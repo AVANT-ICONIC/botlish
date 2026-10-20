@@ -181,7 +181,7 @@ Disassembly of section .text:
  2ad:	ret
 	...
 
-00000000000002b0 <botlish_fn_1>:  ;; byte::from_int<int>
+00000000000002b0 <botlish_fn_1>:  ;; std::byte::from_int<int>
  2b0:	push   rbp
  2b1:	mov    rbp,rsp
  2b4:	sub    rsp,0x10
@@ -258,7 +258,7 @@ Disassembly of section .text:
  3cd:	add    BYTE PTR [rax],al
 	...
 
-00000000000003d0 <botlish_entry_1>:  ;; byte::from_int<int>
+00000000000003d0 <botlish_entry_1>:  ;; std::byte::from_int<int>
  3d0:	push   rbp
  3d1:	mov    rbp,rsp
  3d4:	mov    rsi,QWORD PTR [rdx]

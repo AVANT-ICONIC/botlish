@@ -37,7 +37,7 @@ totals per run: Ir=73,385  Dr=17,999  Dw=13,394  I1mr=8  D1mr=0  D1mw=0  ILmr=0 
     0.48%  [rust-other] <alloc::string::String as core::iter::traits::collect::Fr Ir=      350.0  Dr=       75.0  Dw=       67.0  Bc=       33.0  Bcm=        1.4  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
     0.43%  [botlish] 3 is_hyphen?                                                 Ir=      315.0  Dr=       84.0  Dw=       42.0  Bc=       42.0  Bcm=        0.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
     0.43%  [botlish] 2 is_underscore?                                             Ir=      315.0  Dr=       84.0  Dw=       42.0  Bc=       42.0  Bcm=        0.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
-    0.42%  [botlish] 1 list::find                                                 Ir=      308.0  Dr=       38.0  Dw=       39.0  Bc=       46.0  Bcm=        0.2  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
+    0.42%  [botlish] 1 std::list::find                                                 Ir=      308.0  Dr=       38.0  Dw=       39.0  Bc=       46.0  Bcm=        0.2  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
     0.35%  [runtime] runtime::vm::str_object                                      Ir=      260.0  Dr=       59.0  Dw=       71.0  Bc=       32.0  Bcm=        4.0  Bi=        7.0  D1mr=        0.0  D1mw=        0.0
     0.32%  [libc] _int_realloc                                                    Ir=      232.0  Dr=       40.0  Dw=       32.0  Bc=       32.0  Bcm=        0.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
     0.24%  [runtime] rt_closure_new                                               Ir=      174.0  Dr=       45.0  Dw=       60.0  Bc=        9.0  Bcm=        0.1  Bi=        9.0  D1mr=        0.0  D1mw=        0.0
@@ -58,7 +58,7 @@ totals per run: Ir=73,385  Dr=17,999  Dw=13,394  I1mr=8  D1mr=0  D1mw=0  ILmr=0 
           22.1  3 is_hyphen? (generic entry)             incl   4.08% of Ir  Ir=    2,994.0  Dr=      612.0  Dw=      333.0  Bc=      537.0  Bcm=        4.0  Bi=       60.0  D1mr=        0.0  D1mw=        0.0
           22.1  2 is_underscore? (generic entry)         incl   4.08% of Ir  Ir=    2,994.0  Dr=      612.0  Dw=      333.0  Bc=      537.0  Bcm=        7.0  Bi=       60.0  D1mr=        0.0  D1mw=        0.0
            6.3  6 invalid_name?                          incl  26.83% of Ir  Ir=   19,691.7  Dr=    4,837.7  Dw=    3,573.3  Bc=    2,847.8  Bcm=       77.5  Bi=      343.0  D1mr=        0.1  D1mw=        0.2
-           1.1  1 list::find                             incl  27.27% of Ir  Ir=   20,010.7  Dr=    4,878.7  Dw=    3,613.3  Bc=    2,894.8  Bcm=       77.8  Bi=      343.0  D1mr=        0.1  D1mw=        0.2
+           1.1  1 std::list::find                             incl  27.27% of Ir  Ir=   20,010.7  Dr=    4,878.7  Dw=    3,613.3  Bc=    2,894.8  Bcm=       77.8  Bi=      343.0  D1mr=        0.1  D1mw=        0.2
            1.0  0 <program>                              incl  99.99% of Ir  Ir=   73,378.6  Dr=   17,997.9  Dw=   13,393.0  Bc=   10,483.9  Bcm=      314.4  Bi=    1,298.0  D1mr=        0.1  D1mw=        0.3
 
 == Botlish -> Botlish calls, per caller -> callee (per run)
@@ -68,9 +68,9 @@ totals per run: Ir=73,385  Dr=17,999  Dw=13,394  I1mr=8  D1mr=0  D1mw=0  ILmr=0 
           22.1  rt_call_value  ->  3 is_hyphen? (generic entry)
           22.1  rt_call_value  ->  2 is_underscore? (generic entry)
           16.8  0 <program>  ->  5 valid_start?
-           6.3  1 list::find  ->  6 invalid_name?
+           6.3  1 std::list::find  ->  6 invalid_name?
            6.3  6 invalid_name?  ->  5 valid_start?
-           1.1  0 <program>  ->  1 list::find
+           1.1  0 <program>  ->  1 std::list::find
            1.0  botlish_audit_run  ->  0 <program>
 
 == Botlish -> runtime/libc calls, per helper: count and INCLUSIVE cost (per run)
@@ -94,7 +94,7 @@ totals per run: Ir=73,385  Dr=17,999  Dw=13,394  I1mr=8  D1mr=0  D1mw=0  ILmr=0 
            5.2  0 <program>  ->  rt_list_append
            4.2  0 <program>  ->  rt_list_new
            3.1  0 <program>  ->  rt_closure_new
-           1.1  1 list::find  ->  rt_str_len
+           1.1  1 std::list::find  ->  rt_str_len
 
 == calls made outside Botlish code, caller -> callee (per run; top 60)
        1,009.9  __rustc::__rdl_alloc  ->  malloc

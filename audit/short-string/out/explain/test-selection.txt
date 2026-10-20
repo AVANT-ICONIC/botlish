@@ -2,7 +2,7 @@ instance <program>
   closed: yes
   entry: runtime (tagged)
 
-instance list::any?<List[str], block(e55)>
+instance std::list::any?<List[str], block(e55)>
   closed: yes
   params:
     xs:
@@ -15,7 +15,7 @@ instance list::any?<List[str], block(e55)>
     semantic type: bool
     ABI tagged (not-string)
 
-instance list::none?<List[str], block(e55)>
+instance std::list::none?<List[str], block(e55)>
   closed: yes
   params:
     xs:
@@ -28,7 +28,7 @@ instance list::none?<List[str], block(e55)>
     semantic type: bool
     ABI tagged (not-string)
 
-instance list::find<List[Test], block(e94)>
+instance std::list::find<List[Test], block(e94)>
   closed: yes
   params:
     xs:

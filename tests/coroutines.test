@@ -4,7 +4,7 @@
 #       input = yield Event {kind: "ready"}               a yield expression
 #   coroutine {step, first} = worker("start")             eager construction
 #   second = step(StepInput {command: "continue"})        a resume
-#   coroutine::done?(step)                                 the lifecycle query
+#   std::coroutine::done?(step)                                 the lifecycle query
 #
 # * grammar: `yield`, the coroutine binding form and its fields, the resume
 #   clause, contextual `coroutine`/`resume`;
@@ -25,7 +25,7 @@ source [file join $::projectRoot surface surface.tcl]
 interp recursionlimit {} 100000
 
 # Linux on x86-64 or AArch64: syscalls through the portable wrappers
-# (linux::write, linux::read, linux::io: each architecture's own transport,
+# (std::linux::write, std::linux::read, std::linux::io: each architecture's own transport,
 # LINUX-SYSCALL-TRANSPORTS.md). Native coroutines and the stack guard are the
 # capabilities nativeCoroutines and nativeStackGuard (helpers.tcl).
 testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
@@ -193,7 +193,7 @@ test co-syntax-yield {yield: the lowest-precedence expression form; an operand n
 # The principal success theorem (COROUTINES.md item 69)
 
 test co-principal {construction enters worker and deep, deep yields Event(10); the first resume finishes deep and yields Event(20) from worker; the second completes with Event(30); later calls return the cached Event(30)} -body {
-    coAgree "import coroutine\n${principal}second = step(Message {value: 20})\nfinal = step(Message {value: 30})\nagain = step(Message {value: 999})\n\[first.value, second.value, final.value, again.value, coroutine::done?(step)\]\n"
+    coAgree "import std::coroutine\n${principal}second = step(Message {value: 20})\nfinal = step(Message {value: 30})\nagain = step(Message {value: 999})\n\[first.value, second.value, final.value, again.value, std::coroutine::done?(step)\]\n"
 } -result {value {[10, 20, 30, 30, true]}}
 
 test co-principal-move {`other = step` moves the handle: using step afterwards is USE-AFTER-MOVE, naming the move and the use; using other is valid and continues the same coroutine} -body {
@@ -212,7 +212,7 @@ used here:
 # Deep yield and the empty loop (items 50, 51)
 
 test co-deep-three-levels {a yield three frames deep suspends the whole stack; the message becomes the yield's value; deepest, middle and worker return in turn; the handle is then completed and keeps its final result} -body {
-    coAgree {import coroutine
+    coAgree {import std::coroutine
 
 struct Message:
     value: int
@@ -235,16 +235,16 @@ fn worker() -> Event:
     return Event {kind: "finished", value: x}
 
 coroutine {step, first} = worker()
-was = coroutine::done?(step)
+was = std::coroutine::done?(step)
 final = step(Message {value: 20})
-now = coroutine::done?(step)
+now = std::coroutine::done?(step)
 again = step(Message {value: 5})
 [first, was, final, now, again]
 }
 } -result {value {[Event {kind: "progress", value: 1}, false, Event {kind: "finished", value: 41}, true, Event {kind: "finished", value: 41}]}}
 
 test co-empty-loop {a loop that runs zero times: construction succeeds, first is the final Finished, the handle is done, and calling it again returns Finished -- no exhaustion, no failure} -body {
-    coAgree {import coroutine
+    coAgree {import std::coroutine
 
 struct Item:
     n: int
@@ -258,9 +258,9 @@ fn worker(items: List[Item]) -> Event:
 
 fn run(items: List[Item]) -> list:
     coroutine {step, first} = worker(items)
-    done = coroutine::done?(step)
+    done = std::coroutine::done?(step)
     again = step()
-    [first.kind, done, again.kind, coroutine::done?(step)]
+    [first.kind, done, again.kind, std::coroutine::done?(step)]
 
 [run([]), run([Item {n: 1}])]
 }
@@ -341,7 +341,7 @@ test co-protocol-discarded-collections {a yield that is the last statement of a 
 # Binding forms (items 2, 4, 53)
 
 test co-binding-forms {{step, first}, {step: next}, {first: initial}, {step: next, first: initial}: each binds what it names} -body {
-    coAgree {import coroutine
+    coAgree {import std::coroutine
 
 struct T:
     n: int
@@ -356,7 +356,7 @@ coroutine {first: initial} = t(20)
 coroutine {step: s, first: f} = t(30)
 a = next()
 b = s()
-[first.n, coroutine::done?(step), a.n, initial.n, f.n, b.n, coroutine::done?(next)]
+[first.n, std::coroutine::done?(step), a.n, initial.n, f.n, b.n, std::coroutine::done?(next)]
 }
 } -result {value {[1, false, 11, 20, 30, 31, true]}}
 
@@ -368,7 +368,7 @@ test co-binding-no-aggregate {the binding form builds no two-field value: the co
 } -cleanup {unset -nocomplain hir report} -result {1 1 0 0}
 
 test co-binding-eager-order {the call's arguments are evaluated before the coroutine exists, in order (a method call's receiver first); the body has run when the binding completes} -body {
-    coAgree {import mutable_array
+    coAgree {import std::mutable_array
 
 struct V:
     n: int
@@ -377,13 +377,13 @@ context struct Log:
     a: MutableArray[int]
 
 fn note(i: int, v: int, context log: Log) -> int:
-    mutable_array::set(log.a, i, v):
+    std::mutable_array::set(log.a, i, v):
         on IndexNotFound:
             unit
     v
 
 fn get(i: int, context log: Log) -> int:
-    mutable_array::at(log.a, i):
+    std::mutable_array::at(log.a, i):
         on IndexNotFound:
             -1
 
@@ -394,7 +394,7 @@ fn run(base: int, flags :twice) -> V:
     yield V {n: base}
     return V {n: 0}
 
-with context Log {a: mutable_array::create(4, 0)}
+with context Log {a: std::mutable_array::create(4, 0)}
 coroutine {step: s, first: f} = note(0, 7).run(:twice)
 seen = get(2)
 coroutine {first: only} = run(note(1, 9))
@@ -524,7 +524,7 @@ test co-result-mismatch {the root's yields and return need one outward type: its
 # ---------------------------------------------------------------------------
 # Errors (items 18-20, 22, 56)
 
-set errorDecls {import coroutine
+set errorDecls {import std::coroutine
 
 error Broken
 
@@ -550,11 +550,11 @@ fn worker(v: int, resume Msg) -> Ev errors Broken:
 }
 
 test co-errors-startup {an unhandled fail before the first yield crosses the construction: its handler runs, the handle is failed} -body {
-    coAgree "${errorDecls}fn early(n: int) -> list:\n    coroutine {step, first} = worker(n):\n        on Broken:\n            Ev {v: -1}\n    again = step(Msg {v: 1}):\n        on Broken:\n            Ev {v: -2}\n    \[first.v, coroutine::done?(step), again.v\]\nearly(0 - 1)\n"
+    coAgree "${errorDecls}fn early(n: int) -> list:\n    coroutine {step, first} = worker(n):\n        on Broken:\n            Ev {v: -1}\n    again = step(Msg {v: 1}):\n        on Broken:\n            Ev {v: -2}\n    \[first.v, std::coroutine::done?(step), again.v\]\nearly(0 - 1)\n"
 } -result {value {[-1, true, -2]}}
 
 test co-errors-segment {a deep fail after resumes crosses the resume call; the failed handle raises the same error again and never resumes} -body {
-    coAgree "${errorDecls}fn later() -> list errors Broken:\n    coroutine {step, first} = worker(1)\n    a = step(Msg {v: 5})\n    b = step(Msg {v: -1}):\n        on Broken:\n            Ev {v: 999}\n    c = step(Msg {v: 7}):\n        on Broken:\n            Ev {v: 1000}\n    \[first.v, a.v, b.v, c.v, coroutine::done?(step)\]\nlater():\n    on Broken:\n        \[\]\n"
+    coAgree "${errorDecls}fn later() -> list errors Broken:\n    coroutine {step, first} = worker(1)\n    a = step(Msg {v: 5})\n    b = step(Msg {v: -1}):\n        on Broken:\n            Ev {v: 999}\n    c = step(Msg {v: 7}):\n        on Broken:\n            Ev {v: 1000}\n    \[first.v, a.v, b.v, c.v, std::coroutine::done?(step)\]\nlater():\n    on Broken:\n        \[\]\n"
 } -result {value {[1, 6, 999, 1000, true]}}
 
 test co-errors-last-segment-always-fails {a root that always fails after yielding is no statically known failure: construction yields, the last resume fails} -body {
@@ -583,8 +583,8 @@ test co-errors-uncaught-native-limit {a native stack overflow on a coroutine's o
 # Stable terminal states (items 21-24, 57)
 
 test co-terminal-success {return before any yield completes at construction; done? is false while suspended and true after; repeated calls return the cached result and run no body code} -body {
-    coAgree {import coroutine
-import mutable_array
+    coAgree {import std::coroutine
+import std::mutable_array
 
 struct V:
     n: int
@@ -593,16 +593,16 @@ context struct Counter:
     a: MutableArray[int]
 
 fn bump(context c: Counter) -> int:
-    v = mutable_array::at(c.a, 0):
+    v = std::mutable_array::at(c.a, 0):
         on IndexNotFound:
             0
-    mutable_array::set(c.a, 0, v + 1):
+    std::mutable_array::set(c.a, 0, v + 1):
         on IndexNotFound:
             unit
     v + 1
 
 fn count(context c: Counter) -> int:
-    mutable_array::at(c.a, 0):
+    std::mutable_array::at(c.a, 0):
         on IndexNotFound:
             -1
 
@@ -613,16 +613,16 @@ fn w(k: int) -> V:
     yield V {n: bump()}
     return V {n: bump() * 100}
 
-with context Counter {a: mutable_array::create(1, 0)}
+with context Counter {a: std::mutable_array::create(1, 0)}
 coroutine {step: z, first: zf} = w(0)
-zd = coroutine::done?(z)
+zd = std::coroutine::done?(z)
 zagain = z()
 coroutine {step, first} = w(1)
-d0 = coroutine::done?(step)
+d0 = std::coroutine::done?(step)
 x = step()
-d1 = coroutine::done?(step)
+d1 = std::coroutine::done?(step)
 y = step()
-d2 = coroutine::done?(step)
+d2 = std::coroutine::done?(step)
 r1 = step()
 r2 = step()
 [zf.n, zd, zagain.n, first.n, d0, x.n, d1, y.n, d2, r1.n, r2.n, count()]
@@ -647,11 +647,11 @@ test co-affine-terminating-branch {a move in a branch that returns leaves the ha
 
 test co-affine-loop {a move inside a loop body reaches its next iteration: rejected; resumes in a loop keep ownership, past completion too} -body {
     list [coCode "${principalDecls}fn f(n: int) -> int:\n    coroutine {step, first} = worker(10)\n    loop i from 0 to n:\n        other = step\n        i\n    1\n"] \
-        [coAgree "import coroutine\nstruct T:\n    n: int\nfn t() -> T:\n    loop i from 0 to 3:\n        yield T {n: i}\n    return T {n: 99}\ncoroutine {step, first} = t()\nseen = loop i from 0 to 5:\n    x = step()\n    x.n\n\[first.n, seen, coroutine::done?(step)\]\n"]
+        [coAgree "import std::coroutine\nstruct T:\n    n: int\nfn t() -> T:\n    loop i from 0 to 3:\n        yield T {n: i}\n    return T {n: 99}\ncoroutine {step, first} = t()\nseen = loop i from 0 to 5:\n    x = step()\n    x.n\n\[first.n, seen, std::coroutine::done?(step)\]\n"]
 } -result {{CORE SEMANTIC AFFINE-NOT-DEFINITELY-LIVE} {value {[0, [1, 2, 99, 99, 99], true]}}}
 
-test co-affine-done-does-not-move {coroutine::done? observes the handle; sequential resumes keep ownership; dropping a handle is allowed} -body {
-    coAgree "import coroutine\n${principalDecls}coroutine {step, first} = worker(1)\na = coroutine::done?(step)\nb = coroutine::done?(step)\nx = step(Message {value: 2})\ny = step(Message {value: 3})\ncoroutine {step: dropped} = worker(5)\n\[a, b, x.value, y.value, coroutine::done?(step)\]\n"
+test co-affine-done-does-not-move {std::coroutine::done? observes the handle; sequential resumes keep ownership; dropping a handle is allowed} -body {
+    coAgree "import std::coroutine\n${principalDecls}coroutine {step, first} = worker(1)\na = std::coroutine::done?(step)\nb = std::coroutine::done?(step)\nx = step(Message {value: 2})\ny = step(Message {value: 3})\ncoroutine {step: dropped} = worker(5)\n\[a, b, x.value, y.value, std::coroutine::done?(step)\]\n"
 } -result {value {[false, false, 2, 3, true]}}
 
 test co-affine-move-never-forks {a moved handle continues the one coroutine: resuming the new owner picks up where the old one stopped, and a second move chain still has one continuation} -body {
@@ -699,7 +699,7 @@ fn t() -> T:
 
 coroutine {step, first} = t()
 }} {
-        lindex [coCode "import co::m\n1\n"] end
+        lindex [coCode "import std::co::m\n1\n"] end
     }
 } -result INVALID-TOPLEVEL
 
@@ -769,7 +769,7 @@ fn worker(n: int) -> Ev errors WriteFailed:
     y = deep(n)
     return Ev {n: y}
 }
-co/a.bot {import co::out
+co/a.bot {import std::co::out
 type Small = Int in 0..1000
 
 context struct A:
@@ -778,10 +778,10 @@ context struct A:
 fn create() -> A:
     A {k: 1}
 
-fn emit(n: int, context c: A) -> int errors co::out::WriteFailed:
+fn emit(n: int, context c: A) -> int errors std::co::out::WriteFailed:
     n + c.k
 }
-co/b.bot {import co::out
+co/b.bot {import std::co::out
 type Small = Int in 0..1000
 
 context struct B:
@@ -790,24 +790,24 @@ context struct B:
 fn create() -> B:
     B {k: 100}
 
-fn emit(n: int, context c: B) -> int errors co::out::WriteFailed:
+fn emit(n: int, context c: B) -> int errors std::co::out::WriteFailed:
     n * c.k
 }
 }
 
 test co-context-fixed-at-construction {the provider is the one selected at construction: a context implementing the same trait installed before a resume changes nothing (no re-selection per resume), while a new construction there is ambiguous} -body {
-    set program "import co::out\nimport co::a\nimport co::b\nwith context co::a::create()\ncoroutine {step, first} = co::out::worker(10):\n    on co::out::WriteFailed:\n        co::out::Ev {n: -1}\nwith context co::b::create()\nsecond = step():\n    on co::out::WriteFailed:\n        co::out::Ev {n: -2}\n"
+    set program "import std::co::out\nimport std::co::a\nimport std::co::b\nwith context std::co::a::create()\ncoroutine {step, first} = std::co::out::worker(10):\n    on std::co::out::WriteFailed:\n        std::co::out::Ev {n: -1}\nwith context std::co::b::create()\nsecond = step():\n    on std::co::out::WriteFailed:\n        std::co::out::Ev {n: -2}\n"
     coWithModules $::coContextLib {
         list [coAgree "${program}\[first.n, second.n\]\n"] \
-            [lindex [coCode "${program}coroutine {step: again} = co::out::worker(1):\n    on co::out::WriteFailed:\n        co::out::Ev {n: -3}\n1\n"] end]
+            [lindex [coCode "${program}coroutine {step: again} = std::co::out::worker(1):\n    on std::co::out::WriteFailed:\n        std::co::out::Ev {n: -3}\n1\n"] end]
     }
 } -cleanup {unset -nocomplain program} -result {{value {[11, 12]}} AMBIGUOUS-CONTEXT-IMPLEMENTATION}
 
-# A substitute environment for the portable io::IO trait (lib/io.bot): writes
+# A substitute environment for the portable std::io::IO trait (stdlib/io.bot): writes
 # succeed up to the context's limit and fail with WriteFailed beyond it.
 set coLimitedLib {
-limited.bot {import io
-import str
+limited.bot {import std::io
+import std::str
 type Limit = Int in 0..1000
 
 context struct Limited:
@@ -816,29 +816,29 @@ context struct Limited:
 fn create(max: Limit) -> Limited:
     Limited {max: max}
 
-fn write_text(text: str, context c: Limited) -> unit errors io::WriteFailed:
-    if str::length(text) > c.max:
-        fail io::WriteFailed
+fn write_text(text: str, context c: Limited) -> unit errors std::io::WriteFailed:
+    if std::str::length(text) > c.max:
+        fail std::io::WriteFailed
     unit
 
-fn write_error_text(text: str, context c: Limited) -> unit errors io::WriteFailed:
-    fail io::WriteFailed
+fn write_error_text(text: str, context c: Limited) -> unit errors std::io::WriteFailed:
+    fail std::io::WriteFailed
 }
 }
 
-test co-context-portable-io {io::print_line deep inside a coroutine, through the real io::IO context trait and a substitute context: each segment writes through the provider selected at construction, and a write failure after a resume crosses that resume and stays the coroutine's terminal error} -body {
-    set program "import io\nimport limited\nstruct Ev:\n    n: int\nfn say(text: str) -> int errors io::WriteFailed:\n    io::print_line(text)\n    yield Ev {n: 10}\n    1\nfn worker() -> Ev errors io::WriteFailed:\n    a = say(\"hi\")\n    b = say(\"a much longer line\")\n    return Ev {n: a + b}\n"
-    set driver "coroutine {step, first} = worker():\n    on io::WriteFailed:\n        Ev {n: -1}\nsecond = step():\n    on io::WriteFailed:\n        Ev {n: -2}\nthird = step():\n    on io::WriteFailed:\n        Ev {n: -3}\n\[first.n, second.n, third.n\]\n"
+test co-context-portable-io {std::io::print_line deep inside a coroutine, through the real std::io::IO context trait and a substitute context: each segment writes through the provider selected at construction, and a write failure after a resume crosses that resume and stays the coroutine's terminal error} -body {
+    set program "import std::io\nimport std::limited\nstruct Ev:\n    n: int\nfn say(text: str) -> int errors std::io::WriteFailed:\n    std::io::print_line(text)\n    yield Ev {n: 10}\n    1\nfn worker() -> Ev errors std::io::WriteFailed:\n    a = say(\"hi\")\n    b = say(\"a much longer line\")\n    return Ev {n: a + b}\n"
+    set driver "coroutine {step, first} = worker():\n    on std::io::WriteFailed:\n        Ev {n: -1}\nsecond = step():\n    on std::io::WriteFailed:\n        Ev {n: -2}\nthird = step():\n    on std::io::WriteFailed:\n        Ev {n: -3}\n\[first.n, second.n, third.n\]\n"
     coWithModules $::coLimitedLib {
         lmap max {100 5} {
-            coAgree "${program}with context limited::create($max)\n$driver"
+            coAgree "${program}with context std::limited::create($max)\n$driver"
         }
     }
 } -cleanup {unset -nocomplain program driver} -result {{value {[10, 10, 2]}} {value {[10, -2, -3]}}}
 
-test co-executable-linux-io {a standalone executable printing through io::print_line and linux::io::LinuxIO before and after a yield: descriptor 1 receives both lines in segment order, then the result; the same under GC stress} -constraints nativeLinux -body {
+test co-executable-linux-io {a standalone executable printing through std::io::print_line and std::linux::io::LinuxIO before and after a yield: descriptor 1 receives both lines in segment order, then the result; the same under GC stress} -constraints nativeLinux -body {
     set exe [file join [temporaryDirectory] co-io-[pid]]
-    native::executable [surface::compile "import str\nimport io\nimport linux::io\nstruct Ev:\n    n: int\nfn report(label: str) -> unit errors io::WriteFailed:\n    io::print_line(str::concat(\"report \", label))\nfn worker(n: int) -> Ev errors io::WriteFailed:\n    report(\"before\")\n    yield Ev {n: n}\n    report(\"after\")\n    return Ev {n: n + 2}\nwith context linux::io::create()\ncoroutine {step, first} = worker(1):\n    on io::WriteFailed:\n        Ev {n: -1}\nlast = step():\n    on io::WriteFailed:\n        Ev {n: -2}\n\[first.n, last.n\]\n" -warnings off] $exe
+    native::executable [surface::compile "import std::str\nimport std::io\nimport std::linux::io\nstruct Ev:\n    n: int\nfn report(label: str) -> unit errors std::io::WriteFailed:\n    std::io::print_line(std::str::concat(\"report \", label))\nfn worker(n: int) -> Ev errors std::io::WriteFailed:\n    report(\"before\")\n    yield Ev {n: n}\n    report(\"after\")\n    return Ev {n: n + 2}\nwith context std::linux::io::create()\ncoroutine {step, first} = worker(1):\n    on std::io::WriteFailed:\n        Ev {n: -1}\nlast = step():\n    on std::io::WriteFailed:\n        Ev {n: -2}\n\[first.n, last.n\]\n" -warnings off] $exe
     set plain [exec $exe]
     set ::env(BOTLISH_NATIVE_GC_STRESS) 1
     try {
@@ -860,7 +860,7 @@ test co-context-trait-native {native evidence: the yielding clone of deep takes 
 } -cleanup {unset -nocomplain nir deep} -result {1 1 1 0}
 
 test co-trait-polymorphic {a trait-polymorphic yielding function is monomorphized into an ordinary yielding clone} -body {
-    coAgree {import str
+    coAgree {import std::str
 
 trait Named:
     fn name(value: Named) -> str
@@ -875,8 +875,8 @@ struct Ev:
     text: str
 
 fn greet(x: Named) -> Ev:
-    yield Ev {text: str::concat("hello ", x.name())}
-    return Ev {text: str::concat("bye ", x.name())}
+    yield Ev {text: std::str::concat("hello ", x.name())}
+    return Ev {text: std::str::concat("bye ", x.name())}
 
 coroutine {step, first} = greet(Person {first: "Ada"})
 last = step()
@@ -897,7 +897,7 @@ test co-hir-text {checked HIR states each yielding function's effect, the handle
 } -cleanup {unset -nocomplain hir text} -result {2 1 1 1}
 
 test co-nir-operations {construction is cocreate then costart (eager); a resume is coresume of the one handle register; a move copies no state; done? is codone; the handle's last use is followed by corelease of that register; a yield is coyield in the deep function, reached by an ordinary direct call} -body {
-    set nir [coNir "import coroutine\n${principal}other = step\nx = other(Message {value: 1})\ny = coroutine::done?(other)\nx.value\n"]
+    set nir [coNir "import std::coroutine\n${principal}other = step\nx = other(Message {value: 1})\ny = std::coroutine::done?(other)\nx.value\n"]
     set ops {}
     set handle ""
     foreach line [coFunc $nir <program>] {
@@ -918,36 +918,36 @@ test co-nir-operations {construction is cocreate then costart (eager); a resume 
 # ---------------------------------------------------------------------------
 # GC (items 40-43)
 
-set gcProgram {import str
-import list
+set gcProgram {import std::str
+import std::list
 
 struct Ev:
     text: str
 
 fn churn(n: int) -> int:
     xs = loop i from 0 to n:
-        str::concat("x", str::concat("y", "z"))
-    list::length(xs)
+        std::str::concat("x", std::str::concat("y", "z"))
+    std::list::length(xs)
 
 fn deep(k: int, label: str) -> int:
-    held = [label, str::concat(label, "!"), [k, k + 1]]
+    held = [label, std::str::concat(label, "!"), [k, k + 1]]
     if k == 0:
-        yield Ev {text: str::concat("bottom:", label)}
+        yield Ev {text: std::str::concat("bottom:", label)}
         churn(50)
-        yield Ev {text: str::concat("after:", list::at(held, 1))}
+        yield Ev {text: std::str::concat("after:", std::list::at(held, 1))}
         return 1
-    mine = str::concat(label, "-")
+    mine = std::str::concat(label, "-")
     r = deep(k - 1, mine)
-    yield Ev {text: str::concat(mine, list::at(held, 0))}
+    yield Ev {text: std::str::concat(mine, std::list::at(held, 0))}
     r + 1
 
 fn worker(k: int, label: str) -> Ev:
     n = deep(k, label)
-    return Ev {text: str::concat("done ", label)}
+    return Ev {text: std::str::concat("done ", label)}
 
 fn run(k: int, label: str) -> list:
     coroutine {step: a, first: fa} = worker(k, label)
-    coroutine {step: b, first: fb} = worker(k + 2, str::concat(label, "B"))
+    coroutine {step: b, first: fb} = worker(k + 2, std::str::concat(label, "B"))
     coroutine {step: dropped} = worker(3, "dropped")
     churn(100)
     out = loop i from 0 to k + 4:
@@ -978,9 +978,9 @@ test co-gc-stress {the same program with a collection before every native alloca
 # coroutines while the main program, the outer and the inner all allocate: the
 # macOS port's acceptance program for suspended roots
 # (MACOS-AARCH64-MILESTONE-3.md), a semantic test for every backend.
-set gcNestedProgram {import coroutine
-import str
-import list
+set gcNestedProgram {import std::coroutine
+import std::str
+import std::list
 
 error Boom
 
@@ -993,35 +993,35 @@ struct Box:
 
 fn churn(n: int) -> int:
     xs = loop i from 0 to n:
-        str::concat("x", str::concat("y", "z"))
-    list::length(xs)
+        std::str::concat("x", std::str::concat("y", "z"))
+    std::list::length(xs)
 
 fn inner(label: str) -> Ev errors Boom:
-    local = [label, str::concat(label, "?"), [1, 2, 3]]
-    held = Box {head: str::concat(label, "!"), items: local}
-    yield Ev {text: str::concat("in1:", list::at(local, 0))}
+    local = [label, std::str::concat(label, "?"), [1, 2, 3]]
+    held = Box {head: std::str::concat(label, "!"), items: local}
+    yield Ev {text: std::str::concat("in1:", std::list::at(local, 0))}
     churn(40)
-    yield Ev {text: str::concat("in2:", list::at(local, 1))}
+    yield Ev {text: std::str::concat("in2:", std::list::at(local, 1))}
     churn(40)
-    if list::length(held.items) == 3:
+    if std::list::length(held.items) == 3:
         fail Boom
     return Ev {text: held.head}
 
 fn outer(label: str) -> Ev:
-    box = Box {head: str::concat(label, "#"), items: [label]}
-    coroutine {step: next, first: f} = inner(str::concat(label, "i")):
+    box = Box {head: std::str::concat(label, "#"), items: [label]}
+    coroutine {step: next, first: f} = inner(std::str::concat(label, "i")):
         on Boom:
             Ev {text: "early"}
-    yield Ev {text: str::concat("out1:", f.text)}
+    yield Ev {text: std::str::concat("out1:", f.text)}
     churn(40)
     second = next():
         on Boom:
             Ev {text: "second"}
-    yield Ev {text: str::concat("out2:", second.text)}
+    yield Ev {text: std::str::concat("out2:", second.text)}
     third = next():
         on Boom:
-            Ev {text: str::concat("handled:", box.head)}
-    return Ev {text: str::concat("end:", third.text)}
+            Ev {text: std::str::concat("handled:", box.head)}
+    return Ev {text: std::str::concat("end:", third.text)}
 
 fn run() -> list:
     coroutine {step: a, first: fa} = outer("A")
@@ -1033,7 +1033,7 @@ fn run() -> list:
     churn(60)
     a3 = a()
     b3 = b()
-    [fa.text, fb.text, a2.text, b2.text, a3.text, b3.text, coroutine::done?(a), coroutine::done?(b)]
+    [fa.text, fb.text, a2.text, b2.text, a3.text, b3.text, std::coroutine::done?(a), std::coroutine::done?(b)]
 
 run()
 }
@@ -1052,7 +1052,7 @@ test co-gc-nested-suspended-roots-stress {the same program with a collection bef
 } -cleanup {unset -nocomplain hir} -result [list [concat $gcNestedExpected {{}}] [concat $gcNestedExpected {{}}]]
 
 test co-gc-many-coroutines {thousands of short coroutines: abandoned and finished ones are reclaimed (their stacks pooled), the program stays correct} -body {
-    coAgree "import list\nstruct V:\n    n: int\nfn w(k: int) -> V:\n    yield V {n: k}\n    return V {n: k * 2}\nfn one(k: int) -> int:\n    coroutine {step, first} = w(k)\n    coroutine {step: abandoned} = w(k + 1)\n    last = step()\n    first.n + last.n\nxs = loop i from 0 to 2000:\n    one(i)\nlast = list::at(xs, 1999):\n    on IndexNotFound:\n        0\nlist::length(xs) + last\n"
+    coAgree "import std::list\nstruct V:\n    n: int\nfn w(k: int) -> V:\n    yield V {n: k}\n    return V {n: k * 2}\nfn one(k: int) -> int:\n    coroutine {step, first} = w(k)\n    coroutine {step: abandoned} = w(k + 1)\n    last = step()\n    first.n + last.n\nxs = loop i from 0 to 2000:\n    one(i)\nlast = std::list::at(xs, 1999):\n    on IndexNotFound:\n        0\nstd::list::length(xs) + last\n"
 } -result {value 7997}
 
 # ---------------------------------------------------------------------------
@@ -1094,9 +1094,9 @@ proc coReleases {text} {
     return $rows
 }
 
-set releaseDecls {import coroutine
-import list
-import mutable_array
+set releaseDecls {import std::coroutine
+import std::list
+import std::mutable_array
 struct V:
     n: int
 fn w(k: int) -> V:
@@ -1108,7 +1108,7 @@ test co-release-placement {a release follows the last statement of the handle's 
     lmap body {
         "coroutine {step, first} = w(1)\na = step()\nb = step()\n\[first.n, a.n, b.n\]\n"
         "coroutine {step} = w(1)\nother = step\nx = other()\nx.n\n"
-        "coroutine {step} = w(1)\nif coroutine::done?(step):\n    gone = step\n1\n"
+        "coroutine {step} = w(1)\nif std::coroutine::done?(step):\n    gone = step\n1\n"
         "fn f() -> int:\n    coroutine {step} = w(1)\n    step().n\nf()\n"
         "xs = loop i from 0 to 3:\n    coroutine {first} = w(i)\n    first.n\nxs\n"
         "coroutine {step} = w(1)\nxs = loop i from 0 to 3:\n    step().n\nxs\n"
@@ -1121,12 +1121,12 @@ test co-release-values {a release changes no value: after a last statement whose
     coAgree "${releaseDecls}context struct Log:
     a: MutableArray\[int\]
 fn note(v: int, context log: Log) -> int:
-    mutable_array::set(log.a, 0, v):
+    std::mutable_array::set(log.a, 0, v):
         on IndexNotFound:
             unit
     v
 fn seen(context log: Log) -> int:
-    mutable_array::at(log.a, 0):
+    std::mutable_array::at(log.a, 0):
         on IndexNotFound:
             -1
 fn noisy() -> V:
@@ -1137,7 +1137,7 @@ fn noisy() -> V:
 fn f(k: int) -> int:
     coroutine {step} = w(k)
     step().n
-with context Log {a: mutable_array::create(1, 0)}
+with context Log {a: std::mutable_array::create(1, 0)}
 fn abandon() -> int:
     coroutine {first} = noisy()
     first.n
@@ -1160,9 +1160,9 @@ test co-release-branch-move {a handle moved on one path only: its new owner is r
 } -result {value {[10, 10, 41, 20]}}
 
 test co-release-tcl-runtime {on the Tcl backends a released suspended coroutine is unwound: its Tcl coroutine and its frames end with its handle (the interpreter's 9 frames of a coroutine suspended 5 calls deep are gone after the handle's last use; a loop of abandoned coroutines leaves exactly what a loop creating a closure does)} -body {
-    set pre "import coroutine\nstruct V:\n    n: int\nfn deep(d: int, k: int) -> int:\n    if d == 0:\n        yield V {n: k}\n        return 0\n    deep(d - 1, k) + 1\nfn holder(k: int) -> V:\n    return V {n: deep(5, k)}\nbefore = test_live_frames()\n"
+    set pre "import std::coroutine\nstruct V:\n    n: int\nfn deep(d: int, k: int) -> int:\n    if d == 0:\n        yield V {n: k}\n        return 0\n    deep(d - 1, k) + 1\nfn holder(k: int) -> V:\n    return V {n: deep(5, k)}\nbefore = test_live_frames()\n"
     set programs [list \
-        "coroutine {step: a} = holder(1)\nheld = test_live_frames() - before\nd = coroutine::done?(a)\ngone = test_live_frames() - before\n\[held, gone, test_live_coroutines()\]\n" \
+        "coroutine {step: a} = holder(1)\nheld = test_live_frames() - before\nd = std::coroutine::done?(a)\ngone = test_live_frames() - before\n\[held, gone, test_live_coroutines()\]\n" \
         "xs = loop i from 0 to 50:\n    coroutine {first} = holder(i)\n    first.n\n\[test_live_frames() - before, test_live_coroutines()\]\n" \
         "xs = loop i from 0 to 50:\n    fn g() -> int:\n        i\n    g()\n\[test_live_frames() - before, test_live_coroutines()\]\n"]
     set results [lmap backend {interp compile} {
@@ -1178,7 +1178,7 @@ test co-release-tcl-runtime {on the Tcl backends a released suspended coroutine 
 } -cleanup {unset -nocomplain pre programs results} -result {{{[9, 0, 0]} {[50, 0]} {[50, 0]}} {{[0, 0, 0]} {[50, 0]} {[50, 0]}} {{[0, 0, 0]} {[50, 0]} {[50, 0]}}}
 
 test co-release-native-stacks {natively a released suspended coroutine's stack goes back to the pool at once: 2000 constructions abandoned in a loop map one stack and reuse it 1999 times, and no collection sweeps a coroutine still holding one; the same under GC stress} -constraints nativeCoroutines -body {
-    set hir [surface::compile "${releaseDecls}xs = loop i from 0 to 2000:\n    coroutine {first} = w(i)\n    first.n\nlist::length(xs)\n" -warnings off]
+    set hir [surface::compile "${releaseDecls}xs = loop i from 0 to 2000:\n    coroutine {first} = w(i)\n    first.n\nstd::list::length(xs)\n" -warnings off]
     set report [native::allocationReport $hir summary]
     list [dict get $report coroutines] [withGcStress {lrange [outcomeUnderHir cranelift $hir] 0 1}]
 } -cleanup {unset -nocomplain hir report} -result {{stacksMapped 1 stacksReused 1999 released 2000 releasedSuspended 2000 sweptSuspended 0} {value 2000}}
@@ -1209,7 +1209,7 @@ proc coExits {text} {
     return $rows
 }
 
-set exitDecls {import coroutine
+set exitDecls {import std::coroutine
 struct V:
     n: int
 error Boom
@@ -1320,7 +1320,7 @@ test co-exit-release-tcl-runtime {on the Tcl backends no exit leaves a suspended
 } -cleanup {unset -nocomplain text} -result {{value 0} {value 0} 0}
 
 test co-exit-release-native-stacks {natively every coroutine an exit leaves is released, none is left for a collection: 2100 rows (27900 constructions, 18000 abandoned suspended on an exit or at a last use) map two stacks (an outer and a loop's inner coroutine are alive at once) and sweep none; the same under GC stress} -constraints nativeCoroutines -body {
-    set hir [surface::compile "import list\n${exitDecls}${exitProgram}xs = loop j from 0 to 300:\n    ys = loop k from 0 to 7:\n        row(k)\n    list::length(ys)\nlist::length(xs)\n" -warnings off]
+    set hir [surface::compile "import std::list\n${exitDecls}${exitProgram}xs = loop j from 0 to 300:\n    ys = loop k from 0 to 7:\n        row(k)\n    std::list::length(ys)\nstd::list::length(xs)\n" -warnings off]
     set report [native::allocationReport $hir summary]
     list [dict get $report coroutines] [withGcStress {lrange [outcomeUnderHir cranelift $hir] 0 1}]
 } -cleanup {unset -nocomplain hir report} -result {{stacksMapped 2 stacksReused 27898 released 27900 releasedSuspended 18000 sweptSuspended 0} {value 300}}
@@ -1350,7 +1350,7 @@ proc coSource {path} {
 proc coImplementationFiles {} {
     set files {}
     foreach pattern {core/*.tcl compiler/*.tcl hir/*.tcl surface/*.tcl native/*.tcl
-                     native/src/*.rs native/src/*/*.rs native/src/*/*/*.rs lib/*.bot lib/*/*.bot} {
+                     native/src/*.rs native/src/*/*.rs native/src/*/*/*.rs stdlib/*.bot stdlib/*/*.bot} {
         foreach path [glob -nocomplain -directory $::projectRoot $pattern] {
             lappend files [string range $path [string length $::projectRoot/] end]
         }
@@ -1362,9 +1362,9 @@ test co-source-no-iterator-or-exhaustion {no iterator protocol, StopIteration-li
     set hits {}
     foreach path [coImplementationFiles] {
         set text [coSource $path]
-        foreach pattern {StopIteration CoroutineExhausted COROUTINE-EXHAUSTED yieldto coroutine::fork
-                         coroutine#fork coroutine::clone coroutine#clone coroutine::next coroutine#next
-                         coroutine::iter coroutine#iter ResumableError {resumable error} {resumable exception}} {
+        foreach pattern {StopIteration CoroutineExhausted COROUTINE-EXHAUSTED yieldto std::coroutine::fork
+                         coroutine#fork std::coroutine::clone coroutine#clone std::coroutine::next coroutine#next
+                         std::coroutine::iter coroutine#iter ResumableError {resumable error} {resumable exception}} {
             if {[string first $pattern $text] >= 0} {
                 lappend hits "$path: $pattern"
             }
@@ -1375,11 +1375,11 @@ test co-source-no-iterator-or-exhaustion {no iterator protocol, StopIteration-li
 
 test co-source-operations {the coroutine operations are exactly create, start, resume (at most one message), yield, done? and release, in the Tcl runtime and in NIR: no copy, fork or move operation exists at run time} -body {
     set runtime [coSource core/coroutines.tcl]
-    set registered [lmap {- name} [regexp -all -inline {core::native::register (coroutine\S+)} $runtime] {set name}]
+    set registered [lmap {- name} [regexp -all -inline {core::native::register ((?:std::)?coroutine\S+)} $runtime] {set name}]
     set nir [coSource native/src/nir.rs]
     set ops [lmap {- name} [regexp -all -inline {"(co[a-z0-9]+)" => Co} $nir] {set name}]
     list $registered [core::coroutines::natives] $ops [regexp {\[llength \$args\] > 1} $runtime]
-} -cleanup {unset -nocomplain runtime registered nir ops} -result {{coroutine#create coroutine#start coroutine#resume coroutine#yield coroutine::done? coroutine#release} {coroutine#create coroutine#start coroutine#resume coroutine#yield coroutine::done? coroutine#release} {cocreate costart coresume coresume0 coyield codone corelease} 1}
+} -cleanup {unset -nocomplain runtime registered nir ops} -result {{coroutine#create coroutine#start coroutine#resume coroutine#yield std::coroutine::done? coroutine#release} {coroutine#create coroutine#start coroutine#resume coroutine#yield std::coroutine::done? coroutine#release} {cocreate costart coresume coresume0 coyield codone corelease} 1}
 
 test co-source-state-machine {the runtime states are exactly fresh, running, suspended, completed, failed and released (the handle is dead): there is no moved sentinel (ownership is static), and a coroutine object is never cloned} -body {
     set runtime [coSource core/coroutines.tcl]

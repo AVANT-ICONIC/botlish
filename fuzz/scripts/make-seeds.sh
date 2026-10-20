@@ -119,7 +119,7 @@ done
 seed 06-list "list-sample-1" '[1, 2, 3]'
 seed 06-list "list-sample-2" '[]'
 seed 13-hygiene "hygiene-sample-1" '[1, 2]'
-seed 14-modules "module-sample-1" 'mathish::inc(41)'
+seed 14-modules "module-sample-1" 'std::mathish::inc(41)'
 
 # The abi example: its own documented values (ABI-NUMERIC-DOMAINS.md).
 seed numeric-domains "abi-sample-1" '255'

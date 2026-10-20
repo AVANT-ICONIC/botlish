@@ -61,21 +61,21 @@ included). Body text is therefore indented or starts with another character.
 
 ```
 @topic proof.list-bounds
-title: Indexed access: when list::at cannot fail
+title: Indexed access: when std::list::at cannot fail
 summary: One sentence (at most 200 characters): what the topic says.
 index: proofs stdlib
 alias: bounds proof; index proof; IndexNotFound
-keywords: list::at, guard, descending
-related: proof.slices rule.unhandled-errors stdlib.list::at
+keywords: std::list::at, guard, descending
+related: proof.slices rule.unhandled-errors stdlib.std::list::at
 docs: STDLIB-NAMESPACES.md STATIC-COMPLETION-PROOFS.md
 code: CORE SEMANTIC UNHANDLED-ERROR
-match: CORE SEMANTIC UNHANDLED-ERROR | *"list::at" may produce*
+match: CORE SEMANTIC UNHANDLED-ERROR | *"std::list::at" may produce*
 
 == LANGUAGE GUARANTEE
 Text, verbatim: wrap at about 76 columns; indent code by 4 spaces.
 
 @example accept
-import list
+import std::list
 [1, 2, 3].at(0)
 @value 1
 @caption One-line description shown above the code
@@ -106,7 +106,7 @@ An ID is a lowercase category, a dot and a name: `concept.method-sugar`,
 `warning.method-eligible`, `principle.name-the-parts`, `backend.interp`,
 `cli.options`, `capability.integer-division`, `task.print-output`,
 `lint.policy`, `index.errors` (an index's introduction), and the generated
-`stdlib.list::at`, `stdlib.module.list`. The category is a reading aid; the
+`stdlib.std::list::at`, `stdlib.module.std::list`. The category is a reading aid; the
 `index:` key decides where a topic is listed. IDs are stable: other topics,
 the help lines the compiler prints and users' notes refer to them. Rename one
 only with every reference.
@@ -191,7 +191,7 @@ case-insensitively, then loosely (`-`, `_`, `.` and spaces alike:
 
 1. an exact topic ID;
 2. an exact code (the whole code, or its last word: `KNOWN-ERROR`) or
-   standard-library symbol (`list::at`);
+   standard-library symbol (`std::list::at`);
 3. an exact alias;
 4. a word search: the query's words, minus stop words, each folded to its
    singular, must *all* occur in a topic, and at least half of them in its
@@ -203,7 +203,7 @@ case-insensitively, then loosely (`-`, `_`, `.` and spaces alike:
 A code's last word that is a plain word (`TYPE`, `STRUCT`, `RANGE`) is a
 key only as written, in capitals: `-help STRUCT` is the run-time error,
 `-help struct` the concept (its alias), `-help range` a word search. Case
-matters in one more place: `abi::I8` (the type) and `abi::i8` (the
+matters in one more place: `std::abi::I8` (the type) and `std::abi::i8` (the
 function) are both symbols, and the spelling as written decides.
 
 A single result is shown as its page (an index's introduction,
@@ -262,16 +262,16 @@ help line names the topic.
 * one topic per namespace (`stdlib.module.NS`; `stdlib.module.root` for the
   language primitives): the module's header comment, its source file and
   directness, and its members, each with its kind and first comment sentence;
-* one topic per public native (`stdlib.list::at`, `stdlib.mod`): its
+* one topic per public native (`stdlib.std::list::at`, `stdlib.mod`): its
   signature, declared errors and use (import, method syntax, `nomethod`)
   from `core::native`'s registry, and its backends (a native whose registered
   runtime needs a raw address or a raw system call is native-only);
-* one topic per library declaration (`stdlib.list::get`, `stdlib.test::value`):
-  its declaration text and the comment above it, from `lib/*.bot` through
+* one topic per library declaration (`stdlib.std::list::get`, `stdlib.std::test::value`):
+  its declaration text and the comment above it, from `stdlib/*.bot` through
   `surface::parse`. A comment block that starts on the file's first line is
   the module's header, never a declaration's; a block of several paragraphs
   whose later paragraph begins with the declaration's name is that
-  declaration's from there on (`lib/web.bot`'s `local_extra_chars`).
+  declaration's from there on (`stdlib/web.bot`'s `local_extra_chars`).
 
 Natives have no source comment, so each has a note in
 `compilerpedia/notes/stdlib.notes`: a topic-format entry with the same ID
@@ -311,7 +311,7 @@ which runs it) fails on:
 * a matcher no rejected example exercises;
 * an example that does not compile, run, print or fail as stated, on every
   backend it names that is available (the native ones when the native
-  backend is built on Linux x86-64 or AArch64, where linux::io, syscalls
+  backend is built on Linux x86-64 or AArch64, where std::linux::io, syscalls
   and C calls run natively), or that draws a warning it does not state (`@warn`):
   pages show code a reader can copy without a surprise.
 

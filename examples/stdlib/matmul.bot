@@ -9,15 +9,15 @@
 #
 # Each of the three loops is a recursive function that carries its index
 # and the part of the result built so far. Rows and matrices grow by
-# list::append, which copies, and every entry is read with list::at, whose
-# result has no static kind. list::at fails with IndexNotFound for an index
+# std::list::append, which copies, and every entry is read with std::list::at, whose
+# result has no static kind. std::list::at fails with IndexNotFound for an index
 # that designates no element, which is exactly what incompatible or ragged
 # dimensions produce, so every function here declares it and the caller
 # decides what a malformed input means.
 #
 # expect: [[58, 64], [139, 154]]
 
-import list
+import std::list
 
 # The sum of a_row[k] * b[k][column] for k from k to count - 1, plus total.
 fn dot(a_row, b, column, k, count, total) errors IndexNotFound:
@@ -32,22 +32,22 @@ fn product_row(a_row, b, column, columns, row) errors IndexNotFound:
     if column == columns:
         return row
 
-    entry = a_row.dot(b, column, 0, list::length(a_row), 0)
+    entry = a_row.dot(b, column, 0, std::list::length(a_row), 0)
     a_row.product_row(b, column + 1, columns, row.append(entry))
 
 # The product rows for the rows of a from i on, appended to rows.
 fn product_rows(a, b, i, columns, rows) errors IndexNotFound:
-    if i == list::length(a):
+    if i == std::list::length(a):
         return rows
 
     row = a.at(i).product_row(b, 0, columns, [])
     a.product_rows(b, i + 1, columns, rows.append(row))
 
 fn matmul(a, b) errors IndexNotFound:
-    if list::length(a) == 0:
+    if std::list::length(a) == 0:
         return []
 
-    a.product_rows(b, 0, list::length(b.at(0)), [])
+    a.product_rows(b, 0, std::list::length(b.at(0)), [])
 
 product = [[1, 2, 3], [4, 5, 6]].matmul([[7, 8], [9, 10], [11, 12]]):
     on IndexNotFound:

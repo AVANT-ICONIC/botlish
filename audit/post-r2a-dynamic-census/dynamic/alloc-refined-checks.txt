@@ -20,10 +20,10 @@
     <program>                    web.bot:189    closure            Block             1       48
     <program>                    web.bot:192    closure            Block             1       56
     <program>                    -              listnew            List              1       40
-    byte::set                    byte.bot:175   listnew            List              1       24
-    byte::set                    byte.bot:175   listappend         List              4      176
-    byte::set                    byte.bot:177   setfromlisttotal   ImmutableSet      1       56
-    web::emailish?               web.bot:99     closure            Block           800    38400
+    std::byte::set                    byte.bot:175   listnew            List              1       24
+    std::byte::set                    byte.bot:175   listappend         List              4      176
+    std::byte::set                    byte.bot:177   setfromlisttotal   ImmutableSet      1       56
+    std::web::emailish?               web.bot:99     closure            Block           800    38400
     char_at                      web.bot:97     substr             String         8000   330800
     hex_pair                     web.bot:198    construct          StringPlan        1       96
     esc_char                     web.bot:207    strutf8bytes       List              3       96

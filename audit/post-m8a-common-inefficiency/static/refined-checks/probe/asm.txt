@@ -219,7 +219,7 @@ Disassembly of section .text:
      475:	pop    rbp
      476:	ret
 
-0000000000000477 <botlish_fn_1>:  ;; char::codepoint<UnicodeChar>
+0000000000000477 <botlish_fn_1>:  ;; std::char::codepoint<UnicodeChar>
      477:	push   rbp
      478:	mov    rbp,rsp
      47b:	call   480 <botlish_fn_1+0x9>
@@ -228,7 +228,7 @@ Disassembly of section .text:
      483:	pop    rbp
      484:	ret
 
-0000000000000485 <botlish_entry_1>:  ;; char::codepoint<UnicodeChar>
+0000000000000485 <botlish_entry_1>:  ;; std::char::codepoint<UnicodeChar>
      485:	push   rbp
      486:	mov    rbp,rsp
      489:	mov    rsi,QWORD PTR [rdx]
@@ -239,7 +239,7 @@ Disassembly of section .text:
      495:	ret
 	...
 
-0000000000000498 <botlish_fn_2>:  ;; byte::from_int<int>
+0000000000000498 <botlish_fn_2>:  ;; std::byte::from_int<int>
      498:	push   rbp
      499:	mov    rbp,rsp
      49c:	sub    rsp,0x10
@@ -307,7 +307,7 @@ Disassembly of section .text:
      595:	add    BYTE PTR [rax],al
 	...
 
-0000000000000598 <botlish_entry_2>:  ;; byte::from_int<int>
+0000000000000598 <botlish_entry_2>:  ;; std::byte::from_int<int>
      598:	push   rbp
      599:	mov    rbp,rsp
      59c:	mov    rsi,QWORD PTR [rdx]
@@ -321,7 +321,7 @@ Disassembly of section .text:
      5ad:	add    BYTE PTR [rax],al
 	...
 
-00000000000005b0 <botlish_fn_3>:  ;; byte::set<List[UnicodeChar]>
+00000000000005b0 <botlish_fn_3>:  ;; std::byte::set<List[UnicodeChar]>
      5b0:	push   rbp
      5b1:	mov    rbp,rsp
      5b4:	sub    rsp,0x60
@@ -468,7 +468,7 @@ Disassembly of section .text:
      7dd:	add    BYTE PTR [rax],al
 	...
 
-00000000000007e0 <botlish_entry_3>:  ;; byte::set<List[UnicodeChar]>
+00000000000007e0 <botlish_entry_3>:  ;; std::byte::set<List[UnicodeChar]>
      7e0:	push   rbp
      7e1:	mov    rbp,rsp
      7e4:	mov    rsi,QWORD PTR [rdx]
@@ -478,7 +478,7 @@ Disassembly of section .text:
      7ef:	pop    rbp
      7f0:	ret
 
-00000000000007f1 <botlish_fn_4>:  ;; ascii::is_digit<int>
+00000000000007f1 <botlish_fn_4>:  ;; std::ascii::is_digit<int>
      7f1:	push   rbp
      7f2:	mov    rbp,rsp
      7f5:	sar    rsi,1
@@ -495,7 +495,7 @@ Disassembly of section .text:
      828:	pop    rbp
      829:	ret
 
-000000000000082a <botlish_entry_4>:  ;; ascii::is_digit<int>
+000000000000082a <botlish_entry_4>:  ;; std::ascii::is_digit<int>
      82a:	push   rbp
      82b:	mov    rbp,rsp
      82e:	mov    rsi,QWORD PTR [rdx]
@@ -505,7 +505,7 @@ Disassembly of section .text:
      839:	pop    rbp
      83a:	ret
 
-000000000000083b <botlish_fn_5>:  ;; ascii::is_upper<int>
+000000000000083b <botlish_fn_5>:  ;; std::ascii::is_upper<int>
      83b:	push   rbp
      83c:	mov    rbp,rsp
      83f:	sar    rsi,1
@@ -522,7 +522,7 @@ Disassembly of section .text:
      872:	pop    rbp
      873:	ret
 
-0000000000000874 <botlish_entry_5>:  ;; ascii::is_upper<int>
+0000000000000874 <botlish_entry_5>:  ;; std::ascii::is_upper<int>
      874:	push   rbp
      875:	mov    rbp,rsp
      878:	mov    rsi,QWORD PTR [rdx]
@@ -532,7 +532,7 @@ Disassembly of section .text:
      883:	pop    rbp
      884:	ret
 
-0000000000000885 <botlish_fn_6>:  ;; ascii::is_lower<int>
+0000000000000885 <botlish_fn_6>:  ;; std::ascii::is_lower<int>
      885:	push   rbp
      886:	mov    rbp,rsp
      889:	sar    rsi,1
@@ -549,7 +549,7 @@ Disassembly of section .text:
      8bc:	pop    rbp
      8bd:	ret
 
-00000000000008be <botlish_entry_6>:  ;; ascii::is_lower<int>
+00000000000008be <botlish_entry_6>:  ;; std::ascii::is_lower<int>
      8be:	push   rbp
      8bf:	mov    rbp,rsp
      8c2:	mov    rsi,QWORD PTR [rdx]
@@ -559,7 +559,7 @@ Disassembly of section .text:
      8cd:	pop    rbp
      8ce:	ret
 
-00000000000008cf <botlish_fn_7>:  ;; ascii::is_alphabetic<int>
+00000000000008cf <botlish_fn_7>:  ;; std::ascii::is_alphabetic<int>
      8cf:	push   rbp
      8d0:	mov    rbp,rsp
      8d3:	sub    rsp,0x10
@@ -591,7 +591,7 @@ Disassembly of section .text:
      939:	pop    rbp
      93a:	ret
 
-000000000000093b <botlish_entry_7>:  ;; ascii::is_alphabetic<int>
+000000000000093b <botlish_entry_7>:  ;; std::ascii::is_alphabetic<int>
      93b:	push   rbp
      93c:	mov    rbp,rsp
      93f:	mov    rsi,QWORD PTR [rdx]
@@ -601,7 +601,7 @@ Disassembly of section .text:
      94a:	pop    rbp
      94b:	ret
 
-000000000000094c <botlish_fn_8>:  ;; ascii::is_alphanumeric<int>
+000000000000094c <botlish_fn_8>:  ;; std::ascii::is_alphanumeric<int>
      94c:	push   rbp
      94d:	mov    rbp,rsp
      950:	sub    rsp,0x10
@@ -633,7 +633,7 @@ Disassembly of section .text:
      9b6:	pop    rbp
      9b7:	ret
 
-00000000000009b8 <botlish_entry_8>:  ;; ascii::is_alphanumeric<int>
+00000000000009b8 <botlish_entry_8>:  ;; std::ascii::is_alphanumeric<int>
      9b8:	push   rbp
      9b9:	mov    rbp,rsp
      9bc:	mov    rsi,QWORD PTR [rdx]
@@ -643,7 +643,7 @@ Disassembly of section .text:
      9c7:	pop    rbp
      9c8:	ret
 
-00000000000009c9 <botlish_fn_9>:  ;; web::is_unreserved<generic>
+00000000000009c9 <botlish_fn_9>:  ;; std::web::is_unreserved<generic>
      9c9:	push   rbp
      9ca:	mov    rbp,rsp
      9cd:	sub    rsp,0x20
@@ -681,7 +681,7 @@ Disassembly of section .text:
      a4a:	pop    rbp
      a4b:	ret
 
-0000000000000a4c <botlish_entry_9>:  ;; web::is_unreserved<generic>
+0000000000000a4c <botlish_entry_9>:  ;; std::web::is_unreserved<generic>
      a4c:	push   rbp
      a4d:	mov    rbp,rsp
      a50:	mov    rdx,QWORD PTR [rdx]
@@ -691,7 +691,7 @@ Disassembly of section .text:
      a5b:	pop    rbp
      a5c:	ret
 
-0000000000000a5d <botlish_fn_10>:  ;; web::uri_escape_text<generic>
+0000000000000a5d <botlish_fn_10>:  ;; std::web::uri_escape_text<generic>
      a5d:	push   rbp
      a5e:	mov    rbp,rsp
      a61:	sub    rsp,0x30
@@ -723,7 +723,7 @@ Disassembly of section .text:
      ac7:	pop    rbp
      ac8:	ret
 
-0000000000000ac9 <botlish_entry_10>:  ;; web::uri_escape_text<generic>
+0000000000000ac9 <botlish_entry_10>:  ;; std::web::uri_escape_text<generic>
      ac9:	push   rbp
      aca:	mov    rbp,rsp
      acd:	mov    rdx,QWORD PTR [rdx]

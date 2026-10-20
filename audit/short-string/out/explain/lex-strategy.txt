@@ -2,7 +2,7 @@ instance <program>
   closed: yes
   entry: runtime (tagged)
 
-instance list::all?<List[str], native(is_tcl_alnum)>
+instance std::list::all?<List[str], native(is_tcl_alnum)>
   closed: yes
   params:
     xs:

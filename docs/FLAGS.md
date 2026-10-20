@@ -337,4 +337,4 @@ with the unknown-flag check disabled, 4 negative escapes).
   `flags :T` (space before the colon, none after) used to be a parameter
   named `flags` annotated `T`; it now opens a flag section. `flags: T`,
   `flags : T`, `flags:T` and plain `flags` are unchanged. No program in the
-  repository (tests, examples, `lib/`, corpus) uses the changed spelling.
+  repository (tests, examples, `stdlib/`, corpus) uses the changed spelling.

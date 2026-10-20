@@ -28,7 +28,7 @@
 #     power of two or would exclude 0 where the jumped chain meets other
 #     values, 0 among them. A fuel parameter bounds every chain.
 #   * a deep program (about one seed in two), its own: an `==` bound that is
-#     a native call with a registered Range, char::scalar_value(c), with c
+#     a native call with a registered Range, std::char::scalar_value(c), with c
 #     recomputed every step (varying: the bound is no single value, and i may
 #     step past it) or passed unchanged (invariant: the fact fires), read
 #     directly, through a local, a struct field or a function returning it,
@@ -141,10 +141,10 @@ proc program {} {
             }
             hash {
                 set cap [pick {1 2 7 8 13 1024}]
-                lappend fns "fn f$i\(t: MutableArray\[int\], k) -> int:\n    hash(k).mod(mutable_array::capacity(t))\n"
-                foreach x [sample $pool 3] { lappend items "f$i\(mutable_array::create($cap, 0), [lit $x])" }
+                lappend fns "fn f$i\(t: MutableArray\[int\], k) -> int:\n    hash(k).mod(std::mutable_array::capacity(t))\n"
+                foreach x [sample $pool 3] { lappend items "f$i\(std::mutable_array::create($cap, 0), [lit $x])" }
                 if {$errorCall eq "" && rand() < 0.3} {
-                    set errorCall "f$i\(mutable_array::create(0, 0), 5)"
+                    set errorCall "f$i\(std::mutable_array::create(0, 0), 5)"
                 }
             }
             leaf {
@@ -194,7 +194,7 @@ proc program {} {
     return "[join $fns \n]\n$result\n"
 }
 
-# The deep program (the header): an `==` bound char::scalar_value(c) with
+# The deep program (the header): an `==` bound std::char::scalar_value(c) with
 # the next c chosen by NEXT -- `parity`, never the next i's value (an 'a',
 # 97, before an even i, a 'b', 98, before an odd one: i steps past every
 # bound and the run ends at the zero divisor), `threshold`, 'z' (122) where
@@ -204,7 +204,7 @@ proc program {} {
 # struct rebuilt when c changes), a top-level function returning it
 # (`same(c)`), a nested one capturing it (`pick(0)`), a field of a struct
 # the invocation builds (`Box{c: c}.c`), an `if` value whose condition reads
-# c (`d = if char::scalar_value(c) > 100: c else: c`), or -- with NEXT
+# c (`d = if std::char::scalar_value(c) > 100: c else: c`), or -- with NEXT
 # `same` only, since a context is installed once -- a context parameter's
 # field (`cfg.c`) -- and a mod of i + OFF, direct or through an inlined
 # leaf. NEXT `closure` is the other
@@ -245,7 +245,7 @@ proc deepProgram {} {
     }
     set char0 '[format %c $c0]'
     if {$next eq "closure"} {
-        append text "fn mk(c: UnicodeChar):\n    fn b(i, acc, k):\n        if i == char::scalar_value(c):\n            acc\n        else:\n            x = if i == $hop:\n                k(i - 1, acc, k)\n            else:\n                0\n            b(i - 1, acc + x + $term, k)\n    b\n\n"
+        append text "fn mk(c: UnicodeChar):\n    fn b(i, acc, k):\n        if i == std::char::scalar_value(c):\n            acc\n        else:\n            x = if i == $hop:\n                k(i - 1, acc, k)\n            else:\n                0\n            b(i - 1, acc + x + $term, k)\n    b\n\n"
         append text "first = mk($char0)\nother = mk('[format %c $c1]')\nfirst(1114111, 0, other)\n"
         return [list $text [list $next $c0 $t $x $off $c1 $hop]]
     }
@@ -287,7 +287,7 @@ proc deepProgram {} {
             set bound "Box{c: c}.c"
         }
         choice {
-            set prelude "    d = if char::scalar_value(c) > 100:\n        c\n    else:\n        c\n"
+            set prelude "    d = if std::char::scalar_value(c) > 100:\n        c\n    else:\n        c\n"
             set bound d
         }
         context {
@@ -300,10 +300,10 @@ proc deepProgram {} {
     if {$form eq "context"} {
         # The context parameter follows the ordinary ones; the call passes
         # none, and the program installs the one value first.
-        append text "fn b(i: int, acc: int, $param) -> int:\n${prelude}    if i == char::scalar_value($bound):\n        acc\n    else:\n        b(i - 1, acc + $term)\n\n"
+        append text "fn b(i: int, acc: int, $param) -> int:\n${prelude}    if i == std::char::scalar_value($bound):\n        acc\n    else:\n        b(i - 1, acc + $term)\n\n"
         append text "with context Cfg {c: $start}\nb(1114111, 0)\n"
     } else {
-        append text "fn b(i: int, $param, acc: int) -> int:\n${prelude}    if i == char::scalar_value($bound):\n        acc\n    else:\n${step}        b(i - 1, $arg, acc + $term)\n\n"
+        append text "fn b(i: int, $param, acc: int) -> int:\n${prelude}    if i == std::char::scalar_value($bound):\n        acc\n    else:\n${step}        b(i - 1, $arg, acc + $term)\n\n"
         append text "b(1114111, $start, 0)\n"
     }
     return [list $text [list $next $c0 $t $x $off $c1 $hop]]

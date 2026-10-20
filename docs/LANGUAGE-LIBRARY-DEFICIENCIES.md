@@ -1,7 +1,7 @@
 # Language and library deficiencies found by the warning-driven refactor
 
 The warning-driven refactor (REFACTOR-WARNINGS-CLEAN.md) rewrote the corpus
--- `examples/`, `bench/`, `lib/` -- under the compiler's own warnings, and
+-- `examples/`, `bench/`, `stdlib/` -- under the compiler's own warnings, and
 measured every rewrite. Where a warning could not be answered, or its answer
 cost more than the code it replaced, the cause was nearly always somewhere
 other than the program: a primitive the library lacks, an analysis that
@@ -21,11 +21,11 @@ Ranked by what fixing it would unlock in the corpus measured here.
 
 | # | deficiency | kind | worst effect measured | what it forces |
 |---|---|---|---|---|
-| 1 | A `str::char_at` scan gets no byte cursor | native | 7.2-8.4 s instead of 17-28 ms; 11-13 GB of UTF-8 re-decoded (100K characters) | reading characters through one-character String slices (`peek`) |
+| 1 | A `std::str::char_at` scan gets no byte cursor | native | 7.2-8.4 s instead of 17-28 ms; 11-13 GB of UTF-8 re-decoded (100K characters) | reading characters through one-character String slices (`peek`) |
 | 2 | Reading a program-level non-Int value makes a function, and its callers, generic | specialization | 3.4-3.7 s instead of 17-28 ms (a program-level set); 0 -> 60 MB re-decoded (a program-level table) | constants rebuilt inside the function, or written out as code |
 | 3 | No way to make text from a character | library | 24 findings that cannot close; a translation table that only hides them | one-character String literals wherever a character is output |
 | 4 | Strings are not iterable | language | -- (the reason for 1's index loops) | index loops with `char_at` or `substring` |
-| 5 | `str::char_at` of a short String or a slice materializes it | native | +50-54% Strings and +20-54% time (`ai_text_clean`, 100K characters) | the character idiom is slower than the String idiom it replaces |
+| 5 | `std::str::char_at` of a short String or a slice materializes it | native | +50-54% Strings and +20-54% time (`ai_text_clean`, 100K characters) | the character idiom is slower than the String idiom it replaces |
 | 6 | A constant List literal is rebuilt on every call | native | one object per call; 28-31 ms instead of 17-28 ms for a 12-element membership test | `or` chains instead of tables |
 | 7 | An `and`/`or` condition, and `!=` on raw Ints, become materialized bools | native | 245 instructions and 40 jumps instead of 222 and 31 (`ht_find_insert`) | nested `if`s instead of the conjunction a merge spells |
 | 8 | Range narrowing does not flow through `and` | analysis | an entry range one past the small-Int bound: a parameter loses its raw ABI | nested `if`s instead of `and` |
@@ -44,13 +44,13 @@ to the output -- needs 1 (or 4) and 3; a table of characters needs 6 and 2
 
 ## Pathological performance (native)
 
-### 1. A `str::char_at` scan gets no byte cursor
+### 1. A `std::str::char_at` scan gets no byte cursor
 
 Botlish indexes Strings by Unicode scalar, so locating index i in non-ASCII
 text decodes from byte 0. `hir/traversal.tcl` removes that cost for one
 shape: a self-tail loop stepping +1 from a literal 0 whose body reads through
 a `peek`-shaped helper (a width-1 slice). A loop that reads with
-`str::char_at`, or starts anywhere but a literal 0, decodes from byte 0 on
+`std::str::char_at`, or starts anywhere but a literal 0, decodes from byte 0 on
 every step: quadratic.
 
 * `audit/refactor/ripple/` (`measure.tcl`): `ai_text_clean` with the
@@ -92,10 +92,10 @@ closure whose captures are program-level constants (they are one value per
 program), or treat program-level constants as static values rather than
 captures.
 
-### 5. `str::char_at` of a short String or a slice materializes it
+### 5. `std::str::char_at` of a short String or a slice materializes it
 
 A one-character slice compared with a literal is a String region and
-allocates nothing; the same slice handed to `str::char_at` becomes a
+allocates nothing; the same slice handed to `std::str::char_at` becomes a
 substring and then a heap String (`shorttostr`). The refactor's
 consumption-side conversion reads the character of each `peek`ed slice, so
 it pays this once per character.
@@ -138,7 +138,7 @@ into a register, then branched on -- even where it is only a condition, and
   two materialized bools: 245 machine instructions and 40 jumps, against 222
   and 31 unmerged and 213 and 32 for the `if`/`elif` chain the corpus now
   uses.
-* `abi::bytes::replace`: `if index < 0 or index >= count: fail ...` needs 13
+* `std::abi::bytes::replace`: `if index < 0 or index >= count: fail ...` needs 13
   NIR registers and two extra jumps against 10 for the nested tests.
 * `emailish?`: `if local_end != 0:` lowered as `rieq` and a bool; the corpus
   uses `local_end > 0` (`rigt`, direct).
@@ -157,7 +157,7 @@ A comparison narrows the then-branch of the `if` it is the condition of, but
 not the later operands of an `and`, nor the then-branch of an `if` whose
 condition is an `and`.
 
-* `emailish?` (`lib/web.bot`): `local_end > 0 and local_end < n and ... and
+* `emailish?` (`stdlib/web.bot`): `local_end > 0 and local_end < n and ... and
   domain?(local_end + 1)` -- or the same conjunction as an `if` condition --
   leaves `local_end < n` unused: `domain?`'s entry range grows to [1, 2^62]
   from [1, 2^62 - 1], and its parameter loses its raw (untagged) ABI
@@ -172,7 +172,7 @@ the ones before it, and an `if`'s then-branch by every conjunct.
 through a guarded *name*; the slice proof uses linear forms. And a recursive
 scanner's index is never proven non-negative.
 
-* `lib/linux/path.bot`: `path.char_at(n - 1) == '/'` is not proven in range
+* `stdlib/linux/path.bot`: `path.char_at(n - 1) == '/'` is not proven in range
   (n - 1 < n), while `path.substring(n - 1, n)` is; the provable character
   spelling decodes a slice made only to be decoded (two allocations a call).
   Manifested.
@@ -187,13 +187,13 @@ index that starts at a non-negative value and only grows.
 
 ### 3. No way to make text from a character
 
-There is no `str::of_char`, no `str::concat` (or append, or builder) taking a
+There is no `std::str::of_char`, no `std::str::concat` (or append, or builder) taking a
 `UnicodeChar`. A character, once compared as a character, cannot become the
 text a caller appends.
 
 * 24 manifested `ONE-CHAR-STRING-LITERAL` findings (`char->text`): the hex
-  digit table and `%` of `lib/web.bot`, the newline of `lib/io.bot`'s
-  `print_line`/`write_error_line`, the `/` of `lib/linux/path.bot`'s
+  digit table and `%` of `stdlib/web.bot`, the newline of `stdlib/io.bot`'s
+  `print_line`/`write_error_line`, the `/` of `stdlib/linux/path.bot`'s
   `concat`, `ai_text_clean`'s three normalizations, the separator of
   `examples/io/child-path.bot`. 21 of them are appends.
 * H1 (`audit/refactor/h1-attempt/`): the one literal-free spelling slices the
@@ -203,15 +203,15 @@ text a caller appends.
 
 **Forces**: one-character String literals in every output path, and the
 character type stops one step short of the output. **Direction**: append a
-character to text (what the corpus asks for, 21 of 24); `str::of_char` would
+character to text (what the corpus asks for, 21 of 24); `std::str::of_char` would
 be a longer spelling of a literal.
 
-**Partly addressed** (S16, 2048-ENGINE-WORKLOAD.md): `str::append_char(text,
+**Partly addressed** (S16, 2048-ENGINE-WORKLOAD.md): `std::str::append_char(text,
 c)` appends a character to text as a new flat String, and closed
-`lib/io.bot`'s two newlines. The other 22 need it as a piece of a virtual
+`stdlib/io.bot`'s two newlines. The other 22 need it as a piece of a virtual
 construction (`hir/construction.tcl`): spelled with today's flat append, a
-`linux::path::concat` join costs one more String (7 -> 8) and
-`web::uri_escape_text` of an 11-character text 28 Strings instead of 1.
+`std::linux::path::concat` join costs one more String (7 -> 8) and
+`std::web::uri_escape_text` of an 11-character text 28 Strings instead of 1.
 
 ### 4. Strings are not iterable
 
@@ -224,12 +224,12 @@ has a byte cursor by construction and makes 1 unnecessary for forward scans.
 
 ### 9. Classifiers exist for Strings and Bytes, not characters
 
-`str::is_tcl_alnum` and `str::is_tcl_alpha` take a String; `lib/ascii.bot`'s
+`std::str::is_tcl_alnum` and `std::str::is_tcl_alpha` take a String; `stdlib/ascii.bot`'s
 `is_digit`/`is_upper`/`is_lower`/`is_alphabetic`/`is_alphanumeric` take a
 `Byte`. There is none for a `UnicodeChar`, whose only operation is
-`char::scalar_value`.
+`std::char::scalar_value`.
 
-* 10 manifested findings (`classifier`): `lib/web.bot`'s local-part and label
+* 10 manifested findings (`classifier`): `stdlib/web.bot`'s local-part and label
   classes, `bench/lex-strategy.bot` and `bench/source-checks.bot`, whose
   uniform classifier contracts (`Fn{args: [str]}`) force every classified
   character to be a one-character String.
@@ -238,9 +238,9 @@ has a byte cursor by construction and makes 1 unnecessary for forward scans.
 
 ### 10. No List membership operation
 
-`lib/list.bot` has `get`, `any?`, `all?`, `none?`, `find`; the List natives
-are `append`, `at`, `length`. Membership is a loop, `list::any?` with a
-callable, or an `ImmutableSet` (`immutable_set::contains`). With 2 and 6, all
+`stdlib/list.bot` has `get`, `any?`, `all?`, `none?`, `find`; the List natives
+are `append`, `at`, `length`. Membership is a loop, `std::list::any?` with a
+callable, or an `ImmutableSet` (`std::immutable_set::contains`). With 2 and 6, all
 three cost more than an `or` chain today (6). A warning preferring a table
 over an `or` chain would have nothing to suggest.
 
@@ -259,12 +259,12 @@ design: IMPORTS.md), and `x.f(y)` chooses between same-named members only by
 the receiver's type.
 
 * `hashtable.bot`, `csv_records.bot` and `csv_chunked.bot` import `list` for
-  `list::append` and `mutable_array` for the tables, and both define `at`.
+  `std::list::append` and `mutable_array` for the tables, and both define `at`.
   With an untyped receiver, `controls.at(i)` is `AMBIGUOUS-METHOD-CALL
-  (list::at, mutable_array::at)`; with a typed one (`a: MutableArray[int]`),
+  (std::list::at, std::mutable_array::at)`; with a typed one (`a: MutableArray[int]`),
   `a.at(i)` compiles. `METHOD-ELIGIBLE` counts visible names, not admitting
   types, so it is silent in both cases, and the corpus's 28
-  `mutable_array::at(...)` calls stay functional beside sugared `.set(...)`
+  `std::mutable_array::at(...)` calls stay functional beside sugared `.set(...)`
   calls in the same functions.
 
 **Direction**: let the warning ask the type-directed resolver when the
@@ -272,10 +272,10 @@ receiver's static type decides the call.
 
 ### 14. A library file cannot always compile as an entry program
 
-* `lib/list.bot` and `lib/mutable_array.bot` call their own namespace's
-  intrinsics (`list::at`), which a module needs no import for and may not
-  import (`SELF-IMPORT`), while an entry program needs `import list`.
-* `lib/io.bot`, `lib/io/path.bot`, `lib/linux/io.bot`: an entry program's
+* `stdlib/list.bot` and `stdlib/mutable_array.bot` call their own namespace's
+  intrinsics (`std::list::at`), which a module needs no import for and may not
+  import (`SELF-IMPORT`), while an entry program needs `import std::list`.
+* `stdlib/io.bot`, `stdlib/io/path.bot`, `stdlib/linux/io.bot`: an entry program's
   value is its last declaration, and theirs is a context or trait function,
   which cannot be a value.
 

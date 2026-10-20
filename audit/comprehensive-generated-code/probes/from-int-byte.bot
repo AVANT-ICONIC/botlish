@@ -1,8 +1,8 @@
-import byte
+import std::byte
 
-# Probe C: byte::from_int on a statically Byte-range Int (byte::complement's
+# Probe C: std::byte::from_int on a statically Byte-range Int (std::byte::complement's
 # declared Byte result on an unconstrained input): effectiveErrors = {}, no
 # handler needed.
 ns = [0 - 7, 45, 300]
 loop n in ns:
-    byte::from_int(byte::complement(n))
+    std::byte::from_int(std::byte::complement(n))

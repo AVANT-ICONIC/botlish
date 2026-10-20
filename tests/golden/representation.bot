@@ -17,11 +17,11 @@
 # NIR plan (rawparams, shortresult, structnew counts), allocation counts and
 # native options (-raw-int-abi-opt 0, -short-string-opt 0, -struct-opt 0)
 # -- stays in the Tcl suite; each port says which part it keeps.
-import abi
-import compiler
-import list
-import str
-import test
+import std::abi
+import std::compiler
+import std::list
+import std::str
+import std::test
 
 # ---------------------------------------------------------------------------
 # Declarations the tests need (top-level only).
@@ -53,16 +53,16 @@ struct SrAccount:
 error ShortBad
 
 # ---------------------------------------------------------------------------
-# Custom check: a rejection's code, location and message. lib/test.bot
+# Custom check: a rejection's code, location and message. stdlib/test.bot
 # compares codes and locations only; abi-numeric-conversion-failure-points-at-
 # the-call pins its message as a glob (PREFIX*SUFFIX) too.
 
 # TEXT begins with PREFIX.
 fn rep_starts_with?(text: str, prefix: str) -> bool:
-    k = str::length(prefix)
-    if k > str::length(text):
+    k = std::str::length(prefix)
+    if k > std::str::length(text):
         return false
-    head = str::substring(text, 0, k):
+    head = std::str::substring(text, 0, k):
         on LowerUnderrun:
             return false
         on UpperOverrun:
@@ -71,11 +71,11 @@ fn rep_starts_with?(text: str, prefix: str) -> bool:
 
 # TEXT ends with SUFFIX.
 fn rep_ends_with?(text: str, suffix: str) -> bool:
-    n = str::length(text)
-    k = str::length(suffix)
+    n = std::str::length(text)
+    k = std::str::length(suffix)
     if k > n:
         return false
-    tail = str::substring(text, n - k, n):
+    tail = std::str::substring(text, n - k, n):
         on LowerUnderrun:
             return false
         on UpperOverrun:
@@ -85,18 +85,18 @@ fn rep_ends_with?(text: str, suffix: str) -> bool:
 # BODY's block must be rejected with EXPECTED at LINE:COLUMN with a message
 # that begins with PREFIX and ends with SUFFIX (the Tcl glob PREFIX*SUFFIX).
 # BODY goes through an untyped parameter, as in the library's own helpers.
-nomethod fn rep_rejects_message(name: str, expected: compiler::DiagnosticCode, line: int, column: int, prefix: str, suffix: str, body, context suite: test::Suite) -> unit:
-    fn check() -> test::Match:
-        place = compiler::SourceLocation {line: line, column: column}
-        shown = test::diagnostic_text(expected, place).concat(", message: ").concat(prefix).concat("*").concat(suffix)
+nomethod fn rep_rejects_message(name: str, expected: std::compiler::DiagnosticCode, line: int, column: int, prefix: str, suffix: str, body, context suite: std::test::Suite) -> unit:
+    fn check() -> std::test::Match:
+        place = std::compiler::SourceLocation {line: line, column: column}
+        shown = std::test::diagnostic_text(expected, place).concat(", message: ").concat(prefix).concat("*").concat(suffix)
         actual = body():
-            on compiler::CompilerError {code, primary, message}:
+            on std::compiler::CompilerError {code, primary, message}:
                 worded = message.rep_starts_with?(prefix) and message.rep_ends_with?(suffix)
                 if code == expected and primary.line == line and primary.column == column and worded:
-                    return test::passed()
-                return test::mismatch(shown, test::diagnostic_text(code, primary), message)
-        test::mismatch(shown, "value ".concat(test::describe(actual)), "")
-    test::case(name, check)
+                    return std::test::passed()
+                return std::test::mismatch(shown, std::test::diagnostic_text(code, primary), message)
+        std::test::mismatch(shown, "value ".concat(std::test::describe(actual)), "")
+    std::test::case(name, check)
 
 # ---------------------------------------------------------------------------
 # native.test
@@ -106,20 +106,20 @@ fn register_native_tests(i64_max: int, i64_min: int, small_max: int, small_min: 
     # tagged small-Int edges (2^62) promote, never wrap. The literal program
     # is the Tcl test's: the compiler folds most of its constant arithmetic
     # (its exact values), as it does there.
-    fn b_int_2() errors compiler::CompilerError:
+    fn b_int_2() errors std::compiler::CompilerError:
         static compile:
             fn big():
                 170141183460469231731687303715884105727
             [[9223372036854775807 + 1, -9223372036854775808 - 1, 9223372036854775807 * 9223372036854775807, 100000000000000000000 - 100000000000000000000, 4611686018427387904 + 4611686018427387904], 4611686018427387903 + 1, -4611686018427387904 - 1, 123456789012345678901234567890 == 123456789012345678901234567890, big() > 170141183460469231731687303715884105726]
-    test::value("native-int-2", [[9223372036854775808, -9223372036854775809, 85070591730234615847396907784232501249, 0, 9223372036854775808], 4611686018427387904, -4611686018427387905, true, true], b_int_2)
+    std::test::value("native-int-2", [[9223372036854775808, -9223372036854775809, 85070591730234615847396907784232501249, 0, 9223372036854775808], 4611686018427387904, -4611686018427387905, true, true], b_int_2)
 
     # native-int-2/dynamic: the same arithmetic on operands the registration
     # function receives (nothing folds: every backend computes it at run
     # time).
-    fn b_int_2_dynamic() errors compiler::CompilerError:
+    fn b_int_2_dynamic() errors std::compiler::CompilerError:
         static compile:
             [[i64_max + 1, i64_min - 1, i64_max * i64_max, large - large, (small_max + 1) + (small_max + 1)], small_max + 1, small_min - 1, large * large == large * large, i64_max * i64_max > i64_max * i64_max - 1]
-    test::value("native-int-2/dynamic", [[9223372036854775808, -9223372036854775809, 85070591730234615847396907784232501249, 0, 9223372036854775808], 4611686018427387904, -4611686018427387905, true, true], b_int_2_dynamic)
+    std::test::value("native-int-2/dynamic", [[9223372036854775808, -9223372036854775809, 85070591730234615847396907784232501249, 0, 9223372036854775808], 4611686018427387904, -4611686018427387905, true, true], b_int_2_dynamic)
 
 # ---------------------------------------------------------------------------
 # raw-int-abi.test
@@ -127,14 +127,14 @@ fn register_native_tests(i64_max: int, i64_min: int, small_max: int, small_min: 
 fn register_raw_int_abi_tests():
     # raw-small-domain-edges: the edges of the small-Int domain, smallMax
     # and smallMin, round-trip through the raw Int ABI with their signs.
-    fn b_small_domain_edges() errors compiler::CompilerError:
+    fn b_small_domain_edges() errors std::compiler::CompilerError:
         static compile:
             fn ident(n):
                 n
             a = ident(4611686018427387903) + 0
             b = ident(0 - 4611686018427387904) + 0
             [a, b]
-    test::value("raw-small-domain-edges", [4611686018427387903, -4611686018427387904], b_small_domain_edges)
+    std::test::value("raw-small-domain-edges", [4611686018427387903, -4611686018427387904], b_small_domain_edges)
 
 # ---------------------------------------------------------------------------
 # loop-counted.test
@@ -143,7 +143,7 @@ fn register_loop_counted_tests():
     # loop-counted-large-int-sum: a counted loop whose bounds lie past
     # i64::MAX steps and sums exactly (no native i64 wraparound, no
     # wrapping Tcl incr).
-    fn b_large_int_sum() errors compiler::CompilerError:
+    fn b_large_int_sum() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 fn go(i, n, acc):
@@ -152,7 +152,7 @@ fn register_loop_counted_tests():
                     acc
                 go(9223372036854775806, 9223372036854775810, 0)
             f()
-    test::value("loop-counted-large-int-sum", 36893488147419103230, b_large_int_sum)
+    std::test::value("loop-counted-large-int-sum", 36893488147419103230, b_large_int_sum)
 
 # ---------------------------------------------------------------------------
 # native-bitshift.test
@@ -161,14 +161,14 @@ fn register_native_bitshift_tests():
     # bitshift-shl-overflow-tagged-counts: small Ints of both signs shifted
     # left by 61..64 and 100, value and count both parameters (the tagged
     # rt_int_shl path): every result past 2^63 is promoted, never wrapped.
-    fn b_shl_overflow_counts() errors compiler::CompilerError:
+    fn b_shl_overflow_counts() errors std::compiler::CompilerError:
         static compile:
             fn g(y, k):
                 shift_left(y, k)
             fn row(y):
                 [g(y, 61), g(y, 62), g(y, 63), g(y, 64), g(y, 100)]
             [row(1), row(2), row(3), row(-1), row(-2), row(-3), row(4611686018427387903), row(-4611686018427387904), row(0)]
-    test::value("bitshift-shl-overflow-tagged-counts", [
+    std::test::value("bitshift-shl-overflow-tagged-counts", [
         [2305843009213693952, 4611686018427387904, 9223372036854775808, 18446744073709551616, 1267650600228229401496703205376],
         [4611686018427387904, 9223372036854775808, 18446744073709551616, 36893488147419103232, 2535301200456458802993406410752],
         [6917529027641081856, 13835058055282163712, 27670116110564327424, 55340232221128654848, 3802951800684688204490109616128],
@@ -187,7 +187,7 @@ fn register_short_string_tests():
     # short-highest-scalar-round-trips: U+10FFFF, the highest scalar value,
     # survives scalar -> String -> scalar as a one-character String (the
     # literal below is that character).
-    fn b_highest_scalar() errors compiler::CompilerError:
+    fn b_highest_scalar() errors std::compiler::CompilerError:
         static compile:
             fn pick(flag):
                 if flag:
@@ -195,13 +195,13 @@ fn register_short_string_tests():
                 else:
                     ""
             s = pick(true)
-            [str::length(s), s == "􏿿", s == ""]
-    test::value("short-highest-scalar-round-trips", [1, true, false], b_highest_scalar)
+            [std::str::length(s), s == "􏿿", s == ""]
+    std::test::value("short-highest-scalar-round-trips", [1, true, false], b_highest_scalar)
 
     # short-error-capable-result: an error-capable function with a
     # one-character (ShortString1) success result: the empty String is a
     # successful value, never the failure; a handler receives the failure.
-    fn b_error_capable_result() errors compiler::CompilerError:
+    fn b_error_capable_result() errors std::compiler::CompilerError:
         static compile:
             fn guarded(n) -> str errors ShortBad:
                 if n < 0:
@@ -216,8 +216,8 @@ fn register_short_string_tests():
                     on ShortBad:
                         "caught"
                 r
-            [run(-1), run(0), run(3), str::length(run(0)), run(0) == ""]
-    test::value("short-error-capable-result", ["caught", "", "y", 0, true], b_error_capable_result)
+            [run(-1), run(0), run(3), std::str::length(run(0)), run(0) == ""]
+    std::test::value("short-error-capable-result", ["caught", "", "y", 0, true], b_error_capable_result)
 
 # ---------------------------------------------------------------------------
 # native-hashing.test
@@ -226,10 +226,10 @@ fn register_native_hashing_tests():
     # hash-parity-astral-1: the hash of a String with a supplementary-plane
     # character (U+1F642) is the reference value on every backend: one
     # scalar, no surrogate pair.
-    fn b_hash_astral() errors compiler::CompilerError:
+    fn b_hash_astral() errors std::compiler::CompilerError:
         static compile:
             hash("🙂 quick brown fox")
-    test::value("hash-parity-astral-1", 1807445379848190912, b_hash_astral)
+    std::test::value("hash-parity-astral-1", 1807445379848190912, b_hash_astral)
 
 # ---------------------------------------------------------------------------
 # enums.test
@@ -238,13 +238,13 @@ fn register_enums_tests():
     # enum-hash: hashing is nominal and agrees with equality: the same case
     # through a generic function hashes equal; another case, another enum's
     # same-named case and the case's spelling as a String do not.
-    fn b_enum_hash() errors compiler::CompilerError:
+    fn b_enum_hash() errors std::compiler::CompilerError:
         static compile:
             fn same(x):
                 x
             h = hash(VehicleType::Car)
             [h == hash(same(VehicleType::Car)), h == hash(VehicleType::Boat), h == hash(Other::Car), h == hash("VehicleType::Car"), h]
-    test::value("enum-hash", [true, false, false, false, 632455997673246507], b_enum_hash)
+    std::test::value("enum-hash", [true, false, false, false, 632455997673246507], b_enum_hash)
 
 # ---------------------------------------------------------------------------
 # struct-scalar-replacement.test
@@ -255,7 +255,7 @@ fn register_struct_scalar_replacement_tests():
     # shape: two named shapes with equal fields differ, two anonymous
     # literals in different field orders are equal, and each element of the
     # stored List equals a value of its own shape.
-    fn b_shape() errors compiler::CompilerError:
+    fn b_shape() errors std::compiler::CompilerError:
         static compile:
             a = SrPerson {age: 1, name: "a"}
             b = SrAccount {name: "a", age: 1}
@@ -263,7 +263,7 @@ fn register_struct_scalar_replacement_tests():
             d = {name: "a", age: 1}
             xs = [a, b, c, d]
             [a.age, b.age, c.age, d.age, a == b, c == d, xs]
-    test::value("sr-shape-named-vs-anonymous", [1, 1, 1, 1, false, true, [SrPerson {name: "a", age: 1}, SrAccount {name: "a", age: 1}, {age: 1, name: "a"}, {age: 1, name: "a"}]], b_shape)
+    std::test::value("sr-shape-named-vs-anonymous", [1, 1, 1, 1, false, true, [SrPerson {name: "a", age: 1}, SrAccount {name: "a", age: 1}, {age: 1, name: "a"}, {age: 1, name: "a"}]], b_shape)
 
 # ---------------------------------------------------------------------------
 # native-string-region.test
@@ -274,18 +274,18 @@ fn register_native_string_region_tests():
     # equality count scalars. (The Tcl test compiles non-strictly: f's
     # slices may fail as far as the compiler can tell, so f declares their
     # errors and its caller handles them; the slices themselves stay
-    # temporaries consumed only by == and str::length, as there.)
-    fn b_unicode_mixed() errors compiler::CompilerError:
+    # temporaries consumed only by == and std::str::length, as there.)
+    fn b_unicode_mixed() errors std::compiler::CompilerError:
         static compile:
             fn f(text) errors LowerUnderrun, UpperOverrun:
-                [str::substring(text, 0, 4) == "café", str::length(str::substring(text, 4, 6)), str::substring(text, 4, 6) == "🌍!"]
+                [std::str::substring(text, 0, 4) == "café", std::str::length(std::str::substring(text, 4, 6)), std::str::substring(text, 4, 6) == "🌍!"]
             r = f("café🌍!"):
                 on LowerUnderrun:
                     ["LowerUnderrun"]
                 on UpperOverrun:
                     ["UpperOverrun"]
             r
-    test::value("region-unicode-mixed-1", [true, 2, true], b_unicode_mixed)
+    std::test::value("region-unicode-mixed-1", [true, 2, true], b_unicode_mixed)
 
 # ---------------------------------------------------------------------------
 # abi-numeric.test
@@ -295,23 +295,23 @@ fn register_abi_numeric_tests():
     # may fail is an obligation at the creator call itself, reported there;
     # a dynamic failure is the declared error of the violated bound, which a
     # handler receives.
-    fn b_conversion_unhandled() errors compiler::CompilerError:
+    fn b_conversion_unhandled() errors std::compiler::CompilerError:
         static compile:
             fn f(n: int):
-                abi::u8(n)
+                std::abi::u8(n)
             f(3)
-    rep_rejects_message("abi-numeric-conversion-failure-points-at-the-call/unhandled", compiler::DiagnosticCode::UnhandledError, 301, 17, "this call may produce the declared errors \"abi::AbiIntegerAboveRange\" and \"abi::AbiIntegerBelowRange\"", ", which are neither handled here nor admitted by the enclosing function's own \"errors\" declaration", b_conversion_unhandled)
-    fn b_conversion_dynamic() errors compiler::CompilerError:
+    rep_rejects_message("abi-numeric-conversion-failure-points-at-the-call/unhandled", std::compiler::DiagnosticCode::UnhandledError, 301, 17, "this call may produce the declared errors \"std::abi::AbiIntegerAboveRange\" and \"std::abi::AbiIntegerBelowRange\"", ", which are neither handled here nor admitted by the enclosing function's own \"errors\" declaration", b_conversion_unhandled)
+    fn b_conversion_dynamic() errors std::compiler::CompilerError:
         static compile:
-            fn f(n: int) -> int errors abi::AbiIntegerBelowRange, abi::AbiIntegerAboveRange:
-                abi::u8(n).value
+            fn f(n: int) -> int errors std::abi::AbiIntegerBelowRange, std::abi::AbiIntegerAboveRange:
+                std::abi::u8(n).value
             loop n in [1, 256, 0 - 1]:
                 f(n):
-                    on abi::AbiIntegerBelowRange:
+                    on std::abi::AbiIntegerBelowRange:
                         0 - 100
-                    on abi::AbiIntegerAboveRange:
+                    on std::abi::AbiIntegerAboveRange:
                         100
-    test::value("abi-numeric-conversion-failure-points-at-the-call/dynamic", [1, 100, -100], b_conversion_dynamic)
+    std::test::value("abi-numeric-conversion-failure-points-at-the-call/dynamic", [1, 100, -100], b_conversion_dynamic)
 
 # ---------------------------------------------------------------------------
 
@@ -327,6 +327,6 @@ fn register_representation_tests():
     register_native_string_region_tests()
     register_abi_numeric_tests()
 
-with context test::suite()
+with context std::test::suite()
 register_representation_tests()
-test::report()
+std::test::report()

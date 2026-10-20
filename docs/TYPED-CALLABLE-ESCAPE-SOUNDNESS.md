@@ -138,7 +138,7 @@ new erasure check itself:
   function returning a callable is not expressible and was never
   attempted). An undeclared result stays exactly whatever the body's
   trailing/return expressions infer. **Exact identity survives return**,
-  through the very same mechanism that already makes `byte::high_nibble`'s
+  through the very same mechanism that already makes `std::byte::high_nibble`'s
   declared `HighNibble` result visible to callers -- already true before
   this milestone.
 - **`if`/loop-break joins**: `hir::types::lub` requires *the same block
@@ -446,7 +446,7 @@ hir/hir.tcl             +2  (source the new file; call hir::callables::verify)
 No other production file changed. In particular, untouched:
 `surface/**` (no syntax change -- spec #46's own expectation), `core/**`,
 `compiler/**`, `native/lower.tcl`, `native/src/**` (spec #47's own
-expectation -- no runtime/Rust changes), and `lib/**` (no Byte-specific
+expectation -- no runtime/Rust changes), and `stdlib/**` (no Byte-specific
 library edits were necessary or made -- every test above uses either a
 throwaway local `type Byte = Int in 0..255`/`type Small = ...` declaration
 or a throwaway `$::core::libraryDir` module, matching the previous

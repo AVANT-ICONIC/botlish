@@ -11,7 +11,7 @@ function 0 "<program>"
   depth reservation: no
   storage: native frame
 
-function 1 "char::codepoint"
+function 1 "std::char::codepoint"
   NIR regs: 2
   raw regs: 0
   managed-capable regs: 2
@@ -24,7 +24,7 @@ function 1 "char::codepoint"
   depth reservation: no
   storage: native frame
 
-function 2 "byte::from_int"
+function 2 "std::byte::from_int"
   NIR regs: 9
   raw regs: 2
   managed-capable regs: 7
@@ -37,7 +37,7 @@ function 2 "byte::from_int"
   depth reservation: no
   storage: native frame
 
-function 3 "byte::set"
+function 3 "std::byte::set"
   NIR regs: 17
   raw regs: 2
   managed-capable regs: 15
@@ -50,7 +50,7 @@ function 3 "byte::set"
   depth reservation: no
   storage: native frame
 
-function 4 "ascii::is_digit"
+function 4 "std::ascii::is_digit"
   NIR regs: 12
   raw regs: 2
   managed-capable regs: 10
@@ -63,7 +63,7 @@ function 4 "ascii::is_digit"
   depth reservation: no
   storage: native frame
 
-function 5 "ascii::is_upper"
+function 5 "std::ascii::is_upper"
   NIR regs: 12
   raw regs: 2
   managed-capable regs: 10
@@ -76,7 +76,7 @@ function 5 "ascii::is_upper"
   depth reservation: no
   storage: native frame
 
-function 6 "ascii::is_lower"
+function 6 "std::ascii::is_lower"
   NIR regs: 12
   raw regs: 2
   managed-capable regs: 10
@@ -89,7 +89,7 @@ function 6 "ascii::is_lower"
   depth reservation: no
   storage: native frame
 
-function 7 "ascii::is_alphabetic"
+function 7 "std::ascii::is_alphabetic"
   NIR regs: 8
   raw regs: 0
   managed-capable regs: 8
@@ -102,7 +102,7 @@ function 7 "ascii::is_alphabetic"
   depth reservation: no
   storage: native frame
 
-function 8 "ascii::is_alphanumeric"
+function 8 "std::ascii::is_alphanumeric"
   NIR regs: 8
   raw regs: 0
   managed-capable regs: 8
@@ -115,7 +115,7 @@ function 8 "ascii::is_alphanumeric"
   depth reservation: no
   storage: native frame
 
-function 9 "web::is_unreserved"
+function 9 "std::web::is_unreserved"
   NIR regs: 9
   raw regs: 0
   managed-capable regs: 9
@@ -128,7 +128,7 @@ function 9 "web::is_unreserved"
   depth reservation: no
   storage: native frame
 
-function 10 "web::uri_escape_text"
+function 10 "std::web::uri_escape_text"
   NIR regs: 7
   raw regs: 1
   managed-capable regs: 6

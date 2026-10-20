@@ -4,7 +4,7 @@
 # C tag a bound signature points to (never its fields), and the converters
 # that give its constants their C types (C-BINDGEN.md, "Opaque types",
 # "Constants").
-import ffi::c
+import std::ffi::c
 
 # struct timeval (a system header), a complete C type seen through pointers only
 opaque struct timeval:
@@ -787,17 +787,17 @@ opaque struct X509_STORE:
     tag: unit
 
 # A constant of C int.
-fn c_int(value: ffi::c::Int) -> ffi::c::Int:
+fn c_int(value: std::ffi::c::Int) -> std::ffi::c::Int:
     value
 
 # A constant of C long.
-fn c_long(value: ffi::c::Long) -> ffi::c::Long:
+fn c_long(value: std::ffi::c::Long) -> std::ffi::c::Long:
     value
 
 # A constant of C unsigned int.
-fn c_uint(value: ffi::c::UInt) -> ffi::c::UInt:
+fn c_uint(value: std::ffi::c::UInt) -> std::ffi::c::UInt:
     value
 
 # A constant of C unsigned long.
-fn c_ulong(value: ffi::c::ULong) -> ffi::c::ULong:
+fn c_ulong(value: std::ffi::c::ULong) -> std::ffi::c::ULong:
     value

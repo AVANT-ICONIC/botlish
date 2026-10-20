@@ -94,7 +94,7 @@ foreach {name description edits} [readMutants [file join [file dirname [file nor
 # A private copy of the compiler sources, the library, the tests and this
 # audit's tools; native/target is a link to this checkout's (never rebuilt).
 set tree [file tempdir botlish-direct-mutants]
-foreach dir {compiler core hir surface lib tests examples audit/direct-modules} {
+foreach dir {compiler core hir surface stdlib tests examples audit/direct-modules} {
     file mkdir [file dirname [file join $tree $dir]]
     file copy [file join $root $dir] [file join $tree $dir]
 }

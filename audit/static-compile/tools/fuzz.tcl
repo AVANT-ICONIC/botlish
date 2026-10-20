@@ -9,7 +9,7 @@
 # Each program has 3..8 sites (-sites): a function `site_K(x)` whose body is
 # one `static compile:` block -- its last statement, or the value of a binding
 # it returns -- and a driver `run_K(x)` that calls it under
-# handlers for compiler::CompilerError and the program's three application
+# handlers for std::compiler::CompilerError and the program's three application
 # errors. A block is one fragment of the pool below, written so its value is
 # an Int, or a fault:
 #
@@ -35,7 +35,7 @@
 # offending token. The driver encodes every outcome as one Int:
 #
 #   VALUE                        the block's value
-#   -(CODE*1000000+LINE*1000+COL)  compiler::CompilerError (CODE: code_number)
+#   -(CODE*1000000+LINE*1000+COL)  std::compiler::CompilerError (CODE: code_number)
 #   -500000000 + C               Oops {code: C}
 #   -600000000                   IndexNotFound
 #   -700000000                   NotSmall
@@ -70,7 +70,7 @@ set argv {}
 source [file join $root tests helpers.tcl]
 
 # A private copy of the library for the opaque-struct module (never the real
-# lib/), removed at exit.
+# stdlib/), removed at exit.
 set ::fuzzLib [file tempdir botlish-sc-fuzz-lib]
 foreach entry [glob -directory $::core::libraryDir *] {
     file copy $entry $::fuzzLib
@@ -103,10 +103,10 @@ proc Pick {list} {
 # ---------------------------------------------------------------------------
 # The program
 
-set ::prelude {import compiler
-import coroutine
-import list
-import fz_token
+set ::prelude {import std::compiler
+import std::coroutine
+import std::list
+import std::fz_token
 
 error Oops:
     code: int
@@ -170,8 +170,8 @@ fn consume(s: Coroutine{args: [Message], return: Event}, n: int) -> int:
 }
 
 # The model's diagnostic numbers, and the program's code_number() mapping
-# the compiler::DiagnosticCode cases the faults produce to them. The case of
-# each kind is written here, as lib/compiler.bot spells it -- never asked of
+# the std::compiler::DiagnosticCode cases the faults produce to them. The case of
+# each kind is written here, as stdlib/compiler.bot spells it -- never asked of
 # the static implementation's own table (hir::static::codes), so a wrong
 # mapping there is a disagreement.
 set ::codeCases {UNBOUND Unbound TYPE Type USE-AFTER-MOVE UseAfterMove
@@ -182,11 +182,11 @@ set ::codeNumbers {UNBOUND 1 TYPE 2 USE-AFTER-MOVE 3 UNHANDLED-ERROR 4 KNOWN-ERR
     OPAQUE-CONSTRUCTION 6 MISSING-IMPORT 7 UNKNOWN-FIELD 8 DUPLICATE 9}
 
 proc CodeNumberFunction {} {
-    set text "fn code_number(c: compiler::DiagnosticCode) -> int:\n"
+    set text "fn code_number(c: std::compiler::DiagnosticCode) -> int:\n"
     set first 1
     foreach {kind n} $::codeNumbers {
         set case [dict get $::codeCases $kind]
-        append text "    [expr {$first ? "if" : "elif"}] c == compiler::DiagnosticCode::$case:\n        $n\n"
+        append text "    [expr {$first ? "if" : "elif"}] c == std::compiler::DiagnosticCode::$case:\n        $n\n"
         set first 0
     }
     append text "    else:\n        99\n\n"
@@ -218,13 +218,13 @@ proc Fragment {k fault} {
             8 { return [dict create lines [list "coroutine \{step, first\} = worker(x)" "first.value + consume(step, $c)"] \
                     model [list {x c} {list value [expr {$x + $c}]}] c $c affine 1] }
             9 { return [dict create lines [list "x.inc().inc()"] model [list {x c} {list value [expr {$x + 2}]}] c $c] }
-            10 { return [dict create lines [list "xs = \[x, $c\]" "list::at(xs, x)"] \
+            10 { return [dict create lines [list "xs = \[x, $c\]" "std::list::at(xs, x)"] \
                     model [list {x c} {expr {$x == 0 ? {value 0} : ($x == 1 ? [list value $c] : {index})}}] c $c] }
-            11 { return [dict create lines [list "fz_token::value(fz_token::make(x)) + $c"] \
+            11 { return [dict create lines [list "std::fz_token::value(std::fz_token::make(x)) + $c"] \
                     model [list {x c} {list value [expr {$x + $c}]}] c $c] }
             12 { return [dict create lines [list "if x > $c:" "    x - $c" "elif x < 0:" "    0 - x" "else:" "    $c"] \
                     model [list {x c} {expr {$x > $c ? [list value [expr {$x - $c}]] : ($x < 0 ? [list value [expr {-$x}]] : [list value $c])}}] c $c] }
-            13 { return [dict create lines [list "ys = loop i from 0 to 3:" "    i * x" "list::length(ys) + x"] \
+            13 { return [dict create lines [list "ys = loop i from 0 to 3:" "    i * x" "std::list::length(ys) + x"] \
                     model [list {x c} {list value [expr {3 + $x}]}] c $c] }
             14 { return [dict create lines [list "static compile:" "    x + $c"] \
                     model [list {x c} {list value [expr {$x + $c}]}] c $c] }
@@ -245,8 +245,8 @@ proc Fragment {k fault} {
         3 { return [dict create lines [list "may_fail_other(x) + 1"] fault {UNHANDLED-ERROR 1 1}] }
         4 { return [dict create lines [list "call(may_fail_other, x)"] fault {UNHANDLED-ERROR 1 1} erased 1] }
         5 { return [dict create lines [list "always_fails() + x"] fault {KNOWN-ERROR 1 1}] }
-        6 { return [dict create lines [list "t = fz_token::Token \{value: x\}" "x"] fault {OPAQUE-CONSTRUCTION 1 5}] }
-        7 { return [dict create lines [list "str::length(\"ab\") + x"] fault {MISSING-IMPORT 1 1}] }
+        6 { return [dict create lines [list "t = std::fz_token::Token \{value: x\}" "x"] fault {OPAQUE-CONSTRUCTION 1 5}] }
+        7 { return [dict create lines [list "std::str::length(\"ab\") + x"] fault {MISSING-IMPORT 1 1}] }
         8 { return [dict create lines [list "p = Point \{x: x, y: 1\}" "p.z"] fault {UNKNOWN-FIELD 2 3}] }
         9 { return [dict create lines [list "a = x" "a = 2" "a"] fault {DUPLICATE 2 1}] }
         10 {
@@ -281,7 +281,7 @@ proc Program {number} {
         # The block as the function's last statement, or (one in three) as
         # the value of a binding the function then returns.
         set valued [expr {[Rand 3] == 0}]
-        append text "fn site_$k\(x: int) errors compiler::CompilerError, Oops, IndexNotFound, NotSmall:\n    [expr {$valued ? "v = " : ""}]static compile:\n"
+        append text "fn site_$k\(x: int) errors std::compiler::CompilerError, Oops, IndexNotFound, NotSmall:\n    [expr {$valued ? "v = " : ""}]static compile:\n"
         set line0 [expr {[llength [split $text \n]]}]
         foreach line [dict get $fragment lines] {
             append text "        $line\n"
@@ -290,7 +290,7 @@ proc Program {number} {
             append text "    v\n"
         }
         append text "\nfn run_$k\(x: int):\n    r = site_$k\(x):\n"
-        append text "        on compiler::CompilerError \{code, primary\}:\n"
+        append text "        on std::compiler::CompilerError \{code, primary\}:\n"
         append text "            0 - (code_number(code) * 1000000 + primary.line * 1000 + primary.column)\n"
         append text "        on Oops \{code\}:\n            -500000000 + code\n"
         append text "        on IndexNotFound:\n            -600000000\n"

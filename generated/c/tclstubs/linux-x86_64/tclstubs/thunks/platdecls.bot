@@ -3,12 +3,12 @@
 # The thunked APIs of generic/tclPlatDecls.h (static inline functions, table-redirected
 # names, macros): externs of the C wrappers in the shim library (C-BINDGEN.md,
 # "Thunks"). Build the shim with `tools/c-bindgen.tcl build`.
-import ffi::c
+import std::ffi::c
 
 extern c library "botlish_shim_tclstubs_2627031d"
 extern c library "tclstub9.0"
 
 # C: void Tcl_WinConvertError(unsigned int errCode) (called through (tclPlatStubsPtr -> tcl_WinConvertError))
 extern c fn Tcl_WinConvertError named "botlish_tclstubs_Tcl_WinConvertError"(
-    errCode: ffi::c::UInt
+    errCode: std::ffi::c::UInt
 ) -> unit

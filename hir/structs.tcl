@@ -638,7 +638,7 @@ proc hir::structs::ProjectionProblem {hir e} {
 # apply (METHOD-SUGAR.md): the call is then a call of the field NAME, and the
 # programmer may have meant the function spelling, which needs a function
 # visible under that name here: one defined or bound in this file, or a member
-# of a namespace this file directly imports (`import list` makes `list::at`
+# of a namespace this file directly imports (`import std::list` makes `std::list::at`
 # a candidate for `xs.at(i)`; there is no search by receiver type).
 # CANDIDATES (UnimportedCandidates) are the functions of that name the call
 # would apply once their namespace is imported; a projection the receiver
@@ -656,7 +656,7 @@ proc hir::structs::MethodHint {name candidates} {
     return $hint
 }
 
-# The intrinsics named NAME in any namespace (`str::concat`), by namespace:
+# The intrinsics named NAME in any namespace (`std::str::concat`), by namespace:
 # cheap and deterministic (never a search of modules, which are only known
 # once imported).
 proc hir::structs::IntrinsicsNamed {name} {
@@ -697,7 +697,7 @@ proc hir::structs::MissingImportMessage {name candidates} {
 # the code it is written in imported their namespace: by method resolution's
 # own rules (hir/resolve.tcl's MethodCandidates, hir::MethodCallProblems),
 # the member NAME of a namespace the code does not import -- an intrinsic
-# (`str::concat`), or a function of a module this compilation loaded -- not
+# (`std::str::concat`), or a function of a module this compilation loaded -- not
 # declared nomethod, accepting the call's number of arguments (the receiver
 # first) and, for an intrinsic, a first argument of the receiver's kind. The
 # qualified names, sorted. No search of modules this compilation does not

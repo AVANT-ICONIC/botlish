@@ -93,17 +93,17 @@ second = step(Message {value: 7})
 [first.value, second.value]
 } {}] \
     linux-syscall [list program {direct module
-import abi
-import abi::bytes
-import linux
+import std::abi
+import std::abi::bytes
+import std::linux
 
-# A zero-byte write(2) to standard output through linux::sys, the host
+# A zero-byte write(2) to standard output through std::linux::sys, the host
 # architecture's transport: 0 bytes written.
-linux::write(abi::i32(1), abi::bytes::from_list([]))
+std::linux::write(std::abi::i32(1), std::abi::bytes::from_list([]))
 } {}] \
-    c-call [list program {import ffi::c
+    c-call [list program {import std::ffi::c
 
-extern c fn labs(x: ffi::c::Long) -> ffi::c::Long
+extern c fn labs(x: std::ffi::c::Long) -> std::ffi::c::Long
 
 labs(-5)
 } {}] \
@@ -124,16 +124,16 @@ fib(20)
 fib(20)
 } {}] \
     target [list target {} {}] \
-    c-convention [list convention {import ffi::c
+    c-convention [list convention {import std::ffi::c
 
-extern c fn labs(x: ffi::c::Long) -> ffi::c::Long
-extern c fn abs(x: ffi::c::SChar) -> ffi::c::Int
+extern c fn labs(x: std::ffi::c::Long) -> std::ffi::c::Long
+extern c fn abs(x: std::ffi::c::SChar) -> std::ffi::c::Int
 
 labs(-5) + abs(-3)
 } {}] \
-    other-target [list other-target {import ffi::c
+    other-target [list other-target {import std::ffi::c
 
-fn f(x: ffi::c::Char) -> int:
+fn f(x: std::ffi::c::Char) -> int:
     x
 
 f(1)
@@ -158,7 +158,7 @@ f(1)
 # Since milestone 2 (MACOS-AARCH64-MILESTONE-2.md) a program importing a
 # Linux namespace does not compile for macos-aarch64 at all
 # (UNSUPPORTED-PLATFORM), where it used to compile with Linux's
-# lib/linux/sys.aarch64.bot and fail at run time; the target, convention
+# stdlib/linux/sys.aarch64.bot and fail at run time; the target, convention
 # and other-target probes record the target boundary.
 set linux [dict create \
     jit {value 6765} \
@@ -186,7 +186,7 @@ set expected [dict create \
         stack-overflow {error {NATIVE LIMIT STACK} {native stack exhausted: too many nested calls}} \
         coroutine-stack-overflow {error {NATIVE LIMIT STACK} {native stack exhausted: too many nested calls}} \
         coroutine {value {[10, 7]}} \
-        linux-syscall {error {SURFACE MODULE UNSUPPORTED-PLATFORM} {*namespace "linux" belongs to the Linux platform*unavailable for target macos-aarch64 (macOS on aarch64)*}} \
+        linux-syscall {error {SURFACE MODULE UNSUPPORTED-PLATFORM} {*namespace "std::linux" belongs to the Linux platform*unavailable for target macos-aarch64 (macOS on aarch64)*}} \
         c-call {value 5} \
         object {value {macho arm64 object}} \
         executable {value {{macho arm64 execute} 6765}} \

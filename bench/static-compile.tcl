@@ -20,7 +20,7 @@
 # plainly (they compile to the same code: the difference must be noise),
 # and a loop calling a function whose static block was rejected and
 # handling its CompilerError, against the same failure written by hand as
-# `fail compiler::CompilerError {...}` (the same ordinary payload error);
+# `fail std::compiler::CompilerError {...}` (the same ordinary payload error);
 # with natively the heap allocations of each.
 
 set root [file dirname [file dirname [file normalize [info script]]]]
@@ -61,15 +61,15 @@ proc ms {x} {
     return [format "%.1f ms" $x]
 }
 
-set prelude "import compiler\nimport list\n\nfn needs_int(v: int) -> int:\n    v\n\n"
-set body "        a = x * 3\n        b = \[a, a + 1, a + 2\]\n        list::length(b) + a\n"
+set prelude "import std::compiler\nimport std::list\n\nfn needs_int(v: int) -> int:\n    v\n\n"
+set body "        a = x * 3\n        b = \[a, a + 1, a + 2\]\n        std::list::length(b) + a\n"
 
 puts "## Compile time\n"
 puts "| program | compile | builds |"
 puts "|---|---|---|"
 set plainText "${prelude}fn f(x: int) -> int:\n    if true:\n$body\nf(1)\n"
 set staticText "${prelude}fn f(x: int) -> int:\n    static compile:\n$body\nf(1)\n"
-set invalidText "${prelude}fn f(x: int) -> int errors compiler::CompilerError:\n    static compile:\n        missing + x\n\n0\n"
+set invalidText "${prelude}fn f(x: int) -> int errors std::compiler::CompilerError:\n    static compile:\n        missing + x\n\n0\n"
 set t1 [compileMs $plainText]
 puts "| 1. ordinary valid block (`if true:`) | [ms $t1] | 1 |"
 set t2 [compileMs $staticText]
@@ -84,7 +84,7 @@ proc manyBlocks {k mix plain} {
     for {set i 0} {$i < $k} {incr i} {
         set kind [expr {$mix eq "mixed" ? $i % 3 : 0}]
         if {$plain && $kind != 0} continue
-        append text "fn t$i\(x: int) errors compiler::CompilerError:\n    [expr {$plain ? "if true:" : "static compile:"}]\n"
+        append text "fn t$i\(x: int) errors std::compiler::CompilerError:\n    [expr {$plain ? "if true:" : "static compile:"}]\n"
         switch -- $kind {
             0 { append text "        a = x + $i\n        a * 2\n\n" }
             1 { append text "        missing_$i + x\n\n" }
@@ -111,16 +111,16 @@ puts "\n## Run time\n"
 
 # A loop of N iterations, each calling f(i) through BODY lines.
 proc loopProgram {decls n call} {
-    return "${::prelude}${decls}fn run(n: int, k: int) -> int:\n    xs = loop i from 0 to n:\n$call\n    list::length(xs)\n\nrun($n, 1)\n"
+    return "${::prelude}${decls}fn run(n: int, k: int) -> int:\n    xs = loop i from 0 to n:\n$call\n    std::list::length(xs)\n\nrun($n, 1)\n"
 }
 
 set acceptedDecls "fn f(x: int) -> int:\n    static compile:\n        x * 3 + 1\n\n"
 set plainDecls "fn f(x: int) -> int:\n    x * 3 + 1\n\n"
 set callOk "        f(i)"
-set rejectedDecls "fn f(x: int) -> int errors compiler::CompilerError:\n    static compile:\n        missing + x\n\n"
-set handWrittenDecls "fn f(x: int, k: int) -> int errors compiler::CompilerError:\n    if k > 0:\n        fail compiler::CompilerError \{\n            code: compiler::DiagnosticCode::Unbound,\n            primary: compiler::SourceLocation \{line: 8, column: 9\},\n            related: \[\],\n            message: \"unbound name \\\"missing\\\"\",\n        \}\n    x\n\n"
-set callFail "        r = f(i):\n            on compiler::CompilerError \{code, primary\}:\n                primary.line\n        r"
-set callFailK "        r = f(i, k):\n            on compiler::CompilerError \{code, primary\}:\n                primary.line\n        r"
+set rejectedDecls "fn f(x: int) -> int errors std::compiler::CompilerError:\n    static compile:\n        missing + x\n\n"
+set handWrittenDecls "fn f(x: int, k: int) -> int errors std::compiler::CompilerError:\n    if k > 0:\n        fail std::compiler::CompilerError \{\n            code: std::compiler::DiagnosticCode::Unbound,\n            primary: std::compiler::SourceLocation \{line: 8, column: 9\},\n            related: \[\],\n            message: \"unbound name \\\"missing\\\"\",\n        \}\n    x\n\n"
+set callFail "        r = f(i):\n            on std::compiler::CompilerError \{code, primary\}:\n                primary.line\n        r"
+set callFailK "        r = f(i, k):\n            on std::compiler::CompilerError \{code, primary\}:\n                primary.line\n        r"
 
 proc timeOn {backend hir} {
     if {$backend eq "native"} {

@@ -14,24 +14,24 @@
 # opaque.bot stays a real one: run.tcl substitutes cranelift for a whole
 # suite whose unspecialized lowering reports struct-shape.
 #
-# Imports: compiler and test (the framework); abi (abi::I32, an ordinary
+# Imports: compiler and test (the framework); abi (std::abi::I32, an ordinary
 # struct of module abi, stands in for the Tcl fixture module mixed's
 # Public). No test here is about an import or about method calls.
-import abi
-import compiler
-import test
+import std::abi
+import std::compiler
+import std::test
 
 fn register_generic_instance_tests():
     # opaque-instance-ordinary-struct-still-works: the generic function
     # that is rejected for an opaque argument, given a module's ordinary
     # struct, is accepted and projects its field.
-    fn ordinary() errors compiler::CompilerError:
+    fn ordinary() errors std::compiler::CompilerError:
         static compile:
             fn peek(x):
                 x.value
-            peek(abi::I32 {value: 5})
-    test::value("opaque-instance-ordinary-struct-still-works", 5, ordinary)
+            peek(std::abi::I32 {value: 5})
+    std::test::value("opaque-instance-ordinary-struct-still-works", 5, ordinary)
 
-with context test::suite()
+with context std::test::suite()
 register_generic_instance_tests()
-test::report()
+std::test::report()

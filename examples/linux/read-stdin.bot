@@ -2,15 +2,15 @@
 # output, through Botlish's own raw Linux x86-64 syscall path
 # (MUTABLE-BYTES.md):
 #
-#   abi::bytes::zeroed(4096)   a zero-filled, writable, owned byte VALUE
-#     --linux::read-----------> read(2): rax = 0, rdi = 0, rsi = the payload
+#   std::abi::bytes::zeroed(4096)   a zero-filled, writable, owned byte VALUE
+#     --std::linux::read-----------> read(2): rax = 0, rdi = 0, rsi = the payload
 #                               address, rdx = 4096; ONE syscall
-#     --linux::ReadResult-----> the kernel's raw ssize_t + the updated buffer
-#     --abi::bytes::freeze_prefix----> an immutable abi::bytes::Bytes of exactly the bytes read
-#     --linux::write----------> write(2) to descriptor 1 (rax = 1)
+#     --std::linux::ReadResult-----> the kernel's raw ssize_t + the updated buffer
+#     --std::abi::bytes::freeze_prefix----> an immutable std::abi::bytes::Bytes of exactly the bytes read
+#     --std::linux::write----------> write(2) to descriptor 1 (rax = 1)
 #
 # No libc `read` or `write`, no special runtime implementation of either, and
-# no syscall number known to the compiler. `buffer` is a value: linux::read
+# no syscall number known to the compiler. `buffer` is a value: std::linux::read
 # works on its own copy, so `buffer` still holds 4096 zero bytes afterwards
 # and the bytes the kernel wrote are in `result.data`.
 #
@@ -25,17 +25,17 @@
 #   hello from stdin
 #   17                      <- the bytes written (the runner prints the result)
 
-# A direct module (DIRECT-MODULES.md): the program calls linux::read, a
+# A direct module (DIRECT-MODULES.md): the program calls std::linux::read, a
 # callable of the direct module linux, at its top level -- a deliberately
 # low-level program, which says so.
 direct module
 
-import abi
-import abi::bytes
-import linux
+import std::abi
+import std::abi::bytes
+import std::linux
 
-buffer = abi::bytes::zeroed(abi::usize(4096))
-result = abi::i32(0).read(buffer)
+buffer = std::abi::bytes::zeroed(std::abi::usize(4096))
+result = std::abi::i32(0).read(buffer)
 
 n = result.result
 if n > 0:
@@ -43,12 +43,12 @@ if n > 0:
     # so the count is a valid Usize within the buffer. But `result` is an
     # ordinary Int the compiler cannot bound, and the language asks for both
     # declared errors to be handled; the fallback (write nothing) is harmless.
-    count = abi::usize(n):
-        on abi::AbiIntegerAboveRange:
-            abi::usize(0)
+    count = std::abi::usize(n):
+        on std::abi::AbiIntegerAboveRange:
+            std::abi::usize(0)
     data = result.data.freeze_prefix(count):
         on UpperOverrun:
-            abi::bytes::from_list([])
-    abi::i32(1).write(data)
+            std::abi::bytes::from_list([])
+    std::abi::i32(1).write(data)
 else:
     n

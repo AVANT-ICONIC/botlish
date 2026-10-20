@@ -120,7 +120,7 @@
       }
     },
     {
-      "path": "lib/web.bot",
+      "path": "stdlib/web.bot",
       "generic": 24,
       "specialized": 4,
       "blockers": {
@@ -149,7 +149,7 @@
       }
     },
     {
-      "path": "lib/list.bot",
+      "path": "stdlib/list.bot",
       "generic": 8,
       "specialized": 2,
       "blockers": {
@@ -207,7 +207,7 @@
       }
     },
     {
-      "path": "lib/mathish.bot",
+      "path": "stdlib/mathish.bot",
       "generic": 1,
       "specialized": 1,
       "blockers": {
@@ -241,7 +241,7 @@
       ]
     },
     {
-      "path": "lib/list.bot",
+      "path": "stdlib/list.bot",
       "instances": [
         {
           "name": "find<generic>",
@@ -253,7 +253,7 @@
       ]
     },
     {
-      "path": "lib/web.bot",
+      "path": "stdlib/web.bot",
       "instances": [
         {
           "name": "scan_while<generic>",

@@ -46,12 +46,12 @@ after three gaps its first run found (42 / 3 / 3) were closed and their
 mutants re-run ([Mutation](#mutation)).
 
 The ordinary framework -- a context holding a `MutableVector` of deferred
-`Fn{args: [], return: test::Match}` checks, a coroutine runner, explicit
+`Fn{args: [], return: std::test::Match}` checks, a coroutine runner, explicit
 `static compile:` per test -- carried the whole practical corpus with **no test
 syntax, no global registry, no catch-all error, no test-only native and no layout
-trick**. The library grew by exactly two helpers (`test::rejects_message`,
-`test::rejects_containing`, with the substring scan they use,
-`test::contains_text?`) after four suites had reimplemented them independently.
+trick**. The library grew by exactly two helpers (`std::test::rejects_message`,
+`std::test::rejects_containing`, with the substring scan they use,
+`std::test::contains_text?`) after four suites had reimplemented them independently.
 
 The migration found and fixed **seven compiler defects** in their own layers
 (two completion-analysis precision/soundness defects; three static-decision
@@ -254,7 +254,7 @@ changed:
 | `class`, `also` | DIRECT, STATIC-COMPILE-ADAPTATION, EXPLICIT-ERROR-HANDLER, CUSTOM-MATCHER, HARNESS-DIFFERENCE, OLD-TEST-OVERSPECIFIED, COMPILER-BUG-FOUND, NEW-FRAMEWORK-LIMITATION, NOT-EXPRESSIBLE |
 | `static` | yes: the `static compile:` boundary is semantically needed (a rejection, or an error escaping the code under test); convention: it only isolates the test |
 | `handler` | yes: the body handles a run-time declared error explicitly |
-| `api` | simple (a library helper), helper (a suite-local registration helper), custom (`test::case`) |
+| `api` | simple (a library helper), helper (a suite-local registration helper), custom (`std::test::case`) |
 | `verbosity` | clearer, similar, more-verbose than the Tcl test |
 | `strength` | equal, stronger, weaker (the notes say exactly what was lost), split (the Tcl test also observes what only Tcl can) |
 | `old_lines`, `new_lines` | approximate sizes |
@@ -287,9 +287,9 @@ back. A companion exists for one of three reasons, each stated in its header:
   `import type`, or an enum named like a namespace needs a program that declares
   and imports exactly that (`methods-list-without-str.bot`,
   `imports-unimported.bot`, `structs-and-enums-qualifiers.bot`,
-  `mutable-vector-str.bot` -- adding `import str` to `mutable-vector.bot` turns
+  `mutable-vector-str.bot` -- adding `import std::str` to `mutable-vector.bot` turns
   three USE-AFTER-MOVE rejections into NO-APPLICABLE-METHOD, because
-  `str::length` becomes a candidate -- ...);
+  `std::str::length` becomes a candidate -- ...);
 * **a program-wide fact** (7 files): the erased-callable contract is
   everything the *whole* program passes into untyped parameters, so a test of
   what an uncontracted call is charged needs a program that erases exactly its
@@ -405,9 +405,9 @@ suite):
 | warning-programs.bot | 42 | 37 | fixed-arity-list-return, many-boolean-arguments, one-char-string-literal, proves-naming +1 | 623 | 42 (14) | 3 | 4 (0) | 6.2 | 1.1 | 4.5 | 0.7 | 1.7 | 148 |
 | total (88 suites) | 4572 | 3287 | | 63212 | 4378 (1390) | 210 | 328 (81) | 1518.4 | 774.0 | 1404.0 | 93.5 | 402.6 | |
 
-Every suite ends with `with context test::suite()`, its registration calls and
-`test::report()`; every test body is a function `fn NAME() errors
-compiler::CompilerError:` around a `static compile:` block -- nested in a
+Every suite ends with `with context std::test::suite()`, its registration calls and
+`std::test::report()`; every test body is a function `fn NAME() errors
+std::compiler::CompilerError:` around a `static compile:` block -- nested in a
 registration function in the migration's suites, at the top level in six of
 the validation sample's (154 bodies); registration
 functions group tests by concept and take run-time inputs as parameters; names
@@ -461,7 +461,7 @@ that is reported outside any block -- at a top-level declaration (a trait,
 refined type, enum or struct declaration rejected as such), at the top-level
 context installation, or at a module header -- so `static compile:` cannot
 reify it. One is a contradiction worth fixing later: TRAIT-POLYMORPHIC-RECURSION
-has a `compiler::DiagnosticCode` case (the static-compile census classifies it
+has a `std::compiler::DiagnosticCode` case (the static-compile census classifies it
 recoverable), yet it is anchored at the trait-polymorphic function's top-level
 declaration, so no block produces it (`traits.test`
 trait-polymorphic-recursion-rejected is BLOCKED with that reproducer). Of the
@@ -561,11 +561,11 @@ native-executable test (golden suites run on the JIT path).
 
 | # | defect | layer | found by | fix |
 |---|---|---|---|---|
-| 1 | **Precision.** A loop over an empty literal List was charged its body's errors: `each([])` and `byte::set([])` were UNHANDLED-ERROR while `each([1])` was correctly KNOWN-ERROR, contradicting STATIC-COMPLETION-PROOFS.md item 92. `LiteralListOf` answered `{}` both for "no fact" and for the empty literal. | `hir/completions.tcl` | `byte-set-empty` (lists-and-sets.bot) | a3c5a79: the literal-list fact is tagged (`{list V...}`, `{list}` the empty literal), threaded through exact calls and the size readers. Two Tcl tests depended on the imprecision and were updated: `stdlib-namespaces.test` ns-proof-relations-do-not-outlive-their-scope now expects the correct KNOWN-ERROR; `empty-collection-admissibility.test` empty-caller-element-read-propagated reaches `first` through a parameter (its values unchanged). |
+| 1 | **Precision.** A loop over an empty literal List was charged its body's errors: `each([])` and `std::byte::set([])` were UNHANDLED-ERROR while `each([1])` was correctly KNOWN-ERROR, contradicting STATIC-COMPLETION-PROOFS.md item 92. `LiteralListOf` answered `{}` both for "no fact" and for the empty literal. | `hir/completions.tcl` | `byte-set-empty` (lists-and-sets.bot) | a3c5a79: the literal-list fact is tagged (`{list V...}`, `{list}` the empty literal), threaded through exact calls and the size readers. Two Tcl tests depended on the imprecision and were updated: `stdlib-namespaces.test` ns-proof-relations-do-not-outlive-their-scope now expects the correct KNOWN-ERROR; `empty-collection-admissibility.test` empty-caller-element-read-propagated reaches `first` through a parameter (its values unchanged). |
 | 2 | **Soundness.** `EvalListloop` never evaluated the loop's iterable: a call in `loop x in g(n):` that may fail was never charged, so a strict program compiled and its declared error escaped at run time uncaught (and counted/lockstep operands that never complete still let the body be charged). | `hir/completions.tcl` | the fix of #1 | be97243: `LoopDomain` walks every loop's domain (iterable, bounds, lockstep operands) in the enclosing scope first; a `never` operand makes the loop `never`. No existing program was newly rejected. |
 | 3 | **Static decisions: wrong decision.** `hir::affine::verify` computes release scopes (and so AFFINE-PATH-RELEASE-UNSUPPORTED) only when the whole program has no affine diagnostic; `hir/staticdeps.tcl` did not model that channel, so the batched scheduler mispredicted -- and, when the site also had a later diagnostic, *committed a different decision than the sequential reference* (KNOWN-ERROR instead of AFFINE-PATH-RELEASE-UNSUPPORTED), recorded nowhere. | `hir/staticdeps.tcl` | mutable-vector.bot (mispredicted) | 984baec: the ownership verdict is a program-wide channel (`C:verdict`); 3 tests, 3 mutants. |
 | 4 | **Static decisions: wrong program.** `Prepare` built its mentions, site expressions, region calls and function literals with `dict lappend` into flat lists read as dicts, so only the last entry per key survived: the analysis dropped edges, and a batched build could commit a capture the sequential order accepts (a different program, recorded nowhere) or mispredict. | `hir/staticdeps.tcl` | the fix of #3 | 6fe0859: every entry kept; a function value is not a shared mutable place (soundness argued in STATIC-DECISION-ECONOMICS.md, "Every mention"). Outcomes of all suites unchanged; some suites take more builds through the restored contract-boundary edges. |
-| 5 | **Crash.** `hir::mutvec::ShareDescriptor` recursed without bound (TCL LIMIT STACK) on a program declaring a recursive struct type and a function typed over it and using a `MutableVector` or `MutableArray` anywhere -- which every golden suite does, through `lib/test.bot`. | `hir/mutvec.tcl` | `structs.test` struct-named-recursive-declaration | e4107e3: `ShareDescriptor` and the affine drop `Descriptor` keep the structs they are inside of (a struct met again inside itself contributes nothing; descriptors of every non-recursive type unchanged). An *affine* struct holding its own type in a container element has values nested to any depth that no finite static descriptor reaches: its declaration is now rejected (AFFINE-CONTAINER-UNSUPPORTED, naming the field path) -- before, it compiled while unused and crashed the compiler once a release was needed. **A new restriction, flagged for your decision** (STRUCTS.md, AFFINE-VALUES.md). 5 Tcl tests, `recursive-types.bot` (9). |
+| 5 | **Crash.** `hir::mutvec::ShareDescriptor` recursed without bound (TCL LIMIT STACK) on a program declaring a recursive struct type and a function typed over it and using a `MutableVector` or `MutableArray` anywhere -- which every golden suite does, through `stdlib/test.bot`. | `hir/mutvec.tcl` | `structs.test` struct-named-recursive-declaration | e4107e3: `ShareDescriptor` and the affine drop `Descriptor` keep the structs they are inside of (a struct met again inside itself contributes nothing; descriptors of every non-recursive type unchanged). An *affine* struct holding its own type in a container element has values nested to any depth that no finite static descriptor reaches: its declaration is now rejected (AFFINE-CONTAINER-UNSUPPORTED, naming the field path) -- before, it compiled while unused and crashed the compiler once a release was needed. **A new restriction, flagged for your decision** (STRUCTS.md, AFFINE-VALUES.md). 5 Tcl tests, `recursive-types.bot` (9). |
 | 6 | **Static decisions: wrong message.** Hygiene renames a capturing binding `NAME#N`, N counted over the whole program, every static site's body included; a TYPE message printing that name differed between builds, so the batched scheduler committed `"list#2"` where the sequential reference reports `"list#1"` -- a different `CompilerError.message` value. | `hir/semantic.tcl`, `hir/range.tcl` | `se-equal-hygiene-names` (found while making TYPE messages name callables by source) | dc8bf3d: such messages print the binding's source spelling (`hir::semantic::SourceName`). The other producers that printed a binding's, a reference's or a function's name (USE-AFTER-MOVE, `hir::signatures::Name` and every other) print it likewise since the follow-up (`hir::semantic::RefName`, `CallableName`; `se-equal-hygiene-*`, STATIC-DECISION-ECONOMICS.md); no golden suite's message names a hygiene rename. |
 | 7 | **Ahead-of-time build failure.** An executable's startup code listed each struct shape's fields as `vec![...]`; for a shape with no fields -- the empty anonymous struct `{}` -- that is an untyped `vec![]`, which rustc rejects (E0282), so no program holding an empty struct could be built ahead of time (the JIT path was unaffected). | `native/src/codegen/aot.rs` | `bench/golden-aot.tcl` on `structs-and-enums.bot` | c50b9d1: the field list is typed `Vec<&str>`; `tests/native-executable.test` native-executable-empty-shape (fails before, at the link). structs-and-enums.bot now builds and passes 111/111 as an executable. |
 
@@ -660,14 +660,14 @@ top level). Counted over all 88 suites (`audit/golden/tools/census.tcl`):
 
 | construct | count |
 |---|---|
-| `test::value` registrations | 2915 |
-| `test::rejects` | 688 |
-| `test::rejects_at` (an absolute location of the suite file) | 289 |
-| `test::rejects_message` / `test::rejects_containing` | 339 |
-| `test::holds` / `test::rejects_any` | 0 / 0 |
-| custom `test::case` | 28 |
+| `std::test::value` registrations | 2915 |
+| `std::test::rejects` | 688 |
+| `std::test::rejects_at` (an absolute location of the suite file) | 289 |
+| `std::test::rejects_message` / `std::test::rejects_containing` | 339 |
+| `std::test::holds` / `std::test::rejects_any` | 0 / 0 |
+| custom `std::test::case` | 28 |
 | calls of suite-local registration helpers (tables, message+location, same-diagnostic) | 292 |
-| test bodies (`fn NAME() errors compiler::CompilerError:`) | 4293 |
+| test bodies (`fn NAME() errors std::compiler::CompilerError:`) | 4293 |
 | `static compile:` blocks | 4373 |
 | explicit run-time error handlers | 1118 |
 | top-level declarations (struct, enum, error, refined type, trait, context struct, ...) | 527 |
@@ -678,13 +678,13 @@ Per manifest row (4702): 4418 simple helper, 245 suite-local helper, 39 custom;
 error), 3244 use it by convention; 671 handle a run-time error explicitly; 421
 pin a location, 837 a message, 23 related locations; 509 use run-time inputs to
 defeat folding or KnownError; 1386 port a `-strict 0` Tcl program strictly. The
-ceremony every test repeats -- a named body, `errors compiler::CompilerError`,
+ceremony every test repeats -- a named body, `errors std::compiler::CompilerError`,
 `static compile:`, a registration line -- appears 4293 times; it is the evidence
 for a later general `syntactic fn` decision, and was not changed.
 
 **Library additions.** Exactly two helpers, after evidence (the brief's item 24):
-`test::rejects_message(name, code, message, body)` and
-`test::rejects_containing(name, code, fragment, body)` (with `contains_text?`,
+`std::test::rejects_message(name, code, message, body)` and
+`std::test::rejects_containing(name, code, fragment, body)` (with `contains_text?`,
 the substring scan they need) -- four suites (diagnostics, errors,
 loop-collecting, mutable-vector) had written the same matcher independently.
 `tests/golden-framework.test` pins every verdict of both on every backend
@@ -764,8 +764,8 @@ pass, and no GENERIC STAND-IN.)
 `audit/golden/tools/perturb.tcl` (new) proves every golden test can fail, two
 independent ways, one compilation each:
 
-* **invert**: the suite runs against a private copy of `lib/` whose
-  `test::passed()` is a mismatch and `test::mismatch(...)` a match; every helper
+* **invert**: the suite runs against a private copy of `stdlib/` whose
+  `std::test::passed()` is a mismatch and `std::test::mismatch(...)` a match; every helper
   and every custom check reaching its verdict through them reports the opposite.
   Every test must FAIL; one that still passes decided its verdict without the
   library (none does).
@@ -779,7 +779,7 @@ passes both over all 88 suites (interp; the three suites that exclude the Tcl
 backends on cranelift): **invert -- 4572 of 4572 tests FAIL; alter -- 4047
 tests altered, 4047 FAIL**. The 212 registrations alter cannot change
 textually (computed names, `unit`/`[]` or computed expectations, suite-local
-helpers, `test::case`) are covered by invert, and several migrators altered
+helpers, `std::test::case`) are covered by invert, and several migrators altered
 those by hand. No test is vacuous.
 
 ## Mutation
@@ -812,8 +812,8 @@ side), on the backends the mutated file can affect. A verdict is per mutant:
 mutant that breaks the runtime under a whole program (an uncatchable run-time
 failure in one test aborts its suite's runner), or the compiler on a
 construct every suite uses, fails the suite. Two of them say something about
-the framework itself: `done-consumes` breaks `lib/test.bot`'s own runner (it
-calls `coroutine::done?` and resumes), so every suite fails to compile, and
+the framework itself: `done-consumes` breaks `stdlib/test.bot`'s own runner (it
+calls `std::coroutine::done?` and resumes), so every suite fails to compile, and
 `fail-ignores-payload-tcl`/`whole-binding-loses-field-tcl` turn a missing
 payload field into a run-time failure no handler can catch.
 
@@ -830,10 +830,10 @@ run is `out/mutant-sample.txt`, the three mutants' re-run on the final tree
 * `handler-dispatch-short-name-tcl` (NEITHER): of the namespaced-errors tests
   that kill it, `nerr-both-handlers` had been classified multi-program and
   `nerr-completion-sets` internal; both are expressible with a stock module's
-  error (`byte::AboveRange`), and are now ported (the latter's value half, as
+  error (`std::byte::AboveRange`), and are now ported (the latter's value half, as
   `nerr-completion-sets/value`). Now BOTH.
 * `caller-imports-provide` (NEITHER): `ct-owner-only` was re-expressed with a
-  stock context (`linux::io::LinuxIO`) instead of a private module. Now
+  stock context (`std::linux::io::LinuxIO`) instead of a private module. Now
   BOTH-SUITE-LEVEL.
 
 The remaining three are explained, not gaps:
@@ -859,7 +859,7 @@ the final tree).
 
 | harness | mutants | result | why it ran |
 |---|---|---|---|
-| golden framework (`audit/golden/tools/mutate.tcl -suites 0`; `out/framework-mutants.txt`) | 20 | all apply, all killed by `golden-framework.test` and the framework fuzzer (`-suites 0` leaves out running all 88 suites per mutant, a full four-backend corpus run each) | `lib/test.bot` gained two helpers |
+| golden framework (`audit/golden/tools/mutate.tcl -suites 0`; `out/framework-mutants.txt`) | 20 | all apply, all killed by `golden-framework.test` and the framework fuzzer (`-suites 0` leaves out running all 88 suites per mutant, a full four-backend corpus run each) | `stdlib/test.bot` gained two helpers |
 | static decisions (`audit/static-decisions/tools/mutate.tcl`) | 35 (17 before; 18 added with the fixes) | all apply, all killed on the final tree (`out/static-decisions-final.txt`; the coroutine-construction fix's own mutant, `coroutine-subsume-unconditional`, by `se-builds-coroutine-construction`) | `hir/staticdeps.tcl`, `hir/static.tcl` |
 | structural contracts (`audit/structural-contracts/tools/mutate.tcl`) | 18 | all apply, all killed | `hir/completions.tcl` |
 | error payloads (`audit/error-payloads/tools/mutate.tcl`) | 44 | all apply, all killed (the 43 Tcl-backend ones, and the native `propagation-drops-payload-native` with its private rebuild) | `hir/completions.tcl` |
@@ -882,7 +882,7 @@ GC-stressed), MutableArray 3 x 40 (one GC-stressed), static intrinsics 3
 seeds (one GC-stressed), structural contracts 3 x 40 and its three fault modes
 (carrier, unknown, drop), error payloads 3 x 40 (one GC-stressed) and `-fault
 unhandled`, and the golden fuzzer 4 x 20 programs (one GC-stressed) after
-`lib/test.bot` changed. The static-decision fuzzer, run on new seeds there
+`stdlib/test.bot` changed. The static-decision fuzzer, run on new seeds there
 (17 and 29, beside 3), found two failures ([Compiler
 findings](#compiler-findings)): seed 29's, a layout taking one round more,
 came from the migration's own fix of #4 and is fixed; seed 17's, a verdict
@@ -1085,7 +1085,7 @@ instances, rejected blocks over several rounds, method-call trials
   subset's 653 s. Running whole files instead
   of the ported tests triples the time (2,054 s): the duplicated tests sit in
   files with many internal ones.
-* **Golden harness.** Every suite compiles `lib/test.bot` with it (0.85 s
+* **Golden harness.** Every suite compiles `stdlib/test.bot` with it (0.85 s
   alone, about 75 s over the corpus) and re-analyzes its HIR in every build
   (a suite of no case is 1,468 HIR expressions: 99% of the smallest suite's
   1,481, half the median suite's 2,932);
@@ -1343,7 +1343,7 @@ The milestone's 75 report points, in order (section links hold the detail).
     `count(100000)` exceeds the Tcl interpreter's evaluation depth (TCL LIMIT
     STACK on interp), and the theorem *is* the depth, so no smaller port keeps
     it. `traits.test` trait-polymorphic-recursion-rejected: TRAIT-POLYMORPHIC-
-    RECURSION has a `compiler::DiagnosticCode` case (the static-compile census
+    RECURSION has a `std::compiler::DiagnosticCode` case (the static-compile census
     calls it recoverable) but is reported at the trait-polymorphic function's
     top-level declaration, so no `static compile:` block can produce it (the
     manifest row holds the reproducer).
@@ -1382,16 +1382,16 @@ The milestone's 75 report points, in order (section links hold the detail).
 22. **Runtime bugs found.** None: every suite passes under GC stress on every
     native backend it runs (81 on both, the 7 struct-shape companions on
     cranelift only), and no golden/Tcl disagreement traced to a runtime.
-23. **Framework bugs found.** None in `lib/test.bot`. In the harness: the
+23. **Framework bugs found.** None in `stdlib/test.bot`. In the harness: the
     runner's whole-suite generic stand-in silently removed cranelift-generic
     coverage (now reported, and the last suite relying on it repaired;
     [Backends and exclusions](#backends-and-exclusions)). The mutant
-    `done-consumes` shows the runner depends on `coroutine::done?` (by design).
-24. **Simple-helper usage.** `test::value` 2915, `test::rejects` 688,
-    `test::rejects_at` 289, `test::rejects_message`/`_containing` 339,
-    `test::holds` 0, `test::rejects_any` 0 registrations; 4418 manifest rows use
+    `done-consumes` shows the runner depends on `std::coroutine::done?` (by design).
+24. **Simple-helper usage.** `std::test::value` 2915, `std::test::rejects` 688,
+    `std::test::rejects_at` 289, `std::test::rejects_message`/`_containing` 339,
+    `std::test::holds` 0, `std::test::rejects_any` 0 registrations; 4418 manifest rows use
     a library helper.
-25. **Custom matcher usage.** 28 `test::case` registrations (39 rows).
+25. **Custom matcher usage.** 28 `std::test::case` registrations (39 rows).
 26. **Suite-local matcher usage.** 292 calls of suite-local registration helpers
     (245 rows).
 27. **Explicit runtime-handler count.** 1118 `on E` handlers in test bodies; 671
@@ -1483,9 +1483,9 @@ The milestone's 75 report points, in order (section links hold the detail).
     90% active), release order, scheduler economics, the process boundary.
 70. **Compiler bottlenecks.** Type inference (38% of the front end) and instance verification (13%) -- the semantic-instance layer's whole-program copies, quadratic --, hygiene's rescans (11%), the completion analysis (8%); outside the front end, the quadratic Core IR lowering (583 s, which the Tcl compiler also re-enters per block) and the `compile` backend's HIR rebuild (gone from that backend since main's 14a1143, with its whole-program lowering). All algorithmic; prototypes and plans in [Compiler performance](#compiler-performance-what-dominates-and-what-would-remove-it).
 71. **Tcl-harness overhead.** About 0.07-0.1 s per Tcl file (start-up and loading), 2% of the subset; the cost of running whole files instead of the ported tests is 3x.
-72. **Golden-harness overhead.** `lib/test.bot` compiled with every suite (0.85 s, about 75 s in all) and re-analyzed in every build; framework execution microseconds; the parallel floor of the largest suite (mutable-array.bot, 324-562 s four at a time; the 562 s on all four backends, `compile` on its former core IR path).
+72. **Golden-harness overhead.** `stdlib/test.bot` compiled with every suite (0.85 s, about 75 s in all) and re-analyzed in every build; framework execution microseconds; the parallel floor of the largest suite (mutable-array.bot, 324-562 s four at a time; the 562 s on all four backends, `compile` on its former core IR path).
 73. **Estimated local feedback-loop winner.** Today the Tcl E2E subset in parallel (180 s) is the fastest full source-level loop, about three times faster than the golden corpus on one backend (517-531 s, bounded by mutable-array.bot); for targeted edits Tcl files win for analyses and golden suites win for native lowering. The golden layer's gap is compiler cost: the measured in-place branch halves callables.bot's front end and cuts others' by 5-30% (the walk alone: -19% over the 12 largest suites), and the quadratic Core IR lowering, which the Tcl compiler still re-enters per block, is the next item (the compile backend's whole-program lowering and rebuild, the other one then, are gone from that backend since main's 14a1143). No policy is chosen here.
-74. **Evidence for front-end self-hosting.** (a) Where the time is: per-build whole-program analyses, 76-83% of a small suite's front end, with super-linear algorithms that would stay super-linear in Botlish; Tcl's constant factor is real but second. (b) Coupling: the HIR is not self-contained (about 11 process-wide registries the backends read), and there is no complete interchange format (`hir::format` drops modules, the `semantic` and `coroutines` tables, bounds verdicts, spans); native lowering reuses `hir/` analyses including type inference. (c) The natural cut is the whole build loop (`hir::buildSyntax`'s inputs in, analyzed HIR out); parsing alone is 3% of the corpus's front end (9-21% of a small suite's, mostly re-parsing `lib/test.bot`), lowering and module loading a few percent more. (d) Tcl can orchestrate across a process boundary (an AOT executable: 2-4 ms start-up, argv in, one String out). (e) Prerequisites: maps, enum payloads and `match`, String ordering and conversions, file I/O and exit status, fast character access on non-ASCII text. (f) The Tcl backends' preparation costs more than the front end (2,166 against 1,518 s, measured with `compile` on its former core IR path; not re-measured since 14a1143), so a Botlish front end alone would not make the golden corpus fast. ((a) to (d) are the coupling study's measurements, `audit/golden/migration/out/study-frontend-coupling.json`.)
+74. **Evidence for front-end self-hosting.** (a) Where the time is: per-build whole-program analyses, 76-83% of a small suite's front end, with super-linear algorithms that would stay super-linear in Botlish; Tcl's constant factor is real but second. (b) Coupling: the HIR is not self-contained (about 11 process-wide registries the backends read), and there is no complete interchange format (`hir::format` drops modules, the `semantic` and `coroutines` tables, bounds verdicts, spans); native lowering reuses `hir/` analyses including type inference. (c) The natural cut is the whole build loop (`hir::buildSyntax`'s inputs in, analyzed HIR out); parsing alone is 3% of the corpus's front end (9-21% of a small suite's, mostly re-parsing `stdlib/test.bot`), lowering and module loading a few percent more. (d) Tcl can orchestrate across a process boundary (an AOT executable: 2-4 ms start-up, argv in, one String out). (e) Prerequisites: maps, enum payloads and `match`, String ordering and conversions, file I/O and exit status, fast character access on non-ASCII text. (f) The Tcl backends' preparation costs more than the front end (2,166 against 1,518 s, measured with `compile` on its former core IR path; not re-measured since 14a1143), so a Botlish front end alone would not make the golden corpus fast. ((a) to (d) are the coupling study's measurements, `audit/golden/migration/out/study-frontend-coupling.json`.)
 75. **Recommended next milestone.** [Recommendations](#recommendations).
 
 ## Recommendations
@@ -1579,7 +1579,7 @@ The specification and its map:
 * `tests/golden/manifest.tsv` -- the complete map (generated).
 * `tests/golden/README.md` -- the porting guide, now with the manifest's
   workflow, exclusions and companions.
-* `lib/test.bot` -- `test::rejects_message`, `test::rejects_containing`.
+* `stdlib/test.bot` -- `std::test::rejects_message`, `std::test::rejects_containing`.
 
 The evidence the manifest is derived from (`audit/golden/migration/`):
 
@@ -1664,14 +1664,14 @@ STRUCTS.md, AFFINE-VALUES.md, MUTABLE-VECTOR.md and AGENTS.md record the rules.
   fail), `audit/golden/tools/check.tcl -suites SUITE.bot` (side by side with
   its Tcl originals), and the fragment row and `merge.tcl`. Suites are test
   programs, compiled with warnings off like the Tcl suite's programs; the
-  warning gate covers `lib/test.bot`.
+  warning gate covers `stdlib/test.bot`.
 * **A Tcl test**: its census row; `tclsh9.0 audit/golden/migration/merge.tcl
   -names audit/golden/migration/tcl-names.txt -check 1` reports a test without
   a row once the names are refreshed.
-* **`lib/test.bot`**: as AGENTS.md says (golden-framework.test, golden.test,
+* **`stdlib/test.bot`**: as AGENTS.md says (golden-framework.test, golden.test,
   run.tcl, the golden fuzzer and mutants, the warning gate), and
   `perturb.tcl` over every suite (`-mode invert` exercises every verdict path).
-* **A compiler diagnostic, `compiler::DiagnosticCode`, the completion analysis
+* **A compiler diagnostic, `std::compiler::DiagnosticCode`, the completion analysis
   or the static decisions**: `audit/golden/tools/check.tcl` (all shards: a
   diagnostic's code, position or message is pinned by about 1,350 golden
   tests) and `audit/static-decisions/tools/compare.tcl tests/golden/*.bot`.

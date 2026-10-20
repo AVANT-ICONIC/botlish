@@ -23,7 +23,7 @@ set only [expr {[llength $argv] > 1 ? [lindex $argv 1] : "*"}]
 # arguments are exactly known (the "heroic proving" the warning must never do);
 # `character-literal-warned` drops the kind check and measures a character
 # literal as the one-character String of its scalar (so it warns, rather than
-# crashing str::length);
+# crashing std::str::length);
 # `first-site-per-value` also declares its `seen` dict (below). (Texts that open
 # a brace they do not close are double-quoted.)
 set guard "        if \{\[dict get \$node kind\] ne \"const\" || \[dict exists \$keys \$e\]\} \{"

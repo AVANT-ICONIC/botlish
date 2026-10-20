@@ -117,7 +117,7 @@ proc writeFile {path text} {
 proc makeMutantTree {scratch} {
     global root
     file mkdir $scratch
-    foreach dir {core compiler hir surface lib} {
+    foreach dir {core compiler hir surface stdlib} {
         file copy -force [file join $root $dir] [file join $scratch $dir]
     }
     file mkdir [file join $scratch native]

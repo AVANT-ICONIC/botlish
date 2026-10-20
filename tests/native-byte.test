@@ -1,14 +1,14 @@
-# native-byte.test -- byte::high_nibble/byte::low_nibble/byte::nibble/
-# byte::complement/byte::position_low/byte::position_high (lib/byte.bot)
+# native-byte.test -- std::byte::high_nibble/std::byte::low_nibble/std::byte::nibble/
+# std::byte::complement/std::byte::position_low/std::byte::position_high (stdlib/byte.bot)
 # and the generic bit_and/bit_or/bit_xor/shift_left/shift_right primitives
 # (core/scalarbits.tcl) on the native (Cranelift) backend, and web.bot's
 # rewritten high_nibble via bench/refined-checks.bot -- the milestone's
 # primary acceptance case. See BYTE-NIBBLE-BIT-ARITHMETIC.md.
 #
-# byte::high_nibble/byte::low_nibble/byte::nibble/etc. are ordinary,
+# std::byte::high_nibble/std::byte::low_nibble/std::byte::nibble/etc. are ordinary,
 # plainly-typed Botlish functions (not natives with a declared HighNibble/
 # LowNibble/Nibble result type): that shape does not compile natively from
-# a call site *inside* a cross-file module function (lib/byte.bot's own
+# a call site *inside* a cross-file module function (stdlib/byte.bot's own
 # shape, and web.bot's) -- core/scalarbits.tcl's header has the discovery
 # and the full trace. This file's parity checks are exactly what proves the
 # plain-function design still computes the right values on every backend.
@@ -45,14 +45,14 @@ proc moduleValue {path} {
 }
 
 # ---------------------------------------------------------------------------
-# byte::high_nibble/byte::low_nibble/byte::nibble/byte::complement/
-# byte::position_low/byte::position_high: cross-backend parity and values.
+# std::byte::high_nibble/std::byte::low_nibble/std::byte::nibble/std::byte::complement/
+# std::byte::position_low/std::byte::position_high: cross-backend parity and values.
 
 test native-byte-basic-parity {byte:: operations agree on every backend} -body {
-    set path [makeFile {import byte
-[byte::high_nibble(171), byte::low_nibble(171), byte::nibble(byte::high_nibble(171)),
- byte::nibble(byte::low_nibble(171)), byte::complement(0), byte::complement(240),
- byte::position_low(10), byte::position_high(10)]} native-byte-basic.bot]
+    set path [makeFile {import std::byte
+[std::byte::high_nibble(171), std::byte::low_nibble(171), std::byte::nibble(std::byte::high_nibble(171)),
+ std::byte::nibble(std::byte::low_nibble(171)), std::byte::complement(0), std::byte::complement(240),
+ std::byte::position_low(10), std::byte::position_high(10)]} native-byte-basic.bot]
     try {
         list [moduleParity $path] [moduleValue $path]
     } finally {
@@ -65,14 +65,14 @@ test native-byte-basic-parity {byte:: operations agree on every backend} -body {
 # (e.g. a call argument) -- so each exhaustive check below binds its `if`
 # result to a local first (next_acc), then passes that plain ref on.
 
-test native-byte-reconstruction-exhaustive {byte::high_nibble(b) | byte::low_nibble(b) == b for every b in 0..255 (spec #66)} -body {
+test native-byte-reconstruction-exhaustive {std::byte::high_nibble(b) | std::byte::low_nibble(b) == b for every b in 0..255 (spec #66)} -body {
     set body {
-import byte
+import std::byte
 fn check_all(i, acc):
     if i > 255:
         acc
     else:
-        ok = bit_or(byte::high_nibble(i), byte::low_nibble(i)) == i
+        ok = bit_or(std::byte::high_nibble(i), std::byte::low_nibble(i)) == i
         next_acc = if acc:
             ok
         else:
@@ -89,15 +89,15 @@ check_all(0, true)
     }
 } -result true
 
-test native-byte-normalization-exhaustive {byte::nibble(byte::high_nibble(b)) == b div 16, byte::nibble(byte::low_nibble(b)) == b mod 16, for every b in 0..255 (spec #67)} -body {
+test native-byte-normalization-exhaustive {std::byte::nibble(std::byte::high_nibble(b)) == b div 16, std::byte::nibble(std::byte::low_nibble(b)) == b mod 16, for every b in 0..255 (spec #67)} -body {
     set body {
-import byte
+import std::byte
 fn check_all(i, acc):
     if i > 255:
         acc
     else:
-        hi_ok = byte::nibble(byte::high_nibble(i)) == shift_right(i, 4)
-        lo_ok = byte::nibble(byte::low_nibble(i)) == mod(i, 16)
+        hi_ok = std::byte::nibble(std::byte::high_nibble(i)) == shift_right(i, 4)
+        lo_ok = std::byte::nibble(std::byte::low_nibble(i)) == mod(i, 16)
         both_ok = if hi_ok:
             lo_ok
         else:
@@ -118,14 +118,14 @@ check_all(0, true)
     }
 } -result true
 
-test native-byte-complement-exhaustive {byte::complement is its own inverse for every b in 0..255} -body {
+test native-byte-complement-exhaustive {std::byte::complement is its own inverse for every b in 0..255} -body {
     set body {
-import byte
+import std::byte
 fn check_all(i, acc):
     if i > 255:
         acc
     else:
-        ok = byte::complement(byte::complement(i)) == i
+        ok = std::byte::complement(std::byte::complement(i)) == i
         next_acc = if acc:
             ok
         else:
@@ -144,13 +144,13 @@ check_all(0, true)
 
 test native-byte-position-exhaustive {position_low/position_high round-trip through nibble, for every n in 0..15} -body {
     set body {
-import byte
+import std::byte
 fn check_all(i, acc):
     if i > 15:
         acc
     else:
-        low_ok = byte::nibble(byte::position_low(i)) == i
-        high_ok = byte::nibble(byte::position_high(i)) == i
+        low_ok = std::byte::nibble(std::byte::position_low(i)) == i
+        high_ok = std::byte::nibble(std::byte::position_high(i)) == i
         ok = if low_ok:
             high_ok
         else:
@@ -172,7 +172,7 @@ check_all(0, true)
 } -result true
 
 # ---------------------------------------------------------------------------
-# Byte/Nibble/LowNibble/HighNibble checked construction (lib/byte.bot's own
+# Byte/Nibble/LowNibble/HighNibble checked construction (stdlib/byte.bot's own
 # source declarations -- see SOURCE-DEFINED-INTEGER-DOMAINS.md): this
 # section used to test the callable Byte(n)/Nibble(n)/LowNibble(n)/
 # HighNibble(n) checked-constructor syntax directly (both its interp/compile
@@ -187,11 +187,11 @@ check_all(0, true)
 # PREDICATES.md) are removed rather than rewritten. The property they pinned -- a source-declared interval domain
 # gets a real, dynamic, cross-backend-identical runtime check for a
 # genuinely dynamic value -- is now demonstrated through an explicit
-# `errors`/`fail`/`handle` function instead (byte::from_int is the Byte
+# `errors`/`fail`/`handle` function instead (std::byte::from_int is the Byte
 # vertical's own instance; tests/errors.test has the general, exhaustive,
 # all-four-backend coverage of the mechanism itself).
 #
-# Referencing byte::high_nibble is what loads byte.bot (and so registers
+# Referencing std::byte::high_nibble is what loads byte.bot (and so registers
 # Byte/Nibble/LowNibble/HighNibble) through the ordinary module system --
 # see moduleValue/moduleParity above; the remaining tests below still need
 # it for native-byte-nibble-lownibble-distinct's own nominal-distinctness
@@ -202,9 +202,9 @@ check_all(0, true)
 # lives in tests/source-types.test with its own synthetic types; this is
 # the Byte-vertical-specific instance of it.
 test native-byte-nibble-lownibble-distinct {Nibble and LowNibble each show their own name in HIR, for the identical [0,15] domain} -body {
-    set path [makeFile {import byte
-n = byte::nibble(byte::high_nibble(160))
-l = byte::position_low(10)
+    set path [makeFile {import std::byte
+n = std::byte::nibble(std::byte::high_nibble(160))
+l = std::byte::position_low(10)
 0} native-byte-nominal.bot]
     try {
         set hir [surface::readProgramFile $path -strict 0]
@@ -212,8 +212,8 @@ l = byte::position_low(10)
     } finally {
         removeFile native-byte-nominal.bot
     }
-    list [expr {[string first {int[byte::Nibble]} $text] >= 0}] \
-         [expr {[string first {int[byte::LowNibble]} $text] >= 0}]
+    list [expr {[string first {int[std::byte::Nibble]} $text] >= 0}] \
+         [expr {[string first {int[std::byte::LowNibble]} $text] >= 0}]
 } -result {1 1}
 
 # ---------------------------------------------------------------------------
@@ -244,13 +244,13 @@ test native-shift-range-error-parity {an out-of-range shift amount is the same e
 } -result same
 
 # ---------------------------------------------------------------------------
-# byte::high_nibble compiles to mask/shift, not a branch ladder (spec #21,
+# std::byte::high_nibble compiles to mask/shift, not a branch ladder (spec #21,
 # #53, #69, #90): the AND-mask extraction itself is unconditional in the
-# generated NIR (no `guard`/`raise` instruction at all -- byte::high_nibble/
-# byte::low_nibble need no runtime validation for any Int input, per
+# generated NIR (no `guard`/`raise` instruction at all -- std::byte::high_nibble/
+# std::byte::low_nibble need no runtime validation for any Int input, per
 # core/scalarbits.tcl's by-construction argument).
 
-test native-byte-high-nibble-nir-is-mask-not-branch {byte::high_nibble's own NIR has no comparison/branch instruction} -body {
+test native-byte-high-nibble-nir-is-mask-not-branch {std::byte::high_nibble's own NIR has no comparison/branch instruction} -body {
     # extract's own argument is deliberately not a literal (mod's own wide,
     # non-exact result: core/native.tcl's resultRange metadata gives it only
     # [0,+inf), never a single proven value): this test is about the mask
@@ -260,7 +260,7 @@ test native-byte-high-nibble-nir-is-mask-not-branch {byte::high_nibble's own NIR
     # caller (e.g. extract(200)) would now trigger instead, since this
     # milestone's own generic exact-set transfer (hir/range.tcl's BitOp) can
     # prove *that* case a single value and fold the `iand` away entirely.
-    set path [makeFile "import byte\nfn extract(b):\n    byte::high_nibble(b)\n\nextract(mod(200, 1000000))\n" native-byte-nir.bot]
+    set path [makeFile "import std::byte\nfn extract(b):\n    std::byte::high_nibble(b)\n\nextract(mod(200, 1000000))\n" native-byte-nir.bot]
     try {
         set hir [surface::readProgramFile $path -strict 0]
         set nir [native::nir $hir]
@@ -289,10 +289,10 @@ test native-refined-checks-compile-cranelift-agree {compile and cranelift agree 
 } -result {{value {[400, 0]} {}} {value {[400, 0]} {}}}
 
 test native-refined-checks-no-old-ladder {web.bot's high_nibble no longer contains the old 15-branch threshold ladder} -body {
-    set text [read [open [file join $::projectRoot lib web.bot]]]
+    set text [read [open [file join $::projectRoot stdlib web.bot]]]
     list [expr {[string first "b <= 239" $text] < 0}] \
-         [expr {[string first "byte::high_nibble" $text] >= 0}] \
-         [expr {[string first "byte::nibble" $text] >= 0}]
+         [expr {[string first "std::byte::high_nibble" $text] >= 0}] \
+         [expr {[string first "std::byte::nibble" $text] >= 0}]
 } -result {1 1 1}
 
 cleanupTests

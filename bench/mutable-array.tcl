@@ -22,7 +22,7 @@
 #     detaches) for each S -- the copy is O(1), the first write O(S), later
 #     writes of the now-unique backing O(1); the same for a vector;
 #   * a scheduler-shaped construction: N workers made by a factory
-#     (mutable_array::generate), each resumed K times through swap, and the
+#     (std::mutable_array::generate), each resumed K times through swap, and the
 #     array consumed by a loop.
 #
 # Every timed number is best of RUNS in-process executions, compilation
@@ -51,11 +51,11 @@ foreach {option value} $args {
 }
 
 set C "Coroutine{args: \[Cmd\], return: Ev}"
-set prelude "import coroutine
-import list
-import mutable_array
-import mutable_byte_store
-import mutable_vector
+set prelude "import std::coroutine
+import std::list
+import std::mutable_array
+import std::mutable_byte_store
+import std::mutable_vector
 
 struct Cmd:
     v: int
@@ -88,24 +88,24 @@ fn range(n: int) -> List\[int\]:
         i
 
 fn ints_of(n: int) -> MutableVector\[int\]:
-    mutable_vector::from_list(range(n))
+    std::mutable_vector::from_list(range(n))
 
 fn pair(i: int) -> MutableArray\[int\]:
-    mutable_array::create(2, i)
+    std::mutable_array::create(2, i)
 
 fn pair_co(i: int) -> MutableArray\[$C\]:
-    mutable_array::generate(2, make)
+    std::mutable_array::generate(2, make)
 
 fn arrays() -> MutableVector\[MutableArray\[int\]\]:
-    mutable_vector::from_list(\[\])
+    std::mutable_vector::from_list(\[\])
 
 fn co_arrays() -> MutableVector\[MutableArray\[$C\]\]:
-    mutable_vector::from_list(\[\])
+    std::mutable_vector::from_list(\[\])
 
 fn fill_bytes(s, i: int, n: int):
     if i >= n:
         return s
-    fill_bytes(mutable_byte_store::replace(s, i, 1), i + 1, n)
+    fill_bytes(std::mutable_byte_store::replace(s, i, 1), i + 1, n)
 
 "
 
@@ -132,58 +132,58 @@ proc programText {kind n} {
             append p [Fn $n [concat [Each {i}] {n}]]
         }
         list-build {
-            append p [Fn $n {"xs = range(n)" "list::length(xs)"}]
+            append p [Fn $n {"xs = range(n)" "std::list::length(xs)"}]
         }
         create {
-            append p [Fn $n {"a = mutable_array::create(n, 0)" "a.capacity()"}]
+            append p [Fn $n {"a = std::mutable_array::create(n, 0)" "a.capacity()"}]
         }
         from-list {
-            append p [Fn $n {"a = mutable_array::from_list(range(n))" "a.capacity()"}]
+            append p [Fn $n {"a = std::mutable_array::from_list(range(n))" "a.capacity()"}]
         }
         generate {
-            append p [Fn $n {"a = mutable_array::generate(n, tens)" "a.capacity()"}]
+            append p [Fn $n {"a = std::mutable_array::generate(n, tens)" "a.capacity()"}]
         }
         array-base {
-            append p [Fn $n {"a = mutable_array::create(n, 0)" "a.set(0, 1)" "a.capacity()"} 1]
+            append p [Fn $n {"a = std::mutable_array::create(n, 0)" "a.set(0, 1)" "a.capacity()"} 1]
         }
         set {
-            append p [Fn $n [concat {"a = mutable_array::create(n, 0)" "a.set(0, 1)"} [Each {"a.set(i, i)"}] {"a.capacity()"}] 1]
+            append p [Fn $n [concat {"a = std::mutable_array::create(n, 0)" "a.set(0, 1)"} [Each {"a.set(i, i)"}] {"a.capacity()"}] 1]
         }
         at {
-            append p [Fn $n [concat {"a = mutable_array::create(n, 0)" "a.set(0, 1)"} [Each {"mutable_array::at(a, i)"}] {"a.capacity()"}] 1]
+            append p [Fn $n [concat {"a = std::mutable_array::create(n, 0)" "a.set(0, 1)"} [Each {"std::mutable_array::at(a, i)"}] {"a.capacity()"}] 1]
         }
         swap {
-            append p [Fn $n [concat {"a = mutable_array::create(n, 0)" "a.set(0, 1)"} [Each {"a.swap(i, i)"}] {"a.capacity()"}] 1]
+            append p [Fn $n [concat {"a = std::mutable_array::create(n, 0)" "a.set(0, 1)"} [Each {"a.swap(i, i)"}] {"a.capacity()"}] 1]
         }
         iterate {
-            append p [Fn $n {"a = mutable_array::create(n, 0)" "a.set(0, 1)" "ys = loop x in a:" "    x" "list::length(ys)"} 1]
+            append p [Fn $n {"a = std::mutable_array::create(n, 0)" "a.set(0, 1)" "ys = loop x in a:" "    x" "std::list::length(ys)"} 1]
         }
         vector-base {
             append p [Fn $n {"v = ints_of(n)" "v.push(0)" "v.length()"} 1]
         }
         vector-at {
-            append p [Fn $n [concat {"v = ints_of(n)" "v.push(0)"} [Each {"mutable_vector::at(v, i)"}] {"v.length()"}] 1]
+            append p [Fn $n [concat {"v = ints_of(n)" "v.push(0)"} [Each {"std::mutable_vector::at(v, i)"}] {"v.length()"}] 1]
         }
         vector-swap {
             append p [Fn $n [concat {"v = ints_of(n)" "v.push(0)"} [Each {"v.swap(i, 0)"}] {"v.length()"}] 1]
         }
         bytes-base {
-            append p [Fn $n {"s = mutable_byte_store::zeroed(n)" "mutable_byte_store::count(s)"}]
+            append p [Fn $n {"s = std::mutable_byte_store::zeroed(n)" "std::mutable_byte_store::count(s)"}]
         }
         bytes-replace {
-            append p [Fn $n {"s = fill_bytes(mutable_byte_store::zeroed(n), 0, n)" "mutable_byte_store::count(s)"}]
+            append p [Fn $n {"s = fill_bytes(std::mutable_byte_store::zeroed(n), 0, n)" "std::mutable_byte_store::count(s)"}]
         }
         make-drop {
             append p [Fn $n [concat [Each {"c = make(i)" "1"}] {n}]]
         }
         affine-generate {
-            append p [Fn $n {"q = mutable_array::generate(n, make)" "q.capacity()"}]
+            append p [Fn $n {"q = std::mutable_array::generate(n, make)" "q.capacity()"}]
         }
         affine-swap {
-            append p [Fn $n [concat {"q = mutable_array::generate(1, make)"} [Each {"old = q.swap(0, make(i))" "1"}] {"q.capacity()"}] 1]
+            append p [Fn $n [concat {"q = std::mutable_array::generate(1, make)"} [Each {"old = q.swap(0, make(i))" "1"}] {"q.capacity()"}] 1]
         }
         affine-consume {
-            append p [Fn $n {"q = mutable_array::generate(n, make)" "ys = loop c in q:" "    1" "list::length(ys)"}]
+            append p [Fn $n {"q = std::mutable_array::generate(n, make)" "ys = loop c in q:" "    1" "std::list::length(ys)"}]
         }
         nested-base {
             append p [Fn $n {"v = arrays()" "v.length()"}]
@@ -210,7 +210,7 @@ proc programText {kind n} {
                     }
                     lappend body "v.length()"
                 } else {
-                    set body [list "a = mutable_array::create($size, 0)" "a.set(0, 1)"]
+                    set body [list "a = std::mutable_array::create($size, 0)" "a.set(0, 1)"]
                     switch -- $what {
                         copy-base { lappend body {*}[Each {"a.capacity()"}] }
                         copy { lappend body {*}[Each {"b = a" "b.capacity()"}] }
@@ -228,8 +228,8 @@ proc programText {kind n} {
                 append p "    step_all(q, i + 1, n)\n"
                 append p "fn rounds(q: MutableArray\[$::C\], r: int, n: int) -> MutableArray\[$::C\] errors IndexNotFound:\n"
                 append p "    if r >= $k:\n        return q\n    rounds(step_all(q, 0, n), r + 1, n)\n"
-                append p "fn f(n: int) -> int errors IndexNotFound:\n    q = rounds(mutable_array::generate(n, worker), 0, n)\n"
-                append p "    done = loop w in q:\n        coroutine::done?(w)\n    list::length(done)\n"
+                append p "fn f(n: int) -> int errors IndexNotFound:\n    q = rounds(std::mutable_array::generate(n, worker), 0, n)\n"
+                append p "    done = loop w in q:\n        std::coroutine::done?(w)\n    std::list::length(done)\n"
                 append p "r = f($n):\n    on IndexNotFound:\n        -1\nr\n"
             } else {
                 error "unknown program $kind"
@@ -375,7 +375,7 @@ if {"native" in $backends} {
 }
 
 puts "\n## Scheduler-shaped construction\n"
-puts "N workers from mutable_array::generate(n, worker), 8 rounds over the array (swap a slot out, resume it, swap it back), then a consuming loop; time per resume.\n"
+puts "N workers from std::mutable_array::generate(n, worker), 8 rounds over the array (swap a slot out, resume it, swap it back), then a consuming loop; time per resume.\n"
 header "program"
 set cells {}
 foreach backend $backends {

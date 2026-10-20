@@ -46,7 +46,7 @@ m = mean(x, y):
 * **No implicit conversion.** An Int and a Float64 together are a TYPE
   error where the operator is written:
   `the operands of "+" are Float64 and int: a Float64 operation needs Float64
-  operands, and nothing converts one implicitly (float64::from_int makes an
+  operands, and nothing converts one implicitly (std::float64::from_int makes an
   Int a Float64)`.
 * **Division.** `/` divides Float64 values and nothing else. There is no
   integer division: `7 / 2` is
@@ -83,11 +83,11 @@ m = mean(x, y):
   contracts. An untyped parameter used with a Float64 operand is inferred
   `Float64` (the operation's checked contract), so `half(3)` of
   `fn half(x): x / 2.0` is rejected at the call.
-* **Conversions** (`import float64`, the whole standard-library addition):
-  * `float64::from_int(n)` gives the nearest Float64, ties to even, from the
+* **Conversions** (`import std::float64`, the whole standard-library addition):
+  * `std::float64::from_int(n)` gives the nearest Float64, ties to even, from the
     exact Int at any size; an Int beyond the range fails with
     `NonFiniteFloat`.
-  * `float64::truncate(x)` gives the integer part, toward zero, exact at any
+  * `std::float64::truncate(x)` gives the integer part, toward zero, exact at any
     magnitude; it never fails.
   * Nothing else: no rounding modes, no math library, no text conversion, no
     bit access.
@@ -174,7 +174,7 @@ more than a single, replaceable rule does.
   unchanged. `hir/format.tcl` and `hir/read.tcl` needed nothing new: a
   resolved operator is an ordinary native call. The front-end fingerprint
   changes with the front end, as it must.
-* **C.** `ffi::c::Double` is `Float64` under its C name (section 7).
+* **C.** `std::ffi::c::Double` is `Float64` under its C name (section 7).
 
 ## 5. Finite-only enforcement
 
@@ -238,7 +238,7 @@ The conservative choices:
 
 ## 7. FFI: C `double`
 
-`ffi::c::Double` is a C ABI value type for `extern c fn` parameters and
+`std::ffi::c::Double` is a C ABI value type for `extern c fn` parameters and
 results (`hir/cabi.tcl`). It is Float64 itself, so a program needs no
 conversion. Its ABI class is `f64` (`hir/foreign.tcl`, `nir::CAbi::F64`).
 Cranelift places it by the target's C convention
@@ -251,13 +251,13 @@ floating-point parameters filling their own register classes.
 * **In:** the returned double is normalized (`+ 0.0`) and checked for
   finiteness before it becomes a Float64. NaN, +Inf or -Inf fail the call
   with `NonFiniteFloat`, whose payload says which of the three C returned,
-  so a declaration whose result is `ffi::c::Double` declares that error,
+  so a declaration whose result is `std::ffi::c::Double` declares that error,
   and callers handle it. Negative zero becomes zero.
 * The Tcl backends refuse every C call (`NATIVE-ONLY`), these included.
 
 Not added:
 
-* `Ptr[ffi::c::Double]` as a pointee.
+* `Ptr[std::ffi::c::Double]` as a pointee.
 * C `float` and `long double`: they have no Botlish type yet.
 * Double support in the binding generator (`tools/c-bindgen.tcl` still
   reports `double` declarations as unsupported). Mapping it is a generator
@@ -430,7 +430,7 @@ would need work for another width:
    specifically. `float` would be a second name and class.
 8. **`surface::lower::DecimalConstant`** gives every decimal literal the type
    Float64 (section 3). That is the intended single point to revise.
-9. **`hir::types::resolveNamed`** maps `ffi::c::Double` to `Float64`.
+9. **`hir::types::resolveNamed`** maps `std::ffi::c::Double` to `Float64`.
 
 ## 13. Tests
 
@@ -470,12 +470,12 @@ would need work for another width:
     builtin error 4, which moves LayoutLengthMismatch, NativeViewNull and
     NativeEditNull to 5-7.
   * `linux-syscall.test`: the qualified-native inventory.
-  * `c-ffi.test`: the value-type message names `ffi::c::Double`.
+  * `c-ffi.test`: the value-type message names `std::ffi::c::Double`.
   * `compilerpedia.test` and `main-cli.test`: the help-line examples, since
     `1.5` and `/` are no longer syntax errors.
 * **Compilerpedia.**
   * New: `concept.floats` (replacing `capability.floats`), notes for `/`,
-    `float64::from_int`, `float64::truncate` and the `float64` module.
+    `std::float64::from_int`, `std::float64::truncate` and the `float64` module.
   * Updated: the operator pages, `capability.integer-division` (matching
     the new TYPE message) and `concept.integers`.
 

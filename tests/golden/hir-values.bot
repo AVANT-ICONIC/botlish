@@ -60,8 +60,8 @@
 #
 # Imports: compiler and test (the framework) only; the programs use root
 # natives alone.
-import compiler
-import test
+import std::compiler
+import std::test
 
 # ---------------------------------------------------------------------------
 # Every scope has its own bindings; resolution is sequential
@@ -72,7 +72,7 @@ fn register_lexical_scope_tests():
     # denotes the nearest x, h's; a program function named like a root
     # native shadows it (the sample rebinds `+` to a block listing its
     # arguments).
-    fn nearest_binding() errors compiler::CompilerError:
+    fn nearest_binding() errors std::compiler::CompilerError:
         static compile:
             x = 10
             fn h():
@@ -84,13 +84,13 @@ fn register_lexical_scope_tests():
             fn mod(a, b):
                 [a, b]
             mod(inner, x)
-    test::value("nearest-binding-in-nested-scopes", [20, 10], nearest_binding)
+    std::test::value("nearest-binding-in-nested-scopes", [20, 10], nearest_binding)
 
     # hir-lower-compile-shadowing: the x bound in a called scope leaves the
     # outer x unchanged, and the call by a shadowed root native's name calls
     # the program's function (the core IR rebinds `+` to a block returning
     # "shadowed").
-    fn shadowing() errors compiler::CompilerError:
+    fn shadowing() errors std::compiler::CompilerError:
         static compile:
             x = 10
             fn mod(a, b):
@@ -100,11 +100,11 @@ fn register_lexical_scope_tests():
                 x
             inner = h()
             [inner, x, mod(1, 2)]
-    test::value("shadowing-in-called-scope-and-of-root-native", [20, 10, "shadowed"], shadowing)
+    std::test::value("shadowing-in-called-scope-and-of-root-native", [20, 10, "shadowed"], shadowing)
 
     # hir-resolve-10: resolution is sequential. g's `y = x` reads the outer
     # x, which g's later `x = 2` does not capture...
-    fn later_binding() errors compiler::CompilerError:
+    fn later_binding() errors std::compiler::CompilerError:
         static compile:
             x = 1
             fn g():
@@ -112,11 +112,11 @@ fn register_lexical_scope_tests():
                 x = 2
                 [y, x]
             g()
-    test::value("sequential-resolution/later-binding", [1, 2], later_binding)
+    std::test::value("sequential-resolution/later-binding", [1, 2], later_binding)
 
     # ... and neither does it through a closure: h, created and called
     # before k's `x = 2`, reads the outer x.
-    fn closure_before_binding() errors compiler::CompilerError:
+    fn closure_before_binding() errors std::compiler::CompilerError:
         static compile:
             x = 1
             fn k():
@@ -126,7 +126,7 @@ fn register_lexical_scope_tests():
                 x = 2
                 y
             k()
-    test::value("sequential-resolution/closure-called-before", 1, closure_before_binding)
+    std::test::value("sequential-resolution/closure-called-before", 1, closure_before_binding)
 
 # ---------------------------------------------------------------------------
 # A scope binds a name once
@@ -134,27 +134,27 @@ fn register_lexical_scope_tests():
 fn register_duplicate_binding_tests():
     # hir-resolve-5: a second binding of x in one scope is Duplicate, with
     # the message the core IR interpreter raises for the same program.
-    fn second_binding() errors compiler::CompilerError:
+    fn second_binding() errors std::compiler::CompilerError:
         static compile:
             x = 10
             x = 20
-    test::rejects_message("duplicate-binding-message", compiler::DiagnosticCode::Duplicate, "duplicate binding \"x\" in the same lexical scope", second_binding)
+    std::test::rejects_message("duplicate-binding-message", std::compiler::DiagnosticCode::Duplicate, "duplicate binding \"x\" in the same lexical scope", second_binding)
 
     # hir-resolve-7: rebinding the parameter x in the function's body is
     # Duplicate, at `x = 1`; the earlier `x = 2` in the branch is not (it
     # would be reported first)...
-    fn parameter_rebinding() errors compiler::CompilerError:
+    fn parameter_rebinding() errors std::compiler::CompilerError:
         static compile:
             fn f(x):
                 if true:
                     x = 2
                 x = 1
             f(0)
-    test::rejects_at("parameter-rebinding/body-duplicate", compiler::DiagnosticCode::Duplicate, 151, 17, parameter_rebinding)
+    std::test::rejects_at("parameter-rebinding/body-duplicate", std::compiler::DiagnosticCode::Duplicate, 151, 17, parameter_rebinding)
 
     # ... because a branch is a nested scope, whose binding shadows the
     # parameter.
-    fn branch_shadow() errors compiler::CompilerError:
+    fn branch_shadow() errors std::compiler::CompilerError:
         static compile:
             fn f(x):
                 if true:
@@ -163,16 +163,16 @@ fn register_duplicate_binding_tests():
                 else:
                     x
             f(0)
-    test::value("parameter-rebinding/branch-shadow-allowed", 2, branch_shadow)
+    std::test::value("parameter-rebinding/branch-shadow-allowed", 2, branch_shadow)
 
     # hir-resolve-8: two parameters of one name are Duplicate, with the core
     # IR interpreter's message.
-    fn duplicate_parameters() errors compiler::CompilerError:
+    fn duplicate_parameters() errors std::compiler::CompilerError:
         static compile:
             fn f(x, x):
                 x
             0
-    test::rejects_message("duplicate-parameters-message", compiler::DiagnosticCode::Duplicate, "duplicate binding \"x\" in the same lexical scope (block parameters)", duplicate_parameters)
+    std::test::rejects_message("duplicate-parameters-message", std::compiler::DiagnosticCode::Duplicate, "duplicate binding \"x\" in the same lexical scope (block parameters)", duplicate_parameters)
 
 # ---------------------------------------------------------------------------
 # Unbound names
@@ -180,15 +180,15 @@ fn register_duplicate_binding_tests():
 fn register_unbound_tests():
     # hir-resolve-9: a name nothing binds is Unbound, and the message names
     # it.
-    fn unbound_name() errors compiler::CompilerError:
+    fn unbound_name() errors std::compiler::CompilerError:
         static compile:
             nope
-    test::rejects_message("unbound-name-message", compiler::DiagnosticCode::Unbound, "unbound name \"nope\"", unbound_name)
+    std::test::rejects_message("unbound-name-message", std::compiler::DiagnosticCode::Unbound, "unbound name \"nope\"", unbound_name)
 
     # hir-aot-8a (examples/surface/09-mutual-recursion.bot): mutual
     # recursion needs a forward edge, is_even's call of is_odd, which is
     # Unbound with the "declared later" hint.
-    fn mutual_recursion() errors compiler::CompilerError:
+    fn mutual_recursion() errors std::compiler::CompilerError:
         static compile:
             fn is_even(n):
                 if n == 0:
@@ -199,7 +199,7 @@ fn register_unbound_tests():
                     return false
                 is_even(n - 1)
             [is_even(10), is_even(7)]
-    test::rejects_containing("mutual-recursion-forward-reference", compiler::DiagnosticCode::Unbound, "unbound name \"is_odd\": \"is_odd\" is declared later", mutual_recursion)
+    std::test::rejects_containing("mutual-recursion-forward-reference", std::compiler::DiagnosticCode::Unbound, "unbound name \"is_odd\": \"is_odd\" is declared later", mutual_recursion)
 
 # ---------------------------------------------------------------------------
 # A function is a new callable
@@ -207,20 +207,20 @@ fn register_unbound_tests():
 fn register_loop_control_tests():
     # hir-resolve-18 (its break half): h's `break` is outside any loop of
     # h's own, though h is declared in, and called from, the loop's body.
-    fn break_in_function() errors compiler::CompilerError:
+    fn break_in_function() errors std::compiler::CompilerError:
         static compile:
             loop:
                 fn h():
                     break
                 h()
-    test::rejects_at("break-in-function-declared-in-loop", compiler::DiagnosticCode::BreakOutsideLoop, 214, 21, break_in_function)
+    std::test::rejects_at("break-in-function-declared-in-loop", std::compiler::DiagnosticCode::BreakOutsideLoop, 214, 21, break_in_function)
 
 # ---------------------------------------------------------------------------
 # Recursion and refinement (inputs computed at run time)
 
 fn register_recursion_tests(fib_input: int, sum_input: int):
     # hir-lower-compile-recursion: fib(8) through fib's own binding.
-    fn fibonacci() errors compiler::CompilerError:
+    fn fibonacci() errors std::compiler::CompilerError:
         static compile:
             fn fib(n):
                 if n < 2:
@@ -228,11 +228,11 @@ fn register_recursion_tests(fib_input: int, sum_input: int):
                 else:
                     fib(n - 1) + fib(n - 2)
             fib(fib_input)
-    test::value("recursion-fib", 21, fibonacci)
+    std::test::value("recursion-fib", 21, fibonacci)
 
     # hir-sample-backends-03-recursion (examples/hir/03-recursion): the sum
     # of 0..10 through sum's own binding.
-    fn summation() errors compiler::CompilerError:
+    fn summation() errors std::compiler::CompilerError:
         static compile:
             fn sum(n):
                 if n == 0:
@@ -240,14 +240,14 @@ fn register_recursion_tests(fib_input: int, sum_input: int):
                 else:
                     n + sum(n - 1)
             sum(sum_input)
-    test::value("recursion-sum", 55, summation)
+    std::test::value("recursion-sum", 55, summation)
 
 fn register_refinement_tests(number: int, text: str, empty: List[int]):
     # hir-sample-backends-04-refinement (examples/hir/04-refinement): an
     # untyped describe's integer? and string? tests refine v in the branch
     # where they hold (v + 1 for an Int, v itself for a String); a test the
     # static types decide (integer?(five)) selects its branch.
-    fn refinement() errors compiler::CompilerError:
+    fn refinement() errors std::compiler::CompilerError:
         static compile:
             fn describe(v):
                 if integer?(v):
@@ -263,15 +263,15 @@ fn register_refinement_tests(number: int, text: str, empty: List[int]):
             else:
                 "no"
             [describe(number), describe(text), describe(empty), known]
-    test::value("type-tests-refine-branches", [42, "hi", "other", "yes"], refinement)
+    std::test::value("type-tests-refine-branches", [42, "hi", "other", "yes"], refinement)
 
 # ---------------------------------------------------------------------------
 
-with context test::suite()
+with context std::test::suite()
 register_lexical_scope_tests()
 register_duplicate_binding_tests()
 register_unbound_tests()
 register_loop_control_tests()
 register_recursion_tests(8, 10)
 register_refinement_tests(41, "hi", [])
-test::report()
+std::test::report()

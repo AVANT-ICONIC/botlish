@@ -1,7 +1,7 @@
-import list
+import std::list
 digits = [10, 20]
 fn get(i):
-    if i < 0 or i >= list::length(digits):
+    if i < 0 or i >= std::list::length(digits):
         0
     else:
-        list::at(digits, i)
+        std::list::at(digits, i)

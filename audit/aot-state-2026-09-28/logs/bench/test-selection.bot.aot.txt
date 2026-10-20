@@ -1,10 +1,10 @@
 == test-selection.bot (interp)
 <program>: closed (transitively open)   [program, line 44:1]
-  dispatch: closed -- natives: list x33, list_length x2; functions: changed? (non-tail), first_affected (non-tail), list::none? (non-tail), make_changed? (non-tail), select_affected (non-tail)
+  dispatch: closed -- natives: list x33, list_length x2; functions: changed? (non-tail), first_affected (non-tail), std::list::none? (non-tail), make_changed? (non-tail), select_affected (non-tail)
   blockers: none
   runtime:  closure-env, list-alloc
 
-list::any?: open   [e2, line 59:8]
+std::list::any?: open   [e2, line 59:8]
   params:   xs : any, predicate : any   result: bool
   dispatch: open -- dynamic calls: 1
   blockers:
@@ -13,7 +13,7 @@ list::any?: open   [e2, line 59:8]
     line 61:12  e7  DynamicCall: the callee has no static kind: native, block or not callable is decided at run time
   runtime:  dynamic-call, tagged-values
 
-list::all?: open   [e13, line 65:8]
+std::list::all?: open   [e13, line 65:8]
   params:   xs : any, predicate : any   result: bool
   dispatch: open -- dynamic calls: 1
   blockers:
@@ -22,7 +22,7 @@ list::all?: open   [e13, line 65:8]
     line 67:16  e19  DynamicCall: the callee has no static kind: native, block or not callable is decided at run time
   runtime:  dynamic-call, tagged-values
 
-list::none?: open   [e27, line 71:9]
+std::list::none?: open   [e27, line 71:9]
   params:   xs : any, predicate : any   result: bool
   dispatch: open -- dynamic calls: 1
   blockers:
@@ -31,7 +31,7 @@ list::none?: open   [e27, line 71:9]
     line 73:12  e32  DynamicCall: the callee has no static kind: native, block or not callable is decided at run time
   runtime:  dynamic-call, tagged-values
 
-list::find: open   [e38, line 77:8]
+std::list::find: open   [e38, line 77:8]
   params:   xs : any, predicate : any   result: any
   dispatch: open -- dynamic calls: 1
   blockers:
@@ -72,7 +72,7 @@ test_deps: guarded   [e68, line 53:13]
 affected?: closed (transitively open)   [e74, line 56:13]
   params:   test : any, changed? : any   result: bool
   captures: test_deps (block)
-  dispatch: closed -- functions: list::any? (tail), test_deps (non-tail)
+  dispatch: closed -- functions: std::list::any? (tail), test_deps (non-tail)
   blockers: none
   runtime:  none
 
@@ -87,7 +87,7 @@ select_affected: guarded (transitively open)   [e82, line 59:19]
 first_affected: closed (transitively open)   [e96, line 65:18]
   params:   tests : any, changed? : any   result: any
   captures: affected? (block), test_name (block)
-  dispatch: closed -- natives: list x2; functions: list::find (non-tail), test_name (tail)
+  dispatch: closed -- natives: list x2; functions: std::list::find (non-tail), test_name (tail)
   blockers: none
   note:     line 66:20  e98  creates a closure capturing values
   runtime:  closure-env, list-alloc

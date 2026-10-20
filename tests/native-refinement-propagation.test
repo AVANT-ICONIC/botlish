@@ -4,14 +4,14 @@
 # RefinementFacts/RefineParams).
 #
 # hir::specialize::KeyType deliberately drops named types from a
-# specialization *key* (representation decides instances: a web::Emailish and
+# specialization *key* (representation decides instances: a std::web::Emailish and
 # a plain str share one codegen instance, REFINEMENT-VALUES.md). What every
 # exact call of a parameter proves in common widens that one instance's
 # *parameter analysis* instead -- never its key.
 #
-# This file used to pin the same mechanism with lib/web.tcl's opaque
+# This file used to pin the same mechanism with stdlib/web.tcl's opaque
 # UriQueryValue, whose type test the widened fact then decided statically.
-# Refinements are now source declarations (lib/web.bot), and a refinement
+# Refinements are now source declarations (stdlib/web.bot), and a refinement
 # fact never decides a proof predicate on its own (a different function
 # proving the same refinement need not return true -- only an exact
 # predicate-result fact decides a repeated call), so the tests below observe
@@ -37,17 +37,17 @@ proc viewRefTypes {hir spec id ref} {
     hirRefTypes [hir::specialize::view $hir $spec $id] $ref
 }
 
-set prelude {import web
-import str
+set prelude {import std::web
+import std::str
 
 fn inspect(q):
-    str::length(q)
+    std::str::length(q)
 }
 
-test native-refinement-propagation-single-caller {a single proven caller: inspect's one instance sees q as web::Emailish, keyed by its representation (str)} -body {
+test native-refinement-propagation-single-caller {a single proven caller: inspect's one instance sees q as std::web::Emailish, keyed by its representation (str)} -body {
     lassign [instancesOf "$prelude
 fn main(s: str):
-    if web::emailish?(s):
+    if std::web::emailish?(s):
         inspect(s)
     else:
         0
@@ -55,12 +55,12 @@ fn main(s: str):
 main(\"a@b.io\")
 " inspect] hir spec ids
     list [llength $ids] [hir::specialize::label $spec [lindex $ids 0]] [viewRefTypes $hir $spec [lindex $ids 0] q]
-} -result {1 inspect<str> {{str[web::Emailish]}}}
+} -result {1 inspect<str> {{str[std::web::Emailish]}}}
 
 test native-refinement-propagation-mixed-callers {mixed callers share one instance, and the fact one proves never leaks into it} -body {
     lassign [instancesOf "$prelude
 fn main(s: str):
-    if web::emailish?(s):
+    if std::web::emailish?(s):
         inspect(s) + inspect(\"plain\")
     else:
         0
@@ -71,17 +71,17 @@ main(\"a@b.io\")
 } -result {1 str}
 
 test native-refinement-propagation-recursive-forwarding {a proven value forwarded unchanged through self-tail recursion keeps its refinement in the one instance} -body {
-    lassign [instancesOf {import web
-import str
+    lassign [instancesOf {import std::web
+import std::str
 
 fn loop_fn(n, q):
     if n == 0:
-        str::length(q)
+        std::str::length(q)
     else:
         loop_fn(n - 1, q)
 
 fn main(s: str):
-    if web::emailish?(s):
+    if std::web::emailish?(s):
         loop_fn(5, s)
     else:
         0
@@ -89,13 +89,13 @@ fn main(s: str):
 main("a@b.io")
 } loop_fn] hir spec ids
     list [llength $ids] [lsort -unique [viewRefTypes $hir $spec [lindex $ids 0] q]]
-} -result {1 {{str[web::Emailish]}}}
+} -result {1 {{str[std::web::Emailish]}}}
 
-test native-refinement-propagation-transformation-invalidates {an operation on the carrier returns the carrier: str::concat(s, "") is not proven Emailish} -body {
+test native-refinement-propagation-transformation-invalidates {an operation on the carrier returns the carrier: std::str::concat(s, "") is not proven Emailish} -body {
     lassign [instancesOf "$prelude
 fn main(s: str):
-    if web::emailish?(s):
-        inspect(str::concat(s, \"\"))
+    if std::web::emailish?(s):
+        inspect(std::str::concat(s, \"\"))
     else:
         0
 
@@ -105,16 +105,16 @@ main(\"a@b.io\")
 } -result str
 
 test native-refinement-propagation-fact-decides-no-predicate {a widened refinement fact never decides a proof predicate: only an exact predicate-result fact does} -body {
-    set source {import web
+    set source {import std::web
 
 fn inspect(q):
-    if web::emailish?(q):
+    if std::web::emailish?(q):
         1
     else:
         0
 
 fn main(s: str):
-    if web::emailish?(s):
+    if std::web::emailish?(s):
         inspect(s)
     else:
         0
@@ -124,11 +124,11 @@ fn main(s: str):
     lassign [instancesOf $source inspect] hir spec ids
     set view [hir::specialize::view $hir $spec [lindex $ids 0]]
     set known [lmap e [hirFind $view call] {
-        if {[hir::get $view [hir::get $view $e callee] name] ne "web::emailish?"} continue
+        if {[hir::get $view [hir::get $view $e callee] name] ne "std::web::emailish?"} continue
         hir::get $view $e known
     }]
     list [viewRefTypes $hir $spec [lindex $ids 0] q] $known [sourceAgree $source]
-} -result {{{str[web::Emailish]}} {{} {}} {value {[1, 0]}}}
+} -result {{{str[std::web::Emailish]}} {{} {}} {value {[1, 0]}}}
 
 test native-refinement-propagation-refined-checks-no-explosion {"check" of bench/refined-checks.bot gets exactly one, specialized instance} -body {
     set hir [surface::readProgramFile [file join $::projectRoot bench refined-checks.bot] -warnings off]

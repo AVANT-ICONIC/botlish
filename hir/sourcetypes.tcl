@@ -531,17 +531,17 @@ proc hir::sourcetypes::ValueStability {type {visiting {}}} {
 # identities. A declaration registers a type and nothing else: no value,
 # no callable, no membership predicate (ELIMINATE-AUTOMATIC-TYPE-
 # PREDICATES.md). A program that wants a value of the domain from an Int
-# calls an ordinary function returning it (a converter, `byte::from_int`),
+# calls an ordinary function returning it (a converter, `std::byte::from_int`),
 # or tests the bounds with ordinary comparisons, whose range facts admit the
 # value (hir/range.tcl).
 proc hir::sourcetypes::RegisterOne {decl parentId} {
     variable generation
     set name [dict get $decl name]
     set id [Identity $decl]
-    # A C integer scalar of namespace ffi::c (C-ABI-TYPES.md): a declaration
+    # A C integer scalar of namespace std::ffi::c (C-ABI-TYPES.md): a declaration
     # the loader synthesizes for the compilation's C target
     # (hir::cabi::NamespaceTypeDecls), or its HIR text read back. Its short
-    # name may be a built-in one (ffi::c::Int): its identity is qualified.
+    # name may be a built-in one (std::ffi::c::Int): its identity is qualified.
     set cabi [dict getdef $decl cabi ""]
     if {$name eq "Int" && $cabi eq ""} {
         Fail [dict get $decl nameSpan] \

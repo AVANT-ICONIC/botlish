@@ -7,7 +7,7 @@ exclusive Ir by code kind: runtime 32,298 (44.0%)  libc 26,015 (35.4%)  botlish 
   0 <program>                                1           0        1,139          0       73,379  99.99%   1.55%
   5 valid_start?                            22           0          794          0       68,821  93.78%   1.08%
   4 classify_leading                        22           0        6,606          0       68,027  92.70%   9.00%
-  1 list::find                               1           0          308          0       20,011  27.27%   0.42%
+  1 std::list::find                               1           0          308          0       20,011  27.27%   0.42%
   6 invalid_name?                            6           0          103          0       19,692  26.83%   0.14%
   2 is_underscore?                          21          21          315        147        2,994   4.08%   0.63%
   3 is_hyphen?                              21          21          315        147        2,994   4.08%   0.63%
@@ -16,8 +16,8 @@ exclusive Ir by code kind: runtime 32,298 (44.0%)  libc 26,015 (35.4%)  botlish 
   5 valid_start?                 -> 4 classify_leading                                                  22        68,027   3092.1   92.70%
   0 <program>                    -> 5 valid_start?                                                      16        49,232   3077.0   67.09%
   4 classify_leading             -> rt_list_append                                                      84        29,674    353.3   40.44%
-  0 <program>                    -> 1 list::find                                                         1        20,011  20010.7   27.27%
-  1 list::find                   -> 6 invalid_name?                                                      6        19,692   3281.9   26.83%
+  0 <program>                    -> 1 std::list::find                                                         1        20,011  20010.7   27.27%
+  1 std::list::find                   -> 6 invalid_name?                                                      6        19,692   3281.9   26.83%
   6 invalid_name?                -> 5 valid_start?                                                       6        19,589   3264.8   26.69%
   4 classify_leading             -> rt_call_value                                                       84        15,241    181.4   20.77%
   4 classify_leading             -> rt_substr                                                           21        10,456    497.9   14.25%
@@ -31,7 +31,7 @@ exclusive Ir by code kind: runtime 32,298 (44.0%)  libc 26,015 (35.4%)  botlish 
   0 <program>                    -> rt_closure_new                                                       3           726    242.0    0.99%
   4 classify_leading             -> rt_str_len                                                          43           473     11.0    0.64%
   0 <program>                    -> rt_str_len                                                           5            55     11.0    0.07%
-  1 list::find                   -> rt_str_len                                                           1            11     11.0    0.01%
+  1 std::list::find                   -> rt_str_len                                                           1            11     11.0    0.01%
 
 == runtime/libc functions: exact in-region invocations (entry-instruction count, if resolvable), SELF, INCLUSIVE
   botlish_audit_run                                                              1  self           6 ( 0.01%)  incl      73,385 (100.00%)  73384.6 Ir/call
@@ -335,6 +335,6 @@ exclusive Ir by code kind: runtime 32,298 (44.0%)  libc 26,015 (35.4%)  botlish 
   5 valid_start? (794): mov reg-reg=150; heap/vm load=137; frame: epilogue=132; frame: prologue=110; bool test=62; cmp/test (other)=53; jcc (other)=53; stack store=44; call botlish=22; mov imm=22; jmp=9
   3 is_hyphen? (462): frame: epilogue=126; frame: prologue=84; heap/vm load=63; tag test=63; call helper=42; completion check=42; call botlish=21; mov reg-reg=21
   2 is_underscore? (462): frame: epilogue=126; frame: prologue=84; heap/vm load=63; tag test=63; call helper=42; completion check=42; call botlish=21; mov reg-reg=21
-  1 list::find (308): mov reg-reg=84; tag test=34; stack store=26; bool test=24; heap/vm load=18; overflow check=15; mov imm=13; cmp/test (other)=12; completion check=12; jmp=10; frame: epilogue=9; frame: prologue=8; stack load=7; logic=6; bool materialize=6; untag=6; jcc (other)=6; call botlish=6; arith=5; call helper=1
+  1 std::list::find (308): mov reg-reg=84; tag test=34; stack store=26; bool test=24; heap/vm load=18; overflow check=15; mov imm=13; cmp/test (other)=12; completion check=12; jmp=10; frame: epilogue=9; frame: prologue=8; stack load=7; logic=6; bool materialize=6; untag=6; jcc (other)=6; call botlish=6; arith=5; call helper=1
   6 invalid_name? (103): frame: epilogue=24; frame: prologue=18; stack store=12; heap/vm load=12; completion check=12; bool test=12; call botlish=6; mov imm=6; jmp=1
 

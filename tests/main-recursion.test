@@ -51,8 +51,8 @@ test main-recursion-deep {far beyond the old threshold: 5000 nested calls on int
 
 test main-recursion-managed-values {a deep recursion that builds Lists and Strings returns them whole} -setup {
     set path [makeFile [join {
-        "import list"
-        "import str"
+        "import std::list"
+        "import std::str"
         ""
         "fn upto(k: int) -> List[int]:"
         "    if k == 0:"
@@ -65,7 +65,7 @@ test main-recursion-managed-values {a deep recursion that builds Lists and Strin
         "    stars(k - 1).concat(\"*\")"
         ""
         "xs = upto(3000)"
-        "\[list::length(xs), list::get(xs, 2999, 0), str::length(stars(3000))\]"
+        "\[std::list::length(xs), std::list::get(xs, 2999, 0), std::str::length(stars(3000))\]"
         ""
     } \n] recursion-managed.bot]
 } -body {

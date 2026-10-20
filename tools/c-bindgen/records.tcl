@@ -933,7 +933,7 @@ proc ::cbind::records::ArrayField {recs key i f mapped fbVar depsVar} {
     set width ""
     switch -- $kind {
         scalar {
-            if {[regexp {^ffi::c::([A-Za-z]+)$} $text -> scalar]} {
+            if {[regexp {^std::ffi::c::([A-Za-z]+)$} $text -> scalar]} {
                 set width [expr {[dict get [core::cabi::scalarInfo $scalar $::cbind::model::target] bits] / 8}]
             }
         }

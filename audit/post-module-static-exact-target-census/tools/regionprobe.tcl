@@ -48,7 +48,7 @@ proc firstRejection {view instance exprs} {
 }
 
 set L {}
-lappend L "tree: [exec git -C $root rev-parse HEAD] (lib/web.bot diff lines: [llength [split [exec git -C $root diff -- lib/web.bot] \n]])"
+lappend L "tree: [exec git -C $root rev-parse HEAD] (stdlib/web.bot diff lines: [llength [split [exec git -C $root diff -- stdlib/web.bot] \n]])"
 lappend L ""
 lappend L "== predicate / scanner instances: StringRegion's own verdicts"
 foreach id [dict get $spec used] {

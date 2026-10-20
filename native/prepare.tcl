@@ -22,9 +22,9 @@
 # It used to also attach native implementations: a root native carrying a
 # -module-fn (an ordinary Botlish module function as its native
 # implementation) or a -native-body (a core-IR literal) had its calls
-# redirected here. Both existed only for lib/web.tcl's Tcl-registered String
+# redirected here. Both existed only for stdlib/web.tcl's Tcl-registered String
 # refinements, which REFINEMENT-VALUES.md replaced with source declarations
-# (`refined type`, `proves`) in lib/web.bot: no native needs either any more,
+# (`refined type`, `proves`) in stdlib/web.bot: no native needs either any more,
 # and both mechanisms are gone.
 proc native::prepareHir {hir} {
     hir::activate $hir

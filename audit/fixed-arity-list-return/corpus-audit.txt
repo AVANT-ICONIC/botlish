@@ -6,16 +6,16 @@
      element types (informational): same-element [str, str, str, str, str, str]
      HAND: annotate -- the sample's list of check results: printed as the program's value and compared with the file's `# expect: [...]` list; never destructured or read positionally
 2. examples/stdlib/csv_chunked.bot:29:5: `chunked_new`: a 3-element list from 1 exit(s) (0 self-call(s); first seen compiling examples/stdlib/csv_chunked.bot)
-     examples/stdlib/csv_chunked.bot:29:5: [[], mutable_array::allocate(chunk_size()), 0]
+     examples/stdlib/csv_chunked.bot:29:5: [[], std::mutable_array::allocate(chunk_size()), 0]
      element types (informational): heterogeneous [List[never], mutarray, int]
-     HAND: convert -- the ChunkedBuilder state [completedChunks, currentChunk, filled]: the file's own header names the three parts, which callers read back with list::at(builder, 0/1/2)
+     HAND: convert -- the ChunkedBuilder state [completedChunks, currentChunk, filled]: the file's own header names the three parts, which callers read back with std::list::at(builder, 0/1/2)
 3. examples/stdlib/csv_chunked.bot:44:9: `chunked_append`: a 3-element list from 2 exit(s) (0 self-call(s); first seen compiling examples/stdlib/csv_chunked.bot)
      examples/stdlib/csv_chunked.bot:44:9: return [more, fresh, 1]
      examples/stdlib/csv_chunked.bot:47:5: [completed, current, filled + 1]
      element types (informational): heterogeneous [any|list, mutarray, int]
      HAND: convert -- the same builder state, returned from both of its exits
 4. examples/stdlib/csv_records.bot:515:5: `sample_checks`: a 7-element list from 1 exit(s) (0 self-call(s); first seen compiling examples/stdlib/csv_records.bot)
-     examples/stdlib/csv_records.bot:515:5: [list::length(rows), ht_get(first, "name"), ht_get(first, "age"), ht_get(first, "city"), ht_get(second, "name"), ht_get(second, "city"), agree]
+     examples/stdlib/csv_records.bot:515:5: [std::list::length(rows), ht_get(first, "name"), ht_get(first, "age"), ht_get(first, "city"), ht_get(second, "name"), ht_get(second, "city"), agree]
      element types (informational): heterogeneous [int, any, any, any, any, any, bool]
      HAND: annotate -- the sample's observation vector (`# expect: [2, "Alice", ...]`), heterogeneous by element type but a list of check outcomes, never read by position
 5. examples/stdlib/hashtable.bot:379:5: `sample_checks`: a 6-element list from 1 exit(s) (0 self-call(s); first seen compiling examples/stdlib/hashtable.bot)
@@ -38,8 +38,8 @@
 programs compiled: 35 of 39
 did not compile standalone: examples/surface/09-mutual-recursion.bot (CORE SEMANTIC UNBOUND)
 did not compile standalone: examples/surface/10-duplicate-binding.bot (CORE SEMANTIC DUPLICATE)
-did not compile standalone: lib/list.bot (SURFACE MODULE MISSING-IMPORT)
-did not compile standalone: lib/mutable_array.bot (SURFACE MODULE MISSING-IMPORT)
+did not compile standalone: stdlib/list.bot (SURFACE MODULE MISSING-IMPORT)
+did not compile standalone: stdlib/mutable_array.bot (SURFACE MODULE MISSING-IMPORT)
 distinct FIXED-ARITY-LIST-RETURN findings: 8
   convert: 2
   annotate: 6

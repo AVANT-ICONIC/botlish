@@ -8,8 +8,8 @@
 # of every width and signedness at random offsets with random gaps (padding)
 # between and after them, a random power-of-two alignment, sometimes a layout
 # nested by value (two or three levels), and in the outermost layout zero to
-# three pointer fields (data pointers ffi::c::Ptr[NvTarget] and function
-# pointers ffi::c::FnPtr[...]) at aligned or unaligned offsets. This script
+# three pointer fields (data pointers std::ffi::c::Ptr[NvTarget] and function
+# pointers std::ffi::c::FnPtr[...]) at aligned or unaligned offsets. This script
 # draws field values biased toward each encoding's extremes and zero, random
 # padding bytes, and for each pointer field null or not; it assembles the
 # record's bytes itself (little-endian, two's complement; a non-null data
@@ -17,7 +17,7 @@
 # pointer a random address), and the program copies them into native memory
 # (the test fixture's ffi_fixture::memory) and checks:
 #
-#   view      every scalar leaf read through binary::native::view of the
+#   view      every scalar leaf read through std::binary::native::view of the
 #             record (nested ones through the nested views) is the value
 #             this script decodes from the same bytes itself
 #   subview   a nested layout's view, passed to a function taking it, reads
@@ -26,11 +26,11 @@
 #             this script wrote zeros, and otherwise exactly the address it
 #             wrote; a data pointer reads the NvTarget record through a
 #             view of its own
-#   bytes     the same bytes as byte storage: binary::parse of the layout
+#   bytes     the same bytes as byte storage: std::binary::parse of the layout
 #             (pointer-free) -- or of its bits twin, every pointer an inert
 #             U64 (native-only) -- gives the model's scalar leaves, and the
 #             twin's pointer words equal the pointers' address bits
-#   load      binary::load of the view: equal to the parse (pointer-free),
+#   load      std::binary::load of the view: equal to the parse (pointer-free),
 #             or, destructured, the same scalars, nested values and
 #             pointers (native-only)
 #
@@ -53,7 +53,7 @@ foreach {option value} $argv {
 source [file join $root compiler compiler.tcl]
 source [file join $root native native.tcl]
 source [file join $root surface surface.tcl]
-set ::core::libraryDir [file join $root lib]
+set ::core::libraryDir [file join $root stdlib]
 core::cabi::installTestFixture
 if {[dict get $options -gc-stress]} {
     set ::env(BOTLISH_NATIVE_GC_STRESS) 1
@@ -72,7 +72,7 @@ proc pick {list} {
 
 # The domain type and range of a scalar of WIDTH bytes, SIGNED.
 proc scalarType {width signed} {
-    return binary::[expr {$signed ? "I" : "U"}][expr {8 * $width}]
+    return std::binary::[expr {$signed ? "I" : "U"}][expr {8 * $width}]
 }
 proc scalarRange {width signed} {
     set bits [expr {8 * $width}]
@@ -104,7 +104,7 @@ proc randomScalar {width signed} {
 # The pointer width of every target this runs on (the layouts' pointer
 # fields are 8 bytes: core/cabi.tcl's table has no other).
 set ::pointerWidth 8
-set ::fnType {ffi::c::FnPtr[Fn{args: [ffi::c::Int], return: ffi::c::Int}]}
+set ::fnType {std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Int], return: std::ffi::c::Int}]}
 
 # A random layout NAME: {name size align fields}, each field {name offset
 # scalar width signed}, {name offset layout INNER} with INNER a layout of
@@ -141,7 +141,7 @@ proc randomLayout {name inners pointers} {
 }
 
 # The declaration of LAYOUT; with BITS, its bits twin NAME: every pointer
-# field an inert binary::U64.
+# field an inert std::binary::U64.
 proc layoutText {layout {bits 0}} {
     set name [dict get $layout name]
     if {$bits} {
@@ -154,9 +154,9 @@ proc layoutText {layout {bits 0}} {
             layout { set type [dict get $a name] }
             pointer {
                 if {$bits} {
-                    set type binary::U64
+                    set type std::binary::U64
                 } elseif {$a eq "data"} {
-                    set type {ffi::c::Ptr[NvTarget]}
+                    set type {std::ffi::c::Ptr[NvTarget]}
                 } else {
                     set type $::fnType
                 }
@@ -275,23 +275,23 @@ proc structText {layout leaves {prefix ""}} {
 
 set prelude {direct module
 
-import abi
-import abi::bytes
-import binary
-import binary::native
-import byte
-import ffi::c
+import std::abi
+import std::abi::bytes
+import std::binary
+import std::binary::native
+import std::byte
+import std::ffi::c
 import ffi_fixture
 
-fn bytes_of(values: List[int]) -> abi::bytes::Bytes:
+fn bytes_of(values: List[int]) -> std::abi::bytes::Bytes:
     bs = loop v in values:
-        b = byte::from_int(v):
-            on byte::BelowRange:
+        b = std::byte::from_int(v):
+            on std::byte::BelowRange:
                 0
-            on byte::AboveRange:
+            on std::byte::AboveRange:
                 255
         b
-    abi::bytes::from_list(bs)
+    std::abi::bytes::from_list(bs)
 
 fn byte_at(n: int, i: int) -> int:
     bit_and(shift_right(n, 8 * i), 255)
@@ -302,8 +302,8 @@ opaque struct NvTarget:
 layout NvTargetRecord:
     size 4
     align 2
-    field x: binary::I16 at 0
-    field y: binary::U16 at 2
+    field x: std::binary::I16 at 0
+    field y: std::binary::U16 at 2
 
 }
 
@@ -356,11 +356,11 @@ proc program {index} {
     }
     append text "fn record(t: int) -> List\[int\]:\n    \[[join $record {, }]\]\n\n"
     append text "fn check() -> List\[any\] errors NativeViewNull, LayoutLengthMismatch:\n"
-    append text "    target = ffi_fixture::memory\[ffi::c::Void\](bytes_of(\[[join [concat [list [expr {$tx & 255}] [expr {($tx >> 8) & 255}]] [list [expr {$ty & 255}] [expr {($ty >> 8) & 255}]]] {, }]\]))\n"
+    append text "    target = ffi_fixture::memory\[std::ffi::c::Void\](bytes_of(\[[join [concat [list [expr {$tx & 255}] [expr {($tx >> 8) & 255}]] [list [expr {$ty & 255}] [expr {($ty >> 8) & 255}]]] {, }]\]))\n"
     append text "    t = ffi_fixture::address_of(target)\n"
     append text "    xs = record(t)\n"
-    append text "    p = ffi_fixture::memory\[ffi::c::Void\](bytes_of(xs))\n"
-    append text "    v = binary::native::view($name, p)\n"
+    append text "    p = ffi_fixture::memory\[std::ffi::c::Void\](bytes_of(xs))\n"
+    append text "    v = std::binary::native::view($name, p)\n"
     set checks {}
     set expected {}
     # view
@@ -384,7 +384,7 @@ proc program {index} {
                 lappend pointerExpected "\[true, true\]"
             }
             target {
-                append text "    w$k = binary::native::view(NvTargetRecord, q$k)\n"
+                append text "    w$k = std::binary::native::view(NvTargetRecord, q$k)\n"
                 lappend pointerChecks "\[q$k.null?(), ffi_fixture::address_of(q$k) == t, w$k.x, w$k.y\]"
                 lappend pointerExpected "\[false, true, $tx, $ty\]"
             }
@@ -399,7 +399,7 @@ proc program {index} {
     lappend expected "\[[join $pointerExpected {, }]\]"
     # bytes
     if {$native} {
-        append text "    s = binary::parse(${name}Bits, bytes_of(xs))\n"
+        append text "    s = std::binary::parse(${name}Bits, bytes_of(xs))\n"
         set bitChecks [lmap {path v} $leaves {string cat s. $path}]
         set bitExpected [lmap {path v} $leaves {set v}]
         set k 0
@@ -413,7 +413,7 @@ proc program {index} {
         lappend checks "\[[join $bitChecks {, }]\]"
         lappend expected "\[[join $bitExpected {, }]\]"
     } else {
-        append text "    s = binary::parse($name, bytes_of(xs))\n"
+        append text "    s = std::binary::parse($name, bytes_of(xs))\n"
         lappend checks "\[[join [lmap {path v} $leaves {string cat s. $path}] {, }]\]"
         lappend expected "\[[join [lmap {path v} $leaves {set v}] {, }]\]"
     }
@@ -442,11 +442,11 @@ proc program {index} {
                 }
             }
         }
-        append text "    \{[join $binds {, }]\} = binary::load(v)\n"
+        append text "    \{[join $binds {, }]\} = std::binary::load(v)\n"
         lappend checks "\[[join $loadChecks {, }]\]"
         lappend expected "\[[join $loadExpected {, }]\]"
     } else {
-        lappend checks "binary::load(v) == s"
+        lappend checks "std::binary::load(v) == s"
         lappend expected true
     }
     append text "    \[[join $checks {, }]\]\n\n"

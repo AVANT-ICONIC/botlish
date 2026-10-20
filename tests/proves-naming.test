@@ -467,25 +467,25 @@ fn check_path(v: str) -> unit proves v: Path errors Bad:
         fail Bad
     unit
 }} {
-        set hir [surface::compile {import pth
-a = pth::check("a")
-b = pth::ok?("b")
-c = pth::validate("c"):
-    on pth::Bad:
+        set hir [surface::compile {import std::pth
+a = std::pth::check("a")
+b = std::pth::ok?("b")
+c = std::pth::validate("c"):
+    on std::pth::Bad:
         unit
-d = pth::check_path("d"):
-    on pth::Bad:
+d = std::pth::check_path("d"):
+    on std::pth::Bad:
         unit
 [a, b]} t.bot -warnings default -warning-channel ""]
         list [lmap w [namingOf $hir] {
             list [file tail [hir::originLocation $hir [dict get $w primary]]] [dict get $w data functionName] \
                 [dict get $w data kind] [dict get $w message]
         }] [lsort [lmap {b binding} [dict get $hir bindings] {
-            if {![string match pth::* [dict get $binding name]]} continue
+            if {![string match std::pth::* [dict get $binding name]]} continue
             dict get $binding name
         }]]
     }
-} -result {{{pth.bot:3:1 check predicate {`check` proves a contract and returns bool; predicate names end in `?`}} {pth.bot:11:1 check_path validator {`check_path` proves a contract and returns unit; validator names are `validate` or begin with `validate_`}}} {pth::check pth::check_path pth::ok? pth::validate}}
+} -result {{{pth.bot:3:1 check predicate {`check` proves a contract and returns bool; predicate names end in `?`}} {pth.bot:11:1 check_path validator {`check_path` proves a contract and returns unit; validator names are `validate` or begin with `validate_`}}} {std::pth::check std::pth::check_path std::pth::ok? std::pth::validate}}
 
 test pn-written-name-shadowing-around-the-declaration {shadowing around a declaration changes nothing: a non-proves outer `p`, a parameter and a local named like the proves function, and a later rebinding of its name are never reported; only the proves declaration is} -body {
     naming "$::E

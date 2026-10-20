@@ -25,7 +25,7 @@ is real, general, and independently proven by a second type.
 - `tests/native-validator-predicate.test` -- new: parity, known-result
   folding, the opaque/validator distinction, GC stress, and the `Emailish?`
   regression pin.
-- `lib/web.tcl` -- **unchanged**. `Emailish`'s registration still passes no
+- `stdlib/web.tcl` -- **unchanged**. `Emailish`'s registration still passes no
   native body (\167 6).
 - `native/lower.tcl` -- **unchanged**. No named-type logic added or
   touched (spec \167 9/17); see \167 2.
@@ -64,7 +64,7 @@ proc native::lower::NativeCall {fnVar e node name argRegs rawEligible op want} {
 
 `$natives` (`native/lower.tcl:99`) is a fixed dict of ~30 built-in
 operator names (`+ - * ... integer? string? list? ok? error? ...`).
-`Emailish?` (a *library* native, `lib/web.tcl`) was never in it, so the
+`Emailish?` (a *library* native, `stdlib/web.tcl`) was never in it, so the
 first check (`![dict exists $natives $name]`) rejects it and raises before
 the second, evidence-specific check at line 3017-3019 is ever reached.
 Confirmed directly: a two-line program calling only `Emailish?` fails
@@ -146,7 +146,7 @@ str[Emailish]` lines confirm the refinement.)
 
 ## 4. `Emailish` vs. `UriQueryValue`: the type-registry facts
 
-Read directly from `lib/web.tcl` and `core/type.tcl` (not inferred):
+Read directly from `stdlib/web.tcl` and `core/type.tcl` (not inferred):
 
 ```tcl
 core::type::register Emailish -base str \
@@ -188,7 +188,7 @@ lists `str` as the only kind that can carry evidence at all -- both types
 are on the one representation that supports either mechanism.
 
 This table is not new in this milestone; it is exactly what
-`lib/web.tcl`'s own header comment already documented (`Emailish
+`stdlib/web.tcl`'s own header comment already documented (`Emailish
 structural: a regex validator decides membership`; `UriQueryValue opaque:
 no validator can manufacture it`) and what milestone 1 relied on when it
 gave `uriEscape` (the only way to *mint* `UriQueryValue` evidence) a
@@ -267,7 +267,7 @@ as permanent regression coverage.
 ## 6. Why `Emailish` itself still gets no `-native-body`
 
 `Emailish`'s validator is `core::regex::matches` against
-`core::web::emailRegex` (`lib/web.tcl:18-24`):
+`core::web::emailRegex` (`stdlib/web.tcl:18-24`):
 
 ```
 seq
@@ -381,7 +381,7 @@ reason instead of a generic one.
 `Emailish?`/`UriQueryValue?`/`NonEmpty?` semantics, evidence combination,
 contract checks) pass unchanged -- `definePredicate`'s new third argument
 is optional and every existing call site (`UriQueryValue`, and `Emailish`
-in `lib/web.tcl`) omits it, so their registered metadata is byte-identical
+in `stdlib/web.tcl`) omits it, so their registered metadata is byte-identical
 to before except for one new, empty `nativeBody` field.
 
 ## 8. A disclosed limitation this milestone's reuse introduces
@@ -452,8 +452,8 @@ as it is unfixed.
 
 | native | layer | classification | validator/evidence | de-native status | remaining dependency |
 |---|---|---|---|---|---|
-| `Emailish?` | library (`lib/web.tcl`) | type predicate, `-tests-type` | validator-backed (`core::regex::matches`) | **not fixed** (Outcome B) | Unicode-aware character classification / general regex matching (no ordinary-Botlish primitive exists) |
-| `UriQueryValue?` | library (`lib/web.tcl`) | type predicate, `-tests-type` | **opaque**, evidence-only | unchanged, correctly unsupported dynamically | evidence-capable native runtime representation (separate architecture direction, not regex) |
+| `Emailish?` | library (`stdlib/web.tcl`) | type predicate, `-tests-type` | validator-backed (`core::regex::matches`) | **not fixed** (Outcome B) | Unicode-aware character classification / general regex matching (no ordinary-Botlish primitive exists) |
+| `UriQueryValue?` | library (`stdlib/web.tcl`) | type predicate, `-tests-type` | **opaque**, evidence-only | unchanged, correctly unsupported dynamically | evidence-capable native runtime representation (separate architecture direction, not regex) |
 | `NonEmpty?` (synthetic) | test-only (`tests/helpers.tcl`) | type predicate, `-tests-type` | validator-backed (`length(v) > 0`) | **fully de-nativized**, this milestone | none -- proves the general mechanism |
 | `core::type::definePredicate` | registration (`core/type.tcl`) | generic capability, not a native itself | n/a | generalized: optional `-native-body`, forwarded to the existing field | none |
 | `core/regex.tcl` (`core::regex::matches` etc.) | library-internal (Tcl only) | not a registered native at all | n/a | unchanged; identified, not touched | general regex matching / Unicode character classification (\167 6) |

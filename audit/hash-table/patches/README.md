@@ -1,7 +1,7 @@
 # Hash-table experiment: patches not proposed for main
 
 * `probe-primitive.patch` is the runtime half of RT-1's probe primitive,
-  `mutable_array::probe_linear` (HASH-TABLE-COMPILER-PRESSURE.md, RT-1;
+  `std::mutable_array::probe_linear` (HASH-TABLE-COMPILER-PRESSURE.md, RT-1;
   HASH-TABLE-EXPERIMENT.md, "Runtime experiments"): the Tcl
   implementation and registration in core/mutarray.tcl, and the native
   op `mutarrayprobe` with its Rust helper `rt_mutarray_probe`.

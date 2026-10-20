@@ -10,9 +10,9 @@
 # byte-sized C type or Void, admits a *byte owner* for the call:
 #
 #   argument                  access   transport
-#   abi::bytes::Bytes         read     read:  its storage, exposed as it is
-#   abi::bytes::MutableBytes  read     read:  its storage, exposed as it is
-#   abi::bytes::MutableBytes  write    write: a private copy of its storage
+#   std::abi::bytes::Bytes         read     read:  its storage, exposed as it is
+#   std::abi::bytes::MutableBytes  read     read:  its storage, exposed as it is
+#   std::abi::bytes::MutableBytes  write    write: a private copy of its storage
 #                                      (the detach), exposed writable, and
 #                                      the call's updated value of that
 #                                      parameter afterwards
@@ -33,7 +33,7 @@
 #
 # Nothing here reads a fact from a C type, a `const`, a name or a
 # namespace: the contract's facts, and the argument's static type, decide.
-# A C pointer argument (an ffi::c::Ptr value) at such a parameter is an
+# A C pointer argument (a std::ffi::c::Ptr value) at such a parameter is an
 # ordinary raw pointer, held to the parameter's type like any argument.
 #
 # No pointer value is made: an exposure is the call's argument transport,
@@ -52,7 +52,7 @@
 # appear in the caller's own value: they appear in the call's result. A
 # call with a write exposure returns the anonymous struct
 #
-#   {result: R, NAME: abi::bytes::MutableBytes, ...}
+#   {result: R, NAME: std::abi::bytes::MutableBytes, ...}
 #
 # R the contract's C result and NAME each written parameter's name (sorted,
 # as every anonymous struct's fields are). The caller's argument is
@@ -78,12 +78,12 @@ proc hir::borrow::OwnerTypes {} {
     return [list [list nstruct [core::bytestore::bytesType]] [list nstruct [core::bytestore::mutableBytesType]]]
 }
 
-# 1 if TYPE is a byte owner (abi::bytes::Bytes or abi::bytes::MutableBytes).
+# 1 if TYPE is a byte owner (std::abi::bytes::Bytes or std::abi::bytes::MutableBytes).
 proc hir::borrow::IsOwner {type} {
     return [expr {$type in [OwnerTypes]}]
 }
 
-# 1 if TYPE is abi::bytes::MutableBytes.
+# 1 if TYPE is std::abi::bytes::MutableBytes.
 proc hir::borrow::IsMutableOwner {type} {
     return [expr {$type eq [list nstruct [core::bytestore::mutableBytesType]]}]
 }
@@ -99,7 +99,7 @@ proc hir::borrow::Contract {hir node} {
     return [dict getdef $meta foreign ""]
 }
 
-# 1 if pointee POINTEE may be byte storage: ffi::c::Void, or a C integer
+# 1 if pointee POINTEE may be byte storage: std::ffi::c::Void, or a C integer
 # scalar whose registry metadata says it is 8 bits wide.
 proc hir::borrow::BytePointee {pointee} {
     if {$pointee eq "void"} {
@@ -135,13 +135,13 @@ proc hir::borrow::Decide {param argType} {
     }
     if {$access eq "write" && ![IsMutableOwner $argType]} {
         return [list problem [format \
-            {parameter "%s" lets C modify the bytes (access write), and an immutable %s is exposed only for reading: expose an abi::bytes::MutableBytes, whose written bytes the call returns} \
+            {parameter "%s" lets C modify the bytes (access write), and an immutable %s is exposed only for reading: expose a std::abi::bytes::MutableBytes, whose written bytes the call returns} \
             $name $owner]]
     }
     set pointee [lindex $type 1]
     if {![BytePointee $pointee]} {
         return [list problem [format \
-            {byte storage (%s) is exposed only as a pointer to a byte-sized C type (ffi::c::Char, ffi::c::SChar, ffi::c::UChar) or ffi::c::Void, and parameter "%s" is %s: its bytes are not values of %s, and no alignment or element layout is promised} \
+            {byte storage (%s) is exposed only as a pointer to a byte-sized C type (std::ffi::c::Char, std::ffi::c::SChar, std::ffi::c::UChar) or std::ffi::c::Void, and parameter "%s" is %s: its bytes are not values of %s, and no alignment or element layout is promised} \
             $owner $name [hir::types::show $type] [hir::cabi::ShowPointee $pointee]]]
     }
     return [list borrow $access]
@@ -362,7 +362,7 @@ proc hir::borrow::verify {hirVar} {
         if {[dict get [core::native::metadata $name] imprint] ne ""} continue
         if {[core::native::isExtern $name]} {
             hir::Diagnose hir TYPE \
-                "[core::native::displayName $name] can only be called directly: it is a C function (extern c fn), and a call through a function value would have no C signature, no contract and no link symbol -- it is not a value (a C function pointer value is ffi::c::FnPtr, which Botlish does not call)" $e
+                "[core::native::displayName $name] can only be called directly: it is a C function (extern c fn), and a call through a function value would have no C signature, no contract and no link symbol -- it is not a value (a C function pointer value is std::ffi::c::FnPtr, which Botlish does not call)" $e
             continue
         }
         hir::Diagnose hir TYPE \
@@ -372,7 +372,7 @@ proc hir::borrow::verify {hirVar} {
 
 # The diagnostics of call E (NODE) of native NAME without a foreign
 # contract: a byte owner given where the native requires a C address (its
-# run-time kind contract is `cptr`: ffi::c::null?, ffi::c::clone) is TYPE at
+# run-time kind contract is `cptr`: std::ffi::c::null?, std::ffi::c::clone) is TYPE at
 # compile time. Byte storage is never a pointer value, and no operation of
 # pointers ever sees one (an imprinted one, erase or retype, is held to its
 # imprinted Ptr types already: hir::range::VerifyImprintedNative).

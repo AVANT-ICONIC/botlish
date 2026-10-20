@@ -8,11 +8,11 @@ cranelift-generic, cranelift), directly and transitively. The fix is a
 five-line change to `hir/resolve.tcl`'s capture bookkeeping (plus a shared
 helper extracted from existing code); no other production file changed. A
 new steady-state benchmark, `bench/uri-steady.bot` /
-`bench/uri-steady.tcl`, repeatedly calls the frozen `web::uri_escape_text`
+`bench/uri-steady.tcl`, repeatedly calls the frozen `std::web::uri_escape_text`
 from an ordinary user function -- the exact shape C2 made uncompilable
 natively before this fix -- and its correctness, timing, and structural
 baseline are recorded below. The existing benchmark/test corpus is
-unaffected except for the one function (`web::is_unreserved`) that
+unaffected except for the one function (`std::web::is_unreserved`) that
 actually has the C2 shape, and there only in a raw HIR field that native
 lowering already filters back out to the same generated code as before.
 M1 (declared-parameter fact transport) has **not** been started.
@@ -32,7 +32,7 @@ and the new benchmark's baseline -- nothing else.
 
 ```botlish
 fn f(b: Byte) -> bool:
-    web::is_unreserved(b)
+    std::web::is_unreserved(b)
 
 f(45)
 ```
@@ -51,10 +51,10 @@ After this fix, all four backends agree on `true`.
 
 ## C2 root cause
 
-`web::is_unreserved` (`lib/web.bot`) is itself a closure: it captures the
-retained `additional_unreserved_chars` (`byte::set(['-', '.', '_', '~'])`,
+`std::web::is_unreserved` (`stdlib/web.bot`) is itself a closure: it captures the
+retained `additional_unreserved_chars` (`std::byte::set(['-', '.', '_', '~'])`,
 built once at module initialization). `f` references it through a
-module-qualified reference (`web::is_unreserved`, `hir/resolve.tcl`'s
+module-qualified reference (`std::web::is_unreserved`, `hir/resolve.tcl`'s
 `ResolveQualifiedRef`), not an ordinary lexical one.
 
 `ResolveQualifiedRef` resolves a qualified reference directly against its
@@ -74,14 +74,14 @@ Native lowering has no such shared frame. `hir::aot::context`'s
 captures is itself bound to a block that needs no environment) had
 nothing to work with for `f`: `f`'s raw `captures` list was empty, so `f`
 stayed in the "envless" set trivially, and `native::lower::Access` later
-had no capture slot through which to reach `web::is_unreserved`'s actual
+had no capture slot through which to reach `std::web::is_unreserved`'s actual
 closure value at runtime -- hence "binding ... is not reachable".
 
 Module functions calling other module functions, and the program root
 calling a module function, both already worked: an unqualified reference
 inside another module's own body resolves through the *ordinary* lexical
 path (`ResolveRef`), which already added the capture (this is why
-`web::uri_escape_text` already captures `web::is_unreserved`); and the
+`std::web::uri_escape_text` already captures `std::web::is_unreserved`); and the
 program's own top-level region needs no capture/environment concept at
 all (it is the frame everything else runs relative to). The only missing
 case was specifically *ordinary user code, outside any module, reaching a
@@ -158,7 +158,7 @@ Required independent of `web` (spec item 5). Added to
 `tests/surface-modules.test` (`writeC2Fixture`, module `counter`):
 
 ```botlish
-# lib/counter.bot (scratch-library fixture, not checked into lib/)
+# stdlib/counter.bot (scratch-library fixture, not checked into stdlib/)
 namespace counter
 
 retained = [1, 2, 3]
@@ -186,7 +186,7 @@ fn control_wrapper(x):
 
 `retained` (a `List`) forces `module_fn` to need an environment exactly as
 `additional_unreserved_chars` (also a `List`-derived value) forces one on
-`web::is_unreserved`. Confirmed directly (not just inferred) to fail
+`std::web::is_unreserved`. Confirmed directly (not just inferred) to fail
 pre-fix, on the native backend, with the same error shape as C2:
 
 ```
@@ -207,7 +207,7 @@ tests `surface-modules-c2-user-fn-to-module-closure`,
 
 `tests/web-unreserved.test`'s new `web-unreserved-user-fn-wraps-module-closure`
 runs the milestone's literal repro (`fn f(b: Byte) -> bool:
-web::is_unreserved(b)` / `f(45)`) through `moduleParity` (all four
+std::web::is_unreserved(b)` / `f(45)`) through `moduleParity` (all four
 backends) and `moduleValue` (interp value), pinned to `same` / `true`.
 Confirmed directly via `main.tcl` on all four backends (see "C2
 reproduction" above): `true` everywhere, post-fix.
@@ -238,7 +238,7 @@ pulled in.
 
 **Controls also covered** (spec item 33): `counter::module_fn(10)` from
 program root (already worked, included in the same fixture/value);
-`web::uri_escape_text` calling `web::is_unreserved` is the pre-existing
+`std::web::uri_escape_text` calling `std::web::is_unreserved` is the pre-existing
 "module fn -> module fn" control (unaffected, see below);
 `counter::no_captures` is the "module function without captures" control.
 
@@ -256,7 +256,7 @@ trailing parameter at each call site instead of ever building a real heap
 closure (`env=0`, `captures=0`, `pnames="x counter::retained"`). This is
 item 8's "or otherwise gain an environment" in practice: the *fix*
 supplies the reachability; a wholly separate, pre-existing optimization
-then decides representation. `web::is_unreserved` is *not* eligible for
+then decides representation. `std::web::is_unreserved` is *not* eligible for
 that same flattening (it is called from more than one place with more
 than one used specialization instance -- `hir::blockescape`'s own
 documented limit), so it keeps the plain `env=1`/`captures=1` real-closure
@@ -275,8 +275,8 @@ Added to `tests/surface-modules.test` and `tests/web-unreserved.test`
   pinning for `wrapper`/`wrapper2`/`control_wrapper` (item 34)
 - `surface-modules-c2-native-env` -- structural NIR pinning (env/params/
   captures) for the same three, explained above
-- `surface-modules-c2-existing-corpus-unaffected` -- `web::is_unreserved`'s
-  own raw captures (now also naming `ascii::is_alphanumeric`) vs. its
+- `surface-modules-c2-existing-corpus-unaffected` -- `std::web::is_unreserved`'s
+  own raw captures (now also naming `std::ascii::is_alphanumeric`) vs. its
   unchanged generated NIR
 - `web-unreserved-user-fn-wraps-module-closure` -- the literal C2 repro
 
@@ -289,7 +289,7 @@ obligations are).
 ## GC/rooting impact
 
 A newly captured module closure is a heap value/root once code takes the
-`env=1`/real-closure path (`web::is_unreserved` itself, and any user
+`env=1`/real-closure path (`std::web::is_unreserved` itself, and any user
 function shaped like `f` that is not eligible for `hir::blockescape`'s
 flattening). `tests/surface-modules.test` and `tests/web-unreserved.test`
 (including every new C2 test above) pass under
@@ -309,14 +309,14 @@ milestone is tests, a new benchmark, and this report.
 ## Why this is not the module-constant redesign
 
 The audit's own later milestone (5b / M2, "retained module values as
-program-lifetime constants") would let `f` reach `web::is_unreserved`
+program-lifetime constants") would let `f` reach `std::web::is_unreserved`
 directly as a program-lifetime constant, with no per-call capture load or
 environment at all -- removing the residual cost item 38 asks to record,
 not eliminate, here. This fix does none of that: it does not change
 module initialization, module retention representation, or how a module
 binding's value is stored; it only makes the *existing* capture model see
 a reachability edge it was blind to. The one extra capture load
-`web::is_unreserved` itself performs per call (its own
+`std::web::is_unreserved` itself performs per call (its own
 `additional_unreserved_chars` access) is unchanged by this fix and is
 exactly the cost 5b/M2 will later remove.
 
@@ -332,12 +332,12 @@ the same convention `bench/hashtable.tcl`, `bench/csv_records.tcl`, and
 ### Why `refined-checks` was insufficient
 
 `bench/refined-checks.ir` calls `uriEscape` (the legacy `-native-body`
-implementation, `lib/web.tcl`, via `# requires: web`) exactly once, at
+implementation, `stdlib/web.tcl`, via `# requires: web`) exactly once, at
 startup, on the two-character input `"a b"`; its own timed steady state
 is a `check` recursion dominated by `Emailish?`
 (`COMPREHENSIVE-GENERATED-CODE-AUDIT.md`'s own C2 section says so
 directly). It does not, and structurally cannot, measure
-`web::uri_escape_text` (the *module*-based implementation C2 is about),
+`std::web::uri_escape_text` (the *module*-based implementation C2 is about),
 UTF-8 encoding, or `ascii`/`web` Byte classification under repeated call
 pressure. It remains unmodified and unreplaced (spec item 41): it still
 usefully exercises `StringRegion`, validator refinement, closures, and
@@ -352,7 +352,7 @@ fn repeat_uri(i, total, acc):
     if i >= total:
         return acc
     text = list_get(corpus, mod(i, list_length(corpus)))
-    escaped = web::uri_escape_text(text)
+    escaped = std::web::uri_escape_text(text)
     repeat_uri(i + 1, total, acc + length(escaped))
 
 repeat_uri(0, 2000, 0)
@@ -363,7 +363,7 @@ repeat_uri(0, 2000, 0)
 before the C2 fix (confirmed: this file fails the same way the C2 and
 generic fixtures did, pre-fix). `acc` sums each result's own `length`
 (an `Int`): no persistent list/String accumulation in the harness itself
-(only `web::uri_escape_text`'s own frozen implementation ever
+(only `std::web::uri_escape_text`'s own frozen implementation ever
 concatenates strings, item 19), and every call's result observably
 contributes to the final value, so nothing can be dropped as dead work
 (item 20). The "outer recursion drives N repeats" shape is this
@@ -395,7 +395,7 @@ cranelift          29500
 -> all four backends agree: 29500
 ```
 
-(29500 = the sum of `length(web::uri_escape_text(text))` over the 2000
+(29500 = the sum of `length(std::web::uri_escape_text(text))` over the 2000
 calls in the fixed corpus cycle -- a checksum, not the escaped text
 itself, per item 20's "small enough to add little overhead".)
 
@@ -455,8 +455,8 @@ Per-function shape (from `probe.tcl`'s `summary.txt`; only the hot-path
 functions):
 
 ```
-web::is_unreserved<generic>   regs=9  params=1 env=1 bytes=199  call=1 br=2 capture=1 op:setcontains=1
-web::uri_escape_text<generic> regs=7  params=3 env=0 bytes=121  call=1
+std::web::is_unreserved<generic>   regs=9  params=1 env=1 bytes=199  call=1 br=2 capture=1 op:setcontains=1
+std::web::uri_escape_text<generic> regs=7  params=3 env=0 bytes=121  call=1
 esc_char<generic>             regs=23 params=3 env=0 bytes=525  guard=1 op:strutf8bytes=1 ... callenv=1 call=2
 esc_from<generic>             regs=17 params=5 env=0 bytes=1004 guard=4 op:strlen=1 ... call=1 op:strcat=1 tail=1
 repeat_uri<generic>            regs=18 params=6 env=0 bytes=1180 guard=4 ... call=1 tail=1
@@ -475,23 +475,23 @@ call average over the fixed corpus.
 
 ### Hot-path baseline (spec item 28)
 
-- `web::is_unreserved` executes as its **generic** instance (`<generic>`,
+- `std::web::is_unreserved` executes as its **generic** instance (`<generic>`,
   not `<int>`), with exactly one real capture load per call
   (`additional_unreserved_chars`) and one `op setcontains` (the
   punctuation-set membership check) -- this is the honest current-state
   answer to "does it need a tagged/guarded generic path or a raw int
   one": generic, because nothing upstream of it seeds its parameter with
   the declared `Byte` fact yet (this is exactly the gap M1 targets).
-- `ascii::is_alphanumeric`, `is_alphabetic`, `is_digit`, `is_upper`,
+- `std::ascii::is_alphanumeric`, `is_alphabetic`, `is_digit`, `is_upper`,
   `is_lower` all execute as `<generic>` too (13 `genericFunctions` total
   on this program).
-- `web::uri_escape_text`, `esc_char`, `esc_bytes`, `esc_from`,
+- `std::web::uri_escape_text`, `esc_char`, `esc_bytes`, `esc_from`,
   `repeat_uri` are all `env=0` (de-closured by `hir::blockescape`, as
-  explained above): capture loads are confined to `web::is_unreserved`
+  explained above): capture loads are confined to `std::web::is_unreserved`
   itself, exactly one per call into it (one per ASCII-range byte
   classification), not one per byte of input generally.
 - `rt_set_contains` (the runtime helper backing `op setcontains`) is
-  reached once per `is_unreserved` call whose left (`ascii::is_alphanumeric`)
+  reached once per `is_unreserved` call whose left (`std::ascii::is_alphanumeric`)
   side is false -- i.e. for every non-alphanumeric byte the escaper
   classifies (spec item 29's "percent-escape path runs for at least some
   bytes" and "is_unreserved runs repeatedly for relevant bytes" are both
@@ -513,14 +513,14 @@ $ git stash && <regenerate NIR for the whole corpus> && git stash pop && <regene
 
 This includes the audit's own `web-unreserved-256.bot` and
 `web-unreserved-literals.bot` probes, which already call
-`web::is_unreserved` (from program root, never from a user function), so
+`std::web::is_unreserved` (from program root, never from a user function), so
 even those exercise no change. The one place raw HIR data *does* change
-is `web::is_unreserved`'s own `captures` field (it now also names
-`ascii::is_alphanumeric`, a qualified reference from inside its own
+is `std::web::is_unreserved`'s own `captures` field (it now also names
+`std::ascii::is_alphanumeric`, a qualified reference from inside its own
 body) -- but `native::lower::CaptureList`/`BindingAccess` already filters
 a capture whose target is itself an envless block (`fnvalue` access, no
 value ever needed) before it reaches generated code, so
-`web::is_unreserved`'s own NIR (`env=1 ... captures=1`, pinned by
+`std::web::is_unreserved`'s own NIR (`env=1 ... captures=1`, pinned by
 `surface-modules-c2-existing-corpus-unaffected`) is unchanged. `fib`,
 `loop-count`, `sum-refined`, `refined-checks`, the stdlib algorithm
 corpus, and the `steady-ascii`/`steady-ascii-param`/`steady-ascii-capture`
@@ -539,11 +539,11 @@ BOTLISH_NATIVE_GC_STRESS=1 tclsh9.0 tests/all.tcl          2111 tests, 2111 pass
 ### Source-fence confirmation
 
 ```
-$ git diff 02295c7 -- lib/
+$ git diff 02295c7 -- stdlib/
 (no output)
 ```
 
-`lib/byte.bot`, `lib/ascii.bot`, `lib/char.bot`, `lib/web.bot`, and every
+`stdlib/byte.bot`, `stdlib/ascii.bot`, `stdlib/char.bot`, `stdlib/web.bot`, and every
 other frozen library source file are byte-for-byte unchanged.
 
 ## M1 entry baseline
@@ -563,15 +563,15 @@ implementing any of them):
    per-backend-instruction here, since that needs the M1-era guard/
    `may_error` removal to be meaningful rather than dominated by current
    generic-path overhead.
-3. **Calls into the ASCII predicate chain**: `web::is_unreserved` calls
-   `ascii::is_alphanumeric` once per byte classified (one `call` op in
+3. **Calls into the ASCII predicate chain**: `std::web::is_unreserved` calls
+   `std::ascii::is_alphanumeric` once per byte classified (one `call` op in
    `is_unreserved`'s own NIR body); `is_alphanumeric` itself calls
    `is_alphabetic`/`is_digit` (each composed from `is_upper`/`is_lower`
    or direct range checks) -- the full chain is 13 generic functions
    deep across the program.
 4. **Which ASCII instances execute**: **all `<generic>`** -- `is_digit`,
    `is_upper`, `is_lower`, `is_alphabetic`, `is_alphanumeric`, and
-   `web::is_unreserved` itself. None run as a specialized `<int>`
+   `std::web::is_unreserved` itself. None run as a specialized `<int>`
    instance on this program.
 5. **`guard int` operations on the hot path**: 10 structurally, in this
    program's NIR text (mostly the generic ASCII leaves' own parameter
@@ -582,7 +582,7 @@ implementing any of them):
    alphanumeric check is false (one `op setcontains` in
    `is_unreserved`'s own body, executed conditionally).
 8. **Capture loads per relevant byte**: exactly one (the
-   `additional_unreserved_chars` capture inside `web::is_unreserved`),
+   `additional_unreserved_chars` capture inside `std::web::is_unreserved`),
    once per byte classified -- not once per input byte generally, since
    `uri_escape_text`/`esc_char`/`esc_bytes`/`esc_from`/`repeat_uri` are
    all `env=0` (de-closured, see above).
@@ -598,7 +598,7 @@ implementing any of them):
 **M1's expected first effect, made measurable now**: seeding generic
 instances with their already-verified declared parameter types (M1's
 "seed generic instances with declaredParamTypes") should let
-`web::is_unreserved`'s own `b: Byte` parameter, and the ASCII chain
+`std::web::is_unreserved`'s own `b: Byte` parameter, and the ASCII chain
 underneath it, specialize to `<int>` (or a raw/guard-free path) even
 though `is_unreserved` itself remains a closure/generic-module-function
 in representation terms -- this benchmark's structural baseline (14
@@ -624,8 +624,8 @@ BOTLISH_NATIVE_GC_STRESS=1 tclsh9.0 tests/all.tcl
 
 | question | answer |
 |---|---|
-| Was `lib/web.bot` changed? | no |
-| Was any frozen `.bot` source changed? | no (`git diff 02295c7 -- lib/` is empty) |
+| Was `stdlib/web.bot` changed? | no |
+| Was any frozen `.bot` source changed? | no (`git diff 02295c7 -- stdlib/` is empty) |
 | Was specialization changed? | no |
 | Was range/control-flow lowering changed? | no |
 | Was error lowering changed? | no |
@@ -670,12 +670,12 @@ BOTLISH_NATIVE_GC_STRESS=1 tclsh9.0 tests/all.tcl
 11. **Why was `refined-checks` insufficient?** Its own URI call is a
     single startup-time call on a 2-character input through the legacy
     `-native-body` `uriEscape`, not the module-based
-    `web::uri_escape_text`; its measured steady state is a
+    `std::web::uri_escape_text`; its measured steady state is a
     recursive `Emailish?`/`UriQueryValue?` check, not URI escaping.
 12. **Which URI/Byte/ASCII functions execute repeatedly?**
-    `web::uri_escape_text`, its nested `esc_from`/`esc_char`/`esc_bytes`/
-    `hex_pair`/`high_nibble`, `web::is_unreserved`, and the
-    `ascii::is_*` chain underneath it -- all called from `repeat_uri`,
+    `std::web::uri_escape_text`, its nested `esc_from`/`esc_char`/`esc_bytes`/
+    `hex_pair`/`high_nibble`, `std::web::is_unreserved`, and the
+    `std::ascii::is_*` chain underneath it -- all called from `repeat_uri`,
     2000 times.
 13. **Are module init and JIT compilation excluded from timing?** Yes
     (`native::measure`'s own `lowerUs`/`compileUs`/`bestUs` split; only
@@ -683,7 +683,7 @@ BOTLISH_NATIVE_GC_STRESS=1 tclsh9.0 tests/all.tcl
 14. **What fixed inputs, and why?** `"abcXYZ012"` (plain unreserved),
     `"a b+c?"` (percent-escaping), `"café"` (2-byte UTF-8), `"hello
     世界?"` (mixed, 3-byte UTF-8 x2) -- covers every code path
-    `web::uri_escape_text`'s own semantics distinguish, without gigantic
+    `std::web::uri_escape_text`'s own semantics distinguish, without gigantic
     strings that would just measure bulk-copy bandwidth instead of the
     small-function costs the audit found.
 15. **Stable Cranelift baseline?** Median 5658.74 us for 2000 calls
@@ -721,6 +721,6 @@ steady-state URI/Byte/ASCII benchmark exists (`bench/uri-steady.bot`/
 timed region excludes startup/JIT, its baseline timing/variance and its
 structural baseline (generic instances, guards, tagged ops, `may_error`
 checks, allocations, code size) are recorded, it demonstrably exercises
-`web::uri_escape_text`/Byte classification/ASCII classification/escaping
+`std::web::uri_escape_text`/Byte classification/ASCII classification/escaping
 repeatedly (allocation-site and census counts above), the full regression
 suite and Rust test suite pass, and M1 has not been implemented.

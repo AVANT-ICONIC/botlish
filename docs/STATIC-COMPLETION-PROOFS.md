@@ -21,7 +21,7 @@ runtime-uncertain success/failure -> explicitly declared runtime error completio
 
 Concretely:
 
-- `byte::from_int` is now honestly typed `int -> Byte` (a typed `value: int`
+- `std::byte::from_int` is now honestly typed `int -> Byte` (a typed `value: int`
   parameter, STRICT-TYPED-PARAMETERS.md's usual static-proof obligation at
   every call site -- no runtime type check inserted).
 - A new, general **call-specific completion proof** (`hir/completions.tcl`)
@@ -42,19 +42,19 @@ Concretely:
   milestone) is fixed: a function declared to return the broadest possible
   scalar type, plain `int`, is no longer rejected merely because its
   inferred result is a non-dense exact finite set.
-- `char::codepoint` exposes truthful static facts (`0 <= result <=
-  0x10FFFF`, exact for a literal character), which lets `byte::set`'s own
+- `std::char::codepoint` exposes truthful static facts (`0 <= result <=
+  0x10FFFF`, exact for a literal character), which lets `std::byte::set`'s own
   declared error set shrink, *generically proven*, from `BelowRange,
   AboveRange` to `AboveRange` alone.
 - UTF-8 encoding's static result type is now the truthful `List[Byte]`
-  (still exactly the same runtime representation), which lets `lib/web.bot`
-  drop its last redundant `byte::from_int(...)` conversion.
-- `lib/web.bot`'s `additional_unreserved_chars` module initializer is
+  (still exactly the same runtime representation), which lets `stdlib/web.bot`
+  drop its last redundant `std::byte::from_int(...)` conversion.
+- `stdlib/web.bot`'s `additional_unreserved_chars` module initializer is
   restored to its clean, handler-free form:
-  `additional_unreserved_chars = byte::set(['-', '.', '_', '~'])` -- the
+  `additional_unreserved_chars = std::byte::set(['-', '.', '_', '~'])` -- the
   call-specific proof establishes `effectiveErrors = {}` for this exact
   call, so no handler, no placeholder fallback set, and no
-  `byte::from_int(0)` construction are needed.
+  `std::byte::from_int(0)` construction are needed.
 
 All of this is **static semantic analysis**, not an optimization: it changes
 which source programs are statically legal (a provably-failing call is now
@@ -76,8 +76,8 @@ whole point of Botlish's own three-way completion rule, because a call that
 provably *always* fails still compiles as long as a syntactically-present
 handler exists for it. Making the compiler see that is changing the
 *acceptance* of source programs (some now-legal programs, like
-`byte::set(['-','.','_','~'])` with no handler, were previously rejected;
-some now-illegal programs, like `byte::from_int(999): on AboveRange: 255`,
+`std::byte::set(['-','.','_','~'])` with no handler, were previously rejected;
+some now-illegal programs, like `std::byte::from_int(999): on AboveRange: 255`,
 were previously accepted) -- the textbook definition of a semantic-analysis
 change, not a machine-code shape change. Every acceptance test in this
 report is a `hir::diagnostics`-level (or `hir::completions::
@@ -103,7 +103,7 @@ It already:
   tracked set, not just the interval, on every comparison);
 - accumulates facts through nested `if`s for free, because each nested
   `If` call runs inside the *already-narrowed* `ctx.bindings` its enclosing
-  branch established -- `byte::from_int`'s own two-level `if`/`fail`/`if`/
+  branch established -- `std::byte::from_int`'s own two-level `if`/`fail`/`if`/
   `fail`/`else` shape (items 9/66) needs no special handling at all.
 
 **Nothing in `hir/range.tcl` needed to change for items 6-10.** What this
@@ -185,7 +185,7 @@ accepted-by-broad-int`/`source-type-exact-set-member-rejected-by-narrow-
 type` -- the second confirms a *narrower*-than-`int` declared type still
 correctly rejects an out-of-domain exact-set member).
 
-## Typed `byte::from_int`
+## Typed `std::byte::from_int`
 
 ```botlish
 fn from_int(value: int) -> Byte errors BelowRange, AboveRange:
@@ -204,15 +204,15 @@ declaring `value: int` would make every call site that could not statically
 element) uncallable, and that motivated leaving the strict-typed-parameter
 check out entirely. This milestone's own item 5 is explicit that the fix
 belongs in the *producers*, not in weakening `from_int` back: `encode_utf8`'s
-own truthful `List[Byte]` result type (below) and `char::codepoint`'s own
+own truthful `List[Byte]` result type (below) and `std::char::codepoint`'s own
 truthful `int`-with-facts result mean every actual caller in this codebase
 now has a statically provable `Int` (or `Byte`, itself a subtype) in hand at
 every `from_int` call site, so the typed parameter costs nothing in
-practice -- confirmed directly: `lib/byte.bot`/`lib/web.bot` both compile
+practice -- confirmed directly: `stdlib/byte.bot`/`stdlib/web.bot` both compile
 clean under `-strict 1` with the typed parameter and zero call-site
 weakening.
 
-`byte::from_int("hello")` is now a static `TYPE` diagnostic
+`std::byte::from_int("hello")` is now a static `TYPE` diagnostic
 (`STRICT-TYPED-PARAMETERS.md`'s own existing mechanism, unchanged): `str`
 is not provably `int`. No dynamic kind check is inserted for the declared
 parameter -- the existing invariant (argument proven admissible -> call
@@ -255,10 +255,10 @@ facts" above for why). Two entry points:
   Both of these cross an exact call boundary the same way an Int `Range`
   fact already does (`ArgExactValues`/`ArgExactLists`, seeded into the
   callee's own fresh `ctx` by `analyzeBlock`) -- this is what lets
-  `byte::set(['-','.','_','~'])`'s own literal argument reach `set`'s own
+  `std::byte::set(['-','.','_','~'])`'s own literal argument reach `set`'s own
   `loop c in chars:` (whose `iterable` is a plain `ref` to the parameter
   `chars`, not the literal list expression itself) as a genuine small
-  literal list, with **zero** `byte::set`/`web`-specific code anywhere in
+  literal list, with **zero** `std::byte::set`/`web`-specific code anywhere in
   this file.
 - **Errors** (`ctx.errors`, `name -> 1`): every declared error name a
   reachable `fail` (respecting branch-feasibility pruning) contributed,
@@ -336,7 +336,7 @@ written for it: it falls straight out of the general rule.
 `CheckCallLegality` checks `mayReturnNormally` **first**, before `handled`
 is even consulted (item 50): if a call cannot complete normally under the
 current facts, it is always a `KNOWN-ERROR`, independent of any handler --
-`byte::from_int(999): on AboveRange: 255` is rejected exactly like the
+`std::byte::from_int(999): on AboveRange: 255` is rejected exactly like the
 unhandled bare call, because a handler is not a way to encode an `if` for a
 statically decided condition. The diagnostic names the call and the
 guaranteed error(s) (item 19/80):
@@ -355,11 +355,11 @@ name.
 ### Partial error-set elimination
 
 Falls out of the same general mechanism with no extra code: if a value is
-statically nonnegative (e.g. `char::codepoint`'s own result, or an
+statically nonnegative (e.g. `std::char::codepoint`'s own result, or an
 in-source `nonneg`-shaped helper) but not upper-bounded,
 `BelowRange`'s branch is pruned as infeasible (the narrowed `Range` for
 `value < 0` becomes empty) while `AboveRange`'s branch remains live, so
-`effectiveErrors = {AboveRange}` only -- confirmed both for `byte::from_int`
+`effectiveErrors = {AboveRange}` only -- confirmed both for `std::byte::from_int`
 directly (`tests/source-types.test`) and for the general `bounded` fixture
 in `tests/errors.test`.
 
@@ -382,7 +382,7 @@ something unproven:
   `analyzeBlock` analyses, every further nested call falls back to the same
   conservative contract. Documented directly in the source; generous enough
   for every corpus shape (a handful of calls per literal-list element,
-  `byte::set`'s own single level of `from_int` nesting) while bounding a
+  `std::byte::set`'s own single level of `from_int` nesting) while bounding a
   pathological call chain.
 - **Memoization** (a plain performance fix, not a semantic one --
   `hir::completions::cache`, reset once per whole-program `errorsets::
@@ -401,9 +401,9 @@ something unproven:
   even consulted, so a genuine cycle is never short-circuited by a stale
   hit.
 
-## `char::codepoint` facts
+## `std::char::codepoint` facts
 
-`char::codepoint` (`lib/char.bot`) wraps the root native `char_codepoint`
+`std::char::codepoint` (`stdlib/char.bot`) wraps the root native `char_codepoint`
 (`core/unicodechar.tcl`), already registered `-result-range nonneg` for
 `hir/range.tcl`'s own (unrelated, codegen-facing) purposes -- unchanged,
 deliberately, to avoid the same generated-code blast radius discussed above
@@ -423,28 +423,28 @@ an exact `UnicodeChar` constant (a literal, or `ctx.exact` propagation
 through an immutable binding), the exact codepoint itself:
 
 ```
-char::codepoint('A') -> exact 65
-char::codepoint('é') -> exact 233
-char::codepoint('Ā') -> exact 256
+std::char::codepoint('A') -> exact 65
+std::char::codepoint('é') -> exact 233
+std::char::codepoint('Ā') -> exact 256
 ```
 
 Pinned directly (`tests/errors.test` via `hir::completions::
 resultRangeOf`). No constant folding for codegen purposes: this fact is
 consumed only by this file's own proof, never by any backend.
 
-## `byte::set` contract reduction
+## `std::byte::set` contract reduction
 
 ```botlish
 fn set(chars: List[UnicodeChar]) -> ImmutableSet[Byte] errors AboveRange:
     bytes = loop c in chars:
-        from_int(char::codepoint(c))
+        from_int(std::char::codepoint(c))
     immutable_set_from_list(bytes)
 ```
 
 `BelowRange` is gone from the declaration, *proven*, not asserted: when
 `set`'s own body is independently checked (its own top-level `checkBlock`
 entry, `chars` unseeded/generic), the dynamic loop over `chars` evaluates
-`from_int(char::codepoint(c))` once, with `char::codepoint(c)`'s own fact
+`from_int(std::char::codepoint(c))` once, with `std::char::codepoint(c)`'s own fact
 (`[0, 0x10FFFF]`, from the previous section) as `from_int`'s argument Range
 -- `value < 0`'s narrowed Range for that fact is empty (`min=0` already
 excludes it), so `BelowRange`'s branch is pruned and never contributes to
@@ -477,23 +477,23 @@ into a callee's parameter alike, so `each([])` needs no handler for what
 its loop body raises, while a parameter merely typed `List` still knows
 nothing and still does (`tests/errors.test`'s `errors-*-literal-loop-*`,
 `errors-dynamic-list-loop-needs-handler`). Its size, zero, is known the
-same way (`list::length`, a bounds check): a read of the empty literal
+same way (`std::list::length`, a bounds check): a read of the empty literal
 through an exact call always fails, so a handled one is KNOWN-ERROR,
-exactly as a handled `list::at([], 0)` itself
+exactly as a handled `std::list::at([], 0)` itself
 (`errors-empty-literal-read-through-call-known-error`). This is
-general, not `byte::set`-specific: the same `list`-native-call recognition
+general, not `std::byte::set`-specific: the same `list`-native-call recognition
 and per-element walk apply to any `loop x in [literal, ...]:` shape,
 whatever fallible calls its body happens to make.
 
 ```
-byte::set([])                   -> effectiveErrors {} (no element)
-byte::set(['A'])                -> effectiveErrors {} (65, safe)
-byte::set(['é'])                -> effectiveErrors {} (233, safe)
-byte::set(['ÿ'])                -> effectiveErrors {} (255, safe)
-byte::set(['Ā'])                -> KNOWN-ERROR (256, guaranteed AboveRange)
-byte::set(['😀'])               -> KNOWN-ERROR (128512, guaranteed AboveRange)
-byte::set(['A', 'Ā', 'B'])      -> KNOWN-ERROR at 'Ā'; 'B' never analyzed
-byte::set(['-', '.', '_', '~']) -> effectiveErrors {}, no handler needed
+std::byte::set([])                   -> effectiveErrors {} (no element)
+std::byte::set(['A'])                -> effectiveErrors {} (65, safe)
+std::byte::set(['é'])                -> effectiveErrors {} (233, safe)
+std::byte::set(['ÿ'])                -> effectiveErrors {} (255, safe)
+std::byte::set(['Ā'])                -> KNOWN-ERROR (256, guaranteed AboveRange)
+std::byte::set(['😀'])               -> KNOWN-ERROR (128512, guaranteed AboveRange)
+std::byte::set(['A', 'Ā', 'B'])      -> KNOWN-ERROR at 'Ā'; 'B' never analyzed
+std::byte::set(['-', '.', '_', '~']) -> effectiveErrors {}, no handler needed
 ```
 
 ## Loop domains
@@ -533,16 +533,16 @@ is a fixed, argument-independent fact about the native itself, resolved
 indirection is necessary, not stylistic: `encode_utf8` is registered once,
 at Tcl-process bootstrap (`core.tcl` sources `core/strings.tcl`
 unconditionally), long before a compiling program's own `type Byte = Int in
-0..255` declaration (`lib/byte.bot`, parsed per-compilation) exists in
+0..255` declaration (`stdlib/byte.bot`, parsed per-compilation) exists in
 `core::type`'s registry -- `Byte` is stored in the shape tuple as a
 symbolic name and resolved only once type inference actually runs, by which
 point every source-defined type the compiling program itself loaded is
-already registered. If a program never loads `lib/byte.bot` at all,
+already registered. If a program never loads `stdlib/byte.bot` at all,
 `isNamed` is false and `ShapeResult` falls back to the native's own plain
 declared `-result-type list` -- never a false claim (per item 86: no `0`/
 `255` bound is hardcoded into the compiler; the `Byte` name is resolved
 against whatever the compiling program's own type registry currently
-holds, and its *domain* still comes entirely from `lib/byte.bot`'s own
+holds, and its *domain* still comes entirely from `stdlib/byte.bot`'s own
 declaration). No runtime representation change (item 27): `encodeUtf8`'s
 own Tcl implementation is untouched, still `List[Int]`-shaped at runtime,
 same bytes, same order.
@@ -553,7 +553,7 @@ web-specific code (item 75).
 
 ## `web` migration
 
-`lib/web.bot`'s `esc_char` no longer converts:
+`stdlib/web.bot`'s `esc_char` no longer converts:
 
 ```botlish
 fn esc_char(c):
@@ -569,7 +569,7 @@ fn esc_char(c):
 ```
 
 `list_get(bytes, 0)` is now directly `Byte`-typed; the previous
-`byte::from_int(...): on BelowRange: ... on AboveRange: ...` conversion (and
+`std::byte::from_int(...): on BelowRange: ... on AboveRange: ...` conversion (and
 its always-unreachable-in-practice fallback) is gone -- it was working
 around an under-typed `encode_utf8`, never a genuine runtime possibility,
 and item 26/54 is explicit that a redundant conversion should not remain in
@@ -580,11 +580,11 @@ library source once its producer's own static contract is honest.
 Restored exactly:
 
 ```botlish
-additional_unreserved_chars = byte::set(['-', '.', '_', '~'])
+additional_unreserved_chars = std::byte::set(['-', '.', '_', '~'])
 ```
 
 No handlers, no placeholder `ImmutableSet[Byte]` sentinel, no
-`byte::from_int(0)` construction. The call-specific completion proof
+`std::byte::from_int(0)` construction. The call-specific completion proof
 establishes `effectiveErrors = {}` for this exact call (every element is a
 statically known safe literal, per "Small literal-list proof" above), which
 trivially satisfies the legality rule at the module's own top level
@@ -749,7 +749,7 @@ for later inspection (item 62/89: useful input to the later comprehensive
 generated-code audit, and this milestone's own HIR-inspection tests), never
 read back by this pass itself and never consulted by any backend. A third,
 `resultRangeFact`, records the `Range` this pass computed for a checked
-call's own value (used by the `char::codepoint` exact-fact tests). Plain
+call's own value (used by the `std::char::codepoint` exact-fact tests). Plain
 dict fields on an existing node, ignored by every unrelated pass exactly the
 way `calleeErrors`/`known` already are; `hir/format.tcl`/`hir/read.tcl`'s
 text round-trip is unaffected (these fields are never part of the canonical
@@ -766,7 +766,7 @@ this milestone (confirmed directly: `git diff --stat` for this milestone
 touches only `hir/`, two `core/` files whose only change is a new,
 inert-until-consulted native-registration option and one `-result-shape`
 annotation, and library/test source) -- every genuinely runtime-uncertain
-case (a dynamic `byte::from_int`/`byte::set` call) reaches the *same*,
+case (a dynamic `std::byte::from_int`/`std::byte::set` call) reaches the *same*,
 completely unmodified runtime error-completion machinery on all four
 backends the previous milestone already established parity for. A
 program this milestone's own proof rejects at compile time (a known
@@ -782,23 +782,23 @@ Per item 61/101-102, no codegen change was made, and none should be
 inferred from this report's own precision. Concretely, and left exactly as
 found for the later comprehensive generated-code audit to address:
 
-- `byte::from_int(dynamic int)` still compiles both its `<`/`>` range
+- `std::byte::from_int(dynamic int)` still compiles both its `<`/`>` range
   checks and both `fail` paths on every backend, unconditionally --
   unaffected by this milestone's own static proof that a *specific* call
   site's own facts make one or both unreachable.
-- `byte::from_int(45)` (statically safe) still compiles the identical
+- `std::byte::from_int(45)` (statically safe) still compiles the identical
   callee body -- the same two range checks, the same two `fail` paths --
   even though this milestone's own proof establishes that neither can ever
   fire for this particular call. No inlining, no specialization, no
   guard/error-edge elimination was added.
-- `byte::set(dynamic chars)` still compiles its own loop body exactly as
+- `std::byte::set(dynamic chars)` still compiles its own loop body exactly as
   before, including the `BelowRange`-shaped range check inside the
-  `from_int` it calls, even though `byte::set`'s own *declared* contract no
+  `from_int` it calls, even though `std::byte::set`'s own *declared* contract no
   longer admits `BelowRange` at all (the discrepancy between "declared
   impossible" and "still range-checked at runtime" is exactly the kind of
   input the later audit is meant to use).
-- `web::is_unreserved`'s own path is unchanged at the machine-code level:
-  removing the source-level `byte::from_int(...): on ...` conversion around
+- `std::web::is_unreserved`'s own path is unchanged at the machine-code level:
+  removing the source-level `std::byte::from_int(...): on ...` conversion around
   `list_get(bytes, 0)` removes exactly the Tcl/NIR this milestone's own
   static proof already knew was dead source, not a codegen decision --
   `native/native.tcl`'s `ExpandNativeBodiesIn` and `native/lower.tcl` are
@@ -814,7 +814,7 @@ regenerated against this milestone's own final source, matching every
 previous milestone's own practice. The one corpus entry it touches,
 `bench/refined-checks.ir` (which exercises the real `web`/`byte`/`ascii`
 pipeline), shrinks from 34 functions/19043 bytes to 33 functions/17855
-bytes: `byte::from_int` no longer appears as its own separately-compiled
+bytes: `std::byte::from_int` no longer appears as its own separately-compiled
 function (nothing in this corpus's own reachable call graph still calls
 it directly -- `esc_char`'s own conversion is gone, per "web migration"
 above), and `esc_char` itself drops from 31 to 23 NIR registers (the
@@ -834,7 +834,7 @@ or any `examples/stdlib/` file) changed at all.
 - `errors-byte-from-int-known-safe-literal-no-handler`/`-known-failure-
   literal`/`-known-failure-with-handler-still-rejected`: items 20/50/64.
 - `errors-byte-from-int-partial-range-elimination`: item 21/65.
-- `errors-byte-from-int-branch-refinement-result`: item 9/66 (`lib/byte.bot`
+- `errors-byte-from-int-branch-refinement-result`: item 9/66 (`stdlib/byte.bot`
   itself compiles clean under `-strict 1`, proving the declared `Byte`
   result from ordinary branch-sensitive facts, no builtin escape hatch).
 - `errors-generic-bounded-fixture`: item 15/67 (the exact `bounded`
@@ -866,7 +866,7 @@ or any `examples/stdlib/` file) changed at all.
 - `tests/ascii.test`/`tests/web-unreserved.test`/`tests/native-byte.test`/
   `tests/refined-signatures.test`/`tests/native-uri-escape.test`: run
   unchanged and pass -- their own dynamic-loop-variable call shapes
-  (`loop n in ns: b = byte::from_int(n): on ... on ...`) are genuinely
+  (`loop n in ns: b = std::byte::from_int(n): on ... on ...`) are genuinely
   unconstrained at the point `hir::completions.tcl` analyzes them (the
   literal list `ns` is bound via a plain top-level `bind`, never a direct
   `listloop` iterable and never propagated through `ctx.exactList`, so this
@@ -943,12 +943,12 @@ current *source* shape until the comprehensive generated-code/
 representation audit completes its own work:
 
 ```
-byte::from_int
-byte::set
+std::byte::from_int
+std::byte::set
 ascii:: predicates
 UTF-8 byte production (core/strings.tcl encode_utf8)
-web::is_unreserved
-the URI escape workload (web::uri_escape_text and its own helpers)
+std::web::is_unreserved
+the URI escape workload (std::web::uri_escape_text and its own helpers)
 explicit error handling semantics (error/errors/fail/handle, hir/errorsets.tcl, hir/completions.tcl)
 ```
 
@@ -972,10 +972,10 @@ section above is the audit's starting input.
    after the `if` sees `hir::range::JoinBindings`'s own join (or, when one
    side is provably infeasible/dead, that side's own facts exactly, no
    join needed).
-3. **Can the final success branch of `byte::from_int` prove `value :
+3. **Can the final success branch of `std::byte::from_int` prove `value :
    Byte` without cast syntax?** Yes -- confirmed directly:
-   `lib/byte.bot` compiles clean under `-strict 1` with no diagnostics.
-4. **Is `byte::from_int` now typed `int -> Byte`?** Yes:
+   `stdlib/byte.bot` compiles clean under `-strict 1` with no diagnostics.
+4. **Is `std::byte::from_int` now typed `int -> Byte`?** Yes:
    `fn from_int(value: int) -> Byte errors BelowRange, AboveRange:`.
 5. **Can a non-int value reach its `<` checks dynamically?** No --
    rejected statically (`TYPE`, `STRICT-TYPED-PARAMETERS.md`'s own
@@ -997,13 +997,13 @@ section above is the audit's starting input.
    guaranteed error(s).
 10. **Does a handler make a statically guaranteed failure legal?** No --
     `mayReturnNormally` is checked before `handled` is even consulted;
-    `byte::from_int(999): on AboveRange: 255` is still rejected.
+    `std::byte::from_int(999): on AboveRange: 255` is still rejected.
 
 ## Required proof questions
 
-11. **Does `byte::from_int(45)` require handlers?** No.
-12. **Does `byte::from_int(999)` compile?** No (`KNOWN-ERROR`).
-13. **What errors remain for `byte::from_int(x)` when `x : int` is
+11. **Does `std::byte::from_int(45)` require handlers?** No.
+12. **Does `std::byte::from_int(999)` compile?** No (`KNOWN-ERROR`).
+13. **What errors remain for `std::byte::from_int(x)` when `x : int` is
     otherwise unconstrained?** `{BelowRange, AboveRange}`, both.
 14. **What errors remain when `x` is statically nonnegative?**
     `{AboveRange}` only, unless an upper bound also proves that
@@ -1019,22 +1019,22 @@ section above is the audit's starting input.
 
 ## Required Byte/String questions
 
-17. **What static facts does `char::codepoint(c)` expose for arbitrary
+17. **What static facts does `std::char::codepoint(c)` expose for arbitrary
     `UnicodeChar`?** `0 <= result <= 0x10FFFF` always; the exact codepoint
     when the argument is a provably exact `UnicodeChar` constant.
 18. **Can it ever be negative?** No.
-19. **Which errors does `byte::set(List[UnicodeChar])` now declare?**
+19. **Which errors does `std::byte::set(List[UnicodeChar])` now declare?**
     `AboveRange` only.
-20. **Why is BelowRange absent?** Because `char::codepoint`'s own result
+20. **Why is BelowRange absent?** Because `std::char::codepoint`'s own result
     is always nonnegative, which the call-specific proof carries generically
     into `from_int`'s own call inside `set`'s body, pruning `BelowRange`'s
     branch as infeasible.
 21. **Does a dynamic UnicodeChar >= U+0100 still produce a declared
     runtime error?** Yes -- `AboveRange` remains genuinely possible and is
     still declared and still a real runtime completion on every backend.
-22. **Does `byte::set(['Ā'])` reach runtime?** No -- statically known
+22. **Does `std::byte::set(['Ā'])` reach runtime?** No -- statically known
     failure (`KNOWN-ERROR`).
-23. **Does `byte::set(['-', '.', '_', '~'])` require handlers?** No.
+23. **Does `std::byte::set(['-', '.', '_', '~'])` require handlers?** No.
 
 ## Required UTF-8/web questions
 
@@ -1043,12 +1043,12 @@ section above is the audit's starting input.
 25. **Does runtime representation change?** No -- identical Tcl-side
     `List[Int]` construction, identical byte values and order.
 26. **What is the static result of `list_get` on that value?** `Byte`.
-27. **Does `web` still call `byte::from_int` on an encoded UTF-8 byte?**
+27. **Does `web` still call `std::byte::from_int` on an encoded UTF-8 byte?**
     No.
 28. **Does `additional_unreserved_chars` still contain impossible
     handlers?** No.
 29. **Is it again written directly as `additional_unreserved_chars =
-    byte::set(['-', '.', '_', '~'])`?** Yes.
+    std::byte::set(['-', '.', '_', '~'])`?** Yes.
 30. **Is it still retained once?** Yes -- confirmed via
     `tests/byte-set.test`'s own module-retention test (one `setfromlist`
     allocation site, called twice, same value).

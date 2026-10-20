@@ -353,7 +353,7 @@ proc Operation {stateVar} {
             set e [StaticOf $state $from]
             set n [expr {2 + [Rand 3]}]
             set a [Fresh state a]
-            Emit state "$a = mutable_array::create($n, $from)"
+            Emit state "$a = std::mutable_array::create($n, $from)"
             set slots [lrepeat $n [ModelOf $state $from]]
             # A set of a case of the same enum at an in-range index.
             set others [Vars $state $e]
@@ -363,7 +363,7 @@ proc Operation {stateVar} {
             lset slots $i [ModelOf $state $to]
             set j [Rand $n]
             set v [Fresh state v]
-            Emit state "$v = mutable_array::get($a, $j + zero, $from)"
+            Emit state "$v = std::mutable_array::get($a, $j + zero, $from)"
             Bind state $v [lindex $slots $j] $e
             if {[Rand 2]} {
                 set s [Fresh state l]
@@ -378,7 +378,7 @@ proc Operation {stateVar} {
             set e [StaticOf $state $from]
             set others [Vars $state $e]
             set w [Fresh state w]
-            Emit state "$w = mutable_vector::from_list(lift_$e\($from))"
+            Emit state "$w = std::mutable_vector::from_list(lift_$e\($from))"
             set items [list [ModelOf $state $from] [ModelOf $state $from]]
             foreach k [lrange [Shuffle $others] 0 [Rand 3]] {
                 Emit state "$w.push($k)"
@@ -397,14 +397,14 @@ proc Operation {stateVar} {
             set items [lrange [Shuffle $vars] 0 [Rand 3]]
             set needle [Pick $vars]
             set s [Fresh state s]
-            Emit state "$s = immutable_set::from_list(\[[join $items {, }]\])"
+            Emit state "$s = std::immutable_set::from_list(\[[join $items {, }]\])"
             set found 0
             foreach x $items {
                 if {[Equal [ModelOf $state $x] [ModelOf $state $needle]]} {
                     set found 1
                 }
             }
-            Observe state "immutable_set::contains($s, $needle)" [list bool $found]
+            Observe state "std::immutable_set::contains($s, $needle)" [list bool $found]
         }
         closure {
             set captured [Pick $vars]
@@ -521,7 +521,7 @@ proc Program {number} {
         Emit state {*}$lines
     }
     set declarations [Declarations [dict get $state enums] [dict get $state picks] $decl]
-    set header "import list\nimport mutable_array\nimport mutable_vector\nimport immutable_set\n"
+    set header "import std::list\nimport std::mutable_array\nimport std::mutable_vector\nimport std::immutable_set\n"
     if {[dict get $state module]} {
         append header "import fz\n"
     }

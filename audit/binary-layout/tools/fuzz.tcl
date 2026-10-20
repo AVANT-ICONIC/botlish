@@ -11,11 +11,11 @@
 # for random field values biased toward each encoding's extremes and for
 # random input bytes (padding included):
 #
-#   emit      binary::emit(v) equals the bytes this script assembles itself
+#   emit      std::binary::emit(v) equals the bytes this script assembles itself
 #             (little-endian, two's complement, zero padding: the model)
-#   parse     binary::parse(L, bytes) equals the LayoutStruct whose fields
+#   parse     std::binary::parse(L, bytes) equals the LayoutStruct whose fields
 #             this script decodes from the same bytes itself
-#   round     binary::parse(L, binary::emit(v)) == v
+#   round     std::binary::parse(L, std::binary::emit(v)) == v
 #   length    one byte more and one byte fewer are LayoutLengthMismatch
 #
 # The model is independent of the compiler: it never reads a descriptor,
@@ -36,7 +36,7 @@ foreach {option value} $argv {
 source [file join $root compiler compiler.tcl]
 source [file join $root native native.tcl]
 source [file join $root surface surface.tcl]
-set ::core::libraryDir [file join $root lib]
+set ::core::libraryDir [file join $root stdlib]
 if {[dict get $options -gc-stress]} {
     set ::env(BOTLISH_NATIVE_GC_STRESS) 1
 }
@@ -54,7 +54,7 @@ proc pick {list} {
 
 # The domain type and range of a scalar of WIDTH bytes, SIGNED.
 proc scalarType {width signed} {
-    return binary::[expr {$signed ? "I" : "U"}][expr {8 * $width}]
+    return std::binary::[expr {$signed ? "I" : "U"}][expr {8 * $width}]
 }
 proc scalarRange {width signed} {
     set bits [expr {8 * $width}]
@@ -193,19 +193,19 @@ proc bytesText {bytes} {
     return "bytes_of(\[[join $bytes {, }]\])"
 }
 
-set prelude {import abi::bytes
-import binary
-import byte
+set prelude {import std::abi::bytes
+import std::binary
+import std::byte
 
-fn bytes_of(values: List[int]) -> abi::bytes::Bytes:
+fn bytes_of(values: List[int]) -> std::abi::bytes::Bytes:
     bs = loop v in values:
-        b = byte::from_int(v):
-            on byte::BelowRange:
+        b = std::byte::from_int(v):
+            on std::byte::BelowRange:
                 0
-            on byte::AboveRange:
+            on std::byte::AboveRange:
                 255
         b
-    abi::bytes::from_list(bs)
+    std::abi::bytes::from_list(bs)
 
 }
 
@@ -236,10 +236,10 @@ proc program {index} {
     }
     append text "fn check() -> List\[any\] errors LayoutLengthMismatch:\n"
     append text "    v = [valueText $top $value]\n"
-    append text "    p = binary::parse($name, [bytesText $input])\n"
-    append text "    \[binary::emit(v) == [bytesText $encoded], p == [valueText $top $decoded], binary::parse($name, binary::emit(v)) == v, binary::layout_length($name)\]\n"
-    append text "fn length(data: abi::bytes::Bytes) -> str:\n"
-    append text "    v = binary::parse($name, data):\n"
+    append text "    p = std::binary::parse($name, [bytesText $input])\n"
+    append text "    \[std::binary::emit(v) == [bytesText $encoded], p == [valueText $top $decoded], std::binary::parse($name, std::binary::emit(v)) == v, std::binary::layout_length($name)\]\n"
+    append text "fn length(data: std::abi::bytes::Bytes) -> str:\n"
+    append text "    v = std::binary::parse($name, data):\n"
     append text "        on LayoutLengthMismatch:\n"
     append text "            return \"mismatch\"\n"
     append text "    \"parsed\"\n"

@@ -1,4 +1,4 @@
-# cabi.tcl -- the C ABI value universe of namespace ffi::c (C-ABI-TYPES.md):
+# cabi.tcl -- the C ABI value universe of namespace std::ffi::c (C-ABI-TYPES.md):
 # the targets' data models, the C integer scalar categories, and the raw C
 # address values with their operations.
 #
@@ -64,11 +64,11 @@
 #
 # Operations (natives; the explicit imprints are hir/imprint.tcl's)
 # ----------
-#   ffi::c::null[T]()     Ptr[T]         a null pointer (imprinting T)
-#   ffi::c::null?(p)      bool           whether P is null (any C address)
-#   ffi::c::clone(p)      P's own type   a second alias of the same address
-#   ffi::c::erase(p)      Ptr[Void]      the same bits, as void * (moves P)
-#   ffi::c::retype[T](p)  Ptr[T]         the same bits of a Ptr[Void] (moves P)
+#   std::ffi::c::null[T]()     Ptr[T]         a null pointer (imprinting T)
+#   std::ffi::c::null?(p)      bool           whether P is null (any C address)
+#   std::ffi::c::clone(p)      P's own type   a second alias of the same address
+#   std::ffi::c::erase(p)      Ptr[Void]      the same bits, as void * (moves P)
+#   std::ffi::c::retype[T](p)  Ptr[T]         the same bits of a Ptr[Void] (moves P)
 #
 # None of them reads memory, calls foreign code, allocates or retains
 # anything: clone copies the address, never the pointee, and none of them
@@ -90,10 +90,13 @@ namespace eval core::cabi {
     # The standard namespace trees that are an operating system's platform
     # interface -- ROOT -> OS: the namespace ROOT and every namespace under
     # it are OS's, importable only for a target of OS (surface/modules.tcl's
-    # PlatformCheck). Designated here, never inferred from a name: `linux`
-    # (lib/linux.bot, lib/linux/*, the syscall transports linux::abi::*). A
-    # macOS platform module tree is designated the same way when one exists.
-    variable platforms [dict create linux linux]
+    # PlatformCheck). Designated here, never inferred from a name:
+    # `std::linux` (stdlib/linux.bot, stdlib/linux/*, the syscall transports
+    # std::linux::abi::*). A macOS platform module tree is designated the same
+    # way when one exists. A root is a whole namespace path: `std` itself is
+    # every system's (STD-NAMESPACE.md: the prefix says who owns a namespace,
+    # not where it is available).
+    variable platforms [dict create std::linux linux]
     # In declaration (and HIR text) order.
     variable scalars [dict create \
         Char      {c char width char signed char} \
@@ -108,7 +111,7 @@ namespace eval core::cabi {
         LongLong  {c {long long} width longlong signed 1} \
         ULongLong {c {unsigned long long} width longlong signed 0}]
     # The namespace whose intrinsic types these are.
-    variable namespace ffi::c
+    variable namespace std::ffi::c
 }
 
 proc core::cabi::targetNames {} {
@@ -118,7 +121,7 @@ proc core::cabi::targetNames {} {
 
 # The architectures of the targets (their `arch`), sorted: what an
 # architecture-specific module file may be specific to (surface/modules.tcl's
-# ModuleFile: lib/P.ARCH.bot).
+# ModuleFile: stdlib/P.ARCH.bot).
 proc core::cabi::architectures {} {
     variable targets
     return [lsort -unique [lmap name [dict keys $targets] {dict get $targets $name arch}]]
@@ -135,8 +138,12 @@ proc core::cabi::operatingSystems {} {
 # or "".
 proc core::cabi::platformOf {name} {
     variable platforms
-    set root [lindex [split [string map {:: \x00} $name] \x00] 0]
-    return [dict getdef $platforms $root ""]
+    dict for {root os} $platforms {
+        if {$name eq $root || [string first ${root}:: $name] == 0} {
+            return $os
+        }
+    }
+    return ""
 }
 
 # The name of operating system OS in a message (macOS for macos).
@@ -162,7 +169,7 @@ proc core::cabi::target {name} {
 }
 
 # The target of the machine this process runs on, or "" if it is not one of
-# the table's (the caller decides what that means: importing ffi::c then
+# the table's (the caller decides what that means: importing std::ffi::c then
 # needs an explicit -target).
 proc core::cabi::hostTarget {} {
     set os [string tolower $::tcl_platform(os)]
@@ -208,7 +215,7 @@ proc core::cabi::systemTarget {os} {
     return ""
 }
 
-# The C integer scalar names (ffi::c::NAME), in declaration order.
+# The C integer scalar names (std::ffi::c::NAME), in declaration order.
 proc core::cabi::scalarNames {} {
     variable scalars
     return [dict keys $scalars]
@@ -325,16 +332,16 @@ proc core::cabi::fixtureAddressImpl {n} {
     return [address $n]
 }
 
-core::native::register ffi::c::null -arity 0 -impl core::cabi::nullImpl \
+core::native::register std::ffi::c::null -arity 0 -impl core::cabi::nullImpl \
     -result-type cptr -imprint {vars {T} params {} result {cptr {imprint T}}}
-core::native::register ffi::c::null? -arity 1 -impl core::cabi::isNullImpl \
+core::native::register std::ffi::c::null? -arity 1 -impl core::cabi::isNullImpl \
     -param-types {cptr} -result-type bool -ownership {observe}
-core::native::register ffi::c::clone -arity 1 -impl core::cabi::sameImpl \
+core::native::register std::ffi::c::clone -arity 1 -impl core::cabi::sameImpl \
     -param-types {cptr} -result-type cptr -result-shape {same 0} -ownership {observe}
-core::native::register ffi::c::erase -arity 1 -impl core::cabi::sameImpl \
+core::native::register std::ffi::c::erase -arity 1 -impl core::cabi::sameImpl \
     -param-types {cptr} -result-type cptr -ownership {move} \
     -imprint {vars {T} params {{cptr {imprint T}}} result {cptr void}}
-core::native::register ffi::c::retype -arity 1 -impl core::cabi::sameImpl \
+core::native::register std::ffi::c::retype -arity 1 -impl core::cabi::sameImpl \
     -param-types {cptr} -result-type cptr -ownership {move} \
     -imprint {vars {T} params {{cptr void}} result {cptr {imprint T}}}
 
@@ -349,7 +356,7 @@ core::native::register ffi::c::retype -arity 1 -impl core::cabi::sameImpl \
 #                                       an Int (observes P)
 #   ffi_fixture::memory[T](data)        Ptr[T], the address of a fresh,
 #                                       never-freed native copy of the bytes
-#                                       of the abi::bytes::Bytes DATA, 64-byte
+#                                       of the std::abi::bytes::Bytes DATA, 64-byte
 #                                       aligned: live memory a native view
 #                                       can read (NATIVE-LAYOUT-VIEWS.md). The
 #                                       Tcl backends have no native memory:
@@ -438,18 +445,19 @@ proc core::cabi::fixtureMemoryImpl {data} {
 # call (hir/borrow.tcl decides it statically, and records the transport on
 # the call):
 #
-#   abi::bytes::Bytes          read access only: C sees the bytes, which it
-#                              may not modify (an immutable value is never
-#                              written, whatever its physical storage is)
-#   abi::bytes::MutableBytes   read access: its current bytes, as they are
-#                              (no copy); write access: a private copy of
-#                              them (the detach linux::read takes), which C
-#                              may read and modify, and which comes back as
-#                              the call's updated value of that parameter
-#                              (the call's result is then {result: R,
-#                              NAME: abi::bytes::MutableBytes, ...})
+#   std::abi::bytes::Bytes         read access only: C sees the bytes, which it
+#                                  may not modify (an immutable value is never
+#                                  written, whatever its physical storage is)
+#   std::abi::bytes::MutableBytes  read access: its current bytes, as they are
+#                                  (no copy); write access: a private copy of
+#                                  them (the detach std::linux::read takes),
+#                                  which C may read and modify, and which comes
+#                                  back as the call's updated value of that
+#                                  parameter (the call's result is then
+#                                  {result: R, NAME:
+#                                  std::abi::bytes::MutableBytes, ...})
 #
-# No pointer value exists for an exposure: nothing makes a ffi::c::Ptr of
+# No pointer value exists for an exposure: nothing makes a std::ffi::c::Ptr of
 # Botlish storage, and the address lives only as the call's argument. It
 # ends when the call returns.
 #
@@ -573,7 +581,7 @@ proc core::cabi::AliasIndex {contract} {
 }
 
 # The HIR type term TYPE in its canonical text (a list rebuilt at every
-# level: {refined int {ffi::c::UChar}} is `refined int ffi::c::UChar`), the
+# level: {refined int {std::ffi::c::UChar}} is `refined int std::ffi::c::UChar`), the
 # form types are compared in.
 proc core::cabi::CanonicalTerm {type} {
     if {[llength $type] <= 1} {
@@ -609,7 +617,7 @@ proc core::cabi::RetainingParameters {contract} {
 }
 
 # The byte storage kind ("bytestore" or "mutbytes") a run-time value V owns
-# when it is an abi::bytes::Bytes or abi::bytes::MutableBytes, else "".
+# when it is a std::abi::bytes::Bytes or std::abi::bytes::MutableBytes, else "".
 proc core::cabi::OwnerKind {v} {
     if {[core::value::kind $v] ne "struct"} {
         return ""
@@ -831,8 +839,8 @@ namespace eval core::cabi {
 }
 
 proc core::cabi::BorrowFixtureTable {} {
-    set uchar {refined int {ffi::c::UChar}}
-    set ulong {refined int {ffi::c::ULong}}
+    set uchar {refined int {std::ffi::c::UChar}}
+    set ulong {refined int {std::ffi::c::ULong}}
     set count [list name count type $ulong]
     set table {}
     foreach {suffix facts} {

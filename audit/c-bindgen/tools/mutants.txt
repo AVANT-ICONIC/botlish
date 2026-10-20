@@ -24,7 +24,7 @@
         }
         struct - union {
 ====
-            if {[lindex $final 0] eq "int"} { return [list ok ffi::c::Int {}] }
+            if {[lindex $final 0] eq "int"} { return [list ok std::ffi::c::Int {}] }
             return [Value $final $role $name]
         }
         struct - union {
@@ -38,12 +38,12 @@
 $ctype eq "char"
 >>>>
 
-@@ opaque-collapsed a pointer to a C struct or union is ffi::c::Ptr[ffi::c::Void]: every opaque identity collapsed into one
+@@ opaque-collapsed a pointer to a C struct or union is std::ffi::c::Ptr[std::ffi::c::Void]: every opaque identity collapsed into one
 ## tools/c-bindgen/model.tcl
 <<<<
-            return [list ok "ffi::c::Ptr\[\x01$key\x02\]" $features]
+            return [list ok "std::ffi::c::Ptr\[\x01$key\x02\]" $features]
 ====
-            return [list ok "ffi::c::Ptr\[ffi::c::Void\]" $features]
+            return [list ok "std::ffi::c::Ptr\[std::ffi::c::Void\]" $features]
 >>>>
 
 @@ symbol-prefix-ignored a direct API's link symbol is its C name, not what the symbol probe found (BoringSSL's prefix, asm labels, redefine_extname lost)
@@ -135,7 +135,7 @@ $ctype eq "char"
             set sp [lindex $t 1]
 ====
         float {
-            return [list ok ffi::c::Int {}]
+            return [list ok std::ffi::c::Int {}]
             set sp [lindex $t 1]
 >>>>
 
@@ -231,9 +231,9 @@ $ctype eq "char"
 @@ bool-as-uchar C _Bool is bound as unsigned char
 ## tools/c-bindgen/model.tcl
 <<<<
-            return [list ok ffi::c::Bool {bool}]
+            return [list ok std::ffi::c::Bool {bool}]
 ====
-            return [list ok ffi::c::UChar {}]
+            return [list ok std::ffi::c::UChar {}]
 >>>>
 
 @@ enum-always-int every enum is C int, whatever integer type the compiler gives it
@@ -241,7 +241,7 @@ $ctype eq "char"
 <<<<
         if {$s ne ""} { return [list $s $ctype] }
 ====
-        if {$s ne ""} { return [list ffi::c::Int int] }
+        if {$s ne ""} { return [list std::ffi::c::Int int] }
 >>>>
 
 @@ conflict-silent a profile fact the compiler contradicts is kept silently
@@ -274,7 +274,7 @@ $ctype eq "char"
                 } elseif {$ctype in {float double {long double}}} {
 ====
                     dict set c status constant
-                    dict set c type ffi::c::Int
+                    dict set c type std::ffi::c::Int
                     dict set c ctype $ctype
                     dict set c value $v
                 } elseif {$ctype in {float double {long double}}} {
@@ -295,9 +295,9 @@ $ctype eq "char"
 ## tools/c-bindgen/model.tcl
 <<<<
     if {$blockers ne ""} { return [list no $blockers] }
-    return [list ok "ffi::c::FnPtr
+    return [list ok "std::ffi::c::FnPtr
 ====
-    return [list ok "ffi::c::FnPtr
+    return [list ok "std::ffi::c::FnPtr
 >>>>
 
 @@ calling-convention-ignored an explicit calling convention attribute is ignored
@@ -453,27 +453,27 @@ $ctype eq "char"
             if {[string match _Float* $sp] || [string match __float* $sp] || $sp in {__bf16 __ibm128}} { set reason float }
             return [list no [concat $blockers [list [list $reason "$sp ([::cir::spell $type])"]]] {}]
 ====
-            if {$sp eq "float"} { return [list ok scalar ffi::c::UInt] }
-            if {$sp eq "double"} { return [list ok scalar ffi::c::ULongLong] }
+            if {$sp eq "float"} { return [list ok scalar std::ffi::c::UInt] }
+            if {$sp eq "double"} { return [list ok scalar std::ffi::c::ULongLong] }
             return [list no [concat $blockers [list [list $reason "$sp ([::cir::spell $type])"]]] {}]
 >>>>
 
-@@ layout-bool-as-uchar a C _Bool field is mapped to ffi::c::UChar (one byte), not blocked
+@@ layout-bool-as-uchar a C _Bool field is mapped to std::ffi::c::UChar (one byte), not blocked
 ## tools/c-bindgen/records.tcl
 <<<<
         bool { return [list no [concat $blockers [list [list c-bool "C _Bool ([::cir::spell $type])"]]] {}] }
 ====
-        bool { return [list ok scalar ffi::c::UChar] }
+        bool { return [list ok scalar std::ffi::c::UChar] }
 >>>>
 
-@@ layout-pointee-collapsed a pointer field's pointee identity is collapsed to ffi::c::Void (every record pointer one type)
+@@ layout-pointee-collapsed a pointer field's pointee identity is collapsed to std::ffi::c::Void (every record pointer one type)
 ## tools/c-bindgen/records.tcl
 <<<<
             if {$blockers ne ""} { return [list no $blockers {}] }
             return [list ok pointer [lindex $m 1]]
 ====
             if {$blockers ne ""} { return [list no $blockers {}] }
-            return [list ok pointer [regsub -all {\x01[^\x02]+\x02} [lindex $m 1] ffi::c::Void]]
+            return [list ok pointer [regsub -all {\x01[^\x02]+\x02} [lindex $m 1] std::ffi::c::Void]]
 >>>>
 
 @@ layout-typedef-duplicates every further typedef of a record gets a layout of its own, a duplicate of the first

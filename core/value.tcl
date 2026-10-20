@@ -93,7 +93,7 @@
 #                             Immutable, unrestricted, no heap state. A
 #                             future payload-bearing case extends this
 #                             form; it does not replace it.
-#   {bytestore HEX}           the owned byte storage behind abi::bytes::Bytes (ABI-
+#   {bytestore HEX}           the owned byte storage behind std::abi::bytes::Bytes (ABI-
 #                             BYTES.md): an immutable, finite sequence of
 #                             bytes, HEX its lowercase hexadecimal text (two
 #                             digits per byte, so the byte count is
@@ -104,10 +104,10 @@
 #                             terminates the sequence (a NUL byte is
 #                             "00"). Equality is exact byte-sequence
 #                             equality. It exists only inside the owning
-#                             module's opaque struct (lib/abi/bytes.bot's Bytes);
+#                             module's opaque struct (stdlib/abi/bytes.bot's Bytes);
 #                             no source type spells it.
 #   {mutbytes HEX}            the owned writable byte storage behind
-#                             abi::bytes::MutableBytes (MUTABLE-BYTES.md): a finite
+#                             std::abi::bytes::MutableBytes (MUTABLE-BYTES.md): a finite
 #                             sequence of bytes of one fixed length, HEX its
 #                             lowercase hexadecimal text exactly as for
 #                             `bytestore`. A distinct runtime kind from
@@ -696,12 +696,12 @@ proc core::value::show {v {debug 0} {reveal 0}} {
             return "{[join $parts {, }]}"
         }
         bytestore {
-            # Internal tooling only (reveal of an opaque abi::bytes::Bytes): the
+            # Internal tooling only (reveal of an opaque std::abi::bytes::Bytes): the
             # byte count and the bytes. Normal rendering never reaches it.
             return "<bytes [expr {[string length [lindex $v 1]] / 2}]: [lindex $v 1]>"
         }
         mutbytes {
-            # Internal tooling only (reveal of an opaque abi::bytes::MutableBytes).
+            # Internal tooling only (reveal of an opaque std::abi::bytes::MutableBytes).
             return "<mutbytes [expr {[string length [lindex $v 1]] / 2}]: [lindex $v 1]>"
         }
         block  { return "<block ([join [lindex $v 1] { }])>" }

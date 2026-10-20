@@ -67,11 +67,11 @@ test nrb-interval-rejected {an interval needs exactly two integer bounds, LO <= 
     }
 } -result {{1 1 0} {1 1 0} {1 1 0} {1 1 0} {1 1 0} {1 1 0}}
 
-test nrb-registered-bounds {the bounds the registrations promise: char::scalar_value a Unicode scalar value, hash its 61-bit mask, a length collection-length, mod alone only nonnegative, + nothing} -body {
-    lmap name {char::scalar_value hash str::length mod +} {
+test nrb-registered-bounds {the bounds the registrations promise: std::char::scalar_value a Unicode scalar value, hash its 61-bit mask, a length collection-length, mod alone only nonnegative, + nothing} -body {
+    lmap name {std::char::scalar_value hash std::str::length mod +} {
         list $name [hir::range::show [hir::range::RegisteredRange $name]]
     }
-} -result {{char::scalar_value {[0, 1114111]}} {hash {[0, 2305843009213693951]}} {str::length {[0, 4611686018427387903]}} {mod {[0, +∞]}} {+ {[-∞, +∞]}}}
+} -result {{std::char::scalar_value {[0, 1114111]}} {hash {[0, 2305843009213693951]}} {std::str::length {[0, 4611686018427387903]}} {mod {[0, +∞]}} {+ {[-∞, +∞]}}}
 
 # ---------------------------------------------------------------------------
 # mod's divisor bound
@@ -99,7 +99,7 @@ test nrb-mod-in-range-analysis {hir/range.tcl applies the divisor bound to a cal
 # ---------------------------------------------------------------------------
 # The real case: bench/refined-checks.bot's uri_escape_text
 
-test nrb-refined-checks-entry-facts {uri_escape_text's 4-byte lead byte bit_or(240, v.shift_right(18)) is bounded by char::scalar_value's range, so pct, hex_pair and high_nibble enter with [0, 244] (0xF4, UTF-8's largest lead byte) and esc_scalar with [128, 0x10FFFF]} -body {
+test nrb-refined-checks-entry-facts {uri_escape_text's 4-byte lead byte bit_or(240, v.shift_right(18)) is bounded by std::char::scalar_value's range, so pct, hex_pair and high_nibble enter with [0, 244] (0xF4, UTF-8's largest lead byte) and esc_scalar with [128, 0x10FFFF]} -body {
     set hir [refinedChecksSourceHir]
     set spec [hir::specialize::analyze $hir]
     set ranges [hir::range::analyze $hir $spec]
@@ -113,7 +113,7 @@ test nrb-refined-checks-entry-facts {uri_escape_text's 4-byte lead byte bit_or(2
     lsort -index 0 $out
 } -result {{esc_scalar<int> {{[128, 1114111]}}} {hex_pair<int> {{[0, 244]}}} {high_nibble<int> {{[0, 244]}}} {pct<int> {{[0, 244]}}}}
 
-test nrb-refined-checks-high-nibble-raw {high_nibble<int> (byte::nibble(byte::high_nibble(b)), both inlined) lowers its bit_and raw: no tagged bitwise op in its NIR and no rt_int_and call in its Cranelift IR} -body {
+test nrb-refined-checks-high-nibble-raw {high_nibble<int> (std::byte::nibble(std::byte::high_nibble(b)), both inlined) lowers its bit_and raw: no tagged bitwise op in its NIR and no rt_int_and call in its Cranelift IR} -body {
     set hir [refinedChecksSourceHir]
     set body [FunctionBody [native::nir $hir] high_nibble "\nend"]
     set clif [FunctionBody [native::clif $hir] high_nibble "\n; function "]
@@ -155,7 +155,7 @@ count(3, 0)
     list [bitwiseOps [FunctionBody [nirOf $source] mask "\nend"]] [sourceAgree $source]
 } -result {{0 1} {value 0}}
 
-test nrb-raw-bitwise-fold {a fold of a raw-eligible bitwise op (a constant result, or an identity returning an operand) keeps the operand's raw representation: byte::nibble's formula on high-positioned values} -body {
+test nrb-raw-bitwise-fold {a fold of a raw-eligible bitwise op (a constant result, or an identity returning an operand) keeps the operand's raw representation: std::byte::nibble's formula on high-positioned values} -body {
     set source {fn fold(x):
     bit_and(bit_or(bit_and(x, 15), shift_right(x, 4)), 15)
 

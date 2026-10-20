@@ -1,4 +1,4 @@
-<program> e420 steady-ascii-capture.bot:9 -> byte::from_int<int>
+<program> e420 steady-ascii-capture.bot:9 -> std::byte::from_int<int>
     arg0: type int, range [-∞, +∞]
     result: type int[Byte], range [0, 255]; semantic effectiveErrors (not stamped)
 <program> e501 steady-ascii-capture.bot:30 -> rep<List[int], int, int>
@@ -6,16 +6,16 @@
     arg1: type int, range [1024, 1024] {1024}
     arg2: type int, range [0, 0] {0}
     result: type int, range [-∞, +∞]; semantic effectiveErrors {}
-ascii::is_alphabetic<generic> e133 ascii.bot:63 -> ascii::is_upper<generic>
+std::ascii::is_alphabetic<generic> e133 ascii.bot:63 -> std::ascii::is_upper<generic>
     arg0: type any, range [-∞, +∞]
     result: type bool, range [-∞, +∞]; semantic effectiveErrors {}
-ascii::is_alphabetic<generic> e138 ascii.bot:63 -> ascii::is_lower<generic>
+std::ascii::is_alphabetic<generic> e138 ascii.bot:63 -> std::ascii::is_lower<generic>
     arg0: type any, range [-∞, +∞]
     result: type bool, range [-∞, +∞]; semantic effectiveErrors {}
-ascii::is_alphanumeric<generic> e146 ascii.bot:66 -> ascii::is_alphabetic<generic>
+std::ascii::is_alphanumeric<generic> e146 ascii.bot:66 -> std::ascii::is_alphabetic<generic>
     arg0: type any, range [-∞, +∞]
     result: type bool, range [-∞, +∞]; semantic effectiveErrors {}
-ascii::is_alphanumeric<generic> e151 ascii.bot:66 -> ascii::is_digit<generic>
+std::ascii::is_alphanumeric<generic> e151 ascii.bot:66 -> std::ascii::is_digit<generic>
     arg0: type any, range [-∞, +∞]
     result: type bool, range [-∞, +∞]; semantic effectiveErrors {}
 count<List[int], int, int> e453 steady-ascii-capture.bot:21 -> cls<generic>
@@ -31,7 +31,7 @@ count<List[int], int, int> e470 steady-ascii-capture.bot:24 -> count<List[int], 
     arg1: type int, range [1, 4611686018427387903]
     arg2: type int, range [0, +∞]
     result: type int, range [-∞, +∞]; semantic effectiveErrors {}
-cls<generic> e431 steady-ascii-capture.bot:17 -> ascii::is_alphanumeric<generic>
+cls<generic> e431 steady-ascii-capture.bot:17 -> std::ascii::is_alphanumeric<generic>
     arg0: type any, range [-∞, +∞]
     result: type bool, range [-∞, +∞]; semantic effectiveErrors {}
 rep<List[int], int, int> e496 steady-ascii-capture.bot:29 -> count<List[int], int, int>

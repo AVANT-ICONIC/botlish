@@ -106,8 +106,8 @@ test cp-search-index-pages-and-plurals {a lookup that lands on an index's introd
 } -result {{index principles} {index errors} {page capability.overview} capability match class}
 
 test cp-search-symbols {a standard-library symbol shows its generated page} -body {
-    list [found list::at] [found str::concat] [found io::print_line] [found mod]
-} -result {{page stdlib.list::at} {page stdlib.str::concat} {page stdlib.io::print_line} {page stdlib.mod}}
+    list [found std::list::at] [found std::str::concat] [found std::io::print_line] [found mod]
+} -result {{page stdlib.std::list::at} {page stdlib.std::str::concat} {page stdlib.std::io::print_line} {page stdlib.mod}}
 
 test cp-search-aliases {an alias shows its topic: phrases from other languages map to the Botlish concept that answers them} -body {
     list [found "bounds proof"] [found "try catch"] [found throw] [found lambda] [found switch] \
@@ -115,8 +115,8 @@ test cp-search-aliases {an alias shows its topic: phrases from other languages m
 } -result {{page proof.list-bounds} {page capability.exceptions} {page capability.exceptions} {page capability.lambdas} {page capability.match} {page capability.process-exit-status} {page capability.int-to-string} {page capability.integer-division}}
 
 test cp-search-case-and-spelling {lookups ignore case, and hyphens, underscores and spaces alike} -body {
-    list [found method-eligible] [found Method_Eligible] [found "method eligible"] [found "BOUNDS PROOF"] [found LIST::AT]
-} -result {{page warning.method-eligible} {page warning.method-eligible} {page warning.method-eligible} {page proof.list-bounds} {page stdlib.list::at}}
+    list [found method-eligible] [found Method_Eligible] [found "method eligible"] [found "BOUNDS PROOF"] [found STD::LIST::AT]
+} -result {{page warning.method-eligible} {page warning.method-eligible} {page warning.method-eligible} {page proof.list-bounds} {page stdlib.std::list::at}}
 
 test cp-search-multiword {a query's words must all occur in a topic, ranked by where they occur; stop words are ignored} -body {
     list [compilerpedia::Terms "how do I prove an index in range of a descending loop"] \
@@ -266,7 +266,7 @@ test cp-main-unknown-exit {compilerpedia::main returns 1 for a query nothing mat
 
 test cp-diagnostic-specific-rule {a matcher points a broad code at its specific rule; another message of the same code falls back to the code's own topic} -body {
     list [compilerpedia::topicForDiagnostic {CORE SEMANTIC UNHANDLED-ERROR} \
-            {t.bot:4:5: this call of "list::at" may produce the declared error "IndexNotFound", which is neither handled here nor admitted by the enclosing function's own "errors" declaration}] \
+            {t.bot:4:5: this call of "std::list::at" may produce the declared error "IndexNotFound", which is neither handled here nor admitted by the enclosing function's own "errors" declaration}] \
         [compilerpedia::topicForDiagnostic {CORE SEMANTIC UNHANDLED-ERROR} \
             {t.bot:4:5: this call may produce the declared error "E", which is neither handled here nor admitted by the enclosing function's own "errors" declaration}] \
         [compilerpedia::topicForDiagnostic {CORE SEMANTIC TYPE} {t.bot:1:5: "/" divides floating-point numbers, and neither operand here is one (the operands are int and int): Botlish has no integer division}] \
@@ -275,7 +275,7 @@ test cp-diagnostic-specific-rule {a matcher points a broad code at its specific 
 
 test cp-diagnostic-code-prefix {a code whose last words vary (a value kind, an error name) falls back to its longest documented prefix; an undocumented kind of a broad family finds nothing} -body {
     list [compilerpedia::topicForDiagnostic {NATIVE UNSUPPORTED value} x] \
-        [compilerpedia::topicForDiagnostic {NATIVE UNSUPPORTED {native list::at}} x] \
+        [compilerpedia::topicForDiagnostic {NATIVE UNSUPPORTED {native std::list::at}} x] \
         [compilerpedia::topicForDiagnostic {CORE DECLARED-ERROR geometry::Bad} x] \
         [compilerpedia::topicForDiagnostic {CORE SEMANTIC NO-SUCH-KIND} x] \
         [compilerpedia::topicForDiagnostic SAME-RETURN-VALUE ""] \
@@ -314,7 +314,7 @@ test cp-help-loads-no-compiler {help needs nothing of the compiler: in a fresh i
         $child eval {
             source $::path
             set out [file tempfile scratch]
-            set status [compilerpedia::main {list::at} $out $out]
+            set status [compilerpedia::main {std::list::at} $out $out]
             close $out
             file delete $scratch
         }

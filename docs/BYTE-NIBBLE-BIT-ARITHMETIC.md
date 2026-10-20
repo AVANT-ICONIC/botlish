@@ -15,11 +15,11 @@ interval analysis, and uses all of that to replace `web.bot`'s branch-ladder
   `bit_or`, `bit_xor`, `shift_left`, `shift_right`). Loaded unconditionally
   (`core/core.tcl`'s own file list), like `primitives.tcl`/`predicates.tcl` --
   these are core language types, not an optional library.
-- `lib/byte.bot` (new) -- the `byte::` namespace: `high_nibble`, `low_nibble`,
+- `stdlib/byte.bot` (new) -- the `byte::` namespace: `high_nibble`, `low_nibble`,
   `nibble`, `complement`, `position_low`, `position_high`, as ordinary,
   ordinarily-typed Botlish over the primitives above.
-- `lib/web.bot` -- `high_nibble`'s 15-way threshold ladder replaced by
-  `byte::nibble(byte::high_nibble(b))`. `is_unreserved` untouched.
+- `stdlib/web.bot` -- `high_nibble`'s 15-way threshold ladder replaced by
+  `std::byte::nibble(std::byte::high_nibble(b))`. `is_unreserved` untouched.
 - `hir/range.tcl` -- the interval `Range` lattice gains an optional `exact`
   field (a bounded, sorted finite-value set) alongside every existing
   min/max: `join`/`add`/`sub`/`mul`/branch-narrowing all propagate it when
@@ -71,7 +71,7 @@ After (2 lines):
 
 ```botlish
 fn high_nibble(b):
-    byte::nibble(byte::high_nibble(b))
+    std::byte::nibble(std::byte::high_nibble(b))
 ```
 
 `is_unreserved` (the milestone's other, deliberately-untouched threshold
@@ -101,7 +101,7 @@ already existed.
 **Why `Nibble` and `LowNibble` are distinct types despite an identical
 domain**: `Nibble` means "a logical four-bit integer"; `LowNibble` means "a
 nibble already positioned in the low half of a Byte." They are numerically
-interchangeable today (`byte::position_low` is a bare identity function --
+interchangeable today (`std::byte::position_low` is a bare identity function --
 see \167 5) but are never unified into one type, because the domains would
 diverge the moment any future operation cares about *position* rather than
 *value* (exactly `HighNibble`'s own domain already diverging from `Nibble`'s
@@ -137,10 +137,10 @@ from, so `Byte(300)` on `cranelift`/`cranelift-generic` is
 discussion for why this is the honest, minimal-risk choice for this
 milestone rather than a new dedicated NIR op).
 
-**Position-preserving extraction** (`byte::high_nibble`, `byte::low_nibble`
--- `lib/byte.bot`): `byte::high_nibble(0xAB)` is `0xA0` (`HighNibble`'s own
-domain), never logical `0xA`. `byte::high_nibble(b) = bit_and(b, 0xF0)`;
-`byte::low_nibble(b) = bit_and(b, 0x0F)`. Both are **total over every
+**Position-preserving extraction** (`std::byte::high_nibble`, `std::byte::low_nibble`
+-- `stdlib/byte.bot`): `std::byte::high_nibble(0xAB)` is `0xA0` (`HighNibble`'s own
+domain), never logical `0xA`. `std::byte::high_nibble(b) = bit_and(b, 0xF0)`;
+`std::byte::low_nibble(b) = bit_and(b, 0x0F)`. Both are **total over every
 `Int`**, not just valid `Byte`s: AND-with-a-nonnegative-mask can only ever
 clear bits, never set one outside the mask, so the result is *always* in the
 mask's own domain (`{0,16,...,240}`/`[0,15]`) regardless of the input's sign
@@ -148,8 +148,8 @@ or magnitude -- no validation is possible to omit here because none is ever
 needed (spec \167 39, \167 69: "must not perform a redundant runtime
 validation").
 
-**Normalization** (`byte::nibble` -- positioned nibble, either half, to
-logical `Nibble`): `byte::nibble(x) = bit_or(bit_and(x, 0x0F), shift_right(x, 4))`.
+**Normalization** (`std::byte::nibble` -- positioned nibble, either half, to
+logical `Nibble`): `std::byte::nibble(x) = bit_or(bit_and(x, 0x0F), shift_right(x, 4))`.
 One branch-free formula covers both positions: for `x <= 15` (already
 low-positioned), `shift_right(x,4) = 0`, so the result is `x` unchanged; for
 `x` a valid `HighNibble` (a multiple of 16), `bit_and(x, 0x0F) = 0`, so the
@@ -159,7 +159,7 @@ domain `[0,255]` (both operands of the final `bit_or` are themselves in
 larger, cleaner domain than "LowNibble or HighNibble" would have been, with
 no special-casing of which half `x` came from.
 
-**Positioning** (`byte::position_low`, `byte::position_high` -- `Nibble` to
+**Positioning** (`std::byte::position_low`, `std::byte::position_high` -- `Nibble` to
 `LowNibble`/`HighNibble`): `position_low` is the identity (representation-
 preserving); `position_high(n) = shift_left(n, 4)`, always in
 `{0,16,...,240}` for `n` in `[0,15]`.
@@ -168,11 +168,11 @@ preserving); `position_high(n) = shift_left(n, 4)`, always in
 a separate conversion at all -- every one of the values above is *already*
 an ordinary `Int`, so "widening to `Byte`" is definitionally free (no
 conversion exists to write). What *is* implemented, and load-bearing, is
-keeping normalization (`byte::nibble`, a genuine `>>4`/positional shift) and
+keeping normalization (`std::byte::nibble`, a genuine `>>4`/positional shift) and
 widening (a no-op) from ever being conflated: `HighNibble(0xA0) -> Byte` is
 `0xA0` unchanged (there is no code path that could do anything else, since
 both are the same Int); `HighNibble(0xA0) -> Nibble` is `0xA` via
-`byte::nibble`'s real shift (spec \167 13).
+`std::byte::nibble`'s real shift (spec \167 13).
 
 ## 5. Bitwise operations
 
@@ -190,9 +190,9 @@ shift amount can't itself try to allocate an astronomical BigInt.
 well-defined (`-(x+1)`, exactly what Tcl/Rust both already give) but is not
 what this milestone's domains need, and inheriting it as "the meaning of
 `~Byte`" is exactly the mistake spec \167 15 warns against. Only
-`byte::complement(b) = bit_xor(b, 0xFF)` exists, confined to `Byte`'s 8-bit
-domain by construction: `byte::complement(0x00) = 0xFF`,
-`byte::complement(0xF0) = 0x0F`.
+`std::byte::complement(b) = bit_xor(b, 0xFF)` exists, confined to `Byte`'s 8-bit
+domain by construction: `std::byte::complement(0x00) = 0xFF`,
+`std::byte::complement(0xF0) = 0x0F`.
 
 **Result types for `&`/`|` combinations** (spec \167 16-17: "check whether
 general interval reasoning already proves the result before adding a
@@ -304,15 +304,15 @@ is the same, not-taken, type-directed-seeding extension as \167 6.4.
 
 ## 7. A hard architecture wall this milestone discovered
 
-The original design put `byte::high_nibble`/`byte::nibble`/etc. behind
+The original design put `std::byte::high_nibble`/`std::byte::nibble`/etc. behind
 **natives** with a declared `HighNibble`/`Nibble` result type and a
 `-native-body` (or `-module-fn`) bridge to the underlying bit ops, exactly
-mirroring `uriEscape`/`web::uri_escape_text`. This compiled and ran
+mirroring `uriEscape`/`std::web::uri_escape_text`. This compiled and ran
 correctly for a native called *directly from an `.ir` program's own
-top-level code* (confirmed: `nibble(byte::high_nibble(171))` as a literal
+top-level code* (confirmed: `nibble(std::byte::high_nibble(171))` as a literal
 `.ir` call). It **failed** natively (`NATIVE UNSUPPORTED`) the moment the
 same native was called from *inside* a cross-file module function -- exactly
-`byte::high_nibble`'s own real shape, and `web.bot`'s.
+`std::byte::high_nibble`'s own real shape, and `web.bot`'s.
 
 Root cause, traced directly (`native/native.tcl`): `ExpandNativeBodies`
 (substitutes `-native-body`) and `ModuleNativeBridge` (retargets a
@@ -328,15 +328,15 @@ operation is.
 This is a genuine, previously-undocumented (as far as this milestone found)
 boundary of an established, working mechanism (`uriEscape` never hits it,
 because it is always called directly from a program's own top level in
-every existing test/benchmark). **The fix taken**: `byte::high_nibble`,
-`byte::low_nibble`, `byte::nibble`, `byte::complement`, `byte::position_low`,
-`byte::position_high` are **ordinary, plainly-typed Botlish functions**
-(`lib/byte.bot`) over `bit_and`/`bit_or`/`bit_xor`/`shift_left`/`shift_right`
+every existing test/benchmark). **The fix taken**: `std::byte::high_nibble`,
+`std::byte::low_nibble`, `std::byte::nibble`, `std::byte::complement`, `std::byte::position_low`,
+`std::byte::position_high` are **ordinary, plainly-typed Botlish functions**
+(`stdlib/byte.bot`) over `bit_and`/`bit_or`/`bit_xor`/`shift_left`/`shift_right`
 -- which *are* real entries in `native/lower.tcl`'s op table, so calling
 them needs no substitution or bridging of any kind, from any call site,
 module-nested or not. The cost: the nominal `HighNibble`/`LowNibble`/
 `Nibble` type label does not survive the `byte::` call boundary (a call to
-`byte::high_nibble(b)` from another module infers plain `int`, not
+`std::byte::high_nibble(b)` from another module infers plain `int`, not
 `HighNibble`) -- \167 6.5's interval facts (and, where the caller's own
 argument is itself a tracked exact set, \167 6.3's propagation) recover
 equivalent *fact* precision independently of that label, which is what spec
@@ -352,7 +352,7 @@ Direct NIR evidence (`native::nir`, `bench/refined-checks.ir` after this
 milestone's rewrite):
 
 ```
-func 1 "byte::high_nibble" params=1 ... rawregs="2" @e2
+func 1 "std::byte::high_nibble" params=1 ... rawregs="2" @e2
     %1 = int 240 @e6
     %2 = rawint 240
     guard int %0 "bit_and" @e3
@@ -360,7 +360,7 @@ func 1 "byte::high_nibble" params=1 ... rawregs="2" @e2
     ret %3
 end
 
-func 2 "byte::nibble" params=1 ... instance="int" rawregs="2 5" @e14
+func 2 "std::byte::nibble" params=1 ... instance="int" rawregs="2 5" @e14
     %1 = int 15 @e20
     %2 = rawint 15
     %3 = op iand %0 %1 @e17
@@ -372,12 +372,12 @@ func 2 "byte::nibble" params=1 ... instance="int" rawregs="2 5" @e14
 end
 ```
 
-`byte::high_nibble`: one `guard int` (a kind check on its own parameter --
+`std::byte::high_nibble`: one `guard int` (a kind check on its own parameter --
 present because this call site's argument isn't statically proven `int`,
-not because of anything `byte::high_nibble` itself needs) + one `iand` + ret.
-No comparison, no branch, no loop, no call. `byte::nibble`: `iand` + `ishr` +
+not because of anything `std::byte::high_nibble` itself needs) + one `iand` + ret.
+No comparison, no branch, no loop, no call. `std::byte::nibble`: `iand` + `ishr` +
 `ior` + ret -- again no comparison, branch, or call anywhere; no `guard` at
-all here, since its argument (`byte::high_nibble`'s own result) is already
+all here, since its argument (`std::byte::high_nibble`'s own result) is already
 statically `int` at this call site. Confirmed structurally by
 `tests/native-byte.test`'s `native-byte-high-nibble-nir-is-mask-not-branch`
 (greps the generated NIR text directly for the *absence* of `ilt`/`ile`/
@@ -404,8 +404,8 @@ over every Int on every backend (no error path exists to diverge on).
 the Tcl reference and the Rust runtime helper, and is exercised on every
 backend since `IShl`/`IShr` are *always* real calls (\167 8) -- confirmed by
 `tests/native-byte.test`'s `native-shift-range-error-parity`.
-`byte::high_nibble`/`byte::low_nibble`/`byte::nibble`/`byte::complement`/
-`byte::position_low`/`byte::position_high` are exhaustively verified
+`std::byte::high_nibble`/`std::byte::low_nibble`/`std::byte::nibble`/`std::byte::complement`/
+`std::byte::position_low`/`std::byte::position_high` are exhaustively verified
 identical across `interp`/`compile`/`cranelift-generic`/`cranelift` for
 every value in their real domain (\167 11).
 
@@ -448,13 +448,13 @@ unsupported on Cranelift rather than silently divergent.
 - `tests/native-byte.test` (12 tests): four-way (`interp`/`compile`/
   `cranelift-generic`/`cranelift`) parity for every `byte::` operation;
   **exhaustive** (all 256 `Byte` values, all 16 `Nibble` values) checks of
-  the reconstruction invariant (`byte::high_nibble(b) | byte::low_nibble(b)
-  == b`), the normalization invariant (`byte::nibble(byte::high_nibble(b)) ==
-  b >> 4`, `byte::nibble(byte::low_nibble(b)) == b mod 16`), `byte::complement`
+  the reconstruction invariant (`std::byte::high_nibble(b) | std::byte::low_nibble(b)
+  == b`), the normalization invariant (`std::byte::nibble(std::byte::high_nibble(b)) ==
+  b >> 4`, `std::byte::nibble(std::byte::low_nibble(b)) == b mod 16`), `std::byte::complement`
   being its own inverse, and `position_low`/`position_high` round-tripping
-  through `byte::nibble` -- each checked on all four backends via a single
+  through `std::byte::nibble` -- each checked on all four backends via a single
   compiled recursive-accumulator program, not 256 separate test cases;
-  direct NIR-text inspection proving `byte::high_nibble` has no comparison
+  direct NIR-text inspection proving `std::byte::high_nibble` has no comparison
   instruction; `bench/refined-checks.ir`'s own value (`[400, 0]`) on
   `cranelift`, matching `compile` exactly, unchanged from
   `NATIVE-OPAQUE-REFINEMENT.md`'s own pre-milestone baseline; a direct
@@ -522,7 +522,7 @@ unsupported on Cranelift rather than silently divergent.
 A ~37% reduction in total machine-code size and 3 fewer compiled functions,
 directly attributable to replacing the 15-branch `high_nibble` ladder (15
 nested `if`/`ilt`/`ile` comparisons, each its own conditional branch) with
-`byte::high_nibble`+`byte::nibble`'s two tiny functions (\167 8: 5 instructions
+`std::byte::high_nibble`+`std::byte::nibble`'s two tiny functions (\167 8: 5 instructions
 total between them, one guard, zero branches). `compile`/`cranelift`
 continue to agree exactly (`[400, 0]`); `interp` continues to hit Tcl's own
 recursion-depth limit at this benchmark's `n=400` depth, confirmed
@@ -539,18 +539,18 @@ new types yet."
 
 - **No `Bytes` container.** `Bytes = an immutable packed sequence of Byte`
   is the anticipated future relationship (spec \167 116); nothing here
-  implements it. `byte::high_nibble`'s/`byte::low_nibble`'s scalar `Byte`
+  implements it. `std::byte::high_nibble`'s/`std::byte::low_nibble`'s scalar `Byte`
   result type is exactly the "already-established scalar result type" a
   future `Bytes[index] -> Byte` would want (spec \167 7).
-- **No ASCII/encoding interpretation.** No `byte::is_ascii_*`, no
+- **No ASCII/encoding interpretation.** No `std::byte::is_ascii_*`, no
   `ascii::`/`encoding::ascii::` namespace, no character-class reasoning
-  anywhere in `core/scalarbits.tcl` or `lib/byte.bot`.
+  anywhere in `core/scalarbits.tcl` or `stdlib/byte.bot`.
 - **`is_unreserved` is untouched**, byte-for-byte, deliberately -- it remains
   the acceptance case for the next (ASCII-interpretation) milestone, whose
   likely shape (spec \167 99):
   ```botlish
   fn is_unreserved(b: Byte):
-      ascii::is_alphanumeric(b) or b == ...
+      std::ascii::is_alphanumeric(b) or b == ...
   ```
   is now buildable on top of this milestone's `Byte` type and bit
   primitives, but no such syntax or namespace exists yet.
@@ -583,18 +583,18 @@ new types yet."
 5. **Does `HighNibble` transparently retain its shifted value?** Yes --
    `HighNibble(0xA0)` *is* the Int `160`; there is no separate "positioned"
    representation to retain or lose.
-6. **What does `byte::high_nibble(0xAB)` produce?** `0xA0` (`160`),
+6. **What does `std::byte::high_nibble(0xAB)` produce?** `0xA0` (`160`),
    statically `HighNibble`'s own domain (an ordinary `int` once called from
    another module -- \167 7), by construction.
-7. **What does `byte::nibble(byte::high_nibble(0xAB))` produce?** `0xA`
+7. **What does `std::byte::nibble(std::byte::high_nibble(0xAB))` produce?** `0xA`
    (`10`).
-8. **What does `byte::low_nibble(0xAB)` produce?** `0xB` (`11`).
+8. **What does `std::byte::low_nibble(0xAB)` produce?** `0xB` (`11`).
 9. **What conversions are checked?** Only the four explicit constructors
    (`Byte(x)`/`Nibble(x)`/`LowNibble(x)`/`HighNibble(x)`), and only on
    interp/compile (\167 4, \167 9).
 10. **What conversions are proof-preserving/check-free?**
-    `byte::high_nibble`/`byte::low_nibble`/`byte::nibble`/`byte::complement`/
-    `byte::position_low`/`byte::position_high` -- every one of them, on every
+    `std::byte::high_nibble`/`std::byte::low_nibble`/`std::byte::nibble`/`std::byte::complement`/
+    `std::byte::position_low`/`std::byte::position_high` -- every one of them, on every
     backend, always (\167 4, \167 8): each is total by construction over its
     own declared domain.
 11. **Are any wrapper objects allocated?** No, none, anywhere (\167 3, \167 6).
@@ -609,7 +609,7 @@ new types yet."
     `bit_xor` are declared `int -> int -> int` (generic); their *interval*
     result for `Byte`-domain operands is proven `[0,255]`-consistent by
     `BitOp` (\167 6.5), not by a declared nominal type. There is no generic
-    `~`; `byte::complement : Byte -> Byte` is the Byte-specific one's
+    `~`; `std::byte::complement : Byte -> Byte` is the Byte-specific one's
     complement (\167 5).
 14. **Which operations preserve `HighNibble`/`LowNibble` specifically?**
     None nominally, by declared type, once called across a module boundary
@@ -623,8 +623,8 @@ new types yet."
     nonnegative bounded shift amount) -- see \167 5, no type-specific
     semantics at all.
 17. **Which nibble transformations use named typed operations rather than
-    generic shifts?** `byte::nibble` (normalization) and
-    `byte::position_high` (positioning) are both *implemented* with
+    generic shifts?** `std::byte::nibble` (normalization) and
+    `std::byte::position_high` (positioning) are both *implemented* with
     `shift_right`/`shift_left` but *exposed* as named, total, unchecked
     operations with a stronger contract than the generic shift underneath
     (spec \167 20).
@@ -637,7 +637,7 @@ new types yet."
     positions (\167 5).
 20. **Does the composition simplify to essentially one right shift for
     web.bot's logical high-nibble use?** Close, honestly reported as such:
-    `byte::high_nibble` is one `iand`; `byte::nibble` is `iand`+`ishr`+`ior`.
+    `std::byte::high_nibble` is one `iand`; `std::byte::nibble` is `iand`+`ishr`+`ior`.
     Four ALU instructions total (plus one kind guard), zero branches, zero
     calls except `ishr`'s own helper call (\167 8) -- not literally "one
     shift" (that would need the known-zero-bits reasoning \167 6.4/spec \167 86
@@ -696,7 +696,7 @@ new types yet."
 
 33. **How many source lines/branches did old `high_nibble` require?** 15
     nested `if`/`else` levels, ~47 source lines.
-34. **What is its new source form?** `byte::nibble(byte::high_nibble(b))`,
+34. **What is its new source form?** `std::byte::nibble(std::byte::high_nibble(b))`,
     2 lines.
 35. **What type does its parameter have?** Unannotated (Botlish has no
     parameter type-annotation syntax -- see \167 14 below); dynamically, any
@@ -704,7 +704,7 @@ new types yet."
 36. **What type does it return?** Dynamically a plain Int in `[0,15]`;
     statically, plain `int` (\167 7's cross-module gap -- see \167 6.5 for the
     interval fact that survives instead).
-37. **What intermediate type does `byte::high_nibble` produce?** `HighNibble`
+37. **What intermediate type does `std::byte::high_nibble` produce?** `HighNibble`
     when reasoned about directly (\167 3); plain `int`, with a provably
     `[0,240]` interval, once called from another module (\167 6.5, \167 7).
 38. **Does `hex_digits` indexing consume `Nibble` without conversion
@@ -715,7 +715,7 @@ new types yet."
     completely unmodified.
 39. **Did any redundant runtime range/bounds check remain?** No -- confirmed
     directly in NIR (\167 8): zero comparison instructions in either
-    `byte::high_nibble` or `byte::nibble`.
+    `std::byte::high_nibble` or `std::byte::nibble`.
 40. **How much did `high_nibble`'s NIR/VCode/assembly shrink?** From 15
     nested compare-and-branch HIR `if` nodes (one Botlish function) to 2
     tiny Cranelift functions totaling 5 ALU instructions, 1 guard, 0
@@ -737,7 +737,7 @@ new types yet."
 45. **Was any UTF-8 behavior added?** No.
 46. **Was join/String construction touched?** No.
 47. **Was generic known-bits analysis added?** No (\167 6.4, \167 12).
-48. **What is deliberately deferred to the ASCII milestone?** `ascii::is_alpha`/
+48. **What is deliberately deferred to the ASCII milestone?** `std::ascii::is_alpha`/
     `is_digit`/`is_alphanumeric` etc., taking `Byte`, returning `Bool` (spec
     \167 98) -- `Byte` and the bit primitives are now available for it to build
     on; nothing about the interpretation layer itself exists yet.

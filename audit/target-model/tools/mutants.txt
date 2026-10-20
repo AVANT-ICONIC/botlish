@@ -45,7 +45,7 @@
         darwin { set os linux }
 >>>>
 
-@@ linux-module-under-macos no platform check: linux::sys resolves for macos-aarch64 to the architecture's file
+@@ linux-module-under-macos no platform check: std::linux::sys resolves for macos-aarch64 to the architecture's file
 ## surface/modules.tcl
 <<<<
     set os [PlatformOf $name]
@@ -59,13 +59,19 @@
     }
 >>>>
 
-@@ platform-by-spelling every standard namespace named like an operating system of the target table is that system's platform, designated or not
+@@ platform-by-spelling every namespace whose first segment below std is named like an operating system of the target table is that system's platform, designated or not
 ## core/cabi.tcl
 <<<<
-    return [dict getdef $platforms $root ""]
+    dict for {root os} $platforms {
+        if {$name eq $root || [string first ${root}:: $name] == 0} {
+            return $os
+        }
+    }
+    return ""
 ====
-    if {$root in [operatingSystems]} {
-        return $root
+    set first [lindex [split [string map {:: \x00} [regsub {^std::} $name {}]] \x00] 0]
+    if {$first in [operatingSystems]} {
+        return $first
     }
     return ""
 >>>>
@@ -97,7 +103,7 @@
     }
 >>>>
 
-@@ unknown-target-after-declarations ffi::c's declarations are made before the target is checked
+@@ unknown-target-after-declarations std::ffi::c's declarations are made before the target is checked
 ## surface/modules.tcl
 <<<<
     if {[hir::cabi::HasNamespaceTypes $name]} {

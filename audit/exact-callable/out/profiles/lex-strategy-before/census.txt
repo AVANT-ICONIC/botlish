@@ -11,7 +11,7 @@ exclusive Ir by code kind: runtime 147,429 (46.9%)  libc 112,325 (35.7%)  botlis
   4 chars_of                                24           0        1,584          0      209,328  66.60%   0.50%
   5 chars_of                                24           0       12,012          0      184,387  58.67%   3.82%
   9 fully_alnum?                             8           0          320          0       81,026  25.78%   0.10%
-  1 list::all?                               8           0        2,389          0        9,731   3.10%   0.76%
+  1 std::list::all?                               8           0        2,389          0        9,731   3.10%   0.76%
   7 count_true                              16           0        5,357          0        6,985   2.22%   1.70%
   2 lenient_ident_char?                     66          66        2,178        462        6,842   2.18%   0.84%
   3 choose_classifier                       16           0          152          0          152   0.05%   0.05%
@@ -30,8 +30,8 @@ exclusive Ir by code kind: runtime 147,429 (46.9%)  libc 112,325 (35.7%)  botlis
   6 classify                     -> rt_call_value                                                      132        21,290    161.3    6.77%
   4 chars_of                     -> rt_construct                                                        24        13,025    542.7    4.14%
   4 chars_of                     -> rt_substr                                                           24        10,069    419.5    3.20%
-  9 fully_alnum?                 -> 1 list::all?                                                         8         9,731   1216.4    3.10%
-  1 list::all?                   -> rt_call_value                                                       38         7,254    190.9    2.31%
+  9 fully_alnum?                 -> 1 std::list::all?                                                         8         9,731   1216.4    3.10%
+  1 std::list::all?                   -> rt_call_value                                                       38         7,254    190.9    2.31%
   8 valid_chars                  -> 7 count_true                                                        16         6,985    436.6    2.22%
   2 lenient_ident_char? (generic entry) -> 2 lenient_ident_char?                                               66         6,380     96.7    2.03%
   6 classify                     -> rt_list_new                                                         32         6,259    195.6    1.99%
@@ -46,7 +46,7 @@ exclusive Ir by code kind: runtime 147,429 (46.9%)  libc 112,325 (35.7%)  botlis
   10 total_valid                 -> rt_str_len                                                          18           198     11.0    0.06%
   6 classify                     -> rt_str_len                                                          16           176     11.0    0.06%
   6 classify                     -> 3 choose_classifier                                                 16           152      9.5    0.05%
-  1 list::all?                   -> rt_str_len                                                           8            88     11.0    0.03%
+  1 std::list::all?                   -> rt_str_len                                                           8            88     11.0    0.03%
   0 <program>                    -> rt_str_len                                                           2            22     11.0    0.01%
 
 == runtime/libc functions: exact in-region invocations (entry-instruction count, if resolvable), SELF, INCLUSIVE
@@ -324,7 +324,7 @@ exclusive Ir by code kind: runtime 147,429 (46.9%)  libc 112,325 (35.7%)  botlis
   6 classify (9,004): mov reg-reg=2,432; stack store=1,116; tag test=824; mov imm=788; completion check=624; heap/vm load=396; overflow check=396; call helper=312; bool test=296; cmp/test (other)=280; jmp=264; logic=148; bool materialize=148; stack load=148; frame: epilogue=144; untag=132; jcc (other)=132; lea (stack addr)=132; arith=132; frame: prologue=128; call botlish=32
   7 count_true (5,357): mov reg-reg=1,152; stack store=428; heap/vm load=396; tag test=396; overflow check=396; untag=296; mov imm=280; cmp/test (other)=280; jcc (other)=280; retag=264; bool test=264; arith=264; call helper=148; jmp=141; lea=132; frame: epilogue=128; frame: prologue=112
   2 lenient_ident_char? (2,640): frame: epilogue=594; frame: prologue=462; bool test=288; mov imm=234; cmp/test (other)=198; heap/vm load=156; mov reg-reg=156; call helper=144; jcc (other)=132; completion check=132; setcc/cmov (other)=66; call botlish=66; jmp=12
-  1 list::all? (2,389): mov reg-reg=617; bool test=306; tag test=216; mov imm=208; stack store=170; heap/vm load=114; overflow check=93; logic=77; cmp/test (other)=77; completion check=76; frame: epilogue=72; jmp=69; frame: prologue=64; call helper=46; bool materialize=39; untag=38; jcc (other)=38; lea (stack addr)=38; arith=31
+  1 std::list::all? (2,389): mov reg-reg=617; bool test=306; tag test=216; mov imm=208; stack store=170; heap/vm load=114; overflow check=93; logic=77; cmp/test (other)=77; completion check=76; frame: epilogue=72; jmp=69; frame: prologue=64; call helper=46; bool materialize=39; untag=38; jcc (other)=38; lea (stack addr)=38; arith=31
   4 chars_of (1,584): mov reg-reg=408; stack store=264; frame: epilogue=192; frame: prologue=168; completion check=144; mov imm=120; call helper=72; untag=48; retag=48; cmp/test (other)=24; jcc (other)=24; lea=24; lea (stack addr)=24; call botlish=24
   10 total_valid (738): mov reg-reg=190; stack store=86; heap/vm load=48; tag test=48; overflow check=48; untag=36; cmp/test (other)=34; jcc (other)=34; retag=32; completion check=32; arith=32; mov imm=18; call helper=18; frame: epilogue=18; frame: prologue=16; call botlish=16; lea=16; jmp=16
   0 <program> (565): stack store=80; stack load=69; mov reg-reg=63; tag test=50; bool test=50; heap/vm load=43; mov imm=39; cmp/test (other)=28; overflow check=24; jmp=23; jcc (other)=19; call botlish=10; logic=9; bool materialize=9; frame: epilogue=9; frame: prologue=8; completion check=8; untag=8; arith=8; call helper=6; lea (stack addr)=2

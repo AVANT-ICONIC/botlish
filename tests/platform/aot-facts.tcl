@@ -102,7 +102,7 @@ set macos [string match macos-* $host]
 
 # The program: a context (the object's one data symbol, botlish_context_area),
 # a recursion, String building and a List.
-set program {import str
+set program {import std::str
 
 type Small = Int in 0..1000
 
@@ -172,7 +172,7 @@ step().value
 
 # What performance-compute runs: fib(25) and a String built by 2000
 # concatenations.
-set benchProgram {import str
+set benchProgram {import std::str
 
 fn fib(n):
     if n <= 1:
@@ -190,8 +190,8 @@ fn build(n: int, acc: str) -> int:
 }
 set benchValue {[75025, 2000]}
 
-set errorProgram {import mutable_array
-mutable_array::allocate(0 - 1)
+set errorProgram {import std::mutable_array
+std::mutable_array::allocate(0 - 1)
 }
 
 set overflowLine "error {NATIVE LIMIT STACK} {native stack exhausted: too many nested calls}"
@@ -352,7 +352,7 @@ proc cCalls {} {
             "libbotlish_aot_facts.a: $header, defines ${prefix}bcfx_widen: [regexp -line "T ${prefix}bcfx_widen\$" $symbols]" "$stderr$symbols"]} {
         return
     }
-    set decls "import ffi::c\n\nextern c library \"botlish_aot_facts\"\n\nextern c fn labs(x: ffi::c::Long) -> ffi::c::Long\nextern c fn widen named \"bcfx_widen\"(c: ffi::c::SChar, s: ffi::c::UShort, l: ffi::c::Long) -> ffi::c::Long\n"
+    set decls "import std::ffi::c\n\nextern c library \"botlish_aot_facts\"\n\nextern c fn labs(x: std::ffi::c::Long) -> std::ffi::c::Long\nextern c fn widen named \"bcfx_widen\"(c: std::ffi::c::SChar, s: std::ffi::c::UShort, l: std::ffi::c::Long) -> std::ffi::c::Long\n"
     set text "$decls\n\[labs(-42), widen(-1, 65535, 7)\]\n"
     set started [clock microseconds]
     if {[catch {native::withLinkDirs [list $lib] {standalone c-call $text {}}} outcome options]} {
@@ -381,12 +381,12 @@ proc cCalls {} {
         "-lbotlish_aot_facts and -L its directory passed; GNU archive group: $group; -nodefaultlibs: $nodefault" \
         [expr {$failed ? $message : $named}]
 
-    set missing [surface::compile "import ffi::c\n\nextern c library \"botlish_aot_facts_missing\"\n\n1 + 1\n" missing.bot -warnings off]
+    set missing [surface::compile "import std::ffi::c\n\nextern c library \"botlish_aot_facts_missing\"\n\n1 + 1\n" missing.bot -warnings off]
     set failed [catch {native::executable $missing [file join $work missing]} message options]
     check c-link-missing-library [expr {$failed && [lrange [dict get $options -errorcode] 0 1] eq {NATIVE LINK}
             && [regexp {botlish_aot_facts_missing} [join [lrange [split $message \n] 1 end] \n]]}] \
         "[expr {$failed ? [lrange [dict get $options -errorcode] 0 1] : "linked"}]: the linker names the library" $message
-    set undefined [surface::compile "$decls\nextern c fn nope named \"botlish_aot_facts_nope\"(x: ffi::c::Int) -> ffi::c::Int\n\nnope(1)\n" undefined.bot -warnings off]
+    set undefined [surface::compile "$decls\nextern c fn nope named \"botlish_aot_facts_nope\"(x: std::ffi::c::Int) -> std::ffi::c::Int\n\nnope(1)\n" undefined.bot -warnings off]
     set failed [native::withLinkDirs [list $lib] {catch {native::executable $undefined [file join $work undefined]} message options}]
     check c-link-undefined-symbol [expr {$failed && [lrange [dict get $options -errorcode] 0 1] eq {NATIVE LINK}
             && [regexp {botlish_aot_facts_nope} [join [lrange [split $message \n] 1 end] \n]]}] \

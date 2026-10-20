@@ -4,7 +4,7 @@
 #
 # The Byte/Nibble/LowNibble/HighNibble bounded-integer domains themselves
 # are no longer registered here: they are ordinary Botlish source
-# declarations in lib/byte.bot (see SOURCE-DEFINED-INTEGER-DOMAINS.md,
+# declarations in stdlib/byte.bot (see SOURCE-DEFINED-INTEGER-DOMAINS.md,
 # which supersedes this file's own former #161-189 for exactly what moved
 # and why). What is still true of them, unchanged by where they are
 # declared:
@@ -31,7 +31,7 @@
 # Checked construction from Int is no longer a callable type name
 # (EXPLICIT-ERROR-COMPLETIONS.md removes source-level `Byte(x)`/`Nibble(x)`/
 # `LowNibble(x)`/`HighNibble(x)` entirely -- spec items 19-20: a type name
-# is not a magical value-level function). byte::from_int (lib/byte.bot) is
+# is not a magical value-level function). std::byte::from_int (stdlib/byte.bot) is
 # now the one ordinary, explicitly-fallible Int -> Byte conversion,
 # declaring `errors BelowRange, AboveRange` and produced through the
 # source-level `fail` primitive -- an application-visible declared error,
@@ -41,13 +41,13 @@
 # ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md) a NAME? membership predicate --
 # not something this file arranges.
 #
-# byte::high_nibble/byte::low_nibble/byte::nibble/byte::complement/
-# byte::position_low/byte::position_high (lib/byte.bot) are ordinary,
+# std::byte::high_nibble/std::byte::low_nibble/std::byte::nibble/std::byte::complement/
+# std::byte::position_low/std::byte::position_high (stdlib/byte.bot) are ordinary,
 # Botlish functions with verified result contracts, built from the bitwise primitives below --
-# not separate natives. byte::high_nibble(0xAB) is HighNibble(0xA0), not
+# not separate natives. std::byte::high_nibble(0xAB) is HighNibble(0xA0), not
 # logical Nibble(0xA): position-preserving extraction, never folded into
-# normalization itself (spec's own #3-4); byte::nibble(...) is the separate
-# conversion that does that. See lib/byte.bot's own header for exactly why
+# normalization itself (spec's own #3-4); std::byte::nibble(...) is the separate
+# conversion that does that. See stdlib/byte.bot's own header for exactly why
 # these are ordinary functions here rather than natives with a declared
 # HighNibble/LowNibble/Nibble result type: native lowering's former
 # -native-body/-module-fn bridge (since removed) was a syntactic pre-pass over only
@@ -86,7 +86,7 @@ namespace eval core::scalarbits {}
 #                               generic shift's own domain is a deliberately
 #                               *weaker* contract than the named positioning
 #                               conversions below (spec #20), which is why
-#                               byte::position_high uses shift_left(n, 4)
+#                               std::byte::position_high uses shift_left(n, 4)
 #                               internally but a caller shifting by an
 #                               unproven amount still gets a checked op.
 #
@@ -94,7 +94,7 @@ namespace eval core::scalarbits {}
 # an arbitrary-precision Int is well-defined (Tcl/Rust both give it via
 # -(x+1)) but is not the operation this milestone's domains need, and
 # accidentally inheriting it as "~Byte" would be exactly the mistake spec
-# #15 warns against. Only byte::complement (below), defined over Byte's
+# #15 warns against. Only std::byte::complement (below), defined over Byte's
 # 8-bit domain via bit_xor with 0xFF, is provided.
 
 namespace eval core::scalarbits {
@@ -157,8 +157,8 @@ unset name impl nomethod
 
 # The four scalar domains (Byte, Nibble, LowNibble, HighNibble) are no
 # longer registered here: they are ordinary Botlish source declarations in
-# lib/byte.bot now (see SOURCE-DEFINED-INTEGER-DOMAINS.md). This file keeps
+# stdlib/byte.bot now (see SOURCE-DEFINED-INTEGER-DOMAINS.md). This file keeps
 # only the primitive bit operations above, which those declarations' own
-# functions (byte::high_nibble et al.) are built from -- and which stay
+# functions (std::byte::high_nibble et al.) are built from -- and which stay
 # root natives regardless of what domains are ever declared over their
 # results, exactly as before this milestone.

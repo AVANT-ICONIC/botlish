@@ -5,8 +5,8 @@ lassign $argv setup mode
 switch -- $setup {
     ascii {
         # ascii.bot documents that Byte must already have been registered.
-        surface::readProgramFile lib/byte.bot
-        set argv [list $mode lib/ascii.bot]
+        surface::readProgramFile stdlib/byte.bot
+        set argv [list $mode stdlib/ascii.bot]
     }
     fixtures {
         set ::core::libraryDir [file normalize audit/post-native-stack/module-cases]

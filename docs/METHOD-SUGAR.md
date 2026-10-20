@@ -4,10 +4,10 @@ A small syntax milestone: `value.f(a, b)` as an alternate spelling of the
 ordinary call `f(value, a, b)`.
 
 ```
-import list                                # the namespace's functions become candidates
-xs.at(i)                   ==   list::at(xs, i)
-import str
-text.substring(0, 5)       ==   str::substring(text, 0, 5)
+import std::list                                # the namespace's functions become candidates
+xs.at(i)                   ==   std::list::at(xs, i)
+import std::str
+text.substring(0, 5)       ==   std::str::substring(text, 0, 5)
 n.inc().twice().add(3)     ==   add(twice(inc(n)), 3)
 ```
 
@@ -31,20 +31,20 @@ A function is a candidate for `x.f(...)` if it is visible at the call:
   primitives, STDLIB-NAMESPACES.md), which is visible everywhere unless
   shadowed -- all by ordinary lexical resolution (`hir/resolve.tcl`); or
 * a **member `f` of a namespace the file directly imports** (IMPORTS.md):
-  `import list` makes the module functions (`list::find`) and intrinsics
-  (`list::at`, `list::append`, ...) of exactly `list` candidates; `import
-  str` those of `str`; `import abi::x86_64` those of `abi::x86_64` -- and
-  `import abi` does not make them candidates, nor does an import of a
-  module that imports `abi::x86_64`: imports are exact and not transitive.
+  `import std::list` makes the module functions (`std::list::find`) and intrinsics
+  (`std::list::at`, `std::list::append`, ...) of exactly `list` candidates; `import
+  str` those of `str`; `import std::abi::x86_64` those of `std::abi::x86_64` -- and
+  `import std::abi` does not make them candidates, nor does an import of a
+  module that imports `std::abi::x86_64`: imports are exact and not transitive.
 
-An import injects no unqualified name: `list::at(xs, 0)` is valid after
-`import list`, `at(xs, 0)` is not, and no alias `at = list::at` is needed (or
+An import injects no unqualified name: `std::list::at(xs, 0)` is valid after
+`import std::list`, `at(xs, 0)` is not, and no alias `at = std::list::at` is needed (or
 created) for `xs.at(0)`. Without the import, `xs.at(0)` finds nothing even
 though the compiler knows the standard namespace exists: visibility comes
 from the file's own header. A bound intrinsic is the very intrinsic: `xs.at(i)`
-resolves to the same native target as `list::at(xs, i)`
+resolves to the same native target as `std::list::at(xs, i)`
 (`tests/stdlib-namespaces.test` checks the HIR call targets and the NIR are
-identical). An old-style binding (`at = list::at`) still works and, being the
+identical). An old-style binding (`at = std::list::at`) still works and, being the
 same function as the imported one, is one candidate, not two.
 
 ### Several candidates
@@ -57,9 +57,9 @@ namespace -- so two *distinct* functions can both be visible as `f`
 local `at`). The sugar then applies its one rule to each: **the call is
 accepted with the candidate whose ordinary call `f(x, a, b)` is valid**:
 
-* exactly one valid candidate: the call is that one (so with `import list`
-  and `import mutable_array`, `xs.at(i)` on a `List` is `list::at` and
-  `a.at(i)` on a `MutableArray` is `mutable_array::at`: each rejects the
+* exactly one valid candidate: the call is that one (so with `import std::list`
+  and `import std::mutable_array`, `xs.at(i)` on a `List` is `std::list::at` and
+  `a.at(i)` on a `MutableArray` is `std::mutable_array::at`: each rejects the
   other's receiver kind, the same way a declared parameter type or an
   inferred contract rejects it);
 * more than one valid: `AMBIGUOUS-METHOD-CALL`, naming the candidates -- no
@@ -76,7 +76,7 @@ first parameter has a different known kind, ... A declared error nobody
 handled is not evidence against a candidate (it is the obligation of a call
 that fits). Calls with a single candidate -- almost all -- cost nothing extra.
 Where the receiver's kind leaves one candidate (a List receiver rules out
-`str::length`), the call is decided without building the others
+`std::str::length`), the call is decided without building the others
 (METHOD-DECISION-FILTER.md); the decisions are the same.
 A candidate that is statically a function of another arity is not a candidate
 (unless none is left, which keeps the ordinary arity error).
@@ -270,16 +270,16 @@ reason appended.
 * **The receiver's type need not be named in the program.** Eligibility is
   decided by the function name and the ordinary call; the receiver's
   already-resolved static type is all that matters. Test: a `Byte`
-  (`byte::complement(200)`, a module type never named in source) receives
-  `complement` and `high_nibble` after `import byte`, and the chain works.
+  (`std::byte::complement(200)`, a module type never named in source) receives
+  `complement` and `high_nibble` after `import std::byte`, and the chain works.
 * **No function declaration opts in.** `fn replace(text, old, new)` is the
   same declaration whether called as `replace(t, a, b)` or `t.replace(a, b)`.
 * **No registry, no search.** Resolution starts from the name after the
   period, over the lexical scope and the namespaces the file imported. The
   compiler never searches the program or the libraries for a function "whose
-  first parameter has the receiver's type". Test: a `list::any?` accepting
-  the receiver exactly (`[1, 2].any?(p)`) is not found without `import list`;
-  `byte::complement` is not found for `200.complement()` without `import
+  first parameter has the receiver's type". Test: a `std::list::any?` accepting
+  the receiver exactly (`[1, 2].any?(p)`) is not found without `import std::list`;
+  `std::byte::complement` is not found for `200.complement()` without `import
   byte`.
 * **No import through the type.** Having type `T` does not lead to `T`'s
   module; the file's own `import` is the capability.
@@ -315,10 +315,10 @@ unused-import lint to change.
 * `tests/method-sugar.test` (114 tests; each program runs on interpreter, Tcl
   compiler, native generic and native specialized, and the standalone
   executable is run as well): basic arities 1..3, receivers of every kind,
-  precedence; real library names (`list::at`, `str::substring`,
-  `str::lowercase`, `list::append`, `str::concat` bound to names, variadic
+  precedence; real library names (`std::list::at`, `std::str::substring`,
+  `std::str::lowercase`, `std::list::append`, `std::str::concat` bound to names, variadic
   `list`); module functions bound to names
-  (`byte::complement`, `byte::from_int` with handlers, `list::find` with a
+  (`std::byte::complement`, `std::byte::from_int` with handlers, `std::list::find` with a
   predicate); visibility (unbound module function, receiver-type
   non-search, forward reference, struct receiver, nested scopes, recursion);
   aliases (the local name is the method name, the original is not made
@@ -355,7 +355,7 @@ Ordinary call syntax is the oracle: the two spellings must agree on every
 backend on value, error code/message (locations removed) and evaluation log,
 and the backends must agree with each other. Each program is also paired with
 a **negative** program carrying exactly one defect -- hidden module function
-(`list::any?` not bound), function defined after the call, a name that exists
+(`std::list::any?` not bound), function defined after the call, a name that exists
 only inside another function, wrong receiver type, receiver outside a
 refinement type, wrong later argument, too few / too many arguments, zero
 parameters, field/function ambiguity -- which must be rejected (for the
@@ -373,7 +373,7 @@ programs gave 6 equivalence disagreements and 3 negative escapes.
 ## Known limitations
 
 * No `import` exists, so a library function is a method only after being bound
-  (`find = list::find`). Library functions the corpus would want as methods
+  (`find = std::list::find`). Library functions the corpus would want as methods
   are not made visible by this milestone (the corpus refactor is deferred).
 * `(if c: a else: b).f()` cannot be written (an `if` is not an operand);
   bind the value first.
@@ -416,7 +416,7 @@ canonical case).
 2. **What is `x.f(a, b)` equivalent to?** `f(x, a, b)`.
 3. **Must `f` be imported?** It must be visible: by ordinary resolution (a
    file's function or binding, a root native) or as a member of a namespace
-   the file directly imports (`import list`; IMPORTS.md).
+   the file directly imports (`import std::list`; IMPORTS.md).
 4. **Does the compiler search modules/types for an unimported matching `f`?**
    No: only the namespaces the file itself imports, exactly, never their
    parents, children or dependencies.

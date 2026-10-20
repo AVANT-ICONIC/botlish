@@ -1,9 +1,9 @@
 # getpid.bot -- the canonical demonstration of Botlish's raw Linux x86-64
 # syscall path (LINUX-X86-64-SYSCALL.md):
 #
-#   Botlish Int --abi::x86_64::register64--> Register64 (one register word)
-#     --linux::abi::x86_64::syscall--> the x86-64 `syscall` instruction
-#     --> raw rax as a Register64 --abi::x86_64::to_int--> Botlish Int
+#   Botlish Int --std::abi::x86_64::register64--> Register64 (one register word)
+#     --std::linux::abi::x86_64::syscall--> the x86-64 `syscall` instruction
+#     --> raw rax as a Register64 --std::abi::x86_64::to_int--> Botlish Int
 #
 # raw_getpid is ordinary Botlish except for its one call of the generic
 # syscall intrinsic: 39 is the Linux x86-64 syscall number of getpid, and it
@@ -21,13 +21,13 @@
 # deliberately low-level program, which says so.
 direct module
 
-import abi::x86_64
-import linux::abi::x86_64
+import std::abi::x86_64
+import std::linux::abi::x86_64
 
 fn raw_getpid():
-    abi::x86_64::to_int(
-        linux::abi::x86_64::syscall({
-            rax: abi::x86_64::register64(39),
+    std::abi::x86_64::to_int(
+        std::linux::abi::x86_64::syscall({
+            rax: std::abi::x86_64::register64(39),
         })
     )
 

@@ -5,7 +5,7 @@
 # (//zipfs:/app/main.tcl), which Tcl 9's startup (TclZipfs_AppHook) runs with
 # the executable's own arguments. The archive holds this repository's compiler
 # stack under //zipfs:/app/botlish -- main.tcl, core/, compiler/, hir/,
-# surface/, native/*.tcl, lib/ and compilerpedia/, at the same relative paths
+# surface/, native/*.tcl, stdlib/ and compilerpedia/, at the same relative paths
 # as in a checkout -- and the native backend's two Rust executables under
 # //zipfs:/app/native-bin. This script
 #

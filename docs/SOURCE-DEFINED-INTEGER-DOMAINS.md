@@ -2,7 +2,7 @@
 
 This milestone moves the authoritative definitions of Byte/Nibble/LowNibble/
 HighNibble out of compiler-side Tcl registration (`core/scalarbits.tcl`) and
-into ordinary Botlish source (`lib/byte.bot`), by adding one dedicated
+into ordinary Botlish source (`stdlib/byte.bot`), by adding one dedicated
 declaration to the language:
 
 ```botlish
@@ -19,7 +19,7 @@ registered from Tcl or, now, from Botlish source.
 ## Outcome
 
 Implemented, migrated, and regression-tested. `core/scalarbits.tcl` no
-longer defines Byte/Nibble/LowNibble/HighNibble; `lib/byte.bot` does, as
+longer defines Byte/Nibble/LowNibble/HighNibble; `stdlib/byte.bot` does, as
 four ordinary `type` declarations. No production file downstream of the
 type system (`hir/range.tcl`, `hir/types.tcl`, `hir/specialize.tcl`,
 `native/lower.tcl`, `native/src/**`) needed to change — confirmed directly
@@ -70,7 +70,7 @@ mechanism `Arguments`'s trailing comma already uses) is additive, with zero
 risk of reinterpreting existing brace-free source.
 
 **`type` is a new reserved keyword; `in` is not.** Auditing the current
-corpus (`lib/*.bot`, `examples/**/*.bot`) for `type`/`in` used as an
+corpus (`stdlib/*.bot`, `examples/**/*.bot`) for `type`/`in` used as an
 ordinary identifier (function name, parameter, binding) found none — only
 prose inside comments. Reserving `type` globally (`surface/lexer.tcl`'s
 keyword list) is therefore compatibility-safe, and simpler than a
@@ -272,13 +272,13 @@ A module's own declared types become available to any *other* code only
 when that code is loaded as a dependency — and dependency discovery
 (`surface/modules.tcl::QualifiedRefs`) is driven purely by qualified
 *value* references (`mod::name`), which type declarations have no syntax
-for. Concretely: a program that calls `byte::high_nibble(...)` transitively
-loads `lib/byte.bot`, which registers `Byte`/`Nibble`/`LowNibble`/
+for. Concretely: a program that calls `std::byte::high_nibble(...)` transitively
+loads `stdlib/byte.bot`, which registers `Byte`/`Nibble`/`LowNibble`/
 `HighNibble` as a side effect of being loaded for its *functions* — so
-`web.bot` (which already calls `byte::high_nibble`) gets them "for free,"
+`web.bot` (which already calls `std::byte::high_nibble`) gets them "for free,"
 exactly as needed. A program that wants to use `Byte` as *its own* result
 type, without ever calling a `byte::` function, currently has no mechanism
-to load `lib/byte.bot` at all: there is no `mod::TypeName` qualified
+to load `stdlib/byte.bot` at all: there is no `mod::TypeName` qualified
 result-type spelling. This is the one real, load-bearing limitation of the
 milestone's own scope decision (item 89's own anticipated gap) — not
 special-cased away, and not silently worked around; `tests/source-types.
@@ -371,7 +371,7 @@ semantically live (`source-type-hir-roundtrip-interval`,
 > `Small(x)` by EXPLICIT-ERROR-COMPLETIONS.md, the predicate `Small?` by
 > ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md. A type declaration registers a type
 > and nothing callable; a domain is entered through an ordinary converter
-> (`byte::from_int`, `abi::u8`) or admitted by ordinary comparisons, whose
+> (`std::byte::from_int`, `std::abi::u8`) or admitted by ordinary comparisons, whose
 > range facts prove membership. The paragraph below is the original record.
 
 Every source-declared integer-domain type automatically gets a checked
@@ -394,13 +394,13 @@ raised when Byte was compiler-registered.
 the block that used to register `Byte`/`Nibble`/`LowNibble`/`HighNibble`
 (`core::type::register` × 4, `core::type::definePredicate` × 4, a
 `CheckedConstruct`/constructor-registration loop) is gone, replaced by a
-one-paragraph comment pointing at `lib/byte.bot` and this document. Two
+one-paragraph comment pointing at `stdlib/byte.bot` and this document. Two
 small, genuinely dead helper procs (`InRange`, `IsHighNibble` — never
 actually called; the real registrations always used the generic
 `-integer-domain` validator) were removed along with it rather than kept
 "for safety."
 
-`lib/byte.bot` gained 20 lines: four `type` declarations, matching the
+`stdlib/byte.bot` gained 20 lines: four `type` declarations, matching the
 milestone's own worked example almost verbatim —
 
 ```botlish
@@ -421,12 +421,12 @@ No existing function (`high_nibble`, `low_nibble`, `nibble`, `complement`,
 `position_low`, `position_high`) changed at all — they still call
 `bit_and`/`bit_or`/`bit_xor`/`shift_left`/`shift_right` and declare the
 same result types by the same spellings. No caller changed either:
-`byte::high_nibble` etc. are referenced exactly as before by `lib/web.bot`
+`std::byte::high_nibble` etc. are referenced exactly as before by `stdlib/web.bot`
 and every test.
 
 ## Before/after: canonical metadata
 
-|              | BEFORE (compiler Tcl)        | AFTER (`lib/byte.bot`)       |
+|              | BEFORE (compiler Tcl)        | AFTER (`stdlib/byte.bot`)       |
 |--------------|-------------------------------|-------------------------------|
 | **Byte**     | `core::type::register Byte -base int -integer-domain {interval 0 255}` | `type Byte = Int in 0..255` |
 | parent       | Int (no `-parents`)          | Int (no nominal parent)      |
@@ -454,14 +454,14 @@ comes from the pre-existing regression tests that assert *exact* values and
 were never edited by this migration):
 
 - `native-refined-checks-cranelift-value` / `-compile-cranelift-agree`:
-  `bench/refined-checks.ir` (which calls `web::high_nibble`) still computes
+  `bench/refined-checks.ir` (which calls `std::web::high_nibble`) still computes
   `[400, 0]` on cranelift, compile, and interp alike.
-- `native-byte-high-nibble-nir-is-mask-not-branch`: `byte::high_nibble`'s
+- `native-byte-high-nibble-nir-is-mask-not-branch`: `std::byte::high_nibble`'s
   own NIR still lowers to a raw `iand` with no comparison/branch
   instruction, for an unconstrained argument.
-- `native-refined-checks-no-old-ladder`: `lib/web.bot`'s own source text
+- `native-refined-checks-no-old-ladder`: `stdlib/web.bot`'s own source text
   still contains no branch-ladder fallback and still calls
-  `byte::high_nibble`/`byte::nibble`.
+  `std::byte::high_nibble`/`std::byte::nibble`.
 
 All three pass against the post-migration source unmodified. Since
 `hir/range.tcl`, `native/lower.tcl`, and `native/src/**` are byte-for-byte
@@ -556,10 +556,10 @@ adding the language feature itself.
 
 Everything above describes one flat type namespace. A `type` declared in a
 module is now a member of that module's namespace and has the qualified
-identity `NAMESPACE::Name` (`abi::U8Value`): the identity registered in
+identity `NAMESPACE::Name` (`std::abi::U8Value`): the identity registered in
 `core::type`, kept in HIR's `sourceTypes`, shown in diagnostics
-(`int[abi::U8Value]`); it once also named its membership predicate
-(`abi::U8Value?`), removed by ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md.
+(`int[std::abi::U8Value]`); it once also named its membership predicate
+(`std::abi::U8Value?`), removed by ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md.
 The entry program's own types keep their bare identity. The declaration
 rules above (domain checks, parents, DFS, cycles, isolation by generation)
 are unchanged; what changed is what a *name* denotes:

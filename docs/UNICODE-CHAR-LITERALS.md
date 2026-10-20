@@ -7,7 +7,7 @@ exactly one Unicode scalar value. Single-quoted literals (`'A'`, `'é'`,
 `'😀'`, `'\n'`, `'\''`, `'\\'`) produce `UnicodeChar` values directly, never
 `String`. `UnicodeChar` is not implicitly `Int` and not implicitly `String`
 in either direction; its scalar numeric value is observed only through the
-explicit, total operation `char::codepoint`/`char_codepoint`. The runtime
+explicit, total operation `std::char::codepoint`/`char_codepoint`. The runtime
 preserves this distinction through every backend and through untyped/dynamic
 execution paths, not only statically. Ordinary (unmodified) `List[T]`
 construction inference therefore makes `['-', '.', '_', '~']` a
@@ -21,7 +21,7 @@ tests pass (`cargo test --release`). The new `tests/unicode-char.test` adds
 **75** tests, all passing on `interp` and `compile` (its own backend-parity
 tests additionally check `cranelift-generic` and `cranelift`).
 
-`ImmutableSet[T]`, `byte::set`, ASCII predicates, URI logic, predicate flow
+`ImmutableSet[T]`, `std::byte::set`, ASCII predicates, URI logic, predicate flow
 refinement, source integer-domain union syntax, Unicode normalization/
 categories/grapheme clusters, implicit `UnicodeChar<->Int`/`String`
 conversion, UTF-8 encoding, and Byte/Int64 representation specialization
@@ -50,14 +50,14 @@ it wrong.
 
 ## Why source integer-domain syntax was not expanded
 
-A source-defined type (`type Byte = Int in 0..255`, `lib/byte.bot`) is
+A source-defined type (`type Byte = Int in 0..255`, `stdlib/byte.bot`) is
 registered with `-base int`: at every backend, a `Byte` value *is* an
 ordinary Botlish `Int`, refined by evidence. That is exactly the
 representation the milestone explicitly forbids for `UnicodeChar` (item 3:
 not a subtype of `Int`; item 24: no numeric value-set admissibility). Adding
 a `0..0xD7FF | 0xE000..0x10FFFF` union domain to the source-defined-type
 grammar would still leave `UnicodeChar` with base `int`, meaning
-`char::codepoint('A')` would be definable, but `'A' + 1` would also
+`std::char::codepoint('A')` would be definable, but `'A' + 1` would also
 typecheck (same base kind, ordinary Int arithmetic) -- precisely the
 "character arithmetic becomes legal" outcome item 16 forbids. So
 `UnicodeChar` is registered as its own builtin primitive kind, structurally
@@ -111,7 +111,7 @@ No GC object, no root slot: `is_pointer(v)` (`v & 7 == 0`) is `false` for
 every `UnicodeChar` word by construction, so the existing dynamic root scan
 (`heap.rs`'s `if !is_pointer(v) { continue }`) already skips it — confirmed
 by `native::allocationReport`, which reports **0 allocations** for
-`char::codepoint('A')` end to end (HIR → NIR → machine code → run), and by a
+`std::char::codepoint('A')` end to end (HIR → NIR → machine code → run), and by a
 GC-stress run (`BOTLISH_NATIVE_GC_STRESS=1`) that builds thousands of Lists
 of chars with no failure.
 
@@ -273,16 +273,16 @@ plain-decimal form) were independently verified to agree with each other
 across backends (`tests/unicode-char.test`'s parity tests, plus manual
 3-way comparison during development).
 
-## char::codepoint
+## std::char::codepoint
 
-Namespace: `char::codepoint`, backed by the root native `char_codepoint`
-(`core/unicodechar.tcl`) — exactly the `byte::high_nibble`/`bit_and`
-split already established by `lib/byte.bot`/`core/scalarbits.tcl`: a
+Namespace: `std::char::codepoint`, backed by the root native `char_codepoint`
+(`core/unicodechar.tcl`) — exactly the `std::byte::high_nibble`/`bit_and`
+split already established by `stdlib/byte.bot`/`core/scalarbits.tcl`: a
 namespaced `.bot` wrapper function is how this codebase spells
 "operation under a scalar type's own namespace" (there is no mechanism for
 a *root* native itself to carry a `::` in its resolvable name — qualified
 references resolve only against a loaded module's own definitions,
-`hir/resolve.tcl`'s `ResolveQualifiedRef`). `lib/char.bot` is one line:
+`hir/resolve.tcl`'s `ResolveQualifiedRef`). `stdlib/char.bot` is one line:
 
 ```botlish
 namespace char
@@ -292,11 +292,11 @@ fn codepoint(c: UnicodeChar) -> int:
 
 `char_codepoint` itself (`core/unicodechar.tcl`) is registered
 unconditionally at process start (like `scalarbits.tcl`'s bitwise
-primitives, not like an optional `lib/*.tcl` library), because the
+primitives, not like an optional `stdlib/*.tcl` library), because the
 *primitive operation* is a core language fact even though its namespaced
 surface spelling is only reachable once a program's `char::...` reference
-pulls in `lib/char.bot` — this mirrors item 21's own contrast between
-`UnicodeChar` (always available) and `Byte` (needs `lib/byte.bot` loaded):
+pulls in `stdlib/char.bot` — this mirrors item 21's own contrast between
+`UnicodeChar` (always available) and `Byte` (needs `stdlib/byte.bot` loaded):
 the *type* needs nothing loaded; the *namespaced operation* does, exactly
 like `byte::`'s own operations.
 
@@ -309,7 +309,7 @@ envelope (`2^62`), so it can never itself force a BigInt.
 
 ## Parameter/result contracts
 
-`char::codepoint(65)`/`char::codepoint("A")` (the module-qualified,
+`std::char::codepoint(65)`/`std::char::codepoint("A")` (the module-qualified,
 typed-wrapper spelling) are **compile-time** errors: `codepoint`'s own
 declared parameter type `c: UnicodeChar` is checked by
 `hir::range::verifyDeclaredParams`, exactly like any other typed function
@@ -319,8 +319,8 @@ other native call, e.g. `bit_and("A", "B")`) only checked **dynamically**:
 `hir::types::Call`'s static per-argument kind check only runs during
 specialization's region inference, not ordinary whole-program inference —
 this is pre-existing behavior, unrelated to `UnicodeChar`, and is exactly
-why `lib/char.bot`'s thin typed wrapper is what actually gives
-`char::codepoint` its compile-time contract. `tests/unicode-char.test`
+why `stdlib/char.bot`'s thin typed wrapper is what actually gives
+`std::char::codepoint` its compile-time contract. `tests/unicode-char.test`
 covers both: the compile-time rejection through the module, and the
 dynamic `CORE SEMANTIC TYPE` rejection of the bare native.
 
@@ -372,10 +372,10 @@ modified.
 
 ## Cross-module behavior
 
-`char::codepoint` is loaded via the ordinary module mechanism
-(`surface/modules.tcl`): a program referencing `char::codepoint` pulls in
-`lib/char.bot` exactly as any `NAMESPACE::NAME` reference pulls in
-`lib/NAMESPACE.bot`, with the identical compile-time parameter-type
+`std::char::codepoint` is loaded via the ordinary module mechanism
+(`surface/modules.tcl`): a program referencing `std::char::codepoint` pulls in
+`stdlib/char.bot` exactly as any `NAMESPACE::NAME` reference pulls in
+`stdlib/NAMESPACE.bot`, with the identical compile-time parameter-type
 enforcement any cross-module typed function gets after module combination
 (no special-casing — this was true of `byte::`'s own functions already,
 and remains true here, verified with `surface::readProgramFile` end to
@@ -384,7 +384,7 @@ end, including the rejection case across the module boundary).
 ## Interpreter / compile / native parity
 
 All three backends were run against the same source for every acceptance
-case (literals of each shape, equality, `char::codepoint`,
+case (literals of each shape, equality, `std::char::codepoint`,
 `List[UnicodeChar]`, `list_get`, the dynamic-soundness cases, a GC-stress
 run) and agree exactly — see `tests/unicode-char.test`'s
 `char-parity-*` tests and the manual 3-way comparisons captured during
@@ -415,7 +415,7 @@ development (identical values, identical error codes and messages).
 ## Allocation/GC behavior
 
 Immediate on both backends: no allocation, no GC object, no root slot.
-`native::allocationReport`'s `total.allocations` for `char::codepoint('A')`
+`native::allocationReport`'s `total.allocations` for `std::char::codepoint('A')`
 (HIR → NIR → JIT-compiled machine code → run) is **0**. GC stress
 (`BOTLISH_NATIVE_GC_STRESS=1`, forcing a collection at every safepoint) run
 over the full suite, and separately over a hand-written program building
@@ -465,11 +465,11 @@ would need to change for that; only this one op's codegen).
 shape, escapes, all diagnostics — empty, multi-scalar, combining-accent
 near-miss, unterminated, raw newline, invalid escape), parser/AST,
 `core::value`/`core::ir` validation and round-trip, semantic-type
-distinction (identity/take_int/char::codepoint accept and reject cases,
+distinction (identity/take_int/std::char::codepoint accept and reject cases,
 kind distinctness, non-coercive equality), `List[UnicodeChar]` inference
 (homogeneous, mixed-codepoint, mixed-kind fallback) and `list_get`
 projection, typed-callable escape regression, cross-module behavior via
-`lib/char.bot`, dynamic/untyped soundness (`add_one('A')`,
+`stdlib/char.bot`, dynamic/untyped soundness (`add_one('A')`,
 `char_codepoint(pass(65))`), HIR round-trip (ASCII, quote, backslash,
 control escape, BMP, supplementary plane), source-type coexistence
 (`Small` alongside `UnicodeChar`), repeated-compilation isolation,
@@ -495,16 +495,16 @@ pass unchanged.
 
 ## Deferred (explicitly out of scope for this milestone)
 
-`ImmutableSet[T]`, `byte::set`, ASCII predicates (`is_letter`/`is_digit`/
+`ImmutableSet[T]`, `std::byte::set`, ASCII predicates (`is_letter`/`is_digit`/
 case conversion/Unicode categories), URI/`web::` logic, predicate flow
 refinement, source integer-domain union/`except` syntax, Unicode
 normalization, grapheme clusters, an `Int -> UnicodeChar` constructor or any
 other implicit `UnicodeChar<->Int`/`String` conversion, UTF-8 encoding of a
 `UnicodeChar`, and Byte/Int64 representation specialization were **not**
 added. `UnicodeChar` values obtain their scalar numeric value only through
-`char::codepoint`, which is exactly the seam the next vertical
-(`byte::set(chars: List[UnicodeChar]) -> ImmutableSet[Byte]`) is meant to
-build on: `char::codepoint` → `Int` → an explicit, checked `Byte`
+`std::char::codepoint`, which is exactly the seam the next vertical
+(`std::byte::set(chars: List[UnicodeChar]) -> ImmutableSet[Byte]`) is meant to
+build on: `std::char::codepoint` → `Int` → an explicit, checked `Byte`
 refinement/construction of that `Int` (rejecting any codepoint outside
 `0..255`, e.g. `'Ā'` or `'😀'`) → `Byte`. No UTF-8 encoding is involved in
 that future composition, and nothing here needs to change to support it.
@@ -522,7 +522,7 @@ that future composition, and nothing here needs to change to support it.
 5. **Can UnicodeChar values implicitly satisfy Int parameters?** No
    (`take_int('A')` is a compile-time `CORE SEMANTIC TYPE` error).
 6. **What explicit operation observes its scalar numeric value?**
-   `char::codepoint`/`char_codepoint`.
+   `std::char::codepoint`/`char_codepoint`.
 7. **Is that operation total?** Yes — no Error completion, ever.
 8. **What is the runtime representation?** An immediate tagged word on both
    backends: `{UnicodeChar CODEPOINT}` (Tcl) / `(codepoint << 3) | 0b100`
@@ -583,7 +583,7 @@ that future composition, and nothing here needs to change to support it.
 32. **Does equality compare scalar value rather than object identity?**
     Yes (it is not an object at all on either backend: word/text equality
     *is* value equality).
-33. **Does char::codepoint compile to a helper or direct payload
+33. **Does std::char::codepoint compile to a helper or direct payload
     extraction?** A helper call (`rt_char_codepoint`) on native, matching
     this codebase's existing convention for other single-field-read ops; a
     plain payload read in Tcl (interp/compile).
@@ -592,7 +592,7 @@ that future composition, and nothing here needs to change to support it.
 
 ## Scope questions (spec item 104)
 
-36-48. Was `ImmutableSet` added? No. `byte::set`? No. ASCII? No. URI logic
+36-48. Was `ImmutableSet` added? No. `std::byte::set`? No. ASCII? No. URI logic
 changed? No. Predicate flow refinement? No. Source integer-domain union
 syntax? No. Unicode normalization? No. Unicode categories? No. Grapheme
 clusters? No. Implicit `char<->Int` conversion? No. Implicit
@@ -615,10 +615,10 @@ representation specialization? No.
 | `identity(65)` | compile error |
 | `identity("A")` | compile error |
 | `take_int('A')` | compile error |
-| `take_int(char::codepoint('A'))` | valid |
-| `char::codepoint('A')` | `65` |
-| `char::codepoint('é')` | `233` |
-| `char::codepoint('😀')` | `128512` |
+| `take_int(std::char::codepoint('A'))` | valid |
+| `std::char::codepoint('A')` | `65` |
+| `std::char::codepoint('é')` | `233` |
+| `std::char::codepoint('😀')` | `128512` |
 | `char_codepoint(65)` (bare native, wrong dynamic kind) | runtime `CORE SEMANTIC TYPE` |
 | `['-', '.', '_', '~']` | `List[UnicodeChar]` |
 | `['A', 'é', '😀']` | `List[UnicodeChar]` |
@@ -643,12 +643,12 @@ backend comparison during development:
 - Single-quoted literals produce `UnicodeChar` directly.
 - `UnicodeChar` is not implicitly `Int` or `String`, in either direction.
 - Its scalar numeric value is exposed only through the explicit total
-  operation `char::codepoint`/`char_codepoint`.
+  operation `std::char::codepoint`/`char_codepoint`.
 - The runtime preserves that distinction even through untyped/dynamic
   execution paths, on all three backends.
 - `['-', '.', '_', '~']` infers as `List[UnicodeChar]` through ordinary
   existing `List[T]` inference, with `list_get` recovering `UnicodeChar`
   through the existing applied-type machinery — no char-specific List code.
 
-Not started: `ImmutableSet[T]`, `byte::set`, ASCII predicates, URI rewrites,
+Not started: `ImmutableSet[T]`, `std::byte::set`, ASCII predicates, URI rewrites,
 predicate refinement, Byte/Int64 representation specialization.

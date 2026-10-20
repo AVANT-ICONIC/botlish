@@ -219,7 +219,7 @@ jobs:
 
   golden:
     name: golden suites (Botlish-native tests, shard ${{ matrix.shard }}/4)
-    # The Botlish golden test suites (tests/golden/*.bot, lib/test.bot,
+    # The Botlish golden test suites (tests/golden/*.bot, stdlib/test.bot,
     # GOLDEN-TEST-FRAMEWORK.md, LARGE-SCALE-GOLDEN-MIGRATION.md) on every
     # backend, side by side with the Tcl tests they were ported from: every
     # Tcl test tests/golden/manifest.tsv lists as ported, and the golden test

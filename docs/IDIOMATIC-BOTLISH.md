@@ -188,7 +188,7 @@ the agent reported them:
 | 6 | Lists as tuples? | 3 | `principle.name-the-parts` (a near match of the first query; `tuple` hits it directly) | yes |
 | 7 | Why not a loop/`if` anywhere? | 5 | `concept.loops` (best page, `rule.loop-placement`, second) | partly: the answer is on the second entry |
 | 8 | Indexed operation still fallible? | 3 | `proof.list-bounds` (fifth of 7 in the list) | yes |
-| 9 | Does a helper share a mutable collection? | 4 | `stdlib.module.mutable_vector`, then `concept.values` | partly: no page says "a helper's mutation is invisible to the caller" |
+| 9 | Does a helper share a mutable collection? | 4 | `stdlib.module.std::mutable_vector`, then `concept.values` | partly: no page says "a helper's mutation is invisible to the caller" |
 
 24 invocations in total, 2.7 per question on average. Four of nine
 questions (1, 3, 6, 8) were fully answered by their first useful result and
@@ -208,7 +208,7 @@ answers to 2 and 4 outright once seen.
   specific question lands on its specific page. For question 7 the page led
   the near-match list of two queries that matched nothing, ahead of the
   better rule page; the near-match order was not changed.
-* `stdlib.module.mutable_vector`'s note is cut at "independent" in the
+* `stdlib.module.std::mutable_vector`'s note is cut at "independent" in the
   agent's view and never states the consequence for a helper call.
 
 ## 8. Questions still requiring a probe
@@ -273,7 +273,7 @@ keyword or summary mention.
 * The type is `UnicodeChar`, not `Char`; the pages use that name.
 * A UnicodeChar is not an integer. UNICODE-CHAR-LITERALS.md defines it as a
   scalar value of a type distinct from Int; the number is observed only
-  through `char::scalar_value`. The pages say "scalar value / code point".
+  through `std::char::scalar_value`. The pages say "scalar value / code point".
 * UTF-8 is how the native backends store a String, not a promise of the
   language, which promises a sequence of scalar values. The page says so.
 

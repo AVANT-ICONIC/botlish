@@ -29,25 +29,25 @@
 # allocation counts, the rendering text -- stays in those files.
 #
 # Imports: compiler and test (the framework); list and str (the Tcl
-# prelude's imports: list::at, str::length, str::concat, str::lowercase,
-# str::substring); mutable_array (the effectful predicate's state, as in its
-# Tcl program); linux::path and `import type linux::path::LinuxPath` (a
+# prelude's imports: std::list::at, std::str::length, std::str::concat, std::str::lowercase,
+# std::str::substring); mutable_array (the effectful predicate's state, as in its
+# Tcl program); std::linux::path and `import type std::linux::path::LinuxPath` (a
 # standard module's refinement, standing in for refinement-module-identity's
-# private module "validation"); `import type byte::Byte` (a source-defined
+# private module "validation"); `import type std::byte::Byte` (a source-defined
 # integer domain, as an eligible carrier and as a proven type that is not a
 # refinement).
 #
-# One context beside test::suite() is installed: Counter, the mutable state
+# One context beside std::test::suite() is installed: Counter, the mutable state
 # the effectful predicate bump? reads and writes. The code that needs it runs
 # in its registration function, and the body compares what it computed.
-import compiler
-import linux::path
-import list
-import mutable_array
-import str
-import test
-import type byte::Byte
-import type linux::path::LinuxPath
+import std::compiler
+import std::linux::path
+import std::list
+import std::mutable_array
+import std::str
+import std::test
+import type std::byte::Byte
+import type std::linux::path::LinuxPath
 
 # ---------------------------------------------------------------------------
 # Shared declarations (top-level only): the Tcl prelude of
@@ -61,19 +61,19 @@ refined type Query = str
 refined type Encoded = Query
 
 fn mail?(s: str) -> bool proves s: Mail:
-    str::length(s) > 3
+    std::str::length(s) > 3
 
 fn other_mail?(s: str) -> bool proves s: Mail:
-    str::length(s) > 4
+    std::str::length(s) > 4
 
 fn query?(s: str) -> bool proves s: Query:
-    str::length(s) > 0
+    std::str::length(s) > 0
 
 fn encoded?(q: Query) -> bool proves q: Encoded:
-    str::length(q) > 1
+    std::str::length(q) > 1
 
 fn send(m: Mail) -> int:
-    str::length(m)
+    std::str::length(m)
 
 fn show(s: str) -> str:
     s
@@ -107,7 +107,7 @@ context struct Counter:
     a: MutableArray[int]
 
 # refined-signatures.test's local HighNibble (the Tcl file's highNibbleDecl,
-# lib/byte.bot's sparse domain declared over Int): a 16-value sparse example
+# stdlib/byte.bot's sparse domain declared over Int): a 16-value sparse example
 # type for generic range and exact-set machinery.
 type HighNibble = Int in {
     0, 16, 32, 48,
@@ -122,31 +122,31 @@ type HighNibble = Int in {
 fn register_syntax_tests():
     # refinement-refined-is-contextual: "refined" is an ordinary name
     # everywhere but before "type".
-    fn refined_is_contextual() errors compiler::CompilerError:
+    fn refined_is_contextual() errors std::compiler::CompilerError:
         static compile:
             fn refined(x):
                 x + 1
 
             refined_value = refined(41)
             [refined_value]
-    test::value("refinement-refined-is-contextual", [42], refined_is_contextual)
+    std::test::value("refinement-refined-is-contextual", [42], refined_is_contextual)
 
     # refinement-proves-is-contextual: "proves" is an ordinary name
     # everywhere but after a result type.
-    fn proves_is_contextual() errors compiler::CompilerError:
+    fn proves_is_contextual() errors std::compiler::CompilerError:
         static compile:
             fn f(proves):
                 proves + 1
 
             proves = 2
             [f(proves), proves]
-    test::value("refinement-proves-is-contextual", [3, 2], proves_is_contextual)
+    std::test::value("refinement-proves-is-contextual", [3, 2], proves_is_contextual)
 
 fn register_identity_tests():
     # refinement-nominal-identity: a refinement is a new nominal type, not
     # an alias: Mail, Query and str are three types. A sibling's proof is
     # no proof of Mail, a carrier value is none, Mail's own predicate is.
-    fn sibling_proof() errors compiler::CompilerError:
+    fn sibling_proof() errors std::compiler::CompilerError:
         static compile:
             fn f(s: str) -> int:
                 if query?(s):
@@ -154,12 +154,12 @@ fn register_identity_tests():
                 else:
                     0
             f("abcd")
-    test::rejects_at("refinement-nominal-identity/sibling", compiler::DiagnosticCode::Type, 153, 26, sibling_proof)
-    fn carrier_value() errors compiler::CompilerError:
+    std::test::rejects_at("refinement-nominal-identity/sibling", std::compiler::DiagnosticCode::Type, 153, 26, sibling_proof)
+    fn carrier_value() errors std::compiler::CompilerError:
         static compile:
             send("abcd")
-    test::rejects_at("refinement-nominal-identity/carrier", compiler::DiagnosticCode::Type, 160, 18, carrier_value)
-    fn own_proof() errors compiler::CompilerError:
+    std::test::rejects_at("refinement-nominal-identity/carrier", std::compiler::DiagnosticCode::Type, 160, 18, carrier_value)
+    fn own_proof() errors std::compiler::CompilerError:
         static compile:
             fn f(s: str) -> int:
                 if mail?(s):
@@ -167,11 +167,11 @@ fn register_identity_tests():
                 else:
                     0
             f("abcd")
-    test::value("refinement-nominal-identity/proven", 4, own_proof)
+    std::test::value("refinement-nominal-identity/proven", 4, own_proof)
 
     # refinement-owner-entry-program: the entry program owns its own
     # refinements: its predicate mints Mail.
-    fn owner_entry_program() errors compiler::CompilerError:
+    fn owner_entry_program() errors std::compiler::CompilerError:
         static compile:
             fn f(s: str) -> int:
                 if mail?(s):
@@ -179,32 +179,32 @@ fn register_identity_tests():
                 else:
                     0
             [f("abcd"), f("ab")]
-    test::value("refinement-owner-entry-program", [4, 0], owner_entry_program)
+    std::test::value("refinement-owner-entry-program", [4, 0], owner_entry_program)
 
     # refinement-module-identity: a module's refinement has its
-    # path-derived identity (linux::path::LinuxPath), usable qualified and
+    # path-derived identity (std::linux::path::LinuxPath), usable qualified and
     # through `import type`, proven for the entry program by the owner's
     # predicate and accepted by the owner's own function over it.
-    fn module_identity() errors compiler::CompilerError:
+    fn module_identity() errors std::compiler::CompilerError:
         static compile:
             fn short(p: LinuxPath) -> LinuxPath:
                 p
 
-            fn qualified(p: linux::path::LinuxPath) -> int:
-                str::length(linux::path::text(p))
+            fn qualified(p: std::linux::path::LinuxPath) -> int:
+                std::str::length(std::linux::path::text(p))
 
             fn ok(s: str) -> int:
-                if linux::path::valid?(s):
-                    qualified(short(s)) + str::length(linux::path::text(s))
+                if std::linux::path::valid?(s):
+                    qualified(short(s)) + std::str::length(std::linux::path::text(s))
                 else:
                     0
 
             [ok("abcd"), ok("")]
-    test::value("refinement-module-identity", [8, 0], module_identity)
+    std::test::value("refinement-module-identity", [8, 0], module_identity)
 
     # refinement-chain-forgets-transitively: Encoded forgets to Query and to
     # str; nothing strengthens a Query back to an Encoded.
-    fn chain_forgets() errors compiler::CompilerError:
+    fn chain_forgets() errors std::compiler::CompilerError:
         static compile:
             fn as_query(q: Query) -> str:
                 q
@@ -212,15 +212,15 @@ fn register_identity_tests():
             fn f(s: str) -> str:
                 if query?(s):
                     if encoded?(s):
-                        str::concat(as_query(s), show(s))
+                        std::str::concat(as_query(s), show(s))
                     else:
                         "no"
                 else:
                     "no"
 
             [f("ab"), f("a")]
-    test::value("refinement-chain-forgets-transitively/forgets", ["abab", "no"], chain_forgets)
-    fn chain_no_strengthening() errors compiler::CompilerError:
+    std::test::value("refinement-chain-forgets-transitively/forgets", ["abab", "no"], chain_forgets)
+    fn chain_no_strengthening() errors std::compiler::CompilerError:
         static compile:
             fn need(e: Encoded) -> int:
                 1
@@ -232,23 +232,23 @@ fn register_identity_tests():
                     0
 
             f("ab")
-    test::rejects_at("refinement-chain-forgets-transitively/no-strengthening", compiler::DiagnosticCode::Type, 230, 26, chain_no_strengthening)
+    std::test::rejects_at("refinement-chain-forgets-transitively/no-strengthening", std::compiler::DiagnosticCode::Type, 230, 26, chain_no_strengthening)
 
     # refinement-chain-order-independent: Late's carrier Early is declared
     # after it (top of the suite); the chain resolves.
-    fn chain_order_independent() errors compiler::CompilerError:
+    fn chain_order_independent() errors std::compiler::CompilerError:
         static compile:
             fn keep(x: Late) -> Late:
                 x
 
             1
-    test::value("refinement-chain-order-independent", 1, chain_order_independent)
+    std::test::value("refinement-chain-order-independent", 1, chain_order_independent)
 
 fn register_carrier_tests():
     # refinement-carrier-eligible: scalar value carriers (bool, UnicodeChar,
     # int, str), an integer domain (Byte) and refinements (Short = Text)
     # are eligible; a predicate over the int carrier proves Even.
-    fn carrier_eligible() errors compiler::CompilerError:
+    fn carrier_eligible() errors std::compiler::CompilerError:
         static compile:
             fn even?(n: int) -> bool proves n: Even:
                 mod(n, 2) == 0
@@ -263,7 +263,7 @@ fn register_carrier_tests():
                     -1
 
             [f(10), f(3)]
-    test::value("refinement-carrier-eligible", [3, -1], carrier_eligible)
+    std::test::value("refinement-carrier-eligible", [3, -1], carrier_eligible)
 
 # ---------------------------------------------------------------------------
 # refinement-values.test: proof clauses and their validation
@@ -271,98 +271,98 @@ fn register_carrier_tests():
 fn register_proof_clause_tests():
     # refinement-proof-target-missing: a proof clause must name an ordinary
     # parameter -- neither a missing one nor a flag.
-    fn target_missing() errors compiler::CompilerError:
+    fn target_missing() errors std::compiler::CompilerError:
         static compile:
             fn p(s: str) -> bool proves t: Mail:
                 true
             1
-    test::rejects_containing("refinement-proof-target-missing/no-parameter", compiler::DiagnosticCode::ProofClause, "must name one of the function's ordinary parameters: the function has no parameter \"t\" (its parameters: s)", target_missing)
-    fn target_flag() errors compiler::CompilerError:
+    std::test::rejects_containing("refinement-proof-target-missing/no-parameter", std::compiler::DiagnosticCode::ProofClause, "must name one of the function's ordinary parameters: the function has no parameter \"t\" (its parameters: s)", target_missing)
+    fn target_flag() errors std::compiler::CompilerError:
         static compile:
             fn p(s: str, flags :x) -> bool proves x: Mail:
                 true
             1
-    test::rejects_containing("refinement-proof-target-missing/flag", compiler::DiagnosticCode::ProofClause, "\"x\" is a flag, not an ordinary parameter", target_flag)
+    std::test::rejects_containing("refinement-proof-target-missing/flag", std::compiler::DiagnosticCode::ProofClause, "\"x\" is a flag, not an ordinary parameter", target_flag)
 
     # refinement-proof-target-not-refinement: the proven type must be a
     # refinement: not the carrier itself, not an integer domain, not an
     # unknown name.
-    fn target_carrier() errors compiler::CompilerError:
+    fn target_carrier() errors std::compiler::CompilerError:
         static compile:
             fn p(s: str) -> bool proves s: str:
                 true
             1
-    test::rejects_containing("refinement-proof-target-not-refinement/carrier", compiler::DiagnosticCode::ProofClause, "is str, which is not a refinement type", target_carrier)
-    fn target_domain() errors compiler::CompilerError:
+    std::test::rejects_containing("refinement-proof-target-not-refinement/carrier", std::compiler::DiagnosticCode::ProofClause, "is str, which is not a refinement type", target_carrier)
+    fn target_domain() errors std::compiler::CompilerError:
         static compile:
             fn p(n: int) -> bool proves n: Byte:
                 true
             1
-    test::rejects("refinement-proof-target-not-refinement/domain", compiler::DiagnosticCode::ProofClause, target_domain)
-    fn target_unknown() errors compiler::CompilerError:
+    std::test::rejects("refinement-proof-target-not-refinement/domain", std::compiler::DiagnosticCode::ProofClause, target_domain)
+    fn target_unknown() errors std::compiler::CompilerError:
         static compile:
             fn p(s: str) -> bool proves s: Nope:
                 true
             1
-    test::rejects("refinement-proof-target-not-refinement/unknown", compiler::DiagnosticCode::ProofClause, target_unknown)
+    std::test::rejects("refinement-proof-target-not-refinement/unknown", std::compiler::DiagnosticCode::ProofClause, target_unknown)
 
     # refinement-proof-returns-bool: a proof-producing function declares
     # -> bool (or -> unit, a validator).
-    fn returns_int() errors compiler::CompilerError:
+    fn returns_int() errors std::compiler::CompilerError:
         static compile:
             fn p(s: str) -> int proves s: Mail:
                 1
             1
-    test::rejects_message("refinement-proof-returns-bool/int", compiler::DiagnosticCode::ProofClause, "a proof-producing function must declare \"-> bool\" (a predicate: its true result is the proof) or \"-> unit\" (a validator: its normal completion is the proof), but \"proves s: Mail\" is on a function declared -> int", returns_int)
-    fn returns_undeclared() errors compiler::CompilerError:
+    std::test::rejects_message("refinement-proof-returns-bool/int", std::compiler::DiagnosticCode::ProofClause, "a proof-producing function must declare \"-> bool\" (a predicate: its true result is the proof) or \"-> unit\" (a validator: its normal completion is the proof), but \"proves s: Mail\" is on a function declared -> int", returns_int)
+    fn returns_undeclared() errors std::compiler::CompilerError:
         static compile:
             fn p(s: str) proves s: Mail:
                 true
             1
-    test::rejects_containing("refinement-proof-returns-bool/undeclared", compiler::DiagnosticCode::ProofClause, "with no declared result type", returns_undeclared)
+    std::test::rejects_containing("refinement-proof-returns-bool/undeclared", std::compiler::DiagnosticCode::ProofClause, "with no declared result type", returns_undeclared)
 
     # refinement-proof-carrier-mismatch: the proven parameter must already
     # be of the carrier (or of a refinement that forgets to it).
-    fn mismatch_int() errors compiler::CompilerError:
+    fn mismatch_int() errors std::compiler::CompilerError:
         static compile:
             fn p(n: int) -> bool proves n: Mail:
                 true
             1
-    test::rejects_message("refinement-proof-carrier-mismatch/int", compiler::DiagnosticCode::ProofClause, "proof carrier mismatch: parameter \"n\" is declared int, but Mail refines str, and a int value does not forget to a str (a proof can only strengthen what the parameter already is)", mismatch_int)
-    fn mismatch_untyped() errors compiler::CompilerError:
+    std::test::rejects_message("refinement-proof-carrier-mismatch/int", std::compiler::DiagnosticCode::ProofClause, "proof carrier mismatch: parameter \"n\" is declared int, but Mail refines str, and a int value does not forget to a str (a proof can only strengthen what the parameter already is)", mismatch_int)
+    fn mismatch_untyped() errors std::compiler::CompilerError:
         static compile:
             fn p(s) -> bool proves s: Mail:
                 true
             1
-    test::rejects_message("refinement-proof-carrier-mismatch/untyped", compiler::DiagnosticCode::ProofClause, "the proven parameter \"s\" must declare its type: \"proves s: Mail\" refines a str value, so write \"s: str\" (or a refinement that forgets to it)", mismatch_untyped)
-    fn mismatch_chain() errors compiler::CompilerError:
+    std::test::rejects_message("refinement-proof-carrier-mismatch/untyped", std::compiler::DiagnosticCode::ProofClause, "the proven parameter \"s\" must declare its type: \"proves s: Mail\" refines a str value, so write \"s: str\" (or a refinement that forgets to it)", mismatch_untyped)
+    fn mismatch_chain() errors std::compiler::CompilerError:
         static compile:
             fn p(s: str) -> bool proves s: Encoded:
                 true
             1
-    test::rejects_message("refinement-proof-carrier-mismatch/chain", compiler::DiagnosticCode::ProofClause, "proof carrier mismatch: parameter \"s\" is declared str, but Encoded refines str[Query], and a str value does not forget to a str[Query] (a proof can only strengthen what the parameter already is)", mismatch_chain)
+    std::test::rejects_message("refinement-proof-carrier-mismatch/chain", std::compiler::DiagnosticCode::ProofClause, "proof carrier mismatch: parameter \"s\" is declared str, but Encoded refines str[Query], and a str value does not forget to a str[Query] (a proof can only strengthen what the parameter already is)", mismatch_chain)
 
     # refinement-proof-arity-abi: a proof clause changes neither arity nor
     # the call: the predicate is an ordinary bool function (and value).
-    fn arity_abi() errors compiler::CompilerError:
+    fn arity_abi() errors std::compiler::CompilerError:
         static compile:
             ok = mail?("abcd")
             f = mail?
             [ok, not ok, f("ab")]
-    test::value("refinement-proof-arity-abi", [true, false, false], arity_abi)
+    std::test::value("refinement-proof-arity-abi", [true, false, false], arity_abi)
 
     # refinement-proof-with-errors: a proof clause sits between the result
     # type and an errors clause; the error edge proves nothing, the true
     # edge proves.
-    fn with_errors() errors compiler::CompilerError:
+    fn with_errors() errors std::compiler::CompilerError:
         static compile:
             fn p(s: str) -> bool proves s: Mail errors Weird:
                 if s == "?":
                     fail Weird
-                str::length(s) > 1
+                std::str::length(s) > 1
 
             fn take(m: Mail) -> int:
-                str::length(m)
+                std::str::length(m)
 
             fn f(s: str) -> int:
                 ok = p(s):
@@ -374,7 +374,7 @@ fn register_proof_clause_tests():
                     0
 
             [f("abc"), f("a"), f("?")]
-    test::value("refinement-proof-with-errors", [3, 0, -1], with_errors)
+    std::test::value("refinement-proof-with-errors", [3, 0, -1], with_errors)
 
 # ---------------------------------------------------------------------------
 # refinement-values.test: forgetting, no strengthening, the flow of proofs
@@ -382,29 +382,29 @@ fn register_proof_clause_tests():
 fn register_forgetting_tests():
     # refinement-forgetting: a refined value is usable wherever its carrier
     # is, with no conversion.
-    fn forgetting() errors compiler::CompilerError:
+    fn forgetting() errors std::compiler::CompilerError:
         static compile:
             fn f(s: str) -> List[str]:
                 if mail?(s):
-                    [show(s), str::concat(s, "!"), str::lowercase(s)]
+                    [show(s), std::str::concat(s, "!"), std::str::lowercase(s)]
                 else:
                     []
 
             f("abcd")
-    test::value("refinement-forgetting", ["abcd", "abcd!", "abcd"], forgetting)
+    std::test::value("refinement-forgetting", ["abcd", "abcd!", "abcd"], forgetting)
 
     # refinement-no-implicit-strengthening: a carrier value is never a
     # refinement without a proof.
-    fn no_implicit_strengthening() errors compiler::CompilerError:
+    fn no_implicit_strengthening() errors std::compiler::CompilerError:
         static compile:
             fn bad(s: str) -> int:
                 send(s)
             bad("abcd")
-    test::rejects_message("refinement-no-implicit-strengthening", compiler::DiagnosticCode::Type, "argument for parameter \"m\" cannot be proven to satisfy str[Mail] (argument type: str); expected Mail but found str: a refinement proof is required (a str value becomes Mail only where one of its owner's proof-producing functions has proven it: a predicate returned true for it, or a validator completed normally for it; there is no implicit conversion)", no_implicit_strengthening)
+    std::test::rejects_message("refinement-no-implicit-strengthening", std::compiler::DiagnosticCode::Type, "argument for parameter \"m\" cannot be proven to satisfy str[Mail] (argument type: str); expected Mail but found str: a refinement proof is required (a str value becomes Mail only where one of its owner's proof-producing functions has proven it: a predicate returned true for it, or a validator completed normally for it; there is no implicit conversion)", no_implicit_strengthening)
 
     # refinement-false-edge-no-proof: the false edge proves nothing about
     # the argument.
-    fn false_edge() errors compiler::CompilerError:
+    fn false_edge() errors std::compiler::CompilerError:
         static compile:
             fn f(s: str) -> int:
                 if mail?(s):
@@ -412,14 +412,14 @@ fn register_forgetting_tests():
                 else:
                     send(s)
             f("ab")
-    test::rejects_at("refinement-false-edge-no-proof", compiler::DiagnosticCode::Type, 413, 26, false_edge)
+    std::test::rejects_at("refinement-false-edge-no-proof", std::compiler::DiagnosticCode::Type, 413, 26, false_edge)
 
     # refinement-param-is-proven: inside a function, a refinement parameter
     # is proven.
-    fn param_is_proven() errors compiler::CompilerError:
+    fn param_is_proven() errors std::compiler::CompilerError:
         static compile:
             fn relay(m: Mail) -> int:
-                send(m) + str::length(m)
+                send(m) + std::str::length(m)
 
             fn f(s: str) -> int:
                 if mail?(s):
@@ -428,12 +428,12 @@ fn register_forgetting_tests():
                     0
 
             f("abcde")
-    test::value("refinement-param-is-proven", 10, param_is_proven)
+    std::test::value("refinement-param-is-proven", 10, param_is_proven)
 
 fn register_proof_flow_tests():
     # refinement-boolean-binding: the proof belongs to the Boolean value:
     # ok = p(s), a copy of ok, then if.
-    fn boolean_binding() errors compiler::CompilerError:
+    fn boolean_binding() errors std::compiler::CompilerError:
         static compile:
             fn f(s: str) -> int:
                 ok = mail?(s)
@@ -444,11 +444,11 @@ fn register_proof_flow_tests():
                     0
 
             [f("abcd"), f("ab")]
-    test::value("refinement-boolean-binding", [4, 0], boolean_binding)
+    std::test::value("refinement-boolean-binding", [4, 0], boolean_binding)
 
     # refinement-not-and-or: not, and, or: facts true on every path to an
     # outcome.
-    fn not_and_or() errors compiler::CompilerError:
+    fn not_and_or() errors std::compiler::CompilerError:
         static compile:
             fn neg(s: str) -> int:
                 if not mail?(s):
@@ -468,11 +468,11 @@ fn register_proof_flow_tests():
                     0
 
             [neg("abcd"), neg("a"), both("abcd", "efgh"), both("abcd", "e"), either("abcd"), either("a")]
-    test::value("refinement-not-and-or", [4, 0, 8, 0, 4, 0], not_and_or)
+    std::test::value("refinement-not-and-or", [4, 0, 8, 0, 4, 0], not_and_or)
 
     # refinement-or-needs-both: an or of a proof and an unrelated test
     # proves nothing.
-    fn or_needs_both() errors compiler::CompilerError:
+    fn or_needs_both() errors std::compiler::CompilerError:
         static compile:
             fn f(s: str, c: bool) -> int:
                 if mail?(s) or c:
@@ -480,11 +480,11 @@ fn register_proof_flow_tests():
                 else:
                     0
             f("abcd", true)
-    test::rejects_at("refinement-or-needs-both", compiler::DiagnosticCode::Type, 479, 26, or_needs_both)
+    std::test::rejects_at("refinement-or-needs-both", std::compiler::DiagnosticCode::Type, 479, 26, or_needs_both)
 
     # refinement-copy-of-proven-value: a local copy of a proven value is
     # the same value.
-    fn copy_of_proven() errors compiler::CompilerError:
+    fn copy_of_proven() errors std::compiler::CompilerError:
         static compile:
             fn f(s: str) -> int:
                 if mail?(s):
@@ -493,11 +493,11 @@ fn register_proof_flow_tests():
                 else:
                     0
             f("abcd")
-    test::value("refinement-copy-of-proven-value", 4, copy_of_proven)
+    std::test::value("refinement-copy-of-proven-value", 4, copy_of_proven)
 
     # refinement-proof-through-alias: proving an alias proves the value it
     # aliases.
-    fn through_alias() errors compiler::CompilerError:
+    fn through_alias() errors std::compiler::CompilerError:
         static compile:
             fn f(s: str) -> int:
                 x = s
@@ -506,12 +506,12 @@ fn register_proof_flow_tests():
                 else:
                     0
             f("abcd")
-    test::value("refinement-proof-through-alias", 4, through_alias)
+    std::test::value("refinement-proof-through-alias", 4, through_alias)
 
     # refinement-join-all-paths: a fact survives a join when every path
     # that reaches it proves it (a failing else, early returns on both
     # branches with two different predicates of Mail).
-    fn join_all_paths() errors compiler::CompilerError:
+    fn join_all_paths() errors std::compiler::CompilerError:
         static compile:
             fn guard(s: str) -> int errors Bad:
                 if mail?(s):
@@ -521,7 +521,7 @@ fn register_proof_flow_tests():
                 send(s)
 
             fn both_branches(s: str) -> int:
-                if str::length(s) > 10:
+                if std::str::length(s) > 10:
                     if not mail?(s):
                         return -1
                 else:
@@ -536,14 +536,14 @@ fn register_proof_flow_tests():
                 v
 
             [g("abcd"), g("a"), both_branches("abcde"), both_branches("abc")]
-    test::value("refinement-join-all-paths", [4, -9, 5, -2], join_all_paths)
+    std::test::value("refinement-join-all-paths", [4, -9, 5, -2], join_all_paths)
 
     # refinement-join-one-path: a fact proven on only one path does not
     # survive the join.
-    fn join_one_path() errors compiler::CompilerError:
+    fn join_one_path() errors std::compiler::CompilerError:
         static compile:
             fn f(s: str) -> int:
-                if str::length(s) > 2:
+                if std::str::length(s) > 2:
                     if mail?(s):
                         1
                     else:
@@ -552,11 +552,11 @@ fn register_proof_flow_tests():
                     3
                 send(s)
             f("abcd")
-    test::rejects_at("refinement-join-one-path", compiler::DiagnosticCode::Type, 553, 22, join_one_path)
+    std::test::rejects_at("refinement-join-one-path", std::compiler::DiagnosticCode::Type, 553, 22, join_one_path)
 
     # refinement-rebinding: facts belong to values, not spellings: a
     # shadowing parameter is not proven.
-    fn rebinding() errors compiler::CompilerError:
+    fn rebinding() errors std::compiler::CompilerError:
         static compile:
             fn f(s: str) -> int:
                 if mail?(s):
@@ -566,12 +566,12 @@ fn register_proof_flow_tests():
                 else:
                     0
             f("abcd")
-    test::rejects_at("refinement-rebinding", compiler::DiagnosticCode::Type, 564, 30, rebinding)
+    std::test::rejects_at("refinement-rebinding", std::compiler::DiagnosticCode::Type, 564, 30, rebinding)
 
     # refinement-rebinding-local: a local binding that shadows a proven name
     # is a different value: neither proven (/rejected) nor decided by the
     # earlier call (/value: mail?("xy") runs, and is false).
-    fn rebinding_local_rejected() errors compiler::CompilerError:
+    fn rebinding_local_rejected() errors std::compiler::CompilerError:
         static compile:
             fn f(s: str) -> int:
                 if mail?(s):
@@ -580,8 +580,8 @@ fn register_proof_flow_tests():
                 else:
                     0
             f("abcd")
-    test::rejects_at("refinement-rebinding-local/rejected", compiler::DiagnosticCode::Type, 579, 26, rebinding_local_rejected)
-    fn rebinding_local_value() errors compiler::CompilerError:
+    std::test::rejects_at("refinement-rebinding-local/rejected", std::compiler::DiagnosticCode::Type, 579, 26, rebinding_local_rejected)
+    fn rebinding_local_value() errors std::compiler::CompilerError:
         static compile:
             fn f(s: str) -> int:
                 if mail?(s):
@@ -593,7 +593,7 @@ fn register_proof_flow_tests():
                 else:
                     0
             f("abcd")
-    test::value("refinement-rebinding-local/value", 2, rebinding_local_value)
+    std::test::value("refinement-rebinding-local/value", 2, rebinding_local_value)
 
 # ---------------------------------------------------------------------------
 # refinement-values.test: returns and fields
@@ -601,7 +601,7 @@ fn register_proof_flow_tests():
 fn register_return_and_field_tests():
     # refinement-return: a function may return a refinement it has proven,
     # with no constructor.
-    fn proven_return() errors compiler::CompilerError:
+    fn proven_return() errors std::compiler::CompilerError:
         static compile:
             fn parse(s: str) -> Mail errors Invalid:
                 if mail?(s):
@@ -616,34 +616,34 @@ fn register_return_and_field_tests():
                 send(m)
 
             [f("abcd"), f("x")]
-    test::value("refinement-return", [4, -1], proven_return)
+    std::test::value("refinement-return", [4, -1], proven_return)
 
     # refinement-return-unproven: returning an unproven carrier value is
     # rejected.
-    fn unproven_return() errors compiler::CompilerError:
+    fn unproven_return() errors std::compiler::CompilerError:
         static compile:
             fn parse(s: str) -> Mail:
                 s
             parse("abcd")
-    test::rejects_message("refinement-return-unproven", compiler::DiagnosticCode::Type, "function result does not prove declared type str[Mail]; expected Mail but found str: a refinement proof is required (a str value becomes Mail only where one of its owner's proof-producing functions has proven it: a predicate returned true for it, or a validator completed normally for it; there is no implicit conversion)", unproven_return)
+    std::test::rejects_message("refinement-return-unproven", std::compiler::DiagnosticCode::Type, "function result does not prove declared type str[Mail]; expected Mail but found str: a refinement proof is required (a str value becomes Mail only where one of its owner's proof-producing functions has proven it: a predicate returned true for it, or a validator completed normally for it; there is no implicit conversion)", unproven_return)
 
     # refinement-field: a struct field of refinement type accepts only a
     # proven value (/unproven); the field is a refined value (/value).
-    fn field_value() errors compiler::CompilerError:
+    fn field_value() errors std::compiler::CompilerError:
         static compile:
             fn make(s: str) -> int:
                 if mail?(s):
                     r = Recipient {email: s}
-                    send(r.email) + str::length(r.email)
+                    send(r.email) + std::str::length(r.email)
                 else:
                     0
 
             [make("abcd"), make("a")]
-    test::value("refinement-field/value", [8, 0], field_value)
-    fn field_unproven() errors compiler::CompilerError:
+    std::test::value("refinement-field/value", [8, 0], field_value)
+    fn field_unproven() errors std::compiler::CompilerError:
         static compile:
             Recipient {email: "abcd"}
-    test::rejects_message("refinement-field/unproven", compiler::DiagnosticCode::Type, "field \"email\" of struct Recipient cannot be proven to satisfy its declared type str[Mail] (value type: str); expected Mail but found str: a refinement proof is required (a str value becomes Mail only where one of its owner's proof-producing functions has proven it: a predicate returned true for it, or a validator completed normally for it; there is no implicit conversion)", field_unproven)
+    std::test::rejects_message("refinement-field/unproven", std::compiler::DiagnosticCode::Type, "field \"email\" of struct Recipient cannot be proven to satisfy its declared type str[Mail] (value type: str); expected Mail but found str: a refinement proof is required (a str value becomes Mail only where one of its owner's proof-producing functions has proven it: a predicate returned true for it, or a validator completed normally for it; there is no implicit conversion)", field_unproven)
 
 # ---------------------------------------------------------------------------
 # refinement-values.test: method sugar, operators, equality and hashing
@@ -651,29 +651,29 @@ fn register_return_and_field_tests():
 fn register_method_and_operator_tests():
     # refinement-method-sugar-forgets: method sugar of carrier functions
     # applies to a refined value.
-    fn sugar_forgets() errors compiler::CompilerError:
+    fn sugar_forgets() errors std::compiler::CompilerError:
         static compile:
             fn f(s: str) -> int:
                 if mail?(s):
-                    s.length() + str::length(s.show())
+                    s.length() + std::str::length(s.show())
                 else:
                     0
             f("abcd")
-    test::value("refinement-method-sugar-forgets", 8, sugar_forgets)
+    std::test::value("refinement-method-sugar-forgets", 8, sugar_forgets)
 
     # refinement-method-sugar-one-way: a function requiring the refinement
     # is no method of a plain carrier value.
-    fn sugar_one_way() errors compiler::CompilerError:
+    fn sugar_one_way() errors std::compiler::CompilerError:
         static compile:
             fn f(s: str) -> int:
                 s.send()
             f("abcd")
-    test::rejects_at("refinement-method-sugar-one-way", compiler::DiagnosticCode::Type, 669, 17, sugar_one_way)
+    std::test::rejects_at("refinement-method-sugar-one-way", std::compiler::DiagnosticCode::Type, 669, 17, sugar_one_way)
 
     # refinement-method-sugar-ambiguity: no refinement-specific ranking: a
-    # length over Mail and str::length are both applicable to a proven
+    # length over Mail and std::str::length are both applicable to a proven
     # value.
-    fn sugar_ambiguity() errors compiler::CompilerError:
+    fn sugar_ambiguity() errors std::compiler::CompilerError:
         static compile:
             fn length(m: Mail) -> int:
                 0
@@ -685,36 +685,36 @@ fn register_method_and_operator_tests():
                     0
 
             f("abcd")
-    test::rejects_at("refinement-method-sugar-ambiguity", compiler::DiagnosticCode::AmbiguousMethodCall, 683, 23, sugar_ambiguity)
+    std::test::rejects_at("refinement-method-sugar-ambiguity", std::compiler::DiagnosticCode::AmbiguousMethodCall, 683, 23, sugar_ambiguity)
 
     # refinement-operators: operators take the carrier: equality and
     # comparison are the carrier's (/value), and concatenation returns the
     # carrier, not the refinement (/concat-forgets).
-    fn operators() errors compiler::CompilerError:
+    fn operators() errors std::compiler::CompilerError:
         static compile:
             fn f(s: str) -> List[bool]:
                 if mail?(s):
-                    joined = str::concat(s, "x")
+                    joined = std::str::concat(s, "x")
                     [s == "abcd", s != "abce", joined == "abcdx"]
                 else:
                     []
 
             f("abcd")
-    test::value("refinement-operators/value", [true, true, true], operators)
-    fn concat_forgets() errors compiler::CompilerError:
+    std::test::value("refinement-operators/value", [true, true, true], operators)
+    fn concat_forgets() errors std::compiler::CompilerError:
         static compile:
             fn f(s: str) -> int:
                 if mail?(s):
-                    joined = str::concat(s, "x")
+                    joined = std::str::concat(s, "x")
                     send(joined)
                 else:
                     0
             f("abcd")
-    test::rejects_at("refinement-operators/concat-forgets", compiler::DiagnosticCode::Type, 709, 26, concat_forgets)
+    std::test::rejects_at("refinement-operators/concat-forgets", std::compiler::DiagnosticCode::Type, 709, 26, concat_forgets)
 
     # refinement-equality-and-hash: equality and hashing are the carrier's,
     # never salted by the refinement.
-    fn equality_and_hash() errors compiler::CompilerError:
+    fn equality_and_hash() errors std::compiler::CompilerError:
         static compile:
             fn f(s: str, t: str) -> List[bool]:
                 if mail?(s):
@@ -726,7 +726,7 @@ fn register_method_and_operator_tests():
                     []
 
             f("abcd", "abcd")
-    test::value("refinement-equality-and-hash", [true, true, true, true], equality_and_hash)
+    std::test::value("refinement-equality-and-hash", [true, true, true, true], equality_and_hash)
 
 # ---------------------------------------------------------------------------
 # refinement-values.test: rendering, erasure, generic code, inference
@@ -734,7 +734,7 @@ fn register_method_and_operator_tests():
 fn register_erasure_and_generic_tests():
     # refinement-rendering-value: a refined value is its carrier value, at
     # top level and inside a list (compared, not rendered: see the fragment).
-    fn rendering_value() errors compiler::CompilerError:
+    fn rendering_value() errors std::compiler::CompilerError:
         static compile:
             fn pick(s: str) -> List[Mail]:
                 if mail?(s):
@@ -743,12 +743,12 @@ fn register_erasure_and_generic_tests():
                     []
 
             [pick("abcd"), pick("a")]
-    test::value("refinement-rendering-value", [["abcd"], []], rendering_value)
+    std::test::value("refinement-rendering-value", [["abcd"], []], rendering_value)
 
     # refinement-any-erasure: through an erased any the proof is lost
     # (/erased); where the compiler still knows the exact value, it is kept
     # (/exact).
-    fn any_erased() errors compiler::CompilerError:
+    fn any_erased() errors std::compiler::CompilerError:
         static compile:
             fn f(s: str) -> List[int]:
                 if mail?(s):
@@ -757,22 +757,22 @@ fn register_erasure_and_generic_tests():
                 else:
                     []
             f("abcd")
-    test::rejects_at("refinement-any-erasure/erased", compiler::DiagnosticCode::Type, 756, 30, any_erased)
-    fn any_exact() errors compiler::CompilerError:
+    std::test::rejects_at("refinement-any-erasure/erased", std::compiler::DiagnosticCode::Type, 756, 30, any_erased)
+    fn any_exact() errors std::compiler::CompilerError:
         static compile:
             fn f(s: str) -> int:
                 if mail?(s):
                     xs = [s, 1]
-                    send(list::at(xs, 0))
+                    send(std::list::at(xs, 0))
                 else:
                     0
             f("abcd")
-    test::value("refinement-any-erasure/exact", 4, any_exact)
+    std::test::value("refinement-any-erasure/exact", 4, any_exact)
 
     # refinement-generic-imprint: an identity function's result keeps the
     # refinement of its argument (send(m) is accepted) and the carrier of a
     # plain one.
-    fn generic_imprint() errors compiler::CompilerError:
+    fn generic_imprint() errors std::compiler::CompilerError:
         static compile:
             fn identity(x):
                 x
@@ -781,17 +781,17 @@ fn register_erasure_and_generic_tests():
                 if mail?(s):
                     m = identity(s)
                     p = identity("plain")
-                    send(m) + str::length(p)
+                    send(m) + std::str::length(p)
                 else:
                     0
 
             f("abcd")
-    test::value("refinement-generic-imprint", 9, generic_imprint)
+    std::test::value("refinement-generic-imprint", 9, generic_imprint)
 
     # refinement-contract-inference: an untyped function that passes its
     # parameter where a refinement is required requires the refinement of
     # its callers.
-    fn inferred_rejected() errors compiler::CompilerError:
+    fn inferred_rejected() errors std::compiler::CompilerError:
         static compile:
             fn relay(x):
                 send(x)
@@ -800,8 +800,8 @@ fn register_erasure_and_generic_tests():
                 relay(s)
 
             bad("abcd")
-    test::rejects_containing("refinement-contract-inference/rejected", compiler::DiagnosticCode::Type, "the parameter type inferred from the function body", inferred_rejected)
-    fn inferred_accepted() errors compiler::CompilerError:
+    std::test::rejects_containing("refinement-contract-inference/rejected", std::compiler::DiagnosticCode::Type, "the parameter type inferred from the function body", inferred_rejected)
+    fn inferred_accepted() errors std::compiler::CompilerError:
         static compile:
             fn relay(x):
                 send(x)
@@ -813,7 +813,7 @@ fn register_erasure_and_generic_tests():
                     0
 
             ok("abcd")
-    test::value("refinement-contract-inference/accepted", 4, inferred_accepted)
+    std::test::value("refinement-contract-inference/accepted", 4, inferred_accepted)
 
 # ---------------------------------------------------------------------------
 # refinement-values.test: repeated predicates
@@ -822,10 +822,10 @@ fn register_erasure_and_generic_tests():
 # writes the installed Counter, so an earlier call never decides a repeat.
 # Its first call sees 0 (true), every later one a larger count (false).
 fn bump?(s: str, context c: Counter) -> bool proves s: Mail:
-    n = mutable_array::at(c.a, 0):
+    n = std::mutable_array::at(c.a, 0):
         on IndexNotFound:
             return false
-    mutable_array::set(c.a, 0, n + 1):
+    std::mutable_array::set(c.a, 0, n + 1):
         on IndexNotFound:
             return false
     n == 0
@@ -833,7 +833,7 @@ fn bump?(s: str, context c: Counter) -> bool proves s: Mail:
 fn register_repeat_tests():
     # refinement-repeat-folds-true: a repeated proof predicate on the same
     # value, on the true edge (the compiler may decide it true).
-    fn repeat_true() errors compiler::CompilerError:
+    fn repeat_true() errors std::compiler::CompilerError:
         static compile:
             fn f(s: str) -> int:
                 if mail?(s):
@@ -845,11 +845,11 @@ fn register_repeat_tests():
                     3
 
             [f("abcd"), f("a")]
-    test::value("refinement-repeat-folds-true", [1, 3], repeat_true)
+    std::test::value("refinement-repeat-folds-true", [1, 3], repeat_true)
 
     # refinement-repeat-folds-false: the same invocation on the false edge
     # (decided false: an exact result, never a negative refinement).
-    fn repeat_false() errors compiler::CompilerError:
+    fn repeat_false() errors std::compiler::CompilerError:
         static compile:
             fn f(s: str) -> int:
                 if mail?(s):
@@ -861,12 +861,12 @@ fn register_repeat_tests():
                         3
 
             [f("abcd"), f("a")]
-    test::value("refinement-repeat-folds-false", [1, 3], repeat_false)
+    std::test::value("refinement-repeat-folds-false", [1, 3], repeat_false)
 
     # refinement-repeat-different-predicate: a different predicate proving
     # the same refinement is not decided (other_mail?("abcd") is false),
     # though the value is proven on both of its edges.
-    fn different_predicate() errors compiler::CompilerError:
+    fn different_predicate() errors std::compiler::CompilerError:
         static compile:
             fn f(s: str) -> int:
                 if mail?(s):
@@ -878,7 +878,7 @@ fn register_repeat_tests():
                     0
 
             [f("abcde"), f("abcd")]
-    test::value("refinement-repeat-different-predicate", [5, -4], different_predicate)
+    std::test::value("refinement-repeat-different-predicate", [5, -4], different_predicate)
 
     # refinement-effectful-not-folded: a proof predicate that reads or
     # writes mutable state still proves (take(s) on both edges of the
@@ -897,10 +897,10 @@ fn register_repeat_tests():
             []
 
     observed = f("x")
-    fn effectful_not_folded() errors compiler::CompilerError:
+    fn effectful_not_folded() errors std::compiler::CompilerError:
         static compile:
             observed
-    test::value("refinement-effectful-not-folded", ["x", "changed"], effectful_not_folded)
+    std::test::value("refinement-effectful-not-folded", ["x", "changed"], effectful_not_folded)
 
 fn register_refinement_values_tests():
     register_syntax_tests()
@@ -922,25 +922,25 @@ fn register_refinement_values_tests():
 fn register_refined_tests(s: str, lower: int, upper: int):
     # refined-type-test-kind-tests-on-unknown: integer?, string? and list?
     # of a value whose kind the function does not declare.
-    fn kind_tests() errors compiler::CompilerError:
+    fn kind_tests() errors std::compiler::CompilerError:
         static compile:
             fn f(v):
                 [integer?(v), string?(v), list?(v)]
 
             [f(1), f("a"), f([])]
-    test::value("refined-type-test-kind-tests-on-unknown", [[true, false, false], [false, true, false], [false, false, true]], kind_tests)
+    std::test::value("refined-type-test-kind-tests-on-unknown", [[true, false, false], [false, true, false], [false, false, true]], kind_tests)
 
     # refined-16: a substring past the end of the String fails with the
     # declared UpperOverrun (handled: the outcome becomes a value).
-    fn substring_range() errors compiler::CompilerError:
+    fn substring_range() errors std::compiler::CompilerError:
         static compile:
-            r = str::substring(s, lower, upper):
+            r = std::str::substring(s, lower, upper):
                 on LowerUnderrun:
                     "LowerUnderrun"
                 on UpperOverrun:
                     "UpperOverrun"
             r
-    test::value("refined-16", "UpperOverrun", substring_range)
+    std::test::value("refined-16", "UpperOverrun", substring_range)
 
 # ---------------------------------------------------------------------------
 # refined-signatures.test: verified ordinary-function result contracts
@@ -950,25 +950,25 @@ fn register_refined_tests(s: str, lower: int, upper: int):
 fn register_refined_signatures_tests(byte: int, flag: bool):
     # refined-signature-syntax-2: an unknown result type is a semantic
     # error, even in a function nothing calls.
-    fn unknown_result() errors compiler::CompilerError:
+    fn unknown_result() errors std::compiler::CompilerError:
         static compile:
             fn f() -> MissingType:
                 1
             0
-    test::rejects_containing("refined-signature-syntax-2", compiler::DiagnosticCode::Type, "unknown or invalid result type", unknown_result)
+    std::test::rejects_containing("refined-signature-syntax-2", std::compiler::DiagnosticCode::Type, "unknown or invalid result type", unknown_result)
 
     # refined-signature-verify-0: an ordinary primitive result declaration
     # is accepted by semantic subtype checking.
-    fn primitive_result() errors compiler::CompilerError:
+    fn primitive_result() errors std::compiler::CompilerError:
         static compile:
             fn f() -> bool:
                 true
             f()
-    test::value("refined-signature-verify-0", true, primitive_result)
+    std::test::value("refined-signature-verify-0", true, primitive_result)
 
     # refined-signature-verify-1: constant-mask facts verify a sparse
     # refined result; the call has the declared type.
-    fn constant_mask() errors compiler::CompilerError:
+    fn constant_mask() errors std::compiler::CompilerError:
         static compile:
             fn f(x) -> HighNibble:
                 bit_and(x, 240)
@@ -977,20 +977,20 @@ fn register_refined_signatures_tests(byte: int, flag: bool):
                 h
 
             need(f(byte))
-    test::value("refined-signature-verify-1", 16, constant_mask)
+    std::test::value("refined-signature-verify-1", 16, constant_mask)
 
     # refined-signature-verify-2: an invalid sparse result is rejected at
     # definition time.
-    fn invalid_sparse() errors compiler::CompilerError:
+    fn invalid_sparse() errors std::compiler::CompilerError:
         static compile:
             fn bad() -> HighNibble:
                 15
             0
-    test::rejects_containing("refined-signature-verify-2", compiler::DiagnosticCode::Type, "does not prove declared type", invalid_sparse)
+    std::test::rejects_containing("refined-signature-verify-2", std::compiler::DiagnosticCode::Type, "does not prove declared type", invalid_sparse)
 
     # refined-signature-verify-3: a finite branch join proves a sparse
     # result.
-    fn branch_join() errors compiler::CompilerError:
+    fn branch_join() errors std::compiler::CompilerError:
         static compile:
             fn f(x) -> HighNibble:
                 if x:
@@ -1002,12 +1002,12 @@ fn register_refined_signatures_tests(byte: int, flag: bool):
                 h
 
             need(f(flag))
-    test::value("refined-signature-verify-3", 0, branch_join)
+    std::test::value("refined-signature-verify-3", 0, branch_join)
 
     # refined-signature-verify-4: bit_or of two AND masks' exact sets proves
     # a sparse result an interval hull could not (128 and 112 are disjoint
     # masks together spanning HighNibble's domain).
-    fn exact_set_union() errors compiler::CompilerError:
+    fn exact_set_union() errors std::compiler::CompilerError:
         static compile:
             fn f(x) -> HighNibble:
                 bit_or(bit_and(x, 128), bit_and(x, 112))
@@ -1016,21 +1016,21 @@ fn register_refined_signatures_tests(byte: int, flag: bool):
                 h
 
             need(f(byte))
-    test::value("refined-signature-verify-4", 16, exact_set_union)
+    std::test::value("refined-signature-verify-4", 16, exact_set_union)
 
     # refined-signature-verify-4b: an interval hull alone does not prove a
     # sparse result when one side's exact set is over budget (63 has 64
     # submasks).
-    fn hull_only() errors compiler::CompilerError:
+    fn hull_only() errors std::compiler::CompilerError:
         static compile:
             fn f(x) -> HighNibble:
                 bit_or(bit_and(x, 63), bit_and(x, 192))
             0
-    test::rejects_containing("refined-signature-verify-4b", compiler::DiagnosticCode::Type, "does not prove declared type", hull_only)
+    std::test::rejects_containing("refined-signature-verify-4b", std::compiler::DiagnosticCode::Type, "does not prove declared type", hull_only)
 
-with context Counter {a: mutable_array::create(1, 0)}
-with context test::suite()
+with context Counter {a: std::mutable_array::create(1, 0)}
+with context std::test::suite()
 register_refinement_values_tests()
 register_refined_tests("abc", 2, 5)
 register_refined_signatures_tests(17, true)
-test::report()
+std::test::report()

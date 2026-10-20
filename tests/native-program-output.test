@@ -3,7 +3,7 @@
 #
 # main.tcl -backend cranelift used to run botlish-native with its standard
 # output and error in one pipe and keep only the last result line, so a
-# printing program (io::print_line, linux::io::write) showed nothing but its
+# printing program (std::io::print_line, std::linux::io::write) showed nothing but its
 # value. It now runs it with native::evalHir's `-output inherit`: the program
 # writes to main.tcl's own standard output and error, as a standalone
 # executable writes to its own, and the driver's result lines come back
@@ -18,7 +18,7 @@ source [file join [file dirname [file normalize [info script]]] helpers.tcl]
 source [file join $::projectRoot surface surface.tcl]
 source [file join $::projectRoot native native.tcl]
 
-# The programs print through linux::io, whose syscalls exist on Linux x86-64
+# The programs print through std::linux::io, whose syscalls exist on Linux x86-64
 # and AArch64 (each architecture's own transport, LINUX-SYSCALL-TRANSPORTS.md).
 testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
@@ -54,9 +54,9 @@ proc mainRun {args} {
 }
 
 # The program file NAME (in the tcltest temporary directory) of the Botlish
-# lines LINES, which print through linux::io.
+# lines LINES, which print through std::linux::io.
 proc printingProgram {name lines} {
-    return [makeFile [join [concat {"import io" "import linux::io"} $lines] \n]\n $name]
+    return [makeFile [join [concat {"import std::io" "import std::linux::io"} $lines] \n]\n $name]
 }
 
 set nativeBackends {cranelift cranelift-generic}
@@ -72,15 +72,15 @@ test native-output-one-line {S15: hello.bot's line is printed, then its value, o
 test native-output-lines-and-value {several lines, then a non-unit value} -constraints {nativeLinux nativeBuilt} -setup {
     set path [printingProgram native-output-lines.bot {
         ""
-        "fn lines() -> int errors io::WriteFailed:"
-        "    io::print_line(\"one\")"
-        "    io::print_line(\"two\")"
-        "    io::print_line(\"three\")"
+        "fn lines() -> int errors std::io::WriteFailed:"
+        "    std::io::print_line(\"one\")"
+        "    std::io::print_line(\"two\")"
+        "    std::io::print_line(\"three\")"
         "    3"
         ""
-        "with context linux::io::create()"
+        "with context std::linux::io::create()"
         "lines():"
-        "    on io::WriteFailed:"
+        "    on std::io::WriteFailed:"
         "        0"
     }]
 } -body {
@@ -106,14 +106,14 @@ test native-output-empty {a program that prints nothing shows only its value, as
 test native-output-stderr-separate {the program's error output is main.tcl's standard error, its output main.tcl's standard output} -constraints {nativeLinux nativeBuilt} -setup {
     set path [printingProgram native-output-stderr.bot {
         ""
-        "fn both() errors io::WriteFailed:"
-        "    io::print(\"out-a \")"
-        "    io::write_error_line(\"to stderr\")"
-        "    io::print_line(\"out-b\")"
+        "fn both() errors std::io::WriteFailed:"
+        "    std::io::print(\"out-a \")"
+        "    std::io::write_error_line(\"to stderr\")"
+        "    std::io::print_line(\"out-b\")"
         ""
-        "with context linux::io::create()"
+        "with context std::linux::io::create()"
         "both():"
-        "    on io::WriteFailed:"
+        "    on std::io::WriteFailed:"
         "        unit"
     }]
 } -body {
@@ -122,16 +122,16 @@ test native-output-stderr-separate {the program's error output is main.tcl's sta
     removeFile native-output-stderr.bot
 } -result [list "== native-output-stderr.bot (cranelift)\nout-a out-b\n   value: unit\n" "to stderr\n" 0]
 
-test native-output-raw-bytes {bytes linux::io::write writes reach main.tcl's standard output unchanged: no decoding, no newline translation} -constraints {nativeLinux nativeBuilt} -setup {
+test native-output-raw-bytes {bytes std::linux::io::write writes reach main.tcl's standard output unchanged: no decoding, no newline translation} -constraints {nativeLinux nativeBuilt} -setup {
     set path [makeFile [join {
-        "import abi::bytes"
-        "import byte"
-        "import linux::io"
+        "import std::abi::bytes"
+        "import std::byte"
+        "import std::linux::io"
         ""
         "fn raw() -> int:"
-        "    linux::io::write(abi::bytes::from_list([byte::from_int(255), byte::from_int(0), byte::from_int(128), byte::from_int(10), byte::from_int(13), byte::from_int(10)]))"
+        "    std::linux::io::write(std::abi::bytes::from_list([std::byte::from_int(255), std::byte::from_int(0), std::byte::from_int(128), std::byte::from_int(10), std::byte::from_int(13), std::byte::from_int(10)]))"
         ""
-        "with context linux::io::create()"
+        "with context std::linux::io::create()"
         "raw()"
         ""
     } \n] native-output-bytes.bot]
@@ -152,12 +152,12 @@ test native-output-failure-keeps-output {a program that fails after printing kee
         "    1 + forever(k + 1)"
         ""
         "fn go() -> int:"
-        "    io::print_line(\"before the failure\"):"
-        "        on io::WriteFailed:"
+        "    std::io::print_line(\"before the failure\"):"
+        "        on std::io::WriteFailed:"
         "            unit"
         "    forever(0)"
         ""
-        "with context linux::io::create()"
+        "with context std::linux::io::create()"
         "go()"
     }]
 } -body {
@@ -172,14 +172,14 @@ test native-output-failure-keeps-output {a program that fails after printing kee
 test native-output-not-a-result {output that looks like the driver's result lines, even unterminated, is output: the value is the program's} -constraints {nativeLinux nativeBuilt} -setup {
     set path [printingProgram native-output-lookalike.bot {
         ""
-        "fn fake() -> int errors io::WriteFailed:"
-        "    io::print_line(\"value 99\")"
-        "    io::print(\"error {NATIVE BUG} {not an error}\")"
+        "fn fake() -> int errors std::io::WriteFailed:"
+        "    std::io::print_line(\"value 99\")"
+        "    std::io::print(\"error {NATIVE BUG} {not an error}\")"
         "    7"
         ""
-        "with context linux::io::create()"
+        "with context std::linux::io::create()"
         "fake():"
-        "    on io::WriteFailed:"
+        "    on std::io::WriteFailed:"
         "        0"
     }]
 } -body {
@@ -190,12 +190,12 @@ test native-output-not-a-result {output that looks like the driver's result line
 
 test native-output-several-files {each file's output comes between its header and its value line} -constraints {nativeLinux nativeBuilt} -setup {
     set first [printingProgram native-output-first.bot {
-        "" "fn p() errors io::WriteFailed:" "    io::print_line(\"first\")" ""
-        "with context linux::io::create()" "p():" "    on io::WriteFailed:" "        unit"
+        "" "fn p() errors std::io::WriteFailed:" "    std::io::print_line(\"first\")" ""
+        "with context std::linux::io::create()" "p():" "    on std::io::WriteFailed:" "        unit"
     }]
     set second [printingProgram native-output-second.bot {
-        "" "fn p() -> int errors io::WriteFailed:" "    io::print_line(\"second\")" "    2" ""
-        "with context linux::io::create()" "p():" "    on io::WriteFailed:" "        0"
+        "" "fn p() -> int errors std::io::WriteFailed:" "    std::io::print_line(\"second\")" "    2" ""
+        "with context std::linux::io::create()" "p():" "    on std::io::WriteFailed:" "        0"
     }]
 } -body {
     lindex [mainRun -backend cranelift $first $second] 0
@@ -209,19 +209,19 @@ test native-output-agrees-with-executable {the output main.tcl -backend cranelif
     set path [file join $dir agree.bot]
     set channel [open $path w]
     puts $channel [join {
-        "import io"
-        "import linux::io"
+        "import std::io"
+        "import std::linux::io"
         ""
-        "fn lines(k: int) -> int errors io::WriteFailed:"
+        "fn lines(k: int) -> int errors std::io::WriteFailed:"
         "    if k == 0:"
         "        return 0"
-        "    io::print_line(\"line\")"
-        "    io::write_error_line(\"err\")"
+        "    std::io::print_line(\"line\")"
+        "    std::io::write_error_line(\"err\")"
         "    1 + lines(k - 1)"
         ""
-        "with context linux::io::create()"
+        "with context std::linux::io::create()"
         "lines(3):"
-        "    on io::WriteFailed:"
+        "    on std::io::WriteFailed:"
         "        0"
     } \n]
     close $channel

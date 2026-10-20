@@ -33,11 +33,11 @@ bench/refined-checks.bot:
   rbox/runbox (total, call-boundary rbox, call-boundary runbox) off: 7/11 boundary 3/5
   rbox/runbox (total, call-boundary rbox, call-boundary runbox) on:  7/9 boundary 3/3
   machine code bytes off 9089 on 9080 (-9)
-    gains: ascii::is_digit<int> params raw result val
-    gains: ascii::is_upper<int> params raw result val
-    gains: ascii::is_lower<int> params raw result val
-    gains: ascii::is_alphabetic<int> params raw result val
-    gains: ascii::is_alphanumeric<int> params raw result val
+    gains: std::ascii::is_digit<int> params raw result val
+    gains: std::ascii::is_upper<int> params raw result val
+    gains: std::ascii::is_lower<int> params raw result val
+    gains: std::ascii::is_alphabetic<int> params raw result val
+    gains: std::ascii::is_alphanumeric<int> params raw result val
     gains: check<int, int, str, str> params raw,val,val,val result val (recursive)
 bench/source-checks.bot:
   instances examined 6; raw parameter positions 0; raw results 0; both 0; any raw 0 (recursive 0, non-recursive 0); tagged-only 6; emitted NIR functions with a raw signature 0 of 7
@@ -72,11 +72,11 @@ bench/uri-steady.bot:
   rbox/runbox (total, call-boundary rbox, call-boundary runbox) off: 5/7 boundary 1/3
   rbox/runbox (total, call-boundary rbox, call-boundary runbox) on:  5/5 boundary 1/1
   machine code bytes off 5462 on 5471 (9)
-    gains: ascii::is_digit<int> params raw result val
-    gains: ascii::is_upper<int> params raw result val
-    gains: ascii::is_lower<int> params raw result val
-    gains: ascii::is_alphabetic<int> params raw result val
-    gains: ascii::is_alphanumeric<int> params raw result val
+    gains: std::ascii::is_digit<int> params raw result val
+    gains: std::ascii::is_upper<int> params raw result val
+    gains: std::ascii::is_lower<int> params raw result val
+    gains: std::ascii::is_alphabetic<int> params raw result val
+    gains: std::ascii::is_alphanumeric<int> params raw result val
 examples/stdlib/ai_text_clean.bot:
   instances examined 5; raw parameter positions 0; raw results 0; both 0; any raw 0 (recursive 0, non-recursive 0); tagged-only 5; emitted NIR functions with a raw signature 0 of 5
   rejection tags: not-int 11 suppressed-mixed-tagged-use 2

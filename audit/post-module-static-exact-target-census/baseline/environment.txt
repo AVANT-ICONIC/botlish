@@ -1,7 +1,7 @@
 tree: 924482b9774589a55612ffcec5f394e11b3d6db4 (Regenerate the scalar assembly audit corpus)
 module-static milestone commit: f037c7dd54b6e9c5086994e3d4a5c44de8e34caf (POST-R2.a.1: module-static retained values)
 working tree: 0 modified production files
-lib/web.bot: blob 0d038f058b32274c54516440b4eca93ea223b24d; diff vs R2.a.3 freeze 05ae3d8: comment-only (4ef02f4); diff vs prior census 2b82c5b: none
+stdlib/web.bot: blob 0d038f058b32274c54516440b4eca93ea223b24d; diff vs R2.a.3 freeze 05ae3d8: comment-only (4ef02f4); diff vs prior census 2b82c5b: none
 bench/refined-checks.ir: blob 7d256ad4e3487d6ce8c579b092effc2e0efaefd9
 native/src tree: 1c9efedbaa8ffd24d3925177812d749c03986a28
 production binary: native/target/release/botlish-native sha256 6ee65e438f8f7a96… (cargo build --release, [profile.release] debug = 1)

@@ -3,21 +3,21 @@
 # The thunked APIs of processthreadsapi.h (static inline functions, table-redirected
 # names, macros): externs of the C wrappers in the shim library (C-BINDGEN.md,
 # "Thunks"). Build the shim with `tools/c-bindgen.tcl build`.
-import ffi::c
+import std::ffi::c
 
 extern c library "botlish_shim_win32_e3f8535c"
 
 # C: static inline HANDLE GetCurrentProcessToken(void)
 extern c fn GetCurrentProcessToken named "botlish_win32_GetCurrentProcessToken"(
     
-) -> ffi::c::Ptr[ffi::c::Void]
+) -> std::ffi::c::Ptr[std::ffi::c::Void]
 
 # C: static inline HANDLE GetCurrentThreadToken(void)
 extern c fn GetCurrentThreadToken named "botlish_win32_GetCurrentThreadToken"(
     
-) -> ffi::c::Ptr[ffi::c::Void]
+) -> std::ffi::c::Ptr[std::ffi::c::Void]
 
 # C: static inline HANDLE GetCurrentThreadEffectiveToken(void)
 extern c fn GetCurrentThreadEffectiveToken named "botlish_win32_GetCurrentThreadEffectiveToken"(
     
-) -> ffi::c::Ptr[ffi::c::Void]
+) -> std::ffi::c::Ptr[std::ffi::c::Void]

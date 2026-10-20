@@ -6,9 +6,9 @@
 # are emitted there and counted in the caller's `guards`; the leaf's
 # representation blockers were counted nowhere (its own function is not even
 # emitted once every call to it inlines). native::report then threw for an
-# ordinary uriEscape call (today: web::uri_escape_text, lib/web.bot), "generic lowering emitted 10 kind guard(s) for 8
-# blocker(s)": web.bot's high_nibble inlines byte::high_nibble and
-# byte::nibble, each of whose generic instance needs one `bit_and` guard.
+# ordinary uriEscape call (today: std::web::uri_escape_text, stdlib/web.bot), "generic lowering emitted 10 kind guard(s) for 8
+# blocker(s)": web.bot's high_nibble inlines std::byte::high_nibble and
+# std::byte::nibble, each of whose generic instance needs one `bit_and` guard.
 # Those guards are the leaves' own checks, the same ones their functions make
 # when the calls are not inlined, so the NIR is unchanged; a function's
 # blockers now include each inlined leaf's, once per inlined call.
@@ -56,32 +56,32 @@ proc guardLines {nir name} {
     return $lines
 }
 
-set uriEscapeSource "import web\nweb::uri_escape_text(\"a b\")"
+set uriEscapeSource "import std::web\nstd::web::uri_escape_text(\"a b\")"
 
 # The generic blocker/guard counts of every uriEscape program below grew by
 # one with STDLIB-NAMESPACES.md: web.bot's esc_bytes now guards its
-# list::at read with `i < 0 or i >= list::length(bytes)` (which proves the
+# std::list::at read with `i < 0 or i >= std::list::length(bytes)` (which proves the
 # read, so no IndexNotFound reaches uriEscape), and the new `i < 0` is one
 # more Int comparison on the untyped parameter i -- one representation
 # blocker, one kind guard. Guards still equal blockers.
 #
 # The declared slice errors (LowerUnderrun/UpperOverrun) moved them again,
 # measured per function against the tree before that change: esc_from now
-# guards its str::substring with `i < 0 or i >= str::length(text)`, one more
+# guards its std::str::substring with `i < 0 or i >= std::str::length(text)`, one more
 # Int comparison on its untyped i (3 -> 4 blockers: every uriEscape program
 # +1); emailish?'s char_at guards its slice with `i < 0 or i >= n`, whose
 # comparison is now the one kind check of i (the slice's i and i + 1 below
 # it see a proven Int), so each of its two generic instances goes 2 -> 1
 # (05-refined-strings.ir and 06-refined-strings.hir, which call both
 # Emailish? and uriEscape: -2 + 1). REFINEMENT-VALUES.md replaced those two
-# examples, whose natives (lib/web.tcl) are gone, with
+# examples, whose natives (stdlib/web.tcl) are gone, with
 # examples/refinement/refined-strings.bot.
 
-test native-report-inlined-leaf-1 {native::report accepts an ordinary web::uri_escape_text call, directly and through an untyped wrapper, and web::emailish?(5) (-strict 0: its declared str parameter becomes a checked guard that always fails)} -body {
+test native-report-inlined-leaf-1 {native::report accepts an ordinary std::web::uri_escape_text call, directly and through an untyped wrapper, and std::web::emailish?(5) (-strict 0: its declared str parameter becomes a checked guard that always fails)} -body {
     lmap text [list \
         $uriEscapeSource \
-        "import web\nfn h(x):\n    web::uri_escape_text(x)\nh(\"a b\")" \
-        "import web\nweb::emailish?(5)"] {
+        "import std::web\nfn h(x):\n    std::web::uri_escape_text(x)\nh(\"a b\")" \
+        "import std::web\nstd::web::emailish?(5)"] {
         reportCounts [sourceHir $text]
     }
 } -result {{12 12 0 0 0} {12 12 0 0 0} {7 7 0 0 1}}
@@ -99,7 +99,7 @@ test native-report-inlined-leaf-3 {inlining moves guards and blockers together: 
         set lowered [native::lowered $hir -specialize 0 -tiny-leaf-inline-opt $opt]
         list [dict get $lowered statistics blockers] [dict get $lowered statistics guards] \
             [llength [lmap info [dict get $lowered functions] {
-                if {[dict get $info name] ni {byte::high_nibble byte::nibble}} continue
+                if {[dict get $info name] ni {std::byte::high_nibble std::byte::nibble}} continue
                 set info
             }]]
     }
@@ -108,8 +108,8 @@ test native-report-inlined-leaf-3 {inlining moves guards and blockers together: 
 test native-report-inlined-leaf-4 {a leaf of an unproven argument inlined into the program, into a generic instance under specialization, and twice on one register} -body {
     lmap text {
         "fn inc(x):\n    x + 1\n\ninc(41)"
-        "import list\nfn inc(x):\n    x + 1\n\nfn twice(y):\n    inc(inc(y))\n\nfs = \[twice\]\nlist::at(fs, 0)(4)"
-        "import list\nfn mix(a, b):\n    bit_and(bit_or(a, b), 255)\n\nfn h(p):\n    mix(p, p)\n\nfs = \[h\]\nlist::at(fs, 0)(7)"
+        "import std::list\nfn inc(x):\n    x + 1\n\nfn twice(y):\n    inc(inc(y))\n\nfs = \[twice\]\nstd::list::at(fs, 0)(4)"
+        "import std::list\nfn mix(a, b):\n    bit_and(bit_or(a, b), 255)\n\nfn h(p):\n    mix(p, p)\n\nfs = \[h\]\nstd::list::at(fs, 0)(7)"
     } {
         reportCounts [sourceHir $text]
     }

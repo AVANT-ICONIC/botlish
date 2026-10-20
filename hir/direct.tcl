@@ -16,7 +16,7 @@
 #   * its source file starts with `direct module` (moduleDecls' `direct`), or
 #   * it is an intrinsic namespace the compiler declares direct
 #     (core::native::declareDirectNamespace: the raw syscall transports
-#     linux::abi::x86_64 and linux::abi::aarch64) -- the trusted provider's
+#     std::linux::abi::x86_64 and std::linux::abi::aarch64) -- the trusted provider's
 #     equivalent declaration.
 #
 # Nothing else designates one: never a namespace's name, path or library.

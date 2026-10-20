@@ -148,7 +148,7 @@ and lib's Tcl libraries.
 
   The golden layer is the cheaper one here.
 * **An edit to the front end, the evaluator or a library module** (`core/`,
-  `hir/`, `surface/`, `lib/`) invalidates every entry or the importers'. The
+  `hir/`, `surface/`, `stdlib/`) invalidates every entry or the importers'. The
   golden corpus then costs its no-cache price, 3.7-3.9 times the Tcl tests on
   interp and compile.
   - The first golden run stores the entries at no visible cost when it runs one

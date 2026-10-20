@@ -22,7 +22,7 @@ New test file: tests/close-callers-convergence.test, 24 tests, all passing.
 
 No other production file changed. `native/lower.tcl`, `hir/blockescape.tcl`,
 `hir/types.tcl`, `hir/range.tcl`, and every other module are byte-for-byte
-unmodified. No `.bot`/`.ir`/`lib/*.bot` source changed.
+unmodified. No `.bot`/`.ir`/`stdlib/*.bot` source changed.
 
 ## Current CloseCallers convergence semantics (before this milestone)
 
@@ -494,7 +494,7 @@ theorem/control-flow-only change with this diff shape does not require it.
 ## Source-fence confirmation
 
 `git status`/`git diff` confirm no change under `bench/*.bot`, `bench/*.ir`,
-or any file under `lib/`. The only files this milestone touched are
+or any file under `stdlib/`. The only files this milestone touched are
 `hir/specialize.tcl` (production), `M7C-CLOSED-CLOSURE-ENTRY-FACTS.md`
 (the drive-by documentation correction spec item 33 asks for), and the new
 `tests/close-callers-convergence.test`.
@@ -662,4 +662,4 @@ close to that depth.
 32. **Was no native lowering rule changed?** Confirmed: `native/lower.tcl`
     is byte-for-byte unmodified (`git diff` shows no change to it).
 33. **Was no source program changed? Required: yes.** Confirmed: no
-    `.bot`/`.ir`/`lib/*.bot` file appears in `git status`/`git diff`.
+    `.bot`/`.ir`/`stdlib/*.bot` file appears in `git status`/`git diff`.

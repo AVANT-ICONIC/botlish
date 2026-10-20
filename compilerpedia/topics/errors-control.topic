@@ -7,7 +7,7 @@ summary: A call that may complete with a declared error must handle it with `on 
 index: errors
 alias: neither handled here nor admitted; may produce the declared error; unhandled declared error; error not handled
 keywords: on, errors clause, handler, admit, propagate, fail, declared error, IndexNotFound, LowerUnderrun, UpperOverrun, Fn contract, top level, grouped
-related: rule.unhandled-errors concept.errors proof.completions proof.list-bounds proof.slices proof.callable-contracts error.known-error error.undeclared-error concept.function-types rule.one-handler-per-error principle.errors-over-sentinels stdlib.list::get
+related: rule.unhandled-errors concept.errors proof.completions proof.list-bounds proof.slices proof.callable-contracts error.known-error error.undeclared-error concept.function-types rule.one-handler-per-error principle.errors-over-sentinels stdlib.std::list::get
 docs: EXPLICIT-ERROR-COMPLETIONS.md STATIC-COMPLETION-PROOFS.md DIAGNOSTIC-RECOVERY.md VERIFIED-CALLABLE-CONTRACT-BOUNDARY.md
 code: CORE SEMANTIC UNHANDLED-ERROR
 
@@ -50,16 +50,16 @@ when the call fails -- or the compiler has proven it cannot.
     handles nor declares its errors.
   * An intrinsic with declared errors whose precondition is not proven
     here. The usual ones:
-        list::at, mutable_array::at, str::char_at   IndexNotFound
-        str::substring                    LowerUnderrun, UpperOverrun
+        std::list::at, std::mutable_array::at, std::str::char_at   IndexNotFound
+        std::str::substring                    LowerUnderrun, UpperOverrun
         argv()                            InvalidArgumentEncoding
-        binary::parse                     LayoutLengthMismatch
+        std::binary::parse                     LayoutLengthMismatch
     `xs.at(i)` is free of the obligation only in the forms proof.list-bounds
-    lists, and str::substring only in those of proof.slices. A
+    lists, and std::str::substring only in those of proof.slices. A
     descending loop, an index written again in the guard and in the read,
     or one reduced by another container's size is not related to the
     length today:
-        this call of "list::at" may produce the declared error
+        this call of "std::list::at" may produce the declared error
         "IndexNotFound", which is neither handled here nor admitted ...
   * A function body is checked once, for every argument: facts about the
     arguments of one call (`twice(4)`) are not carried into the callee's
@@ -75,14 +75,14 @@ when the call fails -- or the compiler has proven it cannot.
     clause, so every possible error of a top-level call must be handled
     there or proven impossible.
   * A coroutine resume, or a rejected `static compile:` block, whose
-    error (compiler::CompilerError) is not admitted where it stands.
+    error (std::compiler::CompilerError) is not admitted where it stands.
 
 == HOW TO INVESTIGATE
 Read the error names in the message: they are canonical identities, so a
-module's error appears qualified (`io::WriteFailed`). For an intrinsic,
-`-help list::at` (or the symbol) shows its declared errors and the page of
-the proof that removes them. For your own function, its `errors` clause is
-the contract; the analysis may narrow it per call (an argument proven
+module's error appears qualified (`std::io::WriteFailed`). For an intrinsic,
+`-help std::list::at` (or the symbol) shows its declared errors and the page
+of the proof that removes them. For your own function, its `errors` clause
+is the contract; the analysis may narrow it per call (an argument proven
 non-negative removes an error raised only for negative input) but never
 widens it.
 
@@ -96,7 +96,7 @@ Decide where the failure is meaningful:
     error to the enclosing function's `errors` clause.
   * Restate the code in a form the compiler proves (proof pages list the
     recognized forms), so that the error is impossible and no handler is
-    needed. For list access, list::get(xs, i, default) is the handler
+    needed. For list access, std::list::get(xs, i, default) is the handler
     written once.
 
 Do not add a handler for an error the call can never complete normally
@@ -170,8 +170,8 @@ title: KNOWN-ERROR: a call proven to always fail, even under a handler
 summary: A call that the compiler proves can never complete normally is rejected, whether or not a handler or an `errors` clause covers its error: a statically known failure is a mistake, not a branch.
 index: errors
 alias: can never complete normally; statically known failure; always fails; known failure
-keywords: handler, on, KnownError, always, constant argument, literal, risky, negative test, static compile, test::rejects, parameter
-related: rule.known-error concept.known-errors concept.negative-tests proof.completions error.unhandled-error concept.static-compile concept.testing stdlib.test::rejects proof.list-bounds
+keywords: handler, on, KnownError, always, constant argument, literal, risky, negative test, static compile, std::test::rejects, parameter
+related: rule.known-error concept.known-errors concept.negative-tests proof.completions error.unhandled-error concept.static-compile concept.testing stdlib.std::test::rejects proof.list-bounds
 docs: STATIC-COMPLETION-PROOFS.md STATIC-COMPILE.md GOLDEN-TEST-FRAMEWORK.md
 code: CORE SEMANTIC KNOWN-ERROR
 
@@ -202,7 +202,7 @@ one that always fails always fails itself.
 
 == LIKELY CAUSES
   * A literal argument that the callee rejects: `risky(-3)` where risky
-    fails for negative input, `byte::from_int(999)`, `[1, 2].at(5)`.
+    fails for negative input, `std::byte::from_int(999)`, `[1, 2].at(5)`.
   * A function whose only purpose is to fail (its whole body is `fail
     Bad`): every call of it is KNOWN-ERROR, even from a function that
     declares `errors Bad`. Write `fail Bad` where the failure is.
@@ -229,12 +229,13 @@ two supported forms:
     so the handler is legal; the test calls the function with the bad
     input.
   * Put the call in a `static compile:` block inside a function that
-    declares `errors compiler::CompilerError`: the rejected block becomes
-    that error, whose payload carries the code (KnownError), and the
-    golden test framework checks it with test::rejects (concept.testing).
+    declares `errors std::compiler::CompilerError`: the rejected block
+    becomes that error, whose payload carries the code (KnownError), and the
+    golden test framework checks it with std::test::rejects
+    (concept.testing).
 
 Inside a `static compile:` block, KNOWN-ERROR is the recoverable
-diagnostic code compiler::DiagnosticCode::KnownError.
+diagnostic code std::compiler::DiagnosticCode::KnownError.
 
 @example reject
 error Bad
@@ -271,7 +272,7 @@ attempt(-3)
 @end
 
 @example accept
-import compiler
+import std::compiler
 
 error Bad
 
@@ -280,12 +281,12 @@ fn risky(n: int) -> int errors Bad:
         fail Bad
     n
 
-fn probe() -> int errors compiler::CompilerError:
+fn probe() -> int errors std::compiler::CompilerError:
     static compile:
         risky(-3)
 
 probe():
-    on compiler::CompilerError:
+    on std::compiler::CompilerError:
         -1
 @caption The rejection itself observed through static compile
 @value -1
@@ -310,13 +311,13 @@ error. When the spelling denotes none:
 
     unknown error "Nope": no "error Nope" declaration is visible
 
-A module's error is named qualified outside that module (`io::WriteFailed`,
-`compiler::CompilerError`); when the short name matches a module's error,
-the message says so:
+A module's error is named qualified outside that module
+(`std::io::WriteFailed`, `std::compiler::CompilerError`); when the short
+name matches a module's error, the message says so:
 
     unknown error "CompilerError": no "error CompilerError" declaration is
     visible here (a module's error is named qualified outside its module:
-    compiler::CompilerError)
+    std::compiler::CompilerError)
 
 The same code reports a declaration that repeats an identity, including a
 builtin error of the runtime (InvalidArgumentEncoding, IndexNotFound,
@@ -330,8 +331,8 @@ LowerUnderrun, UpperOverrun, LayoutLengthMismatch):
   * A typo, or a `fail` written before its `error` declaration exists.
   * A module's error spelled by its short name outside the module. (A
     qualified name of a module that is not imported, such as
-    `compiler::CompilerError` without `import compiler`, is MISSING-IMPORT
-    instead.)
+    `std::compiler::CompilerError` without `import std::compiler`, is
+    MISSING-IMPORT instead.)
   * Declaring an error whose name is a builtin error.
 
 == WHAT TO DO
@@ -591,8 +592,8 @@ title: MISSING-CONTEXT: a call needs a context that is not installed
 summary: The called function (or one it calls) declares a context parameter, and no `with context` installation of that context precedes this call at the program's top level.
 index: errors
 alias: is required by this call but is not installed here; no installed context implements it; context not installed
-keywords: with context, context parameter, context struct, context trait, io::IO, installation, chain, requirement, order
-related: concept.contexts concept.context-traits proof.contexts rule.context-installation error.not-a-context error.context-function-value error.context-installation-unsupported stdlib.module.io
+keywords: with context, context parameter, context struct, context trait, std::io::IO, installation, chain, requirement, order
+related: concept.contexts concept.context-traits proof.contexts rule.context-installation error.not-a-context error.context-function-value error.context-installation-unsupported stdlib.module.std::io
 docs: CONTEXTS.md CONTEXT-TRAITS.md
 code: CORE SEMANTIC MISSING-CONTEXT
 
@@ -610,11 +611,11 @@ its callee requires installed by an earlier `with context EXPR` line:
             directly requires Clock
 
 The chain shows why: the shortest call path from the called function to
-one that declares the context. For a context trait (io::IO, ...) the
+one that declares the context. For a context trait (std::io::IO, ...) the
 message says that no installed context implements it, and lists the
 installed contexts:
 
-    io::IO is required by this call, but no installed context implements
+    std::io::IO is required by this call, but no installed context implements
     it (install one with "with context EXPR" before the call): ...
 
 The reason for the check: a context is never looked up at run time. A
@@ -629,8 +630,8 @@ that uses it runs.
   * A module's top-level code (a module binding's initializer) calls a
     context consumer: module code runs before the entry program installs
     anything.
-  * Printing with io::print_line, which requires io::IO: install an
-    implementation, e.g. `with context linux::io::create()` (native
+  * Printing with std::io::print_line, which requires std::io::IO: install
+    an implementation, e.g. `with context std::linux::io::create()` (native
     backends on Linux).
 
 == HOW TO INVESTIGATE
@@ -943,8 +944,8 @@ it.
 
 == WHAT TO DO
 Move the `with context` line to the entry program's top level, before the
-calls that need it. A library offers a constructor (`linux::io::create()`)
-and the program installs its result.
+calls that need it. A library offers a constructor
+(`std::linux::io::create()`) and the program installs its result.
 
 @example reject
 context struct Clock:
@@ -1051,7 +1052,7 @@ summary: A call into a direct module (linux, a raw syscall transport, a retainin
 index: errors
 alias: uses direct authority; undischarged direct edge
 keywords: direct module, linux, syscall, authority, context, mediate, contextualize, capability, extern c fn, captures
-related: concept.direct-modules concept.contexts error.stale-direct-module error.direct-callable-value error.direct-module-position concept.c-ffi stdlib.module.linux
+related: concept.direct-modules concept.contexts error.stale-direct-module error.direct-callable-value error.direct-module-position concept.c-ffi stdlib.module.std::linux
 docs: DIRECT-MODULES.md CONTEXTS.md C-FFI.md
 code: CORE SEMANTIC DIRECT
 
@@ -1066,7 +1067,7 @@ context trait) that U declares itself. An unmediated edge makes U
 inferred direct, and then its declaration must say so:
 
     the entry program uses direct authority: function "emit" calls
-    linux::write, a callable of the direct module "linux", without a
+    std::linux::write, a callable of the direct module "std::linux", without a
     context defined by the entry program; require one of this module's
     own contexts ("context NAME: T", T a context struct or context trait
     declared by the entry program) in "emit", the function that makes the
@@ -1077,8 +1078,8 @@ The entry program is a module like any other. Reported once per function,
 at its first undischarged edge.
 
 == LIKELY CAUSES
-  * Calling linux, linux::sys or a transport from an ordinary program or
-    module (for printing, use io or linux::io, which mediate it).
+  * Calling linux, std::linux::sys or a transport from an ordinary program
+    or module (for printing, use io or std::linux::io, which mediate it).
   * A helper without a context making the call for a function that has
     one: the context must be on the function that makes the call.
   * A context of another module in the context section: only the
@@ -1099,16 +1100,16 @@ LocalIO)`), installing it at the top level; or declare the whole file
 per-function exemption.
 
 @example reject
-import abi
-import abi::bytes
-import linux
-import str
+import std::abi
+import std::abi::bytes
+import std::linux
+import std::str
 
 fn emit(text: str) -> int:
-    linux::write(abi::i32(1), abi::bytes::from_list(str::encode_utf8(text)))
+    std::linux::write(std::abi::i32(1), std::abi::bytes::from_list(std::str::encode_utf8(text)))
 
 0
-@caption linux::write called without a context of the entry program
+@caption std::linux::write called without a context of the entry program
 @error CORE SEMANTIC DIRECT
 @at 7:5
 @end
@@ -1127,7 +1128,7 @@ code: CORE SEMANTIC DIRECT-CALLABLE-VALUE
 Direct edges are exact calls. A function value of a direct module could be
 called anywhere, through code the analysis cannot see:
 
-    linux::write is a callable of the direct module "linux": the entry
+    std::linux::write is a callable of the direct module "std::linux": the entry
     program, which is not declared direct, may only call it (or bind it to
     another name as a statement), never pass, return, store or capture it
     as a value -- a call through an unknown function value would carry
@@ -1139,15 +1140,15 @@ module's contexts; pass data, not the callable. A module declared `direct
 module` may take a direct callable as a value.
 
 @example reject
-import abi
-import abi::bytes
-import linux
+import std::abi
+import std::abi::bytes
+import std::linux
 
 fn pick():
-    linux::write
+    std::linux::write
 
 0
-@caption linux::write returned as a value
+@caption std::linux::write returned as a value
 @error CORE SEMANTIC DIRECT-CALLABLE-VALUE
 @at 6:5
 @end
@@ -1202,12 +1203,12 @@ code: DIRECT-MODULE-FORM
 match: SURFACE SYNTAX | DIRECT-MODULE-FORM: *
 
 == MEANING
-There is no `module NAME` declaration in Botlish: lib/linux.bot is the
-module linux because of where it is. So:
+There is no `module NAME` declaration in Botlish: stdlib/linux.bot is the
+module std::linux because of where it is. So:
 
     `direct module` takes no name: a module's identity is its file path
-    (lib/linux.bot is the module linux), so the declaration is the two
-    words alone
+    (stdlib/linux.bot is the module std::linux), so the declaration is the
+    two words alone
     expected end of line after `direct module`, found ...
 
 == WHAT TO DO
@@ -1248,7 +1249,7 @@ Move the line above the imports. There is no narrower form: mediate the
 calls through a context of the module instead (DIRECT).
 
 @example reject
-import list
+import std::list
 direct module
 0
 @caption direct module after an import
@@ -1299,8 +1300,8 @@ match: SURFACE SYNTAX | EXTERN-SYNTAX: *
 An extern declaration is a truthful C ABI declaration with no body:
 
     extern c library "crypto"
-    extern c fn sum named "bcf_sum"(data: ffi::c::Ptr[ffi::c::UChar]
-        read noescape, count: ffi::c::ULong) -> ffi::c::ULong
+    extern c fn sum named "bcf_sum"(data: std::ffi::c::Ptr[std::ffi::c::UChar]
+        read noescape, count: std::ffi::c::ULong) -> std::ffi::c::ULong
 
 The parser reports each malformed form at the offender, for example:
 
@@ -1334,13 +1335,13 @@ title: FOREIGN-BORROW: bytes passed to a C pointer that does not admit them
 summary: Bytes or MutableBytes reach a C pointer parameter for one call only if its contract says noescape, a known access (read or write) and a byte-sized pointee; this argument fails one.
 index: errors
 alias: byte storage is exposed to C only; temporary byte exposure refused
-keywords: FFI, extern c fn, abi::bytes::Bytes, MutableBytes, noescape, captures, access, read, write, pointer, borrow, exposure, alias, independent
-related: concept.c-ffi error.extern-syntax error.direct error.imprint stdlib.module.ffi::c stdlib.module.abi::bytes
+keywords: FFI, extern c fn, std::abi::bytes::Bytes, MutableBytes, noescape, captures, access, read, write, pointer, borrow, exposure, alias, independent
+related: concept.c-ffi error.extern-syntax error.direct error.imprint stdlib.module.std::ffi::c stdlib.module.std::abi::bytes
 docs: C-POINTER-BORROWING.md C-FFI.md C-ABI-TYPES.md
 code: CORE SEMANTIC FOREIGN-BORROW
 
 == MEANING
-A foreign call may borrow an existing abi::bytes::Bytes or MutableBytes
+A foreign call may borrow an existing std::abi::bytes::Bytes or MutableBytes
 for the duration of the call -- no pointer value of Botlish storage is
 ever made, and no pointer may outlive the call. The contract of the
 parameter decides, and nothing else (not a `const`, a name or a C type):
@@ -1351,15 +1352,15 @@ parameter decides, and nothing else (not a `const`, a name or a C type):
     write       needs a MutableBytes: C writes a private copy, which the
                 call returns (`written.out`); an immutable Bytes is read
                 only
-    pointee     ffi::c::Char, SChar, UChar or Void
+    pointee     std::ffi::c::Char, SChar, UChar or Void
 
 A pointer result of a call that exposes storage must say where it comes
 from (`independent`, or `alias PARAM`). The refusal names the argument and
 the reason, e.g.:
 
     argument 1 of fill: parameter "p" lets C modify the bytes (access
-    write), and an immutable abi::bytes::Bytes is exposed only for
-    reading: expose an abi::bytes::MutableBytes, whose written bytes the
+    write), and an immutable std::abi::bytes::Bytes is exposed only for
+    reading: expose a std::abi::bytes::MutableBytes, whose written bytes the
     call returns
 
 This is a compile-time check: it is reported on every backend, although
@@ -1372,16 +1373,16 @@ promise about the C function, so state what its documentation guarantees.
 A parameter C may keep cannot take Botlish storage at all.
 
 @example reject
-import abi
-import abi::bytes
-import ffi::c
+import std::abi
+import std::abi::bytes
+import std::ffi::c
 
 extern c fn fill(
-    p: ffi::c::Ptr[ffi::c::UChar] write noescape,
-    n: ffi::c::ULong
+    p: std::ffi::c::Ptr[std::ffi::c::UChar] write noescape,
+    n: std::ffi::c::ULong
 ) -> unit
 
-fn give(data: abi::bytes::Bytes):
+fn give(data: std::abi::bytes::Bytes):
     fill(data, 4)
 
 0
@@ -1395,8 +1396,8 @@ title: IMPRINT: a call's imprint variables cannot be bound
 summary: A signature with imprint variables (T in `List[T]`) is imprinted at each call: the arguments must establish every variable consistently, or the call supplies them explicitly as `f[TYPE](...)`.
 index: errors
 alias: imprint variable is not established; imprinted callable is not a value; explicit imprints
-keywords: imprint, imprint variable, T, generic, List[T], ffi::c::null, ffi::c::Ptr, explicit, f[int]
-related: concept.c-ffi concept.specialization concept.function-types error.type error.foreign-borrow stdlib.module.ffi::c
+keywords: imprint, imprint variable, T, generic, List[T], std::ffi::c::null, std::ffi::c::Ptr, explicit, f[int]
+related: concept.c-ffi concept.specialization concept.function-types error.type error.foreign-borrow stdlib.module.std::ffi::c
 docs: C-ABI-TYPES.md
 code: CORE SEMANTIC IMPRINT
 
@@ -1406,7 +1407,7 @@ signature, naming no visible type: whatever type a particular call
 imprints there. It is not a declared generic parameter -- Botlish has no
 `fn f[T]` -- and the body is checked once, for every T. A variable is
 established by an argument whose parameter holds it in an applied type
-(`List[T]`, `MutableArray[T]`, `ffi::c::Ptr[T]`, ...), left to right; a
+(`List[T]`, `MutableArray[T]`, `std::ffi::c::Ptr[T]`, ...), left to right; a
 variable that occurs only in the result is supplied at the call. IMPRINT
 reports a call that cannot bind them, or a callable used as a value:
 
@@ -1427,12 +1428,12 @@ establishes nothing; that declaration is a TYPE error, not IMPRINT.
 
 == WHAT TO DO
 Give explicit imprints, all of them, in first-occurrence order:
-`empty[int]()`, `ffi::c::null[ffi::c::Void]()`. Make the arguments agree.
-To pass an imprinted function on, wrap one call of it in an ordinary
+`empty[int]()`, `std::ffi::c::null[std::ffi::c::Void]()`. Make the arguments
+agree. To pass an imprinted function on, wrap one call of it in an ordinary
 function.
 
 @example reject
-import list
+import std::list
 
 fn empty() -> List[T]:
     []
@@ -1445,7 +1446,7 @@ xs
 @end
 
 @example accept
-import list
+import std::list
 
 fn empty() -> List[T]:
     []
@@ -1462,7 +1463,7 @@ summary: A `layout` declares its size explicitly with `size N`, a byte count fro
 index: errors
 alias: layout has size
 keywords: layout, size, binary, bytes, declaration
-related: concept.binary-layouts error.layout-alignment error.layout-field-bounds stdlib.module.binary
+related: concept.binary-layouts error.layout-alignment error.layout-field-bounds stdlib.module.std::binary
 docs: BINARY-LAYOUT.md
 code: CORE SEMANTIC LAYOUT-SIZE
 
@@ -1481,12 +1482,12 @@ State the real size of the record in bytes; every field must fit inside it
 (LAYOUT-FIELD-BOUNDS).
 
 @example reject
-import binary
+import std::binary
 
 layout Header:
     size 0
     align 4
-    field magic: binary::U32 at 0
+    field magic: std::binary::U32 at 0
 
 0
 @caption A layout of zero bytes
@@ -1500,7 +1501,7 @@ summary: `align N` must be a power of two from 1 to 268435456.
 index: errors
 alias: layout has alignment
 keywords: layout, align, alignment, power of two, binary
-related: concept.binary-layouts error.layout-size stdlib.module.binary
+related: concept.binary-layouts error.layout-size stdlib.module.std::binary
 docs: BINARY-LAYOUT.md
 code: CORE SEMANTIC LAYOUT-ALIGNMENT
 
@@ -1508,20 +1509,20 @@ code: CORE SEMANTIC LAYOUT-ALIGNMENT
     layout "Header" has alignment 3: an alignment is a power of two from 1
     to 268435456
 
-The alignment is recorded and reported (binary::layout_alignment); there
-is deliberately no rule that the size be a multiple of it or that field
-offsets be aligned, so packed and vendor layouts are legal as stated.
+The alignment is recorded and reported (std::binary::layout_alignment);
+there is deliberately no rule that the size be a multiple of it or that
+field offsets be aligned, so packed and vendor layouts are legal as stated.
 
 == WHAT TO DO
 Use the record's real alignment: 1, 2, 4, 8, ...
 
 @example reject
-import binary
+import std::binary
 
 layout Header:
     size 8
     align 3
-    field magic: binary::U32 at 0
+    field magic: std::binary::U32 at 0
 
 0
 @caption 3 is not a power of two
@@ -1531,11 +1532,11 @@ layout Header:
 
 @topic error.layout-field-type
 title: LAYOUT-FIELD-TYPE: a layout field's type has no fixed-width encoding
-summary: A layout field is a scalar whose integer domain is exactly one fixed-width encoding's value set (binary::U8 .. U64, I8 .. I64, or an equal `Int in a..b`), a nested layout, or a C pointer.
+summary: A layout field is a scalar whose integer domain is exactly one fixed-width encoding's value set (std::binary::U8 .. U64, I8 .. I64, or an equal `Int in a..b`), a nested layout, or a C pointer.
 index: errors
 alias: cannot have type; no fixed width
-keywords: layout, field, int, binary::U32, domain, encoding, width, signed, unsigned, nested layout
-related: concept.binary-layouts concept.integer-domains error.layout-cycle stdlib.module.binary
+keywords: layout, field, int, std::binary::U32, domain, encoding, width, signed, unsigned, nested layout
+related: concept.binary-layouts concept.integer-domains error.layout-cycle stdlib.module.std::binary
 docs: BINARY-LAYOUT.md
 code: CORE SEMANTIC LAYOUT-FIELD-TYPE
 
@@ -1548,22 +1549,22 @@ else is rejected at the type:
 
     field "magic" of layout "Header" cannot have type int: int has no
     fixed width: a scalar field is an integer domain whose values are
-    exactly one fixed-width encoding's (e.g. binary::U32, Int in
+    exactly one fixed-width encoding's (e.g. std::binary::U32, Int in
     0..4294967295)
 
 Also rejected: a narrower or exact-set domain (`Int in 0..100`), a
 refinement, str, bool, a struct, `LayoutStruct[L]` (write the layout L
-itself) and an unknown name. A C pointer field (ffi::c::Ptr[T],
-ffi::c::FnPtr[F]) is accepted, and makes the layout native-only
+itself) and an unknown name. A C pointer field (std::ffi::c::Ptr[T],
+std::ffi::c::FnPtr[F]) is accepted, and makes the layout native-only
 (error.layout-native-only).
 
 == WHAT TO DO
-Use binary::U8 .. binary::U64 or binary::I8 .. binary::I64 (or your own
-domain with exactly that interval). Check a narrower range after parsing,
-in ordinary code.
+Use std::binary::U8 .. std::binary::U64 or std::binary::I8 ..
+std::binary::I64 (or your own domain with exactly that interval). Check a
+narrower range after parsing, in ordinary code.
 
 @example reject
-import binary
+import std::binary
 
 layout Header:
     size 8
@@ -1582,7 +1583,7 @@ summary: Every field's bytes (its offset plus its width) must lie inside the lay
 index: errors
 alias: outside the layout's size
 keywords: layout, field, offset, width, size, bounds
-related: concept.binary-layouts error.layout-size error.layout-field-overlap stdlib.module.binary
+related: concept.binary-layouts error.layout-size error.layout-field-overlap stdlib.module.std::binary
 docs: BINARY-LAYOUT.md
 code: CORE SEMANTIC LAYOUT-FIELD-BOUNDS
 
@@ -1594,17 +1595,17 @@ The message names the bytes the field would occupy, so the fix is
 visible: move the field or enlarge the layout.
 
 @example reject
-import binary
+import std::binary
 
 layout Header:
     size 8
     align 4
-    field magic: binary::U32 at 6
+    field magic: std::binary::U32 at 6
 
 0
 @caption Four bytes at offset 6 end past byte 7
 @error CORE SEMANTIC LAYOUT-FIELD-BOUNDS
-@at 6:33
+@at 6:38
 @end
 
 @topic error.layout-field-overlap
@@ -1613,7 +1614,7 @@ summary: The fields of a layout never overlap: layouts have no union or overlay,
 index: errors
 alias: overlaps field
 keywords: layout, field, overlap, union, overlay, offset
-related: concept.binary-layouts error.layout-field-bounds stdlib.module.binary
+related: concept.binary-layouts error.layout-field-bounds stdlib.module.std::binary
 docs: BINARY-LAYOUT.md
 code: CORE SEMANTIC LAYOUT-FIELD-OVERLAP
 
@@ -1627,18 +1628,18 @@ Fix the offsets. To read the same bytes two ways, declare two layouts and
 parse the data with each.
 
 @example reject
-import binary
+import std::binary
 
 layout Header:
     size 8
     align 4
-    field magic: binary::U32 at 0
-    field count: binary::U16 at 2
+    field magic: std::binary::U32 at 0
+    field count: std::binary::U16 at 2
 
 0
 @caption count's bytes are inside magic's
 @error CORE SEMANTIC LAYOUT-FIELD-OVERLAP
-@at 7:33
+@at 7:38
 @end
 
 @topic error.layout-cycle
@@ -1647,7 +1648,7 @@ summary: A nested layout field holds the inner layout's bytes by value, so a lay
 index: errors
 alias: contains itself by value
 keywords: layout, nested, recursive, cycle, pointer
-related: concept.binary-layouts error.layout-field-type stdlib.module.binary
+related: concept.binary-layouts error.layout-field-type stdlib.module.std::binary
 docs: BINARY-LAYOUT.md
 code: CORE SEMANTIC LAYOUT-CYCLE
 
@@ -1657,7 +1658,7 @@ code: CORE SEMANTIC LAYOUT-CYCLE
     to one is a pointer field, not a nested layout)
 
 The chain names every layout on the cycle. A link to another record is a
-pointer field (`field next: ffi::c::Ptr[Node] at 0`), which makes the
+pointer field (`field next: std::ffi::c::Ptr[Node] at 0`), which makes the
 layout native-only: it is read through a native view
 (error.layout-native-only).
 
@@ -1679,7 +1680,7 @@ summary: A fixed array's extent is a compile-time integer of at least 1 whose wi
 index: errors
 alias: a fixed array's extent is a positive integer
 keywords: layout, array, extent, zero-length, flexible array member, length, fixed array
-related: concept.binary-layouts error.layout-field-bounds error.layout-array-index stdlib.module.binary
+related: concept.binary-layouts error.layout-field-bounds error.layout-array-index stdlib.module.std::binary
 docs: FIXED-LAYOUT-ARRAYS.md
 code: CORE SEMANTIC LAYOUT-ARRAY-EXTENT
 
@@ -1701,12 +1702,12 @@ layout and read the tail separately (its length is data, not
 representation).
 
 @example reject
-import binary
+import std::binary
 
 layout Packet:
     size 8
     align 1
-    field items: array 0 of binary::U8 at 0
+    field items: array 0 of std::binary::U8 at 0
 
 0
 @caption An array of no elements
@@ -1715,15 +1716,15 @@ layout Packet:
 @end
 
 @example accept
-import binary
+import std::binary
 
 layout Packet:
     size 8
     align 1
-    field kind: binary::U8 at 0
-    field items: array 7 of binary::U8 at 1
+    field kind: std::binary::U8 at 0
+    field items: array 7 of std::binary::U8 at 1
 
-binary::layout_length(Packet)
+std::binary::layout_length(Packet)
 @value 8
 @caption Seven one-byte elements after the kind byte
 @end
@@ -1734,7 +1735,7 @@ summary: An element designator (L.items[3], L.m[1][2]) names its index staticall
 index: errors
 alias: the element index lies outside the fixed array
 keywords: layout, array, index, designator, out of range, element, subscript
-related: concept.binary-layouts error.layout-array-extent stdlib.binary::store stdlib.binary::write stdlib.binary::element
+related: concept.binary-layouts error.layout-array-extent stdlib.std::binary::store stdlib.std::binary::write stdlib.std::binary::element
 docs: FIXED-LAYOUT-ARRAYS.md
 code: CORE SEMANTIC LAYOUT-ARRAY-INDEX
 
@@ -1742,96 +1743,96 @@ code: CORE SEMANTIC LAYOUT-ARRAY-INDEX
     Packet.items is a fixed array of 4 elements (indices 0..3): the element
     index [4] lies outside it
 
-The designator of binary::write, binary::write_foreign and binary::store
-is static: its indices are part of the field it names, resolved to one
-offset at compile time. A dynamic index is binary::element or
-binary::store_element on a live array, checked at run time (IndexNotFound)
-unless the compiler proves it.
+The designator of std::binary::write, std::binary::write_foreign and
+std::binary::store is static: its indices are part of the field it names,
+resolved to one offset at compile time. A dynamic index is
+std::binary::element or std::binary::store_element on a live array, checked
+at run time (IndexNotFound) unless the compiler proves it.
 
 @example reject
-import abi
-import abi::bytes
-import binary
+import std::abi
+import std::abi::bytes
+import std::binary
 
 layout Packet:
     size 4
     align 1
-    field items: array 4 of binary::U8 at 0
+    field items: array 4 of std::binary::U8 at 0
 
-fn last(d: abi::bytes::MutableBytes) -> abi::bytes::MutableBytes errors LayoutLengthMismatch:
-    binary::write(d, Packet.items[4], 1)
+fn last(d: std::abi::bytes::MutableBytes) -> std::abi::bytes::MutableBytes errors LayoutLengthMismatch:
+    std::binary::write(d, Packet.items[4], 1)
 
 0
 @caption Four elements: the last is items[3]
 @error CORE SEMANTIC LAYOUT-ARRAY-INDEX
-@at 11:35
+@at 11:40
 @end
 
 @topic error.layout-native-only
 title: LAYOUT-NATIVE-ONLY: bytes and a C pointer field, the ordinary way
-summary: A pointer field is never parsed from bytes (that would forge a pointer) nor emitted or written into them as ordinary data: binary::write_foreign is the explicit encoding.
+summary: A pointer field is never parsed from bytes (that would forge a pointer) nor emitted or written into them as ordinary data: std::binary::write_foreign is the explicit encoding.
 index: errors
 alias: cannot imprint layout; is a C pointer
-keywords: layout, pointer, ffi::c::Ptr, FnPtr, parse, emit, native view, forge
-related: concept.binary-layouts stdlib.binary::native::view stdlib.binary::load error.layout-field-type
+keywords: layout, pointer, std::ffi::c::Ptr, FnPtr, parse, emit, native view, forge
+related: concept.binary-layouts stdlib.std::binary::native::view stdlib.std::binary::load error.layout-field-type
 docs: NATIVE-LAYOUT-VIEWS.md BINARY-LAYOUT.md
 code: CORE SEMANTIC LAYOUT-NATIVE-ONLY
 
 == MEANING
-    binary::parse cannot imprint layout "Link" from bytes: its field "next"
+    std::binary::parse cannot imprint layout "Link" from bytes: its field "next"
     is a C pointer, and imprinting arbitrary bytes into it would make a
     pointer no foreign code handed out; a layout with a pointer field is
-    read through a native view of live native memory (binary::native::view,
-    binary::load)
+    read through a native view of live native memory (std::binary::native::view,
+    std::binary::load)
 
 Any bit pattern can arrive in byte storage, so a pointer read from bytes
 would be forged. A pointer field nested inside another layout makes the
 outer layout native-only too; the message names the field's path. Emitting
 such a layout is rejected the same way, and so is an ordinary
-binary::write of the pointer field itself (NATIVE-LAYOUT-WRITES.md): an
-existing pointer is encoded into bytes only by binary::write_foreign.
+std::binary::write of the pointer field itself (NATIVE-LAYOUT-WRITES.md): an
+existing pointer is encoded into bytes only by std::binary::write_foreign.
 
 == WHAT TO DO
-Read the record where foreign code put it: binary::native::view(L, p) of
-the pointer that code handed out, then its fields or binary::load. To
-parse bytes, declare a second layout whose pointer field is an Int
-(binary::U64 at the same offset): its value is inert address bits, never a
-pointer.
+Read the record where foreign code put it: std::binary::native::view(L, p)
+of the pointer that code handed out, then its fields or std::binary::load.
+To parse bytes, declare a second layout whose pointer field is an Int
+(std::binary::U64 at the same offset): its value is inert address bits,
+never a pointer.
 
 @example reject
-import abi::bytes
-import binary
-import ffi::c
+import std::abi::bytes
+import std::binary
+import std::ffi::c
 
 layout Link:
     size 8
     align 8
-    field next: ffi::c::Ptr[ffi::c::Void] at 0
+    field next: std::ffi::c::Ptr[std::ffi::c::Void] at 0
 
-fn first(d: abi::bytes::Bytes) -> bool errors LayoutLengthMismatch:
-    l = binary::parse(Link, d)
+fn first(d: std::abi::bytes::Bytes) -> bool errors LayoutLengthMismatch:
+    l = std::binary::parse(Link, d)
     l.next.null?()
 
 0
 @caption Bytes would become a pointer
 @error CORE SEMANTIC LAYOUT-NATIVE-ONLY
-@at 11:23
+@at 11:28
 @end
 
 @topic error.layout-foreign-write
 title: LAYOUT-FOREIGN-WRITE: a foreign write of a field that is not a C pointer
-summary: binary::write_foreign encodes an existing ffi::c::Ptr or FnPtr into a C pointer field of byte storage; an ordinary field is written by binary::write.
+summary: std::binary::write_foreign encodes an existing std::ffi::c::Ptr or FnPtr into a C pointer field of byte storage; an ordinary field is written by std::binary::write.
 index: errors
 alias: encodes an existing foreign value; is an ordinary field
-keywords: write_foreign, pointer field, binary::write, encode pointer, foreign write
-related: stdlib.binary::write_foreign stdlib.binary::write error.layout-native-only concept.binary-layouts
+keywords: write_foreign, pointer field, std::binary::write, encode pointer, foreign write
+related: stdlib.std::binary::write_foreign stdlib.std::binary::write error.layout-native-only concept.binary-layouts
 docs: NATIVE-LAYOUT-WRITES.md
 code: CORE SEMANTIC LAYOUT-FOREIGN-WRITE
 
 == MEANING
-    binary::write_foreign encodes an existing foreign value (an ffi::c::Ptr
-    or ffi::c::FnPtr) into a C pointer field; Pair.count is an ordinary
-    field of type int[binary::U32], written by binary::write
+    std::binary::write_foreign encodes an existing foreign value (a std::ffi::c::Ptr
+    or std::ffi::c::FnPtr) into a C pointer field; Pair.count is an ordinary
+    field of type int[std::binary::U32], written by std::binary::write
 
 The foreign write is deliberately separate from ordinary serialization:
 it is the one operation that puts a pointer's address bits into bytes,
@@ -1839,28 +1840,28 @@ and it takes only a pointer the program already has. Its field must be
 one of the layout's C pointer fields.
 
 == WHAT TO DO
-Write an ordinary field with binary::write(data, L.field, value). Use
-binary::write_foreign only for a field declared ffi::c::Ptr[T] or
-ffi::c::FnPtr[F], with a pointer of exactly that type.
+Write an ordinary field with std::binary::write(data, L.field, value). Use
+std::binary::write_foreign only for a field declared std::ffi::c::Ptr[T] or
+std::ffi::c::FnPtr[F], with a pointer of exactly that type.
 
 @example reject
-import abi::bytes
-import binary
-import ffi::c
+import std::abi::bytes
+import std::binary
+import std::ffi::c
 
 layout Pair:
     size 16
     align 8
-    field count: binary::U32 at 0
-    field next: ffi::c::Ptr[ffi::c::Void] at 8
+    field count: std::binary::U32 at 0
+    field next: std::ffi::c::Ptr[std::ffi::c::Void] at 8
 
-fn f(d: abi::bytes::MutableBytes) -> abi::bytes::MutableBytes errors LayoutLengthMismatch:
-    binary::write_foreign(d, Pair.count, 7)
+fn f(d: std::abi::bytes::MutableBytes) -> std::abi::bytes::MutableBytes errors LayoutLengthMismatch:
+    std::binary::write_foreign(d, Pair.count, 7)
 
 0
 @caption count is no pointer field
 @error CORE SEMANTIC LAYOUT-FOREIGN-WRITE
-@at 12:30
+@at 12:35
 @end
 
 @topic error.layout-union
@@ -1868,83 +1869,84 @@ title: LAYOUT-UNION: a copy of a union, or of anything holding one
 summary: A union is several interpretations of the same bytes, so it has no copied value: no LayoutStruct, parse, emit or load of a union or of a layout holding one; read or write one alternative.
 index: errors
 alias: has no copied value; is a union layout; holds the union layout
-keywords: union, union layout, alternative, overlap, LayoutStruct, binary::parse, binary::load, binary::read, copy, OVERLAPPED
-related: concept.layout-unions stdlib.binary::read stdlib.binary::write concept.binary-layouts error.layout-native-only
+keywords: union, union layout, alternative, overlap, LayoutStruct, std::binary::parse, std::binary::load, std::binary::read, copy, OVERLAPPED
+related: concept.layout-unions stdlib.std::binary::read stdlib.std::binary::write concept.binary-layouts error.layout-native-only
 docs: LAYOUT-UNIONS.md
 code: CORE SEMANTIC LAYOUT-UNION
 
 == MEANING
-    binary::parse cannot imprint layout OVL from bytes: layout OVL holds
+    std::binary::parse cannot imprint layout OVL from bytes: layout OVL holds
     the union layout OVLU by value at OVL.u: a union is several
     interpretations of the same bytes, never independent values, so it
     has no copied value; ...
 
 A union's alternatives all start at its first byte: a struct holding one
-value per alternative would pretend they are independent fields, and
-nothing records which one was written last (a union has no tag and no
-active alternative). So a union has no LayoutStruct, and neither has any
-layout holding one by value -- directly, in a nested layout or as an
-array element. The same holds for binary::load of a live union or of an
-array of unions, binary::read of a designator that holds one, and a whole-
-array write of an array of unions.
+value per alternative would pretend they are independent fields, and nothing
+records which one was written last (a union has no tag and no active
+alternative). So a union has no LayoutStruct, and neither has any layout
+holding one by value -- directly, in a nested layout or as an array element.
+The same holds for std::binary::load of a live union or of an array of
+unions, std::binary::read of a designator that holds one, and a whole- array
+write of an array of unions.
 
 == WHAT TO DO
 Read and write a union one alternative at a time, through a static
-designator: binary::read(data, OVL.u.offsets.offset) and
-binary::write(data, OVL.u.offsets.offset, v) on bytes; in native memory,
-v.u.offsets.offset through a view and binary::store(e, OVL.u.offsets.
-offset, v) through an edit. A record alternative or an array alternative
-is copied whole (binary::read(data, OVL.u.offsets), binary::load(v.u.
-offsets)): it is an ordinary layout. A higher-level wrapper that knows
-which alternative a protocol means turns it into a domain value.
+designator: std::binary::read(data, OVL.u.offsets.offset) and
+std::binary::write(data, OVL.u.offsets.offset, v) on bytes; in native
+memory, v.u.offsets.offset through a view and std::binary::store(e,
+OVL.u.offsets. offset, v) through an edit. A record alternative or an array
+alternative is copied whole (std::binary::read(data, OVL.u.offsets),
+std::binary::load(v.u. offsets)): it is an ordinary layout. A higher-level
+wrapper that knows which alternative a protocol means turns it into a domain
+value.
 
 @example reject
-import abi::bytes
-import binary
+import std::abi::bytes
+import std::binary
 
 layout HALVES:
     size 4
     align 2
-    field low: binary::U16 at 0
-    field high: binary::U16 at 2
+    field low: std::binary::U16 at 0
+    field high: std::binary::U16 at 2
 
 union layout WORD:
     size 4
     align 4
-    alternative whole: binary::U32
+    alternative whole: std::binary::U32
     alternative halves: HALVES
 
-fn f(d: abi::bytes::Bytes) -> any errors LayoutLengthMismatch:
-    binary::parse(WORD, d)
+fn f(d: std::abi::bytes::Bytes) -> any errors LayoutLengthMismatch:
+    std::binary::parse(WORD, d)
 
 0
 @caption A union has no LayoutStruct to imprint into
 @error CORE SEMANTIC LAYOUT-UNION
-@at 17:19
+@at 17:24
 @end
 
 @example accept
-import abi
-import abi::bytes
-import binary
+import std::abi
+import std::abi::bytes
+import std::binary
 
 layout HALVES:
     size 4
     align 2
-    field low: binary::U16 at 0
-    field high: binary::U16 at 2
+    field low: std::binary::U16 at 0
+    field high: std::binary::U16 at 2
 
 union layout WORD:
     size 4
     align 4
-    alternative whole: binary::U32
+    alternative whole: std::binary::U32
     alternative halves: HALVES
 
-fn f(d: abi::bytes::MutableBytes) -> list errors LayoutLengthMismatch:
-    e = abi::bytes::freeze(binary::write(d, WORD.whole, 131073))
-    [binary::read(e, WORD.whole), binary::read(e, WORD.halves)]
+fn f(d: std::abi::bytes::MutableBytes) -> list errors LayoutLengthMismatch:
+    e = std::abi::bytes::freeze(std::binary::write(d, WORD.whole, 131073))
+    [std::binary::read(e, WORD.whole), std::binary::read(e, WORD.halves)]
 
-r = f(abi::bytes::zeroed(abi::usize(4))):
+r = f(std::abi::bytes::zeroed(std::abi::usize(4))):
     on LayoutLengthMismatch:
         []
 r
@@ -1957,8 +1959,8 @@ title: LAYOUT-NOT-A-TYPE: a layout's name used as a type
 summary: A layout describes bytes and is not itself a type: the values imprinted with layout L have the type `LayoutStruct[L]`.
 index: errors
 alias: is a layout, not a type
-keywords: layout, LayoutStruct, type annotation, parameter, binary::parse
-related: concept.binary-layouts error.layout-not-a-value error.layout-struct-parameter stdlib.binary::parse
+keywords: layout, LayoutStruct, type annotation, parameter, std::binary::parse
+related: concept.binary-layouts error.layout-not-a-value error.layout-struct-parameter stdlib.std::binary::parse
 docs: BINARY-LAYOUT.md
 code: CORE SEMANTIC LAYOUT-NOT-A-TYPE
 
@@ -1971,12 +1973,12 @@ code: CORE SEMANTIC LAYOUT-NOT-A-TYPE
 Annotate with `LayoutStruct[Header]`.
 
 @example reject
-import binary
+import std::binary
 
 layout Header:
     size 8
     align 4
-    field magic: binary::U32 at 0
+    field magic: std::binary::U32 at 0
 
 fn f(h: Header) -> int:
     0
@@ -1992,31 +1994,31 @@ title: LAYOUT-NOT-A-VALUE: a layout's name used as a value
 summary: No runtime layout object exists: a layout is named only in a type (`LayoutStruct[L]`) or as the static layout operand of a binary operation.
 index: errors
 alias: is a layout, not a value
-keywords: layout, value, binary::parse, layout_length, method syntax, Header.parse
-related: concept.binary-layouts error.layout-not-a-type error.layout-operand stdlib.binary::parse
+keywords: layout, value, std::binary::parse, layout_length, method syntax, Header.parse
+related: concept.binary-layouts error.layout-not-a-type error.layout-operand stdlib.std::binary::parse
 docs: BINARY-LAYOUT.md
 code: CORE SEMANTIC LAYOUT-NOT-A-VALUE
 
 == MEANING
     "Header" is a layout, not a value: a layout is named in a type
     (LayoutStruct[Header]) or as the layout operand of a binary operation
-    (binary::parse(Header, data), binary::layout_length(Header)), and no
+    (std::binary::parse(Header, data), std::binary::layout_length(Header)), and no
     runtime layout object exists
 
 `x = Header`, `[Header]`, `Header(...)` and `Header.parse(d)` (method
 syntax would make the layout a receiver value) are all this error.
 
 == WHAT TO DO
-Write the layout at the operation: `binary::parse(Header, data)`. To vary
-the layout, write one call per layout.
+Write the layout at the operation: `std::binary::parse(Header, data)`. To
+vary the layout, write one call per layout.
 
 @example reject
-import binary
+import std::binary
 
 layout Header:
     size 8
     align 4
-    field magic: binary::U32 at 0
+    field magic: std::binary::U32 at 0
 
 x = Header
 0
@@ -2027,16 +2029,16 @@ x = Header
 
 @topic error.layout-operand
 title: LAYOUT-OPERAND: a binary operation's layout operand is not a layout name
-summary: The layout argument of binary::parse, binary::layout_length and binary::layout_alignment is static evidence written at the call: a layout's name, never a variable, string or expression.
+summary: The layout argument of std::binary::parse, std::binary::layout_length and std::binary::layout_alignment is static evidence written at the call: a layout's name, never a variable, string or expression.
 index: errors
 alias: layout operand must be the name of a layout
-keywords: layout, binary::parse, operand, static, parameter, value
-related: concept.binary-layouts error.layout-not-a-value error.unknown-layout stdlib.binary::parse
+keywords: layout, std::binary::parse, operand, static, parameter, value
+related: concept.binary-layouts error.layout-not-a-value error.unknown-layout stdlib.std::binary::parse
 docs: BINARY-LAYOUT.md
 code: CORE SEMANTIC LAYOUT-OPERAND
 
 == MEANING
-    the layout operand of binary::parse must be the name of a layout, but
+    the layout operand of std::binary::parse must be the name of a layout, but
     "which" is a value here: the layout is static evidence, never a
     computed value
 
@@ -2044,21 +2046,21 @@ Every compiled backend reads the layout's descriptor at compile time, so
 the operand cannot be chosen at run time.
 
 @example reject
-import abi::bytes
-import binary
+import std::abi::bytes
+import std::binary
 
 layout Header:
     size 8
     align 4
-    field magic: binary::U32 at 0
+    field magic: std::binary::U32 at 0
 
-fn f(data: abi::bytes::Bytes, which):
-    binary::parse(which, data)
+fn f(data: std::abi::bytes::Bytes, which):
+    std::binary::parse(which, data)
 
 0
 @caption A parameter as the layout
 @error CORE SEMANTIC LAYOUT-OPERAND
-@at 10:19
+@at 10:24
 @end
 
 @topic error.layout-struct-parameter
@@ -2083,7 +2085,7 @@ not a type parameter, and the message says what the argument is instead:
 An unknown name is UNKNOWN-LAYOUT instead.
 
 @example reject
-import binary
+import std::binary
 
 fn f(v: LayoutStruct[int]) -> int:
     0
@@ -2099,33 +2101,34 @@ title: UNKNOWN-LAYOUT: a layout name that denotes no visible layout
 summary: A layout operand of a binary operation, or the argument of `LayoutStruct[...]`, names no visible `layout` declaration.
 index: errors
 alias: unknown layout
-keywords: layout, binary::parse, LayoutStruct, qualified, import, module
+keywords: layout, std::binary::parse, LayoutStruct, qualified, import, module
 related: concept.binary-layouts error.layout-operand error.layout-struct-parameter concept.imports
 docs: BINARY-LAYOUT.md
 code: CORE SEMANTIC UNKNOWN-LAYOUT
 
 == MEANING
-    unknown layout "Missing" (the layout operand of binary::parse): no
+    unknown layout "Missing" (the layout operand of std::binary::parse): no
     "layout Missing:" declaration is visible
     unknown layout "Missing" in LayoutStruct[Missing]: ...
 
 A module's layout is named qualified once the module is imported
-(`binary::parse(geo::Box, data)`); `import type` does not reach layouts.
+(`std::binary::parse(geo::Box, data)`); `import type` does not reach
+layouts.
 
 == WHAT TO DO
 Fix the spelling, declare the layout, or import its module and qualify it.
 
 @example reject
-import abi::bytes
-import binary
+import std::abi::bytes
+import std::binary
 
-fn f(data: abi::bytes::Bytes):
-    binary::parse(Missing, data)
+fn f(data: std::abi::bytes::Bytes):
+    std::binary::parse(Missing, data)
 
 0
 @caption No layout named Missing
 @error CORE SEMANTIC UNKNOWN-LAYOUT
-@at 5:19
+@at 5:24
 @end
 
 @topic error.lockstep-unequal
@@ -2162,7 +2165,7 @@ loop x in [1, 2, 3] and i from 0 to 2:
 @end
 
 @example accept
-import list
+import std::list
 
 fn indexed(xs: List[int]) -> List[int]:
     loop x in xs and i from 0 to xs.length():
@@ -2198,11 +2201,11 @@ exactly xs's length; one that may skip does not.
 == WHAT TO DO
 Write the clauses over the same List: `loop x in xs and i from 0 to
 xs.length():`. For two lists, iterate one and index the other, handling
-IndexNotFound (or use list::get with a default). There is no run-time
+IndexNotFound (or use std::list::get with a default). There is no run-time
 check to opt into.
 
 @example reject
-import list
+import std::list
 
 fn pairs(xs: List[int], ys: List[int]) -> List[int]:
     loop x in xs and y in ys:
@@ -2359,7 +2362,7 @@ match: SURFACE SYNTAX | STATIC-INTRINSIC-FORM: *
 == MEANING
 `static compile:` captures the indented block after it; the block is
 compiled with the program and replaced by its body (accepted) or by `fail
-compiler::CompilerError {...}` (rejected). The parser reports:
+std::compiler::CompilerError {...}` (rejected). The parser reports:
 
     "static compile" takes no arguments: it captures the indented block
     written after "static compile:"
@@ -2374,8 +2377,8 @@ Write
     static compile:
         CODE UNDER TEST
 
-inside a function that declares `errors compiler::CompilerError` (after
-`import compiler`).
+inside a function that declares `errors std::compiler::CompilerError` (after
+`import std::compiler`).
 
 @example reject
 x = static compile(1):
@@ -2440,8 +2443,8 @@ parser:
 
 This is a language policy, not an unfinished feature: positions carry no
 meaning a reader can check, while field names do (principle.name-the-parts).
-Lists remain the type for sequences: element access (list::at, list::get)
-and iteration are unchanged.
+Lists remain the type for sequences: element access (std::list::at,
+std::list::get) and iteration are unchanged.
 
 == WHAT TO DO
 Return a struct (named or anonymous) and destructure it by field names;

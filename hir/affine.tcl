@@ -16,7 +16,7 @@
 # (Consumer), what its value flows into:
 #
 #   use       a non-consuming use: the handle of a resume (consume-and-
-#             replace behind the same owner), of coroutine::done?, of a
+#             replace behind the same owner), of std::coroutine::done?, of a
 #             coroutine's start; a read of an *unrestricted* field
 #             (`test.name`); List length; a bare reference in statement
 #             position. The owner keeps owning.
@@ -37,7 +37,7 @@
 #             argument, a field or element type that is not affine, the
 #             program's result), AFFINE-EQUALITY-UNSUPPORTED (==, hash,
 #             ImmutableSet), AFFINE-LIST-OPERATION-UNSUPPORTED (an element
-#             copy -- list::at, list::append, iteration, collecting loops),
+#             copy -- std::list::at, std::list::append, iteration, collecting loops),
 #             AFFINE-FIELD-MOVE-REQUIRES-DESTRUCTURE (a projection of an
 #             affine field: no partial-move state exists), AFFINE-CAPTURE-
 #             UNSUPPORTED (a closure capture), AFFINE-TEMPORARY-UNSUPPORTED
@@ -469,7 +469,7 @@ proc hir::affine::NativeConsumer {hir p e index native type} {
         }
         repeat {
             return [list reject AFFINE-DUPLICATION-UNSUPPORTED \
-                "$native would place [Named $hir $e], an affine [TypeText $hir $e], in every slot it makes -- one value with several owners: an affine value has exactly one (make one value per slot with a factory instead -- mutable_array::generate(n, make) calls `make(i)` once for each slot -- or repeat an unrestricted value)"]
+                "$native would place [Named $hir $e], an affine [TypeText $hir $e], in every slot it makes -- one value with several owners: an affine value has exactly one (make one value per slot with a factory instead -- std::mutable_array::generate(n, make) calls `make(i)` once for each slot -- or repeat an unrestricted value)"]
         }
         factory {
             return [list reject AFFINE-ERASURE-UNSUPPORTED \
@@ -480,7 +480,7 @@ proc hir::affine::NativeConsumer {hir p e index native type} {
             if {$what ne ""} {
                 return [list reject AFFINE-ELEMENT-COPY-OUT [CopyOutMessage $hir $e $native $what]]
             }
-            if {[hir::types::IsList $type] || $native in {list::at list::append}} {
+            if {[hir::types::IsList $type] || $native in {std::list::at std::list::append}} {
                 return [list reject AFFINE-LIST-OPERATION-UNSUPPORTED \
                     "$native would copy affine elements out of [Named $hir $e] ([TypeText $hir $e]) while the List still owns them (whole-List moves are supported; element-wise access waits for ownership-moving operations)"]
             }
@@ -511,14 +511,13 @@ proc hir::affine::CopyOutMessage {hir e native kind} {
     return "$native would copy an affine element out of [Named $hir $e] ([TypeText $hir $e]) while $what still owns it, making a second owner: move it out instead -- $alternatives (there are no references to elements)"
 }
 
-# Where the `move` role of NATIVE moves a value: into a vector, an array, or
-# (any other native) its argument position.
+# Where the `move` role of NATIVE moves a value: into a vector, an array (a
+# native of that collection, by its registration: hir::mutvec::CollectionOf),
+# or (any other native) its argument position.
 proc hir::affine::MoveInto {native} {
-    if {[string match mutable_vector* $native]} {
-        return vector
-    }
-    if {[string match mutable_array* $native]} {
-        return array
+    set collection [hir::mutvec::CollectionOf $native]
+    if {$collection ne ""} {
+        return $collection
     }
     return arg
 }

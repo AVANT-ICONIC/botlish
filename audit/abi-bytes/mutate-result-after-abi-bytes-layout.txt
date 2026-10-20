@@ -1,4 +1,4 @@
-# Re-run of the earlier Bytes mutation suite (tools/mutate.tcl) on the renamed layout (abi::bytes): 12 mutants.
+# Re-run of the earlier Bytes mutation suite (tools/mutate.tcl) on the renamed layout (std::abi::bytes): 12 mutants.
 
    killed: length-off-by-one by 31 test(s) abi-bytes-aliased-writes abi-bytes-aliasing-is-ordinary-value-use abi-bytes-eager-construction-is-independent-of-the-source abi-bytes-embedded-nul abi-bytes-empty-write abi-bytes-every-byte-value-heap-write... fuzz failures 0
    killed: nul-as-terminator by 7 test(s) abi-bytes-accepts-a-typed-dynamic-list abi-bytes-embedded-nul abi-bytes-every-byte-value-heap-write abi-bytes-gc-stress-in-process abi-bytes-gc-stress-writes-are-exact abi-bytes-kernel-sees-the-nul-payload... fuzz failures 0

@@ -95,7 +95,7 @@ executed Botlish-code instructions per run: 3,704,662 (8.7% of all Ir)
   jmp                       6,500.0    1.5%
   lea (stack addr)          4,000.0    0.9%
 
-== 7 ascii::is_alphabetic: 303,500.0 executed instructions per run (8.2% of JIT)
+== 7 std::ascii::is_alphabetic: 303,500.0 executed instructions per run (8.2% of JIT)
   frame: epilogue          75,000.0   24.7%
   mov reg-reg              72,000.0   23.7%
   frame: prologue          62,500.0   20.6%
@@ -104,7 +104,7 @@ executed Botlish-code instructions per run: 3,704,662 (8.7% of all Ir)
   mov imm                  12,500.0    4.1%
   jmp                      11,000.0    3.6%
 
-== 8 ascii::is_alphanumeric: 261,500.0 executed instructions per run (7.1% of JIT)
+== 8 std::ascii::is_alphanumeric: 261,500.0 executed instructions per run (7.1% of JIT)
   frame: epilogue          75,000.0   28.7%
   frame: prologue          62,500.0   23.9%
   mov reg-reg              58,000.0   22.2%
@@ -113,7 +113,7 @@ executed Botlish-code instructions per run: 3,704,662 (8.7% of all Ir)
   mov imm                  12,500.0    4.8%
   jmp                       4,000.0    1.5%
 
-== 9 web::is_unreserved: 247,500.0 executed instructions per run (6.7% of JIT)
+== 9 std::web::is_unreserved: 247,500.0 executed instructions per run (6.7% of JIT)
   frame: epilogue          75,000.0   30.3%
   frame: prologue          62,500.0   25.3%
   mov reg-reg              42,500.0   17.2%
@@ -124,7 +124,7 @@ executed Botlish-code instructions per run: 3,704,662 (8.7% of all Ir)
   call helper               2,500.0    1.0%
   jmp                       2,500.0    1.0%
 
-== 5 ascii::is_upper: 140,500.0 executed instructions per run (3.8% of JIT)
+== 5 std::ascii::is_upper: 140,500.0 executed instructions per run (3.8% of JIT)
   frame: epilogue          37,500.0   26.7%
   frame: prologue          25,000.0   17.8%
   cmp/test (other)         21,000.0   14.9%
@@ -133,7 +133,7 @@ executed Botlish-code instructions per run: 3,704,662 (8.7% of all Ir)
   mov imm                  12,500.0    8.9%
   jmp                      11,000.0    7.8%
 
-== 6 ascii::is_lower: 117,000.0 executed instructions per run (3.2% of JIT)
+== 6 std::ascii::is_lower: 117,000.0 executed instructions per run (3.2% of JIT)
   frame: epilogue          33,000.0   28.2%
   frame: prologue          22,000.0   18.8%
   cmp/test (other)         18,000.0   15.4%
@@ -172,7 +172,7 @@ executed Botlish-code instructions per run: 3,704,662 (8.7% of all Ir)
   mov reg-reg               6,500.0    6.2%
   arith                     6,500.0    6.2%
 
-== 4 ascii::is_digit: 43,500.0 executed instructions per run (1.2% of JIT)
+== 4 std::ascii::is_digit: 43,500.0 executed instructions per run (1.2% of JIT)
   frame: epilogue          12,000.0   27.6%
   frame: prologue           8,000.0   18.4%
   cmp/test (other)          6,500.0   14.9%
@@ -181,7 +181,7 @@ executed Botlish-code instructions per run: 3,704,662 (8.7% of all Ir)
   mov imm                   4,000.0    9.2%
   jmp                       2,500.0    5.7%
 
-== 10 web::uri_escape_text: 32,000.0 executed instructions per run (0.9% of JIT)
+== 10 std::web::uri_escape_text: 32,000.0 executed instructions per run (0.9% of JIT)
   frame: epilogue           8,000.0   25.0%
   frame: prologue           6,000.0   18.8%
   stack store               6,000.0   18.8%

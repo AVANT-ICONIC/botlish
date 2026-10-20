@@ -34,7 +34,7 @@ totals per run: Ir=314,302  Dr=73,690  Dw=57,090  I1mr=45  D1mr=152  D1mw=64  IL
     1.07%  [libc] _int_realloc                                                    Ir=    3,359.8  Dr=      657.8  Dw=      456.4  Bc=      492.1  Bcm=       13.6  Bi=        0.0  D1mr=        3.2  D1mw=        0.0
     1.02%  [rust-other] __rustc::__rust_alloc                                     Ir=    3,212.0  Dr=      803.0  Dw=      803.0  Bc=        0.0  Bcm=        0.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
     1.02%  [rust-other] __rustc::__rust_no_alloc_shim_is_unstable_v2              Ir=    3,212.0  Dr=    1,606.0  Dw=      803.0  Bc=        0.0  Bcm=        0.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
-    0.76%  [botlish] 1 list::all?                                                 Ir=    2,389.0  Dr=      209.0  Dw=      264.0  Bc=      368.0  Bcm=        1.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
+    0.76%  [botlish] 1 std::list::all?                                                 Ir=    2,389.0  Dr=      209.0  Dw=      264.0  Bc=      368.0  Bcm=        1.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
     0.69%  [botlish] 2 lenient_ident_char?                                        Ir=    2,178.0  Dr=      354.0  Dw=      276.0  Bc=      342.0  Bcm=        7.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
     0.63%  [runtime] rt_is_tcl_alnum                                              Ir=    1,972.0  Dr=      462.0  Dw=      198.0  Bc=      264.0  Bcm=        8.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
     0.60%  [rust-other] <alloc::raw_vec::RawVecInner>::finish_grow                Ir=    1,896.0  Dr=      312.0  Dw=      444.0  Bc=      156.0  Bcm=        0.1  Bi=       60.0  D1mr=        1.0  D1mw=        0.0
@@ -66,7 +66,7 @@ totals per run: Ir=314,302  Dr=73,690  Dw=57,090  I1mr=45  D1mr=152  D1mw=64  IL
           16.8  8 valid_chars                            incl  73.44% of Ir  Ir=  230,808.4  Dr=   54,149.6  Dw=   41,954.3  Bc=   33,195.7  Bcm=      988.6  Bi=    3,018.0  D1mr=       94.4  D1mw=       45.0
           16.8  3 choose_classifier                      incl   0.05% of Ir  Ir=      152.0  Dr=       64.0  Dw=       16.0  Bc=       16.0  Bcm=        4.1  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
            8.4  9 fully_alnum?                           incl  25.78% of Ir  Ir=   81,025.6  Dr=   19,038.2  Dw=   14,683.0  Bc=   11,963.8  Bcm=      336.9  Bi=      931.9  D1mr=       52.5  D1mw=       16.0
-           8.4  1 list::all?                             incl   3.10% of Ir  Ir=    9,731.0  Dr=    2,248.0  Dw=    1,564.0  Bc=    1,479.0  Bcm=       18.8  Bi=      114.0  D1mr=        0.1  D1mw=        0.0
+           8.4  1 std::list::all?                             incl   3.10% of Ir  Ir=    9,731.0  Dr=    2,248.0  Dw=    1,564.0  Bc=    1,479.0  Bcm=       18.8  Bi=      114.0  D1mr=        0.1  D1mw=        0.0
            2.1  10 total_valid                           incl  73.73% of Ir  Ir=  231,744.4  Dr=   54,265.6  Dw=   42,104.3  Bc=   33,295.7  Bcm=      990.8  Bi=    3,018.0  D1mr=       94.4  D1mw=       45.0
            1.0  0 <program>                              incl 100.00% of Ir  Ir=  314,296.1  Dr=   73,689.2  Dw=   57,089.3  Bc=   45,457.2  Bcm=    1,339.2  Bi=    3,976.9  D1mr=      151.6  D1mw=       63.8
 
@@ -81,7 +81,7 @@ totals per run: Ir=314,302  Dr=73,690  Dw=57,090  I1mr=45  D1mr=152  D1mw=64  IL
           16.8  6 classify  ->  4 chars_of
            8.4  0 <program>  ->  9 fully_alnum?
            8.4  9 fully_alnum?  ->  4 chars_of
-           8.4  9 fully_alnum?  ->  1 list::all?
+           8.4  9 fully_alnum?  ->  1 std::list::all?
            2.1  0 <program>  ->  10 total_valid
            1.0  botlish_audit_run  ->  0 <program>
 
@@ -103,7 +103,7 @@ totals per run: Ir=314,302  Dr=73,690  Dw=57,090  I1mr=45  D1mr=152  D1mw=64  IL
          138.6  6 classify  ->  rt_call_value
          138.6  6 classify  ->  rt_list_append
           69.3  2 lenient_ident_char?  ->  rt_is_tcl_alnum
-          39.9  1 list::all?  ->  rt_call_value
+          39.9  1 std::list::all?  ->  rt_call_value
           33.6  6 classify  ->  rt_list_new
           25.2  4 chars_of  ->  rt_str_len
           25.2  4 chars_of  ->  rt_substr
@@ -111,7 +111,7 @@ totals per run: Ir=314,302  Dr=73,690  Dw=57,090  I1mr=45  D1mr=152  D1mw=64  IL
           18.9  10 total_valid  ->  rt_str_len
           16.8  6 classify  ->  rt_str_len
           12.6  2 lenient_ident_char?  ->  rt_str_region_eq
-           8.4  1 list::all?  ->  rt_str_len
+           8.4  1 std::list::all?  ->  rt_str_len
            8.4  9 fully_alnum?  ->  rt_list_new
            3.1  0 <program>  ->  rt_list_new
            2.1  0 <program>  ->  rt_str_len

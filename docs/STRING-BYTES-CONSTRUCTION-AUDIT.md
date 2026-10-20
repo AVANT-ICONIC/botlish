@@ -21,7 +21,7 @@ diagnostic fix (below) is the only code change.
   `traversal-string-copy-accounting-1`, locking in the fixed reconciliation
   for a concrete, fully hand-verified case.
 
-No change to `core/`, `surface/`, `hir/`, `lib/web.bot`, `lib/web.tcl`, or
+No change to `core/`, `surface/`, `hir/`, `stdlib/web.bot`, `stdlib/web.tcl`, or
 any `examples/stdlib/*.bot` source. All allocation *counts* and *byte
 totals* reported below are unchanged from HEAD before this diagnostic fix;
 only the `copies.stringBytes` aggregate for `ai_text_clean` changes (from
@@ -163,7 +163,7 @@ framing: the brief's opening evidence ("110 String, 1 List") invites
 reading `encode_utf8 -> List[Int]` as the likely source of those 110
 Strings, by analogy with the prior audit's `uriEscape` finding. It is not.
 Grepping `examples/stdlib/*.bot` confirms `encode_utf8` appears nowhere
-outside `lib/web.bot`'s `uri_escape_text`. `ai_text_clean`'s 110 Strings
+outside `stdlib/web.bot`'s `uri_escape_text`. `ai_text_clean`'s 110 Strings
 and 1 List come entirely from ordinary `substring`/`concat`/`==`
 traversal, and the milestone's `encode_utf8`/`List[Int]` questions
 (#6-20) can only be answered against `uriEscape` as *secondary* evidence
@@ -193,7 +193,7 @@ clean_char's result (same object, unchanged, on the common path)
 strcat: a NEW String = done's full prefix + this one character
     (55 strcat allocations, 6-case demo -- each copies the WHOLE growing
     prefix, not just the new character: the classic immutable-accumulator
-    shape, identical to string_reverse.bot's reverse_from and lib/web.bot's
+    shape, identical to string_reverse.bot's reverse_from and stdlib/web.bot's
     esc_from/esc_bytes)
     ▼
 ... recurse until index >= length(text) ...
@@ -345,7 +345,7 @@ emoji-heavy 100K case, which is non-ASCII throughout). This answers #14/
 the O(n²)-seeking half of the problem here; only the O(n²)-**copying**
 half (the concat accumulator) remains.
 
-`lib/web.bot`'s `esc_from` (uriEscape's per-character scan) is a
+`stdlib/web.bot`'s `esc_from` (uriEscape's per-character scan) is a
 **different, unoptimized shape**: it is a 3-parameter self-tail function
 (`text, i, acc`) that calls `substring(text, i, i+1)` **inline**, not
 through a separate 2-parameter `peek`-shaped helper -- `hir::traversal.
@@ -362,10 +362,10 @@ mode item #14 warns a new byte-view design must not reintroduce.
 
 ## `encode_utf8` audit (secondary evidence: `uriEscape`, since `ai_text_clean` has no calls)
 
-Every call to `encode_utf8` in the corpus is inside `lib/web.bot`'s
+Every call to `encode_utf8` in the corpus is inside `stdlib/web.bot`'s
 `esc_char(c)` (`uriEscape`'s implementation), always applied to a
 **one-character** String (`c = substring(text, i, i+1)`, from `esc_from`).
-Measured directly on `web::uri_escape_text("a café €北京🙂!")` (12
+Measured directly on `std::web::uri_escape_text("a café €北京🙂!")` (12
 scalars, 22 UTF-8 bytes, spanning 1/2/3/4-byte encodings on purpose, per
 #53):
 
@@ -553,7 +553,7 @@ program in the table combined.
 **Corpus-wide `substring`/concat-accumulator inventory** (#33-35, #40):
 the exact `out = concat(out, piece)` (or `concat(piece, out)`) recursive
 shape appears in at least four places: `ai_text_clean.bot`'s `clean_from`,
-`string_reverse.bot`'s `reverse_from`, `lib/web.bot`'s `esc_bytes` (line
+`string_reverse.bot`'s `reverse_from`, `stdlib/web.bot`'s `esc_bytes` (line
 129, twice per byte) and `esc_from` (line 145), and `hex_pair` (line 123,
 a small fixed 2-piece case, not a growing accumulator -- see "Distinguish
 small fixed concat from builder-worthy accumulation" below). `csv_records.
@@ -814,8 +814,8 @@ freeze to immutable String/Bytes             MutableArray->List exists; ->String
 
 **Corpus (#31-40)**
 
-31. Only `lib/web.bot`'s `esc_char` (`uriEscape`'s implementation);
-    nowhere else in `bench/`, `examples/stdlib/`, or `lib/`.
+31. Only `stdlib/web.bot`'s `esc_char` (`uriEscape`'s implementation);
+    nowhere else in `bench/`, `examples/stdlib/`, or `stdlib/`.
 32. All calls found are immediate consumers; none escape.
 33. `ai_text_clean` (`clean_from`), `string_reverse` (`reverse_from`),
     `uriEscape` (`esc_bytes` ×2, `esc_from`), `csv_records`
@@ -862,6 +862,6 @@ freeze to immutable String/Bytes             MutableArray->List exists; ->String
 - `bench/ai_text_clean.tcl -runs 3`: unchanged program values (CRC-
   verified internally by the bench script itself) across all three input
   families and all three sizes measured.
-- No source file under `core/`, `surface/`, `hir/`, `lib/`, or
+- No source file under `core/`, `surface/`, `hir/`, `stdlib/`, or
   `examples/stdlib/` was touched: every allocation count and program
   value in this report is unchanged from HEAD before this milestone.

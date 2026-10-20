@@ -89,7 +89,7 @@ executed Botlish-code instructions per run: 9,964 (13.5% of all Ir)
   mov imm                      22.0    2.8%
   jmp                           9.0    1.1%
 
-== 1 list::find: 356.0 executed instructions per run (3.6% of JIT)
+== 1 std::list::find: 356.0 executed instructions per run (3.6% of JIT)
   mov reg-reg                  96.0   27.0%
   bool test                    36.0   10.1%
   tag test                     34.0    9.6%

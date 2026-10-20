@@ -91,7 +91,7 @@
             return none
 >>>>
 
-@@ view-array-writable binary::store_element through a NativeView's array is accepted (a view upgraded to write authority)
+@@ view-array-writable std::binary::store_element through a NativeView's array is accepted (a view upgraded to write authority)
 ## hir/layouts.tcl
 <<<<
         if {$term ne "" && ![hir::types::IsNativeEdit $type]} {
@@ -129,7 +129,7 @@
     if {$copy ne ""} {
 >>>>
 
-@@ loaded-length-one-more a List binary::load copied from an array of N is taken to have N + 1 elements
+@@ loaded-length-one-more a List std::binary::load copied from an array of N is taken to have N + 1 elements
 ## hir/cardinality.tcl
 <<<<
                 return [FormConst [lindex $term 1]]
@@ -230,7 +230,7 @@
 @@ native-store-row-written-while-encoding the native runtime writes a row's elements one at a time as it encodes them, so a value outside the encoding leaves the elements before it written
 ## native/src/runtime/nview.rs
 <<<<
-    let bytes = match encoded_row(p, l, width, signed, big, "binary::store") {
+    let bytes = match encoded_row(p, l, width, signed, big, "std::binary::store") {
         Ok(bytes) => bytes,
         Err(failed) => return failed,
     };
@@ -238,11 +238,11 @@
     UNIT
 ====
     if heap_kind(l) != KIND_LIST {
-        return vm(p).fail(RtError::Type { context: "binary::store".to_string(), expected: Kind::List, got: l });
+        return vm(p).fail(RtError::Type { context: "std::binary::store".to_string(), expected: Kind::List, got: l });
     }
     let items = list_of(l).items().to_vec();
     for (i, item) in items.into_iter().enumerate() {
-        match super::ops::bin_encode(p, item, width, signed, big, "binary::store") {
+        match super::ops::bin_encode(p, item, width, signed, big, "std::binary::store") {
             Ok(encoded) => store_at(address + i * width, &encoded[..width]),
             Err(failed) => return failed,
         }

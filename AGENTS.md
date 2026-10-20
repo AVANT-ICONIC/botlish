@@ -88,7 +88,7 @@ and relies on compilation isolation for the rest: everything a backend reads
 must be in the HIR, its side tables or its `declarations`. So a new fact a
 backend reads from process state, rather than from the HIR, breaks it the way
 it breaks isolation. Text is valid for the front end that built it only (a
-fingerprint of `core`, `hir`, `surface` and lib's Tcl libraries; the backends
+fingerprint of `core`, `hir`, `surface` and stdlib's Tcl libraries; the backends
 are left out because they never shape a HIR -- keep it so: a backend must not
 define or change a front-end procedure or register a type or native). Never
 add a way to skip that check or to read another front end's text; a front end
@@ -246,7 +246,7 @@ a static zipfs tclsh. `--basekit PATH` uses a prebuilt zipkit instead. To run
 the test suite, still install the `.deb`s.
 
 * `single/package.tcl` packs exactly main.tcl, LICENSE, `core/`,
-  `compiler/`, `hir/`, `surface/`, `native/*.tcl`, `lib/`,
+  `compiler/`, `hir/`, `surface/`, `native/*.tcl`, `stdlib/`,
   `compilerpedia/compilerpedia.tcl`, `compilerpedia/topics/` and
   `compilerpedia/generated/`, plus a `BUILD` file naming the source
   revision. If the compiler starts reading another file at run time, add
@@ -342,7 +342,7 @@ What it costs, measured on a 4-core container (2026-10-15):
     run then removes the entries another front end wrote, so the directory
     stays at one front end's worth (about 190 MB).
   - **Why it pays:** a suite whose text, imported modules and front end
-    (`core/`, `hir/`, `surface/`, lib's Tcl libraries) are unchanged is read
+    (`core/`, `hir/`, `surface/`, stdlib's Tcl libraries) are unchanged is read
     from its entry, not compiled again. The key leaves out `compiler/` and
     `native/`, so after an edit there the golden corpus costs only the
     backends' runs, a fraction of the Tcl tests it replaces
@@ -449,8 +449,8 @@ name; new tests and tools must keep it that way:
 
 * A test that needs a throwaway module next to the standard ones wraps its
   body in `withPrivateLibrary` (`tests/helpers.tcl`), which points
-  `$::core::libraryDir` at a per-process copy of `lib/` in the tcltest
-  temporary directory. Never write into the real `lib/`.
+  `$::core::libraryDir` at a per-process copy of `stdlib/` in the tcltest
+  temporary directory. Never write into the real `stdlib/`.
 * A script or audit tool keeps its scratch files in a `file tempdir` directory
   (or under a name with `[pid]`) and removes it when it finishes, never under a
   fixed name in the working directory or the repository; one that runs a test
@@ -522,13 +522,13 @@ lowers, run `tests/fixed-arity-list-return.test` and
 (`-> list`, `-> List[T]`) is a real type the checker proves, not a suppression;
 do not add another opt-out (MULTI-VALUE-RESULTS.md). Library
 modules' own findings print for every program that loads them, so tests that
-import `lib/*.bot` and assert on a complete warning set filter by code or file.
+import `stdlib/*.bot` and assert on a complete warning set filter by code or file.
 Since the warning-driven refactor (next section) only two modules carry any,
 all `ONE-CHAR-STRING-LITERAL` and all listed in `audit/refactor/manifest.txt`:
-`lib/web.bot` 23 (its hex-digit table, `"%"`, and the local-part and label
-classes) and `lib/linux/path.bot` 2 (`"/"`). Every other module is
-warning-clean, `lib/io.bot` included (its line operations append the newline
-as a character, `str::append_char`).
+`stdlib/web.bot` 23 (its hex-digit table, `"%"`, and the local-part and label
+classes) and `stdlib/linux/path.bot` 2 (`"/"`). Every other module is
+warning-clean, `stdlib/io.bot` included (its line operations append the newline
+as a character, `std::str::append_char`).
 
 `SAME-FAILURE` (WARNINGS-SAME-FAILURE.md) reads the `fail` sites of a function's
 own body (milestone 1's `BodyExprs`, which never enters a nested function), each
@@ -554,11 +554,11 @@ response to this warning is a rename; do not add an opt-out, a reverse rule
 
 `ONE-CHAR-STRING-LITERAL` (WARNINGS-ONE-CHAR-STRING-LITERAL.md) reads, per
 `const` node, its exact value (`hir::exact::Of`: exact String values) and
-measures it with the reference `str::length` (`core::strings::length`); the one
+measures it with the reference `std::str::length` (`core::strings::length`); the one
 String const the frontend synthesizes, a context parameter's
 `context#load("ID")` key, is recognized by `hir::contexts::isLoad` and never
 reported. If you change how a String or character literal lexes, lowers or reads
-back from HIR text, the exact value of a constant, `str::length`, or build a
+back from HIR text, the exact value of a constant, `std::str::length`, or build a
 String const anywhere in the frontend (`tests/one-char-string-literal.test`'s
 `oc-synthesized-string-consts-enumerated` lists every place that does), run
 `tests/one-char-string-literal.test` and
@@ -598,7 +598,7 @@ and location), and every program and loader without an entry compiling under
 runs it on every push and pull request (`tests/warning-gate.test` pins that it
 passes and that it fails on a planted warning).
 
-If you add or change a program in `examples/`, `bench/` or `lib/`, run
+If you add or change a program in `examples/`, `bench/` or `stdlib/`, run
 `tclsh9.0 audit/refactor/tools/gate.tcl`:
 
 * A new warning is answered in the code -- convert it, annotate the result
@@ -743,7 +743,7 @@ If you change satisfaction (`hir::contexts::satisfiesTrait`,
 check (`CheckTraitBindings`), context-trait typing (`hir::traits::TypeCall`,
 `hir::types::ShapeResult`'s context-trait case), the plan's context-trait
 actions or the planned-call resolution (`hir/resolve.tcl`'s
-`ResolvePlannedCall`), or lib/io.bot, lib/linux/io.bot, lib/linux/path.bot,
+`ResolvePlannedCall`), or stdlib/io.bot, stdlib/linux/io.bot, stdlib/linux/path.bot,
 run `tests/context-traits.test`, `tests/portable-io.test`,
 `tests/linux-path.test`, `audit/context-traits/tools/fuzz.tcl` and
 `audit/context-traits/tools/mutate.tcl` (every mutant in
@@ -758,8 +758,8 @@ Raw, ambient authority is acknowledged at the module boundary
 (DIRECT-MODULES.md): a module is designated direct by its file's first line,
 `direct module`, or -- an intrinsic namespace -- by
 `core::native::declareDirectNamespace` (the syscall transports
-linux::abi::x86_64 and linux::abi::aarch64; lib/linux/sys.*.bot and
-lib/linux.bot are declared ones). A call in module U of a callable of another designated module
+std::linux::abi::x86_64 and std::linux::abi::aarch64; stdlib/linux/sys.*.bot and
+stdlib/linux.bot are declared ones). A call in module U of a callable of another designated module
 is a direct edge of U, mediated only when the function making it requires a
 context (struct or context trait) U declares itself; an unmediated edge makes
 U inferred direct, and the marker must agree (DIRECT without it,
@@ -779,7 +779,7 @@ module like any other. Keep it so:
   lives in the HIR (`moduleDecls`, `direct`), never in a registry: keep both
   (no channel in hir/staticdeps.tcl depends on them, and compilation
   isolation holds by construction).
-* A program that calls `linux`, `linux::sys` or a transport itself (an
+* A program that calls `linux`, `std::linux::sys` or a transport itself (an
   example, a golden suite, a test program) is low-level: it starts with `direct module`, or
   mediates the calls through a context of its own.
 
@@ -796,7 +796,7 @@ change the code it mutates, keeping it a mutant of the same rule).
 Coroutines (COROUTINES.md) are eagerly started, affine resumable
 computations: `yield` is a statically tracked deep control effect, and every
 coroutine operation is an internal root native (`coroutine#create`,
-`#start`, `#resume`, `#yield`, `#release`, and `coroutine::done?`).
+`#start`, `#resume`, `#yield`, `#release`, and `std::coroutine::done?`).
 Ownership is entirely static: there is no runtime moved state, no copy, fork
 or clone operation, no iterator protocol, no exhaustion error and no
 resumable error -- don't add any (`tests/coroutines.test`'s `co-source-*` tests pin this). A handle is an
@@ -917,13 +917,13 @@ and rustc-linked executables, and Linux syscalls through the AArch64
 transport (next section). The `stub` linker remains x86-64 only: the Tcl
 tests that need it carry `stubLinker`. A Tcl test that needs the native
 runtime on Linux (coroutines, stack maps, GC-stress evidence), or makes
-syscalls only through the portable wrappers (`linux::write`, `linux::read`,
-`linux::io`), carries `nativeLinux`; one that runs the x86-64 transport or
+syscalls only through the portable wrappers (`std::linux::write`, `std::linux::read`,
+`std::linux::io`), carries `nativeLinux`; one that runs the x86-64 transport or
 reads x86-64 machine code carries `linuxX86_64`, the AArch64 transport's
 `linuxAarch64`; one that only needs a standalone executable,
 `executableAot`. A test that only compiles a transport (its NIR, CLIF, a
 diagnostic) needs no host, like any NIR or CLIF test: it names `-target`
-when it compiles through `linux::sys`. Golden suites that make live syscalls through one
+when it compiles through `std::linux::sys`. Golden suites that make live syscalls through one
 transport declare `# golden-host: linux-x86_64 -- REASON` (or
 `linux-aarch64`; tests/golden/run.tcl). Never gate a test on `linuxX86_64`
 for anything but running the x86-64 instruction set or syscall ABI. A change to the
@@ -993,7 +993,7 @@ C-BINDGEN-LAYOUTS.md) have equal rows and are two targets. Keep it so:
   architecture-specific namespace that is no platform's stays every
   system's.
 * A build reads the target in three places (ModuleFile's architecture file,
-  PlatformCheck, ffi::c's scalars), and the HIR records the target only then
+  PlatformCheck, std::ffi::c's scalars), and the HIR records the target only then
   (`hir::cabi::targetOf`; the loader's `targetRead`): a new place that reads
   the target sets it too. A HIR built for one target is never taken for
   another's: `hir::interchange::decode -target` refuses it, the cache key
@@ -1038,31 +1038,31 @@ and `tests/platform/native-status.tcl` the native target boundary.
 
 A raw Linux syscall is one architecture's transport
 (LINUX-SYSCALL-TRANSPORTS.md, LINUX-X86-64-SYSCALL.md):
-`linux::abi::x86_64::syscall` ({rax, rdi, rsi, rdx, r10, r8, r9}, `syscall`)
-and `linux::abi::aarch64::syscall` ({x8, x0..x5}, `svc #0`), each over its
-own `abi::ARCH::Register64`, with its own address bridges. They are rows of
+`std::linux::abi::x86_64::syscall` ({rax, rdi, rsi, rdx, r10, r8, r9}, `syscall`)
+and `std::linux::abi::aarch64::syscall` ({x8, x0..x5}, `svc #0`), each over its
+own `std::abi::ARCH::Register64`, with its own address bridges. They are rows of
 one table, `core::linuxabi`'s `transports`: the contract (hir/syscall.tcl),
 escape analysis (hir/escape.tcl), lowering (native/lower.tcl) and the Tcl
 refusal read the row of the native a call names. Never name a transport, its
 register type or its op outside the table, never let one architecture's
 register word reach the other's transport, and never give a transport
 knowledge of a syscall (numbers are source data). A third architecture is a
-row, a Rust boundary (native/src/runtime/syscall.rs) and an `abi::ARCH`
+row, a Rust boundary (native/src/runtime/syscall.rs) and an `std::abi::ARCH`
 module.
 
-Everything above the transports is one source: `linux` (lib/linux.bot),
-`linux::io` and `io` name no register, number or transport. What differs by
-architecture is `linux::sys`, an architecture-specific module
-(`lib/linux/sys.x86_64.bot`, `lib/linux/sys.aarch64.bot`): the loader
-(surface/modules.tcl's `ModuleFile`) picks `lib/P.ARCH.bot` by the
+Everything above the transports is one source: `linux` (stdlib/linux.bot),
+`std::linux::io` and `io` name no register, number or transport. What differs by
+architecture is `std::linux::sys`, an architecture-specific module
+(`stdlib/linux/sys.x86_64.bot`, `stdlib/linux/sys.aarch64.bot`): the loader
+(surface/modules.tcl's `ModuleFile`) picks `stdlib/P.ARCH.bot` by the
 compilation target's architecture (`-target`, the host's by default) when
-there is no `lib/P.bot` -- for a Linux target only: `linux::*` is the Linux
+there is no `stdlib/P.bot` -- for a Linux target only: `linux::*` is the Linux
 platform's (Compilation targets, below). Keep both files' surfaces identical
 (`lst-linux-sys-same-surface`). The front-end cache records both candidate
 paths of every imported namespace (`surface::cache::Dependencies`); a new
 input that selects a file must go there too.
 
-If you change the transports, the table, the bridges, `linux::sys` or the
+If you change the transports, the table, the bridges, `std::linux::sys` or the
 loader rule, run `tests/linux-syscall.test`,
 `tests/linux-syscall-transports.test`, `tests/abi-bytes.test`,
 `tests/abi-mutable-bytes.test`, the golden suites `linux-io.bot`,
@@ -1159,8 +1159,8 @@ decimal. It is the one family of the scalar-refinement schema
   precision metadata at run time; HIR interchange carries a constant's exact
   decimal, never its binary64 (`hir::interchange::WithoutRepresentations`).
 * Nothing converts between Float64 and DecimalRounded implicitly: the decay
-  is `float64::from_decimal_rounded`, minting is a proof or
-  `decimal_rounded::round[T]` (UnrepresentableDecimal).
+  is `std::float64::from_decimal_rounded`, minting is a proof or
+  `std::decimal_rounded::round[T]` (UnrepresentableDecimal).
 
 If you change any of that (DECIMAL-ROUNDED-MILESTONE-1.md, "What to run
 when changing this", lists the files), run `tests/decimal-rounded.test`,
@@ -1377,7 +1377,7 @@ dropping variant hir/mutvec.tcl retargets an affine operation to),
 `-result-length` (hir/cardinality.tcl) and the receiver role
 (`hir::mutvec::OpKind`). Do not add a check keyed on a native's name
 (`mat-id-4` fences `hir/`, `compiler/` and `surface/`); register a role.
-`mutable_array::generate(n, f)` calls F once per slot, in index order, under
+`std::mutable_array::generate(n, f)` calls F once per slot, in index order, under
 the callable-contract model (`hir::containers::VerifyFactory`, `-errors-from`).
 
 If you change the array runtime (`core/mutarray.tcl`, the array section of
@@ -1401,7 +1401,7 @@ A `layout` (BINARY-LAYOUT.md) is a compile-time schema of a fixed number of
 bytes -- explicit size, alignment and per-field offsets, scalar fields whose
 integer domain is exactly one fixed-width encoding's, nested layouts by value
 -- and `LayoutStruct[L]` the immutable struct its imprinting
-(`binary::parse(L, data)`) produces and its emission (`binary::emit(v)`)
+(`std::binary::parse(L, data)`) produces and its emission (`std::binary::emit(v)`)
 consumes. `hir/layouts.tcl`'s registry is the one representation of a
 resolved layout: `LayoutStruct[L]` is the named struct `{nstruct
 LayoutStruct[L]}`, whose schema `hir/structs.tcl` reads from it, never a
@@ -1436,10 +1436,10 @@ kind is classified in `tests/static-compile.test`'s census.
 ## Native layout views
 
 A native view (NATIVE-LAYOUT-VIEWS.md) reads an ordinary `layout` from live
-native memory: `binary::native::view(L, p)` is `NativeView[L]`, the
+native memory: `std::binary::native::view(L, p)` is `NativeView[L]`, the
 address word of the data pointer `p` (observed; `NativeViewNull` for null),
 each field read when projected (`v.f`: one load at the layout's offset),
-`binary::load(v)` the `LayoutStruct[L]` of all of them. One layout, one
+`std::binary::load(v)` the `LayoutStruct[L]` of all of them. One layout, one
 registry entry and one descriptor serve both backings; there is no second
 description language. Keep it so:
 
@@ -1447,9 +1447,9 @@ description language. Keep it so:
   representation guarantee for an ordinary Botlish value (an address, a
   stable offset, pinning): a layout is an explicit external description,
   and a struct stays the compiler's.
-* A pointer field (`ffi::c::Ptr[T]`, `ffi::c::FnPtr[F]`) is native-only:
+* A pointer field (`std::ffi::c::Ptr[T]`, `std::ffi::c::FnPtr[F]`) is native-only:
   read through a view it is the pointer memory holds; bytes never become one
-  (`binary::parse` and `binary::emit` of its layout are
+  (`std::binary::parse` and `std::binary::emit` of its layout are
   `LAYOUT-NATIVE-ONLY`). Never let byte storage, an Int or a layout make a
   pointer, and never add pointer arithmetic, `Ptr <-> Int` or a dereference
   outside the view's field reads.
@@ -1461,8 +1461,8 @@ description language. Keep it so:
   elaborated after the checks to `binary#view_field(v, FIELD)` with the
   field's descriptor entry, so no backend reads a layout; its receiver must
   be statically a view (`hir::layouts::verifyInstance`).
-* `binary::native` is designated direct (`declareDirectNamespace`): making a
-  view is a direct edge; declaring layouts, `binary::parse` and reading a
+* `std::binary::native` is designated direct (`declareDirectNamespace`): making a
+  view is a direct edge; declaring layouts, `std::binary::parse` and reading a
   view someone else made are not. Never move directness onto the layout.
 * The Tcl backends have no native memory: they refuse a view of a non-null
   pointer (`NATIVE-ONLY`) and never imitate a read.
@@ -1484,11 +1484,11 @@ harnesses (above) for a change to the layout registry or the descriptor.
 ## Native layout writes
 
 The write half (NATIVE-LAYOUT-WRITES.md) has two deliberately different
-mechanisms: `binary::native::edit(L, p)` is `NativeEdit[L]`, write authority
-over live native memory (`binary::store(e, L.f, v)`: one store of the field's
-width at its offset), and `binary::write(d, L.f, v)` /
-`binary::write_foreign(d, L.p, q)` write one field of a
-`abi::bytes::MutableBytes` as a new value. A write names its field by a
+mechanisms: `std::binary::native::edit(L, p)` is `NativeEdit[L]`, write authority
+over live native memory (`std::binary::store(e, L.f, v)`: one store of the field's
+width at its offset), and `std::binary::write(d, L.f, v)` /
+`std::binary::write_foreign(d, L.p, q)` write one field of a
+`std::abi::bytes::MutableBytes` as a new value. A write names its field by a
 static designator, `L.f` or a path `L.inner.x`, resolved to a constant with
 the leaf's absolute offset and encoding. Keep it so:
 
@@ -1496,7 +1496,7 @@ the leaf's absolute offset and encoding. Keep it so:
   `NativeView[L]` with a flag, a subtype of one either way, a pointer, a
   `MutableBytes` or a struct. A view never becomes an edit (no upgrade, no
   conversion); write authority is made from a pointer by
-  `binary::native::edit`, which is `binary::native`'s and so direct; storing
+  `std::binary::native::edit`, which is `std::binary::native`'s and so direct; storing
   through an edit someone made, and every byte write, are not.
 * Native memory is raw: one layout's integer field and another's pointer
   field can alias an address, so a holder of write authority can pun bits
@@ -1521,13 +1521,13 @@ the leaf's absolute offset and encoding. Keep it so:
 * `MutableBytes` stays a value: a write returns a fresh storage and never
   writes its operand (MUTABLE-BYTES.md); its size must be exactly the
   layout's (`LayoutLengthMismatch`). Pointers enter bytes only through the
-  explicit `binary::write_foreign`, into a pointer field: an ordinary
-  `binary::write` or `binary::emit` of one stays `LAYOUT-NATIVE-ONLY`, and
-  `binary::parse` of a pointer layout stays rejected whatever the bytes hold.
+  explicit `std::binary::write_foreign`, into a pointer field: an ordinary
+  `std::binary::write` or `std::binary::emit` of one stays `LAYOUT-NATIVE-ONLY`, and
+  `std::binary::parse` of a pointer layout stays rejected whatever the bytes hold.
   Never add `Ptr -> Int`, `Ptr -> Bytes` or any decoding of a pointer from
   bytes.
 * No native record allocation, `extern c struct`, layout guarantee for an
-  ordinary struct, bitfields or `ffi::c::Bool` fields here
+  ordinary struct, bitfields or `std::ffi::c::Bool` fields here
   (NATIVE-LAYOUT-WRITES.md section 22 records what a generated layout will
   need; fixed arrays are FIXED-LAYOUT-ARRAYS.md's and unions
   LAYOUT-UNIONS.md's, next sections).
@@ -1558,8 +1558,8 @@ nested layout's size with its tail padding, a row's whole width), E any
 representation (a scalar, a C scalar, a pointer, a nested layout, another
 array). Its copied value is an ordinary List of exactly N element values;
 read through a view or an edit it is a live array, `NativeView[array N of
-E]` / `NativeEdit[array N of E]` (binary::element, binary::store_element,
-binary::load). Keep it so:
+E]` / `NativeEdit[array N of E]` (std::binary::element, std::binary::store_element,
+std::binary::load). Keep it so:
 
 * No new object model: never add a FixedArray type, a runtime array object,
   a slice, an array value distinct from a List, a String conversion of a
@@ -1569,8 +1569,8 @@ binary::load). Keep it so:
   whole-array write, store or emit checks every List's length before the
   first byte is written (the declared LayoutExtentMismatch), unless the
   completion analysis proves it (`-bounds {extents V}`: a literal, a
-  counted loop, a branch on list::length, a copy binary::load or
-  binary::parse made); a proven write has no failure path in native code.
+  counted loop, a branch on std::list::length, a copy std::binary::load or
+  std::binary::parse made); a proven write has no failure path in native code.
   An element index is checked the same way (`-bounds {index narray ...}`,
   IndexNotFound). Never weaken either to a run-time-only check, and never
   read an extent from a List's type.
@@ -1579,7 +1579,7 @@ binary::load). Keep it so:
   an element of an array of records is its own view or edit. Pointer
   authority is recursive: bytes never decode into a pointer inside an
   array (parse of a layout holding one is LAYOUT-NATIVE-ONLY), and an
-  array of pointers is encoded only by binary::write_foreign.
+  array of pointers is encoded only by std::binary::write_foreign.
 * An element access is O(1): one load or store at the array's address plus
   the index times the stride, never a copy of the array; a copy allocates
   exactly the List (and records) it returns.
@@ -1634,19 +1634,19 @@ Keep it so:
   elsewhere, or let a union's size or alignment be computed from its
   alternatives; an alternative wider than its union is an error.
 * A union has no copied value: no `LayoutStruct` of a union or of anything
-  holding one by value, so `binary::parse`, `binary::emit`, `binary::load`
-  and whole-array writes of one are `LAYOUT-UNION` (`compiler::DiagnosticCode`
+  holding one by value, so `std::binary::parse`, `std::binary::emit`, `std::binary::load`
+  and whole-array writes of one are `LAYOUT-UNION` (`std::compiler::DiagnosticCode`
   `LayoutUnion`), statically and, for a program compiled unchecked, when the
   call runs. Bytes are read and written one alternative at a time through a
-  static designator (`binary::read(data, L.u.alt)`, `binary::write`,
-  `binary::write_foreign`); a designator names an alternative, never the
+  static designator (`std::binary::read(data, L.u.alt)`, `std::binary::write`,
+  `std::binary::write_foreign`); a designator names an alternative, never the
   union. Never make a copied union a struct of every alternative, a byte
   blob with interpretation methods, or anything else, without a design
   decision recorded in LAYOUT-UNIONS.md ("The copied-value decision").
 * A write touches exactly its alternative's bytes: a narrow alternative
   never zeroes or normalizes the rest of the union, nor the bytes around it.
 * Pointer authority is recursive through alternatives: bytes never become a
-  pointer through any alternative (`binary::read` or `binary::parse` of a
+  pointer through any alternative (`std::binary::read` or `std::binary::parse` of a
   pointer path is `LAYOUT-NATIVE-ONLY`); native write authority may store
   scalar bits that a pointer alternative then reads (raw native memory),
   and a pointer stored through an alternative is observed, never moved.
@@ -1657,7 +1657,7 @@ Keep it so:
 
 If you change the union grammar (surface/parser.tcl's `LayoutDecl`),
 hir/layouts.tcl's union cases (`IsUnion`, `ReprUnionPath`, `UnionRefusal`,
-`FieldPath` through unions, the overlap and bounds checks), `binary::read`
+`FieldPath` through unions, the overlap and bounds checks), `std::binary::read`
 (core/binary.tcl, core/native.tcl's registration, native/lower.tcl's
 `LayoutCall`), the union cases of `ViewBase`, `ReprRead`/`ReprWrite`,
 `ViewFieldType`, `hir/completions.tcl`'s `ExactCopy`/`ExtentsVerdict`, or the
@@ -1680,11 +1680,11 @@ binding generator's checks below; regenerate and commit).
 
 ## C ABI types and imprinting
 
-`ffi::c` (C-ABI-TYPES.md) is the C ABI value universe: the C integer scalars
-`ffi::c::Char` ... `ffi::c::ULongLong` (integer domains whose ranges are the
+`std::ffi::c` (C-ABI-TYPES.md) is the C ABI value universe: the C integer scalars
+`std::ffi::c::Char` ... `std::ffi::c::ULongLong` (integer domains whose ranges are the
 compilation's C target's -- `-target`, the host's by default; core/cabi.tcl
-is the one target table), `ffi::c::Void` (a pointee only), the affine
-`ffi::c::Ptr[T]` and `ffi::c::FnPtr[Fn{...}]`, and `null[T]()`, `null?`,
+is the one target table), `std::ffi::c::Void` (a pointee only), the affine
+`std::ffi::c::Ptr[T]` and `std::ffi::c::FnPtr[Fn{...}]`, and `null[T]()`, `null?`,
 `clone`, `erase`, `retype[T]`. It calls no C. Keep it a model of C's ABI,
 not of C: no width or signedness read from a name (the registry entry's
 `cabi` metadata, `core::type::cabiOf`), no C integer promotion, no implicit
@@ -1696,7 +1696,7 @@ only from `core::cabi::installTestFixture`, which nothing but a test process
 calls; never add a public way to make one.
 
 The scalars are per-compilation source types the loader declares for the
-target when a file imports ffi::c (`hir::cabi::NamespaceTypeDecls`): the
+target when a file imports std::ffi::c (`hir::cabi::NamespaceTypeDecls`): the
 target is a front-end input, in `surface::cache::Key`. Imprinting
 (hir/imprint.tcl) is general, not generics: one binding path for Botlish
 functions (their declared types) and intrinsics (`-imprint`), variables
@@ -1719,8 +1719,8 @@ regenerates the compile-cost table.
 
 ## C pointer borrowing (temporary byte exposure)
 
-A foreign call's pointer parameter may admit existing `abi::bytes::Bytes` or
-`abi::bytes::MutableBytes` storage for that one call
+A foreign call's pointer parameter may admit existing `std::abi::bytes::Bytes` or
+`std::abi::bytes::MutableBytes` storage for that one call
 (C-POINTER-BORROWING.md): only when its contract (core/native.tcl's
 `-foreign`; an `extern c fn` declaration's later) says, for that parameter,
 `escape proven-noescape|declared-noescape`, a known `access` (read | write),
@@ -1729,9 +1729,9 @@ and a byte-sized pointee (Char, SChar, UChar by registry metadata, or Void).
 (`borrows`); every backend lowers from that field. Keep it so:
 
 * No pointer value of byte storage, ever: no `BorrowedPtr`, no operation
-  turning a Bytes into an `ffi::c::Ptr`, no internal `cptr` for an exposure
+  turning a Bytes into an `std::ffi::c::Ptr`, no internal `cptr` for an exposure
   (`cb-no-pointer-value`, `cb-no-pointer-producing-native`), and no
-  FFI-specific byte type (`ffi::c::Bytes`, `PinnedBytes`, ...).
+  FFI-specific byte type (`std::ffi::c::Bytes`, `PinnedBytes`, ...).
 * No fact from anything but the contract: `const` (read access) is not
   noescape, an absent fact is `unknown`, and `unknown` never admits
   exposure; never read a fact from a C type, a parameter or function name or
@@ -1744,7 +1744,7 @@ and a byte-sized pointee (Char, SChar, UChar by registry metadata, or Void).
   `keepalive` after the operation; the syscall bridges and the foreign call
   share `ExposeStorage`/`KeepExposedAlive` (native/lower.tcl): no other code
   emits an address op or a keepalive. The C side never names the Linux
-  syscall ABI and the syscall side never names `ffi::c`.
+  syscall ABI and the syscall side never names `std::ffi::c`.
 * The borrow fixture (`core::cabi::installBorrowFixture`, `ffi_fixture::`) is
   a test process's own; nothing else may call it.
 
@@ -1862,7 +1862,7 @@ fixture's `tools/c-bindgen/fixture/expected/TARGET/`. Keep it so:
   manifest; conflicting sources and stale policy are errors.
 * Never approximate: a declaration outside the C ABI universe is
   unsupported with its blocker in the report, never mapped to something
-  that compiles. `ffi::c::Bool` is the one primitive this milestone added;
+  that compiles. `std::ffi::c::Bool` is the one primitive this milestone added;
   do not add another to make a binding pass.
 * Output is deterministic (no time, temporary path, host path, hash or
   directory order), and every committed binding is what generation
@@ -1939,7 +1939,7 @@ libraries need the macOS SDK (`BOTLISH_C_SYSROOT_macos_aarch64`, or a Mac).
 boundary: hir/static.tcl decides each block by ordinary whole-program builds
 of the syntax with the block's body in place, reading the diagnostics as
 data, and replaces it -- before resolution -- by its body (accepted) or by an
-ordinary `fail compiler::CompilerError {...}` reifying the diagnostic
+ordinary `fail std::compiler::CompilerError {...}` reifying the diagnostic
 (rejected). No HIR expression kind, Core IR form, NIR instruction or runtime
 operation knows static intrinsics: never add one, never invoke the compiler at
 run time, never serialize the body to text and re-parse it, never catch a Tcl
@@ -1949,11 +1949,11 @@ compilation), and never give `CompilerError` a case per diagnostic or a default
 storage/member meaning), its operations are compiler vocabulary (only
 `compile`: no `static parse:`, `static assert_*:`, test framework, syntactic
 functions or compile-time evaluation yet), and `compiler::*` is reached only
-through `import compiler`.
+through `import std::compiler`.
 
 Every error diagnostic kind the front end can report is classified in
 `tests/static-compile.test`'s `sc-census-exhaustive`: a kind a block can
-produce has exactly one `compiler::DiagnosticCode` case (`lib/compiler.bot`,
+produce has exactly one `std::compiler::DiagnosticCode` case (`stdlib/compiler.bot`,
 `hir::static::codes`, the Botlish enum spelling of the kind); every other kind
 is listed with the reason it never is. Adding a diagnostic kind anywhere in
 `hir/` or `surface/modules.tcl` therefore means classifying it there (and, if
@@ -2039,7 +2039,7 @@ machine. So:
   (`.github/workflows/static-decisions.yml`), one job for mutable-array.bot
   and the other suites in four shards:
   - automatically on every push to main that changes `core/`, `hir/`,
-    `surface/`, `lib/`, a golden suite or `audit/static-decisions/tools/`,
+    `surface/`, `stdlib/`, a golden suite or `audit/static-decisions/tools/`,
     which covers every change the list above names;
   - on demand, on any branch, when you judge your change likely to move a
     decision (the schedulers, the dependency analysis, a new cross-function
@@ -2105,7 +2105,7 @@ calls (`bench/method-filter.tcl -suites -audit 1`) and the suites above under
 `examples/games/2048/` is the first workload of the post-golden stress-test
 series (2048-ENGINE-WORKLOAD.md): a 2048 engine as an ordinary module
 (`game2048.bot`), its demo, its golden suite and its benchmark program. The
-engine is not standard library and must not move into `lib/` (it would ship
+engine is not standard library and must not move into `stdlib/` (it would ship
 in the single executable): it is an application module, the file beside its
 programs, which every entry point compiles as they are (`tclsh9.0 main.tcl
 -backend cranelift examples/games/2048/demo.bot`; `examples/games/2048/run.tcl`
@@ -2116,10 +2116,9 @@ main.tcl's native backends in the ordinary suite; `bench/2048.tcl` is the
 performance report. If you change the engine or the suite, also run
 `audit/2048/mutate.tcl` (every mutant in `audit/2048/mutants.txt` must
 still apply and be killed; each mutant is a private application directory,
-the suite beside the mutated engine) and `audit/golden/tools/perturb.tcl -lib
-DIR` on `golden.bot` (DIR: a copy of `lib/` with the engine added: the
-perturbed copies live in directories of their own, without the engine beside
-them). The workload's golden suite is not in `tests/golden/`: its tests port
+the suite beside the mutated engine) and `audit/golden/tools/perturb.tcl
+examples/games/2048/golden.bot` (it copies a suite's application modules, the
+engine, beside every perturbed copy). The workload's golden suite is not in `tests/golden/`: its tests port
 no Tcl test, so they have no manifest rows. The workload keeps its
 workarounds for what Botlish lacks (no Int-to-String, division, fold, typed
 empty vector, List length facts, ...): they are its evidence
@@ -2131,17 +2130,17 @@ Three product rules (POST-2048-PRODUCT-FIXES.md):
 
 * **Application modules** (IMPORTS.md, "Application modules";
   `surface::modules::ResolveModule`). A program file's application root is
-  the directory of its entry file; for an import an application file writes,
-  a standard namespace comes first and `ROOT/NAME.bot` otherwise, and a file
-  that would shadow an imported standard namespace is `MODULE-COLLISION`.
-  Never make resolution read the working directory, an environment variable,
-  a parent directory or a path list, never let a standard-library module's
-  imports see the application, and never prefer one candidate silently. The
-  root is a front-end input: it is in `surface::cache::Key` and each import's
-  application path in `Dependencies`. If you change resolution, run
-  `tests/application-modules.test`, `tests/imports.test`,
-  `tests/surface-modules.test`, `tests/hir-cache.test` and
-  `audit/hir-interchange/tools/mutate.tcl`.
+  the directory of its entry file; an import an application file writes of a
+  namespace outside `std` is `ROOT/NAME.bot`, and nothing else (the standard
+  library is `std::NAME`: next section). Never make resolution read the
+  working directory, an environment variable, a parent directory or a path
+  list, never let a standard-library module's imports see the application,
+  and never prefer one candidate silently. The root is a front-end input: it
+  is in `surface::cache::Key` and each import's application path in
+  `Dependencies`. If you change resolution, run
+  `tests/application-modules.test`, `tests/std-namespace.test`,
+  `tests/imports.test`, `tests/surface-modules.test`, `tests/hir-cache.test`
+  and `audit/hir-interchange/tools/mutate.tcl`.
 * **Native program output.** main.tcl runs native programs with
   `native::evalHir ... -output inherit`: the program writes to main.tcl's own
   standard output and error, and `botlish-native --result PATH` carries the
@@ -2155,6 +2154,50 @@ Three product rules (POST-2048-PRODUCT-FIXES.md):
   (core/core.tcl); never give one a number of its own. `core::evalProgram`
   and the compiler raise nothing themselves (tests/compiler-opt.test's
   opt-tail-2 checks a compiled tail call under 1000). `tests/main-recursion.test`.
+
+## The standard library: the namespace std
+
+Every public standard-library namespace is under the compiler-owned root
+`std` (STD-NAMESPACE.md): `std::list`, `std::str`, `std::abi::x86_64`,
+`std::linux::io`, `std::ffi::c`, `std::test`, `std::compiler`, ... Their
+source is `stdlib/`, the directory of the namespace std
+(`$::core::libraryDir`, beside `core/`: the checkout's or the single
+executable's), and every qualified intrinsic is registered under its
+canonical `std::` name (`std::list::at`). Keep it so:
+
+* One canonical identity per symbol: never add a flat alias (`list::at`), a
+  prelude, an implicit import or a second registration of an intrinsic. A
+  new public intrinsic or module goes under `std::`; internal `#` natives
+  (`mutable_vector#consume`) are no namespace's and stay as they are.
+* A path's first segment decides its origin (std's directory or the
+  application root): never search, never fall back from one to the other (a
+  missing application `list` is UNKNOWN-NAMESPACE with a hint, never
+  `std::list`), never let an application file be a standard namespace
+  (RESERVED-NAMESPACE), and never read the standard library's location from
+  the working directory, the application or the environment.
+  `$::core::libraryDir` is the one override, for tests (`withPrivateLibrary`):
+  a module a test writes there is `std::NAME`.
+* A leading `::` roots a path (`::std::list::at`) and is never part of an
+  identity: the parser keeps types and error names canonical and records
+  `rooted` on imports, qualified values and constructions only, which the
+  loader alone reads (a rooted qualifier is never a type of the file).
+* Never decide anything by a namespace's spelling: a native's collection,
+  platform, layout role or receiver is its registration's
+  (`hir::mutvec::CollectionOf`, `core::cabi::platformOf`'s whole-path
+  roots), never `string match mutable_array*` or a first segment.
+* Compilerpedia documents what the registry and `stdlib/` hold
+  (`tools/compilerpedia.tcl generate`, recursive over `stdlib/`).
+  `audit/stdlib-census/tools/census.tcl` is the inventory: regenerate
+  `audit/stdlib-census/after.tsv` when the public surface changes.
+
+If you change the namespace model (`surface/modules.tcl`'s resolution,
+`surface/parser.tcl`'s rooted paths, `stdlib/`'s location), run
+`tests/std-namespace.test`, `tests/imports.test`,
+`tests/application-modules.test`, `tests/surface-modules.test`,
+`tests/stdlib-namespaces.test`, `tests/hir-cache.test`,
+`audit/imports/tools/fuzz.tcl` (several seeds) and
+`audit/hir-interchange/tools/mutate.tcl`; a change to the single
+executable's packing also `single/smoke-test.sh` after `single/build.sh`.
 
 ## Diagnostic recovery
 
@@ -2209,7 +2252,7 @@ primary in the first compilation, no cascade, every case clean once fixed).
 `compilerpedia/compilerpedia.tcl`, hand-written topics in
 `compilerpedia/topics/*.topic`, and `compilerpedia/generated/stdlib.topic`,
 which `tclsh9.0 tools/compilerpedia.tcl generate` writes from
-`core::native`'s registry, `lib/*.bot` and `compilerpedia/notes/stdlib.notes`
+`core::native`'s registry, `stdlib/*.bot` and `compilerpedia/notes/stdlib.notes`
 (never edit the generated file). Help reads only those files: it never
 compiles, loads a module or starts a backend, and the "help:" lines main.tcl
 prints under diagnostics and warnings are looked up from the printed code
@@ -2241,16 +2284,16 @@ main.tcl's header comment (`tests/main-cli.test` checks all three).
 
 ## Golden tests (Botlish-native test framework)
 
-`lib/test.bot` (GOLDEN-TEST-FRAMEWORK.md) is an ordinary Botlish library:
+`stdlib/test.bot` (GOLDEN-TEST-FRAMEWORK.md) is an ordinary Botlish library:
 a test suite is an installed `context struct Suite` whose `MutableVector`
 holds the registered cases, each a deferred `Fn{args: [], return:
-test::Match}`; the runner is an ordinary coroutine. It has no syntax, no
+std::test::Match}`; the runner is an ordinary coroutine. It has no syntax, no
 compiler knowledge and no natives of its own: never add test syntax, a
 `test` keyword, an assertion form, a catch-all error, a test-only native,
 module-initializer registration or discovery, or compiler knowledge of
 PASS/FAIL to support it; record the friction instead (the report's
 "Recurring boilerplate" and "Findings"). The library may import `compiler`
-to read `compiler::CompilerError`, and nothing knows static blocks.
+to read `std::compiler::CompilerError`, and nothing knows static blocks.
 
 `tests/golden/*.bot` are ported Tcl tests, each listed in
 `tests/golden/manifest.tsv` with its Tcl original, which stays in the Tcl
@@ -2284,14 +2327,14 @@ the portable wrappers needs no host. On such a host check.tcl accepts a row whos
 constraint skipped (`host-skip`) with its golden test passing or
 host-excluded; every other row must still be "old pass, new pass".
 
-If you change `lib/test.bot`, run `tests/golden-framework.test`,
+If you change `stdlib/test.bot`, run `tests/golden-framework.test`,
 `tests/golden.test`, `tclsh9.0 tests/golden/run.tcl`,
 `audit/golden/tools/fuzz.tcl` (several seeds, once with `-gc-stress 1`)
 and `audit/golden/tools/mutate.tcl` (every mutant in
 `audit/golden/tools/mutants.txt` must still apply and be killed: update a
 mutant's text when you change the code it mutates, keeping it a mutant of
-the same rule), and the warning gate (`lib/test.bot` is in its manifest). If
-you change a compiler diagnostic, `compiler::DiagnosticCode` or the
+the same rule), and the warning gate (`stdlib/test.bot` is in its manifest). If
+you change a compiler diagnostic, `std::compiler::DiagnosticCode` or the
 completion analysis, also run `tests/golden.test` and
 `audit/golden/tools/check.tcl` (old and new tests side by side; with
 `-mutants` it runs existing mutants against both). `bench/golden-framework.tcl`

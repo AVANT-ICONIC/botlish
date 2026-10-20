@@ -270,7 +270,7 @@ KILLED join-keeps-live -- a handle moved on one branch only is live after the jo
 KILLED step-call-moves -- a resume consumes the handle: its owner is moved by the call
     tests: killed (33 failed: co-affine-done-does-not-move, co-affine-loop, co-affine-move-never-forks, co-binding-forms, co-context-portable-io, co-deep-three-levels, ...)
     fuzz:  killed (17 of 25 programs disagree)
-KILLED done-consumes -- coroutine::done? consumes the handle: its owner is moved by the query (its ownership role, core/native.tcl's -ownership, is `move` instead of `observe`)
+KILLED done-consumes -- std::coroutine::done? consumes the handle: its owner is moved by the query (its ownership role, core/native.tcl's -ownership, is `move` instead of `observe`)
     tests: killed (8 failed: co-affine-done-does-not-move, co-deep-three-levels, co-empty-loop, co-fuzz-bounded, co-nir-operations, co-release-placement, ...)
     fuzz:  killed (12 of 25 programs disagree)
 KILLED handle-as-fn -- a handle is accepted where a structural Fn value is expected
@@ -526,7 +526,7 @@ KILLED result-aliases-surviving -- every array read-out a function returns moves
 KILLED generic-identity-aliases -- a dynamic copy (`d`, made inside a generic body) of an array is the array itself (Tcl runtimes)
     tests: killed (1 failed: ma-cow-extraction)
     fuzz:  killed (1 of 25 programs disagree)
-KILLED list-extraction-aliases -- an array a binding takes out of a List (list::at) is not copied: the binding's mutations reach the List's element
+KILLED list-extraction-aliases -- an array a binding takes out of a List (std::list::at) is not copied: the binding's mutations reach the List's element
     tests: killed (1 failed: ma-cow-routes)
     fuzz:  survived
 KILLED struct-extraction-aliases -- an array a binding takes out of a struct field (or a destructure) is not copied: the binding's mutations reach the struct's field
@@ -760,7 +760,7 @@ KILLED loses-primary -- the primary location is the static block's own, not the 
 KILLED loses-related -- the related locations are dropped: related is always []
     tests: killed (3 failed: sc-affine-use-after-move, sc-diag-exact-use-after-move, sc-gc-stress)
     fuzz:  survived
-KILLED string-not-error -- a rejected block becomes the diagnostic's message as a String value instead of the error compiler::CompilerError
+KILLED string-not-error -- a rejected block becomes the diagnostic's message as a String value instead of the error std::compiler::CompilerError
     tests: killed (44 failed: sc-affine-rollback, sc-affine-use-after-move, sc-alloc-rejected, sc-contract-admitted, sc-contract-unhandled-call, sc-core-ir, ...)
     fuzz:  killed (11 of 12 programs disagree)
 KILLED success-returns-unit -- an accepted block's value is unit, not its body's
@@ -940,7 +940,7 @@ KILLED fact-widens-contract -- a recovered exact callable's effective errors wid
 KILLED fallback-widens-contract -- a recursion or budget fallback (every let-through, Carried) charges a value only a structural contract bounds the erased-callable contract instead of its contract
     tests: killed (1 failed: scc-recursive-fallback)
     fuzz:  survived
-KILLED native-factory-widens -- mutable_array::generate with a factory of structural type is still charged the erased-callable contract
+KILLED native-factory-widens -- std::mutable_array::generate with a factory of structural type is still charged the erased-callable contract
     tests: killed (1 failed: scc-native-factory)
     fuzz:  survived
 KILLED coroutine-contract-widens -- a resume through a structural coroutine type is still charged the erased-callable contract

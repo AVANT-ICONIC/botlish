@@ -31,13 +31,13 @@
 # milestone.
 #
 # CSV construction strategy (req #15): the GeometricBuilder variant
-# (csv_geometric.bot), not the persistent list::append baseline (csv.bot,
+# (csv_geometric.bot), not the persistent std::list::append baseline (csv.bot,
 # whose O(n^2) copying is already understood and would obscure row-table
 # costs) and not the ChunkedBuilder (csv_chunked.bot) -- comparing builder
 # strategies against each other is not this milestone's question, so only
 # one is used, both for CSV field/record construction and, reused a third
 # time, for the outer row-table List (req #5: an existing strategy, not a
-# new one, and not repeated list::append).
+# new one, and not repeated std::list::append).
 #
 # Row-shape policy (req #9), precisely:
 #   empty CSV (no lines at all)        -> []
@@ -49,11 +49,11 @@
 #   a data row with more fields        -> the declared error IndexNotFound
 # This falls out of row_fill below without any dedicated validation code,
 # the same way matmul.bot's "incompatible dimensions" case is an ordinary
-# list::at IndexNotFound rather than a hand-written check: row_fill walks the
-# row's own fields by index and looks up list::at(headers, i) for each one,
+# std::list::at IndexNotFound rather than a hand-written check: row_fill walks the
+# row's own fields by index and looks up std::list::at(headers, i) for each one,
 # which is exactly the header/field pairing this policy wants, and which
 # itself fails with IndexNotFound the moment i reaches the header count --
-# "more fields than headers" and "list::at past the end of headers" are the
+# "more fields than headers" and "std::list::at past the end of headers" are the
 # same condition, so no separate error path exists to keep in sync with it.
 # csv_records declares it (`errors IndexNotFound`), so its caller decides
 # what a malformed row means.
@@ -62,7 +62,7 @@
 # ht_set(table, "name", ...) twice, on two occurrences of "name" in the
 # header row, is two calls with the same key text: the second replaces the
 # first, so the row table ends up with one "name" entry holding the later
-# field's value, and row width (req #46/#47's "str::length(headers)") still
+# field's value, and row width (req #46/#47's "std::str::length(headers)") still
 # counts the header row's field count, not the table's eventual distinct-key
 # count -- a presized table for a row with duplicate headers is presized
 # for at least as many entries as it will ever hold, never too few.
@@ -71,10 +71,10 @@
 # like any other and need no special case: "" hashes and compares like any
 # other key/value this table already supports.
 #
-# Header sharing (req #3, #16, #45): headers is list::at(records, 0),
+# Header sharing (req #3, #16, #45): headers is std::list::at(records, 0),
 # computed once by csv_records_generic below and passed unchanged into every
-# row_table/row_fill call; list::at never copies the String it returns, so
-# every row's ht_set(table, list::at(headers, i), ...) inserts the identical
+# row_table/row_fill call; std::list::at never copies the String it returns, so
+# every row's ht_set(table, std::list::at(headers, i), ...) inserts the identical
 # header String object build_rows started with, not a fresh copy -- the
 # workload therefore exercises repeated hash()/== of the same header String
 # objects across rows, on purpose (req #3), with no cached hash or
@@ -88,7 +88,7 @@
 # row table with plain ht_new() (the general baseline, which does not know
 # how many entries the row will hold); csv_records_presized builds every row
 # table with ht_new_sized(header_count) instead, using only
-# list::length(headers) -- information already at hand from the parsed CSV,
+# std::list::length(headers) -- information already at hand from the parsed CSV,
 # not benchmark-specific knowledge. ht_new_sized already exists
 # (hashtable.bot) and needed no change for this: hashtable.bot's own
 # pre-sizing API was already exactly "expected entry count", not raw
@@ -104,12 +104,12 @@
 # no change to the strategy itself, and with one untyped source
 # implementation serving all three element types.
 
-import list
-import mutable_array
-import str
+import std::list
+import std::mutable_array
+import std::str
 
 fn geo_new(first):
-    mutable_array::create(1, first)
+    std::mutable_array::create(1, first)
 
 # The capacity a builder holding LENGTH elements should grow CAPACITY to, to
 # fit one more: double, or exactly enough if doubling still isn't enough
@@ -125,17 +125,17 @@ fn geo_new_capacity(capacity, length):
 # STORAGE, grown if it has no room for one more element at LENGTH: a fresh,
 # larger MutableArray with STORAGE's first LENGTH elements copied in, or
 # STORAGE unchanged if it already has room. VALUE, the element about to be
-# appended, initializes every slot of the fresh array (mutable_array::create
+# appended, initializes every slot of the fresh array (std::mutable_array::create
 # fills all of them); the slots at LENGTH and beyond are overwritten by later
 # appends before freeze(LENGTH) can ever expose them.
 fn geo_grow(storage, length, value) errors UpperOverrun:
-    capacity = mutable_array::capacity(storage)
+    capacity = std::mutable_array::capacity(storage)
     if length < capacity:
         return storage
 
     new_capacity = capacity.geo_new_capacity(length)
-    fresh = mutable_array::create(new_capacity, value)
-    mutable_array::copy(fresh, 0, storage, 0, length)
+    fresh = std::mutable_array::create(new_capacity, value)
+    std::mutable_array::copy(fresh, 0, storage, 0, length)
     fresh
 
 # STORAGE with VALUE appended at index LENGTH, grown first when full. The
@@ -147,7 +147,7 @@ fn geo_append(storage, length, value) errors IndexNotFound, UpperOverrun:
     grown
 
 # STORAGE's first LENGTH elements as an ordinary immutable List
-# (finalization: a single exact-size copy, see mutable_array::freeze).
+# (finalization: a single exact-size copy, see std::mutable_array::freeze).
 fn geo_finish(storage, length) errors LowerUnderrun, UpperOverrun:
     storage.freeze(length)
 
@@ -168,16 +168,16 @@ fn geo_finish(storage, length) errors LowerUnderrun, UpperOverrun:
 # MutableArray[any] and needed none.
 
 fn peek(text, index) errors LowerUnderrun:
-    if index >= str::length(text):
+    if index >= std::str::length(text):
         return ""
 
     text.substring(index, index + 1)
 
 fn quote_at?(text, index) errors IndexNotFound:
-    index < str::length(text) and text.char_at(index) == '"'
+    index < std::str::length(text) and text.char_at(index) == '"'
 
 fn scan_unquoted(text, start, index) errors IndexNotFound, LowerUnderrun, UpperOverrun:
-    if index < str::length(text):
+    if index < std::str::length(text):
         character = text.char_at(index)
         if character != ',' and character != '\n':
             return text.scan_unquoted(start, index + 1)
@@ -208,7 +208,7 @@ fn scan_field(text, index) errors IndexNotFound, LowerUnderrun, UpperOverrun:
 # whole call chain -- TYPED-MUTARRAY-BUILDER-REFACTOR.md, "Definition-order
 # sensitivity".)
 fn scan_record_rest(text, stop, fields: MutableArray[str], count) errors IndexNotFound, LowerUnderrun, UpperOverrun:
-    if stop < str::length(text):
+    if stop < std::str::length(text):
         delimiter = text.char_at(stop)
         if delimiter == ',':
             scanned = text.scan_field(stop + 1)
@@ -228,7 +228,7 @@ fn scan_record(text, index) errors IndexNotFound, LowerUnderrun, UpperOverrun:
 
 # The records from INDEX on, the first COUNT records already in RECORDS.
 fn scan_records(text, index, records: MutableArray[List[str]], count) errors IndexNotFound, LowerUnderrun, UpperOverrun:
-    if index >= str::length(text):
+    if index >= std::str::length(text):
         return records.geo_finish(count)
 
     scanned = text.scan_record(index)
@@ -236,7 +236,7 @@ fn scan_records(text, index, records: MutableArray[List[str]], count) errors Ind
     text.scan_records(scanned.stop, more, count + 1)
 
 fn csv_parse(text) errors IndexNotFound, LowerUnderrun, UpperOverrun:
-    if str::length(text) == 0:
+    if std::str::length(text) == 0:
         return []
 
     scanned = text.scan_record(0)
@@ -270,10 +270,10 @@ fn ht_tombstone_state():
 # Construction
 
 fn ht_alloc(capacity) errors IndexNotFound:
-    counts = mutable_array::allocate(2)
+    counts = std::mutable_array::allocate(2)
     counts.set(0, 0)
     counts.set(1, 0)
-    HashTable {controls: mutable_array::create(capacity, ht_empty_state()), keys: mutable_array::allocate(capacity), values: mutable_array::allocate(capacity), counts: counts}
+    HashTable {controls: std::mutable_array::create(capacity, ht_empty_state()), keys: std::mutable_array::allocate(capacity), values: std::mutable_array::allocate(capacity), counts: counts}
 
 fn ht_new() errors IndexNotFound:
     ht_alloc(ht_min_capacity())
@@ -295,13 +295,13 @@ fn ht_new_sized(expected) errors IndexNotFound:
 # Fields
 
 fn ht_size(table) errors IndexNotFound:
-    mutable_array::at(table.counts, 0)
+    std::mutable_array::at(table.counts, 0)
 
 fn ht_tombstones(table) errors IndexNotFound:
-    mutable_array::at(table.counts, 1)
+    std::mutable_array::at(table.counts, 1)
 
 fn ht_capacity(table):
-    mutable_array::capacity(table.controls)
+    std::mutable_array::capacity(table.controls)
 
 # ---------------------------------------------------------------------------
 # Probing (ordinary linear probing: see the file header)
@@ -313,14 +313,14 @@ fn ht_probe_next(table, index):
     mod(index + 1, ht_capacity(table))
 
 # The index of KEY from INDEX on, or -1 if probing reaches an EMPTY slot
-# first. Zero managed allocations: only mutable_array::at, ==, and mod/hash
+# first. Zero managed allocations: only std::mutable_array::at, ==, and mod/hash
 # on values already in hand (req #10, #19).
 fn ht_find_get(table, key, index) errors IndexNotFound:
-    state = mutable_array::at(table.controls, index)
+    state = std::mutable_array::at(table.controls, index)
     if state == ht_empty_state():
         return -1
 
-    if state == ht_occupied_state() and mutable_array::at(table.keys, index) == key:
+    if state == ht_occupied_state() and std::mutable_array::at(table.keys, index) == key:
         return index
 
     table.ht_find_get(key, table.ht_probe_next(index))
@@ -332,11 +332,11 @@ fn ht_find_get(table, key, index) errors IndexNotFound:
 # two slots that end the search at INDEX -- an EMPTY one with no earlier
 # TOMBSTONE, and KEY's own -- fall through to the one answer, INDEX.
 fn ht_find_insert(table, key, index, first_tombstone) errors IndexNotFound:
-    state = mutable_array::at(table.controls, index)
+    state = std::mutable_array::at(table.controls, index)
     if state == ht_empty_state():
         if first_tombstone >= 0:
             return first_tombstone
-    elif state == ht_occupied_state() and mutable_array::at(table.keys, index) == key:
+    elif state == ht_occupied_state() and std::mutable_array::at(table.keys, index) == key:
         unit
     elif state == ht_tombstone_state() and first_tombstone < 0:
         return table.ht_find_insert(key, table.ht_probe_next(index), index)
@@ -354,7 +354,7 @@ fn ht_get(table, key) errors IndexNotFound:
     if index < 0:
         return unit
 
-    mutable_array::at(table.values, index)
+    std::mutable_array::at(table.values, index)
 
 fn ht_contains(table, key) errors IndexNotFound:
     table.ht_find_get(key, table.ht_probe_start(key)) >= 0
@@ -365,7 +365,7 @@ fn ht_contains(table, key) errors IndexNotFound:
 # from, and simpler than, ht_find_insert above.
 
 fn ht_rehash_probe(newControls, index, capacity) errors IndexNotFound:
-    state = mutable_array::at(newControls, index)
+    state = std::mutable_array::at(newControls, index)
     if state == ht_empty_state():
         return index
 
@@ -382,7 +382,7 @@ fn ht_rehash_insert(dest, capacity, key, value) errors IndexNotFound:
 
 # DEST with every OCCUPIED slot of the old table (its arrays CONTROLS, KEYS
 # and VALUES) from I on rehashed into it at NEWCAPACITY. Only individual
-# mutable_array::at/::set ever move an entry here -- no mutable_array::copy
+# std::mutable_array::at/::set ever move an entry here -- no std::mutable_array::copy
 # (req #23). (The old table's arrays are passed apart, not as the struct,
 # so that an instance of this function never has to project a field of a
 # table its generic caller cannot type.)
@@ -390,8 +390,8 @@ fn ht_rehash_scan(controls, keys, values, i, oldCapacity, dest, newCapacity) err
     if i >= oldCapacity:
         return dest
 
-    if mutable_array::at(controls, i) == ht_occupied_state():
-        filled = dest.ht_rehash_insert(newCapacity, mutable_array::at(keys, i), mutable_array::at(values, i))
+    if std::mutable_array::at(controls, i) == ht_occupied_state():
+        filled = dest.ht_rehash_insert(newCapacity, std::mutable_array::at(keys, i), std::mutable_array::at(values, i))
         return controls.ht_rehash_scan(keys, values, i + 1, oldCapacity, filled, newCapacity)
 
     controls.ht_rehash_scan(keys, values, i + 1, oldCapacity, dest, newCapacity)
@@ -432,7 +432,7 @@ fn ht_grow_or_clean(table) errors IndexNotFound:
 # INDEX was reusing one. Split out of ht_set below because it is needed
 # from two branches (with and without a resize in between).
 fn ht_place(table, index, key, value) errors IndexNotFound:
-    prior = mutable_array::at(table.controls, index)
+    prior = std::mutable_array::at(table.controls, index)
     table.controls.set(index, ht_occupied_state())
     table.keys.set(index, key)
     table.values.set(index, value)
@@ -445,7 +445,7 @@ fn ht_place(table, index, key, value) errors IndexNotFound:
 # TABLE with KEY mapped to VALUE (replacing an existing mapping of KEY).
 fn ht_set(table, key, value) errors IndexNotFound:
     index = table.ht_find_insert(key, table.ht_probe_start(key), -1)
-    if mutable_array::at(table.controls, index) == ht_occupied_state():
+    if std::mutable_array::at(table.controls, index) == ht_occupied_state():
         table.values.set(index, value)
         return table
 
@@ -469,8 +469,8 @@ fn row_new(presize, header_count) errors IndexNotFound:
     ht_new()
 
 # TABLE with headers[0..FIELD_COUNT) mapped to fields[0..FIELD_COUNT)
-# (FIELD_COUNT is this row's own field count, list::length(fields), not the
-# header count): see the file header's row-shape policy. list::at(headers,
+# (FIELD_COUNT is this row's own field count, std::list::length(fields), not the
+# header count): see the file header's row-shape policy. std::list::at(headers,
 # i) is the only bounds check this needs -- it fails with IndexNotFound by
 # itself once i reaches the header count, which is exactly "more fields than
 # headers".
@@ -478,19 +478,19 @@ fn row_fill(table, headers, fields, i, field_count) errors IndexNotFound:
     if i >= field_count:
         return table
 
-    filled = table.ht_set(list::at(headers, i), list::at(fields, i))
+    filled = table.ht_set(std::list::at(headers, i), std::list::at(fields, i))
     filled.row_fill(headers, fields, i + 1, field_count)
 
 # One row's HashTable: ordinary HashTable APIs only (ht_new/ht_new_sized,
 # ht_set), no bulk-row-insert primitive and no CSV-specific table API.
 fn row_table(headers, header_count, fields, presize) errors IndexNotFound:
     table = presize.row_new(header_count)
-    table.row_fill(headers, fields, 0, list::length(fields))
+    table.row_fill(headers, fields, 0, std::list::length(fields))
 
 # RECORDS[i..) (RECORDS[0] is the header row, already consumed by the
 # caller) as row HashTables, appended to the outer GeometricBuilder OUTER
 # (storage) holding COUNT row tables so far -- req #5's "one existing
-# efficient construction strategy" for the result, not repeated list::append.
+# efficient construction strategy" for the result, not repeated std::list::append.
 #
 # OUTER's declared MutableArray[HashTable] is this file's one concrete
 # (non-generic) parameter contract on the builder path: build_rows appends a
@@ -503,10 +503,10 @@ fn row_table(headers, header_count, fields, presize) errors IndexNotFound:
 # table was one MutableArray, declared MutableArray[mutarray], until
 # MUTABLE-ARRAY.md made it a struct of arrays.)
 fn build_rows(records, i, headers, header_count, outer: MutableArray[HashTable], count, presize) errors IndexNotFound, LowerUnderrun, UpperOverrun:
-    if i >= list::length(records):
+    if i >= std::list::length(records):
         return outer.geo_finish(count)
 
-    table = headers.row_table(header_count, list::at(records, i), presize)
+    table = headers.row_table(header_count, std::list::at(records, i), presize)
     records.build_rows(i + 1, headers, header_count, outer.geo_append(count, table), count + 1, presize)
 
 # CSV TEXT, with a header row, as an immutable List of mutable HashTables:
@@ -516,12 +516,12 @@ fn build_rows(records, i, headers, header_count, outer: MutableArray[HashTable],
 # table starts the outer builder.
 fn csv_records_generic(text, presize) errors IndexNotFound, LowerUnderrun, UpperOverrun:
     records = csv_parse(text)
-    if list::length(records) <= 1:
+    if std::list::length(records) <= 1:
         return []
 
-    headers = list::at(records, 0)
-    header_count = list::length(headers)
-    first = headers.row_table(header_count, list::at(records, 1), presize)
+    headers = std::list::at(records, 0)
+    header_count = std::list::length(headers)
+    first = headers.row_table(header_count, std::list::at(records, 1), presize)
     records.build_rows(2, headers, header_count, geo_new(first), 1, presize)
 
 # The general baseline: every row table starts at default capacity, not
@@ -530,7 +530,7 @@ fn csv_records(text) errors IndexNotFound, LowerUnderrun, UpperOverrun:
     text.csv_records_generic(false)
 
 # The presized variant: every row table is built for exactly this row's
-# header count via ht_new_sized (req #47) -- str::length(headers), nothing else.
+# header count via ht_new_sized (req #47) -- std::str::length(headers), nothing else.
 fn csv_records_presized(text) errors IndexNotFound, LowerUnderrun, UpperOverrun:
     text.csv_records_generic(true)
 
@@ -542,11 +542,11 @@ fn csv_records_presized(text) errors IndexNotFound, LowerUnderrun, UpperOverrun:
 fn sample_checks() -> list errors IndexNotFound, LowerUnderrun, UpperOverrun:
     rows = csv_records("name,age,city\nAlice,31,Berlin\nBob,42,Hamburg\n")
     presized_rows = csv_records_presized("name,age,city\nAlice,31,Berlin\nBob,42,Hamburg\n")
-    first = list::at(rows, 0)
-    second = list::at(rows, 1)
-    presized_first = list::at(presized_rows, 0)
+    first = std::list::at(rows, 0)
+    second = std::list::at(rows, 1)
+    presized_first = std::list::at(presized_rows, 0)
     agree = first.ht_get("name") == presized_first.ht_get("name") and ht_size(first) == ht_size(presized_first)
-    [list::length(rows), first.ht_get("name"), first.ht_get("age"), first.ht_get("city"), second.ht_get("name"), second.ht_get("city"), agree]
+    [std::list::length(rows), first.ht_get("name"), first.ht_get("age"), first.ht_get("city"), second.ht_get("name"), second.ht_get("city"), agree]
 
 # The sample's input is well formed, so IndexNotFound (a row with more fields
 # than headers, or a broken table invariant: hashtable.bot's sample) and

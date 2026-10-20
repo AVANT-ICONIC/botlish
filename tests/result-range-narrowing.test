@@ -39,7 +39,7 @@ proc withResultNarrow {opt limit script} {
 
 # {HIR SPEC ANALYSIS} of program TEXT (a .bot source) under the current knobs.
 # PREPARE 1 attaches native implementations first (module functions such as
-# lib/web.bot's, which a program reaches through native bodies).
+# stdlib/web.bot's, which a program reaches through native bodies).
 proc narrowOf {text {prepare 0}} {
     set hir [surface::compile [dedent $text] t.bot -strict 0]
     if {$prepare} {
@@ -143,7 +143,7 @@ test result-narrow-chain-reaches-entries-and-results {a narrowed summary feeds t
     list [withResultNarrow 0 "" {chainRow}] [chainRow]
 } -result {{{{[-∞, 100]}} {{[-∞, +∞]}} {[-∞, +∞]}} {{{[5, 100]}} {{[10, 200]}} {[11, 201]}}}
 
-test result-narrow-refined-checks-tld {refined-checks' tld?: `e = scan_while(i, str::is_tcl_alpha)` read the ascending summary [-∞, 2^62-1]; with the pass it reads the callee's own [0, 2^62-1], so `e == n`, `e - i` and `>= 2` lower raw} -body {
+test result-narrow-refined-checks-tld {refined-checks' tld?: `e = scan_while(i, std::str::is_tcl_alpha)` read the ascending summary [-∞, 2^62-1]; with the pass it reads the callee's own [0, 2^62-1], so `e == n`, `e - i` and `>= 2` lower raw} -body {
     set channel [open [file join $::projectRoot bench refined-checks.bot] r]
     fconfigure $channel -encoding utf-8
     set text [read $channel]
@@ -222,7 +222,7 @@ test result-narrow-pinned-summary-untouched {a solved self-recursive summary (ra
 # the dynamic caller this test is about.
 test result-narrow-open-instance-summary-stays-sound {an instance reached through a Block value (open: unknown callers) keeps a summary that covers its dynamic callers: f's generic entry is called with -50 through a List element, so its summary keeps -∞, while the closed f<int> called with 5 narrows to [5, 100]} -body {
     lassign [narrowOf {
-        import list
+        import std::list
         fn f(x):
             if x > 100:
                 100
@@ -235,7 +235,7 @@ test result-narrow-open-instance-summary-stays-sound {an instance reached throug
         fns = [f, g]
 
         fn apply(i, v):
-            list::at(fns, i)(v)
+            std::list::at(fns, i)(v)
 
         [f(5), apply(0, -50)]
     }] hir spec -
@@ -289,7 +289,7 @@ foreach {name src expected} {
         [gap(-4611686018427387904), gap(0), gap(-5)]
     } {[-9223372036854775807, -4611686018427387903, -4611686018427387908]}
     open-and-closed {
-        import list
+        import std::list
         fn f(x):
             if x > 100:
                 100
@@ -299,16 +299,16 @@ foreach {name src expected} {
         fns = [f]
 
         fn apply(i, v):
-            list::at(fns, i)(v)
+            std::list::at(fns, i)(v)
 
         [f(5) * 3, apply(0, -50) * 3, apply(0, 4611686018427387903) + f(5), apply(0, -4611686018427387904) - f(5)]
     } {[15, -150, 105, -4611686018427387909]}
     scan-shape {
-        import str
+        import std::str
         fn first_space(s):
-            n = str::length(s)
+            n = std::str::length(s)
             fn at(i):
-                str::substring(s, i, i + 1)
+                std::str::substring(s, i, i + 1)
             fn scan(start):
                 loop i from start to n:
                     if at(i) == " ":

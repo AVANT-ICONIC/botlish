@@ -299,7 +299,7 @@ not edited. Benchmark and analysis scripts that compile corpus sources pass
 Observational only; the corpus is frozen and was **not** edited.
 `audit/same-return-value/tools/corpus.tcl` compiles every program of
 `examples/stdlib` (9), `examples/surface` (14; `09`/`10` are deliberate
-rejection examples and do not compile), `bench/*.bot` (8) and `lib/*.bot` (7)
+rejection examples and do not compile), `bench/*.bot` (8) and `stdlib/*.bot` (7)
 with warnings on and lists each distinct warning once
 (`audit/same-return-value/corpus-audit.txt`). Programs embedded as text inside
 `bench/*.tcl` scripts are not part of this audit.
@@ -310,11 +310,11 @@ with warnings on and lists each distinct warning once
 |---|-------|------|----------------|
 | 1 | `examples/stdlib/csv_records.bot:325` `ht_find_insert` | `return index` from 2 exits (an empty slot at `index`; the key found at `index`) | **intentional same result**: the result is "the slot to use", two reasons yield the same slot; not a sentinel. Benchmark artifact of the hash-table corpus. |
 | 2 | `examples/stdlib/hashtable.bot:187` `ht_find_insert` | the same function in the other corpus program | same as #1 (the same source, two corpus files) |
-| 3 | `lib/web.bot:163` `domain?` (nested in `emailish?`) | `false` from 4 exits (three rejections inside the loop, plus the fall-through after it) | **intentional same sentinel**: a predicate that rejects in several ways. Legitimate: the return is `Bool`, and the API is `Bool`. |
-| 4 | `lib/web.bot:175` `emailish?` | `false` from 3 exits (the leaves of a nested `if`/`else` tree) | **duplicated branch structure**: the nest of `if`s that all end in `false` is a conjunction spelled as nesting |
+| 3 | `stdlib/web.bot:163` `domain?` (nested in `emailish?`) | `false` from 4 exits (three rejections inside the loop, plus the fall-through after it) | **intentional same sentinel**: a predicate that rejects in several ways. Legitimate: the return is `Bool`, and the API is `Bool`. |
+| 4 | `stdlib/web.bot:175` `emailish?` | `false` from 3 exits (the leaves of a nested `if`/`else` tree) | **duplicated branch structure**: the nest of `if`s that all end in `false` is a conjunction spelled as nesting |
 
 No false positives: every finding is a true statement of what the function
-does. The two `web.bot` findings appear whenever a program loads `lib/web.bot`
+does. The two `web.bot` findings appear whenever a program loads `stdlib/web.bot`
 (e.g. `bench/uri-steady.bot`), because warnings concern all code
 in the HIR; this is a known limitation (below). None of the four is a "possible
 richer error split" (the functions are predicates and a slot search; nothing
@@ -368,7 +368,7 @@ inspection rather than failing. **2000 seeds (1335 with warnings, 665 without):
 `surface/modules.tcl`'s `RemapFile` (which repoints a module's origins at its
 own file id) did not descend into `listloop`, `countloop`, `lockloop` or `handle`
 nodes, so every expression inside those in a *module* kept the entry file's id:
-the first corpus audit reported `lib/web.bot`'s `domain?` exits as `bench/
+the first corpus audit reported `stdlib/web.bot`'s `domain?` exits as `bench/
 uri-steady.bot:163`. This pre-existing mislocation affected every diagnostic
 inside those constructs in module code, not only warnings. Fixed and pinned
 (the new surface-modules test fails without the fix). Origins are diagnostic-only;
@@ -404,7 +404,7 @@ no analysis reads them.
 
 ## Known limitations
 
-* Library warnings are shown: a warning inside `lib/*.bot` appears for any
+* Library warnings are shown: a warning inside `stdlib/*.bot` appears for any
   program that loads that module, because the pass sees all code in the HIR.
   (There is no "system header" notion; and with the corpus frozen, two
   `web.bot` warnings print for every `uri-steady` run until the warning-driven

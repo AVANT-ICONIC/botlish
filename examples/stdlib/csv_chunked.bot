@@ -1,21 +1,21 @@
 # CSV parsing, identical to csv.bot's algorithm and result, except that both
 # levels of list construction (fields within a record, records within the
 # result) use a ChunkedBuilder over MutableArray instead of repeated
-# list::append. See csv_geometric.bot for the GeometricBuilder comparison
+# std::list::append. See csv_geometric.bot for the GeometricBuilder comparison
 # point and bench/corpus.tcl's csv/csv_geometric/csv_chunked cases.
 #
 # ChunkedBuilder: fixed-size MutableArray chunks, appended into without ever
 # copying earlier chunks (unlike GeometricBuilder, which copies every prior
 # element on every growth step). A builder is a ChunkedBuilder struct value:
 # completed is an ordinary persistent List of full MutableArray chunks
-# (list::append there copies only the *chunk handles* seen so far, not their
+# (std::list::append there copies only the *chunk handles* seen so far, not their
 # elements -- see the file-level note below on why that is a deliberately
 # minor, not eliminated, quadratic term), current the chunk being filled, and
 # filled its count, a one-slot MutableArray so that an append updates the
 # builder's own arrays in place and returns the same builder (the HashTable's
 # counts, hashtable.bot) instead of rebuilding the struct. Finalization
 # flattens once: every chunk's elements are bulk-copied
-# (mutable_array::copy) into one exact-size MutableArray, then frozen to a
+# (std::mutable_array::copy) into one exact-size MutableArray, then frozen to a
 # List, so total element movement is still O(n), just with different
 # constants than GeometricBuilder's.
 #
@@ -29,9 +29,9 @@
 #
 # expect: [["name", "age"], ["Alice", "30"], ["Bob", "40"]]
 
-import list
-import mutable_array
-import str
+import std::list
+import std::mutable_array
+import std::str
 
 fn chunk_size():
     64
@@ -46,18 +46,18 @@ struct ChunkedBuilder:
     filled: MutableArray[int]
 
 fn chunked_new():
-    ChunkedBuilder {completed: [], current: mutable_array::allocate(chunk_size()), filled: mutable_array::create(1, 0)}
+    ChunkedBuilder {completed: [], current: std::mutable_array::allocate(chunk_size()), filled: std::mutable_array::create(1, 0)}
 
 # BUILDER with VALUE appended: writes into the current chunk's next free
 # slot, or -- when the current chunk is full -- files it away in completed
-# (persistent list::append: see the file-level note; this never copies a
+# (persistent std::list::append: see the file-level note; this never copies a
 # chunk's *elements*, only prior chunk handles) and starts a fresh chunk.
 fn chunked_append(builder: ChunkedBuilder, value) errors IndexNotFound:
-    filled = mutable_array::at(builder.filled, 0)
+    filled = std::mutable_array::at(builder.filled, 0)
     if filled == chunk_size():
-        fresh = mutable_array::allocate(chunk_size())
+        fresh = std::mutable_array::allocate(chunk_size())
         fresh.set(0, value)
-        return ChunkedBuilder {completed: builder.completed.append(builder.current), current: fresh, filled: mutable_array::create(1, 1)}
+        return ChunkedBuilder {completed: builder.completed.append(builder.current), current: fresh, filled: std::mutable_array::create(1, 1)}
 
     builder.current.set(filled, value)
     builder.filled.set(0, filled + 1)
@@ -66,22 +66,22 @@ fn chunked_append(builder: ChunkedBuilder, value) errors IndexNotFound:
 # FINAL with each of CHUNKS[INDEX..) (all full, chunk_size() elements)
 # bulk-copied into it from OFFSET on.
 fn chunked_copy_chunks(chunks, index, final, offset) errors IndexNotFound, LowerUnderrun, UpperOverrun:
-    if index >= list::length(chunks):
+    if index >= std::list::length(chunks):
         return final
 
-    chunk = list::at(chunks, index)
-    mutable_array::copy(final, offset, chunk, 0, chunk_size())
+    chunk = std::list::at(chunks, index)
+    std::mutable_array::copy(final, offset, chunk, 0, chunk_size())
     chunks.chunked_copy_chunks(index + 1, final, offset + chunk_size())
 
 # BUILDER's elements as an ordinary immutable List: one exact-size
 # MutableArray, filled by bulk-copying every completed chunk followed by the
 # current chunk's filled prefix, then frozen.
 fn chunked_finish(builder: ChunkedBuilder) errors IndexNotFound, LowerUnderrun, UpperOverrun:
-    filled = mutable_array::at(builder.filled, 0)
-    offset = list::length(builder.completed) * chunk_size()
+    filled = std::mutable_array::at(builder.filled, 0)
+    offset = std::list::length(builder.completed) * chunk_size()
     total = offset + filled
-    final = builder.completed.chunked_copy_chunks(0, mutable_array::allocate(total), 0)
-    mutable_array::copy(final, offset, builder.current, 0, filled)
+    final = builder.completed.chunked_copy_chunks(0, std::mutable_array::allocate(total), 0)
+    std::mutable_array::copy(final, offset, builder.current, 0, filled)
     final.freeze(total)
 
 # ---------------------------------------------------------------------------
@@ -90,16 +90,16 @@ fn chunked_finish(builder: ChunkedBuilder) errors IndexNotFound, LowerUnderrun, 
 # chunked_finish wherever the persistent version returned a completed List).
 
 fn peek(text, index) errors LowerUnderrun:
-    if index >= str::length(text):
+    if index >= std::str::length(text):
         return ""
 
     text.substring(index, index + 1)
 
 fn quote_at?(text, index) errors IndexNotFound:
-    index < str::length(text) and text.char_at(index) == '"'
+    index < std::str::length(text) and text.char_at(index) == '"'
 
 fn scan_unquoted(text, start, index) errors IndexNotFound, LowerUnderrun, UpperOverrun:
-    if index < str::length(text):
+    if index < std::str::length(text):
         character = text.char_at(index)
         if character != ',' and character != '\n':
             return text.scan_unquoted(start, index + 1)
@@ -126,7 +126,7 @@ fn scan_record(text, index, fields) errors IndexNotFound, LowerUnderrun, UpperOv
     scanned = text.scan_field(index)
     more = fields.chunked_append(scanned.field)
     stop = scanned.index
-    if stop < str::length(text):
+    if stop < std::str::length(text):
         delimiter = text.char_at(stop)
         if delimiter == ',':
             return text.scan_record(stop + 1, more)
@@ -137,7 +137,7 @@ fn scan_record(text, index, fields) errors IndexNotFound, LowerUnderrun, UpperOv
     {fields: chunked_finish(more), stop: stop}
 
 fn scan_records(text, index, records) errors IndexNotFound, LowerUnderrun, UpperOverrun:
-    if index >= str::length(text):
+    if index >= std::str::length(text):
         return chunked_finish(records)
 
     scanned = text.scan_record(index, chunked_new())
@@ -146,8 +146,8 @@ fn scan_records(text, index, records) errors IndexNotFound, LowerUnderrun, Upper
 fn csv_parse(text) errors IndexNotFound, LowerUnderrun, UpperOverrun:
     text.scan_records(0, chunked_new())
 
-# A ChunkedBuilder's count is read with mutable_array::at and its chunks with
-# list::at, so every builder function declares IndexNotFound (a malformed
+# A ChunkedBuilder's count is read with std::mutable_array::at and its chunks with
+# std::list::at, so every builder function declares IndexNotFound (a malformed
 # state), and the scanners declare LowerUnderrun/UpperOverrun (a slice they
 # cannot prove in range); csv_parse's own states and slices are always well
 # formed, and its caller says what a broken one would mean.

@@ -1,17 +1,17 @@
 # binary.tcl -- the binary operations of fixed layouts (BINARY-LAYOUT.md):
 # imprinting bytes into a LayoutStruct[L] and emitting one back.
 #
-#   binary::parse(L, data)          LayoutStruct[L], imprinted from DATA, an
-#                                   abi::bytes::Bytes of exactly L's size
+#   std::binary::parse(L, data)          LayoutStruct[L], imprinted from DATA, an
+#                                   std::abi::bytes::Bytes of exactly L's size
 #                                   (LayoutLengthMismatch otherwise)
-#   binary::emit(value)             the abi::bytes::Bytes of L's size a
+#   std::binary::emit(value)             the std::abi::bytes::Bytes of L's size a
 #                                   LayoutStruct[L] VALUE emits, L from the
 #                                   value's static type
-#   binary::layout_length(L)        L's size, a compile-time constant
-#   binary::layout_alignment(L)     L's alignment, likewise
-#   binary::read(data, L.path)      the value of the one representation the
+#   std::binary::layout_length(L)        L's size, a compile-time constant
+#   std::binary::layout_alignment(L)     L's alignment, likewise
+#   std::binary::read(data, L.path)      the value of the one representation the
 #                                   designator L.path names, imprinted from
-#                                   DATA, an abi::bytes::Bytes of exactly L's
+#                                   DATA, a std::abi::bytes::Bytes of exactly L's
 #                                   size (LayoutLengthMismatch otherwise): a
 #                                   scalar's Int, a nested layout's
 #                                   LayoutStruct, an array's List -- one
@@ -21,7 +21,7 @@
 # L is static evidence, never a value: written as a layout name where these
 # operations take it (hir/resolve.tcl resolves it to the layout's descriptor
 # constant), or read from the value's static type (hir::layouts::Elaborate
-# rewrites binary::emit(v) to the internal binary#emit(v, DESCRIPTOR)). The
+# rewrites std::binary::emit(v) to the internal binary#emit(v, DESCRIPTOR)). The
 # descriptor (hir::layouts::descriptor) is the whole of what these
 # implementations know about a layout -- they read no registry -- so a core
 # IR program runs them unchanged on any front end's registry state:
@@ -75,7 +75,7 @@ namespace eval core::binary {
     variable letters {1 c 2 s 4 i 8 w}
 }
 
-# The bytes (a Tcl byte string) of the abi::bytes::Bytes DATA.
+# The bytes (a Tcl byte string) of the std::abi::bytes::Bytes DATA.
 proc core::binary::BytesOf {data context} {
     core::value::expect struct $data $context
     set bytesType [core::bytestore::bytesType]
@@ -94,7 +94,7 @@ proc core::binary::LayoutName {structId} {
     return [string range $structId 13 end-1]
 }
 
-# The abi::bytes::Bytes holding the byte string BYTES.
+# The std::abi::bytes::Bytes holding the byte string BYTES.
 proc core::binary::BytesValue {bytes} {
     return [core::value::structOf [list [core::bytestore::bytesType] [core::bytestore::storageField]] \
         [list [core::value::bytestore [binary encode hex $bytes]]]]
@@ -140,7 +140,7 @@ proc core::binary::DecodeRepr {repr bytes at name structId} {
         ptr {
             # Statically LAYOUT-NATIVE-ONLY (hir/layouts.tcl): arbitrary
             # bytes never become a pointer.
-            core::semanticError TYPE "binary::parse: field \"$name\" of $structId is a C pointer, which is never imprinted from bytes"
+            core::semanticError TYPE "std::binary::parse: field \"$name\" of $structId is a C pointer, which is never imprinted from bytes"
         }
         union {
             # Statically LAYOUT-UNION (hir/layouts.tcl): several
@@ -165,11 +165,11 @@ proc core::binary::DecodeRepr {repr bytes at name structId} {
 proc core::binary::Encode {descriptor value bytes base} {
     lassign $descriptor structId size align fields
     if {[core::value::kind $value] ne "struct" || [core::value::structId $value] ne $structId} {
-        core::semanticError TYPE "binary::emit: expected a $structId, got [core::value::show $value]"
+        core::semanticError TYPE "std::binary::emit: expected a $structId, got [core::value::show $value]"
     }
     foreach field $fields {
         set name [lindex $field 0]
-        set bytes [EncodeRepr binary::emit [lrange $field 2 end] [core::value::structGet $value $name] \
+        set bytes [EncodeRepr std::binary::emit [lrange $field 2 end] [core::value::structGet $value $name] \
             $bytes [expr {$base + [lindex $field 1]}] "field \"$name\" of $structId"]
     }
     return $bytes
@@ -385,17 +385,17 @@ proc core::binary::ReprUnionPath {repr} {
 
 proc core::binary::parse {descriptor data} {
     set descriptor [core::value::strOf $descriptor]
-    RefuseNativeOnly binary::parse $descriptor
-    set bytes [BytesOf $data binary::parse]
+    RefuseNativeOnly std::binary::parse $descriptor
+    set bytes [BytesOf $data std::binary::parse]
     set size [lindex $descriptor 1]
     if {[string length $bytes] != $size} {
         core::native::failDeclared LayoutLengthMismatch \
-            "binary::parse: [string length $bytes] bytes given, but the layout [LayoutName [lindex $descriptor 0]] has size $size"
+            "std::binary::parse: [string length $bytes] bytes given, but the layout [LayoutName [lindex $descriptor 0]] has size $size"
     }
     return [Decode $descriptor $bytes 0]
 }
 
-# binary::read(data, L.path) (LAYOUT-UNIONS.md): the one representation the
+# std::binary::read(data, L.path) (LAYOUT-UNIONS.md): the one representation the
 # designator constant PATH names -- {STRUCTID SIZE PATH FIELD}, FIELD its
 # descriptor entry at its absolute offset -- imprinted from DATA, exactly
 # L's size. Never a pointer (LAYOUT-NATIVE-ONLY) or a union (LAYOUT-UNION):
@@ -407,28 +407,28 @@ proc core::binary::read {data path} {
     set union [ReprUnionPath $repr]
     if {$union ne "none"} {
         core::semanticError LAYOUT-UNION \
-            "binary::read: [PathText $path] holds a union, which has no copied value (one of its alternatives is read at a time)"
+            "std::binary::read: [PathText $path] holds a union, which has no copied value (one of its alternatives is read at a time)"
     }
     if {[ReprPointerPath $repr] ne "none"} {
         core::semanticError LAYOUT-NATIVE-ONLY \
-            "binary::read: [PathText $path] holds a C pointer, which bytes never become"
+            "std::binary::read: [PathText $path] holds a C pointer, which bytes never become"
     }
-    set bytes [BytesOf $data binary::read]
+    set bytes [BytesOf $data std::binary::read]
     if {[string length $bytes] != $size} {
         core::native::failDeclared LayoutLengthMismatch \
-            "binary::read: [string length $bytes] bytes given, but the layout [LayoutName $structId] has size $size"
+            "std::binary::read: [string length $bytes] bytes given, but the layout [LayoutName $structId] has size $size"
     }
     return [DecodeRepr $repr $bytes [lindex $field 1] [lindex $field 0] $structId]
 }
 
 proc core::binary::emit {value descriptor} {
     set descriptor [core::value::strOf $descriptor]
-    RefuseNativeOnly binary::emit $descriptor
+    RefuseNativeOnly std::binary::emit $descriptor
     set size [lindex $descriptor 1]
     return [BytesValue [Encode $descriptor $value [binary format x$size] 0]]
 }
 
-# binary::emit before elaboration and the layout queries before resolution
+# std::binary::emit before elaboration and the layout queries before resolution
 # never run: hir/resolve.tcl replaces a query by its constant, and
 # hir::layouts::Elaborate turns every emit whose value has a layout into
 # binary#emit. A core IR program that calls one directly has no static
@@ -440,27 +440,27 @@ proc core::binary::Unelaborated {name args} {
 # ---------------------------------------------------------------------------
 # Read-only native views (NATIVE-LAYOUT-VIEWS.md)
 #
-#   binary::native::view(L, p)      NativeView[L]: the live native memory the
-#                                   data pointer P (an ffi::c::Ptr[T])
+#   std::binary::native::view(L, p)      NativeView[L]: the live native memory the
+#                                   data pointer P (a std::ffi::c::Ptr[T])
 #                                   addresses, read through layout L
 #                                   (NativeViewNull for a null P). P is
 #                                   observed; the view is P's address word.
 #   v.field                         one field read at its offset: a scalar's
 #                                   Int, a nested layout's NativeView[Inner]
 #                                   (its address plus the offset, nothing
-#                                   read), a pointer field's ffi::c::Ptr /
+#                                   read), a pointer field's std::ffi::c::Ptr /
 #                                   FnPtr (hir::layouts::Elaborate rewrites
 #                                   the projection to the internal
 #                                   binary#view_field(v, FIELD), FIELD the
 #                                   field's descriptor entry)
-#   binary::load(v)                 LayoutStruct[L]: every field read once,
+#   std::binary::load(v)                 LayoutStruct[L]: every field read once,
 #                                   L from the view's static type (elaborated
 #                                   to binary#load(v, DESCRIPTOR))
 #
-# binary::native is an intrinsic namespace designated direct
+# std::binary::native is an intrinsic namespace designated direct
 # (DIRECT-MODULES.md): reading live process memory is raw authority, so a
 # call of view is a direct edge of its module. Reading a view (a projection,
-# binary::load) is not: the view is the authority, already granted.
+# std::binary::load) is not: the view is the authority, already granted.
 #
 # The Tcl backends have no native memory: a null pointer is NativeViewNull
 # on every backend, and any other view is refused (NATIVE-ONLY) -- nothing
@@ -476,9 +476,9 @@ proc core::binary::nativeView {descriptor p} {
     set descriptor [core::value::strOf $descriptor]
     if {[core::cabi::addressOf $p] == 0} {
         core::native::failDeclared NativeViewNull \
-            "binary::native::view: the pointer is null, so there is no [LayoutName [lindex $descriptor 0]] to read"
+            "std::binary::native::view: the pointer is null, so there is no [LayoutName [lindex $descriptor 0]] to read"
     }
-    NativeOnly binary::native::view
+    NativeOnly std::binary::native::view
 }
 
 proc core::binary::viewField {view field} {
@@ -486,36 +486,36 @@ proc core::binary::viewField {view field} {
 }
 
 proc core::binary::load {view descriptor} {
-    NativeOnly binary::load
+    NativeOnly std::binary::load
 }
 
 # ---------------------------------------------------------------------------
 # Layout writes (NATIVE-LAYOUT-WRITES.md)
 #
-#   binary::native::edit(L, p)      NativeEdit[L]: the live native memory the
-#                                   data pointer P addresses, read and WRITTEN
-#                                   through layout L (NativeEditNull for a
-#                                   null P). P is observed; the edit is P's
-#                                   address word. Direct authority, like a
-#                                   view; reading an edit is a view's read
-#   binary::store(e, L.f, v)        writes V into field f of the memory the
-#                                   NativeEdit[L] E addresses: one store of
-#                                   the field's width at its offset, nothing
-#                                   else touched. A pointer field takes a
-#                                   pointer the program already has (V
-#                                   observed: its address bits are copied)
-#   binary::write(d, L.f, v)        the abi::bytes::MutableBytes D with field
-#                                   f of layout L written to V: a new value
-#                                   (D is unchanged), every other byte D's.
-#                                   D must have exactly L's size
-#                                   (LayoutLengthMismatch). Never a pointer
-#                                   field (LAYOUT-NATIVE-ONLY)
-#   binary::write_foreign(d, L.f, p)  the same for a C pointer field f: the
+#   std::binary::native::edit(L, p)  NativeEdit[L]: the live native memory the
+#                                    data pointer P addresses, read and WRITTEN
+#                                    through layout L (NativeEditNull for a
+#                                    null P). P is observed; the edit is P's
+#                                    address word. Direct authority, like a
+#                                    view; reading an edit is a view's read
+#   std::binary::store(e, L.f, v)    writes V into field f of the memory the
+#                                    NativeEdit[L] E addresses: one store of
+#                                    the field's width at its offset, nothing
+#                                    else touched. A pointer field takes a
+#                                    pointer the program already has (V
+#                                    observed: its address bits are copied)
+#   std::binary::write(d, L.f, v)    the std::abi::bytes::MutableBytes D with
+#                                    field f of layout L written to V: a new
+#                                    value (D is unchanged), every other byte
+#                                    D's. D must have exactly L's size
+#                                    (LayoutLengthMismatch). Never a pointer
+#                                    field (LAYOUT-NATIVE-ONLY)
+#   std::binary::write_foreign(d, L.f, p)  the same for a C pointer field f: the
 #                                   address bits of the pointer P (an
-#                                   existing ffi::c::Ptr or FnPtr, observed)
+#                                   existing std::ffi::c::Ptr or FnPtr, observed)
 #                                   encoded into it -- the explicit foreign
 #                                   encoding, which bytes never decode back
-#                                   (binary::parse stays LAYOUT-NATIVE-ONLY)
+#                                   (std::binary::parse stays LAYOUT-NATIVE-ONLY)
 #
 # L.f is a static field designator, resolved to the constant {STRUCTID SIZE
 # PATH FIELD} (hir/layouts.tcl's "Field designators"), FIELD the leaf's
@@ -524,10 +524,10 @@ proc core::binary::load {view descriptor} {
 #
 # The Tcl backends have no native memory: an edit of the null pointer is
 # NativeEditNull, any other edit is refused (NATIVE-ONLY), and so is a
-# store. Byte storage is theirs, so binary::write and binary::write_foreign
+# store. Byte storage is theirs, so std::binary::write and std::binary::write_foreign
 # run on every backend; a C pointer's address bits are its value there too.
 
-# The bytes (a Tcl byte string) of the abi::bytes::MutableBytes DATA.
+# The bytes (a Tcl byte string) of the std::abi::bytes::MutableBytes DATA.
 proc core::binary::MutableBytesOf {data context} {
     core::value::expect struct $data $context
     set mutableType [core::bytestore::mutableBytesType]
@@ -537,7 +537,7 @@ proc core::binary::MutableBytesOf {data context} {
     return [binary decode hex [core::value::mutbytesHex [core::value::structGet $data [core::bytestore::storageField]]]]
 }
 
-# The abi::bytes::MutableBytes holding the byte string BYTES.
+# The std::abi::bytes::MutableBytes holding the byte string BYTES.
 proc core::binary::MutableBytesValue {bytes} {
     return [core::value::structOf [list [core::bytestore::mutableBytesType] [core::bytestore::storageField]] \
         [list [core::value::mutbytes [binary encode hex $bytes]]]]
@@ -567,23 +567,23 @@ proc core::binary::write {data path value} {
     if {$sign eq "ptr" || [ReprPointerPath [lrange [lindex $path 3] 2 end]] ne "none"} {
         # Statically LAYOUT-NATIVE-ONLY (hir/layouts.tcl).
         core::semanticError LAYOUT-NATIVE-ONLY \
-            "binary::write: field [PathText $path] holds a C pointer, which an ordinary byte write never encodes (binary::write_foreign encodes a pointer the program already has)"
+            "std::binary::write: field [PathText $path] holds a C pointer, which an ordinary byte write never encodes (std::binary::write_foreign encodes a pointer the program already has)"
     }
     if {$sign eq "array"} {
         # A whole fixed array (FIXED-LAYOUT-ARRAYS.md): one new value, every
         # element encoded into the array's bytes and nothing else; the
         # List's extent checked first (LayoutExtentMismatch, D unchanged).
-        set bytes [RecordBytes binary::write $data $path]
-        ArrayItems binary::write $value [lindex [lindex $path 3] 3] "field [PathText $path]"
-        return [MutableBytesValue [EncodeRepr binary::write [lrange [lindex $path 3] 2 end] $value $bytes \
+        set bytes [RecordBytes std::binary::write $data $path]
+        ArrayItems std::binary::write $value [lindex [lindex $path 3] 3] "field [PathText $path]"
+        return [MutableBytesValue [EncodeRepr std::binary::write [lrange [lindex $path 3] 2 end] $value $bytes \
             $offset "field [PathText $path]"]]
     }
-    set bytes [RecordBytes binary::write $data $path]
+    set bytes [RecordBytes std::binary::write $data $path]
     set n [core::value::intOf $value]
     set piece [ScalarPiece $n $sign $width $endian]
     if {$piece eq ""} {
         lassign [EncodingRange $sign $width] lo hi
-        core::semanticError RANGE "binary::write: field [PathText $path] cannot hold $n, outside its $width-byte encoding $lo..$hi"
+        core::semanticError RANGE "std::binary::write: field [PathText $path] cannot hold $n, outside its $width-byte encoding $lo..$hi"
     }
     return [MutableBytesValue [string replace $bytes $offset [expr {$offset + $width - 1}] $piece]]
 }
@@ -602,21 +602,21 @@ proc core::binary::writeForeign {data path pointer} {
         }
         if {[lindex $leaf 0] ne "ptr"} {
             core::semanticError LAYOUT-FOREIGN-WRITE \
-                "binary::write_foreign: field [PathText $path] is no array of C pointers (an ordinary field is written by binary::write)"
+                "std::binary::write_foreign: field [PathText $path] is no array of C pointers (an ordinary field is written by std::binary::write)"
         }
-        set bytes [RecordBytes binary::write_foreign $data $path]
-        ArrayItems binary::write_foreign $pointer [lindex $repr 1] "field [PathText $path]"
+        set bytes [RecordBytes std::binary::write_foreign $data $path]
+        ArrayItems std::binary::write_foreign $pointer [lindex $repr 1] "field [PathText $path]"
         return [MutableBytesValue [EncodeForeign $repr $pointer $bytes $offset "field [PathText $path]"]]
     }
     if {$kind ne "ptr"} {
         # Statically LAYOUT-FOREIGN-WRITE (hir/layouts.tcl).
         core::semanticError LAYOUT-FOREIGN-WRITE \
-            "binary::write_foreign: field [PathText $path] is no C pointer field (an ordinary field is written by binary::write)"
+            "std::binary::write_foreign: field [PathText $path] is no C pointer field (an ordinary field is written by std::binary::write)"
     }
     # The pointer's own address bits, never an Int made into one: a C
     # address value, or the type error a checked program never reaches.
     set address [core::cabi::addressOf $pointer]
-    set bytes [RecordBytes binary::write_foreign $data $path]
+    set bytes [RecordBytes std::binary::write_foreign $data $path]
     set bits [expr {$address & ((1 << (8 * $width)) - 1)}]
     set piece [binary format [Letter $width u $endian 0] $bits]
     return [MutableBytesValue [string replace $bytes $offset [expr {$offset + $width - 1}] $piece]]
@@ -625,12 +625,12 @@ proc core::binary::writeForeign {data path pointer} {
 # BYTES with the pointers VALUE (one, or a fixed array's List of them,
 # nested) encoded at byte AT by the pointer representation words REPR
 # ({ptr WIDTH ENDIAN}, or arrays of it): each pointer's own address bits,
-# observed (binary::write_foreign).
+# observed (std::binary::write_foreign).
 proc core::binary::EncodeForeign {repr value bytes at what} {
     if {[lindex $repr 0] eq "array"} {
         lassign $repr - extent stride element
         set i 0
-        foreach item [ArrayItems binary::write_foreign $value $extent $what] {
+        foreach item [ArrayItems std::binary::write_foreign $value $extent $what] {
             set bytes [EncodeForeign $element $item $bytes [expr {$at + $i * $stride}] "element $i of $what"]
             incr i
         }
@@ -647,34 +647,36 @@ proc core::binary::nativeEdit {descriptor p} {
     set address [core::cabi::addressOf $p]
     if {$address == 0} {
         core::native::failDeclared NativeEditNull \
-            "binary::native::edit: the pointer is null, so there is no [LayoutName [lindex $descriptor 0]] to edit"
+            "std::binary::native::edit: the pointer is null, so there is no [LayoutName [lindex $descriptor 0]] to edit"
     }
-    NativeOnly binary::native::edit "reads and writes"
+    NativeOnly std::binary::native::edit "reads and writes"
 }
 
 proc core::binary::store {edit path value} {
-    NativeOnly binary::store writes
+    NativeOnly std::binary::store writes
 }
 
 # ---------------------------------------------------------------------------
 # Live fixed arrays (FIXED-LAYOUT-ARRAYS.md)
 #
-#   binary::element(a, i)           element I of the live array A (a
-#                                   NativeView[array N of E] or a
-#                                   NativeEdit[array N of E], a field of a
-#                                   view or an edit, or an element of
-#                                   another): a scalar's Int, a pointer
-#                                   (fresh, observed from memory), a nested
-#                                   layout's or array's live view or edit
-#                                   (its address, nothing read). One access
-#                                   at A + I * STRIDE, the whole array never
-#                                   read; IndexNotFound unless 0 <= I < N
-#   binary::store_element(a, i, v)  V written into scalar or pointer element
-#                                   I of the live array A (a NativeEdit[array
-#                                   N of E]): one store, nothing else
-#                                   touched; IndexNotFound unless 0 <= I < N
-#   binary::load(a)                 the whole live array A copied into its
-#                                   List (binary#load_array)
+#   std::binary::element(a, i)           element I of the live array A (a
+#                                        NativeView[array N of E] or a
+#                                        NativeEdit[array N of E], a field of a
+#                                        view or an edit, or an element of
+#                                        another): a scalar's Int, a pointer
+#                                        (fresh, observed from memory), a
+#                                        nested layout's or array's live view
+#                                        or edit (its address, nothing read).
+#                                        One access at A + I * STRIDE, the
+#                                        whole array never read; IndexNotFound
+#                                        unless 0 <= I < N
+#   std::binary::store_element(a, i, v)  V written into scalar or pointer
+#                                        element I of the live array A (a
+#                                        NativeEdit[array N of E]): one store,
+#                                        nothing else touched; IndexNotFound
+#                                        unless 0 <= I < N
+#   std::binary::load(a)                 the whole live array A copied into its
+#                                        List (binary#load_array)
 #
 # elaborated (hir::layouts::Elaborate) to binary#element(a, i, ARRAY),
 # binary#store_element(a, i, v, ARRAY), binary#load_array(a, ARRAY), ARRAY
@@ -683,15 +685,15 @@ proc core::binary::store {edit path value} {
 # is refused before it could be made), and refuse these too.
 
 proc core::binary::element {array index args} {
-    NativeOnly binary::element
+    NativeOnly std::binary::element
 }
 
 proc core::binary::storeElement {array index value args} {
-    NativeOnly binary::store_element writes
+    NativeOnly std::binary::store_element writes
 }
 
 proc core::binary::loadArray {array descriptor} {
-    NativeOnly binary::load
+    NativeOnly std::binary::load
 }
 
 core::native::declareError LayoutLengthMismatch
@@ -699,32 +701,32 @@ core::native::declareError NativeViewNull
 core::native::declareError NativeEditNull
 core::native::declareError LayoutExtentMismatch
 
-core::native::register binary::parse -arity 2 -impl core::binary::parse \
+core::native::register std::binary::parse -arity 2 -impl core::binary::parse \
     -param-types {str struct} -result-type struct -result-shape {layout-struct 0} \
     -errors {LayoutLengthMismatch} -layout {operand 0 input 1 op parse} -nomethod 1
-core::native::register binary::emit -arity 1 -impl {core::binary::Unelaborated binary::emit} \
+core::native::register std::binary::emit -arity 1 -impl {core::binary::Unelaborated std::binary::emit} \
     -param-types {struct} -result-type struct -result-shape [list named-struct [core::bytestore::bytesType]] \
     -ownership {observe} -errors {LayoutExtentMismatch} -bounds {extents 0} -layout {typed {0 binary#emit}}
 core::native::register binary#emit -arity 2 -impl core::binary::emit \
     -param-types {struct str} -result-type struct -result-shape [list named-struct [core::bytestore::bytesType]] \
     -runtime {bytestore-alloc} -ownership {observe observe} -errors {LayoutExtentMismatch} -bounds {extents 0} \
     -layout {operand 1 op emit} -nomethod 1
-# binary::read(data, L.path) (LAYOUT-UNIONS.md): one designated
+# std::binary::read(data, L.path) (LAYOUT-UNIONS.md): one designated
 # representation imprinted from bytes -- how a union's alternative is read
 # from byte storage, a union having no copied value of its own. Its result
 # is the representation's copied type (a scalar's domain, LayoutStruct[R],
 # a List); `-result-length {path 1}` states an array's extent.
-core::native::register binary::read -arity 2 -impl core::binary::read \
+core::native::register std::binary::read -arity 2 -impl core::binary::read \
     -param-types {struct str} -result-type any -result-shape {layout-read 1} -ownership {observe observe} \
     -errors {LayoutLengthMismatch} -result-length {path 1} -layout {input 0 path 1 op read} -nomethod 1
-core::native::register binary::layout_length -arity 1 -impl {core::binary::Unelaborated binary::layout_length} \
+core::native::register std::binary::layout_length -arity 1 -impl {core::binary::Unelaborated std::binary::layout_length} \
     -param-types {any} -result-type int -layout {operand 0 query length} -nomethod 1
-core::native::register binary::layout_alignment -arity 1 -impl {core::binary::Unelaborated binary::layout_alignment} \
+core::native::register std::binary::layout_alignment -arity 1 -impl {core::binary::Unelaborated std::binary::layout_alignment} \
     -param-types {any} -result-type int -layout {operand 0 query alignment} -nomethod 1
-core::native::register binary::native::view -arity 2 -impl core::binary::nativeView \
+core::native::register std::binary::native::view -arity 2 -impl core::binary::nativeView \
     -param-types {str any} -result-type any -result-shape {native-view 0} -ownership {observe observe} \
     -errors {NativeViewNull} -layout {operand 0 pointer 1 op view} -nomethod 1
-core::native::register binary::load -arity 1 -impl {core::binary::Unelaborated binary::load} \
+core::native::register std::binary::load -arity 1 -impl {core::binary::Unelaborated std::binary::load} \
     -param-types {any} -result-type any -result-shape {view-struct 0} -ownership {observe} \
     -result-length {extent 0} -layout {viewed {0 binary#load} arrayed {0 binary#load_array}}
 core::native::register binary#load -arity 2 -impl core::binary::load \
@@ -733,17 +735,17 @@ core::native::register binary#load -arity 2 -impl core::binary::load \
 core::native::register binary#view_field -arity 2 -impl core::binary::viewField \
     -param-types {any str} -result-type any -result-shape {view-field 0 1} -ownership {observe observe} \
     -layout {field 1 op field} -nomethod 1
-core::native::register binary::native::edit -arity 2 -impl core::binary::nativeEdit \
+core::native::register std::binary::native::edit -arity 2 -impl core::binary::nativeEdit \
     -param-types {str any} -result-type any -result-shape {native-edit 0} -ownership {observe observe} \
     -errors {NativeEditNull} -layout {operand 0 pointer 1 op edit} -nomethod 1
-core::native::register binary::store -arity 3 -impl core::binary::store \
+core::native::register std::binary::store -arity 3 -impl core::binary::store \
     -param-types {any str any} -result-type unit -ownership {observe observe observe} \
     -errors {LayoutExtentMismatch} -bounds {extents 2} -layout {edited 0 path 1 value 2 op store} -nomethod 1
-core::native::register binary::write -arity 3 -impl core::binary::write \
+core::native::register std::binary::write -arity 3 -impl core::binary::write \
     -param-types {struct str any} -result-type struct -result-shape [list named-struct [core::bytestore::mutableBytesType]] \
     -runtime {bytestore-alloc} -ownership {observe observe observe} -errors {LayoutExtentMismatch LayoutLengthMismatch} \
     -bounds {extents 2} -layout {output 0 path 1 value 2 op write} -nomethod 1
-core::native::register binary::write_foreign -arity 3 -impl core::binary::writeForeign \
+core::native::register std::binary::write_foreign -arity 3 -impl core::binary::writeForeign \
     -param-types {struct str any} -result-type struct -result-shape [list named-struct [core::bytestore::mutableBytesType]] \
     -runtime {bytestore-alloc} -ownership {observe observe observe} -errors {LayoutExtentMismatch LayoutLengthMismatch} \
     -bounds {extents 2} -layout {output 0 path 1 value 2 op write_foreign} -nomethod 1
@@ -751,13 +753,13 @@ core::native::register binary::write_foreign -arity 3 -impl core::binary::writeF
 # dynamic index (IndexNotFound unless the index designates an element: the
 # narray bounds family, whose N is the extent the array's static type
 # states), and a whole array's copy.
-core::native::register binary::element -arity 2 -impl {core::binary::Unelaborated binary::element} \
+core::native::register std::binary::element -arity 2 -impl {core::binary::Unelaborated std::binary::element} \
     -param-types {any int} -result-type any -result-shape {native-element 0} -ownership {observe observe} \
     -errors {IndexNotFound} -bounds {index narray 0 1} -layout {arrayed {0 binary#element} index 1 op element} -nomethod 1
 core::native::register binary#element -arity 3 -impl core::binary::element \
     -param-types {any int str} -result-type any -result-shape {native-element 0} -ownership {observe observe observe} \
     -errors {IndexNotFound} -bounds {index narray 0 1} -layout {array 2 index 1 op element} -nomethod 1
-core::native::register binary::store_element -arity 3 -impl {core::binary::Unelaborated binary::store_element} \
+core::native::register std::binary::store_element -arity 3 -impl {core::binary::Unelaborated std::binary::store_element} \
     -param-types {any int any} -result-type unit -ownership {observe observe observe} \
     -errors {IndexNotFound} -bounds {index narray 0 1} \
     -layout {arrayed {0 binary#store_element} index 1 value 2 op store_element} -nomethod 1
@@ -768,8 +770,8 @@ core::native::register binary#load_array -arity 2 -impl core::binary::loadArray 
     -param-types {any str} -result-type any -result-shape {view-struct 0} -ownership {observe observe} \
     -result-length {extent 0} -layout {array 1 op load_array} -nomethod 1
 # Reading live process memory is raw authority (DIRECT-MODULES.md): every
-# call of binary::native::view is a direct edge of the module making it --
-# and so is every call of binary::native::edit, write authority over it
-# (NATIVE-LAYOUT-WRITES.md). Using an edit someone made (binary::store, its
+# call of std::binary::native::view is a direct edge of the module making it --
+# and so is every call of std::binary::native::edit, write authority over it
+# (NATIVE-LAYOUT-WRITES.md). Using an edit someone made (std::binary::store, its
 # reads) is not: the edit is the authority, already granted.
-core::native::declareDirectNamespace binary::native
+core::native::declareDirectNamespace std::binary::native

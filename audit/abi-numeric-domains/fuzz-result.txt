@@ -1,5 +1,5 @@
 # audit/abi-numeric-domains/tools/fuzz.tcl -- the pure ABI numeric conversions
-# (creators, .value, abi::x86_64::from_* encodings) for all ten domains; no
+# (creators, .value, std::abi::x86_64::from_* encodings) for all ten domains; no
 # syscall is executed by the fuzzer. Recorded 2026-10-03 on the final tree
 # (the error-name check matches the complete list of errors a KNOWN-ERROR
 # names, up to its ";").
@@ -17,5 +17,5 @@ wall time 0m54.228s)
 Mutation check of the fuzzer (scratch library copies, never committed), each
 run with -n 3 -seed 1 -backends "interp cranelift":
   from_u64 upper half encoded as v - 2^64 + 1            detected (6 failures)
-  abi::u16 upper bound 65534 instead of 65535            detected (3 failures)
-  abi::i8 lower bound -127 instead of -128               detected (3 failures)
+  std::abi::u16 upper bound 65534 instead of 65535            detected (3 failures)
+  std::abi::i8 lower bound -127 instead of -128               detected (3 failures)

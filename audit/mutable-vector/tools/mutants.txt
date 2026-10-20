@@ -125,7 +125,7 @@
 >>>>
 
 
-@@ operation-value-allowed a mutating operation may be used as a value: `p = mutable_vector::push; p(v, 4)` mutates v's header behind the copies (`c = v`) that were never written out for it, and a callee's parameter given it
+@@ operation-value-allowed a mutating operation may be used as a value: `p = std::mutable_vector::push; p(v, 4)` mutates v's header behind the copies (`c = v`) that were never written out for it, and a callee's parameter given it
 ## hir/mutvec.tcl
 <<<<
         set problem [OperationValueProblem $hir $e]
@@ -135,7 +135,7 @@
         if {0} {
 >>>>
 
-@@ operation-value-help-method-only the MUTABLE-PLACE-RECEIVER help for an operation used as a value always spells the call with method syntax, which a nomethod operation (mutable_array::copy) rejects (NOMETHOD-CALL)
+@@ operation-value-help-method-only the MUTABLE-PLACE-RECEIVER help for an operation used as a value always spells the call with method syntax, which a nomethod operation (std::mutable_array::copy) rejects (NOMETHOD-CALL)
 ## hir/mutvec.tcl
 <<<<
     set call [expr {[dict get $meta nomethod] ? "${op}(v, ...)" : "v.[namespace tail $op](...)"}]
@@ -609,10 +609,10 @@ proc hir::mutvec::ShareDescriptor {type} {
 @@ take-duplicate-owner take shifts the later elements down but leaves a duplicate owner of the taken one (at the end)
 ## core/mutvec.tcl
 <<<<
-    set i [Index $id $index mutable_vector::take]
+    set i [Index $id $index std::mutable_vector::take]
     return [lpop store($id) $i]
 ====
-    set i [Index $id $index mutable_vector::take]
+    set i [Index $id $index std::mutable_vector::take]
     set x [lpop store($id) $i]
     lappend store($id) $x
     return $x
@@ -622,10 +622,10 @@ proc hir::mutvec::ShareDescriptor {type} {
 ## core/mutvec.tcl
 <<<<
     -ownership {place observe move}
-core::native::register mutable_vector::clear
+core::native::register std::mutable_vector::clear
 ====
     -ownership {place observe observe}
-core::native::register mutable_vector::clear
+core::native::register std::mutable_vector::clear
 >>>>
 ## core/mutvec.tcl
 <<<<

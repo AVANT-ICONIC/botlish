@@ -26,12 +26,12 @@ The four frontend rejections have distinct explanations:
 
 | Input | Reason | Follow-up |
 |---|---|---|
-| `audit/comprehensive-generated-code/probes/from-int-invalid.bot` | Intentional `byte::from_int(999)` rejection: `CORE SEMANTIC KNOWN-ERROR`, `AboveRange` | Expected negative probe |
+| `audit/comprehensive-generated-code/probes/from-int-invalid.bot` | Intentional `std::byte::from_int(999)` rejection: `CORE SEMANTIC KNOWN-ERROR`, `AboveRange` | Expected negative probe |
 | `examples/surface/10-duplicate-binding.bot` | Intentional duplicate binding: `CORE SEMANTIC DUPLICATE` | Expected negative example |
-| `lib/ascii.bot` | `Byte` type is unregistered when launched alone | Loading `lib/byte.bot` first makes both flags succeed; zero guards |
-| `audit/post-native-stack/module-cases/main.bot` | `plain` module is outside the default `lib/` directory | Setting `core::libraryDir` to the fixture directory makes both flags succeed; result `[2, 8, 20]`, guards 3 → 0 |
+| `stdlib/ascii.bot` | `Byte` type is unregistered when launched alone | Loading `stdlib/byte.bot` first makes both flags succeed; zero guards |
+| `audit/post-native-stack/module-cases/main.bot` | `plain` module is outside the default `stdlib/` directory | Setting `core::libraryDir` to the fixture directory makes both flags succeed; result `[2, 8, 20]`, guards 3 → 0 |
 
-`lib/ascii.bot` documents its dependency on another compilation unit loading `byte`; existing ASCII consumers in the baseline run also succeed. The context reruns use `context.tcl` without editing any `.bot` source. With these setups and the compiler reruns, all **56 non-negative inputs** produce both reports and execute successfully.
+`stdlib/ascii.bot` documents its dependency on another compilation unit loading `byte`; existing ASCII consumers in the baseline run also succeed. The context reruns use `context.tcl` without editing any `.bot` source. With these setups and the compiler reruns, all **56 non-negative inputs** produce both reports and execute successfully.
 
 ## Readiness reported by the analysis
 
@@ -63,17 +63,17 @@ Fibonacci, loop-count, URI escaping, ordinary CSV, geometric CSV, matrix multipl
 | `examples/stdlib/hashtable.bot` | 63 | 25 |
 | `bench/test-selection.bot` | 12 | 5 |
 | `bench/source-checks.bot` | 11 | 4 |
-| `lib/web.bot` | 24 | 4 |
+| `stdlib/web.bot` | 24 | 4 |
 | `bench/lex-strategy.bot` | 22 | 3 |
 | `examples/surface/09-mutual-recursion.bot` | 2 | 2 |
-| `lib/list.bot` | 8 | 2 |
+| `stdlib/list.bot` | 8 | 2 |
 | `audit/post-native-stack/module-cases/managed.bot` | 1 | 1 |
 | `audit/post-native-stack/module-cases/plain.bot` | 1 | 1 |
 | `audit/post-native-stack/module-cases/scalar.bot` | 1 | 1 |
 | `bench/sum-refined.bot` | 3 | 1 |
 | `examples/stdlib/csv_chunked.bot` | 29 | 1 |
 | `examples/surface/03-closure.bot` | 2 | 1 |
-| `lib/mathish.bot` | 1 | 1 |
+| `stdlib/mathish.bot` | 1 | 1 |
 
 `csv_records.bot` and `hashtable.bot` account for 54 of 81 remaining guards (two thirds). Across all reports, the residual guard causes are 47 unknown call-result kinds, 23 unknown parameter kinds, and 11 unknown aggregate-element kinds. The two largest cases repeatedly lose Int or mutable-array kinds through hashtable accessors and list-shaped records.
 
@@ -83,8 +83,8 @@ Four used instances still contain a `DynamicCall` blocker:
 |---|---|---|
 | `bench/lex-strategy.bot` | `classify<str, bool>` | line 57:9; classifier selected between Native and Block |
 | `bench/source-checks.bot` | `classify_leading<generic>` | line 56:9; callable read from the checks list |
-| `lib/list.bot` | `find<generic>` | line 79:12; unconstrained predicate |
-| `lib/web.bot` | `scan_while<generic>` | line 128:16; unconstrained predicate |
+| `stdlib/list.bot` | `find<generic>` | line 79:12; unconstrained predicate |
+| `stdlib/web.bot` | `scan_while<generic>` | line 128:16; unconstrained predicate |
 
 The library entries are open when analyzed as standalone inputs with generic callable parameters. Concrete callers can close such dispatch: e.g. `bench/uri-steady.bot` is fully closed. A standalone module run does not supply call-site facts for every exported API, and its specialized report only includes instances retained by that run.
 
@@ -161,12 +161,12 @@ The next executable-AOT work is therefore runtime packaging and linking, constan
 | `examples/surface/12-if-value.bot` | [1/1/0](logs/examples/surface/12-if-value.bot.aot.txt) | [2/0/0](logs/examples/surface/12-if-value.bot.aot-spec.txt) | 1 → 0 | OK |
 | `examples/surface/13-hygiene.bot` | [2/0/0](logs/examples/surface/13-hygiene.bot.aot.txt) | [2/0/0](logs/examples/surface/13-hygiene.bot.aot-spec.txt) | 0 → 0 | OK |
 | `examples/surface/14-modules.bot` | [1/1/0](logs/examples/surface/14-modules.bot.aot.txt) | [2/0/0](logs/examples/surface/14-modules.bot.aot-spec.txt) | 1 → 0 | OK |
-| `lib/ascii.bot` | [—](logs/lib/ascii.bot.aot.txt) | [—](logs/lib/ascii.bot.aot-spec.txt) | — | needs context → OK |
-| `lib/byte.bot` | [4/6/0](logs/lib/byte.bot.aot.txt) | [4/0/0](logs/lib/byte.bot.aot-spec.txt) | 6 → 0 | OK |
-| `lib/char.bot` | [2/0/0](logs/lib/char.bot.aot.txt) | [2/0/0](logs/lib/char.bot.aot-spec.txt) | 0 → 0 | OK |
-| `lib/list.bot` | [1/0/4](logs/lib/list.bot.aot.txt) | [1/0/1](logs/lib/list.bot.aot-spec.txt) | 8 → 2 | OK |
-| `lib/mathish.bot` | [1/1/0](logs/lib/mathish.bot.aot.txt) | [1/1/0](logs/lib/mathish.bot.aot-spec.txt) | 1 → 1 | OK |
-| `lib/web.bot` | [12/16/1](logs/lib/web.bot.aot.txt) | [21/3/1](logs/lib/web.bot.aot-spec.txt) | 24 → 4 | OK |
+| `stdlib/ascii.bot` | [—](logs/stdlib/ascii.bot.aot.txt) | [—](logs/stdlib/ascii.bot.aot-spec.txt) | — | needs context → OK |
+| `stdlib/byte.bot` | [4/6/0](logs/stdlib/byte.bot.aot.txt) | [4/0/0](logs/stdlib/byte.bot.aot-spec.txt) | 6 → 0 | OK |
+| `stdlib/char.bot` | [2/0/0](logs/lib/char.bot.aot.txt) | [2/0/0](logs/lib/char.bot.aot-spec.txt) | 0 → 0 | OK |
+| `stdlib/list.bot` | [1/0/4](logs/stdlib/list.bot.aot.txt) | [1/0/1](logs/stdlib/list.bot.aot-spec.txt) | 8 → 2 | OK |
+| `stdlib/mathish.bot` | [1/1/0](logs/stdlib/mathish.bot.aot.txt) | [1/1/0](logs/stdlib/mathish.bot.aot-spec.txt) | 1 → 1 | OK |
+| `stdlib/web.bot` | [12/16/1](logs/stdlib/web.bot.aot.txt) | [21/3/1](logs/stdlib/web.bot.aot-spec.txt) | 24 → 4 | OK |
 
 ## Evidence and reproduction
 

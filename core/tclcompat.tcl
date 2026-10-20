@@ -1,13 +1,13 @@
 # tclcompat.tcl -- native Tcl-compatibility character classification:
-#   str::is_tcl_alpha(c), str::is_tcl_alnum(c) : one-scalar str -> bool
+#   std::str::is_tcl_alpha(c), std::str::is_tcl_alnum(c) : one-scalar str -> bool
 #   (root natives registered under their qualified `str` names, beside
 #   core/strings.tcl's)
 #
 # STATUS: temporary compatibility primitives -- NOT Botlish's eventual
 # public Unicode character-classification API.
 #
-#   These exist only to let the Emailish validator (lib/web.tcl's
-#   `Emailish?` when written, today lib/web.bot's `web::emailish?`; whose
+#   These exist only to let the Emailish validator (stdlib/web.tcl's
+#   `Emailish?` when written, today stdlib/web.bot's `std::web::emailish?`; whose
 #   grammar uses Tcl's `[:alpha:]`/`[:alnum:]` regexp bracket-expression
 #   classes -- core/regex.tcl, core::web::emailRegex) be expressed as
 #   ordinary compiled core IR instead of running through the Tcl-only regex
@@ -47,15 +47,15 @@
 # NATIVE-TCL-UNICODE.md for the full edge-case corpus and Unicode-version
 # notes):
 #
-#   str::is_tcl_alpha(c)  Unicode General_Category(c) in {Lu, Ll, Lt, Lm, Lo}
+#   std::str::is_tcl_alpha(c)  Unicode General_Category(c) in {Lu, Ll, Lt, Lm, Lo}
 #                     ("Letter"), exactly Tcl 9's [:alpha:] bracket class.
-#   str::is_tcl_alnum(c)  str::is_tcl_alpha(c) or General_Category(c) == Nd
+#   std::str::is_tcl_alnum(c)  std::str::is_tcl_alpha(c) or General_Category(c) == Nd
 #                     ("Letter or Decimal_Number"), exactly Tcl 9's
 #                     [:alnum:] bracket class.
 #
 # Deliberately narrower than several plausible-looking alternatives, each
 # checked directly against Tcl and rejected where it disagreed:
-#   - Rust's char::is_alphabetic()/is_alphanumeric() use the Unicode
+#   - Rust's std::char::is_alphabetic()/is_alphanumeric() use the Unicode
 #     *Alphabetic*/derived-numeric properties, which also admit Nl
 #     (letter-number) code points and other Other_Alphabetic marks Tcl's
 #     classes do not (e.g. U+2160 ROMAN NUMERAL ONE: alpha=false in Tcl,
@@ -81,7 +81,7 @@
 # scalar of a longer string.
 #
 # native/src/runtime/ops.rs's rt_is_tcl_alpha/rt_is_tcl_alnum are the
-# Cranelift-native counterpart (used by lib/web.bot's emailish?); this file (Tcl's
+# Cranelift-native counterpart (used by stdlib/web.bot's emailish?); this file (Tcl's
 # own built-in `string is alpha -strict`/`string is alnum -strict`, verified
 # identical to `regexp {^[:alpha:]$}`/`{^[:alnum:]}$}` on the same corpus)
 # stays authoritative for interp/compile and for the reference contract
@@ -100,12 +100,12 @@ proc core::tclcompat::CheckOneScalar {v native} {
 }
 
 proc core::tclcompat::isTclAlpha {c} {
-    set text [CheckOneScalar $c str::is_tcl_alpha]
+    set text [CheckOneScalar $c std::str::is_tcl_alpha]
     return [core::value::bool [string is alpha -strict $text]]
 }
 
 proc core::tclcompat::isTclAlnum {c} {
-    set text [CheckOneScalar $c str::is_tcl_alnum]
+    set text [CheckOneScalar $c std::str::is_tcl_alnum]
     return [core::value::bool [string is alnum -strict $text]]
 }
 
@@ -113,7 +113,7 @@ proc core::tclcompat::isTclAlnum {c} {
 # argument, no I/O or process state): a module initializer may call them, and
 # a function calling them can be repeatable (hir/repeatable.tcl,
 # REFINEMENT-VALUES.md).
-core::native::register str::is_tcl_alpha -arity 1 -impl core::tclcompat::isTclAlpha \
+core::native::register std::str::is_tcl_alpha -arity 1 -impl core::tclcompat::isTclAlpha \
     -param-types {str} -result-type bool -runtime {char-index range-check} -context-free 1
-core::native::register str::is_tcl_alnum -arity 1 -impl core::tclcompat::isTclAlnum \
+core::native::register std::str::is_tcl_alnum -arity 1 -impl core::tclcompat::isTclAlnum \
     -param-types {str} -result-type bool -runtime {char-index range-check} -context-free 1

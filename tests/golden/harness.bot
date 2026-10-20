@@ -15,12 +15,12 @@
 # a coroutine the code under test owns stands in for test-tick. A release's
 # effect is observed through a second installed context (a body cannot use
 # one, so the registration function computes it).
-import compiler
-import coroutine
-import list
-import mutable_array
-import str
-import test
+import std::compiler
+import std::coroutine
+import std::list
+import std::mutable_array
+import std::str
+import std::test
 
 # ---------------------------------------------------------------------------
 # Declarations the tests need (top-level only).
@@ -37,13 +37,13 @@ context struct HarnessLog:
     a: MutableArray[int]
 
 fn harness_note(v: int, context log: HarnessLog) -> int:
-    mutable_array::set(log.a, 0, v):
+    std::mutable_array::set(log.a, 0, v):
         on IndexNotFound:
             unit
     v
 
 fn harness_seen(context log: HarnessLog) -> int:
-    mutable_array::at(log.a, 0):
+    std::mutable_array::at(log.a, 0):
         on IndexNotFound:
             -1
 
@@ -69,34 +69,34 @@ fn register_argv_tests():
     # backend, never the Tcl process's own argv. (The Tcl test also reads
     # core::process::defaultArgv and $::argv0 and runs cranelift-generic;
     # here the vector is the golden runner's own default.)
-    fn b_default_argv() errors compiler::CompilerError:
+    fn b_default_argv() errors std::compiler::CompilerError:
         static compile:
             args = argv():
                 on InvalidArgumentEncoding:
                     ["fallback"]
             args
-    test::value("argv-default-argv-is-synthetic-not-the-runner's", ["botlish-runner"], b_default_argv)
+    std::test::value("argv-default-argv-is-synthetic-not-the-runner's", ["botlish-runner"], b_default_argv)
 
     # argv-contents-and-length-are-not-static-facts: the compiler knows
     # List[str] and the error, nothing about the length or the elements. The
     # Tcl test reads hir::exact::Of of the three calls; here the evidence is
-    # that the handled list::at(args, 1) -- which fails on this run -- is not
+    # that the handled std::list::at(args, 1) -- which fails on this run -- is not
     # KNOWN-ERROR (it would be if the vector's length were an exact fact),
     # and the values are the run's.
-    fn b_not_static_facts() errors compiler::CompilerError:
+    fn b_not_static_facts() errors std::compiler::CompilerError:
         static compile:
             args = argv():
                 on InvalidArgumentEncoding:
                     []
-            n = list::length(args)
-            first = list::at(args, 0):
+            n = std::list::length(args)
+            first = std::list::at(args, 0):
                 on IndexNotFound:
                     "none"
-            second = list::at(args, 1):
+            second = std::list::at(args, 1):
                 on IndexNotFound:
                     "absent"
             [n, first, second]
-    test::value("argv-contents-and-length-are-not-static-facts", [1, "botlish-runner", "absent"], b_not_static_facts)
+    std::test::value("argv-contents-and-length-are-not-static-facts", [1, "botlish-runner", "absent"], b_not_static_facts)
 
 # ---------------------------------------------------------------------------
 # warnings.test
@@ -107,14 +107,14 @@ fn register_warnings_tests():
     # warnings off runs identically on every backend. The golden runner
     # compiles with -warnings off and requires one report from interp,
     # compile and cranelift (not cranelift-generic).
-    fn b_policy_program() errors compiler::CompilerError:
+    fn b_policy_program() errors std::compiler::CompilerError:
         static compile:
             fn f(x):
                 if x:
                     return 0
                 return 0
             f(true)
-    test::value("warn-backend-independent-off", 0, b_policy_program)
+    std::test::value("warn-backend-independent-off", 0, b_policy_program)
 
 # ---------------------------------------------------------------------------
 # native-alloc.test
@@ -126,15 +126,15 @@ fn register_native_alloc_tests(huge: int):
     # left. The literal program is the Tcl test's; /dynamic takes the
     # operands from the registration function, so nothing folds and every
     # backend runs the BigInt slow path.
-    fn b_sites_3() errors compiler::CompilerError:
+    fn b_sites_3() errors std::compiler::CompilerError:
         static compile:
-            [100000000000000000000000000000000000 - 100000000000000000000000000000000000, str::concat("x", "y")]
-    test::value("alloc-sites-3", [0, "xy"], b_sites_3)
-    fn b_sites_3_dynamic() errors compiler::CompilerError:
+            [100000000000000000000000000000000000 - 100000000000000000000000000000000000, std::str::concat("x", "y")]
+    std::test::value("alloc-sites-3", [0, "xy"], b_sites_3)
+    fn b_sites_3_dynamic() errors std::compiler::CompilerError:
         static compile:
             d = huge - huge
-            [d, d == 0, d + 1, str::concat("x", "y")]
-    test::value("alloc-sites-3/dynamic", [0, true, 1, "xy"], b_sites_3_dynamic)
+            [d, d == 0, d + 1, std::str::concat("x", "y")]
+    std::test::value("alloc-sites-3/dynamic", [0, true, 1, "xy"], b_sites_3_dynamic)
 
 # ---------------------------------------------------------------------------
 # static-compile.test
@@ -146,20 +146,20 @@ fn register_static_compile_tests():
     # Tcl test counts the native allocations of the two programs (3 and 2);
     # here the inner block, nested in the body's own block, is rejected and
     # both handlers read its code.
-    fn b_alloc_rejected() errors compiler::CompilerError:
+    fn b_alloc_rejected() errors std::compiler::CompilerError:
         static compile:
-            fn f() errors compiler::CompilerError:
+            fn f() errors std::compiler::CompilerError:
                 static compile:
                     missing
             r = f():
-                on compiler::CompilerError details:
+                on std::compiler::CompilerError details:
                     details
-            whole = r.code == compiler::DiagnosticCode::Unbound
+            whole = r.code == std::compiler::DiagnosticCode::Unbound
             code_only = f():
-                on compiler::CompilerError {code}:
-                    code == compiler::DiagnosticCode::Unbound
-            [whole, code_only, list::length(r.related)]
-    test::value("sc-alloc-rejected", [true, true, 0], b_alloc_rejected)
+                on std::compiler::CompilerError {code}:
+                    code == std::compiler::DiagnosticCode::Unbound
+            [whole, code_only, std::list::length(r.related)]
+    std::test::value("sc-alloc-rejected", [true, true, 0], b_alloc_rejected)
 
 # ---------------------------------------------------------------------------
 # coroutines.test
@@ -176,7 +176,7 @@ fn register_coroutines_tests():
     # test fails.)
     abandoned = harness_abandon()
     logged = harness_seen()
-    fn b_release_values() errors compiler::CompilerError:
+    fn b_release_values() errors std::compiler::CompilerError:
         static compile:
             fn w(k: int) -> HarnessV:
                 yield HarnessV {n: k}
@@ -194,7 +194,7 @@ fn register_coroutines_tests():
                 0
             coroutine {step} = w(5)
             [f(3), xs, y, abandoned, logged, step().n]
-    test::value("co-release-values", [4, [1, 2, 3], 8, 10, 1, 6], b_release_values)
+    std::test::value("co-release-values", [4, [1, 2, 3], 8, 10, 1, 6], b_release_values)
 
 # ---------------------------------------------------------------------------
 # surface-samples.test
@@ -203,7 +203,7 @@ fn register_surface_samples_tests():
     # surface-run-evaluation-order: arguments evaluate left to right. The
     # Tcl test logs with test_log; here log(n) yields n, so the coroutine's
     # segments are the log ([1, 2, 3]) and its result is pick's value (3).
-    fn b_evaluation_order() errors compiler::CompilerError:
+    fn b_evaluation_order() errors std::compiler::CompilerError:
         static compile:
             fn log(n: int) -> int:
                 yield n
@@ -214,18 +214,18 @@ fn register_surface_samples_tests():
                 pick(log(1), log(2), log(3))
             coroutine {step, first} = program()
             rest = loop i from 0 to 10:
-                if coroutine::done?(step):
+                if std::coroutine::done?(step):
                     break
                 step()
             [first, rest]
-    test::value("surface-run-evaluation-order", [1, [2, 3, 3]], b_evaluation_order)
+    std::test::value("surface-run-evaluation-order", [1, [2, 3, 3]], b_evaluation_order)
 
     # surface-run-continue: continue starts the next iteration, each a fresh
     # scope. The Tcl test counts with test_tick; here f owns a ticker
     # coroutine whose resumes count 1, 2, 3, ... (its first segment, 0, is
     # the eager start's), and f returns t with the next tick: 4 means f
     # ticked exactly three times, as the Tcl test's tick count says.
-    fn b_continue() errors compiler::CompilerError:
+    fn b_continue() errors std::compiler::CompilerError:
         static compile:
             fn ticker() -> int:
                 loop i from 0 to 1000:
@@ -239,7 +239,7 @@ fn register_surface_samples_tests():
                         continue
                     return [first, t, tick()]
             f()
-    test::value("surface-run-continue", [0, 3, 4], b_continue)
+    std::test::value("surface-run-continue", [0, 3, 4], b_continue)
 
 # ---------------------------------------------------------------------------
 # calls.test
@@ -249,7 +249,7 @@ fn register_calls_tests():
     # The Tcl test (Core IR) logs the callee expression `test-log(list)` and
     # each argument; here callee() logs 0 and returns pick (standing in for
     # the `list` native), and the coroutine's segments are the log.
-    fn b_call_1() errors compiler::CompilerError:
+    fn b_call_1() errors std::compiler::CompilerError:
         static compile:
             fn log(n: int) -> int:
                 yield [n]
@@ -263,11 +263,11 @@ fn register_calls_tests():
                 (callee())(log(1), log(2), log(3))
             coroutine {step, first} = program()
             rest = loop i from 0 to 10:
-                if coroutine::done?(step):
+                if std::coroutine::done?(step):
                     break
                 step()
             [first, rest]
-    test::value("call-1", [[0], [[1], [2], [3], [1, 2, 3]]], b_call_1)
+    std::test::value("call-1", [[0], [[1], [2], [3], [1, 2, 3]]], b_call_1)
 
 # ---------------------------------------------------------------------------
 # strict-references.test
@@ -278,7 +278,7 @@ fn register_calls_tests():
 # a rejected block reifies the first diagnostic only, so the port pins its
 # code and location and cannot see that there is no second one. (A
 # top-level body: it captures nothing.)
-fn b_sr_no_derivative_diagnostics() errors compiler::CompilerError:
+fn b_sr_no_derivative_diagnostics() errors std::compiler::CompilerError:
     static compile:
         fn caller(x):
             helper(x)
@@ -287,7 +287,7 @@ fn b_sr_no_derivative_diagnostics() errors compiler::CompilerError:
         caller(1)
 
 fn register_strict_references_tests():
-    test::rejects_at("sr-no-derivative-diagnostics", compiler::DiagnosticCode::Unbound, 284, 13, b_sr_no_derivative_diagnostics)
+    std::test::rejects_at("sr-no-derivative-diagnostics", std::compiler::DiagnosticCode::Unbound, 284, 13, b_sr_no_derivative_diagnostics)
 
 # ---------------------------------------------------------------------------
 # hir-lowering.test
@@ -299,7 +299,7 @@ fn register_hir_lowering_tests():
     # here compose returns a named nested function. The golden runner's
     # agreement of interp, compile and cranelift stands in for the
     # differential; the round trip of the Core IR text is not observed.
-    fn b_closures() errors compiler::CompilerError:
+    fn b_closures() errors std::compiler::CompilerError:
         static compile:
             fn compose(f, g):
                 fn composed(x):
@@ -310,7 +310,7 @@ fn register_hir_lowering_tests():
             fn dbl(x):
                 x * 2
             (compose(inc, dbl))(20)
-    test::value("hir-lower-compile-closures", 41, b_closures)
+    std::test::value("hir-lower-compile-closures", 41, b_closures)
 
 # ---------------------------------------------------------------------------
 # native-stack-overflow.test
@@ -322,14 +322,14 @@ fn register_native_stack_overflow_tests():
     # here the same function, from source, on every backend (under stress
     # only when the runner is). The value: its length and the positions
     # holding a wrong character (none).
-    fn b_build_400() errors compiler::CompilerError:
+    fn b_build_400() errors std::compiler::CompilerError:
         static compile:
             fn build(n):
                 if n < 1:
                     return ""
-                str::concat(str::concat("x", "y"), build(n - 1))
+                std::str::concat(std::str::concat("x", "y"), build(n - 1))
             s = build(400)
-            wrong = loop i from 0 to str::length(s):
+            wrong = loop i from 0 to std::str::length(s):
                 c = s.char_at(i):
                     on IndexNotFound:
                         '?'
@@ -340,8 +340,8 @@ fn register_native_stack_overflow_tests():
                 if c == want:
                     continue
                 i
-            [str::length(s), wrong]
-    test::value("native-stack-gc-1", [800, []], b_build_400)
+            [std::str::length(s), wrong]
+    std::test::value("native-stack-gc-1", [800, []], b_build_400)
 
 # ---------------------------------------------------------------------------
 
@@ -357,7 +357,7 @@ fn register_harness_tests():
     register_hir_lowering_tests()
     register_native_stack_overflow_tests()
 
-with context test::suite()
-with context HarnessLog {a: mutable_array::create(1, 0)}
+with context std::test::suite()
+with context HarnessLog {a: std::mutable_array::create(1, 0)}
 register_harness_tests()
-test::report()
+std::test::report()

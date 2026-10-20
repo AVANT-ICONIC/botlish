@@ -70,23 +70,23 @@ proc runCaptured {executable stdin args} {
 # function addresses), shapes, enums, natives, module statics, coroutines,
 # runtime errors, the process arguments and standard input.
 set ::stubPrograms {
-    values {import immutable_set
-import str
+    values {import std::immutable_set
+import std::str
 big = 9223372036854775808
 [big * big, "aé🙂\n\t", '🙂', true, unit, [1, [2, 3]],
- immutable_set::from_list([3, 2, 3]), str::length, {a: 1, b: [2]}]}
-    closures {import str
+ std::immutable_set::from_list([3, 2, 3]), std::str::length, {a: 1, b: [2]}]}
+    closures {import std::str
 fn build():
-    str::concat("x", "y")
+    std::str::concat("x", "y")
 fn other():
-    str::concat("z", "w")
+    std::str::concat("z", "w")
 fn pick(flag: bool):
     if flag:
         build
     else:
         other
 fn apply(f):
-    prefix = str::concat("a", "b")
+    prefix = std::str::concat("a", "b")
     [prefix, f()]
 [apply(pick(true)), apply(pick(false))]}
     enums {enum Color:
@@ -98,13 +98,13 @@ fn flip(c: Color) -> Color:
     else:
         Color::Red
 [flip(Color::Red), flip(Color::Green)]}
-    modules {import web
-import type byte::Byte
+    modules {import std::web
+import type std::byte::Byte
 fn check(b: Byte) -> bool:
-    web::is_unreserved(b)
-[check(45), check(32), web::uri_escape_text("a b/é🙂")]}
-    error {import mutable_array
-mutable_array::allocate(0 - 1)}
+    std::web::is_unreserved(b)
+[check(45), check(32), std::web::uri_escape_text("a b/é🙂")]}
+    error {import std::mutable_array
+std::mutable_array::allocate(0 - 1)}
     argv {args = argv():
     on InvalidArgumentEncoding:
         ["fallback"]

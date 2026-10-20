@@ -9,8 +9,8 @@
 # module, the file beside them (IMPORTS.md, "Application modules"), which
 # every compiler entry point finds as it is -- `tclsh9.0 main.tcl -backend
 # cranelift examples/games/2048/demo.bot` runs the demo. The engine is not
-# standard library and is not installed into lib/. (Before application
-# modules this script compiled them against a private copy of lib/ with the
+# standard library and is not installed into stdlib/. (Before application
+# modules this script compiled them against a private copy of stdlib/ with the
 # engine added: 2048-ENGINE-WORKLOAD.md, S4.)
 #
 # FILE.bot is compiled once (warnings off unless -warnings says otherwise)

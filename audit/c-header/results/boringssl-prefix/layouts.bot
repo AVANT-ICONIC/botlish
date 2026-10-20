@@ -2,13 +2,13 @@
 # (C-HEADER-ARCHAEOLOGY.md, "The ABI probe"): the census's REPRESENTABLE-NOW
 # structs, sizes and offsets as the C compiler resolved them on this host.
 # expect: [8]
-import binary
+import std::binary
 
 # struct openssl_method_common_st { int references; char is_static; }
 layout OPENSSL_METHOD_COMMON_ST:
     size 8
     align 4
-    field references: binary::I32 at 0
-    field is_static: binary::I8 at 4
+    field references: std::binary::I32 at 0
+    field is_static: std::binary::I8 at 4
 
-[binary::layout_length(OPENSSL_METHOD_COMMON_ST)]
+[std::binary::layout_length(OPENSSL_METHOD_COMMON_ST)]

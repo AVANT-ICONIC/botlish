@@ -47,12 +47,12 @@ proc seekBytes {text opt} {
 # idiom this milestone targets (examples/stdlib/csv.bot's and
 # examples/stdlib/ai_text_clean.bot's own `peek`).
 set ::peekSrc {
-import str
+import std::str
 fn peek(text, index):
-    if index >= str::length(text):
+    if index >= std::str::length(text):
         return ""
 
-    str::substring(text, index, index + 1)
+    std::str::substring(text, index, index + 1)
 }
 
 # text's characters from index on, reassembled unchanged (csv.bot's own
@@ -60,10 +60,10 @@ fn peek(text, index):
 # local, not inlined directly into the self-tail call's own arguments).
 set ::scanCollectSrc "$::peekSrc
 fn scan_collect(text, index, done):
-    if index >= str::length(text):
+    if index >= std::str::length(text):
         return done
     character = peek(text, index)
-    scan_collect(text, index + 1, str::concat(done, character))
+    scan_collect(text, index + 1, std::str::concat(done, character))
 "
 
 # text's characters from index on, counted if they peek()-equal any of
@@ -80,7 +80,7 @@ fn is_target(c):
     0
 
 fn scan_count(text, index, count):
-    if index >= str::length(text):
+    if index >= std::str::length(text):
         return count
     scan_count(text, index + 1, count + is_target(peek(text, index)))
 "
@@ -163,12 +163,12 @@ f()
 test traversal-early-exit-1 {a scan that returns before consuming the whole String still carries the byte position correctly for the characters it does read} -body {
     set text "$::peekSrc
 fn stop_at_comma(text, index, done):
-    if index >= str::length(text):
+    if index >= std::str::length(text):
         return done
     c = peek(text, index)
     if c == \",\":
         return done
-    stop_at_comma(text, index + 1, str::concat(done, c))
+    stop_at_comma(text, index + 1, std::str::concat(done, c))
 
 fn f():
     stop_at_comma([corpus::literal "éè,not read"], 0, \"\")

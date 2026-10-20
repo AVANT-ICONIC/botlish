@@ -61,7 +61,7 @@ conclusion was drawn, and run before inspecting whether a fix was needed:
   as the falsely-precise `List[int]`. Directly inspects the listloop
   expression's own static type (not just the function-result contract).
 - `loop-in-no-break-still-precise` — a listloop with no break at all keeps
-  its precise `List[R]` typing (the shape `byte::set`'s own `bytes` binding
+  its precise `List[R]` typing (the shape `std::byte::set`'s own `bytes` binding
   relies on), unaffected by the break-payload join.
 
 ## Observed pre-fix (and, as it turned out, final) behavior
@@ -159,15 +159,15 @@ case, via the same mechanism.
 
 Neither is part of the successful-value type join computed for a listloop.
 
-## byte::set regression
+## std::byte::set regression
 
-`lib/byte.bot` was not touched. `byte::set` contains no `break` anywhere in
-its `bytes = loop c in chars: Byte(char::codepoint(c))`, so `ctx
+`stdlib/byte.bot` was not touched. `std::byte::set` contains no `break` anywhere in
+its `bytes = loop c in chars: Byte(std::char::codepoint(c))`, so `ctx
 breakTypes` for that loop stays `never` throughout, and `lub(never,
 List[Byte])` returns `List[Byte]` unchanged (the `$a eq "never"` fast path
 in `hir::types::lub`) — exactly as before this audit. Pinned generically by
 the new `loop-in-no-break-still-precise` regression (same no-break shape,
-without depending on `byte::set` itself).
+without depending on `std::byte::set` itself).
 
 ## Backend parity
 
@@ -226,5 +226,5 @@ update), and this report are the only changes.
 5. **Does `continue` contribute a value?** No.
 6. **Are `return` and Error part of the successful-value type join?** No.
 7. **Does a loop with no break retain precise `List[R]` typing?** Yes.
-8. **Does `byte::set` remain unchanged and still infer `List[Byte]` for
+8. **Does `std::byte::set` remain unchanged and still infer `List[Byte]` for
    `bytes`?** Yes.

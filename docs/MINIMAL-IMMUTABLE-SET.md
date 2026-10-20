@@ -38,7 +38,7 @@ native/Cargo.toml`: **60/60 passing**. New `tests/immutable-set.test`: **66
 tests**, passing on interp, compile, and under
 `BOTLISH_NATIVE_GC_STRESS=1`.
 
-`byte::set`, ASCII, Byte bitmaps, perfect hashing, static/compile-time set
+`std::byte::set`, ASCII, Byte bitmaps, perfect hashing, static/compile-time set
 lowering, overloading, variadics, set literals, set iteration, and set
 algebra were **not** added -- see "Deferred" and the "Required scope
 questions" section.
@@ -224,7 +224,7 @@ representation, only to semantics. Hashing, bitmaps, and perfect hashing
 are all *plausible future representations* the brief names outright --
 adding any of them now would make a representation choice part of
 `ImmutableSet`'s semantics prematurely, before the actual consumer
-(`byte::set`, and the four-element URI-unreserved-characters set it
+(`std::byte::set`, and the four-element URI-unreserved-characters set it
 exists for) has even been built. An O(n^2) vector scan is completely
 adequate for a four-element set and gives the simplest possible reference
 behavior against which any future representation can be checked for
@@ -391,7 +391,7 @@ structural-equality check used for parameters.
 [UnicodeChar]` (`set-construct-unicodechar`) through the *identical*
 `-result-shape` path a `Small`-element set uses -- **zero** UnicodeChar-
 specific code exists anywhere in this milestone's diff. This is the direct
-precursor payload for the eventual `byte::set`, verified end to end with
+precursor payload for the eventual `std::byte::set`, verified end to end with
 the spec's own exact worked example
 (`set-required-unicodechar-payload`): `contains(chars(), '-')` true,
 `contains(chars(), 'A')` false, `contains(chars(), 45)` false (Int 45 never
@@ -578,7 +578,7 @@ BOTLISH_NATIVE_GC_STRESS=1 tclsh9.0 tests/all.tcl
 
 ## Deferred (unchanged from the brief)
 
-`byte::set`, ASCII predicates/types, `web::is_unreserved`, any URI logic
+`std::byte::set`, ASCII predicates/types, `std::web::is_unreserved`, any URI logic
 change, a `Byte`/`UnicodeChar`/small-finite-domain bitmap or domain-indexed
 bitset, perfect hashing, minimal perfect hashing, a general hash table,
 hash-consing, compile-time hash generation, static/constant-set lowering,
@@ -593,7 +593,7 @@ notes for the future audit:
   fully-known domain).
 * `ImmutableSet[<small finite bounded type>]` -- a domain-indexed bitset
   candidate, generalizing the Byte case.
-* A small compile-time-constant set (e.g. `byte::set(['-', '.', '_',
+* A small compile-time-constant set (e.g. `std::byte::set(['-', '.', '_',
   '~'])`'s own eventual four-element table) -- a comparison-chain
   candidate, entirely decidable at compile time.
 * A generic hash-stable scalar set -- an immutable/perfect-hash candidate
@@ -743,7 +743,7 @@ set equality, and element semantic type -- must not change underneath it.
 
 ## Required scope questions
 
-48. Was `byte::set` added? No.
+48. Was `std::byte::set` added? No.
 49. Was ASCII added? No.
 50. Was URI logic modified? No.
 51. Was a bitmap added? No.
@@ -802,6 +802,6 @@ simple (an O(n^2) deduplicated vector) and commits to no hashing, bitset,
 or compile-time lookup lowering. Typed parameters/results/HIR/module
 metadata understand `ImmutableSet[T]` without any runtime whole-set
 validation. UnicodeChar works as an ordinary set element type with zero
-special-case code. `byte::set`, ASCII, URI changes, Byte bitsets, perfect
+special-case code. `std::byte::set`, ASCII, URI changes, Byte bitsets, perfect
 hashing, static set lowering, predicate refinement, and Byte/Int64
 representation specialization were not started.

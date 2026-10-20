@@ -33,7 +33,7 @@ BOTH-SUITE-LEVEL audit/coroutines/tools/mutants.txt:move-keeps-source (1 rows; s
     new failed (other rows): 0 (); suites not ok: coroutines.bot=aborted
     rows weaker for this mutant: coroutines.bot co-affine-move-chain-use-after (tests/coroutines.test co-affine-move-chain-use-after)
 == done-consumes (coroutines.test; compile,interp; 53s): BOTH-SUITE-LEVEL
-BOTH-SUITE-LEVEL audit/coroutines/tools/mutants.txt:done-consumes (1 rows; suites coroutines.bot) -- coroutine::done? consumes the handle: its owner is moved by the query (its ownership role, core/native.tcl's -ownership, is `move` instead of `observe`)
+BOTH-SUITE-LEVEL audit/coroutines/tools/mutants.txt:done-consumes (1 rows; suites coroutines.bot) -- std::coroutine::done? consumes the handle: its owner is moved by the query (its ownership role, core/native.tcl's -ownership, is `move` instead of `observe`)
     old failed: 1 (tests/coroutines.test co-affine-done-does-not-move)
     new failed (related): 0 ()
     new failed (other rows): 0 (); suites not ok: coroutines.bot=compile-error

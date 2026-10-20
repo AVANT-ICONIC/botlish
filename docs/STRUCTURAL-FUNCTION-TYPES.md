@@ -260,7 +260,7 @@ worth protecting (see "Diagnostics" and `hir/callables.tcl`'s header):
 mapping `-param-types` into `args` would make a native-derived
 `Fn{args: [str]}` indistinguishable from a typed-Block-derived one, forcing
 the audit either to reject erasure of harmless native joins (a regression
-for ordinary programs, e.g. passing a native/Block join to `list::all?`) or
+for ordinary programs, e.g. passing a native/Block join to `std::list::all?`) or
 to accept erasure of typed-Block contracts (unsound).
 
 Classification (51 natives with the test libraries loaded): 50 fixed-arity
@@ -415,7 +415,7 @@ Inferred contract: `Fn{args: [any], return: bool, errors: []}` -- `glb(any
 |---|---|---|
 | `make_changed?` returned type | `block(e55)/1 -> bool` | `block(e55)/1 -> bool` |
 | `changed_a?` binding | `block(e55)/1 -> bool` | `block(e55)/1 -> bool` |
-| direct `changed_a?("lib/web.bot")` | target `block e55`, `callenv` | target `block e55`, `callenv` |
+| direct `changed_a?("stdlib/web.bot")` | target `block e55`, `callenv` | target `block e55`, `callenv` |
 
 Exact identity is preserved; nothing is eagerly widened to `Fn`.
 
@@ -509,10 +509,10 @@ Relifted pipeline (as `bench/bench.tcl` compiles), every canonical
 
 | program | before | after |
 |---|---:|---:|
-| `lex-strategy.bot` | 2 (`list::all?@e18`, `classify@e119`) | 2 (same) |
+| `lex-strategy.bot` | 2 (`std::list::all?@e18`, `classify@e119`) | 2 (same) |
 | `refined-checks.bot` | 1 (`scan_while@e216`) | 1 (same) |
-| `source-checks.bot` | 2 (`list::find@e42`, `classify_leading@e91`) | 2 (same) |
-| `test-selection.bot` | 3 (`list::any?@e6`, `list::none?@e31`, `list::find@e42`) | 3 (same) |
+| `source-checks.bot` | 2 (`std::list::find@e42`, `classify_leading@e91`) | 2 (same) |
+| `test-selection.bot` | 3 (`std::list::any?@e6`, `std::list::none?@e31`, `std::list::find@e42`) | 3 (same) |
 | `uri-steady.bot` | 1 (`scan_while@e216`) | 1 (same) |
 | others | 0 | 0 |
 | **total** | **9** | **9** |
@@ -585,8 +585,8 @@ Pinned expectations changed on purpose: `types.test` `type-7` (`{native +}
   a native other than `list`/`list_append`/`list_get`/
   `immutable_set_from_list` (e.g. `list_length`) is conservatively rejected
   as an erasure.
-- **HOF helpers stay untyped**: `list::any?/all?/none?/find` and
-  `web::scan_while` keep untyped predicate parameters. Typing them accurately
+- **HOF helpers stay untyped**: `std::list::any?/all?/none?/find` and
+  `std::web::scan_while` keep untyped predicate parameters. Typing them accurately
   needs "the predicate accepts the element type", i.e. type variables, which
   do not exist; `Fn{args: [any], return: bool}` would newly reject valid
   uses whose predicate result is not statically `bool`. Their internal

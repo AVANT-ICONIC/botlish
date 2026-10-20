@@ -46,13 +46,13 @@
 # carried is returned by the enclosing function instead.
 #
 # Imports: compiler and test are the framework's (bodies declare
-# compiler::CompilerError; DiagnosticCode cases); list for the counted-loop
-# accumulators of the Tcl programs (list::append, list::length); coroutine
-# for coroutine::done?, which drives the `trace` probes.
-import compiler
-import coroutine
-import list
-import test
+# std::compiler::CompilerError; DiagnosticCode cases); list for the counted-loop
+# accumulators of the Tcl programs (std::list::append, std::list::length); coroutine
+# for std::coroutine::done?, which drives the `trace` probes.
+import std::compiler
+import std::coroutine
+import std::list
+import std::test
 
 # ---------------------------------------------------------------------------
 # Shared declarations (top-level only)
@@ -84,144 +84,144 @@ fn ticker() -> int:
 fn register_counted_range_tests(zero: int, three: int):
     # loop-counted-ascending: START, START + 1, ..., END - 1 in order, never
     # END (the loop body records j and recurses on j + 1).
-    fn ascending() errors compiler::CompilerError:
+    fn ascending() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 fn go(i, acc):
                     loop j from i to 5:
-                        return go(j + 1, list::append(acc, j))
+                        return go(j + 1, std::list::append(acc, j))
                     acc
                 go(2, [])
             f()
-    test::value("loop-counted-ascending", [2, 3, 4], ascending)
+    std::test::value("loop-counted-ascending", [2, 3, 4], ascending)
 
     # loop-counted-zero-iterations-equal: START == END runs the body zero
     # times; the value is the empty collected List.
-    fn zero_iterations_equal() errors compiler::CompilerError:
+    fn zero_iterations_equal() errors std::compiler::CompilerError:
         static compile:
             loop i from 3 to 3:
                 -1
-    test::value("loop-counted-zero-iterations-equal", [], zero_iterations_equal)
+    std::test::value("loop-counted-zero-iterations-equal", [], zero_iterations_equal)
 
     # loop-counted-zero-iterations-reversed: START > END runs it zero times.
-    fn zero_iterations_reversed() errors compiler::CompilerError:
+    fn zero_iterations_reversed() errors std::compiler::CompilerError:
         static compile:
             loop i from 5 to 2:
                 -1
-    test::value("loop-counted-zero-iterations-reversed", [], zero_iterations_reversed)
+    std::test::value("loop-counted-zero-iterations-reversed", [], zero_iterations_reversed)
 
     # loop-counted-one-iteration: END == START + 1 runs it exactly once.
-    fn one_iteration() errors compiler::CompilerError:
+    fn one_iteration() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 fn go(i, acc):
                     loop j from i to 8:
-                        return go(j + 1, list::append(acc, j))
+                        return go(j + 1, std::list::append(acc, j))
                     acc
                 go(7, [])
             f()
-    test::value("loop-counted-one-iteration", [7], one_iteration)
+    std::test::value("loop-counted-one-iteration", [7], one_iteration)
 
     # loop-counted-negative-start: a negative START is an ordinary Int.
-    fn negative_start() errors compiler::CompilerError:
+    fn negative_start() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 fn go(i, acc):
                     loop j from i to 0:
-                        return go(j + 1, list::append(acc, j))
+                        return go(j + 1, std::list::append(acc, j))
                     acc
                 go(-3, [])
             f()
-    test::value("loop-counted-negative-start", [-3, -2, -1], negative_start)
+    std::test::value("loop-counted-negative-start", [-3, -2, -1], negative_start)
 
     # loop-counted-negative-to-positive: a range spanning zero visits every
     # Int in between.
-    fn negative_to_positive() errors compiler::CompilerError:
+    fn negative_to_positive() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 fn go(i, acc):
                     loop j from i to 3:
-                        return go(j + 1, list::append(acc, j))
+                        return go(j + 1, std::list::append(acc, j))
                     acc
                 go(-2, [])
             f()
-    test::value("loop-counted-negative-to-positive", [-2, -1, 0, 1, 2], negative_to_positive)
+    std::test::value("loop-counted-negative-to-positive", [-2, -1, 0, 1, 2], negative_to_positive)
 
     # loop-counted-dynamic-start: START computed at run time (f's argument
     # is the registration input ZERO, not a literal).
-    fn dynamic_start() errors compiler::CompilerError:
+    fn dynamic_start() errors std::compiler::CompilerError:
         static compile:
             fn f(n):
                 fn go(i, acc):
                     loop j from i to 4:
-                        return go(j + 1, list::append(acc, j))
+                        return go(j + 1, std::list::append(acc, j))
                     acc
                 go(n + 1, [])
             f(zero)
-    test::value("loop-counted-dynamic-start", [1, 2, 3], dynamic_start)
+    std::test::value("loop-counted-dynamic-start", [1, 2, 3], dynamic_start)
 
     # loop-counted-dynamic-end: END computed at run time (the registration
     # input THREE).
-    fn dynamic_end() errors compiler::CompilerError:
+    fn dynamic_end() errors std::compiler::CompilerError:
         static compile:
             fn f(n):
                 fn go(i, acc):
                     loop j from i to n:
-                        return go(j + 1, list::append(acc, j))
+                        return go(j + 1, std::list::append(acc, j))
                     acc
                 go(0, [])
             f(three)
-    test::value("loop-counted-dynamic-end", [0, 1, 2], dynamic_end)
+    std::test::value("loop-counted-dynamic-end", [0, 1, 2], dynamic_end)
 
     # loop-counted-natural-exhaustion-collects: reaching END without a
     # break, the loop's value is the List of its body values.
-    fn natural_exhaustion() errors compiler::CompilerError:
+    fn natural_exhaustion() errors std::compiler::CompilerError:
         static compile:
             loop i from 0 to 3:
                 i
-    test::value("loop-counted-natural-exhaustion-collects", [0, 1, 2], natural_exhaustion)
+    std::test::value("loop-counted-natural-exhaustion-collects", [0, 1, 2], natural_exhaustion)
 
     # loop-counted-end-exclusive-observed: the body never observes i == END,
     # not even in the last iteration.
-    fn end_exclusive_observed() errors compiler::CompilerError:
+    fn end_exclusive_observed() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 fn go(i, acc):
                     loop j from i to 3:
-                        return go(j + 1, list::append(acc, j == 3))
+                        return go(j + 1, std::list::append(acc, j == 3))
                     acc
                 go(0, [])
             f()
-    test::value("loop-counted-end-exclusive-observed", [false, false, false], end_exclusive_observed)
+    std::test::value("loop-counted-end-exclusive-observed", [false, false, false], end_exclusive_observed)
 
     # loop-counted-large-int-boundary: two iterations across the native
     # small-Int tag boundary (2^62 - 1) are both exact.
-    fn large_int_boundary() errors compiler::CompilerError:
+    fn large_int_boundary() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 fn go(i, n, acc):
                     loop j from i to n:
-                        return go(j + 1, n, list::append(acc, j))
+                        return go(j + 1, n, std::list::append(acc, j))
                     acc
                 go(4611686018427387903, 4611686018427387905, [])
             f()
-    test::value("loop-counted-large-int-boundary", [4611686018427387903, 4611686018427387904], large_int_boundary)
+    std::test::value("loop-counted-large-int-boundary", [4611686018427387903, 4611686018427387904], large_int_boundary)
 
     # loop-counted-bounds-left-to-right: START is evaluated before END, each
     # once. Each bound is a probe: the first batch is START's [1], the next
     # END's [2], then the loop's value [1].
-    fn bounds_left_to_right() errors compiler::CompilerError:
+    fn bounds_left_to_right() errors std::compiler::CompilerError:
         static compile:
             fn program() -> List[int]:
                 loop i from trace(1) to trace(2):
                     i
             coroutine {step, first} = program()
             rest = loop k from 0 to 10:
-                if coroutine::done?(step):
+                if std::coroutine::done?(step):
                     break
                 step()
             [first, rest]
-    test::value("loop-counted-bounds-left-to-right", [[1], [[2], [1]]], bounds_left_to_right)
+    std::test::value("loop-counted-bounds-left-to-right", [[1], [[2], [1]]], bounds_left_to_right)
 
 # ---------------------------------------------------------------------------
 # Counted loops: the induction variable's scope
@@ -229,24 +229,24 @@ fn register_counted_range_tests(zero: int, three: int):
 fn register_counted_scope_tests():
     # loop-counted-i-not-in-bounds-hir: the induction variable is not bound
     # in START: the first diagnostic is START's i.
-    fn i_not_in_bounds() errors compiler::CompilerError:
+    fn i_not_in_bounds() errors std::compiler::CompilerError:
         static compile:
             loop i from i to 3:
                 i
-    test::rejects_at("loop-counted-i-not-in-bounds", compiler::DiagnosticCode::Unbound, 234, 25, i_not_in_bounds)
+    std::test::rejects_at("loop-counted-i-not-in-bounds", std::compiler::DiagnosticCode::Unbound, 234, 25, i_not_in_bounds)
 
     # loop-counted-i-not-after-loop: the induction variable does not escape
     # the loop: the first diagnostic is the i after it.
-    fn i_not_after_loop() errors compiler::CompilerError:
+    fn i_not_after_loop() errors std::compiler::CompilerError:
         static compile:
             loop i from 0 to 3:
                 i
             i
-    test::rejects_at("loop-counted-i-not-after-loop", compiler::DiagnosticCode::Unbound, 244, 13, i_not_after_loop)
+    std::test::rejects_at("loop-counted-i-not-after-loop", std::compiler::DiagnosticCode::Unbound, 244, 13, i_not_after_loop)
 
     # loop-counted-shadowing: a function parameter in the body may shadow
     # the induction variable, by the ordinary rules.
-    fn shadowing() errors compiler::CompilerError:
+    fn shadowing() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 loop i from 0 to 1:
@@ -256,34 +256,34 @@ fn register_counted_scope_tests():
                         return "shadow-ok"
                 "no-shadow"
             f()
-    test::value("loop-counted-shadowing", "shadow-ok", shadowing)
+    std::test::value("loop-counted-shadowing", "shadow-ok", shadowing)
 
     # loop-counted-closure-captures-per-iteration: a closure made in an
     # iteration captures that iteration's own immutable j.
-    fn closure_captures() errors compiler::CompilerError:
+    fn closure_captures() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 fn go(i, acc):
                     loop j from i to 3:
                         fn grab():
                             j
-                        return go(j + 1, list::append(acc, grab()))
+                        return go(j + 1, std::list::append(acc, grab()))
                     acc
                 go(0, [])
             f()
-    test::value("loop-counted-closure-captures-per-iteration", [0, 1, 2], closure_captures)
+    std::test::value("loop-counted-closure-captures-per-iteration", [0, 1, 2], closure_captures)
 
     # loop-counted-from-usable-as-identifier: `from` (a word of the counted
     # header) is an ordinary loop variable of an iterable loop.
-    fn from_as_loop_variable() errors compiler::CompilerError:
+    fn from_as_loop_variable() errors std::compiler::CompilerError:
         static compile:
             loop from in [1, 2]:
                 from
-    test::value("loop-counted-from-usable-as-identifier", [1, 2], from_as_loop_variable)
+    std::test::value("loop-counted-from-usable-as-identifier", [1, 2], from_as_loop_variable)
 
     # loop-counted-from-as-plain-name: from, down, to, through and by are
     # ordinary bound names outside a loop header.
-    fn header_words_as_names() errors compiler::CompilerError:
+    fn header_words_as_names() errors std::compiler::CompilerError:
         static compile:
             from = 5
             down = 2
@@ -291,7 +291,7 @@ fn register_counted_scope_tests():
             through = 1
             by = 4
             from + down + to + through + by
-    test::value("loop-counted-from-as-plain-name", 15, header_words_as_names)
+    std::test::value("loop-counted-from-as-plain-name", 15, header_words_as_names)
 
 # ---------------------------------------------------------------------------
 # Counted loops: break, continue, return and errors in the body
@@ -299,32 +299,32 @@ fn register_counted_scope_tests():
 fn register_counted_control_tests(too_big: int, in_range: int):
     # loop-counted-break-bare: a bare break ends the loop with the prefix
     # collected so far (two iterations of the else-less if's unit).
-    fn break_bare() errors compiler::CompilerError:
+    fn break_bare() errors std::compiler::CompilerError:
         static compile:
             loop i from 0 to 10:
                 if i == 2:
                     break
-    test::value("loop-counted-break-bare", [unit, unit], break_bare)
+    std::test::value("loop-counted-break-bare", [unit, unit], break_bare)
 
     # loop-counted-continue-sequence: the induction sequence advances by one
     # per iteration, whatever the body does (0 1 2 3, nothing skipped or
     # repeated; iteration 1 records -1).
-    fn continue_sequence() errors compiler::CompilerError:
+    fn continue_sequence() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 fn go(i, acc):
                     loop j from i to 4:
                         if j == 1:
-                            return go(j + 1, list::append(acc, -1))
-                        return go(j + 1, list::append(acc, j))
+                            return go(j + 1, std::list::append(acc, -1))
+                        return go(j + 1, std::list::append(acc, j))
                     acc
                 go(0, [])
             f()
-    test::value("loop-counted-continue-sequence", [0, -1, 2, 3], continue_sequence)
+    std::test::value("loop-counted-continue-sequence", [0, -1, 2, 3], continue_sequence)
 
     # loop-counted-continue-real: continue contributes nothing for its
     # iteration and advances i to the next value.
-    fn continue_real() errors compiler::CompilerError:
+    fn continue_real() errors std::compiler::CompilerError:
         static compile:
             v = 0
             loop i from 0 to 5:
@@ -332,12 +332,12 @@ fn register_counted_control_tests(too_big: int, in_range: int):
                     continue
                 else:
                     i
-    test::value("loop-counted-continue-real", [0, 1, 3, 4], continue_real)
+    std::test::value("loop-counted-continue-real", [0, 1, 3, 4], continue_real)
 
     # loop-counted-continue-count: every iteration that does not continue
     # runs its body once, in order: the probe sees 0, 2, 3 (not 1), and the
     # loop collects their values.
-    fn continue_count() errors compiler::CompilerError:
+    fn continue_count() errors std::compiler::CompilerError:
         static compile:
             fn program() -> List[int]:
                 loop i from 0 to 4:
@@ -347,24 +347,24 @@ fn register_counted_control_tests(too_big: int, in_range: int):
                         trace(i)
             coroutine {step, first} = program()
             rest = loop k from 0 to 10:
-                if coroutine::done?(step):
+                if std::coroutine::done?(step):
                     break
                 step()
             [first, rest]
-    test::value("loop-counted-continue-count", [[0], [[2], [3], [0, 2, 3]]], continue_count)
+    std::test::value("loop-counted-continue-count", [[0], [[2], [3], [0, 2, 3]]], continue_count)
 
     # loop-counted-end-exclusive-under-continue: END stays exclusive when
     # every iteration continues; nothing is collected.
-    fn end_exclusive_under_continue() errors compiler::CompilerError:
+    fn end_exclusive_under_continue() errors std::compiler::CompilerError:
         static compile:
             v = 0
             loop i from 0 to 3:
                 continue
-    test::value("loop-counted-end-exclusive-under-continue", [], end_exclusive_under_continue)
+    std::test::value("loop-counted-end-exclusive-under-continue", [], end_exclusive_under_continue)
 
     # loop-counted-return-propagates: return in the body returns from the
     # enclosing function, not merely from the loop.
-    fn return_propagates() errors compiler::CompilerError:
+    fn return_propagates() errors std::compiler::CompilerError:
         static compile:
             fn find(n):
                 loop i from 0 to n:
@@ -372,14 +372,14 @@ fn register_counted_control_tests(too_big: int, in_range: int):
                         return i
                 -1
             find(10)
-    test::value("loop-counted-return-propagates", 3, return_propagates)
+    std::test::value("loop-counted-return-propagates", 3, return_propagates)
 
     # loop-counted-error-propagates: a declared error raised in the body
     # leaves the whole loop, with no partial result: run's caller handles
     # it ("TooBig"), and an in-range input collects every iteration. Both
     # inputs come from the registration call, so the failure happens at run
     # time.
-    fn error_propagates() errors compiler::CompilerError:
+    fn error_propagates() errors std::compiler::CompilerError:
         static compile:
             fn check(n: int) -> Small errors TooBig:
                 if n > 10:
@@ -397,65 +397,65 @@ fn register_counted_control_tests(too_big: int, in_range: int):
                         return "TooBig"
                 v
             [outcome(too_big), outcome(in_range)]
-    test::value("loop-counted-error-propagates", ["TooBig", [2, 2, 2]], error_propagates)
+    std::test::value("loop-counted-error-propagates", ["TooBig", [2, 2, 2]], error_propagates)
 
 # ---------------------------------------------------------------------------
 # Iterable loops
 
 fn register_iterable_tests():
     # loop-in-basic-map: the value is each element's body value, in order.
-    fn basic_map() errors compiler::CompilerError:
+    fn basic_map() errors std::compiler::CompilerError:
         static compile:
             loop x in [1, 2, 3]:
                 x + x
-    test::value("loop-in-basic-map", [2, 4, 6], basic_map)
+    std::test::value("loop-in-basic-map", [2, 4, 6], basic_map)
 
     # loop-in-empty-list: an empty iterable runs the body zero times and
     # yields the empty List.
-    fn empty_list() errors compiler::CompilerError:
+    fn empty_list() errors std::compiler::CompilerError:
         static compile:
             loop x in []:
                 x
-    test::value("loop-in-empty-list", [], empty_list)
+    std::test::value("loop-in-empty-list", [], empty_list)
 
     # loop-in-one-element: one element contributes exactly one value.
-    fn one_element() errors compiler::CompilerError:
+    fn one_element() errors std::compiler::CompilerError:
         static compile:
             loop x in [7]:
                 x * 2
-    test::value("loop-in-one-element", [14], one_element)
+    std::test::value("loop-in-one-element", [14], one_element)
 
     # loop-in-left-to-right: elements are visited left to right.
-    fn left_to_right() errors compiler::CompilerError:
+    fn left_to_right() errors std::compiler::CompilerError:
         static compile:
             result = loop x in [1, 2, 3, 4]:
                 x
             result
-    test::value("loop-in-left-to-right", [1, 2, 3, 4], left_to_right)
+    std::test::value("loop-in-left-to-right", [1, 2, 3, 4], left_to_right)
 
     # loop-in-element-type-list-of-t: List[int] types the binding int, so
     # x + 1 is accepted.
-    fn element_type() errors compiler::CompilerError:
+    fn element_type() errors std::compiler::CompilerError:
         static compile:
             fn f(xs: List[int]):
                 loop x in xs:
                     x + 1
             f([1, 2])
-    test::value("loop-in-element-type-list-of-t", [2, 3], element_type)
+    std::test::value("loop-in-element-type-list-of-t", [2, 3], element_type)
 
     # loop-in-broad-element-type: an untyped iterable gives the binding a
     # broad type, not a rejection.
-    fn broad_element_type() errors compiler::CompilerError:
+    fn broad_element_type() errors std::compiler::CompilerError:
         static compile:
             fn passthrough(x):
                 x
             loop x in passthrough([1, 2, 3]):
                 x
-    test::value("loop-in-broad-element-type", [1, 2, 3], broad_element_type)
+    std::test::value("loop-in-broad-element-type", [1, 2, 3], broad_element_type)
 
     # loop-in-iterable-evaluated-once: the iterable is evaluated once, not
     # per iteration: its probe yields one batch, then the loop's value.
-    fn iterable_once() errors compiler::CompilerError:
+    fn iterable_once() errors std::compiler::CompilerError:
         static compile:
             fn source() -> List[int]:
                 trace(0)
@@ -465,36 +465,36 @@ fn register_iterable_tests():
                     x
             coroutine {step, first} = program()
             rest = loop k from 0 to 10:
-                if coroutine::done?(step):
+                if std::coroutine::done?(step):
                     break
                 step()
             [first, rest]
-    test::value("loop-in-iterable-evaluated-once", [[0], [[1, 2, 3]]], iterable_once)
+    std::test::value("loop-in-iterable-evaluated-once", [[0], [[1, 2, 3]]], iterable_once)
 
     # loop-in-break-returns-prefix: a bare break ends the loop with the List
     # collected so far.
-    fn break_prefix() errors compiler::CompilerError:
+    fn break_prefix() errors std::compiler::CompilerError:
         static compile:
             loop x in [1, 2, 3, 4]:
                 if x == 3:
                     break
                 x
-    test::value("loop-in-break-returns-prefix", [1, 2], break_prefix)
+    std::test::value("loop-in-break-returns-prefix", [1, 2], break_prefix)
 
     # loop-in-break-immediately: a break at the first element yields the
     # empty List.
-    fn break_immediately() errors compiler::CompilerError:
+    fn break_immediately() errors std::compiler::CompilerError:
         static compile:
             loop x in [1, 2, 3]:
                 if x == 1:
                     break
                 x
-    test::value("loop-in-break-immediately", [], break_immediately)
+    std::test::value("loop-in-break-immediately", [], break_immediately)
 
     # loop-in-break-bare-value-declared-result-ok: a bare break is
     # compatible with a declared List[int] result, whether or not it is
     # taken.
-    fn break_declared_result() errors compiler::CompilerError:
+    fn break_declared_result() errors std::compiler::CompilerError:
         static compile:
             fn f(xs: List[int]) -> List[int]:
                 loop x in xs:
@@ -502,21 +502,21 @@ fn register_iterable_tests():
                         break
                     x
             [f([1, 2]), f([3, 0, 4])]
-    test::value("loop-in-break-bare-value-declared-result-ok", [[1, 2], [3]], break_declared_result)
+    std::test::value("loop-in-break-bare-value-declared-result-ok", [[1, 2], [3]], break_declared_result)
 
     # loop-in-continue-skips: continue contributes nothing for its element.
-    fn continue_skips() errors compiler::CompilerError:
+    fn continue_skips() errors std::compiler::CompilerError:
         static compile:
             loop x in [1, 2, 3]:
                 if x == 2:
                     continue
                 else:
                     x
-    test::value("loop-in-continue-skips", [1, 3], continue_skips)
+    std::test::value("loop-in-continue-skips", [1, 3], continue_skips)
 
     # loop-in-return-propagates: return in the body returns from the
     # enclosing function.
-    fn return_propagates() errors compiler::CompilerError:
+    fn return_propagates() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 loop x in [1, 2, 3]:
@@ -526,7 +526,7 @@ fn register_iterable_tests():
                         x
                 "unreachable"
             f()
-    test::value("loop-in-return-propagates", "escaped", return_propagates)
+    std::test::value("loop-in-return-propagates", "escaped", return_propagates)
 
 # ---------------------------------------------------------------------------
 # Nested loops: break, continue and collection belong to the nearest loop
@@ -535,7 +535,7 @@ fn register_nested_loop_tests():
     # loop-counted-nested-counted-in-counted: the inner counted loop's exit
     # (a return of the inner function) leaves only the inner loop: two
     # outer iterations of two inner counts each.
-    fn counted_in_counted() errors compiler::CompilerError:
+    fn counted_in_counted() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 fn outer(i, total):
@@ -550,11 +550,11 @@ fn register_nested_loop_tests():
                     total
                 outer(0, 0)
             f()
-    test::value("loop-counted-nested-counted-in-counted", 4, counted_in_counted)
+    std::test::value("loop-counted-nested-counted-in-counted", 4, counted_in_counted)
 
     # loop-counted-nested-counted-in-bare: a bare loop's own break still
     # works after a counted loop computed the result.
-    fn counted_in_bare() errors compiler::CompilerError:
+    fn counted_in_bare() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 fn go(i, acc):
@@ -566,11 +566,11 @@ fn register_nested_loop_tests():
                     break
                 result
             f()
-    test::value("loop-counted-nested-counted-in-bare", 3, counted_in_bare)
+    std::test::value("loop-counted-nested-counted-in-bare", 3, counted_in_bare)
 
     # loop-counted-bare-in-counted: a bare loop's break inside a counted
     # loop's iteration stays local to the bare loop.
-    fn bare_in_counted() errors compiler::CompilerError:
+    fn bare_in_counted() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 fn go(i, acc):
@@ -583,11 +583,11 @@ fn register_nested_loop_tests():
                     acc
                 go(0, 0)
             f()
-    test::value("loop-counted-bare-in-counted", 3, bare_in_counted)
+    std::test::value("loop-counted-bare-in-counted", 3, bare_in_counted)
 
     # loop-counted-counted-in-listloop: a counted loop inside an iterable
     # loop leaves the iterable loop's collection intact.
-    fn counted_in_listloop() errors compiler::CompilerError:
+    fn counted_in_listloop() errors std::compiler::CompilerError:
         static compile:
             fn countUpTo(n):
                 fn go(i, acc):
@@ -597,31 +597,31 @@ fn register_nested_loop_tests():
                 go(0, 0)
             loop x in [2, 3, 4]:
                 countUpTo(x)
-    test::value("loop-counted-counted-in-listloop", [2, 3, 4], counted_in_listloop)
+    std::test::value("loop-counted-counted-in-listloop", [2, 3, 4], counted_in_listloop)
 
     # loop-counted-listloop-in-counted: an iterable loop inside a counted
     # loop yields its own List each iteration.
-    fn listloop_in_counted() errors compiler::CompilerError:
+    fn listloop_in_counted() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 fn go(i, acc):
                     loop j from i to 3:
                         v = loop x in [1, 2]:
                             x
-                        return go(j + 1, acc + list::length(v))
+                        return go(j + 1, acc + std::list::length(v))
                     acc
                 go(0, 0)
             f()
-    test::value("loop-counted-listloop-in-counted", 6, listloop_in_counted)
+    std::test::value("loop-counted-listloop-in-counted", 6, listloop_in_counted)
 
     # loop-in-nested: an iterable loop in an iterable loop collects a List
     # per outer element.
-    fn iterable_in_iterable() errors compiler::CompilerError:
+    fn iterable_in_iterable() errors std::compiler::CompilerError:
         static compile:
             loop x in [1, 2]:
                 loop y in [10, 20]:
                     x + y
-    test::value("loop-in-nested", [[11, 21], [12, 22]], iterable_in_iterable)
+    std::test::value("loop-in-nested", [[11, 21], [12, 22]], iterable_in_iterable)
 
 # ---------------------------------------------------------------------------
 # Bare loops (each body owns a ticker: TICK() returns 1, 2, 3, ...)
@@ -629,7 +629,7 @@ fn register_nested_loop_tests():
 fn register_bare_loop_tests():
     # loop-1: the body repeats after it completes normally, until the loop
     # is left: three ticks, then n == 3 leaves it (the next tick is 4).
-    fn repeats_until_exit() errors compiler::CompilerError:
+    fn repeats_until_exit() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 coroutine {step: tick, first} = ticker()
@@ -638,10 +638,10 @@ fn register_bare_loop_tests():
                     if n == 3:
                         return [n, tick()]
             f()
-    test::value("bare-loop-repeats-until-exit", [3, 4], repeats_until_exit)
+    std::test::value("bare-loop-repeats-until-exit", [3, 4], repeats_until_exit)
 
     # loop-2: each iteration binds n afresh: n takes 1, 2, ..., 5.
-    fn fresh_binding_per_iteration() errors compiler::CompilerError:
+    fn fresh_binding_per_iteration() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 coroutine {step: tick, first} = ticker()
@@ -650,11 +650,11 @@ fn register_bare_loop_tests():
                     if n >= 5:
                         return n
             f()
-    test::value("bare-loop-fresh-binding-per-iteration", 5, fresh_binding_per_iteration)
+    std::test::value("bare-loop-fresh-binding-per-iteration", 5, fresh_binding_per_iteration)
 
     # continue-1: continue starts the next iteration, skipping the rest of
     # the body: the probe sees only n == 3, after three ticks.
-    fn continue_starts_next_iteration() errors compiler::CompilerError:
+    fn continue_starts_next_iteration() errors std::compiler::CompilerError:
         static compile:
             fn program() -> List[int]:
                 coroutine {step: tick, first} = ticker()
@@ -666,15 +666,15 @@ fn register_bare_loop_tests():
                     return [n, tick()]
             coroutine {step, first} = program()
             rest = loop k from 0 to 10:
-                if coroutine::done?(step):
+                if std::coroutine::done?(step):
                     break
                 step()
             [first, rest]
-    test::value("bare-loop-continue-starts-next-iteration", [[3], [[3, 4]]], continue_starts_next_iteration)
+    std::test::value("bare-loop-continue-starts-next-iteration", [[3], [[3, 4]]], continue_starts_next_iteration)
 
     # break-1: break leaves the loop at once, with the value unit: the
     # tick after it never runs (the next tick is 2).
-    fn break_exits() errors compiler::CompilerError:
+    fn break_exits() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 coroutine {step: tick, first} = ticker()
@@ -684,11 +684,11 @@ fn register_bare_loop_tests():
                     tick()
                 [v, tick()]
             f()
-    test::value("bare-loop-break-exits-with-unit", [unit, 2], break_exits)
+    std::test::value("bare-loop-break-exits-with-unit", [unit, 2], break_exits)
 
     # break-3: break in a nested loop leaves only the inner loop: the outer
     # body goes on after it.
-    fn break_exits_inner_only() errors compiler::CompilerError:
+    fn break_exits_inner_only() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 loop:
@@ -696,11 +696,11 @@ fn register_bare_loop_tests():
                         break
                     return [inner, "outer"]
             f()
-    test::value("bare-loop-break-exits-inner-loop-only", [unit, "outer"], break_exits_inner_only)
+    std::test::value("bare-loop-break-exits-inner-loop-only", [unit, "outer"], break_exits_inner_only)
 
     # loop-return-1: return leaves the loop and its function at once: two
     # ticks (the next is 3), and the code after the loop never runs.
-    fn return_leaves_function() errors compiler::CompilerError:
+    fn return_leaves_function() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 coroutine {step: tick, first} = ticker()
@@ -710,11 +710,11 @@ fn register_bare_loop_tests():
                         return [n, tick()]
                 "unreachable"
             f()
-    test::value("bare-loop-return-leaves-function", [2, 3], return_leaves_function)
+    std::test::value("bare-loop-return-leaves-function", [2, 3], return_leaves_function)
 
     # boundary-8: a break in an if branch inside a loop is lexically in the
     # loop, and leaves it.
-    fn break_in_if_branch() errors compiler::CompilerError:
+    fn break_in_if_branch() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 loop:
@@ -722,7 +722,7 @@ fn register_bare_loop_tests():
                         break
                 "ok"
             f()
-    test::value("break-in-if-branch-is-in-loop", "ok", break_in_if_branch)
+    std::test::value("break-in-if-branch-is-in-loop", "ok", break_in_if_branch)
 
 # ---------------------------------------------------------------------------
 # break and continue are lexical: a function boundary stops them
@@ -730,49 +730,49 @@ fn register_bare_loop_tests():
 fn register_lexical_boundary_tests():
     # boundary-1: a break in a function declared in a loop body is outside
     # any loop, even though the function is called from that body.
-    fn break_across_function() errors compiler::CompilerError:
+    fn break_across_function() errors std::compiler::CompilerError:
         static compile:
             loop:
                 fn g():
                     break
                 g()
-    test::rejects_at("break-cannot-cross-function-boundary", compiler::DiagnosticCode::BreakOutsideLoop, 737, 21, break_across_function)
+    std::test::rejects_at("break-cannot-cross-function-boundary", std::compiler::DiagnosticCode::BreakOutsideLoop, 737, 21, break_across_function)
 
     # boundary-3: the same for continue.
-    fn continue_across_function() errors compiler::CompilerError:
+    fn continue_across_function() errors std::compiler::CompilerError:
         static compile:
             loop:
                 fn g():
                     continue
                 g()
                 break
-    test::rejects_at("continue-cannot-cross-function-boundary", compiler::DiagnosticCode::ContinueOutsideLoop, 746, 21, continue_across_function)
+    std::test::rejects_at("continue-cannot-cross-function-boundary", std::compiler::DiagnosticCode::ContinueOutsideLoop, 746, 21, continue_across_function)
 
     # boundary-5: break outside any loop.
-    fn break_outside() errors compiler::CompilerError:
+    fn break_outside() errors std::compiler::CompilerError:
         static compile:
             break
-    test::rejects("break-outside-any-loop", compiler::DiagnosticCode::BreakOutsideLoop, break_outside)
+    std::test::rejects("break-outside-any-loop", std::compiler::DiagnosticCode::BreakOutsideLoop, break_outside)
 
     # boundary-6: continue outside any loop.
-    fn continue_outside() errors compiler::CompilerError:
+    fn continue_outside() errors std::compiler::CompilerError:
         static compile:
             continue
-    test::rejects("continue-outside-any-loop", compiler::DiagnosticCode::ContinueOutsideLoop, continue_outside)
+    std::test::rejects("continue-outside-any-loop", std::compiler::DiagnosticCode::ContinueOutsideLoop, continue_outside)
 
     # boundary-7: a function made in a loop body is its own boundary even
     # when it is never called: the break in it is rejected.
-    fn break_in_function_made_in_loop() errors compiler::CompilerError:
+    fn break_in_function_made_in_loop() errors std::compiler::CompilerError:
         static compile:
             loop:
                 fn b():
                     break
                 break
-    test::rejects_at("break-in-function-made-in-loop-body", compiler::DiagnosticCode::BreakOutsideLoop, 769, 21, break_in_function_made_in_loop)
+    std::test::rejects_at("break-in-function-made-in-loop-body", std::compiler::DiagnosticCode::BreakOutsideLoop, 769, 21, break_in_function_made_in_loop)
 
 # ---------------------------------------------------------------------------
 
-with context test::suite()
+with context std::test::suite()
 register_counted_range_tests(0, 3)
 register_counted_scope_tests()
 register_counted_control_tests(20, 2)
@@ -780,4 +780,4 @@ register_iterable_tests()
 register_nested_loop_tests()
 register_bare_loop_tests()
 register_lexical_boundary_tests()
-test::report()
+std::test::report()

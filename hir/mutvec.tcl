@@ -133,6 +133,21 @@ proc hir::mutvec::OpKind {hir e} {
     return [NativeOpKind $name]
 }
 
+# The mutable collection native NAME operates on, by its registration (never
+# its name, STD-NAMESPACE.md): "vector" or "array" when its receiver -- or,
+# for a constructor, its result -- is a MutableVector or a MutableArray, else
+# "".
+proc hir::mutvec::CollectionOf {name} {
+    set meta [core::native::metadata $name]
+    foreach type [list [lindex [dict get $meta paramTypes] 0] [dict get $meta resultType]] {
+        switch -- [core::type::base $type] {
+            mutvec { return vector }
+            mutarray { return array }
+        }
+    }
+    return ""
+}
+
 proc hir::mutvec::NativeOpKind {name} {
     variable opKinds
     if {![dict exists $opKinds $name]} {
@@ -293,7 +308,10 @@ proc hir::mutvec::OperationValueProblem {hir e} {
 proc hir::mutvec::ReceiverProblem {hir e r} {
     set op [hir::affine::NativeName $hir $e]
     set what "the receiver of $op"
-    set kind [expr {[string match mutable_array* $op] ? "array" : "vector"}]
+    set kind vector
+    if {[CollectionOf $op] eq "array"} {
+        set kind array
+    }
     set name [KindName $kind]
     set path [Path $hir $r]
     if {$path eq ""} {
@@ -1977,13 +1995,17 @@ proc hir::mutvec::Evidence {hir e} {
                 return {}
             }
             set name [hir::affine::NativeName $hir $e]
-            set flags [list [expr {[string match mutable_array* $name] ? "array" : "vector"}]=$kind]
+            set collection vector
+            if {[CollectionOf $name] eq "array"} {
+                set collection array
+            }
+            set flags [list $collection=$kind]
             set place [PlaceText $hir $e]
             if {$place ne ""} {
                 lappend flags place=$place
             }
-            if {$name in {mutable_vector::pop mutable_vector::take mutable_vector::swap
-                    mutable_vector#swap_drop mutable_vector#take_front mutable_array::swap
+            if {$name in {std::mutable_vector::pop std::mutable_vector::take std::mutable_vector::swap
+                    mutable_vector#swap_drop mutable_vector#take_front std::mutable_array::swap
                     mutable_array#swap_drop mutable_array#take_front}
                     && [hir::types::IsAffine [hir::typeOf $hir $e]]} {
                 lappend flags move-out

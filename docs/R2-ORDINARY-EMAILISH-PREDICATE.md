@@ -7,9 +7,9 @@ and one honestly-reported out-of-scope discovery (a pre-existing, unrelated
 native-lowering bug, §"A pre-existing bug found, not fixed").
 
 `emailish?` is now the canonical predicate, implemented as an ordinary
-Botlish module function (`web::is_emailish`, `lib/web.bot`), reached from
+Botlish module function (`std::web::is_emailish`, `stdlib/web.bot`), reached from
 the native (Cranelift) backend through `-module-fn` -- the same mechanism
-`NATIVE-MODULES.md` built for `uriEscape`/`web::uri_escape_text` -- with no
+`NATIVE-MODULES.md` built for `uriEscape`/`std::web::uri_escape_text` -- with no
 `-native-body` at all. `Emailish?` is a temporary compatibility alias
 (`core::native::alias`), unifying both spellings onto the identical
 root `BindingId`/`SymbolId`/registry entry: never a second registration,
@@ -80,7 +80,7 @@ Answering §10's architecture questions directly, from the pre-R2 tree:
 
 1. **What is `Emailish?` before R2?** A `core::native::register`-based
    type-test predicate (`core::type::definePredicate Emailish`,
-   `lib/web.tcl`): `-impl core::type::PredicateImpl` (evidence-or-validator,
+   `stdlib/web.tcl`): `-impl core::type::PredicateImpl` (evidence-or-validator,
    `core::type.tcl`), `-tests-type {refined str {Emailish}}`, and a
    **`-native-body`**: a hand-written `(block {v} ...)` core-IR literal
    reproducing `emailRegex`'s grammar via `core::tclcompat`'s
@@ -132,7 +132,7 @@ Answering §10's architecture questions directly, from the pre-R2 tree:
 
 ## 3. Ordinary Botlish implementation
 
-`web::is_emailish` (`lib/web.bot`), an ordinary top-level module function:
+`std::web::is_emailish` (`stdlib/web.bot`), an ordinary top-level module function:
 the same left-to-right, three-scanner grammar (`scan_local`/`scan_label`/
 `scan_alpha`, `char_at`, `is_local_char`/`is_label_char`, `tld_ok`,
 `domain_loop`) the old `-native-body` used, now as real Botlish source --
@@ -142,7 +142,7 @@ No compiler-oriented special form, no hand-rolled representation trick: the
 whole point (spec item 12) is to see whether the *ordinary* pipeline
 optimizes this as well as the privileged one did.
 
-`lib/web.tcl`'s registration:
+`stdlib/web.tcl`'s registration:
 
 ```tcl
 core::type::definePredicate Emailish emailish? "" {web is_emailish}
@@ -344,11 +344,11 @@ prohibits is in §"A note on one line in `ExpandNativeBodiesIn`" below.
 | `check`'s own `values` (materialized Blocks in its region) | `e332 e552` (2) | *(empty)* |
 | used instances total (`hir::specialize::analyze`) | 39 | 28 |
 | duplicate scanner/validator function copies | 2 each (one per call site) | 1 each |
-| `web::is_emailish`/its scanner helpers' own `generic`/`specializations` | n/a (anonymous) | `web::is_emailish {generic 0 specializations 1}`; scanners `{generic 1 specializations 0}` |
+| `std::web::is_emailish`/its scanner helpers' own `generic`/`specializations` | n/a (anonymous) | `std::web::is_emailish {generic 0 specializations 1}`; scanners `{generic 1 specializations 0}` |
 
 Pinned directly: `emailish-predicate-no-anonymous-callee-instance` (0
 anonymous instances) and `emailish-predicate-check-scanner-instance-count`
-(`web::is_emailish` and each of its six scanner helpers: exactly 1 used
+(`std::web::is_emailish` and each of its six scanner helpers: exactly 1 used
 instance, never 2), both in `tests/emailish-predicate.test`.
 
 ## 9. M9 scanner facts before/after -- and the actual first loss
@@ -358,7 +358,7 @@ Per-parameter `hir::range::analyze` results (fresh, both states):
 | instance.param | before | after |
 |---|---|---|
 | `check.n` | `[0, 400]` | `[0, 400]` (**unchanged control**) |
-| `web::is_emailish.v` (str; no Int range applies) | n/a (didn't exist) | `[-inf, +inf]` (str kind; not an Int fact) |
+| `std::web::is_emailish.v` (str; no Int range applies) | n/a (didn't exist) | `[-inf, +inf]` (str kind; not an Int fact) |
 | `char_at.i` | `[-inf, +inf]` (x2 copies) | `[-inf, +inf]` (x1) |
 | `scan_local.i` | `[-inf, +inf]` (x2) | `[-inf, +inf]` (x1) |
 | `scan_label.i` | `[-inf, +inf]` (x2) | `[-inf, +inf]` (x1) |
@@ -376,10 +376,10 @@ concluding "M9 didn't unlock, nothing more to do," this milestone traced
 
 `hir::aot::materializedBlocks`'s own first rule flags the *creation* of any
 non-envless (capturing) block unconditionally, independent of how it is
-later used -- `web::is_emailish`'s own nested helpers (`char_at`,
+later used -- `std::web::is_emailish`'s own nested helpers (`char_at`,
 `scan_local`, `scan_label`, `scan_alpha`, `tld_ok`, `domain_loop`) each
 capture free variables from their enclosing scope (`v`, `n`), so each one
-is "materialized" in `web::is_emailish`'s own region by construction,
+is "materialized" in `std::web::is_emailish`'s own region by construction,
 before `hir::range`/`hir::specialize` ever get a chance to know that
 `native/lower.tcl`'s own later virtualization pass (`hir/blockescape.tcl`'s
 capture-flattening, confirmed still firing --
@@ -392,7 +392,7 @@ for") -- not a bug, and not something this milestone found evidence to the
 contrary of.
 
 **Proof this is general, pre-existing, and has nothing to do with
-`Emailish?`/R2:** `lib/web.bot`'s own pre-existing `web::uri_escape_text`
+`Emailish?`/R2:** `stdlib/web.bot`'s own pre-existing `std::web::uri_escape_text`
 (added by `NATIVE-MODULES.md`, untouched by this milestone) has the
 *identical* nested-closure shape, and its own helpers (`esc_from`,
 `esc_char`, `esc_bytes`, `hex_pair`) show the *identical* `open=1`
@@ -423,7 +423,7 @@ fully, with hard evidence:
   pattern (`if Emailish?(s): ... Emailish?(s)`) shows the inner check
   compiled to `%10 = bool true @e578` -- a bare constant, zero calls, zero
   guards -- while the outer, genuinely dynamic check compiles to exactly
-  one `call 9 %2 @e574` into the one shared `web::is_emailish` function.
+  one `call 9 %2 @e574` into the one shared `std::web::is_emailish` function.
   Before R2, both checks independently called their own copy of the whole
   scanner chain.
 - **The dead callee-position fnvalue and its open generic instance are
@@ -438,13 +438,13 @@ fully, with hard evidence:
 |---|---|---|
 | used instances | 39 | 28 |
 | anonymous used instances | 2 | 0 |
-| `web::is_emailish`/scanner-family instances | 12 (2 copies x 6 names, all anonymous-owned) | 7 (1 copy x 6 scanners + 1 `web::is_emailish`) |
+| `std::web::is_emailish`/scanner-family instances | 12 (2 copies x 6 names, all anonymous-owned) | 7 (1 copy x 6 scanners + 1 `std::web::is_emailish`) |
 | `check`'s own materialized values | `e332 e552` | *(none)* |
 
-No specialization identity proliferation: `web::is_emailish` itself gets
+No specialization identity proliferation: `std::web::is_emailish` itself gets
 exactly one specialized instance (`str` -- its only call shape), and no new
 per-call predicate clone exists for the alias spelling (confirmed:
-`emailish-predicate-no-second-instance`, exactly one `web::is_emailish`
+`emailish-predicate-no-second-instance`, exactly one `std::web::is_emailish`
 function definition in the compiled `refined-checks.ir` NIR, regardless of
 which spelling any call site used).
 
@@ -576,7 +576,7 @@ via generated-code inspection, not just a runtime assertion; the redundant
 check's HIR `known` field and its zero-call NIR shape; identical
 `BindingId` for both spellings; no runtime Block value for the alias; the
 alias is `core::native::isAlias`, never a second `core::native::names`
-entry, with identical metadata; exactly one compiled `web::is_emailish`
+entry, with identical metadata; exactly one compiled `std::web::is_emailish`
 function regardless of how many call sites or spellings reference it;
 case-sensitivity otherwise unchanged; the module/library opt-in path
 through an isolated interpreter (not a hand-built HIR fixture); an
@@ -688,7 +688,7 @@ counts are from `native::nir`/`native::codeSize`, which are deterministic):
   available here); `native::codeSize`'s aggregate byte counts (§12/§15) are
   the deterministic proxy used throughout this report, per its own §28
   guidance to prefer deterministic counts over noisy wall time.
-- **Other**: `web::is_emailish` itself (the outer, real predicate call)
+- **Other**: `std::web::is_emailish` itself (the outer, real predicate call)
   and its own frame -- unavoidable, the one genuinely dynamic operation
   this benchmark actually needs to perform.
 
@@ -766,7 +766,7 @@ before being attempted.
    type-test predicate, same registry mechanism, with `-module-fn {web
    is_emailish}` and no `-native-body`; its executable form on every
    backend is either the Tcl `-impl` (interp/compile) or the ordinary,
-   compiled-once Botlish function `web::is_emailish` (cranelift/
+   compiled-once Botlish function `std::web::is_emailish` (cranelift/
    cranelift-generic) (§3).
 10. **What exactly is `Emailish?` after R2?** A pure compile-time alias
     (`core::native::alias`) for `emailish?`: the identical registry entry,
@@ -782,7 +782,7 @@ before being attempted.
     directly, `emailish-predicate-alias-not-runtime-value`.
 13. **Does alias use add a specialization instance?** No -- pinned,
     `emailish-predicate-no-second-instance` (exactly one compiled
-    `web::is_emailish` function regardless of spelling/call-site count).
+    `std::web::is_emailish` function regardless of spelling/call-site count).
 14. **Does alias use add a wrapper function?** No.
 15. **Do both spellings resolve to the same semantic predicate identity?**
     Yes -- pinned, `emailish-predicate-alias-same-binding` (identical
@@ -905,8 +905,8 @@ before being attempted.
     both states (§16).
 53. **no hot allocation introduced?** Confirmed, §16.
 54. **UriFragment untouched?** Confirmed: no reference to `UriFragment`
-    anywhere in this diff (`git diff --stat`); not mentioned in `lib/
-    web.tcl`/`lib/web.bot` at all.
+    anywhere in this diff (`git diff --stat`); not mentioned in `stdlib/
+    web.tcl`/`stdlib/web.bot` at all.
 55. **callable-type syntax otherwise untouched?** Confirmed: `surface/*`,
     `hir/callables.tcl`, `hir/sourcetypes.tcl` all absent from `git diff
     --stat`; the uppercase `NAME?` surface syntax itself was never touched,

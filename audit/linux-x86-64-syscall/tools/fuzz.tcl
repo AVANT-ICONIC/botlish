@@ -1,5 +1,5 @@
 #!/usr/bin/env tclsh9.0
-# fuzz.tcl -- randomized check of the pure abi::x86_64 conversions
+# fuzz.tcl -- randomized check of the pure std::abi::x86_64 conversions
 # (LINUX-X86-64-SYSCALL.md): Int -> Register64 -> Int.
 #
 #   tclsh9.0 audit/linux-x86-64-syscall/tools/fuzz.tcl ?-n N? ?-seed S?
@@ -137,7 +137,7 @@ for {set p 0} {$p < $n} {incr p} {
     incr outOfRange [llength [lsearch -all -glob [lmap v $xs {oracle $v}] {"*}]]
 
     # dynamic
-    set text "fn classify(n: int):\n    r = abi::x86_64::register64(n):\n        on abi::x86_64::Register64BelowRange:\n            return \"below\"\n        on abi::x86_64::Register64AboveRange:\n            return \"above\"\n    abi::x86_64::to_int(r)\n\nxs = \[[join [lmap v $xs {lit $v}] {, }]\]\nloop x in xs:\n    classify(x)\n"
+    set text "fn classify(n: int):\n    r = std::abi::x86_64::register64(n):\n        on std::abi::x86_64::Register64BelowRange:\n            return \"below\"\n        on std::abi::x86_64::Register64AboveRange:\n            return \"above\"\n    std::abi::x86_64::to_int(r)\n\nxs = \[[join [lmap v $xs {lit $v}] {, }]\]\nloop x in xs:\n    classify(x)\n"
     foreach backend $::backends outcome [outcomes [hirOfText $text]] {
         if {$outcome ne [list value $expected {}]} {
             incr failures
@@ -148,7 +148,7 @@ for {set p 0} {$p < $n} {incr p} {
     # constant: 10 values per program, each its own literal call
     foreach v [lrange $xs 0 9] {
         incr constantChecks
-        set hir [hirOfText "abi::x86_64::to_int(abi::x86_64::register64([lit $v]))\n" 0]
+        set hir [hirOfText "std::abi::x86_64::to_int(std::abi::x86_64::register64([lit $v]))\n" 0]
         set kinds [lsort -unique [lmap d [hir::diagnostics $hir] {dict get $d kind}]]
         set o [oracle $v]
         set want [expr {[string match {"*} $o] ? "KNOWN-ERROR" : ""}]
@@ -157,7 +157,7 @@ for {set p 0} {$p < $n} {incr p} {
             puts "FAIL seed $seed constant $v: diagnostics {$kinds}, expected {$want}"
         } elseif {$want eq "KNOWN-ERROR"} {
             set message [dict get [lindex [hir::diagnostics $hir] 0] message]
-            set error [expr {$o eq "\"below\"" ? "abi::x86_64::Register64BelowRange" : "abi::x86_64::Register64AboveRange"}]
+            set error [expr {$o eq "\"below\"" ? "std::abi::x86_64::Register64BelowRange" : "std::abi::x86_64::Register64AboveRange"}]
             if {![string match "*$error*" $message]} {
                 incr failures
                 puts "FAIL seed $seed constant $v: $message"
@@ -168,7 +168,7 @@ for {set p 0} {$p < $n} {incr p} {
     # round trip, in-range values only, no handler anywhere but the dynamic
     # entry
     set inRange [lsearch -all -inline -not -glob [lmap v $xs {oracle $v}] {"*}]
-    set text "fn again(r: abi::x86_64::Register64) -> abi::x86_64::Register64:\n    abi::x86_64::register64(abi::x86_64::to_int(r))\nfn entry(n: int):\n    r = abi::x86_64::register64(n):\n        on abi::x86_64::Register64BelowRange:\n            return 0\n        on abi::x86_64::Register64AboveRange:\n            return 0\n    abi::x86_64::to_int(again(again(r)))\n\nloop x in \[[join [lmap v $inRange {lit $v}] {, }]\]:\n    entry(x)\n"
+    set text "fn again(r: std::abi::x86_64::Register64) -> std::abi::x86_64::Register64:\n    std::abi::x86_64::register64(std::abi::x86_64::to_int(r))\nfn entry(n: int):\n    r = std::abi::x86_64::register64(n):\n        on std::abi::x86_64::Register64BelowRange:\n            return 0\n        on std::abi::x86_64::Register64AboveRange:\n            return 0\n    std::abi::x86_64::to_int(again(again(r)))\n\nloop x in \[[join [lmap v $inRange {lit $v}] {, }]\]:\n    entry(x)\n"
     set want [list value "\[[join $inRange {, }]\]" {}]
     foreach backend $::backends outcome [outcomes [hirOfText $text]] {
         if {$outcome ne $want} {

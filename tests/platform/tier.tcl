@@ -36,7 +36,7 @@
 #                   backend of -backends (CORE_BACKEND; default interp,compile)
 #   golden suites   tests/golden/run.tcl -quiet -backends B, B the
 #                   -golden-backends (default all four; the golden runner,
-#                   lib/test.bot, is a coroutine, which the native backends
+#                   stdlib/test.bot, is a coroutine, which the native backends
 #                   run on macOS since milestone 3)
 #   examples        main.tcl -backend B on the sample programs CI runs, for
 #                   every B of -example-backends (default all four)

@@ -39,7 +39,7 @@
 #
 #   hidden        the function exists but is not visible by that name (a
 #                 function of a namespace the program does not import, such as
-#                 byte::complement, or a function defined after the call):
+#                 std::byte::complement, or a function defined after the call):
 #                 must be rejected, and the
 #                 diagnostic must say that no function by that name is
 #                 visible
@@ -87,9 +87,9 @@ proc rnd {lo hi} { return [expr {$lo + int(rand() * ($hi - $lo + 1))}] }
 # The prelude: every function visible in generated programs. One entry per
 # function: {NAME RESULT-TYPE PARAM-TYPES}. Types: int str list struct small.
 
-set ::prelude {import list
-import mutable_array
-import str
+set ::prelude {import std::list
+import std::mutable_array
+import std::str
 
 error TooSmall
 error TooBig
@@ -98,14 +98,14 @@ type Small = Int in 0..10
 context struct Log:
     digits: MutableArray[int]
 fn probe(id, result, context log: Log):
-    mutable_array::set(log.digits, 0, mutable_array::get(log.digits, 0, 0) * 10 + id):
+    std::mutable_array::set(log.digits, 0, std::mutable_array::get(log.digits, 0, 0) * 10 + id):
         on IndexNotFound:
             unit
     result
 fn logged(context log: Log):
-    mutable_array::get(log.digits, 0, 0)
+    std::mutable_array::get(log.digits, 0, 0)
 fn reset(context log: Log):
-    mutable_array::set(log.digits, 0, 0):
+    std::mutable_array::set(log.digits, 0, 0):
         on IndexNotFound:
             unit
     unit
@@ -124,24 +124,24 @@ fn mix4(a, b, c, d):
 fn tadd(a: int, b: int) -> int:
     a + b
 fn label(n) -> str:
-    str::substring("abcdefghijklmnop", 0, mod(n * n, 9) + 1)
+    std::str::substring("abcdefghijklmnop", 0, mod(n * n, 9) + 1)
 fn shout(s):
-    str::lowercase(s)
+    std::str::lowercase(s)
 fn cat(s, t):
-    str::concat(s, t)
+    std::str::concat(s, t)
 fn size(s):
-    str::length(s)
+    std::str::length(s)
 fn dup(a):
     [a, a]
 fn trio(a, b, c):
     [a, b, c]
 fn grow(xs, x):
-    list::append(xs, x)
+    std::list::append(xs, x)
 fn count(xs):
-    list::length(xs)
+    std::list::length(xs)
 fn second(xs):
-    loop i from 1 to list::length(xs):
-        return list::at(xs, i)
+    loop i from 1 to std::list::length(xs):
+        return std::list::at(xs, i)
     0
 fn rect(w, h):
     {w: w, h: h}
@@ -293,7 +293,7 @@ proc program {expr style} {
     set lines [list $::prelude "fn run(a, b, s):" "    reset()"]
     lappend lines {*}$::hoisted
     lappend lines "    r = $text" "    \[r, logged()\]"
-    lappend lines "with context Log {digits: mutable_array::create(1, 0)}"
+    lappend lines "with context Log {digits: std::mutable_array::create(1, 0)}"
     lappend lines {[run(3, 5, "xy"), run(0, 2, "abc"), run(7, 1, "q"), run(12, 4, "Hello")]}
     return [join [lflatten $lines] \n]
 }
@@ -363,14 +363,14 @@ set ::negativeBase {fn run(a, b, s):
     reset()
     r = %s
     [r, logged()]
-with context Log {digits: mutable_array::create(1, 0)}
+with context Log {digits: std::mutable_array::create(1, 0)}
 [run(3, 5, "xy"), run(0, 2, "abc")]}
 
 proc negative {kind} {
     set pred "fn is_big(x):\n    x > 1\n"
     switch -- $kind {
         hidden-module {
-            # byte::complement exists, takes a Byte first, but the program
+            # std::byte::complement exists, takes a Byte first, but the program
             # does not import `byte`: not visible as `complement`.
             return [list "$::prelude$pred[format $::negativeBase {a.complement()}]" \
                 "" "no function named \"complement\" is visible"]

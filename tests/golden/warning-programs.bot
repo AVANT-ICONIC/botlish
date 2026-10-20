@@ -12,7 +12,7 @@
 #
 # * every program a warning is reported on computes the same value on every
 #   backend (each code's backend-independence program);
-# * ONE-CHAR-STRING-LITERAL: str::length counts characters (Unicode scalar
+# * ONE-CHAR-STRING-LITERAL: std::str::length counts characters (Unicode scalar
 #   values: escapes resolved, a supplementary-plane character is one, a
 #   letter plus a combining mark is two); call results and computed Strings
 #   are ordinary values; a one-character String and its character spelling
@@ -55,17 +55,17 @@
 # block's acceptance is the theorem and the suite never aborts.
 #
 # Imports:
-#   char      char::scalar_value (the UnicodeChar-typed code functions)
-#   compiler  compiler::CompilerError and DiagnosticCode (every body)
-#   list      list::get and list::at (the fixed-arity conversion's leftovers)
-#   str       str::length, str::concat and the String methods substring,
+#   char      std::char::scalar_value (the UnicodeChar-typed code functions)
+#   compiler  std::compiler::CompilerError and DiagnosticCode (every body)
+#   list      std::list::get and std::list::at (the fixed-arity conversion's leftovers)
+#   str       std::str::length, std::str::concat and the String methods substring,
 #             lowercase and concat
 #   test      the framework
-import char
-import compiler
-import list
-import str
-import test
+import std::char
+import std::compiler
+import std::list
+import std::str
+import std::test
 
 # ---------------------------------------------------------------------------
 # Declarations (top-level only), renamed from the Tcl programs' one-letter
@@ -122,24 +122,24 @@ error Invalid
 # their lengths are computed at run time; RUN_CHARACTER_SPELLING is false.
 fn register_one_char_string_literal_tests(samples: List[str], run_character_spelling: bool):
     # oc-length-is-str-length: the length the warning measures is the
-    # language's own str::length -- 0, 1 and 2 characters; a letter plus a
+    # language's own std::str::length -- 0, 1 and 2 characters; a letter plus a
     # combining mark is two, the precomposed letter one, a supplementary-
     # plane character one; an escaped backslash and an escaped newline one.
-    fn b_lengths() errors compiler::CompilerError:
+    fn b_lengths() errors std::compiler::CompilerError:
         static compile:
-            [str::length(""), str::length("a"), str::length("ab"), str::length("é"), str::length("é"), str::length("😀"), str::length("😀a"), str::length("\\"), str::length("\n")]
-    test::value("oc-length-is-str-length", [0, 1, 2, 2, 1, 1, 2, 1, 1], b_lengths)
+            [std::str::length(""), std::str::length("a"), std::str::length("ab"), std::str::length("é"), std::str::length("é"), std::str::length("😀"), std::str::length("😀a"), std::str::length("\\"), std::str::length("\n")]
+    std::test::value("oc-length-is-str-length", [0, 1, 2, 2, 1, 1, 2, 1, 1], b_lengths)
 
     # ... and the same lengths of the same Strings as run-time values (the
     # Tcl test's literal arguments may be folded by the compiler).
-    fn b_lengths_at_run_time() errors compiler::CompilerError:
+    fn b_lengths_at_run_time() errors std::compiler::CompilerError:
         static compile:
             loop s in samples:
-                str::length(s)
-    test::value("oc-length-is-str-length/run-time", [0, 1, 2, 2, 1, 1, 2, 1, 1], b_lengths_at_run_time)
+                std::str::length(s)
+    std::test::value("oc-length-is-str-length/run-time", [0, 1, 2, 2, 1, 1, 2, 1, 1], b_lengths_at_run_time)
 
     # oc-call-results-silent: one-character call results.
-    fn b_call_results() errors compiler::CompilerError:
+    fn b_call_results() errors std::compiler::CompilerError:
         static compile:
             fn second() -> str:
                 "xy".substring(1, 2)
@@ -149,104 +149,104 @@ fn register_one_char_string_literal_tests(samples: List[str], run_character_spel
                 else:
                     "cd".substring(1, 2)
             [second(), pick(true), pick(false)]
-    test::value("oc-call-results-silent", ["y", "a", "d"], b_call_results)
+    std::test::value("oc-call-results-silent", ["y", "a", "d"], b_call_results)
 
     # oc-computed-strings-silent: concatenations, lowercase and substring.
-    fn b_computed_strings() errors compiler::CompilerError:
+    fn b_computed_strings() errors std::compiler::CompilerError:
         static compile:
-            a = str::concat("ab", "")
+            a = std::str::concat("ab", "")
             b = "AB".lowercase().substring(0, 1)
-            c = str::concat("x", "")
+            c = std::str::concat("x", "")
             [a, b, c]
-    test::value("oc-computed-strings-silent", ["ab", "a", "x"], b_computed_strings)
+    std::test::value("oc-computed-strings-silent", ["ab", "a", "x"], b_computed_strings)
 
     # oc-str-parameter-is-the-api-deficiency-shape: a str parameter takes the
     # one-character String; its character spelling is a TYPE error there.
-    fn b_str_parameter_string() errors compiler::CompilerError:
+    fn b_str_parameter_string() errors std::compiler::CompilerError:
         static compile:
             fn width(text: str) -> int:
                 7
             width("a")
-    test::value("oc-str-parameter-is-the-api-deficiency-shape/string", 7, b_str_parameter_string)
+    std::test::value("oc-str-parameter-is-the-api-deficiency-shape/string", 7, b_str_parameter_string)
 
-    fn b_str_parameter_char() errors compiler::CompilerError:
+    fn b_str_parameter_char() errors std::compiler::CompilerError:
         static compile:
             fn width(text: str) -> int:
                 7
             width('a')
-    test::rejects("oc-str-parameter-is-the-api-deficiency-shape/char", compiler::DiagnosticCode::Type, b_str_parameter_char)
+    std::test::rejects("oc-str-parameter-is-the-api-deficiency-shape/char", std::compiler::DiagnosticCode::Type, b_str_parameter_char)
 
     # oc-str-native-argument-warns: a native's str parameter takes the
     # one-character String; its character spelling is accepted statically
     # (native parameter types are checked at run time, where it fails: the
     # Tcl test keeps that half, a failure no handler catches). The call is
     # reachable, under a condition that is false at run time.
-    fn b_native_argument_string() errors compiler::CompilerError:
+    fn b_native_argument_string() errors std::compiler::CompilerError:
         static compile:
-            str::length("a")
-    test::value("oc-str-native-argument-warns/string", 1, b_native_argument_string)
+            std::str::length("a")
+    std::test::value("oc-str-native-argument-warns/string", 1, b_native_argument_string)
 
-    fn b_native_argument_char() errors compiler::CompilerError:
+    fn b_native_argument_char() errors std::compiler::CompilerError:
         static compile:
             if run_character_spelling:
-                str::length('a')
+                std::str::length('a')
             else:
                 0
-    test::value("oc-str-native-argument-warns/char-compiles", 0, b_native_argument_char)
+    std::test::value("oc-str-native-argument-warns/char-compiles", 0, b_native_argument_char)
 
     # oc-comparison-with-a-string-warns: == with a one-character String; the
     # character spelling silently changes the value (== of two kinds is
     # false, not an error).
-    fn b_comparison_string() errors compiler::CompilerError:
+    fn b_comparison_string() errors std::compiler::CompilerError:
         static compile:
             fn is_quote(text: str) -> bool:
                 text == "\""
             [is_quote("\""), is_quote("ab")]
-    test::value("oc-comparison-with-a-string-warns/string", [true, false], b_comparison_string)
+    std::test::value("oc-comparison-with-a-string-warns/string", [true, false], b_comparison_string)
 
-    fn b_comparison_char() errors compiler::CompilerError:
+    fn b_comparison_char() errors std::compiler::CompilerError:
         static compile:
             fn is_quote(text: str) -> bool:
                 text == '"'
             [is_quote("\""), is_quote("ab")]
-    test::value("oc-comparison-with-a-string-warns/char", [false, false], b_comparison_char)
+    std::test::value("oc-comparison-with-a-string-warns/char", [false, false], b_comparison_char)
 
     # oc-character-accepting-context-warns: a kind-tolerant consumer gives
     # the same value for the String and for its character spelling.
-    fn b_accepting_string() errors compiler::CompilerError:
+    fn b_accepting_string() errors std::compiler::CompilerError:
         static compile:
             fn is_comma(c):
                 c == ',' or c == ","
             is_comma(",")
-    test::value("oc-character-accepting-context-warns/string", true, b_accepting_string)
+    std::test::value("oc-character-accepting-context-warns/string", true, b_accepting_string)
 
-    fn b_accepting_char() errors compiler::CompilerError:
+    fn b_accepting_char() errors std::compiler::CompilerError:
         static compile:
             fn is_comma(c):
                 c == ',' or c == ","
             is_comma(',')
-    test::value("oc-character-accepting-context-warns/char", true, b_accepting_char)
+    std::test::value("oc-character-accepting-context-warns/char", true, b_accepting_char)
 
     # oc-character-typed-parameter: a UnicodeChar parameter takes the
     # character spelling; the String spelling there is a TYPE error.
-    fn b_typed_char() errors compiler::CompilerError:
+    fn b_typed_char() errors std::compiler::CompilerError:
         static compile:
             fn code(c: UnicodeChar) -> int:
-                char::scalar_value(c)
+                std::char::scalar_value(c)
             code(',')
-    test::value("oc-character-typed-parameter/char", 44, b_typed_char)
+    std::test::value("oc-character-typed-parameter/char", 44, b_typed_char)
 
-    fn b_typed_string() errors compiler::CompilerError:
+    fn b_typed_string() errors std::compiler::CompilerError:
         static compile:
             fn code(c: UnicodeChar) -> int:
-                char::scalar_value(c)
+                std::char::scalar_value(c)
             code(",")
-    test::rejects("oc-character-typed-parameter/string", compiler::DiagnosticCode::Type, b_typed_string)
+    std::test::rejects("oc-character-typed-parameter/string", std::compiler::DiagnosticCode::Type, b_typed_string)
 
     # oc-backend-independent-off (and oc-backend-independent, the same
     # program under the default policy): a top-level binding read by a
     # nested function becomes a block binding here.
-    fn b_backend_independent() errors compiler::CompilerError:
+    fn b_backend_independent() errors std::compiler::CompilerError:
         static compile:
             sep = ","
             fn quote(text: str) -> str:
@@ -254,21 +254,21 @@ fn register_one_char_string_literal_tests(samples: List[str], run_character_spel
             fn joined(a, b):
                 a.concat(sep).concat(b)
             fn width(text: str) -> int:
-                str::length(text)
+                std::str::length(text)
             [quote("a"), joined("x", "yz"), width(";"), width(""), [',', "ab"]]
-    test::value("oc-backend-independent-off", ["\"a\"", "x,yz", 1, 0, [',', "ab"]], b_backend_independent)
+    std::test::value("oc-backend-independent-off", ["\"a\"", "x,yz", 1, 0, [',', "ab"]], b_backend_independent)
 
     # oc-spelling-law-unit: the character spelling of each one-character
     # String -- a letter, punctuation, both quotes, a backslash, newline,
     # tab, carriage return, a two-byte, a three-byte and a supplementary-
     # plane character -- denotes its code point, and a UnicodeChar parameter
     # takes it.
-    fn b_spelling_law() errors compiler::CompilerError:
+    fn b_spelling_law() errors std::compiler::CompilerError:
         static compile:
             fn code(c: UnicodeChar) -> int:
-                char::scalar_value(c)
+                std::char::scalar_value(c)
             [code('a'), code(','), code('"'), code('\''), code('\\'), code('\n'), code('\t'), code('\r'), code('é'), code('世'), code('😀')]
-    test::value("oc-spelling-law-unit", [97, 44, 34, 39, 92, 10, 9, 13, 233, 19990, 128512], b_spelling_law)
+    std::test::value("oc-spelling-law-unit", [97, 44, 34, 39, 92, 10, 9, 13, 233, 19990, 128512], b_spelling_law)
 
 # The context programs of one-char-string-literal.test. A body cannot need
 # a context, so the consumers run here, with the suite's installations
@@ -278,20 +278,20 @@ fn register_context_key_tests():
     # oc-context-load-key-is-not-a-literal: f() reads the installed
     # context's field; x is an ordinary String binding.
     loaded = loaded_value()
-    fn b_load_key() errors compiler::CompilerError:
+    fn b_load_key() errors std::compiler::CompilerError:
         static compile:
             x = "C"
             [loaded, x]
-    test::value("oc-context-load-key-is-not-a-literal", [3, "C"], b_load_key)
+    std::test::value("oc-context-load-key-is-not-a-literal", [3, "C"], b_load_key)
 
     # oc-context-trait-key-is-not-a-literal: f(1) calls tick through the
     # context trait, selected statically as the one installed implementation.
     ticks = ticked(1)
-    fn b_trait_key() errors compiler::CompilerError:
+    fn b_trait_key() errors std::compiler::CompilerError:
         static compile:
             x = "T"
             [ticks, x]
-    test::value("oc-context-trait-key-is-not-a-literal", [4, "T"], b_trait_key)
+    std::test::value("oc-context-trait-key-is-not-a-literal", [4, "T"], b_trait_key)
 
 # ---------------------------------------------------------------------------
 # fixed-arity-list-return.test
@@ -300,44 +300,44 @@ fn register_context_key_tests():
 fn register_fixed_arity_list_return_tests(run_leftover: bool):
     # fa-rebinding-same-scope-is-an-error: a same-scope rebinding is
     # DUPLICATE (so the program is never warned about).
-    fn b_rebinding() errors compiler::CompilerError:
+    fn b_rebinding() errors std::compiler::CompilerError:
         static compile:
             fn f(a, b):
                 r = [a, b]
                 r = [a, b, a]
                 r
             0
-    test::rejects("fa-rebinding-same-scope-is-an-error", compiler::DiagnosticCode::Duplicate, b_rebinding)
+    std::test::rejects("fa-rebinding-same-scope-is-an-error", std::compiler::DiagnosticCode::Duplicate, b_rebinding)
 
     # fa-annotation-struct-is-a-checker-error: a struct result annotation
     # over list exits is a TYPE error.
-    fn b_struct_annotation() errors compiler::CompilerError:
+    fn b_struct_annotation() errors std::compiler::CompilerError:
         static compile:
             fn f(a: int) -> Wrapped:
                 [a, a]
             0
-    test::rejects("fa-annotation-struct-is-a-checker-error", compiler::DiagnosticCode::Type, b_struct_annotation)
+    std::test::rejects("fa-annotation-struct-is-a-checker-error", std::compiler::DiagnosticCode::Type, b_struct_annotation)
 
     # fa-annotation-changes-nothing-else: the annotated and the unannotated
     # twin compute the same value (the annotation is a type declaration,
     # not a warning switch).
-    fn b_annotated() errors compiler::CompilerError:
+    fn b_annotated() errors std::compiler::CompilerError:
         static compile:
             fn pair(a: int, b: int) -> List[int]:
                 [a, b]
             pair(3, 4)
-    test::value("fa-annotation-changes-nothing-else/annotated", [3, 4], b_annotated)
+    std::test::value("fa-annotation-changes-nothing-else/annotated", [3, 4], b_annotated)
 
-    fn b_unannotated() errors compiler::CompilerError:
+    fn b_unannotated() errors std::compiler::CompilerError:
         static compile:
             fn pair(a: int, b: int):
                 [a, b]
             pair(3, 4)
-    test::value("fa-annotation-changes-nothing-else/plain", [3, 4], b_unannotated)
+    std::test::value("fa-annotation-changes-nothing-else/plain", [3, 4], b_unannotated)
 
     # fa-backend-independent-off (and fa-backend-independent, the same
     # program under the default policy).
-    fn b_backend_independent() errors compiler::CompilerError:
+    fn b_backend_independent() errors std::compiler::CompilerError:
         static compile:
             fn pair(a, b):
                 if a == 0:
@@ -345,14 +345,14 @@ fn register_fixed_arity_list_return_tests(run_leftover: bool):
                 [a, b]
             p = pair(3, 4)
             p
-    test::value("fa-backend-independent-off", [3, 4], b_backend_independent)
+    std::test::value("fa-backend-independent-off", [3, 4], b_backend_independent)
 
     # The conversion the warning suggests: pair's fixed-arity list result
     # becomes an anonymous struct {p0, p1}.
 
     # fa-conversion-field-reads-checked: a field the converted result does
     # not have is UNKNOWN-FIELD.
-    fn b_field_reads_checked() errors compiler::CompilerError:
+    fn b_field_reads_checked() errors std::compiler::CompilerError:
         static compile:
             fn pair(a, b):
                 {p0: a, p1: b}
@@ -360,10 +360,10 @@ fn register_fixed_arity_list_return_tests(run_leftover: bool):
                 r = pair(x, 1)
                 r.p2
             use(1)
-    test::rejects("fa-conversion-field-reads-checked", compiler::DiagnosticCode::UnknownField, b_field_reads_checked)
+    std::test::rejects("fa-conversion-field-reads-checked", std::compiler::DiagnosticCode::UnknownField, b_field_reads_checked)
 
     # fa-conversion-field-reads-compile: the converted reads run.
-    fn b_field_reads_compile() errors compiler::CompilerError:
+    fn b_field_reads_compile() errors std::compiler::CompilerError:
         static compile:
             fn pair(a, b):
                 {p0: a, p1: b}
@@ -371,43 +371,43 @@ fn register_fixed_arity_list_return_tests(run_leftover: bool):
                 r = pair(x, 1)
                 [r.p1, r.p0]
             use(5)
-    test::value("fa-conversion-field-reads-compile", [1, 5], b_field_reads_compile)
+    std::test::value("fa-conversion-field-reads-compile", [1, 5], b_field_reads_compile)
 
     # fa-conversion-leftover-through-source-function: a leftover positional
-    # read through a source function (list::get) is a TYPE error.
-    fn b_leftover_source_function() errors compiler::CompilerError:
+    # read through a source function (std::list::get) is a TYPE error.
+    fn b_leftover_source_function() errors std::compiler::CompilerError:
         static compile:
             fn pair(a, b):
                 {p0: a, p1: b}
-            list::get(pair(1, 2), 0, 7)
-    test::rejects("fa-conversion-leftover-through-source-function", compiler::DiagnosticCode::Type, b_leftover_source_function)
+            std::list::get(pair(1, 2), 0, 7)
+    std::test::rejects("fa-conversion-leftover-through-source-function", std::compiler::DiagnosticCode::Type, b_leftover_source_function)
 
     # fa-conversion-leftover-native-read-is-a-run-time-error: a leftover
-    # direct native read (list::at) is accepted statically (the gap; it
+    # direct native read (std::list::at) is accepted statically (the gap; it
     # fails at run time, where no handler catches it: the Tcl test keeps
     # that half). The read is reachable, under a condition that is false at
     # run time.
-    fn b_leftover_native_read() errors compiler::CompilerError:
+    fn b_leftover_native_read() errors std::compiler::CompilerError:
         static compile:
             fn pair(a, b):
                 {p0: a, p1: b}
             if run_leftover:
-                v = list::at(pair(1, 2), 0):
+                v = std::list::at(pair(1, 2), 0):
                     on IndexNotFound:
                         0
                 v
             else:
                 0
-    test::value("fa-conversion-leftover-native-read-is-a-run-time-error/compiles", 0, b_leftover_native_read)
+    std::test::value("fa-conversion-leftover-native-read-is-a-run-time-error/compiles", 0, b_leftover_native_read)
 
     # fa-conversion-leftover-equality-is-silent: a leftover == against a
     # list literal is silently false (no EQUALITY error).
-    fn b_leftover_equality() errors compiler::CompilerError:
+    fn b_leftover_equality() errors std::compiler::CompilerError:
         static compile:
             fn pair(a, b):
                 {p0: a, p1: b}
             pair(1, 2) == [1, 2]
-    test::value("fa-conversion-leftover-equality-is-silent", false, b_leftover_equality)
+    std::test::value("fa-conversion-leftover-equality-is-silent", false, b_leftover_equality)
 
 # ---------------------------------------------------------------------------
 # proves-naming.test
@@ -415,55 +415,55 @@ fn register_fixed_arity_list_return_tests(run_leftover: bool):
 fn register_proves_naming_tests():
     # pn-predicate-needs-a-declared-bool: a proves clause on a function with
     # no result annotation, with -> str or with -> int is PROOF-CLAUSE.
-    fn b_no_result() errors compiler::CompilerError:
+    fn b_no_result() errors std::compiler::CompilerError:
         static compile:
             fn p(v: str) proves v: Vetted:
                 true
             0
-    test::rejects("pn-predicate-needs-a-declared-bool/no-result", compiler::DiagnosticCode::ProofClause, b_no_result)
+    std::test::rejects("pn-predicate-needs-a-declared-bool/no-result", std::compiler::DiagnosticCode::ProofClause, b_no_result)
 
-    fn b_str_result() errors compiler::CompilerError:
+    fn b_str_result() errors std::compiler::CompilerError:
         static compile:
             fn p(v: str) -> str proves v: Vetted:
                 v
             0
-    test::rejects("pn-predicate-needs-a-declared-bool/str", compiler::DiagnosticCode::ProofClause, b_str_result)
+    std::test::rejects("pn-predicate-needs-a-declared-bool/str", std::compiler::DiagnosticCode::ProofClause, b_str_result)
 
-    fn b_int_result() errors compiler::CompilerError:
+    fn b_int_result() errors std::compiler::CompilerError:
         static compile:
             fn p(v: str) -> int proves v: Vetted:
                 1
             0
-    test::rejects("pn-predicate-needs-a-declared-bool/int", compiler::DiagnosticCode::ProofClause, b_int_result)
+    std::test::rejects("pn-predicate-needs-a-declared-bool/int", std::compiler::DiagnosticCode::ProofClause, b_int_result)
 
     # pn-scope-zero-parameters-unrepresentable: the clause must name an
     # ordinary parameter -- not a missing one, not a flag.
-    fn b_zero_parameters() errors compiler::CompilerError:
+    fn b_zero_parameters() errors std::compiler::CompilerError:
         static compile:
             fn p() -> bool proves v: Vetted:
                 true
             0
-    test::rejects("pn-scope-zero-parameters-unrepresentable/zero", compiler::DiagnosticCode::ProofClause, b_zero_parameters)
+    std::test::rejects("pn-scope-zero-parameters-unrepresentable/zero", std::compiler::DiagnosticCode::ProofClause, b_zero_parameters)
 
-    fn b_flag_parameter() errors compiler::CompilerError:
+    fn b_flag_parameter() errors std::compiler::CompilerError:
         static compile:
             fn p(flags :v) -> bool proves v: Vetted:
                 true
             0
-    test::rejects("pn-scope-zero-parameters-unrepresentable/flag", compiler::DiagnosticCode::ProofClause, b_flag_parameter)
+    std::test::rejects("pn-scope-zero-parameters-unrepresentable/flag", std::compiler::DiagnosticCode::ProofClause, b_flag_parameter)
 
     # pn-shape-parameter-count: zero ordinary parameters cannot carry proves.
-    fn b_shape_zero() errors compiler::CompilerError:
+    fn b_shape_zero() errors std::compiler::CompilerError:
         static compile:
             fn zero() -> bool proves a: Vetted:
                 true
             0
-    test::rejects("pn-shape-parameter-count/zero", compiler::DiagnosticCode::ProofClause, b_shape_zero)
+    std::test::rejects("pn-shape-parameter-count/zero", std::compiler::DiagnosticCode::ProofClause, b_shape_zero)
 
     # pn-backend-independent-off (and pn-backend-independent, the same
     # program under the default policy): a predicate and a validator whose
     # names do not follow the convention.
-    fn b_backend_independent() errors compiler::CompilerError:
+    fn b_backend_independent() errors std::compiler::CompilerError:
         static compile:
             fn emailish(v: str) -> bool proves v: Vetted:
                 v == "a@b"
@@ -484,21 +484,21 @@ fn register_proves_naming_tests():
                         return -1
                 3
             [use("a@b"), use("x"), use2(""), use2("y")]
-    test::value("pn-backend-independent-off", [7, 0, -1, 3], b_backend_independent)
+    std::test::value("pn-backend-independent-off", [7, 0, -1, 3], b_backend_independent)
 
     # pn-question-method-sugar-parses: a `?`-suffixed method-sugar call
     # parses and resolves.
-    fn b_question_method_sugar() errors compiler::CompilerError:
+    fn b_question_method_sugar() errors std::compiler::CompilerError:
         static compile:
             fn emailish?(v: str) -> bool proves v: Vetted:
                 v == "a"
             ["a".emailish?(), "b".emailish?()]
-    test::value("pn-question-method-sugar-parses", [true, false], b_question_method_sugar)
+    std::test::value("pn-question-method-sugar-parses", [true, false], b_question_method_sugar)
 
     # pn-rename-is-semantics-preserving: the conventional rename (emailish ->
     # emailish?, check_email -> validate_check_email) of the program above
     # computes its value.
-    fn b_renamed() errors compiler::CompilerError:
+    fn b_renamed() errors std::compiler::CompilerError:
         static compile:
             fn emailish?(v: str) -> bool proves v: Vetted:
                 v == "a@b"
@@ -519,7 +519,7 @@ fn register_proves_naming_tests():
                         return -1
                 3
             [use("a@b"), use("x"), use2(""), use2("y")]
-    test::value("pn-rename-is-semantics-preserving", [7, 0, -1, 3], b_renamed)
+    std::test::value("pn-rename-is-semantics-preserving", [7, 0, -1, 3], b_renamed)
 
 # ---------------------------------------------------------------------------
 # same-failure.test
@@ -527,7 +527,7 @@ fn register_proves_naming_tests():
 fn register_same_failure_tests():
     # sf-strict0-unadmitted-fail-never-warned: fails of an error the
     # function does not declare are UNHANDLED-ERROR.
-    fn b_unadmitted() errors compiler::CompilerError:
+    fn b_unadmitted() errors std::compiler::CompilerError:
         static compile:
             fn f(x):
                 if x == 1:
@@ -536,11 +536,11 @@ fn register_same_failure_tests():
                     fail Unadmitted
                 x
             0
-    test::rejects("sf-strict0-unadmitted-fail-never-warned", compiler::DiagnosticCode::UnhandledError, b_unadmitted)
+    std::test::rejects("sf-strict0-unadmitted-fail-never-warned", std::compiler::DiagnosticCode::UnhandledError, b_unadmitted)
 
     # sf-strict0-undeclared-error-never-warned: fails of an error declared
     # nowhere are UNDECLARED-ERROR.
-    fn b_undeclared() errors compiler::CompilerError:
+    fn b_undeclared() errors std::compiler::CompilerError:
         static compile:
             fn f(x) errors Nope:
                 if x == 1:
@@ -549,12 +549,12 @@ fn register_same_failure_tests():
                     fail Nope
                 x
             0
-    test::rejects("sf-strict0-undeclared-error-never-warned", compiler::DiagnosticCode::UndeclaredError, b_undeclared)
+    std::test::rejects("sf-strict0-undeclared-error-never-warned", std::compiler::DiagnosticCode::UndeclaredError, b_undeclared)
 
     # sf-backend-independent-off (and sf-backend-independent, the same
     # program under the default policy): two fails of one error, handled
     # per element.
-    fn b_backend_independent() errors compiler::CompilerError:
+    fn b_backend_independent() errors std::compiler::CompilerError:
         static compile:
             fn parse(x) errors Invalid:
                 if x < 0:
@@ -568,7 +568,7 @@ fn register_same_failure_tests():
                         0
                 r
             v
-    test::value("sf-backend-independent-off", [2, 0, 0, 8], b_backend_independent)
+    std::test::value("sf-backend-independent-off", [2, 0, 0, 8], b_backend_independent)
 
 # ---------------------------------------------------------------------------
 # many-boolean-arguments.test
@@ -576,17 +576,17 @@ fn register_same_failure_tests():
 fn register_many_boolean_arguments_tests():
     # mb-flags-never-make-the-gate: one ordinary bool and two flags, both
     # supplied: the flags are true.
-    fn b_flags() errors compiler::CompilerError:
+    fn b_flags() errors std::compiler::CompilerError:
         static compile:
             fn one(path, a: bool, flags :x, :y):
                 [path, a, x, y]
             one(true, true, :x, :y)
-    test::value("mb-flags-never-make-the-gate", [true, true, true, true], b_flags)
+    std::test::value("mb-flags-never-make-the-gate", [true, true, true, true], b_flags)
 
     # mb-backend-independent-off (and mb-backend-independent, the same
     # program under the default policy): bool literals, a computed bool and
     # flags forwarded as ordinary bool arguments.
-    fn b_backend_independent() errors compiler::CompilerError:
+    fn b_backend_independent() errors std::compiler::CompilerError:
         static compile:
             fn weight(base: int, double: bool, negate: bool) -> int:
                 if double:
@@ -603,7 +603,7 @@ fn register_many_boolean_arguments_tests():
             c = 5.tally(:double)
             d = 6.weight(a > 5, true)
             [a, b, c, d]
-    test::value("mb-backend-independent-off", [6, 4, 10, -12], b_backend_independent)
+    std::test::value("mb-backend-independent-off", [6, 4, 10, -12], b_backend_independent)
 
 # ---------------------------------------------------------------------------
 # The suite
@@ -616,8 +616,8 @@ fn register_warning_programs_tests():
     register_same_failure_tests()
     register_many_boolean_arguments_tests()
 
-with context test::suite()
+with context std::test::suite()
 with context LoadKeyed {v: 3}
 with context TickSource {v: 3}
 register_warning_programs_tests()
-test::report()
+std::test::report()

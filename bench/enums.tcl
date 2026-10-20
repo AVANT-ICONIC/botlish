@@ -40,10 +40,10 @@ foreach {option value} $args {
     }
 }
 
-set prelude "import list
-import mutable_array
-import mutable_vector
-import immutable_set
+set prelude "import std::list
+import std::mutable_array
+import std::mutable_vector
+import std::immutable_set
 
 enum Kind:
     Boat,
@@ -103,7 +103,7 @@ proc Fn {n body} {
 
 # BODY lines as a collecting loop `i from 0 to n`, then the List's length.
 proc Each {lines} {
-    return [concat [list "xs = loop i from 0 to n:"] [lmap line $lines {string cat "    " $line}] [list "list::length(xs)"]]
+    return [concat [list "xs = loop i from 0 to n:"] [lmap line $lines {string cat "    " $line}] [list "std::list::length(xs)"]]
 }
 
 proc programText {kind n} {
@@ -122,26 +122,26 @@ proc programText {kind n} {
         bool-compare { append p [Fn $n [Each {"bpick(i) == true"}]] }
         pass        { append p [Fn $n [Each {"kid(pick(i))"}]] }
         int-pass    { append p [Fn $n [Each {"iid(ipick(i))"}]] }
-        list-base   { append p [Fn $n {"xs = kinds(n)" "list::length(xs)"}] }
-        list-iterate { append p [Fn $n {"xs = kinds(n)" "ys = loop x in xs:" "    x == Kind::Car" "list::length(ys)"}] }
-        int-list-base { append p [Fn $n {"xs = ints(n)" "list::length(xs)"}] }
-        int-list-iterate { append p [Fn $n {"xs = ints(n)" "ys = loop x in xs:" "    x == 1" "list::length(ys)"}] }
-        array-base  { append p [Fn $n {"a = mutable_array::create(n, Kind::Car)" "a.capacity()"}] }
-        array-at    { append p [Fn $n [concat {"a = mutable_array::create(n, Kind::Car)"} [Each {"a.at(i)"}]]] }
-        array-set   { append p [Fn $n [concat {"a = mutable_array::create(n, Kind::Car)"} [Each {"a.set(i, Kind::Boat)"}]]] }
-        array-swap  { append p [Fn $n [concat {"a = mutable_array::create(n, Kind::Car)"} [Each {"a.swap(i, Kind::Tank)"}]]] }
-        int-array-base { append p [Fn $n {"a = mutable_array::create(n, 1)" "a.capacity()"}] }
-        int-array-at   { append p [Fn $n [concat {"a = mutable_array::create(n, 1)"} [Each {"a.at(i)"}]]] }
-        int-array-set  { append p [Fn $n [concat {"a = mutable_array::create(n, 1)"} [Each {"a.set(i, 0)"}]]] }
-        int-array-swap { append p [Fn $n [concat {"a = mutable_array::create(n, 1)"} [Each {"a.swap(i, 3)"}]]] }
-        vector-base { append p [Fn $n {"v = mutable_vector::from_list(kinds(0))" "v.length()"}] }
-        vector-push-pop { append p [Fn $n [concat {"v = mutable_vector::from_list(kinds(0))"} [Each {"v.push(pick(i))" "v.pop()"}]]] }
-        int-vector-base { append p [Fn $n {"v = mutable_vector::from_list(ints(0))" "v.length()"}] }
-        int-vector-push-pop { append p [Fn $n [concat {"v = mutable_vector::from_list(ints(0))"} [Each {"v.push(ipick(i))" "v.pop()"}]]] }
-        set-base    { append p [Fn $n [concat {"s = immutable_set::from_list(\[Kind::Boat, Kind::Car, Kind::Truck\])"} [Each {"pick(i)"}]]] }
-        set-contains { append p [Fn $n [concat {"s = immutable_set::from_list(\[Kind::Boat, Kind::Car, Kind::Truck\])"} [Each {"immutable_set::contains(s, pick(i))"}]]] }
-        int-set-base { append p [Fn $n [concat {"s = immutable_set::from_list(\[0, 1, 2\])"} [Each {"ipick(i)"}]]] }
-        int-set-contains { append p [Fn $n [concat {"s = immutable_set::from_list(\[0, 1, 2\])"} [Each {"immutable_set::contains(s, ipick(i))"}]]] }
+        list-base   { append p [Fn $n {"xs = kinds(n)" "std::list::length(xs)"}] }
+        list-iterate { append p [Fn $n {"xs = kinds(n)" "ys = loop x in xs:" "    x == Kind::Car" "std::list::length(ys)"}] }
+        int-list-base { append p [Fn $n {"xs = ints(n)" "std::list::length(xs)"}] }
+        int-list-iterate { append p [Fn $n {"xs = ints(n)" "ys = loop x in xs:" "    x == 1" "std::list::length(ys)"}] }
+        array-base  { append p [Fn $n {"a = std::mutable_array::create(n, Kind::Car)" "a.capacity()"}] }
+        array-at    { append p [Fn $n [concat {"a = std::mutable_array::create(n, Kind::Car)"} [Each {"a.at(i)"}]]] }
+        array-set   { append p [Fn $n [concat {"a = std::mutable_array::create(n, Kind::Car)"} [Each {"a.set(i, Kind::Boat)"}]]] }
+        array-swap  { append p [Fn $n [concat {"a = std::mutable_array::create(n, Kind::Car)"} [Each {"a.swap(i, Kind::Tank)"}]]] }
+        int-array-base { append p [Fn $n {"a = std::mutable_array::create(n, 1)" "a.capacity()"}] }
+        int-array-at   { append p [Fn $n [concat {"a = std::mutable_array::create(n, 1)"} [Each {"a.at(i)"}]]] }
+        int-array-set  { append p [Fn $n [concat {"a = std::mutable_array::create(n, 1)"} [Each {"a.set(i, 0)"}]]] }
+        int-array-swap { append p [Fn $n [concat {"a = std::mutable_array::create(n, 1)"} [Each {"a.swap(i, 3)"}]]] }
+        vector-base { append p [Fn $n {"v = std::mutable_vector::from_list(kinds(0))" "v.length()"}] }
+        vector-push-pop { append p [Fn $n [concat {"v = std::mutable_vector::from_list(kinds(0))"} [Each {"v.push(pick(i))" "v.pop()"}]]] }
+        int-vector-base { append p [Fn $n {"v = std::mutable_vector::from_list(ints(0))" "v.length()"}] }
+        int-vector-push-pop { append p [Fn $n [concat {"v = std::mutable_vector::from_list(ints(0))"} [Each {"v.push(ipick(i))" "v.pop()"}]]] }
+        set-base    { append p [Fn $n [concat {"s = std::immutable_set::from_list(\[Kind::Boat, Kind::Car, Kind::Truck\])"} [Each {"pick(i)"}]]] }
+        set-contains { append p [Fn $n [concat {"s = std::immutable_set::from_list(\[Kind::Boat, Kind::Car, Kind::Truck\])"} [Each {"std::immutable_set::contains(s, pick(i))"}]]] }
+        int-set-base { append p [Fn $n [concat {"s = std::immutable_set::from_list(\[0, 1, 2\])"} [Each {"ipick(i)"}]]] }
+        int-set-contains { append p [Fn $n [concat {"s = std::immutable_set::from_list(\[0, 1, 2\])"} [Each {"std::immutable_set::contains(s, ipick(i))"}]]] }
         default { error "unknown program $kind" }
     }
     return $p

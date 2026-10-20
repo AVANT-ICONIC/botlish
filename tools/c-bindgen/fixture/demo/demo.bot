@@ -8,50 +8,50 @@
 # modules themselves stay ordinary.
 direct module
 
-import abi
-import abi::bytes
-import byte
-import ffi::c
-import list
-import str
+import std::abi
+import std::abi::bytes
+import std::byte
+import std::ffi::c
+import std::list
+import std::str
 import bgf::bgf
 import bgf::ctypes
 import bgf::thunks::bgf
 import bgf::types
 
-fn nul() -> byte::Byte:
+fn nul() -> std::byte::Byte:
     0
 
 # The bytes of TEXT and the NUL the C API needs.
-fn cstring(text: str) -> abi::bytes::Bytes:
-    abi::bytes::from_list(str::encode_utf8(text).append(nul()))
+fn cstring(text: str) -> std::abi::bytes::Bytes:
+    std::abi::bytes::from_list(std::str::encode_utf8(text).append(nul()))
 
-fn byte_of(n: int) -> byte::Byte:
+fn byte_of(n: int) -> std::byte::Byte:
     if n >= 0 and n <= 255:
         return n
     0
 
-fn bytes_of(values: List[int]) -> abi::bytes::Bytes:
+fn bytes_of(values: List[int]) -> std::abi::bytes::Bytes:
     bytes = loop v in values:
         byte_of(v)
-    abi::bytes::from_list(bytes)
+    std::abi::bytes::from_list(bytes)
 
-fn text(s: str) -> abi::bytes::Bytes:
-    abi::bytes::from_list(str::encode_utf8(s))
+fn text(s: str) -> std::abi::bytes::Bytes:
+    std::abi::bytes::from_list(std::str::encode_utf8(s))
 
 handle = cstring("alpha").bgf_open(1)
 alias = handle.clone()
 window = bgf::bgf::bgf_window_of(alias)
-nothing = ffi::c::null[ffi::c::Char]()
+nothing = std::ffi::c::null[std::ffi::c::Char]()
 missing = cstring("beta").bgf_open(1)
-filled = abi::bytes::zeroed(abi::usize(3)).bgf_fill(3, 7)
-digest = text("abc").bgf_digest(3, abi::bytes::zeroed(abi::usize(4)))
-fill_bytes = abi::bytes::freeze(filled.out)
-digest_bytes = abi::bytes::freeze(digest.out)
+filled = std::abi::bytes::zeroed(std::abi::usize(3)).bgf_fill(3, 7)
+digest = text("abc").bgf_digest(3, std::abi::bytes::zeroed(std::abi::usize(4)))
+fill_bytes = std::abi::bytes::freeze(filled.out)
+digest_bytes = std::abi::bytes::freeze(digest.out)
 id_handle = handle.clone()
 handle_id = id_handle.bgf_handle_id()
-twin = ffi::c::null[bgf::ctypes::bgf_twin]()
-twin_struct = ffi::c::null[bgf::ctypes::bgf_twin_struct]()
+twin = std::ffi::c::null[bgf::ctypes::bgf_twin]()
+twin_struct = std::ffi::c::null[bgf::ctypes::bgf_twin_struct]()
 twins = twin.bgf_twins(twin_struct)
 bgf::bgf::bgf_close(handle)
 [2.bgf_add(3),

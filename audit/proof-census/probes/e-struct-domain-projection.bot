@@ -1,23 +1,23 @@
 # Journey E: a source-defined domain on a nominal struct field reaches a
-# consumer through projection. byte::from_int declares
+# consumer through projection. std::byte::from_int declares
 # ByteBelowRange/ByteAboveRange; x.value : AbiU8Value (0..255) rules both
 # out, both through a local and directly as an argument.
-fn via_local(x: abi::U8):
+fn via_local(x: std::abi::U8):
     v = x.value
-    byte::from_int(v)
+    std::byte::from_int(v)
 
-fn direct(x: abi::U8):
-    byte::from_int(x.value)
+fn direct(x: std::abi::U8):
+    std::byte::from_int(x.value)
 
-fn plus_one(x: abi::U8):
+fn plus_one(x: std::abi::U8):
     x.value + 1
 
 fn dynamic(n):
-    a = abi::u8(n):
-        on abi::AbiIntegerBelowRange:
-            abi::u8(0)
-        on abi::AbiIntegerAboveRange:
-            abi::u8(255)
+    a = std::abi::u8(n):
+        on std::abi::AbiIntegerBelowRange:
+            std::abi::u8(0)
+        on std::abi::AbiIntegerAboveRange:
+            std::abi::u8(255)
     direct(a)
 
-[via_local(abi::u8(7)), direct(abi::u8(9)), plus_one(abi::u8(255)), dynamic(200)]
+[via_local(std::abi::u8(7)), direct(std::abi::u8(9)), plus_one(std::abi::u8(255)), dynamic(200)]

@@ -1,11 +1,11 @@
 == from-int-literal.bot (interp)
 <program>: closed   [i0, line 4:1]
-  calls:    byte::from_int<int>
+  calls:    std::byte::from_int<int>
   guards:   0
   runtime:  none
 
-byte::from_int (semantic): closed   [no blockers]
-byte::from_int<int>: closed   [i1, line 150:12]
+std::byte::from_int (semantic): closed   [no blockers]
+std::byte::from_int<int>: closed   [i1, line 150:12]
   params:   value : int
   result:   int[Byte]
   guards:   0

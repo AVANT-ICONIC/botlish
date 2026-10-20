@@ -2,20 +2,20 @@
 # x86-64 one (LINUX-SYSCALL-TRANSPORTS.md), as far as one program observes
 # it, as a source-level specification:
 #
-#   abi::aarch64::register64(value: int) -> abi::aarch64::Register64
+#   std::abi::aarch64::register64(value: int) -> std::abi::aarch64::Register64
 #       errors Register64BelowRange, Register64AboveRange
-#   abi::aarch64::to_int(register: abi::aarch64::Register64) -> Int
-#   linux::abi::aarch64::syscall({x8: R, x0: R, x1: R, x2: R, x3: R, x4: R, x5: R})
-#       -> abi::aarch64::Register64
+#   std::abi::aarch64::to_int(register: std::abi::aarch64::Register64) -> Int
+#   std::linux::abi::aarch64::syscall({x8: R, x0: R, x1: R, x2: R, x3: R, x4: R, x5: R})
+#       -> std::abi::aarch64::Register64
 #
-# * abi::aarch64 is ordinary Botlish (lib/abi/aarch64.bot), bit for bit
-#   abi::x86_64's encoding: the checked creator, its signed inverse, sign-
+# * std::abi::aarch64 is ordinary Botlish (stdlib/abi/aarch64.bot), bit for bit
+#   std::abi::x86_64's encoding: the checked creator, its signed inverse, sign-
 #   and zero-extension of the ABI numeric values, the upper half of U64 as a
 #   negative word, the declared errors of an out-of-range Int.
-# * linux::abi::aarch64::syscall's register struct may name only x8 and
+# * std::linux::abi::aarch64::syscall's register struct may name only x8 and
 #   x0..x5 (UnknownField at the field: rax, another architecture's register,
 #   x6, x30, sp), must name x8 (MissingField at the literal), and must hold
-#   abi::aarch64::Register64 values only: a register word of the other
+#   std::abi::aarch64::Register64 values only: a register word of the other
 #   architecture, a creator's or an address bridge's, is Type, and so is an
 #   AArch64 word in the x86-64 transport. The native is no function value.
 #
@@ -26,11 +26,11 @@
 # Ported from tests/linux-syscall-transports.test, which stays authoritative
 # and unchanged; it also observes what no program does: the transport table
 # and the registry, the Tcl backends' refusal, NIR, the live AArch64 getpid,
-# machine code, and how the compilation target selects linux::sys.
+# machine code, and how the compilation target selects std::linux::sys.
 #
 # Imports: compiler and test (the framework); abi (the ABI numeric creators),
-# abi::aarch64, abi::bytes, abi::x86_64, linux::abi::aarch64 and
-# linux::abi::x86_64 are the Tcl programs' own imports. Every call is written
+# std::abi::aarch64, std::abi::bytes, std::abi::x86_64, std::linux::abi::aarch64 and
+# std::linux::abi::x86_64 are the Tcl programs' own imports. Every call is written
 # qualified.
 #
 # A direct module (DIRECT-MODULES.md): its programs call both transports
@@ -39,103 +39,103 @@
 # and raw_aarch64 at the end, one well-formed call of each transport that
 # nothing calls.
 direct module
-import abi
-import abi::aarch64
-import abi::bytes
-import abi::x86_64
-import compiler
-import linux::abi::aarch64
-import linux::abi::x86_64
-import test
+import std::abi
+import std::abi::aarch64
+import std::abi::bytes
+import std::abi::x86_64
+import std::compiler
+import std::linux::abi::aarch64
+import std::linux::abi::x86_64
+import std::test
 
 # ---------------------------------------------------------------------------
-# abi::aarch64: the conversions, on every backend
+# std::abi::aarch64: the conversions, on every backend
 
 fn register_conversion_tests():
     # lst-aarch64-conversions-every-backend: the creator, its inverse, the
     # extensions, U64's upper half, and an out-of-range Int's declared error.
     fn r(n: int) -> int:
-        w = abi::aarch64::register64(n):
-            on abi::aarch64::Register64BelowRange:
+        w = std::abi::aarch64::register64(n):
+            on std::abi::aarch64::Register64BelowRange:
                 return 1
-            on abi::aarch64::Register64AboveRange:
+            on std::abi::aarch64::Register64AboveRange:
                 return 2
-        abi::aarch64::to_int(w)
+        std::abi::aarch64::to_int(w)
     fn conversions():
-        [abi::aarch64::to_int(abi::aarch64::register64(0 - 1)), abi::aarch64::to_int(abi::aarch64::from_i8(abi::i8(0 - 128))), abi::aarch64::to_int(abi::aarch64::from_u32(abi::u32(4294967295))), abi::aarch64::to_int(abi::aarch64::from_u64(abi::u64(18446744073709551615))), r(9223372036854775807), r(9223372036854775808), r(0 - 9223372036854775809)]
-    test::value("lst-aarch64-conversions-every-backend", [0 - 1, 0 - 128, 4294967295, 0 - 1, 9223372036854775807, 2, 1], conversions)
+        [std::abi::aarch64::to_int(std::abi::aarch64::register64(0 - 1)), std::abi::aarch64::to_int(std::abi::aarch64::from_i8(std::abi::i8(0 - 128))), std::abi::aarch64::to_int(std::abi::aarch64::from_u32(std::abi::u32(4294967295))), std::abi::aarch64::to_int(std::abi::aarch64::from_u64(std::abi::u64(18446744073709551615))), r(9223372036854775807), r(9223372036854775808), r(0 - 9223372036854775809)]
+    std::test::value("lst-aarch64-conversions-every-backend", [0 - 1, 0 - 128, 4294967295, 0 - 1, 9223372036854775807, 2, 1], conversions)
 
 # ---------------------------------------------------------------------------
-# linux::abi::aarch64::syscall: the static contract of the register struct
+# std::linux::abi::aarch64::syscall: the static contract of the register struct
 
 fn register_contract_tests():
     # A field that is not an AArch64 syscall-input register is UnknownField
     # at that field.
-    fn names_rax() errors compiler::CompilerError:
+    fn names_rax() errors std::compiler::CompilerError:
         static compile:
-            linux::abi::aarch64::syscall({x8: abi::aarch64::register64(172), rax: abi::aarch64::register64(1)})
-    test::rejects_at("lst-aarch64-unknown-register/rax", compiler::DiagnosticCode::UnknownField, 76, 78, names_rax)
-    test::rejects_containing("lst-aarch64-unknown-register/rax-message", compiler::DiagnosticCode::UnknownField, "\"rax\" is not a syscall register: linux::abi::aarch64::syscall's argument may name only x8, x0, x1, x2, x3, x4, x5 (the Linux AArch64 syscall number and its six argument registers; an omitted argument register is zero)", names_rax)
+            std::linux::abi::aarch64::syscall({x8: std::abi::aarch64::register64(172), rax: std::abi::aarch64::register64(1)})
+    std::test::rejects_at("lst-aarch64-unknown-register/rax", std::compiler::DiagnosticCode::UnknownField, 76, 88, names_rax)
+    std::test::rejects_containing("lst-aarch64-unknown-register/rax-message", std::compiler::DiagnosticCode::UnknownField, "\"rax\" is not a syscall register: std::linux::abi::aarch64::syscall's argument may name only x8, x0, x1, x2, x3, x4, x5 (the Linux AArch64 syscall number and its six argument registers; an omitted argument register is zero)", names_rax)
 
-    fn names_x6() errors compiler::CompilerError:
+    fn names_x6() errors std::compiler::CompilerError:
         static compile:
-            linux::abi::aarch64::syscall({x8: abi::aarch64::register64(172), x6: abi::aarch64::register64(1)})
-    test::rejects("lst-aarch64-unknown-register/x6", compiler::DiagnosticCode::UnknownField, names_x6)
+            std::linux::abi::aarch64::syscall({x8: std::abi::aarch64::register64(172), x6: std::abi::aarch64::register64(1)})
+    std::test::rejects("lst-aarch64-unknown-register/x6", std::compiler::DiagnosticCode::UnknownField, names_x6)
 
-    fn names_x30() errors compiler::CompilerError:
+    fn names_x30() errors std::compiler::CompilerError:
         static compile:
-            linux::abi::aarch64::syscall({x8: abi::aarch64::register64(172), x30: abi::aarch64::register64(1)})
-    test::rejects("lst-aarch64-unknown-register/x30", compiler::DiagnosticCode::UnknownField, names_x30)
+            std::linux::abi::aarch64::syscall({x8: std::abi::aarch64::register64(172), x30: std::abi::aarch64::register64(1)})
+    std::test::rejects("lst-aarch64-unknown-register/x30", std::compiler::DiagnosticCode::UnknownField, names_x30)
 
-    fn names_sp() errors compiler::CompilerError:
+    fn names_sp() errors std::compiler::CompilerError:
         static compile:
-            linux::abi::aarch64::syscall({x8: abi::aarch64::register64(172), sp: abi::aarch64::register64(1)})
-    test::rejects("lst-aarch64-unknown-register/sp", compiler::DiagnosticCode::UnknownField, names_sp)
+            std::linux::abi::aarch64::syscall({x8: std::abi::aarch64::register64(172), sp: std::abi::aarch64::register64(1)})
+    std::test::rejects("lst-aarch64-unknown-register/sp", std::compiler::DiagnosticCode::UnknownField, names_sp)
 
     # x8, the syscall number, is required: MissingField at the literal.
-    fn omits_x8() errors compiler::CompilerError:
+    fn omits_x8() errors std::compiler::CompilerError:
         static compile:
-            linux::abi::aarch64::syscall({x0: abi::aarch64::register64(1)})
-    test::rejects_at("lst-aarch64-number-required/at-the-literal", compiler::DiagnosticCode::MissingField, 98, 42, omits_x8)
-    test::rejects_containing("lst-aarch64-number-required/message", compiler::DiagnosticCode::MissingField, "linux::abi::aarch64::syscall's argument has no field \"x8\": x8 carries the syscall number and is required (only the argument registers x0, x1, x2, x3, x4, x5 may be omitted, as zero)", omits_x8)
+            std::linux::abi::aarch64::syscall({x0: std::abi::aarch64::register64(1)})
+    std::test::rejects_at("lst-aarch64-number-required/at-the-literal", std::compiler::DiagnosticCode::MissingField, 98, 47, omits_x8)
+    std::test::rejects_containing("lst-aarch64-number-required/message", std::compiler::DiagnosticCode::MissingField, "std::linux::abi::aarch64::syscall's argument has no field \"x8\": x8 carries the syscall number and is required (only the argument registers x0, x1, x2, x3, x4, x5 may be omitted, as zero)", omits_x8)
 
     # The architectures are never mixed: an x86-64 word in the AArch64
     # transport ...
-    fn x86_word_in_aarch64() errors compiler::CompilerError:
+    fn x86_word_in_aarch64() errors std::compiler::CompilerError:
         static compile:
-            linux::abi::aarch64::syscall({x8: abi::x86_64::register64(172)})
-    test::rejects_containing("lst-architectures-never-mixed/x86-word", compiler::DiagnosticCode::Type, "must be an abi::aarch64::Register64 (abi::aarch64::register64(...), lib/abi/aarch64.bot)", x86_word_in_aarch64)
-    test::rejects_containing("lst-architectures-never-mixed/x86-word-type", compiler::DiagnosticCode::Type, "its type here is abi::x86_64::Register64", x86_word_in_aarch64)
+            std::linux::abi::aarch64::syscall({x8: std::abi::x86_64::register64(172)})
+    std::test::rejects_containing("lst-architectures-never-mixed/x86-word", std::compiler::DiagnosticCode::Type, "must be a std::abi::aarch64::Register64 (std::abi::aarch64::register64(...), stdlib/abi/aarch64.bot)", x86_word_in_aarch64)
+    std::test::rejects_containing("lst-architectures-never-mixed/x86-word-type", std::compiler::DiagnosticCode::Type, "its type here is std::abi::x86_64::Register64", x86_word_in_aarch64)
 
     # ... an AArch64 word in the x86-64 one ...
-    fn aarch64_word_in_x86() errors compiler::CompilerError:
+    fn aarch64_word_in_x86() errors std::compiler::CompilerError:
         static compile:
-            linux::abi::x86_64::syscall({rax: abi::aarch64::register64(39)})
-    test::rejects("lst-architectures-never-mixed/aarch64-word", compiler::DiagnosticCode::Type, aarch64_word_in_x86)
+            std::linux::abi::x86_64::syscall({rax: std::abi::aarch64::register64(39)})
+    std::test::rejects("lst-architectures-never-mixed/aarch64-word", std::compiler::DiagnosticCode::Type, aarch64_word_in_x86)
 
     # ... and the other architecture's address bridge.
-    fn x86_address_in_aarch64() errors compiler::CompilerError:
+    fn x86_address_in_aarch64() errors std::compiler::CompilerError:
         static compile:
-            fn w(d: abi::bytes::Bytes):
-                linux::abi::aarch64::syscall({x8: abi::aarch64::register64(64), x1: abi::x86_64::from_bytes(d)})
+            fn w(d: std::abi::bytes::Bytes):
+                std::linux::abi::aarch64::syscall({x8: std::abi::aarch64::register64(64), x1: std::abi::x86_64::from_bytes(d)})
             1
-    test::rejects("lst-architectures-never-mixed/x86-address", compiler::DiagnosticCode::Type, x86_address_in_aarch64)
+    std::test::rejects("lst-architectures-never-mixed/x86-address", std::compiler::DiagnosticCode::Type, x86_address_in_aarch64)
 
     # The transport can only be called directly.
-    fn bound_native() errors compiler::CompilerError:
+    fn bound_native() errors std::compiler::CompilerError:
         static compile:
-            f = linux::abi::aarch64::syscall
+            f = std::linux::abi::aarch64::syscall
             f
-    test::rejects("lst-aarch64-not-a-value", compiler::DiagnosticCode::Type, bound_native)
+    std::test::rejects("lst-aarch64-not-a-value", std::compiler::DiagnosticCode::Type, bound_native)
 
 # The suite's own direct authority: compiled on every backend, never called.
 fn raw_x86_64() -> int:
-    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39)}))
+    std::abi::x86_64::to_int(std::linux::abi::x86_64::syscall({rax: std::abi::x86_64::register64(39)}))
 
 fn raw_aarch64() -> int:
-    abi::aarch64::to_int(linux::abi::aarch64::syscall({x8: abi::aarch64::register64(172)}))
+    std::abi::aarch64::to_int(std::linux::abi::aarch64::syscall({x8: std::abi::aarch64::register64(172)}))
 
-with context test::suite()
+with context std::test::suite()
 register_conversion_tests()
 register_contract_tests()
-test::report()
+std::test::report()

@@ -19,7 +19,7 @@
 #                            then writes into the caller's own buffer
 #   set-aliases              mutable_bytes_set writes into its operand instead of
 #                            a fresh copy (an update visible through every copy)
-#   read-does-not-detach     linux::read hands the kernel the caller's storage
+#   read-does-not-detach     std::linux::read hands the kernel the caller's storage
 #                            (the function argument is not copied)
 #   freeze-shares            freeze flips the mutable object into a Bytes in
 #                            place: a zero-copy freeze with no proof, so the
@@ -63,16 +63,16 @@ while {[lindex $args 0] in {-only -list -fuzz}} {
     set args [lrange $args 2 end]
 }
 
-# The library text of linux::read's x86-64 transport (lib/linux/sys.x86_64.bot:
-# linux::sys::read), the one place the Tcl-side mutants rewrite.
-set readHead {fn read(fd: abi::I32, data: abi::bytes::MutableBytes):
-    local = abi::bytes::detach(data)
-    result = abi::x86_64::to_int(
-        linux::abi::x86_64::syscall({
-            rax: abi::x86_64::register64(0),
-            rdi: abi::x86_64::from_i32(fd),
-            rsi: abi::x86_64::from_mutable_bytes(local),
-            rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(local)),
+# The library text of std::linux::read's x86-64 transport (stdlib/linux/sys.x86_64.bot:
+# std::linux::sys::read), the one place the Tcl-side mutants rewrite.
+set readHead {fn read(fd: std::abi::I32, data: std::abi::bytes::MutableBytes):
+    local = std::abi::bytes::detach(data)
+    result = std::abi::x86_64::to_int(
+        std::linux::abi::x86_64::syscall({
+            rax: std::abi::x86_64::register64(0),
+            rdi: std::abi::x86_64::from_i32(fd),
+            rsi: std::abi::x86_64::from_mutable_bytes(local),
+            rdx: std::abi::x86_64::from_usize(std::abi::bytes::mutable_length(local)),
         })
     )
     {result: result, data: local}}
@@ -89,8 +89,8 @@ set mutations {
     {set-aliases rust native/src/runtime/ops.rs
         {let r = vm(p).new_mutbytes_with(len, |init| init.push_slice(mutbytes_of(m)));}
         {let r = m;}}
-    {read-does-not-detach tcl lib/linux/sys.x86_64.bot
-        {    local = abi::bytes::detach(data)}
+    {read-does-not-detach tcl stdlib/linux/sys.x86_64.bot
+        {    local = std::abi::bytes::detach(data)}
         {    local = data}}
     {freeze-shares rust native/src/runtime/ops.rs
         {    vm(p).metrics.record_list_copy(mutbytes_of(m).len());
@@ -115,28 +115,28 @@ set mutations {
     {read-uses-bytes-bridge tcl native/lower.tcl
         {set address [ExposeStorage fn $storage [core::bytestore::bridgeWritable $native] $e]}
         {set address [ExposeStorage fn $storage 0 $e]}}
-    {count-off-by-one tcl lib/linux/sys.x86_64.bot
-        {            rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(local)),}
-        {            rdx: abi::x86_64::from_usize(plus_one(abi::bytes::mutable_length(local))),}}
-    {count-unrelated tcl lib/linux/sys.x86_64.bot
-        {            rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(local)),}
-        {            rdx: abi::x86_64::from_usize(abi::usize(1)),}}
+    {count-off-by-one tcl stdlib/linux/sys.x86_64.bot
+        {            rdx: std::abi::x86_64::from_usize(std::abi::bytes::mutable_length(local)),}
+        {            rdx: std::abi::x86_64::from_usize(plus_one(std::abi::bytes::mutable_length(local))),}}
+    {count-unrelated tcl stdlib/linux/sys.x86_64.bot
+        {            rdx: std::abi::x86_64::from_usize(std::abi::bytes::mutable_length(local)),}
+        {            rdx: std::abi::x86_64::from_usize(std::abi::usize(1)),}}
     {no-keepalive tcl native/lower.tcl
         {    foreach storage $kept {
         Assign fn "op keepalive $storage" $e
     }}
         {    foreach storage $kept {
     }}}
-    {result-is-the-original tcl lib/linux/sys.x86_64.bot
+    {result-is-the-original tcl stdlib/linux/sys.x86_64.bot
         {    {result: result, data: local}}
         {    {result: result, data: data}}}
-    {rax-is-write tcl lib/linux/sys.x86_64.bot
-        {            rax: abi::x86_64::register64(0),
-            rdi: abi::x86_64::from_i32(fd),
-            rsi: abi::x86_64::from_mutable_bytes(local),}
-        {            rax: abi::x86_64::register64(1),
-            rdi: abi::x86_64::from_i32(fd),
-            rsi: abi::x86_64::from_mutable_bytes(local),}}
+    {rax-is-write tcl stdlib/linux/sys.x86_64.bot
+        {            rax: std::abi::x86_64::register64(0),
+            rdi: std::abi::x86_64::from_i32(fd),
+            rsi: std::abi::x86_64::from_mutable_bytes(local),}
+        {            rax: std::abi::x86_64::register64(1),
+            rdi: std::abi::x86_64::from_i32(fd),
+            rsi: std::abi::x86_64::from_mutable_bytes(local),}}
     {libc-read rust native/src/runtime/syscall.rs
         {    let result: i64;
     // SAFETY: the caller's contract (above). The operand constraints are
@@ -148,14 +148,14 @@ set mutations {
     let result: i64;
     // SAFETY: the caller's contract (above). The operand constraints are
     // exactly the Linux x86-64 syscall register convention; rcx and r11 are}}
-    {read-twice tcl lib/linux/sys.x86_64.bot
+    {read-twice tcl stdlib/linux/sys.x86_64.bot
         {    {result: result, data: local}}
-        {    result2 = abi::x86_64::to_int(
-        linux::abi::x86_64::syscall({
-            rax: abi::x86_64::register64(0),
-            rdi: abi::x86_64::from_i32(fd),
-            rsi: abi::x86_64::from_mutable_bytes(local),
-            rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(local)),
+        {    result2 = std::abi::x86_64::to_int(
+        std::linux::abi::x86_64::syscall({
+            rax: std::abi::x86_64::register64(0),
+            rdi: std::abi::x86_64::from_i32(fd),
+            rsi: std::abi::x86_64::from_mutable_bytes(local),
+            rdx: std::abi::x86_64::from_usize(std::abi::bytes::mutable_length(local)),
         })
     )
     {result: result2, data: local}}}
@@ -176,12 +176,12 @@ set mutations {
 # count-off-by-one needs its helper function in the library: appended to the
 # mutated file by the probe below.
 set extraLibrary [dict create count-off-by-one {
-fn plus_one(n: abi::Usize) -> abi::Usize:
+fn plus_one(n: std::abi::Usize) -> std::abi::Usize:
     v = n.value + 1
     if v > 18446744073709551615:
-        abi::Usize {value: 0}
+        std::abi::Usize {value: 0}
     else:
-        abi::Usize {value: v}
+        std::abi::Usize {value: v}
 }]
 
 if {$listOnly} {
@@ -199,7 +199,7 @@ set ran 0
 # for a Tcl-only one (it is only read).
 proc copyTree {destination copyTarget} {
     file mkdir $destination
-    foreach entry {core hir surface compiler lib native tests examples main.tcl audit .cargo} {
+    foreach entry {core hir surface compiler stdlib native tests examples main.tcl audit .cargo} {
         set source [file join $::root $entry]
         if {$entry eq "native"} {
             file mkdir [file join $destination native]

@@ -1,9 +1,9 @@
-import web
-import type byte::Byte
+import std::web
+import type std::byte::Byte
 
 # Native crash repro (not fixed): a user function referencing a module function that is
 # itself a closure over a retained module value. interp: true; cranelift: NATIVE BUG
 # "binding ... is not reachable".
 fn f(b: Byte) -> bool:
-    web::is_unreserved(b)
+    std::web::is_unreserved(b)
 f(45)

@@ -82,7 +82,7 @@ should be sufficient once the storage is typed and not paired. This milestone
 performs that refactor on the real source and measures it. Reopened for one
 region only: the geometric builder and the callers whose calling convention
 had to change. `tests/mutable-array-type.test`'s `mat-fence-1` (the old fence:
-"nothing outside `lib/mutarray.bot` uses the new API") now names exactly
+"nothing outside `stdlib/mutarray.bot` uses the new API") now names exactly
 `csv_geometric.bot` and `csv_records.bot`; `tmb-fence-1..3` pin what those two
 files may use it for.
 
@@ -107,7 +107,7 @@ and is untouched; `hashtable.bot` untouched). Functions that changed:
 
 Not touched (item 3): scan pairs `[field, index]`, HashTable record storage
 `[newControls, newKeys, newValues]`, test-selection `[name, dependencies]`,
-`list::find`, loop and recursion style, annotations elsewhere, `csv_chunked`.
+`std::list::find`, loop and recursion style, annotations elsewhere, `csv_chunked`.
 Harness changes forced by the source (no compiler): `corpus::compile` (a
 module-aware text compile in `examples/stdlib/corpus.tcl`, because
 `surface::compile` does not resolve `mutarray::create`, only
@@ -480,7 +480,7 @@ carries declared contracts.
 |---|---|---|
 | struct/product boundary: scan pair `[field, index]` / `[record, index]` | 12 | csv 2, csv_chunked 2, csv_geometric 4, csv_records 4 |
 | struct/product boundary: `[newControls, newKeys, newValues]` | 2 | hashtable, csv_records |
-| struct/product boundary: `[name, dependencies]` (test-selection, with the `list::find` erasure) | 4 | test-selection |
+| struct/product boundary: `[name, dependencies]` (test-selection, with the `std::list::find` erasure) | 4 | test-selection |
 | record-list element `any` from the pair-fed accumulator (`fields`) | 2 | csv_records |
 | definition-level explicit contract | 3 | `total_valid` tokens, `esc_bytes` bytes, matmul `a_row` |
 | **generic function relation at definition level (typed array into an inferred-raw contract)** | 6 diagnostics at 3 positions + 9 downstream consumers = 15 | csv_records `build_rows` and the nine |

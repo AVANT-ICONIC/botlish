@@ -3,15 +3,16 @@
 #
 # `import NAME` used to name exactly $::core::libraryDir/NAME.bot, so every
 # importable module was, by location, standard library: an application could
-# not have a module of its own without a private copy of lib/, and with the
+# not have a module of its own without a private copy of stdlib/, and with the
 # single executable not at all. Now a program file's application root is the
-# directory of its entry file: for an import an application file (the entry
-# program or one of its application modules) writes, a standard namespace is
-# what it always was, and otherwise ROOT/NAME.bot is the application module
-# NAME (ROOT/a/b.bot for a::b) -- one namespace, loaded once, with ordinary
-# module boundaries. A file that would shadow a standard namespace is
-# MODULE-COLLISION; the entry file is not a module. Nothing reads the working
-# directory.
+# directory of its entry file, and the standard library is the namespace std
+# (STD-NAMESPACE.md): for an import an application file (the entry program or
+# one of its application modules) writes, `std::NAME` is the standard module
+# and any other NAME is the application module ROOT/NAME.bot (ROOT/a/b.bot for
+# a::b) -- one namespace, loaded once, with ordinary module boundaries. An
+# application `list` and `std::list` are two namespaces; a file that would be a
+# standard namespace (ROOT/std/NAME.bot) is RESERVED-NAMESPACE; the entry file
+# is not a module. Nothing reads the working directory.
 #
 # Every application here is a fresh directory of the tcltest temporary
 # directory; programs are compiled by surface::readProgramFile (main.tcl's
@@ -46,9 +47,13 @@ proc writeText {path text} {
     close $channel
 }
 
-# The HIR of DIR/main.bot.
-proc appHir {dir {main main.bot}} {
-    return [surface::readProgramFile [file join $dir $main] -warnings off -cache ""]
+# The HIR of DIR/MAIN, compiled for TARGET (the host's by default).
+proc appHir {dir {main main.bot} {target ""}} {
+    set options [list -warnings off -cache ""]
+    if {$target ne ""} {
+        lappend options -target $target
+    }
+    return [surface::readProgramFile [file join $dir $main] {*}$options]
 }
 
 # The value of DIR/main.bot on each of BACKENDS (the program's own value as
@@ -109,7 +114,7 @@ test app-method-sugar {an application module's functions are method candidates o
 } -cleanup removeApps -result {42 42}
 
 test app-stdlib-still-standard {a standard import from an application file resolves exactly as before, beside an application module} -body {
-    set dir [app [list main.bot "import counter\nimport list\n\nlist::length(\[counter::doubled(1), 2, 3\])\n" counter.bot $counterModule]]
+    set dir [app [list main.bot "import counter\nimport std::list\n\nstd::list::length(\[counter::doubled(1), 2, 3\])\n" counter.bot $counterModule]]
     set hir [appHir $dir]
     list [appValues $dir {interp compile}] \
         [lsort [lmap {id file} [dict get $hir files] {string map [list $dir APP $::core::libraryDir LIB] [dict get $file path]}]]
@@ -157,34 +162,41 @@ test app-module-diagnostic-location {a diagnostic in an application module is lo
 # ---------------------------------------------------------------------------
 # Diagnostics
 
-test app-missing-module {a missing module names where an application's modules go, then the standard library} -body {
+test app-missing-module {a missing module names where an application's modules go (a name outside std is never looked up in the standard library)} -body {
     appRejection [app {main.bot "import game\n\n1\n"}]
-} -cleanup removeApps -result {UNKNOWN-NAMESPACE: APP/main.bot:1:8: unknown namespace "game": no such module file APP/game.bot (an application's own modules are the files beside its entry program), and in the standard library no such module file LIB/game.bot and no intrinsics of that namespace}
+} -cleanup removeApps -result {UNKNOWN-NAMESPACE: APP/main.bot:1:8: unknown namespace "game": no such module file APP/game.bot (an application's own modules are the files beside its entry program)}
 
 test app-missing-nested-module {a missing nested module names its file under the root} -body {
     appRejection [app {main.bot "import util::math\n\n1\n"}]
-} -cleanup removeApps -result {UNKNOWN-NAMESPACE: APP/main.bot:1:8: unknown namespace "util::math": no such module file APP/util/math.bot (an application's own modules are the files beside its entry program), and in the standard library no such module file LIB/util/math.bot and no intrinsics of that namespace}
+} -cleanup removeApps -result {UNKNOWN-NAMESPACE: APP/main.bot:1:8: unknown namespace "util::math": no such module file APP/util/math.bot (an application's own modules are the files beside its entry program)}
 
 test app-reference-without-import {a qualified reference to an application module that is not imported is MISSING-IMPORT, as for any existing namespace} -body {
     appRejection [app [list main.bot "counter::doubled(1)\n" counter.bot $counterModule]]
 } -cleanup removeApps -result {MISSING-IMPORT: APP/main.bot:1:1: namespace "counter" is not imported; add `import counter` to use `counter::doubled`}
 
-test app-cannot-shadow-standard {an application file named like a standard namespace never replaces it: importing that namespace is MODULE-COLLISION, for a module file and for an intrinsics-only namespace} -body {
+test app-cannot-shadow-standard {an application file named like a standard namespace is the application's own module: list.bot is `list`, never std::list, and std::list stays the standard one; a file under std/ is RESERVED-NAMESPACE (STD-NAMESPACE.md)} -body {
     set dir [app {
         list.bot "fn length(xs) -> int:\n    0\n"
         str.bot "fn length(s) -> int:\n    0\n"
         linux/io.bot "fn create() -> int:\n    0\n"
-        main.bot "import list\n\nlist::length(\[1, 2\])\n"
-        strmain.bot "import str\n\nstr::length(\"ab\")\n"
-        nested.bot "import linux::io\n\n1\n"
+        main.bot "import std::list\nimport list\n\n\[std::list::length(\[1, 2\]), list::length(\[1, 2\])\]\n"
+        strmain.bot "import std::str\nimport str\n\n\[std::str::length(\"ab\"), str::length(\"ab\")\]\n"
+        nested.bot "import std::linux::io\nimport linux::io\n\nlinux::io::create()\n"
     }]
-    list [appRejection $dir] [appRejection $dir strmain.bot] [lindex [split [appRejection $dir nested.bot] :] 0]
-} -cleanup removeApps -result {{MODULE-COLLISION: APP/main.bot:1:8: application module APP/list.bot has the name of the standard namespace "list" (the standard library's LIB/list.bot), which `import list` names: a standard namespace is never replaced by an application file, and never silently chosen over one; rename the application module} {MODULE-COLLISION: APP/strmain.bot:1:8: application module APP/str.bot has the name of the standard namespace "str" (compiler intrinsics), which `import str` names: a standard namespace is never replaced by an application file, and never silently chosen over one; rename the application module} MODULE-COLLISION}
+    set shadow [app {
+        std/list.bot "fn length(xs) -> int:\n    0\n"
+        main.bot "import std::list\n\nstd::list::length(\[1\])\n"
+    }]
+    list [appValues $dir {interp}] \
+        [lindex [outcomeUnderHir interp [appHir $dir strmain.bot]] 1] \
+        [lindex [outcomeUnderHir interp [appHir $dir nested.bot [linuxTarget]]] 1] \
+        [lindex [split [appRejection $shadow] :] 0]
+} -cleanup removeApps -result {{{[2, 0]}} {[2, 0]} 0 RESERVED-NAMESPACE}
 
-test app-standard-modules-see-no-application {a standard-library module's own imports are the standard library's, whatever the application holds: lib/io.bot imports str, the application has a str.bot it never imports} -body {
+test app-standard-modules-see-no-application {a standard-library module's own imports are the standard library's, whatever the application holds: stdlib/io.bot imports std::str, the application has a str.bot it never imports} -body {
     appValues [app {
         str.bot "fn length(s) -> int:\n    0\n"
-        main.bot "import io\n\n1\n"
+        main.bot "import std::io\n\n1\n"
     }] {interp compile}
 } -cleanup removeApps -result {1 1}
 
@@ -193,7 +205,7 @@ test app-entry-not-a-module {the entry file is not a module: importing it is SEL
         main.bot "import main\n\n1\n"
         prog.bot "import back\n\n1\n"
         back.bot "import prog\n\nfn f() -> int:\n    1\n"
-        list.bot "import list\n\nlist::length(\[1, 2, 3\])\n"
+        list.bot "import std::list\n\nstd::list::length(\[1, 2, 3\])\n"
     }]
     list [appRejection $dir] [appRejection $dir prog.bot] \
         [lindex [outcomeUnderHir interp [appHir $dir list.bot]] 1]
@@ -241,16 +253,19 @@ test app-text-has-no-root {program text has no application root unless the calle
     }
     list $none [lindex [dict get $options -errorcode] end] \
         [string map [list $::core::libraryDir LIB] $message] $rooted
-} -cleanup removeApps -result {1 UNKNOWN-NAMESPACE {<input>:1:8: unknown namespace "counter": no such module file LIB/counter.bot and no intrinsics of that namespace} 10}
+} -cleanup removeApps -result {1 UNKNOWN-NAMESPACE {<input>:1:8: unknown namespace "counter": this program has no application root (it was compiled from text, not from a file beside its modules), so it has no application modules} 10}
 
-test app-root-inside-library {an entry file inside the library directory: its modules there are the standard library's (one file, no collision)} -body {
+test app-root-inside-library {an entry file inside the library directory: the files there are standard modules (std::appmod), never application modules} -body {
     withPrivateLibrary {
         writeText [file join $::core::libraryDir appmod.bot] "fn f() -> int:\n    5\n"
-        writeText [file join $::core::libraryDir appmain.bot] "import appmod\n\nappmod::f()\n"
+        writeText [file join $::core::libraryDir appmain.bot] "import std::appmod\n\nstd::appmod::f()\n"
+        writeText [file join $::core::libraryDir appbare.bot] "import appmod\n\n1\n"
         set hir [surface::readProgramFile [file join $::core::libraryDir appmain.bot] -warnings off -cache ""]
-        lindex [outcomeUnderHir interp $hir] 1
+        catch {surface::readProgramFile [file join $::core::libraryDir appbare.bot] -warnings off -cache ""} message options
+        list [lindex [outcomeUnderHir interp $hir] 1] [lindex [dict get $options -errorcode] end] \
+            [string match "*appmod.bot is in the standard library's directory, so it is the standard namespace std::appmod (`import std::appmod`), never an application module" $message]
     }
-} -result 5
+} -result {5 UNKNOWN-NAMESPACE 1}
 
 # ---------------------------------------------------------------------------
 # HIR interchange (the front-end cache's application root and dependencies:

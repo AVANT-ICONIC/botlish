@@ -33,19 +33,20 @@
 # computed. There is no ownership state here: no moved flag, no owner, no
 # count beyond Tcl's own.
 #
-#   mutable_vector::from_list(xs)     a fresh vector of xs's elements
-#   mutable_vector::length(v)         the number of elements
-#   mutable_vector::empty?(v)         length == 0
-#   mutable_vector::at(v, i)          the element at i (IndexNotFound)
-#   mutable_vector::push(v, x)        appends x; unit
-#   mutable_vector::pop(v)            removes and returns the last element
-#                                     (IndexNotFound when empty)
-#   mutable_vector::take(v, i)        removes and returns the element at i;
-#                                     later elements keep their order
-#                                     (IndexNotFound)
-#   mutable_vector::swap(v, i, x)     installs x at i, returns the old
-#                                     element (IndexNotFound; nothing changes)
-#   mutable_vector::clear(v)          removes every element; unit
+#   std::mutable_vector::from_list(xs)  a fresh vector of xs's elements
+#   std::mutable_vector::length(v)      the number of elements
+#   std::mutable_vector::empty?(v)      length == 0
+#   std::mutable_vector::at(v, i)       the element at i (IndexNotFound)
+#   std::mutable_vector::push(v, x)     appends x; unit
+#   std::mutable_vector::pop(v)         removes and returns the last element
+#                                       (IndexNotFound when empty)
+#   std::mutable_vector::take(v, i)     removes and returns the element at i;
+#                                       later elements keep their order
+#                                       (IndexNotFound)
+#   std::mutable_vector::swap(v, i, x)  installs x at i, returns the old
+#                                       element (IndexNotFound; nothing
+#                                       changes)
+#   std::mutable_vector::clear(v)       removes every element; unit
 #
 # and the internal operations (no source can spell `#`):
 #
@@ -111,17 +112,17 @@ proc core::mutvec::items {v} {
 }
 
 proc core::mutvec::fromList {xs} {
-    return [New [core::value::items [core::value::expect list $xs mutable_vector::from_list]]]
+    return [New [core::value::items [core::value::expect list $xs std::mutable_vector::from_list]]]
 }
 
 proc core::mutvec::length {v} {
     variable store
-    return [core::value::intFromNumber [llength $store([Id $v mutable_vector::length])]]
+    return [core::value::intFromNumber [llength $store([Id $v std::mutable_vector::length])]]
 }
 
 proc core::mutvec::empty {v} {
     variable store
-    return [core::value::bool [expr {[llength $store([Id $v mutable_vector::empty?])] == 0}]]
+    return [core::value::bool [expr {[llength $store([Id $v std::mutable_vector::empty?])] == 0}]]
 }
 
 # The index I (an Int value) of vector ID, checked: 0 <= I < length, else
@@ -139,39 +140,39 @@ proc core::mutvec::Index {id index name} {
 
 proc core::mutvec::at {v index} {
     variable store
-    set id [Id $v mutable_vector::at]
-    set i [Index $id $index mutable_vector::at]
+    set id [Id $v std::mutable_vector::at]
+    set i [Index $id $index std::mutable_vector::at]
     return [lindex $store($id) $i]
 }
 
 proc core::mutvec::push {v x} {
     variable store
-    set id [Id $v mutable_vector::push]
+    set id [Id $v std::mutable_vector::push]
     lappend store($id) [core::value::check $x]
     return [core::value::unit]
 }
 
 proc core::mutvec::pop {v} {
     variable store
-    set id [Id $v mutable_vector::pop]
+    set id [Id $v std::mutable_vector::pop]
     if {[llength $store($id)] == 0} {
         core::native::failDeclared IndexNotFound \
-            "mutable_vector::pop: the vector is empty"
+            "std::mutable_vector::pop: the vector is empty"
     }
     return [lpop store($id)]
 }
 
 proc core::mutvec::take {v index} {
     variable store
-    set id [Id $v mutable_vector::take]
-    set i [Index $id $index mutable_vector::take]
+    set id [Id $v std::mutable_vector::take]
+    set i [Index $id $index std::mutable_vector::take]
     return [lpop store($id) $i]
 }
 
 proc core::mutvec::swap {v index x} {
     variable store
-    set id [Id $v mutable_vector::swap]
-    set i [Index $id $index mutable_vector::swap]
+    set id [Id $v std::mutable_vector::swap]
+    set i [Index $id $index std::mutable_vector::swap]
     set old [lindex $store($id) $i]
     lset store($id) $i [core::value::check $x]
     return $old
@@ -179,7 +180,7 @@ proc core::mutvec::swap {v index x} {
 
 proc core::mutvec::clear {v} {
     variable store
-    set store([Id $v mutable_vector::clear]) {}
+    set store([Id $v std::mutable_vector::clear]) {}
     return [core::value::unit]
 }
 
@@ -317,29 +318,29 @@ proc core::mutvec::resetCounters {} {
     set counters [dict create created 0 shares 0]
 }
 
-core::native::register mutable_vector::from_list -arity 1 -impl core::mutvec::fromList \
+core::native::register std::mutable_vector::from_list -arity 1 -impl core::mutvec::fromList \
     -param-types {list} -result-type mutvec -runtime mutvec-alloc -result-shape {mutvec-from-list 0} \
     -ownership {move}
-core::native::register mutable_vector::length -arity 1 -impl core::mutvec::length \
+core::native::register std::mutable_vector::length -arity 1 -impl core::mutvec::length \
     -param-types {mutvec} -result-type int -result-range collection-length -ownership {observe}
-core::native::register mutable_vector::empty? -arity 1 -impl core::mutvec::empty \
+core::native::register std::mutable_vector::empty? -arity 1 -impl core::mutvec::empty \
     -param-types {mutvec} -result-type bool -ownership {observe}
-core::native::register mutable_vector::at -arity 2 -impl core::mutvec::at \
+core::native::register std::mutable_vector::at -arity 2 -impl core::mutvec::at \
     -param-types {mutvec int} -result-type any -runtime range-check \
     -result-shape {mutvec-element 0} -errors IndexNotFound -ownership {copy-out observe}
-core::native::register mutable_vector::push -arity 2 -impl core::mutvec::push \
+core::native::register std::mutable_vector::push -arity 2 -impl core::mutvec::push \
     -param-types {mutvec any} -result-type unit -runtime mutvec-mutate -ownership {place move}
-core::native::register mutable_vector::pop -arity 1 -impl core::mutvec::pop \
+core::native::register std::mutable_vector::pop -arity 1 -impl core::mutvec::pop \
     -param-types {mutvec} -result-type any -runtime {range-check mutvec-mutate} \
     -result-shape {mutvec-element 0} -errors IndexNotFound -ownership {place}
-core::native::register mutable_vector::take -arity 2 -impl core::mutvec::take \
+core::native::register std::mutable_vector::take -arity 2 -impl core::mutvec::take \
     -param-types {mutvec int} -result-type any -runtime {range-check mutvec-mutate} \
     -result-shape {mutvec-element 0} -errors IndexNotFound -ownership {place observe}
-core::native::register mutable_vector::swap -arity 3 -impl core::mutvec::swap -keeps-length 1 \
+core::native::register std::mutable_vector::swap -arity 3 -impl core::mutvec::swap -keeps-length 1 \
     -param-types {mutvec int any} -result-type any -runtime {range-check mutvec-mutate} \
     -result-shape {mutvec-element 0} -errors IndexNotFound -drop-form {mutable_vector#swap_drop 0} \
     -ownership {place observe move}
-core::native::register mutable_vector::clear -arity 1 -impl core::mutvec::clear \
+core::native::register std::mutable_vector::clear -arity 1 -impl core::mutvec::clear \
     -param-types {mutvec} -result-type unit -runtime mutvec-mutate \
     -drop-form {mutable_vector#clear_drop 0} -ownership {place}
 

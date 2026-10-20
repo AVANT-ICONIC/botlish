@@ -1,75 +1,75 @@
 i0 <program>  generic=1 open=0 key={} result=List[int] resultRange=[-∞, +∞]
-    call e176 web.bot:65 -> byte::set<List[UnicodeChar]>
-    call e791 ? -> web::uri_escape_text<str>
+    call e176 web.bot:65 -> std::byte::set<List[UnicodeChar]>
+    call e791 ? -> std::web::uri_escape_text<str>
     call e796 ? -> check<int, int, str, str>
     call e802 ? -> check<int, int, str, str>
-    materializes: web::is_unreserved, web::uri_escape_text
-i2 char::codepoint<UnicodeChar>  generic=0 open=0 key={UnicodeChar} result=int resultRange=[0, +∞]
+    materializes: std::web::is_unreserved, std::web::uri_escape_text
+i2 std::char::codepoint<UnicodeChar>  generic=0 open=0 key={UnicodeChar} result=int resultRange=[0, +∞]
     param c: declared=UnicodeChar view=UnicodeChar entry=[-∞, +∞]
-i16 byte::high_nibble<int>  generic=0 open=0 key={int} result=int[HighNibble] resultRange=[0, 240] {0,16,32,48,64,80,96,112,128,144,160,176,192,208,224,240}
+i16 std::byte::high_nibble<int>  generic=0 open=0 key={int} result=int[HighNibble] resultRange=[0, 240] {0,16,32,48,64,80,96,112,128,144,160,176,192,208,224,240}
     param b: declared=- view=int entry=[-∞, +∞]
-i59 byte::high_nibble<generic>  generic=1 open=0 key={any} result=int[HighNibble] resultRange=[0, 240] {0,16,32,48,64,80,96,112,128,144,160,176,192,208,224,240}
+i59 std::byte::high_nibble<generic>  generic=1 open=0 key={any} result=int[HighNibble] resultRange=[0, 240] {0,16,32,48,64,80,96,112,128,144,160,176,192,208,224,240}
     param b: declared=- view=any entry=[-∞, +∞]
-i17 byte::nibble<int>  generic=0 open=0 key={int} result=int[Nibble] resultRange=[0, 15]
+i17 std::byte::nibble<int>  generic=0 open=0 key={int} result=int[Nibble] resultRange=[0, 15]
     param x: declared=- view=int[HighNibble] entry=[0, 240] {0,16,32,48,64,80,96,112,128,144,160,176,192,208,224,240} refineEvidence={HighNibble}
-i3 byte::from_int<int>  generic=0 open=0 key={int} result=int[Byte] resultRange=[0, 255]
+i3 std::byte::from_int<int>  generic=0 open=0 key={int} result=int[Byte] resultRange=[0, 255]
     param value: declared=int view=int entry=[0, +∞]
-i1 byte::set<List[UnicodeChar]>  generic=0 open=0 key={{List[UnicodeChar]}} result=ImmutableSet[int[Byte]] resultRange=[-∞, +∞]
+i1 std::byte::set<List[UnicodeChar]>  generic=0 open=0 key={{List[UnicodeChar]}} result=ImmutableSet[int[Byte]] resultRange=[-∞, +∞]
     param chars: declared=List[UnicodeChar] view=List[UnicodeChar] entry=[-∞, +∞]
-    captures: byte::from_int:block(e58)/1 -> any, char::codepoint:block(e2)/1 -> any
-    call e79 web.bot:176 -> char::codepoint<UnicodeChar>
-    call e77 web.bot:176 -> byte::from_int<int>
-i12 ascii::is_digit<int>  generic=0 open=0 key={int} result=bool resultRange=[-∞, +∞]
+    captures: std::byte::from_int:block(e58)/1 -> any, std::char::codepoint:block(e2)/1 -> any
+    call e79 web.bot:176 -> std::char::codepoint<UnicodeChar>
+    call e77 web.bot:176 -> std::byte::from_int<int>
+i12 std::ascii::is_digit<int>  generic=0 open=0 key={int} result=bool resultRange=[-∞, +∞]
     param b: declared=int[Byte] view=int[Byte] entry=[0, 255] refineEvidence={Byte}
-i10 ascii::is_upper<int>  generic=0 open=0 key={int} result=bool resultRange=[-∞, +∞]
+i10 std::ascii::is_upper<int>  generic=0 open=0 key={int} result=bool resultRange=[-∞, +∞]
     param b: declared=int[Byte] view=int[Byte] entry=[0, 255] refineEvidence={Byte}
-i11 ascii::is_lower<int>  generic=0 open=0 key={int} result=bool resultRange=[-∞, +∞]
+i11 std::ascii::is_lower<int>  generic=0 open=0 key={int} result=bool resultRange=[-∞, +∞]
     param b: declared=int[Byte] view=int[Byte] entry=[0, 255] refineEvidence={Byte}
-i9 ascii::is_alphabetic<int>  generic=0 open=0 key={int} result=bool resultRange=[-∞, +∞]
+i9 std::ascii::is_alphabetic<int>  generic=0 open=0 key={int} result=bool resultRange=[-∞, +∞]
     param b: declared=int[Byte] view=int[Byte] entry=[0, 255] refineEvidence={Byte}
-    captures: ascii::is_upper:block(e101)/1 -> any, ascii::is_lower:block(e116)/1 -> any
-    call e133 ascii.bot:63 -> ascii::is_upper<int>
-    call e138 ascii.bot:63 -> ascii::is_lower<int>
-i8 ascii::is_alphanumeric<int>  generic=0 open=0 key={int} result=bool resultRange=[-∞, +∞]
+    captures: std::ascii::is_upper:block(e101)/1 -> any, std::ascii::is_lower:block(e116)/1 -> any
+    call e133 ascii.bot:63 -> std::ascii::is_upper<int>
+    call e138 ascii.bot:63 -> std::ascii::is_lower<int>
+i8 std::ascii::is_alphanumeric<int>  generic=0 open=0 key={int} result=bool resultRange=[-∞, +∞]
     param b: declared=int[Byte] view=int[Byte] entry=[0, 255] refineEvidence={Byte}
-    captures: ascii::is_alphabetic:block(e131)/1 -> any, ascii::is_digit:block(e86)/1 -> any
-    call e146 ascii.bot:66 -> ascii::is_alphabetic<int>
-    call e151 ascii.bot:66 -> ascii::is_digit<int>
-i7 web::is_unreserved<int>  generic=0 open=0 key={int} result=bool resultRange=[-∞, +∞]
+    captures: std::ascii::is_alphabetic:block(e131)/1 -> any, std::ascii::is_digit:block(e86)/1 -> any
+    call e146 ascii.bot:66 -> std::ascii::is_alphabetic<int>
+    call e151 ascii.bot:66 -> std::ascii::is_digit<int>
+i7 std::web::is_unreserved<int>  generic=0 open=0 key={int} result=bool resultRange=[-∞, +∞]
     param b: declared=int[Byte] view=int[Byte] entry=[0, 255] refineEvidence={Byte}
-    captures: ascii::is_alphanumeric:block(e144)/1 -> any, web::additional_unreserved_chars:ImmutableSet[int[Byte]]
-    call e187 web.bot:68 -> ascii::is_alphanumeric<int>
-i55 web::is_unreserved<generic>  generic=1 open=1 key={any} result=bool resultRange=[-∞, +∞]
+    captures: std::ascii::is_alphanumeric:block(e144)/1 -> any, std::web::additional_unreserved_chars:ImmutableSet[int[Byte]]
+    call e187 web.bot:68 -> std::ascii::is_alphanumeric<int>
+i55 std::web::is_unreserved<generic>  generic=1 open=1 key={any} result=bool resultRange=[-∞, +∞]
     param b: declared=int[Byte] view=int[Byte] entry=[-∞, +∞] refineEvidence={Byte}
-    captures: ascii::is_alphanumeric:block(e144)/1 -> any, web::additional_unreserved_chars:ImmutableSet[int[Byte]]
-    call e187 web.bot:68 -> ascii::is_alphanumeric<int>
-i4 web::uri_escape_text<str>  generic=0 open=0 key={str} result=str resultRange=[-∞, +∞]
+    captures: std::ascii::is_alphanumeric:block(e144)/1 -> any, std::web::additional_unreserved_chars:ImmutableSet[int[Byte]]
+    call e187 web.bot:68 -> std::ascii::is_alphanumeric<int>
+i4 std::web::uri_escape_text<str>  generic=0 open=0 key={str} result=str resultRange=[-∞, +∞]
     param s: declared=- view=str entry=[-∞, +∞]
-    captures: byte::nibble:block(e19)/1 -> any, byte::high_nibble:block(e7)/1 -> any, web::hex_digits:List[str], web::is_unreserved:block(e185)/1 -> any
+    captures: std::byte::nibble:block(e19)/1 -> any, std::byte::high_nibble:block(e7)/1 -> any, std::web::hex_digits:List[str], std::web::is_unreserved:block(e185)/1 -> any
     call e316 web.bot:101 -> esc_from<str, int, str>
     materializes: hex_pair, esc_bytes, esc_char, esc_from
-i56 web::uri_escape_text<generic>  generic=1 open=1 key={any} result=str resultRange=[-∞, +∞]
+i56 std::web::uri_escape_text<generic>  generic=1 open=1 key={any} result=str resultRange=[-∞, +∞]
     param s: declared=- view=any entry=[-∞, +∞]
-    captures: byte::nibble:block(e19)/1 -> any, byte::high_nibble:block(e7)/1 -> any, web::hex_digits:List[str], web::is_unreserved:block(e185)/1 -> any
+    captures: std::byte::nibble:block(e19)/1 -> any, std::byte::high_nibble:block(e7)/1 -> any, std::web::hex_digits:List[str], std::web::is_unreserved:block(e185)/1 -> any
     call e316 web.bot:101 -> esc_from<any, int, str>
     materializes: hex_pair, esc_bytes, esc_char, esc_from
 i15 high_nibble<int>  generic=0 open=0 key={int} result=int[Nibble] resultRange=[0, 15]
     param b: declared=- view=int entry=[-∞, +∞]
-    captures: byte::nibble:block(e19)/1 -> any, byte::high_nibble:block(e7)/1 -> any
-    call e204 web.bot:73 -> byte::high_nibble<int>
-    call e202 web.bot:73 -> byte::nibble<int>
+    captures: std::byte::nibble:block(e19)/1 -> any, std::byte::high_nibble:block(e7)/1 -> any
+    call e204 web.bot:73 -> std::byte::high_nibble<int>
+    call e202 web.bot:73 -> std::byte::nibble<int>
 i58 high_nibble<generic>  generic=1 open=0 key={any} result=int[Nibble] resultRange=[0, 15]
     param b: declared=- view=any entry=[-∞, +∞]
-    captures: byte::nibble:block(e19)/1 -> any, byte::high_nibble:block(e7)/1 -> any
-    call e204 web.bot:73 -> byte::high_nibble<generic>
-    call e202 web.bot:73 -> byte::nibble<int>
+    captures: std::byte::nibble:block(e19)/1 -> any, std::byte::high_nibble:block(e7)/1 -> any
+    call e204 web.bot:73 -> std::byte::high_nibble<generic>
+    call e202 web.bot:73 -> std::byte::nibble<int>
 i14 hex_pair<int>  generic=0 open=0 key={int} result=str resultRange=[-∞, +∞]
     param b: declared=- view=int entry=[-∞, +∞]
-    captures: web::hex_digits:List[str], high_nibble:block(e201)/1 -> any
+    captures: std::web::hex_digits:List[str], high_nibble:block(e201)/1 -> any
     call e214 web.bot:76 -> high_nibble<int>
 i18 hex_pair<generic>  generic=1 open=1 key={any} result=str resultRange=[-∞, +∞]
     param b: declared=- view=any entry=[-∞, +∞]
-    captures: web::hex_digits:List[str], high_nibble:block(e201)/1 -> any
+    captures: std::web::hex_digits:List[str], high_nibble:block(e201)/1 -> any
     call e214 web.bot:76 -> high_nibble<generic>
 i13 esc_bytes<List[int], int, str>  generic=0 open=0 key={{List[int]} int str} result=str resultRange=[-∞, +∞]
     param bytes: declared=- view=List[int] entry=[-∞, +∞]
@@ -87,14 +87,14 @@ i19 esc_bytes<generic>  generic=1 open=1 key={any any any} result=any resultRang
     call e234 web.bot:82 -> esc_bytes<generic>
 i6 esc_char<str>  generic=0 open=0 key={str} result=str resultRange=[-∞, +∞]
     param c: declared=- view=str entry=[-∞, +∞]
-    captures: web::is_unreserved:block(e185)/1 -> any, esc_bytes:block(e225)/3 -> any
-    call e272 web.bot:88 -> web::is_unreserved<int>
+    captures: std::web::is_unreserved:block(e185)/1 -> any, esc_bytes:block(e225)/3 -> any
+    call e272 web.bot:88 -> std::web::is_unreserved<int>
     call e276 web.bot:91 -> esc_bytes<List[int], int, str>
     call e281 web.bot:93 -> esc_bytes<List[int], int, str>
 i20 esc_char<generic>  generic=1 open=1 key={any} result=str resultRange=[-∞, +∞]
     param c: declared=- view=any entry=[-∞, +∞]
-    captures: web::is_unreserved:block(e185)/1 -> any, esc_bytes:block(e225)/3 -> any
-    call e272 web.bot:88 -> web::is_unreserved<int>
+    captures: std::web::is_unreserved:block(e185)/1 -> any, esc_bytes:block(e225)/3 -> any
+    call e272 web.bot:88 -> std::web::is_unreserved<int>
     call e276 web.bot:91 -> esc_bytes<List[int], int, str>
     call e281 web.bot:93 -> esc_bytes<List[int], int, str>
 i5 esc_from<str, int, str>  generic=0 open=0 key={str int str} result=str resultRange=[-∞, +∞]

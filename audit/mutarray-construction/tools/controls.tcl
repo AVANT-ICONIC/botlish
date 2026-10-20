@@ -23,13 +23,13 @@ set base [string map [list "\nsample()\n" "\n"] $base]
 set baseLines [llength [split $base \n]]
 
 set controls [list \
-  literal-rows "fn control():\n    headers = \[\"name\", \"age\"\]\n    rows = \[row_table(headers, 2, \[\"A\", \"1\"\], false), row_table(headers, 2, \[\"B\", \"2\"\], false)\]\n    first = list::at(rows, 0)\n    \[ht_get(first, \"name\"), ht_size(first)\]\n" \
-  appended-rows "fn control():\n    headers = \[\"name\", \"age\"\]\n    rows = list::append(\[row_table(headers, 2, \[\"A\", \"1\"\], false)\], row_table(headers, 2, \[\"B\", \"2\"\], false))\n    first = list::at(rows, 0)\n    \[ht_get(first, \"name\"), ht_size(first)\]\n" \
-  builder-rows "fn control():\n    headers = \[\"name\", \"age\"\]\n    outer = geo_append(geo_new(), row_table(headers, 2, \[\"A\", \"1\"\], false))\n    rows = geo_finish(outer)\n    first = list::at(rows, 0)\n    \[ht_get(first, \"name\"), ht_size(first)\]\n" \
-  from-list-rows "fn control():\n    rows = \[mutable_array::from_list(\[1\]), mutable_array::from_list(\[2, 3\])\]\n    first = list::at(rows, 0)\n    \[ht_size(first), mutable_array::capacity(first)\]\n" \
-  from-list-fn-rows "fn table(n):\n    mutable_array::from_list(\[n, n\])\nfn control_rows():\n    \[table(1), table(2), table(3)\]\nfn control(i):\n    ht_size(list::at(control_rows(), i))\n" \
-  record-pair-boundary "fn cap(m):\n    mutable_array::capacity(m)\nfn mk():\n    \[mutable_array::from_list(\[1\]), 0\]\nfn control():\n    cap(list::at(mk(), 0))\n" \
-  record-pair-local "fn cap(m):\n    mutable_array::capacity(m)\nfn control():\n    pair = \[mutable_array::from_list(\[1\]), 0\]\n    cap(list::at(pair, 0))\n" \
+  literal-rows "fn control():\n    headers = \[\"name\", \"age\"\]\n    rows = \[row_table(headers, 2, \[\"A\", \"1\"\], false), row_table(headers, 2, \[\"B\", \"2\"\], false)\]\n    first = std::list::at(rows, 0)\n    \[ht_get(first, \"name\"), ht_size(first)\]\n" \
+  appended-rows "fn control():\n    headers = \[\"name\", \"age\"\]\n    rows = std::list::append(\[row_table(headers, 2, \[\"A\", \"1\"\], false)\], row_table(headers, 2, \[\"B\", \"2\"\], false))\n    first = std::list::at(rows, 0)\n    \[ht_get(first, \"name\"), ht_size(first)\]\n" \
+  builder-rows "fn control():\n    headers = \[\"name\", \"age\"\]\n    outer = geo_append(geo_new(), row_table(headers, 2, \[\"A\", \"1\"\], false))\n    rows = geo_finish(outer)\n    first = std::list::at(rows, 0)\n    \[ht_get(first, \"name\"), ht_size(first)\]\n" \
+  from-list-rows "fn control():\n    rows = \[std::mutable_array::from_list(\[1\]), std::mutable_array::from_list(\[2, 3\])\]\n    first = std::list::at(rows, 0)\n    \[ht_size(first), std::mutable_array::capacity(first)\]\n" \
+  from-list-fn-rows "fn table(n):\n    std::mutable_array::from_list(\[n, n\])\nfn control_rows():\n    \[table(1), table(2), table(3)\]\nfn control(i):\n    ht_size(std::list::at(control_rows(), i))\n" \
+  record-pair-boundary "fn cap(m):\n    std::mutable_array::capacity(m)\nfn mk():\n    \[std::mutable_array::from_list(\[1\]), 0\]\nfn control():\n    cap(std::list::at(mk(), 0))\n" \
+  record-pair-local "fn cap(m):\n    std::mutable_array::capacity(m)\nfn control():\n    pair = \[std::mutable_array::from_list(\[1\]), 0\]\n    cap(std::list::at(pair, 0))\n" \
 ]
 foreach {name text} $controls {
     set path [file join [file tempdir] control-$name.bot]

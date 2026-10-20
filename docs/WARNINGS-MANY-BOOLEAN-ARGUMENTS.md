@@ -623,8 +623,8 @@ the conversion law renders the same model again with one callee converted.
   The body sums one weighted term per parameter and flag (distinct powers of
   two), so every argument's value shows in the result. Some callees have no
   call site (the *no-sites* class). In 40% of the programs three **probe
-  natives** are registered (milestone 2's style): `str::fz_opts` (`int, bool,
-  bool`: past the gate), `str::fz_xor` (`bool, bool`) and `str::fz_one`
+  natives** are registered (milestone 2's style): `std::str::fz_opts` (`int, bool,
+  bool`: past the gate), `std::str::fz_xor` (`bool, bool`) and `std::str::fz_one`
   (`int, bool`).
 * **Call sites** pass an `Int` at each subject and, at every other position, a
   written literal, a computed bool (`N == N` / `N == M`, `N` unique per site)
@@ -790,13 +790,13 @@ recorded here** (the milestone-3/5/6 pattern):
 `lib` are `main`'s at `23dbfd8`, unedited by this milestone). It compiles
 `examples/stdlib` (9), `examples/surface` (14), `examples/refinement` (1),
 `examples/io` (3), `examples/abi` (1), `examples/linux` (4), `bench/*.bot` (8)
-and `lib/*.bot` (9) with warnings on, and -- new here -- a one-line loader
+and `stdlib/*.bot` (9) with warnings on, and -- new here -- a one-line loader
 program (`import NS`) for every library module, the subdirectory modules
-included (`abi::bytes`, `abi::x86_64`, `io::path`, `linux::io`,
-`linux::path`: 14 modules), so a module no example loads is still censused.
+included (`std::abi::bytes`, `std::abi::x86_64`, `std::io::path`, `std::linux::io`,
+`std::linux::path`: 14 modules), so a module no example loads is still censused.
 44 of 49 programs compile standalone (the two deliberate rejections,
-`lib/io.bot`'s `CONTEXT-FUNCTION-VALUE` and `lib/list.bot`'s and
-`lib/mutable_array.bot`'s `MISSING-IMPORT`, as milestones 2-6 recorded); all 14
+`stdlib/io.bot`'s `CONTEXT-FUNCTION-VALUE` and `stdlib/list.bot`'s and
+`stdlib/mutable_array.bot`'s `MISSING-IMPORT`, as milestones 2-6 recorded); all 14
 modules load.
 
 **The census** (the deliverable whatever the findings):
@@ -811,7 +811,7 @@ modules load.
 
 The corpus declares no `bool` parameter anywhere (the only `bool` in a
 parameter list is the result of a `Fn{args: [str], return: bool}` predicate
-type in `lib/web.bot`) and no flag. The nine single-option functions are
+type in `stdlib/web.bot`) and no flag. The nine single-option functions are
 untyped parameters the body tests: `bench/lex-strategy.bot`'s `total_valid(tokens,
 strict_mode, i, acc)` (called `total_valid(tokens, true, 0, 0)` and `(tokens,
 false, 0, 0)`, its recursion forwarding the parameter), `classify`,
@@ -956,7 +956,7 @@ results in place; no `test` line is added or removed outside the new file
 * Successor note (REFACTOR-WARNINGS-CLEAN.md): the corpus still has no finding
   of this code, and is now held there: a gate
   (`audit/refactor/tools/gate.tcl`, CI) fails on any new one in `examples/`,
-  `bench/` or `lib/`. The nine single-option bools of the census stay
+  `bench/` or `stdlib/`. The nine single-option bools of the census stay
   recorded, not converted.
 
 ## Future warning candidates

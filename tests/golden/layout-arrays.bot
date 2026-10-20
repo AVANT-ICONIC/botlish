@@ -3,14 +3,14 @@
 #
 #   * the copied value of `field NAME: array N of E at OFFSET`: a List of
 #     exactly N element values, recursively (rows, records), imprinted by
-#     binary::parse and emitted by binary::emit at the field's offset plus i
+#     std::binary::parse and emitted by std::binary::emit at the field's offset plus i
 #     times the element's own width (a nested layout's size with its tail
 #     padding, a row's whole width), every scalar encoding, packed and
 #     over-aligned records, three dimensions, the round trip;
 #   * the extent rule: a List of another length is the declared
 #     LayoutExtentMismatch (nothing emitted or written), one the compiler
 #     proves of exactly the extent needs no handler;
-#   * whole-array and element writes into byte storage (binary::write with a
+#   * whole-array and element writes into byte storage (std::binary::write with a
 #     List, static designators L.first[3], L.m[1][2], L.tails[1].b) and
 #     their static checks (LAYOUT-ARRAY-INDEX, LAYOUT-OPERAND, UNKNOWN-FIELD,
 #     the value's type);
@@ -27,16 +27,16 @@
 # own), the C oracle, isolation, interchange, executables and GC stress --
 # stays there).
 #
-# Imports: compiler and test (the framework); abi::bytes, binary, byte and
-# ffi::c (the programs); list (proofs).
-import abi
-import abi::bytes
-import binary
-import byte
-import compiler
-import ffi::c
-import list
-import test
+# Imports: compiler and test (the framework); std::abi::bytes, binary, byte and
+# std::ffi::c (the programs); list (proofs).
+import std::abi
+import std::abi::bytes
+import std::binary
+import std::byte
+import std::compiler
+import std::ffi::c
+import std::list
+import std::test
 
 # The representative layouts (the Tcl suite's laLayouts).
 opaque struct Node:
@@ -45,82 +45,82 @@ opaque struct Node:
 layout PT:
     size 4
     align 2
-    field x: binary::I16 at 0
-    field y: binary::U16 at 2
+    field x: std::binary::I16 at 0
+    field y: std::binary::U16 at 2
 
 layout TAILED:
     size 8
     align 4
-    field a: binary::U32 at 0
-    field b: binary::U8 at 4
+    field a: std::binary::U32 at 0
+    field b: std::binary::U8 at 4
 
 layout PACKED:
     size 5
     align 1
-    field a: binary::U8 at 0
-    field b: binary::U32 at 1
+    field a: std::binary::U8 at 0
+    field b: std::binary::U32 at 1
 
 layout ALIGNED:
     size 16
     align 16
-    field v: binary::U32 at 0
+    field v: std::binary::U32 at 0
 
 layout SCALARS:
     size 64
     align 8
-    field u8: array 3 of binary::U8 at 0
-    field i8: array 3 of binary::I8 at 3
-    field u16: array 2 of binary::U16 at 6
-    field i16: array 2 of binary::I16 at 10
-    field u32: array 2 of binary::U32 at 16
-    field i32: array 2 of binary::I32 at 24
-    field u64: array 1 of binary::U64 at 32
-    field i64: array 2 of binary::I64 at 40
+    field u8: array 3 of std::binary::U8 at 0
+    field i8: array 3 of std::binary::I8 at 3
+    field u16: array 2 of std::binary::U16 at 6
+    field i16: array 2 of std::binary::I16 at 10
+    field u32: array 2 of std::binary::U32 at 16
+    field i32: array 2 of std::binary::I32 at 24
+    field u64: array 1 of std::binary::U64 at 32
+    field i64: array 2 of std::binary::I64 at 40
 
 layout SHAPES:
     size 48
     align 4
-    field first: array 4 of binary::U8 at 0
-    field mid: binary::U16 at 4
-    field m: array 2 of array 3 of binary::U16 at 6
+    field first: array 4 of std::binary::U8 at 0
+    field mid: std::binary::U16 at 4
+    field m: array 2 of array 3 of std::binary::U16 at 6
     field tails: array 2 of TAILED at 20
     field pts: array 2 of PT at 36
-    field last: array 4 of binary::U8 at 44
+    field last: array 4 of std::binary::U8 at 44
 
 layout PACKS:
     size 16
     align 1
-    field tag: binary::U8 at 0
+    field tag: std::binary::U8 at 0
     field ps: array 3 of PACKED at 1
 
 layout ALIGNS:
     size 48
     align 16
-    field n: binary::U8 at 0
+    field n: std::binary::U8 at 0
     field vs: array 2 of ALIGNED at 16
 
 layout CUBE:
     size 24
     align 1
-    field c: array 2 of array 3 of array 4 of binary::U8 at 0
+    field c: array 2 of array 3 of array 4 of std::binary::U8 at 0
 
 layout PTRS:
     size 32
     align 8
-    field n: binary::U32 at 0
-    field ps: array 2 of ffi::c::Ptr[Node] at 8
-    field fs: array 1 of ffi::c::FnPtr[Fn{args: [ffi::c::Int], return: ffi::c::Int}] at 24
+    field n: std::binary::U32 at 0
+    field ps: array 2 of std::ffi::c::Ptr[Node] at 8
+    field fs: array 1 of std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Int], return: std::ffi::c::Int}] at 24
 
 layout PREC:
     size 16
     align 8
-    field k: binary::U32 at 0
-    field p: ffi::c::Ptr[Node] at 8
+    field k: std::binary::U32 at 0
+    field p: std::ffi::c::Ptr[Node] at 8
 
 layout PRECS:
     size 40
     align 8
-    field n: binary::U8 at 0
+    field n: std::binary::U8 at 0
     field rs: array 2 of PREC at 8
 
 # la-characters-are-not-text: signed and unsigned C characters (the Tcl test
@@ -128,198 +128,198 @@ layout PRECS:
 layout CHARS:
     size 16
     align 2
-    field name: array 8 of ffi::c::SChar at 0
-    field wide: array 4 of ffi::c::UShort at 8
+    field name: array 8 of std::ffi::c::SChar at 0
+    field wide: array 4 of std::ffi::c::UShort at 8
 
-# The abi::bytes::Bytes of the Ints VALUES (each 0..255).
-fn bytes_of(values: List[int]) -> abi::bytes::Bytes:
+# The std::abi::bytes::Bytes of the Ints VALUES (each 0..255).
+fn bytes_of(values: List[int]) -> std::abi::bytes::Bytes:
     bs = loop v in values:
-        b = byte::from_int(v):
-            on byte::BelowRange:
+        b = std::byte::from_int(v):
+            on std::byte::BelowRange:
                 0
-            on byte::AboveRange:
+            on std::byte::AboveRange:
                 255
         b
-    abi::bytes::from_list(bs)
+    std::abi::bytes::from_list(bs)
 
-fn mutable(values: List[int]) -> abi::bytes::MutableBytes:
-    abi::bytes::from_bytes(bytes_of(values))
+fn mutable(values: List[int]) -> std::abi::bytes::MutableBytes:
+    std::abi::bytes::from_bytes(bytes_of(values))
 
-fn frozen(data: abi::bytes::MutableBytes) -> abi::bytes::Bytes:
-    abi::bytes::freeze(data)
+fn frozen(data: std::abi::bytes::MutableBytes) -> std::abi::bytes::Bytes:
+    std::abi::bytes::freeze(data)
 
 fn fill(n: int, byte: int) -> List[int]:
     loop i from 0 to n:
         byte
 
 # u8(v), u8s(xs): an Int (0 outside the domain: the tests pass values inside)
-# and a List of them -- a List[binary::U8] is what an array of binary::U8
+# and a List of them -- a List[std::binary::U8] is what an array of std::binary::U8
 # holds, and a List literal is a List[int] (List element types are
 # invariant).
-fn u8(v: int) -> binary::U8:
+fn u8(v: int) -> std::binary::U8:
     if v < 0 or v > 255:
         0
     else:
         v
 
-fn u8s(xs: List[int]) -> List[binary::U8]:
+fn u8s(xs: List[int]) -> List[std::binary::U8]:
     loop x in xs:
         u8(x)
 
 # i8(v), i8s(xs): an Int (0 outside the domain: the tests pass values inside)
-# and a List of them -- a List[binary::I8] is what an array of binary::I8
+# and a List of them -- a List[std::binary::I8] is what an array of std::binary::I8
 # holds, and a List literal is a List[int] (List element types are
 # invariant).
-fn i8(v: int) -> binary::I8:
+fn i8(v: int) -> std::binary::I8:
     if v < -128 or v > 127:
         0
     else:
         v
 
-fn i8s(xs: List[int]) -> List[binary::I8]:
+fn i8s(xs: List[int]) -> List[std::binary::I8]:
     loop x in xs:
         i8(x)
 
 # u16(v), u16s(xs): an Int (0 outside the domain: the tests pass values inside)
-# and a List of them -- a List[binary::U16] is what an array of binary::U16
+# and a List of them -- a List[std::binary::U16] is what an array of std::binary::U16
 # holds, and a List literal is a List[int] (List element types are
 # invariant).
-fn u16(v: int) -> binary::U16:
+fn u16(v: int) -> std::binary::U16:
     if v < 0 or v > 65535:
         0
     else:
         v
 
-fn u16s(xs: List[int]) -> List[binary::U16]:
+fn u16s(xs: List[int]) -> List[std::binary::U16]:
     loop x in xs:
         u16(x)
 
 # i16(v), i16s(xs): an Int (0 outside the domain: the tests pass values inside)
-# and a List of them -- a List[binary::I16] is what an array of binary::I16
+# and a List of them -- a List[std::binary::I16] is what an array of std::binary::I16
 # holds, and a List literal is a List[int] (List element types are
 # invariant).
-fn i16(v: int) -> binary::I16:
+fn i16(v: int) -> std::binary::I16:
     if v < -32768 or v > 32767:
         0
     else:
         v
 
-fn i16s(xs: List[int]) -> List[binary::I16]:
+fn i16s(xs: List[int]) -> List[std::binary::I16]:
     loop x in xs:
         i16(x)
 
 # u32(v), u32s(xs): an Int (0 outside the domain: the tests pass values inside)
-# and a List of them -- a List[binary::U32] is what an array of binary::U32
+# and a List of them -- a List[std::binary::U32] is what an array of std::binary::U32
 # holds, and a List literal is a List[int] (List element types are
 # invariant).
-fn u32(v: int) -> binary::U32:
+fn u32(v: int) -> std::binary::U32:
     if v < 0 or v > 4294967295:
         0
     else:
         v
 
-fn u32s(xs: List[int]) -> List[binary::U32]:
+fn u32s(xs: List[int]) -> List[std::binary::U32]:
     loop x in xs:
         u32(x)
 
 # i32(v), i32s(xs): an Int (0 outside the domain: the tests pass values inside)
-# and a List of them -- a List[binary::I32] is what an array of binary::I32
+# and a List of them -- a List[std::binary::I32] is what an array of std::binary::I32
 # holds, and a List literal is a List[int] (List element types are
 # invariant).
-fn i32(v: int) -> binary::I32:
+fn i32(v: int) -> std::binary::I32:
     if v < -2147483648 or v > 2147483647:
         0
     else:
         v
 
-fn i32s(xs: List[int]) -> List[binary::I32]:
+fn i32s(xs: List[int]) -> List[std::binary::I32]:
     loop x in xs:
         i32(x)
 
 # u64(v), u64s(xs): an Int (0 outside the domain: the tests pass values inside)
-# and a List of them -- a List[binary::U64] is what an array of binary::U64
+# and a List of them -- a List[std::binary::U64] is what an array of std::binary::U64
 # holds, and a List literal is a List[int] (List element types are
 # invariant).
-fn u64(v: int) -> binary::U64:
+fn u64(v: int) -> std::binary::U64:
     if v < 0 or v > 18446744073709551615:
         0
     else:
         v
 
-fn u64s(xs: List[int]) -> List[binary::U64]:
+fn u64s(xs: List[int]) -> List[std::binary::U64]:
     loop x in xs:
         u64(x)
 
 # i64(v), i64s(xs): an Int (0 outside the domain: the tests pass values inside)
-# and a List of them -- a List[binary::I64] is what an array of binary::I64
+# and a List of them -- a List[std::binary::I64] is what an array of std::binary::I64
 # holds, and a List literal is a List[int] (List element types are
 # invariant).
-fn i64(v: int) -> binary::I64:
+fn i64(v: int) -> std::binary::I64:
     if v < -9223372036854775808 or v > 9223372036854775807:
         0
     else:
         v
 
-fn i64s(xs: List[int]) -> List[binary::I64]:
+fn i64s(xs: List[int]) -> List[std::binary::I64]:
     loop x in xs:
         i64(x)
 
 fn register_declaration_tests():
     # la-syntax: "array" and "of" are contextual (the AST and the syntax
     # error of a missing "of" stay in Tcl).
-    fn contextual() errors compiler::CompilerError:
+    fn contextual() errors std::compiler::CompilerError:
         static compile:
             array = 3
             fn f(array: int) -> int:
                 array + 1
             f(array)
-    test::value("la-syntax/contextual", 4, contextual)
+    std::test::value("la-syntax/contextual", 4, contextual)
 
     # la-not-a-type: an array describes bytes; NativeView[array ...] is the
     # live array, checked like a field.
-    fn as_type() errors compiler::CompilerError:
+    fn as_type() errors std::compiler::CompilerError:
         static compile:
-            fn f(x: array 3 of binary::U8) -> int:
+            fn f(x: array 3 of std::binary::U8) -> int:
                 0
             0
-    test::rejects_at("la-not-a-type/value-type", compiler::DiagnosticCode::LayoutNotAType, 282, 17, as_type)
-    fn as_element() errors compiler::CompilerError:
+    std::test::rejects_at("la-not-a-type/value-type", std::compiler::DiagnosticCode::LayoutNotAType, 282, 17, as_type)
+    fn as_element() errors std::compiler::CompilerError:
         static compile:
-            fn f(x: List[array 3 of binary::U8]) -> int:
+            fn f(x: List[array 3 of std::binary::U8]) -> int:
                 0
             0
-    test::rejects_at("la-not-a-type/list-element", compiler::DiagnosticCode::LayoutNotAType, 288, 17, as_element)
-    fn as_layout_struct() errors compiler::CompilerError:
+    std::test::rejects_at("la-not-a-type/list-element", std::compiler::DiagnosticCode::LayoutNotAType, 288, 17, as_element)
+    fn as_layout_struct() errors std::compiler::CompilerError:
         static compile:
-            fn f(x: LayoutStruct[array 3 of binary::U8]) -> int:
+            fn f(x: LayoutStruct[array 3 of std::binary::U8]) -> int:
                 0
             0
-    test::rejects_at("la-not-a-type/layout-struct", compiler::DiagnosticCode::LayoutStructParameter, 294, 17, as_layout_struct)
-    fn live_extent() errors compiler::CompilerError:
+    std::test::rejects_at("la-not-a-type/layout-struct", std::compiler::DiagnosticCode::LayoutStructParameter, 294, 17, as_layout_struct)
+    fn live_extent() errors std::compiler::CompilerError:
         static compile:
-            fn f(x: NativeView[array 0 of binary::U8]) -> int:
+            fn f(x: NativeView[array 0 of std::binary::U8]) -> int:
                 0
             0
-    test::rejects_at("la-not-a-type/live-extent", compiler::DiagnosticCode::LayoutArrayExtent, 300, 17, live_extent)
-    fn live_element() errors compiler::CompilerError:
+    std::test::rejects_at("la-not-a-type/live-extent", std::compiler::DiagnosticCode::LayoutArrayExtent, 300, 17, live_extent)
+    fn live_element() errors std::compiler::CompilerError:
         static compile:
             fn f(x: NativeView[array 3 of int]) -> int:
                 0
             0
-    test::rejects_at("la-not-a-type/live-element", compiler::DiagnosticCode::LayoutStructParameter, 306, 17, live_element)
-    fn live_accepted() errors compiler::CompilerError:
+    std::test::rejects_at("la-not-a-type/live-element", std::compiler::DiagnosticCode::LayoutStructParameter, 306, 17, live_element)
+    fn live_accepted() errors std::compiler::CompilerError:
         static compile:
-            fn f(x: NativeView[array 3 of PT], y: NativeEdit[array 2 of array 3 of binary::U16]) -> int:
+            fn f(x: NativeView[array 3 of PT], y: NativeEdit[array 2 of array 3 of std::binary::U16]) -> int:
                 0
             0
-    test::value("la-not-a-type/live-accepted", 0, live_accepted)
+    std::test::value("la-not-a-type/live-accepted", 0, live_accepted)
 
 fn register_value_tests():
     # la-parse-every-scalar-width: every encoding's extremes and zero, the
     # padding (0xA5 or 0) read by no one.
-    fn scalars_a5() errors compiler::CompilerError:
+    fn scalars_a5() errors std::compiler::CompilerError:
         static compile:
-            r = binary::parse(SCALARS, bytes_of([
+            r = std::binary::parse(SCALARS, bytes_of([
                 0, 255, 7, 128, 127, 255, 0, 0, 255, 255, 0, 128, 255, 127, 165, 165,
                 255, 255, 255, 255, 1, 0, 0, 0, 0, 0, 0, 128, 255, 255, 255, 127,
                 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 128,
@@ -328,10 +328,10 @@ fn register_value_tests():
                 on LayoutLengthMismatch:
                     return []
             [r]
-    test::value("la-parse-every-scalar-width/padding-a5", [LayoutStruct[SCALARS] {u8: u8s([0, 255, 7]), i8: i8s([-128, 127, -1]), u16: u16s([0, 65535]), i16: i16s([-32768, 32767]), u32: u32s([4294967295, 1]), i32: i32s([-2147483648, 2147483647]), u64: u64s([18446744073709551615]), i64: i64s([-9223372036854775808, 9223372036854775807])}], scalars_a5)
-    fn scalars_zero() errors compiler::CompilerError:
+    std::test::value("la-parse-every-scalar-width/padding-a5", [LayoutStruct[SCALARS] {u8: u8s([0, 255, 7]), i8: i8s([-128, 127, -1]), u16: u16s([0, 65535]), i16: i16s([-32768, 32767]), u32: u32s([4294967295, 1]), i32: i32s([-2147483648, 2147483647]), u64: u64s([18446744073709551615]), i64: i64s([-9223372036854775808, 9223372036854775807])}], scalars_a5)
+    fn scalars_zero() errors std::compiler::CompilerError:
         static compile:
-            r = binary::parse(SCALARS, bytes_of([
+            r = std::binary::parse(SCALARS, bytes_of([
                 0, 255, 7, 128, 127, 255, 0, 0, 255, 255, 0, 128, 255, 127, 0, 0,
                 255, 255, 255, 255, 1, 0, 0, 0, 0, 0, 0, 128, 255, 255, 255, 127,
                 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 128,
@@ -340,21 +340,21 @@ fn register_value_tests():
                 on LayoutLengthMismatch:
                     return []
             [r]
-    test::value("la-parse-every-scalar-width/padding-zero", [LayoutStruct[SCALARS] {u8: u8s([0, 255, 7]), i8: i8s([-128, 127, -1]), u16: u16s([0, 65535]), i16: i16s([-32768, 32767]), u32: u32s([4294967295, 1]), i32: i32s([-2147483648, 2147483647]), u64: u64s([18446744073709551615]), i64: i64s([-9223372036854775808, 9223372036854775807])}], scalars_zero)
+    std::test::value("la-parse-every-scalar-width/padding-zero", [LayoutStruct[SCALARS] {u8: u8s([0, 255, 7]), i8: i8s([-128, 127, -1]), u16: u16s([0, 65535]), i16: i16s([-32768, 32767]), u32: u32s([4294967295, 1]), i32: i32s([-2147483648, 2147483647]), u64: u64s([18446744073709551615]), i64: i64s([-9223372036854775808, 9223372036854775807])}], scalars_zero)
 
     # la-emit-explicit-bytes: every element at its offset, padding zero, and
     # parse(emit(v)) == v.
-    fn emit_scalars() errors compiler::CompilerError:
+    fn emit_scalars() errors std::compiler::CompilerError:
         static compile:
             v = LayoutStruct[SCALARS] {u8: u8s([0, 255, 7]), i8: i8s([-128, 127, -1]), u16: u16s([0, 65535]), i16: i16s([-32768, 32767]), u32: u32s([4294967295, 1]), i32: i32s([-2147483648, 2147483647]), u64: u64s([18446744073709551615]), i64: i64s([-9223372036854775808, 9223372036854775807])}
-            b = binary::emit(v):
+            b = std::binary::emit(v):
                 on LayoutExtentMismatch:
                     return []
-            back = binary::parse(SCALARS, b):
+            back = std::binary::parse(SCALARS, b):
                 on LayoutLengthMismatch:
                     return []
             [b, back == v]
-    test::value("la-emit-explicit-bytes", [bytes_of([
+    std::test::value("la-emit-explicit-bytes", [bytes_of([
         0, 255, 7, 128, 127, 255, 0, 0, 255, 255, 0, 128, 255, 127, 0, 0,
         255, 255, 255, 255, 1, 0, 0, 0, 0, 0, 0, 128, 255, 255, 255, 127,
         255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 128,
@@ -362,14 +362,14 @@ fn register_value_tests():
     ]), true], emit_scalars)
 
     # la-emit-literal-bytes: rows and records, written out by hand.
-    fn emit_shapes() errors compiler::CompilerError:
+    fn emit_shapes() errors std::compiler::CompilerError:
         static compile:
             v = LayoutStruct[SHAPES] {first: u8s([1, 2, 3, 4]), mid: 1286, m: [u16s([1800, 2314, 2828]), u16s([3342, 3856, 4370])], tails: [LayoutStruct[TAILED] {a: 320083222, b: 23}, LayoutStruct[TAILED] {a: 404298267, b: 28}], pts: [LayoutStruct[PT] {x: -2, y: 3}, LayoutStruct[PT] {x: 4, y: 65535}], last: u8s([253, 254, 255, 0])}
-            b = binary::emit(v):
+            b = std::binary::emit(v):
                 on LayoutExtentMismatch:
                     return []
             [b]
-    test::value("la-emit-literal-bytes", [bytes_of([
+    std::test::value("la-emit-literal-bytes", [bytes_of([
         1, 2, 3, 4, 6, 5, 8, 7, 10, 9, 12, 11, 14, 13, 16, 15,
         18, 17, 0, 0, 22, 21, 20, 19, 23, 0, 0, 0, 27, 26, 25, 24,
         28, 0, 0, 0, 254, 255, 3, 0, 4, 0, 255, 255, 253, 254, 255, 0,
@@ -377,9 +377,9 @@ fn register_value_tests():
 
     # la-parse-shapes: the bytes 0x00..0x2f, every element from its own
     # bytes (rows in C's order, records at stride 8).
-    fn parse_shapes() errors compiler::CompilerError:
+    fn parse_shapes() errors std::compiler::CompilerError:
         static compile:
-            r = binary::parse(SHAPES, bytes_of([
+            r = std::binary::parse(SHAPES, bytes_of([
                 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
                 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
                 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
@@ -387,19 +387,19 @@ fn register_value_tests():
                 on LayoutLengthMismatch:
                     return []
             [r]
-    test::value("la-parse-shapes", [LayoutStruct[SHAPES] {first: u8s([0, 1, 2, 3]), mid: 1284, m: [u16s([1798, 2312, 2826]), u16s([3340, 3854, 4368])], tails: [LayoutStruct[TAILED] {a: 387323156, b: 24}, LayoutStruct[TAILED] {a: 522067228, b: 32}], pts: [LayoutStruct[PT] {x: 9508, y: 10022}, LayoutStruct[PT] {x: 10536, y: 11050}], last: u8s([44, 45, 46, 47])}], parse_shapes)
+    std::test::value("la-parse-shapes", [LayoutStruct[SHAPES] {first: u8s([0, 1, 2, 3]), mid: 1284, m: [u16s([1798, 2312, 2826]), u16s([3340, 3854, 4368])], tails: [LayoutStruct[TAILED] {a: 387323156, b: 24}, LayoutStruct[TAILED] {a: 522067228, b: 32}], pts: [LayoutStruct[PT] {x: 9508, y: 10022}, LayoutStruct[PT] {x: 10536, y: 11050}], last: u8s([44, 45, 46, 47])}], parse_shapes)
 
     # la-parse-packed-and-aligned: the stride is the nested layout's size.
-    fn parse_packs() errors compiler::CompilerError:
+    fn parse_packs() errors std::compiler::CompilerError:
         static compile:
-            r = binary::parse(PACKS, bytes_of([9, 1, 1, 2, 3, 4, 2, 5, 6, 7, 8, 3, 9, 10, 11, 12])):
+            r = std::binary::parse(PACKS, bytes_of([9, 1, 1, 2, 3, 4, 2, 5, 6, 7, 8, 3, 9, 10, 11, 12])):
                 on LayoutLengthMismatch:
                     return []
             [r]
-    test::value("la-parse-packed-and-aligned/packed", [LayoutStruct[PACKS] {tag: 9, ps: [LayoutStruct[PACKED] {a: 1, b: 67305985}, LayoutStruct[PACKED] {a: 2, b: 134678021}, LayoutStruct[PACKED] {a: 3, b: 202050057}]}], parse_packs)
-    fn parse_aligns() errors compiler::CompilerError:
+    std::test::value("la-parse-packed-and-aligned/packed", [LayoutStruct[PACKS] {tag: 9, ps: [LayoutStruct[PACKED] {a: 1, b: 67305985}, LayoutStruct[PACKED] {a: 2, b: 134678021}, LayoutStruct[PACKED] {a: 3, b: 202050057}]}], parse_packs)
+    fn parse_aligns() errors std::compiler::CompilerError:
         static compile:
-            r = binary::parse(ALIGNS, bytes_of([
+            r = std::binary::parse(ALIGNS, bytes_of([
                 7, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165,
                 68, 51, 34, 17, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165,
                 136, 119, 102, 85, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165,
@@ -407,51 +407,51 @@ fn register_value_tests():
                 on LayoutLengthMismatch:
                     return []
             [r]
-    test::value("la-parse-packed-and-aligned/aligned", [LayoutStruct[ALIGNS] {n: 7, vs: [LayoutStruct[ALIGNED] {v: 287454020}, LayoutStruct[ALIGNED] {v: 1432778632}]}], parse_aligns)
+    std::test::value("la-parse-packed-and-aligned/aligned", [LayoutStruct[ALIGNS] {n: 7, vs: [LayoutStruct[ALIGNED] {v: 287454020}, LayoutStruct[ALIGNED] {v: 1432778632}]}], parse_aligns)
 
     # la-three-dimensions: element [i][j][k] at i * 12 + j * 4 + k.
-    fn cube() errors compiler::CompilerError:
+    fn cube() errors std::compiler::CompilerError:
         static compile:
-            r = binary::parse(CUBE, bytes_of([
+            r = std::binary::parse(CUBE, bytes_of([
                 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115,
                 116, 117, 118, 119, 120, 121, 122, 123,
             ])):
                 on LayoutLengthMismatch:
                     return []
-            b = binary::emit(r)
-            d = binary::write(mutable(fill(24, 0)), CUBE.c[1][2][3], 9):
+            b = std::binary::emit(r)
+            d = std::binary::write(mutable(fill(24, 0)), CUBE.c[1][2][3], 9):
                 on LayoutLengthMismatch:
                     return []
             [r.c, b == bytes_of([
                 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115,
                 116, 117, 118, 119, 120, 121, 122, 123,
             ]), frozen(d)]
-    test::value("la-three-dimensions", [[[u8s([100, 101, 102, 103]), u8s([104, 105, 106, 107]), u8s([108, 109, 110, 111])], [u8s([112, 113, 114, 115]), u8s([116, 117, 118, 119]), u8s([120, 121, 122, 123])]], true, bytes_of([
+    std::test::value("la-three-dimensions", [[[u8s([100, 101, 102, 103]), u8s([104, 105, 106, 107]), u8s([108, 109, 110, 111])], [u8s([112, 113, 114, 115]), u8s([116, 117, 118, 119]), u8s([120, 121, 122, 123])]], true, bytes_of([
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         0, 0, 0, 0, 0, 0, 0, 9,
     ])], cube)
 
     # la-round-trip: parse(emit(v)) == v; emit(parse(b)) == b exactly when
     # b's padding (TAILED's tail bytes included) is zero.
-    fn round_trip() errors compiler::CompilerError:
+    fn round_trip() errors std::compiler::CompilerError:
         static compile:
-            a = binary::parse(SHAPES, bytes_of([
+            a = std::binary::parse(SHAPES, bytes_of([
                 11, 48, 85, 122, 159, 196, 233, 14, 51, 88, 125, 162, 199, 236, 17, 54,
                 91, 128, 165, 202, 239, 20, 57, 94, 131, 168, 205, 242, 23, 60, 97, 134,
                 171, 208, 245, 26, 63, 100, 137, 174, 211, 248, 29, 66, 103, 140, 177, 214,
             ])):
                 on LayoutLengthMismatch:
                     return []
-            b = binary::parse(SHAPES, bytes_of([
+            b = std::binary::parse(SHAPES, bytes_of([
                 11, 48, 85, 122, 159, 196, 233, 14, 51, 88, 125, 162, 199, 236, 17, 54,
                 91, 128, 0, 0, 239, 20, 57, 94, 131, 0, 0, 0, 23, 60, 97, 134,
                 171, 0, 0, 0, 63, 100, 137, 174, 211, 248, 29, 66, 103, 140, 177, 214,
             ])):
                 on LayoutLengthMismatch:
                     return []
-            ea = binary::emit(a)
-            eb = binary::emit(b)
-            aa = binary::parse(SHAPES, ea):
+            ea = std::binary::emit(a)
+            eb = std::binary::emit(b)
+            aa = std::binary::parse(SHAPES, ea):
                 on LayoutLengthMismatch:
                     return []
             [aa == a, ea == bytes_of([
@@ -463,23 +463,23 @@ fn register_value_tests():
                 91, 128, 0, 0, 239, 20, 57, 94, 131, 0, 0, 0, 23, 60, 97, 134,
                 171, 0, 0, 0, 63, 100, 137, 174, 211, 248, 29, 66, 103, 140, 177, 214,
             ]), a == b]
-    test::value("la-round-trip", [true, false, true, true], round_trip)
+    std::test::value("la-round-trip", [true, false, true, true], round_trip)
 
     # la-characters-are-not-text: a NUL in the middle and the bytes after it
     # are elements like any other; the field is a List of the scalar, no str.
-    fn chars() errors compiler::CompilerError:
+    fn chars() errors std::compiler::CompilerError:
         static compile:
-            r = binary::parse(CHARS, bytes_of([72, 105, 0, 66, 255, 128, 0, 0, 65, 0, 0, 216, 0, 220, 0, 0])):
+            r = std::binary::parse(CHARS, bytes_of([72, 105, 0, 66, 255, 128, 0, 0, 65, 0, 0, 216, 0, 220, 0, 0])):
                 on LayoutLengthMismatch:
                     return []
             [r.name, r.wide]
-    test::value("la-characters-are-not-text/values", [[72, 105, 0, 66, -1, -128, 0, 0], [65, 55296, 56320, 0]], chars)
-    fn chars_not_str() errors compiler::CompilerError:
+    std::test::value("la-characters-are-not-text/values", [[72, 105, 0, 66, -1, -128, 0, 0], [65, 55296, 56320, 0]], chars)
+    fn chars_not_str() errors std::compiler::CompilerError:
         static compile:
             fn f(v: LayoutStruct[CHARS]) -> str:
                 v.name
             0
-    test::rejects_at("la-characters-are-not-text/not-str", compiler::DiagnosticCode::Type, 479, 17, chars_not_str)
+    std::test::rejects_at("la-characters-are-not-text/not-str", std::compiler::DiagnosticCode::Type, 479, 17, chars_not_str)
 
 fn register_extent_tests(three: int, four: int, five: int):
     # la-emit-extent: a short, a long, a ragged List fail with the declared
@@ -490,23 +490,23 @@ fn register_extent_tests(three: int, four: int, five: int):
         xs = loop i from 0 to n:
             u8(i)
         v = LayoutStruct[SHAPES] {first: xs, mid: 0, m: [u16s([1, 2, 3]), u16s([4, 5, 6])], tails: [LayoutStruct[TAILED] {a: 1, b: 2}, LayoutStruct[TAILED] {a: 3, b: 4}], pts: [LayoutStruct[PT] {x: 1, y: 2}, LayoutStruct[PT] {x: 3, y: 4}], last: u8s([1, 2, 3, 4])}
-        b = binary::emit(v):
+        b = std::binary::emit(v):
             on LayoutExtentMismatch:
                 return -1
-        abi::bytes::length(b).value
+        std::abi::bytes::length(b).value
     fn emit_rows(n: int) -> int:
         rows = loop i from 0 to n:
             u16s([1, 2, 3])
         v = LayoutStruct[SHAPES] {first: u8s([1, 2, 3, 4]), mid: 0, m: rows, tails: [LayoutStruct[TAILED] {a: 1, b: 2}, LayoutStruct[TAILED] {a: 3, b: 4}], pts: [LayoutStruct[PT] {x: 1, y: 2}, LayoutStruct[PT] {x: 3, y: 4}], last: u8s([1, 2, 3, 4])}
-        b = binary::emit(v):
+        b = std::binary::emit(v):
             on LayoutExtentMismatch:
                 return -1
-        abi::bytes::length(b).value
-    fn extents() errors compiler::CompilerError:
+        std::abi::bytes::length(b).value
+    fn extents() errors std::compiler::CompilerError:
         static compile:
             [emit_first(three), emit_first(five), emit_first(four), emit_rows(three - 2), emit_rows(three), emit_rows(three - 1)]
-    test::value("la-emit-extent/dynamic", [-1, -1, 48, -1, -1, 48], extents)
-    fn proven() errors compiler::CompilerError:
+    std::test::value("la-emit-extent/dynamic", [-1, -1, 48, -1, -1, 48], extents)
+    fn proven() errors std::compiler::CompilerError:
         static compile:
             xs = loop i from 0 to 4:
                 u8(i)
@@ -514,49 +514,49 @@ fn register_extent_tests(three: int, four: int, five: int):
                 u16(i)
             r1 = loop i from 0 to 3:
                 u16(i)
-            b = binary::emit(LayoutStruct[SHAPES] {first: xs, mid: 0, m: [r0, r1], tails: [LayoutStruct[TAILED] {a: 1, b: 2}, LayoutStruct[TAILED] {a: 3, b: 4}], pts: [LayoutStruct[PT] {x: 1, y: 2}, LayoutStruct[PT] {x: 3, y: 4}], last: xs})
-            abi::bytes::length(b).value
-    test::value("la-emit-extent/proven", 48, proven)
-    fn unproven() errors compiler::CompilerError:
+            b = std::binary::emit(LayoutStruct[SHAPES] {first: xs, mid: 0, m: [r0, r1], tails: [LayoutStruct[TAILED] {a: 1, b: 2}, LayoutStruct[TAILED] {a: 3, b: 4}], pts: [LayoutStruct[PT] {x: 1, y: 2}, LayoutStruct[PT] {x: 3, y: 4}], last: xs})
+            std::abi::bytes::length(b).value
+    std::test::value("la-emit-extent/proven", 48, proven)
+    fn unproven() errors std::compiler::CompilerError:
         static compile:
-            fn go() -> abi::bytes::Bytes:
+            fn go() -> std::abi::bytes::Bytes:
                 xs = loop i from 0 to 4:
                     u8(i)
-                binary::emit(LayoutStruct[SHAPES] {first: xs, mid: 0, m: [u16s([1, 2, 3]), u16s([4, 5, 6])], tails: [LayoutStruct[TAILED] {a: 1, b: 2}, LayoutStruct[TAILED] {a: 3, b: 4}], pts: [LayoutStruct[PT] {x: 1, y: 2}, LayoutStruct[PT] {x: 3, y: 4}], last: xs})
+                std::binary::emit(LayoutStruct[SHAPES] {first: xs, mid: 0, m: [u16s([1, 2, 3]), u16s([4, 5, 6])], tails: [LayoutStruct[TAILED] {a: 1, b: 2}, LayoutStruct[TAILED] {a: 3, b: 4}], pts: [LayoutStruct[PT] {x: 1, y: 2}, LayoutStruct[PT] {x: 3, y: 4}], last: xs})
             0
-    test::rejects_at("la-emit-extent/unproven", compiler::DiagnosticCode::UnhandledError, 525, 17, unproven)
-    fn known() errors compiler::CompilerError:
+    std::test::rejects_at("la-emit-extent/unproven", std::compiler::DiagnosticCode::UnhandledError, 525, 17, unproven)
+    fn known() errors std::compiler::CompilerError:
         static compile:
-            fn go() -> abi::bytes::Bytes:
-                binary::emit(LayoutStruct[SHAPES] {first: [u8(1)], mid: 0, m: [u16s([1, 2, 3]), u16s([4, 5, 6])], tails: [LayoutStruct[TAILED] {a: 1, b: 2}, LayoutStruct[TAILED] {a: 3, b: 4}], pts: [LayoutStruct[PT] {x: 1, y: 2}, LayoutStruct[PT] {x: 3, y: 4}], last: u8s([1, 2, 3, 4])})
+            fn go() -> std::abi::bytes::Bytes:
+                std::binary::emit(LayoutStruct[SHAPES] {first: [u8(1)], mid: 0, m: [u16s([1, 2, 3]), u16s([4, 5, 6])], tails: [LayoutStruct[TAILED] {a: 1, b: 2}, LayoutStruct[TAILED] {a: 3, b: 4}], pts: [LayoutStruct[PT] {x: 1, y: 2}, LayoutStruct[PT] {x: 3, y: 4}], last: u8s([1, 2, 3, 4])})
             0
-    test::rejects_at("la-emit-extent/known", compiler::DiagnosticCode::KnownError, 531, 17, known)
-    fn parameter() errors compiler::CompilerError:
+    std::test::rejects_at("la-emit-extent/known", std::compiler::DiagnosticCode::KnownError, 531, 17, known)
+    fn parameter() errors std::compiler::CompilerError:
         static compile:
-            fn go(v: LayoutStruct[SHAPES]) -> abi::bytes::Bytes:
-                binary::emit(v)
+            fn go(v: LayoutStruct[SHAPES]) -> std::abi::bytes::Bytes:
+                std::binary::emit(v)
             0
-    test::rejects_at("la-emit-extent/parameter", compiler::DiagnosticCode::UnhandledError, 537, 17, parameter)
-    fn no_arrays() errors compiler::CompilerError:
+    std::test::rejects_at("la-emit-extent/parameter", std::compiler::DiagnosticCode::UnhandledError, 537, 17, parameter)
+    fn no_arrays() errors std::compiler::CompilerError:
         static compile:
-            fn go(v: LayoutStruct[TAILED]) -> abi::bytes::Bytes:
-                binary::emit(v)
-            abi::bytes::length(go(LayoutStruct[TAILED] {a: 1, b: 2})).value
-    test::value("la-emit-extent/no-arrays", 8, no_arrays)
+            fn go(v: LayoutStruct[TAILED]) -> std::abi::bytes::Bytes:
+                std::binary::emit(v)
+            std::abi::bytes::length(go(LayoutStruct[TAILED] {a: 1, b: 2})).value
+    std::test::value("la-emit-extent/no-arrays", 8, no_arrays)
 
     # la-write-extent: the storage's size first (LayoutLengthMismatch), then
     # the List's extent; the operand never changes.
-    fn write_extent() errors compiler::CompilerError:
+    fn write_extent() errors std::compiler::CompilerError:
         static compile:
-            fn w(d: abi::bytes::MutableBytes, xs: List[binary::U8]) -> int:
-                r = binary::write(d, SHAPES.first, xs):
+            fn w(d: std::abi::bytes::MutableBytes, xs: List[std::binary::U8]) -> int:
+                r = std::binary::write(d, SHAPES.first, xs):
                     on LayoutLengthMismatch:
                         return -2
                     on LayoutExtentMismatch:
                         return -1
                 0
-            fn rows(d: abi::bytes::MutableBytes, rs: List[List[binary::U16]]) -> int:
-                r = binary::write(d, SHAPES.m, rs):
+            fn rows(d: std::abi::bytes::MutableBytes, rs: List[List[std::binary::U16]]) -> int:
+                r = std::binary::write(d, SHAPES.m, rs):
                     on LayoutLengthMismatch:
                         return -2
                     on LayoutExtentMismatch:
@@ -564,30 +564,30 @@ fn register_extent_tests(three: int, four: int, five: int):
                 0
             d = mutable(fill(48, 1))
             [w(d, u8s([1, 2, 3])), w(d, u8s([1, 2, 3, 4, 5])), w(d, u8s([1, 2, 3, 4])), w(mutable(fill(47, 1)), u8s([1])), rows(d, [u16s([1, 2, 3]), u16s([1, 2])]), rows(d, [u16s([1, 2, 3])]), rows(d, [u16s([1, 2, 3]), u16s([4, 5, 6])]), frozen(d) == bytes_of(fill(48, 1))]
-    test::value("la-write-extent", [-1, -1, 0, -2, -1, -1, 0, true], write_extent)
+    std::test::value("la-write-extent", [-1, -1, 0, -2, -1, -1, 0, true], write_extent)
 
 fn register_write_tests():
     # la-write-whole-array: every element at its offset, records' fields
     # only (their tail padding keeps the operand's bytes); the operand is
     # unchanged.
-    fn whole() errors compiler::CompilerError:
+    fn whole() errors std::compiler::CompilerError:
         static compile:
             d0 = mutable(fill(48, 165))
-            d1 = binary::write(d0, SHAPES.first, u8s([1, 2, 3, 4])):
+            d1 = std::binary::write(d0, SHAPES.first, u8s([1, 2, 3, 4])):
                 on LayoutLengthMismatch:
                     return []
                 on LayoutExtentMismatch:
                     return []
-            d2 = binary::write(d1, SHAPES.m, [u16s([10, 11, 12]), u16s([20, 21, 22])]):
+            d2 = std::binary::write(d1, SHAPES.m, [u16s([10, 11, 12]), u16s([20, 21, 22])]):
                 on LayoutLengthMismatch:
                     return []
                 on LayoutExtentMismatch:
                     return []
-            d3 = binary::write(d2, SHAPES.tails, [LayoutStruct[TAILED] {a: 16909060, b: 5}, LayoutStruct[TAILED] {a: 168496141, b: 14}]):
+            d3 = std::binary::write(d2, SHAPES.tails, [LayoutStruct[TAILED] {a: 16909060, b: 5}, LayoutStruct[TAILED] {a: 168496141, b: 14}]):
                 on LayoutLengthMismatch:
                     return []
             [frozen(d3), frozen(d0) == bytes_of(fill(48, 165))]
-    test::value("la-write-whole-array", [bytes_of([
+    std::test::value("la-write-whole-array", [bytes_of([
         1, 2, 3, 4, 165, 165, 10, 0, 11, 0, 12, 0, 20, 0, 21, 0,
         22, 0, 165, 165, 4, 3, 2, 1, 5, 165, 165, 165, 13, 12, 11, 10,
         14, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165,
@@ -595,466 +595,466 @@ fn register_write_tests():
 
     # la-write-static-designators: one write at the element's absolute
     # offset; a whole row L.m[1] too.
-    fn designators() errors compiler::CompilerError:
+    fn designators() errors std::compiler::CompilerError:
         static compile:
             d0 = mutable(fill(48, 0))
-            d1 = binary::write(d0, SHAPES.first[3], 250):
+            d1 = std::binary::write(d0, SHAPES.first[3], 250):
                 on LayoutLengthMismatch:
                     return []
-            d2 = binary::write(d1, SHAPES.m[1][2], 513):
+            d2 = std::binary::write(d1, SHAPES.m[1][2], 513):
                 on LayoutLengthMismatch:
                     return []
-            d3 = binary::write(d2, SHAPES.tails[1].b, 7):
+            d3 = std::binary::write(d2, SHAPES.tails[1].b, 7):
                 on LayoutLengthMismatch:
                     return []
-            d4 = binary::write(d3, SHAPES.pts[0].x, -2):
+            d4 = std::binary::write(d3, SHAPES.pts[0].x, -2):
                 on LayoutLengthMismatch:
                     return []
-            d5 = binary::write(d4, SHAPES.m[0], u16s([1, 2, 3])):
+            d5 = std::binary::write(d4, SHAPES.m[0], u16s([1, 2, 3])):
                 on LayoutLengthMismatch:
                     return []
                 on LayoutExtentMismatch:
                     return []
             [frozen(d5)]
-    test::value("la-write-static-designators", [bytes_of([
+    std::test::value("la-write-static-designators", [bytes_of([
         0, 0, 0, 250, 0, 0, 1, 0, 2, 0, 3, 0, 0, 0, 0, 0,
         1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
         7, 0, 0, 0, 254, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     ])], designators)
 
     # la-designator-diagnostics: the index checked statically.
-    fn past_extent() errors compiler::CompilerError:
+    fn past_extent() errors std::compiler::CompilerError:
         static compile:
-            fn f(d: abi::bytes::MutableBytes) -> int errors LayoutLengthMismatch, LayoutExtentMismatch:
-                x = binary::write(d, SHAPES.first[4], 1)
+            fn f(d: std::abi::bytes::MutableBytes) -> int errors LayoutLengthMismatch, LayoutExtentMismatch:
+                x = std::binary::write(d, SHAPES.first[4], 1)
                 0
             0
-    test::rejects_at("la-designator-diagnostics/past-extent", compiler::DiagnosticCode::LayoutArrayIndex, 629, 51, past_extent)
-    fn past_row() errors compiler::CompilerError:
+    std::test::rejects_at("la-designator-diagnostics/past-extent", std::compiler::DiagnosticCode::LayoutArrayIndex, 629, 56, past_extent)
+    fn past_row() errors std::compiler::CompilerError:
         static compile:
-            fn f(d: abi::bytes::MutableBytes) -> int errors LayoutLengthMismatch, LayoutExtentMismatch:
-                x = binary::write(d, SHAPES.m[1][3], 1)
+            fn f(d: std::abi::bytes::MutableBytes) -> int errors LayoutLengthMismatch, LayoutExtentMismatch:
+                x = std::binary::write(d, SHAPES.m[1][3], 1)
                 0
             0
-    test::rejects_at("la-designator-diagnostics/past-row", compiler::DiagnosticCode::LayoutArrayIndex, 636, 50, past_row)
-    fn scalar_index() errors compiler::CompilerError:
+    std::test::rejects_at("la-designator-diagnostics/past-row", std::compiler::DiagnosticCode::LayoutArrayIndex, 636, 55, past_row)
+    fn scalar_index() errors std::compiler::CompilerError:
         static compile:
-            fn f(d: abi::bytes::MutableBytes) -> int errors LayoutLengthMismatch, LayoutExtentMismatch:
-                x = binary::write(d, SHAPES.mid[0], 1)
+            fn f(d: std::abi::bytes::MutableBytes) -> int errors LayoutLengthMismatch, LayoutExtentMismatch:
+                x = std::binary::write(d, SHAPES.mid[0], 1)
                 0
             0
-    test::rejects_at("la-designator-diagnostics/scalar-index", compiler::DiagnosticCode::LayoutOperand, 643, 49, scalar_index)
-    fn no_index() errors compiler::CompilerError:
+    std::test::rejects_at("la-designator-diagnostics/scalar-index", std::compiler::DiagnosticCode::LayoutOperand, 643, 54, scalar_index)
+    fn no_index() errors std::compiler::CompilerError:
         static compile:
-            fn f(d: abi::bytes::MutableBytes) -> int errors LayoutLengthMismatch, LayoutExtentMismatch:
-                x = binary::write(d, SHAPES.tails.b, 1)
+            fn f(d: std::abi::bytes::MutableBytes) -> int errors LayoutLengthMismatch, LayoutExtentMismatch:
+                x = std::binary::write(d, SHAPES.tails.b, 1)
                 0
             0
-    test::rejects_at("la-designator-diagnostics/no-index", compiler::DiagnosticCode::UnknownField, 650, 51, no_index)
-    fn record_element() errors compiler::CompilerError:
+    std::test::rejects_at("la-designator-diagnostics/no-index", std::compiler::DiagnosticCode::UnknownField, 650, 56, no_index)
+    fn record_element() errors std::compiler::CompilerError:
         static compile:
-            fn f(d: abi::bytes::MutableBytes) -> int errors LayoutLengthMismatch, LayoutExtentMismatch:
-                x = binary::write(d, SHAPES.tails[0], 1)
+            fn f(d: std::abi::bytes::MutableBytes) -> int errors LayoutLengthMismatch, LayoutExtentMismatch:
+                x = std::binary::write(d, SHAPES.tails[0], 1)
                 0
             0
-    test::rejects_at("la-designator-diagnostics/record-element", compiler::DiagnosticCode::LayoutOperand, 657, 45, record_element)
-    fn index_expression() errors compiler::CompilerError:
+    std::test::rejects_at("la-designator-diagnostics/record-element", std::compiler::DiagnosticCode::LayoutOperand, 657, 50, record_element)
+    fn index_expression() errors std::compiler::CompilerError:
         static compile:
             fn g(v: LayoutStruct[SHAPES]) -> int:
                 v.first[0]
             0
-    test::rejects_at("la-designator-diagnostics/index-expression", compiler::DiagnosticCode::LayoutOperand, 664, 25, index_expression)
+    std::test::rejects_at("la-designator-diagnostics/index-expression", std::compiler::DiagnosticCode::LayoutOperand, 664, 25, index_expression)
 
     # la-write-value-types: the List's type by the ordinary admission rule;
     # a static element's value by its domain.
-    fn int_list() errors compiler::CompilerError:
+    fn int_list() errors std::compiler::CompilerError:
         static compile:
-            fn f(d: abi::bytes::MutableBytes) -> int errors LayoutLengthMismatch, LayoutExtentMismatch:
-                x = binary::write(d, SHAPES.first, [1, 2, 3, 4])
+            fn f(d: std::abi::bytes::MutableBytes) -> int errors LayoutLengthMismatch, LayoutExtentMismatch:
+                x = std::binary::write(d, SHAPES.first, [1, 2, 3, 4])
                 0
             0
-    test::rejects_at("la-write-value-types/int-list", compiler::DiagnosticCode::Type, 673, 52, int_list)
-    fn other_layout() errors compiler::CompilerError:
+    std::test::rejects_at("la-write-value-types/int-list", std::compiler::DiagnosticCode::Type, 673, 57, int_list)
+    fn other_layout() errors std::compiler::CompilerError:
         static compile:
-            fn f(d: abi::bytes::MutableBytes) -> int errors LayoutLengthMismatch, LayoutExtentMismatch:
-                x = binary::write(d, SHAPES.tails, [LayoutStruct[PT] {x: 1, y: 2}, LayoutStruct[PT] {x: 1, y: 2}])
+            fn f(d: std::abi::bytes::MutableBytes) -> int errors LayoutLengthMismatch, LayoutExtentMismatch:
+                x = std::binary::write(d, SHAPES.tails, [LayoutStruct[PT] {x: 1, y: 2}, LayoutStruct[PT] {x: 1, y: 2}])
                 0
             0
-    test::rejects_at("la-write-value-types/other-layout", compiler::DiagnosticCode::Type, 680, 52, other_layout)
-    fn out_of_domain() errors compiler::CompilerError:
+    std::test::rejects_at("la-write-value-types/other-layout", std::compiler::DiagnosticCode::Type, 680, 57, other_layout)
+    fn out_of_domain() errors std::compiler::CompilerError:
         static compile:
-            fn f(d: abi::bytes::MutableBytes) -> int errors LayoutLengthMismatch, LayoutExtentMismatch:
-                x = binary::write(d, SHAPES.first[0], 256)
+            fn f(d: std::abi::bytes::MutableBytes) -> int errors LayoutLengthMismatch, LayoutExtentMismatch:
+                x = std::binary::write(d, SHAPES.first[0], 256)
                 0
             0
-    test::rejects_at("la-write-value-types/out-of-domain", compiler::DiagnosticCode::Type, 687, 55, out_of_domain)
-    fn in_domain() errors compiler::CompilerError:
+    std::test::rejects_at("la-write-value-types/out-of-domain", std::compiler::DiagnosticCode::Type, 687, 60, out_of_domain)
+    fn in_domain() errors std::compiler::CompilerError:
         static compile:
-            fn f(d: abi::bytes::MutableBytes) -> int errors LayoutLengthMismatch, LayoutExtentMismatch:
-                x = binary::write(d, SHAPES.first[0], 255)
+            fn f(d: std::abi::bytes::MutableBytes) -> int errors LayoutLengthMismatch, LayoutExtentMismatch:
+                x = std::binary::write(d, SHAPES.first[0], 255)
                 0
             0
-    test::value("la-write-value-types/in-domain", 0, in_domain)
+    std::test::value("la-write-value-types/in-domain", 0, in_domain)
 
     # la-pointer-arrays-from-bytes: bytes never conjure a pointer, inside
     # arrays too (the messages stay in Tcl).
-    fn parse_pointers() errors compiler::CompilerError:
+    fn parse_pointers() errors std::compiler::CompilerError:
         static compile:
-            fn f(b: abi::bytes::Bytes) -> int errors LayoutLengthMismatch:
-                x = binary::parse(PTRS, b)
+            fn f(b: std::abi::bytes::Bytes) -> int errors LayoutLengthMismatch:
+                x = std::binary::parse(PTRS, b)
                 0
             0
-    test::rejects_at("la-pointer-arrays-from-bytes/parse-array", compiler::DiagnosticCode::LayoutNativeOnly, 704, 35, parse_pointers)
-    fn parse_records() errors compiler::CompilerError:
+    std::test::rejects_at("la-pointer-arrays-from-bytes/parse-array", std::compiler::DiagnosticCode::LayoutNativeOnly, 704, 40, parse_pointers)
+    fn parse_records() errors std::compiler::CompilerError:
         static compile:
-            fn f(b: abi::bytes::Bytes) -> int errors LayoutLengthMismatch:
-                x = binary::parse(PRECS, b)
+            fn f(b: std::abi::bytes::Bytes) -> int errors LayoutLengthMismatch:
+                x = std::binary::parse(PRECS, b)
                 0
             0
-    test::rejects_at("la-pointer-arrays-from-bytes/parse-records", compiler::DiagnosticCode::LayoutNativeOnly, 711, 35, parse_records)
-    fn write_pointers() errors compiler::CompilerError:
+    std::test::rejects_at("la-pointer-arrays-from-bytes/parse-records", std::compiler::DiagnosticCode::LayoutNativeOnly, 711, 40, parse_records)
+    fn write_pointers() errors std::compiler::CompilerError:
         static compile:
-            fn f(d: abi::bytes::MutableBytes, q: ffi::c::Ptr[Node]) -> int errors LayoutLengthMismatch, LayoutExtentMismatch:
-                ps = [ffi::c::clone(q), ffi::c::clone(q)]
-                x = binary::write(d, PTRS.ps, ps)
+            fn f(d: std::abi::bytes::MutableBytes, q: std::ffi::c::Ptr[Node]) -> int errors LayoutLengthMismatch, LayoutExtentMismatch:
+                ps = [std::ffi::c::clone(q), std::ffi::c::clone(q)]
+                x = std::binary::write(d, PTRS.ps, ps)
                 0
             0
-    test::rejects_at("la-pointer-arrays-from-bytes/write-array", compiler::DiagnosticCode::LayoutNativeOnly, 719, 38, write_pointers)
-    fn foreign_scalars() errors compiler::CompilerError:
+    std::test::rejects_at("la-pointer-arrays-from-bytes/write-array", std::compiler::DiagnosticCode::LayoutNativeOnly, 719, 43, write_pointers)
+    fn foreign_scalars() errors std::compiler::CompilerError:
         static compile:
-            fn f(d: abi::bytes::MutableBytes) -> int errors LayoutLengthMismatch, LayoutExtentMismatch:
-                x = binary::write_foreign(d, SHAPES.first, u8s([1, 2, 3, 4]))
+            fn f(d: std::abi::bytes::MutableBytes) -> int errors LayoutLengthMismatch, LayoutExtentMismatch:
+                x = std::binary::write_foreign(d, SHAPES.first, u8s([1, 2, 3, 4]))
                 0
             0
-    test::rejects_at("la-pointer-arrays-from-bytes/foreign-scalars", compiler::DiagnosticCode::LayoutForeignWrite, 726, 46, foreign_scalars)
-    fn foreign_records() errors compiler::CompilerError:
+    std::test::rejects_at("la-pointer-arrays-from-bytes/foreign-scalars", std::compiler::DiagnosticCode::LayoutForeignWrite, 726, 51, foreign_scalars)
+    fn foreign_records() errors std::compiler::CompilerError:
         static compile:
-            fn f(d: abi::bytes::MutableBytes) -> int errors LayoutLengthMismatch, LayoutExtentMismatch:
-                x = binary::write_foreign(d, PRECS.rs, [])
+            fn f(d: std::abi::bytes::MutableBytes) -> int errors LayoutLengthMismatch, LayoutExtentMismatch:
+                x = std::binary::write_foreign(d, PRECS.rs, [])
                 0
             0
-    test::rejects_at("la-pointer-arrays-from-bytes/foreign-records", compiler::DiagnosticCode::LayoutForeignWrite, 733, 46, foreign_records)
-    fn record_fields() errors compiler::CompilerError:
+    std::test::rejects_at("la-pointer-arrays-from-bytes/foreign-records", std::compiler::DiagnosticCode::LayoutForeignWrite, 733, 51, foreign_records)
+    fn record_fields() errors std::compiler::CompilerError:
         static compile:
-            fn f(d: abi::bytes::MutableBytes, q: ffi::c::Ptr[Node]) -> int errors LayoutLengthMismatch:
-                x = binary::write(d, PRECS.rs[1].k, 3)
-                y = binary::write_foreign(d, PRECS.rs[1].p, q)
+            fn f(d: std::abi::bytes::MutableBytes, q: std::ffi::c::Ptr[Node]) -> int errors LayoutLengthMismatch:
+                x = std::binary::write(d, PRECS.rs[1].k, 3)
+                y = std::binary::write_foreign(d, PRECS.rs[1].p, q)
                 0
             0
-    test::value("la-pointer-arrays-from-bytes/record-fields", 0, record_fields)
+    std::test::value("la-pointer-arrays-from-bytes/record-fields", 0, record_fields)
 
 fn register_live_tests():
     # la-native-authority: a view's arrays are read-only; store_element
-    # writes one scalar or pointer element; binary::element needs a live
+    # writes one scalar or pointer element; std::binary::element needs a live
     # array (the messages stay in Tcl).
-    fn view_store() errors compiler::CompilerError:
+    fn view_store() errors std::compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES]) -> int:
-                binary::store_element(v.first, 0, 1)
+                std::binary::store_element(v.first, 0, 1)
                 0
             0
-    test::rejects_at("la-native-authority/view-store", compiler::DiagnosticCode::BinaryOperand, 753, 39, view_store)
-    fn view_record_store() errors compiler::CompilerError:
+    std::test::rejects_at("la-native-authority/view-store", std::compiler::DiagnosticCode::BinaryOperand, 753, 44, view_store)
+    fn view_record_store() errors std::compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES]) -> int:
-                binary::store(binary::element(v.tails, 0), TAILED.b, 1)
+                std::binary::store(std::binary::element(v.tails, 0), TAILED.b, 1)
                 0
             0
-    test::rejects_at("la-native-authority/view-record-store", compiler::DiagnosticCode::BinaryOperand, 760, 31, view_record_store)
-    fn record_element_store() errors compiler::CompilerError:
+    std::test::rejects_at("la-native-authority/view-record-store", std::compiler::DiagnosticCode::BinaryOperand, 760, 36, view_record_store)
+    fn record_element_store() errors std::compiler::CompilerError:
         static compile:
             fn f(e: NativeEdit[SHAPES]) -> int:
-                binary::store_element(e.tails, 0, 1)
+                std::binary::store_element(e.tails, 0, 1)
                 0
             0
-    test::rejects_at("la-native-authority/record-element-store", compiler::DiagnosticCode::LayoutOperand, 767, 39, record_element_store)
-    fn row_store() errors compiler::CompilerError:
+    std::test::rejects_at("la-native-authority/record-element-store", std::compiler::DiagnosticCode::LayoutOperand, 767, 44, record_element_store)
+    fn row_store() errors std::compiler::CompilerError:
         static compile:
             fn f(e: NativeEdit[SHAPES]) -> int:
-                binary::store_element(e.m, 0, 1)
+                std::binary::store_element(e.m, 0, 1)
                 0
             0
-    test::rejects_at("la-native-authority/row-store", compiler::DiagnosticCode::LayoutOperand, 774, 39, row_store)
-    fn scalar_element() errors compiler::CompilerError:
+    std::test::rejects_at("la-native-authority/row-store", std::compiler::DiagnosticCode::LayoutOperand, 774, 44, row_store)
+    fn scalar_element() errors std::compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES]) -> int:
-                binary::element(v.mid, 0)
+                std::binary::element(v.mid, 0)
             0
-    test::rejects_at("la-native-authority/scalar-element", compiler::DiagnosticCode::BinaryOperand, 781, 33, scalar_element)
-    fn record_view_element() errors compiler::CompilerError:
+    std::test::rejects_at("la-native-authority/scalar-element", std::compiler::DiagnosticCode::BinaryOperand, 781, 38, scalar_element)
+    fn record_view_element() errors std::compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES]) -> int:
-                x = binary::element(v, 0)
+                x = std::binary::element(v, 0)
                 0
             0
-    test::rejects_at("la-native-authority/record-view-element", compiler::DiagnosticCode::BinaryOperand, 787, 37, record_view_element)
-    fn scalar_load() errors compiler::CompilerError:
+    std::test::rejects_at("la-native-authority/record-view-element", std::compiler::DiagnosticCode::BinaryOperand, 787, 42, record_view_element)
+    fn scalar_load() errors std::compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES]) -> int:
-                x = binary::load(v.mid)
+                x = std::binary::load(v.mid)
                 0
             0
-    test::rejects_at("la-native-authority/scalar-load", compiler::DiagnosticCode::BinaryOperand, 794, 34, scalar_load)
-    fn edit_reads() errors compiler::CompilerError:
+    std::test::rejects_at("la-native-authority/scalar-load", std::compiler::DiagnosticCode::BinaryOperand, 794, 39, scalar_load)
+    fn edit_reads() errors std::compiler::CompilerError:
         static compile:
             fn f(e: NativeEdit[SHAPES]) -> int:
-                binary::store_element(e.first, 0, 1)
-                binary::store(binary::element(e.tails, 1), TAILED.b, 2)
-                binary::element(e.first, 0) + binary::element(e.tails, 1).a
+                std::binary::store_element(e.first, 0, 1)
+                std::binary::store(std::binary::element(e.tails, 1), TAILED.b, 2)
+                std::binary::element(e.first, 0) + std::binary::element(e.tails, 1).a
             0
-    test::value("la-native-authority/edit-reads", 0, edit_reads)
+    std::test::value("la-native-authority/edit-reads", 0, edit_reads)
 
     # la-pointer-affinity: a loaded List of pointers and a pointer element
     # are affine; two reads are two pointers; a store observes its value.
-    fn list_twice() errors compiler::CompilerError:
+    fn list_twice() errors std::compiler::CompilerError:
         static compile:
-            fn f(v: NativeView[PTRS]) -> List[List[ffi::c::Ptr[Node]]]:
-                xs = binary::load(v.ps)
+            fn f(v: NativeView[PTRS]) -> List[List[std::ffi::c::Ptr[Node]]]:
+                xs = std::binary::load(v.ps)
                 [xs, xs]
             0
-    test::rejects_at("la-pointer-affinity/list-twice", compiler::DiagnosticCode::UseAfterMove, 813, 22, list_twice)
-    fn element_twice() errors compiler::CompilerError:
+    std::test::rejects_at("la-pointer-affinity/list-twice", std::compiler::DiagnosticCode::UseAfterMove, 813, 22, list_twice)
+    fn element_twice() errors std::compiler::CompilerError:
         static compile:
-            fn f(v: NativeView[PTRS]) -> List[ffi::c::Ptr[Node]]:
-                x = binary::element(v.ps, 0)
+            fn f(v: NativeView[PTRS]) -> List[std::ffi::c::Ptr[Node]]:
+                x = std::binary::element(v.ps, 0)
                 [x, x]
             0
-    test::rejects_at("la-pointer-affinity/element-twice", compiler::DiagnosticCode::UseAfterMove, 820, 21, element_twice)
-    fn two_reads() errors compiler::CompilerError:
+    std::test::rejects_at("la-pointer-affinity/element-twice", std::compiler::DiagnosticCode::UseAfterMove, 820, 21, element_twice)
+    fn two_reads() errors std::compiler::CompilerError:
         static compile:
-            fn f(v: NativeView[PTRS], e: NativeEdit[PTRS]) -> List[ffi::c::Ptr[Node]]:
-                xs = binary::load(v.ps)
-                binary::store(e, PTRS.ps, xs)
-                binary::store(e, PTRS.ps, xs)
-                [binary::element(v.ps, 0), binary::element(v.ps, 1)]
+            fn f(v: NativeView[PTRS], e: NativeEdit[PTRS]) -> List[std::ffi::c::Ptr[Node]]:
+                xs = std::binary::load(v.ps)
+                std::binary::store(e, PTRS.ps, xs)
+                std::binary::store(e, PTRS.ps, xs)
+                [std::binary::element(v.ps, 0), std::binary::element(v.ps, 1)]
             0
-    test::value("la-pointer-affinity/two-reads", 0, two_reads)
+    std::test::value("la-pointer-affinity/two-reads", 0, two_reads)
 
 fn register_proof_tests():
     # la-proofs-index: an index proven in 0..N-1 needs no handler.
-    fn index_constants() errors compiler::CompilerError:
+    fn index_constants() errors std::compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
-                binary::element(v.first, 0) + binary::element(v.first, 3)
+                std::binary::element(v.first, 0) + std::binary::element(v.first, 3)
             0
-    test::value("la-proofs-index/constants", 0, index_constants)
-    fn index_count_to() errors compiler::CompilerError:
+    std::test::value("la-proofs-index/constants", 0, index_constants)
+    fn index_count_to() errors std::compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
                 xs = loop i from 0 to 4:
-                    binary::element(v.first, i)
+                    std::binary::element(v.first, i)
                 0
             0
-    test::value("la-proofs-index/count-to", 0, index_count_to)
-    fn index_count_through() errors compiler::CompilerError:
+    std::test::value("la-proofs-index/count-to", 0, index_count_to)
+    fn index_count_through() errors std::compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
                 xs = loop i from 0 through 3:
-                    binary::element(v.first, i)
+                    std::binary::element(v.first, i)
                 0
             0
-    test::value("la-proofs-index/count-through", 0, index_count_through)
-    fn index_count_down() errors compiler::CompilerError:
+    std::test::value("la-proofs-index/count-through", 0, index_count_through)
+    fn index_count_down() errors std::compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
                 xs = loop i down from 3 through 0:
-                    binary::element(v.first, i)
+                    std::binary::element(v.first, i)
                 0
             0
-    test::value("la-proofs-index/count-down", 0, index_count_down)
-    fn index_layout_length() errors compiler::CompilerError:
+    std::test::value("la-proofs-index/count-down", 0, index_count_down)
+    fn index_layout_length() errors std::compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
-                xs = loop i from 0 to binary::layout_length(PT):
-                    binary::store_element(e.last, i, 1)
+                xs = loop i from 0 to std::binary::layout_length(PT):
+                    std::binary::store_element(e.last, i, 1)
                 0
             0
-    test::value("la-proofs-index/layout-length", 0, index_layout_length)
-    fn index_branch() errors compiler::CompilerError:
+    std::test::value("la-proofs-index/layout-length", 0, index_layout_length)
+    fn index_branch() errors std::compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
                 if k >= 0 and k < 4:
-                    binary::element(v.first, k)
+                    std::binary::element(v.first, k)
                 else:
                     0
             0
-    test::value("la-proofs-index/branch", 0, index_branch)
-    fn index_past_extent() errors compiler::CompilerError:
+    std::test::value("la-proofs-index/branch", 0, index_branch)
+    fn index_past_extent() errors std::compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
-                binary::element(v.first, 4)
+                std::binary::element(v.first, 4)
             0
-    test::rejects_at("la-proofs-index/past-extent", compiler::DiagnosticCode::KnownError, 885, 17, index_past_extent)
-    fn index_negative() errors compiler::CompilerError:
+    std::test::rejects_at("la-proofs-index/past-extent", std::compiler::DiagnosticCode::KnownError, 885, 17, index_past_extent)
+    fn index_negative() errors std::compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
-                binary::element(v.first, -1)
+                std::binary::element(v.first, -1)
             0
-    test::rejects_at("la-proofs-index/negative", compiler::DiagnosticCode::KnownError, 891, 17, index_negative)
-    fn index_parameter() errors compiler::CompilerError:
+    std::test::rejects_at("la-proofs-index/negative", std::compiler::DiagnosticCode::KnownError, 891, 17, index_negative)
+    fn index_parameter() errors std::compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
-                binary::element(v.first, k)
+                std::binary::element(v.first, k)
             0
-    test::rejects_at("la-proofs-index/parameter", compiler::DiagnosticCode::UnhandledError, 897, 17, index_parameter)
-    fn index_reaches_extent() errors compiler::CompilerError:
+    std::test::rejects_at("la-proofs-index/parameter", std::compiler::DiagnosticCode::UnhandledError, 897, 17, index_parameter)
+    fn index_reaches_extent() errors std::compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
                 xs = loop i from 0 through 4:
-                    binary::element(v.first, i)
+                    std::binary::element(v.first, i)
                 0
             0
-    test::rejects_at("la-proofs-index/reaches-extent", compiler::DiagnosticCode::UnhandledError, 904, 21, index_reaches_extent)
-    fn index_down_from_extent() errors compiler::CompilerError:
+    std::test::rejects_at("la-proofs-index/reaches-extent", std::compiler::DiagnosticCode::UnhandledError, 904, 21, index_reaches_extent)
+    fn index_down_from_extent() errors std::compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
                 xs = loop i down from 4 to 0:
-                    binary::element(v.first, i)
+                    std::binary::element(v.first, i)
                 0
             0
-    test::rejects_at("la-proofs-index/down-from-extent", compiler::DiagnosticCode::UnhandledError, 912, 21, index_down_from_extent)
-    fn index_branch_admits_extent() errors compiler::CompilerError:
+    std::test::rejects_at("la-proofs-index/down-from-extent", std::compiler::DiagnosticCode::UnhandledError, 912, 21, index_down_from_extent)
+    fn index_branch_admits_extent() errors std::compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
                 if k >= 0 and k <= 4:
-                    binary::element(v.first, k)
+                    std::binary::element(v.first, k)
                 else:
                     0
             0
-    test::rejects_at("la-proofs-index/branch-admits-extent", compiler::DiagnosticCode::UnhandledError, 920, 21, index_branch_admits_extent)
+    std::test::rejects_at("la-proofs-index/branch-admits-extent", std::compiler::DiagnosticCode::UnhandledError, 920, 21, index_branch_admits_extent)
 
     # la-proofs-extent: a List proven of exactly the extent needs no
     # handler; a function's result is no proof.
-    fn extent_literal() errors compiler::CompilerError:
+    fn extent_literal() errors std::compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
-                binary::store(e, SHAPES.first, [u8(1), u8(2), u8(3), u8(4)])
+                std::binary::store(e, SHAPES.first, [u8(1), u8(2), u8(3), u8(4)])
                 0
             0
-    test::value("la-proofs-extent/literal", 0, extent_literal)
-    fn extent_literal_rows() errors compiler::CompilerError:
+    std::test::value("la-proofs-extent/literal", 0, extent_literal)
+    fn extent_literal_rows() errors std::compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
-                binary::store(e, SHAPES.m, [[u16(1), u16(2), u16(3)], [u16(4), u16(5), u16(6)]])
+                std::binary::store(e, SHAPES.m, [[u16(1), u16(2), u16(3)], [u16(4), u16(5), u16(6)]])
                 0
             0
-    test::value("la-proofs-extent/literal-rows", 0, extent_literal_rows)
-    fn extent_counted_loop() errors compiler::CompilerError:
+    std::test::value("la-proofs-extent/literal-rows", 0, extent_literal_rows)
+    fn extent_counted_loop() errors std::compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
                 xs = loop i from 0 to 4:
                     u8(i)
-                binary::store(e, SHAPES.first, xs)
+                std::binary::store(e, SHAPES.first, xs)
                 0
             0
-    test::value("la-proofs-extent/counted-loop", 0, extent_counted_loop)
-    fn extent_length_branch() errors compiler::CompilerError:
+    std::test::value("la-proofs-extent/counted-loop", 0, extent_counted_loop)
+    fn extent_length_branch() errors std::compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
                 ys = u8s([1, 2, 3, 4])
-                if list::length(ys) == 4:
-                    binary::store(e, SHAPES.first, ys)
+                if std::list::length(ys) == 4:
+                    std::binary::store(e, SHAPES.first, ys)
                 0
             0
-    test::value("la-proofs-extent/length-branch", 0, extent_length_branch)
-    fn extent_loaded() errors compiler::CompilerError:
+    std::test::value("la-proofs-extent/length-branch", 0, extent_length_branch)
+    fn extent_loaded() errors std::compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
-                binary::store(e, SHAPES.first, binary::load(v.last))
-                binary::store(e, SHAPES.m, binary::load(v.m))
-                binary::store(e, SHAPES.tails, binary::load(v.tails))
+                std::binary::store(e, SHAPES.first, std::binary::load(v.last))
+                std::binary::store(e, SHAPES.m, std::binary::load(v.m))
+                std::binary::store(e, SHAPES.tails, std::binary::load(v.tails))
                 0
             0
-    test::value("la-proofs-extent/loaded", 0, extent_loaded)
-    fn extent_loaded_field() errors compiler::CompilerError:
+    std::test::value("la-proofs-extent/loaded", 0, extent_loaded)
+    fn extent_loaded_field() errors std::compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
-                t = binary::load(v)
-                binary::store(e, SHAPES.m, t.m)
+                t = std::binary::load(v)
+                std::binary::store(e, SHAPES.m, t.m)
                 0
             0
-    test::value("la-proofs-extent/loaded-field", 0, extent_loaded_field)
-    fn extent_parsed() errors compiler::CompilerError:
+    std::test::value("la-proofs-extent/loaded-field", 0, extent_loaded_field)
+    fn extent_parsed() errors std::compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
-                s = binary::parse(SHAPES, bytes_of(fill(48, 0))):
+                s = std::binary::parse(SHAPES, bytes_of(fill(48, 0))):
                     on LayoutLengthMismatch:
                         return 0
-                b = binary::emit(s)
-                binary::store(e, SHAPES.m, s.m)
+                b = std::binary::emit(s)
+                std::binary::store(e, SHAPES.m, s.m)
                 0
             0
-    test::value("la-proofs-extent/parsed", 0, extent_parsed)
-    fn extent_parsed_fields() errors compiler::CompilerError:
+    std::test::value("la-proofs-extent/parsed", 0, extent_parsed)
+    fn extent_parsed_fields() errors std::compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
-                s = binary::parse(SHAPES, bytes_of(fill(48, 0))):
+                s = std::binary::parse(SHAPES, bytes_of(fill(48, 0))):
                     on LayoutLengthMismatch:
                         return 0
-                b = binary::emit(LayoutStruct[SHAPES] {first: s.last, mid: 1, m: s.m, tails: s.tails, pts: s.pts, last: s.first})
+                b = std::binary::emit(LayoutStruct[SHAPES] {first: s.last, mid: 1, m: s.m, tails: s.tails, pts: s.pts, last: s.first})
                 0
             0
-    test::value("la-proofs-extent/parsed-fields", 0, extent_parsed_fields)
-    fn extent_loaded_rows() errors compiler::CompilerError:
+    std::test::value("la-proofs-extent/parsed-fields", 0, extent_parsed_fields)
+    fn extent_loaded_rows() errors std::compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
-                binary::store(e, SHAPES.m, [binary::load(binary::element(v.m, 1)), binary::load(binary::element(v.m, 0))])
+                std::binary::store(e, SHAPES.m, [std::binary::load(std::binary::element(v.m, 1)), std::binary::load(std::binary::element(v.m, 0))])
                 0
             0
-    test::value("la-proofs-extent/loaded-rows", 0, extent_loaded_rows)
-    fn extent_loaded_length() errors compiler::CompilerError:
+    std::test::value("la-proofs-extent/loaded-rows", 0, extent_loaded_rows)
+    fn extent_loaded_length() errors std::compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
-                x = list::at(binary::load(v.first), 3)
+                x = std::list::at(std::binary::load(v.first), 3)
                 0
             0
-    test::value("la-proofs-extent/loaded-length", 0, extent_loaded_length)
-    fn extent_short_literal() errors compiler::CompilerError:
+    std::test::value("la-proofs-extent/loaded-length", 0, extent_loaded_length)
+    fn extent_short_literal() errors std::compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
-                binary::store(e, SHAPES.first, [u8(1), u8(2), u8(3)])
+                std::binary::store(e, SHAPES.first, [u8(1), u8(2), u8(3)])
                 0
             0
-    test::rejects_at("la-proofs-extent/short-literal", compiler::DiagnosticCode::KnownError, 1015, 17, extent_short_literal)
-    fn extent_long_loop() errors compiler::CompilerError:
+    std::test::rejects_at("la-proofs-extent/short-literal", std::compiler::DiagnosticCode::KnownError, 1015, 17, extent_short_literal)
+    fn extent_long_loop() errors std::compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
                 xs = loop i from 0 to 5:
                     u8(i)
-                binary::store(e, SHAPES.first, xs)
+                std::binary::store(e, SHAPES.first, xs)
                 0
             0
-    test::rejects_at("la-proofs-extent/long-loop", compiler::DiagnosticCode::KnownError, 1024, 17, extent_long_loop)
-    fn extent_function_result() errors compiler::CompilerError:
+    std::test::rejects_at("la-proofs-extent/long-loop", std::compiler::DiagnosticCode::KnownError, 1024, 17, extent_long_loop)
+    fn extent_function_result() errors std::compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
-                binary::store(e, SHAPES.first, u8s([1, 2, 3, 4]))
+                std::binary::store(e, SHAPES.first, u8s([1, 2, 3, 4]))
                 0
             0
-    test::rejects_at("la-proofs-extent/function-result", compiler::DiagnosticCode::UnhandledError, 1031, 17, extent_function_result)
-    fn extent_function_rows() errors compiler::CompilerError:
+    std::test::rejects_at("la-proofs-extent/function-result", std::compiler::DiagnosticCode::UnhandledError, 1031, 17, extent_function_result)
+    fn extent_function_rows() errors std::compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
-                binary::store(e, SHAPES.m, [u16s([1, 2, 3]), u16s([4, 5, 6])])
+                std::binary::store(e, SHAPES.m, [u16s([1, 2, 3]), u16s([4, 5, 6])])
                 0
             0
-    test::rejects_at("la-proofs-extent/function-rows", compiler::DiagnosticCode::UnhandledError, 1038, 17, extent_function_rows)
-    fn extent_copy_of_another_extent() errors compiler::CompilerError:
+    std::test::rejects_at("la-proofs-extent/function-rows", std::compiler::DiagnosticCode::UnhandledError, 1038, 17, extent_function_rows)
+    fn extent_copy_of_another_extent() errors std::compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
                 0
             fn g(w: NativeView[SCALARS], e: NativeEdit[SHAPES]) -> int:
-                binary::store(e, SHAPES.first, binary::load(w.u8))
+                std::binary::store(e, SHAPES.first, std::binary::load(w.u8))
                 0
             0
-    test::rejects_at("la-proofs-extent/copy-of-another-extent", compiler::DiagnosticCode::KnownError, 1047, 17, extent_copy_of_another_extent)
-    fn extent_loaded_length_past() errors compiler::CompilerError:
+    std::test::rejects_at("la-proofs-extent/copy-of-another-extent", std::compiler::DiagnosticCode::KnownError, 1047, 17, extent_copy_of_another_extent)
+    fn extent_loaded_length_past() errors std::compiler::CompilerError:
         static compile:
             fn f(v: NativeView[SHAPES], e: NativeEdit[SHAPES], k: int) -> int:
-                x = list::at(binary::load(v.first), 4)
+                x = std::list::at(std::binary::load(v.first), 4)
                 0
             0
-    test::rejects_at("la-proofs-extent/loaded-length-past", compiler::DiagnosticCode::KnownError, 1054, 21, extent_loaded_length_past)
+    std::test::rejects_at("la-proofs-extent/loaded-length-past", std::compiler::DiagnosticCode::KnownError, 1054, 21, extent_loaded_length_past)
 
 fn register_layout_arrays_tests():
     register_declaration_tests()
@@ -1064,6 +1064,6 @@ fn register_layout_arrays_tests():
     register_live_tests()
     register_proof_tests()
 
-with context test::suite()
+with context std::test::suite()
 register_layout_arrays_tests()
-test::report()
+std::test::report()

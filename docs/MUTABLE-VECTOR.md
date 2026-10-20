@@ -11,7 +11,7 @@
 > **Mutating operations are only ever called (HASH-TABLE-COMPILER-PRESSURE.md,
 > CP-3).** An operation that mutates its receiver in place (push, pop, take,
 > swap, clear; an array's set, swap, copy) used as a value -- `p =
-> mutable_vector::push`, an argument, a field -- is `MUTABLE-PLACE-RECEIVER`
+> std::mutable_vector::push`, an argument, a field -- is `MUTABLE-PLACE-RECEIVER`
 > at the reference: a call through the value names no place, so it mutated
 > whatever header its caller passed, behind the copies the elaboration
 > writes only for places it sees mutated (`c = v; p(v, 4)` changed `c`).
@@ -71,8 +71,8 @@ itself (affine, moved).
 ## The principal program
 
 ```botlish
-import coroutine
-import mutable_vector
+import std::coroutine
+import std::mutable_vector
 
 struct Command:
     value: int
@@ -87,10 +87,10 @@ fn worker(seed: int, resume Command) -> Event:
 fn schedule() -> List[int] errors IndexNotFound:
     coroutine {step: first} = worker(1)
     coroutine {step: second} = worker(2)
-    queue = mutable_vector::from_list([first, second])
+    queue = std::mutable_vector::from_list([first, second])
     step = queue.take(0)
     event = step(Command {value: 10})
-    if not coroutine::done?(step):
+    if not std::coroutine::done?(step):
         queue.push(step)
     next = queue.pop()
     result = next(Command {value: 20})
@@ -127,7 +127,7 @@ generic and specialized), and (`tests/mutable-vector.test`'s
   `mvfromlist`, `mvtake`, `coresume`, `mvpush`, `mvpop`, `affinedrop` and
   `corelease` on registers (item 89 below).
 
-The scheduler's `if not coroutine::done?(step): queue.push(step)` moves
+The scheduler's `if not std::coroutine::done?(step): queue.push(step)` moves
 `step` on one path only: the elaboration releases it on the other path (the
 empty `else` -- "Path releases" in AFFINE-VALUES.md, new in this
 milestone), never after the join, where the vector now owns it.
@@ -210,8 +210,8 @@ The comparison found three things:
   nothing mutates, and by the mutants `fresh-result-imprecise` and
   `fresh-struct-imprecise`.
 * **Open, predating this milestone: affine values reach a MutableArray
-  through the library's generic `mutable_array::create`.** The written type
-  is rejected, but `mutable_array::create(2, make(1))` compiles: one
+  through the library's generic `std::mutable_array::create`.** The written type
+  is rejected, but `std::mutable_array::create(2, make(1))` compiles: one
   coroutine stored in two slots, never released, while every later use of
   the array is `AFFINE-ERASURE-UNSUPPORTED`. A library function is typed
   from its module signature and gets no per-call semantic instance, so the
@@ -241,12 +241,12 @@ There is no vector literal (a non-goal): a vector comes from `from_list`.
 
 ### 2. Construction API
 
-`mutable_vector::from_list(xs: List[T]) -> MutableVector[T]`, after
-`import mutable_vector`. An empty vector needs its element type from
+`std::mutable_vector::from_list(xs: List[T]) -> MutableVector[T]`, after
+`import std::mutable_vector`. An empty vector needs its element type from
 context: `from_list([])` is `MutableVector[never]` (nothing can be pushed
 into it: `TYPE`), so the empty vector of a given type is written where a
 type is declared -- a function result (`fn empty_queue() ->
-MutableVector[Job]: mutable_vector::from_list([])`), a struct field, a
+MutableVector[Job]: std::mutable_vector::from_list([])`), a struct field, a
 parameter. `mv-construction`, `mv-element-type`.
 
 ### 3. Method/API surface
@@ -305,7 +305,7 @@ whose only such slots are imprecise is copied whole by `d`
 (`mv-any-slot-copies`: the descriptor once skipped those slots, so an
 `any` field kept its source's header, and two `any` fields of one copy
 shared one). A refined value has its carrier's representation, so an
-integer domain or a C scalar (`abi::I32`'s field, `ffi::c::Int`) holds no
+integer domain or a C scalar (`std::abi::I32`'s field, `std::ffi::c::Int`) holds no
 header and is no such slot (`MayHoldVector` looks through the refinement). Where the compiler writes shares: item 11.
 The descriptor walks struct fields only, so a struct that names itself
 (STRUCTS.md) is met again inside itself only through fields -- a type no
@@ -397,21 +397,21 @@ backends: natively such a context is CONTEXT-NATIVE-LOWERING-UNSUPPORTED),
 
 ### 16. `length`
 
-`mutable_vector::length(v) -> int` (a collection-length range fact),
+`std::mutable_vector::length(v) -> int` (a collection-length range fact),
 an observation: no share, no move (affine: `use observe`).
 
 ### 17. `empty?`
 
-`mutable_vector::empty?(v) -> bool`, an observation like `length`.
+`std::mutable_vector::empty?(v) -> bool`, an observation like `length`.
 
 ### 18. Unrestricted `at`
 
-`mutable_vector::at(v, i) -> T`, `errors IndexNotFound` for an index
+`std::mutable_vector::at(v, i) -> T`, `errors IndexNotFound` for an index
 outside `0..length-1` (`mv-ops`).
 
 ### 19. Affine `at` rejection
 
-`AFFINE-VECTOR-COPY-OUT` (new; precise): "mutable_vector::at would copy an
+`AFFINE-VECTOR-COPY-OUT` (new; precise): "std::mutable_vector::at would copy an
 affine element out of `q` (...) while the vector still owns it, making a
 second owner: move it out instead -- `take(i)` removes it, `pop()` removes
 the last one, `swap(i, replacement)` exchanges it for another (there are no
@@ -420,7 +420,7 @@ fuzzer found unreported and is now fixed (`mv-affine-at`).
 
 ### 20. `push`
 
-`mutable_vector::push(v, x) -> unit`: appends; the element type is fixed by
+`std::mutable_vector::push(v, x) -> unit`: appends; the element type is fixed by
 the vector's type -- an element not admissible to it is `TYPE` (never
 widened or checked at run time; `mv-element-type`).
 
@@ -432,7 +432,7 @@ the binding is not released (`mv-affine-push-moves`).
 
 ### 22. `pop`
 
-`mutable_vector::pop(v) -> T` moves the last element out.
+`std::mutable_vector::pop(v) -> T` moves the last element out.
 
 ### 23. Empty-pop behavior
 
@@ -442,7 +442,7 @@ it like any declared error (`mv-ops`, the fuzzer's handled pops).
 
 ### 24. `take`
 
-`mutable_vector::take(v, i) -> T` moves element `i` out; later elements
+`std::mutable_vector::take(v, i) -> T` moves element `i` out; later elements
 keep their order (`mv-take-order`). There is no general partial-move state:
 the slot is gone, the vector stays a valid vector of the rest.
 
@@ -453,7 +453,7 @@ Int) fail with `IndexNotFound` and change nothing.
 
 ### 26. `swap`
 
-`mutable_vector::swap(v, i, x) -> T`: installs `x` at `i`, returns the old
+`std::mutable_vector::swap(v, i, x) -> T`: installs `x` at `i`, returns the old
 element.
 
 ### 27. Affine swap success
@@ -477,7 +477,7 @@ value nothing owns: released right after the statement
 
 ### 30. `clear`
 
-`mutable_vector::clear(v) -> unit`; an affine `clear` is elaborated to
+`std::mutable_vector::clear(v) -> unit`; an affine `clear` is elaborated to
 `mutable_vector#clear_drop(v, "D")`, which takes every element out first,
 then releases each by `D` (`mv-affine-clear`).
 
@@ -565,7 +565,7 @@ affine one (destructure the struct instead: `{items} = s`;
 `List[MutableVector[T]]` stores vectors as values: a List element is never
 a place (Lists are immutable), so it needs no copy until something
 extracts it into a place, whose entry shares it (`mv-cow-list-element`);
-`list::at(xs, 0).push(1)` is `MUTABLE-VECTOR-RECEIVER`. A List of affine
+`std::list::at(xs, 0).push(1)` is `MUTABLE-VECTOR-RECEIVER`. A List of affine
 vectors is affine, moves whole and drops every vector's elements
 (`mv-affine-list-of-vectors`).
 
@@ -656,8 +656,8 @@ HIR text (`hir::format`) marks every vector operation, reading back to the
 same text (`mv-hir-evidence`):
 
 ```
-call native(mutable_vector::take) : Coroutine{...} vector=mutate place=b13 move-out error-release=IndexNotFound=b13
-call native(mutable_vector::push) : unit vector=mutate place=b13
+call native(std::mutable_vector::take) : Coroutine{...} vector=mutate place=b13 move-out error-release=IndexNotFound=b13
+call native(std::mutable_vector::push) : unit vector=mutate place=b13
 ref b15 step : Coroutine{...} move
 ref b9 unit : unit release=b15
 listloop s12 (b27 step) binds b28 e : List[unit] consuming
@@ -797,7 +797,7 @@ The rejected programs carried the predicted diagnostic every time:
 `AFFINE-CAPTURE-UNSUPPORTED` 6, `AFFINE-VECTOR-COPY-OUT` 4,
 `AFFINE-FIELD-MOVE-REQUIRES-DESTRUCTURE` 2. During development the fuzzer
 found one real bug: an affine `at` through a struct field path
-(`mutable_vector::at(h3.items, 0)`) was accepted, because the field read's
+(`std::mutable_vector::at(h3.items, 0)`) was accepted, because the field read's
 rejection was deferred to its receiver while a receiver-path receiver is a
 place, not a read (`hir::affine::AffineProjection` now reports it at the
 projection; `mv-affine-at` pins it). Its mutation-harness run (item 65)
@@ -1136,7 +1136,7 @@ front removal is O(1): the future test runner can keep either discipline.
   "Relation to the other mutable types").
 * **What enums and the test framework still need**: a `TestEvent` with
   several cases (enums/tagged unions), payload-bearing failures, and
-  `compiler::assert_compiles` -- all non-goals here (item 100).
+  `std::compiler::assert_compiles` -- all non-goals here (item 100).
 
 ## By-reference arguments
 
@@ -1154,7 +1154,7 @@ and those could change the header first:
 | `v.at(pop1(v) - 7)` (`v` = [7, 8, 9]) | IndexNotFound | 9 |
 | `obs2(v, v.pop())` (`v` = [1, 2]) | 12 | 22 |
 | `v.at(v.pop() - 7)` | IndexNotFound | 9 |
-| `mutable_vector::at(c.values, bump())` (a context member [5]; bump pushes onto it) | 1 | IndexNotFound |
+| `std::mutable_vector::at(c.values, bump())` (a context member [5]; bump pushes onto it) | 1 | IndexNotFound |
 
 (every backend agreed on the wrong values: the elaboration is shared). Now
 such an argument (`ByReference`) counts as a later use of its path for an
@@ -1164,7 +1164,7 @@ the same place, or -- a context member, which any function sharing the
 context may mutate -- calls anything that may run code (`WrittenLater`,
 `MayRunCode`), a yield included: it suspends the coroutine, and the
 resumer may mutate the installed context before it resumes it
-(`mutable_vector::at(c.values, (yield Ev {...}).i)` read the resumer's
+(`std::mutable_vector::at(c.values, (yield Ev {...}).i)` read the resumer's
 replacement until `mv-cow-by-reference-yield`). A mutating receiver stays the place (`PlaceArgument`: `v.push(v.pop()
 + 10)` updates `v`), and later arguments that only read cost nothing
 (`x = v.at(v.length() - 1)` copies nothing). `tests/mutable-vector.test`'s

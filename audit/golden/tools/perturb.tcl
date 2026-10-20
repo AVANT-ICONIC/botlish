@@ -7,32 +7,33 @@
 #
 # Two independent perturbations, each one compilation of each suite:
 #
-#   invert  the suite runs against a private copy of lib/ whose test.bot
-#           builds every verdict inverted: `test::passed()` is a mismatch and
-#           `test::mismatch(...)` a match. Every helper and every custom check
+#   invert  the suite runs against a private copy of stdlib/ whose test.bot
+#           builds every verdict inverted: `std::test::passed()` is a mismatch and
+#           `std::test::mismatch(...)` a match. Every helper and every custom check
 #           that reaches its verdict through those constructors (directly or
-#           through test::equal / satisfies / diagnostic) then reports the
+#           through std::test::equal / satisfies / diagnostic) then reports the
 #           opposite. A test that still PASSES decided its verdict without the
-#           library's constructors -- a custom check that builds a test::Match
+#           library's constructors -- a custom check that builds a std::test::Match
 #           itself, or none at all: a test that cannot fail through its
 #           matcher. Every test must FAIL.
 #   alter   the suite's text is copied and each registration's expectation is
-#           altered: test::value's expected value (its first Int literal + 1,
+#           altered: std::test::value's expected value (its first Int literal + 1,
 #           else its first String literal + "~", else true/false swapped, else
 #           its first enum case qualified Name::Case swapped with another case
-#           written in the suite -- or not alterable), test::rejects' and
-#           test::rejects_at's, test::rejects_message's and
-#           test::rejects_containing's code (Type <-> Unbound, any other ->
-#           Type), and test::rejects_at's column + 1. Every altered test must FAIL: the
+#           written in the suite -- or not alterable), std::test::rejects' and
+#           std::test::rejects_at's, std::test::rejects_message's and
+#           std::test::rejects_containing's code (Type <-> Unbound, any other ->
+#           Type), and std::test::rejects_at's column + 1. Every altered test must FAIL: the
 #           comparison is sensitive to the expectation it was written with.
-#           test::holds, test::rejects_any, test::case and suite-local
+#           std::test::holds, std::test::rejects_any, std::test::case and suite-local
 #           registration helpers have no textual expectation to alter here;
 #           invert covers them.
 #
 # -lib DIR perturbs against a copy of the library directory DIR instead of
-# lib/: a suite that imports a module of its own (not standard library, so
-# not in lib/) runs against lib/ with that module added
-# (examples/games/2048/, 2048-ENGINE-WORKLOAD.md).
+# stdlib/. A suite's own application modules -- the files beside it that it
+# imports, transitively (IMPORTS.md, "Application modules";
+# examples/games/2048/golden.bot imports game2048) -- are copied beside every
+# perturbed copy, which is the copy's application root.
 #
 # The real checkout is never modified: the private library and suite copies
 # live in a `file tempdir` directory. The suite copy keeps its file name and
@@ -49,7 +50,7 @@ set here [file dirname [file normalize [info script]]]
 set root [file dirname [file dirname [file dirname $here]]]
 source [file join $here tree.tcl]
 
-set options [dict create -mode both -backends interp -timeout 3600 -lib [file join $root lib]]
+set options [dict create -mode both -backends interp -timeout 3600 -lib [file join $root stdlib]]
 set files {}
 for {set i 0} {$i < [llength $argv]} {incr i} {
     set arg [lindex $argv $i]
@@ -131,7 +132,7 @@ proc callArguments {text open} {
 proc enumCases {text} {
     set cases [dict create]
     foreach {- qualifier case} [regexp -all -inline {\m((?:[a-z_][A-Za-z0-9_]*::)?[A-Z][A-Za-z0-9_]*)::([A-Z][A-Za-z0-9_]*)\M} $text] {
-        if {$qualifier eq "compiler::DiagnosticCode"} continue
+        if {$qualifier eq "std::compiler::DiagnosticCode"} continue
         if {![dict exists $cases $qualifier] || $case ni [dict get $cases $qualifier]} {
             dict lappend cases $qualifier $case
         }
@@ -183,7 +184,7 @@ proc alterExpected {expr enums} {
 }
 
 proc alterCode {expr} {
-    if {![regexp {^\s*compiler::DiagnosticCode::([A-Za-z]+)\s*$} $expr -> code]} {
+    if {![regexp {^\s*std::compiler::DiagnosticCode::([A-Za-z]+)\s*$} $expr -> code]} {
         return ""
     }
     set other [expr {$code eq "Type" ? "Unbound" : "Type"}]
@@ -222,7 +223,7 @@ proc alterSuite {text} {
                 set range [lindex $ranges 1]
                 set new [alterCode [string range $text {*}$range]]
                 if {$new eq ""} {
-                    lappend skipped $name "code is not a literal compiler::DiagnosticCode case"
+                    lappend skipped $name "code is not a literal std::compiler::DiagnosticCode case"
                     continue
                 }
                 lappend edits [list {*}$range $new]
@@ -238,7 +239,7 @@ proc alterSuite {text} {
                 lappend altered $name
             }
             default {
-                lappend skipped $name "test::$helper has no textual expectation (invert covers it)"
+                lappend skipped $name "std::test::$helper has no textual expectation (invert covers it)"
             }
         }
     }
@@ -259,6 +260,53 @@ proc moveColumns {text} {
         set text [string replace $text $from $to $new]
     }
     return $text
+}
+
+# ---------------------------------------------------------------------------
+# A suite's application modules: {NAMESPACE FILE ...} for every namespace
+# outside std that the suite at PATH imports, transitively, whose file is in
+# the suite's directory (its application root): ROOT/a/b.bot for a::b.
+proc applicationModules {path} {
+    set appRoot [file dirname $path]
+    set modules [dict create]
+    set queue [list $path]
+    set ident {[A-Za-z_][A-Za-z0-9_]*}
+    while {$queue ne {}} {
+        set file [lindex $queue 0]
+        set queue [lrange $queue 1 end]
+        set namespaces {}
+        foreach {- type spelled} [regexp -all -inline -line "^import\\s+(type\\s+)?(?:::)?(${ident}(?:::${ident})*)\\s*\$" \
+                [goldentools::readFile $file]] {
+            if {$type ne ""} {
+                # `import type a::b::T` depends on the namespace a::b.
+                set spelled [join [lrange [split [string map {:: \x00} $spelled] \x00] 0 end-1] ::]
+            }
+            lappend namespaces $spelled
+        }
+        foreach ns $namespaces {
+            if {$ns eq "std" || [string match std::* $ns] || [dict exists $modules $ns]} continue
+            set moduleFile [file join $appRoot {*}[split [string map {:: \x00} $ns] \x00]].bot
+            if {![file isfile $moduleFile]} continue
+            dict set modules $ns $moduleFile
+            lappend queue $moduleFile
+        }
+    }
+    return $modules
+}
+
+# Writes TEXT, the perturbed suite named NAME, into the fresh directory DIR,
+# with the suite's application modules MODULES (applicationModules) beside it.
+# Returns the copy's path.
+proc writeCopy {dir name text modules} {
+    file mkdir $dir
+    dict for {ns moduleFile} $modules {
+        set target [file join $dir {*}[split [string map {:: \x00} $ns] \x00]].bot
+        file mkdir [file dirname $target]
+        file copy $moduleFile $target
+    }
+    set copy [file join $dir $name]
+    goldentools::writeFile $copy $text
+    return $copy
 }
 
 # ---------------------------------------------------------------------------
@@ -287,7 +335,7 @@ set exit 0
 try {
     # The private library copies: the real one (for alter) and the inverted
     # one (for invert).
-    set plainLib [file join $work lib]
+    set plainLib [file join $work stdlib]
     file copy [file normalize [dict get $options -lib]] $plainLib
     set invertedLib [file join $work lib-inverted]
     file copy [file normalize [dict get $options -lib]] $invertedLib
@@ -302,7 +350,7 @@ try {
     foreach {old new} $edits {
         set first [string first $old $text]
         if {$first < 0 || [string first $old $text [expr {$first + 1}]] >= 0} {
-            error "perturb.tcl: lib/test.bot no longer has exactly one \"[string trim $old]\": update the invert edits"
+            error "perturb.tcl: stdlib/test.bot no longer has exactly one \"[string trim $old]\": update the invert edits"
         }
         set text [string map [list $old $new] $text]
     }
@@ -314,11 +362,9 @@ try {
     foreach path $files {
         set name [file tail $path]
         set source [goldentools::readFile $path]
+        set modules [applicationModules $path]
         if {$mode in {invert both}} {
-            set copyDir [file join $work invert-[file rootname $name]]
-            file mkdir $copyDir
-            set copy [file join $copyDir $name]
-            goldentools::writeFile $copy $source
+            set copy [writeCopy [file join $work invert-[file rootname $name]] $name $source $modules]
             lassign [runPerturbed $invertedLib $copy $backends $timeout] state verdicts problem
             set passing [lmap {n v} $verdicts {if {$v ne "PASS"} continue; set n}]
             puts [format "%-28s invert  %4d tests, %4d failed as required%s" $name [dict size $verdicts] \
@@ -329,10 +375,7 @@ try {
         if {$mode in {alter both}} {
             set ::columnEdits {}
             lassign [alterSuite $source] altered alteredNames skipped
-            set copyDir [file join $work alter-[file rootname $name]]
-            file mkdir $copyDir
-            set copy [file join $copyDir $name]
-            goldentools::writeFile $copy $altered
+            set copy [writeCopy [file join $work alter-[file rootname $name]] $name $altered $modules]
             lassign [runPerturbed $plainLib $copy $backends $timeout] state verdicts problem
             set passing [lmap n $alteredNames {
                 if {![dict exists $verdicts $n] || [dict get $verdicts $n] ne "PASS"} continue
@@ -352,10 +395,7 @@ try {
             # rejects_at: the location alone must matter too.
             if {[regexp {\mtest::rejects_at\(} $source]} {
                 set moved [moveColumns $source]
-                set copyDir [file join $work column-[file rootname $name]]
-                file mkdir $copyDir
-                set copy [file join $copyDir $name]
-                goldentools::writeFile $copy $moved
+                set copy [writeCopy [file join $work column-[file rootname $name]] $name $moved $modules]
                 lassign [runPerturbed $plainLib $copy $backends $timeout] state verdicts problem
                 set located {}
                 foreach match [regexp -all -inline -indices {\mtest::rejects_at\(} $source] {

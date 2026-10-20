@@ -1,6 +1,6 @@
 #!/usr/bin/env tclsh9.0
-# fuzz.tcl -- randomized differential check of abi::bytes::MutableBytes value
-# semantics and linux::read (MUTABLE-BYTES.md).
+# fuzz.tcl -- randomized differential check of std::abi::bytes::MutableBytes value
+# semantics and std::linux::read (MUTABLE-BYTES.md).
 #
 #   tclsh9.0 audit/mutable-bytes/tools/fuzz.tcl ?-mode pure|read|both? ?-n N?
 #       ?-seed S? ?-items K? ?-backends LIST? ?-gc-stress 0|1?
@@ -21,9 +21,9 @@
 #       identity         vN = idg(vK)                  (generic function)
 #       list             vN = first([vK, vJ])          (List storage)
 #       struct           vN = unwrap(Holder {data: vK})(struct storage)
-#       detach           vN = abi::bytes::detach(vK)
+#       detach           vN = std::abi::bytes::detach(vK)
 #       reuse            vN = put(put(vK, ..), ..)     (copy then two updates)
-#   plus snapshots fN = abi::bytes::freeze(vK) and pN = prefix(vK, n) (n may exceed
+#   plus snapshots fN = std::abi::bytes::freeze(vK) and pN = prefix(vK, n) (n may exceed
 #   the length: the sentinel OVER). The result lists the revealed contents of
 #   EVERY variable and snapshot at the END, so an update that leaked into any
 #   earlier copy, through any route, shows up. The independent oracle (a Tcl
@@ -33,7 +33,7 @@
 #
 # read   (native only, Linux x86-64; the only syscall made is read(2) from a
 #         file or a pipe the harness feeds, and write(2) to files)
-#   Each program makes several linux::read calls of random capacities (biased
+#   Each program makes several std::linux::read calls of random capacities (biased
 #   as above) into buffers pre-filled with random NONZERO bytes, from one open
 #   FILE, and checks: every result is exactly min(capacity, bytes remaining)
 #   (a short read when the file ends inside a buffer, 0 at EOF); the returned
@@ -128,7 +128,7 @@ proc renderSpec {spec} {
 # The Botlish expression (a List[Byte]) of SPEC.
 proc specSource {spec} {
     if {[lindex $spec 0] eq "utf8"} {
-        return "str::encode_utf8([textLiteral [lindex $spec 1]])"
+        return "std::str::encode_utf8([textLiteral [lindex $spec 1]])"
     }
     lassign $spec - kind n t a b c k d
     return "gen_${kind}([join [list $n $t $a $b $c $k $d] {, }])"
@@ -247,41 +247,41 @@ fn bump(i: int, k: int, d: int) -> int:
 fn gen_full(n: int, t: int, a: int, b: int, c: int, k: int, d: int):
     loop i from 0 to n + t:
         if i >= n:
-            byte::from_int(0)
+            std::byte::from_int(0)
         else:
-            byte::from_int(mod(a * i * i + b * i + c + bump(i, k, d), 256))
+            std::byte::from_int(mod(a * i * i + b * i + c + bump(i, k, d), 256))
 
 fn gen_ascii(n: int, t: int, a: int, b: int, c: int, k: int, d: int):
     loop i from 0 to n + t:
         if i >= n:
-            byte::from_int(0)
+            std::byte::from_int(0)
         else:
-            byte::from_int(32 + mod(a * i * i + b * i + c + bump(i, k, d), 95))
+            std::byte::from_int(32 + mod(a * i * i + b * i + c + bump(i, k, d), 95))
 
 fn gen_high(n: int, t: int, a: int, b: int, c: int, k: int, d: int):
     loop i from 0 to n + t:
         if i >= n:
-            byte::from_int(0)
+            std::byte::from_int(0)
         else:
-            byte::from_int(128 + mod(a * i * i + b * i + c + bump(i, k, d), 128))
+            std::byte::from_int(128 + mod(a * i * i + b * i + c + bump(i, k, d), 128))
 
 fn gen_zeros(n: int, t: int, a: int, b: int, c: int, k: int, d: int):
     loop i from 0 to n + t:
         if i >= n:
-            byte::from_int(0)
+            std::byte::from_int(0)
         elif mod(a * i * i + b * i + c + bump(i, k, d), 3) == 0:
-            byte::from_int(0)
+            std::byte::from_int(0)
         else:
-            byte::from_int(mod(a * i * i + b * i + c + bump(i, k, d), 256))
+            std::byte::from_int(mod(a * i * i + b * i + c + bump(i, k, d), 256))
 
 fn gen_ffs(n: int, t: int, a: int, b: int, c: int, k: int, d: int):
     loop i from 0 to n + t:
         if i >= n:
-            byte::from_int(0)
+            std::byte::from_int(0)
         elif mod(a * i * i + b * i + c + bump(i, k, d), 3) == 0:
-            byte::from_int(255)
+            std::byte::from_int(255)
         else:
-            byte::from_int(mod(a * i * i + b * i + c + bump(i, k, d), 256))
+            std::byte::from_int(mod(a * i * i + b * i + c + bump(i, k, d), 256))
 
 }
 
@@ -323,42 +323,42 @@ proc pick {list} { return [lindex $list [expr {int(rand() * [llength $list])}]] 
 # pure: a random script of value definitions, and the oracle that replays it
 
 set pureHelpers {
-fn mbf(d: abi::bytes::Bytes) -> abi::bytes::MutableBytes:
-    abi::bytes::from_bytes(d)
+fn mbf(d: std::abi::bytes::Bytes) -> std::abi::bytes::MutableBytes:
+    std::abi::bytes::from_bytes(d)
 
 struct Holder:
-    data: abi::bytes::MutableBytes
+    data: std::abi::bytes::MutableBytes
 
-fn put(m: abi::bytes::MutableBytes, i: int, v: Byte) -> abi::bytes::MutableBytes:
-    abi::bytes::replace(m, i, v):
+fn put(m: std::abi::bytes::MutableBytes, i: int, v: Byte) -> std::abi::bytes::MutableBytes:
+    std::abi::bytes::replace(m, i, v):
         on IndexNotFound:
             m
 
 fn idg(x):
     x
 
-fn first(xs: List[abi::bytes::MutableBytes]) -> abi::bytes::MutableBytes:
-    list::at(xs, 0):
+fn first(xs: List[std::abi::bytes::MutableBytes]) -> std::abi::bytes::MutableBytes:
+    std::list::at(xs, 0):
         on IndexNotFound:
-            abi::bytes::zeroed(abi::usize(0))
+            std::abi::bytes::zeroed(std::abi::usize(0))
 
-fn unwrap(h: Holder) -> abi::bytes::MutableBytes:
+fn unwrap(h: Holder) -> std::abi::bytes::MutableBytes:
     h.data
 
-fn sentinel() -> abi::bytes::Bytes:
-    abi::bytes::from_list(str::encode_utf8("OVER"))
+fn sentinel() -> std::abi::bytes::Bytes:
+    std::abi::bytes::from_list(std::str::encode_utf8("OVER"))
 
-fn pre(m: abi::bytes::MutableBytes, n: int) -> abi::bytes::Bytes:
-    c = abi::usize(n):
-        on abi::AbiIntegerBelowRange:
-            abi::usize(0)
-        on abi::AbiIntegerAboveRange:
-            abi::usize(0)
-    abi::bytes::freeze_prefix(m, c):
+fn pre(m: std::abi::bytes::MutableBytes, n: int) -> std::abi::bytes::Bytes:
+    c = std::abi::usize(n):
+        on std::abi::AbiIntegerBelowRange:
+            std::abi::usize(0)
+        on std::abi::AbiIntegerAboveRange:
+            std::abi::usize(0)
+    std::abi::bytes::freeze_prefix(m, c):
         on UpperOverrun:
             sentinel()
 
-fn hashok(a: abi::bytes::MutableBytes, b: abi::bytes::MutableBytes) -> bool:
+fn hashok(a: std::abi::bytes::MutableBytes, b: std::abi::bytes::MutableBytes) -> bool:
     if a == b:
         hash(a) == hash(b)
     else:
@@ -381,7 +381,7 @@ proc pureScript {items} {
             fresh {
                 set spec [randomSpec]
                 set name [newName]
-                lappend lines "$name = mbf(abi::bytes::from_list([specSource $spec]))"
+                lappend lines "$name = mbf(std::abi::bytes::from_list([specSource $spec]))"
                 dict set values $name [renderSpec $spec]
             }
             copy {
@@ -397,7 +397,7 @@ proc pureScript {items} {
                 set idx [expr {rand() < 0.15 ? [pick [list -2 -1 $len [expr {$len + 1}] 1000]] : ($len > 0 ? int(rand() * $len) : 0)}]
                 set b [expr {int(rand() * 256)}]
                 set name [newName]
-                lappend lines "$name = put($k, $idx, byte::from_int($b))"
+                lappend lines "$name = put($k, $idx, std::byte::from_int($b))"
                 if {$idx >= 0 && $idx < $len} { set bytes [lreplace $bytes $idx $idx $b] }
                 dict set values $name $bytes
             }
@@ -423,7 +423,7 @@ proc pureScript {items} {
             detach {
                 set k [pick $names]
                 set name [newName]
-                lappend lines "$name = abi::bytes::detach($k)"
+                lappend lines "$name = std::abi::bytes::detach($k)"
                 dict set values $name [dict get $values $k]
             }
             reuse {
@@ -435,7 +435,7 @@ proc pureScript {items} {
                 set b2 [expr {int(rand() * 256)}]
                 set i1 [expr {$len > 0 ? int(rand() * $len) : 0}]
                 set i2 [expr {$len > 0 ? int(rand() * $len) : 0}]
-                lappend lines "$name = put(put($k, $i1, byte::from_int($b1)), $i2, byte::from_int($b2))"
+                lappend lines "$name = put(put($k, $i1, std::byte::from_int($b1)), $i2, std::byte::from_int($b2))"
                 if {$len > 0} {
                     set bytes [lreplace $bytes $i1 $i1 $b1]
                     set bytes [lreplace $bytes $i2 $i2 $b2]
@@ -445,7 +445,7 @@ proc pureScript {items} {
             snap {
                 set k [pick $names]
                 set name f[incr count]
-                lappend lines "$name = abi::bytes::freeze($k)"
+                lappend lines "$name = std::abi::bytes::freeze($k)"
                 lappend snaps [list $name [dict get $values $k]]
             }
             prefix {
@@ -468,13 +468,13 @@ proc pureScript {items} {
     set results {}
     set expected {}
     dict for {name bytes} $values {
-        lappend results "abi::bytes::freeze($name)"
-        lappend expected "abi::bytes::Bytes {storage: <bytes [llength $bytes]: [hexOf $bytes]>}"
+        lappend results "std::abi::bytes::freeze($name)"
+        lappend expected "std::abi::bytes::Bytes {storage: <bytes [llength $bytes]: [hexOf $bytes]>}"
     }
     foreach snap $snaps {
         lassign $snap name bytes
         lappend results $name
-        lappend expected "abi::bytes::Bytes {storage: <bytes [llength $bytes]: [hexOf $bytes]>}"
+        lappend expected "std::abi::bytes::Bytes {storage: <bytes [llength $bytes]: [hexOf $bytes]>}"
     }
     set names [dict keys $values]
     for {set i 0} {$i < 6} {incr i} {
@@ -483,7 +483,7 @@ proc pureScript {items} {
         lappend results "$a == $b" "hashok($a, $b)"
         lappend expected [boolWord [expr {[dict get $values $a] eq [dict get $values $b]}]] true
     }
-    set text "import abi\nimport abi::bytes\nimport byte\nimport list\nimport str\nimport type byte::Byte\n\n$::genFunctions\n$::pureHelpers\n[join $lines \n]\n\[[join $results {, }]\]\n"
+    set text "import std::abi\nimport std::abi::bytes\nimport std::byte\nimport std::list\nimport std::str\nimport type std::byte::Byte\n\n$::genFunctions\n$::pureHelpers\n[join $lines \n]\n\[[join $results {, }]\]\n"
     return [list $text $expected [dict size $values]]
 }
 
@@ -503,23 +503,23 @@ proc fillText {cap} {
     return $s
 }
 
-# A direct module (DIRECT-MODULES.md): out and rd call linux::write and
-# linux::read with no context of the program's own.
+# A direct module (DIRECT-MODULES.md): out and rd call std::linux::write and
+# std::linux::read with no context of the program's own.
 set readPrelude {direct module
-import abi
-import abi::bytes
-import byte
-import linux
-import str
+import std::abi
+import std::abi::bytes
+import std::byte
+import std::linux
+import std::str
 
-fn mbs(s: str) -> abi::bytes::MutableBytes:
-    abi::bytes::from_bytes(abi::bytes::from_list(str::encode_utf8(s)))
+fn mbs(s: str) -> std::abi::bytes::MutableBytes:
+    std::abi::bytes::from_bytes(std::abi::bytes::from_list(std::str::encode_utf8(s)))
 
-fn out(fd: int, data: abi::bytes::Bytes) -> int errors abi::AbiIntegerBelowRange, abi::AbiIntegerAboveRange:
-    linux::write(abi::i32(fd), data)
+fn out(fd: int, data: std::abi::bytes::Bytes) -> int errors std::abi::AbiIntegerBelowRange, std::abi::AbiIntegerAboveRange:
+    std::linux::write(std::abi::i32(fd), data)
 
-fn rd(fd: int, data: abi::bytes::MutableBytes) -> linux::ReadResult errors abi::AbiIntegerBelowRange, abi::AbiIntegerAboveRange:
-    linux::read(abi::i32(fd), data)
+fn rd(fd: int, data: std::abi::bytes::MutableBytes) -> std::linux::ReadResult errors std::abi::AbiIntegerBelowRange, std::abi::AbiIntegerAboveRange:
+    std::linux::read(std::abi::i32(fd), data)
 
 }
 
@@ -534,8 +534,8 @@ proc readProgram {caps} {
         lappend fills $fill
         append lets "b$i = mbs([textLiteral $fill])\n"
         append lets "r$i = rd(0, b$i)\n"
-        append lets "w$i = out(3, abi::bytes::freeze(r$i.data))\n"
-        append lets "x$i = out(4, abi::bytes::freeze(b$i))\n"
+        append lets "w$i = out(3, std::abi::bytes::freeze(r$i.data))\n"
+        append lets "x$i = out(4, std::abi::bytes::freeze(b$i))\n"
         lappend results "r$i.result"
         incr i
     }

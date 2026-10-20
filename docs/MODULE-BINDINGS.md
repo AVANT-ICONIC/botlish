@@ -13,8 +13,8 @@ fn uri_escape_text(s):
     ...
 ```
 
-A namespace remains a compile-time concept. `web::hex_digits` resolves through
-the module scope and its stable `BindingId`, exactly as `web::uri_escape_text`
+A namespace remains a compile-time concept. `std::web::hex_digits` resolves through
+the module scope and its stable `BindingId`, exactly as `std::web::uri_escape_text`
 does. There is no namespace object, property lookup, or name lookup at run
 time.
 
@@ -77,11 +77,11 @@ argument. Native root liveness and GC safepoints treat these values as normal
 managed roots, and temporary initializer intermediates are not retained just
 because initialization occurs at startup.
 
-## `web::hex_digits`
+## `std::web::hex_digits`
 
 Before this change, `uri_escape_text` constructed the 16 String List in its
 function body. It therefore constructed the table once for every invocation.
-It is now the module binding in `lib/web.bot`.
+It is now the module binding in `stdlib/web.bot`.
 
 For a native program that calls `uriEscape` twice with the same 16-character
 input, `native::allocationReport` finds the `hex_digits` List allocation site:
@@ -89,7 +89,7 @@ input, `native::allocationReport` finds the `hex_digits` List allocation site:
 | table construction | before | after |
 |---|---:|---:|
 | `hex_digits` List allocations | 2 | 1 |
-| placement in NIR | `web::uri_escape_text` | `<program>` |
+| placement in NIR | `std::web::uri_escape_text` | `<program>` |
 
 Thus for `N` calls, the table construction changes from `N` to `1`. The table
 is not compiler static data and has no URI-specific opcode.
@@ -99,11 +99,11 @@ The representative unspecialized NIR after the change begins as follows:
 ```text
 func 0 "<program>" ...
     ...
-    %16 = op listnew %0 ... %15       # web::hex_digits, once
+    %16 = op listnew %0 ... %15       # std::web::hex_digits, once
     %17 = closure 1 %16               # uri_escape_text, once
     %19 = callenv 1 %17 %18
 
-func 1 "web::uri_escape_text" params=1 env=1 ... captures=1
+func 1 "std::web::uri_escape_text" params=1 env=1 ... captures=1
     %1 = capture 0
 ```
 
@@ -117,7 +117,7 @@ allocation.
 
 With `-repr-opt 0`, the same two-call probe measured 8,644 B before and
 8,666 B after. The program function changed from 311 B to 989 B (table and
-startup closure); `web::uri_escape_text` changed from 1,150 B to 494 B. The
+startup closure); `std::web::uri_escape_text` changed from 1,150 B to 494 B. The
 other helper functions were unchanged. These are structural audit data, not
 an optimization target for this milestone.
 
@@ -127,5 +127,5 @@ an optimization target for this milestone.
 cross-module values, repeated module-value use, identity through qualified and
 same-module references, transitive context rejection, mutable retention, and
 forward-read rejection. It also checks the native startup NIR and allocation
-site for `web::hex_digits`. Native GC-stress and the normal backend suites
+site for `std::web::hex_digits`. Native GC-stress and the normal backend suites
 cover normal liveness and backend parity.

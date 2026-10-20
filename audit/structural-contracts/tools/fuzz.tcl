@@ -8,9 +8,9 @@
 #
 # Each program declares four error identities -- E1..E4, E2 and E4 carrying a
 # payload {code: int}; or, in every other program, two same-short-name
-# module errors alpha::Failed and beta::Failed (written to a private copy of
-# the library) beside E3 and E4 -- and one raiser per identity, an untyped
-# function failing it for one selector value. Then:
+# module errors std::alpha::Failed and std::beta::Failed (written to a private
+# copy of the library, so standard modules) beside E3 and E4 -- and one raiser
+# per identity, an untyped function failing it for one selector value. Then:
 #
 #   erasure     some raisers are passed through the untyped helper `call` and
 #               handled there (`recovered` observations), others captured by
@@ -63,7 +63,7 @@ set argv {}
 source [file join $root tests helpers.tcl]
 
 # A private copy of the library for the namespaced programs' modules (never
-# the real lib/), removed at exit.
+# the real stdlib/), removed at exit.
 set ::fuzzLib [file tempdir botlish-scc-fuzz-lib]
 foreach entry [glob -directory $::core::libraryDir *] {
     file copy $entry $::fuzzLib
@@ -103,8 +103,8 @@ proc Union {args} {
 proc Identities {namespaced} {
     if {$namespaced} {
         return {
-            {alpha::Failed A 1 0 alpha::raise}
-            {beta::Failed B 2 0 beta::raise}
+            {std::alpha::Failed A 1 0 std::alpha::raise}
+            {std::beta::Failed B 2 0 std::beta::raise}
             {E3 E3 3 0 r3}
             {E4 E4 4 1 r4}
         }
@@ -211,7 +211,7 @@ proc Program {number} {
     if {$namespaced} {
         dict set files alpha.bot [ModuleText alpha 1]
         dict set files beta.bot [ModuleText beta 2]
-        append text "import alpha\nimport beta\n\n"
+        append text "import std::alpha\nimport std::beta\n\n"
     }
     foreach id $ids {
         lassign $id name tag k payload raiser

@@ -303,12 +303,12 @@ proc indent {lines n} {
 # context (a MutableArray is a value since MUTABLE-ARRAY.md: one passed as an
 # argument would be the callee's own copy), reset at the start of every run.
 set ::logDecls [list "context struct Log:" "    digits: MutableArray\[int\]" \
-    "fn logged(context log: Log) -> int:" "    mutable_array::get(log.digits, 0, 0)" \
-    "fn reset(context log: Log) -> unit:" "    mutable_array::set(log.digits, 0, 0):" \
+    "fn logged(context log: Log) -> int:" "    std::mutable_array::get(log.digits, 0, 0)" \
+    "fn reset(context log: Log) -> unit:" "    std::mutable_array::set(log.digits, 0, 0):" \
     "        on IndexNotFound:" "            unit" "    unit" \
     "fn probe(id: int, v: int, context log: Log) -> int:" "    k = logged()" \
-    "    mutable_array::set(log.digits, 0, k * 10 + id):" "        on IndexNotFound:" "            unit"]
-set ::logInstall "with context Log {digits: mutable_array::create(1, 0)}"
+    "    std::mutable_array::set(log.digits, 0, k * 10 + id):" "        on IndexNotFound:" "            unit"]
+set ::logInstall "with context Log {digits: std::mutable_array::create(1, 0)}"
 
 proc program {case style} {
     dict with case {}
@@ -428,7 +428,7 @@ proc stripLocations {message} {
 # {ok HIR}, or {error CODE MESSAGE} for a compile-time rejection (the CODE of a
 # syntax error includes the diagnostic's stable `code`, when it has one).
 proc compileOrError {source} {
-    # Through a file: the programs call library modules (mutable_array::create).
+    # Through a file: the programs call library modules (std::mutable_array::create).
     set file destructuring-fuzz-[pid].bot
     set path [makeFile [surface::modules::ImportHeader $source]$source $file]
     set failed [catch {surface::readProgramFile $path} hir options]
@@ -568,7 +568,7 @@ proc negative {kind case} {
             return [concat [defective $case [patternText $bad] $e $source] {{}}]
         }
         non-struct-source {
-            set bad [pick {n {"text"} {[n, 1]} unit {mutable_array::create(1, 0)}}]
+            set bad [pick {n {"text"} {[n, 1]} unit {std::mutable_array::create(1, 0)}}]
             set ::counter(t_) 1
             return [concat [defective $case [patternText $pattern] [explicitLines $pattern t_1] $bad] {{}}]
         }

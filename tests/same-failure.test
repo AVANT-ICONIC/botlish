@@ -249,7 +249,7 @@ error AError
     x"]
 } -result {1 {{7:9 A 2 11:9}}}
 
-test sf-one-identity-is-one-declaration {one short name in two modules, or in a module and the program, is two identities (m::Invalid, n::Invalid, Invalid) and compiles; one identity declared twice, or a builtin's name, is rejected: identical text in one scope never names two failures} -body {
+test sf-one-identity-is-one-declaration {one short name in two modules, or in a module and the program, is two identities (std::m::Invalid, std::n::Invalid, Invalid) and compiles; one identity declared twice, or a builtin's name, is rejected: identical text in one scope never names two failures} -body {
     withModules {m.bot {error Invalid
 fn g(x):
     x
@@ -257,61 +257,61 @@ fn g(x):
 fn h(x):
     x
 }} {
-        list [lindex [rejection "import m\nimport n\nn::h(1)" default] 0] \
-            [lindex [rejection "import m\nerror Invalid\nm::g(1)" default] 0] \
+        list [lindex [rejection "import std::m\nimport std::n\nstd::n::h(1)" default] 0] \
+            [lindex [rejection "import std::m\nerror Invalid\nstd::m::g(1)" default] 0] \
             [lindex [rejection "error Invalid\nerror Invalid\n1" default] 0] \
             [lindex [rejection "error IndexNotFound\n1" default] 0]
     }
 } -result {compiled compiled {CORE SEMANTIC UNDECLARED-ERROR} {CORE SEMANTIC UNDECLARED-ERROR}}
 
-test sf-module-failure-is-the-same-failure {a fail of a module's declared error and the program's own fail of it are one identity: m::Invalid, the canonical identity the resolver admits} -body {
+test sf-module-failure-is-the-same-failure {a fail of a module's declared error and the program's own fail of it are one identity: std::m::Invalid, the canonical identity the resolver admits} -body {
     withModules {m.bot {error Invalid
 fn g(x) errors Invalid:
     if x == 0:
         fail Invalid
     x
 }} {
-        failures {import m
-fn f(x) errors m::Invalid:
+        failures {import std::m
+fn f(x) errors std::m::Invalid:
     if x < 0:
-        fail m::Invalid
+        fail std::m::Invalid
     if x > 9:
-        fail m::Invalid
-    m::g(x)}
+        fail std::m::Invalid
+    std::m::g(x)}
     }
-} -result {{4:9 m::Invalid 2 6:9}}
+} -result {{4:9 std::m::Invalid 2 6:9}}
 
-test sf-same-short-name-never-grouped {two errors of one short name -- the program's Invalid and module m's m::Invalid, payload-free or with identical payloads -- are two identities: their failures are never one group} -body {
+test sf-same-short-name-never-grouped {two errors of one short name -- the program's Invalid and module std::m's std::m::Invalid, payload-free or with identical payloads -- are two identities: their failures are never one group} -body {
     withModules {m.bot {error Invalid
 error Coded:
     code: int
 fn g(x):
     x
 }} {
-        list [failures {import m
+        list [failures {import std::m
 error Invalid
-fn f(x) errors Invalid, m::Invalid:
+fn f(x) errors Invalid, std::m::Invalid:
     if x < 0:
         fail Invalid
     if x > 9:
-        fail m::Invalid
-    x}] [failures {import m
+        fail std::m::Invalid
+    x}] [failures {import std::m
 error Coded:
     code: int
-fn f(x) errors Coded, m::Coded:
+fn f(x) errors Coded, std::m::Coded:
     if x < 0:
         fail Coded {code: 1}
     if x > 9:
-        fail m::Coded {code: 1}
-    x}] [failures {import m
-fn f(x) errors m::Invalid:
+        fail std::m::Coded {code: 1}
+    x}] [failures {import std::m
+fn f(x) errors std::m::Invalid:
     if x < 0:
-        fail m::Invalid
+        fail std::m::Invalid
     if x > 9:
-        fail m::Invalid
+        fail std::m::Invalid
     x}]
     }
-} -result {{} {} {{4:9 m::Invalid 2 6:9}}}
+} -result {{} {} {{4:9 std::m::Invalid 2 6:9}}}
 
 test sf-builtin-error-groups {a builtin error of the runtime (IndexNotFound) is a declared failure like any other} -body {
     failures {fn f(x) errors IndexNotFound:
@@ -884,9 +884,9 @@ fn parse(xs, a) errors Invalid:
         fail Invalid
     a
 }} {
-        set hir [surface::compile {import m
-y = m::parse([1, 2], 3):
-    on m::Invalid:
+        set hir [surface::compile {import std::m
+y = std::m::parse([1, 2], 3):
+    on std::m::Invalid:
         0
 y} t.bot -warnings default -warning-channel ""]
         lmap w [failuresOf $hir] {
@@ -895,7 +895,7 @@ y} t.bot -warnings default -warning-channel ""]
                 [dict get $w data functionName]
         }
     }
-} -result {{m.bot:5:13 m.bot:7:9 m::parse}}
+} -result {{m.bot:5:13 m.bot:7:9 std::m::parse}}
 
 # ---------------------------------------------------------------------------
 # Declared failures only (item 8)

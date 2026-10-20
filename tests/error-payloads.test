@@ -13,10 +13,10 @@
 source [file join [file dirname [file normalize [info script]]] helpers.tcl]
 
 # The principal declarations (the brief's item 78, with a String standing in
-# for the payload stream: a Bytes value, `abi::bytes::empty()`-style, appears
+# for the payload stream: a Bytes value, `std::abi::bytes::empty()`-style, appears
 # in ep-principal-bytes below).
-set epDecls {import str
-import list
+set epDecls {import std::str
+import std::list
 
 struct Response:
     payloadStream: str
@@ -173,8 +173,8 @@ proc epReleased {text} {
 }
 
 # Declarations of the affine cases: a payload that owns a coroutine.
-set epAffine {import coroutine
-import list
+set epAffine {import std::coroutine
+import std::list
 
 struct Message:
     value: int
@@ -223,7 +223,7 @@ test ep-declaration-grammar {a payload is an indented block of `field: Type` lin
     set hir [epHir "${::epDecls}1\n"]
     list [hir::errorDecls $hir] [dict get $hir errorPayloads] \
         [hir::errordecls::fields ConnectionLost] [hir::errordecls::hasPayload ConnectionLost]
-} -cleanup {unset -nocomplain hir} -result {{list::NotFound PageNotFound ObjectNotFound ConnectionLost} {PageNotFound {fields {uri str statusCode int response {nstruct Response}} namespace {}} ObjectNotFound {fields {uri str} namespace {}}} {} 0}
+} -cleanup {unset -nocomplain hir} -result {{std::list::NotFound PageNotFound ObjectNotFound ConnectionLost} {PageNotFound {fields {uri str statusCode int response {nstruct Response}} namespace {}} ObjectNotFound {fields {uri str} namespace {}}} {} 0}
 
 test ep-declaration-payload-type {the payload's static type is the anonymous struct of the declared fields (no source-nameable type, no identity field); declaration order is kept for the descriptor} -body {
     epHir "${::epDecls}1\n"
@@ -249,7 +249,7 @@ test ep-declaration-nominal {two errors with identical payload fields are distin
 } -result {{x int} {x int} UNDECLARED-ERROR}
 
 test ep-declaration-field-types {payload fields take every declarable type: structs (declared later too), enums, Lists, ImmutableSets and function types} -body {
-    set text "import list\nenum Kind:\n    Missing,\n    Gone,\nerror Rich:\n    kind: Kind\n    tags: List\[str\]\n    later: Later\n    cb: Fn{args: \[int\], return: int, errors: \[\]}\nstruct Later:\n    n: int\n1\n"
+    set text "import std::list\nenum Kind:\n    Missing,\n    Gone,\nerror Rich:\n    kind: Kind\n    tags: List\[str\]\n    later: Later\n    cb: Fn{args: \[int\], return: int, errors: \[\]}\nstruct Later:\n    n: int\n1\n"
     epHir $text
     hir::types::show [hir::errordecls::payloadType Rich]
 } -cleanup {unset -nocomplain text} -result {struct{cb: Fn{args: [int], return: int, errors: []}, kind: Kind, later: Later, tags: List[str]}}
@@ -284,7 +284,7 @@ test ep-fail-positional-rejected {item 6: no positional construction} -body {
 } -result {SYNTAX {an error payload is constructed by named fields, never positionally: write "fail ObjectNotFound {field: value, ...}"}}
 
 test ep-fail-written-order {the payload's fields evaluate in written order (any order may be written), then the error is raised; a field that fails first raises that error instead} -body {
-    epAgree "${::epDecls}error Boom\nfn inner(b: int) -> str errors Boom:\n    if b > 5:\n        fail Boom\n    \"x\"\nfn g(a: int, b: int) -> int errors ObjectNotFound, Boom:\n    if a == b:\n        fail ObjectNotFound {uri: str::concat(\"a\", inner(b))}\n    a\nfn f(a: int, b: int) -> str:\n    v = g(a, b):\n        on ObjectNotFound {uri}:\n            return uri\n        on Boom:\n            return \"boom\"\n    \"none\"\n\[f(1, 1), f(7, 7), f(1, 2)\]\n"
+    epAgree "${::epDecls}error Boom\nfn inner(b: int) -> str errors Boom:\n    if b > 5:\n        fail Boom\n    \"x\"\nfn g(a: int, b: int) -> int errors ObjectNotFound, Boom:\n    if a == b:\n        fail ObjectNotFound {uri: std::str::concat(\"a\", inner(b))}\n    a\nfn f(a: int, b: int) -> str:\n    v = g(a, b):\n        on ObjectNotFound {uri}:\n            return uri\n        on Boom:\n            return \"boom\"\n    \"none\"\n\[f(1, 1), f(7, 7), f(1, 2)\]\n"
 } -result {value {["ax", "boom", "none"]}}
 
 # ---------------------------------------------------------------------------
@@ -299,7 +299,7 @@ fn fields(uri: str) -> int:
     page = fetch(uri):
         on PageNotFound {statusCode}:
             return statusCode
-    str::length(page)
+    std::str::length(page)
 
 fn rename(uri: str) -> str:
     fetch(uri):
@@ -314,7 +314,7 @@ fn nested(uri: str) -> int:
                 length,
             }
         }:
-            return length + str::length(payloadStream)
+            return length + std::str::length(payloadStream)
     -1
 
 fn ignored(uri: str) -> str:
@@ -332,8 +332,8 @@ test ep-principal-ints {item 78: the Int-valued forms, failing and succeeding} -
     epAgree "${::epPrincipal}\[fields(\"/y\"), nested(\"/w\"), fields(\"\"), nested(\"\")\]\n"
 } -result {value {[404, 0, 4, -1]}}
 
-test ep-principal-bytes {item 78 with the stdlib's Bytes as the payload stream (abi::bytes::from_list builds an empty one): the nested destructuring reads it, on every backend} -body {
-    epAgree "import abi::bytes\nimport abi\nimport str\n\nstruct Response:\n    payloadStream: abi::bytes::Bytes\n    length: int\n\nerror PageNotFound:\n    uri: str\n    statusCode: int\n    response: Response\n\nfn fetch(uri: str) -> str errors PageNotFound:\n    if uri == \"\":\n        return \"home\"\n    fail PageNotFound {\n        uri: uri,\n        statusCode: 404,\n        response: Response {\n            payloadStream: abi::bytes::from_list(\[\]),\n            length: 0,\n        },\n    }\n\nfn nested(uri: str) -> int:\n    page = fetch(uri):\n        on PageNotFound {\n            response: {\n                payloadStream,\n                length,\n            }\n        }:\n            return length + abi::bytes::length(payloadStream).value\n    -1\n\n\[nested(\"/w\"), nested(\"\")\]\n"
+test ep-principal-bytes {item 78 with the stdlib's Bytes as the payload stream (std::abi::bytes::from_list builds an empty one): the nested destructuring reads it, on every backend} -body {
+    epAgree "import std::abi::bytes\nimport std::abi\nimport std::str\n\nstruct Response:\n    payloadStream: std::abi::bytes::Bytes\n    length: int\n\nerror PageNotFound:\n    uri: str\n    statusCode: int\n    response: Response\n\nfn fetch(uri: str) -> str errors PageNotFound:\n    if uri == \"\":\n        return \"home\"\n    fail PageNotFound {\n        uri: uri,\n        statusCode: 404,\n        response: Response {\n            payloadStream: std::abi::bytes::from_list(\[\]),\n            length: 0,\n        },\n    }\n\nfn nested(uri: str) -> int:\n    page = fetch(uri):\n        on PageNotFound {\n            response: {\n                payloadStream,\n                length,\n            }\n        }:\n            return length + std::abi::bytes::length(payloadStream).value\n    -1\n\n\[nested(\"/w\"), nested(\"\")\]\n"
 } -result {value {[0, -1]}}
 
 test ep-principal-hir {item 76: nominal selection and ordinary payload binding are visibly separate in HIR -- `fail NAME` with its payload construction, `on NAME ... payload (B NAME)`, and the destructuring's ordinary projection binds} -body {
@@ -344,7 +344,7 @@ test ep-principal-hir {item 76: nominal selection and ordinary payload binding a
 } -result {{{# fail PageNotFound : never}} {{# struct payload(PageNotFound) (uri, statusCode, response) : struct{response: Response, statusCode: int, uri: str}}} {{on PageNotFound # payload (# details)} {on PageNotFound # payload (# destructure#*) binds # statusCode} {on PageNotFound # payload (# destructure#*) binds # pageUri} {on PageNotFound # payload (# destructure#*) binds # destructure#*, # payloadStream, # length} {on PageNotFound #}} {{# project statusCode : int}}}
 
 test ep-principal-hir-text-round-trip {HIR text states the payload descriptors, the payload construction and the handler payload bindings, and reads back to the same text, which runs (the program without imports: HIR text of a program with modules does not read back)} -body {
-    set hir [epHir [string map [list "import str\nimport list\n" "" "str::length(" "length_of(" "error ConnectionLost\n" "error ConnectionLost\n\nfn length_of(s: str) -> int:\n    7\n"] "${::epPrincipal}\[whole(\"/x\"), fields(\"/y\"), rename(\"/z\"), nested(\"/w\")\]\n"]]
+    set hir [epHir [string map [list "import std::str\nimport std::list\n" "" "std::str::length(" "length_of(" "error ConnectionLost\n" "error ConnectionLost\n\nfn length_of(s: str) -> int:\n    7\n"] "${::epPrincipal}\[whole(\"/x\"), fields(\"/y\"), rename(\"/z\"), nested(\"/w\")\]\n"]]
     set text [hir::format $hir]
     set back [hir::parse $text]
     list [expr {[hir::format $back] eq $text}] [lindex [outcomeUnderHir compile $back] 1] \
@@ -386,7 +386,7 @@ test ep-whole-binding-is-the-payload {item 15/16/42: the whole binding is the pa
 } -result {{value {[false, true]}} {value {[{response: Response {payloadStream: "", length: 0}, statusCode: 404, uri: "/p"}]}} UNKNOWN-FIELD}
 
 test ep-captured-payload-binding {a nested function may capture a payload binding like any binding (unrestricted payload): natively the payload object is built once, at the handler} -body {
-    epAgree "${::epDecls}fn f(uri: str) -> str:\n    v = fetch(uri):\n        on PageNotFound details:\n            fn show() -> str:\n                str::concat(details.uri, \"?\")\n            return show()\n    \"ok\"\n\[f(\"\"), f(\"/c\")\]\n"
+    epAgree "${::epDecls}fn f(uri: str) -> str:\n    v = fetch(uri):\n        on PageNotFound details:\n            fn show() -> str:\n                std::str::concat(details.uri, \"?\")\n            return show()\n    \"ok\"\n\[f(\"\"), f(\"/c\")\]\n"
 } -result {value {["ok", "/c?"]}}
 
 test ep-partial-destructuring {items 18, 64: a handler names only the fields it uses; a later field added to the declaration does not affect it} -body {
@@ -442,7 +442,7 @@ test ep-no-guards {items 21-22: no `if`/`where` guard, no several errors in one 
 # Nominal dispatch (items 4, 24, 25, 54, 55, 65)
 
 test ep-same-shape-distinct {items 4, 24, 55, 65: errors with identical payload fields are handled by their own handlers only -- selection compares identities, never payload shapes} -body {
-    epAgree "${::epDecls}error A:\n    uri: str\nfn g(x: int) -> int errors A, ObjectNotFound:\n    if x == 1:\n        fail A {uri: \"a\"}\n    if x == 2:\n        fail ObjectNotFound {uri: \"o\"}\n    x\nfn f(x: int) -> str:\n    v = g(x):\n        on ObjectNotFound {uri}:\n            return str::concat(\"object \", uri)\n        on A {uri}:\n            return str::concat(\"a \", uri)\n    \"none\"\n\[f(1), f(2), f(3)\]\n"
+    epAgree "${::epDecls}error A:\n    uri: str\nfn g(x: int) -> int errors A, ObjectNotFound:\n    if x == 1:\n        fail A {uri: \"a\"}\n    if x == 2:\n        fail ObjectNotFound {uri: \"o\"}\n    x\nfn f(x: int) -> str:\n    v = g(x):\n        on ObjectNotFound {uri}:\n            return std::str::concat(\"object \", uri)\n        on A {uri}:\n            return std::str::concat(\"a \", uri)\n    \"none\"\n\[f(1), f(2), f(3)\]\n"
 } -result {value {["a a", "object o", "none"]}}
 
 test ep-same-shape-not-interchangeable {item 65: a handler for one error does not handle a same-shaped other error: it still has to be handled or declared} -body {
@@ -450,8 +450,8 @@ test ep-same-shape-not-interchangeable {item 65: a handler for one error does no
 } -result UNHANDLED-ERROR
 
 test ep-multiple-payload-errors {item 54: a function may fail with several payload-bearing errors; each handler statically knows its own error's payload type (no union of payloads)} -body {
-    list [epAgree "${::epDecls}fn g(x: int) -> int errors PageNotFound, ObjectNotFound, ConnectionLost:\n    if x == 1:\n        fail ObjectNotFound {uri: \"o\"}\n    if x == 2:\n        fail ConnectionLost\n    str::length(fetch(\"/p\"))\nfn f(x: int) -> int:\n    g(x):\n        on PageNotFound {statusCode, response}:\n            statusCode + response.length\n        on ObjectNotFound {uri}:\n            str::length(uri)\n        on ConnectionLost:\n            -1\n\[f(1), f(2), f(3)\]\n"] \
-        [epKinds "${::epDecls}fn g(x: int) -> int errors PageNotFound, ObjectNotFound:\n    if x == 1:\n        fail ObjectNotFound {uri: \"o\"}\n    str::length(fetch(\"/p\"))\nfn f(x: int) -> int:\n    g(x):\n        on ObjectNotFound {statusCode}:\n            statusCode\n        on PageNotFound:\n            0\n1\n"]
+    list [epAgree "${::epDecls}fn g(x: int) -> int errors PageNotFound, ObjectNotFound, ConnectionLost:\n    if x == 1:\n        fail ObjectNotFound {uri: \"o\"}\n    if x == 2:\n        fail ConnectionLost\n    std::str::length(fetch(\"/p\"))\nfn f(x: int) -> int:\n    g(x):\n        on PageNotFound {statusCode, response}:\n            statusCode + response.length\n        on ObjectNotFound {uri}:\n            std::str::length(uri)\n        on ConnectionLost:\n            -1\n\[f(1), f(2), f(3)\]\n"] \
+        [epKinds "${::epDecls}fn g(x: int) -> int errors PageNotFound, ObjectNotFound:\n    if x == 1:\n        fail ObjectNotFound {uri: \"o\"}\n    std::str::length(fetch(\"/p\"))\nfn f(x: int) -> int:\n    g(x):\n        on ObjectNotFound {statusCode}:\n            statusCode\n        on PageNotFound:\n            0\n1\n"]
 } -result {{value {[1, -1, 404]}} UNKNOWN-FIELD}
 
 # ---------------------------------------------------------------------------
@@ -463,7 +463,7 @@ test ep-contracts-name-identities {items 10, 57: `errors` clauses and Fn contrac
 } -result {SYNTAX SYNTAX}
 
 test ep-propagation {items 12, 35: a payload propagates unchanged through declaring intermediate functions (no reconstruction, no field lost)} -body {
-    epAgree "${::epDecls}fn mid(uri: str) -> int errors PageNotFound:\n    str::length(fetch(uri)) + 1\nfn outer(uri: str) -> int errors PageNotFound:\n    mid(uri) * 2\nfn f(uri: str) -> str:\n    v = outer(uri):\n        on PageNotFound details:\n            return details.uri\n    \"ok\"\n\[f(\"/deep\"), f(\"\")\]\n"
+    epAgree "${::epDecls}fn mid(uri: str) -> int errors PageNotFound:\n    std::str::length(fetch(uri)) + 1\nfn outer(uri: str) -> int errors PageNotFound:\n    mid(uri) * 2\nfn f(uri: str) -> str:\n    v = outer(uri):\n        on PageNotFound details:\n            return details.uri\n    \"ok\"\n\[f(\"/deep\"), f(\"\")\]\n"
 } -result {value {["/deep", "ok"]}}
 
 test ep-propagation-through-handled-call {items 12, 30: an error the handlers of a handled call do not name passes through it unchanged -- identity and payload -- while the one it names is handled there} -body {
@@ -471,7 +471,7 @@ test ep-propagation-through-handled-call {items 12, 30: an error the handlers of
 } -result {value {[["E1", {code: 5}], ["E2", 6], 105, 5]}}
 
 test ep-generic-propagation {item 56: a generic `fn call(f, x): f(x)` propagates the payload exactly (specialized, no runtime dispatch)} -body {
-    epAgree "${::epDecls}fn call(f, x):\n    f(x)\nfn g(x: int) -> int errors PageNotFound:\n    if x > 1:\n        fetch(\"/g\")\n    x\nfn h(x: int) -> int errors PageNotFound:\n    call(g, x)\nfn k(x: int) -> int:\n    h(x):\n        on PageNotFound {statusCode, uri}:\n            statusCode + str::length(uri)\n\[k(1), k(7)\]\n"
+    epAgree "${::epDecls}fn call(f, x):\n    f(x)\nfn g(x: int) -> int errors PageNotFound:\n    if x > 1:\n        fetch(\"/g\")\n    x\nfn h(x: int) -> int errors PageNotFound:\n    call(g, x)\nfn k(x: int) -> int:\n    h(x):\n        on PageNotFound {statusCode, uri}:\n            statusCode + std::str::length(uri)\n\[k(1), k(7)\]\n"
 } -result {value {[1, 406]}}
 
 test ep-function-values {items 57-58: a typed Fn value's error contract names the identity; its call carries the payload; the subset rule is unchanged} -body {
@@ -480,16 +480,16 @@ test ep-function-values {items 57-58: a typed Fn value's error contract names th
 } -result {{value {["ok", "g"]}} TYPE}
 
 test ep-translate {item 36: a handler may fail another error built from the payload it received; no automatic cause chain} -body {
-    epAgree "${::epDecls}error PageLoadFailed:\n    uri: str\n    causeText: str\nfn load(uri: str) -> str errors PageLoadFailed:\n    fetch(uri):\n        on PageNotFound details:\n            fail PageLoadFailed {uri: uri, causeText: str::concat(\"status \", \"404\")}\nfn f(uri: str) -> str:\n    load(uri):\n        on PageLoadFailed {causeText, uri: u}:\n            str::concat(u, causeText)\n\[f(\"/a\"), f(\"\")\]\n"
+    epAgree "${::epDecls}error PageLoadFailed:\n    uri: str\n    causeText: str\nfn load(uri: str) -> str errors PageLoadFailed:\n    fetch(uri):\n        on PageNotFound details:\n            fail PageLoadFailed {uri: uri, causeText: std::str::concat(\"status \", \"404\")}\nfn f(uri: str) -> str:\n    load(uri):\n        on PageLoadFailed {causeText, uri: u}:\n            std::str::concat(u, causeText)\n\[f(\"/a\"), f(\"\")\]\n"
 } -result {value {["/astatus 404", "home"]}}
 
 test ep-rejoin-unchanged {item 26: a handled payload error rejoins where a payload-free one does: the handle's type is the call's, handler admissibility is unchanged} -body {
-    list [epAgree "${::epDecls}fn f(uri: str) -> int:\n    page = fetch(uri):\n        on PageNotFound {uri}:\n            str::concat(uri, \"!\")\n    str::length(page)\n\[f(\"\"), f(\"/x\")\]\n"] \
-        [epCode "${::epDecls}fn f(uri: str) -> int:\n    page = fetch(uri):\n        on PageNotFound {statusCode}:\n            statusCode\n    str::length(page)\n1\n"]
+    list [epAgree "${::epDecls}fn f(uri: str) -> int:\n    page = fetch(uri):\n        on PageNotFound {uri}:\n            std::str::concat(uri, \"!\")\n    std::str::length(page)\n\[f(\"\"), f(\"/x\")\]\n"] \
+        [epCode "${::epDecls}fn f(uri: str) -> int:\n    page = fetch(uri):\n        on PageNotFound {statusCode}:\n            statusCode\n    std::str::length(page)\n1\n"]
 } -result {{value {[4, 3]}} TYPE}
 
 test ep-validator {item 27: a validator whose error carries a payload proves its refinement on success; the error edge does not, and handling it rejoins as before} -body {
-    set text "import str\nerror Invalid:\n    reason: str\n    at: int\nrefined type Short = str\nfn validate_short(value: str) -> unit proves value: Short errors Invalid:\n    if str::length(value) > 3:\n        fail Invalid {reason: \"too long\", at: str::length(value)}\nfn use(s: Short) -> int:\n    str::length(s)\nfn f(text: str) -> int:\n    validate_short(text):\n        on Invalid {at}:\n            return -at\n    use(text)\n\[f(\"ab\"), f(\"abcdef\")\]\n"
+    set text "import std::str\nerror Invalid:\n    reason: str\n    at: int\nrefined type Short = str\nfn validate_short(value: str) -> unit proves value: Short errors Invalid:\n    if std::str::length(value) > 3:\n        fail Invalid {reason: \"too long\", at: std::str::length(value)}\nfn use(s: Short) -> int:\n    std::str::length(s)\nfn f(text: str) -> int:\n    validate_short(text):\n        on Invalid {at}:\n            return -at\n    use(text)\n\[f(\"ab\"), f(\"abcdef\")\]\n"
     list [epAgree $text] \
         [epCode [string map [list "            return -at\n" "            -1\n"] $text]]
 } -cleanup {unset -nocomplain text} -result {{value {[2, -6]}} TYPE}
@@ -498,13 +498,13 @@ test ep-validator {item 27: a validator whose error carries a payload proves its
 # Enum and collection payload fields (items 49, 68)
 
 test ep-enum-and-list-fields {item 68: an enum field is an ordinary value branched on with `if` after selection; List fields are ordinary values} -body {
-    epAgree "import list\nenum ParseErrorKind:\n    UnexpectedEnd,\n    BadDigit,\nerror ParseFailed:\n    kind: ParseErrorKind\n    offset: int\n    expected: List\[str\]\nfn parse(n: int) -> int errors ParseFailed:\n    if n == 0:\n        fail ParseFailed {kind: ParseErrorKind::UnexpectedEnd, offset: 0, expected: \[\"digit\"\]}\n    if n < 0:\n        fail ParseFailed {kind: ParseErrorKind::BadDigit, offset: 3, expected: \[\"0\", \"1\"\]}\n    n\nfn f(n: int) -> int:\n    parse(n):\n        on ParseFailed {kind, offset, expected}:\n            if kind == ParseErrorKind::BadDigit:\n                offset * 10 + list::length(expected)\n            else:\n                -1\n\[f(0), f(-1), f(5)\]\n"
+    epAgree "import std::list\nenum ParseErrorKind:\n    UnexpectedEnd,\n    BadDigit,\nerror ParseFailed:\n    kind: ParseErrorKind\n    offset: int\n    expected: List\[str\]\nfn parse(n: int) -> int errors ParseFailed:\n    if n == 0:\n        fail ParseFailed {kind: ParseErrorKind::UnexpectedEnd, offset: 0, expected: \[\"digit\"\]}\n    if n < 0:\n        fail ParseFailed {kind: ParseErrorKind::BadDigit, offset: 3, expected: \[\"0\", \"1\"\]}\n    n\nfn f(n: int) -> int:\n    parse(n):\n        on ParseFailed {kind, offset, expected}:\n            if kind == ParseErrorKind::BadDigit:\n                offset * 10 + std::list::length(expected)\n            else:\n                -1\n\[f(0), f(-1), f(5)\]\n"
 } -result {value {[-1, 32, 5]}}
 
 test ep-mutable-collection-fields {item 49: a MutableVector or MutableArray field is an ordinary value of the payload: moved in as a logical copy, mutated through the handler's bindings (a payload binding is a place like a parameter)} -body {
-    list [epAgree "import mutable_vector\nimport list\nerror Full:\n    items: MutableVector\[int\]\n    size: int\nfn fill(n: int) -> int errors Full:\n    v = mutable_vector::from_list(\[1, 2\])\n    v.push(n)\n    if n > 2:\n        fail Full {items: v, size: v.length()}\n    v.length()\nfn f(n: int):\n    r = fill(n):\n        on Full {items, size}:\n            items.push(99)\n            return \[items.length(), size\]\n    \[r\]\n\[f(1), f(5)\]\n"] \
-        [epAgree "import mutable_vector\nimport list\nerror Full:\n    items: MutableVector\[int\]\nfn fill(n: int) -> int errors Full:\n    v = mutable_vector::from_list(\[1, 2\])\n    if n > 2:\n        fail Full {items: v}\n    v.length()\nfn f(n: int):\n    r = fill(n):\n        on Full details:\n            details.items.push(7)\n            return \[details.items.length()\]\n    \[r\]\n\[f(1), f(5)\]\n"] \
-        [epAgree "import mutable_array\nerror Bad:\n    cells: MutableArray\[int\]\nfn g(n: int) -> int errors Bad:\n    a = mutable_array::create(3, 0)\n    a.set(0, n):\n        on IndexNotFound:\n            unit\n    if n > 2:\n        fail Bad {cells: a}\n    n\nfn f(n: int) -> int:\n    g(n):\n        on Bad {cells}:\n            cells.at(0):\n                on IndexNotFound:\n                    -1\n\[f(1), f(5)\]\n"]
+    list [epAgree "import std::mutable_vector\nimport std::list\nerror Full:\n    items: MutableVector\[int\]\n    size: int\nfn fill(n: int) -> int errors Full:\n    v = std::mutable_vector::from_list(\[1, 2\])\n    v.push(n)\n    if n > 2:\n        fail Full {items: v, size: v.length()}\n    v.length()\nfn f(n: int):\n    r = fill(n):\n        on Full {items, size}:\n            items.push(99)\n            return \[items.length(), size\]\n    \[r\]\n\[f(1), f(5)\]\n"] \
+        [epAgree "import std::mutable_vector\nimport std::list\nerror Full:\n    items: MutableVector\[int\]\nfn fill(n: int) -> int errors Full:\n    v = std::mutable_vector::from_list(\[1, 2\])\n    if n > 2:\n        fail Full {items: v}\n    v.length()\nfn f(n: int):\n    r = fill(n):\n        on Full details:\n            details.items.push(7)\n            return \[details.items.length()\]\n    \[r\]\n\[f(1), f(5)\]\n"] \
+        [epAgree "import std::mutable_array\nerror Bad:\n    cells: MutableArray\[int\]\nfn g(n: int) -> int errors Bad:\n    a = std::mutable_array::create(3, 0)\n    a.set(0, n):\n        on IndexNotFound:\n            unit\n    if n > 2:\n        fail Bad {cells: a}\n    n\nfn f(n: int) -> int:\n    g(n):\n        on Bad {cells}:\n            cells.at(0):\n                on IndexNotFound:\n                    -1\n\[f(1), f(5)\]\n"]
 } -result {{value {[[3], [4, 3]]}} {value {[[2], [3]]}} {value {[1, 5]}}}
 
 # ---------------------------------------------------------------------------
@@ -554,7 +554,7 @@ test ep-affine-partial-construction {item 31: a later payload field that fails a
 test ep-affine-handler-exits {items 74-75: a handler that returns, fails, breaks or continues releases the payload bindings it still owns} -body {
     list [epReleased "${::epAffine}fn f(n: int) -> int:\n    x = read(n):\n        on ReadFailed {stream, bytesRead}:\n            if bytesRead > 2:\n                return 99\n            consume(stream)\n    x + 1\n\[f(3), f(2), f(0), test_ep_live()\]\n"] \
         [epReleased "${::epAffine}fn f(n: int) -> int errors Boom:\n    x = read(n):\n        on ReadFailed details:\n            might_fail(n)\n    x + 1\nfn h(n: int) -> int:\n    f(n):\n        on Boom:\n            -5\n\[h(3), h(1), h(0), test_ep_live()\]\n"] \
-        [epReleased "${::epAffine}fn f(k: int) -> int:\n    total = loop i from 0 to k:\n        x = read(i):\n            on ReadFailed {stream, bytesRead}:\n                if bytesRead == 2:\n                    continue\n                if bytesRead == 4:\n                    break\n                consume(stream)\n        x\n    list::length(total)\n\[f(6), test_ep_live()\]\n"]
+        [epReleased "${::epAffine}fn f(k: int) -> int:\n    total = loop i from 0 to k:\n        x = read(i):\n            on ReadFailed {stream, bytesRead}:\n                if bytesRead == 2:\n                    continue\n                if bytesRead == 4:\n                    break\n                consume(stream)\n        x\n    std::list::length(total)\n\[f(6), test_ep_live()\]\n"]
 } -result {{{value {[99, 3, 1, 0]}} {value {[99, 3, 1, 0]}}} {{value {[-5, 2, 1, 0]}} {value {[-5, 2, 1, 0]}}} {{value {[3, 0]}} {value {[3, 0]}}}}
 
 test ep-affine-refail {item 36: a handler destructures an affine payload and fails another error built from an unrestricted field; the stream it does not bind is released} -body {
@@ -583,14 +583,14 @@ test ep-coroutine-affine-payload-rejected {items 83-84: a coroutine may not fail
 } -result {COROUTINE-CONTRACT ok}
 
 test ep-coroutine-cached-payload {items 82-83: a coroutine that fails with an (unrestricted) payload raises the same payload again on a later resume, never running its body again} -body {
-    epAgree "import coroutine\nstruct Message:\n    value: int\nerror Overflow:\n    limit: int\n    seen: int\nfn counter(limit: int, resume Message) -> int errors Overflow:\n    m = yield 0\n    if m.value > limit:\n        fail Overflow {limit: limit, seen: m.value}\n    m.value\nfn go(n: int) -> int:\n    coroutine {step} = counter(3):\n        on Overflow:\n            return -1\n    a = step(Message {value: n}):\n        on Overflow {seen}:\n            seen * 10\n    b = step(Message {value: 1}):\n        on Overflow details:\n            details.limit * 100 + details.seen\n    a + b\n\[go(2), go(9)\]\n"
+    epAgree "import std::coroutine\nstruct Message:\n    value: int\nerror Overflow:\n    limit: int\n    seen: int\nfn counter(limit: int, resume Message) -> int errors Overflow:\n    m = yield 0\n    if m.value > limit:\n        fail Overflow {limit: limit, seen: m.value}\n    m.value\nfn go(n: int) -> int:\n    coroutine {step} = counter(3):\n        on Overflow:\n            return -1\n    a = step(Message {value: n}):\n        on Overflow {seen}:\n            seen * 10\n    b = step(Message {value: 1}):\n        on Overflow details:\n            details.limit * 100 + details.seen\n    a + b\n\[go(2), go(9)\]\n"
 } -result {value {[4, 399]}}
 
 # ---------------------------------------------------------------------------
 # Debug rendering and the program boundary (items 66, 72)
 
 test ep-uncaught-rendering {item 66: an uncaught payload error (reachable only with -strict 0: a strict program handles or declares every error) renders its identity and payload identically on every backend -- a diagnostic, not a serialization} -body {
-    set hir [surface::compile "${::epDecls}fn h(uri: str) -> int errors PageNotFound:\n    str::length(fetch(uri))\nh(\"/q\")\n" -strict 0 -warnings off]
+    set hir [surface::compile "${::epDecls}fn h(uri: str) -> int errors PageNotFound:\n    std::str::length(fetch(uri))\nh(\"/q\")\n" -strict 0 -warnings off]
     set exprs [hir::lower $hir]
     lsort -unique [lmap b {interp compile cranelift-generic cranelift} {lrange [outcomeUnder $b $exprs] 0 2}]
 } -cleanup {unset -nocomplain hir exprs} -result {{error {CORE SEMANTIC UNCAUGHT-ERROR} {uncaught propagated error: <error PageNotFound {response: Response {payloadStream: "", length: 0}, statusCode: 404, uri: "/q"}>}}}
@@ -626,43 +626,43 @@ test ep-native-whole-binding-materializes-once {item 50: a whole binding used as
 
 test ep-gc-stress {item 89: with a collection at every allocation, nested heap payloads crossing several frames, handled after allocations, re-failed and released stay intact on every native backend} -constraints nativeCoroutines -body {
     epWithGcStress {
-        list [epAgree "${::epDecls}fn mid(uri: str) -> int errors PageNotFound:\n    str::length(fetch(str::concat(uri, \"/x\")))\nfn outer(uri: str) -> int errors PageNotFound:\n    junk = \[str::concat(uri, \"a\"), str::concat(uri, \"b\")\]\n    mid(uri) + list::length(junk)\nfn f(uri: str) -> str:\n    v = outer(uri):\n        on PageNotFound {uri: u, response}:\n            more = \[str::concat(u, \"!\"), str::concat(u, \"?\")\]\n            return str::concat(list::at(more, 1), response.payloadStream):\n                on IndexNotFound:\n                    \"\"\n    \"none\"\n\[f(\"/p\"), f(\"/q\")\]\n"] \
-            [epReleased "${::epAffine}fn mid(n: int) -> int errors Plain:\n    read(n):\n        on ReadFailed {bytesRead}:\n            junk = \[make(1), make(2)\]\n            fail Plain {code: bytesRead + list::length(junk)}\nfn f(n: int) -> int:\n    mid(n):\n        on Plain {code}:\n            code\n\[f(3), f(0), test_ep_live()\]\n"]
+        list [epAgree "${::epDecls}fn mid(uri: str) -> int errors PageNotFound:\n    std::str::length(fetch(std::str::concat(uri, \"/x\")))\nfn outer(uri: str) -> int errors PageNotFound:\n    junk = \[std::str::concat(uri, \"a\"), std::str::concat(uri, \"b\")\]\n    mid(uri) + std::list::length(junk)\nfn f(uri: str) -> str:\n    v = outer(uri):\n        on PageNotFound {uri: u, response}:\n            more = \[std::str::concat(u, \"!\"), std::str::concat(u, \"?\")\]\n            return std::str::concat(std::list::at(more, 1), response.payloadStream):\n                on IndexNotFound:\n                    \"\"\n    \"none\"\n\[f(\"/p\"), f(\"/q\")\]\n"] \
+            [epReleased "${::epAffine}fn mid(n: int) -> int errors Plain:\n    read(n):\n        on ReadFailed {bytesRead}:\n            junk = \[make(1), make(2)\]\n            fail Plain {code: bytesRead + std::list::length(junk)}\nfn f(n: int) -> int:\n    mid(n):\n        on Plain {code}:\n            code\n\[f(3), f(0), test_ep_live()\]\n"]
     }
 } -result {{value {["/p/x?", "/q/x?"]}} {{value {[5, 0, 0]}} {value {[5, 0, 0]}}}}
 
 test ep-gc-stress-coroutine {item 89: a coroutine's cached failure keeps its payload alive across collections at every allocation, raised again on a later resume} -constraints nativeCoroutines -body {
     epWithGcStress {
-        epAgree "import coroutine\nimport str\nstruct Message:\n    value: int\nerror Overflow:\n    limit: int\n    note: str\nfn counter(limit: int, resume Message) -> int errors Overflow:\n    m = yield 0\n    if m.value > limit:\n        fail Overflow {limit: limit, note: str::concat(\"over\", \"flow\")}\n    m.value\nfn go(n: int) -> str:\n    coroutine {step} = counter(3):\n        on Overflow:\n            return \"start\"\n    a = step(Message {value: n}):\n        on Overflow {note}:\n            junk = \[str::concat(note, \"1\"), str::concat(note, \"2\")\]\n            -1\n    b = step(Message {value: 1}):\n        on Overflow details:\n            return str::concat(details.note, \"!\")\n    \"done\"\n\[go(2), go(9)\]\n"
+        epAgree "import std::coroutine\nimport std::str\nstruct Message:\n    value: int\nerror Overflow:\n    limit: int\n    note: str\nfn counter(limit: int, resume Message) -> int errors Overflow:\n    m = yield 0\n    if m.value > limit:\n        fail Overflow {limit: limit, note: std::str::concat(\"over\", \"flow\")}\n    m.value\nfn go(n: int) -> str:\n    coroutine {step} = counter(3):\n        on Overflow:\n            return \"start\"\n    a = step(Message {value: n}):\n        on Overflow {note}:\n            junk = \[std::str::concat(note, \"1\"), std::str::concat(note, \"2\")\]\n            -1\n    b = step(Message {value: 1}):\n        on Overflow details:\n            return std::str::concat(details.note, \"!\")\n    \"done\"\n\[go(2), go(9)\]\n"
     }
 } -result {value {["done", "overflow!"]}}
 
 # ---------------------------------------------------------------------------
 # Modules (items 59-60)
 
-test ep-cross-module {items 59-60: a module's payload error, whose field type is the module's own struct, is failed in the module and handled in the importing program by its canonical name eppage::NotThere; the fields enter scope only through the handler's binding; the program may declare its own NotThere beside it (module-qualified identity)} -body {
+test ep-cross-module {items 59-60: a module's payload error, whose field type is the module's own struct, is failed in the module and handled in the importing program by its canonical name std::eppage::NotThere; the fields enter scope only through the handler's binding; the program may declare its own NotThere beside it (module-qualified identity)} -body {
     withPrivateLibrary {
         set ch [open [file join $::core::libraryDir eppage.bot] w]
         fconfigure $ch -encoding utf-8
         puts -nonewline $ch "struct Meta:\n    status: int\n\nerror NotThere:\n    uri: str\n    meta: Meta\n\nfn get(uri: str) -> int errors NotThere:\n    if uri == \"\":\n        return 0\n    fail NotThere {uri: uri, meta: Meta {status: 404}}\n"
         close $ch
-        set main "import eppage\nfn f(uri: str) -> int:\n    eppage::get(uri):\n        on eppage::NotThere {meta}:\n            meta.status\n\[f(\"\"), f(\"/a\")\]\n"
-        list [epAgree $main] [hir::types::show [hir::errordecls::payloadType eppage::NotThere]] \
-            [epCode "import eppage\nerror NotThere:\n    uri: str\n1\n"]
+        set main "import std::eppage\nfn f(uri: str) -> int:\n    std::eppage::get(uri):\n        on std::eppage::NotThere {meta}:\n            meta.status\n\[f(\"\"), f(\"/a\")\]\n"
+        list [epAgree $main] [hir::types::show [hir::errordecls::payloadType std::eppage::NotThere]] \
+            [epCode "import std::eppage\nerror NotThere:\n    uri: str\n1\n"]
     }
-} -cleanup {unset -nocomplain ch main} -result {{value {[0, 404]}} {struct{meta: eppage::Meta, uri: str}} ok}
+} -cleanup {unset -nocomplain ch main} -result {{value {[0, 404]}} {struct{meta: std::eppage::Meta, uri: str}} ok}
 
 test ep-module-initializer {a module binding initialized through a function that fails with a payload error and ignores it stays a retained, context-free module value (the payload's fields are evaluated where it is raised); reading payload fields there is a projection, which module initializers do not support for any struct yet} -body {
     withPrivateLibrary {
         set ch [open [file join $::core::libraryDir epmodinit.bot] w]
         fconfigure $ch -encoding utf-8
-        puts -nonewline $ch "import str\nerror Bad:\n    code: int\n    note: str\n\nfn g(x: int) -> int errors Bad:\n    if x > 1:\n        fail Bad {code: x, note: str::concat(\"a\", \"b\")}\n    x\n\nfn pick(x: int) -> int:\n    g(x):\n        on Bad:\n            -1\n\nfn read_code(x: int) -> int:\n    g(x):\n        on Bad {code}:\n            code\n\nseed = pick(4)\n"
+        puts -nonewline $ch "import std::str\nerror Bad:\n    code: int\n    note: str\n\nfn g(x: int) -> int errors Bad:\n    if x > 1:\n        fail Bad {code: x, note: std::str::concat(\"a\", \"b\")}\n    x\n\nfn pick(x: int) -> int:\n    g(x):\n        on Bad:\n            -1\n\nfn read_code(x: int) -> int:\n    g(x):\n        on Bad {code}:\n            code\n\nseed = pick(4)\n"
         close $ch
-        set first [epAgree "import epmodinit\n\[epmodinit::seed, epmodinit::pick(1), epmodinit::read_code(5)\]\n"]
+        set first [epAgree "import std::epmodinit\n\[std::epmodinit::seed, std::epmodinit::pick(1), std::epmodinit::read_code(5)\]\n"]
         set ch [open [file join $::core::libraryDir epmodinit.bot] a]
         puts -nonewline $ch "other = read_code(4)\n"
         close $ch
-        list $first [epCode "import epmodinit\n1\n"]
+        list $first [epCode "import std::epmodinit\n1\n"]
     }
 } -cleanup {unset -nocomplain ch first} -result {{value {[-1, 1, 5]}} MODULE-CONTEXT}
 
@@ -670,7 +670,7 @@ test ep-module-initializer {a module binding initialized through a function that
 # Extensibility (items 67, 93)
 
 test ep-compile-error-shape {items 67, 93: a CompileError-shaped error -- an enum code, a struct location, a List of them, a message -- is ordinary: failed and handled with `on CompileError {code, primary}` and no new mechanism} -body {
-    epAgree "import list\nenum DiagnosticCode:\n    Type,\n    Unbound,\n    UseAfterMove,\nstruct SourceLocation:\n    line: int\n    column: int\nerror CompileError:\n    code: DiagnosticCode\n    primary: SourceLocation\n    related: List\[SourceLocation\]\n    message: str\nfn check(n: int) -> int errors CompileError:\n    if n < 0:\n        fail CompileError {code: DiagnosticCode::Unbound, primary: SourceLocation {line: 3, column: 7}, related: \[\], message: \"unbound\"}\n    n\nfn assert_compiles(n: int) -> int:\n    check(n):\n        on CompileError {code, primary}:\n            if code == DiagnosticCode::Unbound:\n                primary.line * 100 + primary.column\n            else:\n                -1\n\[assert_compiles(-1), assert_compiles(5)\]\n"
+    epAgree "import std::list\nenum DiagnosticCode:\n    Type,\n    Unbound,\n    UseAfterMove,\nstruct SourceLocation:\n    line: int\n    column: int\nerror CompileError:\n    code: DiagnosticCode\n    primary: SourceLocation\n    related: List\[SourceLocation\]\n    message: str\nfn check(n: int) -> int errors CompileError:\n    if n < 0:\n        fail CompileError {code: DiagnosticCode::Unbound, primary: SourceLocation {line: 3, column: 7}, related: \[\], message: \"unbound\"}\n    n\nfn assert_compiles(n: int) -> int:\n    check(n):\n        on CompileError {code, primary}:\n            if code == DiagnosticCode::Unbound:\n                primary.line * 100 + primary.column\n            else:\n                -1\n\[assert_compiles(-1), assert_compiles(5)\]\n"
 } -result {value {[307, 5]}}
 
 cleanupTests

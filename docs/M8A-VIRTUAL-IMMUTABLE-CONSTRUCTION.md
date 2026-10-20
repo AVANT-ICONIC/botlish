@@ -157,7 +157,7 @@ binding sequence virtual. The loop improved because its recurrence carried a
 virtual construction, not because the compiler recognized an accumulator
 idiom. No StringBuilder/ListBuilder surface or privileged lowering exists;
 the collecting `listloop`'s own internal accumulator (a compiler-generated
-`listappend` per iteration, e.g. in `byte::set`) is deliberately left eager
+`listappend` per iteration, e.g. in `std::byte::set`) is deliberately left eager
 (M8.b scope). (Since then the collecting-loop lowering keeps that
 accumulator in a List plan itself -- COLLECTING-LOOPS.md, "Native result
 List" -- still with no recognizer here: the accumulator is not a binding.)
@@ -704,7 +704,7 @@ admissibility` 24/24, `symbolic-type-identity` 13/13, `hir-specialize`
     10,000 rows 2.5x, `uri-steady` 17-22% -- none of them noise-sized; the
     concat-free controls sit at 0.96-1.00x.
 12. Full correctness and GC regressions pass -- yes (above).
-13. Frozen source unchanged -- yes: no `.bot`/`.ir`/`lib/*.bot` file
+13. Frozen source unchanged -- yes: no `.bot`/`.ir`/`stdlib/*.bot` file
     changed.
 
 Is the gain large enough to justify a permanent compiler abstraction?
@@ -736,7 +736,7 @@ items 73-74; per-site detail in each census `sites.txt`):
 | `ai_text_clean` | 100,000 one-character Strings from `peek` (`decodecharat`), each copied into the plan | **producer fusion residual** (the character passes through `clean_char` unchanged; only destination passing, or a region-valued traversal access, removes it) -- now 99.9% of its remaining allocations |
 | `csv` family | quoted field Strings and record Lists stored into `[field, index]`/`[more, stop]` | storage into an aggregate (a product-shaped List, itself scalar-replaced by `hir/escape.tcl`) |
 | `hashtable` | `list_append(acc, [key, value])` | dynamic/open call (`combine(...)`) |
-| `byte::set` | collecting `listloop`'s own `listappend` accumulator | not attempted (compiler-generated construction inside a built-in loop form) |
+| `std::byte::set` | collecting `listloop`'s own `listappend` accumulator | not attempted (compiler-generated construction inside a built-in loop form) |
 
 No barrier is unexplained; no fork, unsupported join or unknown escape
 occurs in the frozen corpus.
@@ -748,7 +748,7 @@ occurs in the frozen corpus.
    better, and the planned source repair -- through struct fields once
    structs exist.
 2. **Collecting `listloop` accumulator** as a List plan (the same
-   `construct list plan`/`flat` pair; `byte::set` and any source
+   `construct list plan`/`flat` pair; `std::byte::set` and any source
    `listloop`).
 3. **Producer fusion for the measured residuals**, in order of measured
    weight: a region/char-valued traversal access flowing into a plan

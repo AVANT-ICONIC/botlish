@@ -1,29 +1,29 @@
 # Path + I/O (CONTEXT-TRAITS.md): validate a String as a Linux path in place,
 # report an invalid one on the error output, and keep using the validated
-# value as the String it still is. show_path declares no context: io::IO is
-# required through io::print_line and io::write_error_line, and the
-# installed linux::io::LinuxIO provides it.
-import io
-import linux::io
-import io::path
-import linux::path
-import str
+# value as the String it still is. show_path declares no context: std::io::IO is
+# required through std::io::print_line and std::io::write_error_line, and the
+# installed std::linux::io::LinuxIO provides it.
+import std::io
+import std::linux::io
+import std::io::path
+import std::linux::path
+import std::str
 
-fn show_path(value: str) -> str errors io::WriteFailed:
-    linux::path::validate(value):
-        on io::path::NotAPath:
-            io::write_error_line(str::concat(value, " is not a valid path"))
+fn show_path(value: str) -> str errors std::io::WriteFailed:
+    std::linux::path::validate(value):
+        on std::io::path::NotAPath:
+            std::io::write_error_line(std::str::concat(value, " is not a valid path"))
             return "rejected"
-    # value is a linux::path::LinuxPath here, and still a str.
-    io::print_line(str::concat("Path: ", value))
+    # value is a std::linux::path::LinuxPath here, and still a str.
+    std::io::print_line(std::str::concat("Path: ", value))
     "shown"
 
-with context linux::io::create()
+with context std::linux::io::create()
 
 shown = show_path("/tmp/example"):
-    on io::WriteFailed:
+    on std::io::WriteFailed:
         "failed"
 rejected = show_path(""):
-    on io::WriteFailed:
+    on std::io::WriteFailed:
         "failed"
 [shown, rejected]

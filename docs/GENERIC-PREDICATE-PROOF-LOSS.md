@@ -1,7 +1,7 @@
-# Generic predicate proof loss (`lib/web.bot`'s `tld?` / `domain?`)
+# Generic predicate proof loss (`stdlib/web.bot`'s `tld?` / `domain?`)
 
 This file tracks one question and the fixes it led to: why `tld?` and
-`domain?` (`lib/web.bot`, the scanner closures inside `web::emailish?`) are
+`domain?` (`stdlib/web.bot`, the scanner closures inside `std::web::emailish?`) are
 compiled under `<generic>` keys, and where the facts the compiler already
 proves about them are lost before they reach machine code. The
 investigation found five independent loss points. Each fix gets its own
@@ -22,7 +22,7 @@ section below; the status table is the index.
 
 ## The investigation
 
-Measured on `bench/refined-checks.bot` (which runs `web::emailish?`) at
+Measured on `bench/refined-checks.bot` (which runs `std::web::emailish?`) at
 `9376f99`, before the merge of the collecting-loops work; the loss points
 were re-checked on the merged tree (`main` at `07b373c` plus this work) and
 the line numbers above are from there.
@@ -851,7 +851,7 @@ runs, run 0 excluded):
 | `char_at` (ordinary variant) | 6,800 | 231,200 | 149,600 |
 | total | | 5,637,105 | 5,509,900 (−2.26%) |
 
-(`web::emailish?`, `scan_while` and `domain?` lose 1-2 Ir/call each from
+(`std::web::emailish?`, `scan_while` and `domain?` lose 1-2 Ir/call each from
 the shorter calls; every other function's self Ir is unchanged.)
 
 ### Fuzzing
@@ -1307,7 +1307,7 @@ consumers.
   the 29 `.bot` programs (`refined-checks`: those 3 functions) and three of
   the 15 Core-IR-text programs (the same 3 functions in `refined-checks.ir`,
   `05-refined-strings.ir`, `hir/06-refined-strings.ir`). The only other
-  counted loop the corpus reaches, `lib/mutarray.bot`'s `create` (from
+  counted loop the corpus reaches, `stdlib/mutarray.bot`'s `create` (from
   `csv_records`/`csv_geometric`), runs to a geometrically grown capacity
   whose Range is not proven small, so it stays tagged.
 * Knob off (`native::lower::rawCountLoopOpt 0`) = the parent commit, byte for
@@ -1445,7 +1445,7 @@ Instructions (same file; `profile-nir.sh`, 21 runs, run 0 excluded):
 | `tld?` | 400 | 35.0 | 31.0 |
 | total Ir/run | | 5,509,798 | 5,346,724 (−2.96%) |
 
-(`tld?` and `web::emailish?` lose a few Ir/call from the shorter calls; every
+(`tld?` and `std::web::emailish?` lose a few Ir/call from the shorter calls; every
 other function is unchanged.)
 
 ### Fuzzing
@@ -1557,7 +1557,7 @@ weakened):
 ### Known limitations
 
 1. **Only proven-small bounds.** A loop whose bound's Range is not small
-   stays tagged in full (no loop versioning): `lib/mutarray.bot`'s `create`
+   stays tagged in full (no loop versioning): `stdlib/mutarray.bot`'s `create`
    (geometric capacity) is the corpus example.
 2. **List indexes stay tagged.** `ListLoop`'s index and a lockstep loop's List
    position still use `ilt`/`iadd` against `listlen`, although a List's
@@ -1584,11 +1584,11 @@ positions, is now realized:
   `is_tcl_alpha` one also `rawresult=1`), `tld?` and `domain?`
   `rawparams="0"`. `domain?` hands `tld?` its raw `j + 1` (the `rbox` is
   gone), `tld?` compares `scan_while`'s raw result without `runbox`,
-  `web::emailish?` passes a raw constant start, and the loops' starts are
+  `std::web::emailish?` passes a raw constant start, and the loops' starts are
   no longer unboxed. `char_at`'s `i` stays tagged (`substring`).
 * **Payoff: none to speak of.** `refined-checks` 5,346,740 → 5,345,940
   Ir/run (−800, −0.01%): the callers save 1-3 Ir/call (`tld?` 31 → 29,
-  `domain?` 182 → 179, `web::emailish?` 58.5 → 56.5), and
+  `domain?` 182 → 179, `std::web::emailish?` 58.5 → 56.5), and
   `scan_while<int, native(is_tcl_alpha)>` loses 9 (99 → 108 Ir/call). A raw
   result of a function that may fail is returned as a value/success pair,
   and Cranelift's register allocator now copies the raw loop bound `n`
@@ -1709,7 +1709,7 @@ byte (290 + 150 dump comparisons, 0 mismatches). Instructions (same file):
 
 | function (`refined-checks`) | calls/run | Ir/call before | after |
 |---|---:|---:|---:|
-| `web::emailish?` | 800 | 58.5 | 56.5 |
+| `std::web::emailish?` | 800 | 58.5 | 56.5 |
 | `scan_while<int, block(e239)>` | 800 | 205.5 | 204.5 |
 | `scan_while<int, native(is_tcl_alpha)>` | 400 | 99.0 | 108.0 |
 | `tld?` | 400 | 31.0 | 29.0 |

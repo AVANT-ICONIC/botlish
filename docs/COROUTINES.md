@@ -157,7 +157,7 @@ is `COROUTINE-RESUME-TYPE` at the type (`hir/resolve.tcl`'s
 * `coroutine` is contextual: it starts a coroutine binding only when
   directly followed by a braced field group and `=` (`CoroutineAhead`), and
   stays an ordinary name everywhere else: `coroutine = 3`, `coroutine + 1`,
-  and the namespace in `coroutine::done?(h)`.
+  and the namespace in `std::coroutine::done?(h)`.
 * `resume` is contextual: it is the resume clause only when directly
   followed by a type (a name or `unit`; `ResumeMarker`). `fn f(resume)`,
   `fn f(resume: int)` and `resume(4)` keep their meaning.
@@ -192,7 +192,7 @@ coroutine {step, first} = worker(a)
                              unit
                              THUNK = (block {} (call worker (ref coroutine#N#arg1)))
 step(m)                      call ^coroutine#resume (ref step) m
-coroutine::done?(step)       call ^coroutine::done? (ref step)
+std::coroutine::done?(step)       call ^std::coroutine::done? (ref step)
 fn f(..., resume T)          block ... resume {T ORIGIN}  (declaredResume once resolved)
 ```
 
@@ -387,7 +387,7 @@ first yield have happened when the statement completes.
 ### 16. First-yield construction behavior
 
 The start runs the body to its first yield: `first` is that yield's outward
-value, the coroutine is suspended at it, and `coroutine::done?(step)` is
+value, the coroutine is suspended at it, and `std::coroutine::done?(step)` is
 `false`.
 
 ### 17. Return-before-yield behavior
@@ -508,9 +508,9 @@ exhaustion error.
 Every later call raises the cached error again (same name, same handler
 behavior) and never runs the body (`co-errors-startup`, `co-errors-segment`).
 
-### 29. `coroutine::done?`
+### 29. `std::coroutine::done?`
 
-`coroutine::done?(h)` (a qualified root native; `import coroutine`, like
+`std::coroutine::done?(h)` (a qualified root native; `import std::coroutine`, like
 every standard intrinsic) is `true` exactly when the coroutine is completed or
 failed. It observes the handle without consuming it (`co-affine-done-does-
 not-move`).
@@ -645,12 +645,12 @@ nothing, while a new construction there is
 `AMBIGUOUS-CONTEXT-IMPLEMENTATION` (`co-context-fixed-at-construction`).
 `hir::contexts::Callee` treats a construction as a call of its thunk, so the
 thunk's root's requirement is checked at the construction like any call's.
-With the real portable output trait (`io::IO`, lib/io.bot) and a substitute
-context whose writes fail beyond a length limit, `io::print_line` called
+With the real portable output trait (`std::io::IO`, stdlib/io.bot) and a substitute
+context whose writes fail beyond a length limit, `std::io::print_line` called
 deep inside a coroutine writes through the provider in every segment, and a
 write failure after a resume crosses that resume and stays the coroutine's
 terminal error (`co-context-portable-io`, every backend); with
-`linux::io::LinuxIO`, a standalone executable prints from inside a
+`std::linux::io::LinuxIO`, a standalone executable prints from inside a
 coroutine before and after a yield, in segment order, also under GC stress
 (`co-executable-linux-io`).
 
@@ -780,7 +780,7 @@ evaluator.
   the stack they land on (MACOS-AARCH64-MILESTONE-4.md) -- so an overflow on
   a coroutine stack is the ordinary `NATIVE LIMIT STACK`.
 * AOT executables link the same runtime; the principal program and a program
-  printing through `io::print_line` from inside a coroutine run as
+  printing through `std::io::print_line` from inside a coroutine run as
   executables, also under `BOTLISH_NATIVE_GC_STRESS=1`.
 * Hosts: x86-64 Linux. Elsewhere `rt_co_start` reports `NATIVE UNSUPPORTED`
   (no stack switch exists there yet; COROUTINE-PREREQUISITES.md R3).
@@ -953,7 +953,7 @@ tests and fuzzer, so the counts are higher than before them):
 | **move-keeps-source**: a move does not invalidate the binding moved from | 9 tests | 9/25 programs | -- |
 | **join-keeps-live**: a handle moved on one branch only is live after the join | `co-affine-branch-join`, `co-affine-loop` | 1/25 programs | -- |
 | **step-call-moves**: a resume consumes the handle: its owner is moved by the call | 31 tests | 17/25 programs | -- |
-| **done-consumes**: coroutine::done? consumes the handle: its owner is moved by the query | 8 tests | 12/25 programs | -- |
+| **done-consumes**: std::coroutine::done? consumes the handle: its owner is moved by the query | 8 tests | 12/25 programs | -- |
 | **handle-as-fn**: a handle is accepted where a structural Fn value is expected | `co-storage-frontier` | survived | -- |
 | **handle-erased-to-any**: a handle is accepted as an argument of an untyped (any) parameter | `co-storage-equality`, `co-storage-frontier` | survived | -- |
 | **context-reselected-per-resume**: every top-level resume selects the coroutine's context-trait providers again | `co-context-fixed-at-construction` | survived | -- |
@@ -1226,7 +1226,7 @@ What this says about the architecture (no optimization was attempted):
 * **Use-site inference reads exact callees' declared parameter types only**:
   a yield value passed to an untyped or inferred parameter does not
   constrain the protocol (a projection then needs `resume T`).
-* **`coroutine::done?` needs `import coroutine`**, like every standard
+* **`std::coroutine::done?` needs `import std::coroutine`**, like every standard
   intrinsic (IMPORTS.md).
 * **Handles live in local bindings only** (point 36). Lists of coroutines, a
   scheduler, coroutine fields and handle-taking functions all wait for a

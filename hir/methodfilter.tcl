@@ -192,7 +192,7 @@ proc hir::methodfilter::DefinedType {hir b} {
 # that has a kind: a narrower type of the same kind rules out the same
 # candidates, and a receiver that is `never`, or of another kind, is the work of
 # the build's default candidates for the calls before it, which narrowed the binding
-# (the chain `a.at(0)`, `a.at(1)` on a MutableArray, with `list::at` standing
+# (the chain `a.at(0)`, `a.at(1)` on a MutableArray, with `std::list::at` standing
 # for both, narrows `a` to nothing for the second). A guess decides a whole
 # chain in one wave; it is only a guess -- every decision is read again
 # without it, from a build in which the calls before it are decided (Decide),

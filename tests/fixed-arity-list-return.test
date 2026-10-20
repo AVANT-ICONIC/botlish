@@ -101,11 +101,11 @@ proc withModules {files script} {
 
 # A helper the scanner examples call (the corpus's own `peek`): five lines,
 # so the function after it starts on line 6.
-set ::peek {import str
+set ::peek {import std::str
 fn peek(text, index) errors LowerUnderrun:
-    if index >= str::length(text):
+    if index >= std::str::length(text):
         return ""
-    str::substring(text, index, index + 1)
+    std::str::substring(text, index, index + 1)
 }
 
 # ---------------------------------------------------------------------------
@@ -116,11 +116,11 @@ test fa-scan-quoted {scan_quoted: one 2-element literal and two self-calls; anch
     character = peek(text, index)
     if character == \"\\\"\":
         if peek(text, index + 1) == \"\\\"\":
-            return scan_quoted(text, index + 2, str::concat(field, \"\\\"\"))
+            return scan_quoted(text, index + 2, std::str::concat(field, \"\\\"\"))
 
         return \[field, index + 1\]
 
-    scan_quoted(text, index + 1, str::concat(field, character))"
+    scan_quoted(text, index + 1, std::str::concat(field, character))"
 } -result {{a 2-element list is returned from all 3 value exits; a struct value names the parts @ 10:13 12:9 14:5}}
 
 test fa-scan-quoted-rendered {the rendered diagnostic: one warning line and one note per other exit} -body {
@@ -128,11 +128,11 @@ test fa-scan-quoted-rendered {the rendered diagnostic: one warning line and one 
     character = peek(text, index)
     if character == \"\\\"\":
         if peek(text, index + 1) == \"\\\"\":
-            return scan_quoted(text, index + 2, str::concat(field, \"\\\"\"))
+            return scan_quoted(text, index + 2, std::str::concat(field, \"\\\"\"))
 
         return \[field, index + 1\]
 
-    scan_quoted(text, index + 1, str::concat(field, character))"]
+    scan_quoted(text, index + 1, std::str::concat(field, character))"]
     hir::warnings::render $hir [lindex [fixedOf $hir] 0]
 } -result {t.bot:10:13: warning: a 2-element list is returned from all 3 value exits; a struct value names the parts (FIXED-ARITY-LIST-RETURN)
 t.bot:12:9: note: also returned here
@@ -259,24 +259,24 @@ test fa-nested-list-elements-outer-arity {a literal of literals has its outer ar
 # ---------------------------------------------------------------------------
 # Literal-shaped, not text-matched (item 9): only `written {form list}` counts
 
-test fa-computed-list-append-silent {an exit built by list::append is not literal-shaped} -body {
-    silent {import list
+test fa-computed-list-append-silent {an exit built by std::list::append is not literal-shaped} -body {
+    silent {import std::list
 fn f(x, a, b):
     if x:
         return [a, b]
-    list::append([a], b)}
+    std::list::append([a], b)}
 } -result 1
 
-test fa-computed-concat-silent {an exit built by str::concat (or any other function) is not literal-shaped} -body {
-    silent {import str
+test fa-computed-concat-silent {an exit built by std::str::concat (or any other function) is not literal-shaped} -body {
+    silent {import std::str
 fn f(x, a, b):
     if x:
         return [a, b]
-    str::concat(a, b)}
+    std::str::concat(a, b)}
 } -result 1
 
 test fa-method-sugar-construction-silent {a list built with method sugar is not literal-shaped} -body {
-    silent {import list
+    silent {import std::list
 fn f(x, xs, b):
     if x:
         return [b, b]
@@ -284,9 +284,9 @@ fn f(x, xs, b):
 } -result 1
 
 test fa-computed-list-alone-silent {a function whose only exit is a computed 2-element list is silent} -body {
-    silent {import list
+    silent {import std::list
 fn f(a, b):
-    list::append([a], b)}
+    std::list::append([a], b)}
 } -result 1
 
 test fa-operator-exit-silent {an operator exit is not a literal} -body {
@@ -338,11 +338,11 @@ test fa-collecting-loop-exit-silent {a final collecting loop is a computed list 
 } -result 1
 
 test fa-handled-value-exit-silent {a handled call's value is not a literal} -body {
-    silent {import list
+    silent {import std::list
 fn f(xs, a, b):
     if a == b:
         return [a, b]
-    return list::at(xs, 0):
+    return std::list::at(xs, 0):
         on IndexNotFound:
             [b, a]}
 } -result 1
@@ -364,11 +364,11 @@ f(1, 2)}]
 # Computed and mutable values; structs and mixed shapes (items 10, 13)
 
 test fa-mutable-value-silent {a mutable value exit (a MutableArray) is a mismatch} -body {
-    silent {import mutable_array
+    silent {import std::mutable_array
 fn f(x, a, b):
     if x:
         return [a, b]
-    mutable_array::allocate(2)}
+    std::mutable_array::allocate(2)}
 } -result 1
 
 test fa-parameter-exit-silent {a parameter exit is a mismatch} -body {
@@ -395,11 +395,11 @@ test fa-converted-scan-quoted-silent {the converted form (struct literal) of sca
     character = peek(text, index)
     if character == \"\\\"\":
         if peek(text, index + 1) == \"\\\"\":
-            return scan_quoted(text, index + 2, str::concat(field, \"\\\"\"))
+            return scan_quoted(text, index + 2, std::str::concat(field, \"\\\"\"))
 
         return {field: field, index: index + 1}
 
-    scan_quoted(text, index + 1, str::concat(field, character))"
+    scan_quoted(text, index + 1, std::str::concat(field, character))"
 } -result 1
 
 # ---------------------------------------------------------------------------
@@ -501,12 +501,12 @@ test fa-unit-non-final-elseless-if-is-no-exit {an else-less `if` that is not the
 # `fail` does not block (item 6)
 
 test fa-fail-guard-warns {the procedural guard pattern warns: fail is not a value exit} -body {
-    shown {import list
+    shown {import std::list
 error Empty
 fn f(xs) errors Empty:
     if xs == []:
         fail Empty
-    [xs, list::length(xs)]}
+    [xs, std::list::length(xs)]}
 } -result {{a 2-element list is returned from the only value exit; a struct value names the parts @ 6:5}}
 
 test fa-fail-final-contributes-no-exit {a body ending in fail contributes no exit} -body {
@@ -585,9 +585,9 @@ test fa-alias-beside-literal-other-arity {an alias of a 3-element literal beside
 } -result 1
 
 test fa-alias-of-computed-silent {an alias of a computed list is not literal-shaped} -body {
-    silent {import list
+    silent {import std::list
 fn f(x, a, b):
-    r = list::append([a], b)
+    r = std::list::append([a], b)
     if x:
         return r
     [b, a]}
@@ -602,9 +602,9 @@ test fa-alias-of-parameter-silent {an alias of a parameter is a parameter} -body
 } -result 1
 
 test fa-alias-of-mutable-silent {an alias of a mutable value is a mismatch} -body {
-    silent {import mutable_array
+    silent {import std::mutable_array
 fn f(x, a, b):
-    r = mutable_array::allocate(2)
+    r = std::mutable_array::allocate(2)
     if x:
         return r
     [a, b]}
@@ -808,12 +808,12 @@ test fa-annotation-through-module-import {a module's annotated function is silen
 fn bare(dx, dy):
     [dx, dy]
 }} {
-        set hir [surface::compile {import geo
-geo::coords(1, 2)
-geo::bare(1, 2)} t.bot -warnings default -warning-channel ""]
+        set hir [surface::compile {import std::geo
+std::geo::coords(1, 2)
+std::geo::bare(1, 2)} t.bot -warnings default -warning-channel ""]
         lmap w [fixedOf $hir] {list [file tail [hir::originLocation $hir [dict get $w primary]]] [dict get $w data functionName]}
     }
-} -result {{geo.bot:4:5 geo::bare}}
+} -result {{geo.bot:4:5 std::geo::bare}}
 
 test fa-annotation-is-the-existing-declared-result {the annotation the warning reads is the block's existing declaredResult, recorded in every mode} -body {
     set source {fn coords(dx: int, dy: int) -> List[int]:
@@ -918,9 +918,9 @@ test fa-reach-loops {returns inside list and counted loops are exits} -body {
 } -result {{4:13 2 3 {7:13 8:5}}}
 
 test fa-reach-handler-return {a return inside an on-handler is an exit of the enclosing function} -body {
-    fixed {import list
+    fixed {import std::list
 fn f(xs, a, b) errors IndexNotFound:
-    v = list::at(xs, 0):
+    v = std::list::at(xs, 0):
         on IndexNotFound:
             return [a, b]
     [v, a]}
@@ -933,8 +933,8 @@ test fa-reach-module-code-located-in-module {a module function's exits (inside a
             return [x, a]
     [a, a]
 }} {
-        set hir [surface::compile {import m
-m::find([1, 2], 2)} t.bot -warnings default -warning-channel ""]
+        set hir [surface::compile {import std::m
+std::m::find([1, 2], 2)} t.bot -warnings default -warning-channel ""]
         lmap w [fixedOf $hir] {
             list [file tail [hir::originLocation $hir [dict get $w primary]]] \
                 [lmap o [dict get $w secondary] {file tail [hir::originLocation $hir $o]}]
@@ -1087,7 +1087,7 @@ test fa-deterministic {compiling the same source twice gives identical warnings}
     character = peek(text, index)
     if character == \"\\\"\":
         return \[field, index + 1\]
-    scan_quoted(text, index + 1, str::concat(field, character))"
+    scan_quoted(text, index + 1, std::str::concat(field, character))"
     expr {[hir::warnings::of [compileWith $source]] eq [hir::warnings::of [compileWith $source]]}
 } -result 1
 
@@ -1374,7 +1374,7 @@ test fa-backend-independent-off {the same program runs identically on every back
 # reaches a source function's inferred list parameter, at run time where it
 # reaches a native directly, and not at all by `==` against a list.
 
-set ::converted {import list
+set ::converted {import std::list
 fn pair(a, b):
     {p0: a, p1: b}
 }
@@ -1394,12 +1394,12 @@ use(5)" off]
     core::formatValue [core::evalProgram [hir::lower $hir]]
 } -result {[1, 5]}
 
-test fa-conversion-leftover-through-source-function {a leftover positional read through a source function (list::get) is a compile-time TYPE error} -body {
-    lindex [rejection "${::converted}list::get(pair(1, 2), 0, 7)" default] 0
+test fa-conversion-leftover-through-source-function {a leftover positional read through a source function (std::list::get) is a compile-time TYPE error} -body {
+    lindex [rejection "${::converted}std::list::get(pair(1, 2), 0, 7)" default] 0
 } -result {CORE SEMANTIC TYPE}
 
-test fa-conversion-leftover-native-read-is-a-run-time-error {GAP: a leftover direct native read (list::at) compiles and fails at run time with a kind error} -body {
-    set hir [compileWith "${::converted}v = list::at(pair(1, 2), 0):
+test fa-conversion-leftover-native-read-is-a-run-time-error {GAP: a leftover direct native read (std::list::at) compiles and fails at run time with a kind error} -body {
+    set hir [compileWith "${::converted}v = std::list::at(pair(1, 2), 0):
     on IndexNotFound:
         0
 v" off]

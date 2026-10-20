@@ -315,7 +315,7 @@ proc dProgramText {converter members stmts inputs exact} {
     set lo [dict get $D lo]
     set hi [dict get $D hi]
     set test [join [lmap m $members {set _ "x == $m"}] { or }]
-    return "import list
+    return "import std::list
 
 type D = Int in $lo..$hi
 refined type R = D

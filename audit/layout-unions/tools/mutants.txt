@@ -197,7 +197,7 @@ proc hir::layouts::ReprUnionPath {repr} {
             ViewRead hir $e $field
 >>>>
 
-@@ pointer-alternative-from-bytes binary::read of a pointer alternative is accepted (no LAYOUT-NATIVE-ONLY), so bytes reach a pointer through a union
+@@ pointer-alternative-from-bytes std::binary::read of a pointer alternative is accepted (no LAYOUT-NATIVE-ONLY), so bytes reach a pointer through a union
 ## hir/layouts.tcl
 <<<<
                     set inner [ReprPointerPath $field]
@@ -214,12 +214,12 @@ proc hir::layouts::ReprUnionPath {repr} {
 <<<<
     if {[ReprPointerPath $repr] ne "none"} {
         core::semanticError LAYOUT-NATIVE-ONLY \
-            "binary::read: [PathText $path] holds a C pointer, which bytes never become"
+            "std::binary::read: [PathText $path] holds a C pointer, which bytes never become"
     }
 ====
 >>>>
 
-@@ pointer-union-parse-allowed binary::parse of a layout holding a pointer-bearing union is accepted: neither the union refusal nor the native-only rule sees the pointer inside the union's alternatives
+@@ pointer-union-parse-allowed std::binary::parse of a layout holding a pointer-bearing union is accepted: neither the union refusal nor the native-only rule sees the pointer inside the union's alternatives
 ## hir/layouts.tcl
 <<<<
         if {$why ne ""} {
@@ -262,7 +262,7 @@ proc hir::layouts::ReprPointerPath {repr} {
                         # ARRAYS.md), directly or in its nested elements.
 >>>>
 
-@@ pointer-alternative-ordinary-write an ordinary binary::write of a pointer alternative (or of anything holding a pointer) is accepted statically (no LAYOUT-NATIVE-ONLY): bytes are written with pointers the program never handed to binary::write_foreign
+@@ pointer-alternative-ordinary-write an ordinary std::binary::write of a pointer alternative (or of anything holding a pointer) is accepted statically (no LAYOUT-NATIVE-ONLY): bytes are written with pointers the program never handed to std::binary::write_foreign
 ## hir/layouts.tcl
 <<<<
                 write {
@@ -285,10 +285,10 @@ proc hir::layouts::ReprPointerPath {repr} {
 @@ pointer-alternative-store-moves a pointer stored through a union's pointer alternative is moved into memory instead of observed (the program's binding is consumed)
 ## core/binary.tcl
 <<<<
-core::native::register binary::store -arity 3 -impl core::binary::store \
+core::native::register std::binary::store -arity 3 -impl core::binary::store \
     -param-types {any str any} -result-type unit -ownership {observe observe observe} \
 ====
-core::native::register binary::store -arity 3 -impl core::binary::store \
+core::native::register std::binary::store -arity 3 -impl core::binary::store \
     -param-types {any str any} -result-type unit -ownership {observe observe move} \
 >>>>
 

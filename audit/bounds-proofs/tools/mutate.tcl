@@ -97,7 +97,7 @@ proc writeFile {path text} {
 # fuzzer's smoke run): a test that cannot find its input would fail under
 # every mutant and kill none.
 set tree [file tempdir botlish-bounds-mutants]
-foreach dir {compiler core hir surface lib tests bench audit/bounds-proofs audit/stdlib-namespaces} {
+foreach dir {compiler core hir surface stdlib tests bench audit/bounds-proofs audit/stdlib-namespaces} {
     file mkdir [file dirname [file join $tree $dir]]
     file copy [file join $root $dir] [file join $tree $dir]
 }

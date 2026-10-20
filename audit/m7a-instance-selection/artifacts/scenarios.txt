@@ -177,25 +177,25 @@ i4    f<generic>                         probe7.bot:2 if <(x, 100)              
     NIR 4 g<generic>: regs=2 env=0 call=1
 
 ==============================================================================
-S03a-from-int-safe-only -- byte::from_int(45) as the instance's only caller
+S03a-from-int-safe-only -- std::byte::from_int(45) as the instance's only caller
 ------------------------------------------------------------------------------
-byte::from_int(45)
+std::byte::from_int(45)
 ------------------------------------------------------------------------------
 diagnostics (0): none (legal program)
-i1 byte::from_int<int>  generic=0 open=0 key={int} result=int[Byte] resultRange=[45, 45] {45}
+i1 std::byte::from_int<int>  generic=0 open=0 key={int} result=int[Byte] resultRange=[45, 45] {45}
     param value: declared=int view=int entry=[45, 45] {45}
-i1    byte::from_int<int>                byte.bot:151 if <(value, 0)                              -> AlwaysFalse via entry  operands={param {[45, 45] {45}} const {[0, 0] {0}}}
-i1    byte::from_int<int>                byte.bot:154 if >(value, 255)                            -> AlwaysFalse via entry  operands={param {[45, 45] {45}} const {[255, 255] {255}}}
-    completion: call e77 probe8.bot:176 -> byte::from_int effectiveErrors={AboveRange} mayReturnNormally=1 resultRangeFact=[0, 255]
-    completion: call e85 probe8.bot:1 -> byte::from_int effectiveErrors={} mayReturnNormally=1 resultRangeFact=[45, 45] {45}
-    NIR 1 byte::from_int<int>: regs=8 env=0 op:runbox=1 op:rilt=1 op:rigt=1
+i1    std::byte::from_int<int>                byte.bot:151 if <(value, 0)                              -> AlwaysFalse via entry  operands={param {[45, 45] {45}} const {[0, 0] {0}}}
+i1    std::byte::from_int<int>                byte.bot:154 if >(value, 255)                            -> AlwaysFalse via entry  operands={param {[45, 45] {45}} const {[255, 255] {255}}}
+    completion: call e77 probe8.bot:176 -> std::byte::from_int effectiveErrors={AboveRange} mayReturnNormally=1 resultRangeFact=[0, 255]
+    completion: call e85 probe8.bot:1 -> std::byte::from_int effectiveErrors={} mayReturnNormally=1 resultRangeFact=[45, 45] {45}
+    NIR 1 std::byte::from_int<int>: regs=8 env=0 op:runbox=1 op:rilt=1 op:rigt=1
 
 ==============================================================================
-S03b-from-int-plus-legal-open-caller -- byte::from_int(45) + a legal (handled, untyped) caller reached only through callvalue
+S03b-from-int-plus-legal-open-caller -- std::byte::from_int(45) + a legal (handled, untyped) caller reached only through callvalue
 ------------------------------------------------------------------------------
-byte::from_int(45)
+std::byte::from_int(45)
 fn dyn(m):
-    r = byte::from_int(m + 0):
+    r = std::byte::from_int(m + 0):
         on BelowRange:
             0
         on AboveRange:
@@ -206,51 +206,51 @@ fn caller(g, v):
 caller(dyn, 45)
 ------------------------------------------------------------------------------
 diagnostics (0): none (legal program)
-i1 byte::from_int<int>  generic=0 open=0 key={int} result=int[Byte] resultRange=[0, 255]
+i1 std::byte::from_int<int>  generic=0 open=0 key={int} result=int[Byte] resultRange=[0, 255]
     param value: declared=int view=int entry=[-∞, +∞]
 i3 dyn<generic>  generic=1 open=1 key={any} result=int[Byte] resultRange=[0, 255]
     param m: declared=- view=any entry=[-∞, +∞]
-    captures: byte::from_int:block(e58)/1 -> any
-    call e92 probe9.bot:3 -> byte::from_int<int>
+    captures: std::byte::from_int:block(e58)/1 -> any
+    call e92 probe9.bot:3 -> std::byte::from_int<int>
 i2 caller<block, int>  generic=0 open=0 key={block int} result=any resultRange=[-∞, +∞]
     param g: declared=- view=block entry=[-∞, +∞]
     param v: declared=- view=int entry=[45, 45] {45}
-i1    byte::from_int<int>                byte.bot:151 if <(value, 0)                              -> Unknown     via undecided  operands={param {[-∞, +∞]} const {[0, 0] {0}}}
-i1    byte::from_int<int>                byte.bot:154 if >(value, 255)                            -> Unknown     via undecided  operands={param {[0, +∞]} const {[255, 255] {255}}}
-    completion: call e77 probe9.bot:176 -> byte::from_int effectiveErrors={AboveRange} mayReturnNormally=1 resultRangeFact=[0, 255]
-    completion: call e85 probe9.bot:1 -> byte::from_int effectiveErrors={} mayReturnNormally=1 resultRangeFact=[45, 45] {45}
+i1    std::byte::from_int<int>                byte.bot:151 if <(value, 0)                              -> Unknown     via undecided  operands={param {[-∞, +∞]} const {[0, 0] {0}}}
+i1    std::byte::from_int<int>                byte.bot:154 if >(value, 255)                            -> Unknown     via undecided  operands={param {[0, +∞]} const {[255, 255] {255}}}
+    completion: call e77 probe9.bot:176 -> std::byte::from_int effectiveErrors={AboveRange} mayReturnNormally=1 resultRangeFact=[0, 255]
+    completion: call e85 probe9.bot:1 -> std::byte::from_int effectiveErrors={} mayReturnNormally=1 resultRangeFact=[45, 45] {45}
     completion: call e106 probe9.bot:11 -> caller effectiveErrors={} mayReturnNormally=1 resultRangeFact=[-∞, +∞]
-    NIR 1 byte::from_int<int>: regs=9 env=0 op:ilt=1 br=2 faildeclared=2 op:igt=1
+    NIR 1 std::byte::from_int<int>: regs=9 env=0 op:ilt=1 br=2 faildeclared=2 op:igt=1
     NIR 2 dyn<generic>: regs=12 env=0 guard=1 op:iadd=1 call=1 br=2
     NIR 3 caller<block, int>: regs=3 env=0 callvalue=1
 
 ==============================================================================
 S03c-from-int-m6-fixture-as-written -- the M6 condition-outcome-12 / M5 shared-instance fixture, compiled as written (non-strict): note its diagnostics
 ------------------------------------------------------------------------------
-byte::from_int(45)
+std::byte::from_int(45)
 fn dyn(m: int) -> Byte errors BelowRange, AboveRange:
-    byte::from_int(m)
+    std::byte::from_int(m)
 fn caller(g, v) -> Byte errors BelowRange, AboveRange:
     g(v)
 caller(dyn, 45)
 ------------------------------------------------------------------------------
 diagnostics (2): TYPE {function result does not prove declared type int[Byte] (facts: [-∞, +∞])}; TYPE {"dyn" has typed parameter requirements that cannot be preserved passed as an ordinary call argument: its declared parameter contract would be erased and could no longer be checked at every future call}
-i1 byte::from_int<int>  generic=0 open=0 key={int} result=int[Byte] resultRange=[0, 255]
+i1 std::byte::from_int<int>  generic=0 open=0 key={int} result=int[Byte] resultRange=[0, 255]
     param value: declared=int view=int entry=[-∞, +∞]
 i3 dyn<generic>  generic=1 open=1 key={any} result=int[Byte] resultRange=[0, 255]
     param m: declared=int view=int entry=[-∞, +∞]
-    captures: byte::from_int:block(e58)/1 -> any
-    call e90 probe10.bot:3 -> byte::from_int<int>
+    captures: std::byte::from_int:block(e58)/1 -> any
+    call e90 probe10.bot:3 -> std::byte::from_int<int>
 i2 caller<block, int>  generic=0 open=0 key={block int} result=int[Byte] resultRange=[-∞, +∞]
     param g: declared=- view=block entry=[-∞, +∞]
     param v: declared=- view=int entry=[45, 45] {45}
-i1    byte::from_int<int>                byte.bot:151 if <(value, 0)                              -> Unknown     via undecided  operands={param {[-∞, +∞]} const {[0, 0] {0}}}
-i1    byte::from_int<int>                byte.bot:154 if >(value, 255)                            -> Unknown     via undecided  operands={param {[0, +∞]} const {[255, 255] {255}}}
-    completion: call e77 probe10.bot:176 -> byte::from_int effectiveErrors={AboveRange} mayReturnNormally=1 resultRangeFact=[0, 255]
-    completion: call e85 probe10.bot:1 -> byte::from_int effectiveErrors={} mayReturnNormally=1 resultRangeFact=[45, 45] {45}
-    completion: call e90 probe10.bot:3 -> byte::from_int effectiveErrors={AboveRange BelowRange} mayReturnNormally=1 resultRangeFact=[0, 255]
+i1    std::byte::from_int<int>                byte.bot:151 if <(value, 0)                              -> Unknown     via undecided  operands={param {[-∞, +∞]} const {[0, 0] {0}}}
+i1    std::byte::from_int<int>                byte.bot:154 if >(value, 255)                            -> Unknown     via undecided  operands={param {[0, +∞]} const {[255, 255] {255}}}
+    completion: call e77 probe10.bot:176 -> std::byte::from_int effectiveErrors={AboveRange} mayReturnNormally=1 resultRangeFact=[0, 255]
+    completion: call e85 probe10.bot:1 -> std::byte::from_int effectiveErrors={} mayReturnNormally=1 resultRangeFact=[45, 45] {45}
+    completion: call e90 probe10.bot:3 -> std::byte::from_int effectiveErrors={AboveRange BelowRange} mayReturnNormally=1 resultRangeFact=[0, 255]
     completion: call e98 probe10.bot:6 -> caller effectiveErrors={} mayReturnNormally=1 resultRangeFact=[0, 255]
-    NIR 1 byte::from_int<int>: regs=9 env=0 op:ilt=1 br=2 faildeclared=2 op:igt=1
+    NIR 1 std::byte::from_int<int>: regs=9 env=0 op:ilt=1 br=2 faildeclared=2 op:igt=1
     NIR 2 dyn<generic>: regs=2 env=0 call=1
     NIR 3 caller<block, int>: regs=3 env=0 callvalue=1
 
@@ -284,10 +284,10 @@ fn fh(h: HighNibble):
             2
         else:
             3
-fb(byte::from_int(7))
+fb(std::byte::from_int(7))
 fs(15)
-fl(byte::low_nibble(200))
-fh(byte::high_nibble(200))
+fl(std::byte::low_nibble(200))
+fh(std::byte::high_nibble(200))
 ------------------------------------------------------------------------------
 diagnostics (0): none (legal program)
 i2 fb<int>  generic=0 open=0 key={int} result=int resultRange=[1, 3]
@@ -321,8 +321,8 @@ fn f(x):
         1
     else:
         2
-f(byte::from_int(7))
-f(byte::complement(byte::from_int(8)))
+f(std::byte::from_int(7))
+f(std::byte::complement(std::byte::from_int(8)))
 ------------------------------------------------------------------------------
 diagnostics (0): none (legal program)
 i2 f<int>  generic=0 open=0 key={int} result=int resultRange=[1, 2]
@@ -386,7 +386,7 @@ fn f(xs: List[Byte]) -> int:
         1
     else:
         2
-f([byte::from_int(1), byte::from_int(2)])
+f([std::byte::from_int(1), std::byte::from_int(2)])
 ------------------------------------------------------------------------------
 diagnostics (0): none (legal program)
 i2 f<List[int]>  generic=0 open=0 key={{List[int]}} result=int resultRange=[1, 2]
@@ -405,7 +405,7 @@ fn f(xs: List[Byte]) -> int:
     else:
         2
 g = f
-g([byte::from_int(1), byte::from_int(2)])
+g([std::byte::from_int(1), std::byte::from_int(2)])
 ------------------------------------------------------------------------------
 diagnostics (0): none (legal program)
 i2 f<List[int]>  generic=0 open=0 key={{List[int]}} result=int resultRange=[1, 2]
@@ -423,7 +423,7 @@ S05f-encode-utf8-to-list-byte -- encode_utf8's result passed to a declared List[
 ------------------------------------------------------------------------------
 fn f(xs: List[Byte]) -> int:
     list_length(xs)
-byte::from_int(1)
+std::byte::from_int(1)
 f(encode_utf8("a"))
 ------------------------------------------------------------------------------
 diagnostics (1): TYPE {argument for parameter "xs" cannot be proven to satisfy List[int[Byte]] (argument type: List[int[Byte]], facts: [-∞, +∞])}
@@ -442,7 +442,7 @@ S06a-declared-set -- declared ImmutableSet[Byte] parameter
 ------------------------------------------------------------------------------
 fn f(s: ImmutableSet[Byte], b: Byte) -> bool:
     immutable_set_contains(s, b)
-f(byte::set(['a']), byte::from_int(3))
+f(std::byte::set(['a']), std::byte::from_int(3))
 ------------------------------------------------------------------------------
 diagnostics (0): none (legal program)
 i4 f<immutableSet, int>  generic=0 open=0 key={immutableSet int} result=bool resultRange=[-∞, +∞]
@@ -456,8 +456,8 @@ S06b-undeclared-set-and-empty-set -- undeclared set parameter; a Byte set and an
 ------------------------------------------------------------------------------
 fn f(s, b):
     immutable_set_contains(s, b)
-f(byte::set(['a']), byte::from_int(3))
-f(immutable_set_from_list([]), byte::from_int(4))
+f(std::byte::set(['a']), std::byte::from_int(3))
+f(immutable_set_from_list([]), std::byte::from_int(4))
 ------------------------------------------------------------------------------
 diagnostics (0): none (legal program)
 i4 f<immutableSet, int>  generic=0 open=0 key={immutableSet int} result=bool resultRange=[-∞, +∞]
@@ -468,12 +468,12 @@ i4 f<immutableSet, int>  generic=0 open=0 key={immutableSet int} result=bool res
     NIR 4 f<immutableSet, int>: regs=3 env=0 op:setcontains=1
 
 ==============================================================================
-S06c-module-retained-set -- module-retained ImmutableSet[Byte] captured by a module function (web::is_unreserved shape)
+S06c-module-retained-set -- module-retained ImmutableSet[Byte] captured by a module function (std::web::is_unreserved shape)
 ------------------------------------------------------------------------------
-s = byte::set(['-', '.'])
+s = std::byte::set(['-', '.'])
 fn member(b: Byte) -> bool:
     immutable_set_contains(s, b)
-member(byte::from_int(45))
+member(std::byte::from_int(45))
 ------------------------------------------------------------------------------
 diagnostics (0): none (legal program)
 i4 member<generic>  generic=1 open=1 key={any} result=bool resultRange=[-∞, +∞]
@@ -537,7 +537,7 @@ fn take(b: Byte):
     b
 fn apply(f, x):
     f(x)
-apply(take, byte::from_int(3))
+apply(take, std::byte::from_int(3))
 ------------------------------------------------------------------------------
 diagnostics (1): TYPE {"take" has typed parameter requirements that cannot be preserved passed as an ordinary call argument: its declared parameter contract would be erased and could no longer be checked at every future call}
 i3 take<generic>  generic=1 open=1 key={any} result=int[Byte] resultRange=[0, 255]
@@ -645,7 +645,7 @@ fn mk(n: Byte):
         else:
             x + 1
     inner(1)
-mk(byte::from_int(5))
+mk(std::byte::from_int(5))
 ------------------------------------------------------------------------------
 diagnostics (0): none (legal program)
 i2 mk<int>  generic=0 open=0 key={int} result=int resultRange=[1, 2]
@@ -668,9 +668,9 @@ i4    inner<generic>                     probe28.bot:3 if >(n, 255)             
 ==============================================================================
 S09-completion-per-call-shared-instance -- different per-call effectiveErrors, one shared instance
 ------------------------------------------------------------------------------
-byte::from_int(45)
+std::byte::from_int(45)
 fn dyn(m):
-    r = byte::from_int(m + 0):
+    r = std::byte::from_int(m + 0):
         on BelowRange:
             0
         on AboveRange:
@@ -679,56 +679,56 @@ fn dyn(m):
 dyn(1000)
 ------------------------------------------------------------------------------
 diagnostics (0): none (legal program)
-i1 byte::from_int<int>  generic=0 open=0 key={int} result=int[Byte] resultRange=[45, 255] {45}
+i1 std::byte::from_int<int>  generic=0 open=0 key={int} result=int[Byte] resultRange=[45, 255] {45}
     param value: declared=int view=int entry=[45, 1000] {45,1000}
 i2 dyn<int>  generic=0 open=0 key={int} result=int[Byte] resultRange=[0, 255]
     param m: declared=- view=int entry=[1000, 1000] {1000}
-    captures: byte::from_int:block(e58)/1 -> any
-    call e92 probe29.bot:3 -> byte::from_int<int>
-i1    byte::from_int<int>                byte.bot:151 if <(value, 0)                              -> AlwaysFalse via entry  operands={param {[45, 1000] {45,1000}} const {[0, 0] {0}}}
-i1    byte::from_int<int>                byte.bot:154 if >(value, 255)                            -> Unknown     via undecided  operands={param {[45, 1000] {45,1000}} const {[255, 255] {255}}}
-    completion: call e77 probe29.bot:176 -> byte::from_int effectiveErrors={AboveRange} mayReturnNormally=1 resultRangeFact=[0, 255]
-    completion: call e85 probe29.bot:1 -> byte::from_int effectiveErrors={} mayReturnNormally=1 resultRangeFact=[45, 45] {45}
+    captures: std::byte::from_int:block(e58)/1 -> any
+    call e92 probe29.bot:3 -> std::byte::from_int<int>
+i1    std::byte::from_int<int>                byte.bot:151 if <(value, 0)                              -> AlwaysFalse via entry  operands={param {[45, 1000] {45,1000}} const {[0, 0] {0}}}
+i1    std::byte::from_int<int>                byte.bot:154 if >(value, 255)                            -> Unknown     via undecided  operands={param {[45, 1000] {45,1000}} const {[255, 255] {255}}}
+    completion: call e77 probe29.bot:176 -> std::byte::from_int effectiveErrors={AboveRange} mayReturnNormally=1 resultRangeFact=[0, 255]
+    completion: call e85 probe29.bot:1 -> std::byte::from_int effectiveErrors={} mayReturnNormally=1 resultRangeFact=[45, 45] {45}
     completion: call e101 probe29.bot:9 -> dyn effectiveErrors={} mayReturnNormally=1 resultRangeFact=[0, 255]
-    NIR 1 byte::from_int<int>: regs=9 env=0 op:runbox=1 op:rilt=1 op:rigt=1 br=1 faildeclared=1
+    NIR 1 std::byte::from_int<int>: regs=9 env=0 op:runbox=1 op:rilt=1 op:rigt=1 br=1 faildeclared=1
     NIR 2 dyn<int>: regs=14 env=0 op:runbox=1 op:riadd=1 op:rbox=1 call=1 br=2
 
 ==============================================================================
-S10-byte-set-literal-and-dynamic -- byte::set punctuation literal + a dynamic byte::set caller
+S10-byte-set-literal-and-dynamic -- std::byte::set punctuation literal + a dynamic std::byte::set caller
 ------------------------------------------------------------------------------
-p = byte::set(['-', '.', '_', '~'])
+p = std::byte::set(['-', '.', '_', '~'])
 fn dyn(chars):
-    r = byte::set(chars):
+    r = std::byte::set(chars):
         on AboveRange:
             p
     r
 dyn(['A'])
 ------------------------------------------------------------------------------
 diagnostics (1): TYPE {argument for parameter "chars" cannot be proven to satisfy List[UnicodeChar] (argument type: any, facts: [-∞, +∞])}
-i3 byte::from_int<int>  generic=0 open=0 key={int} result=int[Byte] resultRange=[0, 255]
+i3 std::byte::from_int<int>  generic=0 open=0 key={int} result=int[Byte] resultRange=[0, 255]
     param value: declared=int view=int entry=[0, +∞]
-i1 byte::set<List[UnicodeChar]>  generic=0 open=0 key={{List[UnicodeChar]}} result=ImmutableSet[int[Byte]] resultRange=[-∞, +∞]
+i1 std::byte::set<List[UnicodeChar]>  generic=0 open=0 key={{List[UnicodeChar]}} result=ImmutableSet[int[Byte]] resultRange=[-∞, +∞]
     param chars: declared=List[UnicodeChar] view=List[UnicodeChar] entry=[-∞, +∞]
-    captures: byte::from_int:block(e58)/1 -> any, char::codepoint:block(e2)/1 -> any
-    call e79 probe30.bot:176 -> char::codepoint<UnicodeChar>
-    call e77 probe30.bot:176 -> byte::from_int<int>
-i5 byte::set<generic>  generic=1 open=0 key={any} result=ImmutableSet[int[Byte]] resultRange=[-∞, +∞]
+    captures: std::byte::from_int:block(e58)/1 -> any, std::char::codepoint:block(e2)/1 -> any
+    call e79 probe30.bot:176 -> std::char::codepoint<UnicodeChar>
+    call e77 probe30.bot:176 -> std::byte::from_int<int>
+i5 std::byte::set<generic>  generic=1 open=0 key={any} result=ImmutableSet[int[Byte]] resultRange=[-∞, +∞]
     param chars: declared=List[UnicodeChar] view=List[UnicodeChar] entry=[-∞, +∞]
-    captures: byte::from_int:block(e58)/1 -> any, char::codepoint:block(e2)/1 -> any
-    call e79 probe30.bot:176 -> char::codepoint<UnicodeChar>
-    call e77 probe30.bot:176 -> byte::from_int<int>
+    captures: std::byte::from_int:block(e58)/1 -> any, std::char::codepoint:block(e2)/1 -> any
+    call e79 probe30.bot:176 -> std::char::codepoint<UnicodeChar>
+    call e77 probe30.bot:176 -> std::byte::from_int<int>
 i4 dyn<generic>  generic=1 open=1 key={any} result=ImmutableSet[int[Byte]] resultRange=[-∞, +∞]
     param chars: declared=- view=any entry=[-∞, +∞]
-    captures: byte::set:block(e73)/1 -> any, p:ImmutableSet[int[Byte]]
-    call e98 probe30.bot:3 -> byte::set<generic>
-i3    byte::from_int<int>                byte.bot:151 if <(value, 0)                              -> AlwaysFalse via entry  operands={param {[0, +∞]} const {[0, 0] {0}}}
-i3    byte::from_int<int>                byte.bot:154 if >(value, 255)                            -> Unknown     via undecided  operands={param {[0, +∞]} const {[255, 255] {255}}}
-    completion: call e77 probe30.bot:176 -> byte::from_int effectiveErrors={AboveRange} mayReturnNormally=1 resultRangeFact=[0, 255]
-    completion: call e86 probe30.bot:1 -> byte::set effectiveErrors={} mayReturnNormally=1 resultRangeFact=[-∞, +∞]
+    captures: std::byte::set:block(e73)/1 -> any, p:ImmutableSet[int[Byte]]
+    call e98 probe30.bot:3 -> std::byte::set<generic>
+i3    std::byte::from_int<int>                byte.bot:151 if <(value, 0)                              -> AlwaysFalse via entry  operands={param {[0, +∞]} const {[0, 0] {0}}}
+i3    std::byte::from_int<int>                byte.bot:154 if >(value, 255)                            -> Unknown     via undecided  operands={param {[0, +∞]} const {[255, 255] {255}}}
+    completion: call e77 probe30.bot:176 -> std::byte::from_int effectiveErrors={AboveRange} mayReturnNormally=1 resultRangeFact=[0, 255]
+    completion: call e86 probe30.bot:1 -> std::byte::set effectiveErrors={} mayReturnNormally=1 resultRangeFact=[-∞, +∞]
     completion: call e103 probe30.bot:7 -> dyn effectiveErrors={} mayReturnNormally=1 resultRangeFact=[-∞, +∞]
-    NIR 2 byte::from_int<int>: regs=8 env=0 op:ilt=1 op:igt=1 br=1 faildeclared=1
-    NIR 3 byte::set<List[UnicodeChar]>: regs=17 env=0 op:listlen=1 op:listnew=1 op:ilt=1 br=1 op:listget=1 call=2 op:listappend=1 op:iadd=1 op:setfromlisttotal=1
-    NIR 4 byte::set<generic>: regs=17 env=0 op:listlen=1 op:listnew=1 op:ilt=1 br=1 op:listget=1 call=2 op:listappend=1 op:iadd=1 op:setfromlisttotal=1
+    NIR 2 std::byte::from_int<int>: regs=8 env=0 op:ilt=1 op:igt=1 br=1 faildeclared=1
+    NIR 3 std::byte::set<List[UnicodeChar]>: regs=17 env=0 op:listlen=1 op:listnew=1 op:ilt=1 br=1 op:listget=1 call=2 op:listappend=1 op:iadd=1 op:setfromlisttotal=1
+    NIR 4 std::byte::set<generic>: regs=17 env=0 op:listlen=1 op:listnew=1 op:ilt=1 br=1 op:listget=1 call=2 op:listappend=1 op:iadd=1 op:setfromlisttotal=1
     NIR 5 dyn<generic>: regs=5 env=0 call=1 br=1
 
 ==============================================================================
@@ -801,7 +801,7 @@ fn g(h: HighNibble) -> int errors Bad:
         fail Bad
     else:
         1
-g(byte::high_nibble(200))
+g(std::byte::high_nibble(200))
 ------------------------------------------------------------------------------
 diagnostics (1): UNHANDLED-ERROR {this call may produce the declared error "Bad", which is neither handled here nor admitted by the enclosing function's own "errors" declaration}
 i2 g<int>  generic=0 open=0 key={int} result=int resultRange=[1, 1] {1}
@@ -819,7 +819,7 @@ fn g(b: Byte) -> int errors Bad:
         fail Bad
     else:
         1
-g(byte::from_int(7))
+g(std::byte::from_int(7))
 ------------------------------------------------------------------------------
 diagnostics (0): none (legal program)
 i2 g<int>  generic=0 open=0 key={int} result=int resultRange=[1, 1] {1}
@@ -857,51 +857,51 @@ S13-result-summary-hysteresis -- from_int<int>'s own settled result is [7,7]; wh
 ------------------------------------------------------------------------------
 fn fb(b: Byte):
     b
-fb(byte::from_int(7))
+fb(std::byte::from_int(7))
 ------------------------------------------------------------------------------
 diagnostics (0): none (legal program)
-i1 byte::from_int<int>  generic=0 open=0 key={int} result=int[Byte] resultRange=[7, 7] {7}
+i1 std::byte::from_int<int>  generic=0 open=0 key={int} result=int[Byte] resultRange=[7, 7] {7}
     param value: declared=int view=int entry=[7, 7] {7}
 i2 fb<int>  generic=0 open=0 key={int} result=int[Byte] resultRange=[0, 255]
     param b: declared=int[Byte] view=int[Byte] entry=[0, 255] refineEvidence={Byte}
-i1    byte::from_int<int>                byte.bot:151 if <(value, 0)                              -> AlwaysFalse via entry  operands={param {[7, 7] {7}} const {[0, 0] {0}}}
-i1    byte::from_int<int>                byte.bot:154 if >(value, 255)                            -> AlwaysFalse via entry  operands={param {[7, 7] {7}} const {[255, 255] {255}}}
-    completion: call e77 probe36.bot:176 -> byte::from_int effectiveErrors={AboveRange} mayReturnNormally=1 resultRangeFact=[0, 255]
+i1    std::byte::from_int<int>                byte.bot:151 if <(value, 0)                              -> AlwaysFalse via entry  operands={param {[7, 7] {7}} const {[0, 0] {0}}}
+i1    std::byte::from_int<int>                byte.bot:154 if >(value, 255)                            -> AlwaysFalse via entry  operands={param {[7, 7] {7}} const {[255, 255] {255}}}
+    completion: call e77 probe36.bot:176 -> std::byte::from_int effectiveErrors={AboveRange} mayReturnNormally=1 resultRangeFact=[0, 255]
     completion: call e88 probe36.bot:3 -> fb effectiveErrors={} mayReturnNormally=1 resultRangeFact=[7, 7] {7}
-    completion: call e90 probe36.bot:3 -> byte::from_int effectiveErrors={} mayReturnNormally=1 resultRangeFact=[7, 7] {7}
-    NIR 1 byte::from_int<int>: regs=8 env=0 op:runbox=1 op:rilt=1 op:rigt=1
+    completion: call e90 probe36.bot:3 -> std::byte::from_int effectiveErrors={} mayReturnNormally=1 resultRangeFact=[7, 7] {7}
+    NIR 1 std::byte::from_int<int>: regs=8 env=0 op:runbox=1 op:rilt=1 op:rigt=1
     NIR 2 fb<int>: regs=1 env=0
-    program call e90 -> byte::from_int<int>: call-site result range [0, 255]
+    program call e90 -> std::byte::from_int<int>: call-site result range [0, 255]
     program call e88 -> fb<int>: call-site result range [0, 255]
 
 ==============================================================================
-S14-native-result-range -- char::codepoint's -result-range nonneg reaches a shared from_int instance
+S14-native-result-range -- std::char::codepoint's -result-range nonneg reaches a shared from_int instance
 ------------------------------------------------------------------------------
 fn conv(c: UnicodeChar):
-    r = byte::from_int(char::codepoint(c)):
+    r = std::byte::from_int(std::char::codepoint(c)):
         on AboveRange:
             0
     r
 conv('a')
 ------------------------------------------------------------------------------
 diagnostics (0): none (legal program)
-i2 char::codepoint<UnicodeChar>  generic=0 open=0 key={UnicodeChar} result=int resultRange=[0, +∞]
+i2 std::char::codepoint<UnicodeChar>  generic=0 open=0 key={UnicodeChar} result=int resultRange=[0, +∞]
     param c: declared=UnicodeChar view=UnicodeChar entry=[-∞, +∞]
-i3 byte::from_int<int>  generic=0 open=0 key={int} result=int[Byte] resultRange=[0, 255]
+i3 std::byte::from_int<int>  generic=0 open=0 key={int} result=int[Byte] resultRange=[0, 255]
     param value: declared=int view=int entry=[0, +∞]
 i1 conv<UnicodeChar>  generic=0 open=0 key={UnicodeChar} result=int[Byte] resultRange=[0, 255]
     param c: declared=UnicodeChar view=UnicodeChar entry=[-∞, +∞]
-    captures: byte::from_int:block(e58)/1 -> any, char::codepoint:block(e2)/1 -> any
-    call e91 probe37.bot:2 -> char::codepoint<UnicodeChar>
-    call e89 probe37.bot:2 -> byte::from_int<int>
-i3    byte::from_int<int>                byte.bot:151 if <(value, 0)                              -> AlwaysFalse via entry  operands={param {[0, +∞]} const {[0, 0] {0}}}
-i3    byte::from_int<int>                byte.bot:154 if >(value, 255)                            -> Unknown     via undecided  operands={param {[0, +∞]} const {[255, 255] {255}}}
-    completion: call e77 probe37.bot:176 -> byte::from_int effectiveErrors={AboveRange} mayReturnNormally=1 resultRangeFact=[0, 255]
-    completion: call e79 probe37.bot:176 -> char::codepoint effectiveErrors={} mayReturnNormally=1 resultRangeFact=[0, 1114111]
-    completion: call e91 probe37.bot:2 -> char::codepoint effectiveErrors={} mayReturnNormally=1 resultRangeFact=[0, 1114111]
+    captures: std::byte::from_int:block(e58)/1 -> any, std::char::codepoint:block(e2)/1 -> any
+    call e91 probe37.bot:2 -> std::char::codepoint<UnicodeChar>
+    call e89 probe37.bot:2 -> std::byte::from_int<int>
+i3    std::byte::from_int<int>                byte.bot:151 if <(value, 0)                              -> AlwaysFalse via entry  operands={param {[0, +∞]} const {[0, 0] {0}}}
+i3    std::byte::from_int<int>                byte.bot:154 if >(value, 255)                            -> Unknown     via undecided  operands={param {[0, +∞]} const {[255, 255] {255}}}
+    completion: call e77 probe37.bot:176 -> std::byte::from_int effectiveErrors={AboveRange} mayReturnNormally=1 resultRangeFact=[0, 255]
+    completion: call e79 probe37.bot:176 -> std::char::codepoint effectiveErrors={} mayReturnNormally=1 resultRangeFact=[0, 1114111]
+    completion: call e91 probe37.bot:2 -> std::char::codepoint effectiveErrors={} mayReturnNormally=1 resultRangeFact=[0, 1114111]
     completion: call e96 probe37.bot:6 -> conv effectiveErrors={} mayReturnNormally=1 resultRangeFact=[0, 255]
-    NIR 1 char::codepoint<UnicodeChar>: regs=2 env=0 op:charcodepoint=1
-    NIR 2 byte::from_int<int>: regs=8 env=0 op:ilt=1 op:igt=1 br=1 faildeclared=1
+    NIR 1 std::char::codepoint<UnicodeChar>: regs=2 env=0 op:charcodepoint=1
+    NIR 2 std::byte::from_int<int>: regs=8 env=0 op:ilt=1 op:igt=1 br=1 faildeclared=1
     NIR 3 conv<UnicodeChar>: regs=7 env=0 call=2 br=1
 
 ==============================================================================

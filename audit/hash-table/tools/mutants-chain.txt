@@ -77,7 +77,7 @@
 @@ chain-insert-overwrites-bucket an insert of an absent key replaces its bucket by the new entry alone, losing the entries it collides with (collision not checked)
 ## impl/chain.bot
 <<<<
-    t.buckets.set(i, list::append(b, Entry {hash: h, key: key, value: value}))
+    t.buckets.set(i, std::list::append(b, Entry {hash: h, key: key, value: value}))
 ====
     t.buckets.set(i, [Entry {hash: h, key: key, value: value}])
 >>>>
@@ -251,9 +251,9 @@
 @@ chain-resize-loses-chained-entries growth moves only the first entry of each old bucket, losing the entries chained after it
 ## impl/chain.bot
 <<<<
-    rehomed(b, j + 1, appended(dest, list::at(b, j)))
+    rehomed(b, j + 1, appended(dest, std::list::at(b, j)))
 ====
-    appended(dest, list::at(b, j))
+    appended(dest, std::list::at(b, j))
 >>>>
 
 @@ chain-growth-rehash-old-capacity growth and the insert after it home entries by half the new capacity (the old one), lookups by the new one
@@ -278,7 +278,7 @@
         return counted(appended(grown(t), Entry {hash: h, key: key, value: value}), 1)
 ====
         g = grown(t)
-        g.buckets.set(i, list::append(g.buckets.at(i), Entry {hash: h, key: key, value: value}))
+        g.buckets.set(i, std::list::append(g.buckets.at(i), Entry {hash: h, key: key, value: value}))
         return counted(g, 1)
 >>>>
 

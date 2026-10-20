@@ -92,9 +92,9 @@ proc pick {list} {
 }
 
 # The declarations every program starts with.
-set prelude {import compiler
-import list
-import str
+set prelude {import std::compiler
+import std::list
+import std::str
 
 error E1
 error E2
@@ -145,7 +145,7 @@ proc fragment {kind i} {
             return [pick [list \
                 [list "$i * 3 + 1"] \
                 [list "b = Box \{v: $i\}" "b.v"] \
-                [list "xs = \[1, 2, $i\]" "list::length(xs)"]]]
+                [list "xs = \[1, 2, $i\]" "std::list::length(xs)"]]]
         }
         unbound { return [list "missing_$i + 1"] }
         type { return [list "fn want_${i}(x: int) -> int:" "    x" "want_${i}(\"s\")"] }
@@ -156,10 +156,10 @@ proc fragment {kind i} {
         nestedok {
             # An accepted block around a rejected one on a branch that never
             # runs: only the innermost owner lets the outer one survive.
-            return [list "fn inner_${i}(flag: bool) -> int errors compiler::CompilerError:" \
+            return [list "fn inner_${i}(flag: bool) -> int errors std::compiler::CompilerError:" \
                 "    if flag:" "        static compile:" "            missing_inner_$i" \
                 "    else:" "        $i" \
-                "r = inner_${i}(false):" "    on compiler::CompilerError:" "        -1" "r"]
+                "r = inner_${i}(false):" "    on std::compiler::CompilerError:" "        -1" "r"]
         }
         chain {
             # An inner rejection whose CompilerError the function around it
@@ -210,7 +210,7 @@ proc fragment {kind i} {
         anyconsumer {
             # A callable read from a List[any] has neither identity nor
             # contract: its call is charged whatever the program erases.
-            return [list "fn run_${i}(fs: List\[any\]) errors IndexNotFound:" "    f = list::at(fs, 0)" "    f()" \
+            return [list "fn run_${i}(fs: List\[any\]) errors IndexNotFound:" "    f = std::list::at(fs, 0)" "    f()" \
                 "r = run_${i}(\[harmless\]):" "    on IndexNotFound:" "        -2" "1"]
         }
         method {
@@ -241,7 +241,7 @@ proc program {set layout} {
     set starts {}
     set fns {}
     set count [llength $set]
-    # The functions: site_I() -> int errors compiler::CompilerError, whose
+    # The functions: site_I() -> int errors std::compiler::CompilerError, whose
     # whole body is the block; probe_I() calls it under a handler.
     set groups [dict create]
     for {set i 0} {$i < $count} {incr i} {
@@ -267,13 +267,13 @@ proc program {set layout} {
         set sum {}
         foreach i $members {
             lassign [lindex $set $i] kind body
-            lappend lines "${pad}fn site_${i}() -> int errors compiler::CompilerError:" "${pad}    static compile:"
+            lappend lines "${pad}fn site_${i}() -> int errors std::compiler::CompilerError:" "${pad}    static compile:"
             dict set starts $i [list [expr {[llength $lines] + 1}] [expr {[string length $pad] + 9}]]
             foreach l $body {
                 lappend lines "${pad}        $l"
             }
             lappend lines "${pad}fn probe_${i}() -> int:" "${pad}    r = site_${i}():" \
-                "${pad}        on compiler::CompilerError:" "${pad}            -1" "${pad}    r"
+                "${pad}        on std::compiler::CompilerError:" "${pad}            -1" "${pad}    r"
             lappend sum "probe_${i}()"
         }
         if {$g ne ""} {

@@ -1,7 +1,7 @@
 # refined-signatures.test -- verified ordinary-function result contracts.
 #
 # Byte/Nibble/LowNibble/HighNibble are ordinary Botlish source declarations
-# (lib/byte.bot) now, not compiler-registered globals (see
+# (stdlib/byte.bot) now, not compiler-registered globals (see
 # SOURCE-DEFINED-INTEGER-DOMAINS.md): a bare `surface::compile` (no module
 # loading) no longer has them. Tests below that are really about *generic*
 # range/exact-set/closed-call machinery, merely using HighNibble's own
@@ -9,18 +9,18 @@
 # local "type HighNibble = ..." (item 135's own "testing generic
 # integer-domain machinery: use a source-local test type"); tests that are
 # specifically about the migrated Byte vertical (canonical domain facts,
-# nibble-identity subtyping) load lib/byte.bot for real, through the
+# nibble-identity subtyping) load stdlib/byte.bot for real, through the
 # ordinary module system, via loadByteLibrary below ("testing Byte/Nibble
 # specifically: load the actual byte library").
 
 source [file join [file dirname [file normalize [info script]]] helpers.tcl]
 
 # HighNibble's own domain, as a standalone local type declaration (matches
-# lib/byte.bot's), for tests that need a convenient 16-value sparse example
+# stdlib/byte.bot's), for tests that need a convenient 16-value sparse example
 # type without depending on byte.bot's own global registration.
 set ::highNibbleDecl "type HighNibble = Int in \{\n    0, 16, 32, 48,\n    64, 80, 96, 112,\n    128, 144, 160, 176,\n    192, 208, 224, 240\n\}\n\n"
 
-# Loads lib/byte.bot for real (a trivial program referencing byte::
+# Loads stdlib/byte.bot for real (a trivial program referencing byte::
 # high_nibble, through the ordinary module system), registering
 # Byte/Nibble/LowNibble/HighNibble exactly as any program depending on
 # byte:: would -- so a directly-following core::type::/hir::range:: query
@@ -29,8 +29,8 @@ set ::highNibbleDecl "type HighNibble = Int in \{\n    0, 16, 32, 48,\n    64, 8
 # looks up -- see SOURCE-DEFINED-INTEGER-DOMAINS.md's "Compilation
 # isolation").
 proc loadByteLibrary {} {
-    set path [makeFile {import byte
-byte::high_nibble(0)
+    set path [makeFile {import std::byte
+std::byte::high_nibble(0)
 } refined-signature-load-byte.bot]
     try {
         surface::readProgramFile $path -strict 0
@@ -42,7 +42,7 @@ byte::high_nibble(0)
 test refined-signature-syntax-1 {result-only annotations are optional AST metadata} -body {
     set plain [lindex [dict get [surface::parse {fn f(x):
     x} plain.bot] body] 0]
-    set typed [lindex [dict get [surface::parse {import type byte::HighNibble
+    set typed [lindex [dict get [surface::parse {import type std::byte::HighNibble
 fn f(x) -> HighNibble:
     bit_and(x, 240)} typed.bot] body] 0]
     list [dict get $plain resultType] [dict get $typed resultType]
@@ -136,37 +136,37 @@ test refined-signature-specialize-1 {specialized instances retain the public con
 
 test refined-signature-domain-1 {canonical scalar domains seed bounded optimizer facts} -body {
     loadByteLibrary
-    list [hir::range::show [hir::range::TypeFact byte::Byte]] \
-        [hir::range::show [hir::range::TypeFact byte::Nibble]] \
-        [hir::range::show [hir::range::TypeFact byte::LowNibble]] \
-        [hir::range::show [hir::range::TypeFact byte::HighNibble]]
+    list [hir::range::show [hir::range::TypeFact std::byte::Byte]] \
+        [hir::range::show [hir::range::TypeFact std::byte::Nibble]] \
+        [hir::range::show [hir::range::TypeFact std::byte::LowNibble]] \
+        [hir::range::show [hir::range::TypeFact std::byte::HighNibble]]
 } -result {{[0, 255]} {[0, 15]} {[0, 15]} {[0, 240] {0,16,32,48,64,80,96,112,128,144,160,176,192,208,224,240}}}
 
 test refined-signature-domain-2 {nibble identities are distinct Byte subtypes} -body {
     loadByteLibrary
-    list [core::type::subtype byte::Nibble byte::Byte] [core::type::subtype byte::LowNibble byte::Byte] \
-        [core::type::subtype byte::HighNibble byte::Byte] [core::type::subtype byte::Nibble byte::LowNibble] \
-        [core::type::subtype byte::LowNibble byte::Nibble]
+    list [core::type::subtype std::byte::Nibble std::byte::Byte] [core::type::subtype std::byte::LowNibble std::byte::Byte] \
+        [core::type::subtype std::byte::HighNibble std::byte::Byte] [core::type::subtype std::byte::Nibble std::byte::LowNibble] \
+        [core::type::subtype std::byte::LowNibble std::byte::Nibble]
 } -result {1 1 1 0 0}
 
 test refined-signature-narrow-1 {type-seeded sparse facts compose with inequality narrowing} -body {
     loadByteLibrary
-    set h [hir::range::TypeFact byte::HighNibble]
+    set h [hir::range::TypeFact std::byte::HighNibble]
     list [hir::range::show [hir::range::Narrowed < $h [hir::range::point 100]]] \
         [hir::range::show [hir::range::PointEqualityNarrow $h [hir::range::point 160] 0]]
 } -result {{[0, 99] {0,16,32,48,64,80,96}} {[0, 240] {0,16,32,48,64,80,96,112,128,144,176,192,208,224,240}}}
 
 test refined-signature-cross-module-1 {a qualified byte call retains type and facts across the real module boundary} -setup {
     # The pinned block(eN) id below is an ordinary expr-id offset within
-    # lib/byte.bot's own resolved HIR -- it shifts whenever byte.bot itself
-    # gains or loses content earlier in the file (adding byte::set,
+    # stdlib/byte.bot's own resolved HIR -- it shifts whenever byte.bot itself
+    # gains or loses content earlier in the file (adding std::byte::set,
     # BYTE-SET.md), or loads fewer modules before it (most recently: byte.bot
-    # calls the intrinsic char::scalar_value, so lib/char.bot -- removed --
+    # calls the intrinsic std::char::scalar_value, so stdlib/char.bot -- removed --
     # is no longer resolved first), with no effect on the actual type/range
     # facts asserted here (both unchanged across those changes).
 } -body {
-    set path [makeFile {import byte
-byte::high_nibble(171)
+    set path [makeFile {import std::byte
+std::byte::high_nibble(171)
 } refined-signature-main.bot]
     try {
         set h [surface::readProgramFile $path]
@@ -176,7 +176,7 @@ byte::high_nibble(171)
         foreach id [dict get $spec used] {
             set view [hir::specialize::view $h $spec $id]
             foreach e [dict get [dict get $spec instances $id] reachable] {
-                if {[hir::kind $view $e] ne {call} || [hir::types::show [hir::typeOf $view $e]] ne {int[byte::HighNibble]}} continue
+                if {[hir::kind $view $e] ne {call} || [hir::types::show [hir::typeOf $view $e]] ne {int[std::byte::HighNibble]}} continue
                 lappend found [hir::types::show [hir::typeOf $view $e]] \
                     [hir::range::show [hir::range::of $ranges $id $e]] [hir::format::Target $view [hir::get $view $e target]]
             }
@@ -185,11 +185,11 @@ byte::high_nibble(171)
     } finally {
         removeFile refined-signature-main.bot
     }
-} -result {{int[byte::HighNibble]} {[0, 240] {0,16,32,48,64,80,96,112,128,144,160,176,192,208,224,240}} block(e2)}
+} -result {{int[std::byte::HighNibble]} {[0, 240] {0,16,32,48,64,80,96,112,128,144,160,176,192,208,224,240}} block(e2)}
 
 test refined-signature-web-1 {web high_nibble infers Nibble transitively without a declaration} -body {
-    set path [makeFile {import web
-web::uri_escape_text
+    set path [makeFile {import std::web
+std::web::uri_escape_text
 } refined-signature-web.bot]
     try {
         set h [surface::readProgramFile $path]
@@ -198,7 +198,7 @@ web::uri_escape_text
             set scope [hir::get $h $e bodyScope]
             foreach b [hir::get $h $e params] {
                 if {[dict get [hir::binding $h $b] name] eq {b} \
-                        && [hir::types::show [hir::type $h [hir::get $h $e resultType]]] eq {int[byte::Nibble]}} {
+                        && [hir::types::show [hir::type $h [hir::get $h $e resultType]]] eq {int[std::byte::Nibble]}} {
                     lappend results [dict get [hir::binding $h $b] name] [dict get [hir::node $h $e] declaredResult]
                 }
             }

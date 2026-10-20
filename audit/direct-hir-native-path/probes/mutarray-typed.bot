@@ -1,16 +1,16 @@
-import mutable_array
+import std::mutable_array
 
 # MutableArray[T]: create/get/set/freeze/copy and a raw mutable array.
 fn fill(n):
-    a = mutable_array::create(n, 0)
+    a = std::mutable_array::create(n, 0)
     loop i from 0 to n:
-        mutable_array::set(a, i, i * i)
+        std::mutable_array::set(a, i, i * i)
     a
 a = fill(6)
-c = mutable_array::allocate(3)
-mutable_array::set(c, 0, "x")
-mutable_array::set(c, 1, "y")
-mutable_array::set(c, 2, "z")
-d = mutable_array::allocate(3)
-mutable_array::copy(d, 0, c, 0, 3)
-[mutable_array::get(a, 5, -1), mutable_array::freeze(a, mutable_array::capacity(a)), mutable_array::freeze(d, 3)]
+c = std::mutable_array::allocate(3)
+std::mutable_array::set(c, 0, "x")
+std::mutable_array::set(c, 1, "y")
+std::mutable_array::set(c, 2, "z")
+d = std::mutable_array::allocate(3)
+std::mutable_array::copy(d, 0, c, 0, 3)
+[std::mutable_array::get(a, 5, -1), std::mutable_array::freeze(a, std::mutable_array::capacity(a)), std::mutable_array::freeze(d, 3)]

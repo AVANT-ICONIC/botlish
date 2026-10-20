@@ -1,13 +1,13 @@
 == source-checks.bot (interp)
 <program>: closed (transitively open)   [program, line 43:1]
-  dispatch: closed -- natives: list x3, list_length x4, -; functions: list::find (non-tail), valid_start? (non-tail)
+  dispatch: closed -- natives: list x3, list_length x4, -; functions: std::list::find (non-tail), valid_start? (non-tail)
   blockers: none
   note:     line 51:20  e68  creates a closure capturing values
   note:     line 58:16  e95  creates a closure capturing values
   note:     line 62:17  e114  creates a closure capturing values
   runtime:  bigint, closure-env, list-alloc
 
-list::any?: open   [e2, line 59:8]
+std::list::any?: open   [e2, line 59:8]
   params:   xs : any, predicate : any   result: bool
   dispatch: open -- dynamic calls: 1
   blockers:
@@ -16,7 +16,7 @@ list::any?: open   [e2, line 59:8]
     line 61:12  e7  DynamicCall: the callee has no static kind: native, block or not callable is decided at run time
   runtime:  dynamic-call, tagged-values
 
-list::all?: open   [e13, line 65:8]
+std::list::all?: open   [e13, line 65:8]
   params:   xs : any, predicate : any   result: bool
   dispatch: open -- dynamic calls: 1
   blockers:
@@ -25,7 +25,7 @@ list::all?: open   [e13, line 65:8]
     line 67:16  e19  DynamicCall: the callee has no static kind: native, block or not callable is decided at run time
   runtime:  dynamic-call, tagged-values
 
-list::none?: open   [e27, line 71:9]
+std::list::none?: open   [e27, line 71:9]
   params:   xs : any, predicate : any   result: bool
   dispatch: open -- dynamic calls: 1
   blockers:
@@ -34,7 +34,7 @@ list::none?: open   [e27, line 71:9]
     line 73:12  e32  DynamicCall: the callee has no static kind: native, block or not callable is decided at run time
   runtime:  dynamic-call, tagged-values
 
-list::find: open   [e38, line 77:8]
+std::list::find: open   [e38, line 77:8]
   params:   xs : any, predicate : any   result: any
   dispatch: open -- dynamic calls: 1
   blockers:

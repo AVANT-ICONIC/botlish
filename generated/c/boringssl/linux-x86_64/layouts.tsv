@@ -1,557 +1,557 @@
 # c-bindgen layout manifest: profile boringssl, target linux-x86_64, toolchain clang x86_64-linux-gnu (Ubuntu clang version 18.1.3 (1ubuntu1)) (C-BINDGEN-LAYOUTS.md)
 kind	record	index	name	status	offset	size	align	c	type	detail
 record	union evp_aead_ctx_st_state	-	evp_aead_ctx_st_state	layout-direct	-	560	8	union evp_aead_ctx_st_state	-	identity=-; header=include/openssl/aead.h:222
-field	union evp_aead_ctx_st_state	0	opaque	array	0	560	-	uint8_t opaque[560]	array 560 of ffi::c::UChar	c=opaque; element=char uint8_t; bounds=560; extent=560
-field	union evp_aead_ctx_st_state	1	alignment	scalar	0	8	-	uint64_t alignment	ffi::c::ULong	c=alignment
+field	union evp_aead_ctx_st_state	0	opaque	array	0	560	-	uint8_t opaque[560]	array 560 of std::ffi::c::UChar	c=opaque; element=char uint8_t; bounds=560; extent=560
+field	union evp_aead_ctx_st_state	1	alignment	scalar	0	8	-	uint64_t alignment	std::ffi::c::ULong	c=alignment
 record	struct evp_aead_ctx_st	-	EVP_AEAD_CTX	layout-direct	-	576	8	struct evp_aead_ctx_st	-	typedefs=EVP_AEAD_CTX; identity=boringssl::ctypes::EVP_AEAD_CTX; header=include/openssl/aead.h:229; deps=union evp_aead_ctx_st_state; pointed-by=16
-field	struct evp_aead_ctx_st	0	aead	pointer	0	8	-	const EVP_AEAD *aead	ffi::c::Ptr[EVP_AEAD]	c=aead
+field	struct evp_aead_ctx_st	0	aead	pointer	0	8	-	const EVP_AEAD *aead	std::ffi::c::Ptr[EVP_AEAD]	c=aead
 field	struct evp_aead_ctx_st	1	state	nested	8	560	-	union evp_aead_ctx_st_state state	evp_aead_ctx_st_state	c=state
-field	struct evp_aead_ctx_st	2	tag_len	scalar	568	1	-	uint8_t tag_len	ffi::c::UChar	c=tag_len
+field	struct evp_aead_ctx_st	2	tag_len	scalar	568	1	-	uint8_t tag_len	std::ffi::c::UChar	c=tag_len
 record	struct crypto_ivec_st	-	CRYPTO_IVEC	layout-direct	-	16	8	struct crypto_ivec_st	-	typedefs=CRYPTO_IVEC; identity=boringssl::ctypes::CRYPTO_IVEC; header=include/openssl/aead.h:402; pointed-by=3
-field	struct crypto_ivec_st	0	in	pointer	0	8	-	const uint8_t *in	ffi::c::Ptr[ffi::c::UChar]	c=in
-field	struct crypto_ivec_st	1	len	scalar	8	8	-	size_t len	ffi::c::ULong	c=len
+field	struct crypto_ivec_st	0	in	pointer	0	8	-	const uint8_t *in	std::ffi::c::Ptr[std::ffi::c::UChar]	c=in
+field	struct crypto_ivec_st	1	len	scalar	8	8	-	size_t len	std::ffi::c::ULong	c=len
 record	struct crypto_iovec_st	-	CRYPTO_IOVEC	layout-direct	-	24	8	struct crypto_iovec_st	-	typedefs=CRYPTO_IOVEC; identity=boringssl::ctypes::CRYPTO_IOVEC; header=include/openssl/aead.h:409; pointed-by=3
-field	struct crypto_iovec_st	0	out	pointer	0	8	-	uint8_t *out	ffi::c::Ptr[ffi::c::UChar]	c=out
-field	struct crypto_iovec_st	1	in	pointer	8	8	-	const uint8_t *in	ffi::c::Ptr[ffi::c::UChar]	c=in
-field	struct crypto_iovec_st	2	len	scalar	16	8	-	size_t len	ffi::c::ULong	c=len
+field	struct crypto_iovec_st	0	out	pointer	0	8	-	uint8_t *out	std::ffi::c::Ptr[std::ffi::c::UChar]	c=out
+field	struct crypto_iovec_st	1	in	pointer	8	8	-	const uint8_t *in	std::ffi::c::Ptr[std::ffi::c::UChar]	c=in
+field	struct crypto_iovec_st	2	len	scalar	16	8	-	size_t len	std::ffi::c::ULong	c=len
 record	struct aes_key_st	-	AES_KEY	layout-direct	-	244	4	struct aes_key_st	-	typedefs=AES_KEY; identity=boringssl::ctypes::AES_KEY; header=include/openssl/aes.h:38; pointed-by=13
-field	struct aes_key_st	0	rd_key	array	0	240	-	uint32_t rd_key[4 * (14 + 1)]	array 60 of ffi::c::UInt	c=rd_key; element=scalar uint32_t; bounds=4 * (14 + 1); extent=60
-field	struct aes_key_st	1	rounds	scalar	240	4	-	unsigned int rounds	ffi::c::UInt	c=rounds
+field	struct aes_key_st	0	rd_key	array	0	240	-	uint32_t rd_key[4 * (14 + 1)]	array 60 of std::ffi::c::UInt	c=rd_key; element=scalar uint32_t; bounds=4 * (14 + 1); extent=60
+field	struct aes_key_st	1	rounds	scalar	240	4	-	unsigned int rounds	std::ffi::c::UInt	c=rounds
 record	struct buf_mem_st	-	BUF_MEM	layout-direct	-	24	8	struct buf_mem_st	-	typedefs=BUF_MEM; identity=boringssl::ctypes::BUF_MEM; header=include/openssl/buf.h:29; pointed-by=8
-field	struct buf_mem_st	0	length	scalar	0	8	-	size_t length	ffi::c::ULong	c=length
-field	struct buf_mem_st	1	data	pointer	8	8	-	char *data	ffi::c::Ptr[ffi::c::Char]	c=data
-field	struct buf_mem_st	2	max	scalar	16	8	-	size_t max	ffi::c::ULong	c=max
+field	struct buf_mem_st	0	length	scalar	0	8	-	size_t length	std::ffi::c::ULong	c=length
+field	struct buf_mem_st	1	data	pointer	8	8	-	char *data	std::ffi::c::Ptr[std::ffi::c::Char]	c=data
+field	struct buf_mem_st	2	max	scalar	16	8	-	size_t max	std::ffi::c::ULong	c=max
 record	struct bn_gencb_st	-	BN_GENCB	layout-direct	-	16	8	struct bn_gencb_st	-	typedefs=BN_GENCB; identity=boringssl::ctypes::BN_GENCB; header=include/openssl/bn.h:580; pointed-by=14
-field	struct bn_gencb_st	0	arg	pointer	0	8	-	void *arg	ffi::c::Ptr[ffi::c::Void]	c=arg
-field	struct bn_gencb_st	1	callback	function-pointer	8	8	-	int (*callback)(int event, int n, struct bn_gencb_st *)	ffi::c::FnPtr[Fn{args: [ffi::c::Int, ffi::c::Int, ffi::c::Ptr[BN_GENCB]], return: ffi::c::Int}]	c=callback
+field	struct bn_gencb_st	0	arg	pointer	0	8	-	void *arg	std::ffi::c::Ptr[std::ffi::c::Void]	c=arg
+field	struct bn_gencb_st	1	callback	function-pointer	8	8	-	int (*callback)(int event, int n, struct bn_gencb_st *)	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Int, std::ffi::c::Int, std::ffi::c::Ptr[BN_GENCB]], return: std::ffi::c::Int}]	c=callback
 record	struct bignum_st	-	BIGNUM	layout-direct	-	24	8	struct bignum_st	-	typedefs=BIGNUM; identity=boringssl::ctypes::BIGNUM; header=include/openssl/bn.h:896; pointed-by=188
-field	struct bignum_st	0	d	pointer	0	8	-	BN_ULONG *d	ffi::c::Ptr[ffi::c::ULong]	c=d
-field	struct bignum_st	1	width	scalar	8	4	-	int width	ffi::c::Int	c=width
-field	struct bignum_st	2	dmax	scalar	12	4	-	int dmax	ffi::c::Int	c=dmax
-field	struct bignum_st	3	neg	scalar	16	4	-	int neg	ffi::c::Int	c=neg
-field	struct bignum_st	4	flags	scalar	20	4	-	int flags	ffi::c::Int	c=flags
+field	struct bignum_st	0	d	pointer	0	8	-	BN_ULONG *d	std::ffi::c::Ptr[std::ffi::c::ULong]	c=d
+field	struct bignum_st	1	width	scalar	8	4	-	int width	std::ffi::c::Int	c=width
+field	struct bignum_st	2	dmax	scalar	12	4	-	int dmax	std::ffi::c::Int	c=dmax
+field	struct bignum_st	3	neg	scalar	16	4	-	int neg	std::ffi::c::Int	c=neg
+field	struct bignum_st	4	flags	scalar	20	4	-	int flags	std::ffi::c::Int	c=flags
 record	struct asn1_string_st	-	ASN1_BIT_STRING	layout-direct	-	24	8	struct asn1_string_st	-	typedefs=ASN1_BIT_STRING,ASN1_BMPSTRING,ASN1_ENUMERATED,ASN1_GENERALIZEDTIME,ASN1_GENERALSTRING,ASN1_IA5STRING,ASN1_INTEGER,ASN1_OCTET_STRING,ASN1_PRINTABLESTRING,ASN1_STRING,ASN1_T61STRING,ASN1_TIME,ASN1_UNIVERSALSTRING,ASN1_UTCTIME,ASN1_UTF8STRING,ASN1_VISIBLESTRING; identity=boringssl::ctypes::ASN1_BIT_STRING; header=include/openssl/asn1.h:479; pointed-by=262
-field	struct asn1_string_st	0	length	scalar	0	4	-	int length	ffi::c::Int	c=length
-field	struct asn1_string_st	1	type_	scalar	4	4	-	int type	ffi::c::Int	c=type
-field	struct asn1_string_st	2	data	pointer	8	8	-	unsigned char *data	ffi::c::Ptr[ffi::c::UChar]	c=data
-field	struct asn1_string_st	3	flags	scalar	16	8	-	long flags	ffi::c::Long	c=flags
+field	struct asn1_string_st	0	length	scalar	0	4	-	int length	std::ffi::c::Int	c=length
+field	struct asn1_string_st	1	type_	scalar	4	4	-	int type	std::ffi::c::Int	c=type
+field	struct asn1_string_st	2	data	pointer	8	8	-	unsigned char *data	std::ffi::c::Ptr[std::ffi::c::UChar]	c=data
+field	struct asn1_string_st	3	flags	scalar	16	8	-	long flags	std::ffi::c::Long	c=flags
 record	union anon@asn1.h:1449	-	ASN1_TYPE_value	layout-direct	-	8	8	__typeof__(((struct asn1_type_st *)0)->value)	-	identity=-; header=include/openssl/asn1.h:1449
-field	union anon@asn1.h:1449	0	ptr	pointer	0	8	-	char *ptr	ffi::c::Ptr[ffi::c::Char]	c=ptr
-field	union anon@asn1.h:1449	1	boolean	scalar	0	4	-	ASN1_BOOLEAN boolean	ffi::c::Int	c=boolean
-field	union anon@asn1.h:1449	2	asn1_string	pointer	0	8	-	ASN1_STRING *asn1_string	ffi::c::Ptr[ASN1_BIT_STRING]	c=asn1_string
-field	union anon@asn1.h:1449	3	object	pointer	0	8	-	ASN1_OBJECT *object	ffi::c::Ptr[ASN1_OBJECT]	c=object
-field	union anon@asn1.h:1449	4	integer	pointer	0	8	-	ASN1_INTEGER *integer	ffi::c::Ptr[ASN1_BIT_STRING]	c=integer
-field	union anon@asn1.h:1449	5	enumerated	pointer	0	8	-	ASN1_ENUMERATED *enumerated	ffi::c::Ptr[ASN1_BIT_STRING]	c=enumerated
-field	union anon@asn1.h:1449	6	bit_string	pointer	0	8	-	ASN1_BIT_STRING *bit_string	ffi::c::Ptr[ASN1_BIT_STRING]	c=bit_string
-field	union anon@asn1.h:1449	7	octet_string	pointer	0	8	-	ASN1_OCTET_STRING *octet_string	ffi::c::Ptr[ASN1_BIT_STRING]	c=octet_string
-field	union anon@asn1.h:1449	8	printablestring	pointer	0	8	-	ASN1_PRINTABLESTRING *printablestring	ffi::c::Ptr[ASN1_BIT_STRING]	c=printablestring
-field	union anon@asn1.h:1449	9	t61string	pointer	0	8	-	ASN1_T61STRING *t61string	ffi::c::Ptr[ASN1_BIT_STRING]	c=t61string
-field	union anon@asn1.h:1449	10	ia5string	pointer	0	8	-	ASN1_IA5STRING *ia5string	ffi::c::Ptr[ASN1_BIT_STRING]	c=ia5string
-field	union anon@asn1.h:1449	11	generalstring	pointer	0	8	-	ASN1_GENERALSTRING *generalstring	ffi::c::Ptr[ASN1_BIT_STRING]	c=generalstring
-field	union anon@asn1.h:1449	12	bmpstring	pointer	0	8	-	ASN1_BMPSTRING *bmpstring	ffi::c::Ptr[ASN1_BIT_STRING]	c=bmpstring
-field	union anon@asn1.h:1449	13	universalstring	pointer	0	8	-	ASN1_UNIVERSALSTRING *universalstring	ffi::c::Ptr[ASN1_BIT_STRING]	c=universalstring
-field	union anon@asn1.h:1449	14	utctime	pointer	0	8	-	ASN1_UTCTIME *utctime	ffi::c::Ptr[ASN1_BIT_STRING]	c=utctime
-field	union anon@asn1.h:1449	15	generalizedtime	pointer	0	8	-	ASN1_GENERALIZEDTIME *generalizedtime	ffi::c::Ptr[ASN1_BIT_STRING]	c=generalizedtime
-field	union anon@asn1.h:1449	16	visiblestring	pointer	0	8	-	ASN1_VISIBLESTRING *visiblestring	ffi::c::Ptr[ASN1_BIT_STRING]	c=visiblestring
-field	union anon@asn1.h:1449	17	utf8string	pointer	0	8	-	ASN1_UTF8STRING *utf8string	ffi::c::Ptr[ASN1_BIT_STRING]	c=utf8string
-field	union anon@asn1.h:1449	18	set	pointer	0	8	-	ASN1_STRING *set	ffi::c::Ptr[ASN1_BIT_STRING]	c=set
-field	union anon@asn1.h:1449	19	sequence	pointer	0	8	-	ASN1_STRING *sequence	ffi::c::Ptr[ASN1_BIT_STRING]	c=sequence
-field	union anon@asn1.h:1449	20	asn1_value	pointer	0	8	-	ASN1_VALUE *asn1_value	ffi::c::Ptr[ASN1_VALUE]	c=asn1_value
+field	union anon@asn1.h:1449	0	ptr	pointer	0	8	-	char *ptr	std::ffi::c::Ptr[std::ffi::c::Char]	c=ptr
+field	union anon@asn1.h:1449	1	boolean	scalar	0	4	-	ASN1_BOOLEAN boolean	std::ffi::c::Int	c=boolean
+field	union anon@asn1.h:1449	2	asn1_string	pointer	0	8	-	ASN1_STRING *asn1_string	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=asn1_string
+field	union anon@asn1.h:1449	3	object	pointer	0	8	-	ASN1_OBJECT *object	std::ffi::c::Ptr[ASN1_OBJECT]	c=object
+field	union anon@asn1.h:1449	4	integer	pointer	0	8	-	ASN1_INTEGER *integer	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=integer
+field	union anon@asn1.h:1449	5	enumerated	pointer	0	8	-	ASN1_ENUMERATED *enumerated	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=enumerated
+field	union anon@asn1.h:1449	6	bit_string	pointer	0	8	-	ASN1_BIT_STRING *bit_string	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=bit_string
+field	union anon@asn1.h:1449	7	octet_string	pointer	0	8	-	ASN1_OCTET_STRING *octet_string	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=octet_string
+field	union anon@asn1.h:1449	8	printablestring	pointer	0	8	-	ASN1_PRINTABLESTRING *printablestring	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=printablestring
+field	union anon@asn1.h:1449	9	t61string	pointer	0	8	-	ASN1_T61STRING *t61string	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=t61string
+field	union anon@asn1.h:1449	10	ia5string	pointer	0	8	-	ASN1_IA5STRING *ia5string	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=ia5string
+field	union anon@asn1.h:1449	11	generalstring	pointer	0	8	-	ASN1_GENERALSTRING *generalstring	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=generalstring
+field	union anon@asn1.h:1449	12	bmpstring	pointer	0	8	-	ASN1_BMPSTRING *bmpstring	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=bmpstring
+field	union anon@asn1.h:1449	13	universalstring	pointer	0	8	-	ASN1_UNIVERSALSTRING *universalstring	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=universalstring
+field	union anon@asn1.h:1449	14	utctime	pointer	0	8	-	ASN1_UTCTIME *utctime	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=utctime
+field	union anon@asn1.h:1449	15	generalizedtime	pointer	0	8	-	ASN1_GENERALIZEDTIME *generalizedtime	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=generalizedtime
+field	union anon@asn1.h:1449	16	visiblestring	pointer	0	8	-	ASN1_VISIBLESTRING *visiblestring	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=visiblestring
+field	union anon@asn1.h:1449	17	utf8string	pointer	0	8	-	ASN1_UTF8STRING *utf8string	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=utf8string
+field	union anon@asn1.h:1449	18	set	pointer	0	8	-	ASN1_STRING *set	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=set
+field	union anon@asn1.h:1449	19	sequence	pointer	0	8	-	ASN1_STRING *sequence	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=sequence
+field	union anon@asn1.h:1449	20	asn1_value	pointer	0	8	-	ASN1_VALUE *asn1_value	std::ffi::c::Ptr[ASN1_VALUE]	c=asn1_value
 record	struct asn1_type_st	-	ASN1_TYPE	layout-direct	-	16	8	struct asn1_type_st	-	typedefs=ASN1_TYPE; identity=boringssl::ctypes::ASN1_TYPE; header=include/openssl/asn1.h:1447; deps=union anon@asn1.h:1449; pointed-by=21
-field	struct asn1_type_st	0	type_	scalar	0	4	-	int type	ffi::c::Int	c=type
+field	struct asn1_type_st	0	type_	scalar	0	4	-	int type	std::ffi::c::Int	c=type
 field	struct asn1_type_st	1	value	nested	8	8	-	union anon@asn1.h:1449 value	ASN1_TYPE_value	c=value
 record	struct ASN1_TEMPLATE_st	-	ASN1_TEMPLATE	layout-direct	-	32	8	struct ASN1_TEMPLATE_st	-	typedefs=ASN1_TEMPLATE; identity=boringssl::ctypes::ASN1_TEMPLATE; header=include/openssl/asn1t.h:277
-field	struct ASN1_TEMPLATE_st	0	flags	scalar	0	4	-	uint32_t flags	ffi::c::UInt	c=flags
-field	struct ASN1_TEMPLATE_st	1	tag	scalar	4	4	-	int tag	ffi::c::Int	c=tag
-field	struct ASN1_TEMPLATE_st	2	offset	scalar	8	8	-	unsigned long offset	ffi::c::ULong	c=offset
-field	struct ASN1_TEMPLATE_st	3	field_name	pointer	16	8	-	const char *field_name	ffi::c::Ptr[ffi::c::Char]	c=field_name
-field	struct ASN1_TEMPLATE_st	4	item	pointer	24	8	-	ASN1_ITEM_EXP *item	ffi::c::Ptr[ASN1_ITEM]	c=item
+field	struct ASN1_TEMPLATE_st	0	flags	scalar	0	4	-	uint32_t flags	std::ffi::c::UInt	c=flags
+field	struct ASN1_TEMPLATE_st	1	tag	scalar	4	4	-	int tag	std::ffi::c::Int	c=tag
+field	struct ASN1_TEMPLATE_st	2	offset	scalar	8	8	-	unsigned long offset	std::ffi::c::ULong	c=offset
+field	struct ASN1_TEMPLATE_st	3	field_name	pointer	16	8	-	const char *field_name	std::ffi::c::Ptr[std::ffi::c::Char]	c=field_name
+field	struct ASN1_TEMPLATE_st	4	item	pointer	24	8	-	ASN1_ITEM_EXP *item	std::ffi::c::Ptr[ASN1_ITEM]	c=item
 record	struct ASN1_ADB_st	-	ASN1_ADB	layout-direct	-	56	8	struct ASN1_ADB_st	-	typedefs=ASN1_ADB; identity=-; header=include/openssl/asn1t.h:293
-field	struct ASN1_ADB_st	0	flags	scalar	0	4	-	uint32_t flags	ffi::c::UInt	c=flags
-field	struct ASN1_ADB_st	1	offset	scalar	8	8	-	unsigned long offset	ffi::c::ULong	c=offset
-field	struct ASN1_ADB_st	2	unused	pointer	16	8	-	CRYPTO_MUST_BE_NULL *unused	ffi::c::Ptr[CRYPTO_MUST_BE_NULL]	c=unused
-field	struct ASN1_ADB_st	3	tbl	pointer	24	8	-	const ASN1_ADB_TABLE *tbl	ffi::c::Ptr[ASN1_ADB_TABLE]	c=tbl
-field	struct ASN1_ADB_st	4	tblcount	scalar	32	8	-	long tblcount	ffi::c::Long	c=tblcount
-field	struct ASN1_ADB_st	5	default_tt	pointer	40	8	-	const ASN1_TEMPLATE *default_tt	ffi::c::Ptr[ASN1_TEMPLATE]	c=default_tt
-field	struct ASN1_ADB_st	6	null_tt	pointer	48	8	-	const ASN1_TEMPLATE *null_tt	ffi::c::Ptr[ASN1_TEMPLATE]	c=null_tt
+field	struct ASN1_ADB_st	0	flags	scalar	0	4	-	uint32_t flags	std::ffi::c::UInt	c=flags
+field	struct ASN1_ADB_st	1	offset	scalar	8	8	-	unsigned long offset	std::ffi::c::ULong	c=offset
+field	struct ASN1_ADB_st	2	unused	pointer	16	8	-	CRYPTO_MUST_BE_NULL *unused	std::ffi::c::Ptr[CRYPTO_MUST_BE_NULL]	c=unused
+field	struct ASN1_ADB_st	3	tbl	pointer	24	8	-	const ASN1_ADB_TABLE *tbl	std::ffi::c::Ptr[ASN1_ADB_TABLE]	c=tbl
+field	struct ASN1_ADB_st	4	tblcount	scalar	32	8	-	long tblcount	std::ffi::c::Long	c=tblcount
+field	struct ASN1_ADB_st	5	default_tt	pointer	40	8	-	const ASN1_TEMPLATE *default_tt	std::ffi::c::Ptr[ASN1_TEMPLATE]	c=default_tt
+field	struct ASN1_ADB_st	6	null_tt	pointer	48	8	-	const ASN1_TEMPLATE *null_tt	std::ffi::c::Ptr[ASN1_TEMPLATE]	c=null_tt
 record	struct ASN1_ADB_TABLE_st	-	ASN1_ADB_TABLE	layout-direct	-	40	8	struct ASN1_ADB_TABLE_st	-	typedefs=ASN1_ADB_TABLE; identity=boringssl::ctypes::ASN1_ADB_TABLE; header=include/openssl/asn1t.h:303; deps=struct ASN1_TEMPLATE_st
-field	struct ASN1_ADB_TABLE_st	0	value	scalar	0	4	-	int value	ffi::c::Int	c=value
+field	struct ASN1_ADB_TABLE_st	0	value	scalar	0	4	-	int value	std::ffi::c::Int	c=value
 field	struct ASN1_ADB_TABLE_st	1	tt	nested	8	32	-	const ASN1_TEMPLATE tt	ASN1_TEMPLATE	c=tt
 record	struct ASN1_ITEM_st	-	ASN1_ITEM	layout-direct	-	48	8	struct ASN1_ITEM_st	-	typedefs=ASN1_ITEM,ASN1_ITEM_EXP; identity=boringssl::ctypes::ASN1_ITEM; header=include/openssl/asn1t.h:371; pointed-by=15
-field	struct ASN1_ITEM_st	0	itype	scalar	0	1	-	char itype	ffi::c::Char	c=itype
-field	struct ASN1_ITEM_st	1	utype	scalar	4	4	-	int utype	ffi::c::Int	c=utype
-field	struct ASN1_ITEM_st	2	templates	pointer	8	8	-	const ASN1_TEMPLATE *templates	ffi::c::Ptr[ASN1_TEMPLATE]	c=templates
-field	struct ASN1_ITEM_st	3	tcount	scalar	16	8	-	long tcount	ffi::c::Long	c=tcount
-field	struct ASN1_ITEM_st	4	funcs	pointer	24	8	-	const void *funcs	ffi::c::Ptr[ffi::c::Void]	c=funcs
-field	struct ASN1_ITEM_st	5	size	scalar	32	8	-	long size	ffi::c::Long	c=size
-field	struct ASN1_ITEM_st	6	sname	pointer	40	8	-	const char *sname	ffi::c::Ptr[ffi::c::Char]	c=sname
+field	struct ASN1_ITEM_st	0	itype	scalar	0	1	-	char itype	std::ffi::c::Char	c=itype
+field	struct ASN1_ITEM_st	1	utype	scalar	4	4	-	int utype	std::ffi::c::Int	c=utype
+field	struct ASN1_ITEM_st	2	templates	pointer	8	8	-	const ASN1_TEMPLATE *templates	std::ffi::c::Ptr[ASN1_TEMPLATE]	c=templates
+field	struct ASN1_ITEM_st	3	tcount	scalar	16	8	-	long tcount	std::ffi::c::Long	c=tcount
+field	struct ASN1_ITEM_st	4	funcs	pointer	24	8	-	const void *funcs	std::ffi::c::Ptr[std::ffi::c::Void]	c=funcs
+field	struct ASN1_ITEM_st	5	size	scalar	32	8	-	long size	std::ffi::c::Long	c=size
+field	struct ASN1_ITEM_st	6	sname	pointer	40	8	-	const char *sname	std::ffi::c::Ptr[std::ffi::c::Char]	c=sname
 record	struct ASN1_AUX_st	-	ASN1_AUX	layout-direct	-	32	8	struct ASN1_AUX_st	-	typedefs=ASN1_AUX; identity=-; header=include/openssl/asn1t.h:451
-field	struct ASN1_AUX_st	0	app_data	pointer	0	8	-	void *app_data	ffi::c::Ptr[ffi::c::Void]	c=app_data
-field	struct ASN1_AUX_st	1	flags	scalar	8	4	-	uint32_t flags	ffi::c::UInt	c=flags
-field	struct ASN1_AUX_st	2	ref_offset	scalar	12	4	-	int ref_offset	ffi::c::Int	c=ref_offset
-field	struct ASN1_AUX_st	3	asn1_cb	function-pointer	16	8	-	ASN1_aux_cb *asn1_cb	ffi::c::FnPtr[Fn{args: [ffi::c::Int, ffi::c::Ptr[ffi::c::Ptr[ASN1_VALUE]], ffi::c::Ptr[ASN1_ITEM], ffi::c::Ptr[ffi::c::Void]], return: ffi::c::Int}]	c=asn1_cb
-field	struct ASN1_AUX_st	4	enc_offset	scalar	24	4	-	int enc_offset	ffi::c::Int	c=enc_offset
+field	struct ASN1_AUX_st	0	app_data	pointer	0	8	-	void *app_data	std::ffi::c::Ptr[std::ffi::c::Void]	c=app_data
+field	struct ASN1_AUX_st	1	flags	scalar	8	4	-	uint32_t flags	std::ffi::c::UInt	c=flags
+field	struct ASN1_AUX_st	2	ref_offset	scalar	12	4	-	int ref_offset	std::ffi::c::Int	c=ref_offset
+field	struct ASN1_AUX_st	3	asn1_cb	function-pointer	16	8	-	ASN1_aux_cb *asn1_cb	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Int, std::ffi::c::Ptr[std::ffi::c::Ptr[ASN1_VALUE]], std::ffi::c::Ptr[ASN1_ITEM], std::ffi::c::Ptr[std::ffi::c::Void]], return: std::ffi::c::Int}]	c=asn1_cb
+field	struct ASN1_AUX_st	4	enc_offset	scalar	24	4	-	int enc_offset	std::ffi::c::Int	c=enc_offset
 record	struct evp_encode_ctx_st	-	EVP_ENCODE_CTX	layout-direct	-	56	4	struct evp_encode_ctx_st	-	typedefs=EVP_ENCODE_CTX; identity=boringssl::ctypes::EVP_ENCODE_CTX; header=include/openssl/base64.h:135; pointed-by=8
-field	struct evp_encode_ctx_st	0	data_used	scalar	0	4	-	unsigned int data_used	ffi::c::UInt	c=data_used
-field	struct evp_encode_ctx_st	1	data	array	4	48	-	uint8_t data[48]	array 48 of ffi::c::UChar	c=data; element=char uint8_t; bounds=48; extent=48
-field	struct evp_encode_ctx_st	2	eof_seen	scalar	52	1	-	char eof_seen	ffi::c::Char	c=eof_seen
-field	struct evp_encode_ctx_st	3	error_encountered	scalar	53	1	-	char error_encountered	ffi::c::Char	c=error_encountered
+field	struct evp_encode_ctx_st	0	data_used	scalar	0	4	-	unsigned int data_used	std::ffi::c::UInt	c=data_used
+field	struct evp_encode_ctx_st	1	data	array	4	48	-	uint8_t data[48]	array 48 of std::ffi::c::UChar	c=data; element=char uint8_t; bounds=48; extent=48
+field	struct evp_encode_ctx_st	2	eof_seen	scalar	52	1	-	char eof_seen	std::ffi::c::Char	c=eof_seen
+field	struct evp_encode_ctx_st	3	error_encountered	scalar	53	1	-	char error_encountered	std::ffi::c::Char	c=error_encountered
 record	struct blake2b_state_st	-	BLAKE2B_CTX	layout-direct	-	208	8	struct blake2b_state_st	-	typedefs=BLAKE2B_CTX; identity=boringssl::ctypes::BLAKE2B_CTX; header=include/openssl/blake2.h:31; pointed-by=3
-field	struct blake2b_state_st	0	h	array	0	64	-	uint64_t h[8]	array 8 of ffi::c::ULong	c=h; element=scalar uint64_t; bounds=8; extent=8
-field	struct blake2b_state_st	1	t_low	scalar	64	8	-	uint64_t t_low	ffi::c::ULong	c=t_low
-field	struct blake2b_state_st	2	t_high	scalar	72	4	-	uint32_t t_high	ffi::c::UInt	c=t_high
-field	struct blake2b_state_st	3	block_used	scalar	76	4	-	uint32_t block_used	ffi::c::UInt	c=block_used
-field	struct blake2b_state_st	4	block	array	80	128	-	uint8_t block[128]	array 128 of ffi::c::UChar	c=block; element=char uint8_t; bounds=128; extent=128
+field	struct blake2b_state_st	0	h	array	0	64	-	uint64_t h[8]	array 8 of std::ffi::c::ULong	c=h; element=scalar uint64_t; bounds=8; extent=8
+field	struct blake2b_state_st	1	t_low	scalar	64	8	-	uint64_t t_low	std::ffi::c::ULong	c=t_low
+field	struct blake2b_state_st	2	t_high	scalar	72	4	-	uint32_t t_high	std::ffi::c::UInt	c=t_high
+field	struct blake2b_state_st	3	block_used	scalar	76	4	-	uint32_t block_used	std::ffi::c::UInt	c=block_used
+field	struct blake2b_state_st	4	block	array	80	128	-	uint8_t block[128]	array 128 of std::ffi::c::UChar	c=block; element=char uint8_t; bounds=128; extent=128
 record	struct bf_key_st	-	BF_KEY	layout-direct	-	4168	4	struct bf_key_st	-	typedefs=BF_KEY; identity=boringssl::ctypes::BF_KEY; header=include/openssl/blowfish.h:38; pointed-by=5
-field	struct bf_key_st	0	P	array	0	72	-	uint32_t P[16 + 2]	array 18 of ffi::c::UInt	c=P; element=scalar uint32_t; bounds=16 + 2; extent=18
-field	struct bf_key_st	1	S	array	72	4096	-	uint32_t S[4 *256]	array 1024 of ffi::c::UInt	c=S; element=scalar uint32_t; bounds=4 *256; extent=1024
+field	struct bf_key_st	0	P	array	0	72	-	uint32_t P[16 + 2]	array 18 of std::ffi::c::UInt	c=P; element=scalar uint32_t; bounds=16 + 2; extent=18
+field	struct bf_key_st	1	S	array	72	4096	-	uint32_t S[4 *256]	array 1024 of std::ffi::c::UInt	c=S; element=scalar uint32_t; bounds=4 *256; extent=1024
 record	struct cbs_st	-	CBS	layout-direct	-	16	8	struct cbs_st	-	typedefs=CBS; identity=boringssl::ctypes::CBS; header=include/openssl/bytestring.h:40; pointed-by=88
-field	struct cbs_st	0	data	pointer	0	8	-	const uint8_t *data	ffi::c::Ptr[ffi::c::UChar]	c=data
-field	struct cbs_st	1	len	scalar	8	8	-	size_t len	ffi::c::ULong	c=len
+field	struct cbs_st	0	data	pointer	0	8	-	const uint8_t *data	std::ffi::c::Ptr[std::ffi::c::UChar]	c=data
+field	struct cbs_st	1	len	scalar	8	8	-	size_t len	std::ffi::c::ULong	c=len
 record	struct cbb_buffer_st	-	-	layout-blocked	-	32	8	struct cbb_buffer_st	-	identity=boringssl::ctypes::cbb_buffer_st; header=include/openssl/bytestring.h:478; blockers=bitfield: field can_resize: bitfield can_resize: unsigned int : 1 | bitfield: field error: bitfield error: unsigned int : 1; roots=bitfield
-field	struct cbb_buffer_st	0	buf	pointer	0	8	-	uint8_t *buf	ffi::c::Ptr[ffi::c::UChar]	c=buf
-field	struct cbb_buffer_st	1	len	scalar	8	8	-	size_t len	ffi::c::ULong	c=len
-field	struct cbb_buffer_st	2	cap	scalar	16	8	-	size_t cap	ffi::c::ULong	c=cap
+field	struct cbb_buffer_st	0	buf	pointer	0	8	-	uint8_t *buf	std::ffi::c::Ptr[std::ffi::c::UChar]	c=buf
+field	struct cbb_buffer_st	1	len	scalar	8	8	-	size_t len	std::ffi::c::ULong	c=len
+field	struct cbb_buffer_st	2	cap	scalar	16	8	-	size_t cap	std::ffi::c::ULong	c=cap
 field	struct cbb_buffer_st	3	can_resize	bitfield	-	-	-	unsigned int can_resize	-	c=can_resize; bits=1; blockers=bitfield: bitfield can_resize: unsigned int : 1
 field	struct cbb_buffer_st	4	error_	bitfield	-	-	-	unsigned int error	-	c=error; bits=1; blockers=bitfield: bitfield error: unsigned int : 1
 record	struct cbb_child_st	-	-	layout-blocked	-	24	8	struct cbb_child_st	-	identity=-; header=include/openssl/bytestring.h:492; blockers=bitfield: field pending_is_asn1: bitfield pending_is_asn1: unsigned int : 1; roots=bitfield
-field	struct cbb_child_st	0	base	pointer	0	8	-	struct cbb_buffer_st *base	ffi::c::Ptr[cbb_buffer_st]	c=base
-field	struct cbb_child_st	1	offset	scalar	8	8	-	size_t offset	ffi::c::ULong	c=offset
-field	struct cbb_child_st	2	pending_len_len	scalar	16	1	-	uint8_t pending_len_len	ffi::c::UChar	c=pending_len_len
+field	struct cbb_child_st	0	base	pointer	0	8	-	struct cbb_buffer_st *base	std::ffi::c::Ptr[cbb_buffer_st]	c=base
+field	struct cbb_child_st	1	offset	scalar	8	8	-	size_t offset	std::ffi::c::ULong	c=offset
+field	struct cbb_child_st	2	pending_len_len	scalar	16	1	-	uint8_t pending_len_len	std::ffi::c::UChar	c=pending_len_len
 field	struct cbb_child_st	3	pending_is_asn1	bitfield	-	-	-	unsigned int pending_is_asn1	-	c=pending_is_asn1; bits=1; blockers=bitfield: bitfield pending_is_asn1: unsigned int : 1
 record	union anon@bytestring.h:510	-	-	layout-blocked	-	32	8	__typeof__(((struct cbb_st *)0)->u)	-	identity=-; header=include/openssl/bytestring.h:510; nested=field base (struct cbb_buffer_st, union-member) -> bitfield | field child (struct cbb_child_st, union-member) -> bitfield; roots=bitfield; deps=struct cbb_buffer_st,struct cbb_child_st
 field	union anon@bytestring.h:510	0	base	nested	0	32	-	struct cbb_buffer_st base	cbb_buffer_st	c=base
 field	union anon@bytestring.h:510	1	child	nested	0	24	-	struct cbb_child_st child	cbb_child_st	c=child
 record	struct cbb_st	-	-	layout-blocked	-	48	8	struct cbb_st	-	typedefs=CBB; identity=boringssl::ctypes::CBB; header=include/openssl/bytestring.h:504; nested=field u (union anon@bytestring.h:510, field) -> struct cbb_buffer_st -> bitfield; roots=bitfield; deps=union anon@bytestring.h:510; pointed-by=79
-field	struct cbb_st	0	child	pointer	0	8	-	CBB *child	ffi::c::Ptr[CBB]	c=child
-field	struct cbb_st	1	is_child	scalar	8	1	-	char is_child	ffi::c::Char	c=is_child
+field	struct cbb_st	0	child	pointer	0	8	-	CBB *child	std::ffi::c::Ptr[CBB]	c=child
+field	struct cbb_st	1	is_child	scalar	8	1	-	char is_child	std::ffi::c::Char	c=is_child
 field	struct cbb_st	2	u	nested	16	32	-	union anon@bytestring.h:510 u	CBB_u	c=u
 record	struct cast_key_st	-	CAST_KEY	layout-direct	-	132	4	struct cast_key_st	-	typedefs=CAST_KEY; identity=boringssl::ctypes::CAST_KEY; header=include/openssl/cast.h:41; pointed-by=6
-field	struct cast_key_st	0	data	array	0	128	-	uint32_t data[32]	array 32 of ffi::c::UInt	c=data; element=scalar uint32_t; bounds=32; extent=32
-field	struct cast_key_st	1	short_key	scalar	128	4	-	int short_key	ffi::c::Int	c=short_key
+field	struct cast_key_st	0	data	array	0	128	-	uint32_t data[32]	array 32 of std::ffi::c::UInt	c=data; element=scalar uint32_t; bounds=32; extent=32
+field	struct cast_key_st	1	short_key	scalar	128	4	-	int short_key	std::ffi::c::Int	c=short_key
 record	struct evp_cipher_ctx_st	-	EVP_CIPHER_CTX	layout-direct	-	144	8	struct evp_cipher_ctx_st	-	typedefs=EVP_CIPHER_CTX; identity=boringssl::ctypes::EVP_CIPHER_CTX; header=include/openssl/cipher.h:721; pointed-by=45
-field	struct evp_cipher_ctx_st	0	cipher	pointer	0	8	-	const EVP_CIPHER *cipher	ffi::c::Ptr[EVP_CIPHER]	c=cipher
-field	struct evp_cipher_ctx_st	1	app_data	pointer	8	8	-	void *app_data	ffi::c::Ptr[ffi::c::Void]	c=app_data
-field	struct evp_cipher_ctx_st	2	cipher_data	pointer	16	8	-	void *cipher_data	ffi::c::Ptr[ffi::c::Void]	c=cipher_data
-field	struct evp_cipher_ctx_st	3	key_len	scalar	24	4	-	unsigned int key_len	ffi::c::UInt	c=key_len
-field	struct evp_cipher_ctx_st	4	encrypt	scalar	28	4	-	int encrypt	ffi::c::Int	c=encrypt
-field	struct evp_cipher_ctx_st	5	flags	scalar	32	4	-	uint32_t flags	ffi::c::UInt	c=flags
-field	struct evp_cipher_ctx_st	6	oiv	array	36	16	-	uint8_t oiv[16]	array 16 of ffi::c::UChar	c=oiv; element=char uint8_t; bounds=16; extent=16
-field	struct evp_cipher_ctx_st	7	iv	array	52	16	-	uint8_t iv[16]	array 16 of ffi::c::UChar	c=iv; element=char uint8_t; bounds=16; extent=16
-field	struct evp_cipher_ctx_st	8	buf	array	68	32	-	uint8_t buf[32]	array 32 of ffi::c::UChar	c=buf; element=char uint8_t; bounds=32; extent=32
-field	struct evp_cipher_ctx_st	9	buf_len	scalar	100	4	-	int buf_len	ffi::c::Int	c=buf_len
-field	struct evp_cipher_ctx_st	10	num	scalar	104	4	-	unsigned int num	ffi::c::UInt	c=num
-field	struct evp_cipher_ctx_st	11	final_used	scalar	108	4	-	int final_used	ffi::c::Int	c=final_used
-field	struct evp_cipher_ctx_st	12	final	array	112	32	-	uint8_t final[32]	array 32 of ffi::c::UChar	c=final; element=char uint8_t; bounds=32; extent=32
+field	struct evp_cipher_ctx_st	0	cipher	pointer	0	8	-	const EVP_CIPHER *cipher	std::ffi::c::Ptr[EVP_CIPHER]	c=cipher
+field	struct evp_cipher_ctx_st	1	app_data	pointer	8	8	-	void *app_data	std::ffi::c::Ptr[std::ffi::c::Void]	c=app_data
+field	struct evp_cipher_ctx_st	2	cipher_data	pointer	16	8	-	void *cipher_data	std::ffi::c::Ptr[std::ffi::c::Void]	c=cipher_data
+field	struct evp_cipher_ctx_st	3	key_len	scalar	24	4	-	unsigned int key_len	std::ffi::c::UInt	c=key_len
+field	struct evp_cipher_ctx_st	4	encrypt	scalar	28	4	-	int encrypt	std::ffi::c::Int	c=encrypt
+field	struct evp_cipher_ctx_st	5	flags	scalar	32	4	-	uint32_t flags	std::ffi::c::UInt	c=flags
+field	struct evp_cipher_ctx_st	6	oiv	array	36	16	-	uint8_t oiv[16]	array 16 of std::ffi::c::UChar	c=oiv; element=char uint8_t; bounds=16; extent=16
+field	struct evp_cipher_ctx_st	7	iv	array	52	16	-	uint8_t iv[16]	array 16 of std::ffi::c::UChar	c=iv; element=char uint8_t; bounds=16; extent=16
+field	struct evp_cipher_ctx_st	8	buf	array	68	32	-	uint8_t buf[32]	array 32 of std::ffi::c::UChar	c=buf; element=char uint8_t; bounds=32; extent=32
+field	struct evp_cipher_ctx_st	9	buf_len	scalar	100	4	-	int buf_len	std::ffi::c::Int	c=buf_len
+field	struct evp_cipher_ctx_st	10	num	scalar	104	4	-	unsigned int num	std::ffi::c::UInt	c=num
+field	struct evp_cipher_ctx_st	11	final_used	scalar	108	4	-	int final_used	std::ffi::c::Int	c=final_used
+field	struct evp_cipher_ctx_st	12	final	array	112	32	-	uint8_t final[32]	array 32 of std::ffi::c::UChar	c=final; element=char uint8_t; bounds=32; extent=32
 record	struct evp_cipher_info_st	-	EVP_CIPHER_INFO	layout-direct	-	24	8	struct evp_cipher_info_st	-	typedefs=EVP_CIPHER_INFO; identity=-; header=include/openssl/cipher.h:765
-field	struct evp_cipher_info_st	0	cipher	pointer	0	8	-	const EVP_CIPHER *cipher	ffi::c::Ptr[EVP_CIPHER]	c=cipher
-field	struct evp_cipher_info_st	1	iv	array	8	16	-	unsigned char iv[16]	array 16 of ffi::c::UChar	c=iv; element=char unsigned char; bounds=16; extent=16
+field	struct evp_cipher_info_st	0	cipher	pointer	0	8	-	const EVP_CIPHER *cipher	std::ffi::c::Ptr[EVP_CIPHER]	c=cipher
+field	struct evp_cipher_info_st	1	iv	array	8	16	-	unsigned char iv[16]	array 16 of std::ffi::c::UChar	c=iv; element=char unsigned char; bounds=16; extent=16
 record	struct conf_value_st	-	CONF_VALUE	layout-direct	-	24	8	struct conf_value_st	-	typedefs=CONF_VALUE; identity=boringssl::ctypes::CONF_VALUE; header=include/openssl/conf.h:45; pointed-by=11
-field	struct conf_value_st	0	section	pointer	0	8	-	char *section	ffi::c::Ptr[ffi::c::Char]	c=section
-field	struct conf_value_st	1	name	pointer	8	8	-	char *name	ffi::c::Ptr[ffi::c::Char]	c=name
-field	struct conf_value_st	2	value	pointer	16	8	-	char *value	ffi::c::Ptr[ffi::c::Char]	c=value
+field	struct conf_value_st	0	section	pointer	0	8	-	char *section	std::ffi::c::Ptr[std::ffi::c::Char]	c=section
+field	struct conf_value_st	1	name	pointer	8	8	-	char *name	std::ffi::c::Ptr[std::ffi::c::Char]	c=name
+field	struct conf_value_st	2	value	pointer	16	8	-	char *value	std::ffi::c::Ptr[std::ffi::c::Char]	c=value
 record	struct sha256_state_st	-	SHA256_CTX	layout-direct	-	112	4	struct sha256_state_st	-	typedefs=SHA256_CTX; identity=boringssl::ctypes::SHA256_CTX; header=include/openssl/sha2.h:95; pointed-by=7
-field	struct sha256_state_st	0	h	array	0	32	-	uint32_t h[8]	array 8 of ffi::c::UInt	c=h; element=scalar uint32_t; bounds=8; extent=8
-field	struct sha256_state_st	1	Nl	scalar	32	4	-	uint32_t Nl	ffi::c::UInt	c=Nl
-field	struct sha256_state_st	2	Nh	scalar	36	4	-	uint32_t Nh	ffi::c::UInt	c=Nh
-field	struct sha256_state_st	3	data	array	40	64	-	uint8_t data[64]	array 64 of ffi::c::UChar	c=data; element=char uint8_t; bounds=64; extent=64
-field	struct sha256_state_st	4	num	scalar	104	4	-	unsigned int num	ffi::c::UInt	c=num
-field	struct sha256_state_st	5	md_len	scalar	108	4	-	unsigned int md_len	ffi::c::UInt	c=md_len
+field	struct sha256_state_st	0	h	array	0	32	-	uint32_t h[8]	array 8 of std::ffi::c::UInt	c=h; element=scalar uint32_t; bounds=8; extent=8
+field	struct sha256_state_st	1	Nl	scalar	32	4	-	uint32_t Nl	std::ffi::c::UInt	c=Nl
+field	struct sha256_state_st	2	Nh	scalar	36	4	-	uint32_t Nh	std::ffi::c::UInt	c=Nh
+field	struct sha256_state_st	3	data	array	40	64	-	uint8_t data[64]	array 64 of std::ffi::c::UChar	c=data; element=char uint8_t; bounds=64; extent=64
+field	struct sha256_state_st	4	num	scalar	104	4	-	unsigned int num	std::ffi::c::UInt	c=num
+field	struct sha256_state_st	5	md_len	scalar	108	4	-	unsigned int md_len	std::ffi::c::UInt	c=md_len
 record	struct sha512_state_st	-	SHA512_CTX	layout-direct	-	208	8	struct sha512_state_st	-	typedefs=SHA512_CTX; identity=boringssl::ctypes::SHA512_CTX; header=include/openssl/sha2.h:162; pointed-by=10
-field	struct sha512_state_st	0	h	array	0	64	-	uint64_t h[8]	array 8 of ffi::c::ULong	c=h; element=scalar uint64_t; bounds=8; extent=8
-field	struct sha512_state_st	1	num	scalar	64	2	-	uint16_t num	ffi::c::UShort	c=num
-field	struct sha512_state_st	2	md_len	scalar	66	2	-	uint16_t md_len	ffi::c::UShort	c=md_len
-field	struct sha512_state_st	3	bytes_so_far_high	scalar	68	4	-	uint32_t bytes_so_far_high	ffi::c::UInt	c=bytes_so_far_high
-field	struct sha512_state_st	4	bytes_so_far_low	scalar	72	8	-	uint64_t bytes_so_far_low	ffi::c::ULong	c=bytes_so_far_low
-field	struct sha512_state_st	5	p	array	80	128	-	uint8_t p[128]	array 128 of ffi::c::UChar	c=p; element=char uint8_t; bounds=128; extent=128
+field	struct sha512_state_st	0	h	array	0	64	-	uint64_t h[8]	array 8 of std::ffi::c::ULong	c=h; element=scalar uint64_t; bounds=8; extent=8
+field	struct sha512_state_st	1	num	scalar	64	2	-	uint16_t num	std::ffi::c::UShort	c=num
+field	struct sha512_state_st	2	md_len	scalar	66	2	-	uint16_t md_len	std::ffi::c::UShort	c=md_len
+field	struct sha512_state_st	3	bytes_so_far_high	scalar	68	4	-	uint32_t bytes_so_far_high	std::ffi::c::UInt	c=bytes_so_far_high
+field	struct sha512_state_st	4	bytes_so_far_low	scalar	72	8	-	uint64_t bytes_so_far_low	std::ffi::c::ULong	c=bytes_so_far_low
+field	struct sha512_state_st	5	p	array	80	128	-	uint8_t p[128]	array 128 of std::ffi::c::UChar	c=p; element=char uint8_t; bounds=128; extent=128
 record	struct anon@sha.h:73	-	SHA_CTX_member1_member2	layout-direct	-	20	4	-	-	identity=-; header=include/openssl/sha.h:73; owner=struct sha_state_st; place=SHA_CTX.member1.member2; at=sha.h:73:5
-field	struct anon@sha.h:73	0	h0	scalar	0	4	-	uint32_t h0	ffi::c::UInt	c=h0
-field	struct anon@sha.h:73	1	h1	scalar	4	4	-	uint32_t h1	ffi::c::UInt	c=h1
-field	struct anon@sha.h:73	2	h2	scalar	8	4	-	uint32_t h2	ffi::c::UInt	c=h2
-field	struct anon@sha.h:73	3	h3	scalar	12	4	-	uint32_t h3	ffi::c::UInt	c=h3
-field	struct anon@sha.h:73	4	h4	scalar	16	4	-	uint32_t h4	ffi::c::UInt	c=h4
+field	struct anon@sha.h:73	0	h0	scalar	0	4	-	uint32_t h0	std::ffi::c::UInt	c=h0
+field	struct anon@sha.h:73	1	h1	scalar	4	4	-	uint32_t h1	std::ffi::c::UInt	c=h1
+field	struct anon@sha.h:73	2	h2	scalar	8	4	-	uint32_t h2	std::ffi::c::UInt	c=h2
+field	struct anon@sha.h:73	3	h3	scalar	12	4	-	uint32_t h3	std::ffi::c::UInt	c=h3
+field	struct anon@sha.h:73	4	h4	scalar	16	4	-	uint32_t h4	std::ffi::c::UInt	c=h4
 record	union anon@sha.h:71	-	SHA_CTX_member1	layout-direct	-	20	4	-	-	identity=-; header=include/openssl/sha.h:71; deps=struct anon@sha.h:73; owner=struct sha_state_st; place=SHA_CTX.member1; at=sha.h:71:3
-field	union anon@sha.h:71	0	h	array	0	20	-	uint32_t h[5]	array 5 of ffi::c::UInt	c=h; element=scalar uint32_t; bounds=5; extent=5
+field	union anon@sha.h:71	0	h	array	0	20	-	uint32_t h[5]	array 5 of std::ffi::c::UInt	c=h; element=scalar uint32_t; bounds=5; extent=5
 field	union anon@sha.h:71	1	member2	nested	0	-	-	struct anon@sha.h:73	SHA_CTX_member1_member2	c=-
 record	struct sha_state_st	-	SHA_CTX	layout-direct	-	96	4	struct sha_state_st	-	typedefs=SHA_CTX; identity=boringssl::ctypes::SHA_CTX; header=include/openssl/sha.h:64; deps=union anon@sha.h:71; pointed-by=4
 field	struct sha_state_st	0	member1	nested	0	-	-	union anon@sha.h:71	SHA_CTX_member1	c=-
-field	struct sha_state_st	1	Nl	scalar	20	4	-	uint32_t Nl	ffi::c::UInt	c=Nl
-field	struct sha_state_st	2	Nh	scalar	24	4	-	uint32_t Nh	ffi::c::UInt	c=Nh
-field	struct sha_state_st	3	data	array	28	64	-	uint8_t data[64]	array 64 of ffi::c::UChar	c=data; element=char uint8_t; bounds=64; extent=64
-field	struct sha_state_st	4	num	scalar	92	4	-	unsigned int num	ffi::c::UInt	c=num
-promoted	struct sha_state_st	-	member1.h	-	0	20	-	h	array 5 of ffi::c::UInt	via=union anon@sha.h:71
-promoted	struct sha_state_st	-	member1.member2.h0	-	0	4	-	h0	ffi::c::UInt	via=union anon@sha.h:71,struct anon@sha.h:73
-promoted	struct sha_state_st	-	member1.member2.h1	-	4	4	-	h1	ffi::c::UInt	via=union anon@sha.h:71,struct anon@sha.h:73
-promoted	struct sha_state_st	-	member1.member2.h2	-	8	4	-	h2	ffi::c::UInt	via=union anon@sha.h:71,struct anon@sha.h:73
-promoted	struct sha_state_st	-	member1.member2.h3	-	12	4	-	h3	ffi::c::UInt	via=union anon@sha.h:71,struct anon@sha.h:73
-promoted	struct sha_state_st	-	member1.member2.h4	-	16	4	-	h4	ffi::c::UInt	via=union anon@sha.h:71,struct anon@sha.h:73
+field	struct sha_state_st	1	Nl	scalar	20	4	-	uint32_t Nl	std::ffi::c::UInt	c=Nl
+field	struct sha_state_st	2	Nh	scalar	24	4	-	uint32_t Nh	std::ffi::c::UInt	c=Nh
+field	struct sha_state_st	3	data	array	28	64	-	uint8_t data[64]	array 64 of std::ffi::c::UChar	c=data; element=char uint8_t; bounds=64; extent=64
+field	struct sha_state_st	4	num	scalar	92	4	-	unsigned int num	std::ffi::c::UInt	c=num
+promoted	struct sha_state_st	-	member1.h	-	0	20	-	h	array 5 of std::ffi::c::UInt	via=union anon@sha.h:71
+promoted	struct sha_state_st	-	member1.member2.h0	-	0	4	-	h0	std::ffi::c::UInt	via=union anon@sha.h:71,struct anon@sha.h:73
+promoted	struct sha_state_st	-	member1.member2.h1	-	4	4	-	h1	std::ffi::c::UInt	via=union anon@sha.h:71,struct anon@sha.h:73
+promoted	struct sha_state_st	-	member1.member2.h2	-	8	4	-	h2	std::ffi::c::UInt	via=union anon@sha.h:71,struct anon@sha.h:73
+promoted	struct sha_state_st	-	member1.member2.h3	-	12	4	-	h3	std::ffi::c::UInt	via=union anon@sha.h:71,struct anon@sha.h:73
+promoted	struct sha_state_st	-	member1.member2.h4	-	16	4	-	h4	std::ffi::c::UInt	via=union anon@sha.h:71,struct anon@sha.h:73
 record	struct anon@thread.h:78	-	CRYPTO_dynlock	layout-direct	-	16	8	CRYPTO_dynlock	-	typedefs=CRYPTO_dynlock; identity=-; header=include/openssl/thread.h:78
-field	struct anon@thread.h:78	0	references	scalar	0	4	-	int references	ffi::c::Int	c=references
-field	struct anon@thread.h:78	1	data	pointer	8	8	-	struct CRYPTO_dynlock_value *data	ffi::c::Ptr[CRYPTO_dynlock_value]	c=data
+field	struct anon@thread.h:78	0	references	scalar	0	4	-	int references	std::ffi::c::Int	c=references
+field	struct anon@thread.h:78	1	data	pointer	8	8	-	struct CRYPTO_dynlock_value *data	std::ffi::c::Ptr[CRYPTO_dynlock_value]	c=data
 record	struct DES_cblock_st	-	DES_cblock	layout-direct	-	8	1	struct DES_cblock_st	-	typedefs=DES_cblock; identity=boringssl::ctypes::DES_cblock; header=include/openssl/des.h:34; pointed-by=10
-field	struct DES_cblock_st	0	bytes	array	0	8	-	uint8_t bytes[8]	array 8 of ffi::c::UChar	c=bytes; element=char uint8_t; bounds=8; extent=8
+field	struct DES_cblock_st	0	bytes	array	0	8	-	uint8_t bytes[8]	array 8 of std::ffi::c::UChar	c=bytes; element=char uint8_t; bounds=8; extent=8
 record	struct DES_ks	-	DES_key_schedule	layout-direct	-	128	4	struct DES_ks	-	typedefs=DES_key_schedule; identity=boringssl::ctypes::DES_key_schedule; header=include/openssl/des.h:38; pointed-by=9
-field	struct DES_ks	0	subkeys	array	0	128	-	uint32_t subkeys[16][2]	array 16 of array 2 of ffi::c::UInt	c=subkeys; element=scalar uint32_t; bounds=16,2; extent=16
+field	struct DES_ks	0	subkeys	array	0	128	-	uint32_t subkeys[16][2]	array 16 of array 2 of std::ffi::c::UInt	c=subkeys; element=scalar uint32_t; bounds=16,2; extent=16
 record	union anon@digest.h:356	-	EVP_MD_CTX_member1	layout-direct	-	208	8	-	-	identity=-; header=include/openssl/digest.h:356; owner=struct env_md_ctx_st; place=EVP_MD_CTX.member1; at=digest.h:356:3
-field	union anon@digest.h:356	0	md_data	array	0	208	-	uint8_t md_data[208]	array 208 of ffi::c::UChar	c=md_data; element=char uint8_t; bounds=208; extent=208
-field	union anon@digest.h:356	1	alignment	scalar	0	8	-	uint64_t alignment	ffi::c::ULong	c=alignment
+field	union anon@digest.h:356	0	md_data	array	0	208	-	uint8_t md_data[208]	array 208 of std::ffi::c::UChar	c=md_data; element=char uint8_t; bounds=208; extent=208
+field	union anon@digest.h:356	1	alignment	scalar	0	8	-	uint64_t alignment	std::ffi::c::ULong	c=alignment
 record	struct env_md_ctx_st	-	EVP_MD_CTX	layout-direct	-	232	8	struct env_md_ctx_st	-	typedefs=EVP_MD_CTX; identity=boringssl::ctypes::EVP_MD_CTX; header=include/openssl/digest.h:354; deps=union anon@digest.h:356; pointed-by=44
 field	struct env_md_ctx_st	0	member1	nested	0	-	-	union anon@digest.h:356	EVP_MD_CTX_member1	c=-
-field	struct env_md_ctx_st	1	digest	pointer	208	8	-	const EVP_MD *digest	ffi::c::Ptr[EVP_MD]	c=digest
-field	struct env_md_ctx_st	2	pctx	pointer	216	8	-	EVP_PKEY_CTX *pctx	ffi::c::Ptr[EVP_PKEY_CTX]	c=pctx
-field	struct env_md_ctx_st	3	pctx_ops	pointer	224	8	-	const struct evp_md_pctx_ops *pctx_ops	ffi::c::Ptr[evp_md_pctx_ops]	c=pctx_ops
-promoted	struct env_md_ctx_st	-	member1.md_data	-	0	208	-	md_data	array 208 of ffi::c::UChar	via=union anon@digest.h:356
-promoted	struct env_md_ctx_st	-	member1.alignment	-	0	8	-	alignment	ffi::c::ULong	via=union anon@digest.h:356
+field	struct env_md_ctx_st	1	digest	pointer	208	8	-	const EVP_MD *digest	std::ffi::c::Ptr[EVP_MD]	c=digest
+field	struct env_md_ctx_st	2	pctx	pointer	216	8	-	EVP_PKEY_CTX *pctx	std::ffi::c::Ptr[EVP_PKEY_CTX]	c=pctx
+field	struct env_md_ctx_st	3	pctx_ops	pointer	224	8	-	const struct evp_md_pctx_ops *pctx_ops	std::ffi::c::Ptr[evp_md_pctx_ops]	c=pctx_ops
+promoted	struct env_md_ctx_st	-	member1.md_data	-	0	208	-	md_data	array 208 of std::ffi::c::UChar	via=union anon@digest.h:356
+promoted	struct env_md_ctx_st	-	member1.alignment	-	0	8	-	alignment	std::ffi::c::ULong	via=union anon@digest.h:356
 record	struct DSA_SIG_st	-	DSA_SIG	layout-direct	-	16	8	struct DSA_SIG_st	-	typedefs=DSA_SIG; identity=boringssl::ctypes::DSA_SIG; header=include/openssl/dsa.h:148; pointed-by=11
-field	struct DSA_SIG_st	0	r	pointer	0	8	-	BIGNUM *r	ffi::c::Ptr[BIGNUM]	c=r
-field	struct DSA_SIG_st	1	s	pointer	8	8	-	BIGNUM *s	ffi::c::Ptr[BIGNUM]	c=s
+field	struct DSA_SIG_st	0	r	pointer	0	8	-	BIGNUM *r	std::ffi::c::Ptr[BIGNUM]	c=r
+field	struct DSA_SIG_st	1	s	pointer	8	8	-	BIGNUM *s	std::ffi::c::Ptr[BIGNUM]	c=s
 record	struct anon@ec.h:457	-	EC_builtin_curve	layout-direct	-	16	8	EC_builtin_curve	-	typedefs=EC_builtin_curve; identity=boringssl::ctypes::EC_builtin_curve; header=include/openssl/ec.h:457; pointed-by=1
-field	struct anon@ec.h:457	0	nid	scalar	0	4	-	int nid	ffi::c::Int	c=nid
-field	struct anon@ec.h:457	1	comment	pointer	8	8	-	const char *comment	ffi::c::Ptr[ffi::c::Char]	c=comment
+field	struct anon@ec.h:457	0	nid	scalar	0	4	-	int nid	std::ffi::c::Int	c=nid
+field	struct anon@ec.h:457	1	comment	pointer	8	8	-	const char *comment	std::ffi::c::Ptr[std::ffi::c::Char]	c=comment
 record	struct openssl_method_common_st	-	openssl_method_common_st	layout-direct	-	8	4	struct openssl_method_common_st	-	identity=-; header=include/openssl/engine.h:86
-field	struct openssl_method_common_st	0	references	scalar	0	4	-	int references	ffi::c::Int	c=references
-field	struct openssl_method_common_st	1	is_static	scalar	4	1	-	char is_static	ffi::c::Char	c=is_static
+field	struct openssl_method_common_st	0	references	scalar	0	4	-	int references	std::ffi::c::Int	c=references
+field	struct openssl_method_common_st	1	is_static	scalar	4	1	-	char is_static	std::ffi::c::Char	c=is_static
 record	struct ecdsa_method_st	-	ECDSA_METHOD	layout-direct	-	48	8	struct ecdsa_method_st	-	typedefs=ECDSA_METHOD; identity=boringssl::ctypes::ECDSA_METHOD; header=include/openssl/ec_key.h:261; deps=struct openssl_method_common_st; pointed-by=2
 field	struct ecdsa_method_st	0	common	nested	0	8	-	struct openssl_method_common_st common	openssl_method_common_st	c=common
-field	struct ecdsa_method_st	1	app_data	pointer	8	8	-	void *app_data	ffi::c::Ptr[ffi::c::Void]	c=app_data
-field	struct ecdsa_method_st	2	init	function-pointer	16	8	-	int (*init)(EC_KEY *key)	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[EC_KEY]], return: ffi::c::Int}]	c=init
-field	struct ecdsa_method_st	3	finish	function-pointer	24	8	-	int (*finish)(EC_KEY *key)	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[EC_KEY]], return: ffi::c::Int}]	c=finish
-field	struct ecdsa_method_st	4	sign	function-pointer	32	8	-	int (*sign)(const uint8_t *digest, size_t digest_len, uint8_t *sig, unsigned int *sig_len, EC_KEY *eckey)	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::UChar], ffi::c::ULong, ffi::c::Ptr[ffi::c::UChar], ffi::c::Ptr[ffi::c::UInt], ffi::c::Ptr[EC_KEY]], return: ffi::c::Int}]	c=sign
-field	struct ecdsa_method_st	5	flags	scalar	40	4	-	int flags	ffi::c::Int	c=flags
+field	struct ecdsa_method_st	1	app_data	pointer	8	8	-	void *app_data	std::ffi::c::Ptr[std::ffi::c::Void]	c=app_data
+field	struct ecdsa_method_st	2	init	function-pointer	16	8	-	int (*init)(EC_KEY *key)	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[EC_KEY]], return: std::ffi::c::Int}]	c=init
+field	struct ecdsa_method_st	3	finish	function-pointer	24	8	-	int (*finish)(EC_KEY *key)	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[EC_KEY]], return: std::ffi::c::Int}]	c=finish
+field	struct ecdsa_method_st	4	sign	function-pointer	32	8	-	int (*sign)(const uint8_t *digest, size_t digest_len, uint8_t *sig, unsigned int *sig_len, EC_KEY *eckey)	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::UChar], std::ffi::c::ULong, std::ffi::c::Ptr[std::ffi::c::UChar], std::ffi::c::Ptr[std::ffi::c::UInt], std::ffi::c::Ptr[EC_KEY]], return: std::ffi::c::Int}]	c=sign
+field	struct ecdsa_method_st	5	flags	scalar	40	4	-	int flags	std::ffi::c::Int	c=flags
 record	struct ecdsa_sig_st	-	ECDSA_SIG	layout-direct	-	16	8	struct ecdsa_sig_st	-	typedefs=ECDSA_SIG; identity=boringssl::ctypes::ECDSA_SIG; header=include/openssl/ecdsa.h:73; pointed-by=15
-field	struct ecdsa_sig_st	0	r	pointer	0	8	-	BIGNUM *r	ffi::c::Ptr[BIGNUM]	c=r
-field	struct ecdsa_sig_st	1	s	pointer	8	8	-	BIGNUM *s	ffi::c::Ptr[BIGNUM]	c=s
+field	struct ecdsa_sig_st	0	r	pointer	0	8	-	BIGNUM *r	std::ffi::c::Ptr[BIGNUM]	c=r
+field	struct ecdsa_sig_st	1	s	pointer	8	8	-	BIGNUM *s	std::ffi::c::Ptr[BIGNUM]	c=s
 record	struct hmac_ctx_st	-	HMAC_CTX	layout-direct	-	704	8	struct hmac_ctx_st	-	typedefs=HMAC_CTX; identity=boringssl::ctypes::HMAC_CTX; header=include/openssl/hmac.h:123; deps=struct env_md_ctx_st; pointed-by=14
-field	struct hmac_ctx_st	0	md	pointer	0	8	-	const EVP_MD *md	ffi::c::Ptr[EVP_MD]	c=md
+field	struct hmac_ctx_st	0	md	pointer	0	8	-	const EVP_MD *md	std::ffi::c::Ptr[EVP_MD]	c=md
 field	struct hmac_ctx_st	1	md_ctx	nested	8	232	-	EVP_MD_CTX md_ctx	EVP_MD_CTX	c=md_ctx
 field	struct hmac_ctx_st	2	i_ctx	nested	240	232	-	EVP_MD_CTX i_ctx	EVP_MD_CTX	c=i_ctx
 field	struct hmac_ctx_st	3	o_ctx	nested	472	232	-	EVP_MD_CTX o_ctx	EVP_MD_CTX	c=o_ctx
 record	struct evp_hpke_ctx_st	-	EVP_HPKE_CTX	layout-direct	-	704	8	struct evp_hpke_ctx_st	-	typedefs=EVP_HPKE_CTX; identity=boringssl::ctypes::EVP_HPKE_CTX; header=include/openssl/hpke.h:406; deps=struct evp_aead_ctx_st; pointed-by=18
-field	struct evp_hpke_ctx_st	0	kem	pointer	0	8	-	const EVP_HPKE_KEM *kem	ffi::c::Ptr[EVP_HPKE_KEM]	c=kem
-field	struct evp_hpke_ctx_st	1	aead	pointer	8	8	-	const EVP_HPKE_AEAD *aead	ffi::c::Ptr[EVP_HPKE_AEAD]	c=aead
-field	struct evp_hpke_ctx_st	2	kdf	pointer	16	8	-	const EVP_HPKE_KDF *kdf	ffi::c::Ptr[EVP_HPKE_KDF]	c=kdf
+field	struct evp_hpke_ctx_st	0	kem	pointer	0	8	-	const EVP_HPKE_KEM *kem	std::ffi::c::Ptr[EVP_HPKE_KEM]	c=kem
+field	struct evp_hpke_ctx_st	1	aead	pointer	8	8	-	const EVP_HPKE_AEAD *aead	std::ffi::c::Ptr[EVP_HPKE_AEAD]	c=aead
+field	struct evp_hpke_ctx_st	2	kdf	pointer	16	8	-	const EVP_HPKE_KDF *kdf	std::ffi::c::Ptr[EVP_HPKE_KDF]	c=kdf
 field	struct evp_hpke_ctx_st	3	aead_ctx	nested	24	576	-	EVP_AEAD_CTX aead_ctx	EVP_AEAD_CTX	c=aead_ctx
-field	struct evp_hpke_ctx_st	4	base_nonce	array	600	24	-	uint8_t base_nonce[24]	array 24 of ffi::c::UChar	c=base_nonce; element=char uint8_t; bounds=24; extent=24
-field	struct evp_hpke_ctx_st	5	exporter_secret	array	624	64	-	uint8_t exporter_secret[64]	array 64 of ffi::c::UChar	c=exporter_secret; element=char uint8_t; bounds=64; extent=64
-field	struct evp_hpke_ctx_st	6	seq	scalar	688	8	-	uint64_t seq	ffi::c::ULong	c=seq
-field	struct evp_hpke_ctx_st	7	is_sender	scalar	696	4	-	int is_sender	ffi::c::Int	c=is_sender
+field	struct evp_hpke_ctx_st	4	base_nonce	array	600	24	-	uint8_t base_nonce[24]	array 24 of std::ffi::c::UChar	c=base_nonce; element=char uint8_t; bounds=24; extent=24
+field	struct evp_hpke_ctx_st	5	exporter_secret	array	624	64	-	uint8_t exporter_secret[64]	array 64 of std::ffi::c::UChar	c=exporter_secret; element=char uint8_t; bounds=64; extent=64
+field	struct evp_hpke_ctx_st	6	seq	scalar	688	8	-	uint64_t seq	std::ffi::c::ULong	c=seq
+field	struct evp_hpke_ctx_st	7	is_sender	scalar	696	4	-	int is_sender	std::ffi::c::Int	c=is_sender
 record	struct evp_hpke_key_st	-	EVP_HPKE_KEY	layout-direct	-	1648	8	struct evp_hpke_key_st	-	typedefs=EVP_HPKE_KEY; identity=boringssl::ctypes::EVP_HPKE_KEY; header=include/openssl/hpke.h:417; pointed-by=18
-field	struct evp_hpke_key_st	0	kem	pointer	0	8	-	const EVP_HPKE_KEM *kem	ffi::c::Ptr[EVP_HPKE_KEM]	c=kem
-field	struct evp_hpke_key_st	1	private_key	array	8	64	-	uint8_t private_key[64]	array 64 of ffi::c::UChar	c=private_key; element=char uint8_t; bounds=64; extent=64
-field	struct evp_hpke_key_st	2	public_key	array	72	1568	-	uint8_t public_key[1568]	array 1568 of ffi::c::UChar	c=public_key; element=char uint8_t; bounds=1568; extent=1568
-field	struct evp_hpke_key_st	3	pkey	pointer	1640	8	-	EVP_PKEY *pkey	ffi::c::Ptr[EVP_PKEY]	c=pkey
+field	struct evp_hpke_key_st	0	kem	pointer	0	8	-	const EVP_HPKE_KEM *kem	std::ffi::c::Ptr[EVP_HPKE_KEM]	c=kem
+field	struct evp_hpke_key_st	1	private_key	array	8	64	-	uint8_t private_key[64]	array 64 of std::ffi::c::UChar	c=private_key; element=char uint8_t; bounds=64; extent=64
+field	struct evp_hpke_key_st	2	public_key	array	72	1568	-	uint8_t public_key[1568]	array 1568 of std::ffi::c::UChar	c=public_key; element=char uint8_t; bounds=1568; extent=1568
+field	struct evp_hpke_key_st	3	pkey	pointer	1640	8	-	EVP_PKEY *pkey	std::ffi::c::Ptr[EVP_PKEY]	c=pkey
 record	struct HRSS_private_key	-	HRSS_private_key	layout-direct	-	1808	1	struct HRSS_private_key	-	identity=boringssl::ctypes::HRSS_private_key; header=include/openssl/hrss.h:37; pointed-by=2
-field	struct HRSS_private_key	0	opaque	array	0	1808	-	uint8_t opaque[1808]	array 1808 of ffi::c::UChar	c=opaque; element=char uint8_t; bounds=1808; extent=1808
+field	struct HRSS_private_key	0	opaque	array	0	1808	-	uint8_t opaque[1808]	array 1808 of std::ffi::c::UChar	c=opaque; element=char uint8_t; bounds=1808; extent=1808
 record	struct HRSS_public_key	-	HRSS_public_key	layout-direct	-	1424	1	struct HRSS_public_key	-	identity=boringssl::ctypes::HRSS_public_key; header=include/openssl/hrss.h:41; pointed-by=4
-field	struct HRSS_public_key	0	opaque	array	0	1424	-	uint8_t opaque[1424]	array 1424 of ffi::c::UChar	c=opaque; element=char uint8_t; bounds=1424; extent=1424
+field	struct HRSS_public_key	0	opaque	array	0	1424	-	uint8_t opaque[1424]	array 1424 of std::ffi::c::UChar	c=opaque; element=char uint8_t; bounds=1424; extent=1424
 record	struct md4_state_st	-	MD4_CTX	layout-direct	-	92	4	struct md4_state_st	-	typedefs=MD4_CTX; identity=boringssl::ctypes::MD4_CTX; header=include/openssl/md4.h:61; pointed-by=4
-field	struct md4_state_st	0	h	array	0	16	-	uint32_t h[4]	array 4 of ffi::c::UInt	c=h; element=scalar uint32_t; bounds=4; extent=4
-field	struct md4_state_st	1	Nl	scalar	16	4	-	uint32_t Nl	ffi::c::UInt	c=Nl
-field	struct md4_state_st	2	Nh	scalar	20	4	-	uint32_t Nh	ffi::c::UInt	c=Nh
-field	struct md4_state_st	3	data	array	24	64	-	uint8_t data[64]	array 64 of ffi::c::UChar	c=data; element=char uint8_t; bounds=64; extent=64
-field	struct md4_state_st	4	num	scalar	88	4	-	unsigned int num	ffi::c::UInt	c=num
+field	struct md4_state_st	0	h	array	0	16	-	uint32_t h[4]	array 4 of std::ffi::c::UInt	c=h; element=scalar uint32_t; bounds=4; extent=4
+field	struct md4_state_st	1	Nl	scalar	16	4	-	uint32_t Nl	std::ffi::c::UInt	c=Nl
+field	struct md4_state_st	2	Nh	scalar	20	4	-	uint32_t Nh	std::ffi::c::UInt	c=Nh
+field	struct md4_state_st	3	data	array	24	64	-	uint8_t data[64]	array 64 of std::ffi::c::UChar	c=data; element=char uint8_t; bounds=64; extent=64
+field	struct md4_state_st	4	num	scalar	88	4	-	unsigned int num	std::ffi::c::UInt	c=num
 record	struct md5_state_st	-	MD5_CTX	layout-direct	-	92	4	struct md5_state_st	-	typedefs=MD5_CTX; identity=boringssl::ctypes::MD5_CTX; header=include/openssl/md5.h:55; pointed-by=4
-field	struct md5_state_st	0	h	array	0	16	-	uint32_t h[4]	array 4 of ffi::c::UInt	c=h; element=scalar uint32_t; bounds=4; extent=4
-field	struct md5_state_st	1	Nl	scalar	16	4	-	uint32_t Nl	ffi::c::UInt	c=Nl
-field	struct md5_state_st	2	Nh	scalar	20	4	-	uint32_t Nh	ffi::c::UInt	c=Nh
-field	struct md5_state_st	3	data	array	24	64	-	uint8_t data[64]	array 64 of ffi::c::UChar	c=data; element=char uint8_t; bounds=64; extent=64
-field	struct md5_state_st	4	num	scalar	88	4	-	unsigned int num	ffi::c::UInt	c=num
+field	struct md5_state_st	0	h	array	0	16	-	uint32_t h[4]	array 4 of std::ffi::c::UInt	c=h; element=scalar uint32_t; bounds=4; extent=4
+field	struct md5_state_st	1	Nl	scalar	16	4	-	uint32_t Nl	std::ffi::c::UInt	c=Nl
+field	struct md5_state_st	2	Nh	scalar	20	4	-	uint32_t Nh	std::ffi::c::UInt	c=Nh
+field	struct md5_state_st	3	data	array	24	64	-	uint8_t data[64]	array 64 of std::ffi::c::UChar	c=data; element=char uint8_t; bounds=64; extent=64
+field	struct md5_state_st	4	num	scalar	88	4	-	unsigned int num	std::ffi::c::UInt	c=num
 record	union anon@mldsa.h:43	-	MLDSA65_private_key_opaque	layout-direct	-	23680	4	__typeof__(((struct MLDSA65_private_key *)0)->opaque)	-	identity=-; header=include/openssl/mldsa.h:43
-field	union anon@mldsa.h:43	0	bytes	array	0	23680	-	uint8_t bytes[(32 + 64 + 256 *4 *6) + 32 + 256 *4 * (5 + 6 + 6)]	array 23680 of ffi::c::UChar	c=bytes; element=char uint8_t; bounds=(32 + 64 + 256 *4 *6) + 32 + 256 *4 * (5 + 6 + 6); extent=23680
-field	union anon@mldsa.h:43	1	alignment	scalar	0	4	-	uint32_t alignment	ffi::c::UInt	c=alignment
+field	union anon@mldsa.h:43	0	bytes	array	0	23680	-	uint8_t bytes[(32 + 64 + 256 *4 *6) + 32 + 256 *4 * (5 + 6 + 6)]	array 23680 of std::ffi::c::UChar	c=bytes; element=char uint8_t; bounds=(32 + 64 + 256 *4 *6) + 32 + 256 *4 * (5 + 6 + 6); extent=23680
+field	union anon@mldsa.h:43	1	alignment	scalar	0	4	-	uint32_t alignment	std::ffi::c::UInt	c=alignment
 record	struct MLDSA65_private_key	-	MLDSA65_private_key	layout-direct	-	23680	4	struct MLDSA65_private_key	-	identity=boringssl::ctypes::MLDSA65_private_key; header=include/openssl/mldsa.h:42; deps=union anon@mldsa.h:43; pointed-by=5
 field	struct MLDSA65_private_key	0	opaque	nested	0	23680	-	union anon@mldsa.h:43 opaque	MLDSA65_private_key_opaque	c=opaque
 record	union anon@mldsa.h:52	-	MLDSA65_public_key_opaque	layout-direct	-	6240	4	__typeof__(((struct MLDSA65_public_key *)0)->opaque)	-	identity=-; header=include/openssl/mldsa.h:52
-field	union anon@mldsa.h:52	0	bytes	array	0	6240	-	uint8_t bytes[32 + 64 + 256 *4 *6]	array 6240 of ffi::c::UChar	c=bytes; element=char uint8_t; bounds=32 + 64 + 256 *4 *6; extent=6240
-field	union anon@mldsa.h:52	1	alignment	scalar	0	4	-	uint32_t alignment	ffi::c::UInt	c=alignment
+field	union anon@mldsa.h:52	0	bytes	array	0	6240	-	uint8_t bytes[32 + 64 + 256 *4 *6]	array 6240 of std::ffi::c::UChar	c=bytes; element=char uint8_t; bounds=32 + 64 + 256 *4 *6; extent=6240
+field	union anon@mldsa.h:52	1	alignment	scalar	0	4	-	uint32_t alignment	std::ffi::c::UInt	c=alignment
 record	struct MLDSA65_public_key	-	MLDSA65_public_key	layout-direct	-	6240	4	struct MLDSA65_public_key	-	identity=boringssl::ctypes::MLDSA65_public_key; header=include/openssl/mldsa.h:51; deps=union anon@mldsa.h:52; pointed-by=6
 field	struct MLDSA65_public_key	0	opaque	nested	0	6240	-	union anon@mldsa.h:52 opaque	MLDSA65_public_key_opaque	c=opaque
 record	union anon@mldsa.h:62	-	MLDSA65_prehash_opaque	layout-direct	-	240	8	__typeof__(((struct MLDSA65_prehash *)0)->opaque)	-	identity=-; header=include/openssl/mldsa.h:62
-field	union anon@mldsa.h:62	0	bytes	array	0	240	-	uint8_t bytes[200 + 4 + 4 + 4 *sizeof (size_t)]	array 240 of ffi::c::UChar	c=bytes; element=char uint8_t; bounds=200 + 4 + 4 + 4 *sizeof (size_t); extent=240
-field	union anon@mldsa.h:62	1	alignment	scalar	0	8	-	uint64_t alignment	ffi::c::ULong	c=alignment
+field	union anon@mldsa.h:62	0	bytes	array	0	240	-	uint8_t bytes[200 + 4 + 4 + 4 *sizeof (size_t)]	array 240 of std::ffi::c::UChar	c=bytes; element=char uint8_t; bounds=200 + 4 + 4 + 4 *sizeof (size_t); extent=240
+field	union anon@mldsa.h:62	1	alignment	scalar	0	8	-	uint64_t alignment	std::ffi::c::ULong	c=alignment
 record	struct MLDSA65_prehash	-	MLDSA65_prehash	layout-direct	-	240	8	struct MLDSA65_prehash	-	identity=boringssl::ctypes::MLDSA65_prehash; header=include/openssl/mldsa.h:61; deps=union anon@mldsa.h:62; pointed-by=3
 field	struct MLDSA65_prehash	0	opaque	nested	0	240	-	union anon@mldsa.h:62 opaque	MLDSA65_prehash_opaque	c=opaque
 record	union anon@mldsa.h:193	-	MLDSA87_private_key_opaque	layout-direct	-	31872	4	__typeof__(((struct MLDSA87_private_key *)0)->opaque)	-	identity=-; header=include/openssl/mldsa.h:193
-field	union anon@mldsa.h:193	0	bytes	array	0	31872	-	uint8_t bytes[(32 + 64 + 256 *4 *8) + 32 + 256 *4 * (7 + 8 + 8)]	array 31872 of ffi::c::UChar	c=bytes; element=char uint8_t; bounds=(32 + 64 + 256 *4 *8) + 32 + 256 *4 * (7 + 8 + 8); extent=31872
-field	union anon@mldsa.h:193	1	alignment	scalar	0	4	-	uint32_t alignment	ffi::c::UInt	c=alignment
+field	union anon@mldsa.h:193	0	bytes	array	0	31872	-	uint8_t bytes[(32 + 64 + 256 *4 *8) + 32 + 256 *4 * (7 + 8 + 8)]	array 31872 of std::ffi::c::UChar	c=bytes; element=char uint8_t; bounds=(32 + 64 + 256 *4 *8) + 32 + 256 *4 * (7 + 8 + 8); extent=31872
+field	union anon@mldsa.h:193	1	alignment	scalar	0	4	-	uint32_t alignment	std::ffi::c::UInt	c=alignment
 record	struct MLDSA87_private_key	-	MLDSA87_private_key	layout-direct	-	31872	4	struct MLDSA87_private_key	-	identity=boringssl::ctypes::MLDSA87_private_key; header=include/openssl/mldsa.h:192; deps=union anon@mldsa.h:193; pointed-by=5
 field	struct MLDSA87_private_key	0	opaque	nested	0	31872	-	union anon@mldsa.h:193 opaque	MLDSA87_private_key_opaque	c=opaque
 record	union anon@mldsa.h:202	-	MLDSA87_public_key_opaque	layout-direct	-	8288	4	__typeof__(((struct MLDSA87_public_key *)0)->opaque)	-	identity=-; header=include/openssl/mldsa.h:202
-field	union anon@mldsa.h:202	0	bytes	array	0	8288	-	uint8_t bytes[32 + 64 + 256 *4 *8]	array 8288 of ffi::c::UChar	c=bytes; element=char uint8_t; bounds=32 + 64 + 256 *4 *8; extent=8288
-field	union anon@mldsa.h:202	1	alignment	scalar	0	4	-	uint32_t alignment	ffi::c::UInt	c=alignment
+field	union anon@mldsa.h:202	0	bytes	array	0	8288	-	uint8_t bytes[32 + 64 + 256 *4 *8]	array 8288 of std::ffi::c::UChar	c=bytes; element=char uint8_t; bounds=32 + 64 + 256 *4 *8; extent=8288
+field	union anon@mldsa.h:202	1	alignment	scalar	0	4	-	uint32_t alignment	std::ffi::c::UInt	c=alignment
 record	struct MLDSA87_public_key	-	MLDSA87_public_key	layout-direct	-	8288	4	struct MLDSA87_public_key	-	identity=boringssl::ctypes::MLDSA87_public_key; header=include/openssl/mldsa.h:201; deps=union anon@mldsa.h:202; pointed-by=6
 field	struct MLDSA87_public_key	0	opaque	nested	0	8288	-	union anon@mldsa.h:202 opaque	MLDSA87_public_key_opaque	c=opaque
 record	union anon@mldsa.h:212	-	MLDSA87_prehash_opaque	layout-direct	-	240	8	__typeof__(((struct MLDSA87_prehash *)0)->opaque)	-	identity=-; header=include/openssl/mldsa.h:212
-field	union anon@mldsa.h:212	0	bytes	array	0	240	-	uint8_t bytes[200 + 4 + 4 + 4 *sizeof (size_t)]	array 240 of ffi::c::UChar	c=bytes; element=char uint8_t; bounds=200 + 4 + 4 + 4 *sizeof (size_t); extent=240
-field	union anon@mldsa.h:212	1	alignment	scalar	0	8	-	uint64_t alignment	ffi::c::ULong	c=alignment
+field	union anon@mldsa.h:212	0	bytes	array	0	240	-	uint8_t bytes[200 + 4 + 4 + 4 *sizeof (size_t)]	array 240 of std::ffi::c::UChar	c=bytes; element=char uint8_t; bounds=200 + 4 + 4 + 4 *sizeof (size_t); extent=240
+field	union anon@mldsa.h:212	1	alignment	scalar	0	8	-	uint64_t alignment	std::ffi::c::ULong	c=alignment
 record	struct MLDSA87_prehash	-	MLDSA87_prehash	layout-direct	-	240	8	struct MLDSA87_prehash	-	identity=boringssl::ctypes::MLDSA87_prehash; header=include/openssl/mldsa.h:211; deps=union anon@mldsa.h:212; pointed-by=3
 field	struct MLDSA87_prehash	0	opaque	nested	0	240	-	union anon@mldsa.h:212 opaque	MLDSA87_prehash_opaque	c=opaque
 record	union anon@mldsa.h:340	-	MLDSA44_private_key_opaque	layout-direct	-	16512	4	__typeof__(((struct MLDSA44_private_key *)0)->opaque)	-	identity=-; header=include/openssl/mldsa.h:340
-field	union anon@mldsa.h:340	0	bytes	array	0	16512	-	uint8_t bytes[(32 + 64 + 256 *4 *4) + 32 + 256 *4 * (4 + 4 + 4)]	array 16512 of ffi::c::UChar	c=bytes; element=char uint8_t; bounds=(32 + 64 + 256 *4 *4) + 32 + 256 *4 * (4 + 4 + 4); extent=16512
-field	union anon@mldsa.h:340	1	alignment	scalar	0	4	-	uint32_t alignment	ffi::c::UInt	c=alignment
+field	union anon@mldsa.h:340	0	bytes	array	0	16512	-	uint8_t bytes[(32 + 64 + 256 *4 *4) + 32 + 256 *4 * (4 + 4 + 4)]	array 16512 of std::ffi::c::UChar	c=bytes; element=char uint8_t; bounds=(32 + 64 + 256 *4 *4) + 32 + 256 *4 * (4 + 4 + 4); extent=16512
+field	union anon@mldsa.h:340	1	alignment	scalar	0	4	-	uint32_t alignment	std::ffi::c::UInt	c=alignment
 record	struct MLDSA44_private_key	-	MLDSA44_private_key	layout-direct	-	16512	4	struct MLDSA44_private_key	-	identity=boringssl::ctypes::MLDSA44_private_key; header=include/openssl/mldsa.h:339; deps=union anon@mldsa.h:340; pointed-by=5
 field	struct MLDSA44_private_key	0	opaque	nested	0	16512	-	union anon@mldsa.h:340 opaque	MLDSA44_private_key_opaque	c=opaque
 record	union anon@mldsa.h:349	-	MLDSA44_public_key_opaque	layout-direct	-	4192	4	__typeof__(((struct MLDSA44_public_key *)0)->opaque)	-	identity=-; header=include/openssl/mldsa.h:349
-field	union anon@mldsa.h:349	0	bytes	array	0	4192	-	uint8_t bytes[32 + 64 + 256 *4 *4]	array 4192 of ffi::c::UChar	c=bytes; element=char uint8_t; bounds=32 + 64 + 256 *4 *4; extent=4192
-field	union anon@mldsa.h:349	1	alignment	scalar	0	4	-	uint32_t alignment	ffi::c::UInt	c=alignment
+field	union anon@mldsa.h:349	0	bytes	array	0	4192	-	uint8_t bytes[32 + 64 + 256 *4 *4]	array 4192 of std::ffi::c::UChar	c=bytes; element=char uint8_t; bounds=32 + 64 + 256 *4 *4; extent=4192
+field	union anon@mldsa.h:349	1	alignment	scalar	0	4	-	uint32_t alignment	std::ffi::c::UInt	c=alignment
 record	struct MLDSA44_public_key	-	MLDSA44_public_key	layout-direct	-	4192	4	struct MLDSA44_public_key	-	identity=boringssl::ctypes::MLDSA44_public_key; header=include/openssl/mldsa.h:348; deps=union anon@mldsa.h:349; pointed-by=6
 field	struct MLDSA44_public_key	0	opaque	nested	0	4192	-	union anon@mldsa.h:349 opaque	MLDSA44_public_key_opaque	c=opaque
 record	union anon@mldsa.h:359	-	MLDSA44_prehash_opaque	layout-direct	-	240	8	__typeof__(((struct MLDSA44_prehash *)0)->opaque)	-	identity=-; header=include/openssl/mldsa.h:359
-field	union anon@mldsa.h:359	0	bytes	array	0	240	-	uint8_t bytes[200 + 4 + 4 + 4 *sizeof (size_t)]	array 240 of ffi::c::UChar	c=bytes; element=char uint8_t; bounds=200 + 4 + 4 + 4 *sizeof (size_t); extent=240
-field	union anon@mldsa.h:359	1	alignment	scalar	0	8	-	uint64_t alignment	ffi::c::ULong	c=alignment
+field	union anon@mldsa.h:359	0	bytes	array	0	240	-	uint8_t bytes[200 + 4 + 4 + 4 *sizeof (size_t)]	array 240 of std::ffi::c::UChar	c=bytes; element=char uint8_t; bounds=200 + 4 + 4 + 4 *sizeof (size_t); extent=240
+field	union anon@mldsa.h:359	1	alignment	scalar	0	8	-	uint64_t alignment	std::ffi::c::ULong	c=alignment
 record	struct MLDSA44_prehash	-	MLDSA44_prehash	layout-direct	-	240	8	struct MLDSA44_prehash	-	identity=boringssl::ctypes::MLDSA44_prehash; header=include/openssl/mldsa.h:358; deps=union anon@mldsa.h:359; pointed-by=3
 field	struct MLDSA44_prehash	0	opaque	nested	0	240	-	union anon@mldsa.h:359 opaque	MLDSA44_prehash_opaque	c=opaque
 record	union anon@mlkem.h:34	-	MLKEM768_public_key_opaque	layout-direct	-	6208	2	__typeof__(((struct MLKEM768_public_key *)0)->opaque)	-	identity=-; header=include/openssl/mlkem.h:34
-field	union anon@mlkem.h:34	0	bytes	array	0	6208	-	uint8_t bytes[512 * (3 + 9) + 32 + 32]	array 6208 of ffi::c::UChar	c=bytes; element=char uint8_t; bounds=512 * (3 + 9) + 32 + 32; extent=6208
-field	union anon@mlkem.h:34	1	alignment	scalar	0	2	-	uint16_t alignment	ffi::c::UShort	c=alignment
+field	union anon@mlkem.h:34	0	bytes	array	0	6208	-	uint8_t bytes[512 * (3 + 9) + 32 + 32]	array 6208 of std::ffi::c::UChar	c=bytes; element=char uint8_t; bounds=512 * (3 + 9) + 32 + 32; extent=6208
+field	union anon@mlkem.h:34	1	alignment	scalar	0	2	-	uint16_t alignment	std::ffi::c::UShort	c=alignment
 record	struct MLKEM768_public_key	-	MLKEM768_public_key	layout-direct	-	6208	2	struct MLKEM768_public_key	-	identity=boringssl::ctypes::MLKEM768_public_key; header=include/openssl/mlkem.h:33; deps=union anon@mlkem.h:34; pointed-by=4
 field	struct MLKEM768_public_key	0	opaque	nested	0	6208	-	union anon@mlkem.h:34 opaque	MLKEM768_public_key_opaque	c=opaque
 record	union anon@mlkem.h:43	-	MLKEM768_private_key_opaque	layout-direct	-	7776	2	__typeof__(((struct MLKEM768_private_key *)0)->opaque)	-	identity=-; header=include/openssl/mlkem.h:43
-field	union anon@mlkem.h:43	0	bytes	array	0	7776	-	uint8_t bytes[512 * (3 + 3 + 9) + 32 + 32 + 32]	array 7776 of ffi::c::UChar	c=bytes; element=char uint8_t; bounds=512 * (3 + 3 + 9) + 32 + 32 + 32; extent=7776
-field	union anon@mlkem.h:43	1	alignment	scalar	0	2	-	uint16_t alignment	ffi::c::UShort	c=alignment
+field	union anon@mlkem.h:43	0	bytes	array	0	7776	-	uint8_t bytes[512 * (3 + 3 + 9) + 32 + 32 + 32]	array 7776 of std::ffi::c::UChar	c=bytes; element=char uint8_t; bounds=512 * (3 + 3 + 9) + 32 + 32 + 32; extent=7776
+field	union anon@mlkem.h:43	1	alignment	scalar	0	2	-	uint16_t alignment	std::ffi::c::UShort	c=alignment
 record	struct MLKEM768_private_key	-	MLKEM768_private_key	layout-direct	-	7776	2	struct MLKEM768_private_key	-	identity=boringssl::ctypes::MLKEM768_private_key; header=include/openssl/mlkem.h:42; deps=union anon@mlkem.h:43; pointed-by=4
 field	struct MLKEM768_private_key	0	opaque	nested	0	7776	-	union anon@mlkem.h:43 opaque	MLKEM768_private_key_opaque	c=opaque
 record	union anon@mlkem.h:132	-	MLKEM1024_public_key_opaque	layout-direct	-	10304	2	__typeof__(((struct MLKEM1024_public_key *)0)->opaque)	-	identity=-; header=include/openssl/mlkem.h:132
-field	union anon@mlkem.h:132	0	bytes	array	0	10304	-	uint8_t bytes[512 * (4 + 16) + 32 + 32]	array 10304 of ffi::c::UChar	c=bytes; element=char uint8_t; bounds=512 * (4 + 16) + 32 + 32; extent=10304
-field	union anon@mlkem.h:132	1	alignment	scalar	0	2	-	uint16_t alignment	ffi::c::UShort	c=alignment
+field	union anon@mlkem.h:132	0	bytes	array	0	10304	-	uint8_t bytes[512 * (4 + 16) + 32 + 32]	array 10304 of std::ffi::c::UChar	c=bytes; element=char uint8_t; bounds=512 * (4 + 16) + 32 + 32; extent=10304
+field	union anon@mlkem.h:132	1	alignment	scalar	0	2	-	uint16_t alignment	std::ffi::c::UShort	c=alignment
 record	struct MLKEM1024_public_key	-	MLKEM1024_public_key	layout-direct	-	10304	2	struct MLKEM1024_public_key	-	identity=boringssl::ctypes::MLKEM1024_public_key; header=include/openssl/mlkem.h:131; deps=union anon@mlkem.h:132; pointed-by=4
 field	struct MLKEM1024_public_key	0	opaque	nested	0	10304	-	union anon@mlkem.h:132 opaque	MLKEM1024_public_key_opaque	c=opaque
 record	union anon@mlkem.h:142	-	MLKEM1024_private_key_opaque	layout-direct	-	12384	2	__typeof__(((struct MLKEM1024_private_key *)0)->opaque)	-	identity=-; header=include/openssl/mlkem.h:142
-field	union anon@mlkem.h:142	0	bytes	array	0	12384	-	uint8_t bytes[512 * (4 + 4 + 16) + 32 + 32 + 32]	array 12384 of ffi::c::UChar	c=bytes; element=char uint8_t; bounds=512 * (4 + 4 + 16) + 32 + 32 + 32; extent=12384
-field	union anon@mlkem.h:142	1	alignment	scalar	0	2	-	uint16_t alignment	ffi::c::UShort	c=alignment
+field	union anon@mlkem.h:142	0	bytes	array	0	12384	-	uint8_t bytes[512 * (4 + 4 + 16) + 32 + 32 + 32]	array 12384 of std::ffi::c::UChar	c=bytes; element=char uint8_t; bounds=512 * (4 + 4 + 16) + 32 + 32 + 32; extent=12384
+field	union anon@mlkem.h:142	1	alignment	scalar	0	2	-	uint16_t alignment	std::ffi::c::UShort	c=alignment
 record	struct MLKEM1024_private_key	-	MLKEM1024_private_key	layout-direct	-	12384	2	struct MLKEM1024_private_key	-	identity=boringssl::ctypes::MLKEM1024_private_key; header=include/openssl/mlkem.h:141; deps=union anon@mlkem.h:142; pointed-by=4
 field	struct MLKEM1024_private_key	0	opaque	nested	0	12384	-	union anon@mlkem.h:142 opaque	MLKEM1024_private_key_opaque	c=opaque
 record	struct obj_name_st	-	OBJ_NAME	layout-direct	-	24	8	struct obj_name_st	-	typedefs=OBJ_NAME; identity=boringssl::ctypes::OBJ_NAME; header=include/openssl/obj.h:189
-field	struct obj_name_st	0	type_	scalar	0	4	-	int type	ffi::c::Int	c=type
-field	struct obj_name_st	1	alias	scalar	4	4	-	int alias	ffi::c::Int	c=alias
-field	struct obj_name_st	2	name	pointer	8	8	-	const char *name	ffi::c::Ptr[ffi::c::Char]	c=name
-field	struct obj_name_st	3	data	pointer	16	8	-	const char *data	ffi::c::Ptr[ffi::c::Char]	c=data
+field	struct obj_name_st	0	type_	scalar	0	4	-	int type	std::ffi::c::Int	c=type
+field	struct obj_name_st	1	alias	scalar	4	4	-	int alias	std::ffi::c::Int	c=alias
+field	struct obj_name_st	2	name	pointer	8	8	-	const char *name	std::ffi::c::Ptr[std::ffi::c::Char]	c=name
+field	struct obj_name_st	3	data	pointer	16	8	-	const char *data	std::ffi::c::Ptr[std::ffi::c::Char]	c=data
 record	struct ossl_param_st	-	OSSL_PARAM	layout-direct	-	40	8	struct ossl_param_st	-	typedefs=OSSL_PARAM; identity=boringssl::ctypes::OSSL_PARAM; header=include/openssl/params.h:27; pointed-by=2
-field	struct ossl_param_st	0	key	pointer	0	8	-	const char *key	ffi::c::Ptr[ffi::c::Char]	c=key
-field	struct ossl_param_st	1	data_type	scalar	8	4	-	uint32_t data_type	ffi::c::UInt	c=data_type
-field	struct ossl_param_st	2	data	pointer	16	8	-	void *data	ffi::c::Ptr[ffi::c::Void]	c=data
-field	struct ossl_param_st	3	data_size	scalar	24	8	-	size_t data_size	ffi::c::ULong	c=data_size
-field	struct ossl_param_st	4	return_size	scalar	32	8	-	size_t return_size	ffi::c::ULong	c=return_size
+field	struct ossl_param_st	0	key	pointer	0	8	-	const char *key	std::ffi::c::Ptr[std::ffi::c::Char]	c=key
+field	struct ossl_param_st	1	data_type	scalar	8	4	-	uint32_t data_type	std::ffi::c::UInt	c=data_type
+field	struct ossl_param_st	2	data	pointer	16	8	-	void *data	std::ffi::c::Ptr[std::ffi::c::Void]	c=data
+field	struct ossl_param_st	3	data_size	scalar	24	8	-	size_t data_size	std::ffi::c::ULong	c=data_size
+field	struct ossl_param_st	4	return_size	scalar	32	8	-	size_t return_size	std::ffi::c::ULong	c=return_size
 record	struct anon@pkcs7.h:111	-	PKCS7_SIGNED	layout-direct	-	16	8	PKCS7_SIGNED	-	typedefs=PKCS7_SIGNED; identity=boringssl::ctypes::PKCS7_SIGNED; header=include/openssl/pkcs7.h:111
-field	struct anon@pkcs7.h:111	0	cert	pointer	0	8	-	struct stack_st_X509 *cert	ffi::c::Ptr[stack_st_X509]	c=cert
-field	struct anon@pkcs7.h:111	1	crl	pointer	8	8	-	struct stack_st_X509_CRL *crl	ffi::c::Ptr[stack_st_X509_CRL]	c=crl
+field	struct anon@pkcs7.h:111	0	cert	pointer	0	8	-	struct stack_st_X509 *cert	std::ffi::c::Ptr[stack_st_X509]	c=cert
+field	struct anon@pkcs7.h:111	1	crl	pointer	8	8	-	struct stack_st_X509_CRL *crl	std::ffi::c::Ptr[stack_st_X509_CRL]	c=crl
 record	struct anon@pkcs7.h:116	-	PKCS7_SIGN_ENVELOPE	layout-direct	-	16	8	PKCS7_SIGN_ENVELOPE	-	typedefs=PKCS7_SIGN_ENVELOPE; identity=boringssl::ctypes::PKCS7_SIGN_ENVELOPE; header=include/openssl/pkcs7.h:116
-field	struct anon@pkcs7.h:116	0	cert	pointer	0	8	-	struct stack_st_X509 *cert	ffi::c::Ptr[stack_st_X509]	c=cert
-field	struct anon@pkcs7.h:116	1	crl	pointer	8	8	-	struct stack_st_X509_CRL *crl	ffi::c::Ptr[stack_st_X509_CRL]	c=crl
+field	struct anon@pkcs7.h:116	0	cert	pointer	0	8	-	struct stack_st_X509 *cert	std::ffi::c::Ptr[stack_st_X509]	c=cert
+field	struct anon@pkcs7.h:116	1	crl	pointer	8	8	-	struct stack_st_X509_CRL *crl	std::ffi::c::Ptr[stack_st_X509_CRL]	c=crl
 record	union anon@pkcs7.h:133	-	PKCS7_d	layout-direct	-	8	8	__typeof__(((PKCS7 *)0)->d)	-	identity=-; header=include/openssl/pkcs7.h:133
-field	union anon@pkcs7.h:133	0	ptr	pointer	0	8	-	char *ptr	ffi::c::Ptr[ffi::c::Char]	c=ptr
-field	union anon@pkcs7.h:133	1	data	pointer	0	8	-	ASN1_OCTET_STRING *data	ffi::c::Ptr[ASN1_BIT_STRING]	c=data
-field	union anon@pkcs7.h:133	2	sign	pointer	0	8	-	PKCS7_SIGNED *sign	ffi::c::Ptr[PKCS7_SIGNED]	c=sign
-field	union anon@pkcs7.h:133	3	enveloped	pointer	0	8	-	PKCS7_ENVELOPE *enveloped	ffi::c::Ptr[ffi::c::Void]	c=enveloped
-field	union anon@pkcs7.h:133	4	signed_and_enveloped	pointer	0	8	-	PKCS7_SIGN_ENVELOPE *signed_and_enveloped	ffi::c::Ptr[PKCS7_SIGN_ENVELOPE]	c=signed_and_enveloped
-field	union anon@pkcs7.h:133	5	digest	pointer	0	8	-	PKCS7_DIGEST *digest	ffi::c::Ptr[ffi::c::Void]	c=digest
-field	union anon@pkcs7.h:133	6	encrypted	pointer	0	8	-	PKCS7_ENCRYPT *encrypted	ffi::c::Ptr[ffi::c::Void]	c=encrypted
-field	union anon@pkcs7.h:133	7	other	pointer	0	8	-	ASN1_TYPE *other	ffi::c::Ptr[ASN1_TYPE]	c=other
+field	union anon@pkcs7.h:133	0	ptr	pointer	0	8	-	char *ptr	std::ffi::c::Ptr[std::ffi::c::Char]	c=ptr
+field	union anon@pkcs7.h:133	1	data	pointer	0	8	-	ASN1_OCTET_STRING *data	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=data
+field	union anon@pkcs7.h:133	2	sign	pointer	0	8	-	PKCS7_SIGNED *sign	std::ffi::c::Ptr[PKCS7_SIGNED]	c=sign
+field	union anon@pkcs7.h:133	3	enveloped	pointer	0	8	-	PKCS7_ENVELOPE *enveloped	std::ffi::c::Ptr[std::ffi::c::Void]	c=enveloped
+field	union anon@pkcs7.h:133	4	signed_and_enveloped	pointer	0	8	-	PKCS7_SIGN_ENVELOPE *signed_and_enveloped	std::ffi::c::Ptr[PKCS7_SIGN_ENVELOPE]	c=signed_and_enveloped
+field	union anon@pkcs7.h:133	5	digest	pointer	0	8	-	PKCS7_DIGEST *digest	std::ffi::c::Ptr[std::ffi::c::Void]	c=digest
+field	union anon@pkcs7.h:133	6	encrypted	pointer	0	8	-	PKCS7_ENCRYPT *encrypted	std::ffi::c::Ptr[std::ffi::c::Void]	c=encrypted
+field	union anon@pkcs7.h:133	7	other	pointer	0	8	-	ASN1_TYPE *other	std::ffi::c::Ptr[ASN1_TYPE]	c=other
 record	struct anon@pkcs7.h:126	-	PKCS7	layout-direct	-	32	8	PKCS7	-	typedefs=PKCS7; identity=boringssl::ctypes::PKCS7; header=include/openssl/pkcs7.h:126; deps=union anon@pkcs7.h:133; pointed-by=16
-field	struct anon@pkcs7.h:126	0	ber_bytes	pointer	0	8	-	uint8_t *ber_bytes	ffi::c::Ptr[ffi::c::UChar]	c=ber_bytes
-field	struct anon@pkcs7.h:126	1	ber_len	scalar	8	8	-	size_t ber_len	ffi::c::ULong	c=ber_len
-field	struct anon@pkcs7.h:126	2	type_	pointer	16	8	-	ASN1_OBJECT *type	ffi::c::Ptr[ASN1_OBJECT]	c=type
+field	struct anon@pkcs7.h:126	0	ber_bytes	pointer	0	8	-	uint8_t *ber_bytes	std::ffi::c::Ptr[std::ffi::c::UChar]	c=ber_bytes
+field	struct anon@pkcs7.h:126	1	ber_len	scalar	8	8	-	size_t ber_len	std::ffi::c::ULong	c=ber_len
+field	struct anon@pkcs7.h:126	2	type_	pointer	16	8	-	ASN1_OBJECT *type	std::ffi::c::Ptr[ASN1_OBJECT]	c=type
 field	struct anon@pkcs7.h:126	3	d	nested	24	8	-	union anon@pkcs7.h:133 d	PKCS7_d	c=d
 record	struct rsa_meth_st	-	RSA_METHOD	layout-direct	-	72	8	struct rsa_meth_st	-	typedefs=RSA_METHOD; identity=boringssl::ctypes::RSA_METHOD; header=include/openssl/rsa.h:791; deps=struct openssl_method_common_st; pointed-by=2
 field	struct rsa_meth_st	0	common	nested	0	8	-	struct openssl_method_common_st common	openssl_method_common_st	c=common
-field	struct rsa_meth_st	1	app_data	pointer	8	8	-	void *app_data	ffi::c::Ptr[ffi::c::Void]	c=app_data
-field	struct rsa_meth_st	2	init	function-pointer	16	8	-	int (*init)(RSA *rsa)	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[RSA]], return: ffi::c::Int}]	c=init
-field	struct rsa_meth_st	3	finish	function-pointer	24	8	-	int (*finish)(RSA *rsa)	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[RSA]], return: ffi::c::Int}]	c=finish
-field	struct rsa_meth_st	4	sign	function-pointer	32	8	-	int (*sign)(int type, const uint8_t *m, unsigned int m_length, uint8_t *sigret, unsigned int *siglen, const RSA *rsa)	ffi::c::FnPtr[Fn{args: [ffi::c::Int, ffi::c::Ptr[ffi::c::UChar], ffi::c::UInt, ffi::c::Ptr[ffi::c::UChar], ffi::c::Ptr[ffi::c::UInt], ffi::c::Ptr[RSA]], return: ffi::c::Int}]	c=sign
-field	struct rsa_meth_st	5	sign_raw	function-pointer	40	8	-	int (*sign_raw)(RSA *rsa, size_t *out_len, uint8_t *out, size_t max_out, const uint8_t *in, size_t in_len, int padding)	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[RSA], ffi::c::Ptr[ffi::c::ULong], ffi::c::Ptr[ffi::c::UChar], ffi::c::ULong, ffi::c::Ptr[ffi::c::UChar], ffi::c::ULong, ffi::c::Int], return: ffi::c::Int}]	c=sign_raw
-field	struct rsa_meth_st	6	decrypt	function-pointer	48	8	-	int (*decrypt)(RSA *rsa, size_t *out_len, uint8_t *out, size_t max_out, const uint8_t *in, size_t in_len, int padding)	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[RSA], ffi::c::Ptr[ffi::c::ULong], ffi::c::Ptr[ffi::c::UChar], ffi::c::ULong, ffi::c::Ptr[ffi::c::UChar], ffi::c::ULong, ffi::c::Int], return: ffi::c::Int}]	c=decrypt
-field	struct rsa_meth_st	7	private_transform	function-pointer	56	8	-	int (*private_transform)(RSA *rsa, uint8_t *out, const uint8_t *in, size_t len)	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[RSA], ffi::c::Ptr[ffi::c::UChar], ffi::c::Ptr[ffi::c::UChar], ffi::c::ULong], return: ffi::c::Int}]	c=private_transform
-field	struct rsa_meth_st	8	flags	scalar	64	4	-	int flags	ffi::c::Int	c=flags
+field	struct rsa_meth_st	1	app_data	pointer	8	8	-	void *app_data	std::ffi::c::Ptr[std::ffi::c::Void]	c=app_data
+field	struct rsa_meth_st	2	init	function-pointer	16	8	-	int (*init)(RSA *rsa)	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[RSA]], return: std::ffi::c::Int}]	c=init
+field	struct rsa_meth_st	3	finish	function-pointer	24	8	-	int (*finish)(RSA *rsa)	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[RSA]], return: std::ffi::c::Int}]	c=finish
+field	struct rsa_meth_st	4	sign	function-pointer	32	8	-	int (*sign)(int type, const uint8_t *m, unsigned int m_length, uint8_t *sigret, unsigned int *siglen, const RSA *rsa)	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Int, std::ffi::c::Ptr[std::ffi::c::UChar], std::ffi::c::UInt, std::ffi::c::Ptr[std::ffi::c::UChar], std::ffi::c::Ptr[std::ffi::c::UInt], std::ffi::c::Ptr[RSA]], return: std::ffi::c::Int}]	c=sign
+field	struct rsa_meth_st	5	sign_raw	function-pointer	40	8	-	int (*sign_raw)(RSA *rsa, size_t *out_len, uint8_t *out, size_t max_out, const uint8_t *in, size_t in_len, int padding)	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[RSA], std::ffi::c::Ptr[std::ffi::c::ULong], std::ffi::c::Ptr[std::ffi::c::UChar], std::ffi::c::ULong, std::ffi::c::Ptr[std::ffi::c::UChar], std::ffi::c::ULong, std::ffi::c::Int], return: std::ffi::c::Int}]	c=sign_raw
+field	struct rsa_meth_st	6	decrypt	function-pointer	48	8	-	int (*decrypt)(RSA *rsa, size_t *out_len, uint8_t *out, size_t max_out, const uint8_t *in, size_t in_len, int padding)	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[RSA], std::ffi::c::Ptr[std::ffi::c::ULong], std::ffi::c::Ptr[std::ffi::c::UChar], std::ffi::c::ULong, std::ffi::c::Ptr[std::ffi::c::UChar], std::ffi::c::ULong, std::ffi::c::Int], return: std::ffi::c::Int}]	c=decrypt
+field	struct rsa_meth_st	7	private_transform	function-pointer	56	8	-	int (*private_transform)(RSA *rsa, uint8_t *out, const uint8_t *in, size_t len)	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[RSA], std::ffi::c::Ptr[std::ffi::c::UChar], std::ffi::c::Ptr[std::ffi::c::UChar], std::ffi::c::ULong], return: std::ffi::c::Int}]	c=private_transform
+field	struct rsa_meth_st	8	flags	scalar	64	4	-	int flags	std::ffi::c::Int	c=flags
 record	struct BASIC_CONSTRAINTS_st	-	BASIC_CONSTRAINTS	layout-direct	-	16	8	struct BASIC_CONSTRAINTS_st	-	typedefs=BASIC_CONSTRAINTS; identity=boringssl::ctypes::BASIC_CONSTRAINTS; header=include/openssl/x509.h:1942; pointed-by=4
-field	struct BASIC_CONSTRAINTS_st	0	ca	scalar	0	4	-	ASN1_BOOLEAN ca	ffi::c::Int	c=ca
-field	struct BASIC_CONSTRAINTS_st	1	pathlen	pointer	8	8	-	ASN1_INTEGER *pathlen	ffi::c::Ptr[ASN1_BIT_STRING]	c=pathlen
+field	struct BASIC_CONSTRAINTS_st	0	ca	scalar	0	4	-	ASN1_BOOLEAN ca	std::ffi::c::Int	c=ca
+field	struct BASIC_CONSTRAINTS_st	1	pathlen	pointer	8	8	-	ASN1_INTEGER *pathlen	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=pathlen
 record	struct otherName_st	-	OTHERNAME	layout-direct	-	16	8	struct otherName_st	-	typedefs=OTHERNAME; identity=boringssl::ctypes::OTHERNAME; header=include/openssl/x509.h:2012; pointed-by=2
-field	struct otherName_st	0	type_id	pointer	0	8	-	ASN1_OBJECT *type_id	ffi::c::Ptr[ASN1_OBJECT]	c=type_id
-field	struct otherName_st	1	value	pointer	8	8	-	ASN1_TYPE *value	ffi::c::Ptr[ASN1_TYPE]	c=value
+field	struct otherName_st	0	type_id	pointer	0	8	-	ASN1_OBJECT *type_id	std::ffi::c::Ptr[ASN1_OBJECT]	c=type_id
+field	struct otherName_st	1	value	pointer	8	8	-	ASN1_TYPE *value	std::ffi::c::Ptr[ASN1_TYPE]	c=value
 record	struct EDIPartyName_st	-	EDIPARTYNAME	layout-direct	-	16	8	struct EDIPartyName_st	-	typedefs=EDIPARTYNAME; identity=boringssl::ctypes::EDIPARTYNAME; header=include/openssl/x509.h:2017; pointed-by=2
-field	struct EDIPartyName_st	0	nameAssigner	pointer	0	8	-	ASN1_STRING *nameAssigner	ffi::c::Ptr[ASN1_BIT_STRING]	c=nameAssigner
-field	struct EDIPartyName_st	1	partyName	pointer	8	8	-	ASN1_STRING *partyName	ffi::c::Ptr[ASN1_BIT_STRING]	c=partyName
+field	struct EDIPartyName_st	0	nameAssigner	pointer	0	8	-	ASN1_STRING *nameAssigner	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=nameAssigner
+field	struct EDIPartyName_st	1	partyName	pointer	8	8	-	ASN1_STRING *partyName	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=partyName
 record	union anon@x509.h:2043	-	GENERAL_NAME_d	layout-direct	-	8	8	__typeof__(((struct GENERAL_NAME_st *)0)->d)	-	identity=-; header=include/openssl/x509.h:2043
-field	union anon@x509.h:2043	0	ptr	pointer	0	8	-	char *ptr	ffi::c::Ptr[ffi::c::Char]	c=ptr
-field	union anon@x509.h:2043	1	otherName	pointer	0	8	-	OTHERNAME *otherName	ffi::c::Ptr[OTHERNAME]	c=otherName
-field	union anon@x509.h:2043	2	rfc822Name	pointer	0	8	-	ASN1_IA5STRING *rfc822Name	ffi::c::Ptr[ASN1_BIT_STRING]	c=rfc822Name
-field	union anon@x509.h:2043	3	dNSName	pointer	0	8	-	ASN1_IA5STRING *dNSName	ffi::c::Ptr[ASN1_BIT_STRING]	c=dNSName
-field	union anon@x509.h:2043	4	x400Address	pointer	0	8	-	ASN1_STRING *x400Address	ffi::c::Ptr[ASN1_BIT_STRING]	c=x400Address
-field	union anon@x509.h:2043	5	directoryName	pointer	0	8	-	X509_NAME *directoryName	ffi::c::Ptr[X509_NAME]	c=directoryName
-field	union anon@x509.h:2043	6	ediPartyName	pointer	0	8	-	EDIPARTYNAME *ediPartyName	ffi::c::Ptr[EDIPARTYNAME]	c=ediPartyName
-field	union anon@x509.h:2043	7	uniformResourceIdentifier	pointer	0	8	-	ASN1_IA5STRING *uniformResourceIdentifier	ffi::c::Ptr[ASN1_BIT_STRING]	c=uniformResourceIdentifier
-field	union anon@x509.h:2043	8	iPAddress	pointer	0	8	-	ASN1_OCTET_STRING *iPAddress	ffi::c::Ptr[ASN1_BIT_STRING]	c=iPAddress
-field	union anon@x509.h:2043	9	registeredID	pointer	0	8	-	ASN1_OBJECT *registeredID	ffi::c::Ptr[ASN1_OBJECT]	c=registeredID
-field	union anon@x509.h:2043	10	ip	pointer	0	8	-	ASN1_OCTET_STRING *ip	ffi::c::Ptr[ASN1_BIT_STRING]	c=ip
-field	union anon@x509.h:2043	11	dirn	pointer	0	8	-	X509_NAME *dirn	ffi::c::Ptr[X509_NAME]	c=dirn
-field	union anon@x509.h:2043	12	ia5	pointer	0	8	-	ASN1_IA5STRING *ia5	ffi::c::Ptr[ASN1_BIT_STRING]	c=ia5
-field	union anon@x509.h:2043	13	rid	pointer	0	8	-	ASN1_OBJECT *rid	ffi::c::Ptr[ASN1_OBJECT]	c=rid
+field	union anon@x509.h:2043	0	ptr	pointer	0	8	-	char *ptr	std::ffi::c::Ptr[std::ffi::c::Char]	c=ptr
+field	union anon@x509.h:2043	1	otherName	pointer	0	8	-	OTHERNAME *otherName	std::ffi::c::Ptr[OTHERNAME]	c=otherName
+field	union anon@x509.h:2043	2	rfc822Name	pointer	0	8	-	ASN1_IA5STRING *rfc822Name	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=rfc822Name
+field	union anon@x509.h:2043	3	dNSName	pointer	0	8	-	ASN1_IA5STRING *dNSName	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=dNSName
+field	union anon@x509.h:2043	4	x400Address	pointer	0	8	-	ASN1_STRING *x400Address	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=x400Address
+field	union anon@x509.h:2043	5	directoryName	pointer	0	8	-	X509_NAME *directoryName	std::ffi::c::Ptr[X509_NAME]	c=directoryName
+field	union anon@x509.h:2043	6	ediPartyName	pointer	0	8	-	EDIPARTYNAME *ediPartyName	std::ffi::c::Ptr[EDIPARTYNAME]	c=ediPartyName
+field	union anon@x509.h:2043	7	uniformResourceIdentifier	pointer	0	8	-	ASN1_IA5STRING *uniformResourceIdentifier	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=uniformResourceIdentifier
+field	union anon@x509.h:2043	8	iPAddress	pointer	0	8	-	ASN1_OCTET_STRING *iPAddress	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=iPAddress
+field	union anon@x509.h:2043	9	registeredID	pointer	0	8	-	ASN1_OBJECT *registeredID	std::ffi::c::Ptr[ASN1_OBJECT]	c=registeredID
+field	union anon@x509.h:2043	10	ip	pointer	0	8	-	ASN1_OCTET_STRING *ip	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=ip
+field	union anon@x509.h:2043	11	dirn	pointer	0	8	-	X509_NAME *dirn	std::ffi::c::Ptr[X509_NAME]	c=dirn
+field	union anon@x509.h:2043	12	ia5	pointer	0	8	-	ASN1_IA5STRING *ia5	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=ia5
+field	union anon@x509.h:2043	13	rid	pointer	0	8	-	ASN1_OBJECT *rid	std::ffi::c::Ptr[ASN1_OBJECT]	c=rid
 record	struct GENERAL_NAME_st	-	GENERAL_NAME	layout-direct	-	16	8	struct GENERAL_NAME_st	-	typedefs=GENERAL_NAME; identity=boringssl::ctypes::GENERAL_NAME; header=include/openssl/x509.h:2041; deps=union anon@x509.h:2043; pointed-by=21
-field	struct GENERAL_NAME_st	0	type_	scalar	0	4	-	int type	ffi::c::Int	c=type
+field	struct GENERAL_NAME_st	0	type_	scalar	0	4	-	int type	std::ffi::c::Int	c=type
 field	struct GENERAL_NAME_st	1	d	nested	8	8	-	union anon@x509.h:2043 d	GENERAL_NAME_d	c=d
 record	struct AUTHORITY_KEYID_st	-	AUTHORITY_KEYID	layout-direct	-	24	8	struct AUTHORITY_KEYID_st	-	typedefs=AUTHORITY_KEYID; identity=boringssl::ctypes::AUTHORITY_KEYID; header=include/openssl/x509.h:2175; pointed-by=4
-field	struct AUTHORITY_KEYID_st	0	keyid	pointer	0	8	-	ASN1_OCTET_STRING *keyid	ffi::c::Ptr[ASN1_BIT_STRING]	c=keyid
-field	struct AUTHORITY_KEYID_st	1	issuer	pointer	8	8	-	GENERAL_NAMES *issuer	ffi::c::Ptr[GENERAL_NAMES]	c=issuer
-field	struct AUTHORITY_KEYID_st	2	serial	pointer	16	8	-	ASN1_INTEGER *serial	ffi::c::Ptr[ASN1_BIT_STRING]	c=serial
+field	struct AUTHORITY_KEYID_st	0	keyid	pointer	0	8	-	ASN1_OCTET_STRING *keyid	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=keyid
+field	struct AUTHORITY_KEYID_st	1	issuer	pointer	8	8	-	GENERAL_NAMES *issuer	std::ffi::c::Ptr[GENERAL_NAMES]	c=issuer
+field	struct AUTHORITY_KEYID_st	2	serial	pointer	16	8	-	ASN1_INTEGER *serial	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=serial
 record	struct GENERAL_SUBTREE_st	-	GENERAL_SUBTREE	layout-direct	-	24	8	struct GENERAL_SUBTREE_st	-	typedefs=GENERAL_SUBTREE; identity=boringssl::ctypes::GENERAL_SUBTREE; header=include/openssl/x509.h:2212; pointed-by=12
-field	struct GENERAL_SUBTREE_st	0	base	pointer	0	8	-	GENERAL_NAME *base	ffi::c::Ptr[GENERAL_NAME]	c=base
-field	struct GENERAL_SUBTREE_st	1	minimum	pointer	8	8	-	ASN1_INTEGER *minimum	ffi::c::Ptr[ASN1_BIT_STRING]	c=minimum
-field	struct GENERAL_SUBTREE_st	2	maximum	pointer	16	8	-	ASN1_INTEGER *maximum	ffi::c::Ptr[ASN1_BIT_STRING]	c=maximum
+field	struct GENERAL_SUBTREE_st	0	base	pointer	0	8	-	GENERAL_NAME *base	std::ffi::c::Ptr[GENERAL_NAME]	c=base
+field	struct GENERAL_SUBTREE_st	1	minimum	pointer	8	8	-	ASN1_INTEGER *minimum	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=minimum
+field	struct GENERAL_SUBTREE_st	2	maximum	pointer	16	8	-	ASN1_INTEGER *maximum	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=maximum
 record	struct NAME_CONSTRAINTS_st	-	NAME_CONSTRAINTS	layout-direct	-	16	8	struct NAME_CONSTRAINTS_st	-	typedefs=NAME_CONSTRAINTS; identity=boringssl::ctypes::NAME_CONSTRAINTS; header=include/openssl/x509.h:2229; pointed-by=3
-field	struct NAME_CONSTRAINTS_st	0	permittedSubtrees	pointer	0	8	-	struct stack_st_GENERAL_SUBTREE *permittedSubtrees	ffi::c::Ptr[stack_st_GENERAL_SUBTREE]	c=permittedSubtrees
-field	struct NAME_CONSTRAINTS_st	1	excludedSubtrees	pointer	8	8	-	struct stack_st_GENERAL_SUBTREE *excludedSubtrees	ffi::c::Ptr[stack_st_GENERAL_SUBTREE]	c=excludedSubtrees
+field	struct NAME_CONSTRAINTS_st	0	permittedSubtrees	pointer	0	8	-	struct stack_st_GENERAL_SUBTREE *permittedSubtrees	std::ffi::c::Ptr[stack_st_GENERAL_SUBTREE]	c=permittedSubtrees
+field	struct NAME_CONSTRAINTS_st	1	excludedSubtrees	pointer	8	8	-	struct stack_st_GENERAL_SUBTREE *excludedSubtrees	std::ffi::c::Ptr[stack_st_GENERAL_SUBTREE]	c=excludedSubtrees
 record	struct ACCESS_DESCRIPTION_st	-	ACCESS_DESCRIPTION	layout-direct	-	16	8	struct ACCESS_DESCRIPTION_st	-	typedefs=ACCESS_DESCRIPTION; identity=boringssl::ctypes::ACCESS_DESCRIPTION; header=include/openssl/x509.h:2255; pointed-by=12
-field	struct ACCESS_DESCRIPTION_st	0	method	pointer	0	8	-	ASN1_OBJECT *method	ffi::c::Ptr[ASN1_OBJECT]	c=method
-field	struct ACCESS_DESCRIPTION_st	1	location	pointer	8	8	-	GENERAL_NAME *location	ffi::c::Ptr[GENERAL_NAME]	c=location
+field	struct ACCESS_DESCRIPTION_st	0	method	pointer	0	8	-	ASN1_OBJECT *method	std::ffi::c::Ptr[ASN1_OBJECT]	c=method
+field	struct ACCESS_DESCRIPTION_st	1	location	pointer	8	8	-	GENERAL_NAME *location	std::ffi::c::Ptr[GENERAL_NAME]	c=location
 record	union anon@x509.h:2310	-	DIST_POINT_NAME_name	layout-direct	-	8	8	__typeof__(((struct DIST_POINT_NAME_st *)0)->name)	-	identity=-; header=include/openssl/x509.h:2310
-field	union anon@x509.h:2310	0	fullname	pointer	0	8	-	GENERAL_NAMES *fullname	ffi::c::Ptr[GENERAL_NAMES]	c=fullname
-field	union anon@x509.h:2310	1	relativename	pointer	0	8	-	struct stack_st_X509_NAME_ENTRY *relativename	ffi::c::Ptr[stack_st_X509_NAME_ENTRY]	c=relativename
+field	union anon@x509.h:2310	0	fullname	pointer	0	8	-	GENERAL_NAMES *fullname	std::ffi::c::Ptr[GENERAL_NAMES]	c=fullname
+field	union anon@x509.h:2310	1	relativename	pointer	0	8	-	struct stack_st_X509_NAME_ENTRY *relativename	std::ffi::c::Ptr[stack_st_X509_NAME_ENTRY]	c=relativename
 record	struct DIST_POINT_NAME_st	-	DIST_POINT_NAME	layout-direct	-	16	8	struct DIST_POINT_NAME_st	-	typedefs=DIST_POINT_NAME; identity=boringssl::ctypes::DIST_POINT_NAME; header=include/openssl/x509.h:2308; deps=union anon@x509.h:2310; pointed-by=2
-field	struct DIST_POINT_NAME_st	0	type_	scalar	0	4	-	int type	ffi::c::Int	c=type
+field	struct DIST_POINT_NAME_st	0	type_	scalar	0	4	-	int type	std::ffi::c::Int	c=type
 field	struct DIST_POINT_NAME_st	1	name	nested	8	8	-	union anon@x509.h:2310 name	DIST_POINT_NAME_name	c=name
 record	struct DIST_POINT_st	-	DIST_POINT	layout-direct	-	24	8	struct DIST_POINT_st	-	typedefs=DIST_POINT; identity=boringssl::ctypes::DIST_POINT; header=include/openssl/x509.h:2325; pointed-by=12
-field	struct DIST_POINT_st	0	distpoint	pointer	0	8	-	DIST_POINT_NAME *distpoint	ffi::c::Ptr[DIST_POINT_NAME]	c=distpoint
-field	struct DIST_POINT_st	1	reasons	pointer	8	8	-	ASN1_BIT_STRING *reasons	ffi::c::Ptr[ASN1_BIT_STRING]	c=reasons
-field	struct DIST_POINT_st	2	CRLissuer	pointer	16	8	-	GENERAL_NAMES *CRLissuer	ffi::c::Ptr[GENERAL_NAMES]	c=CRLissuer
+field	struct DIST_POINT_st	0	distpoint	pointer	0	8	-	DIST_POINT_NAME *distpoint	std::ffi::c::Ptr[DIST_POINT_NAME]	c=distpoint
+field	struct DIST_POINT_st	1	reasons	pointer	8	8	-	ASN1_BIT_STRING *reasons	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=reasons
+field	struct DIST_POINT_st	2	CRLissuer	pointer	16	8	-	GENERAL_NAMES *CRLissuer	std::ffi::c::Ptr[GENERAL_NAMES]	c=CRLissuer
 record	struct ISSUING_DIST_POINT_st	-	ISSUING_DIST_POINT	layout-direct	-	32	8	struct ISSUING_DIST_POINT_st	-	typedefs=ISSUING_DIST_POINT; identity=boringssl::ctypes::ISSUING_DIST_POINT; header=include/openssl/x509.h:2366; pointed-by=4
-field	struct ISSUING_DIST_POINT_st	0	distpoint	pointer	0	8	-	DIST_POINT_NAME *distpoint	ffi::c::Ptr[DIST_POINT_NAME]	c=distpoint
-field	struct ISSUING_DIST_POINT_st	1	onlyuser	scalar	8	4	-	ASN1_BOOLEAN onlyuser	ffi::c::Int	c=onlyuser
-field	struct ISSUING_DIST_POINT_st	2	onlyCA	scalar	12	4	-	ASN1_BOOLEAN onlyCA	ffi::c::Int	c=onlyCA
-field	struct ISSUING_DIST_POINT_st	3	onlysomereasons	pointer	16	8	-	ASN1_BIT_STRING *onlysomereasons	ffi::c::Ptr[ASN1_BIT_STRING]	c=onlysomereasons
-field	struct ISSUING_DIST_POINT_st	4	indirectCRL	scalar	24	4	-	ASN1_BOOLEAN indirectCRL	ffi::c::Int	c=indirectCRL
-field	struct ISSUING_DIST_POINT_st	5	onlyattr	scalar	28	4	-	ASN1_BOOLEAN onlyattr	ffi::c::Int	c=onlyattr
+field	struct ISSUING_DIST_POINT_st	0	distpoint	pointer	0	8	-	DIST_POINT_NAME *distpoint	std::ffi::c::Ptr[DIST_POINT_NAME]	c=distpoint
+field	struct ISSUING_DIST_POINT_st	1	onlyuser	scalar	8	4	-	ASN1_BOOLEAN onlyuser	std::ffi::c::Int	c=onlyuser
+field	struct ISSUING_DIST_POINT_st	2	onlyCA	scalar	12	4	-	ASN1_BOOLEAN onlyCA	std::ffi::c::Int	c=onlyCA
+field	struct ISSUING_DIST_POINT_st	3	onlysomereasons	pointer	16	8	-	ASN1_BIT_STRING *onlysomereasons	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=onlysomereasons
+field	struct ISSUING_DIST_POINT_st	4	indirectCRL	scalar	24	4	-	ASN1_BOOLEAN indirectCRL	std::ffi::c::Int	c=indirectCRL
+field	struct ISSUING_DIST_POINT_st	5	onlyattr	scalar	28	4	-	ASN1_BOOLEAN onlyattr	std::ffi::c::Int	c=onlyattr
 record	struct NOTICEREF_st	-	NOTICEREF	layout-direct	-	16	8	struct NOTICEREF_st	-	typedefs=NOTICEREF; identity=boringssl::ctypes::NOTICEREF; header=include/openssl/x509.h:2408; pointed-by=2
-field	struct NOTICEREF_st	0	organization	pointer	0	8	-	ASN1_STRING *organization	ffi::c::Ptr[ASN1_BIT_STRING]	c=organization
-field	struct NOTICEREF_st	1	noticenos	pointer	8	8	-	struct stack_st_ASN1_INTEGER *noticenos	ffi::c::Ptr[stack_st_ASN1_INTEGER]	c=noticenos
+field	struct NOTICEREF_st	0	organization	pointer	0	8	-	ASN1_STRING *organization	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=organization
+field	struct NOTICEREF_st	1	noticenos	pointer	8	8	-	struct stack_st_ASN1_INTEGER *noticenos	std::ffi::c::Ptr[stack_st_ASN1_INTEGER]	c=noticenos
 record	struct USERNOTICE_st	-	USERNOTICE	layout-direct	-	16	8	struct USERNOTICE_st	-	typedefs=USERNOTICE; identity=boringssl::ctypes::USERNOTICE; header=include/openssl/x509.h:2421; pointed-by=2
-field	struct USERNOTICE_st	0	noticeref	pointer	0	8	-	NOTICEREF *noticeref	ffi::c::Ptr[NOTICEREF]	c=noticeref
-field	struct USERNOTICE_st	1	exptext	pointer	8	8	-	ASN1_STRING *exptext	ffi::c::Ptr[ASN1_BIT_STRING]	c=exptext
+field	struct USERNOTICE_st	0	noticeref	pointer	0	8	-	NOTICEREF *noticeref	std::ffi::c::Ptr[NOTICEREF]	c=noticeref
+field	struct USERNOTICE_st	1	exptext	pointer	8	8	-	ASN1_STRING *exptext	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=exptext
 record	union anon@x509.h:2443	-	POLICYQUALINFO_d	layout-direct	-	8	8	__typeof__(((struct POLICYQUALINFO_st *)0)->d)	-	identity=-; header=include/openssl/x509.h:2443
-field	union anon@x509.h:2443	0	cpsuri	pointer	0	8	-	ASN1_IA5STRING *cpsuri	ffi::c::Ptr[ASN1_BIT_STRING]	c=cpsuri
-field	union anon@x509.h:2443	1	usernotice	pointer	0	8	-	USERNOTICE *usernotice	ffi::c::Ptr[USERNOTICE]	c=usernotice
-field	union anon@x509.h:2443	2	other	pointer	0	8	-	ASN1_TYPE *other	ffi::c::Ptr[ASN1_TYPE]	c=other
+field	union anon@x509.h:2443	0	cpsuri	pointer	0	8	-	ASN1_IA5STRING *cpsuri	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=cpsuri
+field	union anon@x509.h:2443	1	usernotice	pointer	0	8	-	USERNOTICE *usernotice	std::ffi::c::Ptr[USERNOTICE]	c=usernotice
+field	union anon@x509.h:2443	2	other	pointer	0	8	-	ASN1_TYPE *other	std::ffi::c::Ptr[ASN1_TYPE]	c=other
 record	struct POLICYQUALINFO_st	-	POLICYQUALINFO	layout-direct	-	16	8	struct POLICYQUALINFO_st	-	typedefs=POLICYQUALINFO; identity=boringssl::ctypes::POLICYQUALINFO; header=include/openssl/x509.h:2441; deps=union anon@x509.h:2443; pointed-by=12
-field	struct POLICYQUALINFO_st	0	pqualid	pointer	0	8	-	ASN1_OBJECT *pqualid	ffi::c::Ptr[ASN1_OBJECT]	c=pqualid
+field	struct POLICYQUALINFO_st	0	pqualid	pointer	0	8	-	ASN1_OBJECT *pqualid	std::ffi::c::Ptr[ASN1_OBJECT]	c=pqualid
 field	struct POLICYQUALINFO_st	1	d	nested	8	8	-	union anon@x509.h:2443 d	POLICYQUALINFO_d	c=d
 record	struct POLICYINFO_st	-	POLICYINFO	layout-direct	-	16	8	struct POLICYINFO_st	-	typedefs=POLICYINFO; identity=boringssl::ctypes::POLICYINFO; header=include/openssl/x509.h:2460; pointed-by=12
-field	struct POLICYINFO_st	0	policyid	pointer	0	8	-	ASN1_OBJECT *policyid	ffi::c::Ptr[ASN1_OBJECT]	c=policyid
-field	struct POLICYINFO_st	1	qualifiers	pointer	8	8	-	struct stack_st_POLICYQUALINFO *qualifiers	ffi::c::Ptr[stack_st_POLICYQUALINFO]	c=qualifiers
+field	struct POLICYINFO_st	0	policyid	pointer	0	8	-	ASN1_OBJECT *policyid	std::ffi::c::Ptr[ASN1_OBJECT]	c=policyid
+field	struct POLICYINFO_st	1	qualifiers	pointer	8	8	-	struct stack_st_POLICYQUALINFO *qualifiers	std::ffi::c::Ptr[stack_st_POLICYQUALINFO]	c=qualifiers
 record	struct POLICY_MAPPING_st	-	POLICY_MAPPING	layout-direct	-	16	8	struct POLICY_MAPPING_st	-	typedefs=POLICY_MAPPING; identity=boringssl::ctypes::POLICY_MAPPING; header=include/openssl/x509.h:2499; pointed-by=12
-field	struct POLICY_MAPPING_st	0	issuerDomainPolicy	pointer	0	8	-	ASN1_OBJECT *issuerDomainPolicy	ffi::c::Ptr[ASN1_OBJECT]	c=issuerDomainPolicy
-field	struct POLICY_MAPPING_st	1	subjectDomainPolicy	pointer	8	8	-	ASN1_OBJECT *subjectDomainPolicy	ffi::c::Ptr[ASN1_OBJECT]	c=subjectDomainPolicy
+field	struct POLICY_MAPPING_st	0	issuerDomainPolicy	pointer	0	8	-	ASN1_OBJECT *issuerDomainPolicy	std::ffi::c::Ptr[ASN1_OBJECT]	c=issuerDomainPolicy
+field	struct POLICY_MAPPING_st	1	subjectDomainPolicy	pointer	8	8	-	ASN1_OBJECT *subjectDomainPolicy	std::ffi::c::Ptr[ASN1_OBJECT]	c=subjectDomainPolicy
 record	struct POLICY_CONSTRAINTS_st	-	POLICY_CONSTRAINTS	layout-direct	-	16	8	struct POLICY_CONSTRAINTS_st	-	typedefs=POLICY_CONSTRAINTS; identity=boringssl::ctypes::POLICY_CONSTRAINTS; header=include/openssl/x509.h:2520; pointed-by=2
-field	struct POLICY_CONSTRAINTS_st	0	requireExplicitPolicy	pointer	0	8	-	ASN1_INTEGER *requireExplicitPolicy	ffi::c::Ptr[ASN1_BIT_STRING]	c=requireExplicitPolicy
-field	struct POLICY_CONSTRAINTS_st	1	inhibitPolicyMapping	pointer	8	8	-	ASN1_INTEGER *inhibitPolicyMapping	ffi::c::Ptr[ASN1_BIT_STRING]	c=inhibitPolicyMapping
+field	struct POLICY_CONSTRAINTS_st	0	requireExplicitPolicy	pointer	0	8	-	ASN1_INTEGER *requireExplicitPolicy	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=requireExplicitPolicy
+field	struct POLICY_CONSTRAINTS_st	1	inhibitPolicyMapping	pointer	8	8	-	ASN1_INTEGER *inhibitPolicyMapping	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=inhibitPolicyMapping
 record	struct Netscape_spki_st	-	NETSCAPE_SPKI	layout-direct	-	24	8	struct Netscape_spki_st	-	typedefs=NETSCAPE_SPKI; identity=boringssl::ctypes::NETSCAPE_SPKI; header=include/openssl/x509.h:3727; pointed-by=10
-field	struct Netscape_spki_st	0	spkac	pointer	0	8	-	NETSCAPE_SPKAC *spkac	ffi::c::Ptr[NETSCAPE_SPKAC]	c=spkac
-field	struct Netscape_spki_st	1	sig_algor	pointer	8	8	-	X509_ALGOR *sig_algor	ffi::c::Ptr[X509_ALGOR]	c=sig_algor
-field	struct Netscape_spki_st	2	signature	pointer	16	8	-	ASN1_BIT_STRING *signature	ffi::c::Ptr[ASN1_BIT_STRING]	c=signature
+field	struct Netscape_spki_st	0	spkac	pointer	0	8	-	NETSCAPE_SPKAC *spkac	std::ffi::c::Ptr[NETSCAPE_SPKAC]	c=spkac
+field	struct Netscape_spki_st	1	sig_algor	pointer	8	8	-	X509_ALGOR *sig_algor	std::ffi::c::Ptr[X509_ALGOR]	c=sig_algor
+field	struct Netscape_spki_st	2	signature	pointer	16	8	-	ASN1_BIT_STRING *signature	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=signature
 record	struct Netscape_spkac_st	-	NETSCAPE_SPKAC	layout-direct	-	16	8	struct Netscape_spkac_st	-	typedefs=NETSCAPE_SPKAC; identity=boringssl::ctypes::NETSCAPE_SPKAC; header=include/openssl/x509.h:3788; pointed-by=4
-field	struct Netscape_spkac_st	0	pubkey	pointer	0	8	-	X509_PUBKEY *pubkey	ffi::c::Ptr[X509_PUBKEY]	c=pubkey
-field	struct Netscape_spkac_st	1	challenge	pointer	8	8	-	ASN1_IA5STRING *challenge	ffi::c::Ptr[ASN1_BIT_STRING]	c=challenge
+field	struct Netscape_spkac_st	0	pubkey	pointer	0	8	-	X509_PUBKEY *pubkey	std::ffi::c::Ptr[X509_PUBKEY]	c=pubkey
+field	struct Netscape_spkac_st	1	challenge	pointer	8	8	-	ASN1_IA5STRING *challenge	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=challenge
 record	struct rsa_pss_params_st	-	RSA_PSS_PARAMS	layout-direct	-	40	8	struct rsa_pss_params_st	-	typedefs=RSA_PSS_PARAMS; identity=boringssl::ctypes::RSA_PSS_PARAMS; header=include/openssl/x509.h:3822; pointed-by=5
-field	struct rsa_pss_params_st	0	hashAlgorithm	pointer	0	8	-	X509_ALGOR *hashAlgorithm	ffi::c::Ptr[X509_ALGOR]	c=hashAlgorithm
-field	struct rsa_pss_params_st	1	maskGenAlgorithm	pointer	8	8	-	X509_ALGOR *maskGenAlgorithm	ffi::c::Ptr[X509_ALGOR]	c=maskGenAlgorithm
-field	struct rsa_pss_params_st	2	saltLength	pointer	16	8	-	ASN1_INTEGER *saltLength	ffi::c::Ptr[ASN1_BIT_STRING]	c=saltLength
-field	struct rsa_pss_params_st	3	trailerField	pointer	24	8	-	ASN1_INTEGER *trailerField	ffi::c::Ptr[ASN1_BIT_STRING]	c=trailerField
-field	struct rsa_pss_params_st	4	maskHash	pointer	32	8	-	X509_ALGOR *maskHash	ffi::c::Ptr[X509_ALGOR]	c=maskHash
+field	struct rsa_pss_params_st	0	hashAlgorithm	pointer	0	8	-	X509_ALGOR *hashAlgorithm	std::ffi::c::Ptr[X509_ALGOR]	c=hashAlgorithm
+field	struct rsa_pss_params_st	1	maskGenAlgorithm	pointer	8	8	-	X509_ALGOR *maskGenAlgorithm	std::ffi::c::Ptr[X509_ALGOR]	c=maskGenAlgorithm
+field	struct rsa_pss_params_st	2	saltLength	pointer	16	8	-	ASN1_INTEGER *saltLength	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=saltLength
+field	struct rsa_pss_params_st	3	trailerField	pointer	24	8	-	ASN1_INTEGER *trailerField	std::ffi::c::Ptr[ASN1_BIT_STRING]	c=trailerField
+field	struct rsa_pss_params_st	4	maskHash	pointer	32	8	-	X509_ALGOR *maskHash	std::ffi::c::Ptr[X509_ALGOR]	c=maskHash
 record	struct private_key_st	-	X509_PKEY	layout-direct	-	8	8	struct private_key_st	-	typedefs=X509_PKEY; identity=boringssl::ctypes::X509_PKEY; header=include/openssl/x509.h:4720
-field	struct private_key_st	0	dec_pkey	pointer	0	8	-	EVP_PKEY *dec_pkey	ffi::c::Ptr[EVP_PKEY]	c=dec_pkey
+field	struct private_key_st	0	dec_pkey	pointer	0	8	-	EVP_PKEY *dec_pkey	std::ffi::c::Ptr[EVP_PKEY]	c=dec_pkey
 record	struct X509_info_st	-	X509_INFO	layout-direct	-	64	8	struct X509_info_st	-	typedefs=X509_INFO; identity=boringssl::ctypes::X509_INFO; header=include/openssl/x509.h:4724; deps=struct evp_cipher_info_st; pointed-by=11
-field	struct X509_info_st	0	x509	pointer	0	8	-	X509 *x509	ffi::c::Ptr[X509]	c=x509
-field	struct X509_info_st	1	crl	pointer	8	8	-	X509_CRL *crl	ffi::c::Ptr[X509_CRL]	c=crl
-field	struct X509_info_st	2	x_pkey	pointer	16	8	-	X509_PKEY *x_pkey	ffi::c::Ptr[X509_PKEY]	c=x_pkey
+field	struct X509_info_st	0	x509	pointer	0	8	-	X509 *x509	std::ffi::c::Ptr[X509]	c=x509
+field	struct X509_info_st	1	crl	pointer	8	8	-	X509_CRL *crl	std::ffi::c::Ptr[X509_CRL]	c=crl
+field	struct X509_info_st	2	x_pkey	pointer	16	8	-	X509_PKEY *x_pkey	std::ffi::c::Ptr[X509_PKEY]	c=x_pkey
 field	struct X509_info_st	3	enc_cipher	nested	24	24	-	EVP_CIPHER_INFO enc_cipher	EVP_CIPHER_INFO	c=enc_cipher
-field	struct X509_info_st	4	enc_len	scalar	48	4	-	int enc_len	ffi::c::Int	c=enc_len
-field	struct X509_info_st	5	enc_data	pointer	56	8	-	char *enc_data	ffi::c::Ptr[ffi::c::Char]	c=enc_data
+field	struct X509_info_st	4	enc_len	scalar	48	4	-	int enc_len	std::ffi::c::Int	c=enc_len
+field	struct X509_info_st	5	enc_data	pointer	56	8	-	char *enc_data	std::ffi::c::Ptr[std::ffi::c::Char]	c=enc_data
 record	struct v3_ext_method	-	X509V3_EXT_METHOD	layout-direct	-	104	8	struct v3_ext_method	-	typedefs=X509V3_EXT_METHOD; identity=boringssl::ctypes::X509V3_EXT_METHOD; header=include/openssl/x509.h:4775; pointed-by=10
-field	struct v3_ext_method	0	ext_nid	scalar	0	4	-	int ext_nid	ffi::c::Int	c=ext_nid
-field	struct v3_ext_method	1	ext_flags	scalar	4	4	-	int ext_flags	ffi::c::Int	c=ext_flags
-field	struct v3_ext_method	2	it	pointer	8	8	-	ASN1_ITEM_EXP *it	ffi::c::Ptr[ASN1_ITEM]	c=it
-field	struct v3_ext_method	3	ext_new	function-pointer	16	8	-	X509V3_EXT_NEW ext_new	ffi::c::FnPtr[Fn{args: [], return: ffi::c::Ptr[ffi::c::Void]}]	c=ext_new
-field	struct v3_ext_method	4	ext_free	function-pointer	24	8	-	X509V3_EXT_FREE ext_free	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]], return: unit}]	c=ext_free
-field	struct v3_ext_method	5	d2i	function-pointer	32	8	-	X509V3_EXT_D2I d2i	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[ffi::c::Ptr[ffi::c::UChar]], ffi::c::Long], return: ffi::c::Ptr[ffi::c::Void]}]	c=d2i
-field	struct v3_ext_method	6	i2d	function-pointer	40	8	-	X509V3_EXT_I2D i2d	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[ffi::c::Ptr[ffi::c::UChar]]], return: ffi::c::Int}]	c=i2d
-field	struct v3_ext_method	7	i2s	function-pointer	48	8	-	X509V3_EXT_I2S i2s	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[X509V3_EXT_METHOD], ffi::c::Ptr[ffi::c::Void]], return: ffi::c::Ptr[ffi::c::Char]}]	c=i2s
-field	struct v3_ext_method	8	s2i	function-pointer	56	8	-	X509V3_EXT_S2I s2i	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[X509V3_EXT_METHOD], ffi::c::Ptr[X509V3_CTX], ffi::c::Ptr[ffi::c::Char]], return: ffi::c::Ptr[ffi::c::Void]}]	c=s2i
-field	struct v3_ext_method	9	i2v	function-pointer	64	8	-	X509V3_EXT_I2V i2v	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[X509V3_EXT_METHOD], ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[stack_st_CONF_VALUE]], return: ffi::c::Ptr[stack_st_CONF_VALUE]}]	c=i2v
-field	struct v3_ext_method	10	v2i	function-pointer	72	8	-	X509V3_EXT_V2I v2i	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[X509V3_EXT_METHOD], ffi::c::Ptr[X509V3_CTX], ffi::c::Ptr[stack_st_CONF_VALUE]], return: ffi::c::Ptr[ffi::c::Void]}]	c=v2i
-field	struct v3_ext_method	11	i2r	function-pointer	80	8	-	X509V3_EXT_I2R i2r	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[X509V3_EXT_METHOD], ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[BIO], ffi::c::Int], return: ffi::c::Int}]	c=i2r
-field	struct v3_ext_method	12	r2i	function-pointer	88	8	-	X509V3_EXT_R2I r2i	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[X509V3_EXT_METHOD], ffi::c::Ptr[X509V3_CTX], ffi::c::Ptr[ffi::c::Char]], return: ffi::c::Ptr[ffi::c::Void]}]	c=r2i
-field	struct v3_ext_method	13	usr_data	pointer	96	8	-	void *usr_data	ffi::c::Ptr[ffi::c::Void]	c=usr_data
+field	struct v3_ext_method	0	ext_nid	scalar	0	4	-	int ext_nid	std::ffi::c::Int	c=ext_nid
+field	struct v3_ext_method	1	ext_flags	scalar	4	4	-	int ext_flags	std::ffi::c::Int	c=ext_flags
+field	struct v3_ext_method	2	it	pointer	8	8	-	ASN1_ITEM_EXP *it	std::ffi::c::Ptr[ASN1_ITEM]	c=it
+field	struct v3_ext_method	3	ext_new	function-pointer	16	8	-	X509V3_EXT_NEW ext_new	std::ffi::c::FnPtr[Fn{args: [], return: std::ffi::c::Ptr[std::ffi::c::Void]}]	c=ext_new
+field	struct v3_ext_method	4	ext_free	function-pointer	24	8	-	X509V3_EXT_FREE ext_free	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Void]], return: unit}]	c=ext_free
+field	struct v3_ext_method	5	d2i	function-pointer	32	8	-	X509V3_EXT_D2I d2i	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Void], std::ffi::c::Ptr[std::ffi::c::Ptr[std::ffi::c::UChar]], std::ffi::c::Long], return: std::ffi::c::Ptr[std::ffi::c::Void]}]	c=d2i
+field	struct v3_ext_method	6	i2d	function-pointer	40	8	-	X509V3_EXT_I2D i2d	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Void], std::ffi::c::Ptr[std::ffi::c::Ptr[std::ffi::c::UChar]]], return: std::ffi::c::Int}]	c=i2d
+field	struct v3_ext_method	7	i2s	function-pointer	48	8	-	X509V3_EXT_I2S i2s	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[X509V3_EXT_METHOD], std::ffi::c::Ptr[std::ffi::c::Void]], return: std::ffi::c::Ptr[std::ffi::c::Char]}]	c=i2s
+field	struct v3_ext_method	8	s2i	function-pointer	56	8	-	X509V3_EXT_S2I s2i	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[X509V3_EXT_METHOD], std::ffi::c::Ptr[X509V3_CTX], std::ffi::c::Ptr[std::ffi::c::Char]], return: std::ffi::c::Ptr[std::ffi::c::Void]}]	c=s2i
+field	struct v3_ext_method	9	i2v	function-pointer	64	8	-	X509V3_EXT_I2V i2v	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[X509V3_EXT_METHOD], std::ffi::c::Ptr[std::ffi::c::Void], std::ffi::c::Ptr[stack_st_CONF_VALUE]], return: std::ffi::c::Ptr[stack_st_CONF_VALUE]}]	c=i2v
+field	struct v3_ext_method	10	v2i	function-pointer	72	8	-	X509V3_EXT_V2I v2i	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[X509V3_EXT_METHOD], std::ffi::c::Ptr[X509V3_CTX], std::ffi::c::Ptr[stack_st_CONF_VALUE]], return: std::ffi::c::Ptr[std::ffi::c::Void]}]	c=v2i
+field	struct v3_ext_method	11	i2r	function-pointer	80	8	-	X509V3_EXT_I2R i2r	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[X509V3_EXT_METHOD], std::ffi::c::Ptr[std::ffi::c::Void], std::ffi::c::Ptr[BIO], std::ffi::c::Int], return: std::ffi::c::Int}]	c=i2r
+field	struct v3_ext_method	12	r2i	function-pointer	88	8	-	X509V3_EXT_R2I r2i	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[X509V3_EXT_METHOD], std::ffi::c::Ptr[X509V3_CTX], std::ffi::c::Ptr[std::ffi::c::Char]], return: std::ffi::c::Ptr[std::ffi::c::Void]}]	c=r2i
+field	struct v3_ext_method	13	usr_data	pointer	96	8	-	void *usr_data	std::ffi::c::Ptr[std::ffi::c::Void]	c=usr_data
 record	struct v3_ext_ctx	-	X509V3_CTX	layout-direct	-	48	8	struct v3_ext_ctx	-	typedefs=X509V3_CTX; identity=boringssl::ctypes::X509V3_CTX; header=include/openssl/x509.h:4877; pointed-by=10
-field	struct v3_ext_ctx	0	flags	scalar	0	4	-	int flags	ffi::c::Int	c=flags
-field	struct v3_ext_ctx	1	issuer_cert	pointer	8	8	-	const X509 *issuer_cert	ffi::c::Ptr[X509]	c=issuer_cert
-field	struct v3_ext_ctx	2	subject_cert	pointer	16	8	-	const X509 *subject_cert	ffi::c::Ptr[X509]	c=subject_cert
-field	struct v3_ext_ctx	3	subject_req	pointer	24	8	-	const X509_REQ *subject_req	ffi::c::Ptr[X509_REQ]	c=subject_req
-field	struct v3_ext_ctx	4	crl	pointer	32	8	-	const X509_CRL *crl	ffi::c::Ptr[X509_CRL]	c=crl
-field	struct v3_ext_ctx	5	db	pointer	40	8	-	const CONF *db	ffi::c::Ptr[CONF]	c=db
+field	struct v3_ext_ctx	0	flags	scalar	0	4	-	int flags	std::ffi::c::Int	c=flags
+field	struct v3_ext_ctx	1	issuer_cert	pointer	8	8	-	const X509 *issuer_cert	std::ffi::c::Ptr[X509]	c=issuer_cert
+field	struct v3_ext_ctx	2	subject_cert	pointer	16	8	-	const X509 *subject_cert	std::ffi::c::Ptr[X509]	c=subject_cert
+field	struct v3_ext_ctx	3	subject_req	pointer	24	8	-	const X509_REQ *subject_req	std::ffi::c::Ptr[X509_REQ]	c=subject_req
+field	struct v3_ext_ctx	4	crl	pointer	32	8	-	const X509_CRL *crl	std::ffi::c::Ptr[X509_CRL]	c=crl
+field	struct v3_ext_ctx	5	db	pointer	40	8	-	const CONF *db	std::ffi::c::Ptr[CONF]	c=db
 record	struct X509_algor_st	-	X509_ALGOR	layout-direct	-	16	8	struct X509_algor_st	-	typedefs=X509_ALGOR; identity=boringssl::ctypes::X509_ALGOR; header=include/openssl/x509.h:5296; pointed-by=34
-field	struct X509_algor_st	0	algorithm	pointer	0	8	-	ASN1_OBJECT *algorithm	ffi::c::Ptr[ASN1_OBJECT]	c=algorithm
-field	struct X509_algor_st	1	parameter	pointer	8	8	-	ASN1_TYPE *parameter	ffi::c::Ptr[ASN1_TYPE]	c=parameter
+field	struct X509_algor_st	0	algorithm	pointer	0	8	-	ASN1_OBJECT *algorithm	std::ffi::c::Ptr[ASN1_OBJECT]	c=algorithm
+field	struct X509_algor_st	1	parameter	pointer	8	8	-	ASN1_TYPE *parameter	std::ffi::c::Ptr[ASN1_TYPE]	c=parameter
 record	struct rand_meth_st	-	-	layout-blocked	-	48	8	struct rand_meth_st	-	typedefs=RAND_METHOD; identity=boringssl::ctypes::RAND_METHOD; header=include/openssl/rand.h:112; blockers=unsupported-pointer: field add: callback argument 3: double (double) (unsupported-callback-signature); roots=unsupported-pointer; pointed-by=4
-field	struct rand_meth_st	0	seed	function-pointer	0	8	-	void (*seed)(const void *buf, int num)	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Int], return: unit}]	c=seed
-field	struct rand_meth_st	1	bytes	function-pointer	8	8	-	int (*bytes)(uint8_t *buf, size_t num)	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::UChar], ffi::c::ULong], return: ffi::c::Int}]	c=bytes
-field	struct rand_meth_st	2	cleanup	function-pointer	16	8	-	void (*cleanup)(void)	ffi::c::FnPtr[Fn{args: [], return: unit}]	c=cleanup
+field	struct rand_meth_st	0	seed	function-pointer	0	8	-	void (*seed)(const void *buf, int num)	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Void], std::ffi::c::Int], return: unit}]	c=seed
+field	struct rand_meth_st	1	bytes	function-pointer	8	8	-	int (*bytes)(uint8_t *buf, size_t num)	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::UChar], std::ffi::c::ULong], return: std::ffi::c::Int}]	c=bytes
+field	struct rand_meth_st	2	cleanup	function-pointer	16	8	-	void (*cleanup)(void)	std::ffi::c::FnPtr[Fn{args: [], return: unit}]	c=cleanup
 field	struct rand_meth_st	3	add	unsupported-pointer	24	8	-	void (*add)(const void *buf, int num, double entropy)	-	c=add; blockers=unsupported-pointer: callback argument 3: double (double) (unsupported-callback-signature)
-field	struct rand_meth_st	4	pseudorand	function-pointer	32	8	-	int (*pseudorand)(uint8_t *buf, size_t num)	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::UChar], ffi::c::ULong], return: ffi::c::Int}]	c=pseudorand
-field	struct rand_meth_st	5	status	function-pointer	40	8	-	int (*status)(void)	ffi::c::FnPtr[Fn{args: [], return: ffi::c::Int}]	c=status
+field	struct rand_meth_st	4	pseudorand	function-pointer	32	8	-	int (*pseudorand)(uint8_t *buf, size_t num)	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::UChar], std::ffi::c::ULong], return: std::ffi::c::Int}]	c=pseudorand
+field	struct rand_meth_st	5	status	function-pointer	40	8	-	int (*status)(void)	std::ffi::c::FnPtr[Fn{args: [], return: std::ffi::c::Int}]	c=status
 record	struct rc4_key_st	-	RC4_KEY	layout-direct	-	1032	4	struct rc4_key_st	-	typedefs=RC4_KEY; identity=boringssl::ctypes::RC4_KEY; header=include/openssl/rc4.h:28; pointed-by=2
-field	struct rc4_key_st	0	x	scalar	0	4	-	uint32_t x	ffi::c::UInt	c=x
-field	struct rc4_key_st	1	y	scalar	4	4	-	uint32_t y	ffi::c::UInt	c=y
-field	struct rc4_key_st	2	data	array	8	1024	-	uint32_t data[256]	array 256 of ffi::c::UInt	c=data; element=scalar uint32_t; bounds=256; extent=256
+field	struct rc4_key_st	0	x	scalar	0	4	-	uint32_t x	std::ffi::c::UInt	c=x
+field	struct rc4_key_st	1	y	scalar	4	4	-	uint32_t y	std::ffi::c::UInt	c=y
+field	struct rc4_key_st	2	data	array	8	1024	-	uint32_t data[256]	array 256 of std::ffi::c::UInt	c=data; element=scalar uint32_t; bounds=256; extent=256
 record	struct RIPEMD160state_st	-	RIPEMD160_CTX	layout-direct	-	96	4	struct RIPEMD160state_st	-	typedefs=RIPEMD160_CTX; identity=boringssl::ctypes::RIPEMD160_CTX; header=include/openssl/ripemd.h:34; pointed-by=4
-field	struct RIPEMD160state_st	0	h	array	0	20	-	uint32_t h[5]	array 5 of ffi::c::UInt	c=h; element=scalar uint32_t; bounds=5; extent=5
-field	struct RIPEMD160state_st	1	Nl	scalar	20	4	-	uint32_t Nl	ffi::c::UInt	c=Nl
-field	struct RIPEMD160state_st	2	Nh	scalar	24	4	-	uint32_t Nh	ffi::c::UInt	c=Nh
-field	struct RIPEMD160state_st	3	data	array	28	64	-	uint8_t data[64]	array 64 of ffi::c::UChar	c=data; element=char uint8_t; bounds=64; extent=64
-field	struct RIPEMD160state_st	4	num	scalar	92	4	-	unsigned int num	ffi::c::UInt	c=num
+field	struct RIPEMD160state_st	0	h	array	0	20	-	uint32_t h[5]	array 5 of std::ffi::c::UInt	c=h; element=scalar uint32_t; bounds=5; extent=5
+field	struct RIPEMD160state_st	1	Nl	scalar	20	4	-	uint32_t Nl	std::ffi::c::UInt	c=Nl
+field	struct RIPEMD160state_st	2	Nh	scalar	24	4	-	uint32_t Nh	std::ffi::c::UInt	c=Nh
+field	struct RIPEMD160state_st	3	data	array	28	64	-	uint8_t data[64]	array 64 of std::ffi::c::UChar	c=data; element=char uint8_t; bounds=64; extent=64
+field	struct RIPEMD160state_st	4	num	scalar	92	4	-	unsigned int num	std::ffi::c::UInt	c=num
 record	struct trust_token_st	-	TRUST_TOKEN	layout-direct	-	16	8	struct trust_token_st	-	typedefs=TRUST_TOKEN; identity=boringssl::ctypes::TRUST_TOKEN; header=include/openssl/trust_token.h:63; pointed-by=16
-field	struct trust_token_st	0	data	pointer	0	8	-	uint8_t *data	ffi::c::Ptr[ffi::c::UChar]	c=data
-field	struct trust_token_st	1	len	scalar	8	8	-	size_t len	ffi::c::ULong	c=len
+field	struct trust_token_st	0	data	pointer	0	8	-	uint8_t *data	std::ffi::c::Ptr[std::ffi::c::UChar]	c=data
+field	struct trust_token_st	1	len	scalar	8	8	-	size_t len	std::ffi::c::ULong	c=len
 record	union anon@xwing.h:35	-	XWING_private_key_opaque	layout-direct	-	7840	2	__typeof__(((struct XWING_private_key *)0)->opaque)	-	identity=-; header=include/openssl/xwing.h:35
-field	union anon@xwing.h:35	0	bytes	array	0	7840	-	uint8_t bytes[512 * (3 + 3 + 9) + 32 + 32 + 32 + 32 + 32]	array 7840 of ffi::c::UChar	c=bytes; element=char uint8_t; bounds=512 * (3 + 3 + 9) + 32 + 32 + 32 + 32 + 32; extent=7840
-field	union anon@xwing.h:35	1	alignment	scalar	0	2	-	uint16_t alignment	ffi::c::UShort	c=alignment
+field	union anon@xwing.h:35	0	bytes	array	0	7840	-	uint8_t bytes[512 * (3 + 3 + 9) + 32 + 32 + 32 + 32 + 32]	array 7840 of std::ffi::c::UChar	c=bytes; element=char uint8_t; bounds=512 * (3 + 3 + 9) + 32 + 32 + 32 + 32 + 32; extent=7840
+field	union anon@xwing.h:35	1	alignment	scalar	0	2	-	uint16_t alignment	std::ffi::c::UShort	c=alignment
 record	struct XWING_private_key	-	XWING_private_key	layout-direct	-	7840	2	struct XWING_private_key	-	identity=boringssl::ctypes::XWING_private_key; header=include/openssl/xwing.h:34; deps=union anon@xwing.h:35; pointed-by=5
 field	struct XWING_private_key	0	opaque	nested	0	7840	-	union anon@xwing.h:35 opaque	XWING_private_key_opaque	c=opaque
 record	struct ssl_private_key_method_st	-	SSL_PRIVATE_KEY_METHOD	layout-direct	-	24	8	struct ssl_private_key_method_st	-	typedefs=SSL_PRIVATE_KEY_METHOD; identity=boringssl::ctypes::SSL_PRIVATE_KEY_METHOD; header=include/openssl/ssl.h:1456; pointed-by=6
-field	struct ssl_private_key_method_st	0	sign	function-pointer	0	8	-	enum ssl_private_key_result_t (*sign)(SSL *ssl, uint8_t *out, size_t *out_len, size_t max_out, uint16_t signature_algorithm, const uint8_t *in, size_t in_len)	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[SSL], ffi::c::Ptr[ffi::c::UChar], ffi::c::Ptr[ffi::c::ULong], ffi::c::ULong, ffi::c::UShort, ffi::c::Ptr[ffi::c::UChar], ffi::c::ULong], return: ffi::c::UInt}]	c=sign
-field	struct ssl_private_key_method_st	1	decrypt	function-pointer	8	8	-	enum ssl_private_key_result_t (*decrypt)(SSL *ssl, uint8_t *out, size_t *out_len, size_t max_out, const uint8_t *in, size_t in_len)	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[SSL], ffi::c::Ptr[ffi::c::UChar], ffi::c::Ptr[ffi::c::ULong], ffi::c::ULong, ffi::c::Ptr[ffi::c::UChar], ffi::c::ULong], return: ffi::c::UInt}]	c=decrypt
-field	struct ssl_private_key_method_st	2	complete	function-pointer	16	8	-	enum ssl_private_key_result_t (*complete)(SSL *ssl, uint8_t *out, size_t *out_len, size_t max_out)	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[SSL], ffi::c::Ptr[ffi::c::UChar], ffi::c::Ptr[ffi::c::ULong], ffi::c::ULong], return: ffi::c::UInt}]	c=complete
+field	struct ssl_private_key_method_st	0	sign	function-pointer	0	8	-	enum ssl_private_key_result_t (*sign)(SSL *ssl, uint8_t *out, size_t *out_len, size_t max_out, uint16_t signature_algorithm, const uint8_t *in, size_t in_len)	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[SSL], std::ffi::c::Ptr[std::ffi::c::UChar], std::ffi::c::Ptr[std::ffi::c::ULong], std::ffi::c::ULong, std::ffi::c::UShort, std::ffi::c::Ptr[std::ffi::c::UChar], std::ffi::c::ULong], return: std::ffi::c::UInt}]	c=sign
+field	struct ssl_private_key_method_st	1	decrypt	function-pointer	8	8	-	enum ssl_private_key_result_t (*decrypt)(SSL *ssl, uint8_t *out, size_t *out_len, size_t max_out, const uint8_t *in, size_t in_len)	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[SSL], std::ffi::c::Ptr[std::ffi::c::UChar], std::ffi::c::Ptr[std::ffi::c::ULong], std::ffi::c::ULong, std::ffi::c::Ptr[std::ffi::c::UChar], std::ffi::c::ULong], return: std::ffi::c::UInt}]	c=decrypt
+field	struct ssl_private_key_method_st	2	complete	function-pointer	16	8	-	enum ssl_private_key_result_t (*complete)(SSL *ssl, uint8_t *out, size_t *out_len, size_t max_out)	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[SSL], std::ffi::c::Ptr[std::ffi::c::UChar], std::ffi::c::Ptr[std::ffi::c::ULong], std::ffi::c::ULong], return: std::ffi::c::UInt}]	c=complete
 record	struct ssl_ticket_aead_method_st	-	SSL_TICKET_AEAD_METHOD	layout-direct	-	24	8	struct ssl_ticket_aead_method_st	-	typedefs=SSL_TICKET_AEAD_METHOD; identity=boringssl::ctypes::SSL_TICKET_AEAD_METHOD; header=include/openssl/ssl.h:2648; pointed-by=1
-field	struct ssl_ticket_aead_method_st	0	max_overhead	function-pointer	0	8	-	size_t (*max_overhead)(SSL *ssl)	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[SSL]], return: ffi::c::ULong}]	c=max_overhead
-field	struct ssl_ticket_aead_method_st	1	seal	function-pointer	8	8	-	int (*seal)(SSL *ssl, uint8_t *out, size_t *out_len, size_t max_out_len, const uint8_t *in, size_t in_len)	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[SSL], ffi::c::Ptr[ffi::c::UChar], ffi::c::Ptr[ffi::c::ULong], ffi::c::ULong, ffi::c::Ptr[ffi::c::UChar], ffi::c::ULong], return: ffi::c::Int}]	c=seal
-field	struct ssl_ticket_aead_method_st	2	open	function-pointer	16	8	-	enum ssl_ticket_aead_result_t (*open)(SSL *ssl, uint8_t *out, size_t *out_len, size_t max_out_len, const uint8_t *in, size_t in_len)	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[SSL], ffi::c::Ptr[ffi::c::UChar], ffi::c::Ptr[ffi::c::ULong], ffi::c::ULong, ffi::c::Ptr[ffi::c::UChar], ffi::c::ULong], return: ffi::c::UInt}]	c=open
+field	struct ssl_ticket_aead_method_st	0	max_overhead	function-pointer	0	8	-	size_t (*max_overhead)(SSL *ssl)	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[SSL]], return: std::ffi::c::ULong}]	c=max_overhead
+field	struct ssl_ticket_aead_method_st	1	seal	function-pointer	8	8	-	int (*seal)(SSL *ssl, uint8_t *out, size_t *out_len, size_t max_out_len, const uint8_t *in, size_t in_len)	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[SSL], std::ffi::c::Ptr[std::ffi::c::UChar], std::ffi::c::Ptr[std::ffi::c::ULong], std::ffi::c::ULong, std::ffi::c::Ptr[std::ffi::c::UChar], std::ffi::c::ULong], return: std::ffi::c::Int}]	c=seal
+field	struct ssl_ticket_aead_method_st	2	open	function-pointer	16	8	-	enum ssl_ticket_aead_result_t (*open)(SSL *ssl, uint8_t *out, size_t *out_len, size_t max_out_len, const uint8_t *in, size_t in_len)	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[SSL], std::ffi::c::Ptr[std::ffi::c::UChar], std::ffi::c::Ptr[std::ffi::c::ULong], std::ffi::c::ULong, std::ffi::c::Ptr[std::ffi::c::UChar], std::ffi::c::ULong], return: std::ffi::c::UInt}]	c=open
 record	struct srtp_protection_profile_st	-	SRTP_PROTECTION_PROFILE	layout-direct	-	16	8	struct srtp_protection_profile_st	-	typedefs=SRTP_PROTECTION_PROFILE; identity=boringssl::ctypes::SRTP_PROTECTION_PROFILE; header=include/openssl/ssl.h:3872; pointed-by=11
-field	struct srtp_protection_profile_st	0	name	pointer	0	8	-	const char *name	ffi::c::Ptr[ffi::c::Char]	c=name
-field	struct srtp_protection_profile_st	1	id	scalar	8	8	-	unsigned long id	ffi::c::ULong	c=id
+field	struct srtp_protection_profile_st	0	name	pointer	0	8	-	const char *name	std::ffi::c::Ptr[std::ffi::c::Char]	c=name
+field	struct srtp_protection_profile_st	1	id	scalar	8	8	-	unsigned long id	std::ffi::c::ULong	c=id
 record	struct ssl_quic_method_st	-	SSL_QUIC_METHOD	layout-direct	-	40	8	struct ssl_quic_method_st	-	typedefs=SSL_QUIC_METHOD; identity=boringssl::ctypes::SSL_QUIC_METHOD; header=include/openssl/ssl.h:4388; pointed-by=2
-field	struct ssl_quic_method_st	0	set_read_secret	function-pointer	0	8	-	int (*set_read_secret)(SSL *ssl, enum ssl_encryption_level_t level, const SSL_CIPHER *cipher, const uint8_t *secret, size_t secret_len)	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[SSL], ffi::c::UInt, ffi::c::Ptr[SSL_CIPHER], ffi::c::Ptr[ffi::c::UChar], ffi::c::ULong], return: ffi::c::Int}]	c=set_read_secret
-field	struct ssl_quic_method_st	1	set_write_secret	function-pointer	8	8	-	int (*set_write_secret)(SSL *ssl, enum ssl_encryption_level_t level, const SSL_CIPHER *cipher, const uint8_t *secret, size_t secret_len)	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[SSL], ffi::c::UInt, ffi::c::Ptr[SSL_CIPHER], ffi::c::Ptr[ffi::c::UChar], ffi::c::ULong], return: ffi::c::Int}]	c=set_write_secret
-field	struct ssl_quic_method_st	2	add_handshake_data	function-pointer	16	8	-	int (*add_handshake_data)(SSL *ssl, enum ssl_encryption_level_t level, const uint8_t *data, size_t len)	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[SSL], ffi::c::UInt, ffi::c::Ptr[ffi::c::UChar], ffi::c::ULong], return: ffi::c::Int}]	c=add_handshake_data
-field	struct ssl_quic_method_st	3	flush_flight	function-pointer	24	8	-	int (*flush_flight)(SSL *ssl)	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[SSL]], return: ffi::c::Int}]	c=flush_flight
-field	struct ssl_quic_method_st	4	send_alert	function-pointer	32	8	-	int (*send_alert)(SSL *ssl, enum ssl_encryption_level_t level, uint8_t alert)	ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[SSL], ffi::c::UInt, ffi::c::UChar], return: ffi::c::Int}]	c=send_alert
+field	struct ssl_quic_method_st	0	set_read_secret	function-pointer	0	8	-	int (*set_read_secret)(SSL *ssl, enum ssl_encryption_level_t level, const SSL_CIPHER *cipher, const uint8_t *secret, size_t secret_len)	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[SSL], std::ffi::c::UInt, std::ffi::c::Ptr[SSL_CIPHER], std::ffi::c::Ptr[std::ffi::c::UChar], std::ffi::c::ULong], return: std::ffi::c::Int}]	c=set_read_secret
+field	struct ssl_quic_method_st	1	set_write_secret	function-pointer	8	8	-	int (*set_write_secret)(SSL *ssl, enum ssl_encryption_level_t level, const SSL_CIPHER *cipher, const uint8_t *secret, size_t secret_len)	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[SSL], std::ffi::c::UInt, std::ffi::c::Ptr[SSL_CIPHER], std::ffi::c::Ptr[std::ffi::c::UChar], std::ffi::c::ULong], return: std::ffi::c::Int}]	c=set_write_secret
+field	struct ssl_quic_method_st	2	add_handshake_data	function-pointer	16	8	-	int (*add_handshake_data)(SSL *ssl, enum ssl_encryption_level_t level, const uint8_t *data, size_t len)	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[SSL], std::ffi::c::UInt, std::ffi::c::Ptr[std::ffi::c::UChar], std::ffi::c::ULong], return: std::ffi::c::Int}]	c=add_handshake_data
+field	struct ssl_quic_method_st	3	flush_flight	function-pointer	24	8	-	int (*flush_flight)(SSL *ssl)	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[SSL]], return: std::ffi::c::Int}]	c=flush_flight
+field	struct ssl_quic_method_st	4	send_alert	function-pointer	32	8	-	int (*send_alert)(SSL *ssl, enum ssl_encryption_level_t level, uint8_t alert)	std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[SSL], std::ffi::c::UInt, std::ffi::c::UChar], return: std::ffi::c::Int}]	c=send_alert
 record	struct ssl_early_callback_ctx	-	SSL_CLIENT_HELLO	layout-direct	-	128	8	struct ssl_early_callback_ctx	-	typedefs=SSL_CLIENT_HELLO; identity=boringssl::ctypes::SSL_CLIENT_HELLO; header=include/openssl/ssl.h:5436; pointed-by=2
-field	struct ssl_early_callback_ctx	0	ssl	pointer	0	8	-	SSL *ssl	ffi::c::Ptr[SSL]	c=ssl
-field	struct ssl_early_callback_ctx	1	client_hello	pointer	8	8	-	const uint8_t *client_hello	ffi::c::Ptr[ffi::c::UChar]	c=client_hello
-field	struct ssl_early_callback_ctx	2	client_hello_len	scalar	16	8	-	size_t client_hello_len	ffi::c::ULong	c=client_hello_len
-field	struct ssl_early_callback_ctx	3	version	scalar	24	2	-	uint16_t version	ffi::c::UShort	c=version
-field	struct ssl_early_callback_ctx	4	random	pointer	32	8	-	const uint8_t *random	ffi::c::Ptr[ffi::c::UChar]	c=random
-field	struct ssl_early_callback_ctx	5	random_len	scalar	40	8	-	size_t random_len	ffi::c::ULong	c=random_len
-field	struct ssl_early_callback_ctx	6	session_id	pointer	48	8	-	const uint8_t *session_id	ffi::c::Ptr[ffi::c::UChar]	c=session_id
-field	struct ssl_early_callback_ctx	7	session_id_len	scalar	56	8	-	size_t session_id_len	ffi::c::ULong	c=session_id_len
-field	struct ssl_early_callback_ctx	8	dtls_cookie	pointer	64	8	-	const uint8_t *dtls_cookie	ffi::c::Ptr[ffi::c::UChar]	c=dtls_cookie
-field	struct ssl_early_callback_ctx	9	dtls_cookie_len	scalar	72	8	-	size_t dtls_cookie_len	ffi::c::ULong	c=dtls_cookie_len
-field	struct ssl_early_callback_ctx	10	cipher_suites	pointer	80	8	-	const uint8_t *cipher_suites	ffi::c::Ptr[ffi::c::UChar]	c=cipher_suites
-field	struct ssl_early_callback_ctx	11	cipher_suites_len	scalar	88	8	-	size_t cipher_suites_len	ffi::c::ULong	c=cipher_suites_len
-field	struct ssl_early_callback_ctx	12	compression_methods	pointer	96	8	-	const uint8_t *compression_methods	ffi::c::Ptr[ffi::c::UChar]	c=compression_methods
-field	struct ssl_early_callback_ctx	13	compression_methods_len	scalar	104	8	-	size_t compression_methods_len	ffi::c::ULong	c=compression_methods_len
-field	struct ssl_early_callback_ctx	14	extensions	pointer	112	8	-	const uint8_t *extensions	ffi::c::Ptr[ffi::c::UChar]	c=extensions
-field	struct ssl_early_callback_ctx	15	extensions_len	scalar	120	8	-	size_t extensions_len	ffi::c::ULong	c=extensions_len
+field	struct ssl_early_callback_ctx	0	ssl	pointer	0	8	-	SSL *ssl	std::ffi::c::Ptr[SSL]	c=ssl
+field	struct ssl_early_callback_ctx	1	client_hello	pointer	8	8	-	const uint8_t *client_hello	std::ffi::c::Ptr[std::ffi::c::UChar]	c=client_hello
+field	struct ssl_early_callback_ctx	2	client_hello_len	scalar	16	8	-	size_t client_hello_len	std::ffi::c::ULong	c=client_hello_len
+field	struct ssl_early_callback_ctx	3	version	scalar	24	2	-	uint16_t version	std::ffi::c::UShort	c=version
+field	struct ssl_early_callback_ctx	4	random	pointer	32	8	-	const uint8_t *random	std::ffi::c::Ptr[std::ffi::c::UChar]	c=random
+field	struct ssl_early_callback_ctx	5	random_len	scalar	40	8	-	size_t random_len	std::ffi::c::ULong	c=random_len
+field	struct ssl_early_callback_ctx	6	session_id	pointer	48	8	-	const uint8_t *session_id	std::ffi::c::Ptr[std::ffi::c::UChar]	c=session_id
+field	struct ssl_early_callback_ctx	7	session_id_len	scalar	56	8	-	size_t session_id_len	std::ffi::c::ULong	c=session_id_len
+field	struct ssl_early_callback_ctx	8	dtls_cookie	pointer	64	8	-	const uint8_t *dtls_cookie	std::ffi::c::Ptr[std::ffi::c::UChar]	c=dtls_cookie
+field	struct ssl_early_callback_ctx	9	dtls_cookie_len	scalar	72	8	-	size_t dtls_cookie_len	std::ffi::c::ULong	c=dtls_cookie_len
+field	struct ssl_early_callback_ctx	10	cipher_suites	pointer	80	8	-	const uint8_t *cipher_suites	std::ffi::c::Ptr[std::ffi::c::UChar]	c=cipher_suites
+field	struct ssl_early_callback_ctx	11	cipher_suites_len	scalar	88	8	-	size_t cipher_suites_len	std::ffi::c::ULong	c=cipher_suites_len
+field	struct ssl_early_callback_ctx	12	compression_methods	pointer	96	8	-	const uint8_t *compression_methods	std::ffi::c::Ptr[std::ffi::c::UChar]	c=compression_methods
+field	struct ssl_early_callback_ctx	13	compression_methods_len	scalar	104	8	-	size_t compression_methods_len	std::ffi::c::ULong	c=compression_methods_len
+field	struct ssl_early_callback_ctx	14	extensions	pointer	112	8	-	const uint8_t *extensions	std::ffi::c::Ptr[std::ffi::c::UChar]	c=extensions
+field	struct ssl_early_callback_ctx	15	extensions_len	scalar	120	8	-	size_t extensions_len	std::ffi::c::ULong	c=extensions_len
 record	struct ssl_comp_st	-	SSL_COMP	layout-direct	-	24	8	struct ssl_comp_st	-	typedefs=SSL_COMP; identity=boringssl::ctypes::SSL_COMP; header=include/openssl/ssl.h:6041; pointed-by=12
-field	struct ssl_comp_st	0	id	scalar	0	4	-	int id	ffi::c::Int	c=id
-field	struct ssl_comp_st	1	name	pointer	8	8	-	const char *name	ffi::c::Ptr[ffi::c::Char]	c=name
-field	struct ssl_comp_st	2	method	pointer	16	8	-	char *method	ffi::c::Ptr[ffi::c::Char]	c=method
+field	struct ssl_comp_st	0	id	scalar	0	4	-	int id	std::ffi::c::Int	c=id
+field	struct ssl_comp_st	1	name	pointer	8	8	-	const char *name	std::ffi::c::Ptr[std::ffi::c::Char]	c=name
+field	struct ssl_comp_st	2	method	pointer	16	8	-	char *method	std::ffi::c::Ptr[std::ffi::c::Char]	c=method
 record	struct ASN1_TLC_st	-	-	opaque-only	-	-	-	-	-	typedefs=ASN1_TLC; identity=-; header=include/openssl/asn1t.h:429
 record	struct ASN1_VALUE_st	-	-	opaque-only	-	-	-	-	-	typedefs=ASN1_VALUE; identity=boringssl::ctypes::ASN1_VALUE; header=include/openssl/asn1.h:241; pointed-by=14
 record	struct CMS_ContentInfo_st	-	-	opaque-only	-	-	-	-	-	typedefs=CMS_ContentInfo; identity=boringssl::ctypes::CMS_ContentInfo; header=include/openssl/base.h:257; pointed-by=6

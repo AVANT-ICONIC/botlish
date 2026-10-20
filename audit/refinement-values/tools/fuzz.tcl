@@ -91,32 +91,32 @@ set validating [dict get $options -validators]
 proc pick {list} { lindex $list [expr {int(rand() * [llength $list])}] }
 proc chance {p} { expr {rand() < $p} }
 
-set prelude {import str
+set prelude {import std::str
 
 refined type R1 = str
 refined type R2 = str
 refined type R3 = R1
 
 fn p1?(s: str) -> bool proves s: R1:
-    str::length(s) > 2
+    std::str::length(s) > 2
 
 fn q1?(s: str) -> bool proves s: R1:
-    str::length(s) > 3
+    std::str::length(s) > 3
 
 fn p2?(s: str) -> bool proves s: R2:
-    str::length(s) < 5
+    std::str::length(s) < 5
 
 fn p3?(s: R1) -> bool proves s: R3:
-    str::length(s) > 4
+    std::str::length(s) > 4
 
 fn n1?(s: str) -> bool proves s: R1:
-    str::length(s) > 2 and hash(s) == hash(s)
+    std::str::length(s) > 2 and hash(s) == hash(s)
 
 fn need1(x: R1) -> int:
-    str::length(x)
+    std::str::length(x)
 
 fn need2(x: R2) -> int:
-    10 * str::length(x)
+    10 * std::str::length(x)
 
 fn need3(x: R3) -> int:
     100 * need1(x)
@@ -130,22 +130,22 @@ if {$validating} {
     append prelude {error Invalid
 
 fn validate_r1(s: str) -> unit proves s: R1 errors Invalid:
-    if str::length(s) <= 2:
+    if std::str::length(s) <= 2:
         fail Invalid
     unit
 
 fn validate_q1(s: str) -> unit proves s: R1 errors Invalid:
-    if str::length(s) <= 3:
+    if std::str::length(s) <= 3:
         fail Invalid
     unit
 
 fn validate_r2(s: str) -> unit proves s: R2 errors Invalid:
-    if str::length(s) >= 5:
+    if std::str::length(s) >= 5:
         fail Invalid
     unit
 
 fn validate_r3(s: R1) -> unit proves s: R3 errors Invalid:
-    if str::length(s) <= 4:
+    if std::str::length(s) <= 4:
         fail Invalid
     unit
 

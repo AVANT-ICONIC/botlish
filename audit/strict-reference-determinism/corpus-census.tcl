@@ -2,7 +2,7 @@
 #
 #   tclsh9.0 audit/strict-reference-determinism/corpus-census.tcl [-root DIR]
 #
-# Builds the HIR of every program under bench/, examples/ and lib/ (a
+# Builds the HIR of every program under bench/, examples/ and stdlib/ (a
 # non-strict build, so a program the compiler already rejects is still
 # audited) and lists every reference that violates the strict-reference
 # invariant (refcheck.tcl), grouped by source area and shape. Run against the
@@ -49,7 +49,7 @@ proc buildModule {name} {
 
 set areas {
     {production  examples/surface/*.bot}
-    {stdlib      lib/*.bot}
+    {stdlib      stdlib/*.bot}
     {corpus      examples/stdlib/*.bot}
     {benchmark   bench/*.bot bench/*.ir}
     {hir-fixture examples/hir/*.hir examples/*.ir}

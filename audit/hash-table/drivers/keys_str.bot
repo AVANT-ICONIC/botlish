@@ -1,7 +1,7 @@
 # keys (String): the String key kinds of SPEC.md section 5, and the trace
 # syntax. The experiment copies this file beside a driver as `keys.bot`.
-import list
-import str
+import std::list
+import std::str
 
 digit_chars = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f']
 

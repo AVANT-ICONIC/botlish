@@ -6,7 +6,7 @@ machine-code bytes: 20986 (per function: 935 365 1713 1425 527 932 541 988 504 1
 
 functions:
   0 <program entry>: nir-regs=33
-  1 web::uri_escape_text<generic>: nir-regs=10
+  1 std::web::uri_escape_text<generic>: nir-regs=10
   2 high_nibble<generic>: nir-regs=93
   3 is_unreserved<generic>: nir-regs=62
   4 hex_pair<generic>: nir-regs=10
@@ -51,7 +51,7 @@ GC roots (refined-checks.asm's NIR ids match roots.txt's "function N"):
     depth reservation: no
     storage: native frame
 
-  function 1 "web::uri_escape_text"
+  function 1 "std::web::uri_escape_text"
     NIR regs: 10
     raw regs: 1
     managed-capable regs: 9

@@ -3,7 +3,7 @@
 # The thunked APIs of generic/tcl.h (static inline functions, table-redirected
 # names, macros): externs of the C wrappers in the shim library (C-BINDGEN.md,
 # "Thunks"). Build the shim with `tools/c-bindgen.tcl build`.
-import ffi::c
+import std::ffi::c
 import tclstubs::ctypes
 
 extern c library "botlish_shim_tclstubs_2627031d"
@@ -11,52 +11,52 @@ extern c library "tclstub9.0"
 
 # C: void Tcl_MainEx(Tcl_Size argc, char **argv, Tcl_AppInitProc *appInitProc, Tcl_Interp *interp), shadowed by a function-like macro of its name
 extern c fn Tcl_MainEx named "botlish_tclstubs_Tcl_MainEx"(
-    argc: ffi::c::Long,
-    argv: ffi::c::Ptr[ffi::c::Ptr[ffi::c::Char]],
-    appInitProc: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[tclstubs::ctypes::Tcl_Interp]], return: ffi::c::Int}],
-    interp: ffi::c::Ptr[tclstubs::ctypes::Tcl_Interp]
+    argc: std::ffi::c::Long,
+    argv: std::ffi::c::Ptr[std::ffi::c::Ptr[std::ffi::c::Char]],
+    appInitProc: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[tclstubs::ctypes::Tcl_Interp]], return: std::ffi::c::Int}],
+    interp: std::ffi::c::Ptr[tclstubs::ctypes::Tcl_Interp]
 ) -> unit
 
 # C: const char *Tcl_InitSubsystems(void), shadowed by a function-like macro of its name
 extern c fn Tcl_InitSubsystems named "botlish_tclstubs_Tcl_InitSubsystems"(
     
-) -> ffi::c::Ptr[ffi::c::Char]
+) -> std::ffi::c::Ptr[std::ffi::c::Char]
 
 # C: void Tcl_GetMemoryInfo(Tcl_DString *dsPtr), shadowed by a function-like macro of its name
 extern c fn Tcl_GetMemoryInfo named "botlish_tclstubs_Tcl_GetMemoryInfo"(
-    dsPtr: ffi::c::Ptr[tclstubs::ctypes::Tcl_DString]
+    dsPtr: std::ffi::c::Ptr[tclstubs::ctypes::Tcl_DString]
 ) -> unit
 
 # C: const char *Tcl_FindExecutable(const char *argv0), shadowed by a function-like macro of its name
 extern c fn Tcl_FindExecutable named "botlish_tclstubs_Tcl_FindExecutable"(
-    argv0: ffi::c::Ptr[ffi::c::Char]
-) -> ffi::c::Ptr[ffi::c::Char]
+    argv0: std::ffi::c::Ptr[std::ffi::c::Char]
+) -> std::ffi::c::Ptr[std::ffi::c::Char]
 
 # C: const char *Tcl_SetPreInitScript(const char *string), shadowed by a function-like macro of its name
 extern c fn Tcl_SetPreInitScript named "botlish_tclstubs_Tcl_SetPreInitScript"(
-    string: ffi::c::Ptr[ffi::c::Char]
-) -> ffi::c::Ptr[ffi::c::Char]
+    string: std::ffi::c::Ptr[std::ffi::c::Char]
+) -> std::ffi::c::Ptr[std::ffi::c::Char]
 
 # C: void Tcl_StaticLibrary(Tcl_Interp *interp, const char *prefix, Tcl_LibraryInitProc *initProc, Tcl_LibraryInitProc *safeInitProc), shadowed by a function-like macro of its name
 extern c fn Tcl_StaticLibrary named "botlish_tclstubs_Tcl_StaticLibrary"(
-    interp: ffi::c::Ptr[tclstubs::ctypes::Tcl_Interp],
-    prefix: ffi::c::Ptr[ffi::c::Char],
-    initProc: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[tclstubs::ctypes::Tcl_Interp]], return: ffi::c::Int}],
-    safeInitProc: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[tclstubs::ctypes::Tcl_Interp]], return: ffi::c::Int}]
+    interp: std::ffi::c::Ptr[tclstubs::ctypes::Tcl_Interp],
+    prefix: std::ffi::c::Ptr[std::ffi::c::Char],
+    initProc: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[tclstubs::ctypes::Tcl_Interp]], return: std::ffi::c::Int}],
+    safeInitProc: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[tclstubs::ctypes::Tcl_Interp]], return: std::ffi::c::Int}]
 ) -> unit
 
 # C: Tcl_FreeProc *Tcl_SetExitProc(Tcl_FreeProc *proc), shadowed by a function-like macro of its name
 extern c fn Tcl_SetExitProc named "botlish_tclstubs_Tcl_SetExitProc"(
-    proc: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]], return: unit}]
-) -> ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]], return: unit}]
+    proc: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Void]], return: unit}]
+) -> std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Void]], return: unit}]
 
 # C: const char *TclZipfs_AppHook(int *argc, char ***argv), shadowed by a function-like macro of its name
 extern c fn TclZipfs_AppHook named "botlish_tclstubs_TclZipfs_AppHook"(
-    argc: ffi::c::Ptr[ffi::c::Int],
-    argv: ffi::c::Ptr[ffi::c::Ptr[ffi::c::Ptr[ffi::c::Char]]]
-) -> ffi::c::Ptr[ffi::c::Char]
+    argc: std::ffi::c::Ptr[std::ffi::c::Int],
+    argv: std::ffi::c::Ptr[std::ffi::c::Ptr[std::ffi::c::Ptr[std::ffi::c::Char]]]
+) -> std::ffi::c::Ptr[std::ffi::c::Char]
 
 # C: static inline void TclBounceRefCount(Tcl_Obj *objPtr)
 extern c fn TclBounceRefCount named "botlish_tclstubs_TclBounceRefCount"(
-    objPtr: ffi::c::Ptr[tclstubs::ctypes::Tcl_Obj]
+    objPtr: std::ffi::c::Ptr[tclstubs::ctypes::Tcl_Obj]
 ) -> unit

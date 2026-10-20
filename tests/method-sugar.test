@@ -12,8 +12,8 @@
 #
 # The functions a method call can use under a bare name are the ones in
 # lexical scope -- the file's own functions, local bindings, the root natives,
-# and any function bound to a name (`find = list::find`) -- plus the members of
-# every namespace the file imports directly (`import list`: IMPORTS.md). That is
+# and any function bound to a name (`find = std::list::find`) -- plus the members of
+# every namespace the file imports directly (`import std::list`: IMPORTS.md). That is
 # what these tests mean by "visible". A module function reached only as
 # `mod::f` (no `import mod`) is not visible as `f`, and not even authorized as
 # `mod::f`.
@@ -178,12 +178,12 @@ twice(y)}                                                                       
 # binding is needed. A receiver of known kind picks the right `length` even
 # with two namespaces imported that both have one.
 foreach {name method free expected} {
-    list-receiver   {[1, 2, 3].length()}   {list::length([1, 2, 3])}   {value 3}
-    string-receiver {"abc".length()}       {str::length("abc")}        {value 3}
-    both-in-one     {["abc", "de"].length() + "abc".length()}  {list::length(["abc", "de"]) + str::length("abc")}  {value 5}
+    list-receiver   {[1, 2, 3].length()}   {std::list::length([1, 2, 3])}   {value 3}
+    string-receiver {"abc".length()}       {std::str::length("abc")}        {value 3}
+    both-in-one     {["abc", "de"].length() + "abc".length()}  {std::list::length(["abc", "de"]) + std::str::length("abc")}  {value 5}
 } {
-    test method-basic-$name "$name: method and qualified spellings agree (import list, import str)" -body {
-        bothSpellings "import list\nimport str\n$::fns$method" "import list\nimport str\n$::fns$free"
+    test method-basic-$name "$name: method and qualified spellings agree (import std::list, import std::str)" -body {
+        bothSpellings "import std::list\nimport std::str\n$::fns$method" "import std::list\nimport std::str\n$::fns$free"
     } -result $expected
 }
 
@@ -199,37 +199,37 @@ test method-multiline-chain {a chain written across lines inside brackets} -body
 # Natives and intrinsics by their real names
 #
 # A root native (`list`) is visible everywhere by its name. A standard
-# intrinsic lives under its family's namespace (list::at, str::substring,
+# intrinsic lives under its family's namespace (std::list::at, std::str::substring,
 # ...: STDLIB-NAMESPACES.md) and, like any namespaced function, is visible
 # to the sugar once its namespace is imported: the member name is the method
 # name, and the call resolves to the very intrinsic the qualified spelling
 # denotes.
 
 foreach {name imports method free expected} {
-    list-at     {import list}
+    list-at     {import std::list}
         {xs = [10, 20, 30]
 xs.at(1)}  {xs = [10, 20, 30]
-list::at(xs, 1)}  {value 20}
-    list-at-expr  {import list}
-        {[10, 20, 30].at(1 + 1)}  {list::at([10, 20, 30], 1 + 1)}  {value 30}
-    substring   {import str}
-        {"HeLLo World".substring(0, 5)}  {str::substring("HeLLo World", 0, 5)}  {value {"HeLLo"}}
-    lowercase   {import str}
-        {"HeLLo".lowercase()}  {str::lowercase("HeLLo")}  {value {"hello"}}
-    list-append {import list}
-        {[1, 2].append(3)}  {list::append([1, 2], 3)}  {value {[1, 2, 3]}}
-    concat      {import str}
-        {"ab".concat("cd")}  {str::concat("ab", "cd")}  {value {"abcd"}}
-    chained     {import str}
+std::list::at(xs, 1)}  {value 20}
+    list-at-expr  {import std::list}
+        {[10, 20, 30].at(1 + 1)}  {std::list::at([10, 20, 30], 1 + 1)}  {value 30}
+    substring   {import std::str}
+        {"HeLLo World".substring(0, 5)}  {std::str::substring("HeLLo World", 0, 5)}  {value {"HeLLo"}}
+    lowercase   {import std::str}
+        {"HeLLo".lowercase()}  {std::str::lowercase("HeLLo")}  {value {"hello"}}
+    list-append {import std::list}
+        {[1, 2].append(3)}  {std::list::append([1, 2], 3)}  {value {[1, 2, 3]}}
+    concat      {import std::str}
+        {"ab".concat("cd")}  {std::str::concat("ab", "cd")}  {value {"abcd"}}
+    chained     {import std::str}
         {"HeLLo World".substring(6, 11).lowercase()}
-        {str::lowercase(str::substring("HeLLo World", 6, 11))}  {value {"world"}}
+        {std::str::lowercase(std::str::substring("HeLLo World", 6, 11))}  {value {"world"}}
     variadic    {}  {5.list(6, 7)}                   {list(5, 6, 7)}                   {value {[5, 6, 7]}}
     variadic-0  {}  {5.list()}                       {list(5)}                         {value {[5]}}
-    chained-natives {import list}
-        {[3, 1, 2].length().twice()}  {twice(list::length([3, 1, 2]))}  {value 6}
-    two-namespaces {import list
-import str}
-        {["ab"].length() + "ab".length()}  {list::length(["ab"]) + str::length("ab")}  {value 3}
+    chained-natives {import std::list}
+        {[3, 1, 2].length().twice()}  {twice(std::list::length([3, 1, 2]))}  {value 6}
+    two-namespaces {import std::list
+import std::str}
+        {["ab"].length() + "ab".length()}  {std::list::length(["ab"]) + std::str::length("ab")}  {value 3}
 } {
     test method-natives-$name "$name: a root native, or an intrinsic of an imported namespace, is a function visible by its member name" -body {
         bothSpellings $imports\n$::fns$method $imports\n$::fns$free
@@ -241,34 +241,34 @@ import str}
 # candidate, so there is one candidate and the call resolves to the very
 # intrinsic the qualified spelling denotes.
 foreach {name imports method free expected} {
-    list-at     {import list}
-        {at = list::at
+    list-at     {import std::list}
+        {at = std::list::at
 xs = [10, 20, 30]
-xs.at(1)}  {at = list::at
+xs.at(1)}  {at = std::list::at
 xs = [10, 20, 30]
 at(xs, 1)}  {value 20}
-    substring   {import str}
-        {substring = str::substring
-"HeLLo World".substring(0, 5)}  {substring = str::substring
+    substring   {import std::str}
+        {substring = std::str::substring
+"HeLLo World".substring(0, 5)}  {substring = std::str::substring
 substring("HeLLo World", 0, 5)}  {value {"HeLLo"}}
-    list-append {import list}
-        {append = list::append
-[1, 2].append(3)}  {append = list::append
+    list-append {import std::list}
+        {append = std::list::append
+[1, 2].append(3)}  {append = std::list::append
 append([1, 2], 3)}  {value {[1, 2, 3]}}
-    renamed     {import str}
-        {size = str::length
-"abcd".size()}  {size = str::length
+    renamed     {import std::str}
+        {size = std::str::length
+"abcd".size()}  {size = std::str::length
 size("abcd")}  {value 4}
-    chained     {import str}
-        {lowercase = str::lowercase
-substring = str::substring
-"HeLLo World".substring(6, 11).lowercase()}  {lowercase = str::lowercase
-substring = str::substring
+    chained     {import std::str}
+        {lowercase = std::str::lowercase
+substring = std::str::substring
+"HeLLo World".substring(6, 11).lowercase()}  {lowercase = std::str::lowercase
+substring = std::str::substring
 lowercase(substring("HeLLo World", 6, 11))}  {value {"world"}}
-    both-namespaces {import list
-import str}
-        {length = list::length
-[3, 1, 2].length().twice()}  {length = list::length
+    both-namespaces {import std::list
+import std::str}
+        {length = std::list::length
+[3, 1, 2].length().twice()}  {length = std::list::length
 twice(length([3, 1, 2]))}  {value 6}
 } {
     test method-natives-aliased-$name "$name: an intrinsic of an imported namespace bound to a name is one candidate and is visible by the bound name" -body {
@@ -279,54 +279,54 @@ twice(length([3, 1, 2]))}  {value 6}
 # Library functions are visible once their namespace is imported (`import
 # byte`: a method candidate named like the member); the sugar then works
 # exactly as for any function, including error-capable ones and handled calls.
-set ::libBindings {import byte
-import list
+set ::libBindings {import std::byte
+import std::list
 fn big(x):
     x > 1
 }
 
 foreach {name method free expected} {
-    imported-module-function  {200.complement()}  {byte::complement(200)}  {value 55}
-    imported-chain            {200.complement().high_nibble()}  {byte::high_nibble(byte::complement(200))}  {value 48}
+    imported-module-function  {200.complement()}  {std::byte::complement(200)}  {value 55}
+    imported-chain            {200.complement().high_nibble()}  {std::byte::high_nibble(std::byte::complement(200))}  {value 48}
     imported-error-capable   {fn conv(n):
     b = n.from_int():
-        on byte::AboveRange:
+        on std::byte::AboveRange:
             0
-        on byte::BelowRange:
+        on std::byte::BelowRange:
             1
     b
 [conv(200), conv(300), conv(0 - 5)]}  {fn conv(n):
-    b = byte::from_int(n):
-        on byte::AboveRange:
+    b = std::byte::from_int(n):
+        on std::byte::AboveRange:
             0
-        on byte::BelowRange:
+        on std::byte::BelowRange:
             1
     b
 [conv(200), conv(300), conv(0 - 5)]}  {value {[200, 0, 1]}}
     higher-order             {d = [1, 2, 3].find(big):
-    on list::NotFound:
+    on std::list::NotFound:
         0
-d}  {d = list::find([1, 2, 3], big):
-    on list::NotFound:
+d}  {d = std::list::find([1, 2, 3], big):
+    on std::list::NotFound:
         0
 d}  {value 2}
     higher-order-not-found   {d = [0, 1].find(big):
-    on list::NotFound:
+    on std::list::NotFound:
         99
-d}  {d = list::find([0, 1], big):
-    on list::NotFound:
+d}  {d = std::list::find([0, 1], big):
+    on std::list::NotFound:
         99
 d}  {value 99}
-    aliased-module-function  {complement = byte::complement
-200.complement()}  {complement = byte::complement
+    aliased-module-function  {complement = std::byte::complement
+200.complement()}  {complement = std::byte::complement
 complement(200)}  {value 55}
-    aliased-higher-order     {find = list::find
+    aliased-higher-order     {find = std::list::find
 d = [1, 2, 3].find(big):
-    on list::NotFound:
+    on std::list::NotFound:
         0
-d}  {find = list::find
+d}  {find = std::list::find
 d = find([1, 2, 3], big):
-    on list::NotFound:
+    on std::list::NotFound:
         0
 d}  {value 2}
 } {
@@ -343,26 +343,26 @@ set ::notVisible {fn big(x):
     x > 1
 }
 
-test method-not-visible-module-function {a module function of a namespace the file does not import is not found by the sugar, though its first parameter would accept the receiver (no search by receiver type), and the qualified name is not even authorized; `import list` makes both work} -body {
-    list [rejection "${::notVisible}\[1, 2, 3\].any?(big)"] [rejection "${::notVisible}list::any?(\[1, 2, 3\], big)"] \
-        [rejection "import list\n${::notVisible}\[1, 2, 3\].any?(big)"] [rejection "import list\n${::notVisible}list::any?(\[1, 2, 3\], big)"]
-} -result {{NOT-A-STRUCT: t.bot:L:C: cannot project field "any?" from a value of type List[int]: only a struct has fields; as a method-style call, no function named "any?" is visible here either: method syntax only applies a function that is already visible by that name (define it here, or import the namespace that defines it with `import NAMESPACE`)} {MISSING-IMPORT: t.bot:L:C: namespace "list" is not imported; add `import list` to use `list::any?`} accepted accepted}
+test method-not-visible-module-function {a module function of a namespace the file does not import is not found by the sugar, though its first parameter would accept the receiver (no search by receiver type), and the qualified name is not even authorized; `import std::list` makes both work} -body {
+    list [rejection "${::notVisible}\[1, 2, 3\].any?(big)"] [rejection "${::notVisible}std::list::any?(\[1, 2, 3\], big)"] \
+        [rejection "import std::list\n${::notVisible}\[1, 2, 3\].any?(big)"] [rejection "import std::list\n${::notVisible}std::list::any?(\[1, 2, 3\], big)"]
+} -result {{NOT-A-STRUCT: t.bot:L:C: cannot project field "any?" from a value of type List[int]: only a struct has fields; as a method-style call, no function named "any?" is visible here either: method syntax only applies a function that is already visible by that name (define it here, or import the namespace that defines it with `import NAMESPACE`)} {MISSING-IMPORT: t.bot:L:C: namespace "std::list" is not imported; add `import std::list` to use `std::list::any?`} accepted accepted}
 
 test method-not-visible-other-namespace-import {importing a namespace makes only that namespace's functions candidates: another namespace's member of that name stays invisible, whatever else is imported or bound} -body {
-    list [rejection "import list\nat = list::at\n\"abc\".concat(\"d\")"] [rejection "import list\n\"abc\".concat(\"d\")"] \
-        [rejection "import str\n\"abc\".concat(\"d\")"]
-} -match glob -result {{MISSING-IMPORT: *namespace "str" is not imported; add `import str` to use `str::concat`*} {MISSING-IMPORT: *namespace "str" is not imported; add `import str` to use `str::concat`*} accepted}
+    list [rejection "import std::list\nat = std::list::at\n\"abc\".concat(\"d\")"] [rejection "import std::list\n\"abc\".concat(\"d\")"] \
+        [rejection "import std::str\n\"abc\".concat(\"d\")"]
+} -match glob -result {{MISSING-IMPORT: *namespace "std::str" is not imported; add `import std::str` to use `std::str::concat`*} {MISSING-IMPORT: *namespace "std::str" is not imported; add `import std::str` to use `std::str::concat`*} accepted}
 
 test method-not-visible-names-the-fix {the diagnostic of a method call with no visible function says the function must be visible by that name, instead of blaming a missing member} -body {
     rejection "x = 5\nx.nothere(1)"
 } -result {NOT-A-STRUCT: t.bot:L:C: cannot project field "nothere" from a value of type int: only a struct has fields; as a method-style call, no function named "nothere" is visible here either: method syntax only applies a function that is already visible by that name (define it here, or import the namespace that defines it with `import NAMESPACE`)}
 
 test method-not-visible-no-type-import-needed-or-used {the receiver's type is never searched for the function: a function in a module that declares the receiver's type is no more visible than any other -- once that module is loaded (by the type import) the call is the missing import of its namespace, never a call of it (DIAGNOSTIC-RECOVERY.md)} -body {
-    # byte::complement takes a Byte; 200.complement() has no `complement` in
+    # std::byte::complement takes a Byte; 200.complement() has no `complement` in
     # scope, and neither does a program that imports the Byte type alone.
-    list [rejection "x = 200\nx.complement()"] [rejection "import type byte::Byte\nx = 200\nx.complement()"] \
-        [rejection "import byte\nx = 200\nx.complement()"]
-} -match glob -result {{NOT-A-STRUCT: *cannot project field "complement"*no function named "complement" is visible here either*} {MISSING-IMPORT: *namespace "byte" is not imported; add `import byte` to use `byte::complement`*} accepted}
+    list [rejection "x = 200\nx.complement()"] [rejection "import type std::byte::Byte\nx = 200\nx.complement()"] \
+        [rejection "import std::byte\nx = 200\nx.complement()"]
+} -match glob -result {{NOT-A-STRUCT: *cannot project field "complement"*no function named "complement" is visible here either*} {MISSING-IMPORT: *namespace "std::byte" is not imported; add `import std::byte` to use `std::byte::complement`*} accepted}
 
 test method-not-visible-forward-reference {a function defined later in the file is not visible yet: the ordinary rule (a binding is visible once established) is the sugar's rule} -body {
     list [rejection "5.later()\nfn later(a):\n    a"] [rejection "later(5)\nfn later(a):\n    a"]
@@ -410,16 +410,16 @@ sum_to(10, 0)"
 # The visible name is the method name
 
 test method-alias-name-is-the-local-name {a function bound to another name is called by that name; the import of its namespace still makes the original member name a candidate, and the same function is one candidate, not two} -body {
-    set prelude "import byte\ntransform = byte::complement\n"
+    set prelude "import std::byte\ntransform = std::byte::complement\n"
     list [bothSpellings "${prelude}200.transform()" "${prelude}transform(200)"] \
-        [bothSpellings "${prelude}200.complement()" "${prelude}byte::complement(200)"] \
-        [bothSpellings "${prelude}\[200.transform(), 200.complement()\]" "${prelude}\[transform(200), byte::complement(200)\]"]
+        [bothSpellings "${prelude}200.complement()" "${prelude}std::byte::complement(200)"] \
+        [bothSpellings "${prelude}\[200.transform(), 200.complement()\]" "${prelude}\[transform(200), std::byte::complement(200)\]"]
 } -result {{value 55} {value 55} {value {[55, 55]}}}
 
 test method-alias-does-not-import {binding one namespace's function makes no other member of that namespace, and nothing of another namespace, visible: only an import does} -body {
-    list [rejection "import byte\ntransform = byte::complement\n200.high_nibble()"] \
-        [rejection "import byte\ntransform = byte::complement\n\[1\].length()"]
-} -match glob -result {accepted {MISSING-IMPORT: *namespace "list" is not imported; add `import list` to use `list::length`*}}
+    list [rejection "import std::byte\ntransform = std::byte::complement\n200.high_nibble()"] \
+        [rejection "import std::byte\ntransform = std::byte::complement\n\[1\].length()"]
+} -match glob -result {accepted {MISSING-IMPORT: *namespace "std::list" is not imported; add `import std::list` to use `std::list::length`*}}
 
 test method-alias-of-local-function {a local alias of a local function: both names are visible, each by ordinary lookup} -body {
     bothSpellings "${::fns}transform = inc\n\[5.transform(), 5.inc()\]" "${::fns}transform = inc\n\[transform(5), inc(5)\]"
@@ -489,21 +489,21 @@ fn inc_twice(a):
     a.inc().inc()
 }
         close $ch
-        set imp "import methodsugarlib\n"
-        set bind "${imp}inc_twice = methodsugarlib::inc_twice\n"
-        list [bothSpellings "${imp}5.inc_twice()" "${imp}methodsugarlib::inc_twice(5)"] \
+        set imp "import std::methodsugarlib\n"
+        set bind "${imp}inc_twice = std::methodsugarlib::inc_twice\n"
+        list [bothSpellings "${imp}5.inc_twice()" "${imp}std::methodsugarlib::inc_twice(5)"] \
             [bothSpellings "${bind}5.inc_twice()" "${bind}inc_twice(5)"] \
-            [bothSpellings "${imp}5.inc_twice().inc_twice()" "${imp}methodsugarlib::inc_twice(methodsugarlib::inc_twice(5))"] \
-            [bothSpellings "${imp}5.inc().inc_twice()" "${imp}methodsugarlib::inc_twice(methodsugarlib::inc(5))"] \
+            [bothSpellings "${imp}5.inc_twice().inc_twice()" "${imp}std::methodsugarlib::inc_twice(std::methodsugarlib::inc_twice(5))"] \
+            [bothSpellings "${imp}5.inc().inc_twice()" "${imp}std::methodsugarlib::inc_twice(std::methodsugarlib::inc(5))"] \
             [rejection "5.inc()"] \
-            [rejection "methodsugarlib::inc_twice(5).inc()"]
+            [rejection "std::methodsugarlib::inc_twice(5).inc()"]
     }
-} -match glob -result {{value 7} {value 7} {value 9} {value 8} {NOT-A-STRUCT: *cannot project field "inc"*no function named "inc" is visible here either*} {MISSING-IMPORT: *namespace "methodsugarlib" is not imported*}}
+} -match glob -result {{value 7} {value 7} {value 9} {value 8} {NOT-A-STRUCT: *cannot project field "inc"*no function named "inc" is visible here either*} {MISSING-IMPORT: *namespace "std::methodsugarlib" is not imported*}}
 
 test method-qualified-references-inside-method-calls {module-qualified references in a receiver or an argument load their modules as in any call} -body {
-    set prelude "import byte\nfn add(a, b):\n    a + b\nfn id(x):\n    x\n"
-    bothSpellings "${prelude}\[byte::complement(200).add(byte::complement(100)), id(5).add(byte::high_nibble(255))\]" \
-        "${prelude}\[add(byte::complement(200), byte::complement(100)), add(id(5), byte::high_nibble(255))\]"
+    set prelude "import std::byte\nfn add(a, b):\n    a + b\nfn id(x):\n    x\n"
+    bothSpellings "${prelude}\[std::byte::complement(200).add(std::byte::complement(100)), id(5).add(std::byte::high_nibble(255))\]" \
+        "${prelude}\[add(std::byte::complement(200), std::byte::complement(100)), add(id(5), std::byte::high_nibble(255))\]"
 } -result {value {[210, 245]}}
 
 # ---------------------------------------------------------------------------
@@ -513,8 +513,8 @@ test method-type-never-imported {the receiver's type is never named in the progr
     bothSpellings "${::libBindings}fn show(b):
     b.high_nibble()
 \[show(200.complement()), 200.complement().high_nibble()\]" "${::libBindings}fn show(b):
-    byte::high_nibble(b)
-\[show(byte::complement(200)), byte::high_nibble(byte::complement(200))\]"
+    std::byte::high_nibble(b)
+\[show(std::byte::complement(200)), std::byte::high_nibble(std::byte::complement(200))\]"
 } -result {value {[48, 48]}}
 
 set ::refined {type Small = Int in 0..10
@@ -665,18 +665,18 @@ test method-no-bound-method-values {x.f is a field projection, never a bound fun
 # ---------------------------------------------------------------------------
 # Evaluation: the receiver is the first argument, evaluated once
 
-set ::logFns {import mutable_array
+set ::logFns {import std::mutable_array
 context struct Log:
     digits: MutableArray[int]
 fn probe(id, result, context log: Log):
-    n = mutable_array::get(log.digits, 0, 0)
-    mutable_array::set(log.digits, 0, n * 10 + id):
+    n = std::mutable_array::get(log.digits, 0, 0)
+    std::mutable_array::set(log.digits, 0, n * 10 + id):
         on IndexNotFound:
             unit
     result
 fn logged(context log: Log):
-    mutable_array::get(log.digits, 0, 0)
-with context Log {digits: mutable_array::create(1, 0)}
+    std::mutable_array::get(log.digits, 0, 0)
+with context Log {digits: std::mutable_array::create(1, 0)}
 fn add(a, b):
     a + b
 fn add3(a, b, c):
@@ -713,8 +713,8 @@ logged()}  {value 12}
 # ---------------------------------------------------------------------------
 # Chaining: nested ordinary calls, one step at a time
 
-set ::chainFns {import list
-import str
+set ::chainFns {import std::list
+import std::str
 fn inc(a):
     a + 1
 fn add(a, b):
@@ -722,22 +722,22 @@ fn add(a, b):
 fn to_list(a):
     [a, a]
 fn size(xs):
-    list::length(xs)
+    std::list::length(xs)
 fn text(n):
     s = "abcdefghij"
-    if n < 0 or n > str::length(s):
+    if n < 0 or n > std::str::length(s):
         return s
-    str::substring(s, 0, n)
+    std::str::substring(s, 0, n)
 fn shout(s):
-    str::lowercase(s)
-count = list::length
+    std::str::lowercase(s)
+count = std::list::length
 }
 
 foreach {name method free expected} {
     two-steps       {1.inc().inc()}                         {inc(inc(1))}                         {value 3}
     with-arguments  {1.inc().add(5).add(6)}                 {add(add(inc(1), 5), 6)}              {value 13}
     type-changes    {3.to_list().size().inc()}              {inc(size(to_list(3)))}               {value 3}
-    int-to-string   {4.text().shout().length()}             {str::length(shout(text(4)))}            {value 4}
+    int-to-string   {4.text().shout().length()}             {std::str::length(shout(text(4)))}            {value 4}
     string-to-list  {"ab".to_list().count().text()}         {text(count(to_list("ab")))}          {value {"ab"}}
     long            {0.inc().inc().inc().inc().inc().inc().inc().inc()}  {inc(inc(inc(inc(inc(inc(inc(inc(0))))))))}  {value 8}
 } {
@@ -869,7 +869,7 @@ test method-errors-handled-method-call-parses-as-handled-call {a method call is 
 # Types of the result, uses, call graph
 
 test method-result-type-is-the-functions {the type of a method call is the selected function's result type: no receiver-related transformation} -body {
-    set prelude "import str\nfn to_text(n) -> str:\n    str::substring(\"abcdef\", 0, n)\nfn size(s):\n    str::length(s)\n"
+    set prelude "import std::str\nfn to_text(n) -> str:\n    std::str::substring(\"abcdef\", 0, n)\nfn size(s):\n    std::str::length(s)\n"
     set m [hirOf "${prelude}a = 3.to_text()\nb = a.size()\n\[a, b\]"]
     set f [hirOf "${prelude}a = to_text(3)\nb = size(a)\n\[a, b\]"]
     list [lmap e [hirFind $m bind] {hir::types::show [hir::typeOf $m $e]}] [lmap e [hirFind $f bind] {hir::types::show [hir::typeOf $f $e]}] \
@@ -905,11 +905,11 @@ foreach {name method free} {
         "fn add(a, b):\n    a + b\nfn run(n):\n    n.add(3).add(n.add(1))\n\[run(1), run(20)\]"
         "fn add(a, b):\n    a + b\nfn run(n):\n    add(add(n, 3), add(n, 1))\n\[run(1), run(20)\]"
     lists-and-strings
-        "import list\nimport str\nfn total(xs):\n    list::length(xs)\nfn name(n):\n    s = \"abcdef\"\n    if n < 0 or n > str::length(s):\n        return s\n    str::substring(s, 0, n)\n\[\[1, 2, 3\].total(), 4.name().lowercase()\]"
-        "import list\nimport str\nfn total(xs):\n    list::length(xs)\nfn name(n):\n    s = \"abcdef\"\n    if n < 0 or n > str::length(s):\n        return s\n    str::substring(s, 0, n)\n\[total(\[1, 2, 3\]), str::lowercase(name(4))\]"
+        "import std::list\nimport std::str\nfn total(xs):\n    std::list::length(xs)\nfn name(n):\n    s = \"abcdef\"\n    if n < 0 or n > std::str::length(s):\n        return s\n    std::str::substring(s, 0, n)\n\[\[1, 2, 3\].total(), 4.name().lowercase()\]"
+        "import std::list\nimport std::str\nfn total(xs):\n    std::list::length(xs)\nfn name(n):\n    s = \"abcdef\"\n    if n < 0 or n > std::str::length(s):\n        return s\n    std::str::substring(s, 0, n)\n\[total(\[1, 2, 3\]), std::str::lowercase(name(4))\]"
     construction
-        "import list\nfn pair(a, b):\n    \[a, b\]\nfn first(p):\n    v = list::at(p, 0):\n        on IndexNotFound:\n            0\n    v\nfn run(n):\n    n.pair(n + 1).first()\n\[run(1), run(5)\]"
-        "import list\nfn pair(a, b):\n    \[a, b\]\nfn first(p):\n    v = list::at(p, 0):\n        on IndexNotFound:\n            0\n    v\nfn run(n):\n    first(pair(n, n + 1))\n\[run(1), run(5)\]"
+        "import std::list\nfn pair(a, b):\n    \[a, b\]\nfn first(p):\n    v = std::list::at(p, 0):\n        on IndexNotFound:\n            0\n    v\nfn run(n):\n    n.pair(n + 1).first()\n\[run(1), run(5)\]"
+        "import std::list\nfn pair(a, b):\n    \[a, b\]\nfn first(p):\n    v = std::list::at(p, 0):\n        on IndexNotFound:\n            0\n    v\nfn run(n):\n    first(pair(n, n + 1))\n\[run(1), run(5)\]"
     struct-receiver
         "fn area(r, scale):\n    r.w * r.h * scale\nfn run(n):\n    {w: n, h: 3}.area(2)\n\[run(1), run(4)\]"
         "fn area(r, scale):\n    r.w * r.h * scale\nfn run(n):\n    area({w: n, h: 3}, 2)\n\[run(1), run(4)\]"
@@ -951,19 +951,19 @@ proc executableValue {text} {
     }
 }
 
-set ::typedMethod {import mutable_array
+set ::typedMethod {import std::mutable_array
 context struct Log:
     digits: MutableArray[int]
 fn probe(id: int, result: int, context log: Log) -> int:
-    n = mutable_array::get(log.digits, 0, 0)
-    mutable_array::set(log.digits, 0, n * 10 + id):
+    n = std::mutable_array::get(log.digits, 0, 0)
+    std::mutable_array::set(log.digits, 0, n * 10 + id):
         on IndexNotFound:
             unit
     result
 fn logged(context log: Log) -> int:
-    mutable_array::get(log.digits, 0, 0)
+    std::mutable_array::get(log.digits, 0, 0)
 fn reset(context log: Log) -> unit:
-    mutable_array::set(log.digits, 0, 0):
+    std::mutable_array::set(log.digits, 0, 0):
         on IndexNotFound:
             unit
     unit
@@ -975,21 +975,21 @@ fn run(n: int) -> int:
     reset()
     v = probe(1, n).add(probe(2, 5)).twice()
     v * 1000 + logged()
-with context Log {digits: mutable_array::create(1, 0)}
+with context Log {digits: std::mutable_array::create(1, 0)}
 [run(1), run(20)]}
-set ::typedFree {import mutable_array
+set ::typedFree {import std::mutable_array
 context struct Log:
     digits: MutableArray[int]
 fn probe(id: int, result: int, context log: Log) -> int:
-    n = mutable_array::get(log.digits, 0, 0)
-    mutable_array::set(log.digits, 0, n * 10 + id):
+    n = std::mutable_array::get(log.digits, 0, 0)
+    std::mutable_array::set(log.digits, 0, n * 10 + id):
         on IndexNotFound:
             unit
     result
 fn logged(context log: Log) -> int:
-    mutable_array::get(log.digits, 0, 0)
+    std::mutable_array::get(log.digits, 0, 0)
 fn reset(context log: Log) -> unit:
-    mutable_array::set(log.digits, 0, 0):
+    std::mutable_array::set(log.digits, 0, 0):
         on IndexNotFound:
             unit
     unit
@@ -1001,7 +1001,7 @@ fn run(n: int) -> int:
     reset()
     v = twice(add(probe(1, n), probe(2, 5)))
     v * 1000 + logged()
-with context Log {digits: mutable_array::create(1, 0)}
+with context Log {digits: std::mutable_array::create(1, 0)}
 [run(1), run(20)]}
 
 test method-standalone-executable {the standalone executables of the method and free spellings print the value (and evaluation log) every in-process backend computes} -constraints executableAot -body {

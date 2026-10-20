@@ -1,7 +1,7 @@
 # native-listloop.test -- native (Cranelift) lowering of the returning
 # iterable loop (`loop x in xs:`, RETURNING-ITERABLE-LOOPS.md): the
 # discarded-vs-retained result distinction (items 20-22, 28-29, 34, 53),
-# and allocation/structural pins for list::any?/all?/none?/find.
+# and allocation/structural pins for std::list::any?/all?/none?/find.
 #
 # Structural facts are read straight from the generated NIR text
 # (native::nir) and from native::allocationReport, exactly like native-
@@ -52,7 +52,7 @@ f()}]]
 # Allocation census: a discarded listloop causes zero List allocations from
 # the loop's own returning-loop semantics -- only the already-existing
 # `rt_list_append` runtime's own copy-on-append behavior (native-alloc.
-# test's own "list::append copies the existing elements" pin, unrelated to
+# test's own "std::list::append copies the existing elements" pin, unrelated to
 # and unchanged by this milestone) makes a *retained* listloop's own List
 # construction cost O(n) allocations, not the "one logical output List"
 # item 14 describes as a semantic goal: an empty accumulator (`listnew`,
@@ -110,7 +110,7 @@ f()}]]
 } -result -1
 
 # ---------------------------------------------------------------------------
-# list::any?/all?/none?/find (lib/list.bot): each one's own listloop result
+# std::list::any?/all?/none?/find (stdlib/list.bot): each one's own listloop result
 # is unused, so the native backend must not allocate an output List for it
 # (items 39-40 of the milestone's required allocation questions).
 
@@ -124,36 +124,36 @@ proc listlibModuleHir {source name} {
 }
 
 set isEven {
-import list
+import std::list
 fn is_even(x):
     mod(x, 2) == 0
 }
 
-test native-listloop-any-no-output-list {list::any? allocates no output List of its own: the only List allocation is the literal argument itself} -body {
-    set hir [listlibModuleHir "$isEven\nlist::any?(\[1, 3, 4\], is_even)" native-any-alloc.bot]
+test native-listloop-any-no-output-list {std::list::any? allocates no output List of its own: the only List allocation is the literal argument itself} -body {
+    set hir [listlibModuleHir "$isEven\nstd::list::any?(\[1, 3, 4\], is_even)" native-any-alloc.bot]
     set report [native::allocationReport $hir summary]
     dict get $report byKind List allocations
 } -result 1
 
-test native-listloop-all-no-output-list {list::all? allocates no output List of its own} -body {
-    set hir [listlibModuleHir "$isEven\nlist::all?(\[2, 4, 6\], is_even)" native-all-alloc.bot]
+test native-listloop-all-no-output-list {std::list::all? allocates no output List of its own} -body {
+    set hir [listlibModuleHir "$isEven\nstd::list::all?(\[2, 4, 6\], is_even)" native-all-alloc.bot]
     set report [native::allocationReport $hir summary]
     dict get $report byKind List allocations
 } -result 1
 
-test native-listloop-none-no-output-list {list::none? allocates no output List of its own} -body {
-    set hir [listlibModuleHir "$isEven\nlist::none?(\[1, 3, 5\], is_even)" native-none-alloc.bot]
+test native-listloop-none-no-output-list {std::list::none? allocates no output List of its own} -body {
+    set hir [listlibModuleHir "$isEven\nstd::list::none?(\[1, 3, 5\], is_even)" native-none-alloc.bot]
     set report [native::allocationReport $hir summary]
     dict get $report byKind List allocations
 } -result 1
 
-test native-listloop-find-no-output-list-matching {list::find allocates no output List of its own on the matching path} -body {
-    set matchHir [listlibModuleHir "$isEven\nlist::find(\[5, 6, 7\], is_even)" native-find-alloc-match.bot]
+test native-listloop-find-no-output-list-matching {std::list::find allocates no output List of its own on the matching path} -body {
+    set matchHir [listlibModuleHir "$isEven\nstd::list::find(\[5, 6, 7\], is_even)" native-find-alloc-match.bot]
     dict get [native::allocationReport $matchHir summary] byKind List allocations
 } -result 1
 
-test native-listloop-find-no-output-list-failing {list::find's listloop allocates no output List of its own on the failing (NotFound) path either -- checked structurally (no listappend anywhere in the generated program), since running this program to completion for an allocation report would just raise the very NotFound error being tested} -body {
-    set failHir [listlibModuleHir "$isEven\nlist::find(\[1, 3, 5\], is_even)" native-find-alloc-fail.bot]
+test native-listloop-find-no-output-list-failing {std::list::find's listloop allocates no output List of its own on the failing (NotFound) path either -- checked structurally (no listappend anywhere in the generated program), since running this program to completion for an allocation report would just raise the very NotFound error being tested} -body {
+    set failHir [listlibModuleHir "$isEven\nstd::list::find(\[1, 3, 5\], is_even)" native-find-alloc-fail.bot]
     string first "listappend" [native::nir $failHir]
 } -result -1
 
@@ -166,24 +166,24 @@ test native-listloop-find-no-output-list-failing {list::find's listloop allocate
 # as `unreachable` instead of rejecting the program (struct-shape).
 
 test native-listloop-never-element-projection {a projection of a never-typed loop element in the [] instance runs on every backend} -body {
-    sourceAgree {import list
+    sourceAgree {import std::list
 struct S:
     f: int
 fn total(xs: List[S]) -> int:
     ys = loop x in xs:
         x.f
-    list::length(ys)
+    std::list::length(ys)
 total([])}
 } -result {value 0}
 
 test native-listloop-never-element-projection-unreachable {the List[never] instance's projection lowers to unreachable code with no structget; the List[S] instance keeps its structget} -body {
-    set text [native::nir [sourceHir {import list
+    set text [native::nir [sourceHir {import std::list
 struct S:
     f: int
 fn total(xs: List[S]) -> int:
     ys = loop x in xs:
         x.f
-    list::length(ys)
+    std::list::length(ys)
 [total([]), total([S{f: 1}])]}]]
     set empty [string first {instance="List[never]"} $text]
     set body [string range $text $empty [string first "\nend" $text $empty]]
@@ -192,13 +192,13 @@ fn total(xs: List[S]) -> int:
 } -result {1 1 0 1}
 
 test native-listloop-never-element-neighbours {the same projection reached through a lockstep loop, a nested [[]], an empty literal passed on through a second call, a projection chain, and an undeclared parameter with mixed callers} -body {
-    set struct "import list\nstruct T:\n    g: int\nstruct S:\n    f: int\n    t: T\n"
+    set struct "import std::list\nstruct T:\n    g: int\nstruct S:\n    f: int\n    t: T\n"
     lmap program [list \
-        "fn total(xs: List\[S\]) -> int:\n    ys = loop x in xs and i from 0 to list::length(xs):\n        x.f + i\n    list::length(ys)\ntotal(\[\])" \
-        "fn total(xss: List\[List\[S\]\]) -> int:\n    ys = loop xs in xss:\n        zs = loop x in xs:\n            x.f\n        list::length(zs)\n    list::length(ys)\ntotal(\[\[\]\])" \
-        "fn total(xs: List\[S\]) -> int:\n    ys = loop x in xs:\n        x.f\n    list::length(ys)\nfn outer(xs: List\[S\]) -> int:\n    total(xs)\nouter(\[\])" \
-        "fn total(xs: List\[S\]) -> int:\n    ys = loop x in xs:\n        x.t.g\n    list::length(ys)\ntotal(\[\])" \
-        "fn total(xs) -> int:\n    ys = loop x in xs:\n        x.t.g + x.f\n    list::length(ys)\n\[total(\[S{f: 1, t: T{g: 2}}\]), total(\[\])\]"] {
+        "fn total(xs: List\[S\]) -> int:\n    ys = loop x in xs and i from 0 to std::list::length(xs):\n        x.f + i\n    std::list::length(ys)\ntotal(\[\])" \
+        "fn total(xss: List\[List\[S\]\]) -> int:\n    ys = loop xs in xss:\n        zs = loop x in xs:\n            x.f\n        std::list::length(zs)\n    std::list::length(ys)\ntotal(\[\[\]\])" \
+        "fn total(xs: List\[S\]) -> int:\n    ys = loop x in xs:\n        x.f\n    std::list::length(ys)\nfn outer(xs: List\[S\]) -> int:\n    total(xs)\nouter(\[\])" \
+        "fn total(xs: List\[S\]) -> int:\n    ys = loop x in xs:\n        x.t.g\n    std::list::length(ys)\ntotal(\[\])" \
+        "fn total(xs) -> int:\n    ys = loop x in xs:\n        x.t.g + x.f\n    std::list::length(ys)\n\[total(\[S{f: 1, t: T{g: 2}}\]), total(\[\])\]"] {
         sourceAgree "$struct$program"
     }
 } -result {{value 0} {value 1} {value 0} {value 0} {value {[1, 0]}}}
@@ -223,8 +223,8 @@ f()}]]
 } -result {1 0}
 
 test native-listloop-empty-domain-bodies-run {loops over an empty domain whose bodies call a function only they call, create and call a closure, and move a coroutine handle -- a list loop, and a lockstep loop in the empty caller's instance -- run on every backend} -body {
-    sourceAgree {import coroutine
-import list
+    sourceAgree {import std::coroutine
+import std::list
 
 fn only_dead(x: int) -> int:
     x * 2
@@ -253,7 +253,7 @@ fn moves() -> list:
     [ys, first, step()]
 
 fn lockstep(xs: List[int]) -> list:
-    loop x in xs and i from 0 to list::length(xs):
+    loop x in xs and i from 0 to std::list::length(xs):
         fn add(y):
             y + i
         add(x)

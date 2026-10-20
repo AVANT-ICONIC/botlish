@@ -17,8 +17,8 @@
 # contexts:
 #
 #   str-param      the argument of a declared `fn take_s(text: str) -> int`
-#   str-length     the argument of str::length (a native's str parameter)
-#   str-concat     the receiver of `.concat("ab")` (str::concat; method
+#   str-length     the argument of std::str::length (a native's str parameter)
+#   str-concat     the receiver of `.concat("ab")` (std::str::concat; method
 #                  syntax: the functional form would be METHOD-ELIGIBLE)
 #   str-compare    one side of `==` whose other side is a String (a computed
 #                  one-character String `sxK`)
@@ -46,7 +46,7 @@
 # reported. About a third of the programs are silent by construction (no
 # one-character String literal at all). Every call is written so that no other
 # warning code can fire (one-parameter functions, method syntax for
-# str::concat, no function returns a list, single exits).
+# std::str::concat, no function returns a list, single exits).
 #
 # The oracle is the construction: a literal built of exactly one pool
 # character is predicted as {LINE COL VALUE} -- the anchor its opening quote,
@@ -174,7 +174,7 @@ proc contextFragments {context literal placement k} {
     set arg [expr {$plain ? [list t $spelling] : [site $text $spelling $context $placement]}]
     switch -- $context {
         str-param   { return [list {t "take_s("} $arg {t ")"}] }
-        str-length  { return [list {t "str::length("} $arg {t ")"}] }
+        str-length  { return [list {t "std::str::length("} $arg {t ")"}] }
         str-concat  { return [list $arg {t ".concat(\"ab\")"}] }
         str-compare { return [list [list t "sx$k == "] $arg] }
         char-accepting { return [list [list t "is_$k\("] $arg {t ")"}] }
@@ -216,7 +216,7 @@ proc generate {seed} {
     if {$quiet} {
         census quietPrograms
     }
-    addLine {{t "import str"}}
+    addLine {{t "import std::str"}}
     # Matchers: K's target character and its computed one-character String
     # sxK (computed, so never a site).
     set ::targets {}
@@ -227,7 +227,7 @@ proc generate {seed} {
         addLine [list [list t "sx$k = [stringSpelling a$x].substring(1, 2)"]]
     }
     addLine {{t "fn take_s(text: str) -> int:"}}
-    addLine {{t "    str::length(text)"}}
+    addLine {{t "    std::str::length(text)"}}
     for {set k 0} {$k < $matchers} {incr k} {
         addLine [list [list t "fn is_$k\(c):"]]
         addLine [list [list t "    c == [charSpelling [lindex $::targets $k]] or c == sx$k"]]
@@ -401,7 +401,7 @@ proc characterClauses {ch} {
         set fact [expr {[llength $consts] == 1 ? [hir::exact::Of $probe [lindex $consts 0]] : ""}]
         if {$fact ne [list val [list UnicodeChar $cp]]} {
             set problem "exact value of $spelling is \"$fact\", not {val {UnicodeChar $cp}}"
-        } elseif {[catch {compileMode "import char\nfn code(c: UnicodeChar) -> int:\n    char::scalar_value(c)\ncode($spelling)" off} typed]} {
+        } elseif {[catch {compileMode "import std::char\nfn code(c: UnicodeChar) -> int:\n    std::char::scalar_value(c)\ncode($spelling)" off} typed]} {
             set problem "a UnicodeChar parameter rejects $spelling: $typed"
         } elseif {[valueOf $typed] ne [list value $cp]} {
             set problem "code($spelling) is [valueOf $typed], not $cp"

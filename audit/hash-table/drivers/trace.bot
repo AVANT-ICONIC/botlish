@@ -4,9 +4,9 @@
 # hash-table experiment (SPEC.md section 4; tools/fuzz.tcl). The fuzzer
 # copies an implementation beside it as `table.bot` and a key kind as
 # `keys.bot`.
-import list
-import str
-import char
+import std::list
+import std::str
+import std::char
 import table
 import keys
 
@@ -20,7 +20,7 @@ fn int_from(text: str, from: int) -> int errors IndexNotFound:
     fn digits(i: int, acc: int) -> int errors IndexNotFound:
         if i >= n:
             return acc
-        digits(i + 1, acc * 10 + char::scalar_value(text.char_at(i)) - 48)
+        digits(i + 1, acc * 10 + std::char::scalar_value(text.char_at(i)) - 48)
     if from < n and text.char_at(from) == '-':
         return 0 - digits(from + 1, 0)
     digits(from, 0)

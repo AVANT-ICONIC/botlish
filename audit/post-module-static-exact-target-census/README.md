@@ -8,8 +8,8 @@ observes:
   `audit/post-r2a-dynamic-census/tools/audit-native.patch`) is applied to a
   scratch copy of `native/`, never to the tree.
 * Every counterfactual lives in a scratch git worktree whose own
-  `lib/web.bot` is rewritten by a diff in `counterfactual/`. The tree's own
-  `lib/web.bot` is never touched.
+  `stdlib/web.bot` is rewritten by a diff in `counterfactual/`. The tree's own
+  `stdlib/web.bot` is never touched.
 
 | path | contents |
 |---|---|
@@ -18,7 +18,7 @@ observes:
 | `baseline/targetgraph-*.txt` | structural proof of `scan_while`'s target graph (`tools/targetgraph.tcl`), and of `scan_local`/`scan_alpha` in the counterfactual |
 | `baseline/stringregion-*.txt` | StringRegion's own verdict per predicate/scanner instance, with the disqualifying node named (`tools/regionprobe.tcl`) |
 | `baseline/nir/*.nir` | every NIR profiled: `prod`, `cf-exact`, `cf-local-only`, `cf-alpha-only`, the StringRegion-off controls (`*-noregion`), the pre-module-static frozen tree and its counterfactual (`hist-*`, copied from the post-R2.a census), and the four single-input probes (`probes/`) |
-| `counterfactual/*.diff` | the scratch-only `lib/web.bot` rewrites: `exact-target` (both call sites; hunks byte-identical to the post-R2.a census's), `local-only`, `alpha-only` |
+| `counterfactual/*.diff` | the scratch-only `stdlib/web.bot` rewrites: `exact-target` (both call sites; hunks byte-identical to the post-R2.a census's), `local-only`, `alpha-only` |
 | `profiles/<name>/` | callgrind profile per program (`census.txt`, `profile.txt`, `instr.txt`, `mix.txt`, `jitmap.txt`, `callgrind.out`, `program.nir`); `intclasses.md` and `moves.txt` for `prod` and `cf-exact` |
 | `dynamic/validate-audit.txt` | audit vs. production binary on all 16 programs: value, size, object, VCode, allocation counters, allocation sites, JIT-map coverage |
 | `dynamic/gc-stress-reset.txt` | `BOTLISH_NATIVE_GC_STRESS=1 bench 8` on both binaries: identical values and collection counts (static slots, rooting, reset) |
@@ -40,7 +40,7 @@ Tools (this directory's own; everything else is reused unchanged from
 | `tools/baseline.tcl` | successor of the post-R2.a `baseline.tcl` for the module-static representation: counts `guard` and `guardbool` separately, adds `staticget`/`staticset`/`native`, CLOSED, captures vs. `staticRefs`, `callvalue` sites |
 | `tools/targetgraph.tcl` | per call site of a scanner: the HIR form and exact type reaching each parameter, the callee Block's captures / module-static refs, `InstanceClosed`, the closed-caller theorem, the NIR forms |
 | `tools/regionprobe.tcl` | `hir::stringregion::ConsumingShape` / `consumingParamsOf` verdicts, naming the node that disqualifies an instance |
-| `tools/parity.tcl` + `tools/corpus.txt` | semantic parity: `web::emailish?` through a `.bot` program and root `emailish?` through a `.ir` program, on interp / compile / cranelift-generic / cranelift, against the Tcl validator as oracle |
+| `tools/parity.tcl` + `tools/corpus.txt` | semantic parity: `std::web::emailish?` through a `.bot` program and root `emailish?` through a `.ir` program, on interp / compile / cranelift-generic / cranelift, against the Tcl validator as oracle |
 | `tools/cfdelta.py` | per-function and per-helper deltas between `census.txt` files, matched by name |
 | `tools/seek.py` | UTF-8 seek Ir per helper: addr2line line attribution of `rt_substr` 562–564, `rt_str_region_eq` 613–615, `region_one_scalar` 811–813 |
 

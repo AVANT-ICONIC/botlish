@@ -1,4 +1,4 @@
-<program> e420 steady-ascii.bot:7 -> byte::from_int<int>
+<program> e420 steady-ascii.bot:7 -> std::byte::from_int<int>
     arg0: type int, range [-∞, +∞]
     result: type int[Byte], range [0, 255]; semantic effectiveErrors (not stamped)
 <program> e485 steady-ascii.bot:26 -> rep<List[int], int, int>
@@ -6,19 +6,19 @@
     arg1: type int, range [1024, 1024] {1024}
     arg2: type int, range [0, 0] {0}
     result: type int, range [-∞, +∞]; semantic effectiveErrors {}
-ascii::is_alphabetic<int> e133 ascii.bot:63 -> ascii::is_upper<int>
+std::ascii::is_alphabetic<int> e133 ascii.bot:63 -> std::ascii::is_upper<int>
     arg0: type int[Byte], range [0, 255]
     result: type bool, range [-∞, +∞]; semantic effectiveErrors {}
-ascii::is_alphabetic<int> e138 ascii.bot:63 -> ascii::is_lower<int>
+std::ascii::is_alphabetic<int> e138 ascii.bot:63 -> std::ascii::is_lower<int>
     arg0: type int[Byte], range [0, 255]
     result: type bool, range [-∞, +∞]; semantic effectiveErrors {}
-ascii::is_alphanumeric<int> e146 ascii.bot:66 -> ascii::is_alphabetic<int>
+std::ascii::is_alphanumeric<int> e146 ascii.bot:66 -> std::ascii::is_alphabetic<int>
     arg0: type int[Byte], range [0, 255]
     result: type bool, range [-∞, +∞]; semantic effectiveErrors {}
-ascii::is_alphanumeric<int> e151 ascii.bot:66 -> ascii::is_digit<int>
+std::ascii::is_alphanumeric<int> e151 ascii.bot:66 -> std::ascii::is_digit<int>
     arg0: type int[Byte], range [0, 255]
     result: type bool, range [-∞, +∞]; semantic effectiveErrors {}
-count<List[int], int, int> e437 steady-ascii.bot:17 -> ascii::is_alphanumeric<int>
+count<List[int], int, int> e437 steady-ascii.bot:17 -> std::ascii::is_alphanumeric<int>
     arg0: type int, range [-∞, +∞]
     result: type bool, range [-∞, +∞]; semantic effectiveErrors {}
 count<List[int], int, int> e443 steady-ascii.bot:18 -> count<List[int], int, int>

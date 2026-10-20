@@ -148,7 +148,7 @@ foreach {name description hosts edits} [readMutants [file join [file dirname [fi
 # native/target a real copy (each mutant rebuilds it), following a linked
 # target: a copied link would build every mutant into another checkout.
 set tree [file tempdir botlish-native-stack-mutants]
-foreach dir {compiler core hir surface lib tests .cargo} {
+foreach dir {compiler core hir surface stdlib tests .cargo} {
     if {![file exists [file join $root $dir]]} continue
     file copy [file join $root $dir] [file join $tree $dir]
 }

@@ -196,7 +196,7 @@ t.entries.ehash.at(i) == h
 ====
     e = t.index.at(i)
     if e >= 0 and full?(t):
-        return put(Table {index: indexed(mutable_array::create(2 * slots(t), -1), t.entries.ehash, 0), entries: t.entries}, key, value)
+        return put(Table {index: indexed(std::mutable_array::create(2 * slots(t), -1), t.entries.ehash, 0), entries: t.entries}, key, value)
     if e >= 0:
         t.entries.eval.swap(e, value)
 >>>>
@@ -236,9 +236,9 @@ t.entries.ehash.at(i) == h
 @@ cd-growth-insert-old-slot the insert that triggers growth stores its entry number at the slot the old index's probe ended at, in the grown index
 ## impl/cd.bot
 <<<<
-        return placed(Table {index: indexed(mutable_array::create(2 * slots(t), -1), t.entries.ehash, 0), entries: t.entries}, h, key, value)
+        return placed(Table {index: indexed(std::mutable_array::create(2 * slots(t), -1), t.entries.ehash, 0), entries: t.entries}, h, key, value)
 ====
-        return appended(Table {index: indexed(mutable_array::create(2 * slots(t), -1), t.entries.ehash, 0), entries: t.entries}, i, h, key, value)
+        return appended(Table {index: indexed(std::mutable_array::create(2 * slots(t), -1), t.entries.ehash, 0), entries: t.entries}, i, h, key, value)
 >>>>
 
 @@ cd-growth-insert-home-unprobed the insert that triggers growth stores its entry number at its home in the grown index, overwriting the number already there

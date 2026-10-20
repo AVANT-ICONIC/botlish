@@ -29,16 +29,16 @@ to machine code, either just in time or as a standalone Linux x86-64
 executable.
 
 ```botlish
-import io
-import linux::io
+import std::io
+import std::linux::io
 
-fn hello() errors io::WriteFailed:
-    io::print_line("Hello, world!")
+fn hello() errors std::io::WriteFailed:
+    std::io::print_line("Hello, world!")
 
-with context linux::io::create()
+with context std::linux::io::create()
 
 hello():
-    on io::WriteFailed:
+    on std::io::WriteFailed:
         unit
 ```
 
@@ -50,11 +50,11 @@ unit
 ```
 
 (An executable prints its program's value last: here `unit`.) `hello` never
-says where its output goes. `io::print_line` needs an `io::IO` context; the
-program installs one, `linux::io::LinuxIO`; and the compiler turns the call
-into a direct call of `linux::io::write_text`, which is one `write(2)` system
+says where its output goes. `std::io::print_line` needs an `std::io::IO` context; the
+program installs one, `std::linux::io::LinuxIO`; and the compiler turns the call
+into a direct call of `std::linux::io::write_text`, which is one `write(2)` system
 call: no dispatch, no hidden argument, no libc in the path. The one way
-`hello` can fail, `io::WriteFailed`, is part of its signature, and its caller
+`hello` can fail, `std::io::WriteFailed`, is part of its signature, and its caller
 handles it. ([examples/io/hello.bot](examples/io/hello.bot),
 [CONTEXT-TRAITS.md](docs/CONTEXT-TRAITS.md))
 
@@ -100,15 +100,15 @@ built for rich debugging.
 * **Native-capable.** One semantics, several backends. The native one
   lowers the analyzed program to its own IR and then to machine code with
   Cranelift. Standalone executables are self-contained, and Botlish code
-  reaches the Linux kernel directly (`linux::abi::x86_64::syscall`,
-  `linux::abi::aarch64::syscall`): the I/O library above is ordinary Botlish
+  reaches the Linux kernel directly (`std::linux::abi::x86_64::syscall`,
+  `std::linux::abi::aarch64::syscall`): the I/O library above is ordinary Botlish
   source, the same on both architectures.
 * **Safe.** Every error a function can raise is in its signature, and every
   call that might raise it handles it or declares it. A refinement type such
-  as `web::Emailish` carries a proof only its owning module can produce, and
-  an integer domain such as `byte::Byte` (`Int in 0..255`) is checked by
+  as `std::web::Emailish` carries a proof only its owning module can produce, and
+  an integer domain such as `std::byte::Byte` (`Int in 0..255`) is checked by
   range analysis. Access to the environment is explicit too: a function that
-  does I/O needs a context (such as `linux::io::LinuxIO`, which only its own
+  does I/O needs a context (such as `std::linux::io::LinuxIO`, which only its own
   module can create), the compiler derives that requirement through every
   caller, and only the entry program installs contexts. Contexts are
   capabilities, and the standard library is being built with capability
@@ -140,8 +140,8 @@ function; and clauses joined by `and` advance in lockstep, over iteration
 counts the compiler must prove equal.
 
 ```botlish
-import list
-import str
+import std::list
+import std::str
 
 squares = loop i from 1 through 5:
     i * i
@@ -155,12 +155,12 @@ odd_squares = loop s in squares:
     s
 
 names = ["ada", "grace", "edsger"]
-numbered = loop name in names and i from 1 through list::length(names):
+numbered = loop name in names and i from 1 through std::list::length(names):
     [i, name]
 
 fn first_long(words: List[str]) -> str:
     loop word in words:
-        if str::length(word) > 4:
+        if std::str::length(word) > 4:
             return word
     "none"
 
@@ -177,7 +177,7 @@ iterates 3 times*. ([COLLECTING-LOOPS.md](docs/COLLECTING-LOOPS.md))
 
 An error is a declared name, possibly with a payload. A function lists the
 errors it can raise, and every call either handles them or declares them.
-`byte::from_int` from the standard library ([lib/byte.bot](lib/byte.bot)):
+`std::byte::from_int` from the standard library ([stdlib/byte.bot](stdlib/byte.bot)):
 
 ```botlish
 type Byte = Int in 0..255
@@ -197,31 +197,31 @@ compile-time error, and only a genuinely uncertain call has to deal with the
 error.
 
 ```botlish
-import byte
-import immutable_set
+import std::byte
+import std::immutable_set
 
 # A dynamic Int: both declared errors are possible, so both are handled.
-fn to_byte(n: int) -> byte::Byte:
-    byte::from_int(n):
-        on byte::BelowRange:
+fn to_byte(n: int) -> std::byte::Byte:
+    std::byte::from_int(n):
+        on std::byte::BelowRange:
             0
-        on byte::AboveRange:
+        on std::byte::AboveRange:
             255
 
 # Proven in range at this call: no handler, no `errors` clause.
-dot = byte::from_int(46)
+dot = std::byte::from_int(46)
 
-# Every element is a known character below U+0100, so byte::set's
+# Every element is a known character below U+0100, so std::byte::set's
 # AboveRange is proven impossible here: no handler either.
-unreserved = byte::set(['-', '.', '_', '~'])
+unreserved = std::byte::set(['-', '.', '_', '~'])
 
 [to_byte(-5), to_byte(300), unreserved.contains(dot)]   # [0, 255, true]
 ```
 
 Leave out `to_byte`'s handlers and the call is rejected (*may produce the
-declared error "byte::AboveRange", which is neither handled here nor
+declared error "std::byte::AboveRange", which is neither handled here nor
 admitted by the enclosing function's own "errors" declaration*). Write
-`byte::from_int(999)` and it is rejected too, handler or not: *this call can
+`std::byte::from_int(999)` and it is rejected too, handler or not: *this call can
 never complete normally under the facts proven for its arguments here*.
 ([STATIC-COMPLETION-PROOFS.md](docs/STATIC-COMPLETION-PROOFS.md),
 [ERROR-PAYLOADS.md](docs/ERROR-PAYLOADS.md))
@@ -230,7 +230,7 @@ never complete normally under the facts proven for its arguments here*.
 
 A refinement type is a nominal type over a carrier, with the carrier's exact
 run-time representation. Only its owning module can prove a value into it:
-[lib/web.bot](lib/web.bot) declares
+[stdlib/web.bot](stdlib/web.bot) declares
 
 ```botlish
 refined type Emailish = str
@@ -242,20 +242,20 @@ fn emailish?(v: str) -> bool proves v: Emailish:
 and any program can then use the proof:
 
 ```botlish
-import str
-import web
+import std::str
+import std::web
 
-fn contact(address: web::Emailish) -> int:
-    str::length(address)
+fn contact(address: std::web::Emailish) -> int:
+    std::str::length(address)
 
 address = "foo@x.com.au"
 
-n = if web::emailish?(address):
-    contact(address)        # address is a web::Emailish in this branch
+n = if std::web::emailish?(address):
+    contact(address)        # address is a std::web::Emailish in this branch
 else:
     0
 
-prefix = if str::length(address) < 3:
+prefix = if std::str::length(address) < 3:
     ""
 else:
     address.substring(0, 3) # in bounds, proven: no handler needed
@@ -266,8 +266,8 @@ else:
 Calling `contact("foo@x.com.au")` directly is a compile-time error: *a
 refinement proof is required ... there is no implicit conversion*. A
 validator works the same way through errors: after
-`linux::path::validate(value)` completes, `value` is a
-`linux::path::LinuxPath` and still a `str`
+`std::linux::path::validate(value)` completes, `value` is a
+`std::linux::path::LinuxPath` and still a `str`
 ([examples/io/show-path.bot](examples/io/show-path.bot)). Integer domains
 work alongside: `type Byte = Int in 0..255`, or an exact set such as
 `HighNibble`, is a subtype of `Int` whose membership the range analysis
@@ -358,15 +358,15 @@ argument. In the committed evidence
 the same 31 bytes of machine code as a hand-written
 `describe_person(value: Person)`, and calling it allocates nothing. Not
 every abstraction is free yet, but many follow the same rule: a refined
-`web::Emailish` is exactly its `str`, a `byte::Byte` is exactly an `Int`, an installed context is a fixed
+`std::web::Emailish` is exactly its `str`, a `std::byte::Byte` is exactly an `Int`, an installed context is a fixed
 slot the compiler reads directly rather than an argument threaded through
-every call, and a context trait such as `io::IO` becomes direct calls of the
+every call, and a context trait such as `std::io::IO` becomes direct calls of the
 installed implementation. ([TRAITS.md](docs/TRAITS.md),
 [CONTEXTS.md](docs/CONTEXTS.md))
 
 ### Tests are Botlish programs
 
-[lib/test.bot](lib/test.bot) is an ordinary library: no test syntax, no
+[stdlib/test.bot](stdlib/test.bot) is an ordinary library: no test syntax, no
 assertion keyword, no test-only native. A suite is a context holding a
 `MutableVector` of cases, the runner is a coroutine, and `static compile:`
 turns "the compiler rejects this" into an ordinary value, so a test can
@@ -375,32 +375,32 @@ expect a compile error as easily as a result. An excerpt of
 the 90 golden suites that run on every backend:
 
 ```botlish
-import compiler
-import list
-import test
+import std::compiler
+import std::list
+import std::test
 
 fn register_lockstep_tests():
-    # x in xs and i from 0 to list::length(xs).
-    fn length_proof() errors compiler::CompilerError:
+    # x in xs and i from 0 to std::list::length(xs).
+    fn length_proof() errors std::compiler::CompilerError:
         static compile:
             fn f(xs):
-                loop x in xs and i from 0 to list::length(xs):
+                loop x in xs and i from 0 to std::list::length(xs):
                     [x, i]
             f([10, 20])
-    test::value("loop-collecting-lockstep-length-proof", [[10, 0], [20, 1]], length_proof)
+    std::test::value("loop-collecting-lockstep-length-proof", [[10, 0], [20, 1]], length_proof)
 
     # Literal lists of different length.
-    fn literal_vs_literal() errors compiler::CompilerError:
+    fn literal_vs_literal() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 loop x in [1, 2] and y in [1, 2, 3]:
                     x
             f()
-    test::rejects("loop-collecting-reject-literal-vs-literal", compiler::DiagnosticCode::LockstepUnequal, literal_vs_literal)
+    std::test::rejects("loop-collecting-reject-literal-vs-literal", std::compiler::DiagnosticCode::LockstepUnequal, literal_vs_literal)
 
-with context test::suite()
+with context std::test::suite()
 register_lockstep_tests()
-test::report()
+std::test::report()
 # ["PASS loop-collecting-lockstep-length-proof",
 #  "PASS loop-collecting-reject-literal-vs-literal", "2 passed, 0 failed"]
 ```
@@ -418,7 +418,8 @@ Structs with [destructuring](docs/STRUCT-DESTRUCTURING.md) and
 [`MutableArray`](docs/MUTABLE-ARRAY.md) with value semantics,
 [structural function types](docs/STRUCTURAL-FUNCTION-TYPES.md),
 [flag parameters](docs/FLAGS.md), [method-call sugar](docs/METHOD-SUGAR.md),
-[modules and explicit imports](docs/IMPORTS.md),
+[modules and explicit imports](docs/IMPORTS.md) with the standard library
+under [one root, `std`](docs/STD-NAMESPACE.md),
 [`mutual:` recursion groups](docs/MUTUAL-RECURSION.md), and
 [compiler warnings](docs/WARNINGS-SAME-RETURN.md) backed by proofs.
 [docs/INDEX.md](docs/INDEX.md) lists every design document.
@@ -473,7 +474,7 @@ reference.
 | `core/` | core IR, values, and the reference interpreter |
 | `compiler/` | the HIR to Tcl compiler |
 | `native/` | the native backend: lowering to NIR (Tcl), runtime and code generation (Rust) |
-| `lib/` | the standard library, in Botlish |
+| `stdlib/` | the standard library, in Botlish: the namespace `std` (`stdlib/list.bot` is `std::list`) |
 | `examples/` | example programs; `examples/stdlib/` is the algorithm corpus |
 | `tests/` | the Tcl test suite; `tests/golden/` holds the suites written in Botlish |
 | `bench/` | benchmarks |

@@ -6,7 +6,7 @@
 #
 # Each program has K cases. A case draws, at random:
 #
-#   * an owner: an abi::bytes::Bytes or an abi::bytes::MutableBytes of random
+#   * an owner: a std::abi::bytes::Bytes or a std::abi::bytes::MutableBytes of random
 #     bytes -- a closed form (A i^2 + B i + C) mod 256 over a random length
 #     biased toward the shapes that matter (0, 1, around 8, 16 and 32, a few
 #     hundred), with all-zero, all-0xff and zero-rich coefficient choices --
@@ -67,8 +67,8 @@ set grid {
     fill_retained       {write   captures          fill}
     fill_unknown        {write   unknown           fill}
 }
-set bytePointees {ffi::c::Char ffi::c::SChar ffi::c::UChar ffi::c::Void}
-set widePointees {ffi::c::Short ffi::c::Int ffi::c::Long ffi::c::ULongLong {ffi::c::Ptr[ffi::c::UChar]} Tag}
+set bytePointees {std::ffi::c::Char std::ffi::c::SChar std::ffi::c::UChar std::ffi::c::Void}
+set widePointees {std::ffi::c::Short std::ffi::c::Int std::ffi::c::Long std::ffi::c::ULongLong {std::ffi::c::Ptr[std::ffi::c::UChar]} Tag}
 
 # The model's admission rule: "" (admitted) or the first reason it refuses
 # OWNER (bytes | mutable | raw) at operation OP with pointee POINTEE.
@@ -121,7 +121,7 @@ proc revealed {bytes} {
     if {$bytes ne {}} {
         set hex [binary encode hex [binary format cu* $bytes]]
     }
-    return "abi::bytes::MutableBytes {storage: <mutbytes [llength $bytes]: $hex>}"
+    return "std::abi::bytes::MutableBytes {storage: <mutbytes [llength $bytes]: $hex>}"
 }
 
 proc drawLength {} {
@@ -158,14 +158,14 @@ proc drawCase {index} {
     set seed [between 0 255]
     set name case$index
     set lines [list "fn ${name}_bytes():" "    loop i from 0 to $n:" \
-        "        byte::from_int(mod($a * i * i + $b * i + $c, 256))" "" "fn ${name}():"]
+        "        std::byte::from_int(mod($a * i * i + $b * i + $c, 256))" "" "fn ${name}():"]
     if {$owner eq "raw"} {
-        lappend lines "    p = ffi::c::null\[$pointee\]()"
+        lappend lines "    p = std::ffi::c::null\[$pointee\]()"
         set arg p
     } else {
-        lappend lines "    data = abi::bytes::from_list(${name}_bytes())"
+        lappend lines "    data = std::abi::bytes::from_list(${name}_bytes())"
         if {$owner eq "mutable"} {
-            lappend lines "    m = abi::bytes::from_bytes(data)"
+            lappend lines "    m = std::abi::bytes::from_bytes(data)"
             set arg m
         } else {
             set arg data
@@ -191,7 +191,7 @@ proc drawCase {index} {
         summary "$owner $op $pointee n=$n count=$count"]
 }
 
-set prelude "import abi\nimport abi::bytes\nimport ffi::c\nimport byte\nimport ffi_fixture\n\nopaque struct Tag:\n    t: unit\n\n"
+set prelude "import std::abi\nimport std::abi::bytes\nimport std::ffi::c\nimport std::byte\nimport ffi_fixture\n\nopaque struct Tag:\n    t: unit\n\n"
 
 set programs 0
 set cases 0

@@ -41,7 +41,7 @@ report records what was done and what was measured.
   topic:
 
   ```
-     error: t.bot:4:5: this call of "list::at" may produce the declared error "IndexNotFound", ... (CORE SEMANTIC UNHANDLED-ERROR)
+     error: t.bot:4:5: this call of "std::list::at" may produce the declared error "IndexNotFound", ... (CORE SEMANTIC UNHANDLED-ERROR)
      help: botlish -help proof.list-bounds
   ```
 
@@ -200,7 +200,7 @@ run botlish with no arguments for the usage summary, or botlish -help cli.option
   * rejections: `@error`, `@at`, `@message`;
   * also `@backends` and `@caption`.
 * **IDs** are `category.name`: `error.known-error`, `rule.if-placement`,
-  `proof.list-bounds`, `stdlib.list::at`, `warning.method-eligible`.
+  `proof.list-bounds`, `stdlib.std::list::at`, `warning.method-eligible`.
 * **No database, no index file:** the catalogue is read on first use, about
   1.0 MB of text (700 KB hand-written, 340 KB generated).
 
@@ -261,7 +261,7 @@ run botlish with no arguments for the usage summary, or botlish -help cli.option
 * **Generated from the compiler:**
   * standard-library signatures, declared errors, `nomethod` and
     native-only status, from `core::native`'s registry;
-  * library declarations and their comments, from `lib/*.bot` through the
+  * library declarations and their comments, from `stdlib/*.bot` through the
     parser.
 * **Not copied into the catalogue, only checked against it:**
   * the diagnostic inventory, scanned from the compiler's own reporting
@@ -627,22 +627,22 @@ query shows, or the topic a diagnostic's help line names.
 |---|---|---|---|
 | S1 | No usage; `./botlish` silently runs demos; `-help`/`-version` unknown | **Resolved by this milestone** (CLI, section B) | `botlish` -> usage; `botlish -help` -> overview; `botlish -version` |
 | S2 | Download blocked by the sandbox network | Outside scope (environment) | -- |
-| S3 | KNOWN-ERROR on a statically failing call, even inside a handler | **Explained**: by design; the page says why a handler does not help and gives the two test techniques (a registration parameter; `static compile:` with `test::rejects`) | `-help KNOWN-ERROR` -> error.known-error; `-help "negative tests"` -> concept.negative-tests |
+| S3 | KNOWN-ERROR on a statically failing call, even inside a handler | **Explained**: by design; the page says why a handler does not help and gives the two test techniques (a registration parameter; `static compile:` with `std::test::rejects`) | `-help KNOWN-ERROR` -> error.known-error; `-help "negative tests"` -> concept.negative-tests |
 | S4 | One handler per error; only the first unhandled error reported | **Earlier work** resolved the second half: the compiler now names every unhandled error in one diagnostic, checked here (`"A", "B" and "C"`). **Explained**: the one-handler rule and the one-error-with-payload design. **Lint precision**: identical handlers no longer draw SAME-RETURN-VALUE/SAME-FAILURE | `-help "handle several errors"` -> task.handle-several-errors |
 | S5 | Forward references not allowed | **Explained**. The study's note that "`mutual:` exists" is wrong: it is a design only (MUTUAL-RECURSION.md), and the pages say so with the workaround | `-help "forward reference"` -> rule.forward-references; `-help "mutual recursion"` -> concept.mutual-recursion |
-| S6 | Bounds guard proves `list::at` for parameters, not for local bindings | **Explained**, still a **limitation**: proof.list-bounds lists the proven forms and the unproven ones (a computed local index), and the UNHANDLED-ERROR of an unproven `list::at` prints a help line to it | `-help "bounds proof"` -> proof.list-bounds; the diagnostic's `help: ... -help proof.list-bounds` |
+| S6 | Bounds guard proves `std::list::at` for parameters, not for local bindings | **Explained**, still a **limitation**: proof.list-bounds lists the proven forms and the unproven ones (a computed local index), and the UNHANDLED-ERROR of an unproven `std::list::at` prints a help line to it | `-help "bounds proof"` -> proof.list-bounds; the diagnostic's `help: ... -help proof.list-bounds` |
 | S7 | METHOD-ELIGIBLE steers towards method syntax | **Explained**: rationale, evidence, exceptions, `nomethod`. **Lint precision**: Int literal receivers | `-help METHOD-ELIGIBLE` -> warning.method-eligible |
 | S8 | Large performance spread between backends | **Explained** (backend.performance, task.choose-backend); the speed itself is outside scope | `-help "fastest backend"` -> task.choose-backend |
-| S9 | `io::print_line` is native-only; the message doesn't say all output is | **Explained**: what prints where, and the portable alternative (the program's value) | `-help "print output"` -> task.print-output; `-help NATIVE-ONLY` -> error.native-only |
+| S9 | `std::io::print_line` is native-only; the message doesn't say all output is | **Explained**: what prints where, and the portable alternative (the program's value) | `-help "print output"` -> task.print-output; `-help NATIVE-ONLY` -> error.native-only |
 | S10 | No way to set the process exit status | **Explained** as absent; **stdlib limitation** remains | `-help "exit status"` -> capability.process-exit-status |
 | S11 | Validation order (the study's own design) | Outside scope | -- |
 | S12 | `import type` rejects structs | **Explained**, a language rule: the page names the spelling to use instead | `-help "import type"` -> rule.import-type; `-help "import struct"` -> capability.struct-type-import |
-| S13 | A method call without `import str` gives a misleading TYPE error | **Earlier work** (diagnostic recovery) resolved it, checked here: `namespace "str" is not imported; add import str ... (CORE SEMANTIC MISSING-IMPORT)`. **Explained**: why sugar needs the import | `-help MISSING-IMPORT` -> error.missing-import |
+| S13 | A method call without `import std::str` gives a misleading TYPE error | **Earlier work** (diagnostic recovery) resolved it, checked here: `namespace "std::str" is not imported; add import std::str ... (CORE SEMANTIC MISSING-IMPORT)`. **Explained**: why sugar needs the import | `-help MISSING-IMPORT` -> error.missing-import |
 | S14 | A loop cannot be a call argument; terse diagnostic | **Explained**: a matcher sends `expected an expression, found "loop"` to the rule, which says to bind it first. Still a language rule | `-help "loop arguments"` -> rule.loop-placement |
 | S15 | Slow compile of the test suite; one error per run | **Earlier work** resolved the second half (several diagnostics per run). Compile speed is outside scope | -- |
-| S16 | Bounds-proof coverage for `list::at` is narrow | **Explained**, still a **limitation**: each reduced case of S16 was rechecked on the current compiler. Proven: a parameter container, ascending loops, guards on parameters, local-bound containers, literal lists. Not proven: field-path containers, descending loops, `i - 1`, lockstep-descending, computed local indices. The page records each, with the restatement that is proven | `-help "indexed access"` -> proof.list-bounds |
+| S16 | Bounds-proof coverage for `std::list::at` is narrow | **Explained**, still a **limitation**: each reduced case of S16 was rechecked on the current compiler. Proven: a parameter container, ascending loops, guards on parameters, local-bound containers, literal lists. Not proven: field-path containers, descending loops, `i - 1`, lockstep-descending, computed local indices. The page records each, with the restatement that is proven | `-help "indexed access"` -> proof.list-bounds |
 | S17 | `if` is never an operand; error cascade | **Earlier work** removed the cascade: one diagnostic now, checked here. **Explained**: a matcher sends the diagnostic to rule.if-placement | `-help "ternary operator"` -> rule.if-placement |
-| S18 | No Int-to-String conversion; no integer division | **Explained** (`test::int_text`; `mod` exists, `/` and `%` do not), still a **stdlib limitation**. Matchers send `/` and `%` syntax errors to the page | `-help "integer to string"` -> capability.int-to-string; `-help division` -> capability.integer-division |
+| S18 | No Int-to-String conversion; no integer division | **Explained** (`std::test::int_text`; `mod` exists, `/` and `%` do not), still a **stdlib limitation**. Matchers send `/` and `%` syntax errors to the page | `-help "integer to string"` -> capability.int-to-string; `-help division` -> capability.integer-division |
 | S19 | Warning policy vs. test helpers (`nomethod`, restructured returns, `-> list`) | **Lint precision**: guard-style Bool returns and handler alternatives no longer warn; Int-literal receivers are not suggested. **Explained**: `-> list` and `nomethod` are declarations of intent, not suppressions | `-help SAME-RETURN-VALUE`, `-help FIXED-ARITY-LIST-RETURN`, `-help lint` |
 | S20 | Executable and CLI output conventions | **Explained** | `-help cli.output`; `-help "exit code"` -> cli.exit-status |
 | S21 | The test framework has no per-test timeout | **Explained** as absent, with the alternative; still a **limitation** | `-help "test timeout"` -> capability.test-timeout |
@@ -668,7 +668,7 @@ listed separately.
 | # | Question | Decisive query (queries tried) | Verified by a program | Verdict |
 |---|---|---|---|---|
 | 1 | Invoke the compiler and select a backend | `botlish` with no arguments: the usage lists `-backend` and the four backends; then `-help "select backend"` -> task.choose-backend (5) | `1 + 2` gives 3 on all four backends; `-backend foo` exits 2 | answered |
-| 2 | Find an operation for indexed list access | `-help "list element"` -> task.list-element, or `-help "list index"` -> proof.list-bounds (10) | `xs.at(1)` with a handler works; without `import list`, MISSING-IMPORT | answered |
+| 2 | Find an operation for indexed list access | `-help "list element"` -> task.list-element, or `-help "list index"` -> proof.list-bounds (10) | `xs.at(1)` with a handler works; without `import std::list`, MISSING-IMPORT | answered |
 | 3 | When indexed access is proven unable to fail | `-help "bounds proof"` / `"list index"` -> proof.list-bounds (6) | 6 proven forms accepted with no handler. A literal index past the end is KNOWN-ERROR. `i + 1`, a descending loop, a computed local index and an unguarded parameter are UNHANDLED-ERROR, and their help line names this page. The documented remedy works | answered |
 | 4 | Why a method-style call needs an imported namespace | `-help "why method call needs import"` -> rule.method-requires-import (3), or the diagnostic's help line | MISSING-IMPORT at 2:3, UNBOUND for the bare name, the qualified-name variant and NOT-A-STRUCT all as documented | answered |
 | 5 | Handle several declared errors | `-help "handle several errors"` -> task.handle-several-errors (4) | two handlers; `on A, B:` is a syntax error; the enum-payload design works; one diagnostic lists every unhandled error | answered |
@@ -676,8 +676,8 @@ listed separately.
 | 7 | Why an `if` or `loop` is rejected as an operand | the diagnostic's help line -> rule.if-placement / rule.loop-placement (3) | the messages, positions and allowed forms all match | answered |
 | 8 | What METHOD-ELIGIBLE recommends, and why | `-help METHOD-ELIGIBLE` (1) | Warns or stays silent as documented, Int-literal receivers included. `nomethod` gives NOMETHOD-CALL. `-warnings error` rejects | answered |
 | 9 | When an early return is reasonable despite SAME-RETURN-VALUE | `-help SAME-RETURN-VALUE`; `-help "early return"` -> principle.guard-clauses (4) | 8 cases, all as documented: the guard predicate is silent, an all-false predicate warns, handler alternatives are silent | answered |
-| 10 | Which forms of I/O work on which backend | `-help "which io works on which backend"` -> backend.io (11) | Printing works natively and is NATIVE-ONLY on interp and compile, as documented. **Standard input can be read through `linux::io::read` natively, which the pages denied** | partial |
-| 11 | Whether a conversion, an exit status or a test timeout exists | `"int to string"`, `"process exit"`, `"test timeout"` -> the capability pages (16) | `test::int_text` works; `str::of` and `test::timeout` do not exist; a hanging test hangs; an executable's run-time error exits 1 | answered |
+| 10 | Which forms of I/O work on which backend | `-help "which io works on which backend"` -> backend.io (11) | Printing works natively and is NATIVE-ONLY on interp and compile, as documented. **Standard input can be read through `std::linux::io::read` natively, which the pages denied** | partial |
+| 11 | Whether a conversion, an exit status or a test timeout exists | `"int to string"`, `"process exit"`, `"test timeout"` -> the capability pages (16) | `std::test::int_text` works; `std::str::of` and `std::test::timeout` do not exist; a hanging test hangs; an executable's run-time error exits 1 | answered |
 | 12 | Where warnings, errors, rules and practices are indexed | `-help` (the overview names all nine indices) (10) | -- | answered |
 
 Result: 11 answered and 1 partial. Every question was answered by the first
@@ -687,11 +687,11 @@ or second query, or by a diagnostic's help line.
 
 * **Fixed:**
   * **The input pages were wrong.** capability.input and backend.io now
-    document `linux::io::read`. The example was verified: it reads stdin
+    document `std::linux::io::read`. The example was verified: it reads stdin
     natively, and interp gives NATIVE-ONLY.
   * **A stale library comment.** It called MutableArray "a reference to a
-    shared store" and appeared on stdlib.module.abi::bytes. It is corrected
-    in `lib/abi/bytes.bot`, in place, with the same line count.
+    shared store" and appeared on stdlib.module.std::abi::bytes. It is corrected
+    in `stdlib/abi/bytes.bot`, in place, with the same line count.
   * **Examples drew warnings they did not state.** Two examples did, and
     once the check required stating them, 16 more turned up. The check now
     fails on any warning an example does not declare, and all 18 examples
@@ -721,10 +721,10 @@ or second query, or by a diagnostic's help line.
 * **Recorded, not fixed** (section I):
   * A top-level call's UNHANDLED-ERROR is printed before the root cause it
     restates. This is the compiler's diagnostic order.
-  * The NATIVE-ONLY message for `io::print_line` on interp names
-    `abi::x86_64::from_bytes`. The help page explains it, but the message is
+  * The NATIVE-ONLY message for `std::io::print_line` on interp names
+    `std::abi::x86_64::from_bytes`. The help page explains it, but the message is
     cryptic.
-  * `str::is_tcl_alnum` and `str::is_tcl_alpha` are public.
+  * `std::str::is_tcl_alnum` and `std::str::is_tcl_alpha` are public.
 
 ## G. Correctness and regression testing
 
@@ -803,7 +803,7 @@ census row:
   without running a program.
 * Outside the repository, with an empty environment and a fresh HOME, these
   all behaved as documented: `./botlish`, `-help`, `-help warnings`,
-  `-help METHOD-ELIGIBLE`, `-help list::at`, `-help "bounds proof"` and
+  `-help METHOD-ELIGIBLE`, `-help std::list::at`, `-help "bounds proof"` and
   `-version`.
   * None of them ran a program or created a cache directory.
   * An explicit `p.bot` ran on interp and cranelift.
@@ -853,7 +853,7 @@ alternate the two trees run by run, over 21 to 25 runs.
 | `tclsh9.0 main.tcl` (no arguments) | ran the 4 demo programs | 9 ms (usage) |
 | an unknown option, until the error | 67 ms (the compiler was loaded first) | 9 ms |
 | `-version` | -- | 90 ms (it loads the front end, for the fingerprint) |
-| `-help` (overview); `-help METHOD-ELIGIBLE`; `-help list::at`; `-help "bounds proof"`; `-help errors` | -- | 143-166 ms |
+| `-help` (overview); `-help METHOD-ELIGIBLE`; `-help std::list::at`; `-help "bounds proof"`; `-help errors` | -- | 143-166 ms |
 | `-help "how do I print a number"` (word search) | -- | 370 ms |
 | `-help xyzzyx` (nothing; near matches) | -- | 363 ms |
 | a clean program, interp (`1 + 2`), interleaved, 25 runs | 98 ms | 100 ms |
@@ -919,7 +919,7 @@ program kept with the writer's notes.
 * **Checked only at run time** (CORE SEMANTIC TYPE, ARITY, NOT-BOOLEAN,
   NOT-CALLABLE or EQUALITY, without a source location), although the
   mismatch is visible statically:
-  * the argument kinds of intrinsics: `str::length(5)`, `"a" + "b"`;
+  * the argument kinds of intrinsics: `std::str::length(5)`, `"a" + "b"`;
   * `[1, 2].length()` when only `str` or `mutable_vector` is imported:
     the method sugar picks that namespace's `length`;
   * the argument count of an ordinary function: `add(1, 2, 3)`;
@@ -945,7 +945,7 @@ program kept with the writer's notes.
   * An enum named like a trait is TYPE, not TRAIT-NAME-COLLISION.
 * **Inconsistent or unreachable compiler paths:**
   * Resuming a temporary coroutine (`make()()`) compiles, while
-    `coroutine::done?(make())` is AFFINE-TEMPORARY-UNSUPPORTED.
+    `std::coroutine::done?(make())` is AFFINE-TEMPORARY-UNSUPPORTED.
   * The parser's `on A | B:` branch is unreachable, because the lexer
     rejects `|` first.
 * **Backends that disagree:**
@@ -959,9 +959,9 @@ program kept with the writer's notes.
 * **Found by the black-box audit:**
   * An UNHANDLED-ERROR at a top-level call is printed before the root cause
     it restates, which is in the function the call reaches.
-  * On interp, the NATIVE-ONLY message for `io::print_line` names
-    `abi::x86_64::from_bytes`.
-  * `str::is_tcl_alnum` and `str::is_tcl_alpha` are public.
+  * On interp, the NATIVE-ONLY message for `std::io::print_line` names
+    `std::abi::x86_64::from_bytes`.
+  * `std::str::is_tcl_alnum` and `std::str::is_tcl_alpha` are public.
 * **main.tcl file errors:** a plain run of a malformed `.hir` file shows HIR
   PARSE as a raw Tcl stack trace, and so does a `.ir` file that is not a Tcl
   list. This was not changed here: it is error-path work in main.tcl's run
@@ -980,11 +980,11 @@ program kept with the writer's notes.
   * COROUTINES.md point 59 says handles live in local bindings only.
   * MUTABLE-VECTOR.md §19 names AFFINE-VECTOR-COPY-OUT (the code is
     AFFINE-ELEMENT-COPY-OUT).
-  * UNICODE-CHAR-LITERALS.md names `char::codepoint` (it is
-    `char::scalar_value`).
+  * UNICODE-CHAR-LITERALS.md names `std::char::codepoint` (it is
+    `std::char::scalar_value`).
   * README §7 describes RANGE as an index out of range (indexing now fails
     with IndexNotFound).
-  * lib/ffi/c.bot and lib/abi.bot have stale header claims.
+  * stdlib/ffi/c.bot and stdlib/abi.bot have stale header claims.
 
 **Unavailable machine-readable metadata**
 

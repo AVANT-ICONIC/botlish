@@ -1,5 +1,5 @@
 # ai_text_clean.bot (P3): clean_char's comparisons read the character
-# (str::char_at of its one-character text) instead of comparing one-character
+# (std::str::char_at of its one-character text) instead of comparing one-character
 # Strings; cleaner_emoji takes that character. clean_char's contract (one
 # character's text, or "" past the end -> its cleaned text) is unchanged, so
 # it is probed directly over its whole documented domain, and clean_ai_text

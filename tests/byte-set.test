@@ -1,5 +1,5 @@
-# byte-set.test -- byte::set(List[UnicodeChar]) -> ImmutableSet[Byte]
-# (lib/byte.bot): UnicodeChar -> char::scalar_value -> checked Byte
+# byte-set.test -- std::byte::set(List[UnicodeChar]) -> ImmutableSet[Byte]
+# (stdlib/byte.bot): UnicodeChar -> std::char::scalar_value -> checked Byte
 # construction -> ImmutableSet, expressed as ordinary Botlish library code
 # using the new "loop x in EXPR:" traversal (core/ir.tcl's `listloop`; see
 # tests/loop-in.test for the construct's own dedicated coverage). See
@@ -47,9 +47,9 @@ proc moduleErrorKinds {path} {
 # Acceptance table (spec items 34-38, 66-69): valid conversions, boundaries,
 # rejections, duplicates, mixed failure -- each on all four backends.
 
-test byte-set-basic {byte::set(['A', 'é', 'ÿ']) -> ImmutableSet[Byte]{65, 233, 255}} -body {
-    set path [makeFile {import byte
-byte::set(['A', 'é', 'ÿ'])} byte-set-basic.bot]
+test byte-set-basic {std::byte::set(['A', 'é', 'ÿ']) -> ImmutableSet[Byte]{65, 233, 255}} -body {
+    set path [makeFile {import std::byte
+std::byte::set(['A', 'é', 'ÿ'])} byte-set-basic.bot]
     try {
         list [moduleParity $path] [moduleValue $path]
     } finally {
@@ -57,9 +57,9 @@ byte::set(['A', 'é', 'ÿ'])} byte-set-basic.bot]
     }
 } -result {same {{65, 233, 255}}}
 
-test byte-set-empty {byte::set([]) -> the empty ImmutableSet[Byte]} -body {
-    set path [makeFile {import byte
-byte::set([])} byte-set-empty.bot]
+test byte-set-empty {std::byte::set([]) -> the empty ImmutableSet[Byte]} -body {
+    set path [makeFile {import std::byte
+std::byte::set([])} byte-set-empty.bot]
     try {
         list [moduleParity $path] [moduleValue $path]
     } finally {
@@ -67,9 +67,9 @@ byte::set([])} byte-set-empty.bot]
     }
 } -result {same {{}}}
 
-test byte-set-single {byte::set(['A']) -> ImmutableSet[Byte]{65}} -body {
-    set path [makeFile {import byte
-byte::set(['A'])} byte-set-single.bot]
+test byte-set-single {std::byte::set(['A']) -> ImmutableSet[Byte]{65}} -body {
+    set path [makeFile {import std::byte
+std::byte::set(['A'])} byte-set-single.bot]
     try {
         list [moduleParity $path] [moduleValue $path]
     } finally {
@@ -77,9 +77,9 @@ byte::set(['A'])} byte-set-single.bot]
     }
 } -result {same {{65}}}
 
-test byte-set-duplicates {byte::set(['A', 'A']) is the same set as byte::set(['A']) -- ordinary ImmutableSet dedup, no byte::set-specific logic} -body {
-    set path [makeFile {import byte
-byte::set(['A', 'A'])} byte-set-dup.bot]
+test byte-set-duplicates {std::byte::set(['A', 'A']) is the same set as std::byte::set(['A']) -- ordinary ImmutableSet dedup, no std::byte::set-specific logic} -body {
+    set path [makeFile {import std::byte
+std::byte::set(['A', 'A'])} byte-set-dup.bot]
     try {
         list [moduleParity $path] [moduleValue $path]
     } finally {
@@ -87,11 +87,11 @@ byte::set(['A', 'A'])} byte-set-dup.bot]
     }
 } -result {same {{65}}}
 
-test byte-set-duplicate-three {byte::set(['A', 'A', 'B']) is the same set as byte::set(['A', 'B'])} -body {
-    set pathAB [makeFile {import byte
-byte::set(['A', 'A', 'B'])} byte-set-dup3.bot]
-    set pathA [makeFile {import byte
-byte::set(['A', 'B'])} byte-set-dup3b.bot]
+test byte-set-duplicate-three {std::byte::set(['A', 'A', 'B']) is the same set as std::byte::set(['A', 'B'])} -body {
+    set pathAB [makeFile {import std::byte
+std::byte::set(['A', 'A', 'B'])} byte-set-dup3.bot]
+    set pathA [makeFile {import std::byte
+std::byte::set(['A', 'B'])} byte-set-dup3b.bot]
     try {
         list [moduleValue $pathAB] [moduleValue $pathA]
     } finally {
@@ -100,9 +100,9 @@ byte::set(['A', 'B'])} byte-set-dup3b.bot]
     }
 } -result {{{65, 66}} {{65, 66}}}
 
-test byte-set-boundary-0 {U+0041 'A' well inside the domain and byte::set(['A','B']) both succeed} -body {
-    set path [makeFile {import byte
-byte::set(['A', 'B'])} byte-set-ab.bot]
+test byte-set-boundary-0 {U+0041 'A' well inside the domain and std::byte::set(['A','B']) both succeed} -body {
+    set path [makeFile {import std::byte
+std::byte::set(['A', 'B'])} byte-set-ab.bot]
     try {
         list [moduleParity $path] [moduleValue $path]
     } finally {
@@ -110,9 +110,9 @@ byte::set(['A', 'B'])} byte-set-ab.bot]
     }
 } -result {same {{65, 66}}}
 
-test byte-set-boundary-255 {byte::set(['ÿ']) (U+00FF, scalar 255) succeeds at Byte's own upper boundary} -body {
-    set path [makeFile {import byte
-byte::set(['ÿ'])} byte-set-255.bot]
+test byte-set-boundary-255 {std::byte::set(['ÿ']) (U+00FF, scalar 255) succeeds at Byte's own upper boundary} -body {
+    set path [makeFile {import std::byte
+std::byte::set(['ÿ'])} byte-set-255.bot]
     try {
         list [moduleParity $path] [moduleValue $path]
     } finally {
@@ -120,7 +120,7 @@ byte::set(['ÿ'])} byte-set-255.bot]
     }
 } -result {same {{255}}}
 
-# These three programs call byte::set(...) unhandled, at top level (which
+# These three programs call std::byte::set(...) unhandled, at top level (which
 # itself declares no errors) -- surface::readProgramFile -strict 0 still
 # lowers and runs them despite the resulting static UNHANDLED-ERROR
 # diagnostics (see byte-set-mixed-failure's own note), so moduleErrorKinds
@@ -130,9 +130,9 @@ byte::set(['ÿ'])} byte-set-255.bot]
 # atProgramBoundary; core/errors.tcl) -- not CORE SEMANTIC RANGE, the old
 # callable-Byte(x) native constructor's own kind, which no longer exists.
 
-test byte-set-boundary-256-fails {byte::set(['Ā']) (U+0100, scalar 256) fails the checked Byte construction just past the boundary} -body {
-    set path [makeFile {import byte
-byte::set(['Ā'])} byte-set-256.bot]
+test byte-set-boundary-256-fails {std::byte::set(['Ā']) (U+0100, scalar 256) fails the checked Byte construction just past the boundary} -body {
+    set path [makeFile {import std::byte
+std::byte::set(['Ā'])} byte-set-256.bot]
     try {
         moduleErrorKinds $path
     } finally {
@@ -140,9 +140,9 @@ byte::set(['Ā'])} byte-set-256.bot]
     }
 } -result {{error {CORE SEMANTIC UNCAUGHT-ERROR}} {error {CORE SEMANTIC UNCAUGHT-ERROR}} {error {CORE SEMANTIC UNCAUGHT-ERROR}} {error {CORE SEMANTIC UNCAUGHT-ERROR}}}
 
-test byte-set-astral-fails {byte::set(['😀']) (U+1F600, scalar 128512) fails -- never UTF-8 encoded into four bytes} -body {
-    set path [makeFile {import byte
-byte::set(['😀'])} byte-set-astral.bot]
+test byte-set-astral-fails {std::byte::set(['😀']) (U+1F600, scalar 128512) fails -- never UTF-8 encoded into four bytes} -body {
+    set path [makeFile {import std::byte
+std::byte::set(['😀'])} byte-set-astral.bot]
     try {
         moduleErrorKinds $path
     } finally {
@@ -150,9 +150,9 @@ byte::set(['😀'])} byte-set-astral.bot]
     }
 } -result {{error {CORE SEMANTIC UNCAUGHT-ERROR}} {error {CORE SEMANTIC UNCAUGHT-ERROR}} {error {CORE SEMANTIC UNCAUGHT-ERROR}} {error {CORE SEMANTIC UNCAUGHT-ERROR}}}
 
-test byte-set-mixed-failure {byte::set(['A', 'Ā', 'B']) fails at the first invalid element, left to right, with no partial successful result -- and, unhandled at top level, is a static UNHANDLED-ERROR diagnostic too (moduleErrorKinds's own -strict 0 read runs it anyway, to observe the runtime outcome)} -body {
-    set path [makeFile {import byte
-byte::set(['A', 'Ā', 'B'])} byte-set-mixed.bot]
+test byte-set-mixed-failure {std::byte::set(['A', 'Ā', 'B']) fails at the first invalid element, left to right, with no partial successful result -- and, unhandled at top level, is a static UNHANDLED-ERROR diagnostic too (moduleErrorKinds's own -strict 0 read runs it anyway, to observe the runtime outcome)} -body {
+    set path [makeFile {import std::byte
+std::byte::set(['A', 'Ā', 'B'])} byte-set-mixed.bot]
     try {
         moduleErrorKinds $path
     } finally {
@@ -160,9 +160,9 @@ byte::set(['A', 'Ā', 'B'])} byte-set-mixed.bot]
     }
 } -result {{error {CORE SEMANTIC UNCAUGHT-ERROR}} {error {CORE SEMANTIC UNCAUGHT-ERROR}} {error {CORE SEMANTIC UNCAUGHT-ERROR}} {error {CORE SEMANTIC UNCAUGHT-ERROR}}}
 
-test byte-set-canonical-payload {byte::set(['-', '.', '_', '~']) -- the motivating four-character URI-unreserved payload} -body {
-    set path [makeFile {import byte
-byte::set(['-', '.', '_', '~'])} byte-set-canonical.bot]
+test byte-set-canonical-payload {std::byte::set(['-', '.', '_', '~']) -- the motivating four-character URI-unreserved payload} -body {
+    set path [makeFile {import std::byte
+std::byte::set(['-', '.', '_', '~'])} byte-set-canonical.bot]
     try {
         list [moduleParity $path] [moduleValue $path]
     } finally {
@@ -171,13 +171,13 @@ byte::set(['-', '.', '_', '~'])} byte-set-canonical.bot]
 } -result {same {{45, 46, 95, 126}}}
 
 # ---------------------------------------------------------------------------
-# UnicodeChar vs UTF-8 distinction (spec items 2-3, 36): byte::set(['é'])
+# UnicodeChar vs UTF-8 distinction (spec items 2-3, 36): std::byte::set(['é'])
 # must contain the scalar value 233 as one Byte, never the two UTF-8 bytes
 # 0xC3 (195) 0xA9 (169).
 
-test byte-set-not-utf8 {byte::set(['é']) contains the one Byte 233 (its Unicode scalar value), never the two UTF-8 encoding bytes 195/169} -body {
-    set path [makeFile {import byte
-byte::set(['é'])} byte-set-notutf8.bot]
+test byte-set-not-utf8 {std::byte::set(['é']) contains the one Byte 233 (its Unicode scalar value), never the two UTF-8 encoding bytes 195/169} -body {
+    set path [makeFile {import std::byte
+std::byte::set(['é'])} byte-set-notutf8.bot]
     try {
         moduleValue $path
     } finally {
@@ -187,15 +187,15 @@ byte::set(['é'])} byte-set-notutf8.bot]
 
 # ---------------------------------------------------------------------------
 # Membership sanity (spec item 43), through the pre-existing generic
-# ImmutableSet membership native -- no byte::set-specific membership code.
+# ImmutableSet membership native -- no std::byte::set-specific membership code.
 
 test byte-set-membership {every canonical-payload byte is a member, and an unrelated byte is not} -body {
-    set path [makeFile {import byte
-import immutable_set
-s = byte::set(['-', '.', '_', '~'])
-[immutable_set::contains(s, 45), immutable_set::contains(s, 46),
- immutable_set::contains(s, 95), immutable_set::contains(s, 126),
- immutable_set::contains(s, 65)]} byte-set-membership.bot]
+    set path [makeFile {import std::byte
+import std::immutable_set
+s = std::byte::set(['-', '.', '_', '~'])
+[std::immutable_set::contains(s, 45), std::immutable_set::contains(s, 46),
+ std::immutable_set::contains(s, 95), std::immutable_set::contains(s, 126),
+ std::immutable_set::contains(s, 65)]} byte-set-membership.bot]
     try {
         list [moduleParity $path] [moduleValue $path]
     } finally {
@@ -207,9 +207,9 @@ s = byte::set(['-', '.', '_', '~'])
 # Result type: ImmutableSet[Byte], statically proven, and preserves the
 # semantic distinction between UnicodeChar and Byte/Int (spec item 44).
 
-test byte-set-result-type {byte::set(...) has static type ImmutableSet[Byte]} -body {
-    set path [makeFile {import byte
-byte::set(['A'])} byte-set-type.bot]
+test byte-set-result-type {std::byte::set(...) has static type ImmutableSet[Byte]} -body {
+    set path [makeFile {import std::byte
+std::byte::set(['A'])} byte-set-type.bot]
     try {
         set hir [surface::readProgramFile $path -strict 0]
         set e [lindex [dict get $hir roots] end]
@@ -217,9 +217,9 @@ byte::set(['A'])} byte-set-type.bot]
     } finally {
         removeFile byte-set-type.bot
     }
-} -result {ImmutableSet[int[byte::Byte]]}
+} -result {ImmutableSet[int[std::byte::Byte]]}
 
-test byte-set-char-not-equal-byte {byte::set's conversion is explicit: the source UnicodeChar and the resulting Byte/Int remain distinct values elsewhere (ordinary equality, unaffected by byte::set)} -body {
+test byte-set-char-not-equal-byte {std::byte::set's conversion is explicit: the source UnicodeChar and the resulting Byte/Int remain distinct values elsewhere (ordinary equality, unaffected by std::byte::set)} -body {
     set path [makeFile {['-' == 45, 45 == 45]} byte-set-equality.bot]
     try {
         moduleValue $path
@@ -232,9 +232,9 @@ test byte-set-char-not-equal-byte {byte::set's conversion is explicit: the sourc
 # Input contract: List[UnicodeChar] is a caller proof obligation (spec
 # items 33, 71) -- rejected statically, no dynamic element scanning.
 
-test byte-set-rejects-string-list {byte::set(["A"]) (List[str]) is a static compile error, not scanned at runtime} -body {
-    set path [makeFile {import byte
-byte::set(["A"])} byte-set-strlist.bot]
+test byte-set-rejects-string-list {std::byte::set(["A"]) (List[str]) is a static compile error, not scanned at runtime} -body {
+    set path [makeFile {import std::byte
+std::byte::set(["A"])} byte-set-strlist.bot]
     try {
         catch {surface::readProgramFile $path -strict 1} err options
         dict get $options -errorcode
@@ -243,9 +243,9 @@ byte::set(["A"])} byte-set-strlist.bot]
     }
 } -result {CORE SEMANTIC TYPE}
 
-test byte-set-rejects-int-list {byte::set([65]) (List[int]) is a static compile error, not scanned at runtime} -body {
-    set path [makeFile {import byte
-byte::set([65])} byte-set-intlist.bot]
+test byte-set-rejects-int-list {std::byte::set([65]) (List[int]) is a static compile error, not scanned at runtime} -body {
+    set path [makeFile {import std::byte
+std::byte::set([65])} byte-set-intlist.bot]
     try {
         catch {surface::readProgramFile $path -strict 1} err options
         dict get $options -errorcode
@@ -254,9 +254,9 @@ byte::set([65])} byte-set-intlist.bot]
     }
 } -result {CORE SEMANTIC TYPE}
 
-test byte-set-accepts-char-list {byte::set(['A']) (List[UnicodeChar]) has no static diagnostic and needs no handler: the call-specific completion proof (STATIC-COMPLETION-PROOFS.md) proves 'A' (65) is statically in Byte's own domain, so byte::set's own declared AboveRange is proven impossible for this exact call} -body {
-    set path [makeFile {import byte
-byte::set(['A'])} byte-set-charlist.bot]
+test byte-set-accepts-char-list {std::byte::set(['A']) (List[UnicodeChar]) has no static diagnostic and needs no handler: the call-specific completion proof (STATIC-COMPLETION-PROOFS.md) proves 'A' (65) is statically in Byte's own domain, so std::byte::set's own declared AboveRange is proven impossible for this exact call} -body {
+    set path [makeFile {import std::byte
+std::byte::set(['A'])} byte-set-charlist.bot]
     try {
         llength [hir::diagnostics [surface::readProgramFile $path -strict 0]]
     } finally {
@@ -267,25 +267,25 @@ byte::set(['A'])} byte-set-charlist.bot]
 # ---------------------------------------------------------------------------
 # Module retention (spec items 39-42): the canonical four-character payload,
 # built once at module initialization and reused by every later call.
-# Written directly into the real lib/ directory (immutable-set.test's own
+# Written directly into the real stdlib/ directory (immutable-set.test's own
 # convention for a synthetic module that must see the real byte.bot), with
 # a name distinctive enough not to collide with any real library file.
 
-test byte-set-module-retained-value {additional_unreserved_chars = byte::set([...]) at module scope is retained: built once, reused by repeated calls} -body {
+test byte-set-module-retained-value {additional_unreserved_chars = std::byte::set([...]) at module scope is retained: built once, reused by repeated calls} -body {
     withPrivateLibrary {
         set ch [open [file join $::core::libraryDir bytesetretentionlib.bot] w]
         fconfigure $ch -encoding utf-8
-        puts -nonewline $ch {import byte
-import immutable_set
+        puts -nonewline $ch {import std::byte
+import std::immutable_set
 
-additional_unreserved_chars = byte::set(['-', '.', '_', '~'])
+additional_unreserved_chars = std::byte::set(['-', '.', '_', '~'])
 
 fn has_dash() -> bool:
-    immutable_set::contains(additional_unreserved_chars, 45)
+    std::immutable_set::contains(additional_unreserved_chars, 45)
 }
         close $ch
-        set mainPath [makeFile {import bytesetretentionlib
-[bytesetretentionlib::has_dash(), bytesetretentionlib::has_dash()]} byte-set-retention-main.bot]
+        set mainPath [makeFile {import std::bytesetretentionlib
+[std::bytesetretentionlib::has_dash(), std::bytesetretentionlib::has_dash()]} byte-set-retention-main.bot]
         try {
             set hir [surface::readProgramFile $mainPath]
             set diagCount [llength [hir::diagnostics $hir]]
@@ -320,12 +320,12 @@ fn has_dash() -> bool:
 # not-Byte-specific property it pinned -- a source-declared interval domain
 # gets a real dynamic runtime check, identically on every backend -- is now
 # expressed through an explicit `errors`/`fail`/`handle` function exactly
-# like byte::from_int, so these two tests are rewritten around that
+# like std::byte::from_int, so these two tests are rewritten around that
 # mechanism rather than removed. tests/errors.test has this milestone's own
 # dedicated, exhaustive coverage of `errors`/`fail`/`handle` itself; these
 # two stay here to keep this file's own "generic, not Byte-specific" pin.
 
-test byte-set-generic-domain-check {a source-declared Small = Int in 0..10, guarded by an explicit fn ... errors ... / fail, gets the identical generic dynamic-range-check treatment byte::from_int's own Byte checks use, dynamic value included} -body {
+test byte-set-generic-domain-check {a source-declared Small = Int in 0..10, guarded by an explicit fn ... errors ... / fail, gets the identical generic dynamic-range-check treatment std::byte::from_int's own Byte checks use, dynamic value included} -body {
     set path [makeFile {type Small = Int in 0..10
 error TooSmall
 error TooBig

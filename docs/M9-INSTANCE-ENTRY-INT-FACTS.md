@@ -888,7 +888,7 @@ tests/hir-range.test                   |  12 +-
 tests/instance-entry-range-facts.test  | 322 (new file)
 ```
 
-No file under `bench/`, `lib/`, `native/` (Rust sources), `core/`,
+No file under `bench/`, `stdlib/`, `native/` (Rust sources), `core/`,
 `surface/`, or any other `hir/*.tcl` file changed. No source-level type
 declaration, domain, or annotation was added anywhere to make a benchmark
 "prove."
@@ -970,4 +970,4 @@ independently pinned by a passing test, M9 is complete as scoped.
 16. Full regression and GC stress pass -- see "Full regression" and
     "GC-stress regression" above.
 17. Frozen source remains unchanged -- "Source-fence confirmation" above;
-    no file under `bench/`, `lib/`, or `native/` changed.
+    no file under `bench/`, `stdlib/`, or `native/` changed.

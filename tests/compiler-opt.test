@@ -70,15 +70,15 @@ test opt-tail-6 {closures calling themselves in tail position keep their own env
 
 test opt-tail-7 {errors inside a looped call are unchanged} -body {
     # concat's run-time TYPE error, reached through an Int that is not the
-    # parameter itself: `str::concat(acc, n)` directly would now be a compile-time
+    # parameter itself: `std::str::concat(acc, n)` directly would now be a compile-time
     # conflict (opt-tail-7-static, INTRINSIC-FUNCTION-CONTRACT-INFERENCE.md).
-    differential [sourceIR "import list\nimport str\nfn f(n, acc):\n    if n == 0:\n        return acc\n    f(n - 1, str::concat(acc, list::at(\[n\], 0)))\n\nf(3, \"x\")"]
+    differential [sourceIR "import std::list\nimport std::str\nfn f(n, acc):\n    if n == 0:\n        return acc\n    f(n - 1, std::str::concat(acc, std::list::at(\[n\], 0)))\n\nf(3, \"x\")"]
 } -result same
 
 test opt-tail-7-static {a parameter used both as an Int and as a String by its own body has no sound contract: a compile-time error naming both uses, before any backend runs (INTRINSIC-FUNCTION-CONTRACT-INFERENCE.md)} -body {
-    catch {sourceIR "import str\nfn f(n, acc):\n    if n == 0:\n        return acc\n    f(n - 1, str::concat(acc, n))\n\nf(3, \"x\")"} message options
+    catch {sourceIR "import std::str\nfn f(n, acc):\n    if n == 0:\n        return acc\n    f(n - 1, std::str::concat(acc, n))\n\nf(3, \"x\")"} message options
     list [dict get $options -errorcode] \
-        [string match {*cannot infer a sound type for parameter "n" of f: argument 1 of native - requires int*argument 2 of native str::concat requires str*} $message]
+        [string match {*cannot infer a sound type for parameter "n" of f: argument 1 of native - requires int*argument 2 of native std::str::concat requires str*} $message]
 } -result {{CORE SEMANTIC TYPE} 1}
 
 # ---------------------------------------------------------------------------
@@ -137,19 +137,19 @@ test opt-env-6 {a Block value still carries its environment} -body {
 # Natives
 
 test opt-native-1 {known natives call their implementation directly} -body {
-    set code [codeOf "import str\nfn f(s):\n    str::concat(str::lowercase(s), s)\n\nf(\"ab\")"]
+    set code [codeOf "import std::str\nfn f(s):\n    std::str::concat(std::str::lowercase(s), s)\n\nf(\"ab\")"]
     list [regexp {callValue} $code] [regexp {core::strings::lowercase} $code] \
          [regexp {core::strings::concat} $code]
 } -result {0 1 1}
 
-test opt-native-1b {a native with declared errors (str::substring: LowerUnderrun, UpperOverrun) goes through the generic call, which turns its error completion into compiled code's} -body {
-    set code [codeOf "import str\nfn f(s):\n    v = str::substring(s, 0, 1):\n        on LowerUnderrun:\n            \"\"\n        on UpperOverrun:\n            \"\"\n    str::concat(v, s)\n\nf(\"ab\")"]
-    list [regexp {callValue \{native str::substring\}} $code] [regexp {core::strings::substring} $code] \
+test opt-native-1b {a native with declared errors (std::str::substring: LowerUnderrun, UpperOverrun) goes through the generic call, which turns its error completion into compiled code's} -body {
+    set code [codeOf "import std::str\nfn f(s):\n    v = std::str::substring(s, 0, 1):\n        on LowerUnderrun:\n            \"\"\n        on UpperOverrun:\n            \"\"\n    std::str::concat(v, s)\n\nf(\"ab\")"]
+    list [regexp {callValue \{native std::str::substring\}} $code] [regexp {core::strings::substring} $code] \
          [regexp {core::strings::concat} $code]
 } -result {1 0 1}
 
 test opt-native-2 {checks static types prove are not emitted} -body {
-    set code [codeOf "import str\nfn f(s):\n    n = str::length(s)\n    str::length(s) + n\n\nf(\"ab\")"]
+    set code [codeOf "import std::str\nfn f(s):\n    n = std::str::length(s)\n    std::str::length(s) + n\n\nf(\"ab\")"]
     regexp -all {AssertCanonical str} $code
 } -result 1
 
@@ -160,8 +160,8 @@ test opt-native-3 {contract violations are still caught} -body {
 } -result {same same {CORE CONTRACT TYPE}}
 
 test opt-native-4 {argument errors are unchanged} -body {
-    list [differential {{call {ref str::substring} {const 1} {const 0} {const 0}}}] \
-         [differential {{call {ref list::at} {call {ref list}} {const 0}}}] \
+    list [differential {{call {ref std::str::substring} {const 1} {const 0} {const 0}}}] \
+         [differential {{call {ref std::list::at} {call {ref list}} {const 0}}}] \
          [differential {{call {ref result-value} {error-value {const 1}}}}]
 } -result {same same same}
 

@@ -46,8 +46,8 @@ named-field payloads and add exhaustive matching on the same construct.
 interpreter, the Tcl compiler, Cranelift without and with specialization:
 
 ```botlish
-import mutable_array
-import mutable_vector
+import std::mutable_array
+import std::mutable_vector
 
 enum VehicleType:
     Boat,
@@ -79,8 +79,8 @@ fn example() -> List[VehicleType] errors IndexNotFound:
         kind: b,
     }
 
-    array = mutable_array::create(2, vehicle.kind)
-    vector = mutable_vector::from_list([
+    array = std::mutable_array::create(2, vehicle.kind)
+    vector = std::mutable_vector::from_list([
         array.at(0),
         VehicleType::Boat,
     ])
@@ -355,8 +355,8 @@ so `ImmutableSet[E]` uses the non-failing set operations natively.
 
 ### 19. MutableArray interaction
 
-`mutable_array::create(n, E::X)` repeats the case (an unrestricted value;
-the `repeat` role is satisfied), `mutable_array::generate(n, f)` with an
+`std::mutable_array::create(n, E::X)` repeats the case (an unrestricted value;
+the `repeat` role is satisfied), `std::mutable_array::generate(n, f)` with an
 enum-returning factory, `at`, `set` and `swap` all work
 (`enum-mutable-array`). An array of cases is unrestricted, so copies are
 ordinary copy-on-write logical copies.
@@ -632,8 +632,8 @@ The GC-stress run is the CI `gc-stress` job's. The runs before these, one
 change earlier, each failed one test: `mat-id-4`
 (`tests/mutable-array-type.test`), which fences `hir/`, `compiler/` and
 `surface/` against any mention of the `mutable_array` constructors, caught a
-comment in `surface/modules.tcl` that used `mutable_array::create` as its
-example of an ambiguous qualifier. The comment's example is `list::length`
+comment in `surface/modules.tcl` that used `std::mutable_array::create` as its
+example of an ambiguous qualifier. The comment's example is `std::list::length`
 now; the suites above, repeated after that and after the last native change
 (the enum hash, 47), pass completely.
 

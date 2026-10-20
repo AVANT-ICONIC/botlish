@@ -17,8 +17,8 @@ source [file join $::projectRoot surface surface.tcl]
 set ::smallDecl "type Small = Int in 0..10\n\nfn one() -> Small:\n    1\n\n"
 set ::byteDecl "type Byte = Int in 0..255\n\nfn byteA() -> Byte:\n    97\n\n"
 # the same declarations for programs that use immutable_set::...
-set ::byteSetDecl "import immutable_set\n$::byteDecl"
-set ::smallSetDecl "import immutable_set\n$::smallDecl"
+set ::byteSetDecl "import std::immutable_set\n$::byteDecl"
+set ::smallSetDecl "import std::immutable_set\n$::smallDecl"
 
 proc sourceHir {text} {
     return [surface::compile $text t.bot -strict 0]
@@ -110,20 +110,20 @@ takes_bytes([256])} $::byteDecl]
 test empty-set-satisfies-byte {an empty-constructed set satisfies a declared ImmutableSet[Byte] parameter (spec item 37)} -body {
     accepts [format {%sfn consume(s: ImmutableSet[Byte]) -> int:
     1
-consume(immutable_set::from_list([]))} $::byteSetDecl]
+consume(std::immutable_set::from_list([]))} $::byteSetDecl]
 } -result ok
 
 test empty-set-satisfies-string {an empty-constructed set satisfies a declared ImmutableSet[str] parameter -- non-integer element kind (spec item 37)} -body {
-    accepts {import immutable_set
+    accepts {import std::immutable_set
 fn consume(s: ImmutableSet[str]) -> int:
     1
-consume(immutable_set::from_list([]))}
+consume(std::immutable_set::from_list([]))}
 } -result ok
 
 test nonempty-set-still-invariant {a non-empty ImmutableSet[Byte] does not satisfy ImmutableSet[int] -- the set-side non-empty invariance control (spec item 37)} -body {
     rejects [format {%sfn consume(s: ImmutableSet[int]) -> int:
     1
-consume(immutable_set::from_list([byteA()]))} $::byteSetDecl]
+consume(std::immutable_set::from_list([byteA()]))} $::byteSetDecl]
 } -result {{CORE SEMANTIC TYPE} 1}
 
 # ---------------------------------------------------------------------------
@@ -138,7 +138,7 @@ test empty-list-satisfies-declared-result {a function declaring -> List[int] and
 
 test empty-set-satisfies-declared-result {a function declaring -> ImmutableSet[Small] and returning an empty-constructed set is accepted (spec items 11, 38)} -body {
     accepts [format {%sfn emptySet() -> ImmutableSet[Small]:
-    immutable_set::from_list([])
+    std::immutable_set::from_list([])
 1} $::smallSetDecl]
 } -result ok
 
@@ -201,11 +201,11 @@ fn consume(xs: List[int]) -> int:
 # specialization gives the empty caller its own instance.
 
 test empty-listloop-runtime-zero-iterations {count(xs: List[int]), which listloop-maps over xs and takes the result's length, called with [] returns 0 on every backend -- bindings are immutable, so listloop maps each element to a value rather than accumulating through reassignment (spec item 40)} -body {
-    set text {import list
+    set text {import std::list
 fn count(xs: List[int]) -> int:
     mapped = loop x in xs:
         x
-    list::length(mapped)
+    std::list::length(mapped)
 count([])}
     set exprs [sourceIR $text]
     lmap backend {interp compile cranelift-generic cranelift} {
@@ -214,11 +214,11 @@ count([])}
 } -result {{value 0 {}} {value 0 {}} {value 0 {}} {value 0 {}}}
 
 test empty-listloop-nonempty-caller-still-correct {the same count(List[int]) function still counts correctly for a real, non-empty caller in the same program -- mixed callers do not corrupt each other's runtime behavior (spec items 40-42)} -body {
-    set text {import list
+    set text {import std::list
 fn count(xs: List[int]) -> int:
     mapped = loop x in xs:
         x
-    list::length(mapped)
+    std::list::length(mapped)
 [count([]), count([1, 2, 3])]}
     set exprs [sourceIR $text]
     lmap backend {interp compile cranelift-generic cranelift} {
@@ -249,11 +249,11 @@ test mixed-callers-adding-third-caller-stays-sound {adding a third, non-empty ca
 } -result {{consume<List[int]>} {consume<List[never]>}}
 
 test empty-caller-instance-loop-body-statically-dead {the empty-caller instance's own listloop body is proven statically unreachable in its generated code (an "unreachable" NIR marker), while the non-empty caller's instance keeps a live loop body -- consistent with the pre-existing undeclared-empty-caller behavior (S05c), now also true for a declared List[T] parameter (spec items 10, 40)} -body {
-    set text {import list
+    set text {import std::list
 fn count(xs: List[int]) -> int:
     mapped = loop x in xs:
         x
-    list::length(mapped)
+    std::list::length(mapped)
 [count([]), count([1, 2, 3])]}
     set nirText [nirOf $text]
     set emptyStart [string first {instance="List[never]"} $nirText]
@@ -300,12 +300,12 @@ test join-empty-and-nonempty-arms-satisfies-declared-result {a function joining 
 # reject a body valid for its contract ("call to first with xs :
 # List[never] is invalid: cannot project field").
 
-test empty-caller-element-read-handled {list::at of an empty caller's List[S] with an IndexNotFound handler, then a field projection, is accepted and agrees on every backend} -body {
-    sourceAgree {import list
+test empty-caller-element-read-handled {std::list::at of an empty caller's List[S] with an IndexNotFound handler, then a field projection, is accepted and agrees on every backend} -body {
+    sourceAgree {import std::list
 struct S:
     f: int
 fn first(xs: List[S]) -> int:
-    s = list::at(xs, 0):
+    s = std::list::at(xs, 0):
         on IndexNotFound:
             S{f: 7}
     s.f
@@ -314,25 +314,25 @@ first([])}
 
 # The empty caller reaches `first` through run's parameter: a handled
 # first([]) at the top level is a statically known failure (the empty literal
-# reaches xs as zero elements, so list::at(xs, 0) always fails -- KNOWN-ERROR,
+# reaches xs as zero elements, so std::list::at(xs, 0) always fails -- KNOWN-ERROR,
 # which a handler does not make legal), while run's own body is legal for
 # every ys; run([]) still makes first's List[never] instance.
-test empty-caller-element-read-propagated {an empty caller's list::at failure propagated through a declared errors clause, and lib/list.bot's list::get with a default, both agree on every backend} -body {
-    list [sourceAgree {import list
+test empty-caller-element-read-propagated {an empty caller's std::list::at failure propagated through a declared errors clause, and stdlib/list.bot's std::list::get with a default, both agree on every backend} -body {
+    list [sourceAgree {import std::list
 struct S:
     f: int
 fn first(xs: List[S]) -> int errors IndexNotFound:
-    list::at(xs, 0).f
+    std::list::at(xs, 0).f
 fn run(ys: List[S]) -> int:
     r = first(ys):
         on IndexNotFound:
             5
     r
-run([])}] [sourceAgree {import list
+run([])}] [sourceAgree {import std::list
 struct S:
     f: int
 fn first(xs: List[S]) -> int:
-    list::get(xs, 0, S{f: 3}).f
+    std::list::get(xs, 0, S{f: 3}).f
 first([])}]
 } -result {{value 5} {value 3}}
 
@@ -341,36 +341,36 @@ first([])}]
 # runs: hir::types walks it as unreachable code (like a decided `if`'s dead
 # arm) and types the loop as exactly the empty List, List[never], whatever
 # the body's own type. That type describes an iteration whose element would
-# be a `never`: a handled byte::from_int of it is typed by its handlers' join
+# be a `never`: a handled std::byte::from_int of it is typed by its handlers' join
 # (an Int, not a Byte), and the instance of an empty caller used to collect
 # a List[int] and reject its own call of a List[Byte] parameter ("call to
 # bytes_of with values : List[never] is invalid"). An instance's verification
 # skips what the call never runs (hir::semantic::verify).
 
-set ::handledByte {        b = byte::from_int(v):
-            on byte::BelowRange:
+set ::handledByte {        b = std::byte::from_int(v):
+            on std::byte::BelowRange:
                 0
-            on byte::AboveRange:
+            on std::byte::AboveRange:
                 255
 }
-set ::countBytes {fn count_bytes(bs: List[byte::Byte]) -> int:
-    list::length(bs)
+set ::countBytes {fn count_bytes(bs: List[std::byte::Byte]) -> int:
+    std::list::length(bs)
 }
 
-test empty-caller-collecting-loop-typed-consumer {the empty caller of a function that collects a handled byte::from_int over its List[int] parameter and passes the List to abi::bytes::from_list's List[Byte] parameter is accepted, and agrees on every backend} -body {
-    sourceAgree [format {import abi::bytes
-import byte
+test empty-caller-collecting-loop-typed-consumer {the empty caller of a function that collects a handled std::byte::from_int over its List[int] parameter and passes the List to std::abi::bytes::from_list's List[Byte] parameter is accepted, and agrees on every backend} -body {
+    sourceAgree [format {import std::abi::bytes
+import std::byte
 
-fn bytes_of(values: List[int]) -> abi::bytes::Bytes:
+fn bytes_of(values: List[int]) -> std::abi::bytes::Bytes:
     bs = loop v in values:
 %s        b
-    abi::bytes::from_list(bs)
+    std::abi::bytes::from_list(bs)
 
-[abi::bytes::length(bytes_of([])).value, abi::bytes::length(bytes_of([1, 300, -4])).value]} $::handledByte]
+[std::abi::bytes::length(bytes_of([])).value, std::abi::bytes::length(bytes_of([1, 300, -4])).value]} $::handledByte]
 } -result {value {[0, 3]}}
 
 test empty-caller-collecting-loop-is-empty-list {in the empty caller's instance the collecting loop is List[never], never the body's join; the contract's own analysis still collects List[Byte]} -body {
-    set program [format {import byte
+    set program [format {import std::byte
 
 fn collect(values: List[int]):
     loop v in values:
@@ -380,15 +380,15 @@ fn collect(values: List[int]):
         set hir [sourceHir "$program$call"]
         hir::types::show [hir::typeOf $hir [lindex [hir::roots $hir] end]]
     }
-} -result {{List[never]} {List[int[byte::Byte]]}}
+} -result {{List[never]} {List[int[std::byte::Byte]]}}
 
 test empty-caller-lockstep-loop-typed-consumer {the same collection through a lockstep loop (an empty list domain: every domain has the one proven cardinality) is accepted and agrees on every backend} -body {
-    sourceAgree [format {import byte
-import list
+    sourceAgree [format {import std::byte
+import std::list
 
 %s
 fn bytes_of(values: List[int]) -> int:
-    bs = loop v in values and i from 0 to list::length(values):
+    bs = loop v in values and i from 0 to std::list::length(values):
 %s        b
     count_bytes(bs)
 
@@ -396,8 +396,8 @@ fn bytes_of(values: List[int]) -> int:
 } -result {value {[0, 2]}}
 
 test empty-caller-loop-body-typed-call {a typed call inside the loop body of the empty caller's instance (each element's handled Byte passed on as a List[Byte]) is code that instance never runs: accepted, and agrees on every backend} -body {
-    sourceAgree [format {import byte
-import list
+    sourceAgree [format {import std::byte
+import std::list
 
 %s
 fn each(values: List[int]) -> list:
@@ -408,8 +408,8 @@ fn each(values: List[int]) -> list:
 } -result {value {[[], [1, 1]]}}
 
 test empty-literal-collecting-loop-typed-consumer {a loop over the literal [] in an ordinary function body (no instance) is the empty List too: passed to a List[Byte] parameter it is accepted} -body {
-    sourceAgree [format {import byte
-import list
+    sourceAgree [format {import std::byte
+import std::list
 
 %s
 fn none() -> int:
@@ -421,8 +421,8 @@ none()} $::countBytes $::handledByte]
 } -result {value 0}
 
 test empty-caller-collected-ints-still-rejected {an empty caller does not rescue a definition invalid for its contract: a loop collecting the Int elements themselves is a List[int], rejected at the List[Byte] parameter whatever calls the function (the negative control)} -body {
-    rejects [format {import byte
-import list
+    rejects [format {import std::byte
+import std::list
 
 %s
 fn ints_of(values: List[int]) -> int:

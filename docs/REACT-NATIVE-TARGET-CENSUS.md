@@ -210,7 +210,7 @@ types are its own: `bridging::callFromJs` converts through `Bridging<T>`.
 | `bool` | `bool` in, `bool *out` | `bool` | `boolean` | boolean (`asBool` rejects others) | value | **works** |
 | `int` | `int64_t`, status 2 on an Int result outside int64 | `double`, checked: finite, integral, at most 2^53 - 1 in magnitude, both ways | `number` | number; `TypeError`/`RangeError` with `code` | value | **works** (stand-in) |
 | `int` as `Int32` | as above | never `int`: `Bridging<int32_t>::fromJs` is a C cast of a double (`react/bridging/Number.h:41-45`), undefined for NaN or out of range | `CodegenTypes.Int32` | number | value | **poor fit**; use `number` |
-| integer domain (`byte::Byte`, `ffi::c::Int`, `abi::I32`) | `int64_t` plus the domain's range check | `double`, range from the HIR | `number` (or `Int32` checked in the adapter) | number | value | **small** |
+| integer domain (`std::byte::Byte`, `std::ffi::c::Int`, `std::abi::I32`) | `int64_t` plus the domain's range check | `double`, range from the HIR | `number` (or `Int32` checked in the adapter) | number | value | **small** |
 | Int beyond 2^53 | `int64_t` or decimal text | string | `string` | string; there is no BigInt in Codegen | copy | **poor fit**; a deliberate choice per API |
 | `Float64` | `double`; NaN and ±Inf rejected; -0 normalized (Botlish has none, `value.rs:44-47`) | `double` | `CodegenTypes.Double` / `number` | number | value | **small** (runtime has `new_float`) |
 | `Float` (binary32) | | | `CodegenTypes.Float` | | | **poor fit**: no Botlish type |
@@ -220,7 +220,7 @@ types are its own: `bridging::callFromJs` converts through `Bridging<T>`.
 | declared error | status 1 with identity and message | throw `Error` with `code` = canonical identity | (none: specs have no error types) | `Error`, `e.code === "NotPositive"` | message copied | **works**; payload is **small** |
 | runtime error (`RANGE`, `TYPE`, ...) | status 1, identity = error code | `Error` with that code | | `Error` | | **works** |
 | native stack exhaustion | executables: `NATIVE LIMIT STACK` then `_exit` | | | process killed | | **blocked**: embedding policy (sections 9, 14) |
-| `abi::bytes::Bytes` / `MutableBytes` | `const uint8_t *, size_t` in (copied); out: bytes copied into a `jsi::ArrayBuffer` (`OwnedBytesBuffer`, `react/bridging/ArrayBuffer.h`) | `jsi::ArrayBuffer` | `ArrayBuffer` | ArrayBuffer; no TypedArray type in Codegen (pass `.buffer`) | copy both ways (no pin API, GC heap) | **small** |
+| `std::abi::bytes::Bytes` / `MutableBytes` | `const uint8_t *, size_t` in (copied); out: bytes copied into a `jsi::ArrayBuffer` (`OwnedBytesBuffer`, `react/bridging/ArrayBuffer.h`) | `jsi::ArrayBuffer` | `ArrayBuffer` | ArrayBuffer; no TypedArray type in Codegen (pass `.buffer`) | copy both ways (no pin API, GC heap) | **small** |
 | `List[T]`, T scalar | `const T *, size_t`; out: a Botlish-owned array borrowed like a String | `std::vector<T>` / `jsi::Array` | `ReadonlyArray<T>` / `Array<T>` | array | copy | **small** |
 | `List[str]`, nested lists | needs an element protocol (count plus per-element accessors) | `jsi::Array` | `Array<string>` | array | copy | **medium**: library-mode ABI v2 |
 | struct (nominal or anonymous) | one C struct per Botlish struct type, field order from `ShapeInfo` (`vm.rs:54-73`), built with `Vm::new_struct` (`vm.rs:772`) | Codegen's `NativeFooPointBridging<T>` or `jsi::Object` | object type alias (`type Point = {x: Double}`) | plain object | copy | **medium** |

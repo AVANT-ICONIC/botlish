@@ -29,7 +29,7 @@
 #                            names differ from the declared ones; HIR rules
 #                            this out for a checked program)
 #   NATIVE-ONLY              an operation only the native backend performs
-#                            (linux::abi::x86_64::syscall's raw kernel transition,
+#                            (std::linux::abi::x86_64::syscall's raw kernel transition,
 #                            core/linuxabi.tcl) was called on a Tcl backend,
 #                            which deliberately does not imitate it
 #

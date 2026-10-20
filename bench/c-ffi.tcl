@@ -79,26 +79,26 @@ proc writeFile {path text} {
 }
 
 # The fixture binding: what the benchmark calls of it.
-writeFile [file join $scratch bcf.bot] {import ffi::c
+writeFile [file join $scratch bcf.bot] {import std::ffi::c
 
 extern c library "botlish_cffi_fixture"
 
-extern c fn count named "bcf_count"() -> ffi::c::ULong
-extern c fn add named "bcf_add"(a: ffi::c::Int, b: ffi::c::Int) -> ffi::c::Int
-extern c fn echo_ulonglong named "bcf_echo_ulonglong"(x: ffi::c::ULongLong) -> ffi::c::ULongLong
-extern c fn stack_tail named "bcf_stack_tail"(a: ffi::c::Long, b: ffi::c::Long, c: ffi::c::Long, d: ffi::c::Long, e: ffi::c::Long, f: ffi::c::Long, g: ffi::c::Long, h: ffi::c::Long, i: ffi::c::Long, j: ffi::c::Int, k: ffi::c::Short, l: ffi::c::SChar) -> ffi::c::LongLong
-extern c fn pick named "bcf_pick"(which: ffi::c::Int, a1: ffi::c::SChar, a2: ffi::c::UChar, a3: ffi::c::Short, a4: ffi::c::UShort, a5: ffi::c::Int, a6: ffi::c::UInt, a7: ffi::c::Char, s8: ffi::c::SChar, s9: ffi::c::UChar, s10: ffi::c::Short, s11: ffi::c::SChar, s12: ffi::c::UShort, s13: ffi::c::Int, s14: ffi::c::SChar, s15: ffi::c::Long, s16: ffi::c::UChar, s17: ffi::c::Short, s18: ffi::c::UInt, s19: ffi::c::SChar) -> ffi::c::LongLong
-extern c fn sum named "bcf_sum"(data: ffi::c::Ptr[ffi::c::UChar] read noescape, count: ffi::c::ULong) -> ffi::c::ULong
-extern c fn fill named "bcf_fill"(out: ffi::c::Ptr[ffi::c::UChar] write noescape, count: ffi::c::ULong, seed: ffi::c::UChar) -> unit
+extern c fn count named "bcf_count"() -> std::ffi::c::ULong
+extern c fn add named "bcf_add"(a: std::ffi::c::Int, b: std::ffi::c::Int) -> std::ffi::c::Int
+extern c fn echo_ulonglong named "bcf_echo_ulonglong"(x: std::ffi::c::ULongLong) -> std::ffi::c::ULongLong
+extern c fn stack_tail named "bcf_stack_tail"(a: std::ffi::c::Long, b: std::ffi::c::Long, c: std::ffi::c::Long, d: std::ffi::c::Long, e: std::ffi::c::Long, f: std::ffi::c::Long, g: std::ffi::c::Long, h: std::ffi::c::Long, i: std::ffi::c::Long, j: std::ffi::c::Int, k: std::ffi::c::Short, l: std::ffi::c::SChar) -> std::ffi::c::LongLong
+extern c fn pick named "bcf_pick"(which: std::ffi::c::Int, a1: std::ffi::c::SChar, a2: std::ffi::c::UChar, a3: std::ffi::c::Short, a4: std::ffi::c::UShort, a5: std::ffi::c::Int, a6: std::ffi::c::UInt, a7: std::ffi::c::Char, s8: std::ffi::c::SChar, s9: std::ffi::c::UChar, s10: std::ffi::c::Short, s11: std::ffi::c::SChar, s12: std::ffi::c::UShort, s13: std::ffi::c::Int, s14: std::ffi::c::SChar, s15: std::ffi::c::Long, s16: std::ffi::c::UChar, s17: std::ffi::c::Short, s18: std::ffi::c::UInt, s19: std::ffi::c::SChar) -> std::ffi::c::LongLong
+extern c fn sum named "bcf_sum"(data: std::ffi::c::Ptr[std::ffi::c::UChar] read noescape, count: std::ffi::c::ULong) -> std::ffi::c::ULong
+extern c fn fill named "bcf_fill"(out: std::ffi::c::Ptr[std::ffi::c::UChar] write noescape, count: std::ffi::c::ULong, seed: std::ffi::c::UChar) -> unit
 }
 foreach file {boringssl.bot sha256.bot} {
     file copy -force [file join $root examples ffi sha256 $file] [file join $scratch $file]
 }
 
-set prelude "import abi\nimport abi::bytes\nimport byte\nimport ffi::c\nimport list\nimport bcf\n
+set prelude "import std::abi\nimport std::abi::bytes\nimport std::byte\nimport std::ffi::c\nimport std::list\nimport bcf\n
 fn pattern(n: int):
     loop i from 0 to n:
-        byte::from_int(mod(i, 256))
+        std::byte::from_int(mod(i, 256))
 
 "
 
@@ -115,7 +115,7 @@ set programs 0
 # BODY then 0, when DISCARDED).
 proc program {setup body discarded n} {
     set inner [expr {$discarded ? "$body\n        0" : $body}]
-    return "$::prelude\nfn f() -> int:\n    $setup\n    xs = loop i from 0 to $n:\n        $inner\n    list::length(xs)\n\nf()\n"
+    return "$::prelude\nfn f() -> int:\n    $setup\n    xs = loop i from 0 to $n:\n        $inner\n    std::list::length(xs)\n\nf()\n"
 }
 
 # The best time (microseconds) of the program TEXT.
@@ -145,10 +145,10 @@ try {
     puts [format "  %-14s %s" "stack 12" [perCall {x = 0} {bcf::stack_tail(1, 2, 3, 4, 5, 6, 7, 8, 9, -10, -11, -12)} 0]]
     puts [format "  %-14s %s" "stack 20" [perCall {x = 0} {bcf::pick(19, -2, 253, -1234, 65244, -123456789, 4275878552, 1, -4, 247, -30000, -128, 48879, -2000000000, 127, -81985529216486895, 128, -2, 2147483649, -1)} 0]]
     foreach s $sizes {
-        puts [format "  %-14s %s" "read $s" [perCall "data = abi::bytes::from_list(pattern($s))" {bcf::sum(data, 0)} 0]]
+        puts [format "  %-14s %s" "read $s" [perCall "data = std::abi::bytes::from_list(pattern($s))" {bcf::sum(data, 0)} 0]]
     }
     foreach s $sizes {
-        puts [format "  %-14s %s" "write $s" [perCall "m = abi::bytes::from_bytes(abi::bytes::from_list(pattern($s)))" {bcf::fill(m, 0, 0)} 1]]
+        puts [format "  %-14s %s" "write $s" [perCall "m = std::abi::bytes::from_bytes(std::abi::bytes::from_list(pattern($s)))" {bcf::fill(m, 0, 0)} 1]]
     }
     puts ""
     if {$boringssl eq ""} {
@@ -157,7 +157,7 @@ try {
         puts "2. SHA-256 (BoringSSL, static), per digest (best of $runs runs):"
         foreach s $shaSizes {
             set count [expr {max(4, min($n, 67108864 / max($s, 1)))}]
-            set setup "data = abi::bytes::from_list(pattern($s))"
+            set setup "data = std::abi::bytes::from_list(pattern($s))"
             set baseline [best "import sha256\n[program $setup 0 0 $count]"]
             set t [best "import sha256\n[program $setup {sha256::digest(data)} 1 $count]"]
             set us [expr {($t - $baseline) / $count}]
@@ -167,7 +167,7 @@ try {
     puts ""
     puts "3. compile and link, ms (best of $runs):"
     set plain [compileApp "x = 40\nx + 2\n"]
-    set calling [compileApp "import ffi::c\nimport bcf\n\nbcf::add(40, 2)\n"]
+    set calling [compileApp "import std::ffi::c\nimport bcf\n\nbcf::add(40, 2)\n"]
     foreach {label hir} [list "no C" $plain "calls C" $calling] {
         set run {}
         set exe {}

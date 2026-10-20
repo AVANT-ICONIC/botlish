@@ -18,9 +18,9 @@
 #     deep (a path, and through a subrecord), a pointer store, making an
 #     edit, a store then a read, and one store into a 4096-byte record (the
 #     theorem: a store's cost is the field's, not the record's); into byte
-#     storage, one binary::write, three in a chain, one binary::write_foreign
+#     storage, one std::binary::write, three in a chain, one std::binary::write_foreign
 #     and one into a 4096-byte record, beside the existing per-byte update
-#     abi::bytes::replace.
+#     std::abi::bytes::replace.
 #   * The heap allocations of each program (Cranelift's counters) and per
 #     operation over its baseline.
 #
@@ -49,51 +49,51 @@ foreach {option value} $args {
     }
 }
 
-set prelude {import abi
-import abi::bytes
-import binary
-import binary::native
-import byte
-import ffi::c
+set prelude {import std::abi
+import std::abi::bytes
+import std::binary
+import std::binary::native
+import std::byte
+import std::ffi::c
 import ffi_fixture
-import list
+import std::list
 
-fn bytes_of(values: List[int]) -> abi::bytes::Bytes:
+fn bytes_of(values: List[int]) -> std::abi::bytes::Bytes:
     bs = loop v in values:
-        b = byte::from_int(v):
-            on byte::BelowRange:
+        b = std::byte::from_int(v):
+            on std::byte::BelowRange:
                 0
-            on byte::AboveRange:
+            on std::byte::AboveRange:
                 255
         b
-    abi::bytes::from_list(bs)
+    std::abi::bytes::from_list(bs)
 
 layout Inner:
     size 4
     align 2
-    field x: binary::I16 at 0
-    field y: binary::U16 at 2
+    field x: std::binary::I16 at 0
+    field y: std::binary::U16 at 2
 
 layout Outer:
     size 12
     align 4
-    field count: binary::U32 at 0
+    field count: std::binary::U32 at 0
     field inner: Inner at 4
-    field last: binary::U8 at 8
+    field last: std::binary::U8 at 8
 
 layout Rec:
     size 32
     align 8
-    field head: binary::U8 at 0
+    field head: std::binary::U8 at 0
     field outer: Outer at 4
-    field word: binary::U32 at 16
-    field next: ffi::c::Ptr[ffi::c::Void] at 24
+    field word: std::binary::U32 at 16
+    field next: std::ffi::c::Ptr[std::ffi::c::Void] at 24
 
 layout Big:
     size 4096
     align 8
-    field first: binary::U32 at 0
-    field last: binary::U32 at 4092
+    field first: std::binary::U32 at 0
+    field last: std::binary::U32 at 4092
 
 }
 
@@ -111,35 +111,35 @@ proc Fn {n body} {
 # SETUP lines, then BODY lines as a collecting loop `i from 0 to n`, then
 # the List's length.
 proc Each {setup lines} {
-    return [concat $setup [list "xs = loop i from 0 to n:"] [lmap line $lines {string cat "    " $line}] [list "list::length(xs)"]]
+    return [concat $setup [list "xs = loop i from 0 to n:"] [lmap line $lines {string cat "    " $line}] [list "std::list::length(xs)"]]
 }
 
-set editSetup {"p = ffi_fixture::memory[ffi::c::Void](abi::bytes::freeze(abi::bytes::zeroed(abi::usize(32))))" "e = binary::native::edit(Rec, p)" "q = ffi::c::null[ffi::c::Void]()"}
-set bigSetup {"p = ffi_fixture::memory[ffi::c::Void](abi::bytes::freeze(abi::bytes::zeroed(abi::usize(4096))))" "e = binary::native::edit(Big, p)"}
-set bytesSetup {"d = abi::bytes::zeroed(abi::usize(32))" "q = ffi::c::null[ffi::c::Void]()"}
-set bigBytesSetup {"d = abi::bytes::zeroed(abi::usize(4096))"}
+set editSetup {"p = ffi_fixture::memory[std::ffi::c::Void](std::abi::bytes::freeze(std::abi::bytes::zeroed(std::abi::usize(32))))" "e = std::binary::native::edit(Rec, p)" "q = std::ffi::c::null[std::ffi::c::Void]()"}
+set bigSetup {"p = ffi_fixture::memory[std::ffi::c::Void](std::abi::bytes::freeze(std::abi::bytes::zeroed(std::abi::usize(4096))))" "e = std::binary::native::edit(Big, p)"}
+set bytesSetup {"d = std::abi::bytes::zeroed(std::abi::usize(32))" "q = std::ffi::c::null[std::ffi::c::Void]()"}
+set bigBytesSetup {"d = std::abi::bytes::zeroed(std::abi::usize(4096))"}
 
 proc programText {kind n} {
     # A program that makes an edit is low-level (DIRECT-MODULES.md).
     set p [expr {[string match *edit* $kind] || [string match big-* $kind] ? "direct module\n\n" : ""}]$::prelude
     switch -- $kind {
         edit-base     { append p [Fn $n [Each $::editSetup {i}]] }
-        edit-scalar   { append p [Fn $n [Each $::editSetup {"binary::store(e, Rec.word, 7)" i}]] }
-        edit-scalar8  { append p [Fn $n [Each $::editSetup {"binary::store(e, Rec.word, 7)" "binary::store(e, Rec.head, 1)" "binary::store(e, Rec.outer.count, 2)" "binary::store(e, Rec.outer.last, 3)" "binary::store(e, Rec.word, 8)" "binary::store(e, Rec.head, 4)" "binary::store(e, Rec.outer.count, 5)" "binary::store(e, Rec.outer.last, 6)" i}]] }
-        edit-nested   { append p [Fn $n [Each $::editSetup {"binary::store(e, Rec.outer.inner.x, -5)" i}]] }
-        edit-subrecord { append p [Fn $n [Each $::editSetup {"binary::store(e.outer.inner, Inner.x, -5)" i}]] }
-        edit-pointer  { append p [Fn $n [Each $::editSetup {"binary::store(e, Rec.next, q)" i}]] }
-        edit-make     { append p [Fn $n [Each $::editSetup {"g = binary::native::edit(Rec, p)" i}]] }
-        edit-roundtrip { append p [Fn $n [Each $::editSetup {"binary::store(e, Rec.word, 7)" "e.word"}]] }
+        edit-scalar   { append p [Fn $n [Each $::editSetup {"std::binary::store(e, Rec.word, 7)" i}]] }
+        edit-scalar8  { append p [Fn $n [Each $::editSetup {"std::binary::store(e, Rec.word, 7)" "std::binary::store(e, Rec.head, 1)" "std::binary::store(e, Rec.outer.count, 2)" "std::binary::store(e, Rec.outer.last, 3)" "std::binary::store(e, Rec.word, 8)" "std::binary::store(e, Rec.head, 4)" "std::binary::store(e, Rec.outer.count, 5)" "std::binary::store(e, Rec.outer.last, 6)" i}]] }
+        edit-nested   { append p [Fn $n [Each $::editSetup {"std::binary::store(e, Rec.outer.inner.x, -5)" i}]] }
+        edit-subrecord { append p [Fn $n [Each $::editSetup {"std::binary::store(e.outer.inner, Inner.x, -5)" i}]] }
+        edit-pointer  { append p [Fn $n [Each $::editSetup {"std::binary::store(e, Rec.next, q)" i}]] }
+        edit-make     { append p [Fn $n [Each $::editSetup {"g = std::binary::native::edit(Rec, p)" i}]] }
+        edit-roundtrip { append p [Fn $n [Each $::editSetup {"std::binary::store(e, Rec.word, 7)" "e.word"}]] }
         big-base      { append p [Fn $n [Each $::bigSetup {i}]] }
-        big-store     { append p [Fn $n [Each $::bigSetup {"binary::store(e, Big.last, 7)" i}]] }
+        big-store     { append p [Fn $n [Each $::bigSetup {"std::binary::store(e, Big.last, 7)" i}]] }
         bytes-base    { append p [Fn $n [Each $::bytesSetup {i}]] }
-        bytes-write   { append p [Fn $n [Each $::bytesSetup {"w = binary::write(d, Rec.word, 7)" "abi::bytes::mutable_length(w).value"}]] }
-        bytes-write3  { append p [Fn $n [Each $::bytesSetup {"a = binary::write(d, Rec.word, 7)" "b = binary::write(a, Rec.head, 1)" "c = binary::write(b, Rec.outer.inner.x, -5)" "abi::bytes::mutable_length(c).value"}]] }
-        bytes-foreign { append p [Fn $n [Each $::bytesSetup {"w = binary::write_foreign(d, Rec.next, q)" "abi::bytes::mutable_length(w).value"}]] }
-        bytes-replace { append p [Fn $n [Each $::bytesSetup {"w = abi::bytes::replace(d, 16, 7)" "abi::bytes::mutable_length(w).value"}]] }
+        bytes-write   { append p [Fn $n [Each $::bytesSetup {"w = std::binary::write(d, Rec.word, 7)" "std::abi::bytes::mutable_length(w).value"}]] }
+        bytes-write3  { append p [Fn $n [Each $::bytesSetup {"a = std::binary::write(d, Rec.word, 7)" "b = std::binary::write(a, Rec.head, 1)" "c = std::binary::write(b, Rec.outer.inner.x, -5)" "std::abi::bytes::mutable_length(c).value"}]] }
+        bytes-foreign { append p [Fn $n [Each $::bytesSetup {"w = std::binary::write_foreign(d, Rec.next, q)" "std::abi::bytes::mutable_length(w).value"}]] }
+        bytes-replace { append p [Fn $n [Each $::bytesSetup {"w = std::abi::bytes::replace(d, 16, 7)" "std::abi::bytes::mutable_length(w).value"}]] }
         bigbytes-base { append p [Fn $n [Each $::bigBytesSetup {i}]] }
-        bigbytes-write { append p [Fn $n [Each $::bigBytesSetup {"w = binary::write(d, Big.last, 7)" "abi::bytes::mutable_length(w).value"}]] }
+        bigbytes-write { append p [Fn $n [Each $::bigBytesSetup {"w = std::binary::write(d, Big.last, 7)" "std::abi::bytes::mutable_length(w).value"}]] }
         default { error "unknown program $kind" }
     }
     return $p
@@ -180,14 +180,14 @@ set operations {
     "edit: a store two layouts deep, by path (Rec.outer.inner.x)" edit-nested edit-base
     "edit: a store two layouts deep, through the subrecord e.outer.inner" edit-subrecord edit-base
     "edit: a pointer store (Rec.next)" edit-pointer edit-base
-    "edit: make an edit (binary::native::edit, a null test)" edit-make edit-base
+    "edit: make an edit (std::binary::native::edit, a null test)" edit-make edit-base
     "edit: a store, then a read of the field" edit-roundtrip edit-base
     "edit: one scalar store into a 4096-byte record" big-store big-base
-    "bytes: one binary::write (a 32-byte record)" bytes-write bytes-base
-    "bytes: three binary::writes in a chain" bytes-write3 bytes-base
-    "bytes: one binary::write_foreign (a pointer field)" bytes-foreign bytes-base
-    "bytes: one binary::write into a 4096-byte record" bigbytes-write bigbytes-base
-    "reference: abi::bytes::replace of one byte (32 bytes)" bytes-replace bytes-base
+    "bytes: one std::binary::write (a 32-byte record)" bytes-write bytes-base
+    "bytes: three std::binary::writes in a chain" bytes-write3 bytes-base
+    "bytes: one std::binary::write_foreign (a pointer field)" bytes-foreign bytes-base
+    "bytes: one std::binary::write into a 4096-byte record" bigbytes-write bigbytes-base
+    "reference: std::abi::bytes::replace of one byte (32 bytes)" bytes-replace bytes-base
 }
 
 puts "Native layout writes: performance (n = $n operations per program; best of $runs runs)\n"

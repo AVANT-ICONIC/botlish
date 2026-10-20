@@ -5,7 +5,7 @@
 #
 #   tclsh9.0 audit/refactor/tools/gate.tcl ?-root DIR? ?-manifest FILE?
 #
-# -root DIR gates another tree's examples/, bench/ and lib/ (and its
+# -root DIR gates another tree's examples/, bench/ and stdlib/ (and its
 # audit/refactor/manifest.txt unless -manifest is given) with this checkout's
 # compiler.
 #
@@ -58,7 +58,7 @@ if {$manifestPath eq ""} {
 # manifest are ROOT's (-root runs the gate over another tree, e.g. a scratch
 # copy with a planted warning).
 source [file join $checkout surface surface.tcl]
-set ::core::libraryDir [file join $root lib]
+set ::core::libraryDir [file join $root stdlib]
 set ::refactorSweepLibrary 1
 source [file join $here sweep.tcl]
 

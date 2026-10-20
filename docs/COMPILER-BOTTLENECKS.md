@@ -272,7 +272,7 @@ Correctness defects found alongside (section 4), all fixed now:
 
 - **Library modules.**
   - Every build re-resolves and re-analyses every imported module (`hir::BuildOnce`).
-  - Cost: about 0.5 s per build for about 1,450 library expressions, about 165 s over the corpus's 329 builds. `lib/test.bot` alone is about 75 s.
+  - Cost: about 0.5 s per build for about 1,450 library expressions, about 165 s over the corpus's 329 builds. `stdlib/test.bot` alone is about 75 s.
   - Reusing an unchanged module's analysis within one compilation needed compilation isolation first. That is done (COMPILATION-ISOLATION.md): a HIR carries the declaration state its backends need. Reuse across builds still has to partition that state by owner namespace.
 - **Method-call trials.**
   - 81 of the corpus's 328 builds are trials (`hir::DecideMethodCalls`). mutable-array.bot has 14 trial builds of its 20.
@@ -419,11 +419,11 @@ Why it matters beyond the failure:
 ### 4.2 A dead call of a trait-polymorphic function fails compilation (fixed)
 
 ```
-fn mk() errors compiler::CompilerError:
+fn mk() errors std::compiler::CompilerError:
     static compile:
         Square {side: want_int("s")}     # rejected: mk() is `never`
 
-fn use() -> int errors compiler::CompilerError:
+fn use() -> int errors std::compiler::CompilerError:
     measure(mk())                         # measure(s: Shape) -> int
 ```
 

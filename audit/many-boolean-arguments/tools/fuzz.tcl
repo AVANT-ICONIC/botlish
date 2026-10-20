@@ -26,8 +26,8 @@
 # is visible in the result. The gate is the oracle's own: at least two
 # parameters of a proven-bool kind and at least one of any other kind. Some
 # programs also call probe natives registered here (milestone 2's probe
-# style): `str::fz_opts` (int, bool, bool: past the gate), `str::fz_xor`
-# (bool, bool: all bool) and `str::fz_one` (int, bool: one bool).
+# style): `std::str::fz_opts` (int, bool, bool: past the gate), `std::str::fz_xor`
+# (bool, bool: all bool) and `std::str::fz_one` (int, bool: one bool).
 #
 # Call sites pass, at each ordinary position: an Int at a subject, and at every
 # other position a written literal (`true`/`false`), a computed bool
@@ -136,16 +136,16 @@ proc shuffle {list} {
 proc boolBit {v} {
     return [core::value::isTrue $v]
 }
-core::native::register str::fz_opts -arity 3 -param-types {int bool bool} -result-type int \
+core::native::register std::str::fz_opts -arity 3 -param-types {int bool bool} -result-type int \
     -impl {apply {{s a b} {core::value::intFromNumber [expr {[core::value::intOf $s] + 2 * [boolBit $a] + 4 * [boolBit $b]}]}}}
-core::native::register str::fz_xor -arity 2 -param-types {bool bool} -result-type int \
+core::native::register std::str::fz_xor -arity 2 -param-types {bool bool} -result-type int \
     -impl {apply {{a b} {core::value::intFromNumber [expr {[boolBit $a] + 2 * [boolBit $b]}]}}}
-core::native::register str::fz_one -arity 2 -param-types {int bool} -result-type int \
+core::native::register std::str::fz_one -arity 2 -param-types {int bool} -result-type int \
     -impl {apply {{s a} {core::value::intFromNumber [expr {[core::value::intOf $s] + 2 * [boolBit $a]}]}}}
 set ::natives [dict create \
-    str::fz_opts {params {{s int} {a bool} {b bool}}} \
-    str::fz_xor {params {{a bool} {b bool}}} \
-    str::fz_one {params {{s int} {a bool}}}]
+    std::str::fz_opts {params {{s int} {a bool} {b bool}}} \
+    std::str::fz_xor {params {{a bool} {b bool}}} \
+    std::str::fz_one {params {{s int} {a bool}}}]
 
 # The kinds of an ordinary parameter, and whether the gate counts it as bool.
 proc boolKind {kind} {
@@ -449,7 +449,7 @@ proc render {model {convert ""} {swap 0}} {
     set ::lines {}
     set ::placed {}
     if {[dict get $model natives]} {
-        emit "import str"
+        emit "import std::str"
     }
     foreach line {
         "fn weight(bit: bool, w: int) -> int:" "    if bit:" "        return w" "    0"

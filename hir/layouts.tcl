@@ -16,7 +16,7 @@
 #                   type alias, a function or a value: a declaration with
 #                   nominal identity, named only in a type (LayoutStruct[L],
 #                   a layout field) or as the layout operand of a binary
-#                   operation (binary::parse(L, data), binary::layout_length(L))
+#                   operation (std::binary::parse(L, data), std::binary::layout_length(L))
 #   LayoutStruct[L] the immutable structural value imprinting with layout L
 #                   produces: one field per layout field, nothing else (no
 #                   padding, no offsets)
@@ -49,9 +49,9 @@
 #   {name F offset O kind union layout U width W type any}
 #
 # where T is the field's consumer type -- the declared integer domain
-# (`{refined int {binary::U16}}`), `{nstruct LayoutStruct[INNER]}`, or the
-# declared C pointer type (`{cptr P}`, ffi::c::Ptr[P]; `{cfnptr F}`,
-# ffi::c::FnPtr[F]) -- and W its byte width (a nested layout's width is its
+# (`{refined int {std::binary::U16}}`), `{nstruct LayoutStruct[INNER]}`, or the
+# declared C pointer type (`{cptr P}`, std::ffi::c::Ptr[P]; `{cfnptr F}`,
+# std::ffi::c::FnPtr[F]) -- and W its byte width (a nested layout's width is its
 # size, a pointer's the compilation's C target's pointer width). `endian` is
 # the byte order: the target's, little-endian on every supported target; it
 # is recorded per field so an explicit big-endian encoding is one more value
@@ -60,7 +60,7 @@
 # Representations. Everything after a field's name and offset is its
 # *representation*: a scalar, a pointer, a nested layout -- or a fixed array
 # (FIXED-LAYOUT-ARRAYS.md), N consecutive elements of one representation E
-# (itself any of the four: `array 2 of array 3 of binary::U32` is two rows
+# (itself any of the four: `array 2 of array 3 of std::binary::U32` is two rows
 # of three), the element at offset i * S, S the stride: E's own width (a
 # scalar's encoding, the target's pointer width, a nested layout's size --
 # tail padding included -- or a nested array's whole width), never a C
@@ -86,19 +86,19 @@
 # alternative read at its address), its alternatives named by designators
 # (`L.u.whole`). A union has no copied value: its alternatives are not
 # independent fields, so there is no LayoutStruct of a union nor of anything
-# holding one by value -- binary::parse, binary::emit, binary::load and
+# holding one by value -- std::binary::parse, std::binary::emit, std::binary::load and
 # whole-array writes of such a representation are LAYOUT-UNION, and its
 # consumer type here is `any`, which no checked program ever holds. Bytes
 # are interpreted one alternative at a time through a static designator
-# (binary::read, binary::write), native memory through a view or an edit.
+# (std::binary::read, std::binary::write), native memory through a view or an edit.
 #
 # Pointer fields (NATIVE-LAYOUT-VIEWS.md). A field may hold a C data or
 # function pointer: its width and placement are representation facts like a
 # scalar's, but its meaning is authority -- an address some foreign code
 # handed out. So a layout with a pointer field (directly or in a nested
 # layout) is *native-only*: it is read through a native view of live native
-# memory (NativeView[L], binary::load), where the pointer is the one that
-# memory holds, and never imprinted from bytes (binary::parse would make a
+# memory (NativeView[L], std::binary::load), where the pointer is the one that
+# memory holds, and never imprinted from bytes (std::binary::parse would make a
 # pointer out of arbitrary bytes) or emitted into them (writing pointers is a
 # later milestone's): both are LAYOUT-NATIVE-ONLY. A pointer field's
 # pointee may name an opaque struct, which is registered after the layouts:
@@ -120,8 +120,8 @@
 # unsigned encoding: 0..2^(8k)-1 (unsigned) or -2^(8k-1)..2^(8k-1)-1
 # (signed), k in 1, 2, 4, 8. The encoding is the domain's: every one of the
 # eight value sets is distinct, so the width and signedness follow from the
-# declared type alone, with no table of names (`binary::U16`, `abi::U16Value`,
-# `byte::Byte` -- 0..255, an unsigned byte -- all qualify). Because the
+# declared type alone, with no table of names (`std::binary::U16`, `std::abi::U16Value`,
+# `std::byte::Byte` -- 0..255, an unsigned byte -- all qualify). Because the
 # domain is exactly the encoding's value set, every bit pattern decodes to a
 # value of the field's type (parse cannot fail on a field) and every value of
 # the type encodes (emit cannot truncate). `int` (no finite width), a domain
@@ -492,7 +492,7 @@ proc hir::layouts::ElementType {type} {
 }
 
 # The consumer (copied) type of the representation term TERM: what
-# binary::load makes of it.
+# std::binary::load makes of it.
 proc hir::layouts::TermConsumerType {term} {
     set repr [ReprOfTerm $term]
     if {$repr eq ""} {
@@ -502,7 +502,7 @@ proc hir::layouts::TermConsumerType {term} {
 }
 
 # TERM as source text, the way hir::types::show prints a type: "array 16 of
-# int[binary::U16]", "array 4 of POINT".
+# int[std::binary::U16]", "array 4 of POINT".
 proc hir::layouts::ShowTerm {term} {
     if {[IsArrayTerm $term]} {
         return "array [lindex $term 1] of [ShowTerm [lindex $term 2]]"
@@ -781,8 +781,8 @@ proc hir::layouts::ViewFieldType {id name {edit 0}} {
         if {[dict get $field name] ne $name} continue
         if {[dict get $field kind] eq "array"} {
             # A fixed array (FIXED-LAYOUT-ARRAYS.md): the live array, read
-            # one element at a time (binary::element) or copied whole
-            # (binary::load); nothing is read by the projection.
+            # one element at a time (std::binary::element) or copied whole
+            # (std::binary::load); nothing is read by the projection.
             return [NativeTermType [ReprTerm $field] $edit]
         }
         if {[dict get $field kind] in {layout union}} {
@@ -812,8 +812,8 @@ proc hir::layouts::NativeFieldType {type name} {
 # Field designators (NATIVE-LAYOUT-WRITES.md)
 #
 # A write names one field statically, as LAYOUT.FIELD or a path through
-# nested layouts, LAYOUT.FIELD.FIELD...: the operand of binary::store,
-# binary::write and binary::write_foreign (role `path K`). Resolution
+# nested layouts, LAYOUT.FIELD.FIELD...: the operand of std::binary::store,
+# std::binary::write and std::binary::write_foreign (role `path K`). Resolution
 # (hir/resolve.tcl's FieldPathOperand) turns it into the constant
 #
 #   {STRUCTID SIZE PATH FIELD}
@@ -836,7 +836,7 @@ proc hir::layouts::NativeFieldType {type name} {
 # leaf (a scalar or a pointer, a field or an element) or a whole fixed
 # array (a field, or a row of one: `L.m[1]`); an element index past the
 # array's extent is LAYOUT-ARRAY-INDEX, an index of something that is no
-# array LAYOUT-OPERAND. With RECORDS 1 (binary::read, LAYOUT-UNIONS.md) it
+# array LAYOUT-OPERAND. With RECORDS 1 (std::binary::read, LAYOUT-UNIONS.md) it
 # may also name a nested layout, whose whole copied value a read makes.
 #
 # A union (LAYOUT-UNIONS.md) is walked like a nested layout: its
@@ -993,9 +993,9 @@ proc hir::layouts::PathText {path} {
 }
 
 # The pointer width in bytes on the compilation's C target: the target the
-# ffi::c scalars of this compilation were declared for (hir/cabi.tcl's
-# NamespaceTypeDecls; a pointer type can only be written where ffi::c is
-# imported), or "" when no file of the compilation imports ffi::c.
+# std::ffi::c scalars of this compilation were declared for (hir/cabi.tcl's
+# NamespaceTypeDecls; a pointer type can only be written where std::ffi::c is
+# imported), or "" when no file of the compilation imports std::ffi::c.
 proc hir::layouts::PointerWidth {} {
     set target [hir::cabi::CompilationTarget]
     if {$target eq ""} {
@@ -1005,7 +1005,7 @@ proc hir::layouts::PointerWidth {} {
 }
 
 # 1 if the field type expression TYPEEXPR is written as a C pointer type
-# (ffi::c::Ptr[...] or ffi::c::FnPtr[...]).
+# (std::ffi::c::Ptr[...] or std::ffi::c::FnPtr[...]).
 proc hir::layouts::PointerTypeExpr {typeExpr} {
     return [expr {[llength $typeExpr] == 2 && [lindex $typeExpr 0] in [list [hir::cabi::PtrName] [hir::cabi::FnPtrName]]}]
 }
@@ -1045,7 +1045,7 @@ proc hir::layouts::Encoding {type} {
 # Why the resolved type TYPE, written SPELLED, is not a scalar field type.
 proc hir::layouts::NotScalarReason {type spelled} {
     if {$type eq "int"} {
-        return "int has no fixed width: a scalar field is an integer domain whose values are exactly one fixed-width encoding's (e.g. binary::U32, Int in 0..4294967295)"
+        return "int has no fixed width: a scalar field is an integer domain whose values are exactly one fixed-width encoding's (e.g. std::binary::U32, Int in 0..4294967295)"
     }
     if {[lindex $type 0] eq "refined" && [lindex $type 1] eq "int"} {
         foreach name [core::type::evidenceClosure $type] {
@@ -1063,9 +1063,9 @@ proc hir::layouts::NotScalarReason {type spelled} {
         return "[hir::types::show $type] is a struct type, not an integer domain or a layout (a nested layout field names the layout itself)"
     }
     if {[hir::types::IsCAddress $type]} {
-        # A pointer field is written ffi::c::Ptr[T] or ffi::c::FnPtr[F]
+        # A pointer field is written std::ffi::c::Ptr[T] or std::ffi::c::FnPtr[F]
         # (NATIVE-LAYOUT-VIEWS.md): its pointee identity is part of its type.
-        return "[hir::types::show $type] is a C pointer of no single pointee identity: a pointer field is written ffi::c::Ptr\[T\] or ffi::c::FnPtr\[F\]"
+        return "[hir::types::show $type] is a C pointer of no single pointee identity: a pointer field is written std::ffi::c::Ptr\[T\] or std::ffi::c::FnPtr\[F\]"
     }
     return "[hir::types::show $type] has no fixed binary width (a layout field is an integer domain of exact fixed width, or a nested layout)"
 }
@@ -1359,7 +1359,7 @@ proc hir::layouts::ResolveRepr {typeExpr pointerText ns byId doneVar stack id na
         # are registered (ResolvePointers).
         set width [PointerWidth]
         if {$width eq ""} {
-            Fail $typeSpan "$what $aPointer, whose width is the compilation's C target's: no file of this compilation imports ffi::c, so there is none" LAYOUT-FIELD-TYPE
+            Fail $typeSpan "$what $aPointer, whose width is the compilation's C target's: no file of this compilation imports std::ffi::c, so there is none" LAYOUT-FIELD-TYPE
         }
         variable pendingPointers
         lappend pendingPointers [dict create id $id field $fieldName name $name ns $ns typeExpr $typeExpr \
@@ -1645,7 +1645,7 @@ proc hir::layouts::ResolveArrayTerm {arg ns ctor} {
     set repr [ReprOfTerm $term]
     if {$repr eq ""} {
         return -code error -errorcode {BOTLISH LAYOUT-STRUCT-PARAMETER} \
-            "$ctor\[$spelled\]: its element has no width in this compilation (a C pointer's width is the C target's: import ffi::c)"
+            "$ctor\[$spelled\]: its element has no width in this compilation (a C pointer's width is the C target's: import std::ffi::c)"
     }
     if {[dict get $repr width] > $maxSize} {
         return -code error -errorcode {BOTLISH LAYOUT-ARRAY-EXTENT} \
@@ -1710,9 +1710,9 @@ proc hir::layouts::ArgumentKind {arg ns} {
 #                   are known the call becomes a call of FORM with L's
 #                   descriptor appended (Elaborate)
 #   input K         argument K is the bytes being imprinted: statically an
-#                   abi::bytes::Bytes (verify)
+#                   std::abi::bytes::Bytes (verify)
 #   pointer K       argument K is the data pointer a native view reads
-#                   through: statically an ffi::c::Ptr[T] (verify)
+#                   through: statically a std::ffi::c::Ptr[T] (verify)
 #   viewed AT FORM  argument AT's static type is NativeView[L]; once types
 #                   are known the call becomes a call of FORM with L's
 #                   descriptor appended (Elaborate)
@@ -1722,7 +1722,7 @@ proc hir::layouts::ArgumentKind {arg ns} {
 #                   statically a NativeEdit[L] -- never a NativeView[L],
 #                   which is read-only (verify)
 #   output K        argument K is the byte storage a layout write writes
-#                   into: statically an abi::bytes::MutableBytes (verify)
+#                   into: statically a std::abi::bytes::MutableBytes (verify)
 #   path K          argument K is the static field designator, written
 #                   LAYOUT.FIELD[.FIELD...] and resolved (hir/resolve.tcl's
 #                   FieldPathOperand) to the field designator constant (the
@@ -1784,37 +1784,37 @@ proc hir::layouts::CalledNative {hir e} {
 #
 #   BINARY-OPERAND      emit's value is not statically a LayoutStruct[L];
 #                       the bytes given to parse are not statically an
-#                       abi::bytes::Bytes; the pointer given to
-#                       binary::native::view is not statically a data
-#                       pointer ffi::c::Ptr[T]; load's value is not
+#                       std::abi::bytes::Bytes; the pointer given to
+#                       std::binary::native::view is not statically a data
+#                       pointer std::ffi::c::Ptr[T]; load's value is not
 #                       statically a NativeView[L]; an operation used as a
 #                       value (it takes static operands, so it has no
 #                       function value)
 #   LAYOUT-NATIVE-ONLY  parse or emit of a layout with a pointer field (the
 #                       file header's "Pointer fields"); an ordinary
-#                       binary::write of a pointer field
+#                       std::binary::write of a pointer field
 #
 # and for the writes (NATIVE-LAYOUT-WRITES.md):
 #
 #   BINARY-OPERAND      a store's edit is not statically a NativeEdit[L] (a
 #                       NativeView[L] is read-only); a write's storage is
-#                       not statically an abi::bytes::MutableBytes
+#                       not statically a std::abi::bytes::MutableBytes
 #   LAYOUT-OPERAND      a store's field designator names a field of
 #                       another layout than its edit's
-#   LAYOUT-FOREIGN-WRITE  binary::write_foreign of a field that is not a C
+#   LAYOUT-FOREIGN-WRITE  std::binary::write_foreign of a field that is not a C
 #                       pointer (an ordinary scalar is written by
-#                       binary::write)
+#                       std::binary::write)
 #
 # and for unions (LAYOUT-UNIONS.md):
 #
 #   LAYOUT-UNION        a copy of a representation holding a union by
-#                       value: binary::parse, binary::emit, binary::load of
-#                       one, binary::read of one, a whole-array write of an
+#                       value: std::binary::parse, std::binary::emit, std::binary::load of
+#                       one, std::binary::read of one, a whole-array write of an
 #                       array of unions (a union has no copied value)
-#   LAYOUT-NATIVE-ONLY  binary::read of a C pointer, or of anything holding
+#   LAYOUT-NATIVE-ONLY  std::binary::read of a C pointer, or of anything holding
 #                       one (bytes never become a pointer)
-#   LAYOUT-OPERAND      binary::store_element of a union element (written
-#                       through its alternatives, binary::element(a, i))
+#   LAYOUT-OPERAND      std::binary::store_element of a union element (written
+#                       through its alternatives, std::binary::element(a, i))
 #
 # The written value is held to the field's type by hir/range.tcl
 # (VerifyWriteValue).
@@ -1877,12 +1877,12 @@ proc hir::layouts::Problems {hir e name role} {
                     "$name needs a live fixed array: a value whose static type is NativeView\[array N of E\] or NativeEdit\[array N of E\] (an array field read through a native view or edit, v.items, or an element of such an array); this value's type here is [hir::types::show $type]" $arg]
             } else {
                 lappend problems [list BINARY-OPERAND \
-                    "$name needs a value whose static type is NativeView\[L\] or NativeEdit\[L\] for a layout L (a native view or edit, binary::native::view or binary::native::edit, whose layout it reads every field of) or a live fixed array NativeView\[array N of E\] (v.items); this value's type here is [hir::types::show $type]" $arg]
+                    "$name needs a value whose static type is NativeView\[L\] or NativeEdit\[L\] for a layout L (a native view or edit, std::binary::native::view or std::binary::native::edit, whose layout it reads every field of) or a live fixed array NativeView\[array N of E\] (v.items); this value's type here is [hir::types::show $type]" $arg]
             }
         }
     }
     if {$viewed ne "" || [RoleOf $role op] in {load load_array}} {
-        # binary::load of a live union, or of anything holding one by value
+        # std::binary::load of a live union, or of anything holding one by value
         # (LAYOUT-UNIONS.md): it has no copied value. (Its argument 0, a
         # view, an edit or a live array, before and after elaboration.)
         set arg [lindex $args 0]
@@ -1895,13 +1895,13 @@ proc hir::layouts::Problems {hir e name role} {
         # One element written through a live array (FIXED-LAYOUT-ARRAYS.md):
         # the array must be write authority, and its element a scalar or a
         # pointer (a nested layout or array is written through its own
-        # elements or fields, binary::element(a, i)).
+        # elements or fields, std::binary::element(a, i)).
         set arg [lindex $args 0]
         set type [hir::typeOf $hir $arg]
         set term [OfArrayType $type]
         if {$term ne "" && ![hir::types::IsNativeEdit $type]} {
             lappend problems [list BINARY-OPERAND \
-                "$name writes live native memory through a native edit; this array is [hir::types::show $type], read through a native view, which is read-only: write authority over native memory is a NativeEdit, made from a pointer by binary::native::edit (a view never becomes one)" $arg]
+                "$name writes live native memory through a native edit; this array is [hir::types::show $type], read through a native view, which is read-only: write authority over native memory is a NativeEdit, made from a pointer by std::binary::native::edit (a view never becomes one)" $arg]
         } elseif {$term ne "" && ([IsArrayTerm [lindex $term 2]] || [IsNamedTerm [lindex $term 2]])} {
             set element [lindex $term 2]
             if {[IsArrayTerm $element]} {
@@ -1920,7 +1920,7 @@ proc hir::layouts::Problems {hir e name role} {
                 set window "edit"
             }
             lappend problems [list LAYOUT-OPERAND \
-                "$name writes one scalar or pointer element, but an element of [hir::types::show $type] is $what: write its $parts through binary::element(a, i), the element's own live $window" $arg]
+                "$name writes one scalar or pointer element, but an element of [hir::types::show $type] is $what: write its $parts through std::binary::element(a, i), the element's own live $window" $arg]
         }
     }
     set at [RoleOf $role edited]
@@ -1929,12 +1929,12 @@ proc hir::layouts::Problems {hir e name role} {
         set type [hir::typeOf $hir $arg]
         if {$type ne "never" && [OfEditType $type] eq ""} {
             if {[hir::types::IsNativeView $type]} {
-                set why "[hir::types::show $type], a native view, which is read-only: write authority over native memory is a NativeEdit\[L\], made from a pointer by binary::native::edit (a view never becomes one)"
+                set why "[hir::types::show $type], a native view, which is read-only: write authority over native memory is a NativeEdit\[L\], made from a pointer by std::binary::native::edit (a view never becomes one)"
             } else {
                 set why [hir::types::show $type]
             }
             lappend problems [list BINARY-OPERAND \
-                "$name writes live native memory through a native edit (a NativeEdit\[L\], binary::native::edit); this value's type here is $why" $arg]
+                "$name writes live native memory through a native edit (a NativeEdit\[L\], std::binary::native::edit); this value's type here is $why" $arg]
         }
     }
     set at [RoleOf $role output]
@@ -1944,7 +1944,7 @@ proc hir::layouts::Problems {hir e name role} {
         set mutable [core::bytestore::mutableBytesType]
         if {$type ne "never" && $type ne [list nstruct $mutable]} {
             lappend problems [list BINARY-OPERAND \
-                "$name writes a field into the bytes of an $mutable (a record built in byte storage the program owns: abi::bytes::zeroed); this argument's type here is [hir::types::show $type]" $arg]
+                "$name writes a field into the bytes of a $mutable (a record built in byte storage the program owns: std::abi::bytes::zeroed); this argument's type here is [hir::types::show $type]" $arg]
         }
     }
     set at [RoleOf $role path]
@@ -1987,12 +1987,12 @@ proc hir::layouts::Problems {hir e name role} {
                 write {
                     if {$pointer} {
                         lappend problems [list LAYOUT-NATIVE-ONLY \
-                            "$name cannot write the field $text: it is a C pointer, and an ordinary byte write never encodes one; encoding a pointer the program already has into a pointer field is the explicit foreign write binary::write_foreign(data, $text, p)" $where]
+                            "$name cannot write the field $text: it is a C pointer, and an ordinary byte write never encodes one; encoding a pointer the program already has into a pointer field is the explicit foreign write std::binary::write_foreign(data, $text, p)" $where]
                     } elseif {[ReprPointerPath $field] ne "none"} {
                         # A fixed array holding C pointers (FIXED-LAYOUT-
                         # ARRAYS.md), directly or in its nested elements.
                         lappend problems [list LAYOUT-NATIVE-ONLY \
-                            "$name cannot write the field $text: it holds C pointers ($text[ReprPointerPath $field]), and an ordinary byte write never encodes one; an array of pointers is encoded only by the explicit foreign write binary::write_foreign(data, $text, pointers)" $where]
+                            "$name cannot write the field $text: it holds C pointers ($text[ReprPointerPath $field]), and an ordinary byte write never encodes one; an array of pointers is encoded only by the explicit foreign write std::binary::write_foreign(data, $text, pointers)" $where]
                     }
                 }
                 write_foreign {
@@ -2000,9 +2000,9 @@ proc hir::layouts::Problems {hir e name role} {
                         if {[dict get $field kind] eq "array"} {
                             # (FIXED-LAYOUT-ARRAYS.md: an array of C
                             # pointers takes a List of them.)
-                            set message "$name encodes existing foreign values (ffi::c::Ptr or ffi::c::FnPtr values, a List of them for an array of C pointers) into a C pointer field or an array of C pointers; $text is an ordinary field of type [hir::types::show [dict get $field type]], written by binary::write"
+                            set message "$name encodes existing foreign values (std::ffi::c::Ptr or std::ffi::c::FnPtr values, a List of them for an array of C pointers) into a C pointer field or an array of C pointers; $text is an ordinary field of type [hir::types::show [dict get $field type]], written by std::binary::write"
                         } else {
-                            set message "$name encodes an existing foreign value (an ffi::c::Ptr or ffi::c::FnPtr) into a C pointer field; $text is an ordinary field of type [hir::types::show [dict get $field type]], written by binary::write"
+                            set message "$name encodes an existing foreign value (a std::ffi::c::Ptr or std::ffi::c::FnPtr) into a C pointer field; $text is an ordinary field of type [hir::types::show [dict get $field type]], written by std::binary::write"
                         }
                         lappend problems [list LAYOUT-FOREIGN-WRITE $message $where]
                     }
@@ -2022,14 +2022,14 @@ proc hir::layouts::Problems {hir e name role} {
             }
             set access [expr {[RoleOf $role op] eq "edit" ? "reads and writes" : "reads"}]
             lappend problems [list BINARY-OPERAND \
-                "$name $access the live native memory a C data pointer addresses (an ffi::c::Ptr\[T\], which only foreign code hands out); this argument's type here is $why" $arg]
+                "$name $access the live native memory a C data pointer addresses (a std::ffi::c::Ptr\[T\], which only foreign code hands out); this argument's type here is $why" $arg]
         }
     }
     # A native-only layout (a pointer field) imprinted from or emitted into
     # bytes: its pointer is authority, which arbitrary bytes are not.
     set op [RoleOf $role op]
     if {[RoleOf $role typed] ne ""} {
-        # binary::emit before elaboration.
+        # std::binary::emit before elaboration.
         set op emit
     }
     if {$op in {parse emit}} {
@@ -2061,7 +2061,7 @@ proc hir::layouts::Problems {hir e name role} {
         } elseif {$id ne "" && [declared $id] && [NativeOnly $id]} {
             set path [PointerField $id]
             if {$op eq "parse"} {
-                set message "$name cannot imprint layout \"$id\" from bytes: its field \"$path\" is a C pointer, and imprinting arbitrary bytes into it would make a pointer no foreign code handed out; a layout with a pointer field is read through a native view of live native memory (binary::native::view, binary::load)"
+                set message "$name cannot imprint layout \"$id\" from bytes: its field \"$path\" is a C pointer, and imprinting arbitrary bytes into it would make a pointer no foreign code handed out; a layout with a pointer field is read through a native view of live native memory (std::binary::native::view, std::binary::load)"
             } else {
                 set message "$name cannot emit layout \"$id\" into bytes: its field \"$path\" is a C pointer, and writing a pointer into bytes is not supported (a layout with a pointer field is read through a native view only)"
             }
@@ -2075,13 +2075,13 @@ proc hir::layouts::Problems {hir e name role} {
         set bytes [core::bytestore::bytesType]
         if {$type ne "never" && $type ne [list nstruct $bytes]} {
             lappend problems [list BINARY-OPERAND \
-                "$name imprints the bytes of an $bytes (an owned, immutable byte value: abi::bytes::from_list, binary::emit); this argument's type here is [hir::types::show $type]" $arg]
+                "$name imprints the bytes of a $bytes (an owned, immutable byte value: std::abi::bytes::from_list, std::binary::emit); this argument's type here is [hir::types::show $type]" $arg]
         }
     }
     return $problems
 }
 
-# Why the native memory type TYPE -- the operand of binary::load: a live
+# Why the native memory type TYPE -- the operand of std::binary::load: a live
 # layout, union or array -- has no copied value ("TYPE: " and UnionRefusal's
 # reason), or "".
 proc hir::layouts::NativeUnionRefusal {type} {
@@ -2107,7 +2107,7 @@ proc hir::layouts::NativeUnionRefusal {type} {
 
 # 1 if the representation REPR is a fixed array whose leaf element, under
 # every nested array, is a C pointer (FIXED-LAYOUT-ARRAYS.md: what
-# binary::write_foreign may encode, a List of existing pointers).
+# std::binary::write_foreign may encode, a List of existing pointers).
 proc hir::layouts::PointerArray {repr} {
     if {[dict get $repr kind] ne "array"} {
         return 0
@@ -2147,8 +2147,8 @@ proc hir::layouts::ConstText {hir e} {
     return [lindex [hir::get $hir $e literal] end]
 }
 
-# Holds the value a write (binary::store, binary::write,
-# binary::write_foreign: role `value K`) puts into its designated field to
+# Holds the value a write (std::binary::store, std::binary::write,
+# std::binary::write_foreign: role `value K`) puts into its designated field to
 # the field's type, in call E (NODE) of native NAME (NATIVE-LAYOUT-WRITES.md):
 # the one admissibility proof a construction's field values are held to
 # (hir::range::ProvesValueAcceptedBy) -- a scalar's integer domain, proven
@@ -2213,7 +2213,7 @@ proc hir::layouts::VerifyWriteValue {hirVar ranges e node name} {
     }
     set hint ""
     if {[hir::types::IsCPtr $declared] && [hir::types::IsCPtr $valueType]} {
-        set hint ": a pointer's pointee identity is never converted implicitly (ffi::c::erase makes a Ptr\[ffi::c::Void\], ffi::c::retype\[T\] one back)"
+        set hint ": a pointer's pointee identity is never converted implicitly (std::ffi::c::erase makes a Ptr\[std::ffi::c::Void\], std::ffi::c::retype\[T\] one back)"
     } elseif {[hir::types::IsCAddress $declared] && ![hir::types::IsCAddress $valueType]} {
         set hint ": a pointer field holds only a pointer the program already has, never an Int or any other value"
     } elseif {[hir::types::IsCPtr $declared] != [hir::types::IsCPtr $valueType]} {
@@ -2231,7 +2231,7 @@ proc hir::layouts::VerifyWriteValue {hirVar ranges e node name} {
 # a call whose value is not a LayoutStruct (a BINARY-OPERAND diagnostic) is
 # left alone.
 #
-# Native views (NATIVE-LAYOUT-VIEWS.md) likewise: binary::load(v) becomes
+# Native views (NATIVE-LAYOUT-VIEWS.md) likewise: std::binary::load(v) becomes
 # binary#load(v, DESCRIPTOR) from v's static NativeView[L], and every
 # projection `v.f` of a receiver statically a NativeView[L] becomes the
 # internal read binary#view_field(v, FIELD), FIELD f's descriptor entry --

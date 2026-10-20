@@ -26,63 +26,63 @@
         "location": "line 3:1"
       },
       {
-        "name": "char::codepoint",
+        "name": "std::char::codepoint",
         "status": "closed",
         "transitive": "closed",
         "region": "e2",
         "location": "line 21:13"
       },
       {
-        "name": "byte::high_nibble",
+        "name": "std::byte::high_nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e7",
         "location": "line 112:15"
       },
       {
-        "name": "byte::low_nibble",
+        "name": "std::byte::low_nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e13",
         "location": "line 115:14"
       },
       {
-        "name": "byte::nibble",
+        "name": "std::byte::nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e19",
         "location": "line 118:10"
       },
       {
-        "name": "byte::complement",
+        "name": "std::byte::complement",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e34",
         "location": "line 121:14"
       },
       {
-        "name": "byte::position_low",
+        "name": "std::byte::position_low",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e43",
         "location": "line 124:16"
       },
       {
-        "name": "byte::position_high",
+        "name": "std::byte::position_high",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e49",
         "location": "line 127:17"
       },
       {
-        "name": "byte::from_int",
+        "name": "std::byte::from_int",
         "status": "closed",
         "transitive": "closed",
         "region": "e58",
         "location": "line 150:12"
       },
       {
-        "name": "byte::set",
+        "name": "std::byte::set",
         "status": "closed",
         "transitive": "closed",
         "region": "e73",
@@ -132,7 +132,7 @@
         "location": "line 3:1"
       },
       {
-        "name": "byte::from_int<int>",
+        "name": "std::byte::from_int<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i1",
@@ -402,105 +402,105 @@
         "location": "line 4:1"
       },
       {
-        "name": "char::codepoint",
+        "name": "std::char::codepoint",
         "status": "closed",
         "transitive": "closed",
         "region": "e2",
         "location": "line 21:13"
       },
       {
-        "name": "byte::high_nibble",
+        "name": "std::byte::high_nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e7",
         "location": "line 112:15"
       },
       {
-        "name": "byte::low_nibble",
+        "name": "std::byte::low_nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e13",
         "location": "line 115:14"
       },
       {
-        "name": "byte::nibble",
+        "name": "std::byte::nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e19",
         "location": "line 118:10"
       },
       {
-        "name": "byte::complement",
+        "name": "std::byte::complement",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e34",
         "location": "line 121:14"
       },
       {
-        "name": "byte::position_low",
+        "name": "std::byte::position_low",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e43",
         "location": "line 124:16"
       },
       {
-        "name": "byte::position_high",
+        "name": "std::byte::position_high",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e49",
         "location": "line 127:17"
       },
       {
-        "name": "byte::from_int",
+        "name": "std::byte::from_int",
         "status": "closed",
         "transitive": "closed",
         "region": "e58",
         "location": "line 150:12"
       },
       {
-        "name": "byte::set",
+        "name": "std::byte::set",
         "status": "closed",
         "transitive": "closed",
         "region": "e73",
         "location": "line 174:7"
       },
       {
-        "name": "ascii::is_digit",
+        "name": "std::ascii::is_digit",
         "status": "closed",
         "transitive": "closed",
         "region": "e86",
         "location": "line 53:12"
       },
       {
-        "name": "ascii::is_upper",
+        "name": "std::ascii::is_upper",
         "status": "closed",
         "transitive": "closed",
         "region": "e101",
         "location": "line 56:12"
       },
       {
-        "name": "ascii::is_lower",
+        "name": "std::ascii::is_lower",
         "status": "closed",
         "transitive": "closed",
         "region": "e116",
         "location": "line 59:12"
       },
       {
-        "name": "ascii::is_alphabetic",
+        "name": "std::ascii::is_alphabetic",
         "status": "closed",
         "transitive": "closed",
         "region": "e131",
         "location": "line 62:17"
       },
       {
-        "name": "ascii::is_alphanumeric",
+        "name": "std::ascii::is_alphanumeric",
         "status": "closed",
         "transitive": "closed",
         "region": "e144",
         "location": "line 65:19"
       },
       {
-        "name": "web::emailish?",
+        "name": "std::web::emailish?",
         "status": "guarded",
         "transitive": "open",
         "region": "e167",
@@ -549,14 +549,14 @@
         "location": "line 159:15"
       },
       {
-        "name": "web::is_unreserved",
+        "name": "std::web::is_unreserved",
         "status": "closed",
         "transitive": "closed",
         "region": "e357",
         "location": "line 189:17"
       },
       {
-        "name": "web::uri_escape_text",
+        "name": "std::web::uri_escape_text",
         "status": "closed",
         "transitive": "guarded",
         "region": "e371",
@@ -655,63 +655,63 @@
         "location": "line 4:1"
       },
       {
-        "name": "char::codepoint<UnicodeChar>",
+        "name": "std::char::codepoint<UnicodeChar>",
         "status": "closed",
         "transitive": "closed",
         "region": "i2",
         "location": "line 21:13"
       },
       {
-        "name": "byte::from_int<int>",
+        "name": "std::byte::from_int<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i3",
         "location": "line 150:12"
       },
       {
-        "name": "byte::set<List[UnicodeChar]>",
+        "name": "std::byte::set<List[UnicodeChar]>",
         "status": "closed",
         "transitive": "closed",
         "region": "i1",
         "location": "line 174:7"
       },
       {
-        "name": "ascii::is_digit<int>",
+        "name": "std::ascii::is_digit<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i10",
         "location": "line 53:12"
       },
       {
-        "name": "ascii::is_upper<int>",
+        "name": "std::ascii::is_upper<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i8",
         "location": "line 56:12"
       },
       {
-        "name": "ascii::is_lower<int>",
+        "name": "std::ascii::is_lower<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i9",
         "location": "line 59:12"
       },
       {
-        "name": "ascii::is_alphabetic<int>",
+        "name": "std::ascii::is_alphabetic<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i7",
         "location": "line 62:17"
       },
       {
-        "name": "ascii::is_alphanumeric<int>",
+        "name": "std::ascii::is_alphanumeric<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i6",
         "location": "line 65:19"
       },
       {
-        "name": "web::is_unreserved<int>",
+        "name": "std::web::is_unreserved<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i5",
@@ -771,98 +771,98 @@
         "location": "line 3:1"
       },
       {
-        "name": "char::codepoint",
+        "name": "std::char::codepoint",
         "status": "closed",
         "transitive": "closed",
         "region": "e2",
         "location": "line 21:13"
       },
       {
-        "name": "byte::high_nibble",
+        "name": "std::byte::high_nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e7",
         "location": "line 112:15"
       },
       {
-        "name": "byte::low_nibble",
+        "name": "std::byte::low_nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e13",
         "location": "line 115:14"
       },
       {
-        "name": "byte::nibble",
+        "name": "std::byte::nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e19",
         "location": "line 118:10"
       },
       {
-        "name": "byte::complement",
+        "name": "std::byte::complement",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e34",
         "location": "line 121:14"
       },
       {
-        "name": "byte::position_low",
+        "name": "std::byte::position_low",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e43",
         "location": "line 124:16"
       },
       {
-        "name": "byte::position_high",
+        "name": "std::byte::position_high",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e49",
         "location": "line 127:17"
       },
       {
-        "name": "byte::from_int",
+        "name": "std::byte::from_int",
         "status": "closed",
         "transitive": "closed",
         "region": "e58",
         "location": "line 150:12"
       },
       {
-        "name": "byte::set",
+        "name": "std::byte::set",
         "status": "closed",
         "transitive": "closed",
         "region": "e73",
         "location": "line 174:7"
       },
       {
-        "name": "ascii::is_digit",
+        "name": "std::ascii::is_digit",
         "status": "closed",
         "transitive": "closed",
         "region": "e86",
         "location": "line 53:12"
       },
       {
-        "name": "ascii::is_upper",
+        "name": "std::ascii::is_upper",
         "status": "closed",
         "transitive": "closed",
         "region": "e101",
         "location": "line 56:12"
       },
       {
-        "name": "ascii::is_lower",
+        "name": "std::ascii::is_lower",
         "status": "closed",
         "transitive": "closed",
         "region": "e116",
         "location": "line 59:12"
       },
       {
-        "name": "ascii::is_alphabetic",
+        "name": "std::ascii::is_alphabetic",
         "status": "closed",
         "transitive": "closed",
         "region": "e131",
         "location": "line 62:17"
       },
       {
-        "name": "ascii::is_alphanumeric",
+        "name": "std::ascii::is_alphanumeric",
         "status": "closed",
         "transitive": "closed",
         "region": "e144",
@@ -912,49 +912,49 @@
         "location": "line 3:1"
       },
       {
-        "name": "byte::high_nibble<int>",
+        "name": "std::byte::high_nibble<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i1",
         "location": "line 112:15"
       },
       {
-        "name": "byte::from_int<int>",
+        "name": "std::byte::from_int<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i2",
         "location": "line 150:12"
       },
       {
-        "name": "ascii::is_digit<int>",
+        "name": "std::ascii::is_digit<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i3",
         "location": "line 53:12"
       },
       {
-        "name": "ascii::is_upper<int>",
+        "name": "std::ascii::is_upper<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i4",
         "location": "line 56:12"
       },
       {
-        "name": "ascii::is_lower<int>",
+        "name": "std::ascii::is_lower<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i5",
         "location": "line 59:12"
       },
       {
-        "name": "ascii::is_alphabetic<int>",
+        "name": "std::ascii::is_alphabetic<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i6",
         "location": "line 62:17"
       },
       {
-        "name": "ascii::is_alphanumeric<int>",
+        "name": "std::ascii::is_alphanumeric<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i7",
@@ -1005,63 +1005,63 @@
         "location": "line 3:1"
       },
       {
-        "name": "char::codepoint",
+        "name": "std::char::codepoint",
         "status": "closed",
         "transitive": "closed",
         "region": "e2",
         "location": "line 21:13"
       },
       {
-        "name": "byte::high_nibble",
+        "name": "std::byte::high_nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e7",
         "location": "line 112:15"
       },
       {
-        "name": "byte::low_nibble",
+        "name": "std::byte::low_nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e13",
         "location": "line 115:14"
       },
       {
-        "name": "byte::nibble",
+        "name": "std::byte::nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e19",
         "location": "line 118:10"
       },
       {
-        "name": "byte::complement",
+        "name": "std::byte::complement",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e34",
         "location": "line 121:14"
       },
       {
-        "name": "byte::position_low",
+        "name": "std::byte::position_low",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e43",
         "location": "line 124:16"
       },
       {
-        "name": "byte::position_high",
+        "name": "std::byte::position_high",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e49",
         "location": "line 127:17"
       },
       {
-        "name": "byte::from_int",
+        "name": "std::byte::from_int",
         "status": "closed",
         "transitive": "closed",
         "region": "e58",
         "location": "line 150:12"
       },
       {
-        "name": "byte::set",
+        "name": "std::byte::set",
         "status": "closed",
         "transitive": "closed",
         "region": "e73",
@@ -1111,21 +1111,21 @@
         "location": "line 3:1"
       },
       {
-        "name": "char::codepoint<UnicodeChar>",
+        "name": "std::char::codepoint<UnicodeChar>",
         "status": "closed",
         "transitive": "closed",
         "region": "i2",
         "location": "line 21:13"
       },
       {
-        "name": "byte::from_int<int>",
+        "name": "std::byte::from_int<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i3",
         "location": "line 150:12"
       },
       {
-        "name": "byte::set<List[UnicodeChar]>",
+        "name": "std::byte::set<List[UnicodeChar]>",
         "status": "closed",
         "transitive": "closed",
         "region": "i1",
@@ -1178,63 +1178,63 @@
         "location": "line 4:1"
       },
       {
-        "name": "char::codepoint",
+        "name": "std::char::codepoint",
         "status": "closed",
         "transitive": "closed",
         "region": "e2",
         "location": "line 21:13"
       },
       {
-        "name": "byte::high_nibble",
+        "name": "std::byte::high_nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e7",
         "location": "line 112:15"
       },
       {
-        "name": "byte::low_nibble",
+        "name": "std::byte::low_nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e13",
         "location": "line 115:14"
       },
       {
-        "name": "byte::nibble",
+        "name": "std::byte::nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e19",
         "location": "line 118:10"
       },
       {
-        "name": "byte::complement",
+        "name": "std::byte::complement",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e34",
         "location": "line 121:14"
       },
       {
-        "name": "byte::position_low",
+        "name": "std::byte::position_low",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e43",
         "location": "line 124:16"
       },
       {
-        "name": "byte::position_high",
+        "name": "std::byte::position_high",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e49",
         "location": "line 127:17"
       },
       {
-        "name": "byte::from_int",
+        "name": "std::byte::from_int",
         "status": "closed",
         "transitive": "closed",
         "region": "e58",
         "location": "line 150:12"
       },
       {
-        "name": "byte::set",
+        "name": "std::byte::set",
         "status": "closed",
         "transitive": "closed",
         "region": "e73",
@@ -1284,21 +1284,21 @@
         "location": "line 4:1"
       },
       {
-        "name": "char::codepoint<UnicodeChar>",
+        "name": "std::char::codepoint<UnicodeChar>",
         "status": "closed",
         "transitive": "closed",
         "region": "i2",
         "location": "line 21:13"
       },
       {
-        "name": "byte::from_int<int>",
+        "name": "std::byte::from_int<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i3",
         "location": "line 150:12"
       },
       {
-        "name": "byte::set<List[UnicodeChar]>",
+        "name": "std::byte::set<List[UnicodeChar]>",
         "status": "closed",
         "transitive": "closed",
         "region": "i1",
@@ -1351,63 +1351,63 @@
         "location": "line 4:1"
       },
       {
-        "name": "char::codepoint",
+        "name": "std::char::codepoint",
         "status": "closed",
         "transitive": "closed",
         "region": "e2",
         "location": "line 21:13"
       },
       {
-        "name": "byte::high_nibble",
+        "name": "std::byte::high_nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e7",
         "location": "line 112:15"
       },
       {
-        "name": "byte::low_nibble",
+        "name": "std::byte::low_nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e13",
         "location": "line 115:14"
       },
       {
-        "name": "byte::nibble",
+        "name": "std::byte::nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e19",
         "location": "line 118:10"
       },
       {
-        "name": "byte::complement",
+        "name": "std::byte::complement",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e34",
         "location": "line 121:14"
       },
       {
-        "name": "byte::position_low",
+        "name": "std::byte::position_low",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e43",
         "location": "line 124:16"
       },
       {
-        "name": "byte::position_high",
+        "name": "std::byte::position_high",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e49",
         "location": "line 127:17"
       },
       {
-        "name": "byte::from_int",
+        "name": "std::byte::from_int",
         "status": "closed",
         "transitive": "closed",
         "region": "e58",
         "location": "line 150:12"
       },
       {
-        "name": "byte::set",
+        "name": "std::byte::set",
         "status": "closed",
         "transitive": "closed",
         "region": "e73",
@@ -1457,14 +1457,14 @@
         "location": "line 4:1"
       },
       {
-        "name": "byte::complement<int>",
+        "name": "std::byte::complement<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i1",
         "location": "line 121:14"
       },
       {
-        "name": "byte::from_int<int>",
+        "name": "std::byte::from_int<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i2",
@@ -1515,63 +1515,63 @@
         "location": "line 4:1"
       },
       {
-        "name": "char::codepoint",
+        "name": "std::char::codepoint",
         "status": "closed",
         "transitive": "closed",
         "region": "e2",
         "location": "line 21:13"
       },
       {
-        "name": "byte::high_nibble",
+        "name": "std::byte::high_nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e7",
         "location": "line 112:15"
       },
       {
-        "name": "byte::low_nibble",
+        "name": "std::byte::low_nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e13",
         "location": "line 115:14"
       },
       {
-        "name": "byte::nibble",
+        "name": "std::byte::nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e19",
         "location": "line 118:10"
       },
       {
-        "name": "byte::complement",
+        "name": "std::byte::complement",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e34",
         "location": "line 121:14"
       },
       {
-        "name": "byte::position_low",
+        "name": "std::byte::position_low",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e43",
         "location": "line 124:16"
       },
       {
-        "name": "byte::position_high",
+        "name": "std::byte::position_high",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e49",
         "location": "line 127:17"
       },
       {
-        "name": "byte::from_int",
+        "name": "std::byte::from_int",
         "status": "closed",
         "transitive": "closed",
         "region": "e58",
         "location": "line 150:12"
       },
       {
-        "name": "byte::set",
+        "name": "std::byte::set",
         "status": "closed",
         "transitive": "closed",
         "region": "e73",
@@ -1621,7 +1621,7 @@
         "location": "line 4:1"
       },
       {
-        "name": "byte::from_int<int>",
+        "name": "std::byte::from_int<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i1",
@@ -1722,63 +1722,63 @@
         "location": "line 4:1"
       },
       {
-        "name": "char::codepoint",
+        "name": "std::char::codepoint",
         "status": "closed",
         "transitive": "closed",
         "region": "e2",
         "location": "line 21:13"
       },
       {
-        "name": "byte::high_nibble",
+        "name": "std::byte::high_nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e7",
         "location": "line 112:15"
       },
       {
-        "name": "byte::low_nibble",
+        "name": "std::byte::low_nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e13",
         "location": "line 115:14"
       },
       {
-        "name": "byte::nibble",
+        "name": "std::byte::nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e19",
         "location": "line 118:10"
       },
       {
-        "name": "byte::complement",
+        "name": "std::byte::complement",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e34",
         "location": "line 121:14"
       },
       {
-        "name": "byte::position_low",
+        "name": "std::byte::position_low",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e43",
         "location": "line 124:16"
       },
       {
-        "name": "byte::position_high",
+        "name": "std::byte::position_high",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e49",
         "location": "line 127:17"
       },
       {
-        "name": "byte::from_int",
+        "name": "std::byte::from_int",
         "status": "closed",
         "transitive": "closed",
         "region": "e58",
         "location": "line 150:12"
       },
       {
-        "name": "byte::set",
+        "name": "std::byte::set",
         "status": "closed",
         "transitive": "closed",
         "region": "e73",
@@ -1827,7 +1827,7 @@
         "location": "line 4:1"
       },
       {
-        "name": "byte::from_int<int>",
+        "name": "std::byte::from_int<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i1",
@@ -1877,63 +1877,63 @@
         "location": "line 4:1"
       },
       {
-        "name": "char::codepoint",
+        "name": "std::char::codepoint",
         "status": "closed",
         "transitive": "closed",
         "region": "e2",
         "location": "line 21:13"
       },
       {
-        "name": "byte::high_nibble",
+        "name": "std::byte::high_nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e7",
         "location": "line 112:15"
       },
       {
-        "name": "byte::low_nibble",
+        "name": "std::byte::low_nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e13",
         "location": "line 115:14"
       },
       {
-        "name": "byte::nibble",
+        "name": "std::byte::nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e19",
         "location": "line 118:10"
       },
       {
-        "name": "byte::complement",
+        "name": "std::byte::complement",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e34",
         "location": "line 121:14"
       },
       {
-        "name": "byte::position_low",
+        "name": "std::byte::position_low",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e43",
         "location": "line 124:16"
       },
       {
-        "name": "byte::position_high",
+        "name": "std::byte::position_high",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e49",
         "location": "line 127:17"
       },
       {
-        "name": "byte::from_int",
+        "name": "std::byte::from_int",
         "status": "closed",
         "transitive": "closed",
         "region": "e58",
         "location": "line 150:12"
       },
       {
-        "name": "byte::set",
+        "name": "std::byte::set",
         "status": "closed",
         "transitive": "closed",
         "region": "e73",
@@ -1997,7 +1997,7 @@
         "location": "line 4:1"
       },
       {
-        "name": "byte::from_int<int>",
+        "name": "std::byte::from_int<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i3",
@@ -2062,98 +2062,98 @@
         "location": "line 7:1"
       },
       {
-        "name": "char::codepoint",
+        "name": "std::char::codepoint",
         "status": "closed",
         "transitive": "closed",
         "region": "e2",
         "location": "line 21:13"
       },
       {
-        "name": "byte::high_nibble",
+        "name": "std::byte::high_nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e7",
         "location": "line 112:15"
       },
       {
-        "name": "byte::low_nibble",
+        "name": "std::byte::low_nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e13",
         "location": "line 115:14"
       },
       {
-        "name": "byte::nibble",
+        "name": "std::byte::nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e19",
         "location": "line 118:10"
       },
       {
-        "name": "byte::complement",
+        "name": "std::byte::complement",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e34",
         "location": "line 121:14"
       },
       {
-        "name": "byte::position_low",
+        "name": "std::byte::position_low",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e43",
         "location": "line 124:16"
       },
       {
-        "name": "byte::position_high",
+        "name": "std::byte::position_high",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e49",
         "location": "line 127:17"
       },
       {
-        "name": "byte::from_int",
+        "name": "std::byte::from_int",
         "status": "closed",
         "transitive": "closed",
         "region": "e58",
         "location": "line 150:12"
       },
       {
-        "name": "byte::set",
+        "name": "std::byte::set",
         "status": "closed",
         "transitive": "closed",
         "region": "e73",
         "location": "line 174:7"
       },
       {
-        "name": "ascii::is_digit",
+        "name": "std::ascii::is_digit",
         "status": "closed",
         "transitive": "closed",
         "region": "e86",
         "location": "line 53:12"
       },
       {
-        "name": "ascii::is_upper",
+        "name": "std::ascii::is_upper",
         "status": "closed",
         "transitive": "closed",
         "region": "e101",
         "location": "line 56:12"
       },
       {
-        "name": "ascii::is_lower",
+        "name": "std::ascii::is_lower",
         "status": "closed",
         "transitive": "closed",
         "region": "e116",
         "location": "line 59:12"
       },
       {
-        "name": "ascii::is_alphabetic",
+        "name": "std::ascii::is_alphabetic",
         "status": "closed",
         "transitive": "closed",
         "region": "e131",
         "location": "line 62:17"
       },
       {
-        "name": "ascii::is_alphanumeric",
+        "name": "std::ascii::is_alphanumeric",
         "status": "closed",
         "transitive": "closed",
         "region": "e144",
@@ -2226,42 +2226,42 @@
         "location": "line 7:1"
       },
       {
-        "name": "byte::from_int<int>",
+        "name": "std::byte::from_int<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i1",
         "location": "line 150:12"
       },
       {
-        "name": "ascii::is_digit<int>",
+        "name": "std::ascii::is_digit<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i9",
         "location": "line 53:12"
       },
       {
-        "name": "ascii::is_upper<int>",
+        "name": "std::ascii::is_upper<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i7",
         "location": "line 56:12"
       },
       {
-        "name": "ascii::is_lower<int>",
+        "name": "std::ascii::is_lower<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i8",
         "location": "line 59:12"
       },
       {
-        "name": "ascii::is_alphabetic<int>",
+        "name": "std::ascii::is_alphabetic<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i6",
         "location": "line 62:17"
       },
       {
-        "name": "ascii::is_alphanumeric<int>",
+        "name": "std::ascii::is_alphanumeric<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i5",
@@ -2335,98 +2335,98 @@
         "location": "line 5:1"
       },
       {
-        "name": "char::codepoint",
+        "name": "std::char::codepoint",
         "status": "closed",
         "transitive": "closed",
         "region": "e2",
         "location": "line 21:13"
       },
       {
-        "name": "byte::high_nibble",
+        "name": "std::byte::high_nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e7",
         "location": "line 112:15"
       },
       {
-        "name": "byte::low_nibble",
+        "name": "std::byte::low_nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e13",
         "location": "line 115:14"
       },
       {
-        "name": "byte::nibble",
+        "name": "std::byte::nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e19",
         "location": "line 118:10"
       },
       {
-        "name": "byte::complement",
+        "name": "std::byte::complement",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e34",
         "location": "line 121:14"
       },
       {
-        "name": "byte::position_low",
+        "name": "std::byte::position_low",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e43",
         "location": "line 124:16"
       },
       {
-        "name": "byte::position_high",
+        "name": "std::byte::position_high",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e49",
         "location": "line 127:17"
       },
       {
-        "name": "byte::from_int",
+        "name": "std::byte::from_int",
         "status": "closed",
         "transitive": "closed",
         "region": "e58",
         "location": "line 150:12"
       },
       {
-        "name": "byte::set",
+        "name": "std::byte::set",
         "status": "closed",
         "transitive": "closed",
         "region": "e73",
         "location": "line 174:7"
       },
       {
-        "name": "ascii::is_digit",
+        "name": "std::ascii::is_digit",
         "status": "closed",
         "transitive": "closed",
         "region": "e86",
         "location": "line 53:12"
       },
       {
-        "name": "ascii::is_upper",
+        "name": "std::ascii::is_upper",
         "status": "closed",
         "transitive": "closed",
         "region": "e101",
         "location": "line 56:12"
       },
       {
-        "name": "ascii::is_lower",
+        "name": "std::ascii::is_lower",
         "status": "closed",
         "transitive": "closed",
         "region": "e116",
         "location": "line 59:12"
       },
       {
-        "name": "ascii::is_alphabetic",
+        "name": "std::ascii::is_alphabetic",
         "status": "closed",
         "transitive": "closed",
         "region": "e131",
         "location": "line 62:17"
       },
       {
-        "name": "ascii::is_alphanumeric",
+        "name": "std::ascii::is_alphanumeric",
         "status": "closed",
         "transitive": "closed",
         "region": "e144",
@@ -2498,42 +2498,42 @@
         "location": "line 5:1"
       },
       {
-        "name": "byte::from_int<int>",
+        "name": "std::byte::from_int<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i1",
         "location": "line 150:12"
       },
       {
-        "name": "ascii::is_digit<int>",
+        "name": "std::ascii::is_digit<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i9",
         "location": "line 53:12"
       },
       {
-        "name": "ascii::is_upper<int>",
+        "name": "std::ascii::is_upper<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i7",
         "location": "line 56:12"
       },
       {
-        "name": "ascii::is_lower<int>",
+        "name": "std::ascii::is_lower<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i8",
         "location": "line 59:12"
       },
       {
-        "name": "ascii::is_alphabetic<int>",
+        "name": "std::ascii::is_alphabetic<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i6",
         "location": "line 62:17"
       },
       {
-        "name": "ascii::is_alphanumeric<int>",
+        "name": "std::ascii::is_alphanumeric<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i5",
@@ -2606,98 +2606,98 @@
         "location": "line 5:1"
       },
       {
-        "name": "char::codepoint",
+        "name": "std::char::codepoint",
         "status": "closed",
         "transitive": "closed",
         "region": "e2",
         "location": "line 21:13"
       },
       {
-        "name": "byte::high_nibble",
+        "name": "std::byte::high_nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e7",
         "location": "line 112:15"
       },
       {
-        "name": "byte::low_nibble",
+        "name": "std::byte::low_nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e13",
         "location": "line 115:14"
       },
       {
-        "name": "byte::nibble",
+        "name": "std::byte::nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e19",
         "location": "line 118:10"
       },
       {
-        "name": "byte::complement",
+        "name": "std::byte::complement",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e34",
         "location": "line 121:14"
       },
       {
-        "name": "byte::position_low",
+        "name": "std::byte::position_low",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e43",
         "location": "line 124:16"
       },
       {
-        "name": "byte::position_high",
+        "name": "std::byte::position_high",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e49",
         "location": "line 127:17"
       },
       {
-        "name": "byte::from_int",
+        "name": "std::byte::from_int",
         "status": "closed",
         "transitive": "closed",
         "region": "e58",
         "location": "line 150:12"
       },
       {
-        "name": "byte::set",
+        "name": "std::byte::set",
         "status": "closed",
         "transitive": "closed",
         "region": "e73",
         "location": "line 174:7"
       },
       {
-        "name": "ascii::is_digit",
+        "name": "std::ascii::is_digit",
         "status": "closed",
         "transitive": "closed",
         "region": "e86",
         "location": "line 53:12"
       },
       {
-        "name": "ascii::is_upper",
+        "name": "std::ascii::is_upper",
         "status": "closed",
         "transitive": "closed",
         "region": "e101",
         "location": "line 56:12"
       },
       {
-        "name": "ascii::is_lower",
+        "name": "std::ascii::is_lower",
         "status": "closed",
         "transitive": "closed",
         "region": "e116",
         "location": "line 59:12"
       },
       {
-        "name": "ascii::is_alphabetic",
+        "name": "std::ascii::is_alphabetic",
         "status": "closed",
         "transitive": "closed",
         "region": "e131",
         "location": "line 62:17"
       },
       {
-        "name": "ascii::is_alphanumeric",
+        "name": "std::ascii::is_alphanumeric",
         "status": "closed",
         "transitive": "closed",
         "region": "e144",
@@ -2762,42 +2762,42 @@
         "location": "line 5:1"
       },
       {
-        "name": "byte::from_int<int>",
+        "name": "std::byte::from_int<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i1",
         "location": "line 150:12"
       },
       {
-        "name": "ascii::is_digit<int>",
+        "name": "std::ascii::is_digit<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i8",
         "location": "line 53:12"
       },
       {
-        "name": "ascii::is_upper<int>",
+        "name": "std::ascii::is_upper<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i6",
         "location": "line 56:12"
       },
       {
-        "name": "ascii::is_lower<int>",
+        "name": "std::ascii::is_lower<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i7",
         "location": "line 59:12"
       },
       {
-        "name": "ascii::is_alphabetic<int>",
+        "name": "std::ascii::is_alphabetic<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i5",
         "location": "line 62:17"
       },
       {
-        "name": "ascii::is_alphanumeric<int>",
+        "name": "std::ascii::is_alphanumeric<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i4",
@@ -2864,105 +2864,105 @@
         "location": "line 3:1"
       },
       {
-        "name": "char::codepoint",
+        "name": "std::char::codepoint",
         "status": "closed",
         "transitive": "closed",
         "region": "e2",
         "location": "line 21:13"
       },
       {
-        "name": "byte::high_nibble",
+        "name": "std::byte::high_nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e7",
         "location": "line 112:15"
       },
       {
-        "name": "byte::low_nibble",
+        "name": "std::byte::low_nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e13",
         "location": "line 115:14"
       },
       {
-        "name": "byte::nibble",
+        "name": "std::byte::nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e19",
         "location": "line 118:10"
       },
       {
-        "name": "byte::complement",
+        "name": "std::byte::complement",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e34",
         "location": "line 121:14"
       },
       {
-        "name": "byte::position_low",
+        "name": "std::byte::position_low",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e43",
         "location": "line 124:16"
       },
       {
-        "name": "byte::position_high",
+        "name": "std::byte::position_high",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e49",
         "location": "line 127:17"
       },
       {
-        "name": "byte::from_int",
+        "name": "std::byte::from_int",
         "status": "closed",
         "transitive": "closed",
         "region": "e58",
         "location": "line 150:12"
       },
       {
-        "name": "byte::set",
+        "name": "std::byte::set",
         "status": "closed",
         "transitive": "closed",
         "region": "e73",
         "location": "line 174:7"
       },
       {
-        "name": "ascii::is_digit",
+        "name": "std::ascii::is_digit",
         "status": "closed",
         "transitive": "closed",
         "region": "e86",
         "location": "line 53:12"
       },
       {
-        "name": "ascii::is_upper",
+        "name": "std::ascii::is_upper",
         "status": "closed",
         "transitive": "closed",
         "region": "e101",
         "location": "line 56:12"
       },
       {
-        "name": "ascii::is_lower",
+        "name": "std::ascii::is_lower",
         "status": "closed",
         "transitive": "closed",
         "region": "e116",
         "location": "line 59:12"
       },
       {
-        "name": "ascii::is_alphabetic",
+        "name": "std::ascii::is_alphabetic",
         "status": "closed",
         "transitive": "closed",
         "region": "e131",
         "location": "line 62:17"
       },
       {
-        "name": "ascii::is_alphanumeric",
+        "name": "std::ascii::is_alphanumeric",
         "status": "closed",
         "transitive": "closed",
         "region": "e144",
         "location": "line 65:19"
       },
       {
-        "name": "web::emailish?",
+        "name": "std::web::emailish?",
         "status": "guarded",
         "transitive": "open",
         "region": "e167",
@@ -3011,14 +3011,14 @@
         "location": "line 159:15"
       },
       {
-        "name": "web::is_unreserved",
+        "name": "std::web::is_unreserved",
         "status": "closed",
         "transitive": "closed",
         "region": "e357",
         "location": "line 189:17"
       },
       {
-        "name": "web::uri_escape_text",
+        "name": "std::web::uri_escape_text",
         "status": "closed",
         "transitive": "guarded",
         "region": "e371",
@@ -3110,63 +3110,63 @@
         "location": "line 3:1"
       },
       {
-        "name": "char::codepoint<UnicodeChar>",
+        "name": "std::char::codepoint<UnicodeChar>",
         "status": "closed",
         "transitive": "closed",
         "region": "i2",
         "location": "line 21:13"
       },
       {
-        "name": "byte::from_int<int>",
+        "name": "std::byte::from_int<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i3",
         "location": "line 150:12"
       },
       {
-        "name": "byte::set<List[UnicodeChar]>",
+        "name": "std::byte::set<List[UnicodeChar]>",
         "status": "closed",
         "transitive": "closed",
         "region": "i1",
         "location": "line 174:7"
       },
       {
-        "name": "ascii::is_digit<int>",
+        "name": "std::ascii::is_digit<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i9",
         "location": "line 53:12"
       },
       {
-        "name": "ascii::is_upper<int>",
+        "name": "std::ascii::is_upper<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i7",
         "location": "line 56:12"
       },
       {
-        "name": "ascii::is_lower<int>",
+        "name": "std::ascii::is_lower<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i8",
         "location": "line 59:12"
       },
       {
-        "name": "ascii::is_alphabetic<int>",
+        "name": "std::ascii::is_alphabetic<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i6",
         "location": "line 62:17"
       },
       {
-        "name": "ascii::is_alphanumeric<int>",
+        "name": "std::ascii::is_alphanumeric<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i5",
         "location": "line 65:19"
       },
       {
-        "name": "web::is_unreserved<int>",
+        "name": "std::web::is_unreserved<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i4",
@@ -3220,105 +3220,105 @@
         "location": "line 3:1"
       },
       {
-        "name": "char::codepoint",
+        "name": "std::char::codepoint",
         "status": "closed",
         "transitive": "closed",
         "region": "e2",
         "location": "line 21:13"
       },
       {
-        "name": "byte::high_nibble",
+        "name": "std::byte::high_nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e7",
         "location": "line 112:15"
       },
       {
-        "name": "byte::low_nibble",
+        "name": "std::byte::low_nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e13",
         "location": "line 115:14"
       },
       {
-        "name": "byte::nibble",
+        "name": "std::byte::nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e19",
         "location": "line 118:10"
       },
       {
-        "name": "byte::complement",
+        "name": "std::byte::complement",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e34",
         "location": "line 121:14"
       },
       {
-        "name": "byte::position_low",
+        "name": "std::byte::position_low",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e43",
         "location": "line 124:16"
       },
       {
-        "name": "byte::position_high",
+        "name": "std::byte::position_high",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e49",
         "location": "line 127:17"
       },
       {
-        "name": "byte::from_int",
+        "name": "std::byte::from_int",
         "status": "closed",
         "transitive": "closed",
         "region": "e58",
         "location": "line 150:12"
       },
       {
-        "name": "byte::set",
+        "name": "std::byte::set",
         "status": "closed",
         "transitive": "closed",
         "region": "e73",
         "location": "line 174:7"
       },
       {
-        "name": "ascii::is_digit",
+        "name": "std::ascii::is_digit",
         "status": "closed",
         "transitive": "closed",
         "region": "e86",
         "location": "line 53:12"
       },
       {
-        "name": "ascii::is_upper",
+        "name": "std::ascii::is_upper",
         "status": "closed",
         "transitive": "closed",
         "region": "e101",
         "location": "line 56:12"
       },
       {
-        "name": "ascii::is_lower",
+        "name": "std::ascii::is_lower",
         "status": "closed",
         "transitive": "closed",
         "region": "e116",
         "location": "line 59:12"
       },
       {
-        "name": "ascii::is_alphabetic",
+        "name": "std::ascii::is_alphabetic",
         "status": "closed",
         "transitive": "closed",
         "region": "e131",
         "location": "line 62:17"
       },
       {
-        "name": "ascii::is_alphanumeric",
+        "name": "std::ascii::is_alphanumeric",
         "status": "closed",
         "transitive": "closed",
         "region": "e144",
         "location": "line 65:19"
       },
       {
-        "name": "web::emailish?",
+        "name": "std::web::emailish?",
         "status": "guarded",
         "transitive": "open",
         "region": "e167",
@@ -3367,14 +3367,14 @@
         "location": "line 159:15"
       },
       {
-        "name": "web::is_unreserved",
+        "name": "std::web::is_unreserved",
         "status": "closed",
         "transitive": "closed",
         "region": "e357",
         "location": "line 189:17"
       },
       {
-        "name": "web::uri_escape_text",
+        "name": "std::web::uri_escape_text",
         "status": "closed",
         "transitive": "guarded",
         "region": "e371",
@@ -3466,63 +3466,63 @@
         "location": "line 3:1"
       },
       {
-        "name": "char::codepoint<UnicodeChar>",
+        "name": "std::char::codepoint<UnicodeChar>",
         "status": "closed",
         "transitive": "closed",
         "region": "i2",
         "location": "line 21:13"
       },
       {
-        "name": "byte::from_int<int>",
+        "name": "std::byte::from_int<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i3",
         "location": "line 150:12"
       },
       {
-        "name": "byte::set<List[UnicodeChar]>",
+        "name": "std::byte::set<List[UnicodeChar]>",
         "status": "closed",
         "transitive": "closed",
         "region": "i1",
         "location": "line 174:7"
       },
       {
-        "name": "ascii::is_digit<int>",
+        "name": "std::ascii::is_digit<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i9",
         "location": "line 53:12"
       },
       {
-        "name": "ascii::is_upper<int>",
+        "name": "std::ascii::is_upper<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i7",
         "location": "line 56:12"
       },
       {
-        "name": "ascii::is_lower<int>",
+        "name": "std::ascii::is_lower<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i8",
         "location": "line 59:12"
       },
       {
-        "name": "ascii::is_alphabetic<int>",
+        "name": "std::ascii::is_alphabetic<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i6",
         "location": "line 62:17"
       },
       {
-        "name": "ascii::is_alphanumeric<int>",
+        "name": "std::ascii::is_alphanumeric<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i5",
         "location": "line 65:19"
       },
       {
-        "name": "web::is_unreserved<int>",
+        "name": "std::web::is_unreserved<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i4",
@@ -4032,28 +4032,28 @@
         "location": "line 40:1"
       },
       {
-        "name": "list::any?",
+        "name": "std::list::any?",
         "status": "open",
         "transitive": "open",
         "region": "e2",
         "location": "line 59:8"
       },
       {
-        "name": "list::all?",
+        "name": "std::list::all?",
         "status": "open",
         "transitive": "open",
         "region": "e13",
         "location": "line 65:8"
       },
       {
-        "name": "list::none?",
+        "name": "std::list::none?",
         "status": "open",
         "transitive": "open",
         "region": "e27",
         "location": "line 71:9"
       },
       {
-        "name": "list::find",
+        "name": "std::list::find",
         "status": "open",
         "transitive": "open",
         "region": "e38",
@@ -4166,7 +4166,7 @@
         "location": "line 40:1"
       },
       {
-        "name": "list::all?<List[str], native>",
+        "name": "std::list::all?<List[str], native>",
         "status": "guarded",
         "transitive": "guarded",
         "region": "i10",
@@ -4506,28 +4506,28 @@
         "location": "line 43:1"
       },
       {
-        "name": "list::any?",
+        "name": "std::list::any?",
         "status": "open",
         "transitive": "open",
         "region": "e2",
         "location": "line 59:8"
       },
       {
-        "name": "list::all?",
+        "name": "std::list::all?",
         "status": "open",
         "transitive": "open",
         "region": "e13",
         "location": "line 65:8"
       },
       {
-        "name": "list::none?",
+        "name": "std::list::none?",
         "status": "open",
         "transitive": "open",
         "region": "e27",
         "location": "line 71:9"
       },
       {
-        "name": "list::find",
+        "name": "std::list::find",
         "status": "open",
         "transitive": "open",
         "region": "e38",
@@ -4621,7 +4621,7 @@
         "location": "line 43:1"
       },
       {
-        "name": "list::find<List[str], block>",
+        "name": "std::list::find<List[str], block>",
         "status": "guarded",
         "transitive": "guarded",
         "region": "i3",
@@ -4846,28 +4846,28 @@
         "location": "line 44:1"
       },
       {
-        "name": "list::any?",
+        "name": "std::list::any?",
         "status": "open",
         "transitive": "open",
         "region": "e2",
         "location": "line 59:8"
       },
       {
-        "name": "list::all?",
+        "name": "std::list::all?",
         "status": "open",
         "transitive": "open",
         "region": "e13",
         "location": "line 65:8"
       },
       {
-        "name": "list::none?",
+        "name": "std::list::none?",
         "status": "open",
         "transitive": "open",
         "region": "e27",
         "location": "line 71:9"
       },
       {
-        "name": "list::find",
+        "name": "std::list::find",
         "status": "open",
         "transitive": "open",
         "region": "e38",
@@ -4978,21 +4978,21 @@
         "location": "line 44:1"
       },
       {
-        "name": "list::any?<any, block>",
+        "name": "std::list::any?<any, block>",
         "status": "guarded",
         "transitive": "guarded",
         "region": "i6",
         "location": "line 59:8"
       },
       {
-        "name": "list::none?<List[str], block>",
+        "name": "std::list::none?<List[str], block>",
         "status": "guarded",
         "transitive": "guarded",
         "region": "i7",
         "location": "line 71:9"
       },
       {
-        "name": "list::find<List[list], block>",
+        "name": "std::list::find<List[list], block>",
         "status": "guarded",
         "transitive": "guarded",
         "region": "i9",
@@ -5122,105 +5122,105 @@
         "location": "line 30:1"
       },
       {
-        "name": "char::codepoint",
+        "name": "std::char::codepoint",
         "status": "closed",
         "transitive": "closed",
         "region": "e2",
         "location": "line 21:13"
       },
       {
-        "name": "byte::high_nibble",
+        "name": "std::byte::high_nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e7",
         "location": "line 112:15"
       },
       {
-        "name": "byte::low_nibble",
+        "name": "std::byte::low_nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e13",
         "location": "line 115:14"
       },
       {
-        "name": "byte::nibble",
+        "name": "std::byte::nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e19",
         "location": "line 118:10"
       },
       {
-        "name": "byte::complement",
+        "name": "std::byte::complement",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e34",
         "location": "line 121:14"
       },
       {
-        "name": "byte::position_low",
+        "name": "std::byte::position_low",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e43",
         "location": "line 124:16"
       },
       {
-        "name": "byte::position_high",
+        "name": "std::byte::position_high",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e49",
         "location": "line 127:17"
       },
       {
-        "name": "byte::from_int",
+        "name": "std::byte::from_int",
         "status": "closed",
         "transitive": "closed",
         "region": "e58",
         "location": "line 150:12"
       },
       {
-        "name": "byte::set",
+        "name": "std::byte::set",
         "status": "closed",
         "transitive": "closed",
         "region": "e73",
         "location": "line 174:7"
       },
       {
-        "name": "ascii::is_digit",
+        "name": "std::ascii::is_digit",
         "status": "closed",
         "transitive": "closed",
         "region": "e86",
         "location": "line 53:12"
       },
       {
-        "name": "ascii::is_upper",
+        "name": "std::ascii::is_upper",
         "status": "closed",
         "transitive": "closed",
         "region": "e101",
         "location": "line 56:12"
       },
       {
-        "name": "ascii::is_lower",
+        "name": "std::ascii::is_lower",
         "status": "closed",
         "transitive": "closed",
         "region": "e116",
         "location": "line 59:12"
       },
       {
-        "name": "ascii::is_alphabetic",
+        "name": "std::ascii::is_alphabetic",
         "status": "closed",
         "transitive": "closed",
         "region": "e131",
         "location": "line 62:17"
       },
       {
-        "name": "ascii::is_alphanumeric",
+        "name": "std::ascii::is_alphanumeric",
         "status": "closed",
         "transitive": "closed",
         "region": "e144",
         "location": "line 65:19"
       },
       {
-        "name": "web::emailish?",
+        "name": "std::web::emailish?",
         "status": "guarded",
         "transitive": "open",
         "region": "e167",
@@ -5269,14 +5269,14 @@
         "location": "line 159:15"
       },
       {
-        "name": "web::is_unreserved",
+        "name": "std::web::is_unreserved",
         "status": "closed",
         "transitive": "closed",
         "region": "e357",
         "location": "line 189:17"
       },
       {
-        "name": "web::uri_escape_text",
+        "name": "std::web::uri_escape_text",
         "status": "closed",
         "transitive": "guarded",
         "region": "e371",
@@ -5375,84 +5375,84 @@
         "location": "line 30:1"
       },
       {
-        "name": "char::codepoint<UnicodeChar>",
+        "name": "std::char::codepoint<UnicodeChar>",
         "status": "closed",
         "transitive": "closed",
         "region": "i2",
         "location": "line 21:13"
       },
       {
-        "name": "byte::high_nibble<int>",
+        "name": "std::byte::high_nibble<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i17",
         "location": "line 112:15"
       },
       {
-        "name": "byte::nibble<int>",
+        "name": "std::byte::nibble<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i18",
         "location": "line 118:10"
       },
       {
-        "name": "byte::from_int<int>",
+        "name": "std::byte::from_int<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i3",
         "location": "line 150:12"
       },
       {
-        "name": "byte::set<List[UnicodeChar]>",
+        "name": "std::byte::set<List[UnicodeChar]>",
         "status": "closed",
         "transitive": "closed",
         "region": "i1",
         "location": "line 174:7"
       },
       {
-        "name": "ascii::is_digit<int>",
+        "name": "std::ascii::is_digit<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i13",
         "location": "line 53:12"
       },
       {
-        "name": "ascii::is_upper<int>",
+        "name": "std::ascii::is_upper<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i11",
         "location": "line 56:12"
       },
       {
-        "name": "ascii::is_lower<int>",
+        "name": "std::ascii::is_lower<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i12",
         "location": "line 59:12"
       },
       {
-        "name": "ascii::is_alphabetic<int>",
+        "name": "std::ascii::is_alphabetic<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i10",
         "location": "line 62:17"
       },
       {
-        "name": "ascii::is_alphanumeric<int>",
+        "name": "std::ascii::is_alphanumeric<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i9",
         "location": "line 65:19"
       },
       {
-        "name": "web::is_unreserved<int>",
+        "name": "std::web::is_unreserved<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i8",
         "location": "line 189:17"
       },
       {
-        "name": "web::uri_escape_text<str>",
+        "name": "std::web::uri_escape_text<str>",
         "status": "closed",
         "transitive": "closed",
         "region": "i5",
@@ -9543,7 +9543,7 @@
         "location": "line 7:1"
       },
       {
-        "name": "mathish::inc",
+        "name": "std::mathish::inc",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e2",
@@ -9591,7 +9591,7 @@
         "location": "line 7:1"
       },
       {
-        "name": "mathish::inc<int>",
+        "name": "std::mathish::inc<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i1",
@@ -9616,24 +9616,24 @@
     ]
   },
   {
-    "path": "lib/ascii.bot",
+    "path": "stdlib/ascii.bot",
     "mode": "aot",
     "command": [
       "tclsh9.0",
       "main.tcl",
       "-aot",
-      "lib/ascii.bot"
+      "stdlib/ascii.bot"
     ],
     "exit_code": 1,
     "timeout": false,
     "seconds": 0.381,
-    "log": "logs/lib/ascii.bot.aot.txt",
+    "log": "logs/stdlib/ascii.bot.aot.txt",
     "analysis_complete": false,
     "status_counts": {},
     "regions": [],
     "blockers": {},
     "errors": [
-      "lib/ascii.bot:53:12: unknown or invalid type Byte for parameter \"b\" (CORE SEMANTIC TYPE)"
+      "stdlib/ascii.bot:53:12: unknown or invalid type Byte for parameter \"b\" (CORE SEMANTIC TYPE)"
     ],
     "value": [],
     "guards": null,
@@ -9641,24 +9641,24 @@
     "runtime": []
   },
   {
-    "path": "lib/ascii.bot",
+    "path": "stdlib/ascii.bot",
     "mode": "aot-spec",
     "command": [
       "tclsh9.0",
       "main.tcl",
       "-aot-spec",
-      "lib/ascii.bot"
+      "stdlib/ascii.bot"
     ],
     "exit_code": 1,
     "timeout": false,
     "seconds": 0.334,
-    "log": "logs/lib/ascii.bot.aot-spec.txt",
+    "log": "logs/stdlib/ascii.bot.aot-spec.txt",
     "analysis_complete": false,
     "status_counts": {},
     "regions": [],
     "blockers": {},
     "errors": [
-      "lib/ascii.bot:53:12: unknown or invalid type Byte for parameter \"b\" (CORE SEMANTIC TYPE)"
+      "stdlib/ascii.bot:53:12: unknown or invalid type Byte for parameter \"b\" (CORE SEMANTIC TYPE)"
     ],
     "value": [],
     "guards": null,
@@ -9666,18 +9666,18 @@
     "runtime": []
   },
   {
-    "path": "lib/byte.bot",
+    "path": "stdlib/byte.bot",
     "mode": "aot",
     "command": [
       "tclsh9.0",
       "main.tcl",
       "-aot",
-      "lib/byte.bot"
+      "stdlib/byte.bot"
     ],
     "exit_code": 0,
     "timeout": false,
     "seconds": 0.384,
-    "log": "logs/lib/byte.bot.aot.txt",
+    "log": "logs/stdlib/byte.bot.aot.txt",
     "analysis_complete": true,
     "status_counts": {
       "closed": 4,
@@ -9692,7 +9692,7 @@
         "location": "line 64:1"
       },
       {
-        "name": "char::codepoint",
+        "name": "std::char::codepoint",
         "status": "closed",
         "transitive": "closed",
         "region": "e2",
@@ -9772,18 +9772,18 @@
     ]
   },
   {
-    "path": "lib/byte.bot",
+    "path": "stdlib/byte.bot",
     "mode": "aot-spec",
     "command": [
       "tclsh9.0",
       "main.tcl",
       "-aot-spec",
-      "lib/byte.bot"
+      "stdlib/byte.bot"
     ],
     "exit_code": 0,
     "timeout": false,
     "seconds": 0.434,
-    "log": "logs/lib/byte.bot.aot-spec.txt",
+    "log": "logs/stdlib/byte.bot.aot-spec.txt",
     "analysis_complete": true,
     "status_counts": {
       "closed": 4
@@ -9797,7 +9797,7 @@
         "location": "line 64:1"
       },
       {
-        "name": "char::codepoint<UnicodeChar>",
+        "name": "std::char::codepoint<UnicodeChar>",
         "status": "closed",
         "transitive": "closed",
         "region": "i2",
@@ -9837,13 +9837,13 @@
     ]
   },
   {
-    "path": "lib/char.bot",
+    "path": "stdlib/char.bot",
     "mode": "aot",
     "command": [
       "tclsh9.0",
       "main.tcl",
       "-aot",
-      "lib/char.bot"
+      "stdlib/char.bot"
     ],
     "exit_code": 0,
     "timeout": false,
@@ -9879,13 +9879,13 @@
     "runtime": []
   },
   {
-    "path": "lib/char.bot",
+    "path": "stdlib/char.bot",
     "mode": "aot-spec",
     "command": [
       "tclsh9.0",
       "main.tcl",
       "-aot-spec",
-      "lib/char.bot"
+      "stdlib/char.bot"
     ],
     "exit_code": 0,
     "timeout": false,
@@ -9926,18 +9926,18 @@
     "runtime": []
   },
   {
-    "path": "lib/list.bot",
+    "path": "stdlib/list.bot",
     "mode": "aot",
     "command": [
       "tclsh9.0",
       "main.tcl",
       "-aot",
-      "lib/list.bot"
+      "stdlib/list.bot"
     ],
     "exit_code": 0,
     "timeout": false,
     "seconds": 0.437,
-    "log": "logs/lib/list.bot.aot.txt",
+    "log": "logs/stdlib/list.bot.aot.txt",
     "analysis_complete": true,
     "status_counts": {
       "closed": 1,
@@ -9997,18 +9997,18 @@
     ]
   },
   {
-    "path": "lib/list.bot",
+    "path": "stdlib/list.bot",
     "mode": "aot-spec",
     "command": [
       "tclsh9.0",
       "main.tcl",
       "-aot-spec",
-      "lib/list.bot"
+      "stdlib/list.bot"
     ],
     "exit_code": 0,
     "timeout": false,
     "seconds": 0.388,
-    "log": "logs/lib/list.bot.aot-spec.txt",
+    "log": "logs/stdlib/list.bot.aot-spec.txt",
     "analysis_complete": true,
     "status_counts": {
       "closed": 1,
@@ -10052,18 +10052,18 @@
     ]
   },
   {
-    "path": "lib/mathish.bot",
+    "path": "stdlib/mathish.bot",
     "mode": "aot",
     "command": [
       "tclsh9.0",
       "main.tcl",
       "-aot",
-      "lib/mathish.bot"
+      "stdlib/mathish.bot"
     ],
     "exit_code": 0,
     "timeout": false,
     "seconds": 0.287,
-    "log": "logs/lib/mathish.bot.aot.txt",
+    "log": "logs/stdlib/mathish.bot.aot.txt",
     "analysis_complete": true,
     "status_counts": {
       "closed": 1,
@@ -10100,18 +10100,18 @@
     ]
   },
   {
-    "path": "lib/mathish.bot",
+    "path": "stdlib/mathish.bot",
     "mode": "aot-spec",
     "command": [
       "tclsh9.0",
       "main.tcl",
       "-aot-spec",
-      "lib/mathish.bot"
+      "stdlib/mathish.bot"
     ],
     "exit_code": 0,
     "timeout": false,
     "seconds": 0.286,
-    "log": "logs/lib/mathish.bot.aot-spec.txt",
+    "log": "logs/stdlib/mathish.bot.aot-spec.txt",
     "analysis_complete": true,
     "status_counts": {
       "closed": 1,
@@ -10153,18 +10153,18 @@
     ]
   },
   {
-    "path": "lib/web.bot",
+    "path": "stdlib/web.bot",
     "mode": "aot",
     "command": [
       "tclsh9.0",
       "main.tcl",
       "-aot",
-      "lib/web.bot"
+      "stdlib/web.bot"
     ],
     "exit_code": 0,
     "timeout": false,
     "seconds": 0.489,
-    "log": "logs/lib/web.bot.aot.txt",
+    "log": "logs/stdlib/web.bot.aot.txt",
     "analysis_complete": true,
     "status_counts": {
       "closed": 12,
@@ -10180,98 +10180,98 @@
         "location": "line 61:1"
       },
       {
-        "name": "char::codepoint",
+        "name": "std::char::codepoint",
         "status": "closed",
         "transitive": "closed",
         "region": "e2",
         "location": "line 21:13"
       },
       {
-        "name": "byte::high_nibble",
+        "name": "std::byte::high_nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e7",
         "location": "line 112:15"
       },
       {
-        "name": "byte::low_nibble",
+        "name": "std::byte::low_nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e13",
         "location": "line 115:14"
       },
       {
-        "name": "byte::nibble",
+        "name": "std::byte::nibble",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e19",
         "location": "line 118:10"
       },
       {
-        "name": "byte::complement",
+        "name": "std::byte::complement",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e34",
         "location": "line 121:14"
       },
       {
-        "name": "byte::position_low",
+        "name": "std::byte::position_low",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e43",
         "location": "line 124:16"
       },
       {
-        "name": "byte::position_high",
+        "name": "std::byte::position_high",
         "status": "guarded",
         "transitive": "guarded",
         "region": "e49",
         "location": "line 127:17"
       },
       {
-        "name": "byte::from_int",
+        "name": "std::byte::from_int",
         "status": "closed",
         "transitive": "closed",
         "region": "e58",
         "location": "line 150:12"
       },
       {
-        "name": "byte::set",
+        "name": "std::byte::set",
         "status": "closed",
         "transitive": "closed",
         "region": "e73",
         "location": "line 174:7"
       },
       {
-        "name": "ascii::is_digit",
+        "name": "std::ascii::is_digit",
         "status": "closed",
         "transitive": "closed",
         "region": "e86",
         "location": "line 53:12"
       },
       {
-        "name": "ascii::is_upper",
+        "name": "std::ascii::is_upper",
         "status": "closed",
         "transitive": "closed",
         "region": "e101",
         "location": "line 56:12"
       },
       {
-        "name": "ascii::is_lower",
+        "name": "std::ascii::is_lower",
         "status": "closed",
         "transitive": "closed",
         "region": "e116",
         "location": "line 59:12"
       },
       {
-        "name": "ascii::is_alphabetic",
+        "name": "std::ascii::is_alphabetic",
         "status": "closed",
         "transitive": "closed",
         "region": "e131",
         "location": "line 62:17"
       },
       {
-        "name": "ascii::is_alphanumeric",
+        "name": "std::ascii::is_alphanumeric",
         "status": "closed",
         "transitive": "closed",
         "region": "e144",
@@ -10401,18 +10401,18 @@
     ]
   },
   {
-    "path": "lib/web.bot",
+    "path": "stdlib/web.bot",
     "mode": "aot-spec",
     "command": [
       "tclsh9.0",
       "main.tcl",
       "-aot-spec",
-      "lib/web.bot"
+      "stdlib/web.bot"
     ],
     "exit_code": 0,
     "timeout": false,
     "seconds": 0.539,
-    "log": "logs/lib/web.bot.aot-spec.txt",
+    "log": "logs/stdlib/web.bot.aot-spec.txt",
     "analysis_complete": true,
     "status_counts": {
       "closed": 21,
@@ -10428,70 +10428,70 @@
         "location": "line 61:1"
       },
       {
-        "name": "char::codepoint<UnicodeChar>",
+        "name": "std::char::codepoint<UnicodeChar>",
         "status": "closed",
         "transitive": "closed",
         "region": "i2",
         "location": "line 21:13"
       },
       {
-        "name": "byte::high_nibble<generic>",
+        "name": "std::byte::high_nibble<generic>",
         "status": "closed",
         "transitive": "closed",
         "region": "i17",
         "location": "line 112:15"
       },
       {
-        "name": "byte::nibble<int>",
+        "name": "std::byte::nibble<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i18",
         "location": "line 118:10"
       },
       {
-        "name": "byte::from_int<int>",
+        "name": "std::byte::from_int<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i3",
         "location": "line 150:12"
       },
       {
-        "name": "byte::set<List[UnicodeChar]>",
+        "name": "std::byte::set<List[UnicodeChar]>",
         "status": "closed",
         "transitive": "closed",
         "region": "i1",
         "location": "line 174:7"
       },
       {
-        "name": "ascii::is_digit<int>",
+        "name": "std::ascii::is_digit<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i13",
         "location": "line 53:12"
       },
       {
-        "name": "ascii::is_upper<int>",
+        "name": "std::ascii::is_upper<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i11",
         "location": "line 56:12"
       },
       {
-        "name": "ascii::is_lower<int>",
+        "name": "std::ascii::is_lower<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i12",
         "location": "line 59:12"
       },
       {
-        "name": "ascii::is_alphabetic<int>",
+        "name": "std::ascii::is_alphabetic<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i10",
         "location": "line 62:17"
       },
       {
-        "name": "ascii::is_alphanumeric<int>",
+        "name": "std::ascii::is_alphanumeric<int>",
         "status": "closed",
         "transitive": "closed",
         "region": "i9",

@@ -17,68 +17,68 @@
 # Imports: compiler and test (the framework); mutable_array
 # (struct-specialization-census's array fields). No test here is about an
 # import or about method calls.
-import compiler
-import mutable_array
-import test
+import std::compiler
+import std::mutable_array
+import std::test
 
 fn register_instance_projection_tests():
     # struct-projection-instance-proves: first's instances for two
     # anonymous struct shapes project value from each (a String, then an
     # Int: the field's position in the canonical layout differs too).
-    fn b_instance_proves() errors compiler::CompilerError:
+    fn b_instance_proves() errors std::compiler::CompilerError:
         static compile:
             fn first(x):
                 x.value
             r = first({value: "a", next: 1})
             s = first({next: 2, value: 7})
             [r, s]
-    test::value("struct-projection-instance-proves", ["a", 7], b_instance_proves)
+    std::test::value("struct-projection-instance-proves", ["a", 7], b_instance_proves)
 
     # struct-projection-through-wrapper: instances chain: a wrapper called
     # with a struct gives its callee the struct too.
-    fn b_through_wrapper() errors compiler::CompilerError:
+    fn b_through_wrapper() errors std::compiler::CompilerError:
         static compile:
             fn first(x):
                 x.value
             fn wrap(y):
                 first(y)
             wrap({value: "deep"})
-    test::value("struct-projection-through-wrapper", "deep", b_through_wrapper)
+    std::test::value("struct-projection-through-wrapper", "deep", b_through_wrapper)
 
     # struct-projection-recursive-struct-parameter: a recursive function
     # threads a struct parameter; its own self-call is not a generic use.
-    fn b_recursive_parameter() errors compiler::CompilerError:
+    fn b_recursive_parameter() errors std::compiler::CompilerError:
         static compile:
             fn walk(s, i):
                 if i >= 3:
                     return s.value
                 walk(s, i + 1)
             walk({value: "done", spare: 1}, 0)
-    test::value("struct-projection-recursive-struct-parameter", "done", b_recursive_parameter)
+    std::test::value("struct-projection-recursive-struct-parameter", "done", b_recursive_parameter)
 
     # struct-specialization-census: one generic get(p) projecting x from five
     # struct shapes -- two with MutableArray fields of different element
     # contracts, an Int, a String, and a wider struct -- returns each field
     # (the Tcl test also pins five semantic instances lowered to four native
     # functions).
-    fn b_specialization_census() errors compiler::CompilerError:
+    fn b_specialization_census() errors std::compiler::CompilerError:
         static compile:
             fn get(p):
                 p.x
-            a = {x: mutable_array::create(2, 0)}
-            b = {x: mutable_array::create(2, "s")}
+            a = {x: std::mutable_array::create(2, 0)}
+            b = {x: std::mutable_array::create(2, "s")}
             c = {x: 7}
             d = {x: "s"}
             e = {x: 1, y: 2}
-            a0 = mutable_array::at(get(a), 0):
+            a0 = std::mutable_array::at(get(a), 0):
                 on IndexNotFound:
                     0
-            b0 = mutable_array::at(get(b), 0):
+            b0 = std::mutable_array::at(get(b), 0):
                 on IndexNotFound:
                     ""
             [a0, b0, get(c), get(d), get(e)]
-    test::value("struct-specialization-census", [0, "s", 7, "s", 1], b_specialization_census)
+    std::test::value("struct-specialization-census", [0, "s", 7, "s", 1], b_specialization_census)
 
-with context test::suite()
+with context std::test::suite()
 register_instance_projection_tests()
-test::report()
+std::test::report()

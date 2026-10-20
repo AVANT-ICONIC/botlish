@@ -25,11 +25,11 @@
 #
 # Imports: compiler and test (the framework); coroutine (the logs); list
 # and str (the programs).
-import compiler
-import coroutine
-import list
-import str
-import test
+import std::compiler
+import std::coroutine
+import std::list
+import std::str
+import std::test
 
 error Boom
 error Left
@@ -59,7 +59,7 @@ fn register_order_tests(k: int):
     # bf-order: left to right, each operand at most once, the right one only
     # when the left one does not decide. log(n, v) yields [n] and returns
     # v; drive() runs the program and collects its log.
-    fn b_and() errors compiler::CompilerError:
+    fn b_and() errors std::compiler::CompilerError:
         static compile:
             fn log(n: int, v: bool) -> List[int]:
                 yield [n]
@@ -79,12 +79,12 @@ fn register_order_tests(k: int):
                 [r1, r2]
             coroutine {step, first} = run()
             rest = loop i from 0 to 100:
-                if coroutine::done?(step):
+                if std::coroutine::done?(step):
                     break
                 step()
             [first, rest]
-    test::value("bf-order/and-short-circuit", [[1], [[5], [6], [11, 15]]], b_and)
-    fn b_or() errors compiler::CompilerError:
+    std::test::value("bf-order/and-short-circuit", [[1], [[5], [6], [11, 15]]], b_and)
+    fn b_or() errors std::compiler::CompilerError:
         static compile:
             fn log(n: int, v: bool) -> bool:
                 yield [n]
@@ -101,12 +101,12 @@ fn register_order_tests(k: int):
                 [r1, r2]
             coroutine {step, first} = run()
             rest = loop i from 0 to 100:
-                if coroutine::done?(step):
+                if std::coroutine::done?(step):
                     break
                 step()
             [first, rest]
-    test::value("bf-order/or-short-circuit", [[3], [[7], [8], [12, 17]]], b_or)
-    fn b_not() errors compiler::CompilerError:
+    std::test::value("bf-order/or-short-circuit", [[3], [[7], [8], [12, 17]]], b_or)
+    fn b_not() errors std::compiler::CompilerError:
         static compile:
             fn log(n: int, v: bool) -> bool:
                 yield [n]
@@ -127,12 +127,12 @@ fn register_order_tests(k: int):
                 [r1, r2, r3]
             coroutine {step, first} = run()
             rest = loop i from 0 to 100:
-                if coroutine::done?(step):
+                if std::coroutine::done?(step):
                     break
                 step()
             [first, rest]
-    test::value("bf-order/not", [[9], [[10], [14], [15], [16], [19, 22, 25]]], b_not)
-    fn b_nested() errors compiler::CompilerError:
+    std::test::value("bf-order/not", [[9], [[10], [14], [15], [16], [19, 22, 25]]], b_not)
+    fn b_nested() errors std::compiler::CompilerError:
         static compile:
             fn log(n: int, v: bool) -> bool:
                 yield [n]
@@ -149,12 +149,12 @@ fn register_order_tests(k: int):
                 [r1, r2]
             coroutine {step, first} = run()
             rest = loop i from 0 to 100:
-                if coroutine::done?(step):
+                if std::coroutine::done?(step):
                     break
                 step()
             [first, rest]
-    test::value("bf-order/nested", [[11], [[12], [13], [17], [18], [20, 26]]], b_nested)
-    fn b_value_position() errors compiler::CompilerError:
+    std::test::value("bf-order/nested", [[11], [[12], [13], [17], [18], [20, 26]]], b_nested)
+    fn b_value_position() errors std::compiler::CompilerError:
         static compile:
             fn log(n: int, v: bool) -> bool:
                 yield [n]
@@ -173,14 +173,14 @@ fn register_order_tests(k: int):
                 [r1, r2]
             coroutine {step, first} = run()
             rest = loop i from 0 to 100:
-                if coroutine::done?(step):
+                if std::coroutine::done?(step):
                     break
                 step()
             [first, rest]
-    test::value("bf-order/value-position", [[20], [[21], [22], [23], [29, 30]]], b_value_position)
+    std::test::value("bf-order/value-position", [[20], [[21], [22], [23], [29, 30]]], b_value_position)
 
     # bf-methods: conditions of method calls behave as the free calls do.
-    fn b_methods() errors compiler::CompilerError:
+    fn b_methods() errors std::compiler::CompilerError:
         static compile:
             fn ready?(j: Job) -> bool:
                 j.n > 0
@@ -194,12 +194,12 @@ fn register_order_tests(k: int):
                 else:
                     3
             [check(Job {n: k}, Job {n: 3}), check(Job {n: 0}, Job {n: 30}), check(Job {n: 5}, Job {n: 30})]
-    test::value("bf-methods", [1, 2, 3], b_methods)
+    std::test::value("bf-methods", [1, 2, 3], b_methods)
 
 fn register_error_tests(ks: List[int]):
     # bf-errors: a right operand that may fail runs only where the left
     # operand lets it.
-    fn b_skipped() errors compiler::CompilerError:
+    fn b_skipped() errors std::compiler::CompilerError:
         static compile:
             fn risky(k: int) -> bool errors Boom:
                 if k > 7:
@@ -225,8 +225,8 @@ fn register_error_tests(ks: List[int]):
                 [a, b]
             loop k in ks:
                 try_guards(k)
-    test::value("bf-errors/rhs-skipped", [[0, 1], [1, 1], [-1, -2]], b_skipped)
-    fn b_constant() errors compiler::CompilerError:
+    std::test::value("bf-errors/rhs-skipped", [[0, 1], [1, 1], [-1, -2]], b_skipped)
+    fn b_constant() errors std::compiler::CompilerError:
         static compile:
             fn risky(k: int) -> bool errors Boom:
                 if k > 7:
@@ -241,11 +241,11 @@ fn register_error_tests(ks: List[int]):
             else:
                 0
             [a, b]
-    test::value("bf-errors/constant-left-skips-known-error", [0, 1], b_constant)
+    std::test::value("bf-errors/constant-left-skips-known-error", [0, 1], b_constant)
 
     # bf-errors-order: when both operands may fail, the left one's error
     # comes first, the right one's only past it.
-    fn b_error_order() errors compiler::CompilerError:
+    fn b_error_order() errors std::compiler::CompilerError:
         static compile:
             fn left(k: int) -> bool errors Left:
                 if k == 1:
@@ -271,13 +271,13 @@ fn register_error_tests(ks: List[int]):
                 else:
                     "no"
             [probe(1), probe(2), probe(3), probe(4), probe(5)]
-    test::value("bf-errors-order", ["Left", "no", "Right", "no", "yes"], b_error_order)
+    std::test::value("bf-errors-order", ["Left", "no", "Right", "no", "yes"], b_error_order)
 
 fn register_proof_tests(xs: List[int]):
     # bf-proofs: the converter's `or` guard proves its result, an `and` of
     # comparisons admits a value into the domain, an exact argument in
     # range needs no handler, one out of range is KnownError.
-    fn b_converter() errors compiler::CompilerError:
+    fn b_converter() errors std::compiler::CompilerError:
         static compile:
             fn h(x: int) -> int:
                 s = small(x):
@@ -286,8 +286,8 @@ fn register_proof_tests(xs: List[int]):
                 use_small(s)
             loop x in xs:
                 h(x)
-    test::value("bf-proofs/converter-or-guard", [103, -1, -1], b_converter)
-    fn b_admitted() errors compiler::CompilerError:
+    std::test::value("bf-proofs/converter-or-guard", [103, -1, -1], b_converter)
+    fn b_admitted() errors std::compiler::CompilerError:
         static compile:
             fn g(x: int) -> int:
                 if 0 <= x and x <= 9:
@@ -296,24 +296,24 @@ fn register_proof_tests(xs: List[int]):
                     0
             loop x in xs:
                 g(x)
-    test::value("bf-proofs/range-through-and", [103, 0, 0], b_admitted)
-    fn b_exact() errors compiler::CompilerError:
+    std::test::value("bf-proofs/range-through-and", [103, 0, 0], b_admitted)
+    fn b_exact() errors std::compiler::CompilerError:
         static compile:
             use_small(small(3))
-    test::value("bf-proofs/exact-in-range", 103, b_exact)
-    fn b_known() errors compiler::CompilerError:
+    std::test::value("bf-proofs/exact-in-range", 103, b_exact)
+    fn b_known() errors std::compiler::CompilerError:
         static compile:
             s = small(12):
                 on OutOfRange:
                     return -1
             use_small(s)
-    test::rejects("bf-proofs/known-error", compiler::DiagnosticCode::KnownError, b_known)
+    std::test::rejects("bf-proofs/known-error", std::compiler::DiagnosticCode::KnownError, b_known)
 
 fn register_size_tests(n: int):
     # bf-beyond-proof-budget: a conjunction of 40 logged operands, past the
     # proof's node budget, evaluates exactly: each operand once, in order,
     # stopping at the first false one (operand n), or all of them.
-    fn b_budget() errors compiler::CompilerError:
+    fn b_budget() errors std::compiler::CompilerError:
         static compile:
             fn log(i: int, v: bool) -> int:
                 yield i
@@ -329,18 +329,18 @@ fn register_size_tests(n: int):
             fn drive(k: int):
                 coroutine {step, first} = run(k)
                 rest = loop i from 0 to 100:
-                    if coroutine::done?(step):
+                    if std::coroutine::done?(step):
                         break
                     step()
-                last = list::at(rest, list::length(rest) - 1):
+                last = std::list::at(rest, std::list::length(rest) - 1):
                     on IndexNotFound:
                         return [first, -9]
-                [first, list::length(rest), last]
+                [first, std::list::length(rest), last]
             [drive(n), drive(500)]
-    test::value("bf-beyond-proof-budget", [[1, 7, -2], [1, 40, -1]], b_budget)
+    std::test::value("bf-beyond-proof-budget", [[1, 7, -2], [1, 40, -1]], b_budget)
 
     # bf-deep-nesting: an alternating and/or/not tree, twelve levels deep.
-    fn b_deep() errors compiler::CompilerError:
+    fn b_deep() errors std::compiler::CompilerError:
         static compile:
             fn f(x: int) -> int:
                 if not ((not ((((not ((((x > 3 and x < 7) or x < 14) and x != 3)) or x < 28) and x < 35) or x != 6)) and x < 49) or x < 56):
@@ -349,11 +349,11 @@ fn register_size_tests(n: int):
                     2
             loop x in [0, 4, n, 500, 841]:
                 f(x)
-    test::value("bf-deep-nesting", [2, 2, 2, 1, 1], b_deep)
+    std::test::value("bf-deep-nesting", [2, 2, 2, 1, 1], b_deep)
 
     # bf-nir-affine-rhs: a right operand that moves a coroutine handle moves
     # it only where it runs; the other path releases it.
-    fn b_affine() errors compiler::CompilerError:
+    fn b_affine() errors std::compiler::CompilerError:
         static compile:
             fn ticker() -> int:
                 loop i from 0 to 1000:
@@ -374,11 +374,11 @@ fn register_size_tests(n: int):
                 else:
                     4
             [f(n > 0), f(n < 0), g(n > 0), g(n < 0)]
-    test::value("bf-nir-affine-rhs", [1, 2, 3, 3], b_affine)
+    std::test::value("bf-nir-affine-rhs", [1, 2, 3, 3], b_affine)
 
     # bf-tcl-value-positions, bf-nir-value-positions: Bools built from
     # and/or/not where a value is wanted are values.
-    fn b_values() errors compiler::CompilerError:
+    fn b_values() errors std::compiler::CompilerError:
         static compile:
             fn id(b: bool) -> bool:
                 b
@@ -389,25 +389,25 @@ fn register_size_tests(n: int):
             fn g(x: int) -> bool:
                 return x > 0 and x < 9
             [f(2), g(2), f(n), g(n)]
-    test::value("bf-nir-value-positions", [[true, true, [false], false], true, [true, false, [true], false], true], b_values)
+    std::test::value("bf-nir-value-positions", [[true, true, [false], false], true, [true, false, [true], false], true], b_values)
 
     # bf-nir-region-consumer: an inlined character predicate as a condition.
-    fn b_region() errors compiler::CompilerError:
+    fn b_region() errors std::compiler::CompilerError:
         static compile:
             fn peek(text, index):
-                if index < 0 or index >= str::length(text):
+                if index < 0 or index >= std::str::length(text):
                     return ""
-                str::substring(text, index, index + 1)
+                std::str::substring(text, index, index + 1)
             fn is_local_char(c):
-                str::is_tcl_alnum(c) or c == "." or c == "_" or c == "-"
+                std::str::is_tcl_alnum(c) or c == "." or c == "_" or c == "-"
             fn scan(text, index, count):
-                if index >= str::length(text):
+                if index >= std::str::length(text):
                     return count
                 if is_local_char(peek(text, index)):
                     return scan(text, index + 1, count + 1)
                 scan(text, index + 1, count)
             scan("ab.c_d-e@f", 0, 0)
-    test::value("bf-nir-region-consumer", 9, b_region)
+    std::test::value("bf-nir-region-consumer", 9, b_region)
 
 fn register_branch_form_boolean_tests():
     register_order_tests(5)
@@ -415,6 +415,6 @@ fn register_branch_form_boolean_tests():
     register_proof_tests([3, 12, -1])
     register_size_tests(7)
 
-with context test::suite()
+with context std::test::suite()
 register_branch_form_boolean_tests()
-test::report()
+std::test::report()

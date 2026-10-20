@@ -5,7 +5,7 @@
 #
 #   tclsh9.0 audit/refactor/tools/expect.tcl ?-backends LIST? ?-root DIR?
 #
-# -root DIR checks another tree's examples/, bench/ and lib/ (a scratch copy
+# -root DIR checks another tree's examples/, bench/ and stdlib/ (a scratch copy
 # with a phase's conversions) with this checkout's compiler.
 #
 # tests/stdlib.test (examples/stdlib), tests/surface-samples.test
@@ -27,7 +27,7 @@ foreach {option value} $argv {
     }
 }
 source [file join $checkout examples stdlib corpus.tcl]
-set ::core::libraryDir [file join $root lib]
+set ::core::libraryDir [file join $root stdlib]
 set ::refactorSweepLibrary 1
 source [file join $here sweep.tcl]
 interp recursionlimit {} 1000000

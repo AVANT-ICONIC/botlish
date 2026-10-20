@@ -21,11 +21,13 @@
 #              order; never statements of `body`, never walked by Children),
 #              direct (the span of the file's `direct module` declaration,
 #              its first construct, or "": DIRECT-MODULES.md)
-#   import     namespace (the imported namespace's whole path, "abi::x86_64"),
-#              namespaceSpan -- `import NAMESPACE` (IMPORTS.md): a direct
-#              dependency on exactly that namespace
+#   import     namespace (the imported namespace's whole path, "std::abi::x86_64"),
+#              namespaceSpan, rooted (1 for a path written from the root,
+#              `import ::std::list`, STD-NAMESPACE.md; the namespace is the
+#              canonical path either way) -- `import NAMESPACE` (IMPORTS.md):
+#              a direct dependency on exactly that namespace
 #   typeimport namespace (the type's namespace path), namespaceSpan, name (the
-#              type's own name), nameSpan -- `import type NAMESPACE::Name`:
+#              type's own name), nameSpan, rooted -- `import type NAMESPACE::Name`:
 #              exactly one short type name
 #   suite      body (statements)                 an indented block
 #   int        text (canonical decimal digits)
@@ -39,7 +41,11 @@
 #   bool       value (true | false)
 #   unit
 #   name       name
-#   qualname   namespace, name, namespaceSpan, nameSpan  (NAMESPACE::NAME)
+#   qualname   namespace, name, namespaceSpan, nameSpan, rooted (NAMESPACE::NAME;
+#              rooted 1 for ::NAMESPACE::NAME, whose NAMESPACE is a namespace
+#              path from the root, never a type qualifier; a type name or an
+#              error name written rooted is kept canonical, with no flag:
+#              STD-NAMESPACE.md)
 #   list       items (expressions)
 #   anonstruct init (a fieldinits node)   { x: a, y: b }: an anonymous struct
 #              value (STRUCTS.md)
@@ -633,10 +639,11 @@ proc surface::formatAst {ast args} {
     }
     if {[dict get $ast kind] eq "program" && [dict exists $ast imports]} {
         foreach import [dict get $ast imports] {
+            set root [surface::ast::Root $import]
             if {[dict get $import kind] eq "import"} {
-                lappend lines "(import [dict get $import namespace])[surface::ast::At $import $show]"
+                lappend lines "(import $root[dict get $import namespace])[surface::ast::At $import $show]"
             } else {
-                lappend lines "(import-type [dict get $import namespace]::[dict get $import name])[surface::ast::At $import $show]"
+                lappend lines "(import-type $root[dict get $import namespace]::[dict get $import name])[surface::ast::At $import $show]"
             }
         }
     }
@@ -668,6 +675,15 @@ proc surface::ast::At {node show} {
     return $text
 }
 
+# "::" for a node whose namespace path was written rooted (`::std::list`,
+# STD-NAMESPACE.md), else "".
+proc surface::ast::Root {node} {
+    if {[dict getdef $node rooted 0]} {
+        return ::
+    }
+    return ""
+}
+
 proc surface::ast::Quote {text} {
     return "\"[string map [list \\ \\\\ \" \\\" \n \\n \r \\r \t \\t] $text]\""
 }
@@ -682,7 +698,7 @@ proc surface::ast::Expr {node show} {
         bool    { return "(bool [dict get $node value])$at" }
         unit    { return "(unit)$at" }
         name    { return "(name [dict get $node name])$at" }
-        qualname { return "(qualname [dict get $node namespace]::[dict get $node name])$at" }
+        qualname { return "(qualname [Root $node][dict get $node namespace]::[dict get $node name])$at" }
         error   { return "(error)$at" }
         list {
             return "([::join [concat list [lmap item [dict get $node items] {Expr $item $show}]] { }])$at"
@@ -713,7 +729,7 @@ proc surface::ast::Expr {node show} {
         namedstruct {
             set name [dict get $node name]
             if {[dict get $node namespace] ne ""} {
-                set name "[dict get $node namespace]::$name"
+                set name "[Root $node][dict get $node namespace]::$name"
             }
             if {[dict exists $node typeArg]} {
                 append name "\[[showType [dict get $node typeArg]]\]"

@@ -211,7 +211,7 @@ test bf-tcl-value-positions {argument, return, collection element, struct field 
 } -result {11 3 {value {[[true, true, [false], false], true]}}}
 
 test bf-tcl-affine-rhs {in the Tcl compiler too, a right operand that moves a coroutine handle moves it only where it runs: the other side of the test releases it (a Boolean constant with a release after it is no bare constant)} -body {
-    set source "import coroutine\n\nfn ticker() -> int:\n    loop i from 0 to 1000:\n        yield i\n    return -1\n\nfn take(c: Coroutine{args: \[\], return: int}) -> bool:\n    c() > 0\n\nfn f(flag: bool) -> int:\n    coroutine {step: h} = ticker()\n    if flag and take(h):\n        1\n    else:\n        2\n\n\[f(true), f(false)\]\n"
+    set source "import std::coroutine\n\nfn ticker() -> int:\n    loop i from 0 to 1000:\n        yield i\n    return -1\n\nfn take(c: Coroutine{args: \[\], return: int}) -> bool:\n    c() > 0\n\nfn f(flag: bool) -> int:\n    coroutine {step: h} = ticker()\n    if flag and take(h):\n        1\n    else:\n        2\n\n\[f(true), f(false)\]\n"
     set body [bfTclBody [bfHir $source] f]
     set test [string first "    if \{" $body]
     set release [string first releaseImpl $body]
@@ -305,7 +305,7 @@ test bf-nir-range-decided-operand {an operand the instance's Ranges decide is no
 } -result {{0 0} 1 {{jump L2} {jump L2}}}
 
 test bf-nir-affine-rhs {a right operand that moves an affine value moves it only where it runs: the other path releases it, then jumps to its target} -body {
-    set source "import coroutine\n\nfn ticker() -> int:\n    loop i from 0 to 1000:\n        yield i\n    return -1\n\nfn take(c: Coroutine{args: \[\], return: int}) -> bool:\n    c() > 0\n\nfn f(flag: bool) -> int:\n    coroutine {step: h} = ticker()\n    if flag and take(h):\n        1\n    else:\n        2\n\nfn g(flag: bool) -> int:\n    coroutine {step: h} = ticker()\n    if flag or take(h):\n        3\n    else:\n        4\n\n\[f(true), f(false), g(true), g(false)\]\n"
+    set source "import std::coroutine\n\nfn ticker() -> int:\n    loop i from 0 to 1000:\n        yield i\n    return -1\n\nfn take(c: Coroutine{args: \[\], return: int}) -> bool:\n    c() > 0\n\nfn f(flag: bool) -> int:\n    coroutine {step: h} = ticker()\n    if flag and take(h):\n        1\n    else:\n        2\n\nfn g(flag: bool) -> int:\n    coroutine {step: h} = ticker()\n    if flag or take(h):\n        3\n    else:\n        4\n\n\[f(true), f(false), g(true), g(false)\]\n"
     set nir [native::nir [bfHir $source]]
     set f [bfNirBody $nir f]
     set i [lsearch -regexp $f {= op corelease }]
@@ -314,7 +314,7 @@ test bf-nir-affine-rhs {a right operand that moves an affine value moves it only
 } -result {{0 0} 1 1 {[1, 2, 3, 3]}}
 
 test bf-nir-region-consumer {an inlined region-consumer predicate used as a condition branches straight to the arms: its `or` chain is one `br` per character test, no Bool, no join} -body {
-    set source "import str\n\nfn peek(text, index):\n    if index < 0 or index >= str::length(text):\n        return \"\"\n\n    str::substring(text, index, index + 1)\n\nfn is_local_char(c):\n    str::is_tcl_alnum(c) or c == \".\" or c == \"_\" or c == \"-\"\n\nfn scan(text, index, count):\n    if index >= str::length(text):\n        return count\n    if is_local_char(peek(text, index)):\n        return scan(text, index + 1, count + 1)\n    scan(text, index + 1, count)\n\nfn f():\n    scan(\"ab.c_d-e@f\", 0, 0)\nf()\n"
+    set source "import std::str\n\nfn peek(text, index):\n    if index < 0 or index >= std::str::length(text):\n        return \"\"\n\n    std::str::substring(text, index, index + 1)\n\nfn is_local_char(c):\n    std::str::is_tcl_alnum(c) or c == \".\" or c == \"_\" or c == \"-\"\n\nfn scan(text, index, count):\n    if index >= std::str::length(text):\n        return count\n    if is_local_char(peek(text, index)):\n        return scan(text, index + 1, count + 1)\n    scan(text, index + 1, count)\n\nfn f():\n    scan(\"ab.c_d-e@f\", 0, 0)\nf()\n"
     set body [bfNirBody [native::nir [bfHir $source]] scan]
     list [bfBools $body] [llength [lsearch -all -regexp $body {= op (strregiontclalnum|regioneq) }]] \
         [llength [bfBranches $body]] [lsearch -all -inline -regexp $body {= call }] [bfValue $source]
@@ -345,7 +345,7 @@ test bf-boolean-valued-if {a Boolean-valued `if` as a condition -- not writable 
 # Semantics on every backend: evaluation order and counts, short circuits
 
 # log(n, v) yields [n] and returns v: a coroutine's segments are the log.
-set bfOrderSource {import coroutine
+set bfOrderSource {import std::coroutine
 
 fn log(n: int, v: bool) -> bool:
     yield [n]
@@ -398,7 +398,7 @@ fn run(k: int) -> List[int]:
 fn drive(k: int):
     coroutine {step, first} = run(k)
     rest = loop i from 0 to 100:
-        if coroutine::done?(step):
+        if std::coroutine::done?(step):
             break
         step()
     [first, rest]
@@ -467,7 +467,7 @@ test bf-methods {conditions of method calls behave as the free calls do} -body {
 # ---------------------------------------------------------------------------
 # Proofs are the analyses', unchanged
 
-set bfConverter {import list
+set bfConverter {import std::list
 type Small = Int in 0..9
 error OutOfRange
 
@@ -555,7 +555,7 @@ test bf-beyond-proof-budget {a condition far past the proof's node budget still 
     for {set i 1} {$i <= 120} {incr i} {
         lappend ops "log($i, $i != k)"
     }
-    bfValue "import coroutine\nimport list\n\nfn log(n: int, v: bool) -> int:\n    yield n\n    if v:\n        1\n    else:\n        0\n\nfn run(k: int) -> int:\n    if [join [lmap op $ops {string cat $op " == 1"}] { and }]:\n        -1\n    else:\n        -2\n\nfn drive(k: int):\n    coroutine {step, first} = run(k)\n    rest = loop i from 0 to 200:\n        if coroutine::done?(step):\n            break\n        step()\n    last = list::at(rest, list::length(rest) - 1):\n        on IndexNotFound:\n            return \[first, -9\]\n    \[first, list::length(rest), last\]\n\n\[drive(7), drive(500)\]\n"
+    bfValue "import std::coroutine\nimport std::list\n\nfn log(n: int, v: bool) -> int:\n    yield n\n    if v:\n        1\n    else:\n        0\n\nfn run(k: int) -> int:\n    if [join [lmap op $ops {string cat $op " == 1"}] { and }]:\n        -1\n    else:\n        -2\n\nfn drive(k: int):\n    coroutine {step, first} = run(k)\n    rest = loop i from 0 to 200:\n        if std::coroutine::done?(step):\n            break\n        step()\n    last = std::list::at(rest, std::list::length(rest) - 1):\n        on IndexNotFound:\n            return \[first, -9\]\n    \[first, std::list::length(rest), last\]\n\n\[drive(7), drive(500)\]\n"
 } -result {[[1, 7, -2], [1, 120, -1]]}
 
 # A tree of depth D alternating and/or/not over comparisons of x.

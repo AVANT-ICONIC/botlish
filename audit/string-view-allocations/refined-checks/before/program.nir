@@ -37,7 +37,7 @@ func 0 "<program>" params=0 env=0 regs=33 pnames="" captures=0 instance="generic
     ret %32
 end
 
-func 1 "web::uri_escape_text" params=1 env=1 regs=10 pnames="s" captures=1 instance="generic" rawregs="7" @e21
+func 1 "std::web::uri_escape_text" params=1 env=1 regs=10 pnames="s" captures=1 instance="generic" rawregs="7" @e21
     %1 = capture 0
     %2 = closure 4 %1 @e191
     %3 = closure 5 %2 @e208

@@ -1,5 +1,5 @@
 # lpp -- lpa (audit/hash-table/impl/lpa.bot) with its probe walk delegated
-# to the EXPERIMENTAL runtime primitive mutable_array::probe_linear
+# to the EXPERIMENTAL runtime primitive std::mutable_array::probe_linear
 # (HASH-TABLE-EXPERIMENT.md, "Runtime experiments"; core/mutarray.tcl): one
 # helper call walks the linear probing sequence over the stored hashes and
 # keys in Rust and answers the key's slot or -1 - the empty slot ending its
@@ -14,8 +14,8 @@
 # the tools at that checkout); this checkout's compiler rejects it.
 #
 # policy: 7/10
-import list
-import mutable_array
+import std::list
+import std::mutable_array
 
 struct Table:
     hashes: MutableArray[int]
@@ -41,7 +41,7 @@ fn slots_for(expected: int, cap: int) -> int:
     slots_for(expected, cap * 2)
 
 fn empty_table(cap: int) -> Table:
-    Table {hashes: mutable_array::create(cap, -1), keys: mutable_array::allocate(cap), vals: mutable_array::allocate(cap), meta: mutable_array::create(1, 0)}
+    Table {hashes: std::mutable_array::create(cap, -1), keys: std::mutable_array::allocate(cap), vals: std::mutable_array::allocate(cap), meta: std::mutable_array::create(1, 0)}
 
 fn fresh(expected: int) -> Table:
     empty_table(slots_for(expected, min_slots()))
@@ -67,14 +67,14 @@ fn next_slot(i: int, cap: int) -> int:
 # The slot holding KEY (hash H), or the empty slot that ends its probe
 # sequence (the primitive answers -1 - that slot).
 fn find(t: Table, h: int, key) -> int errors IndexNotFound:
-    i = mutable_array::probe_linear(t.hashes, t.keys, h, key)
+    i = std::mutable_array::probe_linear(t.hashes, t.keys, h, key)
     if i < 0:
         return -1 - i
     i
 
 # The first empty slot of hash H's probe sequence (no stored hash is -1).
 fn find_empty(t: Table, h: int) -> int errors IndexNotFound:
-    -1 - mutable_array::probe_linear(t.hashes, t.keys, h, unit)
+    -1 - std::mutable_array::probe_linear(t.hashes, t.keys, h, unit)
 
 # ---------------------------------------------------------------------------
 # Lookup
@@ -173,9 +173,9 @@ fn drop(t: Table, key) -> Table errors IndexNotFound:
 
 # The table of KEYS[i] -> VALS[i], in order (a later duplicate's value wins).
 fn from_lists(keys: list, vals: list) -> Table errors IndexNotFound:
-    n = list::length(keys)
+    n = std::list::length(keys)
     fn fill(t: Table, i: int) -> Table errors IndexNotFound:
         if i >= n:
             return t
-        fill(put(t, list::at(keys, i), list::at(vals, i)), i + 1)
+        fill(put(t, std::list::at(keys, i), std::list::at(vals, i)), i + 1)
     fill(fresh(n), 0)

@@ -14,12 +14,12 @@
 #
 # expect: ["abc", "aXc", "bb", "", ""]
 
-import str
+import std::str
 
 # true if needle occurs in haystack starting at index.
 fn matches_at(haystack, needle, index) errors LowerUnderrun, UpperOverrun:
-    end = index + str::length(needle)
-    if end > str::length(haystack):
+    end = index + std::str::length(needle)
+    if end > std::str::length(haystack):
         return false
 
     haystack.substring(index, end) == needle
@@ -27,18 +27,18 @@ fn matches_at(haystack, needle, index) errors LowerUnderrun, UpperOverrun:
 # haystack from index on with its matches replaced, appended to done;
 # unmatched text from run_start up to index has not been copied yet.
 fn replace_from(haystack, needle, replacement, index, run_start, done) errors LowerUnderrun, UpperOverrun:
-    if index + str::length(needle) > str::length(haystack):
-        return done.concat(haystack.substring(run_start, str::length(haystack)))
+    if index + std::str::length(needle) > std::str::length(haystack):
+        return done.concat(haystack.substring(run_start, std::str::length(haystack)))
 
     if haystack.matches_at(needle, index):
         copied = done.concat(haystack.substring(run_start, index))
-        after = index + str::length(needle)
+        after = index + std::str::length(needle)
         return haystack.replace_from(needle, replacement, after, after, copied.concat(replacement))
 
     haystack.replace_from(needle, replacement, index + 1, run_start, done)
 
 fn replace(haystack, needle, replacement) errors LowerUnderrun, UpperOverrun:
-    if str::length(needle) == 0:
+    if std::str::length(needle) == 0:
         return haystack
 
     haystack.replace_from(needle, replacement, 0, 0, "")

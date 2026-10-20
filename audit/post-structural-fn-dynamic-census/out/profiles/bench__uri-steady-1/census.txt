@@ -6,26 +6,26 @@ exclusive Ir by code kind: libc 18,094,375 (40.9%)  runtime 17,928,487 (40.6%)  
   function                               invoc entry-invoc  self direct self entry    inclusive  incl %  self %
   0 <program>                                1           0          237          0   44,193,367 100.00%   0.00%
   23 repeat_uri                              1           0      166,043          0   44,186,582  99.98%   0.38%
-  17 web::uri_escape_text                2,000           0       40,000          0   43,886,539  99.31%   0.09%
+  17 std::web::uri_escape_text                2,000           0       40,000          0   43,886,539  99.31%   0.09%
   22 esc_from                            2,000           0    1,146,000          0   43,846,539  99.22%   2.59%
   21 esc_char                           14,000           0      836,000          0   25,129,432  56.86%   1.89%
   20 esc_bytes                           4,000           0      653,000          0   11,261,820  25.48%   1.48%
   19 hex_pair                            6,500           0      429,000          0    6,556,882  14.84%   0.97%
-  16 web::is_unreserved                 12,500           0      330,000          0    2,563,500   5.80%   0.75%
-  8 ascii::is_alphanumeric              12,500           0      294,500          0    1,586,000   3.59%   0.67%
-  7 ascii::is_alphabetic                12,500           0      350,500          0    1,155,500   2.61%   0.79%
-  5 ascii::is_upper                     12,500           0      433,000          0      433,000   0.98%   0.98%
-  6 ascii::is_lower                     11,000           0      372,000          0      372,000   0.84%   0.84%
-  4 ascii::is_digit                      4,000           0      136,000          0      136,000   0.31%   0.31%
+  16 std::web::is_unreserved                 12,500           0      330,000          0    2,563,500   5.80%   0.75%
+  8 std::ascii::is_alphanumeric              12,500           0      294,500          0    1,586,000   3.59%   0.67%
+  7 std::ascii::is_alphabetic                12,500           0      350,500          0    1,155,500   2.61%   0.79%
+  5 std::ascii::is_upper                     12,500           0      433,000          0      433,000   0.98%   0.98%
+  6 std::ascii::is_lower                     11,000           0      372,000          0      372,000   0.84%   0.84%
+  4 std::ascii::is_digit                      4,000           0      136,000          0      136,000   0.31%   0.31%
   18 high_nibble                         6,500           0      104,000          0      104,000   0.24%   0.24%
-  3 byte::set                                1           0          280          0        2,717   0.01%   0.00%
-  2 byte::from_int                           4           0          108          0          108   0.00%   0.00%
-  1 char::codepoint                          4           0           28          0           60   0.00%   0.00%
+  3 std::byte::set                                1           0          280          0        2,717   0.01%   0.00%
+  2 std::byte::from_int                           4           0          108          0          108   0.00%   0.00%
+  1 std::char::codepoint                          4           0           28          0           60   0.00%   0.00%
 
 == calls out of Botlish code (in-region counts): caller -> callee, count/run, inclusive Ir/run, Ir/call, % total
   0 <program>                    -> 23 repeat_uri                                                        1    44,186,582  44186582.0   99.98%
-  23 repeat_uri                  -> 17 web::uri_escape_text                                          2,000    43,886,539  21943.3   99.31%
-  17 web::uri_escape_text        -> 22 esc_from                                                      2,000    43,846,539  21923.3   99.22%
+  23 repeat_uri                  -> 17 std::web::uri_escape_text                                          2,000    43,886,539  21943.3   99.31%
+  17 std::web::uri_escape_text        -> 22 esc_from                                                      2,000    43,846,539  21923.3   99.22%
   22 esc_from                    -> 21 esc_char                                                     14,000    25,129,432   1795.0   56.86%
   21 esc_char                    -> 20 esc_bytes                                                     4,000    11,261,820   2815.5   25.48%
   21 esc_char                    -> rt_str_utf8_bytes                                               14,000    10,314,112    736.7   23.34%
@@ -34,31 +34,31 @@ exclusive Ir by code kind: libc 18,094,375 (40.9%)  runtime 17,928,487 (40.6%)  
   20 esc_bytes                   -> 19 hex_pair                                                      6,500     6,556,882   1008.8   14.84%
   19 hex_pair                    -> rt_construct                                                     6,500     5,731,382    881.8   12.97%
   20 esc_bytes                   -> rt_construct                                                     6,500     3,936,438    605.6    8.91%
-  21 esc_char                    -> 16 web::is_unreserved                                           12,500     2,563,500    205.1    5.80%
-  16 web::is_unreserved          -> 8 ascii::is_alphanumeric                                        12,500     1,586,000    126.9    3.59%
-  8 ascii::is_alphanumeric       -> 7 ascii::is_alphabetic                                          12,500     1,155,500     92.4    2.61%
-  16 web::is_unreserved          -> rt_set_contains                                                  2,500       647,500    259.0    1.47%
-  7 ascii::is_alphabetic         -> 5 ascii::is_upper                                               12,500       433,000     34.6    0.98%
-  7 ascii::is_alphabetic         -> 6 ascii::is_lower                                               11,000       372,000     33.8    0.84%
+  21 esc_char                    -> 16 std::web::is_unreserved                                           12,500     2,563,500    205.1    5.80%
+  16 std::web::is_unreserved          -> 8 std::ascii::is_alphanumeric                                        12,500     1,586,000    126.9    3.59%
+  8 std::ascii::is_alphanumeric       -> 7 std::ascii::is_alphabetic                                          12,500     1,155,500     92.4    2.61%
+  16 std::web::is_unreserved          -> rt_set_contains                                                  2,500       647,500    259.0    1.47%
+  7 std::ascii::is_alphabetic         -> 5 std::ascii::is_upper                                               12,500       433,000     34.6    0.98%
+  7 std::ascii::is_alphabetic         -> 6 std::ascii::is_lower                                               11,000       372,000     33.8    0.84%
   19 hex_pair                    -> rt_int_mod                                                       6,500       292,500     45.0    0.66%
   22 esc_from                    -> rt_str_len                                                      16,000       176,000     11.0    0.40%
   21 esc_char                    -> rt_str_len                                                      14,000       154,000     11.0    0.35%
-  8 ascii::is_alphanumeric       -> 4 ascii::is_digit                                                4,000       136,000     34.0    0.31%
+  8 std::ascii::is_alphanumeric       -> 4 std::ascii::is_digit                                                4,000       136,000     34.0    0.31%
   20 esc_bytes                   -> rt_str_len                                                      10,500       115,500     11.0    0.26%
   19 hex_pair                    -> 18 high_nibble                                                   6,500       104,000     16.0    0.24%
   23 repeat_uri                  -> rt_int_mod                                                       2,000        90,000     45.0    0.20%
   23 repeat_uri                  -> rt_str_len                                                       4,000        44,000     11.0    0.10%
-  0 <program>                    -> 3 byte::set                                                          1         2,717   2717.0    0.01%
+  0 <program>                    -> 3 std::byte::set                                                          1         2,717   2717.0    0.01%
   0 <program>                    -> rt_list_new                                                          4         1,796    449.0    0.00%
   0 <program>                    -> rt_set_from_list                                                     1         1,551   1551.0    0.00%
-  3 byte::set                    -> rt_list_append                                                       4         1,432    358.0    0.00%
-  3 byte::set                    -> rt_set_from_list                                                     1           668    668.0    0.00%
+  3 std::byte::set                    -> rt_list_append                                                       4         1,432    358.0    0.00%
+  3 std::byte::set                    -> rt_set_from_list                                                     1           668    668.0    0.00%
   0 <program>                    -> rt_closure_new                                                       2           484    242.0    0.00%
-  3 byte::set                    -> rt_list_new                                                          1           158    158.0    0.00%
-  3 byte::set                    -> 2 byte::from_int                                                     4           108     27.0    0.00%
-  3 byte::set                    -> 1 char::codepoint                                                    4            60     15.0    0.00%
-  1 char::codepoint              -> rt_char_codepoint                                                    4            32      8.0    0.00%
-  3 byte::set                    -> rt_str_len                                                           1            11     11.0    0.00%
+  3 std::byte::set                    -> rt_list_new                                                          1           158    158.0    0.00%
+  3 std::byte::set                    -> 2 std::byte::from_int                                                     4           108     27.0    0.00%
+  3 std::byte::set                    -> 1 std::char::codepoint                                                    4            60     15.0    0.00%
+  1 std::char::codepoint              -> rt_char_codepoint                                                    4            32      8.0    0.00%
+  3 std::byte::set                    -> rt_str_len                                                           1            11     11.0    0.00%
 
 == runtime/libc functions: exact in-region invocations (entry-instruction count, if resolvable), SELF, INCLUSIVE
   botlish_audit_run                                                              1  self           6 ( 0.00%)  incl  44,193,373 (100.00%)  44193373.0 Ir/call
@@ -339,18 +339,18 @@ exclusive Ir by code kind: libc 18,094,375 (40.9%)  runtime 17,928,487 (40.6%)  
   22 esc_from (1,146,000): stack store=274,000; mov reg-reg=254,000; tag test=88,000; completion check=88,000; overflow check=84,000; mov imm=78,000; call helper=46,000; stack load=44,000; bool materialize=32,000; bool test=32,000; arith=28,000; frame: epilogue=18,000; frame: prologue=16,000; logic=16,000; cmp/test (other)=16,000; call botlish=14,000; jmp=14,000; lea (stack addr)=4,000
   21 esc_char (836,000): mov reg-reg=243,500; frame: epilogue=126,000; frame: prologue=112,000; stack store=78,000; heap/vm load=45,500; cmp/test (other)=40,500; jcc (other)=40,500; completion check=33,000; mov imm=32,000; call helper=28,000; bool test=25,000; call botlish=16,500; untag=14,000; jmp=1,500
   20 esc_bytes (653,000): stack store=138,500; mov reg-reg=134,500; tag test=47,000; frame: epilogue=36,000; heap/vm load=32,500; frame: prologue=32,000; mov imm=30,000; completion check=26,000; stack load=23,500; bool materialize=21,000; bool test=21,000; overflow check=19,500; call helper=17,000; cmp/test (other)=17,000; jmp=13,000; logic=10,500; arith=6,500; untag=6,500; jcc (other)=6,500; call botlish=6,500; frame: root-slot zero=4,000; lea (stack addr)=4,000
-  5 ascii::is_upper (433,000): frame: epilogue=75,000; frame: prologue=62,500; tag test=54,500; mov reg-reg=51,500; mov imm=48,500; bool test=42,000; cmp/test (other)=33,500; bool materialize=29,500; jcc (other)=25,000; jmp=11,000
+  5 std::ascii::is_upper (433,000): frame: epilogue=75,000; frame: prologue=62,500; tag test=54,500; mov reg-reg=51,500; mov imm=48,500; bool test=42,000; cmp/test (other)=33,500; bool materialize=29,500; jcc (other)=25,000; jmp=11,000
   19 hex_pair (429,000): mov reg-reg=91,000; stack store=52,000; frame: epilogue=52,000; frame: prologue=45,500; heap/vm load=39,000; mov imm=32,500; tag test=26,000; completion check=26,000; untag=13,000; cmp/test (other)=13,000; jcc (other)=13,000; call helper=13,000; call botlish=6,500; lea (stack addr)=6,500
-  6 ascii::is_lower (372,000): frame: epilogue=66,000; frame: prologue=55,000; mov reg-reg=51,000; tag test=47,000; mov imm=37,000; bool test=36,000; cmp/test (other)=29,000; bool materialize=25,000; jcc (other)=22,000; jmp=4,000
-  7 ascii::is_alphabetic (350,500): frame: epilogue=75,000; mov reg-reg=72,000; frame: prologue=62,500; completion check=47,000; bool test=47,000; call botlish=23,500; mov imm=12,500; jmp=11,000
-  16 web::is_unreserved (330,000): frame: epilogue=87,500; frame: prologue=75,000; mov reg-reg=70,000; completion check=30,000; bool test=30,000; mov imm=15,000; call botlish=12,500; heap/vm load=5,000; call helper=2,500; jmp=2,500
-  8 ascii::is_alphanumeric (294,500): frame: epilogue=75,000; frame: prologue=62,500; mov reg-reg=58,000; completion check=33,000; bool test=33,000; call botlish=16,500; mov imm=12,500; jmp=4,000
+  6 std::ascii::is_lower (372,000): frame: epilogue=66,000; frame: prologue=55,000; mov reg-reg=51,000; tag test=47,000; mov imm=37,000; bool test=36,000; cmp/test (other)=29,000; bool materialize=25,000; jcc (other)=22,000; jmp=4,000
+  7 std::ascii::is_alphabetic (350,500): frame: epilogue=75,000; mov reg-reg=72,000; frame: prologue=62,500; completion check=47,000; bool test=47,000; call botlish=23,500; mov imm=12,500; jmp=11,000
+  16 std::web::is_unreserved (330,000): frame: epilogue=87,500; frame: prologue=75,000; mov reg-reg=70,000; completion check=30,000; bool test=30,000; mov imm=15,000; call botlish=12,500; heap/vm load=5,000; call helper=2,500; jmp=2,500
+  8 std::ascii::is_alphanumeric (294,500): frame: epilogue=75,000; frame: prologue=62,500; mov reg-reg=58,000; completion check=33,000; bool test=33,000; call botlish=16,500; mov imm=12,500; jmp=4,000
   23 repeat_uri (166,043): mov reg-reg=32,005; stack store=30,010; tag test=18,002; stack load=16,002; overflow check=12,000; mov imm=8,001; completion check=8,000; heap/vm load=6,001; call helper=6,000; jmp=6,000; bool test=4,002; cmp/test (other)=4,001; arith=4,000; logic=2,001; bool materialize=2,001; untag=2,000; jcc (other)=2,000; call botlish=2,000; lea=2,000; frame: epilogue=9; frame: prologue=8
-  4 ascii::is_digit (136,000): frame: epilogue=24,000; frame: prologue=20,000; mov reg-reg=17,500; tag test=17,000; mov imm=14,500; bool test=13,000; cmp/test (other)=10,500; bool materialize=9,000; jcc (other)=8,000; jmp=2,500
+  4 std::ascii::is_digit (136,000): frame: epilogue=24,000; frame: prologue=20,000; mov reg-reg=17,500; tag test=17,000; mov imm=14,500; bool test=13,000; cmp/test (other)=10,500; bool materialize=9,000; jcc (other)=8,000; jmp=2,500
   18 high_nibble (104,000): frame: epilogue=26,000; frame: prologue=19,500; stack store=13,000; tag test=13,000; retag=13,000; logic=6,500; mov reg-reg=6,500; arith=6,500
-  17 web::uri_escape_text (40,000): stack store=10,000; frame: epilogue=8,000; frame: prologue=6,000; mov reg-reg=4,000; heap/vm load=4,000; completion check=4,000; mov imm=2,000; call botlish=2,000
-  3 byte::set (280): mov reg-reg=90; tag test=26; stack store=23; mov imm=18; completion check=18; heap/vm load=12; overflow check=12; bool test=10; cmp/test (other)=9; frame: epilogue=9; frame: prologue=8; call botlish=8; jmp=8; call helper=7; logic=5; bool materialize=5; untag=4; jcc (other)=4; arith=4
+  17 std::web::uri_escape_text (40,000): stack store=10,000; frame: epilogue=8,000; frame: prologue=6,000; mov reg-reg=4,000; heap/vm load=4,000; completion check=4,000; mov imm=2,000; call botlish=2,000
+  3 std::byte::set (280): mov reg-reg=90; tag test=26; stack store=23; mov imm=18; completion check=18; heap/vm load=12; overflow check=12; bool test=10; cmp/test (other)=9; frame: epilogue=9; frame: prologue=8; call botlish=8; jmp=8; call helper=7; logic=5; bool materialize=5; untag=4; jcc (other)=4; arith=4
   0 <program> (237): stack store=76; heap/vm load=50; stack load=28; mov imm=17; completion check=12; frame: root-slot zero=11; mov reg-reg=9; frame: epilogue=9; frame: prologue=8; call helper=7; lea (stack addr)=6; lea=2; call botlish=2
-  2 byte::from_int (108): frame: epilogue=24; frame: prologue=20; mov reg-reg=16; bool materialize=16; tag test=12; cmp/test (other)=8; bool test=8; jcc (other)=4
-  1 char::codepoint (28): frame: epilogue=12; frame: prologue=8; call helper=8
+  2 std::byte::from_int (108): frame: epilogue=24; frame: prologue=20; mov reg-reg=16; bool materialize=16; tag test=12; cmp/test (other)=8; bool test=8; jcc (other)=4
+  1 std::char::codepoint (28): frame: epilogue=12; frame: prologue=8; call helper=8
 

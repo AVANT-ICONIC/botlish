@@ -167,7 +167,7 @@ foreach {name description hosts edits} [readMutants [file join [file dirname [fi
 # mutant rebuilds it), following a linked target: a copied link would build
 # every mutant into another checkout.
 set tree [file tempdir botlish-native-aot-mutants]
-foreach dir {compiler compilerpedia core hir surface lib tests examples .cargo} {
+foreach dir {compiler compilerpedia core hir surface stdlib tests examples .cargo} {
     if {![file exists [file join $root $dir]]} continue
     file copy [file join $root $dir] [file join $tree $dir]
 }

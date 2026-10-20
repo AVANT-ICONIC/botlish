@@ -294,14 +294,14 @@ test hx-unstamped {a HIR that records no declaration state (built before compila
 test hx-fingerprint {the fingerprint is the front end's Tcl sources (core, hir, surface, Tcl libraries): the same for a copy of them; unchanged by an edited backend (compiler, native) or a file that is no Tcl source; another for one character changed in a front-end file, its size the same} -setup {
     set dir [makeDirectory hx-fingerprint]
 } -body {
-    foreach sub {core hir surface compiler native lib} {
+    foreach sub {core hir surface compiler native stdlib} {
         file mkdir [file join $dir $sub]
         foreach path [glob -nocomplain -directory [file join $::projectRoot $sub] -types f *.tcl] {
             file copy $path [file join $dir $sub]
         }
     }
     set copy [hir::interchange::Fingerprint $dir]
-    hxWrite [file join $dir lib extra.bot] "fn f() -> int:\n    1\n"
+    hxWrite [file join $dir stdlib extra.bot] "fn f() -> int:\n    1\n"
     hxWrite [file join $dir hir README.md] "notes\n"
     foreach path [list [file join $dir native lower.tcl] [file join $dir compiler compiler.tcl]] {
         hxWrite $path "[hxRead $path]\n"

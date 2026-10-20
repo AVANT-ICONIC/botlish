@@ -16,7 +16,7 @@
 #   scalars         each takes four C scalars and adds them
 #   fnptr           each takes four function pointers of four-argument C
 #                   signatures
-#   imprinted       each calls ffi::c::null[T]() of its own pointee and a
+#   imprinted       each calls std::ffi::c::null[T]() of its own pointee and a
 #                   user function with an imprint variable
 #
 # beside the same programs written with ordinary types: List[S] of K
@@ -42,7 +42,7 @@ foreach {option value} $args {
 }
 
 proc nest {t depth} {
-    for {set i 0} {$i < $depth} {incr i} { set t "ffi::c::Ptr\[$t\]" }
+    for {set i 0} {$i < $depth} {incr i} { set t "std::ffi::c::Ptr\[$t\]" }
     return $t
 }
 proc listNest {t depth} {
@@ -51,16 +51,16 @@ proc listNest {t depth} {
 }
 
 proc program {shape c k} {
-    set text "import ffi::c\nimport list\n\n"
+    set text "import std::ffi::c\nimport std::list\n\n"
     for {set i 0} {$i < $k} {incr i} {
         switch -- $shape {
             ptr-distinct {
                 if {$c} {
                     append text "opaque struct O$i:\n    t: unit\n\n"
-                    append text "fn f${i}(a: ffi::c::Ptr\[O$i\], b: ffi::c::Ptr\[O$i\], c: ffi::c::Ptr\[O$i\], d: ffi::c::Ptr\[O$i\]) -> bool:\n    a.null?() and b.null?() and c.null?() and d.null?()\n\n"
+                    append text "fn f${i}(a: std::ffi::c::Ptr\[O$i\], b: std::ffi::c::Ptr\[O$i\], c: std::ffi::c::Ptr\[O$i\], d: std::ffi::c::Ptr\[O$i\]) -> bool:\n    a.null?() and b.null?() and c.null?() and d.null?()\n\n"
                 } else {
                     append text "struct O$i:\n    t: unit\n\n"
-                    append text "fn f${i}(a: List\[O$i\], b: List\[O$i\], c: List\[O$i\], d: List\[O$i\]) -> bool:\n    list::length(a) == 0 and list::length(b) == 0 and list::length(c) == 0 and list::length(d) == 0\n\n"
+                    append text "fn f${i}(a: List\[O$i\], b: List\[O$i\], c: List\[O$i\], d: List\[O$i\]) -> bool:\n    std::list::length(a) == 0 and std::list::length(b) == 0 and std::list::length(c) == 0 and std::list::length(d) == 0\n\n"
                 }
             }
             ptr-nested {
@@ -68,16 +68,16 @@ proc program {shape c k} {
                     append text [expr {$c ? "opaque struct Ctx:\n    t: unit\n\n" : "struct Ctx:\n    t: unit\n\n"}]
                 }
                 set t [expr {$c ? [nest Ctx 6] : [listNest Ctx 6]}]
-                set test [expr {$c ? "%s.null?()" : "list::length(%s) == 0"}]
+                set test [expr {$c ? "%s.null?()" : "std::list::length(%s) == 0"}]
                 append text "fn f${i}(a: $t, b: $t, c: $t, d: $t) -> bool:\n    [format $test a] and [format $test b] and [format $test c] and [format $test d]\n\n"
             }
             scalars {
-                set ts [expr {$c ? {ffi::c::Int ffi::c::ULong ffi::c::Short ffi::c::UChar} : {int int int int}}]
+                set ts [expr {$c ? {std::ffi::c::Int std::ffi::c::ULong std::ffi::c::Short std::ffi::c::UChar} : {int int int int}}]
                 lassign $ts ta tb tc td
                 append text "fn f${i}(a: $ta, b: $tb, c: $tc, d: $td) -> int:\n    a + b + c + d\n\n"
             }
             fnptr {
-                set t [expr {$c ? "ffi::c::FnPtr\[Fn{args: \[ffi::c::Ptr\[ffi::c::Void\], ffi::c::Int, ffi::c::Long, ffi::c::Ptr\[ffi::c::Char\]\], return: ffi::c::Int}\]"
+                set t [expr {$c ? "std::ffi::c::FnPtr\[Fn{args: \[std::ffi::c::Ptr\[std::ffi::c::Void\], std::ffi::c::Int, std::ffi::c::Long, std::ffi::c::Ptr\[std::ffi::c::Char\]\], return: std::ffi::c::Int}\]"
                     : "Fn{args: \[List\[int\], int, int, List\[str\]\], return: int}"}]
                 append text "fn f${i}(a: $t, b: $t, c: $t, d: $t) -> int:\n    $i\n\n"
             }
@@ -87,9 +87,9 @@ proc program {shape c k} {
                 }
                 if {$c} {
                     append text "opaque struct O$i:\n    t: unit\n\n"
-                    append text "fn f${i}() -> int:\n    p = ffi::c::null\[O$i\]()\n    n = if p.null?():\n        1\n    else:\n        0\n    n + list::length(wrap(\[$i\]))\n\n"
+                    append text "fn f${i}() -> int:\n    p = std::ffi::c::null\[O$i\]()\n    n = if p.null?():\n        1\n    else:\n        0\n    n + std::list::length(wrap(\[$i\]))\n\n"
                 } else {
-                    append text "fn f${i}() -> int:\n    n = 1\n    n + list::length(wrapi(\[$i\]))\n\n"
+                    append text "fn f${i}() -> int:\n    n = 1\n    n + std::list::length(wrapi(\[$i\]))\n\n"
                 }
             }
         }

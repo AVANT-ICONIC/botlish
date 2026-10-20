@@ -234,14 +234,14 @@ proc program {kind chain position style} {
         context struct Log:
             digits: MutableArray[int]
         fn probe(id, result, context log: Log):
-            mutable_array::set(log.digits, 0, mutable_array::get(log.digits, 0, 0) * 10 + id):
+            std::mutable_array::set(log.digits, 0, std::mutable_array::get(log.digits, 0, 0) * 10 + id):
                 on IndexNotFound:
                     unit
             result
         fn logged(context log: Log):
-            mutable_array::get(log.digits, 0, 0)
+            std::mutable_array::get(log.digits, 0, 0)
         fn reset(context log: Log):
-            mutable_array::set(log.digits, 0, 0):
+            std::mutable_array::set(log.digits, 0, 0):
                 on IndexNotFound:
                     unit
             unit
@@ -272,7 +272,7 @@ proc program {kind chain position style} {
     lappend lines {        on Boom:}
     lappend lines {            -7}
     lappend lines {    [v, logged()]}
-    lappend lines {with context Log {digits: mutable_array::create(1, 0)}}
+    lappend lines {with context Log {digits: std::mutable_array::create(1, 0)}}
     lappend lines {[driver(true, false, true, 3), driver(false, true, false, 7), driver(false, false, true, 5),}
     lappend lines { driver(false, false, false, 1), driver(true, true, true, 9), driver(false, true, true, 4)]}
     return [join $lines \n]

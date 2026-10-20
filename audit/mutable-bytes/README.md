@@ -1,6 +1,6 @@
 # audit/mutable-bytes
 
-Tools and recorded results for `abi::bytes::MutableBytes` and `linux::read` (MUTABLE-BYTES.md).
+Tools and recorded results for `std::abi::bytes::MutableBytes` and `std::linux::read` (MUTABLE-BYTES.md).
 
 * `tools/fuzz.tcl` -- differential fuzzer. `-mode pure` runs a random SCRIPT of
   value definitions (fresh values from random byte sequences, copies, updates at
@@ -9,7 +9,7 @@ Tools and recorded results for `abi::bytes::MutableBytes` and `linux::read` (MUT
   backend and compares the contents of *every* variable and snapshot at the END
   (so an update that leaked into an earlier copy shows up) plus equality and hash
   between random pairs against an independent Tcl byte-list oracle. `-mode read`
-  (native, Linux x86-64) makes several `linux::read` calls of random capacities into
+  (native, Linux x86-64) makes several `std::linux::read` calls of random capacities into
   non-zero-filled buffers from one open file, and a single read from a real pipe, and
   checks every result (`min(capacity, remaining)`), the returned buffer (bytes read,
   then the untouched suffix), the caller's own buffer (unchanged) and the file's

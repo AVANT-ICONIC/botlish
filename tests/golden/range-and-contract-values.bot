@@ -21,7 +21,7 @@
 #   summaries, callee-position calls, open instances) never change what a
 #   program computes: each program's value is the same on every backend.
 # * Checked domains and exact values. A call the completion proof shows
-#   cannot fail (byte::from_int(45), byte::set of ASCII characters, list::at
+#   cannot fail (std::byte::from_int(45), std::byte::set of ASCII characters, std::list::at
 #   of a known List at an in-bounds exact index) needs no handler; a provably
 #   failing one is KnownError; an exact element proves (or violates) a
 #   declared refined parameter.
@@ -50,15 +50,15 @@
 # Imports: compiler and test (the framework); list, str and immutable_set
 # because the Tcl programs call list::, str:: and immutable_set:: natives
 # (intrinsic-contracts.test's programs import all three); byte for the
-# checked-domain tests' byte::from_int and byte::set; web for
-# ic-emailish-callers-valid's web::emailish?.
-import byte
-import compiler
-import immutable_set
-import list
-import str
-import test
-import web
+# checked-domain tests' std::byte::from_int and std::byte::set; web for
+# ic-emailish-callers-valid's std::web::emailish?.
+import std::byte
+import std::compiler
+import std::immutable_set
+import std::list
+import std::str
+import std::test
+import std::web
 
 # ---------------------------------------------------------------------------
 # Declarations the tests need (top-level only).
@@ -66,12 +66,12 @@ import web
 # The refined Int domain the Tcl programs call Byte (`type Byte = Int in
 # 0..255` in intrinsic-contracts.test, closed-closure-entry-facts.test,
 # exact-value-facts.test and conjunctive-entry-facts.test alike): the entry
-# program's own Byte, distinct from the imported byte::Byte. Diagnostics
+# program's own Byte, distinct from the imported std::byte::Byte. Diagnostics
 # spell it int[Byte], as the Tcl tests' messages do.
 type Byte = Int in 0..255
 
 # intrinsic-contracts.test's errors: the program's own NotFound beside the
-# imported list::NotFound, and PermissionDenied.
+# imported std::list::NotFound, and PermissionDenied.
 error NotFound
 error PermissionDenied
 
@@ -91,31 +91,31 @@ fn register_unconstrained_parameter_tests():
     # ic-unconstrained-stays-any: equality and set membership impose no
     # concrete type, so eq_x? accepts an Int argument (were c inferred str,
     # eq_x?(1) would be a static Type error).
-    fn unconstrained_stays_any() errors compiler::CompilerError:
+    fn unconstrained_stays_any() errors std::compiler::CompilerError:
         static compile:
             fn eq_x?(c):
                 c == "x"
             fn member?(set, c):
-                immutable_set::contains(set, c)
+                std::immutable_set::contains(set, c)
             eq_x?(1)
-    test::value("ic-unconstrained-stays-any", false, unconstrained_stays_any)
+    std::test::value("ic-unconstrained-stays-any", false, unconstrained_stays_any)
 
     # ic-conflict-path-dependent: uses separated by a type test of the
     # parameter itself constrain nothing: either accepts an Int and a String.
-    fn path_dependent() errors compiler::CompilerError:
+    fn path_dependent() errors std::compiler::CompilerError:
         static compile:
             fn either(x):
                 if integer?(x):
                     x + 1
                 else:
-                    str::length(x)
+                    std::str::length(x)
             either(1) + either("ab")
-    test::value("ic-conflict-path-dependent", 4, path_dependent)
+    std::test::value("ic-conflict-path-dependent", 4, path_dependent)
 
     # ic-relational-stop: predicate(x) for x an element of xs is a
     # relational requirement: predicate gets no invented contract, and a
     # str-only predicate still works through it.
-    fn relational_stop() errors compiler::CompilerError:
+    fn relational_stop() errors std::compiler::CompilerError:
         static compile:
             fn all_of(xs, predicate):
                 loop x in xs:
@@ -123,23 +123,23 @@ fn register_unconstrained_parameter_tests():
                         return false
                 true
             fn one?(c):
-                str::length(c) == 1
+                std::str::length(c) == 1
             all_of(["a", "b"], one?)
-    test::value("ic-relational-stop", true, relational_stop)
+    std::test::value("ic-relational-stop", true, relational_stop)
 
     # ic-unreachable-ignored: a use after an unconditional return imposes
     # nothing (were x inferred str, early(5) would be a static Type error).
-    fn unreachable_use() errors compiler::CompilerError:
+    fn unreachable_use() errors std::compiler::CompilerError:
         static compile:
             fn early(x):
                 return 1
-                str::length(x)
+                std::str::length(x)
             early(5)
-    test::value("ic-unreachable-ignored", 1, unreachable_use)
+    std::test::value("ic-unreachable-ignored", 1, unreachable_use)
 
     # ic-unreachable-call-ignored: a call of the parameter in a statically
     # dead branch infers no Fn contract (dead(5) would be rejected).
-    fn unreachable_call() errors compiler::CompilerError:
+    fn unreachable_call() errors std::compiler::CompilerError:
         static compile:
             fn dead(p):
                 if false:
@@ -147,25 +147,25 @@ fn register_unconstrained_parameter_tests():
                 else:
                     0
             dead(5)
-    test::value("ic-unreachable-call-ignored", 0, unreachable_call)
+    std::test::value("ic-unreachable-call-ignored", 0, unreachable_call)
 
 fn register_definition_order_tests():
     # ic-forward-order-rejected: the caller-first order of a call chain is
     # not a program: f's reference to g, defined later, is unbound.
-    fn caller_first_chain() errors compiler::CompilerError:
+    fn caller_first_chain() errors std::compiler::CompilerError:
         static compile:
             fn f(x):
                 g(x)
             fn g(y):
                 h(y)
             fn h(z):
-                str::length(z)
+                std::str::length(z)
             f("abc")
-    test::rejects_containing("ic-forward-order-rejected", compiler::DiagnosticCode::Unbound, "unbound name \"g\"", caller_first_chain)
+    std::test::rejects_containing("ic-forward-order-rejected", std::compiler::DiagnosticCode::Unbound, "unbound name \"g\"", caller_first_chain)
 
     # ic-mutual-recursion-rejected: lexical mutual recursion has one forward
     # edge, so it is not a program either.
-    fn lexical_mutual_recursion() errors compiler::CompilerError:
+    fn lexical_mutual_recursion() errors std::compiler::CompilerError:
         static compile:
             fn even?(n):
                 if n == 0:
@@ -178,12 +178,12 @@ fn register_definition_order_tests():
                 else:
                     even?(n - 1)
             even?(10)
-    test::rejects("ic-mutual-recursion-rejected", compiler::DiagnosticCode::Unbound, lexical_mutual_recursion)
+    std::test::rejects("ic-mutual-recursion-rejected", std::compiler::DiagnosticCode::Unbound, lexical_mutual_recursion)
 
     # m9-narrow-mutual-recursion-rejected: the same over Int results
     # (instance-entry-range-facts.test): isEven's reference to isOdd,
     # declared later, is unbound.
-    fn int_mutual_recursion() errors compiler::CompilerError:
+    fn int_mutual_recursion() errors std::compiler::CompilerError:
         static compile:
             fn isEven(n):
                 if n <= 0:
@@ -196,23 +196,23 @@ fn register_definition_order_tests():
                 else:
                     isEven(n - 1)
             isEven(37)
-    test::rejects("m9-narrow-mutual-recursion-rejected", compiler::DiagnosticCode::Unbound, int_mutual_recursion)
+    std::test::rejects("m9-narrow-mutual-recursion-rejected", std::compiler::DiagnosticCode::Unbound, int_mutual_recursion)
 
 fn register_explicit_annotation_tests():
     # ic-explicit-broad-not-narrowed: a declared int parameter whose body
     # needs a Byte is invalid at that use, never silently narrowed.
-    fn broad_not_narrowed() errors compiler::CompilerError:
+    fn broad_not_narrowed() errors std::compiler::CompilerError:
         static compile:
             fn take_byte(b: Byte) -> int:
                 b
             fn broad(x: int):
                 take_byte(x)
             broad(7)
-    test::rejects_containing("ic-explicit-broad-not-narrowed", compiler::DiagnosticCode::Type, "argument for parameter \"b\" cannot be proven to satisfy int[Byte] (argument type: int", broad_not_narrowed)
+    std::test::rejects_containing("ic-explicit-broad-not-narrowed", std::compiler::DiagnosticCode::Type, "argument for parameter \"b\" cannot be proven to satisfy int[Byte] (argument type: int", broad_not_narrowed)
 
     # ic-explicit-refinement-proves: a declared broad parameter refined by
     # comparisons is a valid program.
-    fn refinement_proves() errors compiler::CompilerError:
+    fn refinement_proves() errors std::compiler::CompilerError:
         static compile:
             fn safe(x: int):
                 if x >= 0:
@@ -223,148 +223,148 @@ fn register_explicit_annotation_tests():
                 else:
                     0
             safe(300)
-    test::value("ic-explicit-refinement-proves", 0, refinement_proves)
+    std::test::value("ic-explicit-refinement-proves", 0, refinement_proves)
 
 fn register_conflict_tests():
     # ic-conflict: one untyped parameter used as a String and as an Int has
     # no sound contract: a Type error naming both uses and where they are.
-    fn conflicting_uses() errors compiler::CompilerError:
+    fn conflicting_uses() errors std::compiler::CompilerError:
         static compile:
             fn both(x):
-                n = str::length(x)
+                n = std::str::length(x)
                 x + n
             both("a")
-    test::rejects_message("ic-conflict", compiler::DiagnosticCode::Type, "cannot infer a sound type for parameter \"x\" of both: argument 1 of native str::length requires str (at 234:33), but argument 1 of native + requires int (at 235:17), and no type satisfies both", conflicting_uses)
+    std::test::rejects_message("ic-conflict", std::compiler::DiagnosticCode::Type, "cannot infer a sound type for parameter \"x\" of both: argument 1 of native std::str::length requires str (at 234:38), but argument 1 of native + requires int (at 235:17), and no type satisfies both", conflicting_uses)
 
     # ic-conflict-callable-result: a callable parameter's result used as a
     # Bool and as a String has no sound return contract.
-    fn conflicting_results() errors compiler::CompilerError:
+    fn conflicting_results() errors std::compiler::CompilerError:
         static compile:
             fn twice(p):
                 if p(1):
-                    str::length(p(2))
+                    std::str::length(p(2))
                 else:
                     0
-            twice(str::is_tcl_alpha)
-    test::rejects_message("ic-conflict-callable-result", compiler::DiagnosticCode::Type, "cannot infer a sound type for parameter \"p\" of twice: the result of a call of it: the condition of an if (or not/and/or) requires bool (at 244:20), but the result of a call of it: argument 1 of native str::length requires str (at 245:33), and no type satisfies both", conflicting_results)
+            twice(std::str::is_tcl_alpha)
+    std::test::rejects_message("ic-conflict-callable-result", std::compiler::DiagnosticCode::Type, "cannot infer a sound type for parameter \"p\" of twice: the result of a call of it: the condition of an if (or not/and/or) requires bool (at 244:20), but the result of a call of it: argument 1 of native std::str::length requires str (at 245:38), and no type satisfies both", conflicting_results)
 
 fn register_native_wrapper_tests():
     # ic-native-wrapper-static: wrapper(123) is a static Type error at the
     # argument 123 (/location), naming the inferred contract (str) and the
-    # native use it was inferred from, str::length's argument x (/message).
-    fn wrapper_of_int() errors compiler::CompilerError:
+    # native use it was inferred from, std::str::length's argument x (/message).
+    fn wrapper_of_int() errors std::compiler::CompilerError:
         static compile:
             fn wrapper(x):
-                str::length(x)
+                std::str::length(x)
             wrapper(123)
-    test::rejects_at("ic-native-wrapper-static/location", compiler::DiagnosticCode::Type, 259, 21, wrapper_of_int)
-    test::rejects_message("ic-native-wrapper-static/message", compiler::DiagnosticCode::Type, "argument for parameter \"x\" is statically incompatible with str, the parameter type inferred from the function body (argument type: int); inferred from the function body: argument 1 of native str::length requires str (at 258:29)", wrapper_of_int)
+    std::test::rejects_at("ic-native-wrapper-static/location", std::compiler::DiagnosticCode::Type, 259, 21, wrapper_of_int)
+    std::test::rejects_message("ic-native-wrapper-static/message", std::compiler::DiagnosticCode::Type, "argument for parameter \"x\" is statically incompatible with str, the parameter type inferred from the function body (argument type: int); inferred from the function body: argument 1 of native std::str::length requires str (at 258:34)", wrapper_of_int)
 
     # ic-native-wrapper-valid: a String argument is accepted and runs.
-    fn wrapper_of_string() errors compiler::CompilerError:
+    fn wrapper_of_string() errors std::compiler::CompilerError:
         static compile:
             fn wrapper(x):
-                str::length(x)
+                std::str::length(x)
             wrapper("abcd")
-    test::value("ic-native-wrapper-valid", 4, wrapper_of_string)
+    std::test::value("ic-native-wrapper-valid", 4, wrapper_of_string)
 
     # ic-native-wrapper-known-kind: an argument of any known kind other than
     # String is rejected: a Bool, a List, a callable.
-    fn wrapper_of_bool() errors compiler::CompilerError:
+    fn wrapper_of_bool() errors std::compiler::CompilerError:
         static compile:
             fn wrapper(x):
-                str::length(x)
+                std::str::length(x)
             wrapper(true)
-    test::rejects_containing("ic-native-wrapper-known-kind/bool", compiler::DiagnosticCode::Type, "statically incompatible with str", wrapper_of_bool)
-    fn wrapper_of_list() errors compiler::CompilerError:
+    std::test::rejects_containing("ic-native-wrapper-known-kind/bool", std::compiler::DiagnosticCode::Type, "statically incompatible with str", wrapper_of_bool)
+    fn wrapper_of_list() errors std::compiler::CompilerError:
         static compile:
             fn wrapper(x):
-                str::length(x)
+                std::str::length(x)
             wrapper([1])
-    test::rejects_containing("ic-native-wrapper-known-kind/list", compiler::DiagnosticCode::Type, "statically incompatible with str", wrapper_of_list)
-    fn wrapper_of_callable() errors compiler::CompilerError:
+    std::test::rejects_containing("ic-native-wrapper-known-kind/list", std::compiler::DiagnosticCode::Type, "statically incompatible with str", wrapper_of_list)
+    fn wrapper_of_callable() errors std::compiler::CompilerError:
         static compile:
             fn wrapper(x):
-                str::length(x)
-            wrapper(str::is_tcl_alpha)
-    test::rejects_containing("ic-native-wrapper-known-kind/callable", compiler::DiagnosticCode::Type, "statically incompatible with str", wrapper_of_callable)
+                std::str::length(x)
+            wrapper(std::str::is_tcl_alpha)
+    std::test::rejects_containing("ic-native-wrapper-known-kind/callable", std::compiler::DiagnosticCode::Type, "statically incompatible with str", wrapper_of_callable)
 
     # ic-native-wrapper-any-argument: a checked contract does not reject an
     # element of a heterogeneous List; read at an exact in-bounds index it
     # needs no handler either.
-    fn wrapper_of_element() errors compiler::CompilerError:
+    fn wrapper_of_element() errors std::compiler::CompilerError:
         static compile:
             fn wrapper(x):
-                str::length(x)
+                std::str::length(x)
             xs = [1, "ab"]
-            wrapper(list::at(xs, 1))
-    test::value("ic-native-wrapper-any-argument", 2, wrapper_of_element)
+            wrapper(std::list::at(xs, 1))
+    std::test::value("ic-native-wrapper-any-argument", 2, wrapper_of_element)
 
 fn register_trusted_contract_tests():
     # ic-trusted-any-argument-rejected: forwarding to a declared-typed callee
     # makes fwd's inferred contract trusted (int[Byte]): an argument not
     # proven to satisfy it is a static Type error -- one of static type any
     # (/any), an out-of-domain literal (/literal) -- and a Byte runs (/valid).
-    fn forwarded_any() errors compiler::CompilerError:
+    fn forwarded_any() errors std::compiler::CompilerError:
         static compile:
             fn take_byte(b: Byte) -> int:
                 b
             fn fwd(x):
                 take_byte(x)
             fn first_of(xs):
-                list::at(xs, 0)
+                std::list::at(xs, 0)
             fwd(first_of([1, "ab"]))
-    test::rejects_containing("ic-trusted-any-argument-rejected/any", compiler::DiagnosticCode::Type, "argument for parameter \"x\" cannot be proven to satisfy int[Byte], the parameter type inferred from the function body (argument type: any", forwarded_any)
-    fn forwarded_out_of_domain() errors compiler::CompilerError:
+    std::test::rejects_containing("ic-trusted-any-argument-rejected/any", std::compiler::DiagnosticCode::Type, "argument for parameter \"x\" cannot be proven to satisfy int[Byte], the parameter type inferred from the function body (argument type: any", forwarded_any)
+    fn forwarded_out_of_domain() errors std::compiler::CompilerError:
         static compile:
             fn take_byte(b: Byte) -> int:
                 b
             fn fwd(x):
                 take_byte(x)
             fwd(9999)
-    test::rejects_containing("ic-trusted-any-argument-rejected/literal", compiler::DiagnosticCode::Type, "cannot be proven to satisfy int[Byte], the parameter type inferred", forwarded_out_of_domain)
-    fn forwarded_byte() errors compiler::CompilerError:
+    std::test::rejects_containing("ic-trusted-any-argument-rejected/literal", std::compiler::DiagnosticCode::Type, "cannot be proven to satisfy int[Byte], the parameter type inferred", forwarded_out_of_domain)
+    fn forwarded_byte() errors std::compiler::CompilerError:
         static compile:
             fn take_byte(b: Byte) -> int:
                 b
             fn fwd(x):
                 take_byte(x)
             fwd(7)
-    test::value("ic-trusted-any-argument-rejected/valid", 7, forwarded_byte)
+    std::test::value("ic-trusted-any-argument-rejected/valid", 7, forwarded_byte)
 
     # ic-trusted-exact-element-proves-contract: an element read out of a
     # known literal List at an exact index is exactly known, so it proves
     # the trusted contract when its value satisfies it (/accepted), and is
     # rejected when it does not (/rejected).
-    fn exact_element_in_domain() errors compiler::CompilerError:
+    fn exact_element_in_domain() errors std::compiler::CompilerError:
         static compile:
             fn take_byte(b: Byte) -> int:
                 b
             fn fwd(x):
                 take_byte(x)
             xs = [1, "ab"]
-            fwd(list::at(xs, 0))
-    test::value("ic-trusted-exact-element-proves-contract/accepted", 1, exact_element_in_domain)
-    fn exact_element_out_of_domain() errors compiler::CompilerError:
+            fwd(std::list::at(xs, 0))
+    std::test::value("ic-trusted-exact-element-proves-contract/accepted", 1, exact_element_in_domain)
+    fn exact_element_out_of_domain() errors std::compiler::CompilerError:
         static compile:
             fn take_byte(b: Byte) -> int:
                 b
             fn fwd(x):
                 take_byte(x)
             xs = [1000, "ab"]
-            fwd(list::at(xs, 0))
-    test::rejects_containing("ic-trusted-exact-element-proves-contract/rejected", compiler::DiagnosticCode::Type, "cannot be proven to satisfy int[Byte]", exact_element_out_of_domain)
+            fwd(std::list::at(xs, 0))
+    std::test::rejects_containing("ic-trusted-exact-element-proves-contract/rejected", std::compiler::DiagnosticCode::Type, "cannot be proven to satisfy int[Byte]", exact_element_out_of_domain)
 
     # ic-trusted-forwarder-now-valid: fwd's own body is no longer a static
     # error (its contract is inferred instead), and a Byte caller runs.
-    fn forwarder_valid() errors compiler::CompilerError:
+    fn forwarder_valid() errors std::compiler::CompilerError:
         static compile:
             fn take_byte(b: Byte) -> int:
                 b
             fn fwd(x):
                 take_byte(x)
             fwd(200)
-    test::value("ic-trusted-forwarder-now-valid", 200, forwarder_valid)
+    std::test::value("ic-trusted-forwarder-now-valid", 200, forwarder_valid)
 
 fn register_callable_parameter_tests():
     # pred_use(p) calls p with a String and uses the result as an `if`
@@ -373,7 +373,7 @@ fn register_callable_parameter_tests():
 
     # ic-callable-accepts: a native, an untyped function, a str-declared
     # function and a capturing closure all satisfy it.
-    fn callables_accepted() errors compiler::CompilerError:
+    fn callables_accepted() errors std::compiler::CompilerError:
         static compile:
             fn pred_use(p):
                 if p("x"):
@@ -383,17 +383,17 @@ fn register_callable_parameter_tests():
             fn eq_x?(c):
                 c == "x"
             fn typed(c: str) -> bool:
-                str::length(c) == 1
+                std::str::length(c) == 1
             fn make(v):
                 fn eq?(c):
                     c == v
                 eq?
-            [pred_use(str::is_tcl_alpha), pred_use(eq_x?), pred_use(typed), pred_use(make("y"))]
-    test::value("ic-callable-accepts", [1, 1, 1, 0], callables_accepted)
+            [pred_use(std::str::is_tcl_alpha), pred_use(eq_x?), pred_use(typed), pred_use(make("y"))]
+    std::test::value("ic-callable-accepts", [1, 1, 1, 0], callables_accepted)
 
     # ic-callable-variance: argument variance is contravariant: a callable
     # requiring an Int cannot accept the String pred_use passes.
-    fn int_callable() errors compiler::CompilerError:
+    fn int_callable() errors std::compiler::CompilerError:
         static compile:
             fn pred_use(p):
                 if p("x"):
@@ -403,11 +403,11 @@ fn register_callable_parameter_tests():
             fn int_only(n: int) -> bool:
                 n == 1
             pred_use(int_only)
-    test::rejects_containing("ic-callable-variance", compiler::DiagnosticCode::Type, "argument 1 is incompatible: the callable's parameter requires int, but callers of the function type may pass any str", int_callable)
+    std::test::rejects_containing("ic-callable-variance", std::compiler::DiagnosticCode::Type, "argument 1 is incompatible: the callable's parameter requires int, but callers of the function type may pass any str", int_callable)
 
     # ic-callable-return: a callable returning an Int is not usable as the
     # Bool condition.
-    fn int_result_callable() errors compiler::CompilerError:
+    fn int_result_callable() errors std::compiler::CompilerError:
         static compile:
             fn pred_use(p):
                 if p("x"):
@@ -415,13 +415,13 @@ fn register_callable_parameter_tests():
                 else:
                     0
             fn len(c):
-                str::length(c)
+                std::str::length(c)
             pred_use(len)
-    test::rejects_containing("ic-callable-return", compiler::DiagnosticCode::Type, "return incompatible: the callable returns int, not usable as bool", int_result_callable)
+    std::test::rejects_containing("ic-callable-return", std::compiler::DiagnosticCode::Type, "return incompatible: the callable returns int, not usable as bool", int_result_callable)
 
     # ic-callable-unknown-rejected: the trusted contract is a static
     # obligation: an argument of static type any is rejected.
-    fn unknown_callable() errors compiler::CompilerError:
+    fn unknown_callable() errors std::compiler::CompilerError:
         static compile:
             fn pred_use(p):
                 if p("x"):
@@ -429,13 +429,13 @@ fn register_callable_parameter_tests():
                 else:
                     0
             fn first_of(xs):
-                list::at(xs, 0)
-            pred_use(first_of([str::is_tcl_alpha, 1]))
-    test::rejects_containing("ic-callable-unknown-rejected", compiler::DiagnosticCode::Type, "argument for parameter \"p\" cannot be proven to satisfy Fn{args: [str], return: bool, errors: []}, the parameter type inferred from the function body", unknown_callable)
+                std::list::at(xs, 0)
+            pred_use(first_of([std::str::is_tcl_alpha, 1]))
+    std::test::rejects_containing("ic-callable-unknown-rejected", std::compiler::DiagnosticCode::Type, "argument for parameter \"p\" cannot be proven to satisfy Fn{args: [str], return: bool, errors: []}, the parameter type inferred from the function body", unknown_callable)
 
     # ic-callable-errors-empty: called in an error-free function, the
     # contract allows no error: a callable declaring NotFound is rejected.
-    fn failing_callable() errors compiler::CompilerError:
+    fn failing_callable() errors std::compiler::CompilerError:
         static compile:
             fn pred_use(p):
                 if p("x"):
@@ -445,12 +445,12 @@ fn register_callable_parameter_tests():
             fn missing(c) -> bool errors NotFound:
                 fail NotFound
             pred_use(missing)
-    test::rejects_containing("ic-callable-errors-empty", compiler::DiagnosticCode::Type, "error set incompatible: the callable may raise NotFound, but the function type allows only []", failing_callable)
+    std::test::rejects_containing("ic-callable-errors-empty", std::compiler::DiagnosticCode::Type, "error set incompatible: the callable may raise NotFound, but the function type allows only []", failing_callable)
 
     # ic-callable-errors-declared: inside a function declaring NotFound the
     # contract admits NotFound: a NotFound-declaring callable is accepted and
     # its failure reaches the caller's handler.
-    fn admitted_error() errors compiler::CompilerError:
+    fn admitted_error() errors std::compiler::CompilerError:
         static compile:
             fn use(p) -> int errors NotFound:
                 if p("x"):
@@ -463,11 +463,11 @@ fn register_callable_parameter_tests():
                 on NotFound:
                     7
             r
-    test::value("ic-callable-errors-declared", 7, admitted_error)
+    std::test::value("ic-callable-errors-declared", 7, admitted_error)
 
     # ic-callable-errors-extra-rejected: declared errors are upper bounds: a
     # callable that may also raise PermissionDenied is rejected.
-    fn extra_error() errors compiler::CompilerError:
+    fn extra_error() errors std::compiler::CompilerError:
         static compile:
             fn use(p) -> int errors NotFound:
                 if p("x"):
@@ -480,14 +480,14 @@ fn register_callable_parameter_tests():
                 on NotFound:
                     7
             r
-    test::rejects_containing("ic-callable-errors-extra-rejected", compiler::DiagnosticCode::Type, "the callable may raise PermissionDenied, but the function type allows only [NotFound]", extra_error)
+    std::test::rejects_containing("ic-callable-errors-extra-rejected", std::compiler::DiagnosticCode::Type, "the callable may raise PermissionDenied, but the function type allows only [NotFound]", extra_error)
 
     # ic-trusted-bearing: a function with a trusted inferred contract is
     # checked like a declared one when passed through an untyped helper: a
     # fitting callable is accepted (/accepted); an unfitting one is rejected
     # at the call of the helper (/rejected-at-call), for its result type
     # (/rejected).
-    fn bearing_fits() errors compiler::CompilerError:
+    fn bearing_fits() errors std::compiler::CompilerError:
         static compile:
             fn pred_use(p):
                 if p("x"):
@@ -496,9 +496,9 @@ fn register_callable_parameter_tests():
                     0
             fn app(f, v):
                 f(v)
-            app(pred_use, str::is_tcl_alpha)
-    test::value("ic-trusted-bearing/accepted", 1, bearing_fits)
-    fn bearing_misfits() errors compiler::CompilerError:
+            app(pred_use, std::str::is_tcl_alpha)
+    std::test::value("ic-trusted-bearing/accepted", 1, bearing_fits)
+    fn bearing_misfits() errors std::compiler::CompilerError:
         static compile:
             fn pred_use(p):
                 if p("x"):
@@ -506,25 +506,25 @@ fn register_callable_parameter_tests():
                 else:
                     0
             fn len(c):
-                str::length(c)
+                std::str::length(c)
             fn app(f, v):
                 f(v)
             app(pred_use, len)
-    test::rejects_at("ic-trusted-bearing/rejected-at-call", compiler::DiagnosticCode::Type, 512, 13, bearing_misfits)
-    test::rejects_containing("ic-trusted-bearing/rejected", compiler::DiagnosticCode::Type, "return incompatible: the callable returns int, not usable as bool", bearing_misfits)
+    std::test::rejects_at("ic-trusted-bearing/rejected-at-call", std::compiler::DiagnosticCode::Type, 512, 13, bearing_misfits)
+    std::test::rejects_containing("ic-trusted-bearing/rejected", std::compiler::DiagnosticCode::Type, "return incompatible: the callable returns int, not usable as bool", bearing_misfits)
 
     # ic-checked-not-bearing: a checked-only contract (one?'s str) is not
-    # precondition-bearing: one? passes through the generic list::all?.
-    fn checked_passes_through() errors compiler::CompilerError:
+    # precondition-bearing: one? passes through the generic std::list::all?.
+    fn checked_passes_through() errors std::compiler::CompilerError:
         static compile:
             fn one?(c):
-                str::length(c) == 1
-            list::all?(["a", "b"], one?)
-    test::value("ic-checked-not-bearing", true, checked_passes_through)
+                std::str::length(c) == 1
+            std::list::all?(["a", "b"], one?)
+    std::test::value("ic-checked-not-bearing", true, checked_passes_through)
 
     # ic-keys-unchanged: a scanner called with a native and with a user
     # predicate computes each one's result.
-    fn scanner_keys() errors compiler::CompilerError:
+    fn scanner_keys() errors std::compiler::CompilerError:
         static compile:
             fn scan(p, n):
                 loop i from 0 to n:
@@ -533,17 +533,17 @@ fn register_callable_parameter_tests():
                     return i
                 n
             fn loc?(c):
-                str::is_tcl_alnum(c)
-            [scan(str::is_tcl_alpha, 3), scan(loc?, 2)]
-    test::value("ic-keys-unchanged", [3, 2], scanner_keys)
+                std::str::is_tcl_alnum(c)
+            [scan(std::str::is_tcl_alpha, 3), scan(loc?, 2)]
+    std::test::value("ic-keys-unchanged", [3, 2], scanner_keys)
 
-    # ic-emailish-callers-valid: lib/web.bot's own callers satisfy the
-    # contracts inferred for its helpers (a diagnostic inside lib/web.bot
+    # ic-emailish-callers-valid: stdlib/web.bot's own callers satisfy the
+    # contracts inferred for its helpers (a diagnostic inside stdlib/web.bot
     # would fail this whole suite's build, not only this test).
-    fn emailish_callers() errors compiler::CompilerError:
+    fn emailish_callers() errors std::compiler::CompilerError:
         static compile:
-            web::emailish?("a@b.cd")
-    test::value("ic-emailish-callers-valid", true, emailish_callers)
+            std::web::emailish?("a@b.cd")
+    std::test::value("ic-emailish-callers-valid", true, emailish_callers)
 
 fn register_intrinsic_contract_tests():
     register_unconstrained_parameter_tests()
@@ -561,87 +561,87 @@ fn register_intrinsic_contract_tests():
 fn register_closed_closure_tests():
     # runtime-parity-positive: one capturing closure, every caller exact and
     # passing a String.
-    fn positive() errors compiler::CompilerError:
+    fn positive() errors std::compiler::CompilerError:
         static compile:
             fn outer(tag):
                 fn inner(x):
-                    str::length(x) + str::length(tag)
+                    std::str::length(x) + std::str::length(tag)
                 inner("a") + inner("bb")
             outer("v")
-    test::value("runtime-parity-positive", 5, positive)
+    std::test::value("runtime-parity-positive", 5, positive)
 
     # runtime-parity-mixed: exact callers that disagree (a String, a Bool).
-    fn mixed() errors compiler::CompilerError:
+    fn mixed() errors std::compiler::CompilerError:
         static compile:
             fn outer(tag):
                 fn inner(x):
-                    str::concat(tag, "")
+                    std::str::concat(tag, "")
                     x
                 identity_a = inner(tag)
                 identity_b = inner(true)
-                str::length(tag)
+                std::str::length(tag)
             outer("v")
-    test::value("runtime-parity-mixed", 1, mixed)
+    std::test::value("runtime-parity-mixed", 1, mixed)
 
     # runtime-parity-open (and
     # untyped-parameter-still-legal-with-a-new-untyped-caller): inner also
     # reaches an untyped higher-order parameter; adding that open caller is
     # legal, and the program computes the same value.
-    fn open_caller() errors compiler::CompilerError:
+    fn open_caller() errors std::compiler::CompilerError:
         static compile:
             fn outer(tag):
                 fn inner(x):
-                    str::length(x) + str::length(tag)
+                    std::str::length(x) + std::str::length(tag)
                 fn apply(f, y):
                     f(y)
                 inner("a") + apply(inner, "bb")
             outer("v")
-    test::value("runtime-parity-open", 5, open_caller)
+    std::test::value("runtime-parity-open", 5, open_caller)
 
     # runtime-parity-recursive: a closure recursive on its second parameter
-    # (str::substring's LowerUnderrun is handled: never taken).
-    fn recursive() errors compiler::CompilerError:
+    # (std::str::substring's LowerUnderrun is handled: never taken).
+    fn recursive() errors std::compiler::CompilerError:
         static compile:
             fn outer(tag):
                 fn inner(x, s):
-                    if str::length(s) <= 0:
-                        str::length(x) + str::length(tag)
+                    if std::str::length(s) <= 0:
+                        std::str::length(x) + std::str::length(tag)
                     else:
-                        rest = str::substring(s, 1, str::length(s)):
+                        rest = std::str::substring(s, 1, std::str::length(s)):
                             on LowerUnderrun:
                                 ""
                         inner(x, rest)
                 inner("a", "abc") + inner("bb", "b")
             outer("v")
-    test::value("runtime-parity-recursive", 5, recursive)
+    std::test::value("runtime-parity-recursive", 5, recursive)
 
     # runtime-parity-capturedThroughParent: inner is called only through its
     # sibling middle.
-    fn captured_through_parent() errors compiler::CompilerError:
+    fn captured_through_parent() errors std::compiler::CompilerError:
         static compile:
             fn outer(tag):
                 fn inner(x):
-                    str::length(x) + str::length(tag)
+                    std::str::length(x) + std::str::length(tag)
                 fn middle(y):
                     inner(y)
                 middle("a") + middle("bb")
             outer("v")
-    test::value("runtime-parity-capturedThroughParent", 5, captured_through_parent)
+    std::test::value("runtime-parity-capturedThroughParent", 5, captured_through_parent)
 
     # runtime-parity-declaredPlusCaller: a declared List[Byte] parameter of a
     # capturing closure.
-    fn declared_plus_caller() errors compiler::CompilerError:
+    fn declared_plus_caller() errors std::compiler::CompilerError:
         static compile:
             fn byteA() -> Byte:
                 97
             fn outer(tag):
                 fn inner(xs: List[Byte]):
-                    list::length(xs)
-                    str::length(tag)
+                    std::list::length(xs)
+                    std::str::length(tag)
                 inner([byteA(), byteA()])
                 inner([byteA()])
             outer("v")
-    test::value("runtime-parity-declaredPlusCaller", 1, declared_plus_caller)
+    std::test::value("runtime-parity-declaredPlusCaller", 1, declared_plus_caller)
 
 # ---------------------------------------------------------------------------
 # Self-recursive result ranges (self-recursive-result-ranges.test): a
@@ -653,7 +653,7 @@ fn register_self_recursive_range_tests():
     # not statically known), so some states fail and some succeed. /1: g(5)
     # succeeds, g(0) fails; /2: g(8) and g(3) succeed; /3: g(1) and g(2)
     # fail.
-    fn error_path_1() errors compiler::CompilerError:
+    fn error_path_1() errors std::compiler::CompilerError:
         static compile:
             fn f(n) errors Negative:
                 if n < 0:
@@ -671,8 +671,8 @@ fn register_self_recursive_range_tests():
                 on Negative:
                     -1
             [r1, r2]
-    test::value("rec-error-path-value/1", [3, -1], error_path_1)
-    fn error_path_2() errors compiler::CompilerError:
+    std::test::value("rec-error-path-value/1", [3, -1], error_path_1)
+    fn error_path_2() errors std::compiler::CompilerError:
         static compile:
             fn f(n) errors Negative:
                 if n < 0:
@@ -690,8 +690,8 @@ fn register_self_recursive_range_tests():
                 on Negative:
                     -1
             [r1, r2]
-    test::value("rec-error-path-value/2", [6, 1], error_path_2)
-    fn error_path_3() errors compiler::CompilerError:
+    std::test::value("rec-error-path-value/2", [6, 1], error_path_2)
+    fn error_path_3() errors std::compiler::CompilerError:
         static compile:
             fn f(n) errors Negative:
                 if n < 0:
@@ -709,10 +709,10 @@ fn register_self_recursive_range_tests():
                 on Negative:
                     -1
             [r1, r2]
-    test::value("rec-error-path-value/3", [-1, -1], error_path_3)
+    std::test::value("rec-error-path-value/3", [-1, -1], error_path_3)
 
     # rec-parity-fib: two decreasing calls, entry [0, 22].
-    fn fib_value() errors compiler::CompilerError:
+    fn fib_value() errors std::compiler::CompilerError:
         static compile:
             fn fib(n):
                 if n < 2:
@@ -720,10 +720,10 @@ fn register_self_recursive_range_tests():
                 else:
                     fib(n - 1) + fib(n - 2)
             fib(22)
-    test::value("rec-parity-fib", 17711, fib_value)
+    std::test::value("rec-parity-fib", 17711, fib_value)
 
     # rec-parity-two-calls: decreasing steps of one and three.
-    fn two_calls() errors compiler::CompilerError:
+    fn two_calls() errors std::compiler::CompilerError:
         static compile:
             fn g(n):
                 if n < 3:
@@ -731,10 +731,10 @@ fn register_self_recursive_range_tests():
                 else:
                     g(n - 1) + g(n - 3)
             g(25)
-    test::value("rec-parity-two-calls", 8641, two_calls)
+    std::test::value("rec-parity-two-calls", 8641, two_calls)
 
     # rec-parity-helper: a non-recursive helper's result participates.
-    fn with_helper() errors compiler::CompilerError:
+    fn with_helper() errors std::compiler::CompilerError:
         static compile:
             fn weight(x):
                 x + 1
@@ -744,10 +744,10 @@ fn register_self_recursive_range_tests():
                 else:
                     weight(n) + f(n - 1)
             f(10)
-    test::value("rec-parity-helper", 65, with_helper)
+    std::test::value("rec-parity-helper", 65, with_helper)
 
     # rec-parity-negative: a measure descending from 0 to -10.
-    fn negative_measure() errors compiler::CompilerError:
+    fn negative_measure() errors std::compiler::CompilerError:
         static compile:
             fn f(n):
                 if n <= -10:
@@ -755,10 +755,10 @@ fn register_self_recursive_range_tests():
                 else:
                     f(n - 1) + 1
             f(0)
-    test::value("rec-parity-negative", 10, negative_measure)
+    std::test::value("rec-parity-negative", 10, negative_measure)
 
     # rec-parity-constant-result: every state's result is the base value.
-    fn constant_result() errors compiler::CompilerError:
+    fn constant_result() errors std::compiler::CompilerError:
         static compile:
             fn f(n):
                 if n <= 0:
@@ -766,10 +766,10 @@ fn register_self_recursive_range_tests():
                 else:
                     f(n - 1)
             f(10) + f(3)
-    test::value("rec-parity-constant-result", 14, constant_result)
+    std::test::value("rec-parity-constant-result", 14, constant_result)
 
     # rec-parity-multiple-returns: several return sites joined per state.
-    fn multiple_returns() errors compiler::CompilerError:
+    fn multiple_returns() errors std::compiler::CompilerError:
         static compile:
             fn f(n):
                 if n <= 0:
@@ -778,7 +778,7 @@ fn register_self_recursive_range_tests():
                     return 100
                 f(n - 1) + 1
             f(6)
-    test::value("rec-parity-multiple-returns", 105, multiple_returns)
+    std::test::value("rec-parity-multiple-returns", 105, multiple_returns)
 
 # ---------------------------------------------------------------------------
 # Checked domains (checked-domain-proof-provenance.test): the completion
@@ -790,24 +790,24 @@ fn register_self_recursive_range_tests():
 
 fn register_checked_domain_tests(astral: List[UnicodeChar], low: int, high: int):
     # checked-domain-q1-real-byte-from-int-45-effective-errors-empty:
-    # byte::from_int(45) cannot fail, so it needs no handler.
-    fn in_range_literal() errors compiler::CompilerError:
+    # std::byte::from_int(45) cannot fail, so it needs no handler.
+    fn in_range_literal() errors std::compiler::CompilerError:
         static compile:
-            byte::from_int(45)
-    test::value("checked-domain-q1-real-byte-from-int-45-effective-errors-empty", 45, in_range_literal)
+            std::byte::from_int(45)
+    std::test::value("checked-domain-q1-real-byte-from-int-45-effective-errors-empty", 45, in_range_literal)
 
     # checked-domain-q1-out-of-range-literal-still-known-error:
-    # byte::from_int(999) provably fails.
-    fn out_of_range_literal() errors compiler::CompilerError:
+    # std::byte::from_int(999) provably fails.
+    fn out_of_range_literal() errors std::compiler::CompilerError:
         static compile:
-            byte::from_int(999)
-    test::rejects("checked-domain-q1-out-of-range-literal-still-known-error", compiler::DiagnosticCode::KnownError, out_of_range_literal)
+            std::byte::from_int(999)
+    std::test::rejects("checked-domain-q1-out-of-range-literal-still-known-error", std::compiler::DiagnosticCode::KnownError, out_of_range_literal)
 
     # checked-domain-q2-partial-range-elimination-effective-errors: nonneg's
     # result is at least 10, so checked_small(nonneg(m)) can fail only with
     # TooLarge: g declares only TooLarge. Run with LOW (10) and HIGH
     # (TooLarge).
-    fn partial_range() errors compiler::CompilerError:
+    fn partial_range() errors std::compiler::CompilerError:
         static compile:
             fn checked_small(value: int) -> Small errors TooSmall, TooLarge:
                 if value < 10:
@@ -830,34 +830,34 @@ fn register_checked_domain_tests(astral: List[UnicodeChar], low: int, high: int)
                         -1
                 r
             [outcome(low), outcome(high)]
-    test::value("checked-domain-q2-partial-range-elimination-effective-errors", [10, -1], partial_range)
+    std::test::value("checked-domain-q2-partial-range-elimination-effective-errors", [10, -1], partial_range)
 
-    # checked-domain-q3-module-init-effective-errors-empty: byte::set of
+    # checked-domain-q3-module-init-effective-errors-empty: std::byte::set of
     # ASCII characters cannot fail, so it needs no handler.
-    fn ascii_byte_set() errors compiler::CompilerError:
+    fn ascii_byte_set() errors std::compiler::CompilerError:
         static compile:
-            additional_unreserved_chars = byte::set(['-', '.', '_', '~'])
-            additional_unreserved_chars == immutable_set::from_list([45, 46, 95, 126])
-    test::value("checked-domain-q3-module-init-effective-errors-empty", true, ascii_byte_set)
+            additional_unreserved_chars = std::byte::set(['-', '.', '_', '~'])
+            additional_unreserved_chars == std::immutable_set::from_list([45, 46, 95, 126])
+    std::test::value("checked-domain-q3-module-init-effective-errors-empty", true, ascii_byte_set)
 
-    # checked-domain-byte-set-astral-still-fails: byte::set of a character
-    # above U+00FF fails at run time with byte::AboveRange.
-    fn astral_byte_set() errors compiler::CompilerError:
+    # checked-domain-byte-set-astral-still-fails: std::byte::set of a character
+    # above U+00FF fails at run time with std::byte::AboveRange.
+    fn astral_byte_set() errors std::compiler::CompilerError:
         static compile:
             fn probe() -> str:
-                bytes = byte::set(astral):
-                    on byte::AboveRange:
+                bytes = std::byte::set(astral):
+                    on std::byte::AboveRange:
                         return "AboveRange"
                 "ok"
             probe()
-    test::value("checked-domain-byte-set-astral-still-fails", "AboveRange", astral_byte_set)
+    std::test::value("checked-domain-byte-set-astral-still-fails", "AboveRange", astral_byte_set)
 
     # checked-domain-byte-set-astral-known-error-at-compile-time: the same
     # call with a literal List provably fails.
-    fn astral_literal() errors compiler::CompilerError:
+    fn astral_literal() errors std::compiler::CompilerError:
         static compile:
-            byte::set(['Ā'])
-    test::rejects("checked-domain-byte-set-astral-known-error-at-compile-time", compiler::DiagnosticCode::KnownError, astral_literal)
+            std::byte::set(['Ā'])
+    std::test::rejects("checked-domain-byte-set-astral-known-error-at-compile-time", std::compiler::DiagnosticCode::KnownError, astral_literal)
 
 # ---------------------------------------------------------------------------
 # Exact value facts (exact-value-facts.test)
@@ -866,61 +866,61 @@ fn register_exact_value_tests():
     # ev-used-in-declared-param: an element read out of a literal List at an
     # exact index is exactly known: 7 proves a Byte parameter (/accepted),
     # 700 violates it (/rejected).
-    fn exact_byte_element() errors compiler::CompilerError:
+    fn exact_byte_element() errors std::compiler::CompilerError:
         static compile:
             fn take(b: Byte):
                 b
-            take(list::at(["a", 7], 1))
-    test::value("ev-used-in-declared-param/accepted", 7, exact_byte_element)
-    fn exact_non_byte_element() errors compiler::CompilerError:
+            take(std::list::at(["a", 7], 1))
+    std::test::value("ev-used-in-declared-param/accepted", 7, exact_byte_element)
+    fn exact_non_byte_element() errors std::compiler::CompilerError:
         static compile:
             fn take(b: Byte):
                 b
-            take(list::at(["a", 700], 1))
-    test::rejects_containing("ev-used-in-declared-param/rejected", compiler::DiagnosticCode::Type, "Byte", exact_non_byte_element)
+            take(std::list::at(["a", 700], 1))
+    std::test::rejects_containing("ev-used-in-declared-param/rejected", std::compiler::DiagnosticCode::Type, "Byte", exact_non_byte_element)
 
     # ev-oob-keeps-runtime-error: a provably out-of-bounds read is KnownError.
-    fn out_of_bounds() errors compiler::CompilerError:
+    fn out_of_bounds() errors std::compiler::CompilerError:
         static compile:
             x = ["a"]
-            list::at(x, 3)
-    test::rejects("ev-oob-keeps-runtime-error", compiler::DiagnosticCode::KnownError, out_of_bounds)
+            std::list::at(x, 3)
+    std::test::rejects("ev-oob-keeps-runtime-error", std::compiler::DiagnosticCode::KnownError, out_of_bounds)
 
     # ev-oob-negative: so is a read at a negative exact index.
-    fn negative_index() errors compiler::CompilerError:
+    fn negative_index() errors std::compiler::CompilerError:
         static compile:
             x = ["a", 7]
-            list::at(x, 0 - 1)
-    test::rejects("ev-oob-negative", compiler::DiagnosticCode::KnownError, negative_index)
+            std::list::at(x, 0 - 1)
+    std::test::rejects("ev-oob-negative", std::compiler::DiagnosticCode::KnownError, negative_index)
 
     # ev-test-name-legal: a List parameter named test, read at index 0, is
     # an ordinary function; the call is proven in bounds (no handler).
-    fn test_name_legal() errors compiler::CompilerError:
+    fn test_name_legal() errors std::compiler::CompilerError:
         static compile:
             fn test_name(test) errors IndexNotFound:
-                list::at(test, 0)
+                std::list::at(test, 0)
             test_name(["a", 1])
-    test::value("ev-test-name-legal", "a", test_name_legal)
+    std::test::value("ev-test-name-legal", "a", test_name_legal)
 
     # ev-test-deps-legal: likewise at index 1.
-    fn test_deps_legal() errors compiler::CompilerError:
+    fn test_deps_legal() errors std::compiler::CompilerError:
         static compile:
             fn test_deps(test) errors IndexNotFound:
-                list::at(test, 1)
+                std::list::at(test, 1)
             r = test_deps(["a", ["b"]]):
                 on IndexNotFound:
                     []
             r
-    test::value("ev-test-deps-legal", ["b"], test_deps_legal)
+    std::test::value("ev-test-deps-legal", ["b"], test_deps_legal)
 
     # ev-parity-projections: projections of a known List compute the same
     # values everywhere.
-    fn projections() errors compiler::CompilerError:
+    fn projections() errors std::compiler::CompilerError:
         static compile:
             x = ["a", 7]
             i = 1
-            [list::at(x, 0), list::at(x, i), list::length(x)]
-    test::value("ev-parity-projections", ["a", 7, 2], projections)
+            [std::list::at(x, 0), std::list::at(x, i), std::list::length(x)]
+    std::test::value("ev-parity-projections", ["a", 7, 2], projections)
 
 # ---------------------------------------------------------------------------
 # Result-range narrowing (result-range-narrowing.test): narrowed callee
@@ -928,7 +928,7 @@ fn register_exact_value_tests():
 
 fn register_result_narrowing_tests():
     # result-narrow-parity-clamp-chain
-    fn clamp_chain() errors compiler::CompilerError:
+    fn clamp_chain() errors std::compiler::CompilerError:
         static compile:
             fn clamp(x):
                 if x > 100:
@@ -940,10 +940,10 @@ fn register_result_narrowing_tests():
             fn use(k):
                 double(clamp(k)) + 1
             [use(5), use(500), use(-7)]
-    test::value("result-narrow-parity-clamp-chain", [11, 201, -13], clamp_chain)
+    std::test::value("result-narrow-parity-clamp-chain", [11, 201, -13], clamp_chain)
 
     # result-narrow-parity-small-int-edge: sums at the 2^62 small-Int edge.
-    fn small_int_edge() errors compiler::CompilerError:
+    fn small_int_edge() errors std::compiler::CompilerError:
         static compile:
             fn cap(x):
                 if x > 4611686018427387903:
@@ -953,10 +953,10 @@ fn register_result_narrowing_tests():
             fn twice(v):
                 cap(v) + cap(v)
             [twice(4611686018427387000), twice(4611686018427387903), twice(-4611686018427387904)]
-    test::value("result-narrow-parity-small-int-edge", [9223372036854774000, 9223372036854775806, -9223372036854775808], small_int_edge)
+    std::test::value("result-narrow-parity-small-int-edge", [9223372036854774000, 9223372036854775806, -9223372036854775808], small_int_edge)
 
     # result-narrow-parity-negative-edge: differences at the negative edge.
-    fn negative_edge() errors compiler::CompilerError:
+    fn negative_edge() errors std::compiler::CompilerError:
         static compile:
             fn floor(x):
                 if x < -4611686018427387904:
@@ -966,11 +966,11 @@ fn register_result_narrowing_tests():
             fn gap(v):
                 floor(v) - 4611686018427387903
             [gap(-4611686018427387904), gap(0), gap(-5)]
-    test::value("result-narrow-parity-negative-edge", [-9223372036854775807, -4611686018427387903, -4611686018427387908], negative_edge)
+    std::test::value("result-narrow-parity-negative-edge", [-9223372036854775807, -4611686018427387903, -4611686018427387908], negative_edge)
 
     # result-narrow-parity-open-and-closed: f is called directly and through
     # a List of callables.
-    fn open_and_closed() errors compiler::CompilerError:
+    fn open_and_closed() errors std::compiler::CompilerError:
         static compile:
             fn f(x):
                 if x > 100:
@@ -979,19 +979,19 @@ fn register_result_narrowing_tests():
                     x
             fns = [f]
             fn apply(i, v):
-                list::at(fns, i)(v)
+                std::list::at(fns, i)(v)
             [f(5) * 3, apply(0, -50) * 3, apply(0, 4611686018427387903) + f(5), apply(0, -4611686018427387904) - f(5)]
-    test::value("result-narrow-parity-open-and-closed", [15, -150, 105, -4611686018427387909], open_and_closed)
+    std::test::value("result-narrow-parity-open-and-closed", [15, -150, 105, -4611686018427387909], open_and_closed)
 
     # result-narrow-parity-scan-shape: a scanner returning from inside a
-    # counted loop over a captured length (str::substring's errors are
+    # counted loop over a captured length (std::str::substring's errors are
     # handled: never taken).
-    fn scan_shape() errors compiler::CompilerError:
+    fn scan_shape() errors std::compiler::CompilerError:
         static compile:
             fn first_space(s):
-                n = str::length(s)
+                n = std::str::length(s)
                 fn at(i):
-                    piece = str::substring(s, i, i + 1):
+                    piece = std::str::substring(s, i, i + 1):
                         on LowerUnderrun:
                             ""
                         on UpperOverrun:
@@ -1008,7 +1008,7 @@ fn register_result_narrowing_tests():
                 else:
                     e - 1 + 1000
             [first_space("abc def"), first_space("abcdef"), first_space("x")]
-    test::value("result-narrow-parity-scan-shape", [1002, 5, 0], scan_shape)
+    std::test::value("result-narrow-parity-scan-shape", [1002, 5, 0], scan_shape)
 
 # ---------------------------------------------------------------------------
 # Range facts of open instances and callee-position calls (hir-range.test)
@@ -1017,7 +1017,7 @@ fn register_range_tests():
     # range-induction-open-instance: count_up also escapes as a value, so its
     # known literal callers say nothing about where an unknown caller starts:
     # g(20, 0) takes the n > 10 branch.
-    fn open_instance() errors compiler::CompilerError:
+    fn open_instance() errors std::compiler::CompilerError:
         static compile:
             fn count_up(n, acc):
                 if n == 0:
@@ -1036,11 +1036,11 @@ fn register_range_tests():
                 x > 0
             g = choose(flag(1), count_up, other)
             [count_up(5, 0), g(20, 0)]
-    test::value("range-induction-open-instance", [5, 999], open_instance)
+    std::test::value("range-induction-open-instance", [5, 999], open_instance)
 
     # range-callee-position-parity-sel: sel is called once as an argument
     # (sel(1)) and once in callee position (sel(10)(0)); both reach its entry.
-    fn callee_position_sel() errors compiler::CompilerError:
+    fn callee_position_sel() errors std::compiler::CompilerError:
         static compile:
             fn one(y):
                 1
@@ -1054,11 +1054,11 @@ fn register_range_tests():
             fn apply(g):
                 g(0)
             [apply(sel(1)), sel(10)(0)]
-    test::value("range-callee-position-parity-sel", [1, 2], callee_position_sel)
+    std::test::value("range-callee-position-parity-sel", [1, 2], callee_position_sel)
 
     # range-callee-position-parity-sel-through-clamp: the callee-position
     # call's argument reaches clamp through sel.
-    fn callee_position_clamp() errors compiler::CompilerError:
+    fn callee_position_clamp() errors std::compiler::CompilerError:
         static compile:
             fn clamp(x):
                 if x > 100:
@@ -1078,11 +1078,11 @@ fn register_range_tests():
             fn apply(g):
                 g(0)
             [apply(sel(1)), sel(0 - 50)(0)]
-    test::value("range-callee-position-parity-sel-through-clamp", [1, 2], callee_position_clamp)
+    std::test::value("range-callee-position-parity-sel-through-clamp", [1, 2], callee_position_clamp)
 
     # range-callee-position-parity-list-index: a call inside the index of a
-    # list::at in callee position is a call site of pick too.
-    fn callee_position_index() errors compiler::CompilerError:
+    # std::list::at in callee position is a call site of pick too.
+    fn callee_position_index() errors std::compiler::CompilerError:
         static compile:
             fn pick(k):
                 if k > 5:
@@ -1094,8 +1094,8 @@ fn register_range_tests():
             fn two(y):
                 2
             fs = [one, two]
-            [pick(1), list::at(fs, pick(10))(0)]
-    test::value("range-callee-position-parity-list-index", [0, 2], callee_position_index)
+            [pick(1), std::list::at(fs, pick(10))(0)]
+    std::test::value("range-callee-position-parity-list-index", [0, 2], callee_position_index)
 
 # ---------------------------------------------------------------------------
 # Declared aggregate parameters (conjunctive-entry-facts.test)
@@ -1106,36 +1106,36 @@ fn register_range_tests():
 
 fn register_aggregate_entry_tests(empty):
     # empty-caller-does-not-imply-element-existence: a declared List[Byte]
-    # never makes an element of the empty List exist: list::at(xs, 0) fails
+    # never makes an element of the empty List exist: std::list::at(xs, 0) fails
     # at run time with IndexNotFound.
-    fn empty_caller() errors compiler::CompilerError:
+    fn empty_caller() errors std::compiler::CompilerError:
         static compile:
             fn first(xs: List[Byte]) -> Byte errors IndexNotFound:
-                list::at(xs, 0)
+                std::list::at(xs, 0)
             fn probe() -> str:
                 r = first(empty):
                     on IndexNotFound:
                         return "IndexNotFound"
                 "ok"
             probe()
-    test::value("empty-caller-does-not-imply-element-existence", "IndexNotFound", empty_caller)
+    std::test::value("empty-caller-does-not-imply-element-existence", "IndexNotFound", empty_caller)
 
     # nonempty-list-invariance-unaffected-by-theorem-transport: a List[int]
     # literal does not satisfy a declared List[Byte] parameter.
-    fn nonempty_list() errors compiler::CompilerError:
+    fn nonempty_list() errors std::compiler::CompilerError:
         static compile:
             fn consume(xs: List[Byte]) -> int:
                 1
             consume([1, 2])
-    test::rejects_containing("nonempty-list-invariance-unaffected-by-theorem-transport", compiler::DiagnosticCode::Type, "cannot be proven to satisfy", nonempty_list)
+    std::test::rejects_containing("nonempty-list-invariance-unaffected-by-theorem-transport", std::compiler::DiagnosticCode::Type, "cannot be proven to satisfy", nonempty_list)
 
     # empty-list-admissibility-unaffected: the empty List does.
-    fn empty_list() errors compiler::CompilerError:
+    fn empty_list() errors std::compiler::CompilerError:
         static compile:
             fn consume(xs: List[Byte]) -> int:
                 1
             consume([])
-    test::value("empty-list-admissibility-unaffected", 1, empty_list)
+    std::test::value("empty-list-admissibility-unaffected", 1, empty_list)
 
 # ---------------------------------------------------------------------------
 # Program-level constants read inside functions (exact-value-facts.test's
@@ -1166,7 +1166,7 @@ fn register_outer_constant_tests():
     # ev-outer-constant-proves-domain: quad_size proves an argument's Quad
     # domain over a loop to it, a declared Quad result quad_size - 1 and that
     # checked(quad_size) cannot fail (no handler).
-    fn named_constant() errors compiler::CompilerError:
+    fn named_constant() errors std::compiler::CompilerError:
         static compile:
             fn coordinate(n: Quad) -> Quad:
                 n
@@ -1179,28 +1179,28 @@ fn register_outer_constant_tests():
             fn positions() -> List[QuadPosition]:
                 loop r from 0 to quad_size:
                     QuadPosition {row: coordinate(r), column: last()}
-            [list::length(positions()), last(), checked(quad_size)]
-    test::value("ev-outer-constant-proves-domain", [4, 3, 4], named_constant)
+            [std::list::length(positions()), last(), checked(quad_size)]
+    std::test::value("ev-outer-constant-proves-domain", [4, 3, 4], named_constant)
 
     # ev-outer-constant-out-of-domain: the value is read, not assumed:
     # quad_wide - 1 is exactly 4, outside Quad.
-    fn wide_constant() errors compiler::CompilerError:
+    fn wide_constant() errors std::compiler::CompilerError:
         static compile:
             fn last() -> Quad:
                 quad_wide - 1
             last()
-    test::rejects_containing("ev-outer-constant-out-of-domain", compiler::DiagnosticCode::Type, "facts: [4, 4]", wide_constant)
+    std::test::rejects_containing("ev-outer-constant-out-of-domain", std::compiler::DiagnosticCode::Type, "facts: [4, 4]", wide_constant)
 
     # ev-outer-computed-not-a-fact: a binding of a user function's result
     # (4 at run time) is no fact: quad_computed - 1 proves nothing.
-    fn computed_constant() errors compiler::CompilerError:
+    fn computed_constant() errors std::compiler::CompilerError:
         static compile:
             fn last() -> Quad:
                 quad_computed - 1
             last()
-    test::rejects_containing("ev-outer-computed-not-a-fact", compiler::DiagnosticCode::Type, "does not prove declared type", computed_constant)
+    std::test::rejects_containing("ev-outer-computed-not-a-fact", std::compiler::DiagnosticCode::Type, "does not prove declared type", computed_constant)
 
-with context test::suite()
+with context std::test::suite()
 register_intrinsic_contract_tests()
 register_closed_closure_tests()
 register_self_recursive_range_tests()
@@ -1210,4 +1210,4 @@ register_result_narrowing_tests()
 register_range_tests()
 register_aggregate_entry_tests([])
 register_outer_constant_tests()
-test::report()
+std::test::report()

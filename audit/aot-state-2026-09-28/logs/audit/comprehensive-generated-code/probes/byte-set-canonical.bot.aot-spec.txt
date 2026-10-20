@@ -1,28 +1,28 @@
 == byte-set-canonical.bot (interp)
 <program>: closed   [i0, line 3:1]
-  calls:    byte::set<List[UnicodeChar]>
+  calls:    std::byte::set<List[UnicodeChar]>
   guards:   0
   runtime:  list-alloc
 
-char::codepoint (semantic): closed   [no blockers]
-char::codepoint<UnicodeChar>: closed   [i2, line 21:13]
+std::char::codepoint (semantic): closed   [no blockers]
+std::char::codepoint<UnicodeChar>: closed   [i2, line 21:13]
   params:   c : UnicodeChar
   result:   int
   guards:   0
   runtime:  none
 
-byte::from_int (semantic): closed   [no blockers]
-byte::from_int<int>: closed   [i3, line 150:12]
+std::byte::from_int (semantic): closed   [no blockers]
+std::byte::from_int<int>: closed   [i3, line 150:12]
   params:   value : int
   result:   int[Byte]
   guards:   0
   runtime:  bigint
 
-byte::set (semantic): closed   [no blockers]
-byte::set<List[UnicodeChar]>: closed   [i1, line 174:7]
+std::byte::set (semantic): closed   [no blockers]
+std::byte::set<List[UnicodeChar]>: closed   [i1, line 174:7]
   params:   chars : List[UnicodeChar]
   result:   ImmutableSet[int[Byte]]
-  calls:    byte::from_int<int>, char::codepoint<UnicodeChar>
+  calls:    std::byte::from_int<int>, std::char::codepoint<UnicodeChar>
   guards:   0
   runtime:  set-alloc, structural-equality
 

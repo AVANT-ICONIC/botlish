@@ -36,8 +36,8 @@
 # run time on every backend.
 #
 # Imports: compiler and test (every suite).
-import compiler
-import test
+import std::compiler
+import std::test
 
 error E1
 
@@ -56,7 +56,7 @@ struct Apply1:
 fn register_scc_contravariant_tests(one: int, zero: int):
     # scc-contravariant-admitted: with the contract admitting E1 it fits, the
     # call through it is charged E1, and the error is caught.
-    fn contravariant_admitted() errors compiler::CompilerError:
+    fn contravariant_admitted() errors std::compiler::CompilerError:
         static compile:
             fn raise1(x: int) -> int errors E1:
                 if x > 0:
@@ -71,29 +71,29 @@ fn register_scc_contravariant_tests(one: int, zero: int):
                     on E1:
                         -1
             [top(one), top(zero)]
-    test::value("scc-contravariant-admitted", [-1, 0], contravariant_admitted)
+    std::test::value("scc-contravariant-admitted", [-1, 0], contravariant_admitted)
 
     # ... and the program's erased-callable contract is E1: apply, which
     # calls its `any` parameter, given Fn{args: [any, any], return: any} (a
     # call through which may pass it anything), is Type at the field, for
     # E1; given the same type admitting E1, it fits.
-    fn erased_contract() errors compiler::CompilerError:
+    fn erased_contract() errors std::compiler::CompilerError:
         static compile:
             fn apply(f, x):
                 f(x)
             a = Apply {run: apply}
             0
-    test::rejects_at("scc-contravariant-admitted/erased", compiler::DiagnosticCode::Type, 84, 29, erased_contract)
-    test::rejects_containing("scc-contravariant-admitted/erased/identity", compiler::DiagnosticCode::Type, "declared error \"E1\"", erased_contract)
+    std::test::rejects_at("scc-contravariant-admitted/erased", std::compiler::DiagnosticCode::Type, 84, 29, erased_contract)
+    std::test::rejects_containing("scc-contravariant-admitted/erased/identity", std::compiler::DiagnosticCode::Type, "declared error \"E1\"", erased_contract)
 
-    fn erased_contract_exactly() errors compiler::CompilerError:
+    fn erased_contract_exactly() errors std::compiler::CompilerError:
         static compile:
             fn apply(f, x):
                 f(x)
             a = Apply1 {run: apply}
             0
-    test::value("scc-contravariant-admitted/erased-exactly", 0, erased_contract_exactly)
+    std::test::value("scc-contravariant-admitted/erased-exactly", 0, erased_contract_exactly)
 
-with context test::suite()
+with context std::test::suite()
 register_scc_contravariant_tests(1, 0)
-test::report()
+std::test::report()

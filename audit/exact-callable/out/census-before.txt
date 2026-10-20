@@ -5,8 +5,8 @@ bench/fib.bot | 1 | 2 | 2 | 0 | 0 | 0 | 0 | 0 | 292 | 59
 bench/lex-strategy.bot | 13 | 11 | 11 | 1 | 0 | 1 | 2 | 0 | 5207 | 46
     instances chars_of: 2
     fn <program><generic> bytes=1302
-    fn list::all?<List[str], native> bytes=629
-    callvalue in list::all?<List[str], native>
+    fn std::list::all?<List[str], native> bytes=629
+    callvalue in std::list::all?<List[str], native>
     fn lenient_ident_char?<generic> bytes=327
     fn choose_classifier<bool> bytes=57
     fn chars_of<str, int, List[never]> bytes=371
@@ -23,15 +23,15 @@ bench/loop-count.bot | 2 | 3 | 3 | 0 | 0 | 0 | 0 | 0 | 287 | 13
     fn drive<int, int> bytes=193
 bench/refined-checks.bot | 19 | 26 | 24 | 5 | 0 | 0 | 1 | 0 | 8903 | 547
     fn <program><generic> bytes=1443
-    fn char::codepoint<UnicodeChar> bytes=39
-    fn byte::from_int<int> bytes=289
-    fn byte::set<List[UnicodeChar]> bytes=609
-    fn ascii::is_digit<int> bytes=74
-    fn ascii::is_upper<int> bytes=74
-    fn ascii::is_lower<int> bytes=74
-    fn ascii::is_alphabetic<int> bytes=125
-    fn ascii::is_alphanumeric<int> bytes=125
-    fn web::emailish?<str> bytes=601
+    fn std::char::codepoint<UnicodeChar> bytes=39
+    fn std::byte::from_int<int> bytes=289
+    fn std::byte::set<List[UnicodeChar]> bytes=609
+    fn std::ascii::is_digit<int> bytes=74
+    fn std::ascii::is_upper<int> bytes=74
+    fn std::ascii::is_lower<int> bytes=74
+    fn std::ascii::is_alphabetic<int> bytes=125
+    fn std::ascii::is_alphanumeric<int> bytes=125
+    fn std::web::emailish?<str> bytes=601
     fn char_at<generic> bytes=262
     fn char_at<generic> bytes=222
     fn local_char?<generic> bytes=238
@@ -39,8 +39,8 @@ bench/refined-checks.bot | 19 | 26 | 24 | 5 | 0 | 0 | 1 | 0 | 8903 | 547
     callvalue in scan_while<generic>
     fn tld?<generic> bytes=468
     fn domain?<generic> bytes=1244
-    fn web::is_unreserved<int> bytes=137
-    fn web::uri_escape_text<str> bytes=94
+    fn std::web::is_unreserved<int> bytes=137
+    fn std::web::uri_escape_text<str> bytes=94
     fn high_nibble<int> bytes=103
     fn hex_pair<int> bytes=474
     fn esc_bytes<List[int], int, str> bytes=491
@@ -49,8 +49,8 @@ bench/refined-checks.bot | 19 | 26 | 24 | 5 | 0 | 0 | 1 | 0 | 8903 | 547
     fn check<int, int, str, str> bytes=344
 bench/source-checks.bot | 4 | 7 | 7 | 5 | 0 | 1 | 2 | 3 | 4305 | 60
     fn <program><generic> bytes=2054
-    fn list::find<List[str], block> bytes=605
-    callvalue in list::find<List[str], block>
+    fn std::list::find<List[str], block> bytes=605
+    callvalue in std::list::find<List[str], block>
     fn is_underscore?<generic> bytes=113
     fn is_hyphen?<generic> bytes=113
     fn classify_leading<generic> bytes=1025
@@ -64,12 +64,12 @@ bench/sum-refined.bot | 2 | 4 | 3 | 1 | 0 | 0 | 0 | 0 | 286 | 23
     fn step<int> bytes=98
 bench/test-selection.bot | 12 | 12 | 12 | 2 | 0 | 6 | 3 | 2 | 6589 | 90
     fn <program><generic> bytes=3337
-    fn list::any?<List[str], block> bytes=605
-    callvalue in list::any?<List[str], block>
-    fn list::none?<List[str], block> bytes=605
-    callvalue in list::none?<List[str], block>
-    fn list::find<List[Test], block> bytes=605
-    callvalue in list::find<List[Test], block>
+    fn std::list::any?<List[str], block> bytes=605
+    callvalue in std::list::any?<List[str], block>
+    fn std::list::none?<List[str], block> bytes=605
+    callvalue in std::list::none?<List[str], block>
+    fn std::list::find<List[Test], block> bytes=605
+    callvalue in std::list::find<List[Test], block>
     fn make_changed?<List[str]> bytes=112
     fn changed?<generic> bytes=63
     fn test_name<Test> bytes=33
@@ -80,16 +80,16 @@ bench/test-selection.bot | 12 | 12 | 12 | 2 | 0 | 6 | 3 | 2 | 6589 | 90
     fn is_affected?<generic> bytes=82
 bench/uri-steady.bot | 19 | 19 | 17 | 1 | 0 | 0 | 0 | 0 | 5674 | 128
     fn <program><generic> bytes=1409
-    fn char::codepoint<UnicodeChar> bytes=39
-    fn byte::from_int<int> bytes=289
-    fn byte::set<List[UnicodeChar]> bytes=609
-    fn ascii::is_digit<int> bytes=74
-    fn ascii::is_upper<int> bytes=74
-    fn ascii::is_lower<int> bytes=74
-    fn ascii::is_alphabetic<int> bytes=125
-    fn ascii::is_alphanumeric<int> bytes=125
-    fn web::is_unreserved<int> bytes=137
-    fn web::uri_escape_text<str> bytes=94
+    fn std::char::codepoint<UnicodeChar> bytes=39
+    fn std::byte::from_int<int> bytes=289
+    fn std::byte::set<List[UnicodeChar]> bytes=609
+    fn std::ascii::is_digit<int> bytes=74
+    fn std::ascii::is_upper<int> bytes=74
+    fn std::ascii::is_lower<int> bytes=74
+    fn std::ascii::is_alphabetic<int> bytes=125
+    fn std::ascii::is_alphanumeric<int> bytes=125
+    fn std::web::is_unreserved<int> bytes=137
+    fn std::web::uri_escape_text<str> bytes=94
     fn high_nibble<int> bytes=103
     fn hex_pair<int> bytes=474
     fn esc_bytes<List[int], int, str> bytes=491

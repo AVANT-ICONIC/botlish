@@ -1,4 +1,4 @@
 # S13, the second shape the log records: the method call's result passed to a str parameter.
 primary 7:18
-fix 1 import str
+fix 1 import std::str
 cascade 7:11

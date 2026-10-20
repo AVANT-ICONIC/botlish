@@ -7,7 +7,7 @@ semantic-compilation boundary around a parser-valid block.
 > around a parser-valid Botlish block. If the block compiles, it executes
 > with its ordinary value and error semantics and the boundary has no
 > runtime representation. If semantic compilation rejects the block, the
-> diagnostic is reified as `compiler::CompilerError` and the block is not
+> diagnostic is reified as `std::compiler::CompilerError` and the block is not
 > executed.
 >
 > Parser errors are not captured by `static compile:`. A future lower-level
@@ -17,15 +17,15 @@ semantic-compilation boundary around a parser-valid block.
 > framework.
 
 ```botlish
-import compiler
+import std::compiler
 
-fn probe() -> int errors compiler::CompilerError:
+fn probe() -> int errors std::compiler::CompilerError:
     static compile:
         missing
 
 r = probe():
-    on compiler::CompilerError {code, primary}:
-        if code == compiler::DiagnosticCode::Unbound:
+    on std::compiler::CompilerError {code, primary}:
+        if code == std::compiler::DiagnosticCode::Unbound:
             primary.line * 1000 + primary.column
         else:
             0
@@ -38,11 +38,11 @@ specialization (`tests/static-compile.test`):
 
 | block | the compiler | at run time |
 |---|---|---|
-| `missing` | rejects it: the enclosing program compiles | `compiler::CompilerError {code: compiler::DiagnosticCode::Unbound, primary: compiler::SourceLocation {line: 4, column: 9}, related: [], message: "unbound name \"missing\""}` (`sc-negative-unbound`) |
-| `list::at(xs, i)` | accepts it | `IndexNotFound` when `i` is out of range, never CompilerError (`sc-success-runtime-error`) |
+| `missing` | rejects it: the enclosing program compiles | `std::compiler::CompilerError {code: std::compiler::DiagnosticCode::Unbound, primary: std::compiler::SourceLocation {line: 4, column: 9}, related: [], message: "unbound name \"missing\""}` (`sc-negative-unbound`) |
+| `std::list::at(xs, i)` | accepts it | `IndexNotFound` when `i` is out of range, never CompilerError (`sc-success-runtime-error`) |
 | `20 + 22` | accepts it | `42`, as without the boundary (`sc-success-value`) |
 
-(`list::at([], 0)` itself, the brief's literal example, is a block the
+(`std::list::at([], 0)` itself, the brief's literal example, is a block the
 compiler *rejects*: the completion proofs see the empty List and the
 constant index, so the call is the ordinary KNOWN-ERROR, reified as code
 `KnownError` -- `sc-list-at-empty-is-known-error`. A run-time failure needs an
@@ -81,8 +81,8 @@ allows -- so `static = 3`, `static(x)`, `x.static`, `compile = f` and
 `compile(x)` are ordinary code, and `static compile:` means the same whatever
 the program binds.
 
-A file that uses a static intrinsic imports `compiler` (`import compiler`):
-a rejected block completes with `compiler::CompilerError`, an ordinary
+A file that uses a static intrinsic imports `compiler` (`import std::compiler`):
+a rejected block completes with `std::compiler::CompilerError`, an ordinary
 namespaced declaration, and Botlish has no implicit imports. Without it the
 loader reports `MISSING-IMPORT` at the `static` keyword.
 
@@ -144,7 +144,7 @@ would sit below it; the two stay distinct.
    in its own scope (and is one expression in a value position), else the
    then-branch of an `if` on the root `true` -- exactly the `if true:` block
    that scopes what it binds. A *rejected* block is
-   `fail compiler::CompilerError {code, primary, related, message}`, built
+   `fail std::compiler::CompilerError {code, primary, related, message}`, built
    from the diagnostic, marked `static {operation compile kind KIND}`.
 5. The final program's own diagnostics (none in an accepted body, by
    construction) are its diagnostics, raised by the frontend as for any
@@ -159,7 +159,7 @@ transaction and its rollback.
 
 ## The compiler namespace
 
-`lib/compiler.bot`, ordinary Botlish:
+`stdlib/compiler.bot`, ordinary Botlish:
 
 ```botlish
 enum DiagnosticCode:
@@ -191,7 +191,7 @@ ordinary message, without its location prefix -- for reading, never the
 identity to compare (compare `code`). Everything after that is ordinary:
 the payload is an ordinary anonymous struct, transported field-wise in the
 native payload slots, bound and destructured by ordinary handlers, rendered
-by the ordinary renderer (`<error compiler::CompilerError {code: ...}>` when
+by the ordinary renderer (`<error std::compiler::CompilerError {code: ...}>` when
 uncaught under `-strict 0`).
 
 There is one error, not one per diagnostic: what happened at the level of
@@ -213,7 +213,7 @@ enum):
 | completion | UNHANDLED-ERROR, KNOWN-ERROR, UNDECLARED-ERROR, MISSING-ERROR-PAYLOAD, UNEXPECTED-ERROR-PAYLOAD | yes |
 | module / context / trait | MISSING-CONTEXT, AMBIGUOUS-CONTEXT-IMPLEMENTATION, CONTEXT-BINDING-COLLISION, CONTEXT-FUNCTION-VALUE, CONTEXT-INSTALLATION-UNSUPPORTED, CONTEXT-TRAIT-MISUSE, CONTEXT-TRAIT-POSITION, DUPLICATE-CONTEXT-PARAMETER, NOT-A-CONTEXT, MODULE-CONTEXT, MODULE-IMMUTABLE, TRAIT-IMPL-ORDER, TRAIT-INSTANCE-BUDGET, TRAIT-NESTED-POLYMORPHIC, TRAIT-NOT-SATISFIED, TRAIT-POLYMORPHIC-FUNCTION-VALUE, TRAIT-POLYMORPHIC-RECURSION, TRAIT-STORAGE-UNSUPPORTED, TRAIT-UNKNOWN-OPERATION, TRAIT-VIEW-MISUSE, TRAIT-WITNESS-JOIN | yes |
 | loader, a qualified reference in a block | MISSING-IMPORT, UNKNOWN-NAMESPACE, UNKNOWN-SYMBOL, NOT-AN-ENUM, NOT-A-STRUCT, AMBIGUOUS-QUALIFIER | yes (deferred, step 1) |
-| loader, header only | CYCLE, DUPLICATE-IMPORT, DUPLICATE-NATIVE, INVALID-TOPLEVEL, MODULE-COLLISION, NOT-A-TYPE, SELF-IMPORT, TYPE-IMPORT-COLLISION | no: a block has no header |
+| loader, header only | CYCLE, DUPLICATE-IMPORT, DUPLICATE-NATIVE, INVALID-TOPLEVEL, MODULE-COLLISION, NOT-A-TYPE, RESERVED-NAMESPACE, SELF-IMPORT, TYPE-IMPORT-COLLISION | no: a block has no header |
 | declaration (top level only: a block cannot declare a type, struct, enum, error or trait) | CYCLIC-REFINEMENT, REFINEMENT-CARRIER, TRAIT-DUPLICATE-REQUIREMENT, TRAIT-NAME-COLLISION, TRAIT-OTHER-TRAIT, TRAIT-REQUIREMENT-RECEIVER, TRAIT-SELF-POSITION, ENUM-EMPTY | no |
 | top-level installation only | CONTEXT-TYPE-NOT-EXACT, DUPLICATE-CONTEXT | no: an installation in a block is CONTEXT-INSTALLATION-UNSUPPORTED |
 | not from source | LISTLOOP-BREAK-VALUE (core IR / HIR text only) | no |
@@ -264,17 +264,17 @@ contributor that was rejected later kept a rejection the final program no
 longer justified -- and written after it, it was accepted:
 
 ```botlish
-fn consumer() -> int errors compiler::CompilerError:
+fn consumer() -> int errors std::compiler::CompilerError:
     static compile:
         fn run(fs: List[any]) errors IndexNotFound:
-            f = list::at(fs, 0)
+            f = std::list::at(fs, 0)
             f()                     # charged what the program erases
         r = run([harmless]):
             on IndexNotFound:
                 -2
         1
 
-fn eraser() -> int errors compiler::CompilerError:
+fn eraser() -> int errors std::compiler::CompilerError:
     static compile:
         r = store(raise_e2)         # erases E2 (store's parameter is untyped)
         fn want(x: int) -> int:
@@ -736,13 +736,13 @@ root Boolean reference as a pure decided condition).
 
 ### 14. Failed lowering
 
-`fail compiler::CompilerError {code: <enum const>, primary:
-compiler::SourceLocation {...}, related: [...], message: "..."}`: an ordinary
+`fail std::compiler::CompilerError {code: <enum const>, primary:
+std::compiler::SourceLocation {...}, related: [...], message: "..."}`: an ordinary
 `fail` of an ordinary payload error, the payload an ordinary anonymous struct
-construction (`struct payload(compiler::CompilerError)` in HIR text), its
+construction (`struct payload(std::compiler::CompilerError)` in HIR text), its
 location values ordinary named constructions, its code an enum constant
-(`sc-hir-rejected`). Core IR `(fail compiler::CompilerError (struct ...))`,
-NIR `faildeclared ID "compiler::CompilerError" SHAPE fields...`
+(`sc-hir-rejected`). Core IR `(fail std::compiler::CompilerError (struct ...))`,
+NIR `faildeclared ID "std::compiler::CompilerError" SHAPE fields...`
 (`sc-nir-rejected-payload-slots`). None of the body survives
 (`sc-hir-rejected`: no reference to the function the body called).
 
@@ -799,11 +799,11 @@ corpus program uses `static compile:`).
 `STATIC-UNKNOWN-OPERATION` (an operation outside the vocabulary, never an
 UNBOUND), `STATIC-INTRINSIC-FORM` (arguments, no colon, a one-line body, no
 operation), the ordinary suite error (no block), `MISSING-IMPORT` (no
-`import compiler`, `sc-import-required`).
+`import std::compiler`, `sc-import-required`).
 
-### 21. compiler::DiagnosticCode
+### 21. std::compiler::DiagnosticCode
 
-87 cases, one per recoverable kind (the census below), in `lib/compiler.bot`.
+87 cases, one per recoverable kind (the census below), in `stdlib/compiler.bot`.
 
 ### 22. Census
 
@@ -822,7 +822,7 @@ bridge is an internal compiler failure, never a default case
 ### 24-25. SourceLocation, CompilerError
 
 As declared above, ordinary namespaced declarations named qualified after
-`import compiler`; a bare `CompilerError` or `DiagnosticCode` is unknown
+`import std::compiler`; a bare `CompilerError` or `DiagnosticCode` is unknown
 (`sc-names-qualified`).
 
 ### 26. Host-to-Botlish conversion
@@ -940,11 +940,11 @@ body is left):
 
 ```
 e4 bind b2 f : block(e5)/0 -> never
-    e5 block s5 () captures () errors compiler::CompilerError : block(e5)/0 -> never
-        e6 fail compiler::CompilerError static=compile:UNBOUND : never
-            e7 struct payload(compiler::CompilerError) (code, primary, related, message) : struct{code: compiler::DiagnosticCode, message: str, primary: compiler::SourceLocation, related: List[compiler::SourceLocation]}
-                e8 const enum {compiler::DiagnosticCode Unbound} : compiler::DiagnosticCode
-                e9 struct compiler::SourceLocation (line, column) : compiler::SourceLocation
+    e5 block s5 () captures () errors std::compiler::CompilerError : block(e5)/0 -> never
+        e6 fail std::compiler::CompilerError static=compile:UNBOUND : never
+            e7 struct payload(std::compiler::CompilerError) (code, primary, related, message) : struct{code: std::compiler::DiagnosticCode, message: str, primary: std::compiler::SourceLocation, related: List[std::compiler::SourceLocation]}
+                e8 const enum {std::compiler::DiagnosticCode Unbound} : std::compiler::DiagnosticCode
+                e9 struct std::compiler::SourceLocation (line, column) : std::compiler::SourceLocation
                     e10 const 9 : int
                     e11 const 9 : int
                 e12 call native(list) : List[never]
@@ -961,7 +961,7 @@ Accepted: the unwrapped program's Core IR, element for element (`sc-core-ir`).
 Rejected, the same program:
 
 ```
-{bind f {block {} {fail compiler::CompilerError {struct {} code {const enum {compiler::DiagnosticCode Unbound}} primary {struct {compiler::SourceLocation line column} line {const 9} column {const 9}} related {call {ref list}} message {const str {unbound name "missing"}}}}}}
+{bind f {block {} {fail std::compiler::CompilerError {struct {} code {const enum {std::compiler::DiagnosticCode Unbound}} primary {struct {std::compiler::SourceLocation line column} line {const 9} column {const 9}} related {call {ref list}} message {const str {unbound name "missing"}}}}}}
 ```
 
 an ordinary `fail` of a payload construction; no static form, no compiler
@@ -978,7 +978,7 @@ failure. Every executable test runs on both (`sourceAgree`).
 
 Accepted: byte-identical to the unwrapped body's (or the `if true:`
 block's), no branch, no `bool true` (`sc-nir-accepted-identical`).
-Rejected: one `faildeclared ... "compiler::CompilerError"` with the payload's
+Rejected: one `faildeclared ... "std::compiler::CompilerError"` with the payload's
 fields in the payload slots (`sc-nir-rejected-payload-slots`); no new NIR
 instruction exists for static compile.
 
@@ -993,7 +993,7 @@ code is.
 Natively each failure allocates what its payload's fields hold: the
 `primary` SourceLocation struct (48 bytes) and the `related` List (24 bytes
 when empty) -- 2 allocations, 72 bytes, exactly what the same
-`fail compiler::CompilerError {...}` written by hand allocates
+`fail std::compiler::CompilerError {...}` written by hand allocates
 (Performance below). The message is a String constant, allocated once with
 the program's static data, never per failure; the code is an enum word. A
 handler that binds the payload whole materializes the anonymous payload
@@ -1014,7 +1014,7 @@ flag-unknown, use-after-move, erased-unhandled, missing-import,
 unknown-namespace, not-an-enum): the ordinary compiler's first diagnostic
 inside the block written as `if true:` (kind, line, column, related,
 message) equals both the diagnostic the site recorded and the
-`compiler::CompilerError` the block fails with on every backend -- code,
+`std::compiler::CompilerError` the block fails with on every backend -- code,
 primary, related and message as a handler reads them, the code's case
 spelled by the test itself (`scPayloadOf`), never asked of
 `hir::static::codes`. The fuzzer does the same for every fault: its model
@@ -1028,7 +1028,7 @@ a model-based generator: each program has 3..8 sites, a function per
 site whose body is one `static compile:` block (its last statement, or one
 time in three the value of a binding it returns), each block a valid
 fragment or a deliberate fault, and a driver per site that calls it under
-handlers for `compiler::CompilerError` and the program's application
+handlers for `std::compiler::CompilerError` and the program's application
 errors. The model shares nothing with the compiler: it predicts a valid
 fragment's value or application error and a fault's kind, line and column,
 and every backend (interp, compile, Cranelift) must produce exactly that.
@@ -1126,7 +1126,7 @@ the warning gate):
 
 (The four skips are the suite's `coreScoping` constraint on the Tcl
 compiler, as before this milestone.) The warning gate
-(`audit/refactor/tools/gate.tcl`) passes with `lib/compiler.bot` listed in
+(`audit/refactor/tools/gate.tcl`) passes with `stdlib/compiler.bot` listed in
 the manifest, warning-clean.
 
 The campaigns of the phases this milestone touched (AGENTS.md), on the final
@@ -1235,7 +1235,7 @@ and never one character long, so ONE-CHAR-STRING-LITERAL needs no rule.
 
 No test framework, `test` declaration, expectation syntax or golden files;
 no `static parse:`, `static assert_compiles:` or `static assert_rejects:`; no
-`compiler::compile(str)`, no `syntactic fn`, macros, AST reflection,
+`std::compiler::compile(str)`, no `syntactic fn`, macros, AST reflection,
 compile-time evaluation or IO, subprocess, temporary file or run-time
 compiler invocation; no diagnostic subtyping, one-error-per-diagnostic,
 handler guards or pattern matching on diagnostics.
@@ -1312,7 +1312,7 @@ Reading it:
   45), the same Core IR, so the same time -- the table's differences
   (42.6 against 46.7 ns natively) are noise between two identical
   programs. A rejected block costs exactly what the same
-  `fail compiler::CompilerError {...}` written by hand costs: the
+  `fail std::compiler::CompilerError {...}` written by hand costs: the
   hand-written function needs a parameter and a branch to avoid being a
   KNOWN-ERROR, which is why it is, if anything, slower.
 * **Allocations.** None for an accepted block. A rejected one allocates
@@ -1328,7 +1328,7 @@ Reading it:
 | `surface/parser.tcl` | `staticIntrinsic`, `AtStatic`, `StaticIntrinsic`, misuse diagnostics |
 | `surface/ast.tcl` | the `static` node: ids, children, printing |
 | `surface/lower.tcl` | the `static` syntax node |
-| `surface/modules.tcl` | the `import compiler` rule, deferred loader diagnostics (`StaticSites`, `CheckRef`, `LowerStatements`), `RemapFile` |
+| `surface/modules.tcl` | the `import std::compiler` rule, deferred loader diagnostics (`StaticSites`, `CheckRef`, `LowerStatements`), `RemapFile` |
 | `hir/syntax.tcl` | `staticNode` |
 | `hir/static.tcl` | sites, expansion, reification, decisions (the schedulers, `Simulate`, `MethodSeeds`, the trace), the code table |
 | `hir/staticdeps.tcl` | the dependency analysis of a build (`Deps`, `Explain`) |
@@ -1341,7 +1341,7 @@ Reading it:
 | `hir/range.tcl` | an exact callable type in `ProvesValueAcceptedBy` |
 | `hir/format.tcl`, `hir/read.tcl` | `static=OP:KIND` |
 | `native/lower.tcl` | `PureDecidedCondition`: a root Boolean reference |
-| `lib/compiler.bot` | `DiagnosticCode`, `SourceLocation`, `CompilerError` |
+| `stdlib/compiler.bot` | `DiagnosticCode`, `SourceLocation`, `CompilerError` |
 | `tests/static-compile.test` | the tests named above |
 | `tests/static-economics.test` | the schedulers' equality, build-count bounds, method-decision reuse, the properties the dependency analysis relies on |
 | `audit/static-compile/tools/` | `fuzz.tcl`, `mutate.tcl`, `mutants.txt` |
@@ -1359,7 +1359,7 @@ run `tests/static-compile.test`, `audit/static-compile/tools/fuzz.tcl`
 `audit/static-compile/tools/mutate.tcl` (every mutant in `mutants.txt` must
 still apply and be killed). A new diagnostic kind needs its classification
 in `sc-census-exhaustive` and, if a block can produce it, a case in
-`lib/compiler.bot` and `hir::static::codes`.
+`stdlib/compiler.bot` and `hir::static::codes`.
 
 If you change the decision schedulers (`hir/static.tcl`'s `decide`,
 `Simulate`, `MethodSeeds`), the dependency analysis (`hir/staticdeps.tcl`),

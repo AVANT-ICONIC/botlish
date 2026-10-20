@@ -4,8 +4,8 @@
 #
 #   * a qualified name of a namespace the file does not import is
 #     MissingImport -- a function, an intrinsic, a struct construction, a
-#     struct or type annotation -- whatever exists in lib/ and whatever the
-#     framework module (lib/test.bot imports list, str and mutable_vector)
+#     struct or type annotation -- whatever exists in stdlib/ and whatever the
+#     framework module (stdlib/test.bot imports list, str and mutable_vector)
 #     imports for itself: imports are not transitive;
 #   * the language primitives (list literals, the root natives list,
 #     integer?, string?, hash, mod) are no namespace and need no import;
@@ -21,114 +21,114 @@
 # test). A suite of its own because every other imports suite imports some
 # of these namespaces. Imports: compiler and test only (the framework; a
 # program needs them to be a suite, and neither defines a member the tests
-# below name. lib/test.bot's own imports load list, str and mutable_vector,
+# below name. stdlib/test.bot's own imports load list, str and mutable_vector,
 # which is how a method call's diagnostic knows their members: a module
 # nobody imports is never searched, DIAGNOSTIC-RECOVERY.md).
-import compiler
-import test
+import std::compiler
+import std::test
 
 fn register_no_implicit_import_tests():
     # imports-entry-program-no-implicit-imports: no standard namespace is
     # imported implicitly -- an intrinsic namespace (str), a module with
     # intrinsics (list, mutable_array) or a plain module (abi, byte).
-    fn b_list() errors compiler::CompilerError:
+    fn b_list() errors std::compiler::CompilerError:
         static compile:
-            list::length([1])
-    test::rejects("imports-entry-program-no-implicit-imports/list", compiler::DiagnosticCode::MissingImport, b_list)
-    fn b_mutable_array() errors compiler::CompilerError:
+            std::list::length([1])
+    std::test::rejects("imports-entry-program-no-implicit-imports/list", std::compiler::DiagnosticCode::MissingImport, b_list)
+    fn b_mutable_array() errors std::compiler::CompilerError:
         static compile:
-            mutable_array::allocate(1)
-    test::rejects("imports-entry-program-no-implicit-imports/mutable-array", compiler::DiagnosticCode::MissingImport, b_mutable_array)
-    fn b_abi() errors compiler::CompilerError:
+            std::mutable_array::allocate(1)
+    std::test::rejects("imports-entry-program-no-implicit-imports/mutable-array", std::compiler::DiagnosticCode::MissingImport, b_mutable_array)
+    fn b_abi() errors std::compiler::CompilerError:
         static compile:
-            abi::u8(1)
-    test::rejects("imports-entry-program-no-implicit-imports/abi", compiler::DiagnosticCode::MissingImport, b_abi)
-    fn b_byte() errors compiler::CompilerError:
+            std::abi::u8(1)
+    std::test::rejects("imports-entry-program-no-implicit-imports/abi", std::compiler::DiagnosticCode::MissingImport, b_abi)
+    fn b_byte() errors std::compiler::CompilerError:
         static compile:
-            byte::set([1])
-    test::rejects("imports-entry-program-no-implicit-imports/byte", compiler::DiagnosticCode::MissingImport, b_byte)
-    fn b_str() errors compiler::CompilerError:
+            std::byte::set([1])
+    std::test::rejects("imports-entry-program-no-implicit-imports/byte", std::compiler::DiagnosticCode::MissingImport, b_byte)
+    fn b_str() errors std::compiler::CompilerError:
         static compile:
-            str::length("a")
-    test::rejects("imports-entry-program-no-implicit-imports/str", compiler::DiagnosticCode::MissingImport, b_str)
+            std::str::length("a")
+    std::test::rejects("imports-entry-program-no-implicit-imports/str", std::compiler::DiagnosticCode::MissingImport, b_str)
 
     # imports-unknown-member-vs-missing-import: the namespace is authorized
     # before its member is looked up: an existing member of an unimported
     # namespace is MissingImport (the UnknownSymbol halves, with the
     # import, are imports.bot's).
-    fn b_unimported_member() errors compiler::CompilerError:
+    fn b_unimported_member() errors std::compiler::CompilerError:
         static compile:
-            str::concat("a", "b")
-    test::rejects("imports-unknown-member-vs-missing-import/missing-import", compiler::DiagnosticCode::MissingImport, b_unimported_member)
+            std::str::concat("a", "b")
+    std::test::rejects("imports-unknown-member-vs-missing-import/missing-import", std::compiler::DiagnosticCode::MissingImport, b_unimported_member)
 
 fn register_qualified_reference_tests():
     # imports-struct-and-type-references-are-authorized: a qualified struct
     # construction and a qualified struct annotation need the import too
     # (the accepted halves are imports.bot's).
-    fn b_construction() errors compiler::CompilerError:
+    fn b_construction() errors std::compiler::CompilerError:
         static compile:
-            x = abi::U8 {value: 5}
+            x = std::abi::U8 {value: 5}
             x.value
-    test::rejects("imports-struct-and-type-references-are-authorized/construction-without-import", compiler::DiagnosticCode::MissingImport, b_construction)
-    fn b_struct_annotation() errors compiler::CompilerError:
+    std::test::rejects("imports-struct-and-type-references-are-authorized/construction-without-import", std::compiler::DiagnosticCode::MissingImport, b_construction)
+    fn b_struct_annotation() errors std::compiler::CompilerError:
         static compile:
-            fn f(x: abi::U8):
+            fn f(x: std::abi::U8):
                 x
             1
-    test::rejects("imports-struct-and-type-references-are-authorized/annotation-without-import", compiler::DiagnosticCode::MissingImport, b_struct_annotation)
+    std::test::rejects("imports-struct-and-type-references-are-authorized/annotation-without-import", std::compiler::DiagnosticCode::MissingImport, b_struct_annotation)
 
     # imports-type-qualified-reference: so does a module's integer domain
     # spelled qualified as an annotation (the accepted half is
     # imports.bot's).
-    fn b_type_annotation() errors compiler::CompilerError:
+    fn b_type_annotation() errors std::compiler::CompilerError:
         static compile:
-            fn f(x: abi::U8Value):
+            fn f(x: std::abi::U8Value):
                 x
             1
-    test::rejects("imports-type-qualified-reference/without-import", compiler::DiagnosticCode::MissingImport, b_type_annotation)
+    std::test::rejects("imports-type-qualified-reference/without-import", std::compiler::DiagnosticCode::MissingImport, b_type_annotation)
 
 fn register_primitive_tests():
     # imports-root-primitives-need-no-import: the language primitives are
     # not a namespace. The root natives:
-    fn b_root_natives() errors compiler::CompilerError:
+    fn b_root_natives() errors std::compiler::CompilerError:
         static compile:
             list(1, 2) == [1, 2] and integer?(1) and string?("a") and hash(1) == hash(1) and mod(7, 3) == 1
-    test::value("imports-root-primitives-need-no-import/root-natives", true, b_root_natives)
+    std::test::value("imports-root-primitives-need-no-import/root-natives", true, b_root_natives)
     # ... and a list literal and `+` compile with no import (g is never
     # called: adding an Int to a List fails at run time on every backend).
-    fn b_list_literal_and_plus() errors compiler::CompilerError:
+    fn b_list_literal_and_plus() errors std::compiler::CompilerError:
         static compile:
             fn g():
                 [1, 2] + 0
             1
-    test::value("imports-root-primitives-need-no-import/operators", 1, b_list_literal_and_plus)
+    std::test::value("imports-root-primitives-need-no-import/operators", 1, b_list_literal_and_plus)
 
 fn register_method_visibility_tests():
-    # imports-method-requires-the-import: without `import list` (or str),
+    # imports-method-requires-the-import: without `import std::list` (or str),
     # xs.at(0) and s.length() find no function: the import is what is
     # missing, as for the explicit spelling.
-    fn b_list_at() errors compiler::CompilerError:
+    fn b_list_at() errors std::compiler::CompilerError:
         static compile:
             xs = [1, 2]
             xs.at(0)
-    test::rejects("imports-method-requires-the-import/list-at", compiler::DiagnosticCode::MissingImport, b_list_at)
-    fn b_str_length() errors compiler::CompilerError:
+    std::test::rejects("imports-method-requires-the-import/list-at", std::compiler::DiagnosticCode::MissingImport, b_list_at)
+    fn b_str_length() errors std::compiler::CompilerError:
         static compile:
             s = "ab"
             s.length()
-    test::rejects("imports-method-requires-the-import/str-length", compiler::DiagnosticCode::MissingImport, b_str_length)
+    std::test::rejects("imports-method-requires-the-import/str-length", std::compiler::DiagnosticCode::MissingImport, b_str_length)
 
     # ... and the diagnostic says why and what to import: method syntax
-    # applies only a visible function, the import that makes list::length
-    # one, and no other namespace (mutable_vector::length and str::length
+    # applies only a visible function, the import that makes std::list::length
+    # one, and no other namespace (std::mutable_vector::length and std::str::length
     # would not apply to a List).
-    fn b_list_length() errors compiler::CompilerError:
+    fn b_list_length() errors std::compiler::CompilerError:
         static compile:
             xs = [1, 2]
             xs.length()
-    test::rejects_containing("imports-method-requires-the-import/not-visible", compiler::DiagnosticCode::MissingImport, "the method-style call \".length(...)\" applies only a function visible by that name", b_list_length)
-    test::rejects_containing("imports-method-requires-the-import/how-to-import", compiler::DiagnosticCode::MissingImport, "namespace \"list\" is not imported; add `import list` to use `list::length`", b_list_length)
-    test::rejects_message("imports-method-requires-the-import/defining-namespaces", compiler::DiagnosticCode::MissingImport, "namespace \"list\" is not imported; add `import list` to use `list::length` (the method-style call \".length(...)\" applies only a function visible by that name)", b_list_length)
+    std::test::rejects_containing("imports-method-requires-the-import/not-visible", std::compiler::DiagnosticCode::MissingImport, "the method-style call \".length(...)\" applies only a function visible by that name", b_list_length)
+    std::test::rejects_containing("imports-method-requires-the-import/how-to-import", std::compiler::DiagnosticCode::MissingImport, "namespace \"std::list\" is not imported; add `import std::list` to use `std::list::length`", b_list_length)
+    std::test::rejects_message("imports-method-requires-the-import/defining-namespaces", std::compiler::DiagnosticCode::MissingImport, "namespace \"std::list\" is not imported; add `import std::list` to use `std::list::length` (the method-style call \".length(...)\" applies only a function visible by that name)", b_list_length)
 
 fn register_unimported_tests():
     register_no_implicit_import_tests()
@@ -136,6 +136,6 @@ fn register_unimported_tests():
     register_primitive_tests()
     register_method_visibility_tests()
 
-with context test::suite()
+with context std::test::suite()
 register_unimported_tests()
-test::report()
+std::test::report()

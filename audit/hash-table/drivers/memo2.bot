@@ -9,9 +9,9 @@
 # result as memo.bot.
 #
 #   argv: N
-import list
-import str
-import char
+import std::list
+import std::str
+import std::char
 import table
 import keys
 
@@ -26,7 +26,7 @@ fn int_of(text: str) -> int errors IndexNotFound:
     fn digits(i: int, acc: int) -> int errors IndexNotFound:
         if i >= n:
             return acc
-        digits(i + 1, acc * 10 + char::scalar_value(text.char_at(i)) - 48)
+        digits(i + 1, acc * 10 + std::char::scalar_value(text.char_at(i)) - 48)
     digits(0, 0)
 
 fn successor(v: int) -> int:
@@ -53,8 +53,8 @@ fn all(memo: table::Table, i: int, n: int, sum: int) errors IndexNotFound:
     if i > n:
         return sum
     u = unknown(memo, i, [])
-    count = u.known + list::length(u.path)
-    all(inserted(memo, u.path, list::length(u.path) - 1, u.known + 1), i + 1, n, sum + count)
+    count = u.known + std::list::length(u.path)
+    all(inserted(memo, u.path, std::list::length(u.path) - 1, u.known + 1), i + 1, n, sum + count)
 
 fn main(args: List[str]) errors IndexNotFound:
     all(table::fresh(0), 1, int_of(args.get(1, "100")), 0)

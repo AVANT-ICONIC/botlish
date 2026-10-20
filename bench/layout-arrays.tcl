@@ -20,7 +20,7 @@
 #     element's field, an element store, a whole load of a 16-element row,
 #     of a 260-element array (Win32's MAX_PATH name) and of four records, a
 #     whole store of a 16-element row and of 260 elements; into byte
-#     storage, a whole-row binary::write, binary::parse and binary::emit of
+#     storage, a whole-row std::binary::write, std::binary::parse and std::binary::emit of
 #     a record with arrays.
 #   * The heap allocations of each program (Cranelift's counters) and per
 #     operation over its baseline: an element access allocates nothing, a
@@ -51,37 +51,37 @@ foreach {option value} $args {
     }
 }
 
-set prelude {import abi
-import abi::bytes
-import binary
-import binary::native
-import ffi::c
+set prelude {import std::abi
+import std::abi::bytes
+import std::binary
+import std::binary::native
+import std::ffi::c
 import ffi_fixture
-import list
+import std::list
 
 layout PT:
     size 4
     align 2
-    field x: binary::I16 at 0
-    field y: binary::U16 at 2
+    field x: std::binary::I16 at 0
+    field y: std::binary::U16 at 2
 
 layout ROW:
     size 64
     align 4
-    field n: binary::U32 at 0
-    field row: array 16 of binary::U16 at 4
+    field n: std::binary::U32 at 0
+    field row: array 16 of std::binary::U16 at 4
     field recs: array 4 of PT at 36
-    field tail: binary::U32 at 52
+    field tail: std::binary::U32 at 52
 
 layout HUGE:
     size 8192
     align 2
-    field xs: array 4096 of binary::U16 at 0
+    field xs: array 4096 of std::binary::U16 at 0
 
 layout NAME:
     size 520
     align 2
-    field name: array 260 of binary::U16 at 0
+    field name: array 260 of std::binary::U16 at 0
 
 }
 
@@ -99,37 +99,37 @@ proc Fn {n body} {
 # SETUP lines, then BODY lines as a collecting loop `i from 0 to n`, then
 # the List's length.
 proc Each {setup lines} {
-    return [concat $setup [list "xs = loop i from 0 to n:"] [lmap line $lines {string cat "    " $line}] [list "list::length(xs)"]]
+    return [concat $setup [list "xs = loop i from 0 to n:"] [lmap line $lines {string cat "    " $line}] [list "std::list::length(xs)"]]
 }
 
-set rowSetup {"p = ffi_fixture::memory\[ffi::c::Void\](abi::bytes::freeze(abi::bytes::zeroed(abi::usize(64))))" "v = binary::native::view(ROW, p)" "e = binary::native::edit(ROW, p)" "row = binary::load(v.row)"}
-set hugeSetup {"p = ffi_fixture::memory\[ffi::c::Void\](abi::bytes::freeze(abi::bytes::zeroed(abi::usize(8192))))" "v = binary::native::view(HUGE, p)" "e = binary::native::edit(HUGE, p)"}
-set nameSetup {"p = ffi_fixture::memory\[ffi::c::Void\](abi::bytes::freeze(abi::bytes::zeroed(abi::usize(520))))" "v = binary::native::view(NAME, p)" "e = binary::native::edit(NAME, p)" "name = binary::load(v.name)"}
-set bytesSetup {"d = abi::bytes::zeroed(abi::usize(64))" "b = abi::bytes::freeze(d)" "row = binary::parse(ROW, b).row" "s = binary::parse(ROW, b)"}
+set rowSetup {"p = ffi_fixture::memory\[std::ffi::c::Void\](std::abi::bytes::freeze(std::abi::bytes::zeroed(std::abi::usize(64))))" "v = std::binary::native::view(ROW, p)" "e = std::binary::native::edit(ROW, p)" "row = std::binary::load(v.row)"}
+set hugeSetup {"p = ffi_fixture::memory\[std::ffi::c::Void\](std::abi::bytes::freeze(std::abi::bytes::zeroed(std::abi::usize(8192))))" "v = std::binary::native::view(HUGE, p)" "e = std::binary::native::edit(HUGE, p)"}
+set nameSetup {"p = ffi_fixture::memory\[std::ffi::c::Void\](std::abi::bytes::freeze(std::abi::bytes::zeroed(std::abi::usize(520))))" "v = std::binary::native::view(NAME, p)" "e = std::binary::native::edit(NAME, p)" "name = std::binary::load(v.name)"}
+set bytesSetup {"d = std::abi::bytes::zeroed(std::abi::usize(64))" "b = std::abi::bytes::freeze(d)" "row = std::binary::parse(ROW, b).row" "s = std::binary::parse(ROW, b)"}
 
 proc programText {kind n} {
     # A program that makes a view or an edit is low-level (DIRECT-MODULES.md).
     set p [expr {[string match bytes-* $kind] ? "" : "direct module\n\n"}]$::prelude
     switch -- $kind {
         row-base        { append p [Fn $n [Each $::rowSetup {i}]] }
-        row-proven      { append p [Fn $n [Each $::rowSetup {"binary::element(v.row, 3)"}]] }
-        row-dynamic     { append p [Fn $n [Each $::rowSetup {"binary::element(v.row, k)"}]] }
-        row-record      { append p [Fn $n [Each $::rowSetup {"binary::element(v.recs, k).y"}]] }
-        row-store       { append p [Fn $n [Each $::rowSetup {"binary::store_element(e.row, k, 7)" i}]] }
-        row-load        { append p [Fn $n [Each $::rowSetup {"list::length(binary::load(v.row))"}]] }
-        row-load-recs   { append p [Fn $n [Each $::rowSetup {"list::length(binary::load(v.recs))"}]] }
-        row-store-whole { append p [Fn $n [Each $::rowSetup {"binary::store(e, ROW.row, row)" i}]] }
+        row-proven      { append p [Fn $n [Each $::rowSetup {"std::binary::element(v.row, 3)"}]] }
+        row-dynamic     { append p [Fn $n [Each $::rowSetup {"std::binary::element(v.row, k)"}]] }
+        row-record      { append p [Fn $n [Each $::rowSetup {"std::binary::element(v.recs, k).y"}]] }
+        row-store       { append p [Fn $n [Each $::rowSetup {"std::binary::store_element(e.row, k, 7)" i}]] }
+        row-load        { append p [Fn $n [Each $::rowSetup {"std::list::length(std::binary::load(v.row))"}]] }
+        row-load-recs   { append p [Fn $n [Each $::rowSetup {"std::list::length(std::binary::load(v.recs))"}]] }
+        row-store-whole { append p [Fn $n [Each $::rowSetup {"std::binary::store(e, ROW.row, row)" i}]] }
         huge-base       { append p [Fn $n [Each $::hugeSetup {i}]] }
-        huge-proven     { append p [Fn $n [Each $::hugeSetup {"binary::element(v.xs, 4000)"}]] }
-        huge-dynamic    { append p [Fn $n [Each $::hugeSetup {"binary::element(v.xs, k)"}]] }
-        huge-store      { append p [Fn $n [Each $::hugeSetup {"binary::store_element(e.xs, k, 7)" i}]] }
+        huge-proven     { append p [Fn $n [Each $::hugeSetup {"std::binary::element(v.xs, 4000)"}]] }
+        huge-dynamic    { append p [Fn $n [Each $::hugeSetup {"std::binary::element(v.xs, k)"}]] }
+        huge-store      { append p [Fn $n [Each $::hugeSetup {"std::binary::store_element(e.xs, k, 7)" i}]] }
         name-base       { append p [Fn $n [Each $::nameSetup {i}]] }
-        name-load       { append p [Fn $n [Each $::nameSetup {"list::length(binary::load(v.name))"}]] }
-        name-store      { append p [Fn $n [Each $::nameSetup {"binary::store(e, NAME.name, name)" i}]] }
+        name-load       { append p [Fn $n [Each $::nameSetup {"std::list::length(std::binary::load(v.name))"}]] }
+        name-store      { append p [Fn $n [Each $::nameSetup {"std::binary::store(e, NAME.name, name)" i}]] }
         bytes-base      { append p [Fn $n [Each $::bytesSetup {i}]] }
-        bytes-write     { append p [Fn $n [Each $::bytesSetup {"w = binary::write(d, ROW.row, row)" "abi::bytes::mutable_length(w).value"}]] }
-        bytes-parse     { append p [Fn $n [Each $::bytesSetup {"binary::parse(ROW, b).n"}]] }
-        bytes-emit      { append p [Fn $n [Each $::bytesSetup {"binary::emit(s) == b"}]] }
+        bytes-write     { append p [Fn $n [Each $::bytesSetup {"w = std::binary::write(d, ROW.row, row)" "std::abi::bytes::mutable_length(w).value"}]] }
+        bytes-parse     { append p [Fn $n [Each $::bytesSetup {"std::binary::parse(ROW, b).n"}]] }
+        bytes-emit      { append p [Fn $n [Each $::bytesSetup {"std::binary::emit(s) == b"}]] }
         default { error "unknown program $kind" }
     }
     return $p
@@ -167,19 +167,19 @@ proc ns {x} {
 set operations {
     "view: an element read, proven index (ROW.row[3], 16 x U16)" row-proven row-base
     "view: an element read, dynamic index (bounds check)" row-dynamic row-base
-    "view: a record element's field (binary::element(v.recs, k).y)" row-record row-base
+    "view: a record element's field (std::binary::element(v.recs, k).y)" row-record row-base
     "edit: an element store, dynamic index" row-store row-base
     "view: an element read, proven index, 4096-element array" huge-proven huge-base
     "view: an element read, dynamic index, 4096-element array" huge-dynamic huge-base
     "edit: an element store, dynamic index, 4096-element array" huge-store huge-base
-    "view: binary::load of a 16-element row" row-load row-base
-    "view: binary::load of four records" row-load-recs row-base
-    "view: binary::load of a 260-element array" name-load name-base
-    "edit: binary::store of a 16-element row (a loaded List)" row-store-whole row-base
-    "edit: binary::store of a 260-element array (a loaded List)" name-store name-base
-    "bytes: binary::write of a 16-element row (a 64-byte record)" bytes-write bytes-base
-    "bytes: binary::parse of the 64-byte record (a row, four records)" bytes-parse bytes-base
-    "bytes: binary::emit of the 64-byte record" bytes-emit bytes-base
+    "view: std::binary::load of a 16-element row" row-load row-base
+    "view: std::binary::load of four records" row-load-recs row-base
+    "view: std::binary::load of a 260-element array" name-load name-base
+    "edit: std::binary::store of a 16-element row (a loaded List)" row-store-whole row-base
+    "edit: std::binary::store of a 260-element array (a loaded List)" name-store name-base
+    "bytes: std::binary::write of a 16-element row (a 64-byte record)" bytes-write bytes-base
+    "bytes: std::binary::parse of the 64-byte record (a row, four records)" bytes-parse bytes-base
+    "bytes: std::binary::emit of the 64-byte record" bytes-emit bytes-base
 }
 
 puts "Fixed layout arrays: performance (n = $n operations per program; best of $runs runs)\n"

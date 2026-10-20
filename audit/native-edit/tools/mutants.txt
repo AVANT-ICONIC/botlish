@@ -106,11 +106,11 @@ proc core::binary::writeForeign {data path pointer} {
 @@ signed-as-unsigned-interp the reference byte write encodes every scalar as unsigned
 ## core/binary.tcl
 <<<<
-    set bytes [RecordBytes binary::write $data $path]
+    set bytes [RecordBytes std::binary::write $data $path]
     set n [core::value::intOf $value]
     set piece [ScalarPiece $n $sign $width $endian]
 ====
-    set bytes [RecordBytes binary::write $data $path]
+    set bytes [RecordBytes std::binary::write $data $path]
     set n [core::value::intOf $value]
     set piece [ScalarPiece $n u $width $endian]
 >>>>
@@ -180,10 +180,10 @@ proc core::binary::writeForeign {data path pointer} {
 @@ unrelated-bytes-lost-interp the reference byte write starts from zeroed bytes, not from its operand
 ## core/binary.tcl
 <<<<
-    set bytes [RecordBytes binary::write $data $path]
+    set bytes [RecordBytes std::binary::write $data $path]
     set n [core::value::intOf $value]
 ====
-    set bytes [binary format x[string length [RecordBytes binary::write $data $path]]]
+    set bytes [binary format x[string length [RecordBytes std::binary::write $data $path]]]
     set n [core::value::intOf $value]
 >>>>
 
@@ -221,10 +221,10 @@ proc core::binary::writeForeign {data path pointer} {
 @@ null-encoded-nonzero-interp the reference foreign write encodes null as all-ones
 ## core/binary.tcl
 <<<<
-    set bytes [RecordBytes binary::write_foreign $data $path]
+    set bytes [RecordBytes std::binary::write_foreign $data $path]
     set bits [expr {$address & ((1 << (8 * $width)) - 1)}]
 ====
-    set bytes [RecordBytes binary::write_foreign $data $path]
+    set bytes [RecordBytes std::binary::write_foreign $data $path]
     set bits [expr {$address == 0 ? (1 << (8 * $width)) - 1 : $address & ((1 << (8 * $width)) - 1)}]
 >>>>
 
@@ -278,10 +278,10 @@ proc core::binary::writeForeign {data path pointer} {
 
 # --- authority ----------------------------------------------------------------
 
-@@ edit-not-direct binary::native is not designated direct: an edit needs no acknowledged authority
+@@ edit-not-direct std::binary::native is not designated direct: an edit needs no acknowledged authority
 ## core/binary.tcl
 <<<<
-core::native::declareDirectNamespace binary::native
+core::native::declareDirectNamespace std::binary::native
 ====
 >>>>
 
@@ -297,7 +297,7 @@ core::native::declareDirectNamespace binary::native
             || [ReprUnionPath $field] ne "none" || $op eq "read"} {
 >>>>
 
-@@ ordinary-write-of-pointer an ordinary binary::write accepts a pointer field: byte serialization encodes pointers
+@@ ordinary-write-of-pointer an ordinary std::binary::write accepts a pointer field: byte serialization encodes pointers
 ## hir/layouts.tcl
 <<<<
                 write {
@@ -309,7 +309,7 @@ core::native::declareDirectNamespace binary::native
                         lappend problems [list LAYOUT-NATIVE-ONLY \
 >>>>
 
-@@ foreign-write-of-scalar binary::write_foreign accepts an ordinary field
+@@ foreign-write-of-scalar std::binary::write_foreign accepts an ordinary field
 ## hir/layouts.tcl
 <<<<
                 write_foreign {
@@ -319,7 +319,7 @@ core::native::declareDirectNamespace binary::native
                     if {0} {
 >>>>
 
-@@ written-pointer-bytes-parse binary::parse of a pointer layout is accepted, so bytes holding a written pointer decode into one
+@@ written-pointer-bytes-parse std::binary::parse of a pointer layout is accepted, so bytes holding a written pointer decode into one
 ## hir/layouts.tcl
 <<<<
         } elseif {$id ne "" && [declared $id] && [NativeOnly $id]} {
@@ -331,7 +331,7 @@ core::native::declareDirectNamespace binary::native
             if {$op eq "parse"} {
 >>>>
 
-@@ foreign-write-moves-pointer binary::write_foreign takes ownership of the pointer it encodes
+@@ foreign-write-moves-pointer std::binary::write_foreign takes ownership of the pointer it encodes
 ## core/binary.tcl
 <<<<
     -runtime {bytestore-alloc} -ownership {observe observe observe} -errors {LayoutExtentMismatch LayoutLengthMismatch} \
@@ -341,7 +341,7 @@ core::native::declareDirectNamespace binary::native
     -bounds {extents 2} -layout {output 0 path 1 value 2 op write_foreign} -nomethod 1
 >>>>
 
-@@ store-moves-pointer binary::store takes ownership of the pointer it stores
+@@ store-moves-pointer std::binary::store takes ownership of the pointer it stores
 ## core/binary.tcl
 <<<<
     -param-types {any str any} -result-type unit -ownership {observe observe observe} \

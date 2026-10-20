@@ -282,9 +282,9 @@ test vt-branch-frontier-values {the branch probe agrees on every execution} -bod
 test vt-positional-list-uses-the-same-model {a fixed-shape positional product List is one more descriptor of the same transport model; arbitrary Lists never participate} -body {
     proc listChain {w e} {
         set idx [lrange {0 1 2 3 4 5 6 7 8 9} 0 [expr {$w - 1}]]
-        set uses [join [lmap i $idx {string cat "list::at(r, $i)"}] { + }]
+        set uses [join [lmap i $idx {string cat "std::list::at(r, $i)"}] { + }]
         set lit "\[[join [lmap i $idx {string cat "i + $i"}] {, }]\]"
-        set chain "import list\nfn fwd0(r, k) errors IndexNotFound:\n    $uses + k\n"
+        set chain "import std::list\nfn fwd0(r, k) errors IndexNotFound:\n    $uses + k\n"
         for {set k 1} {$k < $e} {incr k} { append chain "fn fwd${k}(r, k) errors IndexNotFound:\n    fwd[expr {$k - 1}](r, k)\n" }
         return "$chain
 fn drive(i, n, acc) errors IndexNotFound:
@@ -428,13 +428,13 @@ drive(0, 10, 0)
 } -result {250 {structnew 1 structget 3 callmulti 0 retmulti 0} {{} closed:independent-use} {{inner independent-use}}}
 
 test vt-nested-stored-inner {an inner value stored in a List keeps its own object} -body {
-    set source {import list
+    set source {import std::list
 fn drive(i, n, acc):
     if i >= n:
         return acc
     r = {a: i, inner: {c: i + 2, d: i + 3}}
-    xs = list::append([], r.inner)
-    drive(i + 1, n, acc + r.a + list::length(xs))
+    xs = std::list::append([], r.inner)
+    drive(i + 1, n, acc + r.a + std::list::length(xs))
 drive(0, 10, 0)
 }
     list [vtValue $source] [vtOps $source]
@@ -453,20 +453,20 @@ drive(0, 10, 0)
 } -result {185 {structnew 1 structget 1 callmulti 0 retmulti 0}}
 
 test vt-nested-materialization-rebuilds {materializing an outer with an opened inner rebuilds the inner object first: two objects, as the physical form} -body {
-    set source {import list
+    set source {import std::list
 fn drive(i, n, acc):
     if i >= n:
         return acc
     r = {a: i, inner: {c: i + 2, d: i + 3}}
-    xs = list::append([], r)
-    drive(i + 1, n, acc + r.a + r.inner.c + list::length(xs))
+    xs = std::list::append([], r)
+    drive(i + 1, n, acc + r.a + r.inner.c + std::list::length(xs))
 drive(0, 10, 0)
 }
     list [vtValue $source] [vtOps $source] [vtOps $source -struct-opt 0]
 } -result {120 {structnew 2 structget 0 callmulti 0 retmulti 0} {structnew 2 structget 3 callmulti 0 retmulti 0}}
 
 test vt-nested-identity {an opened named inner struct is rebuilt with its own nominal identity} -body {
-    set source {import list
+    set source {import std::list
 struct Pt:
     x: int
     y: int
@@ -475,8 +475,8 @@ struct Seg:
     q: Pt
 fn run(i: int):
     s = Seg {p: Pt {x: i, y: 1}, q: Pt {x: 2, y: i}}
-    t = list::append([], s)
-    [s.p.x, s.q.y, list::at(t, 0), list::at(t, 0) == Seg {p: Pt {x: i, y: 1}, q: Pt {x: 2, y: i}}]
+    t = std::list::append([], s)
+    [s.p.x, s.q.y, std::list::at(t, 0), std::list::at(t, 0) == Seg {p: Pt {x: i, y: 1}, q: Pt {x: 2, y: i}}]
 run(7)
 }
     list [vtValue $source] [vtNew $source]
@@ -567,21 +567,21 @@ test vt-deterministic-planning {the plan is a pure function of the program: lowe
 # GC: frontier materialization and nested opening under collection at every
 # allocation site
 
-set vtGc(frontier-strings) {import str
+set vtGc(frontier-strings) {import std::str
 fn f0(r, k):
-    str::concat(r.a, r.b) + k
+    std::str::concat(r.a, r.b) + k
 fn f1(r, k):
     f0(r, k)
 fn f2(r, k):
     f1(r, k)
 fn run(i):
-    r = {a: str::concat("a", "b"), b: str::concat("c", "d"), c: i, d: [1, 2], e: str::concat("e", "f"), f: i + 1}
-    junk = [str::concat("j", "k"), str::concat("m", "n")]
+    r = {a: std::str::concat("a", "b"), b: std::str::concat("c", "d"), c: i, d: [1, 2], e: std::str::concat("e", "f"), f: i + 1}
+    junk = [std::str::concat("j", "k"), std::str::concat("m", "n")]
     local = r.c + r.f
     [local, r.d, r.e, junk, r.a]
 run(2)
 }
-set vtGc(frontier-after-calls) {import str
+set vtGc(frontier-after-calls) {import std::str
 fn use(r, k):
     [r.a, r.f, k]
 fn f1(r, k):
@@ -591,42 +591,42 @@ fn f2(r, k):
 fn f3(r, k):
     f2(r, k)
 fn run(i):
-    r = {a: str::concat("a", "b"), b: i, c: [str::concat("x", "y")], d: i, e: i, f: str::concat("t", "u")}
-    junk = [str::concat("j", "k"), str::concat("m", "n"), str::concat("o", "p")]
+    r = {a: std::str::concat("a", "b"), b: i, c: [std::str::concat("x", "y")], d: i, e: i, f: std::str::concat("t", "u")}
+    junk = [std::str::concat("j", "k"), std::str::concat("m", "n"), std::str::concat("o", "p")]
     [f3(r, i), junk, r.c]
 run(2)
 }
-set vtGc(nested-strings) {import str
+set vtGc(nested-strings) {import std::str
 fn mk(i):
-    {s: str::concat("a", "b"), inner: {t: str::concat("c", "d"), u: [str::concat("e", "f")]}, n: i}
+    {s: std::str::concat("a", "b"), inner: {t: std::str::concat("c", "d"), u: [std::str::concat("e", "f")]}, n: i}
 fn run(i):
     r = mk(i)
-    junk = [str::concat("j", "k"), str::concat("m", "n")]
+    junk = [std::str::concat("j", "k"), std::str::concat("m", "n")]
     [r.s, r.inner.t, r.inner.u, r.n, junk]
 run(4)
 }
-set vtGc(nested-list-mutarray) {import mutable_array
-import str
+set vtGc(nested-list-mutarray) {import std::mutable_array
+import std::str
 fn mk(i):
-    m = mutable_array::create(2, "z")
-    mutable_array::set(m, 0, str::concat("q", "r"))
-    {arr: m, inner: {items: [str::concat("a", "b"), str::concat("c", "d")], tag: str::concat("t", "g")}}
+    m = std::mutable_array::create(2, "z")
+    std::mutable_array::set(m, 0, std::str::concat("q", "r"))
+    {arr: m, inner: {items: [std::str::concat("a", "b"), std::str::concat("c", "d")], tag: std::str::concat("t", "g")}}
 fn run(i):
     r = mk(i)
-    junk = str::concat(str::concat("j", "k"), "m")
-    [mutable_array::get(r.arr, 0, ""), r.inner.items, r.inner.tag, junk]
+    junk = std::str::concat(std::str::concat("j", "k"), "m")
+    [std::mutable_array::get(r.arr, 0, ""), r.inner.items, r.inner.tag, junk]
 run(1)
 }
-set vtGc(nested-materialized-later) {import list
-import str
+set vtGc(nested-materialized-later) {import std::list
+import std::str
 fn run(i):
-    r = {s: str::concat("a", "b"), inner: {t: str::concat("c", "d"), u: [str::concat("e", "f")]}}
-    junk = [str::concat("j", "k"), str::concat("m", "n"), str::concat("o", "p")]
-    xs = list::append([], r)
-    [r.s, r.inner.t, list::at(xs, 0).inner.u, junk]
+    r = {s: std::str::concat("a", "b"), inner: {t: std::str::concat("c", "d"), u: [std::str::concat("e", "f")]}}
+    junk = [std::str::concat("j", "k"), std::str::concat("m", "n"), std::str::concat("o", "p")]
+    xs = std::list::append([], r)
+    [r.s, r.inner.t, std::list::at(xs, 0).inner.u, junk]
 run(1)
 }
-set vtGc(branch-specific) {import str
+set vtGc(branch-specific) {import std::str
 fn f0(r, k):
     [r.a, r.f, k]
 fn f1(r, k):
@@ -636,8 +636,8 @@ fn f2(r, k):
 fn f3(r, k):
     f2(r, k)
 fn run(i):
-    r = {a: str::concat("a", "b"), b: i, c: i, d: i, e: i, f: str::concat("t", "u")}
-    junk = [str::concat("j", "k"), str::concat("m", "n")]
+    r = {a: std::str::concat("a", "b"), b: i, c: i, d: i, e: i, f: std::str::concat("t", "u")}
+    junk = [std::str::concat("j", "k"), std::str::concat("m", "n")]
     v = if i >= 2:
         f3(r, i)
     else:
@@ -645,12 +645,12 @@ fn run(i):
     [v, junk]
 run(3)
 }
-set vtGc(cyclic) {import str
+set vtGc(cyclic) {import std::str
 fn spin(s, i, n):
     if i >= n:
         return [s.a, s.b, s.c]
-    spin({a: str::concat(s.a, "x"), b: s.b, c: [i]}, i + 1, n)
-spin({a: "a", b: str::concat("b", "c"), c: [0]}, 0, 3)
+    spin({a: std::str::concat(s.a, "x"), b: s.b, c: [i]}, i + 1, n)
+spin({a: "a", b: std::str::concat("b", "c"), c: [0]}, 0, 3)
 }
 foreach name [lsort [array names vtGc]] {
     test vt-gc-$name {pointer-bearing fields survive collection at every allocation site} -body {

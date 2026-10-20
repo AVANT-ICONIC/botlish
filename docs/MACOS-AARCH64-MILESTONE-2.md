@@ -21,9 +21,9 @@ MACOS-AARCH64-MILESTONE-1.md.
   `aarch64-apple-darwin`). A build records the target it depended on in the
   HIR. Interchange, the cache and the native driver refuse to take one
   target's HIR or NIR for another's, however much the two share.
-- **Linux platform modules no longer resolve for macOS.** `import linux::sys`
+- **Linux platform modules no longer resolve for macOS.** `import std::linux::sys`
   for `macos-aarch64` is `UNSUPPORTED-PLATFORM` at the import, where it used
-  to load `lib/linux/sys.aarch64.bot`. Portable architecture-specific
+  to load `stdlib/linux/sys.aarch64.bot`. Portable architecture-specific
   namespaces still work on macOS.
 - **Foreign C signatures select the target triple's C convention
   explicitly:** `apple_aarch64` on the macOS runner, observed in CLIF.
@@ -50,10 +50,10 @@ What the code did at a97b070, the branch's base:
   Darwin/arm64 to `macos-aarch64` correctly.
 - **Module selection.** surface/modules.tcl chose an architecture-specific
   module by the target's architecture only, "never by operating system".
-  So `linux::sys` resolved for `macos-aarch64` (and `windows-x86_64`) to
+  So `std::linux::sys` resolved for `macos-aarch64` (and `windows-x86_64`) to
   Linux's file.
 - **The HIR recorded no target.** The C scalars carried their target in
-  their declarations, but a program importing `linux::sys` carried no trace
+  their declarations, but a program importing `std::linux::sys` carried no trace
   of the architecture that chose it.
 - **Interchange.** A `.hirx` decoded under any target. main.tcl ignored
   `-target` for a `.hirx`.
@@ -64,7 +64,7 @@ What the code did at a97b070, the branch's base:
   `long`, and a `macos-x86_64` one on Linux x86-64. The driver built its ISA
   from the host triple, so foreign calls used the host's convention
   implicitly (`module.make_signature()`).
-- **A host outside the table** importing `ffi::c` got a raw `core::cabi:
+- **A host outside the table** importing `std::ffi::c` got a raw `core::cabi:
   unknown C ABI target ""` error: the declarations were made before the
   UNKNOWN-TARGET check.
 - **Tests inferred plain char's signedness from the architecture alone:**
@@ -76,17 +76,17 @@ sharing this checkout's driver):
 
 | Probe | a97b070 | this milestone |
 |---|---|---|
-| `import linux::sys` compiled for macos-aarch64 | compiles, loads `sys.aarch64.bot` | `UNSUPPORTED-PLATFORM`: `namespace "linux::sys" belongs to the Linux platform ..., which is unavailable for target macos-aarch64 (macOS on aarch64) ...` |
-| a linux-aarch64 `.hirx` with plain char, decoded as a macos-aarch64 compilation | accepted: `ffi::c::Char` is `interval 0 255` under "macOS" | `HIR INTERCHANGE TARGET`: `it was built for target linux-aarch64, not macos-aarch64 ...` |
+| `import std::linux::sys` compiled for macos-aarch64 | compiles, loads `sys.aarch64.bot` | `UNSUPPORTED-PLATFORM`: `namespace "std::linux::sys" belongs to the Linux platform ..., which is unavailable for target macos-aarch64 (macOS on aarch64) ...` |
+| a linux-aarch64 `.hirx` with plain char, decoded as a macos-aarch64 compilation | accepted: `std::ffi::c::Char` is `interval 0 255` under "macOS" | `HIR INTERCHANGE TARGET`: `it was built for target linux-aarch64, not macos-aarch64 ...` |
 | a macos-x86_64 program run natively on Linux x86-64 | runs (value 1) | `NATIVE TARGET`: `... this host is x86_64-unknown-linux-gnu. Both are x86_64, but a matching architecture is not a matching target ...` |
 | a windows-x86_64 program (32-bit `long`) run natively on Linux | runs (2147483647) | `NATIVE TARGET` |
-| `import ffi::c` on a riscv64 host | raw `core::cabi: unknown C ABI target ""` (error code NONE) | `UNKNOWN-TARGET`: `namespace "ffi::c" needs a C ABI target ... compile with -target` |
+| `import std::ffi::c` on a riscv64 host | raw `core::cabi: unknown C ABI target ""` (error code NONE) | `UNKNOWN-TARGET`: `namespace "std::ffi::c" needs a C ABI target ... compile with -target` |
 
 On the macOS runner, milestone 1's probe of examples/io/hello.bot compiled
-and failed at run time with `linux::abi::aarch64::syscall needs a Linux
+and failed at run time with `std::linux::abi::aarch64::syscall needs a Linux
 AArch64 target (NATIVE UNSUPPORTED value)`. Now the same program
 (native-status's `linux-syscall` probe) is refused at compile time:
-`<input>:4:8: namespace "linux" belongs to the Linux platform ...
+`<input>:4:8: namespace "std::linux" belongs to the Linux platform ...
 (SURFACE MODULE UNSUPPORTED-PLATFORM)`.
 
 ## 2. Changes by file and subsystem
@@ -94,7 +94,7 @@ AArch64 target (NATIVE UNSUPPORTED value)`. Now the same program
 | Subsystem | Files | Change |
 |---|---|---|
 | Target table | core/cabi.tcl | `triple` in every row; `systems` (OS display names); `platforms` (the designated platform namespace trees: `linux`); `operatingSystems`, `systemName`, `platformOf`, `hostArchitecture` (factored out of `hostTarget`), `systemTarget` |
-| Module resolution | surface/modules.tcl | `PlatformOf`, `PlatformCheck` in `ResolveModule` (after the application-collision check); `PlatformTarget` (for tools that run programs of every platform); the loader's `targetRead` (set by an architecture-specific file, a platform namespace, ffi::c); `BuildProgram` stamps the HIR's `target`; UNKNOWN-TARGET for ffi::c checked before its declarations |
+| Module resolution | surface/modules.tcl | `PlatformOf`, `PlatformCheck` in `ResolveModule` (after the application-collision check); `PlatformTarget` (for tools that run programs of every platform); the loader's `targetRead` (set by an architecture-specific file, a platform namespace, std::ffi::c); `BuildProgram` stamps the HIR's `target`; UNKNOWN-TARGET for std::ffi::c checked before its declarations |
 | HIR target | hir/cabi.tcl, hir/read.tcl | `HasNamespaceTypes`, `targetOf`, `TargetMismatch`; HIR text's target from its C scalars |
 | Interchange | hir/interchange.tcl, main.tcl | `decode`/`readFile -target`; `{HIR INTERCHANGE TARGET}`; main.tcl passes its `-target` (or the host's) for `.hirx` inputs and documents the target rules |
 | Cache | surface/cache.tcl | a hit is decoded with `-target`; the header states the target rules |
@@ -176,7 +176,7 @@ their target:
 | long / unsigned long | 64 | s / u | `{64 1}` / `{64 0}` | the same |
 | long long / unsigned long long | 64 | s / u | `{64 1}` / `{64 0}` | the same |
 | pointer | 64 | -- | `pointer 64` | 64 |
-| size_t | 64 | unsigned | (no ffi::c scalar; the pointer width) | `sizeT 64 sizeTSigned 0` |
+| size_t | 64 | unsigned | (no std::ffi::c scalar; the pointer width) | `sizeT 64 sizeTSigned 0` |
 
 The compiler's columns are compiler-owned (the table; `tm-macos-aarch64-scalars`
 pins them on any host). Apple clang's are tests/platform/cabi-facts.c,
@@ -186,10 +186,10 @@ The oracle runs on and checks its own host's row, never another target's,
 so the Linux host compiler is never taken for macOS's.
 
 The regression case is plain `char`: `[0, 255]` for linux-aarch64 and
-`[-128, 127]` for macos-aarch64. `f(200)` with `f(x: ffi::c::Char)`
+`[-128, 127]` for macos-aarch64. `f(200)` with `f(x: std::ffi::c::Char)`
 compiles for one and is a `TYPE` error for the other, and `f(0 - 1)` the
 reverse (`tm-default-and-explicit-target`). `size_t` is deliberately not an
-ffi::c scalar (C-ABI-TYPES.md, "What is not here"); the oracle checks that
+std::ffi::c scalar (C-ABI-TYPES.md, "What is not here"); the oracle checks that
 it is the pointer's width and unsigned.
 
 ## 6. Cranelift calling-convention selection
@@ -224,8 +224,8 @@ Checked three ways:
 - **`tm-c-call-conv-of-each-target`**, on any host, through the driver's
   `target` report for each table row.
 - **On the macOS runner,** native-status's `c-convention` probe compiles
-  `extern c fn labs(x: ffi::c::Long)` and `extern c fn abs(x:
-  ffi::c::SChar)` to CLIF and reads `labs apple_aarch64 abs apple_aarch64`;
+  `extern c fn labs(x: std::ffi::c::Long)` and `extern c fn abs(x:
+  std::ffi::c::SChar)` to CLIF and reads `labs apple_aarch64 abs apple_aarch64`;
   `tm-foreign-signature-convention` also checks the `(i8 sext) -> i32`
   signature there. The narrow parameter is `SChar`, signed on every
   target, so that the program means the same thing on each host: with
@@ -249,8 +249,8 @@ The rule (surface/modules.tcl, "Platform namespaces"): the target table
 designates the standard namespace trees that are an operating system's
 platform interface (core/cabi.tcl's `platforms`, read by
 `core::cabi::platformOf`): today `linux`, so the `linux` namespace and
-everything under it (`linux::sys`, `linux::io`, `linux::path`,
-`linux::abi::x86_64`, `linux::abi::aarch64`) are Linux's. It follows the
+everything under it (`std::linux::sys`, `std::linux::io`, `std::linux::path`,
+`std::linux::abi::x86_64`, `std::linux::abi::aarch64`) are Linux's. It follows the
 module layout, which already said "the module's own namespace says which
 OS it is for"; nothing was renamed and no module file changed. It is a
 designation, not a spelling rule: the first version reserved every
@@ -262,7 +262,7 @@ too) -- a stdlib module may be called `windows` for any reason
 (milestone 9) is designated the same way.
 
 - **A target of another operating system** gets `UNSUPPORTED-PLATFORM` at
-  the import -- before any file is chosen, so `linux::sys` never becomes
+  the import -- before any file is chosen, so `std::linux::sys` never becomes
   `sys.aarch64.bot` for macOS -- naming the platform, the target and the
   remedy (`compile for a Linux target (-target linux-aarch64) or import no
   Linux namespace`). The same holds for `macos-x86_64`, `windows-x86_64`
@@ -274,7 +274,7 @@ too) -- a stdlib module may be called `windows` for any reason
   linux-aarch64, `sys.x86_64.bot` for linux-x86_64
   (`tm-linux-platform-on-linux`, `lst-linux-sys-selected-by-target`).
 - **Portable architecture-specific namespaces** are every operating
-  system's. `abi::aarch64` and `abi::x86_64` compile and run for
+  system's. `std::abi::aarch64` and `std::abi::x86_64` compile and run for
   macos-aarch64 and windows-x86_64, and a private `demo::arch` gives
   macos-aarch64 its AArch64 file and macos-x86_64 its x86-64 file
   (`tm-portable-architecture-namespaces`,
@@ -296,7 +296,7 @@ The loader is the only reader, in exactly three places:
 
 - an architecture-specific module's file (ModuleFile);
 - a platform namespace's check (PlatformCheck);
-- ffi::c's scalars (NamespaceTypeDecls).
+- std::ffi::c's scalars (NamespaceTypeDecls).
 
 A HIR that read none is every target's: it records "" and is identical for
 every target (`tm-hir-records-its-target`). HIR text records the target its
@@ -431,7 +431,7 @@ is whether anything moved:
 
   The two Tcl 9.0.4 artefacts (argv, native-tcl-unicode) are gone, as since
   run 5. The one exception was static-compile.test: 3 failures where the
-  census had 2. The third, `sc-tx-context`, compiled a `linux::io` program
+  census had 2. The third, `sc-tx-context`, compiled a `std::linux::io` program
   for the host's target; it was fixed in 95f0069, and both of its other
   failures are native coroutines (`sc-affine-rollback`,
   `sc-affine-rollback-next-block`). Run 12 (below) shows the file back at
@@ -481,7 +481,7 @@ ok   jit             value 6765
 ok   gc-frame-walk   value str xyxy...
 ok   stack-overflow  error NATIVE BUG native backend failed: child killed: SIGABRT  (unchanged: milestone 5)
 ok   coroutine       error NATIVE UNSUPPORTED value native coroutines need stack switching ...  (unchanged: milestone 4)
-ok   linux-syscall   error SURFACE MODULE UNSUPPORTED-PLATFORM <input>:4:8: namespace "linux" belongs to the Linux platform ...
+ok   linux-syscall   error SURFACE MODULE UNSUPPORTED-PLATFORM <input>:4:8: namespace "std::linux" belongs to the Linux platform ...
 ok   c-call          error NATIVE LINK executable emission requires Linux glibc on x86_64 or aarch64  (unchanged: milestone 6/7)
 ok   executable      error NATIVE AOT executable emission requires Linux glibc on x86_64 or aarch64  (unchanged: milestone 6)
 ok   target          value format macho c-call-conv apple_aarch64 runs 1
@@ -579,11 +579,11 @@ them. main (e414ad5) is contained in the branch.
   was weakened, skipped by OS or added to `notYet`.
 - **A plain-char assumption of this milestone's own,** found by the first
   tests-arm64 run on the branch (39128820551): `tm-foreign-signature-convention`
-  declared `abs(x: ffi::c::Char)` and called `abs(0 - 3)`, a type error on
+  declared `abs(x: std::ffi::c::Char)` and called `abs(0 - 3)`, a type error on
   linux-aarch64, where plain char is unsigned (`argument 1 of abs cannot be
-  proven to satisfy ffi::c::Char`). It was the only failure of the interp
+  proven to satisfy std::ffi::c::Char`). It was the only failure of the interp
   job and the cranelift-generic coverage job. The test and native-status's
-  `c-convention` probe now declare `ffi::c::SChar`, signed on every target,
+  `c-convention` probe now declare `std::ffi::c::SChar`, signed on every target,
   and still check the `(i8 sext)` parameter: the facts were right and the
   test was wrong.
 - **The plain-char oracles** of c-ffi.test and the C FFI fuzzer now read the
@@ -614,8 +614,8 @@ them. main (e414ad5) is contained in the branch.
 - **A second merge of main** (native layout views, NATIVE-LAYOUT-VIEWS.md)
   needed no change beyond the two new test-name blocks of tcl-names.txt.
   A view's pointer width is the compilation's target's
-  (`hir::cabi::CompilationTarget`, read from the ffi::c scalars). A HIR
-  that reads it imports ffi::c, so it records its target as this milestone
+  (`hir::cabi::CompilationTarget`, read from the std::ffi::c scalars). A HIR
+  that reads it imports std::ffi::c, so it records its target as this milestone
   requires. All 769 edits of every harness's mutants still apply to the
   merged tree.
 - **One equivalent mutant left out.** Removing the explicit `sig.call_conv =

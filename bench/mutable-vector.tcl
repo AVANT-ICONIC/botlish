@@ -49,10 +49,10 @@ foreach {option value} $args {
 }
 
 set C "Coroutine{args: \[Cmd\], return: Ev}"
-set prelude "import coroutine
-import list
-import mutable_array
-import mutable_vector
+set prelude "import std::coroutine
+import std::list
+import std::mutable_array
+import std::mutable_vector
 
 struct P:
     x: int
@@ -78,20 +78,20 @@ fn make(k: int) -> $C:
     step
 
 fn ints() -> MutableVector\[int\]:
-    mutable_vector::from_list(\[\])
+    std::mutable_vector::from_list(\[\])
 
 fn points() -> MutableVector\[P\]:
-    mutable_vector::from_list(\[\])
+    std::mutable_vector::from_list(\[\])
 
 fn queue() -> MutableVector\[$C\]:
-    mutable_vector::from_list(\[\])
+    std::mutable_vector::from_list(\[\])
 
 fn range(n: int) -> List\[int\]:
     loop i from 0 to n:
         i
 
 fn ints_of(n: int) -> MutableVector\[int\]:
-    mutable_vector::from_list(range(n))
+    std::mutable_vector::from_list(range(n))
 
 fn queue_of(n: int) -> MutableVector\[$C\]:
     q = queue()
@@ -124,23 +124,23 @@ proc programText {kind n} {
             append p [Fn $n [concat [Each {i}] {n}]]
         }
         list-build {
-            append p [Fn $n {"xs = range(n)" "list::length(xs)"}]
+            append p [Fn $n {"xs = range(n)" "std::list::length(xs)"}]
         }
         list-iterate {
-            append p [Fn $n {"xs = range(n)" "ys = loop x in xs:" "    x" "list::length(ys)"}]
+            append p [Fn $n {"xs = range(n)" "ys = loop x in xs:" "    x" "std::list::length(ys)"}]
         }
         from-list {
-            append p [Fn $n {"v = mutable_vector::from_list(range(n))" "v.length()"}]
+            append p [Fn $n {"v = std::mutable_vector::from_list(range(n))" "v.length()"}]
         }
         vector-iterate {
-            append p [Fn $n {"v = ints_of(n)" "ys = loop x in v:" "    x" "list::length(ys)"}]
+            append p [Fn $n {"v = ints_of(n)" "ys = loop x in v:" "    x" "std::list::length(ys)"}]
         }
         push-int {
             append p [Fn $n [concat {"v = ints()"} [Each {"v.push(i)"}] {"v.length()"}]]
         }
         array-set {
-            append p [Fn $n [concat {"a = mutable_array::create(n, 0)"} \
-                [Each {"mutable_array::set(a, i, i):" "    on IndexNotFound:" "        unit"}] {n}]]
+            append p [Fn $n [concat {"a = std::mutable_array::create(n, 0)"} \
+                [Each {"std::mutable_array::set(a, i, i):" "    on IndexNotFound:" "        unit"}] {n}]]
         }
         push-struct {
             append p [Fn $n [concat {"v = points()"} [Each {"v.push(P {x: i, y: i})"}] {"v.length()"}]]
@@ -149,7 +149,7 @@ proc programText {kind n} {
             append p [Fn $n {"v = ints_of(n)" "v.push(0)" "v.length()"} 1]
         }
         at {
-            append p [Fn $n [concat {"v = ints_of(n)" "v.push(0)"} [Each {"mutable_vector::at(v, i)"}] {"v.length()"}] 1]
+            append p [Fn $n [concat {"v = ints_of(n)" "v.push(0)"} [Each {"std::mutable_vector::at(v, i)"}] {"v.length()"}] 1]
         }
         pop {
             append p [Fn $n [concat {"v = ints_of(n)" "v.push(0)"} [Each {"v.pop()"}] {"v.length()"}] 1]
@@ -176,7 +176,7 @@ proc programText {kind n} {
             append p [Fn $n {"q = queue_of(n)" "q.clear()" "q.length()"}]
         }
         affine-consume {
-            append p [Fn $n {"q = queue_of(n)" "ys = loop c in q:" "    1" "list::length(ys)"}]
+            append p [Fn $n {"q = queue_of(n)" "ys = loop c in q:" "    1" "std::list::length(ys)"}]
         }
         default {
             if {[regexp {^(copy|copy-write|copy-base)-([0-9]+)$} $kind -> what size]} {
@@ -196,7 +196,7 @@ proc programText {kind n} {
                 append p "fn run(queue: MutableVector\[$::C\]) -> int errors IndexNotFound:\n"
                 append p "    done = loop:\n        if queue.empty?():\n            break\n"
                 append p "        step = $take\n        e = step(Cmd {v: 1})\n"
-                append p "        if not coroutine::done?(step):\n            queue.push(step)\n    1\n"
+                append p "        if not std::coroutine::done?(step):\n            queue.push(step)\n    1\n"
                 append p "fn spawn(n: int, k: int) -> MutableVector\[$::C\]:\n    q = queue()\n"
                 append p "    loop i from 0 to n:\n        coroutine {step} = steps(k)\n        q.push(step)\n    q\n"
                 if {$how eq "batch"} {

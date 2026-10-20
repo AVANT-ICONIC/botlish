@@ -457,14 +457,14 @@ test sr-random-programs-agree {random legal programs with shadowing and closures
 # ---------------------------------------------------------------------------
 # Modules: the external boundary and the current module's own names
 
+# Runs SCRIPT with a fresh scratch application directory as `dir`: a module
+# written there beside the entry program is an application module
+# (IMPORTS.md, "Application modules"); the standard library is not touched.
 proc withScratchLibrary {script} {
-    set saved $::core::libraryDir
     set dir [tcltest::makeDirectory sr-scratch-[pid]-[incr ::srScratchCounter]]
-    set ::core::libraryDir $dir
     try {
         uplevel 1 [list apply [list {dir} $script] $dir]
     } finally {
-        set ::core::libraryDir $saved
         tcltest::removeDirectory [file tail $dir]
     }
 }

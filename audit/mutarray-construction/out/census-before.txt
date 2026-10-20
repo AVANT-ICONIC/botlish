@@ -119,10 +119,10 @@ examples/stdlib/matmul.bot:22:33 | list_get(list: any) -> any
 examples/stdlib/matmul.bot:22:42 | list_get(list: any) -> any
 examples/stdlib/matmul.bot:38:23 | list_get(list: list) -> any
 examples/stdlib/matmul.bot:45:39 | list_get(list: any) -> any
-lib/web.bot:198:16 | list_get(list: List[str]) -> str
-lib/web.bot:198:54 | list_get(list: List[str]) -> str
-lib/web.bot:204:70 | list_get(list: list) -> any
-lib/web.bot:209:17 | list_get(list: List[int[Byte]]) -> int[Byte]
+stdlib/web.bot:198:16 | list_get(list: List[str]) -> str
+stdlib/web.bot:198:54 | list_get(list: List[str]) -> str
+stdlib/web.bot:204:70 | list_get(list: list) -> any
+stdlib/web.bot:209:17 | list_get(list: List[int[Byte]]) -> int[Byte]
 # 73
 
 ## MutableArray requirement sites (argument type vs required mutarray)

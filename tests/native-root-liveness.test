@@ -202,12 +202,12 @@ test root-imod-call-effects-1 {a function whose only allocation is an imod may c
     list [underGcStress {runNir $text}] [regexp {may_gc=true} [rootsBlock $report m]] [safepointsOf $report "<program>"]
 } -result {{value {str aaaa}} 1 3}
 
-# The shape test::describe (lib/test.bot) hit on a BigInt: a String
+# The shape std::test::describe (stdlib/test.bot) hit on a BigInt: a String
 # construction plan returned by a recursive call, live across a `mod` with a
 # BigInt result, then extended by `construct str plan`.
 
 test root-imod-plan-1 {a construction plan live across a BigInt mod survives GC stress} -body {
-    set text "import str\nfn g(n: int) -> str:\n    \"y\"\nfn f(n: int, k: int) -> str:\n    if k == 0:\n        \"x\"\n    else:\n        f(n, k - 1).concat(g(n.mod(1000000000000000000000)))\nf(12345678901234567890123, 3)"
+    set text "import std::str\nfn g(n: int) -> str:\n    \"y\"\nfn f(n: int, k: int) -> str:\n    if k == 0:\n        \"x\"\n    else:\n        f(n, k - 1).concat(g(n.mod(1000000000000000000000)))\nf(12345678901234567890123, 3)"
     underGcStress {native::evalHir [sourceHir $text]}
 } -result {str xyyy}
 
@@ -282,10 +282,10 @@ test root-loop-carried-1 {a value carried across many loop iterations, each allo
 # equivalent worth hand-writing here, since CountLoop's own real interest is
 # whether the ordinary HIR/lower.tcl -> native pipeline roots it correctly.
 test root-loop-carried-counted-1 {a value carried across a counted loop's iterations, each allocating garbage, survives GC stress} -body {
-    set text {import str
+    set text {import std::str
 fn f(s):
     loop i from 0 to 20:
-        junk = str::concat(s, "pad")
+        junk = std::str::concat(s, "pad")
     s
 
 f("the managed base string")}
@@ -297,25 +297,25 @@ f("the managed base string")}
 # a shared position register and one induction register per numeric clause;
 # each iteration allocates garbage, so every one of them must stay rooted.
 test root-loop-carried-collecting-1 {a descending inclusive loop's accumulator and a carried value survive GC stress} -body {
-    set text {import list
-import str
+    set text {import std::list
+import std::str
 fn f(s):
     ys = loop i down from 20 through 1:
-        junk = str::concat(s, "pad")
-        str::concat(s, junk)
-    list::length(ys)
+        junk = std::str::concat(s, "pad")
+        std::str::concat(s, junk)
+    std::list::length(ys)
 
 f("the managed base string")}
     underGcStress {native::evalHir [sourceHir $text]}
 } -result {int 20}
 
 test root-loop-carried-lockstep-1 {a lockstep loop's list, position, induction registers and accumulator survive GC stress} -body {
-    set text {import list
-import str
+    set text {import std::list
+import std::str
 fn f(xs, s):
-    ys = loop x in xs and i from 0 to list::length(xs) and j down from list::length(xs) through 1:
-        junk = str::concat(s, "pad")
-        str::concat(x, junk)
+    ys = loop x in xs and i from 0 to std::list::length(xs) and j down from std::list::length(xs) through 1:
+        junk = std::str::concat(s, "pad")
+        std::str::concat(x, junk)
     ys
 
 f(["a", "b", "c", "d", "e", "f"], "the managed base string")}
@@ -372,7 +372,7 @@ test root-block-capture-1 {a captured managed value through a virtualized Block 
 # `choose` its own through `retmulti`.
 
 test root-def-interference-1 {a register defined by a call never shares a slot with a value live across that call, under GC stress} -body {
-    set text {import list
+    set text {import std::list
 
 struct Outer:
     rows: List[int]
@@ -398,7 +398,7 @@ fn many(k: int, acc: int) -> int:
     if k == 0:
         return acc
     c = choose([1, 2, 3, k])
-    many(k - 1, acc + list::length(c.outer.rows) + c.d)
+    many(k - 1, acc + std::list::length(c.outer.rows) + c.d)
 
 many(50, 0)}
     underGcStress {native::evalHir [sourceHir $text]}
@@ -412,7 +412,7 @@ many(50, 0)}
 # doc: it only ever respects an existing `rawregs=` declaration).
 
 test root-string-region-1 {a StringRegion's base survives an allocation between its creation and use, under stress} -body {
-    set text "import str\nfn f(s):\n    r = str::substring(s, 1, 4)\n    junk = str::concat(\"pad\", \"ding\")\n    str::concat(r, junk)\n\nf(\"abcdef\")"
+    set text "import std::str\nfn f(s):\n    r = std::str::substring(s, 1, 4)\n    junk = std::str::concat(\"pad\", \"ding\")\n    std::str::concat(r, junk)\n\nf(\"abcdef\")"
     underGcStress {native::evalHir [sourceHir $text]}
 } -result {str bcdpadding}
 

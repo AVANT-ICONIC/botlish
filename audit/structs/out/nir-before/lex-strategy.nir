@@ -1,4 +1,4 @@
-# instances: <program>, list::all?<List[str], native>, lenient_ident_char?<generic>, choose_classifier<bool>, chars_of<str, int, List[never]>, chars_of<str, int, List[str]>, classify<str, bool>, count_true<List[bool], int, int>, valid_chars<str, bool>, fully_alnum?<str>, total_valid<List[str], bool, int, int>
+# instances: <program>, std::list::all?<List[str], native>, lenient_ident_char?<generic>, choose_classifier<bool>, chars_of<str, int, List[never]>, chars_of<str, int, List[str]>, classify<str, bool>, count_true<List[bool], int, int>, valid_chars<str, bool>, fully_alnum?<str>, total_valid<List[str], bool, int, int>
 nir 1 call-effects=1 statics=0
 native "is_tcl_alnum" arity=1 params="str" impl=strtclalnum
 
@@ -76,7 +76,7 @@ func 0 "<program>" params=0 env=0 regs=45 pnames="" captures=0 instance="generic
     ret %44
 end
 
-func 1 "list::all?" params=2 env=0 regs=21 pnames="xs predicate" captures=0 instance="List[str], native" rawregs="4 17" @e13
+func 1 "std::list::all?" params=2 env=0 regs=21 pnames="xs predicate" captures=0 instance="List[str], native" rawregs="4 17" @e13
     %2 = op listlen %0 @e14
     %3 = int 0 @e14
     %4 = rawint 0

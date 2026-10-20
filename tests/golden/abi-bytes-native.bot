@@ -1,4 +1,4 @@
-# abi-bytes-native.bot -- linux::write of an abi::bytes::Bytes (ABI-BYTES.md),
+# abi-bytes-native.bot -- std::linux::write of a std::abi::bytes::Bytes (ABI-BYTES.md),
 # in process, as a source-level specification: the wrapper is ONE write(2)
 # syscall whose raw result is an ordinary Int, so a write the kernel refuses
 # is its exact negative errno -- an invalid descriptor is EBADF (-9) on
@@ -7,10 +7,10 @@
 # lst-portable-write-runs-natively) -- and Bytes
 # held in Lists keep their lengths, equality and hashes around the writes.
 #
-# golden-exclude: interp, compile -- CORE SEMANTIC NATIVE-ONLY: linux::write takes its payload's machine address (the target architecture's address bridge, abi::x86_64::from_bytes or abi::aarch64::from_bytes) for the write(2) syscall, which the Tcl backends refuse at run time by design (tests/abi-bytes.test abi-bytes-tcl-backends-refuse-the-address pins the refusal); a refusal aborts a suite, so these tests run on cranelift-generic and cranelift only
+# golden-exclude: interp, compile -- CORE SEMANTIC NATIVE-ONLY: std::linux::write takes its payload's machine address (the target architecture's address bridge, std::abi::x86_64::from_bytes or std::abi::aarch64::from_bytes) for the write(2) syscall, which the Tcl backends refuse at run time by design (tests/abi-bytes.test abi-bytes-tcl-backends-refuse-the-address pins the refusal); a refusal aborts a suite, so these tests run on cranelift-generic and cranelift only
 #
-# It requires no host: linux::write makes its one write(2) through the target
-# architecture's own transport (linux::sys, LINUX-SYSCALL-TRANSPORTS.md), so
+# It requires no host: std::linux::write makes its one write(2) through the target
+# architecture's own transport (std::linux::sys, LINUX-SYSCALL-TRANSPORTS.md), so
 # the suite runs natively on Linux x86-64 and AArch64 alike (its Tcl
 # originals carry the nativeLinux constraint).
 #
@@ -24,85 +24,85 @@
 # gc-stress job runs this suite under stress as a whole). The pure Bytes
 # semantics, and programs that only define a write, are abi-bytes.bot's.
 #
-# Imports: compiler and test (the framework); abi, abi::bytes, abi::x86_64,
-# byte, linux and str are the Tcl programs' linuxPrelude (less linux::abi::x86_64 and
-# `type byte::Byte`, which no ported program uses); list for the GC-stress
-# program's list::at. Every call is written qualified.
+# Imports: compiler and test (the framework); abi, std::abi::bytes, std::abi::x86_64,
+# byte, linux and str are the Tcl programs' linuxPrelude (less std::linux::abi::x86_64 and
+# `type std::byte::Byte`, which no ported program uses); list for the GC-stress
+# program's std::list::at. Every call is written qualified.
 #
-# A direct module (DIRECT-MODULES.md): its programs call linux::write, a
+# A direct module (DIRECT-MODULES.md): its programs call std::linux::write, a
 # callable of the direct module linux, with no context of their own -- the
 # raw layer under test.
 direct module
 
-import abi
-import abi::bytes
-import abi::x86_64
-import byte
-import compiler
-import linux
-import list
-import str
-import test
+import std::abi
+import std::abi::bytes
+import std::abi::x86_64
+import std::byte
+import std::compiler
+import std::linux
+import std::list
+import std::str
+import std::test
 
 # The Tcl linuxPrelude's helpers the ported programs call: mk (a String's
 # Bytes), pattern (a List of every byte value in turn) and out (one write of
-# DATA to descriptor FD; abi::i32 fails only for an FD outside I32).
+# DATA to descriptor FD; std::abi::i32 fails only for an FD outside I32).
 fn mk(s: str):
-    abi::bytes::from_list(str::encode_utf8(s))
+    std::abi::bytes::from_list(std::str::encode_utf8(s))
 
 fn pattern(n: int):
     loop i from 0 to n:
-        byte::from_int(mod(i, 256))
+        std::byte::from_int(mod(i, 256))
 
-fn out(fd: int, data: abi::bytes::Bytes) -> int errors abi::AbiIntegerBelowRange, abi::AbiIntegerAboveRange:
-    linux::write(abi::i32(fd), data)
+fn out(fd: int, data: std::abi::bytes::Bytes) -> int errors std::abi::AbiIntegerBelowRange, std::abi::AbiIntegerAboveRange:
+    std::linux::write(std::abi::i32(fd), data)
 
 fn register_native_write_tests():
     # A zero-length write to a bad descriptor is EBADF: the empty write is a
     # real syscall.
-    fn empty_write_to_an_invalid_descriptor() errors compiler::CompilerError:
+    fn empty_write_to_an_invalid_descriptor() errors std::compiler::CompilerError:
         static compile:
-            out(1000, abi::bytes::from_list([]))
-    test::value("abi-bytes-empty-write-to-an-invalid-descriptor-is-still-the-syscall", 0 - 9, empty_write_to_an_invalid_descriptor)
+            out(1000, std::abi::bytes::from_list([]))
+    std::test::value("abi-bytes-empty-write-to-an-invalid-descriptor-is-still-the-syscall", 0 - 9, empty_write_to_an_invalid_descriptor)
 
     # The raw negative result is preserved exactly (never reread as
     # unsigned), for a heap, a static and an empty payload.
-    fn write_error() errors compiler::CompilerError:
+    fn write_error() errors std::compiler::CompilerError:
         static compile:
             [
                 out(1000, mk("x")),
-                out(1000, abi::bytes::from_list(str::encode_utf8("static"))),
-                out(1000, abi::bytes::from_list([])),
-                abi::x86_64::to_int(abi::x86_64::register64(0 - 9)) < 0
+                out(1000, std::abi::bytes::from_list(std::str::encode_utf8("static"))),
+                out(1000, std::abi::bytes::from_list([])),
+                std::abi::x86_64::to_int(std::abi::x86_64::register64(0 - 9)) < 0
             ]
-    test::value("abi-bytes-write-error-is-the-raw-negative-result", [0 - 9, 0 - 9, 0 - 9, true], write_error)
+    std::test::value("abi-bytes-write-error-is-the-raw-negative-result", [0 - 9, 0 - 9, 0 - 9, true], write_error)
 
     # Lengths, equality and hashes of Bytes held in a List, and writes of
     # them (the CI gc-stress job runs this suite with a collection at every
     # allocation site).
-    fn in_process() errors compiler::CompilerError:
+    fn in_process() errors std::compiler::CompilerError:
         static compile:
             a = mk("alias\n")
-            xs = [a, mk("other\n"), a, abi::bytes::from_list(pattern(100))]
+            xs = [a, mk("other\n"), a, std::abi::bytes::from_list(pattern(100))]
             sizes = loop x in xs:
-                abi::bytes::length(x).value
+                std::abi::bytes::length(x).value
             [
                 sizes,
-                xs == [a, mk("other\n"), a, abi::bytes::from_list(pattern(100))],
+                xs == [a, mk("other\n"), a, std::abi::bytes::from_list(pattern(100))],
                 hash(a) == hash(mk("alias\n")),
                 out(1000, a),
-                out(1000, list::at(xs, 0))
+                out(1000, std::list::at(xs, 0))
             ]
-    test::value("abi-bytes-gc-stress-in-process", [[6, 6, 6, 100], true, true, 0 - 9, 0 - 9], in_process)
+    std::test::value("abi-bytes-gc-stress-in-process", [[6, 6, 6, 100], true, true, 0 - 9, 0 - 9], in_process)
 
     # lst-portable-write-runs-natively (tests/linux-syscall-transports.test):
-    # linux::write and linux::read through the host's own linux::sys -- an
+    # std::linux::write and std::linux::read through the host's own std::linux::sys -- an
     # invalid descriptor is the kernel's raw -9 on both architectures, a
     # zero-length write included.
     fn portable_syscalls():
-        [linux::write(abi::i32(1000), abi::bytes::from_list(str::encode_utf8("x"))), linux::write(abi::i32(1000), abi::bytes::from_list([])), linux::read(abi::i32(1000), abi::bytes::zeroed(abi::usize(4))).result]
-    test::value("lst-portable-write-runs-natively", [0 - 9, 0 - 9, 0 - 9], portable_syscalls)
+        [std::linux::write(std::abi::i32(1000), std::abi::bytes::from_list(std::str::encode_utf8("x"))), std::linux::write(std::abi::i32(1000), std::abi::bytes::from_list([])), std::linux::read(std::abi::i32(1000), std::abi::bytes::zeroed(std::abi::usize(4))).result]
+    std::test::value("lst-portable-write-runs-natively", [0 - 9, 0 - 9, 0 - 9], portable_syscalls)
 
-with context test::suite()
+with context std::test::suite()
 register_native_write_tests()
-test::report()
+std::test::report()

@@ -34,7 +34,7 @@ audit is edited. HIR, specialization keys/instances, lowering, NIR, representati
 allocation policy and register allocation retain their production behavior.
 Counter hooks exist only in a scratch native crate, behind `BOTLISH_CENSUS`.
 Cost profiles have these hooks **disabled**. A separate historical oracle control
-patches only a scratch copy of `lib/web.bot`, explicitly outside headline counts.
+patches only a scratch copy of `stdlib/web.bot`, explicitly outside headline counts.
 
 All 30 production/audit-off object disassemblies **including instruction bytes
 and relocations** agree. Instrumented/uninstrumented values, allocations, GC
@@ -134,13 +134,13 @@ column does not silently include them). The benchmark total is exactly 9.
 
 | Source expression | Programs | Compiled sites | Dynamic executions |
 | --- | --- | --- | --- |
-| lib/list.bot:67 predicate(x) | bench/lex-strategy.bot | 1 | 38 |
+| stdlib/list.bot:67 predicate(x) | bench/lex-strategy.bot | 1 | 38 |
 | bench/lex-strategy.bot:57 classifier(c) | bench/lex-strategy.bot | 1 | 132 |
-| lib/web.bot:128 predicate(char_at(i)) | bench/refined-checks.bot, bench/uri-steady.bot | 2 | 8000 |
-| lib/list.bot:79 predicate(x) | bench/source-checks.bot, bench/test-selection.bot | 2 | 9 |
+| stdlib/web.bot:128 predicate(char_at(i)) | bench/refined-checks.bot, bench/uri-steady.bot | 2 | 8000 |
+| stdlib/list.bot:79 predicate(x) | bench/source-checks.bot, bench/test-selection.bot | 2 | 9 |
 | bench/source-checks.bot:56 check(c) | bench/source-checks.bot | 1 | 84 |
-| lib/list.bot:61 predicate(x) | bench/test-selection.bot | 1 | 52 |
-| lib/list.bot:73 predicate(x) | bench/test-selection.bot | 1 | 2 |
+| stdlib/list.bot:61 predicate(x) | bench/test-selection.bot | 1 | 52 |
+| stdlib/list.bot:73 predicate(x) | bench/test-selection.bot | 1 | 2 |
 
 Stable IDs below combine canonical program, source helper/location, instance
 label and expression ID. `S1`–`S9` are table aliases; machine addresses are only
@@ -148,24 +148,24 @@ profile lookup keys. `e216` in two programs is two compiled sites. Code target
 IDs are also scoped to their program.
 
 Source-metadata observation: assembled surface HIR sometimes reports the entry
-program's filename beside imported library line/node data (e.g. `list::any?`
-at line 61). The source labels above were checked against `lib/list.bot` and
-`lib/web.bot` definitions and module provenance, rather than trusting that
+program's filename beside imported library line/node data (e.g. `std::list::any?`
+at line 61). The source labels above were checked against `stdlib/list.bot` and
+`stdlib/web.bot` definitions and module provenance, rather than trusting that
 filename alone. This pre-existing attribution issue is reported, not fixed.
 
 ## Per-site results: static facts and dynamic populations
 
 | ID / program | Source site / instance / expr | Provenance | Full inferred callee type in used instance | Audit-only static code-target set | Calls | Observed target count | Observed targets: counts; objects | Capturing? |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| S1 bench/lex-strategy.bot | lib/list.bot:67 predicate(x); list::all?<List[str], native>/i10 @e18 | HOF parameter | native | {native is_tcl_alnum} | 38 | 1 | Native is_tcl_alnum: 38; objects=1 | Native is_tcl_alnum: envless / Native |
+| S1 bench/lex-strategy.bot | stdlib/list.bot:67 predicate(x); std::list::all?<List[str], native>/i10 @e18 | HOF parameter | native | {native is_tcl_alnum} | 38 | 1 | Native is_tcl_alnum: 38; objects=1 | Native is_tcl_alnum: envless / Native |
 | S2 bench/lex-strategy.bot | bench/lex-strategy.bot:57 classifier(c); classify<str, bool>/i3 @e119 | if/control-flow join | Fn{args: [any], return: any, errors: []} | {block e49} {native is_tcl_alnum} | 132 | 2 | Block e49 (lenient_ident_char?): 66; objects=1; Native is_tcl_alnum: 66; objects=1 | Block 2: envless / Native; Native is_tcl_alnum: envless / Native |
-| S3 bench/refined-checks.bot | lib/web.bot:128 predicate(char_at(i)); scan_while<generic>/i20 @e216 | HOF parameter | any | {block e183} {native is_tcl_alpha} | 8,000 | 2 | Block e183 (local_char?): 6800; objects=1; Native is_tcl_alpha: 1200; objects=1 | Block 12: envless / Native; Native is_tcl_alpha: envless / Native |
-| S4 bench/source-checks.bot | lib/list.bot:79 predicate(x); list::find<List[str], block>/i3 @e42 | HOF parameter | block | {block e114} | 6 | 1 | Block e114 (invalid_name?): 6; objects=1 | Block 6: yes, 1 runtime capture(s) |
+| S3 bench/refined-checks.bot | stdlib/web.bot:128 predicate(char_at(i)); scan_while<generic>/i20 @e216 | HOF parameter | any | {block e183} {native is_tcl_alpha} | 8,000 | 2 | Block e183 (local_char?): 6800; objects=1; Native is_tcl_alpha: 1200; objects=1 | Block 12: envless / Native; Native is_tcl_alpha: envless / Native |
+| S4 bench/source-checks.bot | stdlib/list.bot:79 predicate(x); std::list::find<List[str], block>/i3 @e42 | HOF parameter | block | {block e114} | 6 | 1 | Block e114 (invalid_name?): 6; objects=1 | Block 6: yes, 1 runtime capture(s) |
 | S5 bench/source-checks.bot | bench/source-checks.bot:56 check(c); classify_leading<generic>/i2 @e91 | List element | Fn{args: [any], return: any, errors: []} | {block e49} {block e55} {native is_tcl_alnum} {native is_tcl_alpha} | 84 | 4 | Block e49 (is_underscore?): 21; objects=1; Block e55 (is_hyphen?): 21; objects=1; Native is_tcl_alnum: 21; objects=1; Native is_tcl_alpha: 21; objects=1 | Block 2: envless / Native; Block 3: envless / Native; Native is_tcl_alnum: envless / Native; Native is_tcl_alpha: envless / Native |
-| S6 bench/test-selection.bot | lib/list.bot:61 predicate(x); list::any?<any, block>/i6 @e6 | HOF parameter | block | {block e55} | 52 | 1 | Block e55 (changed?): 52; objects=2 | Block 5: yes, 1 runtime capture(s) |
-| S7 bench/test-selection.bot | lib/list.bot:73 predicate(x); list::none?<List[str], block>/i7 @e31 | HOF parameter | block | {block e55} | 2 | 1 | Block e55 (changed?): 2; objects=1 | Block 5: yes, 1 runtime capture(s) |
-| S8 bench/test-selection.bot | lib/list.bot:79 predicate(x); list::find<List[list], block>/i9 @e42 | HOF parameter | block | {block e98} | 3 | 1 | Block e98 (is_affected?): 3; objects=1 | Block 13: yes, 1 runtime capture(s) |
-| S9 bench/uri-steady.bot | lib/web.bot:128 predicate(char_at(i)); scan_while<generic>/i20 @e216 | HOF parameter | any | {block e183} {native is_tcl_alpha} | 0 | 0 | 0 targets (unexecuted) | statically mixed Native/capturing Block |
+| S6 bench/test-selection.bot | stdlib/list.bot:61 predicate(x); std::list::any?<any, block>/i6 @e6 | HOF parameter | block | {block e55} | 52 | 1 | Block e55 (changed?): 52; objects=2 | Block 5: yes, 1 runtime capture(s) |
+| S7 bench/test-selection.bot | stdlib/list.bot:73 predicate(x); std::list::none?<List[str], block>/i7 @e31 | HOF parameter | block | {block e55} | 2 | 1 | Block e55 (changed?): 2; objects=1 | Block 5: yes, 1 runtime capture(s) |
+| S8 bench/test-selection.bot | stdlib/list.bot:79 predicate(x); std::list::find<List[list], block>/i9 @e42 | HOF parameter | block | {block e98} | 3 | 1 | Block e98 (is_affected?): 3; objects=1 | Block 13: yes, 1 runtime capture(s) |
+| S9 bench/uri-steady.bot | stdlib/web.bot:128 predicate(char_at(i)); scan_while<generic>/i20 @e216 | HOF parameter | any | {block e183} {native is_tcl_alpha} | 0 | 0 | 0 targets (unexecuted) | statically mixed Native/capturing Block |
 
 No site has a production exact target. The eight executed sites have observed
 sets equal to their independently recovered static sets. S9's two-element
@@ -197,7 +197,7 @@ it is not caused by instrumentation.
 Both structural sites have `errors: []`; there are no nonempty structural Fn
 error sets here. The other seven have no structural Fn error contract to count;
 do not describe them as seven fully typed error-free Fn sites. Their recovered
-actual predicates have no declared checked errors. `list::find` itself can
+actual predicates have no declared checked errors. `std::list::find` itself can
 raise `NotFound`, independently of its predicate, and the canonical handlers
 remain intact. No error-bearing control was invented.
 
@@ -205,18 +205,18 @@ remain intact. No error-bearing control was invented.
 
 | Site / contributing instance | Parameter | Actual caller | Full callable argument type | Immediate exact fact | Lexical captures | Offline union |
 | --- | --- | --- | --- | --- | --- | --- |
-| S1 list::all?<List[str], native>/i10 | predicate | fully_alnum?<str>/i9 @e164 | e172 : native is_tcl_alnum | native is_tcl_alnum | none / unknown for bare kind | {native is_tcl_alnum} |
-| S3 scan_while<generic>/i20 | predicate | web::emailish?<str>/i19 @e298 | e301 : block(e183)/1 -> any | block e183 1 any | none / unknown for bare kind | {block e183} {native is_tcl_alpha} |
+| S1 std::list::all?<List[str], native>/i10 | predicate | fully_alnum?<str>/i9 @e164 | e172 : native is_tcl_alnum | native is_tcl_alnum | none / unknown for bare kind | {native is_tcl_alnum} |
+| S3 scan_while<generic>/i20 | predicate | std::web::emailish?<str>/i19 @e298 | e301 : block(e183)/1 -> any | block e183 1 any | none / unknown for bare kind | {block e183} {native is_tcl_alpha} |
 | S3 scan_while<generic>/i20 | predicate | tld?<generic>/i23 @e228 | e231 : native is_tcl_alpha | native is_tcl_alpha | none / unknown for bare kind | {block e183} {native is_tcl_alpha} |
-| S4 list::find<List[str], block>/i3 | predicate | <program>/i0 @e151 | e154 : block(e114)/1 -> any | block e114 1 any | b9 | {block e114} |
-| S6 list::any?<any, block>/i6 | predicate | affected?<list, block>/i4 @e75 | e80 : block | not exact here; trace outer callers | none / unknown for bare kind | {block e55} |
-| S6 list::any?<any, block>/i6 | predicate | affected?<any, block>/i12 @e75 | e80 : block | not exact here; trace outer callers | none / unknown for bare kind | {block e55} |
-| S7 list::none?<List[str], block>/i7 | predicate | <program>/i0 @e251 | e254 : block(e55)/1 -> any | block e55 1 any | b36 | {block e55} |
-| S8 list::find<List[list], block>/i9 | predicate | first_affected<List[list], block>/i8 @e105 | e108 : block(e98)/1 -> any | block e98 1 any | b8 b50 | {block e98} |
-| S9 scan_while<generic>/i20 | predicate | web::emailish?<generic>/i19 @e298 | e301 : block(e183)/1 -> any | block e183 1 any | b15 | {block e183} {native is_tcl_alpha} |
+| S4 std::list::find<List[str], block>/i3 | predicate | <program>/i0 @e151 | e154 : block(e114)/1 -> any | block e114 1 any | b9 | {block e114} |
+| S6 std::list::any?<any, block>/i6 | predicate | affected?<list, block>/i4 @e75 | e80 : block | not exact here; trace outer callers | none / unknown for bare kind | {block e55} |
+| S6 std::list::any?<any, block>/i6 | predicate | affected?<any, block>/i12 @e75 | e80 : block | not exact here; trace outer callers | none / unknown for bare kind | {block e55} |
+| S7 std::list::none?<List[str], block>/i7 | predicate | <program>/i0 @e251 | e254 : block(e55)/1 -> any | block e55 1 any | b36 | {block e55} |
+| S8 std::list::find<List[list], block>/i9 | predicate | first_affected<List[list], block>/i8 @e105 | e108 : block(e98)/1 -> any | block e98 1 any | b8 b50 | {block e98} |
+| S9 scan_while<generic>/i20 | predicate | std::web::emailish?<generic>/i19 @e298 | e301 : block(e183)/1 -> any | block e183 1 any | b15 | {block e183} {native is_tcl_alpha} |
 | S9 scan_while<generic>/i20 | predicate | tld?<generic>/i23 @e228 | e231 : native is_tcl_alpha | native is_tcl_alpha | none / unknown for bare kind | {block e183} {native is_tcl_alpha} |
 
-`list::any?` has one used predicate instance with **two actual compiled caller
+`std::list::any?` has one used predicate instance with **two actual compiled caller
 instances**, both at source expression e75: `affected?<list, block>` and
 `affected?<any, block>`. Their immediate arguments are bare `block`, not exact.
 Tracing `changed?` through `select_affected`, and through `is_affected?`'s
@@ -228,10 +228,10 @@ Thus a **single pass using only already-exact immediate ingress** covers 6 HOF
 sites / 8,049 calls; propagating those ingress facts through the closed caller
 chain covers all 7 HOF sites / 8,101 calls. Neither result needs List/if joins.
 
-## scan_while and web::emailish? continuity
+## scan_while and std::web::emailish? continuity
 
 Two compiled predicate sites represent **one** library source expression,
-`lib/web.bot:128`. Both used instances are `scan_while<generic>` (i20, e216).
+`stdlib/web.bot:128`. Both used instances are `scan_while<generic>` (i20, e216).
 Each has two known callers: local-part scanning passes exact `Block e183`
 (`local_char?`), and TLD scanning passes exact `Native is_tcl_alpha`.
 The static union is two targets in each program. In `refined-checks`, e183 is
@@ -244,7 +244,7 @@ The source aggregation is therefore 8,000 calls, **96.1885%** of all callvalue
 executions. The scanner remains dominant. Potential scan-range lengths were
 not separately profiled; inspected elements equal the 8,000 measured predicates.
 
-## list::any?, list::all?, list::none? and list::find; early exit
+## std::list::any?, std::list::all?, std::list::none? and std::list::find; early exit
 
 | Helper / program | Used predicate instances | Static sites | Helper activations | Potential elements | Inspected / predicate calls | Static and observed set |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -357,11 +357,11 @@ cap or an assumption that finite dispatch is free.
 | 1 | S3 bench/refined-checks.bot scan_while | 8000 | 96.1885% | 96.1885% | 378400 |
 | 2 | S2 bench/lex-strategy.bot classify | 132 | 1.5871% | 97.7756% | 10032 |
 | 3 | S5 bench/source-checks.bot classify_leading | 84 | 1.0100% | 98.7856% | 6384 |
-| 4 | S6 bench/test-selection.bot list::any? | 52 | 0.6252% | 99.4108% | 1820 |
-| 5 | S1 bench/lex-strategy.bot list::all? | 38 | 0.4569% | 99.8677% | 4446 |
-| 6 | S4 bench/source-checks.bot list::find | 6 | 0.0721% | 99.9399% | 210 |
-| 7 | S8 bench/test-selection.bot list::find | 3 | 0.0361% | 99.9760% | 105 |
-| 8 | S7 bench/test-selection.bot list::none? | 2 | 0.0240% | 100.0000% | 70 |
+| 4 | S6 bench/test-selection.bot std::list::any? | 52 | 0.6252% | 99.4108% | 1820 |
+| 5 | S1 bench/lex-strategy.bot std::list::all? | 38 | 0.4569% | 99.8677% | 4446 |
+| 6 | S4 bench/source-checks.bot std::list::find | 6 | 0.0721% | 99.9399% | 210 |
+| 7 | S8 bench/test-selection.bot std::list::find | 3 | 0.0361% | 99.9760% | 105 |
+| 8 | S7 bench/test-selection.bot std::list::none? | 2 | 0.0240% | 100.0000% | 70 |
 | 9 | S9 bench/uri-steady.bot scan_while | 0 | 0.0000% | 100.0000% | 0 |
 
 By attributable machinery work the order is **S3, S2, S5, S1, S6, S4,

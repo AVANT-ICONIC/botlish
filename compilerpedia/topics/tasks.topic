@@ -4,42 +4,43 @@
 
 @topic task.print-output
 title: Printing output
-summary: io::print_line(text) prints a line on the native backends and in executables, with linux::io's context installed; on every backend the program's value is printed for you.
+summary: std::io::print_line(text) prints a line on the native backends and in executables, with std::linux::io's context installed; on every backend the program's value is printed for you.
 index: stdlib backends
 alias: print output; print; println; print a line; write to stdout; hello world; console output
 keywords: print, output, stdout, stderr, io, hello, print_line, write
-related: backend.io stdlib.io::print_line stdlib.module.io concept.context-traits concept.program-value backend.native-only capability.int-to-string
+related: backend.io stdlib.std::io::print_line stdlib.module.std::io concept.context-traits concept.program-value backend.native-only capability.int-to-string
 docs: CONTEXT-TRAITS.md
 
 == THE PROGRAM
-    import io
-    import linux::io
+    import std::io
+    import std::linux::io
 
-    fn hello() errors io::WriteFailed:
-        io::print_line("Hello, world!")
+    fn hello() errors std::io::WriteFailed:
+        std::io::print_line("Hello, world!")
 
-    with context linux::io::create()
+    with context std::linux::io::create()
     hello():
-        on io::WriteFailed:
+        on std::io::WriteFailed:
             unit
 
-  * `import io` for the portable operations (print, print_line,
-    write_error, write_error_line); `import linux::io` for the context that
-    implements them.
-  * `with context linux::io::create()` installs it, at the entry program's
-    top level, before the first call that prints (concept.contexts).
-  * Printing can fail (io::WriteFailed): handle it or admit it.
+  * `import std::io` for the portable operations (print, print_line,
+    write_error, write_error_line); `import std::linux::io` for the context
+    that implements them.
+  * `with context std::linux::io::create()` installs it, at the entry
+    program's top level, before the first call that prints
+    (concept.contexts).
+  * Printing can fail (std::io::WriteFailed): handle it or admit it.
 
 @example accept
-import io
-import linux::io
+import std::io
+import std::linux::io
 
-fn hello() errors io::WriteFailed:
-    io::print_line("Hello, world!")
+fn hello() errors std::io::WriteFailed:
+    std::io::print_line("Hello, world!")
 
-with context linux::io::create()
+with context std::linux::io::create()
 hello():
-    on io::WriteFailed:
+    on std::io::WriteFailed:
         unit
 @output Hello, world!
 @value unit
@@ -48,14 +49,14 @@ hello():
 
 == WHERE IT WORKS
 Native backends (-backend cranelift or cranelift-generic) and standalone
-executables, on Linux: linux::io makes raw system calls, which interp and
-compile refuse at run time (NATIVE-ONLY; backend.io). For output on every
-backend, make the text the program's value: the compiler prints it after
-"value:", and an executable prints it last.
+executables, on Linux: std::linux::io makes raw system calls, which interp
+and compile refuse at run time (NATIVE-ONLY; backend.io). For output on
+every backend, make the text the program's value: the compiler prints it
+after "value:", and an executable prints it last.
 
 == NUMBERS
 There is no Int-to-String conversion in the standard namespaces;
-test::int_text (import test) is the available one
+std::test::int_text (import std::test) is the available one
 (capability.int-to-string).
 
 @topic task.handle-several-errors
@@ -122,22 +123,23 @@ callers then decide.
 
 @topic task.string-concatenation
 title: Joining text
-summary: str::concat(a, b) (written a.concat(b) after `import str`) joins two Strings, str::append_char(s, c) appends a character; `+` is for Ints only.
+summary: std::str::concat(a, b) (written a.concat(b) after `import std::str`) joins two Strings, std::str::append_char(s, c) appends a character; `+` is for Ints only.
 index: stdlib
 alias: string concatenation; concatenate strings; join strings; append string; string plus
 keywords: concat, join, append, String, text, plus
-related: stdlib.str::concat stdlib.str::append_char concept.strings capability.string-formatting capability.int-to-string stdlib.test::joined
+related: stdlib.std::str::concat stdlib.std::str::append_char concept.strings capability.string-formatting capability.int-to-string stdlib.std::test::joined
 
 == HOW
-    import str
+    import std::str
     greeting = "Hello, ".concat(name)
     line = greeting.append_char('!')
 `+` adds Ints; applied to Strings it fails (a TYPE error). For many parts,
-chain concat calls or use lib/test.bot's test::joined(parts, separator).
-Numbers need test::int_text first (capability.int-to-string).
+chain concat calls or use stdlib/test.bot's std::test::joined(parts,
+separator). Numbers need std::test::int_text first
+(capability.int-to-string).
 
 @example accept
-import str
+import std::str
 
 fn greet(name: str) -> str:
     "Hello, ".concat(name).append_char('!')
@@ -164,7 +166,7 @@ index alone, `loop i from 0 to xs.length():` with xs.at(i) is proven in
 range (proof.list-bounds).
 
 @example accept
-import list
+import std::list
 
 fn numbered(xs: List[str]) -> List[int]:
     loop x in xs and i from 0 to xs.length():
@@ -218,15 +220,15 @@ args
 
 @topic task.list-element
 title: Reading an element of a list
-summary: xs.at(i) (list::at, after `import list`) returns the element or fails with IndexNotFound; xs.get(i, default) returns a default instead; `loop x in xs:` visits every element with no index at all.
+summary: xs.at(i) (std::list::at, after `import std::list`) returns the element or fails with IndexNotFound; xs.get(i, default) returns a default; `loop x in xs:` visits every element.
 index: stdlib
 alias: list element; list index access; get element; nth element; access list item; xs[i]; xs[0]; subscript; index operator; square brackets
 keywords: list, element, index, at, get, first, last, subscript, brackets
-related: proof.list-bounds stdlib.list::at stdlib.list::get concept.lists task.iterate-with-index
+related: proof.list-bounds stdlib.std::list::at stdlib.std::list::get concept.lists task.iterate-with-index
 match: SURFACE SYNTAX | expected a type after "*\[", found*
 
 == HOW
-    import list
+    import std::list
     first = xs.at(0):                  # handle the missing element...
         on IndexNotFound:
             0
@@ -237,21 +239,21 @@ There is no negative indexing (xs.at(-1) is a missing element); the last
 element is xs.at(xs.length() - 1), which needs a handler or a guard.
 
 == NO SUBSCRIPT OPERATOR
-`xs[1]` is not an element access: `[` written right after a name starts
-the explicit type arguments of a call (`ffi::c::null[ffi::c::Void]()`), so
-the parser expects a type and reports SURFACE SYNTAX ("expected a type
-after "xs["").
+`xs[1]` is not an element access: `[` written right after a name starts the
+explicit type arguments of a call
+(`std::ffi::c::null[std::ffi::c::Void]()`), so the parser expects a type and
+reports SURFACE SYNTAX ("expected a type after "xs["").
 
 @example reject
 xs = [1, 2, 3]
 xs[1]
 @error SURFACE SYNTAX
 @at 2:4
-@caption There is no subscript: write xs.at(1) (after import list)
+@caption There is no subscript: write xs.at(1) (after import std::list)
 @end
 
 @example accept
-import list
+import std::list
 
 fn last_or(xs: List[int], fallback: int) -> int:
     xs.get(xs.length() - 1, fallback)

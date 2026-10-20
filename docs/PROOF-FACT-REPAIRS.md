@@ -23,8 +23,8 @@ own: *the producer already proves the fact; retain and consume it.*
 
 **Before.** `hir/range.tcl` seeded a counted loop's induction variable with
 `[START.min, END.max - 1]` (and the three other forms); completions recorded
-only the relation `0 ≤ i < FORM`, so `loop i from 0 to 256: abi::u8(i)` and
-`list::at([10, 20, 30], i - 1)` over `1..4` needed handlers although range
+only the relation `0 ≤ i < FORM`, so `loop i from 0 to 256: std::abi::u8(i)` and
+`std::list::at([10, 20, 30], i - 1)` over `1..4` needed handlers although range
 knew `[0, 255]` / `[1, 3]`. Because completion strength decides which
 `errors` clauses a program must write, this was source friction, not just
 missed optimization.
@@ -50,13 +50,13 @@ was copied; there is no second reading of the loop syntax.
   conservative and the same in both analyses; making empty bodies unreachable
   would be a new, separate decision for both.
 * **Not done (G4):** the *relation* `0 ≤ i < FORM` for descending loops
-  (`loop i down from list::length(xs) - 1 through 0`) is still missing; only
+  (`loop i down from std::list::length(xs) - 1 through 0`) is still missing; only
   the interval half is here. A descending loop over a literal List now works
   because the interval alone proves it.
 
 `tests/proof-loop-intervals.test` (13 tests): every positive has its
 off-by-one neighbours (both endpoints, both end kinds, both directions),
-including bounds from immutable bindings and arithmetic, `mutable_array::at`/
+including bounds from immutable bindings and arithmetic, `std::mutable_array::at`/
 `set`, slice bounds, lockstep, scoping, nesting, empty loops, a value run on
 all four backends and a direct check of the shared helper. On the pre-change
 tree 9 of 13 fail.
@@ -65,7 +65,7 @@ tree 9 of 13 fail.
 
 ### What completions retains
 
-`effectiveErrors` alone is not enough: `mutable_array::copy` checks two
+`effectiveErrors` alone is not enough: `std::mutable_array::copy` checks two
 slices that raise the *same* two declared errors, and a flat set cannot say
 which slice an error comes from. So each bounds-bearing native call now also
 carries a **per-check verdict**, `boundsVerdicts`, with one element per
@@ -106,11 +106,11 @@ PROVEN FAILURE                          -> KNOWN-ERROR at compile time (unchange
 
 | operation | proven form |
 |---|---|
-| `list::at` | `op listgetproven`: bare element load (no tag test, no comparison, no slow path) |
-| `mutable_array::at` / `set` | `mutarraygetproven` / `mutarraysetproven` |
-| `str::substring` (materialized) | `substrproven` |
-| `str::substring` as a String region / short slice | **no op**: the `regioncheck` is omitted (its result was unused), so both the region and the ShortString paths benefit |
-| `mutable_array::freeze` / `copy` | `mutarrayfreezeproven` / `mutarraycopyproven` |
+| `std::list::at` | `op listgetproven`: bare element load (no tag test, no comparison, no slow path) |
+| `std::mutable_array::at` / `set` | `mutarraygetproven` / `mutarraysetproven` |
+| `std::str::substring` (materialized) | `substrproven` |
+| `std::str::substring` as a String region / short slice | **no op**: the `regioncheck` is omitted (its result was unused), so both the region and the ShortString paths benefit |
+| `std::mutable_array::freeze` / `copy` | `mutarrayfreezeproven` / `mutarraycopyproven` |
 
 The `*proven` opcodes follow the `setcontainstotal` precedent: sibling
 opcodes outside `op_may_error`, selected per call node (`NativeCallOp`), so
@@ -142,11 +142,11 @@ backends are compared with. Runtime outcomes are identical on all four.
   so the function stays "may error" and the skipped comparison is a few
   instructions in an out-of-line helper. If an inline slice fast path is ever
   added, the per-check verdicts are already there to select it.
-* **`list::get` / `mutable_array::get` are untouched.** Their inner `at` sees
+* **`std::list::get` / `std::mutable_array::get` are untouched.** Their inner `at` sees
   an unconstrained index inside `get`'s own body, so it stays checked: a
   recorded frontier (the caller-side decision of STDLIB-NAMESPACES.md §12), pinned
   by a test, with no special `get` lowering or opcode.
-* **No new source API.** `list::at` is still `errors IndexNotFound`; the
+* **No new source API.** `std::list::at` is still `errors IndexNotFound`; the
   distinction lives only in NIR.
 * **Interpreter unchanged** (above); **G2** (`loop x in xs` reads) and
   **G4/G5** are separate.
@@ -211,12 +211,12 @@ only what both implement with the same local theorem:
 * **Compatibility rule at every shared node.** Both are sound
   over-approximations of the same values, so their Ranges must intersect
   (`disjoint`/`crossing` fail), and the documented intentional differences
-  (`mod`'s bounded divisor, `char::scalar_value`, `and`/`or` conjunct
+  (`mod`'s bounded divisor, `std::char::scalar_value`, `and`/`or` conjunct
   narrowing) are checked to make completions only *narrower*.
 * **Corpus sweep** over every function of `examples/{surface,stdlib,abi}` and
   `bench` with unconstrained parameters: 3,150 shared nodes; 3,051 equal;
   98 where completions is narrower (call-specific walks of exact callees,
-  `and`/`or` conjuncts, `mod`, `char::scalar_value` and arithmetic on them,
+  `and`/`or` conjuncts, `mod`, `std::char::scalar_value` and arithmetic on them,
   all by design); **0 disjoint, 0 crossing;** and range strictly narrower at
   exactly one node: `b - a` with `b = a + K` in `bench/loop-count.bot`, the
   census's known `DifferenceOffset` rule (precision only, out of scope). That

@@ -7,10 +7,10 @@
 # the cells taken from the queue plus the number of cells reached.
 #
 #   argv: W
-import list
-import str
-import char
-import mutable_vector
+import std::list
+import std::str
+import std::char
+import std::mutable_vector
 import table
 import keys
 
@@ -19,7 +19,7 @@ fn int_of(text: str) -> int errors IndexNotFound:
     fn digits(i: int, acc: int) -> int errors IndexNotFound:
         if i >= n:
             return acc
-        digits(i + 1, acc * 10 + char::scalar_value(text.char_at(i)) - 48)
+        digits(i + 1, acc * 10 + std::char::scalar_value(text.char_at(i)) - 48)
     digits(0, 0)
 
 fn wall?(x: int, y: int) -> bool:
@@ -67,7 +67,7 @@ fn search(seen: table::Table, queue: MutableVector[keys::Point], head: int, sum:
     search(s4, queue, head + 1, sum + d, w)
 
 fn first_queue() -> MutableVector[keys::Point]:
-    mutable_vector::from_list([keys::Point {x: 0, y: 0}])
+    std::mutable_vector::from_list([keys::Point {x: 0, y: 0}])
 
 fn main(args: List[str]) errors IndexNotFound:
     w = int_of(args.get(1, "8"))

@@ -33,14 +33,14 @@ static (constant table, excluded from GC/live/peak):
 top allocation sites by bytes:
      1. func                             closure           800 allocations  38.4 KB
      2. func                             closure           400 allocations  19.2 KB
-     3. /home/user/botlish/lib/web.bot:31 listnew             1 allocations  152 B
-     4. /home/user/botlish/lib/web.bot:145 strcat              3 allocations  130 B
-     5. /home/user/botlish/lib/web.bot:145 substr              3 allocations  123 B
-     6. /home/user/botlish/lib/web.bot:132 strutf8bytes        3 allocations  96 B
-     7. /home/user/botlish/lib/web.bot:33 closure             1 allocations  48 B
-     8. /home/user/botlish/lib/web.bot:129 strcat              1 allocations  43 B
-     9. /home/user/botlish/lib/web.bot:129 strcat              1 allocations  43 B
-    10. /home/user/botlish/lib/web.bot:123 strcat              1 allocations  42 B
+     3. /home/user/botlish/stdlib/web.bot:31 listnew             1 allocations  152 B
+     4. /home/user/botlish/stdlib/web.bot:145 strcat              3 allocations  130 B
+     5. /home/user/botlish/stdlib/web.bot:145 substr              3 allocations  123 B
+     6. /home/user/botlish/stdlib/web.bot:132 strutf8bytes        3 allocations  96 B
+     7. /home/user/botlish/stdlib/web.bot:33 closure             1 allocations  48 B
+     8. /home/user/botlish/stdlib/web.bot:129 strcat              1 allocations  43 B
+     9. /home/user/botlish/stdlib/web.bot:129 strcat              1 allocations  43 B
+    10. /home/user/botlish/stdlib/web.bot:123 strcat              1 allocations  42 B
     11. func <program>                   listnew             1 allocations  40 B
 
 excluded: num-bigint limb buffers, the shadow stack (fixed ~32 MB), Cranelift/JIT code, process bookkeeping.

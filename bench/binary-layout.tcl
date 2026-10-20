@@ -16,7 +16,7 @@
 #     (the value never kept), construct then emit, a round trip, a padded and
 #     a nested layout, beside two references: building an ordinary struct of
 #     the same four fields, and building the same 16 bytes from a List of
-#     bytes (abi::bytes::from_list).
+#     bytes (std::abi::bytes::from_list).
 #   * Natively, the heap allocations of each program per record (Cranelift's
 #     allocation counters): what a gross allocation path would show.
 #   * The compilation cost of layouts: a generated program declaring K
@@ -56,31 +56,31 @@ foreach {option value} $args {
     }
 }
 
-set prelude "import abi::bytes
-import binary
-import byte
-import list
+set prelude "import std::abi::bytes
+import std::binary
+import std::byte
+import std::list
 
 layout Device:
     size 16
     align 8
-    field page: binary::U16 at 0
-    field usage: binary::U16 at 2
-    field flags: binary::U32 at 4
-    field target: binary::U64 at 8
+    field page: std::binary::U16 at 0
+    field usage: std::binary::U16 at 2
+    field flags: std::binary::U32 at 4
+    field target: std::binary::U64 at 8
 
 layout Sample:
     size 12
     align 4
-    field tag: binary::U8 at 0
-    field value: binary::I32 at 4
-    field flag: binary::U8 at 8
+    field tag: std::binary::U8 at 0
+    field value: std::binary::I32 at 4
+    field flag: std::binary::U8 at 8
 
 layout Point:
     size 8
     align 4
-    field x: binary::I32 at 0
-    field y: binary::I32 at 4
+    field x: std::binary::I32 at 0
+    field y: std::binary::I32 at 4
 
 layout Segment:
     size 16
@@ -94,32 +94,32 @@ struct DeviceRecord:
     flags: int
     target: int
 
-fn byte_list(values: List\[int\]) -> List\[byte::Byte\]:
+fn byte_list(values: List\[int\]) -> List\[std::byte::Byte\]:
     loop v in values:
-        b = byte::from_int(v):
-            on byte::BelowRange:
+        b = std::byte::from_int(v):
+            on std::byte::BelowRange:
                 0
-            on byte::AboveRange:
+            on std::byte::AboveRange:
                 255
         b
 
-fn device_list() -> List\[byte::Byte\]:
+fn device_list() -> List\[std::byte::Byte\]:
     byte_list(\[1, 0, 6, 0, 0, 1, 0, 0, 52, 18, 0, 0, 0, 0, 0, 0\])
 
-fn device_bytes() -> abi::bytes::Bytes:
-    abi::bytes::from_list(device_list())
+fn device_bytes() -> std::abi::bytes::Bytes:
+    std::abi::bytes::from_list(device_list())
 
-fn sample_bytes() -> abi::bytes::Bytes:
-    abi::bytes::from_list(byte_list(\[7, 0, 0, 0, 255, 255, 255, 255, 1, 0, 0, 0\]))
+fn sample_bytes() -> std::abi::bytes::Bytes:
+    std::abi::bytes::from_list(byte_list(\[7, 0, 0, 0, 255, 255, 255, 255, 1, 0, 0, 0\]))
 
-fn segment_bytes() -> abi::bytes::Bytes:
-    abi::bytes::from_list(byte_list(\[251, 255, 255, 255, 7, 0, 0, 0, 255, 255, 255, 127, 0, 0, 0, 128\]))
+fn segment_bytes() -> std::abi::bytes::Bytes:
+    std::abi::bytes::from_list(byte_list(\[251, 255, 255, 255, 7, 0, 0, 0, 255, 255, 255, 127, 0, 0, 0, 128\]))
 
 fn device() -> LayoutStruct\[Device\]:
     LayoutStruct\[Device\] {page: 1, usage: 6, flags: 256, target: 4660}
 
-fn emit_flags(f: binary::U32) -> abi::bytes::Bytes:
-    binary::emit(LayoutStruct\[Device\] {page: 1, usage: 6, flags: f, target: 4660})
+fn emit_flags(f: std::binary::U32) -> std::abi::bytes::Bytes:
+    std::binary::emit(LayoutStruct\[Device\] {page: 1, usage: 6, flags: f, target: 4660})
 
 fn record(f: int) -> DeviceRecord:
     DeviceRecord {page: 1, usage: 6, flags: f, target: 4660}
@@ -140,7 +140,7 @@ proc Fn {n body} {
 # SETUP lines, then BODY lines as a collecting loop `i from 0 to n`, then
 # the List's length.
 proc Each {setup lines} {
-    return [concat $setup [list "xs = loop i from 0 to n:"] [lmap line $lines {string cat "    " $line}] [list "list::length(xs)"]]
+    return [concat $setup [list "xs = loop i from 0 to n:"] [lmap line $lines {string cat "    " $line}] [list "std::list::length(xs)"]]
 }
 
 proc programText {kind n} {
@@ -148,22 +148,22 @@ proc programText {kind n} {
     switch -- $kind {
         loop-base      { append p [Fn $n [Each {} {i}]] }
         device-base    { append p [Fn $n [Each {"d = device_bytes()"} {i}]] }
-        parse          { append p [Fn $n [Each {"d = device_bytes()"} {"binary::parse(Device, d)"}]] }
-        parse-read     { append p [Fn $n [Each {"d = device_bytes()"} {"p = binary::parse(Device, d)" "p.usage + p.flags"}]] }
+        parse          { append p [Fn $n [Each {"d = device_bytes()"} {"std::binary::parse(Device, d)"}]] }
+        parse-read     { append p [Fn $n [Each {"d = device_bytes()"} {"p = std::binary::parse(Device, d)" "p.usage + p.flags"}]] }
         value-base     { append p [Fn $n [Each {"v = device()"} {i}]] }
-        emit           { append p [Fn $n [Each {"v = device()"} {"binary::emit(v)"}]] }
+        emit           { append p [Fn $n [Each {"v = device()"} {"std::binary::emit(v)"}]] }
         construct-emit { append p [Fn $n [Each {} {"emit_flags(256)"}]] }
-        round-trip     { append p [Fn $n [Each {"v = device()"} {"binary::parse(Device, binary::emit(v)) == v"}]] }
+        round-trip     { append p [Fn $n [Each {"v = device()"} {"std::binary::parse(Device, std::binary::emit(v)) == v"}]] }
         sample-base    { append p [Fn $n [Each {"d = sample_bytes()"} {i}]] }
-        sample-parse   { append p [Fn $n [Each {"d = sample_bytes()"} {"binary::parse(Sample, d)"}]] }
+        sample-parse   { append p [Fn $n [Each {"d = sample_bytes()"} {"std::binary::parse(Sample, d)"}]] }
         sample-emit-base { append p [Fn $n [Each {"v = LayoutStruct\[Sample\] {tag: 7, value: -1, flag: 1}"} {i}]] }
-        sample-emit    { append p [Fn $n [Each {"v = LayoutStruct\[Sample\] {tag: 7, value: -1, flag: 1}"} {"binary::emit(v)"}]] }
+        sample-emit    { append p [Fn $n [Each {"v = LayoutStruct\[Sample\] {tag: 7, value: -1, flag: 1}"} {"std::binary::emit(v)"}]] }
         segment-base   { append p [Fn $n [Each {"d = segment_bytes()"} {i}]] }
-        segment-parse  { append p [Fn $n [Each {"d = segment_bytes()"} {"binary::parse(Segment, d)"}]] }
-        segment-round-trip { append p [Fn $n [Each {"d = segment_bytes()"} {"binary::emit(binary::parse(Segment, d)) == d"}]] }
+        segment-parse  { append p [Fn $n [Each {"d = segment_bytes()"} {"std::binary::parse(Segment, d)"}]] }
+        segment-round-trip { append p [Fn $n [Each {"d = segment_bytes()"} {"std::binary::emit(std::binary::parse(Segment, d)) == d"}]] }
         struct         { append p [Fn $n [Each {} {"record(i)"}]] }
         list-base      { append p [Fn $n [Each {"bs = device_list()"} {i}]] }
-        from-list      { append p [Fn $n [Each {"bs = device_list()"} {"abi::bytes::from_list(bs)"}]] }
+        from-list      { append p [Fn $n [Each {"bs = device_list()"} {"std::abi::bytes::from_list(bs)"}]] }
         default { error "unknown program $kind" }
     }
     return $p
@@ -234,7 +234,7 @@ set operations {
     "parse Segment (two nested Points)" segment-parse segment-base
     "round trip Segment: emit(parse(d)) == d" segment-round-trip segment-base
     "reference: an ordinary struct of the same 4 fields" struct loop-base
-    "reference: the same 16 bytes from a List (abi::bytes::from_list)" from-list list-base
+    "reference: the same 16 bytes from a List (std::abi::bytes::from_list)" from-list list-base
 }
 
 puts "Fixed binary layouts: performance (n = $n records per program on the Tcl backends, $nativeN natively; best of $runs runs)\n"
@@ -288,8 +288,8 @@ if {"native" in $backends} {
 # structs of the same fields constructed and read.
 proc scaleText {k structs} {
     set widths {1 2 4 8 1 2 4 8}
-    set types {binary::U8 binary::I16 binary::U32 binary::I64 binary::I8 binary::U16 binary::I32 binary::U64}
-    set text "import abi::bytes\nimport binary\n\n"
+    set types {std::binary::U8 std::binary::I16 std::binary::U32 std::binary::I64 std::binary::I8 std::binary::U16 std::binary::I32 std::binary::U64}
+    set text "import std::abi::bytes\nimport std::binary\n\n"
     set calls {}
     for {set j 0} {$j < $k} {incr j} {
         set offset 0
@@ -315,7 +315,7 @@ proc scaleText {k structs} {
                 lassign $field name type offset
                 append text "    field $name: $type at $offset\n"
             }
-            append text "\nfn use${j}() -> int errors LayoutLengthMismatch:\n    v = binary::parse(L$j, binary::emit(LayoutStruct\[L$j\] {[join $inits {, }]}))\n    v.f1 + v.f6\n\n"
+            append text "\nfn use${j}() -> int errors LayoutLengthMismatch:\n    v = std::binary::parse(L$j, std::binary::emit(LayoutStruct\[L$j\] {[join $inits {, }]}))\n    v.f1 + v.f6\n\n"
         }
         lappend calls "use${j}()"
     }

@@ -5,12 +5,12 @@
 # alternative; read and written live through native views and edits
 # (NativeView[U], NativeEdit[U]: one window, each alternative read at its
 # address), and in byte storage one designated representation at a time
-# (binary::read, binary::write, binary::write_foreign through `L.u.alt`).
+# (std::binary::read, std::binary::write, std::binary::write_foreign through `L.u.alt`).
 #
 # Arrays repeat representation; unions overlap it. A union is no tagged sum:
 # there is no case, tag or active alternative, and choosing one is
 # interpretation, never conversion. It has no copied value (its alternatives
-# are not independent fields): binary::parse, binary::emit, binary::load and
+# are not independent fields): std::binary::parse, std::binary::emit, std::binary::load and
 # LayoutStruct of anything holding one by value are LAYOUT-UNION. Overlap is
 # what a union declares, and only a union: an ordinary layout's fields still
 # never share a byte.
@@ -38,36 +38,36 @@ set luBackends {interp compile cranelift-generic cranelift}
 set luNative {cranelift-generic cranelift}
 
 # The imports and helpers every program below starts with (layout-arrays.test's).
-set luPrelude {import abi
-import abi::bytes
-import binary
-import binary::native
-import byte
-import ffi::c
+set luPrelude {import std::abi
+import std::abi::bytes
+import std::binary
+import std::binary::native
+import std::byte
+import std::ffi::c
 import ffi_fixture
-import list
+import std::list
 
-fn bytes_of(values: List[int]) -> abi::bytes::Bytes:
+fn bytes_of(values: List[int]) -> std::abi::bytes::Bytes:
     bs = loop v in values:
-        b = byte::from_int(v):
-            on byte::BelowRange:
+        b = std::byte::from_int(v):
+            on std::byte::BelowRange:
                 0
-            on byte::AboveRange:
+            on std::byte::AboveRange:
                 255
         b
-    abi::bytes::from_list(bs)
+    std::abi::bytes::from_list(bs)
 
-fn mutable(values: List[int]) -> abi::bytes::MutableBytes:
-    abi::bytes::from_bytes(bytes_of(values))
+fn mutable(values: List[int]) -> std::abi::bytes::MutableBytes:
+    std::abi::bytes::from_bytes(bytes_of(values))
 
-fn memory(values: List[int]) -> ffi::c::Ptr[ffi::c::Void]:
-    ffi_fixture::memory[ffi::c::Void](bytes_of(values))
+fn memory(values: List[int]) -> std::ffi::c::Ptr[std::ffi::c::Void]:
+    ffi_fixture::memory[std::ffi::c::Void](bytes_of(values))
 
-fn dump(p: ffi::c::Ptr[ffi::c::Void], n: int) -> List[any]:
+fn dump(p: std::ffi::c::Ptr[std::ffi::c::Void], n: int) -> List[any]:
     ffi_fixture::memory_bytes(p, n)
 
-fn frozen(data: abi::bytes::MutableBytes) -> abi::bytes::Bytes:
-    abi::bytes::freeze(data)
+fn frozen(data: std::abi::bytes::MutableBytes) -> std::abi::bytes::Bytes:
+    std::abi::bytes::freeze(data)
 
 fn fill(n: int, byte: int) -> List[int]:
     loop i from 0 to n:
@@ -77,83 +77,83 @@ fn ramp(n: int) -> List[int]:
     loop i from 0 to n:
         255 - i
 
-fn u8(v: int) -> binary::U8:
+fn u8(v: int) -> std::binary::U8:
     if v < 0 or v > 255:
         0
     else:
         v
 
-fn i8(v: int) -> binary::I8:
+fn i8(v: int) -> std::binary::I8:
     if v < -128 or v > 127:
         0
     else:
         v
 
-fn u16(v: int) -> binary::U16:
+fn u16(v: int) -> std::binary::U16:
     if v < 0 or v > 65535:
         0
     else:
         v
 
-fn i16(v: int) -> binary::I16:
+fn i16(v: int) -> std::binary::I16:
     if v < -32768 or v > 32767:
         0
     else:
         v
 
-fn u32(v: int) -> binary::U32:
+fn u32(v: int) -> std::binary::U32:
     if v < 0 or v > 4294967295:
         0
     else:
         v
 
-fn i32(v: int) -> binary::I32:
+fn i32(v: int) -> std::binary::I32:
     if v < -2147483648 or v > 2147483647:
         0
     else:
         v
 
-fn u64(v: int) -> binary::U64:
+fn u64(v: int) -> std::binary::U64:
     if v < 0 or v > 18446744073709551615:
         0
     else:
         v
 
-fn i64(v: int) -> binary::I64:
+fn i64(v: int) -> std::binary::I64:
     if v < -9223372036854775808 or v > 9223372036854775807:
         0
     else:
         v
 
-fn u8s(xs: List[int]) -> List[binary::U8]:
+fn u8s(xs: List[int]) -> List[std::binary::U8]:
     loop x in xs:
         u8(x)
 
-fn i8s(xs: List[int]) -> List[binary::I8]:
+fn i8s(xs: List[int]) -> List[std::binary::I8]:
     loop x in xs:
         i8(x)
 
-fn u16s(xs: List[int]) -> List[binary::U16]:
+fn u16s(xs: List[int]) -> List[std::binary::U16]:
     loop x in xs:
         u16(x)
 
-fn i16s(xs: List[int]) -> List[binary::I16]:
+fn i16s(xs: List[int]) -> List[std::binary::I16]:
     loop x in xs:
         i16(x)
 
-fn u32s(xs: List[int]) -> List[binary::U32]:
+fn u32s(xs: List[int]) -> List[std::binary::U32]:
     loop x in xs:
         u32(x)
 
-fn i32s(xs: List[int]) -> List[binary::I32]:
+fn i32s(xs: List[int]) -> List[std::binary::I32]:
     loop x in xs:
         i32(x)
 
-fn u64s(xs: List[int]) -> List[binary::U64]:
+fn u64s(xs: List[int]) -> List[std::binary::U64]:
     loop x in xs:
         u64(x)
 
-fn i64s(xs: List[int]) -> List[binary::I64]:
+fn i64s(xs: List[int]) -> List[std::binary::I64]:
     loop x in xs:
         i64(x)
 
@@ -167,97 +167,97 @@ set luLayouts {opaque struct Node:
 layout HALVES:
     size 4
     align 2
-    field low: binary::U16 at 0
-    field high: binary::I16 at 2
+    field low: std::binary::U16 at 0
+    field high: std::binary::I16 at 2
 
 union layout WORD:
     size 4
     align 4
-    alternative whole: binary::U32
+    alternative whole: std::binary::U32
     alternative halves: HALVES
-    alternative bytes: array 4 of binary::U8
+    alternative bytes: array 4 of std::binary::U8
 
 layout PARTS:
     size 8
     align 4
-    field low: binary::U32 at 0
-    field high: binary::I32 at 4
+    field low: std::binary::U32 at 0
+    field high: std::binary::I32 at 4
 
 union layout LARGE:
     size 8
     align 8
     alternative parts: PARTS
-    alternative quad: binary::I64
+    alternative quad: std::binary::I64
 
 union layout WIDE:
     size 16
     align 8
-    alternative b: binary::U8
-    alternative h: binary::I16
-    alternative w: binary::U32
-    alternative q: binary::U64
+    alternative b: std::binary::U8
+    alternative h: std::binary::I16
+    alternative w: std::binary::U32
+    alternative q: std::binary::U64
     alternative word: WORD
     alternative large: LARGE
-    alternative bytes: array 16 of binary::U8
-    alternative words: array 4 of binary::U32
+    alternative bytes: array 16 of std::binary::U8
+    alternative words: array 4 of std::binary::U32
 
 layout SANDWICH:
     size 24
     align 4
-    field before: binary::U32 at 0
+    field before: std::binary::U32 at 0
     field w: WIDE at 4
-    field after: binary::U32 at 20
+    field after: std::binary::U32 at 20
 
 layout OFFSETS:
     size 8
     align 4
-    field offset: binary::U32 at 0
-    field offsetHigh: binary::U32 at 4
+    field offset: std::binary::U32 at 0
+    field offsetHigh: std::binary::U32 at 4
 
 union layout OVLU:
     size 8
     align 8
     alternative offsets: OFFSETS
-    alternative pointer: ffi::c::Ptr[ffi::c::Void]
+    alternative pointer: std::ffi::c::Ptr[std::ffi::c::Void]
 
 layout OVL:
     size 32
     align 8
-    field internal: binary::U64 at 0
-    field internalHigh: binary::U64 at 8
+    field internal: std::binary::U64 at 0
+    field internalHigh: std::binary::U64 at 8
     field u: OVLU at 16
-    field event: ffi::c::Ptr[Node] at 24
+    field event: std::ffi::c::Ptr[Node] at 24
 
 union layout PWORD:
     size 8
     align 8
-    alternative p: ffi::c::Ptr[Node]
-    alternative bits: binary::U64
+    alternative p: std::ffi::c::Ptr[Node]
+    alternative bits: std::binary::U64
 
 layout PREC:
     size 16
     align 8
-    field k: binary::U32 at 0
-    field p: ffi::c::Ptr[Node] at 8
+    field k: std::binary::U32 at 0
+    field p: std::ffi::c::Ptr[Node] at 8
 
 union layout PRECU:
     size 16
     align 8
     alternative rec: PREC
-    alternative raw: array 2 of binary::U64
+    alternative raw: array 2 of std::binary::U64
 
 layout ARRS:
     size 40
     align 4
-    field n: binary::U8 at 0
+    field n: std::binary::U8 at 0
     field ws: array 3 of WORD at 4
     field grid: array 2 of array 2 of WORD at 16
-    field tail: binary::U32 at 32
+    field tail: std::binary::U32 at 32
 
 layout PARR:
     size 24
     align 8
-    field n: binary::U32 at 0
+    field n: std::binary::U32 at 0
     field ps: array 2 of PWORD at 8
 
 union layout DEEP:
@@ -270,24 +270,24 @@ union layout DEEP:
 layout PLAIN:
     size 8
     align 4
-    field a: binary::U32 at 0
-    field b: binary::U16 at 4
+    field a: std::binary::U32 at 0
+    field b: std::binary::U16 at 4
 
 union layout TAILU:
     size 12
     align 16
-    alternative a: binary::U8
-    alternative pair: array 2 of binary::U32
+    alternative a: std::binary::U8
+    alternative pair: array 2 of std::binary::U32
 
 layout ARRT:
     size 40
     align 4
     field ts: array 3 of TAILU at 0
-    field after: binary::U32 at 36
+    field after: std::binary::U32 at 36
 
 }
 
-# A program's value as text: an abi::bytes::Bytes as bytes(HEX ...), a List
+# A program's value as text: a std::abi::bytes::Bytes as bytes(HEX ...), a List
 # element-wise, anything else as core::value::show does.
 proc luShow {v} {
     switch -- [core::value::kind $v] {
@@ -331,8 +331,8 @@ proc luOutcome {backend hir} {
 # The whole program text of SOURCE: the prelude, the layouts and SOURCE --
 # headed `direct module` when SOURCE makes a native view or edit.
 proc luProgram {source} {
-    set direct [expr {[string first binary::native::edit( $source] >= 0
-        || [string first binary::native::view( $source] >= 0}]
+    set direct [expr {[string first std::binary::native::edit( $source] >= 0
+        || [string first std::binary::native::view( $source] >= 0}]
     set marker [expr {$direct ? "direct module\n\n" : ""}]
     return "$marker$::luPrelude$::luLayouts$source"
 }
@@ -406,10 +406,10 @@ proc luFirst {source {bare 0}} {
     return accepted
 }
 
-# The bare layout declarations TEXT, compiled alone with binary and ffi::c
+# The bare layout declarations TEXT, compiled alone with binary and std::ffi::c
 # imported: their diagnostics (luDiagnostics), "accepted" otherwise.
 proc luDeclaration {text} {
-    return [luDiagnostics "import binary\nimport ffi::c\n\n$text\n0\n" 1]
+    return [luDiagnostics "import std::binary\nimport std::ffi::c\n\n$text\n0\n" 1]
 }
 
 # The NIR text of function NAME of the program SOURCE (after the prelude and
@@ -499,7 +499,7 @@ proc luAt {bytes offset width {signed 0}} {
     return $u
 }
 
-# BYTES (Ints) as luShow shows an abi::bytes::Bytes.
+# BYTES (Ints) as luShow shows a std::abi::bytes::Bytes.
 proc luHex {bytes} {
     return "bytes([join [lmap b $bytes {format %02x $b}] { }])"
 }
@@ -525,19 +525,19 @@ proc luRow {offset stride width values} {
 # Declarations: syntax, registry, descriptor, validation
 
 test lu-syntax {`union layout NAME:` declares a union: `size`, `align` and one `alternative NAME: TYPE` line per alternative, which states no offset (every alternative starts at the union's first byte); "union" and "alternative" are contextual -- a binding or a function called union or alternative is unaffected -- and the AST prints the declaration as written; a `field` line in a union, an `alternative` line in a layout, an offset after an alternative and a union of no alternative are located syntax errors} -body {
-    set ast [surface::formatAst [surface::parse "union layout U:\n    size 8\n    align 4\n    alternative a: binary::U32\n    alternative b: array 8 of binary::U8\n" a.bot]]
+    set ast [surface::formatAst [surface::parse "union layout U:\n    size 8\n    align 4\n    alternative a: std::binary::U32\n    alternative b: array 8 of std::binary::U8\n" a.bot]]
     list [string trim $ast] \
         [luKinds "union = 3\nalternative = 4\nfn f(union: int, alternative: int) -> int:\n    union + alternative\nf(union, alternative)\n" 1] \
-        [lrange [lindex [luDeclaration "union layout U:\n    size 8\n    align 4\n    field a: binary::U32 at 0"] 0] 1 2] \
-        [lrange [lindex [luDeclaration "layout L:\n    size 8\n    align 4\n    alternative a: binary::U32"] 0] 1 2] \
-        [lrange [lindex [luDeclaration "union layout U:\n    size 8\n    align 4\n    alternative a: binary::U32 at 0"] 0] 1 2] \
+        [lrange [lindex [luDeclaration "union layout U:\n    size 8\n    align 4\n    field a: std::binary::U32 at 0"] 0] 1 2] \
+        [lrange [lindex [luDeclaration "layout L:\n    size 8\n    align 4\n    alternative a: std::binary::U32"] 0] 1 2] \
+        [lrange [lindex [luDeclaration "union layout U:\n    size 8\n    align 4\n    alternative a: std::binary::U32 at 0"] 0] 1 2] \
         [lrange [lindex [luDeclaration "union layout U:\n    size 8\n    align 4\n"] 0] 1 2] \
-        [lrange [lindex [luDeclaration "union layout U:\n    align 4\n    alternative a: binary::U32"] 0] 1 2]
+        [lrange [lindex [luDeclaration "union layout U:\n    align 4\n    alternative a: std::binary::U32"] 0] 1 2]
 } -cleanup {unset -nocomplain ast} -result {{union layout U
     size 8
     align 4
-    alternative a: binary::U32
-    alternative b: array 8 of binary::U8} accepted {7:5 {a union layout has alternatives, not fields: "alternative NAME: TYPE" (every alternative starts at the union's first byte, so it states no offset)}} {7:5 {a layout has fields, not alternatives: "field NAME: TYPE at OFFSET" (alternatives, which share bytes, belong to a union layout, `union layout NAME:`; the fields of a layout never share a byte)}} {7:32 {a union alternative states no offset: every alternative of union layout "U" starts at the union's first byte (alternative a: TYPE)}} {4:14 {union layout "U" declares no alternative: a union layout needs at least one "alternative NAME: TYPE" line}} {4:14 {union layout "U" has no "size N" line: a union layout states its byte size and its alignment explicitly}}}
+    alternative a: std::binary::U32
+    alternative b: array 8 of std::binary::U8} accepted {7:5 {a union layout has alternatives, not fields: "alternative NAME: TYPE" (every alternative starts at the union's first byte, so it states no offset)}} {7:5 {a layout has fields, not alternatives: "field NAME: TYPE at OFFSET" (alternatives, which share bytes, belong to a union layout, `union layout NAME:`; the fields of a layout never share a byte)}} {7:37 {a union alternative states no offset: every alternative of union layout "U" starts at the union's first byte (alternative a: TYPE)}} {4:14 {union layout "U" declares no alternative: a union layout needs at least one "alternative NAME: TYPE" line}} {4:14 {union layout "U" has no "size N" line: a union layout states its byte size and its alignment explicitly}}}
 
 test lu-registry {a union is a registry entry of its own (`union 1`) whose fields are its alternatives, every one at offset 0, each any representation -- a scalar, a nested layout, an array, another union -- and a field holding a union is the representation {kind union layout U width SIZE}: its width the union's declared size; the descriptor of a union is headed LayoutUnion[U] and a union field's entry carries {union DESCRIPTOR}, so no backend reads the registry} -body {
     set hir [surface::compile [luProgram "0\n"] unions.bot -warnings off]
@@ -556,30 +556,30 @@ test lu-registry {a union is a registry entry of its own (`union 1`) whose field
 
 test lu-declaration-errors {a malformed union is a located declaration error: an alternative wider than the union's size (LAYOUT-FIELD-BOUNDS, at its type: every alternative lies inside the union), two alternatives of one name (DUPLICATE-FIELD), an alternative of no representation (LAYOUT-FIELD-TYPE), a union containing itself by value -- directly, through an array or through a layout -- (LAYOUT-CYCLE), size 0 (LAYOUT-SIZE), an alignment no power of two (LAYOUT-ALIGNMENT), a name another declaration has (TYPE); a pointer to itself is no cycle} -body {
     list \
-        [luDeclaration "union layout U:\n    size 4\n    align 4\n    alternative a: binary::U32\n    alternative b: binary::U64"] \
-        [lindex [luDeclaration "union layout U:\n    size 8\n    align 4\n    alternative a: binary::U32\n    alternative a: binary::U16"] 0 0] \
+        [luDeclaration "union layout U:\n    size 4\n    align 4\n    alternative a: std::binary::U32\n    alternative b: std::binary::U64"] \
+        [lindex [luDeclaration "union layout U:\n    size 8\n    align 4\n    alternative a: std::binary::U32\n    alternative a: std::binary::U16"] 0 0] \
         [lindex [luDeclaration "union layout U:\n    size 8\n    align 4\n    alternative a: int"] 0 0] \
         [lindex [luDeclaration "union layout U:\n    size 8\n    align 4\n    alternative a: U"] 0 0] \
         [lindex [luDeclaration "union layout U:\n    size 8\n    align 4\n    alternative a: array 2 of U"] 0 0] \
         [lindex [luDeclaration "union layout U:\n    size 8\n    align 4\n    alternative a: L\nlayout L:\n    size 8\n    align 4\n    field u: U at 0"] 0 0] \
-        [lindex [luDeclaration "union layout U:\n    size 0\n    align 4\n    alternative a: binary::U8"] 0 0] \
-        [lindex [luDeclaration "union layout U:\n    size 8\n    align 3\n    alternative a: binary::U8"] 0 0] \
-        [lindex [luDeclaration "struct U:\n    x: int\nunion layout U:\n    size 8\n    align 4\n    alternative a: binary::U8"] 0 0] \
-        [luDeclaration "opaque struct N:\n    tag: unit\nunion layout U:\n    size 8\n    align 8\n    alternative next: ffi::c::Ptr\[N\]\n    alternative bits: binary::U64"]
+        [lindex [luDeclaration "union layout U:\n    size 0\n    align 4\n    alternative a: std::binary::U8"] 0 0] \
+        [lindex [luDeclaration "union layout U:\n    size 8\n    align 3\n    alternative a: std::binary::U8"] 0 0] \
+        [lindex [luDeclaration "struct U:\n    x: int\nunion layout U:\n    size 8\n    align 4\n    alternative a: std::binary::U8"] 0 0] \
+        [luDeclaration "opaque struct N:\n    tag: unit\nunion layout U:\n    size 8\n    align 8\n    alternative next: std::ffi::c::Ptr\[N\]\n    alternative bits: std::binary::U64"]
 } -result {{{LAYOUT-FIELD-BOUNDS 8:20 {alternative "b" of union layout "U" is 8 bytes wide (bytes 0..7), more than the union's size 4: every alternative lies inside the union}}} DUPLICATE-FIELD LAYOUT-FIELD-TYPE LAYOUT-CYCLE LAYOUT-CYCLE LAYOUT-CYCLE LAYOUT-SIZE LAYOUT-ALIGNMENT TYPE accepted}
 
 test lu-overlap-is-declared-only-by-a-union {an ordinary layout's fields still never share a byte (LAYOUT-FIELD-OVERLAP, naming the union layout as the explicit form) -- also when a field holds a union, which overlaps nothing outside its own bytes; a union's alternatives overlap by declaration, every one at offset 0} -body {
     list \
-        [luDeclaration "layout L:\n    size 8\n    align 4\n    field a: binary::U32 at 0\n    field b: binary::U16 at 2"] \
-        [lindex [luDeclaration "union layout U:\n    size 4\n    align 4\n    alternative a: binary::U32\nlayout L:\n    size 8\n    align 4\n    field u: U at 0\n    field b: binary::U16 at 3"] 0 0] \
-        [luDeclaration "union layout U:\n    size 4\n    align 4\n    alternative a: binary::U32\nlayout L:\n    size 8\n    align 4\n    field u: U at 0\n    field b: binary::U16 at 4"] \
-        [luDeclaration "union layout U:\n    size 4\n    align 4\n    alternative a: binary::U32\n    alternative b: binary::U16\n    alternative c: binary::U8"]
-} -result {{{LAYOUT-FIELD-OVERLAP 8:29 {field "b" of layout "L" (bytes 2..3) overlaps field "a" (bytes 0..3): the fields of a layout never share a byte (bytes several interpretations share are declared by a union layout, `union layout NAME:`, held by value in one field)}}} LAYOUT-FIELD-OVERLAP accepted accepted}
+        [luDeclaration "layout L:\n    size 8\n    align 4\n    field a: std::binary::U32 at 0\n    field b: std::binary::U16 at 2"] \
+        [lindex [luDeclaration "union layout U:\n    size 4\n    align 4\n    alternative a: std::binary::U32\nlayout L:\n    size 8\n    align 4\n    field u: U at 0\n    field b: std::binary::U16 at 3"] 0 0] \
+        [luDeclaration "union layout U:\n    size 4\n    align 4\n    alternative a: std::binary::U32\nlayout L:\n    size 8\n    align 4\n    field u: U at 0\n    field b: std::binary::U16 at 4"] \
+        [luDeclaration "union layout U:\n    size 4\n    align 4\n    alternative a: std::binary::U32\n    alternative b: std::binary::U16\n    alternative c: std::binary::U8"]
+} -result {{{LAYOUT-FIELD-OVERLAP 8:34 {field "b" of layout "L" (bytes 2..3) overlaps field "a" (bytes 0..3): the fields of a layout never share a byte (bytes several interpretations share are declared by a union layout, `union layout NAME:`, held by value in one field)}}} LAYOUT-FIELD-OVERLAP accepted accepted}
 
-test lu-size-and-alignment-are-explicit {a union's size and alignment are its own, never computed from its alternatives: a union larger than every alternative (tail padding), aligned more than any needs, held in a packed record at an offset its alignment does not divide; binary::layout_length and binary::layout_alignment answer them; an array of unions strides the union's declared size} -body {
+test lu-size-and-alignment-are-explicit {a union's size and alignment are its own, never computed from its alternatives: a union larger than every alternative (tail padding), aligned more than any needs, held in a packed record at an offset its alignment does not divide; std::binary::layout_length and std::binary::layout_alignment answer them; an array of unions strides the union's declared size} -body {
     list \
-        [luDeclaration "union layout U:\n    size 24\n    align 64\n    alternative a: binary::U8\n    alternative b: binary::U32\nlayout P:\n    size 25\n    align 1\n    field tag: binary::U8 at 0\n    field u: U at 1"] \
-        [luRun "\[binary::layout_length(WORD), binary::layout_alignment(WORD), binary::layout_length(WIDE), binary::layout_alignment(WIDE), binary::layout_length(SANDWICH)\]\n"] \
+        [luDeclaration "union layout U:\n    size 24\n    align 64\n    alternative a: std::binary::U8\n    alternative b: std::binary::U32\nlayout P:\n    size 25\n    align 1\n    field tag: std::binary::U8 at 0\n    field u: U at 1"] \
+        [luRun "\[std::binary::layout_length(WORD), std::binary::layout_alignment(WORD), std::binary::layout_length(WIDE), std::binary::layout_alignment(WIDE), std::binary::layout_length(SANDWICH)\]\n"] \
         [luRun "fn go(v: NativeView\[ARRS\]) -> int:\n    0\n0\n"] \
         [apply {{} {
             set hir [surface::compile [luProgram "0\n"] unions.bot -warnings off]
@@ -605,9 +605,9 @@ test lu-not-a-type-not-a-struct {a union is a layout: no type of values (LAYOUT-
 test lu-tail-padding {a union's size and alignment are its declared ones, never its alternatives': TAILU (a byte or two words, 8 bytes at most) is 12 bytes aligned 16, so an array of it strides 12 -- element i's alternatives at 12 * i -- and a write of its 1-byte alternative changes that byte only, the union's 11 others and the field after the array untouched; on every backend, and natively through a view and an edit} -body {
     set b [luRamp 40]
     list \
-        [luRun "\[binary::layout_length(TAILU), binary::layout_alignment(TAILU), binary::layout_length(ARRT)\]\n"] \
-        [luRun "fn go(d: abi::bytes::Bytes, m: abi::bytes::MutableBytes) -> List\[any\] errors LayoutLengthMismatch:\n    \[binary::read(d, ARRT.ts\[1\].a), binary::read(d, ARRT.ts\[2\].pair), binary::read(d, ARRT.after), frozen(binary::write(m, ARRT.ts\[1\].a, 9))\]\nr = go(bytes_of(ramp(40)), mutable(ramp(40))):\n    on LayoutLengthMismatch:\n        \[\]\nr\n"] \
-        [luNativeRun "fn go() -> List\[any\] errors NativeViewNull, NativeEditNull, IndexNotFound:\n    p = memory(ramp(40))\n    v = binary::native::view(ARRT, p)\n    e = binary::native::edit(ARRT, p)\n    x = \[binary::element(v.ts, 1).a, binary::load(binary::element(v.ts, 2).pair), v.after\]\n    binary::store(binary::element(e.ts, 1), TAILU.a, 9)\n    \[x, dump(p, 40)\]\nr = go():\n    on NativeViewNull:\n        \[\]\n    on NativeEditNull:\n        \[\]\n    on IndexNotFound:\n        \[\]\nr\n"]
+        [luRun "\[std::binary::layout_length(TAILU), std::binary::layout_alignment(TAILU), std::binary::layout_length(ARRT)\]\n"] \
+        [luRun "fn go(d: std::abi::bytes::Bytes, m: std::abi::bytes::MutableBytes) -> List\[any\] errors LayoutLengthMismatch:\n    \[std::binary::read(d, ARRT.ts\[1\].a), std::binary::read(d, ARRT.ts\[2\].pair), std::binary::read(d, ARRT.after), frozen(std::binary::write(m, ARRT.ts\[1\].a, 9))\]\nr = go(bytes_of(ramp(40)), mutable(ramp(40))):\n    on LayoutLengthMismatch:\n        \[\]\nr\n"] \
+        [luNativeRun "fn go() -> List\[any\] errors NativeViewNull, NativeEditNull, IndexNotFound:\n    p = memory(ramp(40))\n    v = std::binary::native::view(ARRT, p)\n    e = std::binary::native::edit(ARRT, p)\n    x = \[std::binary::element(v.ts, 1).a, std::binary::load(std::binary::element(v.ts, 2).pair), v.after\]\n    std::binary::store(std::binary::element(e.ts, 1), TAILU.a, 9)\n    \[x, dump(p, 40)\]\nr = go():\n    on NativeViewNull:\n        \[\]\n    on NativeEditNull:\n        \[\]\n    on IndexNotFound:\n        \[\]\nr\n"]
 } -cleanup {unset -nocomplain b} -result [list {same: [12, 16, 40]} \
     "same: \[[lindex [luRamp 40] 12], \[[luAt [luRamp 40] 24 4], [luAt [luRamp 40] 28 4]\], [luAt [luRamp 40] 36 4], [luHex [lreplace [luRamp 40] 12 12 9]]\]" \
     "same: \[\[[lindex [luRamp 40] 12], \[[luAt [luRamp 40] 24 4], [luAt [luRamp 40] 28 4]\], [luAt [luRamp 40] 36 4]\], [luList [lreplace [luRamp 40] 12 12 9]]\]"]
@@ -625,24 +625,24 @@ test lu-designators {a designator walks a union like a nested layout, its altern
         [lindex [hir::layouts::FieldPath ARRS {grid bytes} {{1 1} 2}] 1] \
         [lindex [hir::layouts::FieldPath WIDE {words} {3}] 1] \
         [lindex [hir::layouts::FieldPath WIDE {large parts} {} 1] 1] \
-        [luFirst "fn f(d: abi::bytes::MutableBytes) -> any errors LayoutLengthMismatch:\n    binary::write(d, SANDWICH.w, 0)\n0\n"] \
-        [luFirst "fn f(d: abi::bytes::MutableBytes) -> any errors LayoutLengthMismatch:\n    binary::write(d, SANDWICH.w.nope, 0)\n0\n"] \
-        [luFirst "fn f(d: abi::bytes::MutableBytes) -> any errors LayoutLengthMismatch:\n    binary::write(d, WIDE.large.parts, 0)\n0\n"] \
-        [luKinds "fn f(d: abi::bytes::MutableBytes) -> any errors LayoutLengthMismatch:\n    binary::write(d, ARRS.ws\[3\].whole, 0)\n0\n"]
+        [luFirst "fn f(d: std::abi::bytes::MutableBytes) -> any errors LayoutLengthMismatch:\n    std::binary::write(d, SANDWICH.w, 0)\n0\n"] \
+        [luFirst "fn f(d: std::abi::bytes::MutableBytes) -> any errors LayoutLengthMismatch:\n    std::binary::write(d, SANDWICH.w.nope, 0)\n0\n"] \
+        [luFirst "fn f(d: std::abi::bytes::MutableBytes) -> any errors LayoutLengthMismatch:\n    std::binary::write(d, WIDE.large.parts, 0)\n0\n"] \
+        [luKinds "fn f(d: std::abi::bytes::MutableBytes) -> any errors LayoutLengthMismatch:\n    std::binary::write(d, ARRS.ws\[3\].whole, 0)\n0\n"]
 } -cleanup {unset -nocomplain hir} -result {{{LayoutUnion[WORD]} 4 whole {whole 0 u 4 little}} {{LayoutStruct[SANDWICH]} 24 w.word.halves.high {high 6 i 2 little}} {{LayoutStruct[OVL]} 32 u.offsets.offsetHigh {offsetHigh 20 u 4 little}} {{LayoutStruct[ARRS]} 40 {grid[1][1].bytes[2]} {{bytes[2]} 30 u 1 little}} {{LayoutUnion[WIDE]} 16 {words[3]} {{words[3]} 12 u 4 little}} {{LayoutUnion[WIDE]} 16 large.parts {parts 0 layout {{LayoutStruct[PARTS]} 8 4 {{low 0 u 4 little} {high 4 i 4 little}}}}} {LAYOUT-OPERAND {SANDWICH.w is the union layout WIDE, several interpretations of the same bytes: a designator names one of its alternatives (SANDWICH.w.b), never the union itself}} {UNKNOWN-FIELD {SANDWICH.w has no alternative "nope" (union layout WIDE has alternatives: b, h, w, q, word, large, bytes, words)}} {LAYOUT-OPERAND {WIDE.large.parts is the nested layout PARTS, not a field a write can name: a write names one scalar or pointer field, or a fixed array (WIDE.large.parts.low)}} LAYOUT-ARRAY-INDEX}
 
-test lu-copy-refusals {a union has no copied value, nor has anything holding one by value: binary::parse and binary::emit of one, binary::load of a live union, of a record holding one and of a live array of unions, binary::read of an array of unions, and a whole-array write or store of one are LAYOUT-UNION -- one diagnostic each, the result poison (nothing else is reported) -- while every alternative and every union-free part is copied as before} -body {
+test lu-copy-refusals {a union has no copied value, nor has anything holding one by value: std::binary::parse and std::binary::emit of one, std::binary::load of a live union, of a record holding one and of a live array of unions, std::binary::read of an array of unions, and a whole-array write or store of one are LAYOUT-UNION -- one diagnostic each, the result poison (nothing else is reported) -- while every alternative and every union-free part is copied as before} -body {
     list \
-        [luFirst "fn f(d: abi::bytes::Bytes) -> any errors LayoutLengthMismatch:\n    binary::parse(OVL, d)\n0\n"] \
-        [luDiagnostics "fn f(d: abi::bytes::Bytes) -> any errors LayoutLengthMismatch:\n    s = binary::parse(WORD, d)\n    s.whole + 1\n0\n"] \
-        [luFirst "fn f(v: NativeView\[OVL\]) -> any:\n    binary::load(v)\n0\n"] \
-        [luKinds "fn f(v: NativeEdit\[WORD\]) -> any:\n    binary::load(v)\n0\n"] \
-        [luFirst "fn f(v: NativeView\[ARRS\]) -> any:\n    binary::load(v.ws)\n0\n"] \
-        [luFirst "fn f(d: abi::bytes::Bytes) -> any errors LayoutLengthMismatch:\n    binary::read(d, ARRS.grid\[1\])\n0\n"] \
-        [luKinds "fn f(d: abi::bytes::MutableBytes) -> any errors LayoutLengthMismatch, LayoutExtentMismatch:\n    binary::write(d, ARRS.ws, \[\])\n0\n"] \
-        [luKinds "fn f(e: NativeEdit\[ARRS\]) -> any errors LayoutExtentMismatch:\n    binary::store(e, ARRS.grid, \[\])\n0\n"] \
-        [luKinds "fn f(v: NativeView\[OVL\], w: NativeView\[WORD\], d: abi::bytes::Bytes) -> any errors LayoutLengthMismatch:\n    \[binary::load(v.u.offsets), binary::load(w.halves), binary::load(w.bytes), binary::read(d, ARRS.ws\[1\].halves)\]\n0\n"]
-} -result {{LAYOUT-UNION {binary::parse cannot imprint layout OVL from bytes: layout OVL holds the union layout OVLU by value at OVL.u: a union is several interpretations of the same bytes, never independent values, so it has no copied value; a program reads or writes it a field or an alternative at a time (a designator such as OVL.u.offsets, or through a native view or edit)}} {{LAYOUT-UNION 245:23 {binary::parse cannot imprint union layout WORD from bytes: WORD is a union layout: a union is several interpretations of the same bytes, never independent values, so it has no copied value; a program reads or writes one alternative at a time (WORD.whole, or through a native view or edit)}}} {LAYOUT-UNION {binary::load cannot copy NativeView[OVL]: layout OVL holds the union layout OVLU by value at OVL.u: a union is several interpretations of the same bytes, never independent values, so it has no copied value; a program reads or writes it a field or an alternative at a time (a designator such as OVL.u.offsets, or through a native view or edit)}} LAYOUT-UNION {LAYOUT-UNION {binary::load cannot copy NativeView[array 3 of WORD]: the array holds the union layout WORD by value: a union is several interpretations of the same bytes, never independent values, so it has no copied value; a program reads or writes it a field or an alternative at a time (a designator such as WORD.whole, or through a native view or edit)}} {LAYOUT-UNION {binary::read cannot read ARRS.grid[1] whole: ARRS.grid[1] holds the union layout WORD by value at ARRS.grid[1][]: a union is several interpretations of the same bytes, never independent values, so it has no copied value; a program reads or writes it a field or an alternative at a time (a designator such as ARRS.grid[1][0].whole, or through a native view or edit)}} LAYOUT-UNION LAYOUT-UNION accepted}
+        [luFirst "fn f(d: std::abi::bytes::Bytes) -> any errors LayoutLengthMismatch:\n    std::binary::parse(OVL, d)\n0\n"] \
+        [luDiagnostics "fn f(d: std::abi::bytes::Bytes) -> any errors LayoutLengthMismatch:\n    s = std::binary::parse(WORD, d)\n    s.whole + 1\n0\n"] \
+        [luFirst "fn f(v: NativeView\[OVL\]) -> any:\n    std::binary::load(v)\n0\n"] \
+        [luKinds "fn f(v: NativeEdit\[WORD\]) -> any:\n    std::binary::load(v)\n0\n"] \
+        [luFirst "fn f(v: NativeView\[ARRS\]) -> any:\n    std::binary::load(v.ws)\n0\n"] \
+        [luFirst "fn f(d: std::abi::bytes::Bytes) -> any errors LayoutLengthMismatch:\n    std::binary::read(d, ARRS.grid\[1\])\n0\n"] \
+        [luKinds "fn f(d: std::abi::bytes::MutableBytes) -> any errors LayoutLengthMismatch, LayoutExtentMismatch:\n    std::binary::write(d, ARRS.ws, \[\])\n0\n"] \
+        [luKinds "fn f(e: NativeEdit\[ARRS\]) -> any errors LayoutExtentMismatch:\n    std::binary::store(e, ARRS.grid, \[\])\n0\n"] \
+        [luKinds "fn f(v: NativeView\[OVL\], w: NativeView\[WORD\], d: std::abi::bytes::Bytes) -> any errors LayoutLengthMismatch:\n    \[std::binary::load(v.u.offsets), std::binary::load(w.halves), std::binary::load(w.bytes), std::binary::read(d, ARRS.ws\[1\].halves)\]\n0\n"]
+} -result {{LAYOUT-UNION {std::binary::parse cannot imprint layout OVL from bytes: layout OVL holds the union layout OVLU by value at OVL.u: a union is several interpretations of the same bytes, never independent values, so it has no copied value; a program reads or writes it a field or an alternative at a time (a designator such as OVL.u.offsets, or through a native view or edit)}} {{LAYOUT-UNION 245:28 {std::binary::parse cannot imprint union layout WORD from bytes: WORD is a union layout: a union is several interpretations of the same bytes, never independent values, so it has no copied value; a program reads or writes one alternative at a time (WORD.whole, or through a native view or edit)}}} {LAYOUT-UNION {std::binary::load cannot copy NativeView[OVL]: layout OVL holds the union layout OVLU by value at OVL.u: a union is several interpretations of the same bytes, never independent values, so it has no copied value; a program reads or writes it a field or an alternative at a time (a designator such as OVL.u.offsets, or through a native view or edit)}} LAYOUT-UNION {LAYOUT-UNION {std::binary::load cannot copy NativeView[array 3 of WORD]: the array holds the union layout WORD by value: a union is several interpretations of the same bytes, never independent values, so it has no copied value; a program reads or writes it a field or an alternative at a time (a designator such as WORD.whole, or through a native view or edit)}} {LAYOUT-UNION {std::binary::read cannot read ARRS.grid[1] whole: ARRS.grid[1] holds the union layout WORD by value at ARRS.grid[1][]: a union is several interpretations of the same bytes, never independent values, so it has no copied value; a program reads or writes it a field or an alternative at a time (a designator such as ARRS.grid[1][0].whole, or through a native view or edit)}} LAYOUT-UNION LAYOUT-UNION accepted}
 
 # ---------------------------------------------------------------------------
 # Byte storage: one alternative at a time, on every backend
@@ -652,16 +652,16 @@ test lu-copy-refusals {a union has no copied value, nor has anything holding one
 set luWideBytes {240 225 210 195 180 165 150 135 120 105 90 75 60 45 30 15}
 
 # reads(d) for the alternatives of WIDE: the program the next test runs.
-set luWideReads {fn reads(d: abi::bytes::Bytes) -> List[any] errors LayoutLengthMismatch:
-    [binary::read(d, WIDE.b), binary::read(d, WIDE.h), binary::read(d, WIDE.w), binary::read(d, WIDE.q),
-        binary::read(d, WIDE.word.whole), binary::read(d, WIDE.word.halves.low), binary::read(d, WIDE.word.halves.high),
-        binary::read(d, WIDE.word.halves), binary::read(d, WIDE.large.parts.low), binary::read(d, WIDE.large.parts.high),
-        binary::read(d, WIDE.large.parts), binary::read(d, WIDE.large.quad), binary::read(d, WIDE.bytes),
-        binary::read(d, WIDE.words), binary::read(d, WIDE.words[3]), binary::read(d, WIDE.bytes[15])]
+set luWideReads {fn reads(d: std::abi::bytes::Bytes) -> List[any] errors LayoutLengthMismatch:
+    [std::binary::read(d, WIDE.b), std::binary::read(d, WIDE.h), std::binary::read(d, WIDE.w), std::binary::read(d, WIDE.q),
+        std::binary::read(d, WIDE.word.whole), std::binary::read(d, WIDE.word.halves.low), std::binary::read(d, WIDE.word.halves.high),
+        std::binary::read(d, WIDE.word.halves), std::binary::read(d, WIDE.large.parts.low), std::binary::read(d, WIDE.large.parts.high),
+        std::binary::read(d, WIDE.large.parts), std::binary::read(d, WIDE.large.quad), std::binary::read(d, WIDE.bytes),
+        std::binary::read(d, WIDE.words), std::binary::read(d, WIDE.words[3]), std::binary::read(d, WIDE.bytes[15])]
 
 }
 
-test lu-read-every-alternative {binary::read(d, U.alt) interprets the same bytes through each alternative -- every scalar width and signedness, a record alternative's fields and its whole LayoutStruct, a union inside the union, an array alternative whole and one element of it -- each by its own representation's existing encoding (little-endian, two's complement), as the test's own reading of the bytes says; on every backend} -body {
+test lu-read-every-alternative {std::binary::read(d, U.alt) interprets the same bytes through each alternative -- every scalar width and signedness, a record alternative's fields and its whole LayoutStruct, a union inside the union, an array alternative whole and one element of it -- each by its own representation's existing encoding (little-endian, two's complement), as the test's own reading of the bytes says; on every backend} -body {
     set b $::luWideBytes
     set expected [list [luAt $b 0 1] [luAt $b 0 2 1] [luAt $b 0 4] [luAt $b 0 8] \
         [luAt $b 0 4] [luAt $b 0 2] [luAt $b 2 2 1] "LayoutStruct\[HALVES\] {low: [luAt $b 0 2], high: [luAt $b 2 2 1]}" \
@@ -671,16 +671,16 @@ test lu-read-every-alternative {binary::read(d, U.alt) interprets the same bytes
     expr {$got eq "same: \[[join $expected {, }]\]" ? "agree" : "$got != [join $expected {, }]"}
 } -cleanup {unset -nocomplain b expected got} -result agree
 
-test lu-write-touches-only-the-alternative {binary::write(d, L.u.alt, v) writes exactly the alternative's bytes -- a 1-, 2-, 4- or 8-byte scalar alternative of a 16-byte union, a field of a union inside the union, one element of an array alternative, a whole array alternative -- and every other byte of the union and of the record around it (0xA5 sentinels before and after the union) keeps the operand's; the operand is unchanged; on every backend} -body {
+test lu-write-touches-only-the-alternative {std::binary::write(d, L.u.alt, v) writes exactly the alternative's bytes -- a 1-, 2-, 4- or 8-byte scalar alternative of a 16-byte union, a field of a union inside the union, one element of an array alternative, a whole array alternative -- and every other byte of the union and of the record around it (0xA5 sentinels before and after the union) keeps the operand's; the operand is unchanged; on every backend} -body {
     set fill [lrepeat 24 165]
-    set program "fn put(d: abi::bytes::MutableBytes) -> List\[any\] errors LayoutLengthMismatch, LayoutExtentMismatch:\n"
-    append program "    a = binary::write(d, SANDWICH.w.b, 7)\n"
-    append program "    b = binary::write(d, SANDWICH.w.h, -2)\n"
-    append program "    c = binary::write(d, SANDWICH.w.w, 305419896)\n"
-    append program "    e = binary::write(d, SANDWICH.w.q, 18446744073709551615)\n"
-    append program "    f = binary::write(d, SANDWICH.w.word.halves.high, -32768)\n"
-    append program "    g = binary::write(d, SANDWICH.w.words\[2\], 4294967295)\n"
-    append program "    h = binary::write(d, SANDWICH.w.bytes, u8s(\[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16\]))\n"
+    set program "fn put(d: std::abi::bytes::MutableBytes) -> List\[any\] errors LayoutLengthMismatch, LayoutExtentMismatch:\n"
+    append program "    a = std::binary::write(d, SANDWICH.w.b, 7)\n"
+    append program "    b = std::binary::write(d, SANDWICH.w.h, -2)\n"
+    append program "    c = std::binary::write(d, SANDWICH.w.w, 305419896)\n"
+    append program "    e = std::binary::write(d, SANDWICH.w.q, 18446744073709551615)\n"
+    append program "    f = std::binary::write(d, SANDWICH.w.word.halves.high, -32768)\n"
+    append program "    g = std::binary::write(d, SANDWICH.w.words\[2\], 4294967295)\n"
+    append program "    h = std::binary::write(d, SANDWICH.w.bytes, u8s(\[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16\]))\n"
     append program "    \[frozen(a), frozen(b), frozen(c), frozen(e), frozen(f), frozen(g), frozen(h), frozen(d)\]\n"
     append program "fn go() -> List\[any\]:\n    put(mutable(fill(24, 165))):\n        on LayoutLengthMismatch:\n            return \[\]\n        on LayoutExtentMismatch:\n            return \[\]\ngo()\n"
     set expected [list \
@@ -691,25 +691,25 @@ test lu-write-touches-only-the-alternative {binary::write(d, L.u.alt, v) writes 
     expr {$got eq "same: \[[join [lmap e $expected {luHex $e}] {, }]\]" ? "agree" : $got}
 } -cleanup {unset -nocomplain fill program expected got} -result agree
 
-test lu-read-length-and-proofs {binary::read needs bytes of exactly its root layout's size (the declared LayoutLengthMismatch, fewer or more); a List it reads from an array alternative has the array's extent (-result-length {path K}: an index inside needs no handler, one outside is KNOWN-ERROR), and it is an exact copy: written back whole it needs no extent handler} -body {
+test lu-read-length-and-proofs {std::binary::read needs bytes of exactly its root layout's size (the declared LayoutLengthMismatch, fewer or more); a List it reads from an array alternative has the array's extent (-result-length {path K}: an index inside needs no handler, one outside is KNOWN-ERROR), and it is an exact copy: written back whole it needs no extent handler} -body {
     list \
-        [luRun "fn go() -> List\[any\]:\n    r = binary::read(bytes_of(fill(15, 0)), WIDE.w):\n        on LayoutLengthMismatch:\n            return \[\"short\"\]\n    \[r\]\ngo()\n"] \
-        [luRun "fn go() -> List\[any\]:\n    r = binary::read(bytes_of(fill(17, 0)), WIDE.w):\n        on LayoutLengthMismatch:\n            return \[\"long\"\]\n    \[r\]\ngo()\n"] \
-        [luRun "fn go(d: abi::bytes::Bytes) -> int errors LayoutLengthMismatch:\n    list::at(binary::read(d, WIDE.bytes), 15)\nr = go(bytes_of(ramp(16))):\n    on LayoutLengthMismatch:\n        0\nr\n"] \
-        [luKinds "fn go(d: abi::bytes::Bytes) -> int errors LayoutLengthMismatch:\n    list::at(binary::read(d, WIDE.bytes), 16)\n0\n"] \
-        [luRun "fn go(d: abi::bytes::Bytes, m: abi::bytes::MutableBytes) -> abi::bytes::Bytes errors LayoutLengthMismatch:\n    frozen(binary::write(m, SANDWICH.w.words, binary::read(d, WIDE.words)))\nr = go(bytes_of(ramp(16)), mutable(fill(24, 0))):\n    on LayoutLengthMismatch:\n        bytes_of(\[\])\nr\n"]
+        [luRun "fn go() -> List\[any\]:\n    r = std::binary::read(bytes_of(fill(15, 0)), WIDE.w):\n        on LayoutLengthMismatch:\n            return \[\"short\"\]\n    \[r\]\ngo()\n"] \
+        [luRun "fn go() -> List\[any\]:\n    r = std::binary::read(bytes_of(fill(17, 0)), WIDE.w):\n        on LayoutLengthMismatch:\n            return \[\"long\"\]\n    \[r\]\ngo()\n"] \
+        [luRun "fn go(d: std::abi::bytes::Bytes) -> int errors LayoutLengthMismatch:\n    std::list::at(std::binary::read(d, WIDE.bytes), 15)\nr = go(bytes_of(ramp(16))):\n    on LayoutLengthMismatch:\n        0\nr\n"] \
+        [luKinds "fn go(d: std::abi::bytes::Bytes) -> int errors LayoutLengthMismatch:\n    std::list::at(std::binary::read(d, WIDE.bytes), 16)\n0\n"] \
+        [luRun "fn go(d: std::abi::bytes::Bytes, m: std::abi::bytes::MutableBytes) -> std::abi::bytes::Bytes errors LayoutLengthMismatch:\n    frozen(std::binary::write(m, SANDWICH.w.words, std::binary::read(d, WIDE.words)))\nr = go(bytes_of(ramp(16)), mutable(fill(24, 0))):\n    on LayoutLengthMismatch:\n        bytes_of(\[\])\nr\n"]
 } -result [list {same: ["short"]} {same: ["long"]} {same: 240} KNOWN-ERROR "same: [luHex [concat {0 0 0 0} [luRamp 16] {0 0 0 0}]]"]
 
-test lu-caller-constructed-record {a record holding a union is built in byte storage the program owns -- its ordinary fields, one alternative's fields (the OVERLAPPED shape: offsets over a pointer) -- and a pointer alternative is encoded only by the explicit binary::write_foreign through the alternative's path (the pointer observed, still the program's afterwards); the scalar alternative of a pointer-bearing union needs no foreign write; reading the other interpretation of the same bytes back is the pointer's address bits, an inert Int; on every backend (each its own fixture address)} -body {
-    set program "fn build(e: ffi::c::Ptr\[Node\], q: ffi::c::Ptr\[ffi::c::Void\]) -> List\[any\] errors LayoutLengthMismatch:\n"
-    append program "    d0 = abi::bytes::zeroed(abi::usize(binary::layout_length(OVL)))\n"
-    append program "    d1 = binary::write(d0, OVL.internal, 258)\n"
-    append program "    d2 = binary::write(d1, OVL.u.offsets.offset, 4096)\n"
-    append program "    d3 = binary::write(d2, OVL.u.offsets.offsetHigh, 1)\n"
-    append program "    d4 = binary::write_foreign(d3, OVL.event, e)\n"
-    append program "    d5 = binary::write_foreign(d4, OVL.u.pointer, q)\n"
-    append program "    \[frozen(d4), binary::read(frozen(d4), OVL.u.offsets), binary::read(frozen(d5), OVL.u.offsets.offset), binary::read(frozen(d5), OVL.u.offsets.offsetHigh), ffi_fixture::address_of(q), ffi::c::null?(q)\]\n"
-    append program "fn go() -> List\[any\]:\n    e = ffi::c::null\[Node\]()\n    q = memory(fill(8, 1))\n    build(e, q):\n        on LayoutLengthMismatch:\n            return \[\]\ngo()\n"
+test lu-caller-constructed-record {a record holding a union is built in byte storage the program owns -- its ordinary fields, one alternative's fields (the OVERLAPPED shape: offsets over a pointer) -- and a pointer alternative is encoded only by the explicit std::binary::write_foreign through the alternative's path (the pointer observed, still the program's afterwards); the scalar alternative of a pointer-bearing union needs no foreign write; reading the other interpretation of the same bytes back is the pointer's address bits, an inert Int; on every backend (each its own fixture address)} -body {
+    set program "fn build(e: std::ffi::c::Ptr\[Node\], q: std::ffi::c::Ptr\[std::ffi::c::Void\]) -> List\[any\] errors LayoutLengthMismatch:\n"
+    append program "    d0 = std::abi::bytes::zeroed(std::abi::usize(std::binary::layout_length(OVL)))\n"
+    append program "    d1 = std::binary::write(d0, OVL.internal, 258)\n"
+    append program "    d2 = std::binary::write(d1, OVL.u.offsets.offset, 4096)\n"
+    append program "    d3 = std::binary::write(d2, OVL.u.offsets.offsetHigh, 1)\n"
+    append program "    d4 = std::binary::write_foreign(d3, OVL.event, e)\n"
+    append program "    d5 = std::binary::write_foreign(d4, OVL.u.pointer, q)\n"
+    append program "    \[frozen(d4), std::binary::read(frozen(d4), OVL.u.offsets), std::binary::read(frozen(d5), OVL.u.offsets.offset), std::binary::read(frozen(d5), OVL.u.offsets.offsetHigh), ffi_fixture::address_of(q), std::ffi::c::null?(q)\]\n"
+    append program "fn go() -> List\[any\]:\n    e = std::ffi::c::null\[Node\]()\n    q = memory(fill(8, 1))\n    build(e, q):\n        on LayoutLengthMismatch:\n            return \[\]\ngo()\n"
     set hir [surface::compile [luProgram $program] unions.bot -warnings off]
     set expected [luHex [luBytes 32 0 {{0 258 8} {16 4096 4} {20 1 4}}]]
     lmap backend $::luBackends {
@@ -724,16 +724,16 @@ test lu-caller-constructed-record {a record holding a union is built in byte sto
     }
 } -cleanup {unset -nocomplain program hir expected backend kind text bytes low high address} -result {agree agree agree agree}
 
-test lu-pointer-authority-from-bytes {pointer authority is recursive through a union's alternatives: bytes never become a pointer -- binary::read of a pointer alternative, of a record alternative holding one, and binary::parse of anything holding either are refused (LAYOUT-NATIVE-ONLY, LAYOUT-UNION) -- while the same bytes read through a scalar alternative are an inert Int; an ordinary write of a pointer alternative is LAYOUT-NATIVE-ONLY, a foreign write of a scalar alternative LAYOUT-FOREIGN-WRITE, an ordinary write of the scalar alternative beside a pointer is allowed} -body {
+test lu-pointer-authority-from-bytes {pointer authority is recursive through a union's alternatives: bytes never become a pointer -- std::binary::read of a pointer alternative, of a record alternative holding one, and std::binary::parse of anything holding either are refused (LAYOUT-NATIVE-ONLY, LAYOUT-UNION) -- while the same bytes read through a scalar alternative are an inert Int; an ordinary write of a pointer alternative is LAYOUT-NATIVE-ONLY, a foreign write of a scalar alternative LAYOUT-FOREIGN-WRITE, an ordinary write of the scalar alternative beside a pointer is allowed} -body {
     list \
-        [luFirst "fn f(d: abi::bytes::Bytes) -> any errors LayoutLengthMismatch:\n    binary::read(d, PWORD.p)\n0\n"] \
-        [luFirst "fn f(d: abi::bytes::Bytes) -> any errors LayoutLengthMismatch:\n    binary::read(d, PRECU.rec)\n0\n"] \
-        [luKinds "fn f(d: abi::bytes::Bytes) -> any errors LayoutLengthMismatch:\n    binary::read(d, PARR.ps\[1\].p)\n0\n"] \
-        [luKinds "fn f(d: abi::bytes::Bytes) -> any errors LayoutLengthMismatch:\n    binary::parse(PARR, d)\n0\n"] \
-        [luKinds "fn f(d: abi::bytes::MutableBytes) -> any errors LayoutLengthMismatch:\n    binary::write(d, PWORD.p, 0)\n0\n"] \
-        [luKinds "fn f(d: abi::bytes::MutableBytes) -> any errors LayoutLengthMismatch:\n    binary::write_foreign(d, PWORD.bits, 0)\n0\n"] \
-        [luRun "fn go(d: abi::bytes::Bytes, d8: abi::bytes::Bytes, m: abi::bytes::MutableBytes) -> List\[any\] errors LayoutLengthMismatch:\n    \[binary::read(d8, PWORD.bits), binary::read(d, PRECU.raw), binary::read(d, PRECU.rec.k), frozen(binary::write(m, PARR.ps\[1\].bits, 18446744073709551615))\]\nr = go(bytes_of(\[1, 0, 0, 0, 0, 0, 0, 128, 2, 0, 0, 0, 0, 0, 0, 0\]), bytes_of(\[1, 0, 0, 0, 0, 0, 0, 128\]), mutable(fill(24, 0))):\n    on LayoutLengthMismatch:\n        \[\]\nr\n"]
-} -result [list {LAYOUT-NATIVE-ONLY {binary::read cannot read PWORD.p from bytes: it is a C pointer, and arbitrary bytes never become one; a pointer is read from live native memory, through a native view or edit}} {LAYOUT-NATIVE-ONLY {binary::read cannot read PRECU.rec from bytes: it holds a C pointer (PRECU.rec.p), and arbitrary bytes never become one; a pointer is read from live native memory, through a native view or edit}} LAYOUT-NATIVE-ONLY LAYOUT-UNION LAYOUT-NATIVE-ONLY LAYOUT-FOREIGN-WRITE "same: \[9223372036854775809, \[9223372036854775809, 2\], 1, [luHex [concat [lrepeat 16 0] [lrepeat 8 255]]]\]"]
+        [luFirst "fn f(d: std::abi::bytes::Bytes) -> any errors LayoutLengthMismatch:\n    std::binary::read(d, PWORD.p)\n0\n"] \
+        [luFirst "fn f(d: std::abi::bytes::Bytes) -> any errors LayoutLengthMismatch:\n    std::binary::read(d, PRECU.rec)\n0\n"] \
+        [luKinds "fn f(d: std::abi::bytes::Bytes) -> any errors LayoutLengthMismatch:\n    std::binary::read(d, PARR.ps\[1\].p)\n0\n"] \
+        [luKinds "fn f(d: std::abi::bytes::Bytes) -> any errors LayoutLengthMismatch:\n    std::binary::parse(PARR, d)\n0\n"] \
+        [luKinds "fn f(d: std::abi::bytes::MutableBytes) -> any errors LayoutLengthMismatch:\n    std::binary::write(d, PWORD.p, 0)\n0\n"] \
+        [luKinds "fn f(d: std::abi::bytes::MutableBytes) -> any errors LayoutLengthMismatch:\n    std::binary::write_foreign(d, PWORD.bits, 0)\n0\n"] \
+        [luRun "fn go(d: std::abi::bytes::Bytes, d8: std::abi::bytes::Bytes, m: std::abi::bytes::MutableBytes) -> List\[any\] errors LayoutLengthMismatch:\n    \[std::binary::read(d8, PWORD.bits), std::binary::read(d, PRECU.raw), std::binary::read(d, PRECU.rec.k), frozen(std::binary::write(m, PARR.ps\[1\].bits, 18446744073709551615))\]\nr = go(bytes_of(\[1, 0, 0, 0, 0, 0, 0, 128, 2, 0, 0, 0, 0, 0, 0, 0\]), bytes_of(\[1, 0, 0, 0, 0, 0, 0, 128\]), mutable(fill(24, 0))):\n    on LayoutLengthMismatch:\n        \[\]\nr\n"]
+} -result [list {LAYOUT-NATIVE-ONLY {std::binary::read cannot read PWORD.p from bytes: it is a C pointer, and arbitrary bytes never become one; a pointer is read from live native memory, through a native view or edit}} {LAYOUT-NATIVE-ONLY {std::binary::read cannot read PRECU.rec from bytes: it holds a C pointer (PRECU.rec.p), and arbitrary bytes never become one; a pointer is read from live native memory, through a native view or edit}} LAYOUT-NATIVE-ONLY LAYOUT-UNION LAYOUT-NATIVE-ONLY LAYOUT-FOREIGN-WRITE "same: \[9223372036854775809, \[9223372036854775809, 2\], 1, [luHex [concat [lrepeat 16 0] [lrepeat 8 255]]]\]"]
 
 # ---------------------------------------------------------------------------
 # Live unions (native memory)
@@ -747,10 +747,10 @@ proc luWideExpected {b} {
         "\[[join $b {, }]\]" "\[[join [list [luAt $b 0 4] [luAt $b 4 4] [luAt $b 8 4] [luAt $b 12 4]] {, }]\]" [luAt $b 12 4] [lindex $b 15]]
 }
 
-test lu-native-reads {a live union is one window onto native memory: each alternative read through a native view (and through an edit: the same reads) is the alternative's own representation at the union's address -- every scalar width, a record alternative's fields (its live NativeView, binary::load of it), a union inside the union, an array alternative (its live array, one element, binary::load of it) -- and equals what binary::read gives for the same bytes and the test's own reading} -constraints nativeBuilt -body {
+test lu-native-reads {a live union is one window onto native memory: each alternative read through a native view (and through an edit: the same reads) is the alternative's own representation at the union's address -- every scalar width, a record alternative's fields (its live NativeView, std::binary::load of it), a union inside the union, an array alternative (its live array, one element, std::binary::load of it) -- and equals what std::binary::read gives for the same bytes and the test's own reading} -constraints nativeBuilt -body {
     set b $::luWideBytes
-    set reads {[v.b, v.h, v.w, v.q, v.word.whole, v.word.halves.low, v.word.halves.high, binary::load(v.word.halves), v.large.parts.low, v.large.parts.high, binary::load(v.large.parts), v.large.quad, binary::load(v.bytes), binary::load(v.words), binary::element(v.words, 3), binary::element(v.bytes, 15)]}
-    set program "fn go() -> List\[any\] errors NativeViewNull, NativeEditNull, IndexNotFound:\n    p = memory([luList $b])\n    v = binary::native::view(WIDE, p)\n    e = binary::native::edit(WIDE, p)\n    \[[string map {v. e. (v) (e) (v. (e.} [string range $reads 1 end-1]], [string range $reads 1 end-1]\]\nr = go():\n    on NativeViewNull:\n        \[\]\n    on NativeEditNull:\n        \[\]\n    on IndexNotFound:\n        \[\]\nr\n"
+    set reads {[v.b, v.h, v.w, v.q, v.word.whole, v.word.halves.low, v.word.halves.high, std::binary::load(v.word.halves), v.large.parts.low, v.large.parts.high, std::binary::load(v.large.parts), v.large.quad, std::binary::load(v.bytes), std::binary::load(v.words), std::binary::element(v.words, 3), std::binary::element(v.bytes, 15)]}
+    set program "fn go() -> List\[any\] errors NativeViewNull, NativeEditNull, IndexNotFound:\n    p = memory([luList $b])\n    v = std::binary::native::view(WIDE, p)\n    e = std::binary::native::edit(WIDE, p)\n    \[[string map {v. e. (v) (e) (v. (e.} [string range $reads 1 end-1]], [string range $reads 1 end-1]\]\nr = go():\n    on NativeViewNull:\n        \[\]\n    on NativeEditNull:\n        \[\]\n    on IndexNotFound:\n        \[\]\nr\n"
     set expected [luWideExpected $b]
     set got [luNativeRun $program]
     expr {$got eq "same: \[[join [concat $expected $expected] {, }]\]" ? "agree" : $got}
@@ -758,11 +758,11 @@ test lu-native-reads {a live union is one window onto native memory: each altern
 
 test lu-native-stores-touch-only-the-alternative {a store through a union alternative writes exactly the alternative's bytes, in its encoding: a 1-, 2-, 4- or 8-byte scalar of a 16-byte union, a field of a union inside it (through the path, and through the alternative's own live edit), one element of an array alternative, a whole array alternative -- every other byte of the union, and the record's fields before and after it, keep their 0xA5 sentinels; nothing is zeroed or normalized} -constraints nativeBuilt -body {
     set stores [list \
-        {binary::store(e, SANDWICH.w.b, 7)} {binary::store(e, SANDWICH.w.h, -2)} {binary::store(e, SANDWICH.w.w, 305419896)} \
-        {binary::store(e, SANDWICH.w.q, 18446744073709551615)} {binary::store(e, SANDWICH.w.word.halves.high, -32768)} \
-        {binary::store(e.w.word.halves, HALVES.low, 4660)} {binary::store_element(e.w.words, 2, 4294967295)} \
-        {binary::store(e, SANDWICH.w.bytes, u8s([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]))}]
-    set program "fn one(k: int) -> List\[any\] errors NativeEditNull, IndexNotFound, LayoutExtentMismatch:\n    p = memory(fill(24, 165))\n    e = binary::native::edit(SANDWICH, p)\n"
+        {std::binary::store(e, SANDWICH.w.b, 7)} {std::binary::store(e, SANDWICH.w.h, -2)} {std::binary::store(e, SANDWICH.w.w, 305419896)} \
+        {std::binary::store(e, SANDWICH.w.q, 18446744073709551615)} {std::binary::store(e, SANDWICH.w.word.halves.high, -32768)} \
+        {std::binary::store(e.w.word.halves, HALVES.low, 4660)} {std::binary::store_element(e.w.words, 2, 4294967295)} \
+        {std::binary::store(e, SANDWICH.w.bytes, u8s([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]))}]
+    set program "fn one(k: int) -> List\[any\] errors NativeEditNull, IndexNotFound, LayoutExtentMismatch:\n    p = memory(fill(24, 165))\n    e = std::binary::native::edit(SANDWICH, p)\n"
     set i 0
     foreach store $stores {
         append program "    if k == $i:\n        $store\n"
@@ -778,7 +778,7 @@ test lu-native-stores-touch-only-the-alternative {a store through a union altern
 } -cleanup {unset -nocomplain stores program i store expected got} -result agree
 
 test lu-native-interpretation-switching {choosing an alternative is interpretation, never conversion, and nothing is cached: reading A, writing B through another edit of the same memory, reading A again reloads it; a write through one alternative is what every other alternative reads next, by its own encoding; no alternative is "active"} -constraints nativeBuilt -body {
-    set program "fn go() -> List\[any\] errors NativeEditNull, NativeViewNull, IndexNotFound:\n    p = memory(fill(16, 0))\n    e1 = binary::native::edit(WIDE, p)\n    e2 = binary::native::edit(WIDE, p)\n    v = binary::native::view(WIDE, p)\n    a = v.w\n    binary::store(e2, WIDE.q, 72623859790382856)\n    b = v.w\n    c = v.word.halves.high\n    binary::store_element(e1.word.bytes, 0, 255)\n    d = v.b\n    f = v.q\n    g = v.w\n    binary::store(e1, WIDE.large.parts.high, -1)\n    h = v.large.quad\n    \[a, b, c, d, f, g, h, binary::element(v.words, 1), dump(p, 16)\]\nr = go():\n    on NativeEditNull:\n        \[\]\n    on NativeViewNull:\n        \[\]\n    on IndexNotFound:\n        \[\]\nr\n"
+    set program "fn go() -> List\[any\] errors NativeEditNull, NativeViewNull, IndexNotFound:\n    p = memory(fill(16, 0))\n    e1 = std::binary::native::edit(WIDE, p)\n    e2 = std::binary::native::edit(WIDE, p)\n    v = std::binary::native::view(WIDE, p)\n    a = v.w\n    std::binary::store(e2, WIDE.q, 72623859790382856)\n    b = v.w\n    c = v.word.halves.high\n    std::binary::store_element(e1.word.bytes, 0, 255)\n    d = v.b\n    f = v.q\n    g = v.w\n    std::binary::store(e1, WIDE.large.parts.high, -1)\n    h = v.large.quad\n    \[a, b, c, d, f, g, h, std::binary::element(v.words, 1), dump(p, 16)\]\nr = go():\n    on NativeEditNull:\n        \[\]\n    on NativeViewNull:\n        \[\]\n    on IndexNotFound:\n        \[\]\nr\n"
     set q [luLe 72623859790382856 8]
     set q2 [lreplace $q 0 0 255]
     set q3 [concat [lrange $q2 0 3] {255 255 255 255}]
@@ -786,9 +786,9 @@ test lu-native-interpretation-switching {choosing an alternative is interpretati
 } -cleanup {unset -nocomplain program q q2 q3} -result [join [list same: \
     "\[0, [luAt [luLe 72623859790382856 8] 0 4], [luAt [luLe 72623859790382856 8] 2 2 1], 255, [luAt [lreplace [luLe 72623859790382856 8] 0 0 255] 0 8], [luAt [lreplace [luLe 72623859790382856 8] 0 0 255] 0 4], [luAt [concat [lrange [lreplace [luLe 72623859790382856 8] 0 0 255] 0 3] {255 255 255 255}] 0 8 1], 4294967295, [luList [concat [lrange [lreplace [luLe 72623859790382856 8] 0 0 255] 0 3] {255 255 255 255} [lrepeat 8 0]]]\]"]]
 
-test lu-native-arrays-of-unions {an array of unions repeats the union's representation, element i at the field's offset plus i times the union's declared size: binary::element gives each element's live union (a view's NativeView[WORD], an edit's NativeEdit[WORD]) at a checked index -- dynamic, two-dimensional -- whose alternatives read and store as any union's; an index past the extent is IndexNotFound, nothing read; one element's store touches that element's alternative only} -constraints nativeBuilt -body {
+test lu-native-arrays-of-unions {an array of unions repeats the union's representation, element i at the field's offset plus i times the union's declared size: std::binary::element gives each element's live union (a view's NativeView[WORD], an edit's NativeEdit[WORD]) at a checked index -- dynamic, two-dimensional -- whose alternatives read and store as any union's; an index past the extent is IndexNotFound, nothing read; one element's store touches that element's alternative only} -constraints nativeBuilt -body {
     set b [luRamp 40]
-    set program "fn go(past: int) -> List\[any\] errors NativeEditNull, IndexNotFound:\n    p = memory(ramp(40))\n    e = binary::native::edit(ARRS, p)\n    wholes = loop i from 0 to 3:\n        binary::element(e.ws, i).whole\n    highs = loop i from 0 to 2:\n        loop j from 0 to 2:\n            binary::element(binary::element(e.grid, i), j).halves.high\n    w1 = binary::element(e.ws, 1)\n    binary::store(w1, WORD.halves.low, 4660)\n    g = binary::element(binary::element(e.grid, 1), 0)\n    binary::store_element(g.bytes, 3, 9)\n    binary::store(e, ARRS.grid\[0\]\[1\].whole, 0)\n    x = binary::element(e.ws, past):\n        on IndexNotFound:\n            return \[wholes, highs, dump(p, 40)\]\n    \[\]\nr = go(3):\n    on NativeEditNull:\n        \[\]\n    on IndexNotFound:\n        \[\]\nr\n"
+    set program "fn go(past: int) -> List\[any\] errors NativeEditNull, IndexNotFound:\n    p = memory(ramp(40))\n    e = std::binary::native::edit(ARRS, p)\n    wholes = loop i from 0 to 3:\n        std::binary::element(e.ws, i).whole\n    highs = loop i from 0 to 2:\n        loop j from 0 to 2:\n            std::binary::element(std::binary::element(e.grid, i), j).halves.high\n    w1 = std::binary::element(e.ws, 1)\n    std::binary::store(w1, WORD.halves.low, 4660)\n    g = std::binary::element(std::binary::element(e.grid, 1), 0)\n    std::binary::store_element(g.bytes, 3, 9)\n    std::binary::store(e, ARRS.grid\[0\]\[1\].whole, 0)\n    x = std::binary::element(e.ws, past):\n        on IndexNotFound:\n            return \[wholes, highs, dump(p, 40)\]\n    \[\]\nr = go(3):\n    on NativeEditNull:\n        \[\]\n    on IndexNotFound:\n        \[\]\nr\n"
     set highs {}
     foreach i {0 1} {
         set row {}
@@ -809,8 +809,8 @@ test lu-native-arrays-of-unions {an array of unions repeats the union's represen
     expr {$got eq $expected ? "agree" : "$got != $expected"}
 } -cleanup {unset -nocomplain b program highs row i j after at got expected} -result agree
 
-test lu-native-unions-of-arrays {an array alternative is an ordinary live array at the union's address -- never flattened: its elements read and store one at a time (a byte array's and a word array's views of the same 16 bytes), it copies whole with binary::load and stores whole from a List; an alternative that is an array of records or of unions (DEEP) gives each element's own live record or union} -constraints nativeBuilt -body {
-    set program "fn go() -> List\[any\] errors NativeEditNull, IndexNotFound, LayoutExtentMismatch:\n    p = memory(fill(16, 0))\n    e = binary::native::edit(WIDE, p)\n    binary::store(e, WIDE.words, u32s(\[16909060, 84281096, 4294967295, 0\]))\n    a = binary::load(e.bytes)\n    binary::store_element(e.bytes, 15, 128)\n    b = binary::element(e.words, 3)\n    q = memory(ramp(12))\n    d = binary::native::edit(DEEP, q)\n    c = \[binary::element(d.arrs, 2).whole, binary::element(d.halves, 1).high, d.inner.halves.low, binary::load(binary::element(d.arrs, 1).bytes)\]\n    binary::store(binary::element(d.halves, 2), HALVES.low, 0)\n    \[a, b, c, dump(q, 12)\]\nr = go():\n    on NativeEditNull:\n        \[\]\n    on IndexNotFound:\n        \[\]\n    on LayoutExtentMismatch:\n        \[\]\nr\n"
+test lu-native-unions-of-arrays {an array alternative is an ordinary live array at the union's address -- never flattened: its elements read and store one at a time (a byte array's and a word array's views of the same 16 bytes), it copies whole with std::binary::load and stores whole from a List; an alternative that is an array of records or of unions (DEEP) gives each element's own live record or union} -constraints nativeBuilt -body {
+    set program "fn go() -> List\[any\] errors NativeEditNull, IndexNotFound, LayoutExtentMismatch:\n    p = memory(fill(16, 0))\n    e = std::binary::native::edit(WIDE, p)\n    std::binary::store(e, WIDE.words, u32s(\[16909060, 84281096, 4294967295, 0\]))\n    a = std::binary::load(e.bytes)\n    std::binary::store_element(e.bytes, 15, 128)\n    b = std::binary::element(e.words, 3)\n    q = memory(ramp(12))\n    d = std::binary::native::edit(DEEP, q)\n    c = \[std::binary::element(d.arrs, 2).whole, std::binary::element(d.halves, 1).high, d.inner.halves.low, std::binary::load(std::binary::element(d.arrs, 1).bytes)\]\n    std::binary::store(std::binary::element(d.halves, 2), HALVES.low, 0)\n    \[a, b, c, dump(q, 12)\]\nr = go():\n    on NativeEditNull:\n        \[\]\n    on IndexNotFound:\n        \[\]\n    on LayoutExtentMismatch:\n        \[\]\nr\n"
     set words [concat [luLe 16909060 4] [luLe 84281096 4] [luLe 4294967295 4] [luLe 0 4]]
     set deep [luRamp 12]
     set after [lreplace $deep 8 9 0 0]
@@ -820,39 +820,39 @@ test lu-native-unions-of-arrays {an array alternative is an ordinary live array 
 } -cleanup {unset -nocomplain program words deep after got expected} -result agree
 
 test lu-native-pointer-alternatives {a pointer alternative read through a view is the pointer memory holds (a fresh affine value, null as null); stored from an existing pointer it is observed, its address bits what the scalar alternative of the same bytes reads -- native memory is raw: a holder of write authority stores an Int's bits and the pointer alternative reads them back as a pointer (raw punning: making the edit is the direct edge); in an array of such unions, each element's alternative likewise} -constraints nativeBuilt -body {
-    set program "fn go() -> List\[any\] errors NativeEditNull, NativeViewNull, IndexNotFound:\n    p = memory(fill(8, 0))\n    e = binary::native::edit(PWORD, p)\n    v = binary::native::view(PWORD, p)\n    z = v.p\n    wasNull = ffi::c::null?(z)\n    q = ffi_fixture::memory\[Node\](bytes_of(\[1, 2, 3\]))\n    binary::store(e, PWORD.p, q)\n    bits = v.bits\n    r = v.p\n    same = ffi_fixture::address_of(r) == ffi_fixture::address_of(q)\n    t = ffi_fixture::memory\[Node\](bytes_of(\[4, 5, 6\]))\n    binary::store(e, PWORD.bits, u64(ffi_fixture::address_of(t)))\n    punned = v.p\n    pun = ffi_fixture::address_of(punned) == ffi_fixture::address_of(t)\n    s = memory(fill(24, 0))\n    a = binary::native::edit(PARR, s)\n    binary::store(binary::element(a.ps, 1), PWORD.p, q)\n    k = binary::element(a.ps, 1).bits == ffi_fixture::address_of(q)\n    \[wasNull, bits == ffi_fixture::address_of(q), same, pun, ffi::c::null?(q), k, binary::element(a.ps, 0).bits\]\nres = go():\n    on NativeEditNull:\n        \[\]\n    on NativeViewNull:\n        \[\]\n    on IndexNotFound:\n        \[\]\nres\n"
+    set program "fn go() -> List\[any\] errors NativeEditNull, NativeViewNull, IndexNotFound:\n    p = memory(fill(8, 0))\n    e = std::binary::native::edit(PWORD, p)\n    v = std::binary::native::view(PWORD, p)\n    z = v.p\n    wasNull = std::ffi::c::null?(z)\n    q = ffi_fixture::memory\[Node\](bytes_of(\[1, 2, 3\]))\n    std::binary::store(e, PWORD.p, q)\n    bits = v.bits\n    r = v.p\n    same = ffi_fixture::address_of(r) == ffi_fixture::address_of(q)\n    t = ffi_fixture::memory\[Node\](bytes_of(\[4, 5, 6\]))\n    std::binary::store(e, PWORD.bits, u64(ffi_fixture::address_of(t)))\n    punned = v.p\n    pun = ffi_fixture::address_of(punned) == ffi_fixture::address_of(t)\n    s = memory(fill(24, 0))\n    a = std::binary::native::edit(PARR, s)\n    std::binary::store(std::binary::element(a.ps, 1), PWORD.p, q)\n    k = std::binary::element(a.ps, 1).bits == ffi_fixture::address_of(q)\n    \[wasNull, bits == ffi_fixture::address_of(q), same, pun, std::ffi::c::null?(q), k, std::binary::element(a.ps, 0).bits\]\nres = go():\n    on NativeEditNull:\n        \[\]\n    on NativeViewNull:\n        \[\]\n    on IndexNotFound:\n        \[\]\nres\n"
     luNativeRun $program
 } -cleanup {unset -nocomplain program} -result {same: [true, true, true, true, false, true, 0]}
 
 test lu-native-record-holding-a-union {a record holding a union (the OVERLAPPED shape) is read and written field by field through a view or an edit without materializing it: its ordinary fields, the union field's live window (NativeView[OVLU]), one alternative's fields, the pointer alternative over the same bytes, the field after the union -- each one access at its absolute offset} -constraints nativeBuilt -body {
-    set program "fn go() -> List\[any\] errors NativeEditNull, NativeViewNull:\n    p = memory(fill(32, 0))\n    e = binary::native::edit(OVL, p)\n    v = binary::native::view(OVL, p)\n    binary::store(e, OVL.internal, 259)\n    binary::store(e.u, OVLU.offsets.offset, 4096)\n    binary::store(e, OVL.u.offsets.offsetHigh, 2)\n    u = v.u\n    x = u.pointer\n    ev = v.event\n    \[v.internal, v.u.offsets.offset, u.offsets.offsetHigh, ffi_fixture::address_of(x), binary::load(v.u.offsets), ffi::c::null?(ev), dump(p, 32)\]\nr = go():\n    on NativeEditNull:\n        \[\]\n    on NativeViewNull:\n        \[\]\nr\n"
+    set program "fn go() -> List\[any\] errors NativeEditNull, NativeViewNull:\n    p = memory(fill(32, 0))\n    e = std::binary::native::edit(OVL, p)\n    v = std::binary::native::view(OVL, p)\n    std::binary::store(e, OVL.internal, 259)\n    std::binary::store(e.u, OVLU.offsets.offset, 4096)\n    std::binary::store(e, OVL.u.offsets.offsetHigh, 2)\n    u = v.u\n    x = u.pointer\n    ev = v.event\n    \[v.internal, v.u.offsets.offset, u.offsets.offsetHigh, ffi_fixture::address_of(x), std::binary::load(v.u.offsets), std::ffi::c::null?(ev), dump(p, 32)\]\nr = go():\n    on NativeEditNull:\n        \[\]\n    on NativeViewNull:\n        \[\]\nr\n"
     luNativeRun $program
 } -cleanup {unset -nocomplain program} -result [join [list same: "\[259, 4096, 2, [expr {4096 + (2 << 32)}], LayoutStruct\[OFFSETS\] {offset: 4096, offsetHigh: 2}, true, [luList [luBytes 32 0 {{0 259 8} {16 4096 4} {20 2 4}}]]\]"]]
 
 test lu-native-types {a union field read through a view is the live union NativeView[U] (through an edit NativeEdit[U]: write authority kept, never gained), an alternative of it its own representation's type (a record's NativeView, an array's live array, a scalar's domain, a pointer's type), an element of an array of unions the element's live union; NativeView[U] is nominal: never another union's, a record's, a pointer, nor a NativeEdit (both directions)} -body {
     list \
-        [luKinds "fn f(v: NativeView\[OVL\]) -> NativeView\[OVLU\]:\n    v.u\nfn g(e: NativeEdit\[OVL\]) -> NativeEdit\[OVLU\]:\n    e.u\nfn h(v: NativeView\[OVL\]) -> NativeView\[OFFSETS\]:\n    v.u.offsets\nfn k(v: NativeView\[WIDE\]) -> NativeView\[array 16 of binary::U8\]:\n    v.bytes\nfn m(v: NativeView\[ARRS\]) -> NativeView\[WORD\] errors IndexNotFound:\n    binary::element(v.ws, 2)\nfn n(e: NativeEdit\[ARRS\]) -> NativeEdit\[array 2 of WORD\] errors IndexNotFound:\n    binary::element(e.grid, 1)\nfn o(v: NativeView\[WIDE\]) -> binary::I16:\n    v.h\n0\n"] \
+        [luKinds "fn f(v: NativeView\[OVL\]) -> NativeView\[OVLU\]:\n    v.u\nfn g(e: NativeEdit\[OVL\]) -> NativeEdit\[OVLU\]:\n    e.u\nfn h(v: NativeView\[OVL\]) -> NativeView\[OFFSETS\]:\n    v.u.offsets\nfn k(v: NativeView\[WIDE\]) -> NativeView\[array 16 of std::binary::U8\]:\n    v.bytes\nfn m(v: NativeView\[ARRS\]) -> NativeView\[WORD\] errors IndexNotFound:\n    std::binary::element(v.ws, 2)\nfn n(e: NativeEdit\[ARRS\]) -> NativeEdit\[array 2 of WORD\] errors IndexNotFound:\n    std::binary::element(e.grid, 1)\nfn o(v: NativeView\[WIDE\]) -> std::binary::I16:\n    v.h\n0\n"] \
         [luKinds "fn f(v: NativeView\[OVL\]) -> NativeEdit\[OVLU\]:\n    v.u\n0\n"] \
         [luKinds "fn f(e: NativeEdit\[OVL\]) -> NativeView\[OVLU\]:\n    e.u\n0\n"] \
         [luKinds "fn f(v: NativeView\[WIDE\]) -> NativeView\[WORD\]:\n    v\n0\n"] \
         [luKinds "fn f(v: NativeView\[OVLU\]) -> NativeView\[OFFSETS\]:\n    v\n0\n"] \
-        [luKinds "fn f(v: NativeView\[PWORD\]) -> bool:\n    ffi::c::null?(v)\n0\n"]
+        [luKinds "fn f(v: NativeView\[PWORD\]) -> bool:\n    std::ffi::c::null?(v)\n0\n"]
 } -result {accepted TYPE TYPE TYPE TYPE TYPE}
 
-test lu-native-authority {a live union keeps its backing's authority: a store through a view's union, or through a view's alternative, is BINARY-OPERAND (a view is read-only), a whole union is never stored (a designator names an alternative), and store_element of a union element is LAYOUT-OPERAND (written through its alternatives, binary::element(a, i))} -body {
+test lu-native-authority {a live union keeps its backing's authority: a store through a view's union, or through a view's alternative, is BINARY-OPERAND (a view is read-only), a whole union is never stored (a designator names an alternative), and store_element of a union element is LAYOUT-OPERAND (written through its alternatives, std::binary::element(a, i))} -body {
     list \
-        [luKinds "fn f(v: NativeView\[OVL\]) -> unit:\n    binary::store(v.u, OVLU.offsets.offset, 1)\n0\n"] \
-        [luKinds "fn f(v: NativeView\[OVL\]) -> unit:\n    binary::store(v, OVL.u.offsets.offset, 1)\n0\n"] \
-        [luKinds "fn f(e: NativeEdit\[OVL\]) -> unit:\n    binary::store(e, OVL.u, 1)\n0\n"] \
-        [luFirst "fn f(e: NativeEdit\[ARRS\]) -> unit errors IndexNotFound:\n    binary::store_element(e.ws, 0, 1)\n0\n"]
-} -result {BINARY-OPERAND BINARY-OPERAND LAYOUT-OPERAND {LAYOUT-OPERAND {binary::store_element writes one scalar or pointer element, but an element of NativeEdit[array 3 of WORD] is the union layout WORD: write its alternatives through binary::element(a, i), the element's own live edit}}}
+        [luKinds "fn f(v: NativeView\[OVL\]) -> unit:\n    std::binary::store(v.u, OVLU.offsets.offset, 1)\n0\n"] \
+        [luKinds "fn f(v: NativeView\[OVL\]) -> unit:\n    std::binary::store(v, OVL.u.offsets.offset, 1)\n0\n"] \
+        [luKinds "fn f(e: NativeEdit\[OVL\]) -> unit:\n    std::binary::store(e, OVL.u, 1)\n0\n"] \
+        [luFirst "fn f(e: NativeEdit\[ARRS\]) -> unit errors IndexNotFound:\n    std::binary::store_element(e.ws, 0, 1)\n0\n"]
+} -result {BINARY-OPERAND BINARY-OPERAND LAYOUT-OPERAND {LAYOUT-OPERAND {std::binary::store_element writes one scalar or pointer element, but an element of NativeEdit[array 3 of WORD] is the union layout WORD: write its alternatives through std::binary::element(a, i), the element's own live edit}}}
 
 test lu-native-nir {native code of a union alternative is the code of that representation at the union's address, with no union machinery: an alternative's field through a union inside a record is one nativeload at its absolute offset (20: the union at 16, the field at 4), a store through a live union's alternative one nativestore at 16, a pointer alternative one nativeloadptr, an alternative of an element of a two-dimensional array of unions the bounds check, the index times the union's size (8: a row of two 4-byte unions), one cptroffset and one nativeload at 4 + 2 -- and reading the last of 64 alternatives is the same one load as reading the first: nothing is searched, allocated or read whole} -constraints nativeBuilt -body {
     set many "union layout MANY:\n    size 4\n    align 4\n"
     for {set i 0} {$i < 64} {incr i} {
-        append many "    alternative a$i: [lindex {binary::U16 binary::U8 binary::U32 binary::U16} [expr {$i % 4}]]\n"
+        append many "    alternative a$i: [lindex {std::binary::U16 std::binary::U8 std::binary::U32 std::binary::U16} [expr {$i % 4}]]\n"
     }
-    set program "$many\nfn rd(v: NativeView\[OVL\]) -> int:\n    v.u.offsets.offsetHigh\nfn st(e: NativeEdit\[OVL\], x: binary::U32) -> unit:\n    binary::store(e.u, OVLU.offsets.offset, x)\nfn ptr(v: NativeView\[OVL\]) -> bool:\n    x = v.u.pointer\n    ffi::c::null?(x)\nfn el(v: NativeView\[ARRS\], i: int) -> int:\n    g = binary::element(v.grid, i):\n        on IndexNotFound:\n            return -1\n    binary::element(g, 1).halves.high\nfn first(m: NativeView\[MANY\]) -> int:\n    m.a0\nfn last(m: NativeView\[MANY\]) -> int:\n    m.a63\nfn main() -> int errors NativeViewNull, NativeEditNull:\n    p = memory(fill(40, 0))\n    v = binary::native::view(OVL, p)\n    e = binary::native::edit(OVL, p)\n    a = binary::native::view(ARRS, p)\n    m = binary::native::view(MANY, p)\n    st(e, 1)\n    b = ptr(v)\n    rd(v) + el(a, 1) + first(m) + last(m)\nr = main():\n    on NativeViewNull:\n        0\n    on NativeEditNull:\n        0\nr\n"
+    set program "$many\nfn rd(v: NativeView\[OVL\]) -> int:\n    v.u.offsets.offsetHigh\nfn st(e: NativeEdit\[OVL\], x: std::binary::U32) -> unit:\n    std::binary::store(e.u, OVLU.offsets.offset, x)\nfn ptr(v: NativeView\[OVL\]) -> bool:\n    x = v.u.pointer\n    std::ffi::c::null?(x)\nfn el(v: NativeView\[ARRS\], i: int) -> int:\n    g = std::binary::element(v.grid, i):\n        on IndexNotFound:\n            return -1\n    std::binary::element(g, 1).halves.high\nfn first(m: NativeView\[MANY\]) -> int:\n    m.a0\nfn last(m: NativeView\[MANY\]) -> int:\n    m.a63\nfn main() -> int errors NativeViewNull, NativeEditNull:\n    p = memory(fill(40, 0))\n    v = std::binary::native::view(OVL, p)\n    e = std::binary::native::edit(OVL, p)\n    a = std::binary::native::view(ARRS, p)\n    m = std::binary::native::view(MANY, p)\n    st(e, 1)\n    b = ptr(v)\n    rd(v) + el(a, 1) + first(m) + last(m)\nr = main():\n    on NativeViewNull:\n        0\n    on NativeEditNull:\n        0\nr\n"
     set el [luNir $program el]
     list [luOpNames [luNir $program rd]] [regexp -inline {int 20} [luNir $program rd]] \
         [luOpNames [luNir $program st]] [regexp -inline {int 16} [luNir $program st]] \
@@ -862,14 +862,14 @@ test lu-native-nir {native code of a union alternative is the code of that repre
 } -cleanup {unset -nocomplain many i program el} -result {{nativeload runbox} {{int 20}} nativestore {{int 16}} {nativeloadptr cptrisnull} {ige ilt imul iadd cptroffset risub nativeload runbox} 1 1 {nativeload runbox} {nativeload runbox} 0}
 
 test lu-native-allocations {natively, reading and storing union alternatives allocates nothing -- a scalar alternative, a record alternative's field, an alternative of an array element, a store through a union inside a record, switching between interpretations: 1000 of each costs what a loop doing nothing does -- and a copy of a record alternative allocates exactly its LayoutStruct} -constraints nativeLinux -body {
-    set loop "fn run(n: int) -> int errors NativeViewNull, NativeEditNull:\n    p = memory(ramp(40))\n    v = binary::native::view(ARRS, p)\n    e = binary::native::edit(OVL, p)\n    w = binary::native::view(WIDE, p)\n    k = loop i from 0 to n:\n        f(v, e, w)\n    0\nr = run(1000):\n    on NativeViewNull:\n        0\n    on NativeEditNull:\n        0\nr\n"
+    set loop "fn run(n: int) -> int errors NativeViewNull, NativeEditNull:\n    p = memory(ramp(40))\n    v = std::binary::native::view(ARRS, p)\n    e = std::binary::native::edit(OVL, p)\n    w = std::binary::native::view(WIDE, p)\n    k = loop i from 0 to n:\n        f(v, e, w)\n    0\nr = run(1000):\n    on NativeViewNull:\n        0\n    on NativeEditNull:\n        0\nr\n"
     set head "fn f(v: NativeView\[ARRS\], e: NativeEdit\[OVL\], w: NativeView\[WIDE\]) -> int:\n"
     lmap body [list \
         "    0\n" \
         "    w.b + w.h + w.word.halves.high + w.large.parts.low\n" \
-        "    x = binary::element(v.ws, 1):\n        on IndexNotFound:\n            return 0\n    x.whole + x.halves.low\n" \
-        "    binary::store(e, OVL.u.offsets.offsetHigh, 4000000000)\n    binary::store(e.u, OVLU.offsets.offset, 7)\n    0\n" \
-        "    s = binary::load(w.large.parts)\n    0\n"] {
+        "    x = std::binary::element(v.ws, 1):\n        on IndexNotFound:\n            return 0\n    x.whole + x.halves.low\n" \
+        "    std::binary::store(e, OVL.u.offsets.offsetHigh, 4000000000)\n    std::binary::store(e.u, OVLU.offsets.offset, 7)\n    0\n" \
+        "    s = std::binary::load(w.large.parts)\n    0\n"] {
         set report [native::allocationReport [surface::compile [luProgram "$head$body$loop"] unions.bot -warnings off] summary]
         lmap kind {Struct List} {
             expr {[dict exists $report byKind $kind] ? [dict get $report byKind $kind allocations] : 0}
@@ -877,18 +877,18 @@ test lu-native-allocations {natively, reading and storing union alternatives all
     }
 } -cleanup {unset -nocomplain loop head body report kind} -result {{1 6} {1 6} {1 6} {1 6} {1001 6}}
 
-test lu-tcl-backends {the Tcl backends have no native memory, so no live union ever exists there: a view or an edit of a non-null pointer is refused (NATIVE-ONLY) before an alternative could be read, of the null pointer it is the declared null error on every backend -- and the byte side (binary::read, binary::write, binary::write_foreign through alternatives) runs there exactly as natively (the tests above)} -body {
+test lu-tcl-backends {the Tcl backends have no native memory, so no live union ever exists there: a view or an edit of a non-null pointer is refused (NATIVE-ONLY) before an alternative could be read, of the null pointer it is the declared null error on every backend -- and the byte side (std::binary::read, std::binary::write, std::binary::write_foreign through alternatives) runs there exactly as natively (the tests above)} -body {
     list \
-        [luRun "fn go() -> int errors NativeViewNull:\n    p = memory(fill(4, 0))\n    v = binary::native::view(WORD, p)\n    v.whole\nr = go():\n    on NativeViewNull:\n        -1\nr\n" {interp compile}] \
-        [luRun "fn go() -> int errors NativeEditNull:\n    p = ffi::c::null\[ffi::c::Void\]()\n    e = binary::native::edit(OVL, p)\n    binary::store(e, OVL.u.offsets.offset, 1)\n    0\nr = go():\n    on NativeEditNull:\n        -1\nr\n" {interp compile}]
-} -result {{same error: NATIVE-ONLY: binary::native::view reads live native process memory, which only the native backends (cranelift, cranelift-generic, a native executable) have; the Tcl backends (interp, compile) have no native address space and do not imitate one} {same: -1}}
+        [luRun "fn go() -> int errors NativeViewNull:\n    p = memory(fill(4, 0))\n    v = std::binary::native::view(WORD, p)\n    v.whole\nr = go():\n    on NativeViewNull:\n        -1\nr\n" {interp compile}] \
+        [luRun "fn go() -> int errors NativeEditNull:\n    p = std::ffi::c::null\[std::ffi::c::Void\]()\n    e = std::binary::native::edit(OVL, p)\n    std::binary::store(e, OVL.u.offsets.offset, 1)\n    0\nr = go():\n    on NativeEditNull:\n        -1\nr\n" {interp compile}]
+} -result {{same error: NATIVE-ONLY: std::binary::native::view reads live native process memory, which only the native backends (cranelift, cranelift-generic, a native executable) have; the Tcl backends (interp, compile) have no native address space and do not imitate one} {same: -1}}
 
-test lu-unchecked-replay {a program compiled unchecked (-strict 0) whose union operation the checks reject replays the diagnostic when the call runs, before anything is read or written -- natively (binary::load of a live union, binary::read of an array of unions, binary::parse of a record holding a union: LAYOUT-UNION; binary::read of a pointer alternative: LAYOUT-NATIVE-ONLY) and by the reference implementation on the Tcl backends (it refuses union words in a descriptor)} -constraints nativeBuilt -body {
+test lu-unchecked-replay {a program compiled unchecked (-strict 0) whose union operation the checks reject replays the diagnostic when the call runs, before anything is read or written -- natively (std::binary::load of a live union, std::binary::read of an array of unions, std::binary::parse of a record holding a union: LAYOUT-UNION; std::binary::read of a pointer alternative: LAYOUT-NATIVE-ONLY) and by the reference implementation on the Tcl backends (it refuses union words in a descriptor)} -constraints nativeBuilt -body {
     lmap source [list \
-        "fn f() -> int errors NativeViewNull:\n    p = memory(fill(4, 0))\n    v = binary::native::view(WORD, p)\n    s = binary::load(v)\n    0\nr = f():\n    on NativeViewNull:\n        -1\nr\n" \
-        "fn f() -> int errors LayoutLengthMismatch:\n    s = binary::read(bytes_of(fill(40, 0)), ARRS.ws)\n    0\nr = f():\n    on LayoutLengthMismatch:\n        -1\nr\n" \
-        "fn f() -> int errors LayoutLengthMismatch:\n    s = binary::parse(SANDWICH, bytes_of(fill(24, 0)))\n    0\nr = f():\n    on LayoutLengthMismatch:\n        -1\nr\n" \
-        "fn f() -> int errors LayoutLengthMismatch:\n    s = binary::read(bytes_of(fill(8, 0)), PWORD.p)\n    0\nr = f():\n    on LayoutLengthMismatch:\n        -1\nr\n"] {
+        "fn f() -> int errors NativeViewNull:\n    p = memory(fill(4, 0))\n    v = std::binary::native::view(WORD, p)\n    s = std::binary::load(v)\n    0\nr = f():\n    on NativeViewNull:\n        -1\nr\n" \
+        "fn f() -> int errors LayoutLengthMismatch:\n    s = std::binary::read(bytes_of(fill(40, 0)), ARRS.ws)\n    0\nr = f():\n    on LayoutLengthMismatch:\n        -1\nr\n" \
+        "fn f() -> int errors LayoutLengthMismatch:\n    s = std::binary::parse(SANDWICH, bytes_of(fill(24, 0)))\n    0\nr = f():\n    on LayoutLengthMismatch:\n        -1\nr\n" \
+        "fn f() -> int errors LayoutLengthMismatch:\n    s = std::binary::read(bytes_of(fill(8, 0)), PWORD.p)\n    0\nr = f():\n    on LayoutLengthMismatch:\n        -1\nr\n"] {
         set hir [surface::compile [luProgram $source] unions.bot -warnings off -strict 0]
         list [lsort -unique [lmap backend $::luNative {lindex [luOutcome $backend $hir] 1}]] \
             [lsort -unique [lmap backend {interp compile} {lindex [luOutcome $backend $hir] 1}]]
@@ -899,20 +899,20 @@ test lu-unchecked-replay {a program compiled unchecked (-strict 0) whose union o
 # HIR, interchange, isolation, cache, specialization
 
 test lu-hir-text-roundtrip {HIR text carries unions: a `union layout ID ns NS size N align A alternatives A1: T1, ...` line (no offsets: every alternative at 0), a field holding one by its identity, an array of unions, and the live types NativeView[U] and NativeView[array N of U]; formatting, reading back and formatting again gives the same text, and the read HIR runs to the same outcome} -constraints nativeBuilt -body {
-    set source "direct module\n\nimport binary::native\nimport ffi::c\n\ntype U8 = Int in 0..255\ntype U16 = Int in 0..65535\ntype U32 = Int in 0..4294967295\n\nopaque struct Node:\n    tag: unit\n\nlayout P:\n    size 4\n    align 2\n    field x: U16 at 0\n    field y: U16 at 2\n\nunion layout W:\n    size 8\n    align 4\n    alternative whole: U32\n    alternative p: P\n    alternative bytes: array 8 of U8\n    alternative next: ffi::c::Ptr\[Node\]\n\nlayout R:\n    size 28\n    align 4\n    field tag: U8 at 0\n    field w: W at 4\n    field ws: array 2 of W at 12\n\nfn w_of(r: NativeView\[R\]) -> NativeView\[W\]:\n    r.w\n\nfn ws_of(r: NativeView\[R\]) -> NativeView\[array 2 of W\]:\n    r.ws\n\nfn run() -> int errors NativeViewNull:\n    p = ffi::c::null\[Node\]()\n    v = binary::native::view(R, p)\n    a = w_of(v)\n    b = ws_of(v)\n    0\n\nr = run():\n    on NativeViewNull:\n        -1\nr\n"
+    set source "direct module\n\nimport std::binary::native\nimport std::ffi::c\n\ntype U8 = Int in 0..255\ntype U16 = Int in 0..65535\ntype U32 = Int in 0..4294967295\n\nopaque struct Node:\n    tag: unit\n\nlayout P:\n    size 4\n    align 2\n    field x: U16 at 0\n    field y: U16 at 2\n\nunion layout W:\n    size 8\n    align 4\n    alternative whole: U32\n    alternative p: P\n    alternative bytes: array 8 of U8\n    alternative next: std::ffi::c::Ptr\[Node\]\n\nlayout R:\n    size 28\n    align 4\n    field tag: U8 at 0\n    field w: W at 4\n    field ws: array 2 of W at 12\n\nfn w_of(r: NativeView\[R\]) -> NativeView\[W\]:\n    r.w\n\nfn ws_of(r: NativeView\[R\]) -> NativeView\[array 2 of W\]:\n    r.ws\n\nfn run() -> int errors NativeViewNull:\n    p = std::ffi::c::null\[Node\]()\n    v = std::binary::native::view(R, p)\n    a = w_of(v)\n    b = ws_of(v)\n    0\n\nr = run():\n    on NativeViewNull:\n        -1\nr\n"
     set hir [surface::compile $source unions.bot -warnings off]
     set text [hir::format $hir]
     set again [hir::parse $text]
-    list [regexp -all {union layout W ns - size 8 align 4 alternatives whole: U32, p: P, bytes: array 8 of U8, next: ffi::c::Ptr\[Node\]} $text] \
+    list [regexp -all {union layout W ns - size 8 align 4 alternatives whole: U32, p: P, bytes: array 8 of U8, next: std::ffi::c::Ptr\[Node\]} $text] \
         [regexp -all {w: W at 4, ws: array 2 of W at 12} $text] \
         [regexp -all {NativeView\[W\]} $text] [regexp -all {NativeView\[array 2 of W\]} $text] \
         [expr {[hir::format $again] eq $text}] [lmap backend {interp cranelift} {luOutcome $backend $again}]
 } -cleanup {unset -nocomplain source hir text again} -result {1 1 7 7 1 {{value -1} {value -1}}}
 
 test lu-interchange {HIR interchange keeps unions -- the registry's union entries and union fields, designator constants through alternatives, live union types and the elaborated alternative reads: a program written as interchange text and read back after another compilation declares a same-named union with other alternatives reads and writes through its own union, natively (live memory and bytes) and on the Tcl backends (the bytes; a view refused)} -constraints nativeBuilt -body {
-    set hir [surface::compile [luProgram "fn bytes() -> List\[any\]:\n    d = binary::write(mutable(fill(24, 0)), SANDWICH.w.word.halves.high, -2):\n        on LayoutLengthMismatch:\n            return \[\]\n    r = binary::read(frozen(d), SANDWICH.w.q):\n        on LayoutLengthMismatch:\n            return \[\]\n    \[r\]\nfn live() -> List\[any\] errors NativeEditNull, NativeViewNull:\n    p = memory(fill(24, 0))\n    e = binary::native::edit(SANDWICH, p)\n    binary::store(e.w, WIDE.h, -3)\n    v = binary::native::view(SANDWICH, p)\n    \[v.w.w, v.w.word.halves.low, dump(p, 24)\]\nr = live():\n    on NativeEditNull:\n        \[\]\n    on NativeViewNull:\n        \[\]\n\[bytes(), r\]\n"] unions.bot -warnings off]
+    set hir [surface::compile [luProgram "fn bytes() -> List\[any\]:\n    d = std::binary::write(mutable(fill(24, 0)), SANDWICH.w.word.halves.high, -2):\n        on LayoutLengthMismatch:\n            return \[\]\n    r = std::binary::read(frozen(d), SANDWICH.w.q):\n        on LayoutLengthMismatch:\n            return \[\]\n    \[r\]\nfn live() -> List\[any\] errors NativeEditNull, NativeViewNull:\n    p = memory(fill(24, 0))\n    e = std::binary::native::edit(SANDWICH, p)\n    std::binary::store(e.w, WIDE.h, -3)\n    v = std::binary::native::view(SANDWICH, p)\n    \[v.w.w, v.w.word.halves.low, dump(p, 24)\]\nr = live():\n    on NativeEditNull:\n        \[\]\n    on NativeViewNull:\n        \[\]\n\[bytes(), r\]\n"] unions.bot -warnings off]
     set text [hir::interchange::encode $hir]
-    surface::compile "import binary\nunion layout WIDE:\n    size 2\n    align 1\n    alternative h: binary::U16\nunion layout WORD:\n    size 1\n    align 1\n    alternative whole: binary::U8\nlayout SANDWICH:\n    size 4\n    align 1\n    field w: WIDE at 2\n\n0\n" other.bot -warnings off
+    surface::compile "import std::binary\nunion layout WIDE:\n    size 2\n    align 1\n    alternative h: std::binary::U16\nunion layout WORD:\n    size 1\n    align 1\n    alternative whole: std::binary::U8\nlayout SANDWICH:\n    size 4\n    align 1\n    field w: WIDE at 2\n\n0\n" other.bot -warnings off
     set read [hir::interchange::decode $text]
     list [lmap backend {interp compile} {lrange [luOutcome $backend $read] 0 1}] [lsort -unique [lmap backend $::luNative {luOutcome $backend $read}]]
 } -cleanup {unset -nocomplain hir text read} -result [list {{error NATIVE-ONLY} {error NATIVE-ONLY}} [list [list value "\[\[[luAt [luBytes 8 0 {{2 -2 2}}] 0 8]\], \[[luAt [luBytes 4 0 {{0 -3 2}}] 0 4], [luAt [luBytes 4 0 {{0 -3 2}}] 0 2], [luList [luBytes 24 0 {{4 -3 2}}]]\]\]"]]]
@@ -921,7 +921,7 @@ test lu-interchange-fresh-process {main.tcl -emit-hir-interchange writes a progr
     set dir [makeDirectory lu-hirx-[pid]]
     set path [file join $dir program.bot]
     set channel [open $path w]
-    puts -nonewline $channel "import abi\nimport abi::bytes\nimport binary\n\nlayout PT:\n    size 4\n    align 2\n    field x: binary::I16 at 0\n    field y: binary::U16 at 2\n\nunion layout U:\n    size 8\n    align 4\n    alternative q: binary::U64\n    alternative pt: PT\n    alternative bytes: array 8 of binary::U8\n\nlayout R:\n    size 20\n    align 4\n    field tag: binary::U8 at 0\n    field us: array 2 of U at 4\n\nfn build() -> List\[any\] errors LayoutLengthMismatch:\n    d = binary::write(abi::bytes::zeroed(abi::usize(20)), R.us\[1\].pt.x, -2)\n    e = binary::write(d, R.us\[0\].bytes\[7\], 128)\n    f = abi::bytes::freeze(e)\n    \[binary::read(f, R.us\[1\].q), binary::read(f, R.us\[1\].pt), binary::read(f, R.us\[0\].q), binary::read(f, R.us\[0\].bytes)\]\n\nr = build():\n    on LayoutLengthMismatch:\n        \[\]\nr\n"
+    puts -nonewline $channel "import std::abi\nimport std::abi::bytes\nimport std::binary\n\nlayout PT:\n    size 4\n    align 2\n    field x: std::binary::I16 at 0\n    field y: std::binary::U16 at 2\n\nunion layout U:\n    size 8\n    align 4\n    alternative q: std::binary::U64\n    alternative pt: PT\n    alternative bytes: array 8 of std::binary::U8\n\nlayout R:\n    size 20\n    align 4\n    field tag: std::binary::U8 at 0\n    field us: array 2 of U at 4\n\nfn build() -> List\[any\] errors LayoutLengthMismatch:\n    d = std::binary::write(std::abi::bytes::zeroed(std::abi::usize(20)), R.us\[1\].pt.x, -2)\n    e = std::binary::write(d, R.us\[0\].bytes\[7\], 128)\n    f = std::abi::bytes::freeze(e)\n    \[std::binary::read(f, R.us\[1\].q), std::binary::read(f, R.us\[1\].pt), std::binary::read(f, R.us\[0\].q), std::binary::read(f, R.us\[0\].bytes)\]\n\nr = build():\n    on LayoutLengthMismatch:\n        \[\]\nr\n"
     close $channel
     set main [file join $::projectRoot main.tcl]
     exec [info nameofexecutable] $main -warnings off -emit-hir-interchange $path
@@ -937,14 +937,14 @@ test lu-interchange-fresh-process {main.tcl -emit-hir-interchange writes a progr
 } -cleanup {file delete -force $dir; unset -nocomplain dir path channel main results backend output} -result {8 {{value: [65534, LayoutStruct[PT] {x: -2, y: 0}, 9223372036854775808, [0, 0, 0, 0, 0, 0, 0, 128]]}}}
 
 test lu-isolation {two programs declaring a same-named union whose alternatives differ -- their kinds, widths, the union's size -- compiled one after the other in one process: the earlier HIR still reads and writes through its own alternatives, natively and in bytes (the union is part of the registry a HIR's declarations capture)} -constraints nativeBuilt -body {
-    set a "union layout Swap:\n    size 4\n    align 4\n    alternative v: binary::U32\n    alternative h: binary::I16\n\n"
-    set b "union layout Swap:\n    size 8\n    align 8\n    alternative v: binary::U8\n    alternative h: binary::U64\n\n"
-    set body "fn f() -> List\[any\] errors NativeEditNull, NativeViewNull, LayoutLengthMismatch:\n    p = memory(fill(8, 255))\n    e = binary::native::edit(Swap, p)\n    binary::store(e, Swap.v, 1)\n    v = binary::native::view(Swap, p)\n    d = binary::write(mutable(fill(binary::layout_length(Swap), 0)), Swap.h, 2)\n    \[dump(p, 8), v.h, frozen(d), binary::read(bytes_of(ramp(binary::layout_length(Swap))), Swap.v)\]\nr = f():\n    on NativeEditNull:\n        \[\]\n    on NativeViewNull:\n        \[\]\n    on LayoutLengthMismatch:\n        \[\]\nr\n"
+    set a "union layout Swap:\n    size 4\n    align 4\n    alternative v: std::binary::U32\n    alternative h: std::binary::I16\n\n"
+    set b "union layout Swap:\n    size 8\n    align 8\n    alternative v: std::binary::U8\n    alternative h: std::binary::U64\n\n"
+    set body "fn f() -> List\[any\] errors NativeEditNull, NativeViewNull, LayoutLengthMismatch:\n    p = memory(fill(8, 255))\n    e = std::binary::native::edit(Swap, p)\n    std::binary::store(e, Swap.v, 1)\n    v = std::binary::native::view(Swap, p)\n    d = std::binary::write(mutable(fill(std::binary::layout_length(Swap), 0)), Swap.h, 2)\n    \[dump(p, 8), v.h, frozen(d), std::binary::read(bytes_of(ramp(std::binary::layout_length(Swap))), Swap.v)\]\nr = f():\n    on NativeEditNull:\n        \[\]\n    on NativeViewNull:\n        \[\]\n    on LayoutLengthMismatch:\n        \[\]\nr\n"
     set first [surface::compile [luProgram "$a$body"] unions.bot -warnings off]
     set second [surface::compile [luProgram "$b$body"] unions.bot -warnings off]
     # A same-named record after the union, and the union after the record:
     # whether Swap is a union is the compilation's own fact, too.
-    set record "layout Swap:\n    size 8\n    align 4\n    field v: binary::U32 at 0\n    field h: binary::I16 at 4\n\n"
+    set record "layout Swap:\n    size 8\n    align 4\n    field v: std::binary::U32 at 0\n    field h: std::binary::I16 at 4\n\n"
     set third [surface::compile [luProgram "$record$body"] unions.bot -warnings off]
     set fourth [surface::compile [luProgram "$a$body"] unions.bot -warnings off]
     list [luOutcome cranelift $first] [luOutcome cranelift $second] [luOutcome cranelift-generic $first] [lrange [luOutcome interp $first] 0 1] \
@@ -961,7 +961,7 @@ test lu-cache {the front-end cache keeps unions: a program file compiled through
     set cache [file join $dir cache]
     set path [file join $dir main.bot]
     set channel [open $path w]
-    puts -nonewline $channel [luProgram "fn f() -> List\[any\] errors NativeEditNull, LayoutLengthMismatch:\n    p = memory(fill(32, 0))\n    e = binary::native::edit(OVL, p)\n    binary::store(e, OVL.u.offsets.offsetHigh, 7)\n    w = binary::read(bytes_of(ramp(16)), WIDE.large.parts)\n    \[dump(p, 32), w\]\nr = f():\n    on NativeEditNull:\n        \[\]\n    on LayoutLengthMismatch:\n        \[\]\nr\n"]
+    puts -nonewline $channel [luProgram "fn f() -> List\[any\] errors NativeEditNull, LayoutLengthMismatch:\n    p = memory(fill(32, 0))\n    e = std::binary::native::edit(OVL, p)\n    std::binary::store(e, OVL.u.offsets.offsetHigh, 7)\n    w = std::binary::read(bytes_of(ramp(16)), WIDE.large.parts)\n    \[dump(p, 32), w\]\nr = f():\n    on NativeEditNull:\n        \[\]\n    on LayoutLengthMismatch:\n        \[\]\nr\n"]
     close $channel
     set first [surface::readProgramFile $path -warnings off -cache $cache]
     set second [surface::readProgramFile $path -warnings off -cache $cache]
@@ -970,22 +970,22 @@ test lu-cache {the front-end cache keeps unions: a program file compiled through
 
 test lu-specialization {a live union's static type survives specialization's re-inference: a union window returned by one function, an element of an array of unions passed to another and read in a third keep NativeEdit[WORD] in every instance (the view-field and native-element result shapes), so the specialized program reads and writes what the unspecialized one does; an untyped function cannot read a union's alternative -- its parameter is no static view (BINARY-OPERAND at the instance, TYPE at the call)} -constraints nativeBuilt -body {
     list \
-        [luNativeRun "fn word(e: NativeEdit\[ARRS\], i: int) -> NativeEdit\[WORD\] errors IndexNotFound:\n    binary::element(e.ws, i)\nfn put(w: NativeEdit\[WORD\], v: binary::U16) -> unit:\n    binary::store(w, WORD.halves.low, v)\nfn read(w: NativeEdit\[WORD\]) -> int:\n    w.whole\nfn go() -> List\[any\] errors NativeEditNull, IndexNotFound:\n    p = memory(fill(40, 0))\n    e = binary::native::edit(ARRS, p)\n    w = word(e, 1)\n    put(w, 513)\n    put(word(e, 2), 514)\n    \[read(w), read(word(e, 2)), dump(p, 40)\]\nres = go():\n    on NativeEditNull:\n        \[\]\n    on IndexNotFound:\n        \[\]\nres\n"] \
-        [luKinds "fn g(w):\n    w.whole\n\nfn f(v: NativeView\[ARRS\]) -> any errors IndexNotFound:\n    g(binary::element(v.ws, 0))\n0\n"]
+        [luNativeRun "fn word(e: NativeEdit\[ARRS\], i: int) -> NativeEdit\[WORD\] errors IndexNotFound:\n    std::binary::element(e.ws, i)\nfn put(w: NativeEdit\[WORD\], v: std::binary::U16) -> unit:\n    std::binary::store(w, WORD.halves.low, v)\nfn read(w: NativeEdit\[WORD\]) -> int:\n    w.whole\nfn go() -> List\[any\] errors NativeEditNull, IndexNotFound:\n    p = memory(fill(40, 0))\n    e = std::binary::native::edit(ARRS, p)\n    w = word(e, 1)\n    put(w, 513)\n    put(word(e, 2), 514)\n    \[read(w), read(word(e, 2)), dump(p, 40)\]\nres = go():\n    on NativeEditNull:\n        \[\]\n    on IndexNotFound:\n        \[\]\nres\n"] \
+        [luKinds "fn g(w):\n    w.whole\n\nfn f(v: NativeView\[ARRS\]) -> any errors IndexNotFound:\n    g(std::binary::element(v.ws, 0))\n0\n"]
 } -result [list "same: \[513, 514, [luList [luBytes 40 0 {{8 513 2} {12 514 2}}]]\]" TYPE]
 
 # ---------------------------------------------------------------------------
 # Authority, registrations, the sum-type boundary
 
-test lu-direct {making a view or an edit is raw authority (binary::native is direct); reading and writing the alternatives of a live union someone else made is not -- projections, binary::store through an alternative, binary::element of an array of unions -- and byte reads and writes through alternatives never are: a module doing only those is ordinary (marked direct, stale)} -body {
-    set layouts "import abi\nimport abi::bytes\nimport binary\nimport binary::native\nimport ffi::c\n\nunion layout U:\n    size 4\n    align 4\n    alternative w: binary::U32\n    alternative b: array 4 of binary::U8\n\nlayout L:\n    size 8\n    align 4\n    field us: array 2 of U at 0\n\n"
-    set use "fn f(v: NativeView\[L\], e: NativeEdit\[L\], d: abi::bytes::MutableBytes) -> int errors LayoutLengthMismatch, IndexNotFound:\n    binary::store(e, L.us\[1\].w, binary::element(v.us, 0).w)\n    x = binary::write(d, L.us\[0\].b\[3\], 1)\n    y = binary::read(abi::bytes::freeze(x), L.us\[0\].w)\n    binary::element(binary::element(e.us, 1).b, 2) + y\n0\n"
+test lu-direct {making a view or an edit is raw authority (std::binary::native is direct); reading and writing the alternatives of a live union someone else made is not -- projections, std::binary::store through an alternative, std::binary::element of an array of unions -- and byte reads and writes through alternatives never are: a module doing only those is ordinary (marked direct, stale)} -body {
+    set layouts "import std::abi\nimport std::abi::bytes\nimport std::binary\nimport std::binary::native\nimport std::ffi::c\n\nunion layout U:\n    size 4\n    align 4\n    alternative w: std::binary::U32\n    alternative b: array 4 of std::binary::U8\n\nlayout L:\n    size 8\n    align 4\n    field us: array 2 of U at 0\n\n"
+    set use "fn f(v: NativeView\[L\], e: NativeEdit\[L\], d: std::abi::bytes::MutableBytes) -> int errors LayoutLengthMismatch, IndexNotFound:\n    std::binary::store(e, L.us\[1\].w, std::binary::element(v.us, 0).w)\n    x = std::binary::write(d, L.us\[0\].b\[3\], 1)\n    y = std::binary::read(std::abi::bytes::freeze(x), L.us\[0\].w)\n    std::binary::element(std::binary::element(e.us, 1).b, 2) + y\n0\n"
     list [luKinds "$layouts$use" 1] [lmap d [luDiagnostics "direct module\n\n$layouts$use" 1] {lindex $d 0}] \
-        [luKinds "${layouts}fn f(p: ffi::c::Ptr\[ffi::c::Void\]) -> int errors NativeViewNull:\n    v = binary::native::view(U, p)\n    v.w\n0\n" 1]
+        [luKinds "${layouts}fn f(p: std::ffi::c::Ptr\[std::ffi::c::Void\]) -> int errors NativeViewNull:\n    v = std::binary::native::view(U, p)\n    v.w\n0\n" 1]
 } -cleanup {unset -nocomplain layouts use} -result {accepted STALE-DIRECT-MODULE DIRECT}
 
-test lu-registrations {binary::read is a root native whose -layout role every layer reads (never a name): its bytes operand (input), its designator (path) and its op; its result is the designated representation's copied type (layout-read), an array's extent its length (-result-length path), LayoutLengthMismatch its one error; it is not context-free, every argument is observed, and it has no method form} -body {
-    set meta [core::native::metadata binary::read]
+test lu-registrations {std::binary::read is a root native whose -layout role every layer reads (never a name): its bytes operand (input), its designator (path) and its op; its result is the designated representation's copied type (layout-read), an array's extent its length (-result-length path), LayoutLengthMismatch its one error; it is not context-free, every argument is observed, and it has no method form} -body {
+    set meta [core::native::metadata std::binary::read]
     list [dict get $meta layout] [dict get $meta contextFree] [dict get $meta ownership] [dict get $meta resultShape] \
         [dict get $meta errors] [dict get $meta resultLength] [dict get $meta nomethod]
 } -cleanup {unset -nocomplain meta} -result {{input 0 path 1 op read} 0 {observe observe} {layout-read 1} LayoutLengthMismatch {path 1} 1}
@@ -995,7 +995,7 @@ test lu-not-a-sum-type {a union is no tagged sum: it has no case, tag or active 
         [luKinds "x = WORD::whole\n0\n" ] \
         [luKinds "x = WORD.whole\n0\n"] \
         [luKinds "x = whole(1)\n0\n"] \
-        [luRun "fn go() -> List\[any\] errors LayoutLengthMismatch:\n    d = binary::write(mutable(fill(4, 0)), WORD.halves.high, -1)\n    f = frozen(d)\n    \[binary::read(f, WORD.whole), binary::read(f, WORD.bytes), binary::read(f, WORD.halves)\]\nr = go():\n    on LayoutLengthMismatch:\n        \[\]\nr\n"]
+        [luRun "fn go() -> List\[any\] errors LayoutLengthMismatch:\n    d = std::binary::write(mutable(fill(4, 0)), WORD.halves.high, -1)\n    f = frozen(d)\n    \[std::binary::read(f, WORD.whole), std::binary::read(f, WORD.bytes), std::binary::read(f, WORD.halves)\]\nr = go():\n    on LayoutLengthMismatch:\n        \[\]\nr\n"]
 } -result {UNKNOWN-NAMESPACE LAYOUT-NOT-A-VALUE UNBOUND {same: [4294901760, [0, 0, 255, 255], LayoutStruct[HALVES] {low: 0, high: -1}]}}
 
 # ---------------------------------------------------------------------------
@@ -1004,7 +1004,7 @@ test lu-not-a-sum-type {a union is no tagged sum: it has no case, tag or active 
 set luExecutableDir [makeDirectory layout-unions-executables-[pid]]
 
 test lu-executable {a standalone executable (whichever linker BOTLISH_NATIVE_LINKER selects) reads and writes live unions -- alternatives of a union in a record, of an array element, a pointer alternative -- and union alternatives in byte storage exactly as the in-process backends do} -constraints executableAot -body {
-    set source [luProgram "fn run(k: int) -> List\[any\] errors NativeEditNull, NativeViewNull, LayoutLengthMismatch, IndexNotFound:\n    p = memory(ramp(40))\n    e = binary::native::edit(ARRS, p)\n    binary::store(binary::element(e.ws, k), WORD.halves.high, -2)\n    binary::store(e, ARRS.grid\[1\]\[0\].bytes\[1\], 9)\n    v = binary::native::view(ARRS, p)\n    d = binary::write(mutable(fill(24, 0)), SANDWICH.w.large.parts.high, -3)\n    \[dump(p, 40), binary::element(v.ws, k).whole, binary::load(binary::element(binary::element(v.grid, 1), 0).halves), binary::read(frozen(d), SANDWICH.w.large.quad)\]\n\nr = run(1):\n    on NativeEditNull:\n        \[\]\n    on NativeViewNull:\n        \[\]\n    on LayoutLengthMismatch:\n        \[\]\n    on IndexNotFound:\n        \[\]\nr\n"]
+    set source [luProgram "fn run(k: int) -> List\[any\] errors NativeEditNull, NativeViewNull, LayoutLengthMismatch, IndexNotFound:\n    p = memory(ramp(40))\n    e = std::binary::native::edit(ARRS, p)\n    std::binary::store(std::binary::element(e.ws, k), WORD.halves.high, -2)\n    std::binary::store(e, ARRS.grid\[1\]\[0\].bytes\[1\], 9)\n    v = std::binary::native::view(ARRS, p)\n    d = std::binary::write(mutable(fill(24, 0)), SANDWICH.w.large.parts.high, -3)\n    \[dump(p, 40), std::binary::element(v.ws, k).whole, std::binary::load(std::binary::element(std::binary::element(v.grid, 1), 0).halves), std::binary::read(frozen(d), SANDWICH.w.large.quad)\]\n\nr = run(1):\n    on NativeEditNull:\n        \[\]\n    on NativeViewNull:\n        \[\]\n    on LayoutLengthMismatch:\n        \[\]\n    on IndexNotFound:\n        \[\]\nr\n"]
     set hir [surface::compile $source unions.bot -warnings off]
     set path [file join $::luExecutableDir unions]
     native::executable $hir $path
@@ -1013,7 +1013,7 @@ test lu-executable {a standalone executable (whichever linker BOTLISH_NATIVE_LIN
 } -cleanup {unset -nocomplain source hir path direct} -result {1 value}
 
 test lu-gc-stress {under BOTLISH_NATIVE_GC_STRESS=1 (a collection at every allocation site) live unions stay exact: copies of record and array alternatives building LayoutStructs and Lists, 64-bit alternatives that are BigInts stored and loaded, byte reads and writes through alternatives each allocating -- every operand stays rooted while the next allocation runs} -constraints nativeLinux -body {
-    set source [luProgram "fn many(k: int) -> List\[any\] errors NativeEditNull, NativeViewNull, LayoutLengthMismatch:\n    p = memory(fill(24, 0))\n    e = binary::native::edit(SANDWICH, p)\n    v = binary::native::view(SANDWICH, p)\n    rs = loop i from 0 to k:\n        binary::store(e, SANDWICH.w.q, 18446744073709551615)\n        binary::store(e.w, WIDE.large.parts.high, -9)\n        a = binary::write(mutable(fill(24, 0)), SANDWICH.w.q, v.w.q)\n        b = binary::read(frozen(a), SANDWICH.w.large.parts)\n        \[binary::load(v.w.large.parts), binary::load(v.w.words), binary::load(v.w.word.halves), b, v.w.q, binary::read(frozen(a), SANDWICH.w.bytes)\]\n    list::at(rs, k - 1):\n        on IndexNotFound:\n            \[\]\nr = many(40):\n    on NativeEditNull:\n        \[\]\n    on NativeViewNull:\n        \[\]\n    on LayoutLengthMismatch:\n        \[\]\nr\n"]
+    set source [luProgram "fn many(k: int) -> List\[any\] errors NativeEditNull, NativeViewNull, LayoutLengthMismatch:\n    p = memory(fill(24, 0))\n    e = std::binary::native::edit(SANDWICH, p)\n    v = std::binary::native::view(SANDWICH, p)\n    rs = loop i from 0 to k:\n        std::binary::store(e, SANDWICH.w.q, 18446744073709551615)\n        std::binary::store(e.w, WIDE.large.parts.high, -9)\n        a = std::binary::write(mutable(fill(24, 0)), SANDWICH.w.q, v.w.q)\n        b = std::binary::read(frozen(a), SANDWICH.w.large.parts)\n        \[std::binary::load(v.w.large.parts), std::binary::load(v.w.words), std::binary::load(v.w.word.halves), b, v.w.q, std::binary::read(frozen(a), SANDWICH.w.bytes)\]\n    std::list::at(rs, k - 1):\n        on IndexNotFound:\n            \[\]\nr = many(40):\n    on NativeEditNull:\n        \[\]\n    on NativeViewNull:\n        \[\]\n    on LayoutLengthMismatch:\n        \[\]\nr\n"]
     set hir [surface::compile $source unions.bot -warnings off]
     set plain [luOutcome cranelift $hir]
     set saved [expr {[info exists ::env(BOTLISH_NATIVE_GC_STRESS)] ? $::env(BOTLISH_NATIVE_GC_STRESS) : ""}]
@@ -1062,9 +1062,9 @@ if {[testConstraint cCompiler] && [testConstraint nativeCCalls] && [testConstrai
 testConstraint luCFixture [expr {$::luFixtureDir ne ""}]
 
 # The binding of the fixture (an application module `bnu`).
-set ::luBinding {import abi
-import abi::bytes
-import ffi::c
+set ::luBinding {import std::abi
+import std::abi::bytes
+import std::ffi::c
 
 extern c library "botlish_nunion_fixture"
 
@@ -1074,17 +1074,17 @@ opaque struct Record:
 opaque struct Target:
     tag: unit
 
-extern c fn reset named "bnu_reset"() -> ffi::c::Ptr[Record] independent
-extern c fn blank named "bnu_blank"() -> ffi::c::Ptr[Record] independent
-extern c fn copy_live named "bnu_copy_live"(out: ffi::c::Ptr[ffi::c::UChar] write noescape, n: ffi::c::ULong) -> unit
-extern c fn check_live named "bnu_check_live"(which: ffi::c::Int) -> ffi::c::Int
-extern c fn check_built named "bnu_check_built"(bytes: ffi::c::Ptr[ffi::c::UChar] read noescape, n: ffi::c::ULong, which: ffi::c::Int) -> ffi::c::Int
-extern c fn store_word named "bnu_store_word"(i: ffi::c::Int, alt: ffi::c::Int, value: ffi::c::ULong) -> unit
-extern c fn target named "bnu_target"() -> ffi::c::Ptr[Target] independent
-extern c fn is_target named "bnu_is_target"(p: ffi::c::Ptr[Target] noescape) -> ffi::c::Int
+extern c fn reset named "bnu_reset"() -> std::ffi::c::Ptr[Record] independent
+extern c fn blank named "bnu_blank"() -> std::ffi::c::Ptr[Record] independent
+extern c fn copy_live named "bnu_copy_live"(out: std::ffi::c::Ptr[std::ffi::c::UChar] write noescape, n: std::ffi::c::ULong) -> unit
+extern c fn check_live named "bnu_check_live"(which: std::ffi::c::Int) -> std::ffi::c::Int
+extern c fn check_built named "bnu_check_built"(bytes: std::ffi::c::Ptr[std::ffi::c::UChar] read noescape, n: std::ffi::c::ULong, which: std::ffi::c::Int) -> std::ffi::c::Int
+extern c fn store_word named "bnu_store_word"(i: std::ffi::c::Int, alt: std::ffi::c::Int, value: std::ffi::c::ULong) -> unit
+extern c fn target named "bnu_target"() -> std::ffi::c::Ptr[Target] independent
+extern c fn is_target named "bnu_is_target"(p: std::ffi::c::Ptr[Target] noescape) -> std::ffi::c::Int
 
-fn live_bytes() -> abi::bytes::MutableBytes:
-    written = copy_live(abi::bytes::zeroed(abi::usize(48)), 48)
+fn live_bytes() -> std::abi::bytes::MutableBytes:
+    written = copy_live(std::abi::bytes::zeroed(std::abi::usize(48)), 48)
     written.out
 }
 
@@ -1094,47 +1094,47 @@ fn live_bytes() -> abi::bytes::MutableBytes:
 set ::luRecordLayouts {layout BNU_HALVES:
     size 4
     align 2
-    field low: binary::U16 at 0
-    field high: binary::I16 at 2
+    field low: std::binary::U16 at 0
+    field high: std::binary::I16 at 2
 
 union layout BNU_WORD:
     size 4
     align 4
-    alternative whole: binary::U32
+    alternative whole: std::binary::U32
     alternative halves: BNU_HALVES
-    alternative bytes: array 4 of binary::U8
+    alternative bytes: array 4 of std::binary::U8
 
 union layout BNU_WIDE:
     size 16
     align 8
-    alternative b: binary::U8
-    alternative h: binary::I16
-    alternative w: binary::U32
-    alternative q: binary::U64
+    alternative b: std::binary::U8
+    alternative h: std::binary::I16
+    alternative w: std::binary::U32
+    alternative q: std::binary::U64
     alternative word: BNU_WORD
-    alternative bytes: array 16 of binary::U8
-    alternative words: array 4 of binary::U32
+    alternative bytes: array 16 of std::binary::U8
+    alternative words: array 4 of std::binary::U32
 
 layout BNU_OFFSETS:
     size 8
     align 4
-    field offset: binary::U32 at 0
-    field offsetHigh: binary::U32 at 4
+    field offset: std::binary::U32 at 0
+    field offsetHigh: std::binary::U32 at 4
 
 union layout BNU_ANON:
     size 8
     align 8
     alternative offsets: BNU_OFFSETS
-    alternative pointer: ffi::c::Ptr[bnu::Target]
+    alternative pointer: std::ffi::c::Ptr[bnu::Target]
 
 layout RECORD:
     size 48
     align 8
-    field tag: binary::U8 at 0
+    field tag: std::binary::U8 at 0
     field w: BNU_WIDE at 8
     field anon: BNU_ANON at 24
     field ws: array 3 of BNU_WORD at 32
-    field after: binary::U16 at 44
+    field after: std::binary::U16 at 44
 
 }
 
@@ -1144,8 +1144,8 @@ set ::luAppCounter 0
 # they agree.
 proc luCValues {main} {
     set dir [makeDirectory lu-app-[pid]-[incr ::luAppCounter]]
-    set marker [expr {[string first binary::native:: $main] >= 0 ? "direct module\n\n" : ""}]
-    foreach {name text} [list bnu.bot $::luBinding main.bot "${marker}import abi\nimport abi::bytes\nimport binary\nimport binary::native\nimport ffi::c\nimport ffi_fixture\nimport bnu\n\n$::luRecordLayouts$main"] {
+    set marker [expr {[string first std::binary::native:: $main] >= 0 ? "direct module\n\n" : ""}]
+    foreach {name text} [list bnu.bot $::luBinding main.bot "${marker}import std::abi\nimport std::abi::bytes\nimport std::binary\nimport std::binary::native\nimport std::ffi::c\nimport ffi_fixture\nimport bnu\n\n$::luRecordLayouts$main"] {
         set channel [open [file join $dir $name] w]
         fconfigure $channel -encoding utf-8 -translation lf
         puts -nonewline $channel $text
@@ -1163,7 +1163,7 @@ proc luCValues {main} {
 }
 
 test lu-c-oracle-view {the C oracle, native views: C fills its record with typed member stores (case 0: the named union through its 8-byte alternative, the OVERLAPPED shape's offsets, each element of the array of unions through another alternative) and Botlish reads it through a view of the address C hands out -- every alternative of the named union (its 16-byte array alternative the 8 bytes C wrote and the 8 sentinel bytes after them: no alternative is active), the record and array alternatives, the anonymous union's offsets and, over the same bytes, its pointer alternative's address bits, every element of the array of unions through every alternative -- exactly the values the test's own little-endian reading of C's typed values gives} -constraints luCFixture -body {
-    luCValues "fn main() -> List\[any\] errors NativeViewNull, IndexNotFound:\n    p = bnu::reset()\n    v = binary::native::view(RECORD, p)\n    x = v.anon.pointer\n    ws = loop i from 0 to 3:\n        w = binary::element(v.ws, i)\n        \[w.whole, binary::load(w.halves), binary::load(w.bytes)\]\n    \[v.tag, v.w.q, v.w.w, v.w.h, v.w.b, v.w.word.halves.high, binary::load(v.w.bytes), binary::element(v.w.words, 1), binary::load(v.anon.offsets), ffi_fixture::address_of(x), ws, v.after\]\n\nr = main():\n    on NativeViewNull:\n        \[\]\n    on IndexNotFound:\n        \[\]\nr\n"
+    luCValues "fn main() -> List\[any\] errors NativeViewNull, IndexNotFound:\n    p = bnu::reset()\n    v = std::binary::native::view(RECORD, p)\n    x = v.anon.pointer\n    ws = loop i from 0 to 3:\n        w = std::binary::element(v.ws, i)\n        \[w.whole, std::binary::load(w.halves), std::binary::load(w.bytes)\]\n    \[v.tag, v.w.q, v.w.w, v.w.h, v.w.b, v.w.word.halves.high, std::binary::load(v.w.bytes), std::binary::element(v.w.words, 1), std::binary::load(v.anon.offsets), ffi_fixture::address_of(x), ws, v.after\]\n\nr = main():\n    on NativeViewNull:\n        \[\]\n    on IndexNotFound:\n        \[\]\nr\n"
 } -result [apply {{} {
     set q [luLe 0xF0E1D2C3B4A59687 8]
     set anon [concat [luLe 0x81020304 4] [luLe 0x00000001 4]]
@@ -1175,7 +1175,7 @@ test lu-c-oracle-view {the C oracle, native views: C fills its record with typed
 }}]
 
 test lu-c-oracle-punning {the C oracle, overlap: C writes one element of the array of unions through one interpretation with typed member stores -- the whole word, the two halves, the four bytes -- and Botlish reads the same four bytes through each of the others; the expected values are the test's own little-endian model of the value's bits, not C's reading of an inactive member} -constraints luCFixture -body {
-    luCValues "fn main() -> List\[any\] errors NativeViewNull, IndexNotFound:\n    p = bnu::reset()\n    v = binary::native::view(RECORD, p)\n    rs = loop alt from 0 to 3:\n        bnu::store_word(1, alt, 2864434397)\n        w = binary::element(v.ws, 1)\n        \[w.whole, w.halves.low, w.halves.high, binary::load(w.bytes)\]\n    rs\n\nr = main():\n    on NativeViewNull:\n        \[\]\n    on IndexNotFound:\n        \[\]\nr\n"
+    luCValues "fn main() -> List\[any\] errors NativeViewNull, IndexNotFound:\n    p = bnu::reset()\n    v = std::binary::native::view(RECORD, p)\n    rs = loop alt from 0 to 3:\n        bnu::store_word(1, alt, 2864434397)\n        w = std::binary::element(v.ws, 1)\n        \[w.whole, w.halves.low, w.halves.high, std::binary::load(w.bytes)\]\n    rs\n\nr = main():\n    on NativeViewNull:\n        \[\]\n    on IndexNotFound:\n        \[\]\nr\n"
 } -result [apply {{} {
     set b [luLe 2864434397 4]
     set one "\[[luAt $b 0 4], [luAt $b 0 2], [luAt $b 2 2 1], [luList $b]\]"
@@ -1183,14 +1183,14 @@ test lu-c-oracle-punning {the C oracle, overlap: C writes one element of the arr
 }}]
 
 test lu-c-oracle-edit {the C oracle, stores through a native edit, each narrower than its union: into C's record of 0xA5 sentinel bytes Botlish stores the tag, a 2-byte alternative of the 16-byte named union, the second half of the OVERLAPPED shape's anonymous struct, the high half of one element of the array of unions (through its live union) and one byte of another (through a designator) -- and C finds every written member with its own typed reads and every other byte, of the unions and around them, still 0xA5 (mask 0)} -constraints luCFixture -body {
-    luCValues "fn main(k: int) -> ffi::c::Int errors NativeEditNull, IndexNotFound:\n    p = bnu::blank()\n    e = binary::native::edit(RECORD, p)\n    binary::store(e, RECORD.tag, 9)\n    binary::store(e.w, BNU_WIDE.h, -2)\n    binary::store(e, RECORD.anon.offsets.offsetHigh, 7)\n    binary::store(binary::element(e.ws, k), BNU_WORD.halves.high, -1)\n    binary::store(e, RECORD.ws\[2\].bytes\[3\], 128)\n    bnu::check_live(1)\n\nr = main(1):\n    on NativeEditNull:\n        -1\n    on IndexNotFound:\n        -2\nr\n"
+    luCValues "fn main(k: int) -> std::ffi::c::Int errors NativeEditNull, IndexNotFound:\n    p = bnu::blank()\n    e = std::binary::native::edit(RECORD, p)\n    std::binary::store(e, RECORD.tag, 9)\n    std::binary::store(e.w, BNU_WIDE.h, -2)\n    std::binary::store(e, RECORD.anon.offsets.offsetHigh, 7)\n    std::binary::store(std::binary::element(e.ws, k), BNU_WORD.halves.high, -1)\n    std::binary::store(e, RECORD.ws\[2\].bytes\[3\], 128)\n    bnu::check_live(1)\n\nr = main(1):\n    on NativeEditNull:\n        -1\n    on IndexNotFound:\n        -2\nr\n"
 } -result {same: value 0}
 
 test lu-c-oracle-pointer {the C oracle, the pointer alternative: Botlish stores the pointer C handed out into the OVERLAPPED shape's pointer alternative (observed: still the program's, and C's own afterwards) and the last word of the named union's word array; C finds its own pointer there and every other byte 0xA5 (mask 0); read back through the view the pointer alternative is C's pointer, and the offsets alternative of the same bytes its address bits} -constraints luCFixture -body {
-    luCValues "fn main() -> List\[any\] errors NativeEditNull, NativeViewNull:\n    p = bnu::blank()\n    e = binary::native::edit(RECORD, p)\n    q = bnu::target()\n    binary::store(e, RECORD.anon.pointer, q)\n    binary::store(e, RECORD.w.words\[3\], 4294967295)\n    mask = bnu::check_live(2)\n    b = bnu::blank()\n    v = binary::native::view(RECORD, b)\n    binary::store(e, RECORD.anon.pointer, q)\n    r = v.anon.pointer\n    o = binary::load(v.anon.offsets)\n    \[mask, bnu::is_target(r), bnu::is_target(q), o.offset + o.offsetHigh * 4294967296 == ffi_fixture::address_of(q)\]\n\nres = main():\n    on NativeEditNull:\n        \[\]\n    on NativeViewNull:\n        \[\]\nres\n"
+    luCValues "fn main() -> List\[any\] errors NativeEditNull, NativeViewNull:\n    p = bnu::blank()\n    e = std::binary::native::edit(RECORD, p)\n    q = bnu::target()\n    std::binary::store(e, RECORD.anon.pointer, q)\n    std::binary::store(e, RECORD.w.words\[3\], 4294967295)\n    mask = bnu::check_live(2)\n    b = bnu::blank()\n    v = std::binary::native::view(RECORD, b)\n    std::binary::store(e, RECORD.anon.pointer, q)\n    r = v.anon.pointer\n    o = std::binary::load(v.anon.offsets)\n    \[mask, bnu::is_target(r), bnu::is_target(q), o.offset + o.offsetHigh * 4294967296 == ffi_fixture::address_of(q)\]\n\nres = main():\n    on NativeEditNull:\n        \[\]\n    on NativeViewNull:\n        \[\]\nres\n"
 } -result {same: value {[0, 1, 1, true]}}
 
-test lu-c-oracle-built {the C oracle, records built in byte storage: case 3 written into zeroed storage -- the tag, a record alternative's field inside a union inside the union, the OVERLAPPED shape's offsets, one byte of one element of the array of unions and the whole word of another, the field after them -- and case 2 written over a copy of C's 0xA5 record, its pointer alternative by binary::write_foreign from C's own pointer (observed); each exposed to C for one noescape call: C finds every member, the size, and every other byte as its image says (mask 0)} -constraints luCFixture -body {
-    luCValues "fn built() -> List\[any\] errors LayoutLengthMismatch:\n    d0 = abi::bytes::zeroed(abi::usize(binary::layout_length(RECORD)))\n    d1 = binary::write(d0, RECORD.tag, 1)\n    d2 = binary::write(d1, RECORD.w.word.halves.low, 43981)\n    d3 = binary::write(d2, RECORD.anon.offsets.offset, 4096)\n    d4 = binary::write(d3, RECORD.anon.offsets.offsetHigh, 1)\n    d5 = binary::write(d4, RECORD.ws\[0\].bytes\[3\], 127)\n    d6 = binary::write(d5, RECORD.ws\[2\].whole, 16909060)\n    d7 = binary::write(d6, RECORD.after, 258)\n    p = bnu::blank()\n    q = bnu::target()\n    s0 = bnu::live_bytes()\n    s1 = binary::write_foreign(s0, RECORD.anon.pointer, q)\n    s2 = binary::write(s1, RECORD.w.words\[3\], 4294967295)\n    \[bnu::check_built(d7, 48, 3), bnu::check_built(d6, 48, 3) != 0, bnu::check_built(s2, 48, 2), bnu::is_target(q)\]\n\nr = built():\n    on LayoutLengthMismatch:\n        \[\]\nr\n"
+test lu-c-oracle-built {the C oracle, records built in byte storage: case 3 written into zeroed storage -- the tag, a record alternative's field inside a union inside the union, the OVERLAPPED shape's offsets, one byte of one element of the array of unions and the whole word of another, the field after them -- and case 2 written over a copy of C's 0xA5 record, its pointer alternative by std::binary::write_foreign from C's own pointer (observed); each exposed to C for one noescape call: C finds every member, the size, and every other byte as its image says (mask 0)} -constraints luCFixture -body {
+    luCValues "fn built() -> List\[any\] errors LayoutLengthMismatch:\n    d0 = std::abi::bytes::zeroed(std::abi::usize(std::binary::layout_length(RECORD)))\n    d1 = std::binary::write(d0, RECORD.tag, 1)\n    d2 = std::binary::write(d1, RECORD.w.word.halves.low, 43981)\n    d3 = std::binary::write(d2, RECORD.anon.offsets.offset, 4096)\n    d4 = std::binary::write(d3, RECORD.anon.offsets.offsetHigh, 1)\n    d5 = std::binary::write(d4, RECORD.ws\[0\].bytes\[3\], 127)\n    d6 = std::binary::write(d5, RECORD.ws\[2\].whole, 16909060)\n    d7 = std::binary::write(d6, RECORD.after, 258)\n    p = bnu::blank()\n    q = bnu::target()\n    s0 = bnu::live_bytes()\n    s1 = std::binary::write_foreign(s0, RECORD.anon.pointer, q)\n    s2 = std::binary::write(s1, RECORD.w.words\[3\], 4294967295)\n    \[bnu::check_built(d7, 48, 3), bnu::check_built(d6, 48, 3) != 0, bnu::check_built(s2, 48, 2), bnu::is_target(q)\]\n\nr = built():\n    on LayoutLengthMismatch:\n        \[\]\nr\n"
 } -result {same: value {[0, true, 0, 1]}}
 cleanupTests

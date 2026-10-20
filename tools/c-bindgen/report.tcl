@@ -189,7 +189,7 @@ proc ::cbind::report::layoutsTsv {model} {
             [Dash [dict get $rec size]] [Dash [dict get $rec align]] [Dash [dict get $rec cname]] - [join $detail {; }]] {Clean $c}] \t]\n
         foreach f [dict get $rec fields] {
             set cat [dict get $f kind]
-            if {$cat eq "pointer" && [string match ffi::c::FnPtr* [dict get $f type]]} { set cat function-pointer }
+            if {$cat eq "pointer" && [string match std::ffi::c::FnPtr* [dict get $f type]]} { set cat function-pointer }
             if {$cat eq "blocked"} { set cat [lindex [dict get $f blockers] 0 0] }
             set type [expr {$cat in {scalar pointer function-pointer nested array} ? [::cbind::records::FieldText $recs $f] : [dict get $f type]}]
             set fd [list "c=[Dash [dict get $f cname]]"]
@@ -299,7 +299,7 @@ proc ::cbind::report::TypedefRow {model ix ids name body} {
             if {$problem ne ""} { return [list typedef $name unsupported "" typedef-abi-mismatch $problem] }
             return [list typedef $name scalar "" $s "an ABI alias of C [lindex $final 1]"]
         }
-        bool { return [list typedef $name scalar "" ffi::c::Bool "C _Bool"] }
+        bool { return [list typedef $name scalar "" std::ffi::c::Bool "C _Bool"] }
         enum {
             set e [::cbind::model::EnumScalar [lindex $final 1] $name]
             if {$e eq ""} { return [list typedef $name unsupported "" enum-unknown-abi "enum [lindex $final 1]"] }
@@ -434,7 +434,7 @@ proc ::cbind::report::counts {model} {
         if {$k ni {direct alias thunk}} continue
         set retains 0
         foreach p [dict get $e params] {
-            if {"callback" in [dict get $p features] && [string match ffi::c::FnPtr* [dict get $p type]]} { set cb 1 }
+            if {"callback" in [dict get $p features] && [string match std::ffi::c::FnPtr* [dict get $p type]]} { set cb 1 }
             if {"pointer" ni [dict get $p features]} continue
             dict incr c ptrParams
             set kinds [lmap s [dict get $p sources] {lindex $s 0}]
@@ -450,7 +450,7 @@ proc ::cbind::report::counts {model} {
         }
         if {$view} { dict incr c views }
         if {$retains} { dict incr c unknownRetention }
-        if {[string match ffi::c::Ptr* [dict get $e result type]]} {
+        if {[string match std::ffi::c::Ptr* [dict get $e result type]]} {
             dict incr c ptrResults
             switch -- [lindex [dict get $e result provenance] 0] {
                 independent { dict incr c resultIndependent }
@@ -544,7 +544,7 @@ proc ::cbind::report::text {model} {
     lappend out [Line "  unknown" [dict get $c resultUnknown] [dict get $c ptrResults]]
     lappend out ""
     lappend out "Capability pressure (API names a missing FFI capability blocks or limits)"
-    lappend out [Line "C _Bool in the signature (blocked without ffi::c::Bool)" [dict get $c bool] $apis]
+    lappend out [Line "C _Bool in the signature (blocked without std::ffi::c::Bool)" [dict get $c bool] $apis]
     lappend out [Line "  of them bound now, bool their only blocker" [dict get $c boolOnly] $apis]
     foreach {label reasons} {
         "float/double" {float double long-double}

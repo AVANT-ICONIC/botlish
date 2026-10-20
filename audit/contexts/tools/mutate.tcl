@@ -4,7 +4,7 @@
 #   tclsh9.0 audit/contexts/tools/mutate.tcl ?-n N? ?-only NAME? ?-list 1?
 #
 # Each mutation breaks exactly one piece of the implementation in a scratch
-# copy of the tree (the Tcl sources and lib/, never the repository), then runs
+# copy of the tree (the Tcl sources and stdlib/, never the repository), then runs
 # the context fuzzer (audit/contexts/tools/fuzz.tcl, N programs, every
 # backend) and tests/contexts.test against it. A mutant is KILLED if either
 # fails. A SURVIVOR is a property nothing checks: the run exits 1 if there is
@@ -84,7 +84,7 @@ set mutations {
     {wrong-static-slot native/lower.tcl
         {return [expr {[dict get $slot offset] + 8 * $i}]}
         {return [expr {8 * $i}]}}
-    {stdout-stderr-swapped lib/linux/io.bot
+    {stdout-stderr-swapped stdlib/linux/io.bot
         {io.stdout.raw.write(data)}
         {io.stderr.raw.write(data)}}
     {context-arrives-as-argument native/lower.tcl
@@ -134,7 +134,7 @@ proc writeFile {path text} {
 proc makeMutantTree {scratch} {
     global root
     file mkdir $scratch
-    foreach dir {core compiler hir surface lib} {
+    foreach dir {core compiler hir surface stdlib} {
         file copy -force [file join $root $dir] [file join $scratch $dir]
     }
     file mkdir [file join $scratch native]

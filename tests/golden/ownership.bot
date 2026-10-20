@@ -11,13 +11,13 @@
 # registration functions only name (a layout for reading: README.md,
 # "Layout is free"). The suite imports str for its custom checks: a test
 # whose meaning depends on str not being imported says so.
-import compiler
-import coroutine
-import list
-import mutable_array
-import mutable_vector
-import str
-import test
+import std::compiler
+import std::coroutine
+import std::list
+import std::mutable_array
+import std::mutable_vector
+import std::str
+import std::test
 
 # ---------------------------------------------------------------------------
 # Declarations the tests need (top-level only).
@@ -105,17 +105,17 @@ fn mv_make(seed: int) -> Coroutine{args: [Command], return: Event}:
     step
 
 fn mv_q4() -> MutableVector[Coroutine{args: [Command], return: Event}]:
-    mutable_vector::from_list([mv_make(1), mv_make(2), mv_make(3), mv_make(4)])
+    std::mutable_vector::from_list([mv_make(1), mv_make(2), mv_make(3), mv_make(4)])
 
 # ---------------------------------------------------------------------------
-# Custom checks: a rejection's related locations and message. lib/test.bot
+# Custom checks: a rejection's related locations and message. stdlib/test.bot
 # compares codes and primary locations only. BODY goes through an untyped
 # parameter, as in the library's own helpers.
 
 # The index of the first occurrence of PART in TEXT, or -1.
 fn own_index_of(text: str, part: str) -> int:
-    k = str::length(part)
-    hits = loop i from 0 through str::length(text) - k:
+    k = std::str::length(part)
+    hits = loop i from 0 through std::str::length(text) - k:
         piece = text.substring(i, i + k):
             on LowerUnderrun:
                 continue
@@ -124,7 +124,7 @@ fn own_index_of(text: str, part: str) -> int:
         if piece != part:
             continue
         i
-    list::get(hits, 0, -1)
+    std::list::get(hits, 0, -1)
 
 # TEXT from character START to END ("" when out of range).
 fn own_slice(text: str, start: int, end: int) -> str:
@@ -139,29 +139,29 @@ fn own_contains?(text: str, part: str) -> bool:
     own_index_of(text, part) >= 0
 
 fn own_starts_with?(text: str, prefix: str) -> bool:
-    own_slice(text, 0, str::length(prefix)) == prefix
+    own_slice(text, 0, std::str::length(prefix)) == prefix
 
 fn own_ends_with?(text: str, suffix: str) -> bool:
-    n = str::length(text)
-    k = str::length(suffix)
+    n = std::str::length(text)
+    k = std::str::length(suffix)
     k <= n and own_slice(text, n - k, n) == suffix
 
 # "LINE:COLUMN".
 fn own_place_text(line: int, column: int) -> str:
-    test::int_text(line).concat(":").concat(test::int_text(column))
+    std::test::int_text(line).concat(":").concat(std::test::int_text(column))
 
 # PARTS from INDEX on, joined by SEPARATOR.
 fn own_join_from(parts: List[str], separator: str, index: int) -> str:
-    if index >= list::length(parts):
+    if index >= std::list::length(parts):
         return ""
-    head = list::get(parts, index, "")
-    if index + 1 >= list::length(parts):
+    head = std::list::get(parts, index, "")
+    if index + 1 >= std::list::length(parts):
         head
     else:
         head.concat(separator).concat(own_join_from(parts, separator, index + 1))
 
 # PLACES as "L:C, L:C".
-fn own_places_text(places: List[compiler::SourceLocation]) -> str:
+fn own_places_text(places: List[std::compiler::SourceLocation]) -> str:
     texts = loop p in places:
         own_place_text(p.line, p.column)
     own_join_from(texts, ", ", 0)
@@ -172,7 +172,7 @@ fn own_located(message: str, marker: str) -> str:
     at = own_index_of(message, marker)
     if at < 0:
         return ""
-    rest = own_slice(message, at + str::length(marker), str::length(message))
+    rest = own_slice(message, at + std::str::length(marker), std::str::length(message))
     close = own_index_of(rest, ")")
     if close < 0:
         return ""
@@ -181,55 +181,55 @@ fn own_located(message: str, marker: str) -> str:
 # BODY's block must be rejected with EXPECTED at LINE:COLUMN, its related
 # locations exactly [MOVED_LINE:MOVED_COLUMN] (where the value was moved),
 # and a message starting with FIRST and containing PART.
-nomethod fn own_rejects_moved(name: str, expected: compiler::DiagnosticCode, line: int, column: int, moved_line: int, moved_column: int, first: str, part: str, body, context suite: test::Suite) -> unit:
-    fn check() -> test::Match:
+nomethod fn own_rejects_moved(name: str, expected: std::compiler::DiagnosticCode, line: int, column: int, moved_line: int, moved_column: int, first: str, part: str, body, context suite: std::test::Suite) -> unit:
+    fn check() -> std::test::Match:
         moved = own_place_text(moved_line, moved_column)
-        shown = test::diagnostic_text(expected, compiler::SourceLocation {line: line, column: column}).concat(", related [").concat(moved).concat("], message starting ").concat(test::describe(first)).concat(" containing ").concat(test::describe(part))
+        shown = std::test::diagnostic_text(expected, std::compiler::SourceLocation {line: line, column: column}).concat(", related [").concat(moved).concat("], message starting ").concat(std::test::describe(first)).concat(" containing ").concat(std::test::describe(part))
         actual = body():
-            on compiler::CompilerError {code, primary, related, message}:
+            on std::compiler::CompilerError {code, primary, related, message}:
                 seen = own_places_text(related)
                 if code == expected and primary.line == line and primary.column == column and seen == moved and own_starts_with?(message, first) and own_contains?(message, part):
-                    return test::passed()
-                return test::mismatch(shown, test::diagnostic_text(code, primary).concat(", related [").concat(seen).concat("]"), message)
-        test::mismatch(shown, "value ".concat(test::describe(actual)), "")
-    test::case(name, check)
+                    return std::test::passed()
+                return std::test::mismatch(shown, std::test::diagnostic_text(code, primary).concat(", related [").concat(seen).concat("]"), message)
+        std::test::mismatch(shown, "value ".concat(std::test::describe(actual)), "")
+    std::test::case(name, check)
 
 # BODY's block must be rejected with EXPECTED, with exactly the message
 # WANTED (WHOLE) or a message containing WANTED (not WHOLE).
-nomethod fn own_rejects_message(name: str, expected: compiler::DiagnosticCode, wanted: str, whole: bool, body, context suite: test::Suite) -> unit:
-    fn check() -> test::Match:
+nomethod fn own_rejects_message(name: str, expected: std::compiler::DiagnosticCode, wanted: str, whole: bool, body, context suite: std::test::Suite) -> unit:
+    fn check() -> std::test::Match:
         how = if whole:
             ", message "
         else:
             ", message containing "
-        shown = "compiler diagnostic ".concat(test::code_name(expected)).concat(how).concat(test::describe(wanted))
+        shown = "compiler diagnostic ".concat(std::test::code_name(expected)).concat(how).concat(std::test::describe(wanted))
         actual = body():
-            on compiler::CompilerError {code, primary, message}:
+            on std::compiler::CompilerError {code, primary, message}:
                 same = if whole:
                     message == wanted
                 else:
                     own_contains?(message, wanted)
                 if code == expected and same:
-                    return test::passed()
-                return test::mismatch(shown, test::diagnostic_text(code, primary), message)
-        test::mismatch(shown, "value ".concat(test::describe(actual)), "")
-    test::case(name, check)
+                    return std::test::passed()
+                return std::test::mismatch(shown, std::test::diagnostic_text(code, primary), message)
+        std::test::mismatch(shown, "value ".concat(std::test::describe(actual)), "")
+    std::test::case(name, check)
 
 # BODY's block must be rejected with EXPECTED, its message naming each
 # chain: after MARKER_A (and MARKER_B) the location PLACE_A ("LINE:COLUMN";
 # and PLACE_B) of the suite file.
-nomethod fn own_rejects_chains(name: str, expected: compiler::DiagnosticCode, marker_a: str, place_a: str, marker_b: str, place_b: str, body, context suite: test::Suite) -> unit:
-    fn check() -> test::Match:
-        shown = "compiler diagnostic ".concat(test::code_name(expected)).concat(", ").concat(test::describe(marker_a)).concat(" at ").concat(place_a).concat(", ").concat(test::describe(marker_b)).concat(" at ").concat(place_b)
+nomethod fn own_rejects_chains(name: str, expected: std::compiler::DiagnosticCode, marker_a: str, place_a: str, marker_b: str, place_b: str, body, context suite: std::test::Suite) -> unit:
+    fn check() -> std::test::Match:
+        shown = "compiler diagnostic ".concat(std::test::code_name(expected)).concat(", ").concat(std::test::describe(marker_a)).concat(" at ").concat(place_a).concat(", ").concat(std::test::describe(marker_b)).concat(" at ").concat(place_b)
         actual = body():
-            on compiler::CompilerError {code, primary, message}:
+            on std::compiler::CompilerError {code, primary, message}:
                 a = own_located(message, marker_a)
                 b = own_located(message, marker_b)
                 if code == expected and own_ends_with?(a, ":".concat(place_a)) and own_ends_with?(b, ":".concat(place_b)):
-                    return test::passed()
-                return test::mismatch(shown, test::diagnostic_text(code, primary), message)
-        test::mismatch(shown, "value ".concat(test::describe(actual)), "")
-    test::case(name, check)
+                    return std::test::passed()
+                return std::test::mismatch(shown, std::test::diagnostic_text(code, primary), message)
+        std::test::mismatch(shown, "value ".concat(std::test::describe(actual)), "")
+    std::test::case(name, check)
 
 # ---------------------------------------------------------------------------
 # coroutines.test
@@ -243,7 +243,7 @@ nomethod fn own_rejects_chains(name: str, expected: compiler::DiagnosticCode, ma
 # depend on it (STATIC-COMPILE.md, "Decision economics") -- its place in
 # the file no longer matters (it used to have to be the first block, the
 # compiler deciding one rejected block per build until it was rejected).
-fn b_generic_unadmitted() errors compiler::CompilerError:
+fn b_generic_unadmitted() errors std::compiler::CompilerError:
     static compile:
         fn w2(seed: int, resume Message) -> Event errors Boom:
             m = yield Event {value: seed}
@@ -259,7 +259,7 @@ fn b_generic_unadmitted() errors compiler::CompilerError:
 # Event(10); the first resume finishes deep and yields Event(20) from
 # worker; the second completes with Event(30); later calls return the
 # cached Event(30).
-fn b_principal() errors compiler::CompilerError:
+fn b_principal() errors std::compiler::CompilerError:
     static compile:
         fn deep(base: int, resume Message) -> int:
             message = yield Event {value: base}
@@ -272,12 +272,12 @@ fn b_principal() errors compiler::CompilerError:
         second = step(Message {value: 20})
         final = step(Message {value: 30})
         again = step(Message {value: 999})
-        [first.value, second.value, final.value, again.value, coroutine::done?(step)]
+        [first.value, second.value, final.value, again.value, std::coroutine::done?(step)]
 
 # co-principal-move: `other = step` moves the handle: using step
 # afterwards is USE-AFTER-MOVE, at the use, naming the move (its related
 # location); using other continues the same coroutine.
-fn b_principal_move() errors compiler::CompilerError:
+fn b_principal_move() errors std::compiler::CompilerError:
     static compile:
         fn deep(base: int, resume Message) -> int:
             message = yield Event {value: base}
@@ -290,7 +290,7 @@ fn b_principal_move() errors compiler::CompilerError:
         other = step
         step(Message {value: 1})
 
-fn b_principal_moved_to() errors compiler::CompilerError:
+fn b_principal_moved_to() errors std::compiler::CompilerError:
     static compile:
         fn deep(base: int, resume Message) -> int:
             message = yield Event {value: base}
@@ -306,7 +306,7 @@ fn b_principal_moved_to() errors compiler::CompilerError:
 
 # co-errors-segment: a deep fail after resumes crosses the resume call;
 # the failed handle raises the same error again and never resumes.
-fn b_errors_segment() errors compiler::CompilerError:
+fn b_errors_segment() errors std::compiler::CompilerError:
     static compile:
         fn deep(v: int, resume ErrMsg) -> int errors Broken:
             if v < 0:
@@ -328,7 +328,7 @@ fn b_errors_segment() errors compiler::CompilerError:
             c = step(ErrMsg {v: 7}):
                 on Broken:
                     ErrEv {v: 1000}
-            [first.v, a.v, b.v, c.v, coroutine::done?(step)]
+            [first.v, a.v, b.v, c.v, std::coroutine::done?(step)]
         later():
             on Broken:
                 []
@@ -337,7 +337,7 @@ fn b_errors_segment() errors compiler::CompilerError:
 # function are a conflict, explained through both chains (each naming
 # the call that reaches the declaring function); never a union -- the
 # resumes written for either protocol add no diagnostic of their own.
-fn b_protocol_conflict() errors compiler::CompilerError:
+fn b_protocol_conflict() errors std::compiler::CompilerError:
     static compile:
         fn ha(resume A) -> int:
             m = yield Ev {n: 1}
@@ -349,7 +349,7 @@ fn b_protocol_conflict() errors compiler::CompilerError:
             return Ev {n: ha() + hb()}
         coroutine {step} = both()
 
-fn b_protocol_conflict_resumes() errors compiler::CompilerError:
+fn b_protocol_conflict_resumes() errors std::compiler::CompilerError:
     static compile:
         fn ha(resume A) -> int:
             m = yield Ev {n: 1}
@@ -368,32 +368,32 @@ fn b_protocol_conflict_resumes() errors compiler::CompilerError:
 # each a move; a closure capture, a structural Fn parameter (a distinct
 # callable kind), a Fn-typed struct field and a parameter declared any
 # stay rejected.
-fn b_storage_list() errors compiler::CompilerError:
+fn b_storage_list() errors std::compiler::CompilerError:
     static compile:
         coroutine {step} = t()
         xs = [step]
         1
 
-fn b_storage_struct() errors compiler::CompilerError:
+fn b_storage_struct() errors std::compiler::CompilerError:
     static compile:
         coroutine {step} = t()
         s = {h: step}
         1
 
-fn b_storage_generic() errors compiler::CompilerError:
+fn b_storage_generic() errors std::compiler::CompilerError:
     static compile:
         coroutine {step} = t()
         k = keep(step)
         1
 
-fn b_storage_result() errors compiler::CompilerError:
+fn b_storage_result() errors std::compiler::CompilerError:
     static compile:
         fn make():
             coroutine {step} = t()
             step
         1
 
-fn b_storage_capture() errors compiler::CompilerError:
+fn b_storage_capture() errors std::compiler::CompilerError:
     static compile:
         fn g() -> int:
             coroutine {step} = t()
@@ -402,14 +402,14 @@ fn b_storage_capture() errors compiler::CompilerError:
             3
         g()
 
-fn b_storage_fn_param() errors compiler::CompilerError:
+fn b_storage_fn_param() errors std::compiler::CompilerError:
     static compile:
         fn apply(f: Fn{args: [], return: T}) -> T:
             f()
         coroutine {step} = t()
         x = apply(step)
 
-fn b_storage_if() errors compiler::CompilerError:
+fn b_storage_if() errors std::compiler::CompilerError:
     static compile:
         coroutine {step} = t()
         x = if true:
@@ -418,13 +418,13 @@ fn b_storage_if() errors compiler::CompilerError:
             step
         1
 
-fn b_storage_fn_field() errors compiler::CompilerError:
+fn b_storage_fn_field() errors std::compiler::CompilerError:
     static compile:
         coroutine {step} = t()
         h = H {f: step}
         1
 
-fn b_storage_any() errors compiler::CompilerError:
+fn b_storage_any() errors std::compiler::CompilerError:
     static compile:
         fn keep_any(x: any) -> int:
             1
@@ -433,21 +433,21 @@ fn b_storage_any() errors compiler::CompilerError:
         1
 
 fn register_coroutines_tests():
-    test::value("co-principal", [10, 20, 30, 30, true], b_principal)
-    own_rejects_moved("co-principal-move/use-after-move", compiler::DiagnosticCode::UseAfterMove, 291, 9, 290, 9, "`step` was used after its coroutine value was moved\n\nmoved here:\n    other = step  (", "used here:\n    ", b_principal_move)
-    test::value("co-principal-move/moved-to", 1, b_principal_moved_to)
-    test::value("co-errors-segment", [1, 6, 999, 1000, true], b_errors_segment)
-    own_rejects_chains("co-protocol-conflict", compiler::DiagnosticCode::CoroutineResumeConflict, "resume A: it calls ha (", "349:27", "resume B: it calls hb (", "349:34", b_protocol_conflict)
-    test::rejects("co-protocol-conflict/resumes", compiler::DiagnosticCode::CoroutineResumeConflict, b_protocol_conflict_resumes)
-    test::value("co-storage-frontier/list", 1, b_storage_list)
-    test::value("co-storage-frontier/struct", 1, b_storage_struct)
-    test::value("co-storage-frontier/generic", 1, b_storage_generic)
-    test::value("co-storage-frontier/result", 1, b_storage_result)
-    test::rejects("co-storage-frontier/capture", compiler::DiagnosticCode::AffineCaptureUnsupported, b_storage_capture)
-    test::rejects("co-storage-frontier/fn-param", compiler::DiagnosticCode::CoroutineNotFunction, b_storage_fn_param)
-    test::value("co-storage-frontier/if", 1, b_storage_if)
-    test::rejects("co-storage-frontier/fn-field", compiler::DiagnosticCode::Type, b_storage_fn_field)
-    test::rejects("co-storage-frontier/any", compiler::DiagnosticCode::AffineErasureUnsupported, b_storage_any)
+    std::test::value("co-principal", [10, 20, 30, 30, true], b_principal)
+    own_rejects_moved("co-principal-move/use-after-move", std::compiler::DiagnosticCode::UseAfterMove, 291, 9, 290, 9, "`step` was used after its coroutine value was moved\n\nmoved here:\n    other = step  (", "used here:\n    ", b_principal_move)
+    std::test::value("co-principal-move/moved-to", 1, b_principal_moved_to)
+    std::test::value("co-errors-segment", [1, 6, 999, 1000, true], b_errors_segment)
+    own_rejects_chains("co-protocol-conflict", std::compiler::DiagnosticCode::CoroutineResumeConflict, "resume A: it calls ha (", "349:27", "resume B: it calls hb (", "349:34", b_protocol_conflict)
+    std::test::rejects("co-protocol-conflict/resumes", std::compiler::DiagnosticCode::CoroutineResumeConflict, b_protocol_conflict_resumes)
+    std::test::value("co-storage-frontier/list", 1, b_storage_list)
+    std::test::value("co-storage-frontier/struct", 1, b_storage_struct)
+    std::test::value("co-storage-frontier/generic", 1, b_storage_generic)
+    std::test::value("co-storage-frontier/result", 1, b_storage_result)
+    std::test::rejects("co-storage-frontier/capture", std::compiler::DiagnosticCode::AffineCaptureUnsupported, b_storage_capture)
+    std::test::rejects("co-storage-frontier/fn-param", std::compiler::DiagnosticCode::CoroutineNotFunction, b_storage_fn_param)
+    std::test::value("co-storage-frontier/if", 1, b_storage_if)
+    std::test::rejects("co-storage-frontier/fn-field", std::compiler::DiagnosticCode::Type, b_storage_fn_field)
+    std::test::rejects("co-storage-frontier/any", std::compiler::DiagnosticCode::AffineErasureUnsupported, b_storage_any)
 
 # ---------------------------------------------------------------------------
 # affine.test
@@ -455,13 +455,13 @@ fn register_coroutines_tests():
 # af-principal-callable: a coroutine passed to an untyped HOF moves into
 # it, the HOF is specialized for the coroutine (its call is a resume),
 # the worker completes with the message; the original binding is moved.
-fn b_callable() errors compiler::CompilerError:
+fn b_callable() errors std::compiler::CompilerError:
     static compile:
         coroutine {step, first} = aff_worker(10)
         second = invoke(step, Message {value: 20})
         [first.value, second.value]
 
-fn b_callable_moved() errors compiler::CompilerError:
+fn b_callable_moved() errors std::compiler::CompilerError:
     static compile:
         coroutine {step, first} = aff_worker(10)
         second = invoke(step, Message {value: 20})
@@ -470,8 +470,8 @@ fn b_callable_moved() errors compiler::CompilerError:
 # af-aggregate-field-read: reading an unrestricted field leaves the
 # struct live; projecting an affine field is
 # AFFINE-FIELD-MOVE-REQUIRES-DESTRUCTURE (no partial-move state), naming
-# the destructuring to use -- also as coroutine::done?'s argument.
-fn b_field_read() errors compiler::CompilerError:
+# the destructuring to use -- also as std::coroutine::done?'s argument.
+fn b_field_read() errors std::compiler::CompilerError:
     static compile:
         r = Running {name: "a", step: aff_make(1)}
         n = r.name
@@ -479,47 +479,47 @@ fn b_field_read() errors compiler::CompilerError:
         e = step(Message {value: 4})
         [n, e.value]
 
-fn b_field_projection() errors compiler::CompilerError:
+fn b_field_projection() errors std::compiler::CompilerError:
     static compile:
         r = Running {name: "a", step: aff_make(1)}
         s = r.step
         1
 
-fn b_field_done() errors compiler::CompilerError:
+fn b_field_done() errors std::compiler::CompilerError:
     static compile:
         r = Running {name: "a", step: aff_make(1)}
-        coroutine::done?(r.step)
+        std::coroutine::done?(r.step)
 
 # af-list-operations: List operations that would copy an affine element
-# are AFFINE-LIST-OPERATION-UNSUPPORTED (list::at, list::append,
+# are AFFINE-LIST-OPERATION-UNSUPPORTED (std::list::at, std::list::append,
 # iteration, a collecting loop of affine values); a List of affine
 # values is never erased to a List of any.
-fn b_list_at() errors compiler::CompilerError:
+fn b_list_at() errors std::compiler::CompilerError:
     static compile:
         xs = [aff_make(1), aff_make(2)]
-        s = list::at(xs, 0)
+        s = std::list::at(xs, 0)
         1
 
-fn b_list_append() errors compiler::CompilerError:
+fn b_list_append() errors std::compiler::CompilerError:
     static compile:
         xs = [aff_make(1), aff_make(2)]
-        ys = list::append(xs, aff_make(3))
+        ys = std::list::append(xs, aff_make(3))
         1
 
-fn b_list_iterate() errors compiler::CompilerError:
+fn b_list_iterate() errors std::compiler::CompilerError:
     static compile:
         xs = [aff_make(1), aff_make(2)]
         ys = loop s in xs:
             1
         1
 
-fn b_list_collect() errors compiler::CompilerError:
+fn b_list_collect() errors std::compiler::CompilerError:
     static compile:
         ys = loop i from 0 to 3:
             aff_make(i)
         1
 
-fn b_list_mixed() errors compiler::CompilerError:
+fn b_list_mixed() errors std::compiler::CompilerError:
     static compile:
         ys = [aff_make(1), 2]
         1
@@ -527,38 +527,38 @@ fn b_list_mixed() errors compiler::CompilerError:
 # af-restrictions: closure capture, equality of a handle or an affine
 # struct, erasure into any, an ImmutableSet of affine elements; a
 # MutableArray of affine elements is legal (an affine array).
-fn b_restrict_capture() errors compiler::CompilerError:
+fn b_restrict_capture() errors std::compiler::CompilerError:
     static compile:
         s = aff_make(1)
         fn g() -> Event:
             s(Message {value: 1})
         1
 
-fn b_restrict_handle_equality() errors compiler::CompilerError:
+fn b_restrict_handle_equality() errors std::compiler::CompilerError:
     static compile:
         a = aff_make(1)
         b = aff_make(2)
         a == b
 
-fn b_restrict_struct_equality() errors compiler::CompilerError:
+fn b_restrict_struct_equality() errors std::compiler::CompilerError:
     static compile:
         r = Running {name: "a", step: aff_make(1)}
         q = Running {name: "a", step: aff_make(2)}
         r == q
 
-fn b_restrict_any() errors compiler::CompilerError:
+fn b_restrict_any() errors std::compiler::CompilerError:
     static compile:
         fn f(x: any) -> int:
             1
         f(aff_make(1))
 
-fn b_restrict_array() errors compiler::CompilerError:
+fn b_restrict_array() errors std::compiler::CompilerError:
     static compile:
         fn f(m: MutableArray[Coroutine{args: [Message], return: Event}]) -> int:
             1
         1
 
-fn b_restrict_set() errors compiler::CompilerError:
+fn b_restrict_set() errors std::compiler::CompilerError:
     static compile:
         fn f(m: ImmutableSet[Running]) -> int:
             1
@@ -574,7 +574,7 @@ fn b_restrict_set() errors compiler::CompilerError:
 fn ow_invoke_boom(c, m) errors Boom:
     c(m)
 
-fn b_generic_admitted() errors compiler::CompilerError:
+fn b_generic_admitted() errors std::compiler::CompilerError:
     static compile:
         fn w2(seed: int, resume Message) -> Event errors Boom:
             m = yield Event {value: seed}
@@ -592,24 +592,24 @@ fn b_generic_admitted() errors compiler::CompilerError:
         [run(9), run(3)]
 
 fn register_affine_tests():
-    test::value("af-principal-callable/value", [10, 20], b_callable)
-    test::rejects("af-principal-callable/use-after-move", compiler::DiagnosticCode::UseAfterMove, b_callable_moved)
-    test::value("af-aggregate-field-read/unrestricted", ["a", 4], b_field_read)
-    own_rejects_message("af-aggregate-field-read/projection", compiler::DiagnosticCode::AffineFieldMoveRequiresDestructure, "\"{step} = r\"", false, b_field_projection)
-    test::rejects("af-aggregate-field-read/done", compiler::DiagnosticCode::AffineFieldMoveRequiresDestructure, b_field_done)
-    test::rejects("af-list-operations/at", compiler::DiagnosticCode::AffineListOperationUnsupported, b_list_at)
-    test::rejects("af-list-operations/append", compiler::DiagnosticCode::AffineListOperationUnsupported, b_list_append)
-    test::rejects("af-list-operations/iteration", compiler::DiagnosticCode::AffineListOperationUnsupported, b_list_iterate)
-    test::rejects("af-list-operations/collect", compiler::DiagnosticCode::AffineListOperationUnsupported, b_list_collect)
-    test::rejects("af-list-operations/mixed", compiler::DiagnosticCode::AffineErasureUnsupported, b_list_mixed)
-    test::rejects("af-restrictions/capture", compiler::DiagnosticCode::AffineCaptureUnsupported, b_restrict_capture)
-    test::rejects("af-restrictions/handle-equality", compiler::DiagnosticCode::AffineEqualityUnsupported, b_restrict_handle_equality)
-    test::rejects("af-restrictions/struct-equality", compiler::DiagnosticCode::AffineEqualityUnsupported, b_restrict_struct_equality)
-    test::rejects("af-restrictions/any-parameter", compiler::DiagnosticCode::AffineErasureUnsupported, b_restrict_any)
-    test::value("af-restrictions/mutable-array", 1, b_restrict_array)
-    test::rejects("af-restrictions/immutable-set", compiler::DiagnosticCode::AffineContainerUnsupported, b_restrict_set)
-    test::rejects("af-generic-errors/unadmitted", compiler::DiagnosticCode::UnhandledError, b_generic_unadmitted)
-    test::value("af-generic-errors/admitted", [-1, 3], b_generic_admitted)
+    std::test::value("af-principal-callable/value", [10, 20], b_callable)
+    std::test::rejects("af-principal-callable/use-after-move", std::compiler::DiagnosticCode::UseAfterMove, b_callable_moved)
+    std::test::value("af-aggregate-field-read/unrestricted", ["a", 4], b_field_read)
+    own_rejects_message("af-aggregate-field-read/projection", std::compiler::DiagnosticCode::AffineFieldMoveRequiresDestructure, "\"{step} = r\"", false, b_field_projection)
+    std::test::rejects("af-aggregate-field-read/done", std::compiler::DiagnosticCode::AffineFieldMoveRequiresDestructure, b_field_done)
+    std::test::rejects("af-list-operations/at", std::compiler::DiagnosticCode::AffineListOperationUnsupported, b_list_at)
+    std::test::rejects("af-list-operations/append", std::compiler::DiagnosticCode::AffineListOperationUnsupported, b_list_append)
+    std::test::rejects("af-list-operations/iteration", std::compiler::DiagnosticCode::AffineListOperationUnsupported, b_list_iterate)
+    std::test::rejects("af-list-operations/collect", std::compiler::DiagnosticCode::AffineListOperationUnsupported, b_list_collect)
+    std::test::rejects("af-list-operations/mixed", std::compiler::DiagnosticCode::AffineErasureUnsupported, b_list_mixed)
+    std::test::rejects("af-restrictions/capture", std::compiler::DiagnosticCode::AffineCaptureUnsupported, b_restrict_capture)
+    std::test::rejects("af-restrictions/handle-equality", std::compiler::DiagnosticCode::AffineEqualityUnsupported, b_restrict_handle_equality)
+    std::test::rejects("af-restrictions/struct-equality", std::compiler::DiagnosticCode::AffineEqualityUnsupported, b_restrict_struct_equality)
+    std::test::rejects("af-restrictions/any-parameter", std::compiler::DiagnosticCode::AffineErasureUnsupported, b_restrict_any)
+    std::test::value("af-restrictions/mutable-array", 1, b_restrict_array)
+    std::test::rejects("af-restrictions/immutable-set", std::compiler::DiagnosticCode::AffineContainerUnsupported, b_restrict_set)
+    std::test::rejects("af-generic-errors/unadmitted", std::compiler::DiagnosticCode::UnhandledError, b_generic_unadmitted)
+    std::test::value("af-generic-errors/admitted", [-1, 3], b_generic_admitted)
 
 # ---------------------------------------------------------------------------
 # mutable-vector.test
@@ -617,12 +617,12 @@ fn register_affine_tests():
 # mv-loop-consumes: `loop item in queue` over an affine vector consumes
 # it: each element moves into the loop variable in order (the loop
 # collects unrestricted values); the binding is moved at loop entry.
-# (The use after the loop is the qualified mutable_vector::length: this
+# (The use after the loop is the qualified std::mutable_vector::length: this
 # suite imports str, and `queue.length()` would then have a third
-# candidate, str::length, which takes any value -- the method call is
+# candidate, std::str::length, which takes any value -- the method call is
 # NoApplicableMethod, wrapping the USE-AFTER-MOVE, where the Tcl program
 # without that import reports USE-AFTER-MOVE itself.)
-fn b_loop_consumes() errors compiler::CompilerError:
+fn b_loop_consumes() errors std::compiler::CompilerError:
     static compile:
         fn f() -> List[int]:
             queue = mv_q4()
@@ -631,22 +631,22 @@ fn b_loop_consumes() errors compiler::CompilerError:
                 e.value
         f()
 
-fn b_loop_moved() errors compiler::CompilerError:
+fn b_loop_moved() errors std::compiler::CompilerError:
     static compile:
         fn f() -> int:
             queue = mv_q4()
             xs = loop step in queue:
                 1
-            mutable_vector::length(queue)
+            std::mutable_vector::length(queue)
         f()
 
 # mv-affine-swap-failure: a failed swap leaves the vector unchanged and
 # takes the replacement it was given (never handed back: the source
 # binding stays moved); the handler runs.
-fn b_swap_failure() errors compiler::CompilerError:
+fn b_swap_failure() errors std::compiler::CompilerError:
     static compile:
         fn f() -> int:
-            q = mutable_vector::from_list([mv_make(1), mv_make(2)])
+            q = std::mutable_vector::from_list([mv_make(1), mv_make(2)])
             coroutine {step} = mv_worker(3)
             old = q.swap(999, step):
                 on IndexNotFound:
@@ -655,10 +655,10 @@ fn b_swap_failure() errors compiler::CompilerError:
             e.value * 10 + q.length()
         f()
 
-fn b_swap_failure_moved() errors compiler::CompilerError:
+fn b_swap_failure_moved() errors std::compiler::CompilerError:
     static compile:
         fn f() -> int:
-            q = mutable_vector::from_list([mv_make(1)])
+            q = std::mutable_vector::from_list([mv_make(1)])
             coroutine {step} = mv_worker(3)
             old = q.swap(999, step):
                 on IndexNotFound:
@@ -668,10 +668,10 @@ fn b_swap_failure_moved() errors compiler::CompilerError:
         f()
 
 fn register_mutable_vector_tests():
-    test::value("mv-loop-consumes/values", [101, 102, 103, 104], b_loop_consumes)
-    test::rejects("mv-loop-consumes/use-after-move", compiler::DiagnosticCode::UseAfterMove, b_loop_moved)
-    test::value("mv-affine-swap-failure/value", 52, b_swap_failure)
-    test::rejects("mv-affine-swap-failure/use-after-move", compiler::DiagnosticCode::UseAfterMove, b_swap_failure_moved)
+    std::test::value("mv-loop-consumes/values", [101, 102, 103, 104], b_loop_consumes)
+    std::test::rejects("mv-loop-consumes/use-after-move", std::compiler::DiagnosticCode::UseAfterMove, b_loop_moved)
+    std::test::value("mv-affine-swap-failure/value", 52, b_swap_failure)
+    std::test::rejects("mv-affine-swap-failure/use-after-move", std::compiler::DiagnosticCode::UseAfterMove, b_swap_failure_moved)
 
 # ---------------------------------------------------------------------------
 # mutable-array.test
@@ -679,13 +679,13 @@ fn register_mutable_vector_tests():
 # ma-principal-create-rejects: create(2, make()) would place one affine
 # value in two slots: AFFINE-DUPLICATION-UNSUPPORTED, its message
 # pointing to generate.
-fn b_create_rejects() errors compiler::CompilerError:
+fn b_create_rejects() errors std::compiler::CompilerError:
     static compile:
-        a = mutable_array::create(2, mv_make(1))
+        a = std::mutable_array::create(2, mv_make(1))
         0
 
 fn register_mutable_array_tests():
-    own_rejects_message("ma-principal-create-rejects", compiler::DiagnosticCode::AffineDuplicationUnsupported, "mutable_array::create would place this value, an affine Coroutine{args: [Command], return: Event, errors: []}, in every slot it makes -- one value with several owners: an affine value has exactly one (make one value per slot with a factory instead -- mutable_array::generate(n, make) calls `make(i)` once for each slot -- or repeat an unrestricted value)", true, b_create_rejects)
+    own_rejects_message("ma-principal-create-rejects", std::compiler::DiagnosticCode::AffineDuplicationUnsupported, "std::mutable_array::create would place this value, an affine Coroutine{args: [Command], return: Event, errors: []}, in every slot it makes -- one value with several owners: an affine value has exactly one (make one value per slot with a factory instead -- std::mutable_array::generate(n, make) calls `make(i)` once for each slot -- or repeat an unrestricted value)", true, b_create_rejects)
 
 # ---------------------------------------------------------------------------
 
@@ -695,6 +695,6 @@ fn register_ownership_tests():
     register_mutable_vector_tests()
     register_mutable_array_tests()
 
-with context test::suite()
+with context std::test::suite()
 register_ownership_tests()
-test::report()
+std::test::report()

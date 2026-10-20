@@ -365,17 +365,17 @@ g(true)}]
 } -result {{} {{refined bool On} bool}}
 
 test mb-native-callee-fires {DECIDED, pinned: a native callee is included, by its registry parameter types -- a probe native with a str subject and two bool parameters fires, functionally and through method sugar; one with only bool parameters is silent} -body {
-    withProbeNative str::probe_open {str bool bool} {
-        withProbeNative str::probe_xor {bool bool} {
-            set hir [compileWith {import str
-a = str::probe_open("p", true, false)
+    withProbeNative std::str::probe_open {str bool bool} {
+        withProbeNative std::str::probe_xor {bool bool} {
+            set hir [compileWith {import std::str
+a = std::str::probe_open("p", true, false)
 b = "q".probe_open(false, false)
-c = str::probe_xor(true, false)
+c = std::str::probe_xor(true, false)
 [a, b, c]}]
             lmap w [manyOf $hir] {list [loc $hir [dict get $w primary]] [dict get $w data callee] [dict get $w data calleeName] [dict get $w data positions]}
         }
     }
-} -result {{2:5 {native str::probe_open} str::probe_open {2 3}} {3:5 {native str::probe_open} str::probe_open {2 3}}}
+} -result {{2:5 {native std::str::probe_open} std::str::probe_open {2 3}} {3:5 {native std::str::probe_open} std::str::probe_open {2 3}}}
 
 test mb-no-stdlib-native-takes-bool {the census's native half: no registered native declares a bool parameter, so no stdlib native call can fire today (the natives are included for the call site, and for the pressure list a future one would join)} -body {
     set withBool {}
@@ -714,12 +714,12 @@ test mb-module-call-located-in-the-module {a module's own call is located in the
 fn reopen(path):
     open(path, true, false)
 }} {
-        set hir [compileWith {import opts
-r = opts::open("x", true, false)
-[r, opts::reopen("y"), opts::reopen("z")]}]
+        set hir [compileWith {import std::opts
+r = std::opts::open("x", true, false)
+[r, std::opts::reopen("y"), std::opts::reopen("z")]}]
         lmap w [manyOf $hir] {list [file tail [hir::originLocation $hir [dict get $w primary]]] [dict get $w data calleeName]}
     }
-} -result {{t.bot:2:5 opts::open} {opts.bot:4:5 opts::open}}
+} -result {{t.bot:2:5 std::opts::open} {opts.bot:4:5 std::opts::open}}
 
 test mb-instances-never-walked {the pass reads the generic source HIR once: a call in a polymorphic function with several semantic instances is one warning; collecting over HIR stripped of the semantic side table gives the identical warnings} -body {
     set hir [compileWith "$::openFile
@@ -745,8 +745,8 @@ fn size(value: A) -> int:
 fn size(value: B) -> int:
     value.w
 }} {
-        set hir [compileWith {import wa
-import wb
+        set hir [compileWith {import std::wa
+import std::wb
 trait Sized:
     fn size(value: Sized) -> int
 fn scale(n: int, double: bool, negate: bool) -> int:
@@ -757,7 +757,7 @@ fn scale(n: int, double: bool, negate: bool) -> int:
     n
 fn measure(value: Sized) -> int:
     value.size().scale(true, false)
-[measure(wa::A {v: 2}), measure(wb::B {w: 3})]}]
+[measure(std::wa::A {v: 2}), measure(std::wb::B {w: 3})]}]
         set clones 0
         dict for {e node} [dict get $hir exprs] {
             if {[dict get $node kind] eq "call" && [dict exists $node written] && [dict get $node written form] eq "method"

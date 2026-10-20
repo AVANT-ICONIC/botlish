@@ -62,10 +62,10 @@
 @@ sorted-bisect-upper-bound the bisection finds the first hash greater than the key's, past its entry (wrong bucket index)
 ## impl/sorted.bot
 <<<<
-    if list::at(hs, mid) < h:
+    if std::list::at(hs, mid) < h:
         return lower_bound(hs, h, mid + 1, hi)
 ====
-    if list::at(hs, mid) <= h:
+    if std::list::at(hs, mid) <= h:
         return lower_bound(hs, h, mid + 1, hi)
 >>>>
 
@@ -111,22 +111,22 @@
 @@ sorted-truncated-hash lookups trust a match of the hashes' low 3 bits and omit the key comparison (equality omitted after hash match)
 ## impl/sorted.bot
 <<<<
-    if i >= list::length(hs) or list::at(hs, i) != h or list::at(ks, i) == key:
+    if i >= std::list::length(hs) or std::list::at(hs, i) != h or std::list::at(ks, i) == key:
 ====
-    if i >= list::length(hs) or bit_and(list::at(hs, i), 7) == bit_and(h, 7):
+    if i >= std::list::length(hs) or bit_and(std::list::at(hs, i), 7) == bit_and(h, 7):
 >>>>
 <<<<
-    i < size(t) and list::at(t.hs, i) == h
+    i < size(t) and std::list::at(t.hs, i) == h
 ====
-    i < size(t) and bit_and(list::at(t.hs, i), 7) == bit_and(h, 7)
+    i < size(t) and bit_and(std::list::at(t.hs, i), 7) == bit_and(h, 7)
 >>>>
 
 @@ sorted-present-past-end present? reads the position after the last entry when the key belongs at the end (bounds)
 ## impl/sorted.bot
 <<<<
-    i < size(t) and list::at(t.hs, i) == h
+    i < size(t) and std::list::at(t.hs, i) == h
 ====
-    i <= size(t) and list::at(t.hs, i) == h
+    i <= size(t) and std::list::at(t.hs, i) == h
 >>>>
 
 # ---------------------------------------------------------------------------
@@ -176,19 +176,19 @@
 <<<<
             key
         else:
-            list::at(t.ks, j - 1)
+            std::list::at(t.ks, j - 1)
 ====
             key
         else:
-            list::at(t.ks, j)
+            std::list::at(t.ks, j)
 >>>>
 
 @@ sorted-insert-value-overwritten the value splice's second copy starts at the new value's position and overwrites it with the old neighbour's
 ## impl/sorted.bot
 <<<<
-    mutable_array::copy(a, p + 1, old, p, n - p)
+    std::mutable_array::copy(a, p + 1, old, p, n - p)
 ====
-    mutable_array::copy(a, p, old, p, n - p)
+    std::mutable_array::copy(a, p, old, p, n - p)
 >>>>
 
 # ---------------------------------------------------------------------------
@@ -209,9 +209,9 @@
 @@ sorted-drop-values-misaligned the value splice of a removal keeps the removed value and loses the last one
 ## impl/sorted.bot
 <<<<
-    mutable_array::copy(a, p, old, p + 1, n - 1 - p)
+    std::mutable_array::copy(a, p, old, p + 1, n - 1 - p)
 ====
-    mutable_array::copy(a, p, old, p, n - 1 - p)
+    std::mutable_array::copy(a, p, old, p, n - 1 - p)
 >>>>
 
 @@ sorted-drop-keeps-hash the removal keeps the removed entry's hash, so the hashes no longer match the keys

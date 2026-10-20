@@ -31,7 +31,7 @@
             # A method-style call `receiver.NAME(args)` with no function NAME
 >>>>
 
-@@ missing-import-type-blind the unimported candidates ignore the receiver's kind: a str receiver is told to import mutable_vector
+@@ missing-import-type-blind the unimported candidates ignore the receiver's kind: a str receiver is told to import std::mutable_vector
 ## hir/structs.tcl
 <<<<
         if {$kind ne "" && $wanted ni {"" any} && $kind ne $wanted} continue

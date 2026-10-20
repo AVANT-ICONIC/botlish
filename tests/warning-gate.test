@@ -8,7 +8,7 @@
 # error` would reject.
 #
 # Each ratchet case runs the gate (this checkout's compiler) over a private
-# scratch copy of examples/, bench/, lib/ and the manifest in the tcltest
+# scratch copy of examples/, bench/, stdlib/ and the manifest in the tcltest
 # temporary directory, edited for the case.
 
 source [file join [file dirname [file normalize [info script]]] helpers.tcl]
@@ -40,7 +40,7 @@ proc scratchTree {} {
     set dir [file join [temporaryDirectory] warning-gate-[pid]]
     file delete -force $dir
     file mkdir [file join $dir audit refactor]
-    foreach sub {examples bench lib} {
+    foreach sub {examples bench stdlib} {
         file copy [file join $::projectRoot $sub] [file join $dir $sub]
     }
     file copy [file join $::projectRoot audit refactor manifest.txt] [file join $dir audit refactor manifest.txt]
@@ -60,10 +60,10 @@ test warning-gate-passes {the gate passes on the tree: the observed warnings are
 
 test warning-gate-ratchet-new-warning {a planted new warning in a clean library module fails the gate, naming the warning and its location} -body {
     set root [scratchTree]
-    editFile $root lib/mathish.bot {string cat $text "\nfn planted_sep():\n    \",\"\n"}
+    editFile $root stdlib/mathish.bot {string cat $text "\nfn planted_sep():\n    \",\"\n"}
     lassign [gateRun -root $root] code out
     file delete -force $root
-    list $code [regexp {unexpected warning ONE-CHAR-STRING-LITERAL at lib/mathish\.bot:\d+:\d+} $out] \
+    list $code [regexp {unexpected warning ONE-CHAR-STRING-LITERAL at stdlib/mathish\.bot:\d+:\d+} $out] \
         [string match "*GATE FAILED*" $out]
 } -result {1 1 1}
 

@@ -234,7 +234,7 @@ name; `step`'s per-iteration closure is unchanged, spelled as a nested `fn`
 `root-block-capture-1` fixture already demonstrates).
 
 **refined-checks**: spelled with the canonical predicate name `emailish?`
-(`lib/web.tcl`, `R2-ORDINARY-EMAILISH-PREDICATE.md`) rather than the
+(`stdlib/web.tcl`, `R2-ORDINARY-EMAILISH-PREDICATE.md`) rather than the
 deprecated `Emailish?` compatibility alias the old `.ir` fixture used. That
 alias exists specifically so the *frozen* `.ir` fixture keeps resolving
 (`native/native.tcl`'s `ExpandNativeBodiesIn` comment: "the frozen

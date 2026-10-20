@@ -19,8 +19,8 @@
 # compiler rejects BODY, the site becomes the reification of the compiler's
 # primary diagnostic for it -- an ordinary
 #
-#   fail compiler::CompilerError {code: compiler::DiagnosticCode::CASE,
-#       primary: compiler::SourceLocation {line: L, column: C},
+#   fail std::compiler::CompilerError {code: std::compiler::DiagnosticCode::CASE,
+#       primary: std::compiler::SourceLocation {line: L, column: C},
 #       related: [...], message: "..."}
 #
 # -- and none of BODY survives. Either way the static node is gone before
@@ -199,7 +199,7 @@
 # (hir/resolve.tcl).
 
 namespace eval hir::static {
-    # The public diagnostic identities (lib/compiler.bot's `enum
+    # The public diagnostic identities (stdlib/compiler.bot's `enum
     # DiagnosticCode`): every error diagnostic kind a parser-valid block can
     # make the compiler report, and the one case each becomes. Explicit and
     # one-to-one (tests/static-compile.test pins it against the enum and
@@ -313,10 +313,10 @@ namespace eval hir::static {
         USE-AFTER-MOVE                           UseAfterMove
         YIELD-OUTSIDE-FUNCTION                   YieldOutsideFunction
     }
-    # The canonical identities the reification constructs (lib/compiler.bot).
-    variable errorName compiler::CompilerError
-    variable codeEnum compiler::DiagnosticCode
-    variable locationStruct compiler::SourceLocation
+    # The canonical identities the reification constructs (stdlib/compiler.bot).
+    variable errorName std::compiler::CompilerError
+    variable codeEnum std::compiler::DiagnosticCode
+    variable locationStruct std::compiler::SourceLocation
     # The decision scheduler (header, "Decision economics"): batched (the
     # default), sequential (the reference: one rejection per typed build) or
     # legacy (the procedure before the economics milestone). Test, audit and
@@ -353,13 +353,13 @@ proc hir::static::codes {} {
     return $codes
 }
 
-# The compiler::DiagnosticCode case of diagnostic KIND. A kind with no case is
+# The std::compiler::DiagnosticCode case of diagnostic KIND. A kind with no case is
 # an internal compiler failure, never a default: the table is the public
 # contract (tests/static-compile.test's census keeps it complete).
 proc hir::static::CodeOf {kind} {
     variable codes
     if {![dict exists $codes $kind]} {
-        error "internal compiler error: diagnostic kind \"$kind\" has no compiler::DiagnosticCode case (hir/static.tcl's codes, lib/compiler.bot)"
+        error "internal compiler error: diagnostic kind \"$kind\" has no std::compiler::DiagnosticCode case (hir/static.tcl's codes, stdlib/compiler.bot)"
     }
     return [dict get $codes $kind]
 }
@@ -630,10 +630,10 @@ proc hir::static::Role {origin role} {
 # ---------------------------------------------------------------------------
 # Reification: a rejected site's ordinary failure
 
-# The `fail compiler::CompilerError {...}` node a rejected site NODE becomes,
+# The `fail std::compiler::CompilerError {...}` node a rejected site NODE becomes,
 # reifying DIAGNOSTIC ({kind message origin related}: ORIGIN the primary
 # location, RELATED a list of origins). Every constructed value is an
-# ordinary literal or construction of lib/compiler.bot's declarations, by
+# ordinary literal or construction of stdlib/compiler.bot's declarations, by
 # their canonical identities (the file imports `compiler`: surface/
 # modules.tcl requires it of every file using a static intrinsic). The node
 # carries `static {operation OPERATION kind KIND}`: provenance, read by
@@ -660,7 +660,7 @@ proc hir::static::Reified {node diagnostic} {
     return $fail
 }
 
-# A compiler::SourceLocation construction (at ORIGIN) of the source location
+# A std::compiler::SourceLocation construction (at ORIGIN) of the source location
 # AT: its line and column in its own file.
 proc hir::static::Location {origin at} {
     variable locationStruct

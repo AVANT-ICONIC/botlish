@@ -28,10 +28,10 @@ tree: 67380f41d56fc62986485999057e3976d4f01273 (plus any uncommitted working-tre
     signature: (i: any (untyped)) -> str
     exact Block type: block(e173)/1 -> str; structuralOf: Fn{args: [any], return: str, errors: []}
     instance char_at<generic>: closed (transitively closed); params: i : any; result: str
-  web::emailish? (e167)
+  std::web::emailish? (e167)
     signature: (v: any (untyped)) -> bool
     exact Block type: block(e167)/1 -> bool; structuralOf: Fn{args: [any], return: bool, errors: []}
-    instance web::emailish?<str>: closed (transitively open); params: v : str; result: bool
+    instance std::web::emailish?<str>: closed (transitively open); params: v : str; result: bool
 
 == bench/uri-steady.bot
   scan_while (e211)

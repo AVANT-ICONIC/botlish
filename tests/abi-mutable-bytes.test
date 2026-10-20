@@ -1,21 +1,21 @@
-# abi-mutable-bytes.test -- abi::bytes::MutableBytes, the writable counterpart of
-# abi::bytes::Bytes, and linux::read built on it (MUTABLE-BYTES.md):
+# abi-mutable-bytes.test -- std::abi::bytes::MutableBytes, the writable counterpart of
+# std::abi::bytes::Bytes, and std::linux::read built on it (MUTABLE-BYTES.md):
 #
-#   abi::bytes::zeroed(n: abi::Usize)                 n zero bytes
-#   abi::bytes::from_bytes(data: abi::bytes::Bytes)   an independent writable copy
-#   abi::bytes::mutable_length(data)                   the fixed byte count
-#   abi::bytes::replace(data, index, value)        a NEW value, data unchanged
-#   abi::bytes::detach(data)                     a fresh storage (the "detach")
-#   abi::bytes::freeze(data), abi::bytes::freeze_prefix(data, n)    immutable snapshots
-#   abi::x86_64::from_mutable_bytes(data)             the WRITABLE address bridge
-#   linux::read(fd, data) -> linux::ReadResult        ONE read(2) syscall
+#   std::abi::bytes::zeroed(n: std::abi::Usize)                 n zero bytes
+#   std::abi::bytes::from_bytes(data: std::abi::bytes::Bytes)   an independent writable copy
+#   std::abi::bytes::mutable_length(data)                   the fixed byte count
+#   std::abi::bytes::replace(data, index, value)        a NEW value, data unchanged
+#   std::abi::bytes::detach(data)                     a fresh storage (the "detach")
+#   std::abi::bytes::freeze(data), std::abi::bytes::freeze_prefix(data, n)    immutable snapshots
+#   std::abi::x86_64::from_mutable_bytes(data)             the WRITABLE address bridge
+#   std::linux::read(fd, data) -> std::linux::ReadResult        ONE read(2) syscall
 #
 # The theorem under test is "mutable storage does not imply reference
 # semantics": a MutableBytes is a VALUE, so logical copies are independent
 # through every route a value can take (binding, argument, result, struct
 # field, List element, generic and untyped parameters, closure capture,
 # ReadResult, ImmutableSet). Pure semantics run on every backend; the writable
-# bridge and linux::read are native only (Linux x86-64), like the syscall.
+# bridge and std::linux::read are native only (Linux x86-64), like the syscall.
 # Native tests build standalone executables, feed descriptor 0 through a real
 # pipe or file and redirect descriptors 3 and 4 to files, so every byte the
 # kernel wrote or read is checked as binary.
@@ -33,7 +33,7 @@ testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
 
 # Linux on x86-64 or AArch64: the native backend's whole runtime (native
 # stack maps, the stack guard, coroutines), and syscalls through the portable
-# wrappers (linux::write, linux::read, linux::io: each architecture's own
+# wrappers (std::linux::write, std::linux::read, std::linux::io: each architecture's own
 # transport, LINUX-SYSCALL-TRANSPORTS.md). linuxX86_64 is for a test that
 # runs the x86-64 transport or reads x86-64 machine code; one that only
 # compiles it (NIR, CLIF) needs no host.
@@ -48,7 +48,7 @@ set scratch [makeDirectory abi-mutable-bytes-scratch]
 set programCounter 0
 
 # The HIR of source TEXT, a program file, for C ABI target TARGET ("" a
-# Linux target, linuxTarget: the host's own on Linux -- linux::write is the
+# Linux target, linuxTarget: the host's own on Linux -- std::linux::write is the
 # Linux platform's).
 proc bytesHir {text {strict 1} {target ""}} {
     if {$target eq ""} {
@@ -137,9 +137,9 @@ proc nirFunctionId {nir name} {
 }
 
 # Botlish source of a List[Byte] literal of byte values N... (each
-# `byte::from_int(N)`, which needs no handler for a constant in 0..255).
+# `std::byte::from_int(N)`, which needs no handler for a constant in 0..255).
 proc byteList {args} {
-    return "\[[join [lmap n $args {string cat "byte::from_int($n)"}] {, }]\]"
+    return "\[[join [lmap n $args {string cat "std::byte::from_int($n)"}] {, }]\]"
 }
 
 # The user-facing text (evidence shown, representation NOT revealed) of
@@ -168,66 +168,66 @@ proc shownOn {text} {
 }
 
 # The prelude every pure program starts with.
-set pure {import abi
-import abi::bytes
-import byte
-import immutable_set
-import list
-import str
-import type byte::Byte
+set pure {import std::abi
+import std::abi::bytes
+import std::byte
+import std::immutable_set
+import std::list
+import std::str
+import type std::byte::Byte
 
 fn mb(s: str):
-    abi::bytes::from_bytes(abi::bytes::from_list(str::encode_utf8(s)))
+    std::abi::bytes::from_bytes(std::abi::bytes::from_list(std::str::encode_utf8(s)))
 
-fn put(m: abi::bytes::MutableBytes, i: int, v: Byte) -> abi::bytes::MutableBytes:
-    abi::bytes::replace(m, i, v):
+fn put(m: std::abi::bytes::MutableBytes, i: int, v: Byte) -> std::abi::bytes::MutableBytes:
+    std::abi::bytes::replace(m, i, v):
         on IndexNotFound:
             m
 
-fn is(m: abi::bytes::MutableBytes, s: str) -> bool:
-    abi::bytes::freeze(m) == abi::bytes::from_list(str::encode_utf8(s))
+fn is(m: std::abi::bytes::MutableBytes, s: str) -> bool:
+    std::abi::bytes::freeze(m) == std::abi::bytes::from_list(std::str::encode_utf8(s))
 
-fn get(xs: List[abi::bytes::MutableBytes], i: int) -> abi::bytes::MutableBytes:
-    list::at(xs, i):
+fn get(xs: List[std::abi::bytes::MutableBytes], i: int) -> std::abi::bytes::MutableBytes:
+    std::list::at(xs, i):
         on IndexNotFound:
             mb("")
 
 fn zeros(n: int):
     loop i from 0 to n:
-        byte::from_int(0)
+        std::byte::from_int(0)
 
 fn pattern(n: int):
     loop i from 0 to n:
-        byte::from_int(mod(i, 256))
+        std::byte::from_int(mod(i, 256))
 
 }
 
 # A literal byte for `put`: ASCII "X" = 88, "Z" = 90.
-proc X {} { return "byte::from_int(88)" }
-proc Z {} { return "byte::from_int(90)" }
+proc X {} { return "std::byte::from_int(88)" }
+proc Z {} { return "std::byte::from_int(90)" }
 
 # ---------------------------------------------------------------------------
 # Registration and declaration
 
-test abi-mutable-bytes-natives-registered {the writable storage family is eight natives -- seven in their own namespace mutable_byte_store (zeroed, from_storage, count, replace, detach, freeze, freeze_prefix) and the writable address bridge -- none context-free (a mutable value is never a compile-time constant), none knowing a syscall; the immutable family byte_store is untouched (from_list, byte_count); the bridge is a raw-address native like from_bytes; no native reads an address or makes a pointer -- the one name that says read is binary::read, the designator read of byte storage (LAYOUT-UNIONS.md)} -body {
-    set bridge [core::native::metadata abi::x86_64::from_mutable_bytes]
-    list [lsort [lsearch -all -inline [core::native::names] mutable_byte_store::*]] \
-        [lsort [lsearch -all -inline [core::native::names] byte_store::*]] \
-        [lmap n {zeroed from_storage count replace detach freeze freeze_prefix} {dict get [core::native::metadata mutable_byte_store::$n] contextFree}] \
+test abi-mutable-bytes-natives-registered {the writable storage family is eight natives -- seven in their own namespace std::mutable_byte_store (zeroed, from_storage, count, replace, detach, freeze, freeze_prefix) and the writable address bridge -- none context-free (a mutable value is never a compile-time constant), none knowing a syscall; the immutable family std::byte_store is untouched (from_list, byte_count); the bridge is a raw-address native like from_bytes; no native reads an address or makes a pointer -- the one name that says read is std::binary::read, the designator read of byte storage (LAYOUT-UNIONS.md)} -body {
+    set bridge [core::native::metadata std::abi::x86_64::from_mutable_bytes]
+    list [lsort [lsearch -all -inline [core::native::names] std::mutable_byte_store::*]] \
+        [lsort [lsearch -all -inline [core::native::names] std::byte_store::*]] \
+        [lmap n {zeroed from_storage count replace detach freeze freeze_prefix} {dict get [core::native::metadata std::mutable_byte_store::$n] contextFree}] \
         [dict get $bridge arity] [dict get $bridge paramTypes] [dict get $bridge resultShape] \
         [dict get $bridge contextFree] [dict get $bridge runtime] [dict get $bridge errors] \
         [lsearch -all -inline -regexp [core::native::names] {(?i)read|keepalive|pointer|ptr}]
-} -result {{mutable_byte_store::count mutable_byte_store::detach mutable_byte_store::freeze mutable_byte_store::freeze_prefix mutable_byte_store::from_storage mutable_byte_store::replace mutable_byte_store::zeroed} {byte_store::byte_count byte_store::from_list} {0 0 0 0 0 0 0} 1 struct {named-struct abi::x86_64::Register64} 0 raw-address {} binary::read}
+} -result {{std::mutable_byte_store::count std::mutable_byte_store::detach std::mutable_byte_store::freeze std::mutable_byte_store::freeze_prefix std::mutable_byte_store::from_storage std::mutable_byte_store::replace std::mutable_byte_store::zeroed} {std::byte_store::byte_count std::byte_store::from_list} {0 0 0 0 0 0 0} 1 struct {named-struct std::abi::x86_64::Register64} 0 raw-address {} std::binary::read}
 
-test abi-mutable-bytes-declaration {abi::bytes::MutableBytes is an opaque struct with one hidden field, owned by module abi::bytes (the one module that owns both byte types, so Bytes and MutableBytes convert without any public accessor): the existing opaque-struct mechanism, no new visibility rule} -body {
-    set text [read [open [file join $::projectRoot lib abi bytes.bot]]]
-    set hir [bytesHir "import abi\nimport abi::bytes\nabi::bytes::mutable_length(abi::bytes::zeroed(abi::usize(0))).value"]
+test abi-mutable-bytes-declaration {std::abi::bytes::MutableBytes is an opaque struct with one hidden field, owned by module std::abi::bytes (the one module that owns both byte types, so Bytes and MutableBytes convert without any public accessor): the existing opaque-struct mechanism, no new visibility rule} -body {
+    set text [read [open [file join $::projectRoot stdlib abi bytes.bot]]]
+    set hir [bytesHir "import std::abi\nimport std::abi::bytes\nstd::abi::bytes::mutable_length(std::abi::bytes::zeroed(std::abi::usize(0))).value"]
     list [regexp -line {^opaque struct MutableBytes:$} $text] \
-        [hir::structs::isOpaque abi::bytes::MutableBytes] [hir::structs::names abi::bytes::MutableBytes] [hir::structs::owner abi::bytes::MutableBytes]
-} -result {1 1 storage abi::bytes}
+        [hir::structs::isOpaque std::abi::bytes::MutableBytes] [hir::structs::names std::abi::bytes::MutableBytes] [hir::structs::owner std::abi::bytes::MutableBytes]
+} -result {1 1 storage std::abi::bytes}
 
 test abi-mutable-bytes-api-surface {the module adds exactly the small MutableBytes API beside the Bytes pair: zeroed, from_bytes, mutable_length, replace, detach, freeze and freeze_prefix; no indexing, slicing, capacity, resizing, append or address accessor} -body {
-    set text [read [open [file join $::projectRoot lib abi bytes.bot]]]
+    set text [read [open [file join $::projectRoot stdlib abi bytes.bot]]]
     set fns [lmap line [split $text \n] {
         if {![regexp {^fn ([a-z0-9_]+)} $line -> name]} continue
         set name
@@ -238,38 +238,38 @@ test abi-mutable-bytes-api-surface {the module adds exactly the small MutableByt
 # ---------------------------------------------------------------------------
 # Allocation, length, zero initialization
 
-test abi-mutable-bytes-zero-filled-and-fixed-length {abi::bytes::zeroed(n) is n zero bytes (nothing uninitialized is ever visible), the length is exact and an abi::Usize, the empty and a large one included, on every backend} -body {
-    agree "${::pure}z = abi::bytes::zeroed(abi::usize(5))\nbig = abi::bytes::zeroed(abi::usize(4096))\n\[abi::bytes::mutable_length(abi::bytes::zeroed(abi::usize(0))).value, abi::bytes::mutable_length(z).value, abi::bytes::mutable_length(big).value, abi::bytes::freeze(z) == abi::bytes::from_list(zeros(5)), abi::bytes::freeze(big) == abi::bytes::from_list(zeros(4096)), abi::bytes::freeze(abi::bytes::zeroed(abi::usize(0))) == abi::bytes::from_list(\[\])\]"
+test abi-mutable-bytes-zero-filled-and-fixed-length {std::abi::bytes::zeroed(n) is n zero bytes (nothing uninitialized is ever visible), the length is exact and a std::abi::Usize, the empty and a large one included, on every backend} -body {
+    agree "${::pure}z = std::abi::bytes::zeroed(std::abi::usize(5))\nbig = std::abi::bytes::zeroed(std::abi::usize(4096))\n\[std::abi::bytes::mutable_length(std::abi::bytes::zeroed(std::abi::usize(0))).value, std::abi::bytes::mutable_length(z).value, std::abi::bytes::mutable_length(big).value, std::abi::bytes::freeze(z) == std::abi::bytes::from_list(zeros(5)), std::abi::bytes::freeze(big) == std::abi::bytes::from_list(zeros(4096)), std::abi::bytes::freeze(std::abi::bytes::zeroed(std::abi::usize(0))) == std::abi::bytes::from_list(\[\])\]"
 } -result {[0, 5, 4096, true, true, true]}
 
-test abi-mutable-bytes-length-is-an-abi-usize {the length is an abi::Usize: accepted where one is required, not an abi::U64} -body {
-    list [agree "${::pure}fn takes(n: abi::Usize) -> int:\n    n.value\ntakes(abi::bytes::mutable_length(mb(\"ab\")))"] \
-        [lindex [strictError "${::pure}fn takes(n: abi::U64) -> int:\n    n.value\ntakes(abi::bytes::mutable_length(mb(\"ab\")))"] 0]
+test abi-mutable-bytes-length-is-an-abi-usize {the length is a std::abi::Usize: accepted where one is required, not a std::abi::U64} -body {
+    list [agree "${::pure}fn takes(n: std::abi::Usize) -> int:\n    n.value\ntakes(std::abi::bytes::mutable_length(mb(\"ab\")))"] \
+        [lindex [strictError "${::pure}fn takes(n: std::abi::U64) -> int:\n    n.value\ntakes(std::abi::bytes::mutable_length(mb(\"ab\")))"] 0]
 } -result {2 TYPE}
 
 test abi-mutable-bytes-length-is-bytes-not-scalars {from_bytes of a UTF-8 encoding has the encoded byte count, and the contents round trip exactly} -body {
-    agree "${::pure}s = \"héllo ☃ \U0001f600\"\nm = mb(s)\n\[str::length(s), abi::bytes::mutable_length(m).value, is(m, s)\]"
+    agree "${::pure}s = \"héllo ☃ \U0001f600\"\nm = mb(s)\n\[std::str::length(s), std::abi::bytes::mutable_length(m).value, is(m, s)\]"
 } -result {[9, 15, true]}
 
 test abi-mutable-bytes-oversize-allocation-is-range {a length beyond the runtime's collection ceiling is the RANGE error every oversized collection is (nothing is allocated, nothing aborts), on every backend} -body {
-    set hir [bytesHir "${::pure}abi::bytes::zeroed(abi::usize(18446744073709551615))" 0]
+    set hir [bytesHir "${::pure}std::abi::bytes::zeroed(std::abi::usize(18446744073709551615))" 0]
     lsort -unique [lmap b $::allBackends {lrange [outcomeUnderHir $b $hir] 0 2}]
 } -match glob -result {{error {CORE SEMANTIC RANGE} *}}
 
 # ---------------------------------------------------------------------------
 # mutable_bytes_set: a new value, the old one unchanged
 
-test abi-mutable-bytes-set-returns-a-new-value {b = abi::bytes::replace(a, i, x): b has the modified contents and a remains unchanged -- the semantics, whichever way the implementation realizes the update} -body {
-    agree "${::pure}a = mb(\"hello\")\nb = put(a, 0, [X])\nc = put(b, 4, [Z])\n\[is(a, \"hello\"), is(b, \"Xello\"), is(c, \"XelloZ\") == false, is(c, \"XellZ\"), abi::bytes::mutable_length(c).value\]"
+test abi-mutable-bytes-set-returns-a-new-value {b = std::abi::bytes::replace(a, i, x): b has the modified contents and a remains unchanged -- the semantics, whichever way the implementation realizes the update} -body {
+    agree "${::pure}a = mb(\"hello\")\nb = put(a, 0, [X])\nc = put(b, 4, [Z])\n\[is(a, \"hello\"), is(b, \"Xello\"), is(c, \"XelloZ\") == false, is(c, \"XellZ\"), std::abi::bytes::mutable_length(c).value\]"
 } -result {[true, true, true, true, 5]}
 
 test abi-mutable-bytes-set-index-error {an index that does not designate a byte is the existing IndexNotFound (below 0, equal to the length, beyond, and any index of the empty value); the value is not changed, and a byte value is by its Byte type} -body {
-    agree "${::pure}fn tryset(m: abi::bytes::MutableBytes, i: int) -> int errors IndexNotFound:\n    r = abi::bytes::replace(m, i, [X])\n    abi::bytes::mutable_length(r).value\nfn at(m: abi::bytes::MutableBytes, i: int):\n    tryset(m, i):\n        on IndexNotFound:\n            0 - 1\nm = mb(\"abc\")\n\[at(m, 0 - 1), at(m, 0), at(m, 2), at(m, 3), at(m, 1000), at(abi::bytes::zeroed(abi::usize(0)), 0), is(m, \"abc\")\]"
+    agree "${::pure}fn tryset(m: std::abi::bytes::MutableBytes, i: int) -> int errors IndexNotFound:\n    r = std::abi::bytes::replace(m, i, [X])\n    std::abi::bytes::mutable_length(r).value\nfn at(m: std::abi::bytes::MutableBytes, i: int):\n    tryset(m, i):\n        on IndexNotFound:\n            0 - 1\nm = mb(\"abc\")\n\[at(m, 0 - 1), at(m, 0), at(m, 2), at(m, 3), at(m, 1000), at(std::abi::bytes::zeroed(std::abi::usize(0)), 0), is(m, \"abc\")\]"
 } -result {[-1, 3, 3, -1, -1, -1, true]}
 
-test abi-mutable-bytes-set-needs-a-byte-statically {the value is a byte::Byte: an Int, a String or an out-of-range constant is rejected by ordinary typing, never truncated} -body {
-    lmap arg {"\"a\"" "byte::from_int(256)" "300" "0 - 1"} {
-        lindex [strictError "${::pure}abi::bytes::replace(mb(\"a\"), 0, $arg):\n    on IndexNotFound:\n        mb(\"a\")"] 0
+test abi-mutable-bytes-set-needs-a-byte-statically {the value is a std::byte::Byte: an Int, a String or an out-of-range constant is rejected by ordinary typing, never truncated} -body {
+    lmap arg {"\"a\"" "std::byte::from_int(256)" "300" "0 - 1"} {
+        lindex [strictError "${::pure}std::abi::bytes::replace(mb(\"a\"), 0, $arg):\n    on IndexNotFound:\n        mb(\"a\")"] 0
     }
 } -result {TYPE KNOWN-ERROR TYPE TYPE}
 
@@ -281,21 +281,21 @@ set theoremBody [dict create \
 b = a
 a2 = put(a, 0, XX)
 [is(b, "hello"), is(a, "hello"), is(a2, "Xello")]} \
-    parameter {fn mutate(m: abi::bytes::MutableBytes) -> abi::bytes::MutableBytes:
+    parameter {fn mutate(m: std::abi::bytes::MutableBytes) -> std::abi::bytes::MutableBytes:
     put(m, 1, XX)
 a = mb("hello")
 b = a
 a2 = mutate(a)
 b2 = mutate(b)
 [is(a, "hello"), is(b, "hello"), is(a2, "hXllo"), is(b2, "hXllo")]} \
-    identity {fn id(m: abi::bytes::MutableBytes) -> abi::bytes::MutableBytes:
+    identity {fn id(m: std::abi::bytes::MutableBytes) -> std::abi::bytes::MutableBytes:
     m
 a = mb("hello")
 b = id(a)
 b2 = put(b, 0, XX)
 a2 = put(a, 4, ZZ)
 [is(a, "hello"), is(b, "hello"), is(b2, "Xello"), is(a2, "hellZ")]} \
-    result-with-another-copy {fn edit(m: abi::bytes::MutableBytes) -> abi::bytes::MutableBytes:
+    result-with-another-copy {fn edit(m: std::abi::bytes::MutableBytes) -> std::abi::bytes::MutableBytes:
     put(m, 0, XX)
 a = mb("hello")
 keep = a
@@ -308,14 +308,14 @@ a2 = put(a, 0, XX)
 b = get(xs, 0)
 [is(b, "hello"), is(a, "hello"), is(a2, "Xello"), is(get(xs, 0), "hello")]} \
     struct {struct Holder:
-    data: abi::bytes::MutableBytes
+    data: std::abi::bytes::MutableBytes
 a = mb("hello")
 h = Holder {data: a}
 a2 = put(a, 0, XX)
 h2 = Holder {data: put(h.data, 4, ZZ)}
 [is(h.data, "hello"), is(a, "hello"), is(a2, "Xello"), is(h2.data, "hellZ")]} \
     struct-copy {struct Holder:
-    data: abi::bytes::MutableBytes
+    data: std::abi::bytes::MutableBytes
 a = mb("hello")
 h1 = Holder {data: a}
 h2 = h1
@@ -342,22 +342,22 @@ b2 = put(b, 0, XX)
     closure {a = mb("hello")
 fn peek() -> bool:
     is(a, "hello")
-fn bump() -> abi::bytes::MutableBytes:
+fn bump() -> std::abi::bytes::MutableBytes:
     put(a, 0, XX)
 a2 = bump()
 a3 = bump()
 [peek(), is(a, "hello"), is(a2, "Xello"), a2 == a3]} \
     immutable-set {a = mb("hello")
-s = immutable_set::from_list([a, mb("other")])
+s = std::immutable_set::from_list([a, mb("other")])
 a2 = put(a, 0, XX)
-[immutable_set::contains(s, mb("hello")), immutable_set::contains(s, a2), immutable_set::contains(s, a), is(a, "hello")]} \
+[std::immutable_set::contains(s, mb("hello")), std::immutable_set::contains(s, a2), std::immutable_set::contains(s, a), is(a, "hello")]} \
     loop {a = mb("aaaa")
 acc = [a]
 steps = loop i from 0 to 4:
     put(a, i, XX)
-[is(a, "aaaa"), is(get(steps, 0), "Xaaa"), is(get(steps, 3), "aaaX"), list::length(steps)]} \
+[is(a, "aaaa"), is(get(steps, 0), "Xaaa"), is(get(steps, 3), "aaaX"), std::list::length(steps)]} \
     branch-join {a = mb("hello")
-b = if abi::bytes::mutable_length(a).value > 3:
+b = if std::abi::bytes::mutable_length(a).value > 3:
     a
 else:
     mb("zzzzz")
@@ -389,27 +389,27 @@ dict for {route body} $theoremBody {
 # ---------------------------------------------------------------------------
 # freeze and freeze_prefix: immutable snapshots
 
-test abi-mutable-bytes-freeze-is-a-snapshot {abi::bytes::freeze copies the whole contents into an immutable Bytes that never changes afterwards, whatever is done to the source or to values derived from it; the source stays a valid independent value (freezing it twice gives equal Bytes)} -body {
-    agree "${::pure}m = mb(\"hello\")\nf = abi::bytes::freeze(m)\nm2 = put(m, 0, [X])\nf2 = abi::bytes::freeze(m2)\n\[f == abi::bytes::from_list(str::encode_utf8(\"hello\")), f2 == abi::bytes::from_list(str::encode_utf8(\"Xello\")), f == abi::bytes::freeze(m), abi::bytes::freeze(m) == abi::bytes::freeze(m), f == f2, abi::bytes::length(f).value\]"
+test abi-mutable-bytes-freeze-is-a-snapshot {std::abi::bytes::freeze copies the whole contents into an immutable Bytes that never changes afterwards, whatever is done to the source or to values derived from it; the source stays a valid independent value (freezing it twice gives equal Bytes)} -body {
+    agree "${::pure}m = mb(\"hello\")\nf = std::abi::bytes::freeze(m)\nm2 = put(m, 0, [X])\nf2 = std::abi::bytes::freeze(m2)\n\[f == std::abi::bytes::from_list(std::str::encode_utf8(\"hello\")), f2 == std::abi::bytes::from_list(std::str::encode_utf8(\"Xello\")), f == std::abi::bytes::freeze(m), std::abi::bytes::freeze(m) == std::abi::bytes::freeze(m), f == f2, std::abi::bytes::length(f).value\]"
 } -result {[true, true, true, true, false, 5]}
 
-set preludePrefix {fn B(s: str) -> abi::bytes::Bytes:
-    abi::bytes::from_list(str::encode_utf8(s))
+set preludePrefix {fn B(s: str) -> std::abi::bytes::Bytes:
+    std::abi::bytes::from_list(std::str::encode_utf8(s))
 
-fn pre(m: abi::bytes::MutableBytes, n: int) -> abi::bytes::Bytes:
-    c = abi::usize(n):
-        on abi::AbiIntegerBelowRange:
-            abi::usize(0)
-        on abi::AbiIntegerAboveRange:
-            abi::usize(0)
-    abi::bytes::freeze_prefix(m, c):
+fn pre(m: std::abi::bytes::MutableBytes, n: int) -> std::abi::bytes::Bytes:
+    c = std::abi::usize(n):
+        on std::abi::AbiIntegerBelowRange:
+            std::abi::usize(0)
+        on std::abi::AbiIntegerAboveRange:
+            std::abi::usize(0)
+    std::abi::bytes::freeze_prefix(m, c):
         on UpperOverrun:
             B("OVER")
 
 }
 
-test abi-mutable-bytes-freeze-prefix {abi::bytes::freeze_prefix(data, n) is exactly the first n bytes: 0 (empty), a proper prefix, the whole length; the suffix is never included; a count beyond the length is the existing UpperOverrun and reads nothing outside the payload; the source is unchanged} -body {
-    agree "${::pure}$::preludePrefix\nm = mb(\"hello\")\n\[pre(m, 0) == B(\"\"), pre(m, 2) == B(\"he\"), pre(m, 5) == B(\"hello\"), pre(m, 6) == B(\"OVER\"), pre(m, 100000) == B(\"OVER\"), pre(abi::bytes::zeroed(abi::usize(0)), 0) == B(\"\"), pre(abi::bytes::zeroed(abi::usize(0)), 1) == B(\"OVER\"), is(m, \"hello\")\]"
+test abi-mutable-bytes-freeze-prefix {std::abi::bytes::freeze_prefix(data, n) is exactly the first n bytes: 0 (empty), a proper prefix, the whole length; the suffix is never included; a count beyond the length is the existing UpperOverrun and reads nothing outside the payload; the source is unchanged} -body {
+    agree "${::pure}$::preludePrefix\nm = mb(\"hello\")\n\[pre(m, 0) == B(\"\"), pre(m, 2) == B(\"he\"), pre(m, 5) == B(\"hello\"), pre(m, 6) == B(\"OVER\"), pre(m, 100000) == B(\"OVER\"), pre(std::abi::bytes::zeroed(std::abi::usize(0)), 0) == B(\"\"), pre(std::abi::bytes::zeroed(std::abi::usize(0)), 1) == B(\"OVER\"), is(m, \"hello\")\]"
 } -result {[true, true, true, true, true, true, true, true]}
 
 test abi-mutable-bytes-freeze-prefix-after-update {a prefix of an UPDATED value sees the update and only the prefix: the suffix bytes after the count never appear} -body {
@@ -417,46 +417,46 @@ test abi-mutable-bytes-freeze-prefix-after-update {a prefix of an UPDATED value 
 } -result {[true, true, true]}
 
 test abi-mutable-bytes-frozen-bytes-never-change {a Bytes frozen from a MutableBytes (and from a prefix) never changes after later updates of every other value derived from the same source: the snapshot theorem on every backend} -body {
-    agree "${::pure}$::preludePrefix\nm = mb(\"abcde\")\nf = abi::bytes::freeze(m)\np = pre(m, 3)\nm2 = put(m, 0, [X])\nm3 = put(m2, 1, [Z])\nf3 = abi::bytes::freeze(m3)\n\[f == B(\"abcde\"), p == B(\"abc\"), f3 == B(\"XZcde\"), abi::bytes::freeze(m2) == B(\"Xbcde\"), f == abi::bytes::freeze(m)\]"
+    agree "${::pure}$::preludePrefix\nm = mb(\"abcde\")\nf = std::abi::bytes::freeze(m)\np = pre(m, 3)\nm2 = put(m, 0, [X])\nm3 = put(m2, 1, [Z])\nf3 = std::abi::bytes::freeze(m3)\n\[f == B(\"abcde\"), p == B(\"abc\"), f3 == B(\"XZcde\"), std::abi::bytes::freeze(m2) == B(\"Xbcde\"), f == std::abi::bytes::freeze(m)\]"
 } -result {[true, true, true, true, true]}
 
 # ---------------------------------------------------------------------------
 # from_bytes: an independent mutable value
 
-test abi-mutable-bytes-from-bytes-is-independent {abi::bytes::from_bytes copies: changing the result never changes the Bytes it came from, and the same Bytes gives independent mutable values every time} -body {
-    agree "${::pure}$::preludePrefix\nd = B(\"data\")\na = abi::bytes::from_bytes(d)\nb = abi::bytes::from_bytes(d)\na2 = put(a, 0, [X])\n\[d == B(\"data\"), is(a, \"data\"), is(b, \"data\"), is(a2, \"Xata\"), a == b, a2 == b, abi::bytes::freeze(b) == d\]"
+test abi-mutable-bytes-from-bytes-is-independent {std::abi::bytes::from_bytes copies: changing the result never changes the Bytes it came from, and the same Bytes gives independent mutable values every time} -body {
+    agree "${::pure}$::preludePrefix\nd = B(\"data\")\na = std::abi::bytes::from_bytes(d)\nb = std::abi::bytes::from_bytes(d)\na2 = put(a, 0, [X])\n\[d == B(\"data\"), is(a, \"data\"), is(b, \"data\"), is(a2, \"Xata\"), a == b, a2 == b, std::abi::bytes::freeze(b) == d\]"
 } -result {[true, true, true, true, true, false, true]}
 
 # ---------------------------------------------------------------------------
 # Equality, hash, rendering
 
 test abi-mutable-bytes-equality-is-by-contents {== is by current byte contents, never storage identity: independent values with equal contents are equal, a different byte, a prefix, a longer value and a NUL-padded one are not; after an update the equality changes accordingly} -body {
-    agree "${::pure}a = mb(\"AB\")\n\[a == mb(\"AB\"), a == mb(\"AC\"), a == mb(\"A\"), a == mb(\"ABC\"), abi::bytes::zeroed(abi::usize(2)) == abi::bytes::zeroed(abi::usize(2)), abi::bytes::zeroed(abi::usize(0)) == abi::bytes::zeroed(abi::usize(1)), put(a, 1, byte::from_int(67)) == mb(\"AC\"), put(a, 1, byte::from_int(66)) == a, a == a\]"
+    agree "${::pure}a = mb(\"AB\")\n\[a == mb(\"AB\"), a == mb(\"AC\"), a == mb(\"A\"), a == mb(\"ABC\"), std::abi::bytes::zeroed(std::abi::usize(2)) == std::abi::bytes::zeroed(std::abi::usize(2)), std::abi::bytes::zeroed(std::abi::usize(0)) == std::abi::bytes::zeroed(std::abi::usize(1)), put(a, 1, std::byte::from_int(67)) == mb(\"AC\"), put(a, 1, std::byte::from_int(66)) == a, a == a\]"
 } -result {[true, false, false, false, true, false, true, true, true]}
 
 test abi-mutable-bytes-is-not-a-bytes {a MutableBytes and a Bytes with the same contents are different types and different kinds: neither compares equal to the other nor to a List or String, and the types do not mix} -body {
-    list [agree "${::pure}\[mb(\"A\") == abi::bytes::from_list([byteList 65]), mb(\"A\") == \[65\], mb(\"A\") == \"A\"\]"] \
-        [lindex [strictError "${::pure}fn f(d: abi::bytes::Bytes) -> int:\n    1\nf(mb(\"A\"))"] 0] \
-        [lindex [strictError "${::pure}fn f(d: abi::bytes::MutableBytes) -> int:\n    1\nf(abi::bytes::from_list(\[\]))"] 0]
+    list [agree "${::pure}\[mb(\"A\") == std::abi::bytes::from_list([byteList 65]), mb(\"A\") == \[65\], mb(\"A\") == \"A\"\]"] \
+        [lindex [strictError "${::pure}fn f(d: std::abi::bytes::Bytes) -> int:\n    1\nf(mb(\"A\"))"] 0] \
+        [lindex [strictError "${::pure}fn f(d: std::abi::bytes::MutableBytes) -> int:\n    1\nf(std::abi::bytes::from_list(\[\]))"] 0]
 } -result {{[false, false, false]} TYPE TYPE}
 
 test abi-mutable-bytes-hash-agrees-with-equality {hash is by the current contents, consistent with ==: equal values hash equal however built, a changed value hashes differently, the hash differs from the same bytes' Bytes hash (its own kind tag), and the hash VALUES are identical on every backend} -body {
-    set shown [agree "${::pure}a = mb(\"AB\")\n\[hash(a) == hash(mb(\"AB\")), hash(a) == hash(put(a, 1, byte::from_int(67))), hash(abi::bytes::zeroed(abi::usize(0))) == hash(abi::bytes::zeroed(abi::usize(1))), hash(a) == hash(abi::bytes::from_list([byteList 65 66])), hash(abi::bytes::zeroed(abi::usize(0))), hash(abi::bytes::zeroed(abi::usize(3))), hash(mb(\"héllo ☃\")), hash(put(a, 0, byte::from_int(0)))\]"]
+    set shown [agree "${::pure}a = mb(\"AB\")\n\[hash(a) == hash(mb(\"AB\")), hash(a) == hash(put(a, 1, std::byte::from_int(67))), hash(std::abi::bytes::zeroed(std::abi::usize(0))) == hash(std::abi::bytes::zeroed(std::abi::usize(1))), hash(a) == hash(std::abi::bytes::from_list([byteList 65 66])), hash(std::abi::bytes::zeroed(std::abi::usize(0))), hash(std::abi::bytes::zeroed(std::abi::usize(3))), hash(mb(\"héllo ☃\")), hash(put(a, 0, std::byte::from_int(0)))\]"]
     list [string match DISAGREE* $shown] [string match ERROR* $shown] [regexp {^\[true, false, false, false, [0-9]+, [0-9]+, [0-9]+, [0-9]+\]$} $shown]
 } -result {0 0 1}
 
 test abi-mutable-bytes-in-immutable-collections-stay-correct {a MutableBytes stored in a List or an ImmutableSet is its value at that moment: a later update of another copy cannot corrupt the collection's equality or hash invariants (the update is a new value)} -body {
-    agree "${::pure}a = mb(\"k1\")\nb = a\ns = immutable_set::from_list(\[a, mb(\"k2\"), b\])\nc = put(a, 0, byte::from_int(75))\ns2 = immutable_set::from_list(\[c, a\])\n\[list::length(\[a, b\]), immutable_set::contains(s, mb(\"k1\")), immutable_set::contains(s, c), immutable_set::contains(s2, mb(\"K1\")), immutable_set::contains(s2, mb(\"k1\")), s == immutable_set::from_list(\[mb(\"k2\"), mb(\"k1\")\]), hash(b) == hash(mb(\"k1\"))\]"
+    agree "${::pure}a = mb(\"k1\")\nb = a\ns = std::immutable_set::from_list(\[a, mb(\"k2\"), b\])\nc = put(a, 0, std::byte::from_int(75))\ns2 = std::immutable_set::from_list(\[c, a\])\n\[std::list::length(\[a, b\]), std::immutable_set::contains(s, mb(\"k1\")), std::immutable_set::contains(s, c), std::immutable_set::contains(s2, mb(\"K1\")), std::immutable_set::contains(s2, mb(\"k1\")), s == std::immutable_set::from_list(\[mb(\"k2\"), mb(\"k1\")\]), hash(b) == hash(mb(\"k1\"))\]"
 } -result {[2, true, false, true, true, true, true]}
 
 test abi-mutable-bytes-rendering-is-opaque {normal rendering is the nominal opaque form on every backend, alone or inside a List or struct: no address, allocator metadata, sharing count, hidden storage or payload} -body {
-    set text "${::pure}struct Holder:\n    data: abi::bytes::MutableBytes\n\[mb(\"secret\"), abi::bytes::zeroed(abi::usize(0)), Holder {data: mb(\"x\")}\]"
+    set text "${::pure}struct Holder:\n    data: std::abi::bytes::MutableBytes\n\[mb(\"secret\"), std::abi::bytes::zeroed(std::abi::usize(0)), Holder {data: mb(\"x\")}\]"
     shownOn $text
-} -result {[<opaque abi::bytes::MutableBytes>, <opaque abi::bytes::MutableBytes>, Holder {data: <opaque abi::bytes::MutableBytes>}]}
+} -result {[<opaque std::abi::bytes::MutableBytes>, <opaque std::abi::bytes::MutableBytes>, Holder {data: <opaque std::abi::bytes::MutableBytes>}]}
 
 test abi-mutable-bytes-internal-reveal-shows-the-storage {the explicit internal reveal (the differential printer) shows the contents identically on every backend, in a kind of its own: how the backends are compared byte for byte} -body {
-    agree "${::pure}\[abi::bytes::from_bytes(abi::bytes::from_list([byteList 65 0 255])), abi::bytes::zeroed(abi::usize(2))\]"
-} -result {[abi::bytes::MutableBytes {storage: <mutbytes 3: 4100ff>}, abi::bytes::MutableBytes {storage: <mutbytes 2: 0000>}]}
+    agree "${::pure}\[std::abi::bytes::from_bytes(std::abi::bytes::from_list([byteList 65 0 255])), std::abi::bytes::zeroed(std::abi::usize(2))\]"
+} -result {[std::abi::bytes::MutableBytes {storage: <mutbytes 3: 4100ff>}, std::abi::bytes::MutableBytes {storage: <mutbytes 2: 0000>}]}
 
 # ---------------------------------------------------------------------------
 # The opacity boundary and the two bridges' static contracts
@@ -466,56 +466,56 @@ test abi-mutable-bytes-no-projection-or-construction-outside-the-owner {the repr
             lindex [strictError "${::pure}d = mb(\"a\")\nd.$field"] 0
         }] \
         [lindex [strictError "${::pure}d = mb(\"a\")\n{storage} = d\nstorage"] 0] \
-        [lindex [strictError "import abi\nimport abi::bytes\nabi::bytes::MutableBytes {storage: 1}"] 0] \
-        [lindex [strictError "import abi\nimport abi::bytes\nimport mutable_byte_store\nabi::bytes::MutableBytes {storage: mutable_byte_store::zeroed(1)}"] 0]
+        [lindex [strictError "import std::abi\nimport std::abi::bytes\nstd::abi::bytes::MutableBytes {storage: 1}"] 0] \
+        [lindex [strictError "import std::abi\nimport std::abi::bytes\nimport std::mutable_byte_store\nstd::abi::bytes::MutableBytes {storage: std::mutable_byte_store::zeroed(1)}"] 0]
 } -result {{OPAQUE-REPRESENTATION OPAQUE-REPRESENTATION OPAQUE-REPRESENTATION OPAQUE-REPRESENTATION OPAQUE-REPRESENTATION} OPAQUE-REPRESENTATION OPAQUE-CONSTRUCTION OPAQUE-CONSTRUCTION}
 
-test abi-mutable-bytes-bridges-never-mix {a Bytes gives readable foreign memory and a MutableBytes writable foreign memory, and nothing silently casts one to the other: from_bytes(MutableBytes), from_mutable_bytes(Bytes), of an Int, a String, a raw storage, an abi::U8 and no argument are all compile-time errors} -body {
-    set pre "import abi\nimport abi::bytes\nimport abi::x86_64\nimport byte_store\nimport mutable_byte_store\n"
-    list [lindex [strictError "${pre}abi::x86_64::from_bytes(abi::bytes::zeroed(abi::usize(1)))"] 0] \
-        [lindex [strictError "${pre}abi::x86_64::from_mutable_bytes(abi::bytes::from_list(\[\]))"] 0] \
-        [lindex [strictError "${pre}abi::x86_64::from_mutable_bytes(1)"] 0] \
-        [lindex [strictError "${pre}abi::x86_64::from_mutable_bytes(\"text\")"] 0] \
-        [lindex [strictError "${pre}abi::x86_64::from_mutable_bytes(mutable_byte_store::zeroed(1))"] 0] \
-        [lindex [strictError "${pre}abi::x86_64::from_mutable_bytes(byte_store::from_list(\[\]))"] 0] \
-        [lindex [strictError "${pre}abi::x86_64::from_mutable_bytes(abi::u8(1))"] 0] \
-        [lindex [strictError "${pre}abi::x86_64::from_mutable_bytes()"] 0] \
-        [strictError "${pre}abi::x86_64::to_int(abi::x86_64::from_mutable_bytes(abi::bytes::zeroed(abi::usize(1)))) + 0"]
+test abi-mutable-bytes-bridges-never-mix {a Bytes gives readable foreign memory and a MutableBytes writable foreign memory, and nothing silently casts one to the other: from_bytes(MutableBytes), from_mutable_bytes(Bytes), of an Int, a String, a raw storage, a std::abi::U8 and no argument are all compile-time errors} -body {
+    set pre "import std::abi\nimport std::abi::bytes\nimport std::abi::x86_64\nimport std::byte_store\nimport std::mutable_byte_store\n"
+    list [lindex [strictError "${pre}std::abi::x86_64::from_bytes(std::abi::bytes::zeroed(std::abi::usize(1)))"] 0] \
+        [lindex [strictError "${pre}std::abi::x86_64::from_mutable_bytes(std::abi::bytes::from_list(\[\]))"] 0] \
+        [lindex [strictError "${pre}std::abi::x86_64::from_mutable_bytes(1)"] 0] \
+        [lindex [strictError "${pre}std::abi::x86_64::from_mutable_bytes(\"text\")"] 0] \
+        [lindex [strictError "${pre}std::abi::x86_64::from_mutable_bytes(std::mutable_byte_store::zeroed(1))"] 0] \
+        [lindex [strictError "${pre}std::abi::x86_64::from_mutable_bytes(std::byte_store::from_list(\[\]))"] 0] \
+        [lindex [strictError "${pre}std::abi::x86_64::from_mutable_bytes(std::abi::u8(1))"] 0] \
+        [lindex [strictError "${pre}std::abi::x86_64::from_mutable_bytes()"] 0] \
+        [strictError "${pre}std::abi::x86_64::to_int(std::abi::x86_64::from_mutable_bytes(std::abi::bytes::zeroed(std::abi::usize(1)))) + 0"]
 } -match glob -result {TYPE TYPE TYPE TYPE TYPE TYPE TYPE ARITY {no error}}
 
 test abi-mutable-bytes-bridge-is-only-called {the writable bridge, like the readable one, is a call and never a function value: an address is taken from one MutableBytes at one call and consumed by the syscall that call feeds} -body {
-    set pre "import abi\nimport abi::bytes\nimport abi::x86_64\n"
-    list [lindex [strictError "${pre}f = abi::x86_64::from_mutable_bytes\n1"] 0] \
-        [lindex [strictError "${pre}xs = \[abi::x86_64::from_mutable_bytes\]\nxs"] 0]
+    set pre "import std::abi\nimport std::abi::bytes\nimport std::abi::x86_64\n"
+    list [lindex [strictError "${pre}f = std::abi::x86_64::from_mutable_bytes\n1"] 0] \
+        [lindex [strictError "${pre}xs = \[std::abi::x86_64::from_mutable_bytes\]\nxs"] 0]
 } -result {TYPE TYPE}
 
 test abi-mutable-bytes-bridge-result-is-a-register {the writable bridge returns the raw machine transport, a Register64: not an Int and not a pointer type} -body {
-    set hir [bytesHir "import abi\nimport abi::bytes\nimport abi::x86_64\nm = abi::bytes::zeroed(abi::usize(1))\nabi::x86_64::from_mutable_bytes(m)"]
+    set hir [bytesHir "import std::abi\nimport std::abi::bytes\nimport std::abi::x86_64\nm = std::abi::bytes::zeroed(std::abi::usize(1))\nstd::abi::x86_64::from_mutable_bytes(m)"]
     set types {}
     dict for {e node} [dict get $hir exprs] {
         if {[dict get $node kind] eq "call" && [lindex [dict get $node target] 0] eq "native"
-                && [dict get [hir::symbol $hir [lindex [dict get $node target] 1]] name] eq "abi::x86_64::from_mutable_bytes"} {
+                && [dict get [hir::symbol $hir [lindex [dict get $node target] 1]] name] eq "std::abi::x86_64::from_mutable_bytes"} {
             lappend types [hir::types::show [hir::typeOf $hir $e]]
         }
     }
     set types
-} -result abi::x86_64::Register64
+} -result std::abi::x86_64::Register64
 
 test abi-mutable-bytes-unchecked-bridge-replays-the-contract {a -strict 0 program that breaks the writable bridge's contract (a Bytes where a MutableBytes is required) never takes an address natively: the problem is replayed as a run-time TYPE error before anything is evaluated} -body {
-    set hir [bytesHir "import abi\nimport abi::bytes\nimport abi::x86_64\nabi::x86_64::from_mutable_bytes(abi::bytes::from_list(\[\]))" 0]
+    set hir [bytesHir "import std::abi\nimport std::abi::bytes\nimport std::abi::x86_64\nstd::abi::x86_64::from_mutable_bytes(std::abi::bytes::from_list(\[\]))" 0]
     lrange [outcomeUnderHir cranelift $hir] 0 1
 } -result {error {CORE SEMANTIC TYPE}}
 
-test abi-mutable-bytes-tcl-backends-refuse-the-address {interp and compile refuse the writable bridge and linux::read with NATIVE-ONLY (no imitation of an address or of a read with a Tcl channel); a program that defines but never calls them runs everywhere, and the pure operations run on both} -body {
-    set pre "import abi\nimport abi::bytes\nimport linux\nimport abi::x86_64\n"
-    list [lmap b {interp compile} {lrange [outcomeUnderHir $b [bytesHir "direct module\n${pre}linux::read(abi::i32(0), abi::bytes::zeroed(abi::usize(1)))"]] 0 1}] \
-        [lmap b {interp compile} {lrange [outcomeUnderHir $b [bytesHir "${pre}abi::x86_64::to_int(abi::x86_64::from_mutable_bytes(abi::bytes::zeroed(abi::usize(1))))"]] 0 1}] \
-        [agree "direct module\n${pre}fn emit():\n    linux::read(abi::i32(0), abi::bytes::zeroed(abi::usize(1)))\n7" {interp compile}]
+test abi-mutable-bytes-tcl-backends-refuse-the-address {interp and compile refuse the writable bridge and std::linux::read with NATIVE-ONLY (no imitation of an address or of a read with a Tcl channel); a program that defines but never calls them runs everywhere, and the pure operations run on both} -body {
+    set pre "import std::abi\nimport std::abi::bytes\nimport std::linux\nimport std::abi::x86_64\n"
+    list [lmap b {interp compile} {lrange [outcomeUnderHir $b [bytesHir "direct module\n${pre}std::linux::read(std::abi::i32(0), std::abi::bytes::zeroed(std::abi::usize(1)))"]] 0 1}] \
+        [lmap b {interp compile} {lrange [outcomeUnderHir $b [bytesHir "${pre}std::abi::x86_64::to_int(std::abi::x86_64::from_mutable_bytes(std::abi::bytes::zeroed(std::abi::usize(1))))"]] 0 1}] \
+        [agree "direct module\n${pre}fn emit():\n    std::linux::read(std::abi::i32(0), std::abi::bytes::zeroed(std::abi::usize(1)))\n7" {interp compile}]
 } -result {{{error {CORE SEMANTIC NATIVE-ONLY}} {error {CORE SEMANTIC NATIVE-ONLY}}} {{error {CORE SEMANTIC NATIVE-ONLY}} {error {CORE SEMANTIC NATIVE-ONLY}}} 7}
 
 test abi-mutable-bytes-no-fake-read-on-tcl-backends {nothing in core or lib (other than core/programfile.tcl, which reads the program's own source file) routes reads through gets, read, a Tcl channel or stdin helpers} -body {
     set hits {}
-    foreach file [concat [glob -directory [file join $::projectRoot core] *.tcl] [glob -directory [file join $::projectRoot lib] *.bot]] {
+    foreach file [concat [glob -directory [file join $::projectRoot core] *.tcl] [glob -directory [file join $::projectRoot stdlib] *.bot]] {
         if {[file tail $file] eq "programfile.tcl"} continue
         set channel [open $file r]
         set lineNumber 0
@@ -565,24 +565,24 @@ proc writeBinary {path data} {
 }
 
 set linuxPrelude {direct module
-import abi
-import abi::bytes
-import abi::x86_64
-import byte
-import linux
-import linux::abi::x86_64
-import list
-import str
-import type byte::Byte
+import std::abi
+import std::abi::bytes
+import std::abi::x86_64
+import std::byte
+import std::linux
+import std::linux::abi::x86_64
+import std::list
+import std::str
+import type std::byte::Byte
 
 fn mk(s: str):
-    abi::bytes::from_list(str::encode_utf8(s))
+    std::abi::bytes::from_list(std::str::encode_utf8(s))
 
 fn mb(s: str):
-    abi::bytes::from_bytes(mk(s))
+    std::abi::bytes::from_bytes(mk(s))
 
-fn put(m: abi::bytes::MutableBytes, i: int, v: Byte) -> abi::bytes::MutableBytes:
-    abi::bytes::replace(m, i, v):
+fn put(m: std::abi::bytes::MutableBytes, i: int, v: Byte) -> std::abi::bytes::MutableBytes:
+    std::abi::bytes::replace(m, i, v):
         on IndexNotFound:
             m
 
@@ -590,13 +590,13 @@ fn doubled(s: str, k: int) -> str:
     if k == 0:
         s
     else:
-        doubled(str::concat(s, s), k - 1)
+        doubled(std::str::concat(s, s), k - 1)
 
-fn out(fd: int, data: abi::bytes::Bytes) -> int errors abi::AbiIntegerBelowRange, abi::AbiIntegerAboveRange:
-    linux::write(abi::i32(fd), data)
+fn out(fd: int, data: std::abi::bytes::Bytes) -> int errors std::abi::AbiIntegerBelowRange, std::abi::AbiIntegerAboveRange:
+    std::linux::write(std::abi::i32(fd), data)
 
-fn rd(fd: int, data: abi::bytes::MutableBytes) -> linux::ReadResult errors abi::AbiIntegerBelowRange, abi::AbiIntegerAboveRange:
-    linux::read(abi::i32(fd), data)
+fn rd(fd: int, data: std::abi::bytes::MutableBytes) -> std::linux::ReadResult errors std::abi::AbiIntegerBelowRange, std::abi::AbiIntegerAboveRange:
+    std::linux::read(std::abi::i32(fd), data)
 
 }
 set runCounter 0
@@ -649,14 +649,14 @@ proc utf8 {text} {
 # written, bytes written].
 proc readProgram {cap {fd 0}} {
     return "${::linuxPrelude}
-buf = abi::bytes::from_bytes(mk(\"[string repeat A $cap]\"))
+buf = std::abi::bytes::from_bytes(mk(\"[string repeat A $cap]\"))
 r = rd($fd, buf)
-a = out(3, abi::bytes::freeze(r.data))
-b = out(4, abi::bytes::freeze(buf))
+a = out(3, std::abi::bytes::freeze(r.data))
+b = out(4, std::abi::bytes::freeze(buf))
 \[r.result, a, b\]"
 }
 
-test abi-mutable-bytes-example-echoes-stdin {examples/linux/read-stdin.bot as a standalone executable fed a real pipe: it makes one read(2) of descriptor 0 into a 4096-byte MutableBytes, freezes exactly the 17 bytes received and writes them to descriptor 1 through linux::write; the runner's own result line (the 17 bytes written) follows} -constraints {nativeLinux posixShell} -body {
+test abi-mutable-bytes-example-echoes-stdin {examples/linux/read-stdin.bot as a standalone executable fed a real pipe: it makes one read(2) of descriptor 0 into a 4096-byte MutableBytes, freezes exactly the 17 bytes received and writes them to descriptor 1 through std::linux::write; the runner's own result line (the 17 bytes written) follows} -constraints {nativeLinux posixShell} -body {
     set path [file join $::executableDir read-stdin]
     native::executable [surface::readProgramFile [file join $::projectRoot examples linux read-stdin.bot]] $path
     lindex [runPiped $path "hello from stdin\n"] 0
@@ -684,9 +684,9 @@ test abi-mutable-bytes-read-short-read-and-untouched-suffix {a real short read: 
 
 test abi-mutable-bytes-read-binary-prefix-and-suffix {the issue's example, binary: before AA AA AA AA AA AA, the kernel reads 01 02 03, after 01 02 03 AA AA AA -- proving the exact pointer start, the exact count, that the kernel's write reaches the returned value, and that nothing resizes} -constraints {nativeLinux posixShell} -body {
     set exe [buildExecutable binprefix "${::linuxPrelude}
-buf = abi::bytes::from_bytes(abi::bytes::from_list(\[byte::from_int(170), byte::from_int(170), byte::from_int(170), byte::from_int(170), byte::from_int(170), byte::from_int(170)\]))
+buf = std::abi::bytes::from_bytes(std::abi::bytes::from_list(\[std::byte::from_int(170), std::byte::from_int(170), std::byte::from_int(170), std::byte::from_int(170), std::byte::from_int(170), std::byte::from_int(170)\]))
 r = rd(0, buf)
-\[r.result, out(3, abi::bytes::freeze(r.data)), out(4, abi::bytes::freeze(buf))\]"]
+\[r.result, out(3, std::abi::bytes::freeze(r.data)), out(4, std::abi::bytes::freeze(buf))\]"]
     lassign [runIn $exe [binary format c* {1 2 3}]] stdout f3 f4
     list $stdout [binary encode hex $f3] [binary encode hex $f4]
 } -result {{[3, 6, 6]} 010203aaaaaa aaaaaaaaaaaa}
@@ -704,7 +704,7 @@ test abi-mutable-bytes-read-error-is-the-raw-negative-result {a read the kernel 
     list $stdout $f3 $f4
 } -result {{[-9, 8, 8]} AAAAAAAA AAAAAAAA}
 
-test abi-mutable-bytes-read-larger-input-reads-one-chunk {more input than the buffer: 10000 bytes for a 4096-byte buffer. The one linux::read returns exactly 4096 and mutates only that capacity, allocates nothing more, does not continue reading -- and the remaining 5904 bytes are still there for the next reader of the same open file (a shell `cat` after the program, sharing its file offset)} -constraints {nativeLinux posixShell} -body {
+test abi-mutable-bytes-read-larger-input-reads-one-chunk {more input than the buffer: 10000 bytes for a 4096-byte buffer. The one std::linux::read returns exactly 4096 and mutates only that capacity, allocates nothing more, does not continue reading -- and the remaining 5904 bytes are still there for the next reader of the same open file (a shell `cat` after the program, sharing its file offset)} -constraints {nativeLinux posixShell} -body {
     set exe [buildExecutable larger [readProgram 4096]]
     set input {}
     for {set i 0} {$i < 10000} {incr i} { append input [format %c [expr {($i * 7 + 3) % 256}]] }
@@ -724,28 +724,28 @@ test abi-mutable-bytes-read-does-not-change-the-callers-buffer {the caller's val
 original = mb(\"______\")
 r1 = rd(0, original)
 r2 = rd(0, original)
-\[r1.result, r2.result, out(3, abi::bytes::freeze(r1.data)), out(3, abi::bytes::freeze(r2.data)), out(3, abi::bytes::freeze(original)), original == mb(\"______\"), r1.data == original, r2.data == original\]"]
+\[r1.result, r2.result, out(3, std::abi::bytes::freeze(r1.data)), out(3, std::abi::bytes::freeze(r2.data)), out(3, std::abi::bytes::freeze(original)), original == mb(\"______\"), r1.data == original, r2.data == original\]"]
     lassign [runIn $exe "abcdef"] stdout f3 f4
     list $stdout $f3
 } -result {{[6, 0, 6, 6, 6, true, false, true]} abcdef____________}
 
-test abi-mutable-bytes-read-result-copies-are-independent {a linux::ReadResult contains a MutableBytes, so copying the result copies the value: r2 = r1, then updating the buffer derived from one leaves the other result's logical contents unchanged (value-copy semantics recurse through ordinary structs), through a List and a function parameter as well} -constraints {nativeLinux posixShell} -body {
+test abi-mutable-bytes-read-result-copies-are-independent {a std::linux::ReadResult contains a MutableBytes, so copying the result copies the value: r2 = r1, then updating the buffer derived from one leaves the other result's logical contents unchanged (value-copy semantics recurse through ordinary structs), through a List and a function parameter as well} -constraints {nativeLinux posixShell} -body {
     set exe [buildExecutable resultcopy "${::linuxPrelude}
-fn bump(r: linux::ReadResult) -> linux::ReadResult:
-    linux::ReadResult {result: r.result, data: put(r.data, 0, byte::from_int(90))}
+fn bump(r: std::linux::ReadResult) -> std::linux::ReadResult:
+    std::linux::ReadResult {result: r.result, data: put(r.data, 0, std::byte::from_int(90))}
 r1 = rd(0, mb(\"......\"))
 r2 = r1
 r3 = bump(r1)
 xs = \[r1, r3\]
 r4 = bump(r2)
-\[r1.result, out(3, abi::bytes::freeze(r1.data)), out(3, abi::bytes::freeze(r2.data)), out(3, abi::bytes::freeze(r3.data)), out(3, abi::bytes::freeze(r4.data)), r1.data == r2.data, r3.data == r4.data, r1.data == r3.data, list::length(xs)\]"]
+\[r1.result, out(3, std::abi::bytes::freeze(r1.data)), out(3, std::abi::bytes::freeze(r2.data)), out(3, std::abi::bytes::freeze(r3.data)), out(3, std::abi::bytes::freeze(r4.data)), r1.data == r2.data, r3.data == r4.data, r1.data == r3.data, std::list::length(xs)\]"]
     lassign [runIn $exe "abcdef"] stdout f3 f4
     list $stdout $f3
 } -result {{[6, 6, 6, 6, 6, true, true, false, 2]} abcdefabcdefZbcdefZbcdef}
 
-test abi-mutable-bytes-read-is-exactly-one-syscall {the wrapper makes ONE read(2) (the program as a whole has two syscall ops: this one and linux::write's) and returns exactly the kernel's result: linux::read's NIR has exactly one syscall op and no branch, jump, label or tail call, so there is no loop or retry to fill the buffer or repeat a short read; and its register mapping is rax = 0 (SYS_read), r10 = r8 = r9 = 0} -body {
+test abi-mutable-bytes-read-is-exactly-one-syscall {the wrapper makes ONE read(2) (the program as a whole has two syscall ops: this one and std::linux::write's) and returns exactly the kernel's result: std::linux::read's NIR has exactly one syscall op and no branch, jump, label or tail call, so there is no loop or retry to fill the buffer or repeat a short read; and its register mapping is rax = 0 (SYS_read), r10 = r8 = r9 = 0} -body {
     set nir [native::nir [bytesHir [readProgram 8] 1 linux-x86_64]]
-    set body [nirFunction $nir linux::sys::read]
+    set body [nirFunction $nir std::linux::sys::read]
     list [regexp -all {op syscall_linux_x86_64} $body] [regexp -all {\mjump\M|\mbr\M|\mtail\M|\mlabel\M} $body] \
         [regexp -all {op syscall_linux_x86_64} $nir]
 } -result {1 0 2}
@@ -753,11 +753,11 @@ test abi-mutable-bytes-read-is-exactly-one-syscall {the wrapper makes ONE read(2
 # ---------------------------------------------------------------------------
 # NIR, CLIF and machine-code evidence
 
-test abi-mutable-bytes-nir-read-path {NIR of linux::read, in order: the detached local storage (abi::bytes::detach), register64(0), from_i32(fd), the writable address op over THAT storage, mutable_bytes_length of THAT storage and its from_usize encoding, ONE syscall, a keepalive of the same storage after it, the signed conversion, and the ReadResult constructed from the SAME storage -- no loop, no retry, and not the readable bridge's op} -body {
+test abi-mutable-bytes-nir-read-path {NIR of std::linux::read, in order: the detached local storage (std::abi::bytes::detach), register64(0), from_i32(fd), the writable address op over THAT storage, mutable_bytes_length of THAT storage and its from_usize encoding, ONE syscall, a keepalive of the same storage after it, the signed conversion, and the ReadResult constructed from the SAME storage -- no loop, no retry, and not the readable bridge's op} -body {
     set nir [native::nir [bytesHir [readProgram 8] 1 linux-x86_64]]
     set names [dict create]
     foreach {- id name} [regexp -all -inline -line {^func ([0-9]+) "([^"]+)"} $nir] { dict set names $id $name }
-    set read [nirFunction $nir linux::sys::read]
+    set read [nirFunction $nir std::linux::sys::read]
     set seq {}
     foreach line [split $read \n] {
         if {[regexp {^\s+(%[0-9]+) = op (mbytesaddr|bytesaddr|syscall_linux_x86_64|keepalive) } $line -> reg op]} {
@@ -768,15 +768,15 @@ test abi-mutable-bytes-nir-read-path {NIR of linux::read, in order: the detached
             lappend seq structnew
         }
     }
-    set copyBody [nirFunction $nir abi::bytes::detach]
-    set lengthBody [nirFunction $nir abi::bytes::mutable_length]
+    set copyBody [nirFunction $nir std::abi::bytes::detach]
+    set lengthBody [nirFunction $nir std::abi::bytes::mutable_length]
     list $seq [regexp -all {op mbytesclone} $copyBody] [regexp -all {op mbyteslen} $lengthBody] [regexp -all {op syscall_linux_x86_64} $read] \
         [regexp -all {op bytesaddr} $read]
-} -result {{abi::bytes::detach abi::x86_64::register64 abi::x86_64::from_i32 mbytesaddr abi::bytes::mutable_length abi::x86_64::from_usize syscall_linux_x86_64 keepalive abi::x86_64::to_int structnew} 1 1 1 0}
+} -result {{std::abi::bytes::detach std::abi::x86_64::register64 std::abi::x86_64::from_i32 mbytesaddr std::abi::bytes::mutable_length std::abi::x86_64::from_usize syscall_linux_x86_64 keepalive std::abi::x86_64::to_int structnew} 1 1 1 0}
 
 test abi-mutable-bytes-nir-operands {the syscall's operands are, in register order, rax = the register64(0) word, rdi = the fd word, rsi = THE ADDRESS (the mbytesaddr result), rdx = the length word, then ONE zero constant for r10 r8 r9 -- and the address op's operand, the length call's operand, the keepalive's operand, the ReadResult's data and the detach call's result are ONE register: the buffer the kernel writes is the buffer returned} -body {
     set nir [native::nir [bytesHir [readProgram 8] 1 linux-x86_64]]
-    set read [nirFunction $nir linux::sys::read]
+    set read [nirFunction $nir std::linux::sys::read]
     regexp {(%[0-9]+) = op mbytesaddr (%[0-9]+)} $read -> address storage
     regexp {op syscall_linux_x86_64 (%[0-9]+) (%[0-9]+) (%[0-9]+) (%[0-9]+) (%[0-9]+) (%[0-9]+) (%[0-9]+)} $read -> rax rdi rsi rdx r10 r8 r9
     regexp {op keepalive (%[0-9]+)} $read -> kept
@@ -790,27 +790,27 @@ test abi-mutable-bytes-nir-operands {the syscall's operands are, in register ord
     }
     regexp "($r10) = (int 0) " $read -> - zeroDef
     set copied ""
-    dict for {reg v} $producer { if {[lindex $v 0] eq "abi::bytes::detach"} { set copied $reg } }
+    dict for {reg v} $producer { if {[lindex $v 0] eq "std::abi::bytes::detach"} { set copied $reg } }
     set lengthArg ""
-    dict for {reg v} $producer { if {[lindex $v 0] eq "abi::bytes::mutable_length"} { set lengthArg [lindex $v 1] } }
+    dict for {reg v} $producer { if {[lindex $v 0] eq "std::abi::bytes::mutable_length"} { set lengthArg [lindex $v 1] } }
     list [lindex [dict get $producer $rax] 0] [lindex [dict get $producer $rdi] 0] [expr {$rsi eq $address}] \
         [lindex [dict get $producer $rdx] 0] [expr {$r10 eq $r8 && $r8 eq $r9}] $zeroDef \
         [expr {$kept eq $storage}] [expr {$dataField eq $storage}] [expr {$lengthArg eq $storage}] [expr {$copied eq $storage}] \
         [expr {$rsi ne $rdx && $rsi ne $rdi && $rsi ne $rax}]
-} -result {abi::x86_64::register64 abi::x86_64::from_i32 1 abi::x86_64::from_usize 1 {int 0} 1 1 1 1 1}
+} -result {std::abi::x86_64::register64 std::abi::x86_64::from_i32 1 std::abi::x86_64::from_usize 1 {int 0} 1 1 1 1 1}
 
 test abi-mutable-bytes-nir-update-and-freeze {NIR of the pure operations: set is one allocating op over its operand (a fresh object, the operand never written), copy is one op, freeze and freeze_prefix are one op each producing the immutable kind, length one read; the constructor is one op} -body {
-    set nir [native::nir [bytesHir "${::linuxPrelude}\nm = mb(\"hello\")\nn = put(m, 0, byte::from_int(88))\nf = abi::bytes::freeze(n)\np = abi::bytes::freeze_prefix(n, abi::usize(2)):\n    on UpperOverrun:\n        f\n\[abi::bytes::mutable_length(abi::bytes::zeroed(abi::usize(3))).value, out(1000, p)\]"]]
-    lmap {fn op} {abi::bytes::zeroed mbytesnew abi::bytes::from_bytes mbytesfrom abi::bytes::replace mbytesset abi::bytes::detach mbytesclone abi::bytes::freeze mbytesfreeze abi::bytes::mutable_length mbyteslen} {
+    set nir [native::nir [bytesHir "${::linuxPrelude}\nm = mb(\"hello\")\nn = put(m, 0, std::byte::from_int(88))\nf = std::abi::bytes::freeze(n)\np = std::abi::bytes::freeze_prefix(n, std::abi::usize(2)):\n    on UpperOverrun:\n        f\n\[std::abi::bytes::mutable_length(std::abi::bytes::zeroed(std::abi::usize(3))).value, out(1000, p)\]"]]
+    lmap {fn op} {std::abi::bytes::zeroed mbytesnew std::abi::bytes::from_bytes mbytesfrom std::abi::bytes::replace mbytesset std::abi::bytes::detach mbytesclone std::abi::bytes::freeze mbytesfreeze std::abi::bytes::mutable_length mbyteslen} {
         if {[nirFunctionId $nir $fn] < 0} { list $fn missing } else { list $fn [regexp -all "op $op " [nirFunction $nir $fn]] }
     }
-} -match glob -result {{abi::bytes::zeroed 1} {abi::bytes::from_bytes 1} {abi::bytes::replace 1} {abi::bytes::detach missing} {abi::bytes::freeze 1} {abi::bytes::mutable_length 1}}
+} -match glob -result {{std::abi::bytes::zeroed 1} {std::abi::bytes::from_bytes 1} {std::abi::bytes::replace 1} {std::abi::bytes::detach missing} {std::abi::bytes::freeze 1} {std::abi::bytes::mutable_length 1}}
 
-test abi-mutable-bytes-clif-keepalive-and-stack-map {CLIF of linux::read: the writable address helper, then the syscall helper, then the keepalive helper, in that order, the keepalive's operand being the very value the address helper took (the detached storage), and the syscall call's stack map naming the stack slot that holds that storage -- so the collector sees it as a root at the syscall's own safepoint} -body {
+test abi-mutable-bytes-clif-keepalive-and-stack-map {CLIF of std::linux::read: the writable address helper, then the syscall helper, then the keepalive helper, in that order, the keepalive's operand being the very value the address helper took (the detached storage), and the syscall call's stack map naming the stack slot that holds that storage -- so the collector sees it as a root at the syscall's own safepoint} -body {
     set clif [native::clif [bytesHir [readProgram 8] 1 linux-x86_64]]
     set helperOf [dict create]
     foreach {- ref name} [regexp -all -inline -line {^; (u0:[0-9]+) = (rt_[a-z0-9_]+)} $clif] { dict set helperOf $ref $name }
-    regexp {; function [0-9]+ "linux::sys::read": botlish_fn_[0-9]+} $clif header
+    regexp {; function [0-9]+ "std::linux::sys::read": botlish_fn_[0-9]+} $clif header
     set start [string first $header $clif]
     set block [string range $clif $start [string first "\n\}" $clif $start]]
     set fnName [dict create]
@@ -853,10 +853,10 @@ proc machineCalls {exe function} {
     return $calls
 }
 
-test abi-mutable-bytes-machine-code-read-function {the machine code of linux::read in a standalone executable: a call to the detach function, the runtime helper taking the WRITABLE payload address, the one syscall helper, then the keepalive helper, then to_int; the address and keepalive helpers are given the SAME register (the storage) so it is live across the syscall; and there is no call to libc's read, recv, pread or syscall(3) anywhere in it -- libc exists elsewhere in the executable (the runner's own machinery), the Botlish read path never reaches it} -constraints {linuxX86_64 objdump rustcLinker} -body {
+test abi-mutable-bytes-machine-code-read-function {the machine code of std::linux::read in a standalone executable: a call to the detach function, the runtime helper taking the WRITABLE payload address, the one syscall helper, then the keepalive helper, then to_int; the address and keepalive helpers are given the SAME register (the storage) so it is live across the syscall; and there is no call to libc's read, recv, pread or syscall(3) anywhere in it -- libc exists elsewhere in the executable (the runner's own machinery), the Botlish read path never reaches it} -constraints {linuxX86_64 objdump rustcLinker} -body {
     set text [readProgram 8]
     set exe [buildExecutable machine $text]
-    set id [nirFunctionId [native::nir [bytesHir $text]] linux::sys::read]
+    set id [nirFunctionId [native::nir [bytesHir $text]] std::linux::sys::read]
     set calls [machineCalls $exe botlish_fn_$id]
     set targets [lmap c $calls {lindex $c 0}]
     set helpers [lsearch -all -inline -regexp $targets {^rt_}]
@@ -867,10 +867,10 @@ test abi-mutable-bytes-machine-code-read-function {the machine code of linux::re
         [expr {[lsearch -regexp $targets {^botlish_fn_[0-9]+$}] >= 0}]
 } -result {{rt_mbytes_addr rt_linux_x86_64_syscall rt_keepalive rt_struct_new} 1 0 1}
 
-test abi-mutable-bytes-detach-function-machine-code {the detach (abi::bytes::detach) is the runtime's clone helper and nothing else: one call, to rt_mbytes_clone} -constraints {linuxX86_64 objdump rustcLinker} -body {
+test abi-mutable-bytes-detach-function-machine-code {the detach (std::abi::bytes::detach) is the runtime's clone helper and nothing else: one call, to rt_mbytes_clone} -constraints {linuxX86_64 objdump rustcLinker} -body {
     set text [readProgram 8]
     set exe [buildExecutable machine $text]
-    set id [nirFunctionId [native::nir [bytesHir $text]] abi::bytes::detach]
+    set id [nirFunctionId [native::nir [bytesHir $text]] std::abi::bytes::detach]
     lmap c [machineCalls $exe botlish_fn_$id] {lindex $c 0}
 } -result rt_mbytes_clone
 
@@ -903,7 +903,7 @@ proc recordsOf {records prefix} {
     lsearch -all -inline -glob -index 0 $records "$prefix*"
 }
 
-test abi-mutable-bytes-kernel-sees-the-stdin-read {strace of the standalone stdin example: the kernel receives read(0, "hello from stdin\n", 4096) = 17 -- fd 0 in rdi, a 4096-byte capacity in rdx, and the 17 bytes it wrote visible at rsi -- issued from the raw boundary function botlish_linux_x86_64_syscall, called by the runtime helper, called by the Botlish function (linux::read), with NO libc frame (no __read) in that call's stack; the write that follows is the already implemented raw write, also from the raw boundary} -constraints {linuxX86_64 strace posixShell rustcLinker} -body {
+test abi-mutable-bytes-kernel-sees-the-stdin-read {strace of the standalone stdin example: the kernel receives read(0, "hello from stdin\n", 4096) = 17 -- fd 0 in rdi, a 4096-byte capacity in rdx, and the 17 bytes it wrote visible at rsi -- issued from the raw boundary function botlish_linux_x86_64_syscall, called by the runtime helper, called by the Botlish function (std::linux::read), with NO libc frame (no __read) in that call's stack; the write that follows is the already implemented raw write, also from the raw boundary} -constraints {linuxX86_64 strace posixShell rustcLinker} -body {
     set exe [file join $::executableDir read-stdin]
     if {![file exists $exe]} {
         native::executable [surface::readProgramFile [file join $::projectRoot examples linux read-stdin.bot]] $exe
@@ -939,9 +939,9 @@ test abi-mutable-bytes-gc-stress-reads-are-exact {with BOTLISH_NATIVE_GC_STRESS=
     set program "${::linuxPrelude}
 rs = loop round from 0 to 40:
     junk = mk(doubled(\"x\", 5))
-    r = rd(0, abi::bytes::zeroed(abi::usize(16)))
+    r = rd(0, std::abi::bytes::zeroed(std::abi::usize(16)))
     junk2 = mb(doubled(\"y\", 4))
-    out(3, abi::bytes::freeze(r.data)) + r.result - 16 + abi::bytes::length(junk).value - 32
+    out(3, std::abi::bytes::freeze(r.data)) + r.result - 16 + std::abi::bytes::length(junk).value - 32
 rs"
     set exe [buildExecutable gcread $program]
     set input {}
@@ -953,7 +953,7 @@ rs"
 } -result {1 1 1}
 
 test abi-mutable-bytes-gc-stress-pure-values {the in-process native runs (specialized and unspecialized) under GC stress give the same results as without: updates, freezes, prefixes, equality and hashes of MutableBytes held in Lists and structs} -constraints nativeLinux -body {
-    set text "${::pure}struct Holder:\n    data: abi::bytes::MutableBytes\na = mb(\"alias\")\nxs = \[a, put(a, 0, [X]), a, abi::bytes::from_bytes(abi::bytes::from_list(pattern(100)))\]\nh = Holder {data: put(a, 4, [Z])}\n\[abi::bytes::freeze(a) == abi::bytes::from_list(str::encode_utf8(\"alias\")), xs == \[a, put(a, 0, [X]), a, abi::bytes::from_bytes(abi::bytes::from_list(pattern(100)))\], hash(a) == hash(mb(\"alias\")), is(h.data, \"aliaZ\"), is(a, \"alias\"), list::length(xs)\]"
+    set text "${::pure}struct Holder:\n    data: std::abi::bytes::MutableBytes\na = mb(\"alias\")\nxs = \[a, put(a, 0, [X]), a, std::abi::bytes::from_bytes(std::abi::bytes::from_list(pattern(100)))\]\nh = Holder {data: put(a, 4, [Z])}\n\[std::abi::bytes::freeze(a) == std::abi::bytes::from_list(std::str::encode_utf8(\"alias\")), xs == \[a, put(a, 0, [X]), a, std::abi::bytes::from_bytes(std::abi::bytes::from_list(pattern(100)))\], hash(a) == hash(mb(\"alias\")), is(h.data, \"aliaZ\"), is(a, \"alias\"), std::list::length(xs)\]"
     set plain [outcomesOf $text $::nativeBackends]
     withEnv BOTLISH_NATIVE_GC_STRESS 1 {set stressed [outcomesOf $text $::nativeBackends]}
     list [expr {$plain eq $stressed}] [lindex $stressed 0 1] [lindex $stressed 1 1]
@@ -968,61 +968,61 @@ test abi-mutable-bytes-gc-stress-pure-values {the in-process native runs (specia
 # (write(2) with a writable address), so the bytes it receives show whether the
 # storage survived.
 set livenessHeader {direct module
-import abi
-import abi::bytes
-import abi::x86_64
-import byte
-import linux::abi::x86_64
-import str
+import std::abi
+import std::abi::bytes
+import std::abi::x86_64
+import std::byte
+import std::linux::abi::x86_64
+import std::str
 
 fn doubled(s: str, k: int) -> str:
     if k == 0:
         s
     else:
-        doubled(str::concat(s, s), k - 1)
+        doubled(std::str::concat(s, s), k - 1)
 
-fn mbm(s: str) -> abi::bytes::MutableBytes:
-    abi::bytes::from_bytes(abi::bytes::from_list(str::encode_utf8(s)))
+fn mbm(s: str) -> std::abi::bytes::MutableBytes:
+    std::abi::bytes::from_bytes(std::abi::bytes::from_list(std::str::encode_utf8(s)))
 
-fn addr_of(d: abi::bytes::MutableBytes) -> abi::x86_64::Register64:
-    abi::x86_64::from_mutable_bytes(d)
+fn addr_of(d: std::abi::bytes::MutableBytes) -> std::abi::x86_64::Register64:
+    std::abi::x86_64::from_mutable_bytes(d)
 
-fn raw_write(fd: abi::x86_64::Register64, addr: abi::x86_64::Register64, n: abi::x86_64::Register64) -> int:
-    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(1), rdi: fd, rsi: addr, rdx: n}))
+fn raw_write(fd: std::abi::x86_64::Register64, addr: std::abi::x86_64::Register64, n: std::abi::x86_64::Register64) -> int:
+    std::abi::x86_64::to_int(std::linux::abi::x86_64::syscall({rax: std::abi::x86_64::register64(1), rdi: fd, rsi: addr, rdx: n}))
 
 }
 set livenessFooter {
 sa = doubled("A", 11)
 sb = doubled("B", 11)
 rs = loop i from 0 to 30:
-    w(abi::i32(3), sa, sb)
+    w(std::abi::i32(3), sa, sb)
 rs
 }
 set livenessShapes [dict create \
-    inline {fn w(fd: abi::I32, a: str, b: str) -> int:
-    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(1), rdi: abi::x86_64::from_i32(fd), rsi: abi::x86_64::from_mutable_bytes(mbm(a)), rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(mbm(b)))}))
+    inline {fn w(fd: std::abi::I32, a: str, b: str) -> int:
+    std::abi::x86_64::to_int(std::linux::abi::x86_64::syscall({rax: std::abi::x86_64::register64(1), rdi: std::abi::x86_64::from_i32(fd), rsi: std::abi::x86_64::from_mutable_bytes(mbm(a)), rdx: std::abi::x86_64::from_usize(std::abi::bytes::mutable_length(mbm(b)))}))
 } \
-    locals {fn w(fd: abi::I32, a: str, b: str) -> int:
-    addr = abi::x86_64::from_mutable_bytes(mbm(a))
-    n = abi::x86_64::from_usize(abi::bytes::mutable_length(mbm(b)))
-    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(1), rdi: abi::x86_64::from_i32(fd), rsi: addr, rdx: n}))
+    locals {fn w(fd: std::abi::I32, a: str, b: str) -> int:
+    addr = std::abi::x86_64::from_mutable_bytes(mbm(a))
+    n = std::abi::x86_64::from_usize(std::abi::bytes::mutable_length(mbm(b)))
+    std::abi::x86_64::to_int(std::linux::abi::x86_64::syscall({rax: std::abi::x86_64::register64(1), rdi: std::abi::x86_64::from_i32(fd), rsi: addr, rdx: n}))
 } \
-    struct {fn w(fd: abi::I32, a: str, b: str) -> int:
-    regs = {rax: abi::x86_64::register64(1), rdi: abi::x86_64::from_i32(fd), rsi: abi::x86_64::from_mutable_bytes(mbm(a)), rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(mbm(b)))}
-    abi::x86_64::to_int(linux::abi::x86_64::syscall(regs))
+    struct {fn w(fd: std::abi::I32, a: str, b: str) -> int:
+    regs = {rax: std::abi::x86_64::register64(1), rdi: std::abi::x86_64::from_i32(fd), rsi: std::abi::x86_64::from_mutable_bytes(mbm(a)), rdx: std::abi::x86_64::from_usize(std::abi::bytes::mutable_length(mbm(b)))}
+    std::abi::x86_64::to_int(std::linux::abi::x86_64::syscall(regs))
 } \
-    helper {fn w(fd: abi::I32, a: str, b: str) -> int:
-    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(1), rdi: abi::x86_64::from_i32(fd), rsi: addr_of(mbm(a)), rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(mbm(b)))}))
+    helper {fn w(fd: std::abi::I32, a: str, b: str) -> int:
+    std::abi::x86_64::to_int(std::linux::abi::x86_64::syscall({rax: std::abi::x86_64::register64(1), rdi: std::abi::x86_64::from_i32(fd), rsi: addr_of(mbm(a)), rdx: std::abi::x86_64::from_usize(std::abi::bytes::mutable_length(mbm(b)))}))
 } \
-    join {fn w(fd: abi::I32, a: str, b: str) -> int:
-    addr = if str::length(a) > 0:
-        abi::x86_64::from_mutable_bytes(mbm(a))
+    join {fn w(fd: std::abi::I32, a: str, b: str) -> int:
+    addr = if std::str::length(a) > 0:
+        std::abi::x86_64::from_mutable_bytes(mbm(a))
     else:
-        abi::x86_64::register64(0)
-    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(1), rdi: abi::x86_64::from_i32(fd), rsi: addr, rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(mbm(b)))}))
+        std::abi::x86_64::register64(0)
+    std::abi::x86_64::to_int(std::linux::abi::x86_64::syscall({rax: std::abi::x86_64::register64(1), rdi: std::abi::x86_64::from_i32(fd), rsi: addr, rdx: std::abi::x86_64::from_usize(std::abi::bytes::mutable_length(mbm(b)))}))
 } \
-    callee {fn w(fd: abi::I32, a: str, b: str) -> int:
-    raw_write(abi::x86_64::from_i32(fd), abi::x86_64::from_mutable_bytes(mbm(a)), abi::x86_64::from_usize(abi::bytes::mutable_length(mbm(b))))
+    callee {fn w(fd: std::abi::I32, a: str, b: str) -> int:
+    raw_write(std::abi::x86_64::from_i32(fd), std::abi::x86_64::from_mutable_bytes(mbm(a)), std::abi::x86_64::from_usize(std::abi::bytes::mutable_length(mbm(b))))
 }]
 set livenessProgram "$livenessHeader[dict get $livenessShapes inline]$livenessFooter"
 
@@ -1050,12 +1050,12 @@ test abi-mutable-bytes-liveness-mutant-without-keepalive-is-detected {the inline
 
 test abi-mutable-bytes-read-liveness-an-unreferenced-buffer-under-stress {the read variant: the kernel WRITES through an address whose only owner is the raw register, while a register word evaluated after it allocates a same-sized MutableBytes (GC stress). The second storage -- a fresh buffer of B's -- must be intact afterwards: the kernel's bytes went into the first storage, which stayed alive, never into a reclaimed block the second one reused} -constraints {linuxX86_64 posixShell} -body {
     set program "${::livenessHeader}
-fn raw_read(fd: abi::I32, a: str, b: str) -> int:
-    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(0), rdi: abi::x86_64::from_i32(fd), rsi: abi::x86_64::from_mutable_bytes(mbm(a)), rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(mbm(b)))}))
+fn raw_read(fd: std::abi::I32, a: str, b: str) -> int:
+    std::abi::x86_64::to_int(std::linux::abi::x86_64::syscall({rax: std::abi::x86_64::register64(0), rdi: std::abi::x86_64::from_i32(fd), rsi: std::abi::x86_64::from_mutable_bytes(mbm(a)), rdx: std::abi::x86_64::from_usize(std::abi::bytes::mutable_length(mbm(b)))}))
 sa = doubled(\"A\", 11)
 sb = doubled(\"B\", 11)
 rs = loop i from 0 to 5:
-    raw_read(abi::i32(0), sa, sb)
+    raw_read(std::abi::i32(0), sa, sb)
 rs"
     set exe [buildExecutable mreadlive $program]
     lassign [runIn $exe [string repeat z 100000] 1] stdout f3 f4
@@ -1066,12 +1066,12 @@ rs"
 # ---------------------------------------------------------------------------
 # The raw layer is sharp, and the wrapper is what makes read safe
 
-test abi-mutable-bytes-raw-bridge-writes-through-the-storage-it-is-given {documented sharp edge: the raw writable bridge does NOT detach -- it exposes the machine address of the storage of the value it is given, so a raw program that hands a syscall the address of a value other values share writes through all of them. This is exactly why linux::read detaches first (abi::bytes::detach) and why the raw layer belongs to library wrappers; the safe-wrapper theorem is the next test} -constraints {linuxX86_64 posixShell} -body {
+test abi-mutable-bytes-raw-bridge-writes-through-the-storage-it-is-given {documented sharp edge: the raw writable bridge does NOT detach -- it exposes the machine address of the storage of the value it is given, so a raw program that hands a syscall the address of a value other values share writes through all of them. This is exactly why std::linux::read detaches first (std::abi::bytes::detach) and why the raw layer belongs to library wrappers; the safe-wrapper theorem is the next test} -constraints {linuxX86_64 posixShell} -body {
     set program "${::linuxPrelude}
 a = mb(\"______\")
 b = a
-n = abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(0), rdi: abi::x86_64::from_i32(abi::i32(0)), rsi: abi::x86_64::from_mutable_bytes(a), rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(a))}))
-\[n, out(3, abi::bytes::freeze(a)), out(3, abi::bytes::freeze(b))\]"
+n = std::abi::x86_64::to_int(std::linux::abi::x86_64::syscall({rax: std::abi::x86_64::register64(0), rdi: std::abi::x86_64::from_i32(std::abi::i32(0)), rsi: std::abi::x86_64::from_mutable_bytes(a), rdx: std::abi::x86_64::from_usize(std::abi::bytes::mutable_length(a))}))
+\[n, out(3, std::abi::bytes::freeze(a)), out(3, std::abi::bytes::freeze(b))\]"
     set exe [buildExecutable rawshare $program]
     lassign [runIn $exe "abcdef"] stdout f3 f4
     list $stdout $f3
@@ -1080,13 +1080,13 @@ n = abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register6
 test abi-mutable-bytes-wrapper-read-never-writes-through-shared-values {the safe wrapper over the same situation: read(0, a) with b = a, c = [a] and a struct holding a all keep their contents -- the kernel's bytes are only in result.data} -constraints {nativeLinux posixShell} -body {
     set program "${::linuxPrelude}
 struct Holder:
-    data: abi::bytes::MutableBytes
+    data: std::abi::bytes::MutableBytes
 a = mb(\"______\")
 b = a
 xs = \[a\]
 h = Holder {data: a}
 r = rd(0, a)
-\[r.result, out(3, abi::bytes::freeze(r.data)), out(3, abi::bytes::freeze(a)), out(3, abi::bytes::freeze(b)), out(3, abi::bytes::freeze(h.data)), list::length(xs), xs == \[b\]\]"
+\[r.result, out(3, std::abi::bytes::freeze(r.data)), out(3, std::abi::bytes::freeze(a)), out(3, std::abi::bytes::freeze(b)), out(3, std::abi::bytes::freeze(h.data)), std::list::length(xs), xs == \[b\]\]"
     set exe [buildExecutable wrappershare $program]
     lassign [runIn $exe "abcdef"] stdout f3 f4
     list $stdout $f3
@@ -1108,43 +1108,43 @@ proc allocationsOf {text} {
 
 test abi-mutable-bytes-allocations {allocation evidence {total MutableBytes Bytes Struct List}: the empty MutableBytes is one shared static (0), a small and a large one are exactly one heap object each, a binding is plain sharing (no second storage; the one List is the test's own tuple), passing and returning through a function shares the storage too (it only materializes the one-field wrapper Struct where the value crosses a call), set costs one copy of the storage (and its wrapper), freeze one immutable Bytes, a read costs the detach clone beside the original (2 storages, one wrapper for the returned buffer) -- the eager copies this milestone accepts, none hidden} -constraints nativeLinux -body {
     list \
-        [allocationsOf "m = abi::bytes::zeroed(abi::usize(0))\nabi::bytes::mutable_length(m).value"] \
-        [allocationsOf "m = abi::bytes::zeroed(abi::usize(16))\nabi::bytes::mutable_length(m).value"] \
-        [allocationsOf "m = abi::bytes::zeroed(abi::usize(4096))\nabi::bytes::mutable_length(m).value"] \
-        [allocationsOf "m = abi::bytes::zeroed(abi::usize(16))\nb = m\nc = b\n\[abi::bytes::mutable_length(c).value, abi::bytes::mutable_length(m).value\]"] \
-        [allocationsOf "fn id(x: abi::bytes::MutableBytes) -> abi::bytes::MutableBytes:\n    x\nm = abi::bytes::zeroed(abi::usize(16))\nabi::bytes::mutable_length(id(id(m))).value"] \
-        [allocationsOf "m = abi::bytes::zeroed(abi::usize(16))\nn = put(m, 0, byte::from_int(1))\nabi::bytes::mutable_length(n).value"] \
-        [allocationsOf "m = abi::bytes::zeroed(abi::usize(16))\nabi::bytes::length(abi::bytes::freeze(m)).value"] \
-        [allocationsOf "m = abi::bytes::zeroed(abi::usize(16))\nr = rd(1000, m)\nr.result"]
+        [allocationsOf "m = std::abi::bytes::zeroed(std::abi::usize(0))\nstd::abi::bytes::mutable_length(m).value"] \
+        [allocationsOf "m = std::abi::bytes::zeroed(std::abi::usize(16))\nstd::abi::bytes::mutable_length(m).value"] \
+        [allocationsOf "m = std::abi::bytes::zeroed(std::abi::usize(4096))\nstd::abi::bytes::mutable_length(m).value"] \
+        [allocationsOf "m = std::abi::bytes::zeroed(std::abi::usize(16))\nb = m\nc = b\n\[std::abi::bytes::mutable_length(c).value, std::abi::bytes::mutable_length(m).value\]"] \
+        [allocationsOf "fn id(x: std::abi::bytes::MutableBytes) -> std::abi::bytes::MutableBytes:\n    x\nm = std::abi::bytes::zeroed(std::abi::usize(16))\nstd::abi::bytes::mutable_length(id(id(m))).value"] \
+        [allocationsOf "m = std::abi::bytes::zeroed(std::abi::usize(16))\nn = put(m, 0, std::byte::from_int(1))\nstd::abi::bytes::mutable_length(n).value"] \
+        [allocationsOf "m = std::abi::bytes::zeroed(std::abi::usize(16))\nstd::abi::bytes::length(std::abi::bytes::freeze(m)).value"] \
+        [allocationsOf "m = std::abi::bytes::zeroed(std::abi::usize(16))\nr = rd(1000, m)\nr.result"]
 } -result {{0 0 0 0 0} {1 1 0 0 0} {1 1 0 0 0} {2 1 0 0 1} {2 1 0 1 0} {4 2 0 2 0} {2 1 1 0 0} {3 2 0 1 0}}
 
 test abi-mutable-bytes-allocations-aggregates {a MutableBytes stored in a List is the one storage shared: a List of two copies of one value holds ONE storage object (MutableBytes column 1); a mutated copy beside it is a second (2) -- storing in an aggregate copies nothing} -constraints nativeLinux -body {
     lmap text [list \
-        "m = abi::bytes::zeroed(abi::usize(16))\nxs = \[m, m\]\nloop x in xs:\n    abi::bytes::mutable_length(x).value" \
-        "m = abi::bytes::zeroed(abi::usize(16))\nxs = \[m, put(m, 0, byte::from_int(1))\]\nloop x in xs:\n    abi::bytes::mutable_length(x).value"] {
+        "m = std::abi::bytes::zeroed(std::abi::usize(16))\nxs = \[m, m\]\nloop x in xs:\n    std::abi::bytes::mutable_length(x).value" \
+        "m = std::abi::bytes::zeroed(std::abi::usize(16))\nxs = \[m, put(m, 0, std::byte::from_int(1))\]\nloop x in xs:\n    std::abi::bytes::mutable_length(x).value"] {
         lindex [allocationsOf $text] 1
     }
 } -result {1 2}
 
 test abi-mutable-bytes-heap-object-layout {the heap storage is ONE allocation of 16 header bytes (kind, marked, static flag, then the 8-byte length) plus the payload, in-line, with no pointer to a second block: a 4096-byte MutableBytes is a 4112-byte object, reported as its own kind} -constraints nativeLinux -body {
-    set report [native::allocationReport [bytesHir "${::linuxPrelude}\nm = abi::bytes::zeroed(abi::usize(4096))\nabi::bytes::mutable_length(m).value"] summary]
+    set report [native::allocationReport [bytesHir "${::linuxPrelude}\nm = std::abi::bytes::zeroed(std::abi::usize(4096))\nstd::abi::bytes::mutable_length(m).value"] summary]
     list [dict get $report byKind MutableBytes allocations] [dict get $report byKind MutableBytes headerBytes] \
         [dict get $report byKind MutableBytes payloadBytes] [dict get $report byKind MutableBytes allocatedBytes]
 } -result {1 16 4096 4112}
 
 test abi-mutable-bytes-no-static-mutable-constants {a compile-time-known mutable value is never a shared writable static: two identical mutable_bytes_from_bytes of the same constant Bytes, and two mutable_bytes(3), are FOUR separate heap storages (an immutable constant Bytes, by contrast, is one static object): no unrelated logical values can share writable static storage} -constraints nativeLinux -body {
     list \
-        [lindex [allocationsOf "a = mb(\"abc\")\nb = mb(\"abc\")\n\[abi::bytes::mutable_length(a).value, abi::bytes::mutable_length(b).value\]"] 1] \
-        [lindex [allocationsOf "a = abi::bytes::zeroed(abi::usize(3))\nb = abi::bytes::zeroed(abi::usize(3))\n\[abi::bytes::mutable_length(a).value, abi::bytes::mutable_length(b).value\]"] 1] \
-        [lindex [allocationsOf "a = abi::bytes::from_list(str::encode_utf8(\"abc\"))\nb = abi::bytes::from_list(str::encode_utf8(\"abc\"))\n\[abi::bytes::length(a).value, abi::bytes::length(b).value\]"] 2]
+        [lindex [allocationsOf "a = mb(\"abc\")\nb = mb(\"abc\")\n\[std::abi::bytes::mutable_length(a).value, std::abi::bytes::mutable_length(b).value\]"] 1] \
+        [lindex [allocationsOf "a = std::abi::bytes::zeroed(std::abi::usize(3))\nb = std::abi::bytes::zeroed(std::abi::usize(3))\n\[std::abi::bytes::mutable_length(a).value, std::abi::bytes::mutable_length(b).value\]"] 1] \
+        [lindex [allocationsOf "a = std::abi::bytes::from_list(std::str::encode_utf8(\"abc\"))\nb = std::abi::bytes::from_list(std::str::encode_utf8(\"abc\"))\n\[std::abi::bytes::length(a).value, std::abi::bytes::length(b).value\]"] 2]
 } -result {2 2 0}
 
 test abi-mutable-bytes-raw-write-is-a-memory-barrier {the raw syscall is a strong memory/effect barrier and read is not special-cased: a freeze taken BEFORE a raw read into a buffer shows the old bytes, a freeze taken AFTER shows the kernel's bytes -- neither is cached across the syscall nor moved over it, specialized or not} -constraints {linuxX86_64 posixShell} -body {
     set program "${::linuxPrelude}
 m = mb(\"______\")
-before = abi::bytes::freeze(m)
-n = abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(0), rdi: abi::x86_64::from_i32(abi::i32(0)), rsi: abi::x86_64::from_mutable_bytes(m), rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(m))}))
-after = abi::bytes::freeze(m)
+before = std::abi::bytes::freeze(m)
+n = std::abi::x86_64::to_int(std::linux::abi::x86_64::syscall({rax: std::abi::x86_64::register64(0), rdi: std::abi::x86_64::from_i32(std::abi::i32(0)), rsi: std::abi::x86_64::from_mutable_bytes(m), rdx: std::abi::x86_64::from_usize(std::abi::bytes::mutable_length(m))}))
+after = std::abi::bytes::freeze(m)
 \[n, out(3, before), out(3, after), before == after\]"
     set exe [buildExecutable barrier $program]
     lassign [runIn $exe "abcdef"] stdout f3 f4

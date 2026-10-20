@@ -91,7 +91,7 @@ proc goldentools::isNative {edits} {
 proc goldentools::makeTree {native} {
     set root $::goldentools::root
     set tree [file tempdir botlish-golden-tree]
-    foreach dir {compiler core hir surface lib tests examples bench audit .cargo} {
+    foreach dir {compiler core hir surface stdlib tests examples bench audit .cargo} {
         if {![file exists [file join $root $dir]]} continue
         file mkdir [file dirname [file join $tree $dir]]
         file copy [file join $root $dir] [file join $tree $dir]

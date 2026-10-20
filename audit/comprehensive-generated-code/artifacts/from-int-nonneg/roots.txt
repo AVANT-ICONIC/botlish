@@ -11,7 +11,7 @@ function 0 "<program>"
   depth reservation: no
   storage: native frame
 
-function 1 "byte::from_int"
+function 1 "std::byte::from_int"
   NIR regs: 9
   raw regs: 2
   managed-capable regs: 7

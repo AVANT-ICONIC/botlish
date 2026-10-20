@@ -23,16 +23,16 @@ header include/bgf/bgf.h 49359c5b
 header include/bgf/bgf_records.h Inf
 header include/bgf/bgf_types.h 7f558d1b
 shim_library botlish_shim_bgf_143debf5
-file bgf/bgf.bot 145 ceb5a160
-file bgf/ctypes.bot 71 9fdbf877
-file bgf/layouts.bot 502 fe6bf240
-file bgf/records.bot 35 b64efe1a
-file bgf/thunks/bgf.bot 27 f2a6d19a
-file bgf/types.bot 10 5770e127
+file bgf/bgf.bot 147 30fd41af
+file bgf/ctypes.bot 71 3181613e
+file bgf/layouts.bot 502 e5334e19
+file bgf/records.bot 37 2604673c
+file bgf/thunks/bgf.bot 29 b25e3fa0
+file bgf/types.bot 12 c422e8f9
 file layouts-check.c 344 cfd1901d
-file layouts.tsv 323 928bac2a
-file report.tsv 329 239774e4
-file report.txt 172 6a57d6c5
+file layouts.tsv 323 424bdc24
+file report.tsv 329 036c2347
+file report.txt 172 c3746225
 file shim.c 26 143debf5
 libraries bgf/bgf.bot bgf
 libraries bgf/records.bot bgf

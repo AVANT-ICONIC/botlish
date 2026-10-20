@@ -172,9 +172,9 @@ same callee and compiles to the same program.
   namespaces' members named `f`, plus ordinary lexical lookup -- finds the same
   function as the only candidate. Imports are exact and not transitive; the
   module's own functions are found lexically from inside the module (a
-  module's bare call to a sibling is eligible, while `list::at(...)` inside
+  module's bare call to a sibling is eligible, while `std::list::at(...)` inside
   module `list` is silent: the module does not import itself, so `xs.at(i)` is
-  not visible there). An intrinsic (`str::concat`, `list::append`) is a
+  not visible there). An intrinsic (`std::str::concat`, `std::list::append`) is a
   candidate when its namespace is imported, which any qualified reference
   already requires.
 * **Shadowing / ambiguity (item 19).** The language *can* resolve `x.f(y)` to
@@ -182,12 +182,12 @@ same callee and compiles to the same program.
   visible lexically or through an imported namespace (decided by receiver
   types, or `AMBIGUOUS-METHOD-CALL`), and a struct field of that name. Those
   cases are silent (pinned, including a proof that the sugared spelling really
-  is rejected there). An alias of the same function (`append = list::append`
-  beside `import list`) is the same candidate (`CandidateIdentity` follows
+  is rejected there). An alias of the same function (`append = std::list::append`
+  beside `import std::list`) is the same candidate (`CandidateIdentity` follows
   aliases) and does not silence. A binding established *after* the call is
   invisible to it, as to the real resolver.
 * **Hygiene.** HIR renames bindings after resolution: module bindings to their
-  qualified spelling (`list::find`) and shadowing bindings to `name#N`. The
+  qualified spelling (`std::list::find`) and shadowing bindings to `name#N`. The
   resolver's lookup works on the names as written, so the pass hands it a
   *view* of the HIR (`ResolutionView`) in which only the module sections' name
   tables are restored to their written spelling. The resolver code is not
@@ -374,11 +374,11 @@ Observational only; the corpus is frozen and was **not** edited, no call was
 rewritten and no function marked `nomethod`.
 `audit/method-eligible/tools/corpus.tcl` compiles every program of
 `examples/stdlib` (9), `examples/surface` (14; `09` and `10` are the deliberate
-rejections), `bench/*.bot` (8) and `lib/*.bot` (8) with warnings on and writes
+rejections), `bench/*.bot` (8) and `stdlib/*.bot` (8) with warnings on and writes
 `audit/method-eligible/corpus-audit.txt`.
 
 * 35 of 39 programs compile standalone. The four that do not: the two
-  deliberate rejections, and `lib/list.bot` and `lib/mutable_array.bot`, which
+  deliberate rejections, and `stdlib/list.bot` and `stdlib/mutable_array.bot`, which
   use their own namespace's intrinsics without importing it (a state of the
   repository that predates this milestone: they are loaded as modules by the
   programs that import them, and their findings are reported through those).
@@ -397,14 +397,14 @@ its own second parameter or is passed a function, or neither):
 
 | category | findings | patterns | examples |
 |---|---|---|---|
-| subject-first helper the refactor would convert | 358 | 89 | `peek(text, i)`, `scan_quoted(text, i, acc)`, `ht_get(table, key)`, `mutable_array::set(a, i, v)`, `list::at(xs, i)`, `list::append(xs, v)`, `str::substring(s, a, b)`, `replace(text, old, new)` |
-| predicate / mapper call | 7 | 6 | `list::any?(xs, p)`, `list::all?(xs, p)`, `list::find(xs, p)`, `list::none?(xs, p)`, `scan_while(text, p)` |
+| subject-first helper the refactor would convert | 358 | 89 | `peek(text, i)`, `scan_quoted(text, i, acc)`, `ht_get(table, key)`, `std::mutable_array::set(a, i, v)`, `std::list::at(xs, i)`, `std::list::append(xs, v)`, `std::str::substring(s, a, b)`, `replace(text, old, new)` |
+| predicate / mapper call | 7 | 6 | `std::list::any?(xs, p)`, `std::list::all?(xs, p)`, `std::list::find(xs, p)`, `std::list::none?(xs, p)`, `scan_while(text, p)` |
 | "config object" second argument | 0 | 0 | none in the corpus |
-| one-parameter callees (excluded by rule 2) | 0 | -- | 74 distinct callees at 246 written call sites, e.g. `str::length`, `list::length`, `char_at`, `ht_size`, `clean_ai_text`: listed in the audit for completeness |
+| one-parameter callees (excluded by rule 2) | 0 | -- | 74 distinct callees at 246 written call sites, e.g. `std::str::length`, `std::list::length`, `char_at`, `ht_size`, `clean_ai_text`: listed in the audit for completeness |
 | false positives (round-trip failures) | **0** | **0** | -- |
 
 **`nomethod` candidates** (callees whose receiver reading would mislead;
-recorded for the future refactor, **not applied**): `mutable_array::copy` (4
+recorded for the future refactor, **not applied**): `std::mutable_array::copy` (4
 findings: the receiver would be the *destination* of a five-parameter copy,
 `dst.copy(at, src, from, n)` reads as copying `dst`) and `bit_and`, `bit_or`,
 `bit_xor` (9 findings: symmetric operands, neither is the subject). This is a
@@ -432,8 +432,8 @@ registries are process-global, so every baseline is compiled right before its
 respelling).
 
 Library findings print for every program that loads the library (see Known
-limitations): `lib/web.bot`'s 20 findings, `lib/byte.bot`'s 11 and
-`lib/mutable_array.bot`'s 1 appear whenever a program loads those modules.
+limitations): `stdlib/web.bot`'s 20 findings, `stdlib/byte.bot`'s 11 and
+`stdlib/mutable_array.bot`'s 1 appear whenever a program loads those modules.
 
 ## Tests
 
@@ -498,7 +498,7 @@ limitations): `lib/web.bot`'s 20 findings, `lib/byte.bot`'s 11 and
 `audit/method-eligible/tools/fuzz.tcl SEEDS FIRST` (`audit/method-eligible/
 fuzz-result.txt`). Each seed generates one to three functions from
 construction-known pieces: declared functions with 1, 2 and 3 parameters, one
-`nomethod` function, the 2-parameter intrinsic `str::concat`; calls written
+`nomethod` function, the 2-parameter intrinsic `std::str::concat`; calls written
 functionally with plain-identifier receivers and with the other eligible
 postfix/primary forms (literal, list, field, call result, method-call result);
 chains; calls in a loop and in a nested function; calls already written with
@@ -556,10 +556,10 @@ means every call, in the whole program, has the target it had.
 
 ## Known limitations
 
-* **Library findings are shown.** A finding inside `lib/*.bot` appears for any
+* **Library findings are shown.** A finding inside `stdlib/*.bot` appears for any
   program that loads that module (the pass sees all code in the HIR; there is
   no "system header" notion; the corpus is frozen). With this warning the
-  volume is higher: `lib/web.bot` 20, `lib/byte.bot` 11, `lib/mutable_array.bot`
+  volume is higher: `stdlib/web.bot` 20, `stdlib/byte.bot` 11, `stdlib/mutable_array.bot`
   1. Programs that import them print those warnings, and `-warnings error`
   rejects them. Documented, not fixed (the repetition-for-loaders limitation of
   milestone 1, at higher volume).
@@ -600,12 +600,12 @@ means every call, in the whole program, has the target it had.
   respelled all 355 remaining `METHOD-ELIGIBLE` calls of the corpus with this
   milestone's rewrite machinery, each verified by the round-trip law, and
   marked the `nomethod` candidates above -- `bit_and`, `bit_or`, `bit_xor`,
-  `mutable_array::copy`, plus `mutable_array::create` (its receiver would be
+  `std::mutable_array::copy`, plus `std::mutable_array::create` (its receiver would be
   the new array's length) -- 26 findings. No library carries a
   `METHOD-ELIGIBLE` finding any more, so the "library findings are shown"
   limitation no longer applies to this code: a gate
   (`audit/refactor/tools/gate.tcl`, CI) fails on any new one in `examples/`,
-  `bench/` or `lib/`.
+  `bench/` or `stdlib/`.
 
 ## Deviations from the brief
 
@@ -618,7 +618,7 @@ means every call, in the whole program, has the target it had.
   (`warn-separate-mutable-construction`, `warn-same-mutable-binding`,
   `warn-alias-of-mutable-binding`) compile programs that `import
   mutable_array`, whose module carries a real `METHOD-ELIGIBLE` finding
-  (`lib/mutable_array.bot:75:40`, `list::at(xs, i)`), and the milestone-1 fuzzer
+  (`stdlib/mutable_array.bot:75:40`, `std::list::at(xs, i)`), and the milestone-1 fuzzer
   `audit/same-return-value/tools/fuzz.tcl` (run by `warn-fuzz-smoke`) imports it
   in every program. They asserted the *complete* warning set. They now assert
   the complete `SAME-RETURN-VALUE` set (helpers `sameReturnShown` and
@@ -628,7 +628,7 @@ means every call, in the whole program, has the target it had.
   sort-first warning of either kind. No `SAME-RETURN-VALUE` pin was weakened,
   but "no other warning appears" for those four programs is now pinned by the
   baseline rather than by emptiness. Nothing else in the file changed.
-* **`lib/list.bot` and `lib/mutable_array.bot` do not compile standalone** (the
+* **`stdlib/list.bot` and `stdlib/mutable_array.bot` do not compile standalone** (the
   corpus audit lists them), unlike milestone 1's report (36 of 38 compiled): a
   change of the repository before this milestone, not caused by it.
 * **The fuzzer's `EXTRA` policy.** The brief says `default` must produce exactly
@@ -657,7 +657,7 @@ rewriting or fixits (the mechanical rewrite used by the audits stays in
 
 The deferred corpus refactor is the consumer of this warning: it can convert the
 findings with the audit's patterns, and mark the `nomethod` candidates above
-(`mutable_array::copy`, `bit_and`, `bit_or`, `bit_xor`) in the same change.
+(`std::mutable_array::copy`, `bit_and`, `bit_or`, `bit_xor`) in the same change.
 
 ## Full regression
 
@@ -794,7 +794,7 @@ coverage run, all on the committed tree:
 39. *Corpus findings: how many, which categories?* 365 distinct findings in 95
     patterns over 81 callees: 358 subject-first helper, 7 predicate/mapper, 0
     config object; 74 one-parameter callees (246 call sites) excluded; `nomethod`
-    candidates `mutable_array::copy`, `bit_and`, `bit_or`, `bit_xor`.
+    candidates `std::mutable_array::copy`, `bit_and`, `bit_or`, `bit_xor`.
 40. *False positives (round-trip failures)?* Zero.
 41. *Warning-mode tests pass?* Yes: `tests/method-eligible.test` 145/145 and `tests/warnings.test` 81/81 on each of `interp`, `compile`, `cranelift-generic` and `cranelift` (`tests/warnings.test` with the adaptations listed under "Deviations from the brief").
 42. *Fuzzer results?* 2000 seeds, 1387 with warnings and 613 without: 0

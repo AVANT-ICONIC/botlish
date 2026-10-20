@@ -10,12 +10,12 @@
 
 source [file join [file dirname [file normalize [info script]]] lib.tcl]
 
-# Register the lib/byte.bot domains (and a source-defined Small) the same
+# Register the stdlib/byte.bot domains (and a source-defined Small) the same
 # way any program that mentions them would: by compiling a program that
 # declares/loads them.
 core::loadLibrary web
 m7a::source {type Small = Int in 10..20
-byte::from_int(1)
+std::byte::from_int(1)
 }
 
 set byte {refined int Byte}

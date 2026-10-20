@@ -160,7 +160,7 @@ identical rows below, matching guards.txt).
 
 | instance | parameter(s) | guard count | callers (pre-theorem view) | proposed closed-caller theorem |
 |---|---|---:|---|---|
-| `byte::high_nibble<generic>` | `b` | 1 | `hex_pair<generic>` (itself unresolved pre-theorem: cascade) | Int (once `hex_pair.b` resolves) |
+| `std::byte::high_nibble<generic>` | `b` | 1 | `hex_pair<generic>` (itself unresolved pre-theorem: cascade) | Int (once `hex_pair.b` resolves) |
 | `hex_pair<generic>` | `b` | 1 | `esc_bytes<generic>` (cascade) | Int (once `esc_bytes.bytes` resolves) |
 | `esc_bytes<generic>` | `i`, `bytes`, `acc` | 3 | `esc_char<generic>` (int, List[Byte], str) + self (i+1, bytes fwd, acc concat) | Int, List[Byte], str |
 | `esc_char<generic>` | `c` | 1 | `esc_from<generic>` (str, via substring) | str |
@@ -205,7 +205,7 @@ Inspected directly in `hir/aot.tcl`, `hir/types.tcl`, `hir/callables.tcl`,
 | captured callable forwarded through another block | yes (an ordinary capture; call resolution at the *use* site still goes through the same `{block...}`-or-not test) | only where the forwarded use is itself an exact call |
 | returned/stored callable | yes (ordinary first-class value flow) | never itself (a *later* call of the returned/stored value is a fresh `hir::types::Call`, tested independently) |
 | joined callable identity (`cond ? f : h`) | yes (`hir::types::lub` on two `{block...}` types; differing targets lose exactness) | only if the join still resolves to one exact `{block...}` |
-| module-retained callable / native "-module-fn" bridge | yes (`native/native.tcl`'s `ModuleNativeBridge`; retypes the native reference as the resolved block, per that file's own comment) | in principle yes, but **the reference itself is never a local blockescape candidate** (see "Relationship to OpenInstances") -- confirmed empirically: `refined-checks.ir`'s own `uriEscape`-bridged call to `web::uri_escape_text` is genuinely open |
+| module-retained callable / native "-module-fn" bridge | yes (`native/native.tcl`'s `ModuleNativeBridge`; retypes the native reference as the resolved block, per that file's own comment) | in principle yes, but **the reference itself is never a local blockescape candidate** (see "Relationship to OpenInstances") -- confirmed empirically: `refined-checks.ir`'s own `uriEscape`-bridged call to `std::web::uri_escape_text` is genuinely open |
 | native callback ingress | not found: no native registration in `core/native.tcl` takes a Block-typed callback parameter | n/a |
 | FFI callback ingress | not applicable -- this compiler has no FFI | n/a |
 | dynamic `NativeImpl` dispatch | not found as a separate mechanism from ordinary native calls above | n/a |
@@ -314,7 +314,7 @@ not an oversight:
   **open** for essentially every value-capturing closure, regardless of how
   it is actually referenced.
 - Confirmed empirically, not asserted: every family-1b guard site in both
-  frozen benchmarks except the plain-static cascade (`byte::high_nibble`)
+  frozen benchmarks except the plain-static cascade (`std::byte::high_nibble`)
   reads `open=1` under the production `hir::range::OpenInstances` query
   (`audit/m7a-instance-selection/tools/lib.tcl`'s own `open` column, which
   calls it unmodified).
@@ -325,7 +325,7 @@ not an oversight:
   family-1b population this milestone actually closes (`hex_pair`,
   `esc_bytes`, `esc_char`, `esc_from`, `repeat_uri`, `char_at`,
   `scan_local`, `scan_label`, `scan_alpha`, `tld_ok`, `domain_loop`, and
-  `web::uri_escape_text` itself in `uri-steady.bot` specifically).
+  `std::web::uri_escape_text` itself in `uri-steady.bot` specifically).
 
 **Answer to spec Q4/Q5**: closedness is *partly* already represented by
 `OpenInstances` (the static-block half, reused verbatim, duplicated as a
@@ -631,7 +631,7 @@ corpus.tcl`'s own `functions.txt` (unmodified tool, diffed directly):
 
 | function (generic instance) | bytes before | bytes after | guard before | guard after |
 |---|---:|---:|---:|---:|
-| `byte::high_nibble` (uri-steady/refined-checks, per copy) | 214 | 103 | 1 | 0 |
+| `std::byte::high_nibble` (uri-steady/refined-checks, per copy) | 214 | 103 | 1 | 0 |
 | `hex_pair` | 484 | 378 | 1 | 0 |
 | `esc_bytes` | 864 | 624 | 3 | 0 |
 | `esc_char` | 516 | 448 | 1 | 0 |
@@ -654,12 +654,12 @@ existing, unmodified lowering rule, not a new lowering rule.)
 categories):
 
 - `refined-checks.ir`'s `esc_from<generic>`'s own `text` parameter: **open
-  instance**. `refined-checks.ir` reaches `web::uri_escape_text` only
+  instance**. `refined-checks.ir` reaches `std::web::uri_escape_text` only
   through the legacy `uriEscape` native-module-bridge binding
   (`native/native.tcl`'s own `-module-fn` mechanism), never through an
   ordinary direct HIR call from a locally-bound closure candidate;
   confirmed directly (`hir::specialize::closed` returns `0` for
-  `web::uri_escape_text<generic>` under `refined-checks.ir` specifically,
+  `std::web::uri_escape_text<generic>` under `refined-checks.ir` specifically,
   `1` under `uri-steady.bot`, where the same function is called ordinarily
   from `repeat_uri`). This is exactly why `uri-steady.bot` reaches **0**
   residual guards while `refined-checks.ir` does not: the two programs
@@ -855,7 +855,7 @@ a theorem-only implementation with this diff shape does not require it.
 
 ## Source-fence confirmation
 
-`bench/*.bot`, `bench/*.ir`, and every file under `lib/` are byte-for-byte
+`bench/*.bot`, `bench/*.ir`, and every file under `stdlib/` are byte-for-byte
 unmodified (`git status`/`git diff` show no changes under those paths).
 Every improvement measured in this report comes from the compiler alone,
 against the exact same frozen source M7.a/M7.b measured.
@@ -864,7 +864,7 @@ against the exact same frozen source M7.a/M7.b measured.
 
 | residual | category | why not closed by this milestone | recommended fix |
 |---|---|---|---|
-| `refined-checks.ir`'s `esc_from.text` (and the `UnknownCallResultKind` it feeds) | open instance | `web::uri_escape_text` reached only through the legacy `uriEscape` native-module-bridge binding in this one program; `hir::blockescape`'s own single-region candidate model has no notion of a module-native-bridge reference as an "exact call" | a bridge-aware ingress proof (teach `hir::blockescape`, or a sibling analysis, that a `-module-fn` native reference to a block with a *provably singleton* native symbol binding is itself exact) -- a real, separate, smaller milestone, not implied by anything this report found broken |
+| `refined-checks.ir`'s `esc_from.text` (and the `UnknownCallResultKind` it feeds) | open instance | `std::web::uri_escape_text` reached only through the legacy `uriEscape` native-module-bridge binding in this one program; `hir::blockescape`'s own single-region candidate model has no notion of a module-native-bridge reference as an "exact call" | a bridge-aware ingress proof (teach `hir::blockescape`, or a sibling analysis, that a `-module-fn` native reference to a block with a *provably singleton* native symbol binding is itself exact) -- a real, separate, smaller milestone, not implied by anything this report found broken |
 | `block e332`/`e552`'s own `v` parameter (`Emailish?` scanner bodies) | capture-derived / dead value, out of scope | zero exact callers (M7.a's own mechanism (e)); this milestone correctly refuses to fabricate a theorem for a zero-caller instance | dead-`fnvalue` elimination (M7.a's own recommendation, unchanged by this milestone) |
 | exact-alias closedness (`alias = inner`) | scope limitation of the reused proof, not a guard regression in the frozen corpus | `hir::blockescape`'s own `RefsAsCalls` only recognizes a reference that is itself a call's callee; a plain alias bind is not | extend `hir::blockescape`'s own candidate model to treat an exact-alias bind (M2's own type-level identity) as transparent, if a future workload needs it -- no frozen-corpus guard depends on this today |
 

@@ -5,20 +5,20 @@
 # success): [true, 1]. Windows only.
 # The declarations are written by hand, with the facts a Botlish exposure
 # needs; the generated binding (generated/c/win32/) declares no facts.
-import abi
-import abi::bytes
-import ffi::c
-import str
+import std::abi
+import std::abi::bytes
+import std::ffi::c
+import std::str
 
 extern c library "kernel32"
 
-extern c fn GetCurrentProcessId() -> ffi::c::ULong
-extern c fn GetStdHandle(which: ffi::c::ULong) -> ffi::c::Ptr[ffi::c::Void]
-extern c fn WriteFile(handle: ffi::c::Ptr[ffi::c::Void] noescape, buffer: ffi::c::Ptr[ffi::c::Void] read noescape, count: ffi::c::ULong, written: ffi::c::Ptr[ffi::c::Void] write noescape, overlapped: ffi::c::Ptr[ffi::c::Void] noescape) -> ffi::c::Int
+extern c fn GetCurrentProcessId() -> std::ffi::c::ULong
+extern c fn GetStdHandle(which: std::ffi::c::ULong) -> std::ffi::c::Ptr[std::ffi::c::Void]
+extern c fn WriteFile(handle: std::ffi::c::Ptr[std::ffi::c::Void] noescape, buffer: std::ffi::c::Ptr[std::ffi::c::Void] read noescape, count: std::ffi::c::ULong, written: std::ffi::c::Ptr[std::ffi::c::Void] write noescape, overlapped: std::ffi::c::Ptr[std::ffi::c::Void] noescape) -> std::ffi::c::Int
 
-text = abi::bytes::from_list(str::encode_utf8("hello from kernel32\n"))
+text = std::abi::bytes::from_list(std::str::encode_utf8("hello from kernel32\n"))
 # STD_OUTPUT_HANDLE is (DWORD)-11.
 out = GetStdHandle(4294967285)
-none = ffi::c::null[ffi::c::Void]()
-done = out.WriteFile(text, 20, abi::bytes::zeroed(abi::usize(4)), none)
+none = std::ffi::c::null[std::ffi::c::Void]()
+done = out.WriteFile(text, 20, std::abi::bytes::zeroed(std::abi::usize(4)), none)
 [GetCurrentProcessId() > 0, done.result]

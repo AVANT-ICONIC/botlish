@@ -18,8 +18,8 @@
 #                               bind step (call ^coroutine#create THUNK)
 #                               bind first (call ^coroutine#start (ref step))
 #                               THUNK = (block {} (call worker (ref ...#arg1)))
-#   step(m)                     call ^coroutine#resume (ref step) m
-#   coroutine::done?(step)      call ^coroutine::done? (ref step)
+#   step(m)                      call ^coroutine#resume (ref step) m
+#   std::coroutine::done?(step)  call ^std::coroutine::done? (ref step)
 #
 # A THUNK is the *coroutine boundary*: the one call in its body (the
 # construction's call) is the root of a coroutine's execution, and its yield

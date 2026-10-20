@@ -109,7 +109,7 @@
         Ok(address) => address as i64,
 >>>>
 
-@@ nested-base-dropped-load binary::load reads a nested layout's fields at the outer layout's base
+@@ nested-base-dropped-load std::binary::load reads a nested layout's fields at the outer layout's base
 ## native/lower.tcl
 <<<<
         lappend registers [ReprRead fn $e $mode $source [lrange $field 2 end] [BasePlus fn $e $base [lindex $field 1]]]
@@ -127,7 +127,7 @@
 
 # --- byte-backed pointer materialization ------------------------------------
 
-@@ bytes-make-pointers binary::parse and binary::emit of a native-only layout are accepted
+@@ bytes-make-pointers std::binary::parse and std::binary::emit of a native-only layout are accepted
 ## hir/layouts.tcl
 <<<<
         } elseif {$id ne "" && [declared $id] && [NativeOnly $id]} {
@@ -231,10 +231,10 @@
     return [Assign fn "op nativeload $view $at $code" $e]
 >>>>
 
-@@ view-not-direct binary::native is not designated direct: a view needs no acknowledged authority
+@@ view-not-direct std::binary::native is not designated direct: a view needs no acknowledged authority
 ## core/binary.tcl
 <<<<
-core::native::declareDirectNamespace binary::native
+core::native::declareDirectNamespace std::binary::native
 ====
 >>>>
 

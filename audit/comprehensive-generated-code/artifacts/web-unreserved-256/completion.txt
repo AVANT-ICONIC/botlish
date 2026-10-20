@@ -1,24 +1,24 @@
 diagnostics: 0
 
-e77 (call) web-unreserved-256.bot:176 -> byte::from_int
+e77 (call) web-unreserved-256.bot:176 -> std::byte::from_int
   declaredErrors={AboveRange BelowRange} effectiveErrors={AboveRange} mayReturnNormally=1 resultRangeFact=[0, 255]
-e79 (call) web-unreserved-256.bot:176 -> char::codepoint
+e79 (call) web-unreserved-256.bot:176 -> std::char::codepoint
   declaredErrors={} effectiveErrors={} mayReturnNormally=1 resultRangeFact=[0, 1114111]
-e133 (call) ascii.bot:63 -> ascii::is_upper
+e133 (call) ascii.bot:63 -> std::ascii::is_upper
   declaredErrors={} effectiveErrors={} mayReturnNormally=1 resultRangeFact=[-∞, +∞]
-e138 (call) ascii.bot:63 -> ascii::is_lower
+e138 (call) ascii.bot:63 -> std::ascii::is_lower
   declaredErrors={} effectiveErrors={} mayReturnNormally=1 resultRangeFact=[-∞, +∞]
-e146 (call) ascii.bot:66 -> ascii::is_alphabetic
+e146 (call) ascii.bot:66 -> std::ascii::is_alphabetic
   declaredErrors={} effectiveErrors={} mayReturnNormally=1 resultRangeFact=[-∞, +∞]
-e151 (call) ascii.bot:66 -> ascii::is_digit
+e151 (call) ascii.bot:66 -> std::ascii::is_digit
   declaredErrors={} effectiveErrors={} mayReturnNormally=1 resultRangeFact=[-∞, +∞]
-e176 (call) web.bot:65 -> byte::set
+e176 (call) web.bot:65 -> std::byte::set
   declaredErrors={AboveRange} effectiveErrors={} mayReturnNormally=1 resultRangeFact=[-∞, +∞]
-e187 (call) web.bot:68 -> ascii::is_alphanumeric
+e187 (call) web.bot:68 -> std::ascii::is_alphanumeric
   declaredErrors={} effectiveErrors={} mayReturnNormally=1 resultRangeFact=[-∞, +∞]
-e202 (call) web.bot:73 -> byte::nibble
+e202 (call) web.bot:73 -> std::byte::nibble
   declaredErrors={} effectiveErrors={} mayReturnNormally=1 resultRangeFact=[0, 15]
-e204 (call) web.bot:73 -> byte::high_nibble
+e204 (call) web.bot:73 -> std::byte::high_nibble
   declaredErrors={} effectiveErrors={} mayReturnNormally=1 resultRangeFact=[0, 240] {0,16,32,48,64,80,96,112,128,144,160,176,192,208,224,240}
 e214 (call) web.bot:76 -> high_nibble
   declaredErrors={} effectiveErrors={} mayReturnNormally=1 resultRangeFact=[0, 15]
@@ -26,7 +26,7 @@ e234 (call) web.bot:82 -> esc_bytes
   declaredErrors={} effectiveErrors={} mayReturnNormally=1 resultRangeFact=[-∞, +∞]
 e247 (call) web.bot:82 -> hex_pair
   declaredErrors={} effectiveErrors={} mayReturnNormally=1 resultRangeFact=[-∞, +∞]
-e272 (call) web.bot:88 -> web::is_unreserved
+e272 (call) web.bot:88 -> std::web::is_unreserved
   declaredErrors={} effectiveErrors={} mayReturnNormally=1 resultRangeFact=[-∞, +∞]
 e276 (call) web.bot:91 -> esc_bytes
   declaredErrors={} effectiveErrors={} mayReturnNormally=1 resultRangeFact=[-∞, +∞]
@@ -38,7 +38,7 @@ e306 (call) web.bot:99 -> esc_char
   declaredErrors={} effectiveErrors={} mayReturnNormally=1 resultRangeFact=[-∞, +∞]
 e316 (call) web.bot:101 -> esc_from
   declaredErrors={} effectiveErrors={} mayReturnNormally=1 resultRangeFact=[-∞, +∞]
-e583 (handle) web-unreserved-256.bot:5 -> byte::from_int
+e583 (handle) web-unreserved-256.bot:5 -> std::byte::from_int
   declaredErrors={AboveRange BelowRange} effectiveErrors={AboveRange BelowRange} mayReturnNormally=1 resultRangeFact=-
-e589 (call) web-unreserved-256.bot:10 -> web::is_unreserved
+e589 (call) web-unreserved-256.bot:10 -> std::web::is_unreserved
   declaredErrors={} effectiveErrors={} mayReturnNormally=1 resultRangeFact=[-∞, +∞]

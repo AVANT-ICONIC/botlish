@@ -3,10 +3,10 @@
 #
 # examples/stdlib/csv_geometric.bot and csv_records.bot build their lists with
 # an ordinary untyped GeometricBuilder whose storage is a typed
-# MutableArray[T] (mutable_array::create) and whose storage and length travel as
+# MutableArray[T] (std::mutable_array::create) and whose storage and length travel as
 # two separate values, not a [storage, length] List. This file pins:
 #
-#   * the builder's source shape (no raw mutable_array::allocate, no pair),
+#   * the builder's source shape (no raw std::mutable_array::allocate, no pair),
 #   * the static types it now yields for every real element kind, and that the
 #     same untyped source function serves all of them (no generic syntax, no
 #     per-type copy),
@@ -15,7 +15,7 @@
 #     itself stays a raw heterogeneous mutarray,
 #   * behavior: growth boundaries, several growths, empty/one/many records,
 #     presized vs default row tables,
-#   * that the type-seeding default of mutable_array::create never becomes
+#   * that the type-seeding default of std::mutable_array::create never becomes
 #     observable (unused slots alias the value that triggered a growth and
 #     never escape freeze(length)) and costs no allocation of its own,
 #   * GC stress on typed create/copy/freeze.
@@ -76,15 +76,15 @@ proc instancesOf {hir name} {
 # Source shape
 
 foreach {name} {csv_geometric csv_records} {
-    test tmb-source-$name-1 "$name: the builder allocates its storage only through mutable_array::create -- no raw mutable_array::allocate" -body {
+    test tmb-source-$name-1 "$name: the builder allocates its storage only through std::mutable_array::create -- no raw std::mutable_array::allocate" -body {
         set b [builderSource [corpus::text $name]]
-        list [regexp -all {mutable_array::allocate} [regsub -all -line {^\s*#.*$} $b {}]] \
-            [regexp -all {mutable_array::create} [regsub -all -line {^\s*#.*$} $b {}]]
+        list [regexp -all {std::mutable_array::allocate} [regsub -all -line {^\s*#.*$} $b {}]] \
+            [regexp -all {std::mutable_array::create} [regsub -all -line {^\s*#.*$} $b {}]]
     } -result {0 2}
 
-    test tmb-source-$name-2 "$name: storage and length are separate values -- the builder functions contain no List literal, list::at or list::length" -body {
+    test tmb-source-$name-2 "$name: storage and length are separate values -- the builder functions contain no List literal, std::list::at or std::list::length" -body {
         set b [regsub -all -line {^\s*#.*$} [builderSource [corpus::text $name]] {}]
-        list [regexp {list::at|list::length|\[} $b] \
+        list [regexp {std::list::at|std::list::length|\[} $b] \
             [regexp {fn geo_append\(storage, length, value\)} $b] \
             [regexp {fn geo_finish\(storage, length\)} $b]
     } -result {0 1 1}
@@ -130,8 +130,8 @@ l}]
 } -result {MutableArray[List[str]] | List[List[str]]}
 
 test tmb-types-3 {the row-table case: MutableArray[mutarray] storage, List[mutarray] result} -body {
-    row [driverType csv_geometric {geo_new(mutable_array::allocate(1))}] \
-        [driverType csv_geometric {l = geo_finish(geo_new(mutable_array::allocate(1)), 1):
+    row [driverType csv_geometric {geo_new(std::mutable_array::allocate(1))}] \
+        [driverType csv_geometric {l = geo_finish(geo_new(std::mutable_array::allocate(1)), 1):
     on LowerUnderrun:
         []
     on UpperOverrun:
@@ -147,7 +147,7 @@ test tmb-types-4 {a value of the wrong element type is rejected at compile time,
 test tmb-types-5 {one source function geo_append serves every element type: it has several valid semantic instances and no invalid one} -body {
     set hir [corpus::driven csv_geometric {geo_finish(geo_append(geo_new("a"), 1, "b"), 2)
 geo_finish(geo_append(geo_new(["x"]), 1, ["y"]), 2)
-geo_finish(geo_append(geo_new(mutable_array::allocate(1)), 1, mutable_array::allocate(1)), 2)}]
+geo_finish(geo_append(geo_new(std::mutable_array::allocate(1)), 1, std::mutable_array::allocate(1)), 2)}]
     set defs [lmap {b binding} [dict get $hir bindings] {
         if {[dict get $binding name] ne "geo_append" || [dict get $binding declaredBy] eq ""} continue
         set b
@@ -181,7 +181,7 @@ test tmb-csv-records-1 {csv_records: the row-table builder is MutableArray[HashT
         [instancesOf $hir geo_new]
 } -result {1 1 {{HashTable -> MutableArray[HashTable] [valid]} {List[str] -> MutableArray[List[str]] [valid]} {str -> MutableArray[str] [valid]}}}
 
-test tmb-csv-records-2 {csv_records: the nine historical row-table consumer sites are statically HashTable: rows/presized_rows are List[HashTable] and every list::at out of them is a HashTable} -body {
+test tmb-csv-records-2 {csv_records: the nine historical row-table consumer sites are statically HashTable: rows/presized_rows are List[HashTable] and every std::list::at out of them is a HashTable} -body {
     set hir [surface::readProgramFile [corpus::path csv_records] -strict 0]
     row [join [bindingTypes $hir rows] ,] [join [bindingTypes $hir presized_rows] ,] \
         [join [bindingTypes $hir first] ,] [join [bindingTypes $hir second] ,] [join [bindingTypes $hir presized_first] ,]
@@ -291,23 +291,23 @@ proc codeOf {text} {
 
 # STRUCTS.md adds two declared contracts to each: scan_record_rest's
 # `fields: MutableArray[str]` and scan_records's `records: MutableArray[List[str]]`.
-test tmb-fence-1 {the typed API appears in the corpus only in csv_geometric.bot and csv_records.bot (mutable_array::create in the builder, plus the scan functions' two contracts and csv_records' one build_rows contract) and, since MUTABLE-ARRAY.md, in the structs of hashtable.bot (and csv_records' copy) and csv_chunked.bot: a typed count or controls array and its create} -body {
+test tmb-fence-1 {the typed API appears in the corpus only in csv_geometric.bot and csv_records.bot (std::mutable_array::create in the builder, plus the scan functions' two contracts and csv_records' one build_rows contract) and, since MUTABLE-ARRAY.md, in the structs of hashtable.bot (and csv_records' copy) and csv_chunked.bot: a typed count or controls array and its create} -body {
     set out {}
     foreach file [lsort [glob -directory [file join $::projectRoot examples stdlib] *.bot]] {
         set code [codeOf [core::ReadFile $file]]
-        set creates [regexp -all {mutable_array::create} $code]
+        set creates [regexp -all {std::mutable_array::create} $code]
         set typed [regexp -all {MutableArray\[} $code]
         if {$creates || $typed} { lappend out [list [file tail $file] $creates $typed] }
     }
     set out
 } -result {{csv_chunked.bot 2 1} {csv_geometric.bot 2 2} {csv_records.bot 3 4} {hashtable.bot 1 1}}
 
-test tmb-fence-2 {csv_geometric.bot has no raw mutable_array::allocate at all; csv_records.bot keeps it only in the heterogeneous HashTable code} -body {
-    set geo [regexp -all {mutable_array::allocate} [codeOf [geoText]]]
+test tmb-fence-2 {csv_geometric.bot has no raw std::mutable_array::allocate at all; csv_records.bot keeps it only in the heterogeneous HashTable code} -body {
+    set geo [regexp -all {std::mutable_array::allocate} [codeOf [geoText]]]
     set rec [codeOf [recordsText]]
-    set builder [regexp -all {mutable_array::allocate} [codeOf [builderSource [recordsText]]]]
+    set builder [regexp -all {std::mutable_array::allocate} [codeOf [builderSource [recordsText]]]]
     set hashtableStart [string first "fn ht_min_capacity" $rec]
-    set outsideHashtable [regexp -all {mutable_array::allocate} [string range $rec 0 $hashtableStart]]
+    set outsideHashtable [regexp -all {std::mutable_array::allocate} [string range $rec 0 $hashtableStart]]
     list $geo $builder $outsideHashtable
 } -result {0 0 0}
 
@@ -385,10 +385,10 @@ foreach {rows cols} {0 3  1 3  2 3  3 4  5 9  9 4  17 2} {
         set last [expr {$rows - 1}]
         set driver "
 fn probe(rows) errors IndexNotFound:
-    if list::length(rows) == 0:
+    if std::list::length(rows) == 0:
         return \[0\]
-    r = list::at(rows, [expr {max($last, 0)}])
-    \[list::length(rows), ht_get(r, \"h0\"), ht_get(r, \"h[expr {$cols - 1}]\"), ht_size(r)\]
+    r = std::list::at(rows, [expr {max($last, 0)}])
+    \[std::list::length(rows), ht_get(r, \"h0\"), ht_get(r, \"h[expr {$cols - 1}]\"), ht_size(r)\]
 \[probe(csv_records([$lit $text])), probe(csv_records_presized([$lit $text]))\]"
         set expectRows [expr {$rows == 0 ? "\[0\]" : "\[$rows, \"v${last}x0\", \"v${last}x[expr {$cols - 1}]\", $cols\]"}]
         parityCase csv_records $driver [list value "\[$expectRows, $expectRows\]"]
@@ -398,19 +398,19 @@ fn probe(rows) errors IndexNotFound:
 # ---------------------------------------------------------------------------
 # The type-seeding default is unobservable
 #
-# mutable_array::create(capacity, value) fills EVERY slot with the same value
+# std::mutable_array::create(capacity, value) fills EVERY slot with the same value
 # reference, so after a growth the slots at LENGTH and beyond alias the value
 # that triggered the growth. append overwrites slot LENGTH immediately and no
 # read of a slot >= LENGTH can happen through the builder, and freeze(LENGTH)
 # copies only the first LENGTH slots: the aliased default is never visible.
 
 set aliasDriver {
-t0 = mutable_array::allocate(1)
-mutable_array::set(t0, 0, 10)
-t1 = mutable_array::allocate(1)
-mutable_array::set(t1, 0, 20)
-t2 = mutable_array::allocate(1)
-mutable_array::set(t2, 0, 30)
+t0 = std::mutable_array::allocate(1)
+std::mutable_array::set(t0, 0, 10)
+t1 = std::mutable_array::allocate(1)
+std::mutable_array::set(t1, 0, 20)
+t2 = std::mutable_array::allocate(1)
+std::mutable_array::set(t2, 0, 30)
 s0 = geo_new(t0)
 s1 = geo_append(s0, 1, t1)
 s2 = geo_append(s1, 2, t2)
@@ -419,29 +419,29 @@ frozen = geo_finish(s2, 3)
 
 test tmb-alias-1 {after growth 1 -> 2 -> 4 the builder holds exactly the appended elements, in order} -body {
     parityCase csv_geometric "$aliasDriver
-\[mutable_array::capacity(s2), list::length(frozen), mutable_array::at(list::at(frozen, 0), 0), mutable_array::at(list::at(frozen, 1), 0), mutable_array::at(list::at(frozen, 2), 0)\]" \
+\[std::mutable_array::capacity(s2), std::list::length(frozen), std::mutable_array::at(std::list::at(frozen, 0), 0), std::mutable_array::at(std::list::at(frozen, 1), 0), std::mutable_array::at(std::list::at(frozen, 2), 0)\]" \
         {value {[4, 3, 10, 20, 30]}}
 } -result expected
 
 test tmb-alias-2 {the default slot holds a logical copy of the value that triggered the growth (MUTABLE-ARRAY.md: an array is a value): writing t2 afterwards changes neither slot 3 of the capacity-4 array nor the frozen List} -body {
     parityCase csv_geometric "$aliasDriver
-mutable_array::set(t2, 0, 99)
-\[mutable_array::at(mutable_array::at(s2, 3), 0), mutable_array::at(list::at(frozen, 2), 0), mutable_array::at(list::at(frozen, 0), 0), mutable_array::at(list::at(frozen, 1), 0), list::length(frozen), mutable_array::at(t2, 0)\]" \
+std::mutable_array::set(t2, 0, 99)
+\[std::mutable_array::at(std::mutable_array::at(s2, 3), 0), std::mutable_array::at(std::list::at(frozen, 2), 0), std::mutable_array::at(std::list::at(frozen, 0), 0), std::mutable_array::at(std::list::at(frozen, 1), 0), std::list::length(frozen), std::mutable_array::at(t2, 0)\]" \
         {value {[30, 30, 10, 20, 3, 99]}}
 } -result expected
 
-test tmb-alias-3 {the frozen list stops at LENGTH: the default-filled slot beyond it is not an element (list::at's IndexNotFound)} -body {
+test tmb-alias-3 {the frozen list stops at LENGTH: the default-filled slot beyond it is not an element (std::list::at's IndexNotFound)} -body {
     parityCase csv_geometric "$aliasDriver
-list::at(frozen, 3)" {value {"IndexNotFound"}}
+std::list::at(frozen, 3)" {value {"IndexNotFound"}}
 } -result expected
 
 test tmb-alias-4 {a later append overwrites the default slot; earlier frozen lists are unaffected (freeze copied)} -body {
     parityCase csv_geometric "$aliasDriver
-t3 = mutable_array::allocate(1)
-mutable_array::set(t3, 0, 40)
+t3 = std::mutable_array::allocate(1)
+std::mutable_array::set(t3, 0, 40)
 s3 = geo_append(s2, 3, t3)
 later = geo_finish(s3, 4)
-\[list::length(frozen), list::length(later), mutable_array::at(list::at(later, 3), 0), mutable_array::at(mutable_array::at(s3, 3), 0)\]" \
+\[std::list::length(frozen), std::list::length(later), std::mutable_array::at(std::list::at(later, 3), 0), std::mutable_array::at(std::mutable_array::at(s3, 3), 0)\]" \
         {value {[3, 4, 40, 40]}}
 } -result expected
 
@@ -454,7 +454,7 @@ fn fill(storage: MutableArray[int], length, n) errors IndexNotFound, LowerUnderr
     fill(geo_append(storage, length, length * 10), length + 1, n)
 
 xs = fill(geo_new(0), 1, 11)
-[list::length(xs), list::at(xs, 0), list::at(xs, 1), list::at(xs, 3), list::at(xs, 4), list::at(xs, 7), list::at(xs, 8), list::at(xs, 10)]
+[std::list::length(xs), std::list::at(xs, 0), std::list::at(xs, 1), std::list::at(xs, 3), std::list::at(xs, 4), std::list::at(xs, 7), std::list::at(xs, 8), std::list::at(xs, 10)]
 } {value {[11, 0, 10, 30, 40, 70, 80, 100]}}
 } -result expected
 
@@ -483,8 +483,8 @@ test tmb-alloc-3 {two records of two fields: per fields builder 1 create + 1 gro
 } -result 6
 
 test tmb-alloc-4 {csv_records over one data row: the parse costs 4 arrays; the row adds the outer builder's first array (created from the first row table, no placeholder) and the row table's own 4 arrays} -body {
-    set parseOnly [mutableArrayAllocs csv_records {list::length(csv_parse("h\nv\n"))}]
-    set both [mutableArrayAllocs csv_records {list::length(csv_records("h\nv\n"))}]
+    set parseOnly [mutableArrayAllocs csv_records {std::list::length(csv_parse("h\nv\n"))}]
+    set both [mutableArrayAllocs csv_records {std::list::length(csv_records("h\nv\n"))}]
     list $parseOnly [expr {$both - $parseOnly}]
 } -result {4 5}
 
@@ -514,11 +514,11 @@ test tmb-gc-2 {csv_records under GC stress: row tables and the typed outer build
 fn checkRow(rows, i, n, ok) errors IndexNotFound:
     if i >= n:
         return ok
-    r = list::at(rows, i)
+    r = std::list::at(rows, i)
     checkRow(rows, i + 1, n, ok and ht_contains(r, \"r0c0\") and ht_size(r) == 4)
 
 rows = csv_records([$lit $text])
-\[list::length(rows), checkRow(rows, 0, list::length(rows), true), ht_get(list::at(rows, 0), \"r0c0\"), ht_get(list::at(rows, 10), \"r0c3\")\]"] -specialize 1
+\[std::list::length(rows), checkRow(rows, 0, std::list::length(rows), true), ht_get(std::list::at(rows, 0), \"r0c0\"), ht_get(std::list::at(rows, 10), \"r0c3\")\]"] -specialize 1
     }
 } -result {list {{int 11} {bool true} {str r1c0} {str r11c3}}}
 
@@ -529,7 +529,7 @@ fn fill_str(storage: MutableArray[str], length, n) errors IndexNotFound, LowerUn
     if length >= n:
         return geo_finish(storage, length)
 
-    fill_str(geo_append(storage, length, str::concat("s", str::concat("-", "x"))), length + 1, n)
+    fill_str(geo_append(storage, length, std::str::concat("s", std::str::concat("-", "x"))), length + 1, n)
 
 fn fill_list(storage: MutableArray[List[str]], length, n) errors IndexNotFound, LowerUnderrun, UpperOverrun:
     if length >= n:
@@ -541,16 +541,16 @@ fn fill_mut(storage: MutableArray[mutarray], length, n) errors IndexNotFound, Lo
     if length >= n:
         return geo_finish(storage, length)
 
-    m = mutable_array::allocate(1)
-    mutable_array::set(m, 0, length)
+    m = std::mutable_array::allocate(1)
+    std::mutable_array::set(m, 0, length)
     fill_mut(geo_append(storage, length, m), length + 1, n)
 
 strings = fill_str(geo_new("s"), 1, 13)
 lists = fill_list(geo_new(["a", "b"]), 1, 13)
-m0 = mutable_array::allocate(1)
-mutable_array::set(m0, 0, 0)
+m0 = std::mutable_array::allocate(1)
+std::mutable_array::set(m0, 0, 0)
 tables = fill_mut(geo_new(m0), 1, 13)
-[list::length(strings), list::at(strings, 12), list::length(lists), list::at(list::at(lists, 12), 1), list::length(tables), mutable_array::at(list::at(tables, 12), 0)]
+[std::list::length(strings), std::list::at(strings, 12), std::list::length(lists), std::list::at(std::list::at(lists, 12), 1), std::list::length(tables), std::mutable_array::at(std::list::at(tables, 12), 0)]
 }] -specialize 1
     }
 } -result {list {{int 13} {str s-x} {int 13} {str b} {int 13} {int 12}}}

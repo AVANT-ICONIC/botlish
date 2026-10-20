@@ -1,10 +1,10 @@
 # A simple open-addressed HashTable, built entirely from the MutableArray
-# substrate (mutable_array::create/::allocate/::capacity/::at/::set) plus the
+# substrate (std::mutable_array::create/::allocate/::capacity/::at/::set) plus the
 # two general-purpose primitives this milestone added alongside it --
 # hash(value) -> Int and mod(a, b) -> Int (core/hashing.tcl, core/
 # primitives.tcl) -- ordinary Botlish, not a compiler or runtime primitive.
 # The runtime/compiler has no notion of "hash table": every operation below
-# is mutable_array::at/::set, hash, mod, ==, and ordinary recursion.
+# is std::mutable_array::at/::set, hash, mod, ==, and ordinary recursion.
 #
 # Representation
 # --------------
@@ -71,14 +71,14 @@
 # them instead of growing (ht_rehash) -- the "tombstone cleanup" case;
 # otherwise capacity doubles. Either way every OCCUPIED entry is rehashed
 # (see hir/lower.tcl's "no bulk-copy expectation": rt_mutarray_copy is never
-# used here, only individual mutable_array::at/::set per live entry).
+# used here, only individual std::mutable_array::at/::set per live entry).
 # Linear probing (ht_probe_next: index -> mod(index + 1, capacity)) always
 # terminates because capacity never lets occupancy reach 100%.
 #
 # expect: [true, true, false, false, true, 1]
 
-import list
-import mutable_array
+import std::list
+import std::mutable_array
 
 struct HashTable:
     controls: MutableArray[int]
@@ -102,10 +102,10 @@ fn ht_tombstone_state():
 # Construction
 
 fn ht_alloc(capacity) errors IndexNotFound:
-    counts = mutable_array::allocate(2)
-    mutable_array::set(counts, 0, 0)
-    mutable_array::set(counts, 1, 0)
-    HashTable {controls: mutable_array::create(capacity, ht_empty_state()), keys: mutable_array::allocate(capacity), values: mutable_array::allocate(capacity), counts: counts}
+    counts = std::mutable_array::allocate(2)
+    std::mutable_array::set(counts, 0, 0)
+    std::mutable_array::set(counts, 1, 0)
+    HashTable {controls: std::mutable_array::create(capacity, ht_empty_state()), keys: std::mutable_array::allocate(capacity), values: std::mutable_array::allocate(capacity), counts: counts}
 
 fn ht_new() errors IndexNotFound:
     ht_alloc(ht_min_capacity())
@@ -127,13 +127,13 @@ fn ht_new_sized(expected) errors IndexNotFound:
 # Fields
 
 fn ht_size(table) errors IndexNotFound:
-    mutable_array::at(table.counts, 0)
+    std::mutable_array::at(table.counts, 0)
 
 fn ht_tombstones(table) errors IndexNotFound:
-    mutable_array::at(table.counts, 1)
+    std::mutable_array::at(table.counts, 1)
 
 fn ht_capacity(table):
-    mutable_array::capacity(table.controls)
+    std::mutable_array::capacity(table.controls)
 
 # ---------------------------------------------------------------------------
 # Probing (ordinary linear probing: see the file header)
@@ -145,14 +145,14 @@ fn ht_probe_next(table, index):
     mod(index + 1, ht_capacity(table))
 
 # The index of KEY from INDEX on, or -1 if probing reaches an EMPTY slot
-# first. Zero managed allocations: only mutable_array::at, ==, and mod/hash
+# first. Zero managed allocations: only std::mutable_array::at, ==, and mod/hash
 # on values already in hand (req #10, #19).
 fn ht_find_get(table, key, index) errors IndexNotFound:
-    state = mutable_array::at(table.controls, index)
+    state = std::mutable_array::at(table.controls, index)
     if state == ht_empty_state():
         return -1
 
-    if state == ht_occupied_state() and mutable_array::at(table.keys, index) == key:
+    if state == ht_occupied_state() and std::mutable_array::at(table.keys, index) == key:
         return index
 
     ht_find_get(table, key, ht_probe_next(table, index))
@@ -162,14 +162,14 @@ fn ht_find_get(table, key, index) errors IndexNotFound:
 # is not later in the chain first), or an earlier TOMBSTONE reused once
 # that confirmation is done (FIRST-TOMBSTONE is -1 until one is seen).
 fn ht_find_insert(table, key, index, first_tombstone) errors IndexNotFound:
-    state = mutable_array::at(table.controls, index)
+    state = std::mutable_array::at(table.controls, index)
     if state == ht_empty_state():
         if first_tombstone >= 0:
             return first_tombstone
 
         return index
 
-    if state == ht_occupied_state() and mutable_array::at(table.keys, index) == key:
+    if state == ht_occupied_state() and std::mutable_array::at(table.keys, index) == key:
         return index
 
     if state == ht_tombstone_state() and first_tombstone < 0:
@@ -186,7 +186,7 @@ fn ht_get(table, key) errors IndexNotFound:
     if index < 0:
         return unit
 
-    mutable_array::at(table.values, index)
+    std::mutable_array::at(table.values, index)
 
 fn ht_contains(table, key) errors IndexNotFound:
     ht_find_get(table, key, ht_probe_start(table, key)) >= 0
@@ -197,7 +197,7 @@ fn ht_contains(table, key) errors IndexNotFound:
 # from, and simpler than, ht_find_insert above.
 
 fn ht_rehash_probe(newControls, index, capacity) errors IndexNotFound:
-    state = mutable_array::at(newControls, index)
+    state = std::mutable_array::at(newControls, index)
     if state == ht_empty_state():
         return index
 
@@ -207,14 +207,14 @@ fn ht_rehash_probe(newControls, index, capacity) errors IndexNotFound:
 # KEY's hash on.
 fn ht_rehash_insert(dest, capacity, key, value) errors IndexNotFound:
     index = ht_rehash_probe(dest.controls, mod(hash(key), capacity), capacity)
-    mutable_array::set(dest.controls, index, ht_occupied_state())
-    mutable_array::set(dest.keys, index, key)
-    mutable_array::set(dest.values, index, value)
+    std::mutable_array::set(dest.controls, index, ht_occupied_state())
+    std::mutable_array::set(dest.keys, index, key)
+    std::mutable_array::set(dest.values, index, value)
     dest
 
 # DEST with every OCCUPIED slot of the old table (its arrays CONTROLS, KEYS
 # and VALUES) from I on rehashed into it at NEWCAPACITY. Only individual
-# mutable_array::at/::set ever move an entry here -- no mutable_array::copy
+# std::mutable_array::at/::set ever move an entry here -- no std::mutable_array::copy
 # (req #23). (The old table's arrays are passed apart, not as the struct,
 # so that an instance of this function never has to project a field of a
 # table its generic caller cannot type.)
@@ -222,8 +222,8 @@ fn ht_rehash_scan(controls, keys, values, i, oldCapacity, dest, newCapacity) err
     if i >= oldCapacity:
         return dest
 
-    if mutable_array::at(controls, i) == ht_occupied_state():
-        filled = ht_rehash_insert(dest, newCapacity, mutable_array::at(keys, i), mutable_array::at(values, i))
+    if std::mutable_array::at(controls, i) == ht_occupied_state():
+        filled = ht_rehash_insert(dest, newCapacity, std::mutable_array::at(keys, i), std::mutable_array::at(values, i))
         return ht_rehash_scan(controls, keys, values, i + 1, oldCapacity, filled, newCapacity)
 
     ht_rehash_scan(controls, keys, values, i + 1, oldCapacity, dest, newCapacity)
@@ -233,7 +233,7 @@ fn ht_rehash_scan(controls, keys, values, i, oldCapacity, dest, newCapacity) err
 # (req #20, #41).
 fn ht_rehash(table, newCapacity) errors IndexNotFound:
     dest = ht_alloc(newCapacity)
-    mutable_array::set(dest.counts, 0, ht_size(table))
+    std::mutable_array::set(dest.counts, 0, ht_size(table))
     ht_rehash_scan(table.controls, table.keys, table.values, 0, ht_capacity(table), dest, newCapacity)
 
 # Whether the *next* insert (one more occupied slot) would push occupancy
@@ -264,21 +264,21 @@ fn ht_grow_or_clean(table) errors IndexNotFound:
 # INDEX was reusing one. Split out of ht_set below because it is needed
 # from two branches (with and without a resize in between).
 fn ht_place(table, index, key, value) errors IndexNotFound:
-    prior = mutable_array::at(table.controls, index)
-    mutable_array::set(table.controls, index, ht_occupied_state())
-    mutable_array::set(table.keys, index, key)
-    mutable_array::set(table.values, index, value)
-    mutable_array::set(table.counts, 0, ht_size(table) + 1)
+    prior = std::mutable_array::at(table.controls, index)
+    std::mutable_array::set(table.controls, index, ht_occupied_state())
+    std::mutable_array::set(table.keys, index, key)
+    std::mutable_array::set(table.values, index, value)
+    std::mutable_array::set(table.counts, 0, ht_size(table) + 1)
     if prior == ht_tombstone_state():
-        mutable_array::set(table.counts, 1, ht_tombstones(table) - 1)
+        std::mutable_array::set(table.counts, 1, ht_tombstones(table) - 1)
 
     table
 
 # TABLE with KEY mapped to VALUE (replacing an existing mapping of KEY).
 fn ht_set(table, key, value) errors IndexNotFound:
     index = ht_find_insert(table, key, ht_probe_start(table, key), -1)
-    if mutable_array::at(table.controls, index) == ht_occupied_state():
-        mutable_array::set(table.values, index, value)
+    if std::mutable_array::at(table.controls, index) == ht_occupied_state():
+        std::mutable_array::set(table.values, index, value)
         return table
 
     if ht_should_grow(table):
@@ -300,11 +300,11 @@ fn ht_delete(table, key) errors IndexNotFound:
     if index < 0:
         return table
 
-    mutable_array::set(table.controls, index, ht_tombstone_state())
-    mutable_array::set(table.keys, index, unit)
-    mutable_array::set(table.values, index, unit)
-    mutable_array::set(table.counts, 0, ht_size(table) - 1)
-    mutable_array::set(table.counts, 1, ht_tombstones(table) + 1)
+    std::mutable_array::set(table.controls, index, ht_tombstone_state())
+    std::mutable_array::set(table.keys, index, unit)
+    std::mutable_array::set(table.values, index, unit)
+    std::mutable_array::set(table.counts, 0, ht_size(table) - 1)
+    std::mutable_array::set(table.counts, 1, ht_tombstones(table) + 1)
     table
 
 # ---------------------------------------------------------------------------
@@ -315,14 +315,14 @@ fn ht_fold(table, index, capacity, acc, combine) errors IndexNotFound:
     if index >= capacity:
         return acc
 
-    if mutable_array::at(table.controls, index) == ht_occupied_state():
-        next = combine(acc, mutable_array::at(table.keys, index), mutable_array::at(table.values, index))
+    if std::mutable_array::at(table.controls, index) == ht_occupied_state():
+        next = combine(acc, std::mutable_array::at(table.keys, index), std::mutable_array::at(table.values, index))
         return ht_fold(table, index + 1, capacity, next, combine)
 
     ht_fold(table, index + 1, capacity, acc, combine)
 
 fn ht_collect_pair(acc, key, value):
-    list::append(acc, [key, value])
+    std::list::append(acc, [key, value])
 
 # Every live [key, value] pair, in slot order (not insertion order).
 fn ht_to_list(table) errors IndexNotFound:
@@ -342,7 +342,7 @@ fn sample_checks() errors IndexNotFound:
     t4 = ht_delete(t3, "age")
     [ht_get(t4, "name") == "Grace", had_age, ht_contains(t4, "age"), ht_contains(t4, "missing"), ht_get(t4, "missing") == unit, ht_size(t4)]
 
-# The table's slots are read with mutable_array::at, whose IndexNotFound
+# The table's slots are read with std::mutable_array::at, whose IndexNotFound
 # every function above that reads one declares: no index here can miss
 # (counts has its 2 slots, every slot index is reduced mod the capacity of
 # the arrays it reads), but that is the table's own invariant, not something

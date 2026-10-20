@@ -66,10 +66,10 @@
 # Imports: compiler and test (the framework); mathish (the namespace of
 # sr-module-local-shadow-of-namespace-name, standing in for the Tcl test's
 # private module m); str (rejects_opening's prefix).
-import compiler
-import mathish
-import str
-import test
+import std::compiler
+import std::mathish
+import std::str
+import std::test
 
 # ---------------------------------------------------------------------------
 # Declarations (top-level only)
@@ -87,21 +87,21 @@ error RightOperandEvaluated
 
 # BODY's block must be rejected with diagnostic code EXPECTED at LINE and
 # COLUMN of this file, with exactly the message WORDING.
-nomethod fn rejects_saying(name: str, expected: compiler::DiagnosticCode, line: int, column: int, wording: str, body) -> unit:
-    fn check() -> test::Match:
-        shown = test::diagnostic_text(expected, compiler::SourceLocation {line: line, column: column}).concat(", message: ").concat(wording)
+nomethod fn rejects_saying(name: str, expected: std::compiler::DiagnosticCode, line: int, column: int, wording: str, body) -> unit:
+    fn check() -> std::test::Match:
+        shown = std::test::diagnostic_text(expected, std::compiler::SourceLocation {line: line, column: column}).concat(", message: ").concat(wording)
         actual = body():
-            on compiler::CompilerError {code, primary, message}:
+            on std::compiler::CompilerError {code, primary, message}:
                 located = primary.line == line and primary.column == column
                 if code == expected and located and message == wording:
-                    return test::passed()
-                return test::mismatch(shown, test::diagnostic_text(code, primary), message)
-        test::mismatch(shown, "value ".concat(test::describe(actual)), "")
-    test::case(name, check)
+                    return std::test::passed()
+                return std::test::mismatch(shown, std::test::diagnostic_text(code, primary), message)
+        std::test::mismatch(shown, "value ".concat(std::test::describe(actual)), "")
+    std::test::case(name, check)
 
 # The first K characters of TEXT (all of TEXT when it is shorter).
 fn opening_of(text: str, k: int) -> str:
-    piece = str::substring(text, 0, k):
+    piece = std::str::substring(text, 0, k):
         on LowerUnderrun:
             ""
         on UpperOverrun:
@@ -111,17 +111,17 @@ fn opening_of(text: str, k: int) -> str:
 # BODY's block must be rejected with diagnostic code EXPECTED at LINE and
 # COLUMN of this file, with a message that begins with OPENING (the Tcl
 # test's glob "OPENING*").
-nomethod fn rejects_opening(name: str, expected: compiler::DiagnosticCode, line: int, column: int, opening: str, body) -> unit:
-    fn check() -> test::Match:
-        shown = test::diagnostic_text(expected, compiler::SourceLocation {line: line, column: column}).concat(", message beginning: ").concat(opening)
+nomethod fn rejects_opening(name: str, expected: std::compiler::DiagnosticCode, line: int, column: int, opening: str, body) -> unit:
+    fn check() -> std::test::Match:
+        shown = std::test::diagnostic_text(expected, std::compiler::SourceLocation {line: line, column: column}).concat(", message beginning: ").concat(opening)
         actual = body():
-            on compiler::CompilerError {code, primary, message}:
+            on std::compiler::CompilerError {code, primary, message}:
                 located = primary.line == line and primary.column == column
-                if code == expected and located and opening_of(message, str::length(opening)) == opening:
-                    return test::passed()
-                return test::mismatch(shown, test::diagnostic_text(code, primary), message)
-        test::mismatch(shown, "value ".concat(test::describe(actual)), "")
-    test::case(name, check)
+                if code == expected and located and opening_of(message, std::str::length(opening)) == opening:
+                    return std::test::passed()
+                return std::test::mismatch(shown, std::test::diagnostic_text(code, primary), message)
+        std::test::mismatch(shown, "value ".concat(std::test::describe(actual)), "")
+    std::test::case(name, check)
 
 # ---------------------------------------------------------------------------
 # A binding is visible from where it is established: callee first, no
@@ -130,7 +130,7 @@ nomethod fn rejects_opening(name: str, expected: compiler::DiagnosticCode, line:
 fn register_source_order_tests():
     # sr-callee-first-accepted: a helper declared before its caller is the
     # canonical order: the call resolves and runs.
-    fn callee_first_accepted() errors compiler::CompilerError:
+    fn callee_first_accepted() errors std::compiler::CompilerError:
         static compile:
             fn helper():
                 41
@@ -139,12 +139,12 @@ fn register_source_order_tests():
                 helper() + 1
 
             caller()
-    test::value("sr-callee-first-accepted", 42, callee_first_accepted)
+    std::test::value("sr-callee-first-accepted", 42, callee_first_accepted)
 
     # sr-mutual-recursion: ordinary mutual recursion is not supported: one
     # edge must point forward. even?'s call of odd? is that edge, reported
     # at the call as a forward reference.
-    fn mutual_recursion_rejected() errors compiler::CompilerError:
+    fn mutual_recursion_rejected() errors std::compiler::CompilerError:
         static compile:
             fn even?(n):
                 if n == 0:
@@ -157,11 +157,11 @@ fn register_source_order_tests():
                 even?(n - 1)
 
             0
-    rejects_saying("sr-mutual-recursion", compiler::DiagnosticCode::Unbound, 152, 17, "unbound name \"odd?\": \"odd?\" is declared later; forward references are not allowed (a binding is visible only after it is established)", mutual_recursion_rejected)
+    rejects_saying("sr-mutual-recursion", std::compiler::DiagnosticCode::Unbound, 152, 17, "unbound name \"odd?\": \"odd?\" is declared later; forward references are not allowed (a binding is visible only after it is established)", mutual_recursion_rejected)
 
     # sr-mutual-recursion-either-order: declaring odd? first only moves the
     # forward edge: now odd?'s call of even? is rejected.
-    fn mutual_recursion_either_order() errors compiler::CompilerError:
+    fn mutual_recursion_either_order() errors std::compiler::CompilerError:
         static compile:
             fn odd?(n):
                 if n == 0:
@@ -174,12 +174,12 @@ fn register_source_order_tests():
                 odd?(n - 1)
 
             0
-    test::rejects_at("sr-mutual-recursion-either-order", compiler::DiagnosticCode::Unbound, 169, 17, mutual_recursion_either_order)
+    std::test::rejects_at("sr-mutual-recursion-either-order", std::compiler::DiagnosticCode::Unbound, 169, 17, mutual_recursion_either_order)
 
     # lower-hir-mutual-recursion: of two mutually recursive functions, the
     # earlier one's reference to the later one is the unresolved one (the
     # later one's reference to the earlier resolves).
-    fn mutual_recursion_earlier_edge_unbound() errors compiler::CompilerError:
+    fn mutual_recursion_earlier_edge_unbound() errors std::compiler::CompilerError:
         static compile:
             fn even(n):
                 if n == 0:
@@ -190,12 +190,12 @@ fn register_source_order_tests():
                     return false
                 even(n - 1)
             even(4)
-    test::rejects_at("lower-hir-mutual-recursion", compiler::DiagnosticCode::Unbound, 187, 17, mutual_recursion_earlier_edge_unbound)
+    std::test::rejects_at("lower-hir-mutual-recursion", std::compiler::DiagnosticCode::Unbound, 187, 17, mutual_recursion_earlier_edge_unbound)
 
     # sr-runtime-order-irrelevant: a forward reference is illegal even though
     # the referencing function only runs after the binding exists: rejected
     # at the call of later.
-    fn runtime_order_irrelevant() errors compiler::CompilerError:
+    fn runtime_order_irrelevant() errors std::compiler::CompilerError:
         static compile:
             fn call_later():
                 later()
@@ -204,12 +204,12 @@ fn register_source_order_tests():
                 1
 
             call_later()
-    test::rejects_at("sr-runtime-order-irrelevant", compiler::DiagnosticCode::Unbound, 201, 17, runtime_order_irrelevant)
+    std::test::rejects_at("sr-runtime-order-irrelevant", std::compiler::DiagnosticCode::Unbound, 201, 17, runtime_order_irrelevant)
 
     # sr-unreachable-branch: legality is a resolution rule, not
     # reachability: a forward reference in a branch that never runs is
     # rejected there.
-    fn forward_reference_in_unreachable_branch() errors compiler::CompilerError:
+    fn forward_reference_in_unreachable_branch() errors std::compiler::CompilerError:
         static compile:
             if false:
                 later()
@@ -218,11 +218,11 @@ fn register_source_order_tests():
                 1
 
             0
-    test::rejects_at("sr-unreachable-branch", compiler::DiagnosticCode::Unbound, 215, 17, forward_reference_in_unreachable_branch)
+    std::test::rejects_at("sr-unreachable-branch", std::compiler::DiagnosticCode::Unbound, 215, 17, forward_reference_in_unreachable_branch)
 
     # sr-unused-function: a function that is never called must still contain
     # only valid references: rejected at its call of later.
-    fn forward_reference_in_unused_function() errors compiler::CompilerError:
+    fn forward_reference_in_unused_function() errors std::compiler::CompilerError:
         static compile:
             fn unused():
                 later()
@@ -231,11 +231,11 @@ fn register_source_order_tests():
                 1
 
             0
-    test::rejects_at("sr-unused-function", compiler::DiagnosticCode::Unbound, 228, 17, forward_reference_in_unused_function)
+    std::test::rejects_at("sr-unused-function", std::compiler::DiagnosticCode::Unbound, 228, 17, forward_reference_in_unused_function)
 
     # sr-forward-value-alias: an alias of a later function is illegal, even
     # if it would only be called later.
-    fn forward_value_alias() errors compiler::CompilerError:
+    fn forward_value_alias() errors std::compiler::CompilerError:
         static compile:
             g = f
 
@@ -243,11 +243,11 @@ fn register_source_order_tests():
                 1
 
             0
-    test::rejects_at("sr-forward-value-alias", compiler::DiagnosticCode::Unbound, 240, 17, forward_value_alias)
+    std::test::rejects_at("sr-forward-value-alias", std::compiler::DiagnosticCode::Unbound, 240, 17, forward_value_alias)
 
     # sr-forward-higher-order: building an aggregate is no route to a later
     # binding.
-    fn forward_reference_in_list_literal() errors compiler::CompilerError:
+    fn forward_reference_in_list_literal() errors std::compiler::CompilerError:
         static compile:
             callbacks = [later]
 
@@ -255,51 +255,51 @@ fn register_source_order_tests():
                 1
 
             0
-    test::rejects_at("sr-forward-higher-order", compiler::DiagnosticCode::Unbound, 252, 26, forward_reference_in_list_literal)
+    std::test::rejects_at("sr-forward-higher-order", std::compiler::DiagnosticCode::Unbound, 252, 26, forward_reference_in_list_literal)
 
     # sr-forward-module-value: values obey the same source order as
     # functions: the reference to a later value is a forward reference.
-    fn forward_value_reference() errors compiler::CompilerError:
+    fn forward_value_reference() errors std::compiler::CompilerError:
         static compile:
             a = b
             b = 3
-    rejects_opening("sr-forward-module-value", compiler::DiagnosticCode::Unbound, 264, 17, "unbound name \"b\": \"b\" is declared later", forward_value_reference)
+    rejects_opening("sr-forward-module-value", std::compiler::DiagnosticCode::Unbound, 264, 17, "unbound name \"b\": \"b\" is declared later", forward_value_reference)
 
     # sr-value-dependency-order: values are accepted once their dependencies
     # come first.
-    fn value_dependency_order() errors compiler::CompilerError:
+    fn value_dependency_order() errors std::compiler::CompilerError:
         static compile:
             c = 1
             b = c + 1
             a = b + 1
             a
-    test::value("sr-value-dependency-order", 3, value_dependency_order)
+    std::test::value("sr-value-dependency-order", 3, value_dependency_order)
 
     # sr-value-order-not-reordered: a dependency chain written backwards is
     # rejected at its first reference, never sorted.
-    fn value_order_not_reordered() errors compiler::CompilerError:
+    fn value_order_not_reordered() errors std::compiler::CompilerError:
         static compile:
             a = b + 1
             b = c + 1
             c = 1
-    test::rejects_at("sr-value-order-not-reordered", compiler::DiagnosticCode::Unbound, 282, 17, value_order_not_reordered)
+    std::test::rejects_at("sr-value-order-not-reordered", std::compiler::DiagnosticCode::Unbound, 282, 17, value_order_not_reordered)
 
     # sr-own-initializer: a value is not visible in its own initializer:
     # rejected at the initializer's x.
-    fn own_initializer_rejected() errors compiler::CompilerError:
+    fn own_initializer_rejected() errors std::compiler::CompilerError:
         static compile:
             x = x + 1
-    test::rejects_at("sr-own-initializer", compiler::DiagnosticCode::Unbound, 291, 17, own_initializer_rejected)
+    std::test::rejects_at("sr-own-initializer", std::compiler::DiagnosticCode::Unbound, 291, 17, own_initializer_rejected)
 
     # sr-own-initializer-outer: an initializer that names its own binding
     # reads the outer binding of that name.
-    fn own_initializer_reads_outer() errors compiler::CompilerError:
+    fn own_initializer_reads_outer() errors std::compiler::CompilerError:
         static compile:
             x = 1
             if true:
                 x = x + 1
                 x
-    test::value("sr-own-initializer-outer", 2, own_initializer_reads_outer)
+    std::test::value("sr-own-initializer-outer", 2, own_initializer_reads_outer)
 
 # ---------------------------------------------------------------------------
 # Every kind of scope is sequential
@@ -308,7 +308,7 @@ fn register_scope_kind_tests():
     # In each scope, `a = b` before `b = 1` is rejected at that b.
 
     # sr-scope-function-body: a function body is sequential.
-    fn function_body_sequential() errors compiler::CompilerError:
+    fn function_body_sequential() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 a = b
@@ -316,11 +316,11 @@ fn register_scope_kind_tests():
                 a
 
             0
-    test::rejects_at("sr-scope-function-body", compiler::DiagnosticCode::Unbound, 314, 21, function_body_sequential)
+    std::test::rejects_at("sr-scope-function-body", std::compiler::DiagnosticCode::Unbound, 314, 21, function_body_sequential)
 
     # sr-scope-nested-function: a nested function may not call a later
     # sibling: rejected at g's call of h.
-    fn nested_function_sequential() errors compiler::CompilerError:
+    fn nested_function_sequential() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 fn g():
@@ -332,56 +332,56 @@ fn register_scope_kind_tests():
                 g()
 
             0
-    test::rejects_at("sr-scope-nested-function", compiler::DiagnosticCode::Unbound, 327, 21, nested_function_sequential)
+    std::test::rejects_at("sr-scope-nested-function", std::compiler::DiagnosticCode::Unbound, 327, 21, nested_function_sequential)
 
     # sr-scope-if-branch: an if branch is sequential.
-    fn if_branch_sequential() errors compiler::CompilerError:
+    fn if_branch_sequential() errors std::compiler::CompilerError:
         static compile:
             if true:
                 a = b
                 b = 1
-    test::rejects_at("sr-scope-if-branch", compiler::DiagnosticCode::Unbound, 341, 21, if_branch_sequential)
+    std::test::rejects_at("sr-scope-if-branch", std::compiler::DiagnosticCode::Unbound, 341, 21, if_branch_sequential)
 
     # sr-scope-else-branch: an else branch is sequential.
-    fn else_branch_sequential() errors compiler::CompilerError:
+    fn else_branch_sequential() errors std::compiler::CompilerError:
         static compile:
             if false:
                 1
             else:
                 a = b
                 b = 1
-    test::rejects_at("sr-scope-else-branch", compiler::DiagnosticCode::Unbound, 351, 21, else_branch_sequential)
+    std::test::rejects_at("sr-scope-else-branch", std::compiler::DiagnosticCode::Unbound, 351, 21, else_branch_sequential)
 
     # sr-scope-loop-body: a loop body is sequential.
-    fn loop_body_sequential() errors compiler::CompilerError:
+    fn loop_body_sequential() errors std::compiler::CompilerError:
         static compile:
             loop:
                 a = b
                 b = 1
                 break
-    test::rejects_at("sr-scope-loop-body", compiler::DiagnosticCode::Unbound, 359, 21, loop_body_sequential)
+    std::test::rejects_at("sr-scope-loop-body", std::compiler::DiagnosticCode::Unbound, 359, 21, loop_body_sequential)
 
     # sr-scope-loop-header: a loop's header is resolved in the enclosing
     # scope: a binding of its body is not visible in it (rejected at the
     # header's ys).
-    fn loop_header_in_enclosing_scope() errors compiler::CompilerError:
+    fn loop_header_in_enclosing_scope() errors std::compiler::CompilerError:
         static compile:
             loop x in ys:
                 ys = [1]
                 x
-    test::rejects_at("sr-scope-loop-header", compiler::DiagnosticCode::Unbound, 369, 23, loop_header_in_enclosing_scope)
+    std::test::rejects_at("sr-scope-loop-header", std::compiler::DiagnosticCode::Unbound, 369, 23, loop_header_in_enclosing_scope)
 
     # sr-scope-count-loop-header: a counted loop's bounds are resolved
     # before its body binds anything (rejected at the header's n).
-    fn count_loop_bounds_in_enclosing_scope() errors compiler::CompilerError:
+    fn count_loop_bounds_in_enclosing_scope() errors std::compiler::CompilerError:
         static compile:
             loop i from 0 to n:
                 n = 3
                 i
-    test::rejects_at("sr-scope-count-loop-header", compiler::DiagnosticCode::Unbound, 378, 30, count_loop_bounds_in_enclosing_scope)
+    std::test::rejects_at("sr-scope-count-loop-header", std::compiler::DiagnosticCode::Unbound, 378, 30, count_loop_bounds_in_enclosing_scope)
 
     # sr-scope-handler-body: a handler body is sequential.
-    fn handler_body_sequential() errors compiler::CompilerError:
+    fn handler_body_sequential() errors std::compiler::CompilerError:
         static compile:
             fn f() errors HandledProbeFailure:
                 fail HandledProbeFailure
@@ -395,42 +395,42 @@ fn register_scope_kind_tests():
                 r
 
             0
-    test::rejects_at("sr-scope-handler-body", compiler::DiagnosticCode::Unbound, 392, 29, handler_body_sequential)
+    std::test::rejects_at("sr-scope-handler-body", std::compiler::DiagnosticCode::Unbound, 392, 29, handler_body_sequential)
 
     # lower-semantic-break-in-fn: a function declared in a loop body is a new
     # callable: its `continue` is outside any loop of its own.
-    fn loop_control_does_not_cross_function() errors compiler::CompilerError:
+    fn loop_control_does_not_cross_function() errors std::compiler::CompilerError:
         static compile:
             loop:
                 fn f():
                     continue
                 break
-    test::rejects_at("lower-semantic-break-in-fn", compiler::DiagnosticCode::ContinueOutsideLoop, 406, 21, loop_control_does_not_cross_function)
+    std::test::rejects_at("lower-semantic-break-in-fn", std::compiler::DiagnosticCode::ContinueOutsideLoop, 406, 21, loop_control_does_not_cross_function)
 
     # sr-loop-bindings-visible-in-body: a loop's element binding is
     # established on body entry.
-    fn loop_binding_visible_in_body() errors compiler::CompilerError:
+    fn loop_binding_visible_in_body() errors std::compiler::CompilerError:
         static compile:
             loop x in [1, 2, 3]:
                 x + 1
-    test::value("sr-loop-bindings-visible-in-body", [2, 3, 4], loop_binding_visible_in_body)
+    std::test::value("sr-loop-bindings-visible-in-body", [2, 3, 4], loop_binding_visible_in_body)
 
     # sr-parameters-visible-in-body: parameters are established at function
     # entry.
-    fn parameters_visible_in_body() errors compiler::CompilerError:
+    fn parameters_visible_in_body() errors std::compiler::CompilerError:
         static compile:
             fn f(a, b):
                 a + b
 
             f(20, 22)
-    test::value("sr-parameters-visible-in-body", 42, parameters_visible_in_body)
+    std::test::value("sr-parameters-visible-in-body", 42, parameters_visible_in_body)
 
 # ---------------------------------------------------------------------------
 # A named function sees itself, and nothing later
 
 fn register_self_reference_tests():
     # sr-self-recursion: a named function calls itself directly.
-    fn self_recursion() errors compiler::CompilerError:
+    fn self_recursion() errors std::compiler::CompilerError:
         static compile:
             fn factorial(n):
                 if n == 0:
@@ -439,10 +439,10 @@ fn register_self_reference_tests():
                     n * factorial(n - 1)
 
             factorial(5)
-    test::value("sr-self-recursion", 120, self_recursion)
+    std::test::value("sr-self-recursion", 120, self_recursion)
 
     # sr-self-recursion-nested: a nested named function calls itself.
-    fn nested_self_recursion() errors compiler::CompilerError:
+    fn nested_self_recursion() errors std::compiler::CompilerError:
         static compile:
             fn outer(n):
                 fn count(k):
@@ -454,11 +454,11 @@ fn register_self_reference_tests():
                 count(n)
 
             outer(4)
-    test::value("sr-self-recursion-nested", 4, nested_self_recursion)
+    std::test::value("sr-self-recursion-nested", 4, nested_self_recursion)
 
     # sr-self-binding-not-a-sibling: a named function sees itself, not a
     # later function: rejected at f's call of g.
-    fn self_binding_not_a_sibling() errors compiler::CompilerError:
+    fn self_binding_not_a_sibling() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 g()
@@ -467,22 +467,22 @@ fn register_self_reference_tests():
                 f()
 
             0
-    test::rejects_at("sr-self-binding-not-a-sibling", compiler::DiagnosticCode::Unbound, 464, 17, self_binding_not_a_sibling)
+    std::test::rejects_at("sr-self-binding-not-a-sibling", std::compiler::DiagnosticCode::Unbound, 464, 17, self_binding_not_a_sibling)
 
     # sr-function-value-alias: an alias of an existing function is legal,
     # and calls it.
-    fn function_value_alias() errors compiler::CompilerError:
+    fn function_value_alias() errors std::compiler::CompilerError:
         static compile:
             fn f(x):
                 x + 1
 
             g = f
             g(41)
-    test::value("sr-function-value-alias", 42, function_value_alias)
+    std::test::value("sr-function-value-alias", 42, function_value_alias)
 
     # sr-value-does-not-see-itself: a value bound in a function is never
     # visible before its binding there: rejected at g in `f = g`.
-    fn value_does_not_see_itself() errors compiler::CompilerError:
+    fn value_does_not_see_itself() errors std::compiler::CompilerError:
         static compile:
             fn make():
                 f = g
@@ -490,7 +490,7 @@ fn register_self_reference_tests():
                 f
 
             0
-    test::rejects_at("sr-value-does-not-see-itself", compiler::DiagnosticCode::Unbound, 488, 21, value_does_not_see_itself)
+    std::test::rejects_at("sr-value-does-not-see-itself", std::compiler::DiagnosticCode::Unbound, 488, 21, value_does_not_see_itself)
 
 # ---------------------------------------------------------------------------
 # A scope binds a name once; a nested scope may shadow it
@@ -498,7 +498,7 @@ fn register_self_reference_tests():
 fn register_duplicate_tests():
     # sr-duplicate-function, lower-semantic-duplicate-fn: two functions of
     # one name in one scope are a duplicate, at the second.
-    fn duplicate_function() errors compiler::CompilerError:
+    fn duplicate_function() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 1
@@ -506,46 +506,46 @@ fn register_duplicate_tests():
                 2
 
             0
-    test::rejects_at("duplicate-function-in-one-scope", compiler::DiagnosticCode::Duplicate, 505, 13, duplicate_function)
+    std::test::rejects_at("duplicate-function-in-one-scope", std::compiler::DiagnosticCode::Duplicate, 505, 13, duplicate_function)
 
     # sr-duplicate-value, lower-semantic-duplicate: a second binding of a
     # value name in one scope is a duplicate, at the second.
-    fn duplicate_value() errors compiler::CompilerError:
+    fn duplicate_value() errors std::compiler::CompilerError:
         static compile:
             x = 1
             x = 2
-    test::rejects_at("duplicate-value-in-one-scope", compiler::DiagnosticCode::Duplicate, 516, 13, duplicate_value)
+    std::test::rejects_at("duplicate-value-in-one-scope", std::compiler::DiagnosticCode::Duplicate, 516, 13, duplicate_value)
 
     # lower-semantic-param-rebind: binding a parameter's name in the body is
     # a duplicate, at the binding.
-    fn parameter_rebinding() errors compiler::CompilerError:
+    fn parameter_rebinding() errors std::compiler::CompilerError:
         static compile:
             fn f(a):
                 a = 1
 
             0
-    test::rejects_at("lower-semantic-param-rebind", compiler::DiagnosticCode::Duplicate, 524, 17, parameter_rebinding)
+    std::test::rejects_at("lower-semantic-param-rebind", std::compiler::DiagnosticCode::Duplicate, 524, 17, parameter_rebinding)
 
     # lower-duplicate-params-located: duplicate parameters are reported at
     # the function's parameter list.
-    fn duplicate_parameters() errors compiler::CompilerError:
+    fn duplicate_parameters() errors std::compiler::CompilerError:
         static compile:
             x = 1
             fn f(a, b, a):
                 a
 
             0
-    test::rejects_at("lower-duplicate-params-located", compiler::DiagnosticCode::Duplicate, 534, 17, duplicate_parameters)
+    std::test::rejects_at("lower-duplicate-params-located", std::compiler::DiagnosticCode::Duplicate, 534, 17, duplicate_parameters)
 
     # sr-shadowing-in-nested-scope-allowed: a nested scope may shadow an
     # outer name.
-    fn nested_scope_shadows() errors compiler::CompilerError:
+    fn nested_scope_shadows() errors std::compiler::CompilerError:
         static compile:
             x = 1
             if true:
                 x = 2
                 x
-    test::value("sr-shadowing-in-nested-scope-allowed", 2, nested_scope_shadows)
+    std::test::value("sr-shadowing-in-nested-scope-allowed", 2, nested_scope_shadows)
 
 # ---------------------------------------------------------------------------
 # A later shadowing binding never reaches back; a closure captures what
@@ -554,7 +554,7 @@ fn register_duplicate_tests():
 fn register_shadowing_tests():
     # sr-forward-closure-capture: a closure cannot capture a binding
     # introduced after it: rejected at get's x, as a forward reference.
-    fn forward_closure_capture() errors compiler::CompilerError:
+    fn forward_closure_capture() errors std::compiler::CompilerError:
         static compile:
             fn make():
                 fn get():
@@ -564,11 +564,11 @@ fn register_shadowing_tests():
                 get
 
             0
-    rejects_opening("sr-forward-closure-capture", compiler::DiagnosticCode::Unbound, 561, 21, "unbound name \"x\": \"x\" is declared later", forward_closure_capture)
+    rejects_opening("sr-forward-closure-capture", std::compiler::DiagnosticCode::Unbound, 561, 21, "unbound name \"x\": \"x\" is declared later", forward_closure_capture)
 
     # sr-backward-closure-capture: a closure captures a binding established
     # before it.
-    fn backward_closure_capture() errors compiler::CompilerError:
+    fn backward_closure_capture() errors std::compiler::CompilerError:
         static compile:
             fn make():
                 x = 5
@@ -578,33 +578,33 @@ fn register_shadowing_tests():
                 get
 
             make()()
-    test::value("sr-backward-closure-capture", 5, backward_closure_capture)
+    std::test::value("sr-backward-closure-capture", 5, backward_closure_capture)
 
     # sr-shadow-early-reference: a reference before a shadowing binding
     # reads the outer binding; one after it, the new inner binding.
-    fn shadow_early_reference() errors compiler::CompilerError:
+    fn shadow_early_reference() errors std::compiler::CompilerError:
         static compile:
             x = "outer"
             if true:
                 early = x
                 x = "inner"
                 [early, x]
-    test::value("sr-shadow-early-reference", ["outer", "inner"], shadow_early_reference)
+    std::test::value("sr-shadow-early-reference", ["outer", "inner"], shadow_early_reference)
 
     # sr-shadow-hygiene-straight-line: the same in straight-line code
     # (the Tcl test's lowering renames the later binding).
-    fn shadow_straight_line() errors compiler::CompilerError:
+    fn shadow_straight_line() errors std::compiler::CompilerError:
         static compile:
             x = 1
             if true:
                 a = x
                 x = 2
                 [a, x]
-    test::value("sr-shadow-hygiene-straight-line", [1, 2], shadow_straight_line)
+    std::test::value("sr-shadow-hygiene-straight-line", [1, 2], shadow_straight_line)
 
     # sr-shadow-closure: a closure made before a shadowing binding captures
     # the outer binding; one made after it, the inner.
-    fn shadow_closure() errors compiler::CompilerError:
+    fn shadow_closure() errors std::compiler::CompilerError:
         static compile:
             x = "outer"
             if true:
@@ -616,11 +616,11 @@ fn register_shadowing_tests():
                     x
 
                 [before(), after()]
-    test::value("sr-shadow-closure", ["outer", "inner"], shadow_closure)
+    std::test::value("sr-shadow-closure", ["outer", "inner"], shadow_closure)
 
     # sr-shadow-closure-in-function: the same, through a function's own
     # scope.
-    fn shadow_closure_in_function() errors compiler::CompilerError:
+    fn shadow_closure_in_function() errors std::compiler::CompilerError:
         static compile:
             x = 10
             fn f():
@@ -631,11 +631,11 @@ fn register_shadowing_tests():
                 [before(), x]
 
             f()
-    test::value("sr-shadow-closure-in-function", [10, 20], shadow_closure_in_function)
+    std::test::value("sr-shadow-closure-in-function", [10, 20], shadow_closure_in_function)
 
     # sr-shadow-parameter: a later local named like an outer parameter does
     # not capture an earlier closure.
-    fn shadow_parameter() errors compiler::CompilerError:
+    fn shadow_parameter() errors std::compiler::CompilerError:
         static compile:
             fn outer(x):
                 fn inner():
@@ -648,11 +648,11 @@ fn register_shadowing_tests():
                 inner()
 
             outer(1)
-    test::value("sr-shadow-parameter", [1, 99], shadow_parameter)
+    std::test::value("sr-shadow-parameter", [1, 99], shadow_parameter)
 
     # lower-if-value-scopes: an if value's branches are scopes of their own:
     # the branch binding shadows x only inside the if value.
-    fn if_value_branch_scope() errors compiler::CompilerError:
+    fn if_value_branch_scope() errors std::compiler::CompilerError:
         static compile:
             x = 1
             y = if x == 1:
@@ -661,7 +661,7 @@ fn register_shadowing_tests():
             else:
                 0
             [x, y]
-    test::value("lower-if-value-scopes", [1, 2], if_value_branch_scope)
+    std::test::value("lower-if-value-scopes", [1, 2], if_value_branch_scope)
 
 # ---------------------------------------------------------------------------
 # An unbound reference is reported where it is written, and says "declared
@@ -669,22 +669,22 @@ fn register_shadowing_tests():
 
 fn register_unbound_diagnostic_tests():
     # lower-semantic-unbound: a name nothing binds, at the reference.
-    fn unbound_name() errors compiler::CompilerError:
+    fn unbound_name() errors std::compiler::CompilerError:
         static compile:
             y = nope
-    test::rejects_at("lower-semantic-unbound", compiler::DiagnosticCode::Unbound, 674, 17, unbound_name)
+    std::test::rejects_at("lower-semantic-unbound", std::compiler::DiagnosticCode::Unbound, 674, 17, unbound_name)
 
     # lower-semantic-before-binding: a reference before the binding of its
     # name is a forward reference, and the message says so.
-    fn reference_before_binding() errors compiler::CompilerError:
+    fn reference_before_binding() errors std::compiler::CompilerError:
         static compile:
             y = x
             x = 1
-    rejects_saying("lower-semantic-before-binding", compiler::DiagnosticCode::Unbound, 681, 17, "unbound name \"x\": \"x\" is declared later; forward references are not allowed (a binding is visible only after it is established)", reference_before_binding)
+    rejects_saying("lower-semantic-before-binding", std::compiler::DiagnosticCode::Unbound, 681, 17, "unbound name \"x\": \"x\" is declared later; forward references are not allowed (a binding is visible only after it is established)", reference_before_binding)
 
     # sr-error-locality: the diagnostic is at the illegal reference, not at
     # the later declaration.
-    fn error_at_reference() errors compiler::CompilerError:
+    fn error_at_reference() errors std::compiler::CompilerError:
         static compile:
             a = 1
             b = later
@@ -692,21 +692,21 @@ fn register_unbound_diagnostic_tests():
                 b
 
             later = 3
-    test::rejects_at("sr-error-locality", compiler::DiagnosticCode::Unbound, 690, 17, error_at_reference)
+    std::test::rejects_at("sr-error-locality", std::compiler::DiagnosticCode::Unbound, 690, 17, error_at_reference)
 
     # sr-decl-hint-only-in-message: an undeclared name gets the plain
     # message, without the "declared later" hint.
-    fn undeclared_name_plain_message() errors compiler::CompilerError:
+    fn undeclared_name_plain_message() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 nothing_here()
 
             0
-    rejects_saying("sr-decl-hint-only-in-message", compiler::DiagnosticCode::Unbound, 702, 17, "unbound name \"nothing_here\"", undeclared_name_plain_message)
+    rejects_saying("sr-decl-hint-only-in-message", std::compiler::DiagnosticCode::Unbound, 702, 17, "unbound name \"nothing_here\"", undeclared_name_plain_message)
 
     # sr-decl-hint-is-scope-accurate: a binding of the same name in an
     # unrelated scope does not make the message claim "declared later".
-    fn unrelated_binding_no_hint() errors compiler::CompilerError:
+    fn unrelated_binding_no_hint() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 helper()
@@ -716,11 +716,11 @@ fn register_unbound_diagnostic_tests():
                 helper
 
             0
-    rejects_saying("sr-decl-hint-is-scope-accurate", compiler::DiagnosticCode::Unbound, 712, 17, "unbound name \"helper\"", unrelated_binding_no_hint)
+    rejects_saying("sr-decl-hint-is-scope-accurate", std::compiler::DiagnosticCode::Unbound, 712, 17, "unbound name \"helper\"", unrelated_binding_no_hint)
 
     # lower-elif-error-location: an unbound name in an elif condition is
     # reported at the condition.
-    fn unbound_in_elif_condition() errors compiler::CompilerError:
+    fn unbound_in_elif_condition() errors std::compiler::CompilerError:
         static compile:
             x = 1
             if x < 0:
@@ -731,11 +731,11 @@ fn register_unbound_diagnostic_tests():
                 3
             else:
                 4
-    test::rejects_at("lower-elif-error-location", compiler::DiagnosticCode::Unbound, 728, 18, unbound_in_elif_condition)
+    std::test::rejects_at("lower-elif-error-location", std::compiler::DiagnosticCode::Unbound, 728, 18, unbound_in_elif_condition)
 
     # lower-elif-error-location-in-branch: an unbound name in the final else
     # branch of an elif chain is reported there.
-    fn unbound_in_elif_chain_else() errors compiler::CompilerError:
+    fn unbound_in_elif_chain_else() errors std::compiler::CompilerError:
         static compile:
             x = 1
             if x < 0:
@@ -744,7 +744,7 @@ fn register_unbound_diagnostic_tests():
                 2
             else:
                 nope
-    test::rejects_at("lower-elif-error-location-in-branch", compiler::DiagnosticCode::Unbound, 746, 17, unbound_in_elif_chain_else)
+    std::test::rejects_at("lower-elif-error-location-in-branch", std::compiler::DiagnosticCode::Unbound, 746, 17, unbound_in_elif_chain_else)
 
 # ---------------------------------------------------------------------------
 # Boolean operators: truth tables and short-circuiting
@@ -755,16 +755,16 @@ fn register_unbound_diagnostic_tests():
 fn register_boolean_operator_tests(yes: bool, no: bool, failing: int):
     # lower-boolean-values: the truth tables of and, or, not and != over the
     # four pairs of Bools.
-    fn boolean_truth_tables() errors compiler::CompilerError:
+    fn boolean_truth_tables() errors std::compiler::CompilerError:
         static compile:
             fn t(a, b):
                 [a and b, a or b, not a, a != b]
             [t(yes, yes), t(yes, no), t(no, yes), t(no, no)]
-    test::value("lower-boolean-values", [[true, true, false, false], [false, true, false, true], [false, true, true, true], [false, false, true, false]], boolean_truth_tables)
+    std::test::value("lower-boolean-values", [[true, true, false, false], [false, true, false, true], [false, true, true, true], [false, false, true, false]], boolean_truth_tables)
 
     # lower-boolean-short-circuit: the right operand is not evaluated when
     # the left one decides: probe(failing) would fail.
-    fn boolean_short_circuit() errors compiler::CompilerError:
+    fn boolean_short_circuit() errors std::compiler::CompilerError:
         static compile:
             fn probe(k: int) -> bool errors RightOperandEvaluated:
                 if k > 0:
@@ -778,7 +778,7 @@ fn register_boolean_operator_tests(yes: bool, no: bool, failing: int):
                 on RightOperandEvaluated:
                     []
             r
-    test::value("lower-boolean-short-circuit", [true, false], boolean_short_circuit)
+    std::test::value("lower-boolean-short-circuit", [true, false], boolean_short_circuit)
 
 # ---------------------------------------------------------------------------
 # Names the front end introduces cannot be shadowed: a binding named `list`
@@ -787,24 +787,24 @@ fn register_boolean_operator_tests(yes: bool, no: bool, failing: int):
 fn register_hygiene_tests():
     # lower-hygiene-list, hir-rootref-program-binding: a binding named list
     # does not change a list literal after it.
-    fn list_binding_keeps_literals() errors compiler::CompilerError:
+    fn list_binding_keeps_literals() errors std::compiler::CompilerError:
         static compile:
             list = 5
             [1, list]
-    test::value("lower-hygiene-list", [1, 5], list_binding_keeps_literals)
+    std::test::value("lower-hygiene-list", [1, 5], list_binding_keeps_literals)
 
     # hir-rootref-used-before-shadowing-binding: a list literal before a
     # binding named list, and one after it, both build lists.
-    fn list_literal_before_and_after_binding() errors compiler::CompilerError:
+    fn list_literal_before_and_after_binding() errors std::compiler::CompilerError:
         static compile:
             x = [1]
             list = 2
             [x, list]
-    test::value("hir-rootref-used-before-shadowing-binding", [[1], 2], list_literal_before_and_after_binding)
+    std::test::value("hir-rootref-used-before-shadowing-binding", [[1], 2], list_literal_before_and_after_binding)
 
     # lower-hygiene-nested: a parameter named list and a branch binding
     # named list.
-    fn list_parameter_and_branch_binding() errors compiler::CompilerError:
+    fn list_parameter_and_branch_binding() errors std::compiler::CompilerError:
         static compile:
             fn f(list):
                 if true:
@@ -814,41 +814,41 @@ fn register_hygiene_tests():
                     [list]
 
             [f(1), []]
-    test::value("lower-hygiene-nested", [[2], []], list_parameter_and_branch_binding)
+    std::test::value("lower-hygiene-nested", [[2], []], list_parameter_and_branch_binding)
 
     # hir-rootref-closure-frames: a captured binding named list keeps its
     # value in the closure, and list literals still build lists.
-    fn list_binding_captured() errors compiler::CompilerError:
+    fn list_binding_captured() errors std::compiler::CompilerError:
         static compile:
             list = 3
             fn g():
                 list
 
             [g(), list]
-    test::value("hir-rootref-closure-frames", [3, 3], list_binding_captured)
+    std::test::value("hir-rootref-closure-frames", [3, 3], list_binding_captured)
 
     # lower-hygiene-diagnostics: a diagnostic about a binding named list
     # spells it list, as the source does.
-    fn list_duplicate_spelled_as_written() errors compiler::CompilerError:
+    fn list_duplicate_spelled_as_written() errors std::compiler::CompilerError:
         static compile:
             list = 1
             list = 2
             []
-    rejects_saying("lower-hygiene-diagnostics", compiler::DiagnosticCode::Duplicate, 835, 13, "duplicate binding \"list\" in the same lexical scope", list_duplicate_spelled_as_written)
+    rejects_saying("lower-hygiene-diagnostics", std::compiler::DiagnosticCode::Duplicate, 835, 13, "duplicate binding \"list\" in the same lexical scope", list_duplicate_spelled_as_written)
 
 # ---------------------------------------------------------------------------
 # A local named like a namespace does not hide its qualified names
 
 fn register_namespace_tests():
-    # sr-module-local-shadow-of-namespace-name: mathish::inc is still the
+    # sr-module-local-shadow-of-namespace-name: std::mathish::inc is still the
     # module's function after a local named mathish.
-    fn local_named_like_namespace() errors compiler::CompilerError:
+    fn local_named_like_namespace() errors std::compiler::CompilerError:
         static compile:
             mathish = 5
-            [mathish, mathish::inc(0)]
-    test::value("sr-module-local-shadow-of-namespace-name", [5, 1], local_named_like_namespace)
+            [mathish, std::mathish::inc(0)]
+    std::test::value("sr-module-local-shadow-of-namespace-name", [5, 1], local_named_like_namespace)
 
-with context test::suite()
+with context std::test::suite()
 register_source_order_tests()
 register_scope_kind_tests()
 register_self_reference_tests()
@@ -858,4 +858,4 @@ register_unbound_diagnostic_tests()
 register_boolean_operator_tests(true, false, 1)
 register_hygiene_tests()
 register_namespace_tests()
-test::report()
+std::test::report()

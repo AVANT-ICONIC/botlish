@@ -96,7 +96,7 @@ proc ::cbind::generate::Seconds {t0} {
 }
 
 # Generates PROFILE (a name or a loaded profile) for TARGET. OPTIONS:
-# bool 0|1 (whether C _Bool maps to ffi::c::Bool), evidence (overrides the
+# bool 0|1 (whether C _Bool maps to std::ffi::c::Bool), evidence (overrides the
 # profile's), fetch 0|1. Returns {files FILES model MODEL timing TIMING}.
 proc ::cbind::generate::run {profile target {options {}}} {
     set options [dict merge {bool 1 fetch 0 evidence ""} $options]

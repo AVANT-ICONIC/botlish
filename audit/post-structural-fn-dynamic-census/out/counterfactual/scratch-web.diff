@@ -1,5 +1,5 @@
---- /mnt/c/Users/MarkusWagner/dev/botlish/lib/web.bot	2026-09-28 12:29:16.519704200 +0200
-+++ /tmp/botlish-post-structural-fn-cf-1/lib/web.bot	2026-09-28 22:39:25.379128745 +0200
+--- /mnt/c/Users/MarkusWagner/dev/botlish/stdlib/web.bot	2026-09-28 12:29:16.519704200 +0200
++++ /tmp/botlish-post-structural-fn-cf-1/stdlib/web.bot	2026-09-28 22:39:25.379128745 +0200
 @@ -123,15 +123,22 @@
      # are an untyped-parameter Botlish function and a native, neither of
      # which is a "typed callable" that rule would block from flowing

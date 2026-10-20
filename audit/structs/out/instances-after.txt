@@ -21,12 +21,12 @@ semantic instances: 12; with a struct type: 7; distinct codegen keys of those: 7
 codegen instances used: 12; emitted functions: 12; struct codegen instances: 6
   semantic affected?<Test, any> -> bool (valid)
   semantic test_deps<Test> -> List[str] (valid)
-  semantic list::find<List[Test], block(e94)/1 -> bool> -> Test (valid)
+  semantic std::list::find<List[Test], block(e94)/1 -> bool> -> Test (valid)
   semantic test_name<Test> -> str (valid)
   semantic select_affected<List[Test], block(e55)/1 -> bool> -> List[Test] (valid)
   semantic affected?<Test, block(e55)/1 -> bool> -> bool (valid)
   semantic first_affected<List[Test], block(e55)/1 -> bool> -> str (valid)
-  codegen list::find<List[Test], block>
+  codegen std::list::find<List[Test], block>
   codegen test_name<Test>
   codegen test_deps<Test>
   codegen affected?<Test, block>

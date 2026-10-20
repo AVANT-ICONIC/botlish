@@ -6,47 +6,47 @@
 # unless it is imported.
 #
 # Ports the halves of tests/method-sugar.test (which stays authoritative and
-# unchanged) whose programs import list or nothing and need str and byte
+# unchanged) whose programs import std::list or nothing and need str and byte
 # absent (the halves with them imported are in methods.bot):
 # method-not-visible-other-namespace-import and
 # method-not-visible-no-type-import-needed-or-used (its program without any
 # import).
 #
 # Imports: compiler and test (the framework); list (the Tcl programs' own
-# import). The absence of `import str` and `import byte` is the property:
-# str::concat and byte::complement must not be candidates. (The framework's
+# import). The absence of `import std::str` and `import std::byte` is the property:
+# std::str::concat and std::byte::complement must not be candidates. (The framework's
 # own imports add no member named concat or complement.) A method call whose
 # function exists in a namespace the file does not import is that missing
-# import (MissingImport, DIAGNOSTIC-RECOVERY.md): str::concat, an intrinsic,
+# import (MissingImport, DIAGNOSTIC-RECOVERY.md): std::str::concat, an intrinsic,
 # is known to every compilation; byte, a module nothing here loads, is not
 # searched.
-import compiler
-import list
-import test
+import std::compiler
+import std::list
+import std::test
 
 fn register_visibility_tests():
     # method-not-visible-other-namespace-import: with only list imported,
     # "abc".concat("d") finds no function `concat`, bound list member or not:
     # str is what is missing.
-    fn b_bound_list_member() errors compiler::CompilerError:
+    fn b_bound_list_member() errors std::compiler::CompilerError:
         static compile:
-            at = list::at
+            at = std::list::at
             "abc".concat("d")
-    fn b_list_imported() errors compiler::CompilerError:
+    fn b_list_imported() errors std::compiler::CompilerError:
         static compile:
             "abc".concat("d")
-    test::rejects_containing("method-not-visible-other-namespace-import/bound-list-member", compiler::DiagnosticCode::MissingImport, "namespace \"str\" is not imported; add `import str` to use `str::concat`", b_bound_list_member)
-    test::rejects_containing("method-not-visible-other-namespace-import/list-imported", compiler::DiagnosticCode::MissingImport, "namespace \"str\" is not imported; add `import str` to use `str::concat`", b_list_imported)
+    std::test::rejects_containing("method-not-visible-other-namespace-import/bound-list-member", std::compiler::DiagnosticCode::MissingImport, "namespace \"std::str\" is not imported; add `import std::str` to use `std::str::concat`", b_bound_list_member)
+    std::test::rejects_containing("method-not-visible-other-namespace-import/list-imported", std::compiler::DiagnosticCode::MissingImport, "namespace \"std::str\" is not imported; add `import std::str` to use `std::str::concat`", b_list_imported)
 
-    # method-not-visible-no-type-import-needed-or-used: byte::complement
+    # method-not-visible-no-type-import-needed-or-used: std::byte::complement
     # takes a Byte, but with nothing of byte imported 200.complement() has
     # no function `complement` in scope.
-    fn b_no_import() errors compiler::CompilerError:
+    fn b_no_import() errors std::compiler::CompilerError:
         static compile:
             x = 200
             x.complement()
-    test::rejects_containing("method-not-visible-no-type-import-needed-or-used/no-import", compiler::DiagnosticCode::NotAStruct, "cannot project field \"complement\" from a value of type int: only a struct has fields; as a method-style call, no function named \"complement\" is visible here either", b_no_import)
+    std::test::rejects_containing("method-not-visible-no-type-import-needed-or-used/no-import", std::compiler::DiagnosticCode::NotAStruct, "cannot project field \"complement\" from a value of type int: only a struct has fields; as a method-style call, no function named \"complement\" is visible here either", b_no_import)
 
-with context test::suite()
+with context std::test::suite()
 register_visibility_tests()
-test::report()
+std::test::report()

@@ -1,7 +1,7 @@
 # corpus.tcl -- observational audit of METHOD-ELIGIBLE over the frozen corpus
 # (WARNINGS-METHOD-ELIGIBLE.md, "Corpus findings"). Compiles every program of
 # examples/stdlib, examples/surface (minus the deliberate rejections),
-# bench/*.bot and lib/*.bot with warnings on (collected, not emitted),
+# bench/*.bot and stdlib/*.bot with warnings on (collected, not emitted),
 # classifies the findings per distinct (callee, receiver-form) pattern, and
 # *checks the round-trip law on every distinct pattern*: the call is respelled
 # with method sugar in a scratch copy, and the respelled program must compile,
@@ -38,7 +38,7 @@ set programs [concat \
     [lsort [glob -directory [file join $root examples stdlib] *.bot]] \
     [lsort [glob -directory [file join $root examples surface] *.bot]] \
     [lsort [glob -directory [file join $root bench] *.bot]] \
-    [lsort [glob -directory [file join $root lib] *.bot]]]
+    [lsort [glob -directory [file join $root stdlib] *.bot]]]
 
 if {$only ne ""} {
     set programs [lmap p $programs {if {![string match $only $p]} continue; set p}]
@@ -46,8 +46,8 @@ if {$only ne ""} {
 
 set scratch [file join [expr {[info exists ::env(TMPDIR)] ? $::env(TMPDIR) : "/tmp"}] method-eligible-audit-[pid]]
 file mkdir $scratch
-set libCopy [file join $scratch lib]
-file copy [file join $root lib] $libCopy
+set libCopy [file join $scratch stdlib]
+file copy [file join $root stdlib] $libCopy
 set realLib $::core::libraryDir
 
 proc readText {path} {
@@ -357,7 +357,7 @@ puts ""
 # applied (the corpus is frozen and nothing is marked `nomethod`); the tool
 # only counts how often each curated callee is a finding.
 set nomethodCandidates {
-    mutable_array::copy {the receiver would be the *destination* of a five-parameter copy (`dst.copy(at, src, from, n)` reads as copying dst)}
+    std::mutable_array::copy {the receiver would be the *destination* of a five-parameter copy (`dst.copy(at, src, from, n)` reads as copying dst)}
     bit_and             {symmetric operands: neither is the subject (`a.bit_and(b)`)}
     bit_or              {symmetric operands: neither is the subject (`a.bit_or(b)`)}
     bit_xor             {symmetric operands: neither is the subject (`a.bit_xor(b)`)}
@@ -427,7 +427,7 @@ if {$whole} {
         puts "[format %-40s [rel $path]] $n warning(s), $steps step(s): $status"
         # Restore the scratch tree.
         file delete -force $libCopy
-        file copy [file join $root lib] $libCopy
+        file copy [file join $root stdlib] $libCopy
     }
     puts ""
     puts "whole-program failures: $wholeFailures"

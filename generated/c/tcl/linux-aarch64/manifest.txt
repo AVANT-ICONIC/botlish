@@ -27,21 +27,21 @@ header generic/tclPlatDecls.h c8603094
 header generic/tclTomMathDecls.h 1ebc0288
 shim_library botlish_shim_tcl_47be8309
 file layouts-check.c 363 7cb833ad
-file layouts.tsv 1103 97428e6b
-file report.tsv 1497 13b39a20
-file report.txt 170 076c0d88
+file layouts.tsv 1103 03c226a0
+file report.tsv 1497 d74adad5
+file report.txt 170 19e07d04
 file shim.c 72 47be8309
-file tcl/ctypes.bot 255 cdf17a80
-file tcl/decls.bot 3638 057fc900
-file tcl/layouts.bot 427 6d20d719
+file tcl/ctypes.bot 255 7fbc7eca
+file tcl/decls.bot 3708 547148f4
+file tcl/layouts.bot 427 f409fe3a
 file tcl/oo.bot 14 87752fc2
-file tcl/oodecls.bot 227 43c573ea
-file tcl/platdecls.bot 23 a575194a
-file tcl/tcl.bot 312 ed313b38
-file tcl/thunks/decls.bot 84 39ca5fe6
-file tcl/thunks/oo.bot 16 f2d48922
-file tcl/thunks/tcl.bot 25 28e8a831
-file tcl/tommathdecls.bot 924 730e16c4
+file tcl/oodecls.bot 233 9075ad5f
+file tcl/platdecls.bot 25 6f35c44d
+file tcl/tcl.bot 322 76c7974c
+file tcl/thunks/decls.bot 84 7772ee3c
+file tcl/thunks/oo.bot 16 dc91a24d
+file tcl/thunks/tcl.bot 25 137a29d4
+file tcl/tommathdecls.bot 926 55c17528
 libraries tcl/decls.bot tcl9.0
 libraries tcl/oodecls.bot tcl9.0
 libraries tcl/platdecls.bot tcl9.0

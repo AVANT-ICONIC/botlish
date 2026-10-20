@@ -5,7 +5,7 @@
 #
 # Botlish has no general type variables (`fn f[T](...)` does not exist and
 # this file adds none). Some operations are nevertheless *intrinsically*
-# relational -- `list::at(List[T], i)` is a `T`, `from_list(List[T])` is a
+# relational -- `std::list::at(List[T], i)` is a `T`, `from_list(List[T])` is a
 # `MutableArray[T]` -- and the compiler knows such relations through
 # per-native rules rather than through function types: a native's
 # -result-shape (core/native.tcl), consumed by hir::types::ShapeResult, types
@@ -17,7 +17,7 @@
 #     move values into a typed destination without the same proof. There is
 #     no implicit guard and no widening -- an unproven store is a
 #     compile-time TYPE error;
-#   * the factory check of mutable_array::generate: the factory is called
+#   * the factory check of std::mutable_array::generate: the factory is called
 #     with every Int index 0..n-1, so its contract must accept an Int;
 #   * the argument "contexts" the typed-contract escape audit
 #     (hir/callables.tcl) needs to tell a call that merely *uses* a typed
@@ -26,7 +26,7 @@
 #     its element contract.
 #
 # MutableArray's constructors used to be ordinary Botlish functions of
-# lib/mutable_array.bot that a "module rule" here typed at every call from
+# stdlib/mutable_array.bot that a "module rule" here typed at every call from
 # their argument types -- in place of their bodies, which the ownership
 # discipline therefore never saw: `create(2, make_coroutine())` stored one
 # coroutine in two slots. They are intrinsics now, each with a result shape
@@ -43,26 +43,26 @@ namespace eval hir::containers {
     #                    argument 0's array
     #   {vector I}       a MutableVector store: argument I lands in an
     #                    element of argument 0's vector
-    #   copy             mutable_array::copy(dst, ds, src, ss, n)
+    #   copy             std::mutable_array::copy(dst, ds, src, ss, n)
     #   {fill I}         argument I lands in every slot of the result array
     #   {list I}         List argument I lands, element by element, in the
     #                    result collection
     #   {factory I}      argument I is a factory: called once per slot with
     #                    the slot's Int index, its results land in the slots
     variable nativeRules [dict create \
-        mutable_array::set             {store 2} \
-        mutable_array::swap            {store 2} \
+        std::mutable_array::set             {store 2} \
+        std::mutable_array::swap            {store 2} \
         mutable_array#swap_drop        {store 2} \
         mutable_array#set_drop         {store 2} \
-        mutable_array::copy            copy \
-        mutable_array::create          {fill 1} \
-        mutable_array::from_list       {list 0} \
-        mutable_array::generate        {factory 1} \
+        std::mutable_array::copy            copy \
+        std::mutable_array::create          {fill 1} \
+        std::mutable_array::from_list       {list 0} \
+        std::mutable_array::generate        {factory 1} \
         mutable_array#generate_drop    {factory 1} \
-        mutable_vector::push           {vector 1} \
-        mutable_vector::swap           {vector 2} \
+        std::mutable_vector::push           {vector 1} \
+        std::mutable_vector::swap           {vector 2} \
         mutable_vector#swap_drop       {vector 2} \
-        mutable_vector::from_list      {list 0}]
+        std::mutable_vector::from_list      {list 0}]
 }
 
 # The element contract a value of static type T is stored under: its own
@@ -85,8 +85,8 @@ proc hir::containers::ElementContract {t} {
 
 # 1 if native NAME cannot retain any of its arguments where a later reader
 # could find them: it returns a plain scalar and does not mutate a
-# MutableArray. Such a call merely *uses* its arguments (list::length,
-# type tests, mutable_array::capacity, ...), so it cannot erase a contract.
+# MutableArray. Such a call merely *uses* its arguments (std::list::length,
+# type tests, std::mutable_array::capacity, ...), so it cannot erase a contract.
 proc hir::containers::NonRetaining {name} {
     set meta [core::native::metadata $name]
     if {"mutarray-mutate" in [dict get $meta runtime]} {
@@ -222,7 +222,7 @@ proc hir::containers::VerifyNative {hirVar ranges e node name} {
     }
 }
 
-# mutable_array::set(ARRAY, i, VALUE) / swap: when ARRAY is a
+# std::mutable_array::set(ARRAY, i, VALUE) / swap: when ARRAY is a
 # MutableArray[T], VALUE must be proven admissible for T. The element
 # contract belongs to the array's type; a store never widens it.
 proc hir::containers::VerifyStore {hirVar ranges array value} {
@@ -246,7 +246,7 @@ proc hir::containers::VerifyStore {hirVar ranges array value} {
         [hir::range::show $range]] $value
 }
 
-# mutable_vector::push(VECTOR, VALUE) / swap(VECTOR, i, VALUE): when VECTOR is
+# std::mutable_vector::push(VECTOR, VALUE) / swap(VECTOR, i, VALUE): when VECTOR is
 # a MutableVector[T], VALUE must be proven admissible for T.
 proc hir::containers::VerifyElement {hirVar ranges vector value} {
     upvar 1 $hirVar hir
@@ -270,7 +270,7 @@ proc hir::containers::VerifyElement {hirVar ranges vector value} {
         [hir::range::show $range]] $value
 }
 
-# mutable_array::copy(DST, dstStart, SRC, srcStart, count): every copied
+# std::mutable_array::copy(DST, dstStart, SRC, srcStart, count): every copied
 # element must be valid in the destination's element contract.
 #
 #   typed destination MutableArray[T] (T other than any):
@@ -311,7 +311,7 @@ proc hir::containers::VerifyCopy {hirVar dst src} {
     }
 }
 
-# A factory argument F of native NAME (mutable_array::generate): the native
+# A factory argument F of native NAME (std::mutable_array::generate): the native
 # calls it with each slot's Int index, so its callable contract must take
 # exactly one argument that admits every Int (an untyped or `int`
 # parameter): a factory declaring a narrower parameter (`i: Byte`) could be

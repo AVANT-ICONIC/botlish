@@ -50,9 +50,9 @@ examples/surface/11-boolean-operators.bot
 examples/surface/12-if-value.bot
 examples/surface/13-hygiene.bot
 examples/surface/14-modules.bot
-lib/ascii.bot
-lib/byte.bot
-lib/char.bot
-lib/list.bot
-lib/mathish.bot
-lib/web.bot
+stdlib/ascii.bot
+stdlib/byte.bot
+stdlib/char.bot
+stdlib/list.bot
+stdlib/mathish.bot
+stdlib/web.bot

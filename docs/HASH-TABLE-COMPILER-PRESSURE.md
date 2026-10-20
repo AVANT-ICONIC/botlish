@@ -57,7 +57,7 @@ mutable contents, or a whole-program analysis.
 | [CP-3](#cp-3-a-field-path-is-a-new-container-each-time-it-is-written) | a field path is a new container each time it is written; writes through a field place are never proven | proof | cheap | yes (`a1e281d`) | proven, in-place |
 | [CP-4](#cp-4-facts-do-not-cross-a-call) | an index computed in one function and used in another | proof | costly | no | the main reason no table index is proven |
 | [CP-5](#cp-5-parallel-arrays-equal-capacities) | parallel arrays' equal capacities | proof | costly | no | |
-| [CP-6](#cp-6-mutable_vectorat-is-never-proven) | `mutable_vector::at` has no bounds registration | proof | cheap | no | |
+| [CP-6](#cp-6-mutable_vectorat-is-never-proven) | `std::mutable_vector::at` has no bounds registration | proof | cheap | no | |
 | [CP-7](#cp-7-a-collections-contents-cannot-bound-anothers-index) | one collection's contents cannot bound another's index | proof | costly | no (not a candidate) | |
 | [CP-8](#cp-8-the-binary-search-midpoint) | the binary-search midpoint | proof | moderate | no | |
 | [CG-1](#cg-1-every-mutablearray-access-is-a-helper-call) | every MutableArray access is a helper call, proven or not | codegen | moderate | yes (`0bd45ff`, `11fe677`) | at 6.6 -> 1.6 ns, set 9.3 -> 1.3 ns |
@@ -195,7 +195,7 @@ one at 0 shares and 0 detaches in steady state.
   ```
 
   The compact dict's growth helper is the same case: `T {index:
-  mutable_array::create(...), items: t.items}`.
+  std::mutable_array::create(...), items: t.items}`.
 * **Expected.** A literal returned from a function, entered into a place,
   or passed as a consumed argument is in an exclusive position. Its
   collection-bearing fields are exclusive positions too, so the binding
@@ -300,7 +300,7 @@ one at 0 shares and 0 detaches in steady state.
       cap = hashes.capacity()
       fn walk(i: int) -> int errors IndexNotFound:
           s = hashes.at(i)
-          if s < 0 or s == h and mutable_array::at(keys, i) == key:
+          if s < 0 or s == h and std::mutable_array::at(keys, i) == key:
               return i
           walk(next_slot(i, cap))
       walk(home(h, cap))
@@ -389,7 +389,7 @@ about the rest.
 
 ## Proofs
 
-The bounds of `mutable_array::at`/`set` are decided by
+The bounds of `std::mutable_array::at`/`set` are decided by
 `hir::completions::IndexBounds`, which is open-world and pattern-based
 (PROOF-FACT-CENSUS.md). A proven call lowers to a `*proven` opcode that
 has no error edge, so its function can stop being `may_error` and its
@@ -454,7 +454,7 @@ proven sets are `counts.set(0|1, 0)` on a capacity-2 allocation.
     opcodes and per-call verdicts are identical before and after, because
     that corpus was written around the old prover. In the tables, the
     only new proof is the bench driver's own miss-pool read,
-    `list::at(pool, mod(j, list::length(pool)))`.
+    `std::list::at(pool, mod(j, std::list::length(pool)))`.
   * In `lpmask`, the table written for the rules (every index reduced by
     its array at the access), every access becomes proven:
     `mutarraygetproven`/`setproven` throughout, and `store`, `counted`,
@@ -542,7 +542,7 @@ proven sets are `counts.set(0|1, 0)` on a capacity-2 allocation.
   pushes and then walked twice keeps the proof; two loops with a push
   between them do not. The review's second round found one route no size
   form saw: a mutating operation taken as a value (`p =
-  mutable_vector::push; p(v, 4)`, or one passed to a function or stored in
+  std::mutable_vector::push; p(v, 4)`, or one passed to a function or stored in
   a field) mutated whatever its caller passed, behind the copies the
   elaboration never wrote out for it, so it also broke value semantics
   (`c = v` then changed, on the baseline too). Such an operation is now
@@ -636,9 +636,9 @@ size-form equalities at a struct's construction sites, which is
 whole-program over the struct's literals. Costly. The alternatives are a
 layout with one array per probe sequence, or one `mod` per array.
 
-### CP-6. `mutable_vector::at` is never proven
+### CP-6. `std::mutable_vector::at` is never proven
 
-`mutable_vector::at` declares `IndexNotFound` but has no `-bounds`
+`std::mutable_vector::at` declares `IndexNotFound` but has no `-bounds`
 registration (core/mutvec.tcl), so no form proves it, not even
 `loop i from 0 to v.length(): v.at(i)`. The compact dict (`cd`) reads its
 entries with a checked `mvat` on every probe step. Candidate: a `-bounds`
@@ -791,7 +791,7 @@ Not prototyped.
   * `at(t, hash(i).mod(capacity(t)))` 580 -> 543 (the hash dominates).
 
   In examples/stdlib/hashtable.bot, `ht_probe_start` and `ht_probe_next`
-  become `rimod`: not `may_gc`, no safepoint, no root slots. lib/web.bot's
+  become `rimod`: not `may_gc`, no safepoint, no root slots. stdlib/web.bot's
   percent-encoding (`b.mod(16)`) becomes a mask. `bench/uri-steady.bot`
   runs 1.9 % fewer instructions.
 
@@ -815,7 +815,7 @@ Not prototyped.
   * the proof read only the self *tail* calls, so a non-tail self call
     (`x = f(i + 3, 2)`) was a way into the instance it never saw;
   * an `==` bound that is a native call with a registered Range
-    (`char::scalar_value(c)`) was taken as stable whatever its argument,
+    (`std::char::scalar_value(c)`) was taken as stable whatever its argument,
     so a `c` recomputed every step was a different bound each time.
 
   Both are fixed in the proof, not the lowering: every self call is a step
@@ -936,7 +936,7 @@ quality": FNV's distribution is not the problem).
 
 ### CO-2. Pure helper calls are never CSE'd or hoisted
 
-`mutable_array::capacity(t.hashes)` is called on every probe step of a
+`std::mutable_array::capacity(t.hashes)` is called on every probe step of a
 loop that never changes `t.hashes`. A helper call clobbers caller-saved
 registers, Cranelift treats it as reading and writing all memory, and NIR
 has no CSE of pure natives. Yet `capacity` is fixed for an array's
@@ -984,7 +984,7 @@ with CP-1..4 it would let a lookup be `may_error=false`.
 ### CO-5. Collecting loops and empty literals allocate
 
 * **Source.**
-  * `loop k from 0 to list::length(b): list::at(b, k)` on a one-element `b`
+  * `loop k from 0 to std::list::length(b): std::list::at(b, k)` on a one-element `b`
     allocates 3 objects (`listnew`'s empty List, a ListPlan, the
     materialized List), where `[x]` allocates 1.
   * `x = []` allocates a fresh List on every evaluation.
@@ -1079,7 +1079,7 @@ Brief section 34 asks for the operations that stay awkward or expensive
   So a step costs several helper calls where a compiled loop costs a load,
   a compare and an increment.
 * **Smallest plausible primitive.**
-  `mutable_array::probe_linear(hashes, keys, h, key) -> int`. It runs the
+  `std::mutable_array::probe_linear(hashes, keys, h, key) -> int`. It runs the
   whole probe sequence in Rust and returns the slot. The table's policy,
   layout, growth and deletion stay Botlish.
 * **Runtime and GC implications.** It allocates nothing, is no
@@ -1156,7 +1156,7 @@ CG-1, CG-2, RO-1 and the proofs.
   * the backends would agree only for equal keys;
   * an API that exposes slot order would have to stop doing so, or sort.
 * **Other users.** Every hash-based structure that takes untrusted keys,
-  such as parsers of request parameters (lib/web.bot).
+  such as parsers of request parameters (stdlib/web.bot).
 * **Prototype.** None. Whether `hash` is seeded, and whether iteration
   order is part of the semantics, are decisions for the hash
   specification that core/hashing.tcl defers ("seeding/collision-
@@ -1186,7 +1186,7 @@ two more verifiers, one hunting unsoundness and one hunting regressions.
 | AR-8 | a mutated handler payload binding (`on E details:`) had no entry copy | older | `e687ef5` |
 | AR-9 | a mask computed `mod` wrongly, and `rimodtotal` divided by zero (SIGFPE), under an induction fact that ignored a non-tail self call | CG-2 trusting an older unsound fact of hir/induction.tcl | merge `1198a1d` |
 | AR-10 | `rimodtotal` SIGFPE under an `==` bound whose native call's argument changed every step | the same | merge `1198a1d` |
-| AR-11 | a mutating operation taken as a function value (`p = mutable_vector::push; p(v, 4)`) mutated a copy's header too, and hid the mutation from the size forms | older; found by the bounds fix's second review round | `147e543`: such a value is now `MUTABLE-PLACE-RECEIVER` |
+| AR-11 | a mutating operation taken as a function value (`p = std::mutable_vector::push; p(v, 4)`) mutated a copy's header too, and hid the mutation from the size forms | older; found by the bounds fix's second review round | `147e543`: such a value is now `MUTABLE-PLACE-RECEIVER` |
 | AR-12 | the interpreter's `listloop` drained any vector reaching it through an `any` path, where the other backends raised the loop's TYPE error | older, interp only | `65d48d3` |
 
 The inline-array (CG-1) and hash (RO-1) reviews found nothing.
@@ -1230,7 +1230,7 @@ here:
   error from `ImportHeader`, identically on the baseline.
 * **The hash-table driver of `lp` had stopped compiling**, when its own
   module started importing `list`: `keys.at(i)` on an untyped parameter is
-  ambiguous between `list::at` and `mutable_array::at`. It is fixed in the
-  experiment (explicit `mutable_array::at`), and its fuzz runs and 12
+  ambiguous between `std::list::at` and `std::mutable_array::at`. It is fixed in the
+  experiment (explicit `std::mutable_array::at`), and its fuzz runs and 12
   mutants were run again.
 

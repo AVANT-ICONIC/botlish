@@ -9,13 +9,13 @@
 # of every width and signedness at random offsets with random gaps (padding)
 # between and after them, a random power-of-two alignment, sometimes a layout
 # nested by value (two or three levels) -- and in the outermost layout zero
-# to three pointer fields (data pointers ffi::c::Ptr[NeTarget] and function
-# pointers ffi::c::FnPtr[...]), aligned or not. This script draws a random
+# to three pointer fields (data pointers std::ffi::c::Ptr[NeTarget] and function
+# pointers std::ffi::c::FnPtr[...]), aligned or not. This script draws a random
 # initial record (every byte random: padding, fields, pointer words) and one
 # to eight writes, each to a random leaf -- a scalar or a pointer, the
 # outermost layout's or a nested layout's -- some written through a nested
-# edit (binary::store(e.f2, INNER.f0, v)), the others through a path from
-# the root (binary::store(e, TOP.f2.f0, v)); fields may be written more than
+# edit (std::binary::store(e.f2, INNER.f0, v)), the others through a path from
+# the root (std::binary::store(e, TOP.f2.f0, v)); fields may be written more than
 # once. Scalar values are biased toward each encoding's extremes and zero; a
 # pointer is null, the run-time address of a fixture NeTarget record, or a
 # random function address. The script applies the writes to the initial
@@ -23,13 +23,13 @@
 # and the program
 #
 #   edit    copies the initial bytes into native memory (the test fixture's
-#           ffi_fixture::memory), writes through binary::native::edit, and
+#           ffi_fixture::memory), writes through std::binary::native::edit, and
 #           returns the memory's bytes afterwards (ffi_fixture::memory_bytes:
 #           a copy made with no layout and no view), every written field read
 #           back through the edit (the last value written), and every
 #           written pointer's address read back
 #   bytes   writes the same values, in the same order, into a MutableBytes of
-#           the initial bytes (binary::write; binary::write_foreign for the
+#           the initial bytes (std::binary::write; std::binary::write_foreign for the
 #           pointer fields) and returns its bytes, and the operand's bytes
 #           afterwards (unchanged: a write makes a new value)
 #
@@ -55,7 +55,7 @@ foreach {option value} $argv {
 source [file join $root compiler compiler.tcl]
 source [file join $root native native.tcl]
 source [file join $root surface surface.tcl]
-set ::core::libraryDir [file join $root lib]
+set ::core::libraryDir [file join $root stdlib]
 core::cabi::installTestFixture
 if {[dict get $options -gc-stress]} {
     set ::env(BOTLISH_NATIVE_GC_STRESS) 1
@@ -73,7 +73,7 @@ proc pick {list} {
 }
 
 proc scalarType {width signed} {
-    return binary::[expr {$signed ? "I" : "U"}][expr {8 * $width}]
+    return std::binary::[expr {$signed ? "I" : "U"}][expr {8 * $width}]
 }
 proc scalarRange {width signed} {
     set bits [expr {8 * $width}]
@@ -104,8 +104,8 @@ proc randomScalar {width signed} {
 }
 
 set ::pointerWidth 8
-set ::fnSig {Fn{args: [ffi::c::Int], return: ffi::c::Int}}
-set ::fnType "ffi::c::FnPtr\[$::fnSig\]"
+set ::fnSig {Fn{args: [std::ffi::c::Int], return: std::ffi::c::Int}}
+set ::fnType "std::ffi::c::FnPtr\[$::fnSig\]"
 
 # A random layout NAME: {name size align fields}, each field {name offset
 # scalar width signed}, {name offset layout INNER} with INNER a layout of
@@ -145,7 +145,7 @@ proc layoutText {layout} {
         lassign $field fname offset kind a b
         switch -- $kind {
             layout { set type [dict get $a name] }
-            pointer { set type [expr {$a eq "data" ? {ffi::c::Ptr[NeTarget]} : $::fnType}] }
+            pointer { set type [expr {$a eq "data" ? {std::ffi::c::Ptr[NeTarget]} : $::fnType}] }
             default { set type [scalarType $a $b] }
         }
         lappend lines "    field $fname: $type at $offset"
@@ -221,23 +221,23 @@ proc valueText {value field} {
 
 set prelude {direct module
 
-import abi
-import abi::bytes
-import binary
-import binary::native
-import byte
-import ffi::c
+import std::abi
+import std::abi::bytes
+import std::binary
+import std::binary::native
+import std::byte
+import std::ffi::c
 import ffi_fixture
 
-fn bytes_of(values: List[int]) -> abi::bytes::Bytes:
+fn bytes_of(values: List[int]) -> std::abi::bytes::Bytes:
     bs = loop v in values:
-        b = byte::from_int(v):
-            on byte::BelowRange:
+        b = std::byte::from_int(v):
+            on std::byte::BelowRange:
                 0
-            on byte::AboveRange:
+            on std::byte::AboveRange:
                 255
         b
-    abi::bytes::from_list(bs)
+    std::abi::bytes::from_list(bs)
 
 opaque struct NeTarget:
     tag: unit
@@ -294,13 +294,13 @@ proc program {index} {
         lassign $w path at field owner ownerPath nested value
         set v [valueText $value $field]
         if {$nested} {
-            lappend stores "    binary::store(e.$ownerPath, [dict get $owner name].[lindex $field 0], $v)"
+            lappend stores "    std::binary::store(e.$ownerPath, [dict get $owner name].[lindex $field 0], $v)"
         } else {
-            lappend stores "    binary::store(e, $name.$path, $v)"
+            lappend stores "    std::binary::store(e, $name.$path, $v)"
         }
         set op [expr {[lindex $field 2] eq "pointer" ? "write_foreign" : "write"}]
         incr k
-        lappend bytesWrites "    d$k = binary::$op\(d[expr {$k - 1}], $name.$path, $v)"
+        lappend bytesWrites "    d$k = std::binary::$op\(d[expr {$k - 1}], $name.$path, $v)"
         dict set readNames $path [lindex $field 2]
     }
     set last d$k
@@ -319,12 +319,12 @@ proc program {index} {
         lappend pointerChecks "ffi_fixture::address_of(r$i)"
         incr i
     }
-    set setup "    target = ffi_fixture::memory\[NeTarget\](bytes_of(\[1, 2, 3, 4\]))\n    t = ffi_fixture::address_of(target)\n    z = ffi::c::null\[NeTarget\]()\n    zf = ffi_fixture::function_address\[$::fnSig\](0)\n"
+    set setup "    target = ffi_fixture::memory\[NeTarget\](bytes_of(\[1, 2, 3, 4\]))\n    t = ffi_fixture::address_of(target)\n    z = std::ffi::c::null\[NeTarget\]()\n    zf = ffi_fixture::function_address\[$::fnSig\](0)\n"
     foreach f [dict keys $fns] {
         append setup "    fn$f = ffi_fixture::function_address\[$::fnSig\]($f)\n"
     }
-    set bytesFn "fn bytes() -> List\[any\] errors LayoutLengthMismatch:\n$setup    d0 = abi::bytes::from_bytes(bytes_of(\[[join $initial {, }]\]))\n[join $bytesWrites \n]\n    \[t, abi::bytes::freeze($last), abi::bytes::freeze(d0)\]\n\n"
-    set editFn "fn edit() -> List\[any\] errors NativeEditNull:\n$setup    p = ffi_fixture::memory\[ffi::c::Void\](bytes_of(\[[join $initial {, }]\]))\n    e = binary::native::edit($name, p)\n[join $stores \n]\n[join $pointerBinds \n][expr {$pointerBinds eq {} ? "" : "\n"}]    \[t, ffi_fixture::memory_bytes(p, $size), \[[join $reads {, }]\], \[[join $pointerChecks {, }]\]\]\n\n"
+    set bytesFn "fn bytes() -> List\[any\] errors LayoutLengthMismatch:\n$setup    d0 = std::abi::bytes::from_bytes(bytes_of(\[[join $initial {, }]\]))\n[join $bytesWrites \n]\n    \[t, std::abi::bytes::freeze($last), std::abi::bytes::freeze(d0)\]\n\n"
+    set editFn "fn edit() -> List\[any\] errors NativeEditNull:\n$setup    p = ffi_fixture::memory\[std::ffi::c::Void\](bytes_of(\[[join $initial {, }]\]))\n    e = std::binary::native::edit($name, p)\n[join $stores \n]\n[join $pointerBinds \n][expr {$pointerBinds eq {} ? "" : "\n"}]    \[t, ffi_fixture::memory_bytes(p, $size), \[[join $reads {, }]\], \[[join $pointerChecks {, }]\]\]\n\n"
     set tail "b = bytes():\n    on LayoutLengthMismatch:\n        \[\]\n"
     set both "${text}${bytesFn}${editFn}${tail}x = edit():\n    on NativeEditNull:\n        \[\]\n\[b, x\]\n"
     set bytesOnly "[string range $text [string length "direct module\n\n"] end]${bytesFn}${tail}\[b\]\n"
@@ -332,7 +332,7 @@ proc program {index} {
 }
 
 # A core value as a Tcl value: a List element-wise, an Int its number, an
-# abi::bytes::Bytes the list of its bytes, anything else as shown.
+# std::abi::bytes::Bytes the list of its bytes, anything else as shown.
 proc tclValue {v} {
     switch -- [core::value::kind $v] {
         list { return [lmap item [core::value::items $v] {tclValue $item}] }

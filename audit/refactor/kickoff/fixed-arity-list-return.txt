@@ -6,7 +6,7 @@
      element types (informational): same-element [str, str, str, str, str, str]
      HAND: annotate -- the sample's list of check results: printed as the program's value and compared with the file's `# expect: [...]` list; never destructured or read positionally
 2. examples/stdlib/csv_records.bot:544:5: `sample_checks`: a 7-element list from 1 exit(s) (0 self-call(s); first seen compiling examples/stdlib/csv_records.bot)
-     examples/stdlib/csv_records.bot:544:5: [list::length(rows), ht_get(first, "name"), ht_get(first, "age"), ht_get(first, "city"), ht_get(second, "name"), ht_get(second, "city"), agree]
+     examples/stdlib/csv_records.bot:544:5: [std::list::length(rows), ht_get(first, "name"), ht_get(first, "age"), ht_get(first, "city"), ht_get(second, "name"), ht_get(second, "city"), agree]
      element types (informational): heterogeneous [int, any, any, any, any, any, bool]
      HAND: annotate -- the sample's observation vector (`# expect: [2, "Alice", ...]`), heterogeneous by element type but a list of check outcomes, never read by position
 3. examples/stdlib/hashtable.bot:343:5: `sample_checks`: a 6-element list from 1 exit(s) (0 self-call(s); first seen compiling examples/stdlib/hashtable.bot)
@@ -29,9 +29,9 @@
 programs compiled: 35 of 40
 did not compile standalone: examples/surface/09-mutual-recursion.bot (CORE SEMANTIC UNBOUND)
 did not compile standalone: examples/surface/10-duplicate-binding.bot (CORE SEMANTIC DUPLICATE)
-did not compile standalone: lib/io.bot (CORE SEMANTIC CONTEXT-FUNCTION-VALUE)
-did not compile standalone: lib/list.bot (SURFACE MODULE MISSING-IMPORT)
-did not compile standalone: lib/mutable_array.bot (SURFACE MODULE MISSING-IMPORT)
+did not compile standalone: stdlib/io.bot (CORE SEMANTIC CONTEXT-FUNCTION-VALUE)
+did not compile standalone: stdlib/list.bot (SURFACE MODULE MISSING-IMPORT)
+did not compile standalone: stdlib/mutable_array.bot (SURFACE MODULE MISSING-IMPORT)
 distinct FIXED-ARITY-LIST-RETURN findings: 6
   convert: 0
   annotate: 6

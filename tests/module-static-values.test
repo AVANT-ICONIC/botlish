@@ -30,18 +30,15 @@ proc underGcStress {body} {
     }
 }
 
-# Runs SCRIPT with $::core::libraryDir pointed at a fresh scratch directory
-# (for throwaway module fixtures), passing that directory as its own
-# argument; restores the real library directory afterward regardless of
-# outcome. (Mirrors tests/surface-modules.test's own helper.)
+# Runs SCRIPT with a fresh scratch application directory (for throwaway
+# module fixtures, application modules beside the entry program writeMain
+# puts there: IMPORTS.md, "Application modules"), passing that directory as
+# its own argument. (Mirrors tests/surface-modules.test's own helper.)
 proc withScratchLibrary {script} {
-    set saved $::core::libraryDir
     set dir [tcltest::makeDirectory modstatic-scratch-[pid]-[incr ::scratchLibraryCounter]]
-    set ::core::libraryDir $dir
     try {
         uplevel 1 [list apply [list {dir} $script] $dir]
     } finally {
-        set ::core::libraryDir $saved
         tcltest::removeDirectory [file tail $dir]
     }
 }
@@ -87,11 +84,11 @@ proc outcomeUnderValue {backend exprs} {
 }
 
 # ---------------------------------------------------------------------------
-# The primary motivating source (namespace web, lib/web.bot): local_char?
-# and web::emailish? itself.
+# The primary motivating source (namespace web, stdlib/web.bot): local_char?
+# and std::web::emailish? itself.
 
-test module-static-local-char-envless {web::local_char? (nested inside web::emailish?) is envless: its only external reference, local_extra_chars, is a module-static reference, never a lexical capture} -body {
-    set hir [surface::compile "import web\ns = \"a\"\nweb::emailish?(s)\n" -warnings off]
+test module-static-local-char-envless {std::web::local_char? (nested inside std::web::emailish?) is envless: its only external reference, local_extra_chars, is a module-static reference, never a lexical capture} -body {
+    set hir [surface::compile "import std::web\ns = \"a\"\nstd::web::emailish?(s)\n" -warnings off]
     set lowered [native::lower::program $hir]
     set nir [dict get $lowered text]
     set localCharInfo {}
@@ -104,12 +101,12 @@ test module-static-local-char-envless {web::local_char? (nested inside web::emai
         [regexp {func [0-9]+ "local_char\?[^"]*" params=1 env=0 [^\n]*captures=0} $nir]
 } -result {1 1}
 
-test module-static-emailish-envless {web::emailish? itself is envless: its own module-static dependency (local_extra_chars, through local_char?) never makes it closure-valued} -body {
-    set hir [surface::compile "import web\ns = \"a\"\nweb::emailish?(s)\n" -warnings off]
+test module-static-emailish-envless {std::web::emailish? itself is envless: its own module-static dependency (local_extra_chars, through local_char?) never makes it closure-valued} -body {
+    set hir [surface::compile "import std::web\ns = \"a\"\nstd::web::emailish?(s)\n" -warnings off]
     set lowered [native::lower::program $hir]
     set emailishInfo {}
     foreach info [dict get $lowered functions] {
-        if {[dict get $info name] eq "web::emailish?"} {
+        if {[dict get $info name] eq "std::web::emailish?"} {
             set emailishInfo $info
         }
     }
@@ -117,7 +114,7 @@ test module-static-emailish-envless {web::emailish? itself is envless: its own m
 } -result 1
 
 test module-static-no-block-allocation {emailish?, called many times, allocates zero Block values (the frozen baseline's own ~800/run local_char? closure allocation is gone)} -body {
-    set hir [surface::compile "import web\ns = \"example.test@café.example\"\nweb::emailish?(s)\n" -warnings off]
+    set hir [surface::compile "import std::web\ns = \"example.test@café.example\"\nstd::web::emailish?(s)\n" -warnings off]
     dict get [native::allocationReport $hir summary 1] byKind Block allocations
 } -result 0
 
@@ -131,7 +128,7 @@ test module-static-refined-checks-block-allocations {bench/refined-checks.bot's 
 # milestone)". That work is exactly what the exact-callable milestone did
 # (the key keeps the predicate's identity), so the callvalue is gone; the
 # opt-off flag still reproduces the old indirect call.
-test module-static-check-callvalue-gone {scan_while's predicate parameter is no longer a dynamic call: both predicates (local_char? and str::is_tcl_alpha) are exact targets of their call sites} -body {
+test module-static-check-callvalue-gone {scan_while's predicate parameter is no longer a dynamic call: both predicates (local_char? and std::str::is_tcl_alpha) are exact targets of their call sites} -body {
     set hir [refinedChecksSourceHir]
     set nir [native::nir $hir]
     regexp -all {callvalue} $nir
@@ -143,9 +140,9 @@ test module-static-check-callvalue-with-exact-callable-off {with -exact-callable
     expr {[regexp -all {callvalue} $nir] >= 1}
 } -result 1
 
-test module-static-emailish-parity {web::emailish? agrees on every backend, module-static representation or not} -body {
-    set path [makeFile {import web
-web::emailish?("a@b.co")} module-static-emailish-parity.bot]
+test module-static-emailish-parity {std::web::emailish? agrees on every backend, module-static representation or not} -body {
+    set path [makeFile {import std::web
+std::web::emailish?("a@b.co")} module-static-emailish-parity.bot]
     try {
         set hir [surface::readProgramFile $path -strict 0]
         set exprs [hir::lower $hir]
@@ -161,7 +158,7 @@ web::emailish?("a@b.co")} module-static-emailish-parity.bot]
 
 test module-static-captures-empty-for-static-only {a function that references only a module static has an empty capture set (hir::captures), the reference itself recorded as staticRefs instead} -body {
     withScratchLibrary {
-        writeModule $dir m "import list\n\nv = \[1, 2, 3\]\n\nfn f(x):\n    x + list::length(v)\n"
+        writeModule $dir m "import std::list\n\nv = \[1, 2, 3\]\n\nfn f(x):\n    x + std::list::length(v)\n"
         set main [writeMain $dir "import m\nm::f(1)\n"]
         set hir [surface::readProgramFile $main -strict 0]
         set fExpr [moduleBlockOf $hir m f]
@@ -193,7 +190,7 @@ test module-static-real-capture-plus-static-coexist {a nested function referenci
 
 test module-static-two-functions-share-slot {two functions each referencing the same module value never duplicate its storage: one List allocation total (v's own), shared by both} -body {
     withScratchLibrary {
-        writeModule $dir m "import list\n\nv = \[1, 2, 3\]\n\nfn f():\n    list::length(v)\n\nfn g():\n    list::length(v)\n"
+        writeModule $dir m "import std::list\n\nv = \[1, 2, 3\]\n\nfn f():\n    std::list::length(v)\n\nfn g():\n    std::list::length(v)\n"
         set main [writeMain $dir "import m\nm::f() + m::g()\n"]
         set hir [surface::readProgramFile $main -strict 0]
         set report [native::allocationReport $hir summary 1]
@@ -209,7 +206,7 @@ test module-static-two-functions-share-slot {two functions each referencing the 
 test module-static-cross-module-reference {module B's function reaches module A's own retained value as a direct static reference, on every backend} -body {
     withScratchLibrary {
         writeModule $dir a "shared = \[10, 20, 30\]\n"
-        writeModule $dir b "import a\nimport list\n\nfn total():\n    list::length(a::shared)\n"
+        writeModule $dir b "import a\nimport std::list\n\nfn total():\n    std::list::length(a::shared)\n"
         set main [writeMain $dir "import b\nb::total()\n"]
         set hir [surface::readProgramFile $main -strict 0]
         set exprs [hir::lower $hir]
@@ -280,7 +277,7 @@ test module-static-negative-control-real-closure {a genuine activation-dependent
 } -result {{int 0} 1 1}
 
 test module-static-entry-toplevel-binding-still-captures {an ordinary (non-module) entry-program top-level binding is out of this milestone's scope: it still becomes a genuine lexical capture, exactly as before} -body {
-    set text "import list\nv = \[1, 2, 3\]\n\nfn f():\n    list::length(v)\n\nf()"
+    set text "import std::list\nv = \[1, 2, 3\]\n\nfn f():\n    std::list::length(v)\n\nf()"
     set hir [sourceHir $text]
     set fExpr ""
     foreach e [hirFind $hir block] {
@@ -300,7 +297,7 @@ test module-static-entry-toplevel-binding-still-captures {an ordinary (non-modul
 
 test module-static-gc-stress-envless-reader {a module-static managed value (List) is read correctly, many times, from an envless function, under GC stress (many intervening allocations)} -body {
     withScratchLibrary {
-        writeModule $dir m "import list\n\nv = \[1, 2, 3, 4, 5\]\n\nfn touch(x):\n    x + list::length(v)\n"
+        writeModule $dir m "import std::list\n\nv = \[1, 2, 3, 4, 5\]\n\nfn touch(x):\n    x + std::list::length(v)\n"
         set main [writeMain $dir "import m\nfn drive(i, total, acc):\n    if i >= total:\n        return acc\n    drive(i + 1, total, acc + m::touch(i))\n\ndrive(0, 500, 0)\n"]
         set hir [surface::readProgramFile $main -strict 0]
         underGcStress {native::evalHir $hir}
@@ -310,14 +307,14 @@ test module-static-gc-stress-envless-reader {a module-static managed value (List
 test module-static-gc-stress-mixed-closure {a static reference and a real activation-local capture coexisting inside one closure both stay correct under GC stress} -body {
     withScratchLibrary {
         writeModule $dir m "v = \[1, 2, 3\]\n\nfn combine(a, b):\n    a + b\n"
-        set main [writeMain $dir "import list\nimport m\nfn outer(x):\n    fn inner():\n        m::combine(list::length(\[1,2,3,4,5,6,7,8\]), x)\n    inner()\n\nfn drive(i, total, acc):\n    if i >= total:\n        return acc\n    drive(i + 1, total, acc + outer(i))\n\ndrive(0, 300, 0)\n"]
+        set main [writeMain $dir "import std::list\nimport m\nfn outer(x):\n    fn inner():\n        m::combine(std::list::length(\[1,2,3,4,5,6,7,8\]), x)\n    inner()\n\nfn drive(i, total, acc):\n    if i >= total:\n        return acc\n    drive(i + 1, total, acc + outer(i))\n\ndrive(0, 300, 0)\n"]
         set hir [surface::readProgramFile $main -strict 0]
         underGcStress {native::evalHir $hir}
     }
 } -result {int 47250}
 
 test module-static-repeated-runs-reset {the same compiled program, run repeatedly in one process (Vm::reset between runs, matching the benchmark harness), re-initializes and correctly re-reads its module statics every run, under GC stress} -body {
-    set hir [surface::compile "import web\ns = \"a b/c%d~e_f.g@h\"\nweb::uri_escape_text(s)\n" -warnings off]
+    set hir [surface::compile "import std::web\ns = \"a b/c%d~e_f.g@h\"\nstd::web::uri_escape_text(s)\n" -warnings off]
     underGcStress {
         set report [native::allocationReport $hir summary 8]
         expr {[dict get $report byKind String currentLiveObjects] > 0}

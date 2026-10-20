@@ -36,17 +36,17 @@ bench/refined-checks.bot:
   rbox/runbox (total, call-boundary rbox, call-boundary runbox) off: 7/11 boundary 3/5
   rbox/runbox (total, call-boundary rbox, call-boundary runbox) on:  10/10 boundary 2/3
   machine code bytes off 9089 on 9068 (-21)
-    gains: byte::high_nibble<int> params val result raw
-    gains: byte::nibble<int> params raw result raw
-    gains: byte::from_int<int> params val result raw
-    gains: ascii::is_digit<int> params raw result val
-    gains: ascii::is_upper<int> params raw result val
-    gains: ascii::is_lower<int> params raw result val
-    gains: ascii::is_alphabetic<int> params raw result val
-    gains: ascii::is_alphanumeric<int> params raw result val
+    gains: std::byte::high_nibble<int> params val result raw
+    gains: std::byte::nibble<int> params raw result raw
+    gains: std::byte::from_int<int> params val result raw
+    gains: std::ascii::is_digit<int> params raw result val
+    gains: std::ascii::is_upper<int> params raw result val
+    gains: std::ascii::is_lower<int> params raw result val
+    gains: std::ascii::is_alphabetic<int> params raw result val
+    gains: std::ascii::is_alphanumeric<int> params raw result val
     gains: scan_while<any, block(e239)> params val,val result raw
     gains: scan_while<any, native(is_tcl_alpha)> params val,val result raw
-    gains: web::is_unreserved<int> params raw result val
+    gains: std::web::is_unreserved<int> params raw result val
     gains: high_nibble<int> params val result raw
     gains: esc_bytes<List[int], int, str> params val,raw,val result val (recursive)
     gains: esc_from<str, int, str> params val,raw,val result val (recursive)
@@ -84,15 +84,15 @@ bench/uri-steady.bot:
   rbox/runbox (total, call-boundary rbox, call-boundary runbox) off: 5/7 boundary 1/3
   rbox/runbox (total, call-boundary rbox, call-boundary runbox) on:  8/6 boundary 0/1
   machine code bytes off 5462 on 5459 (-3)
-    gains: byte::high_nibble<int> params val result raw
-    gains: byte::nibble<int> params raw result raw
-    gains: byte::from_int<int> params val result raw
-    gains: ascii::is_digit<int> params raw result val
-    gains: ascii::is_upper<int> params raw result val
-    gains: ascii::is_lower<int> params raw result val
-    gains: ascii::is_alphabetic<int> params raw result val
-    gains: ascii::is_alphanumeric<int> params raw result val
-    gains: web::is_unreserved<int> params raw result val
+    gains: std::byte::high_nibble<int> params val result raw
+    gains: std::byte::nibble<int> params raw result raw
+    gains: std::byte::from_int<int> params val result raw
+    gains: std::ascii::is_digit<int> params raw result val
+    gains: std::ascii::is_upper<int> params raw result val
+    gains: std::ascii::is_lower<int> params raw result val
+    gains: std::ascii::is_alphabetic<int> params raw result val
+    gains: std::ascii::is_alphanumeric<int> params raw result val
+    gains: std::web::is_unreserved<int> params raw result val
     gains: high_nibble<int> params val result raw
     gains: esc_bytes<List[int], int, str> params val,raw,val result val (recursive)
     gains: esc_from<str, int, str> params val,raw,val result val (recursive)

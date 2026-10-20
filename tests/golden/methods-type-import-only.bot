@@ -1,5 +1,5 @@
 # methods-type-import-only.bot -- method-call sugar (METHOD-SUGAR.md) in a
-# file that imports the type byte::Byte but not the namespace byte: the
+# file that imports the type std::byte::Byte but not the namespace byte: the
 # receiver's type is never searched for the function, so a function of the
 # module that declares the receiver's type is no more visible than any
 # other, even with that type imported: the type import loads the module, so
@@ -11,21 +11,21 @@
 # authoritative and unchanged; its other halves are in
 # methods-list-without-str.bot and methods.bot).
 #
-# Imports: compiler and test (the framework); `import type byte::Byte` (the
-# Tcl program's own header). The absence of `import byte` is the property.
-import compiler
-import test
-import type byte::Byte
+# Imports: compiler and test (the framework); `import type std::byte::Byte` (the
+# Tcl program's own header). The absence of `import std::byte` is the property.
+import std::compiler
+import std::test
+import type std::byte::Byte
 
 fn register_visibility_tests():
     # method-not-visible-no-type-import-needed-or-used: importing the Byte
     # type makes no function of byte a candidate: byte is what is missing.
-    fn b_type_import() errors compiler::CompilerError:
+    fn b_type_import() errors std::compiler::CompilerError:
         static compile:
             x = 200
             x.complement()
-    test::rejects_containing("method-not-visible-no-type-import-needed-or-used/type-import", compiler::DiagnosticCode::MissingImport, "namespace \"byte\" is not imported; add `import byte` to use `byte::complement`", b_type_import)
+    std::test::rejects_containing("method-not-visible-no-type-import-needed-or-used/type-import", std::compiler::DiagnosticCode::MissingImport, "namespace \"std::byte\" is not imported; add `import std::byte` to use `std::byte::complement`", b_type_import)
 
-with context test::suite()
+with context std::test::suite()
 register_visibility_tests()
-test::report()
+std::test::report()

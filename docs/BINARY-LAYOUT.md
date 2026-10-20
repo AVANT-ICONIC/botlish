@@ -9,10 +9,10 @@
 > `union layout` (several interpretations of the same bytes, every
 > alternative at the union's start, an explicit size and alignment) held by
 > value in a field -- items 33 and 67 describe the language before it. A
-> union has no copied value: `LayoutStruct`, `binary::parse`,
-> `binary::emit` and `binary::load` of anything holding one are
+> union has no copied value: `LayoutStruct`, `std::binary::parse`,
+> `std::binary::emit` and `std::binary::load` of anything holding one are
 > LAYOUT-UNION, and bytes are read one alternative at a time
-> (`binary::read(data, L.u.alt)`). Overlap stays an error in an ordinary
+> (`std::binary::read(data, L.u.alt)`). Overlap stays an error in an ordinary
 > layout, and a union is no sum (item 67's plan is not what landed).
 
 Fixed binary layouts: `layout` declarations, `LayoutStruct[L]`, imprinting
@@ -25,19 +25,19 @@ and emission.
 > mechanism.
 
 ```botlish
-import abi::bytes
-import binary
+import std::abi::bytes
+import std::binary
 
 layout Header:
     size 8
     align 4
-    field magic: binary::U32 at 0
-    field count: binary::I16 at 4
+    field magic: std::binary::U32 at 0
+    field count: std::binary::I16 at 4
 
-h = binary::parse(Header, data)       # LayoutStruct[Header]: imprinting
-h.magic                               # a binary::U32
-back = binary::emit(h)                # an abi::bytes::Bytes of 8 bytes: emission
-binary::layout_length(Header)         # 8, a compile-time constant
+h = std::binary::parse(Header, data)       # LayoutStruct[Header]: imprinting
+h.magic                               # a std::binary::U32
+back = std::binary::emit(h)                # a std::abi::bytes::Bytes of 8 bytes: emission
+std::binary::layout_length(Header)         # 8, a compile-time constant
 ```
 
 A layout describes a fixed number of physical bytes. The same layout
@@ -50,8 +50,8 @@ are the layout's, and never sees offsets, padding or byte order.
 * [Guide](#guide)
   * [`layout` declarations](#layout-declarations)
   * [`LayoutStruct[L]`](#layoutstructl)
-  * [Imprinting: `binary::parse`](#imprinting-binaryparse)
-  * [Emission: `binary::emit`](#emission-binaryemit)
+  * [Imprinting: `std::binary::parse`](#imprinting-binaryparse)
+  * [Emission: `std::binary::emit`](#emission-binaryemit)
   * [Layout queries](#layout-queries)
   * [Padding](#padding)
   * [Nested layouts](#nested-layouts)
@@ -80,7 +80,7 @@ layout SAMPLE:
 
 A `layout` is a top-level declaration of a module (or of the entry program)
 with nominal identity, exactly like a named struct's: `SAMPLE` in the entry
-program, `ffi::c::windows::SAMPLE` in module `ffi::c::windows`. Its body has
+program, `std::ffi::c::windows::SAMPLE` in module `std::ffi::c::windows`. Its body has
 one `size N` line, one `align N` line and one `field NAME: TYPE at OFFSET`
 line per field, in any order, one item per line. `layout`, `size`, `align`,
 `field` and `at` are contextual words: `layout` declares only as the first
@@ -96,8 +96,8 @@ declared. A field's type is either
 * a **scalar**: an integer domain whose value set is *exactly* one
   fixed-width encoding's -- `0..2^(8k)-1` (unsigned) or
   `-2^(8k-1)..2^(8k-1)-1` (two's complement), k in 1, 2, 4, 8. The encoding
-  follows from the interval alone, never from a name: `binary::U16`,
-  `abi::U16Value`, `byte::Byte` and a program's own `Int in 0..65535` are
+  follows from the interval alone, never from a name: `std::binary::U16`,
+  `std::abi::U16Value`, `std::byte::Byte` and a program's own `Int in 0..65535` are
   all the same unsigned 16-bit scalar. Because the domain is exactly the
   encoding's value set, every bit pattern decodes to a value of the field's
   type (parse cannot fail on a field) and every value of the type encodes
@@ -105,8 +105,8 @@ declared. A field's type is either
   or
 * a **nested layout**, by value: `field first: POINT at 0`.
 
-`lib/binary.bot` names the eight scalar domains (`binary::U8` .. `U64`,
-`binary::I8` .. `I64`) for convenience; nothing requires them.
+`stdlib/binary.bot` names the eight scalar domains (`std::binary::U8` .. `U64`,
+`std::binary::I8` .. `I64`) for convenience; nothing requires them.
 
 A malformed declaration is a located error at the offending number, type or
 name (the declaration stage, so a whole-program error -- never a `static
@@ -129,7 +129,7 @@ layout is authoritative, so a packed (`#pragma pack(1)`) or vendor layout is
 legal exactly as stated (`examples/binary/c-structs.bot`'s `PACKED_HEADER`).
 `align` is the layout's own requirement for placement and storage; nothing in
 this milestone places a layout in memory yet, and it is recorded and
-reported (`binary::layout_alignment`) for the consumers that will.
+reported (`std::binary::layout_alignment`) for the consumers that will.
 
 ### `LayoutStruct[L]`
 
@@ -186,16 +186,16 @@ There is no generic struct declaration of any kind: `struct Foo[T]:`,
 `LayoutStruct` is a built-in applied type whose one argument is a layout, not
 a type parameter.
 
-### Imprinting: `binary::parse`
+### Imprinting: `std::binary::parse`
 
 ```botlish
-v = binary::parse(L, data)      # LayoutStruct[L], errors LayoutLengthMismatch
+v = std::binary::parse(L, data)      # LayoutStruct[L], errors LayoutLengthMismatch
 ```
 
 L is static evidence written at the call: a layout name (qualified for a
 module's layout), never a String, an expression or a value (`UNKNOWN-LAYOUT`
 for an unknown name, `LAYOUT-OPERAND` otherwise). DATA is statically an
-`abi::bytes::Bytes` (ABI-BYTES.md; `BINARY-OPERAND` otherwise). DATA must
+`std::abi::bytes::Bytes` (ABI-BYTES.md; `BINARY-OPERAND` otherwise). DATA must
 have exactly L's size: fewer or more bytes is the builtin declared error
 `LayoutLengthMismatch` -- an ordinary declared error, handled with `on
 LayoutLengthMismatch:` or admitted by an `errors` clause, `UNHANDLED-ERROR`
@@ -208,13 +208,13 @@ value holds the fields only -- never the input, a view of it or a borrowed
 buffer -- so `parse`, drop the bytes, use the struct is the natural pattern,
 and foreign storage may disappear the moment the call returns.
 
-`binary::parse` takes its layout first and is `nomethod`: `Header.parse(d)`
+`std::binary::parse` takes its layout first and is `nomethod`: `Header.parse(d)`
 would make the layout a receiver value.
 
-### Emission: `binary::emit`
+### Emission: `std::binary::emit`
 
 ```botlish
-bytes = binary::emit(v)         # abi::bytes::Bytes of L's size; v.emit() too
+bytes = std::binary::emit(v)         # std::abi::bytes::Bytes of L's size; v.emit() too
 ```
 
 L is read from the value's static type, which must be `LayoutStruct[L]`
@@ -224,12 +224,12 @@ encoding, recursively for nested layouts, into L's size zero bytes. It is
 infallible (declares no error) and never truncates: a field's value is in
 its domain by its type. Equal values emit equal bytes.
 
-Neither operation is a function value (`e = binary::emit` is
+Neither operation is a function value (`e = std::binary::emit` is
 `BINARY-OPERAND`): its layout is a static operand.
 
 ### Layout queries
 
-`binary::layout_length(L)` and `binary::layout_alignment(L)` are
+`std::binary::layout_length(L)` and `std::binary::layout_alignment(L)` are
 compile-time constants: resolution replaces the call by its value, so it is
 usable wherever a proven Int is.
 
@@ -240,7 +240,7 @@ zeros, so emitted bytes are deterministic and never expose uninitialized
 memory. Consequently `emit(parse(L, b)) == b` holds exactly when b's padding
 bytes are zero: emission canonicalizes padding.
 
-The round-trip theorem: **`binary::parse(L, binary::emit(v)) == v` for every
+The round-trip theorem: **`std::binary::parse(L, std::binary::emit(v)) == v` for every
 value v of `LayoutStruct[L]`** -- each field is written and read at the same
 offset with the same encoding, and the value holds nothing else.
 
@@ -269,7 +269,7 @@ none is approximated.
 
 A layout is a member of its module like a struct: named qualified after the
 module is imported (`LayoutStruct[geo::shapes::Point]`,
-`binary::parse(geo::shapes::Box, data)`), bare inside its module, never
+`std::binary::parse(geo::shapes::Box, data)`), bare inside its module, never
 reachable through `import type` (a layout is not a type: `NOT-A-TYPE`) and
 never a value of its module (`LAYOUT-NOT-A-VALUE`). Module functions take
 and return its `LayoutStruct`s.
@@ -349,7 +349,7 @@ K`, `input K`, `query length|alignment`, `typed {AT FORM}`, `op parse|emit`),
 read by every layer -- never a check keyed on a native's name. Resolution
 turns parse's layout operand into the layout's **descriptor** constant and
 folds the queries to Int constants; after the checks,
-`hir::layouts::Elaborate` rewrites `binary::emit(v)` to the internal
+`hir::layouts::Elaborate` rewrites `std::binary::emit(v)` to the internal
 `binary#emit(v, DESCRIPTOR)` from v's static type. The descriptor is the
 self-contained static text of one layout:
 
@@ -485,7 +485,7 @@ F: T at O, ...`, read back by `hir/read.tcl`), so HIR interchange
     encodings -- unsigned and two's-complement, 1, 2, 4 and 8 bytes --
     little-endian. A field's encoding is its domain's: any integer domain
     whose interval is exactly an encoding's value set qualifies
-    (`binary::U16`, `abi::U16Value`, `byte::Byte`, `Int in -128..127`), and
+    (`std::binary::U16`, `std::abi::U16Value`, `std::byte::Byte`, `Int in -128..127`), and
     `int`, a narrower or exact-set domain, a refinement, `bool`, `str` do not
     (`LAYOUT-FIELD-TYPE`, with the reason). Unsigned 64-bit values above
     i64::MAX are ordinary Ints (BigInts natively).
@@ -494,7 +494,7 @@ F: T at O, ...`, read back by `hir/read.tcl`), so HIR interchange
     field are trailing padding. Parse requires exactly the size; emit
     produces exactly the size.
 15. **Alignment semantics.** The alignment is explicit, a power of two up to
-    2^28, recorded and reported (`binary::layout_alignment`) but imposing no
+    2^28, recorded and reported (`std::binary::layout_alignment`) but imposing no
     rule on offsets or on the size: a resolved foreign layout is
     authoritative, packed and over-aligned layouts included. Nothing places
     a layout in memory in this milestone, so nothing consumes it yet.
@@ -506,11 +506,11 @@ F: T at O, ...`, read back by `hir/read.tcl`), so HIR interchange
 18. **Nested layouts.** By value, at the field's offset, width the inner
     size; its value an ordinary `LayoutStruct[Inner]`; no cycles
     (`LAYOUT-CYCLE`).
-19. **Parse semantics.** `binary::parse(L, data)`: data must be exactly L's
+19. **Parse semantics.** `std::binary::parse(L, data)`: data must be exactly L's
     size, then every scalar is read at its absolute offset in its encoding;
     the result holds the fields only, never the input.
-20. **Emit semantics.** `binary::emit(v)`: L from v's static type; a fresh
-    `abi::bytes::Bytes` of L's size, zero, with every scalar written at its
+20. **Emit semantics.** `std::binary::emit(v)`: L from v's static type; a fresh
+    `std::abi::bytes::Bytes` of L's size, zero, with every scalar written at its
     absolute offset in its encoding. Infallible; never truncates.
 21. **Error behavior.** Exactly one failure: the payload-free builtin
     declared error `LayoutLengthMismatch` (parse, wrong length), an ordinary
@@ -518,7 +518,7 @@ F: T at O, ...`, read back by `hir/read.tcl`), so HIR interchange
     Emit declares none. Every misuse is static: `BINARY-OPERAND`,
     `LAYOUT-OPERAND`, `UNKNOWN-LAYOUT`, `LAYOUT-NOT-A-VALUE`,
     `LAYOUT-NOT-A-TYPE`, `LAYOUT-STRUCT-PARAMETER` -- each a
-    `compiler::DiagnosticCode` case, so a `static compile:` block reifies it.
+    `std::compiler::DiagnosticCode` case, so a `static compile:` block reifies it.
 22. **Exact/prefix input rule.** Exact only: fewer and more bytes are both
     `LayoutLengthMismatch` (`bl-length-rule`); no prefix parse, no cursor,
     no remainder.
@@ -526,8 +526,8 @@ F: T at O, ...`, read back by `hir/read.tcl`), so HIR interchange
     equal values emit equal bytes and no uninitialized memory is ever
     exposed (`bl-padding`, `bl-determinism`; the padding mutants of every
     backend are killed).
-24. **Round-trip theorem.** `binary::parse(L, binary::emit(v)) == v` for
-    every v (`bl-round-trip`, every fuzz program); `binary::emit(binary::
+24. **Round-trip theorem.** `std::binary::parse(L, std::binary::emit(v)) == v` for
+    every v (`bl-round-trip`, every fuzz program); `std::binary::emit(binary::
     parse(L, b)) == b` iff b's padding is zero (emission canonicalizes
     padding).
 25. **Byte-level independent tests.** `bl-parse-explicit-bytes` and
@@ -554,7 +554,7 @@ F: T at O, ...`, read back by `hir/read.tcl`), so HIR interchange
     Int in 0..4294967295` on Windows x86-64), and one `layout` per struct
     with the sizes, alignments and offsets its C front end resolved, nested
     structs as nested layouts, probably one module per header and target
-    (`ffi::c::windows::RAWINPUTDEVICE`). Botlish needs no C rule to accept it.
+    (`std::ffi::c::windows::RAWINPUTDEVICE`). Botlish needs no C rule to accept it.
 31. **Remaining blockers for basic C structs.** Pointer fields (a stand-in
     domain gives the width only), fixed arrays (`char name[16]`), unions,
     bitfields, `float`/`double` (Botlish has no floating-point value), C
@@ -574,7 +574,7 @@ F: T at O, ...`, read back by `hir/read.tcl`), so HIR interchange
     An incomplete struct is only ever behind a pointer, an opaque pointer
     scalar (item 36).
 36. **Pointer-field readiness.** (Resolved by NATIVE-LAYOUT-VIEWS.md:
-    `ffi::c::Ptr[T]`/`FnPtr[F]` fields of the target's width, read only
+    `std::ffi::c::Ptr[T]`/`FnPtr[F]` fields of the target's width, read only
     through native views.) The width is representable (a 64-bit
     unsigned domain), the meaning is not: a pointer is not a number, so the
     example's `HandleBits` is explicitly a stand-in. What is missing is an
@@ -607,12 +607,12 @@ F: T at O, ...`, read back by `hir/read.tcl`), so HIR interchange
 42. **Representative HIR.** (`main.tcl -hir`)
 
     ```
-    layout Sample ns - size 12 align 4 fields tag: binary::U8 at 0, value: binary::I32 at 4, flag: binary::U8 at 8
-    e349 call native(binary::parse) : LayoutStruct[Sample]
-        e350 ref b82 binary::parse : native binary::parse
+    layout Sample ns - size 12 align 4 fields tag: std::binary::U8 at 0, value: std::binary::I32 at 4, flag: std::binary::U8 at 8
+    e349 call native(std::binary::parse) : LayoutStruct[Sample]
+        e350 ref b82 std::binary::parse : native std::binary::parse
         e351 const str {{LayoutStruct[Sample]} 12 4 {{tag 0 u 1 little} {value 4 i 4 little} {flag 8 u 1 little}}} : str
-    e355 project value : int[binary::I32]
-    e361 call native(binary#emit) : abi::bytes::Bytes
+    e355 project value : int[std::binary::I32]
+    e361 call native(binary#emit) : std::abi::bytes::Bytes
         e363 struct LayoutStruct[Sample] (tag, value, flag) : LayoutStruct[Sample]
         e379 const str {{LayoutStruct[Sample]} 12 4 {...}} : str
     ```
@@ -650,7 +650,7 @@ F: T at O, ...`, read back by `hir/read.tcl`), so HIR interchange
     big-endian, unused). No `structnew` of the `LayoutStruct` in either.
 44. **Allocation behavior.** Natively, parse-then-read allocates nothing
     per record; parse of a kept record allocates its struct (one per nested
-    layout too); emit allocates the storage and its `abi::bytes::Bytes`
+    layout too); emit allocates the storage and its `std::abi::bytes::Bytes`
     (two per record), construct-then-emit the same two -- never the
     `LayoutStruct` (`bl-allocations`; the benchmark's allocation table).
 45. **Compile-time layout validation.** Every rule of
@@ -721,7 +721,7 @@ F: T at O, ...`, read back by `hir/read.tcl`), so HIR interchange
     front-end limitation unrelated to layouts (an empty literal's
     `List[never]` instance of a loop-collecting function fails to type,
     reproduced on the commit before this work); the generator spelled it
-    `abi::bytes::from_list([])` until that was fixed
+    `std::abi::bytes::from_list([])` until that was fixed
     (M7AA-EMPTY-COLLECTION-AND-APPLIED-TYPE-SEMANTICS.md, "Addendum:
     collecting loops over an empty domain"), and spells it `bytes_of([])`
     again.
@@ -744,11 +744,11 @@ per record over the program's baseline, Cranelift specialized unless noted:
 | parse `Segment` (two nested `Point`s) | 58 us | 4.3 us | 396 ns | 299 ns |
 | round trip `emit(parse(d)) == d` of `Segment` | 150 us | 6.9 us | 553 ns | 533 ns |
 | reference: an ordinary struct of the same 4 fields | 90 us | 6.5 us | 109 ns | 102 ns |
-| reference: the same 16 bytes from a List (`abi::bytes::from_list`) | 116 us | 32.5 us | 117 ns | 116 ns |
+| reference: the same 16 bytes from a List (`std::abi::bytes::from_list`) | 116 us | 32.5 us | 117 ns | 116 ns |
 
 Native heap allocations per record (Cranelift's counters): parse kept 1
 (the struct; `Segment` 3, one per nested layout), parse then read 0, emit 2
-(the storage and its `abi::bytes::Bytes`), construct then emit 2 (the
+(the storage and its `std::abi::bytes::Bytes`), construct then emit 2 (the
 `LayoutStruct` is never built), the ordinary-struct reference 1, the
 `from_list` reference 2.
 
@@ -805,7 +805,7 @@ Native heap allocations per record (Cranelift's counters): parse kept 1
     unread fields (a `binload` is marked fallible, so a parse whose record
     is only partly read still loads every field, though none can fail after
     the length check); holding a parse result passed straight to emit, and
-    nested `LayoutStruct`s, as fields; not building the `abi::bytes::Bytes`
+    nested `LayoutStruct`s, as fields; not building the `std::abi::bytes::Bytes`
     wrapper of an emission consumed at once. None changes semantics.
 
 ### Mapper evidence (57-64)
@@ -901,12 +901,12 @@ From `examples/binary/c-structs.bot`'s `raw_input_device` and `to_raw`.
 | `hir/types.tcl`, `hir/resolve.tcl` | `LayoutStruct[L]` typing, operand resolution, query folding, diagnostics |
 | `hir/escape.tcl` | parse results and emitted values held as fields |
 | `hir/format.tcl`, `hir/read.tcl` | HIR text of layouts |
-| `hir/static.tcl`, `lib/compiler.bot`, `lib/test.bot` | the six new `compiler::DiagnosticCode` cases |
+| `hir/static.tcl`, `stdlib/compiler.bot`, `stdlib/test.bot` | the six new `std::compiler::DiagnosticCode` cases |
 | `core/binary.tcl`, `core/native.tcl` | the reference implementation, registrations, the `-layout` role |
 | `compiler/compiler.tcl` | `CompileLayoutOperation` |
 | `native/lower.tcl` | `LayoutCall`, `LayoutDecode`, `LayoutEncode` |
 | `native/src/nir.rs`, `native/src/runtime/ops.rs`, `native/src/codegen/clif.rs` | `binload`, `binstore`, `byteszeroed` |
-| `lib/binary.bot` | the `binary` namespace and its scalar domains |
+| `stdlib/binary.bot` | the `binary` namespace and its scalar domains |
 | `examples/binary/c-structs.bot` | C structs as layouts, with wrappers both ways |
 | `tests/binary-layout.test` | the Tcl suite (authoritative) |
 | `tests/golden/binary-layout.bot` | the golden suite |

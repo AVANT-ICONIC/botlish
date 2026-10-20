@@ -39,18 +39,18 @@ confirmed directly by dedicated negative fixtures, including one that still
 raises the real, pre-existing `EQUALITY` error at runtime.
 
 The motivating real-corpus site behaved exactly as M3's own follow-up
-section predicted, with **no `byte::set`-specific code anywhere**:
+section predicted, with **no `std::byte::set`-specific code anywhere**:
 
 ```
 bytes : List[Byte] (byte.bot:177, immutable_set_from_list(bytes))
     -> equality-total (hir::types::IsEqualityTotal(Byte), unchanged since M3)
     -> setfromlisttotal, may_error=false (this milestone's own local-op effect)
-    -> byte::set<List[UnicodeChar]>'s own local NO_VALUE recheck around
+    -> std::byte::set<List[UnicodeChar]>'s own local NO_VALUE recheck around
        rt_set_from_list disappears from the generated machine code
-    -> byte::set AS A WHOLE remains may_error=true (unaffected: its own
-       checked byte::from_int(char::codepoint(c)) construction, inside the
+    -> std::byte::set AS A WHOLE remains may_error=true (unaffected: its own
+       checked std::byte::from_int(std::char::codepoint(c)) construction, inside the
        same loop, is genuinely fallible with AboveRange -- confirmed, not
-       assumed; see "byte::set effect trace" below)
+       assumed; see "std::byte::set effect trace" below)
 ```
 
 Structural results, `uri-steady` (whole program, includes module init;
@@ -68,16 +68,16 @@ Structural results, `uri-steady` (whole program, includes module init;
 | `params.txt` diff | -- | empty (zero lines changed) |
 
 Exactly one function's own machine code shrinks:
-`byte::set<List[UnicodeChar]>` 625B -> 617B (-8B, its own internal
+`std::byte::set<List[UnicodeChar]>` 625B -> 617B (-8B, its own internal
 `rt_set_from_list` NO_VALUE recheck gone -- `test rax,rax` / `je <error>`,
 confirmed in the disassembly below). No caller-side edge changes at all:
-`<program> -> byte::set` stays `may_error=true` (unaffected, per
-"byte::set effect trace" below), so **zero** completion-retest machinery
+`<program> -> std::byte::set` stays `may_error=true` (unaffected, per
+"std::byte::set effect trace" below), so **zero** completion-retest machinery
 moves at any call site in this milestone -- unlike M3, whose refinement
-cascaded to a second function (`web::is_unreserved`) and a caller-side edge
-(`esc_char -> web::is_unreserved`). This is the correct, fully anticipated
+cascaded to a second function (`std::web::is_unreserved`) and a caller-side edge
+(`esc_char -> std::web::is_unreserved`). This is the correct, fully anticipated
 outcome (spec items 27/31/33): SetFromList's own local-op effect is exactly
-one property among several that determine `byte::set`'s aggregate
+one property among several that determine `std::byte::set`'s aggregate
 `may_error`, and the other one (checked `Byte` construction) was never in
 scope to change.
 
@@ -177,10 +177,10 @@ List[T]
 **`native::lower::NativeCallOp`** (`native/lower.tcl`), the identical proc
 M3 already extended for `immutable_set_contains`. The source list's own
 static element type is already an ordinary, fully-resolved HIR fact by the
-time this proc runs for `byte::set`'s own `immutable_set_from_list(bytes)`
+time this proc runs for `std::byte::set`'s own `immutable_set_from_list(bytes)`
 call: `bytes`'s type is `List[Byte]` (`{list {refined int {Byte}}}`),
 directly visible via `hir::typeOf` on the `bytes` ref node inside
-`byte::set<List[UnicodeChar]>`'s own instance view, confirmed directly (see
+`std::byte::set<List[UnicodeChar]>`'s own instance view, confirmed directly (see
 "Architecture trace" below) -- nothing upstream ever lost it. The
 `immutable_set_from_list` entry in `native::lower::natives`, though, was
 `{op setfromlist}` -- an ordinary fixed single-opcode entry, structurally
@@ -294,7 +294,7 @@ fixture, following M3's own established technique:
 * **`setfromlist-total-bool`** -- `List[Bool]` qualifies, another
   audited-total scalar kind.
 * **`setfromlist-total-byte`** -- `List[Byte] -> ImmutableSet[Byte]`, the
-  real `byte::set` shape in miniature (a locally-declared `Byte`, per
+  real `std::byte::set` shape in miniature (a locally-declared `Byte`, per
   M3's own note that `surface::compile` cannot resolve module-qualified
   references -- the real acceptance case is covered separately, below, via
   the frozen `bench/uri-steady.bot` itself).
@@ -402,36 +402,36 @@ above (they are, in fact, the same underlying mechanism observed from two
 different angles: an empty list literal's own inferred element type is
 `never`).
 
-## byte::set effect trace (spec items 29-33, the most important check)
+## std::byte::set effect trace (spec items 29-33, the most important check)
 
 Traced directly against the frozen `bench/uri-steady.bot`, not assumed by
 analogy:
 
 | fact | before M4 | after M4 |
 |---|---|---|
-| `byte::set`'s own `SetFromList` local op | `may_error=true` (opcode `setfromlist`) | `may_error=false` (opcode `setfromlisttotal`) |
-| `byte::set`'s own internal `rt_set_from_list` NO_VALUE recheck | present | **gone** (confirmed in disassembly, below) |
-| `byte::set` function aggregate `may_error` | `true` | **still `true`** -- unaffected |
-| `<program> -> byte::set` edge `may_error` | `true` | **still `true`** -- unaffected |
-| Cause of `byte::set`'s remaining `may_error=true` | `byte::from_int`'s own genuinely fallible `AboveRange` (checked construction inside the same loop) | **unchanged** -- confirmed the *same* cause, not a new one |
-| `byte::set(['Ā'])` (U+0100, past Byte's own range) | raises `CORE SEMANTIC UNCAUGHT-ERROR` (an uncaught `AboveRange`) on all four backends | **unchanged**, all four backends, confirmed directly (`setfromlist-byte-set-real-range-error-preserved`) |
+| `std::byte::set`'s own `SetFromList` local op | `may_error=true` (opcode `setfromlist`) | `may_error=false` (opcode `setfromlisttotal`) |
+| `std::byte::set`'s own internal `rt_set_from_list` NO_VALUE recheck | present | **gone** (confirmed in disassembly, below) |
+| `std::byte::set` function aggregate `may_error` | `true` | **still `true`** -- unaffected |
+| `<program> -> std::byte::set` edge `may_error` | `true` | **still `true`** -- unaffected |
+| Cause of `std::byte::set`'s remaining `may_error=true` | `std::byte::from_int`'s own genuinely fallible `AboveRange` (checked construction inside the same loop) | **unchanged** -- confirmed the *same* cause, not a new one |
+| `std::byte::set(['Ā'])` (U+0100, past Byte's own range) | raises `CORE SEMANTIC UNCAUGHT-ERROR` (an uncaught `AboveRange`) on all four backends | **unchanged**, all four backends, confirmed directly (`setfromlist-byte-set-real-range-error-preserved`) |
 
 `native::Driver calls`'s own report line for the only call edge into
-`byte::set` (`<program> -> byte::set`) is **identical** before and after
+`std::byte::set` (`<program> -> std::byte::set`) is **identical** before and after
 except that its callee id's own aggregate stays `may_error=true` for a
 *different, unaffected* reason -- confirmed by an empty `effects.txt` diff
 across the entire `uri-steady` workload (no line changed at all, not even
 this one, since its own `may_error=true` value did not move). This is
 spec item 31's own anticipated "zero caller-level effect movement" outcome,
 and it is correct: `SetFromList`'s own local-op effect became one property
-among several that determine `byte::set`'s own aggregate effect, and the
-other one (`byte::from_int`'s checked construction) was never in this
+among several that determine `std::byte::set`'s own aggregate effect, and the
+other one (`std::byte::from_int`'s checked construction) was never in this
 milestone's scope to change (spec item 30 explicitly forbids "erasing"
 this).
 
 ## Machine-code excerpt before/after
 
-`byte::set<List[UnicodeChar]>`'s own body, immediately after its call into
+`std::byte::set<List[UnicodeChar]>`'s own body, immediately after its call into
 `rt_set_from_list` (objdump, both from freshly re-probed `bench/uri-
 steady.bot`, `botlish_fn_3`):
 
@@ -456,13 +456,13 @@ finding for `rt_set_contains`, applied here to `rt_set_from_list`.
 
 ## SetFromList corpus census
 
-Searched the entire frozen corpus (`lib/*.bot`, `bench/*.bot`, `bench/*.ir`,
+Searched the entire frozen corpus (`stdlib/*.bot`, `bench/*.bot`, `bench/*.ir`,
 every `audit/comprehensive-generated-code/probes/*.bot` fixture) for
 `immutable_set_from_list` call sites:
 
 | site | count |
 |---|---:|
-| `lib/byte.bot:177` (`byte::set`) | 1 |
+| `stdlib/byte.bot:177` (`std::byte::set`) | 1 |
 | everywhere else in the frozen corpus | 0 |
 
 **Exactly one** real `SetFromList` call site exists in the whole frozen
@@ -476,8 +476,8 @@ per spec item 34's own instruction.
 **Empty diff.** `diff` between a fresh post-M3 probe (commit `b27c4a5`) and
 a fresh post-M4 probe of `bench/uri-steady.bot`'s own `effects.txt`
 produces **zero** lines -- confirmed directly, not merely summarized. This
-is the expected, correct outcome per spec item 31/33: `byte::set`'s own
-aggregate `may_error` does not move (see "byte::set effect trace" above),
+is the expected, correct outcome per spec item 31/33: `std::byte::set`'s own
+aggregate `may_error` does not move (see "std::byte::set effect trace" above),
 and it is the only function whose own local `SetFromList` op is affected in
 this corpus, so no call-edge fact anywhere in this workload's effect
 report changes. The entire visible effect of this milestone in
@@ -496,7 +496,7 @@ changed function:
 |---|---:|---:|
 | machine code bytes | 15441 | 15433 (-8B) |
 | NIR functions | 16 | 16 |
-| `byte::set<List[UnicodeChar]>` bytes | 625 | 617 (-8B) |
+| `std::byte::set<List[UnicodeChar]>` bytes | 625 | 617 (-8B) |
 | every other function | unchanged | unchanged |
 | `effects.txt` / `roots.txt` / `params.txt` diff | -- | empty |
 
@@ -539,7 +539,7 @@ changed function:
 * `params.txt` for both `uri-steady` and `web-unreserved-256`: **zero**
   diff against the pre-M4 tree (every declared-parameter view, guard, and
   entry range unchanged).
-* `web::is_unreserved<generic>`'s own declared-Byte parameter view: still
+* `std::web::is_unreserved<generic>`'s own declared-Byte parameter view: still
   `int[Byte]` (M1's own subject, unaffected -- confirmed by re-running
   M3's own regression test, `setcontains-m1-control-is-unreserved-param-
   view-unchanged`, unchanged, plus `setfromlist-m3-control-web-is-
@@ -549,15 +549,15 @@ changed function:
 
 * `tests/hir-callable-target.test`: 8/8, unchanged.
 * `tests/typed-callable-escape.test`: 35/35, unchanged.
-* `esc_char -> web::is_unreserved`: still exact `{block}`, still direct
+* `esc_char -> std::web::is_unreserved`: still exact `{block}`, still direct
   `callenv`, still `may_error=false` (M3's own result, unaffected -- this
-  milestone touches no code on that call path at all: `byte::set`'s own
-  call is a *different*, module-init-only edge, `<program> -> byte::set`).
+  milestone touches no code on that call path at all: `std::byte::set`'s own
+  call is a *different*, module-init-only edge, `<program> -> std::byte::set`).
 * `uri-steady`'s own `callvalue` count: `0`, unchanged.
 
 ## M3 regression controls
 
-* `web::is_unreserved`'s own `SetContains` call: still `setcontainstotal`,
+* `std::web::is_unreserved`'s own `SetContains` call: still `setcontainstotal`,
   still `may_error=false` -- confirmed directly against the frozen
   `bench/uri-steady.bot` (`setfromlist-m3-control-web-is-unreserved-still-
   total`, the new file's own dedicated M3 control) and by re-running
@@ -568,10 +568,10 @@ changed function:
   `native/lower.tcl`'s own `equality-set` branch is untouched, confirmed by
   `git diff` producing no hunk inside that switch arm).
 * Tagged Bool comparison (`cmp rax,0x6`) remains present in both
-  `web::is_unreserved`'s own body and its caller's edge, confirmed in the
+  `std::web::is_unreserved`'s own body and its caller's edge, confirmed in the
   same disassembly excerpts M3 already established (unaffected: this
   milestone's own machine-code delta is confined entirely to
-  `byte::set<List[UnicodeChar]>`).
+  `std::byte::set<List[UnicodeChar]>`).
 
 ## Full regression
 
@@ -632,9 +632,9 @@ by machine-code bytes:
 | `esc_bytes<generic>` | 864 | 3 guards, `strcat`x2, `tail` |
 | `hex_pair<generic>` | 484 | 1 guard, 2x `listget`, `imod`/`strcat` |
 | `esc_char<generic>` | 516 | 1 guard, `strutf8bytes`/`listget`, `callenv`/2 `call` |
-| `byte::set<List[UnicodeChar]>` | 617 (was 625) | 1 `setfromlisttotal` (was `setfromlist`) |
-| `byte::from_int<int>` | 337 | 2 `fail`, `ilt`/`igt` (no `guard` op -- explicit `if`/`else`, not a native-arg guard) |
-| `web::is_unreserved<generic>` | 155 | 1 `setcontainstotal`, 1 `call` |
+| `std::byte::set<List[UnicodeChar]>` | 617 (was 625) | 1 `setfromlisttotal` (was `setfromlist`) |
+| `std::byte::from_int<int>` | 337 | 2 `fail`, `ilt`/`igt` (no `guard` op -- explicit `if`/`else`, not a native-arg guard) |
+| `std::web::is_unreserved<generic>` | 155 | 1 `setcontainstotal`, 1 `call` |
 
 At least reconsidered, per spec item 44:
 
@@ -645,22 +645,22 @@ At least reconsidered, per spec item 44:
   Still the single largest remaining *class* of guard machinery in this
   workload, unchanged by M3 or M4.
 * **Tagged Bool discrimination**: still present (`cmp rax,0x6` at
-  `web::is_unreserved`'s own body and its caller edge) -- visually
+  `std::web::is_unreserved`'s own body and its caller edge) -- visually
   conspicuous, per spec item 45's own explicit warning not to auto-
   recommend it merely for that reason.
 * **Generic `ImmutableSet[Byte]` representation**: unaffected by M3 or M4
   (both milestones only ever change effect *classification*, never
   representation).
-* **`byte::set`'s own temporary `List[Byte]`** (`bytes`, built via
+* **`std::byte::set`'s own temporary `List[Byte]`** (`bytes`, built via
   `listnew`/4x `listappend` before the now-refined `setfromlisttotal`
   call): still present, still a real allocation (`byte.bot:175`'s own
   sites, x1/x4, unchanged before/after) -- explicitly out of scope (spec
   item: "remove the temporary List[Byte]" is a **must NOT**).
-* **`char::codepoint` helper**: unaffected, still a direct 39-byte call.
+* **`std::char::codepoint` helper**: unaffected, still a direct 39-byte call.
 * **Checked `Byte` construction for statically known literals**
-  (`byte::from_int`, 337 bytes, still fully generic range-checking logic
+  (`std::byte::from_int`, 337 bytes, still fully generic range-checking logic
   even for the four call-site literals `'-' '.' '_' '~'` that obviously
-  fit): still present, still the reason `byte::set` as a whole stays
+  fit): still present, still the reason `std::byte::set` as a whole stays
   `may_error=true` -- explicitly out of scope this milestone (spec items
   30/32 forbid touching it), and now the clearest concrete candidate for a
   **future**, *separate* milestone (a call-specific completion/constant-
@@ -681,11 +681,11 @@ choice, not additional work bundled into M4.
 
 | fact | before M4 | after M4 |
 |---|---|---|
-| `byte::set`'s own `SetFromList` local-op effect | `may_error=true` (blind to operand type) | `may_error=false` (proven from static list element type) |
-| `byte::set`'s own internal `rt_set_from_list` NO_VALUE recheck | present | **gone** |
-| `byte::set` function aggregate | `may_error=true` | **unchanged**, `true` (via `byte::from_int`) |
-| `<program> -> byte::set` edge | `may_error=true` | **unchanged**, `true` |
-| `byte::set(['Ā'])`'s own real RANGE-family failure | raised (`UNCAUGHT-ERROR`/`AboveRange`) | **unchanged**, still raised |
+| `std::byte::set`'s own `SetFromList` local-op effect | `may_error=true` (blind to operand type) | `may_error=false` (proven from static list element type) |
+| `std::byte::set`'s own internal `rt_set_from_list` NO_VALUE recheck | present | **gone** |
+| `std::byte::set` function aggregate | `may_error=true` | **unchanged**, `true` (via `std::byte::from_int`) |
+| `<program> -> std::byte::set` edge | `may_error=true` | **unchanged**, `true` |
+| `std::byte::set(['Ā'])`'s own real RANGE-family failure | raised (`UNCAUGHT-ERROR`/`AboveRange`) | **unchanged**, still raised |
 | Generic `SetFromList` (broad/erased/unsupported operands) | `may_error=true` | unchanged, `true` |
 | `SetContains`/`setcontainstotal` (M3's own subject) | unaffected | unaffected (confirmed directly) |
 | `ImmutableSet`/`List` representation, dedup algorithm, allocation strategy | unaffected | unaffected |
@@ -698,22 +698,22 @@ Two independent, evidenced candidates, neither implemented here:
 
 1. **Checked domain construction over statically-known-in-range literal
    arguments** (the clearest new evidence from this milestone's own
-   re-census): `byte::from_int(char::codepoint(c))` inside `byte::set`
+   re-census): `std::byte::from_int(std::char::codepoint(c))` inside `std::byte::set`
    remains fully generic range-checking machinery (337 bytes, 2 `fail`
    paths) even at the one real call site in the frozen corpus, where all
    four actual arguments (`'-' '.' '_' '~'`) are statically known to be in
    Byte's own range -- a call-specific completion proof
    (STATIC-COMPLETION-PROOFS.md's own existing machinery, already used
-   elsewhere for e.g. `byte::set`'s own declared-error narrowing) could in
-   principle prove `byte::from_int`'s own `AboveRange` unreachable for this
-   exact call, closing the *other* half of `byte::set`'s own `may_error`
+   elsewhere for e.g. `std::byte::set`'s own declared-error narrowing) could in
+   principle prove `std::byte::from_int`'s own `AboveRange` unreachable for this
+   exact call, closing the *other* half of `std::byte::set`'s own `may_error`
    classification that M4 deliberately left alone. This would be the
    natural, evidenced continuation of the M1-M4 arc's own shape ("repair
    one information-preservation boundary, let existing effect machinery do
    the rest"), and is explicitly **not** the same thing as "optimizing
    away checked Byte construction" in general (spec items 30/32's own
    prohibition) -- it is a call-specific proof, exactly like
-   `byte::set`'s own existing `AboveRange`-impossibility proof for
+   `std::byte::set`'s own existing `AboveRange`-impossibility proof for
    *itself* already is.
 2. **Family 1b** (`refined-checks`/`uri-steady`'s own `StringRegion`
    scanner-index guards, 11 `guard` ops across
@@ -732,7 +732,7 @@ actually support.
 ## Required architecture questions
 
 1. **What static type reaches the real `immutable_set_from_list(bytes)`
-   call in `byte::set`?** `List[Byte]` (`{list {refined int {Byte}}}`),
+   call in `std::byte::set`?** `List[Byte]` (`{list {refined int {Byte}}}`),
    confirmed directly via `hir::typeOf` on the `bytes` ref node.
 2. **Is that fact already present before M4?** Yes -- confirmed: `bytes`'s
    own type is fully resolved (from the `loop c in chars: from_int(...)`
@@ -774,13 +774,13 @@ actually support.
 13. **Does the positive case demonstrate effect orthogonality?** Yes --
     `setfromlist-total-int` pins both facts on the same call edge in one
     test.
-14. **Does `byte::set` as a whole become non-erroring?** **No** --
+14. **Does `std::byte::set` as a whole become non-erroring?** **No** --
     confirmed directly, not assumed: it remains `may_error=true`.
 15. **If it remains erroring, which operation still causes that?**
-    `byte::from_int`'s own genuinely fallible `AboveRange`, confirmed by
+    `std::byte::from_int`'s own genuinely fallible `AboveRange`, confirmed by
     `setfromlist-uri-byte-set-stays-erroring-via-from-int` and by the
     disassembly/effects-report trace above.
-16. **Does `byte::set(['Ā'])` still produce a real range-family error?**
+16. **Does `std::byte::set(['Ā'])` still produce a real range-family error?**
     Yes -- `CORE SEMANTIC UNCAUGHT-ERROR` (an uncaught `AboveRange`), all
     four backends, unchanged from pre-M4 behavior (confirmed directly
     against `tests/byte-set.test`'s own pre-existing, unmodified
@@ -801,9 +801,9 @@ actually support.
     175`'s own `listnew`/`listappend` sites, x1/x4, unchanged before/after.
 21. **Does module initialization lose any caller-side completion retest?**
     **No** -- confirmed by the empty `effects.txt` diff: `<program> ->
-    byte::set` stays `may_error=true`, so its own completion check is
+    std::byte::set` stays `may_error=true`, so its own completion check is
     unaffected. This is the correct, expected outcome (spec item 33): the
-    removed machinery is entirely internal to `byte::set`'s own body, not
+    removed machinery is entirely internal to `std::byte::set`'s own body, not
     at any caller edge.
 22. **`uri-steady` machine-code bytes before/after?** 7111 -> 7103 (-8B).
 23. **Allocation count/bytes before/after?** 61510/2544568, unchanged.
@@ -837,10 +837,10 @@ actually support.
     diff.
 33. **Was allocation behavior changed?** No -- allocation counts/bytes
     identical in both measured workloads.
-34. **Was `byte::set` source changed?** No -- `lib/byte.bot` has zero diff.
-35. **Was checked Byte construction optimized?** No -- `byte::from_int`
-    has zero diff, and `byte::set` still raises the real range error.
-36. **Was `char::codepoint` optimized?** No.
+34. **Was `std::byte::set` source changed?** No -- `stdlib/byte.bot` has zero diff.
+35. **Was checked Byte construction optimized?** No -- `std::byte::from_int`
+    has zero diff, and `std::byte::set` still raises the real range error.
+36. **Was `std::char::codepoint` optimized?** No.
 37. **Was listloop changed?** No.
 38. **Was ABI/Bool representation changed?** No.
 39. **Was specialization changed?** No -- `hir/specialize.tcl` has zero
@@ -857,7 +857,7 @@ All twelve conditions of spec section 52 hold:
    `SetContains`.
 2. `List[T]` with `IsEqualityTotal(T)` lowers to a non-erroring
    `SetFromListTotal` operation instance, confirmed by the positive
-   fixtures and the real `byte::set` trace.
+   fixtures and the real `std::byte::set` trace.
 3. Generic/broad/unsupported `SetFromList` remains potentially erroring,
    confirmed by two dedicated negative fixtures.
 4. A genuine runtime `EQUALITY` construction failure remains intact,
@@ -871,12 +871,12 @@ All twelve conditions of spec section 52 hold:
 7. No allocation, representation, fusion, constant-folding, ABI, source,
    or specialization work was bundled in (confirmed by `git diff --stat`
    and the "Required scope questions" above).
-8. The real `byte::set` path was re-measured without changing its source
-   (`lib/byte.bot` has zero diff), and its own aggregate `may_error`
-   outcome was reported honestly (still `true`, via `byte::from_int`) --
+8. The real `std::byte::set` path was re-measured without changing its source
+   (`stdlib/byte.bot` has zero diff), and its own aggregate `may_error`
+   outcome was reported honestly (still `true`, via `std::byte::from_int`) --
    not assumed to have become `false`.
 9. Checked `UnicodeChar -> Byte` failure behavior remains intact
-   (`byte::set(['Ā'])` still raises the real error, all four backends).
+   (`std::byte::set(['Ā'])` still raises the real error, all four backends).
 10. Full plain (2156/2156) and Rust (60/60) regressions pass; GC-stress
     recorded in the addendum below.
 11. The FINAL SEMANTIC SOURCE FENCE remains intact (`hir/types.tcl` zero

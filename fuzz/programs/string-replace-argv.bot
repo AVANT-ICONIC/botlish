@@ -11,40 +11,40 @@
 #   * any arguments, valid UTF-8  -> replace(a1, a2, a3) with "" for
 #     missing ones (empty needle -> haystack unchanged, per the example)
 #   * invalid UTF-8 anywhere      -> replace("", "", "") -> ""
-import list
-import str
+import std::list
+import std::str
 
 # true if needle occurs in haystack starting at index.
 fn matches_at(haystack, needle, index) errors LowerUnderrun, UpperOverrun:
-    end = index + str::length(needle)
-    if end > str::length(haystack):
+    end = index + std::str::length(needle)
+    if end > std::str::length(haystack):
         return false
 
-    str::substring(haystack, index, end) == needle
+    std::str::substring(haystack, index, end) == needle
 
 # haystack from index on with its matches replaced, appended to done;
 # unmatched text from run_start up to index has not been copied yet.
 fn replace_from(haystack, needle, replacement, index, run_start, done) errors LowerUnderrun, UpperOverrun:
-    if index + str::length(needle) > str::length(haystack):
-        return str::concat(done, str::substring(haystack, run_start, str::length(haystack)))
+    if index + std::str::length(needle) > std::str::length(haystack):
+        return std::str::concat(done, std::str::substring(haystack, run_start, std::str::length(haystack)))
 
     if matches_at(haystack, needle, index):
-        copied = str::concat(done, str::substring(haystack, run_start, index))
-        after = index + str::length(needle)
-        return replace_from(haystack, needle, replacement, after, after, str::concat(copied, replacement))
+        copied = std::str::concat(done, std::str::substring(haystack, run_start, index))
+        after = index + std::str::length(needle)
+        return replace_from(haystack, needle, replacement, after, after, std::str::concat(copied, replacement))
 
     replace_from(haystack, needle, replacement, index + 1, run_start, done)
 
 fn replace(haystack, needle, replacement) errors LowerUnderrun, UpperOverrun:
-    if str::length(needle) == 0:
+    if std::str::length(needle) == 0:
         return haystack
 
     replace_from(haystack, needle, replacement, 0, 0, "")
 
 # Argument i of the captured vector, or "" when it does not exist.
 fn argument(args, index):
-    if list::length(args) > index:
-        list::get(args, index, "")
+    if std::list::length(args) > index:
+        std::list::get(args, index, "")
     else:
         ""
 

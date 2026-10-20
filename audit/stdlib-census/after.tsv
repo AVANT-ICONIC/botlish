@@ -1,0 +1,513 @@
+name	kind	namespace	role	origin	location	platform	arch	direct
+*	intrinsic		primitive	intrinsic				
++	intrinsic		primitive	intrinsic				
+-	intrinsic		primitive	intrinsic				
+/	intrinsic		primitive	intrinsic	core/float.tcl:358			
+<	intrinsic		primitive	intrinsic				
+<=	intrinsic		primitive	intrinsic				
+==	intrinsic		primitive	intrinsic	core/primitives.tcl:99			
+>	intrinsic		primitive	intrinsic				
+>=	intrinsic		primitive	intrinsic				
+DecimalRounded#*	intrinsic		internal	intrinsic				
+DecimalRounded#+	intrinsic		internal	intrinsic				
+DecimalRounded#-	intrinsic		internal	intrinsic				
+DecimalRounded#/	intrinsic		internal	intrinsic				
+DecimalRounded#<	intrinsic		internal	intrinsic				
+DecimalRounded#<=	intrinsic		internal	intrinsic				
+DecimalRounded#==	intrinsic		internal	intrinsic				
+DecimalRounded#>	intrinsic		internal	intrinsic				
+DecimalRounded#>=	intrinsic		internal	intrinsic				
+DecimalRounded#neg	intrinsic		internal	intrinsic				
+Float64#*	intrinsic		internal	intrinsic				
+Float64#+	intrinsic		internal	intrinsic				
+Float64#-	intrinsic		internal	intrinsic				
+Float64#/	intrinsic		internal	intrinsic				
+Float64#<	intrinsic		internal	intrinsic				
+Float64#<=	intrinsic		internal	intrinsic				
+Float64#>	intrinsic		internal	intrinsic				
+Float64#>=	intrinsic		internal	intrinsic				
+Float64#neg	intrinsic		internal	intrinsic				
+IndexNotFound	builtin-error		builtin	intrinsic	core/native.tcl			
+InvalidArgumentEncoding	builtin-error		builtin	intrinsic	core/native.tcl			
+LayoutExtentMismatch	builtin-error		builtin	intrinsic	core/native.tcl			
+LayoutLengthMismatch	builtin-error		builtin	intrinsic	core/native.tcl			
+LowerUnderrun	builtin-error		builtin	intrinsic	core/native.tcl			
+NativeEditNull	builtin-error		builtin	intrinsic	core/native.tcl			
+NativeViewNull	builtin-error		builtin	intrinsic	core/native.tcl			
+NonFiniteFloat	builtin-error		builtin	intrinsic	core/native.tcl			
+NonFiniteResult	builtin-enum		builtin	intrinsic	core/native.tcl			
+PositiveInfinity NegativeInfinity NotANumber	builtin-enum		builtin	intrinsic	core/native.tcl			
+UnrepresentableDecimal	builtin-error		builtin	intrinsic	core/native.tcl			
+UpperOverrun	builtin-error		builtin	intrinsic	core/native.tcl			
+affine#drop	intrinsic		internal	intrinsic	core/affine.tcl:124			
+argv	intrinsic		primitive	intrinsic	core/process.tcl:115			
+binary#element	intrinsic		internal	intrinsic	core/binary.tcl:759			
+binary#emit	intrinsic		internal	intrinsic	core/binary.tcl:710			
+binary#load	intrinsic		internal	intrinsic	core/binary.tcl:732			
+binary#load_array	intrinsic		internal	intrinsic	core/binary.tcl:769			
+binary#store_element	intrinsic		internal	intrinsic	core/binary.tcl:766			
+binary#view_field	intrinsic		internal	intrinsic	core/binary.tcl:735			
+bit_and	intrinsic		primitive	intrinsic				
+bit_or	intrinsic		primitive	intrinsic				
+bit_xor	intrinsic		primitive	intrinsic				
+context#install	intrinsic		internal	intrinsic	core/contexts.tcl:106			
+context#load	intrinsic		internal	intrinsic	core/contexts.tcl:108			
+context#unreachable	intrinsic		internal	intrinsic	core/contexts.tcl:110			
+coroutine#create	intrinsic		internal	intrinsic	core/coroutines.tcl:324			
+coroutine#release	intrinsic		internal	intrinsic	core/coroutines.tcl:334			
+coroutine#resume	intrinsic		internal	intrinsic	core/coroutines.tcl:328			
+coroutine#start	intrinsic		internal	intrinsic	core/coroutines.tcl:326			
+coroutine#yield	intrinsic		internal	intrinsic	core/coroutines.tcl:330			
+decimal_rounded#equal	intrinsic		internal	intrinsic				
+decimal_rounded#greater	intrinsic		internal	intrinsic				
+decimal_rounded#greater_equal	intrinsic		internal	intrinsic				
+decimal_rounded#less	intrinsic		internal	intrinsic				
+decimal_rounded#less_equal	intrinsic		internal	intrinsic				
+decimal_rounded#round	intrinsic		internal	intrinsic	core/decimal.tcl:803			
+decimal_rounded#to_float64	intrinsic		internal	intrinsic	core/decimal.tcl:797			
+error?	intrinsic		primitive	intrinsic	core/predicates.tcl:55			
+foreign#refused	intrinsic		internal	intrinsic				
+hash	intrinsic		primitive	intrinsic	core/hashing.tcl:253			
+integer?	intrinsic		primitive	intrinsic				
+list	intrinsic		primitive	intrinsic	core/primitives.tcl:102			
+list?	intrinsic		primitive	intrinsic				
+mod	intrinsic		primitive	intrinsic	core/primitives.tcl:96			
+mutable_array#consume	intrinsic		internal	intrinsic	core/mutarray.tcl:413			
+mutable_array#generate_drop	intrinsic		internal	intrinsic	core/mutarray.tcl:424			
+mutable_array#set_drop	intrinsic		internal	intrinsic	core/mutarray.tcl:421			
+mutable_array#swap_drop	intrinsic		internal	intrinsic	core/mutarray.tcl:418			
+mutable_array#take_front	intrinsic		internal	intrinsic	core/mutarray.tcl:415			
+mutable_array#to_list	intrinsic		internal	intrinsic	core/mutarray.tcl:410			
+mutable_vector#clear_drop	intrinsic		internal	intrinsic	core/mutvec.tcl:357			
+mutable_vector#consume	intrinsic		internal	intrinsic	core/mutvec.tcl:349			
+mutable_vector#share	intrinsic		internal	intrinsic	core/mutvec.tcl:347			
+mutable_vector#swap_drop	intrinsic		internal	intrinsic	core/mutvec.tcl:359			
+mutable_vector#take_front	intrinsic		internal	intrinsic	core/mutvec.tcl:354			
+mutable_vector#to_list	intrinsic		internal	intrinsic	core/mutvec.tcl:351			
+mutarray?	intrinsic		primitive	intrinsic				
+ok?	intrinsic		primitive	intrinsic	core/predicates.tcl:54			
+result-error	intrinsic		internal	intrinsic	core/predicates.tcl:59			
+result-value	intrinsic		internal	intrinsic	core/predicates.tcl:57			
+shift_left	intrinsic		primitive	intrinsic				
+shift_right	intrinsic		primitive	intrinsic				
+std::abi	namespace		api	source	stdlib/abi.bot			
+std::abi::AbiIntegerAboveRange	error	std::abi	api	source	stdlib/abi.bot:114			
+std::abi::AbiIntegerBelowRange	error	std::abi	api	source	stdlib/abi.bot:113			
+std::abi::I16	struct	std::abi	api	source	stdlib/abi.bot:157			
+std::abi::I16Value	type	std::abi	api	source	stdlib/abi.bot:120			
+std::abi::I32	struct	std::abi	api	source	stdlib/abi.bot:160			
+std::abi::I32Value	type	std::abi	api	source	stdlib/abi.bot:121			
+std::abi::I64	struct	std::abi	api	source	stdlib/abi.bot:163			
+std::abi::I64Value	type	std::abi	api	source	stdlib/abi.bot:122			
+std::abi::I8	struct	std::abi	api	source	stdlib/abi.bot:154			
+std::abi::I8Value	type	std::abi	api	source	stdlib/abi.bot:119			
+std::abi::Isize	struct	std::abi	api	source	stdlib/abi.bot:178			
+std::abi::IsizeValue	type	std::abi	api	source	stdlib/abi.bot:148			
+std::abi::U16	struct	std::abi	api	source	stdlib/abi.bot:169			
+std::abi::U16Value	type	std::abi	api	source	stdlib/abi.bot:125			
+std::abi::U32	struct	std::abi	api	source	stdlib/abi.bot:172			
+std::abi::U32Value	type	std::abi	api	source	stdlib/abi.bot:126			
+std::abi::U64	struct	std::abi	api	source	stdlib/abi.bot:175			
+std::abi::U64Value	type	std::abi	api	source	stdlib/abi.bot:127			
+std::abi::U8	struct	std::abi	api	source	stdlib/abi.bot:166			
+std::abi::U8Value	type	std::abi	api	source	stdlib/abi.bot:124			
+std::abi::Usize	struct	std::abi	api	source	stdlib/abi.bot:181			
+std::abi::UsizeValue	type	std::abi	api	source	stdlib/abi.bot:149			
+std::abi::aarch64	namespace		api	source+intrinsic	stdlib/abi/aarch64.bot			
+std::abi::aarch64::Register64	struct	std::abi::aarch64	api	source	stdlib/abi/aarch64.bot:70			
+std::abi::aarch64::Register64AboveRange	error	std::abi::aarch64	api	source	stdlib/abi/aarch64.bot:64			
+std::abi::aarch64::Register64BelowRange	error	std::abi::aarch64	api	source	stdlib/abi/aarch64.bot:63			
+std::abi::aarch64::Register64Word	type	std::abi::aarch64	api	source	stdlib/abi/aarch64.bot:68			
+std::abi::aarch64::from_bytes	intrinsic	std::abi::aarch64	api	intrinsic				
+std::abi::aarch64::from_i16	function	std::abi::aarch64	api	source	stdlib/abi/aarch64.bot:135			
+std::abi::aarch64::from_i32	function	std::abi::aarch64	api	source	stdlib/abi/aarch64.bot:138			
+std::abi::aarch64::from_i64	function	std::abi::aarch64	api	source	stdlib/abi/aarch64.bot:141			
+std::abi::aarch64::from_i8	function	std::abi::aarch64	api	source	stdlib/abi/aarch64.bot:132			
+std::abi::aarch64::from_isize	function	std::abi::aarch64	api	source	stdlib/abi/aarch64.bot:144			
+std::abi::aarch64::from_mutable_bytes	intrinsic	std::abi::aarch64	api	intrinsic				
+std::abi::aarch64::from_u16	function	std::abi::aarch64	api	source	stdlib/abi/aarch64.bot:150			
+std::abi::aarch64::from_u32	function	std::abi::aarch64	api	source	stdlib/abi/aarch64.bot:153			
+std::abi::aarch64::from_u64	function	std::abi::aarch64	api	source	stdlib/abi/aarch64.bot:158			
+std::abi::aarch64::from_u8	function	std::abi::aarch64	api	source	stdlib/abi/aarch64.bot:147			
+std::abi::aarch64::from_usize	function	std::abi::aarch64	api	source	stdlib/abi/aarch64.bot:165			
+std::abi::aarch64::register64	function	std::abi::aarch64	api	source	stdlib/abi/aarch64.bot:76			
+std::abi::aarch64::to_int	function	std::abi::aarch64	api	source	stdlib/abi/aarch64.bot:89			
+std::abi::bytes	namespace		api	source	stdlib/abi/bytes.bot			
+std::abi::bytes::Bytes	opaque-struct	std::abi::bytes	api	source	stdlib/abi/bytes.bot:97			
+std::abi::bytes::MutableBytes	opaque-struct	std::abi::bytes	api	source	stdlib/abi/bytes.bot:100			
+std::abi::bytes::detach	function	std::abi::bytes	api	source	stdlib/abi/bytes.bot:152			
+std::abi::bytes::freeze	function	std::abi::bytes	api	source	stdlib/abi/bytes.bot:157			
+std::abi::bytes::freeze_prefix	function	std::abi::bytes	api	source	stdlib/abi/bytes.bot:163			
+std::abi::bytes::from_bytes	function	std::abi::bytes	api	source	stdlib/abi/bytes.bot:128			
+std::abi::bytes::from_list	function	std::abi::bytes	api	source	stdlib/abi/bytes.bot:108			
+std::abi::bytes::length	function	std::abi::bytes	api	source	stdlib/abi/bytes.bot:114			
+std::abi::bytes::mutable_length	function	std::abi::bytes	api	source	stdlib/abi/bytes.bot:133			
+std::abi::bytes::replace	function	std::abi::bytes	api	source	stdlib/abi/bytes.bot:139			
+std::abi::bytes::zeroed	function	std::abi::bytes	api	source	stdlib/abi/bytes.bot:123			
+std::abi::i16	function	std::abi	api	source	stdlib/abi.bot:201			
+std::abi::i32	function	std::abi	api	source	stdlib/abi.bot:209			
+std::abi::i64	function	std::abi	api	source	stdlib/abi.bot:217			
+std::abi::i8	function	std::abi	api	source	stdlib/abi.bot:193			
+std::abi::isize	function	std::abi	api	source	stdlib/abi.bot:258			
+std::abi::u16	function	std::abi	api	source	stdlib/abi.bot:233			
+std::abi::u32	function	std::abi	api	source	stdlib/abi.bot:241			
+std::abi::u64	function	std::abi	api	source	stdlib/abi.bot:249			
+std::abi::u8	function	std::abi	api	source	stdlib/abi.bot:225			
+std::abi::usize	function	std::abi	api	source	stdlib/abi.bot:266			
+std::abi::x86_64	namespace		api	source+intrinsic	stdlib/abi/x86_64.bot			
+std::abi::x86_64::Register64	struct	std::abi::x86_64	api	source	stdlib/abi/x86_64.bot:76			
+std::abi::x86_64::Register64AboveRange	error	std::abi::x86_64	api	source	stdlib/abi/x86_64.bot:70			
+std::abi::x86_64::Register64BelowRange	error	std::abi::x86_64	api	source	stdlib/abi/x86_64.bot:69			
+std::abi::x86_64::Register64Word	type	std::abi::x86_64	api	source	stdlib/abi/x86_64.bot:74			
+std::abi::x86_64::from_bytes	intrinsic	std::abi::x86_64	api	intrinsic				
+std::abi::x86_64::from_i16	function	std::abi::x86_64	api	source	stdlib/abi/x86_64.bot:141			
+std::abi::x86_64::from_i32	function	std::abi::x86_64	api	source	stdlib/abi/x86_64.bot:144			
+std::abi::x86_64::from_i64	function	std::abi::x86_64	api	source	stdlib/abi/x86_64.bot:147			
+std::abi::x86_64::from_i8	function	std::abi::x86_64	api	source	stdlib/abi/x86_64.bot:138			
+std::abi::x86_64::from_isize	function	std::abi::x86_64	api	source	stdlib/abi/x86_64.bot:150			
+std::abi::x86_64::from_mutable_bytes	intrinsic	std::abi::x86_64	api	intrinsic				
+std::abi::x86_64::from_u16	function	std::abi::x86_64	api	source	stdlib/abi/x86_64.bot:156			
+std::abi::x86_64::from_u32	function	std::abi::x86_64	api	source	stdlib/abi/x86_64.bot:159			
+std::abi::x86_64::from_u64	function	std::abi::x86_64	api	source	stdlib/abi/x86_64.bot:164			
+std::abi::x86_64::from_u8	function	std::abi::x86_64	api	source	stdlib/abi/x86_64.bot:153			
+std::abi::x86_64::from_usize	function	std::abi::x86_64	api	source	stdlib/abi/x86_64.bot:171			
+std::abi::x86_64::register64	function	std::abi::x86_64	api	source	stdlib/abi/x86_64.bot:82			
+std::abi::x86_64::to_int	function	std::abi::x86_64	api	source	stdlib/abi/x86_64.bot:95			
+std::ascii	namespace		api	source	stdlib/ascii.bot			
+std::ascii::is_alphabetic	function	std::ascii	api	source	stdlib/ascii.bot:50			
+std::ascii::is_alphanumeric	function	std::ascii	api	source	stdlib/ascii.bot:53			
+std::ascii::is_digit	function	std::ascii	api	source	stdlib/ascii.bot:41			
+std::ascii::is_lower	function	std::ascii	api	source	stdlib/ascii.bot:47			
+std::ascii::is_upper	function	std::ascii	api	source	stdlib/ascii.bot:44			
+std::binary	namespace		api	source+intrinsic	stdlib/binary.bot			
+std::binary::I16	type	std::binary	api	source	stdlib/binary.bot:61			
+std::binary::I32	type	std::binary	api	source	stdlib/binary.bot:62			
+std::binary::I64	type	std::binary	api	source	stdlib/binary.bot:63			
+std::binary::I8	type	std::binary	api	source	stdlib/binary.bot:60			
+std::binary::U16	type	std::binary	api	source	stdlib/binary.bot:56			
+std::binary::U32	type	std::binary	api	source	stdlib/binary.bot:57			
+std::binary::U64	type	std::binary	api	source	stdlib/binary.bot:58			
+std::binary::U8	type	std::binary	api	source	stdlib/binary.bot:55			
+std::binary::element	intrinsic	std::binary	api	intrinsic	core/binary.tcl:756			
+std::binary::emit	intrinsic	std::binary	api	intrinsic	core/binary.tcl:707			
+std::binary::layout_alignment	intrinsic	std::binary	api	intrinsic	core/binary.tcl:724			
+std::binary::layout_length	intrinsic	std::binary	api	intrinsic	core/binary.tcl:722			
+std::binary::load	intrinsic	std::binary	api	intrinsic	core/binary.tcl:729			
+std::binary::native	namespace		api	intrinsic				1
+std::binary::native::edit	intrinsic	std::binary::native	api	intrinsic	core/binary.tcl:738			
+std::binary::native::view	intrinsic	std::binary::native	api	intrinsic	core/binary.tcl:726			
+std::binary::parse	intrinsic	std::binary	api	intrinsic	core/binary.tcl:704			
+std::binary::read	intrinsic	std::binary	api	intrinsic	core/binary.tcl:719			
+std::binary::store	intrinsic	std::binary	api	intrinsic	core/binary.tcl:741			
+std::binary::store_element	intrinsic	std::binary	api	intrinsic	core/binary.tcl:762			
+std::binary::write	intrinsic	std::binary	api	intrinsic	core/binary.tcl:744			
+std::binary::write_foreign	intrinsic	std::binary	api	intrinsic	core/binary.tcl:748			
+std::byte	namespace		api	source	stdlib/byte.bot			
+std::byte::AboveRange	error	std::byte	api	source	stdlib/byte.bot:75			
+std::byte::BelowRange	error	std::byte	api	source	stdlib/byte.bot:74			
+std::byte::Byte	type	std::byte	api	source	stdlib/byte.bot:101			
+std::byte::HighNibble	type	std::byte	api	source	stdlib/byte.bot:106			
+std::byte::LowNibble	type	std::byte	api	source	stdlib/byte.bot:104			
+std::byte::Nibble	type	std::byte	api	source	stdlib/byte.bot:103			
+std::byte::complement	function	std::byte	api	source	stdlib/byte.bot:122			
+std::byte::from_int	function	std::byte	api	source	stdlib/byte.bot:151			
+std::byte::high_nibble	function	std::byte	api	source	stdlib/byte.bot:113			
+std::byte::low_nibble	function	std::byte	api	source	stdlib/byte.bot:116			
+std::byte::nibble	function	std::byte	api	source	stdlib/byte.bot:119			
+std::byte::position_high	function	std::byte	api	source	stdlib/byte.bot:128			
+std::byte::position_low	function	std::byte	api	source	stdlib/byte.bot:125			
+std::byte::set	function	std::byte	api	source	stdlib/byte.bot:174			
+std::byte_store	namespace		api	intrinsic				
+std::byte_store::byte_count	intrinsic	std::byte_store	api	intrinsic	core/bytestore.tcl:197			
+std::byte_store::from_list	intrinsic	std::byte_store	api	intrinsic	core/bytestore.tcl:195			
+std::char	namespace		api	intrinsic				
+std::char::scalar_value	intrinsic	std::char	api	intrinsic	core/unicodechar.tcl:29			
+std::compiler	namespace		api	source	stdlib/compiler.bot			
+std::compiler::CompilerError	error	std::compiler	api	source	stdlib/compiler.bot:157			
+std::compiler::DiagnosticCode	enum	std::compiler	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::AffineCaptureUnsupported	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::AffineContainerUnsupported	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::AffineDuplicationUnsupported	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::AffineElementCopyOut	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::AffineEqualityUnsupported	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::AffineErasureUnsupported	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::AffineFieldMoveRequiresDestructure	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::AffineGenericNestedUnsupported	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::AffineInstanceBudget	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::AffineListOperationUnsupported	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::AffineNotDefinitelyLive	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::AffinePathReleaseUnsupported	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::AffineTemporaryUnsupported	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::AmbiguousContextImplementation	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::AmbiguousMethodCall	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::AmbiguousQualifier	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::Arity	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::BinaryOperand	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::BreakOutsideLoop	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::ContextBindingCollision	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::ContextFunctionValue	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::ContextInstallationUnsupported	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::ContextTraitMisuse	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::ContextTraitPosition	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::ContinueOutsideLoop	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::CoroutineContract	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::CoroutineNotFunction	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::CoroutineResultMismatch	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::CoroutineResumeArity	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::CoroutineResumeConflict	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::CoroutineResumeType	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::CoroutineResumeUnderconstrained	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::CoroutineRhsNotYielding	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::DecimalGuaranteeLost	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::DecimalPrecision	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::Direct	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::DirectCallableValue	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::Duplicate	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::DuplicateContextParameter	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::DuplicateField	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::DuplicateFlag	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::DuplicateFlagDeclaration	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::DuplicateLoopVariable	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::FlagBindingCollision	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::FlagCalleeUnknown	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::FlagFunctionValue	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::ForeignBorrow	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::Imprint	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::KnownError	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::LayoutArrayExtent	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::LayoutArrayIndex	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::LayoutForeignWrite	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::LayoutNativeOnly	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::LayoutNotAType	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::LayoutNotAValue	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::LayoutOperand	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::LayoutStructParameter	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::LayoutUnion	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::LockstepUnequal	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::LockstepUnproven	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::MissingContext	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::MissingErrorPayload	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::MissingField	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::MissingImport	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::ModuleContext	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::ModuleImmutable	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::MutablePlaceCapture	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::MutablePlaceReceiver	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::NoApplicableMethod	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::NomethodCall	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::NotAContext	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::NotAStruct	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::NotAnEnum	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::OpaqueConstruction	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::OpaqueRepresentation	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::ProofClause	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::RefinementMintAuthority	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::RefinementParameter	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::ReturnOutsideCallable	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::TraitImplOrder	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::TraitInstanceBudget	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::TraitNestedPolymorphic	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::TraitNotSatisfied	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::TraitPolymorphicFunctionValue	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::TraitPolymorphicRecursion	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::TraitStorageUnsupported	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::TraitUnknownOperation	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::TraitViewMisuse	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::TraitWitnessJoin	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::Type	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::Unbound	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::UndeclaredError	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::UnexpectedErrorPayload	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::UnhandledError	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::UnknownEnumCase	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::UnknownField	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::UnknownFlag	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::UnknownLayout	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::UnknownNamespace	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::UnknownStruct	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::UnknownSymbol	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::UnprovenField	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::UnwrappedYield	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::UseAfterMove	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::DiagnosticCode::YieldOutsideFunction	enum-case	std::compiler::DiagnosticCode	api	source	stdlib/compiler.bot:42			
+std::compiler::SourceLocation	struct	std::compiler	api	source	stdlib/compiler.bot:151			
+std::coroutine	namespace		api	intrinsic				
+std::coroutine::done?	intrinsic	std::coroutine	api	intrinsic	core/coroutines.tcl:332			
+std::decimal_rounded	namespace		api	intrinsic				
+std::decimal_rounded::round	intrinsic	std::decimal_rounded	api	intrinsic	core/decimal.tcl:799			
+std::ffi::c	namespace		api	source+intrinsic	stdlib/ffi/c.bot			
+std::ffi::c::Bool	intrinsic-type	std::ffi::c	api	intrinsic	hir/cabi.tcl			
+std::ffi::c::Char	c-scalar-type	std::ffi::c	api	intrinsic	core/cabi.tcl			
+std::ffi::c::Double	intrinsic-type	std::ffi::c	api	intrinsic	hir/cabi.tcl			
+std::ffi::c::FnPtr	intrinsic-type	std::ffi::c	api	intrinsic	hir/cabi.tcl			
+std::ffi::c::Int	c-scalar-type	std::ffi::c	api	intrinsic	core/cabi.tcl			
+std::ffi::c::Long	c-scalar-type	std::ffi::c	api	intrinsic	core/cabi.tcl			
+std::ffi::c::LongLong	c-scalar-type	std::ffi::c	api	intrinsic	core/cabi.tcl			
+std::ffi::c::Ptr	intrinsic-type	std::ffi::c	api	intrinsic	hir/cabi.tcl			
+std::ffi::c::SChar	c-scalar-type	std::ffi::c	api	intrinsic	core/cabi.tcl			
+std::ffi::c::Short	c-scalar-type	std::ffi::c	api	intrinsic	core/cabi.tcl			
+std::ffi::c::UChar	c-scalar-type	std::ffi::c	api	intrinsic	core/cabi.tcl			
+std::ffi::c::UInt	c-scalar-type	std::ffi::c	api	intrinsic	core/cabi.tcl			
+std::ffi::c::ULong	c-scalar-type	std::ffi::c	api	intrinsic	core/cabi.tcl			
+std::ffi::c::ULongLong	c-scalar-type	std::ffi::c	api	intrinsic	core/cabi.tcl			
+std::ffi::c::UShort	c-scalar-type	std::ffi::c	api	intrinsic	core/cabi.tcl			
+std::ffi::c::Void	intrinsic-type	std::ffi::c	api	intrinsic	hir/cabi.tcl			
+std::ffi::c::clone	intrinsic	std::ffi::c	api	intrinsic	core/cabi.tcl:339			
+std::ffi::c::erase	intrinsic	std::ffi::c	api	intrinsic	core/cabi.tcl:341			
+std::ffi::c::null	intrinsic	std::ffi::c	api	intrinsic	core/cabi.tcl:335			
+std::ffi::c::null?	intrinsic	std::ffi::c	api	intrinsic	core/cabi.tcl:337			
+std::ffi::c::retype	intrinsic	std::ffi::c	api	intrinsic	core/cabi.tcl:344			
+std::float64	namespace		api	intrinsic				
+std::float64::from_decimal_rounded	intrinsic	std::float64	api	intrinsic	core/decimal.tcl:794			
+std::float64::from_int	intrinsic	std::float64	api	intrinsic				
+std::float64::truncate	intrinsic	std::float64	api	intrinsic				
+std::immutable_set	namespace		api	intrinsic				
+std::immutable_set::contains	intrinsic	std::immutable_set	api	intrinsic	core/immutableset.tcl:78			
+std::immutable_set::from_list	intrinsic	std::immutable_set	api	intrinsic	core/immutableset.tcl:75			
+std::io	namespace		api	source	stdlib/io.bot			
+std::io::IO	context-trait	std::io	api	source	stdlib/io.bot:48			
+std::io::WriteFailed	error	std::io	api	source	stdlib/io.bot:44			
+std::io::path	namespace		api	source	stdlib/io/path.bot			
+std::io::path::NotAPath	error	std::io::path	api	source	stdlib/io/path.bot:24			
+std::io::path::Path	trait	std::io::path	api	source	stdlib/io/path.bot:33			
+std::io::path::concat	function	std::io::path	api	source	stdlib/io/path.bot:40			
+std::io::path::text	function	std::io::path	api	source	stdlib/io/path.bot:44			
+std::io::print	function	std::io	api	source	stdlib/io.bot:53			
+std::io::print_line	function	std::io	api	source	stdlib/io.bot:59			
+std::io::write_error	function	std::io	api	source	stdlib/io.bot:63			
+std::io::write_error_line	function	std::io	api	source	stdlib/io.bot:67			
+std::linux	namespace		api	source	stdlib/linux.bot	linux		1
+std::linux::ReadResult	struct	std::linux	api	source	stdlib/linux.bot:84	linux		
+std::linux::abi::aarch64	namespace		api	intrinsic		linux		1
+std::linux::abi::aarch64::syscall	intrinsic	std::linux::abi::aarch64	api	intrinsic		linux		
+std::linux::abi::x86_64	namespace		api	intrinsic		linux		1
+std::linux::abi::x86_64::syscall	intrinsic	std::linux::abi::x86_64	api	intrinsic		linux		
+std::linux::io	namespace		api	source	stdlib/linux/io.bot	linux		
+std::linux::io::FileDescriptor	opaque-struct	std::linux::io	api	source	stdlib/linux/io.bot:76	linux		
+std::linux::io::LinuxIO	context-struct	std::linux::io	api	source	stdlib/linux/io.bot:81	linux		
+std::linux::io::create	function	std::linux::io	api	source	stdlib/linux/io.bot:88	linux		
+std::linux::io::read	function	std::linux::io	api	source	stdlib/linux/io.bot:109	linux		
+std::linux::io::write	function	std::linux::io	api	source	stdlib/linux/io.bot:98	linux		
+std::linux::io::write_all	function	std::linux::io	api	source	stdlib/linux/io.bot:125	linux		
+std::linux::io::write_error	function	std::linux::io	api	source	stdlib/linux/io.bot:102	linux		
+std::linux::io::write_error_text	function	std::linux::io	api	source	stdlib/linux/io.bot:146	linux		
+std::linux::io::write_text	function	std::linux::io	api	source	stdlib/linux/io.bot:142	linux		
+std::linux::path	namespace		api	source	stdlib/linux/path.bot	linux		
+std::linux::path::LinuxPath	refined-type	std::linux::path	api	source	stdlib/linux/path.bot:41	linux		
+std::linux::path::concat	function	std::linux::path	api	source	stdlib/linux/path.bot:76	linux		
+std::linux::path::nul_free?	function	std::linux::path	api	source	stdlib/linux/path.bot:44	linux		
+std::linux::path::text	function	std::linux::path	api	source	stdlib/linux/path.bot:66	linux		
+std::linux::path::valid?	function	std::linux::path	api	source	stdlib/linux/path.bot:52	linux		
+std::linux::path::validate	function	std::linux::path	api	source	stdlib/linux/path.bot:58	linux		
+std::linux::read	function	std::linux	api	source	stdlib/linux.bot:111	linux		
+std::linux::sys	namespace		api	source	stdlib/linux/sys.aarch64.bot,stdlib/linux/sys.x86_64.bot	linux	aarch64,x86_64	1
+std::linux::sys::read	function	std::linux::sys	api	source	stdlib/linux/sys.x86_64.bot:52	linux	x86_64	
+std::linux::sys::write	function	std::linux::sys	api	source	stdlib/linux/sys.x86_64.bot:38	linux	x86_64	
+std::linux::write	function	std::linux	api	source	stdlib/linux.bot:77	linux		
+std::list	namespace		api	source+intrinsic	stdlib/list.bot			
+std::list::NotFound	error	std::list	api	source	stdlib/list.bot:74			
+std::list::all?	function	std::list	api	source	stdlib/list.bot:88			
+std::list::any?	function	std::list	api	source	stdlib/list.bot:82			
+std::list::append	intrinsic	std::list	api	intrinsic	core/lists.tcl:62			
+std::list::at	intrinsic	std::list	api	intrinsic	core/lists.tcl:59			
+std::list::find	function	std::list	api	source	stdlib/list.bot:100			
+std::list::get	function	std::list	api	source	stdlib/list.bot:76			
+std::list::length	intrinsic	std::list	api	intrinsic	core/lists.tcl:57			
+std::list::none?	function	std::list	api	source	stdlib/list.bot:94			
+std::mathish	namespace		demo	source	stdlib/mathish.bot			
+std::mathish::inc	function	std::mathish	demo	source	stdlib/mathish.bot:6			
+std::mutable_array	namespace		api	source+intrinsic	stdlib/mutable_array.bot			
+std::mutable_array::allocate	intrinsic	std::mutable_array	api	intrinsic	core/mutarray.tcl:367			
+std::mutable_array::at	intrinsic	std::mutable_array	api	intrinsic	core/mutarray.tcl:388			
+std::mutable_array::capacity	intrinsic	std::mutable_array	api	intrinsic	core/mutarray.tcl:385			
+std::mutable_array::copy	intrinsic	std::mutable_array	api	intrinsic	core/mutarray.tcl:400			
+std::mutable_array::create	intrinsic	std::mutable_array	api	intrinsic	core/mutarray.tcl:370			
+std::mutable_array::freeze	intrinsic	std::mutable_array	api	intrinsic	core/mutarray.tcl:405			
+std::mutable_array::from_list	intrinsic	std::mutable_array	api	intrinsic	core/mutarray.tcl:374			
+std::mutable_array::generate	intrinsic	std::mutable_array	api	intrinsic	core/mutarray.tcl:377			
+std::mutable_array::get	function	std::mutable_array	api	source	stdlib/mutable_array.bot:45			
+std::mutable_array::set	intrinsic	std::mutable_array	api	intrinsic	core/mutarray.tcl:392			
+std::mutable_array::swap	intrinsic	std::mutable_array	api	intrinsic	core/mutarray.tcl:396			
+std::mutable_byte_store	namespace		api	intrinsic				
+std::mutable_byte_store::count	intrinsic	std::mutable_byte_store	api	intrinsic	core/bytestore.tcl:290			
+std::mutable_byte_store::detach	intrinsic	std::mutable_byte_store	api	intrinsic	core/bytestore.tcl:294			
+std::mutable_byte_store::freeze	intrinsic	std::mutable_byte_store	api	intrinsic	core/bytestore.tcl:296			
+std::mutable_byte_store::freeze_prefix	intrinsic	std::mutable_byte_store	api	intrinsic	core/bytestore.tcl:298			
+std::mutable_byte_store::from_storage	intrinsic	std::mutable_byte_store	api	intrinsic	core/bytestore.tcl:288			
+std::mutable_byte_store::replace	intrinsic	std::mutable_byte_store	api	intrinsic	core/bytestore.tcl:292			
+std::mutable_byte_store::zeroed	intrinsic	std::mutable_byte_store	api	intrinsic	core/bytestore.tcl:286			
+std::mutable_vector	namespace		api	intrinsic				
+std::mutable_vector::at	intrinsic	std::mutable_vector	api	intrinsic	core/mutvec.tcl:328			
+std::mutable_vector::clear	intrinsic	std::mutable_vector	api	intrinsic	core/mutvec.tcl:343			
+std::mutable_vector::empty?	intrinsic	std::mutable_vector	api	intrinsic	core/mutvec.tcl:326			
+std::mutable_vector::from_list	intrinsic	std::mutable_vector	api	intrinsic	core/mutvec.tcl:321			
+std::mutable_vector::length	intrinsic	std::mutable_vector	api	intrinsic	core/mutvec.tcl:324			
+std::mutable_vector::pop	intrinsic	std::mutable_vector	api	intrinsic	core/mutvec.tcl:333			
+std::mutable_vector::push	intrinsic	std::mutable_vector	api	intrinsic	core/mutvec.tcl:331			
+std::mutable_vector::swap	intrinsic	std::mutable_vector	api	intrinsic	core/mutvec.tcl:339			
+std::mutable_vector::take	intrinsic	std::mutable_vector	api	intrinsic	core/mutvec.tcl:336			
+std::str	namespace		api	intrinsic				
+std::str::append_char	intrinsic	std::str	api	intrinsic	core/strings.tcl:124			
+std::str::char_at	intrinsic	std::str	api	intrinsic	core/strings.tcl:129			
+std::str::concat	intrinsic	std::str	api	intrinsic	core/strings.tcl:122			
+std::str::encode_utf8	intrinsic	std::str	api	intrinsic	core/strings.tcl:126			
+std::str::is_tcl_alnum	intrinsic	std::str	api	intrinsic	core/tclcompat.tcl:118			
+std::str::is_tcl_alpha	intrinsic	std::str	api	intrinsic	core/tclcompat.tcl:116			
+std::str::length	intrinsic	std::str	api	intrinsic	core/strings.tcl:114			
+std::str::lowercase	intrinsic	std::str	api	intrinsic	core/strings.tcl:120			
+std::str::substring	intrinsic	std::str	api	intrinsic	core/strings.tcl:116			
+std::test	namespace		api	source	stdlib/test.bot			
+std::test::Erased	struct	std::test	api	source	stdlib/test.bot:295			
+std::test::Match	struct	std::test	api	source	stdlib/test.bot:95			
+std::test::Suite	context-struct	std::test	api	source	stdlib/test.bot:123			
+std::test::Summary	struct	std::test	api	source	stdlib/test.bot:127			
+std::test::TestCase	struct	std::test	api	source	stdlib/test.bot:111			
+std::test::TestResult	struct	std::test	api	source	stdlib/test.bot:102			
+std::test::case	function	std::test	api	source	stdlib/test.bot:142			
+std::test::code_name	function	std::test	api	source	stdlib/test.bot:325			
+std::test::contains_text?	function	std::test	api	source	stdlib/test.bot:281			
+std::test::count	function	std::test	api	source	stdlib/test.bot:152			
+std::test::describe	function	std::test	api	source	stdlib/test.bot:307			
+std::test::diagnostic	function	std::test	api	source	stdlib/test.bot:583			
+std::test::diagnostic_text	function	std::test	api	source	stdlib/test.bot:550			
+std::test::digit_value	function	std::test	api	source	stdlib/test.bot:170			
+std::test::digits_from	function	std::test	api	source	stdlib/test.bot:177			
+std::test::equal	function	std::test	api	source	stdlib/test.bot:567			
+std::test::escape_of	function	std::test	api	source	stdlib/test.bot:214			
+std::test::escaped	function	std::test	api	source	stdlib/test.bot:230			
+std::test::glyph	function	std::test	api	source	stdlib/test.bot:160			
+std::test::holds	function	std::test	api	source	stdlib/test.bot:607			
+std::test::int_text	function	std::test	api	source	stdlib/test.bot:185			
+std::test::joined	function	std::test	api	source	stdlib/test.bot:198			
+std::test::mismatch	function	std::test	api	source	stdlib/test.bot:563			
+std::test::no_results	function	std::test	api	source	stdlib/test.bot:688			
+std::test::no_texts	function	std::test	api	source	stdlib/test.bot:193			
+std::test::passed	function	std::test	api	source	stdlib/test.bot:557			
+std::test::quoted	function	std::test	api	source	stdlib/test.bot:248			
+std::test::registered	function	std::test	api	source	stdlib/test.bot:147			
+std::test::rejects	function	std::test	api	source	stdlib/test.bot:616			
+std::test::rejects_any	function	std::test	api	source	stdlib/test.bot:638			
+std::test::rejects_at	function	std::test	api	source	stdlib/test.bot:626			
+std::test::rejects_containing	function	std::test	api	source	stdlib/test.bot:664			
+std::test::rejects_message	function	std::test	api	source	stdlib/test.bot:651			
+std::test::report	function	std::test	api	source	stdlib/test.bot:749			
+std::test::result_lines	function	std::test	api	source	stdlib/test.bot:717			
+std::test::results	function	std::test	api	source	stdlib/test.bot:692			
+std::test::run	function	std::test	api	source	stdlib/test.bot:682			
+std::test::satisfies	function	std::test	api	source	stdlib/test.bot:575			
+std::test::suite	function	std::test	api	source	stdlib/test.bot:136			
+std::test::summarize	function	std::test	api	source	stdlib/test.bot:707			
+std::test::summary_line	function	std::test	api	source	stdlib/test.bot:740			
+std::test::text_lines	function	std::test	api	source	stdlib/test.bot:254			
+std::test::value	function	std::test	api	source	stdlib/test.bot:598			
+std::web	namespace		api	source	stdlib/web.bot			
+std::web::Emailish	refined-type	std::web	api	source	stdlib/web.bot:71			
+std::web::UriQueryValue	refined-type	std::web	api	source	stdlib/web.bot:226			
+std::web::additional_unreserved_chars	binding	std::web	api	source	stdlib/web.bot:221			
+std::web::emailish?	function	std::web	api	source	stdlib/web.bot:107			
+std::web::hex_digits	binding	std::web	api	source	stdlib/web.bot:219			
+std::web::is_unreserved	function	std::web	api	source	stdlib/web.bot:223			
+std::web::local_extra_chars	binding	std::web	api	source	stdlib/web.bot:105			
+std::web::uri_escape_text	function	std::web	api	source	stdlib/web.bot:266			
+std::web::uri_query_value?	function	std::web	api	source	stdlib/web.bot:237			
+string?	intrinsic		primitive	intrinsic				

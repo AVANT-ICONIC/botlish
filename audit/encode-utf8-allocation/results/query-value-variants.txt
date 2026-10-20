@@ -1,7 +1,7 @@
 # query-value-variants.txt -- query-value-steady.bot (programs/), best of
 # 5 x native::measure 20, on: the checkout; treeA = source-only, String sets
 # (prototype/source-only-sets.patch); treeA2 = source-only, == chains
-# (source-only-equality.patch); treeC = str::char_at native BEFORE the
+# (source-only-equality.patch); treeC = std::str::char_at native BEFORE the
 # inline Cranelift fast paths (the final prototype is in final-batch.txt).
 == <checkout>
 value interp 1334

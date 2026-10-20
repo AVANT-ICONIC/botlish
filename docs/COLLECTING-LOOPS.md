@@ -266,8 +266,8 @@ fuzzing, not language semantics.
   CFG shape with a numeric induction register: `op ilt|ile|igt|ige` against
   the endpoint, `op iadd|isub 1` at the continue label, and the usual
   `discarded` optimization (a loop whose List nothing reads allocates no
-  output List; the existing corpus' statement-position loops — `lib/web.bot`'s
-  `scan_while`/`domain?`, `lib/mutarray.bot` — compile to the same loop body as
+  output List; the existing corpus' statement-position loops — `stdlib/web.bot`'s
+  `scan_while`/`domain?`, `stdlib/mutarray.bot` — compile to the same loop body as
   before). `LockLoop` is one CFG loop: each numeric clause keeps its own
   induction register, all list clauses share one position register, everything
   advances at the single continue label, and the continuation test is the
@@ -317,7 +317,7 @@ Pre-existing counted loops now collect. Concretely: `loop i from 0 to 3: i`
 was `unit` and is `[0, 1, 2]`; `break` returned `unit` and now returns the
 collected prefix; a counted loop that is the last expression of a function now
 returns a List. In the shipped corpus every counted loop is in statement
-position (`lib/web.bot`, `lib/mutarray.bot`), so nothing observable changed
+position (`stdlib/web.bot`, `stdlib/mutarray.bot`), so nothing observable changed
 there and the native discarded-result optimization keeps their code identical.
 `tests/loop-counted.test` was updated for the new results and for the two
 reserved-diagnostic tests (`down from`, `through`), which are now implemented.
@@ -438,8 +438,8 @@ What currently stops additional legal lockstep programs from proving equal:
 * Recursive accumulator loops that count down (`fn drive(i, total): if i <=
   0: return total …`) can become `loop i down from n through 1:` plus a direct
   result.
-* `loop-counted.test`, `lib/web.bot`'s `scan_while`/`tld?`/`domain?` and
-  `lib/mutarray.bot`'s `from_list`/`create` can use collected results directly
+* `loop-counted.test`, `stdlib/web.bot`'s `scan_while`/`tld?`/`domain?` and
+  `stdlib/mutarray.bot`'s `from_list`/`create` can use collected results directly
   (e.g. `from_list` as `loop x in xs and i from 0 to …` without a manual
   index) — not changed in this milestone.
 * Manual index maintenance around `list_get(xs, i)` becomes

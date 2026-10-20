@@ -28,7 +28,7 @@ totals per run: Ir=3,034,577  Dr=666,861  Dw=535,679  I1mr=117  D1mr=3,739  D1mw
     2.15%  [rust-other] __rustc::__rdl_alloc                                      Ir=   65,187.0  Dr=    7,243.0  Dw=        0.0  Bc=    7,243.0  Bcm=        0.1  Bi=    7,243.0  D1mr=        1.0  D1mw=        0.0
     1.96%  [runtime] rt_is_tcl_alnum                                              Ir=   59,600.0  Dr=   14,000.0  Dw=    6,000.0  Bc=    8,000.0  Bcm=      400.0  Bi=        0.0  D1mr=        2.0  D1mw=        0.0
     1.89%  [libc] __memcpy_avx_unaligned_erms                                     Ir=   57,252.0  Dr=    7,801.0  Dw=    4,160.0  Bc=   20,561.0  Bcm=      413.2  Bi=        0.0  D1mr=        4.0  D1mw=       12.9
-    1.46%  [botlish] 9 web::emailish?                                             Ir=   44,400.0  Dr=    6,400.0  Dw=    8,800.0  Bc=    4,800.0  Bcm=        0.1  Bi=        0.0  D1mr=        2.0  D1mw=        0.0
+    1.46%  [botlish] 9 std::web::emailish?                                             Ir=   44,400.0  Dr=    6,400.0  Dw=    8,800.0  Bc=    4,800.0  Bcm=        0.1  Bi=        0.0  D1mr=        2.0  D1mw=        0.0
     1.32%  [libc] __memcmp_avx2_movbe                                             Ir=   40,100.0  Dr=   12,030.0  Dw=        0.0  Bc=   12,030.0  Bcm=        3.0  Bi=        0.0  D1mr=        6.0  D1mw=        0.0
     0.95%  [rust-other] __rustc::__rust_no_alloc_shim_is_unstable_v2              Ir=   28,980.0  Dr=   14,490.0  Dw=    7,245.0  Bc=        0.0  Bcm=        0.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
     0.95%  [rust-other] __rustc::__rust_alloc                                     Ir=   28,972.0  Dr=    7,243.0  Dw=    7,243.0  Bc=        0.0  Bcm=        0.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
@@ -50,20 +50,20 @@ totals per run: Ir=3,034,577  Dr=666,861  Dw=535,679  I1mr=117  D1mr=3,739  D1mw
          840.0  13 scan_while                            incl  75.42% of Ir  Ir=2,288,566.2  Dr=  517,554.9  Dw=  402,367.3  Bc=  352,352.8  Bcm=   10,115.9  Bi=   31,600.0  D1mr=    3,258.7  D1mw=      786.1
          420.0  14 tld?                                  incl  26.94% of Ir  Ir=  817,544.8  Dr=  185,241.4  Dw=  146,461.0  Bc=  126,639.5  Bcm=    4,604.9  Bi=    9,600.0  D1mr=    1,228.4  D1mw=      294.9
          420.0  15 domain?                               incl  41.55% of Ir  Ir=1,260,744.8  Dr=  270,441.4  Dw=  223,261.0  Bc=  178,639.5  Bcm=    7,004.9  Bi=   11,200.0  D1mr=    1,229.4  D1mw=      294.9
-         420.0  9 web::emailish?                         incl  98.76% of Ir  Ir=2,996,924.5  Dr=  662,256.4  Dw=  528,668.0  Bc=  437,254.2  Bcm=   13,318.1  Bi=   36,400.0  D1mr=    3,674.9  D1mw=      884.4
-           4.2  1 char::codepoint                        incl   0.00% of Ir  Ir=       60.0  Dr=       16.0  Dw=       12.0  Bc=        0.0  Bcm=        0.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
-           4.2  2 byte::from_int                         incl   0.00% of Ir  Ir=      108.0  Dr=       24.0  Dw=       12.0  Bc=       12.0  Bcm=        2.1  Bi=        0.0  D1mr=        1.0  D1mw=        0.0
+         420.0  9 std::web::emailish?                         incl  98.76% of Ir  Ir=2,996,924.5  Dr=  662,256.4  Dw=  528,668.0  Bc=  437,254.2  Bcm=   13,318.1  Bi=   36,400.0  D1mr=    3,674.9  D1mw=      884.4
+           4.2  1 std::char::codepoint                        incl   0.00% of Ir  Ir=       60.0  Dr=       16.0  Dw=       12.0  Bc=        0.0  Bcm=        0.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
+           4.2  2 std::byte::from_int                         incl   0.00% of Ir  Ir=      108.0  Dr=       24.0  Dw=       12.0  Bc=       12.0  Bcm=        2.1  Bi=        0.0  D1mr=        1.0  D1mw=        0.0
            3.1  21 esc_char                              incl   0.12% of Ir  Ir=    3,528.0  Dr=      797.0  Dw=      617.0  Bc=      490.0  Bcm=       30.1  Bi=       34.0  D1mr=        6.5  D1mw=        8.0
-           3.1  5 ascii::is_upper                        incl   0.00% of Ir  Ir=       34.0  Dr=        6.0  Dw=        3.0  Bc=        5.0  Bcm=        1.1  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
-           3.1  6 ascii::is_lower                        incl   0.00% of Ir  Ir=       32.0  Dr=        6.0  Dw=        3.0  Bc=        5.0  Bcm=        0.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
-           3.1  7 ascii::is_alphabetic                   incl   0.00% of Ir  Ir=      141.0  Dr=       24.0  Dw=       21.0  Bc=       16.0  Bcm=        1.2  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
-           3.1  16 web::is_unreserved                    incl   0.02% of Ir  Ir=      549.0  Dr=      100.0  Dw=       94.0  Bc=       62.0  Bcm=        2.4  Bi=        4.0  D1mr=        0.0  D1mw=        0.0
-           3.1  8 ascii::is_alphanumeric                 incl   0.01% of Ir  Ir=      214.0  Dr=       38.0  Dw=       35.0  Bc=       21.0  Bcm=        1.2  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
+           3.1  5 std::ascii::is_upper                        incl   0.00% of Ir  Ir=       34.0  Dr=        6.0  Dw=        3.0  Bc=        5.0  Bcm=        1.1  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
+           3.1  6 std::ascii::is_lower                        incl   0.00% of Ir  Ir=       32.0  Dr=        6.0  Dw=        3.0  Bc=        5.0  Bcm=        0.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
+           3.1  7 std::ascii::is_alphabetic                   incl   0.00% of Ir  Ir=      141.0  Dr=       24.0  Dw=       21.0  Bc=       16.0  Bcm=        1.2  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
+           3.1  16 std::web::is_unreserved                    incl   0.02% of Ir  Ir=      549.0  Dr=      100.0  Dw=       94.0  Bc=       62.0  Bcm=        2.4  Bi=        4.0  D1mr=        0.0  D1mw=        0.0
+           3.1  8 std::ascii::is_alphanumeric                 incl   0.01% of Ir  Ir=      214.0  Dr=       38.0  Dw=       35.0  Bc=       21.0  Bcm=        1.2  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
            1.1  19 hex_pair                              incl   0.03% of Ir  Ir=      944.0  Dr=      222.0  Dw=      166.0  Bc=      138.0  Bcm=        5.6  Bi=        9.0  D1mr=        5.5  D1mw=        7.0
            1.1  22 esc_from                              incl   0.24% of Ir  Ir=    7,334.0  Dr=    1,717.0  Dw=    1,357.0  Bc=    1,033.0  Bcm=       73.8  Bi=       80.0  D1mr=       14.9  D1mw=       30.0
-           1.1  4 ascii::is_digit                        incl   0.00% of Ir  Ir=       10.0  Dr=        2.0  Dw=        1.0  Bc=        1.0  Bcm=        0.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
-           1.1  3 byte::set                              incl   0.09% of Ir  Ir=    2,713.0  Dr=      624.0  Dw=      494.0  Bc=      363.0  Bcm=       28.8  Bi=       42.0  D1mr=        6.0  D1mw=        1.5
-           1.1  17 web::uri_escape_text                  incl   0.24% of Ir  Ir=    7,358.0  Dr=    1,725.0  Dw=    1,364.0  Bc=    1,034.0  Bcm=       73.8  Bi=       80.0  D1mr=       15.9  D1mw=       30.0
+           1.1  4 std::ascii::is_digit                        incl   0.00% of Ir  Ir=       10.0  Dr=        2.0  Dw=        1.0  Bc=        1.0  Bcm=        0.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
+           1.1  3 std::byte::set                              incl   0.09% of Ir  Ir=    2,713.0  Dr=      624.0  Dw=      494.0  Bc=      363.0  Bcm=       28.8  Bi=       42.0  D1mr=        6.0  D1mw=        1.5
+           1.1  17 std::web::uri_escape_text                  incl   0.24% of Ir  Ir=    7,358.0  Dr=    1,725.0  Dw=    1,364.0  Bc=    1,034.0  Bcm=       73.8  Bi=       80.0  D1mr=       15.9  D1mw=       30.0
            1.1  23 check                                 incl  99.53% of Ir  Ir=3,020,164.5  Dr=  663,465.4  Dw=  533,082.0  Bc=  440,456.2  Bcm=   13,319.1  Bi=   36,400.0  D1mr=    3,676.9  D1mw=      884.4
            1.1  20 esc_bytes                             incl   0.05% of Ir  Ir=    1,624.0  Dr=      378.0  Dw=      285.0  Bc=      238.0  Bcm=       16.4  Bi=       12.0  D1mr=        6.5  D1mw=        7.0
            1.1  18 high_nibble                           incl   0.00% of Ir  Ir=       16.0  Dr=        2.0  Dw=        3.0  Bc=        1.0  Bcm=        0.1  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
@@ -75,24 +75,24 @@ totals per run: Ir=3,034,577  Dr=666,861  Dw=535,679  I1mr=117  D1mr=3,739  D1mw
        2,100.0  botlish_native::runtime::ops::rt_call_value  ->  12 local_char? (generic entry)
        2,100.0  12 local_char? (entry)  ->  12 local_char?
          420.0  15 domain?  ->  14 tld?
-         420.0  9 web::emailish?  ->  13 scan_while
-         420.0  9 web::emailish?  ->  10 char_at
-         420.0  9 web::emailish?  ->  15 domain?
+         420.0  9 std::web::emailish?  ->  13 scan_while
+         420.0  9 std::web::emailish?  ->  10 char_at
+         420.0  9 std::web::emailish?  ->  15 domain?
          420.0  14 tld?  ->  13 scan_while
-         420.0  23 check  ->  9 web::emailish?
-           4.2  3 byte::set  ->  1 char::codepoint
-           4.2  3 byte::set  ->  2 byte::from_int
+         420.0  23 check  ->  9 std::web::emailish?
+           4.2  3 std::byte::set  ->  1 std::char::codepoint
+           4.2  3 std::byte::set  ->  2 std::byte::from_int
            3.1  22 esc_from  ->  21 esc_char
-           3.1  7 ascii::is_alphabetic  ->  5 ascii::is_upper
-           3.1  7 ascii::is_alphabetic  ->  6 ascii::is_lower
-           3.1  8 ascii::is_alphanumeric  ->  7 ascii::is_alphabetic
-           3.1  21 esc_char  ->  16 web::is_unreserved
-           3.1  16 web::is_unreserved  ->  8 ascii::is_alphanumeric
+           3.1  7 std::ascii::is_alphabetic  ->  5 std::ascii::is_upper
+           3.1  7 std::ascii::is_alphabetic  ->  6 std::ascii::is_lower
+           3.1  8 std::ascii::is_alphanumeric  ->  7 std::ascii::is_alphabetic
+           3.1  21 esc_char  ->  16 std::web::is_unreserved
+           3.1  16 std::web::is_unreserved  ->  8 std::ascii::is_alphanumeric
            1.1  20 esc_bytes  ->  19 hex_pair
-           1.1  17 web::uri_escape_text  ->  22 esc_from
-           1.1  8 ascii::is_alphanumeric  ->  4 ascii::is_digit
-           1.1  0 <program>  ->  3 byte::set
-           1.1  0 <program>  ->  17 web::uri_escape_text
+           1.1  17 std::web::uri_escape_text  ->  22 esc_from
+           1.1  8 std::ascii::is_alphanumeric  ->  4 std::ascii::is_digit
+           1.1  0 <program>  ->  3 std::byte::set
+           1.1  0 <program>  ->  17 std::web::uri_escape_text
            1.1  0 <program>  ->  23 check
            1.1  21 esc_char  ->  20 esc_bytes
            1.1  19 hex_pair  ->  18 high_nibble
@@ -124,14 +124,14 @@ totals per run: Ir=3,034,577  Dr=666,861  Dw=535,679  I1mr=117  D1mr=3,739  D1mw
        1,680.0  15 domain?  ->  rt_str_region_eq
          840.0  15 domain?  ->  rt_str_region_is_tcl_alnum
          420.0  12 local_char?  ->  rt_set_contains
-         420.0  9 web::emailish?  ->  rt_str_len
-         420.0  9 web::emailish?  ->  rt_closure_new
-         420.0  9 web::emailish?  ->  rt_str_region_eq
+         420.0  9 std::web::emailish?  ->  rt_str_len
+         420.0  9 std::web::emailish?  ->  rt_closure_new
+         420.0  9 std::web::emailish?  ->  rt_str_region_eq
            4.2  22 esc_from  ->  rt_str_len
            4.2  22 esc_from  ->  runtime::construct::rt_construct
-           4.2  1 char::codepoint  ->  rt_char_codepoint
+           4.2  1 std::char::codepoint  ->  rt_char_codepoint
            4.2  0 <program>  ->  rt_list_new
-           4.2  3 byte::set  ->  rt_list_append
+           4.2  3 std::byte::set  ->  rt_list_append
            3.1  22 esc_from  ->  rt_substr
            3.1  0 <program>  ->  rt_closure_new
            3.1  21 esc_char  ->  rt_str_utf8_bytes
@@ -139,10 +139,10 @@ totals per run: Ir=3,034,577  Dr=666,861  Dw=535,679  I1mr=117  D1mr=3,739  D1mw
            2.1  20 esc_bytes  ->  rt_str_len
            1.1  20 esc_bytes  ->  runtime::construct::rt_construct
            1.1  0 <program>  ->  rt_set_from_list
-           1.1  16 web::is_unreserved  ->  rt_set_contains
-           1.1  3 byte::set  ->  rt_str_len
-           1.1  3 byte::set  ->  rt_list_new
-           1.1  3 byte::set  ->  rt_set_from_list
+           1.1  16 std::web::is_unreserved  ->  rt_set_contains
+           1.1  3 std::byte::set  ->  rt_str_len
+           1.1  3 std::byte::set  ->  rt_list_new
+           1.1  3 std::byte::set  ->  rt_set_from_list
            1.1  19 hex_pair  ->  rt_int_mod
            1.1  19 hex_pair  ->  runtime::construct::rt_construct
 

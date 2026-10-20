@@ -26,7 +26,7 @@ unfixed) blocker, `UriQueryValue?`.
   (after `strings`).
 - `native/src/runtime/ops.rs` -- `rt_is_tcl_alpha`/`rt_is_tcl_alnum`: the
   Cranelift-native counterpart, built from the `unicode-general-category`
-  crate (Unicode 16.0 data) rather than Rust's `char::is_alphabetic`/
+  crate (Unicode 16.0 data) rather than Rust's `std::char::is_alphabetic`/
   `is_alphanumeric` (§8 explains why those are not exact matches). Added to
   `apply_op` (dynamic native-value dispatch) and `helpers()` (the JIT/AOT
   symbol table). Excluded from `op_may_allocate` (non-allocating).
@@ -44,7 +44,7 @@ unfixed) blocker, `UriQueryValue?`.
 - `native/Cargo.toml` / `native/Cargo.lock` -- one new dependency,
   `unicode-general-category = "1.1.0"` (§8, §9: documented, benchmark/
   runtime-reference-only dependency, never a Botlish-architecture change).
-- `lib/web.tcl` -- `Emailish`'s `definePredicate` call now passes a third
+- `stdlib/web.tcl` -- `Emailish`'s `definePredicate` call now passes a third
   argument: the validator's grammar as ordinary core IR over
   `is_tcl_alpha`/`is_tcl_alnum`/`length`/`substring`/`+`/`==`/`if`/self-tail
   recursion (§6 walks through its shape). `Emailish`'s `core::regex::matches`
@@ -134,7 +134,7 @@ alpha -strict`/`string is alnum -strict` (what `core::tclcompat.tcl`'s Tcl
 
 This is *narrower* than several plausible alternatives, each checked and
 rejected:
-- **Rust's `char::is_alphabetic()`/`is_alphanumeric()`** use the Unicode
+- **Rust's `std::char::is_alphabetic()`/`is_alphanumeric()`** use the Unicode
   *Alphabetic*/derived-numeric properties, not raw `General_Category`. The
   Alphabetic property also admits `Nl` (e.g. U+2160) and some
   `Other_Alphabetic` combining marks (e.g. U+0345 COMBINING GREEK
@@ -223,7 +223,7 @@ claimed to generalize to every future Unicode assignment.
 
 ## 6. `Emailish?`'s native-body: ordinary compiled validator logic
 
-`lib/web.tcl`'s `emailRegex` (unchanged):
+`stdlib/web.tcl`'s `emailRegex` (unchanged):
 
 ```
 local:  1+ of (alnum | . | _ | % | + | -)
@@ -300,7 +300,7 @@ classification was still ASCII-only). Now uses
 GeneralCategory` from a generated two-level lookup table (the crate's own
 implementation, via `ucd-generate`) -- exact, not approximated, and not a
 derived/simplified property. Chosen over:
-- `char::is_alphabetic()`/`is_alphanumeric()` (Rust std): wrong semantics,
+- `std::char::is_alphabetic()`/`is_alphanumeric()` (Rust std): wrong semantics,
   §2/§3.
 - Hand-writing a category table in this repository: spec §34 explicitly
   discourages large hand-maintained Unicode tables; a maintained crate is
@@ -501,8 +501,8 @@ lowering does not currently make.
 |---|---|---|---|---|---|
 | `is_tcl_alpha` | core (`core/tclcompat.tcl`) | general string predicate | n/a (plain native, not a type predicate) | **temporary compatibility / bootstrap substrate**, this milestone | Unicode `General_Category` property table exposed to *ordinary Botlish*, not just native/runtime code (§16) |
 | `is_tcl_alnum` | core (`core/tclcompat.tcl`) | general string predicate | n/a | same as `is_tcl_alpha` | same |
-| `Emailish?` | library (`lib/web.tcl`) | type predicate, `-tests-type` | validator-backed | **fully de-nativized**, this milestone (Outcome A) | none -- its validator is now ordinary core IR over `is_tcl_alpha`/`is_tcl_alnum`/`length`/`substring`; only those two primitives remain native |
-| `UriQueryValue?` | library (`lib/web.tcl`) | type predicate, `-tests-type` | **opaque**, evidence-only | unchanged, correctly unsupported dynamically | evidence-capable native runtime representation (separate architecture direction, unaffected by this milestone) |
+| `Emailish?` | library (`stdlib/web.tcl`) | type predicate, `-tests-type` | validator-backed | **fully de-nativized**, this milestone (Outcome A) | none -- its validator is now ordinary core IR over `is_tcl_alpha`/`is_tcl_alnum`/`length`/`substring`; only those two primitives remain native |
+| `UriQueryValue?` | library (`stdlib/web.tcl`) | type predicate, `-tests-type` | **opaque**, evidence-only | unchanged, correctly unsupported dynamically | evidence-capable native runtime representation (separate architecture direction, unaffected by this milestone) |
 | `NonEmpty?` (synthetic) | test-only (`tests/helpers.tcl`) | type predicate, `-tests-type` | validator-backed | fully de-nativized (milestone 2) | none |
 | `core::type::definePredicate` | registration (`core/type.tcl`) | generic capability | n/a | unchanged (milestone 2's generalization); no changes this milestone | none |
 | `core/regex.tcl` (`core::regex::matches`) | library-internal (Tcl only) | not a registered native | n/a | unchanged; `Emailish`'s registration still cites it as the -impl/reference validator | general regex matching, still not needed elsewhere in the codebase after this milestone |

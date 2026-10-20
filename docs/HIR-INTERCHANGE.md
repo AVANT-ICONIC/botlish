@@ -59,7 +59,7 @@ compiler FINGERPRINT requires LIBRARIES hir HIR
   - `compiler`: the fingerprint of the front end that built the HIR (see
     [Validity](#validity)).
   - `requires`: the optional Tcl libraries (`core::loadLibrary`) loaded in the
-    writing process. `decode` loads them first. Today lib/ has no Tcl library,
+    writing process. `decode` loads them first. Today stdlib/ has no Tcl library,
     so the list is empty; the mechanism stays because `# requires:` does.
   - `hir`: the HIR dict, exactly as the front end returned it, side tables
     included.
@@ -122,7 +122,7 @@ another's could be silently wrong, not just rejected. So:
   (`{HIR INTERCHANGE COMPILER}`). There is no option to skip the check.
 * **The native binaries** consume NIR, not HIR, and are not in the
   fingerprint either.
-* **Target.** A HIR is its target's when its build read the target -- ffi::c's
+* **Target.** A HIR is its target's when its build read the target -- std::ffi::c's
   scalars, a platform namespace (`linux::*`), an architecture-specific
   module -- and records it (`hir::cabi::targetOf`; "" for a HIR that is every
   target's). The text carries it inside the HIR, and a decoded HIR keeps its

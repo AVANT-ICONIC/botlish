@@ -1,6 +1,6 @@
 # framework-semantics.bot -- the golden framework's own source-level
 # semantics (manifest: category harness), as golden tests: the properties of
-# lib/test.bot and of the convention every suite follows that ordinary
+# stdlib/test.bot and of the convention every suite follows that ordinary
 # Botlish source can state about itself.
 #
 # Ported from tests/golden-framework.test, which stays authoritative and
@@ -9,7 +9,7 @@
 # and their order, a suite's report rendering a FAIL line, a whole program
 # rejected outside any block (a registration outside a block, the
 # MISSING-CONTEXT of an unsatisfied context trait), the case list of
-# lib/compiler.bot read at test time, NIR and allocations.
+# stdlib/compiler.bot read at test time, NIR and allocations.
 #
 # The specification, in order:
 #
@@ -32,16 +32,16 @@
 #   fit a helper (TYPE at the registration, naming the error); the same
 #   error escaping a block is that block's UnhandledError; handled it is a
 #   value.
-# * The report's texts: test::describe, test::int_text, test::code_name.
+# * The report's texts: std::test::describe, std::test::int_text, std::test::code_name.
 # * The framework keeps the compiler's precision: a range proof, a known
 #   error, error narrowing by an exact value, the affine analysis and method
 #   resolution decide a body's code exactly as they decide plain code.
 # * The suite is an ordinary context: it implements, structurally, an
-#   application's context trait spelled like test::registered (Listed).
+#   application's context trait spelled like std::test::registered (Listed).
 #
 # Imports:
-#   compiler        compiler::DiagnosticCode and compiler::CompilerError.
-#   list            list::length and list::at in the precision tests and the
+#   compiler        std::compiler::DiagnosticCode and std::compiler::CompilerError.
+#   list            std::list::length and std::list::at in the precision tests and the
 #                   context trait's operation.
 #   mutable_vector  the application contexts' vectors (Config, ProbeLog);
 #                   with list, the two length candidates that make an
@@ -54,10 +54,10 @@
 # diagnostics' messages name the same errors. Two names are new: ProbeLog
 # with note/noted (the Tcl golden_probe native) and eager (the Tcl
 # program's body()).
-import compiler
-import list
-import mutable_vector
-import test
+import std::compiler
+import std::list
+import std::mutable_vector
+import std::test
 
 # ---------------------------------------------------------------------------
 # Declarations (top-level only)
@@ -68,10 +68,10 @@ context struct Config:
     levels: MutableVector[int]
 
 fn levels() -> MutableVector[int]:
-    mutable_vector::from_list([3, 4])
+    std::mutable_vector::from_list([3, 4])
 
 fn level_count(context config: Config) -> int:
-    mutable_vector::length(config.levels)
+    std::mutable_vector::length(config.levels)
 
 # gf-eager-coroutine-start: what golden_probe(x) recorded, as an ordinary
 # context the coroutine writes (a body cannot use one: the registration
@@ -80,7 +80,7 @@ context struct ProbeLog:
     notes: MutableVector[int]
 
 fn no_notes() -> MutableVector[int]:
-    mutable_vector::from_list([])
+    std::mutable_vector::from_list([])
 
 fn note(x: int, context log: ProbeLog) -> int:
     log.notes.push(x)
@@ -138,13 +138,13 @@ fn pick(x: int) -> int errors Small, Large:
     x
 
 # gf-context-trait-surface: an application context trait whose one
-# operation is spelled like test::registered, one of the two library
+# operation is spelled like std::test::registered, one of the two library
 # functions that declare the Suite context parameter.
 context trait Listed:
-    fn registered() -> List[test::TestCase]
+    fn registered() -> List[std::test::TestCase]
 
 fn how_many(context c: Listed) -> int:
-    list::length(c.registered())
+    std::list::length(c.registered())
 
 # ---------------------------------------------------------------------------
 # Suites are context values
@@ -154,27 +154,27 @@ fn register_context_tests(context config: Config):
     # others. The registration function reads the application's Config and
     # the body captures the count read; no priority or lookup interaction.
     count = level_count()
-    fn config_read_at_registration() errors compiler::CompilerError:
+    fn config_read_at_registration() errors std::compiler::CompilerError:
         static compile:
             count * 10
-    test::value("gf-application-context", 20, config_read_at_registration)
+    std::test::value("gf-application-context", 20, config_read_at_registration)
 
     # gf-body-cannot-use-context: a body is a function value, so it cannot
     # require a context -- it cannot register, or reach the suite, while it
     # runs. The Tcl program registers such a body and is rejected as a
     # whole; here that registration is the code under test, inside a block.
-    fn registers_a_context_body() errors compiler::CompilerError:
+    fn registers_a_context_body() errors std::compiler::CompilerError:
         static compile:
-            fn body() errors compiler::CompilerError:
+            fn body() errors std::compiler::CompilerError:
                 static compile:
-                    test::count()
+                    std::test::count()
             # (Code under test, never registered: its expectation is a binding,
             # so audit/golden/tools/perturb.tcl, which alters every literal
-            # test::value expectation it finds, does not take it for one of
+            # std::test::value expectation it finds, does not take it for one of
             # this suite's registrations.)
             expected = 0
-            test::value("nested", expected, body)
-    test::rejects("gf-body-cannot-use-context", compiler::DiagnosticCode::ContextFunctionValue, registers_a_context_body)
+            std::test::value("nested", expected, body)
+    std::test::rejects("gf-body-cannot-use-context", std::compiler::DiagnosticCode::ContextFunctionValue, registers_a_context_body)
 
 # ---------------------------------------------------------------------------
 # Eager coroutines and deferral
@@ -189,23 +189,23 @@ fn register_eager_start_tests():
     coroutine {first} = eager()
     after = noted()
     n = first.n
-    fn starts_at_construction() errors compiler::CompilerError:
+    fn starts_at_construction() errors std::compiler::CompilerError:
         static compile:
             [before, after, n]
-    test::value("gf-eager-coroutine-start", [[], [1], 1], starts_at_construction)
+    std::test::value("gf-eager-coroutine-start", [[], [1], 1], starts_at_construction)
 
 # ---------------------------------------------------------------------------
 # Coroutine cleanup: the cases' values (the Tcl test counts the releases)
 
 fn register_coroutine_cleanup_tests(k: int):
     # gf-coroutine-cleanup: a case's coroutine completes ...
-    fn completes() errors compiler::CompilerError:
+    fn completes() errors std::compiler::CompilerError:
         static compile:
             coroutine {step, first} = finite(k)
             first.n + step().n
-    test::value("gf-coroutine-cleanup/completes", 3, completes)
+    std::test::value("gf-coroutine-cleanup/completes", 3, completes)
     # ... fails, the failure handled inside the body ...
-    fn fails() errors compiler::CompilerError:
+    fn fails() errors std::compiler::CompilerError:
         static compile:
             coroutine {step, first} = breaking(k):
                 on Broken:
@@ -214,21 +214,21 @@ fn register_coroutine_cleanup_tests(k: int):
                 on Broken:
                     Event {n: -2}
             first.n * 10 + last.n
-    test::value("gf-coroutine-cleanup/fails-handled", 8, fails)
+    std::test::value("gf-coroutine-cleanup/fails-handled", 8, fails)
     # ... is abandoned suspended ...
-    fn abandons() errors compiler::CompilerError:
+    fn abandons() errors std::compiler::CompilerError:
         static compile:
             coroutine {first} = finite(k)
             first.n
-    test::value("gf-coroutine-cleanup/abandons", 1, abandons)
+    std::test::value("gf-coroutine-cleanup/abandons", 1, abandons)
     # ... or is left suspended by an early return.
-    fn leaves_early() errors compiler::CompilerError:
+    fn leaves_early() errors std::compiler::CompilerError:
         static compile:
             coroutine {step, first} = finite(k)
             if first.n > 0:
                 return first.n
             step().n
-    test::value("gf-coroutine-cleanup/leaves-early", 1, leaves_early)
+    std::test::value("gf-coroutine-cleanup/leaves-early", 1, leaves_early)
 
 # ---------------------------------------------------------------------------
 # Affine captures: the ordinary ownership rules decide
@@ -239,75 +239,75 @@ fn register_affine_capture_tests():
     # at the captured use: the framework neither needs nor gets an
     # exception.
     coroutine {step, first} = finite(1)
-    fn captures_the_handle() errors compiler::CompilerError:
+    fn captures_the_handle() errors std::compiler::CompilerError:
         static compile:
             step().n
-    test::rejects_at("gf-affine-capture-rejected/location", compiler::DiagnosticCode::AffineCaptureUnsupported, 244, 13, captures_the_handle)
-    test::rejects_containing("gf-affine-capture-rejected/message", compiler::DiagnosticCode::AffineCaptureUnsupported, "`step` is an affine Coroutine", captures_the_handle)
+    std::test::rejects_at("gf-affine-capture-rejected/location", std::compiler::DiagnosticCode::AffineCaptureUnsupported, 244, 13, captures_the_handle)
+    std::test::rejects_containing("gf-affine-capture-rejected/message", std::compiler::DiagnosticCode::AffineCaptureUnsupported, "`step` is an affine Coroutine", captures_the_handle)
 
     # gf-affine-capture-in-a-case: the same capture inside a case's block is
     # that case's rejection; a block that owns its coroutine passes; an
     # ordinary move inside a block is UseAfterMove.
-    fn captures() errors compiler::CompilerError:
+    fn captures() errors std::compiler::CompilerError:
         static compile:
             coroutine {step} = finite(1)
             fn later() -> int:
                 step().n
             later()
-    test::rejects("gf-affine-capture-in-a-case/capture", compiler::DiagnosticCode::AffineCaptureUnsupported, captures)
-    fn owns() errors compiler::CompilerError:
+    std::test::rejects("gf-affine-capture-in-a-case/capture", std::compiler::DiagnosticCode::AffineCaptureUnsupported, captures)
+    fn owns() errors std::compiler::CompilerError:
         static compile:
             coroutine {step, first} = finite(1)
             first.n + step().n
-    test::value("gf-affine-capture-in-a-case/owns", 3, owns)
-    fn moves() errors compiler::CompilerError:
+    std::test::value("gf-affine-capture-in-a-case/owns", 3, owns)
+    fn moves() errors std::compiler::CompilerError:
         static compile:
             coroutine {step} = finite(1)
             other = step
             step().n + other().n
-    test::rejects("gf-affine-capture-in-a-case/moved", compiler::DiagnosticCode::UseAfterMove, moves)
+    std::test::rejects("gf-affine-capture-in-a-case/moved", std::compiler::DiagnosticCode::UseAfterMove, moves)
 
 # ---------------------------------------------------------------------------
 # What a body may complete with
 
 fn register_body_contract_tests(n: int):
     # gf-body-error-contract: a body that may raise a declared error other
-    # than compiler::CompilerError does not fit a helper: the registration
+    # than std::compiler::CompilerError does not fit a helper: the registration
     # is rejected (TYPE) at the body argument, naming the error -- there is
     # no catch-all to turn it into data. The Tcl program is rejected as a
     # whole; here the registration is the code under test, inside a block.
-    fn registers_a_raising_body() errors compiler::CompilerError:
+    fn registers_a_raising_body() errors std::compiler::CompilerError:
         static compile:
-            fn body() errors Boom, compiler::CompilerError:
+            fn body() errors Boom, std::compiler::CompilerError:
                 boom(n)
             # (Code under test, never registered: its expectation is a binding,
             # so audit/golden/tools/perturb.tcl, which alters every literal
-            # test::value expectation it finds, does not take it for one of
+            # std::test::value expectation it finds, does not take it for one of
             # this suite's registrations.)
             expected = 1
-            test::value("raises", expected, body)
-    test::rejects_at("gf-body-error-contract/location", compiler::DiagnosticCode::Type, 288, 45, registers_a_raising_body)
-    test::rejects_containing("gf-body-error-contract/contract", compiler::DiagnosticCode::Type, "argument for parameter \"body\" cannot be proven to satisfy Fn{args: [], return: any, errors: [compiler::CompilerError]}", registers_a_raising_body)
-    test::rejects_containing("gf-body-error-contract/names-the-error", compiler::DiagnosticCode::Type, "error set incompatible: the callable may raise Boom", registers_a_raising_body)
+            std::test::value("raises", expected, body)
+    std::test::rejects_at("gf-body-error-contract/location", std::compiler::DiagnosticCode::Type, 288, 50, registers_a_raising_body)
+    std::test::rejects_containing("gf-body-error-contract/contract", std::compiler::DiagnosticCode::Type, "argument for parameter \"body\" cannot be proven to satisfy Fn{args: [], return: any, errors: [std::compiler::CompilerError]}", registers_a_raising_body)
+    std::test::rejects_containing("gf-body-error-contract/names-the-error", std::compiler::DiagnosticCode::Type, "error set incompatible: the callable may raise Boom", registers_a_raising_body)
 
 fn register_escaping_error_tests(n: int):
     # gf-escaping-error-is-the-case-s: the same error escaping a body's block
     # (the body declares only CompilerError) is that block's own rejection,
     # UnhandledError -- one failing case, not a broken suite ...
-    fn escapes() errors compiler::CompilerError:
+    fn escapes() errors std::compiler::CompilerError:
         static compile:
             boom(n)
-    test::rejects_at("gf-escaping-error-is-the-case-s/escapes", compiler::DiagnosticCode::UnhandledError, 299, 13, escapes)
-    test::rejects_message("gf-escaping-error-is-the-case-s/escapes-message", compiler::DiagnosticCode::UnhandledError, "this call may produce the declared error \"Boom\", which is neither handled here nor admitted by the enclosing function's own \"errors\" declaration", escapes)
+    std::test::rejects_at("gf-escaping-error-is-the-case-s/escapes", std::compiler::DiagnosticCode::UnhandledError, 299, 13, escapes)
+    std::test::rejects_message("gf-escaping-error-is-the-case-s/escapes-message", std::compiler::DiagnosticCode::UnhandledError, "this call may produce the declared error \"Boom\", which is neither handled here nor admitted by the enclosing function's own \"errors\" declaration", escapes)
     # ... and handled inside the body it is an ordinary value (n = 9: Boom
     # is raised at run time).
-    fn handled() errors compiler::CompilerError:
+    fn handled() errors std::compiler::CompilerError:
         static compile:
             r = boom(n):
                 on Boom:
                     -1
             r
-    test::value("gf-escaping-error-is-the-case-s/handled", -1, handled)
+    std::test::value("gf-escaping-error-is-the-case-s/handled", -1, handled)
 
 # ---------------------------------------------------------------------------
 # Text
@@ -316,120 +316,120 @@ fn register_text_tests():
     # gf-describe: the report's texts of values: Ints (negative and
     # arbitrary precision), Strings as literals with escapes, Bools, nested
     # Lists; anything else a placeholder.
-    fn describes() errors compiler::CompilerError:
+    fn describes() errors std::compiler::CompilerError:
         static compile:
-            [test::describe(0), test::describe(-305), test::describe(123456789012345678901234567890), test::describe("a\"b\\c\nd\te"), test::describe(true), test::describe(false), test::describe([[1, -2], [], ["s"]]), test::describe(Point {x: 1}), test::describe(compiler::DiagnosticCode::Type)]
-    test::value("gf-describe", ["0", "-305", "123456789012345678901234567890", "\"a\\\"b\\\\c\\nd\\te\"", "true", "false", "[[1, -2], [], [\"s\"]]", "a value with no text form", "a value with no text form"], describes)
+            [std::test::describe(0), std::test::describe(-305), std::test::describe(123456789012345678901234567890), std::test::describe("a\"b\\c\nd\te"), std::test::describe(true), std::test::describe(false), std::test::describe([[1, -2], [], ["s"]]), std::test::describe(Point {x: 1}), std::test::describe(std::compiler::DiagnosticCode::Type)]
+    std::test::value("gf-describe", ["0", "-305", "123456789012345678901234567890", "\"a\\\"b\\\\c\\nd\\te\"", "true", "false", "[[1, -2], [], [\"s\"]]", "a value with no text form", "a value with no text form"], describes)
 
     # gf-int-text: int_text at the boundaries the representations change at
     # (small Int, i64), both signs.
-    fn int_texts() errors compiler::CompilerError:
+    fn int_texts() errors std::compiler::CompilerError:
         static compile:
-            [test::int_text(9), test::int_text(10), test::int_text(4611686018427387903), test::int_text(4611686018427387904), test::int_text(9223372036854775807), test::int_text(9223372036854775808), test::int_text(-9223372036854775808), test::int_text(-9223372036854775809)]
-    test::value("gf-int-text", ["9", "10", "4611686018427387903", "4611686018427387904", "9223372036854775807", "9223372036854775808", "-9223372036854775808", "-9223372036854775809"], int_texts)
+            [std::test::int_text(9), std::test::int_text(10), std::test::int_text(4611686018427387903), std::test::int_text(4611686018427387904), std::test::int_text(9223372036854775807), std::test::int_text(9223372036854775808), std::test::int_text(-9223372036854775808), std::test::int_text(-9223372036854775809)]
+    std::test::value("gf-int-text", ["9", "10", "4611686018427387903", "4611686018427387904", "9223372036854775807", "9223372036854775808", "-9223372036854775808", "-9223372036854775809"], int_texts)
 
-    # gf-code-name-complete: test::code_name spells every
-    # compiler::DiagnosticCode case of lib/compiler.bot, in its own words, in
+    # gf-code-name-complete: std::test::code_name spells every
+    # std::compiler::DiagnosticCode case of stdlib/compiler.bot, in its own words, in
     # declaration order. (A snapshot of today's 87 cases: Botlish has no enum
     # reflection, so the completeness check -- the case list read from
-    # lib/compiler.bot -- is the Tcl test's.)
-    fn spells_every_code() errors compiler::CompilerError:
+    # stdlib/compiler.bot -- is the Tcl test's.)
+    fn spells_every_code() errors std::compiler::CompilerError:
         static compile:
             [
-                test::code_name(compiler::DiagnosticCode::AffineCaptureUnsupported),
-                test::code_name(compiler::DiagnosticCode::AffineContainerUnsupported),
-                test::code_name(compiler::DiagnosticCode::AffineDuplicationUnsupported),
-                test::code_name(compiler::DiagnosticCode::AffineElementCopyOut),
-                test::code_name(compiler::DiagnosticCode::AffineEqualityUnsupported),
-                test::code_name(compiler::DiagnosticCode::AffineErasureUnsupported),
-                test::code_name(compiler::DiagnosticCode::AffineFieldMoveRequiresDestructure),
-                test::code_name(compiler::DiagnosticCode::AffineGenericNestedUnsupported),
-                test::code_name(compiler::DiagnosticCode::AffineInstanceBudget),
-                test::code_name(compiler::DiagnosticCode::AffineListOperationUnsupported),
-                test::code_name(compiler::DiagnosticCode::AffineNotDefinitelyLive),
-                test::code_name(compiler::DiagnosticCode::AffinePathReleaseUnsupported),
-                test::code_name(compiler::DiagnosticCode::AffineTemporaryUnsupported),
-                test::code_name(compiler::DiagnosticCode::AmbiguousContextImplementation),
-                test::code_name(compiler::DiagnosticCode::AmbiguousMethodCall),
-                test::code_name(compiler::DiagnosticCode::AmbiguousQualifier),
-                test::code_name(compiler::DiagnosticCode::Arity),
-                test::code_name(compiler::DiagnosticCode::BreakOutsideLoop),
-                test::code_name(compiler::DiagnosticCode::ContextBindingCollision),
-                test::code_name(compiler::DiagnosticCode::ContextFunctionValue),
-                test::code_name(compiler::DiagnosticCode::ContextInstallationUnsupported),
-                test::code_name(compiler::DiagnosticCode::ContextTraitMisuse),
-                test::code_name(compiler::DiagnosticCode::ContextTraitPosition),
-                test::code_name(compiler::DiagnosticCode::ContinueOutsideLoop),
-                test::code_name(compiler::DiagnosticCode::CoroutineContract),
-                test::code_name(compiler::DiagnosticCode::CoroutineNotFunction),
-                test::code_name(compiler::DiagnosticCode::CoroutineResultMismatch),
-                test::code_name(compiler::DiagnosticCode::CoroutineResumeArity),
-                test::code_name(compiler::DiagnosticCode::CoroutineResumeConflict),
-                test::code_name(compiler::DiagnosticCode::CoroutineResumeType),
-                test::code_name(compiler::DiagnosticCode::CoroutineResumeUnderconstrained),
-                test::code_name(compiler::DiagnosticCode::CoroutineRhsNotYielding),
-                test::code_name(compiler::DiagnosticCode::DecimalGuaranteeLost),
-                test::code_name(compiler::DiagnosticCode::DecimalPrecision),
-                test::code_name(compiler::DiagnosticCode::Direct),
-                test::code_name(compiler::DiagnosticCode::DirectCallableValue),
-                test::code_name(compiler::DiagnosticCode::Duplicate),
-                test::code_name(compiler::DiagnosticCode::DuplicateContextParameter),
-                test::code_name(compiler::DiagnosticCode::DuplicateField),
-                test::code_name(compiler::DiagnosticCode::DuplicateFlag),
-                test::code_name(compiler::DiagnosticCode::DuplicateFlagDeclaration),
-                test::code_name(compiler::DiagnosticCode::DuplicateLoopVariable),
-                test::code_name(compiler::DiagnosticCode::FlagBindingCollision),
-                test::code_name(compiler::DiagnosticCode::FlagCalleeUnknown),
-                test::code_name(compiler::DiagnosticCode::FlagFunctionValue),
-                test::code_name(compiler::DiagnosticCode::KnownError),
-                test::code_name(compiler::DiagnosticCode::LockstepUnequal),
-                test::code_name(compiler::DiagnosticCode::LockstepUnproven),
-                test::code_name(compiler::DiagnosticCode::MissingContext),
-                test::code_name(compiler::DiagnosticCode::MissingErrorPayload),
-                test::code_name(compiler::DiagnosticCode::MissingField),
-                test::code_name(compiler::DiagnosticCode::MissingImport),
-                test::code_name(compiler::DiagnosticCode::ModuleContext),
-                test::code_name(compiler::DiagnosticCode::ModuleImmutable),
-                test::code_name(compiler::DiagnosticCode::MutablePlaceCapture),
-                test::code_name(compiler::DiagnosticCode::MutablePlaceReceiver),
-                test::code_name(compiler::DiagnosticCode::NoApplicableMethod),
-                test::code_name(compiler::DiagnosticCode::NomethodCall),
-                test::code_name(compiler::DiagnosticCode::NotAContext),
-                test::code_name(compiler::DiagnosticCode::NotAStruct),
-                test::code_name(compiler::DiagnosticCode::NotAnEnum),
-                test::code_name(compiler::DiagnosticCode::OpaqueConstruction),
-                test::code_name(compiler::DiagnosticCode::OpaqueRepresentation),
-                test::code_name(compiler::DiagnosticCode::ProofClause),
-                test::code_name(compiler::DiagnosticCode::RefinementMintAuthority),
-                test::code_name(compiler::DiagnosticCode::RefinementParameter),
-                test::code_name(compiler::DiagnosticCode::ReturnOutsideCallable),
-                test::code_name(compiler::DiagnosticCode::TraitImplOrder),
-                test::code_name(compiler::DiagnosticCode::TraitInstanceBudget),
-                test::code_name(compiler::DiagnosticCode::TraitNestedPolymorphic),
-                test::code_name(compiler::DiagnosticCode::TraitNotSatisfied),
-                test::code_name(compiler::DiagnosticCode::TraitPolymorphicFunctionValue),
-                test::code_name(compiler::DiagnosticCode::TraitPolymorphicRecursion),
-                test::code_name(compiler::DiagnosticCode::TraitStorageUnsupported),
-                test::code_name(compiler::DiagnosticCode::TraitUnknownOperation),
-                test::code_name(compiler::DiagnosticCode::TraitViewMisuse),
-                test::code_name(compiler::DiagnosticCode::TraitWitnessJoin),
-                test::code_name(compiler::DiagnosticCode::Type),
-                test::code_name(compiler::DiagnosticCode::Unbound),
-                test::code_name(compiler::DiagnosticCode::UndeclaredError),
-                test::code_name(compiler::DiagnosticCode::UnexpectedErrorPayload),
-                test::code_name(compiler::DiagnosticCode::UnhandledError),
-                test::code_name(compiler::DiagnosticCode::UnknownEnumCase),
-                test::code_name(compiler::DiagnosticCode::UnknownField),
-                test::code_name(compiler::DiagnosticCode::UnknownFlag),
-                test::code_name(compiler::DiagnosticCode::UnknownNamespace),
-                test::code_name(compiler::DiagnosticCode::UnknownStruct),
-                test::code_name(compiler::DiagnosticCode::UnknownSymbol),
-                test::code_name(compiler::DiagnosticCode::UnprovenField),
-                test::code_name(compiler::DiagnosticCode::UnwrappedYield),
-                test::code_name(compiler::DiagnosticCode::UseAfterMove),
-                test::code_name(compiler::DiagnosticCode::YieldOutsideFunction),
+                std::test::code_name(std::compiler::DiagnosticCode::AffineCaptureUnsupported),
+                std::test::code_name(std::compiler::DiagnosticCode::AffineContainerUnsupported),
+                std::test::code_name(std::compiler::DiagnosticCode::AffineDuplicationUnsupported),
+                std::test::code_name(std::compiler::DiagnosticCode::AffineElementCopyOut),
+                std::test::code_name(std::compiler::DiagnosticCode::AffineEqualityUnsupported),
+                std::test::code_name(std::compiler::DiagnosticCode::AffineErasureUnsupported),
+                std::test::code_name(std::compiler::DiagnosticCode::AffineFieldMoveRequiresDestructure),
+                std::test::code_name(std::compiler::DiagnosticCode::AffineGenericNestedUnsupported),
+                std::test::code_name(std::compiler::DiagnosticCode::AffineInstanceBudget),
+                std::test::code_name(std::compiler::DiagnosticCode::AffineListOperationUnsupported),
+                std::test::code_name(std::compiler::DiagnosticCode::AffineNotDefinitelyLive),
+                std::test::code_name(std::compiler::DiagnosticCode::AffinePathReleaseUnsupported),
+                std::test::code_name(std::compiler::DiagnosticCode::AffineTemporaryUnsupported),
+                std::test::code_name(std::compiler::DiagnosticCode::AmbiguousContextImplementation),
+                std::test::code_name(std::compiler::DiagnosticCode::AmbiguousMethodCall),
+                std::test::code_name(std::compiler::DiagnosticCode::AmbiguousQualifier),
+                std::test::code_name(std::compiler::DiagnosticCode::Arity),
+                std::test::code_name(std::compiler::DiagnosticCode::BreakOutsideLoop),
+                std::test::code_name(std::compiler::DiagnosticCode::ContextBindingCollision),
+                std::test::code_name(std::compiler::DiagnosticCode::ContextFunctionValue),
+                std::test::code_name(std::compiler::DiagnosticCode::ContextInstallationUnsupported),
+                std::test::code_name(std::compiler::DiagnosticCode::ContextTraitMisuse),
+                std::test::code_name(std::compiler::DiagnosticCode::ContextTraitPosition),
+                std::test::code_name(std::compiler::DiagnosticCode::ContinueOutsideLoop),
+                std::test::code_name(std::compiler::DiagnosticCode::CoroutineContract),
+                std::test::code_name(std::compiler::DiagnosticCode::CoroutineNotFunction),
+                std::test::code_name(std::compiler::DiagnosticCode::CoroutineResultMismatch),
+                std::test::code_name(std::compiler::DiagnosticCode::CoroutineResumeArity),
+                std::test::code_name(std::compiler::DiagnosticCode::CoroutineResumeConflict),
+                std::test::code_name(std::compiler::DiagnosticCode::CoroutineResumeType),
+                std::test::code_name(std::compiler::DiagnosticCode::CoroutineResumeUnderconstrained),
+                std::test::code_name(std::compiler::DiagnosticCode::CoroutineRhsNotYielding),
+                std::test::code_name(std::compiler::DiagnosticCode::DecimalGuaranteeLost),
+                std::test::code_name(std::compiler::DiagnosticCode::DecimalPrecision),
+                std::test::code_name(std::compiler::DiagnosticCode::Direct),
+                std::test::code_name(std::compiler::DiagnosticCode::DirectCallableValue),
+                std::test::code_name(std::compiler::DiagnosticCode::Duplicate),
+                std::test::code_name(std::compiler::DiagnosticCode::DuplicateContextParameter),
+                std::test::code_name(std::compiler::DiagnosticCode::DuplicateField),
+                std::test::code_name(std::compiler::DiagnosticCode::DuplicateFlag),
+                std::test::code_name(std::compiler::DiagnosticCode::DuplicateFlagDeclaration),
+                std::test::code_name(std::compiler::DiagnosticCode::DuplicateLoopVariable),
+                std::test::code_name(std::compiler::DiagnosticCode::FlagBindingCollision),
+                std::test::code_name(std::compiler::DiagnosticCode::FlagCalleeUnknown),
+                std::test::code_name(std::compiler::DiagnosticCode::FlagFunctionValue),
+                std::test::code_name(std::compiler::DiagnosticCode::KnownError),
+                std::test::code_name(std::compiler::DiagnosticCode::LockstepUnequal),
+                std::test::code_name(std::compiler::DiagnosticCode::LockstepUnproven),
+                std::test::code_name(std::compiler::DiagnosticCode::MissingContext),
+                std::test::code_name(std::compiler::DiagnosticCode::MissingErrorPayload),
+                std::test::code_name(std::compiler::DiagnosticCode::MissingField),
+                std::test::code_name(std::compiler::DiagnosticCode::MissingImport),
+                std::test::code_name(std::compiler::DiagnosticCode::ModuleContext),
+                std::test::code_name(std::compiler::DiagnosticCode::ModuleImmutable),
+                std::test::code_name(std::compiler::DiagnosticCode::MutablePlaceCapture),
+                std::test::code_name(std::compiler::DiagnosticCode::MutablePlaceReceiver),
+                std::test::code_name(std::compiler::DiagnosticCode::NoApplicableMethod),
+                std::test::code_name(std::compiler::DiagnosticCode::NomethodCall),
+                std::test::code_name(std::compiler::DiagnosticCode::NotAContext),
+                std::test::code_name(std::compiler::DiagnosticCode::NotAStruct),
+                std::test::code_name(std::compiler::DiagnosticCode::NotAnEnum),
+                std::test::code_name(std::compiler::DiagnosticCode::OpaqueConstruction),
+                std::test::code_name(std::compiler::DiagnosticCode::OpaqueRepresentation),
+                std::test::code_name(std::compiler::DiagnosticCode::ProofClause),
+                std::test::code_name(std::compiler::DiagnosticCode::RefinementMintAuthority),
+                std::test::code_name(std::compiler::DiagnosticCode::RefinementParameter),
+                std::test::code_name(std::compiler::DiagnosticCode::ReturnOutsideCallable),
+                std::test::code_name(std::compiler::DiagnosticCode::TraitImplOrder),
+                std::test::code_name(std::compiler::DiagnosticCode::TraitInstanceBudget),
+                std::test::code_name(std::compiler::DiagnosticCode::TraitNestedPolymorphic),
+                std::test::code_name(std::compiler::DiagnosticCode::TraitNotSatisfied),
+                std::test::code_name(std::compiler::DiagnosticCode::TraitPolymorphicFunctionValue),
+                std::test::code_name(std::compiler::DiagnosticCode::TraitPolymorphicRecursion),
+                std::test::code_name(std::compiler::DiagnosticCode::TraitStorageUnsupported),
+                std::test::code_name(std::compiler::DiagnosticCode::TraitUnknownOperation),
+                std::test::code_name(std::compiler::DiagnosticCode::TraitViewMisuse),
+                std::test::code_name(std::compiler::DiagnosticCode::TraitWitnessJoin),
+                std::test::code_name(std::compiler::DiagnosticCode::Type),
+                std::test::code_name(std::compiler::DiagnosticCode::Unbound),
+                std::test::code_name(std::compiler::DiagnosticCode::UndeclaredError),
+                std::test::code_name(std::compiler::DiagnosticCode::UnexpectedErrorPayload),
+                std::test::code_name(std::compiler::DiagnosticCode::UnhandledError),
+                std::test::code_name(std::compiler::DiagnosticCode::UnknownEnumCase),
+                std::test::code_name(std::compiler::DiagnosticCode::UnknownField),
+                std::test::code_name(std::compiler::DiagnosticCode::UnknownFlag),
+                std::test::code_name(std::compiler::DiagnosticCode::UnknownNamespace),
+                std::test::code_name(std::compiler::DiagnosticCode::UnknownStruct),
+                std::test::code_name(std::compiler::DiagnosticCode::UnknownSymbol),
+                std::test::code_name(std::compiler::DiagnosticCode::UnprovenField),
+                std::test::code_name(std::compiler::DiagnosticCode::UnwrappedYield),
+                std::test::code_name(std::compiler::DiagnosticCode::UseAfterMove),
+                std::test::code_name(std::compiler::DiagnosticCode::YieldOutsideFunction),
             ]
-    test::value("gf-code-name-complete", [
+    std::test::value("gf-code-name-complete", [
         "AffineCaptureUnsupported",
         "AffineContainerUnsupported",
         "AffineDuplicationUnsupported",
@@ -532,59 +532,59 @@ fn register_text_tests():
 fn register_precision_tests():
     # gf-precision-range-proof: an index the counted loop proves in range
     # needs no IndexNotFound handler.
-    fn range_proof() errors compiler::CompilerError:
+    fn range_proof() errors std::compiler::CompilerError:
         static compile:
             xs = [1, 2, 3]
-            loop i from 0 to list::length(xs):
-                list::at(xs, i)
-    test::value("gf-precision-range-proof", [1, 2, 3], range_proof)
+            loop i from 0 to std::list::length(xs):
+                std::list::at(xs, i)
+    std::test::value("gf-precision-range-proof", [1, 2, 3], range_proof)
 
     # gf-precision-known-error: a call proven to fail is KnownError.
-    fn known_error() errors compiler::CompilerError:
+    fn known_error() errors std::compiler::CompilerError:
         static compile:
-            list::at([1, 2], 5)
-    test::rejects("gf-precision-known-error", compiler::DiagnosticCode::KnownError, known_error)
+            std::list::at([1, 2], 5)
+    std::test::rejects("gf-precision-known-error", std::compiler::DiagnosticCode::KnownError, known_error)
 
     # gf-precision-error-narrowing: the argument's exact value (9) rules out
     # Large, so only Small needs a handler.
-    fn error_narrowing() errors compiler::CompilerError:
+    fn error_narrowing() errors std::compiler::CompilerError:
         static compile:
             x = 9
             r = pick(x):
                 on Small:
                     0
             r
-    test::value("gf-precision-error-narrowing", 9, error_narrowing)
+    std::test::value("gf-precision-error-narrowing", 9, error_narrowing)
 
     # gf-precision-affine: a coroutine moved to another binding and then
     # resumed is UseAfterMove; the moved-to binding is fine.
-    fn resumes_after_move() errors compiler::CompilerError:
+    fn resumes_after_move() errors std::compiler::CompilerError:
         static compile:
             coroutine {step} = finite(1)
             other = step
             step().n
-    test::rejects("gf-precision-affine/use-after-move", compiler::DiagnosticCode::UseAfterMove, resumes_after_move)
-    fn resumes_moved_binding() errors compiler::CompilerError:
+    std::test::rejects("gf-precision-affine/use-after-move", std::compiler::DiagnosticCode::UseAfterMove, resumes_after_move)
+    fn resumes_moved_binding() errors std::compiler::CompilerError:
         static compile:
             coroutine {step} = finite(1)
             other = step
             other().n
-    test::value("gf-precision-affine/moved-binding", 2, resumes_moved_binding)
+    std::test::value("gf-precision-affine/moved-binding", 2, resumes_moved_binding)
 
     # gf-precision-method-resolution: a typed receiver picks its one
-    # admitting candidate (list::length, not mutable_vector::length); an
+    # admitting candidate (std::list::length, not std::mutable_vector::length); an
     # untyped one is ambiguous between the two imported candidates.
-    fn typed_receiver() errors compiler::CompilerError:
+    fn typed_receiver() errors std::compiler::CompilerError:
         static compile:
             xs = [1, 2]
             xs.length()
-    test::value("gf-precision-method-resolution/typed", 2, typed_receiver)
-    fn untyped_receiver() errors compiler::CompilerError:
+    std::test::value("gf-precision-method-resolution/typed", 2, typed_receiver)
+    fn untyped_receiver() errors std::compiler::CompilerError:
         static compile:
             fn first(v):
                 v.length()
             first([1])
-    test::rejects("gf-precision-method-resolution/untyped", compiler::DiagnosticCode::AmbiguousMethodCall, untyped_receiver)
+    std::test::rejects("gf-precision-method-resolution/untyped", std::compiler::DiagnosticCode::AmbiguousMethodCall, untyped_receiver)
 
 # ---------------------------------------------------------------------------
 # The context-trait surface
@@ -592,23 +592,23 @@ fn register_precision_tests():
 fn register_context_trait_tests():
     # gf-context-trait-surface: the installed suite implements, structurally,
     # the application's context trait Listed (its operation spelled like
-    # test::registered): how_many() reads the very cases the suite holds --
-    # as many as test::count() says, and more than none, since every other
+    # std::test::registered): how_many() reads the very cases the suite holds --
+    # as many as std::test::count() says, and more than none, since every other
     # test is registered by now. (Config and ProbeLog, the other installed
     # contexts, spell no `registered`.) The negative half -- a trait spelled
-    # like test::count() is not satisfied -- is a whole-program
+    # like std::test::count() is not satisfied -- is a whole-program
     # MISSING-CONTEXT at the top-level call, which no block can reify: it
     # stays in Tcl.
     listed = how_many()
-    counted = test::count()
-    fn suite_satisfies_listed() errors compiler::CompilerError:
+    counted = std::test::count()
+    fn suite_satisfies_listed() errors std::compiler::CompilerError:
         static compile:
             [listed == counted, listed > 0]
-    test::value("gf-context-trait-surface", [true, true], suite_satisfies_listed)
+    std::test::value("gf-context-trait-surface", [true, true], suite_satisfies_listed)
 
 with context Config {levels: levels()}
 with context ProbeLog {notes: no_notes()}
-with context test::suite()
+with context std::test::suite()
 register_context_tests()
 register_eager_start_tests()
 register_coroutine_cleanup_tests(1)
@@ -618,4 +618,4 @@ register_escaping_error_tests(9)
 register_text_tests()
 register_precision_tests()
 register_context_trait_tests()
-test::report()
+std::test::report()

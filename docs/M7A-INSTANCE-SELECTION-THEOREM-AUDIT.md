@@ -100,7 +100,7 @@ end), or read directly from the current source.
      `condition-outcome-12` compile *illegal* programs with `-strict 0`.
    - M5's `funcHeaderCount` helper returns `llength` of a `regexp -all`
      count, so it always returns 1. Both "one shared header" assertions
-     are vacuous. The `byte::set` fixture actually has two `byte::set`
+     are vacuous. The `std::byte::set` fixture actually has two `std::byte::set`
      headers.
    - The `-from-int` fixture is legal, but its "genuinely dynamic"
      caller is `dyn(45)`, so the shared entry is just `{45}`.
@@ -128,10 +128,10 @@ Only the first is instance identity.
 | layer | what it holds today | who owns it | example |
 |---|---|---|---|
 | **identity** (`hir::specialize` key) | argument kinds; List element kinds; rarely a positional shape | `hir::specialize::KeyType` + `Handle` policy | `f<int>`, `g<List[never]>`, `apply<block, int>` |
-| **instance entry** (valid for every caller of one instance) | declared parameter type (M1); RefineParams named evidence; joined entry Range; captured-binding seed types | `hir::specialize::Analyze` (types), `hir::range::analyze` (ranges) | `ascii::is_digit<int>`'s `b : int[Byte]`, entry `[0,255]` |
+| **instance entry** (valid for every caller of one instance) | declared parameter type (M1); RefineParams named evidence; joined entry Range; captured-binding seed types | `hir::specialize::Analyze` (types), `hir::range::analyze` (ranges) | `std::ascii::is_digit<int>`'s `b : int[Byte]`, entry `[0,255]` |
 | **path** (inside one branch of one instance) | ComparisonNarrowing facts; hir type-test refinements | `hir::range::If`/`ComparisonNarrowing`; `hir::types::If`/`hir::refine` | inside `x >= 0`, `x` is `[0,+∞]` |
-| **call edge** (one invocation, not the shared body) | `effectiveErrors`, `mayReturnNormally`, `resultRangeFact`, literal-list contents | `hir/completions.tcl` (+ `hir/errorsets.tcl`) | `byte::from_int(45)`: `effectiveErrors={}`, `[45,45]` |
-| **result** | instance result type (lub fixpoint); instance result Range summary; native result metadata | `hir::specialize` (types), `hir::range` (`calleeResults`), `core/native.tcl` | `char::codepoint` → `[0,+∞]` |
+| **call edge** (one invocation, not the shared body) | `effectiveErrors`, `mayReturnNormally`, `resultRangeFact`, literal-list contents | `hir/completions.tcl` (+ `hir/errorsets.tcl`) | `std::byte::from_int(45)`: `effectiveErrors={}`, `[45,45]` |
+| **result** | instance result type (lub fixpoint); instance result Range summary; native result metadata | `hir::specialize` (types), `hir::range` (`calleeResults`), `core/native.tcl` | `std::char::codepoint` → `[0,+∞]` |
 | **expression** | KnownOutcome; ConditionOutcome; equality-totality; raw-representation eligibility | `hir::types`, `hir::range`, `native::lower` | `h == 17` AlwaysFalse |
 
 The distinction M7.a was asked to protect, "a fact is useful" versus "a
@@ -189,7 +189,7 @@ Two facts that are *not* identity but are sometimes mistaken for it:
 
 - **Emitted NIR functions ≠ used instances.** `uri-steady` has 19 used
   instances but 17 emitted functions: tiny-leaf inlining absorbs
-  `byte::nibble<int>` and `byte::high_nibble<generic>`.
+  `std::byte::nibble<int>` and `std::byte::high_nibble<generic>`.
 - **Representation variants are not instances.** `internal`, `companion`,
   `region`, `fields` and `fieldscompanion` are extra NIR functions of one
   instance with a different ABI. They share the instance's facts. They
@@ -279,7 +279,7 @@ owner, representation and transport.
 | native `-result-range` | **result** (global, per native) | `core/native.tcl` metadata | `nonneg`/`collection-length` | `hir::range::Call`, `SeedRange` (induction) | entry ranges (M6's `BelowRange` elimination) |
 | native `-result-shape` | **result** | `core/native.tcl` metadata | list/set forms | types (hence List keys) | identity (List element kinds), admissibility |
 | completion facts (`effectiveErrors`, `mayReturnNormally`, `resultRangeFact`) | **call edge** | `hir/completions.tcl` | fields stamped on call/handle nodes | **none** (read only by `hir/errorsets.tcl`) | static legality only |
-| literal container contents | **call edge** | `hir/completions.tcl` `exactList` | walk-local | none | legality (`byte::set([...])` needs no handler) |
+| literal container contents | **call edge** | `hir/completions.tcl` `exactList` | walk-local | none | legality (`std::byte::set([...])` needs no handler) |
 | equality-totality | **expression** | `hir::types::IsEqualityTotal` over view types | predicate | — | `setcontainstotal`/`setfromlisttotal` opcodes |
 | `may_error`/`may_gc` per call | **global** (NIR fixed point) | Rust side, structural over NIR | per call edge | — | codegen check elision |
 | closedness ("no dynamic caller") | **global** | only the approximation `OpenInstances` (= materialized); `hir::blockescape` proves non-materialization for local closures, per region, *after* specialization | — | — | entry-range fold only |
@@ -360,8 +360,8 @@ on the key's representation.
 
 | key representation | what `Analyze` does with the declaration | observed |
 |---|---|---|
-| `any` (generic instance) | adopts the declared type outright (M1) | `web::is_unreserved<generic>`: `b : int[Byte]` |
-| scalar kind (`int`, `str`, ...) | `narrow(key, declared)` = union of evidence (M1) | `ascii::is_digit<int>`: `int[Byte]` |
+| `any` (generic instance) | adopts the declared type outright (M1) | `std::web::is_unreserved<generic>`: `b : int[Byte]` |
+| scalar kind (`int`, `str`, ...) | `narrow(key, declared)` = union of evidence (M1) | `std::ascii::is_digit<int>`: `int[Byte]` |
 | bare `immutableSet` | not "specific", so the declared `ImmutableSet[T]` is adopted | S06a: `s : ImmutableSet[int[Byte]]`, `setcontainstotal` |
 | `List[K]` / shaped list | **skipped**: key already "specific" | S05d: declared `List[Byte]`, view `List[int]`; `b > 255` Unknown in `f<List[int]>`, AlwaysFalse in `f<generic>` (S05e) |
 | `List[never]` | skipped | exists only for *rejected* programs when the parameter is declared (S05a) |
@@ -398,7 +398,7 @@ refs of the parameter    = entry Range ∩ TypeFact(seed type)  (what ConditionO
 The joined entry Range and the declared domain meet only at refs (both
 `hir::range::Expr` and `hir/completions.tcl` intersect on every `ref`).
 The instance's `params` entry Range itself never contains the declared
-domain. `web::is_unreserved<generic>` has entry `[-∞,+∞]`, yet every
+domain. `std::web::is_unreserved<generic>` has entry `[-∞,+∞]`, yet every
 reference to `b` is `[0,255]`.
 
 ## Scalar refined-domain audit
@@ -513,8 +513,8 @@ parameters the key is pure observed shape.
 | case | key | view | opcode |
 |---|---|---|---|
 | declared `ImmutableSet[Byte]` (S06a) | `immutableSet` | `ImmutableSet[int[Byte]]` (declared adopted) | `setcontainstotal` |
-| undeclared, `byte::set([...])` and `immutable_set_from_list([])` callers (S06b) | `immutableSet` (both share) | `immutableSet` (element erased) | `setcontains` (not proven total) |
-| module-retained set captured (S06c `member`, `web::is_unreserved`) | n/a (capture) | seed `ImmutableSet[int[Byte]]` | `setcontainstotal` |
+| undeclared, `std::byte::set([...])` and `immutable_set_from_list([])` callers (S06b) | `immutableSet` (both share) | `immutableSet` (element erased) | `setcontains` (not proven total) |
+| module-retained set captured (S06c `member`, `std::web::is_unreserved`) | n/a (capture) | seed `ImmutableSet[int[Byte]]` | `setcontainstotal` |
 
 A set's element type is *never* identity: the empty set and every other
 set share one instance. It reaches an instance only through a
@@ -639,9 +639,9 @@ generic key for every exact call.
 | kind | example | exact call form | specializes by argument kind? |
 |---|---|---|---|
 | envless static block | `fn foo(x)` at top level; module function capturing only static blocks | `call` | yes |
-| static block with block-only captures | `ascii::is_alphanumeric` (captures `is_alphabetic`, `is_digit`) | `call` | yes |
+| static block with block-only captures | `std::ascii::is_alphanumeric` (captures `is_alphabetic`, `is_digit`) | `call` | yes |
 | closure with Int captures only | `add` in S08a | `callenv` or internal variant `call` | yes (the scalar exception) |
-| closure with any non-Int capture | `hex_pair` (captures `hex_digits`), `char_at` (captures `v`), `web::is_unreserved` (captures the set) | `callenv` or internal variant `call` | **no**: generic key |
+| closure with any non-Int capture | `hex_pair` (captures `hex_digits`), `char_at` (captures `v`), `std::web::is_unreserved` (captures the set) | `callenv` or internal variant `call` | **no**: generic key |
 | closure capturing a non-static closure | `esc_bytes` (captures `hex_pair`), `scan_local` (captures `char_at`) | same | **no**: a Block capture is not Int-kinded |
 | dynamic callable | untyped parameter | `callvalue` | callee is always `<generic>` |
 
@@ -752,7 +752,7 @@ entries, so a callee whose result is already concrete under unknown
 entries keeps that coarse summary for good. This applies to any callee
 with a declared result domain or a declared parameter.
 
-`byte::from_int(7)`: the instance's own settled result is `[7,7]`, the
+`std::byte::from_int(7)`: the instance's own settled result is `[7,7]`, the
 call-site Range seen by `fb` is `[0,255]`, and `hir/completions.tcl`'s
 call-edge fact is `[7,7]`. This is sound, deterministic, and loses
 precision. Entry facts of non-self-recursive instances are recomputed
@@ -763,23 +763,23 @@ is a transport loss, not a missing theorem.
 
 | fact | call-edge value | instance value | why it must stay edge-scoped |
 |---|---|---|---|
-| `effectiveErrors` of `byte::from_int(45)` vs `byte::from_int(m+0)` handled (S09) | `{}` and `{BelowRange AboveRange}` | one `from_int<int>` with entry `{45,1000}`: `BelowRange` decided, `AboveRange` kept | the body is shared; using the `{}` edge would delete a live `fail` for the `1000` caller |
+| `effectiveErrors` of `std::byte::from_int(45)` vs `std::byte::from_int(m+0)` handled (S09) | `{}` and `{BelowRange AboveRange}` | one `from_int<int>` with entry `{45,1000}`: `BelowRange` decided, `AboveRange` kept | the body is shared; using the `{}` edge would delete a live `fail` for the `1000` caller |
 | `resultRangeFact` of `f(1)` / `f(2)` (S01) | `[1,1]` each | `f<int>` result `[1,2]` | per-edge precision; the instance result is the join |
-| literal container contents of `byte::set(['-','.','_','~'])` (S10) | every element in Byte (legality: no handler needed) | `from_int<int>` shared with the whole `byte::set` family: entry `[0,+∞]` | the shared inner instance also serves dynamic `byte::set` callers |
+| literal container contents of `std::byte::set(['-','.','_','~'])` (S10) | every element in Byte (legality: no handler needed) | `from_int<int>` shared with the whole `std::byte::set` family: entry `[0,+∞]` | the shared inner instance also serves dynamic `std::byte::set` callers |
 | literal `45` at a shared caller (M6 control, legal twin S03b) | `[45,45]` | `from_int<int>` entry `[-∞,+∞]` | an open caller joins in |
 
 M5's completion proofs are the canonical call-edge theorems. They are
 consumed only by legality (`hir/errorsets.tcl`). Nothing in the code
 lets them prune a shared body (confirmed by S09 and S03b).
 
-## M5/M6 byte::from_int shared-instance case
+## M5/M6 std::byte::from_int shared-instance case
 
 | shape | legal? | instances | entry | `value < 0` | `value > 255` |
 |---|---|---|---|---|---|
-| `byte::from_int(45)` only (S03a) | yes | `from_int<int>` | `{45}` | AlwaysFalse (entry) | AlwaysFalse (entry) |
+| `std::byte::from_int(45)` only (S03a) | yes | `from_int<int>` | `{45}` | AlwaysFalse (entry) | AlwaysFalse (entry) |
 | + legal open caller (S03b; handled, untyped `dyn` passed through `caller(g, v)`) | yes | same instance | `[-∞,+∞]` | Unknown | Unknown |
 | M6's `condition-outcome-12` as written (S03c) | **no** (2 TYPE diagnostics: typed `dyn` passed as an argument; `caller`'s declared result unproven) | same instance | `[-∞,+∞]` | Unknown | Unknown |
-| + `char::codepoint` metadata caller (S14, `byte::set`) | yes | same | `[0,+∞]` | AlwaysFalse (entry, via native metadata) | Unknown |
+| + `std::char::codepoint` metadata caller (S14, `std::byte::set`) | yes | same | `[0,+∞]` | AlwaysFalse (entry, via native metadata) | Unknown |
 
 This case separates the three scopes cleanly:
 
@@ -814,7 +814,7 @@ NIR `guard` op totals equal the representation-blocker counts: 14 and
 
 | instance (bytes) | param | key | declared | entry | open | kinds passed by exact callers | mechanism | theorem that removes it | identity? |
 |---|---|---|---|---|---|---|---|---|---|
-| `byte::high_nibble<generic>` (inlined into `high_nibble<generic>`, 214) | `b` | any | – | unknown | no | `high_nibble<generic>`: any | (c), 3rd order | entry kind of `high_nibble.b` | no |
+| `std::byte::high_nibble<generic>` (inlined into `high_nibble<generic>`, 214) | `b` | any | – | unknown | no | `high_nibble<generic>`: any | (c), 3rd order | entry kind of `high_nibble.b` | no |
 | `hex_pair<generic>` (484) | `b` | any | – | unknown | yes | `esc_bytes<generic>`: any (`list_get(bytes, i)`) | (a)(b)(c), 2nd order | entry kind of `esc_bytes.bytes` (= `List[Byte]`) | no |
 | `esc_bytes<generic>` (864) | `i` | any | – | unknown | yes | int, int, int | (a)(b) | entry-kind join | no |
 | | `bytes` | any | – | unknown | yes | `List[int[Byte]]` ×2, self-forward | (a)(b) | entry-kind join | no |
@@ -858,7 +858,7 @@ Totals:
     (`refined-checks`), unchanged by M6. M1 took `refined-checks` from 27
     to 24.
 26. **Which functions contain them?**
-    - `uri-steady`: `high_nibble` (inlined `byte::high_nibble`),
+    - `uri-steady`: `high_nibble` (inlined `std::byte::high_nibble`),
       `hex_pair`, `esc_bytes`, `esc_char`, `esc_from`, `repeat_uri`;
     - `refined-checks`: the five URI helpers, plus `char_at`,
       `scan_local`, `scan_label`, `scan_alpha`, `tld_ok` and the
@@ -918,7 +918,7 @@ Totals:
     | program result | 29500 | 29500 | `[400, 0]` | `[400, 0]` |
 
     Cause, traced:
-    - `web::uri_escape_text` is materialized, so its generic instance is
+    - `std::web::uri_escape_text` is materialized, so its generic instance is
       always used.
     - Analyzing that generic instance calls `esc_from` with `(any, int,
       str)`, creating `esc_from<any, int, str>`, a second *non-generic*
@@ -974,12 +974,12 @@ Per function (key excerpts from `instances.txt`):
 
 | function/block | instances | key(s) | entry facts | open | dispatch into it | capture facts | candidate theorem | scope |
 |---|---|---|---|---|---|---|---|---|
-| `byte::from_int` | 1 | `<int>` | `[0,+∞]` (from `char::codepoint` metadata) | no | `call` | – | container contents for `AboveRange` | call edge (keep) |
-| `char::codepoint` | 1 | `<UnicodeChar>` | declared | no | `call` | – | – | – |
-| `byte::set` | 1 | `<List[UnicodeChar]>` | declared | no | `call` | exact callables | literal contents | call edge |
-| `ascii::is_*` (5) | 1 each | `<int>` | `[0,255]`, `int[Byte]` | no | `call` | exact callables | none needed | – |
-| `web::is_unreserved` | 1 | `<generic>` | declared `Byte`; entry unknown | yes | `callenv` | `ImmutableSet[Byte]` (type) | entry Range if closed | entry |
-| `web::uri_escape_text` | 1 | `<generic>` | unknown | yes | `call` | `List[str]`, callables | closedness + entry kind | entry |
+| `std::byte::from_int` | 1 | `<int>` | `[0,+∞]` (from `std::char::codepoint` metadata) | no | `call` | – | container contents for `AboveRange` | call edge (keep) |
+| `std::char::codepoint` | 1 | `<UnicodeChar>` | declared | no | `call` | – | – | – |
+| `std::byte::set` | 1 | `<List[UnicodeChar]>` | declared | no | `call` | exact callables | literal contents | call edge |
+| `std::ascii::is_*` (5) | 1 each | `<int>` | `[0,255]`, `int[Byte]` | no | `call` | exact callables | none needed | – |
+| `std::web::is_unreserved` | 1 | `<generic>` | declared `Byte`; entry unknown | yes | `callenv` | `ImmutableSet[Byte]` (type) | entry Range if closed | entry |
+| `std::web::uri_escape_text` | 1 | `<generic>` | unknown | yes | `call` | `List[str]`, callables | closedness + entry kind | entry |
 | `high_nibble`, `hex_pair`, `esc_*`, `repeat_uri` | 1 each | `<generic>` | unknown | mostly yes | internal-variant `call` | callables, `List[str]` | closedness + entry kind | entry |
 | `check` (refined-checks) | 1 | `<int, int, str, str>` | `n ∈ [-∞,400]`, `acc ∈ [0,+∞]`, `q : str[UriQueryValue]` (RefineParams) | no | `call`/`tail` | – | threshold widening (existing 2d) | entry |
 | `Emailish?` scanners | 2 copies each | `<generic>` (+ `<str>` for the body) | unknown | yes | internal / `callmulti` | `v : str`, `n : int`, callables | closedness + entry kind; dead-`fnvalue` removal | entry / global |
@@ -987,8 +987,8 @@ Per function (key excerpts from `instances.txt`):
 ## Container-content theorem classification
 
 The theorem: "every element a `listloop` visits comes from this literal
-list", e.g. `['-','.','_','~']` in `byte::set`'s loop, so
-`char::codepoint(c) ∈ {45,46,95,126}` and `AboveRange` is dead.
+list", e.g. `['-','.','_','~']` in `std::byte::set`'s loop, so
+`std::char::codepoint(c) ∈ {45,46,95,126}` and `AboveRange` is dead.
 
 **It already exists, as a call-edge theorem**
 (`hir/completions.tcl`: `exactList`, `LiteralListOf`, per-element
@@ -999,13 +999,13 @@ Candidate scopes:
 | scope | verdict | reason |
 |---|---|---|
 | call edge (current) | **KEEP** | exactly true for one invocation; drives legality |
-| instance identity (key `byte::set<List[...] with contents C>`) | **REJECT** | unbounded: every distinct literal list creates an instance. Unstable: the benefit disappears the moment a second caller passes other contents. And it would not even help `from_int`: the inner `from_int<int>` instance is shared with every other `byte::set` instance (S10 shows `byte::set<List[UnicodeChar]>` and `byte::set<generic>` both calling one `from_int<int>`) |
-| entry theorem of `byte::set`'s instance (join of contents over callers) | DEFER | sound (a join) and bounded, but its only consumer would be `from_int<int>`'s entry, which it cannot reach. The inner call's argument is `char::codepoint(c)`, whose Range comes from the *callee result summary*, not from the loop element. It would need a per-element Range for listloop bindings (hir::range currently leaves the element binding unseeded: "the same answer a not-provably-int element would get anyway") *and* separate `from_int` instances to benefit, i.e. identity after all |
+| instance identity (key `std::byte::set<List[...] with contents C>`) | **REJECT** | unbounded: every distinct literal list creates an instance. Unstable: the benefit disappears the moment a second caller passes other contents. And it would not even help `from_int`: the inner `from_int<int>` instance is shared with every other `std::byte::set` instance (S10 shows `std::byte::set<List[UnicodeChar]>` and `std::byte::set<generic>` both calling one `from_int<int>`) |
+| entry theorem of `std::byte::set`'s instance (join of contents over callers) | DEFER | sound (a join) and bounded, but its only consumer would be `from_int<int>`'s entry, which it cannot reach. The inner call's argument is `std::char::codepoint(c)`, whose Range comes from the *callee result summary*, not from the loop element. It would need a per-element Range for listloop bindings (hir::range currently leaves the element binding unseeded: "the same answer a not-provably-int element would get anyway") *and* separate `from_int` instances to benefit, i.e. identity after all |
 | loop/path theorem inside one instance | DEFER | the listloop element binding is a path fact of the loop body; with an entry-level content set it would be the natural carrier |
 
-For `byte::set` punctuation versus a generic dynamic `byte::set` caller:
+For `std::byte::set` punctuation versus a generic dynamic `std::byte::set` caller:
 the literal's facts must not prune the shared `from_int<int>` body, and
-they do not. The dynamic caller also routes through `byte::set<generic>`
+they do not. The dynamic caller also routes through `std::byte::set<generic>`
 (a second instance) into the same `from_int<int>`.
 
 Conclusion: container contents is a call-edge theorem with value today
@@ -1067,7 +1067,7 @@ that arm is a Bool constant the outer condition's outcome follows.
   instance selection.
 - **Identity:** no.
 - **Recommendation:** **DEFER** as a small, self-contained expression
-  milestone. Corpus incidence is low (`web::is_unreserved`'s `or` has
+  milestone. Corpus incidence is low (`std::web::is_unreserved`'s `or` has
   no decidable operand).
 
 S11 also exposed a precision problem that belongs to the next section:
@@ -1356,10 +1356,10 @@ None of these was changed or pinned in M7.a.
    `unknown` entries.
 8. **Declared parameter domains are applied at refs, not entries.** Any
    consumer reading `hir::range` `params` directly (e.g. a future
-   entry-based optimization) sees `[-∞,+∞]` for `web::is_unreserved`'s
+   entry-based optimization) sees `[-∞,+∞]` for `std::web::is_unreserved`'s
    `b` although every use is `[0,255]`.
 9. **`hir/completions.tcl` keeps its own native result table.**
-   `char::codepoint` is `[0,1114111]` there and `[0,+∞]` in `hir::range`
+   `std::char::codepoint` is `[0,1114111]` there and `[0,+∞]` in `hir::range`
    (S14).
 10. **Tests observing rejected programs**:
     - M4 `setfromlist-empty-list-stays-generic`;
@@ -1469,10 +1469,10 @@ Pin as reviewed contracts what this audit judged intentional:
 ### D. Test hygiene (no production change)
 
 - Fix `funcHeaderCount` to return the count, and correct its two
-  assertions (the `byte::set` fixture has 2 headers).
+  assertions (the `std::byte::set` fixture has 2 headers).
 - Add legal twins for:
   - M6 `condition-outcome-12` (S03b);
-  - M5 shared-instance `byte::set` (a handled caller whose argument is
+  - M5 shared-instance `std::byte::set` (a handled caller whose argument is
     *declared* `List[UnicodeChar]` but dynamic);
   - M4 empty-list (a declared-result `List[int]` producer).
 - Replace M5's `-from-int` "dynamic" caller with a genuinely
@@ -1615,10 +1615,10 @@ test.
 ## Source-fence confirmation
 
 - No `.bot`, `.ir` or `.hir` file changed; the frozen workloads
-  (`bench/uri-steady.bot`, `bench/refined-checks.ir`, `lib/*.bot`,
+  (`bench/uri-steady.bot`, `bench/refined-checks.ir`, `stdlib/*.bot`,
   audit probes) are untouched.
 - No file under `hir/`, `native/`, `core/`, `compiler/`, `surface/`,
-  `lib/`, `bench/` or `tests/` changed.
+  `stdlib/`, `bench/` or `tests/` changed.
 - New files only: this report and `audit/m7a-instance-selection/`
   (non-production tools and their outputs).
 - The counterfactual tool redefines one `hir::specialize` proc *inside
@@ -1711,8 +1711,8 @@ the limit, with no corpus benefit (0 `callvalue`); 24 no.
     it partitions callers, and so decides *which* join an entry Range
     is.
 36. **Which derive only from entry facts?**
-    - the corpus: both corpus Range decisions (`byte::from_int`'s
-      `BelowRange`, via `char::codepoint`'s native metadata joined into
+    - the corpus: both corpus Range decisions (`std::byte::from_int`'s
+      `BelowRange`, via `std::char::codepoint`'s native metadata joined into
       the entry);
     - synthetic: S01, S02a, S02b, S02f, S03a, S09, S10, S11, S12d, S13,
       S14, S15 (15 of the 25 synthetic decisions; the other 10 are
@@ -1839,8 +1839,8 @@ A tier that decides while production says Unknown is reported as
 
 A tool limitation: the `file:line` column for a few call nodes inside
 library `listloop`s prints the *program's* file name with the
-*library's* line number (e.g. `probe8.bot:176` is `lib/byte.bot:176`,
-the call inside `byte::set`'s loop). The ExprId is authoritative.
+*library's* line number (e.g. `probe8.bot:176` is `stdlib/byte.bot:176`,
+the call inside `std::byte::set`'s loop). The ExprId is authoritative.
 
 Reproduce (from the repository root, `LANG=C.utf8 LC_ALL=C.utf8`, native
 backend built):

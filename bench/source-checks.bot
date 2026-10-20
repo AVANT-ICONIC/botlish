@@ -7,7 +7,7 @@
 #
 # Canonical surface-Botlish source (CANONICAL-SURFACE-BENCHMARKS.md,
 # HIGHER-ORDER-DOGFOODING.md). checks mixes callable kinds because a real
-# lint pass's own classifiers naturally do: str::is_tcl_alpha/str::is_tcl_alnum
+# lint pass's own classifiers naturally do: std::str::is_tcl_alpha/std::str::is_tcl_alnum
 # are ordinary intrinsics (core/tclcompat.tcl), used directly, not wrapped;
 # is_underscore?/is_hyphen? are ordinary envless Botlish functions. This is
 # not a List built merely to provoke "callvalue" -- a batch of independent
@@ -26,26 +26,26 @@
 # even though this file's own valid_start? consults only two of the four --
 # an honest diagnostic vector, the same shape a real lint report would
 # produce for a caller that wants more than one downstream policy's answer.
-# The vector is read with list::get and a `false` default: its length is the
+# The vector is read with std::list::get and a `false` default: its length is the
 # checks List's own, which a function boundary hides from the compiler, so a
-# required list::at would oblige every caller (including list::find's
+# required std::list::at would oblige every caller (including std::list::find's
 # predicate) to handle an IndexNotFound that cannot happen.
 #
 # invalid_names is the returning-loop + continue selection idiom (no
-# list::filter exists or is introduced); first_invalid genuinely needs "the
-# first invalid candidate in declared order" and uses list::find for it.
+# std::list::filter exists or is introduced); first_invalid genuinely needs "the
+# first invalid candidate in declared order" and uses std::list::find for it.
 #
 # candidates deliberately covers ordinary valid identifiers (including this
 # codebase's own trailing-"?" convention and non-ASCII letters, both
-# already structurally alpha under str::is_tcl_alpha's Unicode categories),
+# already structurally alpha under std::str::is_tcl_alpha's Unicode categories),
 # leading-underscore names (valid under this policy), and every invalid
 # leading-character kind (digit, hyphen, and the empty string) -- both
 # branches of valid_start? are genuinely exercised, not just one.
 #
 # expect: [16, 5, "2fast", 11]
 
-import list
-import str
+import std::list
+import std::str
 
 fn is_underscore?(c):
     c == "_"
@@ -53,10 +53,10 @@ fn is_underscore?(c):
 fn is_hyphen?(c):
     c == "-"
 
-checks = [str::is_tcl_alpha, str::is_tcl_alnum, is_underscore?, is_hyphen?]
+checks = [std::str::is_tcl_alpha, std::str::is_tcl_alnum, is_underscore?, is_hyphen?]
 
 fn classify_leading(name):
-    if str::length(name) == 0:
+    if std::str::length(name) == 0:
         return [false, false, false, false]
     c = name.substring(0, 1)
     loop check in checks:
@@ -94,7 +94,7 @@ invalid_names = loop name in candidates:
     name
 
 first_invalid = candidates.find(invalid_name?):
-    on list::NotFound:
+    on std::list::NotFound:
         "<none>"
 
-[list::length(candidates), list::length(invalid_names), first_invalid, list::length(candidates) - list::length(invalid_names)]
+[std::list::length(candidates), std::list::length(invalid_names), first_invalid, std::list::length(candidates) - std::list::length(invalid_names)]

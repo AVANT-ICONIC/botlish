@@ -14,22 +14,22 @@ platform C calling convention, and the system linker resolves the symbols.
 
 ```botlish
 # sha256.bot -- an application module (examples/ffi/sha256/)
-import abi
-import abi::bytes
-import ffi::c
+import std::abi
+import std::abi::bytes
+import std::ffi::c
 
 extern c library "crypto"
 extern c library "stdc++"
 
 extern c fn SHA256 named "botlish_bssl_SHA256"(
-    data: ffi::c::Ptr[ffi::c::UChar] read noescape,
-    len: ffi::c::ULong,
-    out: ffi::c::Ptr[ffi::c::UChar] write noescape
-) -> ffi::c::Ptr[ffi::c::UChar] alias out
+    data: std::ffi::c::Ptr[std::ffi::c::UChar] read noescape,
+    len: std::ffi::c::ULong,
+    out: std::ffi::c::Ptr[std::ffi::c::UChar] write noescape
+) -> std::ffi::c::Ptr[std::ffi::c::UChar] alias out
 
-fn digest(data: abi::bytes::Bytes) -> abi::bytes::Bytes:
-    written = data.SHA256(abi::bytes::length(data).value, abi::bytes::zeroed(abi::usize(32)))
-    abi::bytes::freeze(written.out)
+fn digest(data: std::abi::bytes::Bytes) -> std::abi::bytes::Bytes:
+    written = data.SHA256(std::abi::bytes::length(data).value, std::abi::bytes::zeroed(std::abi::usize(32)))
+    std::abi::bytes::freeze(written.out)
 ```
 
 `digest` hands BoringSSL the input Bytes' own storage for reading (no
@@ -96,10 +96,10 @@ resultFact    := "independent" | "alias" NAME
 ```botlish
 extern c library "botlish_cffi_fixture"
 
-extern c fn add named "bcf_add"(a: ffi::c::Int, b: ffi::c::Int) -> ffi::c::Int
+extern c fn add named "bcf_add"(a: std::ffi::c::Int, b: std::ffi::c::Int) -> std::ffi::c::Int
 extern c fn nothing named "bcf_nothing"() -> unit
-extern c fn sum named "bcf_sum"(data: ffi::c::Ptr[ffi::c::UChar] read noescape, count: ffi::c::ULong) -> ffi::c::ULong
-extern c fn keep named "bcf_keep"(p: ffi::c::Ptr[ffi::c::Void] captures) -> unit
+extern c fn sum named "bcf_sum"(data: std::ffi::c::Ptr[std::ffi::c::UChar] read noescape, count: std::ffi::c::ULong) -> std::ffi::c::ULong
+extern c fn keep named "bcf_keep"(p: std::ffi::c::Ptr[std::ffi::c::Void] captures) -> unit
 ```
 
 * **No body.** An extern c fn is a declaration of a C function, not a
@@ -175,14 +175,14 @@ nothing else:
 
 | C | Botlish | ABI class |
 |---|---|---|
-| `signed char`, `unsigned char`, `char` | `ffi::c::SChar`, `ffi::c::UChar`, `ffi::c::Char` | `i8`, `u8`; `char` by the target (`i8` on x86-64 and Apple AArch64, `u8` on Linux AArch64) |
-| `short`, `unsigned short` | `ffi::c::Short`, `ffi::c::UShort` | `i16`, `u16` |
-| `int`, `unsigned int` | `ffi::c::Int`, `ffi::c::UInt` | `i32`, `u32` |
-| `long`, `unsigned long` | `ffi::c::Long`, `ffi::c::ULong` | `i64`, `u64` on LP64 (`i32`, `u32` on LLP64) |
-| `long long`, `unsigned long long` | `ffi::c::LongLong`, `ffi::c::ULongLong` | `i64`, `u64` |
-| `_Bool` (`bool` of `<stdbool.h>`) | `ffi::c::Bool`, which is Botlish's `bool` | `bool`: one byte, 0 or 1, zero-extended like `u8` |
-| `T *` | `ffi::c::Ptr[T]` (T a scalar, `ffi::c::Void`, an opaque struct, a pointer) | `ptr` |
-| `R (*)(A...)` | `ffi::c::FnPtr[Fn{args: [...], return: R}]` | `ptr` |
+| `signed char`, `unsigned char`, `char` | `std::ffi::c::SChar`, `std::ffi::c::UChar`, `std::ffi::c::Char` | `i8`, `u8`; `char` by the target (`i8` on x86-64 and Apple AArch64, `u8` on Linux AArch64) |
+| `short`, `unsigned short` | `std::ffi::c::Short`, `std::ffi::c::UShort` | `i16`, `u16` |
+| `int`, `unsigned int` | `std::ffi::c::Int`, `std::ffi::c::UInt` | `i32`, `u32` |
+| `long`, `unsigned long` | `std::ffi::c::Long`, `std::ffi::c::ULong` | `i64`, `u64` on LP64 (`i32`, `u32` on LLP64) |
+| `long long`, `unsigned long long` | `std::ffi::c::LongLong`, `std::ffi::c::ULongLong` | `i64`, `u64` |
+| `_Bool` (`bool` of `<stdbool.h>`) | `std::ffi::c::Bool`, which is Botlish's `bool` | `bool`: one byte, 0 or 1, zero-extended like `u8` |
+| `T *` | `std::ffi::c::Ptr[T]` (T a scalar, `std::ffi::c::Void`, an opaque struct, a pointer) | `ptr` |
+| `R (*)(A...)` | `std::ffi::c::FnPtr[Fn{args: [...], return: R}]` | `ptr` |
 | `void` (result) | `unit` | `void` |
 
 A parameter's ABI class is its type's width and signedness on the
@@ -192,10 +192,10 @@ the-target`: `long` is 64 bits for `-target linux-x86_64` and 32 for
 `windows-x86_64`, plain `char` signed on x86-64 and unsigned on
 `linux-aarch64`). size_t, uint8_t and the other typedefs are a binding
 author's (or a future generator's) choice of the scalar the target's ABI
-probe says they are (`size_t` is `ffi::c::ULong` on LP64): the compiler
+probe says they are (`size_t` is `std::ffi::c::ULong` on LP64): the compiler
 knows no typedef.
 
-`ffi::c::Double` (C `double`, Botlish's Float64; FLOAT64-MILESTONE-1.md) is
+`std::ffi::c::Double` (C `double`, Botlish's Float64; FLOAT64-MILESTONE-1.md) is
 a parameter and result type too: it travels in the target's floating-point
 registers (the stack beyond them), a Float64 passed out is never negative
 zero, and a double returned that is not finite -- NaN or an infinity -- is
@@ -258,22 +258,22 @@ typed, admitted and checked by the machinery every call has:
 
 * **Arguments** are held to the declared C types by the ordinary admission
   proof: a C scalar is an integer domain, so an `int` argument needs its
-  range proven (a literal, a comparison, a declared `ffi::c::Int`
+  range proven (a literal, a comparison, a declared `std::ffi::c::Int`
   parameter), never wrapped or truncated (`cf-call-typing`); a pointer
-  parameter admits an `ffi::c::Ptr` of exactly its type, or byte storage
+  parameter admits an `std::ffi::c::Ptr` of exactly its type, or byte storage
   under its contract (section 6).
 * **Arity** is the C signature's: a call passing another number of
   arguments is a compile-time `ARITY` naming the declaration ("bcf::add is a
   C function of 2 parameter(s), its declaration's C signature, and this
   call passes 1 argument(s)").
 * **The result** is the declared C type -- an integer domain value, an
-  affine `ffi::c::Ptr`, an `ffi::c::FnPtr`, unit -- or, with a write
+  affine `std::ffi::c::Ptr`, an `std::ffi::c::FnPtr`, unit -- or, with a write
   exposure, the write-back struct (section 6).
 * **Not a value.** An extern c fn is only called: bound, passed or returned
   as a value it is `TYPE` ("bcf::add can only be called directly: it is a C
   function (extern c fn), and a call through a function value would have no
   C signature, no contract and no link symbol", `cf-not-a-value`). A C
-  function pointer value is `ffi::c::FnPtr`, which Botlish passes and
+  function pointer value is `std::ffi::c::FnPtr`, which Botlish passes and
   receives but never calls (`cf-function-pointers`).
 * **Ownership.** Every parameter observes: an affine `Ptr` argument stays
   its owner's (an observed temporary needs an owner first: bind it).
@@ -284,7 +284,7 @@ Exactly C-POINTER-BORROWING.md, through real C. A byte-pointee parameter
 (`Char`, `SChar`, `UChar`, `Void`) whose contract says noescape and states
 an access admits existing storage for the one call:
 
-* **read noescape**: an `abi::bytes::Bytes` or `MutableBytes` is exposed as
+* **read noescape**: an `std::abi::bytes::Bytes` or `MutableBytes` is exposed as
   it is -- its own storage's address, no copy (`cf-borrow-read`);
 * **write noescape**: a `MutableBytes` is detached into a private copy, C
   writes the copy, and the call's value is the write-back struct
@@ -297,7 +297,7 @@ Refused, `FOREIGN-BORROW`, as for every foreign call: storage where the
 contract may keep the pointer (captures, unknown), an immutable Bytes at a
 write parameter, a pointee that is not byte-sized (`cf-borrow-refusals`).
 There is no pointer value of byte storage, ever: a Bytes is never an
-`ffi::c::Ptr`. C strings are bytes: a `const char *` argument is a Bytes
+`std::ffi::c::Ptr`. C strings are bytes: a `const char *` argument is a Bytes
 holding the string and its NUL, which the binding (not the compiler) adds
 (`examples/ffi/tcl/demo.bot`'s `script`).
 
@@ -309,7 +309,7 @@ run time, the C call never made (`cf-strict0-replay`).
 ## 7. Pointer results
 
 A pointer result is truthful: SHA256 returns `uint8_t *`, so its
-declaration's result is `ffi::c::Ptr[ffi::c::UChar]`, never a void
+declaration's result is `std::ffi::c::Ptr[std::ffi::c::UChar]`, never a void
 pretending C's register is ignored (C-POINTER-BORROWING.md section 14 had to
 declare it unit; the provenance fact is what lets it stay a pointer). What a
 call yields depends on where the result points, which only the contract can
@@ -317,10 +317,10 @@ say:
 
 | provenance | the call's result |
 |---|---|
-| `independent` | a fresh `ffi::c::Ptr` (`Tcl_CreateInterp`) |
-| `alias P`, P a raw `Ptr` argument | a new `ffi::c::Ptr` of the same address (`bcf_echo_ptr`) |
+| `independent` | a fresh `std::ffi::c::Ptr` (`Tcl_CreateInterp`) |
+| `alias P`, P a raw `Ptr` argument | a new `std::ffi::c::Ptr` of the same address (`bcf_echo_ptr`) |
 | `alias P`, P exposed byte storage | unit in its place: a pointer into Botlish storage never outlives the call (SHA256's `out`) |
-| `unknown`, nothing exposed | a fresh `ffi::c::Ptr` (C-ABI-TYPES.md's raw pointers) |
+| `unknown`, nothing exposed | a fresh `std::ffi::c::Ptr` (C-ABI-TYPES.md's raw pointers) |
 | `unknown`, storage exposed | `FOREIGN-BORROW`: the result may point into the exposure (memchr's shape, `cf-result-provenance`) |
 
 **The contract is checked where the run sees it.** An `alias P` result that
@@ -422,7 +422,7 @@ spelling). The HIR keeps two side tables:
 ```
 foreign   KEY -> {key namespace name symbol native origin contract abi}
           boringssl::SHA256 -> {... symbol botlish_bssl_SHA256
-            contract {vars {} params {{name data type {cptr {refined int ffi::c::UChar}}
+            contract {vars {} params {{name data type {cptr {refined int std::ffi::c::UChar}}
               access read escape declared-noescape} {name len ...}
               {name out ... access write escape declared-noescape}}
               result {cptr ...} provenance {alias out}}
@@ -722,11 +722,11 @@ design: a library is the program's declaration and the host's file.
 **A scalar function.**
 
 ```botlish
-import ffi::c
+import std::ffi::c
 
 extern c library "m"
 
-extern c fn labs(x: ffi::c::Long) -> ffi::c::Long
+extern c fn labs(x: std::ffi::c::Long) -> std::ffi::c::Long
 
 labs(-42)                               # 42 (labs is libc's; "m" shows a library)
 ```
@@ -736,15 +736,15 @@ pointee is an opaque struct, the result's provenance states where it comes
 from.
 
 ```botlish
-import ffi::c
+import std::ffi::c
 
 extern c library "tcl9.0"
 
 opaque struct Interp:
     tag: unit
 
-extern c fn Tcl_CreateInterp() -> ffi::c::Ptr[Interp] independent
-extern c fn Tcl_DeleteInterp(interp: ffi::c::Ptr[Interp] noescape) -> unit
+extern c fn Tcl_CreateInterp() -> std::ffi::c::Ptr[Interp] independent
+extern c fn Tcl_DeleteInterp(interp: std::ffi::c::Ptr[Interp] noescape) -> unit
 
 interp = Tcl_CreateInterp()
 alive = not interp.null?()
@@ -755,28 +755,28 @@ alive
 **Bytes, read noescape.**
 
 ```botlish
-import abi
-import abi::bytes
-import ffi::c
-import str
+import std::abi
+import std::abi::bytes
+import std::ffi::c
+import std::str
 
 extern c library "botlish_cffi_fixture"
 
-extern c fn sum named "bcf_sum"(data: ffi::c::Ptr[ffi::c::UChar] read noescape, count: ffi::c::ULong) -> ffi::c::ULong
+extern c fn sum named "bcf_sum"(data: std::ffi::c::Ptr[std::ffi::c::UChar] read noescape, count: std::ffi::c::ULong) -> std::ffi::c::ULong
 
-data = abi::bytes::from_list(str::encode_utf8("hello"))
-sum(data, abi::bytes::length(data).value)        # 532: C read the Bytes' own storage
+data = std::abi::bytes::from_list(std::str::encode_utf8("hello"))
+sum(data, std::abi::bytes::length(data).value)        # 532: C read the Bytes' own storage
 ```
 
 **MutableBytes, write noescape.** The call returns the bytes C wrote; the
 caller's MutableBytes is unchanged (the imports and library as above).
 
 ```botlish
-extern c fn fill named "bcf_fill"(out: ffi::c::Ptr[ffi::c::UChar] write noescape, count: ffi::c::ULong, seed: ffi::c::UChar) -> unit
+extern c fn fill named "bcf_fill"(out: std::ffi::c::Ptr[std::ffi::c::UChar] write noescape, count: std::ffi::c::ULong, seed: std::ffi::c::UChar) -> unit
 
-m = abi::bytes::zeroed(abi::usize(5))
+m = std::abi::bytes::zeroed(std::abi::usize(5))
 r = fill(m, 5, 7)
-abi::bytes::freeze(r.out)                         # the bytes 7 44 81 118 155
+std::abi::bytes::freeze(r.out)                         # the bytes 7 44 81 118 155
 # r.result is unit; m is still five zero bytes
 ```
 
@@ -787,12 +787,12 @@ module:
 ```botlish
 direct module
 
-import ffi::c
+import std::ffi::c
 
 extern c library "botlish_cffi_fixture"
 
-extern c fn keep named "bcf_keep"(p: ffi::c::Ptr[ffi::c::Void] captures) -> unit
-extern c fn address named "bcf_address"() -> ffi::c::Ptr[ffi::c::Void] independent
+extern c fn keep named "bcf_keep"(p: std::ffi::c::Ptr[std::ffi::c::Void] captures) -> unit
+extern c fn address named "bcf_address"() -> std::ffi::c::Ptr[std::ffi::c::Void] independent
 
 p = address()
 keep(p)
@@ -809,7 +809,7 @@ first line".
 **A renamed native symbol.**
 
 ```botlish
-extern c fn plus named "bcf_add"(a: ffi::c::Int, b: ffi::c::Int) -> ffi::c::Int
+extern c fn plus named "bcf_add"(a: std::ffi::c::Int, b: std::ffi::c::Int) -> std::ffi::c::Int
 
 plus(40, 2)                                       # 42; the link symbol is bcf_add
 ```
@@ -834,16 +834,16 @@ extern c library "tcl9.0"
 opaque struct Interp:
     tag: unit
 
-extern c fn Tcl_CreateInterp() -> ffi::c::Ptr[Interp] independent
+extern c fn Tcl_CreateInterp() -> std::ffi::c::Ptr[Interp] independent
 
 extern c fn Tcl_EvalEx(
-    interp: ffi::c::Ptr[Interp] noescape,
-    script: ffi::c::Ptr[ffi::c::Char] read noescape,
-    numBytes: ffi::c::Long,
-    flags: ffi::c::Int
-) -> ffi::c::Int
+    interp: std::ffi::c::Ptr[Interp] noescape,
+    script: std::ffi::c::Ptr[std::ffi::c::Char] read noescape,
+    numBytes: std::ffi::c::Long,
+    flags: std::ffi::c::Int
+) -> std::ffi::c::Int
 
-extern c fn Tcl_DeleteInterp(interp: ffi::c::Ptr[Interp] noescape) -> unit
+extern c fn Tcl_DeleteInterp(interp: std::ffi::c::Ptr[Interp] noescape) -> unit
 ```
 
 Tcl 9's `Tcl_Eval` is a macro, `Tcl_EvalEx(interp, script, TCL_INDEX_NONE,
@@ -1150,7 +1150,7 @@ and in CI).
 | Temporary byte borrowing still requires noescape. | **Confirmed.** The admission is the borrowing milestone's, unchanged (`cf-borrow-refusals`). |
 | Raw foreign Ptr values can cross calls independently of borrowing. | **Confirmed.** A `Ptr` is a raw address word, passed and returned as one; a pointer result is borrowing's concern only when the same call exposes storage (section 7). |
 | No callback/export mechanism exists yet. | **Confirmed.** Botlish never calls an `FnPtr`, and exports no C symbol. |
-| No aggregate/varargs ABI exists yet. | **Confirmed.** Structs, unions and arrays by value and varargs are declaration errors (floating point was too until FLOAT64-MILESTONE-1.md added `ffi::c::Double`; `float` and `long double` still are). |
+| No aggregate/varargs ABI exists yet. | **Confirmed.** Structs, unions and arrays by value and varargs are declaration errors (floating point was too until FLOAT64-MILESTONE-1.md added `std::ffi::c::Double`; `float` and `long double` still are). |
 
 ## 25. For a binding generator
 
@@ -1163,10 +1163,10 @@ word after its type:
 extern c library "foo"
 
 extern c fn foo_frob named "foo_frob_v2"(
-    handle: ffi::c::Ptr[Foo] noescape,
-    data: ffi::c::Ptr[ffi::c::UChar] read proven noescape,
-    len: ffi::c::ULong
-) -> ffi::c::Int
+    handle: std::ffi::c::Ptr[Foo] noescape,
+    data: std::ffi::c::Ptr[std::ffi::c::UChar] read proven noescape,
+    len: std::ffi::c::ULong
+) -> std::ffi::c::Int
 ```
 
 Nothing in it needs a hand-written construct: no body, no wrapper, no
@@ -1182,7 +1182,7 @@ writes exactly these declarations, which compile like hand-written ones.
 * Header parsing in the compiler: whole-API bindings are generated by a
   development tool (C-BINDGEN.md) as ordinary source, and compiling them
   needs no header, preprocessor or C compiler.
-* C `float` and `long double` (`double` is `ffi::c::Double`,
+* C `float` and `long double` (`double` is `std::ffi::c::Double`,
   FLOAT64-MILESTONE-1.md), structs, unions and arrays by value, varargs,
   bitfields.
 * Callbacks (Botlish code called from C), exported C symbols, calling an

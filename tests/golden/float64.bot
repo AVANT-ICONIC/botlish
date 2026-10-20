@@ -16,8 +16,8 @@
 #     that declare it and is an obligation like any declared error; a result
 #     of exactly known operands is decided while compiling (KNOWN-ERROR when
 #     it is not finite), and the decided value is the run's own;
-#   * the conversions float64::from_int (nearest, ties to even) and
-#     float64::truncate (toward zero, exact).
+#   * the conversions std::float64::from_int (nearest, ties to even) and
+#     std::float64::truncate (toward zero, exact).
 #
 # Ported from tests/float64.test, which stays authoritative and unchanged: it
 # also pins what no program can observe -- the lexer's tokens, the literal
@@ -28,14 +28,14 @@
 # test (or of one of its programs); its name is the Tcl test's.
 #
 # Imports: compiler (the body contract) and test; list, mutable_vector and
-# float64 because the Tcl programs call list::length/list::at, a
-# MutableVector's push and length, and float64::from_int/truncate (the same
+# float64 because the Tcl programs call std::list::length/std::list::at, a
+# MutableVector's push and length, and std::float64::from_int/truncate (the same
 # imports the Tcl programs write).
-import compiler
-import float64
-import list
-import mutable_vector
-import test
+import std::compiler
+import std::float64
+import std::list
+import std::mutable_vector
+import std::test
 
 # float-aggregates: a struct of two Float64 fields.
 struct Point:
@@ -44,29 +44,29 @@ struct Point:
 
 fn register_float64_tests():
     # float-arithmetic: + - * / and unary minus on Float64 operands.
-    fn arithmetic() errors compiler::CompilerError:
+    fn arithmetic() errors std::compiler::CompilerError:
         static compile:
             x = 1.5
             y = -2.0
             [x + y, x - y, x * y, x / y, -x, -y, 0.1 + 0.2, 1.0 / 3.0, 2.0 * 0.5]
-    test::value("float-arithmetic", [-0.5, 3.5, -3.0, -0.75, -1.5, 2.0, 0.30000000000000004, 0.3333333333333333, 1.0], arithmetic)
+    std::test::value("float-arithmetic", [-0.5, 3.5, -3.0, -0.75, -1.5, 2.0, 0.30000000000000004, 0.3333333333333333, 1.0], arithmetic)
 
     # float-comparisons: < <= > >= == != on Float64 operands.
-    fn comparisons() errors compiler::CompilerError:
+    fn comparisons() errors std::compiler::CompilerError:
         static compile:
             x = 1.5
             y = -2.0
             [x < y, x <= y, x > y, x >= y, x == y, x != y, x <= x, x >= x, y < x]
-    test::value("float-comparisons", [false, false, true, true, false, true, true, true, true], comparisons)
+    std::test::value("float-comparisons", [false, false, true, true, false, true, true, true, true], comparisons)
 
     # float-equality-not-coercive: a Float64 never equals an Int.
-    fn not_coercive() errors compiler::CompilerError:
+    fn not_coercive() errors std::compiler::CompilerError:
         static compile:
             [1.0 == 1, 0.0 == 0, 2.5 == 2.5]
-    test::value("float-equality-not-coercive", [false, false, true], not_coercive)
+    std::test::value("float-equality-not-coercive", [false, false, true], not_coercive)
 
     # float-runtime-values: parameters, recursion and a loop over a List.
-    fn runtime_values() errors compiler::CompilerError:
+    fn runtime_values() errors std::compiler::CompilerError:
         static compile:
             fn power(x: Float64, n: int) -> Float64 errors NonFiniteFloat:
                 if n == 0:
@@ -74,10 +74,10 @@ fn register_float64_tests():
                 else:
                     x * power(x, n - 1)
             fn sum(xs: List[Float64], i: int, acc: Float64) -> Float64 errors NonFiniteFloat:
-                if i == list::length(xs):
+                if i == std::list::length(xs):
                     acc
                 else:
-                    x = list::at(xs, i):
+                    x = std::list::at(xs, i):
                         on IndexNotFound:
                             0.0
                     sum(xs, i + 1, acc + x)
@@ -92,10 +92,10 @@ fn register_float64_tests():
                 on NonFiniteFloat:
                     0.0
             [r, m]
-    test::value("float-runtime-values", [2.5937424601000023, 4.0], runtime_values)
+    std::test::value("float-runtime-values", [2.5937424601000023, 4.0], runtime_values)
 
     # float-control-flow-joins: an if of two Float64 branches, closures.
-    fn joins() errors compiler::CompilerError:
+    fn joins() errors std::compiler::CompilerError:
         static compile:
             fn pick(c: bool, a: Float64, b: Float64) -> Float64:
                 if c:
@@ -115,22 +115,22 @@ fn register_float64_tests():
             else:
                 0.5
             [pick(true, 1.25, 2.0), pick(false, 1.25, 2.0), y, z]
-    test::value("float-control-flow-joins", [1.25, -2.0, 10.0, 10.0], joins)
+    std::test::value("float-control-flow-joins", [1.25, -2.0, 10.0, 10.0], joins)
 
     # float-aggregates: Lists, structs and MutableVectors of Float64 values.
-    fn aggregates() errors compiler::CompilerError:
+    fn aggregates() errors std::compiler::CompilerError:
         static compile:
             p = Point {x: 1.5, y: -0.25}
             q = Point {x: 1.5, y: -0.25}
-            v = mutable_vector::from_list([0.5, 1.5])
+            v = std::mutable_vector::from_list([0.5, 1.5])
             v.push(2.5)
             xs = [1.0, 2.0, 3.0]
-            [p == q, p.x, list::length(xs), hash(p) == hash(q), hash(1.5) == hash(1.5), hash(1.5) == hash(2.5), v.length(), xs == [1.0, 2.0, 3.0]]
-    test::value("float-aggregates", [true, 1.5, 3, true, true, false, 3, true], aggregates)
+            [p == q, p.x, std::list::length(xs), hash(p) == hash(q), hash(1.5) == hash(1.5), hash(1.5) == hash(2.5), v.length(), xs == [1.0, 2.0, 3.0]]
+    std::test::value("float-aggregates", [true, 1.5, 3, true, true, false, 3, true], aggregates)
 
     # float-resolution-through-inference: an untyped parameter used with a
     # Float64 operand is Float64, so an Int argument is rejected.
-    fn inferred() errors compiler::CompilerError:
+    fn inferred() errors std::compiler::CompilerError:
         static compile:
             fn half(x) errors NonFiniteFloat:
                 x / 2.0
@@ -138,23 +138,23 @@ fn register_float64_tests():
                 on NonFiniteFloat:
                     0.0
             r
-    test::value("float-resolution-through-inference/value", 1.5, inferred)
-    fn inferred_int_argument() errors compiler::CompilerError:
+    std::test::value("float-resolution-through-inference/value", 1.5, inferred)
+    fn inferred_int_argument() errors std::compiler::CompilerError:
         static compile:
             fn half(x) errors NonFiniteFloat:
                 x / 2.0
             half(3)
-    test::rejects("float-resolution-through-inference/int-argument", compiler::DiagnosticCode::Type, inferred_int_argument)
+    std::test::rejects("float-resolution-through-inference/int-argument", std::compiler::DiagnosticCode::Type, inferred_int_argument)
 
     # float-resolution-default-int: with no Float64 operand an operator is
     # the Int operation.
-    fn default_int() errors compiler::CompilerError:
+    fn default_int() errors std::compiler::CompilerError:
         static compile:
             fn add(x, y):
                 x + y
             add(1.5, 2.5)
-    test::rejects("float-resolution-default-int/untyped", compiler::DiagnosticCode::Type, default_int)
-    fn declared_float() errors compiler::CompilerError:
+    std::test::rejects("float-resolution-default-int/untyped", std::compiler::DiagnosticCode::Type, default_int)
+    fn declared_float() errors std::compiler::CompilerError:
         static compile:
             fn add(x: Float64, y: Float64) -> Float64 errors NonFiniteFloat:
                 x + y
@@ -162,51 +162,51 @@ fn register_float64_tests():
                 on NonFiniteFloat:
                     0.0
             r
-    test::value("float-resolution-default-int/declared", 4.0, declared_float)
+    std::test::value("float-resolution-default-int/declared", 4.0, declared_float)
 
     # float-resolution-mixed-operands: no implicit conversion.
-    fn mixed_add() errors compiler::CompilerError:
+    fn mixed_add() errors std::compiler::CompilerError:
         static compile:
             x = 1.5
             x + 1
-    test::rejects("float-resolution-mixed-operands/add", compiler::DiagnosticCode::Type, mixed_add)
-    fn mixed_multiply() errors compiler::CompilerError:
+    std::test::rejects("float-resolution-mixed-operands/add", std::compiler::DiagnosticCode::Type, mixed_add)
+    fn mixed_multiply() errors std::compiler::CompilerError:
         static compile:
             x = 2
             1.5 * x
-    test::rejects("float-resolution-mixed-operands/multiply", compiler::DiagnosticCode::Type, mixed_multiply)
-    fn mixed_compare() errors compiler::CompilerError:
+    std::test::rejects("float-resolution-mixed-operands/multiply", std::compiler::DiagnosticCode::Type, mixed_multiply)
+    fn mixed_compare() errors std::compiler::CompilerError:
         static compile:
             1 < 2.0
-    test::rejects("float-resolution-mixed-operands/compare", compiler::DiagnosticCode::Type, mixed_compare)
+    std::test::rejects("float-resolution-mixed-operands/compare", std::compiler::DiagnosticCode::Type, mixed_compare)
 
     # float-no-integer-division: "/" needs a Float64 operand.
-    fn int_division() errors compiler::CompilerError:
+    fn int_division() errors std::compiler::CompilerError:
         static compile:
             7 / 2
-    test::rejects("float-no-integer-division/ints", compiler::DiagnosticCode::Type, int_division)
-    fn untyped_division() errors compiler::CompilerError:
+    std::test::rejects("float-no-integer-division/ints", std::compiler::DiagnosticCode::Type, int_division)
+    fn untyped_division() errors std::compiler::CompilerError:
         static compile:
             fn d(a, b):
                 a / b
             d(1, 2)
-    test::rejects("float-no-integer-division/untyped", compiler::DiagnosticCode::Type, untyped_division)
-    fn int_tools() errors compiler::CompilerError:
+    std::test::rejects("float-no-integer-division/untyped", std::compiler::DiagnosticCode::Type, untyped_division)
+    fn int_tools() errors std::compiler::CompilerError:
         static compile:
             [mod(7, 2), shift_right(7, 1)]
-    test::value("float-no-integer-division/int-tools", [1, 3], int_tools)
+    std::test::value("float-no-integer-division/int-tools", [1, 3], int_tools)
 
     # float-nonfinite-unhandled: NonFiniteFloat is an obligation.
-    fn unhandled() errors compiler::CompilerError:
+    fn unhandled() errors std::compiler::CompilerError:
         static compile:
             fn f(x: Float64) -> Float64:
                 x * x
             f(2.0)
-    test::rejects("float-nonfinite-unhandled", compiler::DiagnosticCode::UnhandledError, unhandled)
+    std::test::rejects("float-nonfinite-unhandled", std::compiler::DiagnosticCode::UnhandledError, unhandled)
 
     # float-nonfinite-runtime: every non-finite result computed at run time
     # completes with NonFiniteFloat (0.0 / 0.0, NaN, included).
-    fn nonfinite_runtime() errors compiler::CompilerError:
+    fn nonfinite_runtime() errors std::compiler::CompilerError:
         static compile:
             fn div(a: Float64, b: Float64) -> Float64:
                 a / b:
@@ -227,10 +227,10 @@ fn register_float64_tests():
             big = 1.0e308
             [div(1.0, 0.0), div(-1.0, 0.0), div(0.0, 0.0), div(1.0, -0.0), mul(big, 10.0), mul(-big, 10.0),
              add(big, big), sub(-big, big), div(big, 1.0e-10), div(1.0, 4.0), mul(big, 1.0), add(big, -big)]
-    test::value("float-nonfinite-runtime", [-99.0, -99.0, -99.0, -99.0, -99.0, -99.0, -99.0, -99.0, -99.0, 0.25, 1.0e308, 0.0], nonfinite_runtime)
+    std::test::value("float-nonfinite-runtime", [-99.0, -99.0, -99.0, -99.0, -99.0, -99.0, -99.0, -99.0, -99.0, 0.25, 1.0e308, 0.0], nonfinite_runtime)
 
     # float-nonfinite-propagates: through declaring functions and recursion.
-    fn propagates() errors compiler::CompilerError:
+    fn propagates() errors std::compiler::CompilerError:
         static compile:
             fn grow(x: Float64, n: int) -> Float64 errors NonFiniteFloat:
                 if n == 0:
@@ -244,8 +244,8 @@ fn register_float64_tests():
                     on NonFiniteFloat:
                         -1.0
             [safe(2), safe(4)]
-    test::value("float-nonfinite-propagates/handled", [1.0e200, -1.0], propagates)
-    fn propagates_unhandled() errors compiler::CompilerError:
+    std::test::value("float-nonfinite-propagates/handled", [1.0e200, -1.0], propagates)
+    fn propagates_unhandled() errors std::compiler::CompilerError:
         static compile:
             fn grow(x: Float64, n: int) -> Float64 errors NonFiniteFloat:
                 if n == 0:
@@ -255,41 +255,41 @@ fn register_float64_tests():
             fn top(n: int) -> Float64 errors NonFiniteFloat:
                 grow(1.0, n)
             top(4)
-    test::rejects("float-nonfinite-propagates/unhandled", compiler::DiagnosticCode::UnhandledError, propagates_unhandled)
+    std::test::rejects("float-nonfinite-propagates/unhandled", std::compiler::DiagnosticCode::UnhandledError, propagates_unhandled)
 
     # float-nonfinite-decided-at-compile-time: exactly known operands.
-    fn decided_finite() errors compiler::CompilerError:
+    fn decided_finite() errors std::compiler::CompilerError:
         static compile:
             x = 1.5
             y = -2.0
-            [x / y, x * 1.0e300, float64::from_int(3)]
-    test::value("float-nonfinite-decided-at-compile-time/finite", [-0.75, 1.5e300, 3.0], decided_finite)
-    fn decided_literals() errors compiler::CompilerError:
+            [x / y, x * 1.0e300, std::float64::from_int(3)]
+    std::test::value("float-nonfinite-decided-at-compile-time/finite", [-0.75, 1.5e300, 3.0], decided_finite)
+    fn decided_literals() errors std::compiler::CompilerError:
         static compile:
             1.0 / 0.0
-    test::rejects("float-nonfinite-decided-at-compile-time/literals", compiler::DiagnosticCode::KnownError, decided_literals)
-    fn decided_local() errors compiler::CompilerError:
+    std::test::rejects("float-nonfinite-decided-at-compile-time/literals", std::compiler::DiagnosticCode::KnownError, decided_literals)
+    fn decided_local() errors std::compiler::CompilerError:
         static compile:
             x = 0.0
             0.0 / x
-    test::rejects("float-nonfinite-decided-at-compile-time/local", compiler::DiagnosticCode::KnownError, decided_local)
-    fn decided_overflow() errors compiler::CompilerError:
+    std::test::rejects("float-nonfinite-decided-at-compile-time/local", std::compiler::DiagnosticCode::KnownError, decided_local)
+    fn decided_overflow() errors std::compiler::CompilerError:
         static compile:
             big = 1.0e308
             big * 10.0
-    test::rejects("float-nonfinite-decided-at-compile-time/overflow", compiler::DiagnosticCode::KnownError, decided_overflow)
-    fn decided_handled() errors compiler::CompilerError:
+    std::test::rejects("float-nonfinite-decided-at-compile-time/overflow", std::compiler::DiagnosticCode::KnownError, decided_overflow)
+    fn decided_handled() errors std::compiler::CompilerError:
         static compile:
             r = 1.0 / 0.0:
                 on NonFiniteFloat:
                     0.0
             r
-    test::rejects("float-nonfinite-decided-at-compile-time/handled", compiler::DiagnosticCode::KnownError, decided_handled)
-    fn decided_conversion() errors compiler::CompilerError:
+    std::test::rejects("float-nonfinite-decided-at-compile-time/handled", std::compiler::DiagnosticCode::KnownError, decided_handled)
+    fn decided_conversion() errors std::compiler::CompilerError:
         static compile:
-            float64::from_int(shift_left(1, 1024))
-    test::rejects("float-nonfinite-decided-at-compile-time/conversion", compiler::DiagnosticCode::KnownError, decided_conversion)
-    fn decided_call() errors compiler::CompilerError:
+            std::float64::from_int(shift_left(1, 1024))
+    std::test::rejects("float-nonfinite-decided-at-compile-time/conversion", std::compiler::DiagnosticCode::KnownError, decided_conversion)
+    fn decided_call() errors std::compiler::CompilerError:
         static compile:
             fn inv(x: Float64) -> Float64 errors NonFiniteFloat:
                 1.0 / x
@@ -297,11 +297,11 @@ fn register_float64_tests():
                 on NonFiniteFloat:
                     0.0
             r
-    test::rejects("float-nonfinite-decided-at-compile-time/call", compiler::DiagnosticCode::KnownError, decided_call)
+    std::test::rejects("float-nonfinite-decided-at-compile-time/call", std::compiler::DiagnosticCode::KnownError, decided_call)
 
     # float-nonfinite-payload: NonFiniteFloat says which non-finite result
     # it was, {result: NonFiniteResult}, for every way a run makes one.
-    fn payload_results() errors compiler::CompilerError:
+    fn payload_results() errors std::compiler::CompilerError:
         static compile:
             fn mul(a: Float64, b: Float64) -> NonFiniteResult:
                 a * b:
@@ -324,11 +324,11 @@ fn register_float64_tests():
                         return result
                 NonFiniteResult::NotANumber
             fn converted(n: int) -> NonFiniteResult:
-                float64::from_int(n):
+                std::float64::from_int(n):
                     on NonFiniteFloat {result}:
                         return result
                 NonFiniteResult::NotANumber
-            conv = float64::from_int
+            conv = std::float64::from_int
             fn by_value(n: int) -> NonFiniteResult:
                 conv(n):
                     on NonFiniteFloat {result}:
@@ -337,11 +337,11 @@ fn register_float64_tests():
             big = 1.0e308
             [mul(big, 10.0), mul(-big, 10.0), div(1.0, 0.0), div(-1.0, 0.0), div(0.0, 0.0), div(1.0, -0.0),
              add(big, big), sub(-big, big), converted(shift_left(1, 1100)), converted(0 - shift_left(1, 1100)), by_value(shift_left(1, 1100))]
-    test::value("float-nonfinite-payload", [NonFiniteResult::PositiveInfinity, NonFiniteResult::NegativeInfinity, NonFiniteResult::PositiveInfinity, NonFiniteResult::NegativeInfinity, NonFiniteResult::NotANumber, NonFiniteResult::PositiveInfinity, NonFiniteResult::PositiveInfinity, NonFiniteResult::NegativeInfinity, NonFiniteResult::PositiveInfinity, NonFiniteResult::NegativeInfinity, NonFiniteResult::PositiveInfinity], payload_results)
+    std::test::value("float-nonfinite-payload", [NonFiniteResult::PositiveInfinity, NonFiniteResult::NegativeInfinity, NonFiniteResult::PositiveInfinity, NonFiniteResult::NegativeInfinity, NonFiniteResult::NotANumber, NonFiniteResult::PositiveInfinity, NonFiniteResult::PositiveInfinity, NonFiniteResult::NegativeInfinity, NonFiniteResult::PositiveInfinity, NonFiniteResult::NegativeInfinity, NonFiniteResult::PositiveInfinity], payload_results)
 
     # float-nonfinite-payload-binding: an ordinary payload, bound whole,
     # destructured, renamed or ignored, propagated through declarations.
-    fn payload_binding() errors compiler::CompilerError:
+    fn payload_binding() errors std::compiler::CompilerError:
         static compile:
             fn deep(x: Float64, n: int) -> Float64 errors NonFiniteFloat:
                 if n == 0:
@@ -364,26 +364,26 @@ fn register_float64_tests():
                         -1.0
             big = 1.0e200
             [whole(big), renamed(big), ignored(big), ignored(2.0)]
-    test::value("float-nonfinite-payload-binding", [[{result: NonFiniteResult::PositiveInfinity}, NonFiniteResult::PositiveInfinity, true], true, -1.0, 4.0], payload_binding)
+    std::test::value("float-nonfinite-payload-binding", [[{result: NonFiniteResult::PositiveInfinity}, NonFiniteResult::PositiveInfinity, true], true, -1.0, 4.0], payload_binding)
 
     # float-nonfinite-payload-enum: the builtin enum is every program's; a
     # program failing with NonFiniteFloat constructs its payload.
-    fn payload_enum_values() errors compiler::CompilerError:
+    fn payload_enum_values() errors std::compiler::CompilerError:
         static compile:
             x = NonFiniteResult::NotANumber
             [x, x == NonFiniteResult::NotANumber, x == NonFiniteResult::PositiveInfinity]
-    test::value("float-nonfinite-payload-enum/values", [NonFiniteResult::NotANumber, true, false], payload_enum_values)
-    fn payload_enum_unknown_case() errors compiler::CompilerError:
+    std::test::value("float-nonfinite-payload-enum/values", [NonFiniteResult::NotANumber, true, false], payload_enum_values)
+    fn payload_enum_unknown_case() errors std::compiler::CompilerError:
         static compile:
             NonFiniteResult::Infinity
-    test::rejects("float-nonfinite-payload-enum/unknown-case", compiler::DiagnosticCode::UnknownEnumCase, payload_enum_unknown_case)
-    fn payload_enum_missing() errors compiler::CompilerError:
+    std::test::rejects("float-nonfinite-payload-enum/unknown-case", std::compiler::DiagnosticCode::UnknownEnumCase, payload_enum_unknown_case)
+    fn payload_enum_missing() errors std::compiler::CompilerError:
         static compile:
             fn f(n: int) -> int errors NonFiniteFloat:
                 fail NonFiniteFloat
             0
-    test::rejects("float-nonfinite-payload-enum/missing-payload", compiler::DiagnosticCode::MissingErrorPayload, payload_enum_missing)
-    fn payload_enum_fail() errors compiler::CompilerError:
+    std::test::rejects("float-nonfinite-payload-enum/missing-payload", std::compiler::DiagnosticCode::MissingErrorPayload, payload_enum_missing)
+    fn payload_enum_fail() errors std::compiler::CompilerError:
         static compile:
             fn f(n: int) -> int errors NonFiniteFloat:
                 if n < 0:
@@ -395,11 +395,11 @@ fn register_float64_tests():
                         return result
                 NonFiniteResult::NotANumber
             [g(-1), g(1)]
-    test::value("float-nonfinite-payload-enum/fail", [NonFiniteResult::NegativeInfinity, NonFiniteResult::NotANumber], payload_enum_fail)
+    std::test::value("float-nonfinite-payload-enum/fail", [NonFiniteResult::NegativeInfinity, NonFiniteResult::NotANumber], payload_enum_fail)
 
     # float-decided-equals-run: the decided results and the run-time ones
     # are one computation.
-    fn decided_equals_run() errors compiler::CompilerError:
+    fn decided_equals_run() errors std::compiler::CompilerError:
         static compile:
             fn mul(a: Float64, b: Float64) -> Float64:
                 a * b:
@@ -427,23 +427,23 @@ fn register_float64_tests():
                 mul(123456.789, 0.001), div(123456.789, 0.001), add(123456.789, 0.001), sub(123456.789, 0.001),
                 mul(3.0, 7.0), div(3.0, 7.0), add(3.0, 7.0), sub(3.0, 7.0),
                 mul(1.0e300, 0.5), div(1.0e300, 0.5), add(1.0e300, 0.5), sub(1.0e300, 0.5)]
-            [decided == run, list::length(decided)]
-    test::value("float-decided-equals-run", [true, 20], decided_equals_run)
+            [decided == run, std::list::length(decided)]
+    std::test::value("float-decided-equals-run", [true, 20], decided_equals_run)
 
     # float-conversions: from_int rounds to nearest (ties to even) and fails
     # beyond the range; truncate drops the fraction toward zero, exactly.
-    fn conversions() errors compiler::CompilerError:
+    fn conversions() errors std::compiler::CompilerError:
         static compile:
             fn f(n: int) -> Float64:
-                float64::from_int(n):
+                std::float64::from_int(n):
                     on NonFiniteFloat:
                         -1.0
             fn t(x: Float64) -> int:
-                float64::truncate(x)
+                std::float64::truncate(x)
             [f(0), f(-7), f(9007199254740993), f(9007199254740995), f(123456789012345678901234567890), f(shift_left(1, 1024)), f(shift_left(1, 1023)),
              t(2.7), t(-2.7), t(0.5), t(1.0e20), t(-1.0e300) == 0 - shift_left(1, 0) * 0 - t(1.0e300)]
-    test::value("float-conversions", [0.0, -7.0, 9007199254740992.0, 9007199254740996.0, 1.2345678901234568e29, -1.0, 8.98846567431158e307, 2, -2, 0, 100000000000000000000, true], conversions)
+    std::test::value("float-conversions", [0.0, -7.0, 9007199254740992.0, 9007199254740996.0, 1.2345678901234568e29, -1.0, 8.98846567431158e307, 2, -2, 0, 100000000000000000000, true], conversions)
 
-with context test::suite()
+with context std::test::suite()
 register_float64_tests()
-test::report()
+std::test::report()

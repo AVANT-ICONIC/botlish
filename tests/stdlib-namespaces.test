@@ -3,9 +3,10 @@
 #
 #   * the historical `eq` String-equality native is gone (== is the one
 #     equality, Strings included);
-#   * standard operations live in their value family's flat namespace as
-#     qualified root natives (list::at, str::concat, mutable_array::set,
-#     ...), protected per member from redefinition;
+#   * standard operations live in their value family's namespace as
+#     qualified root natives, below the root std since STD-NAMESPACE.md
+#     (std::list::at, std::str::concat, std::mutable_array::set, ...),
+#     protected per member from redefinition;
 #   * indexed access is `at` (fails with the builtin declared error
 #     IndexNotFound) and `get` (ordinary Botlish over `at`, with an explicit,
 #     eagerly evaluated default);
@@ -22,7 +23,7 @@ interp recursionlimit {} 100000
 set nsBackends {interp compile cranelift-generic cranelift}
 
 # HIR of SOURCE, read as a program file through the module loader, so
-# qualified references to library modules (list::get) resolve too.
+# qualified references to library modules (std::list::get) resolve too.
 proc nsHir {source {strict 1}} {
     set path [makeFile $source stdlib-ns-case.bot]
     try {
@@ -125,18 +126,21 @@ test ns-root-inventory {the unqualified root natives are exactly the language pr
         [lsort [lmap name [freshNatives] {if {[string first # $name] < 0} continue; set name}]]
 } -result {{* + - / < <= == > >= argv bit_and bit_or bit_xor error? hash integer? list list? mod mutarray? ok? result-error result-value shift_left shift_right string?} {DecimalRounded#* DecimalRounded#+ DecimalRounded#- DecimalRounded#/ DecimalRounded#< DecimalRounded#<= DecimalRounded#== DecimalRounded#> DecimalRounded#>= DecimalRounded#neg Float64#* Float64#+ Float64#- Float64#/ Float64#< Float64#<= Float64#> Float64#>= Float64#neg affine#drop binary#element binary#emit binary#load binary#load_array binary#store_element binary#view_field context#install context#load context#unreachable coroutine#create coroutine#release coroutine#resume coroutine#start coroutine#yield decimal_rounded#equal decimal_rounded#greater decimal_rounded#greater_equal decimal_rounded#less decimal_rounded#less_equal decimal_rounded#round decimal_rounded#to_float64 foreign#refused mutable_array#consume mutable_array#generate_drop mutable_array#set_drop mutable_array#swap_drop mutable_array#take_front mutable_array#to_list mutable_vector#clear_drop mutable_vector#consume mutable_vector#share mutable_vector#swap_drop mutable_vector#take_front mutable_vector#to_list}}
 
-test ns-qualified-inventory {every standard intrinsic lives in its value family's flat namespace} -body {
-    lmap ns {list str char float64 decimal_rounded mutable_array mutable_vector immutable_set byte_store mutable_byte_store linux::abi::x86_64 linux::abi::aarch64 abi::x86_64 abi::aarch64 ffi::c} {
+test ns-qualified-inventory {every standard intrinsic lives in its value family's namespace, below the root std (STD-NAMESPACE.md)} -body {
+    lmap ns {std::list std::str std::char std::float64 std::decimal_rounded std::mutable_array std::mutable_vector std::immutable_set std::byte_store std::mutable_byte_store std::linux::abi::x86_64 std::linux::abi::aarch64 std::abi::x86_64 std::abi::aarch64 std::ffi::c} {
         list $ns [core::native::qualifiedMembers $ns]
     }
-} -result {{list {append at length}} {str {append_char char_at concat encode_utf8 is_tcl_alnum is_tcl_alpha length lowercase substring}} {char scalar_value} {float64 {from_decimal_rounded from_int truncate}} {decimal_rounded round} {mutable_array {allocate at capacity copy create freeze from_list generate set swap}} {mutable_vector {at clear empty? from_list length pop push swap take}} {immutable_set {contains from_list}} {byte_store {byte_count from_list}} {mutable_byte_store {count detach freeze freeze_prefix from_storage replace zeroed}} {linux::abi::x86_64 syscall} {linux::abi::aarch64 syscall} {abi::x86_64 {from_bytes from_mutable_bytes}} {abi::aarch64 {from_bytes from_mutable_bytes}} {ffi::c {clone erase null null? retype}}}
+} -result {{std::list {append at length}} {std::str {append_char char_at concat encode_utf8 is_tcl_alnum is_tcl_alpha length lowercase substring}} {std::char scalar_value} {std::float64 {from_decimal_rounded from_int truncate}} {std::decimal_rounded round} {std::mutable_array {allocate at capacity copy create freeze from_list generate set swap}} {std::mutable_vector {at clear empty? from_list length pop push swap take}} {std::immutable_set {contains from_list}} {std::byte_store {byte_count from_list}} {std::mutable_byte_store {count detach freeze freeze_prefix from_storage replace zeroed}} {std::linux::abi::x86_64 syscall} {std::linux::abi::aarch64 syscall} {std::abi::x86_64 {from_bytes from_mutable_bytes}} {std::abi::aarch64 {from_bytes from_mutable_bytes}} {std::ffi::c {clone erase null null? retype}}}
 
-test ns-no-nested-stdlib {no std::/stdlib::/core:: hierarchy: every qualified intrinsic but the platforms' (linux::abi::x86_64::syscall, linux::abi::aarch64::syscall, abi::x86_64::from_bytes, abi::aarch64::from_bytes) and the C ABI's (ffi::c::null ..., C-ABI-TYPES.md) and the native-view constructor (binary::native::view, NATIVE-LAYOUT-VIEWS.md: a namespace of its own because directness is designated per namespace, so binary itself stays non-direct) is NAMESPACE::MEMBER, one level} -body {
+test ns-no-nested-stdlib {every qualified intrinsic is standard, under the one compiler-owned root std (STD-NAMESPACE.md: no flat alias, no second root), and every one but the platforms' (std::linux::abi::x86_64::syscall, std::linux::abi::aarch64::syscall, std::abi::x86_64::from_bytes, std::abi::aarch64::from_bytes) and the C ABI's (std::ffi::c::null ..., C-ABI-TYPES.md) and the native-view constructor (std::binary::native::view, NATIVE-LAYOUT-VIEWS.md: a namespace of its own because directness is designated per namespace, so binary itself stays non-direct) is std::FAMILY::MEMBER, one family level below std} -body {
     lsort [lmap name [core::native::names] {
-        if {[string first :: $name] < 0 || [string match linux::abi::* $name] || [string match abi::x86_64::* $name]
-                || [string match abi::aarch64::* $name]
-                || [string match ffi::c::* $name] || [string match binary::native::* $name]} continue
-        if {[llength [split [string map {:: \x00} $name] \x00]] == 2} continue
+        if {[string first :: $name] < 0} continue
+        if {[string match std::* $name]} {
+            if {[string match std::linux::abi::* $name] || [string match std::abi::x86_64::* $name]
+                    || [string match std::abi::aarch64::* $name]
+                    || [string match std::ffi::c::* $name] || [string match std::binary::native::* $name]} continue
+            if {[llength [split [string map {:: \x00} $name] \x00]] == 3} continue
+        }
         set name
     }]
 } -result {}
@@ -146,52 +150,52 @@ test ns-historical-names-are-unknown {every historical root spelling is now an o
         {list_get([1], 0)} {list_append([1], 2)} {list_length([1])} {concat("a", "b")}
         {length("a")} {substring("ab", 0, 1)} {lowercase("A")} {encode_utf8("a")}
         {is_tcl_alpha("a")} {is_tcl_alnum("a")} {char_codepoint('a')}
-        {mutable_array_allocate(1)} {import mutable_array
-mutable_array_capacity(mutable_array::allocate(1))}
-        {import mutable_array
-mutable_array_get(mutable_array::allocate(1), 0)} {import mutable_array
-mutable_array_set(mutable_array::allocate(1), 0, 1)}
-        {import mutable_array
-mutable_array_copy(mutable_array::allocate(1), 0, mutable_array::allocate(1), 0, 1)}
-        {import mutable_array
-mutable_array_freeze(mutable_array::allocate(1), 1)}
-        {immutable_set_from_list([1])} {import immutable_set
-immutable_set_contains(immutable_set::from_list([1]), 1)}
+        {mutable_array_allocate(1)} {import std::mutable_array
+mutable_array_capacity(std::mutable_array::allocate(1))}
+        {import std::mutable_array
+mutable_array_get(std::mutable_array::allocate(1), 0)} {import std::mutable_array
+mutable_array_set(std::mutable_array::allocate(1), 0, 1)}
+        {import std::mutable_array
+mutable_array_copy(std::mutable_array::allocate(1), 0, std::mutable_array::allocate(1), 0, 1)}
+        {import std::mutable_array
+mutable_array_freeze(std::mutable_array::allocate(1), 1)}
+        {immutable_set_from_list([1])} {import std::immutable_set
+immutable_set_contains(std::immutable_set::from_list([1]), 1)}
     } {
         diagKinds $call
     }
 } -result [lrepeat 19 UNBOUND]
 
-test ns-char-scalar-value-is-canonical {char::scalar_value is the one spelling: the intrinsic itself (no char module, no codepoint wrapper); a direct call with an Int is its run-time TYPE error, like any intrinsic's} -body {
-    list [rejection {import char
-char::codepoint('A')}] [rejection {import char
-char::scalar_value(65)}] [agree {import char
-char::scalar_value(65)}] \
-        [agree {import char
-[char::scalar_value('A'), char::scalar_value('é'), char::scalar_value('😀')]}] \
-        [core::native::isQualifiedNative char::scalar_value] [file exists [file join $::projectRoot lib char.bot]]
-} -match glob -result {{UNKNOWN-SYMBOL {*: namespace "char" has no definition "codepoint" (its members are the intrinsics: scalar_value)}} accepted {error {CORE SEMANTIC TYPE}} {\[65, 233, 128512\]} 1 0}
+test ns-char-scalar-value-is-canonical {std::char::scalar_value is the one spelling: the intrinsic itself (no char module, no codepoint wrapper); a direct call with an Int is its run-time TYPE error, like any intrinsic's} -body {
+    list [rejection {import std::char
+std::char::codepoint('A')}] [rejection {import std::char
+std::char::scalar_value(65)}] [agree {import std::char
+std::char::scalar_value(65)}] \
+        [agree {import std::char
+[std::char::scalar_value('A'), std::char::scalar_value('é'), std::char::scalar_value('😀')]}] \
+        [core::native::isQualifiedNative std::char::scalar_value] [file exists [file join $::projectRoot stdlib char.bot]]
+} -match glob -result {{UNKNOWN-SYMBOL {*: namespace "std::char" has no definition "codepoint" (its members are the intrinsics: scalar_value)}} accepted {error {CORE SEMANTIC TYPE}} {\[65, 233, 128512\]} 1 0}
 
 test ns-historical-module-is-gone {the mutarray module became mutable_array (one namespace per family)} -body {
     list [lindex [rejection {import mutarray
-mutarray::create(1, 0)}] 0] [agree {import mutable_array
-mutable_array::freeze(mutable_array::create(2, 7), 2)}]
+mutarray::create(1, 0)}] 0] [agree {import std::mutable_array
+std::mutable_array::freeze(std::mutable_array::create(2, 7), 2)}]
 } -result {UNKNOWN-NAMESPACE {[7, 7]}}
 
 test ns-intrinsics-are-root-natives {a qualified intrinsic is a root reference: no module is loaded for it and no local can shadow it} -body {
-    set hir [nsHir "import list\nimport str\nfn f(list, str):\n    \[list::at(\[1, 2\], 1), str::concat(\"a\", \"b\")\]\nf(0, 0)"]
-    list [targetOf $hir [callNamed $hir list::at]] [targetOf $hir [callNamed $hir str::concat]] \
-        [agree "import list\nimport str\nfn f(list, str):\n    \[list::at(\[1, 2\], 1), str::concat(\"a\", \"b\")\]\nf(0, 0)"]
-} -result {{native list::at} {native str::concat} {[2, "ab"]}}
+    set hir [nsHir "import std::list\nimport std::str\nfn f(list, str):\n    \[std::list::at(\[1, 2\], 1), std::str::concat(\"a\", \"b\")\]\nf(0, 0)"]
+    list [targetOf $hir [callNamed $hir std::list::at]] [targetOf $hir [callNamed $hir std::str::concat]] \
+        [agree "import std::list\nimport std::str\nfn f(list, str):\n    \[std::list::at(\[1, 2\], 1), std::str::concat(\"a\", \"b\")\]\nf(0, 0)"]
+} -result {{native std::list::at} {native std::str::concat} {[2, "ab"]}}
 
 test ns-diagnostics-name-the-qualified-callable {run-time and static diagnostics spell the intrinsic's qualified name} -body {
-    list [lindex [agree {import list
-list::length("abc")} 0] 1] \
-        [string match {*this call of "list::at" may produce the declared error "IndexNotFound"*} \
-            [lindex [rejection "import list\nfn f(xs, i):\n    list::at(xs, i)\nf(\[1\], 0)"] 1]] \
-        [lindex [outcomeUnderHir interp [nsHir {import list
-list::length("abc")} 0]] 2]
-} -result {{CORE SEMANTIC TYPE} 1 {list::length: expected list, got "abc"}}
+    list [lindex [agree {import std::list
+std::list::length("abc")} 0] 1] \
+        [string match {*this call of "std::list::at" may produce the declared error "IndexNotFound"*} \
+            [lindex [rejection "import std::list\nfn f(xs, i):\n    std::list::at(xs, i)\nf(\[1\], 0)"] 1]] \
+        [lindex [outcomeUnderHir interp [nsHir {import std::list
+std::list::length("abc")} 0]] 2]
+} -result {{CORE SEMANTIC TYPE} 1 {std::list::length: expected list, got "abc"}}
 
 # ---------------------------------------------------------------------------
 # Protection: an intrinsic member cannot be redefined or overloaded; other
@@ -223,63 +227,63 @@ proc withLibrary {files script} {
 }
 
 test ns-protect-module-member {a module of the intrinsic's namespace may not define a member of the intrinsic's name} -body {
-    withLibrary {str.bot "fn shout(s):\n    str::concat(s, \"!\")\n\nfn concat(a, b):\n    a\n"} {
-        lassign [rejection {import str
-str::shout("hi")}] kind message
-        list $kind [string match {*module "str" (*str.bot) cannot define "concat": str::concat is a compiler-provided intrinsic*cannot be redefined or overloaded (other members of namespace "str" are unaffected)*} $message]
+    withLibrary {str.bot "fn shout(s):\n    std::str::concat(s, \"!\")\n\nfn concat(a, b):\n    a\n"} {
+        lassign [rejection {import std::str
+std::str::shout("hi")}] kind message
+        list $kind [string match {*module "std::str" (*str.bot) cannot define "concat": std::str::concat is a compiler-provided intrinsic*cannot be redefined or overloaded (other members of namespace "std::str" are unaffected)*} $message]
     }
 } -result {DUPLICATE-NATIVE 1}
 
 test ns-protect-module-binding {an immutable module binding of the intrinsic's name is rejected the same way} -body {
-    withLibrary {mutable_array.bot "set = 1\n\nfn create(n, d):\n    mutable_array::allocate(n)\n"} {
-        lindex [rejection {import mutable_array
-mutable_array::create(1, 0)}] 0
+    withLibrary {mutable_array.bot "set = 1\n\nfn create(n, d):\n    std::mutable_array::allocate(n)\n"} {
+        lindex [rejection {import std::mutable_array
+std::mutable_array::create(1, 0)}] 0
     }
 } -result DUPLICATE-NATIVE
 
-test ns-unrelated-member-is-legal {an unrelated member of the same namespace is ordinary: str::shout beside the intrinsic str::concat, which still means the intrinsic} -body {
-    withLibrary {str.bot "fn shout(s):\n    str::concat(s, \"!\")\n"} {
-        agree {import str
-[str::shout("hi"), str::concat("a", "b"), str::length(str::shout("x"))]}
+test ns-unrelated-member-is-legal {an unrelated member of the same namespace is ordinary: std::str::shout beside the intrinsic std::str::concat, which still means the intrinsic} -body {
+    withLibrary {str.bot "fn shout(s):\n    std::str::concat(s, \"!\")\n"} {
+        agree {import std::str
+[std::str::shout("hi"), std::str::concat("a", "b"), std::str::length(std::str::shout("x"))]}
     }
 } -result {["hi!", "ab", 2]}
 
-test ns-list-module-beside-intrinsics {lib/list.bot's own members (get, find, any?) sit beside the intrinsics list::at/append/length} -body {
-    list [core::native::isQualifiedNative list::get] [core::native::isQualifiedNative list::at] \
-        [agree "import list\nfn odd(x):\n    mod(x, 2) == 1\nf = list::find(\[2, 3\], odd):\n    on list::NotFound:\n        0\n\[list::get(\[1\], 0, 9), f, list::any?(\[2\], odd), list::length(list::append(\[\], 1))\]"]
+test ns-list-module-beside-intrinsics {stdlib/list.bot's own members (get, find, any?) sit beside the intrinsics std::list::at/append/length} -body {
+    list [core::native::isQualifiedNative std::list::get] [core::native::isQualifiedNative std::list::at] \
+        [agree "import std::list\nfn odd(x):\n    mod(x, 2) == 1\nf = std::list::find(\[2, 3\], odd):\n    on std::list::NotFound:\n        0\n\[std::list::get(\[1\], 0, 9), f, std::list::any?(\[2\], odd), std::list::length(std::list::append(\[\], 1))\]"]
 } -result {0 1 {[1, 3, false, 1]}}
 
 test ns-entry-program-is-in-no-namespace {an entry program belongs to no namespace, so it may define a function whose name an intrinsic uses in some namespace: only a module file of that namespace is protected} -body {
     list [agree "fn at(xs, i):\n    \"mine\"\n\[at(\[4, 5\], 0)\]"] \
         [agree "set = 3\n\[set\]"] \
-        [agree "import list\nfn second(xs):\n    list::length(xs)\n\[second(\[4, 5\])\]"]
+        [agree "import std::list\nfn second(xs):\n    std::list::length(xs)\n\[second(\[4, 5\])\]"]
 } -result {{["mine"]} {[3]} {[2]}}
 
 test ns-protect-is-not-overloading {a module's definition of an intrinsic's name with another arity is no overload: it is rejected like any other} -body {
-    list [withLibrary {str.bot "fn length(s, extra):\n    0\n"} {lindex [rejection "import str\n1\n"] 0}] \
-        [withLibrary {list.bot "fn at(xs):\n    0\n"} {lindex [rejection "import list\n1\n"] 0}]
+    list [withLibrary {str.bot "fn length(s, extra):\n    0\n"} {lindex [rejection "import std::str\n1\n"] 0}] \
+        [withLibrary {list.bot "fn at(xs):\n    0\n"} {lindex [rejection "import std::list\n1\n"] 0}]
 } -result {DUPLICATE-NATIVE DUPLICATE-NATIVE}
 
-test ns-local-names-are-unrelated {a local function named at is an ordinary binding: it neither replaces nor overloads list::at} -body {
-    agree "import list\nfn at(xs, i):\n    \"mine\"\n\[at(\[1\], 0), list::at(\[7\], 0)\]"
+test ns-local-names-are-unrelated {a local function named at is an ordinary binding: it neither replaces nor overloads std::list::at} -body {
+    agree "import std::list\nfn at(xs, i):\n    \"mine\"\n\[at(\[1\], 0), std::list::at(\[7\], 0)\]"
 } -result {["mine", 7]}
 
 test ns-unknown-member-of-intrinsic-namespace {a namespace with only intrinsics reports an unknown member against them, not as a missing module file} -body {
-    rejection {import str
-str::nope("a")}
-} -match glob -result {UNKNOWN-SYMBOL {*namespace "str" has no definition "nope" (its members are the intrinsics: append_char, char_at, concat, encode_utf8, is_tcl_alnum, is_tcl_alpha, length, lowercase, substring)}}
+    rejection {import std::str
+std::str::nope("a")}
+} -match glob -result {UNKNOWN-SYMBOL {*namespace "std::str" has no definition "nope" (its members are the intrinsics: append_char, char_at, concat, encode_utf8, is_tcl_alnum, is_tcl_alpha, length, lowercase, substring)}}
 
 test ns-unknown-member-lists-intrinsics-too {a namespace with a module lists the module's definitions and the intrinsics} -body {
-    rejection {import list
-list::nope([1])}
-} -match glob -result {UNKNOWN-SYMBOL {*namespace "list" has no definition "nope" (it defines: all?, any?, append, at, find, get, length, none?)}}
+    rejection {import std::list
+std::list::nope([1])}
+} -match glob -result {UNKNOWN-SYMBOL {*namespace "std::list" has no definition "nope" (it defines: all?, any?, append, at, find, get, length, none?)}}
 
 # ---------------------------------------------------------------------------
 # at: required indexed lookup, IndexNotFound otherwise
 
-set ::pick {import list
+set ::pick {import std::list
 fn pick(xs, i) errors IndexNotFound:
-    list::at(xs, i)
+    std::list::at(xs, i)
 fn safe(xs, i):
     r = pick(xs, i):
         on IndexNotFound:
@@ -287,7 +291,7 @@ fn safe(xs, i):
     r
 }
 
-test ns-at-present-and-missing {list::at returns the element for 0 <= i < length and fails with IndexNotFound for every other Int: past the end, negative (no negative indexing), a BigInt, an empty List} -body {
+test ns-at-present-and-missing {std::list::at returns the element for 0 <= i < length and fails with IndexNotFound for every other Int: past the end, negative (no negative indexing), a BigInt, an empty List} -body {
     agree "$::pick\[safe(\[10, 20, 30\], 0), safe(\[10, 20, 30\], 2), safe(\[10, 20, 30\], 3), safe(\[10, 20, 30\], -1), safe(\[10\], 100000000000000000000), safe(\[\], 0)\]"
 } -result {[10, 30, "missing", "missing", "missing", "missing"]}
 
@@ -299,21 +303,21 @@ test ns-at-other-failures-are-not-index-not-found {a non-List container or a non
     list [agree "$::pick\nsafe(\"abc\", 0)" 0] [agree "$::pick\nsafe(\[1\], \"0\")" 0]
 } -result {{error {CORE SEMANTIC TYPE}} {error {CORE SEMANTIC TYPE}}}
 
-test ns-mutable-array-at {mutable_array::at has the same contract over a MutableArray's capacity} -body {
-    agree "import mutable_array\nfn pick(a, i) errors IndexNotFound:\n    mutable_array::at(a, i)\nfn safe(a, i):\n    r = pick(a, i):\n        on IndexNotFound:\n            -1\n    r\na = mutable_array::from_list(\[5, 6\])\n\[safe(a, 0), safe(a, 1), safe(a, 2), safe(a, -1), safe(mutable_array::allocate(0), 0)\]"
+test ns-mutable-array-at {std::mutable_array::at has the same contract over a MutableArray's capacity} -body {
+    agree "import std::mutable_array\nfn pick(a, i) errors IndexNotFound:\n    std::mutable_array::at(a, i)\nfn safe(a, i):\n    r = pick(a, i):\n        on IndexNotFound:\n            -1\n    r\na = std::mutable_array::from_list(\[5, 6\])\n\[safe(a, 0), safe(a, 1), safe(a, 2), safe(a, -1), safe(std::mutable_array::allocate(0), 0)\]"
 } -result {[5, 6, -1, -1, -1]}
 
-test ns-mutable-array-set-is-index-not-found {mutable_array::set at an index that designates no slot fails with IndexNotFound, on every backend; each call writes its own copy (MUTABLE-ARRAY.md), never the caller's array} -body {
-    agree "import mutable_array\nfn put(a, i, v) errors IndexNotFound:\n    mutable_array::set(a, i, v)\n    a\nfn safe(a, i, v):\n    r = put(a, i, v):\n        on IndexNotFound:\n            return \"missing\"\n    mutable_array::freeze(r, mutable_array::capacity(r))\na = mutable_array::from_list(\[5, 6\])\n\[safe(a, 1, 9), safe(a, 2, 9), safe(a, -1, 9), safe(a, 100000000000000000000, 9), safe(mutable_array::allocate(0), 0, 1), mutable_array::freeze(a, 2)\]"
+test ns-mutable-array-set-is-index-not-found {std::mutable_array::set at an index that designates no slot fails with IndexNotFound, on every backend; each call writes its own copy (MUTABLE-ARRAY.md), never the caller's array} -body {
+    agree "import std::mutable_array\nfn put(a, i, v) errors IndexNotFound:\n    std::mutable_array::set(a, i, v)\n    a\nfn safe(a, i, v):\n    r = put(a, i, v):\n        on IndexNotFound:\n            return \"missing\"\n    std::mutable_array::freeze(r, std::mutable_array::capacity(r))\na = std::mutable_array::from_list(\[5, 6\])\n\[safe(a, 1, 9), safe(a, 2, 9), safe(a, -1, 9), safe(a, 100000000000000000000, 9), safe(std::mutable_array::allocate(0), 0, 1), std::mutable_array::freeze(a, 2)\]"
 } -result {[[5, 9], "missing", "missing", "missing", "missing", [5, 6]]}
 
-test ns-error-signatures {the indexed natives declare exactly IndexNotFound, the slicing natives exactly LowerUnderrun and UpperOverrun: builtin errors every program sees, with fixed native ids (the Float64 operations' NonFiniteFloat, FLOAT64-MILESTONE-1.md, is the fifth builtin error, binary::parse's LayoutLengthMismatch, BINARY-LAYOUT.md, the sixth, binary::native::view's NativeViewNull, NATIVE-LAYOUT-VIEWS.md, the seventh, binary::native::edit's NativeEditNull, NATIVE-LAYOUT-WRITES.md, the eighth, and a whole fixed array's LayoutExtentMismatch, FIXED-LAYOUT-ARRAYS.md, the ninth, and decimal_rounded::round's UnrepresentableDecimal, DECIMAL-ROUNDED-MILESTONE-1.md, the tenth)} -body {
-    list [lmap n {list::at mutable_array::at mutable_array::set str::substring mutable_array::freeze mutable_array::copy} {
+test ns-error-signatures {the indexed natives declare exactly IndexNotFound, the slicing natives exactly LowerUnderrun and UpperOverrun: builtin errors every program sees, with fixed native ids (the Float64 operations' NonFiniteFloat, FLOAT64-MILESTONE-1.md, is the fifth builtin error, std::binary::parse's LayoutLengthMismatch, BINARY-LAYOUT.md, the sixth, std::binary::native::view's NativeViewNull, NATIVE-LAYOUT-VIEWS.md, the seventh, std::binary::native::edit's NativeEditNull, NATIVE-LAYOUT-WRITES.md, the eighth, and a whole fixed array's LayoutExtentMismatch, FIXED-LAYOUT-ARRAYS.md, the ninth, and std::decimal_rounded::round's UnrepresentableDecimal, DECIMAL-ROUNDED-MILESTONE-1.md, the tenth)} -body {
+    list [lmap n {std::list::at std::mutable_array::at std::mutable_array::set std::str::substring std::mutable_array::freeze std::mutable_array::copy} {
             list $n [dict get [core::native::metadata $n] errors]
         }] \
         [core::native::builtinErrorNames] \
         [lmap e {IndexNotFound LowerUnderrun UpperOverrun NonFiniteFloat} {native::lower::ErrorId $e}]
-} -result {{{list::at IndexNotFound} {mutable_array::at IndexNotFound} {mutable_array::set IndexNotFound} {str::substring {LowerUnderrun UpperOverrun}} {mutable_array::freeze {LowerUnderrun UpperOverrun}} {mutable_array::copy {LowerUnderrun UpperOverrun}}} {InvalidArgumentEncoding IndexNotFound LowerUnderrun UpperOverrun NonFiniteFloat LayoutLengthMismatch NativeViewNull NativeEditNull LayoutExtentMismatch UnrepresentableDecimal} {1073741825 1073741826 1073741827 1073741828}}
+} -result {{{std::list::at IndexNotFound} {std::mutable_array::at IndexNotFound} {std::mutable_array::set IndexNotFound} {std::str::substring {LowerUnderrun UpperOverrun}} {std::mutable_array::freeze {LowerUnderrun UpperOverrun}} {std::mutable_array::copy {LowerUnderrun UpperOverrun}}} {InvalidArgumentEncoding IndexNotFound LowerUnderrun UpperOverrun NonFiniteFloat LayoutLengthMismatch NativeViewNull NativeEditNull LayoutExtentMismatch UnrepresentableDecimal} {1073741825 1073741826 1073741827 1073741828}}
 
 test ns-bounds-are-registered {the bounds checks behind the argument-dependent errors are registered with each native (-bounds), validated against its -errors and arity} -body {
     set bad {}
@@ -331,54 +335,54 @@ test ns-bounds-are-registered {the bounds checks behind the argument-dependent e
             -errors $errors -bounds $bounds} message]
         catch {core::native::unregister test-ns-bounds}
     }
-    list [lmap n {list::at mutable_array::at mutable_array::set str::substring mutable_array::freeze mutable_array::copy list::length} {
+    list [lmap n {std::list::at std::mutable_array::at std::mutable_array::set std::str::substring std::mutable_array::freeze std::mutable_array::copy std::list::length} {
             list $n [dict get [core::native::metadata $n] bounds]
         }] $bad
-} -result {{{list::at {index list 0 1}} {mutable_array::at {index mutarray 0 1}} {mutable_array::set {index mutarray 0 1}} {str::substring {slices {str 0 1 2}}} {mutable_array::freeze {slices {mutarray 0 {const 0} 1}}} {mutable_array::copy {slices {mutarray 0 1 {sum 1 4}} {mutarray 2 3 {sum 3 4}}}} {list::length {}}} {1 1 1 1 1 1 1 1}}
+} -result {{{std::list::at {index list 0 1}} {std::mutable_array::at {index mutarray 0 1}} {std::mutable_array::set {index mutarray 0 1}} {std::str::substring {slices {str 0 1 2}}} {std::mutable_array::freeze {slices {mutarray 0 {const 0} 1}}} {std::mutable_array::copy {slices {mutarray 0 1 {sum 1 4}} {mutarray 2 3 {sum 3 4}}}} {std::list::length {}}} {1 1 1 1 1 1 1 1}}
 
 test ns-proof-binding-minimum {an enclosing `n > K` on an Int binding bounds a capacity equal to that binding (an array created with capacity n); exactly, never more} -body {
     lmap body {
-        "    if n > 0:\n        mutable_array::set(m, 0, 5)"
-        "    if n > 1:\n        mutable_array::set(m, 1, 5)"
-        "    if n >= 1:\n        mutable_array::set(m, 0, 5)"
-        "    if n > 0:\n        mutable_array::set(m, 1, 5)"
-        "    if n >= 0:\n        mutable_array::set(m, 0, 5)"
-        "    if n > 0:\n        return m\n    mutable_array::set(m, 0, 5)"
+        "    if n > 0:\n        std::mutable_array::set(m, 0, 5)"
+        "    if n > 1:\n        std::mutable_array::set(m, 1, 5)"
+        "    if n >= 1:\n        std::mutable_array::set(m, 0, 5)"
+        "    if n > 0:\n        std::mutable_array::set(m, 1, 5)"
+        "    if n >= 0:\n        std::mutable_array::set(m, 0, 5)"
+        "    if n > 0:\n        return m\n    std::mutable_array::set(m, 0, 5)"
     } {
-        diagKinds "import mutable_array\nfn f(n):\n    m = mutable_array::create(n, 0)\n$body\n    m\nf(3)"
+        diagKinds "import std::mutable_array\nfn f(n):\n    m = std::mutable_array::create(n, 0)\n$body\n    m\nf(3)"
     }
 } -result {{} {} {} UNHANDLED-ERROR UNHANDLED-ERROR UNHANDLED-ERROR}
 
 # ---------------------------------------------------------------------------
-# Slices: str::substring, mutable_array::freeze, mutable_array::copy
+# Slices: std::str::substring, std::mutable_array::freeze, std::mutable_array::copy
 # (core::native::checkSlice): START against 0..N first, then END against
 # START..N; below its interval is LowerUnderrun, above it UpperOverrun.
 
-set ::sliceFns {import mutable_array
-import str
+set ::sliceFns {import std::mutable_array
+import std::str
 fn slice_of(s, a, b):
-    v = str::substring(s, a, b):
+    v = std::str::substring(s, a, b):
         on LowerUnderrun:
             return "lower"
         on UpperOverrun:
             return "upper"
     v
 fn freeze_of(xs, n):
-    a = mutable_array::from_list(xs)
-    v = mutable_array::freeze(a, n):
+    a = std::mutable_array::from_list(xs)
+    v = std::mutable_array::freeze(a, n):
         on LowerUnderrun:
             return "lower"
         on UpperOverrun:
             return "upper"
     v
 fn copy_within(xs, ds, ss, n):
-    a = mutable_array::from_list(xs)
-    done = mutable_array::copy(a, ds, a, ss, n):
+    a = std::mutable_array::from_list(xs)
+    done = std::mutable_array::copy(a, ds, a, ss, n):
         on LowerUnderrun:
             return "lower"
         on UpperOverrun:
             return "upper"
-    mutable_array::freeze(a, mutable_array::capacity(a))
+    std::mutable_array::freeze(a, std::mutable_array::capacity(a))
 }
 
 test ns-slice-rule-substring {every bound case of a substring of "abc", including BigInts and the check order, on every backend} -body {
@@ -390,47 +394,47 @@ test ns-slice-rule-freeze-and-copy {freeze is the slice 0..COUNT; copy checks it
 } -result {["lower", "upper", [1], "lower", "upper", "lower", "upper", "upper", [1, 1, 2]]}
 
 test ns-slice-unhandled-is-the-declared-error {a slice error nobody handles is the ordinary uncaught declared error on every backend (a -strict 0 program)} -body {
-    list [agree "import str\nfn f(s, a, b):\n    str::substring(s, a, b)\nf(\"abc\", 2, 1)" 0] [agree "import str\nfn f(s, a, b):\n    str::substring(s, a, b)\nf(\"abc\", 0, 9)" 0]
+    list [agree "import std::str\nfn f(s, a, b):\n    std::str::substring(s, a, b)\nf(\"abc\", 2, 1)" 0] [agree "import std::str\nfn f(s, a, b):\n    std::str::substring(s, a, b)\nf(\"abc\", 0, 9)" 0]
 } -result {{error {CORE SEMANTIC UNCAUGHT-ERROR}} {error {CORE SEMANTIC UNCAUGHT-ERROR}}}
 
 test ns-slice-proofs {the slice proof: literals, an index guard, a counted loop, a minimum length, String lengths through concat, capacities; the unsound neighbours keep their obligation} -body {
     lmap src [list \
-        {import str
-str::substring("hello", 1, 3)} \
-        {import str
-str::substring("hello", 3, 1)} \
-        "import str\nfn f(t, i):\n    if i < 0 or i >= str::length(t):\n        return \"\"\n    str::substring(t, i, i + 1)\nf(\"ab\", 1)" \
-        "import str\nfn f(t, i):\n    if i >= str::length(t):\n        return \"\"\n    str::substring(t, i, i + 1)\nf(\"ab\", 1)" \
-        "import str\nfn f(t):\n    loop i from 0 to str::length(t):\n        str::substring(t, i, i + 1)\nf(\"ab\")" \
-        "import str\nfn f(t):\n    if str::length(t) > 0:\n        return str::substring(t, 0, 1)\n    \"\"\nf(\"ab\")" \
-        "import str\nfn f(t):\n    str::substring(str::concat(t, \"x\"), 0, 1)\nf(\"ab\")" \
-        "import str\nfn f(t):\n    str::substring(str::concat(t, \"x\"), 0, 2)\nf(\"ab\")" \
-        "import mutable_array\nfn f(n):\n    a = mutable_array::allocate(n)\n    loop i from 0 to n:\n        mutable_array::set(a, i, i)\n    mutable_array::freeze(a, mutable_array::capacity(a))\nf(3)" \
-        "import mutable_array\nfn f(a, n):\n    mutable_array::freeze(a, n)\nf(mutable_array::allocate(2), 1)" \
-        {import mutable_array
-a = mutable_array::allocate(3)
-b = mutable_array::allocate(5)
-mutable_array::copy(a, 0, b, 2, 3)} \
-        {import mutable_array
-a = mutable_array::allocate(3)
-mutable_array::set(a, 3, 0)}] {diagKinds $src}
+        {import std::str
+std::str::substring("hello", 1, 3)} \
+        {import std::str
+std::str::substring("hello", 3, 1)} \
+        "import std::str\nfn f(t, i):\n    if i < 0 or i >= std::str::length(t):\n        return \"\"\n    std::str::substring(t, i, i + 1)\nf(\"ab\", 1)" \
+        "import std::str\nfn f(t, i):\n    if i >= std::str::length(t):\n        return \"\"\n    std::str::substring(t, i, i + 1)\nf(\"ab\", 1)" \
+        "import std::str\nfn f(t):\n    loop i from 0 to std::str::length(t):\n        std::str::substring(t, i, i + 1)\nf(\"ab\")" \
+        "import std::str\nfn f(t):\n    if std::str::length(t) > 0:\n        return std::str::substring(t, 0, 1)\n    \"\"\nf(\"ab\")" \
+        "import std::str\nfn f(t):\n    std::str::substring(std::str::concat(t, \"x\"), 0, 1)\nf(\"ab\")" \
+        "import std::str\nfn f(t):\n    std::str::substring(std::str::concat(t, \"x\"), 0, 2)\nf(\"ab\")" \
+        "import std::mutable_array\nfn f(n):\n    a = std::mutable_array::allocate(n)\n    loop i from 0 to n:\n        std::mutable_array::set(a, i, i)\n    std::mutable_array::freeze(a, std::mutable_array::capacity(a))\nf(3)" \
+        "import std::mutable_array\nfn f(a, n):\n    std::mutable_array::freeze(a, n)\nf(std::mutable_array::allocate(2), 1)" \
+        {import std::mutable_array
+a = std::mutable_array::allocate(3)
+b = std::mutable_array::allocate(5)
+std::mutable_array::copy(a, 0, b, 2, 3)} \
+        {import std::mutable_array
+a = std::mutable_array::allocate(3)
+std::mutable_array::set(a, 3, 0)}] {diagKinds $src}
 } -result {{} KNOWN-ERROR {} UNHANDLED-ERROR {} {} {} UNHANDLED-ERROR {} UNHANDLED-ERROR {} KNOWN-ERROR}
 
-test ns-index-proof-minimum-size {an enclosing `list::length(xs) > 0` (or `== 0` false) proves the reads below the minimum it states} -body {
-    list [diagKinds "import list\nfn f(xs):\n    if list::length(xs) > 0:\n        return list::at(xs, 0)\n    0\nf(\[1\])"] \
-        [diagKinds "import list\nfn f(xs):\n    if list::length(xs) == 0:\n        return 0\n    list::at(xs, 0)\nf(\[1\])"] \
-        [diagKinds "import list\nfn f(xs):\n    if list::length(xs) > 0:\n        return list::at(xs, 1)\n    0\nf(\[1\])"]
+test ns-index-proof-minimum-size {an enclosing `std::list::length(xs) > 0` (or `== 0` false) proves the reads below the minimum it states} -body {
+    list [diagKinds "import std::list\nfn f(xs):\n    if std::list::length(xs) > 0:\n        return std::list::at(xs, 0)\n    0\nf(\[1\])"] \
+        [diagKinds "import std::list\nfn f(xs):\n    if std::list::length(xs) == 0:\n        return 0\n    std::list::at(xs, 0)\nf(\[1\])"] \
+        [diagKinds "import std::list\nfn f(xs):\n    if std::list::length(xs) > 0:\n        return std::list::at(xs, 1)\n    0\nf(\[1\])"]
 } -result {{} {} UNHANDLED-ERROR}
 
-test ns-at-element-type {list::at keeps the element type: List[int] gives int, no optional/null type} -body {
-    set hir [nsHir "import list\nfn f(xs: List\[int\]) errors IndexNotFound:\n    list::at(xs, 0)\nr = f(\[1, 2\]):\n    on IndexNotFound:\n        0\nr"]
-    # `import list` loads lib/list.bot, whose own (untyped) list::at calls come
+test ns-at-element-type {std::list::at keeps the element type: List[int] gives int, no optional/null type} -body {
+    set hir [nsHir "import std::list\nfn f(xs: List\[int\]) errors IndexNotFound:\n    std::list::at(xs, 0)\nr = f(\[1, 2\]):\n    on IndexNotFound:\n        0\nr"]
+    # `import std::list` loads stdlib/list.bot, whose own (untyped) std::list::at calls come
     # first in the walk: pick the call written inside this program's f.
     set mine {}
     foreach e [hir::walk $hir] {
         if {[hir::kind $hir $e] ne "call"} continue
         set callee [hir::get $hir $e callee]
-        if {[hir::kind $hir $callee] eq "ref" && [hir::get $hir $callee name] eq "list::at" &&
+        if {[hir::kind $hir $callee] eq "ref" && [hir::get $hir $callee name] eq "std::list::at" &&
                 [string match {f()/*} [dict get [hir::get $hir $e origin] node]]} {
             lappend mine $e
         }
@@ -438,13 +442,13 @@ test ns-at-element-type {list::at keeps the element type: List[int] gives int, n
     hir::types::show [hir::typeOf $hir [lindex $mine 0]]
 } -result int
 
-test ns-get-element-type {list::get and mutable_array::get keep the element type: the result of a get call is the element type joined with the default's, no optional/null type} -body {
-    set hir [nsHir {import list
-import mutable_array
-a = list::get([1, 2], 5, 0)
-b = list::get(["x"], 0, "y")
-c = mutable_array::get(mutable_array::create(2, "s"), 1, "t")
-d = list::get([[1], [2, 3]], 1, [])
+test ns-get-element-type {std::list::get and std::mutable_array::get keep the element type: the result of a get call is the element type joined with the default's, no optional/null type} -body {
+    set hir [nsHir {import std::list
+import std::mutable_array
+a = std::list::get([1, 2], 5, 0)
+b = std::list::get(["x"], 0, "y")
+c = std::mutable_array::get(std::mutable_array::create(2, "s"), 1, "t")
+d = std::list::get([[1], [2, 3]], 1, [])
 [a, b, c, d]}]
     lmap name {a b c d} {
         set bind [lindex [lmap e [hir::walk $hir] {
@@ -459,168 +463,168 @@ d = list::get([[1], [2, 3]], 1, [])
 # Static completion proofs for at (hir/completions.tcl)
 
 test ns-proof-literal-in-range {a List of statically known length read at a provably valid index needs no handler} -body {
-    list [diagKinds {import list
-list::at([1, 2, 3], 2)}] [agree {import list
+    list [diagKinds {import std::list
+std::list::at([1, 2, 3], 2)}] [agree {import std::list
 xs = [1, 2, 3]
 i = 1
-[list::at(xs, i), list::at(xs, 0 + 2)]}]
+[std::list::at(xs, i), std::list::at(xs, 0 + 2)]}]
 } -result {{} {[2, 3]}}
 
 test ns-proof-literal-out-of-range {a provably missing index is a compile-time KNOWN-ERROR, handler or not} -body {
-    list [diagKinds {import list
-list::at([1, 2, 3], 3)}] [diagKinds {import list
-list::at([], 0)}] \
-        [diagKinds "import list\nr = list::at(\[1\], -1):\n    on IndexNotFound:\n        0\nr"]
+    list [diagKinds {import std::list
+std::list::at([1, 2, 3], 3)}] [diagKinds {import std::list
+std::list::at([], 0)}] \
+        [diagKinds "import std::list\nr = std::list::at(\[1\], -1):\n    on IndexNotFound:\n        0\nr"]
 } -result {KNOWN-ERROR KNOWN-ERROR KNOWN-ERROR}
 
-test ns-proof-counted-loop {loop i from 0 to list::length(xs) (or through length - 1) reads list::at(xs, i) with no obligation} -body {
-    list [diagKinds "import list\nfn f(xs):\n    loop i from 0 to list::length(xs):\n        list::at(xs, i)\nf(\[1\])"] \
-        [diagKinds "import list\nfn f(xs):\n    n = list::length(xs)\n    loop i from 0 through n - 1:\n        list::at(xs, i)\nf(\[1\])"] \
-        [diagKinds "import list\nfn f(xs):\n    loop x in xs and i from 0 to list::length(xs):\n        list::at(xs, i) == x\nf(\[1\])"] \
-        [agree "import list\nfn f(xs):\n    loop i from 0 to list::length(xs):\n        list::at(xs, i) * 2\nf(\[1, 2, 3\])"]
+test ns-proof-counted-loop {loop i from 0 to std::list::length(xs) (or through length - 1) reads std::list::at(xs, i) with no obligation} -body {
+    list [diagKinds "import std::list\nfn f(xs):\n    loop i from 0 to std::list::length(xs):\n        std::list::at(xs, i)\nf(\[1\])"] \
+        [diagKinds "import std::list\nfn f(xs):\n    n = std::list::length(xs)\n    loop i from 0 through n - 1:\n        std::list::at(xs, i)\nf(\[1\])"] \
+        [diagKinds "import std::list\nfn f(xs):\n    loop x in xs and i from 0 to std::list::length(xs):\n        std::list::at(xs, i) == x\nf(\[1\])"] \
+        [agree "import std::list\nfn f(xs):\n    loop i from 0 to std::list::length(xs):\n        std::list::at(xs, i) * 2\nf(\[1, 2, 3\])"]
 } -result {{} {} {} {[2, 4, 6]}}
 
 test ns-proof-counted-loop-negatives {the loop proof is exact: a start below 0, an end past the length, or another List's length proves nothing} -body {
-    list [diagKinds "import list\nfn f(xs):\n    loop i from -1 to list::length(xs):\n        list::at(xs, i)\nf(\[1\])"] \
-        [diagKinds "import list\nfn f(xs):\n    loop i from 0 to list::length(xs) + 1:\n        list::at(xs, i)\nf(\[1\])"] \
-        [diagKinds "import list\nfn f(xs, ys):\n    loop i from 0 to list::length(ys):\n        list::at(xs, i)\nf(\[1\], \[2\])"] \
-        [diagKinds "import list\nfn f(xs):\n    loop i down from list::length(xs) to 0:\n        list::at(xs, i)\nf(\[1\])"]
+    list [diagKinds "import std::list\nfn f(xs):\n    loop i from -1 to std::list::length(xs):\n        std::list::at(xs, i)\nf(\[1\])"] \
+        [diagKinds "import std::list\nfn f(xs):\n    loop i from 0 to std::list::length(xs) + 1:\n        std::list::at(xs, i)\nf(\[1\])"] \
+        [diagKinds "import std::list\nfn f(xs, ys):\n    loop i from 0 to std::list::length(ys):\n        std::list::at(xs, i)\nf(\[1\], \[2\])"] \
+        [diagKinds "import std::list\nfn f(xs):\n    loop i down from std::list::length(xs) to 0:\n        std::list::at(xs, i)\nf(\[1\])"]
 } -result {UNHANDLED-ERROR UNHANDLED-ERROR UNHANDLED-ERROR UNHANDLED-ERROR}
 
-test ns-proof-capacity {a MutableArray's capacity is fixed at allocation: loops to it, or to the allocation's own size, read mutable_array::at freely} -body {
-    list [diagKinds "import mutable_array\nfn f(n):\n    a = mutable_array::allocate(n)\n    loop i from 0 to n:\n        mutable_array::at(a, i)\nf(2)"] \
-        [diagKinds "import mutable_array\nfn f(a):\n    loop i from 0 to mutable_array::capacity(a):\n        mutable_array::at(a, i)\nf(mutable_array::allocate(1))"] \
-        [diagKinds "import mutable_array\na = mutable_array::allocate(3)\nmutable_array::at(a, 2)"] \
-        [diagKinds "import mutable_array\na = mutable_array::allocate(3)\nmutable_array::at(a, 3)"]
+test ns-proof-capacity {a MutableArray's capacity is fixed at allocation: loops to it, or to the allocation's own size, read std::mutable_array::at freely} -body {
+    list [diagKinds "import std::mutable_array\nfn f(n):\n    a = std::mutable_array::allocate(n)\n    loop i from 0 to n:\n        std::mutable_array::at(a, i)\nf(2)"] \
+        [diagKinds "import std::mutable_array\nfn f(a):\n    loop i from 0 to std::mutable_array::capacity(a):\n        std::mutable_array::at(a, i)\nf(std::mutable_array::allocate(1))"] \
+        [diagKinds "import std::mutable_array\na = std::mutable_array::allocate(3)\nstd::mutable_array::at(a, 2)"] \
+        [diagKinds "import std::mutable_array\na = std::mutable_array::allocate(3)\nstd::mutable_array::at(a, 3)"]
 } -result {{} {} {} KNOWN-ERROR}
 
 test ns-proof-branch-relations {an enclosing comparison with the length (and a nonnegative index) or an equality of the length with a constant proves the read} -body {
-    list [diagKinds "import list\nfn f(xs, i):\n    if i < 0:\n        return 0\n    if i >= list::length(xs):\n        return 1\n    list::at(xs, i)\nf(\[1\], 0)"] \
-        [diagKinds "import list\nfn f(b):\n    if list::length(b) == 2:\n        list::at(b, 1)\n    else:\n        0\nf(\[1\])"] \
-        [diagKinds "import list\nfn f(xs, i):\n    if i >= list::length(xs):\n        return 1\n    list::at(xs, i)\nf(\[1\], 0)"]
+    list [diagKinds "import std::list\nfn f(xs, i):\n    if i < 0:\n        return 0\n    if i >= std::list::length(xs):\n        return 1\n    std::list::at(xs, i)\nf(\[1\], 0)"] \
+        [diagKinds "import std::list\nfn f(b):\n    if std::list::length(b) == 2:\n        std::list::at(b, 1)\n    else:\n        0\nf(\[1\])"] \
+        [diagKinds "import std::list\nfn f(xs, i):\n    if i >= std::list::length(xs):\n        return 1\n    std::list::at(xs, i)\nf(\[1\], 0)"]
 } -result {{} {} UNHANDLED-ERROR}
 
-test ns-proof-and-or-conditions {`i < 0 or i >= list::length(xs)` false, and `i >= 0 and i < list::length(xs)` true, prove the read; the unsound mixes do not} -body {
-    list [diagKinds "import list\nfn f(xs, i):\n    if i < 0 or i >= list::length(xs):\n        0\n    else:\n        list::at(xs, i)\nf(\[1\], 0)"] \
-        [diagKinds "import list\nfn f(xs, i):\n    if i >= 0 and i < list::length(xs):\n        list::at(xs, i)\n    else:\n        0\nf(\[1\], 0)"] \
-        [diagKinds "import list\nfn f(xs, i):\n    if i >= 0 or i < list::length(xs):\n        list::at(xs, i)\n    else:\n        0\nf(\[1\], 0)"] \
-        [diagKinds "import list\nfn f(xs, i):\n    if i < 0 and i >= list::length(xs):\n        0\n    else:\n        list::at(xs, i)\nf(\[1\], 0)"]
+test ns-proof-and-or-conditions {`i < 0 or i >= std::list::length(xs)` false, and `i >= 0 and i < std::list::length(xs)` true, prove the read; the unsound mixes do not} -body {
+    list [diagKinds "import std::list\nfn f(xs, i):\n    if i < 0 or i >= std::list::length(xs):\n        0\n    else:\n        std::list::at(xs, i)\nf(\[1\], 0)"] \
+        [diagKinds "import std::list\nfn f(xs, i):\n    if i >= 0 and i < std::list::length(xs):\n        std::list::at(xs, i)\n    else:\n        0\nf(\[1\], 0)"] \
+        [diagKinds "import std::list\nfn f(xs, i):\n    if i >= 0 or i < std::list::length(xs):\n        std::list::at(xs, i)\n    else:\n        0\nf(\[1\], 0)"] \
+        [diagKinds "import std::list\nfn f(xs, i):\n    if i < 0 and i >= std::list::length(xs):\n        0\n    else:\n        std::list::at(xs, i)\nf(\[1\], 0)"]
 } -result {{} {} UNHANDLED-ERROR UNHANDLED-ERROR}
 
 # In the loop program, f's own read after the loop stays UNHANDLED-ERROR;
 # its call f([], [1], 5) is KNOWN-ERROR: the loop over the empty literal never
 # runs (STATIC-COMPLETION-PROOFS.md item 92), so its guard never returns and
-# list::at([1], 5) always fails.
+# std::list::at([1], 5) always fails.
 test ns-proof-relations-do-not-outlive-their-scope {a guard established inside a loop body or a handler (which may not run) proves nothing after it; an early return at the function's own level does} -body {
-    set small "import list\ntype Small = Int in 0..100\n"
-    list [diagKinds "${small}fn f(xs, ys, j: Small):\n    loop x in xs:\n        if j >= list::length(ys):\n            return 0\n    list::at(ys, j)\nf(\[\], \[1\], 5)"] \
-        [diagKinds "${small}fn f(xs, ys, j: Small):\n    v = list::at(xs, 0):\n        on IndexNotFound:\n            if j >= list::length(ys):\n                return 0\n            1\n    v + list::at(ys, j)\nf(\[1\], \[1\], 5)"] \
-        [diagKinds "${small}fn f(ys, j: Small):\n    if j >= list::length(ys):\n        return 0\n    list::at(ys, j)\nf(\[1\], 5)"]
+    set small "import std::list\ntype Small = Int in 0..100\n"
+    list [diagKinds "${small}fn f(xs, ys, j: Small):\n    loop x in xs:\n        if j >= std::list::length(ys):\n            return 0\n    std::list::at(ys, j)\nf(\[\], \[1\], 5)"] \
+        [diagKinds "${small}fn f(xs, ys, j: Small):\n    v = std::list::at(xs, 0):\n        on IndexNotFound:\n            if j >= std::list::length(ys):\n                return 0\n            1\n    v + std::list::at(ys, j)\nf(\[1\], \[1\], 5)"] \
+        [diagKinds "${small}fn f(ys, j: Small):\n    if j >= std::list::length(ys):\n        return 0\n    std::list::at(ys, j)\nf(\[1\], 5)"]
 } -result {{KNOWN-ERROR UNHANDLED-ERROR} UNHANDLED-ERROR {}}
 
 test ns-proof-relations-before-call-ranges {a read the branch relations prove stays proven in a call whose exact arguments put the index out of range: that call never reaches the read} -body {
-    set source "import list\nfn at_or(xs: List\[int\], i: int, d: int) -> int:\n    if i >= 0 and i < list::length(xs):\n        list::at(xs, i)\n    else:\n        d\n\[at_or(\[1, 2, 3\], 2, 0), at_or(\[1\], 5, 9), at_or(\[\], 0, 7)\]"
+    set source "import std::list\nfn at_or(xs: List\[int\], i: int, d: int) -> int:\n    if i >= 0 and i < std::list::length(xs):\n        std::list::at(xs, i)\n    else:\n        d\n\[at_or(\[1, 2, 3\], 2, 0), at_or(\[1\], 5, 9), at_or(\[\], 0, 7)\]"
     list [diagKinds $source] [agree $source]
 } -result {{} {[3, 9, 7]}}
 
 test ns-proof-early-return-result {a callee's early `return` value is part of the result Range the call-specific walk proves: a read indexed by a function that may return 5 stays obligated (it compiled with no handler and raised an undeclared IndexNotFound at run time; PROOF-FACT-CENSUS.md); one whose every return is in range is still proven} -body {
-    set out "import list\nfn idx(k):\n    if k > 0:\n        return 5\n    0\n\nfn get(k):\n    list::at(\[10, 20\], idx(k))\n\nloop i from 0 to 3:\n    get(i)"
-    set in "import list\nfn idx(k):\n    if k > 0:\n        return 1\n    0\n\nfn get(k):\n    list::at(\[10, 20\], idx(k))\n\nloop i from 0 to 3:\n    get(i)"
+    set out "import std::list\nfn idx(k):\n    if k > 0:\n        return 5\n    0\n\nfn get(k):\n    std::list::at(\[10, 20\], idx(k))\n\nloop i from 0 to 3:\n    get(i)"
+    set in "import std::list\nfn idx(k):\n    if k > 0:\n        return 1\n    0\n\nfn get(k):\n    std::list::at(\[10, 20\], idx(k))\n\nloop i from 0 to 3:\n    get(i)"
     list [diagKinds $out] [diagKinds $in] [agree $in]
 } -result {UNHANDLED-ERROR {} {[10, 20, 20]}}
 
 test ns-proof-literal-loop-exits {a loop over a small literal List whose body can break or continue is not cut short by the per-element walk: the code after it is still checked (an unhandled read after it compiled and raised IndexNotFound at run time), and a function whose loop continues still completes normally (it was a false KNOWN-ERROR; PROOF-FACT-CENSUS.md); a body that returns still stops the walk} -body {
-    set after "import list\nloop x in \[1, 2\]:\n    if x > 1:\n        break\n    x\n\nfn f(xs, i):\n    list::at(xs, i)\n\nf(\[1\], 0)"
+    set after "import std::list\nloop x in \[1, 2\]:\n    if x > 1:\n        break\n    x\n\nfn f(xs, i):\n    std::list::at(xs, i)\n\nf(\[1\], 0)"
     set cont "error Boom\n\nfn f(k) errors Boom:\n    loop x in \[1, 2\]:\n        if x > 0:\n            continue\n        x\n    if k > 0:\n        fail Boom\n    7\n\nf(0)"
-    set ret "import list\nfn f():\n    loop x in \[1, 2\]:\n        if x > 0:\n            return x\n        x\n    list::at(\[\], 0)\n\nf()"
+    set ret "import std::list\nfn f():\n    loop x in \[1, 2\]:\n        if x > 0:\n            return x\n        x\n    std::list::at(\[\], 0)\n\nf()"
     list [diagKinds $after] [diagKinds $cont] [agree $cont] [diagKinds $ret] [agree $ret]
 } -result {UNHANDLED-ERROR {} 7 {} 1}
 
-test ns-proof-lib-mutable-array-from-list {mutable_array::from_list's own list::at needs no handler: its loop counts to list::length(xs)} -body {
-    diagKinds {import mutable_array
-mutable_array::freeze(mutable_array::from_list([1, 2]), 2)}
+test ns-proof-lib-mutable-array-from-list {std::mutable_array::from_list's own std::list::at needs no handler: its loop counts to std::list::length(xs)} -body {
+    diagKinds {import std::mutable_array
+std::mutable_array::freeze(std::mutable_array::from_list([1, 2]), 2)}
 } -result {}
 
 # ---------------------------------------------------------------------------
 # get: ordinary Botlish over at, with an explicit, eager default
 
-test ns-get-values {list::get and mutable_array::get: the element when present, the default for every missing index} -body {
-    agree {import list
-import mutable_array
-a = mutable_array::from_list(["x", "y"])
-[list::get([10, 20, 30], 1, 0), list::get([10, 20, 30], 3, 0), list::get([10, 20, 30], -1, 0), list::get([], 0, "none"), list::get([1], 100000000000000000000, 7), mutable_array::get(a, 1, ""), mutable_array::get(a, 2, "?")]}
+test ns-get-values {std::list::get and std::mutable_array::get: the element when present, the default for every missing index} -body {
+    agree {import std::list
+import std::mutable_array
+a = std::mutable_array::from_list(["x", "y"])
+[std::list::get([10, 20, 30], 1, 0), std::list::get([10, 20, 30], 3, 0), std::list::get([10, 20, 30], -1, 0), std::list::get([], 0, "none"), std::list::get([1], 100000000000000000000, 7), std::mutable_array::get(a, 1, ""), std::mutable_array::get(a, 2, "?")]}
 } -result {[20, 0, 0, "none", 7, "y", "?"]}
 
-test ns-get-is-ordinary-botlish {list::get and mutable_array::get are library functions (no native, no special op): their bodies are an at call handled by an `on IndexNotFound` clause} -body {
-    set hir [nsHir {import list
-import mutable_array
-[list::get([1], 0, 2), mutable_array::get(mutable_array::allocate(1), 0, 3)]}]
+test ns-get-is-ordinary-botlish {std::list::get and std::mutable_array::get are library functions (no native, no special op): their bodies are an at call handled by an `on IndexNotFound` clause} -body {
+    set hir [nsHir {import std::list
+import std::mutable_array
+[std::list::get([1], 0, 2), std::mutable_array::get(std::mutable_array::allocate(1), 0, 3)]}]
     set handles [lmap e [hir::walk $hir] {
         if {[hir::kind $hir $e] ne "handle"} continue
         list [targetOf $hir [hir::get $hir $e call]] [hir::get $hir $e handlerNames]
     }]
-    list [core::native::isQualifiedNative list::get] [core::native::isQualifiedNative mutable_array::get] \
-        [lindex [targetOf $hir [callNamed $hir list::get]] 0] [lsort $handles]
-} -result {0 0 block {{{native list::at} IndexNotFound} {{native mutable_array::at} IndexNotFound}}}
+    list [core::native::isQualifiedNative std::list::get] [core::native::isQualifiedNative std::mutable_array::get] \
+        [lindex [targetOf $hir [callNamed $hir std::list::get]] 0] [lsort $handles]
+} -result {0 0 block {{{native std::list::at} IndexNotFound} {{native std::mutable_array::at} IndexNotFound}}}
 
 test ns-get-has-no-obligation {a get call never needs a handler: get handles IndexNotFound itself} -body {
-    diagKinds "import list\nfn f(xs, i):\n    list::get(xs, i, 0)\nf(\[1\], 9)"
+    diagKinds "import std::list\nfn f(xs, i):\n    std::list::get(xs, i, 0)\nf(\[1\], 9)"
 } -result {}
 
-test ns-get-nir-is-an-ordinary-call {natively, list::get is an ordinary module function whose body reads with the same listget op list::at uses: no get-specific operation exists} -body {
-    set nir [dict get [native::lower::program [nsHir "import list\nfn f(xs, i):\n    list::get(xs, i, 0)\nf(\[1, 2\], 1)"]] text]
-    list [regexp {func [0-9]+ "list::get"} $nir] [regexp {op listget} $nir] [regexp -nocase {get[a-z]*default|listgetor} $nir]
+test ns-get-nir-is-an-ordinary-call {natively, std::list::get is an ordinary module function whose body reads with the same listget op std::list::at uses: no get-specific operation exists} -body {
+    set nir [dict get [native::lower::program [nsHir "import std::list\nfn f(xs, i):\n    std::list::get(xs, i, 0)\nf(\[1, 2\], 1)"]] text]
+    list [regexp {func [0-9]+ "std::list::get"} $nir] [regexp {op listget} $nir] [regexp -nocase {get[a-z]*default|listgetor} $nir]
 } -result {1 1 0}
 
 test ns-get-handles-only-index-not-found {a TYPE failure inside get propagates: a non-List container or a non-Int index never yields the default} -body {
-    list [agree {import list
-list::get("abc", 0, "d")} 0] [agree {import list
-list::get([1], "0", "d")} 0] \
-        [agree {import mutable_array
-mutable_array::get([1], 0, "d")} 0]
+    list [agree {import std::list
+std::list::get("abc", 0, "d")} 0] [agree {import std::list
+std::list::get([1], "0", "d")} 0] \
+        [agree {import std::mutable_array
+std::mutable_array::get([1], 0, "d")} 0]
 } -result {{error {CORE SEMANTIC TYPE}} {error {CORE SEMANTIC TYPE}} {error {CORE SEMANTIC TYPE}}}
 
 test ns-get-default-is-eager {the default is an ordinary argument: evaluated before the call, present index or not} -body {
-    agree {import list
-import mutable_array
-import str
+    agree {import std::list
+import std::mutable_array
+import std::str
 context struct Log:
     marks: MutableArray[int]
 fn marks(context log: Log):
-    mutable_array::get(log.marks, 0, -1)
+    std::mutable_array::get(log.marks, 0, -1)
 fn mark(v, context log: Log):
-    mutable_array::set(log.marks, 0, marks() + 1):
+    std::mutable_array::set(log.marks, 0, marks() + 1):
         on IndexNotFound:
             unit
     v
-with context Log {marks: mutable_array::create(1, 0)}
-a = list::get([10, 20], 0, mark(-1))
-b = list::get([10, 20], 5, mark(-2))
-c = mutable_array::get(mutable_array::create(1, 7), 0, mark(-3))
+with context Log {marks: std::mutable_array::create(1, 0)}
+a = std::list::get([10, 20], 0, mark(-1))
+b = std::list::get([10, 20], 5, mark(-2))
+c = std::mutable_array::get(std::mutable_array::create(1, 7), 0, mark(-3))
 [a, b, c, marks()]}
 } -result {[10, -2, 7, 3]}
 
 # get against the explicit handling it is defined as: same value on every
 # backend for every container/index pair, including missing indices.
-set ::explicitGet {import list
-import mutable_array
+set ::explicitGet {import std::list
+import std::mutable_array
 fn explicit(xs, i, d):
-    v = list::at(xs, i):
+    v = std::list::at(xs, i):
         on IndexNotFound:
             d
     v
 fn explicit_array(a, i, d):
-    v = mutable_array::at(a, i):
+    v = std::mutable_array::at(a, i):
         on IndexNotFound:
             d
     v
 }
 
-test ns-get-differential {list::get(xs, i, d) == explicit at-with-handler, and mutable_array::get likewise, for every pair (every backend)} -body {
+test ns-get-differential {std::list::get(xs, i, d) == explicit at-with-handler, and std::mutable_array::get likewise, for every pair (every backend)} -body {
     set cases {}
     foreach xs {{[]} {[7]} {[1, 2, 3]} {["a", "b"]} {[[1], [2, 3]]}} {
         foreach i {-2 -1 0 1 2 3 100000000000000000000} {
-            lappend cases "\[list::get($xs, $i, \"d\") == explicit($xs, $i, \"d\"), list::get($xs, $i, \"d\"), mutable_array::get(mutable_array::from_list($xs), $i, \"d\") == explicit_array(mutable_array::from_list($xs), $i, \"d\")\]"
+            lappend cases "\[std::list::get($xs, $i, \"d\") == explicit($xs, $i, \"d\"), std::list::get($xs, $i, \"d\"), std::mutable_array::get(std::mutable_array::from_list($xs), $i, \"d\") == explicit_array(std::mutable_array::from_list($xs), $i, \"d\")\]"
         }
     }
     set program "$::explicitGet\[[join $cases ",\n"]\]"
@@ -628,9 +632,9 @@ test ns-get-differential {list::get(xs, i, d) == explicit at-with-handler, and m
     list [regexp {DISAGREE|false} $result] [regexp -all {\[true, } $result]
 } -result {0 35}
 
-test ns-handle-type-in-an-instance {a handled call's type includes a handler the semantic instance cannot admit as the call's own type (an int call, a str handler): no Int equality is ever applied to the String (natively this crashed before STDLIB-NAMESPACES.md; list::get is the everyday case)} -body {
+test ns-handle-type-in-an-instance {a handled call's type includes a handler the semantic instance cannot admit as the call's own type (an int call, a str handler): no Int equality is ever applied to the String (natively this crashed before STDLIB-NAMESPACES.md; std::list::get is the everyday case)} -body {
     list [agree "error E\nfn f(x, n) errors E:\n    if n < 0:\n        fail E\n    x\nfn explicit(x, n, d):\n    v = f(x, n):\n        on E:\n            d\n    v\nb = explicit(1, 0 - 2, \"dd\")\nc = explicit(1, 0 - 3, \"dd\")\n\[b == c, b, explicit(1, 5, \"dd\")\]"] \
-        [agree "import list\na = list::get(\[7\], -2, \"dd\")\nb = list::get(\[7\], -3, \"dd\")\n\[a == b, list::get(\[7\], 0, \"dd\") == 7\]"]
+        [agree "import std::list\na = std::list::get(\[7\], -2, \"dd\")\nb = std::list::get(\[7\], -3, \"dd\")\n\[a == b, std::list::get(\[7\], 0, \"dd\") == 7\]"]
 } -result {{[true, "dd", 1]} {[true, true]}}
 
 # ---------------------------------------------------------------------------
@@ -654,15 +658,15 @@ proc sameCallable {mh fh qualified} {
 }
 
 foreach {name qualified imports method free expected} {
-    list-at       list::at       {import list}   {[10, 20, 30].at(1)}         {list::at([10, 20, 30], 1)}          {20}
-    list-get      list::get      {import list}   {[10, 20].get(5, 0)}         {list::get([10, 20], 5, 0)}          {0}
-    list-append   list::append   {import list}   {[1].append(2)}              {list::append([1], 2)}               {[1, 2]}
-    list-length   list::length   {import list}   {[1, 2].length()}            {list::length([1, 2])}               {2}
-    str-concat    str::concat    {import str}    {"ab".concat("cd")}          {str::concat("ab", "cd")}            {"abcd"}
-    str-length    str::length    {import str}    {"abc".length()}             {str::length("abc")}                 {3}
-    str-substring str::substring {import str}    {"hello".substring(1, 3)}    {str::substring("hello", 1, 3)}      {"el"}
-    set-contains  immutable_set::contains {import immutable_set} {immutable_set::from_list([1]).contains(1)} {immutable_set::contains(immutable_set::from_list([1]), 1)} {true}
-    char-scalar-value char::scalar_value {import char} {'A'.scalar_value()} {char::scalar_value('A')}          {65}
+    list-at       std::list::at       {import std::list}   {[10, 20, 30].at(1)}         {std::list::at([10, 20, 30], 1)}          {20}
+    list-get      std::list::get      {import std::list}   {[10, 20].get(5, 0)}         {std::list::get([10, 20], 5, 0)}          {0}
+    list-append   std::list::append   {import std::list}   {[1].append(2)}              {std::list::append([1], 2)}               {[1, 2]}
+    list-length   std::list::length   {import std::list}   {[1, 2].length()}            {std::list::length([1, 2])}               {2}
+    str-concat    std::str::concat    {import std::str}    {"ab".concat("cd")}          {std::str::concat("ab", "cd")}            {"abcd"}
+    str-length    std::str::length    {import std::str}    {"abc".length()}             {std::str::length("abc")}                 {3}
+    str-substring std::str::substring {import std::str}    {"hello".substring(1, 3)}    {std::str::substring("hello", 1, 3)}      {"el"}
+    set-contains  std::immutable_set::contains {import std::immutable_set} {std::immutable_set::from_list([1]).contains(1)} {std::immutable_set::contains(std::immutable_set::from_list([1]), 1)} {true}
+    char-scalar-value std::char::scalar_value {import std::char} {'A'.scalar_value()} {std::char::scalar_value('A')}          {65}
 } {
     test ns-method-$name "$name: the method spelling and the qualified free spelling agree, through the same callable (the namespace is imported, nothing is bound)" -body {
         set m "$imports\n$method"
@@ -674,10 +678,10 @@ foreach {name qualified imports method free expected} {
 # An old-style binding of an imported function to a name is still a method
 # candidate -- the same function as the imported member, so one candidate.
 foreach {name qualified imports binding method free expected} {
-    list-at       list::at       {import list} {at = list::at}               {[10, 20, 30].at(1)}   {list::at([10, 20, 30], 1)}   {20}
-    list-length   list::length   {import list} {length = list::length}       {[1, 2].length()}      {list::length([1, 2])}        {2}
-    str-concat    str::concat    {import str}  {concat = str::concat}        {"ab".concat("cd")}    {str::concat("ab", "cd")}     {"abcd"}
-    list-get      list::get      {import list} {get = list::get}             {[10, 20].get(5, 0)}   {list::get([10, 20], 5, 0)}   {0}
+    list-at       std::list::at       {import std::list} {at = std::list::at}               {[10, 20, 30].at(1)}   {std::list::at([10, 20, 30], 1)}   {20}
+    list-length   std::list::length   {import std::list} {length = std::list::length}       {[1, 2].length()}      {std::list::length([1, 2])}        {2}
+    str-concat    std::str::concat    {import std::str}  {concat = std::str::concat}        {"ab".concat("cd")}    {std::str::concat("ab", "cd")}     {"abcd"}
+    list-get      std::list::get      {import std::list} {get = std::list::get}             {[10, 20].get(5, 0)}   {std::list::get([10, 20], 5, 0)}   {0}
 } {
     test ns-method-alias-$name "$name: an alias of an imported member is the same one candidate as the member itself: method, qualified and aliased spellings agree through the same callable" -body {
         set m "$imports\n$binding\n$method"
@@ -686,31 +690,31 @@ foreach {name qualified imports binding method free expected} {
     } -result [list $expected $expected 1]
 }
 
-test ns-method-mutable-array {mutable_array::at/set/get by method spelling: the same reads and writes as the free calls} -body {
-    set prelude "import mutable_array\na = mutable_array::allocate(2)\n"
+test ns-method-mutable-array {std::mutable_array::at/set/get by method spelling: the same reads and writes as the free calls} -body {
+    set prelude "import std::mutable_array\na = std::mutable_array::allocate(2)\n"
     list [agree "${prelude}a.set(0, 5)\na.set(1, 6)\n\[a.at(0), a.at(1), a.get(2, -1)\]"] \
-        [agree "${prelude}mutable_array::set(a, 0, 5)\nmutable_array::set(a, 1, 6)\n\[mutable_array::at(a, 0), mutable_array::at(a, 1), mutable_array::get(a, 2, -1)\]"]
+        [agree "${prelude}std::mutable_array::set(a, 0, 5)\nstd::mutable_array::set(a, 1, 6)\n\[std::mutable_array::at(a, 0), std::mutable_array::at(a, 1), std::mutable_array::get(a, 2, -1)\]"]
 } -result {{[5, 6, -1]} {[5, 6, -1]}}
 
 test ns-method-nir-identical {the method spelling and the qualified spelling of an imported namespace's functions lower to identical NIR} -body {
     set tail "r = f(\[4\]):\n    on IndexNotFound:\n        \[\]\nr"
-    set m [dict get [native::lower::program [nsHir "import list\nfn f(xs) errors IndexNotFound:\n    \[xs.at(0), xs.get(9, 1)\]\n$tail"]] text]
-    set f [dict get [native::lower::program [nsHir "import list\nfn f(xs) errors IndexNotFound:\n    \[list::at(xs, 0), list::get(xs, 9, 1)\]\n$tail"]] text]
+    set m [dict get [native::lower::program [nsHir "import std::list\nfn f(xs) errors IndexNotFound:\n    \[xs.at(0), xs.get(9, 1)\]\n$tail"]] text]
+    set f [dict get [native::lower::program [nsHir "import std::list\nfn f(xs) errors IndexNotFound:\n    \[std::list::at(xs, 0), std::list::get(xs, 9, 1)\]\n$tail"]] text]
     expr {$m eq $f}
 } -result 1
 
 test ns-method-alias-nir-identical {a binding of an imported function that stays in the program adds no second candidate: the method spelling lowers to the same NIR as the qualified spelling beside that very binding} -body {
     set tail "r = f(\[4\]):\n    on IndexNotFound:\n        \[\]\nr"
-    set m [dict get [native::lower::program [nsHir "import list\nat = list::at\nget = list::get\nfn f(xs) errors IndexNotFound:\n    \[xs.at(0), xs.get(9, 1)\]\n$tail"]] text]
-    set q [dict get [native::lower::program [nsHir "import list\nat = list::at\nget = list::get\nfn f(xs) errors IndexNotFound:\n    \[list::at(xs, 0), list::get(xs, 9, 1)\]\n$tail"]] text]
+    set m [dict get [native::lower::program [nsHir "import std::list\nat = std::list::at\nget = std::list::get\nfn f(xs) errors IndexNotFound:\n    \[xs.at(0), xs.get(9, 1)\]\n$tail"]] text]
+    set q [dict get [native::lower::program [nsHir "import std::list\nat = std::list::at\nget = std::list::get\nfn f(xs) errors IndexNotFound:\n    \[std::list::at(xs, 0), std::list::get(xs, 9, 1)\]\n$tail"]] text]
     expr {$m eq $q}
 } -result 1
 
 test ns-method-requires-an-import {a namespace's functions are method candidates only when the file imports that namespace: no import (or the import of another namespace) leaves `.at` unresolved -- the missing import, as a qualified name alone without its import is (DIAGNOSTIC-RECOVERY.md)} -body {
     list [lindex [rejection {[1, 2].at(0)}] 0] \
-        [lindex [rejection "import str\n\[1, 2\].at(0)"] 0] \
-        [rejection "import list\n\[1, 2\].at(0)"] \
-        [lindex [rejection {list::at([1, 2], 0)}] 0]
+        [lindex [rejection "import std::str\n\[1, 2\].at(0)"] 0] \
+        [rejection "import std::list\n\[1, 2\].at(0)"] \
+        [lindex [rejection {std::list::at([1, 2], 0)}] 0]
 } -result {MISSING-IMPORT MISSING-IMPORT accepted MISSING-IMPORT}
 
 # ---------------------------------------------------------------------------

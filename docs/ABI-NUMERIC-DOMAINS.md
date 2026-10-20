@@ -1,25 +1,25 @@
-# ABI numeric domains: abi::I8 ... abi::Usize
+# ABI numeric domains: std::abi::I8 ... std::abi::Usize
 
 ## Outcome
 
 The first ABI-domain layer above the x86-64 `Register64` transport exists,
 and it is **ordinary Botlish**: ten nominal structs, ten source-defined
-integer domains, ten checked creators (`lib/abi.bot`), and ten register
-encoders (`lib/abi/x86_64.bot`). No type, function, error or rule of the
+integer domains, ten checked creators (`stdlib/abi.bot`), and ten register
+encoders (`stdlib/abi/x86_64.bot`). No type, function, error or rule of the
 family is known to the compiler.
 
 ```botlish
-x = abi::u32(n)                      # n, proven 0 <= n <= 2^32 - 1, or an error
+x = std::abi::u32(n)                      # n, proven 0 <= n <= 2^32 - 1, or an error
 m = x.value                          # exactly n again: an ordinary Int
-r = abi::x86_64::from_u32(x)         # the x86-64 register word (zero-extended)
-linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39), rdi: r})
+r = std::abi::x86_64::from_u32(x)         # the x86-64 register word (zero-extended)
+std::linux::abi::x86_64::syscall({rax: std::abi::x86_64::register64(39), rdi: r})
 ```
 
 ```
 ordinary computation in Int
-    --abi::u32(...)------------->  abi::U32        checked/proven domain     (lib/abi.bot)
-    --abi::x86_64::from_u32----->  Register64      x86-64 transport          (lib/abi/x86_64.bot)
-    --linux::abi::x86_64::syscall------->  the kernel                                (unchanged)
+    --std::abi::u32(...)------------->  std::abi::U32        checked/proven domain     (stdlib/abi.bot)
+    --std::abi::x86_64::from_u32----->  Register64      x86-64 transport          (stdlib/abi/x86_64.bot)
+    --std::linux::abi::x86_64::syscall------->  the kernel                                (unchanged)
 ```
 
 The two theorems the milestone asked for hold, and are tested:
@@ -29,9 +29,9 @@ The two theorems the milestone asked for hold, and are tested:
    fixed-width arithmetic semantics leak into ordinary Botlish.** An ABI
    value is a struct whose one field is typed with the domain: every
    construction must prove the field statically (no run-time guard exists),
-   `.value` is the Int itself, and a struct has no arithmetic (`abi::u8(255)
-   + 1` is the ordinary TYPE error; `abi::u8(255).value + 1` is the Int 256,
-   and back into U8 only through `abi::u8`, which reports
+   `.value` is the Int itself, and a struct has no arithmetic (`std::abi::u8(255)
+   + 1` is the ordinary TYPE error; `std::abi::u8(255).value + 1` is the Int 256,
+   and back into U8 only through `std::abi::u8`, which reports
    `AbiIntegerAboveRange`).
 2. **Every ABI numeric domain encodes into the correct x86-64 64-bit register
    bit pattern without weakening its mathematical domain, including the full
@@ -45,26 +45,26 @@ gap; all are general (none mentions an ABI type):
 
 * **The completion proof now reads a field projection's declared domain**
   (`hir/completions.tcl`), as `hir/range.tcl` already did. Without it,
-  `byte::from_int(x.value)` for `x: abi::U8` demanded a `BelowRange`
+  `std::byte::from_int(x.value)` for `x: std::abi::U8` demanded a `BelowRange`
   handler (while the same value through a local did not): source-defined
   domains did not aid the error proof at a projection.
 * **Mismatch diagnostics** (`hir/range.tcl`): they print Int facts only when
   both the value and the declared type may be Ints, and name a nominal
-  struct mismatch. Passing an `abi::U64` where an `abi::Usize` is required
-  now reads "...cannot be proven to satisfy abi::Usize (argument type:
-  abi::U64); abi::U64 and abi::Usize are distinct named struct types: a
+  struct mismatch. Passing an `std::abi::U64` where an `std::abi::Usize` is required
+  now reads "...cannot be proven to satisfy std::abi::Usize (argument type:
+  std::abi::U64); std::abi::U64 and std::abi::Usize are distinct named struct types: a
   named struct type is nominal, and no value is ever converted from one to
-  another implicitly" instead of "... (argument type: abi::U64, facts:
+  another implicitly" instead of "... (argument type: std::abi::U64, facts:
   [-∞, +∞])".
 * **A duplicate `type`/`error` declaration names the module declaration it
   collides with** (`hir/sourcetypes.tcl`, `hir/errordecls.tcl`), and
   **module files are parsed once per process** (`surface/modules.tcl`) --
-  both consequences of `abi::x86_64` now loading `lib/abi.bot` (below,
+  both consequences of `std::abi::x86_64` now loading `stdlib/abi.bot` (below,
   "Dependency and global names").
 
 Natively, the wrappers disappear: a proven-valid constant creation is a
 single `retmulti` of its argument (no comparison, no fail path, no struct,
-no allocation), and `from_i32(abi::i32(42))` is two such register moves end
+no allocation), and `from_i32(std::abi::i32(42))` is two such register moves end
 to end. The remaining costs are pinned and explained below ("Optimization
 frontier"): `from_u64`/`from_usize` keep one comparison (and on the
 upper-half path one BigInt subtraction) at run time even for a constant; an
@@ -73,7 +73,7 @@ a bound outside the small-Int range is a run-time helper call.
 
 ## Source declarations
 
-### `abi` (lib/abi.bot)
+### `abi` (stdlib/abi.bot)
 
 ```botlish
 namespace abi
@@ -124,32 +124,32 @@ analysis, completion proofs, raw-Int lowering), and a one-field nominal
 struct carries the identity. The domain types alone could not be the ABI
 types: a source `type` is a *subtype of Int*, so `I32Value` would accept
 arithmetic (`x + 1` is an Int) and would be accepted wherever an Int is --
-the opposite of a boundary value. The struct is what makes `abi::I32` and
-`abi::U32` distinct and arithmetic-free. Botlish has no generics over
+the opposite of a boundary value. The struct is what makes `std::abi::I32` and
+`std::abi::U32` distinct and arithmetic-free. Botlish has no generics over
 nominal types and no macros, so the ten members are written out; each is
 the same three branches.
 
 **Names.** Types are uppercase (`I32`), creators lowercase (`i32`) and
 documented as checked conversions from Int, not constructors. A source `type`
 is a member of its namespace (IMPORTS.md), so the domains are
-`abi::I8Value` ... `abi::UsizeValue`, beside the structs and creators; a
-consumer writes `x: abi::U8Value` after `import abi`, or binds the short name
-with `import type abi::U8Value`. Source `error` declarations are still
+`std::abi::I8Value` ... `std::abi::UsizeValue`, beside the structs and creators; a
+consumer writes `x: std::abi::U8Value` after `import std::abi`, or binds the short name
+with `import type std::abi::U8Value`. Source `error` declarations are still
 global, unqualified names (hir/errordecls.tcl), hence the errors
 `AbiIntegerBelowRange`/`AbiIntegerAboveRange` keep their `Abi` prefix.
 
 ### Dependency and global names
 
-`abi::x86_64`'s encoders name the ABI types, so `lib/abi/x86_64.bot` declares
-`import abi`, and **every program that imports `abi::x86_64` -- the raw
-`register64`/`to_int` included -- also loads `lib/abi.bot`** (a dependency of
+`std::abi::x86_64`'s encoders name the ABI types, so `stdlib/abi/x86_64.bot` declares
+`import std::abi`, and **every program that imports `std::abi::x86_64` -- the raw
+`register64`/`to_int` included -- also loads `stdlib/abi.bot`** (a dependency of
 the module, not of the program's source: the program can use none of `abi`
-without its own `import abi`), with the two global error names. (The ten
-`abi::U8Value?`-style predicate natives every source `type` used to get are
+without its own `import std::abi`), with the two global error names. (The ten
+`std::abi::U8Value?`-style predicate natives every source `type` used to get are
 gone: a type declaration registers no callable,
-ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md; the checked creators `abi::u8`, ...
+ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md; the checked creators `std::abi::u8`, ...
 are the family's converters.)
-The layering requires the edge (`abi::U32 -> abi::x86_64::Register64`), and
+The layering requires the edge (`std::abi::U32 -> std::abi::x86_64::Register64`), and
 one namespace is one file, so the encoders cannot live in a module that
 loads only when used.
 
@@ -157,9 +157,9 @@ loads only when used.
   (`U8Value`, ...) as *global* type names; a program declaring its own `type
   U8Value` and calling `register64` then stopped compiling, so they were
   prefixed (`U8Value`). IMPORTS.md removed the problem at the root: the
-  domain types are `abi::U8Value` ..., members of namespace `abi`, and a
+  domain types are `std::abi::U8Value` ..., members of namespace `abi`, and a
   program's own `type U8Value` is a different type (`U8Value`, not
-  `abi::U8Value`) that coexists with it (`abi-numeric-namespaced-types`). The
+  `std::abi::U8Value`) that coexists with it (`abi-numeric-namespaced-types`). The
   two errors are still global (`error` declarations are not namespaced), so
   a program declaring `error AbiIntegerAboveRange` collides with the module's
   and the message says where the other is.
@@ -184,16 +184,16 @@ loads only when used.
 
 | type | domain |
 |---|---|
-| `abi::I8` | `-128 .. 127` |
-| `abi::I16` | `-32768 .. 32767` |
-| `abi::I32` | `-2147483648 .. 2147483647` |
-| `abi::I64` | `-9223372036854775808 .. 9223372036854775807` |
-| `abi::U8` | `0 .. 255` |
-| `abi::U16` | `0 .. 65535` |
-| `abi::U32` | `0 .. 4294967295` |
-| `abi::U64` | `0 .. 18446744073709551615` (the full unsigned 64-bit range) |
-| `abi::Isize` | signed ABI address/size-width integer: today `-2^63 .. 2^63 - 1` |
-| `abi::Usize` | unsigned ABI address/size-width integer: today `0 .. 2^64 - 1` |
+| `std::abi::I8` | `-128 .. 127` |
+| `std::abi::I16` | `-32768 .. 32767` |
+| `std::abi::I32` | `-2147483648 .. 2147483647` |
+| `std::abi::I64` | `-9223372036854775808 .. 9223372036854775807` |
+| `std::abi::U8` | `0 .. 255` |
+| `std::abi::U16` | `0 .. 65535` |
+| `std::abi::U32` | `0 .. 4294967295` |
+| `std::abi::U64` | `0 .. 18446744073709551615` (the full unsigned 64-bit range) |
+| `std::abi::Isize` | signed ABI address/size-width integer: today `-2^63 .. 2^63 - 1` |
+| `std::abi::Usize` | unsigned ABI address/size-width integer: today `0 .. 2^64 - 1` |
 
 `tests/abi-numeric.test` pins every interval from the compiled program's own
 source-type table (`abi-numeric-exact-domains`).
@@ -201,10 +201,10 @@ source-type table (`abi-numeric-exact-domains`).
 ### Isize and Usize: the target dependency
 
 `IsizeValue`/`UsizeValue` are declared in their own clearly marked
-section of `lib/abi.bot`: "TARGET-DEPENDENT ... The only supported target today is
+section of `stdlib/abi.bot`: "TARGET-DEPENDENT ... The only supported target today is
 Linux x86-64, whose address size is 64 bits. This pair of declarations is
 the one place that width is chosen." The architecture side
-(`lib/abi/x86_64.bot`) says where that width meets the register: Isize/Usize
+(`stdlib/abi/x86_64.bot`) says where that width meets the register: Isize/Usize
 are encoded at x86-64's 64-bit width. No target-parametric type machinery
 was built. A 32-bit target would change exactly those two declarations and
 its own architecture layer.
@@ -212,27 +212,27 @@ its own architecture layer.
 They are **nominally distinct** from I64/U64: different structs, and their
 domains are separate declarations with no parent (not aliases, not
 subtypes: `core::type::subtype IsizeValue I64Value` is 0). `fn f(x:
-abi::Usize)` rejects an `abi::U64` at compile time; `abi::isize(1) ==
-abi::i64(1)` is false. The documentation describes them as "unsigned/signed
+std::abi::Usize)` rejects an `std::abi::U64` at compile time; `std::abi::isize(1) ==
+std::abi::i64(1)` is false. The documentation describes them as "unsigned/signed
 ABI address/size-width integer; currently 64-bit on the supported x86-64
 target", never as "always 64-bit".
 
 `list_length`, string lengths and indexes remain ordinary `Int`;
-`list_get(xs, abi::usize(0))` is a TYPE error (tested).
+`list_get(xs, std::abi::usize(0))` is a TYPE error (tested).
 
 ### Creators and errors
 
 ```
-abi::i8(value: int)    -> abi::I8     errors AbiIntegerBelowRange, AbiIntegerAboveRange
-abi::i16(value: int)   -> abi::I16    errors ...
-abi::i32(value: int)   -> abi::I32    errors ...
-abi::i64(value: int)   -> abi::I64    errors ...
-abi::u8(value: int)    -> abi::U8     errors ...
-abi::u16(value: int)   -> abi::U16    errors ...
-abi::u32(value: int)   -> abi::U32    errors ...
-abi::u64(value: int)   -> abi::U64    errors ...
-abi::isize(value: int) -> abi::Isize  errors ...
-abi::usize(value: int) -> abi::Usize  errors ...
+std::abi::i8(value: int)    -> std::abi::I8     errors AbiIntegerBelowRange, AbiIntegerAboveRange
+std::abi::i16(value: int)   -> std::abi::I16    errors ...
+std::abi::i32(value: int)   -> std::abi::I32    errors ...
+std::abi::i64(value: int)   -> std::abi::I64    errors ...
+std::abi::u8(value: int)    -> std::abi::U8     errors ...
+std::abi::u16(value: int)   -> std::abi::U16    errors ...
+std::abi::u32(value: int)   -> std::abi::U32    errors ...
+std::abi::u64(value: int)   -> std::abi::U64    errors ...
+std::abi::isize(value: int) -> std::abi::Isize  errors ...
+std::abi::usize(value: int) -> std::abi::Usize  errors ...
 ```
 
 * Each returns the ABI value representing exactly its argument, or fails
@@ -240,18 +240,18 @@ abi::usize(value: int) -> abi::Usize  errors ...
   **`AbiIntegerAboveRange`** (value > its maximum). Never truncation.
 * **One pair of errors for the whole family**, not twenty: the creator a call
   names already identifies the domain; the error says which bound. This is
-  `byte::from_int`'s and `register64`'s two-error granularity, so callers can
+  `std::byte::from_int`'s and `register64`'s two-error granularity, so callers can
   still treat the two directions differently.
 * The error surface is statically visible: each creator declares both, and
   the call-specific completion proof (STATIC-COMPLETION-PROOFS.md) computes
-  each call's effective set -- `abi::u8(42)` needs no handler,
-  `abi::u8(256)` is a compile-time `KNOWN-ERROR` naming
+  each call's effective set -- `std::abi::u8(42)` needs no handler,
+  `std::abi::u8(256)` is a compile-time `KNOWN-ERROR` naming
   `AbiIntegerAboveRange`, and a dynamic Int must be handled or declared.
-* No `ContractViolation` semantics: a failing `abi::u8(user_input)` is an
+* No `ContractViolation` semantics: a failing `std::abi::u8(user_input)` is an
   ordinary declared error.
-* Direct construction (`abi::U8 {value: x}`) is equally sound without
+* Direct construction (`std::abi::U8 {value: x}`) is equally sound without
   privacy: a named construction must prove each field statically
-  (STRUCTS.md), so `abi::U8 {value: 256}` and `fn wrap(x: int): abi::U8
+  (STRUCTS.md), so `std::abi::U8 {value: 256}` and `fn wrap(x: int): std::abi::U8
   {value: x}` are compile-time TYPE errors.
 
 ### Back to Int: `x.value`
@@ -262,14 +262,14 @@ whole family, returning exactly the Int the value represents (`U8 255 ->
 type and every boundary). It never sign-extends, truncates or reinterprets:
 it reads the one field.
 
-Why not `abi::to_int(x)`: Botlish has no overloading, and one function over
+Why not `std::abi::to_int(x)`: Botlish has no overloading, and one function over
 ten nominal types needs either overloading or a closed-family intrinsic --
 the milestone asked for neither merely to obtain the spelling. Ten
-`abi::i32_to_int` functions would only repeat the projection. The projection
+`std::abi::i32_to_int` functions would only repeat the projection. The projection
 is the smallest coherent interface: no new function, resolved statically by
 the receiver's nominal type, and its static type is the domain
-(`int[U32Value]`), so the proof survives (`abi::usize(u.value)` for `u:
-abi::U64` needs no handler; `byte::from_int(x.value)` for `x: abi::U8` needs
+(`int[U32Value]`), so the proof survives (`std::abi::usize(u.value)` for `u:
+std::abi::U64` needs no handler; `std::byte::from_int(x.value)` for `x: std::abi::U8` needs
 none).
 
 ### Nominal behavior, arithmetic, equality
@@ -277,31 +277,31 @@ none).
 * Parameters are nominal (`abi-numeric-nominal-parameters`): I32 is not U32,
   I64 is not Isize, U64 is not Usize, and a plain Int is not a U32 -- each a
   compile-time TYPE error with the nominal clause above. The explicit route
-  is through Int: `abi::usize(u64_value.value)`.
+  is through Int: `std::abi::usize(u64_value.value)`.
 * No arithmetic or ordering: `+`, `*`, `<` on an ABI value are the ordinary
-  run-time TYPE error any struct operand gets (`+: expected int, got abi::U8
+  run-time TYPE error any struct operand gets (`+: expected int, got std::abi::U8
   {value: 255}`), identically on all four backends. Nothing in the language
   needed to change to prevent it; no implicit `.value` exists.
-* The language's structural equality applies within a type (`abi::u8(1) ==
-  abi::u8(1)`) and never across nominal types, whatever the domains.
+* The language's structural equality applies within a type (`std::abi::u8(1) ==
+  std::abi::u8(1)`) and never across nominal types, whatever the domains.
 * No wrapping, saturating, bitwise, cast, promotion or pointer API exists,
   and none was added.
 
-## Register encoding (lib/abi/x86_64.bot)
+## Register encoding (stdlib/abi/x86_64.bot)
 
 ```botlish
-fn from_i8(value: abi::I8) -> Register64:
+fn from_i8(value: std::abi::I8) -> Register64:
     Register64 {word: value.value}
 # from_i16, from_i32, from_i64, from_isize, from_u8, from_u16, from_u32:
 # the same one line, each typed with its own ABI struct
 
-fn from_u64(value: abi::U64) -> Register64:
+fn from_u64(value: std::abi::U64) -> Register64:
     v = value.value
     if v > 9223372036854775807:
         Register64 {word: v - 18446744073709551616}
     else:
         Register64 {word: v}
-# from_usize: the same, typed abi::Usize
+# from_usize: the same, typed std::abi::Usize
 ```
 
 **Why it is correct.** `Register64` is a 64-bit bit pattern; its `word` holds
@@ -331,17 +331,17 @@ upper half, and still does: `register64(2^64-1)` is `KNOWN-ERROR`), and it is
 never reduced to `0 .. 2^63-1`. `register64(Int)` remains one route into the
 transport, unchanged.
 
-**Bit transport is not interpretation.** `abi::x86_64::to_int` still reads
-every word signed, as raw Linux results need: `to_int(from_u64(abi::u64(2^64
-- 1)))` is `-1`, and `from_u64(abi::u64(2^64-1)) == from_i64(abi::i64(-1))`
+**Bit transport is not interpretation.** `std::abi::x86_64::to_int` still reads
+every word signed, as raw Linux results need: `to_int(from_u64(std::abi::u64(2^64
+- 1)))` is `-1`, and `from_u64(std::abi::u64(2^64-1)) == from_i64(std::abi::i64(-1))`
 (the same bits). No `to_uint64(Register64)` or other reverse API was added.
 
 ### Spelling without overloading
 
 One encoder per ABI type, named for the type it accepts (`from_i32`,
-`from_usize`), exactly as the creator's name selects the domain (`abi::i32`,
-`abi::usize`). Each is an ordinary, nominally typed function: `from_usize`
-does not accept an `abi::U64`, `from_u32` no plain Int (tested). This is not
+`from_usize`), exactly as the creator's name selects the domain (`std::abi::i32`,
+`std::abi::usize`). Each is an ordinary, nominally typed function: `from_usize`
+does not accept an `std::abi::U64`, `from_u32` no plain Int (tested). This is not
 an overload system: there is no dispatch on argument types anywhere, and no
 name means two functions. The caller has an ABI value of a known nominal
 type and names its encoder, just as it names its creator. A
@@ -352,10 +352,10 @@ compiler the family -- the opposite of the brief's preference.
 Within a register literal:
 
 ```botlish
-linux::abi::x86_64::syscall({
-    rax: abi::x86_64::register64(nr),
-    rdi: abi::x86_64::from_i32(fd),
-    rdx: abi::x86_64::from_usize(count),
+std::linux::abi::x86_64::syscall({
+    rax: std::abi::x86_64::register64(nr),
+    rdi: std::abi::x86_64::from_i32(fd),
+    rdx: std::abi::x86_64::from_usize(count),
 })
 ```
 
@@ -407,7 +407,7 @@ cases:
 An ABI value is, physically, its one Int field: a tagged 64-bit word in a
 register (an immediate for `-2^62 <= v <= 2^62 - 1`, a static constant for
 a literal, otherwise a BigInt pointer), the struct erased by the existing
-struct scalar replacement. CLIF of a constant creator instance (`abi::i32` called with 42):
+struct scalar replacement. CLIF of a constant creator instance (`std::abi::i32` called with 42):
 
 ```
 function u0:64(i64, i64) -> i64 system_v {      ; (vm, value)
@@ -420,10 +420,10 @@ block0:
 }
 ```
 
-`fn f(x: abi::U8)` receives `x.0` (the field) in a register; `x.value + 1`
+`fn f(x: std::abi::U8)` receives `x.0` (the field) in a register; `x.value + 1`
 is raw machine arithmetic (`runbox`, `riadd`, `rbox`) because `0..255`
 survived into native lowering (`abi-numeric-typed-parameter-is-raw`). This is
-not a calling convention: nothing says an `abi::I32` is a 32-bit slot, and a
+not a calling convention: nothing says an `std::abi::I32` is a 32-bit slot, and a
 closed instance may receive a constant or a raw word; machine meaning begins
 only at `from_*`.
 
@@ -435,14 +435,14 @@ native backend:
 
 | expression | creator instance | encoder instance | allocations |
 |---|---|---|---|
-| `abi::i32(42).value` | `retmulti %0` | -- | 0 |
-| `abi::u32(42).value` | `retmulti %0` | -- | 0 |
-| `abi::i64(-1).value` | `retmulti %0` | -- | 0 |
-| `abi::u64(42).value` | `retmulti %0` | -- | 0 |
-| `to_int(from_i32(abi::i32(42)))` | `retmulti %0` | `retmulti %0` | 0 |
-| `to_int(from_u32(abi::u32(4294967295)))` | `retmulti %0` | `retmulti %0` | 0 |
-| `to_int(from_u64(abi::u64(18446744073709551615)))` | `retmulti %0` | `igt`, `isub` | 0 |
-| `to_int(from_u64(abi::u64(9223372036854775808)))` | `retmulti %0` | `igt`, `isub` | 1001 BigInt |
+| `std::abi::i32(42).value` | `retmulti %0` | -- | 0 |
+| `std::abi::u32(42).value` | `retmulti %0` | -- | 0 |
+| `std::abi::i64(-1).value` | `retmulti %0` | -- | 0 |
+| `std::abi::u64(42).value` | `retmulti %0` | -- | 0 |
+| `to_int(from_i32(std::abi::i32(42)))` | `retmulti %0` | `retmulti %0` | 0 |
+| `to_int(from_u32(std::abi::u32(4294967295)))` | `retmulti %0` | `retmulti %0` | 0 |
+| `to_int(from_u64(std::abi::u64(18446744073709551615)))` | `retmulti %0` | `igt`, `isub` | 0 |
+| `to_int(from_u64(std::abi::u64(9223372036854775808)))` | `retmulti %0` | `igt`, `isub` | 1001 BigInt |
 
 * **Wrappers allocate nothing** (no `structnew` anywhere in these programs).
 * **Proven checks disappear**: a constant creator instance has no
@@ -453,7 +453,7 @@ native backend:
   constant (no run-time arithmetic).
 * **Provably invalid constants** are compile-time `KNOWN-ERROR`s through the
   existing completion proof (no ABI constant evaluator).
-* `abi::i64(-1)`: the literal `-1` is source `0 - 1`, lowered (as for any
+* `std::abi::i64(-1)`: the literal `-1` is source `0 - 1`, lowered (as for any
   small negative literal) to one raw subtraction and a box -- no allocation.
 * The unspecialized baseline (`-specialize 0`, `cranelift-generic`)
   materializes one struct per ABI value that crosses a call, as it does for
@@ -463,7 +463,7 @@ native backend:
 
 * `U64` values `2^63 .. 2^64-1` are ordinary arbitrary-precision Ints: a
   literal is a static BigInt constant (never allocated), a computed one a
-  heap BigInt, exactly as before (`abi::u64(2^64-1).value + 1` is `2^64`).
+  heap BigInt, exactly as before (`std::abi::u64(2^64-1).value + 1` is `2^64`).
 * `U64(2^64-1)` needs no BigInt *allocation* anywhere: the constant is
   static, and its word `-1` is a small Int (`from_u64`'s BigInt subtraction
   returns an immediate).
@@ -478,12 +478,12 @@ native backend:
 ### Optimization frontier (remaining avoidable overhead)
 
 1. **Struct field facts do not reach a closed instance.** The encoder
-   instance is selected by its parameter's type (`instance="abi::U64"`), and
+   instance is selected by its parameter's type (`instance="std::abi::U64"`), and
    range analysis tracks Int bindings only, so inside `from_u64` the value is
    known to be in `0..2^64-1`, not to be the caller's constant. Its `if v >
    2^63-1` therefore runs (one BigInt comparison through the runtime's slow
    path) and, on the upper-half path, one BigInt `isub`, even for
-   `from_u64(abi::u64(2^64-1))`. `from_usize` is the same. Removing this
+   `from_u64(std::abi::u64(2^64-1))`. `from_usize` is the same. Removing this
    needs per-field Range facts carried through struct construction, call
    results and instance entry (or a semantic instance keyed on field facts) --
    a general range-analysis extension, not an ABI rule, and deliberately not
@@ -493,8 +493,8 @@ native backend:
    would make constant cases static constants; a dynamic word in that range
    would still be boxed unless a raw `i64` transport representation reached
    the syscall operand.
-3. **Comparisons with big bounds are helper calls.** A dynamic `abi::i64` or
-   `abi::isize` creation (both bounds), and `abi::u64` or `abi::usize`
+3. **Comparisons with big bounds are helper calls.** A dynamic `std::abi::i64` or
+   `std::abi::isize` creation (both bounds), and `std::abi::u64` or `std::abi::usize`
    (the upper bound), compares against a static BigInt constant; the native
    fast path needs both operands to be small Ints, so each such comparison
    is a run-time helper call even for a small argument (the previous
@@ -517,15 +517,15 @@ creators or in signed/narrow encoders, no allocation.
 
 | file | change | why |
 |---|---|---|
-| `hir/completions.tcl` | the walker's `project` case returns the Range the projected field's declared type implies (`hir::range::ConstrainType`) and records it, as `hir::range::Expr`'s `project` case already does | requirement 20: `fn f(x: abi::U8)` must know `0 <= x.value <= 255` *for the error proof too*; previously only a local bound to the projection carried it |
+| `hir/completions.tcl` | the walker's `project` case returns the Range the projected field's declared type implies (`hir::range::ConstrainType`) and records it, as `hir::range::Expr`'s `project` case already does | requirement 20: `fn f(x: std::abi::U8)` must know `0 <= x.value <= 255` *for the error proof too*; previously only a local bound to the projection carried it |
 | `hir/range.tcl` | `FactsClause`: a TYPE diagnostic prints `facts: ...` only for an Int-kinded (or kind-less) value; `MismatchClause`: two different named structs get the nominal reason | requirement 32: a nominal mismatch must not read like an Int-range problem |
 | `hir/range.tcl` | the same rule for "function result does not prove declared type" | consistency |
-| `hir/sourcetypes.tcl`, `hir/errordecls.tcl` | `ElsewhereClause`: a duplicate *error* name whose earlier declaration is in another file says where it is, and that error names are program-wide (types are namespace members, IMPORTS.md) | the `abi::x86_64 -> abi` dependency brings the two global error names a program may not know it loaded |
+| `hir/sourcetypes.tcl`, `hir/errordecls.tcl` | `ElsewhereClause`: a duplicate *error* name whose earlier declaration is in another file says where it is, and that error names are program-wide (types are namespace members, IMPORTS.md) | the `std::abi::x86_64 -> abi` dependency brings the two global error names a program may not know it loaded |
 | `surface/modules.tcl` | `ParseModule`: module ASTs cached by `{path, file text}` | the dependency's compile-time cost |
 | `native/src/runtime/syscall.rs` | one Rust unit test (no runtime change) | requirement 27: the bits the kernel receives |
 
 All are general: they apply to every struct field typed with a source
-domain (`byte::Byte` fields included), every named struct mismatch, every
+domain (`std::byte::Byte` fields included), every named struct mismatch, every
 duplicate declaration and every module. No change to `core/`,
 `native/lower.tcl`, the NIR, CLIF generation or the runtime's behavior.
 
@@ -544,7 +544,7 @@ duplicate declaration and every module. No change to `core/`,
   `struct-error-no-implicit-guard` (an `int` or `any` value for a declared
   `str` field: no Int facts).
 * `tests/linux-syscall.test`'s module-binding fixture also copies
-  `lib/abi.bot` (its expectation is unchanged).
+  `stdlib/abi.bot` (its expectation is unchanged).
 
 ### How range facts survive into HIR and analysis
 
@@ -554,8 +554,8 @@ duplicate declaration and every module. No change to `core/`,
   native lowering sees `x.value` in `0..255` (raw arithmetic; check-free
   encoders).
 * `hir/completions.tcl` now does the same, so the call-specific error proof
-  uses it: `abi::u16(x.value)` needs no handler for `x: abi::U8`, and
-  `abi::i8(x.value)` can only fail above.
+  uses it: `std::abi::u16(x.value)` needs no handler for `x: std::abi::U8`, and
+  `std::abi::i8(x.value)` can only fail above.
 * At construction, `hir::range::VerifyStruct` proves the field from the
   creator's comparison narrowing (or the parameter domain in an encoder).
 
@@ -570,10 +570,10 @@ result whatever `CORE_BACKEND` is), and none disturbing a suite-wide
   this target yet separately declared (no parent, not subtypes); the compiler
   knows no ABI type (no native, and no non-comment line of `core/`, `hir/`,
   `native/`, `surface/`, `compiler/` or any Rust source names a member,
-  domain or error, and the only abi natives are `linux::abi::x86_64::syscall` and
+  domain or error, and the only abi natives are `std::linux::abi::x86_64::syscall` and
   the ten generic predicates every source `type` gets); names (a
-  program's own `U8Value` beside `register64` and beside `abi::U8Value`; a
-  real *error* name collision names `lib/abi.bot`; a same-file duplicate
+  program's own `U8Value` beside `register64` and beside `std::abi::U8Value`; a
+  real *error* name collision names `stdlib/abi.bot`; a same-file duplicate
   unchanged).
 * **Boundaries, one test per type, all four backends:** min-1, min, min+1,
   -1, 0, 1, min/2, max/2, max-1, max, max+1, `-2^128`, `2^128`; for U64/Usize
@@ -588,7 +588,7 @@ result whatever `CORE_BACKEND` is), and none disturbing a suite-wide
   each bound, of every domain, is `KNOWN-ERROR` naming exactly that bound's
   error (the complete list the message gives); dynamic Ints must be handled; the
   unhandled obligation is reported at the creator call; field domains survive
-  (`byte::from_int(x.value)` as a direct argument, widening, one-sided
+  (`std::byte::from_int(x.value)` as a direct argument, widening, one-sided
   narrowing); explicit conversion through Int; direct construction needs
   proof.
 * **Nominal:** parameters (with the exact new diagnostic), equality, no
@@ -611,8 +611,8 @@ previous milestone's Rust tests it runs with `cargo test --release`, which CI
 does not run (CI builds the backend and runs the Tcl suites).
 
 `tests/linux-syscall.test` runs unchanged except one fixture line: its
-module-binding test copies `lib/abi/x86_64.bot` into a temporary library
-directory, and now also copies `lib/abi.bot`, which the encoders use.
+module-binding test copies `stdlib/abi/x86_64.bot` into a temporary library
+directory, and now also copies `stdlib/abi.bot`, which the encoders use.
 
 ## Fuzz results
 
@@ -678,10 +678,10 @@ the report's claims) found the bounds, the encoders and the completion
 change's soundness correct. Changed as a result:
 
 * **A regression fixed:** the domain types were first named `U8Value` ...,
-  and because `abi::x86_64` now loads `lib/abi.bot`, a program declaring its
+  and because `std::abi::x86_64` now loads `stdlib/abi.bot`, a program declaring its
   own `type U8Value` (or `error AbiIntegerAboveRange`) and using only
   `register64` stopped compiling, with an error at its own declaration. The
-  types were then `U8Value` ... (now `abi::U8Value`, IMPORTS.md), and the
+  types were then `U8Value` ... (now `std::abi::U8Value`, IMPORTS.md), and the
   dependency's compile-time cost is measured and reduced (module parse
   cache).
 * The mismatch diagnostics print facts only when both sides may be Ints
@@ -698,13 +698,13 @@ change's soundness correct. Changed as a result:
 
 ## Milestone report
 
-1. **Source declarations:** above ("`abi` (lib/abi.bot)"): ten
+1. **Source declarations:** above ("`abi` (stdlib/abi.bot)"): ten
    `type AbiXValue = Int in LO..HI` domains and ten one-field structs
    `struct X: value: AbiXValue`.
-2. **Creators and errors:** `abi::i8 ... abi::usize`, each `(value: int) -> X
+2. **Creators and errors:** `std::abi::i8 ... std::abi::usize`, each `(value: int) -> X
    errors AbiIntegerBelowRange, AbiIntegerAboveRange`.
 3. **Exact ranges:** the table above; U64/Usize include `2^63 .. 2^64-1`.
-4. **Isize/Usize width:** their two domain declarations in `lib/abi.bot`'s
+4. **Isize/Usize width:** their two domain declarations in `stdlib/abi.bot`'s
    marked TARGET-DEPENDENT section, chosen for the only supported target
    (Linux x86-64, 64-bit addresses); the x86-64 layer encodes them at 64
    bits.
@@ -732,7 +732,7 @@ change's soundness correct. Changed as a result:
     `i64` by the syscall helper.
 13. **Register64 representation change:** none.
 14. **Spelling:** one nominally typed encoder per ABI type,
-    `abi::x86_64::from_i8 ... from_usize`; no dispatch on argument types,
+    `std::abi::x86_64::from_i8 ... from_usize`; no dispatch on argument types,
     hence no overloading.
 15. **Native physical representation:** one tagged 64-bit word in a register
     (immediate / static constant / BigInt pointer), struct erased.
@@ -756,7 +756,7 @@ change's soundness correct. Changed as a result:
 23. **Optimizer limitations discovered:** the frontier above (struct field
     facts, upper-half BigInt words, comparisons with big static bounds as
     helper calls, struct-bodied functions not inlined), plus: the completion proof leaves a counted loop's induction variable
-    unseeded (deliberately, `hir/completions.tcl`), so `abi::u8(i)` in
+    unseeded (deliberately, `hir/completions.tcl`), so `std::abi::u8(i)` in
     `loop i from 0 to 256:` needs a handler although `hir/range.tcl` proves
     `i` in `0..255`; and arithmetic on a struct is a run-time, not a
     compile-time, TYPE error.
@@ -764,15 +764,15 @@ change's soundness correct. Changed as a result:
     * *Private/trusted construction.* ABI numerics and Register64 are sound
       without privacy because every in-domain value is valid. A view
       (`{address, length}`) is not: arbitrary construction forges pointers.
-      `abi::bytes::Bytes` needs a construction only trusted code can perform.
+      `std::abi::bytes::Bytes` needs a construction only trusted code can perform.
     * *Struct field facts.* A view's length will typically be an
-      `abi::Usize` field; checks against it (and the frontier above) need
+      `std::abi::Usize` field; checks against it (and the frontier above) need
       field facts that flow through constructions and calls.
     * *Global names.* Every new error adds a global name (as
       `AbiInteger*Range` do); domain types are namespace members now
-      (`abi::I8Value`...), but `error` declarations are not yet namespaced,
+      (`std::abi::I8Value`...), but `error` declarations are not yet namespaced,
       which would keep a growing ABI layer from colliding with programs.
-    * *Counted-loop proofs.* Index/length loops that convert to `abi::Usize`
+    * *Counted-loop proofs.* Index/length loops that convert to `std::abi::Usize`
       will want the completion proof to seed the induction variable.
     * *The bound-register-struct frontier* (LINUX-X86-64-SYSCALL.md) still
       applies to wrapper code that binds a register literal to a variable.

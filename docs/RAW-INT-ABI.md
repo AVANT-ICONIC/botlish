@@ -70,7 +70,7 @@ every raw region has) does not count as a competing use.
   12,799 (+67) → **12,732 (+0)**, `csv_geometric` 7,578 → 7,597 (+19) →
   **7,578**, `csv_records` 23,245 → 23,204 → 23,234; and no program is larger
   than the tagged baseline except `uri-steady` (+9 bytes, a mixed-parameter
-  frontier in `web::is_unreserved`, see *Known limitations*). The price of the
+  frontier in `std::web::is_unreserved`, see *Known limitations*). The price of the
   boxed-mixed default is that the preliminary milestone's size gains in
   programs whose parameters mix raw and tagged uses shrink (`matmul` −223 → −51
   bytes, `lex-strategy` −40 → 0): see *Updated corpus code-size result*.
@@ -685,7 +685,7 @@ is the program; `disabled` is `-raw-int-abi-opt 0`; `unsupported-completion`
 and `variant-budget` do not occur: errors are supported and there is no
 per-call variant). The functions that gain raw positions are listed per program
 in `census.txt` (`-detail`); notable ones: `fib<int>` (both), `loop-count`'s
-`work` (both) and `drive` (param), `byte::nibble` (both), the `ascii::is_*`
+`work` (both) and `drive` (param), `std::byte::nibble` (both), the `std::ascii::is_*`
 predicates (param), `ht_*_state` constants and `ht_capacity` (result), the
 `matmul` `dot`/`product_row`/`product_rows` (params).
 
@@ -843,7 +843,7 @@ mixed-kept-raw policy (C) 53 / 6 / 1 / 51 (22 / 29):
 Call edges (emitted NIR): off — tagged→tagged 309; **on (D) — raw→raw 11,
 tagged→raw 10, raw→tagged 3, tagged→tagged 285** (B: 24 / 48 / 18 / 219).
 The surviving raw positions are the ones every consumer of which is raw:
-`fib<int>` (parameter and result), the `ascii::is_*` predicates' `b`,
+`fib<int>` (parameter and result), the `std::ascii::is_*` predicates' `b`,
 `check`/`dot`/`drive`/`work`/`refined_sum` loop parameters, `ht_rehash_scan
 .oldCapacity`, `row_fill.field_count`.
 
@@ -860,7 +860,7 @@ Reasons: `eligible-fits-small` (every row above is eligible), then either
 `suppressed-no-raw-demand` (the 3 parameters `ht_alloc.capacity` and
 `geo_new_capacity.capacity` ×2, and the 17 results `ht_min_capacity`,
 `ht_empty_state`, `ht_occupied_state`, `ht_tombstone_state` ×2 programs each,
-`byte::from_int`, `byte::nibble`, `high_nibble` ×2 each, `chunk_size`,
+`std::byte::from_int`, `std::byte::nibble`, `high_nibble` ×2 each, `chunk_size`,
 `scan_while`, `work`) or `suppressed-mixed-tagged-use` (34 parameters, 5
 results: `high_nibble` ×2, `ht_capacity` ×2, `scan_while`). `out/demand.txt`
 lists every position with its trace. Parameters are mostly *mixed* (a bounded
@@ -1160,7 +1160,7 @@ Tcl 9.0.1, Linux x86-64, release native backend, final tree.
   not representation; recorded for the machine-code audit.
 * **A boxed position cascades through transport.** A parameter that flows into a
   boxed parameter, or a result whose consumer is boxed, is itself boxed, so one
-  tagged use can un-raw a chain (`web::is_unreserved.b` → `ascii::is_alphanumeric.b`
+  tagged use can un-raw a chain (`std::web::is_unreserved.b` → `std::ascii::is_alphanumeric.b`
   is the `uri-steady` case: the raw predicates keep their raw parameter, the
   mixed caller boxes its own and unboxes once at the call, +3 bytes).
 * **The demand pass approximates lowering's raw consumers from HIR and Ranges.**

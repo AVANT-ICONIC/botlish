@@ -62,13 +62,13 @@ test native-lockstep-rejected-unequal {a lockstep loop proven unequal raises LOC
 
 test native-lockstep-rejected-only-when-reached {the diagnostic is raised when the loop is reached, not before: an untaken branch holding a rejected loop runs normally (natively the program used to give the same value, which this pins)} -body {
     parity {
-        import list
+        import std::list
         fn u(xs, go):
             if go:
                 loop x in xs and i from 0 to 3:
                     x + i
             else:
-                [list::length(xs)]
+                [std::list::length(xs)]
         [u([1, 2, 3], false), u([4], false)]
     }
 } -result {value {[[3], [1]]}}

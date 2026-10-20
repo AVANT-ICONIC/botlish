@@ -186,19 +186,17 @@ proc parseError {source} {
     return parsed
 }
 
-# Modules: a scratch library directory (as in surface-modules.test).
-proc withScratchLibrary {script} {
-    set saved $::core::libraryDir
-    set dir [tcltest::makeDirectory destructuring-scratch-[pid]-[incr ::scratchLibraryCounter]]
-    set ::core::libraryDir $dir
+# Modules: a scratch application directory, whose module files are the
+# application modules of an entry file written there.
+proc withScratchApplication {script} {
+    set dir [tcltest::makeDirectory destructuring-scratch-[pid]-[incr ::scratchApplicationCounter]]
     try {
         uplevel 1 [list apply [list {dir} $script] $dir]
     } finally {
-        set ::core::libraryDir $saved
         tcltest::removeDirectory [file tail $dir]
     }
 }
-set ::scratchLibraryCounter 0
+set ::scratchApplicationCounter 0
 
 proc writeModule {dir name content} {
     set path [file join $dir $name.bot]
@@ -414,11 +412,11 @@ test destructure-list-struct-syntax-on-list-source-is-not-list-policy {`{a} = so
 
 test destructure-list-ordinary-list-uses {a List literal followed by `=` anywhere else keeps its meaning} -body {
     list [parity "xs = \[1, 2\]\nys = \[3\]\n\[xs, ys\]"] [parity "\[1, 2\] == \[1, 2\]"] \
-        [parity "x = \[1\] == \[1\]\nx"] [parity "import list\nxs = \[\{a: 1\}\]\n\{a\} = list::at(xs, 0)\na"]
+        [parity "x = \[1\] == \[1\]\nx"] [parity "import std::list\nxs = \[\{a: 1\}\]\n\{a\} = std::list::at(xs, 0)\na"]
 } -result {{value {[[1, 2], [3]]}} {value true} {value true} {value 1}}
 
 test destructure-list-indexing-unchanged {List indexing is still an ordinary call, in both spellings} -body {
-    bothSpellings "import list\nat = list::at\nxs = \[10, 20, 30\]\nxs.at(1)" "import list\nxs = \[10, 20, 30\]\nlist::at(xs, 1)"
+    bothSpellings "import std::list\nat = std::list::at\nxs = \[10, 20, 30\]\nxs.at(1)" "import std::list\nxs = \[10, 20, 30\]\nstd::list::at(xs, 1)"
 } -result {value 20}
 
 test destructure-list-bad-assignment-targets-unchanged {other things before `=` keep their old error} -body {
@@ -692,13 +690,13 @@ test destructure-field-order-is-not-layout {the pattern's order and the declarat
 } -result {{value {[1, 2, 3]}} {value {[1, 2, 3]}} {value {[1, 2, 3]}} {value {[1, 3]}}}
 
 test destructure-fields-of-different-types {heterogeneous results are the point: fields of different types come out as ordinary typed values} -body {
-    parity "import list\nimport str\n\{n, s, xs, p\} = \{n: 3, s: \"text\", xs: \[1, 2\], p: \{q: true\}\}\n\[n + 1, str::length(s), list::length(xs), p.q\]"
+    parity "import std::list\nimport std::str\n\{n, s, xs, p\} = \{n: 3, s: \"text\", xs: \[1, 2\], p: \{q: true\}\}\n\[n + 1, std::str::length(s), std::list::length(xs), p.q\]"
 } -result {value {[4, 4, 2, true]}}
 
 # ---------------------------------------------------------------------------
 # Evaluate the source once
 
-set ::countDecls {import mutable_array
+set ::countDecls {import std::mutable_array
 struct Rec:
     a: int
     b: str
@@ -706,15 +704,15 @@ struct Rec:
 context struct Log:
     digits: MutableArray[int]
 fn bump(id: int, v: int, context log: Log) -> int:
-    n = mutable_array::get(log.digits, 0, 0)
-    mutable_array::set(log.digits, 0, n * 10 + id):
+    n = std::mutable_array::get(log.digits, 0, 0)
+    std::mutable_array::set(log.digits, 0, n * 10 + id):
         on IndexNotFound:
             unit
     v
 fn logged(context log: Log) -> int:
-    mutable_array::get(log.digits, 0, 0)
+    std::mutable_array::get(log.digits, 0, 0)
 fn reset(context log: Log) -> unit:
-    mutable_array::set(log.digits, 0, 0):
+    std::mutable_array::set(log.digits, 0, 0):
         on IndexNotFound:
             unit
     unit
@@ -722,7 +720,7 @@ fn mk_named() -> Rec:
     Rec {a: bump(1, 1), b: "x", c: bump(2, 3)}
 fn mk_anon():
     {a: bump(1, 1), b: "x", c: bump(2, 3)}
-with context Log {digits: mutable_array::create(1, 0)}
+with context Log {digits: std::mutable_array::create(1, 0)}
 }
 
 foreach {name destructured explicit expected} {
@@ -841,7 +839,7 @@ test destructure-once-not-per-field {destructuring is not a.f; b.f with the sour
 # Bindings are values, not references into the source struct
 
 test destructure-bound-mutable-value-is-the-same-value {a field holding a MutableArray: the binding is a logical copy of the field's array (MUTABLE-ARRAY.md: an array is a value), so a write through either name is never seen through the other} -body {
-    set program "import mutable_array\nstruct Holder:\n    items: MutableArray\[int\]\n    n: int\nfn run():\n    h = Holder \{items: mutable_array::create(2, 0), n: 1\}\n    \{items\} = h\n    a = mutable_array::set(items, 0, 5):\n        on IndexNotFound:\n            unit\n    b = mutable_array::set(h.items, 1, 6):\n        on IndexNotFound:\n            unit\n    \[mutable_array::get(h.items, 0, -1), mutable_array::get(items, 0, -1), mutable_array::get(h.items, 1, -1), mutable_array::get(items, 1, -1)\]\nrun()"
+    set program "import std::mutable_array\nstruct Holder:\n    items: MutableArray\[int\]\n    n: int\nfn run():\n    h = Holder \{items: std::mutable_array::create(2, 0), n: 1\}\n    \{items\} = h\n    a = std::mutable_array::set(items, 0, 5):\n        on IndexNotFound:\n            unit\n    b = std::mutable_array::set(h.items, 1, 6):\n        on IndexNotFound:\n            unit\n    \[std::mutable_array::get(h.items, 0, -1), std::mutable_array::get(items, 0, -1), std::mutable_array::get(h.items, 1, -1), std::mutable_array::get(items, 1, -1)\]\nrun()"
     parity $program
 } -result {value {[0, 5, 6, 0]}}
 
@@ -898,15 +896,15 @@ a = tmp.a}
     x
 tmp = f
 a = tmp.a}
-    native-source   {import list
-{a} = list::length}
-                    {import list
-tmp = list::length
+    native-source   {import std::list
+{a} = std::list::length}
+                    {import std::list
+tmp = std::list::length
 a = tmp.a}
-    mutarray-source {import mutable_array
-{a} = mutable_array::create(1, 0)}
-                    {import mutable_array
-tmp = mutable_array::create(1, 0)
+    mutarray-source {import std::mutable_array
+{a} = std::mutable_array::create(1, 0)}
+                    {import std::mutable_array
+tmp = std::mutable_array::create(1, 0)
 a = tmp.a}
     unknown-shape   {fn first(x):
     {a} = x
@@ -1422,7 +1420,7 @@ fn run(r):
     fs
 run({n: 4})}
                  {value {[4, 5]}}
-    capture-two-closures {import list
+    capture-two-closures {import std::list
 fn make(r):
     {n} = r
     fn get():
@@ -1431,8 +1429,8 @@ fn make(r):
         n + k
     [get, bump]
 fs = make({n: 7})
-[list::at(fs, 0)(), list::at(fs, 1)(1)]}
-                 {import list
+[std::list::at(fs, 0)(), std::list::at(fs, 1)(1)]}
+                 {import std::list
 fn make(r):
     t = r
     n = t.n
@@ -1442,7 +1440,7 @@ fn make(r):
         n + k
     [get, bump]
 fs = make({n: 7})
-[list::at(fs, 0)(), list::at(fs, 1)(1)]}
+[std::list::at(fs, 0)(), std::list::at(fs, 1)(1)]}
                  {value {[7, 8]}}
     capture-nested {fn make(r):
     {u: {a, b}} = r
@@ -1491,14 +1489,14 @@ make(W {inner: K {k: 9}})()}
 # ---------------------------------------------------------------------------
 # Interoperation with method sugar and elif
 
-set ::sugarFns {import list
+set ::sugarFns {import std::list
 fn list_sum(xs):
     total = 0
     loop x in xs:
         total
-    list::length(xs)
+    std::list::length(xs)
 fn visible(items, n):
-    list::length(items) + n
+    std::list::length(items) + n
 }
 
 test destructure-method-sugar {a destructured binding is an ordinary receiver} -body {
@@ -1510,7 +1508,7 @@ test destructure-method-sugar-source {a method-call source destructures like any
 } -result {value {[5, 6]}}
 
 test destructure-method-sugar-library {a library call through a destructured List binding} -body {
-    bothSpellings "import list\n\{xs\} = \{xs: \[3, 1, 2\]\}\nxs.length()" "import list\nt = \{xs: \[3, 1, 2\]\}\nxs = t.xs\nlist::length(xs)"
+    bothSpellings "import std::list\n\{xs\} = \{xs: \[3, 1, 2\]\}\nxs.length()" "import std::list\nt = \{xs: \[3, 1, 2\]\}\nxs = t.xs\nstd::list::length(xs)"
 } -result {value 3}
 
 test destructure-method-sugar-field-callable {a field holding a function is still called as a field value (no sugar, no ambiguity)} -body {
@@ -1576,7 +1574,7 @@ test destructure-nested-struct-field-is-struct-only {a field that is not a struc
 # Modules (a top-level destructure is not allowed in a module)
 
 test destructure-module-top-level-rejected {a module-level destructure is rejected with a clear reason: module bindings are context-free immutable values and no struct value is one, so the explicit spelling is rejected too (MODULE-CONTEXT)} -body {
-    withScratchLibrary {
+    withScratchApplication {
         set results {}
         foreach body [list "\{lo, hi: top\} = \{lo: 3, hi: 9, mid: 6\}\n" "t = \{lo: 3, hi: 9, mid: 6\}\nlo = t.lo\ntop = t.hi\n"] {
             writeModule $dir pair "$body"
@@ -1589,7 +1587,7 @@ test destructure-module-top-level-rejected {a module-level destructure is reject
 } -result {{SURFACE MODULE INVALID-TOPLEVEL} {CORE SEMANTIC MODULE-CONTEXT}}
 
 test destructure-module-top-level-message {the module-level rejection names the reason and the way out} -body {
-    withScratchLibrary {
+    withScratchApplication {
         writeModule $dir pair "\{lo\} = \{lo: 3\}\n"
         set main [writeMain $dir "import pair\npair::lo\n"]
         catch {surface::readProgramFile $main} message
@@ -1599,7 +1597,7 @@ test destructure-module-top-level-message {the module-level rejection names the 
 } -result {1 1}
 
 test destructure-module-destructure-in-function {a destructure inside a module's function} -body {
-    withScratchLibrary {
+    withScratchApplication {
         writeModule $dir geo {fn area(r):
     {w, h} = r
     w * h
@@ -1613,7 +1611,7 @@ geo::area({w: 6, h: 7, tag: "x"})
 } -result {42 42 42 42}
 
 test destructure-module-struct-source {a struct declared in a module is destructurable by its fields} -body {
-    withScratchLibrary {
+    withScratchApplication {
         writeModule $dir geo {struct Point:
     x: int
     y: int
@@ -1628,7 +1626,7 @@ test destructure-module-struct-source {a struct declared in a module is destruct
 } -result {{[3, 4]} {[3, 4]} {[3, 4]} {[3, 4]}}
 
 test destructure-module-statements-still-restricted {other statements stay forbidden at module top level} -body {
-    withScratchLibrary {
+    withScratchApplication {
         writeModule $dir bad {x = 1
 if true:
     y = 2
@@ -1708,7 +1706,7 @@ test destructure-value-bindings-still-work {a destructure followed by more state
 } -result {value 3}
 
 test destructure-value-statement-order {the unit comes after the bindings and before the next statement: the statements around it keep their order} -body {
-    parity "import mutable_array\ncontext struct Log:\n    digits: MutableArray\[int\]\nfn bump(id: int, v: int, context log: Log) -> int:\n    n = mutable_array::get(log.digits, 0, 0)\n    mutable_array::set(log.digits, 0, n * 10 + id):\n        on IndexNotFound:\n            unit\n    v\nfn logged(context log: Log) -> int:\n    mutable_array::get(log.digits, 0, 0)\nfn reset(context log: Log) -> unit:\n    mutable_array::set(log.digits, 0, 0):\n        on IndexNotFound:\n            unit\n    unit\nwith context Log \{digits: mutable_array::create(1, 0)\}\nfn run():\n    reset()\n    x = bump(1, 5)\n    \{a, b\} = \{a: bump(2, 1), b: bump(3, 2)\}\n    y = bump(4, 7)\n    \[x, a, b, y, logged()\]\nrun()"
+    parity "import std::mutable_array\ncontext struct Log:\n    digits: MutableArray\[int\]\nfn bump(id: int, v: int, context log: Log) -> int:\n    n = std::mutable_array::get(log.digits, 0, 0)\n    std::mutable_array::set(log.digits, 0, n * 10 + id):\n        on IndexNotFound:\n            unit\n    v\nfn logged(context log: Log) -> int:\n    std::mutable_array::get(log.digits, 0, 0)\nfn reset(context log: Log) -> unit:\n    std::mutable_array::set(log.digits, 0, 0):\n        on IndexNotFound:\n            unit\n    unit\nwith context Log \{digits: std::mutable_array::create(1, 0)\}\nfn run():\n    reset()\n    x = bump(1, 5)\n    \{a, b\} = \{a: bump(2, 1), b: bump(3, 2)\}\n    y = bump(4, 7)\n    \[x, a, b, y, logged()\]\nrun()"
 } -result {value {[5, 1, 2, 7, 1234]}}
 
 test destructure-value-ordinary-binding-unchanged {an ordinary binding is not changed to unit to match the destructure: as the last statement it still yields its value} -body {
@@ -1788,9 +1786,9 @@ test destructure-value-evaluate-once {the source of a destructure that is the la
 } -result {{value 12} {value {[12]}}}
 
 test destructure-value-mutable-field-still-same-value {a MutableArray field: the binding is a logical copy (a write to it leaves the field unchanged), and a destructure that ends the body is unit} -body {
-    set decls "import mutable_array\nstruct Holder:\n    items: MutableArray\[int\]\n    n: int\n"
-    list [parity "${decls}fn run():\n    h = Holder \{items: mutable_array::create(2, 0), n: 1\}\n    \{items\} = h\nrun()"] \
-        [parity "${decls}fn run():\n    h = Holder \{items: mutable_array::create(2, 0), n: 1\}\n    \{items\} = h\n    a = mutable_array::set(items, 0, 5):\n        on IndexNotFound:\n            unit\n    \[mutable_array::get(h.items, 0, -1), mutable_array::get(items, 0, -1)\]\nrun()"]
+    set decls "import std::mutable_array\nstruct Holder:\n    items: MutableArray\[int\]\n    n: int\n"
+    list [parity "${decls}fn run():\n    h = Holder \{items: std::mutable_array::create(2, 0), n: 1\}\n    \{items\} = h\nrun()"] \
+        [parity "${decls}fn run():\n    h = Holder \{items: std::mutable_array::create(2, 0), n: 1\}\n    \{items\} = h\n    a = std::mutable_array::set(items, 0, 5):\n        on IndexNotFound:\n            unit\n    \[std::mutable_array::get(h.items, 0, -1), std::mutable_array::get(items, 0, -1)\]\nrun()"]
 } -result {{value unit} {value {[0, 5]}}}
 
 test destructure-value-bindings-are-values {the result being unit does not turn the bindings into references: a binding keeps its value when a later struct is destructured} -body {
@@ -1944,7 +1942,7 @@ proc executableValue {text} {
     }
 }
 
-set ::typedDestructured {import mutable_array
+set ::typedDestructured {import std::mutable_array
 struct Acc:
     total: int
     count: int
@@ -1952,14 +1950,14 @@ struct Acc:
 context struct Log:
     digits: MutableArray[int]
 fn logged(context log: Log) -> int:
-    mutable_array::get(log.digits, 0, 0)
+    std::mutable_array::get(log.digits, 0, 0)
 fn reset(context log: Log) -> unit:
-    mutable_array::set(log.digits, 0, 0):
+    std::mutable_array::set(log.digits, 0, 0):
         on IndexNotFound:
             unit
     unit
 fn probe(id: int, result: int, context log: Log) -> int:
-    mutable_array::set(log.digits, 0, logged() * 10 + id):
+    std::mutable_array::set(log.digits, 0, logged() * 10 + id):
         on IndexNotFound:
             unit
     result
@@ -1969,9 +1967,9 @@ fn run(n: int) -> int:
     reset()
     {total, last: l} = step(n)
     total * 1000 + l * 100 + logged()
-with context Log {digits: mutable_array::create(1, 0)}
+with context Log {digits: std::mutable_array::create(1, 0)}
 [run(1), run(20)]}
-set ::typedExplicit {import mutable_array
+set ::typedExplicit {import std::mutable_array
 struct Acc:
     total: int
     count: int
@@ -1979,14 +1977,14 @@ struct Acc:
 context struct Log:
     digits: MutableArray[int]
 fn logged(context log: Log) -> int:
-    mutable_array::get(log.digits, 0, 0)
+    std::mutable_array::get(log.digits, 0, 0)
 fn reset(context log: Log) -> unit:
-    mutable_array::set(log.digits, 0, 0):
+    std::mutable_array::set(log.digits, 0, 0):
         on IndexNotFound:
             unit
     unit
 fn probe(id: int, result: int, context log: Log) -> int:
-    mutable_array::set(log.digits, 0, logged() * 10 + id):
+    std::mutable_array::set(log.digits, 0, logged() * 10 + id):
         on IndexNotFound:
             unit
     result
@@ -1998,7 +1996,7 @@ fn run(n: int) -> int:
     total = tmp.total
     l = tmp.last
     total * 1000 + l * 100 + logged()
-with context Log {digits: mutable_array::create(1, 0)}
+with context Log {digits: std::mutable_array::create(1, 0)}
 [run(1), run(20)]}
 
 test destructure-standalone-executable {the standalone executables of both spellings print the value every in-process backend computes} -constraints executableAot -body {

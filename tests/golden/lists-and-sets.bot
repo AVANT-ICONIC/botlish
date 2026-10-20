@@ -1,24 +1,24 @@
 # lists-and-sets.bot -- immutable Lists and Sets as values: the source-level
 # specification of
 #
-#   * the list primitives list::length, list::at and list::append (a nested
+#   * the list primitives std::list::length, std::list::at and std::list::append (a nested
 #     List counts once, at returns the element itself, append returns a new
 #     List and leaves its argument unchanged, an index outside the List is the
 #     declared IndexNotFound);
 #   * the list library's searches and reductions any?, all?, none? and find
-#     (lib/list.bot): their empty-List cases, left-to-right short-circuiting,
-#     find's checked list::NotFound, Botlish and native predicates;
+#     (stdlib/list.bot): their empty-List cases, left-to-right short-circuiting,
+#     find's checked std::list::NotFound, Botlish and native predicates;
 #   * ImmutableSet[T]: the applied type (arity, unknown element types, a
 #     non-constructor, structural identity, invariance in its element type,
 #     erasure through untyped and broad helpers, typed callables, declared
 #     results), and the value (membership, deduplication, order-independent
 #     equality that is never List equality, nested Lists and Sets as members,
 #     a member nothing compares, String and List members natively);
-#   * byte::set(List[UnicodeChar]) -> ImmutableSet[Byte] (lib/byte.bot): a
+#   * std::byte::set(List[UnicodeChar]) -> ImmutableSet[Byte] (stdlib/byte.bot): a
 #     character's Unicode scalar value (never its UTF-8 bytes), Byte's
-#     boundaries, the declared byte::AboveRange past them, its static input
+#     boundaries, the declared std::byte::AboveRange past them, its static input
 #     contract, and the generic checked-domain construction it is built on;
-#   * the equality-total forms of immutable_set::contains and from_list:
+#   * the equality-total forms of std::immutable_set::contains and from_list:
 #     the values they compute (the opcode choice itself is NIR, Tcl only).
 #
 # Ported from tests/lists.test, tests/list-stdlib.test,
@@ -33,17 +33,17 @@
 # decide (a provably missing index or out-of-range character is KNOWN-ERROR)
 # takes that input as a parameter of its registration function.
 #
-# Imports: compiler and test (the framework), list (list::length, at,
-# append, any?, all?, none?, find, list::NotFound), immutable_set (from_list,
-# contains), byte (byte::set, byte::AboveRange) and str (str::concat for
-# heap-allocated String members, str::is_tcl_alpha as a native predicate).
+# Imports: compiler and test (the framework), list (std::list::length, at,
+# append, any?, all?, none?, find, std::list::NotFound), immutable_set (from_list,
+# contains), byte (std::byte::set, std::byte::AboveRange) and str (std::str::concat for
+# heap-allocated String members, std::str::is_tcl_alpha as a native predicate).
 # No test here is about a missing import or about method-call candidates.
-import byte
-import compiler
-import immutable_set
-import list
-import str
-import test
+import std::byte
+import std::compiler
+import std::immutable_set
+import std::list
+import std::str
+import std::test
 
 # ---------------------------------------------------------------------------
 # Declarations the tests need (top-level only).
@@ -74,7 +74,7 @@ fn make_b() -> SiblingB:
     1
 
 # A locally declared byte domain, the equality-total fixtures' Byte with
-# byteA() and byteB() ($::byteDecl; renamed: byte::Byte is the library's).
+# byteA() and byteB() ($::byteDecl; renamed: std::byte::Byte is the library's).
 type LocalByte = Int in 0..255
 
 fn byteA() -> LocalByte:
@@ -89,62 +89,62 @@ error TooBig
 
 # ---------------------------------------------------------------------------
 # The list primitives (lists.test). The index operands of the failing calls
-# arrive as parameters: list::at with a provably missing constant index is
+# arrive as parameters: std::list::at with a provably missing constant index is
 # KNOWN-ERROR, a handler or not.
 
 fn register_list_primitive_tests(past_one: int, negative: int, first: int, huge: int, past_two: int):
     # lists-1: length counts the top-level elements; a nested List is one.
-    fn b_length() errors compiler::CompilerError:
+    fn b_length() errors std::compiler::CompilerError:
         static compile:
-            [list::length([]), list::length([1, "a", [2, 3]])]
-    test::value("list-length-counts-nested-once", [0, 3], b_length)
+            [std::list::length([]), std::list::length([1, "a", [2, 3]])]
+    std::test::value("list-length-counts-nested-once", [0, 3], b_length)
 
     # lists-2: at returns the element itself, whatever its kind.
-    fn b_at() errors compiler::CompilerError:
+    fn b_at() errors std::compiler::CompilerError:
         static compile:
-            [list::at([7, "a"], 0), list::at([7, "a"], 1), list::at([7, [8]], 1)]
-    test::value("list-at-returns-element-of-any-kind", [7, "a", [8]], b_at)
+            [std::list::at([7, "a"], 0), std::list::at([7, "a"], 1), std::list::at([7, [8]], 1)]
+    std::test::value("list-at-returns-element-of-any-kind", [7, "a", [8]], b_at)
 
     # lists-3: an index past the end, a negative one, any index of the empty
     # List and a BigInt index all fail with the declared IndexNotFound.
-    fn b_at_missing() errors compiler::CompilerError:
+    fn b_at_missing() errors std::compiler::CompilerError:
         static compile:
             fn at_or(xs, i):
-                r = list::at(xs, i):
+                r = std::list::at(xs, i):
                     on IndexNotFound:
                         return "missing"
                 r
             [at_or([1], past_one), at_or([1], negative), at_or([], first), at_or([1], huge)]
-    test::value("list-at-outside-is-index-not-found", ["missing", "missing", "missing", "missing"], b_at_missing)
+    std::test::value("list-at-outside-is-index-not-found", ["missing", "missing", "missing", "missing"], b_at_missing)
 
     # lists-5: append returns a new List, its argument unchanged; a List
     # argument is appended as one element.
-    fn b_append() errors compiler::CompilerError:
+    fn b_append() errors std::compiler::CompilerError:
         static compile:
             xs = [1]
-            ys = list::append(xs, 2)
-            zs = list::append(xs, [3])
+            ys = std::list::append(xs, 2)
+            zs = std::list::append(xs, [3])
             [xs, ys, zs]
-    test::value("list-append-returns-new-list", [[1], [1, 2], [1, [3]]], b_append)
+    std::test::value("list-append-returns-new-list", [[1], [1, 2], [1, [3]]], b_append)
 
     # lists-8: every backend computes the same outcomes, the declared error
     # of a missing index included.
-    fn b_agreement() errors compiler::CompilerError:
+    fn b_agreement() errors std::compiler::CompilerError:
         static compile:
             fn at_or(xs, i):
-                r = list::at(xs, i):
+                r = std::list::at(xs, i):
                     on IndexNotFound:
                         return "IndexNotFound"
                 r
-            [list::at([1, 2], 1), at_or([1, 2], past_two), list::append([1], [2]), list::length(list::append([], 1))]
-    test::value("list-primitives-backend-agreement", [2, "IndexNotFound", [1, [2]], 1], b_agreement)
+            [std::list::at([1, 2], 1), at_or([1, 2], past_two), std::list::append([1], [2]), std::list::length(std::list::append([], 1))]
+    std::test::value("list-primitives-backend-agreement", [2, "IndexNotFound", [1, [2]], 1], b_agreement)
 
     # lists-11: the primitives are named from source.
-    fn b_named() errors compiler::CompilerError:
+    fn b_named() errors std::compiler::CompilerError:
         static compile:
             xs = [1, 2]
-            [list::length(xs), list::at(xs, 1), list::append(xs, 3)]
-    test::value("list-primitives-named-from-source", [2, 2, [1, 2, 3]], b_named)
+            [std::list::length(xs), std::list::at(xs, 1), std::list::append(xs, 3)]
+    std::test::value("list-primitives-named-from-source", [2, 2, [1, 2, 3]], b_named)
 
 # ---------------------------------------------------------------------------
 # The list library's searches and reductions (list-stdlib.test). The table
@@ -153,47 +153,47 @@ fn register_list_primitive_tests(past_one: int, negative: int, first: int, huge:
 # String) if the search ever applied the predicate to it, which would abort
 # the suite rather than fail one test.
 
-# list::any?(XS, is_even) must be EXPECTED.
+# std::list::any?(XS, is_even) must be EXPECTED.
 fn register_any_case(name: str, xs, expected: bool):
-    fn b_any() errors compiler::CompilerError:
+    fn b_any() errors std::compiler::CompilerError:
         static compile:
             fn is_even(x):
                 mod(x, 2) == 0
-            list::any?(xs, is_even)
-    test::value(name, expected, b_any)
+            std::list::any?(xs, is_even)
+    std::test::value(name, expected, b_any)
 
-# list::all?(XS, is_even) must be EXPECTED.
+# std::list::all?(XS, is_even) must be EXPECTED.
 fn register_all_case(name: str, xs, expected: bool):
-    fn b_all() errors compiler::CompilerError:
+    fn b_all() errors std::compiler::CompilerError:
         static compile:
             fn is_even(x):
                 mod(x, 2) == 0
-            list::all?(xs, is_even)
-    test::value(name, expected, b_all)
+            std::list::all?(xs, is_even)
+    std::test::value(name, expected, b_all)
 
-# list::none?(XS, is_even) must be EXPECTED.
+# std::list::none?(XS, is_even) must be EXPECTED.
 fn register_none_case(name: str, xs, expected: bool):
-    fn b_none() errors compiler::CompilerError:
+    fn b_none() errors std::compiler::CompilerError:
         static compile:
             fn is_even(x):
                 mod(x, 2) == 0
-            list::none?(xs, is_even)
-    test::value(name, expected, b_none)
+            std::list::none?(xs, is_even)
+    std::test::value(name, expected, b_none)
 
-# list::find(XS, is_even) must be EXPECTED, "NotFound" standing for the
-# checked list::NotFound (find has no sentinel result).
+# std::list::find(XS, is_even) must be EXPECTED, "NotFound" standing for the
+# checked std::list::NotFound (find has no sentinel result).
 fn register_find_case(name: str, xs, expected):
-    fn b_find() errors compiler::CompilerError:
+    fn b_find() errors std::compiler::CompilerError:
         static compile:
             fn is_even(x):
                 mod(x, 2) == 0
             fn find_or(ys):
-                r = list::find(ys, is_even):
-                    on list::NotFound:
+                r = std::list::find(ys, is_even):
+                    on std::list::NotFound:
                         return "NotFound"
                 r
             find_or(xs)
-    test::value(name, expected, b_find)
+    std::test::value(name, expected, b_find)
 
 fn register_list_search_tests():
     # Every backend must compute each expected value: list-any-match,
@@ -220,466 +220,466 @@ fn register_list_search_tests():
     register_find_case("list-find-no-match-fails", [1, 3, 5], "NotFound")
     register_find_case("list-find-empty-fails", [], "NotFound")
 
-    # A native predicate, str::is_tcl_alpha, passed as a function value.
-    fn b_any_native() errors compiler::CompilerError:
+    # A native predicate, std::str::is_tcl_alpha, passed as a function value.
+    fn b_any_native() errors std::compiler::CompilerError:
         static compile:
-            list::any?(["1", "a", "2"], str::is_tcl_alpha)
-    test::value("list-any-native-predicate", true, b_any_native)
+            std::list::any?(["1", "a", "2"], std::str::is_tcl_alpha)
+    std::test::value("list-any-native-predicate", true, b_any_native)
 
-    fn b_all_native() errors compiler::CompilerError:
+    fn b_all_native() errors std::compiler::CompilerError:
         static compile:
-            list::all?(["a", "b", "c"], str::is_tcl_alpha)
-    test::value("list-all-native-predicate", true, b_all_native)
+            std::list::all?(["a", "b", "c"], std::str::is_tcl_alpha)
+    std::test::value("list-all-native-predicate", true, b_all_native)
 
-    fn b_find_native() errors compiler::CompilerError:
+    fn b_find_native() errors std::compiler::CompilerError:
         static compile:
-            f = list::find(["1", "2", "a"], str::is_tcl_alpha):
-                on list::NotFound:
+            f = std::list::find(["1", "2", "a"], std::str::is_tcl_alpha):
+                on std::list::NotFound:
                     "none"
             f
-    test::value("list-find-native-predicate", "a", b_find_native)
+    std::test::value("list-find-native-predicate", "a", b_find_native)
 
-    fn b_none_native() errors compiler::CompilerError:
+    fn b_none_native() errors std::compiler::CompilerError:
         static compile:
-            list::none?(["1", "2", "3"], str::is_tcl_alpha)
-    test::value("list-none-native-predicate", true, b_none_native)
+            std::list::none?(["1", "2", "3"], std::str::is_tcl_alpha)
+    std::test::value("list-none-native-predicate", true, b_none_native)
 
 # ---------------------------------------------------------------------------
 # ImmutableSet[T] as a type (immutable-set.test).
 
 fn register_set_type_tests():
     # A bare ImmutableSet takes one type argument.
-    fn b_bare() errors compiler::CompilerError:
+    fn b_bare() errors std::compiler::CompilerError:
         static compile:
             fn f(s: ImmutableSet):
                 1
             1
-    test::rejects("set-type-bare-arity-error", compiler::DiagnosticCode::Type, b_bare)
+    std::test::rejects("set-type-bare-arity-error", std::compiler::DiagnosticCode::Type, b_bare)
 
     # An unknown element type.
-    fn b_unknown_argument() errors compiler::CompilerError:
+    fn b_unknown_argument() errors std::compiler::CompilerError:
         static compile:
             fn f(x: ImmutableSet[Missing]):
                 x
             1
-    test::rejects("set-type-unknown-argument", compiler::DiagnosticCode::Type, b_unknown_argument)
+    std::test::rejects("set-type-unknown-argument", std::compiler::DiagnosticCode::Type, b_unknown_argument)
 
     # An ordinary named type is not a type constructor.
-    fn b_not_constructor() errors compiler::CompilerError:
+    fn b_not_constructor() errors std::compiler::CompilerError:
         static compile:
             fn f(x: Small[int]):
                 x
             1
-    test::rejects("set-type-not-a-constructor", compiler::DiagnosticCode::Type, b_not_constructor)
+    std::test::rejects("set-type-not-a-constructor", std::compiler::DiagnosticCode::Type, b_not_constructor)
 
     # Two independent ImmutableSet[Small] annotations are one structural type.
-    fn b_structural() errors compiler::CompilerError:
+    fn b_structural() errors std::compiler::CompilerError:
         static compile:
             fn make_a() -> ImmutableSet[Small]:
-                immutable_set::from_list([one()])
+                std::immutable_set::from_list([one()])
             fn consume(s: ImmutableSet[Small]) -> int:
                 1
             consume(make_a())
-    test::value("set-type-structural-not-nominal", 1, b_structural)
+    std::test::value("set-type-structural-not-nominal", 1, b_structural)
 
     # ImmutableSet is invariant: Tiny <: Small, yet ImmutableSet[Tiny] is not
     # admissible as ImmutableSet[Small] (rejected at the call) ...
-    fn b_invariant_rejected() errors compiler::CompilerError:
+    fn b_invariant_rejected() errors std::compiler::CompilerError:
         static compile:
             fn tiny_set() -> ImmutableSet[Tiny]:
-                immutable_set::from_list([tiny_one()])
+                std::immutable_set::from_list([tiny_one()])
             fn take_small_set(s: ImmutableSet[Small]):
                 1
             take_small_set(tiny_set())
-    test::rejects_at("set-type-invariant-subtype-element-rejected", compiler::DiagnosticCode::Type, 293, 28, b_invariant_rejected)
+    std::test::rejects_at("set-type-invariant-subtype-element-rejected", std::compiler::DiagnosticCode::Type, 293, 28, b_invariant_rejected)
 
     # ... while a Tiny scalar is admissible as Small.
-    fn b_invariant_scalar() errors compiler::CompilerError:
+    fn b_invariant_scalar() errors std::compiler::CompilerError:
         static compile:
             fn take_small(x: Small):
                 1
             take_small(tiny_one())
-    test::value("set-type-invariant-subtype-scalar-still-valid", 1, b_invariant_scalar)
+    std::test::value("set-type-invariant-subtype-scalar-still-valid", 1, b_invariant_scalar)
 
     # No numeric-domain lifting through the container: ImmutableSet[SiblingB]
     # is not ImmutableSet[SiblingA] ...
-    fn b_sibling_rejected() errors compiler::CompilerError:
+    fn b_sibling_rejected() errors std::compiler::CompilerError:
         static compile:
             fn bset() -> ImmutableSet[SiblingB]:
-                immutable_set::from_list([make_b()])
+                std::immutable_set::from_list([make_b()])
             fn take_a_set(s: ImmutableSet[SiblingA]):
                 1
             take_a_set(bset())
-    test::rejects_at("set-type-sibling-rejected", compiler::DiagnosticCode::Type, 312, 24, b_sibling_rejected)
+    std::test::rejects_at("set-type-sibling-rejected", std::compiler::DiagnosticCode::Type, 312, 24, b_sibling_rejected)
 
     # ... while the sibling scalar is admissible.
-    fn b_sibling_scalar() errors compiler::CompilerError:
+    fn b_sibling_scalar() errors std::compiler::CompilerError:
         static compile:
             fn take_a(x: SiblingA) -> int:
                 0
             take_a(make_b())
-    test::value("set-type-sibling-scalar-still-valid", 0, b_sibling_scalar)
+    std::test::value("set-type-sibling-scalar-still-valid", 0, b_sibling_scalar)
 
     # A provably empty set satisfies ImmutableSet[Small].
-    fn b_empty_satisfies() errors compiler::CompilerError:
+    fn b_empty_satisfies() errors std::compiler::CompilerError:
         static compile:
             fn consume(s: ImmutableSet[Small]) -> int:
                 1
-            consume(immutable_set::from_list([]))
-    test::value("set-construct-empty-satisfies-declared", 1, b_empty_satisfies)
+            consume(std::immutable_set::from_list([]))
+    std::test::value("set-construct-empty-satisfies-declared", 1, b_empty_satisfies)
 
     # Erasure through an untyped helper is lost precision, not an error ...
-    fn b_passthrough_alone() errors compiler::CompilerError:
+    fn b_passthrough_alone() errors std::compiler::CompilerError:
         static compile:
             fn passthrough(x):
                 x
             fn make() -> ImmutableSet[Small]:
-                immutable_set::from_list([one()])
-            immutable_set::contains(passthrough(make()), one())
-    test::value("set-erasure-passthrough-alone-is-legal", true, b_passthrough_alone)
+                std::immutable_set::from_list([one()])
+            std::immutable_set::contains(passthrough(make()), one())
+    std::test::value("set-erasure-passthrough-alone-is-legal", true, b_passthrough_alone)
 
     # ... and an untyped helper's semantic instance keeps the proof consume
     # needs, while a declared broad result (immutableSet) loses it.
-    fn b_broad_passthrough() errors compiler::CompilerError:
+    fn b_broad_passthrough() errors std::compiler::CompilerError:
         static compile:
             fn passthrough(x) -> immutableSet:
                 x
             fn make() -> ImmutableSet[Small]:
-                immutable_set::from_list([one()])
+                std::immutable_set::from_list([one()])
             fn consume(s: ImmutableSet[Small]) -> int:
                 0
             consume(passthrough(make()))
-    test::rejects_at("set-erasure-vs-consume/declared-broad", compiler::DiagnosticCode::Type, 351, 21, b_broad_passthrough)
+    std::test::rejects_at("set-erasure-vs-consume/declared-broad", std::compiler::DiagnosticCode::Type, 351, 21, b_broad_passthrough)
 
-    fn b_untyped_passthrough() errors compiler::CompilerError:
+    fn b_untyped_passthrough() errors std::compiler::CompilerError:
         static compile:
             fn passthrough(x):
                 x
             fn make() -> ImmutableSet[Small]:
-                immutable_set::from_list([one()])
+                std::immutable_set::from_list([one()])
             fn consume(s: ImmutableSet[Small]) -> int:
                 0
             consume(passthrough(make()))
-    test::value("set-erasure-vs-consume/untyped", 0, b_untyped_passthrough)
+    std::test::value("set-erasure-vs-consume/untyped", 0, b_untyped_passthrough)
 
     # A function taking ImmutableSet[Small] is a typed callable: through an
     # untyped higher-order helper its contract is checked at the helper's
     # call -- the right set is accepted, another rejected there.
-    fn b_escape_accepted() errors compiler::CompilerError:
+    fn b_escape_accepted() errors std::compiler::CompilerError:
         static compile:
             fn consume(s: ImmutableSet[Small]) -> int:
                 0
             fn apply(f, x):
                 f(x)
             fn make() -> ImmutableSet[Small]:
-                immutable_set::from_list([one()])
+                std::immutable_set::from_list([one()])
             apply(consume, make())
-    test::value("set-callable-escape-still-rejected/accepted", 0, b_escape_accepted)
+    std::test::value("set-callable-escape-still-rejected/accepted", 0, b_escape_accepted)
 
-    fn b_escape_rejected() errors compiler::CompilerError:
+    fn b_escape_rejected() errors std::compiler::CompilerError:
         static compile:
             fn consume(s: ImmutableSet[Small]) -> int:
                 0
             fn apply(f, x):
                 f(x)
-            apply(consume, immutable_set::from_list([3]))
-    test::rejects_at("set-callable-escape-still-rejected/rejected", compiler::DiagnosticCode::Type, 385, 13, b_escape_rejected)
+            apply(consume, std::immutable_set::from_list([3]))
+    std::test::rejects_at("set-callable-escape-still-rejected/rejected", std::compiler::DiagnosticCode::Type, 385, 13, b_escape_rejected)
 
     # An exact alias of such a function stays first-class.
-    fn b_exact_alias() errors compiler::CompilerError:
+    fn b_exact_alias() errors std::compiler::CompilerError:
         static compile:
             fn consume(s: ImmutableSet[Small]) -> int:
                 0
             fn make() -> ImmutableSet[Small]:
-                immutable_set::from_list([one()])
+                std::immutable_set::from_list([one()])
             f = consume
             f(make())
-    test::value("set-callable-escape-exact-alias-still-legal", 0, b_exact_alias)
+    std::test::value("set-callable-escape-exact-alias-still-legal", 0, b_exact_alias)
 
     # A declared ImmutableSet[Small] result is not proven by a broad set ...
-    fn b_result_broad() errors compiler::CompilerError:
+    fn b_result_broad() errors std::compiler::CompilerError:
         static compile:
             fn make() -> ImmutableSet[Small]:
-                immutable_set::from_list([1, "x"])
+                std::immutable_set::from_list([1, "x"])
             1
-    test::rejects_at("set-result-rejected-broad", compiler::DiagnosticCode::Type, 402, 20, b_result_broad)
+    std::test::rejects_at("set-result-rejected-broad", std::compiler::DiagnosticCode::Type, 402, 20, b_result_broad)
 
     # ... nor by an ImmutableSet[int] whose members are not Small evidence.
-    fn b_result_wrong_element() errors compiler::CompilerError:
+    fn b_result_wrong_element() errors std::compiler::CompilerError:
         static compile:
             fn make() -> ImmutableSet[Small]:
-                immutable_set::from_list([1, 2])
+                std::immutable_set::from_list([1, 2])
             1
-    test::rejects_at("set-result-rejected-wrong-element", compiler::DiagnosticCode::Type, 410, 20, b_result_wrong_element)
+    std::test::rejects_at("set-result-rejected-wrong-element", std::compiler::DiagnosticCode::Type, 410, 20, b_result_wrong_element)
 
 # ---------------------------------------------------------------------------
 # ImmutableSet values: membership, deduplication, equality (immutable-set.test).
 
 fn register_set_value_tests():
-    fn b_present() errors compiler::CompilerError:
+    fn b_present() errors std::compiler::CompilerError:
         static compile:
-            immutable_set::contains(immutable_set::from_list([1, 2, 3]), 2)
-    test::value("set-membership-present", true, b_present)
+            std::immutable_set::contains(std::immutable_set::from_list([1, 2, 3]), 2)
+    std::test::value("set-membership-present", true, b_present)
 
     # Absent membership is an ordinary false, no error.
-    fn b_absent() errors compiler::CompilerError:
+    fn b_absent() errors std::compiler::CompilerError:
         static compile:
-            immutable_set::contains(immutable_set::from_list([1, 2, 3]), 4)
-    test::value("set-membership-absent", false, b_absent)
+            std::immutable_set::contains(std::immutable_set::from_list([1, 2, 3]), 4)
+    std::test::value("set-membership-absent", false, b_absent)
 
-    fn b_char_present() errors compiler::CompilerError:
+    fn b_char_present() errors std::compiler::CompilerError:
         static compile:
-            immutable_set::contains(immutable_set::from_list(['A', 'B']), 'A')
-    test::value("set-membership-char-present", true, b_char_present)
+            std::immutable_set::contains(std::immutable_set::from_list(['A', 'B']), 'A')
+    std::test::value("set-membership-char-present", true, b_char_present)
 
-    fn b_char_absent() errors compiler::CompilerError:
+    fn b_char_absent() errors std::compiler::CompilerError:
         static compile:
-            immutable_set::contains(immutable_set::from_list(['A', 'B']), 'C')
-    test::value("set-membership-char-absent", false, b_char_absent)
+            std::immutable_set::contains(std::immutable_set::from_list(['A', 'B']), 'C')
+    std::test::value("set-membership-char-absent", false, b_char_absent)
 
     # A needle of another kind never matches: false, not a TYPE error.
-    fn b_cross_kind() errors compiler::CompilerError:
+    fn b_cross_kind() errors std::compiler::CompilerError:
         static compile:
-            immutable_set::contains(immutable_set::from_list(['A', 'B']), 65)
-    test::value("set-membership-cross-kind-false", false, b_cross_kind)
+            std::immutable_set::contains(std::immutable_set::from_list(['A', 'B']), 65)
+    std::test::value("set-membership-cross-kind-false", false, b_cross_kind)
 
     # from_list([1, 1, 1]) is the singleton {1}.
-    fn b_dedup() errors compiler::CompilerError:
+    fn b_dedup() errors std::compiler::CompilerError:
         static compile:
-            [immutable_set::from_list([1, 1, 1]) == immutable_set::from_list([1]), immutable_set::contains(immutable_set::from_list([1, 1, 1]), 1)]
-    test::value("set-dedup-collapses-duplicates", [true, true], b_dedup)
+            [std::immutable_set::from_list([1, 1, 1]) == std::immutable_set::from_list([1]), std::immutable_set::contains(std::immutable_set::from_list([1, 1, 1]), 1)]
+    std::test::value("set-dedup-collapses-duplicates", [true, true], b_dedup)
 
-    fn b_dedup_char() errors compiler::CompilerError:
+    fn b_dedup_char() errors std::compiler::CompilerError:
         static compile:
-            immutable_set::from_list(['A', 'A', 'B']) == immutable_set::from_list(['A', 'B'])
-    test::value("set-dedup-char", true, b_dedup_char)
+            std::immutable_set::from_list(['A', 'A', 'B']) == std::immutable_set::from_list(['A', 'B'])
+    std::test::value("set-dedup-char", true, b_dedup_char)
 
     # The required payload: one() twice in the source List is one member of
     # the ImmutableSet[Small] a declared result and parameter carry. (Also
     # the run of set-required-basic-payload, whose HIR types stay in Tcl.)
-    fn b_required_payload() errors compiler::CompilerError:
+    fn b_required_payload() errors std::compiler::CompilerError:
         static compile:
             fn make() -> ImmutableSet[Small]:
-                immutable_set::from_list([one(), two(), one()])
+                std::immutable_set::from_list([one(), two(), one()])
             fn accepts(s: ImmutableSet[Small]) -> bool:
-                immutable_set::contains(s, one())
+                std::immutable_set::contains(s, one())
             accepts(make())
-    test::value("set-dedup-required-payload", true, b_required_payload)
+    std::test::value("set-dedup-required-payload", true, b_required_payload)
 
     # UnicodeChar 'A' and Int 65 are distinct values.
-    fn b_char_vs_int() errors compiler::CompilerError:
+    fn b_char_vs_int() errors std::compiler::CompilerError:
         static compile:
-            immutable_set::from_list(['A']) == immutable_set::from_list([65])
-    test::value("set-equality-char-vs-int", false, b_char_vs_int)
+            std::immutable_set::from_list(['A']) == std::immutable_set::from_list([65])
+    std::test::value("set-equality-char-vs-int", false, b_char_vs_int)
 
     # A set is never equal to a List, even of the same members; no error.
-    fn b_not_list() errors compiler::CompilerError:
+    fn b_not_list() errors std::compiler::CompilerError:
         static compile:
-            immutable_set::from_list([1, 2]) == [1, 2]
-    test::value("set-equality-not-list-equality", false, b_not_list)
+            std::immutable_set::from_list([1, 2]) == [1, 2]
+    std::test::value("set-equality-not-list-equality", false, b_not_list)
 
     # List members compare structurally, Set members by set equality.
-    fn b_nested_lists() errors compiler::CompilerError:
+    fn b_nested_lists() errors std::compiler::CompilerError:
         static compile:
-            immutable_set::from_list([[1, 2], [3, 4]]) == immutable_set::from_list([[3, 4], [1, 2]])
-    test::value("set-equality-nested-list-members", true, b_nested_lists)
+            std::immutable_set::from_list([[1, 2], [3, 4]]) == std::immutable_set::from_list([[3, 4], [1, 2]])
+    std::test::value("set-equality-nested-list-members", true, b_nested_lists)
 
-    fn b_nested_sets() errors compiler::CompilerError:
+    fn b_nested_sets() errors std::compiler::CompilerError:
         static compile:
-            immutable_set::from_list([immutable_set::from_list([1, 2])]) == immutable_set::from_list([immutable_set::from_list([2, 1])])
-    test::value("set-equality-nested-set-members", true, b_nested_sets)
+            std::immutable_set::from_list([std::immutable_set::from_list([1, 2])]) == std::immutable_set::from_list([std::immutable_set::from_list([2, 1])])
+    std::test::value("set-equality-nested-set-members", true, b_nested_sets)
 
     # A one-member set of a function value constructs: deduplication never
     # compares it. (The set itself is not compared: function equality is a
     # run-time EQUALITY error.)
-    fn b_block_member() errors compiler::CompilerError:
+    fn b_block_member() errors std::compiler::CompilerError:
         static compile:
             fn g():
                 1
             fn constructed(s):
                 1
-            constructed(immutable_set::from_list([g]))
-    test::value("set-construction-block-member-single-ok", 1, b_block_member)
+            constructed(std::immutable_set::from_list([g]))
+    std::test::value("set-construction-block-member-single-ok", 1, b_block_member)
 
-    fn b_unicodechar_payload() errors compiler::CompilerError:
+    fn b_unicodechar_payload() errors std::compiler::CompilerError:
         static compile:
             fn chars() -> ImmutableSet[UnicodeChar]:
-                immutable_set::from_list(['-', '.', '_', '~'])
-            [immutable_set::contains(chars(), '-'), immutable_set::contains(chars(), 'A'), immutable_set::contains(chars(), 45)]
-    test::value("set-required-unicodechar-payload", [true, false, false], b_unicodechar_payload)
+                std::immutable_set::from_list(['-', '.', '_', '~'])
+            [std::immutable_set::contains(chars(), '-'), std::immutable_set::contains(chars(), 'A'), std::immutable_set::contains(chars(), 45)]
+    std::test::value("set-required-unicodechar-payload", [true, false, false], b_unicodechar_payload)
 
-    fn b_parity_ints() errors compiler::CompilerError:
+    fn b_parity_ints() errors std::compiler::CompilerError:
         static compile:
-            [immutable_set::contains(immutable_set::from_list([1, 1, 2, 3]), 2), immutable_set::contains(immutable_set::from_list([1, 1, 2, 3]), 4), immutable_set::from_list([1, 2]) == immutable_set::from_list([2, 1])]
-    test::value("set-parity-construction-and-membership", [true, false, true], b_parity_ints)
+            [std::immutable_set::contains(std::immutable_set::from_list([1, 1, 2, 3]), 2), std::immutable_set::contains(std::immutable_set::from_list([1, 1, 2, 3]), 4), std::immutable_set::from_list([1, 2]) == std::immutable_set::from_list([2, 1])]
+    std::test::value("set-parity-construction-and-membership", [true, false, true], b_parity_ints)
 
-    fn b_parity_chars() errors compiler::CompilerError:
+    fn b_parity_chars() errors std::compiler::CompilerError:
         static compile:
             chars = ['-', '.', '_', '~']
-            [immutable_set::contains(immutable_set::from_list(chars), '-'), immutable_set::contains(immutable_set::from_list(chars), 'A'), immutable_set::contains(immutable_set::from_list(chars), 45)]
-    test::value("set-parity-unicodechar", [true, false, false], b_parity_chars)
+            [std::immutable_set::contains(std::immutable_set::from_list(chars), '-'), std::immutable_set::contains(std::immutable_set::from_list(chars), 'A'), std::immutable_set::contains(std::immutable_set::from_list(chars), 45)]
+    std::test::value("set-parity-unicodechar", [true, false, false], b_parity_chars)
 
     # Strings computed at run time as members (natively, heap pointers):
     # equal Strings deduplicate and are found.
-    fn b_pointer_members() errors compiler::CompilerError:
+    fn b_pointer_members() errors std::compiler::CompilerError:
         static compile:
-            s = immutable_set::from_list([str::concat("a", "b"), str::concat("c", "d"), str::concat("a", "b")])
-            [immutable_set::contains(s, str::concat("a", "b")), immutable_set::contains(s, "zz")]
-    test::value("set-computed-string-members", [true, false], b_pointer_members)
+            s = std::immutable_set::from_list([std::str::concat("a", "b"), std::str::concat("c", "d"), std::str::concat("a", "b")])
+            [std::immutable_set::contains(s, std::str::concat("a", "b")), std::immutable_set::contains(s, "zz")]
+    std::test::value("set-computed-string-members", [true, false], b_pointer_members)
 
     # Sets of String and List members built 300 calls deep, each level
     # allocating a set nothing keeps, then probed. (The Tcl test forces the
     # native GC at every allocation; this one meets it when the golden suites
     # run under BOTLISH_NATIVE_GC_STRESS=1.)
-    fn b_deep_pointer_members() errors compiler::CompilerError:
+    fn b_deep_pointer_members() errors std::compiler::CompilerError:
         static compile:
             fn build(n):
                 if n == 0:
-                    immutable_set::from_list(["a", "b", "c", "a"])
+                    std::immutable_set::from_list(["a", "b", "c", "a"])
                 else:
-                    s = immutable_set::from_list([str::concat("x", "y"), [1, 2], [3, 4]])
+                    s = std::immutable_set::from_list([std::str::concat("x", "y"), [1, 2], [3, 4]])
                     build(n - 1)
             fn probe():
                 s = build(300)
-                [immutable_set::contains(s, "a"), immutable_set::contains(s, "z"), s == immutable_set::from_list(["c", "b", "a", "a"])]
+                [std::immutable_set::contains(s, "a"), std::immutable_set::contains(s, "z"), s == std::immutable_set::from_list(["c", "b", "a", "a"])]
             probe()
-    test::value("set-computed-members-built-deep", [true, false, true], b_deep_pointer_members)
+    std::test::value("set-computed-members-built-deep", [true, false, true], b_deep_pointer_members)
 
     # A member outlives the binding that built it, across later allocations.
-    fn b_member_liveness() errors compiler::CompilerError:
+    fn b_member_liveness() errors std::compiler::CompilerError:
         static compile:
             fn make():
-                a = str::concat("live-", "member")
-                immutable_set::from_list([a])
+                a = std::str::concat("live-", "member")
+                std::immutable_set::from_list([a])
             fn probe():
                 s = make()
-                padding = [str::concat("junk", "1"), str::concat("junk", "2"), str::concat("junk", "3")]
-                immutable_set::contains(s, str::concat("live-", "member"))
+                padding = [std::str::concat("junk", "1"), std::str::concat("junk", "2"), std::str::concat("junk", "3")]
+                std::immutable_set::contains(s, std::str::concat("live-", "member"))
             probe()
-    test::value("set-member-outlives-its-binding", true, b_member_liveness)
+    std::test::value("set-member-outlives-its-binding", true, b_member_liveness)
 
 # ---------------------------------------------------------------------------
-# byte::set (byte-set.test). A set has no text form, so a byte set is
-# compared with `==` against immutable_set::from_list of its Ints.
+# std::byte::set (byte-set.test). A set has no text form, so a byte set is
+# compared with `==` against std::immutable_set::from_list of its Ints.
 
-# byte::set(CHARS)'s outcome must be EXPECTED: "AboveRange" for the declared
-# byte::AboveRange, "a set" for a set. CHARS is a parameter: a constant
+# std::byte::set(CHARS)'s outcome must be EXPECTED: "AboveRange" for the declared
+# std::byte::AboveRange, "a set" for a set. CHARS is a parameter: a constant
 # out-of-range character is KNOWN-ERROR.
 fn register_byte_set_outcome_case(name: str, chars: List[UnicodeChar], expected: str):
-    fn b_outcome() errors compiler::CompilerError:
+    fn b_outcome() errors std::compiler::CompilerError:
         static compile:
             fn outcome(cs):
-                s = byte::set(cs):
-                    on byte::AboveRange:
+                s = std::byte::set(cs):
+                    on std::byte::AboveRange:
                         return "AboveRange"
                 "a set"
             outcome(chars)
-    test::value(name, expected, b_outcome)
+    std::test::value(name, expected, b_outcome)
 
 fn register_byte_set_tests(no_chars: List[UnicodeChar]):
     # A character's scalar value; no handler: every literal is provably a Byte.
-    fn b_basic() errors compiler::CompilerError:
+    fn b_basic() errors std::compiler::CompilerError:
         static compile:
-            byte::set(['A', 'é', 'ÿ']) == immutable_set::from_list([65, 233, 255])
-    test::value("byte-set-basic", true, b_basic)
+            std::byte::set(['A', 'é', 'ÿ']) == std::immutable_set::from_list([65, 233, 255])
+    std::test::value("byte-set-basic", true, b_basic)
 
     # The empty List gives the empty set. NO_CHARS, the empty List, is passed
     # in: the call's argument is then not a literal, may hold any character,
     # and so is handled.
-    fn b_empty() errors compiler::CompilerError:
+    fn b_empty() errors std::compiler::CompilerError:
         static compile:
             fn empty_ok(cs):
-                e = byte::set(cs):
-                    on byte::AboveRange:
+                e = std::byte::set(cs):
+                    on std::byte::AboveRange:
                         return false
-                e == immutable_set::from_list([])
+                e == std::immutable_set::from_list([])
             empty_ok(no_chars)
-    test::value("byte-set-empty", true, b_empty)
+    std::test::value("byte-set-empty", true, b_empty)
 
-    fn b_single() errors compiler::CompilerError:
+    fn b_single() errors std::compiler::CompilerError:
         static compile:
-            byte::set(['A']) == immutable_set::from_list([65])
-    test::value("byte-set-single", true, b_single)
+            std::byte::set(['A']) == std::immutable_set::from_list([65])
+    std::test::value("byte-set-single", true, b_single)
 
     # Ordinary ImmutableSet deduplication.
-    fn b_duplicates() errors compiler::CompilerError:
+    fn b_duplicates() errors std::compiler::CompilerError:
         static compile:
-            [byte::set(['A', 'A']) == immutable_set::from_list([65]), byte::set(['A', 'A']) == byte::set(['A'])]
-    test::value("byte-set-duplicates", [true, true], b_duplicates)
+            [std::byte::set(['A', 'A']) == std::immutable_set::from_list([65]), std::byte::set(['A', 'A']) == std::byte::set(['A'])]
+    std::test::value("byte-set-duplicates", [true, true], b_duplicates)
 
-    fn b_duplicate_three() errors compiler::CompilerError:
+    fn b_duplicate_three() errors std::compiler::CompilerError:
         static compile:
-            [byte::set(['A', 'A', 'B']) == byte::set(['A', 'B']), byte::set(['A', 'A', 'B']) == immutable_set::from_list([65, 66])]
-    test::value("byte-set-duplicate-three", [true, true], b_duplicate_three)
+            [std::byte::set(['A', 'A', 'B']) == std::byte::set(['A', 'B']), std::byte::set(['A', 'A', 'B']) == std::immutable_set::from_list([65, 66])]
+    std::test::value("byte-set-duplicate-three", [true, true], b_duplicate_three)
 
-    fn b_boundary_low() errors compiler::CompilerError:
+    fn b_boundary_low() errors std::compiler::CompilerError:
         static compile:
-            byte::set(['A', 'B']) == immutable_set::from_list([65, 66])
-    test::value("byte-set-boundary-0", true, b_boundary_low)
+            std::byte::set(['A', 'B']) == std::immutable_set::from_list([65, 66])
+    std::test::value("byte-set-boundary-0", true, b_boundary_low)
 
     # U+00FF is Byte's upper bound.
-    fn b_boundary_255() errors compiler::CompilerError:
+    fn b_boundary_255() errors std::compiler::CompilerError:
         static compile:
-            byte::set(['ÿ']) == immutable_set::from_list([255])
-    test::value("byte-set-boundary-255", true, b_boundary_255)
+            std::byte::set(['ÿ']) == std::immutable_set::from_list([255])
+    std::test::value("byte-set-boundary-255", true, b_boundary_255)
 
     # Just past the bound (U+0100), an astral character (U+1F600: never its
     # UTF-8 bytes), and an invalid character between valid ones (no partial
-    # set): the declared byte::AboveRange.
+    # set): the declared std::byte::AboveRange.
     register_byte_set_outcome_case("byte-set-boundary-256-fails", ['Ā'], "AboveRange")
     register_byte_set_outcome_case("byte-set-astral-fails", ['😀'], "AboveRange")
     register_byte_set_outcome_case("byte-set-mixed-failure", ['A', 'Ā', 'B'], "AboveRange")
 
     # The URI-unreserved payload.
-    fn b_canonical() errors compiler::CompilerError:
+    fn b_canonical() errors std::compiler::CompilerError:
         static compile:
-            byte::set(['-', '.', '_', '~']) == immutable_set::from_list([45, 46, 95, 126])
-    test::value("byte-set-canonical-payload", true, b_canonical)
+            std::byte::set(['-', '.', '_', '~']) == std::immutable_set::from_list([45, 46, 95, 126])
+    std::test::value("byte-set-canonical-payload", true, b_canonical)
 
     # 'é' is the one Byte 233, never its UTF-8 encoding 195, 169.
-    fn b_not_utf8() errors compiler::CompilerError:
+    fn b_not_utf8() errors std::compiler::CompilerError:
         static compile:
-            s = byte::set(['é'])
-            [s == immutable_set::from_list([233]), immutable_set::contains(s, 195), immutable_set::contains(s, 169)]
-    test::value("byte-set-not-utf8", [true, false, false], b_not_utf8)
+            s = std::byte::set(['é'])
+            [s == std::immutable_set::from_list([233]), std::immutable_set::contains(s, 195), std::immutable_set::contains(s, 169)]
+    std::test::value("byte-set-not-utf8", [true, false, false], b_not_utf8)
 
-    fn b_membership() errors compiler::CompilerError:
+    fn b_membership() errors std::compiler::CompilerError:
         static compile:
-            s = byte::set(['-', '.', '_', '~'])
-            [immutable_set::contains(s, 45), immutable_set::contains(s, 46), immutable_set::contains(s, 95), immutable_set::contains(s, 126), immutable_set::contains(s, 65)]
-    test::value("byte-set-membership", [true, true, true, true, false], b_membership)
+            s = std::byte::set(['-', '.', '_', '~'])
+            [std::immutable_set::contains(s, 45), std::immutable_set::contains(s, 46), std::immutable_set::contains(s, 95), std::immutable_set::contains(s, 126), std::immutable_set::contains(s, 65)]
+    std::test::value("byte-set-membership", [true, true, true, true, false], b_membership)
 
     # The conversion is explicit: a UnicodeChar is never equal to an Int.
-    fn b_char_not_byte() errors compiler::CompilerError:
+    fn b_char_not_byte() errors std::compiler::CompilerError:
         static compile:
             ['-' == 45, 45 == 45]
-    test::value("byte-set-char-not-equal-byte", [false, true], b_char_not_byte)
+    std::test::value("byte-set-char-not-equal-byte", [false, true], b_char_not_byte)
 
     # The input contract is List[UnicodeChar], checked statically.
-    fn b_string_list() errors compiler::CompilerError:
+    fn b_string_list() errors std::compiler::CompilerError:
         static compile:
-            byte::set(["A"])
-    test::rejects("byte-set-rejects-string-list", compiler::DiagnosticCode::Type, b_string_list)
+            std::byte::set(["A"])
+    std::test::rejects("byte-set-rejects-string-list", std::compiler::DiagnosticCode::Type, b_string_list)
 
-    fn b_int_list() errors compiler::CompilerError:
+    fn b_int_list() errors std::compiler::CompilerError:
         static compile:
-            byte::set([65])
-    test::rejects("byte-set-rejects-int-list", compiler::DiagnosticCode::Type, b_int_list)
+            std::byte::set([65])
+    std::test::rejects("byte-set-rejects-int-list", std::compiler::DiagnosticCode::Type, b_int_list)
 
     # A provably in-range List[UnicodeChar] needs no handler: the block holds
-    # an unhandled byte::set call and is accepted.
-    fn b_char_list() errors compiler::CompilerError:
+    # an unhandled std::byte::set call and is accepted.
+    fn b_char_list() errors std::compiler::CompilerError:
         static compile:
-            s = byte::set(['A'])
-            immutable_set::contains(s, 65)
-    test::value("byte-set-accepts-char-list", true, b_char_list)
+            s = std::byte::set(['A'])
+            std::immutable_set::contains(s, 65)
+    std::test::value("byte-set-accepts-char-list", true, b_char_list)
 
-# The generic checked-domain construction byte::from_int is an instance of:
+# The generic checked-domain construction std::byte::from_int is an instance of:
 # a declared interval domain, guarded by an explicit `errors`/`fail`
 # function, checked at run time on a dynamic value (SEED, here 500:
 # mod(500, 11) is 5, and 15 is out of the domain).
 fn register_generic_domain_tests(seed: int):
-    fn b_in_domain() errors compiler::CompilerError:
+    fn b_in_domain() errors std::compiler::CompilerError:
         static compile:
             fn check(n: int) -> Small errors TooSmall, TooBig:
                 if n < 0:
@@ -697,9 +697,9 @@ fn register_generic_domain_tests(seed: int):
                         return -2
                 r
             [checked(mod(seed, 11)), checked(0), checked(10)]
-    test::value("byte-set-generic-domain-check", [5, 0, 10], b_in_domain)
+    std::test::value("byte-set-generic-domain-check", [5, 0, 10], b_in_domain)
 
-    fn b_out_of_domain() errors compiler::CompilerError:
+    fn b_out_of_domain() errors std::compiler::CompilerError:
         static compile:
             fn check(n: int) -> Small errors TooSmall, TooBig:
                 if n < 0:
@@ -717,57 +717,57 @@ fn register_generic_domain_tests(seed: int):
                         return -2
                 r
             checked(mod(seed, 11) + 10)
-    test::value("byte-set-generic-domain-check-out-of-range", -2, b_out_of_domain)
+    std::test::value("byte-set-generic-domain-check-out-of-range", -2, b_out_of_domain)
 
 # ---------------------------------------------------------------------------
-# The equality-total forms of immutable_set::contains and from_list
+# The equality-total forms of std::immutable_set::contains and from_list
 # (setcontains-equality-total.test, setfromlist-equality-total.test): which
 # opcode a call lowers to is NIR, observed in Tcl only; the values are the
 # same as the generic forms', present and absent, empty or not.
 
 fn register_equality_total_tests():
-    fn b_contains_total() errors compiler::CompilerError:
+    fn b_contains_total() errors std::compiler::CompilerError:
         static compile:
             fn contains_byte(s: ImmutableSet[LocalByte], b: LocalByte) -> bool:
-                immutable_set::contains(s, b)
-            s = immutable_set::from_list([byteA()])
+                std::immutable_set::contains(s, b)
+            s = std::immutable_set::from_list([byteA()])
             [contains_byte(s, byteA()), contains_byte(s, byteB())]
-    test::value("setcontains-total-runtime-present-and-absent", [true, false], b_contains_total)
+    std::test::value("setcontains-total-runtime-present-and-absent", [true, false], b_contains_total)
 
-    fn b_contains_total_empty() errors compiler::CompilerError:
+    fn b_contains_total_empty() errors std::compiler::CompilerError:
         static compile:
             fn mk(xs: List[LocalByte]) -> ImmutableSet[LocalByte]:
-                immutable_set::from_list(xs)
+                std::immutable_set::from_list(xs)
             fn contains_byte(s: ImmutableSet[LocalByte], b: LocalByte) -> bool:
-                immutable_set::contains(s, b)
+                std::immutable_set::contains(s, b)
             contains_byte(mk([]), byteA())
-    test::value("setcontains-total-empty-set", false, b_contains_total_empty)
+    std::test::value("setcontains-total-empty-set", false, b_contains_total_empty)
 
-    fn b_from_list_total() errors compiler::CompilerError:
+    fn b_from_list_total() errors std::compiler::CompilerError:
         static compile:
             fn mk_int(xs: List[int]) -> ImmutableSet[int]:
-                immutable_set::from_list(xs)
-            [immutable_set::contains(mk_int([1, 1, 2, 3]), 2), immutable_set::contains(mk_int([1, 1, 2, 3]), 4)]
-    test::value("setfromlist-total-runtime-parity", [true, false], b_from_list_total)
+                std::immutable_set::from_list(xs)
+            [std::immutable_set::contains(mk_int([1, 1, 2, 3]), 2), std::immutable_set::contains(mk_int([1, 1, 2, 3]), 4)]
+    std::test::value("setfromlist-total-runtime-parity", [true, false], b_from_list_total)
 
     # A provably empty List literal satisfies List[int]: accepted strictly.
-    fn b_from_list_empty_legal() errors compiler::CompilerError:
+    fn b_from_list_empty_legal() errors std::compiler::CompilerError:
         static compile:
             fn mk_int(xs: List[int]) -> ImmutableSet[int]:
-                immutable_set::from_list(xs)
-            mk_int([]) == immutable_set::from_list([])
-    test::value("setfromlist-empty-list-strict-legal", true, b_from_list_empty_legal)
+                std::immutable_set::from_list(xs)
+            mk_int([]) == std::immutable_set::from_list([])
+    std::test::value("setfromlist-empty-list-strict-legal", true, b_from_list_empty_legal)
 
-    fn b_from_list_empty_runs() errors compiler::CompilerError:
+    fn b_from_list_empty_runs() errors std::compiler::CompilerError:
         static compile:
             fn mk_int(xs: List[int]) -> ImmutableSet[int]:
-                immutable_set::from_list(xs)
-            immutable_set::contains(mk_int([]), 1)
-    test::value("setfromlist-empty-list-runtime-empty-result", false, b_from_list_empty_runs)
+                std::immutable_set::from_list(xs)
+            std::immutable_set::contains(mk_int([]), 1)
+    std::test::value("setfromlist-empty-list-runtime-empty-result", false, b_from_list_empty_runs)
 
 # ---------------------------------------------------------------------------
 
-with context test::suite()
+with context std::test::suite()
 register_list_primitive_tests(1, -1, 0, 100000000000000000000, 2)
 register_list_search_tests()
 register_set_type_tests()
@@ -775,4 +775,4 @@ register_set_value_tests()
 register_byte_set_tests([])
 register_generic_domain_tests(500)
 register_equality_total_tests()
-test::report()
+std::test::report()

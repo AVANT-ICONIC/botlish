@@ -1,4 +1,4 @@
-# linux-io-native.bot -- live Linux x86-64 syscalls through linux::abi::x86_64::syscall
+# linux-io-native.bot -- live Linux x86-64 syscalls through std::linux::abi::x86_64::syscall
 # (LINUX-X86-64-SYSCALL.md), in process, as a source-level specification:
 # getpid (x86-64 syscall number 39, argument-free and harmless) returns a
 # positive pid, the same on every call in one process, however the registers
@@ -8,8 +8,8 @@
 # the result words, materialized in a List or holding the i64 extremes,
 # survive allocation unchanged.
 #
-# golden-exclude: interp, compile -- CORE SEMANTIC NATIVE-ONLY: linux::abi::x86_64::syscall executes the x86-64 syscall instruction and the Tcl backends refuse it at run time by design (tests/linux-syscall.test linux-syscall-tcl-backends-refuse pins the refusal); a refusal aborts a suite, so these tests run on cranelift-generic and cranelift only
-# golden-host: linux-x86_64 -- live getpid syscalls through linux::abi::x86_64::syscall, the x86-64 transport, which runs on Linux x86-64 only (tests/linux-syscall.test's live tests carry the linuxX86_64 constraint)
+# golden-exclude: interp, compile -- CORE SEMANTIC NATIVE-ONLY: std::linux::abi::x86_64::syscall executes the x86-64 syscall instruction and the Tcl backends refuse it at run time by design (tests/linux-syscall.test linux-syscall-tcl-backends-refuse pins the refusal); a refusal aborts a suite, so these tests run on cranelift-generic and cranelift only
+# golden-host: linux-x86_64 -- live getpid syscalls through std::linux::abi::x86_64::syscall, the x86-64 transport, which runs on Linux x86-64 only (tests/linux-syscall.test's live tests carry the linuxX86_64 constraint)
 #
 # The only live syscall is getpid, in the runner's process: no other syscall
 # number is ever executed. Ported from tests/linux-syscall.test, which stays
@@ -20,109 +20,109 @@
 # standalone executables' pids. The register struct's static contract, and
 # programs that only define a syscall wrapper, are linux-io.bot's.
 #
-# Imports: compiler and test (the framework); abi::x86_64, linux::abi::x86_64 and
+# Imports: compiler and test (the framework); std::abi::x86_64, std::linux::abi::x86_64 and
 # list are the Tcl programs' own (the rawGetpid prelude). Every call is
 # written qualified.
 #
 # A direct module (DIRECT-MODULES.md): its programs call
-# linux::abi::x86_64::syscall with no context of their own -- the raw layer
+# std::linux::abi::x86_64::syscall with no context of their own -- the raw layer
 # under test.
 direct module
 
-import abi::x86_64
-import compiler
-import linux::abi::x86_64
-import list
-import test
+import std::abi::x86_64
+import std::compiler
+import std::linux::abi::x86_64
+import std::list
+import std::test
 
 fn register_getpid_tests():
     # Positive, and the same on repeated calls in one process.
-    fn positive_and_stable() errors compiler::CompilerError:
+    fn positive_and_stable() errors std::compiler::CompilerError:
         static compile:
             fn raw_getpid():
-                abi::x86_64::to_int(
-                    linux::abi::x86_64::syscall({
-                        rax: abi::x86_64::register64(39),
+                std::abi::x86_64::to_int(
+                    std::linux::abi::x86_64::syscall({
+                        rax: std::abi::x86_64::register64(39),
                     })
                 )
             a = raw_getpid()
             b = raw_getpid()
             c = raw_getpid()
             [a > 0, a == b, b == c]
-    test::value("linux-syscall-getpid-positive-and-stable", [true, true, true], positive_and_stable)
+    std::test::value("linux-syscall-getpid-positive-and-stable", [true, true, true], positive_and_stable)
 
     # Every way of supplying registers reaches the same kernel call.
-    fn argument_shapes() errors compiler::CompilerError:
+    fn argument_shapes() errors std::compiler::CompilerError:
         static compile:
             fn raw_getpid():
-                abi::x86_64::to_int(
-                    linux::abi::x86_64::syscall({
-                        rax: abi::x86_64::register64(39),
+                std::abi::x86_64::to_int(
+                    std::linux::abi::x86_64::syscall({
+                        rax: std::abi::x86_64::register64(39),
                     })
                 )
-            fn sys1(nr: abi::x86_64::Register64) -> abi::x86_64::Register64:
-                linux::abi::x86_64::syscall({rax: nr})
+            fn sys1(nr: std::abi::x86_64::Register64) -> std::abi::x86_64::Register64:
+                std::linux::abi::x86_64::syscall({rax: nr})
 
             fn via_local():
-                nr = abi::x86_64::register64(39)
-                abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: nr}))
+                nr = std::abi::x86_64::register64(39)
+                std::abi::x86_64::to_int(std::linux::abi::x86_64::syscall({rax: nr}))
 
             fn via_struct_var():
-                regs = {rdi: abi::x86_64::register64(0 - 1), rax: abi::x86_64::register64(39)}
-                abi::x86_64::to_int(linux::abi::x86_64::syscall(regs))
+                regs = {rdi: std::abi::x86_64::register64(0 - 1), rax: std::abi::x86_64::register64(39)}
+                std::abi::x86_64::to_int(std::linux::abi::x86_64::syscall(regs))
 
             fn twice_used():
-                r = linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39)})
-                abi::x86_64::to_int(r) - abi::x86_64::to_int(r)
+                r = std::linux::abi::x86_64::syscall({rax: std::abi::x86_64::register64(39)})
+                std::abi::x86_64::to_int(r) - std::abi::x86_64::to_int(r)
 
             fn discarded():
-                linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39)})
+                std::linux::abi::x86_64::syscall({rax: std::abi::x86_64::register64(39)})
                 7
 
             a = raw_getpid()
-            s = list::at([linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39)})], 0)
-            [a == abi::x86_64::to_int(sys1(abi::x86_64::register64(39))), a == via_local(), a == via_struct_var(), twice_used(), a == abi::x86_64::to_int(s), discarded()]
-    test::value("linux-syscall-argument-shapes", [true, true, true, 0, true, 7], argument_shapes)
+            s = std::list::at([std::linux::abi::x86_64::syscall({rax: std::abi::x86_64::register64(39)})], 0)
+            [a == std::abi::x86_64::to_int(sys1(std::abi::x86_64::register64(39))), a == via_local(), a == via_struct_var(), twice_used(), a == std::abi::x86_64::to_int(s), discarded()]
+    std::test::value("linux-syscall-argument-shapes", [true, true, true, 0, true, 7], argument_shapes)
 
     # A register struct bound to a local and passed by name, and the same
     # registers written inline, make the same call.
-    fn bound_register_struct() errors compiler::CompilerError:
+    fn bound_register_struct() errors std::compiler::CompilerError:
         static compile:
             fn f():
-                regs = {rdi: abi::x86_64::register64(1), rax: abi::x86_64::register64(39)}
-                abi::x86_64::to_int(linux::abi::x86_64::syscall(regs))
+                regs = {rdi: std::abi::x86_64::register64(1), rax: std::abi::x86_64::register64(39)}
+                std::abi::x86_64::to_int(std::linux::abi::x86_64::syscall(regs))
             f() > 0
-    test::value("linux-syscall-bound-register-struct-is-an-object/bound", true, bound_register_struct)
+    std::test::value("linux-syscall-bound-register-struct-is-an-object/bound", true, bound_register_struct)
 
-    fn inline_register_struct() errors compiler::CompilerError:
+    fn inline_register_struct() errors std::compiler::CompilerError:
         static compile:
             fn f():
-                abi::x86_64::to_int(linux::abi::x86_64::syscall({rdi: abi::x86_64::register64(1), rax: abi::x86_64::register64(39)}))
+                std::abi::x86_64::to_int(std::linux::abi::x86_64::syscall({rdi: std::abi::x86_64::register64(1), rax: std::abi::x86_64::register64(39)}))
             f() > 0
-    test::value("linux-syscall-bound-register-struct-is-an-object/inline", true, inline_register_struct)
+    std::test::value("linux-syscall-bound-register-struct-is-an-object/inline", true, inline_register_struct)
 
     # Syscall results transported virtually, materialized in a List, and
     # register words at the i64 extremes keep their values.
-    fn results_survive_allocation() errors compiler::CompilerError:
+    fn results_survive_allocation() errors std::compiler::CompilerError:
         static compile:
             fn raw_getpid():
-                abi::x86_64::to_int(
-                    linux::abi::x86_64::syscall({
-                        rax: abi::x86_64::register64(39),
+                std::abi::x86_64::to_int(
+                    std::linux::abi::x86_64::syscall({
+                        rax: std::abi::x86_64::register64(39),
                     })
                 )
             fn stored():
-                [linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39), rdi: abi::x86_64::register64(0 - 9223372036854775807 - 1), r9: abi::x86_64::register64(9223372036854775807)})]
+                [std::linux::abi::x86_64::syscall({rax: std::abi::x86_64::register64(39), rdi: std::abi::x86_64::register64(0 - 9223372036854775807 - 1), r9: std::abi::x86_64::register64(9223372036854775807)})]
             a = raw_getpid()
             xs = stored()
-            r = list::at(xs, 0):
+            r = std::list::at(xs, 0):
                 on IndexNotFound:
-                    abi::x86_64::register64(0)
-            b = abi::x86_64::to_int(r)
-            big = abi::x86_64::to_int(abi::x86_64::register64(9223372036854775807))
+                    std::abi::x86_64::register64(0)
+            b = std::abi::x86_64::to_int(r)
+            big = std::abi::x86_64::to_int(std::abi::x86_64::register64(9223372036854775807))
             [a == b, a > 0, big]
-    test::value("linux-syscall-gc-stress", [true, true, 9223372036854775807], results_survive_allocation)
+    std::test::value("linux-syscall-gc-stress", [true, true, 9223372036854775807], results_survive_allocation)
 
-with context test::suite()
+with context std::test::suite()
 register_getpid_tests()
-test::report()
+std::test::report()

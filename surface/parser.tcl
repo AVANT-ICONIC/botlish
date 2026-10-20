@@ -7,8 +7,18 @@
 #
 #   program      = { importDecl } { NEWLINE | topStatement } EOF
 #                  -- a file declares no namespace: its namespace is its path
-#                     (lib/abi/x86_64.bot is `abi::x86_64`, surface/modules.tcl)
-#   path         = IDENT { "::" IDENT }  -- a namespace: one or more segments
+#                     (stdlib/abi/x86_64.bot is `std::abi::x86_64`, surface/modules.tcl)
+#   path         = [ "::" ] IDENT { "::" IDENT }  -- a namespace: one or more
+#                  segments; a leading "::" roots the path explicitly
+#                  (STD-NAMESPACE.md: `::std::list`). Every path is resolved
+#                  from the namespace root, rooted or not, so the marker
+#                  changes no identity: a type or an error name keeps the
+#                  canonical spelling only, and an import, a qualified value
+#                  and a qualified construction record `rooted 1`, which is
+#                  what lets the loader take a rooted qualifier for a
+#                  namespace, never a type of the file (surface/modules.tcl).
+#                  A rooted reference names a namespace member, so it has at
+#                  least two segments after the root (`::std::list::at`)
 #   importDecl   = "import" path NEWLINE            -- a namespace import
 #                | "import" "type" path NEWLINE     -- a type import: the path's
 #                                                      last segment is a type name,
@@ -60,7 +70,7 @@
 #                  the call on its right side as a coroutine. "coroutine" is
 #                  contextual: a binding form only when directly followed by
 #                  a braced group and "=" (CoroutineAhead), so `coroutine` is
-#                  an ordinary name everywhere else (`coroutine::done?(h)`,
+#                  an ordinary name everywhere else (`std::coroutine::done?(h)`,
 #                  `coroutine = 1`). The fields are exactly the two named
 #                  results of construction, each optional and renamable:
 #   coField      = ( "step" | "first" ) [ ":" IDENT ]
@@ -570,7 +580,17 @@ proc surface::parser::Expect {pVar kind what} {
     return [Advance p]
 }
 
-# An error reference: IDENT { "::" IDENT } (ERROR-PAYLOADS.md, "Module-
+# Fails at the root marker ROOT of the rooted name `::FIRST` that names no
+# namespace member: a rooted name is a namespace path from the root plus a
+# member (`::std::list::at`), and the entry program's own definitions are in
+# no namespace. WHAT is what was expected ("an error name", ...).
+proc surface::parser::RootedMemberError {root first what} {
+    set name [dict get $first value]
+    FailCode [surface::ast::cover [dict get $root span] [dict get $first span]] ROOTED-NAME \
+        "\"::$name\" is a rooted name with no namespace: a leading \"::\" starts a namespace path from the root, so $what written with it is ::NAMESPACE::NAME (::std::list::at); a name that is in no namespace (the entry program's own) is written without it: $name"
+}
+
+# An error reference: [ "::" ] IDENT { "::" IDENT } (ERROR-PAYLOADS.md, "Module-
 # qualified error identity"). A bare name is an error of the file's own
 # module (or the entry program's, or a builtin one); `ns::Name`, `a::b::Name`
 # names the error Name of module ns, a::b -- the qualified-name rule of
@@ -578,9 +598,21 @@ proc surface::parser::Expect {pVar kind what} {
 # SPELLING span SPAN}; WHAT describes what is expected, for the diagnostic.
 proc surface::parser::ErrorName {pVar what} {
     upvar 1 $pVar p
+    set root ""
+    if {[Kind p] eq "::"} {
+        # `::std::list::NotFound`: a rooted error name, the canonical
+        # spelling (STD-NAMESPACE.md).
+        set root [Advance p]
+    }
     set first [Expect p IDENT $what]
     set value [dict get $first value]
     set span [dict get $first span]
+    if {$root ne ""} {
+        set span [surface::ast::cover [dict get $root span] $span]
+        if {[Kind p] ne "::"} {
+            RootedMemberError $root $first "an error name"
+        }
+    }
     while {[Kind p] eq "::"} {
         Advance p
         set member [Expect p IDENT "an error name after \"::\""]
@@ -652,7 +684,7 @@ proc surface::parser::DirectModule {pVar} {
     set token [Peek p]
     if {[dict get $token kind] eq "IDENT" || [dict get $token kind] eq "::"} {
         FailCode [dict get $token span] DIRECT-MODULE-FORM \
-            "`direct module` takes no name: a module's identity is its file path (lib/linux.bot is the module linux), so the declaration is the two words alone"
+            "`direct module` takes no name: a module's identity is its file path (stdlib/linux.bot is the module std::linux), so the declaration is the two words alone"
     }
     if {[dict get $token kind] ni {NEWLINE EOF}} {
         FailCode [dict get $token span] DIRECT-MODULE-FORM \
@@ -683,8 +715,17 @@ proc surface::parser::MisplacedDirectModule {pVar token} {
 proc surface::parser::AtImport {pVar} {
     upvar 1 $pVar p
     set token [Peek p]
-    return [expr {[dict get $token kind] eq "IDENT" && [dict get $token text] eq "import"
-        && [Kind p 1] in {IDENT type}}]
+    if {[dict get $token kind] ne "IDENT" || [dict get $token text] ne "import"} {
+        return 0
+    }
+    if {[Kind p 1] in {IDENT type}} {
+        return 1
+    }
+    # `import ::std::list` (a rooted path, STD-NAMESPACE.md), never
+    # `import::name`: "::" glued to the word is a qualified name whose first
+    # segment is `import`, as before.
+    set next [Peek p 1]
+    return [expr {[dict get $next kind] eq "::" && [dict get $next span start] > [dict get $token span end]}]
 }
 
 # The import declarations of the file header, in written order: a list of
@@ -732,9 +773,18 @@ proc surface::parser::Import {pVar} {
         Advance p
         set isType 1
     }
+    set rooted 0
+    if {[Kind p] eq "::"} {
+        # `import ::std::list`: the path from the root, explicitly.
+        set root [Advance p]
+        set rooted 1
+    }
     set first [Expect p IDENT [expr {$isType ? "a qualified type name (NAMESPACE::Type) after \"import type\"" : "a namespace name after \"import\""}]]
     set segments [list [dict get $first value]]
     set spans [list [dict get $first span]]
+    if {$rooted} {
+        set spans [list [surface::ast::cover [dict get $root span] [dict get $first span]]]
+    }
     while {[Kind p] eq "::"} {
         Advance p
         if {[Kind p] eq "*"} {
@@ -763,10 +813,10 @@ proc surface::parser::Import {pVar} {
         return [surface::ast::node typeimport $span \
             namespace [join [lrange $segments 0 end-1] ::] \
             namespaceSpan [surface::ast::cover [lindex $spans 0] [lindex $spans end-1]] \
-            name [lindex $segments end] nameSpan [lindex $spans end]]
+            name [lindex $segments end] nameSpan [lindex $spans end] rooted $rooted]
     }
     return [surface::ast::node import $span namespace [join $segments ::] \
-        namespaceSpan [surface::ast::cover [lindex $spans 0] [lindex $spans end]]]
+        namespaceSpan [surface::ast::cover [lindex $spans 0] [lindex $spans end]] rooted $rooted]
 }
 
 # 1 if the next tokens are a (removed) namespace declaration: the contextual
@@ -1798,7 +1848,7 @@ proc surface::parser::Statement {pVar} {
         Fail $token "\"[dict get $token text]\" only modifies a function declaration (\"[dict get $token text] fn NAME(...):\"), not a \"[Kind p 1]\" declaration"
     }
     if {[AtNamespaceDecl p]} {
-        Fail $token "namespace declarations do not exist: a file's namespace is its path (lib/abi/x86_64.bot is abi::x86_64), so the file needs no \"namespace\" line"
+        Fail $token "namespace declarations do not exist: a file's namespace is its path (stdlib/abi/x86_64.bot is std::abi::x86_64), so the file needs no \"namespace\" line"
     }
     if {[AtImport p]} {
         Fail $token "an import must be in the file header: after the \"namespace\" declaration, before any other declaration or statement, and never inside a function, loop or branch"
@@ -2174,6 +2224,16 @@ proc surface::parser::TypeExpr {pVar what} {
         # constructor (`unit[int]` is resolution's "not a type constructor").
         Advance p
         set name unit
+    } elseif {[Kind p] eq "::"} {
+        # `::std::abi::U8Value`: a rooted type name. A type name is a
+        # namespace member whichever way it is spelled, so it keeps the
+        # canonical spelling (STD-NAMESPACE.md).
+        set root [Advance p]
+        set token [Expect p IDENT "a namespace name after the root \"::\""]
+        if {[Kind p] ne "::"} {
+            RootedMemberError $root $token "a type name"
+        }
+        set name [dict get $token value]
     } else {
         set token [Expect p IDENT $what]
         set name [dict get $token value]
@@ -2192,8 +2252,8 @@ proc surface::parser::TypeExpr {pVar what} {
     }
     while {$name ne "unit" && [Kind p] eq "::"} {
         # A module-qualified type name (STRUCTS.md): "geo::Point" names the
-        # struct Point declared by module geo, "abi::x86_64::Register64" the
-        # struct Register64 of the nested namespace abi::x86_64. Kept as the
+        # struct Point declared by module geo, "std::abi::x86_64::Register64" the
+        # struct Register64 of the nested namespace std::abi::x86_64. Kept as the
         # one bare-name string, so every bare-name consumer keeps working.
         Advance p
         set member [Expect p IDENT "a type name after \"::\""]
@@ -2287,7 +2347,7 @@ proc surface::parser::ScalarRefinement {pVar name} {
 # "array" INT "of" TypeExpr -- a fixed array representation
 # (FIXED-LAYOUT-ARRAYS.md): exactly INT consecutive elements of the element
 # representation, which may itself be an array (`array 2 of array 3 of
-# binary::U32`: two rows of three, C's dimension order). The extent is the
+# std::binary::U32`: two rows of three, C's dimension order). The extent is the
 # INT token's decimal text; what it may be (positive, within the layout) is
 # hir/layouts.tcl's.
 proc surface::parser::ArrayTypeExpr {pVar} {
@@ -3375,7 +3435,7 @@ proc surface::parser::Postfix {pVar} {
                 while {[Kind p] eq "\[" && [Kind p 1] eq "INT"} {
                     # receiver.name[3][1]: static element indices -- the
                     # element designator of a layout's fixed array
-                    # (FIXED-LAYOUT-ARRAYS.md: binary::store(e, L.pts[2].x,
+                    # (FIXED-LAYOUT-ARRAYS.md: std::binary::store(e, L.pts[2].x,
                     # v)). An integer can never be a type, so this is never
                     # a method call's imprint list; what it may designate
                     # (only a layout field designator) is hir/resolve.tcl's.
@@ -3473,6 +3533,57 @@ proc surface::parser::CallArguments {pVar} {
     return [list $args $flags]
 }
 
+# NAMESPACE::member after its first segment FIRST (the IDENT token just
+# consumed; SPAN where the name starts, its root marker for a ROOTED name):
+# NAMESPACE possibly nested, every segment but the last the namespace path
+# ("std::abi::x86_64::register64" is member register64 of namespace
+# std::abi::x86_64). A qualified name, a qualified construction
+# NAMESPACE::Struct { ... } or a call's callee with explicit imprints.
+# ROOTED is recorded on the node, for the loader (surface/modules.tcl).
+proc surface::parser::QualifiedPrimary {pVar first span rooted} {
+    upvar 1 $pVar p
+    set segments [list [dict get $first value]]
+    set namespaceSpan $span
+    if {$rooted} {
+        set namespaceSpan [surface::ast::cover $span [dict get $first span]]
+    }
+    Advance p
+    set member [Expect p IDENT "a name after \"::\""]
+    while {[Kind p] eq "::"} {
+        lappend segments [dict get $member value]
+        set namespaceSpan [surface::ast::cover $span [dict get $member span]]
+        Advance p
+        set member [Expect p IDENT "a name after \"::\""]
+    }
+    set namespaceName [join $segments ::]
+    if {[Kind p] eq "\{"} {
+        # NAMESPACE::Struct { ... }: a named struct construction
+        # (STRUCTS.md) through module qualification.
+        set nameSpan [SpanFrom p $span]
+        set init [FieldInits p]
+        return [surface::ast::node namedstruct [SpanFrom p $span] \
+            namespace $namespaceName \
+            name [dict get $member value] nameSpan $nameSpan init $init rooted $rooted]
+    }
+    set imprints {}
+    if {[Kind p] eq "\["} {
+        # NAMESPACE::name[TYPE, ...](args): a call with explicit
+        # imprints (C-ABI-TYPES.md: `std::ffi::c::null[SSL]()`).
+        set spelled "${namespaceName}::[dict get $member value]"
+        if {$rooted} {
+            set spelled ::$spelled
+        }
+        lassign [Imprints p $spelled] types spans
+        if {[Kind p] ne "("} {
+            Fail [Peek p] "explicit imprints $spelled\[...\] are written only before a call's argument list, found [Describe [Peek p]] after them"
+        }
+        set imprints [list imprints $types imprintSpans $spans]
+    }
+    return [surface::ast::node qualname [SpanFrom p $span] \
+        namespace $namespaceName namespaceSpan $namespaceSpan \
+        name [dict get $member value] nameSpan [dict get $member span] rooted $rooted {*}$imprints]
+}
+
 proc surface::parser::Primary {pVar} {
     upvar 1 $pVar p
     set token [Peek p]
@@ -3509,46 +3620,20 @@ proc surface::parser::Primary {pVar} {
             Advance p
             return [surface::ast::node unit $span]
         }
+        :: {
+            # ::NAMESPACE::member: a rooted qualified name (STD-NAMESPACE.md),
+            # the namespace path from the root, explicitly.
+            Advance p
+            set first [Expect p IDENT "a namespace name after the root \"::\""]
+            if {[Kind p] ne "::"} {
+                RootedMemberError $token $first "a name"
+            }
+            return [QualifiedPrimary p $first $span 1]
+        }
         IDENT {
             Advance p
             if {[Kind p] eq "::"} {
-                # NAMESPACE::member, NAMESPACE possibly nested: every segment
-                # but the last is the namespace path ("abi::x86_64::register64"
-                # is member register64 of namespace abi::x86_64).
-                set segments [list [dict get $token value]]
-                set namespaceSpan $span
-                Advance p
-                set member [Expect p IDENT "a name after \"::\""]
-                while {[Kind p] eq "::"} {
-                    lappend segments [dict get $member value]
-                    set namespaceSpan [surface::ast::cover $span [dict get $member span]]
-                    Advance p
-                    set member [Expect p IDENT "a name after \"::\""]
-                }
-                set namespaceName [join $segments ::]
-                if {[Kind p] eq "\{"} {
-                    # NAMESPACE::Struct { ... }: a named struct construction
-                    # (STRUCTS.md) through module qualification.
-                    set nameSpan [SpanFrom p $span]
-                    set init [FieldInits p]
-                    return [surface::ast::node namedstruct [SpanFrom p $span] \
-                        namespace $namespaceName \
-                        name [dict get $member value] nameSpan $nameSpan init $init]
-                }
-                set imprints {}
-                if {[Kind p] eq "\["} {
-                    # NAMESPACE::name[TYPE, ...](args): a call with explicit
-                    # imprints (C-ABI-TYPES.md: `ffi::c::null[SSL]()`).
-                    set spelled "${namespaceName}::[dict get $member value]"
-                    lassign [Imprints p $spelled] types spans
-                    if {[Kind p] ne "("} {
-                        Fail [Peek p] "explicit imprints $spelled\[...\] are written only before a call's argument list, found [Describe [Peek p]] after them"
-                    }
-                    set imprints [list imprints $types imprintSpans $spans]
-                }
-                return [surface::ast::node qualname [SpanFrom p $span] \
-                    namespace $namespaceName namespaceSpan $namespaceSpan \
-                    name [dict get $member value] nameSpan [dict get $member span] {*}$imprints]
+                return [QualifiedPrimary p $token $span 0]
             }
             if {[Kind p] eq "\{" && [dict get $token value] eq "enum"} {
                 # `enum {A, B}` (ENUMS.md): there are no anonymous enums.

@@ -94,7 +94,7 @@ prof audit/post-module-static-exact-target-census/profiles/hist-frozen-r2a3/prog
 prof audit/post-module-static-exact-target-census/profiles/prod/program.nir 21 hist-modstatic
 wt="$scratch/wt-cf"
 [ -d "$wt" ] || git worktree add -f --detach "$wt" HEAD > /dev/null
-(cd "$wt" && git checkout -q -- lib/web.bot \
+(cd "$wt" && git checkout -q -- stdlib/web.bot \
     && git apply "$root/audit/post-module-static-exact-target-census/counterfactual/exact-target.diff" \
     && mkdir -p native/target/release && cp "$root/native/target/release/botlish-native" native/target/release/ \
     && tclsh9.0 "$root/$D/tools/emit-nir.tcl" bench/refined-checks.bot) > "$out/nir/cf-exact.bot.nir"

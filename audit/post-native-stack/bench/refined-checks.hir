@@ -1,5 +1,5 @@
 program s2 binds b35 check, b36 q
-e1 bind b1 web::hex_digits : list
+e1 bind b1 std::web::hex_digits : list
     e2 call native(list) : list
         e3 ref b3 list : native list
         e4 const str 0 : str
@@ -18,8 +18,8 @@ e1 bind b1 web::hex_digits : list
         e17 const str D : str
         e18 const str E : str
         e19 const str F : str
-e20 bind b2 web::uri_escape_text : block(e21)/1 -> any
-    e21 block s4 (b4 s) captures (b1 web::hex_digits) binds b5 high_nibble, b6 is_unreserved, b7 hex_pair, b8 esc_bytes, b9 esc_char, b10 esc_from : block(e21)/1 -> any
+e20 bind b2 std::web::uri_escape_text : block(e21)/1 -> any
+    e21 block s4 (b4 s) captures (b1 std::web::hex_digits) binds b5 high_nibble, b6 is_unreserved, b7 hex_pair, b8 esc_bytes, b9 esc_char, b10 esc_from : block(e21)/1 -> any
         e22 bind b5 high_nibble : block(e23)/1 -> int
             e23 block s5 (b11 b) captures () : block(e23)/1 -> int
                 e24 if : int
@@ -243,18 +243,18 @@ e20 bind b2 web::uri_escape_text : block(e21)/1 -> any
                                                                                                             else s60
                                                                                                                 e189 ref b14 false : bool
         e190 bind b7 hex_pair : block(e191)/1 -> str
-            e191 block s61 (b16 b) captures (b1 web::hex_digits, b5 high_nibble) : block(e191)/1 -> str
+            e191 block s61 (b16 b) captures (b1 std::web::hex_digits, b5 high_nibble) : block(e191)/1 -> str
                 e192 call native(concat) : str
                     e193 ref b17 concat : native concat
                     e194 call native(list_get) : any
                         e195 ref b18 list_get : native list_get
-                        e196 ref b1 web::hex_digits : list deferred
+                        e196 ref b1 std::web::hex_digits : list deferred
                         e197 call block(e23) : int
                             e198 ref b5 high_nibble : block(e23)/1 -> int deferred
                             e199 ref b16 b : any
                     e200 call native(list_get) : any
                         e201 ref b18 list_get : native list_get
-                        e202 ref b1 web::hex_digits : list deferred
+                        e202 ref b1 std::web::hex_digits : list deferred
                         e203 call native(mod) : int
                             e204 ref b19 mod : native mod
                             e205 ref b16 b : any

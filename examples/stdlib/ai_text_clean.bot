@@ -30,11 +30,11 @@
 #
 # expect: ["hello", "hello  world", "AI-generated", "\"hello\"", "'hello'", "wait... what?"]
 
-import str
+import std::str
 
 # The character at index, or "" past the end (examples/stdlib/csv.bot's peek).
 fn peek(text, index) errors LowerUnderrun:
-    if index >= str::length(text):
+    if index >= std::str::length(text):
         return ""
 
     text.substring(index, index + 1)
@@ -50,9 +50,9 @@ fn cleaner_emoji(c):
 # character (one peek()'d character, or "" past the end), cleaned in
 # isolation: "" for a removed emoji, the ASCII normalization of a targeted
 # punctuation mark, or character itself unchanged. The tests read the
-# character the text holds (str::char_at) and compare characters.
+# character the text holds (std::str::char_at) and compare characters.
 fn clean_char(character):
-    if str::length(character) > 0:
+    if std::str::length(character) > 0:
         c = character.char_at(0)
         if cleaner_emoji(c):
             return ""
@@ -73,7 +73,7 @@ fn clean_char(character):
 
 # text's characters from index on, cleaned and appended to done.
 fn clean_from(text, index, done) errors LowerUnderrun:
-    if index >= str::length(text):
+    if index >= std::str::length(text):
         return done
 
     text.clean_from(index + 1, done.concat(clean_char(text.peek(index))))

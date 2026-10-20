@@ -155,7 +155,7 @@ proc withoutName {message name} {
 # The standard library's own module `NAME` copied into the scratch library
 # (a scratch library otherwise holds only what a test writes).
 proc useStandardModule {dir name} {
-    set source [file join $::projectRoot lib $name.bot]
+    set source [file join $::projectRoot stdlib $name.bot]
     set target [file join $dir $name.bot]
     file mkdir [file dirname $target]
     file copy -force $source $target
@@ -172,7 +172,7 @@ proc useStandardModule {dir name} {
 # nest      an opaque struct holding a public struct, and a public struct
 # mixed     a module with one public and one opaque struct
 # holder    a public struct of another module holding an opaque value
-# authp/authp::kid, authc/authc::kid  authority is exact across parent/child
+# authp/std::authp::kid, authc/std::authc::kid  authority is exact across parent/child
 
 proc writeFixtures {dir} {
     writeModule $dir wrapped "opaque struct Wrapped:
@@ -252,37 +252,37 @@ opaque struct Secret:
 fn secret(v: int) -> Secret:
     Secret {value: v}
 "
-    writeModule $dir holder "import wrapped
+    writeModule $dir holder "import std::wrapped
 
 struct Holder:
-    secret: wrapped::Wrapped
+    secret: std::wrapped::Wrapped
     n: int
 
 fn make(n: int) -> Holder:
-    Holder {secret: wrapped::create(n, \"h\"), n: n}
+    Holder {secret: std::wrapped::create(n, \"h\"), n: n}
 
 fn secret(h: Holder):
     h.secret
 
 fn viaaccessor(h: Holder):
-    wrapped::value(h.secret)
+    std::wrapped::value(h.secret)
 "
-    writeModule $dir holderbad "import wrapped
+    writeModule $dir holderbad "import std::wrapped
 
 struct Holder:
-    secret: wrapped::Wrapped
+    secret: std::wrapped::Wrapped
 
 fn bad(h: Holder):
     h.secret.value
 "
     # Parent with a child it imports; the child owns its own opaque struct.
-    writeModule $dir authp "import authp::kid
+    writeModule $dir authp "import std::authp::kid
 
 opaque struct Box:
     v: int
 
 fn forge():
-    authp::kid::Kid {k: 1}
+    std::authp::kid::Kid {k: 1}
 "
     writeModule $dir authp/kid "opaque struct Kid:
     k: int
@@ -297,15 +297,15 @@ fn make(k: int) -> Kid:
 fn make(v: int) -> Box:
     Box {v: v}
 "
-    writeModule $dir authc/kid "import authc
+    writeModule $dir authc/kid "import std::authc
 
 fn forge():
-    authc::Box {v: 1}
+    std::authc::Box {v: 1}
 "
 }
 
 # The standard consumer prefix.
-set ::consume "import wrapped\nx = wrapped::create(3, \"three\")\n"
+set ::consume "import std::wrapped\nx = std::wrapped::create(3, \"three\")\n"
 
 # ---------------------------------------------------------------------------
 # Grammar, the contextual modifier, the AST
@@ -376,10 +376,10 @@ test opaque-syntax-recovery {a bad opaque declaration recovers like any other st
 test opaque-lower-decl {the lowered declaration carries the opaque flag and the namespace the loader supplied} -body {
     set ast [surface::parse "opaque struct A:\n    v: int\n"]
     set node [lindex [dict get $ast body] 0]
-    list [dict get [surface::lower::StructDeclOf $node abi::x86_64] namespace] \
-        [dict get [surface::lower::StructDeclOf $node abi::x86_64] opaque] \
+    list [dict get [surface::lower::StructDeclOf $node std::abi::x86_64] namespace] \
+        [dict get [surface::lower::StructDeclOf $node std::abi::x86_64] opaque] \
         [dict get [surface::lower::StructDeclOf $node ""] namespace]
-} -result {abi::x86_64 1 {}}
+} -result {std::abi::x86_64 1 {}}
 
 # ---------------------------------------------------------------------------
 # The HIR registry and its text
@@ -387,25 +387,25 @@ test opaque-lower-decl {the lowered declaration carries the opaque flag and the 
 test opaque-registry-entry {the HIR struct entry records opaque and the declaring namespace; an ordinary struct records opaque 0} -body {
     withScratchLibrary {
         writeFixtures $dir
-        set hir [hirOfSource "import mixed\nimport wrapped\n1\n"]
+        set hir [hirOfSource "import std::mixed\nimport std::wrapped\n1\n"]
         lsort [lmap entry [hir::sourceTypes $hir] {
             list [dict get $entry id] [dict get $entry namespace] [dict get $entry opaque]
         }]
     }
-} -result {{mixed::Public mixed 0} {mixed::Secret mixed 1} {wrapped::Wrapped wrapped 1}}
+} -result {{std::mixed::Public std::mixed 0} {std::mixed::Secret std::mixed 1} {std::wrapped::Wrapped std::wrapped 1}}
 
 test opaque-registry-predicates {isOpaque, owner and the authority predicate are exact} -body {
     withScratchLibrary {
         writeFixtures $dir
-        hirOfSource "import mixed\nimport wrapped\n1\n"
-        list [hir::structs::isOpaque wrapped::Wrapped] [hir::structs::isOpaque mixed::Public] \
-            [hir::structs::owner wrapped::Wrapped] \
-            [hir::structs::representationDenied wrapped::Wrapped ""] \
-            [hir::structs::representationDenied wrapped::Wrapped wrapped] \
-            [hir::structs::representationDenied wrapped::Wrapped mixed] \
-            [hir::structs::representationDenied mixed::Public mixed::other]
+        hirOfSource "import std::mixed\nimport std::wrapped\n1\n"
+        list [hir::structs::isOpaque std::wrapped::Wrapped] [hir::structs::isOpaque std::mixed::Public] \
+            [hir::structs::owner std::wrapped::Wrapped] \
+            [hir::structs::representationDenied std::wrapped::Wrapped ""] \
+            [hir::structs::representationDenied std::wrapped::Wrapped std::wrapped] \
+            [hir::structs::representationDenied std::wrapped::Wrapped std::mixed] \
+            [hir::structs::representationDenied std::mixed::Public std::mixed::other]
     }
-} -result {1 0 wrapped 1 0 1 0}
+} -result {1 0 std::wrapped 1 0 1 0}
 
 test opaque-registry-entry-program-owner {an entry program's own opaque struct is owned by the entry program (namespace "")} -body {
     set hir [hirOfSource "opaque struct Secret:\n    value: int\nSecret {value: 1}.value\n"]
@@ -436,7 +436,7 @@ test opaque-hir-ordinary-text-has-no-opaque-word {HIR text of a program with onl
 test opaque-owner-module-ordinary-botlish {inside its module an opaque struct is an ordinary struct: construction, projection and destructuring need nothing special} -body {
     withScratchLibrary {
         writeFixtures $dir
-        agree "import wrapped\nx = wrapped::create(3, \"three\")\ny = wrapped::copy(x)\n\[wrapped::value(x), wrapped::describe(y), wrapped::value(y), x == y\]\n"
+        agree "import std::wrapped\nx = std::wrapped::create(3, \"three\")\ny = std::wrapped::copy(x)\n\[std::wrapped::value(x), std::wrapped::describe(y), std::wrapped::value(y), x == y\]\n"
     }
 } -result {[3, "three", 3, true]}
 
@@ -455,9 +455,9 @@ fn copy(s: Secret):
 test opaque-owner-entry-program-is-exact {an entry program's opaque struct is not open to a module's generic function: only the entry program's own code may project it} -body {
     withScratchLibrary {
         writeModule $dir peeker "fn peek(x):\n    x.value\n"
-        rejection "import peeker\nopaque struct Secret:\n    value: int\npeeker::peek(Secret {value: 1})\n"
+        rejection "import std::peeker\nopaque struct Secret:\n    value: int\nstd::peeker::peek(Secret {value: 1})\n"
     }
-} -match glob -result {OPAQUE-REPRESENTATION: call to peeker::peek with x : Secret is invalid: field access on Secret is not available outside the entry program; Secret has an opaque representation, so its fields can be neither projected nor destructured here (use the public operations provided by the entry program) (in the body of peeker::peek, at *)}
+} -match glob -result {OPAQUE-REPRESENTATION: call to std::peeker::peek with x : Secret is invalid: field access on Secret is not available outside the entry program; Secret has an opaque representation, so its fields can be neither projected nor destructured here (use the public operations provided by the entry program) (in the body of std::peeker::peek, at *)}
 
 test opaque-owner-same-hir-as-ordinary-struct {opaque changes no HIR operation: the program's HIR, with the one declaration marker removed, is exactly the ordinary struct's, and has no opaque-specific node kind} -body {
     set body {
@@ -489,12 +489,12 @@ read(copy(create(4)))
 test opaque-consumer-value-semantics {a consumer passes, aliases and compares an opaque value like any value} -body {
     withScratchLibrary {
         writeFixtures $dir
-        agree "import wrapped
-x = wrapped::create(3, \"three\")
+        agree "import std::wrapped
+x = std::wrapped::create(3, \"three\")
 y = x
-fn pass(v: wrapped::Wrapped) -> wrapped::Wrapped:
+fn pass(v: std::wrapped::Wrapped) -> std::wrapped::Wrapped:
     v
-\[wrapped::value(pass(x)), x == y, x == wrapped::create(4, \"four\"), pass(x) == y\]
+\[std::wrapped::value(pass(x)), x == y, x == std::wrapped::create(4, \"four\"), pass(x) == y\]
 "
     }
 } -result {[3, true, false, true]}
@@ -502,13 +502,13 @@ fn pass(v: wrapped::Wrapped) -> wrapped::Wrapped:
 test opaque-consumer-pass-store-return {passing, storing in a list, returning} -body {
     withScratchLibrary {
         writeFixtures $dir
-        agree "import wrapped
-import list
-x = wrapped::create(3, \"three\")
-fn pass(v: wrapped::Wrapped) -> wrapped::Wrapped:
+        agree "import std::wrapped
+import std::list
+x = std::wrapped::create(3, \"three\")
+fn pass(v: std::wrapped::Wrapped) -> std::wrapped::Wrapped:
     v
 xs = \[x, pass(x)\]
-\[wrapped::value(pass(x)), x == pass(x), list::length(xs)\]
+\[std::wrapped::value(pass(x)), x == pass(x), std::list::length(xs)\]
 "
     }
 } -result {[3, true, 2]}
@@ -516,24 +516,24 @@ xs = \[x, pass(x)\]
 test opaque-consumer-method-and-qualified-call {the qualified accessor, the method form of the same function, and a method of a describe function} -body {
     withScratchLibrary {
         writeFixtures $dir
-        agree "${::consume}\[wrapped::value(x), x.value(), x.describe(), wrapped::describe(x)\]\n"
+        agree "${::consume}\[std::wrapped::value(x), x.value(), x.describe(), std::wrapped::describe(x)\]\n"
     }
 } -result {[3, 3, "three", "three"]}
 
 test opaque-consumer-signatures {an opaque struct appears in a consumer's own signatures, struct fields and lists: the type is public} -body {
     withScratchLibrary {
         writeFixtures $dir
-        agree "import wrapped
+        agree "import std::wrapped
 struct Box:
-    inside: wrapped::Wrapped
+    inside: std::wrapped::Wrapped
 
-fn open(b: Box) -> wrapped::Wrapped:
+fn open(b: Box) -> std::wrapped::Wrapped:
     b.inside
 
-fn weigh(w: wrapped::Wrapped) -> int:
-    wrapped::value(w)
+fn weigh(w: std::wrapped::Wrapped) -> int:
+    std::wrapped::value(w)
 
-b = Box {inside: wrapped::create(8, \"eight\")}
+b = Box {inside: std::wrapped::create(8, \"eight\")}
 weigh(open(b))
 "
     }
@@ -542,45 +542,45 @@ weigh(open(b))
 test opaque-consumer-holder-in-entry-program {an entry-program struct storing an opaque value is legal and projects its own field, not the stored value's} -body {
     withScratchLibrary {
         writeFixtures $dir
-        list [agree "import wrapped\nstruct H:\n    t: wrapped::Wrapped\nh = H {t: wrapped::create(5, \"q\")}\nwrapped::value(h.t)\n"] \
-             [rejectionKind "import wrapped\nstruct H:\n    t: wrapped::Wrapped\nh = H {t: wrapped::create(5, \"q\")}\nh.t.value\n"]
+        list [agree "import std::wrapped\nstruct H:\n    t: std::wrapped::Wrapped\nh = H {t: std::wrapped::create(5, \"q\")}\nstd::wrapped::value(h.t)\n"] \
+             [rejectionKind "import std::wrapped\nstruct H:\n    t: std::wrapped::Wrapped\nh = H {t: std::wrapped::create(5, \"q\")}\nh.t.value\n"]
     }
 } -result {5 OPAQUE-REPRESENTATION}
 
 test opaque-consumer-no-import-type {`import type` stays reserved for source `type` declarations: a struct is spelled qualified, opaque or not} -body {
     withScratchLibrary {
         writeFixtures $dir
-        rejection "import type wrapped::Wrapped\n1\n"
+        rejection "import type std::wrapped::Wrapped\n1\n"
     }
-} -match glob -result {NOT-A-TYPE: *"wrapped::Wrapped" is a struct, not a source-defined `type`*}
+} -match glob -result {NOT-A-TYPE: *"std::wrapped::Wrapped" is a struct, not a source-defined `type`*}
 
 test opaque-consumer-anonymous-struct-is-not-an-opaque-value {an anonymous struct with the same fields never manufactures an opaque value} -body {
     withScratchLibrary {
         writeFixtures $dir
-        rejection "import wrapped\nwrapped::value({value: 3, label: \"x\"})\n"
+        rejection "import std::wrapped\nstd::wrapped::value({value: 3, label: \"x\"})\n"
     }
-} -match glob -result {TYPE: argument for parameter "x" cannot be proven to satisfy wrapped::Wrapped (argument type: *}
+} -match glob -result {TYPE: argument for parameter "x" cannot be proven to satisfy std::wrapped::Wrapped (argument type: *}
 
 # ---------------------------------------------------------------------------
 # What a consumer cannot do
 
-set constructionMessage {OPAQUE-CONSTRUCTION: wrapped::Wrapped has an opaque representation owned by module "wrapped"; construct it through the public operations provided by that module}
-set representationMessage {OPAQUE-REPRESENTATION: field access on wrapped::Wrapped is not available outside module "wrapped"; wrapped::Wrapped has an opaque representation, so its fields can be neither projected nor destructured here (use the public operations provided by that module)}
+set constructionMessage {OPAQUE-CONSTRUCTION: std::wrapped::Wrapped has an opaque representation owned by module "std::wrapped"; construct it through the public operations provided by that module}
+set representationMessage {OPAQUE-REPRESENTATION: field access on std::wrapped::Wrapped is not available outside module "std::wrapped"; std::wrapped::Wrapped has an opaque representation, so its fields can be neither projected nor destructured here (use the public operations provided by that module)}
 
 foreach {name literal} {
-    valid          {wrapped::Wrapped {value: 3, label: "three"}}
-    reordered      {wrapped::Wrapped {label: "three", value: 3}}
-    constants      {wrapped::Wrapped {value: 0, label: ""}}
-    missing-field  {wrapped::Wrapped {value: 3}}
-    unknown-field  {wrapped::Wrapped {value: 3, label: "x", guess: 1}}
-    only-guess     {wrapped::Wrapped {guess: 3}}
-    duplicate      {wrapped::Wrapped {value: 3, value: 4, label: "x"}}
-    wrong-type     {wrapped::Wrapped {value: "no", label: 4}}
+    valid          {std::wrapped::Wrapped {value: 3, label: "three"}}
+    reordered      {std::wrapped::Wrapped {label: "three", value: 3}}
+    constants      {std::wrapped::Wrapped {value: 0, label: ""}}
+    missing-field  {std::wrapped::Wrapped {value: 3}}
+    unknown-field  {std::wrapped::Wrapped {value: 3, label: "x", guess: 1}}
+    only-guess     {std::wrapped::Wrapped {guess: 3}}
+    duplicate      {std::wrapped::Wrapped {value: 3, value: 4, label: "x"}}
+    wrong-type     {std::wrapped::Wrapped {value: "no", label: 4}}
 } {
     test opaque-construct-$name "outside the owner `$literal` is rejected with the one OPAQUE-CONSTRUCTION diagnostic: no missing-field, unknown-field, duplicate or type error, no field named" -body {
         withScratchLibrary {
             writeFixtures $dir
-            rejection "import wrapped\n$literal\n"
+            rejection "import std::wrapped\n$literal\n"
         }
     } -result $constructionMessage
 }
@@ -589,10 +589,10 @@ test opaque-construct-in-a-function-and-nested {construction is rejected whereve
     withScratchLibrary {
         writeFixtures $dir
         lmap source {
-            "import wrapped\nfn f():\n    wrapped::Wrapped {value: 1, label: \"a\"}\n1\n"
-            "import wrapped\nwrapped::value(wrapped::Wrapped {value: 1, label: \"a\"})\n"
-            "import wrapped\n\[wrapped::Wrapped {value: 1, label: \"a\"}\]\n"
-            "import wrapped\nstruct H:\n    t: wrapped::Wrapped\nH {t: wrapped::Wrapped {value: 1, label: \"a\"}}\n"
+            "import std::wrapped\nfn f():\n    std::wrapped::Wrapped {value: 1, label: \"a\"}\n1\n"
+            "import std::wrapped\nstd::wrapped::value(std::wrapped::Wrapped {value: 1, label: \"a\"})\n"
+            "import std::wrapped\n\[std::wrapped::Wrapped {value: 1, label: \"a\"}\]\n"
+            "import std::wrapped\nstruct H:\n    t: std::wrapped::Wrapped\nH {t: std::wrapped::Wrapped {value: 1, label: \"a\"}}\n"
         } {rejection $source}
     }
 } -result [lrepeat 4 $constructionMessage]
@@ -601,12 +601,12 @@ test opaque-construct-diagnostic-kinds-all-modes {with -strict 0 the only diagno
     withScratchLibrary {
         writeFixtures $dir
         lmap literal {
-            {wrapped::Wrapped {guess: 3}}
-            {wrapped::Wrapped {value: "no", label: 4}}
-            {wrapped::Wrapped {value: 3}}
-            {wrapped::Wrapped {value: 3, label: "x", extra: 1}}
-            {wrapped::Wrapped {value: 3, value: 4, label: "x"}}
-        } {diagKinds "import wrapped\n$literal\n"}
+            {std::wrapped::Wrapped {guess: 3}}
+            {std::wrapped::Wrapped {value: "no", label: 4}}
+            {std::wrapped::Wrapped {value: 3}}
+            {std::wrapped::Wrapped {value: 3, label: "x", extra: 1}}
+            {std::wrapped::Wrapped {value: 3, value: 4, label: "x"}}
+        } {diagKinds "import std::wrapped\n$literal\n"}
     }
 } -result [lrepeat 5 OPAQUE-CONSTRUCTION]
 
@@ -615,10 +615,10 @@ test opaque-construct-diagnostics-name-no-field {no diagnostic of a forged const
         writeFixtures $dir
         set words {}
         foreach literal {
-            {wrapped::Wrapped {value: "no", label: 4}}
-            {wrapped::Wrapped {value: 3}}
+            {std::wrapped::Wrapped {value: "no", label: 4}}
+            {std::wrapped::Wrapped {value: 3}}
         } {
-            foreach d [hir::diagnostics [hirOfSource "import wrapped\n$literal\n" 0]] {
+            foreach d [hir::diagnostics [hirOfSource "import std::wrapped\n$literal\n" 0]] {
                 lappend words [regexp {\ylabel\y|\ymissing\y|declared fields|satisfy} [dict get $d message]]
             }
         }
@@ -632,7 +632,7 @@ foreach {name expr} {
     guessed        {x.guess}
     guessed-other  {x.does_not_exist}
     nested-use     {x.value + 1}
-    in-argument    {wrapped::value(x) + x.value}
+    in-argument    {std::wrapped::value(x) + x.value}
     in-list        {[x.value]}
 } {
     test opaque-project-$name "outside the owner `$expr` is the one OPAQUE-REPRESENTATION diagnostic whether or not the field exists" -body {
@@ -668,7 +668,7 @@ test opaque-project-located-at-the-field-name {the diagnostic points at the fiel
         catch {hirOfSource "${::consume}x.value\n"} m options
         list [ErrorKind $options] [regsub {^.*main\.bot:} [lindex [split $m \n] 0] {}]
     }
-} -match glob -result {OPAQUE-REPRESENTATION {3:3: field access on wrapped::Wrapped is not available*}}
+} -match glob -result {OPAQUE-REPRESENTATION {3:3: field access on std::wrapped::Wrapped is not available*}}
 
 foreach {name pattern} {
     shorthand        {{value} = x}
@@ -697,30 +697,30 @@ test opaque-destructure-same-as-projection {a destructuring is rejected exactly 
 test opaque-destructure-in-function {destructuring a parameter of opaque type in a consumer function is rejected} -body {
     withScratchLibrary {
         writeFixtures $dir
-        rejection "import wrapped\nfn f(w: wrapped::Wrapped):\n    {value} = w\n    value\n1\n"
+        rejection "import std::wrapped\nfn f(w: std::wrapped::Wrapped):\n    {value} = w\n    value\n1\n"
     }
 } -result $representationMessage
 
 test opaque-field-value-call {the callee `(x.callback)(arg)` is representation access: it is rejected like any projection, a function-valued field is no way around} -body {
     withScratchLibrary {
         writeFixtures $dir
-        list [rejection "import hidden\ng = hidden::make()\n(g.callback)(1)\n"] \
-             [rejection "import hidden\ng = hidden::make()\n(g.describe)(1)\n"]
+        list [rejection "import std::hidden\ng = std::hidden::make()\n(g.callback)(1)\n"] \
+             [rejection "import std::hidden\ng = std::hidden::make()\n(g.describe)(1)\n"]
     }
-} -match glob -result {{OPAQUE-REPRESENTATION: field access on hidden::Gadget is not available outside module "hidden"; *} {OPAQUE-REPRESENTATION: field access on hidden::Gadget is not available outside module "hidden"; *}}
+} -match glob -result {{OPAQUE-REPRESENTATION: field access on std::hidden::Gadget is not available outside module "std::hidden"; *} {OPAQUE-REPRESENTATION: field access on std::hidden::Gadget is not available outside module "std::hidden"; *}}
 
 test opaque-field-value-call-method-spelling-without-a-function {`g.callback(1)` with no function `callback` visible is the call of the field value: representation access, with the usual method hint} -body {
     withScratchLibrary {
         writeFixtures $dir
-        rejection "import hidden\ng = hidden::make()\ng.callback(1)\n"
+        rejection "import std::hidden\ng = std::hidden::make()\ng.callback(1)\n"
     }
-} -match glob -result {OPAQUE-REPRESENTATION: field access on hidden::Gadget is not available outside module "hidden"; *; as a method-style call, no function named "callback" is visible here either*}
+} -match glob -result {OPAQUE-REPRESENTATION: field access on std::hidden::Gadget is not available outside module "std::hidden"; *; as a method-style call, no function named "callback" is visible here either*}
 
 test opaque-hint-does-not-depend-on-the-field {the method-call spelling of a real hidden field and of a guessed one differ only in the name the caller wrote} -body {
     withScratchLibrary {
         writeFixtures $dir
-        set real [rejection "import hidden\ng = hidden::make()\ng.callback(1)\n"]
-        set guess [rejection "import hidden\ng = hidden::make()\ng.zzzzzzzz(1)\n"]
+        set real [rejection "import std::hidden\ng = std::hidden::make()\ng.callback(1)\n"]
+        set guess [rejection "import std::hidden\ng = std::hidden::make()\ng.zzzzzzzz(1)\n"]
         expr {[withoutName $real callback] eq [withoutName $guess zzzzzzzz]}
     }
 } -result 1
@@ -728,17 +728,17 @@ test opaque-hint-does-not-depend-on-the-field {the method-call spelling of a rea
 test opaque-instance-bypass-is-rejected {a consumer's own generic function that projects its parameter is analyzed under the opaque argument and rejected at the call that made the instance, with the opacity kind} -body {
     withScratchLibrary {
         writeFixtures $dir
-        list [rejectionKind "import wrapped\nfn peek(x):\n    x.value\npeek(wrapped::create(3, \"three\"))\n"] \
-             [rejectionKind "import wrapped\nfn peek(x):\n    x.guess\npeek(wrapped::create(3, \"three\"))\n"] \
-             [rejectionKind "import wrapped\nfn peek(x):\n    {value} = x\n    value\npeek(wrapped::create(3, \"three\"))\n"]
+        list [rejectionKind "import std::wrapped\nfn peek(x):\n    x.value\npeek(std::wrapped::create(3, \"three\"))\n"] \
+             [rejectionKind "import std::wrapped\nfn peek(x):\n    x.guess\npeek(std::wrapped::create(3, \"three\"))\n"] \
+             [rejectionKind "import std::wrapped\nfn peek(x):\n    {value} = x\n    value\npeek(std::wrapped::create(3, \"three\"))\n"]
     }
 } -result {OPAQUE-REPRESENTATION OPAQUE-REPRESENTATION OPAQUE-REPRESENTATION}
 
 test opaque-instance-bypass-message {the instance diagnostic carries the same representation message, whichever field the generic body reads} -body {
     withScratchLibrary {
         writeFixtures $dir
-        set a [rejection "import wrapped\nfn peek(x):\n    x.value\npeek(wrapped::create(3, \"three\"))\n"]
-        set b [rejection "import wrapped\nfn peek(x):\n    x.guess\npeek(wrapped::create(3, \"three\"))\n"]
+        set a [rejection "import std::wrapped\nfn peek(x):\n    x.value\npeek(std::wrapped::create(3, \"three\"))\n"]
+        set b [rejection "import std::wrapped\nfn peek(x):\n    x.guess\npeek(std::wrapped::create(3, \"three\"))\n"]
         list [expr {[withoutName $a value] eq [withoutName $b guess]}] [string match {*opaque representation*} $a]
     }
 } -result {1 1}
@@ -746,7 +746,7 @@ test opaque-instance-bypass-message {the instance diagnostic carries the same re
 test opaque-instance-ordinary-struct-still-works {the same generic function on an ordinary struct is accepted: only the opaque receiver is refused} -body {
     withScratchLibrary {
         writeFixtures $dir
-        agree "import mixed\nfn peek(x):\n    x.value\npeek(mixed::Public {value: 5})\n"
+        agree "import std::mixed\nfn peek(x):\n    x.value\npeek(std::mixed::Public {value: 5})\n"
     }
 } -result 5
 
@@ -769,7 +769,7 @@ test opaque-no-fallout-twin {the same program on an ordinary struct is the TYPE 
     withScratchLibrary {
         writeFixtures $dir
         writeModule $dir plainw "struct Wrapped:\n    value: int\n\nfn create(value: int):\n    Wrapped {value: value}\n"
-        rejection "import plainw\nfn f(b: bool):\n    b\nf(plainw::create(1).value)\n"
+        rejection "import std::plainw\nfn f(b: bool):\n    b\nf(std::plainw::create(1).value)\n"
     }
 } -match glob -result {TYPE: argument for parameter "b" cannot be proven to satisfy bool (argument type: int*}
 
@@ -829,121 +829,121 @@ proc withoutLocations {message} {
 }
 
 set ::leakPrograms {
-    {import leaky
-leaky::Leaky {zeta_secret: 5, hidden_tag: "t", lurk_inner: leaky::Lurker {shade: 1}, slot_any: 0, hook_fn: leaky::twice}}
-    {import leaky
-leaky::Leaky {zeta_secret: "no", hidden_tag: 4}}
-    {import leaky
-leaky::Leaky {guess: 1, other: 2}}
-    {import leaky
-leaky::Leaky {zeta_secret: 5, zeta_secret: 6}}
-    {import leaky
-import mutable_array
-m = mutable_array::create(2, "x")
-leaky::Leaky {zeta_secret: 5, hidden_tag: "t", lurk_inner: leaky::Lurker {shade: 1}, slot_any: m, hook_fn: leaky::twice}}
-    {import leaky
-import mutable_array
-m = mutable_array::create(2, "x")
-leaky::Leaky {slot_any: m}}
-    {import leaky
-x = leaky::make()
+    {import std::leaky
+std::leaky::Leaky {zeta_secret: 5, hidden_tag: "t", lurk_inner: std::leaky::Lurker {shade: 1}, slot_any: 0, hook_fn: std::leaky::twice}}
+    {import std::leaky
+std::leaky::Leaky {zeta_secret: "no", hidden_tag: 4}}
+    {import std::leaky
+std::leaky::Leaky {guess: 1, other: 2}}
+    {import std::leaky
+std::leaky::Leaky {zeta_secret: 5, zeta_secret: 6}}
+    {import std::leaky
+import std::mutable_array
+m = std::mutable_array::create(2, "x")
+std::leaky::Leaky {zeta_secret: 5, hidden_tag: "t", lurk_inner: std::leaky::Lurker {shade: 1}, slot_any: m, hook_fn: std::leaky::twice}}
+    {import std::leaky
+import std::mutable_array
+m = std::mutable_array::create(2, "x")
+std::leaky::Leaky {slot_any: m}}
+    {import std::leaky
+x = std::leaky::make()
 x.zeta_secret}
-    {import leaky
-x = leaky::make()
+    {import std::leaky
+x = std::leaky::make()
 x.hidden_tag + 1}
-    {import leaky
-x = leaky::make()
+    {import std::leaky
+x = std::leaky::make()
 x.lurk_inner.shade}
-    {import leaky
-x = leaky::make()
+    {import std::leaky
+x = std::leaky::make()
 x.slot_any}
-    {import leaky
-x = leaky::make()
+    {import std::leaky
+x = std::leaky::make()
 x.nothing_like_it}
-    {import leaky
-x = leaky::make()
+    {import std::leaky
+x = std::leaky::make()
 fn f(b: bool):
     b
 f(x.zeta_secret)}
-    {import leaky
-x = leaky::make()
+    {import std::leaky
+x = std::leaky::make()
 fn g(s: str):
     s
 g(x.zeta_secret)}
-    {import leaky
-x = leaky::make()
+    {import std::leaky
+x = std::leaky::make()
 [x.zeta_secret, x.hidden_tag]}
-    {import leaky
-x = leaky::make()
+    {import std::leaky
+x = std::leaky::make()
 if x.zeta_secret:
     1
 else:
     2}
-    {import leaky
-x = leaky::make()
+    {import std::leaky
+x = std::leaky::make()
 {zeta_secret} = x
 zeta_secret}
-    {import leaky
-x = leaky::make()
+    {import std::leaky
+x = std::leaky::make()
 {hidden_tag: t, lurk_inner: {shade}} = x
 shade}
-    {import leaky
-x = leaky::make()
+    {import std::leaky
+x = std::leaky::make()
 {guess} = x
 guess}
-    {import leaky
-x = leaky::make()
+    {import std::leaky
+x = std::leaky::make()
 (x.hook_fn)(1)}
-    {import leaky
-x = leaky::make()
+    {import std::leaky
+x = std::leaky::make()
 x.hook_fn(1)}
-    {import leaky
-x = leaky::make()
+    {import std::leaky
+x = std::leaky::make()
 x.zeta_secret()}
-    {import leaky
+    {import std::leaky
 fn peek(q):
     q.zeta_secret
-peek(leaky::make())}
-    {import leaky
+peek(std::leaky::make())}
+    {import std::leaky
 fn peek(q):
     {lurk_inner: {shade}} = q
     shade
-peek(leaky::make())}
-    {import leaky
+peek(std::leaky::make())}
+    {import std::leaky
 struct H:
-    t: leaky::Leaky
-h = H {t: leaky::make()}
+    t: std::leaky::Leaky
+h = H {t: std::leaky::make()}
 h.t.zeta_secret}
-    {import leaky
-x = leaky::make()
+    {import std::leaky
+x = std::leaky::make()
 x + 1}
-    {import leaky
-x = leaky::make()
+    {import std::leaky
+x = std::leaky::make()
 fn n(k: int):
     k
 n(x)}
-    {import leaky
-x = leaky::make()
-fn n(k: leaky::Secretive):
+    {import std::leaky
+x = std::leaky::make()
+fn n(k: std::leaky::Secretive):
     k
 n(x)}
-    {import leaky
-x = leaky::make()
+    {import std::leaky
+x = std::leaky::make()
 fn f(v: any):
     v
 f(x)}
-    {import leaky
-x = leaky::make()
+    {import std::leaky
+x = std::leaky::make()
 [x, 1]}
-    {import leaky
-x = leaky::make()
+    {import std::leaky
+x = std::leaky::make()
 x == 1}
-    {import leaky
-x = leaky::make()
+    {import std::leaky
+x = std::leaky::make()
 x == {zeta_secret: 5}}
-    {import leaky
-x = leaky::make()
-leaky::twice(x)}
+    {import std::leaky
+x = std::leaky::make()
+std::leaky::twice(x)}
 }
 
 test opaque-leak-sweep {no diagnostic of any unauthorized program, in any phase, names a field or a field type of the hidden representation} -body {
@@ -984,16 +984,16 @@ test opaque-leak-sweep {no diagnostic of any unauthorized program, in any phase,
 test opaque-construct-bearing-erasure-is-not-reported {a forged construction whose value would lose a typed function's contract in a hidden `any` field is still only OPAQUE-CONSTRUCTION: the erasure diagnostic ("stored in field ...") would confirm that a guessed field exists} -body {
     withScratchLibrary {
         writeModule $dir leaky $::leakModule
-        set forged "import leaky\nfn typed(k: int) -> int:\n    k\n"
-        list [diagKinds "${forged}leaky::Leaky {slot_any: typed}\n"] \
-            [diagKinds "${forged}leaky::Leaky {guess_any: typed}\n"]
+        set forged "import std::leaky\nfn typed(k: int) -> int:\n    k\n"
+        list [diagKinds "${forged}std::leaky::Leaky {slot_any: typed}\n"] \
+            [diagKinds "${forged}std::leaky::Leaky {guess_any: typed}\n"]
     }
 } -result {OPAQUE-CONSTRUCTION OPAQUE-CONSTRUCTION}
 
 test opaque-construct-bearing-erasure-twin {the ordinary struct reports the erasure, naming the field: the control for the test above} -body {
     withScratchLibrary {
         writeModule $dir leaky [string map {{opaque struct Leaky} {struct Leaky}} $::leakModule]
-        diagKinds "import leaky\nfn typed(k: int) -> int:\n    k\nleaky::Leaky {zeta_secret: 5, hidden_tag: \"t\", lurk_inner: leaky::Lurker {shade: 1}, slot_any: typed, hook_fn: leaky::twice}\n"
+        diagKinds "import std::leaky\nfn typed(k: int) -> int:\n    k\nstd::leaky::Leaky {zeta_secret: 5, hidden_tag: \"t\", lurk_inner: std::leaky::Lurker {shade: 1}, slot_any: typed, hook_fn: std::leaky::twice}\n"
     }
 } -result TYPE
 
@@ -1002,9 +1002,9 @@ test opaque-leak-sweep-control {the sweep can see a leak: the same words do appe
         writeModule $dir leaky [string map {{opaque struct Leaky} {struct Leaky}} $::leakModule]
         set found 0
         foreach program {
-            "import leaky\nleaky::Leaky {guess: 1}\n"
-            "import leaky\nx = leaky::make()\nx.nothing_like_it\n"
-            "import leaky\nleaky::Leaky {zeta_secret: \"no\", hidden_tag: 4}\n"
+            "import std::leaky\nstd::leaky::Leaky {guess: 1}\n"
+            "import std::leaky\nx = std::leaky::make()\nx.nothing_like_it\n"
+            "import std::leaky\nstd::leaky::Leaky {zeta_secret: \"no\", hidden_tag: 4}\n"
         } {
             catch {hirOfSource $program 1} m
             foreach word $::leakWords {
@@ -1023,12 +1023,12 @@ test opaque-bypass-higher-order {a consumer function that projects an opaque arg
         writeFixtures $dir
         writeModule $dir hof "fn apply(f, v):\n    f(v)\n"
         lmap source {
-            "import hof\nimport wrapped\nfn peek(x):\n    x.value\nhof::apply(peek, wrapped::create(1, \"a\"))\n"
-            "import hof\nimport wrapped\nfn peek(x: wrapped::Wrapped):\n    x.value\nhof::apply(peek, wrapped::create(1, \"a\"))\n"
-            "import hof\nimport wrapped\nfn peek(x):\n    x.value\nf = peek\nhof::apply(f, wrapped::create(1, \"a\"))\n"
-            "import hof\nimport wrapped\nfn peek(x):\n    {value} = x\n    value\nhof::apply(peek, wrapped::create(1, \"a\"))\n"
-            "import wrapped\nw = wrapped::create(1, \"a\")\nfn grab():\n    w.value\ngrab()\n"
-            "import hof\nimport wrapped\nw = wrapped::create(1, \"a\")\nfn grab(u):\n    w.label\nhof::apply(grab, 0)\n"
+            "import std::hof\nimport std::wrapped\nfn peek(x):\n    x.value\nstd::hof::apply(peek, std::wrapped::create(1, \"a\"))\n"
+            "import std::hof\nimport std::wrapped\nfn peek(x: std::wrapped::Wrapped):\n    x.value\nstd::hof::apply(peek, std::wrapped::create(1, \"a\"))\n"
+            "import std::hof\nimport std::wrapped\nfn peek(x):\n    x.value\nf = peek\nstd::hof::apply(f, std::wrapped::create(1, \"a\"))\n"
+            "import std::hof\nimport std::wrapped\nfn peek(x):\n    {value} = x\n    value\nstd::hof::apply(peek, std::wrapped::create(1, \"a\"))\n"
+            "import std::wrapped\nw = std::wrapped::create(1, \"a\")\nfn grab():\n    w.value\ngrab()\n"
+            "import std::hof\nimport std::wrapped\nw = std::wrapped::create(1, \"a\")\nfn grab(u):\n    w.label\nstd::hof::apply(grab, 0)\n"
         } {rejectionKind $source}
     }
 } -result [lrepeat 6 OPAQUE-REPRESENTATION]
@@ -1037,18 +1037,18 @@ test opaque-bypass-higher-order-owner-functions-pass {the owner's own functions 
     withScratchLibrary {
         writeFixtures $dir
         writeModule $dir hof "fn apply(f, v):\n    f(v)\n"
-        agree "import hof\nimport wrapped\n\[hof::apply(wrapped::value, wrapped::create(7, \"a\")), hof::apply(wrapped::describe, wrapped::create(7, \"a\"))\]\n"
+        agree "import std::hof\nimport std::wrapped\n\[std::hof::apply(std::wrapped::value, std::wrapped::create(7, \"a\")), std::hof::apply(std::wrapped::describe, std::wrapped::create(7, \"a\"))\]\n"
     }
 } -result {[7, "a"]}
 
 # ---------------------------------------------------------------------------
 # Public accessor facts (a function's contract is public; the field is not)
 
-test opaque-accessor-facts-are-public {a consumer benefits from the owner's declared result domain: `facts::level(m)` is a Level without a check, while the field behind it stays private and the struct is no Level} -body {
+test opaque-accessor-facts-are-public {a consumer benefits from the owner's declared result domain: `std::facts::level(m)` is a Level without a check, while the field behind it stays private and the struct is no Level} -body {
     withScratchLibrary {
         writeModule $dir facts "type Level = Int in 0..9\n\nopaque struct Meter:\n    lvl: Level\n\nfn make(l: Level) -> Meter:\n    Meter {lvl: l}\n\nfn level(m: Meter) -> Level:\n    m.lvl\n"
-        set need "import facts\nimport type facts::Level\nfn need(n: Level):\n    n\nm = facts::make(3)\n"
-        list [agree "${need}need(facts::level(m))\n"] \
+        set need "import std::facts\nimport type std::facts::Level\nfn need(n: Level):\n    n\nm = std::facts::make(3)\n"
+        list [agree "${need}need(std::facts::level(m))\n"] \
              [agree "${need}m.level()\n"] \
              [rejectionKind "${need}need(m)\n"] \
              [rejectionKind "${need}need(m.lvl)\n"]
@@ -1059,14 +1059,14 @@ test opaque-accessor-field-domain-is-not-exported {the hidden field's own domain
     withScratchLibrary {
         writeModule $dir facts2 "type Level = Int in 0..9\n\nopaque struct Meter:\n    lvl: Level\n\nfn make(l: Level) -> Meter:\n    Meter {lvl: l}\n\nfn raw(m: Meter) -> int:\n    m.lvl\n"
         # raw's declared result is the full Int: no Level proof reaches the caller.
-        rejectionKind "import facts2\nimport type facts2::Level\nfn need(n: Level):\n    n\nneed(facts2::raw(facts2::make(3)))\n"
+        rejectionKind "import std::facts2\nimport type std::facts2::Level\nfn need(n: Level):\n    n\nneed(std::facts2::raw(std::facts2::make(3)))\n"
     }
 } -result TYPE
 
 # ---------------------------------------------------------------------------
 # Methods
 
-test opaque-method-resolves-the-visible-function {`x.value()` is the method form of wrapped::value(x), while the field projection `x.value` is forbidden} -body {
+test opaque-method-resolves-the-visible-function {`x.value()` is the method form of std::wrapped::value(x), while the field projection `x.value` is forbidden} -body {
     withScratchLibrary {
         writeFixtures $dir
         list [agree "${::consume}x.value()\n"] [rejectionKind "${::consume}x.value\n"]
@@ -1077,12 +1077,12 @@ test opaque-method-same-callee-as-qualified {the method call and the qualified c
     withScratchLibrary {
         writeFixtures $dir
         set m [hirOfSource "${::consume}x.value()\n"]
-        set q [hirOfSource "${::consume}wrapped::value(x)\n"]
+        set q [hirOfSource "${::consume}std::wrapped::value(x)\n"]
         proc calleeOfLast {hir} {
             set last ""
             foreach e [hir::walk $hir] {
                 if {[hir::kind $hir $e] eq "call" && [hir::kind $hir [hir::get $hir $e callee]] eq "ref"
-                        && [hir::get $hir [hir::get $hir $e callee] name] eq "wrapped::value"} {
+                        && [hir::get $hir [hir::get $hir $e callee] name] eq "std::wrapped::value"} {
                     set last [hir::get $hir [hir::get $hir $e callee] binding]
                 }
             }
@@ -1095,7 +1095,7 @@ test opaque-method-same-callee-as-qualified {the method call and the qualified c
 test opaque-method-hidden-field-is-not-a-candidate {a hidden function-valued field named like a visible function neither becomes the callee nor makes the call ambiguous outside its owner} -body {
     withScratchLibrary {
         writeFixtures $dir
-        agree "import hidden\ng = hidden::make()\ng.describe()\n"
+        agree "import std::hidden\ng = std::hidden::make()\ng.describe()\n"
     }
 } -result 100
 
@@ -1114,35 +1114,35 @@ fn describe(g: Gadget) -> int:
 fn make() -> Gadget:
     Gadget {describe: twice}
 "
-        rejectionKind "import plainhidden\ng = plainhidden::make()\ng.describe()\n"
+        rejectionKind "import std::plainhidden\ng = std::plainhidden::make()\ng.describe()\n"
     }
 } -result AMBIGUOUS-METHOD-CALL
 
 test opaque-method-ambiguity-inside-the-owner {inside the owner the ordinary field/function ambiguity rule continues to apply} -body {
     withScratchLibrary {
         writeFixtures $dir
-        rejection "import hiddenamb\n1\n"
+        rejection "import std::hiddenamb\n1\n"
     }
-} -match glob -result {AMBIGUOUS-METHOD-CALL: FILE: method-style call "describe" is ambiguous: the receiver (type hiddenamb::Gadget) has a field "describe" whose value may be callable, and a function "describe" is also visible here; *}
+} -match glob -result {AMBIGUOUS-METHOD-CALL: FILE: method-style call "describe" is ambiguous: the receiver (type std::hiddenamb::Gadget) has a field "describe" whose value may be callable, and a function "describe" is also visible here; *}
 
 test opaque-method-consumer-function-named-like-a-hidden-field {a consumer's own function with the name of a hidden field is simply the method: hidden fields take no part in resolution} -body {
     withScratchLibrary {
         writeFixtures $dir
-        agree "import hidden\nfn callback(g):\n    5\ng = hidden::make()\ng.callback()\n"
+        agree "import std::hidden\nfn callback(g):\n    5\ng = std::hidden::make()\ng.callback()\n"
     }
 } -result 5
 
 test opaque-method-hidden-field-no-function-no-candidate {a hidden field alone is not a callee: the call is representation access, not the call of the field} -body {
     withScratchLibrary {
         writeFixtures $dir
-        rejectionKind "import hidden\ng = hidden::make()\ng.callback(21)\n"
+        rejectionKind "import std::hidden\ng = std::hidden::make()\ng.callback(21)\n"
     }
 } -result OPAQUE-REPRESENTATION
 
 test opaque-method-no-candidate-on-opaque-receiver {a method-style call with no visible function of that name on an opaque receiver is representation access, never a call of a field} -body {
     withScratchLibrary {
         writeFixtures $dir
-        rejectionKind "import wrapped\nfn f(w: wrapped::Wrapped):\n    w.nothing()\n1\n"
+        rejectionKind "import std::wrapped\nfn f(w: std::wrapped::Wrapped):\n    w.nothing()\n1\n"
     }
 } -result OPAQUE-REPRESENTATION
 
@@ -1160,52 +1160,52 @@ foreach {name pattern} {
     test opaque-nested-$name "outside the owner nothing of an opaque struct holding a public struct is reachable: `$pattern`, whatever its field's own type" -body {
         withScratchLibrary {
             writeFixtures $dir
-            rejection "import nest\no = nest::make(4, 9)\n$pattern\n1\n"
+            rejection "import std::nest\no = std::nest::make(4, 9)\n$pattern\n1\n"
         }
-    } -result {OPAQUE-REPRESENTATION: field access on nest::Outer is not available outside module "nest"; nest::Outer has an opaque representation, so its fields can be neither projected nor destructured here (use the public operations provided by that module)}
+    } -result {OPAQUE-REPRESENTATION: field access on std::nest::Outer is not available outside module "std::nest"; std::nest::Outer has an opaque representation, so its fields can be neither projected nor destructured here (use the public operations provided by that module)}
 }
 
 test opaque-nested-owner-reaches-through {the owner reads the public inner struct as ordinary Botlish, and the public struct itself needs no authority from anyone} -body {
     withScratchLibrary {
         writeFixtures $dir
-        agree "import nest\no = nest::make(4, 9)\n\[nest::count(o), nest::inner_value(o)\]\n"
+        agree "import std::nest\no = std::nest::make(4, 9)\n\[std::nest::count(o), std::nest::inner_value(o)\]\n"
     }
 } -result {[9, 4]}
 
 test opaque-nested-public-struct-stays-public {the public struct is ordinary outside: construct, project, destructure} -body {
     withScratchLibrary {
         writeFixtures $dir
-        agree "import nest\ni = nest::Inner {value: 6}\n{value} = i\n\[i.value, value\]\n"
+        agree "import std::nest\ni = std::nest::Inner {value: 6}\n{value} = i\n\[i.value, value\]\n"
     }
 } -result {[6, 6]}
 
 test opaque-holder-owner-projects-its-own-field {a module's public struct holding an opaque value projects its own field; the value stays opaque} -body {
     withScratchLibrary {
         writeFixtures $dir
-        agree "import holder\nh = holder::make(7)\nholder::viaaccessor(h)\n"
+        agree "import std::holder\nh = std::holder::make(7)\nstd::holder::viaaccessor(h)\n"
     }
 } -result 7
 
 test opaque-holder-authority-is-not-transitive {representation authority does not flow through the holder: the holder's module cannot read the held value's fields} -body {
     withScratchLibrary {
         writeFixtures $dir
-        rejection "import holderbad\n1\n"
+        rejection "import std::holderbad\n1\n"
     }
-} -match glob -result {OPAQUE-REPRESENTATION: FILE: field access on wrapped::Wrapped is not available outside module "wrapped"; *}
+} -match glob -result {OPAQUE-REPRESENTATION: FILE: field access on std::wrapped::Wrapped is not available outside module "std::wrapped"; *}
 
 test opaque-holder-consumer-cannot-either {neither the module that holds the value nor the program that receives it through the holder can open it} -body {
     withScratchLibrary {
         writeFixtures $dir
-        list [rejectionKind "import holder\nh = holder::make(7)\nh.secret.value\n"] \
-             [rejectionKind "import holder\nh = holder::make(7)\n{value} = h.secret\n1\n"] \
-             [rejectionKind "import holder\nh = holder::make(7)\nh.secret\n"]
+        list [rejectionKind "import std::holder\nh = std::holder::make(7)\nh.secret.value\n"] \
+             [rejectionKind "import std::holder\nh = std::holder::make(7)\n{value} = h.secret\n1\n"] \
+             [rejectionKind "import std::holder\nh = std::holder::make(7)\nh.secret\n"]
     }
 } -result {OPAQUE-REPRESENTATION OPAQUE-REPRESENTATION accepted}
 
 test opaque-struct-fields-need-no-authority-to-be-stored {declaring a struct field of an opaque type, and constructing the holder, needs no authority over the opaque struct} -body {
     withScratchLibrary {
         writeFixtures $dir
-        rejectionKind "import wrapped\nstruct Holder:\n    token: wrapped::Wrapped\nholder = Holder {token: wrapped::create(1, \"a\")}\n1\n"
+        rejectionKind "import std::wrapped\nstruct Holder:\n    token: std::wrapped::Wrapped\nholder = Holder {token: std::wrapped::create(1, \"a\")}\n1\n"
     }
 } -result accepted
 
@@ -1215,23 +1215,23 @@ test opaque-struct-fields-need-no-authority-to-be-stored {declaring a struct fie
 test opaque-per-struct-public-stays-public {a module with one opaque and one ordinary struct: the ordinary one is as open as ever} -body {
     withScratchLibrary {
         writeFixtures $dir
-        agree "import mixed\np = mixed::Public {value: 3}\n{value} = p\n\[p.value, value\]\n"
+        agree "import std::mixed\np = std::mixed::Public {value: 3}\n{value} = p\n\[p.value, value\]\n"
     }
 } -result {[3, 3]}
 
 test opaque-per-struct-secret-is-closed {and the opaque one in the same module is not} -body {
     withScratchLibrary {
         writeFixtures $dir
-        list [rejectionKind "import mixed\nmixed::Secret {value: 1}\n"] \
-             [rejectionKind "import mixed\ns = mixed::secret(1)\ns.value\n"] \
-             [rejectionKind "import mixed\ns = mixed::secret(1)\n{value} = s\n1\n"]
+        list [rejectionKind "import std::mixed\nstd::mixed::Secret {value: 1}\n"] \
+             [rejectionKind "import std::mixed\ns = std::mixed::secret(1)\ns.value\n"] \
+             [rejectionKind "import std::mixed\ns = std::mixed::secret(1)\n{value} = s\n1\n"]
     }
 } -result {OPAQUE-CONSTRUCTION OPAQUE-REPRESENTATION OPAQUE-REPRESENTATION}
 
 test opaque-per-struct-ordinary-struct-unchanged {ordinary structs are no more restrictive: a plain struct in a module is constructed, projected and destructured from outside exactly as before} -body {
     withScratchLibrary {
         writeModule $dir plain "struct P:\n    a: int\n    b: str\n"
-        agree "import plain\np = plain::P {a: 1, b: \"x\"}\n{a, b: y} = p\n\[p.a, p.b, a, y\]\n"
+        agree "import std::plain\np = std::plain::P {a: 1, b: \"x\"}\n{a, b: y} = p\n\[p.a, p.b, a, y\]\n"
     }
 } -result {[1, "x", 1, "x"]}
 
@@ -1241,39 +1241,39 @@ test opaque-per-struct-ordinary-struct-unchanged {ordinary structs are no more r
 test opaque-authority-import-grants-nothing {importing the owner (directly or not) names the type and its functions; it does not grant representation authority} -body {
     withScratchLibrary {
         writeFixtures $dir
-        list [rejectionKind "import wrapped\nwrapped::Wrapped {value: 1, label: \"a\"}\n"] \
-             [rejectionKind "import holder\nimport wrapped\nh = holder::make(1)\nholder::secret(h).value\n"]
+        list [rejectionKind "import std::wrapped\nstd::wrapped::Wrapped {value: 1, label: \"a\"}\n"] \
+             [rejectionKind "import std::holder\nimport std::wrapped\nh = std::holder::make(1)\nstd::holder::secret(h).value\n"]
     }
 } -result {OPAQUE-CONSTRUCTION OPAQUE-REPRESENTATION}
 
 test opaque-authority-parent-has-none-over-child {a parent module that imports its child namespace cannot construct the child's opaque struct} -body {
     withScratchLibrary {
         writeFixtures $dir
-        rejection "import authp\n1\n"
+        rejection "import std::authp\n1\n"
     }
-} -match glob -result {OPAQUE-CONSTRUCTION: FILE: authp::kid::Kid has an opaque representation owned by module "authp::kid"; construct it through the public operations provided by that module}
+} -match glob -result {OPAQUE-CONSTRUCTION: FILE: std::authp::kid::Kid has an opaque representation owned by module "std::authp::kid"; construct it through the public operations provided by that module}
 
 test opaque-authority-child-has-none-over-parent {a child module that imports its parent cannot construct the parent's opaque struct} -body {
     withScratchLibrary {
         writeFixtures $dir
-        rejection "import authc::kid\n1\n"
+        rejection "import std::authc::kid\n1\n"
     }
-} -match glob -result {OPAQUE-CONSTRUCTION: FILE: authc::Box has an opaque representation owned by module "authc"; construct it through the public operations provided by that module}
+} -match glob -result {OPAQUE-CONSTRUCTION: FILE: std::authc::Box has an opaque representation owned by module "std::authc"; construct it through the public operations provided by that module}
 
 test opaque-authority-own-namespace-needs-no-import {inside its own module the qualified spelling of its own struct is authorized, with no import} -body {
     withScratchLibrary {
-        writeModule $dir selfq "opaque struct T:\n    v: int\n\nfn make(v: int):\n    selfq::T {v: v}\n\nfn read(t: T):\n    t.v\n"
-        agree "import selfq\nselfq::read(selfq::make(5))\n"
+        writeModule $dir selfq "opaque struct T:\n    v: int\n\nfn make(v: int):\n    std::selfq::T {v: v}\n\nfn read(t: T):\n    t.v\n"
+        agree "import std::selfq\nstd::selfq::read(std::selfq::make(5))\n"
     }
 } -result 5
 
 test opaque-authority-same-short-name {two modules' opaque structs of one short name are two types with two owners: owning one grants nothing over the other} -body {
     withScratchLibrary {
         writeModule $dir one "opaque struct T:\n    v: int\n\nfn make(v: int):\n    T {v: v}\n"
-        writeModule $dir two "import one\n\nopaque struct T:\n    v: int\n\nfn forge():\n    one::T {v: 1}\n"
-        rejection "import two\n1\n"
+        writeModule $dir two "import std::one\n\nopaque struct T:\n    v: int\n\nfn forge():\n    std::one::T {v: 1}\n"
+        rejection "import std::two\n1\n"
     }
-} -match glob -result {OPAQUE-CONSTRUCTION: FILE: one::T has an opaque representation owned by module "one"*}
+} -match glob -result {OPAQUE-CONSTRUCTION: FILE: std::one::T has an opaque representation owned by module "std::one"*}
 
 # ---------------------------------------------------------------------------
 # No runtime check, no new operation
@@ -1281,7 +1281,7 @@ test opaque-authority-same-short-name {two modules' opaque structs of one short 
 test opaque-no-opaque-operations-below-the-source {after the check nothing knows opacity: the program's HIR text, its core IR text and its NIR contain no opaque operation and no visibility test} -body {
     withScratchLibrary {
         writeFixtures $dir
-        set hir [hirOfSource "${::consume}\[wrapped::value(x), x.describe()\]\n"]
+        set hir [hirOfSource "${::consume}\[std::wrapped::value(x), x.describe()\]\n"]
         set core [hir::lower $hir]
         set nir [dict get [native::lowered $hir] text]
         list [string match *opaque* $core] [string match *owner* $nir] [string match *visib* $nir] \
@@ -1313,10 +1313,10 @@ test opaque-print-nominal-only {the user-facing text of an opaque value is its n
         writeFixtures $dir
         list [shownOn "${::consume}x\n"] \
              [shownOn "${::consume}\[x, x\]\n"] \
-             [shownOn "import holder\nholder::make(7)\n"] \
-             [shownOn "import holder\nholder::secret(holder::make(7))\n"]
+             [shownOn "import std::holder\nstd::holder::make(7)\n"] \
+             [shownOn "import std::holder\nstd::holder::secret(std::holder::make(7))\n"]
     }
-} -result {{<opaque wrapped::Wrapped>} {[<opaque wrapped::Wrapped>, <opaque wrapped::Wrapped>]} {holder::Holder {secret: <opaque wrapped::Wrapped>, n: 7}} {<opaque wrapped::Wrapped>}}
+} -result {{<opaque std::wrapped::Wrapped>} {[<opaque std::wrapped::Wrapped>, <opaque std::wrapped::Wrapped>]} {std::holder::Holder {secret: <opaque std::wrapped::Wrapped>, n: 7}} {<opaque std::wrapped::Wrapped>}}
 
 test opaque-print-no-representation-in-text {the text contains neither a field name nor a field value} -body {
     withScratchLibrary {
@@ -1329,9 +1329,9 @@ test opaque-print-no-representation-in-text {the text contains neither a field n
 test opaque-print-ordinary-struct-unchanged {an ordinary struct prints as it always did, in the same program} -body {
     withScratchLibrary {
         writeFixtures $dir
-        shownOn "import mixed\nmixed::Public {value: 3}\n"
+        shownOn "import std::mixed\nstd::mixed::Public {value: 3}\n"
     }
-} -result {mixed::Public {value: 3}}
+} -result {std::mixed::Public {value: 3}}
 
 test opaque-print-entry-program-opaque {an entry program's opaque struct is printed nominally too (the printed value is user-facing text)} -body {
     shownOn "opaque struct Secret:\n    value: int\nSecret {value: 41}\n"
@@ -1344,7 +1344,7 @@ test opaque-print-reveal-is-explicit {internal tooling can still ask for the rep
         set value [core::evalProgram [hir::lower $hir]]
         list [core::value::show $value] [core::value::show $value 1] [core::value::show $value 0 1] [core::formatValue $value]
     }
-} -result {{<opaque wrapped::Wrapped>} {<opaque wrapped::Wrapped>} {wrapped::Wrapped {value: 3, label: "three"}} {<opaque wrapped::Wrapped>}}
+} -result {{<opaque std::wrapped::Wrapped>} {<opaque std::wrapped::Wrapped>} {std::wrapped::Wrapped {value: 3, label: "three"}} {<opaque std::wrapped::Wrapped>}}
 
 test opaque-print-runtime-errors-all-backends {a runtime TYPE error that shows an opaque value names its type only, in the interpreter, the compiler and both native modes} -body {
     withScratchLibrary {
@@ -1353,37 +1353,37 @@ test opaque-print-runtime-errors-all-backends {a runtime TYPE error that shows a
             runtimeMessage $backend "${::consume}x + 1\n"
         }
     }
-} -result [lrepeat 4 {+: expected int, got <opaque wrapped::Wrapped>}]
+} -result [lrepeat 4 {+: expected int, got <opaque std::wrapped::Wrapped>}]
 
 test opaque-print-ordinary-struct-error-unchanged {the same error on an ordinary struct still shows the struct, as before} -body {
     withScratchLibrary {
         writeFixtures $dir
         lmap backend $::allBackends {
-            runtimeMessage $backend "import mixed\nmixed::Public {value: 3} + 1\n"
+            runtimeMessage $backend "import std::mixed\nstd::mixed::Public {value: 3} + 1\n"
         }
     }
-} -result [lrepeat 4 {+: expected int, got mixed::Public {value: 3}}]
+} -result [lrepeat 4 {+: expected int, got std::mixed::Public {value: 3}}]
 
 test opaque-print-diagnostics-name-the-type {static diagnostics that mention an opaque value name its type, never a representation} -body {
     withScratchLibrary {
         writeFixtures $dir
         rejection "${::consume}fn f(n: int):\n    n\nf(x)\n"
     }
-} -match glob -result {TYPE: argument for parameter "n" cannot be proven to satisfy int (argument type: wrapped::Wrapped*}
+} -match glob -result {TYPE: argument for parameter "n" cannot be proven to satisfy int (argument type: std::wrapped::Wrapped*}
 
 test opaque-print-nir-shape-says-opaque {the native shape table marks an opaque shape (a rendering fact the runtime printer reads) and no other shape} -body {
     withScratchLibrary {
         writeFixtures $dir
-        set hir [hirOfSource "import wrapped\nimport mixed\n\[wrapped::create(1, \"a\"), mixed::Public {value: 1}\]\n"]
+        set hir [hirOfSource "import std::wrapped\nimport std::mixed\n\[std::wrapped::create(1, \"a\"), std::mixed::Public {value: 1}\]\n"]
         set text [dict get [native::lowered $hir -specialize 0] text]
         lmap l [split $text \n] {if {![string match "shape *" $l]} continue; set l}
     }
-} -result {{shape 0 named "mixed::Public" fields="value"} {shape 1 named "wrapped::Wrapped" opaque=1 fields="value label"}}
+} -result {{shape 0 named "std::mixed::Public" fields="value"} {shape 1 named "std::wrapped::Wrapped" opaque=1 fields="value label"}}
 
 test opaque-print-standalone-executable {a standalone executable prints the same nominal text (its runtime reads the shape table's opaque attribute), an ordinary struct in the same program printing in full} -constraints executableAot -body {
     withScratchLibrary {
         writeFixtures $dir
-        set hir [hirOfSource "import wrapped\nimport mixed\n\[wrapped::create(1, \"a\"), mixed::Public {value: 4}\]\n"]
+        set hir [hirOfSource "import std::wrapped\nimport std::mixed\n\[std::wrapped::create(1, \"a\"), std::mixed::Public {value: 4}\]\n"]
         set out [tcltest::makeDirectory opaque-exe-[pid]]
         try {
             set binary [native::executable $hir [file join $out program]]
@@ -1392,7 +1392,7 @@ test opaque-print-standalone-executable {a standalone executable prints the same
             tcltest::removeDirectory [file tail $out]
         }
     }
-} -result {[<opaque wrapped::Wrapped>, mixed::Public {value: 4}]}
+} -result {[<opaque std::wrapped::Wrapped>, std::mixed::Public {value: 4}]}
 
 # ---------------------------------------------------------------------------
 # Equality and hashing: whole-value semantics, unchanged
@@ -1400,14 +1400,14 @@ test opaque-print-standalone-executable {a standalone executable prints the same
 test opaque-equality-is-whole-value {two opaque values with equal fields are equal, as two ordinary structs would be; opacity does not change equality, and equality does not expose a field} -body {
     withScratchLibrary {
         writeFixtures $dir
-        agree "import wrapped\n\[wrapped::create(1, \"a\") == wrapped::create(1, \"a\"), wrapped::create(1, \"a\") == wrapped::create(2, \"a\"), wrapped::create(1, \"a\") == wrapped::create(1, \"b\"), wrapped::create(1, \"a\") != wrapped::create(1, \"a\")\]\n"
+        agree "import std::wrapped\n\[std::wrapped::create(1, \"a\") == std::wrapped::create(1, \"a\"), std::wrapped::create(1, \"a\") == std::wrapped::create(2, \"a\"), std::wrapped::create(1, \"a\") == std::wrapped::create(1, \"b\"), std::wrapped::create(1, \"a\") != std::wrapped::create(1, \"a\")\]\n"
     }
 } -result {[true, false, false, false]}
 
 test opaque-equality-matches-an-ordinary-struct {the identical comparisons on an ordinary struct give the identical answers} -body {
     withScratchLibrary {
         writeModule $dir plainw "struct Wrapped:\n    value: int\n    label: str\n\nfn create(value: int, label: str):\n    Wrapped {value: value, label: label}\n"
-        agree "import plainw\n\[plainw::create(1, \"a\") == plainw::create(1, \"a\"), plainw::create(1, \"a\") == plainw::create(2, \"a\"), plainw::create(1, \"a\") == plainw::create(1, \"b\"), plainw::create(1, \"a\") != plainw::create(1, \"a\")\]\n"
+        agree "import std::plainw\n\[std::plainw::create(1, \"a\") == std::plainw::create(1, \"a\"), std::plainw::create(1, \"a\") == std::plainw::create(2, \"a\"), std::plainw::create(1, \"a\") == std::plainw::create(1, \"b\"), std::plainw::create(1, \"a\") != std::plainw::create(1, \"a\")\]\n"
     }
 } -result {[true, false, false, false]}
 
@@ -1415,14 +1415,14 @@ test opaque-equality-nominal {an opaque struct never equals another type's value
     withScratchLibrary {
         writeFixtures $dir
         writeModule $dir lookalike "struct Wrapped:\n    value: int\n    label: str\n\nfn create(value: int, label: str):\n    Wrapped {value: value, label: label}\n"
-        agree "import wrapped\nimport lookalike\nwrapped::create(1, \"a\") == lookalike::create(1, \"a\")\n"
+        agree "import std::wrapped\nimport std::lookalike\nstd::wrapped::create(1, \"a\") == std::lookalike::create(1, \"a\")\n"
     }
 } -result false
 
 test opaque-hash-is-whole-value {hash(x) is structural for an opaque value as for an ordinary struct: equal values hash equal, different values hash differently} -body {
     withScratchLibrary {
         writeFixtures $dir
-        agree "import wrapped\n\[hash(wrapped::create(1, \"a\")) == hash(wrapped::create(1, \"a\")), hash(wrapped::create(1, \"a\")) == hash(wrapped::create(2, \"a\"))\]\n"
+        agree "import std::wrapped\n\[hash(std::wrapped::create(1, \"a\")) == hash(std::wrapped::create(1, \"a\")), hash(std::wrapped::create(1, \"a\")) == hash(std::wrapped::create(2, \"a\"))\]\n"
     }
 } -result {[true, false]}
 
@@ -1436,7 +1436,7 @@ test opaque-hash-equals-the-ordinary-struct-hash {the hash of an opaque value is
 test opaque-immutable-set-deduplicates {an ImmutableSet of opaque values deduplicates by whole-value equality, on every backend} -body {
     withScratchLibrary {
         writeFixtures $dir
-        agree "import wrapped\nimport immutable_set\ns = immutable_set::from_list(\[wrapped::create(1, \"a\"), wrapped::create(1, \"a\"), wrapped::create(2, \"b\")\])\n\[immutable_set::contains(s, wrapped::create(1, \"a\")), immutable_set::contains(s, wrapped::create(3, \"c\"))\]\n"
+        agree "import std::wrapped\nimport std::immutable_set\ns = std::immutable_set::from_list(\[std::wrapped::create(1, \"a\"), std::wrapped::create(1, \"a\"), std::wrapped::create(2, \"b\")\])\n\[std::immutable_set::contains(s, std::wrapped::create(1, \"a\")), std::immutable_set::contains(s, std::wrapped::create(3, \"c\"))\]\n"
     }
 } -result {[true, false]}
 
@@ -1448,27 +1448,27 @@ test opaque-cache-ast-is-not-touched {compiling programs that import a module ne
         writeFixtures $dir
         set path [file join $dir wrapped.bot]
         set before [surface::modules::ParseModule $path]
-        hirOfSource "import wrapped\nx = wrapped::create(1, \"a\")\nwrapped::value(x)\n"
-        rejection "import wrapped\nwrapped::Wrapped {value: 1, label: \"a\"}\n"
-        hirOfSource "import holder\nholder::make(1)\n"
+        hirOfSource "import std::wrapped\nx = std::wrapped::create(1, \"a\")\nstd::wrapped::value(x)\n"
+        rejection "import std::wrapped\nstd::wrapped::Wrapped {value: 1, label: \"a\"}\n"
+        hirOfSource "import std::holder\nstd::holder::make(1)\n"
         set after [surface::modules::ParseModule $path]
         expr {$before eq $after}
     }
 } -result 1
 
-test opaque-cache-owner-follows-the-module-not-the-importer {the owner of wrapped::Wrapped is `wrapped` whichever program (or module) causes it to load, in either order} -body {
+test opaque-cache-owner-follows-the-module-not-the-importer {the owner of std::wrapped::Wrapped is `wrapped` whichever program (or module) causes it to load, in either order} -body {
     withScratchLibrary {
         writeFixtures $dir
         # First through holder (which imports wrapped itself), then directly,
         # then with the loads reversed: the same verdicts each time.
-        set a [list [rejectionKind "import holder\n1\n"] \
-            [rejectionKind "import holder\nh = holder::make(1)\nh.secret.value\n"] \
-            [rejectionKind "import wrapped\nwrapped::Wrapped {value: 1, label: \"a\"}\n"] \
-            [rejectionKind "import wrapped\nimport holder\nx = wrapped::create(1, \"a\")\nwrapped::value(x)\n"]]
-        set b [list [rejectionKind "import wrapped\nwrapped::Wrapped {value: 1, label: \"a\"}\n"] \
-            [rejectionKind "import holder\nh = holder::make(1)\nh.secret.value\n"] \
-            [rejectionKind "import holder\n1\n"] \
-            [rejectionKind "import holder\nimport wrapped\nx = wrapped::create(1, \"a\")\nwrapped::value(x)\n"]]
+        set a [list [rejectionKind "import std::holder\n1\n"] \
+            [rejectionKind "import std::holder\nh = std::holder::make(1)\nh.secret.value\n"] \
+            [rejectionKind "import std::wrapped\nstd::wrapped::Wrapped {value: 1, label: \"a\"}\n"] \
+            [rejectionKind "import std::wrapped\nimport std::holder\nx = std::wrapped::create(1, \"a\")\nstd::wrapped::value(x)\n"]]
+        set b [list [rejectionKind "import std::wrapped\nstd::wrapped::Wrapped {value: 1, label: \"a\"}\n"] \
+            [rejectionKind "import std::holder\nh = std::holder::make(1)\nh.secret.value\n"] \
+            [rejectionKind "import std::holder\n1\n"] \
+            [rejectionKind "import std::holder\nimport std::wrapped\nx = std::wrapped::create(1, \"a\")\nstd::wrapped::value(x)\n"]]
         list $a [expr {[lindex $a 0] eq [lindex $b 2] && [lindex $a 1] eq [lindex $b 1] && [lindex $a 2] eq [lindex $b 0] && [lindex $a 3] eq [lindex $b 3]}]
     }
 } -result {{accepted OPAQUE-REPRESENTATION OPAQUE-CONSTRUCTION accepted} 1}
@@ -1476,7 +1476,7 @@ test opaque-cache-owner-follows-the-module-not-the-importer {the owner of wrappe
 test opaque-cache-entry-struct-of-the-same-name-is-not-the-module-one {an entry program's own `Wrapped` (opaque or not) is a different type, owned by the entry program, whatever the module cache holds} -body {
     withScratchLibrary {
         writeFixtures $dir
-        hirOfSource "import wrapped\n1\n"
+        hirOfSource "import std::wrapped\n1\n"
         list [agree "opaque struct Wrapped:\n    value: int\nWrapped {value: 9}.value\n"] \
              [agree "struct Wrapped:\n    value: int\nWrapped {value: 9}.value\n"]
     }
@@ -1485,11 +1485,11 @@ test opaque-cache-entry-struct-of-the-same-name-is-not-the-module-one {an entry 
 test opaque-cache-flag-edit-takes-effect {the cache is keyed by the module's text: removing `opaque` from the file makes the same consumer legal, adding it makes it illegal, with no stale answer} -body {
     withScratchLibrary {
         writeModule $dir flip "struct S:\n    v: int\n"
-        set a [rejectionKind "import flip\nflip::S {v: 1}.v\n"]
+        set a [rejectionKind "import std::flip\nstd::flip::S {v: 1}.v\n"]
         writeModule $dir flip "opaque struct S:\n    v: int\n"
-        set b [rejectionKind "import flip\nflip::S {v: 1}.v\n"]
+        set b [rejectionKind "import std::flip\nstd::flip::S {v: 1}.v\n"]
         writeModule $dir flip "struct S:\n    v: int\n"
-        set c [rejectionKind "import flip\nflip::S {v: 1}.v\n"]
+        set c [rejectionKind "import std::flip\nstd::flip::S {v: 1}.v\n"]
         list $a $b $c
     }
 } -result {accepted OPAQUE-CONSTRUCTION accepted}
@@ -1549,9 +1549,9 @@ proc plainNir {text} {
 }
 
 foreach {name main} {
-    local-wrapper   "import small\nx = small::create(7)\nsmall::read(x) + small::bump(x)\n"
-    stored          "import small\nxs = \[small::create(7), small::create(9)\]\nsmall::read(small::create(200))\n"
-    returned-twice  "import small\nfn pass(s: small::Small) -> small::Small:\n    s\nsmall::read(pass(small::create(3)))\n"
+    local-wrapper   "import std::small\nx = std::small::create(7)\nstd::small::read(x) + std::small::bump(x)\n"
+    stored          "import std::small\nxs = \[std::small::create(7), std::small::create(9)\]\nstd::small::read(std::small::create(200))\n"
+    returned-twice  "import std::small\nfn pass(s: std::small::Small) -> std::small::Small:\n    s\nstd::small::read(pass(std::small::create(3)))\n"
 } {
     foreach {mode options} {specialized {} generic {-specialize 0}} {
         test opaque-optimizer-$name-$mode "an opaque one-field wrapper compiles to the ordinary struct's NIR and CLIF and allocates the same objects ($mode)" -body {
@@ -1567,25 +1567,25 @@ foreach {name main} {
 }
 
 test opaque-optimizer-specialized-erases-the-wrapper {on the specialized path the opaque wrapper is scalar-replaced: no struct object, no structnew, no shape, no boxing -- zero cost for the abstraction} -body {
-    set o [transparency "opaque " "import small\nx = small::create(7)\nsmall::read(x) + small::bump(x)\n" {}]
+    set o [transparency "opaque " "import std::small\nx = std::small::create(7)\nstd::small::read(x) + std::small::bump(x)\n" {}]
     list [dict get $o structs] [dict get $o allocations] [dict get $o structnew] \
         [string match *shape* [dict get $o nir]] [string match *opaque* [dict get $o nir]]
 } -result {0 0 0 0 0}
 
 test opaque-optimizer-generic-materializes-exactly-when-ordinary-does {the unspecialized path materializes the opaque struct exactly as the ordinary struct is materialized (one object here)} -body {
-    set main "import small\nx = small::create(7)\nsmall::read(x) + small::bump(x)\n"
+    set main "import std::small\nx = std::small::create(7)\nstd::small::read(x) + std::small::bump(x)\n"
     set o [transparency "opaque " $main {-specialize 0}]
     set p [transparency "" $main {-specialize 0}]
     list [dict get $o structs] [dict get $p structs] [dict get $o structnew] [dict get $p structnew]
 } -result {1 1 1 1}
 
 test opaque-optimizer-no-runtime-check {no visibility check exists at run time: the specialized machine code (CLIF) of the opaque program is the ordinary program's, byte for byte} -body {
-    set main "import small\nx = small::create(7)\nsmall::read(x) + small::bump(x)\n"
+    set main "import std::small\nx = std::small::create(7)\nstd::small::read(x) + std::small::bump(x)\n"
     expr {[dict get [transparency "opaque " $main {}] clif] eq [dict get [transparency "" $main {}] clif]}
 } -result 1
 
 test opaque-optimizer-range-facts-still-seen {the compiler still sees the hidden field's domain: the owner's accessor proves 0..255 + 1, so a branch on it is decided at compile time in both spellings} -body {
-    set main "import small\nx = small::create(7)\nif small::bump(x) < 257:\n    1\nelse:\n    2\n"
+    set main "import std::small\nx = std::small::create(7)\nif std::small::bump(x) < 257:\n    1\nelse:\n    2\n"
     set o [transparency "opaque " $main {}]
     set p [transparency "" $main {}]
     list [expr {[plainNir [dict get $o nir]] eq [dict get $p nir]}] \
@@ -1593,14 +1593,14 @@ test opaque-optimizer-range-facts-still-seen {the compiler still sees the hidden
 } -result {1 0}
 
 test opaque-optimizer-analysis-values-agree {the program computes the same value on every backend in both spellings} -body {
-    set main "import small\nx = small::create(7)\n\[small::read(x), small::bump(x)\]\n"
+    set main "import std::small\nx = std::small::create(7)\n\[std::small::read(x), std::small::bump(x)\]\n"
     list [smallValue "opaque " $main] [smallValue "" $main]
 } -result {{[7, 8]} {[7, 8]}}
 
 test opaque-optimizer-gc-stress {native programs holding opaque values in lists agree with and without a forced collection at every allocation site} -body {
     withScratchLibrary {
         writeFixtures $dir
-        set hir [hirOfSource "import wrapped\nimport list\nxs = \[wrapped::create(1, \"a\"), wrapped::create(2, \"b\"), wrapped::create(3, \"c\")\]\nwrapped::value(wrapped::create(9, \"z\")) + list::length(xs)\n"]
+        set hir [hirOfSource "import std::wrapped\nimport std::list\nxs = \[std::wrapped::create(1, \"a\"), std::wrapped::create(2, \"b\"), std::wrapped::create(3, \"c\")\]\nstd::wrapped::value(std::wrapped::create(9, \"z\")) + std::list::length(xs)\n"]
         set plain [outcomeUnderHir cranelift $hir]
         set ::env(BOTLISH_NATIVE_GC_STRESS) 1
         try {

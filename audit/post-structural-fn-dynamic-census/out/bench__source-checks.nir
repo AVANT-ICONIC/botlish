@@ -90,7 +90,7 @@ func 0 "<program>" params=0 env=0 regs=54 pnames="" captures=0 instance="generic
     ret %53
 end
 
-func 1 "list::find" params=2 env=0 regs=16 pnames="xs predicate" captures=0 instance="List[str], block" rawregs="4 13" @e38
+func 1 "std::list::find" params=2 env=0 regs=16 pnames="xs predicate" captures=0 instance="List[str], block" rawregs="4 13" @e38
     %2 = op listlen %0 @e39
     %3 = int 0 @e39
     %4 = rawint 0

@@ -1,0 +1,62 @@
+# linux/sys.x86_64.bot -- namespace "std::linux::sys" on x86-64: the Linux x86-64
+# syscall numbers and register convention under stdlib/linux.bot's wrappers
+# (LINUX-SYSCALL-TRANSPORTS.md).
+#
+# std::linux::sys is an architecture-specific module: it has no stdlib/linux/sys.bot
+# but this file and stdlib/linux/sys.aarch64.bot, and the compilation target's
+# architecture selects the one that defines it (surface/modules.tcl's
+# ModuleFile). Both files declare the same members with the same signatures
+# (tests/linux-syscall.test pins it), so code above them -- linux, std::linux::io,
+# io -- is one source on every architecture. What differs is all here, as
+# ordinary Botlish data: which syscall number, which register carries which
+# argument, and the architecture's register type and bridges.
+#
+#   std::linux::sys::write(fd, data)   write(2), SYS_write = 1: rdi = fd, rsi =
+#                                 the address of data's payload, rdx = its
+#                                 byte count. The raw signed rax as an Int.
+#   std::linux::sys::read(fd, data)    read(2), SYS_read = 0: into a freshly
+#                                 detached copy of DATA (rsi its address, rdx
+#                                 its byte count); {result: the raw signed
+#                                 rax, data: the copy as the kernel left it}.
+#
+# stdlib/linux.bot states the semantics (one syscall, the raw result, the
+# logical copy); this file only performs them on x86-64.
+#
+# A direct module (DIRECT-MODULES.md): write and read call the raw transport,
+# std::linux::abi::x86_64::syscall, for any descriptor, with no context -- raw
+# process authority, which stdlib/linux.bot exposes as its explicit low-level
+# layer and std::linux::io mediates through LinuxIO.
+direct module
+
+import std::abi
+import std::abi::bytes
+import std::abi::x86_64
+import std::linux::abi::x86_64
+
+# write(2): SYS_write = 1, rdi = fd, rsi = the address of data's payload,
+# rdx = data's byte count.
+fn write(fd: std::abi::I32, data: std::abi::bytes::Bytes) -> int:
+    std::abi::x86_64::to_int(
+        std::linux::abi::x86_64::syscall({
+            rax: std::abi::x86_64::register64(1),
+            rdi: std::abi::x86_64::from_i32(fd),
+            rsi: std::abi::x86_64::from_bytes(data),
+            rdx: std::abi::x86_64::from_usize(std::abi::bytes::length(data)),
+        })
+    )
+
+# read(2): SYS_read = 0, rdi = fd, rsi = the address of the buffer's payload,
+# rdx = the buffer's byte count. The kernel writes into `local`, the writable
+# address bridge's operand: a freshly detached storage nothing else observes,
+# returned as `data`.
+fn read(fd: std::abi::I32, data: std::abi::bytes::MutableBytes):
+    local = std::abi::bytes::detach(data)
+    result = std::abi::x86_64::to_int(
+        std::linux::abi::x86_64::syscall({
+            rax: std::abi::x86_64::register64(0),
+            rdi: std::abi::x86_64::from_i32(fd),
+            rsi: std::abi::x86_64::from_mutable_bytes(local),
+            rdx: std::abi::x86_64::from_usize(std::abi::bytes::mutable_length(local)),
+        })
+    )
+    {result: result, data: local}

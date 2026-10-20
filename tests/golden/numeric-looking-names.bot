@@ -6,18 +6,18 @@
 # unchanged: it also checks the compiler's sources for the rule that keeps
 # such names intact and compares many programs using them against the same
 # programs with other names (front end, every backend, HIR interchange).
-import compiler
-import test
+import std::compiler
+import std::test
 
 fn register_numeric_looking_names_tests():
     # nl-the-reported-program: the program that used to crash the compiler.
-    fn reported() errors compiler::CompilerError:
+    fn reported() errors std::compiler::CompilerError:
         static compile:
             fn nan(x):
                 x + 1
             nan(1)
-    test::value("nl-the-reported-program", 2, reported)
+    std::test::value("nl-the-reported-program", 2, reported)
 
-with context test::suite()
+with context std::test::suite()
 register_numeric_looking_names_tests()
-test::report()
+std::test::report()

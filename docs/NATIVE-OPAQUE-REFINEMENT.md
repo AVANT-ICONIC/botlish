@@ -38,7 +38,7 @@ and `UriQueryValue?` still genuinely unsupported dynamically.
   moves that blocker.
 
 No change to `native/lower.tcl`, `core/type.tcl`, `core/native.tcl`,
-`lib/web.tcl`, or any Rust source. No runtime evidence machinery (`Value`
+`stdlib/web.tcl`, or any Rust source. No runtime evidence machinery (`Value`
 evidence bits, side tables, `rt_has_evidence`/`rt_add_evidence`) exists
 anywhere in this diff.
 
@@ -97,7 +97,7 @@ Two independent losses, exactly as the milestone's own framing predicted:
    ascending-fixed-point inference over `esc_from`'s self-tail recursion,
    which (confirmed directly, not assumed) settles at `any`, not even
    `str`. The native's own registered `-result-type {refined str
-   {UriQueryValue}}` (`lib/web.tcl`) is never consulted for this call again.
+   {UriQueryValue}}` (`stdlib/web.tcl`) is never consulted for this call again.
 2. **`hir::specialize::KeyType`** (`hir/specialize.tcl:239-250`) reduces
    every type to its base *kind*, unconditionally, for specialization-key
    purposes: `kindOf {refined str {UriQueryValue}}` is `str`, same as plain

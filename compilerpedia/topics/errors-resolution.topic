@@ -15,7 +15,7 @@ code: CORE SEMANTIC UNBOUND
 Every name a program uses is resolved at compile time to exactly one
 binding: a value binding (`x = ...`), a function, a parameter, a loop
 variable, a root primitive (`true`, `mod`, `argv`), or -- written
-qualified -- a member of a namespace (`list::at`). A binding is visible
+qualified -- a member of a namespace (`std::list::at`). A binding is visible
 from the point where it is established to the end of its scope. Nothing
 is hoisted, and there is no lookup by name at run time. UNBOUND reports a
 reference that resolves to nothing.
@@ -47,8 +47,8 @@ The message says which case it is:
   * A bare enum case (`Red`) or the enum type itself used as a value.
   * A type used as a function or predicate: `Small(3)`, `Small?(x)`, or a
     struct name `P` alone. No type is callable (rule.no-callable-types).
-  * A namespace member used without its qualifier: after `import list`
-    the function is `list::length(xs)` (or `xs.length()`), never a bare
+  * A namespace member used without its qualifier: after `import std::list`
+    the function is `std::list::length(xs)` (or `xs.length()`), never a bare
     `length(xs)`; an import never adds unqualified names.
 
 == HOW TO INVESTIGATE
@@ -189,7 +189,7 @@ What is checked when:
         function emit takes 1 ordinary argument(s) and the flags :quiet,
         got 2 ordinary argument(s)
             a call of a function that declares flags (FLAGS.md);
-        binary::layout_length takes exactly one argument, a layout name
+        std::binary::layout_length takes exactly one argument, a layout name
         (2 given)
             the layout queries;
         a C function of N parameter(s) ... passes M argument(s)
@@ -199,7 +199,7 @@ What is checked when:
     intrinsic with the wrong number of arguments: the program compiles,
     and the call stops the program when (and only if) it runs:
         block (a b) expects 2 argument(s), got 1
-        list::length expects 1 argument(s), got 2
+        std::list::length expects 1 argument(s), got 2
 
 A call through a value of a structural function type (`Fn{args: [...]}`)
 with the wrong count is a TYPE error instead ("this call passes 2
@@ -211,7 +211,7 @@ with the wrong count is COROUTINE-RESUME-ARITY.
   * A flag written as an ordinary argument (`emit(x, true)` for
     `emit(x, :quiet)`), or an argument forgotten before the flags.
   * An argument that was meant as the receiver of method syntax written
-    twice: `xs.length(xs)` is `list::length(xs, xs)`.
+    twice: `xs.length(xs)` is `std::list::length(xs, xs)`.
 
 == HOW TO INVESTIGATE
 Compare the call with the callee's declaration (`-help NAME` shows the
@@ -236,15 +236,15 @@ emit(1, 2, :quiet)
 @end
 
 @example reject
-import binary
+import std::binary
 
 layout Header:
     size 2
     align 1
-    field tag: binary::U8 at 0
-    field len: binary::U8 at 1
+    field tag: std::binary::U8 at 0
+    field len: std::binary::U8 at 1
 
-binary::layout_length(Header, 1)
+std::binary::layout_length(Header, 1)
 @caption A layout query takes exactly the layout
 @error CORE SEMANTIC ARITY
 @at 9:1
@@ -352,8 +352,8 @@ Other compile-time families, reported as TYPE with this page:
     parameter requirements that cannot be preserved ...", "a value of
     function type ... is used here as a value of function type ...,
     which does not declare it").
-  * The C ABI: an `extern c fn` signature that is not one ("unit is not
-    a C parameter type"), and `ffi::c::Void {...}` (SURFACE MODULE TYPE,
+  * The C ABI: an `extern c fn` signature that is not one ("unit is not a C
+    parameter type"), and `std::ffi::c::Void {...}` (SURFACE MODULE TYPE,
     reported by the loader: C's void has no values).
 
 At run time, TYPE has a different source. The primitive operations and
@@ -361,7 +361,7 @@ the standard-library intrinsics check the kinds of their arguments when
 they run, and a value of the wrong kind stops the program with this code:
 
     +: expected int, got "a"
-    str::length: expected str, got 5
+    std::str::length: expected str, got 5
 
 A direct call of an intrinsic or operator is not rejected at compile
 time for an argument of the wrong kind (`1 + "a"` compiles); the
@@ -392,7 +392,7 @@ For a run-time TYPE, the message names the intrinsic and the value: find
 where that value came from and convert it before the call.
 
 @example reject
-import mutable_vector
+import std::mutable_vector
 
 fn add_name(v: MutableVector[int]) -> int:
     v.push("seven")
@@ -405,9 +405,9 @@ fn add_name(v: MutableVector[int]) -> int:
 @end
 
 @example reject
-import ffi::c
+import std::ffi::c
 
-ffi::c::Void {}
+std::ffi::c::Void {}
 @caption C's void has no values
 @error SURFACE MODULE TYPE
 @at 3:1
@@ -1309,8 +1309,8 @@ over the struct's representation: only m can build a value from fields
 or read its fields. Everyone else may name the type, pass, store and
 compare its values, and call m's functions.
 
-    abi::bytes::Bytes has an opaque representation owned by module
-    "abi::bytes"; construct it through the public operations provided by
+    std::abi::bytes::Bytes has an opaque representation owned by module
+    "std::abi::bytes"; construct it through the public operations provided by
     that module
 
 The diagnostic deliberately says nothing about the fields (which exist,
@@ -1331,15 +1331,15 @@ The message names the owning module. Its functions are the interface:
 `-help stdlib.module.NS` lists a standard module's members.
 
 == WHAT TO DO
-Use the module's constructor functions (`abi::bytes::from_list(...)`);
+Use the module's constructor functions (`std::abi::bytes::from_list(...)`);
 `-help stdlib.module.NS` lists a module's functions. If you own the
 module and need another construction, add a function there.
 
 @example reject
-import abi::bytes
+import std::abi::bytes
 
-abi::bytes::Bytes {storage: 0}
-@caption Only abi::bytes may build a Bytes
+std::abi::bytes::Bytes {storage: 0}
+@caption Only std::abi::bytes may build a Bytes
 @error CORE SEMANTIC OPAQUE-CONSTRUCTION
 @at 3:1
 @end
@@ -1360,8 +1360,8 @@ projected (`data.storage`) nor destructured (`{storage} = data`), and
 they are not method-call candidates. The message is the same whether the
 field exists or not, so the representation cannot be probed:
 
-    field access on abi::bytes::Bytes is not available outside module
-    "abi::bytes"; abi::bytes::Bytes has an opaque representation, so its
+    field access on std::abi::bytes::Bytes is not available outside module
+    "std::abi::bytes"; std::abi::bytes::Bytes has an opaque representation, so its
     fields can be neither projected nor destructured here (use the public
     operations provided by that module)
 
@@ -1380,13 +1380,14 @@ The message names the owning module; look for an accessor among its
 functions (`-help stdlib.module.NS` for a standard module).
 
 == WHAT TO DO
-Call the owning module's accessor functions (`abi::bytes::length(data)`,
-or `data.length()` with method syntax after the import).
+Call the owning module's accessor functions
+(`std::abi::bytes::length(data)`, or `data.length()` with method syntax
+after the import).
 
 @example reject
-import abi::bytes
+import std::abi::bytes
 
-fn storage_of(data: abi::bytes::Bytes) -> any:
+fn storage_of(data: std::abi::bytes::Bytes) -> any:
     data.storage
 
 0
@@ -1586,39 +1587,41 @@ code: SURFACE MODULE AMBIGUOUS-QUALIFIER
 
 == MEANING
 `X::Y` is a namespace member when X is a namespace and an enum case when
-X is an enum type. When an enum is named like a namespace that exists
-(a standard namespace or an application module), the reference has two
-meanings, and Botlish never picks one by a precedence rule:
+X is an enum type. When an enum is named like a namespace that exists --
+one of the program's own modules, a file NAME.bot beside its entry
+program -- the reference has two meanings, and Botlish never picks one by
+a precedence rule:
 
-    "list::Red" is ambiguous: "list" names both a namespace and the enum
-    type list visible in this file (a qualifier is never resolved by
+    "game::Red" is ambiguous: "game" names both a namespace and the enum
+    type game visible in this file (a qualifier is never resolved by
     precedence; rename the enum)
 
 This is reported whether or not the file imports the namespace, so a
-qualified name never means an intrinsic in one file and a case in
-another.
+qualified name never means a module's member in one file and a case in
+another. A standard namespace never meets an enum this way: its path
+starts at the root std (std::list), which no enum's name can, and an
+enum named like a built-in type (`list`) is rejected as a declaration
+first. The diagnostic needs a module file beside the program, so there
+is no single-file example here; the message above comes from two files
+in one directory:
+
+    main.bot              game.bot
+      enum game:            fn f() -> int:
+          Red,                  1
+
+      game::Red
 
 == LIKELY CAUSES
-  * An enum named in lower case like a standard namespace (`list`,
-    `test`, `io`), or like one of the program's own modules.
+  * An enum named in lower case like one of the program's own modules
+    (`game` beside game.bot).
 
 == HOW TO INVESTIGATE
-The message names the namespace and the enum. `-help stdlib` lists the
-standard namespaces.
+The message names the namespace and the enum: the namespace is the
+application module NAME.bot beside the entry program.
 
 == WHAT TO DO
-Rename the enum (enum types are conventionally capitalized: `List`,
-`Status`), so no namespace shares its name.
-
-@example reject
-enum list:
-    Red,
-
-list::Red
-@caption An enum named like the standard namespace list
-@error SURFACE MODULE AMBIGUOUS-QUALIFIER
-@at 4:1
-@end
+Rename the enum (enum types are conventionally capitalized: `Game`,
+`Status`), so no module shares its name.
 
 @topic error.ambiguous-method-call
 title: AMBIGUOUS-METHOD-CALL: method syntax with more than one possible callee
@@ -1640,7 +1643,7 @@ are, the call is rejected -- there is no precedence: not import order,
 not "local wins", not "standard library wins":
 
     method-style call "length" is ambiguous: more than one visible
-    function accepts the receiver (length, list::length); there is no
+    function accepts the receiver (length, std::list::length); there is no
     precedence between them: call the one you mean explicitly, e.g.
     length(receiver, ...)
 
@@ -1654,47 +1657,47 @@ callable, and a function `f` is also visible:
 
 == LIKELY CAUSES
   * A local binding or parameter with the method's name: with
-    `import list`, a parameter `length: int` makes `xs.length()`
+    `import std::list`, a parameter `length: int` makes `xs.length()`
     ambiguous. Today a local of any type counts as a candidate, even an
     Int that could never be called.
   * A helper function of your own named like an imported function
-    (`fn length(...)` beside `import list`).
+    (`fn length(...)` beside `import std::list`).
   * Two imported namespaces with a function of that name that both
     accept the receiver (e.g. an untyped receiver).
 
 == HOW TO INVESTIGATE
-The message lists the candidates (`length, list::length`). For each,
+The message lists the candidates (`length, std::list::length`). For each,
 find where it comes from: a parameter or local binding, a function of
 this file, or a namespace this file imports.
 
 == WHAT TO DO
   * Rename the local or parameter (`count`, `size_limit`), or your own
     function.
-  * Or call explicitly: `list::length(xs)` or `length(xs)`, and for a
+  * Or call explicitly: `std::list::length(xs)` or `length(xs)`, and for a
     field `(x.f)(a)`.
   * Give an untyped receiver a declared type, so only one candidate
     accepts it.
 
 @example reject
-import list
+import std::list
 
 fn count(xs: List[int], length: int) -> int:
     xs.length() + length
 
 count([1, 2], 3)
-@caption A parameter named like list::length
+@caption A parameter named like std::list::length
 @error CORE SEMANTIC AMBIGUOUS-METHOD-CALL
 @at 4:8
 @end
 
 @example accept
-import list
+import std::list
 
 fn count(xs: List[int], limit: int) -> int:
     xs.length() + limit
 
 [1, 2].count(3)
-@caption Renamed: list::length is the only candidate
+@caption Renamed: std::list::length is the only candidate
 @value 5
 @end
 
@@ -1716,8 +1719,8 @@ the message gives each candidate's reason:
 
     method-style call "length": none of the visible functions of that
     name accepts the receiver (length: argument for parameter "s" cannot
-    be proven to satisfy str (argument type: int); list::length: the
-    receiver is a int, but argument 1 of native list::length requires
+    be proven to satisfy str (argument type: int); std::list::length: the
+    receiver is a int, but argument 1 of native std::list::length requires
     list)
 
 Botlish has no overloading: candidates are not ranked or converted to,
@@ -1740,13 +1743,13 @@ Read each candidate's reason; fix the receiver's type or call the
 intended function explicitly.
 
 @example reject
-import list
+import std::list
 
 fn length(s: str) -> int:
     0
 
 5.length()
-@caption Neither length nor list::length accepts an int
+@caption Neither length nor std::list::length accepts an int
 @error CORE SEMANTIC NO-APPLICABLE-METHOD
 @at 6:3
 @end
@@ -1764,7 +1767,7 @@ code: CORE SEMANTIC NOMETHOD-CALL
 == MEANING
 `nomethod fn f(...)` is the author's declaration that f has no receiver:
 its first argument is not "the thing it operates on" (`bit_and`'s two
-operands are symmetric; `mutable_array::create`'s first argument is a
+operands are symmetric; `std::mutable_array::create`'s first argument is a
 length). Method syntax skips such a function as a candidate; when every
 visible function of the name is nomethod, the call is rejected:
 
@@ -1772,14 +1775,14 @@ visible function of the name is nomethod, the call is rejected:
     syntax; call it as bit_and(receiver, ...)
 
 It is not a warning and has no suppression: nomethod changes which call
-forms are legal. The standard library's nomethod functions include
-bit_and, bit_or, bit_xor, mutable_array::copy, mutable_array::create and
-binary::parse.
+forms are legal. The standard library's nomethod functions include bit_and,
+bit_or, bit_xor, std::mutable_array::copy, std::mutable_array::create and
+std::binary::parse.
 
 == LIKELY CAUSES
   * A symmetric operation or a constructor-like function written in
     receiver form: `a.bit_and(b)`, `3.create(0)` for
-    mutable_array::create.
+    std::mutable_array::create.
 
 == HOW TO INVESTIGATE
 For a standard function, `-help NAME` says whether it is nomethod; for
@@ -2162,14 +2165,14 @@ code: CORE SEMANTIC REFINEMENT-MINT-AUTHORITY
 
 == MEANING
 A refinement means what its owner's predicates and validators check:
-`web::Emailish` is exactly what module web's predicate accepts. If any
-file could declare `proves v: web::Emailish`, the fact would mean
+`std::web::Emailish` is exactly what module web's predicate accepts. If any
+file could declare `proves v: std::web::Emailish`, the fact would mean
 nothing. So only the namespace that declares the refinement may declare
 proofs of it; no import, parent or child namespace grants that
 authority:
 
-    the entry program cannot declare a proof of refinement web::Emailish:
-    only its owning module "web" may mint it (no import, parent or child
+    the entry program cannot declare a proof of refinement std::web::Emailish:
+    only its owning module "std::web" may mint it (no import, parent or child
     namespace grants that authority)
 
 == LIKELY CAUSES
@@ -2183,17 +2186,17 @@ validators are the only way to the fact.
 
 == WHAT TO DO
 Call the owner's predicate or validator to obtain the proof
-(`-help stdlib.module.web` lists them), or declare a refinement of your
+(`-help stdlib.module.std::web` lists them), or declare a refinement of your
 own if you need a different fact.
 
 @example reject
-import web
+import std::web
 
-fn mine?(v: str) -> bool proves v: web::Emailish:
+fn mine?(v: str) -> bool proves v: std::web::Emailish:
     true
 
 0
-@caption The entry program cannot mint web::Emailish
+@caption The entry program cannot mint std::web::Emailish
 @error CORE SEMANTIC REFINEMENT-MINT-AUTHORITY
 @at 3:36
 @end
@@ -2287,7 +2290,7 @@ refined type Q = P
 
 @topic error.binary-operand
 title: BINARY-OPERAND: a binary layout operation without its static operand
-summary: binary::emit needs a value statically of type LayoutStruct[L], binary::parse needs an abi::bytes::Bytes, and neither operation can be used as a function value.
+summary: std::binary::emit needs a value statically of type LayoutStruct[L], std::binary::parse needs a std::abi::bytes::Bytes, and neither operation can be used as a function value.
 index: errors
 alias: binary emit operand; binary parse operand
 keywords: binary, layout, emit, parse, LayoutStruct, Bytes, static operand
@@ -2296,39 +2299,40 @@ docs: BINARY-LAYOUT.md
 code: CORE SEMANTIC BINARY-OPERAND
 
 == MEANING
-A layout is a compile-time schema: `binary::parse(L, data)` imprints
-bytes with layout L and `binary::emit(v)` writes v with the layout of
+A layout is a compile-time schema: `std::binary::parse(L, data)` imprints
+bytes with layout L and `std::binary::emit(v)` writes v with the layout of
 v's static type LayoutStruct[L]. The layout is read from the call at
 compile time, so the operands must say it statically:
 
-    binary::emit needs a value whose static type is LayoutStruct[L] for
+    std::binary::emit needs a value whose static type is LayoutStruct[L] for
     a layout L (the layout it emits with); this value's type here is int
-    binary::parse imprints the bytes of an abi::bytes::Bytes (...); this
+    std::binary::parse imprints the bytes of a std::abi::bytes::Bytes (...); this
     argument's type here is str
-    binary::emit can only be called directly: its layout is a static
+    std::binary::emit can only be called directly: its layout is a static
     operand (...), so it has no function value
 
 == LIKELY CAUSES
   * Emitting a value whose static type was lost: an untyped parameter,
     a value read from a list.
-  * Parsing a str or a List: binary::parse takes abi::bytes::Bytes.
-  * `binary::emit` bound to a name or passed as an argument.
+  * Parsing a str or a List: std::binary::parse takes
+    std::abi::bytes::Bytes.
+  * `std::binary::emit` bound to a name or passed as an argument.
 
 == HOW TO INVESTIGATE
 The message shows the type the compiler sees for the operand.
 
 == WHAT TO DO
-Emit a value obtained from `binary::parse` (or constructed as
-`LayoutStruct[L] {...}`), give `binary::parse` an abi::bytes::Bytes
-(`abi::bytes::from_list`), and call the operations directly.
+Emit a value obtained from `std::binary::parse` (or constructed as
+`LayoutStruct[L] {...}`), give `std::binary::parse` a std::abi::bytes::Bytes
+(`std::abi::bytes::from_list`), and call the operations directly.
 
 @example reject
-import binary
+import std::binary
 
-binary::emit(5)
+std::binary::emit(5)
 @caption An int has no layout
 @error CORE SEMANTIC BINARY-OPERAND
-@at 3:14
+@at 3:19
 @end
 
 @topic error.missing-import
@@ -2344,38 +2348,38 @@ code: CORE SEMANTIC MISSING-IMPORT
 
 == MEANING
 A file may use the members of another namespace only after importing
-that namespace itself (`import str`). Imports are per file, exact and
-not transitive: importing `abi` does not import `abi::bytes`, and a
+that namespace itself (`import std::str`). Imports are per file, exact and
+not transitive: importing `abi` does not import `std::abi::bytes`, and a
 module's imports do nothing for the files that import the module. The
 member exists -- otherwise the diagnostic would be UNKNOWN-SYMBOL or
 UNKNOWN-NAMESPACE -- but this file is not authorized to name it.
 
 It is reported for each use, in both spellings:
 
-  * Qualified, `str::length(s)`: the module loader reports it before
+  * Qualified, `std::str::length(s)`: the module loader reports it before
     anything else is compiled, as SURFACE MODULE MISSING-IMPORT:
-        namespace "str" is not imported; add `import str` to use
-        `str::length`
+        namespace "std::str" is not imported; add `import std::str` to use
+        `std::str::length`
     with a note when a related namespace is imported:
-        ... (imports are exact: `import abi` does not import
-        "abi::bytes")
+        ... (imports are exact: `import std::abi` does not import
+        "std::abi::bytes")
   * Method syntax, `s.length()`: method syntax applies only functions
     visible by name, and an unimported namespace's members are not
     visible. When no visible function fits but a function of that name
     in an unimported namespace would accept the receiver, the call is
     reported as the missing import, CORE SEMANTIC MISSING-IMPORT, at the
     method name:
-        namespace "str" is not imported; add `import str` to use
-        `str::length` (the method-style call ".length(...)" applies only
+        namespace "std::str" is not imported; add `import std::str` to use
+        `std::str::length` (the method-style call ".length(...)" applies only
         a function visible by that name)
     In an untyped function, the method's receiver type is known only
     for a call, so the problem is reported at the call:
-        call to shout with s : str is invalid: namespace "str" is not
+        call to shout with s : str is invalid: namespace "std::str" is not
         imported; ... (in the body of shout, at 2:5)
   * Also: a qualified enum case of an unimported module
-    (`compiler::DiagnosticCode::Unbound`), and `static compile:` in a
-    file without `import compiler` (a rejected block fails with
-    compiler::CompilerError).
+    (`std::compiler::DiagnosticCode::Unbound`), and `static compile:` in a
+    file without `import std::compiler` (a rejected block fails with
+    std::compiler::CompilerError).
 
 Earlier compilers reported the method-syntax case as a confusing TYPE
 error elsewhere ("function result does not prove declared type str");
@@ -2392,8 +2396,8 @@ receiver type, for the same reason.
   * Using a standard-library function without its import (`str`, `list`,
     `mutable_vector` ...; the root primitives such as `mod` and `argv`
     need none).
-  * Expecting an import to cover a child namespace (`import linux` for
-    `linux::io`) or to flow from an imported module.
+  * Expecting an import to cover a child namespace (`import std::linux` for
+    `std::linux::io`) or to flow from an imported module.
 
 == HOW TO INVESTIGATE
 The message names the namespace to import and the member. Check the
@@ -2406,17 +2410,17 @@ uses the member. `-help stdlib` lists the standard namespaces and their
 members.
 
 @example reject
-str::length("abc")
-@caption A qualified use of str without import str
+std::str::length("abc")
+@caption A qualified use of str without import std::str
 @error SURFACE MODULE MISSING-IMPORT
 @at 1:1
 @end
 
 @example reject
-import abi
+import std::abi
 
-abi::bytes::from_list([])
-@caption abi does not import abi::bytes
+std::abi::bytes::from_list([])
+@caption abi does not import std::abi::bytes
 @error SURFACE MODULE MISSING-IMPORT
 @at 3:1
 @end
@@ -2426,62 +2430,70 @@ fn greet(name: str) -> str:
     name.concat(" says hi")
 
 greet("Ada")
-@caption Method syntax without import str
+@caption Method syntax without import std::str
 @error CORE SEMANTIC MISSING-IMPORT
 @at 2:10
 @end
 
 @example accept
-import str
+import std::str
 
 "abc".length()
-@caption With import str, method syntax works too
+@caption With import std::str, method syntax works too
 @value 3
 @end
 
 @topic error.unknown-namespace
 title: UNKNOWN-NAMESPACE: a namespace that does not exist
-summary: No standard namespace, application module or set of intrinsics has this name: there is no ROOT/NAME.bot beside the entry program and no lib/NAME.bot.
+summary: No standard namespace, application module or set of intrinsics has this name: there is no ROOT/NAME.bot beside the entry program and no stdlib/NAME.bot.
 index: errors
 alias: unknown namespace; no such module; module not found
 keywords: import, namespace, module, application module, standard library, path, file beside, nested namespace
 related: concept.imports concept.modules rule.application-modules error.missing-import error.unknown-symbol error.module-collision error.not-an-enum
-docs: IMPORTS.md STDLIB-NAMESPACES.md
+docs: STD-NAMESPACE.md IMPORTS.md STDLIB-NAMESPACES.md
 code: SURFACE MODULE UNKNOWN-NAMESPACE
 
 == MEANING
-`import NAME` (and a qualified `NAME::member`) names a namespace, which
-is, in this order and with no other search:
+`import NAME` (and a qualified `NAME::member`) names a namespace, decided
+by its first segment, with no search and no fallback:
 
-  1. a standard namespace: the standard library's module `NAME.bot`
-     (`a/b.bot` for `a::b`), or compiler intrinsics of that name (`str`,
-     `char` have no module file);
-  2. else, for the entry program and its application modules, the
-     application module `NAME.bot` in the entry file's directory (the
+  1. `std::NAME`: the standard library's module `NAME.bot` (`a/b.bot` for
+     `std::a::b`) in stdlib/, or compiler intrinsics of that name
+     (`std::str`, `std::char` have no module file);
+  2. any other NAME, for the entry program and its application modules:
+     the application module `NAME.bot` in the entry file's directory (the
      application root; `a/b.bot` for `a::b`).
 
 Nothing else is searched: not the working directory, not an environment
-variable, not a parent directory. A standard-library module's own
-imports see only the standard library. When neither exists, the message
-names where it looked:
+variable, not a parent directory, and a name without its std:: is never
+looked up in the standard library. A standard-library module's own
+imports see only the standard library. When the namespace does not exist,
+the message names where it looked, and the standard namespace of the same
+name if there is one:
 
-    unknown namespace "nosuch": no such module file ROOT/nosuch.bot (an
-    application's own modules are the files beside its entry program),
-    and in the standard library no such module file LIB/nosuch.bot and
-    no intrinsics of that namespace
+    unknown namespace "std::list": no such module file ROOT/list.bot (an
+    application's own modules are the files beside its entry program);
+    the standard library's namespace of that name is std::list (`import
+    std::list`): standard namespaces are named from the root std, and a
+    namespace outside it is never looked up there
+
+`std` itself is the standard library's root, not a namespace (`import
+std` is rejected the same way).
 
 A qualified name `X::Y` whose X is neither a namespace nor an enum type
 of this file is reported the same way, with "(nor is "X" an enum type
 visible in this file: a case is written Enum::Case)".
 
 == LIKELY CAUSES
+  * A standard namespace written without its std:: (`import std::list` for
+    `import std::list`): the message names the standard one.
   * A typo, or a name from another language's library (`math`, `os`).
   * An application module that is not beside the entry file: the root
     is the entry file's directory, whatever the working directory, and a
     module in a subdirectory `util/` is the namespace `util::NAME`.
-  * A parent of a namespace imported as if it were one: `import linux::abi`
-    is not a namespace; `linux::abi::x86_64` is.
-  * A namespace name with a member appended: `list::length::x`.
+  * A parent of a namespace imported as if it were one: `import
+    std::linux::abi` is not a namespace; `std::linux::abi::x86_64` is.
+  * A namespace name with a member appended: `std::list::length::x`.
 
 == HOW TO INVESTIGATE
 The message prints both places searched. Check that the module file
@@ -2489,8 +2501,9 @@ exists at the first one, spelled exactly (letter case, `a/b.bot` for
 `a::b`), beside the entry file actually compiled.
 
 == WHAT TO DO
-Fix the name, or move the module to `NAME.bot` beside the entry program.
-`-help stdlib` lists the standard namespaces.
+Fix the name (a standard namespace is std::NAME), or move the module to
+`NAME.bot` beside the entry program. `-help stdlib` lists the standard
+namespaces.
 
 @example reject
 import nosuch
@@ -2516,20 +2529,20 @@ After `import NS`, a qualified reference `NS::name` must name something
 NS declares, of the right kind for where it is written. The message
 lists what NS has:
 
-    namespace "list" has no definition "nosuch" (it defines: all?, any?,
+    namespace "std::list" has no definition "nosuch" (it defines: all?, any?,
     append, at, find, get, length, none?)
-    namespace "str" has no definition "reverse" (its members are the
+    namespace "std::str" has no definition "reverse" (its members are the
     intrinsics: append_char, char_at, concat, ...)
-    namespace "test" has no type "Nope" (it declares: Erased, Match, ...)
-    namespace "list" has no error "Nope" (it declares: NotFound)
-    namespace "list" has no type "Foo" (its types: none)  (import type)
+    namespace "std::test" has no type "Nope" (it declares: Erased, Match, ...)
+    namespace "std::list" has no error "Nope" (it declares: NotFound)
+    namespace "std::list" has no type "Foo" (its types: none)  (import type)
 
-and `ffi::c::Bool` or `ffi::c::Ptr` used as a value ("is a type, not a
-value or a function").
+and `std::ffi::c::Bool` or `std::ffi::c::Ptr` used as a value ("is a type,
+not a value or a function").
 
 == LIKELY CAUSES
-  * A function another language's library has (`str::reverse`,
-    `list::map`); Botlish's standard library is small, and absent
+  * A function another language's library has (`std::str::reverse`,
+    `std::list::map`); Botlish's standard library is small, and absent
     facilities have capability.* pages.
   * A type or error spelled with the wrong namespace.
 
@@ -2542,9 +2555,9 @@ Use a member the message lists (`-help stdlib.module.NS` describes
 them), or write the function yourself.
 
 @example reject
-import list
+import std::list
 
-list::nosuch([1])
+std::list::nosuch([1])
 @caption list has no definition nosuch
 @error SURFACE MODULE UNKNOWN-SYMBOL
 @at 3:1
@@ -2566,16 +2579,16 @@ module NS declares with `type`, `refined type`, `enum` or `trait`. It
 does not import structs: a struct of another module is always spelled
 qualified, `NS::Name`, after `import NS`. Other members are not types:
 
-    "test::Suite" is a struct, not a source-defined `type`: `import type`
-    imports `type` declarations only; spell the struct test::Suite after
-    `import test`
-    "list::get" exists, but is not a type (it is a function or value of
-    namespace "list"): ...
-    "compiler::CompilerError" is an error declaration, not a type
-    "binary::X" is a layout, not a type: ... (its values have the type
-    LayoutStruct[binary::X])
-    "ffi::c::Ptr" is an intrinsic type of namespace "ffi::c", not a
-    source-defined `type`: spell it ffi::c::Ptr after `import ffi::c`
+    "std::test::Suite" is a struct, not a source-defined `type`: `import type`
+    imports `type` declarations only; spell the struct std::test::Suite after
+    `import std::test`
+    "std::list::get" exists, but is not a type (it is a function or value of
+    namespace "std::list"): ...
+    "std::compiler::CompilerError" is an error declaration, not a type
+    "std::binary::X" is a layout, not a type: ... (its values have the type
+    LayoutStruct[std::binary::X])
+    "std::ffi::c::Ptr" is an intrinsic type of namespace "std::ffi::c", not a
+    source-defined `type`: spell it std::ffi::c::Ptr after `import std::ffi::c`
 
 The struct case is the one people meet most: `import type` works for an
 enum of a module but not for a struct of the same module, and there is
@@ -2594,27 +2607,27 @@ For a struct, replace `import type NS::Name` by `import NS` and write
 `NS::Name` in annotations and constructions. For a function or error,
 import the namespace and use it qualified:
 
-    import compiler
+    import std::compiler
 
-    fn line_of(at: compiler::SourceLocation) -> int:
+    fn line_of(at: std::compiler::SourceLocation) -> int:
         at.line
 
 @example reject
-import type test::Suite
+import type std::test::Suite
 
 0
 @caption import type does not import structs
 @error SURFACE MODULE NOT-A-TYPE
-@at 1:19
+@at 1:24
 @end
 
 @example reject
-import type list::get
+import type std::list::get
 
 0
-@caption list::get is a function, not a type
+@caption std::list::get is a function, not a type
 @error SURFACE MODULE NOT-A-TYPE
-@at 1:19
+@at 1:24
 @end
 
 @topic error.type-import-collision
@@ -2633,21 +2646,21 @@ never shadows, and is never shadowed by, a type the file declares, a
 built-in type or another import -- there is no precedence and no
 renaming:
 
-    `import type compiler::DiagnosticCode` binds the type name
+    `import type std::compiler::DiagnosticCode` binds the type name
     "DiagnosticCode", which this file also declares itself (at ...); an
     imported type never shadows or is shadowed by a local one: drop the
-    import and spell the imported type compiler::DiagnosticCode (after
-    `import compiler`)
-    `import type ffi::c::Int` binds the type name "Int", which is a
+    import and spell the imported type std::compiler::DiagnosticCode (after
+    `import std::compiler`)
+    `import type std::ffi::c::Int` binds the type name "Int", which is a
     built-in type; ...
-    `import type abi::aarch64::Register64Word` and `import type
-    abi::x86_64::Register64Word` (at ...) both bind the type name
+    `import type std::abi::aarch64::Register64Word` and `import type
+    std::abi::x86_64::Register64Word` (at ...) both bind the type name
     "Register64Word"; ...
 
 == LIKELY CAUSES
   * A type both imported and declared locally, after a refactoring.
   * Two modules with types of the same short name.
-  * `import type ffi::c::Int` (`Int` is a built-in name).
+  * `import type std::ffi::c::Int` (`Int` is a built-in name).
 
 == HOW TO INVESTIGATE
 The message names both sides and the location of the other one.
@@ -2657,7 +2670,7 @@ Drop the `import type` and spell the type qualified after `import NS`
 (or rename your own type).
 
 @example reject
-import type compiler::DiagnosticCode
+import type std::compiler::DiagnosticCode
 
 enum DiagnosticCode:
     A,
@@ -2665,7 +2678,7 @@ enum DiagnosticCode:
 0
 @caption The file declares its own DiagnosticCode
 @error SURFACE MODULE TYPE-IMPORT-COLLISION
-@at 1:23
+@at 1:28
 @end
 
 @topic error.duplicate-import
@@ -2681,8 +2694,8 @@ code: SURFACE MODULE DUPLICATE-IMPORT
 == MEANING
 Each import states one dependency of the file, once:
 
-    namespace "list" is already imported (first imported at ...)
-    type "byte::Byte" is already imported (first imported at ...)
+    namespace "std::list" is already imported (first imported at ...)
+    type "std::byte::Byte" is already imported (first imported at ...)
 
 == LIKELY CAUSES
   * Two headers merged, or an import added twice.
@@ -2694,8 +2707,8 @@ The message gives the location of the first import.
 Delete the second import.
 
 @example reject
-import list
-import list
+import std::list
+import std::list
 
 0
 @caption list is imported twice
@@ -2795,47 +2808,119 @@ merge the two. A module must never import the entry program: move the
 shared code from the entry program into a module.
 
 @topic error.module-collision
-title: MODULE-COLLISION: an application module named like a standard namespace
-summary: An application file imports a standard namespace while the application has a file of the same name beside the entry program; standard namespaces are never replaced.
+title: MODULE-COLLISION: an application module named like an intrinsic namespace
+summary: An application file imports a namespace that is both a file beside the entry program and a namespace of compiler intrinsics registered outside std; neither is chosen silently.
 index: errors
-alias: application module has the name of a standard namespace
-keywords: application module, standard namespace, collision, rename, lib, entry file directory
-related: rule.application-modules concept.modules concept.imports error.unknown-namespace
-docs: IMPORTS.md POST-2048-PRODUCT-FIXES.md
+alias: application module has the name of an intrinsic namespace
+keywords: application module, intrinsic namespace, collision, rename, test fixture, entry file directory
+related: rule.application-modules concept.modules concept.imports concept.standard-library error.unknown-namespace error.reserved-namespace
+docs: STD-NAMESPACE.md IMPORTS.md POST-2048-PRODUCT-FIXES.md
 code: SURFACE MODULE MODULE-COLLISION
 
 == MEANING
-A standard namespace always wins resolution, so an application file
-named like one could never be imported -- and silently loading the
-standard module instead would hide the mistake. When an application
-file imports NAME and the application root also holds NAME.bot for a
-standard NAME, the import is rejected, naming both files:
+Every standard namespace is under std (concept.standard-library), so an
+application module `list.bot` and the standard `std::list` never collide:
+they are two namespaces. A collision is left only where one name has two
+meanings outside std: an application file NAME.bot and compiler intrinsics
+of the namespace NAME, which only a test process registers (its
+`ffi_fixture` fixture). The import is rejected, naming the file:
 
-    application module DIR/list.bot has the name of the standard
-    namespace "list" (the standard library's LIB/list.bot), which
-    `import list` names: a standard namespace is never replaced by an
-    application file, and never silently chosen over one; rename the
-    application module
+    application module DIR/ffi_fixture.bot has the name of the intrinsic
+    namespace "ffi_fixture" (compiler intrinsics registered in this
+    process), which `import ffi_fixture` names: an intrinsic namespace is
+    never replaced by an application file, and never silently chosen over
+    one; rename the application module
 
 An application file that nothing imports collides with nothing. A
-collision needs a second file, so there is no single-file example:
-
-    main.bot                    list.bot (beside it)
-      import list                 fn length(xs) -> int:
-                                      0
-      list::length([1])
-
-== LIKELY CAUSES
-  * An application module with a generic name the standard library also
-    uses (`list`, `str`, `test`, `io`, `byte`).
-
-== HOW TO INVESTIGATE
-The message names both files; `-help stdlib` lists the standard
-namespaces to avoid.
+collision needs a second file and a test process, so there is no
+single-file example.
 
 == WHAT TO DO
-Rename the application module (`list.bot` to `my_lists.bot`) and its
-imports.
+Rename the application module and its imports.
+
+@topic error.reserved-namespace
+title: RESERVED-NAMESPACE: an application file inside std/
+summary: An application file imports std::NAME while the application has a file std/NAME.bot beside its entry program: std belongs to the standard library, so that file is never a module and is never chosen.
+index: errors
+alias: application module named std; shadow the standard library; std directory in my project
+keywords: std, standard library, reserved, shadow, application module, std/ directory, rename
+related: concept.standard-library rule.application-modules concept.modules error.unknown-namespace error.module-collision
+docs: STD-NAMESPACE.md IMPORTS.md
+code: SURFACE MODULE RESERVED-NAMESPACE
+
+== MEANING
+The namespace std and every namespace under it are the standard library's
+(concept.standard-library): `std::list` is stdlib/list.bot beside the
+compiler, for every program. An application file ROOT/std/list.bot would
+be the namespace std::list by its path, so it can never be an application
+module, and `import std::list` never chooses between the two. Rather than
+ignore the file silently, the import is rejected, naming it:
+
+    application file DIR/std/list.bot would be the namespace "std::list",
+    but std and every namespace under it belong to the standard library:
+    an application module is never a standard namespace, and `import
+    std::list` never chooses between the two (it names the standard
+    library's LIB/list.bot); move or rename the application file out of
+    the application's std/ directory
+
+The same holds for a file under std/ for a namespace the standard library
+does not have (`import std::mine` beside std/mine.bot). An application
+file under std/ that nothing imports as std::NAME collides with nothing.
+A shadowing attempt needs a second file, so there is no single-file
+example.
+
+== WHAT TO DO
+Move the application's module out of its std/ directory (std/util.bot to
+util.bot, imported as `util`) or rename the directory.
+
+@topic error.rooted-name
+title: ROOTED-NAME: a rooted name with no namespace
+summary: A leading :: starts a namespace path from the root (::std::list::at); a name in no namespace, such as the entry program's own function or type, is written without it.
+index: errors
+alias: leading ::; absolute name; ::name
+keywords: ::, rooted, absolute, root namespace, qualified name, std, syntax
+related: concept.standard-library concept.imports error.surface-syntax error.unknown-namespace
+docs: STD-NAMESPACE.md
+code: ROOTED-NAME
+match: SURFACE SYNTAX | ROOTED-NAME: *
+
+== MEANING
+`::` at the start of a name roots its namespace path explicitly, as in
+Tcl: `import ::std::list`, `::std::list::at(xs, 0)`, `x:
+::std::abi::U8Value`, `on ::std::list::NotFound:`. A rooted reference is
+a namespace path plus a member, so it has at least two segments after
+the root. One segment alone names nothing in a namespace -- the entry
+program's own definitions, types and errors are in no namespace -- and
+the parser says so:
+
+    "::f" is a rooted name with no namespace: a leading "::" starts a
+    namespace path from the root, so a name written with it is
+    ::NAMESPACE::NAME (::std::list::at); a name that is in no namespace
+    (the entry program's own) is written without it: f
+
+(An import's path is a namespace, so `import ::game` is the application
+module game.)
+
+== WHAT TO DO
+Drop the leading `::`, or name the member's namespace after it.
+
+@example reject
+fn twice(x):
+    x * 2
+
+::twice(4)
+@caption The entry program's own function is in no namespace
+@error SURFACE SYNTAX
+@at 4:1
+@end
+
+@example accept
+import ::std::list
+
+[::std::list::length([1, 2]), std::list::length([3])]
+@caption Rooted and unrooted spellings of one standard namespace
+@value [2, 1]
+@end
 
 @topic error.invalid-toplevel
 title: INVALID-TOPLEVEL: a statement at the top level of a module
@@ -2885,25 +2970,25 @@ fine; a test call is not.
 
 @topic error.duplicate-native
 title: DUPLICATE-NATIVE: a library module redefining a compiler intrinsic
-summary: A standard-library module defines a member whose qualified name is a compiler-provided intrinsic (such as list::at); an intrinsic cannot be redefined or overloaded.
+summary: A standard-library module defines a member whose qualified name is a compiler-provided intrinsic (such as std::list::at); an intrinsic cannot be redefined or overloaded.
 index: errors
 alias: cannot redefine an intrinsic
 keywords: intrinsic, native, module, redefine, overload, standard library
-related: concept.modules stdlib.module.list error.module-collision
+related: concept.modules stdlib.module.std::list error.module-collision
 docs: STDLIB-NAMESPACES.md IMPORTS.md
 code: SURFACE MODULE DUPLICATE-NATIVE
 
 == MEANING
 Some members of standard namespaces are intrinsics provided by the
-compiler (`list::at`, `str::concat`). Every reference spelled
-`list::at` denotes the intrinsic, so a module definition of that name
+compiler (`std::list::at`, `std::str::concat`). Every reference spelled
+`std::list::at` denotes the intrinsic, so a module definition of that name
 could never be called, and Botlish has no overloading for it to coexist
 as:
 
-    module "list" (LIB/list.bot) cannot define "at": list::at is a
+    module "std::list" (LIB/list.bot) cannot define "at": std::list::at is a
     compiler-provided intrinsic (...), which every reference of that
     spelling denotes; it cannot be redefined or overloaded (other members
-    of namespace "list" are unaffected)
+    of namespace "std::list" are unaffected)
 
 Only a standard-library module can be in such a namespace: an
 application module named like a standard namespace is a MODULE-COLLISION
@@ -2921,8 +3006,8 @@ with.
 
 == WHAT TO DO
 Give the library function another name; the module may define any other
-member of its namespace (lib/list.bot's `list::get` beside the intrinsic
-`list::at`).
+member of its namespace (stdlib/list.bot's `std::list::get` beside the
+intrinsic `std::list::at`).
 
 @topic error.module-immutable
 title: MODULE-IMMUTABLE: a module binding whose value is not provably immutable
@@ -2984,18 +3069,18 @@ title: AMBIGUOUS-MODULE: a namespace both general and architecture-specific
 summary: A standard-library namespace has both a module file NAME.bot and architecture-specific files NAME.ARCH.bot; a namespace is one or the other.
 index: errors
 alias: module file and architecture-specific module files
-keywords: architecture, module file, x86_64, aarch64, standard library, linux::sys
+keywords: architecture, module file, x86_64, aarch64, standard library, std::linux::sys
 related: error.unsupported-architecture error.unknown-target backend.targets concept.modules
 docs: LINUX-SYSCALL-TRANSPORTS.md
 code: SURFACE MODULE AMBIGUOUS-MODULE
 
 == MEANING
 A standard namespace is either the same on every architecture (one file
-`lib/NAME.bot`) or specific to each (`lib/NAME.x86_64.bot`,
-`lib/NAME.aarch64.bot`, chosen by the compilation's target, like
-`linux::sys`), never both:
+`stdlib/NAME.bot`) or specific to each (`stdlib/NAME.x86_64.bot`,
+`stdlib/NAME.aarch64.bot`, chosen by the compilation's target, like
+`std::linux::sys`), never both:
 
-    namespace "linux::sys" has both a module file ... and
+    namespace "std::linux::sys" has both a module file ... and
     architecture-specific module files (...): a namespace is either the
     same on every architecture or specific to each, never both
 
@@ -3017,31 +3102,31 @@ of this compiler version.
 
 @topic error.unknown-target
 title: UNKNOWN-TARGET: a target-dependent namespace on an unknown host
-summary: The program imports an architecture-specific namespace or ffi::c, and the host machine is none of the known C ABI targets; compile with -target.
+summary: The program imports an architecture-specific namespace or std::ffi::c, and the host machine is none of the known C ABI targets; compile with -target.
 index: errors
 alias: none of the known targets
-keywords: target, -target, host, architecture, ffi::c, linux::sys, C ABI
+keywords: target, -target, host, architecture, std::ffi::c, std::linux::sys, C ABI
 related: backend.targets backend.platforms cli.options error.unsupported-architecture error.ambiguous-module concept.c-ffi
 docs: C-ABI-TYPES.md LINUX-SYSCALL-TRANSPORTS.md
 code: SURFACE MODULE UNKNOWN-TARGET
 
 == MEANING
 Two kinds of namespace depend on the compilation's C ABI target, which
-defaults to the host's: an architecture-specific module (`linux::sys`)
-and `ffi::c`, whose integer types have the target's sizes. On a host that
-is none of the known targets (linux, macos and windows on x86_64 and
+defaults to the host's: an architecture-specific module (`std::linux::sys`)
+and `std::ffi::c`, whose integer types have the target's sizes. On a host
+that is none of the known targets (linux, macos and windows on x86_64 and
 aarch64), the compiler cannot choose:
 
-    namespace "linux::sys" is architecture-specific (its files are ...),
+    namespace "std::linux::sys" is architecture-specific (its files are ...),
     and this host (OS MACHINE) is none of the known targets; compile with
     -target (linux-aarch64, linux-x86_64, macos-aarch64, ...)
-    namespace "ffi::c" needs a C ABI target, and this host (...) is none
+    namespace "std::ffi::c" needs a C ABI target, and this host (...) is none
     of the known ones; compile with -target (...)
 
 A platform namespace (`linux` and everything under it:
 error.unsupported-platform) needs a target too, for its operating system:
 
-    namespace "linux::io" belongs to the Linux platform, and this host
+    namespace "std::linux::io" belongs to the Linux platform, and this host
     (...) is none of the known targets; compile with -target (...)
 
 It depends on the host, so there is no example program for it.
@@ -3061,20 +3146,20 @@ title: UNSUPPORTED-PLATFORM: a Linux namespace imported for another operating sy
 summary: A namespace of the Linux platform (linux and everything under it) is imported for a target of another operating system; compile for a Linux target or drop the import.
 index: errors
 alias: Linux platform; linux namespace on macOS
-keywords: platform, linux, linux::io, linux::sys, linux::path, macOS, Windows, target, -target, operating system
+keywords: platform, linux, std::linux::io, std::linux::sys, std::linux::path, macOS, Windows, target, -target, operating system
 related: error.unknown-target error.unsupported-architecture backend.platforms backend.targets cli.options concept.modules
 docs: MACOS-AARCH64-MILESTONE-2.md LINUX-SYSCALL-TRANSPORTS.md C-ABI-TYPES.md
 code: SURFACE MODULE UNSUPPORTED-PLATFORM
 
 == MEANING
 A compilation target is an operating system and an architecture
-(backend.targets). The standard namespace `linux` and every namespace
-under it (`linux::io`, `linux::path`, `linux::sys`, the system-call
+(backend.targets). The standard namespace `linux` and every namespace under
+it (`std::linux::io`, `std::linux::path`, `std::linux::sys`, the system-call
 transports) belong to the Linux platform: they make Linux system calls or
-model Linux, so they exist for Linux targets only. Imported for a target
-of another operating system, they are refused at the import:
+model Linux, so they exist for Linux targets only. Imported for a target of
+another operating system, they are refused at the import:
 
-    namespace "linux::io" belongs to the Linux platform (the standard
+    namespace "std::linux::io" belongs to the Linux platform (the standard
     namespace linux and every namespace under it), which is unavailable
     for target macos-aarch64 (macOS on aarch64): a Linux module is never
     chosen for, mapped to or substituted on another operating system,
@@ -3085,12 +3170,12 @@ A matching architecture is not enough: linux-aarch64 and macos-aarch64
 share an instruction set, not an operating system, and no macOS module
 stands in for a Linux one. Namespaces that are no platform's stay
 available on every target, the architecture-specific ones included
-(`abi::aarch64` on macOS). The target defaults to the host's, so the
+(`std::abi::aarch64` on macOS). The target defaults to the host's, so the
 same program compiles on Linux and is refused on a Mac; there is no
 example program for it.
 
 == LIKELY CAUSES
-  * Compiling a program that prints through `linux::io` (or calls
+  * Compiling a program that prints through `std::linux::io` (or calls
     `linux` directly) on macOS or Windows, or with -target naming one.
 
 == HOW TO INVESTIGATE
@@ -3102,7 +3187,7 @@ host's default.
 Compile for a Linux target (`botlish -target linux-aarch64
 PROGRAM.bot`): the Tcl backends run the result on any host, while native
 code runs only on its own target's host (NATIVE TARGET). Or remove the
-Linux import; the portable standard library (io, io::path) has no
+Linux import; the portable standard library (io, std::io::path) has no
 platform.
 
 @topic error.unsupported-architecture
@@ -3117,15 +3202,15 @@ code: SURFACE MODULE UNSUPPORTED-ARCHITECTURE
 
 == MEANING
 An architecture-specific standard namespace is a set of files
-`lib/NAME.ARCH.bot`, one per supported architecture. When the target's
+`stdlib/NAME.ARCH.bot`, one per supported architecture. When the target's
 architecture has none:
 
     namespace "NAME" has no module for the ARCH architecture of target
     TARGET: it is architecture-specific, and its files are ... (no
-    lib/NAME.ARCH.bot)
+    stdlib/NAME.ARCH.bot)
 
 Every architecture-specific namespace of the shipped library
-(`linux::sys`) has a file for both x86_64 and aarch64, the
+(`std::linux::sys`) has a file for both x86_64 and aarch64, the
 architectures of all known targets, so a program compiled against the
 shipped library does not meet this diagnostic; there is no example
 program for it.
@@ -3277,7 +3362,7 @@ summary: + - * / of DecimalRounded values that are not constants (parameters, ca
 index: errors
 alias: guarantee lost; no decimal place can be proved; decimal arithmetic on parameters; DecimalRounded arithmetic
 keywords: DecimalRounded, arithmetic, parameter, guarantee, proof, rounding cell, decay, from_decimal_rounded, round
-related: concept.decimal-rounded stdlib.float64::from_decimal_rounded stdlib.decimal_rounded::round error.decimal-precision
+related: concept.decimal-rounded stdlib.std::float64::from_decimal_rounded stdlib.std::decimal_rounded::round error.decimal-precision
 docs: DECIMAL-ROUNDED-MILESTONE-1.md
 code: CORE SEMANTIC DECIMAL-GUARANTEE-LOST
 
@@ -3300,11 +3385,11 @@ arithmetic, and are allowed. Only arithmetic of decimal constants is
 proven (error.decimal-precision).
 
 == WHAT TO DO
-Compute with Float64 and say where the guarantee is established again:
-decay each operand with float64::from_decimal_rounded (the Float64 of its
+Compute with Float64 and say where the guarantee is established again: decay
+each operand with std::float64::from_decimal_rounded (the Float64 of its
 guaranteed decimal), compute, and round the Float64 result back with
-decimal_rounded::round[DecimalRounded{minDecimalsPreserved: N}](x), which
-quantizes it to N places.
+std::decimal_rounded::round[DecimalRounded{minDecimalsPreserved: N}](x),
+which quantizes it to N places.
 
 @example reject
 fn sum(a: DecimalRounded{minDecimalsPreserved: 2}, b: DecimalRounded{minDecimalsPreserved: 2}) -> DecimalRounded{minDecimalsPreserved: 2}:
@@ -3317,12 +3402,12 @@ fn sum(a: DecimalRounded{minDecimalsPreserved: 2}, b: DecimalRounded{minDecimals
 @end
 
 @example accept
-import float64
-import decimal_rounded
+import std::float64
+import std::decimal_rounded
 
 fn sum(a: DecimalRounded{minDecimalsPreserved: 2}, b: DecimalRounded{minDecimalsPreserved: 2}) -> DecimalRounded{minDecimalsPreserved: 2} errors NonFiniteFloat, UnrepresentableDecimal:
-    total = float64::from_decimal_rounded(a) + float64::from_decimal_rounded(b)
-    decimal_rounded::round[DecimalRounded{minDecimalsPreserved: 2}](total)
+    total = std::float64::from_decimal_rounded(a) + std::float64::from_decimal_rounded(b)
+    std::decimal_rounded::round[DecimalRounded{minDecimalsPreserved: 2}](total)
 
 0.25.sum(0.5):
     on NonFiniteFloat:

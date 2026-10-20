@@ -310,26 +310,26 @@ test dr-strengthening-refused {a guarantee is never minted without a proof: a va
         [rejection "fn f(x: $dr2) -> int:\n    1\ny = 0.5 * 1.0\nf(y)\n"] \
         [rejection "fn f(x: Float64) -> int:\n    1\nfn g(x: $dr2) -> int:\n    f(x)\ng(0.5)\n"] \
         [rejection "fn f(x: Float64) -> $dr2:\n    x\nf(0.5)\n"]
-} -result {{TYPE: argument for parameter "x" cannot be proven to satisfy DecimalRounded{minDecimalsPreserved: 3} (argument type: DecimalRounded{minDecimalsPreserved: 2}); a value of DecimalRounded{minDecimalsPreserved: 2} is known only to 2 decimal places, and a guarantee is never strengthened without a proof (only a decimal constant's precision is proven)} {TYPE: argument for parameter "x" cannot be proven to satisfy DecimalRounded{minDecimalsPreserved: 2} (argument type: DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4}); observations of a value of DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4} are limited to 4 decimal places (its maxDecimalsPreserved), and DecimalRounded{minDecimalsPreserved: 2} states no upper bound: an upper precision bound is never dropped or raised} {TYPE: argument for parameter "x" cannot be proven to satisfy DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 6} (argument type: DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4}); observations of a value of DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4} are limited to 4 decimal places (its maxDecimalsPreserved), and DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 6} allows observations to 6 places: an upper precision bound is never dropped or raised} {TYPE: argument for parameter "x" cannot be proven to satisfy DecimalRounded{minDecimalsPreserved: 2} (argument type: Float64); a Float64 is no DecimalRounded value, and nothing converts one implicitly (decimal_rounded::round[DecimalRounded{...}] rounds a Float64 to one; a decimal literal where a DecimalRounded type is expected is one)} {TYPE: argument for parameter "x" cannot be proven to satisfy Float64 (argument type: DecimalRounded{minDecimalsPreserved: 2}); a DecimalRounded value is no Float64, and nothing converts one implicitly (float64::from_decimal_rounded decays one to the Float64 nearest its guaranteed decimal)} {TYPE: function result does not prove declared type DecimalRounded{minDecimalsPreserved: 2}; a Float64 is no DecimalRounded value, and nothing converts one implicitly (decimal_rounded::round[DecimalRounded{...}] rounds a Float64 to one; a decimal literal where a DecimalRounded type is expected is one)}}
+} -result {{TYPE: argument for parameter "x" cannot be proven to satisfy DecimalRounded{minDecimalsPreserved: 3} (argument type: DecimalRounded{minDecimalsPreserved: 2}); a value of DecimalRounded{minDecimalsPreserved: 2} is known only to 2 decimal places, and a guarantee is never strengthened without a proof (only a decimal constant's precision is proven)} {TYPE: argument for parameter "x" cannot be proven to satisfy DecimalRounded{minDecimalsPreserved: 2} (argument type: DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4}); observations of a value of DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4} are limited to 4 decimal places (its maxDecimalsPreserved), and DecimalRounded{minDecimalsPreserved: 2} states no upper bound: an upper precision bound is never dropped or raised} {TYPE: argument for parameter "x" cannot be proven to satisfy DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 6} (argument type: DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4}); observations of a value of DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4} are limited to 4 decimal places (its maxDecimalsPreserved), and DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 6} allows observations to 6 places: an upper precision bound is never dropped or raised} {TYPE: argument for parameter "x" cannot be proven to satisfy DecimalRounded{minDecimalsPreserved: 2} (argument type: Float64); a Float64 is no DecimalRounded value, and nothing converts one implicitly (std::decimal_rounded::round[DecimalRounded{...}] rounds a Float64 to one; a decimal literal where a DecimalRounded type is expected is one)} {TYPE: argument for parameter "x" cannot be proven to satisfy Float64 (argument type: DecimalRounded{minDecimalsPreserved: 2}); a DecimalRounded value is no Float64, and nothing converts one implicitly (std::float64::from_decimal_rounded decays one to the Float64 nearest its guaranteed decimal)} {TYPE: function result does not prove declared type DecimalRounded{minDecimalsPreserved: 2}; a Float64 is no DecimalRounded value, and nothing converts one implicitly (std::decimal_rounded::round[DecimalRounded{...}] rounds a Float64 to one; a decimal literal where a DecimalRounded type is expected is one)}}
 
-test dr-decay {float64::from_decimal_rounded is the visible decay to Float64: the Float64 nearest round(x, N), N the precision x's type guarantees -- never x's hidden digits} -body {
-    drValue [string cat "import float64\n" \
+test dr-decay {std::float64::from_decimal_rounded is the visible decay to Float64: the Float64 nearest round(x, N), N the precision x's type guarantees -- never x's hidden digits} -body {
+    drValue [string cat "import std::float64\n" \
         "fn d(x: $dr2) -> $dr2:\n    x\n" \
-        "fn one(x: DecimalRounded{minDecimalsPreserved: 1}) -> Float64:\n    float64::from_decimal_rounded(x)\n" \
-        "\[float64::from_decimal_rounded(d(0.295)), float64::from_decimal_rounded(d(1.245)), one(d(1.25)), one(d(1.35)), float64::from_decimal_rounded(d(0.1))\]\n"]
+        "fn one(x: DecimalRounded{minDecimalsPreserved: 1}) -> Float64:\n    std::float64::from_decimal_rounded(x)\n" \
+        "\[std::float64::from_decimal_rounded(d(0.295)), std::float64::from_decimal_rounded(d(1.245)), one(d(1.25)), one(d(1.35)), std::float64::from_decimal_rounded(d(0.1))\]\n"]
 } -result {[0.3, 1.24, 1.2, 1.4, 0.1]}
 
-test dr-quantize {decimal_rounded::round[T](x) mints a guarantee by quantizing: the Float64 x's exact value rounded half to even to T's places, represented to satisfy them; it is imprinted with a refined DecimalRounded type, and a decimal no representation holds is UnrepresentableDecimal} -body {
-    list [drValue [string cat "import decimal_rounded\n" \
-            "fn q(x: Float64) -> $dr2 errors UnrepresentableDecimal:\n    decimal_rounded::round\[$dr2\](x)\n" \
+test dr-quantize {std::decimal_rounded::round[T](x) mints a guarantee by quantizing: the Float64 x's exact value rounded half to even to T's places, represented to satisfy them; it is imprinted with a refined DecimalRounded type, and a decimal no representation holds is UnrepresentableDecimal} -body {
+    list [drValue [string cat "import std::decimal_rounded\n" \
+            "fn q(x: Float64) -> $dr2 errors UnrepresentableDecimal:\n    std::decimal_rounded::round\[$dr2\](x)\n" \
             "fn safe(x: Float64) -> $dr2:\n    q(x):\n        on UnrepresentableDecimal:\n            0.0\n" \
             "\[safe(0.1 + 0.2), safe(1.005), safe(2.675), safe(-0.125), safe(1.0e15 + 0.3)\]\n"]] \
-        [drValue [string cat "import decimal_rounded\n" \
-            "fn q(x: Float64) -> DecimalRounded{minDecimalsPreserved: 9} errors UnrepresentableDecimal:\n    decimal_rounded::round\[DecimalRounded{minDecimalsPreserved: 9}\](x)\n" \
+        [drValue [string cat "import std::decimal_rounded\n" \
+            "fn q(x: Float64) -> DecimalRounded{minDecimalsPreserved: 9} errors UnrepresentableDecimal:\n    std::decimal_rounded::round\[DecimalRounded{minDecimalsPreserved: 9}\](x)\n" \
             "q(4873863637.854281):\n    on UnrepresentableDecimal:\n        0.0\n"]] \
-        [rejection "import decimal_rounded\ndecimal_rounded::round(0.5)\n"] \
-        [rejection "import decimal_rounded\ndecimal_rounded::round\[Float64\](0.5)\n"]
-} -result {{[0.30, 1.00, 2.67, -0.12, 1000000000000000.25]} 0.000000000 {IMPRINT: decimal_rounded::round: imprint variable T is not established (it occurs only in the result, and no type named T is visible where decimal_rounded::round is declared): write decimal_rounded::round[T](...) with explicit imprints} {TYPE: decimal_rounded::round makes a DecimalRounded value of the precision its imprint states, so it is imprinted with a DecimalRounded{...} type (decimal_rounded::round[DecimalRounded{minDecimalsPreserved: 2}](x)), not Float64}}
+        [rejection "import std::decimal_rounded\nstd::decimal_rounded::round(0.5)\n"] \
+        [rejection "import std::decimal_rounded\nstd::decimal_rounded::round\[Float64\](0.5)\n"]
+} -result {{[0.30, 1.00, 2.67, -0.12, 1000000000000000.25]} 0.000000000 {IMPRINT: std::decimal_rounded::round: imprint variable T is not established (it occurs only in the result, and no type named T is visible where std::decimal_rounded::round is declared): write std::decimal_rounded::round[T](...) with explicit imprints} {TYPE: std::decimal_rounded::round makes a DecimalRounded value of the precision its imprint states, so it is imprinted with a DecimalRounded{...} type (std::decimal_rounded::round[DecimalRounded{minDecimalsPreserved: 2}](x)), not Float64}}
 
 # ---------------------------------------------------------------------------
 # Arithmetic
@@ -365,7 +365,7 @@ test dr-arithmetic-opaque {arithmetic on a DecimalRounded value known only by it
         [rejectionKinds "fn f(a: $dr2, b: $dr2) -> bool:\n    a * b < a / b\nf(0.5, 0.25)\n"] \
         [drValue "fn f(a: $dr2) -> $dr2:\n    -a\n\[f(0.125), f(-0.135), f(0.0)\]\n"] \
         [rejection "fn f(a: $dr2) -> $dr2:\n    a - 0.01\nf(0.5)\n"]
-} -result {{DECIMAL-GUARANTEE-LOST: no decimal place of this sum can be proved: its operands are DecimalRounded{minDecimalsPreserved: 2} and DecimalRounded{minDecimalsPreserved: 2}, values known only to the precision their types guarantee, and rounding is discontinuous -- an operand anywhere in its rounding cell can carry the exact result across a rounding boundary of every precision, and the type states no magnitude (only arithmetic of decimal constants is proven: decay the operands with float64::from_decimal_rounded to compute with Float64, and round a Float64 result back with decimal_rounded::round[DecimalRounded{...}])} {DECIMAL-GUARANTEE-LOST DECIMAL-GUARANTEE-LOST} {[-0.12, 0.14, 0.00]} {DECIMAL-GUARANTEE-LOST: no decimal place of this difference can be proved: its operands are DecimalRounded{minDecimalsPreserved: 2} and DecimalRounded{minDecimalsPreserved: 2}, values known only to the precision their types guarantee, and rounding is discontinuous -- an operand anywhere in its rounding cell can carry the exact result across a rounding boundary of every precision, and the type states no magnitude (only arithmetic of decimal constants is proven: decay the operands with float64::from_decimal_rounded to compute with Float64, and round a Float64 result back with decimal_rounded::round[DecimalRounded{...}])}}
+} -result {{DECIMAL-GUARANTEE-LOST: no decimal place of this sum can be proved: its operands are DecimalRounded{minDecimalsPreserved: 2} and DecimalRounded{minDecimalsPreserved: 2}, values known only to the precision their types guarantee, and rounding is discontinuous -- an operand anywhere in its rounding cell can carry the exact result across a rounding boundary of every precision, and the type states no magnitude (only arithmetic of decimal constants is proven: decay the operands with std::float64::from_decimal_rounded to compute with Float64, and round a Float64 result back with std::decimal_rounded::round[DecimalRounded{...}])} {DECIMAL-GUARANTEE-LOST DECIMAL-GUARANTEE-LOST} {[-0.12, 0.14, 0.00]} {DECIMAL-GUARANTEE-LOST: no decimal place of this difference can be proved: its operands are DecimalRounded{minDecimalsPreserved: 2} and DecimalRounded{minDecimalsPreserved: 2}, values known only to the precision their types guarantee, and rounding is discontinuous -- an operand anywhere in its rounding cell can carry the exact result across a rounding boundary of every precision, and the type states no magnitude (only arithmetic of decimal constants is proven: decay the operands with std::float64::from_decimal_rounded to compute with Float64, and round a Float64 result back with std::decimal_rounded::round[DecimalRounded{...}])}}
 
 test dr-arithmetic-not-blind-min {the result guarantee follows the operation's proof, never the operands' precisions: 1.0e20 + 0.01 is refused at 2 places though 1.0e20 is exact and 0.01 holds 17, 0.1 * 10.0 is exact though 0.1 holds only 16 places, and 0.1 + 0.2 holds 16 but not 17} -body {
     list [rejection "fn a() -> DecimalRounded{minDecimalsPreserved: 2}:\n    1.0e20 + 0.01\na()\n"] \
@@ -377,10 +377,10 @@ test dr-arithmetic-not-blind-min {the result guarantee follows the operation's p
 } -result {{DECIMAL-PRECISION: this result is only proven correct to 1 decimal place, but the declared result of a requires DecimalRounded{minDecimalsPreserved: 2} (its exact value is 1.0000000000000000000001e20; its binary64 computation gives 1.0e20, which rounds to 100000000000000000000.00 at 2 places where the exact value rounds to 100000000000000000000.01)} accepted accepted {DECIMAL-PRECISION: the literal 0.1 is only proven correct to 16 decimal places, but the declared result of a requires DecimalRounded{minDecimalsPreserved: 30} (its exact value is 0.1; its binary64 computation gives 0.1000000000000000055511151231257827021181..., which rounds to 0.10000000000000001 at 17 places where the exact value rounds to 0.10000000000000000)} accepted {DECIMAL-PRECISION: this result is only proven correct to 16 decimal places, but the declared result of a requires DecimalRounded{minDecimalsPreserved: 17} (its exact value is 0.3; its binary64 computation gives 0.3000000000000000444089209850062616169452..., which rounds to 0.30000000000000004 at 17 places where the exact value rounds to 0.30000000000000000)}}
 
 test dr-mixing-refused {DecimalRounded and Float64 never mix implicitly: an operator with a Float64 operand and a DecimalRounded one is a type error that names the explicit conversions} -body {
-    list [rejection "import float64\nfn f(a: $dr2, b: Float64) -> bool:\n    a < b\nf(0.5, 0.5)\n"] \
+    list [rejection "import std::float64\nfn f(a: $dr2, b: Float64) -> bool:\n    a < b\nf(0.5, 0.5)\n"] \
         [rejection "fn f(a: $dr2, b: Float64) -> $dr2:\n    a + b\nf(0.5, 0.5)\n"] \
         [rejection "fn f(a: $dr2) -> bool:\n    a < 1\nf(0.5)\n"]
-} -result {{TYPE: the operands of "<" are DecimalRounded{minDecimalsPreserved: 2} and Float64: a DecimalRounded operation needs DecimalRounded operands, and nothing converts one implicitly (float64::from_decimal_rounded decays a DecimalRounded value to a Float64, decimal_rounded::round[DecimalRounded{...}] rounds a Float64 to one; a decimal literal is a DecimalRounded constant beside a DecimalRounded operand)} {TYPE: the operands of "+" are DecimalRounded{minDecimalsPreserved: 2} and Float64: a DecimalRounded operation needs DecimalRounded operands, and nothing converts one implicitly (float64::from_decimal_rounded decays a DecimalRounded value to a Float64, decimal_rounded::round[DecimalRounded{...}] rounds a Float64 to one; a decimal literal is a DecimalRounded constant beside a DecimalRounded operand)} {TYPE: the operands of "<" are DecimalRounded{minDecimalsPreserved: 2} and int: a DecimalRounded operation needs DecimalRounded operands, and nothing converts one implicitly (float64::from_decimal_rounded decays a DecimalRounded value to a Float64, decimal_rounded::round[DecimalRounded{...}] rounds a Float64 to one; a decimal literal is a DecimalRounded constant beside a DecimalRounded operand)}}
+} -result {{TYPE: the operands of "<" are DecimalRounded{minDecimalsPreserved: 2} and Float64: a DecimalRounded operation needs DecimalRounded operands, and nothing converts one implicitly (std::float64::from_decimal_rounded decays a DecimalRounded value to a Float64, std::decimal_rounded::round[DecimalRounded{...}] rounds a Float64 to one; a decimal literal is a DecimalRounded constant beside a DecimalRounded operand)} {TYPE: the operands of "+" are DecimalRounded{minDecimalsPreserved: 2} and Float64: a DecimalRounded operation needs DecimalRounded operands, and nothing converts one implicitly (std::float64::from_decimal_rounded decays a DecimalRounded value to a Float64, std::decimal_rounded::round[DecimalRounded{...}] rounds a Float64 to one; a decimal literal is a DecimalRounded constant beside a DecimalRounded operand)} {TYPE: the operands of "<" are DecimalRounded{minDecimalsPreserved: 2} and int: a DecimalRounded operation needs DecimalRounded operands, and nothing converts one implicitly (std::float64::from_decimal_rounded decays a DecimalRounded value to a Float64, std::decimal_rounded::round[DecimalRounded{...}] rounds a Float64 to one; a decimal literal is a DecimalRounded constant beside a DecimalRounded operand)}}
 
 test dr-nonfinite-distinct {a non-finite binary64 result is NonFiniteFloat, never a precision loss, and a constant's is always decided at compile time (KNOWN-ERROR, which a handler does not excuse): an overflow, a division by zero, a quotient whose exact divisor (1.0e-400) is represented by zero; a finite binary64 quotient of an exactly zero divisor is a precision loss instead (DECIMAL-PRECISION: no value to round)} -body {
     list [rejection "fn a() -> DecimalRounded{minDecimalsPreserved: 0}:\n    1.0e300 * 1.0e300\na()\n"] \
@@ -418,8 +418,8 @@ test dr-equality-refused {equality that does not know the precision is refused: 
 
 test dr-sets-refused {a set hashes its members by value, which knows no precision: ImmutableSet of DecimalRounded is a type error, as an annotation and as a call's result} -body {
     list [rejection "fn f(s: ImmutableSet\[$dr2\]) -> int:\n    1\n1\n"] \
-        [rejection "import immutable_set\nfn f() -> List\[$dr2\]:\n    \[0.1\]\nimmutable_set::from_list(f())\n"]
-} -result {{TYPE: unknown or invalid type ImmutableSet[DecimalRounded{minDecimalsPreserved: 2}] for parameter "s": ImmutableSet[DecimalRounded{minDecimalsPreserved: 2}] would hash DecimalRounded values: a set compares and hashes its members by value, which knows no precision, so it cannot hold them (a List can; decay the members with float64::from_decimal_rounded to build a set of Float64)} {TYPE: this call makes ImmutableSet[DecimalRounded{minDecimalsPreserved: 2}]: a set compares and hashes its members by value, which knows no precision, so it cannot hold DecimalRounded values (a List can; decay the members with float64::from_decimal_rounded to build a set of Float64)}}
+        [rejection "import std::immutable_set\nfn f() -> List\[$dr2\]:\n    \[0.1\]\nstd::immutable_set::from_list(f())\n"]
+} -result {{TYPE: unknown or invalid type ImmutableSet[DecimalRounded{minDecimalsPreserved: 2}] for parameter "s": ImmutableSet[DecimalRounded{minDecimalsPreserved: 2}] would hash DecimalRounded values: a set compares and hashes its members by value, which knows no precision, so it cannot hold them (a List can; decay the members with std::float64::from_decimal_rounded to build a set of Float64)} {TYPE: this call makes ImmutableSet[DecimalRounded{minDecimalsPreserved: 2}]: a set compares and hashes its members by value, which knows no precision, so it cannot hold DecimalRounded values (a List can; decay the members with std::float64::from_decimal_rounded to build a set of Float64)}}
 
 test dr-upper-bound {with an observation ceiling, every observation reads the guaranteed precision (never beyond the ceiling): values apart only beyond it compare equal and display alike on every backend, whatever digits the representation carries} -body {
     drValue [string cat "fn c(x: DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4}) -> DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4}:\n    x\n" \
@@ -474,22 +474,22 @@ test dr-folding-parity {a constant expression's proof reads exactly the operatio
 } -result {{{0.1 + 0.2} 1 1} {{1.0 / 3.0} 1 1} {{0.295 * 3.0} 1 1} {{1.245 - 0.005} 1 1} {-(2.675) 1 1} {{1.0e-300 * 1.0e-10} 1 1} {{123456.789 / 7.0} 1 1}}
 
 test dr-runtime-parity {comparisons and conversions of values computed at run time (parameters, recursion over a List) agree on every backend, Tcl's exact rationals and the native runtime's big integers deciding alike around every boundary} -body {
-    drValue [string cat "import float64\nimport list\n" \
+    drValue [string cat "import std::float64\nimport std::list\n" \
         "fn values() -> List\[DecimalRounded{minDecimalsPreserved: 3}\]:\n" \
         "    \[1.2345, 1.2355, 0.0005, -0.0005, 0.0015, 2.675, 1.0e15, 123.4565, 0.1, 0.3\]\n" \
         "fn le(a: $dr2, b: $dr2) -> bool:\n    a <= b\n" \
         "fn walk(xs: List\[DecimalRounded{minDecimalsPreserved: 3}\], i: int, acc):\n" \
-        "    if i == list::length(xs):\n        acc\n" \
-        "    else:\n        x = list::at(xs, i):\n            on IndexNotFound:\n                return acc\n" \
-        "        walk(xs, i + 1, list::append(acc, \[float64::from_decimal_rounded(x), x < 0.001, le(x, 1.24)\]))\n" \
+        "    if i == std::list::length(xs):\n        acc\n" \
+        "    else:\n        x = std::list::at(xs, i):\n            on IndexNotFound:\n                return acc\n" \
+        "        walk(xs, i + 1, std::list::append(acc, \[std::float64::from_decimal_rounded(x), x < 0.001, le(x, 1.24)\]))\n" \
         "walk(values(), 0, \[\])\n"]
 } -result {[[1.234, false, true], [1.236, false, true], [0.0, true, true], [0.0, true, true], [0.002, false, true], [2.675, false, false], [1000000000000000.0, false, false], [123.456, false, false], [0.1, false, true], [0.3, false, true]]}
 
 # ---------------------------------------------------------------------------
 # Static decisions
 
-test dr-static-compile {a proof failure is a semantic diagnostic like any other: a static compile block reifies a precision loss, a lost guarantee and a malformed refinement as compiler::CompilerError, each with its own DiagnosticCode case, and accepts a proven block} -body {
-    set block {fn probe%d(n: int) -> int errors compiler::CompilerError:
+test dr-static-compile {a proof failure is a semantic diagnostic like any other: a static compile block reifies a precision loss, a lost guarantee and a malformed refinement as std::compiler::CompilerError, each with its own DiagnosticCode case, and accepts a proven block} -body {
+    set block {fn probe%d(n: int) -> int errors std::compiler::CompilerError:
     static compile:
         %s
         n
@@ -498,15 +498,15 @@ test dr-static-compile {a proof failure is a semantic diagnostic like any other:
         "fn f(a: $dr2) -> $dr2:\n            a + a" \
         "fn g(a: DecimalRounded{minDecimalsPreserved: 3, maxDecimalsPreserved: 2}) -> int:\n            1" \
         "fn h() -> DecimalRounded{minDecimalsPreserved: 3}:\n            0.125 + 0.25"]
-    set text "import compiler\n"
+    set text "import std::compiler\n"
     set i 0
     foreach body $bodies {
         append text [format $block [incr i] $body]
     }
-    append text "fn code(f):\n    r = f(1):\n        on compiler::CompilerError {code, primary, related, message}:\n            return \[code, primary.line, primary.column\]\n    \[r\]\n"
+    append text "fn code(f):\n    r = f(1):\n        on std::compiler::CompilerError {code, primary, related, message}:\n            return \[code, primary.line, primary.column\]\n    \[r\]\n"
     append text "\[code(probe1), code(probe2), code(probe3), code(probe4)\]\n"
     sourceAgree $text
-} -result {value {[[compiler::DiagnosticCode::DecimalPrecision, 5, 13], [compiler::DiagnosticCode::DecimalGuaranteeLost, 10, 13], [compiler::DiagnosticCode::RefinementParameter, 14, 13], [1]]}}
+} -result {value {[[std::compiler::DiagnosticCode::DecimalPrecision, 5, 13], [std::compiler::DiagnosticCode::DecimalGuaranteeLost, 10, 13], [std::compiler::DiagnosticCode::RefinementParameter, 14, 13], [1]]}}
 
 # ---------------------------------------------------------------------------
 # HIR text, interchange, targets
@@ -546,7 +546,7 @@ test dr-target-independent {validity, proofs, inferred types and decisions are e
 # The native backend
 
 test dr-native-representation {natively a DecimalRounded value is a boxed binary64 of its own kind (no precision metadata): its operations are NIR's d64 ops, comparisons and conversions carrying their precision as an operand} -constraints nativeBuilt -body {
-    set hir [drHir "import float64\nfn f(a: $dr2, b: $dr2) -> bool:\n    a < b\nfn g() -> $dr2:\n    0.1 + 0.2\nfn h(a: $dr2) -> Float64:\n    float64::from_decimal_rounded(-a)\n\[f(g(), 0.5), h(g())\]\n"]
+    set hir [drHir "import std::float64\nfn f(a: $dr2, b: $dr2) -> bool:\n    a < b\nfn g() -> $dr2:\n    0.1 + 0.2\nfn h(a: $dr2) -> Float64:\n    std::float64::from_decimal_rounded(-a)\n\[f(g(), 0.5), h(g())\]\n"]
     set nir [native::lowered $hir]
     list [regexp {= float DecimalRounded 0x[0-9a-f]{16}} $nir] [regexp {op d64add} $nir] [regexp {op d64lt %[0-9]+ %[0-9]+ %[0-9]+ } $nir] \
         [regexp {op d64neg} $nir] [regexp {op d64tof64} $nir] [regexp {Float64} [regexp -inline {op d64add[^\n]*} $nir]]
@@ -556,13 +556,13 @@ test dr-native-executable {a standalone executable computes and decides DecimalR
     set dir [makeDirectory dr-exe-[pid]]
     set path [file join $dir prog.bot]
     set channel [open $path w]
-    puts -nonewline $channel [string cat "import float64\nimport decimal_rounded\n" \
+    puts -nonewline $channel [string cat "import std::float64\nimport std::decimal_rounded\n" \
         "fn total() -> $dr2 errors NonFiniteFloat:\n    0.10 + 0.20\n" \
         "fn more(a: $dr2, b: $dr2) -> bool:\n    a > b\n" \
-        "fn q(x: Float64) -> $dr2 errors UnrepresentableDecimal:\n    decimal_rounded::round\[$dr2\](x)\n" \
+        "fn q(x: Float64) -> $dr2 errors UnrepresentableDecimal:\n    std::decimal_rounded::round\[$dr2\](x)\n" \
         "x = total():\n    on NonFiniteFloat:\n        0.00\n" \
         "y = q(1.005):\n    on UnrepresentableDecimal:\n        0.00\n" \
-        "\[x == 0.30, more(x, 0.295), more(x, 0.2949), float64::from_decimal_rounded(x), float64::from_decimal_rounded(y), -x\]\n"]
+        "\[x == 0.30, more(x, 0.295), more(x, 0.2949), std::float64::from_decimal_rounded(x), std::float64::from_decimal_rounded(y), -x\]\n"]
     close $channel
     set hir [surface::readProgramFile $path -warnings off -cache ""]
     set exe [native::executable $hir [file join $dir prog]]

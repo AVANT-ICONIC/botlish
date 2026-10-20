@@ -50,7 +50,7 @@ proc value {text} {
 }
 
 # "same"/interp-value helpers matching byte-set.test's own moduleParity, for
-# the cross-module and byte::from_int tests below (which go through real
+# the cross-module and std::byte::from_int tests below (which go through real
 # .bot files on disk, not inline source text).
 proc moduleParity {path} {
     set hir [surface::readProgramFile $path -strict 0]
@@ -405,9 +405,9 @@ fn clamp(n) -> int errors OutOfRange:
             n
 }
         close $ch
-        set mainPath [makeFile {import errorscrossmodulelib
-r = errorscrossmodulelib::clamp(500):
-    on errorscrossmodulelib::OutOfRange:
+        set mainPath [makeFile {import std::errorscrossmodulelib
+r = std::errorscrossmodulelib::clamp(500):
+    on std::errorscrossmodulelib::OutOfRange:
         -1
 r} errors-cross-module-main.bot]
         try {
@@ -431,9 +431,9 @@ fn clamp(n) -> int errors OutOfRange:
         n
 }
         close $ch
-        set mainPath [makeFile {import errorscrossmodulelib2
+        set mainPath [makeFile {import std::errorscrossmodulelib2
 fn g(m):
-    errorscrossmodulelib2::clamp(m)} errors-cross-module-main2.bot]
+    std::errorscrossmodulelib2::clamp(m)} errors-cross-module-main2.bot]
         try {
             diagKinds [surface::readProgramFile $mainPath -strict 0]
         } finally {
@@ -483,7 +483,7 @@ Small(5)}]
 # ---------------------------------------------------------------------------
 # All four backends (spec item 90): interp, compile, cranelift-generic and
 # cranelift must agree, including the module-init-style ("Outcome B")
-# handled call byte::from_int-style code already exercises in
+# handled call std::byte::from_int-style code already exercises in
 # tests/byte-set.test/web-unreserved.test. This file's own dedicated,
 # minimal exhaustive-over-all-branches version:
 
@@ -567,18 +567,18 @@ fn convert(n) -> int:
 } -result {{[5, -1, -2]} {[5, -1, -2]} {[5, -1, -2]} {[5, -1, -2]}}
 
 # ---------------------------------------------------------------------------
-# byte::from_int itself (spec items 28-31): the real migration this
+# std::byte::from_int itself (spec items 28-31): the real migration this
 # milestone drove, exercised directly and exhaustively (not only through
-# byte::set/web::is_unreserved's own indirect coverage in
+# std::byte::set/std::web::is_unreserved's own indirect coverage in
 # tests/byte-set.test and tests/web-unreserved.test).
 
-test errors-byte-from-int-in-range {byte::from_int succeeds for an in-range value, no handler branch taken} -body {
-    set path [makeFile {import byte
-byte::high_nibble(0)
-r = byte::from_int(200):
-    on byte::BelowRange:
+test errors-byte-from-int-in-range {std::byte::from_int succeeds for an in-range value, no handler branch taken} -body {
+    set path [makeFile {import std::byte
+std::byte::high_nibble(0)
+r = std::byte::from_int(200):
+    on std::byte::BelowRange:
         -1
-    on byte::AboveRange:
+    on std::byte::AboveRange:
         -2
 r} errors-byte-from-int-ok.bot]
     try {
@@ -588,13 +588,13 @@ r} errors-byte-from-int-ok.bot]
     }
 } -result {same 200}
 
-test errors-byte-from-int-below-range {byte::from_int reaches its byte::BelowRange handler for a negative value} -body {
-    set path [makeFile {import byte
-byte::high_nibble(0)
-r = byte::from_int(0 - 1):
-    on byte::BelowRange:
+test errors-byte-from-int-below-range {std::byte::from_int reaches its std::byte::BelowRange handler for a negative value} -body {
+    set path [makeFile {import std::byte
+std::byte::high_nibble(0)
+r = std::byte::from_int(0 - 1):
+    on std::byte::BelowRange:
         -1
-    on byte::AboveRange:
+    on std::byte::AboveRange:
         -2
 r} errors-byte-from-int-below.bot]
     try {
@@ -604,13 +604,13 @@ r} errors-byte-from-int-below.bot]
     }
 } -result {same -1}
 
-test errors-byte-from-int-above-range {byte::from_int reaches its byte::AboveRange handler for a value past 255} -body {
-    set path [makeFile {import byte
-byte::high_nibble(0)
-r = byte::from_int(256):
-    on byte::BelowRange:
+test errors-byte-from-int-above-range {std::byte::from_int reaches its std::byte::AboveRange handler for a value past 255} -body {
+    set path [makeFile {import std::byte
+std::byte::high_nibble(0)
+r = std::byte::from_int(256):
+    on std::byte::BelowRange:
         -1
-    on byte::AboveRange:
+    on std::byte::AboveRange:
         -2
 r} errors-byte-from-int-above.bot]
     try {
@@ -620,11 +620,11 @@ r} errors-byte-from-int-above.bot]
     }
 } -result {same -2}
 
-test errors-byte-from-int-unhandled-rejected {an unhandled byte::from_int call of a genuinely dynamic (unconstrained) value at top level is a static UNHANDLED-ERROR for both of its declared errors, one diagnostic naming both (DIAGNOSTIC-RECOVERY.md)} -body {
-    set path [makeFile {import byte
-byte::high_nibble(0)
+test errors-byte-from-int-unhandled-rejected {an unhandled std::byte::from_int call of a genuinely dynamic (unconstrained) value at top level is a static UNHANDLED-ERROR for both of its declared errors, one diagnostic naming both (DIAGNOSTIC-RECOVERY.md)} -body {
+    set path [makeFile {import std::byte
+std::byte::high_nibble(0)
 fn g(m: int):
-    byte::from_int(m)} errors-byte-from-int-unhandled.bot]
+    std::byte::from_int(m)} errors-byte-from-int-unhandled.bot]
     try {
         set hir [surface::readProgramFile $path -strict 0]
         list [diagKinds $hir] [llength [lindex [unhandledSets $hir] 0]]
@@ -633,10 +633,10 @@ fn g(m: int):
     }
 } -cleanup {unset -nocomplain hir} -result {UNHANDLED-ERROR 2}
 
-test errors-byte-from-int-known-safe-literal-no-handler {byte::from_int(5) at top level, a statically provable in-range literal, needs no handler at all -- STATIC-COMPLETION-PROOFS.md item 20} -body {
-    set path [makeFile {import byte
-byte::high_nibble(0)
-byte::from_int(5)} errors-byte-from-int-known-safe.bot]
+test errors-byte-from-int-known-safe-literal-no-handler {std::byte::from_int(5) at top level, a statically provable in-range literal, needs no handler at all -- STATIC-COMPLETION-PROOFS.md item 20} -body {
+    set path [makeFile {import std::byte
+std::byte::high_nibble(0)
+std::byte::from_int(5)} errors-byte-from-int-known-safe.bot]
     try {
         diagKinds [surface::readProgramFile $path -strict 0]
     } finally {
@@ -644,10 +644,10 @@ byte::from_int(5)} errors-byte-from-int-known-safe.bot]
     }
 } -result {}
 
-test errors-byte-from-int-known-failure-literal {byte::from_int(999) at top level, a statically provable out-of-range literal, is a compile-time KNOWN-ERROR, not an UNHANDLED-ERROR} -body {
-    set path [makeFile {import byte
-byte::high_nibble(0)
-byte::from_int(999)} errors-byte-from-int-known-failure.bot]
+test errors-byte-from-int-known-failure-literal {std::byte::from_int(999) at top level, a statically provable out-of-range literal, is a compile-time KNOWN-ERROR, not an UNHANDLED-ERROR} -body {
+    set path [makeFile {import std::byte
+std::byte::high_nibble(0)
+std::byte::from_int(999)} errors-byte-from-int-known-failure.bot]
     try {
         diagKinds [surface::readProgramFile $path -strict 0]
     } finally {
@@ -656,10 +656,10 @@ byte::from_int(999)} errors-byte-from-int-known-failure.bot]
 } -result {KNOWN-ERROR}
 
 test errors-byte-from-int-known-failure-with-handler-still-rejected {a handler does not make a statically known failure legal -- STATIC-COMPLETION-PROOFS.md item 50} -body {
-    set path [makeFile {import byte
-byte::high_nibble(0)
-x = byte::from_int(999):
-    on byte::AboveRange:
+    set path [makeFile {import std::byte
+std::byte::high_nibble(0)
+x = std::byte::from_int(999):
+    on std::byte::AboveRange:
         255
 x} errors-byte-from-int-known-failure-handled.bot]
     try {
@@ -669,16 +669,16 @@ x} errors-byte-from-int-known-failure-handled.bot]
     }
 } -result {KNOWN-ERROR}
 
-test errors-byte-from-int-partial-range-elimination {a value statically known nonnegative but not upper-bounded needs only a byte::AboveRange handler/declaration -- STATIC-COMPLETION-PROOFS.md item 21} -body {
-    set path [makeFile {import byte
-byte::high_nibble(0)
+test errors-byte-from-int-partial-range-elimination {a value statically known nonnegative but not upper-bounded needs only a std::byte::AboveRange handler/declaration -- STATIC-COMPLETION-PROOFS.md item 21} -body {
+    set path [makeFile {import std::byte
+std::byte::high_nibble(0)
 fn nonneg(m) -> int:
     if m < 0:
         0 - m
     else:
         m
-fn g(m) -> int errors byte::AboveRange:
-    byte::from_int(nonneg(m))} errors-byte-from-int-partial.bot]
+fn g(m) -> int errors std::byte::AboveRange:
+    std::byte::from_int(nonneg(m))} errors-byte-from-int-partial.bot]
     try {
         diagKinds [surface::readProgramFile $path -strict 0]
     } finally {
@@ -686,8 +686,8 @@ fn g(m) -> int errors byte::AboveRange:
     }
 } -result {}
 
-test errors-byte-from-int-branch-refinement-result {byte::from_int's own body proves its final else-branch value is a Byte through ordinary branch-sensitive range facts, no builtin escape hatch -- STATIC-COMPLETION-PROOFS.md items 6-10} -body {
-    hir::diagnostics [surface::readProgramFile [file join $::projectRoot lib byte.bot] -strict 0]
+test errors-byte-from-int-branch-refinement-result {std::byte::from_int's own body proves its final else-branch value is a Byte through ordinary branch-sensitive range facts, no builtin escape hatch -- STATIC-COMPLETION-PROOFS.md items 6-10} -body {
+    hir::diagnostics [surface::readProgramFile [file join $::projectRoot stdlib byte.bot] -strict 0]
 } -result {}
 
 test errors-generic-bounded-fixture {a test-defined, non-Byte bounded function demonstrates the same call-specific completion proof generically -- STATIC-COMPLETION-PROOFS.md item 15/67} -body {
@@ -757,15 +757,15 @@ test errors-dynamic-list-loop-needs-handler {a List parameter is not the empty l
     list [diagWhere $bare] [diagKinds [sourceHir $handled]] [parity $handled] [value $handled]
 } -result {{{UNHANDLED-ERROR g}} {} same 1}
 
-test errors-empty-literal-read-through-call-known-error {the same fact gives the empty literal's size, zero, through an exact call: a handled first([]) whose first reads list::at(xs, 0) always fails -- KNOWN-ERROR, exactly as a handled list::at([], 0) itself} -body {
-    set through "import list\nfn first(xs) errors IndexNotFound:\n    list::at(xs, 0)\nr = first(\[\]):\n    on IndexNotFound:\n        5\nr\n"
-    set direct "import list\nr = list::at(\[\], 0):\n    on IndexNotFound:\n        5\nr\n"
+test errors-empty-literal-read-through-call-known-error {the same fact gives the empty literal's size, zero, through an exact call: a handled first([]) whose first reads std::list::at(xs, 0) always fails -- KNOWN-ERROR, exactly as a handled std::list::at([], 0) itself} -body {
+    set through "import std::list\nfn first(xs) errors IndexNotFound:\n    std::list::at(xs, 0)\nr = first(\[\]):\n    on IndexNotFound:\n        5\nr\n"
+    set direct "import std::list\nr = std::list::at(\[\], 0):\n    on IndexNotFound:\n        5\nr\n"
     list [diagKinds [sourceHir $through]] [diagKinds [sourceHir $direct]]
 } -result {KNOWN-ERROR KNOWN-ERROR}
 
-test errors-byte-set-empty-literal-no-handler {byte::set([]) needs no byte::AboveRange handler: the empty literal reaches set's own loop over its parameter as zero elements -- accepted strictly, the empty set on every backend} -body {
-    set path [makeFile {import byte
-byte::set([])} errors-byte-set-empty.bot]
+test errors-byte-set-empty-literal-no-handler {std::byte::set([]) needs no std::byte::AboveRange handler: the empty literal reaches set's own loop over its parameter as zero elements -- accepted strictly, the empty set on every backend} -body {
+    set path [makeFile {import std::byte
+std::byte::set([])} errors-byte-set-empty.bot]
     try {
         list [diagKinds [surface::readProgramFile $path -strict 0]] [moduleParity $path] [moduleValue $path]
     } finally {
@@ -789,8 +789,8 @@ byte::set([])} errors-byte-set-empty.bot]
 # G fails Boom for a positive N, else is the List [1, 2]; H the same with N
 # itself; BANG fails Bang (which no function below declares) for a positive
 # N. The consuming forms need the collection modules, imported in the header.
-set loopDomainDecls {import mutable_array
-import mutable_vector
+set loopDomainDecls {import std::mutable_array
+import std::mutable_vector
 error Boom
 error Bang
 fn g(n: int) -> List[int] errors Boom:
@@ -879,14 +879,14 @@ f(0)
 f(0)
 }
         vector {fn make(n: int) -> MutableVector[int] errors Boom:
-    mutable_vector::from_list([h(n), 2])
+    std::mutable_vector::from_list([h(n), 2])
 fn f(n: int) -> List[int]:
     loop x in make(n):
         x
 f(0)
 }
         array {fn make(n: int) -> MutableArray[int] errors Boom:
-    mutable_array::create(2, h(n))
+    std::mutable_array::create(2, h(n))
 fn f(n: int) -> List[int]:
     loop x in make(n):
         x
@@ -995,13 +995,13 @@ f(0)
 f(0)
 }
         vector {fn make(n: int) -> MutableVector[int] errors Boom:
-    mutable_vector::from_list([h(n), 2])
+    std::mutable_vector::from_list([h(n), 2])
 fn f(n: int) -> List[int]:
     loop x in make(n):
         x
 f(0)
 } {fn make(n: int) -> MutableVector[int] errors Boom:
-    mutable_vector::from_list([h(n), 2])
+    std::mutable_vector::from_list([h(n), 2])
 fn f(n: int) -> List[int]:
     v = make(n)
     loop x in v:
@@ -1009,13 +1009,13 @@ fn f(n: int) -> List[int]:
 f(0)
 }
         array {fn make(n: int) -> MutableArray[int] errors Boom:
-    mutable_array::create(2, h(n))
+    std::mutable_array::create(2, h(n))
 fn f(n: int) -> List[int]:
     loop x in make(n):
         x
 f(0)
 } {fn make(n: int) -> MutableArray[int] errors Boom:
-    mutable_array::create(2, h(n))
+    std::mutable_array::create(2, h(n))
 fn f(n: int) -> List[int]:
     a = make(n)
     loop x in a:
@@ -1095,15 +1095,15 @@ fn h(x: int) -> int:
     list [parity $src] [value $src]
 } -result {same {[4611686018427387904, 6]}}
 
-test errors-handled-byte-from-int-bigint {byte::from_int(45) alone does not narrow from_int's shared instance: a BigInt reaching it through a handled call is still range-checked as a BigInt} -body {
-    set path [makeFile {import byte
-a = byte::from_int(45)
+test errors-handled-byte-from-int-bigint {std::byte::from_int(45) alone does not narrow from_int's shared instance: a BigInt reaching it through a handled call is still range-checked as a BigInt} -body {
+    set path [makeFile {import std::byte
+a = std::byte::from_int(45)
 ns = [0 - 100000000000000000000000, 100000000000000000000000]
 bs = loop n in ns:
-    b = byte::from_int(n):
-        on byte::BelowRange:
+    b = std::byte::from_int(n):
+        on std::byte::BelowRange:
             1
-        on byte::AboveRange:
+        on std::byte::AboveRange:
             2
     b
 [a, bs]} errors-handled-byte-from-int-bigint.bot]

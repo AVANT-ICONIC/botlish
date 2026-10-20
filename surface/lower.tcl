@@ -700,7 +700,7 @@ proc surface::lower::Node {node} {
             set qualifiedName "[dict get $node namespace]::[dict get $node name]"
             if {[core::native::isQualifiedNative $qualifiedName]} {
                 # A root native whose registered name is itself qualified
-                # (linux::abi::x86_64::syscall, core/linuxabi.tcl): a root
+                # (std::linux::abi::x86_64::syscall, core/linuxabi.tcl): a root
                 # reference, exactly like a bare `argv` -- there is no
                 # module file behind it (surface/modules.tcl's
                 # CollectAndLoad skips it the same way), and since no local

@@ -1,5 +1,5 @@
 i0 <program>
-i3 byte::from_int<int>
+i3 std::byte::from_int<int>
     param value: declared=int first-ref-view-type=int entry-range=[0, +∞]
     result range: [0, 255]
 i2 nonneg<int>

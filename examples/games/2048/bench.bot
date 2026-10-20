@@ -10,7 +10,7 @@
 # changed the board. The seed mixes in the length of the process's argument
 # vector, which no compiler can know.
 import game2048
-import list
+import std::list
 
 fn next_seed(seed: int) -> int:
     (seed * 1103515245 + 12345).mod(2147483648)
@@ -34,7 +34,7 @@ struct Turn:
 fn spawned(game: game2048::Game, seed: int) -> Turn:
     roll = next_seed(seed)
     empties = game.board.empty_positions()
-    count = list::length(empties)
+    count = std::list::length(empties)
     if count == 0:
         return Turn {game: game, seed: roll}
     at = empties.get(roll.mod(count), game2048::Position {row: 0, column: 0})
@@ -80,6 +80,6 @@ fn entropy() -> int:
     arguments = argv():
         on InvalidArgumentEncoding:
             []
-    list::length(arguments)
+    std::list::length(arguments)
 
 benchmark(200, 2048 + entropy())

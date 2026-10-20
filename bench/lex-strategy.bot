@@ -6,7 +6,7 @@
 #
 # Canonical surface-Botlish source (CANONICAL-SURFACE-BENCHMARKS.md,
 # HIGHER-ORDER-DOGFOODING.md). choose_classifier's own two branches are
-# deliberately different callable kinds -- str::is_tcl_alnum (a root native,
+# deliberately different callable kinds -- std::str::is_tcl_alnum (a root native,
 # strict mode: only Unicode letters/digits) versus lenient_ident_char? (an
 # ordinary envless Botlish function, relaxed mode: also "_" and "-") -- a
 # genuine Native/Block join, not manufactured: strict-vs-relaxed character
@@ -18,12 +18,12 @@
 # the traversal, exactly the recommended idiom.
 #
 # chars_of turns a String into a List[str] of its own one-character
-# substrings via ordinary recursion + list::append (there is no String ->
+# substrings via ordinary recursion + std::list::append (there is no String ->
 # List[UnicodeChar]/List[str] conversion primitive in this language yet, so
 # this is the same recursive-accumulator idiom examples/stdlib/csv_geometric
 # .bot's own field/record scanning already uses, not a new abstraction).
 #
-# fully_alnum? passes str::is_tcl_alnum directly to list::all? as a genuine
+# fully_alnum? passes std::str::is_tcl_alnum directly to std::list::all? as a genuine
 # universal question ("does every character of this token satisfy strict
 # classification, unconditionally") -- a one-caller/one-target native
 # predicate, a direct structural control alongside the if-joined
@@ -37,20 +37,20 @@
 #
 # expect: [58, 65, 1, "café"]
 
-import list
-import str
+import std::list
+import std::str
 
 fn lenient_ident_char?(c):
-    str::is_tcl_alnum(c) or c == "_" or c == "-"
+    std::str::is_tcl_alnum(c) or c == "_" or c == "-"
 
 fn choose_classifier(strict_mode):
     if strict_mode:
-        str::is_tcl_alnum
+        std::str::is_tcl_alnum
     else:
         lenient_ident_char?
 
 fn chars_of(s, i, acc):
-    if i < 0 or i >= str::length(s):
+    if i < 0 or i >= std::str::length(s):
         return acc
     s.chars_of(i + 1, acc.append(s.substring(i, i + 1)))
 
@@ -60,7 +60,7 @@ fn classify(token, strict_mode):
         classifier(c)
 
 fn count_true(flags, i, acc) errors IndexNotFound:
-    if i >= list::length(flags):
+    if i >= std::list::length(flags):
         return acc
     step = if flags.at(i):
         1
@@ -72,12 +72,12 @@ fn valid_chars(token, strict_mode) errors IndexNotFound:
     token.classify(strict_mode).count_true(0, 0)
 
 fn fully_alnum?(token):
-    token.chars_of(0, []).all?(str::is_tcl_alnum)
+    token.chars_of(0, []).all?(std::str::is_tcl_alnum)
 
 tokens = ["emailish?", "scan_while", "local-part", "tld-check", "x_1", "9bad-name", "café", "is_tcl_alpha"]
 
 fn total_valid(tokens, strict_mode, i, acc) errors IndexNotFound:
-    if i >= list::length(tokens):
+    if i >= std::list::length(tokens):
         return acc
     tokens.total_valid(strict_mode, i + 1, acc + tokens.at(i).valid_chars(strict_mode))
 
@@ -97,4 +97,4 @@ first_alnum = alnum_only_tokens.at(0):
     on IndexNotFound:
         ""
 
-[strict_total, relaxed_total, list::length(alnum_only_tokens), first_alnum]
+[strict_total, relaxed_total, std::list::length(alnum_only_tokens), first_alnum]

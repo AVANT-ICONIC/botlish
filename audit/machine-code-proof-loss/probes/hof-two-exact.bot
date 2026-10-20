@@ -4,7 +4,7 @@
 #
 # expect: [42, 3]
 
-import str
+import std::str
 
 fn inc(x):
     x + 1
@@ -18,10 +18,10 @@ fn first_hit(f, i, n):
 fn alpha_run(p, s, i):
     if i < 0:
         return 0
-    loop j from i to str::length(s):
-        if p(str::substring(s, j, j + 1)):
+    loop j from i to std::str::length(s):
+        if p(std::str::substring(s, j, j + 1)):
             continue
         return j
-    str::length(s)
+    std::str::length(s)
 
-[first_hit(inc, 0, 100), alpha_run(str::is_tcl_alpha, "abc1", 0)]
+[first_hit(inc, 0, 100), alpha_run(std::str::is_tcl_alpha, "abc1", 0)]

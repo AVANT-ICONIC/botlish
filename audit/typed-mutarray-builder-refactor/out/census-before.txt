@@ -11,7 +11,7 @@
   chars_of<str, int, List[str]> -> List[str]  [valid]  passes=2  program-calls=0
   count_true<list, int, int> -> int  [valid]  passes=2  program-calls=1
   count_true<List[bool], int, int> -> int  [valid]  passes=2  program-calls=1
-  list::all?<List[str], native is_tcl_alnum> -> bool  [valid]  passes=1  program-calls=1
+  std::list::all?<List[str], native is_tcl_alnum> -> bool  [valid]  passes=1  program-calls=1
   total_valid<list, any, int, int> -> int  [valid]  passes=2  program-calls=1
   total_valid<List[str], bool, int, int> -> int  [valid]  passes=2  program-calls=2
   valid_chars<str, bool> -> int  [valid]  passes=1  program-calls=0
@@ -26,7 +26,7 @@
      chars_of<str, int, List[str]> => chars_of<str, int, List[str]>
      count_true<list, int, int> => count_true<List[bool], int, int>
      count_true<List[bool], int, int> => count_true<List[bool], int, int>
-     list::all?<List[str], native is_tcl_alnum> => list::all?<List[str], native>
+     std::list::all?<List[str], native is_tcl_alnum> => std::list::all?<List[str], native>
      total_valid<list, any, int, int> => total_valid<List[str], bool, int, int>
      total_valid<List[str], bool, int, int> => total_valid<List[str], bool, int, int>
      valid_chars<str, bool> => valid_chars<str, bool>
@@ -56,12 +56,12 @@
      scan_while<int, local_char?/1 -> bool> => scan_while<generic>
      local_char?<str> => none (no used codegen call site: caller unused by codegen, or call folded away)
      domain?<int> => domain?<generic>
-     byte::nibble<int[HighNibble]> => byte::nibble<int> (not emitted: inlined)
+     std::byte::nibble<int[HighNibble]> => std::byte::nibble<int> (not emitted: inlined)
      esc_bytes<list, int, str> => esc_bytes<List[int], int, str>
      esc_bytes<List[int[Byte]], int, str> => esc_bytes<List[int], int, str>
      hex_pair<int[Byte]> => hex_pair<int>
      high_nibble<int[Byte]> => high_nibble<int>
-     byte::high_nibble<int[Byte]> => byte::high_nibble<int> (not emitted: inlined)
+     std::byte::high_nibble<int[Byte]> => std::byte::high_nibble<int> (not emitted: inlined)
      esc_char<str> => esc_char<str>
      esc_from<str, int, str> => esc_from<str, int, str>
      esc_from<any, int, str> => esc_from<str, int, str>
@@ -71,12 +71,12 @@
 == source-checks.bot
   valid_start?<str> -> bool  [valid]  passes=1  program-calls=1
   classify_leading<str> -> List[bool]  [valid]  passes=1  program-calls=0
-  list::find<List[str], invalid_name?/1 -> bool> -> str  [valid]  passes=1  program-calls=1
+  std::list::find<List[str], invalid_name?/1 -> bool> -> str  [valid]  passes=1  program-calls=1
   invalid_name?<str> -> bool  [valid]  passes=1  program-calls=0
   -- codegen relationship (7 used codegen instances, 7 emitted functions)
      valid_start?<str> => valid_start?<generic>
      classify_leading<str> => classify_leading<generic>
-     list::find<List[str], invalid_name?/1 -> bool> => list::find<List[str], block>
+     std::list::find<List[str], invalid_name?/1 -> bool> => std::list::find<List[str], block>
      invalid_name?<str> => none (no used codegen call site: caller unused by codegen, or call folded away)
 
 == sum-refined.bot
@@ -88,32 +88,32 @@
      refined_sum<int, int> => refined_sum<int, int>
 
 == test-selection.bot
-  list::find<any, is_affected?/1 -> bool> -> any  [valid]  passes=1  program-calls=1
+  std::list::find<any, is_affected?/1 -> bool> -> any  [valid]  passes=1  program-calls=1
   make_changed?<List[str]> -> changed?/1 -> bool  [valid]  passes=1  program-calls=2
   changed?<str> -> bool  [valid]  passes=1  program-calls=1
   select_affected<List[list], changed?/1 -> bool> -> List[list]  [valid]  passes=1  program-calls=2
   affected?<list, changed?/1 -> bool> -> bool  [valid]  passes=1  program-calls=0
   test_deps<list> -> any  [valid]  passes=1  program-calls=0
-  list::any?<any, changed?/1 -> bool> -> bool  [valid]  passes=1  program-calls=0
-  list::none?<List[str], changed?/1 -> bool> -> bool  [valid]  passes=1  program-calls=1
+  std::list::any?<any, changed?/1 -> bool> -> bool  [valid]  passes=1  program-calls=0
+  std::list::none?<List[str], changed?/1 -> bool> -> bool  [valid]  passes=1  program-calls=1
   first_affected<List[list], changed?/1 -> bool> -> any  [valid]  passes=1  program-calls=1
   affected?<any, changed?/1 -> bool> -> bool  [valid]  passes=1  program-calls=0
-  list::find<List[list], is_affected?/1 -> bool> -> list  [valid]  passes=1  program-calls=0
+  std::list::find<List[list], is_affected?/1 -> bool> -> list  [valid]  passes=1  program-calls=0
   is_affected?<list> -> bool  [valid]  passes=1  program-calls=0
   affected?<list, any> -> bool  [valid]  passes=1  program-calls=0
   test_name<list> -> any  [valid]  passes=1  program-calls=0
   -- codegen relationship (14 used codegen instances, 14 emitted functions)
-     list::find<any, is_affected?/1 -> bool> => list::find<List[list], block>
+     std::list::find<any, is_affected?/1 -> bool> => std::list::find<List[list], block>
      make_changed?<List[str]> => make_changed?<List[str]>
      changed?<str> => changed?<generic>
      select_affected<List[list], changed?/1 -> bool> => select_affected<List[list], block>
      affected?<list, changed?/1 -> bool> => affected?<list, block>
      test_deps<list> => test_deps<list> | test_deps<generic>
-     list::any?<any, changed?/1 -> bool> => list::any?<any, block>
-     list::none?<List[str], changed?/1 -> bool> => list::none?<List[str], block>
+     std::list::any?<any, changed?/1 -> bool> => std::list::any?<any, block>
+     std::list::none?<List[str], changed?/1 -> bool> => std::list::none?<List[str], block>
      first_affected<List[list], changed?/1 -> bool> => first_affected<List[list], block>
      affected?<any, changed?/1 -> bool> => affected?<any, block>
-     list::find<List[list], is_affected?/1 -> bool> => list::find<List[list], block>
+     std::list::find<List[list], is_affected?/1 -> bool> => std::list::find<List[list], block>
      is_affected?<list> => none (no used codegen call site: caller unused by codegen, or call folded away)
      affected?<list, any> => affected?<any, block>
      test_name<list> => test_name<list>
@@ -127,20 +127,20 @@
   scan_while<int, local_char?/1 -> bool> -> int  [valid]  passes=1  program-calls=1
   local_char?<str> -> bool  [valid]  passes=1  program-calls=0
   domain?<int> -> bool  [valid]  passes=1  program-calls=1
-  byte::nibble<int[HighNibble]> -> int[Nibble]  [valid]  passes=1  program-calls=1
+  std::byte::nibble<int[HighNibble]> -> int[Nibble]  [valid]  passes=1  program-calls=1
   esc_bytes<list, int, str> -> str  [valid]  passes=2  program-calls=1
   esc_bytes<List[int[Byte]], int, str> -> str  [valid]  passes=2  program-calls=2
   hex_pair<int[Byte]> -> str  [valid]  passes=1  program-calls=0
   high_nibble<int[Byte]> -> int[Nibble]  [valid]  passes=1  program-calls=0
-  byte::high_nibble<int[Byte]> -> int[HighNibble]  [valid]  passes=1  program-calls=0
+  std::byte::high_nibble<int[Byte]> -> int[HighNibble]  [valid]  passes=1  program-calls=0
   esc_char<str> -> str  [valid]  passes=1  program-calls=1
   esc_from<str, int, str> -> str  [valid]  passes=2  program-calls=1
   esc_from<any, int, str> -> str  [valid]  passes=1  program-calls=1
-  web::uri_escape_text<str> -> str  [valid]  passes=1  program-calls=1
+  std::web::uri_escape_text<str> -> str  [valid]  passes=1  program-calls=1
   repeat_uri<int, int, int> -> int  [valid]  passes=2  program-calls=2
   recursive/SCC participants: s10 s15 s18 s9
   -- codegen relationship (26 used codegen instances, 24 emitted functions)
-     byte::from_int<int> => byte::from_int<int>
+     std::byte::from_int<int> => std::byte::from_int<int>
      char_at<int> => char_at<generic>
      scan_while<any, native is_tcl_alpha> => scan_while<generic>
      tld?<int> => tld?<generic>
@@ -149,24 +149,24 @@
      scan_while<int, local_char?/1 -> bool> => scan_while<generic>
      local_char?<str> => none (no used codegen call site: caller unused by codegen, or call folded away)
      domain?<int> => domain?<generic>
-     byte::set<List[UnicodeChar]> => byte::set<List[UnicodeChar]>
-     char::codepoint<UnicodeChar> => char::codepoint<UnicodeChar>
-     byte::nibble<int> => byte::nibble<int> (not emitted: inlined)
+     std::byte::set<List[UnicodeChar]> => std::byte::set<List[UnicodeChar]>
+     std::char::codepoint<UnicodeChar> => std::char::codepoint<UnicodeChar>
+     std::byte::nibble<int> => std::byte::nibble<int> (not emitted: inlined)
      esc_bytes<list, int, str> => esc_bytes<generic>
-     web::is_unreserved<int[Byte]> => web::is_unreserved<generic>
-     ascii::is_alphanumeric<int[Byte]> => ascii::is_alphanumeric<generic>
-     ascii::is_alphabetic<int[Byte]> => ascii::is_alphabetic<generic>
-     ascii::is_upper<int[Byte]> => ascii::is_upper<generic>
-     ascii::is_lower<int[Byte]> => ascii::is_lower<generic>
-     ascii::is_digit<int[Byte]> => ascii::is_digit<generic>
+     std::web::is_unreserved<int[Byte]> => std::web::is_unreserved<generic>
+     std::ascii::is_alphanumeric<int[Byte]> => std::ascii::is_alphanumeric<generic>
+     std::ascii::is_alphabetic<int[Byte]> => std::ascii::is_alphabetic<generic>
+     std::ascii::is_upper<int[Byte]> => std::ascii::is_upper<generic>
+     std::ascii::is_lower<int[Byte]> => std::ascii::is_lower<generic>
+     std::ascii::is_digit<int[Byte]> => std::ascii::is_digit<generic>
      esc_bytes<List[int[Byte]], int, str> => esc_bytes<generic>
      hex_pair<int[Byte]> => hex_pair<generic>
      high_nibble<int[Byte]> => high_nibble<generic>
-     byte::high_nibble<int[Byte]> => byte::high_nibble<generic> (not emitted: inlined)
+     std::byte::high_nibble<int[Byte]> => std::byte::high_nibble<generic> (not emitted: inlined)
      esc_char<str> => esc_char<generic>
      esc_from<str, int, str> => esc_from<generic>
      esc_from<any, int, str> => esc_from<generic>
-     web::uri_escape_text<str> => web::uri_escape_text<generic>
+     std::web::uri_escape_text<str> => std::web::uri_escape_text<generic>
      repeat_uri<int, int, int> => repeat_uri<generic>
 
 == ai_text_clean.bot
@@ -626,7 +626,7 @@
 #   lex-strategy.bot count_true 2
 #   lex-strategy.bot total_valid 2
 #   refined-checks.bot check 2
-#   test-selection.bot list::find 2
+#   test-selection.bot std::list::find 2
 #   test-selection.bot affected? 3
 #   uri-steady.bot scan_while 3
 #   uri-steady.bot esc_bytes 2

@@ -44,11 +44,12 @@ and the comparisons.
   * shift_right(n, k): n divided by 2^k, rounded down; bit_and(n, 2^k - 1)
     is the remainder (row and column of a cell of a 4x4 board, for
     example).
-  * Division by any other divisor: repeated subtraction, as lib/test.bot's
-    digit_value does for decimal digits (a recursive helper).
-  * An approximate quotient through Float64: float64::truncate of
-    float64::from_int(a) / float64::from_int(b) is exact only while both
-    Ints and the quotient fit in 53 bits.
+  * Division by any other divisor: repeated subtraction, as
+    stdlib/test.bot's digit_value does for decimal digits (a recursive
+    helper).
+  * An approximate quotient through Float64: std::float64::truncate of
+    std::float64::from_int(a) / std::float64::from_int(b) is exact only
+    while both Ints and the quotient fit in 53 bits.
 
 @example accept
 [mod(17, 5), mod(-7, 3), shift_right(17, 2), bit_and(17, 3)]
@@ -66,11 +67,11 @@ x
 
 @topic capability.int-to-string
 title: Int-to-String conversion: absent from the standard namespaces
-summary: There is no general Int-to-String conversion (no str::of, no formatting); the test framework's test::int_text(n) converts by repeated subtraction and is the one available route.
+summary: There is no general Int-to-String conversion (no std::str::of, no formatting); the test framework's std::test::int_text(n) converts by repeated subtraction and is the one available route.
 index: concepts stdlib
 alias: integer to string; int to string; number to text; to_string; format number; itoa; tostring; string of a number
 keywords: convert, string, text, decimal, format, int_text
-related: stdlib.test::int_text concept.strings capability.string-formatting capability.integer-division
+related: stdlib.std::test::int_text concept.strings capability.string-formatting capability.integer-division
 docs: LANGUAGE-LIBRARY-DEFICIENCIES.md GOLDEN-TEST-FRAMEWORK.md
 
 == STATUS
@@ -80,16 +81,16 @@ program's value is shown by the compiler (the compiler's "value:" line, an
 executable's last line), which is how most programs report numbers.
 
 == NEAREST ALTERNATIVE
-test::int_text(n), in lib/test.bot (import test), returns n in decimal with
-a leading minus sign when negative. It needs no installed suite. It is
-written in Botlish by repeated subtraction (there is no division), so it is
-slow for huge numbers but exact.
+std::test::int_text(n), in stdlib/test.bot (import std::test), returns n in
+decimal with a leading minus sign when negative. It needs no installed
+suite. It is written in Botlish by repeated subtraction (there is no
+division), so it is slow for huge numbers but exact.
 
 @example accept
-import test
-import str
+import std::test
+import std::str
 
-"moves: ".concat(test::int_text(20))
+"moves: ".concat(std::test::int_text(20))
 @value "moves: 20"
 @end
 
@@ -110,7 +111,7 @@ them in (rule.unhandled-errors).
 
 == NEAREST ALTERNATIVE
 Make the outcome the program's value and test it outside: a golden suite
-returns its report (test::report(), or a verdict String such as
+returns its report (std::test::report(), or a verdict String such as
 "GOLDEN PASS: 258 passed") and a script compares the printed value. The
 compiler's own status is 1 when a program is rejected or fails at run time.
 
@@ -124,7 +125,7 @@ related: concept.testing capability.process-exit-status
 docs: GOLDEN-TEST-FRAMEWORK.md
 
 == STATUS
-lib/test.bot runs each registered check to completion, in order; Botlish
+stdlib/test.bot runs each registered check to completion, in order; Botlish
 has no clock, no timer and no cancellation. A non-terminating check stops
 the whole run.
 
@@ -174,27 +175,27 @@ went wrong.
 
 @topic capability.input
 title: Reading input: raw bytes of standard input only
-summary: There is no line-reading or text input API; on the native backends linux::io::read(buffer) reads standard input into a MutableBytes, one read(2) call at a time, through the linux::io context.
+summary: There is no line-reading or text input API; on the native backends std::linux::io::read(buffer) reads standard input into a MutableBytes, one read(2) call at a time.
 index: concepts stdlib
 alias: read input; stdin; read line; user input; keyboard input; standard input
 keywords: input, read, stdin, line, console, bytes
-related: concept.argv backend.io capability.files stdlib.linux::io::read stdlib.module.linux::io stdlib.abi::bytes::MutableBytes
+related: concept.argv backend.io capability.files stdlib.std::linux::io::read stdlib.module.std::linux::io stdlib.std::abi::bytes::MutableBytes
 docs: CONTEXT-TRAITS.md
 
 == STATUS
-lib/io.bot is output only (print, print_line, write_error,
+stdlib/io.bot is output only (print, print_line, write_error,
 write_error_line). Standard input is read through the Linux context
 itself, as bytes:
 
-    import abi
-    import abi::bytes
-    import linux::io
+    import std::abi
+    import std::abi::bytes
+    import std::linux::io
 
     fn first_bytes() -> int:
-        r = linux::io::read(abi::bytes::zeroed(abi::usize(16)))
+        r = std::linux::io::read(std::abi::bytes::zeroed(std::abi::usize(16)))
         r.result                    # the byte count (or -errno)
 
-    with context linux::io::create()
+    with context std::linux::io::create()
     first_bytes()
 
 r.data is the buffer with the bytes read. The call needs no direct module
@@ -210,31 +211,32 @@ For small, fixed inputs pass them in the program text or through argv()
 
 @topic capability.files
 title: Files and directories: absent
-summary: There is no file, directory or path-opening API in the portable standard library; io::path and linux::path handle path text only.
+summary: There is no file, directory or path-opening API in the portable standard library; std::io::path and std::linux::path handle path text only.
 index: concepts stdlib
 alias: open file; read file; write file; file system; filesystem
 keywords: file, open, read, write, directory, path
-related: capability.input backend.io stdlib.module.io::path stdlib.module.linux
+related: capability.input backend.io stdlib.module.std::io::path stdlib.module.std::linux
 
 == STATUS
-No open/read/write of named files. io::path and linux::path are textual
-path utilities. On the native backends, lib/linux.bot's raw system calls
-are the only route, and they are low-level.
+No open/read/write of named files. std::io::path and std::linux::path are
+textual path utilities. On the native backends, stdlib/linux.bot's raw
+system calls are the only route, and they are low-level.
 
 @topic capability.string-formatting
 title: String formatting and interpolation: absent
-summary: There is no format function, template string or interpolation; text is built with str::concat and str::append_char, numbers with test::int_text.
+summary: There is no format function, template string or interpolation; text is built with std::str::concat and std::str::append_char, numbers with std::test::int_text.
 index: concepts stdlib
 alias: string formatting; format string; interpolation; sprintf; string interpolation; f-string
 keywords: format, interpolation, template, concat, text
-related: task.string-concatenation capability.int-to-string concept.strings stdlib.str::concat
+related: task.string-concatenation capability.int-to-string concept.strings stdlib.std::str::concat
 
 == STATUS
 No format, printf-style operation or interpolation syntax exists.
 
 == NEAREST ALTERNATIVE
-Concatenate: `"moves: ".concat(test::int_text(n)).concat(" steps")`; build
-long texts with a helper or lib/test.bot's test::joined(parts, separator).
+Concatenate: `"moves: ".concat(std::test::int_text(n)).concat(" steps")`;
+build long texts with a helper or stdlib/test.bot's std::test::joined(parts,
+separator).
 
 @topic capability.assignment
 title: Assignment and mutable variables: absent
@@ -257,7 +259,7 @@ shadow a name with a new binding, which never changes the outer one.
     collection in place is the point.
 
 @example accept
-import list
+import std::list
 
 fn sum(xs: List[int], i: int, total: int) -> int:
     if i < 0 or i >= xs.length():
@@ -275,7 +277,7 @@ summary: Botlish has no null, no nil and no optional type: a function that may n
 index: concepts
 alias: null; nil; none; optional; maybe; undefined
 keywords: null, optional, missing, absent, default
-related: principle.errors-over-sentinels concept.errors stdlib.list::get capability.match
+related: principle.errors-over-sentinels concept.errors stdlib.std::list::get capability.match
 match: CORE SEMANTIC UNBOUND | unbound name "null"*
 
 == STATUS
@@ -285,7 +287,7 @@ is a value of its own type, not a member of every type.
 == NEAREST ALTERNATIVE
 Declare an error (`fn find(...) errors NotFound`) and handle it at the call
 (principle.errors-over-sentinels); or take a default argument as
-list::get(xs, i, default) does.
+std::list::get(xs, i, default) does.
 
 @example reject
 x = null
@@ -359,7 +361,7 @@ g = fn(y): y
 @end
 
 @example accept
-import list
+import std::list
 
 fn has_big?(xs: List[int], limit: int) -> bool:
     fn big?(x: int) -> bool:
@@ -373,15 +375,15 @@ fn has_big?(xs: List[int], limit: int) -> bool:
 
 @topic capability.map-filter
 title: map, filter and reduce: use loops
-summary: There are no map/filter/reduce functions: a collecting loop is the transformation (`loop x in xs: f(x)`), `continue` filters, and list::any?, all?, none? and find cover search.
+summary: There are no map/filter/reduce functions: a collecting loop is the transformation (`loop x in xs: f(x)`), `continue` filters, and std::list::any?, all?, none? and find cover search.
 index: concepts stdlib
 alias: map; filter; reduce; fold; comprehension; list comprehension
 keywords: map, filter, reduce, fold, transform, collect
-related: concept.loops stdlib.module.list capability.assignment
+related: concept.loops stdlib.module.std::list capability.assignment
 docs: RETURNING-ITERABLE-LOOPS.md COLLECTING-LOOPS.md
 
 == STATUS
-lib/list.bot deliberately has no map or filter: the collecting loop
+stdlib/list.bot deliberately has no map or filter: the collecting loop
 subsumes them. There is no fold either; carry an accumulator through
 recursion, or use a MutableVector.
 
@@ -417,7 +419,7 @@ call proven to always fail is rejected (concept.known-errors). A handler's
 value is the call's value, or it leaves with return/fail.
 
 @example accept
-import list
+import std::list
 
 error Empty
 

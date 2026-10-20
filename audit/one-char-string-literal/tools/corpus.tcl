@@ -2,11 +2,11 @@
 # (WARNINGS-ONE-CHAR-STRING-LITERAL.md, "Corpus findings and the API-
 # deficiency catalog"). Compiles every program of examples/stdlib,
 # examples/surface, examples/refinement, examples/io, bench/*.bot and
-# lib/*.bot with warnings on (collected, not emitted) and reports, at the
+# stdlib/*.bot with warnings on (collected, not emitted) and reports, at the
 # commit it runs on (examples/io is the context-trait feature's example
 # directory, as examples/refinement is the refinement feature's: its programs
-# are the corpus's only loaders of lib/io.bot -- which does not compile as a
-# program on its own -- and of lib/io/path.bot and lib/linux/path.bot):
+# are the corpus's only loaders of stdlib/io.bot -- which does not compile as a
+# program on its own -- and of stdlib/io/path.bot and stdlib/linux/path.bot):
 #
 #   * every distinct finding (a library module's finding once, with every
 #     corpus program that loaded the module), with its value, its source line,
@@ -18,7 +18,7 @@
 #   * an independent false-positive check: the source token at each finding's
 #     anchor, lexed by the lexer's own String procedure, must be a String
 #     literal whose value is the warning's and is exactly one character
-#     (str::length); a finding that is not is a FALSE POSITIVE;
+#     (std::str::length); a finding that is not is a FALSE POSITIVE;
 #   * the spelling law's corpus level, per finding: the literal rewritten to
 #     its character spelling in a scratch copy (the corpus is never edited),
 #     clauses 1 and 2 on a probe (the spelling lexes; its exact value is the
@@ -91,7 +91,7 @@ set programs [concat \
     [lsort [glob -directory [file join $auditRoot examples refinement] *.bot]] \
     [lsort [glob -directory [file join $auditRoot examples io] *.bot]] \
     [lsort [glob -directory [file join $auditRoot bench] *.bot]] \
-    [lsort [glob -directory [file join $auditRoot lib] *.bot]]]
+    [lsort [glob -directory [file join $auditRoot stdlib] *.bot]]]
 
 # The surface examples that are deliberate rejections (their own headers say
 # so): expected not to compile.
@@ -113,18 +113,18 @@ set deliberate {
 # order; ROW names the catalog row, WHAT says which API would let the literal
 # be a character.
 set apiRows {
-    {== str-substring:*} {"== against a one-character String sliced by str::substring or a peek/char_at helper"
-        "the slice is a one-character String (a helper returns \"\" past the end); str::char_at returns a UnicodeChar but fails outside the String, where the helper returns \"\""}
+    {== str-substring:*} {"== against a one-character String sliced by std::str::substring or a peek/char_at helper"
+        "the slice is a one-character String (a helper returns \"\" past the end); std::str::char_at returns a UnicodeChar but fails outside the String, where the helper returns \"\""}
     {== str-param:*} {"== against a str parameter or a String-typed binding"
         "the parameter is declared or inferred str: its callers pass one-character Strings sliced from text"}
     {== any-param:*} {"== against an untyped parameter that receives one-character Strings"
-        "the callers pass str::substring slices (peek, a first-character slice); the comparison would hold for a UnicodeChar only if the callers changed too"}
-    {call str::concat:*} {"str::concat argument"
-        "str::concat takes two Strings: there is no append of a UnicodeChar to a String"}
-    {list-element immutable_set::from_list:*} {"element of a List[str] made an ImmutableSet[str], queried with one-character Strings"
-        "the set is queried (immutable_set::contains) with one-character String slices; a set of UnicodeChars needs the scanner to read characters (str::char_at)"}
-    {list-element bind:*hex_digits} {"element of a List[str] table indexed (list::at) and concatenated (str::concat)"
-        "the digits are appended to output text with str::concat: no append of a UnicodeChar"}
+        "the callers pass std::str::substring slices (peek, a first-character slice); the comparison would hold for a UnicodeChar only if the callers changed too"}
+    {call std::str::concat:*} {"std::str::concat argument"
+        "std::str::concat takes two Strings: there is no append of a UnicodeChar to a String"}
+    {list-element std::immutable_set::from_list:*} {"element of a List[str] made an ImmutableSet[str], queried with one-character Strings"
+        "the set is queried (std::immutable_set::contains) with one-character String slices; a set of UnicodeChars needs the scanner to read characters (std::str::char_at)"}
+    {list-element bind:*hex_digits} {"element of a List[str] table indexed (std::list::at) and concatenated (std::str::concat)"
+        "the digits are appended to output text with std::str::concat: no append of a UnicodeChar"}
 }
 
 proc readText {path} {
@@ -247,7 +247,7 @@ proc CalleeName {hir node} {
     return [expr {[dict get $callee kind] eq "ref" ? [dict get $callee name] : [dict get $callee kind]}]
 }
 
-# 1 if the user function the call NODE calls returns a str::substring slice
+# 1 if the user function the call NODE calls returns a std::str::substring slice
 # (its body's last expression is one): a peek/char_at helper.
 proc SlicingHelper {hir node} {
     set target [dict get $node target]
@@ -256,7 +256,7 @@ proc SlicingHelper {hir node} {
     }
     set body [dict get $hir exprs [lindex $target 1] body]
     set last [dict get $hir exprs [lindex $body end]]
-    return [expr {[dict get $last kind] eq "call" && [CalleeName $hir $last] eq "str::substring"}]
+    return [expr {[dict get $last kind] eq "call" && [CalleeName $hir $last] eq "std::str::substring"}]
 }
 
 # The consumer of the literal at SITE: {KEY TYPE DETAIL}, KEY the catalog
@@ -272,12 +272,12 @@ proc consumerOf {hir parent site} {
                 set type [hir::types::show [hir::typeOf $hir $other]]
                 set onode [dict get $hir exprs $other]
                 set shape [operand $hir $other]
-                if {[dict get $onode kind] eq "call" && ([CalleeName $hir $onode] eq "str::substring" || [SlicingHelper $hir $onode])} {
+                if {[dict get $onode kind] eq "call" && ([CalleeName $hir $onode] eq "std::str::substring" || [SlicingHelper $hir $onode])} {
                     return [list "== str-substring:[CalleeName $hir $onode]()" $type $shape]
                 }
                 if {[dict get $onode kind] eq "ref" && [string match bind-of-call:* $shape]} {
                     set init [dict get $hir exprs [dict get $hir exprs [dict get $hir bindings [dict get $onode binding] declaredBy] value]]
-                    if {[CalleeName $hir $init] eq "str::substring" || [SlicingHelper $hir $init]} {
+                    if {[CalleeName $hir $init] eq "std::str::substring" || [SlicingHelper $hir $init]} {
                         return [list "== str-substring:[dict get $onode name]" $type $shape]
                     }
                 }
@@ -397,7 +397,7 @@ proc characterClauses {ch} {
         set fact [hir::exact::Of $probe [lindex $consts 0]]
         if {$fact ne [list val [list UnicodeChar [scan $ch %c]]]} {
             set problem "exact value $fact"
-        } elseif {[catch {surface::compile "import char\nfn code(c: UnicodeChar) -> int:\n    char::scalar_value(c)\ncode($spelling)" probe.bot -warnings off} typed]
+        } elseif {[catch {surface::compile "import std::char\nfn code(c: UnicodeChar) -> int:\n    std::char::scalar_value(c)\ncode($spelling)" probe.bot -warnings off} typed]
                 || [valueOf $typed] ne [list value [scan $ch %c]]} {
             set problem "a UnicodeChar parameter does not take it"
         }
@@ -442,7 +442,7 @@ dict for {where f} $findings {
     set to [expr {$from + [string length [dict get $f spelling]] - 1}]
     lset lines $index [string replace [lindex $lines $index] $from $to [charSpelling $text]]
     set outcomes {}
-    if {[string match lib/* $file]} {
+    if {[string match stdlib/* $file]} {
         exec cp -r $libraryDir/. $dir
         writeText [file join $dir [string range $file 4 end]] [join $lines \n]
         set ::core::libraryDir $dir

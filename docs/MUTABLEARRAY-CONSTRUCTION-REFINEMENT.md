@@ -1,6 +1,6 @@
 # MutableArray construction and refinement
 
-> **Note (MUTABLE-ARRAY.md).** `mutable_array::from_list` is a registered
+> **Note (MUTABLE-ARRAY.md).** `std::mutable_array::from_list` is a registered
 > native now (its argument kind is checked at run time, like every
 > intrinsic's), and a MutableArray is a value: the aliasing this report
 > describes (`n = m` sharing one array) is gone.
@@ -10,7 +10,7 @@
 **Delivered:** `mutarray?(v)` (a genuine, non-throwing, allocation-free type
 test registered through the ordinary type-test metadata, on every backend)
 and `mutarray::from_list(xs)` (an ordinary Botlish function over the
-existing MutableArray substrate, in `lib/mutarray.bot`). `mutarray` remains
+existing MutableArray substrate, in `stdlib/mutarray.bot`). `mutarray` remains
 the one canonical MutableArray type. No `MutableArray[T]`, no cast, no
 element/slot typing, no positional List schema, no exact-value machinery
 for MutableArrays, no runtime representation change.
@@ -106,7 +106,7 @@ registry: `mutable_array_get` returns whatever the slot holds, hence `any`.
 
 ## Public API: `mutarray::from_list`
 
-`lib/mutarray.bot`:
+`stdlib/mutarray.bot`:
 
 ```
 namespace mutarray
@@ -446,7 +446,7 @@ generic-relationship work.
 ## Corpus census (before / after)
 
 `tools/census.tcl` over `bench/*.bot`, `examples/stdlib/*.bot`,
-`examples/surface/*.bot` and the loaded `lib/*.bot` (each source location
+`examples/surface/*.bot` and the loaded `stdlib/*.bot` (each source location
 once; **semantic** types of the source HIR). The outputs are identical
 before and after in both the real regime and the all-trusted counterfactual
 regime (`out/census-{before,after}[-variant].txt`), as they must be for a
@@ -486,9 +486,9 @@ not `mutarray`.
 ## Remaining generic failures
 
 Untouched (7): `chars_of` accumulator return (`lex-strategy 57:20`),
-`list::find` callable erasure (`source-checks 89:40`), `found` from
-`list::find` (`test-selection 71:15`), `is_affected?` erased into
-`list::find` (`test-selection 68:31`), `csv_records` `records` accumulator
+`std::list::find` callable erasure (`source-checks 89:40`), `found` from
+`std::list::find` (`test-selection 71:15`), `is_affected?` erased into
+`std::list::find` (`test-selection 68:31`), `csv_records` `records` accumulator
 (`416:46`, `429:28`), `ht_collect_pair` erased into `ht_fold`
 (`hashtable 362:47`). The `row_fill`/`row_table` accumulator-return shape
 (`table` in -> `table` out) that makes those helpers infer `any` *outside*
@@ -499,7 +499,7 @@ the counterfactual is the same `T in -> T out` relationship.
 The four proposed annotations all remain necessary, unchanged:
 `chars_of result` (`lex-strategy 57:20`, categorized generic-relationship),
 `total_valid tokens` (`lex-strategy 79:63`), `select_affected tests`
-(`test-selection 61:26`) and `esc_bytes bytes` (`lib/web.bot 204:70`). The
+(`test-selection 61:26`) and `esc_bytes bytes` (`stdlib/web.bot 204:70`). The
 fourth "genuine annotation" site in the counterfactual table is
 `matmul.bot:38:23` (`list_get(a, i)` on an untyped matrix parameter). MutableArray
 typing indirectly removes none of them, as expected. No annotation was added.
@@ -654,7 +654,7 @@ milestones and are unaffected.
 3. **Previously incorrect/broad result metadata:** none.
 4. **Runtime constructor added or exposed?** Neither: an ordinary Botlish
    wrapper over the existing constructor. A runtime *predicate* was added.
-5. **What backs `mutarray::from_list`:** `lib/mutarray.bot`, over
+5. **What backs `mutarray::from_list`:** `stdlib/mutarray.bot`, over
    `mutable_array_allocate` + `mutable_array_set` + `list_length`/`list_get`.
 6. **Copy/alias/transform of the source List:** allocates a new MutableArray
    and copies element references (shallow); the source List is only read and

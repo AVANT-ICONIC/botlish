@@ -14,8 +14,8 @@
 #
 # (T {s, r: MutableArray[int]}, O {inner: T}, V {v: MutableVector[int]})
 # with no `errors` clause, whose body makes one indexed access -- a read
-# (mutable_array::at, list::at, str::char_at) or a write
-# (mutable_array::set, then the array frozen and returned) -- of a
+# (std::mutable_array::at, std::list::at, std::str::char_at) or a write
+# (std::mutable_array::set, then the array frozen and returned) -- of a
 # container that is a parameter, a local array derived from one (`c =
 # create(capacity(a) + K, 3)`), a field path (t.s) or a nested one
 # (o.inner.s), or the List p a loop collects over a vector (a local or a
@@ -133,30 +133,30 @@ proc kindInfo {kind} {
     switch -- $kind {
         array {
             return [dict create c a other b prelude "" family array nonzero 0 \
-                sizes {"mutable_array::capacity(%s)" "%s.capacity()"}]
+                sizes {"std::mutable_array::capacity(%s)" "%s.capacity()"}]
         }
         list {
             return [dict create c xs other ys prelude "" family list nonzero 0 \
-                sizes {"list::length(%s)"}]
+                sizes {"std::list::length(%s)"}]
         }
         str {
             return [dict create c s other w prelude "" family str nonzero 0 \
-                sizes {"str::length(%s)"}]
+                sizes {"std::str::length(%s)"}]
         }
         field {
             return [dict create c t.s other t.r prelude "" family array nonzero 0 \
-                sizes {"mutable_array::capacity(%s)" "%s.capacity()"}]
+                sizes {"std::mutable_array::capacity(%s)" "%s.capacity()"}]
         }
         nested {
             return [dict create c o.inner.s other o.inner.r prelude "" family array nonzero 0 \
-                sizes {"mutable_array::capacity(%s)"}]
+                sizes {"std::mutable_array::capacity(%s)"}]
         }
         derived {
             # c's size has two spellings: its own capacity, and the equal
             # form it was allocated with.
-            return [dict create c c other b prelude "c = mutable_array::create(mutable_array::capacity(a) + $K, 3)\n    " \
+            return [dict create c c other b prelude "c = std::mutable_array::create(std::mutable_array::capacity(a) + $K, 3)\n    " \
                 family array nonzero [expr {$K > 0}] \
-                sizes [list "mutable_array::capacity(%s)" "(mutable_array::capacity(a) + $K)"]]
+                sizes [list "std::mutable_array::capacity(%s)" "(std::mutable_array::capacity(a) + $K)"]]
         }
         snapshot {
             # p, the List a loop collects over a vector built from xs (a
@@ -175,7 +175,7 @@ proc kindInfo {kind} {
             # specialization types List[never].)
             set make [expr {$v eq "v" ? "v = vec(xs)" : "bx = V {v: vec(xs)}"}]
             set loop "p = loop x in $v:\n        x + 1\n    "
-            set sizes {"list::length(%s)"}
+            set sizes {"std::list::length(%s)"}
             set twin "q = loop x in $v:\n        x * 2\n    "
             if {[chance 0.3]} {
                 set before ""
@@ -196,7 +196,7 @@ proc kindInfo {kind} {
                     # The later loop's body pushes after its domain ran.
                     set loop "${twin}p = loop x in $v:\n        $v.push(x)\n        x + 1\n    "
                 }
-                lappend sizes "list::length(q)"
+                lappend sizes "std::list::length(q)"
             }
             return [dict create c p other ys family list nonzero 0 nonempty [expr {$before ne ""}] \
                 prelude "$make\n    ${before}${loop}$after" sizes $sizes]
@@ -214,16 +214,16 @@ proc sizeOf {info {e ""}} {
 proc readOf {info i} {
     set c [dict get $info c]
     switch -- [dict get $info family] {
-        array { return [pick [list "mutable_array::at($c, $i)" "$c.at($i)"]] }
-        list { return "list::at($c, $i)" }
-        str { return "str::char_at($c, $i)" }
+        array { return [pick [list "std::mutable_array::at($c, $i)" "$c.at($i)"]] }
+        list { return "std::list::at($c, $i)" }
+        str { return "std::str::char_at($c, $i)" }
     }
 }
 
 proc writeOf {info i} {
     set c [dict get $info c]
-    set set [pick [list "mutable_array::set($c, $i, h)" "$c.set($i, h)"]]
-    return "$set\n    mutable_array::freeze($c, mutable_array::capacity($c))"
+    set set [pick [list "std::mutable_array::set($c, $i, h)" "$c.set($i, h)"]]
+    return "$set\n    std::mutable_array::freeze($c, std::mutable_array::capacity($c))"
 }
 
 proc opOf {info write} {
@@ -296,15 +296,15 @@ proc soundBody {} {
 # ---------------------------------------------------------------------------
 # Programs
 
-set header "import list\nimport mutable_array\nimport mutable_vector\nimport str\n\nstruct T:\n    s: MutableArray\[int\]\n    r: MutableArray\[int\]\n\nstruct O:\n    inner: T\n\nstruct V:\n    v: MutableVector\[int\]\n\nfn mk(t: T) -> T:\n    t\n\nfn vec(xs: List\[int\]) -> MutableVector\[int\]:\n    mutable_vector::from_list(xs)\n\n"
+set header "import std::list\nimport std::mutable_array\nimport std::mutable_vector\nimport std::str\n\nstruct T:\n    s: MutableArray\[int\]\n    r: MutableArray\[int\]\n\nstruct O:\n    inner: T\n\nstruct V:\n    v: MutableVector\[int\]\n\nfn mk(t: T) -> T:\n    t\n\nfn vec(xs: List\[int\]) -> MutableVector\[int\]:\n    std::mutable_vector::from_list(xs)\n\n"
 set signature "fn f(a: MutableArray\[int\], b: MutableArray\[int\], xs: List\[int\], ys: List\[int\], s: str, w: str, t: T, u: T, o: O, h: int)"
 set alphabet [split "aé😀bcdefghijklmnopq" ""]
 
 proc arrayOf {n} {
-    if {$n == 0} { return "mutable_array::create(0, 0)" }
+    if {$n == 0} { return "std::mutable_array::create(0, 0)" }
     set items {}
     for {set i 0} {$i < $n} {incr i} { lappend items [expr {10 * $i + 1}] }
-    return "mutable_array::from_list(\[[join $items {, }]\])"
+    return "std::mutable_array::from_list(\[[join $items {, }]\])"
 }
 proc listOf {n} {
     set items {}
@@ -460,88 +460,88 @@ for {set n 1} {$n <= [dict get $options -count]} {incr n} {
 # CONSERVATIVE shapes (no witness).
 
 set unsound {
-    mod-other        {mutable_array::at(a, mod(h, mutable_array::capacity(b)))} {2 5 4}
-    mod-plus-one     {mutable_array::at(a, mod(h, mutable_array::capacity(a) + 1))} {3 3 3}
-    mod-minus-one    {mutable_array::at(a, mod(h, mutable_array::capacity(a) - 1))} {0 3 5}
-    list-mod-other   {list::at(xs, mod(h, list::length(ys)))} {2 5 4}
-    str-mod-plus-one {str::char_at(s, mod(h, str::length(s) + 1))} {3 3 3}
-    mask-unguarded   {mutable_array::at(a, bit_and(h, mutable_array::capacity(a) - 1))} {0 3 5}
-    mask-size        {if mutable_array::capacity(a) == 0:
+    mod-other        {std::mutable_array::at(a, mod(h, std::mutable_array::capacity(b)))} {2 5 4}
+    mod-plus-one     {std::mutable_array::at(a, mod(h, std::mutable_array::capacity(a) + 1))} {3 3 3}
+    mod-minus-one    {std::mutable_array::at(a, mod(h, std::mutable_array::capacity(a) - 1))} {0 3 5}
+    list-mod-other   {std::list::at(xs, mod(h, std::list::length(ys)))} {2 5 4}
+    str-mod-plus-one {std::str::char_at(s, mod(h, std::str::length(s) + 1))} {3 3 3}
+    mask-unguarded   {std::mutable_array::at(a, bit_and(h, std::mutable_array::capacity(a) - 1))} {0 3 5}
+    mask-size        {if std::mutable_array::capacity(a) == 0:
         return -1
-    mutable_array::at(a, bit_and(h, mutable_array::capacity(a)))} {3 3 3}
-    mask-other       {if mutable_array::capacity(b) == 0:
+    std::mutable_array::at(a, bit_and(h, std::mutable_array::capacity(a)))} {3 3 3}
+    mask-other       {if std::mutable_array::capacity(b) == 0:
         return -1
-    mutable_array::at(a, bit_and(h, mutable_array::capacity(b) - 1))} {2 8 7}
-    derived-mod      {c = mutable_array::create(mutable_array::capacity(a) + 1, 3)
-    mutable_array::at(c, mod(h, mutable_array::capacity(a) + 2))} {2 2 3}
-    derived-mask     {c = mutable_array::create(mutable_array::capacity(a) + 1, 3)
-    mutable_array::at(c, bit_and(h, mutable_array::capacity(a) + 1))} {2 2 3}
-    field-other      {mutable_array::at(t.s, mod(h, mutable_array::capacity(t.r)))} {2 5 4}
-    field-other-struct {mutable_array::at(t.s, mod(h, mutable_array::capacity(u.s)))} {2 5 4}
-    nested-other     {mutable_array::at(o.inner.s, mod(h, mutable_array::capacity(o.inner.r)))} {2 5 4}
-    field-write-other {if h < 0 or h >= mutable_array::capacity(t.r):
+    std::mutable_array::at(a, bit_and(h, std::mutable_array::capacity(b) - 1))} {2 8 7}
+    derived-mod      {c = std::mutable_array::create(std::mutable_array::capacity(a) + 1, 3)
+    std::mutable_array::at(c, mod(h, std::mutable_array::capacity(a) + 2))} {2 2 3}
+    derived-mask     {c = std::mutable_array::create(std::mutable_array::capacity(a) + 1, 3)
+    std::mutable_array::at(c, bit_and(h, std::mutable_array::capacity(a) + 1))} {2 2 3}
+    field-other      {std::mutable_array::at(t.s, mod(h, std::mutable_array::capacity(t.r)))} {2 5 4}
+    field-other-struct {std::mutable_array::at(t.s, mod(h, std::mutable_array::capacity(u.s)))} {2 5 4}
+    nested-other     {std::mutable_array::at(o.inner.s, mod(h, std::mutable_array::capacity(o.inner.r)))} {2 5 4}
+    field-write-other {if h < 0 or h >= std::mutable_array::capacity(t.r):
         return -1
     t.s.set(h, 7)
-    mutable_array::freeze(t.s, mutable_array::capacity(t.s))} {2 5 3}
+    std::mutable_array::freeze(t.s, std::mutable_array::capacity(t.s))} {2 5 3}
     local-one-sided  {j = h + 1
-    if j >= mutable_array::capacity(a):
+    if j >= std::mutable_array::capacity(a):
         return -1
-    mutable_array::at(a, j)} {3 3 -5}
+    std::mutable_array::at(a, j)} {3 3 -5}
     local-other      {j = h + 1
-    if j < 0 or j >= mutable_array::capacity(b):
+    if j < 0 or j >= std::mutable_array::capacity(b):
         return -1
-    mutable_array::at(a, j)} {2 5 3}
-    param-one-sided  {if h >= mutable_array::capacity(a):
+    std::mutable_array::at(a, j)} {2 5 3}
+    param-one-sided  {if h >= std::mutable_array::capacity(a):
         return -1
-    mutable_array::at(a, h)} {3 3 -1}
+    std::mutable_array::at(a, h)} {3 3 -1}
     local-another-local {j = h + 1
     k = mod(h + 50, 1000)
-    if j < 0 or j >= mutable_array::capacity(a):
+    if j < 0 or j >= std::mutable_array::capacity(a):
         return -1
-    mutable_array::at(a, k)} {3 3 0}
+    std::mutable_array::at(a, k)} {3 3 0}
     loop-scope       {j = mod(h, 1000)
     loop k from 0 to h - 500:
-        if j >= mutable_array::capacity(a):
+        if j >= std::mutable_array::capacity(a):
             return k
-    mutable_array::at(a, j)} {3 3 500}
-    call-receivers   {mutable_array::at(mk(t).s, mod(h, mutable_array::capacity(mk(u).s)))} {2 5 4}
-    vector-counted   {v = mutable_vector::from_list(xs)
+    std::mutable_array::at(a, j)} {3 3 500}
+    call-receivers   {std::mutable_array::at(mk(t).s, mod(h, std::mutable_array::capacity(mk(u).s)))} {2 5 4}
+    vector-counted   {v = std::mutable_vector::from_list(xs)
     p = loop x in v:
         x
     v.push(h)
     q = loop x in v:
         x
-    r = loop k from 0 to list::length(q):
-        list::at(p, k)
-    list::length(r)} {2 3 1}
-    vector-mod       {v = mutable_vector::from_list(xs)
-    p = loop x in v:
-        x
-    v.push(h)
-    v.push(h)
-    q = loop x in v:
-        x
-    list::at(p, mod(h, list::length(q)))} {2 3 3}
-    vector-mask      {v = mutable_vector::from_list(xs)
+    r = loop k from 0 to std::list::length(q):
+        std::list::at(p, k)
+    std::list::length(r)} {2 3 1}
+    vector-mod       {v = std::mutable_vector::from_list(xs)
     p = loop x in v:
         x
     v.push(h)
     v.push(h)
     q = loop x in v:
         x
-    if list::length(q) == 0:
+    std::list::at(p, mod(h, std::list::length(q)))} {2 3 3}
+    vector-mask      {v = std::mutable_vector::from_list(xs)
+    p = loop x in v:
+        x
+    v.push(h)
+    v.push(h)
+    q = loop x in v:
+        x
+    if std::list::length(q) == 0:
         return -1
-    list::at(p, bit_and(h, list::length(q) - 1))} {2 3 3}
-    vector-guard     {v = mutable_vector::from_list(xs)
+    std::list::at(p, bit_and(h, std::list::length(q) - 1))} {2 3 3}
+    vector-guard     {v = std::mutable_vector::from_list(xs)
     p = loop x in v:
         x
     v.push(h)
     q = loop x in v:
         x
-    if h < 0 or h >= list::length(q):
+    if h < 0 or h >= std::list::length(q):
         return -1
-    list::at(p, h)} {2 3 2}
-    vector-pop       {v = mutable_vector::from_list(xs)
+    std::list::at(p, h)} {2 3 2}
+    vector-pop       {v = std::mutable_vector::from_list(xs)
     p = loop x in v:
         x
     v.pop():
@@ -549,22 +549,22 @@ set unsound {
             0
     q = loop x in v:
         x
-    list::at(q, mod(h, list::length(p)))} {3 3 2}
-    vector-clear     {v = mutable_vector::from_list(xs)
+    std::list::at(q, mod(h, std::list::length(p)))} {3 3 2}
+    vector-clear     {v = std::mutable_vector::from_list(xs)
     p = loop x in v:
         x
     v.clear()
     q = loop x in v:
         x
-    list::at(q, mod(h, list::length(p)))} {2 3 1}
-    vector-field     {bx = V {v: mutable_vector::from_list(xs)}
+    std::list::at(q, mod(h, std::list::length(p)))} {2 3 1}
+    vector-field     {bx = V {v: std::mutable_vector::from_list(xs)}
     p = loop x in bx.v:
         x
     bx.v.push(h)
     q = loop x in bx.v:
         x
-    list::at(p, mod(h, list::length(q)))} {2 3 2}
-    vector-copies    {v = mutable_vector::from_list(xs)
+    std::list::at(p, mod(h, std::list::length(q)))} {2 3 2}
+    vector-copies    {v = std::mutable_vector::from_list(xs)
     c1 = v
     v.push(h)
     c2 = v
@@ -572,24 +572,24 @@ set unsound {
         x
     q = loop x in c2:
         x
-    list::at(p, mod(h, list::length(q)))} {2 3 2}
-    vector-through-copy {v = mutable_vector::from_list(xs)
+    std::list::at(p, mod(h, std::list::length(q)))} {2 3 2}
+    vector-through-copy {v = std::mutable_vector::from_list(xs)
     c1 = v
     c1.push(h)
     p = loop x in v:
         x
     q = loop x in c1:
         x
-    list::at(p, mod(h, list::length(q)))} {2 3 2}
-    vector-loop-body {v = mutable_vector::from_list(xs)
+    std::list::at(p, mod(h, std::list::length(q)))} {2 3 2}
+    vector-loop-body {v = std::mutable_vector::from_list(xs)
     p = loop x in v:
         x
     loop i from 0 to 2:
         v.push(i)
     q = loop x in v:
         x
-    list::at(p, mod(h, list::length(q)))} {2 3 3}
-    vector-copies-each-pushed {v = mutable_vector::from_list(xs)
+    std::list::at(p, mod(h, std::list::length(q)))} {2 3 3}
+    vector-copies-each-pushed {v = std::mutable_vector::from_list(xs)
     c1 = v
     c1.push(h)
     c2 = v
@@ -599,107 +599,107 @@ set unsound {
         x
     q = loop x in c2:
         x
-    list::at(p, mod(h, list::length(q)))} {2 3 3}
-    vector-branch    {v = mutable_vector::from_list(xs)
+    std::list::at(p, mod(h, std::list::length(q)))} {2 3 3}
+    vector-branch    {v = std::mutable_vector::from_list(xs)
     p = loop x in v:
         x
     if h > 0:
         v.push(h)
     q = loop x in v:
         x
-    list::at(p, mod(h, list::length(q)))} {2 3 2}
-    vector-loop-encloses {v = mutable_vector::from_list(xs)
+    std::list::at(p, mod(h, std::list::length(q)))} {2 3 2}
+    vector-loop-encloses {v = std::mutable_vector::from_list(xs)
     p = loop x in v:
         x
     r = loop t from 0 to 3:
         q = loop x in v:
             x
         v.push(t)
-        list::at(p, mod(h, list::length(q)))
-    list::length(r)} {2 3 2}
-    vector-own-body  {v = mutable_vector::from_list(xs)
+        std::list::at(p, mod(h, std::list::length(q)))
+    std::list::length(r)} {2 3 2}
+    vector-own-body  {v = std::mutable_vector::from_list(xs)
     p = loop x in v:
         v.push(x)
         x
     q = loop x in v:
         x
-    list::at(p, mod(h, list::length(q)))} {2 3 3}
-    vector-field-handler {bx = V {v: mutable_vector::from_list(xs)}
+    std::list::at(p, mod(h, std::list::length(q)))} {2 3 3}
+    vector-field-handler {bx = V {v: std::mutable_vector::from_list(xs)}
     p = loop x in bx.v:
         x
-    n = list::at(p, 9):
+    n = std::list::at(p, 9):
         on IndexNotFound:
             bx.v.push(h)
             0
     q = loop x in bx.v:
         x
-    list::at(p, mod(h, list::length(q)))} {2 3 2}
-    vector-branch-push-first {v = mutable_vector::from_list(xs)
+    std::list::at(p, mod(h, std::list::length(q)))} {2 3 2}
+    vector-branch-push-first {v = std::mutable_vector::from_list(xs)
     p = loop x in v:
         x
     if h > 0:
         v.push(h)
         q = loop x in v:
             x
-        return list::at(p, mod(h, list::length(q)))
+        return std::list::at(p, mod(h, std::list::length(q)))
     0} {2 3 2}
-    vector-handler-push-first {v = mutable_vector::from_list(xs)
+    vector-handler-push-first {v = std::mutable_vector::from_list(xs)
     p = loop x in v:
         x
-    n = mutable_vector::at(v, 99):
+    n = std::mutable_vector::at(v, 99):
         on IndexNotFound:
             v.push(h)
             q = loop x in v:
                 x
-            list::at(p, mod(h, list::length(q)))
+            std::list::at(p, mod(h, std::list::length(q)))
     n} {2 3 2}
 }
 # Lockstep clauses over a vector and a List an earlier loop collected over
 # it, the vector grown between them: LOCKSTEP-UNPROVEN, and the witness
 # program (the two clauses' counts) shows they differ there.
 set lockstepUnsound {
-    vector-lockstep {v = mutable_vector::from_list(xs)
+    vector-lockstep {v = std::mutable_vector::from_list(xs)
     p = loop x in v:
         x
     v.push(h)
     r = loop a in v and y in p:
         a + y
-    list::length(r)} {v = mutable_vector::from_list(xs)
+    std::list::length(r)} {v = std::mutable_vector::from_list(xs)
     p = loop x in v:
         x
     v.push(h)
-    [mutable_vector::length(v), list::length(p)]} {2 3 1}
-    field-lockstep {bx = V {v: mutable_vector::from_list(xs)}
+    [std::mutable_vector::length(v), std::list::length(p)]} {2 3 1}
+    field-lockstep {bx = V {v: std::mutable_vector::from_list(xs)}
     p = loop x in bx.v:
         x
     bx.v.push(h)
     r = loop a in bx.v and y in p:
         a + y
-    list::length(r)} {bx = V {v: mutable_vector::from_list(xs)}
+    std::list::length(r)} {bx = V {v: std::mutable_vector::from_list(xs)}
     p = loop x in bx.v:
         x
     bx.v.push(h)
-    [mutable_vector::length(bx.v), list::length(p)]} {2 3 1}
-    copy-lockstep {v = mutable_vector::from_list(xs)
+    [std::mutable_vector::length(bx.v), std::list::length(p)]} {2 3 1}
+    copy-lockstep {v = std::mutable_vector::from_list(xs)
     cv = v
     v.push(h)
     r = loop a in v and c in cv:
         a + c
-    list::length(r)} {v = mutable_vector::from_list(xs)
+    std::list::length(r)} {v = std::mutable_vector::from_list(xs)
     cv = v
     v.push(h)
-    [mutable_vector::length(v), mutable_vector::length(cv)]} {2 3 1}
-    copies-lockstep {v = mutable_vector::from_list(xs)
+    [std::mutable_vector::length(v), std::mutable_vector::length(cv)]} {2 3 1}
+    copies-lockstep {v = std::mutable_vector::from_list(xs)
     c1 = v
     v.push(h)
     c2 = v
     r = loop a in c1 and c in c2:
         a + c
-    list::length(r)} {v = mutable_vector::from_list(xs)
+    std::list::length(r)} {v = std::mutable_vector::from_list(xs)
     c1 = v
     v.push(h)
     c2 = v
-    [mutable_vector::length(c1), mutable_vector::length(c2)]} {2 3 1}
+    [std::mutable_vector::length(c1), std::mutable_vector::length(c2)]} {2 3 1}
 }
 # Two clauses of one lockstep loop over the same vector place, nothing but
 # places and constants between them, walk one vector; a clause over a
@@ -711,29 +711,29 @@ set lockstepSound {
     v.push(h)
     r = loop a in v and c in v:
         a + c
-    list::length(r)}
+    std::list::length(r)}
     same-field {bx = V {v: vec(xs)}
     bx.v.push(h)
     r = loop a in bx.v and c in bx.v:
         a + c
-    list::length(r)}
+    std::list::length(r)}
     unmutated-collected {v = vec(xs)
     p = loop x in v:
         x * 10
     r = loop a in v and y in p:
         a + y
-    list::length(r)}
+    std::list::length(r)}
     unmutated-copy {v = vec(xs)
     c1 = v
     r = loop a in v and c in c1:
         a + c
-    list::length(r)}
+    std::list::length(r)}
     unmutated-field {bx = V {v: vec(xs)}
     p = loop x in bx.v:
         x * 10
     r = loop a in bx.v and y in p:
         a + y
-    list::length(r)}
+    std::list::length(r)}
     built-collected {v = vec(xs)
     loop i from 0 to 3:
         v.push(i)
@@ -741,14 +741,14 @@ set lockstepSound {
         x * 10
     r = loop a in v and y in p:
         a + y
-    list::length(r)}
+    std::list::length(r)}
     own-body-field {bx = V {v: vec(xs)}
     p = loop x in bx.v:
         x * 10
     r = loop a in bx.v and y in p:
         bx.v.push(a)
         a + y
-    [list::length(r), mutable_vector::length(bx.v)]}
+    [std::list::length(r), std::mutable_vector::length(bx.v)]}
     swap-collected {v = vec(xs)
     p = loop x in v:
         x * 10
@@ -757,14 +757,14 @@ set lockstepSound {
             0
     r = loop a in v and y in p:
         a + y + old
-    list::length(r)}
+    std::list::length(r)}
     third-copy {v = vec(xs)
     c1 = v
     c2 = v
     c2.push(h)
     r = loop a in v and c in c1:
         a + c
-    [list::length(r), mutable_vector::length(c2)]}
+    [std::list::length(r), std::mutable_vector::length(c2)]}
 }
 # Reads of a List collected over a vector, at an index proven against
 # another loop over it (or over a copy of it) with nothing between the two
@@ -773,29 +773,29 @@ set lockstepSound {
 # pushed between them: accepted, the read the proven opcode, every backend
 # agreeing with the interpreter.
 set vectorProven {
-    twice-mod {v = mutable_vector::from_list(xs)
+    twice-mod {v = std::mutable_vector::from_list(xs)
     p = loop x in v:
         x
     q = loop x in v:
         x
-    list::at(p, mod(h, list::length(q)))}
+    std::list::at(p, mod(h, std::list::length(q)))}
     twice-field-counted {bx = V {v: vec(xs)}
     p = loop x in bx.v:
         x
     q = loop x in bx.v:
         x * 3
-    r = loop k from 0 to list::length(q):
-        list::at(p, k)
-    list::length(r)}
+    r = loop k from 0 to std::list::length(q):
+        std::list::at(p, k)
+    std::list::length(r)}
     copy-guard {v = vec(xs)
     c1 = v
     p = loop x in v:
         x
     q = loop x in c1:
         x
-    if h < 0 or h >= list::length(q):
+    if h < 0 or h >= std::list::length(q):
         return -1
-    list::at(p, h)}
+    std::list::at(p, h)}
     copy-pushed {v = vec(xs)
     p = loop x in v:
         x
@@ -803,7 +803,7 @@ set vectorProven {
     c1.push(h)
     q = loop x in v:
         x * 3
-    list::at(p, mod(h, list::length(q)))}
+    std::list::at(p, mod(h, std::list::length(q)))}
     copy-pushed-mutated {v = vec(xs)
     v.push(h)
     p = loop x in v:
@@ -815,7 +815,7 @@ set vectorProven {
     v.pop():
         on IndexNotFound:
             0
-    list::at(p, mod(h, list::length(q)))}
+    std::list::at(p, mod(h, std::list::length(q)))}
     built-mod {v = vec(xs)
     loop i from 0 to 3:
         v.push(i * h)
@@ -824,7 +824,7 @@ set vectorProven {
     q = loop x in v:
         x * 3
     v.clear()
-    list::at(p, mod(h, list::length(q)))}
+    std::list::at(p, mod(h, std::list::length(q)))}
     own-body-counted {bx = V {v: vec(xs)}
     bx.v.push(h)
     q = loop x in bx.v:
@@ -832,29 +832,29 @@ set vectorProven {
     p = loop x in bx.v:
         bx.v.push(x)
         x * 2
-    r = loop k from 0 to list::length(q):
-        list::at(p, k)
-    [list::length(r), mutable_vector::length(bx.v)]}
+    r = loop k from 0 to std::list::length(q):
+        std::list::at(p, k)
+    [std::list::length(r), std::mutable_vector::length(bx.v)]}
     branch-read-then-push {v = vec(xs)
     p = loop x in v:
         x
     if h > 0:
         q = loop x in v:
             x * 3
-        r = list::at(p, mod(h, list::length(q)))
+        r = std::list::at(p, mod(h, std::list::length(q)))
         v.push(r)
         return r
-    mutable_vector::length(v)}
+    std::mutable_vector::length(v)}
     else-pushes {bx = V {v: vec(xs)}
     p = loop x in bx.v:
         x
     if h > 0:
         q = loop x in bx.v:
             x * 3
-        return list::at(p, mod(h, list::length(q)))
+        return std::list::at(p, mod(h, std::list::length(q)))
     else:
         bx.v.push(h)
-    mutable_vector::length(bx.v)}
+    std::mutable_vector::length(bx.v)}
     then-pushes {v = vec(xs)
     p = loop x in v:
         x
@@ -863,19 +863,19 @@ set vectorProven {
     else:
         q = loop x in v:
             x * 3
-        return list::at(p, mod(h, list::length(q)))
-    mutable_vector::length(v)}
+        return std::list::at(p, mod(h, std::list::length(q)))
+    std::mutable_vector::length(v)}
     handler-read-then-push {v = vec(xs)
     p = loop x in v:
         x
-    n = mutable_vector::at(v, 99):
+    n = std::mutable_vector::at(v, 99):
         on IndexNotFound:
             q = loop x in v:
                 x * 3
-            k = list::at(p, mod(h, list::length(q)))
+            k = std::list::at(p, mod(h, std::list::length(q)))
             v.push(k)
             k
-    n + mutable_vector::length(v)}
+    n + std::mutable_vector::length(v)}
     swap-between {v = vec(xs)
     p = loop x in v:
         x
@@ -884,7 +884,7 @@ set vectorProven {
             0
     q = loop x in v:
         x * 3
-    list::at(p, mod(h, list::length(q))) + old}
+    std::list::at(p, mod(h, std::list::length(q))) + old}
     third-copy-pushed {v = vec(xs)
     c1 = v
     p = loop x in v:
@@ -893,18 +893,18 @@ set vectorProven {
         x * 3
     c2 = v
     c2.push(h)
-    list::at(p, mod(h, list::length(q))) + mutable_vector::length(c2)}
+    std::list::at(p, mod(h, std::list::length(q))) + std::mutable_vector::length(c2)}
 }
 set conservative {
-    inline-twice     {if h + 1 < 0 or h + 1 >= mutable_array::capacity(a):
+    inline-twice     {if h + 1 < 0 or h + 1 >= std::mutable_array::capacity(a):
         return -1
-    mutable_array::at(a, h + 1)}
+    std::mutable_array::at(a, h + 1)}
     loop-once        {j = h + 1
     loop k from 0 to 1:
-        if j < 0 or j >= mutable_array::capacity(a):
+        if j < 0 or j >= std::mutable_array::capacity(a):
             return k
-    mutable_array::at(a, j)}
-    call-twice       {mutable_array::at(mk(t).s, mod(h, mutable_array::capacity(mk(t).s)))}
+    std::mutable_array::at(a, j)}
+    call-twice       {std::mutable_array::at(mk(t).s, mod(h, std::mutable_array::capacity(mk(t).s)))}
 }
 
 if {[dict get $options -unsound]} {

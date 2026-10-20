@@ -1,4 +1,4 @@
 # S13 reduced (r7.bot): a method call whose function's namespace is not imported.
 primary 4:7
-fix 1 import str
+fix 1 import std::str
 cascade 3:5

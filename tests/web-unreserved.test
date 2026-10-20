@@ -1,15 +1,15 @@
-# web-unreserved.test -- web::is_unreserved (lib/web.bot): RFC 3986
-# URI-unreserved classification, rewritten as ASCII structure (lib/ascii.
-# bot's ascii::is_alphanumeric) OR a retained URI-owned punctuation set
-# (additional_unreserved_chars = byte::set(['-', '.', '_', '~'])). See
+# web-unreserved.test -- std::web::is_unreserved (stdlib/web.bot): RFC 3986
+# URI-unreserved classification, rewritten as ASCII structure (stdlib/ascii.
+# bot's std::ascii::is_alphanumeric) OR a retained URI-owned punctuation set
+# (additional_unreserved_chars = std::byte::set(['-', '.', '_', '~'])). See
 # ASCII-AND-URI-UNRESERVED.md.
 #
 # Before this milestone, is_unreserved was a private function nested
-# inside uri_escape_text (lib/web.bot), a single ascending-threshold
+# inside uri_escape_text (stdlib/web.bot), a single ascending-threshold
 # ladder (see e.g. BYTE-NIBBLE-BIT-ARITHMETIC.md, NATIVE-URI-ESCAPE.md) --
 # never independently callable, so there was no dedicated test file for
-# it on its own. It is now a top-level web::is_unreserved(b: Byte) ->
-# bool, exactly like byte::set got its own byte-set.test; this file is
+# it on its own. It is now a top-level std::web::is_unreserved(b: Byte) ->
+# bool, exactly like std::byte::set got its own byte-set.test; this file is
 # its equivalent. tests/native-uri-escape.test's own existing tests (the
 # actual URI/string consumer workload: uri_escape_text/uriEscape's text
 # output, byte for byte) are deliberately left untouched -- rerunning them
@@ -40,7 +40,7 @@ proc moduleValue {path} {
 
 # The item-17/19 reference definition of URI-unreserved: A-Za-z0-9._~-,
 # nothing else -- an independent host-side model, not a second production
-# implementation (spec item 51), used only to check web::is_unreserved
+# implementation (spec item 51), used only to check std::web::is_unreserved
 # against, never as itself a thing under test.
 proc referenceUnreserved {b} {
     return [expr {
@@ -54,17 +54,17 @@ proc referenceUnreserved {b} {
 # alphanumeric class, and immediately adjacent/nonmember punctuation and
 # high-bit bytes.
 
-test web-unreserved-acceptance-table {web::is_unreserved's item-78/20 acceptance table} -body {
-    set path [makeFile {import web
+test web-unreserved-acceptance-table {std::web::is_unreserved's item-78/20 acceptance table} -body {
+    set path [makeFile {import std::web
 [
-    web::is_unreserved(45), web::is_unreserved(46),
-    web::is_unreserved(95), web::is_unreserved(126),
-    web::is_unreserved(44), web::is_unreserved(47),
-    web::is_unreserved(58), web::is_unreserved(64),
-    web::is_unreserved(91), web::is_unreserved(96),
-    web::is_unreserved(123), web::is_unreserved(127),
-    web::is_unreserved(128), web::is_unreserved(255),
-    web::is_unreserved(65), web::is_unreserved(97), web::is_unreserved(48)
+    std::web::is_unreserved(45), std::web::is_unreserved(46),
+    std::web::is_unreserved(95), std::web::is_unreserved(126),
+    std::web::is_unreserved(44), std::web::is_unreserved(47),
+    std::web::is_unreserved(58), std::web::is_unreserved(64),
+    std::web::is_unreserved(91), std::web::is_unreserved(96),
+    std::web::is_unreserved(123), std::web::is_unreserved(127),
+    std::web::is_unreserved(128), std::web::is_unreserved(255),
+    std::web::is_unreserved(65), std::web::is_unreserved(97), std::web::is_unreserved(48)
 ]} web-unreserved-table.bot]
     try {
         list [moduleParity $path] [moduleValue $path]
@@ -77,9 +77,9 @@ test web-unreserved-acceptance-table {web::is_unreserved's item-78/20 acceptance
 # Byte contract (spec items 21, 36): a plain out-of-range/unproven Int, a
 # UnicodeChar, or a str are all static type errors -- never a coercion.
 
-test web-unreserved-rejects-unicode-char {web::is_unreserved('-') (UnicodeChar) is a static type error -- no UnicodeChar/Byte equality shortcut} -body {
-    set path [makeFile {import web
-web::is_unreserved('-')} web-unreserved-reject-char.bot]
+test web-unreserved-rejects-unicode-char {std::web::is_unreserved('-') (UnicodeChar) is a static type error -- no UnicodeChar/Byte equality shortcut} -body {
+    set path [makeFile {import std::web
+std::web::is_unreserved('-')} web-unreserved-reject-char.bot]
     try {
         catch {surface::readProgramFile $path -strict 1} err options
         dict get $options -errorcode
@@ -88,10 +88,10 @@ web::is_unreserved('-')} web-unreserved-reject-char.bot]
     }
 } -result {CORE SEMANTIC TYPE}
 
-test web-unreserved-rejects-unproven-int {web::is_unreserved(char::scalar_value('-')) is a static type error -- the value (45) is right, but carries no static Byte proof} -body {
-    set path [makeFile {import char
-import web
-web::is_unreserved(char::scalar_value('-'))} web-unreserved-reject-int.bot]
+test web-unreserved-rejects-unproven-int {std::web::is_unreserved(std::char::scalar_value('-')) is a static type error -- the value (45) is right, but carries no static Byte proof} -body {
+    set path [makeFile {import std::char
+import std::web
+std::web::is_unreserved(std::char::scalar_value('-'))} web-unreserved-reject-int.bot]
     try {
         catch {surface::readProgramFile $path -strict 1} err options
         dict get $options -errorcode
@@ -100,9 +100,9 @@ web::is_unreserved(char::scalar_value('-'))} web-unreserved-reject-int.bot]
     }
 } -result {CORE SEMANTIC TYPE}
 
-test web-unreserved-result-type {web::is_unreserved(...) has static result type bool} -body {
-    set path [makeFile {import web
-web::is_unreserved(65)} web-unreserved-restype.bot]
+test web-unreserved-result-type {std::web::is_unreserved(...) has static result type bool} -body {
+    set path [makeFile {import std::web
+std::web::is_unreserved(65)} web-unreserved-restype.bot]
     try {
         set hir [surface::readProgramFile $path -strict 0]
         set e [lindex [dict get $hir roots] end]
@@ -115,12 +115,12 @@ web::is_unreserved(65)} web-unreserved-restype.bot]
 # ---------------------------------------------------------------------------
 # Exhaustive 0..255 equivalence (spec items 18, 54), exact cardinality 66
 # (spec item 19), and the item-54 compositional identity
-# (web::is_unreserved(b) == ascii::is_alphanumeric(b) or b in the
+# (std::web::is_unreserved(b) == std::ascii::is_alphanumeric(b) or b in the
 # punctuation set) -- all in one pass over the full domain.
 
-test web-unreserved-exhaustive {web::is_unreserved matches the reference definition over all 256 Byte values; cardinality exactly 66; equals ascii::is_alphanumeric(b) or membership in the punctuation set, everywhere} -body {
+test web-unreserved-exhaustive {std::web::is_unreserved matches the reference definition over all 256 Byte values; cardinality exactly 66; equals std::ascii::is_alphanumeric(b) or membership in the punctuation set, everywhere} -body {
     set nums [lseq 0 255]
-    set src "import ascii\nimport byte\nimport immutable_set\nimport web\n\nns = \[[join $nums {, }]\]\nloop n in ns:\n    b = byte::from_int(n):\n        on byte::BelowRange:\n            0\n        on byte::AboveRange:\n            0\n    \[web::is_unreserved(b), ascii::is_alphanumeric(b), immutable_set::contains(web::additional_unreserved_chars, b)\]"
+    set src "import std::ascii\nimport std::byte\nimport std::immutable_set\nimport std::web\n\nns = \[[join $nums {, }]\]\nloop n in ns:\n    b = std::byte::from_int(n):\n        on std::byte::BelowRange:\n            0\n        on std::byte::AboveRange:\n            0\n    \[std::web::is_unreserved(b), std::ascii::is_alphanumeric(b), std::immutable_set::contains(std::web::additional_unreserved_chars, b)\]"
     set path [makeFile $src web-unreserved-exhaustive.bot]
     try {
         set hir [surface::readProgramFile $path -strict 0]
@@ -150,9 +150,9 @@ test web-unreserved-exhaustive {web::is_unreserved matches the reference definit
 # Backend parity (spec item 38): all four backends agree over the whole
 # domain, in one pass.
 
-test web-unreserved-backend-parity-256 {web::is_unreserved agrees across interp/compile/cranelift-generic/cranelift over the entire 0..255 domain} -body {
+test web-unreserved-backend-parity-256 {std::web::is_unreserved agrees across interp/compile/cranelift-generic/cranelift over the entire 0..255 domain} -body {
     set nums [lseq 0 255]
-    set src "import byte\nimport web\n\nns = \[[join $nums {, }]\]\nloop n in ns:\n    b = byte::from_int(n):\n        on byte::BelowRange:\n            0\n        on byte::AboveRange:\n            0\n    web::is_unreserved(b)"
+    set src "import std::byte\nimport std::web\n\nns = \[[join $nums {, }]\]\nloop n in ns:\n    b = std::byte::from_int(n):\n        on std::byte::BelowRange:\n            0\n        on std::byte::AboveRange:\n            0\n    std::web::is_unreserved(b)"
     set path [makeFile $src web-unreserved-parity256.bot]
     try {
         moduleParity $path
@@ -164,19 +164,19 @@ test web-unreserved-backend-parity-256 {web::is_unreserved agrees across interp/
 # ---------------------------------------------------------------------------
 # C2 (COMPREHENSIVE-GENERATED-CODE-AUDIT.md sec. C2;
 # M0-MODULE-CLOSURE-AND-URI-BASELINE.md): the exact real-world reproduction.
-# Every web::is_unreserved call above is either at program top level or
+# Every std::web::is_unreserved call above is either at program top level or
 # inside a top-level `loop` body -- neither creates a new hir::aot region
 # (a loop body shares its enclosing invocation's region), so none of them
 # ever exercised the bug: an ordinary *user function* referencing
-# web::is_unreserved, which is itself a closure over the retained
+# std::web::is_unreserved, which is itself a closure over the retained
 # additional_unreserved_chars. Before the fix, native lowering raised
 # "NATIVE BUG: binding ... is not reachable" here; interp was always
 # correct. tests/surface-modules.test has the generic (web-independent)
 # fixture and the capture-set/structural inspection; this is the one
 # concrete case the milestone names.
 
-test web-unreserved-user-fn-wraps-module-closure {fn f(b: Byte) -> bool: web::is_unreserved(b) -- f(45) -- agrees on every backend (was a native-only crash)} -body {
-    set path [makeFile "import web\nimport type byte::Byte\nfn f(b: Byte) -> bool:\n    web::is_unreserved(b)\n\nf(45)\n" web-unreserved-user-fn-wrap.bot]
+test web-unreserved-user-fn-wraps-module-closure {fn f(b: Byte) -> bool: std::web::is_unreserved(b) -- f(45) -- agrees on every backend (was a native-only crash)} -body {
+    set path [makeFile "import std::web\nimport type std::byte::Byte\nfn f(b: Byte) -> bool:\n    std::web::is_unreserved(b)\n\nf(45)\n" web-unreserved-user-fn-wrap.bot]
     try {
         list [moduleParity $path] [moduleValue $path]
     } finally {
@@ -187,19 +187,19 @@ test web-unreserved-user-fn-wraps-module-closure {fn f(b: Byte) -> bool: web::is
 # ---------------------------------------------------------------------------
 # Module retention (spec items 22-23, 39-42, 56-57): the four-byte
 # punctuation set is built exactly once, at module initialization, and
-# reused by every later web::is_unreserved call -- never reconstructed,
+# reused by every later std::web::is_unreserved call -- never reconstructed,
 # never iterated, checked only by membership/cardinality (never display
 # order, spec item 56).
 
 # R2.a.1 (R2A1-MODULE-FN-BRIDGE-REACHABILITY.md) retains web.bot's second
-# module set, local_extra_chars (web.bot's own immutable_set::from_list), at
+# module set, local_extra_chars (web.bot's own std::immutable_set::from_list), at
 # module scope again, so loading web now initializes two retained sets --
-# each exactly once: additional_unreserved_chars through byte::set's own
+# each exactly once: additional_unreserved_chars through std::byte::set's own
 # terminal setfromlist (byte.bot), local_extra_chars directly (web.bot).
-test web-unreserved-set-built-once {additional_unreserved_chars (byte.bot's byte::set site) and web.bot's own local_extra_chars are each constructed exactly once, regardless of how many web::is_unreserved calls follow} -body {
-    set path [makeFile {import web
-[web::is_unreserved(45), web::is_unreserved(46), web::is_unreserved(95),
-web::is_unreserved(126), web::is_unreserved(65), web::is_unreserved(128)]} web-unreserved-once.bot]
+test web-unreserved-set-built-once {additional_unreserved_chars (byte.bot's std::byte::set site) and web.bot's own local_extra_chars are each constructed exactly once, regardless of how many std::web::is_unreserved calls follow} -body {
+    set path [makeFile {import std::web
+[std::web::is_unreserved(45), std::web::is_unreserved(46), std::web::is_unreserved(95),
+std::web::is_unreserved(126), std::web::is_unreserved(65), std::web::is_unreserved(128)]} web-unreserved-once.bot]
     try {
         set hir [surface::readProgramFile $path -strict 0]
         native::lower::program $hir -repr-opt 0
@@ -224,18 +224,18 @@ web::is_unreserved(126), web::is_unreserved(65), web::is_unreserved(128)]} web-u
 } -result {{byte.bot 1} {web.bot 1}}
 
 test web-unreserved-set-exact-members {additional_unreserved_chars contains exactly the four bytes 45/46/95/126, and no others among nearby candidates} -body {
-    set path [makeFile {import immutable_set
-import web
+    set path [makeFile {import std::immutable_set
+import std::web
 [
-    immutable_set::contains(web::additional_unreserved_chars, 45),
-    immutable_set::contains(web::additional_unreserved_chars, 46),
-    immutable_set::contains(web::additional_unreserved_chars, 95),
-    immutable_set::contains(web::additional_unreserved_chars, 126),
-    immutable_set::contains(web::additional_unreserved_chars, 44),
-    immutable_set::contains(web::additional_unreserved_chars, 47),
-    immutable_set::contains(web::additional_unreserved_chars, 94),
-    immutable_set::contains(web::additional_unreserved_chars, 96),
-    immutable_set::contains(web::additional_unreserved_chars, 65)
+    std::immutable_set::contains(std::web::additional_unreserved_chars, 45),
+    std::immutable_set::contains(std::web::additional_unreserved_chars, 46),
+    std::immutable_set::contains(std::web::additional_unreserved_chars, 95),
+    std::immutable_set::contains(std::web::additional_unreserved_chars, 126),
+    std::immutable_set::contains(std::web::additional_unreserved_chars, 44),
+    std::immutable_set::contains(std::web::additional_unreserved_chars, 47),
+    std::immutable_set::contains(std::web::additional_unreserved_chars, 94),
+    std::immutable_set::contains(std::web::additional_unreserved_chars, 96),
+    std::immutable_set::contains(std::web::additional_unreserved_chars, 65)
 ]} web-unreserved-members.bot]
     try {
         list [moduleParity $path] [moduleValue $path]
@@ -245,17 +245,17 @@ import web
 } -result {same {[true, true, true, true, false, false, false, false, false]}}
 
 # ---------------------------------------------------------------------------
-# Allocation (spec items 41, 58): a web::is_unreserved call, after module
+# Allocation (spec items 41, 58): a std::web::is_unreserved call, after module
 # init, allocates nothing of its own (the module-scope hex_digits list,
 # the additional_unreserved_chars set, and the two module functions' own
 # closures are one-time program-init costs -- see the report's "Generated-
 # code baseline for module set"; they do not grow with call count).
 
-test web-unreserved-allocations-dont-grow-with-call-count {total allocations are the same one-time module-init cost whether web::is_unreserved is called once or four times} -body {
-    set path1 [makeFile {import web
-web::is_unreserved(55)} web-unreserved-alloc1.bot]
-    set path4 [makeFile {import web
-[web::is_unreserved(55), web::is_unreserved(56), web::is_unreserved(57), web::is_unreserved(58)]} web-unreserved-alloc4.bot]
+test web-unreserved-allocations-dont-grow-with-call-count {total allocations are the same one-time module-init cost whether std::web::is_unreserved is called once or four times} -body {
+    set path1 [makeFile {import std::web
+std::web::is_unreserved(55)} web-unreserved-alloc1.bot]
+    set path4 [makeFile {import std::web
+[std::web::is_unreserved(55), std::web::is_unreserved(56), std::web::is_unreserved(57), std::web::is_unreserved(58)]} web-unreserved-alloc4.bot]
     try {
         set hir1 [surface::readProgramFile $path1 -strict 0]
         native::lower::program $hir1 -repr-opt 0
@@ -275,17 +275,17 @@ web::is_unreserved(55)} web-unreserved-alloc1.bot]
 # ---------------------------------------------------------------------------
 # Short-circuit evaluation (spec items 59-60): is_unreserved's "or" is
 # ordinary short-circuit Boolean evaluation -- the set-membership operand
-# is never evaluated once ascii::is_alphanumeric(b) is already true. Uses
+# is never evaluated once std::ascii::is_alphanumeric(b) is already true. Uses
 # this project's own test-log probe (tests/helpers.tcl) in is_unreserved's
 # exact two-operand shape, since is_digit/is_alphanumeric/
-# immutable_set::contains have no observable side effect of their own to
+# std::immutable_set::contains have no observable side effect of their own to
 # probe directly.
 
 # "or" has no dedicated IR form of its own: hir::lower desugars it
-# directly to "if" (surface/lower.tcl) -- `ascii::is_alphanumeric(b) or
-# immutable_set::contains(...)` is exactly `if ascii::is_alphanumeric(b)
-# {true} else {immutable_set::contains(...)}`, confirmed below by lowering
-# `ascii::is_alphanumeric(65)` itself and inspecting its own body's
+# directly to "if" (surface/lower.tcl) -- `std::ascii::is_alphanumeric(b) or
+# std::immutable_set::contains(...)` is exactly `if std::ascii::is_alphanumeric(b)
+# {true} else {std::immutable_set::contains(...)}`, confirmed below by lowering
+# `std::ascii::is_alphanumeric(65)` itself and inspecting its own body's
 # IR shape. Laziness is therefore inherited from "if"'s own evaluator
 # (core::forms::op-if: it only ever descends into the taken branch),
 # never a property "or" could accidentally lose on its own -- the same
@@ -296,14 +296,14 @@ web::is_unreserved(55)} web-unreserved-alloc1.bot]
 # reachable only from raw core IR -- ordinary ".bot" identifiers cannot
 # spell its hyphen) in is_unreserved's own right-operand position, spliced
 # onto the real compiled ascii:: bindings hir::lower already produced.
-test web-unreserved-is-alphanumeric-lowers-to-if {ascii::is_alphanumeric(b) or SIDE-EFFECT lowers to an "if" whose else-branch (only) is SIDE-EFFECT} -body {
-    set path [makeFile {import ascii
-ascii::is_alphanumeric(65)} web-unreserved-ir-shape.bot]
+test web-unreserved-is-alphanumeric-lowers-to-if {std::ascii::is_alphanumeric(b) or SIDE-EFFECT lowers to an "if" whose else-branch (only) is SIDE-EFFECT} -body {
+    set path [makeFile {import std::ascii
+std::ascii::is_alphanumeric(65)} web-unreserved-ir-shape.bot]
     try {
         set hir [surface::readProgramFile $path -strict 0]
         set exprs [hir::lower $hir]
         set last [lindex $exprs end-1]
-        expr {[lindex $last 0] eq "bind" && [lindex $last 1] eq "ascii::is_alphanumeric"
+        expr {[lindex $last 0] eq "bind" && [lindex $last 1] eq "std::ascii::is_alphanumeric"
             && [lindex [lindex $last 2] 0] eq "block"
             && [lindex [lindex [lindex $last 2] 2] 0] eq "if"}
     } finally {
@@ -313,16 +313,16 @@ ascii::is_alphanumeric(65)} web-unreserved-ir-shape.bot]
 
 test web-unreserved-or-short-circuits {an "or" shaped exactly like is_unreserved's own never evaluates its right operand once the left is already true} -body {
     resetEffects
-    set path [makeFile {import ascii
-ascii::is_alphanumeric(65)} web-unreserved-shortcircuit.bot]
+    set path [makeFile {import std::ascii
+std::ascii::is_alphanumeric(65)} web-unreserved-shortcircuit.bot]
     try {
         set hir [surface::readProgramFile $path -strict 0]
         set binds [lrange [hir::lower $hir] 0 end-1]
         set trueByte {const 65}
         set nonMemberByte {const 45}
         set probe {block {} {call {ref test-log} {const 999}}}
-        set trueProgram [concat $binds [list [list if [list call {ref ascii::is_alphanumeric} $trueByte] {block {} {ref true}} $probe]]]
-        set nonMemberProgram [concat $binds [list [list if [list call {ref ascii::is_alphanumeric} $nonMemberByte] {block {} {ref true}} $probe]]]
+        set trueProgram [concat $binds [list [list if [list call {ref std::ascii::is_alphanumeric} $trueByte] {block {} {ref true}} $probe]]]
+        set nonMemberProgram [concat $binds [list [list if [list call {ref std::ascii::is_alphanumeric} $nonMemberByte] {block {} {ref true}} $probe]]]
         resetEffects
         set v1 [core::value::show [core::evalProgram $trueProgram]]
         set log1 $::testLog

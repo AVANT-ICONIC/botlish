@@ -460,7 +460,7 @@ including raw-eligible arithmetic and the StringRegion ops
 %10 = op strregiontclalpha %7 %8 %9 ; was: %7 = call 11 (rt_substr); %8 = callvalue
 ```
 
-`lex-strategy`'s `list::all?<List[str], native(is_tcl_alnum)>`:
+`lex-strategy`'s `std::list::all?<List[str], native(is_tcl_alnum)>`:
 `%9 = callvalue %1 %8; guardbool %9` → `%9 = op strtclalnum %8`.
 
 ## Generic fallback
@@ -518,7 +518,7 @@ function, before → after):
 | function | tagged `i*` ops | raw `ri*` ops |
 |---|---:|---:|
 | `domain?<generic>` | 5 → 2 | 0 → 3 |
-| `web::emailish?<str>` | 3 → 0 | 0 → 3 |
+| `std::web::emailish?<str>` | 3 → 0 | 0 → 3 |
 | `repeat_uri<generic>` (`uri-steady`) | 4 → 2 | 0 → 2 |
 | `scan_while`, `tld?`, `char_at` | unchanged | unchanged |
 
@@ -594,12 +594,12 @@ change on this path: no dispatch (`rt_call_value`, 225 Ir/char), no trampoline
 | program | function | before | after | classification |
 |---|---|:---:|:---:|---|
 | `refined-checks` | `scan_while` | 1 | 0 | exact (block + native), now direct |
-| `test-selection` | `list::any?` | 1 | 0 | exact, `callenv` |
-| `test-selection` | `list::none?` | 1 | 0 | exact, `callenv` |
-| `test-selection` | `list::find` | 1 | 0 | exact, `callenv` |
-| `lex-strategy` | `list::all?` | 1 | 0 | exact native, `strtclalnum` |
+| `test-selection` | `std::list::any?` | 1 | 0 | exact, `callenv` |
+| `test-selection` | `std::list::none?` | 1 | 0 | exact, `callenv` |
+| `test-selection` | `std::list::find` | 1 | 0 | exact, `callenv` |
+| `lex-strategy` | `std::list::all?` | 1 | 0 | exact native, `strtclalnum` |
 | `lex-strategy` | `classify` | 1 | 1 | **genuinely dynamic** (the callable is chosen at run time) |
-| `source-checks` | `list::find` | 1 | 0 | exact, `callenv` |
+| `source-checks` | `std::list::find` | 1 | 0 | exact, `callenv` |
 | `source-checks` | `classify_leading` | 1 | 1 | **genuinely dynamic** (List-held checks) |
 | total | | **8** | **2** | 6 exact sites repaired; 0 budget-fallback, 0 unsupported-exactness, 0 bugs |
 
@@ -609,11 +609,11 @@ The 17-program corpus has no other `callvalue` site.
 
 | program | Ir/run before | after | function-level change |
 |---|---:|---:|---|
-| `test-selection` | 35,913 | 33,274 (−7.3%) | `list::any?`, `list::none?`, `list::find`, `affected?`, `select_affected`, `first_affected` now keyed by `block(e55)`/`block(e94)`; 3 `callvalue` + 3 `guardbool` become 3 `callenv`; machine code −168 B |
-| `lex-strategy` | 314,302 | 312,757 (−0.5%) | `list::all?<List[str], native(is_tcl_alnum)>` has `strtclalnum`; −88 B |
-| `source-checks` | 73,594 | 73,385 (−0.3%) | `list::find<List[str], block(e114)>` is `callenv`; the dynamic `classify_leading` site is preserved; −56 B |
+| `test-selection` | 35,913 | 33,274 (−7.3%) | `std::list::any?`, `std::list::none?`, `std::list::find`, `affected?`, `select_affected`, `first_affected` now keyed by `block(e55)`/`block(e94)`; 3 `callvalue` + 3 `guardbool` become 3 `callenv`; machine code −168 B |
+| `lex-strategy` | 314,302 | 312,757 (−0.5%) | `std::list::all?<List[str], native(is_tcl_alnum)>` has `strtclalnum`; −88 B |
+| `source-checks` | 73,594 | 73,385 (−0.3%) | `std::list::find<List[str], block(e114)>` is `callenv`; the dynamic `classify_leading` site is preserved; −56 B |
 
-These improve with **no source change**: `list::any?` and friends are generic
+These improve with **no source change**: `std::list::any?` and friends are generic
 source; each call site has an exact target, so each gets exact code.
 
 ## Instance census
@@ -647,7 +647,7 @@ count under a different (exact) key.
 | source function | instances before → after (emitted) | distinct targets | machine code |
 |---|---|---|---|
 | `scan_while` (`refined-checks`) | 1 → 2 | `block(e239)` (`local_char?`), `native(is_tcl_alpha)` | 496 B → 440 + 456 = 896 B |
-| `list::any?`, `list::none?`, `list::find`, `list::all?` | 1 → 1 each | 1 each | key change only |
+| `std::list::any?`, `std::list::none?`, `std::list::find`, `std::list::all?` | 1 → 1 each | 1 each | key change only |
 
 The `used` count grows by two more for `refined-checks`: the generic `scan_while`
 entry and `local_char?`'s generic Block-value entry stay in the used set (a Block
@@ -689,7 +689,7 @@ byte-identical):
 | `scan_while<any, native(is_tcl_alpha)>` | — | 456 |
 | `local_char?<str>` | — | 176 |
 | `domain?<generic>` | 1,244 | 1,076 |
-| `web::emailish?<str>` | 601 | 379 |
+| `std::web::emailish?<str>` | 601 | 379 |
 
 Net +186 B in `refined-checks`: the extra `scan_while` and `local_char?<str>`
 instances, partly paid for by `emailish?` (−222) and `domain?` (−168), which

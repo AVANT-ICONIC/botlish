@@ -52,7 +52,7 @@ KILLED join-keeps-live -- a handle moved on one branch only is live after the jo
 KILLED step-call-moves -- a resume consumes the handle: its owner is moved by the call
     tests: killed (33 failed: co-affine-done-does-not-move, co-affine-loop, co-affine-move-never-forks, co-binding-forms, co-context-portable-io, co-deep-three-levels, ...)
     fuzz:  killed (17 of 25 programs disagree)
-KILLED done-consumes -- coroutine::done? consumes the handle: its owner is moved by the query (its ownership role, core/native.tcl's -ownership, is `move` instead of `observe`)
+KILLED done-consumes -- std::coroutine::done? consumes the handle: its owner is moved by the query (its ownership role, core/native.tcl's -ownership, is `move` instead of `observe`)
     tests: killed (8 failed: co-affine-done-does-not-move, co-deep-three-levels, co-empty-loop, co-fuzz-bounded, co-nir-operations, co-release-placement, ...)
     fuzz:  killed (12 of 25 programs disagree)
 KILLED handle-as-fn -- a handle is accepted where a structural Fn value is expected

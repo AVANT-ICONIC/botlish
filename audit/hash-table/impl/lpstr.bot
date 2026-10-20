@@ -7,8 +7,8 @@
 #
 # policy: 7/10
 # key-type: str
-import list
-import mutable_array
+import std::list
+import std::mutable_array
 
 struct Table:
     hashes: MutableArray[int]
@@ -34,7 +34,7 @@ fn slots_for(expected: int, cap: int) -> int:
     slots_for(expected, cap * 2)
 
 fn empty_table(cap: int) -> Table:
-    Table {hashes: mutable_array::create(cap, -1), keys: mutable_array::create(cap, ""), vals: mutable_array::create(cap, 0), meta: mutable_array::create(1, 0)}
+    Table {hashes: std::mutable_array::create(cap, -1), keys: std::mutable_array::create(cap, ""), vals: std::mutable_array::create(cap, 0), meta: std::mutable_array::create(1, 0)}
 
 fn fresh(expected: int) -> Table:
     empty_table(slots_for(expected, min_slots()))
@@ -174,9 +174,9 @@ fn drop(t: Table, key: str) -> Table errors IndexNotFound:
 
 # The table of KEYS[i] -> VALS[i], in order (a later duplicate's value wins).
 fn from_lists(keys: List[str], vals: List[int]) -> Table errors IndexNotFound:
-    n = list::length(keys)
+    n = std::list::length(keys)
     fn fill(t: Table, i: int) -> Table errors IndexNotFound:
         if i >= n:
             return t
-        fill(put(t, list::at(keys, i), list::at(vals, i)), i + 1)
+        fill(put(t, std::list::at(keys, i), std::list::at(vals, i)), i + 1)
     fill(fresh(n), 0)

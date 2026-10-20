@@ -1,7 +1,7 @@
 # Native result bounds and raw bitwise lowering
 
-`bench/refined-checks.bot`'s `high_nibble<int>` (lib/web.bot's
-`byte::nibble(byte::high_nibble(b))` inside `uri_escape_text`) compiled to a
+`bench/refined-checks.bot`'s `high_nibble<int>` (stdlib/web.bot's
+`std::byte::nibble(std::byte::high_nibble(b))` inside `uri_escape_text`) compiled to a
 tag test on `b` and an `rt_int_and` call, with a stack frame for the call's
 spills, although every byte it is ever given is at most 244:
 
@@ -24,7 +24,7 @@ lowering. This change fixes both.
 
 `b`'s entry range is the join of the arguments of `pct`'s call sites. All
 but one were bounded; the 4-byte UTF-8 lead byte `bit_or(240,
-v.shift_right(18))` was not, because `char::scalar_value` was registered
+v.shift_right(18))` was not, because `std::char::scalar_value` was registered
 `-result-range nonneg` and `hir/range.tcl` therefore knew `v` only as
 `[65536, +inf]`. `hir/completions.tcl` meanwhile knew `[0, 0x10FFFF]`, by a
 rule of its own keyed on the native's name, and a second such rule for
@@ -35,7 +35,7 @@ in that milestone; nothing about them was unsound for code generation.
 Now:
 
 * `-result-range` takes `{interval LO HI}` (core/native.tcl; stored in
-  decimal). `char::scalar_value` is registered `{interval 0 0x10FFFF}` and
+  decimal). `std::char::scalar_value` is registered `{interval 0 0x10FFFF}` and
   `hash` `{interval 0 2^61-1}` (its result is masked to 61 bits; it was
   `nonneg`).
 * `hir::range::RegisteredRange` is the one reader of the metadata. The range
@@ -88,7 +88,7 @@ instance whose range does not fit the small-Int representation:
 | before | 620 | 108 |
 | after | 520 | 88 |
 
-`char::scalar_value`'s bound accounts for 50 expressions and 14 parameters,
+`std::char::scalar_value`'s bound accounts for 50 expressions and 14 parameters,
 `mod`'s for 46 and 6, `hash`'s for 4 and 0.
 
 The committed disassembly corpus (audit/native-scalar-asm/, regenerated)
@@ -98,7 +98,7 @@ code); `hashtable` and `csv_records` grow by 9 and 10 instructions (22
 bytes each). The growth is section 1's `mod` bound, not section 2:
 `ht_probe_next`'s result is now provably small, so the probing loops keep
 `index` in a raw self-tail slot (native/lower.tcl's RawParams) and box it
-again for `mutable_array::at`, which takes a tagged index;
+again for `std::mutable_array::at`, which takes a tagged index;
 `ht_probe_next` itself shrinks (228 to 178 bytes, one safepoint fewer).
 
 Executed instructions (callgrind, deterministic; native driver, the same
@@ -114,12 +114,12 @@ binary for both NIRs):
 | `hashtable`, ... + 200,000 replaces | 233,972,618 | 235,914,748 | +0.83% |
 
 The hashtable cost is the extra boxing above; a raw index for
-`mutable_array::at`, or a raw `imod`, would remove it.
+`std::mutable_array::at`, or a raw `imod`, would remove it.
 
 ## 4. What still has no bound
 
 The remaining 520 expressions and 88 parameters are not native results:
-self-recursive loop indices whose bound is relational (`i < str::length(s)`),
+self-recursive loop indices whose bound is relational (`i < std::str::length(s)`),
 indices that step a few past the small-Int maximum because the collection
 length cap equals it, accumulators (bounded only by a trip count, or truly
 unbounded), values read from struct fields and mutable-array elements (no
@@ -135,7 +135,7 @@ and inputs that are simply unbounded.
   every backend at the small-Int boundaries, and the fold with raw operands.
 * `tests/range-completions-crosscheck.test`'s
   `xcheck-intentional-completions-rules` now pins the shared bounds as equal
-  (mod, char::scalar_value, hash) and the exact-codepoint rule as narrower.
+  (mod, std::char::scalar_value, hash) and the exact-codepoint rule as narrower.
 * Two tests used `mod(...)` as their unbounded value
   (`closed-call-weaker-caller-widens`, `rec-neg-unbounded-entry`); they use a
   recursive accumulator instead, with the same expected results.

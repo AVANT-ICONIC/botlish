@@ -26,8 +26,8 @@ source [file join [file dirname [file normalize [info script]]] helpers.tcl]
 # helper, and `poison`: a function that erases raise2 through the helper and
 # handles it, which puts E2 into the program's erased-callable contract.
 # Callables stored behind structural contracts, in every transport.
-set sccPrelude {import mutable_vector
-import mutable_array
+set sccPrelude {import std::mutable_vector
+import std::mutable_array
 
 error E1
 
@@ -103,7 +103,7 @@ fn run_all(jobs: List[Job]) -> List[int]:
         (j.run)()
 
 fn no_jobs() -> MutableVector[Job]:
-    mutable_vector::from_list([])
+    std::mutable_vector::from_list([])
 
 fn vector_first(v: MutableVector[Job]) -> int:
     j = v.at(0):
@@ -192,7 +192,7 @@ proc sccEffective {text name} {
 proc sccBlock {hir name} {
     foreach e [hirFind $hir bind] {
         set b [hir::get $hir $e binding]
-        if {[dict get $hir bindings $b name] in [list $name test::$name]} {
+        if {[dict get $hir bindings $b name] in [list $name std::test::$name]} {
             return [hir::get $hir $e value]
         }
     }
@@ -216,8 +216,8 @@ proc sccExcess {text} {
 # ---------------------------------------------------------------------------
 # The headline: the golden runner's registry, with an unrelated erasure.
 
-set sccRunner {import test
-import compiler
+set sccRunner {import std::test
+import std::compiler
 
 error E
 
@@ -230,24 +230,24 @@ fn call(f, x):
     f(x)
 
 fn register_poison(n: int):
-    fn body() errors compiler::CompilerError:
+    fn body() errors std::compiler::CompilerError:
         static compile:
             r = call(raise_e, n):
                 on E:
                     7
             r
-    test::value("poison", 7, body)
+    std::test::value("poison", 7, body)
 
 fn register_plain():
-    fn body() errors compiler::CompilerError:
+    fn body() errors std::compiler::CompilerError:
         static compile:
             3 + 4
-    test::value("plain", 7, body)
+    std::test::value("plain", 7, body)
 
-with context test::suite()
+with context std::test::suite()
 register_poison(1)
 register_plain()
-test::report()
+std::test::report()
 }
 
 test scc-golden-runner {the runner's (c.run)() through Fn{args: [], return: Match} is not charged an error an unrelated test erases: the suite compiles and runs on every backend} -constraints {
@@ -264,7 +264,7 @@ test scc-golden-runner-call-effective {the runner's call is charged nothing: its
         if {[dict get $node kind] ne "call" || [dict get $node target] ne ""} continue
         list [hir::types::show [hir::typeOf $hir [dict get $node callee]]] [hir::completions::effectiveErrorsOf $hir $e]
     }
-} -result {{{Fn{args: [], return: test::Match, errors: []}} {}}}
+} -result {{{Fn{args: [], return: std::test::Match, errors: []}} {}}}
 
 # ---------------------------------------------------------------------------
 # Every transport of a structural callable, with E2 in the erased contract.
@@ -336,7 +336,7 @@ test scc-payload-error {a payload-bearing contract error: handled with destructu
 # ---------------------------------------------------------------------------
 # Same short name, two identities: the contract names one.
 
-test scc-namespaced {a contract of a::Failed with b::Failed erased elsewhere: a::Failed only, never by short name} -body {
+test scc-namespaced {a contract of std::a::Failed with std::b::Failed erased elsewhere: std::a::Failed only, never by short name} -body {
     set lib {
 a.bot {error Failed
 
@@ -353,31 +353,31 @@ fn fails(x: int) -> int errors Failed:
     x
 }
 }
-    set text {import a
-import b
+    set text {import std::a
+import std::b
 
 fn call(f, x):
     f(x)
 
 fn poison(k: int) -> int:
-    call(b::fails, k):
-        on b::Failed:
+    call(std::b::fails, k):
+        on std::b::Failed:
             -2
 
 struct Job:
-    run: Fn{args: [int], return: int, errors: [a::Failed]}
+    run: Fn{args: [int], return: int, errors: [std::a::Failed]}
 
 fn h(j: Job, k: int) -> int:
     (j.run)(k):
-        on a::Failed:
+        on std::a::Failed:
             -1
 
 fn wrong(j: Job, k: int) -> int:
     (j.run)(k):
-        on b::Failed:
+        on std::b::Failed:
             -9
 
-[poison(2), h(Job {run: a::fails}, 1), h(Job {run: a::fails}, 2)]
+[poison(2), h(Job {run: std::a::fails}, 1), h(Job {run: std::a::fails}, 2)]
 }
     withPrivateLibrary {
         foreach {path body} $lib {
@@ -385,13 +385,13 @@ fn wrong(j: Job, k: int) -> int:
             puts -nonewline $ch $body
             close $ch
         }
-        set ok [string map {"fn wrong(j: Job, k: int) -> int:\n    (j.run)(k):\n        on b::Failed:\n            -9\n" ""} $text]
+        set ok [string map {"fn wrong(j: Job, k: int) -> int:\n    (j.run)(k):\n        on std::b::Failed:\n            -9\n" ""} $text]
         list [hir::completions::erasedErrorsOf [surface::compile $ok -warnings off]] \
             [sccEffective $ok h] [sccDiagnostics $text] [sourceAgree $ok]
     }
-} -result {b::Failed {handle a::Failed} {{UNHANDLED-ERROR wrong a::Failed}} {value {[-2, -1, 2]}}}
+} -result {std::b::Failed {handle std::a::Failed} {{UNHANDLED-ERROR wrong std::a::Failed}} {value {[-2, -1, 2]}}}
 
-test scc-namespaced-boundary {a closure carrying b::Failed given a contract of a::Failed: TYPE naming b::Failed (identities, never short names); carrying a::Failed it fits} -body {
+test scc-namespaced-boundary {a closure carrying std::b::Failed given a contract of std::a::Failed: TYPE naming std::b::Failed (identities, never short names); carrying std::a::Failed it fits} -body {
     set lib {
 a.bot {error Failed
 
@@ -408,11 +408,11 @@ fn fails(x) -> int errors Failed:
     0
 }
 }
-    set text {import a
-import b
+    set text {import std::a
+import std::b
 
 struct Job:
-    run: Fn{args: [int], return: any, errors: [a::Failed]}
+    run: Fn{args: [int], return: any, errors: [std::a::Failed]}
 
 fn wrap(f) -> Job:
     fn inner(x):
@@ -421,7 +421,7 @@ fn wrap(f) -> Job:
 
 fn h(j: Job, k: int):
     (j.run)(k):
-        on a::Failed:
+        on std::a::Failed:
             -1
 
 [h(wrap(GIVEN), 1), h(wrap(GIVEN), 3)]
@@ -432,9 +432,9 @@ fn h(j: Job, k: int):
             puts -nonewline $ch $body
             close $ch
         }
-        list [sccDiagnostics [string map {GIVEN b::fails} $text]] [sourceAgree [string map {GIVEN a::fails} $text]]
+        list [sccDiagnostics [string map {GIVEN std::b::fails} $text]] [sourceAgree [string map {GIVEN std::a::fails} $text]]
     }
-} -result {{{TYPE wrap b::Failed}} {value {[-1, 0]}}}
+} -result {{{TYPE wrap std::b::Failed}} {value {[-1, 0]}}}
 
 # ---------------------------------------------------------------------------
 # Three precisions side by side, in one program.
@@ -556,7 +556,7 @@ test scc-known-error-exact-unchanged {an exact always-failing call is still KNOW
 # ---------------------------------------------------------------------------
 # Ownership: affine error edges use the same boundary.
 
-set sccAffine {import coroutine
+set sccAffine {import std::coroutine
 
 struct Message:
     value: int
@@ -659,7 +659,7 @@ test scc-affine-native {natively: every coroutine released, none swept} -constra
 # the payload's ownership are the contract's -- a coroutine live across the
 # call is released on the Carry edge, the payload's stream is moved to the
 # handler or released with it -- and nothing for the unrelated erased E2.
-set sccAffinePayload {import coroutine
+set sccAffinePayload {import std::coroutine
 
 error E2
 
@@ -726,7 +726,7 @@ test scc-affine-payload-native {natively: every coroutine released, none swept} 
 # Coroutines: an error-bearing coroutine given to an untyped function no longer
 # reaches an unrelated contracted call.
 
-set sccCoroutine {import coroutine
+set sccCoroutine {import std::coroutine
 
 error Boom
 
@@ -786,7 +786,7 @@ test scc-coroutine-poison {an error-bearing coroutine given to an untyped functi
 # leaves the body that constructed it: the same boundary. Its root calls an
 # untyped callable passed to its construction (here an error-bearing one):
 # before this milestone the escaping handle let E escape at run time.
-set sccHandle {import coroutine
+set sccHandle {import std::coroutine
 
 error E
 
@@ -846,8 +846,8 @@ test scc-coroutine-boundary-local {a handle resumed only in the body that constr
 # ---------------------------------------------------------------------------
 # Natives calling a callable argument, recursion, and the uncontracted path.
 
-test scc-native-factory {mutable_array::generate with a factory of type Fn{..., errors: [E1]}: charged E1, never the erased E2} -body {
-    set text [sccProgram "fn gen(f: Fn{args: \[int\], return: int, errors: \[E1\]}) -> int:\n    a = mutable_array::generate(3, f):\n        on E1:\n            return -1\n    a.capacity()\n\n\[poison(2), gen(raise1)\]\n"]
+test scc-native-factory {std::mutable_array::generate with a factory of type Fn{..., errors: [E1]}: charged E1, never the erased E2} -body {
+    set text [sccProgram "fn gen(f: Fn{args: \[int\], return: int, errors: \[E1\]}) -> int:\n    a = std::mutable_array::generate(3, f):\n        on E1:\n            return -1\n    a.capacity()\n\n\[poison(2), gen(raise1)\]\n"]
     list [sccEffective $text gen] [sourceAgree $text]
 } -result {{handle E1} {value {[-2, -1]}}}
 

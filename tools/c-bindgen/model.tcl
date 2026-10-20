@@ -18,7 +18,7 @@
 #                   policy) or unsupported (a precise blocker)
 #   a type          a C integer scalar (an ABI alias, resolved through the
 #                   target's typedef chain and confirmed by the compiler),
-#                   ffi::c::Bool, an opaque pointee identity (one per C
+#                   std::ffi::c::Bool, an opaque pointee identity (one per C
 #                   tag, owned by the binding's ctypes module), a function
 #                   pointer type, or unsupported
 #   a constant      an exact integer of the C type the compiler gives it, or
@@ -31,7 +31,7 @@
 # unknown.
 
 namespace eval ::cbind::model {
-    # C integer spellings (the parser's canonical ones) -> ffi::c scalars.
+    # C integer spellings (the parser's canonical ones) -> std::ffi::c scalars.
     variable scalars {
         char Char {signed char} SChar {unsigned char} UChar short Short
         {unsigned short} UShort int Int {unsigned int} UInt long Long
@@ -211,7 +211,7 @@ proc ::cbind::model::Blocked {reason detail} {
 # The scalar of the C integer spelling SPELLING.
 proc ::cbind::model::ScalarOf {spelling} {
     variable scalars
-    if {[dict exists $scalars $spelling]} { return ffi::c::[dict get $scalars $spelling] }
+    if {[dict exists $scalars $spelling]} { return std::ffi::c::[dict get $scalars $spelling] }
     return ""
 }
 
@@ -262,9 +262,9 @@ proc ::cbind::model::Value {type role {via ""}} {
         }
         bool {
             if {![dict get $options bool]} {
-                return [Blocked unsupported-bool "C _Bool (without ffi::c::Bool)"]
+                return [Blocked unsupported-bool "C _Bool (without std::ffi::c::Bool)"]
             }
-            return [list ok ffi::c::Bool {bool}]
+            return [list ok std::ffi::c::Bool {bool}]
         }
         int {
             set s [ScalarOf [lindex $t 1]]
@@ -345,7 +345,7 @@ proc ::cbind::model::Pointer {pointee} {
         if {[lindex $final 0] eq "enum"} {
             set e [EnumScalar [lindex $final 1] $name]
             if {$e eq ""} { return [Blocked enum-unknown-abi "enum [lindex $final 1]"] }
-            return [list ok "ffi::c::Ptr\[[lindex $e 0]\]" {pointer enum}]
+            return [list ok "std::ffi::c::Ptr\[[lindex $e 0]\]" {pointer enum}]
         }
         if {[lindex $final 0] eq "typedef"} {
             return [Blocked unresolved-typedef "$name -> [lindex $final 1] (no declaration of it)"]
@@ -353,37 +353,37 @@ proc ::cbind::model::Pointer {pointee} {
         set t $final
     }
     switch -- [lindex $t 0] {
-        void { return [list ok "ffi::c::Ptr\[ffi::c::Void\]" {pointer void}] }
+        void { return [list ok "std::ffi::c::Ptr\[std::ffi::c::Void\]" {pointer void}] }
         int {
             set s [ScalarOf [lindex $t 1]]
             if {$s eq ""} { return [Blocked unsupported-type "a pointer to [lindex $t 1]"] }
             set features {pointer}
             if {[lindex $t 1] in {char {signed char} {unsigned char}}} { lappend features bytes }
-            return [list ok "ffi::c::Ptr\[$s\]" $features]
+            return [list ok "std::ffi::c::Ptr\[$s\]" $features]
         }
         bool {
             if {![dict get $options bool]} {
-                return [Blocked unsupported-bool "a pointer to C _Bool (without ffi::c::Bool)"]
+                return [Blocked unsupported-bool "a pointer to C _Bool (without std::ffi::c::Bool)"]
             }
-            return [list ok "ffi::c::Ptr\[ffi::c::Bool\]" {pointer bool}]
+            return [list ok "std::ffi::c::Ptr\[std::ffi::c::Bool\]" {pointer bool}]
         }
         enum {
             set e [EnumScalar [lindex $t 1] ""]
             if {$e eq ""} { return [Blocked enum-unknown-abi "enum [lindex $t 1]"] }
-            return [list ok "ffi::c::Ptr\[[lindex $e 0]\]" {pointer enum}]
+            return [list ok "std::ffi::c::Ptr\[[lindex $e 0]\]" {pointer enum}]
         }
         struct - union {
             set key "[lindex $t 0] [lindex $t 1]"
             set name [Identity $key]
             set features {pointer opaque}
             if {[dict get $::cbind::model::identities $key complete]} { lappend features view }
-            return [list ok "ffi::c::Ptr\[\x01$key\x02\]" $features]
+            return [list ok "std::ffi::c::Ptr\[\x01$key\x02\]" $features]
         }
         ptr {
             set inner [Pointer [lindex $t 1]]
             if {[lindex $inner 0] ne "ok"} { return $inner }
             lassign $inner _ text features
-            return [list ok "ffi::c::Ptr\[$text\]" [lsort -unique [concat pointer $features]]]
+            return [list ok "std::ffi::c::Ptr\[$text\]" [lsort -unique [concat pointer $features]]]
         }
         fn { return [FnPtr $t] }
         float {
@@ -396,7 +396,7 @@ proc ::cbind::model::Pointer {pointee} {
     }
 }
 
-# The Botlish ffi::c::FnPtr of the C function type FN (a callback).
+# The Botlish std::ffi::c::FnPtr of the C function type FN (a callback).
 proc ::cbind::model::FnPtr {fn} {
     lassign $fn _ result params flags
     set blockers {}
@@ -430,7 +430,7 @@ proc ::cbind::model::FnPtr {fn} {
         lappend features bool
     }
     if {$blockers ne ""} { return [list no $blockers] }
-    return [list ok "ffi::c::FnPtr\[Fn\{args: \[[join $args {, }]\], return: [lindex $r 1]\}\]" [lsort -unique $features]]
+    return [list ok "std::ffi::c::FnPtr\[Fn\{args: \[[join $args {, }]\], return: [lindex $r 1]\}\]" [lsort -unique $features]]
 }
 
 # The mapped signature of the function type TYPE: {ok PARAMS RESULT} with
@@ -1124,7 +1124,7 @@ proc ::cbind::model::ApplyContracts {entry manual evidence} {
     foreach p [dict get $entry params] {
         set cname [dict get $p cname]
         set pointer [expr {"pointer" in [dict get $p features]}]
-        set callback [expr {"callback" in [dict get $p features] && [string match ffi::c::FnPtr* [dict get $p type]]}]
+        set callback [expr {"callback" in [dict get $p features] && [string match std::ffi::c::FnPtr* [dict get $p type]]}]
         set access ""
         set escape ""
         set sources {}
@@ -1177,7 +1177,7 @@ proc ::cbind::model::ApplyContracts {entry manual evidence} {
     set result [dict get $entry result]
     set provenance ""
     set rsources {}
-    set resultPointer [expr {[string match ffi::c::Ptr* [dict get $result type]]}]
+    set resultPointer [expr {[string match std::ffi::c::Ptr* [dict get $result type]]}]
     if {[dict exists $manual result]} {
         set m [dict get $manual result]
         set f [dict get $m facts]
@@ -1264,7 +1264,7 @@ proc ::cbind::model::Constants {model} {
         set scalar ""
         set ctype int
         if {[string match anon@* $tag] && $via eq ""} {
-            set scalar ffi::c::Int
+            set scalar std::ffi::c::Int
         } else {
             set e [EnumScalar $tag $via]
             if {$e ne ""} { lassign $e scalar ctype }
@@ -1324,7 +1324,7 @@ proc ::cbind::model::Constants {model} {
                 } elseif {$ctype eq "_Bool"} {
                     if {[dict get $options bool]} {
                         dict set c status constant
-                        dict set c type ffi::c::Bool
+                        dict set c type std::ffi::c::Bool
                         dict set c ctype _Bool
                         dict set c value [expr {$word != 0}]
                     } else {
@@ -1334,7 +1334,7 @@ proc ::cbind::model::Constants {model} {
                     }
                 } elseif {$scalar ne ""} {
                     set signed [expr {$ctype in {{signed char} short int long {long long}} || ($ctype eq "char" && [dict get [core::cabi::scalarInfo Char $::cbind::model::target] signed])}]
-                    set width [dict get [core::cabi::scalarInfo [string range $scalar 8 end] $::cbind::model::target] bits]
+                    set width [dict get [core::cabi::scalarInfo [regsub {^std::ffi::c::} $scalar {}] $::cbind::model::target] bits]
                     set v $word
                     if {$signed && $word >= 2**($width - 1) && $word < 2**$width} {
                         set v [expr {$word - 2**$width}]

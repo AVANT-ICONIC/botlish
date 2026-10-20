@@ -46,7 +46,8 @@ The standard library, examples and benchmarks compile clean under these
 warnings, except the findings a reviewed manifest lists with the reason each
 stays open (audit/refactor/manifest.txt in a checkout). A library's warnings
 print for every program that loads it; of the shipped modules only
-lib/web.bot and lib/linux/path.bot carry any (ONE-CHAR-STRING-LITERAL).
+stdlib/web.bot and stdlib/linux/path.bot carry any
+(ONE-CHAR-STRING-LITERAL).
 
 == HELP LINES
 After the warnings of a compilation, the compiler prints one line per
@@ -336,12 +337,12 @@ related: concept.method-sugar concept.nomethod rule.method-resolution principle.
 docs: WARNINGS-METHOD-ELIGIBLE.md METHOD-SUGAR.md REFACTOR-WARNINGS-CLEAN.md
 
 == WHAT IT DETECTS
-A call written in functional form, `f(x, y)` or `list::at(xs, i)`, whose
-method spelling `x.f(y)` / `xs.at(i)` the compiler proves to parse and to
-resolve to the identical function, where the function is a declared named
+A call written in functional form, `f(x, y)` or `std::list::at(xs, i)`,
+whose method spelling `x.f(y)` / `xs.at(i)` the compiler proves to parse and
+to resolve to the identical function, where the function is a declared named
 function (not a function value) with at least two ordinary parameters, not
 declared `nomethod`. One warning per call:
-    f.bot:2:12: warning: call to `list::at` is eligible for method syntax
+    f.bot:2:12: warning: call to `std::list::at` is eligible for method syntax
         (METHOD-ELIGIBLE)
 
 == WHY IT MATTERS
@@ -362,8 +363,8 @@ the operation rather than its subject (a name, a position, a count, a
 destination) -- declare the function `nomethod fn`: that is a statement
 about its interface (method syntax becomes an error for it,
 NOMETHOD-CALL), not a way to silence a call site. The shipped library marks
-bit_and, bit_or, bit_xor (symmetric), mutable_array::copy (destination
-first) and mutable_array::create (length first).
+bit_and, bit_or, bit_xor (symmetric), std::mutable_array::copy (destination
+first) and std::mutable_array::create (length first).
 
 == EVIDENCE
 The compiler's own parser rule for what may precede a `.` (a name, a field
@@ -393,10 +394,10 @@ the author's decision, made once at the declaration with `nomethod`.
 
 == EXAMPLES
 @example accept
-import list
+import std::list
 
 fn first(xs: List[int]) -> int:
-    list::at(xs, 0):
+    std::list::at(xs, 0):
         on IndexNotFound:
             -1
 
@@ -407,7 +408,7 @@ first([7, 8])
 @end
 
 @example accept
-import list
+import std::list
 
 fn first(xs: List[int]) -> int:
     xs.at(0):
@@ -431,7 +432,7 @@ tile_name(0, 3)
 @end
 
 @example accept
-import str
+import std::str
 
 nomethod fn label(prefix: str, n: str) -> str:
     prefix.concat(n)
@@ -462,13 +463,13 @@ first exit:
         exits; a struct value names the parts (FIXED-ARITY-LIST-RETURN)
 
 == WHY IT MATTERS
-A result like `[field, index + 1]` is a pair whose parts the caller reads
-by position: `list::at(r, 0)` and `list::at(r, 1)`, each of which must
-handle IndexNotFound, none of which says what the part is, and all of which
-silently break when the order changes. Botlish deliberately gives Lists no
-positional destructuring (a List is a sequence) and gives structs named
-fields and destructuring: `{field, next} = scan(...)`. A struct result is
-checked by name at every use.
+A result like `[field, index + 1]` is a pair whose parts the caller reads by
+position: `std::list::at(r, 0)` and `std::list::at(r, 1)`, each of which
+must handle IndexNotFound, none of which says what the part is, and all of
+which silently break when the order changes. Botlish deliberately gives
+Lists no positional destructuring (a List is a sequence) and gives structs
+named fields and destructuring: `{field, next} = scan(...)`. A struct result
+is checked by name at every use.
 
 == RECOMMENDED PRACTICE
 Return a struct (an anonymous one is enough: `{field: f, next: i + 1}`) and
@@ -606,14 +607,14 @@ code: ONE-CHAR-STRING-LITERAL
 code: CORE SEMANTIC ONE-CHAR-STRING-LITERAL
 alias: one char string literal; one character string; single character string
 keywords: character, UnicodeChar, char literal, String, append_char, char_at
-related: principle.characters-not-strings concept.strings stdlib.str::append_char stdlib.str::char_at
+related: principle.characters-not-strings concept.strings stdlib.std::str::append_char stdlib.std::str::char_at
 docs: WARNINGS-ONE-CHAR-STRING-LITERAL.md ENCODE-UTF8-ALLOCATION-RESEARCH.md
 
 == WHAT IT DETECTS
 Every written String literal whose exact value is one character, measured as
-str::length measures (escapes resolved: "\n" and "\"" are one character; a
-supplementary-plane character is one; a letter plus a combining accent is
-two). One warning per literal, wherever it is written:
+std::str::length measures (escapes resolved: "\n" and "\"" are one
+character; a supplementary-plane character is one; a letter plus a combining
+accent is two). One warning per literal, wherever it is written:
     f.bot:5:21: warning: the String literal `"\""` is one character long; a
         single character is written as a character literal
         (ONE-CHAR-STRING-LITERAL)
@@ -646,7 +647,7 @@ better in general, and a symbolic sequence is not always a List: the choice
 follows whether the value is conceptually text.
 
 @example accept
-import str
+import std::str
 
 notation = "ULDR"
 moves = ['U', 'L', 'D', 'R']
@@ -673,7 +674,7 @@ literal and a brace initializer for a char array.
 
 == RECOMMENDED PRACTICE
 Write characters as character literals and use the character operations:
-str::char_at to read one, str::append_char to append one, ==
+std::str::char_at to read one, std::str::append_char to append one, ==
 between characters to compare. Where an API you call takes a String for
 what is really a character, the finding is about that API; changing the
 API (to take a UnicodeChar) is the response the warning is meant to prompt.
@@ -692,11 +693,11 @@ a character is meant. It is also deliberately not autofixable: replacing
 "x" by 'x' changes the program where the consumer takes a String (a type
 error, a run-time error, or a comparison of a String with a character that
 is silently false). The shipped library's open findings are of this kind
-(lib/web.bot, lib/linux/path.bot).
+(stdlib/web.bot, stdlib/linux/path.bot).
 
 == EXAMPLES
 @example accept
-import str
+import std::str
 
 fn quoted?(text: str, i: int) -> bool:
     s = text.substring(i, i + 1):
@@ -713,7 +714,7 @@ fn quoted?(text: str, i: int) -> bool:
 @end
 
 @example accept
-import str
+import std::str
 
 fn quoted?(text: str, i: int) -> bool:
     c = text.char_at(i):

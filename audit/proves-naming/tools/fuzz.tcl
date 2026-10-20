@@ -7,10 +7,10 @@
 #     renamed program)
 #
 # Each seed generates a program (fuzz.bot) and sometimes a module (pnm.bot,
-# in a private library directory) of functions whose naming facts are *known
-# by construction*. Every function gets a unique stem (its index is part of
-# it), and a name drawn from a pool that is conforming or violating by
-# construction:
+# in a private library directory: the module std::pnm) of functions whose
+# naming facts are *known by construction*. Every function gets a unique stem
+# (its index is part of it), and a name drawn from a pool that is conforming
+# or violating by construction:
 #
 #   predicate   a proves function, one `v: str` parameter, `-> bool`;
 #               sometimes with flags, sometimes fallible (`errors Bad`)
@@ -36,7 +36,7 @@
 # function of the *same* name, so hygiene renames the nested binding (NAME#N)
 # and only its written name can be checked. The bare `validate` and
 # `validate_` are used at most once per program (the module included: a
-# method call `s.validate()` with both `validate` and `pnm::validate` visible
+# method call `s.validate()` with both `validate` and `std::pnm::validate` visible
 # is ambiguous), so names are collision-free by construction. `x?y` does not lex (R2A2), so it
 # is not generated.
 #
@@ -199,9 +199,9 @@ proc generate {seed} {
         set err [expr {$placement eq "module" ? "MBad" : "Bad"}]
         # A module's error is named qualified outside the module (its uses are
         # in the program: ERROR-PAYLOADS.md, "Module-qualified error identity").
-        set useErr [expr {$placement eq "module" ? "pnm::MBad" : "Bad"}]
-        set need [expr {$placement eq "module" ? "pnm::needM" : "needE"}]
-        set callee [expr {$placement eq "module" ? "pnm::$N" : $N}]
+        set useErr [expr {$placement eq "module" ? "std::pnm::MBad" : "Bad"}]
+        set need [expr {$placement eq "module" ? "std::pnm::needM" : "needE"}]
+        set callee [expr {$placement eq "module" ? "std::pnm::$N" : $N}]
         set flags [expr {$role eq "proves" && $shape eq "predicate" && [chance 0.25]}]
         set fallible [expr {$role eq "proves" && ($shape eq "validator" ? [chance 0.7] : [chance 0.2])}]
         set ind [expr {$placement in {nested closure hygiene} ? "    " : ""}]
@@ -228,7 +228,7 @@ proc generate {seed} {
                 census [expr {$conforming ? "conforming" : "violating"}]$shape
                 if {!$conforming} {
                     dict set renames $i [renamed $shape $name]
-                    set label [expr {$placement eq "module" ? "pnm::" : ""}]
+                    set label [expr {$placement eq "module" ? "std::pnm::" : ""}]
                     lappend labels [list $label$name $label[renamed $shape $name]]
                 }
             }
@@ -279,7 +279,7 @@ proc generate {seed} {
             wrong/predicate - wrong/validator {
                 set rest [lrange [list {"x"} {"y"}] 0 [expr {$arity - 2}]]
                 # Method syntax: a functional call of a two-parameter
-                # function is METHOD-ELIGIBLE (a module member's too, pnm
+                # function is METHOD-ELIGIBLE (a module member's too, std::pnm
                 # being imported).
                 set wcall "s.$N\([join $rest {, }])"
                 if {$shape eq "predicate"} {
@@ -335,7 +335,7 @@ proc generate {seed} {
     # its `fn` line).
     set main {}
     if {$moduleFns ne ""} {
-        lappend main "import pnm"
+        lappend main "import std::pnm"
     }
     lappend main "refined type E = str" "error Bad" "fn needE(v: E) -> int:" "    1"
     foreach decl $top {

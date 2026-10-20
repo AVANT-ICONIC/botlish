@@ -226,7 +226,7 @@ proc hir::hygiene::qualifyModules {hirVar} {
 # qualifyModules's renames), `name` -- the qualified spelling -- is itself
 # the meaningful, canonical, provenance-carrying identity, so it is what
 # diagnostics and native symbol names should show (spec: "an agent seeing
-# web::uri_escape should be able to answer mechanically which file defines
+# std::web::uri_escape should be able to answer mechanically which file defines
 # this").
 proc hir::hygiene::RenameTo {hirVar b new {recordSpelling 0}} {
     upvar 1 $hirVar hir

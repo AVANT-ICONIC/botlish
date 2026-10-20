@@ -11,7 +11,7 @@ function 0 "<program>"
   depth reservation: no
   storage: native frame
 
-function 1 "byte::from_int"
+function 1 "std::byte::from_int"
   NIR regs: 9
   raw regs: 2
   managed-capable regs: 7
@@ -24,7 +24,7 @@ function 1 "byte::from_int"
   depth reservation: no
   storage: native frame
 
-function 2 "ascii::is_digit"
+function 2 "std::ascii::is_digit"
   NIR regs: 13
   raw regs: 3
   managed-capable regs: 10
@@ -37,7 +37,7 @@ function 2 "ascii::is_digit"
   depth reservation: no
   storage: native frame
 
-function 3 "ascii::is_upper"
+function 3 "std::ascii::is_upper"
   NIR regs: 13
   raw regs: 3
   managed-capable regs: 10
@@ -50,7 +50,7 @@ function 3 "ascii::is_upper"
   depth reservation: no
   storage: native frame
 
-function 4 "ascii::is_lower"
+function 4 "std::ascii::is_lower"
   NIR regs: 13
   raw regs: 3
   managed-capable regs: 10
@@ -63,7 +63,7 @@ function 4 "ascii::is_lower"
   depth reservation: no
   storage: native frame
 
-function 5 "ascii::is_alphabetic"
+function 5 "std::ascii::is_alphabetic"
   NIR regs: 8
   raw regs: 0
   managed-capable regs: 8
@@ -76,7 +76,7 @@ function 5 "ascii::is_alphabetic"
   depth reservation: no
   storage: native frame
 
-function 6 "ascii::is_alphanumeric"
+function 6 "std::ascii::is_alphanumeric"
   NIR regs: 8
   raw regs: 0
   managed-capable regs: 8

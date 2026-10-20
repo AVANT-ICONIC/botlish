@@ -1,26 +1,26 @@
-# native-uri-escape.test -- str::encode_utf8 (core/strings.tcl, general: a
+# native-uri-escape.test -- std::str::encode_utf8 (core/strings.tcl, general: a
 # String's UTF-8 encoding as a List of Int, one per byte) and
-# web::uri_escape_text / web::uri_query_value? (lib/web.bot), the ordinary
+# std::web::uri_escape_text / std::web::uri_query_value? (stdlib/web.bot), the ordinary
 # Botlish percent-encoding algorithm and the proof-producing predicate of the
-# web::UriQueryValue refinement. See NATIVE-URI-ESCAPE.md for the algorithm's
+# std::web::UriQueryValue refinement. See NATIVE-URI-ESCAPE.md for the algorithm's
 # history and REFINEMENT-VALUES.md for the refinement.
 #
-# Both read their argument one character at a time with str::char_at
-# (tests/str-char-at.test), never through str::encode_utf8's List; the
+# Both read their argument one character at a time with std::str::char_at
+# (tests/str-char-at.test), never through std::str::encode_utf8's List; the
 # allocation and NIR pins below hold them to that
 # (ENCODE-UTF8-ALLOCATION-RESEARCH.md).
 #
 # Everything is checked four-way (interp, compile, cranelift-generic,
 # cranelift): a refined value is its carrier, so no backend may differ. The
 # escaping is also checked against an independent Tcl reference (the former
-# lib/web.tcl uriEscape implementation, uriEscapeReference below).
+# stdlib/web.tcl uriEscape implementation, uriEscapeReference below).
 
 source [file join [file dirname [file normalize [info script]]] helpers.tcl]
 
 set parityBackends {interp compile cranelift-generic cranelift}
 
 proc encodeUtf8Program {s} {
-    return [list [list call {ref str::encode_utf8} [list const str $s]]]
+    return [list [list call {ref std::str::encode_utf8} [list const str $s]]]
 }
 
 # S as a Botlish string literal.
@@ -43,22 +43,22 @@ proc uriEscapeReference {s} {
     return $escaped
 }
 
-# The text web::uri_escape_text(S) has on every backend (a Tcl error if they
+# The text std::web::uri_escape_text(S) has on every backend (a Tcl error if they
 # disagree, or if it differs from the reference).
 proc escapeText {s} {
-    set outcome [sourceAgree "import web\nweb::uri_escape_text([botString $s])\n"]
+    set outcome [sourceAgree "import std::web\nstd::web::uri_escape_text([botString $s])\n"]
     if {[lindex $outcome 0] ne "value"} {
-        error "web::uri_escape_text raised: $outcome"
+        error "std::web::uri_escape_text raised: $outcome"
     }
     set text [string range [lindex $outcome 1] 1 end-1]
     if {$text ne [uriEscapeReference $s]} {
-        error "web::uri_escape_text gives $text, the reference [uriEscapeReference $s]"
+        error "std::web::uri_escape_text gives $text, the reference [uriEscapeReference $s]"
     }
     return $text
 }
 
 # ---------------------------------------------------------------------------
-# str::encode_utf8: four-way value parity.
+# std::str::encode_utf8: four-way value parity.
 
 foreach {name s expect} {
     empty        {}      {[]}
@@ -68,7 +68,7 @@ foreach {name s expect} {
     astral       😀      {[240, 159, 152, 128]}
     mixed        {a b}   {[97, 32, 98]}
 } {
-    test native-uri-escape-utf8-$name "str::encode_utf8($s) agrees across interp/compile/cranelift-generic/cranelift" -body {
+    test native-uri-escape-utf8-$name "std::str::encode_utf8($s) agrees across interp/compile/cranelift-generic/cranelift" -body {
         set exprs [encodeUtf8Program $s]
         set shown [lmap b $::parityBackends {lindex [outcomeUnder $b $exprs] 1}]
         if {[llength [lsort -unique $shown]] != 1} {
@@ -79,7 +79,7 @@ foreach {name s expect} {
 }
 
 # ---------------------------------------------------------------------------
-# web::uri_escape_text: text parity across all four backends and with the
+# std::web::uri_escape_text: text parity across all four backends and with the
 # reference (RFC 3986 unreserved set: A-Za-z0-9._~-; everything else
 # percent-encoded, byte by byte).
 
@@ -95,13 +95,13 @@ foreach {name s expect} {
     three-byte    世界                  %E4%B8%96%E7%95%8C
     escape-like   %41%4a                %2541%254a
 } {
-    test native-uri-escape-text-$name "web::uri_escape_text($s) text agrees across interp/compile/cranelift-generic/cranelift" -body {
+    test native-uri-escape-text-$name "std::web::uri_escape_text($s) text agrees across interp/compile/cranelift-generic/cranelift" -body {
         escapeText $s
     } -result $expect
 }
 
 # ---------------------------------------------------------------------------
-# web::uri_query_value?: the structural proposition of web::UriQueryValue --
+# std::web::uri_query_value?: the structural proposition of std::web::UriQueryValue --
 # unreserved characters and "%XX" triplets of uppercase hex digits only.
 # Every escaped text passes; text that is not safe to embed does not.
 
@@ -122,29 +122,29 @@ foreach {name s expect} {
     hex-at-end         a%4            false
     escaped-percent    %25            true
 } {
-    test native-uri-escape-query-value-$name "web::uri_query_value?($s) is $expect on every backend" -body {
-        sourceAgree "import web\nweb::uri_query_value?([botString $s])\n"
+    test native-uri-escape-query-value-$name "std::web::uri_query_value?($s) is $expect on every backend" -body {
+        sourceAgree "import std::web\nstd::web::uri_query_value?([botString $s])\n"
     } -result [list value $expect]
 }
 
-test native-uri-escape-escaped-is-query-value {web::uri_query_value? accepts what web::uri_escape_text produces, on every backend} -body {
-    sourceAgree {import web
+test native-uri-escape-escaped-is-query-value {std::web::uri_query_value? accepts what std::web::uri_escape_text produces, on every backend} -body {
+    sourceAgree {import std::web
 
 texts = ["", "a b", "someone@example.com", "é", "😀", "50%", "a&b=c", "déjà vu"]
 loop t in texts:
-    web::uri_query_value?(web::uri_escape_text(t))
+    std::web::uri_query_value?(std::web::uri_escape_text(t))
 }
 } -result {value {[true, true, true, true, true, true, true, true]}}
 
-test native-uri-escape-query-value-repeatable {web::uri_query_value? is proven repeatable} -body {
-    set hir [surface::compile "import web\nweb::uri_query_value?(\"a\")\n" -warnings off]
-    set binding [hir::get $hir [lindex [hirFind $hir ref web::uri_query_value?] 0] binding]
+test native-uri-escape-query-value-repeatable {std::web::uri_query_value? is proven repeatable} -body {
+    set hir [surface::compile "import std::web\nstd::web::uri_query_value?(\"a\")\n" -warnings off]
+    set binding [hir::get $hir [lindex [hirFind $hir ref std::web::uri_query_value?] 0] binding]
     hir::repeatable::explain $hir [hir::get $hir [dict get [hir::binding $hir $binding] declaredBy] value]
 } -result {}
 
-test native-uri-escape-text-repeatable {web::uri_escape_text is proven repeatable} -body {
-    set hir [surface::compile "import web\nweb::uri_escape_text(\"a\")\n" -warnings off]
-    set binding [hir::get $hir [lindex [hirFind $hir ref web::uri_escape_text] 0] binding]
+test native-uri-escape-text-repeatable {std::web::uri_escape_text is proven repeatable} -body {
+    set hir [surface::compile "import std::web\nstd::web::uri_escape_text(\"a\")\n" -warnings off]
+    set binding [hir::get $hir [lindex [hirFind $hir ref std::web::uri_escape_text] 0] binding]
     hir::repeatable::explain $hir [hir::get $hir [dict get [hir::binding $hir $binding] declaredBy] value]
 } -result {}
 
@@ -173,40 +173,40 @@ proc nirBody {text name} {
 
 # {LISTS STRINGS} native allocations of a program that runs CALL N times.
 proc allocationsOfRepeated {call n} {
-    set hir [surface::compile "import str\nimport web\n\nfn go(i, acc):\n    if i >= $n:\n        return acc\n    hit = if $call:\n        1\n    else:\n        0\n    go(i + 1, acc + hit)\n\ngo(0, 0)\n" -warnings off]
+    set hir [surface::compile "import std::str\nimport std::web\n\nfn go(i, acc):\n    if i >= $n:\n        return acc\n    hit = if $call:\n        1\n    else:\n        0\n    go(i + 1, acc + hit)\n\ngo(0, 0)\n" -warnings off]
     set report [native::allocationReport $hir summary]
     return [list [dict get $report byKind List allocations] [dict get $report byKind String allocations]]
 }
 
-test native-uri-escape-query-value-allocates-nothing-per-call {web::uri_query_value? allocates nothing per call} -body {
-    set call {web::uri_query_value?("hello%20%E4%B8%96%E7%95%8C%3F")}
+test native-uri-escape-query-value-allocates-nothing-per-call {std::web::uri_query_value? allocates nothing per call} -body {
+    set call {std::web::uri_query_value?("hello%20%E4%B8%96%E7%95%8C%3F")}
     expr {[allocationsOfRepeated $call 10] eq [allocationsOfRepeated $call 50]}
 } -result 1
 
-test native-uri-escape-text-allocates-no-list {web::uri_escape_text allocates no List per call or per character} -body {
-    set call {str::length(web::uri_escape_text("a b+c? café 世界")) > 0}
+test native-uri-escape-text-allocates-no-list {std::web::uri_escape_text allocates no List per call or per character} -body {
+    set call {std::str::length(std::web::uri_escape_text("a b+c? café 世界")) > 0}
     lassign [allocationsOfRepeated $call 10] lists10
     lassign [allocationsOfRepeated $call 50] lists50
     expr {$lists10 == $lists50}
 } -result 1
 
 test native-uri-escape-nir-reads-characters {the predicate and the escaping read characters with strcharatproven, never a List} -body {
-    set text [native::nir [surface::compile "import web\n\[web::uri_query_value?(\"a\"), web::uri_escape_text(\"a\")\]\n" -warnings off]]
-    lmap name {valid_from? upper_hex? esc_from web::uri_query_value?} {
+    set text [native::nir [surface::compile "import std::web\n\[std::web::uri_query_value?(\"a\"), std::web::uri_escape_text(\"a\")\]\n" -warnings off]]
+    lmap name {valid_from? upper_hex? esc_from std::web::uri_query_value?} {
         set body [nirBody $text $name]
         list $name [regexp {op strcharatproven } $body] \
             [regexp {op (strutf8bytes|listlen|listget|listgetproven|strcharat) } $body]
     }
-} -result {{valid_from? 1 0} {upper_hex? 1 0} {esc_from 1 0} {web::uri_query_value? 0 0}}
+} -result {{valid_from? 1 0} {upper_hex? 1 0} {esc_from 1 0} {std::web::uri_query_value? 0 0}}
 
 # ---------------------------------------------------------------------------
-# GC stress: str::encode_utf8 and the escaping both allocate on the native
+# GC stress: std::str::encode_utf8 and the escaping both allocate on the native
 # backend (a List, and a chain of Strings/Lists respectively).
 
-test native-uri-escape-gc-stress {web::uri_escape_text survives a collection forced before every allocation} -body {
+test native-uri-escape-gc-stress {std::web::uri_escape_text survives a collection forced before every allocation} -body {
     set ::env(BOTLISH_NATIVE_GC_STRESS) 1
     try {
-        lrange [outcomeUnderHir cranelift [surface::compile "import web\nweb::uri_query_value?(web::uri_escape_text(\"a b c déjà vu 😀\"))\n" -warnings off]] 0 1
+        lrange [outcomeUnderHir cranelift [surface::compile "import std::web\nstd::web::uri_query_value?(std::web::uri_escape_text(\"a b c déjà vu 😀\"))\n" -warnings off]] 0 1
     } finally {
         unset ::env(BOTLISH_NATIVE_GC_STRESS)
     }

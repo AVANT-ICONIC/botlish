@@ -218,11 +218,11 @@ test me-one-param-via-module {a one-parameter module function and a one-paramete
     withModules {m.bot {fn one(a):
     a
 }} {
-        list [codes {import m
-import str
+        list [codes {import std::m
+import std::str
 fn t(x, s):
-    m::one(x)
-    str::length(s)
+    std::m::one(x)
+    std::str::length(s)
     0}]
     }
 } -result {{}}
@@ -473,11 +473,11 @@ test me-form-named-struct {a named struct construction is a receiver} -body {
 test me-form-qualified-name {a module-qualified name is a receiver} -body {
     withModules {m.bot {value = 7
 }} {
-        formRow "import m
+        formRow "import std::m
 ${::prelude}fn t(x):
-    return two(m::value, x)" "import m
+    return two(std::m::value, x)" "import std::m
 ${::prelude}fn t(x):
-    return m::value.two(x)"
+    return std::m::value.two(x)"
     }
 } -result {METHOD-ELIGIBLE {}}
 
@@ -576,11 +576,11 @@ test me-qualified-callee {mod::f(x, y) warns in the importing file when its suga
     withModules {m.bot {fn two(a, b):
     a
 }} {
-        set program {import m
+        set program {import std::m
 fn t(x):
-    return m::two(x, 1)
+    return std::m::two(x, 1)
 t(5)}
-        list [where $program] [roundTrip $program {import m
+        list [where $program] [roundTrip $program {import std::m
 fn t(x):
     return x.two(1)
 t(5)}]
@@ -591,35 +591,35 @@ test me-qualified-callee-message-names-qualified-spelling {the message names the
     withModules {m.bot {fn two(a, b):
     a
 }} {
-        shown {import m
+        shown {import std::m
 fn t(x):
-    return m::two(x, 1)}
+    return std::m::two(x, 1)}
     }
-} -result {{call to `m::two` is eligible for method syntax @ 3:12}}
+} -result {{call to `std::m::two` is eligible for method syntax @ 3:12}}
 
 test me-intrinsic-callee {a 2-parameter intrinsic warns when its namespace is imported} -body {
-    set program {import str
+    set program {import std::str
 fn t(s):
-    return str::concat(s, "x")
+    return std::str::concat(s, "x")
 t("a")}
-    list [where $program] [roundTrip $program {import str
+    list [where $program] [roundTrip $program {import std::str
 fn t(s):
     return s.concat("x")
 t("a")}]
 } -result {3:12 {}}
 
 test me-intrinsic-one-param-silent {a 1-parameter intrinsic never warns} -body {
-    codes {import str
+    codes {import std::str
 fn t(s):
-    return str::length(s)}
+    return std::str::length(s)}
 } -result {}
 
-test me-imported-two-param-intrinsic-append {list::append(xs, v) warns} -body {
-    set program {import list
+test me-imported-two-param-intrinsic-append {std::list::append(xs, v) warns} -body {
+    set program {import std::list
 fn t(xs):
-    return list::append(xs, 1)
+    return std::list::append(xs, 1)
 t([1])}
-    list [where $program] [roundTrip $program {import list
+    list [where $program] [roundTrip $program {import std::list
 fn t(xs):
     return xs.append(1)
 t([1])}]
@@ -634,10 +634,10 @@ fn scan(n):
         helper(i, 1)
     0
 }} {
-        set path [makeFile {import m
+        set path [makeFile {import std::m
 fn t(x):
-    return m::helper(x, 1)
-m::scan(3)
+    return std::m::helper(x, 1)
+std::m::scan(3)
 } me-main.bot]
         try {
             lsort [lmap l [fileWarnings $path $::core::libraryDir default] {regsub {^.*/} $l {}}]
@@ -656,8 +656,8 @@ fn scan(n):
         helper(i, 1)
     0
 }} {
-        set path [makeFile {import m
-m::scan(3)
+        set path [makeFile {import std::m
+std::m::scan(3)
 } me-main2.bot]
         try {
             fileWarnings $path $::core::libraryDir default
@@ -710,11 +710,11 @@ test me-two-candidates-silent {a function and another visible function of the sa
     withModules {m.bot {fn two(a, b):
     a
 }} {
-        codes {import m
+        codes {import std::m
 fn two(a, b):
     a
 fn t(x):
-    m::two(x, 1)
+    std::m::two(x, 1)
     two(x, 1)
     0}
     }
@@ -726,11 +726,11 @@ test me-two-imported-candidates-silent {two imported namespaces with a member of
 } n.bot {fn two(a, b):
     b
 }} {
-        codes {import m
-import n
+        codes {import std::m
+import std::n
 fn t(x):
-    m::two(x, 1)
-    n::two(x, 1)
+    std::m::two(x, 1)
+    std::n::two(x, 1)
     0}
     }
 } -result {}
@@ -741,8 +741,8 @@ test me-two-candidates-sugar-is-ambiguous {...and the language really cannot say
 } n.bot {fn two(a, b):
     b
 }} {
-        lindex [rejection {import m
-import n
+        lindex [rejection {import std::m
+import std::n
 fn t(x):
     x.two(1)
 t(5)} off] 0
@@ -750,13 +750,13 @@ t(5)} off] 0
 } -match glob -result {*AMBIGUOUS-METHOD-CALL}
 
 test me-alias-of-the-same-function-is-one-candidate {an alias binding of an imported function adds no second candidate} -body {
-    set program {import list
-append = list::append
+    set program {import std::list
+append = std::list::append
 fn t(xs):
-    return list::append(xs, 1)
+    return std::list::append(xs, 1)
 t([1])}
-    list [where $program] [roundTrip $program {import list
-append = list::append
+    list [where $program] [roundTrip $program {import std::list
+append = std::list::append
 fn t(xs):
     return xs.append(1)
 t([1])}]
@@ -978,8 +978,8 @@ test me-provenance-records-namespace {a written call records the namespace of th
 fn go(n):
     helper(n, 1)
 }} {
-        set hir [surface::compile {import m
-m::go(1)
+        set hir [surface::compile {import std::m
+std::m::go(1)
 fn t(x):
     two = 1
     x} t.bot -warnings off]
@@ -991,7 +991,7 @@ fn t(x):
         }
         lsort -unique $namespaces
     }
-} -result {{} m}
+} -result {{} std::m}
 
 test me-hir-identical-across-modes {the HIR, with its provenance marker, is the same under off and default} -body {
     set program "${::prelude}fn t(x):
@@ -1122,15 +1122,15 @@ test me-nomethod-via-module-import {a nomethod function imported from a module b
 fn plain(a, b):
     a
 }} {
-        list [codes {import m
+        list [codes {import std::m
 fn t(x):
-    m::atan2(x, 1)
-    0}] [lindex [rejection {import m
+    std::m::atan2(x, 1)
+    0}] [lindex [rejection {import std::m
 fn t(x):
     x.atan2(1)
-    0} off] 0] [codes {import m
+    0} off] 0] [codes {import std::m
 fn t(x):
-    m::plain(x, 1)
+    std::m::plain(x, 1)
     0}]
     }
 } -result {{} {CORE SEMANTIC NOMETHOD-CALL} METHOD-ELIGIBLE}
@@ -1144,8 +1144,8 @@ test me-nomethod-is-not-a-candidate-so-another-function-wins {sugar skips a nome
     withModules {m.bot {fn atan2(y, x):
     y - x
 }} {
-        list [lindex [rejection "import m
-[nomethodDecl]5.atan2(1)" off] 0] [core::formatValue [core::evalProgram [hir::lower [compileWith "import m
+        list [lindex [rejection "import std::m
+[nomethodDecl]5.atan2(1)" off] 0] [core::formatValue [core::evalProgram [hir::lower [compileWith "import std::m
 [nomethodDecl]5.atan2(1)" off]]]]
     }
 } -result {compiled 4}
@@ -1237,7 +1237,7 @@ test me-nomethod-lowers-to-a-marked-block {the lowered syntax marks the block, n
 
 # The builtin registry carries the flag too.
 
-test me-nomethod-native-default-off {exactly the five natives the warning-driven refactor marked are nomethod (REFACTOR-WARNINGS-CLEAN.md, P1), and the binary-layout operations whose first argument is a static layout operand, never a receiver value, or that are internal (binary::parse, the layout queries, binary#emit: BINARY-LAYOUT.md; binary::native::view, binary#load, binary#view_field: NATIVE-LAYOUT-VIEWS.md; binary::native::edit, binary::store, binary::write, binary::write_foreign, whose field operand is static: NATIVE-LAYOUT-WRITES.md; binary::element, binary::store_element and their elaborated forms with binary#load_array, which take a live array and an index like the other native-memory operations: FIXED-LAYOUT-ARRAYS.md; binary::read, whose field operand is static: LAYOUT-UNIONS.md); every other shipped native takes method syntax} -body {
+test me-nomethod-native-default-off {exactly the five natives the warning-driven refactor marked are nomethod (REFACTOR-WARNINGS-CLEAN.md, P1), and the binary-layout operations whose first argument is a static layout operand, never a receiver value, or that are internal (std::binary::parse, the layout queries, binary#emit: BINARY-LAYOUT.md; std::binary::native::view, binary#load, binary#view_field: NATIVE-LAYOUT-VIEWS.md; std::binary::native::edit, std::binary::store, std::binary::write, std::binary::write_foreign, whose field operand is static: NATIVE-LAYOUT-WRITES.md; std::binary::element, std::binary::store_element and their elaborated forms with binary#load_array, which take a live array and an index like the other native-memory operations: FIXED-LAYOUT-ARRAYS.md; std::binary::read, whose field operand is static: LAYOUT-UNIONS.md); every other shipped native takes method syntax} -body {
     set marked {}
     foreach name [core::native::names] {
         if {[dict get [core::native::metadata $name] nomethod]} {
@@ -1245,7 +1245,7 @@ test me-nomethod-native-default-off {exactly the five natives the warning-driven
         }
     }
     lsort $marked
-} -result {binary#element binary#emit binary#load binary#load_array binary#store_element binary#view_field binary::element binary::layout_alignment binary::layout_length binary::native::edit binary::native::view binary::parse binary::read binary::store binary::store_element binary::write binary::write_foreign bit_and bit_or bit_xor mutable_array::copy mutable_array::create}
+} -result {binary#element binary#emit binary#load binary#load_array binary#store_element binary#view_field bit_and bit_or bit_xor std::binary::element std::binary::layout_alignment std::binary::layout_length std::binary::native::edit std::binary::native::view std::binary::parse std::binary::read std::binary::store std::binary::store_element std::binary::write std::binary::write_foreign std::mutable_array::copy std::mutable_array::create}
 
 # The shipped markings (REFACTOR-WARNINGS-CLEAN.md, P1), one test per marked
 # function: the receiver form is NOMETHOD-CALL with the pinned message, the
@@ -1274,50 +1274,50 @@ test me-nomethod-shipped-shifts-stay-eligible {the shifts are not marked: a shif
     list [codes "fn t(v):\n    return shift_right(v, 6)\nt(640)"] [rejection "fn t(v):\n    return v.shift_left(1)\nt(640)" off]
 } -result {METHOD-ELIGIBLE compiled}
 
-test me-nomethod-shipped-mutable-array-create {mutable_array::create is nomethod: its first argument is the new array's length, not a receiver} -body {
-    shippedNomethod "import mutable_array\nfn t(n):\n    return mutable_array::create(n, 7).capacity()\nt(2)" \
-        "import mutable_array\nfn t(n):\n    return n.create(7).capacity()\nt(2)"
-} -result {{{CORE SEMANTIC NOMETHOD-CALL} {t.bot:3:14: `mutable_array::create` is declared nomethod and cannot be called with method syntax; call it as mutable_array::create(receiver, ...)}} {} 2}
+test me-nomethod-shipped-mutable-array-create {std::mutable_array::create is nomethod: its first argument is the new array's length, not a receiver} -body {
+    shippedNomethod "import std::mutable_array\nfn t(n):\n    return std::mutable_array::create(n, 7).capacity()\nt(2)" \
+        "import std::mutable_array\nfn t(n):\n    return n.create(7).capacity()\nt(2)"
+} -result {{{CORE SEMANTIC NOMETHOD-CALL} {t.bot:3:14: `std::mutable_array::create` is declared nomethod and cannot be called with method syntax; call it as std::mutable_array::create(receiver, ...)}} {} 2}
 
-test me-nomethod-shipped-mutable-array-copy {mutable_array::copy is nomethod: its first argument is the copy's destination, so `dst.copy(...)` would read as copying it} -body {
-    set decls "import mutable_array\nfn t() errors LowerUnderrun, UpperOverrun:\n    a = mutable_array::from_list(\[1, 2, 3\])\n    b = mutable_array::from_list(\[8, 9\])\n"
+test me-nomethod-shipped-mutable-array-copy {std::mutable_array::copy is nomethod: its first argument is the copy's destination, so `dst.copy(...)` would read as copying it} -body {
+    set decls "import std::mutable_array\nfn t() errors LowerUnderrun, UpperOverrun:\n    a = std::mutable_array::from_list(\[1, 2, 3\])\n    b = std::mutable_array::from_list(\[8, 9\])\n"
     set handled "\nr = t():\n    on LowerUnderrun:\n        \[\]\n    on UpperOverrun:\n        \[\]\nr"
-    shippedNomethod "${decls}    mutable_array::copy(a, 1, b, 0, 2)\n    a.freeze(3)$handled" \
+    shippedNomethod "${decls}    std::mutable_array::copy(a, 1, b, 0, 2)\n    a.freeze(3)$handled" \
         "${decls}    a.copy(1, b, 0, 2)\n    a.freeze(3)$handled"
-} -result {{{CORE SEMANTIC NOMETHOD-CALL} {t.bot:5:7: `mutable_array::copy` is declared nomethod and cannot be called with method syntax; call it as mutable_array::copy(receiver, ...)}} {} {[1, 8, 9]}}
+} -result {{{CORE SEMANTIC NOMETHOD-CALL} {t.bot:5:7: `std::mutable_array::copy` is declared nomethod and cannot be called with method syntax; call it as std::mutable_array::copy(receiver, ...)}} {} {[1, 8, 9]}}
 
 test me-nomethod-native-flag-declarable {a native registered -nomethod 1 is skipped by sugar, callable functionally, and never reported} -body {
-    core::native::register list::probe_nomethod -arity 2 -nomethod 1 \
+    core::native::register std::list::probe_nomethod -arity 2 -nomethod 1 \
         -impl {apply {{a b} {return $a}}} -result-type any
     try {
-        set meta [dict get [core::native::metadata list::probe_nomethod] nomethod]
-        set functional {import list
+        set meta [dict get [core::native::metadata std::list::probe_nomethod] nomethod]
+        set functional {import std::list
 fn t(xs):
-    return list::probe_nomethod(xs, 1)}
-        set sugared {import list
+    return std::list::probe_nomethod(xs, 1)}
+        set sugared {import std::list
 fn t(xs):
     return xs.probe_nomethod(1)}
         list $meta [lindex [rejection $sugared off] 0] [rejection $functional off] [codes $functional]
     } finally {
-        core::native::unregister list::probe_nomethod
+        core::native::unregister std::list::probe_nomethod
     }
 } -result {1 {CORE SEMANTIC NOMETHOD-CALL} compiled {}}
 
 test me-nomethod-native-without-flag-is-reported {the same shape of native without the flag is eligible} -body {
-    core::native::register list::probe_plain -arity 2 \
+    core::native::register std::list::probe_plain -arity 2 \
         -impl {apply {{a b} {return $a}}} -result-type any
     try {
-        codes {import list
+        codes {import std::list
 fn t(xs):
-    return list::probe_plain(xs, 1)}
+    return std::list::probe_plain(xs, 1)}
     } finally {
-        core::native::unregister list::probe_plain
+        core::native::unregister std::list::probe_plain
     }
 } -result METHOD-ELIGIBLE
 
 test me-nomethod-register-validates-flag {-nomethod must be 0 or 1} -body {
-    core::native::register list::probe_bad -arity 2 -nomethod 2 -impl {apply {{a b} {return $a}}}
-} -returnCodes error -match glob -result {*-nomethod of "list::probe_bad" must be 0 or 1*}
+    core::native::register std::list::probe_bad -arity 2 -nomethod 2 -impl {apply {{a b} {return $a}}}
+} -returnCodes error -match glob -result {*-nomethod of "std::list::probe_bad" must be 0 or 1*}
 
 # ---------------------------------------------------------------------------
 # Interleaving with SAME-RETURN-VALUE, ordering, the policy matrix

@@ -131,7 +131,7 @@ foreach {name description edits} [readMutants [file join [file dirname [file nor
 # BoringSSL build reads its pin there) and the native backend's sources,
 # its target a link to this checkout's.
 set tree [file tempdir botlish-cbindgen-mutants]
-foreach dir {compiler core hir surface lib tests tools generated examples audit/c-bindgen
+foreach dir {compiler core hir surface stdlib tests tools generated examples audit/c-bindgen
         audit/c-header/profiles audit/c-header/tools .cargo} {
     if {![file exists [file join $root $dir]]} continue
     file mkdir [file dirname [file join $tree $dir]]

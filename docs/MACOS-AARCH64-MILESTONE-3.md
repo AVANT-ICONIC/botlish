@@ -18,7 +18,7 @@ are MACOS-AARCH64-MILESTONE-1.md and MACOS-AARCH64-MILESTONE-2.md.
   program native-status runs (`worker(10)`, a coroutine that yields twice)
   returned `[10, 7]` on the macOS runner instead of `NATIVE UNSUPPORTED`.
 - **The native golden runner runs on macOS, unmodified.** The runner is
-  `lib/test.bot`, a coroutine; the 94 golden suites passed on interp,
+  `stdlib/test.bot`, a coroutine; the 94 golden suites passed on interp,
   compile, cranelift-generic and cranelift wherever the suite is a portable
   program. Milestone 2 had 78 cranelift and 71 cranelift-generic suite runs
   blocked by the refusal.

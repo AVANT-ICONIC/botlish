@@ -14,120 +14,120 @@
 # Ported from tests/namespaced-errors.test, which stays authoritative
 # (audit/golden/migration/fragments/declared-errors-imports.tsv maps every
 # test). The Tcl tests write modules a (errors Failed and Plain) and a::sub;
-# here they are the stock io (error WriteFailed) and its child io::path
+# here they are the stock io (error WriteFailed) and its child std::io::path
 # (error NotAPath), and the Tcl tests' unimported module is abi.
 #
-# Imports: compiler and test (the framework) and io::path -- exactly the
-# import set the theorems need: io::path imported and its parent io not, and
+# Imports: compiler and test (the framework) and std::io::path -- exactly the
+# import set the theorems need: std::io::path imported and its parent io not, and
 # no namespace of abi imported at all. This is why these tests are a suite
-# of their own: declared-errors.bot imports abi and abi::bytes, so no
+# of their own: declared-errors.bot imports abi and std::abi::bytes, so no
 # error-declaring namespace there is unrelated to every import. (A suite
 # always imports compiler and test, so the Tcl test's program without any
 # import is the same theorem as its program importing another namespace.)
-import compiler
-import io::path
-import test
+import std::compiler
+import std::io::path
+import std::test
 
 fn register_import_authorization_tests():
     # nerr-import-authorization: a handler naming an error of io, whose child
-    # io::path alone is imported, is MissingImport.
-    fn b_child_import() errors compiler::CompilerError:
+    # std::io::path alone is imported, is MissingImport.
+    fn b_child_import() errors std::compiler::CompilerError:
         static compile:
             fn f(x: int) -> int:
                 x
             f(1):
-                on io::WriteFailed:
+                on std::io::WriteFailed:
                     0
-    test::rejects("nerr-import-authorization/child-import", compiler::DiagnosticCode::MissingImport, b_child_import)
+    std::test::rejects("nerr-import-authorization/child-import", std::compiler::DiagnosticCode::MissingImport, b_child_import)
 
     # ... an error of abi, no namespace of which is imported, is MissingImport.
-    fn b_unrelated_import() errors compiler::CompilerError:
+    fn b_unrelated_import() errors std::compiler::CompilerError:
         static compile:
             fn f(x: int) -> int:
                 x
             f(1):
-                on abi::AbiIntegerAboveRange:
+                on std::abi::AbiIntegerAboveRange:
                     0
-    test::rejects("nerr-import-authorization/not-imported", compiler::DiagnosticCode::MissingImport, b_unrelated_import)
+    std::test::rejects("nerr-import-authorization/not-imported", std::compiler::DiagnosticCode::MissingImport, b_unrelated_import)
 
     # ... an error of a namespace that does not exist is UnknownNamespace.
-    fn b_unknown_namespace() errors compiler::CompilerError:
+    fn b_unknown_namespace() errors std::compiler::CompilerError:
         static compile:
             fn f(x: int) -> int:
                 x
             f(1):
                 on nonexistent::E:
                     0
-    test::rejects("nerr-import-authorization/unknown-namespace", compiler::DiagnosticCode::UnknownNamespace, b_unknown_namespace)
+    std::test::rejects("nerr-import-authorization/unknown-namespace", std::compiler::DiagnosticCode::UnknownNamespace, b_unknown_namespace)
 
     # ... an error an imported namespace does not declare is UnknownSymbol.
-    fn b_unknown_error() errors compiler::CompilerError:
+    fn b_unknown_error() errors std::compiler::CompilerError:
         static compile:
             fn f(x: int) -> int:
                 x
             f(1):
-                on io::path::DoesNotExist:
+                on std::io::path::DoesNotExist:
                     0
-    test::rejects("nerr-import-authorization/unknown-error", compiler::DiagnosticCode::UnknownSymbol, b_unknown_error)
+    std::test::rejects("nerr-import-authorization/unknown-error", std::compiler::DiagnosticCode::UnknownSymbol, b_unknown_error)
 
     # ... and an errors clause, a function type's errors list and a fail
     # naming an error of a namespace not imported are MissingImport.
-    fn b_errors_clause() errors compiler::CompilerError:
+    fn b_errors_clause() errors std::compiler::CompilerError:
         static compile:
-            fn f(x: int) -> int errors abi::AbiIntegerAboveRange:
+            fn f(x: int) -> int errors std::abi::AbiIntegerAboveRange:
                 x
             1
-    test::rejects("nerr-import-authorization/errors-clause", compiler::DiagnosticCode::MissingImport, b_errors_clause)
+    std::test::rejects("nerr-import-authorization/errors-clause", std::compiler::DiagnosticCode::MissingImport, b_errors_clause)
 
-    fn b_function_type() errors compiler::CompilerError:
+    fn b_function_type() errors std::compiler::CompilerError:
         static compile:
-            fn f(g: Fn{args: [int], return: int, errors: [abi::AbiIntegerAboveRange]}) -> int:
+            fn f(g: Fn{args: [int], return: int, errors: [std::abi::AbiIntegerAboveRange]}) -> int:
                 1
             1
-    test::rejects("nerr-import-authorization/function-type", compiler::DiagnosticCode::MissingImport, b_function_type)
+    std::test::rejects("nerr-import-authorization/function-type", std::compiler::DiagnosticCode::MissingImport, b_function_type)
 
-    fn b_fail() errors compiler::CompilerError:
+    fn b_fail() errors std::compiler::CompilerError:
         static compile:
-            fn f(x: int) -> int errors abi::AbiIntegerAboveRange:
-                fail abi::AbiIntegerAboveRange
+            fn f(x: int) -> int errors std::abi::AbiIntegerAboveRange:
+                fail std::abi::AbiIntegerAboveRange
             1
-    test::rejects("nerr-import-authorization/fail", compiler::DiagnosticCode::MissingImport, b_fail)
+    std::test::rejects("nerr-import-authorization/fail", std::compiler::DiagnosticCode::MissingImport, b_fail)
 
 fn register_diagnostic_message_tests():
     # nerr-diagnostic-messages: the MissingImport message names the namespace
     # and import that are missing, and says that importing a child does not
     # import its parent.
-    fn b_child_import_message() errors compiler::CompilerError:
+    fn b_child_import_message() errors std::compiler::CompilerError:
         static compile:
             fn f(x: int) -> int:
                 x
             f(1):
-                on io::WriteFailed:
+                on std::io::WriteFailed:
                     0
-    test::rejects_message("nerr-diagnostic-messages/child-import", compiler::DiagnosticCode::MissingImport, "namespace \"io\" is not imported; add `import io` to use `io::WriteFailed` (imports are exact: `import io::path` does not import \"io\")", b_child_import_message)
+    std::test::rejects_message("nerr-diagnostic-messages/child-import", std::compiler::DiagnosticCode::MissingImport, "namespace \"std::io\" is not imported; add `import std::io` to use `std::io::WriteFailed` (imports are exact: `import std::io::path` does not import \"std::io\")", b_child_import_message)
 
     # ... the UnknownSymbol message lists the errors the namespace declares.
-    fn b_unknown_error_message() errors compiler::CompilerError:
+    fn b_unknown_error_message() errors std::compiler::CompilerError:
         static compile:
             fn f(x: int) -> int:
                 x
             f(1):
-                on io::path::DoesNotExist:
+                on std::io::path::DoesNotExist:
                     0
-    test::rejects_message("nerr-diagnostic-messages/unknown-error", compiler::DiagnosticCode::UnknownSymbol, "namespace \"io::path\" has no error \"DoesNotExist\" (it declares: NotAPath)", b_unknown_error_message)
+    std::test::rejects_message("nerr-diagnostic-messages/unknown-error", std::compiler::DiagnosticCode::UnknownSymbol, "namespace \"std::io::path\" has no error \"DoesNotExist\" (it declares: NotAPath)", b_unknown_error_message)
 
     # ... and a module's error written bare outside its module is an unknown
     # error whose message names its qualified spelling.
-    fn b_bare_module_error() errors compiler::CompilerError:
+    fn b_bare_module_error() errors std::compiler::CompilerError:
         static compile:
             fn f(x: int) -> int:
                 x
             f(1):
                 on NotAPath:
                     0
-    test::rejects_message("nerr-diagnostic-messages/bare-module-error", compiler::DiagnosticCode::UndeclaredError, "unknown error \"NotAPath\": no \"error NotAPath\" declaration is visible here (a module's error is named qualified outside its module: io::path::NotAPath)", b_bare_module_error)
+    std::test::rejects_message("nerr-diagnostic-messages/bare-module-error", std::compiler::DiagnosticCode::UndeclaredError, "unknown error \"NotAPath\": no \"error NotAPath\" declaration is visible here (a module's error is named qualified outside its module: std::io::path::NotAPath)", b_bare_module_error)
 
-with context test::suite()
+with context std::test::suite()
 register_import_authorization_tests()
 register_diagnostic_message_tests()
-test::report()
+std::test::report()

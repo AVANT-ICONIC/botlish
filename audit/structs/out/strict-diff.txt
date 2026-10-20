@@ -14,7 +14,7 @@ after:  56 lines (55 strict sites + 1 forward-reference diagnostic)
   csv_records.bot          scan_record            param stop needs int (arg any)  [204:28]
   csv_records.bot          scan_record_rest       param stop needs int (arg any)  [193:39]
   csv_records.bot          scan_records           param index needs int (arg any)  [213:24]
-  test-selection.bot       first_affected         invalid call: call to list::find with xs : list, predicate : is_affected?/1 -> bool   [68:13]
+  test-selection.bot       first_affected         invalid call: call to std::list::find with xs : list, predicate : is_affected?/1 -> bool   [68:13]
   test-selection.bot       first_affected         param test needs list (arg any)  [71:15]
   test-selection.bot       select_affected        param test needs list (arg any)  [61:26]
 

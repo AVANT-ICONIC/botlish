@@ -5,7 +5,7 @@
 
 == lex-strategy.bot
   <program>: closed (transitively guarded)
-  list::all?<List[str], native>: guarded (transitively guarded)
+  std::list::all?<List[str], native>: guarded (transitively guarded)
       blocker: UnknownCallResultKind the condition needs bool; the result of the dynamic call at ir {1 2 2 2 2 1 1} has no static kind
   lenient_ident_char?<generic>: guarded (transitively guarded)
       blocker: UnknownParameterKind is_tcl_alnum needs str; parameter c (no annotation, no call-site inference) has no static kind
@@ -25,17 +25,17 @@
 
 == refined-checks.bot
   <program>: closed (transitively closed)
-  char::codepoint<UnicodeChar>: closed (transitively closed)
-  byte::high_nibble<int>: closed (transitively closed)
-  byte::nibble<int>: closed (transitively closed)
-  byte::from_int<int>: closed (transitively closed)
-  byte::set<List[UnicodeChar]>: closed (transitively closed)
-  ascii::is_digit<int>: closed (transitively closed)
-  ascii::is_upper<int>: closed (transitively closed)
-  ascii::is_lower<int>: closed (transitively closed)
-  ascii::is_alphabetic<int>: closed (transitively closed)
-  ascii::is_alphanumeric<int>: closed (transitively closed)
-  web::emailish?<str>: closed (transitively closed)
+  std::char::codepoint<UnicodeChar>: closed (transitively closed)
+  std::byte::high_nibble<int>: closed (transitively closed)
+  std::byte::nibble<int>: closed (transitively closed)
+  std::byte::from_int<int>: closed (transitively closed)
+  std::byte::set<List[UnicodeChar]>: closed (transitively closed)
+  std::ascii::is_digit<int>: closed (transitively closed)
+  std::ascii::is_upper<int>: closed (transitively closed)
+  std::ascii::is_lower<int>: closed (transitively closed)
+  std::ascii::is_alphabetic<int>: closed (transitively closed)
+  std::ascii::is_alphanumeric<int>: closed (transitively closed)
+  std::web::emailish?<str>: closed (transitively closed)
   char_at<generic>: closed (transitively closed)
   local_char?<generic>: guarded (transitively guarded)
       blocker: UnknownParameterKind is_tcl_alnum needs str; parameter c (no annotation, no call-site inference) has no static kind
@@ -43,8 +43,8 @@
   scan_while<generic>: closed (transitively closed)
   tld?<generic>: closed (transitively closed)
   domain?<generic>: closed (transitively closed)
-  web::is_unreserved<int>: closed (transitively closed)
-  web::uri_escape_text<str>: closed (transitively closed)
+  std::web::is_unreserved<int>: closed (transitively closed)
+  std::web::uri_escape_text<str>: closed (transitively closed)
   high_nibble<int>: closed (transitively closed)
   hex_pair<int>: closed (transitively closed)
   esc_bytes<List[int], int, str>: closed (transitively closed)
@@ -54,7 +54,7 @@
 
 == source-checks.bot
   <program>: closed (transitively open)
-  list::find<List[str], block>: open (transitively open)
+  std::list::find<List[str], block>: open (transitively open)
       blocker: UnknownCallResultKind the condition needs bool; the result of the dynamic call at ir {3 2 2 2 2 1} has no static kind
       blocker: StaticError UNHANDLED-ERROR: "fail NotFound" is not admitted here: the enclosing function does not declare "errors NotFound"
   is_underscore?<generic>: closed (transitively closed)
@@ -73,12 +73,12 @@
 
 == test-selection.bot
   <program>: closed (transitively open)
-  list::any?<any, block>: guarded (transitively guarded)
+  std::list::any?<any, block>: guarded (transitively guarded)
       blocker: UnknownParameterKind the condition needs list; parameter xs (no annotation, no call-site inference) has no static kind
       blocker: UnknownCallResultKind the condition needs bool; the result of the dynamic call at ir {0 2 2 2 2 1} has no static kind
-  list::none?<List[str], block>: guarded (transitively guarded)
+  std::list::none?<List[str], block>: guarded (transitively guarded)
       blocker: UnknownCallResultKind the condition needs bool; the result of the dynamic call at ir {2 2 2 2 2 1} has no static kind
-  list::find<List[list], block>: open (transitively open)
+  std::list::find<List[list], block>: open (transitively open)
       blocker: UnknownCallResultKind the condition needs bool; the result of the dynamic call at ir {3 2 2 2 2 1} has no static kind
       blocker: StaticError UNHANDLED-ERROR: "fail NotFound" is not admitted here: the enclosing function does not declare "errors NotFound"
   make_changed?<List[str]>: closed (transitively closed)
@@ -95,23 +95,23 @@
 
 == uri-steady.bot
   <program>: closed (transitively open)
-  char::codepoint<UnicodeChar>: closed (transitively closed)
-  byte::high_nibble<generic>: closed (transitively closed)
-  byte::nibble<int>: closed (transitively closed)
-  byte::from_int<int>: open (transitively open)
+  std::char::codepoint<UnicodeChar>: closed (transitively closed)
+  std::byte::high_nibble<generic>: closed (transitively closed)
+  std::byte::nibble<int>: closed (transitively closed)
+  std::byte::from_int<int>: open (transitively open)
       blocker: StaticError UNHANDLED-ERROR: "fail BelowRange" is not admitted here: the enclosing function does not declare "errors BelowRange"
       blocker: StaticError UNHANDLED-ERROR: "fail AboveRange" is not admitted here: the enclosing function does not declare "errors AboveRange"
-  byte::set<List[UnicodeChar]>: open (transitively open)
+  std::byte::set<List[UnicodeChar]>: open (transitively open)
       blocker: StaticError UNHANDLED-ERROR: this call may produce the declared error "AboveRange", which is neither handled here nor admitted by the enclosing function's own "errors" declaration
-  ascii::is_digit<generic>: guarded (transitively guarded)
+  std::ascii::is_digit<generic>: guarded (transitively guarded)
       blocker: UnknownParameterKind >= needs int; parameter b (no annotation, no call-site inference) has no static kind
-  ascii::is_upper<generic>: guarded (transitively guarded)
+  std::ascii::is_upper<generic>: guarded (transitively guarded)
       blocker: UnknownParameterKind >= needs int; parameter b (no annotation, no call-site inference) has no static kind
-  ascii::is_lower<generic>: guarded (transitively guarded)
+  std::ascii::is_lower<generic>: guarded (transitively guarded)
       blocker: UnknownParameterKind >= needs int; parameter b (no annotation, no call-site inference) has no static kind
-  ascii::is_alphabetic<generic>: closed (transitively guarded)
-  ascii::is_alphanumeric<generic>: closed (transitively guarded)
-  web::emailish?<generic>: guarded (transitively guarded)
+  std::ascii::is_alphabetic<generic>: closed (transitively guarded)
+  std::ascii::is_alphanumeric<generic>: closed (transitively guarded)
+  std::web::emailish?<generic>: guarded (transitively guarded)
       blocker: UnknownParameterKind length needs str; parameter v (no annotation, no call-site inference) has no static kind
   char_at<generic>: closed (transitively closed)
   local_char?<generic>: guarded (transitively guarded)
@@ -120,8 +120,8 @@
   scan_while<generic>: closed (transitively closed)
   tld?<generic>: closed (transitively closed)
   domain?<generic>: closed (transitively closed)
-  web::is_unreserved<generic>: closed (transitively guarded)
-  web::uri_escape_text<generic>: closed (transitively guarded)
+  std::web::is_unreserved<generic>: closed (transitively guarded)
+  std::web::uri_escape_text<generic>: closed (transitively guarded)
   high_nibble<generic>: closed (transitively closed)
   hex_pair<generic>: closed (transitively closed)
   esc_bytes<generic>: closed (transitively closed)

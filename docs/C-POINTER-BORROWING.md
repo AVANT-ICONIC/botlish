@@ -6,11 +6,11 @@ real Tcl and BoringSSL functions with ordinary Botlish byte storage.
 > Existing Botlish byte storage may be exposed temporarily to C as a
 > pointer when, and only when, the call contract says the pointer does not
 > escape the call. The Linux syscall path's byte-exposure mechanism is
-> reused wherever it is general; C semantics are exposed through `ffi::c`,
+> reused wherever it is general; C semantics are exposed through `std::ffi::c`,
 > never through the syscall ABI.
 
 ```
-existing abi::bytes::Bytes / abi::bytes::MutableBytes
+existing std::abi::bytes::Bytes / std::abi::bytes::MutableBytes
           |
           | temporary exposure, for one call
           v
@@ -20,10 +20,10 @@ shared byte exposure (native/lower.tcl: StorageOf, ExposeStorage,
          / \
         /   \
 Linux syscall ABI              C call boundary
-abi::x86_64::from_bytes,       a foreign call contract per parameter
-linux::abi::x86_64::syscall            (access read|write, escape noescape|...),
-(Register64 words, policy      hir/borrow.tcl's admission, ffi::c's
- in lib/linux.bot)             vocabulary; the test fixture's operations
+std::abi::x86_64::from_bytes,       a foreign call contract per parameter
+std::linux::abi::x86_64::syscall            (access read|write, escape noescape|...),
+(Register64 words, policy      hir/borrow.tcl's admission, std::ffi::c's
+ in stdlib/linux.bot)             vocabulary; the test fixture's operations
 ```
 
 > Continued by C-FFI.md: `extern c fn` and `extern c library` attach this
@@ -38,30 +38,30 @@ transport for it, and a synthetic, test-only foreign call boundary (the
 address on the native backend:
 
 ```botlish
-import abi
-import abi::bytes
-import ffi::c
+import std::abi
+import std::abi::bytes
+import std::ffi::c
 import ffi_fixture                 # a test process's own namespace
 
-fn len(data: abi::bytes::Bytes) -> ffi::c::ULong:
-    abi::bytes::length(data).value
+fn len(data: std::abi::bytes::Bytes) -> std::ffi::c::ULong:
+    std::abi::bytes::length(data).value
 
 # SHA256's shape: input read/noescape, output write/noescape, a C count.
-fn digest_like(input: abi::bytes::Bytes) -> abi::bytes::MutableBytes:
-    out = abi::bytes::zeroed(abi::usize(32))
-    state = ffi::c::null[ffi::c::Void]()        # a userdata pointer it may keep
+fn digest_like(input: std::abi::bytes::Bytes) -> std::abi::bytes::MutableBytes:
+    out = std::abi::bytes::zeroed(std::abi::usize(32))
+    state = std::ffi::c::null[std::ffi::c::Void]()        # a userdata pointer it may keep
     r = ffi_fixture::mixed(input, state, out, len(input))
     r.output                                    # the bytes C wrote
 
 # Tcl_Eval's shape: a script read/noescape, as Ptr[Char].
-fn script_like(script: abi::bytes::Bytes) -> List[int]:
-    ffi_fixture::read[ffi::c::Char](script, len(script))
+fn script_like(script: std::abi::bytes::Bytes) -> List[int]:
+    ffi_fixture::read[std::ffi::c::Char](script, len(script))
 ```
 
 Both run on all four backends; natively `script_like` is
 
 ```
-func 6 "script_like" params=1 ... pnames="script.0" instance="abi::bytes::Bytes"
+func 6 "script_like" params=1 ... pnames="script.0" instance="std::abi::bytes::Bytes"
     %1 = call 4 %0               ; len(script): the count, a separate C scalar
     %2 = op bytesaddr %0         ; the payload address of script's storage
     %3 = op ffifixtureread %2 %1 ; the foreign operation, given THAT address
@@ -105,17 +105,17 @@ Before anything was designed, the existing path was read end to end
 
 | question | what the syscall path does |
 |---|---|
-| how `Bytes` reaches a pointer argument | `abi::x86_64::from_bytes(data)` (a root native, hir/syscall.tcl's `BytesProblems` holds its argument to `abi::bytes::Bytes`) lowers to `StorageOf` (the opaque struct's one `storage` field: a virtual field register, else `structget`) and `op bytesaddr %s` (`rt_bytes_addr`: object + 16, as a small Int). The word is a `Register64`'s; `linux::abi::x86_64::syscall` unboxes it (`register_word`) into rsi |
+| how `Bytes` reaches a pointer argument | `std::abi::x86_64::from_bytes(data)` (a root native, hir/syscall.tcl's `BytesProblems` holds its argument to `std::abi::bytes::Bytes`) lowers to `StorageOf` (the opaque struct's one `storage` field: a virtual field register, else `structget`) and `op bytesaddr %s` (`rt_bytes_addr`: object + 16, as a small Int). The word is a `Register64`'s; `std::linux::abi::x86_64::syscall` unboxes it (`register_word`) into rsi |
 | how writable storage reaches a writing syscall | the same with `from_mutable_bytes` and `op mbytesaddr` (`rt_mbytes_addr`), the writable kind's op: the two ops are two run-time kind checks, never interchanged |
 | pinned, stable, copied? | stable: the collector never moves an object, so an address is valid exactly while its storage is live. Nothing is pinned or copied by the bridge |
 | what keeps it alive | `fn keepAddr` (address register -> storages) and `op keepalive %s` after the syscall (`SyscallCall`), also after a call that takes an address-carrying operand (`AddressFlowAcrossCall`); `rt_keepalive` is a real helper call (`black_box`), so the storage is a root in the stack map of every safepoint up to the syscall's own |
 | a Botlish Ptr-like value? | no: the address is a `Register64` word (an Int). It *can* leave the function (returned, stored), which is the raw layer's documented sharp edge; provenance is tracked through structs, Lists, `if` joins and calls, not through module statics or closures |
 | HIR/NIR representation | HIR: an ordinary call of the bridge native, an ordinary `struct` literal for the registers; NIR: `bytesaddr`/`mbytesaddr`, `syscall_linux_x86_64`, `keepalive` |
 | read vs write distinguished? | by the owner type (two bridges, two ops); the syscall itself does not know which register points at what |
-| mutable storage afterwards | the raw bridge does **not** detach (a raw program writing through a shared storage writes through all its aliases: pinned by a test). `linux::read`, the safe wrapper, detaches first (`abi::bytes::detach`, `rt_mbytes_clone`), lets the kernel write the private copy, and returns it in `ReadResult.data`: MutableBytes is a value, "published storage is never written" |
+| mutable storage afterwards | the raw bridge does **not** detach (a raw program writing through a shared storage writes through all its aliases: pinned by a test). `std::linux::read`, the safe wrapper, detaches first (`std::abi::bytes::detach`, `rt_mbytes_clone`), lets the kernel write the private copy, and returns it in `ReadResult.data`: MutableBytes is a value, "published storage is never written" |
 | native and Tcl backends | native: the above. Tcl: `NATIVE-ONLY` (no addresses; nothing imitates one) |
 | generic | storage projection (`StorageOf`), the two address ops, the non-moving liveness rule, `keepalive` after the consumer, the detach-then-expose discipline for writes |
-| Linux-syscall policy | `Register64` as the carrier, the register-struct contract (hir/syscall.tcl), the syscall op and its asm boundary, `lib/linux.bot`'s choice of registers and numbers |
+| Linux-syscall policy | `Register64` as the carrier, the register-struct contract (hir/syscall.tcl), the syscall op and its asm boundary, `stdlib/linux.bot`'s choice of registers and numbers |
 
 `direct` was audited too: **it does not exist** anywhere in the compiler,
 the runtime or the libraries. It is a planned policy named in four places
@@ -128,7 +128,7 @@ Section 12 says what this milestone adds for it instead.
 
 | | what | lifetime | here |
 |---|---|---|---|
-| 1. an ordinary `ffi::c::Ptr[T]` | an independently usable raw foreign pointer (C-ABI-TYPES.md): affine, explicitly cloneable, nullable | unknown: nothing about ownership or lifetime | unchanged; passed to any pointer parameter as a raw pointer |
+| 1. an ordinary `std::ffi::c::Ptr[T]` | an independently usable raw foreign pointer (C-ABI-TYPES.md): affine, explicitly cloneable, nullable | unknown: nothing about ownership or lifetime | unchanged; passed to any pointer parameter as a raw pointer |
 | 2. temporary Botlish-storage exposure | existing `Bytes` / `MutableBytes` storage, its address handed to **one** call whose parameter contract says noescape | exactly that call: no pointer value exists before or after | **this milestone** |
 | 3. stable foreign/native storage | memory C may keep a pointer to after the call returns | as long as C holds it: needs an owner-backed resource | **not implemented**: section 15 |
 
@@ -194,16 +194,16 @@ whose static type is a *byte owner*:
 
 | argument | parameter | transport |
 |---|---|---|
-| `abi::bytes::Bytes` | read, noescape, byte pointee | **read**: its storage, exposed as it is |
-| `abi::bytes::MutableBytes` | read, noescape, byte pointee | **read**: its storage, exposed as it is (no copy) |
-| `abi::bytes::MutableBytes` | write, noescape, byte pointee | **write**: a private copy, exposed writable; the call returns it |
-| an `ffi::c::Ptr[P]` of the parameter's type | any | a raw pointer (no exposure, nothing about lifetime) |
+| `std::abi::bytes::Bytes` | read, noescape, byte pointee | **read**: its storage, exposed as it is |
+| `std::abi::bytes::MutableBytes` | read, noescape, byte pointee | **read**: its storage, exposed as it is (no copy) |
+| `std::abi::bytes::MutableBytes` | write, noescape, byte pointee | **write**: a private copy, exposed writable; the call returns it |
+| an `std::ffi::c::Ptr[P]` of the parameter's type | any | a raw pointer (no exposure, nothing about lifetime) |
 | anything else | | the ordinary TYPE mismatch |
 
-A byte pointee is `ffi::c::Char`, `ffi::c::SChar`, `ffi::c::UChar` (a C
-integer scalar whose metadata says 8 bits) or `ffi::c::Void`. A byte owner
+A byte pointee is `std::ffi::c::Char`, `std::ffi::c::SChar`, `std::ffi::c::UChar` (a C
+integer scalar whose metadata says 8 bits) or `std::ffi::c::Void`. A byte owner
 the parameter refuses is `FOREIGN-BORROW`, a new diagnostic kind
-(`compiler::DiagnosticCode::ForeignBorrow`, recoverable in `static
+(`std::compiler::DiagnosticCode::ForeignBorrow`, recoverable in `static
 compile:`), with one reason, the first of:
 
 1. the parameter may retain the pointer (escape `captures` or `unknown`) --
@@ -217,7 +217,7 @@ compile:`), with one reason, the first of:
    are later work.
 
 ```
-argument 1 of ffi_fixture::read_retained: byte storage (abi::bytes::Bytes) is
+argument 1 of ffi_fixture::read_retained: byte storage (std::abi::bytes::Bytes) is
 exposed to C only for a call that cannot keep the pointer, but parameter
 "data" may retain it (escape captures): a pointer C keeps after the call needs
 storage that outlives the call, which nothing provides yet, and only a
@@ -226,17 +226,17 @@ temporary exposure
 ```
 
 A byte owner establishes no pointee imprint (it is not a pointer): the
-pointee comes from an explicit imprint, `read[ffi::c::Char](data, n)`, or
+pointee comes from an explicit imprint, `read[std::ffi::c::Char](data, n)`, or
 from a raw pointer argument (`cb-imprint-owner-establishes-nothing`).
 
 **Offsets.** None: an exposure is the start of the owner's storage. A
-standalone sub-buffer is an ordinary value (`abi::bytes::freeze_prefix`)
+standalone sub-buffer is an ordinary value (`std::abi::bytes::freeze_prefix`)
 and is exposed like any other; no slice, offset or arithmetic exists.
 
 **Length.** None is added. The count is a separate argument, a C integer
 scalar admitted by its proven range (`len(data)` above is
-`abi::bytes::length(data).value`, an `abi::Usize`'s Int, which fits
-`ffi::c::ULong` on LP64; on windows-x86_64, where `unsigned long` is 32 bits,
+`std::abi::bytes::length(data).value`, an `std::abi::Usize`'s Int, which fits
+`std::ffi::c::ULong` on LP64; on windows-x86_64, where `unsigned long` is 32 bits,
 it needs a check: `cb-length-separate`). The exposure carries no bounds into
 C: the caller passes the right count to a function whose contract respects
 it (`cb-read-prefix`).
@@ -244,7 +244,7 @@ it (`cb-read-prefix`).
 **NUL termination, encoding, Strings.** None: the exposure is the bytes, no
 terminator is added and none is promised. A Tcl script ends with an
 explicit `0` byte its builder put there (`script_like` above); a `String` is
-never exposed (`str::encode_utf8` then `abi::bytes::from_list` makes the
+never exposed (`std::str::encode_utf8` then `std::abi::bytes::from_list` makes the
 bytes explicit).
 
 ## 5. No pointer value
@@ -257,11 +257,11 @@ compile-time error (`cb-no-pointer-value`):
 
 | attempt | outcome |
 |---|---|
-| `keep(data)` with `fn keep(p: ffi::c::Ptr[ffi::c::UChar])` | TYPE, with the clause "byte storage is never a pointer value: ... exposed to C only as the argument of a foreign call whose parameter's contract admits it" |
-| `fn leak(d: Bytes) -> ffi::c::Ptr[UChar]: d` | TYPE (the result does not prove its type) |
+| `keep(data)` with `fn keep(p: std::ffi::c::Ptr[std::ffi::c::UChar])` | TYPE, with the clause "byte storage is never a pointer value: ... exposed to C only as the argument of a foreign call whose parameter's contract admits it" |
+| `fn leak(d: Bytes) -> std::ffi::c::Ptr[UChar]: d` | TYPE (the result does not prove its type) |
 | a struct field or a `List[Ptr[UChar]]` element | TYPE |
-| `ffi::c::clone(data)`, `ffi::c::null?(data)` | TYPE at compile time (hir::borrow's `VerifyPointerKinds`: a byte owner where a native's run-time kind is `cptr`; before this milestone a run-time TYPE) |
-| `ffi::c::erase(data)`, `ffi::c::retype[T](data)` | IMPRINT / TYPE (their imprinted `Ptr` types) |
+| `std::ffi::c::clone(data)`, `std::ffi::c::null?(data)` | TYPE at compile time (hir::borrow's `VerifyPointerKinds`: a byte owner where a native's run-time kind is `cptr`; before this milestone a run-time TYPE) |
+| `std::ffi::c::erase(data)`, `std::ffi::c::retype[T](data)` | IMPRINT / TYPE (their imprinted `Ptr` types) |
 | `f = ffi_fixture::copy` (a foreign operation as a value) | TYPE (IMPRINT for an imprinted one): a call through a value would have no contract |
 
 And the registry pins that no operation makes a pointer of anything but a
@@ -273,13 +273,13 @@ byte storage.**
 
 ## 6. Write exposure and MutableBytes' value semantics
 
-`abi::bytes::MutableBytes` is a *value* (MUTABLE-BYTES.md: "mutable storage
+`std::abi::bytes::MutableBytes` is a *value* (MUTABLE-BYTES.md: "mutable storage
 does not imply reference semantics"; no update ever writes storage another
 value can observe). A foreign write therefore cannot change the caller's own
 binding -- Botlish has no assignment and MutableBytes has no header to
 mutate in place (MutableVector's places do; MutableBytes predates them). The
 existing syscall machinery already answers how a foreign write reaches a
-value: `linux::read` detaches, lets the kernel write the private copy, and
+value: `std::linux::read` detaches, lets the kernel write the private copy, and
 returns it. A write exposure does exactly that, generally:
 
 * the argument's storage is copied (the detach, `op mbytesclone`), the copy
@@ -288,7 +288,7 @@ returns it. A write exposure does exactly that, generally:
   write exposure evaluates to the anonymous struct
 
   ```
-  {result: R, NAME: abi::bytes::MutableBytes, ...}
+  {result: R, NAME: std::abi::bytes::MutableBytes, ...}
   ```
 
   R the contract's C result, NAME each written parameter's name (the write
@@ -323,8 +323,8 @@ keepalive) stays.
 * **Copy cost**, measured (section 18): one fresh storage of the owner's
   length and one copy of its bytes per write exposure, beside two small
   objects when the write-back result is used. A fresh owner
-  (`abi::bytes::zeroed(...)` written inline) is copied all the same, as
-  `linux::read` copies a fresh buffer: eliding it needs uniqueness or
+  (`std::abi::bytes::zeroed(...)` written inline) is copied all the same, as
+  `std::linux::read` copies a fresh buffer: eliding it needs uniqueness or
   deadness facts the compiler does not have (MUTABLE-BYTES.md, "How
   copy-on-write would fit").
 
@@ -352,7 +352,7 @@ The address is a tagged small Int (`bytesaddr`'s result: what the syscall
 path's register words are too), never a `cptr` word: "Bytes -> backing
 storage address -> raw machine pointer argument", the unboxing being the
 call helper's -- `rt_ffi_fixture_*` untags it into a `*const u8`, as
-`rt_linux_x86_64_syscall` untags a register word. No `ffi::c::Ptr` is ever
+`rt_linux_x86_64_syscall` untags a register word. No `std::ffi::c::Ptr` is ever
 constructed for an exposure, not even internally.
 
 **Escape analysis** (`hir/escape.tcl`): an exposed argument is read only for
@@ -462,17 +462,17 @@ theorem is pinned in every run.
 
 | | |
 |---|---|
-| **existed** | the byte storages (`KIND_BYTES`/`KIND_MUTBYTES`, one allocation, payload at +16, non-moving), `StorageOf`, the ops `bytesaddr`/`mbytesaddr`/`keepalive`/`mbytesclone` and their runtime helpers, `keepAddr` provenance, `SyscallCall`'s keepalive loop, the detach-then-expose discipline of `linux::read`, escape analysis's one-field `wordUse` |
+| **existed** | the byte storages (`KIND_BYTES`/`KIND_MUTBYTES`, one allocation, payload at +16, non-moving), `StorageOf`, the ops `bytesaddr`/`mbytesaddr`/`keepalive`/`mbytesclone` and their runtime helpers, `keepAddr` provenance, `SyscallCall`'s keepalive loop, the detach-then-expose discipline of `std::linux::read`, escape analysis's one-field `wordUse` |
 | **reused unchanged** | the storage objects and their helpers (`rt_bytes_addr`, `rt_mbytes_addr`, `rt_mbytes_clone`, `rt_keepalive`), `StorageOf`, the non-moving liveness rule, `keepAddr`; the C ABI types (`Ptr[T]`, the scalars, imprinting) |
 | **generalized** | the address op choice and its provenance record became `ExposeStorage`, and the keepalive loop `KeepExposedAlive` (native/lower.tcl): the syscall bridge (`BytesAddrCall`), the syscall (`SyscallCall`), a call that may make one (`AddressFlowAcrossCall`) and the foreign call (`BorrowCall`) are their four callers, and no other code emits an address op or a keepalive (`cb-shared-mechanism`); `wordUse` gained exposed arguments; `hir::imprint::Bind` skips an argument type `""` (a byte owner establishes nothing) |
-| **syscall-specific, unchanged** | `abi::x86_64::from_bytes`/`from_mutable_bytes` and their `Register64` result, `linux::abi::x86_64::syscall`, hir/syscall.tcl, `SyscallCall`'s register assembly, `lib/linux.bot`. Their NIR is unchanged: `linux::write` is one `bytesaddr`, one syscall and one `keepalive` of the same storage, `linux::read` one detach, one `mbytesaddr`, one syscall and one `keepalive` of the detached storage, with no new copy or allocation (`cb-syscall-nir-unchanged`, against the NIR ABI-BYTES.md and MUTABLE-BYTES.md show) -- and the whole `-emit-nir` output of `examples/linux/write.bot`, `read-stdin.bot` and `context-hello.bot` is byte-identical before and after this milestone; `abi-bytes`, `abi-mutable-bytes` and `linux-syscall` pass unchanged |
+| **syscall-specific, unchanged** | `std::abi::x86_64::from_bytes`/`from_mutable_bytes` and their `Register64` result, `std::linux::abi::x86_64::syscall`, hir/syscall.tcl, `SyscallCall`'s register assembly, `stdlib/linux.bot`. Their NIR is unchanged: `std::linux::write` is one `bytesaddr`, one syscall and one `keepalive` of the same storage, `std::linux::read` one detach, one `mbytesaddr`, one syscall and one `keepalive` of the detached storage, with no new copy or allocation (`cb-syscall-nir-unchanged`, against the NIR ABI-BYTES.md and MUTABLE-BYTES.md show) -- and the whole `-emit-nir` output of `examples/linux/write.bot`, `read-stdin.bot` and `context-hello.bot` is byte-identical before and after this milestone; `abi-bytes`, `abi-mutable-bytes` and `linux-syscall` pass unchanged |
 | **C-specific, added** | the contract vocabulary and its normalization (`core/cabi.tcl`), `-foreign` (`core/native.tcl`), the admission and the write-back type (`hir/borrow.tcl`), `FOREIGN-BORROW`, `BorrowCall`, the Tcl exposure model (`ForeignBoundary`), the `foreign#refused` replay, the fixture and its runtime (`runtime/ffifixture.rs`, six NIR ops) |
 
 **Namespaces stay apart** (`cb-namespace-separation`): no syscall wrapper
-mentions `ffi::c`, and no C-side code (`lib/ffi/c.bot`, `hir/borrow.tcl`,
+mentions `std::ffi::c`, and no C-side code (`stdlib/ffi/c.bot`, `hir/borrow.tcl`,
 `core/cabi.tcl`, the fixture runtime) names a Linux, syscall, register or
 x86-64 identifier; a borrow program imports neither `linux` nor
-`abi::x86_64` and calls no syscall native, and a syscall program's calls
+`std::abi::x86_64` and calls no syscall native, and a syscall program's calls
 carry no exposures. The shared internals are named for what they are
 (storage, address, exposure, keepalive), never `linux` or `syscall`; the
 C ABI is not a pretend syscall ABI, and the syscall ABI does not depend on
@@ -545,7 +545,7 @@ whatever its source syntax becomes:
 ```
 extern C parameter metadata:
     name                 the parameter's name (the write-back field)
-    type                 the C type: a scalar, ffi::c::Ptr[T], ffi::c::FnPtr[F]
+    type                 the C type: a scalar, std::ffi::c::Ptr[T], std::ffi::c::FnPtr[F]
     access               read | write | unknown          (data pointers)
     escape               proven-noescape | declared-noescape | captures | unknown
 result:                  the C result type, or unit
@@ -585,8 +585,8 @@ SHA256(const uint8_t *data, size_t len, uint8_t out[32]) -> uint8_t *
                                 hand Botlish a pointer derived from an exposure --
                                 exactly what noescape rules out -- so the binding
                                 declares the result void and C's rax is ignored)
-  call:  r = SHA256(input, len(input), abi::bytes::zeroed(abi::usize(32)))
-         digest = abi::bytes::freeze(r.out)
+  call:  r = SHA256(input, len(input), std::abi::bytes::zeroed(std::abi::usize(32)))
+         digest = std::abi::bytes::freeze(r.out)
 ```
 
 Two policy examples, illustrative only (no name is known to the compiler):
@@ -623,7 +623,7 @@ ordinary capability-safe Botlish API
 ```
 
 None of that is implemented: no ownership policy is encoded into
-`ffi::c::Ptr[T]`, and borrowing knows nothing of C objects.
+`std::ffi::c::Ptr[T]`, and borrowing knows nothing of C objects.
 
 ## 16. The fixture
 
@@ -655,7 +655,7 @@ same behaviors are `core::cabi::FixtureImpl` over the exposure model.
 * **NIR of a write exposure** (`digest_like` above):
 
   ```
-  %4 = callmulti 3 %3          ; abi::bytes::zeroed(32): out, a virtual field
+  %4 = callmulti 3 %3          ; std::abi::bytes::zeroed(32): out, a virtual field
   %5 = op cptrnull             ; state, a raw pointer
   %6 = call 4 %0               ; len(input)
   %7 = op mbytesclone %4       ; the private copy of out's storage (the detach)
@@ -699,14 +699,14 @@ a quiet 4-core container):
 | read exposure of a MutableBytes | 74.9 | 33.1 | 103.8 | 2.4 |
 | write exposure, result discarded | -16.9 | 61.9 | 366.6 | 3714.1 |
 | write exposure, result used | 194.4 | 256.5 | 615.9 | 4307.0 |
-| `linux::read(-1, m)` (EBADF: the syscall path's own detach) | 263.3 | 304.4 | 647.6 | 4326.6 |
+| `std::linux::read(-1, m)` (EBADF: the syscall path's own detach) | 263.3 | 304.4 | 647.6 | 4326.6 |
 
 | allocations of one call (S = 64) | Bytes | MutableBytes | Struct | List |
 |---|---:|---:|---:|---:|
 | raw, read, read of a MutableBytes | 0 | 0 | 0 | 1 (the operation's result) |
 | write, discarded | 0 | 1 | 0 | 0 |
 | write, result used | 0 | 1 | 2 | 0 |
-| `linux::read` | 0 | 1 | 1 | 0 |
+| `std::linux::read` | 0 | 1 | 1 | 0 |
 
 * **Read exposure: fixed cost, no allocation, no copy.** Two helper calls
   (`rt_bytes_addr`/`rt_mbytes_addr`, `rt_keepalive`) beside the operation,
@@ -716,7 +716,7 @@ a quiet 4-core container):
 * **Write exposure: linear in the size, the detach.** One fresh storage and
   one copy of S bytes: about 0.06 ns per byte at 64 KiB (3.7 us), and two
   small objects (~200 ns) when the write-back result is used -- exactly
-  `linux::read`'s detach cost, which the syscall row shows beside its
+  `std::linux::read`'s detach cost, which the syscall row shows beside its
   syscall (~260 ns for EBADF). Pinning is never needed (the collector does
   not move objects), and nothing is materialized but the copy.
 * The operation's own work (C touching the bytes) is not the exposure's and
@@ -843,7 +843,7 @@ respectively (their own tools, `-only NAME`). Every other area's
 `extern c fn`, `exported c fn`, actual Tcl or BoringSSL calls, C linking,
 symbol resolution, calling conventions, C source capture analysis, LLVM
 capture import, binding generation, Ptr ownership, stable native buffers,
-`PinnedBytes`, `ffi::c::Bytes`, `ffi::c::MutableBytes`, `CBytes`, general
+`PinnedBytes`, `std::ffi::c::Bytes`, `std::ffi::c::MutableBytes`, `CBytes`, general
 views, `View[L]`, mutable foreign-memory views, pointer dereference,
 arithmetic or slicing, `String -> char *`, C strings, automatic NUL
 termination, array or struct reinterpretation, async foreign borrowing,
@@ -879,7 +879,7 @@ the performance table.
 | `core/native.tcl` | `-foreign` |
 | `hir/borrow.tcl` | admission, the transport on the call, the write-back type, `FOREIGN-BORROW`, pointer-kind checks, foreign operations only called, the `direct` hook |
 | `hir/types.tcl`, `hir/range.tcl`, `hir/imprint.tcl`, `hir/escape.tcl`, `hir/hir.tcl`, `hir/static.tcl`, `hir/lower.tcl` | typing, verification, imprint establishment, scalar replacement, the check order, the diagnostic code, the replay |
-| `lib/compiler.bot`, `lib/test.bot`, `lib/ffi/c.bot` | `DiagnosticCode::ForeignBorrow` and its name; the namespace's documentation |
+| `stdlib/compiler.bot`, `stdlib/test.bot`, `stdlib/ffi/c.bot` | `DiagnosticCode::ForeignBorrow` and its name; the namespace's documentation |
 | `compiler/compiler.tcl` | the replay |
 | `native/lower.tcl` | `ExposeStorage`, `KeepExposedAlive`, `BorrowCall`, the fixture ops |
 | `native/src/runtime/ffifixture.rs`, `nir.rs`, `ops.rs`, `vm.rs`, `codegen/clif.rs` | the fixture's foreign operations, their ops and helpers, the on-demand collection |

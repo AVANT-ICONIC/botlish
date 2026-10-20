@@ -200,12 +200,12 @@ test xcheck-source-domain {a source-defined integer domain constrains every read
 } -result {{r 1..100} {q 0..99}}
 
 test xcheck-struct-projection-domain {projecting a field declared with an integer domain gives its domain} -body {
-    set src "fn probe(x: abi::U8):\n    v = x.value\n    w = v + 1\n    w"
+    set src "fn probe(x: std::abi::U8):\n    v = x.value\n    w = v + 1\n    w"
     theorem $src [list [hir::range::unknown]] {v w}
 } -result {{v 0..255} {w 1..256}}
 
 test xcheck-native-result-metadata {a native's registered result facts (a collection's length is nonnegative and below the collection limit)} -body {
-    set src "fn probe(xs, s):\n    n = list::length(xs)\n    m = str::length(s)\n    n"
+    set src "fn probe(xs, s):\n    n = std::list::length(xs)\n    m = std::str::length(s)\n    n"
     theorem $src [list [hir::range::unknown] [hir::range::unknown]] {n m}
 } -result [list [list n 0..4611686018427387903] [list m 0..4611686018427387903]]
 
@@ -251,8 +251,8 @@ test xcheck-loop-interval-is-body-scoped {the interval exists only in the body: 
 # ---------------------------------------------------------------------------
 # Intentional independent reasoning: completions may only be narrower
 
-test xcheck-intentional-completions-rules {a native's bound is one rule both analyses read (mod's bounded divisor: hir::range::Mod; char::scalar_value's and hash's -result-range intervals): equal. Completions' own rule on top of it, the exact codepoint of a known character, is only ever narrower} -body {
-    set hir [xHir "fn probe(a, c):\n    m = mod(a, 16)\n    s = char::scalar_value(c)\n    h = hash(a)\n    p = char::scalar_value('a')\n    m"]
+test xcheck-intentional-completions-rules {a native's bound is one rule both analyses read (mod's bounded divisor: hir::range::Mod; std::char::scalar_value's and hash's -result-range intervals): equal. Completions' own rule on top of it, the exact codepoint of a known character, is only ever narrower} -body {
+    set hir [xHir "fn probe(a, c):\n    m = mod(a, 16)\n    s = std::char::scalar_value(c)\n    h = hash(a)\n    p = std::char::scalar_value('a')\n    m"]
     lassign [bothOf $hir [list [iv -inf +inf] [hir::range::unknown]]] rx cx
     lmap name {m s h p} {
         set e [bindValue $hir $name]

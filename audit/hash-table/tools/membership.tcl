@@ -31,7 +31,7 @@
 # Strategies (not every one applies to every domain):
 #   chain    x == c1 or x == c2 or ...                       (all)
 #   list     a module-level List literal, a counted-loop scan (all)
-#   iset     immutable_set::from_list of the literal, contains (all)
+#   iset     std::immutable_set::from_list of the literal, contains (all)
 #   table    the experiment's lpa table built at start, has?   (all)
 #   bsearch  a sorted List literal, binary search             (ints)
 #   tree     a generated balanced comparison tree             (ints)
@@ -42,8 +42,8 @@
 #   phash    hash-and-displace: B buckets by low hash bits, a displacement
 #            per bucket XORed into high hash bits, M = 2^ceil(log2 K) slots
 #            (int, str)
-#   length   dispatch on str::length, then an equality chain  (str)
-#   trie     dispatch on str::length, then on characters: at each node the
+#   length   dispatch on std::str::length, then an equality chain  (str)
+#   trie     dispatch on std::str::length, then on characters: at each node the
 #            position that splits the remaining members most, a comparison
 #            tree over its code points, one equality at a leaf (str)
 #
@@ -173,12 +173,12 @@ proc chainOf {domain members} {
 
 proc listOf {domain members} {
     set items [join [lmap v $members {literal $domain $v}] ", "]
-    return [list "member_items = \[$items\]\n\nfn member?(x: [typeOf $domain]) -> bool:\n    loop i from 0 to list::length(member_items):\n        if list::at(member_items, i) == x:\n            return true\n    false\n" [llength $members]]
+    return [list "member_items = \[$items\]\n\nfn member?(x: [typeOf $domain]) -> bool:\n    loop i from 0 to std::list::length(member_items):\n        if std::list::at(member_items, i) == x:\n            return true\n    false\n" [llength $members]]
 }
 
 proc isetOf {domain members} {
     set items [join [lmap v $members {literal $domain $v}] ", "]
-    return [list "member_set = immutable_set::from_list(\[$items\])\n\nfn member?(x: [typeOf $domain]) -> bool:\n    immutable_set::contains(member_set, x)\n" [llength $members]]
+    return [list "member_set = std::immutable_set::from_list(\[$items\])\n\nfn member?(x: [typeOf $domain]) -> bool:\n    std::immutable_set::contains(member_set, x)\n" [llength $members]]
 }
 
 proc tableOf {domain members} {
@@ -198,7 +198,7 @@ fn member_search(x: int, lo: int, hi: int) -> bool errors IndexNotFound:
     if lo >= hi:
         return false
     mid = shift_right(lo + hi, 1)
-    v = list::at(member_sorted, mid)
+    v = std::list::at(member_sorted, mid)
     if v == x:
         return true
     if v < x:
@@ -244,7 +244,7 @@ member_masks = \[[join $masks {, }]\]
 fn member?(x: int) -> bool:
     if x < 0 or x >= $u:
         return false
-    bit_and(list::at(member_words, shift_right(x, 5)), list::at(member_masks, bit_and(x, 31))) != 0
+    bit_and(std::list::at(member_words, shift_right(x, 5)), std::list::at(member_masks, bit_and(x, 31))) != 0
 " [expr {$nwords + 32}]]
 }
 
@@ -258,7 +258,7 @@ proc directOf {domain members} {
 fn member?(x: int) -> bool:
     if x < 0 or x >= $u:
         return false
-    list::at(member_flags, x)
+    std::list::at(member_flags, x)
 " $u]
 }
 
@@ -294,7 +294,7 @@ proc pmodOf {domain members} {
 # Every slot holds a member (an empty one any member), so the slot of X's
 # hash holds X exactly when X is a member.
 fn member?(x: [typeOf $domain]) -> bool:
-    list::at(member_slots, hash(x).mod($m)) == x
+    std::list::at(member_slots, hash(x).mod($m)) == x
 " $m]
 }
 
@@ -371,8 +371,8 @@ member_slots = \[$items\]
 # displaces to holds X exactly when X is a member.
 fn member?(x: [typeOf $domain]) -> bool:
     h = hash(x)
-    d = list::at(member_disp, bit_and(h, [expr {$b - 1}]))
-    list::at(member_slots, bit_and(bit_xor(shift_right(h, $shift), d), [expr {$m - 1}])) == x
+    d = std::list::at(member_disp, bit_and(h, [expr {$b - 1}]))
+    std::list::at(member_slots, bit_and(bit_xor(shift_right(h, $shift), d), [expr {$m - 1}])) == x
 " [expr {$b + $m}]]
 }
 
@@ -387,7 +387,7 @@ proc lengthOf {domain members} {
         lappend branches "    [expr {$first ? "if" : "elif"}] n == $len:\n        [join $terms { or }]"
         set first 0
     }
-    return [list "fn member?(x: str) -> bool:\n    n = str::length(x)\n[join $branches \n]\n    else:\n        false\n" 0]
+    return [list "fn member?(x: str) -> bool:\n    n = std::str::length(x)\n[join $branches \n]\n    else:\n        false\n" 0]
 }
 
 # A trie node over GROUP, members of one length: one equality when two or
@@ -409,7 +409,7 @@ proc trieNode {group indent} {
     set parts [dict create]
     foreach v $group { dict lappend parts [scan [string index $v $best] %c] $v }
     set name c[incr trieNames]
-    return "${pad}$name = char::scalar_value(str::char_at(x, $best))\n[trieSplit $name [lsort -integer [dict keys $parts]] $parts $indent]"
+    return "${pad}$name = std::char::scalar_value(std::str::char_at(x, $best))\n[trieSplit $name [lsort -integer [dict keys $parts]] $parts $indent]"
 }
 
 proc trieSplit {name points parts indent} {
@@ -437,7 +437,7 @@ proc trieOf {domain members} {
         lappend branches "    [expr {$first ? "if" : "elif"}] n == $len:\n        member_len$len?(x)"
         set first 0
     }
-    return [list "[join $fns \n]\nfn member?(x: str) -> bool errors IndexNotFound:\n    n = str::length(x)\n[join $branches \n]\n    else:\n        false\n" 0]
+    return [list "[join $fns \n]\nfn member?(x: str) -> bool errors IndexNotFound:\n    n = std::str::length(x)\n[join $branches \n]\n    else:\n        false\n" 0]
 }
 
 # ---------------------------------------------------------------------------
@@ -470,8 +470,8 @@ proc programOf {domain strategy k {full 0}} {
         set index "bit_and(j, 63)"
     }
     set type [typeOf $domain]
-    set header "import list\nimport str\nimport char\n"
-    if {$strategy eq "iset"} { append header "import immutable_set\n" }
+    set header "import std::list\nimport std::str\nimport std::char\n"
+    if {$strategy eq "iset"} { append header "import std::immutable_set\n" }
     if {$strategy eq "table"} { append header "import table\n" }
     if {$domain eq "enum"} {
         set cases {}
@@ -508,22 +508,22 @@ fn int_of(text: str) -> int errors IndexNotFound:
     fn digits(i: int, acc: int) -> int errors IndexNotFound:
         if i >= n:
             return acc
-        digits(i + 1, acc * 10 + char::scalar_value(text.char_at(i)) - 48)
+        digits(i + 1, acc * 10 + std::char::scalar_value(text.char_at(i)) - 48)
     digits(0, 0)
 
 fn run_hits(${param}j: int, m: int, acc: int) -> int errors IndexNotFound:
     if j >= m:
         return acc
-    run_hits(${arg}j + 1, m, acc + bit(member?(${arg}list::at(query_hits, $index))))
+    run_hits(${arg}j + 1, m, acc + bit(member?(${arg}std::list::at(query_hits, $index))))
 
 fn run_misses(${param}j: int, m: int, acc: int) -> int errors IndexNotFound:
     if j >= m:
         return acc
-    run_misses(${arg}j + 1, m, acc + bit(member?(${arg}list::at(query_misses, $index))))
+    run_misses(${arg}j + 1, m, acc + bit(member?(${arg}std::list::at(query_misses, $index))))
 
 fn main(args: List\[str\]) -> int errors IndexNotFound:
-    mode = list::get(args, 1, \"none\")
-    m = int_of(list::get(args, 2, \"0\"))
+    mode = std::list::get(args, 1, \"none\")
+    m = int_of(std::list::get(args, 2, \"0\"))
 $build    if mode == \"hit\":
         return run_hits(${arg}0, m, 0)
     if mode == \"miss\":

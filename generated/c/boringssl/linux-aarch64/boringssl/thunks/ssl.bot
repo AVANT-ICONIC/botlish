@@ -3,7 +3,7 @@
 # The thunked APIs of include/openssl/ssl.h (static inline functions, table-redirected
 # names, macros): externs of the C wrappers in the shim library (C-BINDGEN.md,
 # "Thunks"). Build the shim with `tools/c-bindgen.tcl build`.
-import ffi::c
+import std::ffi::c
 import boringssl::ctypes
 
 extern c library "botlish_shim_boringssl_752c8e63"
@@ -13,474 +13,474 @@ extern c library "stdc++"
 
 # C: static inline void sk_SSL_CIPHER_call_free_func(OPENSSL_sk_free_func free_func, void *ptr)
 extern c fn sk_SSL_CIPHER_call_free_func named "botlish_boringssl_sk_SSL_CIPHER_call_free_func"(
-    free_func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]], return: unit}] proven noescape,
-    ptr: ffi::c::Ptr[ffi::c::Void]
+    free_func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Void]], return: unit}] proven noescape,
+    ptr: std::ffi::c::Ptr[std::ffi::c::Void]
 ) -> unit
 
 # C: static inline void *sk_SSL_CIPHER_call_copy_func(OPENSSL_sk_copy_func copy_func, const void *ptr)
 extern c fn sk_SSL_CIPHER_call_copy_func named "botlish_boringssl_sk_SSL_CIPHER_call_copy_func"(
-    copy_func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]], return: ffi::c::Ptr[ffi::c::Void]}] proven noescape,
-    ptr: ffi::c::Ptr[ffi::c::Void]
-) -> ffi::c::Ptr[ffi::c::Void]
+    copy_func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Void]], return: std::ffi::c::Ptr[std::ffi::c::Void]}] proven noescape,
+    ptr: std::ffi::c::Ptr[std::ffi::c::Void]
+) -> std::ffi::c::Ptr[std::ffi::c::Void]
 
 # C: static inline int sk_SSL_CIPHER_call_cmp_func(OPENSSL_sk_cmp_func cmp_func, const void *a, const void *b)
 extern c fn sk_SSL_CIPHER_call_cmp_func named "botlish_boringssl_sk_SSL_CIPHER_call_cmp_func"(
-    cmp_func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Ptr[ffi::c::Void]], ffi::c::Ptr[ffi::c::Ptr[ffi::c::Void]]], return: ffi::c::Int}] proven noescape,
-    a: ffi::c::Ptr[ffi::c::Void],
-    b: ffi::c::Ptr[ffi::c::Void]
-) -> ffi::c::Int
+    cmp_func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Ptr[std::ffi::c::Void]], std::ffi::c::Ptr[std::ffi::c::Ptr[std::ffi::c::Void]]], return: std::ffi::c::Int}] proven noescape,
+    a: std::ffi::c::Ptr[std::ffi::c::Void],
+    b: std::ffi::c::Ptr[std::ffi::c::Void]
+) -> std::ffi::c::Int
 
 # C: static inline int sk_SSL_CIPHER_call_delete_if_func(OPENSSL_sk_delete_if_func func, void *obj, void *data)
 extern c fn sk_SSL_CIPHER_call_delete_if_func named "botlish_boringssl_sk_SSL_CIPHER_call_delete_if_func"(
-    func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[ffi::c::Void]], return: ffi::c::Int}] proven noescape,
-    obj: ffi::c::Ptr[ffi::c::Void],
-    data: ffi::c::Ptr[ffi::c::Void]
-) -> ffi::c::Int
+    func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Void], std::ffi::c::Ptr[std::ffi::c::Void]], return: std::ffi::c::Int}] proven noescape,
+    obj: std::ffi::c::Ptr[std::ffi::c::Void],
+    data: std::ffi::c::Ptr[std::ffi::c::Void]
+) -> std::ffi::c::Int
 
 # C: static inline struct stack_st_SSL_CIPHER *sk_SSL_CIPHER_new(sk_SSL_CIPHER_cmp_func comp)
 extern c fn sk_SSL_CIPHER_new named "botlish_boringssl_sk_SSL_CIPHER_new"(
-    comp: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]], ffi::c::Ptr[ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]]], return: ffi::c::Int}]
-) -> ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER]
+    comp: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]], std::ffi::c::Ptr[std::ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]]], return: std::ffi::c::Int}]
+) -> std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER]
 
 # C: static inline struct stack_st_SSL_CIPHER *sk_SSL_CIPHER_new_null(void)
 extern c fn sk_SSL_CIPHER_new_null named "botlish_boringssl_sk_SSL_CIPHER_new_null"(
     
-) -> ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER]
+) -> std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER]
 
 # C: static inline size_t sk_SSL_CIPHER_num(const struct stack_st_SSL_CIPHER *sk)
 extern c fn sk_SSL_CIPHER_num named "botlish_boringssl_sk_SSL_CIPHER_num"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER]
-) -> ffi::c::ULong
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER]
+) -> std::ffi::c::ULong
 
 # C: static inline void sk_SSL_CIPHER_zero(struct stack_st_SSL_CIPHER *sk)
 extern c fn sk_SSL_CIPHER_zero named "botlish_boringssl_sk_SSL_CIPHER_zero"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER]
 ) -> unit
 
 # C: static inline const SSL_CIPHER *sk_SSL_CIPHER_value(const struct stack_st_SSL_CIPHER *sk, size_t i)
 extern c fn sk_SSL_CIPHER_value named "botlish_boringssl_sk_SSL_CIPHER_value"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER],
-    i: ffi::c::ULong
-) -> ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER],
+    i: std::ffi::c::ULong
+) -> std::ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]
 
 # C: static inline const SSL_CIPHER *sk_SSL_CIPHER_last(const struct stack_st_SSL_CIPHER *sk)
 extern c fn sk_SSL_CIPHER_last named "botlish_boringssl_sk_SSL_CIPHER_last"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER]
-) -> ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER]
+) -> std::ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]
 
 # C: static inline const SSL_CIPHER *sk_SSL_CIPHER_set(struct stack_st_SSL_CIPHER *sk, size_t i, const SSL_CIPHER *p)
 extern c fn sk_SSL_CIPHER_set named "botlish_boringssl_sk_SSL_CIPHER_set"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER],
-    i: ffi::c::ULong,
-    p: ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]
-) -> ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER],
+    i: std::ffi::c::ULong,
+    p: std::ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]
+) -> std::ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]
 
 # C: static inline void sk_SSL_CIPHER_free(struct stack_st_SSL_CIPHER *sk)
 extern c fn sk_SSL_CIPHER_free named "botlish_boringssl_sk_SSL_CIPHER_free"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER]
 ) -> unit
 
 # C: static inline void sk_SSL_CIPHER_pop_free(struct stack_st_SSL_CIPHER *sk, sk_SSL_CIPHER_free_func free_func)
 extern c fn sk_SSL_CIPHER_pop_free named "botlish_boringssl_sk_SSL_CIPHER_pop_free"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER],
-    free_func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]], return: unit}]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER],
+    free_func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]], return: unit}]
 ) -> unit
 
 # C: static inline size_t sk_SSL_CIPHER_insert(struct stack_st_SSL_CIPHER *sk, const SSL_CIPHER *p, size_t where)
 extern c fn sk_SSL_CIPHER_insert named "botlish_boringssl_sk_SSL_CIPHER_insert"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER],
-    p: ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER],
-    where: ffi::c::ULong
-) -> ffi::c::ULong
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER],
+    p: std::ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER],
+    where: std::ffi::c::ULong
+) -> std::ffi::c::ULong
 
 # C: static inline const SSL_CIPHER *sk_SSL_CIPHER_delete(struct stack_st_SSL_CIPHER *sk, size_t where)
 extern c fn sk_SSL_CIPHER_delete named "botlish_boringssl_sk_SSL_CIPHER_delete"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER],
-    where: ffi::c::ULong
-) -> ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER],
+    where: std::ffi::c::ULong
+) -> std::ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]
 
 # C: static inline const SSL_CIPHER *sk_SSL_CIPHER_delete_ptr(struct stack_st_SSL_CIPHER *sk, const SSL_CIPHER *p)
 extern c fn sk_SSL_CIPHER_delete_ptr named "botlish_boringssl_sk_SSL_CIPHER_delete_ptr"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER],
-    p: ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]
-) -> ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER],
+    p: std::ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]
+) -> std::ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]
 
 # C: static inline void sk_SSL_CIPHER_delete_if(struct stack_st_SSL_CIPHER *sk, sk_SSL_CIPHER_delete_if_func func, void *data)
 extern c fn sk_SSL_CIPHER_delete_if named "botlish_boringssl_sk_SSL_CIPHER_delete_if"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER],
-    func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER], ffi::c::Ptr[ffi::c::Void]], return: ffi::c::Int}],
-    data: ffi::c::Ptr[ffi::c::Void]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER],
+    func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER], std::ffi::c::Ptr[std::ffi::c::Void]], return: std::ffi::c::Int}],
+    data: std::ffi::c::Ptr[std::ffi::c::Void]
 ) -> unit
 
 # C: static inline int sk_SSL_CIPHER_find(const struct stack_st_SSL_CIPHER *sk, size_t *out_index, const SSL_CIPHER *p)
 extern c fn sk_SSL_CIPHER_find named "botlish_boringssl_sk_SSL_CIPHER_find"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER],
-    out_index: ffi::c::Ptr[ffi::c::ULong],
-    p: ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]
-) -> ffi::c::Int
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER],
+    out_index: std::ffi::c::Ptr[std::ffi::c::ULong],
+    p: std::ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]
+) -> std::ffi::c::Int
 
 # C: static inline const SSL_CIPHER *sk_SSL_CIPHER_shift(struct stack_st_SSL_CIPHER *sk)
 extern c fn sk_SSL_CIPHER_shift named "botlish_boringssl_sk_SSL_CIPHER_shift"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER]
-) -> ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER]
+) -> std::ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]
 
 # C: static inline size_t sk_SSL_CIPHER_push(struct stack_st_SSL_CIPHER *sk, const SSL_CIPHER *p)
 extern c fn sk_SSL_CIPHER_push named "botlish_boringssl_sk_SSL_CIPHER_push"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER],
-    p: ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]
-) -> ffi::c::ULong
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER],
+    p: std::ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]
+) -> std::ffi::c::ULong
 
 # C: static inline const SSL_CIPHER *sk_SSL_CIPHER_pop(struct stack_st_SSL_CIPHER *sk)
 extern c fn sk_SSL_CIPHER_pop named "botlish_boringssl_sk_SSL_CIPHER_pop"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER]
-) -> ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER]
+) -> std::ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]
 
 # C: static inline struct stack_st_SSL_CIPHER *sk_SSL_CIPHER_dup(const struct stack_st_SSL_CIPHER *sk)
 extern c fn sk_SSL_CIPHER_dup named "botlish_boringssl_sk_SSL_CIPHER_dup"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER]
-) -> ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER]
+) -> std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER]
 
 # C: static inline void sk_SSL_CIPHER_sort(struct stack_st_SSL_CIPHER *sk)
 extern c fn sk_SSL_CIPHER_sort named "botlish_boringssl_sk_SSL_CIPHER_sort"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER]
 ) -> unit
 
 # C: static inline void sk_SSL_CIPHER_sort_and_dedup(struct stack_st_SSL_CIPHER *sk, sk_SSL_CIPHER_free_func free_func)
 extern c fn sk_SSL_CIPHER_sort_and_dedup named "botlish_boringssl_sk_SSL_CIPHER_sort_and_dedup"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER],
-    free_func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]], return: unit}]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER],
+    free_func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]], return: unit}]
 ) -> unit
 
 # C: static inline int sk_SSL_CIPHER_is_sorted(const struct stack_st_SSL_CIPHER *sk)
 extern c fn sk_SSL_CIPHER_is_sorted named "botlish_boringssl_sk_SSL_CIPHER_is_sorted"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER]
-) -> ffi::c::Int
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER]
+) -> std::ffi::c::Int
 
 # C: static inline sk_SSL_CIPHER_cmp_func sk_SSL_CIPHER_set_cmp_func(struct stack_st_SSL_CIPHER *sk, sk_SSL_CIPHER_cmp_func comp)
 extern c fn sk_SSL_CIPHER_set_cmp_func named "botlish_boringssl_sk_SSL_CIPHER_set_cmp_func"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER],
-    comp: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]], ffi::c::Ptr[ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]]], return: ffi::c::Int}]
-) -> ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]], ffi::c::Ptr[ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]]], return: ffi::c::Int}]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER],
+    comp: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]], std::ffi::c::Ptr[std::ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]]], return: std::ffi::c::Int}]
+) -> std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]], std::ffi::c::Ptr[std::ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]]], return: std::ffi::c::Int}]
 
 # C: static inline struct stack_st_SSL_CIPHER *sk_SSL_CIPHER_deep_copy(const struct stack_st_SSL_CIPHER *sk, sk_SSL_CIPHER_copy_func copy_func, sk_SSL_CIPHER_free_func free_func)
 extern c fn sk_SSL_CIPHER_deep_copy named "botlish_boringssl_sk_SSL_CIPHER_deep_copy"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER],
-    copy_func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]], return: ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]}],
-    free_func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]], return: unit}]
-) -> ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER],
+    copy_func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]], return: std::ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]}],
+    free_func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[boringssl::ctypes::SSL_CIPHER]], return: unit}]
+) -> std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_CIPHER]
 
 # C: static inline void sk_SRTP_PROTECTION_PROFILE_call_free_func(OPENSSL_sk_free_func free_func, void *ptr)
 extern c fn sk_SRTP_PROTECTION_PROFILE_call_free_func named "botlish_boringssl_sk_SRTP_PROTECTION_PROFILE_call_free_func"(
-    free_func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]], return: unit}] proven noescape,
-    ptr: ffi::c::Ptr[ffi::c::Void]
+    free_func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Void]], return: unit}] proven noescape,
+    ptr: std::ffi::c::Ptr[std::ffi::c::Void]
 ) -> unit
 
 # C: static inline void *sk_SRTP_PROTECTION_PROFILE_call_copy_func(OPENSSL_sk_copy_func copy_func, const void *ptr)
 extern c fn sk_SRTP_PROTECTION_PROFILE_call_copy_func named "botlish_boringssl_sk_SRTP_PROTECTION_PROFILE_call_copy_func"(
-    copy_func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]], return: ffi::c::Ptr[ffi::c::Void]}] proven noescape,
-    ptr: ffi::c::Ptr[ffi::c::Void]
-) -> ffi::c::Ptr[ffi::c::Void]
+    copy_func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Void]], return: std::ffi::c::Ptr[std::ffi::c::Void]}] proven noescape,
+    ptr: std::ffi::c::Ptr[std::ffi::c::Void]
+) -> std::ffi::c::Ptr[std::ffi::c::Void]
 
 # C: static inline int sk_SRTP_PROTECTION_PROFILE_call_cmp_func(OPENSSL_sk_cmp_func cmp_func, const void *a, const void *b)
 extern c fn sk_SRTP_PROTECTION_PROFILE_call_cmp_func named "botlish_boringssl_sk_SRTP_PROTECTION_PROFILE_call_cmp_func"(
-    cmp_func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Ptr[ffi::c::Void]], ffi::c::Ptr[ffi::c::Ptr[ffi::c::Void]]], return: ffi::c::Int}] proven noescape,
-    a: ffi::c::Ptr[ffi::c::Void],
-    b: ffi::c::Ptr[ffi::c::Void]
-) -> ffi::c::Int
+    cmp_func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Ptr[std::ffi::c::Void]], std::ffi::c::Ptr[std::ffi::c::Ptr[std::ffi::c::Void]]], return: std::ffi::c::Int}] proven noescape,
+    a: std::ffi::c::Ptr[std::ffi::c::Void],
+    b: std::ffi::c::Ptr[std::ffi::c::Void]
+) -> std::ffi::c::Int
 
 # C: static inline int sk_SRTP_PROTECTION_PROFILE_call_delete_if_func(OPENSSL_sk_delete_if_func func, void *obj, void *data)
 extern c fn sk_SRTP_PROTECTION_PROFILE_call_delete_if_func named "botlish_boringssl_sk_SRTP_PROTECTION_PROFILE_call_delete_if_func"(
-    func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[ffi::c::Void]], return: ffi::c::Int}] proven noescape,
-    obj: ffi::c::Ptr[ffi::c::Void],
-    data: ffi::c::Ptr[ffi::c::Void]
-) -> ffi::c::Int
+    func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Void], std::ffi::c::Ptr[std::ffi::c::Void]], return: std::ffi::c::Int}] proven noescape,
+    obj: std::ffi::c::Ptr[std::ffi::c::Void],
+    data: std::ffi::c::Ptr[std::ffi::c::Void]
+) -> std::ffi::c::Int
 
 # C: static inline struct stack_st_SRTP_PROTECTION_PROFILE *sk_SRTP_PROTECTION_PROFILE_new(sk_SRTP_PROTECTION_PROFILE_cmp_func comp)
 extern c fn sk_SRTP_PROTECTION_PROFILE_new named "botlish_boringssl_sk_SRTP_PROTECTION_PROFILE_new"(
-    comp: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]], ffi::c::Ptr[ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]]], return: ffi::c::Int}]
-) -> ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE]
+    comp: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]], std::ffi::c::Ptr[std::ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]]], return: std::ffi::c::Int}]
+) -> std::ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE]
 
 # C: static inline struct stack_st_SRTP_PROTECTION_PROFILE *sk_SRTP_PROTECTION_PROFILE_new_null(void)
 extern c fn sk_SRTP_PROTECTION_PROFILE_new_null named "botlish_boringssl_sk_SRTP_PROTECTION_PROFILE_new_null"(
     
-) -> ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE]
+) -> std::ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE]
 
 # C: static inline size_t sk_SRTP_PROTECTION_PROFILE_num(const struct stack_st_SRTP_PROTECTION_PROFILE *sk)
 extern c fn sk_SRTP_PROTECTION_PROFILE_num named "botlish_boringssl_sk_SRTP_PROTECTION_PROFILE_num"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE]
-) -> ffi::c::ULong
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE]
+) -> std::ffi::c::ULong
 
 # C: static inline void sk_SRTP_PROTECTION_PROFILE_zero(struct stack_st_SRTP_PROTECTION_PROFILE *sk)
 extern c fn sk_SRTP_PROTECTION_PROFILE_zero named "botlish_boringssl_sk_SRTP_PROTECTION_PROFILE_zero"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE]
 ) -> unit
 
 # C: static inline const SRTP_PROTECTION_PROFILE *sk_SRTP_PROTECTION_PROFILE_value(const struct stack_st_SRTP_PROTECTION_PROFILE *sk, size_t i)
 extern c fn sk_SRTP_PROTECTION_PROFILE_value named "botlish_boringssl_sk_SRTP_PROTECTION_PROFILE_value"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE],
-    i: ffi::c::ULong
-) -> ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE],
+    i: std::ffi::c::ULong
+) -> std::ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]
 
 # C: static inline const SRTP_PROTECTION_PROFILE *sk_SRTP_PROTECTION_PROFILE_last(const struct stack_st_SRTP_PROTECTION_PROFILE *sk)
 extern c fn sk_SRTP_PROTECTION_PROFILE_last named "botlish_boringssl_sk_SRTP_PROTECTION_PROFILE_last"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE]
-) -> ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE]
+) -> std::ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]
 
 # C: static inline const SRTP_PROTECTION_PROFILE *sk_SRTP_PROTECTION_PROFILE_set(struct stack_st_SRTP_PROTECTION_PROFILE *sk, size_t i, const SRTP_PROTECTION_PROFILE *p)
 extern c fn sk_SRTP_PROTECTION_PROFILE_set named "botlish_boringssl_sk_SRTP_PROTECTION_PROFILE_set"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE],
-    i: ffi::c::ULong,
-    p: ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]
-) -> ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE],
+    i: std::ffi::c::ULong,
+    p: std::ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]
+) -> std::ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]
 
 # C: static inline void sk_SRTP_PROTECTION_PROFILE_free(struct stack_st_SRTP_PROTECTION_PROFILE *sk)
 extern c fn sk_SRTP_PROTECTION_PROFILE_free named "botlish_boringssl_sk_SRTP_PROTECTION_PROFILE_free"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE]
 ) -> unit
 
 # C: static inline void sk_SRTP_PROTECTION_PROFILE_pop_free(struct stack_st_SRTP_PROTECTION_PROFILE *sk, sk_SRTP_PROTECTION_PROFILE_free_func free_func)
 extern c fn sk_SRTP_PROTECTION_PROFILE_pop_free named "botlish_boringssl_sk_SRTP_PROTECTION_PROFILE_pop_free"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE],
-    free_func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]], return: unit}]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE],
+    free_func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]], return: unit}]
 ) -> unit
 
 # C: static inline size_t sk_SRTP_PROTECTION_PROFILE_insert(struct stack_st_SRTP_PROTECTION_PROFILE *sk, const SRTP_PROTECTION_PROFILE *p, size_t where)
 extern c fn sk_SRTP_PROTECTION_PROFILE_insert named "botlish_boringssl_sk_SRTP_PROTECTION_PROFILE_insert"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE],
-    p: ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE],
-    where: ffi::c::ULong
-) -> ffi::c::ULong
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE],
+    p: std::ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE],
+    where: std::ffi::c::ULong
+) -> std::ffi::c::ULong
 
 # C: static inline const SRTP_PROTECTION_PROFILE *sk_SRTP_PROTECTION_PROFILE_delete(struct stack_st_SRTP_PROTECTION_PROFILE *sk, size_t where)
 extern c fn sk_SRTP_PROTECTION_PROFILE_delete named "botlish_boringssl_sk_SRTP_PROTECTION_PROFILE_delete"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE],
-    where: ffi::c::ULong
-) -> ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE],
+    where: std::ffi::c::ULong
+) -> std::ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]
 
 # C: static inline const SRTP_PROTECTION_PROFILE *sk_SRTP_PROTECTION_PROFILE_delete_ptr(struct stack_st_SRTP_PROTECTION_PROFILE *sk, const SRTP_PROTECTION_PROFILE *p)
 extern c fn sk_SRTP_PROTECTION_PROFILE_delete_ptr named "botlish_boringssl_sk_SRTP_PROTECTION_PROFILE_delete_ptr"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE],
-    p: ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]
-) -> ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE],
+    p: std::ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]
+) -> std::ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]
 
 # C: static inline void sk_SRTP_PROTECTION_PROFILE_delete_if(struct stack_st_SRTP_PROTECTION_PROFILE *sk, sk_SRTP_PROTECTION_PROFILE_delete_if_func func, void *data)
 extern c fn sk_SRTP_PROTECTION_PROFILE_delete_if named "botlish_boringssl_sk_SRTP_PROTECTION_PROFILE_delete_if"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE],
-    func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE], ffi::c::Ptr[ffi::c::Void]], return: ffi::c::Int}],
-    data: ffi::c::Ptr[ffi::c::Void]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE],
+    func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE], std::ffi::c::Ptr[std::ffi::c::Void]], return: std::ffi::c::Int}],
+    data: std::ffi::c::Ptr[std::ffi::c::Void]
 ) -> unit
 
 # C: static inline int sk_SRTP_PROTECTION_PROFILE_find(const struct stack_st_SRTP_PROTECTION_PROFILE *sk, size_t *out_index, const SRTP_PROTECTION_PROFILE *p)
 extern c fn sk_SRTP_PROTECTION_PROFILE_find named "botlish_boringssl_sk_SRTP_PROTECTION_PROFILE_find"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE],
-    out_index: ffi::c::Ptr[ffi::c::ULong],
-    p: ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]
-) -> ffi::c::Int
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE],
+    out_index: std::ffi::c::Ptr[std::ffi::c::ULong],
+    p: std::ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]
+) -> std::ffi::c::Int
 
 # C: static inline const SRTP_PROTECTION_PROFILE *sk_SRTP_PROTECTION_PROFILE_shift(struct stack_st_SRTP_PROTECTION_PROFILE *sk)
 extern c fn sk_SRTP_PROTECTION_PROFILE_shift named "botlish_boringssl_sk_SRTP_PROTECTION_PROFILE_shift"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE]
-) -> ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE]
+) -> std::ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]
 
 # C: static inline size_t sk_SRTP_PROTECTION_PROFILE_push(struct stack_st_SRTP_PROTECTION_PROFILE *sk, const SRTP_PROTECTION_PROFILE *p)
 extern c fn sk_SRTP_PROTECTION_PROFILE_push named "botlish_boringssl_sk_SRTP_PROTECTION_PROFILE_push"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE],
-    p: ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]
-) -> ffi::c::ULong
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE],
+    p: std::ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]
+) -> std::ffi::c::ULong
 
 # C: static inline const SRTP_PROTECTION_PROFILE *sk_SRTP_PROTECTION_PROFILE_pop(struct stack_st_SRTP_PROTECTION_PROFILE *sk)
 extern c fn sk_SRTP_PROTECTION_PROFILE_pop named "botlish_boringssl_sk_SRTP_PROTECTION_PROFILE_pop"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE]
-) -> ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE]
+) -> std::ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]
 
 # C: static inline struct stack_st_SRTP_PROTECTION_PROFILE *sk_SRTP_PROTECTION_PROFILE_dup(const struct stack_st_SRTP_PROTECTION_PROFILE *sk)
 extern c fn sk_SRTP_PROTECTION_PROFILE_dup named "botlish_boringssl_sk_SRTP_PROTECTION_PROFILE_dup"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE]
-) -> ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE]
+) -> std::ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE]
 
 # C: static inline void sk_SRTP_PROTECTION_PROFILE_sort(struct stack_st_SRTP_PROTECTION_PROFILE *sk)
 extern c fn sk_SRTP_PROTECTION_PROFILE_sort named "botlish_boringssl_sk_SRTP_PROTECTION_PROFILE_sort"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE]
 ) -> unit
 
 # C: static inline void sk_SRTP_PROTECTION_PROFILE_sort_and_dedup(struct stack_st_SRTP_PROTECTION_PROFILE *sk, sk_SRTP_PROTECTION_PROFILE_free_func free_func)
 extern c fn sk_SRTP_PROTECTION_PROFILE_sort_and_dedup named "botlish_boringssl_sk_SRTP_PROTECTION_PROFILE_sort_and_dedup"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE],
-    free_func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]], return: unit}]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE],
+    free_func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]], return: unit}]
 ) -> unit
 
 # C: static inline int sk_SRTP_PROTECTION_PROFILE_is_sorted(const struct stack_st_SRTP_PROTECTION_PROFILE *sk)
 extern c fn sk_SRTP_PROTECTION_PROFILE_is_sorted named "botlish_boringssl_sk_SRTP_PROTECTION_PROFILE_is_sorted"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE]
-) -> ffi::c::Int
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE]
+) -> std::ffi::c::Int
 
 # C: static inline sk_SRTP_PROTECTION_PROFILE_cmp_func sk_SRTP_PROTECTION_PROFILE_set_cmp_func(struct stack_st_SRTP_PROTECTION_PROFILE *sk, sk_SRTP_PROTECTION_PROFILE_cmp_func comp)
 extern c fn sk_SRTP_PROTECTION_PROFILE_set_cmp_func named "botlish_boringssl_sk_SRTP_PROTECTION_PROFILE_set_cmp_func"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE],
-    comp: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]], ffi::c::Ptr[ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]]], return: ffi::c::Int}]
-) -> ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]], ffi::c::Ptr[ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]]], return: ffi::c::Int}]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE],
+    comp: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]], std::ffi::c::Ptr[std::ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]]], return: std::ffi::c::Int}]
+) -> std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]], std::ffi::c::Ptr[std::ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]]], return: std::ffi::c::Int}]
 
 # C: static inline struct stack_st_SRTP_PROTECTION_PROFILE *sk_SRTP_PROTECTION_PROFILE_deep_copy(const struct stack_st_SRTP_PROTECTION_PROFILE *sk, sk_SRTP_PROTECTION_PROFILE_copy_func copy_func, sk_SRTP_PROTECTION_PROFILE_free_func free_func)
 extern c fn sk_SRTP_PROTECTION_PROFILE_deep_copy named "botlish_boringssl_sk_SRTP_PROTECTION_PROFILE_deep_copy"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE],
-    copy_func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]], return: ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]}],
-    free_func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]], return: unit}]
-) -> ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE],
+    copy_func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]], return: std::ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]}],
+    free_func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[boringssl::ctypes::SRTP_PROTECTION_PROFILE]], return: unit}]
+) -> std::ffi::c::Ptr[boringssl::ctypes::stack_st_SRTP_PROTECTION_PROFILE]
 
 # C: static inline void sk_SSL_COMP_call_free_func(OPENSSL_sk_free_func free_func, void *ptr)
 extern c fn sk_SSL_COMP_call_free_func named "botlish_boringssl_sk_SSL_COMP_call_free_func"(
-    free_func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]], return: unit}] proven noescape,
-    ptr: ffi::c::Ptr[ffi::c::Void]
+    free_func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Void]], return: unit}] proven noescape,
+    ptr: std::ffi::c::Ptr[std::ffi::c::Void]
 ) -> unit
 
 # C: static inline void *sk_SSL_COMP_call_copy_func(OPENSSL_sk_copy_func copy_func, const void *ptr)
 extern c fn sk_SSL_COMP_call_copy_func named "botlish_boringssl_sk_SSL_COMP_call_copy_func"(
-    copy_func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]], return: ffi::c::Ptr[ffi::c::Void]}] proven noescape,
-    ptr: ffi::c::Ptr[ffi::c::Void]
-) -> ffi::c::Ptr[ffi::c::Void]
+    copy_func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Void]], return: std::ffi::c::Ptr[std::ffi::c::Void]}] proven noescape,
+    ptr: std::ffi::c::Ptr[std::ffi::c::Void]
+) -> std::ffi::c::Ptr[std::ffi::c::Void]
 
 # C: static inline int sk_SSL_COMP_call_cmp_func(OPENSSL_sk_cmp_func cmp_func, const void *a, const void *b)
 extern c fn sk_SSL_COMP_call_cmp_func named "botlish_boringssl_sk_SSL_COMP_call_cmp_func"(
-    cmp_func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Ptr[ffi::c::Void]], ffi::c::Ptr[ffi::c::Ptr[ffi::c::Void]]], return: ffi::c::Int}] proven noescape,
-    a: ffi::c::Ptr[ffi::c::Void],
-    b: ffi::c::Ptr[ffi::c::Void]
-) -> ffi::c::Int
+    cmp_func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Ptr[std::ffi::c::Void]], std::ffi::c::Ptr[std::ffi::c::Ptr[std::ffi::c::Void]]], return: std::ffi::c::Int}] proven noescape,
+    a: std::ffi::c::Ptr[std::ffi::c::Void],
+    b: std::ffi::c::Ptr[std::ffi::c::Void]
+) -> std::ffi::c::Int
 
 # C: static inline int sk_SSL_COMP_call_delete_if_func(OPENSSL_sk_delete_if_func func, void *obj, void *data)
 extern c fn sk_SSL_COMP_call_delete_if_func named "botlish_boringssl_sk_SSL_COMP_call_delete_if_func"(
-    func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[ffi::c::Void]], return: ffi::c::Int}] proven noescape,
-    obj: ffi::c::Ptr[ffi::c::Void],
-    data: ffi::c::Ptr[ffi::c::Void]
-) -> ffi::c::Int
+    func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Void], std::ffi::c::Ptr[std::ffi::c::Void]], return: std::ffi::c::Int}] proven noescape,
+    obj: std::ffi::c::Ptr[std::ffi::c::Void],
+    data: std::ffi::c::Ptr[std::ffi::c::Void]
+) -> std::ffi::c::Int
 
 # C: static inline struct stack_st_SSL_COMP *sk_SSL_COMP_new(sk_SSL_COMP_cmp_func comp)
 extern c fn sk_SSL_COMP_new named "botlish_boringssl_sk_SSL_COMP_new"(
-    comp: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Ptr[boringssl::ctypes::SSL_COMP]], ffi::c::Ptr[ffi::c::Ptr[boringssl::ctypes::SSL_COMP]]], return: ffi::c::Int}]
-) -> ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP]
+    comp: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Ptr[boringssl::ctypes::SSL_COMP]], std::ffi::c::Ptr[std::ffi::c::Ptr[boringssl::ctypes::SSL_COMP]]], return: std::ffi::c::Int}]
+) -> std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP]
 
 # C: static inline struct stack_st_SSL_COMP *sk_SSL_COMP_new_null(void)
 extern c fn sk_SSL_COMP_new_null named "botlish_boringssl_sk_SSL_COMP_new_null"(
     
-) -> ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP]
+) -> std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP]
 
 # C: static inline size_t sk_SSL_COMP_num(const struct stack_st_SSL_COMP *sk)
 extern c fn sk_SSL_COMP_num named "botlish_boringssl_sk_SSL_COMP_num"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP]
-) -> ffi::c::ULong
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP]
+) -> std::ffi::c::ULong
 
 # C: static inline void sk_SSL_COMP_zero(struct stack_st_SSL_COMP *sk)
 extern c fn sk_SSL_COMP_zero named "botlish_boringssl_sk_SSL_COMP_zero"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP]
 ) -> unit
 
 # C: static inline SSL_COMP *sk_SSL_COMP_value(const struct stack_st_SSL_COMP *sk, size_t i)
 extern c fn sk_SSL_COMP_value named "botlish_boringssl_sk_SSL_COMP_value"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP],
-    i: ffi::c::ULong
-) -> ffi::c::Ptr[boringssl::ctypes::SSL_COMP]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP],
+    i: std::ffi::c::ULong
+) -> std::ffi::c::Ptr[boringssl::ctypes::SSL_COMP]
 
 # C: static inline SSL_COMP *sk_SSL_COMP_last(const struct stack_st_SSL_COMP *sk)
 extern c fn sk_SSL_COMP_last named "botlish_boringssl_sk_SSL_COMP_last"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP]
-) -> ffi::c::Ptr[boringssl::ctypes::SSL_COMP]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP]
+) -> std::ffi::c::Ptr[boringssl::ctypes::SSL_COMP]
 
 # C: static inline SSL_COMP *sk_SSL_COMP_set(struct stack_st_SSL_COMP *sk, size_t i, SSL_COMP *p)
 extern c fn sk_SSL_COMP_set named "botlish_boringssl_sk_SSL_COMP_set"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP],
-    i: ffi::c::ULong,
-    p: ffi::c::Ptr[boringssl::ctypes::SSL_COMP]
-) -> ffi::c::Ptr[boringssl::ctypes::SSL_COMP]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP],
+    i: std::ffi::c::ULong,
+    p: std::ffi::c::Ptr[boringssl::ctypes::SSL_COMP]
+) -> std::ffi::c::Ptr[boringssl::ctypes::SSL_COMP]
 
 # C: static inline void sk_SSL_COMP_free(struct stack_st_SSL_COMP *sk)
 extern c fn sk_SSL_COMP_free named "botlish_boringssl_sk_SSL_COMP_free"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP]
 ) -> unit
 
 # C: static inline void sk_SSL_COMP_pop_free(struct stack_st_SSL_COMP *sk, sk_SSL_COMP_free_func free_func)
 extern c fn sk_SSL_COMP_pop_free named "botlish_boringssl_sk_SSL_COMP_pop_free"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP],
-    free_func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[boringssl::ctypes::SSL_COMP]], return: unit}]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP],
+    free_func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[boringssl::ctypes::SSL_COMP]], return: unit}]
 ) -> unit
 
 # C: static inline size_t sk_SSL_COMP_insert(struct stack_st_SSL_COMP *sk, SSL_COMP *p, size_t where)
 extern c fn sk_SSL_COMP_insert named "botlish_boringssl_sk_SSL_COMP_insert"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP],
-    p: ffi::c::Ptr[boringssl::ctypes::SSL_COMP],
-    where: ffi::c::ULong
-) -> ffi::c::ULong
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP],
+    p: std::ffi::c::Ptr[boringssl::ctypes::SSL_COMP],
+    where: std::ffi::c::ULong
+) -> std::ffi::c::ULong
 
 # C: static inline SSL_COMP *sk_SSL_COMP_delete(struct stack_st_SSL_COMP *sk, size_t where)
 extern c fn sk_SSL_COMP_delete named "botlish_boringssl_sk_SSL_COMP_delete"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP],
-    where: ffi::c::ULong
-) -> ffi::c::Ptr[boringssl::ctypes::SSL_COMP]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP],
+    where: std::ffi::c::ULong
+) -> std::ffi::c::Ptr[boringssl::ctypes::SSL_COMP]
 
 # C: static inline SSL_COMP *sk_SSL_COMP_delete_ptr(struct stack_st_SSL_COMP *sk, const SSL_COMP *p)
 extern c fn sk_SSL_COMP_delete_ptr named "botlish_boringssl_sk_SSL_COMP_delete_ptr"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP],
-    p: ffi::c::Ptr[boringssl::ctypes::SSL_COMP]
-) -> ffi::c::Ptr[boringssl::ctypes::SSL_COMP]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP],
+    p: std::ffi::c::Ptr[boringssl::ctypes::SSL_COMP]
+) -> std::ffi::c::Ptr[boringssl::ctypes::SSL_COMP]
 
 # C: static inline void sk_SSL_COMP_delete_if(struct stack_st_SSL_COMP *sk, sk_SSL_COMP_delete_if_func func, void *data)
 extern c fn sk_SSL_COMP_delete_if named "botlish_boringssl_sk_SSL_COMP_delete_if"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP],
-    func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[boringssl::ctypes::SSL_COMP], ffi::c::Ptr[ffi::c::Void]], return: ffi::c::Int}],
-    data: ffi::c::Ptr[ffi::c::Void]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP],
+    func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[boringssl::ctypes::SSL_COMP], std::ffi::c::Ptr[std::ffi::c::Void]], return: std::ffi::c::Int}],
+    data: std::ffi::c::Ptr[std::ffi::c::Void]
 ) -> unit
 
 # C: static inline int sk_SSL_COMP_find(const struct stack_st_SSL_COMP *sk, size_t *out_index, const SSL_COMP *p)
 extern c fn sk_SSL_COMP_find named "botlish_boringssl_sk_SSL_COMP_find"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP],
-    out_index: ffi::c::Ptr[ffi::c::ULong],
-    p: ffi::c::Ptr[boringssl::ctypes::SSL_COMP]
-) -> ffi::c::Int
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP],
+    out_index: std::ffi::c::Ptr[std::ffi::c::ULong],
+    p: std::ffi::c::Ptr[boringssl::ctypes::SSL_COMP]
+) -> std::ffi::c::Int
 
 # C: static inline SSL_COMP *sk_SSL_COMP_shift(struct stack_st_SSL_COMP *sk)
 extern c fn sk_SSL_COMP_shift named "botlish_boringssl_sk_SSL_COMP_shift"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP]
-) -> ffi::c::Ptr[boringssl::ctypes::SSL_COMP]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP]
+) -> std::ffi::c::Ptr[boringssl::ctypes::SSL_COMP]
 
 # C: static inline size_t sk_SSL_COMP_push(struct stack_st_SSL_COMP *sk, SSL_COMP *p)
 extern c fn sk_SSL_COMP_push named "botlish_boringssl_sk_SSL_COMP_push"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP],
-    p: ffi::c::Ptr[boringssl::ctypes::SSL_COMP]
-) -> ffi::c::ULong
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP],
+    p: std::ffi::c::Ptr[boringssl::ctypes::SSL_COMP]
+) -> std::ffi::c::ULong
 
 # C: static inline SSL_COMP *sk_SSL_COMP_pop(struct stack_st_SSL_COMP *sk)
 extern c fn sk_SSL_COMP_pop named "botlish_boringssl_sk_SSL_COMP_pop"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP]
-) -> ffi::c::Ptr[boringssl::ctypes::SSL_COMP]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP]
+) -> std::ffi::c::Ptr[boringssl::ctypes::SSL_COMP]
 
 # C: static inline struct stack_st_SSL_COMP *sk_SSL_COMP_dup(const struct stack_st_SSL_COMP *sk)
 extern c fn sk_SSL_COMP_dup named "botlish_boringssl_sk_SSL_COMP_dup"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP]
-) -> ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP]
+) -> std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP]
 
 # C: static inline void sk_SSL_COMP_sort(struct stack_st_SSL_COMP *sk)
 extern c fn sk_SSL_COMP_sort named "botlish_boringssl_sk_SSL_COMP_sort"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP]
 ) -> unit
 
 # C: static inline void sk_SSL_COMP_sort_and_dedup(struct stack_st_SSL_COMP *sk, sk_SSL_COMP_free_func free_func)
 extern c fn sk_SSL_COMP_sort_and_dedup named "botlish_boringssl_sk_SSL_COMP_sort_and_dedup"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP],
-    free_func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[boringssl::ctypes::SSL_COMP]], return: unit}]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP],
+    free_func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[boringssl::ctypes::SSL_COMP]], return: unit}]
 ) -> unit
 
 # C: static inline int sk_SSL_COMP_is_sorted(const struct stack_st_SSL_COMP *sk)
 extern c fn sk_SSL_COMP_is_sorted named "botlish_boringssl_sk_SSL_COMP_is_sorted"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP]
-) -> ffi::c::Int
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP]
+) -> std::ffi::c::Int
 
 # C: static inline sk_SSL_COMP_cmp_func sk_SSL_COMP_set_cmp_func(struct stack_st_SSL_COMP *sk, sk_SSL_COMP_cmp_func comp)
 extern c fn sk_SSL_COMP_set_cmp_func named "botlish_boringssl_sk_SSL_COMP_set_cmp_func"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP],
-    comp: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Ptr[boringssl::ctypes::SSL_COMP]], ffi::c::Ptr[ffi::c::Ptr[boringssl::ctypes::SSL_COMP]]], return: ffi::c::Int}]
-) -> ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Ptr[boringssl::ctypes::SSL_COMP]], ffi::c::Ptr[ffi::c::Ptr[boringssl::ctypes::SSL_COMP]]], return: ffi::c::Int}]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP],
+    comp: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Ptr[boringssl::ctypes::SSL_COMP]], std::ffi::c::Ptr[std::ffi::c::Ptr[boringssl::ctypes::SSL_COMP]]], return: std::ffi::c::Int}]
+) -> std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Ptr[boringssl::ctypes::SSL_COMP]], std::ffi::c::Ptr[std::ffi::c::Ptr[boringssl::ctypes::SSL_COMP]]], return: std::ffi::c::Int}]
 
 # C: static inline struct stack_st_SSL_COMP *sk_SSL_COMP_deep_copy(const struct stack_st_SSL_COMP *sk, sk_SSL_COMP_copy_func copy_func, sk_SSL_COMP_free_func free_func)
 extern c fn sk_SSL_COMP_deep_copy named "botlish_boringssl_sk_SSL_COMP_deep_copy"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP],
-    copy_func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[boringssl::ctypes::SSL_COMP]], return: ffi::c::Ptr[boringssl::ctypes::SSL_COMP]}],
-    free_func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[boringssl::ctypes::SSL_COMP]], return: unit}]
-) -> ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP],
+    copy_func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[boringssl::ctypes::SSL_COMP]], return: std::ffi::c::Ptr[boringssl::ctypes::SSL_COMP]}],
+    free_func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[boringssl::ctypes::SSL_COMP]], return: unit}]
+) -> std::ffi::c::Ptr[boringssl::ctypes::stack_st_SSL_COMP]

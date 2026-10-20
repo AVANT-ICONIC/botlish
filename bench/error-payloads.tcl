@@ -51,8 +51,8 @@ foreach {option value} $args {
     }
 }
 
-set plainPrelude "import list
-import str
+set plainPrelude "import std::list
+import std::str
 
 error Lost
 
@@ -116,7 +116,7 @@ fn text(x: int) -> int errors Text:
 
 fn built(x: int) -> int errors Text:
     if x < 0:
-        fail Text {uri: str::concat(\"/a\", \"/b\")}
+        fail Text {uri: std::str::concat(\"/a\", \"/b\")}
     x
 
 fn nested(x: int) -> int errors Nested:
@@ -151,7 +151,7 @@ proc Loop {prelude n sign body} {
     foreach line $body {
         append text "        $line\n"
     }
-    append text "    list::length(xs)\n\nf($n, $sign)\n"
+    append text "    std::list::length(xs)\n\nf($n, $sign)\n"
     return $text
 }
 
@@ -169,11 +169,11 @@ proc programText {kind n} {
         fail-small    { return [Loop $rich $n -1 {"small(x):" "    on Small {code}:" "        code"}] }
         fail-small-ignored { return [Loop $rich $n -1 {"small(x):" "    on Small:" "        0"}] }
         fail-scalars  { return [Loop $rich $n -1 {"scalars(x):" "    on Scalars {code, at}:" "        code + at"}] }
-        fail-text     { return [Loop $rich $n -1 {"text(x):" "    on Text {uri}:" "        str::length(uri)"}] }
-        fail-built    { return [Loop $rich $n -1 {"built(x):" "    on Text {uri}:" "        str::length(uri)"}] }
+        fail-text     { return [Loop $rich $n -1 {"text(x):" "    on Text {uri}:" "        std::str::length(uri)"}] }
+        fail-built    { return [Loop $rich $n -1 {"built(x):" "    on Text {uri}:" "        std::str::length(uri)"}] }
         fail-nested   { return [Loop $rich $n -1 {"nested(x):" "    on Nested {box: {n}}:" "        n"}] }
         fail-whole-projected { return [Loop $rich $n -1 {"scalars(x):" "    on Scalars details:" "        details.code"}] }
-        fail-whole-value { return [Loop $rich $n -1 {"v = scalars(x):" "    on Scalars details:" "        d = \[details\]" "        list::length(d)" "v"}] }
+        fail-whole-value { return [Loop $rich $n -1 {"v = scalars(x):" "    on Scalars details:" "        d = \[details\]" "        std::list::length(d)" "v"}] }
         fail-partial  { return [Loop $rich $n -1 {"scalars(x):" "    on Scalars {at}:" "        at"}] }
         fail-small-5  { return [Loop $rich $n -1 {"s5(x):" "    on Small {code}:" "        code"}] }
         default { error "unknown program $kind" }

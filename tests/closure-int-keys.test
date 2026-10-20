@@ -1,7 +1,7 @@
 # closure-int-keys.test -- loss point 1 of GENERIC-PREDICATE-PROOF-LOSS.md:
 # a value-capturing closure with a non-Int capture keeps the Int positions of
 # its key (hir::specialize::Handle), not only its exact callable positions.
-# lib/web.bot's tld?, domain?, char_at and scan_while's start are therefore
+# stdlib/web.bot's tld?, domain?, char_at and scan_while's start are therefore
 # keyed <int>; their generic instances stay used as never-entered Block-value
 # entries (dormant: tests/dormant-instances.test).
 #
@@ -76,13 +76,13 @@ proc paramGuards {hir analysis id} {
 # The warning-driven refactor (REFACTOR-WARNINGS-CLEAN.md) merged emailish?'s
 # rejections behind `if local_end > 0:`, which narrows where the old
 # `if local_end == 0:` else-branch did not: domain?, tld? and the
-# str::is_tcl_alpha scan_while each start one higher (2, 3, 3), keyed and
+# std::str::is_tcl_alpha scan_while each start one higher (2, 3, 3), keyed and
 # generic alike.
 
 test closure-int-keys-refined-checks {tld?, domain?, char_at and scan_while's start are Int-keyed; each generic instance is a dormant Block-value entry; the keyed instances keep every entry Range the generic ones had} -body {
     lassign [refinedChecks] hir spec analysis
     lmap name {tld? domain? char_at scan_while} {rowsOf $spec $analysis $name}
-} -result {{{tld?<generic> 1 {{[-∞, +∞]}}} {tld?<int> 0 {{[3, 4611686018427387903]}}}} {{domain?<generic> 1 {{[-∞, +∞]}}} {domain?<int> 0 {{[2, 4611686018427387903]}}}} {{char_at<generic> 1 {{[-∞, +∞]}}} {char_at<int> 0 {{[0, 4611686018427387902]}}}} {{scan_while<generic> 1 {{[-∞, +∞]} {[-∞, +∞]}}} {{scan_while<any, native(str::is_tcl_alpha)>} 1 {{[-∞, +∞]} {[-∞, +∞]}}} {{scan_while<int, block(eN)>} 0 {{[0, 0]} {[-∞, +∞]}}} {{scan_while<int, native(str::is_tcl_alpha)>} 0 {{[3, 4611686018427387903]} {[-∞, +∞]}}}}}
+} -result {{{tld?<generic> 1 {{[-∞, +∞]}}} {tld?<int> 0 {{[3, 4611686018427387903]}}}} {{domain?<generic> 1 {{[-∞, +∞]}}} {domain?<int> 0 {{[2, 4611686018427387903]}}}} {{char_at<generic> 1 {{[-∞, +∞]}}} {char_at<int> 0 {{[0, 4611686018427387902]}}}} {{scan_while<generic> 1 {{[-∞, +∞]} {[-∞, +∞]}}} {{scan_while<any, native(std::str::is_tcl_alpha)>} 1 {{[-∞, +∞]} {[-∞, +∞]}}} {{scan_while<int, block(eN)>} 0 {{[0, 0]} {[-∞, +∞]}}} {{scan_while<int, native(std::str::is_tcl_alpha)>} 0 {{[3, 4611686018427387903]} {[-∞, +∞]}}}}}
 
 test closure-int-keys-refined-checks-knob-off {with the knob off the same functions are <generic> (or <any, …>) with the same entry Ranges} -body {
     withIntKeys 0 {
@@ -125,21 +125,21 @@ test closure-int-keys-refined-checks-rawint-plan {the keyed positions are RawInt
         set rows {}
         foreach id [dict get $spec used] {
             set label [hir::specialize::label $spec $id]
-            if {$label ni {tld?<int> domain?<int> char_at<int> {scan_while<int, native(str::is_tcl_alpha)>}}} continue
+            if {$label ni {tld?<int> domain?<int> char_at<int> {scan_while<int, native(std::str::is_tcl_alpha)>}}} continue
             lappend rows [list $label [lindex [dict get $plan $id paramEligible] 0] [lindex [dict get $plan $id paramReasons] 0]]
         }
         lsort $rows
     }
-} -result {{{char_at<int> 1 suppressed-mixed-tagged-use} {domain?<int> 1 suppressed-mixed-tagged-use} {tld?<int> 1 suppressed-mixed-tagged-use} {{scan_while<int, native(str::is_tcl_alpha)>} 1 suppressed-no-raw-demand}} {{char_at<int> 1 suppressed-mixed-tagged-use} {domain?<int> 1 {}} {tld?<int> 1 {}} {{scan_while<int, native(str::is_tcl_alpha)>} 1 {}}}}
+} -result {{{char_at<int> 1 suppressed-mixed-tagged-use} {domain?<int> 1 suppressed-mixed-tagged-use} {tld?<int> 1 suppressed-mixed-tagged-use} {{scan_while<int, native(std::str::is_tcl_alpha)>} 1 suppressed-no-raw-demand}} {{char_at<int> 1 suppressed-mixed-tagged-use} {domain?<int> 1 {}} {tld?<int> 1 {}} {{scan_while<int, native(std::str::is_tcl_alpha)>} 1 {}}}}
 
 # ---------------------------------------------------------------------------
 # The rule
 
 set ::intFixture {
-    import str
+    import std::str
     fn outer(tag):
         fn inner(x):
-            x + str::length(tag)
+            x + std::str::length(tag)
         inner(1) + inner(2)
     outer("v")
 }
@@ -164,14 +164,14 @@ test closure-int-keys-no-guard-without-theorem {the key alone removes the kind g
 
 test closure-int-keys-other-kinds-stay-generic {a String or Bool argument still gives the generic key} -body {
     lassign [specOf {
-        import str
+        import std::str
         fn outer(tag):
             fn inner(x):
-                str::concat(tag, "")
+                std::str::concat(tag, "")
                 x
             a = inner(tag)
             b = inner(true)
-            str::length(tag)
+            std::str::length(tag)
         outer("v")
     }] hir analysis
     lmap id [dict get $analysis used] {
@@ -181,10 +181,10 @@ test closure-int-keys-other-kinds-stay-generic {a String or Bool argument still 
 } -result {inner<generic>}
 
 set ::mixedKinds {
-    import str
+    import std::str
     fn outer(tag):
         fn inner(x):
-            str::concat(tag, "")
+            std::str::concat(tag, "")
             x
         [inner(tag), inner(1), inner(2)]
     outer("v")
@@ -203,11 +203,11 @@ foreach {name src expected} [list \
     int $::intFixture 5 \
     mixed $::mixedKinds {["v", 1, 2]} \
     scanner {
-        import str
+        import std::str
         fn first_space(s):
-            n = str::length(s)
+            n = std::str::length(s)
             fn at(i):
-                str::substring(s, i, i + 1)
+                std::str::substring(s, i, i + 1)
             fn scan(start):
                 loop i from start to n:
                     if at(i) == " ":

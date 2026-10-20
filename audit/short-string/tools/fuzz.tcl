@@ -78,7 +78,7 @@ proc atom {svars ivars callable} {
         return "${name}([join $args {, }])"
     }
     if {$x < 0.72 && $ivars ne ""} {
-        return "str::substring($::TEXT, [pick $ivars], [pick $ivars] + 1)"
+        return "std::str::substring($::TEXT, [pick $ivars], [pick $ivars] + 1)"
     }
     if {$x < 0.86} { return [maybeLong] }
     return [strLit]
@@ -114,7 +114,7 @@ proc program {} {
     set extra {}
     # peek, once: the corpus idiom
     if {rand() < 0.5} {
-        lappend lines "fn peek(text, index):\n    if index < 0 or index >= str::length(text):\n        return \"\"\n\n    str::substring(text, index, index + 1)\n"
+        lappend lines "fn peek(text, index):\n    if index < 0 or index >= std::str::length(text):\n        return \"\"\n\n    std::str::substring(text, index, index + 1)\n"
         set peekable 1
     } else {
         set peekable 0
@@ -130,7 +130,7 @@ proc program {} {
     }
     if {rand() < 0.4} {
         # a closure capturing a short local (the environment is tagged)
-        lappend lines "fn cap(n, s) errors LowerUnderrun, UpperOverrun:\n    v = [atom {s} {n} {}]\n    fn add(x):\n        str::concat(v, x)\n    add(\"!\")\n"
+        lappend lines "fn cap(n, s) errors LowerUnderrun, UpperOverrun:\n    v = [atom {s} {n} {}]\n    fn add(x):\n        std::str::concat(v, x)\n    add(\"!\")\n"
         lappend extra "cap:is"
     }
     set nfun [expr {2 + int(rand() * 4)}]
@@ -181,13 +181,13 @@ proc program {} {
         set args {}
         foreach k [split $kind ""] { lappend args [expr {$k eq "s" ? [strLit] : [intLit]}] }
         set call "${name}([join $args {, }])"
-        lappend cons "str::length($call)" "$call == [strLit]" "$call == \"\"" "list::append(\[\], $call)" "str::concat($call, \"!\")" "hash($call) == hash($call)"
+        lappend cons "std::str::length($call)" "$call == [strLit]" "$call == \"\"" "std::list::append(\[\], $call)" "std::str::concat($call, \"!\")" "hash($call) == hash($call)"
     }
     set picks {}
     set m [expr {3 + int(rand() * 6)}]
     for {set i 0} {$i < $m} {incr i} { lappend picks [pick $cons] }
     # Every generated function declares the slice errors its inline
-    # str::substring calls may raise (STDLIB-NAMESPACES.md); the program's
+    # std::str::substring calls may raise (STDLIB-NAMESPACES.md); the program's
     # value turns them into ["lower"]/["upper"], so an out-of-range slice is an
     # outcome the backends must agree on, not a static rejection.
     return "[join $lines \n]\nfn main() errors LowerUnderrun, UpperOverrun:\n    \[[join $picks {, }]\]\nr = main():\n    on LowerUnderrun:\n        \[\"lower\"\]\n    on UpperOverrun:\n        \[\"upper\"\]\nr\n"

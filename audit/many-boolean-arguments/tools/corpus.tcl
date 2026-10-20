@@ -2,8 +2,8 @@
 # (WARNINGS-MANY-BOOLEAN-ARGUMENTS.md, "Corpus census and findings").
 # Compiles every program of examples/stdlib, examples/surface,
 # examples/refinement, examples/io, examples/abi, examples/linux, bench/*.bot
-# and lib/*.bot, and a one-line loader program (`import NS`) for every library
-# module (lib/**/*.bot, the subdirectory modules included, whether or not a
+# and stdlib/*.bot, and a one-line loader program (`import NS`) for every library
+# module (stdlib/**/*.bot, the subdirectory modules included, whether or not a
 # corpus program loads them), with warnings on (collected, not emitted), and
 # reports, at the commit it runs on:
 #
@@ -100,12 +100,12 @@ set programs [concat \
     [lsort [glob -directory [file join $auditRoot examples abi] *.bot]] \
     [lsort [glob -directory [file join $auditRoot examples linux] *.bot]] \
     [lsort [glob -directory [file join $auditRoot bench] *.bot]] \
-    [lsort [glob -directory [file join $auditRoot lib] *.bot]]]
+    [lsort [glob -directory [file join $auditRoot stdlib] *.bot]]]
 
-# The library modules, as namespaces (lib/abi/bytes.bot -> abi::bytes).
+# The library modules, as namespaces (stdlib/abi/bytes.bot -> std::abi::bytes).
 set modules {}
-foreach path [lsort [concat [glob -directory [file join $auditRoot lib] *.bot] \
-        [glob -nocomplain -directory [file join $auditRoot lib] */*.bot]]] {
+foreach path [lsort [concat [glob -directory [file join $auditRoot stdlib] *.bot] \
+        [glob -nocomplain -directory [file join $auditRoot stdlib] */*.bot]]] {
     set relative [string range [file rootname [rel $path]] 4 end]
     lappend modules [string map {/ ::} $relative]
 }

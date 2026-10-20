@@ -102,23 +102,23 @@ proc stringsOf {text args} { return [dict get [lindex [census $text {*}$args] 0]
 # (1) Structural allocation facts
 
 test strings-one-object-no-text-buffer {a dynamic String is one allocation: one object, header plus text, and no text buffer exists to count} -body {
-    set c [census {import str
-str::concat("a", "b")}]
+    set c [census {import std::str
+std::str::concat("a", "b")}]
     set s [lindex $c 0]
     list [dict get $s objects] [dict get $s heapAllocations] [dict get $s textBufferAllocations] \
         [dict get $s textBufferFrees] [dict get $s bytes]
 } -result {1 1 0 0 27}
 
 test strings-header-is-32-bytes {the fixed header is 25 bytes (it was 40: header plus Box<str> fat pointer); allocatedBytes = 25 + UTF-8 bytes} -body {
-    set k [lindex [census {import str
-str::concat("ab", "…")}] 1]
+    set k [lindex [census {import std::str
+std::str::concat("ab", "…")}] 1]
     list [dict get $k allocations] [dict get $k headerBytes] [dict get $k payloadBytes] [dict get $k allocatedBytes]
 } -result {1 25 5 30}
 
 test strings-bytes-are-header-plus-utf8 {every dynamic String is 25 header bytes plus its UTF-8 length, for 1-, 2-, 3- and 4-byte scalars} -body {
     set out {}
     foreach {a b} {a b é é … … 😀 😀} {
-        set k [lindex [census "import str\nstr::concat(\"$a\", \"$b\")"] 1]
+        set k [lindex [census "import std::str\nstd::str::concat(\"$a\", \"$b\")"] 1]
         lappend out [dict get $k allocations] [dict get $k allocatedBytes]
     }
     set out
@@ -126,7 +126,7 @@ test strings-bytes-are-header-plus-utf8 {every dynamic String is 25 header bytes
 
 test strings-hundred-byte-string-is-one-block {a 100-byte String is one allocation of 125 bytes} -body {
     set half [string repeat x 50]
-    set k [lindex [census "import str\nstr::concat(\"$half\", \"$half\")"] 1]
+    set k [lindex [census "import std::str\nstd::str::concat(\"$half\", \"$half\")"] 1]
     list [dict get $k allocations] [dict get $k allocatedBytes]
 } -result {1 125}
 
@@ -139,11 +139,11 @@ test strings-constants-allocate-nothing-at-run-time {literals (empty, one char, 
 
 test strings-empty-results-reuse-the-canonical-empty {a dynamic empty String (empty substring) is the canonical static empty: zero allocations, counted as a reuse} -body {
     set s [stringsOf {
-        import str
+        import std::str
         fn cut(s, i) errors LowerUnderrun, UpperOverrun:
-            str::substring(s, i, i)
+            std::str::substring(s, i, i)
 
-        r = cut(str::concat("a", "bc"), 2):
+        r = cut(std::str::concat("a", "bc"), 2):
             on LowerUnderrun:
                 "none"
             on UpperOverrun:
@@ -155,24 +155,24 @@ test strings-empty-results-reuse-the-canonical-empty {a dynamic empty String (em
 
 test strings-concat-is-one-object-whatever-the-width {a nested concat is one flat construct (virtual construction: one String, no intermediate); ASCII and non-ASCII substrings each allocate one String} -body {
     list \
-        [dict get [stringsOf {import str
-str::concat(str::concat("é", "x"), "…")}] objects] \
+        [dict get [stringsOf {import std::str
+std::str::concat(std::str::concat("é", "x"), "…")}] objects] \
         [dict get [stringsOf {
-            import str
+            import std::str
             fn cut(s) errors UpperOverrun:
-                str::substring(s, 1, 4)
+                std::str::substring(s, 1, 4)
 
-            r = cut(str::concat("hello", "world")):
+            r = cut(std::str::concat("hello", "world")):
                 on UpperOverrun:
                     "none"
             r
         }] objects] \
         [dict get [stringsOf {
-            import str
+            import std::str
             fn cut(s) errors UpperOverrun:
-                str::substring(s, 1, 4)
+                std::str::substring(s, 1, 4)
 
-            r = cut(str::concat("a😀…", "éz")):
+            r = cut(std::str::concat("a😀…", "éz")):
                 on UpperOverrun:
                     "none"
             r
@@ -181,14 +181,14 @@ str::concat(str::concat("é", "x"), "…")}] objects] \
 
 test strings-frees-match-objects {after the run, the cleanup collection frees exactly one block per String} -body {
     set report [native::allocationReport [srcHir {
-        import str
+        import std::str
         fn grow(n, acc):
             if n == 0:
                 acc
             else:
-                grow(n - 1, str::concat(acc, "é"))
+                grow(n - 1, std::str::concat(acc, "é"))
 
-        str::length(grow(50, str::concat("a", "b")))
+        std::str::length(grow(50, std::str::concat("a", "b")))
     }] summary 2]
     set s [dict get $report byKind String]
     list [dict get $report strings textBufferFrees] [expr {[dict get $s reclaimedObjects] == [dict get $s allocations]}]
@@ -196,30 +196,30 @@ test strings-frees-match-objects {after the run, the cleanup collection frees ex
 
 test strings-large-string-is-one-block {a megabyte-scale String is still one allocation of header plus bytes} -body {
     set s [stringsOf {
-        import str
+        import std::str
         fn dbl(n, s):
             if n == 0:
                 s
             else:
-                dbl(n - 1, str::concat(s, s))
+                dbl(n - 1, std::str::concat(s, s))
 
-        str::length(dbl(20, "x"))
+        std::str::length(dbl(20, "x"))
     }]
     dict get $s objects
 } -result 20
 
 test strings-large-string-bytes {the bytes of the doubling chain are exactly the sum of 25 + 2^i} -body {
     set s [stringsOf {
-        import str
+        import std::str
         fn dbl(n, s):
             if n == 0:
                 s
             else:
-                dbl(n - 1, str::concat(s, s))
+                dbl(n - 1, std::str::concat(s, s))
 
-        str::length(dbl(10, str::concat("x", "x")))
+        std::str::length(dbl(10, std::str::concat("x", "x")))
     }]
-    # str::concat("x","x") is 2 bytes; ten doublings: 4, 8, ..., 2048.
+    # std::str::concat("x","x") is 2 bytes; ten doublings: 4, 8, ..., 2048.
     set bytes 27
     for {set i 2} {$i <= 11} {incr i} { incr bytes [expr {25 + (1 << $i)}] }
     list [dict get $s objects] [expr {[dict get $s bytes] == $bytes}]
@@ -254,32 +254,32 @@ test strings-short-materialization-is-one-object {a ShortString1 and a packed AS
 test strings-parity-unicode-classes {ASCII, Latin-1, ellipsis, BMP, astral, combining, NUL and empty through concat, substring, length and equality} -body {
     set nul [format %c 0]
     parity "
-        import str
+        import std::str
         fn probe(s):
-            \[str::length(s), s == \"\", str::concat(s, \"!\"), str::substring(str::concat(s, \"x\"), 0, 1)\]
+            \[std::str::length(s), s == \"\", std::str::concat(s, \"!\"), std::str::substring(std::str::concat(s, \"x\"), 0, 1)\]
 
         \[probe(\"a\"), probe(\"é\"), probe(\"…\"), probe(\"猫\"), probe(\"😀\"), probe(\"é\"), probe(\"$nul\"), probe(\"\"),
-         probe(str::concat(\"😀\", \"…\"))\]
+         probe(std::str::concat(\"😀\", \"…\"))\]
     "
 } -result "value:\[\[1, false, \"a!\", \"a\"\], \[1, false, \"é!\", \"é\"\], \[1, false, \"…!\", \"…\"\], \[1, false, \"猫!\", \"猫\"\], \[1, false, \"😀!\", \"😀\"\], \[2, false, \"e\u0301!\", \"e\"\], \[1, false, \"\u0000!\", \"\u0000\"\], \[0, true, \"!\", \"x\"\], \[2, false, \"😀…!\", \"😀\"\]\]"
 
 test strings-parity-nul-is-one-character {NUL is a one-character String of one zero byte, not the empty String} -body {
     set nul [format %c 0]
     parity "
-        import str
+        import std::str
         fn n(s):
-            \[str::length(s), s == \"\", s == \"$nul\", str::length(str::concat(s, s))\]
+            \[std::str::length(s), s == \"\", s == \"$nul\", std::str::length(std::str::concat(s, s))\]
 
-        \[n(\"$nul\"), n(str::concat(\"$nul\", \"\")), n(str::substring(str::concat(\"a$nul\", \"b\"), 1, 2))\]
+        \[n(\"$nul\"), n(std::str::concat(\"$nul\", \"\")), n(std::str::substring(std::str::concat(\"a$nul\", \"b\"), 1, 2))\]
     "
 } -result {value:[[1, false, true, 2], [1, false, true, 2], [1, false, true, 2]]}
 
 test strings-parity-substring-boundaries {substring at 0, at the end, empty and full, over ASCII and non-ASCII bases, including multi-byte slices} -body {
     parity {
-        import str
+        import std::str
         fn cuts(s) errors LowerUnderrun, UpperOverrun:
-            n = str::length(s)
-            [str::substring(s, 0, 0), str::substring(s, 0, n), str::substring(s, n, n), str::substring(s, 1, n), str::substring(s, 0, n - 1)]
+            n = std::str::length(s)
+            [std::str::substring(s, 0, 0), std::str::substring(s, 0, n), std::str::substring(s, n, n), std::str::substring(s, 1, n), std::str::substring(s, 0, n - 1)]
 
         [cuts("hello"), cuts("a😀…é"), cuts("é")]
     }
@@ -287,15 +287,15 @@ test strings-parity-substring-boundaries {substring at 0, at the end, empty and 
 
 test strings-parity-concat-shapes {concat chains of every width, accumulating a String over a loop} -body {
     parity {
-        import str
+        import std::str
         fn build(n, acc):
             if n == 0:
                 acc
             else:
-                build(n - 1, str::concat(str::concat("😀", acc), str::concat("é", "…")))
+                build(n - 1, std::str::concat(std::str::concat("😀", acc), std::str::concat("é", "…")))
 
         fn shapes(s) errors LowerUnderrun, UpperOverrun:
-            [str::length(s), str::substring(s, 0, 4), str::substring(s, 56, 60), s == build(20, "")]
+            [std::str::length(s), std::str::substring(s, 0, 4), std::str::substring(s, 56, 60), s == build(20, "")]
 
         r = shapes(build(20, "")):
             on LowerUnderrun:
@@ -308,9 +308,9 @@ test strings-parity-concat-shapes {concat chains of every width, accumulating a 
 
 test strings-parity-errors-keep-their-messages {an out-of-range substring fails with the same declared error on every backend, and its handler sees it} -body {
     set hir [srcHir {
-        import str
+        import std::str
         fn cut(s) errors UpperOverrun:
-            str::substring(str::concat(s, "é"), 0, 9)
+            std::str::substring(std::str::concat(s, "é"), 0, 9)
 
         r = cut("😀"):
             on UpperOverrun:
@@ -326,15 +326,15 @@ test strings-parity-errors-keep-their-messages {an out-of-range substring fails 
 
 test strings-parity-large {a String over a megabyte, built by doubling, has the right length, ends and equality} -body {
     parity {
-        import str
+        import std::str
         fn dbl(n, s):
             if n == 0:
                 s
             else:
-                dbl(n - 1, str::concat(s, s))
+                dbl(n - 1, std::str::concat(s, s))
 
         fn ends(s) errors LowerUnderrun, UpperOverrun:
-            [str::length(s), str::substring(s, 0, 3), str::substring(s, str::length(s) - 2, str::length(s))]
+            [std::str::length(s), std::str::substring(s, 0, 3), std::str::substring(s, std::str::length(s) - 2, std::str::length(s))]
 
         r = ends(dbl(20, "é…")):
             on LowerUnderrun:
@@ -350,8 +350,8 @@ test strings-parity-large {a String over a megabyte, built by doubling, has the 
 
 test strings-gc-live-across-allocation-and-storage {Strings held in a List, a struct, a MutableArray and a captured local survive allocation churn under GC stress, with every width} -body {
     set text {
-        import mutable_array
-        import str
+        import std::mutable_array
+        import std::str
         struct Pair:
             left: str
             right: str
@@ -360,7 +360,7 @@ test strings-gc-live-across-allocation-and-storage {Strings held in a List, a st
             if n == 0:
                 0
             else:
-                str::length(str::concat(str::concat("x", "y"), "z")) + churn(n - 1)
+                std::str::length(std::str::concat(std::str::concat("x", "y"), "z")) + churn(n - 1)
 
         fn make_getter(s):
             fn get(unused):
@@ -369,14 +369,14 @@ test strings-gc-live-across-allocation-and-storage {Strings held in a List, a st
             get
 
         fn work(a, b) errors UpperOverrun:
-            xs = [a, b, str::concat(a, b)]
-            p = Pair {left: str::concat(b, a), right: "k"}
-            m = mutable_array::allocate(2)
-            mutable_array::set(m, 0, str::concat(a, "!"))
-            mutable_array::set(m, 1, str::substring(str::concat(a, b), 0, 1))
-            g = make_getter(str::concat(b, b))
+            xs = [a, b, std::str::concat(a, b)]
+            p = Pair {left: std::str::concat(b, a), right: "k"}
+            m = std::mutable_array::allocate(2)
+            std::mutable_array::set(m, 0, std::str::concat(a, "!"))
+            std::mutable_array::set(m, 1, std::str::substring(std::str::concat(a, b), 0, 1))
+            g = make_getter(std::str::concat(b, b))
             c = churn(30)
-            [xs, p.left, p.right, mutable_array::at(m, 0), mutable_array::at(m, 1), g(0), c]
+            [xs, p.left, p.right, std::mutable_array::at(m, 0), std::mutable_array::at(m, 1), g(0), c]
 
         fn all() errors UpperOverrun:
             [work("é", "…"), work("😀", "a"), work("", "bc")]
@@ -391,17 +391,17 @@ test strings-gc-live-across-allocation-and-storage {Strings held in a List, a st
 
 test strings-gc-recursive-allocating-frames {a String parameter and result across 150 recursive allocating frames under GC stress} -body {
     set text {
-        import str
+        import std::str
         fn rec(n, s) errors LowerUnderrun, UpperOverrun:
             if n == 0:
                 s
             else:
-                t = str::concat(s, "…")
+                t = std::str::concat(s, "…")
                 u = rec(n - 1, t)
-                str::concat(str::substring(u, 0, 1), str::substring(u, str::length(u) - 1, str::length(u)))
+                std::str::concat(std::str::substring(u, 0, 1), std::str::substring(u, std::str::length(u) - 1, std::str::length(u)))
 
         fn both() errors LowerUnderrun, UpperOverrun:
-            [rec(150, "😀"), str::length(rec(150, "ab"))]
+            [rec(150, "😀"), std::str::length(rec(150, "ab"))]
 
         r = both():
             on LowerUnderrun:
@@ -415,21 +415,21 @@ test strings-gc-recursive-allocating-frames {a String parameter and result acros
 
 test strings-gc-large-string-survives-collections {a large String stays intact across the collections its own allocation and later garbage trigger} -body {
     set text {
-        import str
+        import std::str
         fn dbl(n, s):
             if n == 0:
                 s
             else:
-                dbl(n - 1, str::concat(s, s))
+                dbl(n - 1, std::str::concat(s, s))
 
         fn churn(n):
             if n == 0:
                 0
             else:
-                str::length(str::concat("a", "b")) + churn(n - 1)
+                std::str::length(std::str::concat("a", "b")) + churn(n - 1)
 
         fn ends(big, c) errors LowerUnderrun, UpperOverrun:
-            [str::length(big), str::substring(big, 0, 4), str::substring(big, str::length(big) - 2, str::length(big)), c]
+            [std::str::length(big), std::str::substring(big, 0, 4), std::str::substring(big, std::str::length(big) - 2, std::str::length(big)), c]
 
         r = ends(dbl(16, "é…"), churn(2000)):
             on LowerUnderrun:
@@ -443,12 +443,12 @@ test strings-gc-large-string-survives-collections {a large String stays intact a
 
 test strings-gc-reclaims-and-reuses {a loop that builds and drops many Strings reaches a steady live set: collections reclaim the dropped Strings, one block each} -body {
     set report [native::allocationReport [srcHir {
-        import str
+        import std::str
         fn churn(n, acc) errors UpperOverrun:
             if n == 0:
-                str::length(acc)
+                std::str::length(acc)
             else:
-                churn(n - 1, str::concat(str::substring(str::concat(acc, "é"), 0, 3), "…"))
+                churn(n - 1, std::str::concat(std::str::substring(std::str::concat(acc, "é"), 0, 3), "…"))
 
         r = churn(20000, "ab"):
             on UpperOverrun:
@@ -499,8 +499,8 @@ proc aotParity {text {extra {}}} {
 test strings-executable-everything {every width, NUL, empty, concat, substring, storage, an error path and a large String in one standalone executable, also under GC stress} -constraints executableAot -body {
     set nul [format %c 0]
     aotParity "
-        import list
-        import str
+        import std::list
+        import std::str
         error Bad
 
         fn pick(n):
@@ -534,19 +534,19 @@ test strings-executable-everything {every width, NUL, empty, concat, substring, 
             if n == 0:
                 s
             else:
-                dbl(n - 1, str::concat(s, s))
+                dbl(n - 1, std::str::concat(s, s))
 
         fn both(n):
             s = pick(n)
-            \[str::length(s), str::concat(s, \"é\"), str::substring(str::concat(\"x\", s), 1, str::length(str::concat(\"x\", s)))\]
+            \[std::str::length(s), std::str::concat(s, \"é\"), std::str::substring(std::str::concat(\"x\", s), 1, std::str::length(std::str::concat(\"x\", s)))\]
 
-        \[both(0), both(1), both(2), both(3), both(4), run(2), run(9), str::length(dbl(16, \"é…\")), list::append(\[pick(3)\], pick(0))\]
+        \[both(0), both(1), both(2), both(3), both(4), run(2), run(9), std::str::length(dbl(16, \"é…\")), std::list::append(\[pick(3)\], pick(0))\]
     "
 } -result "\[\[0, \"é\", \"\"\], \[1, \"aé\", \"a\"\], \[1, \"…é\", \"…\"\], \[1, \"😀é\", \"😀\"\], \[1, \"\u0000é\", \"\u0000\"\], \"…\", \"bad\", 131072, \[\"😀\", \"\"\]\]"
 
 test strings-executable-short-optimization-off {the same kind of executable with -short-string-opt 0} -constraints executableAot -body {
     aotParity {
-        import str
+        import std::str
         fn pick(flag):
             if flag:
                 ""
@@ -556,16 +556,16 @@ test strings-executable-short-optimization-off {the same kind of executable with
         fn fwd(s):
             s
 
-        tail = str::substring(str::concat("a", fwd(pick(false))), 1, 2):
+        tail = std::str::substring(std::str::concat("a", fwd(pick(false))), 1, 2):
             on UpperOverrun:
                 "none"
-        [str::length(fwd(pick(true))), str::length(fwd(pick(false))), str::concat(fwd(pick(false)), "…"), tail]
+        [std::str::length(fwd(pick(true))), std::str::length(fwd(pick(false))), std::str::concat(fwd(pick(false)), "…"), tail]
     } {-short-string-opt 0}
 } -result {[0, 1, "😀…", "😀"]}
 
 test strings-executable-census-has-no-text-buffer {a standalone executable's allocation report shows no text buffer allocations} -constraints executableAot -body {
-    set report [native::allocationReport [srcHir {import str
-str::concat(str::concat("a", "b"), "…")}] summary]
+    set report [native::allocationReport [srcHir {import std::str
+std::str::concat(std::str::concat("a", "b"), "…")}] summary]
     list [dict get $report strings textBufferAllocations] [dict get $report strings textBufferFrees]
 } -result {0 0}
 

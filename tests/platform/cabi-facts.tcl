@@ -6,10 +6,10 @@
 # Compiles and runs tests/platform/cabi-facts.c with COMPILER (default $CC,
 # else cc) in a private temporary directory, and compares what it prints --
 # the bit widths of char, short, int, long, long long and a pointer, whether
-# plain char is signed, and each ffi::c scalar's width and signedness
+# plain char is signed, and each std::ffi::c scalar's width and signedness
 # (core::cabi::scalarInfo), size_t's width with the pointer's (size_t is no
-# ffi::c scalar) -- with core::cabi::target of core::cabi::hostTarget, the
-# row a compilation for this host uses when it imports ffi::c. It also
+# std::ffi::c scalar) -- with core::cabi::target of core::cabi::hostTarget, the
+# row a compilation for this host uses when it imports std::ffi::c. It also
 # checks that the compiler's own target (COMPILER -dumpmachine: arm64-apple-
 # darwin24.6.0 on a Mac) is the host target's operating system and
 # architecture: the host default is the toolchain's host, not an
@@ -81,7 +81,7 @@ dict for {key value} $measured {
         scalars {
             dict for {name facts} $value {
                 if {![dict exists $scalars $name] || [dict get $scalars $name] ne $facts} {
-                    lappend differences "ffi::c::$name: table {bits signed} [expr {[dict exists $scalars $name] ? [dict get $scalars $name] : {(none)}}], C $facts"
+                    lappend differences "std::ffi::c::$name: table {bits signed} [expr {[dict exists $scalars $name] ? [dict get $scalars $name] : {(none)}}], C $facts"
                 }
             }
         }

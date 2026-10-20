@@ -3,15 +3,15 @@
 #
 # expect: [2, 3, 1, 101, 8, 21]
 
-import str
+import std::str
 
 fn outer(p, s):
     fn inner(x):
         p(x)
     fn count(i):
-        if i < 0 or i >= str::length(s):
+        if i < 0 or i >= std::str::length(s):
             return i
-        if inner(str::substring(s, i, i + 1)):
+        if inner(std::str::substring(s, i, i + 1)):
             return count(i + 1)
         i
     count(0)
@@ -33,4 +33,4 @@ fn first_idx(p, lo, hi):
             return i
     hi
 
-[outer(str::is_tcl_alpha, "ab1"), outer(str::is_tcl_alnum, "ab1_"), first_idx(pos?, -5, 5), first_idx(big?, 0, 200), first_idx(mk(7), 0, 50), first_idx(mk(20), 0, 50)]
+[outer(std::str::is_tcl_alpha, "ab1"), outer(std::str::is_tcl_alnum, "ab1_"), first_idx(pos?, -5, 5), first_idx(big?, 0, 200), first_idx(mk(7), 0, 50), first_idx(mk(20), 0, 50)]

@@ -1339,7 +1339,7 @@ proc core::compiler::CompileNativeCall {ctxVar e callee name argOps} {
     }
     if {[dict get $meta errors] ne "" && (![hir::completions::BoundsProven $hir $e]
             || [core::native::unboundedErrors $meta] ne {})} {
-        # A native with declared errors (`argv`, `list::at`) completes with
+        # A native with declared errors (`argv`, `std::list::at`) completes with
         # propagate-error: only the generic call turns its completion into
         # compiled code's Tcl completion code 5 (core::runtime::callValue).
         # Not when every one of this call's bounds checks was proven never to
@@ -1377,7 +1377,7 @@ proc core::compiler::CompileNativeCall {ctxVar e callee name argOps} {
 # ---------------------------------------------------------------------------
 # Fixed binary layouts (BINARY-LAYOUT.md)
 #
-# binary::parse(L, data) and binary#emit(value, L) carry L's descriptor
+# std::binary::parse(L, data) and binary#emit(value, L) carry L's descriptor
 # (hir::layouts::descriptor) as a constant argument, read here at compile
 # time: the call becomes one `binary scan` (parse, after one length check) or
 # one `binary format` (emit) whose format string holds every scalar field's
@@ -1514,7 +1514,7 @@ proc core::compiler::CompileLayoutOperation {ctxVar e name role argOps} {
     set leaves [LayoutLeaves $descriptor 0 {}]
     switch -- [hir::layouts::RoleOf $role op] {
         parse {
-            # (hir::layouts::verify proved the bytes an abi::bytes::Bytes:
+            # (hir::layouts::verify proved the bytes a std::abi::bytes::Bytes:
             # its one field holds the {bytestore HEX} storage.)
             set data [lindex $argOps [hir::layouts::RoleOf $role input]]
             set raw [NewTemp]

@@ -71,7 +71,7 @@
 # instance (hir/specialize.tcl), that certain `[e0, ..., en-1]` List values
 # are semantically ordinary Lists whose object identity is never observed --
 # so native/lower.tcl may keep them as a handful of scalar registers
-# (n0..nn-1) instead of ever calling `listnew`, and every `list::at` reading
+# (n0..nn-1) instead of ever calling `listnew`, and every `std::list::at` reading
 # one of them at a compile-time-constant position may read that register
 # directly instead of calling `listget` -- and, separately, which used
 # instances a caller's scalar use *demands* a scalar-replacement companion
@@ -102,7 +102,7 @@
 #   * a local binding, bound (once, non-duplicate, kind local, never
 #     captured by a nested closure) to a recognized construction, is
 #     "virtual" only if *every* reference to it in the same region is the
-#     first argument of a `list::at` call whose second argument is a
+#     first argument of a `std::list::at` call whose second argument is a
 #     compile-time Int constant within the construction's arity. Any other
 #     use at all (a dynamic index, a store, an argument to any other call, a
 #     return, anything this module does not specifically recognize) means
@@ -197,7 +197,7 @@ proc hir::escape::Classify {hir instance arity e {structOpts {}}} {
         set name [dict get [hir::symbol $hir $target] name]
         if {[core::linuxabi::isSyscall $name]} {
             # A raw kernel transition builds its result, its architecture's
-            # Register64 (abi::x86_64::Register64, abi::aarch64::
+            # Register64 (std::abi::x86_64::Register64, std::abi::aarch64::
             # Register64), from one word (the result register it returns): a
             # local construction of that one-field shape, exactly as a struct
             # literal is (native/lower.tcl's SyscallCall hands back the op's
@@ -210,7 +210,7 @@ proc hir::escape::Classify {hir instance arity e {structOpts {}}} {
             return [SyscallResult $hir $e [core::bytestore::bridgeRegisterType $name] $structOpts]
         }
         if {[hir::layouts::RoleOf [hir::layouts::Role $name] op] eq "parse"} {
-            # binary::parse (BINARY-LAYOUT.md) builds its LayoutStruct from
+            # std::binary::parse (BINARY-LAYOUT.md) builds its LayoutStruct from
             # the field registers its loads produce, exactly as a struct
             # literal is built (native/lower.tcl's LayoutCall hands them
             # back as the fields).
@@ -218,7 +218,7 @@ proc hir::escape::Classify {hir instance arity e {structOpts {}}} {
         }
         if {[hir::layouts::RoleOf [hir::layouts::Role $name] op] in {write write_foreign}} {
             # A layout write into byte storage (NATIVE-LAYOUT-WRITES.md)
-            # builds its abi::bytes::MutableBytes from the one fresh storage
+            # builds its std::abi::bytes::MutableBytes from the one fresh storage
             # its op makes: a local construction of that one-field shape, as
             # the address bridge's Register64 is (native/lower.tcl's
             # LayoutWrite hands back the storage register as the field).
@@ -314,7 +314,7 @@ proc hir::escape::SyscallResult {hir e id structOpts} {
     return [list local [list 1 [list $id $layout]] {}]
 }
 
-# binary::parse call E's result (BINARY-LAYOUT.md) as a recognized
+# std::binary::parse call E's result (BINARY-LAYOUT.md) as a recognized
 # construction: {local {N {ID LAYOUT}} {}} for its LayoutStruct type -- the
 # fields its loads produce (a nested layout's an object built from its own
 # loads) -- "" otherwise.
@@ -629,9 +629,9 @@ proc hir::escape::TrailingPositions {hir topBody exprs} {
 }
 
 # 1 if reference R (to a virtual binding of arity N) is used only as the
-# first argument of a `list::at` call whose second argument is a
+# first argument of a `std::list::at` call whose second argument is a
 # compile-time Int constant within 0..N-1 (LISTGETBYARG: first-arg ExprId ->
-# the list::at call ExprId, from Bindings above).
+# the std::list::at call ExprId, from Bindings above).
 proc hir::escape::ScalarUse {hir listGetByArg r n} {
     if {![dict exists $listGetByArg $r]} {
         return 0
@@ -683,7 +683,7 @@ proc hir::escape::Propagate {wants forward} {
 # discipline across an exact closed call's *parameter* boundary too: a
 # fixed-shape List value that a proven exact caller hands to a callee whose
 # own uses of that parameter are themselves all structural (Classify/
-# ScalarUse's same "list::at at a constant position" rule, plus a new
+# ScalarUse's same "std::list::at at a constant position" rule, plus a new
 # supported use -- forwarding the same value, unchanged, as an argument to
 # another exact closed call) need not be materialized at that boundary
 # either: its fields cross as ordinary internal-call arguments instead (see
@@ -718,7 +718,7 @@ proc hir::escape::Propagate {wants forward} {
 #   Eligible
 #       Of the slots RawLocalArities/RawParamArities found a shape for,
 #       *which* are safe to actually virtualize: every reference to the
-#       slot, within its own instance's region, is either a `list::at`
+#       slot, within its own instance's region, is either a `std::list::at`
 #       at a compile-time-constant in-range index, or the unchanged
 #       forwarding of the same value (same position, no re-wrapping) as
 #       an argument to another exact call whose own corresponding
@@ -733,7 +733,7 @@ proc hir::escape::Propagate {wants forward} {
 #       a late-materializing branch). An out-of-range constant index
 #       (#10) simply fails this check like any other unsupported use,
 #       which correctly declines virtualization and so preserves the
-#       real `list::at`'s ordinary runtime INDEX error.
+#       real `std::list::at`'s ordinary runtime INDEX error.
 #
 # Multiple callers of the same parameter position (#42) are handled by
 # RawParamArities requiring *every* exact call site's argument to classify
@@ -824,7 +824,7 @@ proc hir::escape::RegionInfo {hir spec id} {
     # stores its leaves into the context's fixed slot, reading its fields --
     # a structural use whatever the struct's width.
     set ctxUse [dict create]
-    # The value binary::emit writes (BINARY-LAYOUT.md) -> 1: native/lower.tcl's
+    # The value std::binary::emit writes (BINARY-LAYOUT.md) -> 1: native/lower.tcl's
     # LayoutCall stores its leaves into the emitted bytes, reading its fields
     # -- a structural use, like a context installation.
     set leafUse [dict create]
@@ -854,7 +854,7 @@ proc hir::escape::RegionInfo {hir spec id} {
                 set node [hir::node $view $e]
                 lassign [dict get $node target] targetKind target
                 set args [dict get $node args]
-                if {$targetKind eq "native" && [dict get [hir::symbol $view $target] name] eq "list::at"
+                if {$targetKind eq "native" && [dict get [hir::symbol $view $target] name] eq "std::list::at"
                         && [llength $args] == 2} {
                     dict set listGetByArg [lindex $args 0] $e
                 }
@@ -867,7 +867,7 @@ proc hir::escape::RegionInfo {hir spec id} {
                 if {$targetKind eq "native"} {
                     set input [hir::layouts::RoleOf [hir::layouts::Role [dict get [hir::symbol $view $target] name]] input]
                     if {$input ne "" && $input < [llength $args]} {
-                        # binary::parse's abi::bytes::Bytes is read only for
+                        # std::binary::parse's std::abi::bytes::Bytes is read only for
                         # its storage field (native/lower.tcl's StorageOf),
                         # like the address bridge's.
                         dict set wordUse [lindex $args $input] 1
@@ -878,7 +878,7 @@ proc hir::escape::RegionInfo {hir spec id} {
                     }
                     set output [hir::layouts::RoleOf $role output]
                     if {$output ne "" && $output < [llength $args]} {
-                        # A layout write's abi::bytes::MutableBytes is read
+                        # A layout write's std::abi::bytes::MutableBytes is read
                         # only for its storage field (NATIVE-LAYOUT-WRITES.md;
                         # native/lower.tcl's LayoutWrite uses StorageOf).
                         dict set wordUse [lindex $args $output] 1
@@ -886,7 +886,7 @@ proc hir::escape::RegionInfo {hir spec id} {
                 }
                 if {$targetKind eq "native" && [core::bytestore::isBridge [dict get [hir::symbol $view $target] name]]
                         && [llength $args] == 1} {
-                    # The address bridge's abi::bytes::Bytes argument is read only for
+                    # The address bridge's std::abi::bytes::Bytes argument is read only for
                     # its one storage field (native/lower.tcl's StorageOf),
                     # like a projection of it: a Bytes held as virtual fields
                     # need not be built for it.
@@ -1317,7 +1317,7 @@ proc hir::escape::UseTag {info r {regions {}} {deny {}}} {
 # the physical object (struct locals only).
 #
 # A *List* candidate keeps the original rule exactly: every reference must
-# be a `list::at` at a constant in-range index, or an unchanged forwarding
+# be a `std::list::at` at a constant in-range index, or an unchanged forwarding
 # into another candidate of the same descriptor.
 #
 # A *struct* local may also be materialized, lazily, at any reference that
@@ -1385,7 +1385,7 @@ proc hir::escape::UseVerdict {candidates regions aliasOf id b desc isParam bindE
             continue
         }
         if {[dict exists [dict get $info leafUse] $r]} {
-            # binary::emit's value: its fields are written to the emitted
+            # std::binary::emit's value: its fields are written to the emitted
             # bytes (BINARY-LAYOUT.md).
             incr structural
             continue

@@ -61,7 +61,7 @@ if grep -q -e '^== ' -e '^   value:' "$work/default.out"; then fail "the no-argu
 run -help >"$work/help.out" || fail "-help"
 grep -q '^Compilerpedia' "$work/help.out" || fail "-help printed no overview"
 # QUERY=FIRST: the query, and how its page starts.
-for pair in warnings=WARNINGS METHOD-ELIGIBLE=warning.method-eligible list::at=stdlib.list::at "bounds proof=proof.list-bounds" "best practices=principle.idiomatic-botlish"; do
+for pair in warnings=WARNINGS METHOD-ELIGIBLE=warning.method-eligible std::list::at=stdlib.std::list::at "bounds proof=proof.list-bounds" "best practices=principle.idiomatic-botlish"; do
   query=${pair%%=*} first=${pair#*=}
   run -help "$query" >"$work/help-query.out" || fail "-help $query"
   if grep -q -e '^== ' -e '^   value:' "$work/help-query.out"; then fail "-help $query ran a program"; fi
@@ -98,6 +98,20 @@ printf 'import nosuch\n\n1\n' >"$work/app/missing.bot"
 if run "$work/app/missing.bot" >"$work/missing.out"; then fail "a missing module was accepted"; fi
 grep -qF "no such module file $work/app/nosuch.bot" "$work/missing.out" ||
   fail "a missing module's diagnostic names no application path"
+# A local module named like a standard one beside the standard namespace
+# itself (STD-NAMESPACE.md): `list` is the application's, `::std::list` the
+# standard library's, read from inside the executable whatever the working
+# directory holds.
+printf 'fn length(xs) -> int:\n    99\n' >"$work/app/list.bot"
+printf 'import list\nimport ::std::list\n\n[list::length([1]), ::std::list::length([1, 2])]\n' >"$work/app/both.bot"
+for backend in interp cranelift; do
+  (cd "$work/app" && run -backend "$backend" "$work/app/both.bot") | grep -qxF '   value: [99, 2]' ||
+    fail "a local list beside std::list on $backend"
+done
+printf 'import std::nosuch\n\n1\n' >"$work/app/nostd.bot"
+if run "$work/app/nostd.bot" >"$work/nostd.out"; then fail "a missing standard namespace was accepted"; fi
+grep -qF "no such module file //zipfs:/app/botlish/stdlib/nosuch.bot" "$work/nostd.out" ||
+  fail "the standard library is not read from inside the executable"
 # A native run shows the program's output, then its value.
 for backend in cranelift cranelift-generic; do
   [[ $(run -backend "$backend" hello.bot) == "== hello.bot ($backend)"$'\n'"Hello, world!"$'\n'"   value: unit" ]] ||

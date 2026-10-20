@@ -137,20 +137,20 @@ set ::drS13 "fn f(s: str) -> str:\n    s.concat(\"ab\")\n\nf(\"q\")\n"
 # ---------------------------------------------------------------------------
 # Part A: failed method resolution never becomes `any`
 
-test dr-method-missing-import-s13 {S13: s.concat("ab") without `import str` is MISSING-IMPORT at the method name, the import the explicit spelling needs; no type error at the function result restates it (old: TYPE "function result does not prove declared type str" at 1:5, alone)} -body {
+test dr-method-missing-import-s13 {S13: s.concat("ab") without `import std::str` is MISSING-IMPORT at the method name, the import the explicit spelling needs; no type error at the function result restates it (old: TYPE "function result does not prove declared type str" at 1:5, alone)} -body {
     drReport $::drS13
-} -result {{MISSING-IMPORT 2:7 {namespace "str" is not imported; add `import str` to use `str::concat` (the method-style call ".concat(...)" applies only a function visible by that name)}}}
+} -result {{MISSING-IMPORT 2:7 {namespace "std::str" is not imported; add `import std::str` to use `std::str::concat` (the method-style call ".concat(...)" applies only a function visible by that name)}}}
 
 test dr-method-missing-import-imported {the same program with the import compiles and behaves as before, on every backend} -body {
-    drValues "import str\n\n$::drS13"
+    drValues "import std::str\n\n$::drS13"
 } -result {{value {"qab"} {}} {value {"qab"} {}} {value {"qab"} {}} {value {"qab"} {}}}
 
-test dr-method-explicit-agrees {the explicit spelling and the method spelling diagnose the same missing prerequisite: MISSING-IMPORT for the namespace str and the function str::concat (the loader's, before analysis, and the analysis's, at the method name)} -body {
-    set explicit [drReport "fn f(s: str) -> str:\n    str::concat(s, \"ab\")\n\nf(\"q\")\n"]
+test dr-method-explicit-agrees {the explicit spelling and the method spelling diagnose the same missing prerequisite: MISSING-IMPORT for the namespace str and the function std::str::concat (the loader's, before analysis, and the analysis's, at the method name)} -body {
+    set explicit [drReport "fn f(s: str) -> str:\n    std::str::concat(s, \"ab\")\n\nf(\"q\")\n"]
     set method [drReport $::drS13]
     list [lindex $explicit 0 0] [lindex $method 0 0] \
-        [regexp {namespace "str" is not imported; add `import str` to use `str::concat`} [lindex $explicit 0 2]] \
-        [regexp {namespace "str" is not imported; add `import str` to use `str::concat`} [lindex $method 0 2]]
+        [regexp {namespace "std::str" is not imported; add `import std::str` to use `std::str::concat`} [lindex $explicit 0 2]] \
+        [regexp {namespace "std::str" is not imported; add `import std::str` to use `std::str::concat`} [lindex $method 0 2]]
 } -cleanup {unset -nocomplain explicit method} -result {MISSING-IMPORT MISSING-IMPORT 1 1}
 
 test dr-method-no-any {failed method sugar is poison, never `any`: the call and its callee are typed never and recorded poisoned (no divergence: the function's result is the call), and HIR types no expression of the function's body `any`} -body {
@@ -170,7 +170,7 @@ test dr-method-unknown-genuine {a name no function has stays the projection's ow
     drReport "fn f(s: str) -> str:\n    s.no_such_function(1)\n\nf(\"q\")\n"
 } -result {{NOT-A-STRUCT 2:7 {cannot project field "no_such_function" from a value of type str: only a struct has fields; as a method-style call, no function named "no_such_function" is visible here either: method syntax only applies a function that is already visible by that name (define it here, or import the namespace that defines it with `import NAMESPACE`)}}}
 
-test dr-method-not-applicable-unnamed {a function of that name the call would not apply (mutable_vector::empty? takes a MutableVector, the receiver is a str) is no missing import, and the hint no longer names it} -body {
+test dr-method-not-applicable-unnamed {a function of that name the call would not apply (std::mutable_vector::empty? takes a MutableVector, the receiver is a str) is no missing import, and the hint no longer names it} -body {
     set report [drReport "fn f(s: str) -> bool:\n    s.empty?()\n\nf(\"q\")\n"]
     list [lindex $report 0 0] [lindex $report 0 1] [string first mutable_vector [lindex $report 0 2]] [llength $report]
 } -cleanup {unset -nocomplain report} -result {NOT-A-STRUCT 2:7 -1 1}
@@ -236,7 +236,7 @@ test dr-poison-valid-program-absent {a valid program has no poison and no recove
 } -cleanup {unset -nocomplain hir} -result {{} 0 0}
 
 test dr-poison-lenient-run {a lenient HIR keeps its poison (the checks' recovery state) and runs as it did before poison existed: every backend checks it again without poison first (hir::recovery::runnable). An inadmissible handler's value and an opaque field's value are values at run time, never a divergence. (The opaque program on cranelift is a NATIVE BUG, before this milestone as after it: not run here.)} -body {
-    list [drLenient [dict create main.bot "import mutable_array\n\nfn st(a, i):\n    mutable_array::set(a, i, 1):\n        on IndexNotFound:\n            2\n\nb = mutable_array::allocate(2)\n\[st(b, 0), st(b, 2), 3\]\n"]] \
+    list [drLenient [dict create main.bot "import std::mutable_array\n\nfn st(a, i):\n    std::mutable_array::set(a, i, 1):\n        on IndexNotFound:\n            2\n\nb = std::mutable_array::allocate(2)\n\[st(b, 0), st(b, 2), 3\]\n"]] \
         [drLenient [dict create \
             main.bot "import vault\n\nx = vault::make().secret\n\[x, 1\]\n" \
             vault.bot "opaque struct Box:\n    secret: int\n\nfn make() -> Box:\n    Box \{secret: 7\}\n"] \
@@ -272,11 +272,11 @@ test dr-resolution-taint-transitive {taint is transitive through bindings: a val
 # Three static compile blocks, two of which miss the same import (the shape
 # of imports-unimported.bot, where the static-decisions CI comparison found a
 # scheduler disagreement).
-set ::drThreeBlocks "import compiler\n\nfn b_list_at() errors compiler::CompilerError:\n    static compile:\n        xs = \[1, 2\]\n        xs.at(0)\n\nfn b_str_length() errors compiler::CompilerError:\n    static compile:\n        s = \"ab\"\n        s.length()\n\nfn b_list_length() errors compiler::CompilerError:\n    static compile:\n        xs = \[1, 2\]\n        xs.length()\n\nfn code(body):\n    r = body():\n        on compiler::CompilerError \{code, message\}:\n            message\n    r\n\n\[code(b_list_at), code(b_str_length), code(b_list_length)\]\n"
+set ::drThreeBlocks "import std::compiler\n\nfn b_list_at() errors std::compiler::CompilerError:\n    static compile:\n        xs = \[1, 2\]\n        xs.at(0)\n\nfn b_str_length() errors std::compiler::CompilerError:\n    static compile:\n        s = \"ab\"\n        s.length()\n\nfn b_list_length() errors std::compiler::CompilerError:\n    static compile:\n        xs = \[1, 2\]\n        xs.length()\n\nfn code(body):\n    r = body():\n        on std::compiler::CompilerError \{code, message\}:\n            message\n    r\n\n\[code(b_list_at), code(b_str_length), code(b_list_length)\]\n"
 
 test dr-missing-import-each-use {two uses of one missing import are two diagnostics, in both spellings: merging them (a first version did) made one static compile block's diagnostic depend on another's -- three blocks, two of them missing the same import, are decided alike by both schedulers, with no mispredicted build} -body {
     set sites [list [drSites "fn f(xs: List\[int\]) -> int:\n    xs.length() + xs.length()\n\nf(\[1\])\n"] \
-        [drSites "fn f(xs: List\[int\]) -> int:\n    list::length(xs) + list::length(xs)\n\nf(\[1\])\n"]]
+        [drSites "fn f(xs: List\[int\]) -> int:\n    std::list::length(xs) + std::list::length(xs)\n\nf(\[1\])\n"]]
     set path [makeFile $::drThreeBlocks dr-blocks.bot]
     set outcomes {}
     foreach scheduler {batched sequential} {
@@ -291,10 +291,10 @@ test dr-missing-import-each-use {two uses of one missing import are two diagnost
     }
     removeFile dr-blocks.bot
     list $sites [lindex $outcomes 0 0] [lindex $outcomes 1 0] [expr {[lindex $outcomes 0 1] eq [lindex $outcomes 1 1]}] [lindex $outcomes 0 1 0]
-} -result {{{{MISSING-IMPORT 2:8} {MISSING-IMPORT 2:22}} {{MISSING-IMPORT 2:5} {MISSING-IMPORT 2:24}}} {} {} 1 value}
+} -result {{{{MISSING-IMPORT 2:8} {MISSING-IMPORT 2:22}} {{MISSING-IMPORT 2:5} {MISSING-IMPORT 2:29}}} {} {} 1 value}
 
 test dr-loader-references {every qualified reference the loader rejects is reported, in source order (old: the first only)} -body {
-    drSites "fn f(s: str) -> int:\n    str::length(s)\n\nfn g(xs: List\[int\]) -> int:\n    list::length(xs)\n\nfn h() -> int:\n    nosuch::thing()\n\nf(\"ab\")\n"
+    drSites "fn f(s: str) -> int:\n    std::str::length(s)\n\nfn g(xs: List\[int\]) -> int:\n    std::list::length(xs)\n\nfn h() -> int:\n    nosuch::thing()\n\nf(\"ab\")\n"
 } -result {{MISSING-IMPORT 2:5} {MISSING-IMPORT 5:5} {UNKNOWN-NAMESPACE 8:5}}
 
 test dr-single-diagnostic-unchanged {a program with one diagnostic raises exactly what it always did: the same error code and the same message} -body {
@@ -333,7 +333,7 @@ test dr-unhandled-set-remaining {handling one member leaves exactly the rest; ha
 } -result {{{UNHANDLED-ERROR 15:9 {this call may produce the declared errors "Duplicate" and "Range", which are neither handled here nor admitted by the enclosing function's own "errors" declaration}}} {{UNHANDLED-ERROR 15:9 {this call may produce the declared error "Duplicate", which is neither handled here nor admitted by the enclosing function's own "errors" declaration}}} accepted}
 
 test dr-unhandled-native-set {a native's unhandled errors are one diagnostic too: the single-error wording is unchanged} -body {
-    drSites "import list\n\nfn f(xs: List\[int\], i: int) -> int:\n    list::at(xs, i)\n\nf(\[1\], 0)\n"
+    drSites "import std::list\n\nfn f(xs: List\[int\], i: int) -> int:\n    std::list::at(xs, i)\n\nf(\[1\], 0)\n"
 } -result {{UNHANDLED-ERROR 4:5}}
 
 # ---------------------------------------------------------------------------
@@ -392,30 +392,30 @@ test dr-syntax-declaration-body {a declaration that fails inside its own indente
 # and whose value is the rejected block's [code, message].
 proc drStatic {body {prelude ""}} {
     set lines [lmap line [split [string trimright $body \n] \n] {string cat "        " $line}]
-    return "import compiler\n${prelude}fn probe(s: str) errors compiler::CompilerError:\n    static compile:\n[join $lines \n]\n\nr = probe(\"q\"):\n    on compiler::CompilerError {code, message}:\n        \[code, message\]\nr\n"
+    return "import std::compiler\n${prelude}fn probe(s: str) errors std::compiler::CompilerError:\n    static compile:\n[join $lines \n]\n\nr = probe(\"q\"):\n    on std::compiler::CompilerError {code, message}:\n        \[code, message\]\nr\n"
 }
 
 test dr-static-method-missing-import {static compile: a failed method call's block is rejected with the explicit spelling's code, MissingImport (old: NotAStruct)} -body {
     drValues [drStatic "s.concat(\"ab\")"] interp
-} -match glob -result {{value {\[compiler::DiagnosticCode::MissingImport, *namespace \\"str\\" is not imported*}}}
+} -match glob -result {{value {\[std::compiler::DiagnosticCode::MissingImport, *namespace \\"std::str\\" is not imported*}}}
 
 test dr-static-explicit-agrees {the explicit spelling's block: MissingImport, the same code} -body {
-    drValues [drStatic "str::concat(s, \"ab\")"] interp
-} -match glob -result {{value {\[compiler::DiagnosticCode::MissingImport, *namespace \\"str\\" is not imported*}}}
+    drValues [drStatic "std::str::concat(s, \"ab\")"] interp
+} -match glob -result {{value {\[std::compiler::DiagnosticCode::MissingImport, *namespace \\"std::str\\" is not imported*}}}
 
 test dr-static-unhandled-set {static compile: a block rejected for unhandled errors carries the whole set in its one diagnostic} -body {
-    drValues [drStatic "validate(str::length(s))" "import str\nerror A\nerror B\n\nfn validate(n: int) -> int errors A, B:\n    if n < 1:\n        fail A\n    if n == 1:\n        fail B\n    n\n\n"] interp
-} -match glob -result {{value {\[compiler::DiagnosticCode::UnhandledError, *the declared errors \\"A\\" and \\"B\\"*}}}
+    drValues [drStatic "validate(std::str::length(s))" "import std::str\nerror A\nerror B\n\nfn validate(n: int) -> int errors A, B:\n    if n < 1:\n        fail A\n    if n == 1:\n        fail B\n    n\n\n"] interp
+} -match glob -result {{value {\[std::compiler::DiagnosticCode::UnhandledError, *the declared errors \\"A\\" and \\"B\\"*}}}
 
 test dr-static-program-diagnostics {a program with static sites reports all of its own independent diagnostics, as any program does} -body {
-    drSites "import compiler\n\nfn probe() -> int errors compiler::CompilerError:\n    static compile:\n        1\n    0\n\nfn a(x: int) -> str:\n    x\n\nfn b() -> int:\n    missing\n\n0\n"
+    drSites "import std::compiler\n\nfn probe() -> int errors std::compiler::CompilerError:\n    static compile:\n        1\n    0\n\nfn a(x: int) -> str:\n    x\n\nfn b() -> int:\n    missing\n\n0\n"
 } -result {{UNBOUND 12:5} {TYPE 8:5}}
 
 # ---------------------------------------------------------------------------
 # Isolation: recovery state is the compilation's own
 
 test dr-isolation {a rejected compilation (poison, resolution taint, a method decision) changes nothing about the next one: its HIR is the HIR a fresh process builds, with no recovery state} -body {
-    set valid "import str\n\nfn f(s: str) -> str:\n    s.concat(\"ab\")\n\nf(\"q\")\n"
+    set valid "import std::str\n\nfn f(s: str) -> str:\n    s.concat(\"ab\")\n\nf(\"q\")\n"
     set before [hir::format [drHir $valid]]
     drReport "fn g(s: str) -> str:\n    s.concat(\"ab\")\n\nfn h() -> int:\n    missing\n\ng(\"q\")\n"
     set hir [drHir $valid]
@@ -428,7 +428,7 @@ test dr-interchange-rejected {an invalid program never produces HIR interchange 
     list [catch {exec [info nameofexecutable] [file join $::projectRoot main.tcl] -emit-hir-interchange $path 2>@1} output] \
         [regsub -all {[^ \n]*dr-interchange\.bot} $output dr-interchange.bot] \
         [file exists [file rootname $path].hirx]
-} -cleanup {removeFile dr-interchange.bot; unset -nocomplain path output} -match glob -result {1 {dr-interchange.bot: dr-interchange.bot:2:7: namespace "str" is not imported*(CORE SEMANTIC MISSING-IMPORT)*} 0}
+} -cleanup {removeFile dr-interchange.bot; unset -nocomplain path output} -match glob -result {1 {dr-interchange.bot: dr-interchange.bot:2:7: namespace "std::str" is not imported*(CORE SEMANTIC MISSING-IMPORT)*} 0}
 
 test dr-main-prints-each {main.tcl prints each reported diagnostic on a line of its own, with its own code} -body {
     set path [makeFile "fn a(x: int) -> str:\n    x\n\nfn b(s: str) -> str:\n    s.concat(\"!\")\n\na(1)\n" dr-main.bot]
@@ -437,7 +437,7 @@ test dr-main-prints-each {main.tcl prints each reported diagnostic on a line of 
         if {![string match "*error:*" $line]} continue
         regsub {^.*dr-main\.bot} [string trim $line] {dr-main.bot}
     }
-} -cleanup {removeFile dr-main.bot; unset -nocomplain path output} -result {{dr-main.bot:1:5: function result does not prove declared type str (CORE SEMANTIC TYPE)} {dr-main.bot:5:7: namespace "str" is not imported; add `import str` to use `str::concat` (the method-style call ".concat(...)" applies only a function visible by that name) (CORE SEMANTIC MISSING-IMPORT)}}
+} -cleanup {removeFile dr-main.bot; unset -nocomplain path output} -result {{dr-main.bot:1:5: function result does not prove declared type str (CORE SEMANTIC TYPE)} {dr-main.bot:5:7: namespace "std::str" is not imported; add `import std::str` to use `std::str::concat` (the method-style call ".concat(...)" applies only a function visible by that name) (CORE SEMANTIC MISSING-IMPORT)}}
 
 # ---------------------------------------------------------------------------
 # The diagnostic-efficiency corpus

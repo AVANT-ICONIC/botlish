@@ -5,7 +5,7 @@ hash table, a set or a membership test ordinary Botlish expresses
 efficiently, which missing compiler proofs or optimizations make otherwise
 good Botlish slow, and which operations, if any, justify privileged runtime
 support. It ships no Set, Map or membership API, freezes no spelling, and
-graduates none of its tables into `lib/`.
+graduates none of its tables into `stdlib/`.
 
 The detailed catalogue of what the experiment found is
 [HASH-TABLE-COMPILER-PRESSURE.md](HASH-TABLE-COMPILER-PRESSURE.md). Its IDs
@@ -79,7 +79,7 @@ not C or D.
   * a hash-and-displace perfect hash only where a trie's code is too
     large.
 
-  Against an equality chain or `immutable_set::contains` (1-5 µs at 512
+  Against an equality chain or `std::immutable_set::contains` (1-5 µs at 512
   elements), that is 100 times faster. Two compile-cost limits (CO-7,
   CO-8) must be fixed first. Hashing is the wrong tool for constant Ints
   and enums.
@@ -151,7 +151,7 @@ per call site. The exceptions are `lpint` and `lpstr`, which type them.
 | `rh` | Robin Hood over `lpa`'s arrays, backward-shift deletion | 126 | the tail-latency algorithm |
 | `cd` | compact dict: entries dense in three MutableVectors, an index `MutableArray[int]` of entry numbers; no removal | 89 | the insertion-ordered layout |
 | `sorted` | entries sorted by hash, binary search; O(n log n) bulk construction, O(n) insert | 192 | the immutable sorted-sequence family |
-| `lpp` | `lpa` with its probe walk delegated to `mutable_array::probe_linear` | 110 | the runtime-primitive experiment (compiles only with `patches/probe-primitive.patch` applied) |
+| `lpp` | `lpa` with its probe walk delegated to `std::mutable_array::probe_linear` | 110 | the runtime-primitive experiment (compiles only with `patches/probe-primitive.patch` applied) |
 
 Quadratic probing was not implemented. Linear probing and Robin Hood over
 the same arrays already compare two probe disciplines, and the measured
@@ -1181,7 +1181,7 @@ the merged-tree sweep's.
 `lpa` (A) is the table as a library author writes it:
 * small functions: `home`, `next_slot`, `find`/`find_from`,
   `find_empty`/`empty_from`, `store`, `grown`;
-* every array access through `mutable_array::at`;
+* every array access through `std::mutable_array::at`;
 * every index reduced by `mod`.
 
 `lpmono` (B) is the same algorithm with every helper inlined by hand:
@@ -1424,7 +1424,7 @@ mutants and a workload unrelated to hash tables.
 | per-path last use, literal demand, by-reference arguments | VS-1, VS-2, BUG-1 | `9c79b28` `720c826` `6c76947` | `hir/mutvec.tcl`: a read-out moves at its *path's* last use; a struct literal in an exclusive position demands its fields; an argument handed over by reference is copied when a later argument writes it | mutable-vector 61/61 (new: by-reference, per-path, literal-demand semantics and copies), mutable-array 33/33, mutable-array-type, affine, coroutines, contexts, struct-destructuring | vector fuzzer: a new PATHS family; seeds 1-2 (60 programs each) and GC stress, array fuzzer seeds 1-3, 0 disagreements | 17 new (4 by-reference, 11 path, 2 literal), all 62 vector and 31 array mutants killed | a BFS whose state struct is rebuilt per visit: N = 100 313 ms -> 1.1 ms, N = 200 4.48 s -> 13.6 ms; 5 examples and 21 golden suites: identical copies |
 | allocation-free hash | RO-1 | `4bc7c94` | `rt_hash` writes decimal text on the stack and borrows struct shapes; every hash value is unchanged | 19 hashing-related test files; `hash-parity-kinds-1` (87 values at the representation's edges, four backends) | hash-table fuzz 432 checks | a planted chunk-padding mutant fails the parity test | valgrind: 0 heap allocations per hash (Ints up to 128 bits, chars, structs) |
 | inline MutableArray access | CG-1 | `0bd45ff` `11fe677` `243455f` | header words LEN, PTR, UNIQUE; inline `capacity`, `at`, `set` with cold helper paths | 10 MutableArray/vector/affine/hashtable test files, normally and under GC stress; stub linker; Rust unit tests under GC stress | array fuzzer seeds 1, 2, 3, 17, 41 and GC stress, 0 disagreements; hash-table fuzz 540 checks | 33/33 array mutants, 2 new (`share-keeps-unique-native`, `detach-keeps-stale-pointer-native`) | 1M-iteration loops: `at` 6.6 -> 1.6 ns, `set` 9.3 -> 1.3 ns, read-modify-write 17.4 -> 2.3 ns |
-| raw, masked, inline `mod` | CG-2, CO-1 | `71e4be1` `3b9f42c` `3c2bfc4` `2b6a055` | `rimod`/`rimodtotal` for small operands, a mask for +-2^k, an inline tagged fast path, tiny-leaf inlining of a `mod` with a nonzero divisor | `native-mod-lowering.test` (new), 24 native test files through `tests/local.tcl`, GC stress | a new differential fuzzer `audit/mod-lowering/` (380 programs, four backends and three option variants, 0 disagreements) | planted mask and zero-check bugs caught; all 79 existing mutant edits of the touched files still apply | `bench/uri-steady.bot` -1.9 % instructions; lib/web.bot's `b.mod(16)` a mask; hashtable.bot's probes no longer safepoints |
+| raw, masked, inline `mod` | CG-2, CO-1 | `71e4be1` `3b9f42c` `3c2bfc4` `2b6a055` | `rimod`/`rimodtotal` for small operands, a mask for +-2^k, an inline tagged fast path, tiny-leaf inlining of a `mod` with a nonzero divisor | `native-mod-lowering.test` (new), 24 native test files through `tests/local.tcl`, GC stress | a new differential fuzzer `audit/mod-lowering/` (380 programs, four backends and three option variants, 0 disagreements) | planted mask and zero-check bugs caught; all 79 existing mutant edits of the touched files still apply | `bench/uri-steady.bot` -1.9 % instructions; stdlib/web.bot's `b.mod(16)` a mask; hashtable.bot's probes no longer safepoints |
 | bounds theorems | CP-1, CP-2, CP-3 | `e0b7b9c` `a1e281d` `b1144fe` `a137676` `58d0212` | an index reduced by its container's size; a field path keyed by its path; a guard on a computed local; a known size below a proven minimum is a contradiction | proven-bounds 42/42 (18 new), 16 golden ports, stdlib-namespaces, crosscheck, proof-loop-intervals, cardinality, exact-value, static-compile, static-economics, compilerpedia | a new soundness fuzzer `audit/bounds-proofs/` (every rejected unsound shape has a failing witness), static-decisions fuzz seeds 1-2 | 22/22 new mutants | the 2048 workload's spawn read can be written as a proven `at`, and so can ring buffers; corpus verdicts unchanged |
 
 Two integration fixups followed the merge:
@@ -1608,7 +1608,7 @@ compiler work. RT-1 was therefore measured twice:
 Both rounds compare it with the same table written in Botlish.
 
 **RT-1, the probe primitive.**
-`mutable_array::probe_linear(hashes, keys, h, key) -> int` runs one
+`std::mutable_array::probe_linear(hashes, keys, h, key) -> int` runs one
 whole linear-probing walk in Rust and returns the slot. `lpp` is `lpa`
 with its probe walks replaced by it. Everything else stays Botlish: the
 layout, the policy, growth and deletion.
@@ -1725,7 +1725,7 @@ miss times are the honest worst case, and the tables lead with misses.
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
 | `chain` (`x == c1 or ...`) | 4.4 | 7.7 | 11.5 | 19.5 | 32.1 | 60.4 | 360 | (does not compile, CO-8) |
 | `list` (module List, counted loop) | 8.5 | 13.5 | 17.3 | 27.6 | 57.9 | 107 | 355 | 1,421 |
-| `iset` (`immutable_set::contains`) | 13.4 | 31.7 | 54.9 | 121 | 212 | 412 | 1,631 | 6,363 |
+| `iset` (`std::immutable_set::contains`) | 13.4 | 31.7 | 54.9 | 121 | 212 | 412 | 1,631 | 6,363 |
 | `table` (the experiment's `lpa`) | 42.8 | 48.8 | 51.0 | 58.4 | 47.7 | 52.5 | 56.8 | 54.6 |
 | `bsearch` (sorted List literal) | 11.7 | 14.5 | 15.7 | 19.1 | 20.0 | 22.7 | 29.9 | 35.2 |
 | `tree` (generated comparison tree) | 4.5 | 7.7 | 8.3 | 8.3 | 8.8 | 10.3 | 10.5 | 11.5 |
@@ -1776,7 +1776,7 @@ dense-Int `bits` row is the best estimate of what it would cost.
     comparison.
   * Up to about 4 Ints, 2-3 Strings or 16 enum cases, a chain is as fast
     as anything.
-  * `immutable_set::contains`, the language's only set, is a linear
+  * `std::immutable_set::contains`, the language's only set, is a linear
     `equal` scan through a runtime helper. It is the slowest strategy
     from 8 elements (below that the run-time `table` is slower): 1.6-7
     times a hand-written List scan, and 6-10 µs per miss at 1,024
@@ -1972,7 +1972,7 @@ when the lowering changes.
   * facts that cross a call (CP-4);
   * a struct's size invariants (CP-5: parallel capacities, "capacity >=
     8");
-  * `mutable_vector::at` bounds (CP-6);
+  * `std::mutable_vector::at` bounds (CP-6);
   * total siblings of `hash` and `==` (CO-4), without which no lookup can
     be error-free.
 * **Evidence:**
@@ -2097,7 +2097,7 @@ one representation for all of them.
 
 ### Immutable Set
 
-* **Today.** `immutable_set::contains` is a linear scan of `equal`
+* **Today.** `std::immutable_set::contains` is a linear scan of `equal`
   through a runtime helper: 7 µs per miss at 1,024 Ints, 10 µs at 1,024
   Strings. It is the slowest strategy measured from about 8 elements;
   below that a run-time hash table is slower.
@@ -2140,7 +2140,7 @@ one representation for all of them.
     64 literals), and a perfect hash (hash-and-displace) beyond.
 * **The gains are large** (merged tree):
   * Ints: 1,013 ns (an equality chain of 512) or 3.2 µs
-    (`immutable_set::contains`) against 18 ns (a tree; 10-12 at most
+    (`std::immutable_set::contains`) against 18 ns (a tree; 10-12 at most
     sizes).
   * Strings: 2.4 µs against 11 ns (a trie) or 20 ns (a perfect hash), for
     512 literals.
@@ -2279,7 +2279,7 @@ one representation for all of them.
    * VS-1/VS-2/BUG-1: a BFS whose state struct is rebuilt per visit, 313
      ms to 1.1 ms. BUG-1 itself was a miscompilation found on the way.
    * CG-1: `at` 6.6 to 1.6 ns and `set` 9.3 to 1.3 ns, in any array loop.
-   * CG-2: any `mod`. `lib/web.bot`'s hex digits become a mask.
+   * CG-2: any `mod`. `stdlib/web.bot`'s hex digits become a mask.
    * RO-1: every hash.
    * CP-1..CP-3: the 2048 workload's spawn read can be written as a
      proven `empties.at(roll.mod(count))`, as can a ring buffer's index.

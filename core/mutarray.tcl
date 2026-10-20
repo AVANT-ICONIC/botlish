@@ -32,22 +32,22 @@
 # of affine#drop). There is no ownership state here: no moved flag, no owner,
 # no count beyond Tcl's own.
 #
-#   mutable_array::allocate(n)         n slots of unit (the raw substrate)
-#   mutable_array::create(n, x)        n slots, each a logical copy of x
-#                                      (x unrestricted: the compiler rejects
-#                                      an affine x, AFFINE-DUPLICATION-
-#                                      UNSUPPORTED)
-#   mutable_array::from_list(xs)       the List's elements, in order
-#   mutable_array::generate(n, f)      slot i holds f(i), for i from 0 to
-#                                      n - 1, in order; the first failing
-#                                      call's error propagates
-#   mutable_array::capacity(a)         the length
-#   mutable_array::at(a, i)            the element at i (IndexNotFound)
-#   mutable_array::set(a, i, x)        installs x at i; unit (IndexNotFound)
-#   mutable_array::swap(a, i, x)       installs x at i, returns the old
-#                                      element (IndexNotFound; no change)
-#   mutable_array::copy(d, ds, s, ss, n)  memmove of s's slice into d's
-#   mutable_array::freeze(a, n)        a List of the first n elements
+#   std::mutable_array::allocate(n)     n slots of unit (the raw substrate)
+#   std::mutable_array::create(n, x)    n slots, each a logical copy of x (x
+#                                       unrestricted: the compiler rejects an
+#                                       affine x,
+#                                       AFFINE-DUPLICATION-UNSUPPORTED)
+#   std::mutable_array::from_list(xs)   the List's elements, in order
+#   std::mutable_array::generate(n, f)  slot i holds f(i), for i from 0 to
+#                                       n - 1, in order; the first failing
+#                                       call's error propagates
+#   std::mutable_array::capacity(a)     the length
+#   std::mutable_array::at(a, i)        the element at i (IndexNotFound)
+#   std::mutable_array::set(a, i, x)    installs x at i; unit (IndexNotFound)
+#   std::mutable_array::swap(a, i, x)   installs x at i, returns the old
+#                                       element (IndexNotFound; no change)
+#   std::mutable_array::copy(d, ds, s, ss, n)  memmove of s's slice into d's
+#   std::mutable_array::freeze(a, n)   a List of the first n elements
 #
 # and the internal operations (no source can spell `#`):
 #
@@ -131,18 +131,18 @@ proc core::mutarray::Capacity {n name} {
 
 # A fresh MutableArray of CAPACITY slots, each initialized to {unit}.
 proc core::mutarray::allocate {capacity} {
-    return [New [lrepeat [Capacity $capacity mutable_array::allocate] [core::value::unit]]]
+    return [New [lrepeat [Capacity $capacity std::mutable_array::allocate] [core::value::unit]]]
 }
 
 # A fresh MutableArray of CAPACITY slots, each holding VALUE: one value placed
 # CAPACITY times (an unrestricted value: a logical copy per slot, the same
 # immutable value or COW header in each).
 proc core::mutarray::create {capacity value} {
-    return [New [lrepeat [Capacity $capacity mutable_array::create] [core::value::check $value]]]
+    return [New [lrepeat [Capacity $capacity std::mutable_array::create] [core::value::check $value]]]
 }
 
 proc core::mutarray::fromList {xs} {
-    return [New [core::value::items [core::value::expect list $xs mutable_array::from_list]]]
+    return [New [core::value::items [core::value::expect list $xs std::mutable_array::from_list]]]
 }
 
 # The elements FACTORY makes for slots 0..COUNT-1, in order, as a completion:
@@ -168,7 +168,7 @@ proc core::mutarray::Generate {count factory tree name} {
 }
 
 proc core::mutarray::generate {count factory} {
-    return [Generate $count $factory "" mutable_array::generate]
+    return [Generate $count $factory "" std::mutable_array::generate]
 }
 
 proc core::mutarray::generateDrop {count factory descriptor} {
@@ -178,7 +178,7 @@ proc core::mutarray::generateDrop {count factory descriptor} {
 
 proc core::mutarray::capacity {v} {
     variable store
-    return [core::value::intFromNumber [llength $store([Id $v mutable_array::capacity])]]
+    return [core::value::intFromNumber [llength $store([Id $v std::mutable_array::capacity])]]
 }
 
 # The index I (an Int value) of array ID, checked: 0 <= I < capacity, else
@@ -194,39 +194,39 @@ proc core::mutarray::Index {id index name} {
     return $i
 }
 
-# (mutable_array::at ARRAY INDEX): the element at INDEX, 0 <= INDEX <
+# (std::mutable_array::at ARRAY INDEX): the element at INDEX, 0 <= INDEX <
 # capacity; any other Int fails with the declared builtin error
-# IndexNotFound (core/native.tcl), exactly like list::at (core/lists.tcl).
+# IndexNotFound (core/native.tcl), exactly like std::list::at (core/lists.tcl).
 proc core::mutarray::at {v index} {
     variable store
-    set id [Id $v mutable_array::at]
-    set i [Index $id $index mutable_array::at]
+    set id [Id $v std::mutable_array::at]
+    set i [Index $id $index std::mutable_array::at]
     return [lindex $store($id) $i]
 }
 
-# (mutable_array::set ARRAY INDEX VALUE): mutates ARRAY's header in place;
+# (std::mutable_array::set ARRAY INDEX VALUE): mutates ARRAY's header in place;
 # returns unit. An INDEX that does not designate a slot fails with
-# IndexNotFound, exactly like mutable_array::at, and writes nothing.
+# IndexNotFound, exactly like std::mutable_array::at, and writes nothing.
 proc core::mutarray::set_ {v index value} {
     variable store
-    set id [Id $v mutable_array::set]
-    set i [Index $id $index mutable_array::set]
+    set id [Id $v std::mutable_array::set]
+    set i [Index $id $index std::mutable_array::set]
     lset store($id) $i [core::value::check $value]
     return [core::value::unit]
 }
 
-# (mutable_array::swap ARRAY INDEX VALUE): VALUE installed at INDEX, the old
+# (std::mutable_array::swap ARRAY INDEX VALUE): VALUE installed at INDEX, the old
 # element returned; IndexNotFound (and no change) when INDEX is no slot.
 proc core::mutarray::swap {v index value} {
     variable store
-    set id [Id $v mutable_array::swap]
-    set i [Index $id $index mutable_array::swap]
+    set id [Id $v std::mutable_array::swap]
+    set i [Index $id $index std::mutable_array::swap]
     set old [lindex $store($id) $i]
     lset store($id) $i [core::value::check $value]
     return $old
 }
 
-# (mutable_array::copy DST DSTSTART SRC SRCSTART COUNT): copies COUNT elements
+# (std::mutable_array::copy DST DSTSTART SRC SRCSTART COUNT): copies COUNT elements
 # of SRC starting at SRCSTART into DST starting at DSTSTART; returns unit.
 # DST and SRC may be the same array, with overlapping ranges: the result is
 # as if every source element were read before any destination write (memmove
@@ -237,13 +237,13 @@ proc core::mutarray::swap {v index value} {
 # its start: LowerUnderrun), and nothing is copied.
 proc core::mutarray::copy {dst dstStart src srcStart count} {
     variable store
-    set dstId [Id $dst mutable_array::copy]
-    set srcId [Id $src mutable_array::copy]
-    set ds [core::value::intOf [core::value::expect int $dstStart mutable_array::copy]]
-    set ss [core::value::intOf [core::value::expect int $srcStart mutable_array::copy]]
-    set n  [core::value::intOf [core::value::expect int $count mutable_array::copy]]
-    core::native::checkSlice mutable_array::copy $ds [expr {$ds + $n}] [llength $store($dstId)]
-    core::native::checkSlice mutable_array::copy $ss [expr {$ss + $n}] [llength $store($srcId)]
+    set dstId [Id $dst std::mutable_array::copy]
+    set srcId [Id $src std::mutable_array::copy]
+    set ds [core::value::intOf [core::value::expect int $dstStart std::mutable_array::copy]]
+    set ss [core::value::intOf [core::value::expect int $srcStart std::mutable_array::copy]]
+    set n  [core::value::intOf [core::value::expect int $count std::mutable_array::copy]]
+    core::native::checkSlice std::mutable_array::copy $ds [expr {$ds + $n}] [llength $store($dstId)]
+    core::native::checkSlice std::mutable_array::copy $ss [expr {$ss + $n}] [llength $store($srcId)]
     if {$n > 0} {
         # Read the source range before writing (memmove semantics), so an
         # overlapping self-copy is correct in either direction.
@@ -257,14 +257,14 @@ proc core::mutarray::copy {dst dstStart src srcStart count} {
     return [core::value::unit]
 }
 
-# (mutable_array::freeze ARRAY COUNT): a new immutable List of ARRAY's first
+# (std::mutable_array::freeze ARRAY COUNT): a new immutable List of ARRAY's first
 # COUNT elements: the slice 0..COUNT (core::native::checkSlice: a negative
 # COUNT is LowerUnderrun, one above the capacity UpperOverrun).
 proc core::mutarray::freeze {v count} {
     variable store
-    set id [Id $v mutable_array::freeze]
-    set n [core::value::intOf [core::value::expect int $count mutable_array::freeze]]
-    core::native::checkSlice mutable_array::freeze 0 $n [llength $store($id)]
+    set id [Id $v std::mutable_array::freeze]
+    set n [core::value::intOf [core::value::expect int $count std::mutable_array::freeze]]
+    core::native::checkSlice std::mutable_array::freeze 0 $n [llength $store($id)]
     return [core::value::listOf [lrange $store($id) 0 [expr {$n - 1}]]]
 }
 
@@ -364,17 +364,17 @@ proc core::mutarray::resetCounters {} {
 # length, not a receiver (`n.create(x)` would read as a method of N), and
 # copy's is the *destination* of the copy (`dst.copy(at, src, from, n)` would
 # read as copying DST). Both are called functionally.
-core::native::register mutable_array::allocate -arity 1 -impl core::mutarray::allocate \
+core::native::register std::mutable_array::allocate -arity 1 -impl core::mutarray::allocate \
     -param-types {int} -result-type mutarray -runtime mutarray-alloc -context-free 1 \
     -result-length {int 0} -ownership {observe}
-core::native::register mutable_array::create -arity 2 -impl core::mutarray::create \
+core::native::register std::mutable_array::create -arity 2 -impl core::mutarray::create \
     -param-types {int any} -result-type mutarray -runtime mutarray-alloc \
     -result-shape {mutarray-create 1} -result-length {int 0} -ownership {observe repeat} \
     -nomethod 1
-core::native::register mutable_array::from_list -arity 1 -impl core::mutarray::fromList \
+core::native::register std::mutable_array::from_list -arity 1 -impl core::mutarray::fromList \
     -param-types {list} -result-type mutarray -runtime mutarray-alloc \
     -result-shape {mutarray-from-list 0} -result-length {list 0} -ownership {move}
-core::native::register mutable_array::generate -arity 2 -impl core::mutarray::generate \
+core::native::register std::mutable_array::generate -arity 2 -impl core::mutarray::generate \
     -param-types {int any} -result-type mutarray -runtime mutarray-alloc -completion 1 \
     -result-shape {mutarray-generate 1} -errors-from 1 -result-length {int 0} \
     -drop-form {mutable_array#generate_drop result} -ownership {observe factory}
@@ -382,27 +382,27 @@ core::native::register mutable_array::generate -arity 2 -impl core::mutarray::ge
 # binding holds (there is no push, pop or clear, a copy-on-write detach keeps
 # the length, and a consuming loop drains only an affine array it moved, which
 # no binding holds any more).
-core::native::register mutable_array::capacity -arity 1 -impl core::mutarray::capacity \
+core::native::register std::mutable_array::capacity -arity 1 -impl core::mutarray::capacity \
     -param-types {mutarray} -result-type int -result-range collection-length -ownership {observe} \
     -mutation-stable 1
-core::native::register mutable_array::at -arity 2 -impl core::mutarray::at \
+core::native::register std::mutable_array::at -arity 2 -impl core::mutarray::at \
     -param-types {mutarray int} -result-type any -runtime range-check \
     -result-shape {mutarray-element 0} -errors IndexNotFound -bounds {index mutarray 0 1} \
     -ownership {copy-out observe}
-core::native::register mutable_array::set -arity 3 -impl core::mutarray::set_ -keeps-length 1 \
+core::native::register std::mutable_array::set -arity 3 -impl core::mutarray::set_ -keeps-length 1 \
     -param-types {mutarray int any} -result-type unit -runtime {range-check mutarray-mutate} \
     -errors IndexNotFound -bounds {index mutarray 0 1} -drop-form {mutable_array#set_drop 0} \
     -ownership {place observe move}
-core::native::register mutable_array::swap -arity 3 -impl core::mutarray::swap -keeps-length 1 \
+core::native::register std::mutable_array::swap -arity 3 -impl core::mutarray::swap -keeps-length 1 \
     -param-types {mutarray int any} -result-type any -runtime {range-check mutarray-mutate} \
     -result-shape {mutarray-element 0} -errors IndexNotFound -bounds {index mutarray 0 1} \
     -drop-form {mutable_array#swap_drop 0} -ownership {place observe move}
-core::native::register mutable_array::copy -arity 5 -impl core::mutarray::copy -keeps-length 1 \
+core::native::register std::mutable_array::copy -arity 5 -impl core::mutarray::copy -keeps-length 1 \
     -param-types {mutarray int mutarray int int} -result-type unit -runtime {range-check mutarray-mutate} \
     -errors {LowerUnderrun UpperOverrun} \
     -bounds {slices {mutarray 0 1 {sum 1 4}} {mutarray 2 3 {sum 3 4}}} \
     -ownership {place observe copy-out observe observe} -nomethod 1
-core::native::register mutable_array::freeze -arity 2 -impl core::mutarray::freeze \
+core::native::register std::mutable_array::freeze -arity 2 -impl core::mutarray::freeze \
     -param-types {mutarray int} -result-type list -runtime {range-check mutarray-alloc} \
     -result-shape {mutarray-freeze 0} -errors {LowerUnderrun UpperOverrun} \
     -bounds {slices {mutarray 0 {const 0} 1}} -ownership {copy-out observe}

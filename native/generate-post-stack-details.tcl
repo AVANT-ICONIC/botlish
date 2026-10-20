@@ -14,7 +14,7 @@ proc writeText {path value} {
 source [file join $root surface surface.tcl]
 foreach name {fib loop-count sum-refined refined-checks} {
     # refined-checks exists only as source since REFINEMENT-VALUES.md (its
-    # .ir form needed lib/web.tcl, which is gone).
+    # .ir form needed stdlib/web.tcl, which is gone).
     set ir [file join $root bench "$name.ir"]
     if {[file exists $ir]} {
         set hir [native::prepareHir [hir::build [core::loadProgramFile $ir] -strict 0]]

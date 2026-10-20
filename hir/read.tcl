@@ -195,7 +195,7 @@ proc hir::read::TypeDecls {lines} {
     }
     variable lastTypeDecls
     set lastTypeDecls $registered
-    # A build declares ffi::c's scalars for one target: text naming two is
+    # A build declares std::ffi::c's scalars for one target: text naming two is
     # the HIR of no program.
     variable lastTarget
     set targets [lsort -unique [lmap decl $decls {
@@ -334,7 +334,7 @@ proc hir::read::TypeDeclLine {content number} {
             }
             set field [dict create name $fname nameSpan $span type $ftype typeSpan $span \
                 offset $offset offsetSpan $span]
-            if {[regexp {^ffi::c::(Ptr|FnPtr)\[} $ftype]} {
+            if {[regexp {^std::ffi::c::(Ptr|FnPtr)\[} $ftype]} {
                 # A pointer field (NATIVE-LAYOUT-VIEWS.md): its canonical type
                 # text, read once the structs its pointee may name are
                 # registered (hir::layouts::ResolvePointers).
@@ -382,7 +382,7 @@ proc hir::read::TypeDeclLine {content number} {
     } else {
         return ""
     }
-    # NAME is the type's identity as printed (`abi::U8Value` for a module's
+    # NAME is the type's identity as printed (`std::abi::U8Value` for a module's
     # type), so the declaration reads back with no namespace of its own.
     set decl [dict create name $name namespace "" nameSpan $span parent $parent parentSpan $span \
         domain $domain domainSpan $span]
@@ -771,12 +771,12 @@ proc hir::read::ParseType {text number} {
         # A native edit (NATIVE-LAYOUT-WRITES.md), likewise.
         return [hir::layouts::editType $layout]
     }
-    if {[regexp {^ffi::c::Ptr\[(.+)\]$} $text -> inner]} {
+    if {[regexp {^std::ffi::c::Ptr\[(.+)\]$} $text -> inner]} {
         # A C data pointer (C-ABI-TYPES.md): its pointee identity, as
         # hir::cabi::ShowPointee wrote it.
         return [list cptr [hir::cabi::ParsePointee $inner $number]]
     }
-    if {[regexp {^ffi::c::FnPtr\[Fn\{args: \[(.*)\], return: (.+)\}\]$} $text -> argsText returnText]} {
+    if {[regexp {^std::ffi::c::FnPtr\[Fn\{args: \[(.*)\], return: (.+)\}\]$} $text -> argsText returnText]} {
         # A C function pointer: hir::cabi::ShowSignature's notation (no
         # errors: a C signature has none).
         if {$argsText eq ""} {
@@ -786,7 +786,7 @@ proc hir::read::ParseType {text number} {
         }
         return [list cfnptr [hir::types::MakeFn $argTypes [ParseType $returnText $number] {}]]
     }
-    if {[regexp {^ffi::c::FnPtr\[(\S+)\]$} $text -> inner] && [hir::imprint::IsVariableName $inner]} {
+    if {[regexp {^std::ffi::c::FnPtr\[(\S+)\]$} $text -> inner] && [hir::imprint::IsVariableName $inner]} {
         # A C function pointer whose whole signature is an imprint variable.
         return [list cfnptr [list imprint $inner]]
     }

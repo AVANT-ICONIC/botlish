@@ -9,10 +9,10 @@
 # An extern c fn is a truthful C ABI declaration with no body:
 #
 #   extern c fn SHA256 named "botlish_bssl_SHA256"(
-#       data: ffi::c::Ptr[ffi::c::UChar] read noescape,
-#       len: ffi::c::ULong,
-#       out: ffi::c::Ptr[ffi::c::UChar] write noescape
-#   ) -> ffi::c::Ptr[ffi::c::UChar] alias out
+#       data: std::ffi::c::Ptr[std::ffi::c::UChar] read noescape,
+#       len: std::ffi::c::ULong,
+#       out: std::ffi::c::Ptr[std::ffi::c::UChar] write noescape
+#   ) -> std::ffi::c::Ptr[std::ffi::c::UChar] alias out
 #
 # It becomes a compilation-local native of the internal name extern#KEY
 # (KEY: the Botlish qualified name, `sha::SHA256`, or the entry program's
@@ -79,8 +79,8 @@ proc hir::foreign::Location {span} {
 
 # The ABI transport class of the C value type TYPE (a resolved type): i8 ..
 # u64 for a C integer scalar by its registry metadata's width and
-# signedness (never its name), bool for C _Bool (ffi::c::Bool, Botlish's
-# bool: one byte, 0 or 1), f64 for C double (ffi::c::Double, Botlish's
+# signedness (never its name), bool for C _Bool (std::ffi::c::Bool, Botlish's
+# bool: one byte, 0 or 1), f64 for C double (std::ffi::c::Double, Botlish's
 # Float64: an IEEE 754 binary64), ptr for a data or function pointer, void
 # for unit (a result only).
 proc hir::foreign::AbiClass {type} {

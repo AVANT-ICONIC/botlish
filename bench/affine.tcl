@@ -52,7 +52,7 @@ foreach {option value} $args {
     }
 }
 
-set prelude "import coroutine\nstruct V:\n    n: int\nstruct Box:\n    name: str\n    step: Coroutine{args: \[\], return: V}\n"
+set prelude "import std::coroutine\nstruct V:\n    n: int\nstruct Box:\n    name: str\n    step: Coroutine{args: \[\], return: V}\n"
 append prelude "fn counter(m: int) -> V:\n    loop i from 0 to m:\n        yield V {n: i}\n    return V {n: m}\n"
 append prelude "fn idle(k: int) -> V:\n    yield V {n: k}\n    return V {n: k + 1}\n"
 

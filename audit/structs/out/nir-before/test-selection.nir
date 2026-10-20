@@ -1,4 +1,4 @@
-# instances: <program>, list::any?<any, block>, list::none?<List[str], block>, list::find<List[list], block>, make_changed?<List[str]>, changed?<generic>, test_name<list>, test_deps<list>, test_deps<generic>, affected?<list, block>, affected?<any, block>, select_affected<List[list], block>, first_affected<List[list], block>, is_affected?<generic>
+# instances: <program>, std::list::any?<any, block>, std::list::none?<List[str], block>, std::list::find<List[list], block>, make_changed?<List[str]>, changed?<generic>, test_name<list>, test_deps<list>, test_deps<generic>, affected?<list, block>, affected?<any, block>, select_affected<List[list], block>, first_affected<List[list], block>, is_affected?<generic>
 nir 1 call-effects=1 statics=0
 
 func 0 "<program>" params=0 env=0 regs=86 pnames="" captures=0 instance="generic"
@@ -37,25 +37,25 @@ func 0 "<program>" params=0 env=0 regs=86 pnames="" captures=0 instance="generic
     %32 = op listnew %31 @e165
     %33 = op listnew %30 %32 @e162
     %34 = str "web-tests" @e170
-    %35 = str "lib/web.bot" @e173
-    %36 = str "lib/byte.bot" @e174
+    %35 = str "stdlib/web.bot" @e173
+    %36 = str "stdlib/byte.bot" @e174
     %37 = op listnew %35 %36 @e171
     %38 = op listnew %34 %37 @e168
     %39 = str "ascii-tests" @e177
-    %40 = str "lib/ascii.bot" @e180
+    %40 = str "stdlib/ascii.bot" @e180
     %41 = op listnew %40 @e178
     %42 = op listnew %39 %41 @e175
     %43 = str "list-tests" @e183
-    %44 = str "lib/list.bot" @e186
+    %44 = str "stdlib/list.bot" @e186
     %45 = op listnew %44 @e184
     %46 = op listnew %43 %45 @e181
     %47 = str "byte-tests" @e189
-    %48 = str "lib/byte.bot" @e192
+    %48 = str "stdlib/byte.bot" @e192
     %49 = str "core/scalarbits.tcl" @e193
     %50 = op listnew %48 %49 @e190
     %51 = op listnew %47 %50 @e187
     %52 = str "char-tests" @e196
-    %53 = str "lib/char.bot" @e199
+    %53 = str "stdlib/char.bot" @e199
     %54 = str "core/unicodechar.tcl" @e200
     %55 = op listnew %53 %54 @e197
     %56 = op listnew %52 %55 @e194
@@ -69,14 +69,14 @@ func 0 "<program>" params=0 env=0 regs=86 pnames="" captures=0 instance="generic
     %64 = op listnew %63 @e211
     %65 = op listnew %62 %64 @e208
     %66 = op listnew %4 %9 %14 %19 %24 %29 %33 %38 %42 %46 %51 %56 %61 %65 @e118
-    %67 = str "lib/web.bot" @e217
+    %67 = str "stdlib/web.bot" @e217
     %68 = str "hir/hir.tcl" @e218
     %69 = op listnew %67 %68 @e215
     %70 = str "README.md" @e222
     %71 = op listnew %70 @e220
     %72 = call 4 %69 @e224
     %73 = call 4 %71 @e228
-    %74 = str "lib/web.bot" @e234
+    %74 = str "stdlib/web.bot" @e234
     %75 = callenv 5 %72 %74 @e232
     %76 = call 11 %66 %72 @e236
     %77 = call 11 %66 %73 @e241
@@ -91,7 +91,7 @@ func 0 "<program>" params=0 env=0 regs=86 pnames="" captures=0 instance="generic
     ret %85
 end
 
-func 1 "list::any?" params=2 env=0 regs=18 pnames="xs predicate" captures=0 instance="any, block" rawregs="4 14" @e2
+func 1 "std::list::any?" params=2 env=0 regs=18 pnames="xs predicate" captures=0 instance="any, block" rawregs="4 14" @e2
     guard list %0 "loop" @e3
     %2 = op listlen %0 @e3
     %3 = int 0 @e3
@@ -130,7 +130,7 @@ func 1 "list::any?" params=2 env=0 regs=18 pnames="xs predicate" captures=0 inst
     ret %17
 end
 
-func 2 "list::none?" params=2 env=0 regs=18 pnames="xs predicate" captures=0 instance="List[str], block" rawregs="4 14" @e27
+func 2 "std::list::none?" params=2 env=0 regs=18 pnames="xs predicate" captures=0 instance="List[str], block" rawregs="4 14" @e27
     %2 = op listlen %0 @e28
     %3 = int 0 @e28
     %4 = rawint 0
@@ -168,7 +168,7 @@ func 2 "list::none?" params=2 env=0 regs=18 pnames="xs predicate" captures=0 ins
     ret %17
 end
 
-func 3 "list::find" params=2 env=0 regs=16 pnames="xs predicate" captures=0 instance="List[list], block" rawregs="4 13" @e38
+func 3 "std::list::find" params=2 env=0 regs=16 pnames="xs predicate" captures=0 instance="List[list], block" rawregs="4 13" @e38
     %2 = op listlen %0 @e39
     %3 = int 0 @e39
     %4 = rawint 0

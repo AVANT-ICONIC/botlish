@@ -10,10 +10,10 @@ A `layout` field may now be a fixed array:
     layout WIN32_FIND_DATAW:
         size 592
         align 4
-        field dwFileAttributes: ffi::c::ULong at 0
+        field dwFileAttributes: std::ffi::c::ULong at 0
         ...
-        field cFileName: array 260 of ffi::c::UShort at 44
-        field cAlternateFileName: array 14 of ffi::c::UShort at 564
+        field cFileName: array 260 of std::ffi::c::UShort at 44
+        field cAlternateFileName: array 14 of std::ffi::c::UShort at 564
 
 This report records what was built, why it is shaped the way it is, and the
 evidence. It extends BINARY-LAYOUT.md (the layout language),
@@ -49,9 +49,9 @@ the generator, supplies every extent and offset (section 12).
     field NAME: array N of ELEMENT at OFFSET
 
 ELEMENT is any representation a field may have -- a scalar domain
-(`binary::U16`, your own `Int in 0..255`), a C scalar (`ffi::c::Char`), a C
-pointer (`ffi::c::Ptr[T]`, `ffi::c::FnPtr[F]`), a nested layout -- or another
-array: `array 2 of array 3 of binary::U16` is C's `uint16_t m[2][3]`, the
+(`std::binary::U16`, your own `Int in 0..255`), a C scalar (`std::ffi::c::Char`), a C
+pointer (`std::ffi::c::Ptr[T]`, `std::ffi::c::FnPtr[F]`), a nested layout -- or another
+array: `array 2 of array 3 of std::binary::U16` is C's `uint16_t m[2][3]`, the
 outermost dimension first, as C writes it. `array` and `of` are contextual
 words: a binding or a function named `array` is unaffected
 (`la-syntax`). There is no C declarator syntax (`char name[16]`): the form
@@ -101,10 +101,10 @@ type is `List[E']`, E' the element's copied type (`List[List[int[U16]]]`,
 `List[LayoutStruct[TAILED]]`). The extent is not part of the List's type --
 List types say nothing about length -- so it is a fact about the value:
 
-* **binary::parse** imprints every element from its own bytes (element i at
+* **std::binary::parse** imprints every element from its own bytes (element i at
   offset + i * stride), every encoding's extremes and zero, little-endian
   (`la-parse-every-scalar-width`, `la-parse-shapes`, `la-three-dimensions`).
-* **binary::emit** writes every element at its offset and checks every List
+* **std::binary::emit** writes every element at its offset and checks every List
   against its array's extent first: a short List, a long one, a ragged row,
   a record element's own array is the declared **LayoutExtentMismatch**, and
   nothing is emitted (`la-emit-extent`). `parse(L, emit(v)) == v`;
@@ -116,7 +116,7 @@ which is about a byte storage's size): it names what a program got wrong.
 
 ### Proofs remove the failure path
 
-`binary::emit`, `binary::write` and `binary::store` carry a bounds
+`std::binary::emit`, `std::binary::write` and `std::binary::store` carry a bounds
 registration, `-bounds {extents V}`: the completion analysis decides, per
 call, whether every List the value writes is proven of exactly its array's
 extent (hir/completions.tcl's `ExtentsVerdict`, `ReprValueVerdict`).
@@ -127,22 +127,22 @@ extent (`la-proofs-extent`):
 
 * a list literal (each row of a two-dimensional one too);
 * a collecting loop over a count (`loop i from 0 to 4`), or to
-  `binary::layout_length(L)`;
-* a branch on `list::length(xs) == N`;
-* an **exact copy**: a List or LayoutStruct `binary::load` or
-  `binary::parse` made, or a field of one, followed through immutable
+  `std::binary::layout_length(L)`;
+* a branch on `std::list::length(xs) == N`;
+* an **exact copy**: a List or LayoutStruct `std::binary::load` or
+  `std::binary::parse` made, or a field of one, followed through immutable
   bindings and handlers that never complete (`ExactCopy`). Every array of a
   copy has exactly its extent: the copy made it so, and values never change.
-  `binary::store(e, L.first, binary::load(v.last))` needs no handler; a copy
+  `std::binary::store(e, L.first, std::binary::load(v.last))` needs no handler; a copy
   of an array of another extent is proven out (KNOWN-ERROR);
 * a construction of a LayoutStruct each of whose array fields is proven.
 
-`binary::load` of a live array also tells every analysis its result's length
-(`-result-length {extent 0}`, hir/cardinality.tcl): `list::at(binary::load(
+`std::binary::load` of a live array also tells every analysis its result's length
+(`-result-length {extent 0}`, hir/cardinality.tcl): `std::list::at(std::binary::load(
 v.first), 3)` needs no handler, index 4 always fails.
 
 **The proof gap.** A function's result is no proof: `u8s([1, 2, 3, 4])`
-returns a `List[binary::U8]` whose length no contract states, so writing it
+returns a `List[std::binary::U8]` whose length no contract states, so writing it
 needs a handler (`la-proofs-extent`, "function-result"). Closing that needs
 length facts in function contracts, a general feature this milestone does not
 add. In practice the gap is small: values built by literals, counted loops,
@@ -150,7 +150,7 @@ copies and branches are proven; a handler is one line where they are not.
 
 ## 5. Byte storage: whole arrays and static designators
 
-`binary::write(d, L.arr, xs)` writes a whole array into a fresh
+`std::binary::write(d, L.arr, xs)` writes a whole array into a fresh
 MutableBytes (the operand unchanged, as every MutableBytes write): every
 element at its offset, records field by field -- a record element's tail
 padding keeps the operand's bytes (`la-write-whole-array`). The storage's
@@ -170,15 +170,15 @@ designator LAYOUT-OPERAND: Botlish has no index expression
 LAYOUT-OPERAND, as one ending at a nested layout always was.
 
 **Decision: no dynamic-index byte writes.** A byte write by a computed index
-(`binary::write_element(d, L.arr, i, v)`) would duplicate what a static
+(`std::binary::write_element(d, L.arr, i, v)`) would duplicate what a static
 designator or a whole-array write already express for byte storage, whose
 records are built once, field by field; live memory, where elements change
-one at a time, has `binary::store_element`. If a workload needs it, it is a
+one at a time, has `std::binary::store_element`. If a workload needs it, it is a
 role on the existing machinery (the narray bounds, ReprWrite), not a new
 mechanism.
 
 The value of a write is held to the field's type by the ordinary admission
-rule: a List[binary::U8] for an array of binary::U8 (a List literal of Ints
+rule: a List[std::binary::U8] for an array of std::binary::U8 (a List literal of Ints
 is a List[int], which List's invariance does not admit), a List of
 LayoutStruct[TAILED] for an array of TAILED, a static element's value to its
 domain (`la-write-value-types`).
@@ -191,12 +191,12 @@ E]` -- its address word, nothing read -- and through an edit
 (an array of 5, or of I8 elements, is another type), and a view and an edit
 stay distinct: no upgrade, no implicit downgrade (`la-native-types`).
 
-    binary::element(a, i)           element i: a scalar's Int, a pointer
+    std::binary::element(a, i)           element i: a scalar's Int, a pointer
                                     (fresh, observed), a record's or a row's
                                     own live view or edit at its address
-    binary::store_element(e, i, v)  one scalar or pointer element written
+    std::binary::store_element(e, i, v)  one scalar or pointer element written
                                     through an edit
-    binary::load(a)                 the whole array copied into its List
+    std::binary::load(a)                 the whole array copied into its List
 
 Each is one access at the array's address plus i times the stride: the whole
 array is never read to get one element (`la-native-element-reads`), and the
@@ -209,27 +209,27 @@ branch on 0 <= k < N) has no check at all and needs no handler, a constant
 outside is KNOWN-ERROR (`la-proofs-index`; the narray bounds family,
 `-bounds {index narray 0 1}`).
 
-`binary::store(e, L.arr, xs)` writes a whole live array from a List: every
+`std::binary::store(e, L.arr, xs)` writes a whole live array from a List: every
 extent checked before the first byte is written (a ragged second row changes
 nothing), then each row of scalars one helper call (`nativestorearray`),
 records field by field (their tail padding untouched)
 (`la-native-whole-store`). Element stores through static designators work
-through an edit as through byte storage (`binary::store(e, L.m[0][1], v)`).
+through an edit as through byte storage (`std::binary::store(e, L.m[0][1], v)`).
 
 Authority stays distinct inside arrays: store_element through a view's
-array, or binary::store through a view's record element, is BINARY-OPERAND;
+array, or std::binary::store through a view's record element, is BINARY-OPERAND;
 store_element of a record or row element is LAYOUT-OPERAND ("write its
-fields through binary::element(a, i), the element's own live edit");
-binary::element needs a live array (`la-native-authority`). Reading through
+fields through std::binary::element(a, i), the element's own live edit");
+std::binary::element needs a live array (`la-native-authority`). Reading through
 an edit's arrays is allowed, as reading through an edit always was.
 
-Making a view or an edit is raw authority (`binary::native` is direct);
-using the arrays of one someone else made is not: binary::element,
+Making a view or an edit is raw authority (`std::binary::native` is direct);
+using the arrays of one someone else made is not: std::binary::element,
 store_element, load and whole stores are `binary`'s (`la-direct`).
 
 ## 7. Whole-array writes are one logical write
 
-Every whole-array write -- emit, binary::write, binary::store -- checks all
+Every whole-array write -- emit, std::binary::write, std::binary::store -- checks all
 extents first and then writes: there is no state in which part of a List was
 written and the rest refused. Byte storage is copied once (the fresh
 MutableBytes), never per element or per record; live memory is written in
@@ -241,18 +241,18 @@ test).
 ## 8. Pointer authority is recursive
 
 A layout holding an array of pointers -- directly, or an array of records
-with a pointer field -- is native-only: binary::parse of it is
+with a pointer field -- is native-only: std::binary::parse of it is
 LAYOUT-NATIVE-ONLY, naming the pointer by its path (`ps[]`, `rs[].p`), and
 an ordinary byte write of the array is LAYOUT-NATIVE-ONLY too
 (`la-pointer-arrays-from-bytes`). Native memory may reveal pointers; bytes
 may not conjure them:
 
 * through a view, an element of an array of pointers is the pointer memory
-  holds; binary::load copies the array into a List of pointers, affine like
+  holds; std::binary::load copies the array into a List of pointers, affine like
   each pointer (using the List twice, or a read element twice, is
   USE-AFTER-MOVE; two reads are two pointers) (`la-native-pointers`,
   `la-pointer-affinity`);
-* `binary::write_foreign(d, L.ps, ps)` encodes a List of existing pointers
+* `std::binary::write_foreign(d, L.ps, ps)` encodes a List of existing pointers
   of exactly the element's type into an array of pointers in byte storage:
   each one's address bits, null as zero bytes, the extent checked, the
   pointers observed (`la-write-foreign-array`). An array of scalars, or of
@@ -261,7 +261,7 @@ may not conjure them:
 
 ## 9. Arrays of characters are not text
 
-`array 16 of ffi::c::Char` imprints sixteen Ints of the target's plain char
+`array 16 of std::ffi::c::Char` imprints sixteen Ints of the target's plain char
 (signed on x86-64, unsigned on AArch64 Linux): a NUL in the middle and the
 bytes after it included, nothing trimmed, terminated or decoded; an array of
 `wchar_t` (or Win32's WCHAR) is Ints of its scalar. The field's type is a
@@ -309,14 +309,14 @@ this scale, but the shape is the point):
 | element read, proven index, 4096-element array | 18.3 ns | 19.9 ns |
 | element read, dynamic index, 4096-element array | 12.1 ns | 20.1 ns |
 | element store, dynamic index, 4096-element array | 19.1 ns | 14.1 ns |
-| binary::load of a 16-element row | 353.5 ns | 401.1 ns |
-| binary::load of four records | 686.2 ns | 652.3 ns |
-| binary::load of a 260-element array | 3315.6 ns | 3500.4 ns |
-| binary::store of a 16-element row | 119.2 ns | 150.9 ns |
-| binary::store of a 260-element array | 1970.8 ns | 1854.3 ns |
-| binary::write of a 16-element row (64-byte record) | 505.5 ns | 207.7 ns |
-| binary::parse of the 64-byte record | 1173.3 ns | 1037.5 ns |
-| binary::emit of the 64-byte record | 478.6 ns | 451.1 ns |
+| std::binary::load of a 16-element row | 353.5 ns | 401.1 ns |
+| std::binary::load of four records | 686.2 ns | 652.3 ns |
+| std::binary::load of a 260-element array | 3315.6 ns | 3500.4 ns |
+| std::binary::store of a 16-element row | 119.2 ns | 150.9 ns |
+| std::binary::store of a 260-element array | 1970.8 ns | 1854.3 ns |
+| std::binary::write of a 16-element row (64-byte record) | 505.5 ns | 207.7 ns |
+| std::binary::parse of the 64-byte record | 1173.3 ns | 1037.5 ns |
+| std::binary::emit of the 64-byte record | 478.6 ns | 451.1 ns |
 
 Allocations per operation over the baseline (Cranelift's counters): element
 reads and stores, at any extent, **0**; whole stores **0** beyond their
@@ -355,11 +355,11 @@ layout field:
   pointer's, the nested record's sizeof) and the extents' product times it
   the member's sizeof; a disagreement would be a blocker, never a guess
   (none occurs).
-* **Elements map as fields do**: a char array is `array N of ffi::c::Char`,
-  `wchar_t text[8]` on Linux `array 8 of ffi::c::Int`, `void *slots[3]`
-  `array 3 of ffi::c::Ptr[ffi::c::Void]`, `bgf_point pts[4]` `array 4 of
+* **Elements map as fields do**: a char array is `array N of std::ffi::c::Char`,
+  `wchar_t text[8]` on Linux `array 8 of std::ffi::c::Int`, `void *slots[3]`
+  `array 3 of std::ffi::c::Ptr[std::ffi::c::Void]`, `bgf_point pts[4]` `array 4 of
   bgf_point` (a by-value dependency: blocked if the element is), `int
-  m[2][3]` `array 2 of array 3 of ffi::c::Int`.
+  m[2][3]` `array 2 of array 3 of std::ffi::c::Int`.
 * **What stays blocked**: a flexible array member or a zero-length array
   (`flexible-array`); an array whose element is blocked (an array of floats
   is `float`, of a union `union`, of a blocked record nested-layout-blocked
@@ -373,9 +373,9 @@ layout field:
   stride. Every committed binding's check compiles with its target's clang,
   and the Win32 one with MinGW-w64's GCC too (`cb-win32-verified-gcc`).
 * **The runtime oracle** (oracle.tcl) treats each array element as a leaf:
-  C writes it, Botlish reads it through `binary::element`, stores it through
+  C writes it, Botlish reads it through `std::binary::element`, stores it through
   a static designator, writes it into byte storage and parses it back
-  (`list::at`). Arrays of more than four elements in a dimension are sampled
+  (`std::list::at`). Arrays of more than four elements in a dimension are sampled
   (first two, middle, last); the elements left out are bytes no check covers,
   which C checks untouched -- so the oracle also proves nothing else was
   written. It ran over every emitted layout of the Tcl, BoringSSL and SDL3
@@ -408,7 +408,7 @@ SDL3 183 → 185, BoringSSL 791 → 946, Win32 1582 → 1663.
 
 | record | before | now |
 |---|---|---|
-| Win32 WIN32_FIND_DATAW (592 bytes) | blocked: WCHAR arrays | layout (`cFileName: array 260 of ffi::c::UShort at 44`) |
+| Win32 WIN32_FIND_DATAW (592 bytes) | blocked: WCHAR arrays | layout (`cFileName: array 260 of std::ffi::c::UShort at 44`) |
 | Win32 OVERLAPPED | blocked: anonymous union | blocked: anonymous union (unchanged) |
 | Win32 LARGE_INTEGER | blocked: union | blocked: union (unchanged) |
 | Tcl_DString, Tcl_HashTable, Tcl_Parse | blocked: arrays | layouts |
@@ -559,7 +559,7 @@ under GC stress) and the whole suite under BOTLISH_NATIVE_GC_STRESS=1 pass.
 ## 15. Exclusions
 
 Deliberately not added, each a separate decision: unions and overlays;
-bitfields; float, double and long double fields; `_Bool` (`ffi::c::Bool`)
+bitfields; float, double and long double fields; `_Bool` (`std::ffi::c::Bool`)
 fields; flexible array members and variable-length arrays; slices or views
 of part of an array; a FixedArray value type or any array value distinct
 from a List; String conversion of character arrays; native allocation of
@@ -574,7 +574,7 @@ arrays by value in the C call ABI (parameters and results); MSVC layouts.
   -- an unknown field (`L.nope`) does the same on main -- and applies equally
   to LAYOUT-ARRAY-INDEX.
 * A store of an out-of-range value under `-strict 0` reports RANGE naming
-  `binary::store` also for `binary::store_element` (the runtime store helper
+  `std::binary::store` also for `std::binary::store_element` (the runtime store helper
   is shared); a checked program never reaches it.
 
 ## 17. What to run when changing this

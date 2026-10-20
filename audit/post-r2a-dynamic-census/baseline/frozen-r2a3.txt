@@ -3,33 +3,33 @@ tree: 6dbcfdb3d62e7870363d2af4fe0dfab7e58ad80c
 
 == used instances: 26
   i0 <program> generic; materializes e167 e357 e371 e494
-  i2 char::codepoint<UnicodeChar> 
-  i16 byte::high_nibble<generic> generic
-  i17 byte::nibble<int> 
-  i3 byte::from_int<int> 
-  i1 byte::set<List[UnicodeChar]> 
-  i12 ascii::is_digit<int> 
-  i10 ascii::is_upper<int> 
-  i11 ascii::is_lower<int> 
-  i9 ascii::is_alphabetic<int> 
-  i8 ascii::is_alphanumeric<int> 
-  i19 web::emailish?<generic> generic; OPEN; materializes e173 e183 e211 e226 e246
+  i2 std::char::codepoint<UnicodeChar> 
+  i16 std::byte::high_nibble<generic> generic
+  i17 std::byte::nibble<int> 
+  i3 std::byte::from_int<int> 
+  i1 std::byte::set<List[UnicodeChar]> 
+  i12 std::ascii::is_digit<int> 
+  i10 std::ascii::is_upper<int> 
+  i11 std::ascii::is_lower<int> 
+  i9 std::ascii::is_alphabetic<int> 
+  i8 std::ascii::is_alphanumeric<int> 
+  i19 std::web::emailish?<generic> generic; OPEN; materializes e173 e183 e211 e226 e246
   i21 char_at<generic> generic; OPEN; blockescape-flattened captures=[v]
   i25 local_char?<generic> generic; OPEN
   i24 label_char?<str> 
   i20 scan_while<generic> generic; OPEN; blockescape-flattened captures=[n, v]
   i23 tld?<generic> generic; OPEN; blockescape-flattened captures=[n, v]
   i22 domain?<generic> generic; OPEN; blockescape-flattened captures=[n, v]
-  i7 web::is_unreserved<generic> generic; OPEN
-  i4 web::uri_escape_text<generic> generic; OPEN; materializes e380 e397 e426 e459
+  i7 std::web::is_unreserved<generic> generic; OPEN
+  i4 std::web::uri_escape_text<generic> generic; OPEN; materializes e380 e397 e426 e459
   i15 high_nibble<generic> generic
-  i14 hex_pair<generic> generic; OPEN; blockescape-flattened captures=[web::hex_digits]
-  i13 esc_bytes<generic> generic; OPEN; blockescape-flattened captures=[web::hex_digits]
-  i6 esc_char<generic> generic; OPEN; blockescape-flattened captures=[web::is_unreserved, web::hex_digits]
-  i5 esc_from<generic> generic; OPEN; blockescape-flattened captures=[web::is_unreserved, web::hex_digits]
-  i18 check<generic> generic; OPEN; blockescape-flattened captures=[web::emailish?]
+  i14 hex_pair<generic> generic; OPEN; blockescape-flattened captures=[std::web::hex_digits]
+  i13 esc_bytes<generic> generic; OPEN; blockescape-flattened captures=[std::web::hex_digits]
+  i6 esc_char<generic> generic; OPEN; blockescape-flattened captures=[std::web::is_unreserved, std::web::hex_digits]
+  i5 esc_from<generic> generic; OPEN; blockescape-flattened captures=[std::web::is_unreserved, std::web::hex_digits]
+  i18 check<generic> generic; OPEN; blockescape-flattened captures=[std::web::emailish?]
 
-== OpenInstances: 13 (web::emailish?<generic>, char_at<generic>, local_char?<generic>, scan_while<generic>, tld?<generic>, domain?<generic>, web::is_unreserved<generic>, web::uri_escape_text<generic>, hex_pair<generic>, esc_bytes<generic>, esc_char<generic>, esc_from<generic>, check<generic>)
+== OpenInstances: 13 (std::web::emailish?<generic>, char_at<generic>, local_char?<generic>, scan_while<generic>, tld?<generic>, domain?<generic>, std::web::is_unreserved<generic>, std::web::uri_escape_text<generic>, hex_pair<generic>, esc_bytes<generic>, esc_char<generic>, esc_from<generic>, check<generic>)
 == blockescape virtual bindings: 9
   char_at<generic>
   (i21):
@@ -63,33 +63,33 @@ tree: 6dbcfdb3d62e7870363d2af4fe0dfab7e58ad80c
   internal
   variant,
   captures
-  [web::hex_digits]
+  [std::web::hex_digits]
   esc_bytes<generic>
   (i13):
   internal
   variant,
   captures
-  [web::hex_digits]
+  [std::web::hex_digits]
   esc_char<generic>
   (i6):
   internal
   variant,
   captures
-  [web::is_unreserved,
-  web::hex_digits]
+  [std::web::is_unreserved,
+  std::web::hex_digits]
   esc_from<generic>
   (i5):
   internal
   variant,
   captures
-  [web::is_unreserved,
-  web::hex_digits]
+  [std::web::is_unreserved,
+  std::web::hex_digits]
   check<generic>
   (i18):
   internal
   variant,
   captures
-  [web::emailish?]
+  [std::web::emailish?]
 
 == NIR: functions 24, lines 688, machine bytes 10258
   call           21
@@ -135,25 +135,25 @@ tree: 6dbcfdb3d62e7870363d2af4fe0dfab7e58ad80c
   per-function machine bytes: 1588 39 289 617 74 74 74 125 125 753 262 222 272 528 468 1244 155 125 103 453 750 486 828 604
 
 == parameter entry Ranges (hir::range::analyze)
-  char::codepoint<UnicodeChar>: c=[-∞, +∞]
-  byte::high_nibble<generic>: b=[-∞, +∞]
-  byte::nibble<int>: x=[0, 240] {0,16,32,48,64,80,96,112,128,144,160,176,192,208,224,240}
-  byte::from_int<int>: value=[0, +∞]
-  byte::set<List[UnicodeChar]>: chars=[-∞, +∞]
-  ascii::is_digit<int>: b=[0, 255]
-  ascii::is_upper<int>: b=[0, 255]
-  ascii::is_lower<int>: b=[0, 255]
-  ascii::is_alphabetic<int>: b=[0, 255]
-  ascii::is_alphanumeric<int>: b=[0, 255]
-  web::emailish?<generic>: v=[-∞, +∞]
+  std::char::codepoint<UnicodeChar>: c=[-∞, +∞]
+  std::byte::high_nibble<generic>: b=[-∞, +∞]
+  std::byte::nibble<int>: x=[0, 240] {0,16,32,48,64,80,96,112,128,144,160,176,192,208,224,240}
+  std::byte::from_int<int>: value=[0, +∞]
+  std::byte::set<List[UnicodeChar]>: chars=[-∞, +∞]
+  std::ascii::is_digit<int>: b=[0, 255]
+  std::ascii::is_upper<int>: b=[0, 255]
+  std::ascii::is_lower<int>: b=[0, 255]
+  std::ascii::is_alphabetic<int>: b=[0, 255]
+  std::ascii::is_alphanumeric<int>: b=[0, 255]
+  std::web::emailish?<generic>: v=[-∞, +∞]
   char_at<generic>: i=[-∞, +∞]
   local_char?<generic>: c=[-∞, +∞]
   label_char?<str>: c=[-∞, +∞]
   scan_while<generic>: start=[-∞, +∞]  predicate=[-∞, +∞]
   tld?<generic>: i=[-∞, +∞]
   domain?<generic>: start=[-∞, +∞]
-  web::is_unreserved<generic>: b=[-∞, +∞]
-  web::uri_escape_text<generic>: s=[-∞, +∞]
+  std::web::is_unreserved<generic>: b=[-∞, +∞]
+  std::web::uri_escape_text<generic>: s=[-∞, +∞]
   high_nibble<generic>: b=[-∞, +∞]
   hex_pair<generic>: b=[-∞, +∞]
   esc_bytes<generic>: bytes=[-∞, +∞]  i=[-∞, +∞]  acc=[-∞, +∞]

@@ -7,7 +7,7 @@
 ;
 ; function symbol -> Botlish label:
 ;   botlish_fn_0 / botlish_entry_0 -> <program entry>
-;   botlish_fn_1 / botlish_entry_1 -> web::uri_escape_text<generic>
+;   botlish_fn_1 / botlish_entry_1 -> std::web::uri_escape_text<generic>
 ;   botlish_fn_2 / botlish_entry_2 -> high_nibble<generic>
 ;   botlish_fn_3 / botlish_entry_3 -> is_unreserved<generic>
 ;   botlish_fn_4 / botlish_entry_4 -> hex_pair<generic>
@@ -138,7 +138,7 @@ Disassembly of section .text:
      1f8:	mov    QWORD PTR [rsp+0x100],rax
      200:	mov    ecx,0x1
      205:	mov    rdx,QWORD PTR [rip+0x0]        # 20c <botlish_fn_0+0x20c>
-			208: R_X86_64_GOTPCREL	botlish_entry_1-0x4 ; web::uri_escape_text<generic>
+			208: R_X86_64_GOTPCREL	botlish_entry_1-0x4 ; std::web::uri_escape_text<generic>
      20c:	mov    rdi,QWORD PTR [rsp+0x118]
      214:	mov    rsi,rcx
      217:	call   21c <botlish_fn_0+0x21c>
@@ -150,7 +150,7 @@ Disassembly of section .text:
      233:	mov    QWORD PTR [rsp+0x8],rdx
      238:	mov    rsi,rax
      23b:	call   240 <botlish_fn_0+0x240>
-			23c: R_X86_64_PLT32	botlish_fn_1-0x4 ; web::uri_escape_text<generic>
+			23c: R_X86_64_PLT32	botlish_fn_1-0x4 ; std::web::uri_escape_text<generic>
      240:	test   rax,rax
      243:	je     319 <botlish_fn_0+0x319>
      249:	mov    QWORD PTR [rsp],rax
@@ -222,7 +222,7 @@ Disassembly of section .text:
      390:	pop    rbp
      391:	ret
 
-0000000000000392 <botlish_fn_1: web::uri_escape_text<generic>>:
+0000000000000392 <botlish_fn_1: std::web::uri_escape_text<generic>>:
      392:	push   rbp
      393:	mov    rbp,rsp
      396:	sub    rsp,0x60
@@ -305,12 +305,12 @@ Disassembly of section .text:
      4d0:	pop    rbp
      4d1:	ret
 
-00000000000004d2 <botlish_entry_1: web::uri_escape_text<generic>>:
+00000000000004d2 <botlish_entry_1: std::web::uri_escape_text<generic>>:
      4d2:	push   rbp
      4d3:	mov    rbp,rsp
      4d6:	mov    rdx,QWORD PTR [rdx]
      4d9:	call   4de <botlish_entry_1+0xc>
-			4da: R_X86_64_PLT32	botlish_fn_1-0x4 ; web::uri_escape_text<generic>
+			4da: R_X86_64_PLT32	botlish_fn_1-0x4 ; std::web::uri_escape_text<generic>
      4de:	mov    rsp,rbp
      4e1:	pop    rbp
      4e2:	ret

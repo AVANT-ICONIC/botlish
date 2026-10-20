@@ -4,8 +4,8 @@
 #                                 [-lib DIR] [-quiet] [-names] [FILE.bot ...]
 #
 # A golden suite is an ordinary Botlish program (tests/golden/*.bot by
-# default) that installs a `test::suite()` context, registers its tests by
-# calling ordinary registration functions, and ends with `test::report()`: its
+# default) that installs a `std::test::suite()` context, registers its tests by
+# calling ordinary registration functions, and ends with `std::test::report()`: its
 # value is the deterministic report, a List of lines ("PASS name", "FAIL name"
 # plus indented "expected:", "actual:", "detail:" lines, then "P passed, F
 # failed"). Nothing here knows tests: this script compiles each program once
@@ -36,7 +36,7 @@
 # platform's target of the host's architecture, and runs on the Tcl backends
 # only, its native backends excluded with the reason (golden::target).
 #
-# -lib DIR compiles against the library directory DIR instead of lib/ (a
+# -lib DIR compiles against the library directory DIR instead of stdlib/ (a
 # private, mutated copy: audit/golden/tools/). -names prints only the test
 # names with their verdicts ("PASS name"/"FAIL name"), one per line, for
 # tools that compare suites, after a "SUITE STATUS STATUS" line (ok,
@@ -172,11 +172,11 @@ proc golden::exclusions {path} {
 #
 # as {HOST REASON}, or "" (any host). HOST is linux-x86_64 or linux-aarch64
 # (golden::hosts): the suite's tests make live syscalls through that
-# architecture's own transport (linux::abi::x86_64::syscall,
-# linux::abi::aarch64::syscall), which runs on no other, exactly as the Tcl
+# architecture's own transport (std::linux::abi::x86_64::syscall,
+# std::linux::abi::aarch64::syscall), which runs on no other, exactly as the Tcl
 # tests they were ported from carry the linuxX86_64 (linuxAarch64)
 # constraint. (A suite that makes its syscalls through the portable wrappers
-# -- linux::write, linux::io -- needs only Linux natively, which its
+# -- std::linux::write, std::linux::io -- needs only Linux natively, which its
 # golden-exclude of the Tcl backends already says.) Any other HOST is an
 # error, never a silent skip.
 proc golden::host {path} {
@@ -199,8 +199,8 @@ proc golden::host {path} {
 
 # The C ABI target the suite at PATH is compiled for: "" (the host's) unless
 # it is a program of another operating system's platform than this host's --
-# its header imports a platform namespace (linux::io, linux::path,
-# linux::abi::x86_64, ...) -- and then that system's target of this host's
+# its header imports a platform namespace (std::linux::io, std::linux::path,
+# std::linux::abi::x86_64, ...) -- and then that system's target of this host's
 # architecture (surface::modules::PlatformTarget: linux-aarch64 on an arm64
 # Mac), for which its imports compile. On a Linux host every suite is the
 # host's. The native backends never run a program built for another host's

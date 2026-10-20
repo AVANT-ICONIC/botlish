@@ -1,5 +1,5 @@
 # asm.txt without botlish_fn_0/botlish_entry_0 (<program>); regenerate with tools/probe.tcl
-0000000000001ad8 <botlish_fn_1>:  ;; byte::from_int<int>
+0000000000001ad8 <botlish_fn_1>:  ;; std::byte::from_int<int>
     1ad8:	push   rbp
     1ad9:	mov    rbp,rsp
     1adc:	sub    rsp,0x10
@@ -76,7 +76,7 @@
     1bf5:	add    BYTE PTR [rax],al
 	...
 
-0000000000001bf8 <botlish_entry_1>:  ;; byte::from_int<int>
+0000000000001bf8 <botlish_entry_1>:  ;; std::byte::from_int<int>
     1bf8:	push   rbp
     1bf9:	mov    rbp,rsp
     1bfc:	mov    rsi,QWORD PTR [rdx]
@@ -86,7 +86,7 @@
     1c07:	pop    rbp
     1c08:	ret
 
-0000000000001c09 <botlish_fn_2>:  ;; ascii::is_digit<int>
+0000000000001c09 <botlish_fn_2>:  ;; std::ascii::is_digit<int>
     1c09:	push   rbp
     1c0a:	mov    rbp,rsp
     1c0d:	sar    rsi,1
@@ -103,7 +103,7 @@
     1c40:	pop    rbp
     1c41:	ret
 
-0000000000001c42 <botlish_entry_2>:  ;; ascii::is_digit<int>
+0000000000001c42 <botlish_entry_2>:  ;; std::ascii::is_digit<int>
     1c42:	push   rbp
     1c43:	mov    rbp,rsp
     1c46:	mov    rsi,QWORD PTR [rdx]
@@ -113,7 +113,7 @@
     1c51:	pop    rbp
     1c52:	ret
 
-0000000000001c53 <botlish_fn_3>:  ;; ascii::is_upper<int>
+0000000000001c53 <botlish_fn_3>:  ;; std::ascii::is_upper<int>
     1c53:	push   rbp
     1c54:	mov    rbp,rsp
     1c57:	sar    rsi,1
@@ -130,7 +130,7 @@
     1c8a:	pop    rbp
     1c8b:	ret
 
-0000000000001c8c <botlish_entry_3>:  ;; ascii::is_upper<int>
+0000000000001c8c <botlish_entry_3>:  ;; std::ascii::is_upper<int>
     1c8c:	push   rbp
     1c8d:	mov    rbp,rsp
     1c90:	mov    rsi,QWORD PTR [rdx]
@@ -140,7 +140,7 @@
     1c9b:	pop    rbp
     1c9c:	ret
 
-0000000000001c9d <botlish_fn_4>:  ;; ascii::is_lower<int>
+0000000000001c9d <botlish_fn_4>:  ;; std::ascii::is_lower<int>
     1c9d:	push   rbp
     1c9e:	mov    rbp,rsp
     1ca1:	sar    rsi,1
@@ -157,7 +157,7 @@
     1cd4:	pop    rbp
     1cd5:	ret
 
-0000000000001cd6 <botlish_entry_4>:  ;; ascii::is_lower<int>
+0000000000001cd6 <botlish_entry_4>:  ;; std::ascii::is_lower<int>
     1cd6:	push   rbp
     1cd7:	mov    rbp,rsp
     1cda:	mov    rsi,QWORD PTR [rdx]
@@ -167,7 +167,7 @@
     1ce5:	pop    rbp
     1ce6:	ret
 
-0000000000001ce7 <botlish_fn_5>:  ;; ascii::is_alphabetic<int>
+0000000000001ce7 <botlish_fn_5>:  ;; std::ascii::is_alphabetic<int>
     1ce7:	push   rbp
     1ce8:	mov    rbp,rsp
     1ceb:	sub    rsp,0x10
@@ -199,7 +199,7 @@
     1d51:	pop    rbp
     1d52:	ret
 
-0000000000001d53 <botlish_entry_5>:  ;; ascii::is_alphabetic<int>
+0000000000001d53 <botlish_entry_5>:  ;; std::ascii::is_alphabetic<int>
     1d53:	push   rbp
     1d54:	mov    rbp,rsp
     1d57:	mov    rsi,QWORD PTR [rdx]
@@ -209,7 +209,7 @@
     1d62:	pop    rbp
     1d63:	ret
 
-0000000000001d64 <botlish_fn_6>:  ;; ascii::is_alphanumeric<int>
+0000000000001d64 <botlish_fn_6>:  ;; std::ascii::is_alphanumeric<int>
     1d64:	push   rbp
     1d65:	mov    rbp,rsp
     1d68:	sub    rsp,0x10
@@ -241,7 +241,7 @@
     1dce:	pop    rbp
     1dcf:	ret
 
-0000000000001dd0 <botlish_entry_6>:  ;; ascii::is_alphanumeric<int>
+0000000000001dd0 <botlish_entry_6>:  ;; std::ascii::is_alphanumeric<int>
     1dd0:	push   rbp
     1dd1:	mov    rbp,rsp
     1dd4:	mov    rsi,QWORD PTR [rdx]

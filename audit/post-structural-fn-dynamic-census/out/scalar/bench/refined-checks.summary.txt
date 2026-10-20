@@ -6,23 +6,23 @@ machine-code bytes: 8935 (per function: 1443 39 289 609 74 74 74 125 125 601 262
 
 functions:
   0 <program entry>: nir-regs=45
-  1 char::codepoint<UnicodeChar>: nir-regs=2
-  2 byte::from_int<int>: nir-regs=8
-  3 byte::set<List[UnicodeChar]>: nir-regs=17
-  4 ascii::is_digit<int>: nir-regs=13
-  5 ascii::is_upper<int>: nir-regs=13
-  6 ascii::is_lower<int>: nir-regs=13
-  7 ascii::is_alphabetic<int>: nir-regs=8
-  8 ascii::is_alphanumeric<int>: nir-regs=8
-  9 web::emailish?<str>: nir-regs=25
+  1 std::char::codepoint<UnicodeChar>: nir-regs=2
+  2 std::byte::from_int<int>: nir-regs=8
+  3 std::byte::set<List[UnicodeChar]>: nir-regs=17
+  4 std::ascii::is_digit<int>: nir-regs=13
+  5 std::ascii::is_upper<int>: nir-regs=13
+  6 std::ascii::is_lower<int>: nir-regs=13
+  7 std::ascii::is_alphabetic<int>: nir-regs=8
+  8 std::ascii::is_alphanumeric<int>: nir-regs=8
+  9 std::web::emailish?<str>: nir-regs=25
   10 char_at<generic>: nir-regs=6
   11 char_at<generic>: nir-regs=6
   12 local_char?<generic>: nir-regs=9
   13 scan_while<generic>: nir-regs=15
   14 tld?<generic>: nir-regs=12
   15 domain?<generic>: nir-regs=56
-  16 web::is_unreserved<int>: nir-regs=9
-  17 web::uri_escape_text<str>: nir-regs=5
+  16 std::web::is_unreserved<int>: nir-regs=9
+  17 std::web::uri_escape_text<str>: nir-regs=5
   18 high_nibble<int>: nir-regs=15
   19 hex_pair<int>: nir-regs=10
   20 esc_bytes<List[int], int, str>: nir-regs=15
@@ -44,7 +44,7 @@ GC roots (refined-checks.asm's NIR ids match roots.txt's "function N"):
     depth reservation: no
     storage: native frame
   
-  function 1 "char::codepoint"
+  function 1 "std::char::codepoint"
     NIR regs: 2
     raw regs: 0
     managed-capable regs: 2
@@ -57,7 +57,7 @@ GC roots (refined-checks.asm's NIR ids match roots.txt's "function N"):
     depth reservation: no
     storage: native frame
   
-  function 2 "byte::from_int"
+  function 2 "std::byte::from_int"
     NIR regs: 8
     raw regs: 2
     managed-capable regs: 6
@@ -70,7 +70,7 @@ GC roots (refined-checks.asm's NIR ids match roots.txt's "function N"):
     depth reservation: no
     storage: native frame
   
-  function 3 "byte::set"
+  function 3 "std::byte::set"
     NIR regs: 17
     raw regs: 2
     managed-capable regs: 15
@@ -83,7 +83,7 @@ GC roots (refined-checks.asm's NIR ids match roots.txt's "function N"):
     depth reservation: no
     storage: native frame
   
-  function 4 "ascii::is_digit"
+  function 4 "std::ascii::is_digit"
     NIR regs: 13
     raw regs: 3
     managed-capable regs: 10
@@ -96,7 +96,7 @@ GC roots (refined-checks.asm's NIR ids match roots.txt's "function N"):
     depth reservation: no
     storage: native frame
   
-  function 5 "ascii::is_upper"
+  function 5 "std::ascii::is_upper"
     NIR regs: 13
     raw regs: 3
     managed-capable regs: 10
@@ -109,7 +109,7 @@ GC roots (refined-checks.asm's NIR ids match roots.txt's "function N"):
     depth reservation: no
     storage: native frame
   
-  function 6 "ascii::is_lower"
+  function 6 "std::ascii::is_lower"
     NIR regs: 13
     raw regs: 3
     managed-capable regs: 10
@@ -122,7 +122,7 @@ GC roots (refined-checks.asm's NIR ids match roots.txt's "function N"):
     depth reservation: no
     storage: native frame
   
-  function 7 "ascii::is_alphabetic"
+  function 7 "std::ascii::is_alphabetic"
     NIR regs: 8
     raw regs: 0
     managed-capable regs: 8
@@ -135,7 +135,7 @@ GC roots (refined-checks.asm's NIR ids match roots.txt's "function N"):
     depth reservation: no
     storage: native frame
   
-  function 8 "ascii::is_alphanumeric"
+  function 8 "std::ascii::is_alphanumeric"
     NIR regs: 8
     raw regs: 0
     managed-capable regs: 8
@@ -148,7 +148,7 @@ GC roots (refined-checks.asm's NIR ids match roots.txt's "function N"):
     depth reservation: no
     storage: native frame
   
-  function 9 "web::emailish?"
+  function 9 "std::web::emailish?"
     NIR regs: 25
     raw regs: 3
     managed-capable regs: 22
@@ -239,7 +239,7 @@ GC roots (refined-checks.asm's NIR ids match roots.txt's "function N"):
     depth reservation: no
     storage: native frame
   
-  function 16 "web::is_unreserved"
+  function 16 "std::web::is_unreserved"
     NIR regs: 9
     raw regs: 0
     managed-capable regs: 9
@@ -252,7 +252,7 @@ GC roots (refined-checks.asm's NIR ids match roots.txt's "function N"):
     depth reservation: no
     storage: native frame
   
-  function 17 "web::uri_escape_text"
+  function 17 "std::web::uri_escape_text"
     NIR regs: 5
     raw regs: 1
     managed-capable regs: 4

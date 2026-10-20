@@ -7,7 +7,7 @@ func 0 "<program>" params=0 env=0 regs=3 pnames="" captures=0 instance="generic"
     ret %2
 end
 
-func 1 "byte::from_int" params=1 env=0 regs=10 pnames="value" captures=0 instance="int" rawregs="1 3 7" @e58
+func 1 "std::byte::from_int" params=1 env=0 regs=10 pnames="value" captures=0 instance="int" rawregs="1 3 7" @e58
     %1 = op runbox %0
     %2 = int 0 @e63
     %3 = rawint 0

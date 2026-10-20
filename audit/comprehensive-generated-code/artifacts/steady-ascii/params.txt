@@ -1,20 +1,20 @@
 i0 <program>
-i1 byte::from_int<int>
+i1 std::byte::from_int<int>
     param value: declared=int first-ref-view-type=int entry-range=[-∞, +∞]
     result range: [0, 255]
-i8 ascii::is_digit<int>
+i8 std::ascii::is_digit<int>
     param b: declared=int[Byte] first-ref-view-type=int[Byte] entry-range=[0, 255]
     result range: [-∞, +∞]
-i6 ascii::is_upper<int>
+i6 std::ascii::is_upper<int>
     param b: declared=int[Byte] first-ref-view-type=int[Byte] entry-range=[0, 255]
     result range: [-∞, +∞]
-i7 ascii::is_lower<int>
+i7 std::ascii::is_lower<int>
     param b: declared=int[Byte] first-ref-view-type=int[Byte] entry-range=[0, 255]
     result range: [-∞, +∞]
-i5 ascii::is_alphabetic<int>
+i5 std::ascii::is_alphabetic<int>
     param b: declared=int[Byte] first-ref-view-type=int[Byte] entry-range=[0, 255]
     result range: [-∞, +∞]
-i4 ascii::is_alphanumeric<int>
+i4 std::ascii::is_alphanumeric<int>
     param b: declared=int[Byte] first-ref-view-type=int[Byte] entry-range=[-∞, +∞]
     result range: [-∞, +∞]
 i3 count<List[int], int, int>

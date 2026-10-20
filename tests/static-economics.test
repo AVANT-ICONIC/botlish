@@ -22,7 +22,7 @@ source [file join $::sdRoot audit static-decisions tools lib.tcl]
 # Helpers
 
 # The HIR of SOURCE (-strict 0, warnings off) under SCHEDULER, for a Linux
-# target (linuxTarget: the host's own on Linux), where linux::io is
+# target (linuxTarget: the host's own on Linux), where std::linux::io is
 # importable; a program importing no platform namespace is every target's.
 proc seHir {source {scheduler batched}} {
     set saved $hir::static::scheduler
@@ -69,14 +69,14 @@ proc seOutcomes {source} {
 # REJECTION (none, unbound, type), the bodies nested in the registration
 # function (NESTED 1) or each at the top level.
 proc seSuite {k rejection nested} {
-    set lines {"import compiler" "import test" ""}
+    set lines {"import std::compiler" "import std::test" ""}
     set registrations {}
     set pad [expr {$nested ? "    " : ""}]
     if {$nested} {
         lappend lines "fn register_bench():"
     }
     for {set i 0} {$i < $k} {incr i} {
-        lappend lines "${pad}fn body_${i}() errors compiler::CompilerError:" "${pad}    static compile:"
+        lappend lines "${pad}fn body_${i}() errors std::compiler::CompilerError:" "${pad}    static compile:"
         if {$rejection ne "none" && $i % 3 == 2} {
             if {$rejection eq "unbound"} {
                 lappend lines "${pad}        missing_$i + 7"
@@ -85,10 +85,10 @@ proc seSuite {k rejection nested} {
                 lappend lines "${pad}        fn want_${i}(x: int) -> int:" "${pad}            x" "${pad}        want_${i}(\"s\")"
                 set code Type
             }
-            set registration "test::rejects(\"t$i\", compiler::DiagnosticCode::$code, body_${i})"
+            set registration "std::test::rejects(\"t$i\", std::compiler::DiagnosticCode::$code, body_${i})"
         } else {
             lappend lines "${pad}        7 * $i + $i"
-            set registration "test::value(\"t$i\", 7 * $i + $i, body_${i})"
+            set registration "std::test::value(\"t$i\", 7 * $i + $i, body_${i})"
         }
         if {$nested} {
             lappend lines "    $registration"
@@ -100,7 +100,7 @@ proc seSuite {k rejection nested} {
         lappend lines "fn register_bench():" {*}$registrations
         if {$k == 0} { lappend lines "    return" }
     }
-    lappend lines "" "with context test::suite()" "register_bench()" "test::report()" ""
+    lappend lines "" "with context std::test::suite()" "register_bench()" "std::test::report()" ""
     return [join $lines \n]
 }
 
@@ -109,7 +109,7 @@ proc seSuite {k rejection nested} {
 # from the top level; a contributor block erases E2 as well; a consumer
 # block handles E1 only around generic(0), which is charged everything the
 # program erases.
-set ::seErased {import compiler
+set ::seErased {import std::compiler
 
 error E1
 error E2
@@ -136,7 +136,7 @@ set ::seConsumer {"r = generic(0):" "    on E1:" "        -1" "r"}
 
 # A site function: name NAME, body lines BODY.
 proc seSite {name body} {
-    set lines [list "fn ${name}() -> int errors compiler::CompilerError:" "    static compile:"]
+    set lines [list "fn ${name}() -> int errors std::compiler::CompilerError:" "    static compile:"]
     foreach line $body {
         lappend lines "        $line"
     }
@@ -154,8 +154,8 @@ proc seTypeFail {i} {
 # used after its move, a collecting loop of handles) and one whose handle is
 # moved on a counted loop's break path but still owned when the loop runs
 # out (TAIL: its last line).
-set ::seOwnership {import compiler
-import mutable_vector
+set ::seOwnership {import std::compiler
+import std::mutable_vector
 
 error Boom
 
@@ -174,13 +174,13 @@ fn make(seed: int) -> Coroutine{args: [Command], return: Event}:
     step
 
 fn empty_queue() -> MutableVector[Coroutine{args: [Command], return: Event}]:
-    mutable_vector::from_list([])
+    std::mutable_vector::from_list([])
 
 fn boom() -> int errors Boom:
     fail Boom
 
 }
-set ::seMovedVector {"fn f() -> int:" "    q = empty_queue()" "    w = q" "    mutable_vector::length(q)" "f()"}
+set ::seMovedVector {"fn f() -> int:" "    q = empty_queue()" "    w = q" "    std::mutable_vector::length(q)" "f()"}
 set ::seCollectHandles {"fn f() -> int:" "    xs = loop i from 0 to 2:" "        make(i)" "    1" "f()"}
 set ::seMovedHandle {"fn f() -> int:" "    s = make(1)" "    t = s" "    e = s(Command {value: 1})" "    e.value" "f()"}
 proc sePathRelease {{tail 1}} {
@@ -199,7 +199,7 @@ proc seOwnershipProgram {args} {
             continue
         }
         append text [seSite $name $body]
-        append calls "r_$name = ${name}():\n    on compiler::CompilerError:\n        -1\n"
+        append calls "r_$name = ${name}():\n    on std::compiler::CompilerError:\n        -1\n"
     }
     return "$text${calls}0\n"
 }
@@ -210,7 +210,7 @@ proc seOwnershipProgram {args} {
 # (AFFINE-GENERIC-NESTED-UNSUPPORTED, which only the plan reports), each
 # called under a handler.
 proc sePlanAffine {names} {
-    set text "import compiler\n\nstruct Message:\n    value: int\n\nstruct Event:\n    value: int\n\nfn worker(seed: int, resume Message) -> Event:\n    m = yield Event \{value: seed\}\n    return Event \{value: m.value + seed\}\n\nfn make(seed: int) -> Coroutine\{args: \[Message\], return: Event\}:\n    coroutine \{step\} = worker(seed)\n    step\n\nfn want(x: int) -> int:\n    x\n\n"
+    set text "import std::compiler\n\nstruct Message:\n    value: int\n\nstruct Event:\n    value: int\n\nfn worker(seed: int, resume Message) -> Event:\n    m = yield Event \{value: seed\}\n    return Event \{value: m.value + seed\}\n\nfn make(seed: int) -> Coroutine\{args: \[Message\], return: Event\}:\n    coroutine \{step\} = worker(seed)\n    step\n\nfn want(x: int) -> int:\n    x\n\n"
     set calls ""
     foreach name $names {
         if {$name eq "nested"} {
@@ -218,7 +218,7 @@ proc sePlanAffine {names} {
         } else {
             append text [seSite $name [list "want(\"$name\")"]]
         }
-        append calls "r_$name = ${name}():\n    on compiler::CompilerError:\n        -1\n"
+        append calls "r_$name = ${name}():\n    on std::compiler::CompilerError:\n        -1\n"
     }
     return "$text${calls}0\n"
 }
@@ -227,7 +227,7 @@ proc sePlanAffine {names} {
 # implementation of `name` is declared after the top-level call that needs
 # `first`'s specialization, which needs `second`'s.
 proc sePlanTraits {} {
-    return "import compiler\n\ntrait Named:\n    fn name(value: Named) -> str\n\nstruct Person:\n    v: str\n\nfn second(v: Named) -> str errors compiler::CompilerError:\n    static compile:\n        v.name()\n\nfn first(v: Named) -> str errors compiler::CompilerError:\n    static compile:\n        a = v.name()\n        second(v)\n\nr0 = first(Person \{v: \"a\"\}):\n    on compiler::CompilerError:\n        \"rejected\"\n\nfn name(p: Person) -> str:\n    p.v\n\nr1 = second(Person \{v: \"b\"\}):\n    on compiler::CompilerError:\n        \"rejected\"\n\[r0, r1\]\n"
+    return "import std::compiler\n\ntrait Named:\n    fn name(value: Named) -> str\n\nstruct Person:\n    v: str\n\nfn second(v: Named) -> str errors std::compiler::CompilerError:\n    static compile:\n        v.name()\n\nfn first(v: Named) -> str errors std::compiler::CompilerError:\n    static compile:\n        a = v.name()\n        second(v)\n\nr0 = first(Person \{v: \"a\"\}):\n    on std::compiler::CompilerError:\n        \"rejected\"\n\nfn name(p: Person) -> str:\n    p.v\n\nr1 = second(Person \{v: \"b\"\}):\n    on std::compiler::CompilerError:\n        \"rejected\"\n\[r0, r1\]\n"
 }
 
 # Two trait-polymorphic functions whose bodies are sites holding a trait
@@ -236,7 +236,7 @@ proc sePlanTraits {} {
 # nothing else links them. The first one's caller is called at the top level
 # without a handler, so its rejection makes that call an UNHANDLED-ERROR --
 # a diagnostic in no site, which closes the gate again.
-set ::sePlanReclosed {import compiler
+set ::sePlanReclosed {import std::compiler
 
 trait LateNamed:
     fn late_name(value: LateNamed) -> str
@@ -244,11 +244,11 @@ trait LateNamed:
 struct LatePerson:
     v: str
 
-fn late_named(v: LateNamed) -> str errors compiler::CompilerError:
+fn late_named(v: LateNamed) -> str errors std::compiler::CompilerError:
     static compile:
         v.late_name()
 
-fn early() -> str errors compiler::CompilerError:
+fn early() -> str errors std::compiler::CompilerError:
     late_named(LatePerson {v: "a"})
 
 fn late_name(p: LatePerson) -> str:
@@ -260,11 +260,11 @@ trait OtherNamed:
 struct OtherPerson:
     v: str
 
-fn other_named(v: OtherNamed) -> str errors compiler::CompilerError:
+fn other_named(v: OtherNamed) -> str errors std::compiler::CompilerError:
     static compile:
         v.other_name()
 
-fn early_other() -> str errors compiler::CompilerError:
+fn early_other() -> str errors std::compiler::CompilerError:
     other_named(OtherPerson {v: "b"})
 
 fn other_name(p: OtherPerson) -> str:
@@ -272,7 +272,7 @@ fn other_name(p: OtherPerson) -> str:
 
 a = early()
 b = early_other():
-    on compiler::CompilerError:
+    on std::compiler::CompilerError:
         "rejected"
 0
 }
@@ -283,7 +283,7 @@ b = early_other():
 # when a rejection makes the other branch of the `if` producing it `never`.
 # In the clone's view the nested call is AFFINE-GENERIC-NESTED-UNSUPPORTED,
 # the plan's, though nothing of the site's own changed.
-set ::sePlanClone {import compiler
+set ::sePlanClone {import std::compiler
 
 struct Command:
     value: int
@@ -302,21 +302,21 @@ fn make(seed: int) -> Coroutine{args: [Command], return: Event}:
 fn want_int(x: int) -> int:
     x
 
-fn first() -> int errors compiler::CompilerError:
+fn first() -> int errors std::compiler::CompilerError:
     static compile:
         want_int("a")
 
-fn keep(h) -> int errors compiler::CompilerError:
+fn keep(h) -> int errors std::compiler::CompilerError:
     static compile:
         fn inner(c) -> int:
             1
         inner(h)
 
-fn pick() errors compiler::CompilerError:
+fn pick() errors std::compiler::CompilerError:
     static compile:
         want_int("b")
 
-fn caller(flag: bool) -> int errors compiler::CompilerError:
+fn caller(flag: bool) -> int errors std::compiler::CompilerError:
     x = if flag:
         make(1)
     else:
@@ -324,10 +324,10 @@ fn caller(flag: bool) -> int errors compiler::CompilerError:
     keep(x)
 
 r1 = first():
-    on compiler::CompilerError:
+    on std::compiler::CompilerError:
         -1
 r2 = caller(true):
-    on compiler::CompilerError:
+    on std::compiler::CompilerError:
         -1
 0
 }
@@ -338,7 +338,7 @@ r2 = caller(true):
 # such a function only where a context it walks has no instance for it
 # (TRAIT-INSTANCE-BUDGET) -- so `w`, the gate's witness, does not join its
 # component.
-set ::sePlanInstances {import compiler
+set ::sePlanInstances {import std::compiler
 
 trait Shape:
     fn area(shape: Shape) -> int
@@ -352,30 +352,30 @@ fn area(s: Square) -> int:
 fn want_int(x: int) -> int:
     x
 
-fn f_poly(s: Shape) -> int errors compiler::CompilerError:
+fn f_poly(s: Shape) -> int errors std::compiler::CompilerError:
     static compile:
         s.area() + want_int("f")
 
-fn p_poly(s: Shape) -> int errors compiler::CompilerError:
+fn p_poly(s: Shape) -> int errors std::compiler::CompilerError:
     static compile:
         s.area()
 
-fn d() -> int errors compiler::CompilerError:
+fn d() -> int errors std::compiler::CompilerError:
     static compile:
         f_poly(Square {side: 2})
 
-fn w() -> int errors compiler::CompilerError:
+fn w() -> int errors std::compiler::CompilerError:
     static compile:
         want_int("w")
 
 r_p = p_poly(Square {side: 3}):
-    on compiler::CompilerError:
+    on std::compiler::CompilerError:
         -1
 r_d = d():
-    on compiler::CompilerError:
+    on std::compiler::CompilerError:
         -1
 r_w = w():
-    on compiler::CompilerError:
+    on std::compiler::CompilerError:
         -1
 0
 }
@@ -392,7 +392,7 @@ r_w = w():
 # trait-polymorphic request is granted however deep.) Two checker failures
 # that wait for mk's rejection, x1 and x2, keep the gate closed in the build
 # that first finds `use` dead.
-set ::sePlanUnplanned {import compiler
+set ::sePlanUnplanned {import std::compiler
 
 trait Shape:
     fn area(s: Shape) -> int
@@ -409,32 +409,32 @@ fn measure(s: Shape) -> int:
 fn want(x: int) -> int:
     x
 
-fn mk() errors compiler::CompilerError:
+fn mk() errors std::compiler::CompilerError:
     static compile:
         Square {side: want("mk")}
 
-fn x1() -> int errors compiler::CompilerError:
+fn x1() -> int errors std::compiler::CompilerError:
     static compile:
         a = mk()
         want("x1")
 
-fn x2() -> int errors compiler::CompilerError:
+fn x2() -> int errors std::compiler::CompilerError:
     static compile:
         a = mk()
         want("x2")
 
-fn use() -> int errors compiler::CompilerError:
+fn use() -> int errors std::compiler::CompilerError:
     static compile:
         measure(mk())
 
 r1 = x1():
-    on compiler::CompilerError:
+    on std::compiler::CompilerError:
         -1
 r2 = x2():
-    on compiler::CompilerError:
+    on std::compiler::CompilerError:
         -1
 r3 = use():
-    on compiler::CompilerError:
+    on std::compiler::CompilerError:
         -1
 0
 }
@@ -447,7 +447,7 @@ r3 = use():
 # `other` is a second, independent failure.
 proc seDeepFirstRequest {} {
     set n [expr {$hir::semantic::maxDepth + 1}]
-    set text "import compiler\n\nfn want(x: int) -> int:\n    x\n\nfn c$n\(x):\n    x\n\n"
+    set text "import std::compiler\n\nfn want(x: int) -> int:\n    x\n\nfn c$n\(x):\n    x\n\n"
     for {set i [expr {$n - 1}]} {$i >= 1} {incr i -1} {
         append text "fn c$i\(x):\n    c[expr {$i + 1}](x)\n\n"
     }
@@ -455,7 +455,7 @@ proc seDeepFirstRequest {} {
     append text [seSite late {"want(c1(1))"}]
     append text [seSite other {{want("other")}}]
     foreach name {other early late} {
-        append text "r_$name = ${name}():\n    on compiler::CompilerError:\n        -1\n"
+        append text "r_$name = ${name}():\n    on std::compiler::CompilerError:\n        -1\n"
     }
     return "${text}0\n"
 }
@@ -464,28 +464,28 @@ proc seDeepFirstRequest {} {
 # enclosing site (the golden framework's registration function, written as
 # a static block), or (NESTED 0) in a plain function.
 proc seSiblings {k {nested 1}} {
-    set text "import compiler\n\nfn want(x: int) -> int:\n    x\n\nfn outer() -> int errors compiler::CompilerError:\n"
+    set text "import std::compiler\n\nfn want(x: int) -> int:\n    x\n\nfn outer() -> int errors std::compiler::CompilerError:\n"
     set pad [expr {$nested ? "        " : "    "}]
     if {$nested} {
         append text "    static compile:\n"
     }
     for {set i 0} {$i < $k} {incr i} {
-        append text "${pad}fn t$i\() -> int errors compiler::CompilerError:\n$pad    static compile:\n$pad        want(\"s$i\")\n"
+        append text "${pad}fn t$i\() -> int errors std::compiler::CompilerError:\n$pad    static compile:\n$pad        want(\"s$i\")\n"
     }
-    append text "${pad}0\nr = outer():\n    on compiler::CompilerError:\n        -1\nr\n"
+    append text "${pad}0\nr = outer():\n    on std::compiler::CompilerError:\n        -1\nr\n"
     return $text
 }
 
 # K sites, each passing a function that raises nothing (or, with ERRORS,
-# declares an error) to the untyped list::any? -- each an erasure site of
+# declares an error) to the untyped std::list::any? -- each an erasure site of
 # the erased-callable contract and a caller of its consumer -- and each
 # rejected for its function's representation access (OPAQUE-REPRESENTATION).
 proc seErasingSites {k {errors 0}} {
-    set text "import abi::bytes\nimport compiler\nimport list\n\nerror Boom\n\nfn run(body) -> int:\n    v = body():\n        on compiler::CompilerError:\n            return 1\n    0\n\n"
+    set text "import std::abi::bytes\nimport std::compiler\nimport std::list\n\nerror Boom\n\nfn run(body) -> int:\n    v = body():\n        on std::compiler::CompilerError:\n            return 1\n    0\n\n"
     set calls {}
     for {set i 0} {$i < $k} {incr i} {
         set peek [expr {$errors ? "fn peek(x) -> bool errors Boom:" : "fn peek(x):"}]
-        append text "fn b$i\() errors compiler::CompilerError, Boom:\n    static compile:\n        b = abi::bytes::from_list(\[\])\n        $peek\n            x.storage\n        list::any?(\[b\], peek)\n\n"
+        append text "fn b$i\() errors std::compiler::CompilerError, Boom:\n    static compile:\n        b = std::abi::bytes::from_list(\[\])\n        $peek\n            x.storage\n        std::list::any?(\[b\], peek)\n\n"
         lappend calls "run(b$i)"
     }
     return "$text\[[join $calls {, }]\]\n"
@@ -496,11 +496,11 @@ proc seErasingSites {k {errors 0}} {
 # each reads what make's parameter may hold -- raise, from every site -- and
 # each handles E2 only (UNHANDLED-ERROR).
 proc seSubsumeSites {k} {
-    set text "import compiler\n\nerror E1\nerror E2\n\nfn raise(x) -> int errors E1, E2:\n    if x == 1:\n        fail E1\n    if x == 2:\n        fail E2\n    0\n\nfn make(f):\n    fn inner(y):\n        f(y)\n    inner\n\nfn use(kf: Fn\{args: \[int\], return: any, errors: \[E1, E2\]\}, x: int) errors E1, E2:\n    kf(x)\n\n"
+    set text "import std::compiler\n\nerror E1\nerror E2\n\nfn raise(x) -> int errors E1, E2:\n    if x == 1:\n        fail E1\n    if x == 2:\n        fail E2\n    0\n\nfn make(f):\n    fn inner(y):\n        f(y)\n    inner\n\nfn use(kf: Fn\{args: \[int\], return: any, errors: \[E1, E2\]\}, x: int) errors E1, E2:\n    kf(x)\n\n"
     set calls {}
     for {set i 0} {$i < $k} {incr i} {
         append text [seSite t$i [list "r = use(make(raise), $i):" "    on E2:" "        -2" "1"]]
-        append text "r_t$i = t$i\():\n    on compiler::CompilerError:\n        -1\n"
+        append text "r_t$i = t$i\():\n    on std::compiler::CompilerError:\n        -1\n"
     }
     return "${text}0\n"
 }
@@ -511,12 +511,12 @@ proc seSubsumeSites {k} {
 # rejected by the checker, which leaves the program erasing nothing; a
 # coroutine whose root calls a callable passed to its construction (worker),
 # one that calls none (counter), and a function taking a handle whose
-# contract admits no error (drive). mutable_array::generate calls its second
+# contract admits no error (drive). std::mutable_array::generate calls its second
 # argument: given a Fn type leaving that argument uncontracted, it may raise
 # whatever the program erases (hir::completions::ArgumentFact) -- the one
 # report no erased consumer's region leads to.
-set ::seBoundary {import compiler
-import mutable_array
+set ::seBoundary {import std::compiler
+import std::mutable_array
 
 error E
 
@@ -558,7 +558,7 @@ proc seBoundaryProgram {args} {
     set calls ""
     foreach {name body} $args {
         append text [seSite $name $body]
-        append calls "r_$name = ${name}():\n    on compiler::CompilerError:\n        -1\n"
+        append calls "r_$name = ${name}():\n    on std::compiler::CompilerError:\n        -1\n"
     }
     return "$text${calls}0\n"
 }
@@ -567,8 +567,8 @@ proc seBoundaryProgram {args} {
 # The semantics are frozen
 
 test se-equal-independent {independent failures at every stage, nested in one function and at the top level: the batched decisions are the sequential ones} -body {
-    set nested "import compiler\n\nfn needs_int(v: int) -> int:\n    v\n\nfn run() -> int:\n"
-    set top "import compiler\n\nfn needs_int(v: int) -> int:\n    v\n\n"
+    set nested "import std::compiler\n\nfn needs_int(v: int) -> int:\n    v\n\nfn run() -> int:\n"
+    set top "import std::compiler\n\nfn needs_int(v: int) -> int:\n    v\n\n"
     set calls {}
     for {set i 0} {$i < 9} {incr i} {
         switch [expr {$i % 3}] {
@@ -580,7 +580,7 @@ test se-equal-independent {independent failures at every stage, nested in one fu
         foreach line [split [seSite t$i $body] \n] {
             if {$line ne ""} { append nested "    $line\n" }
         }
-        lappend calls "r$i = t${i}():\n    on compiler::CompilerError:\n        -1\n"
+        lappend calls "r$i = t${i}():\n    on std::compiler::CompilerError:\n        -1\n"
     }
     append nested "    0\n\nrun()\n"
     append top [join $calls ""] "0\n"
@@ -588,36 +588,36 @@ test se-equal-independent {independent failures at every stage, nested in one fu
 } -result {{} {} {accepted UNBOUND TYPE accepted UNBOUND TYPE accepted UNBOUND TYPE} {3 3 0} {3 3 0}}
 
 test se-equal-sequence {sites in one function's statement sequence are judged one after another: an earlier rejection makes the code after it unreachable, where completion diagnostics are not reported -- the later site is accepted, as in the sequential order} -body {
-    set text "import compiler\n\nerror Boom\n\nfn boom() errors Boom:\n    fail Boom\n\nfn run() -> int errors compiler::CompilerError:\n    static compile:\n        missing_name\n    static compile:\n        boom()\n    0\n\nr = run():\n    on compiler::CompilerError:\n        0\nr\n"
+    set text "import std::compiler\n\nerror Boom\n\nfn boom() errors Boom:\n    fail Boom\n\nfn run() -> int errors std::compiler::CompilerError:\n    static compile:\n        missing_name\n    static compile:\n        boom()\n    0\n\nr = run():\n    on std::compiler::CompilerError:\n        0\nr\n"
     list [seSame $text] [seOutcomes $text]
 } -result {{} {UNBOUND accepted}}
 
 test se-equal-ownership-siblings {sibling blocks with ownership effects: a rejected block's move of a coroutine handle is gone with it (the block after it in the same function is accepted), beside an independent USE-AFTER-MOVE and an accepted block whose handle lives across an error edge -- the batched decisions are the sequential ones} -body {
-    set text "import compiler\n\nerror Boom\n\nfn boom(x: int) -> int errors Boom:\n    if x > 5:\n        fail Boom\n    x\n\nfn needs_int(v: int) -> int:\n    v\n\nfn producer():\n    yield 1\n    2\n\n"
-    append text "fn run() -> int errors compiler::CompilerError:\n    coroutine \{step\} = producer()\n    static compile:\n        other = step\n        needs_int(\"s\")\n    static compile:\n        step()\n    0\n\n"
+    set text "import std::compiler\n\nerror Boom\n\nfn boom(x: int) -> int errors Boom:\n    if x > 5:\n        fail Boom\n    x\n\nfn needs_int(v: int) -> int:\n    v\n\nfn producer():\n    yield 1\n    2\n\n"
+    append text "fn run() -> int errors std::compiler::CompilerError:\n    coroutine \{step\} = producer()\n    static compile:\n        other = step\n        needs_int(\"s\")\n    static compile:\n        step()\n    0\n\n"
     append text [seSite moved [list "coroutine {step: s1} = producer()" "other = s1" "s1()" "0"]]
     append text [seSite edge [list "coroutine {step: s2} = producer()" "r = boom(3):" "    on Boom:" "        0" "s2()" "r"]]
-    append text "r0 = run():\n    on compiler::CompilerError:\n        -1\nr1 = moved():\n    on compiler::CompilerError:\n        -1\nr2 = edge():\n    on compiler::CompilerError:\n        -1\n\[r0, r1, r2\]\n"
+    append text "r0 = run():\n    on std::compiler::CompilerError:\n        -1\nr1 = moved():\n    on std::compiler::CompilerError:\n        -1\nr2 = edge():\n    on std::compiler::CompilerError:\n        -1\n\[r0, r1, r2\]\n"
     list [seSame $text] [seOutcomes $text]
 } -result {{} {TYPE accepted USE-AFTER-MOVE accepted}}
 
 test se-equal-nested-chain {a nested block whose rejection rejects the block around it: the outer one is judged only after the inner one, one build per level} -body {
-    set text "import compiler\n\nfn outer() -> int errors compiler::CompilerError:\n    static compile:\n        fn level_0() -> int:\n            static compile:\n                fn level_1() -> int:\n                    static compile:\n                        missing\n                level_1()\n        level_0()\n\nr = outer():\n    on compiler::CompilerError:\n        0\nr\n"
+    set text "import std::compiler\n\nfn outer() -> int errors std::compiler::CompilerError:\n    static compile:\n        fn level_0() -> int:\n            static compile:\n                fn level_1() -> int:\n                    static compile:\n                        missing\n                level_1()\n        level_0()\n\nr = outer():\n    on std::compiler::CompilerError:\n        0\nr\n"
     list [seSame $text] [seOutcomes $text] [lindex [seEcon $text] 0]
 } -result {{} {UNBOUND UNHANDLED-ERROR UNHANDLED-ERROR} 4}
 
 test se-equal-nested-checked {a nested block rejected by the checker: the block around it is judged again once it is -- its first diagnostic is then the inner block's unadmitted CompilerError, not its own type error} -body {
-    set text "import compiler\n\nfn want_int(x: int) -> int:\n    x\n\nfn outer() -> int errors compiler::CompilerError:\n    static compile:\n        fn level_0() -> int:\n            static compile:\n                want_int(\"s\")\n        want_int(\"t\")\n        level_0()\n\nr = outer():\n    on compiler::CompilerError:\n        0\nr\n"
+    set text "import std::compiler\n\nfn want_int(x: int) -> int:\n    x\n\nfn outer() -> int errors std::compiler::CompilerError:\n    static compile:\n        fn level_0() -> int:\n            static compile:\n                want_int(\"s\")\n        want_int(\"t\")\n        level_0()\n\nr = outer():\n    on std::compiler::CompilerError:\n        0\nr\n"
     list [seSame $text] [seOutcomes $text] [lindex [seEcon $text] 0]
 } -result {{} {TYPE UNHANDLED-ERROR} 3}
 
 test se-equal-internal-ids {a rejection whose message names internal ids (the numbering of the build it came from) carries the sequential order's message: it is decided in the sequential order's own build} -body {
     # Each block's message names its own struct's exact callable type,
     # `block(eN)`, numbered after every earlier block.
-    set text "import compiler\n\nfn cb(s, x: int) -> int:\n    x\n\n"
+    set text "import std::compiler\n\nfn cb(s, x: int) -> int:\n    x\n\n"
     for {set i 0} {$i < 4} {incr i} {
         append text [seSite t$i [list "fn f_$i\(x: int) -> int:" "    x" "s = \{cb: f_$i, v: $i\}" "s.cb(1)"]]\n
-        append text "r$i = t${i}():\n    on compiler::CompilerError:\n        -1\n"
+        append text "r$i = t${i}():\n    on std::compiler::CompilerError:\n        -1\n"
     }
     append text "0\n"
     set outcomes [seOutcomes $text]
@@ -635,17 +635,17 @@ test se-equal-erased {the erased-callable contract: a consumer judged against wh
         append text [seSite t$i [seTypeFail $i]]
     }
     foreach name {contributor consumer t0 t1 t2 t3} {
-        append text "r_$name = ${name}():\n    on compiler::CompilerError:\n        -1\n"
+        append text "r_$name = ${name}():\n    on std::compiler::CompilerError:\n        -1\n"
     }
     append text "0\n"
     list [seSame $text] [seOutcomes $text]
 } -result {{} {accepted accepted TYPE TYPE TYPE TYPE}}
 
 test se-equal-erased-consumer {a genuine consumer of the erased-callable contract: a callable read from a List[any] has neither identity nor contract, so its call is charged what the program erases -- E2 while the contributor's body erases raise2 (UNHANDLED-ERROR), nothing once that body is rejected (accepted)} -body {
-    set text "import compiler\nimport list\n\nerror E1\nerror E2\n\nfn harmless() -> int:\n    1\n\nfn raise2() -> int errors E2:\n    fail E2\n\nfn store(f) -> int:\n    1\n\n"
+    set text "import std::compiler\nimport std::list\n\nerror E1\nerror E2\n\nfn harmless() -> int:\n    1\n\nfn raise2() -> int errors E2:\n    fail E2\n\nfn store(f) -> int:\n    1\n\n"
     append text [seSite contributor [concat {"r = store(raise2)"} [seTypeFail 0]]]
-    append text [seSite consumer {"fn run(fs: List\[any\]) errors IndexNotFound:" "    f = list::at(fs, 0)" "    f()" "r = run(\[harmless\]):" "    on IndexNotFound:" "        -2" "1"}]
-    append text "r1 = contributor():\n    on compiler::CompilerError:\n        -1\nr2 = consumer():\n    on compiler::CompilerError:\n        -1\nr1 + r2\n"
+    append text [seSite consumer {"fn run(fs: List\[any\]) errors IndexNotFound:" "    f = std::list::at(fs, 0)" "    f()" "r = run(\[harmless\]):" "    on IndexNotFound:" "        -2" "1"}]
+    append text "r1 = contributor():\n    on std::compiler::CompilerError:\n        -1\nr2 = consumer():\n    on std::compiler::CompilerError:\n        -1\nr1 + r2\n"
     set hir::static::trace 1
     try {
         set hir [seHir $text]
@@ -659,11 +659,11 @@ test se-equal-erased-consumer {a genuine consumer of the erased-callable contrac
 # The consumer and contributor of se-equal-erased-consumer as two
 # functions, the consumer's written first when CONSUMERFIRST.
 proc seConsumerContributor {consumerFirst} {
-    set text "import compiler\nimport list\n\nerror E2\n\nfn raise_e2() -> int errors E2:\n    fail E2\n\nfn store(f) -> int:\n    1\n\nfn harmless() -> int:\n    1\n\n"
-    set consumer [seSite consumer {"fn run(fs: List\[any\]) errors IndexNotFound:" "    f = list::at(fs, 0)" "    f()" "r = run(\[harmless\]):" "    on IndexNotFound:" "        -2" "1"}]
+    set text "import std::compiler\nimport std::list\n\nerror E2\n\nfn raise_e2() -> int errors E2:\n    fail E2\n\nfn store(f) -> int:\n    1\n\nfn harmless() -> int:\n    1\n\n"
+    set consumer [seSite consumer {"fn run(fs: List\[any\]) errors IndexNotFound:" "    f = std::list::at(fs, 0)" "    f()" "r = run(\[harmless\]):" "    on IndexNotFound:" "        -2" "1"}]
     set eraser [seSite eraser [concat {"r = store(raise_e2)"} [seTypeFail 0]]]
     append text [expr {$consumerFirst ? "$consumer$eraser" : "$eraser$consumer"}]
-    append text "a = consumer():\n    on compiler::CompilerError:\n        -1\nb = eraser():\n    on compiler::CompilerError:\n        -1\n\[a, b\]\n"
+    append text "a = consumer():\n    on std::compiler::CompilerError:\n        -1\nb = eraser():\n    on std::compiler::CompilerError:\n        -1\n\[a, b\]\n"
     return $text
 }
 
@@ -688,12 +688,12 @@ test se-equal-consumer-waits {the waiting rule: a consumer of the erased-callabl
 test se-equal-consumer-waits-residual {the residual case of the waiting rule (STATIC-COMPILE.md): a contributor whose own verdict another block decides -- the erasing block is ok until the block nested in a function in its body is rejected (TYPE), whose CompilerError that function does not admit; then it is rejected too and the program erases nothing. The contributors are the blocks holding a contribution, not closed under what they read (that closure made ordinary failures wait for each other, one build each), so a consumer written first does not wait for the nested block and is rejected (UNHANDLED-ERROR); written second it is judged once the eraser is gone and accepted. Batched, sequential and legacy decide alike} -body {
     set results {}
     foreach consumerFirst {1 0} {
-        set text "import compiler\nimport list\n\nerror E2\n\nfn raise_e2() -> int errors E2:\n    fail E2\n\nfn store(f) -> int:\n    1\n\nfn harmless() -> int:\n    1\n\n"
-        set consumer [seSite consumer {"fn run(fs: List\[any\]) errors IndexNotFound:" "    f = list::at(fs, 0)" "    f()" "r = run(\[harmless\]):" "    on IndexNotFound:" "        -2" "1"}]
+        set text "import std::compiler\nimport std::list\n\nerror E2\n\nfn raise_e2() -> int errors E2:\n    fail E2\n\nfn store(f) -> int:\n    1\n\nfn harmless() -> int:\n    1\n\n"
+        set consumer [seSite consumer {"fn run(fs: List\[any\]) errors IndexNotFound:" "    f = std::list::at(fs, 0)" "    f()" "r = run(\[harmless\]):" "    on IndexNotFound:" "        -2" "1"}]
         set eraser [seSite eraser [concat {"r = store(raise_e2)" "fn g() -> int:" "    static compile:"} \
             [lmap line [seTypeFail 0] {string cat "        " $line}] {"    1" "g()"}]]
         append text [expr {$consumerFirst ? "$consumer$eraser" : "$eraser$consumer"}]
-        append text "a = consumer():\n    on compiler::CompilerError:\n        -1\nb = eraser():\n    on compiler::CompilerError:\n        -1\n\[a, b\]\n"
+        append text "a = consumer():\n    on std::compiler::CompilerError:\n        -1\nb = eraser():\n    on std::compiler::CompilerError:\n        -1\n\[a, b\]\n"
         lappend results [seSame $text] [seOutcomes $text]
     }
     set results
@@ -702,12 +702,12 @@ test se-equal-consumer-waits-residual {the residual case of the waiting rule (ST
 test se-builds-erasing-consumers {blocks that each erase and each call through an uncontracted value, failing for a reason of their own the completion walk reports (KNOWN-ERROR: always() never completes normally): each consumes what the others contribute, so they wait on each other -- a cycle, decided in post-order in one build (2 rounds at 4 and 8 blocks), as before the waiting rule: the contributors are every block holding a contribution, not only the witness, which would make each wait on the last of them, one build each (mutant erasure-contributors-witnesses-only)} -body {
     set results {}
     foreach n {4 8} {
-        set text "import compiler\nimport list\n\nerror E\nerror Boom\n\nfn raise_e() -> int errors E:\n    fail E\n\nfn always() -> int errors Boom:\n    fail Boom\n\nfn store(f) -> int:\n    1\n\nfn harmless() -> int:\n    1\n\n"
+        set text "import std::compiler\nimport std::list\n\nerror E\nerror Boom\n\nfn raise_e() -> int errors E:\n    fail E\n\nfn always() -> int errors Boom:\n    fail Boom\n\nfn store(f) -> int:\n    1\n\nfn harmless() -> int:\n    1\n\n"
         set calls {}
         for {set i 0} {$i < $n} {incr i} {
-            append text [seSite s$i {"s = store(raise_e)" "fn run(fs: List\[any\]) errors IndexNotFound, E:" "    f = list::at(fs, 0)" \
+            append text [seSite s$i {"s = store(raise_e)" "fn run(fs: List\[any\]) errors IndexNotFound, E:" "    f = std::list::at(fs, 0)" \
                 "    f()" "r = run(\[harmless\]):" "    on IndexNotFound:" "        -2" "    on E:" "        -3" "always()"}]
-            append calls "r$i = s${i}():\n    on compiler::CompilerError:\n        -1\n"
+            append calls "r$i = s${i}():\n    on std::compiler::CompilerError:\n        -1\n"
         }
         append text $calls "0\n"
         lappend results [seSame $text 0] [lsort -unique [seOutcomes $text]] [lindex [seEcon $text] 0]
@@ -716,10 +716,10 @@ test se-builds-erasing-consumers {blocks that each erase and each call through a
 } -result {{} KNOWN-ERROR 2 {} KNOWN-ERROR 2}
 
 test se-builds-early-consumer {a block that calls through an uncontracted value but fails with a diagnostic reported before the completion walk (TYPE) does not wait for the erased contract's failing contributor: no erasure can cause or precede that diagnostic (only the ownership analysis's exit releases read the contract before the walk, and they report nothing), so both blocks are rejected in the first build -- 2 rounds, not 3 (mutant early-consumes-erased)} -body {
-    set text "import compiler\nimport list\n\nerror E\n\nfn raise_e() -> int errors E:\n    fail E\n\nfn store(f) -> int:\n    1\n\nfn harmless() -> int:\n    1\n\nfn want(x: int) -> int:\n    x\n\n"
-    append text [seSite y {"fn run(fs: List\[any\]) errors IndexNotFound:" "    f = list::at(fs, 0)" "    f()" "r = run(\[harmless\]):" "    on IndexNotFound:" "        -2" {want("y")}}]
+    set text "import std::compiler\nimport std::list\n\nerror E\n\nfn raise_e() -> int errors E:\n    fail E\n\nfn store(f) -> int:\n    1\n\nfn harmless() -> int:\n    1\n\nfn want(x: int) -> int:\n    x\n\n"
+    append text [seSite y {"fn run(fs: List\[any\]) errors IndexNotFound:" "    f = std::list::at(fs, 0)" "    f()" "r = run(\[harmless\]):" "    on IndexNotFound:" "        -2" {want("y")}}]
     append text [seSite z {"s = store(raise_e)" {want("z")}}]
-    append text "ry = y():\n    on compiler::CompilerError:\n        -1\nrz = z():\n    on compiler::CompilerError:\n        -1\n0\n"
+    append text "ry = y():\n    on std::compiler::CompilerError:\n        -1\nrz = z():\n    on std::compiler::CompilerError:\n        -1\n0\n"
     list [seSame $text] [seOutcomes $text] [lindex [seEcon $text] 0]
 } -result {{} {TYPE TYPE} 2}
 
@@ -731,7 +731,7 @@ test se-builds-early-consumer {a block that calls through an uncontracted value 
 proc seErasingConsumer {name e bad} {
     set E [string toupper $e]
     set body [list "s = store(raise_$e)" "fn run_${name}(fs: List\[any\]) errors IndexNotFound, $E:" \
-        "    f = list::at(fs, 0)" "    f()" "r = run_${name}(\[harmless\]):" "    on IndexNotFound:" "        -2" \
+        "    f = std::list::at(fs, 0)" "    f()" "r = run_${name}(\[harmless\]):" "    on IndexNotFound:" "        -2" \
         "    on $E:" "        -3"]
     return [seSite $name [concat $body [expr {$bad ? {always()} : {1}}]]]
 }
@@ -739,11 +739,11 @@ proc seErasingConsumer {name e bad} {
 test se-equal-channel-cycle {a cycle through the erased-callable contract: each block erases what the other's call through an uncontracted value does not admit, and fails for a reason the completion walk reports (b: KNOWN-ERROR), so each waits on the other and the first in post-order is rejected -- for the other's erasure (UNHANDLED-ERROR), whichever it is: one of the places the waiting rule leaves a verdict to layout (STATIC-COMPILE.md, "The waiting rule"); batched, sequential and legacy decide alike} -body {
     set results {}
     foreach order {{a b} {b a}} {
-        set text "import compiler\nimport list\n\nerror E1\nerror E2\nerror Boom\n\nfn raise_e1() -> int errors E1:\n    fail E1\n\nfn raise_e2() -> int errors E2:\n    fail E2\n\nfn always() -> int errors Boom:\n    fail Boom\n\nfn store(f) -> int:\n    1\n\nfn harmless() -> int:\n    1\n\n"
+        set text "import std::compiler\nimport std::list\n\nerror E1\nerror E2\nerror Boom\n\nfn raise_e1() -> int errors E1:\n    fail E1\n\nfn raise_e2() -> int errors E2:\n    fail E2\n\nfn always() -> int errors Boom:\n    fail Boom\n\nfn store(f) -> int:\n    1\n\nfn harmless() -> int:\n    1\n\n"
         foreach name $order {
             append text [seErasingConsumer $name [expr {$name eq "a" ? "e1" : "e2"}] [expr {$name eq "b"}]]
         }
-        append text "ra = a():\n    on compiler::CompilerError:\n        -1\nrb = b():\n    on compiler::CompilerError:\n        -1\n\[ra, rb\]\n"
+        append text "ra = a():\n    on std::compiler::CompilerError:\n        -1\nrb = b():\n    on std::compiler::CompilerError:\n        -1\n\[ra, rb\]\n"
         lappend results [seSame $text] [seOutcomes $text]
     }
     set results
@@ -755,59 +755,59 @@ test se-equal-multiple-contributors {several contributors, rejected by the check
     append text [seSite c2 [concat $::seContributor {missing_name}]]
     append text [seSite consumer $::seConsumer]
     foreach name {c1 c2 consumer} {
-        append text "r_$name = ${name}():\n    on compiler::CompilerError:\n        -1\n"
+        append text "r_$name = ${name}():\n    on std::compiler::CompilerError:\n        -1\n"
     }
     append text "0\n"
     list [seSame $text] [seOutcomes $text]
 } -result {{} {TYPE UNBOUND accepted}}
 
 test se-equal-untyped-capture {two blocks capturing an untyped parameter of the function around them: its contract is inferred from every use, so one block's use can fail the other -- which is judged again once the first is rejected} -body {
-    set text "import compiler\nimport str\n\nfn want_int(x: int) -> int:\n    x\n\nfn register(n) -> int:\n    fn a() -> int errors compiler::CompilerError:\n        static compile:\n            q = str::length(n)\n            want_int(\"s\")\n    fn b() -> int errors compiler::CompilerError:\n        static compile:\n            want_int(n)\n    ra = a():\n        on compiler::CompilerError:\n            -1\n    rb = b():\n        on compiler::CompilerError:\n            -1\n    ra + rb\n\nregister(1)\n"
+    set text "import std::compiler\nimport std::str\n\nfn want_int(x: int) -> int:\n    x\n\nfn register(n) -> int:\n    fn a() -> int errors std::compiler::CompilerError:\n        static compile:\n            q = std::str::length(n)\n            want_int(\"s\")\n    fn b() -> int errors std::compiler::CompilerError:\n        static compile:\n            want_int(n)\n    ra = a():\n        on std::compiler::CompilerError:\n            -1\n    rb = b():\n        on std::compiler::CompilerError:\n            -1\n    ra + rb\n\nregister(1)\n"
     list [seSame $text] [seOutcomes $text] [lindex [seEcon $text] 0]
 } -result {{} {TYPE accepted} 2}
 
 test se-equal-outer-constant {a block reading a constant bound outside its function (a capture) reads its exact value (hir::range::BindingRange), so its verdict depends on the constant's own block: rejected (UNBOUND), the constant is a failure, not 4, and the reader is TYPE; accepted through an alias (size = base * 2), the reader is accepted; 5 rejects the reader. The dependency is the existing one -- the reader's function mentions the binding, the binding's definition holds the site -- and the batched decisions are the sequential ones} -body {
-    set text {import compiler
+    set text {import std::compiler
 
 type Coordinate = Int in 0..3
 
 fn coord(n: Coordinate) -> Coordinate:
     n
 
-fn rejected() -> int errors compiler::CompilerError:
+fn rejected() -> int errors std::compiler::CompilerError:
     size = static compile:
         y = no_such_name
         4
-    fn last() -> int errors compiler::CompilerError:
+    fn last() -> int errors std::compiler::CompilerError:
         static compile:
             coord(size - 1)
     last()
 
-fn accepted() -> int errors compiler::CompilerError:
+fn accepted() -> int errors std::compiler::CompilerError:
     base = static compile:
         2
     size = base * 2
-    fn last() -> int errors compiler::CompilerError:
+    fn last() -> int errors std::compiler::CompilerError:
         static compile:
             coord(size - 1)
     last()
 
-fn wide() -> int errors compiler::CompilerError:
+fn wide() -> int errors std::compiler::CompilerError:
     size = static compile:
         5
-    fn last() -> int errors compiler::CompilerError:
+    fn last() -> int errors std::compiler::CompilerError:
         static compile:
             coord(size - 1)
     last()
 
 r0 = rejected():
-    on compiler::CompilerError:
+    on std::compiler::CompilerError:
         -1
 r1 = accepted():
-    on compiler::CompilerError:
+    on std::compiler::CompilerError:
         -1
 r2 = wide():
-    on compiler::CompilerError:
+    on std::compiler::CompilerError:
         -1
 [r0, r1, r2]
 }
@@ -817,12 +817,12 @@ r2 = wide():
 test se-equal-corpus {contexts, opaque structs, traits, coroutines and ownership, method sugar, namespaced errors: batched equals sequential (every program compiles: seSame refuses two failures alike)} -body {
     set results {}
     foreach text [list \
-        "import compiler\nimport linux::io\n\n[seSite a {{with context linux::io::create()} {1}}][seSite b {missing}]ra = a():\n    on compiler::CompilerError:\n        0\nrb = b():\n    on compiler::CompilerError:\n        0\nra + rb\n" \
-        "import compiler\nimport abi\nimport abi::bytes\n\n[seSite a [list "b = abi::bytes::Bytes {storage: 1}" "0"]][seSite b [list "d = abi::bytes::from_list(\[\])" "abi::bytes::length(d).value"]][seSite c [list "d = abi::bytes::from_list(\[\])" "d.storage"]][seSite e {missing}]ra = a():\n    on compiler::CompilerError:\n        0\nrb = b():\n    on compiler::CompilerError:\n        0\nrc = c():\n    on compiler::CompilerError:\n        0\nre = e():\n    on compiler::CompilerError:\n        0\nra + rb + rc + re\n" \
-        "import compiler\n\ntrait Shape:\n    fn area(shape: Shape) -> int\n\nstruct Square:\n    side: int\n\nfn area(s: Square) -> int:\n    s.side\n\nstruct Thing:\n    v: int\n\nfn measure(s: Shape) -> int:\n    s.area()\n\n[seSite a [list "measure(Square {side: 2})"]][seSite b [list "measure(Thing {v: 1})"]][seSite c [list "fn w(x: int) -> int:" "    x" "w(\"s\")"]]ra = a():\n    on compiler::CompilerError:\n        0\nrb = b():\n    on compiler::CompilerError:\n        0\nrc = c():\n    on compiler::CompilerError:\n        0\nra + rb + rc\n" \
-        "import compiler\n\nfn producer():\n    yield 1\n    2\n\n[seSite a [list "coroutine {step} = producer()" "other = step" "step()" "0"]][seSite b [list "coroutine {step} = producer()" "step()" "0"]][seSite c {missing}]ra = a():\n    on compiler::CompilerError:\n        0\nrb = b():\n    on compiler::CompilerError:\n        0\nrc = c():\n    on compiler::CompilerError:\n        0\nra + rb + rc\n" \
-        "import compiler\nimport list\nimport str\n\n[seSite a [list "xs = \[1, 2\]" "xs.length()"]][seSite b [list "s = \"ab\"" "fn w(x: int) -> int:" "    x" "w(s.length() == 2)"]][seSite c [list "xs = \[1\]" "s = \"x\"" "xs.length() + s.length()"]]ra = a():\n    on compiler::CompilerError:\n        0\nrb = b():\n    on compiler::CompilerError:\n        0\nrc = c():\n    on compiler::CompilerError:\n        0\nra + rb + rc\n" \
-        "import compiler\nimport list\n\nfn positive(x: int) -> bool:\n    x > 0\n\n[seSite a [list "r = list::find(\[1, 2\], positive):" "    on list::NotFound:" "        0" "r"]][seSite b [list "r = list::find(\[1, 2\], positive):" "    on NotFound:" "        0" "r"]][seSite c [list "list::find(\[1\], positive)"]]ra = a():\n    on compiler::CompilerError:\n        0\nrb = b():\n    on compiler::CompilerError:\n        0\nrc = c():\n    on compiler::CompilerError:\n        0\nra + rb + rc\n"] {
+        "import std::compiler\nimport std::linux::io\n\n[seSite a {{with context std::linux::io::create()} {1}}][seSite b {missing}]ra = a():\n    on std::compiler::CompilerError:\n        0\nrb = b():\n    on std::compiler::CompilerError:\n        0\nra + rb\n" \
+        "import std::compiler\nimport std::abi\nimport std::abi::bytes\n\n[seSite a [list "b = std::abi::bytes::Bytes {storage: 1}" "0"]][seSite b [list "d = std::abi::bytes::from_list(\[\])" "std::abi::bytes::length(d).value"]][seSite c [list "d = std::abi::bytes::from_list(\[\])" "d.storage"]][seSite e {missing}]ra = a():\n    on std::compiler::CompilerError:\n        0\nrb = b():\n    on std::compiler::CompilerError:\n        0\nrc = c():\n    on std::compiler::CompilerError:\n        0\nre = e():\n    on std::compiler::CompilerError:\n        0\nra + rb + rc + re\n" \
+        "import std::compiler\n\ntrait Shape:\n    fn area(shape: Shape) -> int\n\nstruct Square:\n    side: int\n\nfn area(s: Square) -> int:\n    s.side\n\nstruct Thing:\n    v: int\n\nfn measure(s: Shape) -> int:\n    s.area()\n\n[seSite a [list "measure(Square {side: 2})"]][seSite b [list "measure(Thing {v: 1})"]][seSite c [list "fn w(x: int) -> int:" "    x" "w(\"s\")"]]ra = a():\n    on std::compiler::CompilerError:\n        0\nrb = b():\n    on std::compiler::CompilerError:\n        0\nrc = c():\n    on std::compiler::CompilerError:\n        0\nra + rb + rc\n" \
+        "import std::compiler\n\nfn producer():\n    yield 1\n    2\n\n[seSite a [list "coroutine {step} = producer()" "other = step" "step()" "0"]][seSite b [list "coroutine {step} = producer()" "step()" "0"]][seSite c {missing}]ra = a():\n    on std::compiler::CompilerError:\n        0\nrb = b():\n    on std::compiler::CompilerError:\n        0\nrc = c():\n    on std::compiler::CompilerError:\n        0\nra + rb + rc\n" \
+        "import std::compiler\nimport std::list\nimport std::str\n\n[seSite a [list "xs = \[1, 2\]" "xs.length()"]][seSite b [list "s = \"ab\"" "fn w(x: int) -> int:" "    x" "w(s.length() == 2)"]][seSite c [list "xs = \[1\]" "s = \"x\"" "xs.length() + s.length()"]]ra = a():\n    on std::compiler::CompilerError:\n        0\nrb = b():\n    on std::compiler::CompilerError:\n        0\nrc = c():\n    on std::compiler::CompilerError:\n        0\nra + rb + rc\n" \
+        "import std::compiler\nimport std::list\n\nfn positive(x: int) -> bool:\n    x > 0\n\n[seSite a [list "r = std::list::find(\[1, 2\], positive):" "    on std::list::NotFound:" "        0" "r"]][seSite b [list "r = std::list::find(\[1, 2\], positive):" "    on NotFound:" "        0" "r"]][seSite c [list "std::list::find(\[1\], positive)"]]ra = a():\n    on std::compiler::CompilerError:\n        0\nrb = b():\n    on std::compiler::CompilerError:\n        0\nrc = c():\n    on std::compiler::CompilerError:\n        0\nra + rb + rc\n"] {
         lappend results [seSame $text]
     }
     set results
@@ -836,16 +836,16 @@ test se-equal-ownership-verdict {a site whose handle is moved on a break path is
     # makes helper's result `never` and the erasure vanishes, while the
     # collecting site after the path site keeps the verdict: it must be held
     # back with the path site, not committed beside it.
-    set helper "fn helper() errors compiler::CompilerError:\n    static compile:\n        fn want(x: int) -> int:\n            x\n        want(\"s\")\n\n"
-    set erased {"fn f(c: bool) -> int errors compiler::CompilerError:" "    x = if c:" "        make(1)" "    else:" "        helper()" "    1" "f(true)"}
+    set helper "fn helper() errors std::compiler::CompilerError:\n    static compile:\n        fn want(x: int) -> int:\n            x\n        want(\"s\")\n\n"
+    set erased {"fn f(c: bool) -> int errors std::compiler::CompilerError:" "    x = if c:" "        make(1)" "    else:" "        helper()" "    1" "f(true)"}
     set text [seOwnershipProgram -text $helper path [sePathRelease boom()] collect $::seCollectHandles erased $erased]
     list {*}$after [seSame $text 0] [seOutcomes $text]
 } -result {{} {USE-AFTER-MOVE AFFINE-LIST-OPERATION-UNSUPPORTED AFFINE-PATH-RELEASE-UNSUPPORTED} {} {TYPE KNOWN-ERROR AFFINE-LIST-OPERATION-UNSUPPORTED accepted}}
 
 test se-equal-every-mention {every mention of a binding is an edge of the analysis, not only its last: a nested function's capture of a vector is MUTABLE-PLACE-CAPTURE while a block before it mutates the vector, and is accepted once that block is rejected (the mutation is gone with its body) -- the analysis once kept only the last mention of each binding (a flat `dict lappend`), so the capture did not depend on the mutating block: it was rejected beside it, another program than the sequential order's, or, with a site between them, predicted and contradicted by the next build} -body {
-    set prelude "import compiler\nimport mutable_vector\n\nfn want_int(x: int) -> int:\n    x\n\nfn f() -> int errors compiler::CompilerError:\n    v = mutable_vector::from_list(\[1\])\n    static compile:\n        v.push(2)\n        want_int(\"s\")\n"
-    set capture "    fn g() -> int errors compiler::CompilerError:\n        static compile:\n            v.length()\n    r = g():\n        on compiler::CompilerError:\n            -1\n"
-    set tail "r = f():\n    on compiler::CompilerError:\n        0\nr\n"
+    set prelude "import std::compiler\nimport std::mutable_vector\n\nfn want_int(x: int) -> int:\n    x\n\nfn f() -> int errors std::compiler::CompilerError:\n    v = std::mutable_vector::from_list(\[1\])\n    static compile:\n        v.push(2)\n        want_int(\"s\")\n"
+    set capture "    fn g() -> int errors std::compiler::CompilerError:\n        static compile:\n            v.length()\n    r = g():\n        on std::compiler::CompilerError:\n            -1\n"
+    set tail "r = f():\n    on std::compiler::CompilerError:\n        0\nr\n"
     set results {}
     foreach text [list "$prelude$capture    r + v.length()\n\n$tail" \
             "$prelude    w = static compile:\n        1\n$capture    r + w + v.length()\n\n$tail"] {
@@ -857,7 +857,7 @@ test se-equal-every-mention {every mention of a binding is an edge of the analys
 } -result {{} {TYPE accepted} {} 2 {} {TYPE accepted accepted} {} 2}
 
 test se-equal-vector-context-callee {a bounds proof over a context's vector reads its callees' bodies: a call between two loops over the member is a site only when the callee may reach the installed context (hir::cardinality::ContextSite, over exact call edges), so f's block depends on the block in g's body that calls add -- accepted once that block is rejected (g no longer pushes to the member), UNHANDLED-ERROR while g's block holds the call; the batched decisions are the sequential ones, with no build contradicting a prediction} -body {
-    set text "import compiler\nimport mutable_vector\nimport list\n\ncontext struct Log:\n    items: MutableVector\[int\]\n\nfn add(x: int, context log: Log):\n    log.items.push(x)\n\nfn g(x: int) -> int errors compiler::CompilerError:\n    if x > 100:\n        static compile:\n            add(x)\n            %s\n    x\n\nfn f(h: int, context log: Log) -> int errors compiler::CompilerError:\n    ys = loop x in log.items:\n        x * 10\n    k = g(h)\n    static compile:\n        zs = loop x in log.items:\n            x\n        ys.at(k.mod(list::length(zs)))\n\nwith context Log {items: mutable_vector::from_list(\[1, 2\])}\nr = f(3):\n    on compiler::CompilerError {code, primary, message}:\n        -1\nr\n"
+    set text "import std::compiler\nimport std::mutable_vector\nimport std::list\n\ncontext struct Log:\n    items: MutableVector\[int\]\n\nfn add(x: int, context log: Log):\n    log.items.push(x)\n\nfn g(x: int) -> int errors std::compiler::CompilerError:\n    if x > 100:\n        static compile:\n            add(x)\n            %s\n    x\n\nfn f(h: int, context log: Log) -> int errors std::compiler::CompilerError:\n    ys = loop x in log.items:\n        x * 10\n    k = g(h)\n    static compile:\n        zs = loop x in log.items:\n            x\n        ys.at(k.mod(std::list::length(zs)))\n\nwith context Log {items: std::mutable_vector::from_list(\[1, 2\])}\nr = f(3):\n    on std::compiler::CompilerError {code, primary, message}:\n        -1\nr\n"
     set results {}
     foreach body {bogus_name(1) {x + 0}} {
         set source [format $text $body]
@@ -901,32 +901,32 @@ test se-equal-deep-first-request {the semantic layer declines a request for nest
 } -result {{} {TYPE TYPE TYPE} {}}
 
 test se-equal-internal-ids-exact {only a message naming an internal id the way the compiler prints one (`block(e12)`) waits for the sequential order's own build: a USE-AFTER-MOVE naming the binding `s1` after an earlier rejection is committed beside it (it was once held back as if `s1` were a scope id)} -body {
-    set text "import compiler\n\nfn needs_int(v: int) -> int:\n    v\n\nfn producer():\n    yield 1\n    2\n\n"
+    set text "import std::compiler\n\nfn needs_int(v: int) -> int:\n    v\n\nfn producer():\n    yield 1\n    2\n\n"
     append text [seSite t [list {needs_int("s")}]]
     append text [seSite moved [list "coroutine {step: s1} = producer()" "other = s1" "s1()" "0"]]
-    append text "r0 = t():\n    on compiler::CompilerError:\n        -1\nr1 = moved():\n    on compiler::CompilerError:\n        -1\n\[r0, r1\]\n"
+    append text "r0 = t():\n    on std::compiler::CompilerError:\n        -1\nr1 = moved():\n    on std::compiler::CompilerError:\n        -1\n\[r0, r1\]\n"
     set hir [seHir $text]
     list [seSame $text] [seOutcomes $text] [dict get $hir staticStats rounds] \
         [hir::static::InternalIds "`s1` was used after its coroutine value was moved; other = s1 (f:1:2) t2 e3 b4 y5"] \
-        [hir::static::InternalIds "the callee block(e12)/1 -> int and native(str::length) and block(e7)/0 -> str, f : function e9/1 -> int"] \
+        [hir::static::InternalIds "the callee block(e12)/1 -> int and native(std::str::length) and block(e7)/0 -> str, f : function e9/1 -> int"] \
         [dict get [hir::static::PredictionOf {kind TYPE message "s1 is block(e12)/1 -> int, function e9/0 -> int"}] message]
 } -result {{} {TYPE USE-AFTER-MOVE} 2 {} {e12 e7 e9} {s1 is block(#)/1 -> int, function #/0 -> int}}
 
 test se-equal-hygiene-names {a diagnostic names a binding hygiene renamed (hir/hygiene.tcl's NAME#N: here a parameter `list` shadowing the root `list` a list literal calls) by its source spelling: the number counts that name's renames across the whole program, another site's among them -- the batched run, committing b's rejection beside a's, once printed `list#2` where the sequential order, judging b after a's rejection, prints `list#1`} -body {
-    set text "import compiler\n\nfn want(v: int) -> int:\n    v\n\n"
+    set text "import std::compiler\n\nfn want(v: int) -> int:\n    v\n\n"
     append text [seSite a {"fn f(list: int) -> int:" "    x = \[1\]" "    list" {want("s")}}]
     append text [seSite b {"fn g(list: int) -> int:" "    y = \[2\]" "    list" {g("s")}}]
-    append text "ra = a():\n    on compiler::CompilerError:\n        -1\nrb = b():\n    on compiler::CompilerError:\n        -1\nra + rb\n"
+    append text "ra = a():\n    on std::compiler::CompilerError:\n        -1\nrb = b():\n    on std::compiler::CompilerError:\n        -1\nra + rb\n"
     set messages [lmap {key site} [hir::static::sites [seHir $text]] {dict get $site diagnostic message}]
     list [seSame $text] [seOutcomes $text] [lindex $messages 1]
 } -result {{} {TYPE TYPE} {argument for parameter "list" cannot be proven to satisfy int (argument type: str)}}
 
-# Sites a and b (the body lines A and B) after `import compiler` and PRELUDE,
+# Sites a and b (the body lines A and B) after `import std::compiler` and PRELUDE,
 # each called under a handler, as in se-equal-hygiene-names.
 proc seTwoSites {prelude a b} {
-    set text "import compiler\n\n$prelude"
+    set text "import std::compiler\n\n$prelude"
     append text [seSite a $a] [seSite b $b]
-    append text "ra = a():\n    on compiler::CompilerError:\n        -1\nrb = b():\n    on compiler::CompilerError:\n        -1\nra + rb\n"
+    append text "ra = a():\n    on std::compiler::CompilerError:\n        -1\nrb = b():\n    on std::compiler::CompilerError:\n        -1\nra + rb\n"
     return $text
 }
 
@@ -983,7 +983,7 @@ test se-equal-hygiene-affine-capture {AFFINE-CAPTURE-UNSUPPORTED names the captu
 } -result {{} {AFFINE-CAPTURE-UNSUPPORTED AFFINE-CAPTURE-UNSUPPORTED} {`list` is an affine Coroutine{args: [], return: int, errors: []}, which cannot be captured by a closure (a nested function): a closure may be called any number of times and copied freely, so capturing would alias the one owner (pass it as an argument, or construct it inside the nested function)}}
 
 test se-equal-hygiene-field-move {AFFINE-FIELD-MOVE-REQUIRES-DESTRUCTURE names the struct and spells the destructuring it suggests by the source spelling} -body {
-    set prelude "[string range $::seOwnership [string length "import compiler\n"] end]struct Holder:\n    h: Coroutine{args: \[Command\], return: Event}\n\n"
+    set prelude "[string range $::seOwnership [string length "import std::compiler\n"] end]struct Holder:\n    h: Coroutine{args: \[Command\], return: Event}\n\n"
     seHygiene [seTwoSites $prelude \
         {"list = Holder {h: make(1)}" "x = [1]" "s = list.h" "0"} \
         {"list = Holder {h: make(2)}" "y = [2]" "s = list.h" "0"}]
@@ -992,7 +992,7 @@ test se-equal-hygiene-field-move {AFFINE-FIELD-MOVE-REQUIRES-DESTRUCTURE names t
 test se-equal-hygiene-path-release {AFFINE-PATH-RELEASE-UNSUPPORTED names the binding by its source spelling (hir/affine.tcl's PathPoint)} -body {
     set body {"fn f() -> int:" "    v = empty_queue()" "    list = make(1)" "    x = [1]" "    loop i from 0 to 3:"
         "        if i == 1:" "            v.push(list)" "            break" "    1" "f()"}
-    seHygiene [seTwoSites [string range $::seOwnership [string length "import compiler\n"] end] $body $body]
+    seHygiene [seTwoSites [string range $::seOwnership [string length "import std::compiler\n"] end] $body $body]
 } -result {{} {AFFINE-PATH-RELEASE-UNSUPPORTED AFFINE-PATH-RELEASE-UNSUPPORTED} {`list` is moved on a path that breaks out of this loop but still owned when the loop runs to its end: no statement ends that path to release it there (move it on every path, or on none -- e.g. use an infinite `loop:` whose every exit is a `break`)}}
 
 test se-equal-hygiene-coroutine-not-function {COROUTINE-NOT-FUNCTION names the handle by its source spelling} -body {
@@ -1032,15 +1032,15 @@ test se-equal-hygiene-lockstep {a lockstep loop's iteration counts name their bi
 } -result {{} {LOCKSTEP-UNPROVEN LOCKSTEP-UNPROVEN} {lockstep loop requires equal iteration counts; could not prove length(list) == length(ys) (clause 1 vs clause 2)}}
 
 test se-equal-hygiene-mutable-receiver {MUTABLE-PLACE-RECEIVER names the receiver's binding by its source spelling} -body {
-    seHygiene [seTwoSites "import mutable_vector\n\n" \
-        {"list = mutable_vector::from_list([1])" "fn g() -> int:" "    mutable_vector::push(list, 2)" "    0" "g()"} \
-        {"list = mutable_vector::from_list([2])" "fn g() -> int:" "    mutable_vector::push(list, 3)" "    0" "g()"}]
-} -result {{} {MUTABLE-PLACE-RECEIVER MUTABLE-PLACE-RECEIVER} {the receiver of mutable_vector::push is `list`, a binding of an enclosing function: a nested function cannot mutate a vector it captured (a vector is a value; pass it in and return the result)}}
+    seHygiene [seTwoSites "import std::mutable_vector\n\n" \
+        {"list = std::mutable_vector::from_list([1])" "fn g() -> int:" "    std::mutable_vector::push(list, 2)" "    0" "g()"} \
+        {"list = std::mutable_vector::from_list([2])" "fn g() -> int:" "    std::mutable_vector::push(list, 3)" "    0" "g()"}]
+} -result {{} {MUTABLE-PLACE-RECEIVER MUTABLE-PLACE-RECEIVER} {the receiver of std::mutable_vector::push is `list`, a binding of an enclosing function: a nested function cannot mutate a vector it captured (a vector is a value; pass it in and return the result)}}
 
 test se-equal-hygiene-mutable-capture {MUTABLE-PLACE-CAPTURE names the captured place by its source spelling} -body {
-    seHygiene [seTwoSites "import mutable_vector\n\n" \
-        {"list = mutable_vector::from_list([1])" "mutable_vector::push(list, 2)" "fn g() -> int:" "    mutable_vector::length(list)" "g()"} \
-        {"list = mutable_vector::from_list([2])" "mutable_vector::push(list, 3)" "fn g() -> int:" "    mutable_vector::length(list)" "g()"}]
+    seHygiene [seTwoSites "import std::mutable_vector\n\n" \
+        {"list = std::mutable_vector::from_list([1])" "std::mutable_vector::push(list, 2)" "fn g() -> int:" "    std::mutable_vector::length(list)" "g()"} \
+        {"list = std::mutable_vector::from_list([2])" "std::mutable_vector::push(list, 3)" "fn g() -> int:" "    std::mutable_vector::length(list)" "g()"}]
 } -result {{} {MUTABLE-PLACE-CAPTURE MUTABLE-PLACE-CAPTURE} {`list` is a MutableVector place (its function mutates it in place), which a nested function cannot capture: the nested function would observe a binding that changes, and a vector is a value, not a shared reference (pass it as an argument: the callee gets its own logical copy)}}
 
 test se-equal-hygiene-context-trait-binding {CONTEXT-TRAIT-MISUSE names the context-trait binding by its source spelling} -body {
@@ -1054,11 +1054,11 @@ test se-equal-hygiene-module-function {a module's own function hygiene renamed b
     withPrivateLibrary {
         set f [open [file join $::core::libraryDir hm.bot] w]
         fconfigure $f -encoding utf-8
-        puts -nonewline $f "import compiler\n\nfn want(v: int) -> int:\n    v\n\n[seSite a {"list = 5" "x = [1]" {want("s")}}]\nfn list(v: int) -> int:\n    v\n\n[seSite b {"fn g(x) -> int:" "    list(x)" "y = [2]" {g("s")}}]"
+        puts -nonewline $f "import std::compiler\n\nfn want(v: int) -> int:\n    v\n\n[seSite a {"list = 5" "x = [1]" {want("s")}}]\nfn list(v: int) -> int:\n    v\n\n[seSite b {"fn g(x) -> int:" "    list(x)" "y = [2]" {g("s")}}]"
         close $f
-        seHygiene "import hm\n0\n"
+        seHygiene "import std::hm\n0\n"
     }
-} -result {{} {TYPE TYPE} {argument for parameter "x" cannot be proven to satisfy int, the parameter type inferred from the function body (argument type: str); inferred from the function body: argument 1 of hm::list (declared int) requires int (at 18:18)}}
+} -result {{} {TYPE TYPE} {argument for parameter "x" cannot be proven to satisfy int, the parameter type inferred from the function body (argument type: str); inferred from the function body: argument 1 of std::hm::list (declared int) requires int (at 18:18)}}
 
 # A trait-polymorphic function is declared at the top level only
 # (TRAIT-NESTED-POLYMORPHIC): its rename counts the renames of the sites
@@ -1072,31 +1072,31 @@ test se-equal-hygiene-trait-function-value {TRAIT-POLYMORPHIC-FUNCTION-VALUE nam
 } -result {{} {TYPE TRAIT-POLYMORPHIC-FUNCTION-VALUE} {list is a trait-polymorphic function (a parameter or its result is a trait): it can be called directly or through an immutable alias, but not used as a general function value, which has no place for the compile-time witnesses its calls need (there is no runtime trait dispatch)}}
 
 test se-equal-hygiene-trait-function-alias {the binding statement a body ends with, whose value denotes a trait-polymorphic function, is named by its source spelling} -body {
-    set text "import compiler\n\n$::seNamed[seSite a {"list = 5" "x = [1]" {want("s")}}]"
+    set text "import std::compiler\n\n$::seNamed[seSite a {"list = 5" "x = [1]" {want("s")}}]"
     append text "fn describe(value: Named) -> str:\n    value.name()\n\n"
-    append text "fn b() errors compiler::CompilerError:\n    static compile:\n        y = \[2\]\n        list = describe\n\n"
-    append text "ra = a():\n    on compiler::CompilerError:\n        -1\nb():\n    on compiler::CompilerError:\n        unit\nra\n"
+    append text "fn b() errors std::compiler::CompilerError:\n    static compile:\n        y = \[2\]\n        list = describe\n\n"
+    append text "ra = a():\n    on std::compiler::CompilerError:\n        -1\nb():\n    on std::compiler::CompilerError:\n        unit\nra\n"
     seHygiene $text
 } -result {{} {TYPE TRAIT-POLYMORPHIC-FUNCTION-VALUE} {"list" is the value of this body, but it denotes the trait-polymorphic function describe, which is not a general callable value (its calls need compile-time witnesses; there is no runtime trait dispatch): call it directly}}
 
 test se-equal-hygiene-trait-witness {a trait view's parameter witness is named by the parameter's source spelling (hir::traits::ShowWitness): a site inside a trait-polymorphic function, whose parameter `list` the site's list literal renames} -body {
-    set text "import compiler\n\n$::seNamed[seSite a {"list = 5" "x = [1]" {want("s")}}]"
-    append text "fn pick(list: Named, b: Named, flag: bool) -> Named errors compiler::CompilerError:\n    static compile:\n        y = \[2\]\n        if flag:\n            list\n        else:\n            b\n\n0\n"
+    set text "import std::compiler\n\n$::seNamed[seSite a {"list = 5" "x = [1]" {want("s")}}]"
+    append text "fn pick(list: Named, b: Named, flag: bool) -> Named errors std::compiler::CompilerError:\n    static compile:\n        y = \[2\]\n        if flag:\n            list\n        else:\n            b\n\n0\n"
     seHygiene $text
 } -result {{} {TYPE TRAIT-WITNESS-JOIN} {expression has trait type Named but may contain either the witness of parameter "list" of pick or the witness of parameter "b" of pick; heterogeneous trait values are not supported (there is no erased trait representation to hold a run-time choice between witnesses)}}
 
 test se-equal-erased-witness {the erased-callable contract is a set of errors, which loses one only once every contribution erasing it is gone: it depends on one witness per error (the contribution last in post-order): here the witness, in w(), erases mk()'s result, which never exists once the block in mk() is rejected, and the other contributor of E2, l(), fails as well. The consumer waits for both (the waiting rule) and is accepted: the final program erases nothing. Before the rule it was judged while l()'s erasure was still in the program and rejected (UNHANDLED-ERROR) -- the batched decisions are the sequential ones either way. store() escapes (`keep`), so what its parameter may hold is no input of the contract boundary (P:input), whose own witness link would hold l() back as well} -body {
-    set text "import compiler\nimport list\n\nerror E1\nerror E2\n\nfn harmless() -> int:\n    1\n\nfn raise2() -> int errors E2:\n    fail E2\n\nfn raise2b() -> int errors E2:\n    fail E2\n\nfn store(f) -> int:\n    1\n\nfn want(x: int) -> int:\n    x\n\nfn mk() errors compiler::CompilerError:\n    static compile:\n        want(\"z\")\n        raise2b\n\n"
-    append text [seSite y {"fn run(fs: List\[any\]) errors IndexNotFound:" "    f = list::at(fs, 0)" "    f()" "r = run(\[harmless\]):" "    on IndexNotFound:" "        -2" "1"}]
+    set text "import std::compiler\nimport std::list\n\nerror E1\nerror E2\n\nfn harmless() -> int:\n    1\n\nfn raise2() -> int errors E2:\n    fail E2\n\nfn raise2b() -> int errors E2:\n    fail E2\n\nfn store(f) -> int:\n    1\n\nfn want(x: int) -> int:\n    x\n\nfn mk() errors std::compiler::CompilerError:\n    static compile:\n        want(\"z\")\n        raise2b\n\n"
+    append text [seSite y {"fn run(fs: List\[any\]) errors IndexNotFound:" "    f = std::list::at(fs, 0)" "    f()" "r = run(\[harmless\]):" "    on IndexNotFound:" "        -2" "1"}]
     append text [seSite l {"s = store(raise2)" {want("l")}}]
     append text [seSite w {"store(mk())"}]
-    append text "keep = \[store\]\nr1 = y():\n    on compiler::CompilerError:\n        -1\nr2 = l():\n    on compiler::CompilerError:\n        -1\nr3 = w():\n    on compiler::CompilerError:\n        -1\nr1 + r2 + r3\n"
+    append text "keep = \[store\]\nr1 = y():\n    on std::compiler::CompilerError:\n        -1\nr2 = l():\n    on std::compiler::CompilerError:\n        -1\nr3 = w():\n    on std::compiler::CompilerError:\n        -1\nr1 + r2 + r3\n"
     list [seSame $text] [seOutcomes $text]
 } -result {{} {TYPE accepted TYPE accepted}}
 
-test se-equal-subsume-gate {a block whose first diagnostic is a contract-boundary report depends on what the program erases: mutable_array::generate given Fn{args: [int, any], ...}, and a coroutine handle leaving its construction in make (a function used as a value, whose parameter stands for whatever the program erases), are TYPE while the contributor erases raise_e and accepted once it is rejected -- judged after that rejection, as in the sequential order (a block whose first diagnostic came before the completion walk has no such edge: se-builds-subsume-gate)} -body {
+test se-equal-subsume-gate {a block whose first diagnostic is a contract-boundary report depends on what the program erases: std::mutable_array::generate given Fn{args: [int, any], ...}, and a coroutine handle leaving its construction in make (a function used as a value, whose parameter stands for whatever the program erases), are TYPE while the contributor erases raise_e and accepted once it is rejected -- judged after that rejection, as in the sequential order (a block whose first diagnostic came before the completion walk has no such edge: se-builds-subsume-gate)} -body {
     set results {}
-    foreach body [list {"fn adopt(f: Fn{args: [int, any], return: any, errors: []}) -> int:" "    1" "adopt(mutable_array::generate)"} \
+    foreach body [list {"fn adopt(f: Fn{args: [int, any], return: any, errors: []}) -> int:" "    1" "adopt(std::mutable_array::generate)"} \
             {"fn make(f) -> int:" "    coroutine {step, first} = worker(f)" "    drive(step)" "keep = make" "0"}] {
         set text [seBoundaryProgram contributor $::seBoundaryContributor site $body]
         set open [seBoundaryProgram contributor [lrange $::seBoundaryContributor 0 2] site $body]
@@ -1105,7 +1105,7 @@ test se-equal-subsume-gate {a block whose first diagnostic is a contract-boundar
     set results
 } -result {{} {TYPE accepted} {accepted TYPE} {} {TYPE accepted} {accepted TYPE}}
 
-test se-equal-method-trial {a method-style call's trial builds judge the contract-boundary check of each argument at that candidate's parameter type: mutable_array::generate (it calls its second argument) given apply's Fn type, which leaves that argument uncontracted, may raise whatever the program erases -- so only pick::apply fits while the contributor erases raise_e, and both fit (AMBIGUOUS-METHOD-CALL) once it is rejected. The call's region depends on what the program erases (method-trial) and its decision is not reused across that rejection; the analysis once followed only the chosen candidate's parameter types, at a block's own positions, and the batched run accepted the block} -body {
+test se-equal-method-trial {a method-style call's trial builds judge the contract-boundary check of each argument at that candidate's parameter type: std::mutable_array::generate (it calls its second argument) given apply's Fn type, which leaves that argument uncontracted, may raise whatever the program erases -- so only std::pick::apply fits while the contributor erases raise_e, and both fit (AMBIGUOUS-METHOD-CALL) once it is rejected. The call's region depends on what the program erases (method-trial) and its decision is not reused across that rejection; the analysis once followed only the chosen candidate's parameter types, at a block's own positions, and the batched run accepted the block} -body {
     withPrivateLibrary {
         set f [open [file join $::core::libraryDir pick.bot] w]
         fconfigure $f -encoding utf-8
@@ -1114,9 +1114,9 @@ test se-equal-method-trial {a method-style call's trial builds judge the contrac
         set lexical "fn apply(n: int, f: Fn\{args: \[int, any\], return: any, errors: \[\]\}) -> int:\n    n\n\nfn call(f, x):\n"
         set texts {}
         foreach contributor [list $::seBoundaryContributor [lrange $::seBoundaryContributor 0 2]] {
-            lappend texts [string map [list "import mutable_array\n" "import mutable_array\nimport pick\n" \
+            lappend texts [string map [list "import std::mutable_array\n" "import std::mutable_array\nimport std::pick\n" \
                 "fn call(f, x):\n" $lexical] \
-                [seBoundaryProgram contributor $contributor trial {"n = 3" "n.apply(mutable_array::generate)"}]]
+                [seBoundaryProgram contributor $contributor trial {"n = 3" "n.apply(std::mutable_array::generate)"}]]
         }
         list [seSame [lindex $texts 0]] [seOutcomes [lindex $texts 0]] [seOutcomes [lindex $texts 1]]
     }
@@ -1165,14 +1165,14 @@ test se-builds-erased {the erased-callable contract: a contributor and a consume
         lappend names t$i
     }
     foreach name $names {
-        append text "r_$name = ${name}():\n    on compiler::CompilerError:\n        -1\n"
+        append text "r_$name = ${name}():\n    on std::compiler::CompilerError:\n        -1\n"
     }
     append text "0\n"
     list [lindex [seEcon $text] 0] [lindex [seEcon $text legacy] 0]
 } -result {2 21}
 
 test se-builds-contract {verified structural contracts are not consumers of the erased-callable contract: through Fn parameters, struct fields and vector elements, 12 failures beside an erasing body are decided together} -body {
-    set text "import compiler\nimport list\n\nerror E1\n\nfn raise1(x) -> int errors E1:\n    if x == 1:\n        fail E1\n    0\n\nfn call(f, x):\n    f(x)\n\nstruct Handler:\n    run: Fn{args: \[int\], return: int, errors: \[\]}\n\nfn apply(f: Fn{args: \[int\], return: int, errors: \[\]}, x: int) -> int:\n    f(x)\n\nfn dispatch(h: Handler, x: int) -> int:\n    (h.run)(x)\n\n"
+    set text "import std::compiler\nimport std::list\n\nerror E1\n\nfn raise1(x) -> int errors E1:\n    if x == 1:\n        fail E1\n    0\n\nfn call(f, x):\n    f(x)\n\nstruct Handler:\n    run: Fn{args: \[int\], return: int, errors: \[\]}\n\nfn apply(f: Fn{args: \[int\], return: int, errors: \[\]}, x: int) -> int:\n    f(x)\n\nfn dispatch(h: Handler, x: int) -> int:\n    (h.run)(x)\n\n"
     append text [seSite eraser {"fn gen(x) -> int errors E1:" "    call(raise1, x)" "r = gen(0):" "    on E1:" "        0" "r"}]
     set names eraser
     for {set i 0} {$i < 12} {incr i} {
@@ -1185,7 +1185,7 @@ test se-builds-contract {verified structural contracts are not consumers of the 
         lappend names t$i
     }
     foreach name $names {
-        append text "r_$name = ${name}():\n    on compiler::CompilerError:\n        -1\n"
+        append text "r_$name = ${name}():\n    on std::compiler::CompilerError:\n        -1\n"
     }
     append text "0\n"
     list [seSame $text] [lindex [seEcon $text] 0]
@@ -1195,7 +1195,7 @@ test se-builds-contributor-early {a contributor rejected by resolution leaves no
     set text $::seErased
     append text [seSite contributor [concat $::seContributor {missing_name}]]
     append text [seSite consumer $::seConsumer]
-    append text "r1 = contributor():\n    on compiler::CompilerError:\n        -1\nr2 = consumer():\n    on compiler::CompilerError:\n        -1\n0\n"
+    append text "r1 = contributor():\n    on std::compiler::CompilerError:\n        -1\nr2 = consumer():\n    on std::compiler::CompilerError:\n        -1\n0\n"
     list [seSame $text] [seOutcomes $text] [lindex [seEcon $text] 0]
 } -result {{} {UNBOUND accepted} 2}
 
@@ -1208,7 +1208,7 @@ test se-builds-contributor-checked {a contributor rejected by the checker beside
         lappend names t$i
     }
     foreach name $names {
-        append text "r_$name = ${name}():\n    on compiler::CompilerError:\n        -1\n"
+        append text "r_$name = ${name}():\n    on std::compiler::CompilerError:\n        -1\n"
     }
     append text "0\n"
     list [seSame $text] [lsort -unique [seOutcomes $text]] [lindex [seEcon $text] 0]
@@ -1261,7 +1261,7 @@ test se-builds-plan-instances {a call of a trait-polymorphic function that has i
         [lrange [seEcon $::sePlanInstances sequential] 0 1] [seSame $::sePlanInstances 0] [seOutcomes $::sePlanInstances]
 } -result {2 3 {} {3 4} {} {TYPE accepted accepted TYPE}}
 
-test se-builds-erased-empty {sites that each pass a function to the untyped list::any? -- erasure sites of the erased-callable contract and callers of its consumer -- are decided together: rejecting one removes nothing from the contract when its function raises nothing (it erased nothing), or when another site still erases the same error (the contract is a set of errors), so no other is judged again; nor does a function passed to an untyped parameter (run(bN)) put its body into the contract (what it carries is its declared errors)} -body {
+test se-builds-erased-empty {sites that each pass a function to the untyped std::list::any? -- erasure sites of the erased-callable contract and callers of its consumer -- are decided together: rejecting one removes nothing from the contract when its function raises nothing (it erased nothing), or when another site still erases the same error (the contract is a set of errors), so no other is judged again; nor does a function passed to an untyped parameter (run(bN)) put its body into the contract (what it carries is its declared errors)} -body {
     set results {}
     foreach k {3 6} {
         foreach errors {0 1} {
@@ -1287,33 +1287,33 @@ test se-builds-coroutine-construction {a coroutine construction whose thunk capt
     set text $::seErased$producer
     append text [seSite contributor [concat $::seContributor [seTypeFail 99]]]
     append text [seSite moved $move]
-    append text "r1 = contributor():\n    on compiler::CompilerError:\n        -1\nr2 = moved():\n    on compiler::CompilerError:\n        -1\n0\n"
+    append text "r1 = contributor():\n    on std::compiler::CompilerError:\n        -1\nr2 = moved():\n    on std::compiler::CompilerError:\n        -1\n0\n"
     list [seSame $text] [seOutcomes $text] [lindex [seEcon $text] 0]
 } -result {{} {TYPE USE-AFTER-MOVE} 2}
 
-test se-builds-subsume-gate {a block whose first diagnostic was reported before the completion walk keeps it whatever the program erases (every contract-boundary report is appended after it): three blocks failing first with a checker TYPE, each also holding a check that reads what the program erases (mutable_array::generate given Fn{args: [int, any], ...}), are rejected in the build that rejects the contributor -- 2 rounds, where waiting for it took 3 (the sequential order 5)} -body {
-    set early {"fn adopt(f: Fn{args: [int, any], return: any, errors: []}) -> int:" "    1" "a = adopt(mutable_array::generate)" "want_int(\"s\")"}
+test se-builds-subsume-gate {a block whose first diagnostic was reported before the completion walk keeps it whatever the program erases (every contract-boundary report is appended after it): three blocks failing first with a checker TYPE, each also holding a check that reads what the program erases (std::mutable_array::generate given Fn{args: [int, any], ...}), are rejected in the build that rejects the contributor -- 2 rounds, where waiting for it took 3 (the sequential order 5)} -body {
+    set early {"fn adopt(f: Fn{args: [int, any], return: any, errors: []}) -> int:" "    1" "a = adopt(std::mutable_array::generate)" "want_int(\"s\")"}
     set text [seBoundaryProgram contributor $::seBoundaryContributor g1 $early g2 $early g3 $early]
     list [seSame $text 0] [seOutcomes $text] [lindex [seEcon $text] 0]
 } -result {{} {TYPE TYPE TYPE TYPE} 2}
 
 test se-builds-coroutine-checks {a coroutine handle's check reads what the program erases only through an uncontracted capture of a thunk constructed in the body: an accepted block passing on a handle it receives as a parameter (no construction: no check) and one whose thunk captures nothing does not wait for the contributor's rejection, nor does the failing block after it in the same function -- 2 rounds, where an edge for every handle took 3 (se-builds-coroutine-construction's block fails first before the completion walk, which the gate already covers)} -body {
     set ok {"fn relay(c: Coroutine{args: [M], return: Ev, errors: []}) -> int:" "    drive(c)" "fn local() -> int:" "    coroutine {step: s} = counter()" "    drive(s)" "local()"}
-    set host "fn host() -> int errors compiler::CompilerError:\n    a = static compile:\n"
+    set host "fn host() -> int errors std::compiler::CompilerError:\n    a = static compile:\n"
     foreach line $ok {
         append host "        $line\n"
     }
     append host "    b = static compile:\n        want_int(\"s\")\n    a + b\n\n"
     set text "$::seBoundary[seSite contributor $::seBoundaryContributor]$host"
     foreach name {contributor host} {
-        append text "r_$name = ${name}():\n    on compiler::CompilerError:\n        -1\n"
+        append text "r_$name = ${name}():\n    on std::compiler::CompilerError:\n        -1\n"
     }
     append text "0\n"
     list [seSame $text 0] [seOutcomes $text] [lindex [seEcon $text] 0]
 } -result {{} {TYPE accepted TYPE} 2}
 
 test se-method-reuse {method-style call decisions are reused across rounds: fewer trial builds than deciding afresh, and the audit (every seeded round built again unseeded) finds the same program} -body {
-    set text "import compiler\nimport list\nimport str\n\n"
+    set text "import std::compiler\nimport std::list\nimport std::str\n\n"
     set names {}
     for {set i 0} {$i < 6} {incr i} {
         lappend names t$i
@@ -1326,7 +1326,7 @@ test se-method-reuse {method-style call decisions are reused across rounds: fewe
     append text [seSite late [list "fn w(x: int) -> int:" "    x" "w(\"s\")"]]
     lappend names late
     foreach name $names {
-        append text "r_$name = ${name}():\n    on compiler::CompilerError:\n        -1\n"
+        append text "r_$name = ${name}():\n    on std::compiler::CompilerError:\n        -1\n"
     }
     append text "0\n"
     set reuse [seEcon $text]
@@ -1346,7 +1346,7 @@ test se-method-reuse {method-style call decisions are reused across rounds: fewe
 } -result {1 {} 1}
 
 test se-method-invalidated {a call whose receiver a rejected block changes is decided again, never reused: mk() is a List until its block is rejected, then never -- and xs.length() becomes ambiguous} -body {
-    set text "import compiler\nimport list\nimport str\n\nfn mk() errors compiler::CompilerError:\n    static compile:\n[join [lmap l [seTypeFail 0] {string cat "        " $l}] \n]\n        \[1, 2\]\n\nfn outside() -> int errors compiler::CompilerError:\n    xs = mk()\n    xs.length()\n\n[seSite other [seTypeFail 1]]r = outside():\n    on compiler::CompilerError:\n        -1\nr2 = other():\n    on compiler::CompilerError:\n        -1\nr + r2\n"
+    set text "import std::compiler\nimport std::list\nimport std::str\n\nfn mk() errors std::compiler::CompilerError:\n    static compile:\n[join [lmap l [seTypeFail 0] {string cat "        " $l}] \n]\n        \[1, 2\]\n\nfn outside() -> int errors std::compiler::CompilerError:\n    xs = mk()\n    xs.length()\n\n[seSite other [seTypeFail 1]]r = outside():\n    on std::compiler::CompilerError:\n        -1\nr2 = other():\n    on std::compiler::CompilerError:\n        -1\nr + r2\n"
     set a [sdCompile batched $text]
     set hir::static::methodReuse 0
     try {
@@ -1361,8 +1361,8 @@ test se-build-reuse-identical {a method-call decision build that would repeat th
     set programs [list \
         [seSuite 10 type 1] \
         "$::seErased[seSite a $::seContributor][seSite b $::seConsumer][seSite c [seTypeFail 0]]0\n" \
-        "import list\nimport str\n\nfn f(xs: List\[int\]) -> int:\n    xs.length()\n\nfn g(xs) -> int:\n    xs.length()\n\nxs = \[1, 2\]\ns = \"ab\"\nxs.length() + s.length() + f(\[3\])\n" \
-        "import list\nimport str\n\nxs = \[1, 2\]\ns = \"ab\"\nxs.length() + s.length()\n" \
+        "import std::list\nimport std::str\n\nfn f(xs: List\[int\]) -> int:\n    xs.length()\n\nfn g(xs) -> int:\n    xs.length()\n\nxs = \[1, 2\]\ns = \"ab\"\nxs.length() + s.length() + f(\[3\])\n" \
+        "import std::list\nimport std::str\n\nxs = \[1, 2\]\ns = \"ab\"\nxs.length() + s.length()\n" \
         "trait Shape:\n    fn area(shape: Shape) -> int\n\nstruct Square:\n    side: int\n\nfn area(s: Square) -> int:\n    s.side * s.side\n\nfn measure(s: Shape) -> int:\n    s.area()\n\nmeasure(Square \{side: 3\})\n" \
         "fn producer():\n    yield 1\n    2\n\ncoroutine \{step\} = producer()\nstep()\n"]
     set results {}
@@ -1382,13 +1382,13 @@ test se-build-reuse-identical {a method-call decision build that would repeat th
 # A chain of method-style calls on one receiver: each `arr.at(i)` narrows
 # `arr` for the statements after it, so the receiver of the next is stable
 # only once the call before is decided -- one link per pass. Every link
-# chooses its second candidate (mutable_array::at), so each pass's trial 1
+# chooses its second candidate (std::mutable_array::at), so each pass's trial 1
 # has the configuration the pass before built (hir::MethodConfig). And a
 # chain whose links choose different candidates (swap's first, at's
 # second): its second pass's trial 0 is the build the decision started
 # from, its third pass's trial 1 the second pass's.
-set ::seMethodChain "import list\nimport mutable_array\nimport mutable_vector\n\nfn f() -> List\[int\] errors IndexNotFound:\n    arr = mutable_array::create(3, 0)\n    x = arr.at(0)\n    y = arr.at(1)\n    z = arr.at(2)\n    \[x, y, z\]\n\nr = f():\n    on IndexNotFound:\n        \[\]\nr\n"
-set ::seMethodMixed "import list\nimport mutable_array\nimport mutable_vector\n\nfn f() -> List\[int\] errors IndexNotFound:\n    arr = mutable_array::create(3, 0)\n    old = arr.swap(0, 5)\n    x = arr.at(0)\n    y = arr.at(1)\n    \[old, x, y\]\n\nr = f():\n    on IndexNotFound:\n        \[\]\nr\n"
+set ::seMethodChain "import std::list\nimport std::mutable_array\nimport std::mutable_vector\n\nfn f() -> List\[int\] errors IndexNotFound:\n    arr = std::mutable_array::create(3, 0)\n    x = arr.at(0)\n    y = arr.at(1)\n    z = arr.at(2)\n    \[x, y, z\]\n\nr = f():\n    on IndexNotFound:\n        \[\]\nr\n"
+set ::seMethodMixed "import std::list\nimport std::mutable_array\nimport std::mutable_vector\n\nfn f() -> List\[int\] errors IndexNotFound:\n    arr = std::mutable_array::create(3, 0)\n    old = arr.swap(0, 5)\n    x = arr.at(0)\n    y = arr.at(1)\n    \[old, x, y\]\n\nr = f():\n    on IndexNotFound:\n        \[\]\nr\n"
 
 test se-method-memo {a method-call decision builds no configuration twice: a trial whose configuration an earlier build of the decision had is read from what was recorded of that build (hir::MethodConfig, hir::MethodTrialRecord) -- the decided program is the one building every trial gives, and the audit (every reused build made again) finds the same} -body {
     set results {}
@@ -1472,7 +1472,7 @@ test se-simulate-cycle {failing sites that wait on each other (each consumes a c
 # Scheduling diagnostics
 
 test se-trace {the trace names every round's rejections and why a failing block waits: here, on the block whose use of a captured untyped parameter fails it} -body {
-    set text "import compiler\nimport str\n\nfn want_int(x: int) -> int:\n    x\n\nfn register(n) -> int:\n    fn a() -> int errors compiler::CompilerError:\n        static compile:\n            q = str::length(n)\n            want_int(\"s\")\n    fn b() -> int errors compiler::CompilerError:\n        static compile:\n            want_int(n)\n    ra = a():\n        on compiler::CompilerError:\n            -1\n    rb = b():\n        on compiler::CompilerError:\n            -1\n    ra + rb\n\nregister(1)\n"
+    set text "import std::compiler\nimport std::str\n\nfn want_int(x: int) -> int:\n    x\n\nfn register(n) -> int:\n    fn a() -> int errors std::compiler::CompilerError:\n        static compile:\n            q = std::str::length(n)\n            want_int(\"s\")\n    fn b() -> int errors std::compiler::CompilerError:\n        static compile:\n            want_int(n)\n    ra = a():\n        on std::compiler::CompilerError:\n            -1\n    rb = b():\n        on std::compiler::CompilerError:\n            -1\n    ra + rb\n\nregister(1)\n"
     set hir::static::trace 1
     try {
         set text [hir::static::FormatTrace [dict get [seHir $text] staticStats]]
@@ -1506,7 +1506,7 @@ test se-property-nested-entry {a nested function is analyzed from its own entry:
 } -result {KNOWN-ERROR USE-AFTER-MOVE}
 
 test se-property-capture-narrowing {a captured binding is seen with the facts its mentions before the definition establish (a condition, a native's parameter types), and with no others -- what the capture edges of the analysis follow} -body {
-    set text "import list\n\nfn want(x: int) -> int:\n    x\n\nfn f(things: List\[any\]) -> int errors IndexNotFound:\n    v = list::at(things, 0)\n    if integer?(v):\n        fn g() -> int:\n            want(v)\n        g()\n    else:\n        0\n\nfn h(things: List\[any\]) -> int errors IndexNotFound:\n    w = list::at(things, 0)\n    w + 1\n    fn k() -> int:\n        want(w)\n    k()\n\nfn m(things: List\[any\]) -> int errors IndexNotFound:\n    u = list::at(things, 0)\n    fn q() -> int:\n        want(u)\n    q()\n\nfn all() -> int errors IndexNotFound:\n    f(\[1\]) + h(\[2\]) + m(\[3\])\n\nr = all():\n    on IndexNotFound:\n        0\nr\n"
+    set text "import std::list\n\nfn want(x: int) -> int:\n    x\n\nfn f(things: List\[any\]) -> int errors IndexNotFound:\n    v = std::list::at(things, 0)\n    if integer?(v):\n        fn g() -> int:\n            want(v)\n        g()\n    else:\n        0\n\nfn h(things: List\[any\]) -> int errors IndexNotFound:\n    w = std::list::at(things, 0)\n    w + 1\n    fn k() -> int:\n        want(w)\n    k()\n\nfn m(things: List\[any\]) -> int errors IndexNotFound:\n    u = std::list::at(things, 0)\n    fn q() -> int:\n        want(u)\n    q()\n\nfn all() -> int errors IndexNotFound:\n    f(\[1\]) + h(\[2\]) + m(\[3\])\n\nr = all():\n    on IndexNotFound:\n        0\nr\n"
     lmap d [dict get [surface::compile $text -strict 0 -warnings off] diagnostics] {
         list [dict get $d kind] [dict get [hir::static::PrimaryOrigin [surface::compile $text -strict 0 -warnings off] $d] line]
     }
@@ -1573,11 +1573,11 @@ test se-property-demotion-keeps-diagnostics {a demoted trusted contract changes 
 # contract its body's seeded types make inferable), a coroutine, and a
 # static block whose build demotes.
 set ::seDemoting [dict create \
-    forward "import mutable_array\nfn first(xs: MutableArray\[str\]) -> str errors IndexNotFound:\n    mutable_array::at(xs, 0)\nfn fwd(xs) errors IndexNotFound:\n    first(xs)\nr = fwd(mutable_array::create(1, 5)):\n    on IndexNotFound:\n        \"\"\nr\n" \
+    forward "import std::mutable_array\nfn first(xs: MutableArray\[str\]) -> str errors IndexNotFound:\n    std::mutable_array::at(xs, 0)\nfn fwd(xs) errors IndexNotFound:\n    first(xs)\nr = fwd(std::mutable_array::create(1, 5)):\n    on IndexNotFound:\n        \"\"\nr\n" \
     kept "fn take_int(b: int) -> int:\n    b\nfn f(p, g):\n    take_int(p)\n    g(p)\nfn keep(y):\n    take_int(y)\nfn h(n):\n    n + 1\nkeep(3) + f(\"a\", h)\n" \
-    later "import str\nfn take_int(b: int) -> int:\n    b\nfn f(p, g):\n    take_int(p)\n    g(p)\nfn h(s: str) -> int:\n    str::length(s)\nf(5, h)\n" \
+    later "import std::str\nfn take_int(b: int) -> int:\n    b\nfn f(p, g):\n    take_int(p)\n    g(p)\nfn h(s: str) -> int:\n    std::str::length(s)\nf(5, h)\n" \
     coroutine "fn take_int(b: int) -> int:\n    b\nfn fwd(x):\n    take_int(x)\nfn producer(v):\n    yield fwd(v)\n    2\ncoroutine \{step\} = producer(\"a\")\nstep()\n" \
-    static "import compiler\nimport mutable_array\nfn wrong() errors compiler::CompilerError:\n    static compile:\n        fn first(xs: MutableArray\[str\]) -> str errors IndexNotFound:\n            mutable_array::at(xs, 0)\n        fn fwd(xs) errors IndexNotFound:\n            first(xs)\n        r = fwd(mutable_array::create(1, 5)):\n            on IndexNotFound:\n                \"\"\n        r\nfn right() errors compiler::CompilerError:\n    static compile:\n        1 + 1\nright()\n"]
+    static "import std::compiler\nimport std::mutable_array\nfn wrong() errors std::compiler::CompilerError:\n    static compile:\n        fn first(xs: MutableArray\[str\]) -> str errors IndexNotFound:\n            std::mutable_array::at(xs, 0)\n        fn fwd(xs) errors IndexNotFound:\n            first(xs)\n        r = fwd(std::mutable_array::create(1, 5)):\n            on IndexNotFound:\n                \"\"\n        r\nfn right() errors std::compiler::CompilerError:\n    static compile:\n        1 + 1\nright()\n"]
 
 # SOURCE's HIR (-strict 0, warnings off) and, per hir::check it ran that
 # demoted, {COROUTINE-ANALYSES TYPINGS DEMOTED}; the decisions' timing zeroed.

@@ -55,7 +55,7 @@ done
 tclsh9.0 $D/tools/closedness.tcl bench/refined-checks.bot bench/test-selection.bot bench/lex-strategy.bot bench/source-checks.bot bench/sum-refined.bot > "$out/closedness-after.txt"
 
 # 4b. Per-function op counts of the changed scanner functions.
-python3 $D/tools/opcounts.py "$scratch/nir-before/refined-checks.nir" "$scratch/nir-after/refined-checks.nir" '^(char_at|domain\?|local_char\?|scan_while|tld\?|web::emailish\?)<' > "$out/opcounts-refined-checks.txt"
+python3 $D/tools/opcounts.py "$scratch/nir-before/refined-checks.nir" "$scratch/nir-after/refined-checks.nir" '^(char_at|domain\?|local_char\?|scan_while|tld\?|std::web::emailish\?)<' > "$out/opcounts-refined-checks.txt"
 python3 $D/tools/opcounts.py "$scratch/nir-before/uri-steady.nir" "$scratch/nir-after/uri-steady.nir" '^repeat_uri<' > "$out/opcounts-uri-steady.txt"
 
 # 4c. The specialization-budget probe (median of 5 lowering times per row).

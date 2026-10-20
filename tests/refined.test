@@ -10,7 +10,7 @@
 # Source-level refinement types (`refined type`, proof-producing functions)
 # are a different mechanism -- nominal, proven, never tested at run time --
 # and are tested in refinement-values.test (REFINEMENT-VALUES.md). This file
-# used to test lib/web.tcl's Tcl-registered String refinements (Emailish,
+# used to test stdlib/web.tcl's Tcl-registered String refinements (Emailish,
 # UriQueryValue), their runtime "evidence" and the uriEscape native; all of
 # those are gone.
 
@@ -66,8 +66,8 @@ test refined-6 {string transformations discard refinements} -body {
         {bind x {const str abc}}
         {if {call {ref non_empty?} {ref x}}
             {block {}
-                {bind lower {call {ref str::lowercase} {ref x}}}
-                {bind joined {call {ref str::concat} {ref x} {const str !}}}
+                {bind lower {call {ref std::str::lowercase} {ref x}}}
+                {bind joined {call {ref std::str::concat} {ref x} {const str !}}}
                 {call {ref list} {ref lower} {ref joined}}}
             {block {} {const none}}}
     }
@@ -94,11 +94,11 @@ test refined-15 {refinement from a flow fact: a refined parameter proves its arg
     list [run {*}$p] [differential $p] [boundType $p after]
 } -result {{"abc"} same {refined str NonEmpty}}
 
-test refined-library-1 {lib/ has no Tcl-registered library left} -body {
+test refined-library-1 {stdlib/ has no Tcl-registered library left} -body {
     # The optional Tcl library mechanism (core::loadLibrary, `# requires:`)
-    # remains, but its only library, lib/web.tcl, was replaced by source
-    # declarations in lib/web.bot (REFINEMENT-VALUES.md).
-    list [glob -nocomplain -directory [file join $::projectRoot lib] *.tcl] \
+    # remains, but its only library, stdlib/web.tcl, was replaced by source
+    # declarations in stdlib/web.bot (REFINEMENT-VALUES.md).
+    list [glob -nocomplain -directory [file join $::projectRoot stdlib] *.tcl] \
          [catch {core::loadLibrary web} m] $m
 } -match glob -result {{} 1 {core::loadLibrary: no library "web" in *}}
 
@@ -192,7 +192,7 @@ test refined-type-test-contract {the reference runtime verifies a type test's an
 } -result {{error {CORE CONTRACT TYPE} {test-lying-int?: contract violation: as a test of int it must return false for "a", returned true} {}} {value false {}}}
 
 test refined-16 {substring range errors} -body {
-    differential {{call {ref str::substring} {const str abc} {const 2} {const 5}}}
+    differential {{call {ref std::str::substring} {const str abc} {const 2} {const 5}}}
 } -result same
 
 cleanupTests

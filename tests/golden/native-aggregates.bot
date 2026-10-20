@@ -4,7 +4,7 @@
 # with a refinement a caller proved or with a tiny function it inlines, the
 # program's value is the one the language defines, the same on every backend.
 #
-#   * MutableArray. `mutable_array::allocate(n)` has capacity n and every
+#   * MutableArray. `std::mutable_array::allocate(n)` has capacity n and every
 #     fresh slot holds unit; `set` returns unit and `at` reads back what `set`
 #     wrote. An array is a value: a binding's copy never sees a later write
 #     to the original, and a callee's writes to its parameter stay in the
@@ -18,7 +18,7 @@
 #     later writes to the array do not change.
 #   * Builders over MutableArray (the shared declarations below). A geometric
 #     builder -- [storage, length], storage doubled by allocate + copy when
-#     full -- produces the same List as persistent list::append, for heap
+#     full -- produces the same List as persistent std::list::append, for heap
 #     elements too, and keeps values stored only in its arrays live through
 #     growth, copy and freeze. The chunked builder's chunked_copy_chunks
 #     writes the completed chunks into its own copy of `final`, so they never
@@ -34,8 +34,8 @@
 #     passed by one caller as a literal and by another as a List it has.
 #     Fields of every kind (Int, String, Bool, List, MutableArray) keep their
 #     values, also across a 2000-deep recursion that allocates at every step.
-#   * Refinements across calls. A callee's own web::emailish? check of an
-#     argument its caller proved web::Emailish answers true, and an argument
+#   * Refinements across calls. A callee's own std::web::emailish? check of an
+#     argument its caller proved std::web::Emailish answers true, and an argument
 #     the caller's check rejected never reaches it. (Whether the callee's
 #     check runs or is decided statically is not observable here: the Tcl
 #     test pins that a widened refinement fact decides no predicate.)
@@ -65,7 +65,7 @@
 #
 # Strictness: the Tcl programs of native-mutarray.test,
 # native-param-aggregate.test and native-tiny-leaf-inline.test are compiled
-# -strict 0; here they are strict, which changes three things. A list::at or
+# -strict 0; here they are strict, which changes three things. A std::list::at or
 # MutableArray operation the compiler cannot prove in range may raise its
 # declared error, so the functions that perform one declare it (`errors
 # IndexNotFound`, ...) and the outermost call handles it, turning the
@@ -78,28 +78,28 @@
 #
 # Imports: compiler and test for the framework; list, mutable_array and str
 # are the Tcl programs' own; web for native-refinement-propagation's
-# web::emailish?. Every call in the suite is qualified or a plain call (no
+# std::web::emailish?. Every call in the suite is qualified or a plain call (no
 # method syntax), so the suite-wide imports change no call's meaning.
-import compiler
-import list
-import mutable_array
-import str
-import test
-import web
+import std::compiler
+import std::list
+import std::mutable_array
+import std::str
+import std::test
+import std::web
 
 # ---------------------------------------------------------------------------
 # Shared declarations
 
 # native-mutarray.test's $builders prelude: a geometric builder [storage,
 # length] over MutableArray, a chunked builder [completed, current, filled]
-# with chunks of chunk_size() elements, and persistent list::append as the
+# with chunks of chunk_size() elements, and persistent std::list::append as the
 # baseline; `check(n)` fills each with the elements [i, "v"] for i in 0 ..
 # n - 1 and compares the geometric and the chunked List with the persistent
 # one. Shared by the builder tests and mutarray-gc-stress-1 (whose Tcl
 # program declares the same geometric functions). The `errors` clauses are
 # the strict port's; the code is the Tcl prelude's.
 fn geo_new():
-    [mutable_array::allocate(0), 0]
+    [std::mutable_array::allocate(0), 0]
 
 fn geo_new_capacity(capacity, length):
     doubled = capacity * 2
@@ -109,64 +109,64 @@ fn geo_new_capacity(capacity, length):
     doubled
 
 fn geo_grow(storage, length) errors UpperOverrun, LowerUnderrun:
-    capacity = mutable_array::capacity(storage)
+    capacity = std::mutable_array::capacity(storage)
     if length < capacity:
         return storage
 
     new_capacity = geo_new_capacity(capacity, length)
-    fresh = mutable_array::allocate(new_capacity)
-    mutable_array::copy(fresh, 0, storage, 0, length)
+    fresh = std::mutable_array::allocate(new_capacity)
+    std::mutable_array::copy(fresh, 0, storage, 0, length)
     fresh
 
 fn geo_append(builder, value) errors IndexNotFound, UpperOverrun, LowerUnderrun:
-    storage = list::at(builder, 0)
-    length = list::at(builder, 1)
+    storage = std::list::at(builder, 0)
+    length = std::list::at(builder, 1)
     grown = geo_grow(storage, length)
-    mutable_array::set(grown, length, value)
+    std::mutable_array::set(grown, length, value)
     [grown, length + 1]
 
 fn geo_finish(builder) errors IndexNotFound, UpperOverrun, LowerUnderrun:
-    storage = list::at(builder, 0)
-    length = list::at(builder, 1)
-    mutable_array::freeze(storage, length)
+    storage = std::list::at(builder, 0)
+    length = std::list::at(builder, 1)
+    std::mutable_array::freeze(storage, length)
 
 fn chunk_size():
     4
 
 fn chunked_new():
-    [[], mutable_array::allocate(chunk_size()), 0]
+    [[], std::mutable_array::allocate(chunk_size()), 0]
 
 fn chunked_append(builder, value) errors IndexNotFound:
-    completed = list::at(builder, 0)
-    current = list::at(builder, 1)
-    filled = list::at(builder, 2)
+    completed = std::list::at(builder, 0)
+    current = std::list::at(builder, 1)
+    filled = std::list::at(builder, 2)
     if filled == chunk_size():
-        more = list::append(completed, current)
-        fresh = mutable_array::allocate(chunk_size())
-        mutable_array::set(fresh, 0, value)
+        more = std::list::append(completed, current)
+        fresh = std::mutable_array::allocate(chunk_size())
+        std::mutable_array::set(fresh, 0, value)
         return [more, fresh, 1]
 
-    mutable_array::set(current, filled, value)
+    std::mutable_array::set(current, filled, value)
     [completed, current, filled + 1]
 
 # Writes into its parameter `final`: the caller's array never sees it.
 fn chunked_copy_chunks(chunks, index, final, offset) errors IndexNotFound, UpperOverrun, LowerUnderrun:
-    if index >= list::length(chunks):
+    if index >= std::list::length(chunks):
         return offset
 
-    chunk = list::at(chunks, index)
-    mutable_array::copy(final, offset, chunk, 0, chunk_size())
+    chunk = std::list::at(chunks, index)
+    std::mutable_array::copy(final, offset, chunk, 0, chunk_size())
     chunked_copy_chunks(chunks, index + 1, final, offset + chunk_size())
 
 fn chunked_finish(builder) errors IndexNotFound, UpperOverrun, LowerUnderrun:
-    completed = list::at(builder, 0)
-    current = list::at(builder, 1)
-    filled = list::at(builder, 2)
-    total = list::length(completed) * chunk_size() + filled
-    final = mutable_array::allocate(total)
+    completed = std::list::at(builder, 0)
+    current = std::list::at(builder, 1)
+    filled = std::list::at(builder, 2)
+    total = std::list::length(completed) * chunk_size() + filled
+    final = std::mutable_array::allocate(total)
     offset = chunked_copy_chunks(completed, 0, final, 0)
-    mutable_array::copy(final, offset, current, 0, filled)
-    mutable_array::freeze(final, total)
+    std::mutable_array::copy(final, offset, current, 0, filled)
+    std::mutable_array::freeze(final, total)
 
 fn fill_geo(b, i, n) errors IndexNotFound, UpperOverrun, LowerUnderrun:
     if i >= n:
@@ -181,13 +181,13 @@ fn fill_chunked(b, i, n) errors IndexNotFound, UpperOverrun, LowerUnderrun:
 fn fill_persistent(l, i, n):
     if i >= n:
         return l
-    fill_persistent(list::append(l, [i, "v"]), i + 1, n)
+    fill_persistent(std::list::append(l, [i, "v"]), i + 1, n)
 
 fn check(n) errors IndexNotFound, UpperOverrun, LowerUnderrun:
     a = fill_geo(geo_new(), 0, n)
     b = fill_chunked(chunked_new(), 0, n)
     c = fill_persistent([], 0, n)
-    [a == c, b == c, list::length(a)]
+    [a == c, b == c, std::list::length(a)]
 
 # native-tiny-leaf-inline.test's observable sequence: a counter in a
 # MutableArray slot that is a member of an installed context (a MutableArray
@@ -199,15 +199,15 @@ context struct EvaluationCounter:
     a: MutableArray[int]
 
 fn reset(start: int, context c: EvaluationCounter) errors IndexNotFound:
-    mutable_array::set(c.a, 0, start)
+    std::mutable_array::set(c.a, 0, start)
 
 fn next(context c: EvaluationCounter) errors IndexNotFound:
-    v = mutable_array::at(c.a, 0)
-    mutable_array::set(c.a, 0, v + 1)
+    v = std::mutable_array::at(c.a, 0)
+    std::mutable_array::set(c.a, 0, v + 1)
     v
 
 fn current(context c: EvaluationCounter) errors IndexNotFound:
-    mutable_array::at(c.a, 0)
+    std::mutable_array::at(c.a, 0)
 
 # ---------------------------------------------------------------------------
 # native-mutarray.test (differential there: the -strict 0 program's outcome
@@ -216,55 +216,55 @@ fn current(context c: EvaluationCounter) errors IndexNotFound:
 
 fn register_mutarray_basic_tests():
     # mutarray-1: a fresh array's capacity is allocate's argument.
-    fn fresh_capacity() errors compiler::CompilerError:
+    fn fresh_capacity() errors std::compiler::CompilerError:
         static compile:
-            mutable_array::capacity(mutable_array::allocate(5))
-    test::value("mutarray-1", 5, fresh_capacity)
+            std::mutable_array::capacity(std::mutable_array::allocate(5))
+    std::test::value("mutarray-1", 5, fresh_capacity)
 
     # mutarray-2: a fresh slot holds unit, not uninitialized memory.
-    fn fresh_slot() errors compiler::CompilerError:
+    fn fresh_slot() errors std::compiler::CompilerError:
         static compile:
-            mutable_array::at(mutable_array::allocate(3), 1)
-    test::value("mutarray-2", unit, fresh_slot)
+            std::mutable_array::at(std::mutable_array::allocate(3), 1)
+    std::test::value("mutarray-2", unit, fresh_slot)
 
     # mutarray-3: set, then at reads back the written value.
-    fn set_then_at() errors compiler::CompilerError:
+    fn set_then_at() errors std::compiler::CompilerError:
         static compile:
             fn f():
-                a = mutable_array::allocate(3)
-                mutable_array::set(a, 1, "hello")
-                mutable_array::at(a, 1)
+                a = std::mutable_array::allocate(3)
+                std::mutable_array::set(a, 1, "hello")
+                std::mutable_array::at(a, 1)
             f()
-    test::value("mutarray-3", "hello", set_then_at)
+    std::test::value("mutarray-3", "hello", set_then_at)
 
     # mutarray-4: set returns unit.
-    fn set_result() errors compiler::CompilerError:
+    fn set_result() errors std::compiler::CompilerError:
         static compile:
             fn f():
-                a = mutable_array::allocate(1)
-                mutable_array::set(a, 0, 1)
+                a = std::mutable_array::allocate(1)
+                std::mutable_array::set(a, 0, 1)
             f()
-    test::value("mutarray-4", unit, set_result)
+    std::test::value("mutarray-4", unit, set_result)
 
     # mutarray-5: b = a is a copy (MUTABLE-ARRAY.md), so a's later write is
     # not observable through b: b's slot still holds unit. (The Tcl title,
     # "mutation through one handle is observable through another", predates
     # value semantics; its parity check holds either way.)
-    fn binding_copy() errors compiler::CompilerError:
+    fn binding_copy() errors std::compiler::CompilerError:
         static compile:
             fn f():
-                a = mutable_array::allocate(2)
+                a = std::mutable_array::allocate(2)
                 b = a
-                mutable_array::set(a, 0, 99)
-                mutable_array::at(b, 0)
+                std::mutable_array::set(a, 0, 99)
+                std::mutable_array::at(b, 0)
             f()
-    test::value("mutarray-5", unit, binding_copy)
+    std::test::value("mutarray-5", unit, binding_copy)
 
     # mutarray-6: a zero-capacity array.
-    fn zero_capacity() errors compiler::CompilerError:
+    fn zero_capacity() errors std::compiler::CompilerError:
         static compile:
-            mutable_array::capacity(mutable_array::allocate(0))
-    test::value("mutarray-6", 0, zero_capacity)
+            std::mutable_array::capacity(std::mutable_array::allocate(0))
+    std::test::value("mutarray-6", 0, zero_capacity)
 
 # Bounds: each Tcl program fails at run time with an uncaught declared error
 # (the same outcome on every backend); here the index, count or offset is a
@@ -274,69 +274,69 @@ fn register_mutarray_basic_tests():
 # own result type.
 
 fn register_at_out_of_range(name: str, index: int, expected: str):
-    fn out_of_range() errors compiler::CompilerError:
+    fn out_of_range() errors std::compiler::CompilerError:
         static compile:
-            v = mutable_array::at(mutable_array::allocate(3), index):
+            v = std::mutable_array::at(std::mutable_array::allocate(3), index):
                 on IndexNotFound:
                     "IndexNotFound"
             v
-    test::value(name, expected, out_of_range)
+    std::test::value(name, expected, out_of_range)
 
 fn register_set_out_of_range(name: str, index: int, expected: str):
-    fn out_of_range() errors compiler::CompilerError:
+    fn out_of_range() errors std::compiler::CompilerError:
         static compile:
             fn f():
-                a = mutable_array::allocate(3)
-                mutable_array::set(a, index, 9):
+                a = std::mutable_array::allocate(3)
+                std::mutable_array::set(a, index, 9):
                     on IndexNotFound:
                         return "IndexNotFound"
                 "ok"
             f()
-    test::value(name, expected, out_of_range)
+    std::test::value(name, expected, out_of_range)
 
 fn register_freeze_out_of_range(name: str, count: int, expected: str):
-    fn out_of_range() errors compiler::CompilerError:
+    fn out_of_range() errors std::compiler::CompilerError:
         static compile:
             fn f():
-                mutable_array::freeze(mutable_array::allocate(3), count):
+                std::mutable_array::freeze(std::mutable_array::allocate(3), count):
                     on UpperOverrun:
                         return "UpperOverrun"
                     on LowerUnderrun:
                         return "LowerUnderrun"
                 "ok"
             f()
-    test::value(name, expected, out_of_range)
+    std::test::value(name, expected, out_of_range)
 
 # copy(dst, dst_start, src, src_start, count) between two arrays of CAPACITY.
 fn register_copy_out_of_range(name: str, capacity: int, dst_start: int, src_start: int, count: int, expected: str):
-    fn out_of_range() errors compiler::CompilerError:
+    fn out_of_range() errors std::compiler::CompilerError:
         static compile:
             fn f():
-                a = mutable_array::allocate(capacity)
-                b = mutable_array::allocate(capacity)
-                mutable_array::copy(a, dst_start, b, src_start, count):
+                a = std::mutable_array::allocate(capacity)
+                b = std::mutable_array::allocate(capacity)
+                std::mutable_array::copy(a, dst_start, b, src_start, count):
                     on UpperOverrun:
                         return "UpperOverrun"
                     on LowerUnderrun:
                         return "LowerUnderrun"
                 "ok"
             f()
-    test::value(name, expected, out_of_range)
+    std::test::value(name, expected, out_of_range)
 
 # A copy within one array of capacity 3.
 fn register_self_copy_out_of_range(name: str, dst_start: int, src_start: int, count: int, expected: str):
-    fn out_of_range() errors compiler::CompilerError:
+    fn out_of_range() errors std::compiler::CompilerError:
         static compile:
             fn f():
-                a = mutable_array::allocate(3)
-                mutable_array::copy(a, dst_start, a, src_start, count):
+                a = std::mutable_array::allocate(3)
+                std::mutable_array::copy(a, dst_start, a, src_start, count):
                     on UpperOverrun:
                         return "UpperOverrun"
                     on LowerUnderrun:
                         return "LowerUnderrun"
                 "ok"
             f()
-    test::value(name, expected, out_of_range)
+    std::test::value(name, expected, out_of_range)
 
 fn register_mutarray_bounds_tests():
     # A negative index, and the index equal to the capacity (also
@@ -360,143 +360,143 @@ fn register_mutarray_bounds_tests():
 
 fn register_mutarray_copy_tests():
     # mutarray-copy-1: copying zero elements is a no-op.
-    fn zero_elements() errors compiler::CompilerError:
+    fn zero_elements() errors std::compiler::CompilerError:
         static compile:
             fn f():
-                a = mutable_array::allocate(3)
-                mutable_array::set(a, 0, 1)
-                mutable_array::copy(a, 0, a, 2, 0)
-                mutable_array::freeze(a, 3)
+                a = std::mutable_array::allocate(3)
+                std::mutable_array::set(a, 0, 1)
+                std::mutable_array::copy(a, 0, a, 2, 0)
+                std::mutable_array::freeze(a, 3)
             f()
-    test::value("mutarray-copy-1", [1, unit, unit], zero_elements)
+    std::test::value("mutarray-copy-1", [1, unit, unit], zero_elements)
 
     # mutarray-copy-2: a full-range copy into a larger array.
-    fn full_range() errors compiler::CompilerError:
+    fn full_range() errors std::compiler::CompilerError:
         static compile:
             fn f():
-                a = mutable_array::allocate(3)
-                mutable_array::set(a, 0, 1)
-                mutable_array::set(a, 1, 2)
-                mutable_array::set(a, 2, 3)
-                b = mutable_array::allocate(5)
-                mutable_array::copy(b, 0, a, 0, 3)
-                mutable_array::freeze(b, 3)
+                a = std::mutable_array::allocate(3)
+                std::mutable_array::set(a, 0, 1)
+                std::mutable_array::set(a, 1, 2)
+                std::mutable_array::set(a, 2, 3)
+                b = std::mutable_array::allocate(5)
+                std::mutable_array::copy(b, 0, a, 0, 3)
+                std::mutable_array::freeze(b, 3)
             f()
-    test::value("mutarray-copy-2", [1, 2, 3], full_range)
+    std::test::value("mutarray-copy-2", [1, 2, 3], full_range)
 
     # mutarray-copy-3: a partial range with both offsets.
-    fn partial_range() errors compiler::CompilerError:
+    fn partial_range() errors std::compiler::CompilerError:
         static compile:
             fn f():
-                a = mutable_array::allocate(5)
-                mutable_array::set(a, 0, 1)
-                mutable_array::set(a, 1, 2)
-                mutable_array::set(a, 2, 3)
-                mutable_array::set(a, 3, 4)
-                mutable_array::set(a, 4, 5)
-                b = mutable_array::allocate(5)
-                mutable_array::copy(b, 2, a, 1, 2)
-                mutable_array::freeze(b, 5)
+                a = std::mutable_array::allocate(5)
+                std::mutable_array::set(a, 0, 1)
+                std::mutable_array::set(a, 1, 2)
+                std::mutable_array::set(a, 2, 3)
+                std::mutable_array::set(a, 3, 4)
+                std::mutable_array::set(a, 4, 5)
+                b = std::mutable_array::allocate(5)
+                std::mutable_array::copy(b, 2, a, 1, 2)
+                std::mutable_array::freeze(b, 5)
             f()
-    test::value("mutarray-copy-3", [unit, unit, 2, 3, unit], partial_range)
+    std::test::value("mutarray-copy-3", [unit, unit, 2, 3, unit], partial_range)
 
     # mutarray-copy-4: an overlapping self-copy, destination after source.
-    fn overlap_forward() errors compiler::CompilerError:
+    fn overlap_forward() errors std::compiler::CompilerError:
         static compile:
             fn f():
-                a = mutable_array::allocate(5)
-                mutable_array::set(a, 0, 1)
-                mutable_array::set(a, 1, 2)
-                mutable_array::set(a, 2, 3)
-                mutable_array::set(a, 3, 4)
-                mutable_array::set(a, 4, 5)
-                mutable_array::copy(a, 1, a, 0, 3)
-                mutable_array::freeze(a, 5)
+                a = std::mutable_array::allocate(5)
+                std::mutable_array::set(a, 0, 1)
+                std::mutable_array::set(a, 1, 2)
+                std::mutable_array::set(a, 2, 3)
+                std::mutable_array::set(a, 3, 4)
+                std::mutable_array::set(a, 4, 5)
+                std::mutable_array::copy(a, 1, a, 0, 3)
+                std::mutable_array::freeze(a, 5)
             f()
-    test::value("mutarray-copy-4", [1, 1, 2, 3, 5], overlap_forward)
+    std::test::value("mutarray-copy-4", [1, 1, 2, 3, 5], overlap_forward)
 
     # mutarray-copy-5: an overlapping self-copy, destination before source.
-    fn overlap_backward() errors compiler::CompilerError:
+    fn overlap_backward() errors std::compiler::CompilerError:
         static compile:
             fn f():
-                a = mutable_array::allocate(5)
-                mutable_array::set(a, 0, 1)
-                mutable_array::set(a, 1, 2)
-                mutable_array::set(a, 2, 3)
-                mutable_array::set(a, 3, 4)
-                mutable_array::set(a, 4, 5)
-                mutable_array::copy(a, 0, a, 1, 3)
-                mutable_array::freeze(a, 5)
+                a = std::mutable_array::allocate(5)
+                std::mutable_array::set(a, 0, 1)
+                std::mutable_array::set(a, 1, 2)
+                std::mutable_array::set(a, 2, 3)
+                std::mutable_array::set(a, 3, 4)
+                std::mutable_array::set(a, 4, 5)
+                std::mutable_array::copy(a, 0, a, 1, 3)
+                std::mutable_array::freeze(a, 5)
             f()
-    test::value("mutarray-copy-5", [2, 3, 4, 4, 5], overlap_backward)
+    std::test::value("mutarray-copy-5", [2, 3, 4, 4, 5], overlap_backward)
 
     # mutarray-copy-6: a self-copy over the identical range is a no-op.
-    fn identical_range() errors compiler::CompilerError:
+    fn identical_range() errors std::compiler::CompilerError:
         static compile:
             fn f():
-                a = mutable_array::allocate(3)
-                mutable_array::set(a, 0, 1)
-                mutable_array::set(a, 1, 2)
-                mutable_array::set(a, 2, 3)
-                mutable_array::copy(a, 0, a, 0, 3)
-                mutable_array::freeze(a, 3)
+                a = std::mutable_array::allocate(3)
+                std::mutable_array::set(a, 0, 1)
+                std::mutable_array::set(a, 1, 2)
+                std::mutable_array::set(a, 2, 3)
+                std::mutable_array::copy(a, 0, a, 0, 3)
+                std::mutable_array::freeze(a, 3)
             f()
-    test::value("mutarray-copy-6", [1, 2, 3], identical_range)
+    std::test::value("mutarray-copy-6", [1, 2, 3], identical_range)
 
 fn register_mutarray_freeze_tests():
     # mutarray-freeze-1: freeze produces an ordinary List, usable by the list
-    # natives. (Strict: list::at of the frozen List is handled, and bound
+    # natives. (Strict: std::list::at of the frozen List is handled, and bound
     # before the result literal.)
-    fn ordinary_list() errors compiler::CompilerError:
+    fn ordinary_list() errors std::compiler::CompilerError:
         static compile:
             fn f():
-                a = mutable_array::allocate(3)
-                mutable_array::set(a, 0, 10)
-                mutable_array::set(a, 1, 20)
-                mutable_array::set(a, 2, 30)
-                l = mutable_array::freeze(a, 3)
-                x = list::at(l, 1):
+                a = std::mutable_array::allocate(3)
+                std::mutable_array::set(a, 0, 10)
+                std::mutable_array::set(a, 1, 20)
+                std::mutable_array::set(a, 2, 30)
+                l = std::mutable_array::freeze(a, 3)
+                x = std::list::at(l, 1):
                     on IndexNotFound:
                         -1
-                [list::length(l), x]
+                [std::list::length(l), x]
             f()
-    test::value("mutarray-freeze-1", [3, 20], ordinary_list)
+    std::test::value("mutarray-freeze-1", [3, 20], ordinary_list)
 
     # mutarray-freeze-2: freezing a prefix ignores the rest of the array.
-    fn prefix() errors compiler::CompilerError:
+    fn prefix() errors std::compiler::CompilerError:
         static compile:
             fn f():
-                a = mutable_array::allocate(5)
-                mutable_array::set(a, 0, 1)
-                mutable_array::set(a, 1, 2)
-                mutable_array::freeze(a, 2)
+                a = std::mutable_array::allocate(5)
+                std::mutable_array::set(a, 0, 1)
+                std::mutable_array::set(a, 1, 2)
+                std::mutable_array::freeze(a, 2)
             f()
-    test::value("mutarray-freeze-2", [1, 2], prefix)
+    std::test::value("mutarray-freeze-2", [1, 2], prefix)
 
     # mutarray-freeze-3: writing to the array after freeze does not change
     # the frozen List.
-    fn later_write() errors compiler::CompilerError:
+    fn later_write() errors std::compiler::CompilerError:
         static compile:
             fn f():
-                a = mutable_array::allocate(2)
-                mutable_array::set(a, 0, 1)
-                frozen = mutable_array::freeze(a, 2)
-                mutable_array::set(a, 0, 999)
-                [frozen, mutable_array::at(a, 0)]
+                a = std::mutable_array::allocate(2)
+                std::mutable_array::set(a, 0, 1)
+                frozen = std::mutable_array::freeze(a, 2)
+                std::mutable_array::set(a, 0, 999)
+                [frozen, std::mutable_array::at(a, 0)]
             f()
-    test::value("mutarray-freeze-3", [[1, unit], 999], later_write)
+    std::test::value("mutarray-freeze-3", [[1, unit], 999], later_write)
 
     # mutarray-freeze-4: freezing capacity 0.
-    fn capacity_zero() errors compiler::CompilerError:
+    fn capacity_zero() errors std::compiler::CompilerError:
         static compile:
-            mutable_array::freeze(mutable_array::allocate(0), 0)
-    test::value("mutarray-freeze-4", [], capacity_zero)
+            std::mutable_array::freeze(std::mutable_array::allocate(0), 0)
+    std::test::value("mutarray-freeze-4", [], capacity_zero)
 
 # mutarray-builder-N: check(N) = [geometric == persistent, chunked ==
 # persistent, length]. Any failure of the builders would be a declared error,
 # reported as its name.
 fn register_builder_case(name: str, n: int, expected):
-    fn builders_agree() errors compiler::CompilerError:
+    fn builders_agree() errors std::compiler::CompilerError:
         static compile:
             r = check(n):
                 on IndexNotFound:
@@ -506,7 +506,7 @@ fn register_builder_case(name: str, n: int, expected):
                 on LowerUnderrun:
                     ["LowerUnderrun"]
             r
-    test::value(name, expected, builders_agree)
+    std::test::value(name, expected, builders_agree)
 
 fn register_mutarray_builder_tests():
     # 0, 1, below and at chunk_size()'s boundary (4), and sizes with one,
@@ -523,7 +523,7 @@ fn register_mutarray_builder_tests():
 
     # mutarray-builder-values-1: the geometric builder holds heap values
     # (the [i, "v"] Lists) correctly.
-    fn heap_values() errors compiler::CompilerError:
+    fn heap_values() errors std::compiler::CompilerError:
         static compile:
             fn same() errors IndexNotFound, UpperOverrun, LowerUnderrun:
                 fill_geo(geo_new(), 0, 37) == fill_persistent([], 0, 37)
@@ -535,19 +535,19 @@ fn register_mutarray_builder_tests():
                 on LowerUnderrun:
                     false
             r
-    test::value("mutarray-builder-values-1", true, heap_values)
+    std::test::value("mutarray-builder-values-1", true, heap_values)
 
 fn register_mutarray_gc_tests():
     # mutarray-gc-stress-1: Strings built by concatenation, stored only in
     # the geometric builder's arrays, read back after further allocations,
     # growth (allocate + copy) and freeze: label(i) is i + 1 x's.
-    fn live_through_growth() errors compiler::CompilerError:
+    fn live_through_growth() errors std::compiler::CompilerError:
         static compile:
             fn label(i):
                 if i == 0:
                     return "x"
 
-                str::concat(label(i - 1), "x")
+                std::str::concat(label(i - 1), "x")
 
             fn fill(b, i, n) errors IndexNotFound, UpperOverrun, LowerUnderrun:
                 if i >= n:
@@ -555,7 +555,7 @@ fn register_mutarray_gc_tests():
                 fill(geo_append(b, label(i)), i + 1, n)
 
             fn run() errors IndexNotFound, UpperOverrun, LowerUnderrun:
-                [list::length(fill(geo_new(), 0, 50)), list::at(fill(geo_new(), 0, 50), 17), list::at(fill(geo_new(), 0, 50), 49)]
+                [std::list::length(fill(geo_new(), 0, 50)), std::list::at(fill(geo_new(), 0, 50), 17), std::list::at(fill(geo_new(), 0, 50), 49)]
 
             r = run():
                 on IndexNotFound:
@@ -565,7 +565,7 @@ fn register_mutarray_gc_tests():
                 on LowerUnderrun:
                     []
             r
-    test::value("mutarray-gc-stress-1", [50, "xxxxxxxxxxxxxxxxxx", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"], live_through_growth)
+    std::test::value("mutarray-gc-stress-1", [50, "xxxxxxxxxxxxxxxxxx", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"], live_through_growth)
 
 fn register_native_mutarray_tests():
     register_mutarray_basic_tests()
@@ -578,34 +578,34 @@ fn register_native_mutarray_tests():
 # ---------------------------------------------------------------------------
 # native-param-aggregate.test (native only there, with -param-aggregate-opt 1
 # and 0 agreeing; here every backend must produce the value). Every function
-# that reads a List parameter or a callee's List result by list::at declares
+# that reads a List parameter or a callee's List result by std::list::at declares
 # IndexNotFound, and the outermost call handles it.
 
 fn register_param_aggregate_shape_tests():
     # paramagg-bump-2: a builder-shaped bump(state) -> [x, y + 1] through a
     # closed call.
-    fn bump_state() errors compiler::CompilerError:
+    fn bump_state() errors std::compiler::CompilerError:
         static compile:
             fn bump(state) errors IndexNotFound:
-                x = list::at(state, 0)
-                y = list::at(state, 1)
+                x = std::list::at(state, 0)
+                y = std::list::at(state, 1)
                 [x, y + 1]
 
             fn f() errors IndexNotFound:
                 r = bump([10, 20])
-                list::at(r, 0) + list::at(r, 1)
+                std::list::at(r, 0) + std::list::at(r, 1)
 
             v = f():
                 on IndexNotFound:
                     -1
             v
-    test::value("paramagg-bump-2", 31, bump_state)
+    std::test::value("paramagg-bump-2", 31, bump_state)
 
     # paramagg-arity-1, -2, -3, -5: one to five fields of one parameter.
-    fn arity_1() errors compiler::CompilerError:
+    fn arity_1() errors std::compiler::CompilerError:
         static compile:
             fn first(one) errors IndexNotFound:
-                list::at(one, 0)
+                std::list::at(one, 0)
 
             fn f() errors IndexNotFound:
                 first([42])
@@ -614,12 +614,12 @@ fn register_param_aggregate_shape_tests():
                 on IndexNotFound:
                     -1
             v
-    test::value("paramagg-arity-1", 42, arity_1)
+    std::test::value("paramagg-arity-1", 42, arity_1)
 
-    fn arity_2() errors compiler::CompilerError:
+    fn arity_2() errors std::compiler::CompilerError:
         static compile:
             fn sum2(p) errors IndexNotFound:
-                list::at(p, 0) + list::at(p, 1)
+                std::list::at(p, 0) + std::list::at(p, 1)
 
             fn f() errors IndexNotFound:
                 sum2([1, 2])
@@ -628,12 +628,12 @@ fn register_param_aggregate_shape_tests():
                 on IndexNotFound:
                     -1
             v
-    test::value("paramagg-arity-2", 3, arity_2)
+    std::test::value("paramagg-arity-2", 3, arity_2)
 
-    fn arity_3() errors compiler::CompilerError:
+    fn arity_3() errors std::compiler::CompilerError:
         static compile:
             fn sum3(p) errors IndexNotFound:
-                list::at(p, 0) + list::at(p, 1) + list::at(p, 2)
+                std::list::at(p, 0) + std::list::at(p, 1) + std::list::at(p, 2)
 
             fn f() errors IndexNotFound:
                 sum3([1, 2, 3])
@@ -642,12 +642,12 @@ fn register_param_aggregate_shape_tests():
                 on IndexNotFound:
                     -1
             v
-    test::value("paramagg-arity-3", 6, arity_3)
+    std::test::value("paramagg-arity-3", 6, arity_3)
 
-    fn arity_5() errors compiler::CompilerError:
+    fn arity_5() errors std::compiler::CompilerError:
         static compile:
             fn sum5(p) errors IndexNotFound:
-                list::at(p, 0) + list::at(p, 1) + list::at(p, 2) + list::at(p, 3) + list::at(p, 4)
+                std::list::at(p, 0) + std::list::at(p, 1) + std::list::at(p, 2) + std::list::at(p, 3) + std::list::at(p, 4)
 
             fn f() errors IndexNotFound:
                 sum5([1, 2, 3, 4, 5])
@@ -656,31 +656,31 @@ fn register_param_aggregate_shape_tests():
                 on IndexNotFound:
                     -1
             v
-    test::value("paramagg-arity-5", 15, arity_5)
+    std::test::value("paramagg-arity-5", 15, arity_5)
 
     # paramagg-mixed-1: an aggregate parameter beside an ordinary scalar one.
-    fn beside_scalar() errors compiler::CompilerError:
+    fn beside_scalar() errors std::compiler::CompilerError:
         static compile:
             fn append(state, value) errors IndexNotFound:
-                storage = list::at(state, 0)
-                length = list::at(state, 1)
+                storage = std::list::at(state, 0)
+                length = std::list::at(state, 1)
                 [storage + value, length + 1]
 
             fn f() errors IndexNotFound:
                 r = append([100, 0], 5)
-                list::at(r, 0) + list::at(r, 1)
+                std::list::at(r, 0) + std::list::at(r, 1)
 
             v = f():
                 on IndexNotFound:
                     -1
             v
-    test::value("paramagg-mixed-1", 106, beside_scalar)
+    std::test::value("paramagg-mixed-1", 106, beside_scalar)
 
     # paramagg-multi-param-1: two aggregate parameters.
-    fn two_parameters() errors compiler::CompilerError:
+    fn two_parameters() errors std::compiler::CompilerError:
         static compile:
             fn merge(a, b) errors IndexNotFound:
-                list::at(a, 0) + list::at(a, 1) + list::at(b, 0) + list::at(b, 1)
+                std::list::at(a, 0) + std::list::at(a, 1) + std::list::at(b, 0) + std::list::at(b, 1)
 
             fn f() errors IndexNotFound:
                 merge([1, 2], [10, 20])
@@ -689,16 +689,16 @@ fn register_param_aggregate_shape_tests():
                 on IndexNotFound:
                     -1
             v
-    test::value("paramagg-multi-param-1", 33, two_parameters)
+    std::test::value("paramagg-multi-param-1", 33, two_parameters)
 
     # paramagg-multi-use-1: one List passed to two readers.
-    fn two_readers() errors compiler::CompilerError:
+    fn two_readers() errors std::compiler::CompilerError:
         static compile:
             fn get_x(state) errors IndexNotFound:
-                list::at(state, 0)
+                std::list::at(state, 0)
 
             fn get_y(state) errors IndexNotFound:
-                list::at(state, 1)
+                std::list::at(state, 1)
 
             fn f() errors IndexNotFound:
                 s = [7, 9]
@@ -708,18 +708,18 @@ fn register_param_aggregate_shape_tests():
                 on IndexNotFound:
                     -1
             v
-    test::value("paramagg-multi-use-1", 16, two_readers)
+    std::test::value("paramagg-multi-use-1", 16, two_readers)
 
     # paramagg-conditional-1: both branches of a conditional pass the same
     # List. (Strict: the Tcl program's top-level f(true) + f(false) is the
     # handled both().)
-    fn both_branches() errors compiler::CompilerError:
+    fn both_branches() errors std::compiler::CompilerError:
         static compile:
             fn use_a(state) errors IndexNotFound:
-                list::at(state, 0)
+                std::list::at(state, 0)
 
             fn use_b(state) errors IndexNotFound:
-                list::at(state, 1)
+                std::list::at(state, 1)
 
             fn f(cond) errors IndexNotFound:
                 s = [1, 2]
@@ -735,13 +735,13 @@ fn register_param_aggregate_shape_tests():
                 on IndexNotFound:
                     -1
             v
-    test::value("paramagg-conditional-1", 3, both_branches)
+    std::test::value("paramagg-conditional-1", 3, both_branches)
 
-    # paramagg-chain-1: caller -> helper1 -> helper2 -> list::at.
-    fn forwarding_chain() errors compiler::CompilerError:
+    # paramagg-chain-1: caller -> helper1 -> helper2 -> std::list::at.
+    fn forwarding_chain() errors std::compiler::CompilerError:
         static compile:
             fn helper2(s) errors IndexNotFound:
-                list::at(s, 0) + list::at(s, 1)
+                std::list::at(s, 0) + std::list::at(s, 1)
 
             fn helper1(s) errors IndexNotFound:
                 helper2(s)
@@ -754,39 +754,39 @@ fn register_param_aggregate_shape_tests():
                 on IndexNotFound:
                     -1
             v
-    test::value("paramagg-chain-1", 7, forwarding_chain)
+    std::test::value("paramagg-chain-1", 7, forwarding_chain)
 
 fn register_param_aggregate_recursion_tests():
     # paramagg-selftail-1: state threaded through a self-tail loop, rebuilt
     # every iteration and returned as a fresh List.
-    fn self_tail() errors compiler::CompilerError:
+    fn self_tail() errors std::compiler::CompilerError:
         static compile:
             fn loopState(state, n) errors IndexNotFound:
                 if n == 0:
-                    x = list::at(state, 0)
-                    y = list::at(state, 1)
+                    x = std::list::at(state, 0)
+                    y = std::list::at(state, 1)
                     return [x, y]
-                x = list::at(state, 0)
-                y = list::at(state, 1)
+                x = std::list::at(state, 0)
+                y = std::list::at(state, 1)
                 loopState([x + 1, y], n - 1)
 
             fn f() errors IndexNotFound:
                 r = loopState([0, 99], 50)
-                list::at(r, 0) + list::at(r, 1)
+                std::list::at(r, 0) + std::list::at(r, 1)
 
             v = f():
                 on IndexNotFound:
                     -1
             v
-    test::value("paramagg-selftail-1", 149, self_tail)
+    std::test::value("paramagg-selftail-1", 149, self_tail)
 
     # paramagg-selftail-3: the loop's base case returns the state parameter
     # itself.
-    fn returns_state() errors compiler::CompilerError:
+    fn returns_state() errors std::compiler::CompilerError:
         static compile:
             fn append(state, value) errors IndexNotFound:
-                storage = list::at(state, 0)
-                length = list::at(state, 1)
+                storage = std::list::at(state, 0)
+                length = std::list::at(state, 1)
                 [storage + value, length + 1]
 
             fn fillFrom(state, n) errors IndexNotFound:
@@ -796,53 +796,53 @@ fn register_param_aggregate_recursion_tests():
 
             fn f() errors IndexNotFound:
                 r = fillFrom([0, 0], 5)
-                list::at(r, 0) + list::at(r, 1)
+                std::list::at(r, 0) + std::list::at(r, 1)
 
             v = f():
                 on IndexNotFound:
                     -1
             v
-    test::value("paramagg-selftail-3", 20, returns_state)
+    std::test::value("paramagg-selftail-3", 20, returns_state)
 
 # SHORT is the two-element List [1, 2] of paramagg-canonical-outofrange-1.
 fn register_param_aggregate_canonical_tests(short: List[int]):
     # paramagg-canonical-return-1: a parameter returned as itself.
-    fn returned() errors compiler::CompilerError:
+    fn returned() errors std::compiler::CompilerError:
         static compile:
             fn identity(state):
                 state
 
             fn f() errors IndexNotFound:
                 r = identity([1, 2])
-                list::at(r, 0)
+                std::list::at(r, 0)
 
             v = f():
                 on IndexNotFound:
                     -1
             v
-    test::value("paramagg-canonical-return-1", 1, returned)
+    std::test::value("paramagg-canonical-return-1", 1, returned)
 
     # paramagg-canonical-store-1: a parameter stored into another List.
-    fn stored() errors compiler::CompilerError:
+    fn stored() errors std::compiler::CompilerError:
         static compile:
             fn wrap(state):
                 [state, state]
 
             fn f() errors IndexNotFound:
                 r = wrap([1, 2])
-                list::at(list::at(r, 0), 0)
+                std::list::at(std::list::at(r, 0), 0)
 
             v = f():
                 on IndexNotFound:
                     -1
             v
-    test::value("paramagg-canonical-store-1", 1, stored)
+    std::test::value("paramagg-canonical-store-1", 1, stored)
 
     # paramagg-canonical-dynamic-1: a read by a non-constant index.
-    fn dynamic_index() errors compiler::CompilerError:
+    fn dynamic_index() errors std::compiler::CompilerError:
         static compile:
             fn getAt(state, i) errors IndexNotFound:
-                list::at(state, i)
+                std::list::at(state, i)
 
             fn f() errors IndexNotFound:
                 getAt([10, 20, 30], 1)
@@ -851,16 +851,16 @@ fn register_param_aggregate_canonical_tests(short: List[int]):
                 on IndexNotFound:
                     -1
             v
-    test::value("paramagg-canonical-dynamic-1", 20, dynamic_index)
+    std::test::value("paramagg-canonical-dynamic-1", 20, dynamic_index)
 
     # paramagg-canonical-outofrange-1: an out-of-range constant index into a
     # parameter is the ordinary IndexNotFound. (The Tcl program passes the
     # literal [1, 2], which makes the failure statically known here: the
     # List is SHORT, a registration parameter.)
-    fn past_the_end() errors compiler::CompilerError:
+    fn past_the_end() errors std::compiler::CompilerError:
         static compile:
             fn bad(state) errors IndexNotFound:
-                list::at(state, 5)
+                std::list::at(state, 5)
 
             fn f():
                 v = bad(short):
@@ -869,21 +869,21 @@ fn register_param_aggregate_canonical_tests(short: List[int]):
                 v
 
             f()
-    test::value("paramagg-canonical-outofrange-1", "IndexNotFound", past_the_end)
+    std::test::value("paramagg-canonical-outofrange-1", "IndexNotFound", past_the_end)
 
     # paramagg-canonical-mixed-caller-1: one caller passes a literal, another
     # a List it reads by a dynamic index too; both call get0. (Strict: the
     # Tcl program's top-level List literal is the handled both().)
-    fn mixed_callers() errors compiler::CompilerError:
+    fn mixed_callers() errors std::compiler::CompilerError:
         static compile:
             fn get0(state) errors IndexNotFound:
-                list::at(state, 0)
+                std::list::at(state, 0)
 
             fn scalarCaller() errors IndexNotFound:
                 get0([1, 2])
 
             fn dynamicCaller(state, i) errors IndexNotFound:
-                x = list::at(state, i)
+                x = std::list::at(state, i)
                 y = get0(state)
                 x + y
 
@@ -894,19 +894,19 @@ fn register_param_aggregate_canonical_tests(short: List[int]):
                 on IndexNotFound:
                     []
             v
-    test::value("paramagg-canonical-mixed-caller-1", [1, 11], mixed_callers)
+    std::test::value("paramagg-canonical-mixed-caller-1", [1, 11], mixed_callers)
 
 fn register_param_aggregate_field_kind_tests():
     # paramagg-heterogeneous-1: Int, String and Bool fields read
     # independently.
-    fn int_string_bool() errors compiler::CompilerError:
+    fn int_string_bool() errors std::compiler::CompilerError:
         static compile:
             fn describe(rec) errors IndexNotFound:
-                n = list::at(rec, 0)
-                s = list::at(rec, 1)
-                b = list::at(rec, 2)
+                n = std::list::at(rec, 0)
+                s = std::list::at(rec, 1)
+                b = std::list::at(rec, 2)
                 if b:
-                    str::concat(s, " ")
+                    std::str::concat(s, " ")
                 else:
                     s
 
@@ -917,77 +917,77 @@ fn register_param_aggregate_field_kind_tests():
                 v
 
             f()
-    test::value("paramagg-heterogeneous-1", "x ", int_string_bool)
+    std::test::value("paramagg-heterogeneous-1", "x ", int_string_bool)
 
     # paramagg-heterogeneous-2: a MutableArray field. The element read out is
     # touch's own copy, written and read back there.
-    fn array_field() errors compiler::CompilerError:
+    fn array_field() errors std::compiler::CompilerError:
         static compile:
             fn touch(rec) errors IndexNotFound:
-                arr = list::at(rec, 0)
-                mutable_array::set(arr, 0, 99)
-                mutable_array::at(arr, 0)
+                arr = std::list::at(rec, 0)
+                std::mutable_array::set(arr, 0, 99)
+                std::mutable_array::at(arr, 0)
 
             fn f():
-                a = mutable_array::allocate(1)
+                a = std::mutable_array::allocate(1)
                 v = touch([a, 0]):
                     on IndexNotFound:
                         -1
                 v
 
             f()
-    test::value("paramagg-heterogeneous-2", 99, array_field)
+    std::test::value("paramagg-heterogeneous-2", 99, array_field)
 
     # paramagg-gc-stress-1: String, List and MutableArray fields threaded
     # through 2000 allocating recursive calls keep their values.
-    fn managed_fields() errors compiler::CompilerError:
+    fn managed_fields() errors std::compiler::CompilerError:
         static compile:
             fn build(rec, n) errors IndexNotFound:
-                s = list::at(rec, 0)
-                lst = list::at(rec, 1)
-                arr = list::at(rec, 2)
+                s = std::list::at(rec, 0)
+                lst = std::list::at(rec, 1)
+                arr = std::list::at(rec, 2)
                 if n == 0:
-                    mutable_array::set(arr, 0, 1)
-                    return str::concat(s, list::at(lst, 0))
-                build([str::concat(s, "x"), lst, arr], n - 1)
+                    std::mutable_array::set(arr, 0, 1)
+                    return std::str::concat(s, std::list::at(lst, 0))
+                build([std::str::concat(s, "x"), lst, arr], n - 1)
 
             fn f(n):
-                a = mutable_array::allocate(1)
+                a = std::mutable_array::allocate(1)
                 v = build(["y", ["!"], a], n):
                     on IndexNotFound:
                         "IndexNotFound"
                 v
 
-            str::length(f(2000))
-    test::value("paramagg-gc-stress-1", 2002, managed_fields)
+            std::str::length(f(2000))
+    std::test::value("paramagg-gc-stress-1", 2002, managed_fields)
 
 fn register_param_aggregate_regression_tests():
     # paramagg-regress-1: a local List read by constant index (proven in
     # range: no handler).
-    fn local_pair() errors compiler::CompilerError:
+    fn local_pair() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 pair = [10, 20]
-                list::at(pair, 0) + list::at(pair, 1)
+                std::list::at(pair, 0) + std::list::at(pair, 1)
 
             f()
-    test::value("paramagg-regress-1", 30, local_pair)
+    std::test::value("paramagg-regress-1", 30, local_pair)
 
     # paramagg-regress-2: a closed call's List result read by constant index.
-    fn returned_pair() errors compiler::CompilerError:
+    fn returned_pair() errors std::compiler::CompilerError:
         static compile:
             fn pair():
                 [1, 2]
 
             fn f() errors IndexNotFound:
                 p = pair()
-                list::at(p, 0) + list::at(p, 1)
+                std::list::at(p, 0) + std::list::at(p, 1)
 
             v = f():
                 on IndexNotFound:
                     -1
             v
-    test::value("paramagg-regress-2", 3, returned_pair)
+    std::test::value("paramagg-regress-2", 3, returned_pair)
 
 fn register_native_param_aggregate_tests():
     register_param_aggregate_shape_tests()
@@ -1001,24 +1001,24 @@ fn register_native_param_aggregate_tests():
 
 fn register_native_refinement_propagation_tests():
     # native-refinement-propagation-fact-decides-no-predicate: main proves s
-    # web::Emailish before calling inspect, whose own web::emailish? check of
+    # std::web::Emailish before calling inspect, whose own std::web::emailish? check of
     # it answers true; main("x") never calls inspect.
-    fn predicate_still_runs() errors compiler::CompilerError:
+    fn predicate_still_runs() errors std::compiler::CompilerError:
         static compile:
             fn inspect(q):
-                if web::emailish?(q):
+                if std::web::emailish?(q):
                     1
                 else:
                     0
 
             fn main(s: str):
-                if web::emailish?(s):
+                if std::web::emailish?(s):
                     inspect(s)
                 else:
                     0
 
             [main("a@b.io"), main("x")]
-    test::value("native-refinement-propagation-fact-decides-no-predicate", [1, 0], predicate_still_runs)
+    std::test::value("native-refinement-propagation-fact-decides-no-predicate", [1, 0], predicate_still_runs)
 
 # ---------------------------------------------------------------------------
 # native-tiny-leaf-inline.test (native only there; here every backend must
@@ -1026,17 +1026,17 @@ fn register_native_refinement_propagation_tests():
 
 fn register_tiny_leaf_value_tests():
     # tiny-leaf-generic-add-one-value: a plain leaf (x + 1).
-    fn add_one() errors compiler::CompilerError:
+    fn add_one() errors std::compiler::CompilerError:
         static compile:
             fn add_one(x):
                 x + 1
 
             add_one(41)
-    test::value("tiny-leaf-generic-add-one-value", 42, add_one)
+    std::test::value("tiny-leaf-generic-add-one-value", 42, add_one)
 
     # tiny-leaf-dynamic-call-not-inlined: a call through a function value
     # chosen at run time, beside a direct call of the same leaf.
-    fn chosen_at_run_time() errors compiler::CompilerError:
+    fn chosen_at_run_time() errors std::compiler::CompilerError:
         static compile:
             fn inc(x):
                 x + 1
@@ -1054,11 +1054,11 @@ fn register_tiny_leaf_value_tests():
                 g(y)
 
             [inc(5), apply(pick(true), 5)]
-    test::value("tiny-leaf-dynamic-call-not-inlined", [6, 6], chosen_at_run_time)
+    std::test::value("tiny-leaf-dynamic-call-not-inlined", [6, 6], chosen_at_run_time)
 
     # tiny-leaf-exact-callable-param-call-inlines: a call through a
     # parameter that holds exactly the leaf.
-    fn exact_parameter() errors compiler::CompilerError:
+    fn exact_parameter() errors std::compiler::CompilerError:
         static compile:
             fn inc(x):
                 x + 1
@@ -1067,11 +1067,11 @@ fn register_tiny_leaf_value_tests():
                 g(y)
 
             [inc(5), apply(inc, 5)]
-    test::value("tiny-leaf-exact-callable-param-call-inlines", [6, 6], exact_parameter)
+    std::test::value("tiny-leaf-exact-callable-param-call-inlines", [6, 6], exact_parameter)
 
     # tiny-leaf-dynamic-call-top-level-site-still-inlines: a direct call in
     # another function, beside a call through a value chosen at run time.
-    fn direct_beside_dynamic() errors compiler::CompilerError:
+    fn direct_beside_dynamic() errors std::compiler::CompilerError:
         static compile:
             fn inc(x):
                 x + 1
@@ -1092,10 +1092,10 @@ fn register_tiny_leaf_value_tests():
                 inc(5)
 
             [caller(), apply(pick(true), 5)]
-    test::value("tiny-leaf-dynamic-call-top-level-site-still-inlines", [6, 6], direct_beside_dynamic)
+    std::test::value("tiny-leaf-dynamic-call-top-level-site-still-inlines", [6, 6], direct_beside_dynamic)
 
     # tiny-leaf-multi-call-site-all-inline: five call sites of one leaf.
-    fn five_sites() errors compiler::CompilerError:
+    fn five_sites() errors std::compiler::CompilerError:
         static compile:
             fn sq(x):
                 x * x
@@ -1104,11 +1104,11 @@ fn register_tiny_leaf_value_tests():
                 sq(1) + sq(2) + sq(3) + sq(4) + sq(5)
 
             caller()
-    test::value("tiny-leaf-multi-call-site-all-inline", 55, five_sites)
+    std::test::value("tiny-leaf-multi-call-site-all-inline", 55, five_sites)
 
     # tiny-leaf-canonical-still-callable-value: the leaf called directly and,
     # through a value chosen at run time, both ways round.
-    fn still_callable() errors compiler::CompilerError:
+    fn still_callable() errors std::compiler::CompilerError:
         static compile:
             fn inc(x):
                 x + 1
@@ -1126,11 +1126,11 @@ fn register_tiny_leaf_value_tests():
                 g(y)
 
             [inc(5), apply(pick(true), 5), apply(pick(false), 5)]
-    test::value("tiny-leaf-canonical-still-callable-value", [6, 6, 4], still_callable)
+    std::test::value("tiny-leaf-canonical-still-callable-value", [6, 6, 4], still_callable)
 
     # tiny-leaf-gc-stress-smoke: a leaf call in a caller that allocates
     # (50 concatenations) around it.
-    fn allocating_caller() errors compiler::CompilerError:
+    fn allocating_caller() errors std::compiler::CompilerError:
         static compile:
             fn double_use(x):
                 x + x
@@ -1139,14 +1139,14 @@ fn register_tiny_leaf_value_tests():
                 if i >= n:
                     acc
                 else:
-                    build(n, i + 1, str::concat(acc, "x"))
+                    build(n, i + 1, std::str::concat(acc, "x"))
 
             fn caller():
                 s = build(50, 0, "")
-                [str::length(s), double_use(21)]
+                [std::str::length(s), double_use(21)]
 
             caller()
-    test::value("tiny-leaf-gc-stress-smoke", [50, 42], allocating_caller)
+    std::test::value("tiny-leaf-gc-stress-smoke", [50, 42], allocating_caller)
 
 # Argument evaluation, observed through the EvaluationCounter: the Tcl
 # programs' leaves and run() functions, which need the context, so they run
@@ -1184,26 +1184,26 @@ fn register_tiny_leaf_argument_tests():
     once = evaluated_once():
         on IndexNotFound:
             []
-    fn argument_evaluated_once() errors compiler::CompilerError:
+    fn argument_evaluated_once() errors std::compiler::CompilerError:
         static compile:
             once
-    test::value("tiny-leaf-argument-evaluated-once", [20, 11], argument_evaluated_once)
+    std::test::value("tiny-leaf-argument-evaluated-once", [20, 11], argument_evaluated_once)
 
     unused = unused_still_evaluated():
         on IndexNotFound:
             []
-    fn unused_argument_evaluated() errors compiler::CompilerError:
+    fn unused_argument_evaluated() errors std::compiler::CompilerError:
         static compile:
             unused
-    test::value("tiny-leaf-unused-argument-still-evaluated", [6, 1], unused_argument_evaluated)
+    std::test::value("tiny-leaf-unused-argument-still-evaluated", [6, 1], unused_argument_evaluated)
 
     order = left_to_right():
         on IndexNotFound:
             0
-    fn arguments_in_order() errors compiler::CompilerError:
+    fn arguments_in_order() errors std::compiler::CompilerError:
         static compile:
             order
-    test::value("tiny-leaf-argument-order-preserved", -1, arguments_in_order)
+    std::test::value("tiny-leaf-argument-order-preserved", -1, arguments_in_order)
 
 fn register_native_tiny_leaf_inline_tests():
     register_tiny_leaf_value_tests()
@@ -1217,7 +1217,7 @@ fn register_native_aggregates_tests():
     register_native_refinement_propagation_tests()
     register_native_tiny_leaf_inline_tests()
 
-with context EvaluationCounter {a: mutable_array::create(1, 0)}
-with context test::suite()
+with context EvaluationCounter {a: std::mutable_array::create(1, 0)}
+with context std::test::suite()
 register_native_aggregates_tests()
-test::report()
+std::test::report()

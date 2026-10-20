@@ -1,19 +1,19 @@
 # Tiny exact-leaf inlining
 
 This milestone continues directly from `BOUNDED-BIT-SHIFT-LOWERING.md`,
-which closed the scalar-lowering gap inside `byte::nibble` itself (its own
+which closed the scalar-lowering gap inside `std::byte::nibble` itself (its own
 body now lowers to one fused `sar` and a retag, no helper call, no
 branch) and explicitly recommended this as its own next step (`§ 10`,
 `§ 39-40`): the dominant remaining abstraction cost in the real
-`web::high_nibble` chain was, by that point, no longer arithmetic at all,
+`std::web::high_nibble` chain was, by that point, no longer arithmetic at all,
 but the function-call boundary itself --
 
 ```
-call byte::high_nibble(b)
-call byte::nibble(...)
+call std::byte::high_nibble(b)
+call std::byte::nibble(...)
 ```
 
--- two real `call` instructions plus, inside `byte::nibble`, one tag-
+-- two real `call` instructions plus, inside `std::byte::nibble`, one tag-
 transition pair a caller already holding a raw value for its argument could
 not avoid either way, purely because the function boundary demands a
 tagged ABI value in and out.
@@ -25,12 +25,12 @@ exactly the cases that need it, without becoming a general inliner.
 
 The real acceptance case holds exactly as specified: `web.bot`'s local
 `high_nibble` wrapper (nested inside `uri_escape_text`) now contains
-**zero** `call`/`callenv` instructions to either `byte::high_nibble` or
-`byte::nibble` -- their own mask/shift/retag operations run directly inside
+**zero** `call`/`callenv` instructions to either `std::byte::high_nibble` or
+`std::byte::nibble` -- their own mask/shift/retag operations run directly inside
 `high_nibble`'s own compiled body, with the same value, the same runtime
 guard where one was already needed, and no runtime helper call
 (`rt_int_shr` or otherwise) anywhere on this path. The source functions
-(`lib/byte.bot`, `lib/web.bot`) are byte-for-byte unchanged: this is a
+(`stdlib/byte.bot`, `stdlib/web.bot`) are byte-for-byte unchanged: this is a
 compiler-only optimization, driven entirely by generic structural/effect
 facts, with no code anywhere that mentions `Byte`, `Nibble`, `HighNibble`,
 `byte::`, or `web::`.
@@ -55,7 +55,7 @@ facts, with no code anywhere that mentions `Byte`, `Nibble`, `HighNibble`,
   callee's own direct call site still inlining, and a GC-stress smoke case.
 - This report.
 
-No change to `lib/byte.bot`, `lib/web.bot`, `core/scalarbits.tcl`,
+No change to `stdlib/byte.bot`, `stdlib/web.bot`, `core/scalarbits.tcl`,
 `hir/range.tcl`, `hir/specialize.tcl`, `hir/aot.tcl`, or any Rust source
 (`native/src/**`): the mechanism reuses every one of those unmodified.
 
@@ -207,8 +207,8 @@ Nothing here inspects a callee's name, module, or declared result type.
 
 ### 3.1 The budget: why 8
 
-`byte::high_nibble`'s own body has 1 native call (`bit_and`);
-`byte::nibble`'s has 4 (`bit_and`, `shift_right`, `bit_or`, `bit_and`
+`std::byte::high_nibble`'s own body has 1 native call (`bit_and`);
+`std::byte::nibble`'s has 4 (`bit_and`, `shift_right`, `bit_or`, `bit_and`
 again -- `bit_and(bit_or(bit_and(x,15), shift_right(x,4)), 15)`). 8 is
 comfortably above both real target bodies, with headroom for a small
 synthetic multi-op test (§ 7 below pins the exact boundary at 8/9), and is
@@ -232,7 +232,7 @@ in this milestone's own real or synthetic corpus needed it.
 
 ## 4. Why a needed runtime kind guard does not disqualify eligibility
 
-`byte::high_nibble`'s own body, `bit_and(b, 240)`, needs a guard at its own
+`std::byte::high_nibble`'s own body, `bit_and(b, 240)`, needs a guard at its own
 call site: its parameter `b`, called from `web.bot`'s wrapper, is not
 statically proven `int` there (the chain runs through `list_get`/
 `encode_utf8`, whose own static types are broader than `int`), so
@@ -242,7 +242,7 @@ call is inlined. This was the one restriction that, if kept as strict as
 precondition (which those procs need for an unrelated reason -- deciding
 whether to *skip* an operation's own instruction entirely, which is only
 sound when nothing could still need checking), would have made
-`byte::high_nibble` itself ineligible and defeated this milestone's own
+`std::byte::high_nibble` itself ineligible and defeated this milestone's own
 mandatory acceptance target. Relaxed here: `LeafExprEligible` only declines
 on a *`knownErrors`* entry (proven-always-fails); an ordinary `guards`
 entry is left to `EmitArgGuards`, which emits the identical check wherever
@@ -318,14 +318,14 @@ new was added to `hir/range.tcl`. `RawEligibleCall`/`RawEligibleShift`/
 `PureBitwiseEligible`/`NativeCall`'s ordinary raw-vs-tagged decision runs
 **unmodified** on the inlined body's own operations, using the callee's
 own facts, exactly as it would if that body were still a separate
-function: this is what lets `byte::nibble`'s own `x >> 4` stay a raw
+function: this is what lets `std::byte::nibble`'s own `x >> 4` stay a raw
 `sshr`, fused by Cranelift's own instruction selector with the untag shift
 right where it used to be (§ 6.4) -- with **zero inlining-specific
 representation rule** anywhere in this diff (spec's own "do not force
 rawness"). Provenance: every instruction `InlineLeafCall`'s reused lowering
 procs emit still carries its own originating HIR expression id (`Emit`'s
-existing `@E` suffix, completely unchanged) -- `byte::nibble`'s own
-`x & 15` stays traceable to `byte::nibble`'s own expression in NIR/CLIF
+existing `@E` suffix, completely unchanged) -- `std::byte::nibble`'s own
+`x & 15` stays traceable to `std::byte::nibble`'s own expression in NIR/CLIF
 text, not to a synthetic node, even though it now runs inside
 `web.bot`'s own compiled `high_nibble` function.
 
@@ -369,14 +369,14 @@ After (`-tiny-leaf-inline-opt 1`, default off -- see § 11):
 
 Zero `call`/`callenv` instructions. `guard int %0` is the one preserved
 runtime check (§ 4); every operation after it (`iand`, `runbox`, `rishr`,
-`rbox`) is `byte::high_nibble`'s and `byte::nibble`'s own arithmetic,
+`rbox`) is `std::byte::high_nibble`'s and `std::byte::nibble`'s own arithmetic,
 running directly here, with their own expression ids (`@e3`, `@e23`, ...)
 still attached. `%1/%4/%6/%9/%13` are dead leftover constant
 materializations from the elided calls' own literal operands (`Call`
 evaluates every argument before a containing call decides whether to keep
 it -- pre-existing behavior, unrelated to this milestone: the prior
 `BOUNDED-BIT-SHIFT-LOWERING.md` report's own § 5.2 documents the identical
-pattern inside `byte::nibble` itself).
+pattern inside `std::byte::nibble` itself).
 
 ### 6.2 True Cranelift IR (not just NIR text)
 
@@ -384,7 +384,7 @@ After, `high_nibble`'s own compiled body (`native::clif`): a branchy kind
 guard (`brif`, with its own internal fallback calls to `rt_type_error` and,
 on `bit_and`'s own pre-existing tagged-word fast path's own miss branch,
 `rt_int_and` -- both are the guard/AND op's own generic implementation
-detail, unrelated to `byte::high_nibble`/`byte::nibble`), then
+detail, unrelated to `std::byte::high_nibble`/`std::byte::nibble`), then
 
 ```
 v40 = sshr v32, v39   ; v39 = 1 (RUnbox: untag)
@@ -402,9 +402,9 @@ Before, the whole body is two `call fn0(...)`/`call fn1(...)` plus a
 Before (`botlish_fn_4`, 0x4e bytes):
 
 ```
-call   botlish_fn_1      ; byte::high_nibble
+call   botlish_fn_1      ; std::byte::high_nibble
 test/jne                 ; (open-coded result check)
-call   botlish_fn_2      ; byte::nibble
+call   botlish_fn_2      ; std::byte::nibble
 ret
 ```
 
@@ -414,19 +414,19 @@ the *whole-program* total still shrinks):
 ```
 ; guard int %0 (branchy kind check; only its own failure path calls
 ; rt_type_error -- never reached for this call chain's own real inputs)
-and    rsi, 0x1e1        ; byte::high_nibble's own bit_and(b, 240)
-sar    rax, 0x5          ; byte::nibble's own untag(1) + shift(4), fused
+and    rsi, 0x1e1        ; std::byte::high_nibble's own bit_and(b, 240)
+sar    rax, 0x5          ; std::byte::nibble's own untag(1) + shift(4), fused
 shl    rax, 1
 or     rax, 0x1
 ret
 ```
 
-**Zero calls to `byte::high_nibble`, zero calls to `byte::nibble`**, in
+**Zero calls to `std::byte::high_nibble`, zero calls to `std::byte::nibble`**, in
 either the true Cranelift IR or the true machine code, on this call site --
 not merely absent from NIR text. Cranelift's own instruction selector fused
 the untag-by-1 and the logical shift-by-4 into the single `sar rsi, 0x5`
 seen above, exactly mirroring `BOUNDED-BIT-SHIFT-LOWERING.md`'s own
-`byte::nibble` finding (§ 5.2 there), now happening one level up, inside
+`std::byte::nibble` finding (§ 5.2 there), now happening one level up, inside
 `high_nibble`'s own function, with no ABI boundary left between the two
 former callees' own operations at all.
 
@@ -438,13 +438,13 @@ former callees' own operations at all.
 | Whole-program machine code | 16411 bytes | **16284 bytes** (-127, -0.77%) |
 | Function count | 27 | **25** |
 | `call`/`callenv` instructions, whole program | 28 | **26** |
-| `byte::high_nibble` own machine code | 203 bytes (separately emitted) | not separately emitted (§ 7) |
-| `byte::nibble` own machine code | 40 bytes (separately emitted) | not separately emitted (§ 7) |
+| `std::byte::high_nibble` own machine code | 203 bytes (separately emitted) | not separately emitted (§ 7) |
+| `std::byte::nibble` own machine code | 40 bytes (separately emitted) | not separately emitted (§ 7) |
 | `high_nibble` (wrapper) own machine code | 78 bytes (2 calls) | 182 bytes (0 calls, own arithmetic + guard) |
 
 ## 7. Preserving the canonical helper functions (spec § 9, § 36-37, § 104)
 
-`byte::high_nibble`/`byte::nibble` each have **exactly one caller** in this
+`std::byte::high_nibble`/`std::byte::nibble` each have **exactly one caller** in this
 real corpus program (`CLOSED-CALL-PARAMETER-FACTS.md`'s own prior finding,
 reconfirmed here). Once that one call site inlines, `native::lower::
 program`'s own **unchanged** reachability worklist (the `pending` list
@@ -460,7 +460,7 @@ place -- ordinary reachability, not a new pass, decides it (spec § 37:
 was).
 
 **The source functions themselves remain ordinary, valid, ordinarily
-callable Botlish** (spec § 104): `lib/byte.bot` is byte-for-byte
+callable Botlish** (spec § 104): `stdlib/byte.bot` is byte-for-byte
 unchanged, and the synthetic `tiny-leaf-canonical-still-callable-value`/
 `tiny-leaf-dynamic-call-top-level-site-still-inlines` tests demonstrate the
 general property directly -- a leaf with a second, *dynamic* caller (a
@@ -535,7 +535,7 @@ lost their own last caller. `csv_chunked`/`csv_records`/`hashtable` were
 not specifically written for this milestone: they are the *pre-existing*
 corpus, and their own small helper functions (arithmetic/hash/index-style
 leaves) happened to also qualify -- direct evidence the mechanism is not
-narrowly tuned to `byte::nibble`'s own shape (spec's own § 26, § 93). A
+narrowly tuned to `std::byte::nibble`'s own shape (spec's own § 26, § 93). A
 finer per-decline-reason breakdown (spec § 71's "declined by size / by
 effects / by control flow / by openness") was not separately instrumented
 beyond `LeafInlineEligible`'s own pass/fail per instance -- the aggregate
@@ -665,8 +665,8 @@ anywhere in `native/src/**` or `hir/**`; the only "frame" concept native
 code has is the GC's own PC-indexed root map above, which carries no
 function name or source-line information for a human to step through). A
 crash or panic's own OS-level backtrace would show one fewer native stack
-frame for an inlined call site (`byte::nibble`'s own frame no longer
-exists at runtime; its instructions run inside `web::high_nibble`'s own
+frame for an inlined call site (`std::byte::nibble`'s own frame no longer
+exists at runtime; its instructions run inside `std::web::high_nibble`'s own
 frame) -- ordinary, expected inlining behavior, matching any optimizing
 compiler, and no different in kind from what `TraversalAccess`/
 `InlineRegionConsumerCall` already did before this milestone for their own
@@ -686,10 +686,10 @@ fn high_nibble_handwritten(b):
     shift_right(bit_and(b, 240), 4)
 ```
 
-vs. the real composition (`byte::nibble(byte::high_nibble(b))`), both
+vs. the real composition (`std::byte::nibble(std::byte::high_nibble(b))`), both
 inlined (`-tiny-leaf-inline-opt 1`): both lower to the identical shape --
 one guard, one `iand`, one `runbox`/`rishr`/`rbox` sequence, zero calls --
-because `byte::nibble`'s own body, once its trailing `bit_and(...,15)` is
+because `std::byte::nibble`'s own body, once its trailing `bit_and(...,15)` is
 elided by the *pre-existing*, unrelated `native/lower.tcl` AND-identity
 simplification (`BOUNDED-BIT-SHIFT-LOWERING.md`'s own Phase B, unmodified
 by this milestone) whenever its own operand is already proven `[0,15]`,
@@ -788,11 +788,11 @@ unmodified, territory, not this milestone's).
 
 **Representation (21-28)**
 
-21. Both: `byte::high_nibble`'s own `call` and `byte::nibble`'s own `call`
+21. Both: `std::byte::high_nibble`'s own `call` and `std::byte::nibble`'s own `call`
     (§ 6.1).
 22. No new `runbox`/`rbox` counts were added by this milestone; the *same*
     one unbox/rebox pair `BOUNDED-BIT-SHIFT-LOWERING.md` already produced
-    inside `byte::nibble`'s own body now simply runs inside
+    inside `std::byte::nibble`'s own body now simply runs inside
     `high_nibble`'s own function instead (§ 6.1-6.2).
 23. Yes -- demonstrated directly: the shift stays raw (`rishr`) across
     what used to be the ABI boundary, with no additional box/unbox pair
@@ -814,7 +814,7 @@ unmodified, territory, not this milestone's).
 26. No: eligible leaves never allocate or touch a managed value (§ 3
     rules 5-6), so no root map changed; GC-stress confirms this (§ 13,
     § 15).
-27. Yes, for the real case: `byte::high_nibble`/`byte::nibble` are absent
+27. Yes, for the real case: `std::byte::high_nibble`/`std::byte::nibble` are absent
     from native frame walking entirely once their own last caller inlines
     (§ 7) -- an ordinary consequence of reachability, not a new
     mechanism.
@@ -838,13 +838,13 @@ unmodified, territory, not this milestone's).
     prior milestone in this vertical's own "this benchmark's dominant cost
     was never `high_nibble`" note -- § 79 of the milestone's own spec:
     "do not require a fixed percentage speedup"). 37. No -- the generic
-    mask (`iand`, from `byte::high_nibble`'s own body) remains, because
+    mask (`iand`, from `std::byte::high_nibble`'s own body) remains, because
     `b`'s own static type at this call site is not proven `int` (needs a
     guard, § 4) and its own range fact is unconstrained at the point the
     mask runs; masking `b` is still semantically required regardless.
 38. See 37 -- the mask is not "removed", it was never provably redundant
     for this call chain's own actual (unconstrained-`Byte`) argument; only
-    `byte::nibble`'s own *trailing* `bit_and(...,15)` was ever proven
+    `std::byte::nibble`'s own *trailing* `bit_and(...,15)` was ever proven
     redundant, by the pre-existing, unrelated AND-identity simplification
     (§ 14), unchanged by this milestone. 39. N/A (37's mask was never
     removed; the trailing-AND elision that *was* already happening, § 14,
@@ -859,7 +859,7 @@ unmodified, territory, not this milestone's).
 
 41. Yes (`tiny-leaf-generic-add-one-inlines`, § 10). 42. Not separately
     demonstrated with a bespoke second module (the real acceptance case
-    *is* cross-module -- `lib/web.bot` calling `lib/byte.bot` -- and is
+    *is* cross-module -- `stdlib/web.bot` calling `stdlib/byte.bot` -- and is
     this milestone's own primary evidence for § 52-53; see § 17's answer
     to the corresponding required question). 43. Yes
     (`tiny-leaf-dynamic-call-not-inlined`). 44. Yes
@@ -899,8 +899,8 @@ unmodified, territory, not this milestone's).
     existing AND-identity simplification's own precondition is met by
     inlining removing the ABI boundary that used to block it from ever
     seeing `b`'s own facts continuously. 57. Yes: the real acceptance case
-    is the demonstration -- `byte::high_nibble`/`byte::nibble` stayed
-    ordinary Botlish functions (`lib/byte.bot` untouched, § 1), and their
+    is the demonstration -- `std::byte::high_nibble`/`std::byte::nibble` stayed
+    ordinary Botlish functions (`stdlib/byte.bot` untouched, § 1), and their
     call overhead at their one real call site is now zero, without adding
     any Byte/Nibble-specific compiler code (§ 9's genericity table; § 16
     Q40/Q48). 58. Any shape `LeafInlineEligible` declines: branching,
@@ -932,9 +932,9 @@ unmodified, territory, not this milestone's).
 
 Does this milestone provide evidence that low-level stdlib abstractions can
 remain ordinary Botlish functions without paying unavoidable call
-overhead? **Yes, for the class demonstrated**: `byte::high_nibble` and
-`byte::nibble` are, and remain, ordinary Botlish functions
-(`lib/byte.bot`, byte-for-byte unchanged across this entire multi-milestone
+overhead? **Yes, for the class demonstrated**: `std::byte::high_nibble` and
+`std::byte::nibble` are, and remain, ordinary Botlish functions
+(`stdlib/byte.bot`, byte-for-byte unchanged across this entire multi-milestone
 vertical) with a verified real call chain (`web.bot`'s `high_nibble`) that
 now compiles to zero function-call overhead and zero redundant
 representation-transition instructions at that call site (§ 6), with the

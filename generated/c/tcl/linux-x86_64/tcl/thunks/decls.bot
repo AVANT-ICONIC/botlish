@@ -3,7 +3,7 @@
 # The thunked APIs of generic/tclDecls.h (static inline functions, table-redirected
 # names, macros): externs of the C wrappers in the shim library (C-BINDGEN.md,
 # "Thunks"). Build the shim with `tools/c-bindgen.tcl build`.
-import ffi::c
+import std::ffi::c
 import tcl::ctypes
 
 extern c library "botlish_shim_tcl_3850e119"
@@ -11,74 +11,74 @@ extern c library "tcl9.0"
 
 # C: int Tcl_GetBoolean(Tcl_Interp *interp, const char *src, int *intPtr), shadowed by a function-like macro of its name
 extern c fn Tcl_GetBoolean named "botlish_tcl_Tcl_GetBoolean"(
-    interp: ffi::c::Ptr[tcl::ctypes::Tcl_Interp],
-    src: ffi::c::Ptr[ffi::c::Char],
-    intPtr: ffi::c::Ptr[ffi::c::Int]
-) -> ffi::c::Int
+    interp: std::ffi::c::Ptr[tcl::ctypes::Tcl_Interp],
+    src: std::ffi::c::Ptr[std::ffi::c::Char],
+    intPtr: std::ffi::c::Ptr[std::ffi::c::Int]
+) -> std::ffi::c::Int
 
 # C: int Tcl_GetBooleanFromObj(Tcl_Interp *interp, Tcl_Obj *objPtr, int *intPtr), shadowed by a function-like macro of its name
 extern c fn Tcl_GetBooleanFromObj named "botlish_tcl_Tcl_GetBooleanFromObj"(
-    interp: ffi::c::Ptr[tcl::ctypes::Tcl_Interp],
-    objPtr: ffi::c::Ptr[tcl::ctypes::Tcl_Obj],
-    intPtr: ffi::c::Ptr[ffi::c::Int]
-) -> ffi::c::Int
+    interp: std::ffi::c::Ptr[tcl::ctypes::Tcl_Interp],
+    objPtr: std::ffi::c::Ptr[tcl::ctypes::Tcl_Obj],
+    intPtr: std::ffi::c::Ptr[std::ffi::c::Int]
+) -> std::ffi::c::Int
 
 # C: unsigned char *Tcl_GetByteArrayFromObj(Tcl_Obj *objPtr, Tcl_Size *numBytesPtr), shadowed by a function-like macro of its name
 extern c fn Tcl_GetByteArrayFromObj named "botlish_tcl_Tcl_GetByteArrayFromObj"(
-    objPtr: ffi::c::Ptr[tcl::ctypes::Tcl_Obj],
-    numBytesPtr: ffi::c::Ptr[ffi::c::Long]
-) -> ffi::c::Ptr[ffi::c::UChar]
+    objPtr: std::ffi::c::Ptr[tcl::ctypes::Tcl_Obj],
+    numBytesPtr: std::ffi::c::Ptr[std::ffi::c::Long]
+) -> std::ffi::c::Ptr[std::ffi::c::UChar]
 
 # C: int Tcl_Close(Tcl_Interp *interp, Tcl_Channel chan), shadowed by a function-like macro of its name
 extern c fn Tcl_Close named "botlish_tcl_Tcl_Close"(
-    interp: ffi::c::Ptr[tcl::ctypes::Tcl_Interp],
-    chan: ffi::c::Ptr[tcl::ctypes::Tcl_Channel_]
-) -> ffi::c::Int
+    interp: std::ffi::c::Ptr[tcl::ctypes::Tcl_Interp],
+    chan: std::ffi::c::Ptr[tcl::ctypes::Tcl_Channel_]
+) -> std::ffi::c::Int
 
 # C: void Tcl_ValidateAllMemory(const char *file, int line), shadowed by a function-like macro of its name
 extern c fn Tcl_ValidateAllMemory named "botlish_tcl_Tcl_ValidateAllMemory"(
-    file: ffi::c::Ptr[ffi::c::Char] read proven noescape,
-    line: ffi::c::Int
+    file: std::ffi::c::Ptr[std::ffi::c::Char] read proven noescape,
+    line: std::ffi::c::Int
 ) -> unit
 
 # C: void Tcl_InitMemory(Tcl_Interp *interp), shadowed by a function-like macro of its name
 extern c fn Tcl_InitMemory named "botlish_tcl_Tcl_InitMemory"(
-    interp: ffi::c::Ptr[tcl::ctypes::Tcl_Interp] read proven noescape
+    interp: std::ffi::c::Ptr[tcl::ctypes::Tcl_Interp] read proven noescape
 ) -> unit
 
 # C: int Tcl_GetIndexFromObjStruct(Tcl_Interp *interp, Tcl_Obj *objPtr, const void *tablePtr, Tcl_Size offset, const char *msg, int flags, void *indexPtr), shadowed by a function-like macro of its name
 extern c fn Tcl_GetIndexFromObjStruct named "botlish_tcl_Tcl_GetIndexFromObjStruct"(
-    interp: ffi::c::Ptr[tcl::ctypes::Tcl_Interp],
-    objPtr: ffi::c::Ptr[tcl::ctypes::Tcl_Obj],
-    tablePtr: ffi::c::Ptr[ffi::c::Void],
-    offset: ffi::c::Long,
-    msg: ffi::c::Ptr[ffi::c::Char],
-    flags: ffi::c::Int,
-    indexPtr: ffi::c::Ptr[ffi::c::Void]
-) -> ffi::c::Int
+    interp: std::ffi::c::Ptr[tcl::ctypes::Tcl_Interp],
+    objPtr: std::ffi::c::Ptr[tcl::ctypes::Tcl_Obj],
+    tablePtr: std::ffi::c::Ptr[std::ffi::c::Void],
+    offset: std::ffi::c::Long,
+    msg: std::ffi::c::Ptr[std::ffi::c::Char],
+    flags: std::ffi::c::Int,
+    indexPtr: std::ffi::c::Ptr[std::ffi::c::Void]
+) -> std::ffi::c::Int
 
 # C: char *Tcl_GetString(Tcl_Obj *objPtr), shadowed by a function-like macro of its name
 extern c fn Tcl_GetString named "botlish_tcl_Tcl_GetString"(
-    objPtr: ffi::c::Ptr[tcl::ctypes::Tcl_Obj]
-) -> ffi::c::Ptr[ffi::c::Char]
+    objPtr: std::ffi::c::Ptr[tcl::ctypes::Tcl_Obj]
+) -> std::ffi::c::Ptr[std::ffi::c::Char]
 
 # C: void Tcl_IncrRefCount(Tcl_Obj *objPtr), shadowed by a function-like macro of its name
 extern c fn Tcl_IncrRefCount named "botlish_tcl_Tcl_IncrRefCount"(
-    objPtr: ffi::c::Ptr[tcl::ctypes::Tcl_Obj] proven noescape
+    objPtr: std::ffi::c::Ptr[tcl::ctypes::Tcl_Obj] proven noescape
 ) -> unit
 
 # C: void Tcl_DecrRefCount(Tcl_Obj *objPtr), shadowed by a function-like macro of its name
 extern c fn Tcl_DecrRefCount named "botlish_tcl_Tcl_DecrRefCount"(
-    objPtr: ffi::c::Ptr[tcl::ctypes::Tcl_Obj]
+    objPtr: std::ffi::c::Ptr[tcl::ctypes::Tcl_Obj]
 ) -> unit
 
 # C: int Tcl_IsShared(Tcl_Obj *objPtr), shadowed by a function-like macro of its name
 extern c fn Tcl_IsShared named "botlish_tcl_Tcl_IsShared"(
-    objPtr: ffi::c::Ptr[tcl::ctypes::Tcl_Obj] read proven noescape
-) -> ffi::c::Int
+    objPtr: std::ffi::c::Ptr[tcl::ctypes::Tcl_Obj] read proven noescape
+) -> std::ffi::c::Int
 
 # C: macro Tcl_Eval, as int Tcl_Eval(Tcl_Interp *interp, const char *script)
 extern c fn Tcl_Eval named "botlish_tcl_Tcl_Eval"(
-    interp: ffi::c::Ptr[tcl::ctypes::Tcl_Interp] noescape,
-    script: ffi::c::Ptr[ffi::c::Char] read noescape
-) -> ffi::c::Int
+    interp: std::ffi::c::Ptr[tcl::ctypes::Tcl_Interp] noescape,
+    script: std::ffi::c::Ptr[std::ffi::c::Char] read noescape
+) -> std::ffi::c::Int

@@ -1,14 +1,14 @@
 # CSV parsing, identical to csv.bot's algorithm and result, except that both
 # levels of list construction (fields within a record, records within the
 # result) use a GeometricBuilder over MutableArray instead of repeated
-# list::append. csv.bot's persistent-list version is kept unchanged as the
+# std::list::append. csv.bot's persistent-list version is kept unchanged as the
 # quadratic-copying baseline (see bench/corpus.tcl's csv/csv_geometric/
 # csv_chunked cases); this file exists to compare construction strategies on
 # the identical parsing algorithm.
 #
 # GeometricBuilder: a contiguous, geometrically-growing mutable array,
-# built entirely from the MutableArray substrate (mutable_array::create/
-# mutable_array::capacity/::set/::copy/::freeze) -- ordinary Botlish, not a
+# built entirely from the MutableArray substrate (std::mutable_array::create/
+# std::mutable_array::capacity/::set/::copy/::freeze) -- ordinary Botlish, not a
 # compiler or runtime primitive. A builder's state is two separate values,
 # STORAGE (a typed MutableArray[T], created from a real element) and LENGTH
 # (how many of its slots are in use), threaded through the parsing functions
@@ -19,8 +19,8 @@
 #
 # expect: [["name", "age"], ["Alice", "30"], ["Bob", "40"]]
 
-import mutable_array
-import str
+import std::mutable_array
+import std::str
 
 # A builder holding exactly FIRST: a capacity-1 array (every slot holds
 # FIRST, so slot 0 is already the first element) and, for the caller to keep,
@@ -29,7 +29,7 @@ import str
 # all does not exist (callers with a possibly empty result handle that case
 # themselves).
 fn geo_new(first):
-    mutable_array::create(1, first)
+    std::mutable_array::create(1, first)
 
 # The capacity a builder holding LENGTH elements should grow CAPACITY to, to
 # fit one more: double, or exactly enough if doubling still isn't enough
@@ -45,17 +45,17 @@ fn geo_new_capacity(capacity, length):
 # STORAGE, grown if it has no room for one more element at LENGTH: a fresh,
 # larger MutableArray with STORAGE's first LENGTH elements copied in, or
 # STORAGE unchanged if it already has room. VALUE, the element about to be
-# appended, initializes every slot of the fresh array (mutable_array::create
+# appended, initializes every slot of the fresh array (std::mutable_array::create
 # fills all of them); the slots at LENGTH and beyond are overwritten by later
 # appends before freeze(LENGTH) can ever expose them.
 fn geo_grow(storage, length, value) errors UpperOverrun:
-    capacity = mutable_array::capacity(storage)
+    capacity = std::mutable_array::capacity(storage)
     if length < capacity:
         return storage
 
     new_capacity = geo_new_capacity(capacity, length)
-    fresh = mutable_array::create(new_capacity, value)
-    mutable_array::copy(fresh, 0, storage, 0, length)
+    fresh = std::mutable_array::create(new_capacity, value)
+    std::mutable_array::copy(fresh, 0, storage, 0, length)
     fresh
 
 # STORAGE with VALUE appended at index LENGTH, grown first when full. The
@@ -63,13 +63,13 @@ fn geo_grow(storage, length, value) errors UpperOverrun:
 # caller's new length is LENGTH + 1.
 fn geo_append(storage, length, value) errors IndexNotFound, UpperOverrun:
     grown = geo_grow(storage, length, value)
-    mutable_array::set(grown, length, value)
+    std::mutable_array::set(grown, length, value)
     grown
 
 # STORAGE's first LENGTH elements as an ordinary immutable List
-# (finalization: a single exact-size copy, see mutable_array::freeze).
+# (finalization: a single exact-size copy, see std::mutable_array::freeze).
 fn geo_finish(storage, length) errors LowerUnderrun, UpperOverrun:
-    mutable_array::freeze(storage, length)
+    std::mutable_array::freeze(storage, length)
 
 # ---------------------------------------------------------------------------
 # CSV parsing (see csv.bot for the algorithm's description; unchanged here
@@ -92,15 +92,15 @@ fn geo_finish(storage, length) errors LowerUnderrun, UpperOverrun:
 # MutableArray[any] and needed none.
 
 fn peek(text, index) errors LowerUnderrun:
-    if index >= str::length(text):
+    if index >= std::str::length(text):
         return ""
 
-    str::substring(text, index, index + 1)
+    std::str::substring(text, index, index + 1)
 
 fn scan_unquoted(text, start, index) errors LowerUnderrun, UpperOverrun:
     character = peek(text, index)
     if character == "" or character == "," or character == "\n":
-        return {field: str::substring(text, start, index), index: index}
+        return {field: std::str::substring(text, start, index), index: index}
 
     scan_unquoted(text, start, index + 1)
 
@@ -108,11 +108,11 @@ fn scan_quoted(text, index, field) errors LowerUnderrun:
     character = peek(text, index)
     if character == "\"":
         if peek(text, index + 1) == "\"":
-            return scan_quoted(text, index + 2, str::concat(field, "\""))
+            return scan_quoted(text, index + 2, std::str::concat(field, "\""))
 
         return {field: field, index: index + 1}
 
-    scan_quoted(text, index + 1, str::concat(field, character))
+    scan_quoted(text, index + 1, std::str::concat(field, character))
 
 fn scan_field(text, index) errors LowerUnderrun, UpperOverrun:
     if peek(text, index) == "\"":
@@ -147,7 +147,7 @@ fn scan_record(text, index) errors IndexNotFound, LowerUnderrun, UpperOverrun:
 
 # The records from INDEX on, the first COUNT records already in RECORDS.
 fn scan_records(text, index, records: MutableArray[List[str]], count) errors IndexNotFound, LowerUnderrun, UpperOverrun:
-    if index >= str::length(text):
+    if index >= std::str::length(text):
         return geo_finish(records, count)
 
     scanned = scan_record(text, index)
@@ -155,7 +155,7 @@ fn scan_records(text, index, records: MutableArray[List[str]], count) errors Ind
     scan_records(text, scanned.stop, more, count + 1)
 
 fn csv_parse(text) errors IndexNotFound, LowerUnderrun, UpperOverrun:
-    if str::length(text) == 0:
+    if std::str::length(text) == 0:
         return []
 
     scanned = scan_record(text, 0)

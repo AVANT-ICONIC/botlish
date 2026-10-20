@@ -48,7 +48,7 @@
 #                   calls such a native through the generic call boundary.
 #   errorsFrom      "" or the index K of a callable argument whose contract's
 #                   declared errors a call of the native may complete with:
-#                   the native calls it (mutable_array::generate's factory),
+#                   the native calls it (std::mutable_array::generate's factory),
 #                   and the first failing call's propagate-error is the
 #                   native's own completion. Static typing charges the
 #                   callable's contract errors to the call (hir/types.tcl's
@@ -71,13 +71,13 @@
 #                     extent K        the extent N of argument K's static
 #                                     type when it is a live fixed array,
 #                                     NativeView[array N of E] or
-#                                     NativeEdit[array N of E] (binary::load
+#                                     NativeEdit[array N of E] (std::binary::load
 #                                     copies exactly N elements:
 #                                     FIXED-LAYOUT-ARRAYS.md); nothing for
 #                                     any other argument
 #                     path K          the extent N of the fixed array the
 #                                     field designator constant argument K
-#                                     names (binary::read of an array:
+#                                     names (std::binary::read of an array:
 #                                     LAYOUT-UNIONS.md); nothing for any
 #                                     other designator
 #   keepsLength     0 | 1 (default 0): the operation mutates its receiver
@@ -173,7 +173,7 @@
 #                                     `mutarray` argument keeps the declared
 #                                     result
 #                     named-struct ID   the result is a struct of the
-#                                     named declaration ID ("abi::x86_64::
+#                                     named declaration ID ("std::abi::x86_64::
 #                                     Register64"), resolved lazily in the
 #                                     compiling program's struct registry
 #                                     (hir/structs.tcl); the declared
@@ -213,8 +213,8 @@
 #                   a C pointer -- and R the C result (or unit). The static
 #                   signature of the call (its types, like an -imprint's,
 #                   which -foreign derives when it has variables) and, per
-#                   pointer parameter, whether an abi::bytes::Bytes or
-#                   abi::bytes::MutableBytes may be exposed to it for the
+#                   pointer parameter, whether a std::abi::bytes::Bytes or
+#                   std::abi::bytes::MutableBytes may be exposed to it for the
 #                   call (hir/borrow.tcl). The implementation is entered
 #                   through core::cabi::ForeignBoundary, which models the
 #                   exposures on the Tcl backends.
@@ -241,7 +241,7 @@
 #                     interval LO HI  the result is always in LO..HI (two
 #                                     integers, LO <= HI; stored in decimal):
 #                                     a bound of the operation itself, e.g.
-#                                     char::scalar_value's Unicode scalar
+#                                     std::char::scalar_value's Unicode scalar
 #                                     values or hash's 61-bit mask
 #                     collection-length   the result is always a String or
 #                                     List length: >= 0 and, by the runtime's
@@ -326,9 +326,9 @@ namespace eval core::native {
     #   range-check          may raise RANGE for an index outside a value
     #   structural-equality  compares values of any kinds structurally
     #   mutarray-alloc       allocates a new MutableArray, or a List by
-    #                        finalizing one (mutable_array::freeze)
+    #                        finalizing one (std::mutable_array::freeze)
     #   mutarray-mutate      mutates a MutableArray's slots in place
-    #                        (mutable_array::set, mutable_array::copy)
+    #                        (std::mutable_array::set, std::mutable_array::copy)
     #   hash                 computes a semantic hash of a value, recursing
     #                        into any List/Result payload the way
     #                        structural-equality does (core/hashing.tcl) --
@@ -340,8 +340,8 @@ namespace eval core::native {
     #   bytestore-alloc      allocates a new owned byte storage (core/bytestore.tcl;
     #                        ABI-BYTES.md)
     #   raw-address          produces the machine address of an owned byte
-    #                        storage's payload (abi::x86_64::from_bytes,
-    #                        abi::aarch64::from_bytes; native only,
+    #                        storage's payload (std::abi::x86_64::from_bytes,
+    #                        std::abi::aarch64::from_bytes; native only,
     #                        ABI-BYTES.md)
     #   mutvec-alloc         allocates a new MutableVector header
     #                        (core/mutvec.tcl; MUTABLE-VECTOR.md)
@@ -416,8 +416,8 @@ proc core::native::directNamespaces {} {
 }
 
 # The intrinsic namespace of the qualified root native NAME (the part of its
-# registered name before the last "::": linux::abi::x86_64::syscall is a
-# member of linux::abi::x86_64, qualifiedMembers' membership), "" for a native in no namespace.
+# registered name before the last "::": std::linux::abi::x86_64::syscall is a
+# member of std::linux::abi::x86_64, qualifiedMembers' membership), "" for a native in no namespace.
 proc core::native::namespaceOf {name} {
     if {[string match extern#* $name]} {
         # An extern c fn's native (C-FFI.md) is a member of the module that
@@ -641,7 +641,7 @@ proc core::native::register {name args} {
 #   typed {AT FORM}  argument AT's static type is LayoutStruct[L]; the call is
 #                    elaborated to a call of root native FORM with L's
 #                    descriptor appended
-#   input K          argument K is the bytes being imprinted (an abi::bytes::
+#   input K          argument K is the bytes being imprinted (a std::abi::bytes::
 #                    Bytes)
 #   op OP            the operation a backend performs with the descriptor
 #                    constant of the operand: parse (imprint) or emit; view
@@ -650,15 +650,15 @@ proc core::native::register {name args} {
 #                    read, the operand that field's descriptor entry)
 #                    (NATIVE-LAYOUT-VIEWS.md)
 #   pointer K        argument K is the data pointer a native view reads
-#                    through (an ffi::c::Ptr[T])
+#                    through (a std::ffi::c::Ptr[T])
 #   viewed {AT FORM} argument AT's static type is NativeView[L]; the call is
 #                    elaborated to a call of FORM with L's descriptor
-#                    appended (binary::load)
+#                    appended (std::binary::load)
 #   field K          argument K is one field's descriptor entry (the
 #                    internal binary#view_field a view's projection becomes)
 #   edited K         argument K is the native edit a store writes through
 #                    (a NativeEdit[L]; NATIVE-LAYOUT-WRITES.md)
-#   output K         argument K is the abi::bytes::MutableBytes a layout
+#   output K         argument K is the std::abi::bytes::MutableBytes a layout
 #                    write writes into
 #   path K           argument K is the static field designator
 #                    (LAYOUT.FIELD..., resolved to its designator constant)
@@ -811,7 +811,7 @@ proc core::native::ValidShape {shape count} {
     }
     if {[lindex $shape 0] eq {named-struct}} {
         # {named-struct ID}: the result is a struct of the named declaration
-        # ID (linux::abi::x86_64::syscall's abi::x86_64::Register64), a fixed fact
+        # ID (std::linux::abi::x86_64::syscall's std::abi::x86_64::Register64), a fixed fact
         # about the native itself. ID is a symbolic declaration identity,
         # resolved lazily by hir::types::ShapeResult against the compiling
         # program's own struct registry (a library struct is declared by a
@@ -832,7 +832,7 @@ proc core::native::ValidShape {shape count} {
     }
     if {[lindex $shape 0] eq {layout-struct}} {
         # {layout-struct I}: the result is a LayoutStruct[L] whose layout L
-        # is described by argument I's descriptor constant (binary::parse,
+        # is described by argument I's descriptor constant (std::binary::parse,
         # core/binary.tcl; BINARY-LAYOUT.md), resolved by hir::types::
         # ShapeResult.
         return [expr {$length == 2 && [string is digit -strict [lindex $shape 1]]
@@ -849,7 +849,7 @@ proc core::native::ValidShape {shape count} {
     }
     if {[lindex $shape 0] eq {layout-read}} {
         # {layout-read I}: the copied type of the representation the field
-        # designator constant argument I names (binary::read,
+        # designator constant argument I names (std::binary::read,
         # LAYOUT-UNIONS.md), resolved by hir::types::ShapeResult.
         return [expr {$length == 2 && [string is digit -strict [lindex $shape 1]]
             && ($count eq "" || [lindex $shape 1] < $count)}]
@@ -857,12 +857,12 @@ proc core::native::ValidShape {shape count} {
     if {[lindex $shape 0] in {native-view native-edit view-struct native-element}} {
         # {native-view I}: the result is a NativeView[L] whose layout L is
         # described by argument I's descriptor constant
-        # (binary::native::view); {view-struct I}: a LayoutStruct[L], L the
-        # layout of argument I's static NativeView[L] type (binary::load),
+        # (std::binary::native::view); {view-struct I}: a LayoutStruct[L], L the
+        # layout of argument I's static NativeView[L] type (std::binary::load),
         # or of a live fixed array's the List its copy is;
-        # {native-edit I}: a NativeEdit[L] likewise (binary::native::edit,
+        # {native-edit I}: a NativeEdit[L] likewise (std::binary::native::edit,
         # NATIVE-LAYOUT-WRITES.md); {native-element I}: the element of
-        # argument I's static live fixed array type (binary::element,
+        # argument I's static live fixed array type (std::binary::element,
         # FIXED-LAYOUT-ARRAYS.md). All resolved by hir::types::ShapeResult
         # (NATIVE-LAYOUT-VIEWS.md).
         return [expr {$length == 2 && [string is digit -strict [lindex $shape 1]]
@@ -885,9 +885,9 @@ proc core::native::ValidShape {shape count} {
         # type whose own domain admits every value in LO..HI, the result is
         # additionally NAME-typed. NAME is resolved lazily by hir::types::
         # ShapeResult at type-inference time (never here at registration
-        # time, since a native like str::encode_utf8 is registered once at core
+        # time, since a native like std::str::encode_utf8 is registered once at core
         # bootstrap, long before a compiling program's own `type NAME = ...`
-        # declaration -- e.g. lib/byte.bot's Byte -- has been parsed; NAME
+        # declaration -- e.g. stdlib/byte.bot's Byte -- has been parsed; NAME
         # is just a symbolic reference until then). Resolving the name is
         # not, by itself, proof of membership: the same spelling can denote
         # an unrelated or narrower domain in a different compiling program
@@ -1023,7 +1023,7 @@ proc core::native::failDeclared {name message {payload ""}} {
 }
 
 # The one slice rule (STDLIB-NAMESPACES.md), shared by every slicing native
-# (str::substring, mutable_array::copy, mutable_array::freeze) and
+# (std::str::substring, std::mutable_array::copy, std::mutable_array::freeze) and
 # mirrored exactly by native/src/runtime/ops.rs's check_slice: the slice
 # START..END (END exclusive) of a sequence of N elements is valid iff
 # 0 <= START <= END <= N. Its bounds are checked in order -- START against
@@ -1076,7 +1076,7 @@ proc core::native::names {} {
 }
 
 # 1 if NAME is a registered native whose name is itself namespace-qualified
-# ("linux::abi::x86_64::syscall", core/linuxabi.tcl): source spells it exactly like
+# ("std::linux::abi::x86_64::syscall", core/linuxabi.tcl): source spells it exactly like
 # a module function, but it is a root native, and no module file defines it
 # (surface/modules.tcl, surface/lower.tcl).
 proc core::native::isQualifiedNative {name} {
@@ -1085,7 +1085,7 @@ proc core::native::isQualifiedNative {name} {
 }
 
 # The member names of the qualified root natives that live directly in
-# namespace NS (`list` -> at append length; `linux::abi::x86_64` -> syscall), sorted:
+# namespace NS (`list` -> at append length; `std::linux::abi::x86_64` -> syscall), sorted:
 # the intrinsic members of NS, which no module source may define
 # (surface/modules.tcl's DUPLICATE-NATIVE) and which a reference
 # NS::MEMBER always denotes. Empty for a namespace with none.
@@ -1223,7 +1223,7 @@ proc core::native::invoke {nativeValue argValues} {
 # error.rs's ERR_* constants are both keyed to these indices, so the order
 # is declared once, here, never by whichever file happens to load first.
 #   InvalidArgumentEncoding  argv() (core/process.tcl; ARGV.md)
-#   IndexNotFound            list::at, mutable_array::at, mutable_array::set:
+#   IndexNotFound            std::list::at, std::mutable_array::at, std::mutable_array::set:
 #                            the index does not designate an element
 #                            (core/lists.tcl, core/mutarray.tcl;
 #                            STDLIB-NAMESPACES.md)

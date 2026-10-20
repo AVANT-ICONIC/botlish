@@ -11,7 +11,7 @@
 # valid expression (an Int sum, a List, a String) or a deliberate fault
 # (an unbound name, a TYPE argument, a KNOWN-ERROR call, a USE-AFTER-MOVE, an
 # unknown field) -- with an expectation that matches or deliberately does
-# not. An independent model, sharing nothing with lib/test.bot or the
+# not. An independent model, sharing nothing with stdlib/test.bot or the
 # compiler, predicts the whole report: registration order, every verdict, the
 # expected/actual texts (values, codes, line and column of the fault) and the
 # summary; the first line of a diagnostic's detail is predicted for the
@@ -81,7 +81,7 @@ proc faultBody {k} {
             return [dict create kind fault lines [list "need_int(\"s$k\")"] code Type offset 0 col 22 detail ""]
         }
         known {
-            return [dict create kind fault lines [list "list::at(\[1, 2\], [randint 2 9])"] code KnownError offset 0 col 13 detail ""]
+            return [dict create kind fault lines [list "std::list::at(\[1, 2\], [randint 2 9])"] code KnownError offset 0 col 13 detail ""]
         }
         moved {
             return [dict create kind fault lines [list "coroutine {step} = finite($k)" "other = step" "step().n + other().n"] \
@@ -177,14 +177,14 @@ proc predict {case line} {
     }
 }
 
-proc codeRef {code} { return "compiler::DiagnosticCode::$code" }
+proc codeRef {code} { return "std::compiler::DiagnosticCode::$code" }
 
 # A generated suite: {SOURCE PREDICTED-LINES COUNT}.
 proc genProgram {} {
     set lines {
-        "import compiler"
-        "import list"
-        "import test"
+        "import std::compiler"
+        "import std::list"
+        "import std::test"
         ""
         "struct Event:"
         "    n: int"
@@ -218,19 +218,19 @@ proc genProgram {} {
         for {set i 0} {$i < $n} {incr i} {
             set case [genCase $k]
             set body [dict get $case body]
-            lappend lines "    fn body_${k}() errors compiler::CompilerError:" "        static compile:"
+            lappend lines "    fn body_${k}() errors std::compiler::CompilerError:" "        static compile:"
             set first [expr {[llength $lines] + 1}]
             foreach l [dict get $body lines] { lappend lines "            $l" }
             set name [dict get $case name]
             switch -- [dict get $case helper] {
-                value { lappend lines "    test::value(\"$name\", [dict get $case expected], body_$k)" }
-                holds { lappend lines "    test::holds(\"$name\", \"a number above 50\", above_50?, body_$k)" }
-                rejects { lappend lines "    test::rejects(\"$name\", [codeRef [dict get $case code]], body_$k)" }
+                value { lappend lines "    std::test::value(\"$name\", [dict get $case expected], body_$k)" }
+                holds { lappend lines "    std::test::holds(\"$name\", \"a number above 50\", above_50?, body_$k)" }
+                rejects { lappend lines "    std::test::rejects(\"$name\", [codeRef [dict get $case code]], body_$k)" }
                 rejects_at {
                     set column [expr {[dict get $body col] + [dict get $case dcol]}]
-                    lappend lines "    test::rejects_at(\"$name\", [codeRef [dict get $case code]], [expr {$first + [dict get $body offset]}], $column, body_$k)"
+                    lappend lines "    std::test::rejects_at(\"$name\", [codeRef [dict get $case code]], [expr {$first + [dict get $body offset]}], $column, body_$k)"
                 }
-                rejects_any { lappend lines "    test::rejects_any(\"$name\", body_$k)" }
+                rejects_any { lappend lines "    std::test::rejects_any(\"$name\", body_$k)" }
             }
             lappend registered [list $case $first]
             incr k
@@ -241,7 +241,7 @@ proc genProgram {} {
     # A composing registration function: groups in order.
     lappend lines "fn register_all():"
     foreach c $calls { lappend lines "    $c" }
-    lappend lines "" "with context test::suite()" "register_all()" "test::report()" ""
+    lappend lines "" "with context std::test::suite()" "register_all()" "std::test::report()" ""
     set passed 0
     foreach entry $registered {
         lassign $entry case first

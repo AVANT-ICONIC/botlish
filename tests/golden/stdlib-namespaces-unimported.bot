@@ -3,31 +3,31 @@
 # name of a namespace is authorized only by its import (STDLIB-NAMESPACES.md,
 # IMPORTS.md), as a source-level specification: in a file that imports
 # neither list nor any other namespace defining `at`, [1, 2].at(0) finds no
-# function, and both it and list::at([1, 2], 0) are the missing import of
+# function, and both it and std::list::at([1, 2], 0) are the missing import of
 # list (MissingImport: the two spellings agree, DIAGNOSTIC-RECOVERY.md).
-# (With `import str`
-# alone: stdlib-namespaces-str-only.bot; with `import list`, `.at` is
-# list::at: stdlib-namespaces.bot's ns-method-requires-an-import/list-imported.)
+# (With `import std::str`
+# alone: stdlib-namespaces-str-only.bot; with `import std::list`, `.at` is
+# std::list::at: stdlib-namespaces.bot's ns-method-requires-an-import/list-imported.)
 #
 # Ported from tests/stdlib-namespaces.test (ns-method-requires-an-import, its
 # programs without an import), which stays authoritative:
 # audit/golden/migration/fragments/stdlib-namespaces-unimported.tsv. A suite
 # of its own because its subject is the import set: compiler and test only
-# (the framework; neither defines a member named at, and lib/test.bot's own
+# (the framework; neither defines a member named at, and stdlib/test.bot's own
 # imports of list and str are not this file's: imports are not transitive).
-import compiler
-import test
+import std::compiler
+import std::test
 
 fn register_unimported_tests():
-    fn b_method_without_import() errors compiler::CompilerError:
+    fn b_method_without_import() errors std::compiler::CompilerError:
         static compile:
             [1, 2].at(0)
-    test::rejects("ns-method-requires-an-import/no-import", compiler::DiagnosticCode::MissingImport, b_method_without_import)
-    fn b_qualified_without_import() errors compiler::CompilerError:
+    std::test::rejects("ns-method-requires-an-import/no-import", std::compiler::DiagnosticCode::MissingImport, b_method_without_import)
+    fn b_qualified_without_import() errors std::compiler::CompilerError:
         static compile:
-            list::at([1, 2], 0)
-    test::rejects("ns-method-requires-an-import/qualified-without-import", compiler::DiagnosticCode::MissingImport, b_qualified_without_import)
+            std::list::at([1, 2], 0)
+    std::test::rejects("ns-method-requires-an-import/qualified-without-import", std::compiler::DiagnosticCode::MissingImport, b_qualified_without_import)
 
-with context test::suite()
+with context std::test::suite()
 register_unimported_tests()
-test::report()
+std::test::report()

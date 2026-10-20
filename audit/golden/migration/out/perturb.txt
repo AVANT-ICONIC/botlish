@@ -184,8 +184,8 @@ imports-unimported.bot       invert    16 tests,   16 failed as required
 imports-unimported.bot       alter     16 altered,   16 failed as required,    0 not alterable
 imports.bot                  invert    59 tests,   59 failed as required
 imports.bot                  alter     37 altered,   37 failed as required,    2 not alterable
-    not altered: (computed name str::concat(name, "/qualified")) -- expected value has no Int, String, Bool or known enum case to alter
-    not altered: (computed name str::concat(name, "/method")) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name std::str::concat(name, "/qualified")) -- expected value has no Int, String, Bool or known enum case to alter
+    not altered: (computed name std::str::concat(name, "/method")) -- expected value has no Int, String, Bool or known enum case to alter
 linux-io-native.bot          invert     0 tests,    0 failed as required
 linux-io-native.bot          alter      5 altered,    0 failed as required,    0 not alterable
     NOT REPORTED under alteration: linux-syscall-getpid-positive-and-stable

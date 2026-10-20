@@ -10,7 +10,7 @@
 # de-closured without an internal variant for the generic callee: native
 # lowering then threw "call eN of a de-closure-converted binding has no
 # wanted callee instance (NATIVE BUG)" (the fix-3 fuzz finding: a function
-# called through `list::at(fs, 0)(3)` whose nested closure captures a local).
+# called through `std::list::at(fs, 0)(3)` whose nested closure captures a local).
 
 source [file join [file dirname [file normalize [info script]]] helpers.tcl]
 source [file join $::projectRoot surface surface.tcl]
@@ -30,7 +30,7 @@ proc dedent {text} {
 # directly (f<int>); in f<generic> the nested closure's call g(a) has an
 # unknown argument and selects g<generic>, in f<int> it selects g<int>.
 set listGetShape {
-    import list
+    import std::list
     fn f(a):
         k = 5
         fn g(x):
@@ -38,11 +38,11 @@ set listGetShape {
         g(a)
 
     fs = [f]
-    list::at(fs, 0)(3)
+    std::list::at(fs, 0)(3)
 }
 
 set bothShape {
-    import list
+    import std::list
     fn f(a):
         k = 5
         fn g(x):
@@ -50,7 +50,7 @@ set bothShape {
         [g(a), g(1)]
 
     fs = [f]
-    [list::at(fs, 0)(3), f(4)]
+    [std::list::at(fs, 0)(3), f(4)]
 }
 
 proc wanted {text} {

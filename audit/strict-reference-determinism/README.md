@@ -10,7 +10,7 @@ backend). Tcl 9.0.1, `LANG=C.utf8 LC_ALL=C.utf8`.
 
 | tool | what |
 |---|---|
-| `corpus-census.tcl [-root TREE]` | builds the HIR of every program under `bench/`, `examples/`, `lib/` and lists each reference that violates the strict-reference invariant (`hir/refcheck.tcl`), by source area and shape; on the strict compiler also counts `UNBOUND` diagnostics (a rejected forward reference) |
+| `corpus-census.tcl [-root TREE]` | builds the HIR of every program under `bench/`, `examples/`, `stdlib/` and lists each reference that violates the strict-reference invariant (`hir/refcheck.tcl`), by source area and shape; on the strict compiler also counts `UNBOUND` diagnostics (a rejected forward reference) |
 | `experiment/measure.tcl [-root TREE] FILE.bot` | one program's semantic-instance counters, codegen/AOT/guard counts and a canonical NIR digest (function ids, registers and `@e` tags erased, callees named), or `REJECTED` |
 | `experiment/csv_records-{A,B,C}-*.bot` | the definition-order experiment: A the callee-first source, B the caller-before-callee draft (`scan_record` before `scan_record_rest`), C an alternative legal order of independent helpers |
 | existing tools, reused | `opportunistic-semantic-instances/tools/{census,nir-all}.tcl`, `mutarray-construction/tools/aot.tcl`, `native/generate-scalar-audit.tcl`, `intrinsic-function-contracts/tools/compiletime.tcl`, `bench/bench.tcl` |

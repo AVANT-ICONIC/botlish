@@ -10,36 +10,36 @@
 #       -backend cranelift -L DIR
 #
 # DIR is what boringssl.tcl prints. The value is a List of true.
-import abi
-import abi::bytes
+import std::abi
+import std::abi::bytes
 import boringssl::sha2
-import byte
+import std::byte
 import sha256
-import str
+import std::str
 
-fn byte_of(n: int) -> byte::Byte:
+fn byte_of(n: int) -> std::byte::Byte:
     if n >= 0 and n <= 255:
         return n
     0
 
-fn bytes_of(values: List[int]) -> abi::bytes::Bytes:
+fn bytes_of(values: List[int]) -> std::abi::bytes::Bytes:
     bytes = loop v in values:
         byte_of(v)
-    abi::bytes::from_list(bytes)
+    std::abi::bytes::from_list(bytes)
 
-fn text(s: str) -> abi::bytes::Bytes:
-    abi::bytes::from_list(str::encode_utf8(s))
+fn text(s: str) -> std::abi::bytes::Bytes:
+    std::abi::bytes::from_list(std::str::encode_utf8(s))
 
 empty = bytes_of([227, 176, 196, 66, 152, 252, 28, 20, 154, 251, 244, 200, 153, 111, 185, 36, 39, 174, 65, 228, 100, 155, 147, 76, 164, 149, 153, 27, 120, 82, 184, 85])
 abc = bytes_of([186, 120, 22, 191, 143, 1, 207, 234, 65, 65, 64, 222, 93, 174, 34, 35, 176, 3, 97, 163, 150, 23, 122, 156, 180, 16, 255, 97, 242, 0, 21, 173])
 fox = bytes_of([215, 168, 251, 179, 7, 215, 128, 148, 105, 202, 154, 188, 176, 8, 46, 79, 141, 86, 81, 228, 109, 60, 219, 118, 45, 2, 208, 191, 55, 201, 229, 146])
 
 input = text("abc")
-out = abi::bytes::zeroed(abi::usize(32))
-written = input.SHA256(abi::bytes::length(input).value, out)
+out = std::abi::bytes::zeroed(std::abi::usize(32))
+written = input.SHA256(std::abi::bytes::length(input).value, out)
 [sha256::digest(text("")) == empty,
  sha256::digest(text("abc")) == abc,
  sha256::digest(text("The quick brown fox jumps over the lazy dog")) == fox,
- abi::bytes::freeze(written.out) == abc,
+ std::abi::bytes::freeze(written.out) == abc,
  input == text("abc"),
- abi::bytes::freeze(out) == abi::bytes::freeze(abi::bytes::zeroed(abi::usize(32)))]
+ std::abi::bytes::freeze(out) == std::abi::bytes::freeze(std::abi::bytes::zeroed(std::abi::usize(32)))]

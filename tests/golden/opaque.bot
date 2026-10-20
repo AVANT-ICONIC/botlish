@@ -47,21 +47,21 @@
 # opaque-owner-entry-program and
 # opaque-project-existing-and-guessed-fields-are-indistinguishable in
 # modules.bot). The Tcl tests write private fixture modules (wrapped, hidden,
-# nest, holder, ...); a suite imports only modules of lib/, so the standard
+# nest, holder, ...); a suite imports only modules of stdlib/, so the standard
 # library's own structs stand in for them:
 #
-#   abi::bytes::Bytes          opaque; one hidden field `storage: any`; built
-#                              by abi::bytes::from_list, read by
-#                              abi::bytes::length (an abi::Usize)
-#   abi::bytes::MutableBytes   opaque; one hidden field `storage: any`; built
-#                              by abi::bytes::from_bytes, read by
-#                              abi::bytes::mutable_length
-#   linux::io::LinuxIO         opaque; three fields stdin, stdout, stderr of
-#                              type FileDescriptor; linux::io::create()
-#   linux::io::FileDescriptor  opaque; one field `raw` of the public abi::I32;
-#                              no value of it is obtainable outside linux::io,
+#   std::abi::bytes::Bytes          opaque; one hidden field `storage: any`; built
+#                              by std::abi::bytes::from_list, read by
+#                              std::abi::bytes::length (a std::abi::Usize)
+#   std::abi::bytes::MutableBytes   opaque; one hidden field `storage: any`; built
+#                              by std::abi::bytes::from_bytes, read by
+#                              std::abi::bytes::mutable_length
+#   std::linux::io::LinuxIO         opaque; three fields stdin, stdout, stderr of
+#                              type FileDescriptor; std::linux::io::create()
+#   std::linux::io::FileDescriptor  opaque; one field `raw` of the public std::abi::I32;
+#                              no value of it is obtainable outside std::linux::io,
 #                              so the tests take one as a parameter
-#   linux::ReadResult          ordinary; result: int, data: MutableBytes
+#   std::linux::ReadResult          ordinary; result: int, data: MutableBytes
 #
 # and the suite, an entry program, owns the opaque declarations below. What
 # only Tcl observes stays there: the AST, the HIR registry, HIR, Core IR, NIR
@@ -74,37 +74,37 @@
 # function (one, two, three, ...), given as literals by the driver at the
 # bottom, so no exact-value fact decides them.
 #
-# Imports: compiler and test (the framework); abi::bytes, linux::io and
-# linux (the stock structs above; linux itself imports abi::bytes, which
-# opaque-authority-import-grants-nothing reads); abi (abi::I32, an ordinary
+# Imports: compiler and test (the framework); std::abi::bytes, std::linux::io and
+# linux (the stock structs above; linux itself imports std::abi::bytes, which
+# opaque-authority-import-grants-nothing reads); abi (std::abi::I32, an ordinary
 # struct of a module); byte_store (a value equal to a Bytes' hidden storage,
 # for the nominal-equality lookalikes); immutable_set and list (containers;
-# list::any? is the stock module higher-order function the bypass tests pass
-# a function to); str (the custom checks' text handling); byte::Byte (the
+# std::list::any? is the stock module higher-order function the bypass tests pass
+# a function to); str (the custom checks' text handling); std::byte::Byte (the
 # type of the dynamic bytes). None of them declares a function named
 # storage, guess, nothing, zzzzzzzz or probe, which the method tests rely on.
-import abi
-import abi::bytes
-import byte_store
-import compiler
-import immutable_set
-import linux
-import linux::io
-import list
-import str
-import test
-import type byte::Byte
+import std::abi
+import std::abi::bytes
+import std::byte_store
+import std::compiler
+import std::immutable_set
+import std::linux
+import std::linux::io
+import std::list
+import std::str
+import std::test
+import type std::byte::Byte
 
 # ---------------------------------------------------------------------------
 # Declarations (top-level only)
 
 # The suite's own opaque struct with the short name and the field of
-# abi::bytes::Bytes: a different type, which the suite owns (Tcl: module
+# std::abi::bytes::Bytes: a different type, which the suite owns (Tcl: module
 # two's T, the entry program's own Wrapped, module lookalike's Wrapped).
 opaque struct Bytes:
     storage: any
 
-# abi::bytes::Bytes written without the modifier: its ordinary twin (Tcl:
+# std::abi::bytes::Bytes written without the modifier: its ordinary twin (Tcl:
 # module plainhidden's Gadget, the ordinary Leaky, module lookalike's
 # Wrapped).
 struct PlainStorage:
@@ -113,7 +113,7 @@ struct PlainStorage:
 # A consumer's struct holding an opaque value (Tcl: Box, H, Holder and
 # module holderbad's Holder).
 struct Holder:
-    secret: abi::bytes::Bytes
+    secret: std::abi::bytes::Bytes
 
 # An ordinary struct of plain fields (Tcl: module plainw's Wrapped).
 struct PlainWrapped:
@@ -121,7 +121,7 @@ struct PlainWrapped:
     label: str
 
 # An opaque struct the suite owns whose field may be callable (Tcl: module
-# hiddenamb's Gadget, whose field is `describe`; test::describe is a method
+# hiddenamb's Gadget, whose field is `describe`; std::test::describe is a method
 # candidate of every suite, so the field is `probe` here).
 opaque struct Gadget:
     probe: Fn{args: [int], return: int, errors: []}
@@ -153,19 +153,19 @@ struct Contextual:
 # The diagnostic messages: each names the type and its owner, never a field.
 
 fn bytes_construction_message() -> str:
-    "abi::bytes::Bytes has an opaque representation owned by module \"abi::bytes\"; construct it through the public operations provided by that module"
+    "std::abi::bytes::Bytes has an opaque representation owned by module \"std::abi::bytes\"; construct it through the public operations provided by that module"
 
 fn linux_io_construction_message() -> str:
-    "linux::io::LinuxIO has an opaque representation owned by module \"linux::io\"; construct it through the public operations provided by that module"
+    "std::linux::io::LinuxIO has an opaque representation owned by module \"std::linux::io\"; construct it through the public operations provided by that module"
 
 fn bytes_representation_message() -> str:
-    "field access on abi::bytes::Bytes is not available outside module \"abi::bytes\"; abi::bytes::Bytes has an opaque representation, so its fields can be neither projected nor destructured here (use the public operations provided by that module)"
+    "field access on std::abi::bytes::Bytes is not available outside module \"std::abi::bytes\"; std::abi::bytes::Bytes has an opaque representation, so its fields can be neither projected nor destructured here (use the public operations provided by that module)"
 
 fn linux_io_representation_message() -> str:
-    "field access on linux::io::LinuxIO is not available outside module \"linux::io\"; linux::io::LinuxIO has an opaque representation, so its fields can be neither projected nor destructured here (use the public operations provided by that module)"
+    "field access on std::linux::io::LinuxIO is not available outside module \"std::linux::io\"; std::linux::io::LinuxIO has an opaque representation, so its fields can be neither projected nor destructured here (use the public operations provided by that module)"
 
 fn file_descriptor_representation_message() -> str:
-    "field access on linux::io::FileDescriptor is not available outside module \"linux::io\"; linux::io::FileDescriptor has an opaque representation, so its fields can be neither projected nor destructured here (use the public operations provided by that module)"
+    "field access on std::linux::io::FileDescriptor is not available outside module \"std::linux::io\"; std::linux::io::FileDescriptor has an opaque representation, so its fields can be neither projected nor destructured here (use the public operations provided by that module)"
 
 # ---------------------------------------------------------------------------
 # Custom checks: observing a body's diagnostic and comparing messages.
@@ -173,29 +173,29 @@ fn file_descriptor_representation_message() -> str:
 # What a body did: rejected (with its diagnostic) or completed.
 struct Observed:
     rejected: bool
-    code: compiler::DiagnosticCode
-    primary: compiler::SourceLocation
+    code: std::compiler::DiagnosticCode
+    primary: std::compiler::SourceLocation
     message: str
 
-# Runs BODY (through an untyped parameter, as lib/test.bot's helpers do).
+# Runs BODY (through an untyped parameter, as stdlib/test.bot's helpers do).
 fn observe(body) -> Observed:
     completed = body():
-        on compiler::CompilerError {code, primary, message}:
+        on std::compiler::CompilerError {code, primary, message}:
             return Observed {rejected: true, code: code, primary: primary, message: message}
-    Observed {rejected: false, code: compiler::DiagnosticCode::Type, primary: compiler::SourceLocation {line: 0, column: 0}, message: ""}
+    Observed {rejected: false, code: std::compiler::DiagnosticCode::Type, primary: std::compiler::SourceLocation {line: 0, column: 0}, message: ""}
 
 # The verdict on OBSERVED as a rejection with code WANTED.
-fn rejection(observed: Observed, wanted: compiler::DiagnosticCode) -> test::Match:
+fn rejection(observed: Observed, wanted: std::compiler::DiagnosticCode) -> std::test::Match:
     if not observed.rejected:
-        return test::mismatch("compiler diagnostic ".concat(test::code_name(wanted)), "a value", "")
-    test::diagnostic(wanted, observed.code, observed.primary, observed.message)
+        return std::test::mismatch("compiler diagnostic ".concat(std::test::code_name(wanted)), "a value", "")
+    std::test::diagnostic(wanted, observed.code, observed.primary, observed.message)
 
 # The index of the first occurrence of FRAGMENT in TEXT, or -1.
 fn position(text: str, fragment: str) -> int:
-    n = str::length(text)
-    k = str::length(fragment)
+    n = std::str::length(text)
+    k = std::str::length(fragment)
     loop i from 0 through n - k:
-        piece = str::substring(text, i, i + k):
+        piece = std::str::substring(text, i, i + k):
             on LowerUnderrun:
                 continue
             on UpperOverrun:
@@ -206,7 +206,7 @@ fn position(text: str, fragment: str) -> int:
 
 # TEXT from index START up to STOP.
 fn slice(text: str, start: int, stop: int) -> str:
-    piece = str::substring(text, start, stop):
+    piece = std::str::substring(text, start, stop):
         on LowerUnderrun:
             ""
         on UpperOverrun:
@@ -218,8 +218,8 @@ fn replaced(text: str, old: str, new: str) -> str:
     at = position(text, old)
     if at < 0:
         return text
-    rest = slice(text, at + str::length(old), str::length(text))
-    str::concat(str::concat(slice(text, 0, at), new), replaced(rest, old, new))
+    rest = slice(text, at + std::str::length(old), std::str::length(text))
+    std::str::concat(std::str::concat(slice(text, 0, at), new), replaced(rest, old, new))
 
 # TEXT up to the first occurrence of MARKER (all of TEXT when it has none).
 fn before(text: str, marker: str) -> str:
@@ -234,41 +234,41 @@ fn before(text: str, marker: str) -> str:
 fn register_contextual_modifier_tests():
     # opaque-ast-contextual: `opaque` is not reserved -- it stays an
     # ordinary binding name, function name, field name and method name.
-    fn binding() errors compiler::CompilerError:
+    fn binding() errors std::compiler::CompilerError:
         static compile:
             opaque = 1
             x = opaque
             x + opaque
-    test::value("opaque-ast-contextual/binding", 2, binding)
+    std::test::value("opaque-ast-contextual/binding", 2, binding)
 
-    fn function() errors compiler::CompilerError:
+    fn function() errors std::compiler::CompilerError:
         static compile:
             fn opaque(n):
                 n * 2
             opaque(21)
-    test::value("opaque-ast-contextual/function", 42, function)
+    std::test::value("opaque-ast-contextual/function", 42, function)
 
-    fn field_and_method() errors compiler::CompilerError:
+    fn field_and_method() errors std::compiler::CompilerError:
         static compile:
             fn opaque(s: Contextual) -> int:
                 s.opaque + 1
             s = Contextual {opaque: 1}
             [s.opaque, s.opaque(), opaque(s)]
-    test::value("opaque-ast-contextual/field-and-method", [1, 2, 2], field_and_method)
+    std::test::value("opaque-ast-contextual/field-and-method", [1, 2, 2], field_and_method)
 
 # ---------------------------------------------------------------------------
 # The owner: ordinary Botlish
 
 fn register_owner_tests(one: Byte, two: Byte, three: Byte):
-    # opaque-owner-module-ordinary-botlish: inside abi::bytes its opaque
+    # opaque-owner-module-ordinary-botlish: inside std::abi::bytes its opaque
     # structs are ordinary structs -- from_list, from_bytes and freeze build
     # them, length projects one -- on every backend.
-    fn owner_module() errors compiler::CompilerError:
+    fn owner_module() errors std::compiler::CompilerError:
         static compile:
-            x = abi::bytes::from_list([one, two, three])
-            y = abi::bytes::freeze(abi::bytes::from_bytes(x))
-            [abi::bytes::length(x).value, abi::bytes::length(y).value, x == y]
-    test::value("opaque-owner-module-ordinary-botlish", [3, 3, true], owner_module)
+            x = std::abi::bytes::from_list([one, two, three])
+            y = std::abi::bytes::freeze(std::abi::bytes::from_bytes(x))
+            [std::abi::bytes::length(x).value, std::abi::bytes::length(y).value, x == y]
+    std::test::value("opaque-owner-module-ordinary-botlish", [3, 3, true], owner_module)
 
 # ---------------------------------------------------------------------------
 # A consumer uses an opaque value as a value
@@ -276,68 +276,68 @@ fn register_owner_tests(one: Byte, two: Byte, three: Byte):
 fn register_consumer_tests(one: Byte, two: Byte, three: Byte):
     # opaque-consumer-value-semantics: a consumer passes, aliases and
     # compares an opaque value like any value.
-    fn value_semantics() errors compiler::CompilerError:
+    fn value_semantics() errors std::compiler::CompilerError:
         static compile:
-            x = abi::bytes::from_list([one, two, three])
+            x = std::abi::bytes::from_list([one, two, three])
             y = x
-            fn pass(v: abi::bytes::Bytes) -> abi::bytes::Bytes:
+            fn pass(v: std::abi::bytes::Bytes) -> std::abi::bytes::Bytes:
                 v
-            [abi::bytes::length(pass(x)).value, x == y, x == abi::bytes::from_list([three]), pass(x) == y]
-    test::value("opaque-consumer-value-semantics", [3, true, false, true], value_semantics)
+            [std::abi::bytes::length(pass(x)).value, x == y, x == std::abi::bytes::from_list([three]), pass(x) == y]
+    std::test::value("opaque-consumer-value-semantics", [3, true, false, true], value_semantics)
 
     # opaque-consumer-pass-store-return: passing, storing in a List,
     # returning.
-    fn pass_store_return() errors compiler::CompilerError:
+    fn pass_store_return() errors std::compiler::CompilerError:
         static compile:
-            x = abi::bytes::from_list([one, two, three])
-            fn pass(v: abi::bytes::Bytes) -> abi::bytes::Bytes:
+            x = std::abi::bytes::from_list([one, two, three])
+            fn pass(v: std::abi::bytes::Bytes) -> std::abi::bytes::Bytes:
                 v
             xs = [x, pass(x)]
-            [abi::bytes::length(pass(x)).value, x == pass(x), list::length(xs)]
-    test::value("opaque-consumer-pass-store-return", [3, true, 2], pass_store_return)
+            [std::abi::bytes::length(pass(x)).value, x == pass(x), std::list::length(xs)]
+    std::test::value("opaque-consumer-pass-store-return", [3, true, 2], pass_store_return)
 
     # opaque-consumer-method-and-qualified-call: the owner's accessors,
     # qualified and in method form, on both opaque types.
-    fn method_and_qualified() errors compiler::CompilerError:
+    fn method_and_qualified() errors std::compiler::CompilerError:
         static compile:
-            x = abi::bytes::from_list([one, two, three])
-            m = abi::bytes::from_bytes(x)
-            [abi::bytes::length(x).value, x.length().value, m.mutable_length().value, abi::bytes::mutable_length(m).value]
-    test::value("opaque-consumer-method-and-qualified-call", [3, 3, 3, 3], method_and_qualified)
+            x = std::abi::bytes::from_list([one, two, three])
+            m = std::abi::bytes::from_bytes(x)
+            [std::abi::bytes::length(x).value, x.length().value, m.mutable_length().value, std::abi::bytes::mutable_length(m).value]
+    std::test::value("opaque-consumer-method-and-qualified-call", [3, 3, 3, 3], method_and_qualified)
 
     # opaque-consumer-signatures: the opaque type is public -- in a
     # consumer's parameter and result types and struct fields.
-    fn signatures() errors compiler::CompilerError:
+    fn signatures() errors std::compiler::CompilerError:
         static compile:
-            fn open(h: Holder) -> abi::bytes::Bytes:
+            fn open(h: Holder) -> std::abi::bytes::Bytes:
                 h.secret
-            fn weigh(w: abi::bytes::Bytes) -> int:
-                abi::bytes::length(w).value
-            h = Holder {secret: abi::bytes::from_list([one, two])}
+            fn weigh(w: std::abi::bytes::Bytes) -> int:
+                std::abi::bytes::length(w).value
+            h = Holder {secret: std::abi::bytes::from_list([one, two])}
             weigh(open(h))
-    test::value("opaque-consumer-signatures", 2, signatures)
+    std::test::value("opaque-consumer-signatures", 2, signatures)
 
     # opaque-consumer-holder-in-entry-program: a struct of the suite storing
     # an opaque value projects its own field, never the stored value's.
-    fn holder_value() errors compiler::CompilerError:
+    fn holder_value() errors std::compiler::CompilerError:
         static compile:
-            h = Holder {secret: abi::bytes::from_list([one])}
-            abi::bytes::length(h.secret).value
-    test::value("opaque-consumer-holder-in-entry-program/value", 1, holder_value)
+            h = Holder {secret: std::abi::bytes::from_list([one])}
+            std::abi::bytes::length(h.secret).value
+    std::test::value("opaque-consumer-holder-in-entry-program/value", 1, holder_value)
 
-    fn holder_projection() errors compiler::CompilerError:
+    fn holder_projection() errors std::compiler::CompilerError:
         static compile:
-            h = Holder {secret: abi::bytes::from_list([one])}
+            h = Holder {secret: std::abi::bytes::from_list([one])}
             h.secret.storage
-    test::rejects("opaque-consumer-holder-in-entry-program/projection", compiler::DiagnosticCode::OpaqueRepresentation, holder_projection)
+    std::test::rejects("opaque-consumer-holder-in-entry-program/projection", std::compiler::DiagnosticCode::OpaqueRepresentation, holder_projection)
 
     # opaque-consumer-anonymous-struct-is-not-an-opaque-value: an anonymous
     # struct with the hidden field's name never manufactures an opaque
     # value.
-    fn anonymous() errors compiler::CompilerError:
+    fn anonymous() errors std::compiler::CompilerError:
         static compile:
-            abi::bytes::length({storage: 1})
-    test::rejects_containing("opaque-consumer-anonymous-struct-is-not-an-opaque-value", compiler::DiagnosticCode::Type, "argument for parameter \"data\" cannot be proven to satisfy abi::bytes::Bytes (argument type: ", anonymous)
+            std::abi::bytes::length({storage: 1})
+    std::test::rejects_containing("opaque-consumer-anonymous-struct-is-not-an-opaque-value", std::compiler::DiagnosticCode::Type, "argument for parameter \"data\" cannot be proven to satisfy std::abi::bytes::Bytes (argument type: ", anonymous)
 
 # ---------------------------------------------------------------------------
 # What a consumer cannot do: construct
@@ -348,95 +348,95 @@ fn register_construction_tests():
     # unknown- or duplicate-field diagnostic, no type error, no field named.
     # LinuxIO (three fields) supplies the reordered and missing fields, which
     # need real FileDescriptor values: a never-called function's parameters.
-    fn reordered() errors compiler::CompilerError:
+    fn reordered() errors std::compiler::CompilerError:
         static compile:
-            fn forge(a: linux::io::FileDescriptor, b: linux::io::FileDescriptor, c: linux::io::FileDescriptor) -> linux::io::LinuxIO:
-                linux::io::LinuxIO {stderr: c, stdout: b, stdin: a}
+            fn forge(a: std::linux::io::FileDescriptor, b: std::linux::io::FileDescriptor, c: std::linux::io::FileDescriptor) -> std::linux::io::LinuxIO:
+                std::linux::io::LinuxIO {stderr: c, stdout: b, stdin: a}
             1
-    test::rejects_message("opaque-construct-reordered", compiler::DiagnosticCode::OpaqueConstruction, linux_io_construction_message(), reordered)
+    std::test::rejects_message("opaque-construct-reordered", std::compiler::DiagnosticCode::OpaqueConstruction, linux_io_construction_message(), reordered)
 
-    fn constants() errors compiler::CompilerError:
+    fn constants() errors std::compiler::CompilerError:
         static compile:
-            abi::bytes::Bytes {storage: 0}
-    test::rejects_message("opaque-construct-constants", compiler::DiagnosticCode::OpaqueConstruction, bytes_construction_message(), constants)
+            std::abi::bytes::Bytes {storage: 0}
+    std::test::rejects_message("opaque-construct-constants", std::compiler::DiagnosticCode::OpaqueConstruction, bytes_construction_message(), constants)
 
-    fn missing_field() errors compiler::CompilerError:
+    fn missing_field() errors std::compiler::CompilerError:
         static compile:
-            fn forge(a: linux::io::FileDescriptor) -> linux::io::LinuxIO:
-                linux::io::LinuxIO {stdin: a}
+            fn forge(a: std::linux::io::FileDescriptor) -> std::linux::io::LinuxIO:
+                std::linux::io::LinuxIO {stdin: a}
             1
-    test::rejects_message("opaque-construct-missing-field", compiler::DiagnosticCode::OpaqueConstruction, linux_io_construction_message(), missing_field)
+    std::test::rejects_message("opaque-construct-missing-field", std::compiler::DiagnosticCode::OpaqueConstruction, linux_io_construction_message(), missing_field)
 
-    fn unknown_field() errors compiler::CompilerError:
+    fn unknown_field() errors std::compiler::CompilerError:
         static compile:
-            abi::bytes::Bytes {storage: 3, guess: 1}
-    test::rejects_message("opaque-construct-unknown-field", compiler::DiagnosticCode::OpaqueConstruction, bytes_construction_message(), unknown_field)
+            std::abi::bytes::Bytes {storage: 3, guess: 1}
+    std::test::rejects_message("opaque-construct-unknown-field", std::compiler::DiagnosticCode::OpaqueConstruction, bytes_construction_message(), unknown_field)
 
-    fn only_guess() errors compiler::CompilerError:
+    fn only_guess() errors std::compiler::CompilerError:
         static compile:
-            abi::bytes::Bytes {guess: 3}
-    test::rejects_message("opaque-construct-only-guess", compiler::DiagnosticCode::OpaqueConstruction, bytes_construction_message(), only_guess)
+            std::abi::bytes::Bytes {guess: 3}
+    std::test::rejects_message("opaque-construct-only-guess", std::compiler::DiagnosticCode::OpaqueConstruction, bytes_construction_message(), only_guess)
 
-    fn duplicate() errors compiler::CompilerError:
+    fn duplicate() errors std::compiler::CompilerError:
         static compile:
-            abi::bytes::Bytes {storage: 3, storage: 4}
-    test::rejects_message("opaque-construct-duplicate", compiler::DiagnosticCode::OpaqueConstruction, bytes_construction_message(), duplicate)
+            std::abi::bytes::Bytes {storage: 3, storage: 4}
+    std::test::rejects_message("opaque-construct-duplicate", std::compiler::DiagnosticCode::OpaqueConstruction, bytes_construction_message(), duplicate)
 
-    fn wrong_type() errors compiler::CompilerError:
+    fn wrong_type() errors std::compiler::CompilerError:
         static compile:
-            linux::io::LinuxIO {stdin: "no", stdout: 4, stderr: true}
-    test::rejects_message("opaque-construct-wrong-type", compiler::DiagnosticCode::OpaqueConstruction, linux_io_construction_message(), wrong_type)
+            std::linux::io::LinuxIO {stdin: "no", stdout: 4, stderr: true}
+    std::test::rejects_message("opaque-construct-wrong-type", std::compiler::DiagnosticCode::OpaqueConstruction, linux_io_construction_message(), wrong_type)
 
     # opaque-construct-in-a-function-and-nested: the construction is
     # rejected wherever it is written.
-    fn in_function() errors compiler::CompilerError:
+    fn in_function() errors std::compiler::CompilerError:
         static compile:
             fn f():
-                abi::bytes::Bytes {storage: 1}
+                std::abi::bytes::Bytes {storage: 1}
             1
-    test::rejects_message("opaque-construct-in-a-function-and-nested/function", compiler::DiagnosticCode::OpaqueConstruction, bytes_construction_message(), in_function)
+    std::test::rejects_message("opaque-construct-in-a-function-and-nested/function", std::compiler::DiagnosticCode::OpaqueConstruction, bytes_construction_message(), in_function)
 
-    fn in_argument() errors compiler::CompilerError:
+    fn in_argument() errors std::compiler::CompilerError:
         static compile:
-            abi::bytes::length(abi::bytes::Bytes {storage: 1})
-    test::rejects_message("opaque-construct-in-a-function-and-nested/argument", compiler::DiagnosticCode::OpaqueConstruction, bytes_construction_message(), in_argument)
+            std::abi::bytes::length(std::abi::bytes::Bytes {storage: 1})
+    std::test::rejects_message("opaque-construct-in-a-function-and-nested/argument", std::compiler::DiagnosticCode::OpaqueConstruction, bytes_construction_message(), in_argument)
 
-    fn in_list() errors compiler::CompilerError:
+    fn in_list() errors std::compiler::CompilerError:
         static compile:
-            [abi::bytes::Bytes {storage: 1}]
-    test::rejects_message("opaque-construct-in-a-function-and-nested/list", compiler::DiagnosticCode::OpaqueConstruction, bytes_construction_message(), in_list)
+            [std::abi::bytes::Bytes {storage: 1}]
+    std::test::rejects_message("opaque-construct-in-a-function-and-nested/list", std::compiler::DiagnosticCode::OpaqueConstruction, bytes_construction_message(), in_list)
 
-    fn in_field() errors compiler::CompilerError:
+    fn in_field() errors std::compiler::CompilerError:
         static compile:
-            Holder {secret: abi::bytes::Bytes {storage: 1}}
-    test::rejects_message("opaque-construct-in-a-function-and-nested/field", compiler::DiagnosticCode::OpaqueConstruction, bytes_construction_message(), in_field)
+            Holder {secret: std::abi::bytes::Bytes {storage: 1}}
+    std::test::rejects_message("opaque-construct-in-a-function-and-nested/field", std::compiler::DiagnosticCode::OpaqueConstruction, bytes_construction_message(), in_field)
 
     # opaque-construct-bearing-erasure-is-not-reported: a forged construction
     # whose typed function would be erased into the hidden `any` field (or a
     # guessed one) is still the construction diagnostic -- an erasure
     # diagnostic ("stored in field ...") would confirm the field exists.
-    fn erasure_real() errors compiler::CompilerError:
+    fn erasure_real() errors std::compiler::CompilerError:
         static compile:
             fn typed(k: int) -> int:
                 k
-            abi::bytes::Bytes {storage: typed}
-    test::rejects_message("opaque-construct-bearing-erasure-is-not-reported/real", compiler::DiagnosticCode::OpaqueConstruction, bytes_construction_message(), erasure_real)
+            std::abi::bytes::Bytes {storage: typed}
+    std::test::rejects_message("opaque-construct-bearing-erasure-is-not-reported/real", std::compiler::DiagnosticCode::OpaqueConstruction, bytes_construction_message(), erasure_real)
 
-    fn erasure_guess() errors compiler::CompilerError:
+    fn erasure_guess() errors std::compiler::CompilerError:
         static compile:
             fn typed(k: int) -> int:
                 k
-            abi::bytes::Bytes {guess_any: typed}
-    test::rejects_message("opaque-construct-bearing-erasure-is-not-reported/guess", compiler::DiagnosticCode::OpaqueConstruction, bytes_construction_message(), erasure_guess)
+            std::abi::bytes::Bytes {guess_any: typed}
+    std::test::rejects_message("opaque-construct-bearing-erasure-is-not-reported/guess", std::compiler::DiagnosticCode::OpaqueConstruction, bytes_construction_message(), erasure_guess)
 
     # opaque-construct-bearing-erasure-twin: the control -- the ordinary
     # twin reports the erasure, naming the field.
-    fn erasure_twin() errors compiler::CompilerError:
+    fn erasure_twin() errors std::compiler::CompilerError:
         static compile:
             fn typed(k: int) -> int:
                 k
             PlainStorage {storage: typed}
-    test::rejects_containing("opaque-construct-bearing-erasure-twin", compiler::DiagnosticCode::Type, "stored in field \"storage\"", erasure_twin)
+    std::test::rejects_containing("opaque-construct-bearing-erasure-twin", std::compiler::DiagnosticCode::Type, "stored in field \"storage\"", erasure_twin)
 
 # ---------------------------------------------------------------------------
 # What a consumer cannot do: project
@@ -445,70 +445,70 @@ fn register_projection_tests():
     # opaque-project-*: outside its owner a projection is the one
     # OpaqueRepresentation diagnostic whether or not the field exists,
     # however the projection is used. LinuxIO supplies a second real field.
-    fn projection() errors compiler::CompilerError:
+    fn projection() errors std::compiler::CompilerError:
         static compile:
-            x = abi::bytes::from_list([])
+            x = std::abi::bytes::from_list([])
             x.storage
-    test::rejects_message("opaque-project-projection", compiler::DiagnosticCode::OpaqueRepresentation, bytes_representation_message(), projection)
+    std::test::rejects_message("opaque-project-projection", std::compiler::DiagnosticCode::OpaqueRepresentation, bytes_representation_message(), projection)
 
-    fn projection_2() errors compiler::CompilerError:
+    fn projection_2() errors std::compiler::CompilerError:
         static compile:
-            io = linux::io::create()
+            io = std::linux::io::create()
             io.stdout
-    test::rejects_message("opaque-project-projection-2", compiler::DiagnosticCode::OpaqueRepresentation, linux_io_representation_message(), projection_2)
+    std::test::rejects_message("opaque-project-projection-2", std::compiler::DiagnosticCode::OpaqueRepresentation, linux_io_representation_message(), projection_2)
 
-    fn guessed() errors compiler::CompilerError:
+    fn guessed() errors std::compiler::CompilerError:
         static compile:
-            x = abi::bytes::from_list([])
+            x = std::abi::bytes::from_list([])
             x.guess
-    test::rejects_message("opaque-project-guessed", compiler::DiagnosticCode::OpaqueRepresentation, bytes_representation_message(), guessed)
+    std::test::rejects_message("opaque-project-guessed", std::compiler::DiagnosticCode::OpaqueRepresentation, bytes_representation_message(), guessed)
 
-    fn guessed_other() errors compiler::CompilerError:
+    fn guessed_other() errors std::compiler::CompilerError:
         static compile:
-            x = abi::bytes::from_list([])
+            x = std::abi::bytes::from_list([])
             x.does_not_exist
-    test::rejects_message("opaque-project-guessed-other", compiler::DiagnosticCode::OpaqueRepresentation, bytes_representation_message(), guessed_other)
+    std::test::rejects_message("opaque-project-guessed-other", std::compiler::DiagnosticCode::OpaqueRepresentation, bytes_representation_message(), guessed_other)
 
-    fn nested_use() errors compiler::CompilerError:
+    fn nested_use() errors std::compiler::CompilerError:
         static compile:
-            x = abi::bytes::from_list([])
+            x = std::abi::bytes::from_list([])
             x.storage + 1
-    test::rejects_message("opaque-project-nested-use", compiler::DiagnosticCode::OpaqueRepresentation, bytes_representation_message(), nested_use)
+    std::test::rejects_message("opaque-project-nested-use", std::compiler::DiagnosticCode::OpaqueRepresentation, bytes_representation_message(), nested_use)
 
-    fn in_argument() errors compiler::CompilerError:
+    fn in_argument() errors std::compiler::CompilerError:
         static compile:
-            x = abi::bytes::from_list([])
-            abi::bytes::length(x).value + x.storage
-    test::rejects_message("opaque-project-in-argument", compiler::DiagnosticCode::OpaqueRepresentation, bytes_representation_message(), in_argument)
+            x = std::abi::bytes::from_list([])
+            std::abi::bytes::length(x).value + x.storage
+    std::test::rejects_message("opaque-project-in-argument", std::compiler::DiagnosticCode::OpaqueRepresentation, bytes_representation_message(), in_argument)
 
-    fn in_list() errors compiler::CompilerError:
+    fn in_list() errors std::compiler::CompilerError:
         static compile:
-            x = abi::bytes::from_list([])
+            x = std::abi::bytes::from_list([])
             [x.storage]
-    test::rejects_message("opaque-project-in-list", compiler::DiagnosticCode::OpaqueRepresentation, bytes_representation_message(), in_list)
+    std::test::rejects_message("opaque-project-in-list", std::compiler::DiagnosticCode::OpaqueRepresentation, bytes_representation_message(), in_list)
 
     # opaque-project-message-names-no-field: the message names no field --
     # neither the guessed one written nor the hidden one -- and no field
     # type.
-    fn names_no_field() -> test::Match:
+    fn names_no_field() -> std::test::Match:
         observed = observe(guessed)
-        verdict = rejection(observed, compiler::DiagnosticCode::OpaqueRepresentation)
+        verdict = rejection(observed, std::compiler::DiagnosticCode::OpaqueRepresentation)
         if not verdict.matched:
             return verdict
         leaked = loop word in ["guess", "storage", "any", "known fields", "declared fields"]:
-            if not test::contains_text?(observed.message, word):
+            if not std::test::contains_text?(observed.message, word):
                 continue
             word
-        test::equal([], leaked)
-    test::case("opaque-project-message-names-no-field", names_no_field)
+        std::test::equal([], leaked)
+    std::test::case("opaque-project-message-names-no-field", names_no_field)
 
     # opaque-project-located-at-the-field-name: the diagnostic points at the
     # field name written.
-    fn located() errors compiler::CompilerError:
+    fn located() errors std::compiler::CompilerError:
         static compile:
-            x = abi::bytes::from_list([])
+            x = std::abi::bytes::from_list([])
             x.storage
-    test::rejects_at("opaque-project-located-at-the-field-name", compiler::DiagnosticCode::OpaqueRepresentation, 510, 15, located)
+    std::test::rejects_at("opaque-project-located-at-the-field-name", std::compiler::DiagnosticCode::OpaqueRepresentation, 510, 15, located)
 
 # ---------------------------------------------------------------------------
 # What a consumer cannot do: destructure
@@ -516,67 +516,67 @@ fn register_projection_tests():
 fn register_destructuring_tests():
     # opaque-destructure-*: outside its owner a destructuring is the one
     # OpaqueRepresentation diagnostic, whatever its pattern names.
-    fn shorthand() errors compiler::CompilerError:
+    fn shorthand() errors std::compiler::CompilerError:
         static compile:
-            x = abi::bytes::from_list([])
+            x = std::abi::bytes::from_list([])
             {storage} = x
             1
-    test::rejects_message("opaque-destructure-shorthand", compiler::DiagnosticCode::OpaqueRepresentation, bytes_representation_message(), shorthand)
+    std::test::rejects_message("opaque-destructure-shorthand", std::compiler::DiagnosticCode::OpaqueRepresentation, bytes_representation_message(), shorthand)
 
-    fn rename() errors compiler::CompilerError:
+    fn rename() errors std::compiler::CompilerError:
         static compile:
-            x = abi::bytes::from_list([])
+            x = std::abi::bytes::from_list([])
             {storage: v} = x
             1
-    test::rejects_message("opaque-destructure-rename", compiler::DiagnosticCode::OpaqueRepresentation, bytes_representation_message(), rename)
+    std::test::rejects_message("opaque-destructure-rename", std::compiler::DiagnosticCode::OpaqueRepresentation, bytes_representation_message(), rename)
 
-    fn second_field() errors compiler::CompilerError:
+    fn second_field() errors std::compiler::CompilerError:
         static compile:
-            io = linux::io::create()
+            io = std::linux::io::create()
             {stdout: y} = io
             1
-    test::rejects_message("opaque-destructure-second-field", compiler::DiagnosticCode::OpaqueRepresentation, linux_io_representation_message(), second_field)
+    std::test::rejects_message("opaque-destructure-second-field", std::compiler::DiagnosticCode::OpaqueRepresentation, linux_io_representation_message(), second_field)
 
-    fn both() errors compiler::CompilerError:
+    fn both() errors std::compiler::CompilerError:
         static compile:
-            io = linux::io::create()
+            io = std::linux::io::create()
             {stdin, stdout} = io
             1
-    test::rejects_message("opaque-destructure-both", compiler::DiagnosticCode::OpaqueRepresentation, linux_io_representation_message(), both)
+    std::test::rejects_message("opaque-destructure-both", std::compiler::DiagnosticCode::OpaqueRepresentation, linux_io_representation_message(), both)
 
-    fn guessed() errors compiler::CompilerError:
+    fn guessed() errors std::compiler::CompilerError:
         static compile:
-            x = abi::bytes::from_list([])
+            x = std::abi::bytes::from_list([])
             {nothing} = x
             1
-    test::rejects_message("opaque-destructure-guessed", compiler::DiagnosticCode::OpaqueRepresentation, bytes_representation_message(), guessed)
+    std::test::rejects_message("opaque-destructure-guessed", std::compiler::DiagnosticCode::OpaqueRepresentation, bytes_representation_message(), guessed)
 
     # opaque-destructure-same-as-projection: a destructuring is rejected
     # exactly as its explicit projection spelling is (code and message).
-    fn projection_spelling() errors compiler::CompilerError:
+    fn projection_spelling() errors std::compiler::CompilerError:
         static compile:
-            x = abi::bytes::from_list([])
+            x = std::abi::bytes::from_list([])
             tmp = x
             storage = tmp.storage
             1
-    fn same_as_projection() -> test::Match:
+    fn same_as_projection() -> std::test::Match:
         destructured = observe(shorthand)
         projected = observe(projection_spelling)
-        verdict = rejection(destructured, compiler::DiagnosticCode::OpaqueRepresentation)
+        verdict = rejection(destructured, std::compiler::DiagnosticCode::OpaqueRepresentation)
         if not verdict.matched:
             return verdict
-        test::equal({rejected: destructured.rejected, code: destructured.code, message: destructured.message}, {rejected: projected.rejected, code: projected.code, message: projected.message})
-    test::case("opaque-destructure-same-as-projection", same_as_projection)
+        std::test::equal({rejected: destructured.rejected, code: destructured.code, message: destructured.message}, {rejected: projected.rejected, code: projected.code, message: projected.message})
+    std::test::case("opaque-destructure-same-as-projection", same_as_projection)
 
     # opaque-destructure-in-function: destructuring a consumer function's
     # parameter of the opaque type.
-    fn in_function() errors compiler::CompilerError:
+    fn in_function() errors std::compiler::CompilerError:
         static compile:
-            fn f(w: abi::bytes::Bytes):
+            fn f(w: std::abi::bytes::Bytes):
                 {storage} = w
                 storage
             1
-    test::rejects_message("opaque-destructure-in-function", compiler::DiagnosticCode::OpaqueRepresentation, bytes_representation_message(), in_function)
+    std::test::rejects_message("opaque-destructure-in-function", std::compiler::DiagnosticCode::OpaqueRepresentation, bytes_representation_message(), in_function)
 
 # ---------------------------------------------------------------------------
 # What a consumer cannot do: call a field value
@@ -585,44 +585,44 @@ fn register_field_value_call_tests():
     # opaque-field-value-call: the callee `(x.storage)(arg)` is a
     # projection, rejected like any -- also where a function of the hidden
     # field's name is visible.
-    fn field() errors compiler::CompilerError:
+    fn field() errors std::compiler::CompilerError:
         static compile:
-            x = abi::bytes::from_list([])
+            x = std::abi::bytes::from_list([])
             (x.storage)(1)
-    test::rejects_containing("opaque-field-value-call/field", compiler::DiagnosticCode::OpaqueRepresentation, "field access on abi::bytes::Bytes is not available outside module \"abi::bytes\"; ", field)
+    std::test::rejects_containing("opaque-field-value-call/field", std::compiler::DiagnosticCode::OpaqueRepresentation, "field access on std::abi::bytes::Bytes is not available outside module \"std::abi::bytes\"; ", field)
 
-    fn named_like_a_function() errors compiler::CompilerError:
+    fn named_like_a_function() errors std::compiler::CompilerError:
         static compile:
             fn storage(g):
                 5
-            x = abi::bytes::from_list([])
+            x = std::abi::bytes::from_list([])
             (x.storage)(1)
-    test::rejects_containing("opaque-field-value-call/named-like-a-function", compiler::DiagnosticCode::OpaqueRepresentation, "field access on abi::bytes::Bytes is not available outside module \"abi::bytes\"; ", named_like_a_function)
+    std::test::rejects_containing("opaque-field-value-call/named-like-a-function", std::compiler::DiagnosticCode::OpaqueRepresentation, "field access on std::abi::bytes::Bytes is not available outside module \"std::abi::bytes\"; ", named_like_a_function)
 
     # opaque-field-value-call-method-spelling-without-a-function:
     # `x.storage(1)` with no function storage visible is the call of the
     # field value: representation access, with the method-call hint.
-    fn method_spelling() errors compiler::CompilerError:
+    fn method_spelling() errors std::compiler::CompilerError:
         static compile:
-            x = abi::bytes::from_list([])
+            x = std::abi::bytes::from_list([])
             x.storage(1)
-    test::rejects_containing("opaque-field-value-call-method-spelling-without-a-function", compiler::DiagnosticCode::OpaqueRepresentation, "field access on abi::bytes::Bytes is not available outside module \"abi::bytes\"; abi::bytes::Bytes has an opaque representation, so its fields can be neither projected nor destructured here (use the public operations provided by that module); as a method-style call, no function named \"storage\" is visible here either", method_spelling)
+    std::test::rejects_containing("opaque-field-value-call-method-spelling-without-a-function", std::compiler::DiagnosticCode::OpaqueRepresentation, "field access on std::abi::bytes::Bytes is not available outside module \"std::abi::bytes\"; std::abi::bytes::Bytes has an opaque representation, so its fields can be neither projected nor destructured here (use the public operations provided by that module); as a method-style call, no function named \"storage\" is visible here either", method_spelling)
 
     # opaque-hint-does-not-depend-on-the-field: the method-call spelling of
     # the hidden field and of a guessed one differ only in the name the
     # caller wrote.
-    fn guessed_spelling() errors compiler::CompilerError:
+    fn guessed_spelling() errors std::compiler::CompilerError:
         static compile:
-            x = abi::bytes::from_list([])
+            x = std::abi::bytes::from_list([])
             x.zzzzzzzz(1)
-    fn same_hint() -> test::Match:
+    fn same_hint() -> std::test::Match:
         real = observe(method_spelling)
         guess = observe(guessed_spelling)
-        verdict = rejection(real, compiler::DiagnosticCode::OpaqueRepresentation)
+        verdict = rejection(real, std::compiler::DiagnosticCode::OpaqueRepresentation)
         if not verdict.matched:
             return verdict
-        test::equal({rejected: real.rejected, code: real.code, message: replaced(real.message, "\"storage\"", "\"NAME\"")}, {rejected: guess.rejected, code: guess.code, message: replaced(guess.message, "\"zzzzzzzz\"", "\"NAME\"")})
-    test::case("opaque-hint-does-not-depend-on-the-field", same_hint)
+        std::test::equal({rejected: real.rejected, code: real.code, message: replaced(real.message, "\"storage\"", "\"NAME\"")}, {rejected: guess.rejected, code: guess.code, message: replaced(guess.message, "\"zzzzzzzz\"", "\"NAME\"")})
+    std::test::case("opaque-hint-does-not-depend-on-the-field", same_hint)
 
 # ---------------------------------------------------------------------------
 # Generic instances
@@ -633,27 +633,27 @@ fn register_generic_instance_tests():
     # the representation message whichever field it reads. (The message ends
     # with the body's location, "(in the body of peek, at LINE:COLUMN)",
     # which differs between the two blocks: it is compared up to there.)
-    fn peek_real() errors compiler::CompilerError:
+    fn peek_real() errors std::compiler::CompilerError:
         static compile:
             fn peek(x):
                 x.storage
-            peek(abi::bytes::from_list([]))
-    fn peek_guess() errors compiler::CompilerError:
+            peek(std::abi::bytes::from_list([]))
+    fn peek_guess() errors std::compiler::CompilerError:
         static compile:
             fn peek(x):
                 x.guess
-            peek(abi::bytes::from_list([]))
-    fn same_instance_message() -> test::Match:
+            peek(std::abi::bytes::from_list([]))
+    fn same_instance_message() -> std::test::Match:
         real = observe(peek_real)
         guess = observe(peek_guess)
-        verdict = rejection(real, compiler::DiagnosticCode::OpaqueRepresentation)
+        verdict = rejection(real, std::compiler::DiagnosticCode::OpaqueRepresentation)
         if not verdict.matched:
             return verdict
-        if not test::contains_text?(real.message, "opaque representation"):
-            return test::mismatch("a message containing \"opaque representation\"", real.message, "")
+        if not std::test::contains_text?(real.message, "opaque representation"):
+            return std::test::mismatch("a message containing \"opaque representation\"", real.message, "")
         location = " (in the body of peek, at "
-        test::equal({rejected: real.rejected, code: real.code, message: before(real.message, location), located: position(real.message, location) > 0}, {rejected: guess.rejected, code: guess.code, message: before(guess.message, location), located: position(guess.message, location) > 0})
-    test::case("opaque-instance-bypass-message", same_instance_message)
+        std::test::equal({rejected: real.rejected, code: real.code, message: before(real.message, location), located: position(real.message, location) > 0}, {rejected: guess.rejected, code: guess.code, message: before(guess.message, location), located: position(guess.message, location) > 0})
+    std::test::case("opaque-instance-bypass-message", same_instance_message)
 
     # (opaque-instance-ordinary-struct-still-works, the same generic function
     # accepted for a module's ordinary struct, is in opaque-instances.bot:
@@ -665,24 +665,24 @@ fn register_generic_instance_tests():
 fn register_root_cause_tests():
     # opaque-no-fallout-twin: the control -- an ordinary struct's int field
     # passed to a bool parameter is the Type error that names int.
-    fn twin() errors compiler::CompilerError:
+    fn twin() errors std::compiler::CompilerError:
         static compile:
             fn create(value: int) -> PlainWrapped:
                 PlainWrapped {value: value, label: ""}
             fn f(b: bool):
                 b
             f(create(1).value)
-    test::rejects_containing("opaque-no-fallout-twin", compiler::DiagnosticCode::Type, "argument for parameter \"b\" cannot be proven to satisfy bool (argument type: int", twin)
+    std::test::rejects_containing("opaque-no-fallout-twin", std::compiler::DiagnosticCode::Type, "argument for parameter \"b\" cannot be proven to satisfy bool (argument type: int", twin)
 
     # opaque-root-cause-first: the same use of a hidden field is the
     # representation diagnostic, not its Type consequence.
-    fn root_cause() errors compiler::CompilerError:
+    fn root_cause() errors std::compiler::CompilerError:
         static compile:
-            x = abi::bytes::from_list([])
+            x = std::abi::bytes::from_list([])
             fn f(b: bool):
                 b
             f(x.storage)
-    test::rejects("opaque-root-cause-first", compiler::DiagnosticCode::OpaqueRepresentation, root_cause)
+    std::test::rejects("opaque-root-cause-first", std::compiler::DiagnosticCode::OpaqueRepresentation, root_cause)
 
 # ---------------------------------------------------------------------------
 # No route around the boundary
@@ -692,66 +692,66 @@ fn register_higher_order_tests(one: Byte, two: Byte):
     # opaque value is rejected however it is reached -- passed to a module's
     # higher-order function (untyped or typed, aliased, destructuring) or
     # closed over (called directly or passed on).
-    fn untyped() errors compiler::CompilerError:
+    fn untyped() errors std::compiler::CompilerError:
         static compile:
-            b = abi::bytes::from_list([])
+            b = std::abi::bytes::from_list([])
             fn peek(x):
                 x.storage
-            list::any?([b], peek)
-    test::rejects("opaque-bypass-higher-order/untyped", compiler::DiagnosticCode::OpaqueRepresentation, untyped)
+            std::list::any?([b], peek)
+    std::test::rejects("opaque-bypass-higher-order/untyped", std::compiler::DiagnosticCode::OpaqueRepresentation, untyped)
 
-    fn typed() errors compiler::CompilerError:
+    fn typed() errors std::compiler::CompilerError:
         static compile:
-            b = abi::bytes::from_list([])
-            fn peek(x: abi::bytes::Bytes):
+            b = std::abi::bytes::from_list([])
+            fn peek(x: std::abi::bytes::Bytes):
                 x.storage
-            list::any?([b], peek)
-    test::rejects("opaque-bypass-higher-order/typed", compiler::DiagnosticCode::OpaqueRepresentation, typed)
+            std::list::any?([b], peek)
+    std::test::rejects("opaque-bypass-higher-order/typed", std::compiler::DiagnosticCode::OpaqueRepresentation, typed)
 
-    fn alias() errors compiler::CompilerError:
+    fn alias() errors std::compiler::CompilerError:
         static compile:
-            b = abi::bytes::from_list([])
+            b = std::abi::bytes::from_list([])
             fn peek(x):
                 x.storage
             f = peek
-            list::any?([b], f)
-    test::rejects("opaque-bypass-higher-order/alias", compiler::DiagnosticCode::OpaqueRepresentation, alias)
+            std::list::any?([b], f)
+    std::test::rejects("opaque-bypass-higher-order/alias", std::compiler::DiagnosticCode::OpaqueRepresentation, alias)
 
-    fn destructure() errors compiler::CompilerError:
+    fn destructure() errors std::compiler::CompilerError:
         static compile:
-            b = abi::bytes::from_list([])
+            b = std::abi::bytes::from_list([])
             fn peek(x):
                 {storage} = x
                 storage
-            list::any?([b], peek)
-    test::rejects("opaque-bypass-higher-order/destructure", compiler::DiagnosticCode::OpaqueRepresentation, destructure)
+            std::list::any?([b], peek)
+    std::test::rejects("opaque-bypass-higher-order/destructure", std::compiler::DiagnosticCode::OpaqueRepresentation, destructure)
 
-    fn closure() errors compiler::CompilerError:
+    fn closure() errors std::compiler::CompilerError:
         static compile:
-            w = abi::bytes::from_list([])
+            w = std::abi::bytes::from_list([])
             fn grab():
                 w.storage
             grab()
-    test::rejects("opaque-bypass-higher-order/closure", compiler::DiagnosticCode::OpaqueRepresentation, closure)
+    std::test::rejects("opaque-bypass-higher-order/closure", std::compiler::DiagnosticCode::OpaqueRepresentation, closure)
 
-    fn closure_passed() errors compiler::CompilerError:
+    fn closure_passed() errors std::compiler::CompilerError:
         static compile:
-            w = abi::bytes::from_list([])
+            w = std::abi::bytes::from_list([])
             fn grab(u):
                 w.storage
-            list::any?([0], grab)
-    test::rejects("opaque-bypass-higher-order/closure-hof", compiler::DiagnosticCode::OpaqueRepresentation, closure_passed)
+            std::list::any?([0], grab)
+    std::test::rejects("opaque-bypass-higher-order/closure-hof", std::compiler::DiagnosticCode::OpaqueRepresentation, closure_passed)
 
     # opaque-bypass-higher-order-owner-functions-pass: the owner's own
     # functions, passed as values to a higher-order function, are the
     # sanctioned route.
-    fn owner_functions() errors compiler::CompilerError:
+    fn owner_functions() errors std::compiler::CompilerError:
         static compile:
             fn apply(f, v):
                 f(v)
-            x = abi::bytes::from_list([one, two])
-            [apply(abi::bytes::length, x).value, apply(abi::bytes::mutable_length, abi::bytes::from_bytes(x)).value]
-    test::value("opaque-bypass-higher-order-owner-functions-pass", [2, 2], owner_functions)
+            x = std::abi::bytes::from_list([one, two])
+            [apply(std::abi::bytes::length, x).value, apply(std::abi::bytes::mutable_length, std::abi::bytes::from_bytes(x)).value]
+    std::test::value("opaque-bypass-higher-order-owner-functions-pass", [2, 2], owner_functions)
 
 # ---------------------------------------------------------------------------
 # Methods
@@ -760,139 +760,139 @@ fn register_method_tests(one: Byte, two: Byte, three: Byte):
     # opaque-method-resolves-the-visible-function: `x.storage()` is the
     # method form of the visible function storage, while the projection
     # `x.storage` is forbidden.
-    fn method() errors compiler::CompilerError:
+    fn method() errors std::compiler::CompilerError:
         static compile:
-            fn storage(b: abi::bytes::Bytes) -> int:
-                abi::bytes::length(b).value
-            x = abi::bytes::from_list([one, two, three])
+            fn storage(b: std::abi::bytes::Bytes) -> int:
+                std::abi::bytes::length(b).value
+            x = std::abi::bytes::from_list([one, two, three])
             x.storage()
-    test::value("opaque-method-resolves-the-visible-function/method", 3, method)
+    std::test::value("opaque-method-resolves-the-visible-function/method", 3, method)
 
-    fn projection() errors compiler::CompilerError:
+    fn projection() errors std::compiler::CompilerError:
         static compile:
-            fn storage(b: abi::bytes::Bytes) -> int:
-                abi::bytes::length(b).value
-            x = abi::bytes::from_list([one, two, three])
+            fn storage(b: std::abi::bytes::Bytes) -> int:
+                std::abi::bytes::length(b).value
+            x = std::abi::bytes::from_list([one, two, three])
             x.storage
-    test::rejects("opaque-method-resolves-the-visible-function/projection", compiler::DiagnosticCode::OpaqueRepresentation, projection)
+    std::test::rejects("opaque-method-resolves-the-visible-function/projection", std::compiler::DiagnosticCode::OpaqueRepresentation, projection)
 
     # opaque-method-hidden-field-is-not-a-candidate: the hidden field (an
     # `any`, so possibly callable) named like a visible function neither
     # becomes the callee nor makes the call ambiguous outside its owner ...
-    fn not_a_candidate() errors compiler::CompilerError:
+    fn not_a_candidate() errors std::compiler::CompilerError:
         static compile:
-            fn storage(b: abi::bytes::Bytes) -> int:
+            fn storage(b: std::abi::bytes::Bytes) -> int:
                 100
-            x = abi::bytes::from_list([])
+            x = std::abi::bytes::from_list([])
             x.storage()
-    test::value("opaque-method-hidden-field-is-not-a-candidate", 100, not_a_candidate)
+    std::test::value("opaque-method-hidden-field-is-not-a-candidate", 100, not_a_candidate)
 
     # opaque-method-ordinary-struct-would-be-ambiguous: ... while the
     # identical program on the ordinary twin is the field/function
     # ambiguity: opacity is what removes the field from consideration.
-    fn would_be_ambiguous() errors compiler::CompilerError:
+    fn would_be_ambiguous() errors std::compiler::CompilerError:
         static compile:
             fn storage(b: PlainStorage) -> int:
                 100
-            x = PlainStorage {storage: byte_store::from_list([])}
+            x = PlainStorage {storage: std::byte_store::from_list([])}
             x.storage()
-    test::rejects("opaque-method-ordinary-struct-would-be-ambiguous", compiler::DiagnosticCode::AmbiguousMethodCall, would_be_ambiguous)
+    std::test::rejects("opaque-method-ordinary-struct-would-be-ambiguous", std::compiler::DiagnosticCode::AmbiguousMethodCall, would_be_ambiguous)
 
     # opaque-method-ambiguity-inside-the-owner: inside its owner (the suite)
     # the ordinary field/function ambiguity rule applies to an opaque struct.
-    fn inside_the_owner() errors compiler::CompilerError:
+    fn inside_the_owner() errors std::compiler::CompilerError:
         static compile:
             fn probe(g: Gadget) -> int:
                 100
             fn use(g: Gadget):
                 g.probe()
             1
-    test::rejects_containing("opaque-method-ambiguity-inside-the-owner", compiler::DiagnosticCode::AmbiguousMethodCall, "method-style call \"probe\" is ambiguous: the receiver (type Gadget) has a field \"probe\" whose value may be callable, and a function \"probe\" is also visible here; ", inside_the_owner)
+    std::test::rejects_containing("opaque-method-ambiguity-inside-the-owner", std::compiler::DiagnosticCode::AmbiguousMethodCall, "method-style call \"probe\" is ambiguous: the receiver (type Gadget) has a field \"probe\" whose value may be callable, and a function \"probe\" is also visible here; ", inside_the_owner)
 
     # opaque-method-consumer-function-named-like-a-hidden-field: a consumer's
     # own (untyped) function with the hidden field's name is simply the
     # method.
-    fn consumer_function() errors compiler::CompilerError:
+    fn consumer_function() errors std::compiler::CompilerError:
         static compile:
             fn storage(g):
                 5
-            x = abi::bytes::from_list([])
+            x = std::abi::bytes::from_list([])
             x.storage()
-    test::value("opaque-method-consumer-function-named-like-a-hidden-field", 5, consumer_function)
+    std::test::value("opaque-method-consumer-function-named-like-a-hidden-field", 5, consumer_function)
 
     # opaque-method-hidden-field-no-function-no-candidate: a hidden field
     # alone is not a callee: the call is representation access.
-    fn no_function() errors compiler::CompilerError:
+    fn no_function() errors std::compiler::CompilerError:
         static compile:
-            x = abi::bytes::from_list([])
+            x = std::abi::bytes::from_list([])
             x.storage(21)
-    test::rejects("opaque-method-hidden-field-no-function-no-candidate", compiler::DiagnosticCode::OpaqueRepresentation, no_function)
+    std::test::rejects("opaque-method-hidden-field-no-function-no-candidate", std::compiler::DiagnosticCode::OpaqueRepresentation, no_function)
 
     # opaque-method-no-candidate-on-opaque-receiver: a method-style call of a
     # name no function has, on an opaque receiver, is representation access.
-    fn no_candidate() errors compiler::CompilerError:
+    fn no_candidate() errors std::compiler::CompilerError:
         static compile:
-            fn f(w: abi::bytes::Bytes):
+            fn f(w: std::abi::bytes::Bytes):
                 w.nothing()
             1
-    test::rejects("opaque-method-no-candidate-on-opaque-receiver", compiler::DiagnosticCode::OpaqueRepresentation, no_candidate)
+    std::test::rejects("opaque-method-no-candidate-on-opaque-receiver", std::compiler::DiagnosticCode::OpaqueRepresentation, no_candidate)
 
 # ---------------------------------------------------------------------------
 # Nesting and holders
 
 fn register_nesting_tests(four: int, nine: int, one: Byte, two: Byte, seven: int):
     # opaque-nested-*: outside its owner nothing of an opaque struct holding
-    # a public struct (FileDescriptor holds an abi::I32) is reachable, a
+    # a public struct (FileDescriptor holds a std::abi::I32) is reachable, a
     # field of the public struct's type or not, a real field or not.
-    fn projection() errors compiler::CompilerError:
+    fn projection() errors std::compiler::CompilerError:
         static compile:
-            fn f(fd: linux::io::FileDescriptor):
+            fn f(fd: std::linux::io::FileDescriptor):
                 fd.raw
             1
-    test::rejects_message("opaque-nested-projection", compiler::DiagnosticCode::OpaqueRepresentation, file_descriptor_representation_message(), projection)
+    std::test::rejects_message("opaque-nested-projection", std::compiler::DiagnosticCode::OpaqueRepresentation, file_descriptor_representation_message(), projection)
 
-    fn projection_count() errors compiler::CompilerError:
+    fn projection_count() errors std::compiler::CompilerError:
         static compile:
-            fn f(fd: linux::io::FileDescriptor):
+            fn f(fd: std::linux::io::FileDescriptor):
                 fd.count
             1
-    test::rejects_message("opaque-nested-projection-count", compiler::DiagnosticCode::OpaqueRepresentation, file_descriptor_representation_message(), projection_count)
+    std::test::rejects_message("opaque-nested-projection-count", std::compiler::DiagnosticCode::OpaqueRepresentation, file_descriptor_representation_message(), projection_count)
 
-    fn destructure_1() errors compiler::CompilerError:
+    fn destructure_1() errors std::compiler::CompilerError:
         static compile:
-            fn f(fd: linux::io::FileDescriptor):
+            fn f(fd: std::linux::io::FileDescriptor):
                 {count} = fd
                 1
             1
-    test::rejects_message("opaque-nested-destructure-1", compiler::DiagnosticCode::OpaqueRepresentation, file_descriptor_representation_message(), destructure_1)
+    std::test::rejects_message("opaque-nested-destructure-1", std::compiler::DiagnosticCode::OpaqueRepresentation, file_descriptor_representation_message(), destructure_1)
 
-    fn destructure_2() errors compiler::CompilerError:
+    fn destructure_2() errors std::compiler::CompilerError:
         static compile:
-            fn f(fd: linux::io::FileDescriptor):
+            fn f(fd: std::linux::io::FileDescriptor):
                 {raw} = fd
                 1
             1
-    test::rejects_message("opaque-nested-destructure-2", compiler::DiagnosticCode::OpaqueRepresentation, file_descriptor_representation_message(), destructure_2)
+    std::test::rejects_message("opaque-nested-destructure-2", std::compiler::DiagnosticCode::OpaqueRepresentation, file_descriptor_representation_message(), destructure_2)
 
-    fn destructure_3() errors compiler::CompilerError:
+    fn destructure_3() errors std::compiler::CompilerError:
         static compile:
-            fn f(fd: linux::io::FileDescriptor):
+            fn f(fd: std::linux::io::FileDescriptor):
                 {raw: {value}} = fd
                 1
             1
-    test::rejects_message("opaque-nested-destructure-3", compiler::DiagnosticCode::OpaqueRepresentation, file_descriptor_representation_message(), destructure_3)
+    std::test::rejects_message("opaque-nested-destructure-3", std::compiler::DiagnosticCode::OpaqueRepresentation, file_descriptor_representation_message(), destructure_3)
 
-    fn destructure_4() errors compiler::CompilerError:
+    fn destructure_4() errors std::compiler::CompilerError:
         static compile:
-            fn f(fd: linux::io::FileDescriptor):
+            fn f(fd: std::linux::io::FileDescriptor):
                 {raw: r} = fd
                 1
             1
-    test::rejects_message("opaque-nested-destructure-4", compiler::DiagnosticCode::OpaqueRepresentation, file_descriptor_representation_message(), destructure_4)
+    std::test::rejects_message("opaque-nested-destructure-4", std::compiler::DiagnosticCode::OpaqueRepresentation, file_descriptor_representation_message(), destructure_4)
 
     # opaque-nested-owner-reaches-through: the owner (the suite) reads the
     # public inner struct as ordinary Botlish.
-    fn reaches_through() errors compiler::CompilerError:
+    fn reaches_through() errors std::compiler::CompilerError:
         static compile:
             fn make(v: int, c: int) -> Outer:
                 Outer {inner: Inner {value: v}, count: c}
@@ -902,103 +902,103 @@ fn register_nesting_tests(four: int, nine: int, one: Byte, two: Byte, seven: int
                 o.inner.value
             o = make(four, nine)
             [count(o), inner_value(o)]
-    test::value("opaque-nested-owner-reaches-through", [9, 4], reaches_through)
+    std::test::value("opaque-nested-owner-reaches-through", [9, 4], reaches_through)
 
     # opaque-nested-public-struct-stays-public: the public struct an opaque
-    # one holds (abi::I32) is ordinary outside: construct, project,
+    # one holds (std::abi::I32) is ordinary outside: construct, project,
     # destructure.
-    fn stays_public() errors compiler::CompilerError:
+    fn stays_public() errors std::compiler::CompilerError:
         static compile:
-            i = abi::I32 {value: 6}
+            i = std::abi::I32 {value: 6}
             {value} = i
             [i.value, value]
-    test::value("opaque-nested-public-struct-stays-public", [6, 6], stays_public)
+    std::test::value("opaque-nested-public-struct-stays-public", [6, 6], stays_public)
 
     # opaque-holder-owner-projects-its-own-field: a module's public struct
-    # holding an opaque value (linux::ReadResult) projects its own field,
+    # holding an opaque value (std::linux::ReadResult) projects its own field,
     # which the owner's accessor reads.
-    fn holder_field() errors compiler::CompilerError:
+    fn holder_field() errors std::compiler::CompilerError:
         static compile:
-            r = linux::ReadResult {result: seven, data: abi::bytes::from_bytes(abi::bytes::from_list([one, two]))}
-            abi::bytes::mutable_length(r.data).value
-    test::value("opaque-holder-owner-projects-its-own-field", 2, holder_field)
+            r = std::linux::ReadResult {result: seven, data: std::abi::bytes::from_bytes(std::abi::bytes::from_list([one, two]))}
+            std::abi::bytes::mutable_length(r.data).value
+    std::test::value("opaque-holder-owner-projects-its-own-field", 2, holder_field)
 
     # opaque-holder-authority-is-not-transitive: the holder's owner (the
     # suite, for Holder) cannot read the held value's fields.
-    fn not_transitive() errors compiler::CompilerError:
+    fn not_transitive() errors std::compiler::CompilerError:
         static compile:
             fn bad(h: Holder):
                 h.secret.storage
             1
-    test::rejects_containing("opaque-holder-authority-is-not-transitive", compiler::DiagnosticCode::OpaqueRepresentation, "field access on abi::bytes::Bytes is not available outside module \"abi::bytes\"; ", not_transitive)
+    std::test::rejects_containing("opaque-holder-authority-is-not-transitive", std::compiler::DiagnosticCode::OpaqueRepresentation, "field access on std::abi::bytes::Bytes is not available outside module \"std::abi::bytes\"; ", not_transitive)
 
     # opaque-holder-consumer-cannot-either: a program receiving the value
     # through the holder cannot open it either; the holder's own field is
     # accepted.
-    fn holder_project() errors compiler::CompilerError:
+    fn holder_project() errors std::compiler::CompilerError:
         static compile:
-            r = linux::ReadResult {result: seven, data: abi::bytes::from_bytes(abi::bytes::from_list([one]))}
+            r = std::linux::ReadResult {result: seven, data: std::abi::bytes::from_bytes(std::abi::bytes::from_list([one]))}
             r.data.storage
-    test::rejects("opaque-holder-consumer-cannot-either/project", compiler::DiagnosticCode::OpaqueRepresentation, holder_project)
+    std::test::rejects("opaque-holder-consumer-cannot-either/project", std::compiler::DiagnosticCode::OpaqueRepresentation, holder_project)
 
-    fn holder_destructure() errors compiler::CompilerError:
+    fn holder_destructure() errors std::compiler::CompilerError:
         static compile:
-            r = linux::ReadResult {result: seven, data: abi::bytes::from_bytes(abi::bytes::from_list([one]))}
+            r = std::linux::ReadResult {result: seven, data: std::abi::bytes::from_bytes(std::abi::bytes::from_list([one]))}
             {storage} = r.data
             1
-    test::rejects("opaque-holder-consumer-cannot-either/destructure", compiler::DiagnosticCode::OpaqueRepresentation, holder_destructure)
+    std::test::rejects("opaque-holder-consumer-cannot-either/destructure", std::compiler::DiagnosticCode::OpaqueRepresentation, holder_destructure)
 
-    fn holder_own_field() errors compiler::CompilerError:
+    fn holder_own_field() errors std::compiler::CompilerError:
         static compile:
-            r = linux::ReadResult {result: seven, data: abi::bytes::from_bytes(abi::bytes::from_list([one]))}
-            r.data == abi::bytes::from_bytes(abi::bytes::from_list([one]))
-    test::value("opaque-holder-consumer-cannot-either/field", true, holder_own_field)
+            r = std::linux::ReadResult {result: seven, data: std::abi::bytes::from_bytes(std::abi::bytes::from_list([one]))}
+            r.data == std::abi::bytes::from_bytes(std::abi::bytes::from_list([one]))
+    std::test::value("opaque-holder-consumer-cannot-either/field", true, holder_own_field)
 
     # opaque-struct-fields-need-no-authority-to-be-stored: declaring a field
     # of an opaque type and constructing the holder need no authority.
-    fn stored() errors compiler::CompilerError:
+    fn stored() errors std::compiler::CompilerError:
         static compile:
-            holder = Holder {secret: abi::bytes::from_list([one])}
+            holder = Holder {secret: std::abi::bytes::from_list([one])}
             1
-    test::value("opaque-struct-fields-need-no-authority-to-be-stored", 1, stored)
+    std::test::value("opaque-struct-fields-need-no-authority-to-be-stored", 1, stored)
 
 # ---------------------------------------------------------------------------
 # Per-struct protection and exact authority
 
 fn register_authority_tests(one: int):
     # opaque-per-struct-ordinary-struct-unchanged: a module's ordinary struct
-    # (linux::ReadResult) is constructed, projected and destructured from
+    # (std::linux::ReadResult) is constructed, projected and destructured from
     # outside as ever.
-    fn ordinary_unchanged() errors compiler::CompilerError:
+    fn ordinary_unchanged() errors std::compiler::CompilerError:
         static compile:
-            p = linux::ReadResult {result: one, data: abi::bytes::from_bytes(abi::bytes::from_list([]))}
+            p = std::linux::ReadResult {result: one, data: std::abi::bytes::from_bytes(std::abi::bytes::from_list([]))}
             {result, data: d} = p
-            [p.result, result, abi::bytes::mutable_length(p.data).value, abi::bytes::mutable_length(d).value]
-    test::value("opaque-per-struct-ordinary-struct-unchanged", [1, 1, 0, 0], ordinary_unchanged)
+            [p.result, result, std::abi::bytes::mutable_length(p.data).value, std::abi::bytes::mutable_length(d).value]
+    std::test::value("opaque-per-struct-ordinary-struct-unchanged", [1, 1, 0, 0], ordinary_unchanged)
 
     # opaque-authority-import-grants-nothing/indirect: importing a module
-    # that imports the owner (linux imports abi::bytes) grants nothing.
-    # (/direct -- a construction under `import abi::bytes` -- is
+    # that imports the owner (linux imports std::abi::bytes) grants nothing.
+    # (/direct -- a construction under `import std::abi::bytes` -- is
     # diagnostics.bot's opaque-construct-valid.)
-    fn indirect() errors compiler::CompilerError:
+    fn indirect() errors std::compiler::CompilerError:
         static compile:
-            r = linux::ReadResult {result: 0, data: abi::bytes::from_bytes(abi::bytes::from_list([]))}
+            r = std::linux::ReadResult {result: 0, data: std::abi::bytes::from_bytes(std::abi::bytes::from_list([]))}
             r.data.storage
-    test::rejects("opaque-authority-import-grants-nothing/indirect", compiler::DiagnosticCode::OpaqueRepresentation, indirect)
+    std::test::rejects("opaque-authority-import-grants-nothing/indirect", std::compiler::DiagnosticCode::OpaqueRepresentation, indirect)
 
     # opaque-authority-same-short-name: owning an opaque struct named Bytes
-    # (the suite's) grants nothing over abi::bytes::Bytes.
-    fn same_short_name() errors compiler::CompilerError:
+    # (the suite's) grants nothing over std::abi::bytes::Bytes.
+    fn same_short_name() errors std::compiler::CompilerError:
         static compile:
-            abi::bytes::Bytes {storage: 1}
-    test::rejects_containing("opaque-authority-same-short-name", compiler::DiagnosticCode::OpaqueConstruction, "abi::bytes::Bytes has an opaque representation owned by module \"abi::bytes\"", same_short_name)
+            std::abi::bytes::Bytes {storage: 1}
+    std::test::rejects_containing("opaque-authority-same-short-name", std::compiler::DiagnosticCode::OpaqueConstruction, "std::abi::bytes::Bytes has an opaque representation owned by module \"std::abi::bytes\"", same_short_name)
 
     # opaque-cache-entry-struct-of-the-same-name-is-not-the-module-one: the
     # suite's own Bytes is a different type, which the suite owns.
-    fn own_bytes() errors compiler::CompilerError:
+    fn own_bytes() errors std::compiler::CompilerError:
         static compile:
             Bytes {storage: 9}.storage
-    test::value("opaque-cache-entry-struct-of-the-same-name-is-not-the-module-one", 9, own_bytes)
+    std::test::value("opaque-cache-entry-struct-of-the-same-name-is-not-the-module-one", 9, own_bytes)
 
 # ---------------------------------------------------------------------------
 # Printing
@@ -1006,13 +1006,13 @@ fn register_authority_tests(one: int):
 fn register_printing_tests():
     # opaque-print-diagnostics-name-the-type: a static diagnostic about an
     # opaque value names its type, never a representation.
-    fn names_the_type() errors compiler::CompilerError:
+    fn names_the_type() errors std::compiler::CompilerError:
         static compile:
-            x = abi::bytes::from_list([])
+            x = std::abi::bytes::from_list([])
             fn f(n: int):
                 n
             f(x)
-    test::rejects_containing("opaque-print-diagnostics-name-the-type", compiler::DiagnosticCode::Type, "argument for parameter \"n\" cannot be proven to satisfy int (argument type: abi::bytes::Bytes", names_the_type)
+    std::test::rejects_containing("opaque-print-diagnostics-name-the-type", std::compiler::DiagnosticCode::Type, "argument for parameter \"n\" cannot be proven to satisfy int (argument type: std::abi::bytes::Bytes", names_the_type)
 
 # ---------------------------------------------------------------------------
 # Equality and hashing: whole-value and nominal
@@ -1020,48 +1020,48 @@ fn register_printing_tests():
 fn register_equality_tests(one: Byte, two: Byte, three: Byte):
     # opaque-equality-is-whole-value: two opaque values with equal contents
     # are equal; a difference anywhere makes them unequal.
-    fn whole_value() errors compiler::CompilerError:
+    fn whole_value() errors std::compiler::CompilerError:
         static compile:
-            a = abi::bytes::from_list([one, two])
-            [a == abi::bytes::from_list([one, two]), a == abi::bytes::from_list([two, two]), a == abi::bytes::from_list([one, three]), a != abi::bytes::from_list([one, two])]
-    test::value("opaque-equality-is-whole-value", [true, false, false, false], whole_value)
+            a = std::abi::bytes::from_list([one, two])
+            [a == std::abi::bytes::from_list([one, two]), a == std::abi::bytes::from_list([two, two]), a == std::abi::bytes::from_list([one, three]), a != std::abi::bytes::from_list([one, two])]
+    std::test::value("opaque-equality-is-whole-value", [true, false, false, false], whole_value)
 
     # opaque-equality-matches-an-ordinary-struct: the same comparisons on an
     # ordinary struct give the same answers.
-    fn ordinary() errors compiler::CompilerError:
+    fn ordinary() errors std::compiler::CompilerError:
         static compile:
             fn create(value: int, label: str) -> PlainWrapped:
                 PlainWrapped {value: value, label: label}
             [create(one, "a") == create(one, "a"), create(one, "a") == create(two, "a"), create(one, "a") == create(one, "b"), create(one, "a") != create(one, "a")]
-    test::value("opaque-equality-matches-an-ordinary-struct", [true, false, false, false], ordinary)
+    std::test::value("opaque-equality-matches-an-ordinary-struct", [true, false, false, false], ordinary)
 
     # opaque-equality-nominal: an opaque value never equals another type's
     # value with the same field and an equal field value -- an ordinary
     # lookalike, or an opaque struct of the same short name.
-    fn ordinary_lookalike() errors compiler::CompilerError:
+    fn ordinary_lookalike() errors std::compiler::CompilerError:
         static compile:
-            abi::bytes::from_list([one]) == PlainStorage {storage: byte_store::from_list([one])}
-    test::value("opaque-equality-nominal/ordinary-lookalike", false, ordinary_lookalike)
+            std::abi::bytes::from_list([one]) == PlainStorage {storage: std::byte_store::from_list([one])}
+    std::test::value("opaque-equality-nominal/ordinary-lookalike", false, ordinary_lookalike)
 
-    fn same_short_name() errors compiler::CompilerError:
+    fn same_short_name() errors std::compiler::CompilerError:
         static compile:
-            abi::bytes::from_list([one]) == Bytes {storage: byte_store::from_list([one])}
-    test::value("opaque-equality-nominal/same-short-name", false, same_short_name)
+            std::abi::bytes::from_list([one]) == Bytes {storage: std::byte_store::from_list([one])}
+    std::test::value("opaque-equality-nominal/same-short-name", false, same_short_name)
 
     # opaque-hash-is-whole-value: equal values hash equal, different values
     # differently.
-    fn hashing() errors compiler::CompilerError:
+    fn hashing() errors std::compiler::CompilerError:
         static compile:
-            [hash(abi::bytes::from_list([one, two])) == hash(abi::bytes::from_list([one, two])), hash(abi::bytes::from_list([one, two])) == hash(abi::bytes::from_list([two, two]))]
-    test::value("opaque-hash-is-whole-value", [true, false], hashing)
+            [hash(std::abi::bytes::from_list([one, two])) == hash(std::abi::bytes::from_list([one, two])), hash(std::abi::bytes::from_list([one, two])) == hash(std::abi::bytes::from_list([two, two]))]
+    std::test::value("opaque-hash-is-whole-value", [true, false], hashing)
 
     # opaque-immutable-set-deduplicates: an ImmutableSet of opaque values
     # works by whole-value equality.
-    fn set() errors compiler::CompilerError:
+    fn set() errors std::compiler::CompilerError:
         static compile:
-            s = immutable_set::from_list([abi::bytes::from_list([one]), abi::bytes::from_list([one]), abi::bytes::from_list([two])])
-            [immutable_set::contains(s, abi::bytes::from_list([one])), immutable_set::contains(s, abi::bytes::from_list([three]))]
-    test::value("opaque-immutable-set-deduplicates", [true, false], set)
+            s = std::immutable_set::from_list([std::abi::bytes::from_list([one]), std::abi::bytes::from_list([one]), std::abi::bytes::from_list([two])])
+            [std::immutable_set::contains(s, std::abi::bytes::from_list([one])), std::immutable_set::contains(s, std::abi::bytes::from_list([three]))]
+    std::test::value("opaque-immutable-set-deduplicates", [true, false], set)
 
 # ---------------------------------------------------------------------------
 # The same program in both spellings
@@ -1069,7 +1069,7 @@ fn register_equality_tests(one: Byte, two: Byte, three: Byte):
 fn register_spelling_tests(seven: SmallValue, one: Byte, two: Byte, three: Byte):
     # opaque-optimizer-analysis-values-agree: the opaque and the ordinary
     # spelling of one program compute the same value.
-    fn opaque_spelling() errors compiler::CompilerError:
+    fn opaque_spelling() errors std::compiler::CompilerError:
         static compile:
             fn create(v: SmallValue) -> OpaqueSmall:
                 OpaqueSmall {value: v}
@@ -1079,9 +1079,9 @@ fn register_spelling_tests(seven: SmallValue, one: Byte, two: Byte, three: Byte)
                 s.value + 1
             x = create(seven)
             [read(x), bump(x)]
-    test::value("opaque-optimizer-analysis-values-agree/opaque", [7, 8], opaque_spelling)
+    std::test::value("opaque-optimizer-analysis-values-agree/opaque", [7, 8], opaque_spelling)
 
-    fn ordinary_spelling() errors compiler::CompilerError:
+    fn ordinary_spelling() errors std::compiler::CompilerError:
         static compile:
             fn create(v: SmallValue) -> PlainSmall:
                 PlainSmall {value: v}
@@ -1091,20 +1091,20 @@ fn register_spelling_tests(seven: SmallValue, one: Byte, two: Byte, three: Byte)
                 s.value + 1
             x = create(seven)
             [read(x), bump(x)]
-    test::value("opaque-optimizer-analysis-values-agree/ordinary", [7, 8], ordinary_spelling)
+    std::test::value("opaque-optimizer-analysis-values-agree/ordinary", [7, 8], ordinary_spelling)
 
     # opaque-optimizer-gc-stress: a program holding opaque values in a List
     # (its forced-collection run stays in Tcl).
-    fn held_in_a_list() errors compiler::CompilerError:
+    fn held_in_a_list() errors std::compiler::CompilerError:
         static compile:
-            xs = [abi::bytes::from_list([one]), abi::bytes::from_list([two]), abi::bytes::from_list([three])]
-            nine = abi::bytes::from_list([one, two, three, one, two, three, one, two, three])
-            abi::bytes::length(nine).value + list::length(xs)
-    test::value("opaque-optimizer-gc-stress", 12, held_in_a_list)
+            xs = [std::abi::bytes::from_list([one]), std::abi::bytes::from_list([two]), std::abi::bytes::from_list([three])]
+            nine = std::abi::bytes::from_list([one, two, three, one, two, three, one, two, three])
+            std::abi::bytes::length(nine).value + std::list::length(xs)
+    std::test::value("opaque-optimizer-gc-stress", 12, held_in_a_list)
 
 # ---------------------------------------------------------------------------
 
-with context test::suite()
+with context std::test::suite()
 register_contextual_modifier_tests()
 register_owner_tests(1, 2, 3)
 register_consumer_tests(1, 2, 3)
@@ -1121,4 +1121,4 @@ register_authority_tests(1)
 register_printing_tests()
 register_equality_tests(1, 2, 3)
 register_spelling_tests(7, 1, 2, 3)
-test::report()
+std::test::report()

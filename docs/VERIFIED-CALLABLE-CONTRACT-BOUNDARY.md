@@ -152,7 +152,7 @@ erased-callable contract, and the walk became incomplete. The runner's
 `(c.run)()` reads `c.run` from a struct: unknown. So one accepted test that
 passed an error-declaring callable through an untyped parameter anywhere in
 a suite put its errors into the program's erased-callable contract, and the
-runner was charged them: UNHANDLED-ERROR inside `lib/test.bot`, for an error
+runner was charged them: UNHANDLED-ERROR inside `stdlib/test.bot`, for an error
 no stored check can raise. `hir/affine.tcl`'s error edges did the same
 (`mayLetErasedThrough` was 1 for every `Fn` callee).
 
@@ -211,7 +211,7 @@ coroutine handle's resume was already bounded by its contract in
 | struct field (named or anonymous, context struct installations, error payloads) | `StructField` | `Eval`'s `struct` case |
 | return value, a body's trailing value (declared result, else the inferred one) | `ResultFinal` | `return` case, `checkBlock` |
 | `if` branch join (`FnLub` of two closures), collecting loops, handler values, `break` | the join's type | `EvalIf`, `SubsumeCollected`, `EvalHandle`, `break` case |
-| List/vector/array elements (`list` literal, `mutable_vector::push`, natives with result shapes) | `ArgContexts` (element positions) | `SubsumeCall`; aggregates aligned element-wise (`Align`) |
+| List/vector/array elements (`list` literal, `std::mutable_vector::push`, natives with result shapes) | `ArgContexts` (element positions) | `SubsumeCall`; aggregates aligned element-wise (`Align`) |
 | a `Fn` returned by a callable (`Fn{return: Fn{...}}`) | `Align` on the result type | as its enclosing position |
 | `yield` into a coroutine's outward type | `YieldFinals` | `SubsumeCall` |
 | a coroutine handle leaving its construction's body | its `Coroutine` type | `SubsumeHandle` |
@@ -305,7 +305,7 @@ rejected before (UNHANDLED-ERROR E2), accepted now.
 
 ### 15. Native `-errors-from`
 
-`mutable_array::generate`'s factory: a factory of `Fn` type is bounded by
+`std::mutable_array::generate`'s factory: a factory of `Fn` type is bounded by
 its contract, already in the call's type-level `calleeErrors`; its fact adds
 nothing outside (`{contract}`, or a closure within it). An exact closure
 factory is recovered as before; an uncontracted one is charged by its fact.
@@ -410,7 +410,7 @@ the handler; every coroutine released, none swept, natively too.
 
 GOLDEN-TEST-FRAMEWORK.md's reproducer (`register_poison`):
 
-* before: `lib/test.bot:605:14: this call through a callable value the
+* before: `stdlib/test.bot:605:14: this call through a callable value the
   completion analysis cannot identify may produce the declared error "E"
   ... (UNHANDLED-ERROR)`;
 * after: `["PASS poison", "1 passed, 0 failed"]` on every backend
@@ -742,7 +742,7 @@ backend.
 
 ### 51. Diagnostics
 
-* The poisoned runner's `UNHANDLED-ERROR in lib/test.bot` is gone.
+* The poisoned runner's `UNHANDLED-ERROR in stdlib/test.bot` is gone.
 * An uncontracted unidentified call keeps a precise message, now naming both
   losses: "this call through a callable value the completion analysis
   cannot identify, and that no callable contract bounds, may produce the
@@ -776,7 +776,7 @@ now says "cannot identify *and* no verified contract bounds".
 
 ### 53. No run-time or test-framework special case
 
-No file under `core/`, `compiler/`, `native/`, `lib/` (`lib/test.bot`
+No file under `core/`, `compiler/`, `native/`, `stdlib/` (`stdlib/test.bot`
 included) changed; nothing in `hir/` names the golden framework, a test, a
 struct or a field: the rule reads static types (`IsFn`, `IsCoroutine`,
 `Contract`) and callable facts only. The registry benchmark and the

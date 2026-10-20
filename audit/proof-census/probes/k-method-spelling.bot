@@ -1,30 +1,30 @@
 # Method spelling vs qualified free spelling: the proof and the NIR should
 # be identical after normalization (METHOD-SUGAR.md: a namespaced function
 # becomes visible for method syntax by binding it).
-length = list::length
-at = list::at
-get = list::get
+length = std::list::length
+at = std::list::at
+get = std::list::get
 
 fn free(xs):
-    loop i from 0 to list::length(xs):
-        list::at(xs, i)
+    loop i from 0 to std::list::length(xs):
+        std::list::at(xs, i)
 
 fn method(xs):
     loop i from 0 to xs.length():
         xs.at(i)
 
 fn free_get(xs):
-    loop i from 0 to list::length(xs):
-        list::get(xs, i, 0)
+    loop i from 0 to std::list::length(xs):
+        std::list::get(xs, i, 0)
 
 fn method_get(xs):
     loop i from 0 to xs.length():
         xs.get(i, 0)
 
 fn free_guard(xs, i):
-    if i < 0 or i >= list::length(xs):
+    if i < 0 or i >= std::list::length(xs):
         return 0
-    list::at(xs, i)
+    std::list::at(xs, i)
 
 fn method_guard(xs, i):
     if i < 0 or i >= xs.length():

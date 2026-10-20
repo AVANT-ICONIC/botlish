@@ -5,15 +5,15 @@
 #     unseeded loop variable never has.
 fn slice_in_loop(s, n):
     loop i from 0 to n:
-        if i < str::length(s):
-            str::substring(s, i, i + 1)
+        if i < std::str::length(s):
+            std::str::substring(s, i, i + 1)
         else:
             ""
 
 fn index_in_loop(xs, n):
     loop i from 0 to n:
-        if i < list::length(xs):
-            list::at(xs, i)
+        if i < std::list::length(xs):
+            std::list::at(xs, i)
         else:
             0
 
@@ -21,14 +21,14 @@ fn index_in_loop(xs, n):
 #     immutable alias j = i.
 fn guard_i_read_j(xs, i):
     j = i
-    if i < 0 or i >= list::length(xs):
+    if i < 0 or i >= std::list::length(xs):
         return 0
-    list::at(xs, j)
+    std::list::at(xs, j)
 
 fn guard_j_read_j(xs, i):
     j = i
-    if j < 0 or j >= list::length(xs):
+    if j < 0 or j >= std::list::length(xs):
         return 0
-    list::at(xs, j)
+    std::list::at(xs, j)
 
 [slice_in_loop("ab", 3), index_in_loop([1, 2], 3), guard_i_read_j([1], 0), guard_j_read_j([1], 0)]

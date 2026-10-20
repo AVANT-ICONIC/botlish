@@ -3,20 +3,20 @@
 #
 # expect: [2, 3]
 
-import str
+import std::str
 
 fn a_alpha(c):
-    str::is_tcl_alpha(c)
+    std::str::is_tcl_alpha(c)
 
 fn b_alnum(c):
-    str::is_tcl_alnum(c)
+    std::str::is_tcl_alnum(c)
 
 fn count_while(p, s):
-    loop i from 0 to str::length(s):
-        if p(str::substring(s, i, i + 1)):
+    loop i from 0 to std::str::length(s):
+        if p(std::str::substring(s, i, i + 1)):
             continue
         return i
-    str::length(s)
+    std::str::length(s)
 
 fn pick(flag):
     if flag:

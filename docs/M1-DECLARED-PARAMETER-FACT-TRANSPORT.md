@@ -24,7 +24,7 @@ generic instance the URI/web path used (`is_digit`, `is_upper`,
 *view* while keeping its `<generic>` label -- it stopped existing as a
 separate instance at all, and every exact call that used to route to it
 now resolves to the **same, already-existing** `<int>` instance the
-positive control uses. `web::is_unreserved` itself, whose own generic-ness
+positive control uses. `std::web::is_unreserved` itself, whose own generic-ness
 comes from capturing a non-Int module value (unaffected by this
 milestone), is the only instance left `<generic>` on the URI path, exactly
 as spec item 10 anticipated -- but its own parameter view is now `Byte`,
@@ -84,8 +84,8 @@ reach an invocation the verifier does not see:
 - **Direct/exact calls** -- checked by `VerifyCall` directly. This is the
   overwhelming majority of calls in the fenced corpus and the entire
   URI/ASCII chain.
-- **Cross-module calls** -- a qualified reference (`web::is_unreserved`,
-  `ascii::is_digit`) resolves to the same exact `{block B}` target
+- **Cross-module calls** -- a qualified reference (`std::web::is_unreserved`,
+  `std::ascii::is_digit`) resolves to the same exact `{block B}` target
   mechanism; M0's own qualified-reference capture fix
   (`8041168`) did not change this resolution, only module-closure
   reachability. Confirmed unaffected: all C2 regression tests still pass
@@ -217,7 +217,7 @@ One file, two related edits, both in `hir::specialize`
    existing evidence via `hir::types::narrow` instead of replacing it.
 
 No other file changed except the new tests (`tests/hir-specialize.test`).
-`hir/range.tcl`, `native/lower.tcl`, `nir.rs`, `clif.rs`, `lib/`, and every
+`hir/range.tcl`, `native/lower.tcl`, `nir.rs`, `clif.rs`, `stdlib/`, and every
 frozen `.bot`/`.ir` program are untouched. `git diff --stat`:
 
 ```
@@ -246,7 +246,7 @@ not just its result type:
 
 - **Generic + closure fixture** (`m1-closure-capture`, spec items 35-36):
   a typed function (`cls(b: Small)`) forced into a generic instance by a
-  non-Int capture. Before M1 this is exactly `ascii::is_digit<generic>`'s
+  non-Int capture. Before M1 this is exactly `std::ascii::is_digit<generic>`'s
   own shape; the synthetic fixture isolates it from web/URI moving parts
   as spec item 35 asks. View type: `any` -> `int[Small]`.
 - **Generic + explosion-control fixture, with an untyped-parameter control
@@ -265,14 +265,14 @@ not just its result type:
   forced generic by a non-Int capture; view goes `any` -> `List[int[Small]]`.
   This test is also what caught and pinned down the aggregate-type crash
   fixed by the `IsSpecific` guards above.
-- **Module-closure fixture, the real `web::is_unreserved` class**
+- **Module-closure fixture, the real `std::web::is_unreserved` class**
   (`m1-module-closure`, spec item 37): loads `bench/uri-steady.bot`
-  directly (not a synthetic stand-in) and asserts `web::is_unreserved`'s
+  directly (not a synthetic stand-in) and asserts `std::web::is_unreserved`'s
   generic instance's `b` view is `int[Byte]`.
 - **Exact-call propagation** (`m1-exact-call-propagation`, spec item 21's
   own "A" question): asserts that, on the same real program, `cls` stays
-  `<generic>` while its own exact calls to `ascii::is_alphanumeric` and
-  `ascii::is_digit` now resolve to their *already-existing* `<int>`
+  `<generic>` while its own exact calls to `std::ascii::is_alphanumeric` and
+  `std::ascii::is_digit` now resolve to their *already-existing* `<int>`
   instances -- pinning down the collapse described in "Outcome" above as a
   regression-tested fact, not just a benchmark observation.
 
@@ -300,7 +300,7 @@ existing suite).
 
 ## Byte fact trace
 
-For `web::is_unreserved(b: Byte)`'s generic instance:
+For `std::web::is_unreserved(b: Byte)`'s generic instance:
 
 ```
 declaredParamTypes[0] = int[Byte]              (STRICT-TYPED-PARAMETERS.md,
@@ -331,9 +331,9 @@ Verified directly (`audit/comprehensive-generated-code/tools/probe.tcl`
 `params.txt`, `web-unreserved-256`/`uri-steady` probes):
 
 ```
-before: i9  web::is_unreserved<generic>
+before: i9  std::web::is_unreserved<generic>
             param b: declared=int[Byte] first-ref-view-type=any        entry-range=[-∞, +∞]
-after:  i9  web::is_unreserved<generic>
+after:  i9  std::web::is_unreserved<generic>
             param b: declared=int[Byte] first-ref-view-type=int[Byte]  entry-range=[-∞, +∞]
 ```
 
@@ -349,7 +349,7 @@ still transports correctly here.)
 
 ## ASCII leaf before/after
 
-`ascii::is_digit`'s own generic instance no longer exists in any of the
+`std::ascii::is_digit`'s own generic instance no longer exists in any of the
 measured workloads: every call that used to select it now selects the
 *already-existing* `<int>` instance instead (see "Outcome" and the
 `m1-exact-call-propagation` fixture). Machine code, `steady-ascii-capture`
@@ -378,7 +378,7 @@ did not have their own `guard int` before or after -- their reduction
 call whose callee is no longer `may_error`: the `test rax,rax`/branch a
 caller emits to check a fallible callee's result shrinks away once the
 callee provably cannot fail (see "may_error propagation" below). Verified
-directly in the disassembly (`asm.txt`, `ascii::is_alphanumeric`, both
+directly in the disassembly (`asm.txt`, `std::ascii::is_alphanumeric`, both
 calls):
 
 ```
@@ -420,8 +420,8 @@ unmodified, simply has less to emit for a call whose summary is now
 | `is_alphabetic` -> `is_lower` | may_error=true | **may_error=false** |
 | `is_alphanumeric` -> `is_alphabetic` | may_error=true | **may_error=false** |
 | `is_alphanumeric` -> `is_digit` | may_error=true | **may_error=false** |
-| `web::is_unreserved` -> `is_alphanumeric` | may_error=true | **may_error=false** |
-| `esc_char` -> `web::is_unreserved` | may_error=true | may_error=true (unchanged) |
+| `std::web::is_unreserved` -> `is_alphanumeric` | may_error=true | **may_error=false** |
+| `esc_char` -> `std::web::is_unreserved` | may_error=true | may_error=true (unchanged) |
 
 The first five collapse exactly as spec items 16/43 predicted, entirely
 from `nir.rs::summarize_call_effects`'s existing, **unmodified**
@@ -432,7 +432,7 @@ touched to get this.
 The last edge does *not* collapse, and this is itself informative (spec
 item 56's own prediction that "the new first loss may now be tagged call
 ABI rather than generic instance seed"): `esc_char` receives
-`web::is_unreserved` as one of its own **parameters** (a first-class
+`std::web::is_unreserved` as one of its own **parameters** (a first-class
 function value forwarded down from `uri_escape_text`), so `esc_char`'s
 call to it is an indirect/call-through-value dispatch, not a direct NIR
 `call` of a statically-known target. That is a call-boundary/ABI
@@ -638,7 +638,7 @@ evidence recommends implementing it now.
 | Instance identity for a generic caller's own exact calls | forced generic by the caller's own lost fact (cascading) | resolves through ordinary, unmodified `KeyType` to the already-correct instance |
 | `guard int`/tagged compares on a declared-typed generic parameter | present | absent (raw, via existing range/type machinery) |
 | `may_error` on a call whose only fallible op was that guard | `true` | `false` (via existing, unmodified structural effect analysis) |
-| **new first loss**: call-boundary/ABI cost for an *indirect* (value-forwarded) call of a typed function | not applicable (guard dominated) | **the visible boundary now**: `esc_char -> web::is_unreserved` (forwarded, not a direct NIR call) still costs a frame, a tagged Bool return/retest, and (spec item 59) a `runbox`-equivalent parameter unbox on entry -- unaffected by parameter-fact transport, since it is a property of the call mechanism, not the callee's own facts |
+| **new first loss**: call-boundary/ABI cost for an *indirect* (value-forwarded) call of a typed function | not applicable (guard dominated) | **the visible boundary now**: `esc_char -> std::web::is_unreserved` (forwarded, not a direct NIR call) still costs a frame, a tagged Bool return/retest, and (spec item 59) a `runbox`-equivalent parameter unbox on entry -- unaffected by parameter-fact transport, since it is a property of the call mechanism, not the callee's own facts |
 | remaining `guard int` on a *declared* parameter | (none observed after M1, in the fenced corpus) | n/a -- every remaining guard traced to an undeclared parameter |
 | remaining `guard int`/`guard list` on an *undeclared* parameter (loop indices, `StringRegion` scan index, `high_nibble`) | present | present, unchanged -- correctly out of scope |
 
@@ -657,7 +657,7 @@ M1-DECLARED-PARAMETER-FACT-TRANSPORT.md  (this report)
 
 No `.bot`, `.ir`, `.hir` frozen source file changed. No `native/src/*.rs`
 file changed (confirmed: `cargo build --release` after this change
-finished in 0.04s -- nothing to recompile). No `lib/` stdlib source
+finished in 0.04s -- nothing to recompile). No `stdlib/` stdlib source
 changed.
 
 ## Tests / GC stress
@@ -704,12 +704,12 @@ result throughout.
    Expected: no. **Confirmed no**: `hir::specialize::KeyType` was not
    modified; `git diff` touches no line of it.
 6. **Do generic instances still exist?** Expected: yes. **Confirmed
-   yes**: `web::is_unreserved<generic>` remains generic on the URI path
+   yes**: `std::web::is_unreserved<generic>` remains generic on the URI path
    (its captured module value, unaffected by this milestone, is why); 9
    generic instances remain in `uri-steady` after M1 (down from 14, for
    the reason in "Outcome," not because generic instances were disallowed).
 7. **Can a generic instance nevertheless have a precise parameter view?**
-   Expected: yes. **Confirmed yes**: `web::is_unreserved<generic>`'s own
+   Expected: yes. **Confirmed yes**: `std::web::is_unreserved<generic>`'s own
    `b` view is `int[Byte]`, not `any`.
 8. **Does an untyped parameter gain any new assumption?** Expected: no.
    **Confirmed no**: `m1-explosion-generic`'s `tag` parameter, and every
@@ -726,7 +726,7 @@ result throughout.
 
 ## Required URI questions
 
-11. **Is `web::is_unreserved` still a generic instance?** Yes.
+11. **Is `std::web::is_unreserved` still a generic instance?** Yes.
 12. **What is its parameter view before/after?** `any` -> `int[Byte]`
     (see "Byte fact trace").
 13. **Does its `guard int` disappear?** `is_unreserved` itself never had
@@ -747,19 +747,19 @@ result throughout.
     leaf before/after").
 17. **Which functions stop being `may_error` as a natural consequence?**
     `is_upper`, `is_lower`, `is_alphabetic`, `is_alphanumeric`, and the
-    call from `web::is_unreserved` into `is_alphanumeric` (see "`may_error`
+    call from `std::web::is_unreserved` into `is_alphanumeric` (see "`may_error`
     propagation" table) -- `is_digit` itself has no *callees* to report an
     edge for, but its own guard removal is what starts the cascade.
 18. **How many exact call checks remain in `uri-steady`?** 11 (`effects.txt`
     "exact calls with may_error check", down from 16 -- see the census
     tables above).
 19. **Does the retained-set capture remain?** Expected: yes. **Confirmed
-    yes**: `web::is_unreserved`'s NIR still shows `env=1 captures=1`, one
+    yes**: `std::web::is_unreserved`'s NIR still shows `env=1 captures=1`, one
     capture load, unchanged (`additional_unreserved_chars`, M0's own
     subject, untouched).
 20. **Does `rt_set_contains` remain?** Expected: yes. **Confirmed yes**:
     `bench/uri-steady.tcl`'s own structural report shows `op:setcontains=1`
-    inside `web::is_unreserved`'s NIR, unchanged before/after (the
+    inside `std::web::is_unreserved`'s NIR, unchanged before/after (the
     top-level `rt_set_contains` *text* count the benchmark script also
     prints is 0 both before and after, exactly as its own comment expects
     -- ImmutableSet membership lowers to a native call, not that literal
@@ -816,18 +816,18 @@ result throughout.
 ## Required scope questions
 
 35. **Was closure specialization changed?** Expected: no. **Confirmed
-    no** -- `cls`/`web::is_unreserved` remain generic for the same reason
+    no** -- `cls`/`std::web::is_unreserved` remain generic for the same reason
     (non-Int capture) as before; the closure-specialization rule in
     `hir::specialize::Handle`'s `call` case is untouched.
 36. **Was module-value representation changed?** Expected: no.
-    **Confirmed no** -- `web::is_unreserved`'s own capture (`env=1
+    **Confirmed no** -- `std::web::is_unreserved`'s own capture (`env=1
     captures=1`, one load of `additional_unreserved_chars`) is
     byte-for-byte unchanged.
 37. **Was the specialization key changed?** Expected: no. **Confirmed
     no** -- `hir::specialize::KeyType` has no diff.
 38. **Were range facts added to keys?** Expected: no. **Confirmed no**.
 39. **Was control-flow pruning added?** Expected: no. **Confirmed no** --
-    `byte::from_int`'s own residual guard/error path (spec item 18) is
+    `std::byte::from_int`'s own residual guard/error path (spec item 18) is
     unchanged; no `if`/branch was pruned by range facts anywhere.
 40. **Was `effectiveErrors` consumed?** Expected: no. **Confirmed no** --
     the `may_error` changes observed are entirely `nir.rs`'s own
@@ -852,7 +852,7 @@ result throughout.
 The clearest, most concrete remaining first loss this milestone's own
 evidence points at is the **call-boundary/ABI cost for an indirect
 (value-forwarded) call of a now-provably-non-erroring callee**
-(`esc_char -> web::is_unreserved`, "First-loss matrix" above) -- exactly
+(`esc_char -> std::web::is_unreserved`, "First-loss matrix" above) -- exactly
 what spec items 56/59-61 anticipated as the next layer once parameter
 facts stopped being the dominant cost. This is RC3 territory (tiny-call/
 helper-boundary overhead), not a new finding this milestone invented.

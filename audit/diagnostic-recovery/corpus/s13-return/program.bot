@@ -1,4 +1,4 @@
-#import str
+#import std::str
 
 fn f(s: str) -> str:
     s.concat("ab")

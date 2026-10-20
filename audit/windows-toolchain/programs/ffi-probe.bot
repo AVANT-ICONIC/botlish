@@ -11,34 +11,34 @@
 # stack argument changes 342.0 or 385; 34 is the sum of the four bytes C
 # wrote into storage exposed for the call. A program that calls C runs as
 # an executable linked by the system linker (C-FFI.md).
-import abi
-import abi::bytes
-import byte
-import ffi::c
+import std::abi
+import std::abi::bytes
+import std::byte
+import std::ffi::c
 
 extern c library "bwp"
 
-extern c fn add named "bwp_add"(a: ffi::c::Int, b: ffi::c::Int) -> ffi::c::Int
-extern c fn sizeof_long named "bwp_sizeof_long"() -> ffi::c::Int
-extern c fn sizeof_pointer named "bwp_sizeof_pointer"() -> ffi::c::Int
-extern c fn sizeof_wchar named "bwp_sizeof_wchar"() -> ffi::c::Int
-extern c fn long_echo named "bwp_long_echo"(x: ffi::c::Long) -> ffi::c::Long
-extern c fn mix named "bwp_mix"(a: ffi::c::Int, b: ffi::c::Double, c: ffi::c::Int, d: ffi::c::Double, e: ffi::c::SChar, f: ffi::c::Double) -> ffi::c::Double
-extern c fn sum10 named "bwp_sum10"(a: ffi::c::LongLong, b: ffi::c::LongLong, c: ffi::c::LongLong, d: ffi::c::LongLong, e: ffi::c::LongLong, f: ffi::c::LongLong, g: ffi::c::LongLong, h: ffi::c::LongLong, i: ffi::c::LongLong, j: ffi::c::Int) -> ffi::c::LongLong
-extern c fn narrow named "bwp_narrow"(x: ffi::c::Int) -> ffi::c::SChar
-extern c fn sum_bytes named "bwp_sum_bytes"(data: ffi::c::Ptr[ffi::c::UChar] read noescape, count: ffi::c::ULong) -> ffi::c::ULong
-extern c fn fill named "bwp_fill"(out: ffi::c::Ptr[ffi::c::UChar] write noescape, count: ffi::c::ULong, seed: ffi::c::UChar) -> unit
+extern c fn add named "bwp_add"(a: std::ffi::c::Int, b: std::ffi::c::Int) -> std::ffi::c::Int
+extern c fn sizeof_long named "bwp_sizeof_long"() -> std::ffi::c::Int
+extern c fn sizeof_pointer named "bwp_sizeof_pointer"() -> std::ffi::c::Int
+extern c fn sizeof_wchar named "bwp_sizeof_wchar"() -> std::ffi::c::Int
+extern c fn long_echo named "bwp_long_echo"(x: std::ffi::c::Long) -> std::ffi::c::Long
+extern c fn mix named "bwp_mix"(a: std::ffi::c::Int, b: std::ffi::c::Double, c: std::ffi::c::Int, d: std::ffi::c::Double, e: std::ffi::c::SChar, f: std::ffi::c::Double) -> std::ffi::c::Double
+extern c fn sum10 named "bwp_sum10"(a: std::ffi::c::LongLong, b: std::ffi::c::LongLong, c: std::ffi::c::LongLong, d: std::ffi::c::LongLong, e: std::ffi::c::LongLong, f: std::ffi::c::LongLong, g: std::ffi::c::LongLong, h: std::ffi::c::LongLong, i: std::ffi::c::LongLong, j: std::ffi::c::Int) -> std::ffi::c::LongLong
+extern c fn narrow named "bwp_narrow"(x: std::ffi::c::Int) -> std::ffi::c::SChar
+extern c fn sum_bytes named "bwp_sum_bytes"(data: std::ffi::c::Ptr[std::ffi::c::UChar] read noescape, count: std::ffi::c::ULong) -> std::ffi::c::ULong
+extern c fn fill named "bwp_fill"(out: std::ffi::c::Ptr[std::ffi::c::UChar] write noescape, count: std::ffi::c::ULong, seed: std::ffi::c::UChar) -> unit
 
-fn byte_of(n: int) -> byte::Byte:
+fn byte_of(n: int) -> std::byte::Byte:
     if n >= 0 and n <= 255:
         return n
     0
 
-data = abi::bytes::from_list([byte_of(1), byte_of(2), byte_of(3), byte_of(4)])
-filled = abi::bytes::zeroed(abi::usize(4)).fill(4, 7)
+data = std::abi::bytes::from_list([byte_of(1), byte_of(2), byte_of(3), byte_of(4)])
+filled = std::abi::bytes::zeroed(std::abi::usize(4)).fill(4, 7)
 mixed = mix(1, 2.5, 3, 4.5, 5, 6.5):
     on NonFiniteFloat:
         0.0
 [add(40, 2), sizeof_long(), sizeof_pointer(), sizeof_wchar(), long_echo(-5),
  mixed, sum10(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), narrow(200),
- data.sum_bytes(4), abi::bytes::freeze(filled.out).sum_bytes(4)]
+ data.sum_bytes(4), std::abi::bytes::freeze(filled.out).sum_bytes(4)]

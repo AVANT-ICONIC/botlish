@@ -8,10 +8,10 @@
 # compiler):
 #
 #   pointer  a pointer type nested 0..5 deep over a random base pointee --
-#            ffi::c::Void, a C scalar, an opaque struct, a function pointer
+#            std::ffi::c::Void, a C scalar, an opaque struct, a function pointer
 #            or (sometimes) an invalid one (int, str, List[int], an ordinary
 #            struct, a non-C domain) -- then a chain of 1..6 operations
-#            starting from ffi::c::null[T]() or the test fixture's address
+#            starting from std::ffi::c::null[T]() or the test fixture's address
 #            N: clone, erase (a data pointer to Ptr[Void]), retype[U] (drawn
 #            mostly from Ptr[Void], rarely from anything else, where the
 #            model expects a rejection), finished by a function whose parameter is declared
@@ -77,9 +77,9 @@ proc modelRange {target name} {
     return [list 0 [expr {2 ** $bits - 1}]]
 }
 
-set prelude {import ffi::c
+set prelude {import std::ffi::c
 import ffi_fixture
-import binary
+import std::binary
 
 opaque struct SSL:
     tag: unit
@@ -93,17 +93,17 @@ struct Plain:
 }
 
 set scalars {Char SChar UChar Short UShort Int UInt Long ULong LongLong ULongLong}
-set fnSig {ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]], return: ffi::c::Int}]}
+set fnSig {std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Void]], return: std::ffi::c::Int}]}
 
 # A random pointee base: {SPELLING VALID}.
 proc base {} {
     if {[chance 0.08]} {
-        return [list [pick {int str List[int] Plain binary::U32}] 0]
+        return [list [pick {int str List[int] Plain std::binary::U32}] 0]
     }
-    return [list [pick [list ffi::c::Void ffi::c::[pick $::scalars] ffi::c::Bool SSL Ctx $::fnSig]] 1]
+    return [list [pick [list std::ffi::c::Void std::ffi::c::[pick $::scalars] std::ffi::c::Bool SSL Ctx $::fnSig]] 1]
 }
 
-proc ptrOf {t} { return "ffi::c::Ptr\[$t\]" }
+proc ptrOf {t} { return "std::ffi::c::Ptr\[$t\]" }
 
 # The pointer case: {SOURCE EXPECT}, EXPECT {reject} or {value TEXT}.
 proc pointerCase {} {
@@ -117,7 +117,7 @@ proc pointerCase {} {
         [expr {entier(rand() * (2 ** 59 - 1)) + 1}] [expr {2 ** 59 - 1}]]]
     set lines {}
     if {$address == 0} {
-        lappend lines "    p0 = ffi::c::null\[$pointee\]()"
+        lappend lines "    p0 = std::ffi::c::null\[$pointee\]()"
     } else {
         lappend lines "    p0 = ffi_fixture::address\[$pointee\]($address)"
     }
@@ -129,7 +129,7 @@ proc pointerCase {} {
         set next p[expr {$i + 1}]
         # Mostly valid chains: retype mostly from a Ptr[Void], rarely (a
         # rejection) from anything else.
-        if {$type eq [ptrOf ffi::c::Void]} {
+        if {$type eq [ptrOf std::ffi::c::Void]} {
             set op [pick {clone retype retype erase}]
         } else {
             set op [expr {[chance 0.1] ? "retype" : [pick {clone erase erase}]}]
@@ -141,13 +141,13 @@ proc pointerCase {} {
                 lappend lines "    k$i = p$i.null?()"
             }
             erase {
-                lappend lines "    $next = ffi::c::erase(p$i)"
-                set type [ptrOf ffi::c::Void]
+                lappend lines "    $next = std::ffi::c::erase(p$i)"
+                set type [ptrOf std::ffi::c::Void]
             }
             retype {
                 lassign [base] target targetValid
-                lappend lines "    $next = ffi::c::retype\[$target\](p$i)"
-                if {$type ne [ptrOf ffi::c::Void] || !$targetValid} {
+                lappend lines "    $next = std::ffi::c::retype\[$target\](p$i)"
+                if {$type ne [ptrOf std::ffi::c::Void] || !$targetValid} {
                     set ok 0
                 }
                 set type [ptrOf $target]
@@ -168,7 +168,7 @@ proc scalarCase {} {
     set name [pick $::scalars]
     lassign [modelRange $target $name] lo hi
     set value [pick [list $lo $hi [expr {$lo - 1}] [expr {$hi + 1}] [expr {$lo + int(rand() * 100)}]]]
-    set source "import ffi::c\nfn f(x: ffi::c::$name) -> int:\n    x\n\nf($value)\n"
+    set source "import std::ffi::c\nfn f(x: std::ffi::c::$name) -> int:\n    x\n\nf($value)\n"
     set expect [expr {$value >= $lo && $value <= $hi ? [list value $value] : "reject"}]
     return [list $source $expect -target $target]
 }

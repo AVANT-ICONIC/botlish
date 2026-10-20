@@ -1,6 +1,6 @@
 # contexts.bot -- execution-environment contexts and context traits
 # (CONTEXTS.md, CONTEXT-TRAITS.md) and the textual Linux path library over
-# the portable path trait (lib/linux/path.bot, lib/io/path.bot), as a
+# the portable path trait (stdlib/linux/path.bot, stdlib/io/path.bot), as a
 # source-level specification:
 #
 # * `context`, `with` and `trait` stay ordinary names (bindings, parameters,
@@ -27,9 +27,9 @@
 #   are the call's; flags,
 #   recursion, nested functions, method syntax, value-trait polymorphism and
 #   statement aliases work through it, and exact contexts are unchanged;
-# * linux::path: LinuxPath validity, the predicate's and the validator's
+# * std::linux::path: LinuxPath validity, the predicate's and the validator's
 #   proofs (the success edge only; a rejoining handler loses it; facts
-#   follow values, not names), concat's joining, and io::path::Path's
+#   follow values, not names), concat's joining, and std::io::path::Path's
 #   generic code over LinuxPath and over a second, Windows-shaped witness
 #   owned here.
 #
@@ -42,7 +42,7 @@
 # CONTEXT-TYPE-NOT-EXACT: a block is never at the top level), top-level
 # declarations a test rejects, Strings holding U+0000 (no escape spells one),
 # programs that need several incompatible installations (or none: this
-# program installs linux::io's LinuxIO), and the corpus program
+# program installs std::linux::io's LinuxIO), and the corpus program
 # examples/io/child-path.bot.
 #
 # Contexts. A body is a function value and may not require any context
@@ -57,37 +57,37 @@
 # then make_second(), the slots SlotA, SlotB (in that order) and SlotD,
 # SlotC (in that order), Scale 3, Transparent 4, Outer, Adder 1 (the one
 # implementation of Out and Ticking), Clock 7 and Timed 2 (Stamped's
-# implementation and its own requirement), Capped 3 (the suite's io::IO
-# implementation) and, after every registration but the last, linux::io's
-# LinuxIO (which implements io::IO too: installed after the calls that select
+# implementation and its own requirement), Capped 3 (the suite's std::io::IO
+# implementation) and, after every registration but the last, std::linux::io's
+# LinuxIO (which implements std::io::IO too: installed after the calls that select
 # Capped, and before ct-owner-only's, which selects with it installed).
 #
 # Imports:
-#   abi::bytes   the unused linux::io chain builds its message with it
-#   compiler     compiler::CompilerError and DiagnosticCode (every body)
-#   io           the context trait io::IO (Capped implements it), io::print,
-#                io::WriteFailed
-#   io::path     io::path::NotAPath, io::path::text, the trait io::path::Path
-#   linux::io    the unused chain's linux::io::write; the late LinuxIO
-#   linux::path  LinuxPath's predicate, validator, concat and text
-#   list         list::length (a recursion over a context; listed_count)
-#   str          str::length, str::concat and str::encode_utf8 (concat always
-#                qualified: with io::path imported, chained String .concat
+#   std::abi::bytes   the unused std::linux::io chain builds its message with it
+#   compiler     std::compiler::CompilerError and DiagnosticCode (every body)
+#   io           the context trait std::io::IO (Capped implements it), std::io::print,
+#                std::io::WriteFailed
+#   std::io::path     std::io::path::NotAPath, std::io::path::text, the trait std::io::path::Path
+#   std::linux::io    the unused chain's std::linux::io::write; the late LinuxIO
+#   std::linux::path  LinuxPath's predicate, validator, concat and text
+#   list         std::list::length (a recursion over a context; listed_count)
+#   str          std::str::length, std::str::concat and std::str::encode_utf8 (concat always
+#                qualified: with std::io::path imported, chained String .concat
 #                is NO-APPLICABLE-METHOD)
-#   test         the framework; test::TestCase and test::count (Listed)
+#   test         the framework; std::test::TestCase and std::test::count (Listed)
 #   import type  LinuxPath (need's parameter) and Path (the generic path
 #                functions), by their short names
-import abi::bytes
-import compiler
-import io
-import io::path
-import linux::io
-import linux::path
-import list
-import str
-import test
-import type io::path::Path
-import type linux::path::LinuxPath
+import std::abi::bytes
+import std::compiler
+import std::io
+import std::io::path
+import std::linux::io
+import std::linux::path
+import std::list
+import std::str
+import std::test
+import type std::io::path::Path
+import type std::linux::path::LinuxPath
 
 # ---------------------------------------------------------------------------
 # Declarations (top-level only)
@@ -318,29 +318,29 @@ fn twice_stamped(n: int, context out: Stamped) -> int errors WriteFailed:
     out.stamp(n) + out.stamp(n)
 
 # ct-source-position: Capped, the suite's own implementation of the
-# standard context trait io::IO (portable-io.test's `limited`): a text
-# longer than max fails. linux::io's LinuxIO implements io::IO as well and
-# is installed after every call that needs io::IO.
+# standard context trait std::io::IO (portable-io.test's `limited`): a text
+# longer than max fails. std::linux::io's LinuxIO implements std::io::IO as well and
+# is installed after every call that needs std::io::IO.
 context struct Capped:
     max: Limit
 
-fn write_text(text: str, context c: Capped) -> unit errors io::WriteFailed:
-    if str::length(text) > c.max:
-        fail io::WriteFailed
+fn write_text(text: str, context c: Capped) -> unit errors std::io::WriteFailed:
+    if std::str::length(text) > c.max:
+        fail std::io::WriteFailed
     unit
 
-fn write_error_text(text: str, context c: Capped) -> unit errors io::WriteFailed:
-    fail io::WriteFailed
+fn write_error_text(text: str, context c: Capped) -> unit errors std::io::WriteFailed:
+    fail std::io::WriteFailed
 
 # linux-path.test's needer: a function that requires a proven LinuxPath.
 fn need(p: LinuxPath) -> int:
-    str::length(p)
+    std::str::length(p)
 
-# linux-path.test's generic path code over io::path::Path.
-fn child(path: Path) -> Path errors io::path::NotAPath:
+# linux-path.test's generic path code over std::io::path::Path.
+fn child(path: Path) -> Path errors std::io::path::NotAPath:
     path.concat("child")
 
-fn add_config(path: Path) -> Path errors io::path::NotAPath:
+fn add_config(path: Path) -> Path errors std::io::path::NotAPath:
     path.concat(".config").concat("awesome_tool")
 
 # path-windows-shaped-witness: a second Path witness joining with a
@@ -349,19 +349,19 @@ fn add_config(path: Path) -> Path errors io::path::NotAPath:
 refined type WinPath = str
 
 fn valid?(value: str) -> bool proves value: WinPath:
-    str::length(value) > 0
+    std::str::length(value) > 0
 
-fn validate(value: str) -> unit proves value: WinPath errors io::path::NotAPath:
+fn validate(value: str) -> unit proves value: WinPath errors std::io::path::NotAPath:
     if valid?(value):
         unit
     else:
-        fail io::path::NotAPath
+        fail std::io::path::NotAPath
 
 fn text(path: WinPath) -> str:
     path
 
-fn concat(path: WinPath, component: str) -> WinPath errors io::path::NotAPath:
-    joined = str::concat(str::concat(path, "\\"), component)
+fn concat(path: WinPath, component: str) -> WinPath errors std::io::path::NotAPath:
+    joined = std::str::concat(std::str::concat(path, "\\"), component)
     validate(joined)
     joined
 
@@ -373,46 +373,46 @@ fn concat(path: WinPath, component: str) -> WinPath errors io::path::NotAPath:
 fn register_context_names_tests():
     # contexts-contextual-run: `context` and `with` as a struct field,
     # parameters and bindings.
-    fn contextual_run() errors compiler::CompilerError:
+    fn contextual_run() errors std::compiler::CompilerError:
         static compile:
             fn f(context, with):
                 context + with
             context = Contextual {context: 3}
             with = 4
             f(context.context, with)
-    test::value("contexts-contextual-run", 7, contextual_run)
+    std::test::value("contexts-contextual-run", 7, contextual_run)
 
     # contexts-not-a-context-param: an ordinary struct, a primitive and an
     # unknown type are rejected at the context parameter's type.
-    fn not_a_context_struct() errors compiler::CompilerError:
+    fn not_a_context_struct() errors std::compiler::CompilerError:
         static compile:
             fn f(context x: Ordinary):
                 x.v
             1
-    test::rejects_at("contexts-not-a-context-param/struct", compiler::DiagnosticCode::NotAContext, 389, 29, not_a_context_struct)
-    test::rejects_message("contexts-not-a-context-param/struct-message", compiler::DiagnosticCode::NotAContext, "context parameter \"x\": Ordinary is not a context (only a value of a type declared \"context struct\" can be a context)", not_a_context_struct)
-    fn not_a_context_int() errors compiler::CompilerError:
+    std::test::rejects_at("contexts-not-a-context-param/struct", std::compiler::DiagnosticCode::NotAContext, 389, 29, not_a_context_struct)
+    std::test::rejects_message("contexts-not-a-context-param/struct-message", std::compiler::DiagnosticCode::NotAContext, "context parameter \"x\": Ordinary is not a context (only a value of a type declared \"context struct\" can be a context)", not_a_context_struct)
+    fn not_a_context_int() errors std::compiler::CompilerError:
         static compile:
             fn f(context x: int):
                 x
             1
-    test::rejects_at("contexts-not-a-context-param/int", compiler::DiagnosticCode::NotAContext, 396, 29, not_a_context_int)
-    test::rejects_message("contexts-not-a-context-param/int-message", compiler::DiagnosticCode::NotAContext, "context parameter \"x\": int is not a context (only a value of a type declared \"context struct\" can be a context)", not_a_context_int)
-    fn not_a_context_unknown() errors compiler::CompilerError:
+    std::test::rejects_at("contexts-not-a-context-param/int", std::compiler::DiagnosticCode::NotAContext, 396, 29, not_a_context_int)
+    std::test::rejects_message("contexts-not-a-context-param/int-message", std::compiler::DiagnosticCode::NotAContext, "context parameter \"x\": int is not a context (only a value of a type declared \"context struct\" can be a context)", not_a_context_int)
+    fn not_a_context_unknown() errors std::compiler::CompilerError:
         static compile:
             fn f(context x: Nope):
                 x
             1
-    test::rejects_at("contexts-not-a-context-param/unknown-type", compiler::DiagnosticCode::Type, 403, 29, not_a_context_unknown)
+    std::test::rejects_at("contexts-not-a-context-param/unknown-type", std::compiler::DiagnosticCode::Type, 403, 29, not_a_context_unknown)
 
     # contexts-no-context-api: the internal context natives have no source
     # spelling: `context#load` is the name `context` (unbound here) and a
     # comment.
-    fn no_context_api() errors compiler::CompilerError:
+    fn no_context_api() errors std::compiler::CompilerError:
         static compile:
             x = context#load
             1
-    test::rejects("contexts-no-context-api", compiler::DiagnosticCode::Unbound, no_context_api)
+    std::test::rejects("contexts-no-context-api", std::compiler::DiagnosticCode::Unbound, no_context_api)
 
 # Installation: any expression, in source order, one slot per type,
 # identified by the type alone.
@@ -420,15 +420,15 @@ fn register_installation_tests():
     # contexts-install-is-not-construction: Counter was installed from a
     # binding, Gauge from a call's result.
     from_binding = read_value()
-    fn install_binding() errors compiler::CompilerError:
+    fn install_binding() errors std::compiler::CompilerError:
         static compile:
             from_binding
-    test::value("contexts-install-is-not-construction/binding", 5, install_binding)
+    std::test::value("contexts-install-is-not-construction/binding", 5, install_binding)
     from_call = read_gauge()
-    fn install_call() errors compiler::CompilerError:
+    fn install_call() errors std::compiler::CompilerError:
         static compile:
             from_call
-    test::value("contexts-install-is-not-construction/call", 42, install_call)
+    std::test::value("contexts-install-is-not-construction/call", 42, install_call)
 
     # contexts-identity-is-the-type: functions with different local names
     # read the same installed value.
@@ -437,31 +437,31 @@ fn register_installation_tests():
     fn b(context system_io: Counter):
         system_io.value + 1
     identity = [a(), b(), read_value(), read_enabled()]
-    fn identity_is_the_type() errors compiler::CompilerError:
+    fn identity_is_the_type() errors std::compiler::CompilerError:
         static compile:
             identity
-    test::value("contexts-identity-is-the-type", [5, 6, 5, false], identity_is_the_type)
+    std::test::value("contexts-identity-is-the-type", [5, 6, 5, false], identity_is_the_type)
 
     # contexts-constructor-order: make_second(), installed after First,
     # read First (41 + 1).
     second = read_second()
-    fn constructor_order() errors compiler::CompilerError:
+    fn constructor_order() errors std::compiler::CompilerError:
         static compile:
             second
-    test::value("contexts-constructor-order", 42, constructor_order)
+    std::test::value("contexts-constructor-order", 42, constructor_order)
 
     # contexts-multiple-types: each consumer reads its own type's slot,
     # whatever the installation order or the local names.
     in_order = [read_a(), read_b(), both_ab()]
-    fn multiple_in_order() errors compiler::CompilerError:
+    fn multiple_in_order() errors std::compiler::CompilerError:
         static compile:
             in_order
-    test::value("contexts-multiple-types/a-then-b", [1, 2, 2001], multiple_in_order)
+    std::test::value("contexts-multiple-types/a-then-b", [1, 2, 2001], multiple_in_order)
     reversed = [read_c(), read_d(), both_dc()]
-    fn multiple_reversed() errors compiler::CompilerError:
+    fn multiple_reversed() errors std::compiler::CompilerError:
         static compile:
             reversed
-    test::value("contexts-multiple-types/b-then-a", [1, 2, 2001], multiple_reversed)
+    std::test::value("contexts-multiple-types/b-then-a", [1, 2, 2001], multiple_reversed)
 
     # contexts-non-opaque-context: outside code constructs (at the
     # installation), projects and destructures an ordinary context struct.
@@ -469,10 +469,10 @@ fn register_installation_tests():
         {value} = t
         value + t.value
     transparent = get()
-    fn non_opaque() errors compiler::CompilerError:
+    fn non_opaque() errors std::compiler::CompilerError:
         static compile:
             transparent
-    test::value("contexts-non-opaque-context", 8, non_opaque)
+    std::test::value("contexts-non-opaque-context", 8, non_opaque)
 
 # Context parameters: not call arguments, ordinary locals, one per type.
 fn register_context_parameter_tests():
@@ -483,107 +483,107 @@ fn register_context_parameter_tests():
         else:
             x + c.value
     added = [add(1), add(1, :double)]
-    fn arity() errors compiler::CompilerError:
+    fn arity() errors std::compiler::CompilerError:
         static compile:
             added
-    test::value("contexts-arity", [6, 12], arity)
+    std::test::value("contexts-arity", [6, 12], arity)
 
     # contexts-binding-collision: a parameter, a flag or another context
     # parameter of the context parameter's name is ContextBindingCollision
     # (at the context parameter's name); a body binding of it is the
     # ordinary Duplicate; a nested scope may shadow it.
-    fn collides_with_parameter() errors compiler::CompilerError:
+    fn collides_with_parameter() errors std::compiler::CompilerError:
         static compile:
             fn f(io, context io: Counter):
                 io
             1
-    test::rejects_at("contexts-binding-collision/parameter", compiler::DiagnosticCode::ContextBindingCollision, 497, 30, collides_with_parameter)
-    test::rejects_message("contexts-binding-collision/parameter-message", compiler::DiagnosticCode::ContextBindingCollision, "context parameter \"io\" has the name of a parameter or flag of the same function: context parameters are ordinary locals of the function and share its one namespace", collides_with_parameter)
-    fn collides_with_flag() errors compiler::CompilerError:
+    std::test::rejects_at("contexts-binding-collision/parameter", std::compiler::DiagnosticCode::ContextBindingCollision, 497, 30, collides_with_parameter)
+    std::test::rejects_message("contexts-binding-collision/parameter-message", std::compiler::DiagnosticCode::ContextBindingCollision, "context parameter \"io\" has the name of a parameter or flag of the same function: context parameters are ordinary locals of the function and share its one namespace", collides_with_parameter)
+    fn collides_with_flag() errors std::compiler::CompilerError:
         static compile:
             fn f(flags :io, context io: Counter):
                 io
             1
-    test::rejects_at("contexts-binding-collision/flag", compiler::DiagnosticCode::ContextBindingCollision, 504, 37, collides_with_flag)
-    test::rejects_message("contexts-binding-collision/flag-message", compiler::DiagnosticCode::ContextBindingCollision, "context parameter \"io\" has the name of a parameter or flag of the same function: context parameters are ordinary locals of the function and share its one namespace", collides_with_flag)
-    fn collides_with_context() errors compiler::CompilerError:
+    std::test::rejects_at("contexts-binding-collision/flag", std::compiler::DiagnosticCode::ContextBindingCollision, 504, 37, collides_with_flag)
+    std::test::rejects_message("contexts-binding-collision/flag-message", std::compiler::DiagnosticCode::ContextBindingCollision, "context parameter \"io\" has the name of a parameter or flag of the same function: context parameters are ordinary locals of the function and share its one namespace", collides_with_flag)
+    fn collides_with_context() errors std::compiler::CompilerError:
         static compile:
             fn f(context io: Counter, io: Clock):
                 io
             1
-    test::rejects_at("contexts-binding-collision/context", compiler::DiagnosticCode::ContextBindingCollision, 511, 39, collides_with_context)
-    test::rejects_message("contexts-binding-collision/context-message", compiler::DiagnosticCode::ContextBindingCollision, "context parameter \"io\" has the name of another context parameter: context parameters are ordinary locals of the function and share its one namespace", collides_with_context)
-    fn collides_with_body() errors compiler::CompilerError:
+    std::test::rejects_at("contexts-binding-collision/context", std::compiler::DiagnosticCode::ContextBindingCollision, 511, 39, collides_with_context)
+    std::test::rejects_message("contexts-binding-collision/context-message", std::compiler::DiagnosticCode::ContextBindingCollision, "context parameter \"io\" has the name of another context parameter: context parameters are ordinary locals of the function and share its one namespace", collides_with_context)
+    fn collides_with_body() errors std::compiler::CompilerError:
         static compile:
             fn f(context io: Counter):
                 io = 1
                 io
             1
-    test::rejects("contexts-binding-collision/body", compiler::DiagnosticCode::Duplicate, collides_with_body)
+    std::test::rejects("contexts-binding-collision/body", std::compiler::DiagnosticCode::Duplicate, collides_with_body)
     fn f(context io: Counter):
         fn g(io):
             io + 1
         g(io.value)
     shadowed = f()
-    fn shadow() errors compiler::CompilerError:
+    fn shadow() errors std::compiler::CompilerError:
         static compile:
             shadowed
-    test::value("contexts-binding-collision/shadow", 6, shadow)
+    std::test::value("contexts-binding-collision/shadow", 6, shadow)
 
     # contexts-duplicate-param-type: the same context type twice in one
     # function, whatever the local names (at the second entry's type).
-    fn duplicate_type() errors compiler::CompilerError:
+    fn duplicate_type() errors std::compiler::CompilerError:
         static compile:
             fn bad(context a: Clock, b: Clock):
                 1
             1
-    test::rejects_at("contexts-duplicate-param-type", compiler::DiagnosticCode::DuplicateContextParameter, 537, 41, duplicate_type)
-    test::rejects_message("contexts-duplicate-param-type/message", compiler::DiagnosticCode::DuplicateContextParameter, "context Clock is declared twice (as \"a\" and \"b\"): a function receives at most one value of each context type, whatever the local names", duplicate_type)
+    std::test::rejects_at("contexts-duplicate-param-type", std::compiler::DiagnosticCode::DuplicateContextParameter, 537, 41, duplicate_type)
+    std::test::rejects_message("contexts-duplicate-param-type/message", std::compiler::DiagnosticCode::DuplicateContextParameter, "context Clock is declared twice (as \"a\" and \"b\"): a function receives at most one value of each context type, whatever the local names", duplicate_type)
 
     # contexts-method-sugar: the context is an obligation of the selected
     # call, never an extra receiver.
     sugar = [7.scaled(), scaled(7)]
-    fn method_sugar() errors compiler::CompilerError:
+    fn method_sugar() errors std::compiler::CompilerError:
         static compile:
             sugar
-    test::value("contexts-method-sugar", [21, 21], method_sugar)
+    std::test::value("contexts-method-sugar", [21, 21], method_sugar)
 
 # Requirements: derived through calls, and only where a call can run.
 fn register_requirement_tests():
     # contexts-unused-consumer: defining consumers (a chain down to
-    # linux::io::write; consumers of a context nothing installs) and never
+    # std::linux::io::write; consumers of a context nothing installs) and never
     # calling one requires nothing.
-    fn unused_chain() errors compiler::CompilerError:
+    fn unused_chain() errors std::compiler::CompilerError:
         static compile:
             fn message():
-                abi::bytes::from_list(str::encode_utf8("chain\n"))
+                std::abi::bytes::from_list(std::str::encode_utf8("chain\n"))
             fn c():
-                linux::io::write(message())
+                std::linux::io::write(message())
             fn b():
                 c()
             fn a():
                 b()
             fn unused():
-                linux::io::write(message())
+                std::linux::io::write(message())
             1 + 1
-    test::value("contexts-unused-consumer/chain", 2, unused_chain)
-    fn unused_uninstalled() errors compiler::CompilerError:
+    std::test::value("contexts-unused-consumer/chain", 2, unused_chain)
+    fn unused_uninstalled() errors std::compiler::CompilerError:
         static compile:
             fn read_unplaced(context u: Unplaced):
                 u.value
             fn read_twice(context u: Unplaced):
                 u.value + u.value
             2
-    test::value("contexts-unused-consumer/uninstalled-type", 2, unused_uninstalled)
+    std::test::value("contexts-unused-consumer/uninstalled-type", 2, unused_uninstalled)
 
     # contexts-unreachable-call: a call that cannot run requires nothing.
-    fn unreachable_call() errors compiler::CompilerError:
+    fn unreachable_call() errors std::compiler::CompilerError:
         static compile:
             fn f(x):
                 return x
                 read_value()
             f(4)
-    test::value("contexts-unreachable-call", 4, unreachable_call)
+    std::test::value("contexts-unreachable-call", 4, unreachable_call)
 
     # contexts-recursion: a self-recursive consumer, and a cycle through a
     # nested consumer (a calls b, b needs Counter and calls a), converge.
@@ -600,19 +600,19 @@ fn register_requirement_tests():
                 a(m - 1)
         b(n)
     recursion = [countdown_counter(5), a(4)]
-    fn recursive() errors compiler::CompilerError:
+    fn recursive() errors std::compiler::CompilerError:
         static compile:
             recursion
-    test::value("contexts-recursion", [5, 5], recursive)
+    std::test::value("contexts-recursion", [5, 5], recursive)
 
     # contexts-alias-calls: a call through an alias (value_alias, made at
     # the top level before the installation) carries read_value's
     # requirement inside another function.
     via_alias = through()
-    fn alias_calls() errors compiler::CompilerError:
+    fn alias_calls() errors std::compiler::CompilerError:
         static compile:
             via_alias
-    test::value("contexts-alias-calls", 5, alias_calls)
+    std::test::value("contexts-alias-calls", 5, alias_calls)
 
 # Function values: a function that requires a context may be called or
 # aliased, never used as a value.
@@ -621,34 +621,34 @@ fn register_function_value_tests():
     # closure over a consumer, storing in a List or a struct, choosing one
     # as a result or as an if's value; aliases are calls; a context-free
     # function value is unaffected.
-    fn passed() errors compiler::CompilerError:
+    fn passed() errors std::compiler::CompilerError:
         static compile:
             fn apply(g):
                 g()
             apply(read_value)
-    test::rejects_at("contexts-function-value/pass", compiler::DiagnosticCode::ContextFunctionValue, 628, 19, passed)
-    test::rejects_message("contexts-function-value/pass-message", compiler::DiagnosticCode::ContextFunctionValue, "function read_value requires context Counter, so it can only be called (or bound to another name as a statement): it cannot be passed, returned or stored as a value, because a call through an unknown function value could not prove that context installed", passed)
-    fn closure() errors compiler::CompilerError:
+    std::test::rejects_at("contexts-function-value/pass", std::compiler::DiagnosticCode::ContextFunctionValue, 628, 19, passed)
+    std::test::rejects_message("contexts-function-value/pass-message", std::compiler::DiagnosticCode::ContextFunctionValue, "function read_value requires context Counter, so it can only be called (or bound to another name as a statement): it cannot be passed, returned or stored as a value, because a call through an unknown function value could not prove that context installed", passed)
+    fn closure() errors std::compiler::CompilerError:
         static compile:
             fn make():
                 fn inner():
                     read_value()
                 inner
             make()
-    test::rejects("contexts-function-value/closure", compiler::DiagnosticCode::ContextFunctionValue, closure)
-    fn stored_in_list() errors compiler::CompilerError:
+    std::test::rejects("contexts-function-value/closure", std::compiler::DiagnosticCode::ContextFunctionValue, closure)
+    fn stored_in_list() errors std::compiler::CompilerError:
         static compile:
             xs = [read_value]
             1
-    test::rejects("contexts-function-value/list", compiler::DiagnosticCode::ContextFunctionValue, stored_in_list)
-    fn stored_in_struct() errors compiler::CompilerError:
+    std::test::rejects("contexts-function-value/list", std::compiler::DiagnosticCode::ContextFunctionValue, stored_in_list)
+    fn stored_in_struct() errors std::compiler::CompilerError:
         static compile:
             fn wrap():
                 read_value()
             x = {f: wrap}
             1
-    test::rejects("contexts-function-value/struct", compiler::DiagnosticCode::ContextFunctionValue, stored_in_struct)
-    fn chosen_result() errors compiler::CompilerError:
+    std::test::rejects("contexts-function-value/struct", std::compiler::DiagnosticCode::ContextFunctionValue, stored_in_struct)
+    fn chosen_result() errors std::compiler::CompilerError:
         static compile:
             fn other():
                 1
@@ -659,8 +659,8 @@ fn register_function_value_tests():
                     other
             x = choose(true)
             x()
-    test::rejects("contexts-function-value/choose", compiler::DiagnosticCode::ContextFunctionValue, chosen_result)
-    fn if_value() errors compiler::CompilerError:
+    std::test::rejects("contexts-function-value/choose", std::compiler::DiagnosticCode::ContextFunctionValue, chosen_result)
+    fn if_value() errors std::compiler::CompilerError:
         static compile:
             fn other():
                 1
@@ -669,36 +669,36 @@ fn register_function_value_tests():
             else:
                 other
             x()
-    test::rejects("contexts-function-value/if", compiler::DiagnosticCode::ContextFunctionValue, if_value)
+    std::test::rejects("contexts-function-value/if", std::compiler::DiagnosticCode::ContextFunctionValue, if_value)
     h = value_alias
     aliases = [value_alias(), h()]
-    fn alias() errors compiler::CompilerError:
+    fn alias() errors std::compiler::CompilerError:
         static compile:
             aliases
-    test::value("contexts-function-value/alias", [5, 5], alias)
-    fn context_free() errors compiler::CompilerError:
+    std::test::value("contexts-function-value/alias", [5, 5], alias)
+    fn context_free() errors std::compiler::CompilerError:
         static compile:
             fn apply(g):
                 g()
             fn seven():
                 7
             apply(seven)
-    test::value("contexts-function-value/context-free", 7, context_free)
+    std::test::value("contexts-function-value/context-free", 7, context_free)
 
     # contexts-function-value-last-statement: a block (as a program) whose
     # last statement defines a consumer lets it escape as its value; followed
     # by another statement it is a plain definition.
-    fn last_statement() errors compiler::CompilerError:
+    fn last_statement() errors std::compiler::CompilerError:
         static compile:
             fn tail():
                 read_value()
-    test::rejects("contexts-function-value-last-statement/last", compiler::DiagnosticCode::ContextFunctionValue, last_statement)
-    fn not_last_statement() errors compiler::CompilerError:
+    std::test::rejects("contexts-function-value-last-statement/last", std::compiler::DiagnosticCode::ContextFunctionValue, last_statement)
+    fn not_last_statement() errors std::compiler::CompilerError:
         static compile:
             fn tail():
                 read_value()
             5
-    test::value("contexts-function-value-last-statement/not-last", 5, not_last_statement)
+    std::test::value("contexts-function-value-last-statement/not-last", 5, not_last_statement)
 
 # Native context layouts (the values every backend computes; the layouts
 # themselves are NIR, in the Tcl tests).
@@ -708,10 +708,10 @@ fn register_native_layout_tests():
     fn get(context o: Outer):
         [o.inner.a, o.inner.b, o.c, o.inner]
     nested = get()
-    fn eligible_nested() errors compiler::CompilerError:
+    fn eligible_nested() errors std::compiler::CompilerError:
         static compile:
             nested
-    test::value("contexts-native-eligibility", [1, true, 2, Inner {a: 1, b: true}], eligible_nested)
+    std::test::value("contexts-native-eligibility", [1, true, 2, Inner {a: 1, b: true}], eligible_nested)
 
     # contexts-native-gc-stress: context reads between allocations, and a
     # nested context's parts stored in new Lists.
@@ -720,26 +720,26 @@ fn register_native_layout_tests():
         if n == 0:
             read_value()
         else:
-            many(n - 1) + list::length(xs) - 2
+            many(n - 1) + std::list::length(xs) - 2
     allocating = many(30)
-    fn gc_counter() errors compiler::CompilerError:
+    fn gc_counter() errors std::compiler::CompilerError:
         static compile:
             allocating
-    test::value("contexts-native-gc-stress/counter", 5, gc_counter)
+    std::test::value("contexts-native-gc-stress/counter", 5, gc_counter)
     fn parts(context o: Outer):
         [o.inner, o.inner, [o.c]]
     stored = parts()
-    fn gc_nested() errors compiler::CompilerError:
+    fn gc_nested() errors std::compiler::CompilerError:
         static compile:
             stored
-    test::value("contexts-native-gc-stress/nested", [Inner {a: 1, b: true}, Inner {a: 1, b: true}, [2]], gc_nested)
+    std::test::value("contexts-native-gc-stress/nested", [Inner {a: 1, b: true}, Inner {a: 1, b: true}, [2]], gc_nested)
 
     # contexts-native-jit-absolute: a Small and a false Bool read back.
     fields = [read_value(), read_enabled()]
-    fn jit_absolute() errors compiler::CompilerError:
+    fn jit_absolute() errors std::compiler::CompilerError:
         static compile:
             fields
-    test::value("contexts-native-jit-absolute", [5, false], jit_absolute)
+    std::test::value("contexts-native-jit-absolute", [5, false], jit_absolute)
 
 fn register_contexts_tests():
     register_context_names_tests()
@@ -756,7 +756,7 @@ fn register_contexts_tests():
 # orthogonal to ordinary traits.
 fn register_context_trait_binding_tests():
     # ct-contextual: `context` and `trait` stay ordinary names.
-    fn contextual() errors compiler::CompilerError:
+    fn contextual() errors std::compiler::CompilerError:
         static compile:
             context = 3
             trait = 4
@@ -764,107 +764,107 @@ fn register_context_trait_binding_tests():
                 context * trait
             s = Contextual {context: 5}
             [context + trait, f(context, trait), s.context]
-    test::value("ct-contextual", [7, 12, 5], contextual)
+    std::test::value("ct-contextual", [7, 12, 5], contextual)
 
     # ct-one-way-message: the misuse diagnostic names the binding and the
     # trait; an undeclared operation names the trait's operations.
-    fn returned_binding() errors compiler::CompilerError:
+    fn returned_binding() errors std::compiler::CompilerError:
         static compile:
             fn f(context out: Out):
                 out
             1
-    test::rejects_message("ct-one-way-message/misuse", compiler::DiagnosticCode::ContextTraitMisuse, "\"out\" is a context-trait binding (Out): it is not a value -- the only use of a context-trait binding is calling one of Out's operations on it (out.emit(...)); it cannot be passed, stored, returned, compared, projected or tested, and the installed context that provides it is never recovered", returned_binding)
-    fn unknown_operation() errors compiler::CompilerError:
+    std::test::rejects_message("ct-one-way-message/misuse", std::compiler::DiagnosticCode::ContextTraitMisuse, "\"out\" is a context-trait binding (Out): it is not a value -- the only use of a context-trait binding is calling one of Out's operations on it (out.emit(...)); it cannot be passed, stored, returned, compared, projected or tested, and the installed context that provides it is never recovered", returned_binding)
+    fn unknown_operation() errors std::compiler::CompilerError:
         static compile:
             fn f(context out: Out):
                 out.k()
             1
-    test::rejects_message("ct-one-way-message/unknown-operation", compiler::DiagnosticCode::TraitUnknownOperation, "context trait Out has no operation \"k\" (its operations: emit): a context-trait binding exposes exactly its trait's requirements, whatever installed context provides them", unknown_operation)
+    std::test::rejects_message("ct-one-way-message/unknown-operation", std::compiler::DiagnosticCode::TraitUnknownOperation, "context trait Out has no operation \"k\" (its operations: emit): a context-trait binding exposes exactly its trait's requirements, whatever installed context provides them", unknown_operation)
 
     # ct-positions: a context trait is not a value type: an ordinary
     # parameter, a result, a List or MutableArray element, a function type.
-    fn as_parameter() errors compiler::CompilerError:
+    fn as_parameter() errors std::compiler::CompilerError:
         static compile:
             fn f(x: Out):
                 1
             1
-    test::rejects("ct-positions/parameter", compiler::DiagnosticCode::ContextTraitPosition, as_parameter)
-    fn as_result() errors compiler::CompilerError:
+    std::test::rejects("ct-positions/parameter", std::compiler::DiagnosticCode::ContextTraitPosition, as_parameter)
+    fn as_result() errors std::compiler::CompilerError:
         static compile:
             fn f() -> Out:
                 1
             1
-    test::rejects("ct-positions/result", compiler::DiagnosticCode::ContextTraitPosition, as_result)
-    fn as_list_element() errors compiler::CompilerError:
+    std::test::rejects("ct-positions/result", std::compiler::DiagnosticCode::ContextTraitPosition, as_result)
+    fn as_list_element() errors std::compiler::CompilerError:
         static compile:
             fn f(x: List[Out]):
                 1
             1
-    test::rejects("ct-positions/list-element", compiler::DiagnosticCode::ContextTraitPosition, as_list_element)
-    fn as_array_element() errors compiler::CompilerError:
+    std::test::rejects("ct-positions/list-element", std::compiler::DiagnosticCode::ContextTraitPosition, as_list_element)
+    fn as_array_element() errors std::compiler::CompilerError:
         static compile:
             fn f(x: MutableArray[Out]):
                 1
             1
-    test::rejects("ct-positions/mutable-array-element", compiler::DiagnosticCode::ContextTraitPosition, as_array_element)
-    fn in_function_type() errors compiler::CompilerError:
+    std::test::rejects("ct-positions/mutable-array-element", std::compiler::DiagnosticCode::ContextTraitPosition, as_array_element)
+    fn in_function_type() errors std::compiler::CompilerError:
         static compile:
             fn f(x: Fn{args: [Out], return: int, errors: []}):
                 1
             1
-    test::rejects("ct-positions/function-type", compiler::DiagnosticCode::ContextTraitPosition, in_function_type)
+    std::test::rejects("ct-positions/function-type", std::compiler::DiagnosticCode::ContextTraitPosition, in_function_type)
 
     # ct-orthogonal: a value trait is not a context, and a context-trait
     # binding is not a value-trait argument.
-    fn value_trait_context() errors compiler::CompilerError:
+    fn value_trait_context() errors std::compiler::CompilerError:
         static compile:
             fn f(context x: Named):
                 1
             1
-    test::rejects("ct-orthogonal/value-trait-context", compiler::DiagnosticCode::NotAContext, value_trait_context)
-    fn binding_as_value_trait() errors compiler::CompilerError:
+    std::test::rejects("ct-orthogonal/value-trait-context", std::compiler::DiagnosticCode::NotAContext, value_trait_context)
+    fn binding_as_value_trait() errors std::compiler::CompilerError:
         static compile:
             fn f(context out: Out):
                 use_named(out)
             1
-    test::rejects("ct-orthogonal/binding-as-value-trait-argument", compiler::DiagnosticCode::ContextTraitMisuse, binding_as_value_trait)
+    std::test::rejects("ct-orthogonal/binding-as-value-trait-argument", std::compiler::DiagnosticCode::ContextTraitMisuse, binding_as_value_trait)
 
     # ct-duplicate-parameter: one context trait twice in one function; an
     # exact context and a context trait together are fine (Adder provides
     # both here: 3 * 1).
-    fn trait_twice() errors compiler::CompilerError:
+    fn trait_twice() errors std::compiler::CompilerError:
         static compile:
             fn f(context a: Out, b: Out):
                 1
             1
-    test::rejects("ct-duplicate-parameter/twice", compiler::DiagnosticCode::DuplicateContextParameter, trait_twice)
+    std::test::rejects("ct-duplicate-parameter/twice", std::compiler::DiagnosticCode::DuplicateContextParameter, trait_twice)
     fn f(n: int, context a: Adder, out: Out) -> int errors WriteFailed:
         out.emit(n) * a.k
     exact_and_trait = f(2):
         on WriteFailed:
             0
-    fn with_exact() errors compiler::CompilerError:
+    fn with_exact() errors std::compiler::CompilerError:
         static compile:
             exact_and_trait
-    test::value("ct-duplicate-parameter/with-exact-context", 3, with_exact)
+    std::test::value("ct-duplicate-parameter/with-exact-context", 3, with_exact)
 
 # Selection and requirements: static, from the installations at the call.
 fn register_context_trait_selection_tests():
     # ct-source-position: a context implementing the trait installed after
     # a call (LinuxIO, installed after this registration) does not make the
-    # call ambiguous: io::print selects Capped, whose cap fails the long
+    # call ambiguous: std::io::print selects Capped, whose cap fails the long
     # text.
-    fn greet() -> List[str] errors io::WriteFailed:
-        io::print("hi")
-        io::print("longer than the cap")
+    fn greet() -> List[str] errors std::io::WriteFailed:
+        std::io::print("hi")
+        std::io::print("longer than the cap")
         ["printed"]
     selected = greet():
-        on io::WriteFailed:
+        on std::io::WriteFailed:
             ["capped"]
-    fn installed_after() errors compiler::CompilerError:
+    fn installed_after() errors std::compiler::CompilerError:
         static compile:
             selected
-    test::value("ct-source-position", ["capped"], installed_after)
+    std::test::value("ct-source-position", ["capped"], installed_after)
 
     # ct-implementation-obligations: the selected implementation (Timed's
     # stamp) calls now(), which requires Clock: installed, the program runs
@@ -874,15 +874,15 @@ fn register_context_trait_selection_tests():
     obligations = run(5):
         on WriteFailed:
             0
-    fn implementation_obligations() errors compiler::CompilerError:
+    fn implementation_obligations() errors std::compiler::CompilerError:
         static compile:
             obligations
-    test::value("ct-implementation-obligations", 35, implementation_obligations)
+    std::test::value("ct-implementation-obligations", 35, implementation_obligations)
 
     # ct-unreachable-requires-nothing: consumers nobody calls, a consumer
     # called only in statically unreachable code, a nested consumer its
     # function never calls: none requires anything.
-    fn unreachable_trait_calls() errors compiler::CompilerError:
+    fn unreachable_trait_calls() errors std::compiler::CompilerError:
         static compile:
             fn unused(n: int) -> int errors WriteFailed:
                 twice(n)
@@ -902,7 +902,7 @@ fn register_context_trait_selection_tests():
                     on WriteFailed:
                         0
             [holder(4), g]
-    test::value("ct-unreachable-requires-nothing", [8, 4], unreachable_trait_calls)
+    std::test::value("ct-unreachable-requires-nothing", [8, 4], unreachable_trait_calls)
 
     # ct-flags: live calls of a flag-taking consumer pass their flags; a call
     # in dead code takes none.
@@ -911,26 +911,26 @@ fn register_context_trait_selection_tests():
             return loud(n, :twice)
         n
     flagged = [g(3), loud(4, :twice), loud(4)]
-    fn flags() errors compiler::CompilerError:
+    fn flags() errors std::compiler::CompilerError:
         static compile:
             flagged
-    test::value("ct-flags", [3, 10, 5], flags)
+    std::test::value("ct-flags", [3, 10, 5], flags)
 
     # ct-function-value-frontier: a context-trait consumer is never a value;
     # an alias in statement position (twice_alias) is called like it.
-    fn passed_consumer() errors compiler::CompilerError:
+    fn passed_consumer() errors std::compiler::CompilerError:
         static compile:
             fn apply(f, n):
                 f(n)
             apply(twice, 1)
-    test::rejects("ct-function-value-frontier/value", compiler::DiagnosticCode::ContextFunctionValue, passed_consumer)
+    std::test::rejects("ct-function-value-frontier/value", std::compiler::DiagnosticCode::ContextFunctionValue, passed_consumer)
     aliased = twice_alias(2):
         on WriteFailed:
             0
-    fn alias_call() errors compiler::CompilerError:
+    fn alias_call() errors std::compiler::CompilerError:
         static compile:
             aliased
-    test::value("ct-function-value-frontier/alias", 6, alias_call)
+    std::test::value("ct-function-value-frontier/alias", 6, alias_call)
 
     # ct-shapes: recursion, a nested function calling the operation,
     # method syntax to a consumer, and a function polymorphic in a value
@@ -942,20 +942,20 @@ fn register_context_trait_selection_tests():
     shapes = all():
         on WriteFailed:
             []
-    fn shaped() errors compiler::CompilerError:
+    fn shaped() errors std::compiler::CompilerError:
         static compile:
             shapes
-    test::value("ct-shapes", [9, 41, 5], shaped)
+    std::test::value("ct-shapes", [9, 41, 5], shaped)
 
     # ct-exact-contexts-unchanged: an exact requirement is satisfied by its
     # own context (Adder's emit called directly).
     exact = emit(1):
         on WriteFailed:
             0
-    fn exact_context() errors compiler::CompilerError:
+    fn exact_context() errors std::compiler::CompilerError:
         static compile:
             exact
-    test::value("ct-exact-contexts-unchanged", 2, exact_context)
+    std::test::value("ct-exact-contexts-unchanged", 2, exact_context)
 
     # ct-hir-text: the one-file program's run (2 * (5 + 1) + 1).
     fn run_twice(n: int) -> int errors WriteFailed:
@@ -963,18 +963,18 @@ fn register_context_trait_selection_tests():
     one_file = run_twice(5):
         on WriteFailed:
             0
-    fn one_file_program() errors compiler::CompilerError:
+    fn one_file_program() errors std::compiler::CompilerError:
         static compile:
             one_file
-    test::value("ct-hir-text", 13, one_file_program)
+    std::test::value("ct-hir-text", 13, one_file_program)
 
     # ct-machine-code-direct: the consumer through the trait computes what
     # the hand-written concrete function computes.
     evidence = [sum_ticking(50, 0), sum_adder(50, 0)]
-    fn machine_code_evidence() errors compiler::CompilerError:
+    fn machine_code_evidence() errors std::compiler::CompilerError:
         static compile:
             evidence
-    test::value("ct-machine-code-direct", [2650, 2650], machine_code_evidence)
+    std::test::value("ct-machine-code-direct", [2650, 2650], machine_code_evidence)
 
 fn register_context_traits_tests():
     register_context_trait_binding_tests()
@@ -989,242 +989,242 @@ fn register_path_validity_tests():
     # path-validity: relative, absolute, ".", "..", "./a", "../a",
     # repeated slashes, a trailing slash, spaces and non-ASCII are valid;
     # the empty String is not.
-    fn validity() errors compiler::CompilerError:
+    fn validity() errors std::compiler::CompilerError:
         static compile:
             xs = ["", "a", "/", "/a/b", ".", "..", "./foo", "../foo", "foo//bar", "a/", "with space", "é/𝄞"]
             loop x in xs:
-                linux::path::valid?(x)
-    test::value("path-validity", [false, true, true, true, true, true, true, true, true, true, true, true], validity)
+                std::linux::path::valid?(x)
+    std::test::value("path-validity", [false, true, true, true, true, true, true, true, true, true, true, true], validity)
 
     # path-no-filesystem: a path that exists nowhere is valid, and the
     # validated value is the same String (nothing normalized).
-    fn no_filesystem() errors compiler::CompilerError:
+    fn no_filesystem() errors std::compiler::CompilerError:
         static compile:
-            fn f(s: str) -> str errors io::path::NotAPath:
-                linux::path::validate(s)
+            fn f(s: str) -> str errors std::io::path::NotAPath:
+                std::linux::path::validate(s)
                 s
             r = f("/no/such/dir/../x//y"):
-                on io::path::NotAPath:
+                on std::io::path::NotAPath:
                     "invalid"
             r
-    test::value("path-no-filesystem", "/no/such/dir/../x//y", no_filesystem)
+    std::test::value("path-no-filesystem", "/no/such/dir/../x//y", no_filesystem)
 
 # Proofs: valid? true and validate's normal completion prove LinuxPath.
 fn register_path_proof_tests():
     # path-predicate-proof: the true edge proves; the false edge does not.
-    fn predicate_true_edge() errors compiler::CompilerError:
+    fn predicate_true_edge() errors std::compiler::CompilerError:
         static compile:
             fn f(s: str) -> int:
-                if linux::path::valid?(s):
+                if std::linux::path::valid?(s):
                     need(s)
                 else:
                     -1
             [f("/etc"), f("")]
-    test::value("path-predicate-proof/true-edge", [4, -1], predicate_true_edge)
-    fn predicate_false_edge() errors compiler::CompilerError:
+    std::test::value("path-predicate-proof/true-edge", [4, -1], predicate_true_edge)
+    fn predicate_false_edge() errors std::compiler::CompilerError:
         static compile:
             fn f(s: str) -> int:
-                if not linux::path::valid?(s):
+                if not std::linux::path::valid?(s):
                     need(s)
                 else:
                     -1
             f("x")
-    test::rejects_at("path-predicate-proof/false-edge", compiler::DiagnosticCode::Type, 1028, 26, predicate_false_edge)
+    std::test::rejects_at("path-predicate-proof/false-edge", std::compiler::DiagnosticCode::Type, 1028, 26, predicate_false_edge)
 
     # path-validator-proof: the normal completion proves for the rest of the
     # path; the error edge proves nothing.
-    fn validator_success() errors compiler::CompilerError:
+    fn validator_success() errors std::compiler::CompilerError:
         static compile:
-            fn f(s: str) -> int errors io::path::NotAPath:
-                linux::path::validate(s)
+            fn f(s: str) -> int errors std::io::path::NotAPath:
+                std::linux::path::validate(s)
                 need(s)
             r = f("/etc"):
-                on io::path::NotAPath:
+                on std::io::path::NotAPath:
                     -1
             s = f(""):
-                on io::path::NotAPath:
+                on std::io::path::NotAPath:
                     -1
             [r, s]
-    test::value("path-validator-proof/success", [4, -1], validator_success)
-    fn validator_error_edge() errors compiler::CompilerError:
+    std::test::value("path-validator-proof/success", [4, -1], validator_success)
+    fn validator_error_edge() errors std::compiler::CompilerError:
         static compile:
             fn f(s: str) -> int:
-                linux::path::validate(s):
-                    on io::path::NotAPath:
+                std::linux::path::validate(s):
+                    on std::io::path::NotAPath:
                         return need(s)
                 0
             f("x")
-    test::rejects_at("path-validator-proof/error-edge", compiler::DiagnosticCode::Type, 1054, 37, validator_error_edge)
+    std::test::rejects_at("path-validator-proof/error-edge", std::compiler::DiagnosticCode::Type, 1054, 37, validator_error_edge)
 
     # path-validator-terminating-handler: a handler that returns adds no
     # normal path.
-    fn terminating_handler() errors compiler::CompilerError:
+    fn terminating_handler() errors std::compiler::CompilerError:
         static compile:
             fn f(s: str) -> int:
-                linux::path::validate(s):
-                    on io::path::NotAPath:
+                std::linux::path::validate(s):
+                    on std::io::path::NotAPath:
                         return -1
                 need(s)
             [f("/a"), f("")]
-    test::value("path-validator-terminating-handler", [2, -1], terminating_handler)
+    std::test::value("path-validator-terminating-handler", [2, -1], terminating_handler)
 
     # path-validator-rejoining-handler: a handler completing normally
     # rejoins without the proof; proving it again in the handler keeps it.
-    fn rejoining_unit() errors compiler::CompilerError:
+    fn rejoining_unit() errors std::compiler::CompilerError:
         static compile:
             fn f(s: str) -> int:
-                linux::path::validate(s):
-                    on io::path::NotAPath:
+                std::linux::path::validate(s):
+                    on std::io::path::NotAPath:
                         unit
                 need(s)
             f("x")
-    test::rejects_at("path-validator-rejoining-handler/unit", compiler::DiagnosticCode::Type, 1079, 22, rejoining_unit)
-    fn rejoining_reproved() errors compiler::CompilerError:
+    std::test::rejects_at("path-validator-rejoining-handler/unit", std::compiler::DiagnosticCode::Type, 1079, 22, rejoining_unit)
+    fn rejoining_reproved() errors std::compiler::CompilerError:
         static compile:
             fn f(s: str, fallback: str) -> int:
-                linux::path::validate(s):
-                    on io::path::NotAPath:
-                        if not linux::path::valid?(s):
+                std::linux::path::validate(s):
+                    on std::io::path::NotAPath:
+                        if not std::linux::path::valid?(s):
                             return -1
                 need(s)
             f("/ab", "x")
-    test::value("path-validator-rejoining-handler/reproved", 3, rejoining_reproved)
+    std::test::value("path-validator-rejoining-handler/reproved", 3, rejoining_reproved)
 
     # path-validator-identity: facts are about values: an alias made after
     # validation keeps the proof, validating an alias proves the value it
     # aliases, a shadowing binding is another value, and validating one
     # value proves nothing about another.
-    fn alias_after() errors compiler::CompilerError:
+    fn alias_after() errors std::compiler::CompilerError:
         static compile:
-            fn f(s: str) -> int errors io::path::NotAPath:
-                linux::path::validate(s)
+            fn f(s: str) -> int errors std::io::path::NotAPath:
+                std::linux::path::validate(s)
                 t = s
                 need(t)
             r = f("/x"):
-                on io::path::NotAPath:
+                on std::io::path::NotAPath:
                     -1
             r
-    test::value("path-validator-identity/alias-after-validation", 2, alias_after)
-    fn validated_alias() errors compiler::CompilerError:
+    std::test::value("path-validator-identity/alias-after-validation", 2, alias_after)
+    fn validated_alias() errors std::compiler::CompilerError:
         static compile:
-            fn f(s: str) -> int errors io::path::NotAPath:
+            fn f(s: str) -> int errors std::io::path::NotAPath:
                 t = s
-                linux::path::validate(t)
+                std::linux::path::validate(t)
                 need(s)
             r = f("/xy"):
-                on io::path::NotAPath:
+                on std::io::path::NotAPath:
                     -1
             r
-    test::value("path-validator-identity/validated-alias", 3, validated_alias)
-    fn shadowing() errors compiler::CompilerError:
+    std::test::value("path-validator-identity/validated-alias", 3, validated_alias)
+    fn shadowing() errors std::compiler::CompilerError:
         static compile:
-            fn f(s: str) -> int errors io::path::NotAPath:
-                linux::path::validate(s)
+            fn f(s: str) -> int errors std::io::path::NotAPath:
+                std::linux::path::validate(s)
                 fn g(s: str) -> int:
                     need(s)
                 g(s)
             f("x")
-    test::rejects_at("path-validator-identity/shadowing", compiler::DiagnosticCode::Type, 1124, 26, shadowing)
-    fn other_value() errors compiler::CompilerError:
+    std::test::rejects_at("path-validator-identity/shadowing", std::compiler::DiagnosticCode::Type, 1124, 26, shadowing)
+    fn other_value() errors std::compiler::CompilerError:
         static compile:
-            fn f(s: str, t: str) -> int errors io::path::NotAPath:
-                linux::path::validate(s)
+            fn f(s: str, t: str) -> int errors std::io::path::NotAPath:
+                std::linux::path::validate(s)
                 need(t)
             f("x", "y")
-    test::rejects_at("path-validator-identity/other-value", compiler::DiagnosticCode::Type, 1132, 22, other_value)
+    std::test::rejects_at("path-validator-identity/other-value", std::compiler::DiagnosticCode::Type, 1132, 22, other_value)
 
     # path-string-forgetting: a validated value is still the same String.
-    fn string_forgetting() errors compiler::CompilerError:
+    fn string_forgetting() errors std::compiler::CompilerError:
         static compile:
             fn plain(s: str) -> str:
-                str::concat("<", str::concat(s, ">"))
-            fn show(value: str) -> str errors io::path::NotAPath:
-                linux::path::validate(value)
-                str::concat(plain(value), str::concat(" ", str::concat("Reading config at ", value)))
+                std::str::concat("<", std::str::concat(s, ">"))
+            fn show(value: str) -> str errors std::io::path::NotAPath:
+                std::linux::path::validate(value)
+                std::str::concat(plain(value), std::str::concat(" ", std::str::concat("Reading config at ", value)))
             r = show("config/tool.json"):
-                on io::path::NotAPath:
+                on std::io::path::NotAPath:
                     "invalid"
             r
-    test::value("path-string-forgetting", "<config/tool.json> Reading config at config/tool.json", string_forgetting)
+    std::test::value("path-string-forgetting", "<config/tool.json> Reading config at config/tool.json", string_forgetting)
 
-# linux::path::concat and text.
+# std::linux::path::concat and text.
 fn register_path_concat_tests():
     # path-concat-semantics: one "/" unless the path ends with one; ".",
     # ".." and repeated slashes kept; a relative fragment with "/" accepted;
-    # an empty or absolute component rejected (io::path::NotAPath).
-    fn concat_semantics() errors compiler::CompilerError:
+    # an empty or absolute component rejected (std::io::path::NotAPath).
+    fn concat_semantics() errors std::compiler::CompilerError:
         static compile:
-            fn join(p: LinuxPath, c: str) -> str errors io::path::NotAPath:
-                linux::path::concat(p, c)
+            fn join(p: LinuxPath, c: str) -> str errors std::io::path::NotAPath:
+                std::linux::path::concat(p, c)
             fn try(p: str, c: str) -> str:
-                linux::path::validate(p):
-                    on io::path::NotAPath:
+                std::linux::path::validate(p):
+                    on std::io::path::NotAPath:
                         return "bad base"
                 r = join(p, c):
-                    on io::path::NotAPath:
+                    on std::io::path::NotAPath:
                         "NotAPath"
                 r
             [try("/a", "b"), try("/", "b"), try("a/", "b"), try("a", "b/c"), try("a", ".."), try(".", "x"), try("a//b", "c"), try("/a", "./b"), try("/a", ""), try("/a", "/b")]
-    test::value("path-concat-semantics", ["/a/b", "/b", "a/b", "a/b/c", "a/..", "./x", "a//b/c", "/a/./b", "NotAPath", "NotAPath"], concat_semantics)
+    std::test::value("path-concat-semantics", ["/a/b", "/b", "a/b", "a/b/c", "a/..", "./x", "a//b/c", "/a/./b", "NotAPath", "NotAPath"], concat_semantics)
 
     # path-concat-result-refined: concat's result is a LinuxPath (accepted
     # by need), and text is the carrier String itself.
-    fn concat_result() errors compiler::CompilerError:
+    fn concat_result() errors std::compiler::CompilerError:
         static compile:
-            fn f(s: str) -> List[str] errors io::path::NotAPath:
-                linux::path::validate(s)
-                c = linux::path::concat(s, "child")
-                [linux::path::text(c), linux::path::text(s)]
-            fn n(s: str) -> int errors io::path::NotAPath:
-                linux::path::validate(s)
-                need(linux::path::concat(s, "x"))
+            fn f(s: str) -> List[str] errors std::io::path::NotAPath:
+                std::linux::path::validate(s)
+                c = std::linux::path::concat(s, "child")
+                [std::linux::path::text(c), std::linux::path::text(s)]
+            fn n(s: str) -> int errors std::io::path::NotAPath:
+                std::linux::path::validate(s)
+                need(std::linux::path::concat(s, "x"))
             r = f("/home"):
-                on io::path::NotAPath:
+                on std::io::path::NotAPath:
                     []
             m = n("/h"):
-                on io::path::NotAPath:
+                on std::io::path::NotAPath:
                     -1
             [r, m]
-    test::value("path-concat-result-refined", [["/home/child", "/home"], 4], concat_result)
+    std::test::value("path-concat-result-refined", [["/home/child", "/home"], 4], concat_result)
 
-# The portable io::path::Path trait.
+# The portable std::io::path::Path trait.
 fn register_path_trait_tests():
     # path-generic: child and add_config over Path run on LinuxPath with
     # Linux joining.
-    fn generic() errors compiler::CompilerError:
+    fn generic() errors std::compiler::CompilerError:
         static compile:
-            fn run(value: str) -> str errors io::path::NotAPath:
-                linux::path::validate(value)
-                str::concat(str::concat(io::path::text(child(value)), " "), io::path::text(add_config(value)))
+            fn run(value: str) -> str errors std::io::path::NotAPath:
+                std::linux::path::validate(value)
+                std::str::concat(std::str::concat(std::io::path::text(child(value)), " "), std::io::path::text(add_config(value)))
             r = run("/home/me"):
-                on io::path::NotAPath:
+                on std::io::path::NotAPath:
                     "not a path"
             r
-    test::value("path-generic", "/home/me/child /home/me/.config/awesome_tool", generic)
+    std::test::value("path-generic", "/home/me/child /home/me/.config/awesome_tool", generic)
 
     # path-generic-result-one-way: a generic result is only an
-    # io::path::Path, never a LinuxPath.
-    fn generic_result() errors compiler::CompilerError:
+    # std::io::path::Path, never a LinuxPath.
+    fn generic_result() errors std::compiler::CompilerError:
         static compile:
-            fn f(s: str) -> int errors io::path::NotAPath:
-                linux::path::validate(s)
+            fn f(s: str) -> int errors std::io::path::NotAPath:
+                std::linux::path::validate(s)
                 need(child(s))
             f("x")
-    test::rejects_at("path-generic-result-one-way", compiler::DiagnosticCode::Type, 1211, 22, generic_result)
+    std::test::rejects_at("path-generic-result-one-way", std::compiler::DiagnosticCode::Type, 1211, 22, generic_result)
 
     # path-windows-shaped-witness: the same generic child, given a WinPath,
     # joins with WinPath's own concat.
-    fn windows_witness() errors compiler::CompilerError:
+    fn windows_witness() errors std::compiler::CompilerError:
         static compile:
-            fn both_paths(l: str, w: str) -> List[str] errors io::path::NotAPath:
-                linux::path::validate(l)
+            fn both_paths(l: str, w: str) -> List[str] errors std::io::path::NotAPath:
+                std::linux::path::validate(l)
                 validate(w)
-                [io::path::text(child(l)), io::path::text(child(w))]
+                [std::io::path::text(child(l)), std::io::path::text(child(w))]
             r = both_paths("/home", "C:\\Users"):
-                on io::path::NotAPath:
+                on std::io::path::NotAPath:
                     []
             r
-    test::value("path-windows-shaped-witness", ["/home/child", "C:\\Users\\child"], windows_witness)
+    std::test::value("path-windows-shaped-witness", ["/home/child", "C:\\Users\\child"], windows_witness)
 
 fn register_linux_path_tests():
     register_path_validity_tests()
@@ -1242,31 +1242,31 @@ fn register_contexts_suite():
 # ---------------------------------------------------------------------------
 # Only the owner implements: a selection made with LinuxIO installed.
 
-# ct-owner-only: Listed's one operation is spelled like test::registered,
-# which the namespace owning test::Suite defines; this program defines a
-# `registered` of its own for linux::io's LinuxIO, whose owner defines none.
+# ct-owner-only: Listed's one operation is spelled like std::test::registered,
+# which the namespace owning std::test::Suite defines; this program defines a
+# `registered` of its own for std::linux::io's LinuxIO, whose owner defines none.
 # Only the namespace that owns a context implements its context-trait
 # operations -- never the calling program -- so LinuxIO does not implement
 # Listed, and with both installed a call needing Listed selects
-# test::Suite, the one implementation. (Were the calling program's function
+# std::test::Suite, the one implementation. (Were the calling program's function
 # an implementation, that call would be AMBIGUOUS-CONTEXT-IMPLEMENTATION and
 # this program would not compile.)
 context trait Listed:
-    fn registered() -> List[test::TestCase]
+    fn registered() -> List[std::test::TestCase]
 
-fn registered(context io: linux::io::LinuxIO) -> List[test::TestCase]:
+fn registered(context io: std::linux::io::LinuxIO) -> List[std::test::TestCase]:
     []
 
 fn listed_count(context c: Listed) -> int:
-    list::length(c.registered())
+    std::list::length(c.registered())
 
 fn register_owner_only_tests():
     listed = listed_count()
-    counted = test::count()
-    fn owner_only() errors compiler::CompilerError:
+    counted = std::test::count()
+    fn owner_only() errors std::compiler::CompilerError:
         static compile:
             [listed == counted, listed > 0]
-    test::value("ct-owner-only", [true, true], owner_only)
+    std::test::value("ct-owner-only", [true, true], owner_only)
 
 counter = Counter {value: 5, enabled: false}
 with context counter
@@ -1284,8 +1284,8 @@ with context Adder {k: 1}
 with context Clock {now: 7}
 with context Timed {k: 2}
 with context Capped {max: 3}
-with context test::suite()
+with context std::test::suite()
 register_contexts_suite()
-with context linux::io::create()
+with context std::linux::io::create()
 register_owner_only_tests()
-test::report()
+std::test::report()

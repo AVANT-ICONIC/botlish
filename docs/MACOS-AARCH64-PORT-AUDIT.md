@@ -80,7 +80,7 @@ x86-64 the same probe shows no frame pointer, which is why
 pinned source release (tests/platform/setup-macos.sh). Homebrew's
 `tcl-tk`, which the first runs used, is Tcl **9.0.4**, and that is not
 equivalent: its Unicode 17 case tables make the Tcl backends'
-`str::lowercase` disagree with Botlish's Unicode 16 semantics, which the
+`std::str::lowercase` disagree with Botlish's Unicode 16 semantics, which the
 native runtime keeps (section 15). `tcl_platform(os)` is `Darwin`,
 `machine` `arm64`, so `core::cabi::hostTarget` is `macos-aarch64`. Tcl's
 system encoding and stdout encoding are `utf-8` whatever LANG/LC_ALL say
@@ -153,10 +153,10 @@ details and the evidence.
 |---|---|---|---|---|---|---|
 | core/cabi.tcl `targets`, `models` | **resolved (milestone 2)**: each row names its triple; `macos-aarch64 {os macos arch aarch64 model LP64 charSigned 1 triple aarch64-apple-darwin}`, distinct from `linux-aarch64` (same arch, model and pointer width; other OS, triple and plain char). `operatingSystems`, `systemName`, `hostArchitecture`, `systemTarget` added | -- | none: verified against Apple clang per scalar, `size_t` and `-dumpmachine` (cabi-facts.tcl, every smoke job) | low | 2 (done) | M (done) |
 | core/cabi.tcl `hostTarget` | none: Darwin -> macos, arm64 -> aarch64 | -- | none: verified, `macos-aarch64`; the OS is read, never inferred from the architecture (tests/target-model.test `tm-host-default`) | low | 2 (done) | M (done) |
-| core/linuxabi.tcl `transports`, `transportOf`, `syscallImpl` ("on Linux") | the syscall transport table is keyed by architecture only | arch + linux | **resolved at the import (milestone 2)**: the table stays Linux's and no macOS compilation reaches it -- its namespaces `linux::abi::*` are the Linux platform's, UNSUPPORTED-PLATFORM for any other OS's target. Never a Darwin row (section 9) | low | 2 (done), 9 | L (done) |
+| core/linuxabi.tcl `transports`, `transportOf`, `syscallImpl` ("on Linux") | the syscall transport table is keyed by architecture only | arch + linux | **resolved at the import (milestone 2)**: the table stays Linux's and no macOS compilation reaches it -- its namespaces `std::linux::abi::*` are the Linux platform's, UNSUPPORTED-PLATFORM for any other OS's target. Never a Darwin row (section 9) | low | 2 (done), 9 | L (done) |
 | core/linuxabi.tcl registration | both transports registered and their namespaces declared direct whatever the target | linux | **resolved (milestone 2)**: still registered everywhere (bootstrap natives, the same in every compilation), but a macOS compilation cannot import them (UNSUPPORTED-PLATFORM); a Linux program run natively on macOS is refused (NATIVE TARGET) before the runtime refusal | low | 2 (done) | L (done) |
-| core/bytestore.tcl `bridges` | `abi::ARCH::from_bytes`/`from_mutable_bytes` come from the Linux transport table | arch | OS-neutral in substance (an address to a register word); unchanged: `abi::ARCH` are portable architecture namespaces, importable on macOS | low | -- | L |
-| surface/modules.tcl `ModuleFile`, `ArchModuleFiles`, `PlatformOf`, `PlatformCheck`, `ResolveModule` | an architecture-specific module is chosen by architecture only | arch | **resolved (milestone 2)**: the namespace trees the target table designates a platform's (`platforms`: `linux`) are that OS's, checked at the import before any file is chosen: `import linux::sys` for `macos-aarch64` is UNSUPPORTED-PLATFORM, never `sys.aarch64.bot`. Portable architecture-specific namespaces (a `demo::arch`, `abi::aarch64`) are every OS's; application modules the application's | low | 2 (done) | L (done) |
+| core/bytestore.tcl `bridges` | `std::abi::ARCH::from_bytes`/`from_mutable_bytes` come from the Linux transport table | arch | OS-neutral in substance (an address to a register word); unchanged: `std::abi::ARCH` are portable architecture namespaces, importable on macOS | low | -- | L |
+| surface/modules.tcl `ModuleFile`, `ArchModuleFiles`, `PlatformOf`, `PlatformCheck`, `ResolveModule` | an architecture-specific module is chosen by architecture only | arch | **resolved (milestone 2)**: the namespace trees the target table designates a platform's (`platforms`: `linux`) are that OS's, checked at the import before any file is chosen: `import std::linux::sys` for `macos-aarch64` is UNSUPPORTED-PLATFORM, never `sys.aarch64.bot`. Portable architecture-specific namespaces (a `demo::arch`, `std::abi::aarch64`) are every OS's; application modules the application's | low | 2 (done) | L (done) |
 | surface/cache.tcl `Key`, `Dependencies`, `lookup` | none for the key: it holds the full target name | -- | **verified and hardened (milestone 2)**: one entry per full target (tests/target-model.test `tm-cache-target-isolation`, both orders), and a hit's HIR is decoded with `-target` (an entry of another target filed under this key is invalid: `tm-cache-entry-of-another-target`). Dependencies unchanged: a Linux module's build for macOS fails and is never stored | low | 2 (done) | L (done) |
 | hir/interchange.tcl `decode`; main.tcl `runFile`, `emitExecutable` | a `.hirx` records no target | posix | **resolved (milestone 2)**: the HIR records its target (`hir::cabi::targetOf`: the compilation target when the build read one, "" for a HIR every target shares), interchange carries it, `decode -target T` refuses another target's (HIR INTERCHANGE TARGET), main.tcl reads a `.hirx` for its `-target` or the host's. No format version change: the field is part of the HIR dict | low | 2 (done) | L (done) |
 | main.tcl, hir/cabi.tcl `ResolveTarget`, hir/foreign.tcl `AbiClass` | nothing compares the target with the host before a native run or link | posix | **resolved (milestone 2)**: NIR names the program's target (`target "NAME" triple="TRIPLE"`) and the driver refuses `run`, `bench`, `batch`, `object` and `executable` for another target (NATIVE TARGET: `-target windows-x86_64` on Linux no longer runs a 32-bit `long` C call); the diagnostic commands (`clif`, `vcode`, `size`, `roots`) still show the host's view | low | 2 (done) | L (done) |
@@ -275,12 +275,12 @@ shared.
 Linux's raw syscall transport does not imply that macOS needs one. Darwin's
 kernel interface is private and unstable; its stable interface is
 libSystem. The macOS port's IO goes through C calls of libSystem (the C
-FFI), behind the same portable `io::IO` context trait.
+FFI), behind the same portable `std::io::IO` context trait.
 
 | Where | Linux assumption | Class | macOS adaptation | Risk | M | Check |
 |---|---|---|---|---|---|---|
-| runtime/syscall.rs transports (:66-139), stubs (:242-270) | `syscall` (x86-64) and `svc #0` with x8 (AArch64) for Linux only; elsewhere `NATIVE UNSUPPORTED "linux::abi::aarch64::syscall needs a Linux AArch64 target"` | linux | none: never port raw Darwin syscalls (x16, `svc #0x80`). The refusal is the right macOS behavior (verified, section 15) | low | 9 | M (refusal verified) |
-| lib/linux.bot, lib/linux/sys.{x86_64,aarch64}.bot, lib/linux/io.bot, lib/linux/path.bot | the `linux` namespace and `linux::io::LinuxIO`, the only `io::IO` implementation | linux | a macOS IO context (a `darwin::io`-style module of `extern c fn` calls to libSystem `write`/`read`) implementing `io::IO`; `lib/io.bot` is already portable | medium | 9 | M |
+| runtime/syscall.rs transports (:66-139), stubs (:242-270) | `syscall` (x86-64) and `svc #0` with x8 (AArch64) for Linux only; elsewhere `NATIVE UNSUPPORTED "std::linux::abi::aarch64::syscall needs a Linux AArch64 target"` | linux | none: never port raw Darwin syscalls (x16, `svc #0x80`). The refusal is the right macOS behavior (verified, section 15) | low | 9 | M (refusal verified) |
+| stdlib/linux.bot, stdlib/linux/sys.{x86_64,aarch64}.bot, stdlib/linux/io.bot, stdlib/linux/path.bot | the `linux` namespace and `std::linux::io::LinuxIO`, the only `std::io::IO` implementation | linux | a macOS IO context (a `darwin::io`-style module of `extern c fn` calls to libSystem `write`/`read`) implementing `std::io::IO`; `stdlib/io.bot` is already portable | medium | 9 | M |
 | hir/direct.tcl, core/native.tcl `declareDirectNamespace` (:319-332) | the transport namespaces are the designated direct intrinsics | posix | none: a libSystem module is direct because its retaining C calls are (C-FFI.md, section 9) | low | 9 | L |
 | ops.rs `rt_bytes_addr` (:846-856), `rt_mbytes_addr` (:1155-1166); comment :843 | payload addresses as small Ints; "47-bit Linux x86-64 user space" | posix | none (the check is portable); comment wording | low | 8 | M |
 
@@ -353,7 +353,7 @@ native tests carry no host constraint at all.
 - **The rustc linker path** (codegen/aot.rs `link_rustc`): rustc drives
   the platform linker, so Mach-O executables need no Botlish linker.
 - **Byte borrowing** (hir/borrow.tcl, `BorrowCall`) is OS-neutral.
-- **`lib/io.bot`'s `io::IO` context trait** is the portable IO surface;
+- **`stdlib/io.bot`'s `std::io::IO` context trait** is the portable IO surface;
   macOS adds an implementation, not a new abstraction.
 - **CI plumbing**: `.github/actions/build-native` works on macOS as is.
 
@@ -365,7 +365,7 @@ native tests carry no host constraint at all.
   or, worse, an `#[cfg(not(...))]` fallback silently becomes Linux's. Add
   a macOS branch beside each Linux one; leave the Linux branch's text
   alone.
-- **The syscall transport table and `linux::sys` selection.** Giving the
+- **The syscall transport table and `std::linux::sys` selection.** Giving the
   `aarch64` row an OS-dependent meaning would change Linux AArch64's
   module and transport. An OS dimension must leave every Linux lookup's
   result unchanged (tests/linux-syscall-transports.test pins them).
@@ -509,7 +509,7 @@ toolchain lines is the generator's decision; milestone 7, which brings C
 to macOS, takes it. tier.tcl's `notYet` records the file until then, so
 the acceptance tier leaves it out.
 
-**The Tcl version.** Botlish's `str::lowercase` is the Unicode 16 simple
+**The Tcl version.** Botlish's `std::str::lowercase` is the Unicode 16 simple
 mapping on every backend (README.md, "Strings"). The native runtime pins
 it (`rt_str_lower` leaves the Unicode 17 additions alone: U+A7CE, U+A7D2,
 U+A7D4, Beria Erfe U+16EA0..U+16EB8), and the Tcl backends inherit Tcl's
@@ -528,7 +528,7 @@ macOS rather than taking Homebrew's.
 9.0.1 it passes, run 5). On both
 native backends every suite aborts with `native coroutines need stack
 switching, implemented for x86-64 Linux only (COROUTINES.md) (NATIVE
-UNSUPPORTED value)`: the golden runner, `lib/test.bot`, is itself a
+UNSUPPORTED value)`: the golden runner, `stdlib/test.bot`, is itself a
 coroutine, so no native golden run is possible before milestone 4. The
 two `golden-host: linux-x86_64` suites are compiled and not run, as
 designed. (The second golden shard was cancelled by a later push before
@@ -547,7 +547,7 @@ tier of run 4.)
 | deep recursion (`depth(n - 1)`, 10^8 deep) on cranelift, 1 GiB | **`child killed: segmentation violation` (NATIVE BUG)** | the native stack ran out before the depth token, and the fault escaped Rust's handler too |
 | the same with a 64 MiB stack | Rust's stack-overflow abort (NATIVE BUG) | |
 | a coroutine program on cranelift | `native coroutines need stack switching, implemented for x86-64 Linux only (COROUTINES.md) (NATIVE UNSUPPORTED value)` | an explicit refusal (stale text: AArch64 Linux works too) |
-| examples/io/hello.bot, examples/linux/write.bot on cranelift | `linux::abi::aarch64::syscall needs a Linux AArch64 target (NATIVE UNSUPPORTED value)` | an explicit refusal; note the program compiled, with `lib/linux/sys.aarch64.bot` chosen for the macOS target (section 3). **Since milestone 2** it does not compile for `macos-aarch64`: `namespace "linux" belongs to the Linux platform ... (SURFACE MODULE UNSUPPORTED-PLATFORM)`; compiled with `-target linux-aarch64` it is refused natively (NATIVE TARGET) |
+| examples/io/hello.bot, examples/linux/write.bot on cranelift | `std::linux::abi::aarch64::syscall needs a Linux AArch64 target (NATIVE UNSUPPORTED value)` | an explicit refusal; note the program compiled, with `stdlib/linux/sys.aarch64.bot` chosen for the macOS target (section 3). **Since milestone 2** it does not compile for `macos-aarch64`: `namespace "std::linux" belongs to the Linux platform ... (SURFACE MODULE UNSUPPORTED-PLATFORM)`; compiled with `-target linux-aarch64` it is refused natively (NATIVE TARGET) |
 | examples/ffi/tcl/tcl.bot on cranelift | `executable emission requires Linux glibc on x86_64 or aarch64 (NATIVE LINK)` | an explicit refusal |
 | `-emit-native-executable` | the same text, `(NATIVE AOT)` | an explicit refusal |
 | the stdlib examples on cranelift | values | |
@@ -788,14 +788,14 @@ the census. Report: MACOS-AARCH64-MILESTONE-1.md.
   :60-64.
 - **Prerequisites:** milestone 1.
 - **Acceptance:** importing a `linux` namespace for a `macos-aarch64`
-  compilation is a stated diagnostic (not `lib/linux/sys.aarch64.bot`); a
+  compilation is a stated diagnostic (not `stdlib/linux/sys.aarch64.bot`); a
   `.hirx` records its target and a native run refuses another host's; a
   native run or link refuses a `-target` that is not the host; the tests'
   plain-char expectations come from `core::cabi`. The `macos-aarch64` row
   itself is already verified (cabi-facts.tcl, smoke).
 - **macOS CI:** smoke and acceptance; the census (`CI-Tests: all`) to show
   nothing else moved.
-- **Linux risks:** `linux::sys` selection and its cache dependencies
+- **Linux risks:** `std::linux::sys` selection and its cache dependencies
   (tests/linux-syscall-transports.test, tests/hir-cache.test), the
   interchange format (HIR-INTERCHANGE.md's audits), static decisions.
 
@@ -930,14 +930,14 @@ entry below is the plan it was carried out from; the report is numbered 6.
 
 ### 9. Darwin system APIs and contextual IO
 
-- **Files:** a macOS IO module implementing `io::IO` over libSystem C
-  calls (lib/), tests/portable-io.test, tests/golden/run.tcl's hosts.
+- **Files:** a macOS IO module implementing `std::io::IO` over libSystem C
+  calls (stdlib/), tests/portable-io.test, tests/golden/run.tcl's hosts.
 - **Prerequisites:** 7 (C calls), 2 (the Linux-module refusal).
 - **Acceptance:** examples/io/hello.bot's macOS twin prints through
   libSystem `write`; portable-io's tests run on macOS; no raw Darwin
   syscall anywhere.
 - **macOS CI:** acceptance, full.
-- **Linux risks:** `io::IO` selection must keep choosing LinuxIO on Linux
+- **Linux risks:** `std::io::IO` selection must keep choosing LinuxIO on Linux
   (context-traits tests).
 
 ### 10. Applications, regression breadth, optional libraries, documentation

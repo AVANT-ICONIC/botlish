@@ -2,7 +2,7 @@ lex-strategy.bot:79:63  total_valid          param token needs str (arg any)
 test-selection.bot:57:16  affected?            param xs needs list (arg any)
 test-selection.bot:61:26  select_affected      param test needs list (arg any)
 test-selection.bot:71:15  first_affected       param test needs list (arg any)
-test-selection.bot:68:13  first_affected       invalid call: call to list::find with xs : list, predicate : is_affected?/1 -> bool 
+test-selection.bot:68:13  first_affected       invalid call: call to std::list::find with xs : list, predicate : is_affected?/1 -> bool 
 web.bot:204:70  uri_escape_text      param b needs int (arg any)
 csv.bot:66:28  scan_record          param index needs int (arg any)
 csv.bot:81:24  scan_records         param index needs int (arg any)

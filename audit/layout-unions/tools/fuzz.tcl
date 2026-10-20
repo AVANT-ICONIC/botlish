@@ -19,16 +19,16 @@
 # array at its offset plus i times its element's width (a union's declared
 # size):
 #
-#   read      binary::read(input, L.path) of each leaf is the model's value of
+#   read      std::binary::read(input, L.path) of each leaf is the model's value of
 #             the input at the leaf's offset; of a random union-free record or
 #             array alternative its copied value
-#   write     a chain of binary::write(d, L.path, v) to random leaves --
+#   write     a chain of std::binary::write(d, L.path, v) to random leaves --
 #             different alternatives of one union overlap, so a later write
 #             changes part of an earlier one's bytes -- is the model's bytes
 #             after the same writes in order; the operand is unchanged
 #   live      (the native backends) the input copied into native memory (the
 #             test fixture's): every leaf read through a view (projections
-#             through records and unions, binary::element at dynamic indices
+#             through records and unions, std::binary::element at dynamic indices
 #             through arrays); then stores through an edit to the chain's
 #             leaves, each followed by a read of another random leaf (one
 #             alternative written, another read: interpretation, never
@@ -54,7 +54,7 @@ foreach {option value} $argv {
 source [file join $root compiler compiler.tcl]
 source [file join $root native native.tcl]
 source [file join $root surface surface.tcl]
-set ::core::libraryDir [file join $root lib]
+set ::core::libraryDir [file join $root stdlib]
 core::cabi::installTestFixture
 if {[dict get $options -gc-stress]} {
     set ::env(BOTLISH_NATIVE_GC_STRESS) 1
@@ -124,11 +124,11 @@ proc randomScalarRepr {} {
     if {[rand 4] == 0} {
         lassign [pick [dict keys $::cScalars]] name
         lassign [dict get $::cScalars $name] width signed
-        return [list scalar $width $signed ffi::c::$name]
+        return [list scalar $width $signed std::ffi::c::$name]
     }
     set width [pick {1 2 4 8}]
     set signed [rand 2]
-    return [list scalar $width $signed binary::[scalarName $width $signed]]
+    return [list scalar $width $signed std::binary::[scalarName $width $signed]]
 }
 
 # 1 if REPR holds a C pointer, or a union (it then has no copied value).
@@ -207,7 +207,7 @@ proc randomRecord {name declared} {
 proc reprText {repr} {
     switch -- [lindex $repr 0] {
         scalar { return [lindex $repr 3] }
-        pointer { return "ffi::c::Ptr\[ffi::c::Void\]" }
+        pointer { return "std::ffi::c::Ptr\[std::ffi::c::Void\]" }
         layout - union { return [dict get [lindex $repr 1] name] }
         array { return "array [lindex $repr 1] of [reprText [lindex $repr 2]]" }
     }
@@ -395,7 +395,7 @@ proc liveRead {w steps startVar} {
     set args {}
     foreach step $steps {
         if {[lindex $step 0] eq "index"} {
-            set expr "binary::element($expr, i$k)"
+            set expr "std::binary::element($expr, i$k)"
             lappend args [list i$k [lindex $step 1]]
             incr k
         } else {
@@ -410,7 +410,7 @@ proc constantRead {w steps} {
     set expr $w
     foreach step $steps {
         if {[lindex $step 0] eq "index"} {
-            set expr "binary::element($expr, [lindex $step 1])"
+            set expr "std::binary::element($expr, [lindex $step 1])"
         } else {
             append expr .[lindex $step 1]
         }
@@ -421,30 +421,30 @@ proc constantRead {w steps} {
 # ---------------------------------------------------------------------------
 # Programs
 
-set prelude {import abi
-import abi::bytes
-import binary
-import binary::native
-import byte
-import ffi::c
+set prelude {import std::abi
+import std::abi::bytes
+import std::binary
+import std::binary::native
+import std::byte
+import std::ffi::c
 import ffi_fixture
 
-fn bytes_of(values: List[int]) -> abi::bytes::Bytes:
+fn bytes_of(values: List[int]) -> std::abi::bytes::Bytes:
     bs = loop v in values:
-        b = byte::from_int(v):
-            on byte::BelowRange:
+        b = std::byte::from_int(v):
+            on std::byte::BelowRange:
                 0
-            on byte::AboveRange:
+            on std::byte::AboveRange:
                 255
         b
-    abi::bytes::from_list(bs)
+    std::abi::bytes::from_list(bs)
 
 }
 foreach width {1 2 4 8} {
     foreach signed {0 1} {
         lassign [scalarRange $width $signed] lo hi
         set n [scalarName $width $signed]
-        append prelude "fn c$n\(v: int) -> binary::$n:\n    if v < $lo or v > $hi:\n        0\n    else:\n        v\n\nfn l$n\(xs: List\[int\]) -> List\[binary::$n\]:\n    loop x in xs:\n        c$n\(x)\n\n"
+        append prelude "fn c$n\(v: int) -> std::binary::$n:\n    if v < $lo or v > $hi:\n        0\n    else:\n        v\n\nfn l$n\(xs: List\[int\]) -> List\[std::binary::$n\]:\n    loop x in xs:\n        c$n\(x)\n\n"
     }
 }
 
@@ -493,14 +493,14 @@ proc program {index} {
         set leaf [randomLeaf $top]
         if {$leaf eq ""} break
         lassign $leaf steps scalar at
-        lappend reads "binary::read(d, [designator $name $steps])"
+        lappend reads "std::binary::read(d, [designator $name $steps])"
         lappend readValues [modelScalar $input $at [lindex $scalar 1] [lindex $scalar 2]]
     }
     set copy [randomCopy $top]
     set copyCheck true
     if {$copy ne ""} {
         lassign $copy steps sub at
-        set copyCheck "binary::read(d, [designator $name $steps]) == [copyText $sub $input $at]"
+        set copyCheck "std::binary::read(d, [designator $name $steps]) == [copyText $sub $input $at]"
     }
     # A chain of writes to random leaves (overlapping alternatives among
     # them), the model applying them in order.
@@ -518,18 +518,18 @@ proc program {index} {
     set written $bytes
 
     set text "$::prelude$decls"
-    append text "fn check(d: abi::bytes::Bytes, m: abi::bytes::MutableBytes) -> List\[any\] errors LayoutLengthMismatch:\n"
+    append text "fn check(d: std::abi::bytes::Bytes, m: std::abi::bytes::MutableBytes) -> List\[any\] errors LayoutLengthMismatch:\n"
     append text "    r = \[[join $reads {, }]\]\n"
     set current m
     set k 0
     foreach link $chain {
         lassign $link steps scalar at value
-        append text "    w$k = binary::write($current, [designator $name $steps], $value)\n"
+        append text "    w$k = std::binary::write($current, [designator $name $steps], $value)\n"
         set current w$k
         incr k
     }
-    append text "    \[r, $copyCheck, abi::bytes::freeze($current) == bytes_of(\[[join $written {, }]\]), abi::bytes::freeze(m) == d\]\n"
-    append text "c = check(bytes_of(\[[join $input {, }]\]), abi::bytes::from_bytes(bytes_of(\[[join $input {, }]\]))):\n    on LayoutLengthMismatch:\n        \[\]\nc\n"
+    append text "    \[r, $copyCheck, std::abi::bytes::freeze($current) == bytes_of(\[[join $written {, }]\]), std::abi::bytes::freeze(m) == d\]\n"
+    append text "c = check(bytes_of(\[[join $input {, }]\]), std::abi::bytes::from_bytes(bytes_of(\[[join $input {, }]\]))):\n    on LayoutLengthMismatch:\n        \[\]\nc\n"
     set expected "\[\[[join $readValues {, }]\], true, true, true\]"
 
     # The live program: every read leaf through a view at dynamic indices;
@@ -558,9 +558,9 @@ proc program {index} {
     }
     set live "direct module\n\n$::prelude$decls"
     append live "fn live([join $params {, }]) -> List\[any\] errors NativeViewNull, NativeEditNull, IndexNotFound:\n"
-    append live "    p = ffi_fixture::memory\[ffi::c::Void\](bytes_of(\[[join $input {, }]\]))\n"
-    append live "    v = binary::native::view($name, p)\n"
-    append live "    e = binary::native::edit($name, p)\n"
+    append live "    p = ffi_fixture::memory\[std::ffi::c::Void\](bytes_of(\[[join $input {, }]\]))\n"
+    append live "    v = std::binary::native::view($name, p)\n"
+    append live "    e = std::binary::native::edit($name, p)\n"
     append live "    r = \[[join $liveReads {, }]\]\n"
     set bytes $input
     set after {}
@@ -568,7 +568,7 @@ proc program {index} {
     set k2 0
     foreach link $chain {
         lassign $link steps scalar at value
-        append live "    binary::store(e, [designator $name $steps], $value)\n"
+        append live "    std::binary::store(e, [designator $name $steps], $value)\n"
         set bytes [modelStore $bytes $at [lindex $scalar 1] $value]
         set other [randomLeaf $top]
         lassign $other osteps oscalar oat

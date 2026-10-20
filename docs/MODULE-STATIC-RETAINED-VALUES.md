@@ -2,7 +2,7 @@
 
 ## Outcome
 
-`web::local_extra_chars` (and every other module-level immutable binding,
+`std::web::local_extra_chars` (and every other module-level immutable binding,
 data or function) is now a **module-static reference**: a stable,
 program-lifetime storage slot, resolved and rooted independently of any
 particular function's lexical activation. Referencing one no longer makes
@@ -10,10 +10,10 @@ the referencing function acquire a closure environment.
 
 Concretely, for the primary motivating source:
 
-- `web::local_char?` (nested inside `web::emailish?`) is envless: `env=0
+- `std::web::local_char?` (nested inside `std::web::emailish?`) is envless: `env=0
   captures=0`. It allocates **zero** Block values, on every one of the
   800 real `emailish?` calls `bench/refined-checks.ir` makes per run.
-- `web::emailish?` itself is envless: its own dependency on
+- `std::web::emailish?` itself is envless: its own dependency on
   `local_extra_chars` (through `local_char?`) never made it closure-valued
   to begin with, once the representation is corrected.
 - `check` recovers its pre-R2.a.1 non-generic specialization,
@@ -33,7 +33,7 @@ was touched.
 
 The paused finite-target milestone's own research established that the
 frozen workload represents module-retained immutable values through
-ordinary lexical closure capture: `web::emailish?` (and, transitively,
+ordinary lexical closure capture: `std::web::emailish?` (and, transitively,
 `check`) became closure-valued purely because `local_extra_chars` was
 treated as a captured free variable, not because of anything about the
 *call graph* the finite-target theorem is actually about. Measuring
@@ -75,8 +75,8 @@ this milestone (`hir/modulebinding.tcl`, `MODULE-BINDINGS.md`):
   single-initialization by construction — nothing here is lazy).
 - **How modules expose bindings.** A module section is a genuine `ScopeId`
   (`kind program`), a sibling of the referencing program's own top scope
-  under the same root; `web::local_extra_chars` resolves through this
-  scope and its stable `BindingId`, exactly like `web::emailish?` does.
+  under the same root; `std::web::local_extra_chars` resolves through this
+  scope and its stable `BindingId`, exactly like `std::web::emailish?` does.
   There is no namespace object or runtime name lookup.
 
 This milestone did not weaken or extend any of these existing guarantees.
@@ -383,7 +383,7 @@ verified reachability/identity/no-`NATIVE BUG`) still passes.
 ## A correctness bug this surfaced (not a specialization policy change)
 
 Before fixing three HIR passes, `bench/uri-steady.bot`'s own
-`web::is_unreserved(b: Byte)` regressed from `op setcontainstotal`
+`std::web::is_unreserved(b: Byte)` regressed from `op setcontainstotal`
 (non-erroring) back to plain `op setcontains` (fallible) once its own
 module dependency stopped being a capture. Root cause, isolated
 precisely: `hir::escape.tcl`/`hir::construction.tcl`/`hir::stringregion
@@ -392,7 +392,7 @@ outside its own invocation" analyses each independently scanned
 `hir::captures` alone to build their own `captured` set — exactly
 correct before this milestone (every non-local reference was a capture),
 and silently blind to a module-static reference after it, wrongly
-concluding a module value's own local bind (e.g. `web::hex_digits`, or a
+concluding a module value's own local bind (e.g. `std::web::hex_digits`, or a
 `digits`-style module List) was newly eligible for scalar-replacement/
 virtual-construction virtualization, which requires a single materialized
 Value to not exist at all. Fixed by introducing `hir::externalRefs` (=
@@ -433,19 +433,19 @@ neither touches Rust) and the full Tcl regression (below).
 
 | | before | after |
 |---|---|---|
-| `web::local_extra_chars` reference | lexical capture, through every enclosing block | module-static reference (`staticget`) |
+| `std::web::local_extra_chars` reference | lexical capture, through every enclosing block | module-static reference (`staticget`) |
 | `local_char?` | closure-valued (`env=1 captures=1`), one Block allocation per `emailish?` call | envless (`env=0 captures=0`), zero allocations |
-| `web::emailish?` | closure-valued (captures its own startup closure) | envless |
+| `std::web::emailish?` | closure-valued (captures its own startup closure) | envless |
 | `check` | `check<generic>`, entry `n`: `[-∞, +∞]` | `check<int, int, str, str>`, entry `n`: `[0, 400]` |
-| `web::uri_escape_text` | `env=1 captures=2` (hex_digits, is_unreserved) | `env=0 captures=0` |
-| `web::is_unreserved` | closure-valued, `<generic>` | envless, `<int>`, `op setcontainstotal` (not `setcontains`) |
+| `std::web::uri_escape_text` | `env=1 captures=2` (hex_digits, is_unreserved) | `env=0 captures=0` |
+| `std::web::is_unreserved` | closure-valued, `<generic>` | envless, `<int>`, `op setcontainstotal` (not `setcontains`) |
 | `esc_char`/`esc_bytes`/`esc_from`/`hex_pair` | forced `<generic>` (transitively closure-valued) | specialize on real argument types |
 
 ## Specialization / InstanceClosed / OpenInstances / blockescape census
 
 - `check`: `generic 1 specializations 0` → `generic 0 specializations 1`
   (`hir::specialize::summary`).
-- `web::is_unreserved`: `<generic>` → `<int>`; its own declared `Byte`
+- `std::web::is_unreserved`: `<generic>` → `<int>`; its own declared `Byte`
   parameter view is preserved either way (`int[Byte]`).
 - `bridgefix::two_deps`/`one_dep`/`is_marked` (synthetic bridge fixture):
   every one of six caller shapes (root, top-level function, nested
@@ -677,7 +677,7 @@ remains, so this milestone does not, and was never meant to, touch
     live proof).
 
 **Primary workload (items 96, 17-25).** See "Primary transformations"
-above for 17-22 (`local_char?`/`web::emailish?` envless, `check`
+above for 17-22 (`local_char?`/`std::web::emailish?` envless, `check`
 recovers `check<int, int, str, str>` and `check.n = [0, 400]`) and
 "Post-module-static `scan_while` target shape" for 24-25 (envless Block +
 Native reach `predicate`; `scan_while` still contains one `callvalue`).

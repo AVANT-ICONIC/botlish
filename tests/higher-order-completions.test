@@ -210,16 +210,16 @@ set hocOriginalPayload [string map {
     "fail E1\n" "fail E1 {origin: \"one\"}\n"
     "fail E2\n" "fail E2 {origin: \"two\"}\n"
     "on E2:" "on E2 {origin}:"
-    "            -1" "            -1 + 0 * str::length(origin)"
+    "            -1" "            -1 + 0 * std::str::length(origin)"
 } $hocOriginal]
 
 test hoc-original-payload {the payload-bearing reproducer: the same UNHANDLED-ERROR for E1} -body {
-    hocDiagnostics "import str\n${hocOriginalPayload}0\n"
+    hocDiagnostics "import std::str\n${hocOriginalPayload}0\n"
 } -result {{UNHANDLED-ERROR bad E1}}
 
 test hoc-original-payload-both-handled {the payload-bearing reproducer with both errors handled runs on every backend} -body {
-    sourceAgree [string map {"        on E2 {origin}:" "        on E1 {origin}:\n            -2 + 0 * str::length(origin)\n        on E2 {origin}:"} \
-        "import str\n${hocOriginalPayload}\[bad(0), bad(1), bad(2)\]\n"]
+    sourceAgree [string map {"        on E2 {origin}:" "        on E1 {origin}:\n            -2 + 0 * std::str::length(origin)\n        on E2 {origin}:"} \
+        "import std::str\n${hocOriginalPayload}\[bad(0), bad(1), bad(2)\]\n"]
 } -result {value {[0, -2, -1]}}
 
 # ---------------------------------------------------------------------------
@@ -272,8 +272,8 @@ test hoc-top-level {an unhandled error through an untyped helper at the top leve
     hocDiagnostics "${hocDecls}call(raise, 1)\n"
 } -result {{UNHANDLED-ERROR top {E1 E2 E3}}}
 
-test hoc-mutable-array-factory {a factory closure that calls an erased callable: mutable_array::generate charges what it may raise} -body {
-    set text "import mutable_array\n${hocDecls}fn gen(f, k):\n    fn factory(i):\n        f(k)\n    mutable_array::capacity(mutable_array::generate(1, factory))\n\n"
+test hoc-mutable-array-factory {a factory closure that calls an erased callable: std::mutable_array::generate charges what it may raise} -body {
+    set text "import std::mutable_array\n${hocDecls}fn gen(f, k):\n    fn factory(i):\n        f(k)\n    std::mutable_array::capacity(std::mutable_array::generate(1, factory))\n\n"
     list [hocKinds "${text}gen(raise, 1)\n"] \
         [sourceAgree "${text}fn top(k: int):\n    gen(raise, k):\n        on E1:\n            -1\n        on E2 d:\n            -2\n        on E3 d:\n            -3\n\n\[top(0), top(1), top(3)\]\n"]
 } -result {UNHANDLED-ERROR {value {[1, -1, -3]}}}
@@ -464,7 +464,7 @@ if {"test_hoc_live" ni [core::native::names]} {
     core::registerNative test_hoc_live -arity 0 -impl hocLiveCoroutines
 }
 
-set hocCoroutine {import coroutine
+set hocCoroutine {import std::coroutine
 
 struct Message:
     value: int

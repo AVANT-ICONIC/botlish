@@ -92,8 +92,8 @@ if {"test_aff_live" ni [core::native::names]} {
     core::registerNative test_aff_live -arity 0 -impl fuzzLive
 }
 
-set prelude {import coroutine
-import list
+set prelude {import std::coroutine
+import std::list
 
 error Boom
 
@@ -596,11 +596,11 @@ proc Fault {stateVar} {
     }
     switch -- [Pick $kinds] {
         aftermove {
-            Emit state "late = coroutine::done?([Pick $plain])"
+            Emit state "late = std::coroutine::done?([Pick $plain])"
             return USE-AFTER-MOVE
         }
         maybe {
-            Emit state "late = coroutine::done?([Pick $branched])"
+            Emit state "late = std::coroutine::done?([Pick $branched])"
             return AFFINE-NOT-DEFINITELY-LIVE
         }
         project {
@@ -608,7 +608,7 @@ proc Fault {stateVar} {
             return AFFINE-FIELD-MOVE-REQUIRES-DESTRUCTURE
         }
         listat {
-            Emit state "late = list::at([Pick [Owners $state lists]], 0):"
+            Emit state "late = std::list::at([Pick [Owners $state lists]], 0):"
             Emit state "    on IndexNotFound:"
             Emit state "        0"
             return AFFINE-LIST-OPERATION-UNSUPPORTED
@@ -621,7 +621,7 @@ proc Fault {stateVar} {
         capture {
             set c [Pick [Owners $state handles]]
             Emit state "fn peek() -> bool:"
-            Emit state "    coroutine::done?($c)"
+            Emit state "    std::coroutine::done?($c)"
             return AFFINE-CAPTURE-UNSUPPORTED
         }
         erase {

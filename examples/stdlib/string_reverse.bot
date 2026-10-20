@@ -12,11 +12,11 @@
 #
 # expect: ["", "a", "cba", "dcba", "üöä"]
 
-import str
+import std::str
 
 # The characters of text from index on, reversed, followed by reversed.
 fn reverse_from(text, index, reversed) errors LowerUnderrun, UpperOverrun:
-    if index == str::length(text):
+    if index == std::str::length(text):
         return reversed
 
     character = text.substring(index, index + 1)

@@ -1,11 +1,11 @@
 == source-checks.bot (interp)
 <program>: closed (transitively open)   [i0, line 43:1]
-  calls:    list::find<List[str], block>, valid_start?<generic>
+  calls:    std::list::find<List[str], block>, valid_start?<generic>
   guards:   0
   runtime:  bigint, closure-env, list-alloc
 
-list::find (semantic): open   [UnknownParameterKind 1, UnknownCallResultKind 1, DynamicCall 1]
-list::find<List[str], block>: guarded   [i3, line 77:8]
+std::list::find (semantic): open   [UnknownParameterKind 1, UnknownCallResultKind 1, DynamicCall 1]
+std::list::find<List[str], block>: guarded   [i3, line 77:8]
   params:   xs : List[str], predicate : block
   result:   str
   guards:   1

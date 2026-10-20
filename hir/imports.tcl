@@ -18,7 +18,7 @@
 #     named `f` are, with the ordinary lexical candidates, the functions the
 #     call may denote (hir/resolve.tcl; METHOD-SUGAR.md, IMPORTS.md);
 #   * a bare type name in a type annotation: a type import binds SHORT to the
-#     qualified source type CANONICAL (`abi::U8Value`) at once, so a type
+#     qualified source type CANONICAL (`std::abi::U8Value`) at once, so a type
 #     annotation resolves to the one canonical identity and no alias survives
 #     (hir/types.tcl's resolveNamed).
 #

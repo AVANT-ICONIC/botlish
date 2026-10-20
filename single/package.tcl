@@ -14,7 +14,7 @@
 #   main.tcl              single/main.tcl, run at startup with the arguments
 #   tcl_library/          BASEKIT's own Tcl script library
 #   botlish/              main.tcl, LICENSE, core/, compiler/, hir/, surface/,
-#                         native/*.tcl, lib/, compilerpedia/ (the engine,
+#                         native/*.tcl, stdlib/, compilerpedia/ (the engine,
 #                         topics/ and generated/: -help) -- the compiler
 #                         stack, at its checkout-relative paths -- and
 #                         BUILD, the source revision -version prints
@@ -42,7 +42,7 @@ try {
     file mkdir $app
     # The compiler stack, at the paths main.tcl and its sources compute from
     # their own locations.
-    foreach item {main.tcl LICENSE core compiler hir surface lib} {
+    foreach item {main.tcl LICENSE core compiler hir surface stdlib} {
         file copy [file join $root $item] [file join $app $item]
     }
     file mkdir [file join $app native] [file join $app compilerpedia]

@@ -480,7 +480,7 @@ proc hir::format::Expr {hir e indent origins linesVar} {
             }
             if {[dict exists $node imprint]} {
                 # A call's explicit imprints (hir/imprint.tcl), as resolved:
-                # types, or the pointee ffi::c::Void.
+                # types, or the pointee std::ffi::c::Void.
                 append text " imprint \[[join [lmap t [dict get $node imprint] {hir::cabi::ShowPointee $t}] {, }]\]"
             }
             if {[dict exists $node traitImpl]} {

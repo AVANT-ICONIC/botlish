@@ -89,7 +89,7 @@ proc refinedChecksNir {args} {
     native::nir [surface::readProgramFile [file join $::projectRoot bench refined-checks.bot]] {*}$args
 }
 
-test raw-internal-abi-refined-checks-signatures {the de-closured scanners take the plan's raw positions (knob on): both scan_while variants a raw start, the str::is_tcl_alpha one also a raw result, tld? a raw i, domain? a raw start; char_at's i stays tagged (substring is a tagged consumer); knob off: none} -body {
+test raw-internal-abi-refined-checks-signatures {the de-closured scanners take the plan's raw positions (knob on): both scan_while variants a raw start, the std::str::is_tcl_alpha one also a raw result, tld? a raw i, domain? a raw start; char_at's i stays tagged (substring is a tagged consumer); knob off: none} -body {
     lmap knob {1 0} {
         withRawInternal $knob {
             set nir [refinedChecksNir]
@@ -98,14 +98,14 @@ test raw-internal-abi-refined-checks-signatures {the de-closured scanners take t
     }
 } -result {{{rawparams=0 rawparams=0,rawresult} rawparams=0 rawparams=0 {- -}} {{- -} - - {- -}}}
 
-test raw-internal-abi-refined-checks-callers {the calls agree: domain? hands tld? its raw j + 1 (no rbox), tld? reads scan_while's raw result (no runbox), web::emailish? passes a raw constant start} -body {
+test raw-internal-abi-refined-checks-callers {the calls agree: domain? hands tld? its raw j + 1 (no rbox), tld? reads scan_while's raw result (no runbox), std::web::emailish? passes a raw constant start} -body {
     set nir [refinedChecksNir]
     set domain [functionsNamed $nir domain?]
     set tld [functionsNamed $nir tld?]
     regexp {%(\d+) = call \d+ %0 } $tld -> e
     list [regexp {%(\d+) = op riadd [^\n]*\n\s+%\d+ = call \d+ %\1 } $domain] \
         [regexp "op runbox %$e\\M" $tld] [regexp "op rieq %$e " $tld] \
-        [regexp {rawint 0 @e\d+\n\s+%\d+ = fnvalue \d+ @e\d+\n\s+%\d+ = call} [functionsNamed $nir web::emailish?]]
+        [regexp {rawint 0 @e\d+\n\s+%\d+ = fnvalue \d+ @e\d+\n\s+%\d+ = call} [functionsNamed $nir std::web::emailish?]]
 } -result {1 0 1 1}
 
 # Since the warning-driven refactor (REFACTOR-WARNINGS-CLEAN.md) char_at's
@@ -127,9 +127,9 @@ test raw-internal-abi-refined-checks-region-companion-tagged {char_at's internal
 # The ABI on its own: params, results, recursion, the small-Int boundary
 
 set ::recursionShape {
-    import str
+    import std::str
     fn outer(s, base):
-        n = str::length(s)
+        n = std::str::length(s)
         fn depth(x):
             if x <= 0:
                 base
@@ -154,11 +154,11 @@ test raw-internal-abi-recursion {a non-tail self-recursive internal variant call
 } -result {rawparams=0 rawparams=0 1 {[[18, 19, 32], [-4, -1, -4]]}}
 
 set ::resultShape {
-    import str
+    import std::str
     fn scanner(s):
-        n = str::length(s)
+        n = std::str::length(s)
         fn at(i):
-            str::substring(s, i, i + 1)
+            std::str::substring(s, i, i + 1)
         fn skip(start):
             loop i from start to n:
                 if at(i) != " ":
@@ -195,16 +195,16 @@ test raw-internal-abi-knob-off {with the knob off no internal variant has a raw 
 } -result {0 {[[18, 19, 32], [-4, -1, -4]]} 0 {[[4, 0, 3], [0, 0, 0], [1, 0, 0]]}}
 
 set ::gcShape {
-    import list
-    import str
+    import std::list
+    import std::str
     fn mk(k):
-        [k, str::concat("a", "b")]
+        [k, std::str::concat("a", "b")]
     fn run(s, lim):
-        n = str::length(s)
+        n = std::str::length(s)
         fn step(x):
             ys = mk(x)
             zs = mk(x + n)
-            x * 2 + list::length(ys) + list::length(zs) - list::length(mk(n))
+            x * 2 + std::list::length(ys) + std::list::length(zs) - std::list::length(mk(n))
         fn count(lo):
             loop i from lo to n:
                 if step(i) > lim:

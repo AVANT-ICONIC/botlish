@@ -19,7 +19,7 @@ clearly under Tcl 8.x rather than running with subtly wrong semantics).
 Botlish's String semantics count Unicode scalar values, matching the other
 backends (Rust/Cranelift); Tcl 9 represents strings the same way. Tcl 8.x
 represents a character outside the Basic Multilingual Plane as a surrogate
-pair, so `str::length` would disagree with every other backend by counting such
+pair, so `std::str::length` would disagree with every other backend by counting such
 characters twice -- a host limitation, not a Botlish semantics change, so
 it is not worked around here.
 
@@ -153,7 +153,7 @@ Values are immutable. Every value has exactly one kind:
 | `result` | `ok(v)` / `error(v)` | an application-level outcome                   |
 | `block`  | `<block (x y)>`  | a closure: parameters, body, captured environment  |
 | `native` | `<native +>`     | a primitive callable, possibly with refinement metadata |
-| `coroutine` | `<coroutine>` | the affine handle of one started coroutine (COROUTINES.md): resumed by calling it, observed with `coroutine::done?`, never compared, hashed, copied or stored |
+| `coroutine` | `<coroutine>` | the affine handle of one started coroutine (COROUTINES.md): resumed by calling it, observed with `std::coroutine::done?`, never compared, hashed, copied or stored |
 
 Kinds never blur: the integer `10`, the Float64 `10.0`, the string `"10"`,
 and the string `"true"` are all different values, and none of the strings is
@@ -165,8 +165,8 @@ except where a DecimalRounded type is expected, below; a literal without one
 is an Int, and a binding never decides a literal's type. `+ - * /`, unary `-` and the
 comparisons on two Float64 operands are the Float64 operations, chosen by the
 operands' static types (`hir/operators.tcl`); an Int and a Float64 together
-are a TYPE error (nothing converts implicitly: `float64::from_int` and
-`float64::truncate` convert), and `/` exists only for Float64 (there is no
+are a TYPE error (nothing converts implicitly: `std::float64::from_int` and
+`std::float64::truncate` convert), and `/` exists only for Float64 (there is no
 integer division). A result that is not a finite number -- an overflow, any
 division by zero, NaN -- fails with the declared builtin error
 `NonFiniteFloat`, which a handler catches and an `errors` clause admits like
@@ -202,8 +202,8 @@ proves nothing and is `DECIMAL-GUARANTEE-LOST` (unary minus keeps its
 type). `< <= > >= == !=` compare the operands' decimals at the smaller
 guaranteed precision; equality and hashing that do not know the precision
 (of a List or struct holding them, a set, an untyped `==`) are refused.
-Weakening is subtyping; `float64::from_decimal_rounded` decays a value to
-the Float64 of its guaranteed decimal and `decimal_rounded::round[T]`
+Weakening is subtyping; `std::float64::from_decimal_rounded` decays a value to
+the Float64 of its guaranteed decimal and `std::decimal_rounded::round[T]`
 quantizes a Float64 (`UnrepresentableDecimal` when nothing holds that
 decimal); nothing converts implicitly. A non-finite binary64 result is
 `NonFiniteFloat`. See DECIMAL-ROUNDED-MILESTONE-1.md.
@@ -212,29 +212,29 @@ decimal); nothing converts implicitly. A non-finite binary64 result is
 character is a `UnicodeChar`, exactly one Unicode scalar value. **A single
 character is written as a character literal** (`','`, `'"'`, `'\n'`, `'\''`,
 `'😀'`); the empty String `""` and every String of two or more characters are
-Strings. Characters are counted as `str::length` counts them: Unicode scalar
+Strings. Characters are counted as `std::str::length` counts them: Unicode scalar
 values, never bytes and never grapheme clusters (an `é` written as `e` plus a
 combining accent is two characters). The two kinds never convert implicitly: a
 String and a UnicodeChar are never equal (`==` of the two is `false`), a `str`
-parameter does not take a UnicodeChar, and `str::char_at` is the operation that
+parameter does not take a UnicodeChar, and `std::str::char_at` is the operation that
 reads a String's character as a value (ENCODE-UTF8-ALLOCATION-RESEARCH.md). A
 one-character String literal is therefore a String spelling of what the
 language writes as a character; the `ONE-CHAR-STRING-LITERAL` warning (§23)
 reports each one. Where an API takes a String for what is one character, that
 String spelling is what the API requires today, and the finding is about the
 API. The corpus's scanners are written this way: the CSV programs of
-`examples/stdlib` read each character with `str::char_at` under a
-`str::length` bound and compare it with `','`, `'\n'` and `'"'`;
+`examples/stdlib` read each character with `std::str::char_at` under a
+`std::str::length` bound and compare it with `','`, `'\n'` and `'"'`;
 `ai_text_clean.bot`'s `clean_char` reads the character its one-character text
-holds; `lib/web.bot`'s `emailish?` tests `'.'` and `'@'` at a position
+holds; `stdlib/web.bot`'s `emailish?` tests `'.'` and `'@'` at a position
 (REFACTOR-WARNINGS-CLEAN.md). A character becomes text by being appended to
-a String: `str::append_char(text, c)` is TEXT followed by C (`lib/io.bot`'s
+a String: `std::str::append_char(text, c)` is TEXT followed by C (`stdlib/io.bot`'s
 `print_line` writes `text.append_char('\n')`), so a character the code holds
 never has to be a one-character String first. What still uses a
-one-character String -- a join or an escape that `str::concat` builds as one
+one-character String -- a join or an escape that `std::str::concat` builds as one
 virtual construction, where a flat append would cost an allocation; a table
 of characters as text; a character handed to a String-taking classifier such
-as `str::is_tcl_alnum` -- is listed, with its reason, in the warning manifest
+as `std::str::is_tcl_alnum` -- is listed, with its reason, in the warning manifest
 (§23).
 
 **Equality (`==`)** compares structure. Values of different kinds are never
@@ -519,16 +519,16 @@ the rule):
   and tag tests, the generic structural `hash`, the process's `argv`.
 * **Standard intrinsics** -- operations that belong to one value family --
   live in that family's flat namespace, registered under their qualified
-  name (`list::at`, `str::concat`, `mutable_array::set`, ...): a *qualified
+  name (`std::list::at`, `std::str::concat`, `std::mutable_array::set`, ...): a *qualified
   root native*. Source spells them like module members; no module file
   defines them, no local binding can spell `::` (so they cannot be
   shadowed), and a module of the same namespace may define any *other*
-  member (`lib/list.bot`'s `list::get`) but never one of the intrinsic's own
+  member (`stdlib/list.bot`'s `std::list::get`) but never one of the intrinsic's own
   name (`SURFACE MODULE DUPLICATE-NATIVE`; the entry program is in no
   namespace, so it is not held to this rule). Botlish has no overloading,
   so there is nothing for such a definition to coexist as. A source file
-  names them only after `import list` (IMPORTS.md), and the import also makes
-  the intrinsic a method candidate: `xs.at(1)` is `list::at(xs, 1)`
+  names them only after `import std::list` (IMPORTS.md), and the import also makes
+  the intrinsic a method candidate: `xs.at(1)` is `std::list::at(xs, 1)`
   (METHOD-SUGAR.md); the import injects no unqualified `at`.
 
 Language primitives (root):
@@ -581,62 +581,62 @@ Standard intrinsics (qualified root natives):
 
 | Name | Signature |
 |------|-----------|
-| `list::length` | list → int |
-| `list::at` | list, int → any, errors `IndexNotFound`: the element at `0 <= i < length`; any other Int index fails with `IndexNotFound` |
-| `list::append` | list, any → list (a new list; the argument is unchanged) |
-| `str::length` | str → int (Unicode scalar values) |
-| `str::substring` | str, int, int → str, errors `LowerUnderrun` `UpperOverrun`: the characters `start <= i < end` of a valid slice (below) |
-| `str::lowercase` | str → str (Unicode 16 simple one-to-one case mapping; see §"Strings") |
-| `str::concat` | str, str → str |
-| `str::append_char` | str, UnicodeChar → str: the String followed by the one character (`str::length` + 1 characters; the argument is unchanged), as `list::append` is to a List: the way a character becomes text, with no one-character String of its own |
-| `str::encode_utf8` | str → `List[Byte]` (the UTF-8 bytes) |
-| `str::char_at` | str, int → UnicodeChar, errors `IndexNotFound`: the scalar at character index `0 <= i < length` (the index space of `length`/`substring`); any other Int index fails with `IndexNotFound`; never allocates. With char literals (`c == '%'`) and `char::scalar_value` it classifies a String's characters without a one-character String or an `encode_utf8` List (ENCODE-UTF8-ALLOCATION-RESEARCH.md) |
-| `str::is_tcl_alpha` `str::is_tcl_alnum` | one-scalar str → bool (temporary Tcl-compatibility classes, core/tclcompat.tcl) |
-| `char::scalar_value` | UnicodeChar → int (the Unicode scalar value: `0..0x10FFFF` without the surrogates, never a byte or a code unit of an encoding) |
-| `float64::from_int` | int → Float64, errors `NonFiniteFloat`: the nearest Float64 (ties to even), from the exact Int at any size; an Int beyond the largest finite Float64 fails (FLOAT64-MILESTONE-1.md) |
-| `float64::truncate` | Float64 → int: the integer part, rounding toward zero, exact at any magnitude; never fails |
-| `float64::from_decimal_rounded` | DecimalRounded → Float64: the Float64 nearest round(x, N), N the precision x's static type guarantees (elaborated to `decimal_rounded#to_float64`); never fails (DECIMAL-ROUNDED-MILESTONE-1.md) |
-| `decimal_rounded::round[T]` | Float64 → T, errors `UnrepresentableDecimal`: T a refined DecimalRounded type, imprinted explicitly; the value whose decimal is the Float64's exact value rounded half to even to T's places (elaborated to `decimal_rounded#round`) |
-| `mutable_array::allocate` | int → mutarray (every slot `unit`) |
-| `mutable_array::capacity` | mutarray → int |
-| `mutable_array::at` | mutarray, int → any, errors `IndexNotFound` (as `list::at`) |
-| `mutable_array::set` | mutarray, int, any → unit, errors `IndexNotFound`: stores in place at `0 <= i < capacity`; any other Int index fails with `IndexNotFound` |
-| `mutable_array::copy` | mutarray (DST), int (DS), mutarray (SRC), int (SS), int (COUNT) → unit, errors `LowerUnderrun` `UpperOverrun`: memmove semantics; checks the slice `DS..DS+COUNT` of DST, then `SS..SS+COUNT` of SRC |
-| `mutable_array::freeze` | mutarray, int → list, errors `LowerUnderrun` `UpperOverrun`: a copy of the first N slots (the slice `0..N`) |
-| `immutable_set::from_list` | `List[T]` → `ImmutableSet[T]` |
-| `immutable_set::contains` | `ImmutableSet`, any → bool |
-| `byte_store::from_list` | `List[Byte]` → byte storage: the eagerly copied, owned storage behind `abi::bytes::Bytes` (no source type spells it; ABI-BYTES.md) |
-| `byte_store::byte_count` | byte storage → int: its exact length |
-| `abi::x86_64::from_bytes` | `abi::bytes::Bytes` → `abi::x86_64::Register64`: the machine address of the payload, for the raw layer; native backend only (Tcl backends: `NATIVE-ONLY`); callable only directly (ABI-BYTES.md) |
-| `mutable_byte_store::zeroed` `from_storage` `count` `replace` `detach` `freeze` `freeze_prefix` | the writable byte storage behind `abi::bytes::MutableBytes`, a value kind of its own: zero-filled allocation, an independent copy of a byte storage, the fixed count, an update that returns a **fresh** storage (the operand is never written), the detach copy, and immutable snapshots; none is context-free (MUTABLE-BYTES.md) |
-| `abi::x86_64::from_mutable_bytes` | `abi::bytes::MutableBytes` → `abi::x86_64::Register64`: the machine address of a **writable** payload, for the raw layer; never mixed with `from_bytes`; native backend only; callable only directly (MUTABLE-BYTES.md) |
-| `binary::parse` | layout L (a static operand: a layout name), `abi::bytes::Bytes` → `LayoutStruct[L]`, errors `LayoutLengthMismatch` unless the bytes have exactly L's size: imprinting (BINARY-LAYOUT.md); callable only directly |
-| `binary::emit` | `LayoutStruct[L]` → `abi::bytes::Bytes` of L's size, L from the value's static type, padding zero, infallible (elaborated to the internal `binary#emit(v, DESCRIPTOR)`; BINARY-LAYOUT.md); callable only directly |
-| `binary::layout_length` `binary::layout_alignment` | layout L → int: L's size or alignment, folded to a constant at resolution (BINARY-LAYOUT.md) |
-| `binary::native::view` | layout L (a static operand), `ffi::c::Ptr[T]` (observed) → `NativeView[L]`, errors `NativeViewNull` for a null pointer: a read-only view of the live native memory the pointer addresses, each field read when projected (`v.f`, elaborated to the internal `binary#view_field(v, FIELD)`); direct authority (`binary::native` is designated direct); native backend only (Tcl backends: `NATIVE-ONLY`); callable only directly (NATIVE-LAYOUT-VIEWS.md) |
-| `binary::load` | `NativeView[L]` or `NativeEdit[L]` → `LayoutStruct[L]`: every field read once through the view, L from its static type (elaborated to `binary#load(v, DESCRIPTOR)`; NATIVE-LAYOUT-VIEWS.md) |
-| `binary::native::edit` | layout L (a static operand), `ffi::c::Ptr[T]` (observed) → `NativeEdit[L]`, errors `NativeEditNull` for a null pointer: live native memory the pointer addresses, read like a view and written by `binary::store`; write authority, never ownership; direct authority (`binary::native`); native backend only (Tcl backends: `NATIVE-ONLY`) (NATIVE-LAYOUT-WRITES.md) |
-| `binary::store` | `NativeEdit[L]`, a field designator `L.f` (static: `L.inner.x` through nested layouts), the value → unit: one store of the field's width at its offset, nothing else touched; the value proven in the field's type (a pointer field: exactly its pointer type, observed); not direct (the edit is the authority) (NATIVE-LAYOUT-WRITES.md) |
-| `binary::write` | `abi::bytes::MutableBytes` of exactly L's size, `L.f`, the value → a new `MutableBytes` with that ordinary field written, every other byte the operand's, errors `LayoutLengthMismatch`; never a pointer field (`LAYOUT-NATIVE-ONLY`); every backend (NATIVE-LAYOUT-WRITES.md) |
-| `binary::write_foreign` | `abi::bytes::MutableBytes`, a pointer field `L.p`, an existing `ffi::c::Ptr`/`FnPtr` of exactly its type (observed) → a new `MutableBytes` with the pointer's address bits in that field, errors `LayoutLengthMismatch`; only a pointer field (`LAYOUT-FOREIGN-WRITE`); bytes never decode back into a pointer (NATIVE-LAYOUT-WRITES.md) |
-| `linux::abi::x86_64::syscall` | `{rax: R, rdi: R, …, r9: R}` → `abi::x86_64::Register64` (R a Register64): the raw Linux x86-64 kernel transition, raw rax back; omitted argument registers are zero; native backend only (Tcl backends: `NATIVE-ONLY`); callable only directly (LINUX-X86-64-SYSCALL.md) |
-| `linux::abi::aarch64::syscall` | `{x8: R, x0: R, …, x5: R}` → `abi::aarch64::Register64` (R an `abi::aarch64::Register64`): the raw Linux AArch64 kernel transition (`svc #0`), raw x0 back; otherwise exactly the x86-64 transport's contract, one row of the same table (LINUX-SYSCALL-TRANSPORTS.md) |
-| `ffi::c::null[T]()` | → `ffi::c::Ptr[T]`: the null C pointer, T supplied by the call's explicit imprint (C-ABI-TYPES.md); an imprinted callable is only called |
-| `ffi::c::null?` | any C pointer (data or function) → bool: whether it is null; observes its argument |
-| `ffi::c::clone` | a C pointer → the same type: a second alias of the same address (no pointee copy, no reference count); observes its argument |
-| `ffi::c::erase` | `ffi::c::Ptr[T]` → `ffi::c::Ptr[ffi::c::Void]`, the same address; moves its argument; never a function pointer |
-| `ffi::c::retype[T]` | `ffi::c::Ptr[ffi::c::Void]` → `ffi::c::Ptr[T]`, the same address; moves its argument; proves nothing about the pointee |
+| `std::list::length` | list → int |
+| `std::list::at` | list, int → any, errors `IndexNotFound`: the element at `0 <= i < length`; any other Int index fails with `IndexNotFound` |
+| `std::list::append` | list, any → list (a new list; the argument is unchanged) |
+| `std::str::length` | str → int (Unicode scalar values) |
+| `std::str::substring` | str, int, int → str, errors `LowerUnderrun` `UpperOverrun`: the characters `start <= i < end` of a valid slice (below) |
+| `std::str::lowercase` | str → str (Unicode 16 simple one-to-one case mapping; see §"Strings") |
+| `std::str::concat` | str, str → str |
+| `std::str::append_char` | str, UnicodeChar → str: the String followed by the one character (`std::str::length` + 1 characters; the argument is unchanged), as `std::list::append` is to a List: the way a character becomes text, with no one-character String of its own |
+| `std::str::encode_utf8` | str → `List[Byte]` (the UTF-8 bytes) |
+| `std::str::char_at` | str, int → UnicodeChar, errors `IndexNotFound`: the scalar at character index `0 <= i < length` (the index space of `length`/`substring`); any other Int index fails with `IndexNotFound`; never allocates. With char literals (`c == '%'`) and `std::char::scalar_value` it classifies a String's characters without a one-character String or an `encode_utf8` List (ENCODE-UTF8-ALLOCATION-RESEARCH.md) |
+| `std::str::is_tcl_alpha` `std::str::is_tcl_alnum` | one-scalar str → bool (temporary Tcl-compatibility classes, core/tclcompat.tcl) |
+| `std::char::scalar_value` | UnicodeChar → int (the Unicode scalar value: `0..0x10FFFF` without the surrogates, never a byte or a code unit of an encoding) |
+| `std::float64::from_int` | int → Float64, errors `NonFiniteFloat`: the nearest Float64 (ties to even), from the exact Int at any size; an Int beyond the largest finite Float64 fails (FLOAT64-MILESTONE-1.md) |
+| `std::float64::truncate` | Float64 → int: the integer part, rounding toward zero, exact at any magnitude; never fails |
+| `std::float64::from_decimal_rounded` | DecimalRounded → Float64: the Float64 nearest round(x, N), N the precision x's static type guarantees (elaborated to `decimal_rounded#to_float64`); never fails (DECIMAL-ROUNDED-MILESTONE-1.md) |
+| `std::decimal_rounded::round[T]` | Float64 → T, errors `UnrepresentableDecimal`: T a refined DecimalRounded type, imprinted explicitly; the value whose decimal is the Float64's exact value rounded half to even to T's places (elaborated to `decimal_rounded#round`) |
+| `std::mutable_array::allocate` | int → mutarray (every slot `unit`) |
+| `std::mutable_array::capacity` | mutarray → int |
+| `std::mutable_array::at` | mutarray, int → any, errors `IndexNotFound` (as `std::list::at`) |
+| `std::mutable_array::set` | mutarray, int, any → unit, errors `IndexNotFound`: stores in place at `0 <= i < capacity`; any other Int index fails with `IndexNotFound` |
+| `std::mutable_array::copy` | mutarray (DST), int (DS), mutarray (SRC), int (SS), int (COUNT) → unit, errors `LowerUnderrun` `UpperOverrun`: memmove semantics; checks the slice `DS..DS+COUNT` of DST, then `SS..SS+COUNT` of SRC |
+| `std::mutable_array::freeze` | mutarray, int → list, errors `LowerUnderrun` `UpperOverrun`: a copy of the first N slots (the slice `0..N`) |
+| `std::immutable_set::from_list` | `List[T]` → `ImmutableSet[T]` |
+| `std::immutable_set::contains` | `ImmutableSet`, any → bool |
+| `std::byte_store::from_list` | `List[Byte]` → byte storage: the eagerly copied, owned storage behind `std::abi::bytes::Bytes` (no source type spells it; ABI-BYTES.md) |
+| `std::byte_store::byte_count` | byte storage → int: its exact length |
+| `std::abi::x86_64::from_bytes` | `std::abi::bytes::Bytes` → `std::abi::x86_64::Register64`: the machine address of the payload, for the raw layer; native backend only (Tcl backends: `NATIVE-ONLY`); callable only directly (ABI-BYTES.md) |
+| `std::mutable_byte_store::zeroed` `from_storage` `count` `replace` `detach` `freeze` `freeze_prefix` | the writable byte storage behind `std::abi::bytes::MutableBytes`, a value kind of its own: zero-filled allocation, an independent copy of a byte storage, the fixed count, an update that returns a **fresh** storage (the operand is never written), the detach copy, and immutable snapshots; none is context-free (MUTABLE-BYTES.md) |
+| `std::abi::x86_64::from_mutable_bytes` | `std::abi::bytes::MutableBytes` → `std::abi::x86_64::Register64`: the machine address of a **writable** payload, for the raw layer; never mixed with `from_bytes`; native backend only; callable only directly (MUTABLE-BYTES.md) |
+| `std::binary::parse` | layout L (a static operand: a layout name), `std::abi::bytes::Bytes` → `LayoutStruct[L]`, errors `LayoutLengthMismatch` unless the bytes have exactly L's size: imprinting (BINARY-LAYOUT.md); callable only directly |
+| `std::binary::emit` | `LayoutStruct[L]` → `std::abi::bytes::Bytes` of L's size, L from the value's static type, padding zero, infallible (elaborated to the internal `binary#emit(v, DESCRIPTOR)`; BINARY-LAYOUT.md); callable only directly |
+| `std::binary::layout_length` `std::binary::layout_alignment` | layout L → int: L's size or alignment, folded to a constant at resolution (BINARY-LAYOUT.md) |
+| `std::binary::native::view` | layout L (a static operand), `std::ffi::c::Ptr[T]` (observed) → `NativeView[L]`, errors `NativeViewNull` for a null pointer: a read-only view of the live native memory the pointer addresses, each field read when projected (`v.f`, elaborated to the internal `binary#view_field(v, FIELD)`); direct authority (`std::binary::native` is designated direct); native backend only (Tcl backends: `NATIVE-ONLY`); callable only directly (NATIVE-LAYOUT-VIEWS.md) |
+| `std::binary::load` | `NativeView[L]` or `NativeEdit[L]` → `LayoutStruct[L]`: every field read once through the view, L from its static type (elaborated to `binary#load(v, DESCRIPTOR)`; NATIVE-LAYOUT-VIEWS.md) |
+| `std::binary::native::edit` | layout L (a static operand), `std::ffi::c::Ptr[T]` (observed) → `NativeEdit[L]`, errors `NativeEditNull` for a null pointer: live native memory the pointer addresses, read like a view and written by `std::binary::store`; write authority, never ownership; direct authority (`std::binary::native`); native backend only (Tcl backends: `NATIVE-ONLY`) (NATIVE-LAYOUT-WRITES.md) |
+| `std::binary::store` | `NativeEdit[L]`, a field designator `L.f` (static: `L.inner.x` through nested layouts), the value → unit: one store of the field's width at its offset, nothing else touched; the value proven in the field's type (a pointer field: exactly its pointer type, observed); not direct (the edit is the authority) (NATIVE-LAYOUT-WRITES.md) |
+| `std::binary::write` | `std::abi::bytes::MutableBytes` of exactly L's size, `L.f`, the value → a new `MutableBytes` with that ordinary field written, every other byte the operand's, errors `LayoutLengthMismatch`; never a pointer field (`LAYOUT-NATIVE-ONLY`); every backend (NATIVE-LAYOUT-WRITES.md) |
+| `std::binary::write_foreign` | `std::abi::bytes::MutableBytes`, a pointer field `L.p`, an existing `std::ffi::c::Ptr`/`FnPtr` of exactly its type (observed) → a new `MutableBytes` with the pointer's address bits in that field, errors `LayoutLengthMismatch`; only a pointer field (`LAYOUT-FOREIGN-WRITE`); bytes never decode back into a pointer (NATIVE-LAYOUT-WRITES.md) |
+| `std::linux::abi::x86_64::syscall` | `{rax: R, rdi: R, …, r9: R}` → `std::abi::x86_64::Register64` (R a Register64): the raw Linux x86-64 kernel transition, raw rax back; omitted argument registers are zero; native backend only (Tcl backends: `NATIVE-ONLY`); callable only directly (LINUX-X86-64-SYSCALL.md) |
+| `std::linux::abi::aarch64::syscall` | `{x8: R, x0: R, …, x5: R}` → `std::abi::aarch64::Register64` (R an `std::abi::aarch64::Register64`): the raw Linux AArch64 kernel transition (`svc #0`), raw x0 back; otherwise exactly the x86-64 transport's contract, one row of the same table (LINUX-SYSCALL-TRANSPORTS.md) |
+| `std::ffi::c::null[T]()` | → `std::ffi::c::Ptr[T]`: the null C pointer, T supplied by the call's explicit imprint (C-ABI-TYPES.md); an imprinted callable is only called |
+| `std::ffi::c::null?` | any C pointer (data or function) → bool: whether it is null; observes its argument |
+| `std::ffi::c::clone` | a C pointer → the same type: a second alias of the same address (no pointee copy, no reference count); observes its argument |
+| `std::ffi::c::erase` | `std::ffi::c::Ptr[T]` → `std::ffi::c::Ptr[std::ffi::c::Void]`, the same address; moves its argument; never a function pointer |
+| `std::ffi::c::retype[T]` | `std::ffi::c::Ptr[std::ffi::c::Void]` → `std::ffi::c::Ptr[T]`, the same address; moves its argument; proves nothing about the pointee |
 
 Ordinary Botlish members of the same namespaces (library modules, not
-natives): `list::get`, `list::any?`, `list::all?`, `list::none?`,
-`list::find` (`lib/list.bot`); `mutable_array::from_list`,
-`mutable_array::create`, `mutable_array::get` (`lib/mutable_array.bot`).
-`char` has no library module: `char::scalar_value` is its one member
-(`str::char_at` produces a UnicodeChar from a String position; a
+natives): `std::list::get`, `std::list::any?`, `std::list::all?`, `std::list::none?`,
+`std::list::find` (`stdlib/list.bot`); `std::mutable_array::from_list`,
+`std::mutable_array::create`, `std::mutable_array::get` (`stdlib/mutable_array.bot`).
+`char` has no library module: `std::char::scalar_value` is its one member
+(`std::str::char_at` produces a UnicodeChar from a String position; a
 "code point" also names surrogates and, colloquially, Latin-1 or other
 encodings' numbers; a scalar value is exactly what a UnicodeChar holds).
 Like every native's parameter types, its `UnicodeChar` requirement is
-checked at run time (`char::scalar_value(65)` is the `TYPE` error).
+checked at run time (`std::char::scalar_value(65)` is the `TYPE` error).
 
 **Indexed access: `at` and `get`.** `at(container, index)` is required
 indexed lookup: it returns the element or fails with the builtin declared
@@ -645,9 +645,9 @@ error `IndexNotFound` -- an ordinary, handleable error completion
 function's `errors` clause, or be proven not to need to: the call-specific
 completion proof (hir/completions.tcl) rules it out when the index provably
 designates an element (a List of statically known length with an index in
-range; `loop i from 0 to list::length(xs): list::at(xs, i)` and its
+range; `loop i from 0 to std::list::length(xs): std::list::at(xs, i)` and its
 MutableArray capacity counterpart; a read guarded by `if i < 0 or i >=
-list::length(xs):` or its `and` form; STDLIB-NAMESPACES.md lists the
+std::list::length(xs):` or its `and` form; STDLIB-NAMESPACES.md lists the
 rules), and makes a provably-missing index a compile-time `KNOWN-ERROR`.
 The proof removes the obligation only: a proven call still runs its bounds
 check, and `get` does not benefit yet (STDLIB-NAMESPACES.md §12 records the
@@ -656,7 +656,7 @@ an explicit fallback, written in ordinary Botlish over `at`:
 
 ```
 fn get(xs, index, default):
-    value = list::at(xs, index):
+    value = std::list::at(xs, index):
         on IndexNotFound:
             default
     value
@@ -666,11 +666,11 @@ It handles `IndexNotFound` and nothing else (a non-List or non-Int argument
 is still the `TYPE` error), `default` is an ordinary eagerly evaluated
 argument, and neither operation returns an optional or null value. There is
 no negative indexing: `-1` is a missing index like any other.
-`mutable_array::set` is the write counterpart of `at`: it stores at a
+`std::mutable_array::set` is the write counterpart of `at`: it stores at a
 designated slot or fails with the same `IndexNotFound`, proven the same way.
 
-**Slices.** `str::substring(s, start, end)`, `mutable_array::freeze(a, n)`
-(the slice `0..n`) and `mutable_array::copy` (its destination slice, then
+**Slices.** `std::str::substring(s, start, end)`, `std::mutable_array::freeze(a, n)`
+(the slice `0..n`) and `std::mutable_array::copy` (its destination slice, then
 its source slice) take a half-open slice `START..END` of a sequence of `N`
 elements, valid iff `0 <= START <= END <= N`. START is checked first,
 against `0..N`, then END against `START..N`: a bound below its interval
@@ -679,14 +679,14 @@ fails with the builtin declared error `LowerUnderrun`, one above it with
 `substring("abc", 4, 1)` is `UpperOverrun` for its start). Like
 `IndexNotFound` they must be handled, admitted by an `errors` clause or
 proven impossible: the completion proof also reads String lengths (a
-literal, `str::concat`'s sum, a guard such as `if str::length(s) > 0:` or
-`if i < 0 or i >= str::length(s): return ...`) and array capacities.
+literal, `std::str::concat`'s sum, a guard such as `if std::str::length(s) > 0:` or
+`if i < 0 or i >= std::str::length(s): return ...`) and array capacities.
 
-The former optional native library `web` (lib/web.tcl: `Emailish?`,
+The former optional native library `web` (stdlib/web.tcl: `Emailish?`,
 `UriQueryValue?`, `uriEscape`) is gone. The Botlish module `web`
-(lib/web.bot, `import web`) declares `web::Emailish` and
-`web::UriQueryValue` as source refinement types with their proof-producing
-functions `web::emailish?` and `web::uri_query_value?` (§14).
+(stdlib/web.bot, `import std::web`) declares `std::web::Emailish` and
+`std::web::UriQueryValue` as source refinement types with their proof-producing
+functions `std::web::emailish?` and `std::web::uri_query_value?` (§14).
 
 New natives are registered through the registry, not by changing the
 evaluator:
@@ -710,9 +710,9 @@ a call of the native may complete with: the impl signals one with
 same `propagate-error` completion a Botlish `fail NAME` produces, so
 `on NAME:` handlers, an `errors` clause, call analysis and every backend treat
 it like any declared error. `argv` (`InvalidArgumentEncoding`), the indexed
-intrinsics `list::at`, `mutable_array::at` and `mutable_array::set`
-(`IndexNotFound`) and the slicing intrinsics `str::substring`,
-`mutable_array::freeze` and `mutable_array::copy` (`LowerUnderrun`,
+intrinsics `std::list::at`, `std::mutable_array::at` and `std::mutable_array::set`
+(`IndexNotFound`) and the slicing intrinsics `std::str::substring`,
+`std::mutable_array::freeze` and `std::mutable_array::copy` (`LowerUnderrun`,
 `UpperOverrun`) declare them; core/native.tcl declares the builtin errors in
 their fixed index order. `-bounds` states the check behind such
 argument-dependent errors (`index FAMILY CONTAINER INDEX`, or `slices
@@ -754,9 +754,9 @@ in source, gets a predicate by being a type (ELIMINATE-AUTOMATIC-TYPE-
 PREDICATES.md).
 
 **Strings discard refinements.** A string transformation's result carries no
-refinement unless its contract explicitly establishes one. So `str::substring`
-of a `web::UriQueryValue` is a plain `str`, and so is `web::uri_escape_text`'s
-result until `web::uri_query_value?` proves it one.
+refinement unless its contract explicitly establishes one. So `std::str::substring`
+of a `std::web::UriQueryValue` is a plain `str`, and so is `std::web::uri_escape_text`'s
+result until `std::web::uri_query_value?` proves it one.
 
 ## 9. Public API
 
@@ -800,7 +800,7 @@ result until `web::uri_query_value?` proves it one.
 | `core::process::withArgv ARGV SCRIPT` | run SCRIPT with the raw byte-string list ARGV as the process argument snapshot `argv()` reads (all four in-process backends; ARGV.md) |
 | `core::readProgramFile PATH` | read a `.ir` file (a list of IR; `#` lines are comments) |
 | `core::loadProgramFile PATH` | load the libraries a `.ir` file names with `# requires: NAME…`, then read it |
-| `core::loadLibrary NAME` | load the optional library `lib/NAME.tcl` (once) |
+| `core::loadLibrary NAME` | load the optional library `stdlib/NAME.tcl` (once) |
 
 ## 10. Implementation map
 
@@ -821,12 +821,12 @@ result until `web::uri_query_value?` proves it one.
 | `core/regex.tcl` | engine-independent regex IR, lowered to Tcl ARE |
 | `core/primitives.tcl`, `core/predicates.tcl`, `core/strings.tcl`, `core/lists.tcl` | builtin natives |
 | `core/process.tcl` | the process boundary: `argv()`, its builtin error, argv injection (ARGV.md) |
-| `core/linuxabi.tcl` | the Linux syscall transports, one table row per architecture: `linux::abi::x86_64::syscall` and `linux::abi::aarch64::syscall` (native only; LINUX-X86-64-SYSCALL.md, LINUX-SYSCALL-TRANSPORTS.md) |
+| `core/linuxabi.tcl` | the Linux syscall transports, one table row per architecture: `std::linux::abi::x86_64::syscall` and `std::linux::abi::aarch64::syscall` (native only; LINUX-X86-64-SYSCALL.md, LINUX-SYSCALL-TRANSPORTS.md) |
 | `core/contexts.tcl` | the two internal context operations `context#install` / `context#load` and the Tcl backends' per-run context environment (CONTEXTS.md); `context#unreachable`, the placeholder of code no installed context reaches (CONTEXT-TRAITS.md) |
-| `core/coroutines.tcl` | the coroutine operations `coroutine#create` / `#start` / `#resume` / `#yield` and `coroutine::done?`, and the Tcl backends' coroutine store: one Tcl coroutine per Botlish coroutine (COROUTINES.md) |
-| `core/cabi.tcl` | the C ABI targets and data models, the C integer scalars' metadata, the `cptr` value kind and the `ffi::c` pointer operations, and the C pointer test fixture (C-ABI-TYPES.md); the foreign call contract vocabulary (a pointer parameter's access and escape), the Tcl backends' model of temporary byte exposure (`ForeignBoundary`) and the borrow test fixture (C-POINTER-BORROWING.md) |
-| `core/binary.tcl` | fixed binary layouts' operations `binary::parse` / `binary::emit` / the layout queries, the reference implementation the interpreter runs over a layout's static descriptor (BINARY-LAYOUT.md) |
-| `core/bytestore.tcl` | the byte-storage value kinds' natives (immutable `bytestore`, writable `mutbytes`) and the raw address bridges `abi::x86_64::from_bytes` / `from_mutable_bytes` (ABI-BYTES.md, MUTABLE-BYTES.md) |
+| `core/coroutines.tcl` | the coroutine operations `coroutine#create` / `#start` / `#resume` / `#yield` and `std::coroutine::done?`, and the Tcl backends' coroutine store: one Tcl coroutine per Botlish coroutine (COROUTINES.md) |
+| `core/cabi.tcl` | the C ABI targets and data models, the C integer scalars' metadata, the `cptr` value kind and the `std::ffi::c` pointer operations, and the C pointer test fixture (C-ABI-TYPES.md); the foreign call contract vocabulary (a pointer parameter's access and escape), the Tcl backends' model of temporary byte exposure (`ForeignBoundary`) and the borrow test fixture (C-POINTER-BORROWING.md) |
+| `core/binary.tcl` | fixed binary layouts' operations `std::binary::parse` / `std::binary::emit` / the layout queries, the reference implementation the interpreter runs over a layout's static descriptor (BINARY-LAYOUT.md) |
+| `core/bytestore.tcl` | the byte-storage value kinds' natives (immutable `bytestore`, writable `mutbytes`) and the raw address bridges `std::abi::x86_64::from_bytes` / `from_mutable_bytes` (ABI-BYTES.md, MUTABLE-BYTES.md) |
 | `hir/hir.tcl` | HIR data model, ids, `hir::build`, queries |
 | `hir/syntax.tcl` | syntax nodes: HIR's input, and core IR → syntax |
 | `hir/hygiene.tcl` | renaming bindings that shadow root references |
@@ -845,25 +845,25 @@ result until `web::uri_query_value?` proves it one.
 | `hir/coroutines.tcl` | coroutines: thunks and call graph, the resume-protocol fixed point, yield and handle typing, the transitive yield effect, `UNWRAPPED-YIELD` chains, the affine handle discipline and storage frontier (COROUTINES.md) |
 | `hir/contexts.tcl` | execution-environment contexts: context parameters, direct and transitive requirements, installation order, `MISSING-CONTEXT` chains, function-value frontier (CONTEXTS.md); context traits: structural satisfaction (`satisfiesTrait`/`explainTrait`), the one-way binding check, exactly-one provider selection (CONTEXT-TRAITS.md) |
 | `hir/layouts.tcl` | fixed binary layouts: the one registry of resolved layouts and its validation, the struct view `LayoutStruct[L]` (`hir/structs.tcl` delegates to it), descriptors, the binary operations' roles, `verify` and `Elaborate` (BINARY-LAYOUT.md) |
-| `hir/syscall.tcl` | the static contract of each syscall transport's register-struct argument (LINUX-X86-64-SYSCALL.md, LINUX-SYSCALL-TRANSPORTS.md) and of the address bridges' `abi::bytes::Bytes` / `MutableBytes` argument (ABI-BYTES.md) |
+| `hir/syscall.tcl` | the static contract of each syscall transport's register-struct argument (LINUX-X86-64-SYSCALL.md, LINUX-SYSCALL-TRANSPORTS.md) and of the address bridges' `std::abi::bytes::Bytes` / `MutableBytes` argument (ABI-BYTES.md) |
 | `compiler/compiler.tcl` | HIR → Tcl compiler backend |
 | `native/lower.tcl` | HIR → NIR native lowering (§20) |
 | `native/native.tcl` | the native entry points, all taking HIR: `native::lowered` (the one HIR → NIR entry), `evalHir` (JIT), NIR, CLIF, object, executable, code size and guard report; runs the native driver |
 | `native/prepare.tcl` | `native::prepareHir`: attaches the native implementations a program calls (module functions, validator bodies) to its HIR |
 | `native/src/nir.rs` | NIR parsing and validation |
 | `native/src/runtime/` | native `Value` representation, heap and collector, errors, runtime helper ABI; `syscall.rs` holds the one inline-asm `syscall` boundary (LINUX-X86-64-SYSCALL.md); `bytesobj.rs` the owned byte-storage object, immutable and writable kinds (ABI-BYTES.md, MUTABLE-BYTES.md) |
-| `lib/abi.bot` | the ABI numeric domains `abi::I8` ... `abi::Usize` (ordinary Int values with a proven foreign-interface domain `abi::I8Value` ... `abi::UsizeValue`, not fixed-width arithmetic), their checked creators `abi::i8` ... `abi::usize` and errors `AbiIntegerBelowRange`/`AbiIntegerAboveRange` (ABI-NUMERIC-DOMAINS.md) |
-| `lib/abi/bytes.bot` | the ABI memory values, both owned by this one module (the single-owner rule of OPAQUE-STRUCTS.md, so they convert into each other without a public accessor): `abi::bytes::Bytes`, immutable, opaque over contiguous byte storage (`from_list`, `length`; ABI-BYTES.md), and `abi::bytes::MutableBytes`, its writable counterpart, a *value* whose copies are independent (`zeroed`, `from_bytes`, `mutable_length`, `replace`, `detach`, `freeze`, `freeze_prefix`; MUTABLE-BYTES.md) |
+| `stdlib/abi.bot` | the ABI numeric domains `std::abi::I8` ... `std::abi::Usize` (ordinary Int values with a proven foreign-interface domain `std::abi::I8Value` ... `std::abi::UsizeValue`, not fixed-width arithmetic), their checked creators `std::abi::i8` ... `std::abi::usize` and errors `AbiIntegerBelowRange`/`AbiIntegerAboveRange` (ABI-NUMERIC-DOMAINS.md) |
+| `stdlib/abi/bytes.bot` | the ABI memory values, both owned by this one module (the single-owner rule of OPAQUE-STRUCTS.md, so they convert into each other without a public accessor): `std::abi::bytes::Bytes`, immutable, opaque over contiguous byte storage (`from_list`, `length`; ABI-BYTES.md), and `std::abi::bytes::MutableBytes`, its writable counterpart, a *value* whose copies are independent (`zeroed`, `from_bytes`, `mutable_length`, `replace`, `detach`, `freeze`, `freeze_prefix`; MUTABLE-BYTES.md) |
 | `hir/imports.tcl` | the import environments of a compilation: which namespaces and short type names each file's header imported (IMPORTS.md) |
-| `lib/binary.bot` | the `binary` namespace of fixed binary layouts: the scalar field domains `binary::U8` ... `U64`, `binary::I8` ... `I64` beside the intrinsics `parse`, `emit`, `layout_length`, `layout_alignment` (BINARY-LAYOUT.md) |
-| `lib/linux.bot` | `linux::write(fd, data)`: one `write(2)` syscall over an `abi::bytes::Bytes`, the kernel's raw signed result as an Int (ABI-BYTES.md); `linux::read(fd, data)`: one `read(2)` into the caller's `abi::bytes::MutableBytes` (copied: the caller's value is never changed), returning a `linux::ReadResult` of the raw `ssize_t` and the updated buffer (MUTABLE-BYTES.md); one source on every architecture, over `linux::sys` |
-| `lib/linux/sys.x86_64.bot`, `lib/linux/sys.aarch64.bot` | `linux::sys`, an architecture-specific module (the compilation target's architecture picks the file; for a Linux target only: every `linux` namespace is the Linux platform's, UNSUPPORTED-PLATFORM for another operating system's target, MACOS-AARCH64-MILESTONE-2.md): `write` and `read` as one syscall each through that architecture's transport, with its syscall numbers and registers (LINUX-SYSCALL-TRANSPORTS.md) |
-| `lib/linux/io.bot` | `linux::io::LinuxIO`, the process's standard I/O as one opaque context over three opaque `FileDescriptor` tokens; `create()`, and the contextual `write`, `write_error`, `read` over `linux::write` / `linux::read` (CONTEXTS.md); `write_text`/`write_error_text`, LinuxIO's implementation of `io::IO`, completing short writes (CONTEXT-TRAITS.md) |
-| `lib/io.bot` | the portable text output: the context trait `io::IO`, `WriteFailed`, `io::print`, `print_line`, `write_error`, `write_error_line` (CONTEXT-TRAITS.md) |
-| `lib/io/path.bot` | the portable textual path trait `io::path::Path` (`concat`, `text`) and `NotAPath` (CONTEXT-TRAITS.md) |
-| `lib/linux/path.bot` | `linux::path::LinuxPath`, a refinement of str (non-empty, no U+0000): `valid?`, `validate`, `concat`, `text` (CONTEXT-TRAITS.md) |
-| `lib/abi/x86_64.bot` | `abi::x86_64::Register64`, the x86-64 register word as a transport value, and its two Int conversions (LINUX-X86-64-SYSCALL.md); `from_i8` ... `from_usize` encode ABI numeric values as register words, sign- or zero-extended (ABI-NUMERIC-DOMAINS.md) |
-| `lib/abi/aarch64.bot` | `abi::aarch64::Register64` and its conversions: the same layer for AArch64, bit for bit the same encoding (LINUX-SYSCALL-TRANSPORTS.md) |
+| `stdlib/binary.bot` | the `binary` namespace of fixed binary layouts: the scalar field domains `std::binary::U8` ... `U64`, `std::binary::I8` ... `I64` beside the intrinsics `parse`, `emit`, `layout_length`, `layout_alignment` (BINARY-LAYOUT.md) |
+| `stdlib/linux.bot` | `std::linux::write(fd, data)`: one `write(2)` syscall over an `std::abi::bytes::Bytes`, the kernel's raw signed result as an Int (ABI-BYTES.md); `std::linux::read(fd, data)`: one `read(2)` into the caller's `std::abi::bytes::MutableBytes` (copied: the caller's value is never changed), returning a `std::linux::ReadResult` of the raw `ssize_t` and the updated buffer (MUTABLE-BYTES.md); one source on every architecture, over `std::linux::sys` |
+| `stdlib/linux/sys.x86_64.bot`, `stdlib/linux/sys.aarch64.bot` | `std::linux::sys`, an architecture-specific module (the compilation target's architecture picks the file; for a Linux target only: every `linux` namespace is the Linux platform's, UNSUPPORTED-PLATFORM for another operating system's target, MACOS-AARCH64-MILESTONE-2.md): `write` and `read` as one syscall each through that architecture's transport, with its syscall numbers and registers (LINUX-SYSCALL-TRANSPORTS.md) |
+| `stdlib/linux/io.bot` | `std::linux::io::LinuxIO`, the process's standard I/O as one opaque context over three opaque `FileDescriptor` tokens; `create()`, and the contextual `write`, `write_error`, `read` over `std::linux::write` / `std::linux::read` (CONTEXTS.md); `write_text`/`write_error_text`, LinuxIO's implementation of `std::io::IO`, completing short writes (CONTEXT-TRAITS.md) |
+| `stdlib/io.bot` | the portable text output: the context trait `std::io::IO`, `WriteFailed`, `std::io::print`, `print_line`, `write_error`, `write_error_line` (CONTEXT-TRAITS.md) |
+| `stdlib/io/path.bot` | the portable textual path trait `std::io::path::Path` (`concat`, `text`) and `NotAPath` (CONTEXT-TRAITS.md) |
+| `stdlib/linux/path.bot` | `std::linux::path::LinuxPath`, a refinement of str (non-empty, no U+0000): `valid?`, `validate`, `concat`, `text` (CONTEXT-TRAITS.md) |
+| `stdlib/abi/x86_64.bot` | `std::abi::x86_64::Register64`, the x86-64 register word as a transport value, and its two Int conversions (LINUX-X86-64-SYSCALL.md); `from_i8` ... `from_usize` encode ABI numeric values as register words, sign- or zero-extended (ABI-NUMERIC-DOMAINS.md) |
+| `stdlib/abi/aarch64.bot` | `std::abi::aarch64::Register64` and its conversions: the same layer for AArch64, bit for bit the same encoding (LINUX-SYSCALL-TRANSPORTS.md) |
 | `native/src/codegen/` | the `Backend` interface; NIR → Cranelift IR for JIT and object files |
 | `surface/lexer.tcl` | source → tokens, indentation → `INDENT`/`DEDENT` |
 | `surface/parser.tcl` | tokens → surface AST (recursive descent) |
@@ -1023,8 +1023,8 @@ the kind) and contract (to `any`).
 
 `hir::types::lub`, `narrow` and `kindOf` handle the extra forms themselves
 and delegate everything else to `core::type`. For example,
-`kindOf {refined str {web::Emailish}}` is `str`, and narrowing `str` by
-`web::Emailish` gives `{refined str {web::Emailish}}`. None of these forms mention a
+`kindOf {refined str {std::web::Emailish}}` is `str`, and narrowing `str` by
+`std::web::Emailish` gives `{refined str {std::web::Emailish}}`. None of these forms mention a
 representation: the compiler maps a block's `EXPR` to the proc it generates.
 
 **Where types come from.**
@@ -1033,12 +1033,12 @@ representation: the compiler maps a block's `EXPR` to the proc it generates.
 * **Root constants** in program mode: `+` has type `{native +}`, and `true`
   has type `bool` (and, as an `if` condition, decides the branch).
 * **Native signatures** (§8): a call of `-` has type `int`, and a call of
-  `str::length` has type `int`.
+  `std::str::length` has type `int`.
 * **Immutability:** a binding has the type of the expression it was bound
   to, and keeps it.
 * **Refinements:** inside the `then` branch of `(if (call (ref integer?) (ref x)) …)`,
-  `x` is `int`. Inside the `then` branch of `if web::emailish?(x):`, it's
-  `{refined str {web::Emailish}}`: the function's proof contract (`proves v:
+  `x` is `int`. Inside the `then` branch of `if std::web::emailish?(x):`, it's
+  `{refined str {std::web::Emailish}}`: the function's proof contract (`proves v:
   Emailish`, §14) says what its true result proves. Nested predicates
   accumulate facts. As in the interpreter, only arguments that are plain
   `(ref NAME)` are refined (an immutable alias's root value too), and a
@@ -1070,7 +1070,7 @@ representation: the compiler maps a block's `EXPR` to the proc it generates.
   `hir/semantic.tcl`): a call of an exact block whose argument types say more
   than the block's own entry types is typed with the result of analyzing the
   block's ordinary body under those types (`identity(m : MutableArray[str])` is
-  `MutableArray[str]`, `first(List[int])` is `int`, `list::find(List[str], p)`
+  `MutableArray[str]`, `first(List[int])` is `int`, `std::list::find(List[str], p)`
   is `str`), with no generic syntax and no change to the function's own
   contract. A body that is invalid for one call's types (an untyped writer of an
   `int` into a `MutableArray[str]`) makes that *call* a compile-time error, not
@@ -1154,8 +1154,8 @@ Native type contracts are checked on generic native calls, which costs
 compiled `sum-refined` roughly 10%; inlined intrinsics and type tests are
 unaffected.
 
-`bench/refined-checks.bot` repeats `web::emailish?` and checks
-`web::uri_query_value?`; the repeated `web::emailish?` call, inside the true
+`bench/refined-checks.bot` repeats `std::web::emailish?` and checks
+`std::web::uri_query_value?`; the repeated `std::web::emailish?` call, inside the true
 branch of the first one, is decided and disappears from the generated code
 (REFINEMENT-VALUES.md). (Its Core-IR predecessor `refined-checks.ir`, over
 the removed `Emailish?`/`UriQueryValue?` type-test natives, went from
@@ -1174,8 +1174,8 @@ specification; the compiler consumes the same definitions.
 | `any` | every value |
 | `{refined BASE {NAME…}}` | values of kind `BASE` that satisfy every named type |
 
-A registered name on its own is shorthand: `web::Emailish` means
-`{refined str {web::Emailish}}`. `core::type::normalize` gives the canonical
+A registered name on its own is shorthand: `std::web::Emailish` means
+`{refined str {std::web::Emailish}}`. `core::type::normalize` gives the canonical
 form, with names sorted and unique, and every registry stores canonical types.
 
 **Named types** come in two kinds:
@@ -1199,7 +1199,7 @@ fn emailish?(value: str) -> bool proves value: Emailish:
     ...
 
 fn consume(e: Emailish) -> int:
-    str::length(e)
+    std::str::length(e)
 
 fn ok(s: str) -> int:
     if emailish?(s):
@@ -1213,13 +1213,13 @@ required"): nothing converts a carrier value implicitly. A refined value is a
 value of its carrier everywhere a carrier is expected (forgetting is
 subtyping), and a refinement may refine another (`refined type Encoded =
 Query`), forgetting transitively. A refinement's identity is its declaring
-module's (`web::Emailish`), and only that exact module may declare a proof of
+module's (`std::web::Emailish`), and only that exact module may declare a proof of
 it (`REFINEMENT-MINT-AUTHORITY`; no import, parent or child namespace grants
 it). A carrier must be a scalar value type whose values never change (str,
 int, bool, UnicodeChar, an integer domain or another refinement over them;
 `REFINEMENT-CARRIER`), and a chain of refinements may not return to itself
-(`CYCLIC-REFINEMENT`). `lib/web.bot` declares `web::Emailish` and
-`web::UriQueryValue` this way; the compiler knows neither name.
+(`CYCLIC-REFINEMENT`). `stdlib/web.bot` declares `std::web::Emailish` and
+`std::web::UriQueryValue` this way; the compiler knows neither name.
 
 A **trait** (TRAITS.md) is not a value type at all. `trait Named: fn
 name(value: Named) -> str` declares a nominal, signature-only view that a
@@ -1235,7 +1235,7 @@ trait IO: fn write_text(text: str) -> unit errors WriteFailed` declares
 operations an installed context supplies; a function uses it through a
 context parameter (`fn print_line(text: str, context io: IO)`, then
 `io.write_text(...)`), the installed context that implements it
-(`linux::io::LinuxIO`, through `linux::io::write_text(text: str, context io:
+(`std::linux::io::LinuxIO`, through `std::linux::io::write_text(text: str, context io:
 LinuxIO)`) is selected statically at each top-level call -- exactly one, or
 `MISSING-CONTEXT` / `AMBIGUOUS-CONTEXT-IMPLEMENTATION` -- and every operation
 compiles to a direct call of that context's implementation.
@@ -1270,7 +1270,7 @@ outcome:
 
 ```
 (if (call (ref emailish?) (ref x))
-    (block {} … x : {refined str {web::Emailish}} …)
+    (block {} … x : {refined str {std::web::Emailish}} …)
     (block {} …))
 ```
 
@@ -1722,7 +1722,7 @@ add10(32)          # 42 (add captures x)
   endpoints is ever formed. Clauses compose in **lockstep** with `and`:
 
   ```
-  loop value in values and index from 0 to list::length(values):
+  loop value in values and index from 0 to std::list::length(values):
       [value, index]
   ```
 
@@ -1820,7 +1820,7 @@ add10(32)          # 42 (add captures x)
   call `f(value, a, b)`, allowed exactly when `f` is a function visible by
   that name at the call (under ordinary lexical resolution: a function or
   binding of the file, a root native; or a member `f` of a namespace the file
-  directly imports, `import list` -- IMPORTS.md; `mod::f` alone, without the
+  directly imports, `import std::list` -- IMPORTS.md; `mod::f` alone, without the
   import, never makes `f` visible) and the ordinary call is valid. When several
   distinct visible functions are candidates, each is tried as the ordinary call
   and exactly one must fit (`AMBIGUOUS-METHOD-CALL` otherwise; no precedence). It adds no declaration, receiver
@@ -1853,8 +1853,8 @@ add10(32)          # 42 (add captures x)
   builtin registry (`core::native::register -nomethod 1`). Five shipped
   natives are marked, each for a stated reason (REFACTOR-WARNINGS-CLEAN.md):
   `bit_and`, `bit_or` and `bit_xor` (symmetric operands: neither is a
-  receiver), `mutable_array::copy` (its first argument is the copy's
-  destination) and `mutable_array::create` (its first argument is the new
+  receiver), `std::mutable_array::copy` (its first argument is the copy's
+  destination) and `std::mutable_array::create` (its first argument is the new
   array's length). `nomethod` is a contextual word (an ordinary name everywhere but
   before `fn`). It is not a suppression pragma: it changes what call forms are
   *legal*, not what the compiler *reports* about a call. See
@@ -1895,11 +1895,11 @@ add10(32)          # 42 (add captures x)
   a statically assigned slot of the program's writable data, read with fixed
   PC-relative addressing where it is used: no hidden argument, no reserved
   register, no lookup. `context` and `with` are contextual words. The first
-  context is `linux::io::LinuxIO` (lib/linux/io.bot): `with context
-  linux::io::create()` then `linux::io::write(bytes)`. See CONTEXTS.md. A
+  context is `std::linux::io::LinuxIO` (stdlib/linux/io.bot): `with context
+  std::linux::io::create()` then `std::linux::io::write(bytes)`. See CONTEXTS.md. A
   context parameter may also have a *context trait* type (`context io:
-  io::IO`): the one installed context implementing it is selected statically,
-  and portable code (`io::print_line`) compiles to direct calls of its
+  std::io::IO`): the one installed context implementing it is selected statically,
+  and portable code (`std::io::print_line`) compiles to direct calls of its
   implementation. See CONTEXT-TRAITS.md.
 * **Struct destructuring.** `{user, expires: expiry} = result` binds fields
   of a struct value by name: it evaluates `result` once, then binds `user` to
@@ -1935,7 +1935,7 @@ add10(32)          # 42 (add captures x)
   list (`fn worker(a: str, resume Input) -> Event:`, inferred where the
   yields' uses determine it), or `step()` for the zero-message protocol. A
   completed handle keeps returning its final result and a failed one raises
-  its error again; `coroutine::done?(step)` (`import coroutine`) is `true`
+  its error again; `std::coroutine::done?(step)` (`import std::coroutine`) is `true`
   once it has done either.
   A handle is moved by `other = step` and never copied or stored; a function
   that may yield is called only inside a coroutine (`UNWRAPPED-YIELD`). A
@@ -1950,10 +1950,10 @@ add10(32)          # 42 (add captures x)
   compiler accepts the block where it stands, the boundary disappears and the
   block runs with its ordinary value and errors (the same HIR, code and
   machine code as the block written there); if it rejects it, the block
-  completes with the one payload error `compiler::CompilerError {code,
-  primary, related, message}` -- `code` a `compiler::DiagnosticCode` case
+  completes with the one payload error `std::compiler::CompilerError {code,
+  primary, related, message}` -- `code` a `std::compiler::DiagnosticCode` case
   (`Unbound`, `Type`, `UseAfterMove`, ...), `primary` the diagnostic's
-  `compiler::SourceLocation` -- none of the block runs, and the enclosing
+  `std::compiler::SourceLocation` -- none of the block runs, and the enclosing
   program still compiles. A rejected block's error is handled or declared
   like any other; a file using a static intrinsic imports `compiler`. It
   captures parsed syntax (a parse error in the block is the program's),
@@ -1992,49 +1992,53 @@ namespace): a namespace of ordinary function definitions and immutable value
 bindings. A value initializer executes once before the entry program, after
 its dependency modules and after earlier values in the same source file. It
 must be context-free and must retain a transitively immutable result; there
-are no mutable module bindings or top-level expression statements. A
-standard namespace `NAME` is exactly one file, `lib/NAME.bot`
-(`core::libraryDir`, the same directory as the existing `lib/NAME.tcl`
-native-library convention), or compiler intrinsics. A program's *own*
-modules are the files beside its entry file: the directory of the `.bot`
-file given to main.tcl (or the single executable) is the program's
-*application root*, and for an import the entry program or one of its own
-modules writes, a namespace that is not a standard one is the file
-`ROOT/NAME.bot` (IMPORTS.md, "Application modules"). So a program
-`main.bot` beside `game.bot` writes `import game`; nothing has to be copied
-into `lib/`. The rule is fixed -- the standard library first, then the
-application root, never the working directory, an environment variable or a
-parent directory -- so there is never more than one candidate file for a
-name: an application file named like a standard namespace that the
-application imports is a `MODULE-COLLISION` error, never a replacement of the
-standard one, and a standard module's own imports never see the application.
-The entry file is not a module (importing it is `SELF-IMPORT`). A missing
-module's `UNKNOWN-NAMESPACE` names the application path it looked for and then
-the standard library's. Once built, a program's HIR holds its modules: a
-`.hirx` (`-emit-hir-interchange`) runs, becomes NIR or an executable with no
-source directory at all. A
-nested namespace `a::b` (used as `a::b::symbol`) is the file
-`lib/a/b.bot` (an application's `ROOT/a/b.bot`), one directory per leading
-segment; `a` and `a::b` are unrelated
-modules (LINUX-X86-64-SYSCALL.md). A root native may itself carry a qualified
-name (`linux::abi::x86_64::syscall`): it is spelled like a module definition but
+are no mutable module bindings or top-level expression statements. Every
+standard namespace is under the compiler-owned root `std` (STD-NAMESPACE.md):
+`std::NAME` is exactly one file, `stdlib/NAME.bot` (`core::libraryDir`, the
+directory of the namespace `std` beside the compiler's own `core/`, which
+also holds the `stdlib/NAME.tcl` native libraries), or compiler intrinsics.
+A program's *own* modules are the files beside its entry file: the directory
+of the `.bot` file given to main.tcl (or the single executable) is the
+program's *application root*, and for an import the entry program or one of
+its own modules writes, any namespace outside `std` is the file
+`ROOT/NAME.bot` (IMPORTS.md, "Application modules"). So a program `main.bot`
+beside `game.bot` writes `import game`; nothing has to be copied into
+`stdlib/`. A path's first segment decides its origin and nothing searches --
+not the working directory, an environment variable or a parent directory --
+so there is never more than one candidate file for a name, and nothing falls
+back from one origin to the other: an application `list.bot` is the namespace
+`list`, which coexists with `std::list`; a missing application `list` is
+`UNKNOWN-NAMESPACE` (naming `std::list` as a hint, never choosing it); an
+application file `ROOT/std/NAME.bot` would be a standard namespace and is
+`RESERVED-NAMESPACE`; and a standard module's own imports never see the
+application. A leading `::` roots a path (`import ::std::list`,
+`::std::list::at(xs, 0)`, `x: ::std::abi::U8Value`): every path is resolved
+from the root, so it names what the unrooted path names, and it is never part
+of an identity. The entry file is not a module (importing it is
+`SELF-IMPORT`). Once built, a program's HIR holds its modules: a `.hirx`
+(`-emit-hir-interchange`) runs, becomes NIR or an executable with no source
+directory and no `stdlib/` at all. A nested namespace `std::a::b` (used as
+`std::a::b::symbol`) is the file `stdlib/a/b.bot` (an application's `a::b`
+is `ROOT/a/b.bot`), one directory per leading segment; `std::a` and
+`std::a::b` are unrelated modules (LINUX-X86-64-SYSCALL.md). A root native may itself carry a qualified
+name (`std::linux::abi::x86_64::syscall`): it is spelled like a module definition but
 resolves to the root native, and no module may define that member.
 Another file uses a module definition as `NAME::symbol`: an ordinary,
 non-aliasable qualified reference, allowed only after an exact `import NAME`
-in the file's header (IMPORTS.md: `import list`, `import abi::x86_64`,
-`import type abi::U8Value` for one type's short name; imports are exact and
+in the file's header (IMPORTS.md: `import std::list`, `import std::abi::x86_64`,
+`import type std::abi::U8Value` for one type's short name; imports are exact and
 not transitive, and are the only thing that loads a module, at most once). `::` is
 definition/provenance qualification, never confused with `.`'s (future)
 value-access syntax. Resolution fixes a stable binding identity before
 lowering; a module value does not use a runtime namespace lookup. See
 NATIVE-MODULES.md, MODULE-BINDINGS.md, and `surface/modules.tcl` for the
 implementation. Deliberately not built: namespace aliasing, import aliases
-or wildcards, re-exports, a search path beyond the two roots, or anything
-package-manager-shaped (manifests, dependencies, versions).
+or wildcards, re-exports, a prelude or implicit import, a search path, or
+anything package-manager-shaped (manifests, dependencies, versions).
 
 A file may start with `direct module` (DIRECT-MODULES.md): the module
 deliberately exposes raw, ambient authority -- it calls a direct module
-(a syscall transport such as `linux::abi::x86_64`, which the compiler
+(a syscall transport such as `std::linux::abi::x86_64`, which the compiler
 declares direct, or another file declared so) from a function that requires no context of its own. The
 compiler infers that from the calls and requires the declaration to agree
 both ways (DIRECT without it, STALE-DIRECT-MODULE when nothing needs it); a
@@ -2208,7 +2212,7 @@ compile them. None of them has a native shortcut.
 
 | File | Function | What it does |
 |------|----------|--------------|
-| `string_reverse.bot` | `reverse_chars(text)` | reverses the units `str::length`/`str::substring` count |
+| `string_reverse.bot` | `reverse_chars(text)` | reverses the units `std::str::length`/`std::str::substring` count |
 | `string_replace.bot` | `replace(haystack, needle, replacement)` | exact, left-to-right, non-overlapping replacement |
 | `csv.bot` | `csv_parse(text)` | valid-input CSV → list of records of field strings |
 | `matmul.bot` | `matmul(a, b)` | Int matrix product over nested lists |
@@ -2234,7 +2238,7 @@ compiler compiles from HIR, the same way as `examples/surface/`.
   field. `\r\n`, whitespace trimming and invalid-input diagnostics aren't
   supported.
 * `matmul` needs rectangular matrices with compatible, non-zero dimensions
-  (an empty `a` gives `[]`). An incompatible shape surfaces as `list::at`'s
+  (an empty `a` gives `[]`). An incompatible shape surfaces as `std::list::at`'s
   `IndexNotFound`, which `matmul` declares (`errors IndexNotFound`) and its
   caller handles. Entries are arbitrary-precision Ints.
 
@@ -2285,7 +2289,7 @@ Both backends produced the same value in every measured case.
 **Observations** (evidence for runtime and backend work, not defects to fix
 here):
 
-* **reverse**: each step copies the whole accumulator (`str::concat(character,
+* **reverse**: each step copies the whole accumulator (`std::str::concat(character,
   reversed)`), so the algorithm is O(n²) in characters copied. Up to 10,000
   characters the call overhead still dominates: times grow linearly.
   Before frames were reclaimed, the interpreter kept every intermediate
@@ -2293,13 +2297,13 @@ here):
 * **replace**: testing for a match allocates a needle-sized substring at
   every position, and every match copies the result so far. Times are
   linear here because matches are sparse.
-* **CSV**: `list::append` copies the list, so building n records costs O(n²).
+* **CSV**: `std::list::append` copies the list, so building n records costs O(n²).
   Going from 1,000 to 10,000 rows takes about 42× as long compiled: with
   call overhead reduced, the copying dominates.
   Quoted fields grow one character at a time. Every field scan allocates a
   two-element list just to return two values.
 * **matmul**: n³ work as expected, but every entry read goes through
-  `list::at` with a range check, and its result has no static kind. Every
+  `std::list::at` with a range check, and its result has no static kind. Every
   `*` and `+` is on arbitrary-precision Ints.
 * All four: every loop is a self tail call (`hir::aot` reports `tail`), so
   loop conversion or tail calls in a native backend matter more than any
@@ -2369,7 +2373,7 @@ target is a known native or a known Botlish function. None is closed:
 | `reverse_chars` | closed | guarded (4 blockers) | parameter kinds (`text`, `index`, `reversed`) | bigint, char-index, string-alloc, range-check, structural-equality, tagged-values |
 | `replace` | closed | guarded (12) | parameter kinds | bigint, char-index, string-alloc, range-check, tagged-values |
 | `csv_parse` | closed | guarded (17) | parameter kinds (15); list elements of the `[field, index]` pairs (2) | bigint, char-index, string-alloc, list-alloc, range-check, tagged-values |
-| `matmul` | closed | guarded (17) | parameter kinds (13); list elements feeding `*` and `list::at` (4) | bigint, list-alloc, range-check, structural-equality, tagged-values |
+| `matmul` | closed | guarded (17) | parameter kinds (13); list elements feeding `*` and `std::list::at` (4) | bigint, list-alloc, range-check, structural-equality, tagged-values |
 
 (Requirements are unions over each program's functions and exclude the
 sample expression's list literal.)
@@ -2382,7 +2386,7 @@ The blockers come from two sources, neither of them dynamic dispatch:
    parameter through (`reverse_from`'s accumulator, `dot`'s `total`) are
    `any`. Flow facts from native signatures already remove every later
    check on the same path.
-2. **Lists carry no element type.** `list::at` returns `any`. That affects
+2. **Lists carry no element type.** `std::list::at` returns `any`. That affects
    `matmul`'s entries and the pairs `csv` returns.
 
 This table is the *semantic* analysis, and it stays so: a function's HIR
@@ -2418,7 +2422,7 @@ and the element-type half of 5):
 4. Give HIR call targets for forward references to functions (done at the
    time; forward references were later removed from the language).
 5. Plan list element types and a growable or persistent list
-   representation. `list::append` copying is what makes CSV quadratic.
+   representation. `std::list::append` copying is what makes CSV quadratic.
 
 ## 20. The native backend (Cranelift)
 
@@ -2575,7 +2579,7 @@ compute with the target's floating-point instructions, add `0.0` (so negative
 zero is zero), check finiteness (`|r| <= f64::MAX`, failing with
 `NonFiniteFloat` through `rt_float_nonfinite`) and box the result
 (`rt_float_new`, the allocation and safepoint); `f64eq` compares the bits,
-`hash` hashes them. A C `double` (`ffi::c::Double`) is passed in the
+`hash` hashes them. A C `double` (`std::ffi::c::Double`) is passed in the
 target's floating-point registers and checked the same way when it returns.
 A **DecimalRounded** value is the same boxed binary64 under its own kind
 (`KIND_DECIMAL`, float-type code 1; `float DecimalRounded 0xBITS` in NIR):
@@ -2587,12 +2591,12 @@ for bit. A standalone executable prints its result without types, so a
 DecimalRounded value prints `<DecimalRounded>` there.
 
 **Strings** are UTF-8 with a cached character count and an ASCII flag.
-`str::length` and `str::substring` count Unicode scalar values, including
+`std::str::length` and `std::str::substring` count Unicode scalar values, including
 supplementary-plane characters as one unit each: ASCII strings are indexed
 in O(1), others by walking the characters. This matches Tcl 9, the Tcl
 reference implementation's required host (see this README's introduction),
 so the corpus tests (§18) exercise supplementary-plane characters like any
-other. `str::lowercase` is the Unicode 16 *simple* case mapping: each scalar maps
+other. `std::str::lowercase` is the Unicode 16 *simple* case mapping: each scalar maps
 to exactly one scalar through `UnicodeData.txt`'s simple lowercase column, so
 the character count never changes and the mapping ignores context and
 language. Consequences: `İ` (U+0130) lowercases to `i` (not the full mapping's
@@ -2609,7 +2613,7 @@ is planned for a `grapheme::` namespace, and Unicode 17 and later. The
 all-scalars comparison in `tests/native-tcl-unicode.test` fails if a Tcl or
 Rust upgrade changes any mapping.
 
-**Lists** are immutable vectors of values. `list::append` copies, as the
+**Lists** are immutable vectors of values. `std::list::append` copies, as the
 reference runtime does, so CSV's quadratic behavior is kept deliberately
 (§18).
 
@@ -2711,15 +2715,15 @@ evaluator's nested `try`/`finally` bodies in quadratic time).
 A program's output under main.tcl's `-backend cranelift` and
 `-backend cranelift-generic` is the program's own: `botlish-native` runs it
 with main.tcl's standard output and standard error (native::evalHir's
-`-output inherit`), so what it writes (`io::print_line`, `linux::io::write`)
+`-output inherit`), so what it writes (`std::io::print_line`, `std::linux::io::write`)
 appears as it writes it, byte for byte, between main.tcl's `== FILE
 (BACKEND)` line and its `value:` (or `error:`) line, exactly as a
 standalone executable writes it before printing its value; the driver's
 result comes back through a file of its own (`--result`), never through the
 program's output. A program that fails after printing keeps what it printed.
 `native::evalHir` without `-output` (the test suite, the tools) drops what a
-program writes. Printing needs the native backend: the only `io::IO`
-context, `linux::io::LinuxIO`, makes raw syscalls, which the Tcl backends
+program writes. Printing needs the native backend: the only `std::io::IO`
+context, `std::linux::io::LinuxIO`, makes raw syscalls, which the Tcl backends
 reject (`NATIVE-ONLY`).
 
 Memory management is temporary: a precise, non-moving mark-and-sweep
@@ -2825,17 +2829,17 @@ is string copying and collection, not checks.
 Where the time goes:
 
 * **reverse** and **replace** at large sizes are dominated by copying the
-  accumulator string on every `str::concat`: O(n²) bytes, most of them garbage
+  accumulator string on every `std::str::concat`: O(n²) bytes, most of them garbage
   at once. Collection frequency matters more than the copying itself: with
   a 32 MB minimum collection threshold, `string_replace` at 100 KB took
   146 ms, because new copies kept landing in cold memory; with 1 MB it takes
   about 80 ms (see `native/src/runtime/heap.rs`). A nursery or reference counting would do
   better. The helpers derive a result's character count and ASCII flag from
   the operands instead of rescanning.
-* **CSV** spends its time in `list::append` copies (quadratic in records)
+* **CSV** spends its time in `std::list::append` copies (quadratic in records)
   and in allocating the two-element `[field, index]` lists.
 * **matmul** runs mostly inline: small-Int fast paths for `*` and `+`, and
-  a `list::at` helper call with a range check per entry. Without guards it
+  a `std::list::at` helper call with a range check per entry. Without guards it
   is 1.2–1.3× faster.
 * Compile time is dominated by native lowering in Tcl for programs with
   large literals (the benchmark's matrices are source literals), and by
@@ -2994,10 +2998,10 @@ unchanged):
   `[[1, 2], [3, 4]]` is `list<list<int>>`, `[1, "a"]` is `list[int, str]`
   (a shape is kept only when it says more than the element type), and `[]`
   is `list<never>`.
-* `list::at(xs, i)` has the element type, or position i's type when `xs`
+* `std::list::at(xs, i)` has the element type, or position i's type when `xs`
   has a shape and `i` is an Int constant in range. An empty list's element
-  is not invented: `list::at([], 0)` is `any` (and fails with `IndexNotFound`).
-* `list::append(xs, x)` is `list<lub(ELEM, type of x)>`: `list<int>` stays
+  is not invented: `std::list::at([], 0)` is `any` (and fails with `IndexNotFound`).
+* `std::list::append(xs, x)` is `list<lub(ELEM, type of x)>`: `list<int>` stays
   `list<int>` with an Int, and becomes plain `list` with a String. Appending
   drops a shape.
 * lub joins element types and, for equal lengths, positions; plain `list`
@@ -3010,7 +3014,7 @@ The rules are not specific to the corpus's natives: a native declares how
 its result is built with `-result-shape` (`elements`, `element L I`,
 `append L V`; `core/native.tcl`), like `-runtime`, and nothing in the
 analysis knows a native by name. A list fact proves a kind, never an index:
-`list::at` still range-checks, and Int arithmetic keeps its overflow path.
+`std::list::at` still range-checks, and Int arithmetic keeps its overflow path.
 
 ### Guards and lowering
 
@@ -3021,11 +3025,11 @@ an instance's view), with the structural facts computed once
 representation blockers:
 
 * a parameter whose key type is a kind needs no guard;
-* a flow fact (`str::length(s)` proves `s : str`) or a refinement (`if
+* a flow fact (`std::str::length(s)` proves `s : str`) or a refinement (`if
   integer?(x)`) already removes later guards on the same path, in both
   modes, because the view is typed by the same inference;
 * a call result of a specialized callee has the callee's result type, and
-  `list::at` on `list<int>` gives an `int` that `*` doesn't check.
+  `std::list::at` on `list<int>` gives an `int` that `*` doesn't check.
 
 Native lowering (`native/lower.tcl`) emits one NIR function per instance it
 refers to, starting from the program: a direct call calls the instance the
@@ -3060,7 +3064,7 @@ always fail (known errors). A mismatch raises `NATIVE BUG`.
 Every used instance of every corpus program is closed, transitively. The 44
 parameter-kind guards go because every corpus function is called with known
 kinds; `csv`'s two element guards go because `[field, index]` is
-`list[str, int]` and `list::at(scanned, 1)` is an `int`; `matmul`'s four
+`list[str, int]` and `std::list::at(scanned, 1)` is an `int`; `matmul`'s four
 because the literal matrices are `list<list<int>>`. The generic functions
 stay guarded, and a caller passing, say, a matrix of Strings gets a different
 instance (or the generic one) with the checks.
@@ -3105,7 +3109,7 @@ func 1 "dot" ... instance="list<int>, list<list<int>>, int, int, int, int"
 end
 ```
 
-In `csv`, the specialized `scan_records` passes `list::at(scanned, 1)`, an
+In `csv`, the specialized `scan_records` passes `std::list::at(scanned, 1)`, an
 `int` from `list[list<str>, int]`, straight to its loop, and calls the
 specialized `scan_record` (`call 5`):
 
@@ -3155,7 +3159,7 @@ starting empty) add code. Machine code of the corpus files as written
 ### Known limitations
 
 * Closures over values are never specialized.
-* Positional shapes come only from literals; `list::at` uses a position only
+* Positional shapes come only from literals; `std::list::at` uses a position only
   for a constant index. There are no Result payload facts.
 * The limit counts instances in use at the moment a call is analyzed, so
   which calls get the generic instance at the limit depends on discovery
@@ -3171,7 +3175,7 @@ evidence:
 
 1. **Unboxing** of Ints proven small (range analysis for indices and
    counters): matmul's inner loop and every index in the string functions.
-2. **Transient builders** for `list::append` and string accumulation where
+2. **Transient builders** for `std::list::append` and string accumulation where
    the old value is provably dead (escape analysis), and **scalar
    replacement** of `[field, index]` pairs, whose shapes are now known.
 3. A nursery or reference counting for the string-copying cases, which
@@ -3230,7 +3234,7 @@ was already emitting `@ExprId` on nearly every instruction
 discarding it (`if c == '@' { break; }`). Capturing it into
 `Function::origins` and interning one `Site` per *compiled* allocating
 instruction (never per dynamic execution, so a hot loop's one static
-`str::concat` is one site regardless of iteration count) makes every allocation
+`std::str::concat` is one site regardless of iteration count) makes every allocation
 traceable to `{file line column}` (via `hir::aot::Location`, so the Rust
 backend itself never has to understand HIR) and to the runtime operation
 that caused it (`strcat` vs. `substr` vs. `listappend`, not just "a
@@ -3270,12 +3274,12 @@ cranelift`, summary mode, last of 3 runs):
 | matmul | 32×32 | 1,171 | 194.0 KB | 194.0 KB | 1 | 0 | 18,500 |
 
 This confirms §20's prose quantitatively and sharpens it: **reverse** and
-**replace** are almost entirely `str::concat`/`substr` String traffic (peak live
+**replace** are almost entirely `std::str::concat`/`substr` String traffic (peak live
 stays at 1.1–1.4 MB at their largest sizes tested -- 10,000 chars / 100 KB
 -- while *copied* bytes grow into the hundreds of megabytes: the
 accumulator is O(n) live at any instant but O(n²) copied over the run's
 lifetime, all through one or two sites). **CSV**'s allocation count is
-dominated by `list::append` (the 50 million list-element copies at 10,000
+dominated by `std::list::append` (the 50 million list-element copies at 10,000
 rows are almost all memmoving existing rows/fields forward one element at a
 time) rather than by the `[field, index]` pair lists §20 also names as a
 cost -- both are visible
@@ -3285,8 +3289,8 @@ of `native/lower.tcl`), so the only sites are the output rows' `listnew`
 calls, and no BigInt ever appears with these operands. The one surprise
 worth a follow-up look: from 1,000 to 10,000 rows (10×), object *count*
 scales near-linearly (79,571 → 834,585, 10.5×, as expected -- one
-`list::append` per field/row) but elements *copied* scales quadratically
-(516,540 → 50,165,040, 97×): `list::append`'s O(n) memmove on every call is
+`std::list::append` per field/row) but elements *copied* scales quadratically
+(516,540 → 50,165,040, 97×): `std::list::append`'s O(n) memmove on every call is
 the entire explanation, and a transient builder (§21's item 2) should turn
 it into O(n) total, not just fewer guards.
 
@@ -3405,12 +3409,12 @@ that no longer fires, or a drifted location fails it -- and compiles every
 program and loader without a manifest entry under `-warnings error`. A
 library's findings print for every program that loads it (there is no "system
 header" notion); since the refactor only two modules carry any, all
-`ONE-CHAR-STRING-LITERAL`: `lib/web.bot` (23: its hexadecimal digit table,
-`"%"`, and the local-part and label classes beside `str::is_tcl_alnum`) and
-`lib/linux/path.bot` (2: the joining `"/"`, and an index the completion proof
-does not cover). `lib/io.bot`'s line operations append their newline as a
-character (`str::append_char`), so every program that prints through `io`
-or `linux::io` is free of library findings. A program that loads neither
+`ONE-CHAR-STRING-LITERAL`: `stdlib/web.bot` (23: its hexadecimal digit table,
+`"%"`, and the local-part and label classes beside `std::str::is_tcl_alnum`) and
+`stdlib/linux/path.bot` (2: the joining `"/"`, and an index the completion proof
+does not cover). `stdlib/io.bot`'s line operations append their newline as a
+character (`std::str::append_char`), so every program that prints through `io`
+or `std::linux::io` is free of library findings. A program that loads neither
 module compiles under `-warnings error` whenever its own code is clean.
 
 **Botlish does not currently provide GCC/Clang-style `-Wfoo` controls** (no
@@ -3503,11 +3507,11 @@ fn scan_quoted(text, index, field) errors LowerUnderrun:
     character = peek(text, index)
     if character == "\"":
         if peek(text, index + 1) == "\"":
-            return scan_quoted(text, index + 2, str::concat(field, "\""))
+            return scan_quoted(text, index + 2, std::str::concat(field, "\""))
 
         return [field, index + 1]
 
-    scan_quoted(text, index + 1, str::concat(field, character))
+    scan_quoted(text, index + 1, std::str::concat(field, character))
 ```
 ```
 f.bot:4:13: warning: a 2-element list is returned from all 3 value exits; a struct value names the parts (FIXED-ARITY-LIST-RETURN)
@@ -3645,7 +3649,7 @@ f.bot:5:21: warning: the String literal `"\""` is one character long; a single c
 ```
 
 The fact is the literal's own exact value (`hir::exact::Of`), measured as
-`str::length` measures: escapes are resolved (`"\n"` and `"\""` are one
+`std::str::length` measures: escapes are resolved (`"\n"` and `"\""` are one
 character), a supplementary-plane character is one, and `e` plus a combining
 accent is two. The empty String and Strings of two or more characters are
 silent, and so is a character literal. **Literals only**: a binding's written

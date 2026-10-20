@@ -17,13 +17,13 @@
 # dependency, declared like any other library of the link plan.
 #
 # An ordinary module: both pointers are noescape, so nothing here is direct.
-import ffi::c
+import std::ffi::c
 
 extern c library "crypto"
 extern c library "stdc++"
 
 extern c fn SHA256 named "botlish_bssl_SHA256"(
-    data: ffi::c::Ptr[ffi::c::UChar] read noescape,
-    len: ffi::c::ULong,
-    out: ffi::c::Ptr[ffi::c::UChar] write noescape
-) -> ffi::c::Ptr[ffi::c::UChar] alias out
+    data: std::ffi::c::Ptr[std::ffi::c::UChar] read noescape,
+    len: std::ffi::c::ULong,
+    out: std::ffi::c::Ptr[std::ffi::c::UChar] write noescape
+) -> std::ffi::c::Ptr[std::ffi::c::UChar] alias out

@@ -19,24 +19,24 @@
 # so an unterminated quoted field yields the text accumulated so far and
 # the parse terminates. Valid inputs parse exactly as before (the new
 # branch fires only where the old code recursed forever).
-import list
-import str
+import std::list
+import std::str
 
 # The character at index as text, or "" past the end.
 fn peek(text, index) errors LowerUnderrun:
-    if index >= str::length(text):
+    if index >= std::str::length(text):
         return ""
 
     text.substring(index, index + 1)
 
 # true if the character at index is a double quote (false past the end).
 fn quote_at?(text, index) errors IndexNotFound:
-    index < str::length(text) and text.char_at(index) == '"'
+    index < std::str::length(text) and text.char_at(index) == '"'
 
 # An unquoted field that started at start, scanned up to index:
 # {field, index of the "," or "\n" that ends it, or the end}.
 fn scan_unquoted(text, start, index) errors IndexNotFound, LowerUnderrun, UpperOverrun:
-    if index < str::length(text):
+    if index < std::str::length(text):
         character = text.char_at(index)
         if character != ',' and character != '\n':
             return text.scan_unquoted(start, index + 1)
@@ -49,7 +49,7 @@ fn scan_unquoted(text, start, index) errors IndexNotFound, LowerUnderrun, UpperO
 # FZ-001: end of text ends the field (the example's original walked past
 # the end forever on an unterminated quote).
 fn scan_quoted(text, index, field) errors IndexNotFound, LowerUnderrun:
-    if index >= str::length(text):
+    if index >= std::str::length(text):
         return {field: field, index: index}
 
     character = text.peek(index)
@@ -74,7 +74,7 @@ fn scan_record(text, index, fields) errors IndexNotFound, LowerUnderrun, UpperOv
     scanned = text.scan_field(index)
     more = fields.append(scanned.field)
     stop = scanned.index
-    if stop < str::length(text):
+    if stop < std::str::length(text):
         delimiter = text.char_at(stop)
         if delimiter == ',':
             return text.scan_record(stop + 1, more)
@@ -86,7 +86,7 @@ fn scan_record(text, index, fields) errors IndexNotFound, LowerUnderrun, UpperOv
 
 # The records from index on, appended to records.
 fn scan_records(text, index, records) errors IndexNotFound, LowerUnderrun, UpperOverrun:
-    if index >= str::length(text):
+    if index >= std::str::length(text):
         return records
 
     scanned = text.scan_record(index, [])
@@ -99,8 +99,8 @@ args = argv():
     on InvalidArgumentEncoding:
         []
 
-text = if list::length(args) > 1:
-    list::get(args, 1, "")
+text = if std::list::length(args) > 1:
+    std::list::get(args, 1, "")
 else:
     ""
 

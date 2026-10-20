@@ -4,7 +4,7 @@
   blockers: none
   runtime:  list-alloc, range-check
 
-list::any?: open   [e2, line 59:8]
+std::list::any?: open   [e2, line 59:8]
   params:   xs : any, predicate : any   result: bool
   dispatch: open -- dynamic calls: 1
   blockers:
@@ -13,7 +13,7 @@ list::any?: open   [e2, line 59:8]
     line 61:12  e7  DynamicCall: the callee has no static kind: native, block or not callable is decided at run time
   runtime:  dynamic-call, tagged-values
 
-list::all?: open   [e13, line 65:8]
+std::list::all?: open   [e13, line 65:8]
   params:   xs : any, predicate : any   result: bool
   dispatch: open -- dynamic calls: 1
   blockers:
@@ -22,7 +22,7 @@ list::all?: open   [e13, line 65:8]
     line 67:16  e19  DynamicCall: the callee has no static kind: native, block or not callable is decided at run time
   runtime:  dynamic-call, tagged-values
 
-list::none?: open   [e27, line 71:9]
+std::list::none?: open   [e27, line 71:9]
   params:   xs : any, predicate : any   result: bool
   dispatch: open -- dynamic calls: 1
   blockers:
@@ -31,7 +31,7 @@ list::none?: open   [e27, line 71:9]
     line 73:12  e32  DynamicCall: the callee has no static kind: native, block or not callable is decided at run time
   runtime:  dynamic-call, tagged-values
 
-list::find: open   [e38, line 77:8]
+std::list::find: open   [e38, line 77:8]
   params:   xs : any, predicate : any   result: any
   dispatch: open -- dynamic calls: 1
   blockers:
@@ -95,7 +95,7 @@ valid_chars: closed (transitively open)   [e153, line 68:15]
 fully_alnum?: closed (transitively open)   [e163, line 71:16]
   params:   token : any   result: bool
   captures: chars_of (block)
-  dispatch: closed -- natives: list; functions: chars_of (non-tail), list::all? (tail)
+  dispatch: closed -- natives: list; functions: chars_of (non-tail), std::list::all? (tail)
   blockers: none
   runtime:  list-alloc
 

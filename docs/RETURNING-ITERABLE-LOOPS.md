@@ -68,7 +68,7 @@ Unchanged: `ys = loop x in xs: BODY`. No new keyword; no `collect`/`map`/
 
 Every normal per-iteration body value is retained, in order, into one
 output List — the general collection-transformation primitive items 1 and
-83 describe, replacing `map`/`filter`/`filter_map` outright (`list::any?`/
+83 describe, replacing `map`/`filter`/`filter_map` outright (`std::list::any?`/
 `all?`/`none?`/`find` below are the only higher-order helpers this
 milestone adds, and each is a genuine search/reduction, not a
 transformation `loop x in xs: ...` could not already express directly).
@@ -104,7 +104,7 @@ contributes that value to the result, in order. `[2, 4, 6]` for `loop x in
 
 Unchanged: contributes nothing for that iteration, moves on. The ordinary
 Botlish filtering idiom (item 4): `loop x in xs: if x % 2 == 0: continue \n
-x`. No `list::filter` exists or is needed.
+x`. No `std::list::filter` exists or is needed.
 
 ## `break` semantics — the actual redefinition
 
@@ -125,8 +125,8 @@ This was a genuine breaking change to already-shipped, tested, audited
 behavior, so it was reported to the user (per the milestone's own item
 6/78 stop condition) before being made; the user confirmed redefining
 listloop's break semantics to match this milestone's spec. No shipped
-`lib/*.bot` or `examples/` source used `break`/`break VALUE` inside a
-`loop x in ...:` (`byte::set`'s own listloop has no break at all), so the
+`stdlib/*.bot` or `examples/` source used `break`/`break VALUE` inside a
+`loop x in ...:` (`std::byte::set`'s own listloop has no break at all), so the
 change's real-code blast radius was zero; the cost was entirely in
 `tests/loop-in.test`'s own adversarial-soundness section (rewritten, see
 below) and `LISTLOOP-BREAK-TYPE-SOUNDNESS.md` (marked superseded, its own
@@ -353,11 +353,11 @@ allocationReport`, plus generated-NIR instruction occurrences
 | Retained, continue-shaped (skip `x==2` over `[1, 2, 3, 4]`) | 5 | 2 | 1 | 0 |
 | Retained, break-shaped (break at `x==3` over `[1, 2, 3, 4]`) | 4 | 2 | 1 | 0 |
 | Discarded traversal (same transform, result unused) | 1 | 1 | 0 | 0 |
-| `list::any?([1, 3, 4], is_even)` | 1 | 1 | 0 | 1 |
-| `list::all?([2, 4, 6], is_even)` | 1 | 1 | 0 | 1 |
-| `list::none?([1, 3, 5], is_even)` | 1 | 1 | 0 | 1 |
-| `list::find([5, 6, 7], is_even)` (successful) | 1 | 1 | 0 | 1 |
-| `list::find([1, 3, 5], is_even)` (unsuccessful) | n/a* | 1 | 0 | 1 |
+| `std::list::any?([1, 3, 4], is_even)` | 1 | 1 | 0 | 1 |
+| `std::list::all?([2, 4, 6], is_even)` | 1 | 1 | 0 | 1 |
+| `std::list::none?([1, 3, 5], is_even)` | 1 | 1 | 0 | 1 |
+| `std::list::find([5, 6, 7], is_even)` (successful) | 1 | 1 | 0 | 1 |
+| `std::list::find([1, 3, 5], is_even)` (unsuccessful) | n/a* | 1 | 0 | 1 |
 
 \* The unsuccessful `find` case genuinely raises `NotFound`, so running it
 to completion for a runtime allocation report just raises that same error;
@@ -413,9 +413,9 @@ tests) are parity-checked across all four backends via the existing
 `loopParity`/`listlibParity` helpers. No discrepancy was found on any of
 them.
 
-## `list::any?`/`all?`/`none?`/`find`
+## `std::list::any?`/`all?`/`none?`/`find`
 
-`lib/list.bot`, a new stdlib module (`namespace list`), ordinary Botlish —
+`stdlib/list.bot`, a new stdlib module (`namespace list`), ordinary Botlish —
 none implemented as natives (item 39). Each is built directly on `loop x
 in xs:`, using only `return`/`fail` for short-circuiting; none of the
 four's own loop result is ever read.
@@ -459,14 +459,14 @@ way. Confirmed directly: with `continue` removed, every one of
 short-circuiting via a poison trailing element, a native predicate, and
 four-way parity) still passes unchanged, and the native discarded-result
 optimization still applies identically (`tests/native-listloop.test`'s
-`list::any?`/`all?`/`none?`/`find` allocation pins are unaffected by the
+`std::list::any?`/`all?`/`none?`/`find` allocation pins are unaffected by the
 presence or absence of `continue`, since `hir::aot::context`'s own
 `discarded` fact is purely about statement position, independent of a
 loop body's own control flow).
 
 `error NotFound` is the checked absence convention `find` uses (item 63):
 no existing generic/List "not found" error existed in this codebase to
-reuse, so this is the smallest new one, following exactly `lib/byte.bot`'s
+reuse, so this is the smallest new one, following exactly `stdlib/byte.bot`'s
 own `error BelowRange`/`AboveRange` convention (a bare, undecorated
 PascalCase error name, declared in the same namespace). An empty `xs` and
 a nonempty `xs` with no match both fail identically
@@ -493,7 +493,7 @@ a nonempty `xs` with no match both fail identically
 
 31. `predicate(x)` in each of the four helpers lowers to `callvalue`: yes
     — `predicate` is an untyped parameter, so every call through it is an
-    ordinary dynamic call, exactly like `lib/web.bot`'s pre-existing
+    ordinary dynamic call, exactly like `stdlib/web.bot`'s pre-existing
     `scan_while`'s own `predicate(char_at(i))`. No special-casing.
 32. New static `callvalue` sites: exactly 4 — one `predicate(x)` call site
     per helper (`any?`, `all?`, `none?`, `find`), each a single static call
@@ -506,7 +506,7 @@ a nonempty `xs` with no match both fail identically
     parameter: yes, by construction, at every one of `tests/list-stdlib.
     test`'s call sites — `is_even` (an ordinary Botlish function) and
     `is_tcl_alpha` (a native) are both statically exact, nameable targets
-    at their own call sites (`list::any?([...], is_even)`), but that
+    at their own call sites (`std::list::any?([...], is_even)`), but that
     exactness is not threaded through `any?`'s own `predicate` parameter:
     inside `any?`'s body, `predicate(x)` sees only "some untyped
     callable", not "exactly `is_even`".
@@ -515,13 +515,13 @@ a nonempty `xs` with no match both fail identically
 No optimization of any of this was attempted (items 47, 81) — this census
 is deliberately left as the honest baseline the next milestone's
 higher-order/callable-provenance work is meant to build on, exactly as
-`web::emailish?`'s own `scan_while` predicate call was left untouched
+`std::web::emailish?`'s own `scan_while` predicate call was left untouched
 (item 60; unmodified this milestone, confirmed unchanged below).
 
 ## Canonical performance controls
 
 `fib`, `loop-count`, `sum-refined`, `refined-checks`, and
-`web::emailish?`'s own `scan_while` remain untouched by every change in
+`std::web::emailish?`'s own `scan_while` remain untouched by every change in
 this milestone: the interpreter change is a one-line swap inside
 `op-listloop`'s own `break` case (not reached by any of these workloads,
 none of which use a listloop `break` at all); the Tcl-backend change is
@@ -598,7 +598,7 @@ the three new files) = 2607.
   the element count; the allocation tables above record the original
   lowering.
 - **The Tcl compile backend does not implement the discarded-result
-  optimization.** `list::any?`/`all?`/`none?`/`find` (and any other
+  optimization.** `std::list::any?`/`all?`/`none?`/`find` (and any other
   discarded listloop) still build and discard a real Tcl-level
   accumulator List under the `compile` backend — only the native backend
   elides it. See "Tcl compile lowering" above for the reasoning (item 20's
@@ -607,7 +607,7 @@ the three new files) = 2607.
 - **The Tcl compile backend does not use a literal `lmap`**, despite item
   24's suggestion that it would fit these semantics cleanly — see "Tcl
   compile lowering" above.
-- **`web::emailish?`'s own `scan_while` `callvalue` remains untouched, as
+- **`std::web::emailish?`'s own `scan_while` `callvalue` remains untouched, as
   required** (item 60) — not a deficit, confirmed here for completeness.
 
 ## Readiness for real-world callable harnesses

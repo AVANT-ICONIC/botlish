@@ -23,5 +23,5 @@
 | `scan_while<any, block(e239)>` | - | 440 |
 | `scan_while<any, native(is_tcl_alpha)>` | - | 456 |
 | `scan_while<generic>` | 496 | - |
-| `web::emailish?<str>` | 601 | 379 |
+| `std::web::emailish?<str>` | 601 | 379 |
 

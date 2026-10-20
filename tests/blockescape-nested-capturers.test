@@ -27,8 +27,8 @@ proc dedent {text} {
 # rec calls itself directly, and a closure nested in it puts rec in a List
 # and calls it dynamically with a bignum.
 set selfShape {
-    import list
-    import str
+    import std::list
+    import std::str
     fn h(x):
         x + 1
     fn other(a, p):
@@ -37,7 +37,7 @@ set selfShape {
         fn rec(n, p):
             fn bounce(m):
                 fs = [other, rec]
-                g = list::at(fs, k)
+                g = std::list::at(fs, k)
                 g(m * 10000000000000000000000, p)
             if n > 100:
                 h(n)
@@ -52,14 +52,14 @@ set selfShape {
                             h(n) + rec(n - 1, p)
                         else:
                             0
-        rec(10, str::is_tcl_alpha)
+        rec(10, std::str::is_tcl_alpha)
     outer(1)
 }
 
 # c calls its sibling f directly, and a closure nested in c puts f in a List.
 set siblingShape {
-    import list
-    import str
+    import std::list
+    import std::str
     fn h(x):
         x + 1
     fn other(a, p):
@@ -73,10 +73,10 @@ set siblingShape {
         fn c(m, p):
             fn d(z):
                 fs = [other, f]
-                g = list::at(fs, k)
+                g = std::list::at(fs, k)
                 g(z * 10000000000000000000000, p)
             f(m, p) + d(m)
-        c(7, str::is_tcl_alpha)
+        c(7, std::str::is_tcl_alpha)
     outer(1)
 }
 

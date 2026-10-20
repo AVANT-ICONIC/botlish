@@ -1,4 +1,4 @@
-# golden-framework.test -- the Botlish golden test framework, lib/test.bot
+# golden-framework.test -- the Botlish golden test framework, stdlib/test.bot
 # (GOLDEN-TEST-FRAMEWORK.md): an ordinary library, tested here like any other
 # Botlish program. Every suite program below is compiled once and run on the
 # Tcl interpreter, the Tcl compiler and Cranelift, and the backends must
@@ -156,9 +156,9 @@ proc withGcStress {script} {
 # ---------------------------------------------------------------------------
 # The basic shape: one suite, every kind of verdict
 
-set gfMixed {import compiler
-import list
-import test
+set gfMixed {import std::compiler
+import std::list
+import std::test
 
 error Boom
 
@@ -168,42 +168,42 @@ fn boom(x: int) -> int errors Boom:
     x
 
 fn register_mixed():
-    fn adds() errors compiler::CompilerError:
+    fn adds() errors std::compiler::CompilerError:
         static compile:
             20 + 22
-    test::value("adds", 42, adds)
-    fn off_by_one() errors compiler::CompilerError:
+    std::test::value("adds", 42, adds)
+    fn off_by_one() errors std::compiler::CompilerError:
         static compile:
             20 + 21
-    test::value("off by one", 42, off_by_one)
-    fn unbound() errors compiler::CompilerError:
+    std::test::value("off by one", 42, off_by_one)
+    fn unbound() errors std::compiler::CompilerError:
         static compile:
             missing + 1
-    test::rejects("unbound", compiler::DiagnosticCode::Unbound, unbound)
-    test::rejects("unbound, expecting Type", compiler::DiagnosticCode::Type, unbound)
-    test::rejects_at("unbound at its column", compiler::DiagnosticCode::Unbound, 23, 13, unbound)
-    test::rejects_at("unbound, wrong column", compiler::DiagnosticCode::Unbound, 23, 14, unbound)
-    test::rejects_any("unbound, any diagnostic", unbound)
-    test::value("value expected, block rejected", 1, unbound)
-    test::rejects("rejection expected, block accepted", compiler::DiagnosticCode::Unbound, adds)
-    test::rejects_at("located rejection expected, block accepted", compiler::DiagnosticCode::Unbound, 23, 13, adds)
-    test::rejects_any("any rejection expected, block accepted", adds)
-    fn lists() errors compiler::CompilerError:
+    std::test::rejects("unbound", std::compiler::DiagnosticCode::Unbound, unbound)
+    std::test::rejects("unbound, expecting Type", std::compiler::DiagnosticCode::Type, unbound)
+    std::test::rejects_at("unbound at its column", std::compiler::DiagnosticCode::Unbound, 23, 13, unbound)
+    std::test::rejects_at("unbound, wrong column", std::compiler::DiagnosticCode::Unbound, 23, 14, unbound)
+    std::test::rejects_any("unbound, any diagnostic", unbound)
+    std::test::value("value expected, block rejected", 1, unbound)
+    std::test::rejects("rejection expected, block accepted", std::compiler::DiagnosticCode::Unbound, adds)
+    std::test::rejects_at("located rejection expected, block accepted", std::compiler::DiagnosticCode::Unbound, 23, 13, adds)
+    std::test::rejects_any("any rejection expected, block accepted", adds)
+    fn lists() errors std::compiler::CompilerError:
         static compile:
             [1, 2].append(3)
-    test::value("lists", [1, 2, 3], lists)
+    std::test::value("lists", [1, 2, 3], lists)
     fn positive?(n):
         n > 0
-    test::holds("positive", "a positive number", positive?, adds)
-    test::holds("positive, another value", "a positive number", positive?, off_by_one)
+    std::test::holds("positive", "a positive number", positive?, adds)
+    std::test::holds("positive, another value", "a positive number", positive?, off_by_one)
     fn negative?(n):
         n < 0
-    test::holds("negative, failing", "a negative number", negative?, adds)
+    std::test::holds("negative, failing", "a negative number", negative?, adds)
 }
 append gfMixed {
-with context test::suite()
+with context std::test::suite()
 register_mixed()
-test::report()
+std::test::report()
 }
 
 test gf-verdicts {every helper's pass and mismatch, as data: the report names what was expected, what was observed and the diagnostic's message} -body {
@@ -250,145 +250,145 @@ FAIL negative, failing
 # A suite whose one case's body records golden_probe(n) when it runs; END is
 # the program's last statement.
 proc gfCounted {end} {
-    return [string map [list END $end] {import compiler
-import test
+    return [string map [list END $end] {import std::compiler
+import std::test
 
 fn register_counted(n: int):
-    fn body() errors compiler::CompilerError:
+    fn body() errors std::compiler::CompilerError:
         static compile:
             [golden_probe(n), n]
-    test::value("counted", [7, 7], body)
+    std::test::value("counted", [7, 7], body)
 
-with context test::suite()
+with context std::test::suite()
 register_counted(7)
 END
 }]
 }
 
 test gf-context-required {a registration function needs the installed suite: without one, the call is the ordinary MISSING-CONTEXT, not a test-specific diagnostic} -body {
-    gfStaticError {import compiler
-import test
+    gfStaticError {import std::compiler
+import std::test
 
-fn body() errors compiler::CompilerError:
+fn body() errors std::compiler::CompilerError:
     static compile:
         1
-test::value("one", 1, body)
+std::test::value("one", 1, body)
 }
-} -match glob -result {MISSING-CONTEXT: suite.bot:7:1: test::Suite is required by this call but is not installed here*}
+} -match glob -result {MISSING-CONTEXT: suite.bot:7:1: std::test::Suite is required by this call but is not installed here*}
 
 test gf-registration-does-not-run {registering a case stores its check: the body has not run when registration returns (the probe recorded nothing), on the Tcl backends} -body {
-    lmap backend {interp compile} {gfProbed [gfCounted {test::count()}] $backend}
+    lmap backend {interp compile} {gfProbed [gfCounted {std::test::count()}] $backend}
 } -result {{1 {}} {1 {}}}
 
 test gf-registration-does-not-run-native {natively: registration allocates the body's closure and the case, but nothing at the body's own List literal (line 7)} -constraints nativeCoroutines -body {
-    list [gfNativeAllocationsAt [gfCounted {test::count()}] 7] [gfNativeAllocationsAt [gfCounted {test::report()}] 7]
+    list [gfNativeAllocationsAt [gfCounted {std::test::count()}] 7] [gfNativeAllocationsAt [gfCounted {std::test::report()}] 7]
 } -result {0 1}
 
 test gf-run-executes-once {one run calls each check exactly once} -body {
-    lmap backend {interp compile} {gfProbed [gfCounted {test::report()}] $backend}
+    lmap backend {interp compile} {gfProbed [gfCounted {std::test::report()}] $backend}
 } -result {{{["PASS counted", "1 passed, 0 failed"]} 7} {{["PASS counted", "1 passed, 0 failed"]} 7}}
 
 test gf-registration-would-abort {a body whose run would abort the whole program (a run-time TYPE no handler catches) is registered without running: the registering program completes; the running one aborts} -body {
-    set source {import compiler
-import test
+    set source {import std::compiler
+import std::test
 
 fn register_poisoned(text: str):
-    fn body() errors compiler::CompilerError:
+    fn body() errors std::compiler::CompilerError:
         static compile:
             1 + text
-    test::value("poisoned", 1, body)
+    std::test::value("poisoned", 1, body)
 
-with context test::suite()
+with context std::test::suite()
 register_poisoned("x")
 END
 }
-    list [gfValue [string map {END test::count()} $source]] \
-        [gfReport [string map {END test::report()} $source]]
+    list [gfValue [string map {END std::test::count()} $source]] \
+        [gfReport [string map {END std::test::report()} $source]]
 } -result {1 {abort: CORE SEMANTIC}}
 
 test gf-repeated-runs {re-running starts every registered case again: two runs, two calls of each check, identical reports} -body {
-    lmap backend {interp compile} {gfProbed [gfCounted {[test::report(), test::report()]}] $backend}
+    lmap backend {interp compile} {gfProbed [gfCounted {[std::test::report(), std::test::report()]}] $backend}
 } -result {{{[["PASS counted", "1 passed, 0 failed"], ["PASS counted", "1 passed, 0 failed"]]} {7 7}} {{[["PASS counted", "1 passed, 0 failed"], ["PASS counted", "1 passed, 0 failed"]]} {7 7}}}
 
 test gf-repeated-runs-native {natively, two runs execute the body twice} -constraints nativeCoroutines -body {
-    gfNativeAllocationsAt [gfCounted {[test::report(), test::report()]}] 7
+    gfNativeAllocationsAt [gfCounted {[std::test::report(), std::test::report()]}] 7
 } -result 2
 
 test gf-registration-order {cases run, and report, in registration order} -body {
-    golden::verdicts [gfReport {import compiler
-import test
+    golden::verdicts [gfReport {import std::compiler
+import std::test
 
 fn register_five():
-    fn one() errors compiler::CompilerError:
+    fn one() errors std::compiler::CompilerError:
         static compile:
             1
-    test::value("e", 1, one)
-    test::value("b", 1, one)
-    test::value("d", 1, one)
-    test::value("a", 1, one)
-    test::value("c", 1, one)
+    std::test::value("e", 1, one)
+    std::test::value("b", 1, one)
+    std::test::value("d", 1, one)
+    std::test::value("a", 1, one)
+    std::test::value("c", 1, one)
 
-with context test::suite()
+with context std::test::suite()
 register_five()
-test::report()
+std::test::report()
 }]
 } -result {{PASS e} {PASS b} {PASS d} {PASS a} {PASS c}}
 
 test gf-empty-suite {an empty suite reports no case: the runner completes during its construction, sending the empty batch} -body {
-    list [gfReport {import test
-with context test::suite()
-test::report()
-}] [gfValue {import coroutine
-import test
-with context test::suite()
-coroutine {step, first} = test::run()
-[first, coroutine::done?(step)]
+    list [gfReport {import std::test
+with context std::test::suite()
+std::test::report()
+}] [gfValue {import std::coroutine
+import std::test
+with context std::test::suite()
+coroutine {step, first} = std::test::run()
+[first, std::coroutine::done?(step)]
 }]
 } -result {{{0 passed, 0 failed}} {[[], true]}}
 
 test gf-failures-continue {a mismatch is data: pass, value mismatch, pass, compiler-diagnostic mismatch, pass are five results} -body {
-    gfReport {import compiler
-import test
+    gfReport {import std::compiler
+import std::test
 
 fn register_alternating():
-    fn one() errors compiler::CompilerError:
+    fn one() errors std::compiler::CompilerError:
         static compile:
             1
-    fn unbound() errors compiler::CompilerError:
+    fn unbound() errors std::compiler::CompilerError:
         static compile:
             nothing
-    test::value("first", 1, one)
-    test::value("second", 2, one)
-    test::value("third", 1, one)
-    test::rejects("fourth", compiler::DiagnosticCode::Type, unbound)
-    test::value("fifth", 1, one)
+    std::test::value("first", 1, one)
+    std::test::value("second", 2, one)
+    std::test::value("third", 1, one)
+    std::test::rejects("fourth", std::compiler::DiagnosticCode::Type, unbound)
+    std::test::value("fifth", 1, one)
 
-with context test::suite()
+with context std::test::suite()
 register_alternating()
-test::report()
+std::test::report()
 }
 } -result {{PASS first} {FAIL second} {  expected: 2} {  actual: 1} {PASS third} {FAIL fourth} {  expected: compiler diagnostic Type} {  actual: compiler diagnostic Unbound at line 10, column 13} {  detail: unbound name "nothing"} {PASS fifth} {3 passed, 2 failed}}
 
 test gf-runner-protocol {the runner coroutine sends one result per segment, as a one-element List, then the empty List, and is done} -body {
-    gfValue {import compiler
-import coroutine
-import test
+    gfValue {import std::compiler
+import std::coroutine
+import std::test
 
 fn register_two():
-    fn one() errors compiler::CompilerError:
+    fn one() errors std::compiler::CompilerError:
         static compile:
             1
-    test::value("a", 1, one)
-    test::value("b", 2, one)
+    std::test::value("a", 1, one)
+    std::test::value("b", 2, one)
 
-with context test::suite()
+with context std::test::suite()
 register_two()
-coroutine {step, first} = test::run()
-d0 = coroutine::done?(step)
+coroutine {step, first} = std::test::run()
+d0 = std::coroutine::done?(step)
 second = step()
-d1 = coroutine::done?(step)
+d1 = std::coroutine::done?(step)
 third = step()
-d2 = coroutine::done?(step)
+d2 = std::coroutine::done?(step)
 names = loop r in [first, second, third]:
     loop x in r:
         [x.name, x.passed]
@@ -397,22 +397,22 @@ names = loop r in [first, second, third]:
 } -result {[[[["a", true]], [["b", false]], []], false, false, true]}
 
 test gf-runner-abandoned {a driver may stop early: the runner is an ordinary coroutine, released (once) when its handle dies; the cases after the stop do not run} -body {
-    set source {import compiler
-import test
+    set source {import std::compiler
+import std::test
 
 fn register_two():
-    fn one() errors compiler::CompilerError:
+    fn one() errors std::compiler::CompilerError:
         static compile:
             golden_probe(1)
-    fn two() errors compiler::CompilerError:
+    fn two() errors std::compiler::CompilerError:
         static compile:
             golden_probe(2)
-    test::value("one", 1, one)
-    test::value("two", 2, two)
+    std::test::value("one", 1, one)
+    std::test::value("two", 2, two)
 
-with context test::suite()
+with context std::test::suite()
 register_two()
-coroutine {step, first} = test::run()
+coroutine {step, first} = std::test::run()
 first == []
 }
     lmap backend {interp compile} {
@@ -424,113 +424,113 @@ first == []
 # Suites are context values: isolation
 
 test gf-one-suite-per-program {a context is installed once per program (CONTEXTS.md): a second suite in the same program is the ordinary DUPLICATE-CONTEXT -- suites are isolated by being separate programs} -body {
-    gfStaticError {import test
-with context test::suite()
-with context test::suite()
-test::report()
+    gfStaticError {import std::test
+with context std::test::suite()
+with context std::test::suite()
+std::test::report()
 }
 } -match glob -result {DUPLICATE-CONTEXT: *}
 
 test gf-isolation {two suite programs run one after the other in one process, each twice, on every backend: neither sees the other's cases, and a re-created suite starts empty (no state survives a program)} -body {
-    set a {import compiler
-import test
+    set a {import std::compiler
+import std::test
 
 fn register_a():
-    fn one() errors compiler::CompilerError:
+    fn one() errors std::compiler::CompilerError:
         static compile:
             1
-    test::value("a1", 1, one)
-    test::value("a2", 1, one)
+    std::test::value("a1", 1, one)
+    std::test::value("a2", 1, one)
 
-with context test::suite()
+with context std::test::suite()
 register_a()
-test::report()
+std::test::report()
 }
-    set b {import compiler
-import test
+    set b {import std::compiler
+import std::test
 
 fn register_b():
-    fn two() errors compiler::CompilerError:
+    fn two() errors std::compiler::CompilerError:
         static compile:
             2
-    test::value("b1", 2, two)
+    std::test::value("b1", 2, two)
 
-with context test::suite()
+with context std::test::suite()
 register_b()
-test::report()
+std::test::report()
 }
     list [gfReport $a] [gfReport $b] [gfReport $a] [gfReport $b]
 } -result {{{PASS a1} {PASS a2} {2 passed, 0 failed}} {{PASS b1} {1 passed, 0 failed}} {{PASS a1} {PASS a2} {2 passed, 0 failed}} {{PASS b1} {1 passed, 0 failed}}}
 
 test gf-composition {registration functions compose as ordinary functions: one calls two others, and their cases run in call order} -body {
-    golden::verdicts [gfReport {import compiler
-import test
+    golden::verdicts [gfReport {import std::compiler
+import std::test
 
 fn register_math():
-    fn sum() errors compiler::CompilerError:
+    fn sum() errors std::compiler::CompilerError:
         static compile:
             2 + 3
-    test::value("math: sum", 5, sum)
+    std::test::value("math: sum", 5, sum)
 
 fn register_errors():
-    fn missing() errors compiler::CompilerError:
+    fn missing() errors std::compiler::CompilerError:
         static compile:
             nowhere
-    test::rejects("errors: unbound", compiler::DiagnosticCode::Unbound, missing)
+    std::test::rejects("errors: unbound", std::compiler::DiagnosticCode::Unbound, missing)
 
 fn register_all():
     register_errors()
     register_math()
     register_errors()
 
-with context test::suite()
+with context std::test::suite()
 register_all()
-test::report()
+std::test::report()
 }]
 } -result {{PASS errors: unbound} {PASS math: sum} {PASS errors: unbound}}
 
 test gf-application-context {the suite is one ordinary context among others: a program installs its own context too, a registration function reads it and its tests capture the value read; no priority or lookup interaction} -body {
-    gfReport {import compiler
-import mutable_vector
-import test
+    gfReport {import std::compiler
+import std::mutable_vector
+import std::test
 
 context struct Config:
     levels: MutableVector[int]
 
 fn levels() -> MutableVector[int]:
-    mutable_vector::from_list([3, 4])
+    std::mutable_vector::from_list([3, 4])
 
 fn level_count(context config: Config) -> int:
-    mutable_vector::length(config.levels)
+    std::mutable_vector::length(config.levels)
 
 fn register_config_tests(context config: Config):
     count = level_count()
-    fn counted() errors compiler::CompilerError:
+    fn counted() errors std::compiler::CompilerError:
         static compile:
             count * 10
-    test::value("config read at registration", 20, counted)
+    std::test::value("config read at registration", 20, counted)
 
 with context Config {levels: levels()}
-with context test::suite()
+with context std::test::suite()
 register_config_tests()
-summary = test::report()
+summary = std::test::report()
 summary
 }
 } -result {{PASS config read at registration} {1 passed, 0 failed}}
 
 test gf-body-cannot-use-context {a body is a function value, so it cannot require a context (CONTEXT-FUNCTION-VALUE): it cannot register, or reach the suite, while it runs} -body {
-    gfStaticError {import compiler
-import test
+    gfStaticError {import std::compiler
+import std::test
 
 fn register_nested():
-    fn body() errors compiler::CompilerError:
+    fn body() errors std::compiler::CompilerError:
         static compile:
-            test::count()
-    test::value("nested", 0, body)
+            std::test::count()
+    std::test::value("nested", 0, body)
 
-with context test::suite()
+with context std::test::suite()
 register_nested()
-test::report()
+std::test::report()
 }
 } -match glob -result {CONTEXT-FUNCTION-VALUE: *}
 
@@ -538,7 +538,7 @@ test::report()
 # Eager coroutines and deferral
 
 test gf-eager-coroutine-start {why a case is a function value: constructing a coroutine runs its body to the first yield at once, so a registry of started coroutines would run every test while registering it (the probe fires at construction)} -body {
-    lmap backend {interp compile} {gfProbed {import coroutine
+    lmap backend {interp compile} {gfProbed {import std::coroutine
 
 struct Event:
     n: int
@@ -554,8 +554,8 @@ first.n
 } -result {{1 1} {1 1}}
 
 test gf-coroutine-body-deferred {a case whose body constructs and drives a coroutine: registering it runs nothing; running it runs the coroutine's body once} -body {
-    set source {import compiler
-import test
+    set source {import std::compiler
+import std::test
 
 struct Event:
     n: int
@@ -566,18 +566,18 @@ fn producer(k: int) -> Event:
     Event {n: k + 1}
 
 fn register_coroutine_case(k: int):
-    fn body() errors compiler::CompilerError:
+    fn body() errors std::compiler::CompilerError:
         static compile:
             coroutine {step, first} = producer(k)
             first.n + step().n
-    test::value("coroutine", 11, body)
+    std::test::value("coroutine", 11, body)
 
-with context test::suite()
+with context std::test::suite()
 register_coroutine_case(5)
 END
 }
-    list {*}[lmap backend {interp compile} {gfProbed [string map {END test::count()} $source] $backend}] \
-        {*}[lmap backend {interp compile} {gfProbed [string map {END test::report()} $source] $backend}]
+    list {*}[lmap backend {interp compile} {gfProbed [string map {END std::test::count()} $source] $backend}] \
+        {*}[lmap backend {interp compile} {gfProbed [string map {END std::test::report()} $source] $backend}]
 } -result {{1 {}} {1 {}} {{["PASS coroutine", "1 passed, 0 failed"]} 5} {{["PASS coroutine", "1 passed, 0 failed"]} 5}}
 
 # ---------------------------------------------------------------------------
@@ -585,8 +585,8 @@ END
 
 # A suite whose cases own coroutines that complete, fail (handled inside the
 # body) and are abandoned suspended.
-set gfCoroutineSuite {import compiler
-import test
+set gfCoroutineSuite {import std::compiler
+import std::test
 
 struct Event:
     n: int
@@ -604,12 +604,12 @@ fn breaking(k: int) -> Event errors Broken:
     Event {n: 0}
 
 fn register_coroutine_cases(k: int):
-    fn completes() errors compiler::CompilerError:
+    fn completes() errors std::compiler::CompilerError:
         static compile:
             coroutine {step, first} = finite(k)
             first.n + step().n
-    test::value("completes", 3, completes)
-    fn fails() errors compiler::CompilerError:
+    std::test::value("completes", 3, completes)
+    fn fails() errors std::compiler::CompilerError:
         static compile:
             coroutine {step, first} = breaking(k):
                 on Broken:
@@ -618,23 +618,23 @@ fn register_coroutine_cases(k: int):
                 on Broken:
                     Event {n: -2}
             first.n * 10 + last.n
-    test::value("fails, handled", 8, fails)
-    fn abandons() errors compiler::CompilerError:
+    std::test::value("fails, handled", 8, fails)
+    fn abandons() errors std::compiler::CompilerError:
         static compile:
             coroutine {first} = finite(k)
             first.n
-    test::value("abandons", 1, abandons)
-    fn leaves_early() errors compiler::CompilerError:
+    std::test::value("abandons", 1, abandons)
+    fn leaves_early() errors std::compiler::CompilerError:
         static compile:
             coroutine {step, first} = finite(k)
             if first.n > 0:
                 return first.n
             step().n
-    test::value("leaves early", 1, leaves_early)
+    std::test::value("leaves early", 1, leaves_early)
 
-with context test::suite()
+with context std::test::suite()
 register_coroutine_cases(1)
-test::report()
+std::test::report()
 }
 
 test gf-coroutine-cleanup {every coroutine a run creates -- the runner and each case's own, completed, failed, abandoned while suspended, and left suspended by an early return -- is released exactly once, deterministically and in order (each case's before the next case runs, the runner's last), on the Tcl backends: the interpreter and the Tcl compiler (compiling the HIR itself, as main.tcl's -backend compile does)} -body {
@@ -654,8 +654,8 @@ test gf-coroutine-cleanup-native {natively: five coroutines, five releases (the 
 # Affine captures: the ordinary ownership rules decide
 
 test gf-affine-capture-rejected {a body that captures a coroutine handle owned by the registration function is the ordinary AFFINE-CAPTURE-UNSUPPORTED: the framework neither needs nor gets an exception} -body {
-    gfStaticError {import compiler
-import test
+    gfStaticError {import std::compiler
+import std::test
 
 struct Event:
     n: int
@@ -666,19 +666,19 @@ fn finite(k: int) -> Event:
 
 fn register_capturing():
     coroutine {step, first} = finite(1)
-    fn body() errors compiler::CompilerError:
+    fn body() errors std::compiler::CompilerError:
         step().n
-    test::value("captures", 2, body)
+    std::test::value("captures", 2, body)
 
-with context test::suite()
+with context std::test::suite()
 register_capturing()
-test::report()
+std::test::report()
 }
 } -match glob -result {AFFINE-CAPTURE-UNSUPPORTED: suite.bot:14:9: `step` is an affine Coroutine*}
 
 test gf-affine-capture-in-a-case {the same capture written inside a case's static compile block is that case's rejection, AffineCaptureUnsupported; a body that owns its coroutine passes; and an ordinary move inside a block is UseAfterMove} -body {
-    gfReport {import compiler
-import test
+    gfReport {import std::compiler
+import std::test
 
 struct Event:
     n: int
@@ -688,37 +688,37 @@ fn finite(k: int) -> Event:
     Event {n: k + 1}
 
 fn register_affine():
-    fn captures() errors compiler::CompilerError:
+    fn captures() errors std::compiler::CompilerError:
         static compile:
             coroutine {step} = finite(1)
             fn later() -> int:
                 step().n
             later()
-    test::rejects("capture", compiler::DiagnosticCode::AffineCaptureUnsupported, captures)
-    fn owns() errors compiler::CompilerError:
+    std::test::rejects("capture", std::compiler::DiagnosticCode::AffineCaptureUnsupported, captures)
+    fn owns() errors std::compiler::CompilerError:
         static compile:
             coroutine {step, first} = finite(1)
             first.n + step().n
-    test::value("owns", 3, owns)
-    fn moves() errors compiler::CompilerError:
+    std::test::value("owns", 3, owns)
+    fn moves() errors std::compiler::CompilerError:
         static compile:
             coroutine {step} = finite(1)
             other = step
             step().n + other().n
-    test::rejects("moved", compiler::DiagnosticCode::UseAfterMove, moves)
+    std::test::rejects("moved", std::compiler::DiagnosticCode::UseAfterMove, moves)
 
-with context test::suite()
+with context std::test::suite()
 register_affine()
-test::report()
+std::test::report()
 }
 } -result {{PASS capture} {PASS owns} {PASS moved} {3 passed, 0 failed}}
 
 # ---------------------------------------------------------------------------
 # What a body may complete with
 
-test gf-body-error-contract {a body that may raise a declared error other than compiler::CompilerError does not fit a helper: the registration call is rejected (TYPE), naming the error -- there is no catch-all to turn it into data} -body {
-    gfStaticError {import compiler
-import test
+test gf-body-error-contract {a body that may raise a declared error other than std::compiler::CompilerError does not fit a helper: the registration call is rejected (TYPE), naming the error -- there is no catch-all to turn it into data} -body {
+    gfStaticError {import std::compiler
+import std::test
 
 error Boom
 
@@ -728,19 +728,19 @@ fn boom(x: int) -> int errors Boom:
     x
 
 fn register_raising(n: int):
-    fn body() errors Boom, compiler::CompilerError:
+    fn body() errors Boom, std::compiler::CompilerError:
         boom(n)
-    test::value("raises", 1, body)
+    std::test::value("raises", 1, body)
 
-with context test::suite()
+with context std::test::suite()
 register_raising(1)
-test::report()
+std::test::report()
 }
-} -match glob -result {TYPE: suite.bot:14:30: argument for parameter "body" cannot be proven to satisfy Fn{args: \[\], return: any, errors: \[compiler::CompilerError\]}*error set incompatible: the callable may raise Boom*}
+} -match glob -result {TYPE: suite.bot:14:35: argument for parameter "body" cannot be proven to satisfy Fn{args: \[\], return: any, errors: \[std::compiler::CompilerError\]}*error set incompatible: the callable may raise Boom*}
 
 test gf-escaping-error-is-the-case-s {the same error escaping a body's static compile block (the body declares only CompilerError) is that block's own rejection, UnhandledError -- one failing case, not a broken suite; handled inside the body it is an ordinary value} -body {
-    gfReport {import compiler
-import test
+    gfReport {import std::compiler
+import std::test
 
 error Boom
 
@@ -750,41 +750,41 @@ fn boom(x: int) -> int errors Boom:
     x
 
 fn register_raising(n: int):
-    fn escapes() errors compiler::CompilerError:
+    fn escapes() errors std::compiler::CompilerError:
         static compile:
             boom(n)
-    test::value("escapes", 1, escapes)
-    fn handled() errors compiler::CompilerError:
+    std::test::value("escapes", 1, escapes)
+    fn handled() errors std::compiler::CompilerError:
         static compile:
             r = boom(n):
                 on Boom:
                     -1
             r
-    test::value("handled", -1, handled)
+    std::test::value("handled", -1, handled)
 
-with context test::suite()
+with context std::test::suite()
 register_raising(9)
-test::report()
+std::test::report()
 }
 } -result {{FAIL escapes} {  expected: 1} {  actual: compiler diagnostic UnhandledError at line 14, column 13} {  detail: this call may produce the declared error "Boom", which is neither handled here nor admitted by the enclosing function's own "errors" declaration} {PASS handled} {1 passed, 1 failed}}
 
 test gf-runtime-only-failure-aborts {a run-time-only failure in a body (an Int added to a String: no declared error, no handler) is not a test result: it aborts the whole run, on every backend, and no report is produced} -body {
-    gfReport {import compiler
-import test
+    gfReport {import std::compiler
+import std::test
 
 fn register_aborting(text: str):
-    fn fine() errors compiler::CompilerError:
+    fn fine() errors std::compiler::CompilerError:
         static compile:
             1
-    test::value("fine", 1, fine)
-    fn aborts() errors compiler::CompilerError:
+    std::test::value("fine", 1, fine)
+    fn aborts() errors std::compiler::CompilerError:
         static compile:
             1 + text
-    test::value("aborts", 1, aborts)
+    std::test::value("aborts", 1, aborts)
 
-with context test::suite()
+with context std::test::suite()
 register_aborting("x")
-test::report()
+std::test::report()
 }
 } -result {abort: CORE SEMANTIC}
 
@@ -792,28 +792,28 @@ test::report()
 # Text
 
 test gf-describe {the report's texts of values: Ints (negative and arbitrary precision), Strings as literals with escapes, Bools, nested Lists; anything else a placeholder} -body {
-    gfValue {import compiler
-import test
+    gfValue {import std::compiler
+import std::test
 struct Point:
     x: int
-[test::describe(0), test::describe(-305), test::describe(123456789012345678901234567890), test::describe("a\"b\\c\nd\te"), test::describe(true), test::describe(false), test::describe([[1, -2], [], ["s"]]), test::describe(Point {x: 1}), test::describe(compiler::DiagnosticCode::Type)]
+[std::test::describe(0), std::test::describe(-305), std::test::describe(123456789012345678901234567890), std::test::describe("a\"b\\c\nd\te"), std::test::describe(true), std::test::describe(false), std::test::describe([[1, -2], [], ["s"]]), std::test::describe(Point {x: 1}), std::test::describe(std::compiler::DiagnosticCode::Type)]
 }
 } -result {["0", "-305", "123456789012345678901234567890", "\"a\\\"b\\\\c\\nd\\te\"", "true", "false", "[[1, -2], [], [\"s\"]]", "a value with no text form", "a value with no text form"]}
 
 test gf-int-text {int_text at the boundaries the representations change at (small Int, i64), both signs} -body {
-    gfValue {import test
-[test::int_text(9), test::int_text(10), test::int_text(4611686018427387903), test::int_text(4611686018427387904), test::int_text(9223372036854775807), test::int_text(9223372036854775808), test::int_text(-9223372036854775808), test::int_text(-9223372036854775809)]
+    gfValue {import std::test
+[std::test::int_text(9), std::test::int_text(10), std::test::int_text(4611686018427387903), std::test::int_text(4611686018427387904), std::test::int_text(9223372036854775807), std::test::int_text(9223372036854775808), std::test::int_text(-9223372036854775808), std::test::int_text(-9223372036854775809)]
 }
 } -result {["9", "10", "4611686018427387903", "4611686018427387904", "9223372036854775807", "9223372036854775808", "-9223372036854775808", "-9223372036854775809"]}
 
-test gf-code-name-complete {test::code_name spells every compiler::DiagnosticCode case of lib/compiler.bot, in its own words: a new case without a name fails here} -body {
-    set channel [open [file join $::projectRoot lib compiler.bot]]
+test gf-code-name-complete {std::test::code_name spells every std::compiler::DiagnosticCode case of stdlib/compiler.bot, in its own words: a new case without a name fails here} -body {
+    set channel [open [file join $::projectRoot stdlib compiler.bot]]
     set text [read $channel]
     close $channel
     regexp {enum DiagnosticCode:\n((?:    [A-Za-z]+,?\n)+)} $text -> block
     set cases [lmap line [split [string trim $block] \n] {string trim $line " ,"}]
-    set calls [join [lmap c $cases {format {test::code_name(compiler::DiagnosticCode::%s)} $c}] ", "]
-    set shown [gfValue "import compiler\nimport test\n\[$calls\]\n"]
+    set calls [join [lmap c $cases {format {std::test::code_name(std::compiler::DiagnosticCode::%s)} $c}] ", "]
+    set shown [gfValue "import std::compiler\nimport std::test\n\[$calls\]\n"]
     set expected "\[[join [lmap c $cases {format {"%s"} $c}] {, }]\]"
     list [llength $cases] [expr {$shown eq $expected}]
 } -result {105 1}
@@ -822,9 +822,9 @@ test gf-code-name-complete {test::code_name spells every compiler::DiagnosticCod
 # GC stress and warnings
 
 test gf-gc-stress {natively under GC stress: many registered checks capturing Strings and structs, CompilerError payloads, coroutines and failing results retained until the report; the report equals the Tcl backends'} -constraints nativeCoroutines -body {
-    set source {import compiler
-import str
-import test
+    set source {import std::compiler
+import std::str
+import std::test
 
 struct Pair:
     label: str
@@ -839,33 +839,33 @@ fn finite(k: int) -> Event:
 
 fn register_many(k: int, label: str):
     pair = Pair {label: label.concat("!"), n: k}
-    fn text() errors compiler::CompilerError:
+    fn text() errors std::compiler::CompilerError:
         static compile:
             [pair.label, label]
-    test::value(label, [label.concat("!"), label], text)
-    fn wrong() errors compiler::CompilerError:
+    std::test::value(label, [label.concat("!"), label], text)
+    fn wrong() errors std::compiler::CompilerError:
         static compile:
             [pair.n, k + 1]
-    test::value(label.concat(" mismatch"), [k, k], wrong)
-    fn rejected() errors compiler::CompilerError:
+    std::test::value(label.concat(" mismatch"), [k, k], wrong)
+    fn rejected() errors std::compiler::CompilerError:
         static compile:
             pair.missing
-    test::rejects(label.concat(" rejected"), compiler::DiagnosticCode::Type, rejected)
-    fn driven() errors compiler::CompilerError:
+    std::test::rejects(label.concat(" rejected"), std::compiler::DiagnosticCode::Type, rejected)
+    fn driven() errors std::compiler::CompilerError:
         static compile:
             coroutine {step, first} = finite(pair.n)
             first.n + step().n
-    test::value(label.concat(" coroutine"), k + k + 1, driven)
+    std::test::value(label.concat(" coroutine"), k + k + 1, driven)
 
 fn register_all(k: int):
     if k == 0:
         return
-    register_many(k, "case ".concat(test::int_text(k)))
+    register_many(k, "case ".concat(std::test::int_text(k)))
     register_all(k - 1)
 
-with context test::suite()
+with context std::test::suite()
 register_all(12)
-test::report()
+std::test::report()
 }
     set hir [gfCompile $source]
     set tcl [golden::run $hir interp]
@@ -875,41 +875,41 @@ test::report()
         [dict get $coroutines released] [dict get $coroutines sweptSuspended]
 } -result {{24 passed, 24 failed} 1 13 0}
 
-test gf-library-warning-clean {lib/test.bot, and a suite using every helper, compile under -warnings error: the registration helpers are nomethod (their first argument is a name, not a receiver)} -body {
-    surface::compile [string map {"test::report()" "test::report()"} $gfMixed] suite.bot -warnings error
+test gf-library-warning-clean {stdlib/test.bot, and a suite using every helper, compile under -warnings error: the registration helpers are nomethod (their first argument is a name, not a receiver)} -body {
+    surface::compile [string map {"std::test::report()" "std::test::report()"} $gfMixed] suite.bot -warnings error
     return ok
 } -result ok
 
 # The message helpers, promoted from the suite-local matchers the migration's
 # suites wrote (LARGE-SCALE-GOLDEN-MIGRATION.md, "The framework at scale"): the exact
 # message, or a fragment of it, beside the code; each kind of mismatch.
-set gfMessages {import compiler
-import test
+set gfMessages {import std::compiler
+import std::test
 
 fn register_messages():
-    fn unbound() errors compiler::CompilerError:
+    fn unbound() errors std::compiler::CompilerError:
         static compile:
             missing + 1
-    fn adds() errors compiler::CompilerError:
+    fn adds() errors std::compiler::CompilerError:
         static compile:
             20 + 22
-    test::rejects_message("exact message", compiler::DiagnosticCode::Unbound, "unbound name \"missing\"", unbound)
-    test::rejects_message("another message", compiler::DiagnosticCode::Unbound, "unbound name", unbound)
-    test::rejects_message("another code", compiler::DiagnosticCode::Type, "unbound name \"missing\"", unbound)
-    test::rejects_message("message expected, block accepted", compiler::DiagnosticCode::Unbound, "unbound name \"missing\"", adds)
-    test::rejects_containing("fragment", compiler::DiagnosticCode::Unbound, "\"missing\"", unbound)
-    test::rejects_containing("whole message as fragment", compiler::DiagnosticCode::Unbound, "unbound name \"missing\"", unbound)
-    test::rejects_containing("empty fragment", compiler::DiagnosticCode::Unbound, "", unbound)
-    test::rejects_containing("absent fragment", compiler::DiagnosticCode::Unbound, "present", unbound)
-    test::rejects_containing("fragment, another code", compiler::DiagnosticCode::Type, "missing", unbound)
-    test::rejects_containing("fragment expected, block accepted", compiler::DiagnosticCode::Unbound, "missing", adds)
+    std::test::rejects_message("exact message", std::compiler::DiagnosticCode::Unbound, "unbound name \"missing\"", unbound)
+    std::test::rejects_message("another message", std::compiler::DiagnosticCode::Unbound, "unbound name", unbound)
+    std::test::rejects_message("another code", std::compiler::DiagnosticCode::Type, "unbound name \"missing\"", unbound)
+    std::test::rejects_message("message expected, block accepted", std::compiler::DiagnosticCode::Unbound, "unbound name \"missing\"", adds)
+    std::test::rejects_containing("fragment", std::compiler::DiagnosticCode::Unbound, "\"missing\"", unbound)
+    std::test::rejects_containing("whole message as fragment", std::compiler::DiagnosticCode::Unbound, "unbound name \"missing\"", unbound)
+    std::test::rejects_containing("empty fragment", std::compiler::DiagnosticCode::Unbound, "", unbound)
+    std::test::rejects_containing("absent fragment", std::compiler::DiagnosticCode::Unbound, "present", unbound)
+    std::test::rejects_containing("fragment, another code", std::compiler::DiagnosticCode::Type, "missing", unbound)
+    std::test::rejects_containing("fragment expected, block accepted", std::compiler::DiagnosticCode::Unbound, "missing", adds)
 
-with context test::suite()
+with context std::test::suite()
 register_messages()
-test::report()
+std::test::report()
 }
 
-test gf-message-helpers {test::rejects_message compares the code and the exact message, test::rejects_containing the code and a fragment of the message: passes, a wrong message, a wrong code and an accepted block, on every backend; the suite compiles under -warnings error} -body {
+test gf-message-helpers {std::test::rejects_message compares the code and the exact message, std::test::rejects_containing the code and a fragment of the message: passes, a wrong message, a wrong code and an accepted block, on every backend; the suite compiles under -warnings error} -body {
     surface::compile $gfMessages suite.bot -warnings error
     join [gfReport $gfMessages] \n
 } -result {PASS exact message
@@ -946,14 +946,14 @@ FAIL fragment expected, block accepted
 
 # The compiler's verdict on CODE as the body of a function its registration
 # function calls directly -- "ok VALUE" or the diagnostic's kind -- beside
-# the verdict of the same CODE as a golden case's body (test::value against
+# the verdict of the same CODE as a golden case's body (std::test::value against
 # EXPECTED): the report line, with the diagnostic code when rejected. The
 # prelude declares what the code uses.
 proc gfPrecision {prelude code expected} {
     set indented [join [lmap line [split $code \n] {string cat "            " $line}] \n]
     set plainIndented [join [lmap line [split $code \n] {string cat "        " $line}] \n]
-    set plain "import list\nimport mutable_vector\n$prelude\nfn register_probe(n: int):\n    fn body():\n$plainIndented\n    body()\n\nregister_probe(9)\n"
-    set suite "import compiler\nimport list\nimport mutable_vector\nimport test\n$prelude\nfn register_probe(n: int):\n    fn body() errors compiler::CompilerError:\n        static compile:\n$indented\n    test::value(\"probe\", $expected, body)\n\nwith context test::suite()\nregister_probe(9)\ntest::report()\n"
+    set plain "import std::list\nimport std::mutable_vector\n$prelude\nfn register_probe(n: int):\n    fn body():\n$plainIndented\n    body()\n\nregister_probe(9)\n"
+    set suite "import std::compiler\nimport std::list\nimport std::mutable_vector\nimport std::test\n$prelude\nfn register_probe(n: int):\n    fn body() errors std::compiler::CompilerError:\n        static compile:\n$indented\n    std::test::value(\"probe\", $expected, body)\n\nwith context std::test::suite()\nregister_probe(9)\nstd::test::report()\n"
     if {[catch {surface::compile $plain plain.bot -warnings off} hir options]} {
         set plainVerdict [lindex [dict get $options -errorcode] end]
     } else {
@@ -969,11 +969,11 @@ proc gfPrecision {prelude code expected} {
 }
 
 test gf-precision-range-proof {a range proof: an index the counted loop proves in range needs no IndexNotFound handler, in a plain function and in a golden body alike} -body {
-    gfPrecision "" "xs = \[1, 2, 3\]\nloop i from 0 to list::length(xs):\n    list::at(xs, i)" {[1, 2, 3]}
+    gfPrecision "" "xs = \[1, 2, 3\]\nloop i from 0 to std::list::length(xs):\n    std::list::at(xs, i)" {[1, 2, 3]}
 } -result {{ok [1, 2, 3]} {PASS probe}}
 
 test gf-precision-known-error {KNOWN-ERROR: a call proven to fail is the plain program's KNOWN-ERROR and the golden body's KnownError rejection} -body {
-    gfPrecision "" "list::at(\[1, 2\], 5)" 0
+    gfPrecision "" "std::list::at(\[1, 2\], 5)" 0
 } -result {KNOWN-ERROR {rejected KnownError}}
 
 test gf-precision-error-narrowing {error narrowing: a call whose argument's exact value rules out one of its declared errors needs no handler for it, plain or in a golden body} -body {
@@ -986,7 +986,7 @@ test gf-precision-affine {affine analysis: a coroutine moved to another binding 
         [gfPrecision $prelude "coroutine {step} = finite(1)\nother = step\nother().n" 2]
 } -result {{USE-AFTER-MOVE {rejected UseAfterMove}} {{ok 2} {PASS probe}}}
 
-test gf-precision-method-resolution {method resolution: a typed receiver picks its one admitting candidate (list::length, not mutable_vector::length) in both; an untyped one is AMBIGUOUS-METHOD-CALL in both} -body {
+test gf-precision-method-resolution {method resolution: a typed receiver picks its one admitting candidate (std::list::length, not std::mutable_vector::length) in both; an untyped one is AMBIGUOUS-METHOD-CALL in both} -body {
     list [gfPrecision "" "xs = \[1, 2\]\nxs.length()" 2] \
         [gfPrecision "" "fn first(v):\n    v.length()\nfirst(\[1\])" 1]
 } -result {{{ok 2} {PASS probe}} {AMBIGUOUS-METHOD-CALL {rejected AmbiguousMethodCall}}}
@@ -996,8 +996,8 @@ test gf-precision-method-resolution {method resolution: a typed receiver picks i
 # number replaced by what it numbers -- a callee or function value by its
 # name, a struct shape by its declaration, a declared error by its name
 # (from any `faildeclared N "NAME"` of the program) or else by its order of
-# appearance -- since a suite's program also holds lib/test.bot's functions,
-# shapes and compiler::CompilerError. Instances of one name are keyed NAME,
+# appearance -- since a suite's program also holds stdlib/test.bot's functions,
+# shapes and std::compiler::CompilerError. Instances of one name are keyed NAME,
 # NAME#2, ...; references name the function without the suffix. (Lower HIR
 # right after compiling it: the lowering reads the latest compilation's
 # module state.)
@@ -1066,18 +1066,18 @@ proc gfFunctionNir {source name} {
 }
 
 test gf-nir-body-identical {an accepted golden body is its code: natively, the body function's NIR equals the same closure's written without the framework and without static compile (only the HIR ids differ)} -body {
-    set suite {import compiler
-import test
+    set suite {import std::compiler
+import std::test
 
 fn register_nir(n: int):
-    fn body() errors compiler::CompilerError:
+    fn body() errors std::compiler::CompilerError:
         static compile:
             n * 3 + 1
-    test::value("nir", 22, body)
+    std::test::value("nir", 22, body)
 
-with context test::suite()
+with context std::test::suite()
 register_nir(7)
-test::report()
+std::test::report()
 }
     set plain {fn keep(f) -> int:
     f()
@@ -1118,15 +1118,15 @@ proc gfFunctionAllocations {hir names} {
 # A migrated golden body, CODE (with the suite-level IMPORTS and DECLS it
 # needs; a registration function taking PARAMS, called with ARGS, which the
 # body may capture), compiled twice: inside the convention (a body declaring
-# compiler::CompilerError around a static compile: block, registered with
-# test::value) and plainly (the same code as an ordinary nested function,
+# std::compiler::CompilerError around a static compile: block, registered with
+# std::test::value) and plainly (the same code as an ordinary nested function,
 # called once through an untyped parameter). Returns the suite's verdict
 # line, whether the NIR of each of NAMES (the body and the functions its
 # block declares; "" for the anonymous function a coroutine construction
 # makes) is equal in both programs, and whether their native allocations
 # are.
 proc gfMigratedBody {imports decls params args code expected names} {
-    set suite "import compiler\n${imports}import test\n\n$decls\nfn register_nir($params):\n    fn body() errors compiler::CompilerError:\n        static compile:\n[gfIndent $code 12]\n    test::value(\"nir\", $expected, body)\n\nwith context test::suite()\nregister_nir($args)\ntest::report()\n"
+    set suite "import std::compiler\n${imports}import std::test\n\n$decls\nfn register_nir($params):\n    fn body() errors std::compiler::CompilerError:\n        static compile:\n[gfIndent $code 12]\n    std::test::value(\"nir\", $expected, body)\n\nwith context std::test::suite()\nregister_nir($args)\nstd::test::report()\n"
     set plain "${imports}\n$decls\nfn keep(f):\n    f()\n\nfn register_nir($params):\n    fn body():\n[gfIndent $code 8]\n    keep(body)\n\nregister_nir($args)\n"
     set hir [gfCompile $suite]
     set suiteNir [gfNirFunctions $hir]
@@ -1135,7 +1135,7 @@ proc gfMigratedBody {imports decls params args code expected names} {
     set hir [gfCompile $plain]
     set plainNir [gfNirFunctions $hir]
     set plainAllocations [gfFunctionAllocations $hir $names]
-    # A name the library uses too (test::value's nested check) has several
+    # A name the library uses too (std::test::value's nested check) has several
     # instances in the suite's program: one of them must equal the plain one.
     set equal [lmap name $names {
         set texts [dict values [dict filter $suiteNir script {key -} {regexp "^[string map {. \\.} $name](#\\d+)?\$" $key}]]
@@ -1149,7 +1149,7 @@ test gf-nir-migrated-bodies {representative migrated golden bodies are their cod
         closure {} {} {} {} "fn make_adder(x):\n    fn add(y):\n        x + y\n\n    add\n\nadd10 = make_adder(10)\nadd10(32)" 42 {body make_adder add} \
         loop-closures {} {} {} {} "fs = loop x in \[1, 2, 3\]:\n    fn f():\n        x\n    f\nresults = loop g in fs:\n    g()\nresults" {[1, 2, 3]} {body f} \
         handled-errors {} "error TooSmall\nerror TooBig\n" "big: int" 20 "fn check(n) -> int errors TooSmall, TooBig:\n    if n < 0:\n        fail TooSmall\n    else:\n        if n > 10:\n            fail TooBig\n        else:\n            n\nfn middle(n) -> int errors TooSmall, TooBig:\n    check(n)\nr = middle(big):\n    on TooSmall:\n        -1\n    on TooBig:\n        -2\nr" -2 {body check middle} \
-        coroutine "import coroutine\n" "struct Message:\n    value: int\n\nstruct Event:\n    value: int\n" {} {} "fn deep(base: int, resume Message) -> int:\n    message = yield Event {value: base}\n    message.value\nfn worker(base: int, resume Message) -> Event:\n    x = deep(base)\n    message = yield Event {value: x}\n    return Event {value: message.value}\ncoroutine {step, first} = worker(10)\nsecond = step(Message {value: 20})\nfinal = step(Message {value: 30})\nagain = step(Message {value: 999})\n\[first.value, second.value, final.value, again.value, coroutine::done?(step)\]" {[10, 20, 30, 30, true]} {body deep worker {}}]
+        coroutine "import std::coroutine\n" "struct Message:\n    value: int\n\nstruct Event:\n    value: int\n" {} {} "fn deep(base: int, resume Message) -> int:\n    message = yield Event {value: base}\n    message.value\nfn worker(base: int, resume Message) -> Event:\n    x = deep(base)\n    message = yield Event {value: x}\n    return Event {value: message.value}\ncoroutine {step, first} = worker(10)\nsecond = step(Message {value: 20})\nfinal = step(Message {value: 30})\nagain = step(Message {value: 999})\n\[first.value, second.value, final.value, again.value, std::coroutine::done?(step)\]" {[10, 20, 30, 30, true]} {body deep worker {}}]
     lmap {label imports decls params args code expected names} $cases {
         list $label {*}[gfMigratedBody $imports $decls $params $args $code $expected $names]
     }
@@ -1163,7 +1163,7 @@ test gf-fuzz-bounded {a bounded run of the framework's model-based fuzzer (audit
 
 
 test gf-context-trait-surface {the suite is an ordinary context: it implements, structurally, a context trait whose operations are spelled like the library's functions that declare the Suite context parameter -- and only two do (case, registered): an application trait spelled like count() is not satisfied by the suite} -body {
-    list [gfStaticError {import test
+    list [gfStaticError {import std::test
 
 context trait Counted:
     fn count() -> int
@@ -1171,18 +1171,18 @@ context trait Counted:
 fn how_many(context c: Counted) -> int:
     c.count()
 
-with context test::suite()
+with context std::test::suite()
 how_many()
-}] [gfValue {import list
-import test
+}] [gfValue {import std::list
+import std::test
 
 context trait Listed:
-    fn registered() -> List[test::TestCase]
+    fn registered() -> List[std::test::TestCase]
 
 fn how_many(context c: Listed) -> int:
-    list::length(c.registered())
+    std::list::length(c.registered())
 
-with context test::suite()
+with context std::test::suite()
 how_many()
 }]
 } -match glob -result {{MISSING-CONTEXT: *Counted is required by this call*} 0}

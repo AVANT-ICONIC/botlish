@@ -1,9 +1,9 @@
 # strings.tcl -- native string operations: the `str` namespace's
-# intrinsics (str::length, str::substring, str::lowercase, str::concat,
-# str::append_char, str::encode_utf8, str::char_at; core/tclcompat.tcl adds
-# str::is_tcl_alpha/alnum).
+# intrinsics (std::str::length, std::str::substring, std::str::lowercase, std::str::concat,
+# std::str::append_char, std::str::encode_utf8, std::str::char_at; core/tclcompat.tcl adds
+# std::str::is_tcl_alpha/alnum).
 # Each is a root native registered under its qualified name
-# (core::native::isQualifiedNative): there is no lib/str.bot module, and a
+# (core::native::isQualifiedNative): there is no stdlib/str.bot module, and a
 # future one could add other members but never redefine these
 # (surface/modules.tcl, DUPLICATE-NATIVE; STDLIB-NAMESPACES.md).
 #
@@ -24,17 +24,17 @@ proc core::strings::Text {v name} {
 }
 
 proc core::strings::length {s} {
-    return [core::value::intFromNumber [string length [Text $s str::length]]]
+    return [core::value::intFromNumber [string length [Text $s std::str::length]]]
 }
 
-# (str::substring S START END): the characters at START <= i < END, a slice
+# (std::str::substring S START END): the characters at START <= i < END, a slice
 # of S's characters: an invalid one fails with LowerUnderrun or UpperOverrun
 # (core::native::checkSlice).
 proc core::strings::substring {s start end} {
-    set text [Text $s str::substring]
-    set from [core::value::intOf [core::value::expect int $start str::substring]]
-    set to [core::value::intOf [core::value::expect int $end str::substring]]
-    core::native::checkSlice str::substring $from $to [string length $text]
+    set text [Text $s std::str::substring]
+    set from [core::value::intOf [core::value::expect int $start std::str::substring]]
+    set to [core::value::intOf [core::value::expect int $end std::str::substring]]
+    core::native::checkSlice std::str::substring $from $to [string length $text]
     return [core::value::str [string range $text $from [expr {$to - 1}]]]
 }
 
@@ -49,27 +49,27 @@ proc core::strings::substring {s start end} {
 # ("Strings") and tests/native-tcl-unicode.test, which compares every scalar.
 # Not performance-critical: this is the reference implementation.
 proc core::strings::lowercase {s} {
-    set text [string tolower [Text $s str::lowercase]]
+    set text [string tolower [Text $s std::str::lowercase]]
     return [core::value::str [string map "Ⱥ ⱥ Ⱦ ⱦ" $text]]
 }
 
 proc core::strings::concat {a b} {
-    return [core::value::str "[Text $a str::concat][Text $b str::concat]"]
+    return [core::value::str "[Text $a std::str::concat][Text $b std::str::concat]"]
 }
 
-# (str::append_char S C): a new String of S's characters followed by the
-# character C -- str::length(S) + 1 characters, S unchanged, as list::append
+# (std::str::append_char S C): a new String of S's characters followed by the
+# character C -- std::str::length(S) + 1 characters, S unchanged, as std::list::append
 # is to a List. The one construction that turns a character into text: a
-# character the code holds (a char literal, a str::char_at result) is
+# character the code holds (a char literal, a std::str::char_at result) is
 # appended where it is, never first made a one-character String of its own
 # (README.md, "Strings and characters"; REFACTOR-WARNINGS-CLEAN.md, design
 # finding 1: what the corpus's character-to-text findings asked for is an
-# append, not a str::of_char). Total over its domain: C is a UnicodeChar,
+# append, not a std::str::of_char). Total over its domain: C is a UnicodeChar,
 # so always one Unicode scalar value (astral included), never a surrogate.
 # Mirrors native/src/runtime/ops.rs's rt_str_append_char.
 proc core::strings::appendChar {s c} {
-    set text [Text $s str::append_char]
-    set c [core::value::expect UnicodeChar $c str::append_char]
+    set text [Text $s std::str::append_char]
+    set c [core::value::expect UnicodeChar $c std::str::append_char]
     return [core::value::str $text[format %c [core::value::charOf $c]]]
 }
 
@@ -83,7 +83,7 @@ proc core::strings::appendChar {s c} {
 # (Tcl's `encoding convertto utf-8` here, Rust's already-UTF-8 `String`
 # there): both walk the same byte sequence in the same order.
 proc core::strings::encodeUtf8 {s} {
-    set text [Text $s str::encode_utf8]
+    set text [Text $s std::str::encode_utf8]
     set bytes {}
     foreach byte [split [encoding convertto utf-8 $text] ""] {
         scan $byte %c code
@@ -92,40 +92,40 @@ proc core::strings::encodeUtf8 {s} {
     return [core::value::listOf $bytes]
 }
 
-# (str::char_at S I): the Unicode scalar at character index I (the index
+# (std::str::char_at S I): the Unicode scalar at character index I (the index
 # space of length and substring) as a UnicodeChar, 0 <= I < length(S); any
 # other Int fails with the declared builtin error IndexNotFound, exactly like
-# list::at. The one operation that reads a String's characters as values: a
+# std::list::at. The one operation that reads a String's characters as values: a
 # UnicodeChar is compared with char literals ('%') and measured with
-# char::scalar_value, so classifying the characters of a String needs neither
-# a one-character String per position nor str::encode_utf8's List
+# std::char::scalar_value, so classifying the characters of a String needs neither
+# a one-character String per position nor std::str::encode_utf8's List
 # (ENCODE-UTF8-ALLOCATION-RESEARCH.md). Total over its domain, never
 # allocates. Mirrors native/src/runtime/ops.rs's rt_str_char_at.
 proc core::strings::charAt {s index} {
-    set text [Text $s str::char_at]
-    set i [core::value::intOf [core::value::expect int $index str::char_at]]
+    set text [Text $s std::str::char_at]
+    set i [core::value::intOf [core::value::expect int $index std::str::char_at]]
     if {$i < 0 || $i >= [string length $text]} {
         core::native::failDeclared IndexNotFound \
-            "str::char_at: index $i is outside 0..[expr {[string length $text] - 1}]"
+            "std::str::char_at: index $i is outside 0..[expr {[string length $text] - 1}]"
     }
     return [core::value::char [scan [string index $text $i] %c]]
 }
 
-core::native::register str::length    -arity 1 -impl core::strings::length \
+core::native::register std::str::length    -arity 1 -impl core::strings::length \
     -param-types {str} -result-type int -runtime char-index -result-range collection-length -context-free 1
-core::native::register str::substring -arity 3 -impl core::strings::substring \
+core::native::register std::str::substring -arity 3 -impl core::strings::substring \
     -param-types {str int int} -result-type str \
     -runtime {string-alloc char-index range-check} -context-free 1 \
     -errors {LowerUnderrun UpperOverrun} -bounds {slices {str 0 1 2}}
-core::native::register str::lowercase -arity 1 -impl core::strings::lowercase \
+core::native::register std::str::lowercase -arity 1 -impl core::strings::lowercase \
     -param-types {str} -result-type str -runtime string-alloc -context-free 1
-core::native::register str::concat    -arity 2 -impl core::strings::concat \
+core::native::register std::str::concat    -arity 2 -impl core::strings::concat \
     -param-types {str str} -result-type str -runtime string-alloc -context-free 1
-core::native::register str::append_char -arity 2 -impl core::strings::appendChar \
+core::native::register std::str::append_char -arity 2 -impl core::strings::appendChar \
     -param-types {str UnicodeChar} -result-type str -runtime string-alloc -context-free 1
-core::native::register str::encode_utf8 -arity 1 -impl core::strings::encodeUtf8 \
+core::native::register std::str::encode_utf8 -arity 1 -impl core::strings::encodeUtf8 \
     -param-types {str} -result-type list -runtime list-alloc -context-free 1 \
-    -result-shape {typed byte::Byte 0 255}
-core::native::register str::char_at -arity 2 -impl core::strings::charAt \
+    -result-shape {typed std::byte::Byte 0 255}
+core::native::register std::str::char_at -arity 2 -impl core::strings::charAt \
     -param-types {str int} -result-type UnicodeChar -runtime {char-index range-check} \
     -context-free 1 -errors IndexNotFound -bounds {index str 0 1}

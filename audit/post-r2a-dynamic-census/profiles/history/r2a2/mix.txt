@@ -74,7 +74,7 @@ executed Botlish-code instructions per run: 1,394,535 (14.9% of all Ir)
   setcc/cmov (other)        6,800.0    3.0%
   jmp                       1,200.0    0.5%
 
-== 9 web::emailish?: 80,800.0 executed instructions per run (5.8% of JIT)
+== 9 std::web::emailish?: 80,800.0 executed instructions per run (5.8% of JIT)
   mov reg-reg              19,200.0   23.8%
   stack store               7,200.0    8.9%
   frame: epilogue           7,200.0    8.9%

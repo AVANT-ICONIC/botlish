@@ -3,7 +3,7 @@
 # The thunked APIs of include/openssl/bytestring.h (static inline functions, table-redirected
 # names, macros): externs of the C wrappers in the shim library (C-BINDGEN.md,
 # "Thunks"). Build the shim with `tools/c-bindgen.tcl build`.
-import ffi::c
+import std::ffi::c
 import boringssl::ctypes
 
 extern c library "botlish_shim_boringssl_752c8e63"
@@ -12,17 +12,17 @@ extern c library "stdc++"
 
 # C: static inline void CBS_init(CBS *cbs, const uint8_t *data, size_t len)
 extern c fn CBS_init named "botlish_boringssl_CBS_init"(
-    cbs: ffi::c::Ptr[boringssl::ctypes::CBS] write proven noescape,
-    data: ffi::c::Ptr[ffi::c::UChar],
-    len: ffi::c::ULong
+    cbs: std::ffi::c::Ptr[boringssl::ctypes::CBS] write proven noescape,
+    data: std::ffi::c::Ptr[std::ffi::c::UChar],
+    len: std::ffi::c::ULong
 ) -> unit
 
 # C: static inline const uint8_t *CBS_data(const CBS *cbs)
 extern c fn CBS_data named "botlish_boringssl_CBS_data"(
-    cbs: ffi::c::Ptr[boringssl::ctypes::CBS] read proven noescape
-) -> ffi::c::Ptr[ffi::c::UChar]
+    cbs: std::ffi::c::Ptr[boringssl::ctypes::CBS] read proven noescape
+) -> std::ffi::c::Ptr[std::ffi::c::UChar]
 
 # C: static inline size_t CBS_len(const CBS *cbs)
 extern c fn CBS_len named "botlish_boringssl_CBS_len"(
-    cbs: ffi::c::Ptr[boringssl::ctypes::CBS] read proven noescape
-) -> ffi::c::ULong
+    cbs: std::ffi::c::Ptr[boringssl::ctypes::CBS] read proven noescape
+) -> std::ffi::c::ULong

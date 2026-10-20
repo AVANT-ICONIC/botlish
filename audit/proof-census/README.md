@@ -22,19 +22,19 @@ proof journeys and sections:
 
 | probe | edge |
 |---|---|
-| `a-counted-loop-at` | counted loop `0..list::length(xs)` reading `list::at` (journey A) |
-| `b-mutarray-capacity` | `mutable_array::set`/`at` to `capacity(a)` and to the allocation size (B) |
-| `c-slice` | `str::substring` under a conjunctive guard; `LowerUnderrun`/`UpperOverrun` separately (C) |
-| `d-early-return` | `if i < 0 or i >= list::length(xs): return` then `list::at` (D) |
-| `e-struct-domain-projection` | `abi::U8` field domain into `byte::from_int` (E) |
+| `a-counted-loop-at` | counted loop `0..std::list::length(xs)` reading `std::list::at` (journey A) |
+| `b-mutarray-capacity` | `std::mutable_array::set`/`at` to `capacity(a)` and to the allocation size (B) |
+| `c-slice` | `std::str::substring` under a conjunctive guard; `LowerUnderrun`/`UpperOverrun` separately (C) |
+| `d-early-return` | `if i < 0 or i >= std::list::length(xs): return` then `std::list::at` (D) |
+| `e-struct-domain-projection` | `std::abi::U8` field domain into `std::byte::from_int` (E) |
 | `f-closed-abi-u64`, `f2-closed-int-vs-struct` | exact constant through a closed call: Int parameter vs struct field (F) |
 | `g-induction-declared-param`, `h-recursive-slice` | recursion: `==` vs `>=` guards, induction, `string_reverse`'s shape (G, H) |
-| `i-get-in-counted-loop` | `list::get` in a proven loop (I) |
+| `i-get-in-counted-loop` | `std::list::get` in a proven loop (I) |
 | `k-method-spelling`, `k2-bound-name-spelling` | method spelling vs qualified vs bound-name spelling |
 | `l-loop-forms`, `q-countloop-interval` | every numeric loop form, lockstep; the loop variable's interval |
 | `m-listloop-checked` | `loop x in xs` element access |
 | `n-call-specific-transport` | actual-argument facts into a callee's call-specific walk |
-| `o-lowercase-length` | soundness of the `str::lowercase` length rule |
+| `o-lowercase-length` | soundness of the `std::str::lowercase` length rule |
 | `p-param-inference-narrowing` | parameter contract inference vs branch narrowing |
 | `r-return-facts`, `s-struct-facts`, `u-handler-exit` | return, struct and handled-call value transport |
 | `t-relational-prover-pairs` | the two relational provers; alias keying |

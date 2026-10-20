@@ -4,8 +4,8 @@
 # program reaches, gives each of them an instance with its declared
 # parameter types (audit/react-native/tools/libmode.tcl); a library mode
 # would make them roots instead.
-import list
-import str
+import std::list
+import std::str
 
 error NotPositive
 

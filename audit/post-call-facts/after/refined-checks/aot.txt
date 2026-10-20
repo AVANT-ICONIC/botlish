@@ -1,12 +1,12 @@
 <program>: closed (transitively guarded)   [program, ir {}]
-  dispatch: closed -- natives: list x2; functions: check (non-tail), web::uri_escape_text (non-tail)
+  dispatch: closed -- natives: list x2; functions: check (non-tail), std::web::uri_escape_text (non-tail)
   blockers: none
   note:     line 33:19  e21  creates a closure capturing values
   runtime:  closure-env, list-alloc
 
-web::uri_escape_text: closed (transitively guarded)   [e21, line 33:19]
+std::web::uri_escape_text: closed (transitively guarded)   [e21, line 33:19]
   params:   s : any   result: any
-  captures: web::hex_digits (value)
+  captures: std::web::hex_digits (value)
   dispatch: closed -- functions: esc_from (tail)
   blockers: none
   note:     line 122:16  e191  creates a closure capturing values
@@ -31,7 +31,7 @@ is_unreserved: guarded   [e116, line 83:21]
 
 hex_pair: guarded   [e191, line 122:16]
   params:   b : any   result: str
-  captures: web::hex_digits (value), high_nibble (block)
+  captures: std::web::hex_digits (value), high_nibble (block)
   dispatch: closed -- natives: concat, list_get x2, mod; functions: high_nibble (non-tail)
   blockers:
     line 123:16  e194  UnknownAggregateElementType: concat needs str; the element read by list_get at line 123:16 has no static kind

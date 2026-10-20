@@ -1,38 +1,38 @@
 i0 <program>
-i2 char::codepoint<UnicodeChar>
+i2 std::char::codepoint<UnicodeChar>
     param c: declared=UnicodeChar first-ref-view-type=UnicodeChar entry-range=[-∞, +∞]
     result range: [0, +∞]
-i16 byte::high_nibble<generic>
+i16 std::byte::high_nibble<generic>
     param b: declared=- first-ref-view-type=int entry-range=[-∞, +∞]
     result range: [0, 240] {0,16,32,48,64,80,96,112,128,144,160,176,192,208,224,240}
-i17 byte::nibble<int>
+i17 std::byte::nibble<int>
     param x: declared=- first-ref-view-type=int[HighNibble] entry-range=[0, 240] {0,16,32,48,64,80,96,112,128,144,160,176,192,208,224,240}
     result range: [0, 15]
-i3 byte::from_int<int>
+i3 std::byte::from_int<int>
     param value: declared=int first-ref-view-type=int entry-range=[0, +∞]
     result range: [0, 255]
-i1 byte::set<List[UnicodeChar]>
+i1 std::byte::set<List[UnicodeChar]>
     param chars: declared=List[UnicodeChar] first-ref-view-type=List[UnicodeChar] entry-range=[-∞, +∞]
     result range: [-∞, +∞]
-i12 ascii::is_digit<int>
+i12 std::ascii::is_digit<int>
     param b: declared=int[Byte] first-ref-view-type=int[Byte] entry-range=[0, 255]
     result range: [-∞, +∞]
-i10 ascii::is_upper<int>
+i10 std::ascii::is_upper<int>
     param b: declared=int[Byte] first-ref-view-type=int[Byte] entry-range=[0, 255]
     result range: [-∞, +∞]
-i11 ascii::is_lower<int>
+i11 std::ascii::is_lower<int>
     param b: declared=int[Byte] first-ref-view-type=int[Byte] entry-range=[0, 255]
     result range: [-∞, +∞]
-i9 ascii::is_alphabetic<int>
+i9 std::ascii::is_alphabetic<int>
     param b: declared=int[Byte] first-ref-view-type=int[Byte] entry-range=[0, 255]
     result range: [-∞, +∞]
-i8 ascii::is_alphanumeric<int>
+i8 std::ascii::is_alphanumeric<int>
     param b: declared=int[Byte] first-ref-view-type=int[Byte] entry-range=[0, 255]
     result range: [-∞, +∞]
-i7 web::is_unreserved<generic>
+i7 std::web::is_unreserved<generic>
     param b: declared=int[Byte] first-ref-view-type=int[Byte] entry-range=[-∞, +∞]
     result range: [-∞, +∞]
-i4 web::uri_escape_text<generic>
+i4 std::web::uri_escape_text<generic>
     param s: declared=- first-ref-view-type=any entry-range=[-∞, +∞]
     result range: [-∞, +∞]
 i15 high_nibble<generic>

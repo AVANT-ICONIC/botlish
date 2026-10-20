@@ -1,4 +1,4 @@
-# instances: <program>, list::any?<List[str], block>, list::none?<List[str], block>, list::find<List[Test], block>, make_changed?<List[str]>, changed?<generic>, test_name<Test>, test_deps<Test>, affected?<Test, block>, select_affected<List[Test], block>, first_affected<List[Test], block>, is_affected?<generic>
+# instances: <program>, std::list::any?<List[str], block>, std::list::none?<List[str], block>, std::list::find<List[Test], block>, make_changed?<List[str]>, changed?<generic>, test_name<Test>, test_deps<Test>, affected?<Test, block>, select_affected<List[Test], block>, first_affected<List[Test], block>, is_affected?<generic>
 nir 1 call-effects=1 statics=0
 shape 0 named "Test" fields="name dependencies"
 
@@ -38,25 +38,25 @@ func 0 "<program>" params=0 env=0 regs=86 pnames="" captures=0 instance="generic
     %32 = op listnew %31 @e153
     %33 = structnew 0 %30 %32 @e151
     %34 = str "web-tests" @e157
-    %35 = str "lib/web.bot" @e160
-    %36 = str "lib/byte.bot" @e161
+    %35 = str "stdlib/web.bot" @e160
+    %36 = str "stdlib/byte.bot" @e161
     %37 = op listnew %35 %36 @e158
     %38 = structnew 0 %34 %37 @e156
     %39 = str "ascii-tests" @e163
-    %40 = str "lib/ascii.bot" @e166
+    %40 = str "stdlib/ascii.bot" @e166
     %41 = op listnew %40 @e164
     %42 = structnew 0 %39 %41 @e162
     %43 = str "list-tests" @e168
-    %44 = str "lib/list.bot" @e171
+    %44 = str "stdlib/list.bot" @e171
     %45 = op listnew %44 @e169
     %46 = structnew 0 %43 %45 @e167
     %47 = str "byte-tests" @e173
-    %48 = str "lib/byte.bot" @e176
+    %48 = str "stdlib/byte.bot" @e176
     %49 = str "core/scalarbits.tcl" @e177
     %50 = op listnew %48 %49 @e174
     %51 = structnew 0 %47 %50 @e172
     %52 = str "char-tests" @e179
-    %53 = str "lib/char.bot" @e182
+    %53 = str "stdlib/char.bot" @e182
     %54 = str "core/unicodechar.tcl" @e183
     %55 = op listnew %53 %54 @e180
     %56 = structnew 0 %52 %55 @e178
@@ -70,14 +70,14 @@ func 0 "<program>" params=0 env=0 regs=86 pnames="" captures=0 instance="generic
     %64 = op listnew %63 @e192
     %65 = structnew 0 %62 %64 @e190
     %66 = op listnew %4 %9 %14 %19 %24 %29 %33 %38 %42 %46 %51 %56 %61 %65 @e113
-    %67 = str "lib/web.bot" @e198
+    %67 = str "stdlib/web.bot" @e198
     %68 = str "hir/hir.tcl" @e199
     %69 = op listnew %67 %68 @e196
     %70 = str "README.md" @e203
     %71 = op listnew %70 @e201
     %72 = call 4 %69 @e205
     %73 = call 4 %71 @e209
-    %74 = str "lib/web.bot" @e215
+    %74 = str "stdlib/web.bot" @e215
     %75 = callenv 5 %72 %74 @e213
     %76 = call 9 %66 %72 @e217
     %77 = call 9 %66 %73 @e222
@@ -92,7 +92,7 @@ func 0 "<program>" params=0 env=0 regs=86 pnames="" captures=0 instance="generic
     ret %85
 end
 
-func 1 "list::any?" params=2 env=0 regs=18 pnames="xs predicate" captures=0 instance="List[str], block" rawregs="4 14" @e2
+func 1 "std::list::any?" params=2 env=0 regs=18 pnames="xs predicate" captures=0 instance="List[str], block" rawregs="4 14" @e2
     %2 = op listlen %0 @e3
     %3 = int 0 @e3
     %4 = rawint 0
@@ -130,7 +130,7 @@ func 1 "list::any?" params=2 env=0 regs=18 pnames="xs predicate" captures=0 inst
     ret %17
 end
 
-func 2 "list::none?" params=2 env=0 regs=18 pnames="xs predicate" captures=0 instance="List[str], block" rawregs="4 14" @e27
+func 2 "std::list::none?" params=2 env=0 regs=18 pnames="xs predicate" captures=0 instance="List[str], block" rawregs="4 14" @e27
     %2 = op listlen %0 @e28
     %3 = int 0 @e28
     %4 = rawint 0
@@ -168,7 +168,7 @@ func 2 "list::none?" params=2 env=0 regs=18 pnames="xs predicate" captures=0 ins
     ret %17
 end
 
-func 3 "list::find" params=2 env=0 regs=16 pnames="xs predicate" captures=0 instance="List[Test], block" rawregs="4 13" @e38
+func 3 "std::list::find" params=2 env=0 regs=16 pnames="xs predicate" captures=0 instance="List[Test], block" rawregs="4 13" @e38
     %2 = op listlen %0 @e39
     %3 = int 0 @e39
     %4 = rawint 0

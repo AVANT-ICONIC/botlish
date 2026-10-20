@@ -3,7 +3,9 @@
 #   source core/core.tcl
 #   core::formatValue [core::eval {call {ref +} {const 1} {const 2}}]   ;# => 3
 #
-# Optional libraries in lib/ (e.g. lib/web.tcl) are not loaded by default:
+# Optional Tcl libraries in the standard library's directory (stdlib/NAME.tcl,
+# named by a program file's "# requires: NAME" comment) are not loaded by
+# default:
 #
 #   core::loadLibrary web
 
@@ -17,7 +19,16 @@ package require Tcl 9.0
 
 namespace eval core {
     variable home [file dirname [file normalize [info script]]]
-    variable libraryDir [file join [file dirname $home] lib]
+    # The standard library's root: the directory of the compiler-owned
+    # namespace std (STD-NAMESPACE.md), stdlib/ beside core/ in this
+    # distribution -- the checkout, or the packed tree of the single
+    # executable (//zipfs:/app/botlish/stdlib). std::list is
+    # $libraryDir/list.bot, std::abi::x86_64 $libraryDir/abi/x86_64.bot
+    # (surface/modules.tcl). It follows from where the compiler itself is,
+    # never from the working directory, the application or the environment;
+    # a test points it at a private copy (tests/helpers.tcl's
+    # withPrivateLibrary).
+    variable libraryDir [file join [file dirname $home] stdlib]
     variable loadedLibraries {}
     # The Tcl recursion limit an entry point runs Botlish programs under
     # (core::useProgramRecursionLimit): main.tcl, and so the single
@@ -55,7 +66,7 @@ apply {{dir} {
     }
 }} $core::home
 
-# Loads the optional library lib/NAME.tcl once. Libraries register types and
+# Loads the optional library stdlib/NAME.tcl once. Libraries register types and
 # natives globally; root environments created afterwards include them.
 proc core::loadLibrary {name} {
     variable libraryDir

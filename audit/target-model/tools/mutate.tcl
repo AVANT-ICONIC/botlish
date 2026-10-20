@@ -104,7 +104,7 @@ proc isNative {edits} {
 # first, against this checkout's driver; the native ones after, against a
 # private build (nativeTree).
 set tree [file tempdir botlish-target-model-mutants]
-foreach dir {compiler core hir surface lib tests examples} {
+foreach dir {compiler core hir surface stdlib tests examples} {
     file copy [file join $root $dir] [file join $tree $dir]
 }
 file mkdir [file join $tree native]

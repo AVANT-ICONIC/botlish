@@ -1,6 +1,6 @@
 # Post-R2.a: frozen-baseline dynamic census
 
-Audit only. No production compiler, runtime or `web::emailish?` source
+Audit only. No production compiler, runtime or `std::web::emailish?` source
 change. Raw data, tools and reproduction steps:
 [`audit/post-r2a-dynamic-census/`](../audit/post-r2a-dynamic-census/README.md).
 
@@ -88,7 +88,7 @@ requested:
 | | |
 |---|---|
 | tree | `6dbcfdb3d62e7870363d2af4fe0dfab7e58ad80c`: the R2.a.3 source freeze `05ae3d8`/`c4024de`, plus two audit-corpus regenerations that touch no compiler, runtime or library file |
-| `lib/web.bot` | algorithm and code unchanged. The only diff is the item-2-permitted comment correction below; NIR is byte-identical before and after |
+| `stdlib/web.bot` | algorithm and code unchanged. The only diff is the item-2-permitted comment correction below; NIR is byte-identical before and after |
 | benchmark | `bench/refined-checks.ir`, unmodified; result `[400, 0]` (`value {list {{int 400} {int 0}}}`) on every backend |
 | host | Intel Xeon @ 2.10 GHz, 4 vCPU shared cloud container, Linux 6.18, glibc 2.39 |
 | tools | Tcl 9.0.1, rustc/cargo 1.98.1, valgrind 3.22.0, Python 3.11.15, binutils 2.42 |
@@ -112,7 +112,7 @@ the required-question answers, and both occurrences were corrected:
 
 No measured result or Range fact was changed.
 
-`lib/web.bot`'s own `scan_while` comment reproduced correction 1's mistake:
+`stdlib/web.bot`'s own `scan_while` comment reproduced correction 1's mistake:
 it listed `local_char?/label_char?/is_tcl_alpha` as the predicates passed to
 `PREDICATE`. As item 2 explicitly permits, that comment now names
 `local_char?` and `is_tcl_alpha`. It is a comment-only, four-line,
@@ -232,7 +232,7 @@ tree:
 | allocations | 8,823 | 8,823 | ✓ |
 | String / Block / List / ImmutableSet / StringPlan | 8,004 / 803 / 12 / 2 / 2 | 8,004 / 803 / 12 / 2 / 2 | ✓ |
 | UTF-8 seek bytes | (not reported) | 46,000 | |
-| OpenInstances | web::emailish? region all open | 13 open, 9 of them blockescape-flattened | |
+| OpenInstances | std::web::emailish? region all open | 13 open, 9 of them blockescape-flattened | |
 | `check.n` | `[-∞, +∞]` | `[-∞, +∞]` | ✓ |
 | `scan_while` `i`, `domain?` `j` | max bounded | `[-∞, 4611686018427387902]` both | ✓ |
 
@@ -292,7 +292,7 @@ everything it calls.
 | function | invocations | self Ir | inclusive Ir | incl % | notes |
 |---|---:|---:|---:|---:|---|
 | `check` | 2 (802 self-tail iterations) | 46,880 | 8,547,004 | 99.83 | `check<generic>` |
-| `web::emailish?` | 800 | 76,800 | 8,500,124 | 99.28 | via `callenv` |
+| `std::web::emailish?` | 800 | 76,800 | 8,500,124 | 99.28 | via `callenv` |
 | `scan_while` | 1,200 (8,800 loop headers, 8,000 bodies) | 423,200 | 7,270,216 | 84.92 | 800 from `emailish?` (incl 5,781,566), 400 from `tld?` (incl 1,488,650) |
 | `char_at` (fn 11, materializing) | 8,000 | 272,000 | 5,034,616 | 58.81 | only caller: `scan_while` |
 | `domain?` | 400 | 103,200 | 2,265,450 | 26.46 | 752,000 excluding `tld?` |
@@ -301,9 +301,9 @@ everything it calls.
 | `char_at` (fn 10, region companion) | 2,800 | 128,800 | 235,200 | 2.75 | callers `domain?` 2,400, `emailish?` 400 |
 | `label_char?` | 0 calls, 800 folded evaluations | (in `domain?`) | (in `domain?`) | | folded by StringRegion's region-consumer lowering, not the tiny-leaf inliner |
 | `is_tcl_alpha` (native) | 1,200 (through `rt_call_value`) | 21,600 inlined into `rt_call_value` | 68,400 | 0.80 | plus 75,600 native dispatch |
-| `web::uri_escape_text` + helpers | 1 | 24 | 7,358 | 0.09 | startup |
-| `web::is_unreserved` | 3 | 76 | 549 | 0.01 | startup |
-| `byte::set` | 1 | 276 | 2,713 | 0.03 | startup |
+| `std::web::uri_escape_text` + helpers | 1 | 24 | 7,358 | 0.09 | startup |
+| `std::web::is_unreserved` | 3 | 76 | 549 | 0.01 | startup |
+| `std::byte::set` | 1 | 276 | 2,713 | 0.03 | startup |
 
 Attribution is ambiguous in three places, and each was resolved as follows:
 * `label_char?` has no frame of its own, so its cost is inside `domain?`.
@@ -360,7 +360,7 @@ per call is `rt_set_contains`, which allocates nothing.
 | callee | call form | dynamic calls/run | caller(s) | inclusive Ir |
 |---|---|---:|---|---:|
 | `check` | `call` | 2 | `<program>` | 8,547,004 |
-| `web::emailish?` | `callenv` | 800 | `check` | 8,500,124 |
+| `std::web::emailish?` | `callenv` | 800 | `check` | 8,500,124 |
 | `scan_while` | `call` | 800 / 400 | `emailish?` / `tld?` | 5,781,566 / 1,488,650 |
 | `char_at` (materializing) | `call` | 8,000 | `scan_while` | 5,034,616 |
 | **`predicate(…)`** | **`callvalue`** (`rt_call_value`) | **8,000** | **`scan_while`** | **1,812,400** |
@@ -369,7 +369,7 @@ per call is `rt_set_contains`, which allocates nothing.
 | `domain?` | `call` | 400 | `emailish?` | 2,265,450 |
 | `tld?` | `call` | 400 | `domain?` | 1,513,450 |
 | `char_at` (region companion) | `callmulti` | 2,400 / 400 | `domain?` / `emailish?` | 201,600 / 33,600 |
-| `web::uri_escape_text` | `callenv` | 1 | `<program>` | 7,358 |
+| `std::web::uri_escape_text` | `callenv` | 1 | `<program>` | 7,358 |
 
 The one `callvalue` site executes 8,000 times per run; every other hot edge
 is an exact `call`/`callenv`/`callmulti`.
@@ -516,7 +516,7 @@ calls produce 0 Strings. The only difference is consumer visibility.
 
 ## Module-closure / callenv cost
 
-* **Module initialization:** `web::emailish?`, `is_unreserved` and
+* **Module initialization:** `std::web::emailish?`, `is_unreserved` and
   `uri_escape_text` closures plus `local_extra_chars` (list + set). One-time
   cost: 1,521 Ir of `rt_closure_new` + 1,560 `rt_set_from_list` + ~1K list
   construction, **< 0.05%**. Negligible, as expected.
@@ -533,7 +533,7 @@ calls produce 0 Strings. The only difference is consumer visibility.
 ## Generic-keying / lost-M9-fact cost
 
 **Mechanism.** Since R2.a.1, `local_extra_chars` is module-retained, so
-`web::emailish?` captures it and becomes a closure. `check` captures that
+`std::web::emailish?` captures it and becomes a closure. `check` captures that
 closure, a value-capturing closure's key is forced generic, and the result
 is `check<generic>`. `hir::range` also flags `check` open, because it is
 materialized in `<program>` even though blockescape flattens it. So `n`
@@ -779,7 +779,7 @@ with the profile:
 | site | kind | count | bytes | in-run Ir | reclamation Ir | reason it exists |
 |---|---|---:|---:|---:|---:|---|
 | `char_at` `web.bot:97` `substr` | String | 8,000 | 330,800 | 4,762,616 (595 each) | ≈2.38M | `predicate(char_at(i))`: consumer behind `callvalue` (and set membership on 6,800) |
-| `web::emailish?` `web.bot:99` `closure` | Block | 800 | 38,400 | 283,500 (354 each) | ≈0.24M | `local_char?` captures module-retained `local_extra_chars` and escapes as a value |
+| `std::web::emailish?` `web.bot:99` `closure` | Block | 800 | 38,400 | 283,500 (354 each) | ≈0.24M | `local_char?` captures module-retained `local_extra_chars` and escapes as a value |
 | module init (`web.bot:90/92/185/187/189/192`, `byte.bot:175/177`, program list) | List, ImmutableSet, Block | 14 | 784 | ~7K | | module-retained values, closures, result list |
 | `uriEscape("a b")` (`web.bot:198/207/219/221`) | String, List, StringPlan | 9 | 456 | ~7K | | startup |
 | **total** | | **8,823** | **370,440** | **≈5.06M (59%)** | **2,621,775** | |
@@ -881,9 +881,9 @@ A  exact predicate target at scan_while  (finite theorem: predicate ∈ {local_c
             └── rough upper bound, anchored on R2's own 319 Ir/char region scan .. ~3.2M (38%)
                  [NOT existing machinery; a follow-on; only possible after A]
 
-B  static module-retained values (local_extra_chars, web::emailish?)
+B  static module-retained values (local_extra_chars, std::web::emailish?)
 ├── B1 local_char? envless → no per-call closure ......... 0.28M (3.3%)  ◄── same Ir as A4
-├── B2 web::emailish? envless → emailish?<str>, no guard .. ~0.006M
+├── B2 std::web::emailish? envless → emailish?<str>, no guard .. ~0.006M
 ├── B3 check non-generic → n ∈ [0,400] ..................... ≤0.022M (0.25%) ◄── same Ir as C2
 └── does NOT remove callvalue, NOT make local_char? region-consuming
     total ≈0.31M (3.6%); ≈0.02–0.03M of it independent of A
@@ -938,14 +938,14 @@ corpus: `bench/*.ir`, `bench/*.bot`, `examples/stdlib/*.bot`,
 
 | pattern | where it occurs |
 |---|---|
-| `callvalue` (higher-order predicate call) | **only** `lib/web.bot`'s `scan_while` (via `refined-checks` and `uri-steady`, which compiles the same module) |
+| `callvalue` (higher-order predicate call) | **only** `stdlib/web.bot`'s `scan_while` (via `refined-checks` and `uri-steady`, which compiles the same module) |
 | per-call closure allocation | `local_char?` (same two programs), plus `examples/surface/03-closure.bot` |
 | module values reaching functions as flattened captures | only `web` (7 in `refined-checks`, 10 in `uri-steady`) |
 | open-but-blockescape-flattened instances (C's population) | only `web`: 9 / 10 instances, covering `uri_escape_text`'s `esc_from`/`esc_char`/`esc_bytes`/`hex_pair` **as well as** `emailish?`'s helpers |
 | materializing `substr` | `web` (2 sites) and the csv family (2 each); region ops widespread (ai_text_clean 19, csv 11, csv_* 9–11, string_replace 4) |
 | `immutable_set_contains` | only `web` (`local_char?`, `is_unreserved`) |
 
-Every compiler candidate (A, B, C) is today a `lib/web.bot`-only pattern:
+Every compiler candidate (A, B, C) is today a `stdlib/web.bot`-only pattern:
 * **A is the narrowest:** one site.
 * **B and C are broader:** both web functions.
 * **The runtime materialization costs (E1/E3) are the most general.** The
@@ -1025,7 +1025,7 @@ Choosing A does **not** claim:
 
 ## Validation and regression
 
-* **Full regression** (a comment in `lib/web.bot`, a file normal tests load,
+* **Full regression** (a comment in `stdlib/web.bot`, a file normal tests load,
   changed): `LANG=C.utf8 LC_ALL=C.utf8 tclsh9.0 tests/all.tcl`, on the final
   tree:
   * `interp` pass: **Total 2544, Passed 2544, Skipped 0, Failed 0**;
@@ -1056,7 +1056,7 @@ Choosing A does **not** claim:
 
 1. **Frozen baseline tree:** `6dbcfdb3d62e7870363d2af4fe0dfab7e58ad80c` (R2.a.3
    freeze `05ae3d8`/`c4024de`, plus audit-corpus regenerations only).
-2. **Is `lib/web.bot` unchanged?** **Yes.** Its code and algorithm are
+2. **Is `stdlib/web.bot` unchanged?** **Yes.** Its code and algorithm are
    byte-for-byte unchanged, and it compiles to byte-identical NIR. The one
    diff is the item-2-permitted correction of a comment that reproduced
    R2.a.3's `label_char?` mistake.
@@ -1105,7 +1105,7 @@ Choosing A does **not** claim:
 18. **Cost of the 800 `local_char?` closures:** ≈283,500 Ir in-run (3.3%;
     342 per closure, plus call-site setup), plus ≈237,600 deferred. 0 GC
     cycles.
-19. **Cost of calling closure-valued `web::emailish?` via `callenv`:** about
+19. **Cost of calling closure-valued `std::web::emailish?` via `callenv`:** about
     nothing at the call site, which has the same instruction count as a
     `call`. Inside it, 1,600 Ir of capture loads plus ~5,600 of `guard str`
     from the generic instance.

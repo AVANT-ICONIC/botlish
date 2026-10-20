@@ -1,0 +1,513 @@
+name	kind	namespace	role	origin	location	platform	arch	direct
+*	intrinsic		primitive	intrinsic				
++	intrinsic		primitive	intrinsic				
+-	intrinsic		primitive	intrinsic				
+/	intrinsic		primitive	intrinsic	core/float.tcl:358			
+<	intrinsic		primitive	intrinsic				
+<=	intrinsic		primitive	intrinsic				
+==	intrinsic		primitive	intrinsic	core/primitives.tcl:99			
+>	intrinsic		primitive	intrinsic				
+>=	intrinsic		primitive	intrinsic				
+DecimalRounded#*	intrinsic		internal	intrinsic				
+DecimalRounded#+	intrinsic		internal	intrinsic				
+DecimalRounded#-	intrinsic		internal	intrinsic				
+DecimalRounded#/	intrinsic		internal	intrinsic				
+DecimalRounded#<	intrinsic		internal	intrinsic				
+DecimalRounded#<=	intrinsic		internal	intrinsic				
+DecimalRounded#==	intrinsic		internal	intrinsic				
+DecimalRounded#>	intrinsic		internal	intrinsic				
+DecimalRounded#>=	intrinsic		internal	intrinsic				
+DecimalRounded#neg	intrinsic		internal	intrinsic				
+Float64#*	intrinsic		internal	intrinsic				
+Float64#+	intrinsic		internal	intrinsic				
+Float64#-	intrinsic		internal	intrinsic				
+Float64#/	intrinsic		internal	intrinsic				
+Float64#<	intrinsic		internal	intrinsic				
+Float64#<=	intrinsic		internal	intrinsic				
+Float64#>	intrinsic		internal	intrinsic				
+Float64#>=	intrinsic		internal	intrinsic				
+Float64#neg	intrinsic		internal	intrinsic				
+IndexNotFound	builtin-error		builtin	intrinsic	core/native.tcl			
+InvalidArgumentEncoding	builtin-error		builtin	intrinsic	core/native.tcl			
+LayoutExtentMismatch	builtin-error		builtin	intrinsic	core/native.tcl			
+LayoutLengthMismatch	builtin-error		builtin	intrinsic	core/native.tcl			
+LowerUnderrun	builtin-error		builtin	intrinsic	core/native.tcl			
+NativeEditNull	builtin-error		builtin	intrinsic	core/native.tcl			
+NativeViewNull	builtin-error		builtin	intrinsic	core/native.tcl			
+NonFiniteFloat	builtin-error		builtin	intrinsic	core/native.tcl			
+NonFiniteResult	builtin-enum		builtin	intrinsic	core/native.tcl			
+PositiveInfinity NegativeInfinity NotANumber	builtin-enum		builtin	intrinsic	core/native.tcl			
+UnrepresentableDecimal	builtin-error		builtin	intrinsic	core/native.tcl			
+UpperOverrun	builtin-error		builtin	intrinsic	core/native.tcl			
+abi	namespace		api	source	lib/abi.bot			
+abi::AbiIntegerAboveRange	error	abi	api	source	lib/abi.bot:114			
+abi::AbiIntegerBelowRange	error	abi	api	source	lib/abi.bot:113			
+abi::I16	struct	abi	api	source	lib/abi.bot:157			
+abi::I16Value	type	abi	api	source	lib/abi.bot:120			
+abi::I32	struct	abi	api	source	lib/abi.bot:160			
+abi::I32Value	type	abi	api	source	lib/abi.bot:121			
+abi::I64	struct	abi	api	source	lib/abi.bot:163			
+abi::I64Value	type	abi	api	source	lib/abi.bot:122			
+abi::I8	struct	abi	api	source	lib/abi.bot:154			
+abi::I8Value	type	abi	api	source	lib/abi.bot:119			
+abi::Isize	struct	abi	api	source	lib/abi.bot:178			
+abi::IsizeValue	type	abi	api	source	lib/abi.bot:148			
+abi::U16	struct	abi	api	source	lib/abi.bot:169			
+abi::U16Value	type	abi	api	source	lib/abi.bot:125			
+abi::U32	struct	abi	api	source	lib/abi.bot:172			
+abi::U32Value	type	abi	api	source	lib/abi.bot:126			
+abi::U64	struct	abi	api	source	lib/abi.bot:175			
+abi::U64Value	type	abi	api	source	lib/abi.bot:127			
+abi::U8	struct	abi	api	source	lib/abi.bot:166			
+abi::U8Value	type	abi	api	source	lib/abi.bot:124			
+abi::Usize	struct	abi	api	source	lib/abi.bot:181			
+abi::UsizeValue	type	abi	api	source	lib/abi.bot:149			
+abi::aarch64	namespace		api	source+intrinsic	lib/abi/aarch64.bot			
+abi::aarch64::Register64	struct	abi::aarch64	api	source	lib/abi/aarch64.bot:70			
+abi::aarch64::Register64AboveRange	error	abi::aarch64	api	source	lib/abi/aarch64.bot:64			
+abi::aarch64::Register64BelowRange	error	abi::aarch64	api	source	lib/abi/aarch64.bot:63			
+abi::aarch64::Register64Word	type	abi::aarch64	api	source	lib/abi/aarch64.bot:68			
+abi::aarch64::from_bytes	intrinsic	abi::aarch64	api	intrinsic				
+abi::aarch64::from_i16	function	abi::aarch64	api	source	lib/abi/aarch64.bot:135			
+abi::aarch64::from_i32	function	abi::aarch64	api	source	lib/abi/aarch64.bot:138			
+abi::aarch64::from_i64	function	abi::aarch64	api	source	lib/abi/aarch64.bot:141			
+abi::aarch64::from_i8	function	abi::aarch64	api	source	lib/abi/aarch64.bot:132			
+abi::aarch64::from_isize	function	abi::aarch64	api	source	lib/abi/aarch64.bot:144			
+abi::aarch64::from_mutable_bytes	intrinsic	abi::aarch64	api	intrinsic				
+abi::aarch64::from_u16	function	abi::aarch64	api	source	lib/abi/aarch64.bot:150			
+abi::aarch64::from_u32	function	abi::aarch64	api	source	lib/abi/aarch64.bot:153			
+abi::aarch64::from_u64	function	abi::aarch64	api	source	lib/abi/aarch64.bot:158			
+abi::aarch64::from_u8	function	abi::aarch64	api	source	lib/abi/aarch64.bot:147			
+abi::aarch64::from_usize	function	abi::aarch64	api	source	lib/abi/aarch64.bot:165			
+abi::aarch64::register64	function	abi::aarch64	api	source	lib/abi/aarch64.bot:76			
+abi::aarch64::to_int	function	abi::aarch64	api	source	lib/abi/aarch64.bot:89			
+abi::bytes	namespace		api	source	lib/abi/bytes.bot			
+abi::bytes::Bytes	opaque-struct	abi::bytes	api	source	lib/abi/bytes.bot:97			
+abi::bytes::MutableBytes	opaque-struct	abi::bytes	api	source	lib/abi/bytes.bot:100			
+abi::bytes::detach	function	abi::bytes	api	source	lib/abi/bytes.bot:152			
+abi::bytes::freeze	function	abi::bytes	api	source	lib/abi/bytes.bot:157			
+abi::bytes::freeze_prefix	function	abi::bytes	api	source	lib/abi/bytes.bot:163			
+abi::bytes::from_bytes	function	abi::bytes	api	source	lib/abi/bytes.bot:128			
+abi::bytes::from_list	function	abi::bytes	api	source	lib/abi/bytes.bot:108			
+abi::bytes::length	function	abi::bytes	api	source	lib/abi/bytes.bot:114			
+abi::bytes::mutable_length	function	abi::bytes	api	source	lib/abi/bytes.bot:133			
+abi::bytes::replace	function	abi::bytes	api	source	lib/abi/bytes.bot:139			
+abi::bytes::zeroed	function	abi::bytes	api	source	lib/abi/bytes.bot:123			
+abi::i16	function	abi	api	source	lib/abi.bot:201			
+abi::i32	function	abi	api	source	lib/abi.bot:209			
+abi::i64	function	abi	api	source	lib/abi.bot:217			
+abi::i8	function	abi	api	source	lib/abi.bot:193			
+abi::isize	function	abi	api	source	lib/abi.bot:258			
+abi::u16	function	abi	api	source	lib/abi.bot:233			
+abi::u32	function	abi	api	source	lib/abi.bot:241			
+abi::u64	function	abi	api	source	lib/abi.bot:249			
+abi::u8	function	abi	api	source	lib/abi.bot:225			
+abi::usize	function	abi	api	source	lib/abi.bot:266			
+abi::x86_64	namespace		api	source+intrinsic	lib/abi/x86_64.bot			
+abi::x86_64::Register64	struct	abi::x86_64	api	source	lib/abi/x86_64.bot:76			
+abi::x86_64::Register64AboveRange	error	abi::x86_64	api	source	lib/abi/x86_64.bot:70			
+abi::x86_64::Register64BelowRange	error	abi::x86_64	api	source	lib/abi/x86_64.bot:69			
+abi::x86_64::Register64Word	type	abi::x86_64	api	source	lib/abi/x86_64.bot:74			
+abi::x86_64::from_bytes	intrinsic	abi::x86_64	api	intrinsic				
+abi::x86_64::from_i16	function	abi::x86_64	api	source	lib/abi/x86_64.bot:141			
+abi::x86_64::from_i32	function	abi::x86_64	api	source	lib/abi/x86_64.bot:144			
+abi::x86_64::from_i64	function	abi::x86_64	api	source	lib/abi/x86_64.bot:147			
+abi::x86_64::from_i8	function	abi::x86_64	api	source	lib/abi/x86_64.bot:138			
+abi::x86_64::from_isize	function	abi::x86_64	api	source	lib/abi/x86_64.bot:150			
+abi::x86_64::from_mutable_bytes	intrinsic	abi::x86_64	api	intrinsic				
+abi::x86_64::from_u16	function	abi::x86_64	api	source	lib/abi/x86_64.bot:156			
+abi::x86_64::from_u32	function	abi::x86_64	api	source	lib/abi/x86_64.bot:159			
+abi::x86_64::from_u64	function	abi::x86_64	api	source	lib/abi/x86_64.bot:164			
+abi::x86_64::from_u8	function	abi::x86_64	api	source	lib/abi/x86_64.bot:153			
+abi::x86_64::from_usize	function	abi::x86_64	api	source	lib/abi/x86_64.bot:171			
+abi::x86_64::register64	function	abi::x86_64	api	source	lib/abi/x86_64.bot:82			
+abi::x86_64::to_int	function	abi::x86_64	api	source	lib/abi/x86_64.bot:95			
+affine#drop	intrinsic		internal	intrinsic	core/affine.tcl:124			
+argv	intrinsic		primitive	intrinsic	core/process.tcl:115			
+ascii	namespace		api	source	lib/ascii.bot			
+ascii::is_alphabetic	function	ascii	api	source	lib/ascii.bot:50			
+ascii::is_alphanumeric	function	ascii	api	source	lib/ascii.bot:53			
+ascii::is_digit	function	ascii	api	source	lib/ascii.bot:41			
+ascii::is_lower	function	ascii	api	source	lib/ascii.bot:47			
+ascii::is_upper	function	ascii	api	source	lib/ascii.bot:44			
+binary	namespace		api	source+intrinsic	lib/binary.bot			
+binary#element	intrinsic		internal	intrinsic	core/binary.tcl:757			
+binary#emit	intrinsic		internal	intrinsic	core/binary.tcl:708			
+binary#load	intrinsic		internal	intrinsic	core/binary.tcl:730			
+binary#load_array	intrinsic		internal	intrinsic	core/binary.tcl:767			
+binary#store_element	intrinsic		internal	intrinsic	core/binary.tcl:764			
+binary#view_field	intrinsic		internal	intrinsic	core/binary.tcl:733			
+binary::I16	type	binary	api	source	lib/binary.bot:61			
+binary::I32	type	binary	api	source	lib/binary.bot:62			
+binary::I64	type	binary	api	source	lib/binary.bot:63			
+binary::I8	type	binary	api	source	lib/binary.bot:60			
+binary::U16	type	binary	api	source	lib/binary.bot:56			
+binary::U32	type	binary	api	source	lib/binary.bot:57			
+binary::U64	type	binary	api	source	lib/binary.bot:58			
+binary::U8	type	binary	api	source	lib/binary.bot:55			
+binary::element	intrinsic	binary	api	intrinsic	core/binary.tcl:754			
+binary::emit	intrinsic	binary	api	intrinsic	core/binary.tcl:705			
+binary::layout_alignment	intrinsic	binary	api	intrinsic	core/binary.tcl:722			
+binary::layout_length	intrinsic	binary	api	intrinsic	core/binary.tcl:720			
+binary::load	intrinsic	binary	api	intrinsic	core/binary.tcl:727			
+binary::native	namespace		api	intrinsic				1
+binary::native::edit	intrinsic	binary::native	api	intrinsic	core/binary.tcl:736			
+binary::native::view	intrinsic	binary::native	api	intrinsic	core/binary.tcl:724			
+binary::parse	intrinsic	binary	api	intrinsic	core/binary.tcl:702			
+binary::read	intrinsic	binary	api	intrinsic	core/binary.tcl:717			
+binary::store	intrinsic	binary	api	intrinsic	core/binary.tcl:739			
+binary::store_element	intrinsic	binary	api	intrinsic	core/binary.tcl:760			
+binary::write	intrinsic	binary	api	intrinsic	core/binary.tcl:742			
+binary::write_foreign	intrinsic	binary	api	intrinsic	core/binary.tcl:746			
+bit_and	intrinsic		primitive	intrinsic				
+bit_or	intrinsic		primitive	intrinsic				
+bit_xor	intrinsic		primitive	intrinsic				
+byte	namespace		api	source	lib/byte.bot			
+byte::AboveRange	error	byte	api	source	lib/byte.bot:75			
+byte::BelowRange	error	byte	api	source	lib/byte.bot:74			
+byte::Byte	type	byte	api	source	lib/byte.bot:101			
+byte::HighNibble	type	byte	api	source	lib/byte.bot:106			
+byte::LowNibble	type	byte	api	source	lib/byte.bot:104			
+byte::Nibble	type	byte	api	source	lib/byte.bot:103			
+byte::complement	function	byte	api	source	lib/byte.bot:122			
+byte::from_int	function	byte	api	source	lib/byte.bot:151			
+byte::high_nibble	function	byte	api	source	lib/byte.bot:113			
+byte::low_nibble	function	byte	api	source	lib/byte.bot:116			
+byte::nibble	function	byte	api	source	lib/byte.bot:119			
+byte::position_high	function	byte	api	source	lib/byte.bot:128			
+byte::position_low	function	byte	api	source	lib/byte.bot:125			
+byte::set	function	byte	api	source	lib/byte.bot:174			
+byte_store	namespace		api	intrinsic				
+byte_store::byte_count	intrinsic	byte_store	api	intrinsic	core/bytestore.tcl:197			
+byte_store::from_list	intrinsic	byte_store	api	intrinsic	core/bytestore.tcl:195			
+char	namespace		api	intrinsic				
+char::scalar_value	intrinsic	char	api	intrinsic	core/unicodechar.tcl:29			
+compiler	namespace		api	source	lib/compiler.bot			
+compiler::CompilerError	error	compiler	api	source	lib/compiler.bot:157			
+compiler::DiagnosticCode	enum	compiler	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::AffineCaptureUnsupported	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::AffineContainerUnsupported	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::AffineDuplicationUnsupported	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::AffineElementCopyOut	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::AffineEqualityUnsupported	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::AffineErasureUnsupported	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::AffineFieldMoveRequiresDestructure	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::AffineGenericNestedUnsupported	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::AffineInstanceBudget	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::AffineListOperationUnsupported	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::AffineNotDefinitelyLive	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::AffinePathReleaseUnsupported	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::AffineTemporaryUnsupported	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::AmbiguousContextImplementation	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::AmbiguousMethodCall	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::AmbiguousQualifier	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::Arity	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::BinaryOperand	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::BreakOutsideLoop	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::ContextBindingCollision	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::ContextFunctionValue	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::ContextInstallationUnsupported	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::ContextTraitMisuse	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::ContextTraitPosition	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::ContinueOutsideLoop	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::CoroutineContract	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::CoroutineNotFunction	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::CoroutineResultMismatch	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::CoroutineResumeArity	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::CoroutineResumeConflict	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::CoroutineResumeType	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::CoroutineResumeUnderconstrained	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::CoroutineRhsNotYielding	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::DecimalGuaranteeLost	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::DecimalPrecision	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::Direct	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::DirectCallableValue	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::Duplicate	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::DuplicateContextParameter	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::DuplicateField	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::DuplicateFlag	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::DuplicateFlagDeclaration	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::DuplicateLoopVariable	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::FlagBindingCollision	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::FlagCalleeUnknown	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::FlagFunctionValue	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::ForeignBorrow	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::Imprint	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::KnownError	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::LayoutArrayExtent	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::LayoutArrayIndex	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::LayoutForeignWrite	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::LayoutNativeOnly	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::LayoutNotAType	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::LayoutNotAValue	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::LayoutOperand	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::LayoutStructParameter	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::LayoutUnion	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::LockstepUnequal	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::LockstepUnproven	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::MissingContext	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::MissingErrorPayload	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::MissingField	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::MissingImport	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::ModuleContext	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::ModuleImmutable	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::MutablePlaceCapture	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::MutablePlaceReceiver	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::NoApplicableMethod	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::NomethodCall	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::NotAContext	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::NotAStruct	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::NotAnEnum	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::OpaqueConstruction	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::OpaqueRepresentation	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::ProofClause	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::RefinementMintAuthority	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::RefinementParameter	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::ReturnOutsideCallable	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::TraitImplOrder	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::TraitInstanceBudget	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::TraitNestedPolymorphic	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::TraitNotSatisfied	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::TraitPolymorphicFunctionValue	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::TraitPolymorphicRecursion	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::TraitStorageUnsupported	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::TraitUnknownOperation	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::TraitViewMisuse	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::TraitWitnessJoin	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::Type	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::Unbound	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::UndeclaredError	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::UnexpectedErrorPayload	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::UnhandledError	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::UnknownEnumCase	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::UnknownField	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::UnknownFlag	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::UnknownLayout	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::UnknownNamespace	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::UnknownStruct	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::UnknownSymbol	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::UnprovenField	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::UnwrappedYield	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::UseAfterMove	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::DiagnosticCode::YieldOutsideFunction	enum-case	compiler::DiagnosticCode	api	source	lib/compiler.bot:42			
+compiler::SourceLocation	struct	compiler	api	source	lib/compiler.bot:151			
+context#install	intrinsic		internal	intrinsic	core/contexts.tcl:106			
+context#load	intrinsic		internal	intrinsic	core/contexts.tcl:108			
+context#unreachable	intrinsic		internal	intrinsic	core/contexts.tcl:110			
+coroutine	namespace		api	intrinsic				
+coroutine#create	intrinsic		internal	intrinsic	core/coroutines.tcl:324			
+coroutine#release	intrinsic		internal	intrinsic	core/coroutines.tcl:334			
+coroutine#resume	intrinsic		internal	intrinsic	core/coroutines.tcl:328			
+coroutine#start	intrinsic		internal	intrinsic	core/coroutines.tcl:326			
+coroutine#yield	intrinsic		internal	intrinsic	core/coroutines.tcl:330			
+coroutine::done?	intrinsic	coroutine	api	intrinsic	core/coroutines.tcl:332			
+decimal_rounded	namespace		api	intrinsic				
+decimal_rounded#equal	intrinsic		internal	intrinsic				
+decimal_rounded#greater	intrinsic		internal	intrinsic				
+decimal_rounded#greater_equal	intrinsic		internal	intrinsic				
+decimal_rounded#less	intrinsic		internal	intrinsic				
+decimal_rounded#less_equal	intrinsic		internal	intrinsic				
+decimal_rounded#round	intrinsic		internal	intrinsic	core/decimal.tcl:803			
+decimal_rounded#to_float64	intrinsic		internal	intrinsic	core/decimal.tcl:797			
+decimal_rounded::round	intrinsic	decimal_rounded	api	intrinsic	core/decimal.tcl:799			
+error?	intrinsic		primitive	intrinsic	core/predicates.tcl:55			
+ffi::c	namespace		api	source+intrinsic	lib/ffi/c.bot			
+ffi::c::Bool	intrinsic-type	ffi::c	api	intrinsic	hir/cabi.tcl			
+ffi::c::Char	c-scalar-type	ffi::c	api	intrinsic	core/cabi.tcl			
+ffi::c::Double	intrinsic-type	ffi::c	api	intrinsic	hir/cabi.tcl			
+ffi::c::FnPtr	intrinsic-type	ffi::c	api	intrinsic	hir/cabi.tcl			
+ffi::c::Int	c-scalar-type	ffi::c	api	intrinsic	core/cabi.tcl			
+ffi::c::Long	c-scalar-type	ffi::c	api	intrinsic	core/cabi.tcl			
+ffi::c::LongLong	c-scalar-type	ffi::c	api	intrinsic	core/cabi.tcl			
+ffi::c::Ptr	intrinsic-type	ffi::c	api	intrinsic	hir/cabi.tcl			
+ffi::c::SChar	c-scalar-type	ffi::c	api	intrinsic	core/cabi.tcl			
+ffi::c::Short	c-scalar-type	ffi::c	api	intrinsic	core/cabi.tcl			
+ffi::c::UChar	c-scalar-type	ffi::c	api	intrinsic	core/cabi.tcl			
+ffi::c::UInt	c-scalar-type	ffi::c	api	intrinsic	core/cabi.tcl			
+ffi::c::ULong	c-scalar-type	ffi::c	api	intrinsic	core/cabi.tcl			
+ffi::c::ULongLong	c-scalar-type	ffi::c	api	intrinsic	core/cabi.tcl			
+ffi::c::UShort	c-scalar-type	ffi::c	api	intrinsic	core/cabi.tcl			
+ffi::c::Void	intrinsic-type	ffi::c	api	intrinsic	hir/cabi.tcl			
+ffi::c::clone	intrinsic	ffi::c	api	intrinsic	core/cabi.tcl:332			
+ffi::c::erase	intrinsic	ffi::c	api	intrinsic	core/cabi.tcl:334			
+ffi::c::null	intrinsic	ffi::c	api	intrinsic	core/cabi.tcl:328			
+ffi::c::null?	intrinsic	ffi::c	api	intrinsic	core/cabi.tcl:330			
+ffi::c::retype	intrinsic	ffi::c	api	intrinsic	core/cabi.tcl:337			
+float64	namespace		api	intrinsic				
+float64::from_decimal_rounded	intrinsic	float64	api	intrinsic	core/decimal.tcl:794			
+float64::from_int	intrinsic	float64	api	intrinsic				
+float64::truncate	intrinsic	float64	api	intrinsic				
+foreign#refused	intrinsic		internal	intrinsic				
+hash	intrinsic		primitive	intrinsic	core/hashing.tcl:253			
+immutable_set	namespace		api	intrinsic				
+immutable_set::contains	intrinsic	immutable_set	api	intrinsic	core/immutableset.tcl:78			
+immutable_set::from_list	intrinsic	immutable_set	api	intrinsic	core/immutableset.tcl:75			
+integer?	intrinsic		primitive	intrinsic				
+io	namespace		api	source	lib/io.bot			
+io::IO	context-trait	io	api	source	lib/io.bot:48			
+io::WriteFailed	error	io	api	source	lib/io.bot:44			
+io::path	namespace		api	source	lib/io/path.bot			
+io::path::NotAPath	error	io::path	api	source	lib/io/path.bot:24			
+io::path::Path	trait	io::path	api	source	lib/io/path.bot:33			
+io::path::concat	function	io::path	api	source	lib/io/path.bot:40			
+io::path::text	function	io::path	api	source	lib/io/path.bot:44			
+io::print	function	io	api	source	lib/io.bot:53			
+io::print_line	function	io	api	source	lib/io.bot:59			
+io::write_error	function	io	api	source	lib/io.bot:63			
+io::write_error_line	function	io	api	source	lib/io.bot:67			
+linux	namespace		api	source	lib/linux.bot	linux		1
+linux::ReadResult	struct	linux	api	source	lib/linux.bot:84	linux		
+linux::abi::aarch64	namespace		api	intrinsic		linux		1
+linux::abi::aarch64::syscall	intrinsic	linux::abi::aarch64	api	intrinsic		linux		
+linux::abi::x86_64	namespace		api	intrinsic		linux		1
+linux::abi::x86_64::syscall	intrinsic	linux::abi::x86_64	api	intrinsic		linux		
+linux::io	namespace		api	source	lib/linux/io.bot	linux		
+linux::io::FileDescriptor	opaque-struct	linux::io	api	source	lib/linux/io.bot:76	linux		
+linux::io::LinuxIO	context-struct	linux::io	api	source	lib/linux/io.bot:81	linux		
+linux::io::create	function	linux::io	api	source	lib/linux/io.bot:88	linux		
+linux::io::read	function	linux::io	api	source	lib/linux/io.bot:109	linux		
+linux::io::write	function	linux::io	api	source	lib/linux/io.bot:98	linux		
+linux::io::write_all	function	linux::io	api	source	lib/linux/io.bot:125	linux		
+linux::io::write_error	function	linux::io	api	source	lib/linux/io.bot:102	linux		
+linux::io::write_error_text	function	linux::io	api	source	lib/linux/io.bot:146	linux		
+linux::io::write_text	function	linux::io	api	source	lib/linux/io.bot:142	linux		
+linux::path	namespace		api	source	lib/linux/path.bot	linux		
+linux::path::LinuxPath	refined-type	linux::path	api	source	lib/linux/path.bot:41	linux		
+linux::path::concat	function	linux::path	api	source	lib/linux/path.bot:76	linux		
+linux::path::nul_free?	function	linux::path	api	source	lib/linux/path.bot:44	linux		
+linux::path::text	function	linux::path	api	source	lib/linux/path.bot:66	linux		
+linux::path::valid?	function	linux::path	api	source	lib/linux/path.bot:52	linux		
+linux::path::validate	function	linux::path	api	source	lib/linux/path.bot:58	linux		
+linux::read	function	linux	api	source	lib/linux.bot:111	linux		
+linux::sys	namespace		api	source	lib/linux/sys.aarch64.bot,lib/linux/sys.x86_64.bot	linux	aarch64,x86_64	1
+linux::sys::read	function	linux::sys	api	source	lib/linux/sys.x86_64.bot:52	linux	x86_64	
+linux::sys::write	function	linux::sys	api	source	lib/linux/sys.x86_64.bot:38	linux	x86_64	
+linux::write	function	linux	api	source	lib/linux.bot:77	linux		
+list	intrinsic		primitive	intrinsic	core/primitives.tcl:102			
+list	namespace		api	source+intrinsic	lib/list.bot			
+list::NotFound	error	list	api	source	lib/list.bot:74			
+list::all?	function	list	api	source	lib/list.bot:88			
+list::any?	function	list	api	source	lib/list.bot:82			
+list::append	intrinsic	list	api	intrinsic	core/lists.tcl:62			
+list::at	intrinsic	list	api	intrinsic	core/lists.tcl:59			
+list::find	function	list	api	source	lib/list.bot:100			
+list::get	function	list	api	source	lib/list.bot:76			
+list::length	intrinsic	list	api	intrinsic	core/lists.tcl:57			
+list::none?	function	list	api	source	lib/list.bot:94			
+list?	intrinsic		primitive	intrinsic				
+mathish	namespace		demo	source	lib/mathish.bot			
+mathish::inc	function	mathish	demo	source	lib/mathish.bot:6			
+mod	intrinsic		primitive	intrinsic	core/primitives.tcl:96			
+mutable_array	namespace		api	source+intrinsic	lib/mutable_array.bot			
+mutable_array#consume	intrinsic		internal	intrinsic	core/mutarray.tcl:413			
+mutable_array#generate_drop	intrinsic		internal	intrinsic	core/mutarray.tcl:424			
+mutable_array#set_drop	intrinsic		internal	intrinsic	core/mutarray.tcl:421			
+mutable_array#swap_drop	intrinsic		internal	intrinsic	core/mutarray.tcl:418			
+mutable_array#take_front	intrinsic		internal	intrinsic	core/mutarray.tcl:415			
+mutable_array#to_list	intrinsic		internal	intrinsic	core/mutarray.tcl:410			
+mutable_array::allocate	intrinsic	mutable_array	api	intrinsic	core/mutarray.tcl:367			
+mutable_array::at	intrinsic	mutable_array	api	intrinsic	core/mutarray.tcl:388			
+mutable_array::capacity	intrinsic	mutable_array	api	intrinsic	core/mutarray.tcl:385			
+mutable_array::copy	intrinsic	mutable_array	api	intrinsic	core/mutarray.tcl:400			
+mutable_array::create	intrinsic	mutable_array	api	intrinsic	core/mutarray.tcl:370			
+mutable_array::freeze	intrinsic	mutable_array	api	intrinsic	core/mutarray.tcl:405			
+mutable_array::from_list	intrinsic	mutable_array	api	intrinsic	core/mutarray.tcl:374			
+mutable_array::generate	intrinsic	mutable_array	api	intrinsic	core/mutarray.tcl:377			
+mutable_array::get	function	mutable_array	api	source	lib/mutable_array.bot:45			
+mutable_array::set	intrinsic	mutable_array	api	intrinsic	core/mutarray.tcl:392			
+mutable_array::swap	intrinsic	mutable_array	api	intrinsic	core/mutarray.tcl:396			
+mutable_byte_store	namespace		api	intrinsic				
+mutable_byte_store::count	intrinsic	mutable_byte_store	api	intrinsic	core/bytestore.tcl:290			
+mutable_byte_store::detach	intrinsic	mutable_byte_store	api	intrinsic	core/bytestore.tcl:294			
+mutable_byte_store::freeze	intrinsic	mutable_byte_store	api	intrinsic	core/bytestore.tcl:296			
+mutable_byte_store::freeze_prefix	intrinsic	mutable_byte_store	api	intrinsic	core/bytestore.tcl:298			
+mutable_byte_store::from_storage	intrinsic	mutable_byte_store	api	intrinsic	core/bytestore.tcl:288			
+mutable_byte_store::replace	intrinsic	mutable_byte_store	api	intrinsic	core/bytestore.tcl:292			
+mutable_byte_store::zeroed	intrinsic	mutable_byte_store	api	intrinsic	core/bytestore.tcl:286			
+mutable_vector	namespace		api	intrinsic				
+mutable_vector#clear_drop	intrinsic		internal	intrinsic	core/mutvec.tcl:356			
+mutable_vector#consume	intrinsic		internal	intrinsic	core/mutvec.tcl:348			
+mutable_vector#share	intrinsic		internal	intrinsic	core/mutvec.tcl:346			
+mutable_vector#swap_drop	intrinsic		internal	intrinsic	core/mutvec.tcl:358			
+mutable_vector#take_front	intrinsic		internal	intrinsic	core/mutvec.tcl:353			
+mutable_vector#to_list	intrinsic		internal	intrinsic	core/mutvec.tcl:350			
+mutable_vector::at	intrinsic	mutable_vector	api	intrinsic	core/mutvec.tcl:327			
+mutable_vector::clear	intrinsic	mutable_vector	api	intrinsic	core/mutvec.tcl:342			
+mutable_vector::empty?	intrinsic	mutable_vector	api	intrinsic	core/mutvec.tcl:325			
+mutable_vector::from_list	intrinsic	mutable_vector	api	intrinsic	core/mutvec.tcl:320			
+mutable_vector::length	intrinsic	mutable_vector	api	intrinsic	core/mutvec.tcl:323			
+mutable_vector::pop	intrinsic	mutable_vector	api	intrinsic	core/mutvec.tcl:332			
+mutable_vector::push	intrinsic	mutable_vector	api	intrinsic	core/mutvec.tcl:330			
+mutable_vector::swap	intrinsic	mutable_vector	api	intrinsic	core/mutvec.tcl:338			
+mutable_vector::take	intrinsic	mutable_vector	api	intrinsic	core/mutvec.tcl:335			
+mutarray?	intrinsic		primitive	intrinsic				
+ok?	intrinsic		primitive	intrinsic	core/predicates.tcl:54			
+result-error	intrinsic		internal	intrinsic	core/predicates.tcl:59			
+result-value	intrinsic		internal	intrinsic	core/predicates.tcl:57			
+shift_left	intrinsic		primitive	intrinsic				
+shift_right	intrinsic		primitive	intrinsic				
+str	namespace		api	intrinsic				
+str::append_char	intrinsic	str	api	intrinsic	core/strings.tcl:124			
+str::char_at	intrinsic	str	api	intrinsic	core/strings.tcl:129			
+str::concat	intrinsic	str	api	intrinsic	core/strings.tcl:122			
+str::encode_utf8	intrinsic	str	api	intrinsic	core/strings.tcl:126			
+str::is_tcl_alnum	intrinsic	str	api	intrinsic	core/tclcompat.tcl:118			
+str::is_tcl_alpha	intrinsic	str	api	intrinsic	core/tclcompat.tcl:116			
+str::length	intrinsic	str	api	intrinsic	core/strings.tcl:114			
+str::lowercase	intrinsic	str	api	intrinsic	core/strings.tcl:120			
+str::substring	intrinsic	str	api	intrinsic	core/strings.tcl:116			
+string?	intrinsic		primitive	intrinsic				
+test	namespace		api	source	lib/test.bot			
+test::Erased	struct	test	api	source	lib/test.bot:295			
+test::Match	struct	test	api	source	lib/test.bot:95			
+test::Suite	context-struct	test	api	source	lib/test.bot:123			
+test::Summary	struct	test	api	source	lib/test.bot:127			
+test::TestCase	struct	test	api	source	lib/test.bot:111			
+test::TestResult	struct	test	api	source	lib/test.bot:102			
+test::case	function	test	api	source	lib/test.bot:142			
+test::code_name	function	test	api	source	lib/test.bot:325			
+test::contains_text?	function	test	api	source	lib/test.bot:281			
+test::count	function	test	api	source	lib/test.bot:152			
+test::describe	function	test	api	source	lib/test.bot:307			
+test::diagnostic	function	test	api	source	lib/test.bot:583			
+test::diagnostic_text	function	test	api	source	lib/test.bot:550			
+test::digit_value	function	test	api	source	lib/test.bot:170			
+test::digits_from	function	test	api	source	lib/test.bot:177			
+test::equal	function	test	api	source	lib/test.bot:567			
+test::escape_of	function	test	api	source	lib/test.bot:214			
+test::escaped	function	test	api	source	lib/test.bot:230			
+test::glyph	function	test	api	source	lib/test.bot:160			
+test::holds	function	test	api	source	lib/test.bot:607			
+test::int_text	function	test	api	source	lib/test.bot:185			
+test::joined	function	test	api	source	lib/test.bot:198			
+test::mismatch	function	test	api	source	lib/test.bot:563			
+test::no_results	function	test	api	source	lib/test.bot:688			
+test::no_texts	function	test	api	source	lib/test.bot:193			
+test::passed	function	test	api	source	lib/test.bot:557			
+test::quoted	function	test	api	source	lib/test.bot:248			
+test::registered	function	test	api	source	lib/test.bot:147			
+test::rejects	function	test	api	source	lib/test.bot:616			
+test::rejects_any	function	test	api	source	lib/test.bot:638			
+test::rejects_at	function	test	api	source	lib/test.bot:626			
+test::rejects_containing	function	test	api	source	lib/test.bot:664			
+test::rejects_message	function	test	api	source	lib/test.bot:651			
+test::report	function	test	api	source	lib/test.bot:749			
+test::result_lines	function	test	api	source	lib/test.bot:717			
+test::results	function	test	api	source	lib/test.bot:692			
+test::run	function	test	api	source	lib/test.bot:682			
+test::satisfies	function	test	api	source	lib/test.bot:575			
+test::suite	function	test	api	source	lib/test.bot:136			
+test::summarize	function	test	api	source	lib/test.bot:707			
+test::summary_line	function	test	api	source	lib/test.bot:740			
+test::text_lines	function	test	api	source	lib/test.bot:254			
+test::value	function	test	api	source	lib/test.bot:598			
+web	namespace		api	source	lib/web.bot			
+web::Emailish	refined-type	web	api	source	lib/web.bot:71			
+web::UriQueryValue	refined-type	web	api	source	lib/web.bot:226			
+web::additional_unreserved_chars	binding	web	api	source	lib/web.bot:221			
+web::emailish?	function	web	api	source	lib/web.bot:107			
+web::hex_digits	binding	web	api	source	lib/web.bot:219			
+web::is_unreserved	function	web	api	source	lib/web.bot:223			
+web::local_extra_chars	binding	web	api	source	lib/web.bot:105			
+web::uri_escape_text	function	web	api	source	lib/web.bot:266			
+web::uri_query_value?	function	web	api	source	lib/web.bot:237			

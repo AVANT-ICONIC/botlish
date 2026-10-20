@@ -70,7 +70,7 @@
 # decimal constant operand has its sibling's type, so P is always a declared
 # precision); `!=` is the negation of `==`. `<` and `>` therefore hold only
 # when the true values are provably ordered, and `==` means "the same
-# decimal at P". float64::from_decimal_rounded(x) is the Float64 nearest
+# decimal at P". std::float64::from_decimal_rounded(x) is the Float64 nearest
 # round(x, N), N x's guaranteed precision. Elaborate writes each such P into
 # the call (the run-time operation's last argument), after every check, so
 # no backend chooses a precision. Equality of a List, struct or set holding
@@ -640,23 +640,23 @@ proc hir::decimal::verify {hirVar} {
         set t [hir::typeOf $hir $e]
         if {[lindex $t 0] eq "immutableSet" && [llength $t] == 2 && [Mentions [lindex $t 1]]} {
             hir::Diagnose hir TYPE [format \
-                {this call makes %s: a set compares and hashes its members by value, which knows no precision, so it cannot hold DecimalRounded values (a List can; decay the members with float64::from_decimal_rounded to build a set of Float64)} \
+                {this call makes %s: a set compares and hashes its members by value, which knows no precision, so it cannot hold DecimalRounded values (a List can; decay the members with std::float64::from_decimal_rounded to build a set of Float64)} \
                 [hir::types::show $t]] $e
             continue
         }
         set name [CalledNative $hir $e]
         switch -- $name {
-            float64::from_decimal_rounded {
+            std::float64::from_decimal_rounded {
                 set t [hir::typeOf $hir [lindex [dict get $node args] 0]]
                 if {[IsDecimal $t] && ![IsRefined $t]} {
                     PrecisionUnknown hir $e $t "decayed to a Float64"
                 }
             }
-            decimal_rounded::round {
+            std::decimal_rounded::round {
                 set t [hir::typeOf $hir $e]
                 if {![IsRefined $t] && ![hir::imprint::Unbound $hir $e] && $t ni {never any}} {
                     hir::Diagnose hir TYPE [format \
-                        {decimal_rounded::round makes a DecimalRounded value of the precision its imprint states, so it is imprinted with a DecimalRounded{...} type (decimal_rounded::round[DecimalRounded{minDecimalsPreserved: 2}](x)), not %s} \
+                        {std::decimal_rounded::round makes a DecimalRounded value of the precision its imprint states, so it is imprinted with a DecimalRounded{...} type (std::decimal_rounded::round[DecimalRounded{minDecimalsPreserved: 2}](x)), not %s} \
                         [hir::types::show $t]] $e
                 }
             }
@@ -682,7 +682,7 @@ proc hir::decimal::VerifyOperation {hirVar e} {
     set types [lmap a $args {hir::typeOf $hir $a}]
     if {[hir::operators::Mismatched $types $::core::decimal::kind]} {
         # (Poison, hir/types.tcl's Call: this is why.)
-        set conversions "float64::from_decimal_rounded decays a DecimalRounded value to a Float64, decimal_rounded::round\[DecimalRounded{...}\] rounds a Float64 to one"
+        set conversions "std::float64::from_decimal_rounded decays a DecimalRounded value to a Float64, std::decimal_rounded::round\[DecimalRounded{...}\] rounds a Float64 to one"
         hir::Diagnose hir TYPE [format \
             {the operands of "%s" are %s: a DecimalRounded operation needs DecimalRounded operands, and nothing converts one implicitly (%s; a decimal literal is a DecimalRounded constant beside a DecimalRounded operand)} \
             [OperatorText $op] [join [lmap t $types {hir::types::show $t}] " and "] $conversions] $e
@@ -700,7 +700,7 @@ proc hir::decimal::VerifyOperation {hirVar e} {
         + - - - * - / {
             # (Each of the four arithmetic operators.)
             Diagnose hir DECIMAL-GUARANTEE-LOST [format \
-                {no decimal place of this %s can be proved: its operands are %s, values known only to the precision their types guarantee, and rounding is discontinuous -- an operand anywhere in its rounding cell can carry the exact result across a rounding boundary of every precision, and the type states no magnitude (only arithmetic of decimal constants is proven: decay the operands with float64::from_decimal_rounded to compute with Float64, and round a Float64 result back with decimal_rounded::round[DecimalRounded{...}])} \
+                {no decimal place of this %s can be proved: its operands are %s, values known only to the precision their types guarantee, and rounding is discontinuous -- an operand anywhere in its rounding cell can carry the exact result across a rounding boundary of every precision, and the type states no magnitude (only arithmetic of decimal constants is proven: decay the operands with std::float64::from_decimal_rounded to compute with Float64, and round a Float64 result back with std::decimal_rounded::round[DecimalRounded{...}])} \
                 [OperationNoun $op] [join [lmap t $types {hir::types::show $t}] " and "]] $e
         }
         neg {
@@ -753,10 +753,10 @@ proc hir::decimal::MismatchClause {argType declared} {
         return ""
     }
     if {[IsDecimal $declared] && [hir::types::kindOf $argType] eq "Float64"} {
-        return "; a Float64 is no DecimalRounded value, and nothing converts one implicitly (decimal_rounded::round\[DecimalRounded{...}\] rounds a Float64 to one; a decimal literal where a DecimalRounded type is expected is one)"
+        return "; a Float64 is no DecimalRounded value, and nothing converts one implicitly (std::decimal_rounded::round\[DecimalRounded{...}\] rounds a Float64 to one; a decimal literal where a DecimalRounded type is expected is one)"
     }
     if {[IsDecimal $argType] && $declared eq "Float64"} {
-        return "; a DecimalRounded value is no Float64, and nothing converts one implicitly (float64::from_decimal_rounded decays one to the Float64 nearest its guaranteed decimal)"
+        return "; a DecimalRounded value is no Float64, and nothing converts one implicitly (std::float64::from_decimal_rounded decays one to the Float64 nearest its guaranteed decimal)"
     }
     if {[IsRefined $declared] && [IsDecimal $argType]} {
         return "; the precision of this DecimalRounded value is not known statically"
@@ -861,8 +861,8 @@ proc hir::decimal::ExactText {t} {
 # Writes the precision every observation of a DecimalRounded value reads
 # into its call (header): a comparison's check form becomes its run-time
 # comparison with P, the smaller guaranteed precision of its operands; a
-# decay float64::from_decimal_rounded(x) becomes decimal_rounded#to_float64
-# with x's guaranteed precision; a quantization decimal_rounded::round[T](x)
+# decay std::float64::from_decimal_rounded(x) becomes decimal_rounded#to_float64
+# with x's guaranteed precision; a quantization std::decimal_rounded::round[T](x)
 # becomes decimal_rounded#round with T's. A call whose precision is not
 # known (verify reported it) keeps its check form, which refuses to run.
 proc hir::decimal::Elaborate {hirVar} {
@@ -888,13 +888,13 @@ proc hir::decimal::Elaborate {hirVar} {
             if {[IsRefined [lindex $types 0]] && [IsRefined [lindex $types 1]]} {
                 set precision [expr {min([Precision [lindex $types 0]], [Precision [lindex $types 1]])}]
             }
-        } elseif {$name eq "float64::from_decimal_rounded"} {
+        } elseif {$name eq "std::float64::from_decimal_rounded"} {
             set target decimal_rounded#to_float64
             set t [hir::typeOf $hir [lindex $args 0]]
             if {[IsRefined $t]} {
                 set precision [Precision $t]
             }
-        } elseif {$name eq "decimal_rounded::round"} {
+        } elseif {$name eq "std::decimal_rounded::round"} {
             set target decimal_rounded#round
             set t [hir::typeOf $hir $e]
             if {[IsRefined $t]} {

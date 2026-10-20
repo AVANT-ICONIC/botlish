@@ -87,8 +87,8 @@ foreach {option value} $argv {
 set argv {}
 source [file join $root tests helpers.tcl]
 
-set prelude {import coroutine
-import mutable_vector
+set prelude {import std::coroutine
+import std::mutable_vector
 
 error Boom
 
@@ -119,13 +119,13 @@ fn make(acc: int) -> Coroutine{args: [Msg], return: Ev}:
     step
 
 fn ints() -> MutableVector[int]:
-    mutable_vector::from_list([])
+    std::mutable_vector::from_list([])
 
 fn empty_queue() -> MutableVector[Coroutine{args: [Msg], return: Ev}]:
-    mutable_vector::from_list([])
+    std::mutable_vector::from_list([])
 
 fn empty_jobs() -> MutableVector[Job]:
-    mutable_vector::from_list([])
+    std::mutable_vector::from_list([])
 
 fn b2i(b: bool) -> int:
     if b:
@@ -331,7 +331,7 @@ proc USource {stateVar p seq} {
     set count [expr {1 + [Rand 4]}]
     for {set i 0} {$i < $count} {incr i} { lappend values [Rand 10] }
     set f [Fresh state f]
-    Emit state "$f = mutable_vector::from_list(\[[join $values {, }]\])"
+    Emit state "$f = std::mutable_vector::from_list(\[[join $values {, }]\])"
     dict set state frozen $f $values
     return [list $f $values]
 }
@@ -360,7 +360,7 @@ proc UOperation {stateVar} {
                 # (an untyped `from_list([])` local is MutableVector[never])
                 Emit state "$v = ints()"
             } else {
-                Emit state "$v = mutable_vector::from_list(\[[join $values {, }]\])"
+                Emit state "$v = std::mutable_vector::from_list(\[[join $values {, }]\])"
             }
         }
         copy {
@@ -374,7 +374,7 @@ proc UOperation {stateVar} {
         at {
             set i [expr {[Rand [expr {$len + 2}]] - 1}]
             set x [Fresh state x]
-            Handled state $x "mutable_vector::at($p, $i)" -1
+            Handled state $x "std::mutable_vector::at($p, $i)" -1
             ObserveInt state $x [expr {$i >= 0 && $i < $len ? [lindex $seq $i] : -1}]
         }
         push {
@@ -536,7 +536,7 @@ proc UFault {stateVar} {
         }
         wrongtype {
             if {$places eq {}} {
-                Emit state "late = mutable_vector::from_list(\[1\])" "late.push(\"s\")"
+                Emit state "late = std::mutable_vector::from_list(\[1\])" "late.push(\"s\")"
             } else {
                 Emit state "[Pick $places].push(\"s\")"
             }
@@ -702,7 +702,7 @@ proc AOperation {stateVar} {
             if {$elements eq {}} {
                 Emit state "$q = [expr {$kind eq "co" ? "empty_queue()" : "empty_jobs()"}]"
             } else {
-                Emit state "$q = mutable_vector::from_list(\[[join $elements {, }]\])"
+                Emit state "$q = std::mutable_vector::from_list(\[[join $elements {, }]\])"
             }
             dict set state vecs $q [list $kind $ranks]
         }
@@ -955,7 +955,7 @@ proc AFault {stateVar} {
             return MUTABLE-PLACE-RECEIVER
         }
         handleaftermove {
-            Emit state "late = coroutine::done?([Pick $movedHandles])"
+            Emit state "late = std::coroutine::done?([Pick $movedHandles])"
             return USE-AFTER-MOVE
         }
         vectoraftermove {
@@ -965,7 +965,7 @@ proc AFault {stateVar} {
         at {
             set p [Pick $vectors]
             set fallback [expr {[lindex [dict get $state vecs $p] 0] eq "co" ? "make(1)" : "Job {id: 0, step: make(1)}"}]
-            Handled state late "mutable_vector::at($p, 0)" $fallback
+            Handled state late "std::mutable_vector::at($p, 0)" $fallback
             return AFFINE-ELEMENT-COPY-OUT
         }
         wrongtype {
@@ -1108,7 +1108,7 @@ proc PFromList {values} {
     if {$values eq {}} {
         return "ints()"
     }
-    return "mutable_vector::from_list(\[[join $values {, }]\])"
+    return "std::mutable_vector::from_list(\[[join $values {, }]\])"
 }
 
 proc PValues {} {

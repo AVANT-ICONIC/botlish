@@ -2,7 +2,7 @@
 # prepare-census.tcl -- MACHINE-CODE-PROOF-LOSS-INVESTIGATION.md, spec item 36:
 # the front end's semantic instances (hir::semantic::census) of a program's
 # HIR before and after native::prepareHir (which attaches native
-# implementations such as web::emailish? and re-checks the HIR). Shows
+# implementations such as std::web::emailish? and re-checks the HIR). Shows
 # whether prepareHir broadens or adds semantic facts. Observation only.
 #
 #   (cd TREE && tclsh9.0 .../prepare-census.tcl PROGRAM.bot) > OUT.txt

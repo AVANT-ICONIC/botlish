@@ -49,7 +49,7 @@ keeps its older meaning: a call of the *field* `name` of the receiver.
 `hir/resolve.tcl` builds `call (project receiver name) args` and marks the
 projection `methodCallee 1` -- for diagnostics only.
 
-The old path for `s.concat("ab")` with `s : str` and no `import str`:
+The old path for `s.concat("ab")` with `s : str` and no `import std::str`:
 
 1. `hir::types::Project` typed the projection: the receiver is no struct, so
    it returned `any`.
@@ -58,15 +58,15 @@ The old path for `s.concat("ab")` with `s : str` and no `import str`:
    runs -- found the function's result `any`, which does not prove `str`:
    TYPE "function result does not prove declared type str", at the function.
 4. `hir::structs::verify`, later in the same pass, reported the projection
-   (NOT-A-STRUCT, with a hint that `str::concat` exists).
+   (NOT-A-STRUCT, with a hint that `std::str::concat` exists).
 5. A strict compilation raised the first diagnostic: step 3's.
 
 So the programmer was told the result type was wrong, at the function head,
 and nothing else. Passed to a `str` parameter instead (S13's second shape),
 the `any` failed that parameter's check: "argument ... cannot be proven to
-satisfy str (argument type: any)". The explicit spelling `str::concat(s,
-"ab")` meanwhile got the loader's "namespace "str" is not imported; add
-`import str`".
+satisfy str (argument type: any)". The explicit spelling `std::str::concat(s,
+"ab")` meanwhile got the loader's "namespace "std::str" is not imported; add
+`import std::str`".
 
 ### The new path
 
@@ -88,25 +88,25 @@ satisfy str (argument type: any)". The explicit spelling `str::concat(s,
   imports is never searched). When there are any, the diagnostic is
   MISSING-IMPORT at the method name, worded as the loader's:
 
-      namespace "str" is not imported; add `import str` to use `str::concat`
+      namespace "std::str" is not imported; add `import std::str` to use `std::str::concat`
       (the method-style call ".concat(...)" applies only a function visible
       by that name)
 
   When there is none -- a genuinely unknown method -- it stays the
   projection's own diagnostic (NOT-A-STRUCT, UNKNOWN-FIELD), now also
   poison. The hint no longer names a function the call would not apply:
-  `s.empty?()` on a `str` used to suggest `import mutable_vector`.
+  `s.empty?()` on a `str` used to suggest `import std::mutable_vector`.
 * A generic function (`fn shout(s): s.concat("!")`) is typed `any` for `s`
   in its own analysis (an unproven field, which an instance may cure); the
   semantic instance for `s : str` finds the failure, poisons it, and its
   call is poison in the caller (`hir::semantic::PoisonedCall`). The
   instance's problem is reported at that call with the explicit spelling's
-  kind: `call to shout with s : str is invalid: namespace "str" is not
+  kind: `call to shout with s : str is invalid: namespace "std::str" is not
   imported...` (MISSING-IMPORT).
 
 No import is implied. The call is rejected; the diagnostic names what is
 missing, as the explicit spelling's does, and `static compile:` reifies
-both as `compiler::DiagnosticCode::MissingImport`. Ambiguity is unchanged
+both as `std::compiler::DiagnosticCode::MissingImport`. Ambiguity is unchanged
 (two imported functions that accept the receiver are still
 AMBIGUOUS-METHOD-CALL); a callable field called with method syntax is still
 the field's call.
@@ -114,7 +114,7 @@ the field's call.
 Before and after (the S13 reduction, r7.bot):
 
     before: error: program.bot:3:5: function result does not prove declared type str (CORE SEMANTIC TYPE)
-    after:  error: program.bot:4:7: namespace "str" is not imported; add `import str` to use `str::concat` (the method-style call ".concat(...)" applies only a function visible by that name) (CORE SEMANTIC MISSING-IMPORT)
+    after:  error: program.bot:4:7: namespace "std::str" is not imported; add `import std::str` to use `std::str::concat` (the method-style call ".concat(...)" applies only a function visible by that name) (CORE SEMANTIC MISSING-IMPORT)
 
 Each use of a missing import is reported where it is written, in both
 spellings: two calls are two diagnostics. (A first version reported a
@@ -407,7 +407,7 @@ while auditing S17.
 ## 9. Valid programs, isolation, interchange, backends
 
 **A valid program compiles to the same HIR.** Every corpus program
-(`examples/`, `bench/`, every `lib/` module compiled standalone: 67) and
+(`examples/`, `bench/`, every `stdlib/` module compiled standalone: 67) and
 every golden suite (94) was compiled by the front end before (`0531fc8`)
 and after, and the outcomes compared: for an accepted program `hir::format`'s
 whole HIR text, its warnings and whether the HIR has any recovery state
@@ -460,7 +460,7 @@ the repository and run with nothing but HOME, PATH and the locale in its
 environment:
 
     $ ./botlish s13.bot
-       error: s13.bot:2:7: namespace "str" is not imported; add `import str` to use `str::concat` (the method-style call ".concat(...)" applies only a function visible by that name) (CORE SEMANTIC MISSING-IMPORT)
+       error: s13.bot:2:7: namespace "std::str" is not imported; add `import std::str` to use `std::str::concat` (the method-style call ".concat(...)" applies only a function visible by that name) (CORE SEMANTIC MISSING-IMPORT)
     $ ./botlish three.bot
        error: three.bot:5:9: unbound name "offset" (CORE SEMANTIC UNBOUND)
        error: three.bot:7:10: function result does not prove declared type str (CORE SEMANTIC TYPE)
@@ -471,8 +471,8 @@ environment:
     $ ./botlish cascade.bot
        error: cascade.bot:5:42: argument for parameter "n" cannot be proven to satisfy int (argument type: str) (CORE SEMANTIC TYPE)
        error: cascade.bot:5:17: cannot project field "trim_all" from a value of type str: ... (CORE SEMANTIC NOT-A-STRUCT)
-       error: cascade.bot:5:32: namespace "list" is not imported; add `import list` to use `list::length` (...) (CORE SEMANTIC MISSING-IMPORT)
-    $ ./botlish fixed.bot              # s13.bot with `import str`
+       error: cascade.bot:5:32: namespace "std::list" is not imported; add `import std::list` to use `std::list::length` (...) (CORE SEMANTIC MISSING-IMPORT)
+    $ ./botlish fixed.bot              # s13.bot with `import std::str`
        value: "qab"
 
 (each rejected one exits 1; `fixed.bot` also runs on `-backend cranelift`).

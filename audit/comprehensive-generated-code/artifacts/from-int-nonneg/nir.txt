@@ -57,7 +57,7 @@ func 0 "<program>" params=0 env=0 regs=29 pnames="" captures=0 instance="generic
     ret %17
 end
 
-func 1 "byte::from_int" params=1 env=0 regs=9 pnames="value" captures=0 instance="int" rawregs="2 6" @e58
+func 1 "std::byte::from_int" params=1 env=0 regs=9 pnames="value" captures=0 instance="int" rawregs="2 6" @e58
     %1 = int 0 @e63
     %2 = rawint 0
     %3 = op ilt %0 %1 @e60

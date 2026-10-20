@@ -48,7 +48,7 @@ the first branch: `expected a new line and an indented block after ":"`
 (rule.indentation).
 
 @example reject
-import str
+import std::str
 
 fn answer(ok: bool) -> str:
     "answer: ".concat(if ok: "yes" else: "no")
@@ -66,7 +66,7 @@ small function whose body is the `if` (or a guard and a value), and call
 it where the value is needed.
 
 @example accept
-import str
+import std::str
 
 fn answer(ok: bool) -> str:
     word = if ok:
@@ -81,7 +81,7 @@ answer(true)
 @end
 
 @example accept
-import str
+import std::str
 
 fn yes_no(ok: bool) -> str:
     if ok:
@@ -409,7 +409,7 @@ docs: EXPLICIT-ERROR-COMPLETIONS.md STATIC-COMPLETION-PROOFS.md ERROR-PAYLOADS.m
 == THE RULE
 A function's `errors` clause (`fn f(x) -> T errors E1, E2:`) declares the
 errors a call to it may produce; a standard-library function or intrinsic
-declares its own (`list::at` produces IndexNotFound, `argv` produces
+declares its own (`std::list::at` produces IndexNotFound, `argv` produces
 InvalidArgumentEncoding). Every error a call may produce must be accounted
 for at the call, in one of three ways:
 
@@ -443,7 +443,7 @@ that is left (one diagnostic per call):
     handled here nor admitted by the enclosing function's own "errors"
     declaration
 
-A standard-library call names itself (`this call of "list::at" may
+A standard-library call names itself (`this call of "std::list::at" may
 produce ...`; proof.list-bounds lists the forms the index proof
 recognizes). A `fail` that nothing admits is `"fail Bad" is not admitted
 here: the enclosing function does not declare "errors Bad"`.
@@ -499,7 +499,7 @@ summary: A call the compiler proves can never complete normally under the facts 
 index: rules
 alias: a handler does not make a statically known failure legal; call that always fails
 keywords: known error, always fails, handler, literal argument, statically decided, negative test
-related: concept.known-errors concept.negative-tests concept.static-compile proof.completions rule.unhandled-errors stdlib.list::get error.known-error
+related: concept.known-errors concept.negative-tests concept.static-compile proof.completions rule.unhandled-errors stdlib.std::list::get error.known-error
 docs: STATIC-COMPLETION-PROOFS.md EXPLICIT-ERROR-COMPLETIONS.md
 
 == THE RULE
@@ -548,10 +548,10 @@ check(-3):
 == WHAT TO DO
 Write the outcome the failure would have produced (here, `0`). When the
 failing input is data -- a fallback path, a test of the failure -- pass it
-through a function parameter: the call inside the function may fail, and
-its handler is ordinary (concept.negative-tests). For a List read with a
-fallback, list::get(xs, i, fallback) is the handled read written once. To
-test that a program is rejected at compile time, use `static compile:`
+through a function parameter: the call inside the function may fail, and its
+handler is ordinary (concept.negative-tests). For a List read with a
+fallback, std::list::get(xs, i, fallback) is the handled read written once.
+To test that a program is rejected at compile time, use `static compile:`
 (concept.static-compile).
 
 @example accept
@@ -574,11 +574,11 @@ fn checked_or_zero(n: int) -> int:
 
 @topic rule.method-requires-import
 title: Method syntax applies only functions visible by name
-summary: receiver.f(args) is the call f(receiver, args) and needs a function f visible at the call; nothing is looked up through the receiver's type, so s.concat("x") needs import str.
+summary: receiver.f(args) is the call f(receiver, args) and needs a function f visible at the call; nothing is looked up through the receiver's type, so s.concat("x") needs import std::str.
 index: rules
-alias: method call needs import; method not found on str; why does s.concat need import str
+alias: method call needs import; method not found on str; why does s.concat need import std::str
 keywords: method, import, visible, receiver, concat, str, list, namespace, MISSING-IMPORT
-related: concept.method-sugar concept.imports rule.method-resolution rule.imports-not-transitive principle.explicit-dependencies stdlib.module.str stdlib.str::concat error.missing-import
+related: concept.method-sugar concept.imports rule.method-resolution rule.imports-not-transitive principle.explicit-dependencies stdlib.module.std::str stdlib.std::str::concat error.missing-import
 docs: METHOD-SUGAR.md IMPORTS.md DIAGNOSTIC-RECOVERY.md
 
 == THE RULE
@@ -589,14 +589,14 @@ at the call:
   * a function or binding of the file, defined above the call, or a
     parameter or local of an enclosing scope;
   * a root native (`argv`, `hash`, `mod`, ...), visible everywhere;
-  * a member `f` of a namespace the file imports directly (`import str`
-    makes `str::concat` a candidate for `.concat(...)`).
+  * a member `f` of a namespace the file imports directly (`import std::str`
+    makes `std::str::concat` a candidate for `.concat(...)`).
 
 Nothing is looked up through the receiver's type: a `str` value does not
-"have" the functions of `str`. Without `import str`, `s.concat("xy")`
-finds no `concat`, and neither does `str::concat(s, "xy")`. An import
-injects no unqualified name: after `import str`, `concat(s, "xy")` is
-still an unbound name; `s.concat("xy")` and `str::concat(s, "xy")` are
+"have" the functions of `str`. Without `import std::str`, `s.concat("xy")`
+finds no `concat`, and neither does `std::str::concat(s, "xy")`. An import
+injects no unqualified name: after `import std::str`, `concat(s, "xy")` is
+still an unbound name; `s.concat("xy")` and `std::str::concat(s, "xy")` are
 the two spellings.
 
 == WHY
@@ -611,8 +611,8 @@ reach -- with either spelling -- are those its imports name.
 CORE SEMANTIC MISSING-IMPORT, at the method name, when an unimported
 namespace has a function the call would apply:
 
-    namespace "str" is not imported; add `import str` to use
-    `str::concat` (the method-style call ".concat(...)" applies only a
+    namespace "std::str" is not imported; add `import std::str` to use
+    `std::str::concat` (the method-style call ".concat(...)" applies only a
     function visible by that name)
 
 The qualified spelling reports SURFACE MODULE MISSING-IMPORT. When no
@@ -633,11 +633,11 @@ s.concat("xy")
 Import the namespace whose function you mean.
 
 @example accept
-import str
+import std::str
 
 s = "ab"
 s.concat("xy")
-@caption import str makes str::concat a candidate
+@caption import std::str makes std::str::concat a candidate
 @value "abxy"
 @end
 
@@ -685,7 +685,7 @@ runs.
 CORE SEMANTIC AMBIGUOUS-METHOD-CALL, at the method name:
 
     method-style call "length" is ambiguous: more than one visible
-    function accepts the receiver (length, list::length); there is no
+    function accepts the receiver (length, std::list::length); there is no
     precedence between them: call the one you mean explicitly, e.g.
     length(receiver, ...)
 
@@ -693,7 +693,7 @@ and CORE SEMANTIC NO-APPLICABLE-METHOD, `method-style call "length": none
 of the visible functions of that name accepts the receiver (...)`.
 
 @example reject
-import list
+import std::list
 
 fn length(xs):
     0
@@ -706,19 +706,19 @@ ys.length()
 @end
 
 == WHAT TO DO
-Call the function you mean in its ordinary spelling (`list::length(ys)` or
-`length(ys)`), rename the local function, or declare its parameter type so
-that only one candidate accepts the receiver.
+Call the function you mean in its ordinary spelling (`std::list::length(ys)`
+or `length(ys)`), rename the local function, or declare its parameter type
+so that only one candidate accepts the receiver.
 
 @example accept
-import list
+import std::list
 
 fn length(s: str) -> int:
     0
 
 xs = [1, 2, 3]
 xs.length()
-@caption Only list::length accepts a List
+@caption Only std::list::length accepts a List
 @value 3
 @end
 
@@ -982,17 +982,16 @@ positions, for one of these declarations of namespace NS:
 
   * a `type` declaration (an integer domain, `type Byte = Int in 0..255`)
     or a `refined type`;
-  * a trait, including a context trait (`import type io::IO`);
+  * a trait, including a context trait (`import type std::io::IO`);
   * an enum, whose cases are then written `T::Case`.
 
-It does not import a struct, a layout, an error, a function or an
-intrinsic type of the namespace (the `ffi::c` scalars), and it creates no
-value binding. It authorizes nothing else: `NS::...` references, short or
-not, still need `import NS` (even `NS::T` itself). A struct keeps its
-qualified spelling, `NS::Struct`, in annotations and constructions alike,
-after `import NS`. The short name may not collide with a type the file
-declares, a built-in type or another imported short name
-(TYPE-IMPORT-COLLISION).
+It does not import a struct, a layout, an error, a function or an intrinsic
+type of the namespace (the `std::ffi::c` scalars), and it creates no value
+binding. It authorizes nothing else: `NS::...` references, short or not,
+still need `import NS` (even `NS::T` itself). A struct keeps its qualified
+spelling, `NS::Struct`, in annotations and constructions alike, after
+`import NS`. The short name may not collide with a type the file declares, a
+built-in type or another imported short name (TYPE-IMPORT-COLLISION).
 
 == WHY
 The type import is deliberately narrow (IMPORTS.md): it names one type's
@@ -1004,20 +1003,20 @@ so do layouts; capability.struct-type-import has the alternatives.
 == WHAT IS REPORTED
 SURFACE MODULE NOT-A-TYPE, at the imported name:
 
-    "abi::U8" is a struct, not a source-defined `type`: `import type`
-    imports `type` declarations only; spell the struct abi::U8 after
-    `import abi`
+    "std::abi::U8" is a struct, not a source-defined `type`: `import type`
+    imports `type` declarations only; spell the struct std::abi::U8 after
+    `import std::abi`
 
 (with its own wording for a layout, an error, a function and an
 intrinsic type).
 
 @example reject
-import type abi::U8
+import type std::abi::U8
 
-abi::U8 {value: 3}
-@caption abi::U8 is a struct
+std::abi::U8 {value: 3}
+@caption std::abi::U8 is a struct
 @error SURFACE MODULE NOT-A-TYPE
-@at 1:18
+@at 1:23
 @end
 
 == WHAT TO DO
@@ -1025,24 +1024,24 @@ Import the namespace and spell the struct qualified; use `import type` for
 domains, refinements, traits and enums.
 
 @example accept
-import abi
+import std::abi
 
-v = abi::U8 {value: 3}
+v = std::abi::U8 {value: 3}
 v.value
-@caption A struct spelled qualified after import abi
+@caption A struct spelled qualified after import std::abi
 @value 3
 @end
 
 @example accept
-import type byte::Byte
-import compiler
-import type compiler::DiagnosticCode
+import type std::byte::Byte
+import std::compiler
+import type std::compiler::DiagnosticCode
 
 fn twice(b: Byte) -> int:
     b * 2
 
 c = DiagnosticCode::Type
-[twice(3), c == compiler::DiagnosticCode::Type]
+[twice(3), c == std::compiler::DiagnosticCode::Type]
 @caption Short names: a domain and an enum
 @value [6, true]
 @end
@@ -1057,12 +1056,12 @@ related: concept.destructuring concept.lists concept.structs principle.name-the-
 docs: STRUCT-DESTRUCTURING.md MULTI-VALUE-RESULTS.md
 
 == THE RULE
-`[a, b] = value`, and a List pattern nested in a struct pattern
-(`{pair: [a, b]} = v`), are not binding forms. A List is the type of a
-sequence of values; a function with several results of different meaning
-returns a struct, and the caller binds its fields by name with struct
-destructuring, `{first, second} = result`. There is no tuple or pair type.
-Elements of a List are read with `list::at` (with its proof obligations,
+`[a, b] = value`, and a List pattern nested in a struct pattern (`{pair: [a,
+b]} = v`), are not binding forms. A List is the type of a sequence of
+values; a function with several results of different meaning returns a
+struct, and the caller binds its fields by name with struct destructuring,
+`{first, second} = result`. There is no tuple or pair type. Elements of a
+List are read with `std::list::at` (with its proof obligations,
 proof.list-bounds) or by iterating it.
 
 == WHY
@@ -1136,7 +1135,7 @@ docs: STRUCTS.md ENUMS.md OPAQUE-STRUCTS.md MUTABLE-VECTOR.md MUTABLE-ARRAY.md A
 Function values (and natives), MutableVector and MutableArray, and any
 value containing one, have no equality: comparing them fails at run time
 with EQUALITY, on every backend. Affine values (a coroutine handle, an
-aggregate that owns one, an `ffi::c` pointer) are rejected at compile
+aggregate that owns one, an `std::ffi::c` pointer) are rejected at compile
 time. `hash` follows the same rules. The ordering comparisons `<`, `<=`,
 `>` and `>=` are defined for Int (and integer domains) only; another
 operand is a TYPE error, which today is raised when the comparison runs
@@ -1473,7 +1472,7 @@ summary: An opaque struct's representation belongs to the module that declares i
 index: rules
 alias: opaque struct field access; construct an opaque struct; representation ownership
 keywords: opaque, struct, module, construction, projection, destructuring, authority, Bytes
-related: concept.opaque-structs concept.modules rule.struct-construction capability.visibility stdlib.abi::bytes::from_list error.opaque-construction error.opaque-representation
+related: concept.opaque-structs concept.modules rule.struct-construction capability.visibility stdlib.std::abi::bytes::from_list error.opaque-construction error.opaque-representation
 docs: OPAQUE-STRUCTS.md
 
 == THE RULE
@@ -1490,7 +1489,7 @@ belongs to the module that declares it (an entry program owns its own):
 
 == WHY
 An opaque struct is representation ownership, not object-oriented privacy
-(OPAQUE-STRUCTS.md): the module that owns `abi::bytes::Bytes` keeps the
+(OPAQUE-STRUCTS.md): the module that owns `std::abi::bytes::Bytes` keeps the
 invariants of its storage, because nothing else can manufacture or take
 apart a value. The check is static authority, never a run-time test, and
 the compiler still sees the fields when it optimizes.
@@ -1499,18 +1498,18 @@ the compiler still sees the fields when it optimizes.
 CORE SEMANTIC OPAQUE-REPRESENTATION for a field read or a destructuring
 outside the owner:
 
-    field access on abi::bytes::Bytes is not available outside module
-    "abi::bytes"; abi::bytes::Bytes has an opaque representation, so its
+    field access on std::abi::bytes::Bytes is not available outside module
+    "std::abi::bytes"; std::abi::bytes::Bytes has an opaque representation, so its
     fields can be neither projected nor destructured here (use the public
     operations provided by that module)
 
 and CORE SEMANTIC OPAQUE-CONSTRUCTION for a construction.
 
 @example reject
-import abi::bytes
-import str
+import std::abi::bytes
+import std::str
 
-data = abi::bytes::from_list(str::encode_utf8("hi"))
+data = std::abi::bytes::from_list(std::str::encode_utf8("hi"))
 data.storage
 @caption A field read outside the owner
 @error CORE SEMANTIC OPAQUE-REPRESENTATION
@@ -1522,11 +1521,11 @@ Use the operations the owning module provides; in your own module, write
 the functions other code needs.
 
 @example accept
-import abi::bytes
-import str
+import std::abi::bytes
+import std::str
 
-data = abi::bytes::from_list(str::encode_utf8("hi"))
-n = abi::bytes::length(data)
+data = std::abi::bytes::from_list(std::str::encode_utf8("hi"))
+n = std::abi::bytes::length(data)
 n.value
 @caption The owner's operations, and whole-value use
 @value 2
@@ -1629,7 +1628,7 @@ related: concept.affine concept.coroutines proof.ownership rule.equality error.u
 docs: AFFINE-VALUES.md COROUTINES.md
 
 == THE RULE
-An affine value -- a coroutine handle, an `ffi::c` pointer, and every
+An affine value -- a coroutine handle, an `std::ffi::c` pointer, and every
 struct, anonymous struct or List that owns one -- has one usable owner:
 
   * binding it to another name, passing it as an argument, returning it,
@@ -1803,7 +1802,7 @@ xs
 title: Imports are exact and not transitive
 summary: import NS makes exactly NS available in exactly this file: not its parent or child namespaces, not what NS imports, not other files of the program.
 index: rules
-alias: transitive import; import a nested namespace; parent namespace import; why must I import str again
+alias: transitive import; import a nested namespace; parent namespace import; why must I import std::str again
 keywords: import, transitive, exact, nested namespace, parent, child, header, dependency
 related: concept.imports concept.modules rule.method-requires-import rule.import-type rule.application-modules principle.explicit-dependencies error.missing-import error.duplicate-import
 docs: IMPORTS.md
@@ -1813,10 +1812,10 @@ docs: IMPORTS.md
 NS's functions candidates for method syntax -- for NS exactly, in this
 file only:
 
-  * not NS's parent: `import abi::bytes` does not import `abi`;
-  * not NS's children: `import abi` does not import `abi::bytes`;
-  * not what NS itself imports: `import test` does not give the file
-    `str`, although lib/test.bot imports it;
+  * not NS's parent: `import std::abi::bytes` does not import `abi`;
+  * not NS's children: `import std::abi` does not import `std::abi::bytes`;
+  * not what NS itself imports: `import std::test` does not give the file
+    `str`, although stdlib/test.bot imports it;
   * not other files: every module and the entry program write their own.
 
 Imports come first in a file, before any other declaration or statement,
@@ -1833,15 +1832,15 @@ change its own imports without changing what its users can see.
 MISSING-IMPORT, at the reference -- SURFACE MODULE for a qualified name,
 CORE SEMANTIC for a method call:
 
-    namespace "abi" is not imported; add `import abi` to use `abi::usize`
-    (imports are exact: `import abi::bytes` does not import "abi")
+    namespace "std::abi" is not imported; add `import std::abi` to use `std::abi::usize`
+    (imports are exact: `import std::abi::bytes` does not import "std::abi")
 
 @example reject
-import test
+import std::test
 
 s = "ab"
-str::length(s)
-@caption Only lib/test.bot imports str
+std::str::length(s)
+@caption Only stdlib/test.bot imports str
 @error SURFACE MODULE MISSING-IMPORT
 @at 4:1
 @end
@@ -1850,11 +1849,11 @@ str::length(s)
 Import every namespace the file names, directly.
 
 @example accept
-import test
-import str
+import std::test
+import std::str
 
 s = "ab"
-str::length(s)
+std::str::length(s)
 @caption The file imports what it uses
 @value 2
 @end
@@ -1890,7 +1889,7 @@ program's value (concept.program-value).
 
     # limits.bot (a module)            # main.bot (the entry program)
     sizes = [4, 8, 16]                 import limits
-    fn largest() -> int:               import list
+    fn largest() -> int:               import std::list
         16                             [limits::sizes.length(),
                                         limits::largest()]
 
@@ -1906,7 +1905,7 @@ In the module's file: SURFACE MODULE INVALID-TOPLEVEL for a statement
 (`module "bad" (PATH): only function definitions, immutable bindings, ...
 are allowed at module top level, found a "call" statement`), CORE
 SEMANTIC MODULE-CONTEXT (`module binding initializer must be
-context-free: native operation "mutable_vector::from_list" is not
+context-free: native operation "std::mutable_vector::from_list" is not
 classified context-free`) and MODULE-IMMUTABLE for a value that is not
 proven immutable. These need a second file, so this page has no runnable
 example of them.
@@ -1918,50 +1917,57 @@ module value from literals and context-free functions only.
 
 @topic rule.application-modules
 title: How an import finds a module file
-summary: import NAME is the standard namespace NAME if there is one, else the file NAME.bot beside the entry program; never the working directory or a search path; a shadowing file is MODULE-COLLISION.
+summary: import std::NAME is the standard library's stdlib/NAME.bot (or intrinsics); any other import NAME is the file NAME.bot beside the entry program; nothing is searched and nothing falls back.
 index: rules
-alias: module search path; import my own file; where does import look
-keywords: import, module, file, application root, standard library, entry file, directory, collision
-related: concept.modules concept.imports rule.imports-not-transitive rule.module-bindings error.unknown-namespace error.module-collision error.self-import
-docs: IMPORTS.md POST-2048-PRODUCT-FIXES.md
+alias: module search path; import my own file; where does import look; standard library location
+keywords: import, module, file, application root, standard library, std, stdlib, entry file, directory, reserved, rooted, ::
+related: concept.modules concept.imports concept.standard-library rule.imports-not-transitive rule.module-bindings error.unknown-namespace error.reserved-namespace error.module-collision error.self-import
+docs: STD-NAMESPACE.md IMPORTS.md POST-2048-PRODUCT-FIXES.md
 
 == THE RULE
-The directory of the entry file (the `.bot` file given to botlish) is the
-program's application root. For an `import NAME` that the entry program or
-one of its own modules writes:
+A namespace path is resolved from the root, and its first segment says
+whose it is. For an `import NAME` that the entry program or one of its
+own modules writes:
 
-  * a standard namespace comes first: lib/NAME.bot, or a namespace of
-    compiler intrinsics;
-  * otherwise the module is ROOT/NAME.bot (a nested `a::b` is
-    ROOT/a/b.bot);
+  * `std::NAME` is the standard library's: stdlib/NAME.bot (a nested
+    `std::a::b` is stdlib/a/b.bot) beside the compiler, or a namespace of
+    compiler intrinsics. Every file sees the same one;
+  * any other NAME is the application module ROOT/NAME.bot (a nested `a::b`
+    is ROOT/a/b.bot), ROOT the directory of the entry file;
   * nothing else is searched: not the working directory, an environment
-    variable, a parent directory or a path list;
-  * an application file named like a standard namespace that the program
-    imports is an error, never a replacement of the standard one;
+    variable, a parent directory or a path list, and a missing `NAME` never
+    falls back to `std::NAME`;
+  * `std` is reserved: an application file ROOT/std/NAME.bot is never a
+    module, and importing std::NAME beside one is RESERVED-NAMESPACE;
+  * a leading `::` roots the path explicitly: `import ::std::list` is
+    `import std::list`;
   * a standard-library module's own imports never see application files;
   * the entry file is not a module and cannot be imported (SELF-IMPORT);
     a file beside it that the program imports is a module and follows the
     module rules (rule.module-bindings).
 
     game/main.bot:  import score          game/score.bot:
-                    score::points(4)        fn points(n: int) -> int:
-                                                n * 10
+                    import std::list        fn points(n: int) -> int:
+                    score::points(4)            n * 10
+
+An application module `list.bot` and the standard `std::list` are two
+namespaces, importable side by side.
 
 == WHY
 The rule is fixed so that a name has at most one candidate file: a program
-means the same thing wherever it is run from, and the standard library
-cannot be shadowed by accident (IMPORTS.md, "Application modules").
+means the same thing wherever it is run from, adding a file never changes
+what an import names, and the standard library cannot be shadowed
+(STD-NAMESPACE.md).
 
 == WHAT IS REPORTED
-SURFACE MODULE UNKNOWN-NAMESPACE names the paths it looked for:
+SURFACE MODULE UNKNOWN-NAMESPACE names the path it looked for, and the
+standard namespace of that name when there is one:
 
     unknown namespace "score": no such module file ROOT/score.bot (an
-    application's own modules are the files beside its entry program),
-    and in the standard library no such module file lib/score.bot and no
-    intrinsics of that namespace
+    application's own modules are the files beside its entry program)
 
-SURFACE MODULE MODULE-COLLISION for a file that would shadow a standard
-namespace, SELF-IMPORT for an import of the entry file.
+SURFACE MODULE RESERVED-NAMESPACE for an application file under std/,
+SELF-IMPORT for an import of the entry file.
 
 @example reject
 import score
@@ -1973,10 +1979,20 @@ score::points(4)
 @message unknown namespace "score": no such module file *
 @end
 
+@example reject
+import list
+
+0
+@caption The standard list is std::list: no fallback from a missing local module
+@error SURFACE MODULE UNKNOWN-NAMESPACE
+@at 1:8
+@message unknown namespace "list": no such module file *; the standard library's namespace of that name is std::list *
+@end
+
 == WHAT TO DO
 Put the module file beside the entry file (or in a subdirectory for a
-nested namespace) and run the entry file; rename an application module
-that has a standard namespace's name.
+nested namespace) and run the entry file; name a standard namespace with
+its std:: (`import std::list`).
 
 @topic rule.flags
 title: Flag parameters: declared last, written by name

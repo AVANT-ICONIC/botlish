@@ -1,6 +1,6 @@
 # imports.test -- explicit namespace and type imports (IMPORTS.md):
 #
-#     import list              import abi::x86_64          import type abi::U8Value
+#     import std::list              import std::abi::x86_64          import type std::abi::U8Value
 #
 # * grammar and AST (header placement, contextual `import`, arbitrary path
 #   depth, no alias/wildcard/selective forms);
@@ -147,9 +147,9 @@ proc writeFixtures {dir} {
     writeModule $dir alpha "fn f(x):\n    x + 1\n\nfn only_alpha(x):\n    x + 10\n"
     writeModule $dir beta "fn f(x):\n    x + 100\n"
     writeModule $dir talpha "fn g(x: int):\n    x + 1\n"
-    writeModule $dir tbeta "import str\n\nfn g(x: str):\n    str::concat(x, \"!\")\n"
+    writeModule $dir tbeta "import std::str\n\nfn g(x: str):\n    std::str::concat(x, \"!\")\n"
     writeModule $dir leafc "fn deep(x):\n    x + 7\n"
-    writeModule $dir midb "import leafc\n\nfn via(x):\n    leafc::deep(x)\n"
+    writeModule $dir midb "import std::leafc\n\nfn via(x):\n    std::leafc::deep(x)\n"
     writeModule $dir example_types "type Count = Int in 0..100\ntype Index = Int in 0..1000\n"
 }
 
@@ -157,47 +157,47 @@ proc writeFixtures {dir} {
 # Grammar and AST
 
 test imports-ast-header {the header's imports are program fields, in written order, never body statements} -body {
-    set ast [surface::parse "import abi\nimport list\nimport type abi::U8Value\nimport abi::x86_64\n\nfn f(x):\n    x\n"]
+    set ast [surface::parse "import std::abi\nimport std::list\nimport type std::abi::U8Value\nimport std::abi::x86_64\n\nfn f(x):\n    x\n"]
     list [lmap i [dict get $ast imports] {
             if {[dict get $i kind] eq "import"} {list import [dict get $i namespace]} \
             else {list typeimport [dict get $i namespace] [dict get $i name]}
         }] \
         [lmap s [dict get $ast body] {dict get $s kind}]
-} -result {{{import abi} {import list} {typeimport abi U8Value} {import abi::x86_64}} function}
+} -result {{{import std::abi} {import std::list} {typeimport std::abi U8Value} {import std::abi::x86_64}} function}
 
 test imports-ast-printer {the AST printer shows imports first, with ids} -body {
-    surface::formatAst [surface::parse "import list\nimport type abi::U8Value\nx = 1\n"] -ids 1
-} -result {(import list) <import(list)>
-(import-type abi::U8Value) <import-type(abi::U8Value)>
+    surface::formatAst [surface::parse "import std::list\nimport type std::abi::U8Value\nx = 1\n"] -ids 1
+} -result {(import std::list) <import(std::list)>
+(import-type std::abi::U8Value) <import-type(std::abi::U8Value)>
 (bind x (int 1) <x=/value>) <x=>}
 
 test imports-ast-deep-path {a namespace path of any depth parses (and a type import's last segment is the type)} -body {
-    set ast [surface::parse "import a::b::c::d\nimport type foo::bar::Baz\n"]
+    set ast [surface::parse "import a::b::c::d\nimport type std::foo::bar::Baz\n"]
     lmap i [dict get $ast imports] {dict get $i namespace}
-} -result {a::b::c::d foo::bar}
+} -result {a::b::c::d std::foo::bar}
 
 test imports-ast-import-is-contextual {`import` stays an ordinary name; `import type` is a type import, not a namespace called type} -body {
     set a [surface::formatAst [surface::parse "import = 5\nimport\nimport(1)\n"]]
-    set b [surface::parse "import type foo::Bar\n"]
+    set b [surface::parse "import type std::foo::Bar\n"]
     list $a [lmap i [dict get $b imports] {dict get $i kind}]
 } -result {{(bind import (int 5))
 (name import)
 (call (name import) (int 1))} typeimport}
 
 test imports-ast-imports-are-not-statements {an import is not in the program body and is not a walked child} -body {
-    set ast [surface::parse "import list\nx = 1\n"]
+    set ast [surface::parse "import std::list\nx = 1\n"]
     list [llength [dict get $ast body]] [llength [surface::ast::Children $ast]]
 } -result {1 1}
 
 foreach {name source message} {
-    alias         "import abi as a\n"              "import aliases do not exist"
-    type-alias    "import type abi::U8Value as B\n" "import aliases do not exist"
-    wildcard      "import abi::*\n"                "wildcard imports do not exist"
-    single-type   "import type foo\n"              "a type import needs a qualified name"
-    late          "x = 1\nimport abi\n"            "an import must be in the file header"
-    in-function   "fn f():\n    import abi\n    1\n" "an import must be in the file header"
-    missing-name  "import abi::\n"                 "expected a namespace name after"
-    trailing      "import abi list\n"              "expected end of line"
+    alias         "import std::abi as a\n"              "import aliases do not exist"
+    type-alias    "import type std::abi::U8Value as B\n" "import aliases do not exist"
+    wildcard      "import std::abi::*\n"                "wildcard imports do not exist"
+    single-type   "import type foo\n"                   "a type import needs a qualified name"
+    late          "x = 1\nimport std::abi\n"            "an import must be in the file header"
+    in-function   "fn f():\n    import std::abi\n    1\n" "an import must be in the file header"
+    missing-name  "import std::abi::\n"                 "expected a namespace name after"
+    trailing      "import std::abi list\n"              "expected end of line"
 } {
     test imports-syntax-$name {a malformed or misplaced import is a located syntax error} -body {
         catch {surface::parse $source} m
@@ -206,46 +206,46 @@ foreach {name source message} {
 }
 
 test imports-selective-forms-do-not-exist {`from abi import u8` and `import fn` are not import syntax} -body {
-    list [catch {surface::parse "from abi import u8\n"}] [catch {surface::parse "import fn list::at\n"}]
+    list [catch {surface::parse "from abi import u8\n"}] [catch {surface::parse "import fn std::list::at\n"}]
 } -result {1 1}
 
 # ---------------------------------------------------------------------------
 # Exact namespace authorization
 
 test imports-qualified-needs-import {a qualified reference without its import is MISSING-IMPORT, with the exact import to add} -body {
-    rejection "x = abi::u8(1)\nx\n"
-} -result {MISSING-IMPORT: namespace "abi" is not imported; add `import abi` to use `abi::u8`}
+    rejection "x = std::abi::u8(1)\nx\n"
+} -result {MISSING-IMPORT: namespace "std::abi" is not imported; add `import std::abi` to use `std::abi::u8`}
 
-test imports-exact-namespace {import abi authorizes abi::u8 and nothing of abi::x86_64} -body {
-    list [rejectionKind "import abi\nx = abi::u8(1)\nx.value\n"] \
-        [rejection "import abi\nx = abi::x86_64::register64(1)\n"]
-} -result {accepted {MISSING-IMPORT: namespace "abi::x86_64" is not imported; add `import abi::x86_64` to use `abi::x86_64::register64` (imports are exact: `import abi` does not import "abi::x86_64")}}
+test imports-exact-namespace {import std::abi authorizes std::abi::u8 and nothing of std::abi::x86_64} -body {
+    list [rejectionKind "import std::abi\nx = std::abi::u8(1)\nx.value\n"] \
+        [rejection "import std::abi\nx = std::abi::x86_64::register64(1)\n"]
+} -result {accepted {MISSING-IMPORT: namespace "std::abi::x86_64" is not imported; add `import std::abi::x86_64` to use `std::abi::x86_64::register64` (imports are exact: `import std::abi` does not import "std::abi::x86_64")}}
 
-test imports-nested-namespace-import {import abi::x86_64 authorizes abi::x86_64::register64, and not abi::u8} -body {
-    list [agree "import abi::x86_64\nx = abi::x86_64::register64(1)\nabi::x86_64::to_int(x)\n"] \
-        [rejection "import abi::x86_64\nx = abi::u8(1)\n"]
-} -result {1 {MISSING-IMPORT: namespace "abi" is not imported; add `import abi` to use `abi::u8` (imports are exact: `import abi::x86_64` does not import "abi")}}
+test imports-nested-namespace-import {import std::abi::x86_64 authorizes std::abi::x86_64::register64, and not std::abi::u8} -body {
+    list [agree "import std::abi::x86_64\nx = std::abi::x86_64::register64(1)\nstd::abi::x86_64::to_int(x)\n"] \
+        [rejection "import std::abi::x86_64\nx = std::abi::u8(1)\n"]
+} -result {1 {MISSING-IMPORT: namespace "std::abi" is not imported; add `import std::abi` to use `std::abi::u8` (imports are exact: `import std::abi::x86_64` does not import "std::abi")}}
 
-test imports-linux-abi-intrinsic-namespace {import linux::abi::x86_64 authorizes the intrinsic linux::abi::x86_64::syscall; `linux` is its own namespace (the module lib/linux.bot, ABI-BYTES.md) and importing it does not import `linux::abi::x86_64`} -body {
-    list [rejectionKind "direct module\nimport linux::abi::x86_64\nimport abi::x86_64\nx = linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39)})\n"] \
-        [rejectionKind "import linux\n"] \
-        [rejection "import linux\nx = linux::abi::x86_64::syscall({})\n"]
-} -match glob -result {accepted accepted {MISSING-IMPORT: namespace "linux::abi::x86_64" is not imported; add `import linux::abi::x86_64` to use `linux::abi::x86_64::syscall` (imports are exact: `import linux` does not import "linux::abi::x86_64")}}
+test imports-linux-abi-intrinsic-namespace {import std::linux::abi::x86_64 authorizes the intrinsic std::linux::abi::x86_64::syscall; `linux` is its own namespace (the module stdlib/linux.bot, ABI-BYTES.md) and importing it does not import `std::linux::abi::x86_64`} -body {
+    list [rejectionKind "direct module\nimport std::linux::abi::x86_64\nimport std::abi::x86_64\nx = std::linux::abi::x86_64::syscall({rax: std::abi::x86_64::register64(39)})\n"] \
+        [rejectionKind "import std::linux\n"] \
+        [rejection "import std::linux\nx = std::linux::abi::x86_64::syscall({})\n"]
+} -match glob -result {accepted accepted {MISSING-IMPORT: namespace "std::linux::abi::x86_64" is not imported; add `import std::linux::abi::x86_64` to use `std::linux::abi::x86_64::syscall` (imports are exact: `import std::linux` does not import "std::linux::abi::x86_64")}}
 
-test imports-intrinsic-only-namespace {import str works with no lib/str.bot} -body {
+test imports-intrinsic-only-namespace {import std::str works with no stdlib/str.bot} -body {
     list [file exists [file join $::core::libraryDir str.bot]] \
-        [agree "import str\nstr::length(\"abc\")\n"]
+        [agree "import std::str\nstd::str::length(\"abc\")\n"]
 } -result {0 3}
 
 test imports-unknown-member-vs-missing-import {the namespace is authorized first, then the member is looked up} -body {
-    list [rejectionKind "import str\nstr::reverse(\"a\")\n"] \
-        [rejectionKind "str::concat(\"a\", \"b\")\n"] \
-        [rejectionKind "import list\nlist::nothere(1)\n"]
+    list [rejectionKind "import std::str\nstd::str::reverse(\"a\")\n"] \
+        [rejectionKind "std::str::concat(\"a\", \"b\")\n"] \
+        [rejectionKind "import std::list\nstd::list::nothere(1)\n"]
 } -result {UNKNOWN-SYMBOL MISSING-IMPORT UNKNOWN-SYMBOL}
 
 test imports-unknown-member-names-the-intrinsics {the unknown-member diagnostic of an intrinsic namespace lists its members} -body {
-    rejection "import str\nstr::reverse(\"a\")\n"
-} -result {UNKNOWN-SYMBOL: namespace "str" has no definition "reverse" (its members are the intrinsics: append_char, char_at, concat, encode_utf8, is_tcl_alnum, is_tcl_alpha, length, lowercase, substring)}
+    rejection "import std::str\nstd::str::reverse(\"a\")\n"
+} -result {UNKNOWN-SYMBOL: namespace "std::str" has no definition "reverse" (its members are the intrinsics: append_char, char_at, concat, encode_utf8, is_tcl_alnum, is_tcl_alpha, length, lowercase, substring)}
 
 test imports-unknown-namespace-at-the-import {an import of a namespace that does not exist is reported at the import, before any use} -body {
     rejection "import does_not_exist\n1\n"
@@ -256,43 +256,43 @@ test imports-unknown-namespace-reference {a reference into a namespace that exis
 } -result UNKNOWN-NAMESPACE
 
 test imports-struct-and-type-references-are-authorized {a qualified struct construction and a qualified type annotation need the import too} -body {
-    list [rejectionKind "x = abi::U8 {value: 5}\nx.value\n"] \
-        [rejectionKind "fn f(x: abi::U8):\n    x\n1\n"] \
-        [rejectionKind "import abi\nx = abi::U8 {value: 5}\nx.value\n"] \
-        [rejectionKind "import abi\nfn f(x: abi::U8):\n    x.value\nf(abi::U8 {value: 5})\n"]
+    list [rejectionKind "x = std::abi::U8 {value: 5}\nx.value\n"] \
+        [rejectionKind "fn f(x: std::abi::U8):\n    x\n1\n"] \
+        [rejectionKind "import std::abi\nx = std::abi::U8 {value: 5}\nx.value\n"] \
+        [rejectionKind "import std::abi\nfn f(x: std::abi::U8):\n    x.value\nf(std::abi::U8 {value: 5})\n"]
 } -result {MISSING-IMPORT MISSING-IMPORT accepted accepted}
 
 test imports-duplicate-namespace-import {importing a namespace twice is DUPLICATE-IMPORT} -body {
-    rejection "import list\nimport list\n"
-} -match glob -result {DUPLICATE-IMPORT: namespace "list" is already imported (first imported at *)}
+    rejection "import std::list\nimport std::list\n"
+} -match glob -result {DUPLICATE-IMPORT: namespace "std::list" is already imported (first imported at *)}
 
 test imports-import-order-is-irrelevant {import order changes neither meaning nor diagnostics} -body {
-    list [agree "import abi\nimport list\nlist::length(\[abi::u8(1).value])\n"] \
-        [agree "import list\nimport abi\nlist::length(\[abi::u8(1).value])\n"]
+    list [agree "import std::abi\nimport std::list\nstd::list::length(\[std::abi::u8(1).value])\n"] \
+        [agree "import std::list\nimport std::abi\nstd::list::length(\[std::abi::u8(1).value])\n"]
 } -result {1 1}
 
 test imports-self-import {a module needs no import of its own namespace, and may not make one} -body {
     withScratchLibrary {
-        writeModule $dir selfish "import selfish\n\nfn f(x):\n    x\n"
-        writeModule $dir selfok "fn first(x):\n    x + 1\n\nfn second(x):\n    selfok::first(x) + 1\n"
-        list [rejectionKind "import selfish\n1\n"] [agree "import selfok\nselfok::second(1)\n"]
+        writeModule $dir selfish "import std::selfish\n\nfn f(x):\n    x\n"
+        writeModule $dir selfok "fn first(x):\n    x + 1\n\nfn second(x):\n    std::selfok::first(x) + 1\n"
+        list [rejectionKind "import std::selfish\n1\n"] [agree "import std::selfok\nstd::selfok::second(1)\n"]
     }
 } -result {SELF-IMPORT 3}
 
-test imports-own-intrinsic-needs-no-import {lib/list.bot names its own intrinsic list::at with no import of list} -body {
-    string first "import list" [core::ReadFile [file join $::projectRoot lib list.bot]]
+test imports-own-intrinsic-needs-no-import {stdlib/list.bot names its own intrinsic std::list::at with no import of list} -body {
+    string first "import std::list" [core::ReadFile [file join $::projectRoot stdlib list.bot]]
 } -result -1
 
 test imports-own-forward-reference {a module's own qualified reference is still not a forward reference} -body {
     withScratchLibrary {
-        writeModule $dir fwd "fn first(x):\n    fwd::second(x)\n\nfn second(x):\n    x\n"
-        rejectionKind "import fwd\nfwd::first(1)\n"
+        writeModule $dir fwd "fn first(x):\n    std::fwd::second(x)\n\nfn second(x):\n    x\n"
+        rejectionKind "import std::fwd\nstd::fwd::first(1)\n"
     }
 } -result UNBOUND
 
 test imports-entry-program-no-implicit-imports {an entry program gets no implicit standard imports} -body {
-    list [rejectionKind "list::length(\[1])\n"] [rejectionKind "mutable_array::allocate(1)\n"] \
-        [rejectionKind "abi::u8(1)\n"] [rejectionKind "byte::set(\[1])\n"] [rejectionKind "str::length(\"a\")\n"]
+    list [rejectionKind "std::list::length(\[1])\n"] [rejectionKind "std::mutable_array::allocate(1)\n"] \
+        [rejectionKind "std::abi::u8(1)\n"] [rejectionKind "std::byte::set(\[1])\n"] [rejectionKind "std::str::length(\"a\")\n"]
 } -result {MISSING-IMPORT MISSING-IMPORT MISSING-IMPORT MISSING-IMPORT MISSING-IMPORT}
 
 test imports-root-primitives-need-no-import {the language primitives are not a namespace and need no import} -body {
@@ -303,32 +303,32 @@ test imports-root-primitives-need-no-import {the language primitives are not a n
 # ---------------------------------------------------------------------------
 # Imports are not executable, inject nothing, and no backend sees them
 
-test imports-inject-no-short-names {import list does not make at/append ordinary names} -body {
-    list [agree "import list\nlist::at(\[5, 6], 1):\n    on IndexNotFound:\n        0\n"] \
-        [diagKinds "import list\nat(\[5, 6], 1)\n"] \
-        [diagKinds "import list\nappend(\[1], 2)\n"]
+test imports-inject-no-short-names {import std::list does not make at/append ordinary names} -body {
+    list [agree "import std::list\nstd::list::at(\[5, 6], 1):\n    on IndexNotFound:\n        0\n"] \
+        [diagKinds "import std::list\nat(\[5, 6], 1)\n"] \
+        [diagKinds "import std::list\nappend(\[1], 2)\n"]
 } -result {6 UNBOUND UNBOUND}
 
 test imports-ordinary-binding-still-works {an ordinary binding of the same spelling is independent of the import} -body {
-    agree "import list\nat = 5\nat\n"
+    agree "import std::list\nat = 5\nat\n"
 } -result 5
 
 test imports-not-an-expression {no import survives into HIR or core IR: no node, no call, no binding} -body {
-    set hir [hirOfSource "import list\nimport str\nx = list::length(\[1])\nx\n"]
+    set hir [hirOfSource "import std::list\nimport std::str\nx = std::list::length(\[1])\nx\n"]
     set text [hir::format $hir]
     set core [join [hir::lower $hir] \n]
     list [expr {[string first import $text] < 0}] [expr {[string first import $core] < 0}]
 } -result {1 1}
 
 test imports-nir-has-no-import {the NIR of a program with imports names no import} -body {
-    set hir [hirOfSource "import list\nimport str\nx = list::length(\[1]) + str::length(\"ab\")\nx\n"]
+    set hir [hirOfSource "import std::list\nimport std::str\nx = std::list::length(\[1]) + std::str::length(\"ab\")\nx\n"]
     expr {[string first import [native::nir $hir]] < 0}
 } -result 1
 
-test imports-same-program-same-hir-target {list::at after import list resolves to the same native call target as before imports existed: the root native} -body {
-    set hir [hirOfSource "import list\nx = list::at(\[5], 0):\n    on IndexNotFound:\n        0\nx\n"]
-    targetOf $hir [callNamed $hir list::at]
-} -result {native list::at}
+test imports-same-program-same-hir-target {std::list::at after import std::list resolves to the same native call target as before imports existed: the root native} -body {
+    set hir [hirOfSource "import std::list\nx = std::list::at(\[5], 0):\n    on IndexNotFound:\n        0\nx\n"]
+    targetOf $hir [callNamed $hir std::list::at]
+} -result {native std::list::at}
 
 # ---------------------------------------------------------------------------
 # Non-transitive imports
@@ -336,25 +336,25 @@ test imports-same-program-same-hir-target {list::at after import list resolves t
 test imports-non-transitive-namespace {A imports B and B imports C: A does not get C} -body {
     withScratchLibrary {
         writeFixtures $dir
-        list [agree "import midb\nmidb::via(1)\n"] \
-            [rejection "import midb\nleafc::deep(1)\n"] \
-            [agree "import midb\nimport leafc\nleafc::deep(1) + midb::via(1)\n"]
+        list [agree "import std::midb\nstd::midb::via(1)\n"] \
+            [rejection "import std::midb\nstd::leafc::deep(1)\n"] \
+            [agree "import std::midb\nimport std::leafc\nstd::leafc::deep(1) + std::midb::via(1)\n"]
     }
-} -result {8 {MISSING-IMPORT: namespace "leafc" is not imported; add `import leafc` to use `leafc::deep`} 16}
+} -result {8 {MISSING-IMPORT: namespace "std::leafc" is not imported; add `import std::leafc` to use `std::leafc::deep`} 16}
 
 test imports-non-transitive-methods {C's functions are not method candidates in A merely because B imports C: the call is rejected, MISSING-IMPORT naming C (DIAGNOSTIC-RECOVERY.md)} -body {
     withScratchLibrary {
         writeFixtures $dir
-        list [diagKinds "import midb\nx = 1\nx.deep()\n"] \
-            [agree "import leafc\nx = 1\nx.deep()\n"]
+        list [diagKinds "import std::midb\nx = 1\nx.deep()\n"] \
+            [agree "import std::leafc\nx = 1\nx.deep()\n"]
     }
 } -result {MISSING-IMPORT 8}
 
 test imports-module-declares-its-own-dependencies {a module's imports are its own: importing it grants its importer nothing} -body {
     withScratchLibrary {
-        writeModule $dir needsleaf "fn f(x):\n    leafc::deep(x)\n"
+        writeModule $dir needsleaf "fn f(x):\n    std::leafc::deep(x)\n"
         writeModule $dir leafc "fn deep(x):\n    x + 7\n"
-        list [rejectionKind "import needsleaf\nneedsleaf::f(1)\n"]
+        list [rejectionKind "import std::needsleaf\nstd::needsleaf::f(1)\n"]
     }
 } -result MISSING-IMPORT
 
@@ -362,14 +362,14 @@ test imports-module-declares-its-own-dependencies {a module's imports are its ow
 # Method candidates from imported namespaces
 
 foreach {name imports free method expected} {
-    list-at      {list}          {list::get([10, 20, 30], 1, 0)}   {[10, 20, 30].get(1, 0)}       20
-    list-append  {list}          {list::append([1], 2)}            {[1].append(2)}               {[1, 2]}
-    list-length  {list}          {list::length([1, 2])}            {[1, 2].length()}             2
-    str-concat   {str}           {str::concat("ab", "cd")}         {"ab".concat("cd")}           {"abcd"}
-    str-length   {str}           {str::length("abc")}              {"abc".length()}              3
-    str-substring {str}          {str::substring("hello", 1, 3)}   {"hello".substring(1, 3)}    {"el"}
-    set-contains {immutable_set} {immutable_set::contains(immutable_set::from_list([1]), 1)} {immutable_set::from_list([1]).contains(1)} true
-    char-scalar  {char}          {char::scalar_value('A')}         {'A'.scalar_value()}          65
+    list-at      {std::list}        {std::list::get([10, 20, 30], 1, 0)}   {[10, 20, 30].get(1, 0)}       20
+    list-append  {std::list}        {std::list::append([1], 2)}            {[1].append(2)}               {[1, 2]}
+    list-length  {std::list}        {std::list::length([1, 2])}            {[1, 2].length()}             2
+    str-concat   {std::str}        {std::str::concat("ab", "cd")}         {"ab".concat("cd")}           {"abcd"}
+    str-length   {std::str}        {std::str::length("abc")}              {"abc".length()}              3
+    str-substring {std::str}        {std::str::substring("hello", 1, 3)}   {"hello".substring(1, 3)}    {"el"}
+    set-contains {std::immutable_set} {std::immutable_set::contains(std::immutable_set::from_list([1]), 1)} {std::immutable_set::from_list([1]).contains(1)} true
+    char-scalar  {std::char}        {std::char::scalar_value('A')}         {'A'.scalar_value()}          65
 } {
     test imports-method-$name "$name: the method spelling after the import and the qualified spelling agree" -body {
         set header [join [lmap i $imports {string cat "import " $i}] \n]
@@ -377,57 +377,57 @@ foreach {name imports free method expected} {
     } -result [list $expected $expected]
 }
 
-test imports-method-at-intrinsic {xs.at(i) after import list is list::at(xs, i): the very native, with its declared error} -body {
-    set free "import list\nr = list::at(\[10, 20\], 1):\n    on IndexNotFound:\n        0\nr\n"
-    set method "import list\nr = \[10, 20\].at(1):\n    on IndexNotFound:\n        0\nr\n"
+test imports-method-at-intrinsic {xs.at(i) after import std::list is std::list::at(xs, i): the very native, with its declared error} -body {
+    set free "import std::list\nr = std::list::at(\[10, 20\], 1):\n    on IndexNotFound:\n        0\nr\n"
+    set method "import std::list\nr = \[10, 20\].at(1):\n    on IndexNotFound:\n        0\nr\n"
     set fh [hirOfSource $free]
     set mh [hirOfSource $method]
     list [agree $free] [agree $method] \
-        [targetOf $mh [methodCall $mh]] [targetOf $fh [callNamed $fh list::at]] \
+        [targetOf $mh [methodCall $mh]] [targetOf $fh [callNamed $fh std::list::at]] \
         [expr {[native::nir $fh] eq [native::nir $mh]}]
-} -result {20 20 {native list::at} {native list::at} 1}
+} -result {20 20 {native std::list::at} {native std::list::at} 1}
 
 test imports-method-library-function {a module function of an imported namespace is a method candidate, the same block as the qualified call} -body {
-    set free "import list\nlist::get(\[1, 2\], 5, 9)\n"
-    set method "import list\n\[1, 2\].get(5, 9)\n"
+    set free "import std::list\nstd::list::get(\[1, 2\], 5, 9)\n"
+    set method "import std::list\n\[1, 2\].get(5, 9)\n"
     set fh [hirOfSource $free]
     set mh [hirOfSource $method]
-    list [agree $free] [agree $method] [expr {[targetOf $mh [methodCall $mh]] eq [targetOf $fh [callNamed $fh list::get]]}]
+    list [agree $free] [agree $method] [expr {[targetOf $mh [methodCall $mh]] eq [targetOf $fh [callNamed $fh std::list::get]]}]
 } -result {9 9 1}
 
-test imports-method-mutable-array {a.set/a.at/a.get after import mutable_array equal the free calls on every backend} -body {
-    set method "import mutable_array\na = mutable_array::allocate(2)\na.set(0, 5)\na.set(1, 6)\n\[a.at(0), a.at(1), a.get(2, -1)\]\n"
-    set free "import mutable_array\na = mutable_array::allocate(2)\nmutable_array::set(a, 0, 5)\nmutable_array::set(a, 1, 6)\n\[mutable_array::at(a, 0), mutable_array::at(a, 1), mutable_array::get(a, 2, -1)\]\n"
+test imports-method-mutable-array {a.set/a.at/a.get after import std::mutable_array equal the free calls on every backend} -body {
+    set method "import std::mutable_array\na = std::mutable_array::allocate(2)\na.set(0, 5)\na.set(1, 6)\n\[a.at(0), a.at(1), a.get(2, -1)\]\n"
+    set free "import std::mutable_array\na = std::mutable_array::allocate(2)\nstd::mutable_array::set(a, 0, 5)\nstd::mutable_array::set(a, 1, 6)\n\[std::mutable_array::at(a, 0), std::mutable_array::at(a, 1), std::mutable_array::get(a, 2, -1)\]\n"
     list [agree $method] [agree $free]
 } -result {{[5, 6, -1]} {[5, 6, -1]}}
 
-test imports-method-requires-the-import {without the import, xs.at(i) does not find list::at although the standard namespace exists: the import is what is missing, MISSING-IMPORT as for the explicit spelling, naming the one namespace whose function the call would apply (DIAGNOSTIC-RECOVERY.md)} -body {
+test imports-method-requires-the-import {without the import, xs.at(i) does not find std::list::at although the standard namespace exists: the import is what is missing, MISSING-IMPORT as for the explicit spelling, naming the one namespace whose function the call would apply (DIAGNOSTIC-RECOVERY.md)} -body {
     set message [lindex [diagMessages "xs = \[1, 2\]\nxs.length()\n"] 0]
     list [diagKinds "xs = \[1, 2\]\nxs.at(0)\n"] [diagKinds "s = \"ab\"\ns.length()\n"] \
-        [expr {[string first {namespace "list" is not imported; add `import list` to use `list::length`} $message] >= 0}] \
+        [expr {[string first {namespace "std::list" is not imported; add `import std::list` to use `std::list::length`} $message] >= 0}] \
         [expr {[string first {the method-style call ".length(...)" applies only a function visible by that name} $message] >= 0}] \
         [expr {[string first mutable_vector $message] < 0 && [string first str:: $message] < 0}]
 } -result {MISSING-IMPORT MISSING-IMPORT 1 1 1}
 
 test imports-method-does-not-need-an-alias {an alias binding for method visibility is not needed, and where present is the same candidate (not an ambiguity)} -body {
-    list [agree "import list\nat = list::length\n\[1, 2\].at()\n"] \
-        [agree "import list\nlength = list::length\n\[1, 2\].length()\n"]
+    list [agree "import std::list\nat = std::list::length\n\[1, 2\].at()\n"] \
+        [agree "import std::list\nlength = std::list::length\n\[1, 2\].length()\n"]
 } -result {2 2}
 
-test imports-method-nested-is-exact {import abi does not make abi::x86_64 functions method candidates; import abi::x86_64 does} -body {
-    list [diagKinds "import abi\nx = abi::u8(1)\nx.nothere()\n"] \
-        [agree "import abi\nimport abi::x86_64\nabi::u8(7).from_u8().to_int()\n"] \
-        [diagKinds "import abi\nabi::u8(7).from_u8()\n"]
+test imports-method-nested-is-exact {import std::abi does not make std::abi::x86_64 functions method candidates; import std::abi::x86_64 does} -body {
+    list [diagKinds "import std::abi\nx = std::abi::u8(1)\nx.nothere()\n"] \
+        [agree "import std::abi\nimport std::abi::x86_64\nstd::abi::u8(7).from_u8().to_int()\n"] \
+        [diagKinds "import std::abi\nstd::abi::u8(7).from_u8()\n"]
 } -result {UNKNOWN-FIELD 7 UNKNOWN-FIELD}
 
 test imports-method-keeps-lexical-candidates {local functions, parameters and root natives remain method candidates beside imported ones} -body {
-    list [agree "import list\nfn inc(x):\n    x + 1\n3.inc()\n"] \
-        [agree "import list\nfn apply1(x, f):\n    x.f()\nfn dbl(n):\n    n + n\napply1(4, dbl)\n"] \
-        [agree "import list\n5.list(6, 7).length()\n"]
+    list [agree "import std::list\nfn inc(x):\n    x + 1\n3.inc()\n"] \
+        [agree "import std::list\nfn apply1(x, f):\n    x.f()\nfn dbl(n):\n    n + n\napply1(4, dbl)\n"] \
+        [agree "import std::list\n5.list(6, 7).length()\n"]
 } -result {4 8 3}
 
 test imports-method-field-ambiguity-unchanged {the field/function ambiguity and its escape hatch are unchanged} -body {
-    set decl "import list\nfn cb(s, a):\n    a + 1\nfn mk():\n    {cb: cb}\ns = mk()\n"
+    set decl "import std::list\nfn cb(s, a):\n    a + 1\nfn mk():\n    {cb: cb}\ns = mk()\n"
     list [diagKinds "${decl}s.cb(1)\n"] [agree "${decl}(s.cb)(s, 1)\n"] [agree "${decl}cb(s, 1)\n"]
 } -result {AMBIGUOUS-METHOD-CALL 2 2}
 
@@ -437,100 +437,100 @@ test imports-method-field-ambiguity-unchanged {the field/function ambiguity and 
 test imports-method-ambiguous-between-namespaces {two imported namespaces each with an applicable f: AMBIGUOUS-METHOD-CALL, in either import order, no precedence} -body {
     withScratchLibrary {
         writeFixtures $dir
-        set a [diagMessages "import alpha\nimport beta\n1.f()\n"]
-        set b [diagMessages "import beta\nimport alpha\n1.f()\n"]
-        list [diagKinds "import alpha\nimport beta\n1.f()\n"] [diagKinds "import beta\nimport alpha\n1.f()\n"] \
+        set a [diagMessages "import std::alpha\nimport std::beta\n1.f()\n"]
+        set b [diagMessages "import std::beta\nimport std::alpha\n1.f()\n"]
+        list [diagKinds "import std::alpha\nimport std::beta\n1.f()\n"] [diagKinds "import std::beta\nimport std::alpha\n1.f()\n"] \
             [lsort $a] [lsort $b]
     }
-} -match glob -result {AMBIGUOUS-METHOD-CALL AMBIGUOUS-METHOD-CALL {{method-style call "f" is ambiguous: more than one visible function accepts the receiver (alpha::f, beta::f);*}} {{method-style call "f" is ambiguous: more than one visible function accepts the receiver (alpha::f, beta::f);*}}}
+} -match glob -result {AMBIGUOUS-METHOD-CALL AMBIGUOUS-METHOD-CALL {{method-style call "f" is ambiguous: more than one visible function accepts the receiver (std::alpha::f, std::beta::f);*}} {{method-style call "f" is ambiguous: more than one visible function accepts the receiver (std::alpha::f, std::beta::f);*}}}
 
 test imports-method-ambiguity-is-the-same-either-order {the reported candidates do not depend on import order} -body {
     withScratchLibrary {
         writeFixtures $dir
-        expr {[diagMessages "import alpha\nimport beta\n1.f()\n"] eq [diagMessages "import beta\nimport alpha\n1.f()\n"]}
+        expr {[diagMessages "import std::alpha\nimport std::beta\n1.f()\n"] eq [diagMessages "import std::beta\nimport std::alpha\n1.f()\n"]}
     }
 } -result 1
 
-test imports-method-qualified-calls-never-ambiguous {alpha::f(x) and beta::f(x) are exact, whatever is imported} -body {
+test imports-method-qualified-calls-never-ambiguous {std::alpha::f(x) and std::beta::f(x) are exact, whatever is imported} -body {
     withScratchLibrary {
         writeFixtures $dir
-        agree "import alpha\nimport beta\n\[alpha::f(1), beta::f(1)\]\n"
+        agree "import std::alpha\nimport std::beta\n\[std::alpha::f(1), std::beta::f(1)\]\n"
     }
 } -result {[2, 101]}
 
 test imports-method-typed-candidate-wins {when only one candidate's first parameter accepts the receiver, that candidate is the call} -body {
     withScratchLibrary {
         writeFixtures $dir
-        set both "import talpha\nimport tbeta\n"
+        set both "import std::talpha\nimport std::tbeta\n"
         list [agree "${both}5.g()\n"] [agree "${both}\"hi\".g()\n"] \
-            [agree "import tbeta\nimport talpha\n5.g()\n"]
+            [agree "import std::tbeta\nimport std::talpha\n5.g()\n"]
     }
 } -result {6 {"hi!"} 6}
 
 test imports-method-typed-candidate-target {the typed winner is the very function the qualified call names} -body {
     withScratchLibrary {
         writeFixtures $dir
-        set mh [hirOfSource "import talpha\nimport tbeta\n5.g()\n"]
-        set fh [hirOfSource "import talpha\nimport tbeta\ntalpha::g(5)\n"]
-        expr {[targetOf $mh [methodCall $mh]] eq [targetOf $fh [callNamed $fh talpha::g]]}
+        set mh [hirOfSource "import std::talpha\nimport std::tbeta\n5.g()\n"]
+        set fh [hirOfSource "import std::talpha\nimport std::tbeta\nstd::talpha::g(5)\n"]
+        expr {[targetOf $mh [methodCall $mh]] eq [targetOf $fh [callNamed $fh std::talpha::g]]}
     }
 } -result 1
 
 test imports-method-no-applicable {when no candidate accepts the receiver the call is rejected with each reason} -body {
     withScratchLibrary {
         writeFixtures $dir
-        diagKinds "import talpha\nimport tbeta\n\[1\].g()\n"
+        diagKinds "import std::talpha\nimport std::tbeta\n\[1\].g()\n"
     }
 } -result {NO-APPLICABLE-METHOD TYPE}
 
-test imports-method-list-and-mutable-array {with both imports, a List receiver picks list::at and a MutableArray receiver picks mutable_array::at} -body {
-    set src "import list\nimport mutable_array\na = mutable_array::create(2, 7)\nxs = \[1, 2, 3\]\nx = xs.at(1):\n    on IndexNotFound:\n        0\ny = a.at(0):\n    on IndexNotFound:\n        0\n\[x, y\]\n"
+test imports-method-list-and-mutable-array {with both imports, a List receiver picks std::list::at and a MutableArray receiver picks std::mutable_array::at} -body {
+    set src "import std::list\nimport std::mutable_array\na = std::mutable_array::create(2, 7)\nxs = \[1, 2, 3\]\nx = xs.at(1):\n    on IndexNotFound:\n        0\ny = a.at(0):\n    on IndexNotFound:\n        0\n\[x, y\]\n"
     set hir [hirOfSource $src]
     list [agree $src] [diagKinds $src]
 } -result {{[2, 7]} {}}
 
-test imports-method-untyped-receiver-is-ambiguous {an untyped receiver fits both list::at and mutable_array::at: ambiguous, spell it qualified} -body {
-    set src "import list\nimport mutable_array\nfn first(q):\n    q.at(0)\n1\n"
+test imports-method-untyped-receiver-is-ambiguous {an untyped receiver fits both std::list::at and std::mutable_array::at: ambiguous, spell it qualified} -body {
+    set src "import std::list\nimport std::mutable_array\nfn first(q):\n    q.at(0)\n1\n"
     diagKinds $src
 } -result {AMBIGUOUS-METHOD-CALL UNHANDLED-ERROR}
 
 test imports-method-lexical-and-imported-are-distinct-candidates {a local function and an imported member of the same name are two candidates: no local-wins rule} -body {
     withScratchLibrary {
         writeFixtures $dir
-        list [diagKinds "import alpha\nfn f(x):\n    x + 5\n1.f()\n"] [agree "import alpha\nfn f(x):\n    x + 5\n\[f(1), alpha::f(1)\]\n"]
+        list [diagKinds "import std::alpha\nfn f(x):\n    x + 5\n1.f()\n"] [agree "import std::alpha\nfn f(x):\n    x + 5\n\[f(1), std::alpha::f(1)\]\n"]
     }
 } -result {AMBIGUOUS-METHOD-CALL {[6, 2]}}
 
 # ---------------------------------------------------------------------------
 # Types are namespace members; import type
 
-test imports-type-has-qualified-identity {a module's type is abi::U8Value, not a global U8Value} -body {
-    set hir [hirOfSource "import abi\nx = abi::u8(7)\nx.value\n"]
+test imports-type-has-qualified-identity {a module's type is std::abi::U8Value, not a global U8Value} -body {
+    set hir [hirOfSource "import std::abi\nx = std::abi::u8(7)\nx.value\n"]
     set names [lmap t [hir::sourceTypes $hir] {dict get $t name}]
-    list [expr {"abi::U8Value" in $names}] [expr {"AbiU8Value" in $names}] [expr {"U8Value" in $names}]
+    list [expr {"std::abi::U8Value" in $names}] [expr {"AbiU8Value" in $names}] [expr {"U8Value" in $names}]
 } -result {1 0 0}
 
 test imports-type-qualified-reference {a qualified type annotation needs only import of its namespace} -body {
     withScratchLibrary {
         writeFixtures $dir
-        list [agree "import example_types\nfn f(x: example_types::Count):\n    x + 1\nf(5)\n"] \
-            [rejectionKind "fn f(x: example_types::Count):\n    x\n1\n"]
+        list [agree "import std::example_types\nfn f(x: std::example_types::Count):\n    x + 1\nf(5)\n"] \
+            [rejectionKind "fn f(x: std::example_types::Count):\n    x\n1\n"]
     }
 } -result {6 MISSING-IMPORT}
 
 # A module that owns an integer domain and a refinement (it spells them bare
-# and qualified), one that uses them qualified after `import qtypes` (also as
+# and qualified), one that uses them qualified after `import std::qtypes` (also as
 # a refinement's carrier), and one that uses them through `import type` alone.
 proc writeQualifiedTypeModules {dir} {
-    writeModule $dir qtypes "import str\n\ntype Small = Int in 0..10\nrefined type Word = str\n\nfn mk(n: Small) -> Small:\n    n\n\nfn word?(s: str) -> bool proves s: Word:\n    str::length(s) > 2\n\nfn own(x: qtypes::Small) -> qtypes::Small:\n    x\n"
-    writeModule $dir quser "import qtypes\nimport str\n\nrefined type Phrase = qtypes::Word\n\nfn f(x: qtypes::Small) -> int:\n    x + 1\n\nfn len(w: qtypes::Word) -> int:\n    str::length(w)\n\nfn g(s: str) -> int:\n    if qtypes::word?(s):\n        len(s)\n    else:\n        0\n"
-    writeModule $dir qshort "import str\nimport type qtypes::Small\nimport type qtypes::Word\n\nfn f(x: Small) -> int:\n    x + 2\n\nfn len(w: Word) -> int:\n    str::length(w)\n"
+    writeModule $dir qtypes "import std::str\n\ntype Small = Int in 0..10\nrefined type Word = str\n\nfn mk(n: Small) -> Small:\n    n\n\nfn word?(s: str) -> bool proves s: Word:\n    std::str::length(s) > 2\n\nfn own(x: std::qtypes::Small) -> std::qtypes::Small:\n    x\n"
+    writeModule $dir quser "import std::qtypes\nimport std::str\n\nrefined type Phrase = std::qtypes::Word\n\nfn f(x: std::qtypes::Small) -> int:\n    x + 1\n\nfn len(w: std::qtypes::Word) -> int:\n    std::str::length(w)\n\nfn g(s: str) -> int:\n    if std::qtypes::word?(s):\n        len(s)\n    else:\n        0\n"
+    writeModule $dir qshort "import std::str\nimport type std::qtypes::Small\nimport type std::qtypes::Word\n\nfn f(x: Small) -> int:\n    x + 2\n\nfn len(w: Word) -> int:\n    std::str::length(w)\n"
 }
 
 test imports-type-qualified-reference-from-module {a module names another module's integer domain and refinement qualified after its import, or short after import type: one identity, every backend} -body {
     withScratchLibrary {
         writeQualifiedTypeModules $dir
-        set source "import qtypes\nimport quser\nimport qshort\n\nfn h(s: str) -> int:\n    if qtypes::word?(s):\n        qshort::len(s)\n    else:\n        0\n\n\[quser::f(qtypes::mk(3)), qshort::f(qtypes::mk(3)), qtypes::own(4), quser::g(\"abcd\"), quser::g(\"ab\"), h(\"abcde\")\]\n"
+        set source "import std::qtypes\nimport std::quser\nimport std::qshort\n\nfn h(s: str) -> int:\n    if std::qtypes::word?(s):\n        std::qshort::len(s)\n    else:\n        0\n\n\[std::quser::f(std::qtypes::mk(3)), std::qshort::f(std::qtypes::mk(3)), std::qtypes::own(4), std::quser::g(\"abcd\"), std::quser::g(\"ab\"), h(\"abcde\")\]\n"
         set hir [hirOfSource $source]
         set types {}
         foreach e [hir::walk $hir] {
@@ -541,48 +541,48 @@ test imports-type-qualified-reference-from-module {a module names another module
         }
         list [agree $source] [lsort -unique $types]
     }
-} -result {{[4, 5, 4, 4, 0, 5]} {{int[qtypes::Small]} str {str[qtypes::Word]}}}
+} -result {{[4, 5, 4, 4, 0, 5]} {{int[std::qtypes::Small]} str {str[std::qtypes::Word]}}}
 
 test imports-type-qualified-reference-from-module-authorization {in a module too, a qualified type needs its namespace imported, and the owner alone mints a refinement} -body {
     withScratchLibrary {
         writeQualifiedTypeModules $dir
-        writeModule $dir qnoimport "fn f(x: qtypes::Small):\n    x\n"
-        writeModule $dir qtypeonly "import type qtypes::Small\n\nfn f(x: Small, w: qtypes::Word):\n    x\n"
-        writeModule $dir qmint "import qtypes\n\nfn fake?(s: str) -> bool proves s: qtypes::Word:\n    true\n"
-        list [rejectionKind "import qtypes\nimport qnoimport\nqnoimport::f(qtypes::mk(1))\n"] \
-            [rejectionKind "import qtypes\nimport qtypeonly\nqtypeonly::f(qtypes::mk(1), \"w\")\n"] \
-            [rejectionKind "import qmint\nqmint::fake?(\"w\")\n"]
+        writeModule $dir qnoimport "fn f(x: std::qtypes::Small):\n    x\n"
+        writeModule $dir qtypeonly "import type std::qtypes::Small\n\nfn f(x: Small, w: std::qtypes::Word):\n    x\n"
+        writeModule $dir qmint "import std::qtypes\n\nfn fake?(s: str) -> bool proves s: std::qtypes::Word:\n    true\n"
+        list [rejectionKind "import std::qtypes\nimport std::qnoimport\nstd::qnoimport::f(std::qtypes::mk(1))\n"] \
+            [rejectionKind "import std::qtypes\nimport std::qtypeonly\nstd::qtypeonly::f(std::qtypes::mk(1), \"w\")\n"] \
+            [rejectionKind "import std::qmint\nstd::qmint::fake?(\"w\")\n"]
     }
 } -result {MISSING-IMPORT MISSING-IMPORT REFINEMENT-MINT-AUTHORITY}
 
 test imports-type-import-short-name {import type binds exactly one short type name} -body {
     withScratchLibrary {
         writeFixtures $dir
-        list [agree "import type example_types::Count\nfn f(x: Count):\n    x + 1\nf(5)\n"] \
-            [rejectionKind "import type example_types::Count\nfn f(x: Index):\n    x\n1\n"]
+        list [agree "import type std::example_types::Count\nfn f(x: Count):\n    x + 1\nf(5)\n"] \
+            [rejectionKind "import type std::example_types::Count\nfn f(x: Index):\n    x\n1\n"]
     }
 } -result {6 TYPE}
 
 test imports-type-import-authorizes-nothing-else {import type grants no qualified access to the namespace} -body {
     withScratchLibrary {
         writeFixtures $dir
-        list [rejectionKind "import type example_types::Count\nfn f(x: example_types::Index):\n    x\n1\n"] \
-            [rejectionKind "import type example_types::Count\nexample_types::Count?(1)\n"]
+        list [rejectionKind "import type std::example_types::Count\nfn f(x: std::example_types::Index):\n    x\n1\n"] \
+            [rejectionKind "import type std::example_types::Count\nstd::example_types::Count?(1)\n"]
     }
 } -result {MISSING-IMPORT MISSING-IMPORT}
 
 test imports-type-import-and-namespace-import {the two imports express two capabilities and combine} -body {
     withScratchLibrary {
         writeFixtures $dir
-        agree "import example_types\nimport type example_types::Count\nfn f(x: Count) -> example_types::Count:\n    x\nf(7)\n"
+        agree "import std::example_types\nimport type std::example_types::Count\nfn f(x: Count) -> std::example_types::Count:\n    x\nf(7)\n"
     }
 } -result 7
 
 test imports-type-one-identity {the qualified spelling, the imported short spelling and the declaring namespace denote one canonical type} -body {
     withScratchLibrary {
         writeFixtures $dir
-        writeModule $dir user "import type example_types::Count\n\nfn id(x: Count) -> Count:\n    x\n"
-        set hir [hirOfSource "import example_types\nimport type example_types::Count\nimport user\nfn a(x: example_types::Count):\n    x\nfn b(x: Count):\n    x\na(5)\nb(6)\nuser::id(7)\n"]
+        writeModule $dir user "import type std::example_types::Count\n\nfn id(x: Count) -> Count:\n    x\n"
+        set hir [hirOfSource "import std::example_types\nimport type std::example_types::Count\nimport std::user\nfn a(x: std::example_types::Count):\n    x\nfn b(x: Count):\n    x\na(5)\nb(6)\nstd::user::id(7)\n"]
         set types {}
         foreach e [hir::walk $hir] {
             if {[hir::kind $hir $e] eq "block" && [dict exists [hir::node $hir $e] declaredParamTypes]} {
@@ -592,14 +592,14 @@ test imports-type-one-identity {the qualified spelling, the imported short spell
         }
         lsort -unique $types
     }
-} -result {{int[example_types::Count]}}
+} -result {{int[std::example_types::Count]}}
 
 test imports-type-no-value-binding {a type import creates no value or function binding} -body {
     withScratchLibrary {
         writeFixtures $dir
-        list [diagKinds "import type example_types::Count\nCount\n"] \
-            [diagKinds "import type example_types::Count\nCount(5)\n"] \
-            [agree "import type example_types::Count\nCount = 5\nCount\n"]
+        list [diagKinds "import type std::example_types::Count\nCount\n"] \
+            [diagKinds "import type std::example_types::Count\nCount(5)\n"] \
+            [agree "import type std::example_types::Count\nCount = 5\nCount\n"]
     }
 } -result {UNBOUND UNBOUND 5}
 
@@ -608,10 +608,10 @@ test imports-type-no-predicate {a module type brings no membership predicate (EL
         writeFixtures $dir
         writeModule $dir inside "type Small = Int in 0..9\n\nfn small?(x):\n    Small?(x)\n"
         writeModule $dir ordinary "type Small = Int in 0..9\n\nfn small?(x: int) -> bool:\n    x >= 0 and x <= 9\n"
-        set hir [hirOfSource "import ordinary\n\[ordinary::small?(3), ordinary::small?(12)\]\n"]
-        list [rejectionKind "import example_types\nexample_types::Count?(5)\n"] \
-            [rejectionKind "import inside\ninside::small?(3)\n"] \
-            [rejectionKind "import type example_types::Count\nCount?(5)\n"] \
+        set hir [hirOfSource "import std::ordinary\n\[std::ordinary::small?(3), std::ordinary::small?(12)\]\n"]
+        list [rejectionKind "import std::example_types\nstd::example_types::Count?(5)\n"] \
+            [rejectionKind "import std::inside\nstd::inside::small?(3)\n"] \
+            [rejectionKind "import type std::example_types::Count\nCount?(5)\n"] \
             [lsort -unique [lmap backend {interp compile cranelift-generic cranelift} {lindex [outcomeUnderHir $backend $hir] 1}]]
     }
 } -result {UNKNOWN-SYMBOL UNBOUND UNBOUND {{[true, false]}}}
@@ -619,7 +619,7 @@ test imports-type-no-predicate {a module type brings no membership predicate (EL
 test imports-type-own-names-in-own-namespace {a module's types stay usable by short name inside it, with no import} -body {
     withScratchLibrary {
         writeModule $dir own "type Small = Int in 0..9\n\nstruct Box:\n    value: Small\n\nfn make(v: Small) -> Box:\n    Box {value: v}\n"
-        agree "import own\nown::make(4).value\n"
+        agree "import std::own\nstd::own::make(4).value\n"
     }
 } -result 4
 
@@ -627,7 +627,7 @@ test imports-type-global-collision-gone {two modules declare the same short type
     withScratchLibrary {
         writeModule $dir ma "type T = Int in 0..9\n\nfn mk(v: T) -> T:\n    v\n"
         writeModule $dir mb "type T = Int in 0..99\n\nfn mk(v: T) -> T:\n    v\n"
-        agree "import ma\nimport mb\ntype T = Int in 0..999\nfn own(v: T) -> T:\n    v\n\[ma::mk(5), mb::mk(50), own(500)\]\n"
+        agree "import std::ma\nimport std::mb\ntype T = Int in 0..999\nfn own(v: T) -> T:\n    v\n\[std::ma::mk(5), std::mb::mk(50), own(500)\]\n"
     }
 } -result {[5, 50, 500]}
 
@@ -636,17 +636,17 @@ test imports-type-modules-do-not-see-entry-types {a module cannot name the entry
         writeFixtures $dir
         writeModule $dir peek "fn f(x: Small):\n    x\n"
         writeModule $dir peek2 "fn f(x: Count):\n    x\n"
-        list [rejectionKind "import peek\ntype Small = Int in 0..9\npeek::f(1)\n"] \
-            [rejectionKind "import example_types\nimport peek2\npeek2::f(1)\n"]
+        list [rejectionKind "import std::peek\ntype Small = Int in 0..9\nstd::peek::f(1)\n"] \
+            [rejectionKind "import std::example_types\nimport std::peek2\nstd::peek2::f(1)\n"]
     }
 } -result {TYPE TYPE}
 
 test imports-type-non-transitive {a type import is not transitive: importing user does not give its Count} -body {
     withScratchLibrary {
         writeFixtures $dir
-        writeModule $dir user2 "import type example_types::Count\n\nfn id(x: Count):\n    x\n"
-        list [agree "import user2\nuser2::id(3)\n"] \
-            [rejectionKind "import user2\nfn f(x: Count):\n    x\n1\n"]
+        writeModule $dir user2 "import type std::example_types::Count\n\nfn id(x: Count):\n    x\n"
+        list [agree "import std::user2\nstd::user2::id(3)\n"] \
+            [rejectionKind "import std::user2\nfn f(x: Count):\n    x\n1\n"]
     }
 } -result {3 TYPE}
 
@@ -656,37 +656,37 @@ test imports-type-collision-two-imports {two type imports with one short name ar
     withScratchLibrary {
         writeModule $dir ta "type Count = Int in 0..9\n"
         writeModule $dir tb "type Count = Int in 0..99\n"
-        rejection "import type ta::Count\nimport type tb::Count\n1\n"
+        rejection "import type std::ta::Count\nimport type std::tb::Count\n1\n"
     }
-} -match glob -result {TYPE-IMPORT-COLLISION: `import type tb::Count` and `import type ta::Count` (at *) both bind the type name "Count"*}
+} -match glob -result {TYPE-IMPORT-COLLISION: `import type std::tb::Count` and `import type std::ta::Count` (at *) both bind the type name "Count"*}
 
 test imports-type-collision-in-either-order {the collision is reported whichever import comes first} -body {
     withScratchLibrary {
         writeModule $dir ta "type Count = Int in 0..9\n"
         writeModule $dir tb "type Count = Int in 0..99\n"
-        list [rejectionKind "import type tb::Count\nimport type ta::Count\n1\n"] \
-            [rejectionKind "import type ta::Count\nimport type tb::Count\n1\n"]
+        list [rejectionKind "import type std::tb::Count\nimport type std::ta::Count\n1\n"] \
+            [rejectionKind "import type std::ta::Count\nimport type std::tb::Count\n1\n"]
     }
 } -result {TYPE-IMPORT-COLLISION TYPE-IMPORT-COLLISION}
 
 test imports-type-collision-local-type {an import colliding with a type the file declares is rejected} -body {
     withScratchLibrary {
         writeFixtures $dir
-        rejection "import type example_types::Count\ntype Count = Int in 0..5\n1\n"
+        rejection "import type std::example_types::Count\ntype Count = Int in 0..5\n1\n"
     }
-} -match glob -result {TYPE-IMPORT-COLLISION: `import type example_types::Count` binds the type name "Count", which this file also declares itself (at *); an imported type never shadows or is shadowed by a local one*}
+} -match glob -result {TYPE-IMPORT-COLLISION: `import type std::example_types::Count` binds the type name "Count", which this file also declares itself (at *); an imported type never shadows or is shadowed by a local one*}
 
 test imports-type-collision-local-struct {a local struct is a local type name too} -body {
     withScratchLibrary {
         writeFixtures $dir
-        rejectionKind "import type example_types::Count\nstruct Count:\n    v: int\n1\n"
+        rejectionKind "import type std::example_types::Count\nstruct Count:\n    v: int\n1\n"
     }
 } -result TYPE-IMPORT-COLLISION
 
 test imports-type-declaration-before-import-is-rejected {a declaration cannot precede an import: the header comes first, so the other order of the collision is a syntax error} -body {
     withScratchLibrary {
         writeFixtures $dir
-        rejectionKind "type Count = Int in 0..5\nimport type example_types::Count\n1\n"
+        rejectionKind "type Count = Int in 0..5\nimport type std::example_types::Count\n1\n"
     }
 } -result SYNTAX
 
@@ -694,51 +694,51 @@ test imports-type-collision-builtin {a type import may not bind a built-in type 
     withScratchLibrary {
         writeModule $dir shadowy "type Int2 = Int in 0..9\n"
         writeModule $dir shadowy2 "type NonEmpty = Int in 0..9\n"
-        list [rejectionKind "import type shadowy::Int2\n1\n"] [rejectionKind "import type shadowy2::NonEmpty\n1\n"]
+        list [rejectionKind "import type std::shadowy::Int2\n1\n"] [rejectionKind "import type std::shadowy2::NonEmpty\n1\n"]
     }
 } -result {accepted TYPE-IMPORT-COLLISION}
 
 test imports-type-duplicate-import {importing one type twice is DUPLICATE-IMPORT, not silently deduplicated} -body {
     withScratchLibrary {
         writeFixtures $dir
-        rejection "import type example_types::Count\nimport type example_types::Count\n1\n"
+        rejection "import type std::example_types::Count\nimport type std::example_types::Count\n1\n"
     }
-} -match glob -result {DUPLICATE-IMPORT: type "example_types::Count" is already imported (first imported at *)}
+} -match glob -result {DUPLICATE-IMPORT: type "std::example_types::Count" is already imported (first imported at *)}
 
 test imports-type-values-and-types-are-separate-namespaces {an imported type name does not collide with a value binding of that spelling} -body {
     withScratchLibrary {
         writeFixtures $dir
-        agree "import type example_types::Count\nCount = 5\nfn f(x: Count):\n    x\nf(Count)\n"
+        agree "import type std::example_types::Count\nCount = 5\nfn f(x: Count):\n    x\nf(Count)\n"
     }
 } -result 5
 
 # --- diagnostics of type imports
 
 test imports-type-unknown-type {import type of a type the namespace lacks names the namespace} -body {
-    rejection "import abi\nimport type abi::DoesNotExist\n1\n"
-} -match glob -result {UNKNOWN-SYMBOL: namespace "abi" has no type "DoesNotExist" (its types: I16Value, *}
+    rejection "import std::abi\nimport type std::abi::DoesNotExist\n1\n"
+} -match glob -result {UNKNOWN-SYMBOL: namespace "std::abi" has no type "DoesNotExist" (its types: I16Value, *}
 
 test imports-type-unknown-namespace {import type of a missing namespace reports the namespace} -body {
     rejection "import type missing::T\n1\n"
 } -match glob -result {UNKNOWN-NAMESPACE: unknown namespace "missing": *(in "import type missing::T")}
 
 test imports-type-wrong-member-kind {import type of a function says it exists but is not a type} -body {
-    rejection "import type abi::u8\n1\n"
-} -match glob -result {NOT-A-TYPE: "abi::u8" exists, but is not a type*}
+    rejection "import type std::abi::u8\n1\n"
+} -match glob -result {NOT-A-TYPE: "std::abi::u8" exists, but is not a type*}
 
 test imports-type-struct-is-not-a-type-import {a struct is spelled qualified, not type-imported} -body {
-    rejection "import type abi::U8\n1\n"
-} -match glob -result {NOT-A-TYPE: "abi::U8" is a struct, not a source-defined `type`*}
+    rejection "import type std::abi::U8\n1\n"
+} -match glob -result {NOT-A-TYPE: "std::abi::U8" is a struct, not a source-defined `type`*}
 
 test imports-type-import-intrinsic-namespace {a namespace with only intrinsics has no types} -body {
-    list [rejectionKind "import type str::length\n1\n"] [rejectionKind "import type str::Nope\n1\n"]
+    list [rejectionKind "import type std::str::length\n1\n"] [rejectionKind "import type std::str::Nope\n1\n"]
 } -result {NOT-A-TYPE UNKNOWN-SYMBOL}
 
 test imports-type-import-loads-the-module {import type depends on the namespace's module without authorizing its members} -body {
     withScratchLibrary {
         writeFixtures $dir
-        set hir [hirOfSource "import type example_types::Count\nfn f(x: Count):\n    x\nf(1)\n"]
-        list [expr {[dict exists [dict get $hir modules] example_types]}]
+        set hir [hirOfSource "import type std::example_types::Count\nfn f(x: Count):\n    x\nf(1)\n"]
+        list [expr {[dict exists [dict get $hir modules] std::example_types]}]
     }
 } -result 1
 
@@ -747,10 +747,10 @@ test imports-type-import-loads-the-module {import type depends on the namespace'
 test imports-nested-type-import {a type of an existing nested namespace is importable} -body {
     withScratchLibrary {
         writeModule $dir foo/bar "type Baz = Int in 0..5\n\nfn mk(v: Baz) -> Baz:\n    v\n"
-        list [agree "import type foo::bar::Baz\nfn f(x: Baz):\n    x\nf(3)\n"] \
-            [agree "import foo::bar\nfoo::bar::mk(4)\n"] \
-            [agree "import foo::bar\nfn f(x: foo::bar::Baz):\n    x\nf(2)\n"] \
-            [rejectionKind "import type foo::Baz\n1\n"]
+        list [agree "import type std::foo::bar::Baz\nfn f(x: Baz):\n    x\nf(3)\n"] \
+            [agree "import std::foo::bar\nstd::foo::bar::mk(4)\n"] \
+            [agree "import std::foo::bar\nfn f(x: std::foo::bar::Baz):\n    x\nf(2)\n"] \
+            [rejectionKind "import type std::foo::Baz\n1\n"]
     }
 } -result {3 4 2 UNKNOWN-NAMESPACE}
 
@@ -758,28 +758,28 @@ test imports-nested-import-is-exact {importing a parent namespace does not impor
     withScratchLibrary {
         writeModule $dir foo "fn up(x):\n    x + 1\n"
         writeModule $dir foo/bar "fn down(x):\n    x + 2\n"
-        list [rejectionKind "import foo\nfoo::bar::down(1)\n"] \
-            [rejectionKind "import foo::bar\nfoo::up(1)\n"] \
-            [agree "import foo\nimport foo::bar\n\[foo::up(1), foo::bar::down(1)\]\n"]
+        list [rejectionKind "import std::foo\nstd::foo::bar::down(1)\n"] \
+            [rejectionKind "import std::foo::bar\nstd::foo::up(1)\n"] \
+            [agree "import std::foo\nimport std::foo::bar\n\[std::foo::up(1), std::foo::bar::down(1)\]\n"]
     }
 } -result {MISSING-IMPORT MISSING-IMPORT {[2, 3]}}
 
 # ---------------------------------------------------------------------------
 # ABI migration
 
-test imports-abi-types {abi::U8Value is the one type: qualified, imported and in the declaring module} -body {
-    list [agree "import abi\nfn f(x: abi::U8Value):\n    x\nf(200)\n"] \
-        [agree "import abi\nimport type abi::U8Value\nfn f(x: U8Value) -> abi::U8Value:\n    x\nf(200)\n"] \
-        [rejectionKind "import type abi::U8Value\nfn f(x: U8Value):\n    x\nf(300)\n"]
+test imports-abi-types {std::abi::U8Value is the one type: qualified, imported and in the declaring module} -body {
+    list [agree "import std::abi\nfn f(x: std::abi::U8Value):\n    x\nf(200)\n"] \
+        [agree "import std::abi\nimport type std::abi::U8Value\nfn f(x: U8Value) -> std::abi::U8Value:\n    x\nf(200)\n"] \
+        [rejectionKind "import type std::abi::U8Value\nfn f(x: U8Value):\n    x\nf(300)\n"]
 } -match glob -result {200 200 TYPE}
 
-test imports-abi-program-with-own-u8value {a program's own U8Value coexists with abi::U8Value} -body {
-    agree "import abi\ntype U8Value = Int in 0..5\nfn f(x: U8Value):\n    x\n\[f(3), abi::u8(200).value\]\n"
+test imports-abi-program-with-own-u8value {a program's own U8Value coexists with std::abi::U8Value} -body {
+    agree "import std::abi\ntype U8Value = Int in 0..5\nfn f(x: U8Value):\n    x\n\[f(3), std::abi::u8(200).value\]\n"
 } -result {[3, 200]}
 
 test imports-raw-getpid-example {examples/linux/getpid.bot declares its dependencies} -body {
     set text [core::ReadFile [file join $::projectRoot examples linux getpid.bot]]
-    list [regexp {(?n)^import abi::x86_64$} $text] [regexp {(?n)^import linux::abi::x86_64$} $text] [regexp {(?n)^import abi$} $text]
+    list [regexp {(?n)^import std::abi::x86_64$} $text] [regexp {(?n)^import std::linux::abi::x86_64$} $text] [regexp {(?n)^import std::abi$} $text]
 } -result {1 1 0}
 
 # ---------------------------------------------------------------------------
@@ -788,12 +788,12 @@ test imports-raw-getpid-example {examples/linux/getpid.bot declares its dependen
 test imports-cache-does-not-leak-importer-state {one cached module AST serves two importers with different type imports and method visibility} -body {
     withScratchLibrary {
         writeFixtures $dir
-        writeModule $dir shared "import type example_types::Count\nimport leafc\n\nfn id(x: Count):\n    x.deep()\n"
-        set a [rejectionKind "import shared\nshared::id(1)\n"]
+        writeModule $dir shared "import type std::example_types::Count\nimport std::leafc\n\nfn id(x: Count):\n    x.deep()\n"
+        set a [rejectionKind "import std::shared\nstd::shared::id(1)\n"]
         # A second importer, with other imports of its own: nothing of the
         # first compilation (its short types, its methods) is visible.
-        set b [rejectionKind "import shared\nimport example_types\nx = 1\nx.deep()\n"]
-        set c [agree "import shared\nshared::id(1)\n"]
+        set b [rejectionKind "import std::shared\nimport std::example_types\nx = 1\nx.deep()\n"]
+        set c [agree "import std::shared\nstd::shared::id(1)\n"]
         list $a $b $c
     }
 } -result {accepted MISSING-IMPORT 8}
@@ -801,28 +801,28 @@ test imports-cache-does-not-leak-importer-state {one cached module AST serves tw
 test imports-dependency-graph {the loader records each file's direct imports} -body {
     withScratchLibrary {
         writeFixtures $dir
-        set loaded [surface::modules::LoadNamespaces {midb}]
+        set loaded [surface::modules::LoadNamespaces {std::midb}]
         dict get $loaded imports
     }
-} -result {leafc {namespaces {} types {}} midb {namespaces leafc types {}}}
+} -result {std::leafc {namespaces {} types {}} std::midb {namespaces std::leafc types {}}}
 
 test imports-cycle {a cycle through imports is the existing CYCLE diagnostic} -body {
     withScratchLibrary {
-        writeModule $dir cyca "import cycb\n\nfn f(x):\n    cycb::g(x)\n"
-        writeModule $dir cycb "import cyca\n\nfn g(x):\n    cyca::f(x)\n"
-        rejection "import cyca\n1\n"
+        writeModule $dir cyca "import std::cycb\n\nfn f(x):\n    std::cycb::g(x)\n"
+        writeModule $dir cycb "import std::cyca\n\nfn g(x):\n    std::cyca::f(x)\n"
+        rejection "import std::cyca\n1\n"
     }
-} -match glob -result {CYCLE: FILE: module dependency cycle: cyca -> cycb -> cyca}
+} -match glob -result {CYCLE: FILE: module dependency cycle: std::cyca -> std::cycb -> std::cyca}
 
-test imports-protected-intrinsic-needs-no-import-and-grants-no-authority {importing list does not let a module define list::at} -body {
+test imports-protected-intrinsic-needs-no-import-and-grants-no-authority {importing list does not let a module define std::list::at} -body {
     withScratchLibrary {
         writeModule $dir list "fn at(xs, i):\n    0\n"
-        rejectionKind "import list\n1\n"
+        rejectionKind "import std::list\n1\n"
     }
 } -result DUPLICATE-NATIVE
 
 test imports-entry-program-defines-what-a-module-could-not {an entry program is in no namespace: it may define at (a module list.bot may not), and `namespace` declarations do not exist} -body {
-    list [agree "import str\n\nfn at(xs, i):\n    0\n\[at(\[1\], 0)\]\n"] \
+    list [agree "import std::str\n\nfn at(xs, i):\n    0\n\[at(\[1\], 0)\]\n"] \
         [rejectionKind "namespace list\n\nfn at(xs, i):\n    0\n"]
 } -result {{[0]} SYNTAX}
 
@@ -830,12 +830,12 @@ test imports-entry-program-defines-what-a-module-could-not {an entry program is 
 # Programs
 
 test imports-entry-program-programs-run {an entry program with imports runs on every backend} -body {
-    agree "import str\nimport list\ntext = str::concat(\"a\", \"b\")\nvalue = list::at(\[1, 2\], 0):\n    on IndexNotFound:\n        0\n\[text, value\]\n"
+    agree "import std::str\nimport std::list\ntext = std::str::concat(\"a\", \"b\")\nvalue = std::list::at(\[1, 2\], 0):\n    on IndexNotFound:\n        0\n\[text, value\]\n"
 } -result {["ab", 1]}
 
 test imports-surface-compile-text {surface::compile of program text applies the same rules (imports validated, modules loaded)} -body {
-    list [catch {surface::compile "list::length(\[1\])\n" t.bot} m] \
-        [core::formatValue [core::evalProgram [hir::lower [surface::compile "import list\nlist::get(\[1\], 0, 0)\n" t.bot]]]]
+    list [catch {surface::compile "std::list::length(\[1\])\n" t.bot} m] \
+        [core::formatValue [core::evalProgram [hir::lower [surface::compile "import std::list\nstd::list::get(\[1\], 0, 0)\n" t.bot]]]]
 } -result {1 1}
 
 cleanupTests

@@ -1,6 +1,6 @@
-# native-tcl-unicode.test -- core/tclcompat.tcl's str::is_tcl_alpha/str::is_tcl_alnum
+# native-tcl-unicode.test -- core/tclcompat.tcl's std::str::is_tcl_alpha/std::str::is_tcl_alnum
 # (the temporary Tcl-compatibility Unicode character-class primitives) and
-# web::emailish? (lib/web.bot), the ordinary Botlish predicate that uses them
+# std::web::emailish? (stdlib/web.bot), the ordinary Botlish predicate that uses them
 # to express the e-mail grammar. See NATIVE-TCL-UNICODE.md for the primitives
 # and this milestone's own corpus.
 #
@@ -13,11 +13,11 @@
 # numeric predicates, a combining mark (Mn), and ordinary punctuation --
 # each labeled with why it is in the corpus, not just what it is.
 #
-# web::emailish? parity then reuses the same 16-string corpus this
+# std::web::emailish? parity then reuses the same 16-string corpus this
 # milestone's report cross-checks against the Python and Rust benchmark
 # equivalents (bench/equivalents/{python,rust}/refined_checks.py|rs) and
 # against the reference regular expression the grammar was first written as
-# (emailRegex below, formerly lib/web.tcl's validator, which interp and
+# (emailRegex below, formerly stdlib/web.tcl's validator, which interp and
 # compile used to run instead of the Botlish predicate): every backend now
 # runs the one Botlish predicate, so the regex is checked here directly, and
 # a predicate defect that agrees with itself on all four backends but
@@ -42,21 +42,21 @@ proc classifyProgram {native c} {
     return [list [list call [list ref $native] [list const str $c]]]
 }
 
-# web::emailish?(S) as a Botlish program.
+# std::web::emailish?(S) as a Botlish program.
 proc emailishSource {s} {
-    return "import web\nweb::emailish?(\"[string map {\\ \\\\ \" \\\"} $s]\")\n"
+    return "import std::web\nstd::web::emailish?(\"[string map {\\ \\\\ \" \\\"} $s]\")\n"
 }
 
-# The value web::emailish?(S) has on every backend (a Tcl error if they
+# The value std::web::emailish?(S) has on every backend (a Tcl error if they
 # disagree), and whether it agrees with the reference regex.
 proc emailish {s} {
     set outcome [sourceAgree [emailishSource $s]]
     if {[lindex $outcome 0] ne "value"} {
-        error "web::emailish? raised: $outcome"
+        error "std::web::emailish? raised: $outcome"
     }
     set regex [expr {[core::regex::matches $::emailRegex [core::value::str $s]] ? "true" : "false"}]
     if {[lindex $outcome 1] ne $regex} {
-        error "web::emailish? says [lindex $outcome 1], the reference regex says $regex"
+        error "std::web::emailish? says [lindex $outcome 1], the reference regex says $regex"
     }
     return [lindex $outcome 1]
 }
@@ -83,7 +83,7 @@ proc fourWay {exprs} {
 }
 
 # ---------------------------------------------------------------------------
-# str::is_tcl_alpha / str::is_tcl_alnum: direct, four-way parity, edge-case corpus.
+# std::str::is_tcl_alpha / std::str::is_tcl_alnum: direct, four-way parity, edge-case corpus.
 #
 # label                          char        General_Category   alpha alnum
 foreach {label char alpha alnum} {
@@ -101,11 +101,11 @@ foreach {label char alpha alnum} {
     underscore-Pc                   _           false false
     full-stop-Po                    .           false false
 } {
-    test native-tcl-unicode-alpha-$label "str::is_tcl_alpha($label) agrees across interp/compile/cranelift-generic/cranelift" -body {
-        fourWay [classifyProgram str::is_tcl_alpha $char]
+    test native-tcl-unicode-alpha-$label "std::str::is_tcl_alpha($label) agrees across interp/compile/cranelift-generic/cranelift" -body {
+        fourWay [classifyProgram std::str::is_tcl_alpha $char]
     } -result $alpha
-    test native-tcl-unicode-alnum-$label "str::is_tcl_alnum($label) agrees across interp/compile/cranelift-generic/cranelift" -body {
-        fourWay [classifyProgram str::is_tcl_alnum $char]
+    test native-tcl-unicode-alnum-$label "std::str::is_tcl_alnum($label) agrees across interp/compile/cranelift-generic/cranelift" -body {
+        fourWay [classifyProgram std::str::is_tcl_alnum $char]
     } -result $alnum
 }
 
@@ -114,7 +114,7 @@ foreach {label char alpha alnum} {
 # multi-scalar string are both out of domain, on every backend, with the
 # same error text (spec: "reject malformed primitive inputs consistently").
 
-foreach native {str::is_tcl_alpha str::is_tcl_alnum} {
+foreach native {std::str::is_tcl_alpha std::str::is_tcl_alnum} {
     test native-tcl-unicode-$native-range-empty "${native}('') is a RANGE error on every backend, with the same message" -body {
         set msgs [lmap b $::parityBackends {lindex [outcomeUnder $b [classifyProgram $native {}]] 2}]
         if {[llength [lsort -unique $msgs]] != 1} {
@@ -136,7 +136,7 @@ foreach native {str::is_tcl_alpha str::is_tcl_alnum} {
 # op_may_allocate (spec: "should not have allocation/safepoint metadata
 # they do not need").
 
-foreach native {str::is_tcl_alpha str::is_tcl_alnum} {
+foreach native {std::str::is_tcl_alpha std::str::is_tcl_alnum} {
     test native-tcl-unicode-$native-metadata-nonallocating "$native declares no allocation -runtime tag" -body {
         set tags [dict get [core::native::metadata $native] runtime]
         lsearch -inline $tags {string-alloc list-alloc result-alloc mutarray-alloc mutarray-mutate}
@@ -144,7 +144,7 @@ foreach native {str::is_tcl_alpha str::is_tcl_alnum} {
 }
 
 # ---------------------------------------------------------------------------
-# web::emailish?: four-way parity and the reference regex, the corpus
+# std::web::emailish?: four-way parity and the reference regex, the corpus
 # NATIVE-TCL-UNICODE.md's report cross-checks against Python/Rust too. Each
 # case documents which grammar position it forces Unicode classification
 # in, or which negative case it pins.
@@ -167,7 +167,7 @@ foreach {label s expect} {
     mixed-case-ascii-tld              a@b.cD                           true
     empty-string                      {}                                false
 } {
-    test native-tcl-unicode-emailish-$label "web::emailish?($label) agrees across interp/compile/cranelift-generic/cranelift and with the reference regex" -body {
+    test native-tcl-unicode-emailish-$label "std::web::emailish?($label) agrees across interp/compile/cranelift-generic/cranelift and with the reference regex" -body {
         emailish $s
     } -result $expect
 }
@@ -178,11 +178,11 @@ foreach {label s expect} {
 # character (a Roman numeral, general category Nl) must be rejected --
 # distinguishing Tcl's alnum from Python's/Rust's broader is_alnum()/
 # is_alphabetic() the way NATIVE-TCL-UNICODE.md's report requires.
-test native-tcl-unicode-emailish-unicode-digit-in-label "web::emailish?(a Unicode Nd digit in a domain label) is accepted" -body {
+test native-tcl-unicode-emailish-unicode-digit-in-label "std::web::emailish?(a Unicode Nd digit in a domain label) is accepted" -body {
     emailish "a@b٠.com"
 } -result true
 
-test native-tcl-unicode-emailish-numeric-non-Nd-rejected "web::emailish?(a numeric-but-not-Nd character where the TLD must be 2+ alpha) is rejected" -body {
+test native-tcl-unicode-emailish-numeric-non-Nd-rejected "std::web::emailish?(a numeric-but-not-Nd character where the TLD must be 2+ alpha) is rejected" -body {
     emailish "a@例え.Ⅰ"
 } -result false
 
@@ -191,7 +191,7 @@ test native-tcl-unicode-emailish-numeric-non-Nd-rejected "web::emailish?(a numer
 # and the classification primitives themselves must survive a collection
 # forced before every allocation.
 
-test native-tcl-unicode-emailish-gc-stress {web::emailish? survives a collection forced before every allocation} -body {
+test native-tcl-unicode-emailish-gc-stress {std::web::emailish? survives a collection forced before every allocation} -body {
     set ::env(BOTLISH_NATIVE_GC_STRESS) 1
     try {
         lindex [outcomeUnderHir cranelift [surface::compile [emailishSource {café@例え.テスト}] -warnings off]] 1
@@ -201,17 +201,17 @@ test native-tcl-unicode-emailish-gc-stress {web::emailish? survives a collection
 } -result true
 
 # ---------------------------------------------------------------------------
-# One shared, compiled validator: an outer `if web::emailish?(s)` whose
-# then-branch re-checks `web::emailish?(s)` compiles to exactly one copy of
+# One shared, compiled validator: an outer `if std::web::emailish?(s)` whose
+# then-branch re-checks `std::web::emailish?(s)` compiles to exactly one copy of
 # the validator and one call to it -- the redundant re-check is decided by
 # the outer call's exact result (REFINEMENT-VALUES.md), needing no call. See
 # tests/emailish-predicate.test for the focused refinement regressions.
-test native-tcl-unicode-emailish-known-result-nir-shape {a redundant web::emailish? check inside its own true branch compiles to exactly one call to the shared validator, not two independent copies} -body {
-    set source {import web
+test native-tcl-unicode-emailish-known-result-nir-shape {a redundant std::web::emailish? check inside its own true branch compiles to exactly one call to the shared validator, not two independent copies} -body {
+    set source {import std::web
 
 fn f(s: str) -> str:
-    if web::emailish?(s):
-        if web::emailish?(s):
+    if std::web::emailish?(s):
+        if std::web::emailish?(s):
             "yes"
         else:
             "no"
@@ -224,9 +224,9 @@ f("someone@example.com")
     set text [native::nir $hir]
     # Exactly one compiled copy of the validator and its scanner helpers
     # (never two, one per call site).
-    set isEmailishDefs [regexp -all {func \d+ "web::emailish\?"} $text]
+    set isEmailishDefs [regexp -all {func \d+ "std::web::emailish\?"} $text]
     set domainLoopDefs [regexp -all {func \d+ "domain\?"} $text]
-    regexp {func (\d+) "web::emailish\?"} $text -> isEmailishId
+    regexp {func (\d+) "std::web::emailish\?"} $text -> isEmailishId
     set calls [regexp -all "= call(?:env)? $isEmailishId %" $text]
     list $isEmailishDefs $domainLoopDefs $calls [sourceAgree $source]
 } -result {1 1 1 {value {"yes"}}}
@@ -254,8 +254,8 @@ foreach {label s expect} {
     unicode17-A7D4       ꟔         ꟔
     unicode17-beria-erfe \U00016ea0     \U00016ea0
 } {
-    test native-tcl-unicode-lowercase-$label "str::lowercase($label) is the Unicode 16 simple mapping on interp/compile/cranelift-generic/cranelift" -body {
-        fourWay [list [list call {ref str::lowercase} [list const str $s]]]
+    test native-tcl-unicode-lowercase-$label "std::str::lowercase($label) is the Unicode 16 simple mapping on interp/compile/cranelift-generic/cranelift" -body {
+        fourWay [list [list call {ref std::str::lowercase} [list const str $s]]]
     } -result \"$expect\"
 }
 
@@ -275,7 +275,7 @@ test native-tcl-unicode-lowercase-all-scalars "every scalar's lowercase agrees w
         }
         set expected [core::value::strOf [core::strings::lowercase [core::value::str $text]]]
         set prog [list [list call {ref ==} \
-            [list call {ref str::lowercase} [list const str $text]] \
+            [list call {ref std::str::lowercase} [list const str $text]] \
             [list const str $expected]]]
         foreach b $::parityBackends {
             set outcome [outcomeUnder $b $prog]

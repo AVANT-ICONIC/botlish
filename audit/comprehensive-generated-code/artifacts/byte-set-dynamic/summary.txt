@@ -13,6 +13,6 @@ allocation (one run): allocations=11 bytes=368 List=10 static=2
     byte.bot:177 setfromlist x1
 
   0 <program><generic>                       regs=23  params=0 env=0 bytes=798   op:listnew=3 op:listlen=1 op:ilt=1 br=2 op:listget=1 op:listappend=1 op:iadd=1 pusherrorexit=1 call=2 poperrorexit=1 declarederroreq=1 cleardeclarederror=1 reraise=1
-  1 char::codepoint<UnicodeChar>             regs=2   params=1 env=0 bytes=39    op:charcodepoint=1
-  2 byte::from_int<int>                      regs=9   params=1 env=0 bytes=329   op:ilt=1 br=2 fail=2 op:igt=1
-  3 byte::set<List[UnicodeChar]>             regs=17  params=1 env=0 bytes=625   op:listlen=1 op:listnew=1 op:ilt=1 br=1 op:listget=1 call=2 op:listappend=1 op:iadd=1 op:setfromlist=1
+  1 std::char::codepoint<UnicodeChar>             regs=2   params=1 env=0 bytes=39    op:charcodepoint=1
+  2 std::byte::from_int<int>                      regs=9   params=1 env=0 bytes=329   op:ilt=1 br=2 fail=2 op:igt=1
+  3 std::byte::set<List[UnicodeChar]>             regs=17  params=1 env=0 bytes=625   op:listlen=1 op:listnew=1 op:ilt=1 br=1 op:listget=1 call=2 op:listappend=1 op:iadd=1 op:setfromlist=1

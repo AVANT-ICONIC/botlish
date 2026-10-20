@@ -1,7 +1,7 @@
 # native-tiny-leaf-inline.test -- TINY-EXACT-LEAF-INLINING.md: the narrowest,
 # deliberately non-general exact-leaf inliner (native/lower.tcl's
 # LeafInlineEligible/InlineLeafCall, the "Tiny exact-leaf inlining" section),
-# plus the real byte::high_nibble/byte::nibble/web::high_nibble acceptance
+# plus the real std::byte::high_nibble/std::byte::nibble/std::web::high_nibble acceptance
 # case: a direct exact call whose callee is a tiny (small, straight-line,
 # environment-free, nonrecursive, guard/error-free) leaf is lowered directly
 # into the caller's own function, with no `call`/`callenv` instruction for
@@ -62,7 +62,7 @@ proc HasCallIn {body} {
     return [expr {[regexp {= call(env)? } $body]}]
 }
 
-# The real acceptance case: byte::nibble/byte::high_nibble's closed
+# The real acceptance case: std::byte::nibble/std::byte::high_nibble's closed
 # instances in the actual refined-checks.bot/web.bot chain (identical to
 # tests/native-bitshift.test's own refinedChecksHir).
 proc refinedChecksHir {} {
@@ -71,7 +71,7 @@ proc refinedChecksHir {} {
 
 # ---------------------------------------------------------------------------
 # The real acceptance case: web.bot's local `high_nibble` (nested inside
-# uri_escape_text) composes byte::high_nibble(b) then byte::nibble(...).
+# uri_escape_text) composes std::byte::high_nibble(b) then std::byte::nibble(...).
 # Before this milestone (BOUNDED-BIT-SHIFT-LOWERING.md \167 6): two real
 # `call` instructions. After: zero.
 
@@ -99,23 +99,23 @@ test tiny-leaf-real-value-unchanged {the real program's own value is unchanged b
         [native::evalHir [refinedChecksHir] -tiny-leaf-inline-opt 0]
 } -result {{list {{int 400} {int 0}}} {list {{int 400} {int 0}}}}
 
-# byte::high_nibble/byte::nibble each have exactly one caller in this real
+# std::byte::high_nibble/std::byte::nibble each have exactly one caller in this real
 # corpus program (CLOSED-CALL-PARAMETER-FACTS.md's own finding); once that
 # one call site inlines, native::lower::program's ordinary reachability
 # worklist (unchanged -- no new DCE pass) naturally no longer emits either
 # function's own separate machine code. This is exactly the "unless
 # existing DCE independently proves it unused" exception the milestone's
 # own spec allows (spec \167 9, \167 36-37): the *source* functions remain
-# ordinary, valid, separately callable Botlish (lib/byte.bot is untouched),
+# ordinary, valid, separately callable Botlish (stdlib/byte.bot is untouched),
 # just not materialized into *this particular* compiled program once
 # nothing in it still calls them the ordinary way. The synthetic
 # tiny-leaf-canonical-still-callable-value test below covers the "still
 # has another live caller" case directly, with a NIR check that the
 # canonical function *does* survive there.
-test tiny-leaf-real-helpers-not-separately-emitted {byte::high_nibble/byte::nibble no longer appear as separate compiled functions at all: reachability (unchanged), not a new DCE pass, since their one caller inlined away} -body {
+test tiny-leaf-real-helpers-not-separately-emitted {std::byte::high_nibble/std::byte::nibble no longer appear as separate compiled functions at all: reachability (unchanged), not a new DCE pass, since their one caller inlined away} -body {
     set nirText [native::nir [refinedChecksHir] -tiny-leaf-inline-opt 1]
-    list [expr {[string first "\"byte::high_nibble\"" $nirText] >= 0}] \
-        [expr {[string first "\"byte::nibble\"" $nirText] >= 0}]
+    list [expr {[string first "\"std::byte::high_nibble\"" $nirText] >= 0}] \
+        [expr {[string first "\"std::byte::nibble\"" $nirText] >= 0}]
 } -result {0 0}
 
 # ---------------------------------------------------------------------------
@@ -262,12 +262,12 @@ caller()}] caller]
 } -result 1
 
 test tiny-leaf-ineligible-mutating {a leaf that mutates a MutableArray declines (allocation/mutation, not proven effect-free)} -body {
-    set body [FunctionBody [nirTextOf {import mutable_array
+    set body [FunctionBody [nirTextOf {import std::mutable_array
 fn touch(a):
-    mutable_array::set(a, 0, 1)
+    std::mutable_array::set(a, 0, 1)
 
 fn caller():
-    touch(mutable_array::allocate(1))
+    touch(std::mutable_array::allocate(1))
 
 caller()}] caller]
     HasCallIn $body
@@ -324,7 +324,7 @@ caller(true)}] caller]
     HasCallIn $body
 } -result 1
 
-test tiny-leaf-eligible-shift-proven-count {a leaf shifting by a proven-safe constant amount inlines: the real byte::nibble shape, in miniature, same-module} -body {
+test tiny-leaf-eligible-shift-proven-count {a leaf shifting by a proven-safe constant amount inlines: the real std::byte::nibble shape, in miniature, same-module} -body {
     set body [FunctionBody [nirTextOf {fn sh(x):
     shift_right(x, 4)
 
@@ -415,7 +415,7 @@ fn caller():
 # only a context member is a place every function shares).
 
 test tiny-leaf-argument-evaluated-once {a callee parameter referenced twice in its body still evaluates its one argument expression exactly once} -body {
-    set text {import mutable_array
+    set text {import std::mutable_array
 fn double_use(x):
     x + x
 
@@ -423,18 +423,18 @@ context struct Counter:
     a: MutableArray[int]
 
 fn next(context c: Counter):
-    v = mutable_array::at(c.a, 0)
-    mutable_array::set(c.a, 0, v + 1)
+    v = std::mutable_array::at(c.a, 0)
+    std::mutable_array::set(c.a, 0, v + 1)
     v
 
 fn current(context c: Counter):
-    mutable_array::at(c.a, 0)
+    std::mutable_array::at(c.a, 0)
 
 fn run():
     r = double_use(next())
     [r, current()]
 
-with context Counter {a: mutable_array::create(1, 10)}
+with context Counter {a: std::mutable_array::create(1, 10)}
 run()}
     list [native::evalHir [sourceHir $text] -tiny-leaf-inline-opt 1] \
         [native::evalHir [sourceHir $text] -tiny-leaf-inline-opt 0] \
@@ -442,7 +442,7 @@ run()}
 } -result {{list {{int 20} {int 11}}} {list {{int 20} {int 11}}} 0}
 
 test tiny-leaf-unused-argument-still-evaluated {a callee parameter the body never references still has its own argument evaluated exactly once} -body {
-    set text {import mutable_array
+    set text {import std::mutable_array
 fn ignore_second(x, y):
     x + 1
 
@@ -450,25 +450,25 @@ context struct Counter:
     a: MutableArray[int]
 
 fn next(context c: Counter):
-    v = mutable_array::at(c.a, 0)
-    mutable_array::set(c.a, 0, v + 1)
+    v = std::mutable_array::at(c.a, 0)
+    std::mutable_array::set(c.a, 0, v + 1)
     v
 
 fn current(context c: Counter):
-    mutable_array::at(c.a, 0)
+    std::mutable_array::at(c.a, 0)
 
 fn run():
     r = ignore_second(5, next())
     [r, current()]
 
-with context Counter {a: mutable_array::create(1, 0)}
+with context Counter {a: std::mutable_array::create(1, 0)}
 run()}
     list [native::evalHir [sourceHir $text] -tiny-leaf-inline-opt 1] \
         [native::evalHir [sourceHir $text] -tiny-leaf-inline-opt 0]
 } -result {{list {{int 6} {int 1}}} {list {{int 6} {int 1}}}}
 
 test tiny-leaf-argument-order-preserved {two argument expressions with observable effects still evaluate left to right, matching ordinary (uninlined) call semantics exactly} -body {
-    set text {import mutable_array
+    set text {import std::mutable_array
 fn combine(a, b):
     a - b
 
@@ -476,17 +476,17 @@ context struct Counter:
     a: MutableArray[int]
 
 fn next(context c: Counter):
-    v = mutable_array::at(c.a, 0)
-    mutable_array::set(c.a, 0, v + 1)
+    v = std::mutable_array::at(c.a, 0)
+    std::mutable_array::set(c.a, 0, v + 1)
     v
 
 fn current(context c: Counter):
-    mutable_array::at(c.a, 0)
+    std::mutable_array::at(c.a, 0)
 
 fn run():
     combine(next(), next())
 
-with context Counter {a: mutable_array::create(1, 0)}
+with context Counter {a: std::mutable_array::create(1, 0)}
 run()}
     list [native::evalHir [sourceHir $text] -tiny-leaf-inline-opt 1] \
         [native::evalHir [sourceHir $text] -tiny-leaf-inline-opt 0]
@@ -568,7 +568,7 @@ fn apply(g, y):
 # inlined call inside an allocating caller under forced collection).
 
 test tiny-leaf-gc-stress-smoke {an inlined leaf's own caller still allocates/collects correctly around it} -body {
-    set text {import str
+    set text {import std::str
 fn double_use(x):
     x + x
 
@@ -576,11 +576,11 @@ fn build(n, i, acc):
     if i >= n:
         acc
     else:
-        build(n, i + 1, str::concat(acc, "x"))
+        build(n, i + 1, std::str::concat(acc, "x"))
 
 fn caller():
     s = build(50, 0, "")
-    [str::length(s), double_use(21)]
+    [std::str::length(s), double_use(21)]
 
 caller()}
     native::evalHir [sourceHir $text]

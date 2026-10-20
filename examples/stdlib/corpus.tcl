@@ -67,7 +67,7 @@ proc corpus::text {name} {
 }
 
 # The HIR of the program TEXT (named FILENAME in every origin), with each
-# module its imports (`import mutable_array`) name loaded and compiled
+# module its imports (`import std::mutable_array`) name loaded and compiled
 # alongside it: surface::modules::compileProgramFile's own steps over text
 # instead of a file (a corpus program is a definitions-only prefix plus a
 # driver). -strict and -warnings as surface::compile's.
@@ -82,7 +82,7 @@ proc corpus::compile {source filename args} {
         }
     }
     # A corpus program is a program file plus a driver assembled here: the
-    # driver's own dependencies (a `list::length(...)` in it) are declared
+    # driver's own dependencies (a `std::list::length(...)` in it) are declared
     # exactly, like the file's own header (IMPORTS.md).
     set source [surface::modules::ImportHeader $source]$source
     set ast [surface::parse $source $filename]
@@ -91,7 +91,7 @@ proc corpus::compile {source filename args} {
 }
 
 # DRIVER (top-level Botlish statements) as the body of a function whose
-# builtin declared errors ERRORS -- list::at/mutable_array::at/set's
+# builtin declared errors ERRORS -- std::list::at/std::mutable_array::at/set's
 # IndexNotFound and the slices' LowerUnderrun/UpperOverrun, which the corpus
 # functions declare where they index positional records or slice text they
 # cannot prove in range (STDLIB-NAMESPACES.md) -- are handled at top level by

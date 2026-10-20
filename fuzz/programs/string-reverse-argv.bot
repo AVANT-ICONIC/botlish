@@ -9,16 +9,16 @@
 #   * no argument             -> reverse_chars("")
 #   * valid UTF-8 argument    -> reverse_chars(argument)
 #   * invalid UTF-8 anywhere  -> reverse_chars("")
-import list
-import str
+import std::list
+import std::str
 
 # The characters of text from index on, reversed, followed by reversed.
 fn reverse_from(text, index, reversed) errors LowerUnderrun, UpperOverrun:
-    if index == str::length(text):
+    if index == std::str::length(text):
         return reversed
 
-    character = str::substring(text, index, index + 1)
-    reverse_from(text, index + 1, str::concat(character, reversed))
+    character = std::str::substring(text, index, index + 1)
+    reverse_from(text, index + 1, std::str::concat(character, reversed))
 
 fn reverse_chars(text) errors LowerUnderrun, UpperOverrun:
     reverse_from(text, 0, "")
@@ -27,8 +27,8 @@ args = argv():
     on InvalidArgumentEncoding:
         []
 
-text = if list::length(args) > 1:
-    list::get(args, 1, "")
+text = if std::list::length(args) > 1:
+    std::list::get(args, 1, "")
 else:
     ""
 

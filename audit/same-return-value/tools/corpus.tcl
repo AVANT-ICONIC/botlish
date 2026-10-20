@@ -13,7 +13,7 @@ set programs [concat \
     [lsort [glob -directory [file join $root examples stdlib] *.bot]] \
     [lsort [glob -directory [file join $root examples surface] *.bot]] \
     [lsort [glob -directory [file join $root bench] *.bot]] \
-    [lsort [glob -directory [file join $root lib] *.bot]]]
+    [lsort [glob -directory [file join $root stdlib] *.bot]]]
 
 proc lineOf {hir origin} {
     set path [dict get [hir::sourceFile $hir [lindex $origin 1]] path]

@@ -3,7 +3,7 @@
 ## Outcome
 
 **No production code changed.** The motivating real path -- `esc_char`'s
-call through `web::is_unreserved` in `bench/uri-steady.bot`/`lib/web.bot`
+call through `std::web::is_unreserved` in `bench/uri-steady.bot`/`stdlib/web.bot`
 -- is already an ordinary direct `callenv` to a statically known target,
 confirmed at every layer down to the actual x86-64 machine code (a
 `call rel32` to the fixed symbol `botlish_fn_9`, not an indirect
@@ -12,7 +12,7 @@ post-M1 tree, commit `dfa2b19`); it does not depend on anything this
 milestone did. M1's own report speculated that this edge was "indirect/
 call-through-value dispatch" -- that speculation was checked directly
 against the real HIR/NIR/asm and found to be **incorrect**: it was inferred
-from seeing `web::is_unreserved` listed among `esc_char`'s NIR parameter
+from seeing `std::web::is_unreserved` listed among `esc_char`'s NIR parameter
 names, without checking that `native::lower::Call` already treats any HIR
 call node whose semantic `target` resolved to an exact `{block B}` as a
 direct call, regardless of whether the callee's *value* arrived via an
@@ -20,9 +20,9 @@ ordinary reference, a capture, or (as here) a capture forwarded down
 through nested envless functions as an explicit NIR parameter.
 
 The residual conservative behavior actually present on that edge --
-`esc_char -> web::is_unreserved` is stamped `may_error=true`, producing one
+`esc_char -> std::web::is_unreserved` is stamped `may_error=true`, producing one
 `test rax,rax`/`je` caller-side retest -- is real, but has **nothing to do
-with callable-target identity**. It is caused by `web::is_unreserved`'s own
+with callable-target identity**. It is caused by `std::web::is_unreserved`'s own
 body containing an `op setcontains` (the `immutable_set_contains` call
 lowering, `MINIMAL-IMMUTABLE-SET.md`), and `SetContains` is unconditionally
 classified `may_error` by `native/src/runtime/ops.rs::op_may_error`,
@@ -66,7 +66,7 @@ tests/hir-callable-target.test | 190 ++++++++++++++++++++++++++++++++++++++
 Nothing else changed: no `.tcl`, `.rs`, `.bot`, or `.ir` production file
 has any diff.
 
-## Pre-change `esc_char -> web::is_unreserved` trace
+## Pre-change `esc_char -> std::web::is_unreserved` trace
 
 Gathered directly from the real, frozen `bench/uri-steady.bot`, via
 `audit/comprehensive-generated-code/tools/probe.tcl` (unmodified tooling)
@@ -75,16 +75,16 @@ since, so this is also the "after" trace):
 
 | layer | representation |
 |---|---|
-| source | `lib/web.bot:88`, `is_unreserved(b)` inside `esc_char`, itself nested inside `uri_escape_text` |
-| resolved HIR | `esc_char`'s body captures `web::is_unreserved` (a qualified reference to a module-scope closure) through the ordinary lexical capture path (`hir::resolve::Capture`, M0's own fix) -- not a call-argument/untyped-parameter position |
+| source | `stdlib/web.bot:88`, `is_unreserved(b)` inside `esc_char`, itself nested inside `uri_escape_text` |
+| resolved HIR | `esc_char`'s body captures `std::web::is_unreserved` (a qualified reference to a module-scope closure) through the ordinary lexical capture path (`hir::resolve::Capture`, M0's own fix) -- not a call-argument/untyped-parameter position |
 | callee binding | a `root`-kind binding at `web`'s module section, whose value is `is_unreserved`'s own Block core value |
 | semantic HIR type of the callee ref | `{block B 1 bool}` (exact: `hir::types::BindingType`'s `root` case returns `core::type::ofValue` of a Block value directly -- always exact, independent of instance) |
 | call expression type (`hir::types::Call`) | `target = {block B}` (the 4-tuple branch, `hir/types.tcl:983`) |
-| specialized-instance view | `esc_char<generic>`'s own call graph edge, `hir::specialize::instance`'s `calls` map: `e272 -> i8 web::is_unreserved<generic>` (`spec.txt`) -- exact at the specializer level too |
-| binding type of the callable value at the NIR-parameter boundary | `web::is_unreserved` is envless-static (`hir::aot::context`'s `StaticBlocks`), so its closure value is threaded down through `uri_escape_text -> esc_char` as an ordinary explicit NIR parameter (`pnames="c web::is_unreserved web::hex_digits"`) rather than a runtime environment slot -- this is what M1's report misread as "call-through-value" |
+| specialized-instance view | `esc_char<generic>`'s own call graph edge, `hir::specialize::instance`'s `calls` map: `e272 -> i8 std::web::is_unreserved<generic>` (`spec.txt`) -- exact at the specializer level too |
+| binding type of the callable value at the NIR-parameter boundary | `std::web::is_unreserved` is envless-static (`hir::aot::context`'s `StaticBlocks`), so its closure value is threaded down through `uri_escape_text -> esc_char` as an ordinary explicit NIR parameter (`pnames="c std::web::is_unreserved std::web::hex_digits"`) rather than a runtime environment slot -- this is what M1's report misread as "call-through-value" |
 | blockescape/callable analysis | not a virtualization candidate here (`is_unreserved` is itself a closure with a real capture, `additional_unreserved_chars`; `hir::blockescape` targets locally-bound, non-escaping closures, a different case, see "Environment-bearing closure fixture" below) |
 | NIR lowering input (`native::lower::Call`) | `targetKind eq "block"`, `target` in `envless`? No (`is_unreserved` has `env=1`, it captures `additional_unreserved_chars`) -> emits `callenv`, never falls to the `callvalue` tail |
-| NIR call form | `%13 = callenv 9 %1 %12 @e272` -- direct call to fixed function id 9, closure register `%1` (esc_char's own forwarded `web::is_unreserved` parameter, used purely as the environment value, not as a dispatch target) |
+| NIR call form | `%13 = callenv 9 %1 %12 @e272` -- direct call to fixed function id 9, closure register `%1` (esc_char's own forwarded `std::web::is_unreserved` parameter, used purely as the environment value, not as a dispatch target) |
 | NIR `may_error` (`nir.rs::summarize_call_effects`) | `true` -- but purely because `effects[9]` (function 9's own fixed-point effect) is `true`, driven by `is_unreserved`'s own local `op setcontains` (`op_may_error(SetContains) == true`), **not** by anything about how the call is dispatched |
 | Cranelift/native call form (objdump) | `call botlish_fn_9` (a direct, statically-linked `call rel32`/PLT32 relocation) followed by `test rax,rax` / `je` (the may_error retest) then `cmp rax,0x6` / `je` (the tagged-Bool discrimination) |
 | caller-side result/error checks | one `test rax,rax; je <error-path>` (from `may_error=true`) plus the ordinary tagged-Bool `cmp rax,0x6` -- both already present before this milestone and unaffected by it |
@@ -254,7 +254,7 @@ outer()
 Result: **direct `call`**, no `callvalue`. `inner` is envless, so its
 capture of the immutable alias `f` is threaded down as an ordinary
 explicit NIR parameter -- exactly `esc_char`'s own relationship to
-`web::is_unreserved` -- and the callee type stays exact through that
+`std::web::is_unreserved` -- and the callee type stays exact through that
 transport, exactly as the real path's own trace showed. No blockescape
 policy change was needed or made to get this result; it was already true.
 
@@ -299,7 +299,7 @@ can genuinely fail keeps its caller-side retest.
 
 ### Cross-module
 
-The real `esc_char -> web::is_unreserved` trace above already exercises a
+The real `esc_char -> std::web::is_unreserved` trace above already exercises a
 qualified module-scope callable forwarded as a value and invoked through a
 local/parameter binding, satisfying this without a separate synthetic
 fixture (as spec item 64 itself allows).
@@ -321,19 +321,19 @@ None, by construction: no call's `target` field changed (nothing was
 newly proved exact, nothing newly erased), so `nir.rs::summarize_call_effects`
 -- entirely unmodified -- produces byte-for-byte the same `may_error`/
 `may_gc` stamps on every call in every measured workload as it did before
-this milestone. The one interesting edge (`esc_char -> web::is_unreserved`,
+this milestone. The one interesting edge (`esc_char -> std::web::is_unreserved`,
 `may_error=true`) is explained above and is unrelated to target identity.
 
 ## URI call-site table
 
 | caller -> call expression | target before | target after | call form before | call form after | may_error before | may_error after |
 |---|---|---|---|---|---|---|
-| `ascii::is_alphabetic -> is_upper` | `{block}` exact | unchanged | direct `call` | unchanged | false (M1) | false |
-| `ascii::is_alphabetic -> is_lower` | `{block}` exact | unchanged | direct `call` | unchanged | false (M1) | false |
-| `ascii::is_alphanumeric -> is_alphabetic` | `{block}` exact | unchanged | direct `call` | unchanged | false (M1) | false |
-| `ascii::is_alphanumeric -> is_digit` | `{block}` exact | unchanged | direct `call` | unchanged | false (M1) | false |
-| `web::is_unreserved -> ascii::is_alphanumeric` | `{block}` exact | unchanged | direct `call` | unchanged | false (M1) | false |
-| `esc_char -> web::is_unreserved` (M2's own subject) | `{block}` exact | unchanged | direct `callenv` | unchanged | true | true (unrelated `SetContains` residue, see above) |
+| `std::ascii::is_alphabetic -> is_upper` | `{block}` exact | unchanged | direct `call` | unchanged | false (M1) | false |
+| `std::ascii::is_alphabetic -> is_lower` | `{block}` exact | unchanged | direct `call` | unchanged | false (M1) | false |
+| `std::ascii::is_alphanumeric -> is_alphabetic` | `{block}` exact | unchanged | direct `call` | unchanged | false (M1) | false |
+| `std::ascii::is_alphanumeric -> is_digit` | `{block}` exact | unchanged | direct `call` | unchanged | false (M1) | false |
+| `std::web::is_unreserved -> std::ascii::is_alphanumeric` | `{block}` exact | unchanged | direct `call` | unchanged | false (M1) | false |
+| `esc_char -> std::web::is_unreserved` (M2's own subject) | `{block}` exact | unchanged | direct `callenv` | unchanged | true | true (unrelated `SetContains` residue, see above) |
 
 Every row is unchanged before/after M2, because M2 changed no production
 code. The table's own point is that the row M2 was chartered to
@@ -386,7 +386,7 @@ manufacturing one would not change any conclusion above).
 ## Machine-code excerpt before/after
 
 Identical before/after (no production code changed). The relevant excerpt,
-`esc_char<generic>`'s own call to `web::is_unreserved`:
+`esc_char<generic>`'s own call to `std::web::is_unreserved`:
 
 ```
 call   botlish_fn_9        ; direct call, PLT32 relocation to a fixed symbol
@@ -472,9 +472,9 @@ was changed at all this milestone.
 
 | fact | before M2 | after M2 |
 |---|---|---|
-| `esc_char -> web::is_unreserved` target exactness | exact (already) | exact (unchanged) |
-| `esc_char -> web::is_unreserved` call form | direct `callenv` (already) | direct `callenv` (unchanged) |
-| `esc_char -> web::is_unreserved` `may_error` | true, driven by `is_unreserved`'s internal `SetContains` opcode | true, unchanged -- **this is the actual next first loss**, and it is an effect-analysis/opcode-classification question, not a callable-target one |
+| `esc_char -> std::web::is_unreserved` target exactness | exact (already) | exact (unchanged) |
+| `esc_char -> std::web::is_unreserved` call form | direct `callenv` (already) | direct `callenv` (unchanged) |
+| `esc_char -> std::web::is_unreserved` `may_error` | true, driven by `is_unreserved`'s internal `SetContains` opcode | true, unchanged -- **this is the actual next first loss**, and it is an effect-analysis/opcode-classification question, not a callable-target one |
 | callable value forwarded through an ordinary untyped call-argument/parameter with a single legal caller | genuinely open (`callvalue`); no structural proof exists | unchanged -- correctly left alone, per this milestone's own hard scope (`KeyType` untouched) |
 | callable value forwarded through a capture (into an envless nested function's own explicit parameter) | exact, direct | unchanged |
 | callable value bound to an immutable alias | exact, direct | unchanged |
@@ -526,8 +526,8 @@ classification does not distinguish "the element kind lacks structural
 equality" (a real, unavoidable failure mode) from "the element kind is
 provably `Int`/`Byte`/any other kind with total structural equality" (a
 statically decidable non-failure)**. Proving the latter case impossible
-for `web::is_unreserved`'s own `additional_unreserved_chars` set (built
-once from `byte::set([...])`, always `Byte` elements) would let existing
+for `std::web::is_unreserved`'s own `additional_unreserved_chars` set (built
+once from `std::byte::set([...])`, always `Byte` elements) would let existing
 effect analysis (unmodified, exactly the M1/M2 pattern) recompute
 `is_unreserved`'s own `may_error` as `false`, which would then naturally
 remove `esc_char`'s own caller-side retest with no further code change --
@@ -544,7 +544,7 @@ family 1b (`refined-checks`'s `StringRegion` scanner-index guards).
 ## Required architecture questions
 
 1. **At `esc_char`'s invocation expression, is the exact target
-   `web::is_unreserved` known before M2?** Yes.
+   `std::web::is_unreserved` known before M2?** Yes.
 2. **If yes, in which compiler representation is it last present before
    being lost?** It is never lost -- it survives to the emitted x86-64
    `call` instruction. `hir::types::Call`'s `target` field is `{block B}`

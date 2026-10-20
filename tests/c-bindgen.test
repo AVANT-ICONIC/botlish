@@ -352,7 +352,7 @@ test cb-fixture-mapping {the declaration mapping: integer typedefs resolve to th
     lmap name {bgf_mix bgf_next_color bgf_window_of bgf_handles bgf_point_sum bgf_walk bgf_set_free bgf_digest bgf_keywords bgf_unnamed bgf_is_even bgf_twins} {
         apply $get $name
     }
-} -result {{extern c fn bgf_mix( a: ffi::c::UChar, b: ffi::c::Short, c: ffi::c::UInt, d: ffi::c::ULong, e: ffi::c::Long, f: ffi::c::ULongLong) -> ffi::c::UInt} {extern c fn bgf_next_color(c: ffi::c::UInt) -> ffi::c::UInt} {extern c fn bgf_window_of( handle: ffi::c::Ptr[bgf::ctypes::bgf_handle] noescape) -> ffi::c::Ptr[bgf::ctypes::bgf_window]} {extern c fn bgf_handles() -> ffi::c::Ptr[ffi::c::Ptr[bgf::ctypes::bgf_handle]]} {extern c fn bgf_point_sum(point: ffi::c::Ptr[bgf::ctypes::bgf_point]) -> ffi::c::Int} {extern c fn bgf_walk( handle: ffi::c::Ptr[bgf::ctypes::bgf_handle] noescape, visit: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[bgf::ctypes::bgf_handle], ffi::c::Int], return: ffi::c::Int}], userdata: ffi::c::Ptr[ffi::c::Void]) -> ffi::c::Int} {extern c fn bgf_set_free( free_fn: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]], return: unit}]) -> unit} {extern c fn bgf_digest( data: ffi::c::Ptr[ffi::c::UChar] read noescape, len: ffi::c::ULong, out: ffi::c::Ptr[ffi::c::UChar] write noescape) -> ffi::c::Ptr[ffi::c::UChar] alias out} {extern c fn bgf_keywords( fn_: ffi::c::Int, type_: ffi::c::Int, in: ffi::c::Int, loop_: ffi::c::Int, str: ffi::c::Int) -> ffi::c::Int} {extern c fn bgf_unnamed( arg1: ffi::c::Int, arg2: ffi::c::Ptr[ffi::c::Char]) -> ffi::c::Int} {extern c fn bgf_is_even(n: ffi::c::Int) -> ffi::c::Bool} {extern c fn bgf_twins( a: ffi::c::Ptr[bgf::ctypes::bgf_twin], b: ffi::c::Ptr[bgf::ctypes::bgf_twin_struct]) -> ffi::c::Int}}
+} -result {{extern c fn bgf_mix( a: std::ffi::c::UChar, b: std::ffi::c::Short, c: std::ffi::c::UInt, d: std::ffi::c::ULong, e: std::ffi::c::Long, f: std::ffi::c::ULongLong) -> std::ffi::c::UInt} {extern c fn bgf_next_color(c: std::ffi::c::UInt) -> std::ffi::c::UInt} {extern c fn bgf_window_of( handle: std::ffi::c::Ptr[bgf::ctypes::bgf_handle] noescape) -> std::ffi::c::Ptr[bgf::ctypes::bgf_window]} {extern c fn bgf_handles() -> std::ffi::c::Ptr[std::ffi::c::Ptr[bgf::ctypes::bgf_handle]]} {extern c fn bgf_point_sum(point: std::ffi::c::Ptr[bgf::ctypes::bgf_point]) -> std::ffi::c::Int} {extern c fn bgf_walk( handle: std::ffi::c::Ptr[bgf::ctypes::bgf_handle] noescape, visit: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Void], std::ffi::c::Ptr[bgf::ctypes::bgf_handle], std::ffi::c::Int], return: std::ffi::c::Int}], userdata: std::ffi::c::Ptr[std::ffi::c::Void]) -> std::ffi::c::Int} {extern c fn bgf_set_free( free_fn: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Void]], return: unit}]) -> unit} {extern c fn bgf_digest( data: std::ffi::c::Ptr[std::ffi::c::UChar] read noescape, len: std::ffi::c::ULong, out: std::ffi::c::Ptr[std::ffi::c::UChar] write noescape) -> std::ffi::c::Ptr[std::ffi::c::UChar] alias out} {extern c fn bgf_keywords( fn_: std::ffi::c::Int, type_: std::ffi::c::Int, in: std::ffi::c::Int, loop_: std::ffi::c::Int, str: std::ffi::c::Int) -> std::ffi::c::Int} {extern c fn bgf_unnamed( arg1: std::ffi::c::Int, arg2: std::ffi::c::Ptr[std::ffi::c::Char]) -> std::ffi::c::Int} {extern c fn bgf_is_even(n: std::ffi::c::Int) -> std::ffi::c::Bool} {extern c fn bgf_twins( a: std::ffi::c::Ptr[bgf::ctypes::bgf_twin], b: std::ffi::c::Ptr[bgf::ctypes::bgf_twin_struct]) -> std::ffi::c::Int}}
 
 test cb-fixture-unsupported {every declaration outside the C ABI universe is reported with its precise blocker and never approximated: floats, a struct by value, varargs, a va_list, a callback with a double, an explicit calling convention, a typedef an attribute widens to 128 bits, a declaration without prototype, a pointer to float} -constraints clang -body {
     set rows [::cbind::generate::readTsv [dict get [generation $::fixture linux-x86_64] files report.tsv]]
@@ -374,7 +374,7 @@ test cb-fixture-constants {constants are the compiler's values of their C types:
     lmap key {{macro BGF_FLAG_A} {macro BGF_FLAG_ALL} {macro BGF_BIG} {macro BGF_SIZE_NONE} {macro BGF_NEGATIVE} {macro BGF_CHAR} {enumerator BGF_BLUE} {enumerator BGF_ANON_MINUS} {macro BGF_HALF} {macro BGF_NAME} {macro BGF_NULL_HANDLE} {macro BGF_EXPORT}} {
         lrange [dict get $rows $key] 2 5
     }
-} -result {{constant bgf::bgf ffi::c::UInt {unsigned int 1}} {constant bgf::bgf ffi::c::UInt {unsigned int 3}} {constant bgf::bgf ffi::c::ULong {unsigned long 18446744073709551615}} {constant bgf::bgf ffi::c::Long {long -1}} {constant bgf::bgf ffi::c::Int {int -42}} {constant bgf::bgf ffi::c::Int {int 120}} {constant bgf::bgf ffi::c::UInt {unsigned int 6}} {constant bgf::bgf ffi::c::Int {int -1}} {unsupported {} double {a double constant}} {not-constant {} string-literal {constant: string literal}} {unsupported {} not-integer-constant {its type is no C integer type (a pointer or another type)}} {not-constant {} empty empty}}
+} -result {{constant bgf::bgf std::ffi::c::UInt {unsigned int 1}} {constant bgf::bgf std::ffi::c::UInt {unsigned int 3}} {constant bgf::bgf std::ffi::c::ULong {unsigned long 18446744073709551615}} {constant bgf::bgf std::ffi::c::Long {long -1}} {constant bgf::bgf std::ffi::c::Int {int -42}} {constant bgf::bgf std::ffi::c::Int {int 120}} {constant bgf::bgf std::ffi::c::UInt {unsigned int 6}} {constant bgf::bgf std::ffi::c::Int {int -1}} {unsupported {} double {a double constant}} {not-constant {} string-literal {constant: string literal}} {unsupported {} not-integer-constant {its type is no C integer type (a pointer or another type)}} {not-constant {} empty empty}}
 
 test cb-fixture-contracts {contracts default to unknown; a favorable fact comes from the profile (manual, `noescape`: declared) or from the compiler's IR of the shim (proven: `proven noescape`), each with its source in the manifest; const is no fact} -constraints clang -body {
     set result [generation $::fixture linux-x86_64]
@@ -382,8 +382,8 @@ test cb-fixture-contracts {contracts default to unknown; a favorable fact comes 
     list [regexp -all -inline -line {^contract .*$} $manifest] \
         [regexp -inline {extern c fn bgf_point_sum\([^)]*\)} [dict get $result files bgf/bgf.bot]] \
         [regexp -inline {extern c fn bgf_point_x named "[^"]*"\(\n[^\n]*\n} [dict get $result files bgf/thunks/bgf.bot]]
-} -result {{{contract bgf_handle_id handle {escape declared-noescape} manual {group handles}} {contract bgf_length text {access read escape declared-noescape} manual {contract bgf_length}} {contract bgf_open name {access read escape declared-noescape} manual {contract bgf_open}} {contract bgf_open result independent manual {contract bgf_open}} {contract bgf_close handle {escape declared-noescape} manual {group handles}} {contract bgf_window_of handle {escape declared-noescape} manual {group handles}} {contract bgf_walk handle {escape declared-noescape} manual {group handles}} {contract bgf_fill out {access write escape declared-noescape} manual {contract bgf_fill}} {contract bgf_digest data {access read escape declared-noescape} manual {contract bgf_digest}} {contract bgf_digest out {access write escape declared-noescape} manual {contract bgf_digest}} {contract bgf_digest result {alias out} manual {contract bgf_digest}} {contract bgf_point_x p {escape proven-noescape access read} compiler {nocapture readonly}}} {{extern c fn bgf_point_sum(point: ffi::c::Ptr[bgf::ctypes::bgf_point])}} {{extern c fn bgf_point_x named "botlish_bgf_bgf_point_x"(
-    p: ffi::c::Ptr[bgf::ctypes::bgf_point] read proven noescape
+} -result {{{contract bgf_handle_id handle {escape declared-noescape} manual {group handles}} {contract bgf_length text {access read escape declared-noescape} manual {contract bgf_length}} {contract bgf_open name {access read escape declared-noescape} manual {contract bgf_open}} {contract bgf_open result independent manual {contract bgf_open}} {contract bgf_close handle {escape declared-noescape} manual {group handles}} {contract bgf_window_of handle {escape declared-noescape} manual {group handles}} {contract bgf_walk handle {escape declared-noescape} manual {group handles}} {contract bgf_fill out {access write escape declared-noescape} manual {contract bgf_fill}} {contract bgf_digest data {access read escape declared-noescape} manual {contract bgf_digest}} {contract bgf_digest out {access write escape declared-noescape} manual {contract bgf_digest}} {contract bgf_digest result {alias out} manual {contract bgf_digest}} {contract bgf_point_x p {escape proven-noescape access read} compiler {nocapture readonly}}} {{extern c fn bgf_point_sum(point: std::ffi::c::Ptr[bgf::ctypes::bgf_point])}} {{extern c fn bgf_point_x named "botlish_bgf_bgf_point_x"(
+    p: std::ffi::c::Ptr[bgf::ctypes::bgf_point] read proven noescape
 }}}
 
 test cb-fixture-modules {one canonical owner per C type (the ctypes module, declaring it once) imported by the modules that use it, a type two headers' functions point to included; each module declares the libraries of its header (thunk modules also the shim's, a deterministic name keyed by the shim's text); the type module declares none} -constraints clang -body {
@@ -393,7 +393,7 @@ test cb-fixture-modules {one canonical owner per C type (the ctypes module, decl
         list $path [regexp -all -inline -line {^(?:import|extern c library) .*$} [dict get $files $path]]
     }] [llength [regexp -all -inline -line {^opaque struct bgf_handle:$} $ctypes]] \
         [lsort [lmap path [dict keys $files] {expr {[string match *.bot $path] && [regexp -line {^opaque struct } [dict get $files $path]] ? $path : [continue]}}]]
-} -match glob -result {{bgf/bgf.bot {{import ffi::c} {import bgf::ctypes} {extern c library "bgf"}}} {bgf/types.bot {{import ffi::c} {import bgf::ctypes} {extern c library "bgf"}}} {bgf/thunks/bgf.bot {{import ffi::c} {import bgf::ctypes} {extern c library "botlish_shim_bgf_*"} {extern c library "bgf"}}} {bgf/ctypes.bot {{import ffi::c}}} 1 bgf/ctypes.bot}
+} -match glob -result {{bgf/bgf.bot {{import std::ffi::c} {import bgf::ctypes} {extern c library "bgf"}}} {bgf/types.bot {{import std::ffi::c} {import bgf::ctypes} {extern c library "bgf"}}} {bgf/thunks/bgf.bot {{import std::ffi::c} {import bgf::ctypes} {extern c library "botlish_shim_bgf_*"} {extern c library "bgf"}}} {bgf/ctypes.bot {{import std::ffi::c}}} 1 bgf/ctypes.bot}
 
 test cb-fixture-targets {generation is target-aware: the target's preprocessing decides which declarations exist (Linux-only, Apple-only, AArch64-only, an x86-64 calling convention) and the target's typedef chains their C types (uint64_t is unsigned long on LP64 Linux, unsigned long long on Apple), the target's plain char a constant's value ((char)200 is -56 where char is signed, 200 on AArch64 Linux); a link symbol's user label prefix (Apple's _) is the target's; the manifest names the target} -constraints clang -body {
     set out {}
@@ -407,7 +407,7 @@ test cb-fixture-targets {generation is target-aware: the target's preprocessing 
             [regexp -inline -line {^target .*$} [dict get [generation $::fixture $target] files manifest.txt]]
     }
     set out
-} -result {linux-x86_64 {direct absent absent unsupported} ffi::c::ULong ffi::c::ULong {symbol bgf_renamed_impl} {char -56} {{target linux-x86_64}} linux-aarch64 {direct absent direct absent} ffi::c::ULong ffi::c::ULong {symbol bgf_renamed_impl} {char 200} {{target linux-aarch64}} macos-aarch64 {absent direct direct absent} ffi::c::ULongLong ffi::c::ULongLong {symbol bgf_renamed_impl} {char -56} {{target macos-aarch64}} windows-x86_64-gnu {absent absent absent direct} ffi::c::ULongLong ffi::c::ULongLong {symbol bgf_renamed_impl} {char -56} {{target windows-x86_64-gnu}}}
+} -result {linux-x86_64 {direct absent absent unsupported} std::ffi::c::ULong std::ffi::c::ULong {symbol bgf_renamed_impl} {char -56} {{target linux-x86_64}} linux-aarch64 {direct absent direct absent} std::ffi::c::ULong std::ffi::c::ULong {symbol bgf_renamed_impl} {char 200} {{target linux-aarch64}} macos-aarch64 {absent direct direct absent} std::ffi::c::ULongLong std::ffi::c::ULongLong {symbol bgf_renamed_impl} {char -56} {{target macos-aarch64}} windows-x86_64-gnu {absent absent absent direct} std::ffi::c::ULongLong std::ffi::c::ULongLong {symbol bgf_renamed_impl} {char -56} {{target windows-x86_64-gnu}}}
 
 test cb-fixture-cross-headers {a Linux target that is not the host is preprocessed with its own C library headers or not at all: when clang searches no directory of the target's (no GCC cross installation it finds, no sysroot), generation that uses the system headers stops with the remedy instead of reading the host's /usr/include as the target's; a freestanding profile (-nostdlibinc) needs none} -constraints {clang linuxNative} -body {
     set other [expr {$::hostTarget eq "linux-aarch64" ? "linux-x86_64" : "linux-aarch64"}]
@@ -497,7 +497,7 @@ test cb-fixture-isolation {two generated bindings with the same Botlish declarat
         [lindex [regexp -inline {foreign 0 "[^"]*"} $nirA] 0]
 } -cleanup removeScratch -result {bgf_add other_add {foreign 0 "bgf_add"}}
 
-test cb-fixture-static-compile {a static compile: block over a generated extern is decided like any block: a wrong arity is compiler::DiagnosticCode::Arity, an argument out of its C type's range Type, an accepted block the ordinary call (NATIVE-ONLY on the Tcl backends)} -constraints clang -body {
+test cb-fixture-static-compile {a static compile: block over a generated extern is decided like any block: a wrong arity is std::compiler::DiagnosticCode::Arity, an argument out of its C type's range Type, an accepted block the ordinary call (NATIVE-ONLY on the Tcl backends)} -constraints clang -body {
     lmap {body code} {
         "bgf::bgf::bgf_add(1)" Arity
         "bgf::bgf::bgf_add(x, 2)" Type
@@ -505,7 +505,7 @@ test cb-fixture-static-compile {a static compile: block over a generated extern 
     } {
         set dir [scratch]
         ::cbind::generate::stage $::fixture $::hostTarget "" $dir [generatedDir $::fixture $::hostTarget]
-        writeText [file join $dir main.bot] "import compiler\nimport bgf::bgf\n\nfn probe(x: int) -> int errors compiler::CompilerError:\n    static compile:\n        $body\n        0\n\nr = probe(5):\n    on compiler::CompilerError {code}:\n        if code == compiler::DiagnosticCode::$code:\n            1\n        else:\n            2\nr\n"
+        writeText [file join $dir main.bot] "import std::compiler\nimport bgf::bgf\n\nfn probe(x: int) -> int errors std::compiler::CompilerError:\n    static compile:\n        $body\n        0\n\nr = probe(5):\n    on std::compiler::CompilerError {code}:\n        if code == std::compiler::DiagnosticCode::$code:\n            1\n        else:\n            2\nr\n"
         lassign [outcomeUnderHir interp [stagedHir $dir main.bot "" off]] tag value
         expr {$tag eq "value" ? $value : [lindex $value end]}
     }
@@ -520,7 +520,7 @@ test cb-fixture-why {`report -why NAME` names why a declaration was or was not g
 } -result {{function bgf_scale: not generated (unsupported): double,float
   parameter 1 (x): double
   parameter 2 (y): float
-  result: double} {function bgf_add: generated (direct in bgf::bgf): direct; symbol bgf_add; (ffi::c::Int, ffi::c::Int) -> ffi::c::Int} {macro BGF_HALF: not generated (unsupported): double
+  result: double} {function bgf_add: generated (direct in bgf::bgf): direct; symbol bgf_add; (std::ffi::c::Int, std::ffi::c::Int) -> std::ffi::c::Int} {macro BGF_HALF: not generated (unsupported): double
   a double constant} {no_such_name: not a public name of bgf on linux-x86_64 (no row in */tools/c-bindgen/fixture/expected/linux-x86_64/report.tsv)}}
 
 # ---------------------------------------------------------------------------
@@ -572,7 +572,7 @@ test cb-version-drift {a changed header is a generated diff the check reports wi
     set dir [::cbind::profile::outputDir $::fixture linux-x86_64]
     list [lsort [lmap d [::cbind::generate::compare [dict get $result files] $dir bgf] {lindex $d 0}]] \
         [lsort [::cbind::generate::coverageChange $dir $result]]
-} -cleanup removeScratch -result {{bgf/bgf.bot bgf/layouts.bot layouts.tsv manifest.txt report.tsv report.txt} {{+ function bgf_added: direct direct} {+ function bgf_floaty: unsupported float} {- function bgf_plain_char: was direct direct} {~ function bgf_add: direct direct -> direct direct} {~ macro BGF_VERSION_MAJOR: constant ffi::c::Int -> constant ffi::c::Int} {~ macro bgf_call_add: alias alias of bgf_add -> alias alias of bgf_add}}}
+} -cleanup removeScratch -result {{bgf/bgf.bot bgf/layouts.bot layouts.tsv manifest.txt report.tsv report.txt} {{+ function bgf_added: direct direct} {+ function bgf_floaty: unsupported float} {- function bgf_plain_char: was direct direct} {~ function bgf_add: direct direct -> direct direct} {~ macro BGF_VERSION_MAJOR: constant std::ffi::c::Int -> constant std::ffi::c::Int} {~ macro bgf_call_add: alias alias of bgf_add -> alias alias of bgf_add}}}
 
 # ---------------------------------------------------------------------------
 # Records and layouts (C-BINDGEN-LAYOUTS.md)
@@ -666,7 +666,7 @@ test cb-layout-pointers {pointer fields keep their nominal pointee identities (n
         [dict get [record $::fixture linux-x86_64 {struct bgf_points_ref}] status] \
         [regexp -all -line {^opaque struct (bgf_chars|bgf_points4|bgf_node):$} $ctypes] \
         [regexp -inline -line {^# struct bgf_node .*$} $ctypes]
-} -result {{{next {ffi::c::Ptr[bgf::ctypes::bgf_node]}} {handle {ffi::c::Ptr[bgf::ctypes::bgf_handle]}} {data {ffi::c::Ptr[ffi::c::Void]}} {name {ffi::c::Ptr[ffi::c::Char]}} {slot {ffi::c::Ptr[ffi::c::Ptr[bgf::ctypes::bgf_node]]}} {visit {ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[bgf::ctypes::bgf_handle], ffi::c::Int], return: ffi::c::Int}]}} {compare {ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[bgf::ctypes::bgf_node], ffi::c::Ptr[bgf::ctypes::bgf_node]], return: ffi::c::Int}]}} {label {ffi::c::Ptr[bgf::ctypes::bgf_chars]}} {id ffi::c::UInt}} layout-direct 3 {{# struct bgf_node (include/bgf/bgf_records.h), a complete C type: its layout is bgf::layouts::bgf_node}}}
+} -result {{{next {std::ffi::c::Ptr[bgf::ctypes::bgf_node]}} {handle {std::ffi::c::Ptr[bgf::ctypes::bgf_handle]}} {data {std::ffi::c::Ptr[std::ffi::c::Void]}} {name {std::ffi::c::Ptr[std::ffi::c::Char]}} {slot {std::ffi::c::Ptr[std::ffi::c::Ptr[bgf::ctypes::bgf_node]]}} {visit {std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Void], std::ffi::c::Ptr[bgf::ctypes::bgf_handle], std::ffi::c::Int], return: std::ffi::c::Int}]}} {compare {std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[bgf::ctypes::bgf_node], std::ffi::c::Ptr[bgf::ctypes::bgf_node]], return: std::ffi::c::Int}]}} {label {std::ffi::c::Ptr[bgf::ctypes::bgf_chars]}} {id std::ffi::c::UInt}} layout-direct 3 {{# struct bgf_node (include/bgf/bgf_records.h), a complete C type: its layout is bgf::layouts::bgf_node}}}
 
 test cb-layout-blockers {every representation the layout language lacks is a blocker, never approximated: flexible array members (a fixed array of representable elements is no blocker since FIXED-LAYOUT-ARRAYS.md: bgf_chars, bgf_wide_text, bgf_points4, bgf_ptrs3 and bgf_matrix are layouts; nor a union or an anonymous union member since LAYOUT-UNIONS.md: bgf_value, bgf_tagged, bgf_overlay and bgf_mixed are layouts), bitfields, float, double, long double, C _Bool, volatile, a typedef an attribute widens, a pointer to float, a callback with a double, an explicit calling convention; a record holding a blocked one by value is nested-layout-blocked with the chain to its first direct blocker} -constraints clang -body {
     set recs [dict get [generation $::fixture linux-x86_64] model layouts]
@@ -748,9 +748,9 @@ test cb-layout-verified {every emitted layout is the compiler's: layouts-check.c
     foreach {old new} {
         "layout bgf_point:\n    size 8" "layout bgf_point:\n    size 12"
         "layout bgf_packed1:\n    size 7\n    align 1" "layout bgf_packed1:\n    size 7\n    align 4"
-        "field length: ffi::c::UInt at 1" "field length: ffi::c::UInt at 2"
-        "field l: ffi::c::Long at 8" "field l: ffi::c::Int at 8"
-        "field next: ffi::c::Ptr\[bgf::ctypes::bgf_node\] at 0" "field next: ffi::c::ULong at 0"
+        "field length: std::ffi::c::UInt at 1" "field length: std::ffi::c::UInt at 2"
+        "field l: std::ffi::c::Long at 8" "field l: std::ffi::c::Int at 8"
+        "field next: std::ffi::c::Ptr\[bgf::ctypes::bgf_node\] at 0" "field next: std::ffi::c::ULong at 0"
     } {
         set bad [dict replace $files bgf/layouts.bot [string map [list $old $new] [dict get $files bgf/layouts.bot]]]
         set check [::cbind::verify::source $bad $::fixture linux-x86_64 {}]
@@ -771,7 +771,7 @@ test cb-layout-second-compiler {GCC agrees with clang on every emitted fixture l
     dict map {t v} $out {expr {$v eq "" ? "agrees" : $v}}
 } -match glob -result {*agrees*}
 
-test cb-layout-oracle-fixture {every emitted fixture layout agrees with C at run time, on both native backends: C writes every field with its own typed stores and Botlish reads them through binary::native::view; Botlish writes every field through binary::native::edit and C reads them, the padding untouched; Botlish builds the record in MutableBytes with binary::write and binary::write_foreign and C reads that image, its padding zero; binary::parse reads it back; layout_length and layout_alignment are C's sizeof and _Alignof} -constraints nativeRun -body {
+test cb-layout-oracle-fixture {every emitted fixture layout agrees with C at run time, on both native backends: C writes every field with its own typed stores and Botlish reads them through std::binary::native::view; Botlish writes every field through std::binary::native::edit and C reads them, the padding untouched; Botlish builds the record in MutableBytes with std::binary::write and std::binary::write_foreign and C reads that image, its padding zero; std::binary::parse reads it back; layout_length and layout_alignment are C's sizeof and _Alignof} -constraints nativeRun -body {
     lassign [layoutOracle $::fixture all] checks a b
     list [expr {$checks > 250}] $a $b
 } -cleanup removeScratch -result {1 {} {}}
@@ -779,7 +779,7 @@ test cb-layout-oracle-fixture {every emitted fixture layout agrees with C at run
 test cb-layout-ordinary {a generated layout is an ordinary layout: a program over one (bytes in, a LayoutStruct out, bytes back) runs on all four backends, through HIR interchange in a fresh process, and through the front-end cache, with no C compiler at compile time} -constraints clang -body {
     set dir [scratch]
     ::cbind::generate::stage $::fixture $::hostTarget "" $dir [generatedDir $::fixture $::hostTarget]
-    writeText [file join $dir main.bot] "import abi\nimport abi::bytes\nimport binary\nimport bgf::layouts\n\nfn run() -> List\[int\] errors LayoutLengthMismatch:\n    d0 = abi::bytes::zeroed(abi::usize(binary::layout_length(bgf::layouts::bgf_packed_outer)))\n    d1 = binary::write(d0, bgf::layouts::bgf_packed_outer.inner.y, -9)\n    d2 = binary::write(d1, bgf::layouts::bgf_packed_outer.tail, 513)\n    v = binary::parse(bgf::layouts::bgf_packed_outer, abi::bytes::freeze(d2))\n    \[binary::layout_length(bgf::layouts::bgf_packed_outer), binary::layout_alignment(bgf::layouts::bgf_packed_outer), v.inner.y, v.tail, v.lead\]\n\nr = run():\n    on LayoutLengthMismatch:\n        \[\]\nr\n"
+    writeText [file join $dir main.bot] "import std::abi\nimport std::abi::bytes\nimport std::binary\nimport bgf::layouts\n\nfn run() -> List\[int\] errors LayoutLengthMismatch:\n    d0 = std::abi::bytes::zeroed(std::abi::usize(std::binary::layout_length(bgf::layouts::bgf_packed_outer)))\n    d1 = std::binary::write(d0, bgf::layouts::bgf_packed_outer.inner.y, -9)\n    d2 = std::binary::write(d1, bgf::layouts::bgf_packed_outer.tail, 513)\n    v = std::binary::parse(bgf::layouts::bgf_packed_outer, std::abi::bytes::freeze(d2))\n    \[std::binary::layout_length(bgf::layouts::bgf_packed_outer), std::binary::layout_alignment(bgf::layouts::bgf_packed_outer), v.inner.y, v.tail, v.lead\]\n\nr = run():\n    on LayoutLengthMismatch:\n        \[\]\nr\n"
     set hir [stagedHir $dir main.bot]
     set values [lmap backend [backendsFor $::hostTarget] {lindex [outcomeUnderHir $backend $hir] 1}]
     set text [hir::interchange::encode $hir]
@@ -798,7 +798,7 @@ test cb-layout-pressure {the report weighs every missing feature on the dependen
     set b [string first "Macro APIs" $text]
     string trim [string range $text $a [expr {$b - 1}]]
 } -result {Layout pressure (blocked records a missing feature would make layouts: directly + transitively)
-  ffi::c::Bool fields                                                          3     3.5%  2 + 1
+  std::ffi::c::Bool fields                                                     3     3.5%  2 + 1
   float fields                                                                 4     4.7%  2 + 2
   double fields                                                                0     0.0%  0 + 0
   float and double fields                                                      5     5.9%  3 + 2
@@ -827,7 +827,7 @@ API pressure (bound APIs pointing to C records)
       outside the profile's records (a system header's)                        0     0.0%
     incomplete (opaque only)                                                   5    50.0%
   bound APIs a missing feature would give a layout of a record they point to:
-      ffi::c::Bool fields                                                      0     0.0%  0 records
+      std::ffi::c::Bool fields                                                 0     0.0%  0 records
       float fields                                                             0     0.0%  0 records
       double fields                                                            0     0.0%  0 records
       float and double fields                                                  0     0.0%  0 records
@@ -847,7 +847,7 @@ test cb-layout-manifest {the layout manifest (layouts.tsv) holds every record an
         [regsub -all {\{[^{}]*clang version[^{}]*\}} [regexp -all -inline -line {^layout_(?:abi|count emitted|count blocked) .*$} [dict get $files manifest.txt]] VERSION] \
         [exec [info nameofexecutable] [file join $::projectRoot tools c-bindgen.tcl] report fixture -target linux-x86_64 -why {struct bgf_chain2}] \
         [exec [info nameofexecutable] [file join $::projectRoot tools c-bindgen.tcl] report fixture -target linux-x86_64 -why bgf_rect]
-} -result {1 {kind | record | index | name | status | offset | size | align | c | type | detail} {{record | struct bgf_chars | - | bgf_chars | layout-direct | - | 20 | 4 | struct bgf_chars | - | typedefs=bgf_chars; identity=bgf::ctypes::bgf_chars; header=include/bgf/bgf_records.h:181; pointed-by=1} {field | struct bgf_chars | 0 | len | scalar | 0 | 4 | - | int len | ffi::c::Int | c=len} {field | struct bgf_chars | 1 | name | array | 4 | 16 | - | char name[16] | array 16 of ffi::c::Char | c=name; element=char char; bounds=16; extent=16}} {{layout_abi linux-x86_64 clang x86_64-linux-gnu VERSION} {layout_count blocked 19} {layout_count emitted 65}} {tag struct bgf_chain2: not generated (unused): complete
+} -result {1 {kind | record | index | name | status | offset | size | align | c | type | detail} {{record | struct bgf_chars | - | bgf_chars | layout-direct | - | 20 | 4 | struct bgf_chars | - | typedefs=bgf_chars; identity=bgf::ctypes::bgf_chars; header=include/bgf/bgf_records.h:181; pointed-by=1} {field | struct bgf_chars | 0 | len | scalar | 0 | 4 | - | int len | std::ffi::c::Int | c=len} {field | struct bgf_chars | 1 | name | array | 4 | 16 | - | char name[16] | array 16 of std::ffi::c::Char | c=name; element=char char; bounds=16; extent=16}} {{layout_abi linux-x86_64 clang x86_64-linux-gnu VERSION} {layout_count blocked 19} {layout_count emitted 65}} {tag struct bgf_chain2: not generated (unused): complete
   no bound signature points to it
 record struct bgf_chain2: generated (layout-direct in bgf::layouts): bgf_chain2; sizeof 32, _Alignof 8, 2 fields} {typedef bgf_rect: generated (opaque in bgf::ctypes): identity bgf_rect; struct bgf_rect
 record struct bgf_rect: generated (layout-direct in bgf::layouts): bgf_rect; sizeof 16, _Alignof 4, 2 fields}}
@@ -869,7 +869,7 @@ test cb-layout-unions {a C union is a union layout: its sizeof and _Alignof the 
     lmap name {bgf_value bgf_word bgf_shape bgf_packed_u bgf_tail_u bgf_aligned_u bgf_kwu bgf_words3 bgf_word_grid} {
         list $name {*}[layout $::fixture linux-x86_64 $name]
     }
-} -result {{bgf_value 8 8 {{i ffi::c::Int 0} {u ffi::c::UInt 0} {p {ffi::c::Ptr[ffi::c::Void]} 0}} 1} {bgf_word 4 4 {{whole ffi::c::UInt 0} {halves {array 2 of ffi::c::UShort} 0} {bytes {array 4 of ffi::c::UChar} 0}} 1} {bgf_shape 8 8 {{pt bgf_point 0} {bits ffi::c::LongLong 0} {raw {array 3 of ffi::c::UChar} 0}} 1} {bgf_packed_u 7 1 {{p bgf_packed1 0} {raw {array 7 of ffi::c::UChar} 0}} 1} {bgf_tail_u 8 4 {{c {array 5 of ffi::c::Char} 0} {i ffi::c::Int 0}} 1} {bgf_aligned_u 16 16 {{i ffi::c::Int 0} {c ffi::c::Char 0}} 1} {bgf_kwu 4 4 {{fn_ ffi::c::Int 0} {type_ ffi::c::UInt 0}} 1} {bgf_words3 16 4 {{n ffi::c::Int 0} {words {array 3 of bgf_word} 4}} 0} {bgf_word_grid 20 4 {{grid {array 2 of array 2 of bgf_word} 0} {tail ffi::c::Short 16}} 0}}
+} -result {{bgf_value 8 8 {{i std::ffi::c::Int 0} {u std::ffi::c::UInt 0} {p {std::ffi::c::Ptr[std::ffi::c::Void]} 0}} 1} {bgf_word 4 4 {{whole std::ffi::c::UInt 0} {halves {array 2 of std::ffi::c::UShort} 0} {bytes {array 4 of std::ffi::c::UChar} 0}} 1} {bgf_shape 8 8 {{pt bgf_point 0} {bits std::ffi::c::LongLong 0} {raw {array 3 of std::ffi::c::UChar} 0}} 1} {bgf_packed_u 7 1 {{p bgf_packed1 0} {raw {array 7 of std::ffi::c::UChar} 0}} 1} {bgf_tail_u 8 4 {{c {array 5 of std::ffi::c::Char} 0} {i std::ffi::c::Int 0}} 1} {bgf_aligned_u 16 16 {{i std::ffi::c::Int 0} {c std::ffi::c::Char 0}} 1} {bgf_kwu 4 4 {{fn_ std::ffi::c::Int 0} {type_ std::ffi::c::UInt 0}} 1} {bgf_words3 16 4 {{n std::ffi::c::Int 0} {words {array 3 of bgf_word} 4}} 0} {bgf_word_grid 20 4 {{grid {array 2 of array 2 of bgf_word} 0} {tail std::ffi::c::Short 16}} 0}}
 
 test cb-layout-anonymous-members {an anonymous member is represented truthfully, never flattened into overlapping fields: an anonymous union is a synthetic union layout held by a generated field at the compiler's offset (OVERLAPPED's shape: bgf_overlapped.member3 at 16), an anonymous struct in a union a synthetic struct layout, an alternative (member1, offset_high at 4 within it); an anonymous struct in a struct is still promoted (bgf_deep's a; its anonymous union is the field member2_member2); every deeper level keeps its own layout; a union's size is the compiler's (bgf_anon_tail_member2: 8); two anonymous unions on one line are told apart; the manifest maps every promoted C name to the generated path that reaches it, with its offset in the owner} -constraints clang -body {
     set out [lmap name {bgf_overlay bgf_overlay_member2 bgf_overlapped bgf_overlapped_member3_union bgf_overlapped_member3_member1 bgf_large bgf_large_member1 bgf_deep bgf_deep_member2_member2 bgf_deep_member3 bgf_deep_member3_member1 bgf_deep_member3_member1_member3 bgf_anon_tail bgf_anon_tail_member2 bgf_two_anon bgf_two_anon_member1 bgf_two_anon_member2} {
@@ -883,7 +883,7 @@ test cb-layout-anonymous-members {an anonymous member is represented truthfully,
         }
     }
     list $out $promoted
-} -result {{{bgf_overlay 16 8 {{kind ffi::c::Int 0} {member2 bgf_overlay_member2 8}} 0} {bgf_overlay_member2 8 8 {{i ffi::c::Int 0} {p {ffi::c::Ptr[ffi::c::Void]} 0}} 1} {bgf_overlapped 32 8 {{internal ffi::c::ULong 0} {internal_high ffi::c::ULong 8} {member3 bgf_overlapped_member3_union 16} {event {ffi::c::Ptr[ffi::c::Void]} 24}} 0} {bgf_overlapped_member3_union 8 8 {{member1 bgf_overlapped_member3_member1 0} {pointer {ffi::c::Ptr[ffi::c::Void]} 0}} 1} {bgf_overlapped_member3_member1 8 4 {{offset ffi::c::UInt 0} {offset_high ffi::c::UInt 4}} 0} {bgf_large 8 8 {{member1 bgf_large_member1 0} {u bgf_large_u 0} {quad ffi::c::LongLong 0}} 1} {bgf_large_member1 8 4 {{low ffi::c::UInt 0} {high ffi::c::Int 4}} 0} {bgf_deep 20 4 {{tag ffi::c::Char 0} {a ffi::c::Short 4} {member2_member2 bgf_deep_member2_member2 8} {member3 bgf_deep_member3 12}} 0} {bgf_deep_member2_member2 4 4 {{b ffi::c::Int 0} {c {array 3 of ffi::c::Char} 0}} 1} {bgf_deep_member3 8 4 {{member1 bgf_deep_member3_member1 0} {w bgf_word 0}} 1} {bgf_deep_member3_member1 6 2 {{x ffi::c::UShort 0} {y ffi::c::UShort 2} {member3 bgf_deep_member3_member1_member3 4}} 0} {bgf_deep_member3_member1_member3 2 2 {{z ffi::c::UChar 0} {zz ffi::c::UShort 0}} 1} {bgf_anon_tail 16 4 {{k ffi::c::Char 0} {member2 bgf_anon_tail_member2 4} {after ffi::c::Char 12}} 0} {bgf_anon_tail_member2 8 4 {{c {array 5 of ffi::c::Char} 0} {i ffi::c::Int 0}} 1} {bgf_two_anon 16 8 {{member1 bgf_two_anon_member1 0} {member2 bgf_two_anon_member2 8}} 0} {bgf_two_anon_member1 4 4 {{a ffi::c::Char 0} {b ffi::c::Int 0}} 1} {bgf_two_anon_member2 8 8 {{c ffi::c::Short 0} {d ffi::c::LongLong 0}} 1}} {{{struct bgf_overlapped} pointer member3.pointer 16 8} {{struct bgf_overlapped} offset member3.member1.offset 16 4} {{struct bgf_overlapped} offset_high member3.member1.offset_high 20 4} {{struct bgf_deep} b member2_member2.b 8 4} {{struct bgf_deep} c member2_member2.c 8 3} {{struct bgf_deep} w member3.w 12 4} {{struct bgf_deep} x member3.member1.x 12 2} {{struct bgf_deep} y member3.member1.y 14 2} {{struct bgf_deep} z member3.member1.member3.z 16 1} {{struct bgf_deep} zz member3.member1.member3.zz 16 2}}}
+} -result {{{bgf_overlay 16 8 {{kind std::ffi::c::Int 0} {member2 bgf_overlay_member2 8}} 0} {bgf_overlay_member2 8 8 {{i std::ffi::c::Int 0} {p {std::ffi::c::Ptr[std::ffi::c::Void]} 0}} 1} {bgf_overlapped 32 8 {{internal std::ffi::c::ULong 0} {internal_high std::ffi::c::ULong 8} {member3 bgf_overlapped_member3_union 16} {event {std::ffi::c::Ptr[std::ffi::c::Void]} 24}} 0} {bgf_overlapped_member3_union 8 8 {{member1 bgf_overlapped_member3_member1 0} {pointer {std::ffi::c::Ptr[std::ffi::c::Void]} 0}} 1} {bgf_overlapped_member3_member1 8 4 {{offset std::ffi::c::UInt 0} {offset_high std::ffi::c::UInt 4}} 0} {bgf_large 8 8 {{member1 bgf_large_member1 0} {u bgf_large_u 0} {quad std::ffi::c::LongLong 0}} 1} {bgf_large_member1 8 4 {{low std::ffi::c::UInt 0} {high std::ffi::c::Int 4}} 0} {bgf_deep 20 4 {{tag std::ffi::c::Char 0} {a std::ffi::c::Short 4} {member2_member2 bgf_deep_member2_member2 8} {member3 bgf_deep_member3 12}} 0} {bgf_deep_member2_member2 4 4 {{b std::ffi::c::Int 0} {c {array 3 of std::ffi::c::Char} 0}} 1} {bgf_deep_member3 8 4 {{member1 bgf_deep_member3_member1 0} {w bgf_word 0}} 1} {bgf_deep_member3_member1 6 2 {{x std::ffi::c::UShort 0} {y std::ffi::c::UShort 2} {member3 bgf_deep_member3_member1_member3 4}} 0} {bgf_deep_member3_member1_member3 2 2 {{z std::ffi::c::UChar 0} {zz std::ffi::c::UShort 0}} 1} {bgf_anon_tail 16 4 {{k std::ffi::c::Char 0} {member2 bgf_anon_tail_member2 4} {after std::ffi::c::Char 12}} 0} {bgf_anon_tail_member2 8 4 {{c {array 5 of std::ffi::c::Char} 0} {i std::ffi::c::Int 0}} 1} {bgf_two_anon 16 8 {{member1 bgf_two_anon_member1 0} {member2 bgf_two_anon_member2 8}} 0} {bgf_two_anon_member1 4 4 {{a std::ffi::c::Char 0} {b std::ffi::c::Int 0}} 1} {bgf_two_anon_member2 8 8 {{c std::ffi::c::Short 0} {d std::ffi::c::LongLong 0}} 1}} {{{struct bgf_overlapped} pointer member3.pointer 16 8} {{struct bgf_overlapped} offset member3.member1.offset 16 4} {{struct bgf_overlapped} offset_high member3.member1.offset_high 20 4} {{struct bgf_deep} b member2_member2.b 8 4} {{struct bgf_deep} c member2_member2.c 8 3} {{struct bgf_deep} w member3.w 12 4} {{struct bgf_deep} x member3.member1.x 12 2} {{struct bgf_deep} y member3.member1.y 14 2} {{struct bgf_deep} z member3.member1.member3.z 16 1} {{struct bgf_deep} zz member3.member1.member3.zz 16 2}}}
 
 test cb-layout-union-blockers {a union is blocked only by what an alternative cannot represent, and that root reason is what the report and the pressure analysis see -- never "union" or "anonymous-overlay": a float (bgf_num), a C _Bool (bgf_flagu), a bitfield record (bgf_bitsu, nested-layout-blocked through its alternative), held by a record (bgf_holds_bitsu), as an array element (bgf_nums2), as an anonymous member (bgf_anon_float, through its synthetic union); a representable anonymous union held by a record a bitfield blocks (bgf_bits_overlay) is no layout either: nothing reaches it, nothing C checks verifies it (unheld)} -constraints clang -body {
     set recs [dict get [generation $::fixture linux-x86_64] model layouts]
@@ -947,9 +947,9 @@ test cb-layout-union-verified {layouts-check.c holds every union layout to the c
     foreach {old new} {
         "union layout bgf_tail_u:\n    size 8" "union layout bgf_tail_u:\n    size 5"
         "union layout bgf_aligned_u:\n    size 16\n    align 16" "union layout bgf_aligned_u:\n    size 16\n    align 8"
-        "    alternative i: ffi::c::Int              # int i\n\n# union bgf_aligned_u" "    alternative i: ffi::c::Short            # int i\n\n# union bgf_aligned_u"
-        "    alternative bytes: array 4 of ffi::c::UChar    # uint8_t bytes\[4\]" "    alternative bytes: array 3 of ffi::c::UChar    # uint8_t bytes\[4\]"
-        "    field offset_high: ffi::c::UInt at 4" "    field offset_high: ffi::c::UInt at 8"
+        "    alternative i: std::ffi::c::Int              # int i\n\n# union bgf_aligned_u" "    alternative i: std::ffi::c::Short            # int i\n\n# union bgf_aligned_u"
+        "    alternative bytes: array 4 of std::ffi::c::UChar    # uint8_t bytes\[4\]" "    alternative bytes: array 3 of std::ffi::c::UChar    # uint8_t bytes\[4\]"
+        "    field offset_high: std::ffi::c::UInt at 4" "    field offset_high: std::ffi::c::UInt at 8"
         "    field member3: bgf_overlapped_member3_union at 16" "    field member3: bgf_overlapped_member3_union at 8"
     } {
         set text [dict get $files bgf/layouts.bot]
@@ -977,27 +977,27 @@ test cb-layout-union-program {a generated union layout is an ordinary one: a pro
     set dir [scratch]
     ::cbind::generate::stage $::fixture $::hostTarget "" $dir [generatedDir $::fixture $::hostTarget]
     writeText [file join $dir main.bot] [join {
-        "import abi"
-        "import abi::bytes"
-        "import binary"
+        "import std::abi"
+        "import std::abi::bytes"
+        "import std::binary"
         "import bgf::layouts"
         ""
         "fn run() -> List\[int\] errors LayoutLengthMismatch:"
-        "    l0 = abi::bytes::zeroed(abi::usize(binary::layout_length(bgf::layouts::bgf_large)))"
-        "    l1 = binary::write(l0, bgf::layouts::bgf_large.member1.low, 1)"
-        "    l2 = binary::write(l1, bgf::layouts::bgf_large.member1.high, -2)"
-        "    lb = abi::bytes::freeze(l2)"
-        "    o0 = abi::bytes::zeroed(abi::usize(binary::layout_length(bgf::layouts::bgf_overlapped)))"
-        "    o1 = binary::write(o0, bgf::layouts::bgf_overlapped.member3.member1.offset_high, 7)"
-        "    ob = abi::bytes::freeze(o1)"
-        "    w0 = abi::bytes::zeroed(abi::usize(binary::layout_length(bgf::layouts::bgf_words3)))"
-        "    w1 = binary::write(w0, bgf::layouts::bgf_words3.words\[1\].whole, 16909060)"
-        "    wb = abi::bytes::freeze(w1)"
-        "    d0 = abi::bytes::zeroed(abi::usize(binary::layout_length(bgf::layouts::bgf_deep)))"
-        "    d1 = binary::write(d0, bgf::layouts::bgf_deep.member3.w.whole, 196610)"
-        "    d2 = binary::write(d1, bgf::layouts::bgf_deep.member3.member1.member3.zz, 513)"
-        "    db = abi::bytes::freeze(d2)"
-        "    \[binary::read(lb, bgf::layouts::bgf_large.quad), binary::read(lb, bgf::layouts::bgf_large.u.high), binary::read(ob, bgf::layouts::bgf_overlapped.member3.member1.offset_high), binary::read(ob, bgf::layouts::bgf_overlapped.member3.member1.offset), binary::read(wb, bgf::layouts::bgf_words3.words\[1\].bytes\[0\]), binary::read(wb, bgf::layouts::bgf_words3.words\[1\].halves\[1\]), binary::read(wb, bgf::layouts::bgf_words3.words\[2\].whole), binary::read(db, bgf::layouts::bgf_deep.member3.member1.x), binary::read(db, bgf::layouts::bgf_deep.member3.member1.y), binary::read(db, bgf::layouts::bgf_deep.member3.member1.member3.z)\]"
+        "    l0 = std::abi::bytes::zeroed(std::abi::usize(std::binary::layout_length(bgf::layouts::bgf_large)))"
+        "    l1 = std::binary::write(l0, bgf::layouts::bgf_large.member1.low, 1)"
+        "    l2 = std::binary::write(l1, bgf::layouts::bgf_large.member1.high, -2)"
+        "    lb = std::abi::bytes::freeze(l2)"
+        "    o0 = std::abi::bytes::zeroed(std::abi::usize(std::binary::layout_length(bgf::layouts::bgf_overlapped)))"
+        "    o1 = std::binary::write(o0, bgf::layouts::bgf_overlapped.member3.member1.offset_high, 7)"
+        "    ob = std::abi::bytes::freeze(o1)"
+        "    w0 = std::abi::bytes::zeroed(std::abi::usize(std::binary::layout_length(bgf::layouts::bgf_words3)))"
+        "    w1 = std::binary::write(w0, bgf::layouts::bgf_words3.words\[1\].whole, 16909060)"
+        "    wb = std::abi::bytes::freeze(w1)"
+        "    d0 = std::abi::bytes::zeroed(std::abi::usize(std::binary::layout_length(bgf::layouts::bgf_deep)))"
+        "    d1 = std::binary::write(d0, bgf::layouts::bgf_deep.member3.w.whole, 196610)"
+        "    d2 = std::binary::write(d1, bgf::layouts::bgf_deep.member3.member1.member3.zz, 513)"
+        "    db = std::abi::bytes::freeze(d2)"
+        "    \[std::binary::read(lb, bgf::layouts::bgf_large.quad), std::binary::read(lb, bgf::layouts::bgf_large.u.high), std::binary::read(ob, bgf::layouts::bgf_overlapped.member3.member1.offset_high), std::binary::read(ob, bgf::layouts::bgf_overlapped.member3.member1.offset), std::binary::read(wb, bgf::layouts::bgf_words3.words\[1\].bytes\[0\]), std::binary::read(wb, bgf::layouts::bgf_words3.words\[1\].halves\[1\]), std::binary::read(wb, bgf::layouts::bgf_words3.words\[2\].whole), std::binary::read(db, bgf::layouts::bgf_deep.member3.member1.x), std::binary::read(db, bgf::layouts::bgf_deep.member3.member1.y), std::binary::read(db, bgf::layouts::bgf_deep.member3.member1.member3.z)\]"
         ""
         "r = run():"
         "    on LayoutLengthMismatch:"
@@ -1072,7 +1072,7 @@ test cb-tcl-acceptance {the generated Tcl binding runs the Tcl acceptance: creat
 test cb-tcl-thunk-behavior {a Tcl macro thunk behaves as the macro: Tcl_Eval through the generated thunk and Tcl_Eval in C give the same statuses} -constraints tclLibrary -body {
     set profile [::cbind::profile::load tcl]
     set dir [staged $profile $::hostTarget ""]
-    writeText [file join $dir main.bot] "import abi\nimport abi::bytes\nimport byte\nimport list\nimport str\nimport tcl::decls\nimport tcl::thunks::decls\n\nfn nul() -> byte::Byte:\n    0\n\nfn script(text: str) -> abi::bytes::Bytes:\n    abi::bytes::from_list(str::encode_utf8(text).append(nul()))\n\ni = tcl::decls::Tcl_CreateInterp()\nr = \[i.Tcl_Eval(script(\"set a 1\")), i.Tcl_Eval(script(\"error x\")), i.Tcl_Eval(script(\"return -code break\")), i.Tcl_Eval(script(\"continue\"))\]\ntcl::decls::Tcl_DeleteInterp(i)\nr\n"
+    writeText [file join $dir main.bot] "import std::abi\nimport std::abi::bytes\nimport std::byte\nimport std::list\nimport std::str\nimport tcl::decls\nimport tcl::thunks::decls\n\nfn nul() -> std::byte::Byte:\n    0\n\nfn script(text: str) -> std::abi::bytes::Bytes:\n    std::abi::bytes::from_list(std::str::encode_utf8(text).append(nul()))\n\ni = tcl::decls::Tcl_CreateInterp()\nr = \[i.Tcl_Eval(script(\"set a 1\")), i.Tcl_Eval(script(\"error x\")), i.Tcl_Eval(script(\"return -code break\")), i.Tcl_Eval(script(\"continue\"))\]\ntcl::decls::Tcl_DeleteInterp(i)\nr\n"
     set shim [shimOf $profile $::hostTarget [file join $dir .shim]]
     set botlish [lindex [stagedValues $dir main.bot {cranelift} [list $shim]] 0]
     set c [scratch]/caller.c
@@ -1110,10 +1110,10 @@ test cb-boringssl-inventory {the BoringSSL inventory is the header archaeology's
     set handDecl [apply $get [::chdr::readFile [file join $::projectRoot examples ffi sha256 boringssl.bot]]]
     list [dict get $c declared] [dict get $c inline] [dict get $c thunk] [expr {$decl eq $handDecl}] $decl
 } -result {3109 817 817 1 {extern c fn SHA256 named "botlish_bssl_SHA256"(
-    data: ffi::c::Ptr[ffi::c::UChar] read noescape,
-    len: ffi::c::ULong,
-    out: ffi::c::Ptr[ffi::c::UChar] write noescape
-) -> ffi::c::Ptr[ffi::c::UChar] alias out}}
+    data: std::ffi::c::Ptr[std::ffi::c::UChar] read noescape,
+    len: std::ffi::c::ULong,
+    out: std::ffi::c::Ptr[std::ffi::c::UChar] write noescape
+) -> std::ffi::c::Ptr[std::ffi::c::UChar] alias out}}
 
 test cb-boringssl-symbols {every symbol the generated binding links directly is prefixed (the symbol probe's, for the whole inventory: no name is special) and defined by the prefixed static build -- libcrypto.a, libssl.a or libdecrepit.a -- but for the two FIPS-only functions a non-FIPS build does not define} -constraints boringsslLibrary -body {
     set profile [::cbind::profile::load boringssl]
@@ -1176,7 +1176,7 @@ test cb-sdl3-current-cross {the committed SDL3 binding of the other Linux target
     list [expr {[llength $pairs] > 0}] [staleBindings $pairs]
 } -result {1 {}}
 
-test cb-sdl3-breadth {SDL3 is generated from the whole public header set by the normal rules: over a thousand functions bound, most of them only because of ffi::c::Bool, every blocker counted (floats, aggregates, varargs, macros without a signature), opaque handles distinct (SDL_Window, SDL_Renderer, SDL_Surface, SDL_AudioStream), flags of their typedefs' C types} -constraints {sdl3Sources linuxNative} -body {
+test cb-sdl3-breadth {SDL3 is generated from the whole public header set by the normal rules: over a thousand functions bound, most of them only because of std::ffi::c::Bool, every blocker counted (floats, aggregates, varargs, macros without a signature), opaque handles distinct (SDL_Window, SDL_Renderer, SDL_Surface, SDL_AudioStream), flags of their typedefs' C types} -constraints {sdl3Sources linuxNative} -body {
     set result [generation [::cbind::profile::load sdl3] $::linuxHost]
     set c [::cbind::report::counts [dict get $result model]]
     set ctypes [dict get $result files sdl3/ctypes.bot]
@@ -1185,7 +1185,7 @@ test cb-sdl3-breadth {SDL3 is generated from the whole public header set by the 
         [lmap n {SDL_Window SDL_Renderer SDL_Surface SDL_AudioStream} {regexp "opaque struct $n:" $ctypes}] \
         [lrange [dict get $rows "macro SDL_INIT_VIDEO"] 2 4] [lrange [dict get $rows "macro SDL_WINDOW_RESIZABLE"] 2 4] \
         [lrange [dict get $rows "function SDL_RenderPoint"] 2 4]
-} -result {1 1 1 {1 1 1 1} {constant sdl3::init ffi::c::UInt} {constant sdl3::video ffi::c::ULong} {unsupported {} float}}
+} -result {1 1 1 {1 1 1 1} {constant sdl3::init std::ffi::c::UInt} {constant sdl3::video std::ffi::c::ULong} {unsupported {} float}}
 
 test cb-sdl3-symbols {every SDL3 function the binding links directly is one libSDL3.so exports, or, for SDL's aliases of C library functions (SDL_memcpy is memcpy), one the C library does} -constraints sdl3Library -body {
     set profile [::cbind::profile::load sdl3]
@@ -1341,7 +1341,7 @@ test cb-win32-sentinels {the familiar Win32 records are the compiler's: POINT, R
 test cb-win32-layouts-compile {the Win32 layouts are ordinary Botlish for windows-x86_64-gnu: a program over them compiles warning-free, its HIR records the GNU target, the native driver refuses to run it on this host (NATIVE TARGET), and the Tcl backends run it} -constraints mingw -body {
     set dir [scratch]
     ::cbind::generate::stage $::win32 windows-x86_64-gnu "" $dir [generatedDir $::win32 windows-x86_64-gnu]
-    writeText [file join $dir main.bot] "import binary\nimport win32::layouts\n\n\[binary::layout_length(win32::layouts::SYSTEMTIME), binary::layout_length(win32::layouts::STARTUPINFOW), binary::layout_alignment(win32::layouts::SECURITY_ATTRIBUTES)\]\n"
+    writeText [file join $dir main.bot] "import std::binary\nimport win32::layouts\n\n\[std::binary::layout_length(win32::layouts::SYSTEMTIME), std::binary::layout_length(win32::layouts::STARTUPINFOW), std::binary::layout_alignment(win32::layouts::SECURITY_ATTRIBUTES)\]\n"
     set hir [stagedHir $dir main.bot windows-x86_64-gnu]
     list [hir::cabi::targetOf $hir] [lindex [outcomeUnderHir interp $hir] 1] [lrange [lindex [outcomeUnderHir cranelift $hir] 1] end-1 end]
 } -cleanup removeScratch -result {windows-x86_64-gnu {[16, 104, 8]} {NATIVE TARGET}}

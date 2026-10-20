@@ -28,7 +28,7 @@
 #   method      a.f(b, :x, :y)  (receiver = first ordinary argument)
 #   alias       g(...) / a.g(...) for a name bound to a function (`g = f`)
 #   nested      an argument is `head(CALL)` or `CALL.head()` (head: the
-#               first element via a proven list::at, STDLIB-NAMESPACES.md)
+#               first element via a proven std::list::at, STDLIB-NAMESPACES.md)
 #   probed      an argument is `probe(ID, ARG)`, so evaluation order is
 #               part of the outcome; flags contribute no event
 #
@@ -343,9 +343,9 @@ proc renderProgram {functions calls mutation} {
     # The log is a context member (a MutableArray is a value: a callee given
     # it as an argument would mutate its own copy).
     set text "context struct Log:\n    digits: MutableArray\[int\]\n"
-    append text "fn current(context log: Log):\n    mutable_array::get(log.digits, 0, -1)\n"
-    append text "fn probe(id, result, context log: Log):\n    mutable_array::set(log.digits, 0, current() * 10 + id):\n        on IndexNotFound:\n            unit\n    result\n"
-    append text "fn head(xs):\n    loop i from 0 to list::length(xs):\n        return list::at(xs, i)\n    0\n"
+    append text "fn current(context log: Log):\n    std::mutable_array::get(log.digits, 0, -1)\n"
+    append text "fn probe(id, result, context log: Log):\n    std::mutable_array::set(log.digits, 0, current() * 10 + id):\n        on IndexNotFound:\n            unit\n    result\n"
+    append text "fn head(xs):\n    loop i from 0 to std::list::length(xs):\n        return std::list::at(xs, i)\n    0\n"
     for {set i 0} {$i <= 4} {incr i} {
         set ps [lmap j [lseq $i] {string cat a $j}]
         append text "fn fwd${i}([join [concat s $ps] {, }]):\n    \[[join [concat s $ps] {, }]\]\n"
@@ -356,7 +356,7 @@ proc renderProgram {functions calls mutation} {
     dict for {name alias} $::aliases {
         append text "$alias = $name\n"
     }
-    append text "with context Log {digits: mutable_array::create(1, 0)}\n"
+    append text "with context Log {digits: std::mutable_array::create(1, 0)}\n"
     set results {}
     set i 0
     foreach call $calls {

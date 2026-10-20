@@ -31,7 +31,7 @@ Every other stop condition in the spec is clear:
 ## Why the R2 source was temporarily unfrozen
 
 R2 (`R2-ORDINARY-EMAILISH-PREDICATE.md`) ported `Emailish?`'s old
-hand-written `-native-body` core-IR validator into `web::is_emailish`
+hand-written `-native-body` core-IR validator into `std::web::is_emailish`
 almost structurally -- three duplicated recursive scanners, an equality
 ladder for local-part punctuation, and a recursive `domain_loop` -- because
 R2's own job was proving the *architecture* (module-fn bridge, alias
@@ -163,7 +163,7 @@ fn is_emailish(v):
 module-scope form -- the shipped source builds it once per `is_emailish`
 call, inside the function; see "Set-membership refactor" for exactly why)
 
-The shipped `lib/web.bot` carries the same body with the full rationale as
+The shipped `stdlib/web.bot` carries the same body with the full rationale as
 source comments (predicate-passing design, the domain-loop non-viability
 proof, the set-membership compiler-defect trade-off, and the naming
 blocker), so a future reader hits the explanation in the file that has the
@@ -249,7 +249,7 @@ replaces `c == "." or c == "_" or c == "%" or c == "+" or c == "-"` inside
 `is_local_char`, over ordinary one-scalar `str` values -- `char_at`'s own
 result type, and `is_tcl_alnum`/`is_tcl_alpha`'s own parameter type
 (`core/tclcompat.tcl`: "one-scalar str -> bool") -- never UTF-8 bytes,
-unlike `additional_unreserved_chars`'s `byte::set` a few lines below in
+unlike `additional_unreserved_chars`'s `std::byte::set` a few lines below in
 the same file. `is_label_char`'s own single extra character, `-`, stays a
 plain `==`: a one-element set would be less idiomatic than the direct
 equality this codebase already uses for singleton comparisons (e.g.
@@ -281,7 +281,7 @@ fails on `cranelift`/`cranelift-generic` with:
 error: native lowering: binding b45 is not reachable from e501 (NATIVE BUG)
 ```
 
-whenever `web::is_emailish`'s own body references **any** other root/
+whenever `std::web::is_emailish`'s own body references **any** other root/
 module binding (confirmed for both the set itself at module scope, and for
 `is_local_char` hoisted to a plain top-level module function exactly
 mirroring `is_unreserved`'s own shape -- both trigger it identically) *and*
@@ -290,7 +290,7 @@ mirroring `is_unreserved`'s own shape -- both trigger it identically) *and*
 `Emailish?` directly at program top level (no enclosing user block) never
 triggers it; a version with no such extra module-scope reference (the old
 equality ladder, or the set built per-call as shipped) never triggers it
-either. `b45` is `web::is_emailish`'s own root binding; `e501` is `check`'s
+either. `b45` is `std::web::is_emailish`'s own root binding; `e501` is `check`'s
 own region -- the failure is specifically about the module-fn-bridged
 predicate's own binding becoming unreachable from the caller's region once
 its dependency graph gains a second root reference, a direct generalization
@@ -361,7 +361,7 @@ real grammar and runtime semantics, not assumed:
   iteration's `continue` would see again.
 - **No `range()`/numeric-sequence primitive exists** anywhere in this
   codebase (confirmed by exhaustive grep: every existing `loop x in EXPR`
-  use, in `lib/byte.bot` and every `audit/`/example fixture, iterates an
+  use, in `stdlib/byte.bot` and every `audit/`/example fixture, iterates an
   already-built `List`) -- so `domain_loop`'s position-threading scan
   cannot be driven by the listloop form either, without first *building* a
   list of positions some other way (itself unavoidably recursive, and a
@@ -451,14 +451,14 @@ Answering spec §63 directly:
 - **33. Is `fn emailish?` legal in an ordinary Botlish module?** No --
   confirmed above.
 - **34. Can `-module-fn` target it?** Moot: there is no way to *define*
-  `web::emailish?` in ordinary `.bot` source in the first place (a `bind`
+  `std::web::emailish?` in ordinary `.bot` source in the first place (a `bind`
   target has the identical restriction -- the lexer rejects `?` after any
   identifier, not only after a `fn` name), so `-module-fn {web emailish?}`
   would have nothing to resolve to.
 - **35. Can every backend call it?** Not applicable, per above.
-- **36. Can the function be named `web::emailish?` safely?** No, not
+- **36. Can the function be named `std::web::emailish?` safely?** No, not
   today.
-- **37. If yes, was it renamed?** N/A -- kept as `web::is_emailish`,
+- **37. If yes, was it renamed?** N/A -- kept as `std::web::is_emailish`,
   per spec item 21's own instruction for exactly this situation.
 - **38. Exact architectural restriction:** `surface/lexer.tcl`'s identifier
   scanner unconditionally reports `"?" is reserved and cannot be part of a
@@ -479,8 +479,8 @@ Answering spec §63 directly:
   direction, not a scheduled one, and is not decided or attempted here
   (spec item 18: no naming-system redesign in R2.a).
 
-Per spec items 21/38, `web::is_emailish` is retained, with the exact
-blocker documented in the source itself (`lib/web.bot`'s own comment) and
+Per spec items 21/38, `std::web::is_emailish` is retained, with the exact
+blocker documented in the source itself (`stdlib/web.bot`'s own comment) and
 here. `Emailish?`/`emailish?`'s own root-level identity is completely
 unaffected -- R2's alias machinery never depended on the module function's
 own name matching the predicate's name (it already didn't, before this
@@ -494,7 +494,7 @@ milestone).
 
 | function | before: generic | before: OpenInstances | before: blockescape virtualized | before: flat captures | after: generic | after: OpenInstances | after: blockescape virtualized | after: flat captures |
 |---|---|---|---|---|---|---|---|---|
-| `web::is_emailish` | 0 (str) | no | no | -- | 0 (str) | no | no | -- |
+| `std::web::is_emailish` | 0 (str) | no | no | -- | 0 (str) | no | no | -- |
 | `char_at` | 1 | **yes** | yes | `{v}` | 1 | **yes** | yes | `{v}` |
 | `is_local_char` | 0 (str) | no | no | -- | 1 (new: passed by value) | **yes** | **no** (real closure, env=1) | -- (captures `local_extra_chars` via a real env slot, not flattened) |
 | `is_label_char` | 0 (str) | no | no | -- | 1 (new: passed by value) | **yes** | **no** (flattened to `fnvalue`, no env) | -- |
@@ -515,7 +515,7 @@ Answering spec §64 directly:
   `is_label_char` captures nothing (its only free identifier, `is_tcl_alnum`,
   is a native, not a capture).
 - **42. Which are materialized by `hir::aot::materializedBlocks`?**
-  `web::is_emailish`'s own region already materialized several of its
+  `std::web::is_emailish`'s own region already materialized several of its
   nested blocks before this milestone (6 values, matching R2's own
   pre-existing shape); after, it materializes 5 (one fewer, tracking the
   net reduction from 8 helpers to 6) -- `is_local_char`/`is_label_char`/
@@ -568,7 +568,7 @@ Answering spec §64 directly:
 | instance.param | before | after |
 |---|---|---|
 | `check.n` (control) | `[0, 400]` | `[0, 400]` (**unchanged**) |
-| `web::is_emailish.v` | n/a (str; no Int range applies) | n/a (str; no Int range applies), unchanged |
+| `std::web::is_emailish.v` | n/a (str; no Int range applies) | n/a (str; no Int range applies), unchanged |
 | `char_at.i` | `[-∞, +∞]` | `[-∞, +∞]` |
 | `scan_local.i`/`scan_label.i`/`scan_alpha.i` (before) -> `scan_while.i` (after) | `[-∞, +∞]` (x3, one per scanner) | `[-∞, +∞]` (x1, the one shared instance) |
 | `scan_while.predicate` | n/a (didn't exist) | `[-∞, +∞]` (an `any`-kind parameter; not an Int fact) |
@@ -635,7 +635,7 @@ apples-to-apples comparison spec item 22 asks for):
 
 | before | bytes | after | bytes |
 |---|---|---|---|
-| `web::is_emailish` | 681 | `web::is_emailish` | 961 |
+| `std::web::is_emailish` | 681 | `std::web::is_emailish` | 961 |
 | `char_at` | 262 | `char_at` (x2 instances) | 262 + 222 |
 | `scan_local` | 932 | `scan_while` | 552 |
 | `scan_label` | 588 | (unified into `scan_while`) | -- |
@@ -648,7 +648,7 @@ The scanner family's own combined code shrinks by 9.4% despite gaining a
 second `char_at` specialization (a modest, real specialization-count
 increase from predicate-passing, not a "generic instance served everyone
 identically" outcome -- see below) and the new `closure`/`fnvalue`
-materialization ops. `web::is_emailish`'s own body grows (681 -> 961 bytes)
+materialization ops. `std::web::is_emailish`'s own body grows (681 -> 961 bytes)
 because it now directly embeds the per-call set construction and the
 `is_local_char` closure creation that used to be implicit in a plain
 equality chain.
@@ -817,7 +817,7 @@ only the emailish library path, confirmed.
 ## New compiler weaknesses exposed by idiomatic source
 
 1. **A second `-module-fn`-bridging defect** (this milestone's main
-   finding): `web::is_emailish`, once its own dependency graph gains any
+   finding): `std::web::is_emailish`, once its own dependency graph gains any
    reference to another root/module binding, cannot be called from inside
    a user-defined block on `cranelift`/`cranelift-generic` (`native
    lowering: binding bNN is not reachable from eNN`, NATIVE BUG). A
@@ -870,20 +870,20 @@ only the emailish library path, confirmed.
 
 ## New frozen baseline
 
-The normalized `lib/web.bot` (the `is_emailish` function, `local_extra_chars`,
+The normalized `stdlib/web.bot` (the `is_emailish` function, `local_extra_chars`,
 and their surrounding comments) is frozen as of this commit. `git diff
 --stat` against the pre-R2.a tree, confirming the milestone's own scope
 discipline:
 
 ```
-lib/web.bot                    | 113 +++++++++++++++++++++++++++--------------
+stdlib/web.bot                    | 113 +++++++++++++++++++++++++++--------------
 tests/native-block-escape.test |  62 ++++++++++++++++++----
 ```
 
-No other file changed: `bench/*.ir`, `bench/*.bot`, `lib/web.tcl` (the
+No other file changed: `bench/*.ir`, `bench/*.bot`, `stdlib/web.tcl` (the
 `Emailish?`/`emailish?` registration itself), `hir/range.tcl`, `hir/
 blockescape.tcl`, `hir/stringregion.tcl`, `hir/traversal.tcl`, `hir/
-callables.tcl`, `native/lower.tcl`, and every other `lib/*.bot` function
+callables.tcl`, `native/lower.tcl`, and every other `stdlib/*.bot` function
 are all absent from the diff. Future compiler milestones should measure
 against this implementation as the new source-level baseline for
 `emailish?`.
@@ -1011,8 +1011,8 @@ above.
 `hir/range.tcl`, `hir/blockescape.tcl`, `hir/stringregion.tcl`, `hir/
 traversal.tcl`, `hir/callables.tcl` (`KeyType`), `native/lower.tcl`'s
 inliner/`LeafInlineEligible` machinery, the callable-type surface syntax,
-`UriFragment`, raw-Int ABI, and every `lib/*.bot` function other than
-`web::is_emailish`/`local_extra_chars` -- all confirmed absent from `git
+`UriFragment`, raw-Int ABI, and every `stdlib/*.bot` function other than
+`std::web::is_emailish`/`local_extra_chars` -- all confirmed absent from `git
 diff --stat` against the pre-R2.a tree.
 
 ## Full regression

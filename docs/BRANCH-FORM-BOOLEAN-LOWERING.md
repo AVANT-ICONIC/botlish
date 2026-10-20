@@ -529,8 +529,8 @@ much as the noise. The interpreter is unchanged by design.
 
 | program | compile run | native run (generic / specialized) | NIR lines (specialized) | NIR Bool constants |
 |---|---|---|---|---|
-| bench/uri-steady.bot (lib/web.bot's URI escaping) | 931-965 / 949-1006 ms | 3.1 / 2.2 → 2.8 / 2.1 ms | 419 → 409 | 20 → 18 |
-| bench/refined-checks.bot (web::emailish?, uri_query_value?) | 537 → 511 ms | 0.6 / 0.5 → 0.6 / 0.9 ms | 1018 → 863 | 65 → 36 |
+| bench/uri-steady.bot (stdlib/web.bot's URI escaping) | 931-965 / 949-1006 ms | 3.1 / 2.2 → 2.8 / 2.1 ms | 419 → 409 | 20 → 18 |
+| bench/refined-checks.bot (std::web::emailish?, uri_query_value?) | 537 → 511 ms | 0.6 / 0.5 → 0.6 / 0.9 ms | 1018 → 863 | 65 → 36 |
 | examples/stdlib/ai_text_clean.bot | 5.0 → 4.8 ms | below 0.1 ms | 444 → 223 | 42 → 3 |
 | examples/stdlib/csv_records.bot | 11.5 → 10.9 ms | (generic: struct-shape unsupported, unchanged) / below 0.1 ms | 978 → 890 | 24 → 8 |
 

@@ -168,7 +168,7 @@ score: gained}
 @@ board-accepts-short-rows a board's rows may have any length
 ## examples/games/2048/game2048.bot
 <<<<
-    list::length(row) == size and row.all?(cell?)
+    std::list::length(row) == size and row.all?(cell?)
 ====
     row.all?(cell?)
 >>>>

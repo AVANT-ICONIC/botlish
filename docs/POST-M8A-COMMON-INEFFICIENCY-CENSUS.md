@@ -276,10 +276,10 @@ story.
 | kind | site | count/run | avg bytes | producer | consumer | necessary? |
 |---|---|---:|---:|---|---|---|
 | List | `web.bot:63` `hex_digits` literal | 1 | 152 | module init | `hex_pair` | persistent semantic (module value) |
-| List | `web.bot:65`, `<program>` list literals | 2 | 48 | module init / program | `byte::set`, program result | persistent / final observable |
+| List | `web.bot:65`, `<program>` list literals | 2 | 48 | module init / program | `std::byte::set`, program result | persistent / final observable |
 | Block | `web.bot:67`, `web.bot:70` | 2 | 52 | module closures (`is_unreserved`, `uri_escape_text`) | `callenv` | persistent semantic |
-| List | `byte.bot:175` `listnew` + 4 `listappend` | 5 | 40 | collecting `listloop` in `byte::set` | `immutable_set_from_list` | temporary semantic (M8.b "collecting listloop" residual) |
-| ImmutableSet | `byte.bot:177` | 1 | 56 | `byte::set` | `is_unreserved` | persistent semantic |
+| List | `byte.bot:175` `listnew` + 4 `listappend` | 5 | 40 | collecting `listloop` in `std::byte::set` | `immutable_set_from_list` | temporary semantic (M8.b "collecting listloop" residual) |
+| ImmutableSet | `byte.bot:177` | 1 | 56 | `std::byte::set` | `is_unreserved` | persistent semantic |
 | StringPlan | `web.bot:76`, `web.bot:99` | 2 | 96 | `hex_pair` plan result, `esc_from` accumulator | construct | compiler-private temporary (M8.a) |
 | String | `web.bot:99` `substring` | 3 | 41 | `esc_from` per character | `encode_utf8` | temporary semantic (one-character producer String residual) |
 | List | `web.bot:85` `encode_utf8` | 3 | 32 | `esc_char` | `list_get`/`list_length` | temporary semantic (`encode_utf8` tiny List residual) |
@@ -293,7 +293,7 @@ totals are:
 * 18 semantic + 2 private + 0 unknown objects, 1,064 bytes, all executed
   once per run before the first `check`;
 * 0.22% of refined-checks' instructions (`uri_escape_text` 7,544 Ir,
-  `byte::set` 2,746 Ir, program setup);
+  `std::byte::set` 2,746 Ir, program setup);
 * no allocation in the 800-iteration hot loop.
 
 The scanners' one-character `substring(v, i, i + 1)` calls never allocate:
@@ -310,7 +310,7 @@ Necessary vs avoidable (spec item 44):
   List);
 * persistent semantic data: 4 (`hex_digits`, two module Blocks, the
   reserved-byte set);
-* temporary semantic: 12 (the `byte::set` input literal and its
+* temporary semantic: 12 (the `std::byte::set` input literal and its
   collecting-`listloop` Lists, 3 one-character substrings, 3 `encode_utf8`
   Lists);
 * compiler-private temporary: 2 (plans);
@@ -638,7 +638,7 @@ out-parameter round trip).
 * fib, loop-count and sum-refined: 286-395 bytes, all hot.
 * refined-checks: 15.3 KB, about 4.5 KB of it hot (scanners, `char_at`,
   predicate bodies). About 6 KB is cold duplication (R2) and about 5 KB
-  URI/`byte::set` startup code. I-cache misses: 218 per run.
+  URI/`std::byte::set` startup code. I-cache misses: 218 per run.
 * No candidate below is ranked by bytes.
 
 ## Construction plans after M8.a
@@ -1140,7 +1140,7 @@ In suggested order, each gated on re-measuring after its predecessor:
 * **No production change.** `git status` shows only new files:
   `POST-M8A-COMMON-INEFFICIENCY-CENSUS.md` and
   `audit/post-m8a-common-inefficiency/`.
-* **Untouched:** `bench/*.bot`, `bench/*.ir`, `lib/*.bot`, `native/`,
+* **Untouched:** `bench/*.bot`, `bench/*.ir`, `stdlib/*.bot`, `native/`,
   `hir/`, `core/`, `compiler/`, `surface/`, and the M7/M8 audit artifacts.
   The ASCII probe is a new file under `audit/`; the benchmark it copies is
   unmodified.

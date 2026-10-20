@@ -13,12 +13,12 @@ code: CORE SEMANTIC USE-AFTER-MOVE
 
 == MEANING
 An affine value has exactly one usable owner. Binding it to another name
-(`other = step`), passing it as an argument, storing it in a struct field,
-a List literal or a MutableVector, returning it, or destructuring the
-struct that holds it MOVES it: the new owner owns it, and the old binding
-is dead from then on. A later use of the old binding -- a resume,
-`coroutine::done?`, a field read, another move -- is USE-AFTER-MOVE. The
-message prints where the value was moved and where it was used.
+(`other = step`), passing it as an argument, storing it in a struct field, a
+List literal or a MutableVector, returning it, or destructuring the struct
+that holds it MOVES it: the new owner owns it, and the old binding is dead
+from then on. A later use of the old binding -- a resume,
+`std::coroutine::done?`, a field read, another move -- is USE-AFTER-MOVE.
+The message prints where the value was moved and where it was used.
 
 The rule exists because a coroutine handle is the state of one running
 execution: two usable names for it would let two parts of the program
@@ -26,8 +26,8 @@ resume or release one continuation. Ownership is static only: nothing at
 run time records a move, so every use of a dead owner is rejected at
 compile time.
 
-Not moves: resuming a handle (`step()`), `coroutine::done?(step)`,
-reading an unrestricted field (`job.name`) and `list::length(xs)` keep
+Not moves: resuming a handle (`step()`), `std::coroutine::done?(step)`,
+reading an unrestricted field (`job.name`) and `std::list::length(xs)` keep
 the owner owning. An affine value may be dropped unused: it is released
 where its owner dies.
 
@@ -52,7 +52,7 @@ is never reassigned). When the caller must keep the value, pass the
 callee only what it needs (an unrestricted field, a resume's result).
 
 @example reject
-import coroutine
+import std::coroutine
 
 fn counter() -> int:
     yield 1
@@ -67,7 +67,7 @@ step()
 @end
 
 @example accept
-import coroutine
+import std::coroutine
 
 fn counter() -> int:
     yield 1
@@ -123,7 +123,7 @@ iteration moved the value.
   * move it once, after the loop, instead of inside the loop body.
 
 @example reject
-import coroutine
+import std::coroutine
 
 fn counter() -> int:
     yield 1
@@ -145,7 +145,7 @@ run(true)
 @end
 
 @example accept
-import coroutine
+import std::coroutine
 
 fn counter() -> int:
     yield 1
@@ -197,7 +197,7 @@ owns it, and returns it if the caller needs it back), or construct the
 coroutine inside the nested function.
 
 @example reject
-import coroutine
+import std::coroutine
 
 fn counter() -> int:
     yield 1
@@ -216,7 +216,7 @@ run()
 @end
 
 @example accept
-import coroutine
+import std::coroutine
 
 fn counter() -> int:
     yield 1
@@ -271,7 +271,7 @@ value). For a recursive structure: keep the coroutines out of it -- store
 them in one MutableVector and let the tree hold their indices.
 
 @example reject
-import coroutine
+import std::coroutine
 
 fn counter() -> int:
     yield 1
@@ -299,35 +299,35 @@ struct Node:
 
 @topic error.affine-duplication-unsupported
 title: AFFINE-DUPLICATION-UNSUPPORTED: one affine value in several slots
-summary: mutable_array::create(n, value) places one value in every slot; an affine value would get several owners, so it must be made once per slot with mutable_array::generate.
+summary: std::mutable_array::create(n, value) places one value in every slot; an affine value would get several owners, so it must be made once per slot with std::mutable_array::generate.
 index: errors
-alias: mutable_array::create with a coroutine; affine value repeated in an array
+alias: std::mutable_array::create with a coroutine; affine value repeated in an array
 keywords: affine, MutableArray, create, generate, factory, repeat, slots, coroutine
-related: concept.mutable-array concept.affine stdlib.mutable_array::create stdlib.mutable_array::generate error.affine-erasure-unsupported
+related: concept.mutable-array concept.affine stdlib.std::mutable_array::create stdlib.std::mutable_array::generate error.affine-erasure-unsupported
 docs: MUTABLE-ARRAY.md AFFINE-VALUES.md
 code: CORE SEMANTIC AFFINE-DUPLICATION-UNSUPPORTED
 
 == MEANING
 An operation that logically duplicates its argument -- registered with
 the `repeat` ownership role; today that is the value of
-`mutable_array::create(n, value)` -- cannot take an affine value: every
+`std::mutable_array::create(n, value)` -- cannot take an affine value: every
 slot would hold the same coroutine, one value with several owners. For an
 unrestricted value the slots are logical copies and nothing is wrong. The
 check follows the value through user functions: a wrapper that passes its
 parameter on to `create` is rejected for an affine argument too.
 
 == LIKELY CAUSES
-  * building a pool of workers with `mutable_array::create(n, make())`.
+  * building a pool of workers with `std::mutable_array::create(n, make())`.
 
 == WHAT TO DO
-Make one value per slot with a factory: `mutable_array::generate(n, f)`
+Make one value per slot with a factory: `std::mutable_array::generate(n, f)`
 calls `f(i)` once for each slot, in index order, and moves each result
 into its slot. The factory is an ordinary named function taking the
 index; it cannot itself be affine.
 
 @example reject
-import coroutine
-import mutable_array
+import std::coroutine
+import std::mutable_array
 
 fn counter() -> int:
     yield 1
@@ -337,16 +337,16 @@ fn make() -> Coroutine{args: [], return: int}:
     coroutine {step} = counter()
     step
 
-slots = mutable_array::create(2, make())
+slots = std::mutable_array::create(2, make())
 0
 @caption One coroutine would be placed in both slots
 @error CORE SEMANTIC AFFINE-DUPLICATION-UNSUPPORTED
-@at 12:34
+@at 12:39
 @end
 
 @example accept
-import coroutine
-import mutable_array
+import std::coroutine
+import std::mutable_array
 
 fn counter() -> int:
     yield 1
@@ -356,7 +356,7 @@ fn make(i: int) -> Coroutine{args: [], return: int}:
     coroutine {step} = counter()
     step
 
-slots = mutable_array::generate(2, make)
+slots = std::mutable_array::generate(2, make)
 results = loop step in slots:
     step()
 results
@@ -368,16 +368,16 @@ results
 title: AFFINE-ELEMENT-COPY-OUT: reading an affine element would copy it out
 summary: at, freeze or copy of a MutableVector or MutableArray of affine elements would make a second owner of an element the collection still owns; move it out instead.
 index: errors
-alias: mutable_vector::at of a coroutine; copy an affine element out of a vector
+alias: std::mutable_vector::at of a coroutine; copy an affine element out of a vector
 keywords: affine, MutableVector, MutableArray, at, freeze, copy, take, pop, swap, element
-related: concept.mutable-vector concept.mutable-array concept.affine stdlib.mutable_vector::take stdlib.mutable_vector::pop stdlib.mutable_vector::swap stdlib.mutable_array::swap error.affine-list-operation-unsupported
+related: concept.mutable-vector concept.mutable-array concept.affine stdlib.std::mutable_vector::take stdlib.std::mutable_vector::pop stdlib.std::mutable_vector::swap stdlib.std::mutable_array::swap error.affine-list-operation-unsupported
 docs: MUTABLE-VECTOR.md MUTABLE-ARRAY.md
 code: CORE SEMANTIC AFFINE-ELEMENT-COPY-OUT
 
 == MEANING
-A MutableVector[T] or MutableArray[T] of an affine T owns its elements.
-An operation that reads elements out while the collection keeps owning
-them -- `at`, `mutable_array::freeze`, the source of `mutable_array::copy`
+A MutableVector[T] or MutableArray[T] of an affine T owns its elements. An
+operation that reads elements out while the collection keeps owning them --
+`at`, `std::mutable_array::freeze`, the source of `std::mutable_array::copy`
 -- would give an element a second owner, so it is rejected for an affine
 collection. There are no references to elements: an element leaves the
 collection only by an operation that moves it out.
@@ -397,8 +397,8 @@ Put the element back with `push` (vector) or `swap` when the collection
 should keep it.
 
 @example reject
-import coroutine
-import mutable_vector
+import std::coroutine
+import std::mutable_vector
 
 fn counter() -> int:
     yield 1
@@ -409,7 +409,7 @@ fn make() -> Coroutine{args: [], return: int}:
     step
 
 fn first() -> int errors IndexNotFound:
-    queue = mutable_vector::from_list([make(), make()])
+    queue = std::mutable_vector::from_list([make(), make()])
     step = queue.at(0)
     step()
 
@@ -420,8 +420,8 @@ fn first() -> int errors IndexNotFound:
 @end
 
 @example accept
-import coroutine
-import mutable_vector
+import std::coroutine
+import std::mutable_vector
 
 fn counter() -> int:
     yield 1
@@ -432,7 +432,7 @@ fn make() -> Coroutine{args: [], return: int}:
     step
 
 fn first() -> int errors IndexNotFound:
-    queue = mutable_vector::from_list([make(), make()])
+    queue = std::mutable_vector::from_list([make(), make()])
     step = queue.take(0)
     step() + queue.length()
 
@@ -449,13 +449,13 @@ summary: ==, hash and the ImmutableSet operations are rejected for an affine val
 index: errors
 alias: compare two coroutines; equality of coroutine handles
 keywords: affine, equality, ==, !=, hash, ImmutableSet, coroutine, identity
-related: rule.equality concept.affine concept.coroutines error.affine-container-unsupported stdlib.immutable_set::from_list
+related: rule.equality concept.affine concept.coroutines error.affine-container-unsupported stdlib.std::immutable_set::from_list
 docs: AFFINE-VALUES.md COROUTINES.md
 code: CORE SEMANTIC AFFINE-EQUALITY-UNSUPPORTED
 
 == MEANING
 Comparing two affine values with `==` (or `!=`), hashing one, or giving
-one to `immutable_set::from_list` or `immutable_set::contains` is
+one to `std::immutable_set::from_list` or `std::immutable_set::contains` is
 rejected: the result would observe the identity of the execution the
 value owns, and a coroutine handle has no value equality. The check also
 applies inside a generic function: a call that gives it an affine
@@ -468,10 +468,10 @@ argument it compares is rejected at the call.
 == WHAT TO DO
 Compare unrestricted data instead: give each worker an int or str
 identity in a struct field beside its handle and compare that, or use
-`coroutine::done?` to ask about a coroutine's state.
+`std::coroutine::done?` to ask about a coroutine's state.
 
 @example reject
-import coroutine
+import std::coroutine
 
 fn counter() -> int:
     yield 1
@@ -511,7 +511,7 @@ value would be duplicated or lost there. The message names the position:
   * the program's result: a result is shown, never owned;
   * a module binding: module values are immutable and shared by every
     user of the module;
-  * an affine callable as the factory of `mutable_array::generate`,
+  * an affine callable as the factory of `std::mutable_array::generate`,
     which calls it once per element;
   * an untyped parameter of a function whose specialization for this
     argument was declined ("its semantic instance was declined"). This is
@@ -533,7 +533,7 @@ result of resuming, not the handle). For a declined specialization,
 declare the parameter's type: a typed parameter needs no specialization.
 
 @example reject
-import coroutine
+import std::coroutine
 
 fn counter() -> int:
     yield 1
@@ -550,7 +550,7 @@ keep(step)
 @end
 
 @example reject
-import coroutine
+import std::coroutine
 
 fn counter() -> int:
     yield 1
@@ -585,7 +585,7 @@ fine and leaves the struct live.
 
 == LIKELY CAUSES
   * `s = job.step` or `job.step()` on a struct holding a coroutine;
-  * `coroutine::done?(job.step)`.
+  * `std::coroutine::done?(job.step)`.
 
 == WHAT TO DO
 Destructure the struct, as the message suggests (`{step} = job`, or
@@ -594,7 +594,7 @@ is needed afterwards, build a new one from the parts:
 `again = Job {name: name, step: s}`.
 
 @example reject
-import coroutine
+import std::coroutine
 
 fn counter() -> int:
     yield 1
@@ -614,7 +614,7 @@ s()
 @end
 
 @example accept
-import coroutine
+import std::coroutine
 
 fn counter() -> int:
     yield 1
@@ -666,7 +666,7 @@ typed parameter owns the argument with no specialization. Or move the
 function to the top level of the module or program.
 
 @example reject
-import coroutine
+import std::coroutine
 
 fn counter() -> int:
     yield 1
@@ -685,7 +685,7 @@ run()
 @end
 
 @example accept
-import coroutine
+import std::coroutine
 
 fn counter() -> int:
     yield 1
@@ -740,21 +740,21 @@ functions the value passes through.
 
 @topic error.affine-list-operation-unsupported
 title: AFFINE-LIST-OPERATION-UNSUPPORTED: elements of an affine List accessed
-summary: list::at, list::append, iterating a List of affine values and collecting affine values in a loop would copy elements a List still owns; a List of them only moves whole.
+summary: std::list::at, std::list::append, iterating a List of affine values and collecting affine values in a loop would copy elements a List still owns; a List of them only moves whole.
 index: errors
-alias: list::at of a coroutine; iterate a list of coroutines; collect coroutines in a loop
-keywords: affine, List, list::at, list::append, loop, iteration, collecting loop, MutableVector, coroutine
-related: concept.lists concept.mutable-vector concept.affine error.affine-element-copy-out stdlib.mutable_vector::from_list stdlib.list::at
+alias: std::list::at of a coroutine; iterate a list of coroutines; collect coroutines in a loop
+keywords: affine, List, std::list::at, std::list::append, loop, iteration, collecting loop, MutableVector, coroutine
+related: concept.lists concept.mutable-vector concept.affine error.affine-element-copy-out stdlib.std::mutable_vector::from_list stdlib.std::list::at
 docs: AFFINE-VALUES.md MUTABLE-VECTOR.md
 code: CORE SEMANTIC AFFINE-LIST-OPERATION-UNSUPPORTED
 
 == MEANING
 A List is immutable, and a List of affine values owns them: it moves
 whole (bound, passed, returned) and releases every element where it
-dies, and `list::length` reads it. Every operation that would copy an
+dies, and `std::list::length` reads it. Every operation that would copy an
 element out while the List keeps owning it is rejected:
 
-  * `list::at`, `list::append` and the other List functions;
+  * `std::list::at`, `std::list::append` and the other List functions;
   * `loop s in xs:` over a List of affine values (the loop variable would
     be a second owner);
   * a collecting loop whose body produces affine values (its List would
@@ -763,19 +763,19 @@ element out while the List keeps owning it is rejected:
 Lists have no ownership-moving element operations; MutableVector does.
 
 == LIKELY CAUSES
-  * keeping workers in a List literal and picking one with `list::at`;
+  * keeping workers in a List literal and picking one with `std::list::at`;
   * `loop s in steps:` to resume each coroutine of a List;
   * `loop i from 0 to n: make()` to start n coroutines.
 
 == WHAT TO DO
-Use a MutableVector: `mutable_vector::from_list(xs)` moves the List into
-a vector, whose `take`, `pop` and `swap` move elements out and whose
-`loop s in v:` consumes it element by element. To collect values in a
-loop, `push` each one into a vector.
+Use a MutableVector: `std::mutable_vector::from_list(xs)` moves the List
+into a vector, whose `take`, `pop` and `swap` move elements out and whose
+`loop s in v:` consumes it element by element. To collect values in a loop,
+`push` each one into a vector.
 
 @example reject
-import coroutine
-import list
+import std::coroutine
+import std::list
 
 fn counter() -> int:
     yield 1
@@ -786,16 +786,16 @@ fn make() -> Coroutine{args: [], return: int}:
     step
 
 steps = [make(), make()]
-first = list::at(steps, 0)
+first = std::list::at(steps, 0)
 0
-@caption `list::at` would copy a coroutine the List still owns
+@caption `std::list::at` would copy a coroutine the List still owns
 @error CORE SEMANTIC AFFINE-LIST-OPERATION-UNSUPPORTED
-@at 13:18
+@at 13:23
 @end
 
 @example accept
-import coroutine
-import mutable_vector
+import std::coroutine
+import std::mutable_vector
 
 fn counter() -> int:
     yield 1
@@ -806,7 +806,7 @@ fn make() -> Coroutine{args: [], return: int}:
     step
 
 steps = [make(), make()]
-queue = mutable_vector::from_list(steps)
+queue = std::mutable_vector::from_list(steps)
 loop step in queue:
     step()
 @caption A vector made from the List is consumed one element at a time
@@ -850,7 +850,7 @@ use an infinite `loop:` whose every exit is a `break`, or decide inside
 the loop and move the value after it.
 
 @example reject
-import coroutine
+import std::coroutine
 
 error Boom
 
@@ -879,7 +879,7 @@ run(1)
 @end
 
 @example accept
-import coroutine
+import std::coroutine
 
 error Boom
 
@@ -915,13 +915,13 @@ title: AFFINE-TEMPORARY-UNSUPPORTED: a fresh affine value with no owner
 summary: A fresh affine value (a call's result, a construction) is given to an operation that only observes it, or a field of it is read, so nothing would own it.
 index: errors
 alias: done? of a fresh coroutine; field of a fresh affine struct
-keywords: affine, temporary, owner, coroutine::done?, field, observe, bind first
-related: concept.affine rule.affine-use error.affine-field-move-requires-destructure stdlib.coroutine::done?
+keywords: affine, temporary, owner, std::coroutine::done?, field, observe, bind first
+related: concept.affine rule.affine-use error.affine-field-move-requires-destructure stdlib.std::coroutine::done?
 docs: AFFINE-VALUES.md
 code: CORE SEMANTIC AFFINE-TEMPORARY-UNSUPPORTED
 
 == MEANING
-An operation that does not take ownership -- `coroutine::done?`, a
+An operation that does not take ownership -- `std::coroutine::done?`, a
 length, a read of a field -- needs an owner that keeps the value, so its
 operand must be a binding that owns it. A fresh value, such as the
 result of `make()`, has no owner there: the compiler would have no
@@ -929,17 +929,17 @@ binding to release it from afterwards, and the rest of a struct whose
 field is read would be lost.
 
 == LIKELY CAUSES
-  * `coroutine::done?(make())`;
+  * `std::coroutine::done?(make())`;
   * `make_job().name` on a function returning an affine struct.
 
 == WHAT TO DO
 Bind the value to a name first, then observe the binding:
-`step = make()` and `coroutine::done?(step)`; `job = make_job()` and
+`step = make()` and `std::coroutine::done?(step)`; `job = make_job()` and
 `job.name`. The binding owns the value and releases it after its last
 use.
 
 @example reject
-import coroutine
+import std::coroutine
 
 fn counter() -> int:
     yield 1
@@ -949,14 +949,14 @@ fn make() -> Coroutine{args: [], return: int}:
     coroutine {step} = counter()
     step
 
-coroutine::done?(make())
+std::coroutine::done?(make())
 @caption `done?` only observes; the fresh coroutine would have no owner
 @error CORE SEMANTIC AFFINE-TEMPORARY-UNSUPPORTED
-@at 11:18
+@at 11:23
 @end
 
 @example accept
-import coroutine
+import std::coroutine
 
 fn counter() -> int:
     yield 1
@@ -967,7 +967,7 @@ fn make() -> Coroutine{args: [], return: int}:
     step
 
 step = make()
-coroutine::done?(step)
+std::coroutine::done?(step)
 @caption Bound to a name, the coroutine has an owner
 @value false
 @end
@@ -978,7 +978,7 @@ summary: A MutableVector or MutableArray operation that mutates must be applied 
 index: errors
 alias: push to a temporary vector; mutate a captured vector; push as a function value
 keywords: MutableVector, MutableArray, push, set, swap, take, pop, place, receiver, temporary, nested function, module binding, function value
-related: concept.mutable-vector concept.mutable-array concept.values error.mutable-place-capture stdlib.mutable_vector::push
+related: concept.mutable-vector concept.mutable-array concept.values error.mutable-place-capture stdlib.std::mutable_vector::push
 docs: MUTABLE-VECTOR.md MUTABLE-ARRAY.md
 code: CORE SEMANTIC MUTABLE-PLACE-RECEIVER
 
@@ -1011,7 +1011,8 @@ rule the receiver breaks:
 == LIKELY CAUSES
   * `make_vector().push(x)`;
   * a nested helper that pushes to its enclosing function's vector;
-  * `p = mutable_vector::push`, or `apply(mutable_vector::push, v, x)`.
+  * `p = std::mutable_vector::push`, or `apply(std::mutable_vector::push, v,
+    x)`.
 
 == WHAT TO DO
 Bind the value to a name, mutate the name, and use the name afterwards.
@@ -1023,10 +1024,10 @@ function of your own that takes the collection and returns the updated
 one; the operations that only read (`length`, `at`) may be values.
 
 @example reject
-import mutable_vector
+import std::mutable_vector
 
 fn fresh() -> MutableVector[int]:
-    mutable_vector::from_list([1, 2])
+    std::mutable_vector::from_list([1, 2])
 
 fn grow() -> int:
     fresh().push(3)
@@ -1039,10 +1040,10 @@ grow()
 @end
 
 @example accept
-import mutable_vector
+import std::mutable_vector
 
 fn fresh() -> MutableVector[int]:
-    mutable_vector::from_list([1, 2])
+    std::mutable_vector::from_list([1, 2])
 
 fn grow() -> int:
     v = fresh()
@@ -1055,11 +1056,11 @@ grow()
 @end
 
 @example reject
-import mutable_vector
+import std::mutable_vector
 
 fn grow() -> int:
-    v = mutable_vector::from_list([1, 2])
-    p = mutable_vector::push
+    v = std::mutable_vector::from_list([1, 2])
+    p = std::mutable_vector::push
     p(v, 3)
     v.length()
 
@@ -1097,10 +1098,10 @@ Pass the collection as an argument: the callee gets its own logical copy
 it takes it as a parameter and returns the updated collection.
 
 @example reject
-import mutable_vector
+import std::mutable_vector
 
 fn fill() -> int:
-    log = mutable_vector::from_list([1])
+    log = std::mutable_vector::from_list([1])
     log.push(2)
     fn size() -> int:
         log.length()
@@ -1113,10 +1114,10 @@ fill()
 @end
 
 @example accept
-import mutable_vector
+import std::mutable_vector
 
 fn fill() -> int:
-    log = mutable_vector::from_list([1])
+    log = std::mutable_vector::from_list([1])
     log.push(2)
     fn size(v: MutableVector[int]) -> int:
         v.length()
@@ -1157,7 +1158,7 @@ code) for:
   * `coroutine step = worker(10)`: there is no sugar without braces.
 
 A field written twice is DUPLICATE-FIELD. Outside this form, `coroutine`
-is an ordinary name (`coroutine::done?`, a variable called coroutine).
+is an ordinary name (`std::coroutine::done?`, a variable called coroutine).
 
 == LIKELY CAUSES
   * `coroutine step = f()` written by analogy with an ordinary binding;
@@ -1170,7 +1171,7 @@ f(...)` keeps only the handle, `coroutine {first} = f(...)` only the
 first value (the coroutine still runs eagerly and is then released).
 
 @example reject
-import coroutine
+import std::coroutine
 
 fn counter() -> int:
     yield 1
@@ -1184,7 +1185,7 @@ step()
 @end
 
 @example accept
-import coroutine
+import std::coroutine
 
 fn counter() -> int:
     yield 1
@@ -1240,7 +1241,7 @@ values when it is constructed, as arguments of the coroutine's function
 (a coroutine construction moves its arguments in).
 
 @example reject
-import coroutine
+import std::coroutine
 
 fn drive(s: Coroutine{args: [int], return: int}) -> int:
     s(1)
@@ -1252,7 +1253,7 @@ fn drive(s: Coroutine{args: [int], return: int}) -> int:
 @end
 
 @example reject
-import coroutine
+import std::coroutine
 
 fn counter() -> int:
     yield 1
@@ -1305,7 +1306,7 @@ parameter is specialized for the handle (the call becomes a resume) and
 for functions alike.
 
 @example reject
-import coroutine
+import std::coroutine
 
 fn counter() -> int:
     yield 1
@@ -1322,7 +1323,7 @@ apply(step)
 @end
 
 @example accept
-import coroutine
+import std::coroutine
 
 fn counter() -> int:
     yield 1
@@ -1373,7 +1374,7 @@ and of the final result (e.g. a `finished` flag), declared as the root's
 result type.
 
 @example reject
-import coroutine
+import std::coroutine
 
 struct Progress:
     done: int
@@ -1393,7 +1394,7 @@ coroutine {step} = work()
 @end
 
 @example accept
-import coroutine
+import std::coroutine
 
 struct Status:
     done: int
@@ -1439,7 +1440,7 @@ Resume with the protocol the message states. To send values, declare
 root function's parameter list and read the fields of the yield's value.
 
 @example reject
-import coroutine
+import std::coroutine
 
 fn counter() -> int:
     yield 1
@@ -1494,7 +1495,7 @@ Declare one struct with the fields both need and use it as the protocol
 everywhere, or split the work into two coroutines.
 
 @example reject
-import coroutine
+import std::coroutine
 
 struct Start:
     n: int
@@ -1556,7 +1557,7 @@ Declare a struct with one field per value and name it in the clause:
         m.n
 
 @example reject
-import coroutine
+import std::coroutine
 
 fn echo(resume int) -> int:
     n = yield 0
@@ -1596,7 +1597,7 @@ Declare the protocol with `resume T` as the last entry of the function's
 parameter list (after its parameters, flags and context parameters).
 
 @example reject
-import coroutine
+import std::coroutine
 
 struct Ev:
     n: int
@@ -1613,7 +1614,7 @@ coroutine {step} = echo()
 @end
 
 @example accept
-import coroutine
+import std::coroutine
 
 struct In:
     n: int
@@ -1669,7 +1670,7 @@ and choose between the calls (`s = if c: make_a() else: make_b()`, with
 one Coroutine{...} result type).
 
 @example reject
-import coroutine
+import std::coroutine
 
 fn plain() -> int:
     3
@@ -1717,7 +1718,7 @@ and resume `step()` for the next values. Call it directly only from
 functions that themselves run inside a coroutine.
 
 @example reject
-import coroutine
+import std::coroutine
 
 fn counter() -> int:
     yield 1
@@ -1730,7 +1731,7 @@ counter()
 @end
 
 @example accept
-import coroutine
+import std::coroutine
 
 fn counter() -> int:
     yield 1
@@ -1766,7 +1767,7 @@ Move the yielding code into a function and start it with
 `coroutine {step, first} = f(...)`.
 
 @example reject
-import coroutine
+import std::coroutine
 
 x = yield 3
 x
@@ -2240,7 +2241,7 @@ fn size(value: Measured) -> int:
     value.length()
 
 size("hello")
-@caption String satisfies `Measured` through its owner's `str::length`
+@caption String satisfies `Measured` through its owner's `std::str::length`
 @value 5
 @end
 
@@ -2732,11 +2733,11 @@ program (as small as you can make it) with the full message.
 
 @topic error.ambiguous-context-implementation
 title: AMBIGUOUS-CONTEXT-IMPLEMENTATION: two providers of one context trait
-summary: A call needs a context trait (such as io::IO) and more than one installed context implements it; the compiler never ranks providers, so exactly one must be installed.
+summary: A call needs a context trait (such as std::io::IO) and more than one installed context implements it; the compiler never ranks providers, so exactly one must be installed.
 index: errors
 alias: two contexts implement the same context trait; ambiguous io provider
-keywords: context trait, installed context, provider, selection, with context, io::IO, LinuxIO, ranking
-related: concept.context-traits concept.contexts rule.context-installation error.missing-context stdlib.module.io stdlib.module.linux::io
+keywords: context trait, installed context, provider, selection, with context, std::io::IO, LinuxIO, ranking
+related: concept.context-traits concept.contexts rule.context-installation error.missing-context stdlib.module.std::io stdlib.module.std::linux::io
 docs: CONTEXT-TRAITS.md CONTEXTS.md
 code: CORE SEMANTIC AMBIGUOUS-CONTEXT-IMPLEMENTATION
 
@@ -2756,8 +2757,8 @@ A coroutine's providers are chosen where it is constructed; a new
 construction after a second installation is ambiguous too.
 
 == LIKELY CAUSES
-  * installing a test or capture context for io::IO beside
-    `linux::io::create()`;
+  * installing a test or capture context for std::io::IO beside
+    `std::linux::io::create()`;
   * two libraries each installing a context that implements one trait.
 
 == HOW TO INVESTIGATE
@@ -2771,8 +2772,8 @@ need it. Installation is per program, so a program that needs a
 different provider (a test) installs only that one.
 
 @example reject
-import io
-import linux::io
+import std::io
+import std::linux::io
 
 context struct Capture:
     lines: int
@@ -2783,19 +2784,19 @@ fn write_text(text: str, context c: Capture) -> unit:
 fn write_error_text(text: str, context c: Capture) -> unit:
     unit
 
-fn hello() -> unit errors io::WriteFailed:
-    io::print_line("hello")
+fn hello() -> unit errors std::io::WriteFailed:
+    std::io::print_line("hello")
 
 with context Capture {lines: 0}
-with context linux::io::create()
+with context std::linux::io::create()
 hello()
-@caption Capture and LinuxIO both implement io::IO
+@caption Capture and LinuxIO both implement std::io::IO
 @error CORE SEMANTIC AMBIGUOUS-CONTEXT-IMPLEMENTATION
 @at 18:1
 @end
 
 @example accept
-import io
+import std::io
 
 context struct Capture:
     lines: int
@@ -2806,14 +2807,14 @@ fn write_text(text: str, context c: Capture) -> unit:
 fn write_error_text(text: str, context c: Capture) -> unit:
     unit
 
-fn hello() -> unit errors io::WriteFailed:
-    io::print_line("hello")
+fn hello() -> unit errors std::io::WriteFailed:
+    std::io::print_line("hello")
 
 with context Capture {lines: 0}
 hello():
-    on io::WriteFailed:
+    on std::io::WriteFailed:
         unit
-@caption One provider installed: io::print_line writes through Capture
+@caption One provider installed: std::io::print_line writes through Capture
 @value unit
 @end
 
@@ -2822,7 +2823,7 @@ title: CONTEXT-TRAIT-MISUSE: a context-trait binding used as a value
 summary: A context-trait binding (`context io: IO`) is not a value: its only use is calling one of the trait's operations on it; it cannot be passed, stored, returned, compared, projected or tested.
 index: errors
 alias: pass a context trait binding; context trait binding is not a value
-keywords: context trait, context parameter, binding, value, operation, method call, io::IO
+keywords: context trait, context parameter, binding, value, operation, method call, std::io::IO
 related: concept.context-traits concept.contexts error.trait-unknown-operation error.context-trait-position
 docs: CONTEXT-TRAITS.md
 code: CORE SEMANTIC CONTEXT-TRAIT-MISUSE

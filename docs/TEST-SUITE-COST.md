@@ -216,7 +216,7 @@ already works around it with `lsort -unique`.
 
 The redundant build is **42.6-44.6% of all front-end time: about 573-601 s,
 12% of the suite**, and user compiles get roughly 40-48% faster in the front end
-(on a quiet machine: csv_records about 885 → 510 ms, `import web` about
+(on a quiet machine: csv_records about 885 → 510 ms, `import std::web` about
 245 → 130 ms). Over 3977 redundant builds in 20 test files, the redundant build
 produced byte-identical HIR and identical `::hir`/`::core`/`::surface`/`::native`
 namespace state, and all 20 files pass with an early return in place (checked on
@@ -398,8 +398,8 @@ land before the reductions that depend on them (section 10):
   driver is 4% of the suite.
 * Dropping `cranelift-generic` from the default backend lists: it is about 10% of
   lowering time and the only unspecialized-baseline coverage.
-* Module summaries for `lib/` imports: on an idle machine `import web` costs
-  about 250 ms of front end and `import linux` about 110 ms, everything else at
+* Module summaries for `stdlib/` imports: on an idle machine `import std::web` costs
+  about 250 ms of front end and `import std::linux` about 110 ms, everything else at
   most about 35 ms; the programs' own code dominates.
 * Persistent worker processes: first-call warm-up is about 30 ms.
 * Segmenting by compiler tier: not needed for any of the above.

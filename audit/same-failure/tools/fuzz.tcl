@@ -26,11 +26,11 @@
 #               fails of one of the enclosing function's failures: predicted on
 #               its own, never grouped with the enclosing function's fails
 #
-# Every third seed is *namespaced*: the program imports module sfm (written
+# Every third seed is *namespaced*: the program imports module std::sfm (written
 # to a private copy of the library), whose `error Bad` is the identity
-# sfm::Bad beside the program's own Bad -- the same short name, another
+# std::sfm::Bad beside the program's own Bad -- the same short name, another
 # failure. Functions may declare and raise both; the oracle groups by the
-# exact name written (Bad, sfm::Bad), so it predicts they never group
+# exact name written (Bad, std::sfm::Bad), so it predicts they never group
 # (ERROR-PAYLOADS.md, "Module-qualified error identity").
 #
 # Each failure is raised from 1 to 4 reachable exits of a function. About a
@@ -317,8 +317,8 @@ proc generate {seed} {
     set lines {}
     set ::names $::failureNames
     if {$seed % 3 == 0} {
-        lappend ::names sfm::Bad
-        lappend lines "import sfm"
+        lappend ::names std::sfm::Bad
+        lappend lines "import std::sfm"
         census namespaced
     }
     foreach n $::names {

@@ -32,13 +32,13 @@
 # narrow it back to Entry. Keys and values stay untyped (`any` fields).
 #
 # The lookup, replacement and removal scans are counted loops over the List
-# they read, so their list::at needs no IndexNotFound (proven); growth's
-# walk of a bucket is tail recursion, whose list::at is checked, and the
+# they read, so their std::list::at needs no IndexNotFound (proven); growth's
+# walk of a bucket is tail recursion, whose std::list::at is checked, and the
 # bucket array's own at/set index by a computed `mod` and are checked too.
 #
 # policy: 1/1
-import list
-import mutable_array
+import std::list
+import std::mutable_array
 
 struct Entry:
     hash: int
@@ -69,7 +69,7 @@ fn slots_for(expected: int, cap: int) -> int:
     slots_for(expected, cap * 2)
 
 fn empty_table(cap: int) -> Table:
-    Table {buckets: mutable_array::create(cap, []), meta: mutable_array::create(1, 0)}
+    Table {buckets: std::mutable_array::create(cap, []), meta: std::mutable_array::create(1, 0)}
 
 fn fresh(expected: int) -> Table:
     empty_table(slots_for(expected, min_slots()))
@@ -99,34 +99,34 @@ fn bucket(t: Table, h: int) -> List[Entry] errors IndexNotFound:
 # written in both scans rather than as a helper: native lowering would call
 # the helper once per entry examined.)
 fn position(b: List[Entry], h: int, key) -> int:
-    loop j from 0 to list::length(b):
-        e = list::at(b, j)
+    loop j from 0 to std::list::length(b):
+        e = std::list::at(b, j)
         if e.hash == h and e.key == key:
             return j
     -1
 
 # The value of KEY (hash H) in bucket B, or DEFAULT.
 fn value_in(b: List[Entry], h: int, key, default):
-    loop j from 0 to list::length(b):
-        e = list::at(b, j)
+    loop j from 0 to std::list::length(b):
+        e = std::list::at(b, j)
         if e.hash == h and e.key == key:
             return e.value
     default
 
 # Bucket B with its entry at J replaced by E.
 fn replaced(b: List[Entry], j: int, e: Entry) -> List[Entry]:
-    loop k from 0 to list::length(b):
+    loop k from 0 to std::list::length(b):
         if k == j:
             e
         else:
-            list::at(b, k)
+            std::list::at(b, k)
 
 # Bucket B without its entry at J.
 fn without(b: List[Entry], j: int) -> List[Entry]:
-    loop k from 0 to list::length(b):
+    loop k from 0 to std::list::length(b):
         if k == j:
             continue
-        list::at(b, k)
+        std::list::at(b, k)
 
 # ---------------------------------------------------------------------------
 # Lookup
@@ -146,7 +146,7 @@ fn probes(t: Table, key) -> int errors IndexNotFound:
     b = bucket(t, h)
     j = position(b, h, key)
     if j < 0:
-        return list::length(b)
+        return std::list::length(b)
     j + 1
 
 # ---------------------------------------------------------------------------
@@ -155,7 +155,7 @@ fn probes(t: Table, key) -> int errors IndexNotFound:
 # T with entry E appended to its bucket (E's key is absent from T).
 fn appended(t: Table, e: Entry) -> Table errors IndexNotFound:
     i = home(e.hash, slots(t))
-    t.buckets.set(i, list::append(t.buckets.at(i), e))
+    t.buckets.set(i, std::list::append(t.buckets.at(i), e))
     t
 
 # T with its entry count increased by DELTA.
@@ -165,9 +165,9 @@ fn counted(t: Table, delta: int) -> Table errors IndexNotFound:
 
 # DEST with the entries of bucket B from position J on appended to it.
 fn rehomed(b: List[Entry], j: int, dest: Table) -> Table errors IndexNotFound:
-    if j >= list::length(b):
+    if j >= std::list::length(b):
         return dest
-    rehomed(b, j + 1, appended(dest, list::at(b, j)))
+    rehomed(b, j + 1, appended(dest, std::list::at(b, j)))
 
 # DEST with the entries of OLD's buckets from bucket I on appended to it.
 fn moved(old: Table, i: int, dest: Table) -> Table errors IndexNotFound:
@@ -191,7 +191,7 @@ fn put(t: Table, key, value) -> Table errors IndexNotFound:
         return t
     if full?(t):
         return counted(appended(grown(t), Entry {hash: h, key: key, value: value}), 1)
-    t.buckets.set(i, list::append(b, Entry {hash: h, key: key, value: value}))
+    t.buckets.set(i, std::list::append(b, Entry {hash: h, key: key, value: value}))
     counted(t, 1)
 
 # ---------------------------------------------------------------------------
@@ -212,9 +212,9 @@ fn drop(t: Table, key) -> Table errors IndexNotFound:
 
 # The table of KEYS[i] -> VALS[i], in order (a later duplicate's value wins).
 fn from_lists(keys: list, vals: list) -> Table errors IndexNotFound:
-    n = list::length(keys)
+    n = std::list::length(keys)
     fn fill(t: Table, i: int) -> Table errors IndexNotFound:
         if i >= n:
             return t
-        fill(put(t, list::at(keys, i), list::at(vals, i)), i + 1)
+        fill(put(t, std::list::at(keys, i), std::list::at(vals, i)), i + 1)
     fill(fresh(n), 0)

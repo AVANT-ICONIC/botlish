@@ -1,6 +1,6 @@
 # A failed method call's binding used again, and an independent result-type error after it.
 primary 4:14
-fix 1 import str
+fix 1 import std::str
 fix 4     loud = s
 cascade 5:19
 primary 3:9

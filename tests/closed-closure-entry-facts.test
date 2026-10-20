@@ -102,10 +102,10 @@ proc paramGuards {hir analysis id} {
 # the guard is gone -- through the existing guard machinery, unmodified.
 
 set ::positiveFixture {
-import str
+import std::str
 fn outer(tag):
     fn inner(x):
-        str::length(x) + str::length(tag)
+        std::str::length(x) + std::str::length(tag)
     inner("a") + inner("bb")
 outer("v")
 }
@@ -120,7 +120,7 @@ test closed-single-kind-closure-theorem-is-str {the closed-caller theorem for in
     hir::specialize::closedCallerTheorem $hir $analysis [specId $analysis inner]
 } -result {str}
 
-test closed-single-kind-closure-guard-eliminated {before this milestone (-closed-caller-facts-opt 0) inner's own "str::length(x) + str::length(tag)" has an UnknownParameterKind guard; with the theorem applied, the guard is gone} -body {
+test closed-single-kind-closure-guard-eliminated {before this milestone (-closed-caller-facts-opt 0) inner's own "std::str::length(x) + std::str::length(tag)" has an UnknownParameterKind guard; with the theorem applied, the guard is gone} -body {
     lassign [specOf $::positiveFixture] hir analysis
     lassign [specOf $::positiveFixture -closed-caller-facts-opt 0] hir0 before
     list [paramGuards $hir0 $before [specId $before inner]] \
@@ -149,10 +149,10 @@ test closed-single-kind-closure-instance-count-unchanged {used-instance count (p
 
 test closed-multi-caller-theorem-not-copied-from-first {a third exact Str caller keeps the theorem exactly Str, not the first caller's own possibly-narrower fact by coincidence} -body {
     lassign [specOf {
-import str
+import std::str
 fn outer(tag):
     fn inner(x):
-        str::length(x) + str::length(tag)
+        std::str::length(x) + std::str::length(tag)
     inner("a") + inner("bb") + inner("ccc")
 outer("v")
 }] hir analysis
@@ -166,14 +166,14 @@ outer("v")
 # single kind, and a guard that is genuinely necessary must stay necessary.
 
 set ::mixedFixture {
-import str
+import std::str
 fn outer(tag):
     fn inner(x):
-        str::concat(tag, "")
+        std::str::concat(tag, "")
         x
     identity_a = inner(tag)
     identity_b = inner(true)
-    str::length(tag)
+    std::str::length(tag)
 outer("v")
 }
 
@@ -189,10 +189,10 @@ test closed-mixed-kind-closure-theorem-widens-to-any {the theorem for inner's ow
 
 test closed-mixed-kind-closure-guard-retained-when-necessary {a genuinely kind-requiring parameter with disagreeing exact callers keeps its guard: closedness never manufactures an unsound narrowing (spec items 27, 64)} -body {
     lassign [specOf {
-import str
+import std::str
 fn outer(tag):
     fn inner(x):
-        str::length(x) + str::length(tag)
+        std::str::length(x) + std::str::length(tag)
     inner("a") + inner(true)
 outer("v")
 }] hir analysis
@@ -210,10 +210,10 @@ outer("v")
 # to pass Str.
 
 set ::openFixture {
-import str
+import std::str
 fn outer(tag):
     fn inner(x):
-        str::length(x) + str::length(tag)
+        std::str::length(x) + std::str::length(tag)
     fn apply(f, y):
         f(y)
     inner("a") + apply(inner, "bb")
@@ -272,10 +272,10 @@ test open-instance-callvalue-with-exact-callable-opt-off {with -exact-callable-o
 
 test exact-alias-reference-is-not-currently-vouched-for {"alias = inner" is a plain value reference to inner: blockescape's own single-level RefsAsCalls check (a reference must itself be a call's callee) does not recognize it, so inner is conservatively NOT closed -- pinning the actual current answer to spec item 19, not assuming one} -body {
     lassign [specOf {
-import str
+import std::str
 fn outer(tag):
     fn inner(x):
-        str::length(x) + str::length(tag)
+        std::str::length(x) + std::str::length(tag)
     alias = inner
     inner("a") + alias("bb")
 outer("v")
@@ -302,10 +302,10 @@ test escaping-closure-prevents-closedness {a closure passed into an ordinary unt
 # through middle's own (equally closed) caller facts.
 
 set ::capturedThroughParentFixture {
-import str
+import std::str
 fn outer(tag):
     fn inner(x):
-        str::length(x) + str::length(tag)
+        std::str::length(x) + std::str::length(tag)
     fn middle(y):
         inner(y)
     middle("a") + middle("bb")
@@ -340,11 +340,11 @@ test captured-through-parent-guard-eliminated {inner's own guard is gone under t
 
 test zero-caller-instance-not-closed {a value-capturing closure with no exact caller at all is not closed: zero callers never produce an arbitrary theorem (spec item 32's own "Required: no")} -body {
     lassign [specOf {
-import str
+import std::str
 fn outer(tag):
     fn inner(x):
-        x + str::length(tag)
-    str::length(tag)
+        x + std::str::length(tag)
+    std::str::length(tag)
 outer("v")
 }] hir analysis
     hir::specialize::closed $hir $analysis [specId $analysis inner]
@@ -358,13 +358,13 @@ outer("v")
 # does).
 
 set ::recursiveFixture {
-import str
+import std::str
 fn outer(tag):
     fn inner(x, s):
-        if str::length(s) <= 0:
-            str::length(x) + str::length(tag)
+        if std::str::length(s) <= 0:
+            std::str::length(x) + std::str::length(tag)
         else:
-            inner(x, str::substring(s, 1, str::length(s)))
+            inner(x, std::str::substring(s, 1, std::str::length(s)))
     inner("a", "abc") + inner("bb", "b")
 outer("v")
 }
@@ -372,8 +372,8 @@ outer("v")
 # Both parameters are Strings, so both stay generic positions (Int ones are
 # key positions since loss point 1): x is refined by the two outer callers
 # alone (the self call forwards it unchanged), s by outer's literals joined
-# with the self call's derived str::substring(s, 1, ...) argument.
-test recursive-self-edge-closed-with-theorem {inner, self-recursive on its own second parameter, is closed and both parameters resolve to Str -- x via its two non-self (outer) callers, s via outer's own literals joined with the self-call's own derived (str::substring(s, 1, ...), not an unchanged forward) argument} -body {
+# with the self call's derived std::str::substring(s, 1, ...) argument.
+test recursive-self-edge-closed-with-theorem {inner, self-recursive on its own second parameter, is closed and both parameters resolve to Str -- x via its two non-self (outer) callers, s via outer's own literals joined with the self-call's own derived (std::str::substring(s, 1, ...), not an unchanged forward) argument} -body {
     lassign [specOf $::recursiveFixture] hir analysis
     list [hir::specialize::closed $hir $analysis [specId $analysis inner]] \
          [hir::specialize::closedCallerTheorem $hir $analysis [specId $analysis inner]]
@@ -391,16 +391,16 @@ test recursive-self-edge-guard-eliminated {both of inner's own guards (x's use, 
 # neither erases the other, and instance identity is still untouched.
 
 set ::declaredPlusCallerFixture {
-import list
-import str
+import std::list
+import std::str
 type Byte = Int in 0..255
 fn byteA() -> Byte:
     97
 
 fn outer(tag):
     fn inner(xs: List[Byte]):
-        list::length(xs)
-        str::length(tag)
+        std::list::length(xs)
+        std::str::length(tag)
     inner([byteA(), byteA()])
     inner([byteA()])
 outer("v")

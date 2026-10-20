@@ -1,6 +1,6 @@
-import byte
+import std::byte
 
-# Probe B: byte::from_int on a statically nonnegative Int. nonneg/g are
+# Probe B: std::byte::from_int on a statically nonnegative Int. nonneg/g are
 # verbatim tests/errors.test errors-byte-from-int-partial-range-elimination;
 # the driver loop supplies unconstrained inputs.
 fn nonneg(m) -> int:
@@ -8,11 +8,11 @@ fn nonneg(m) -> int:
         0 - m
     else:
         m
-fn g(m) -> int errors byte::AboveRange:
-    byte::from_int(nonneg(m))
+fn g(m) -> int errors std::byte::AboveRange:
+    std::byte::from_int(nonneg(m))
 ns = [0 - 7, 45, 300]
 loop n in ns:
     r = g(n):
-        on byte::AboveRange:
+        on std::byte::AboveRange:
             0
     r

@@ -4,15 +4,15 @@
 compiled 35 of 40 programs
   not compiled: examples/surface/09-mutual-recursion.bot (CORE SEMANTIC UNBOUND) -- a deliberate rejection
   not compiled: examples/surface/10-duplicate-binding.bot (CORE SEMANTIC DUPLICATE) -- a deliberate rejection
-  not compiled: lib/io.bot (CORE SEMANTIC CONTEXT-FUNCTION-VALUE)
-  not compiled: lib/list.bot (SURFACE MODULE MISSING-IMPORT)
-  not compiled: lib/mutable_array.bot (SURFACE MODULE MISSING-IMPORT)
+  not compiled: stdlib/io.bot (CORE SEMANTIC CONTEXT-FUNCTION-VALUE)
+  not compiled: stdlib/list.bot (SURFACE MODULE MISSING-IMPORT)
+  not compiled: stdlib/mutable_array.bot (SURFACE MODULE MISSING-IMPORT)
 
 ## Findings: 1 distinct
-1. lib/abi/bytes.bot:141:9: `abi::bytes::replace`: failure `IndexNotFound` from 2 exits (first seen compiling lib/linux.bot)
-     lib/abi/bytes.bot:141:9: fail IndexNotFound
-     lib/abi/bytes.bot:143:9: fail IndexNotFound
-     HAND: combine -- the two halves of one bounds check (`index < 0`, `index >= count`), written as an if/elif pair that fails the same IndexNotFound; the failure itself is uniform by design (the header: "the same error list::at and mutable_array::set use"), so a split is not a candidate: the natural responses are merging the guards into one `or` condition or keeping the two-line form
+1. stdlib/abi/bytes.bot:141:9: `std::abi::bytes::replace`: failure `IndexNotFound` from 2 exits (first seen compiling stdlib/linux.bot)
+     stdlib/abi/bytes.bot:141:9: fail IndexNotFound
+     stdlib/abi/bytes.bot:143:9: fail IndexNotFound
+     HAND: combine -- the two halves of one bounds check (`index < 0`, `index >= count`), written as an if/elif pair that fails the same IndexNotFound; the failure itself is uniform by design (the header: "the same error std::list::at and std::mutable_array::set use"), so a split is not a candidate: the natural responses are merging the guards into one `or` condition or keeping the two-line form
 
 ## Categories
   combine: 1
@@ -23,20 +23,20 @@ compiled 35 of 40 programs
 ## Fail census (functions with at least one structurally reachable fail of a declared failure)
   functions: 15 (2 with a single fail site); reachable fail sites: 28; re-raises: 0
   near misses -- two or more fail sites, every one a DISTINCT failure (never a finding): 12
-     lib/abi.bot:193: `i8`: AbiIntegerAboveRange, AbiIntegerBelowRange
-     lib/abi.bot:201: `i16`: AbiIntegerAboveRange, AbiIntegerBelowRange
-     lib/abi.bot:209: `i32`: AbiIntegerAboveRange, AbiIntegerBelowRange
-     lib/abi.bot:217: `i64`: AbiIntegerAboveRange, AbiIntegerBelowRange
-     lib/abi.bot:225: `u8`: AbiIntegerAboveRange, AbiIntegerBelowRange
-     lib/abi.bot:233: `u16`: AbiIntegerAboveRange, AbiIntegerBelowRange
-     lib/abi.bot:241: `u32`: AbiIntegerAboveRange, AbiIntegerBelowRange
-     lib/abi.bot:249: `u64`: AbiIntegerAboveRange, AbiIntegerBelowRange
-     lib/abi.bot:258: `isize`: AbiIntegerAboveRange, AbiIntegerBelowRange
-     lib/abi.bot:266: `usize`: AbiIntegerAboveRange, AbiIntegerBelowRange
-     lib/abi/x86_64.bot:79: `abi::x86_64::register64`: Register64AboveRange, Register64BelowRange
-     lib/byte.bot:151: `byte::from_int`: AboveRange, BelowRange
+     stdlib/abi.bot:193: `i8`: AbiIntegerAboveRange, AbiIntegerBelowRange
+     stdlib/abi.bot:201: `i16`: AbiIntegerAboveRange, AbiIntegerBelowRange
+     stdlib/abi.bot:209: `i32`: AbiIntegerAboveRange, AbiIntegerBelowRange
+     stdlib/abi.bot:217: `i64`: AbiIntegerAboveRange, AbiIntegerBelowRange
+     stdlib/abi.bot:225: `u8`: AbiIntegerAboveRange, AbiIntegerBelowRange
+     stdlib/abi.bot:233: `u16`: AbiIntegerAboveRange, AbiIntegerBelowRange
+     stdlib/abi.bot:241: `u32`: AbiIntegerAboveRange, AbiIntegerBelowRange
+     stdlib/abi.bot:249: `u64`: AbiIntegerAboveRange, AbiIntegerBelowRange
+     stdlib/abi.bot:258: `isize`: AbiIntegerAboveRange, AbiIntegerBelowRange
+     stdlib/abi.bot:266: `usize`: AbiIntegerAboveRange, AbiIntegerBelowRange
+     stdlib/abi/x86_64.bot:79: `std::abi::x86_64::register64`: Register64AboveRange, Register64BelowRange
+     stdlib/byte.bot:151: `std::byte::from_int`: AboveRange, BelowRange
 
 ## Merge check (scratch copy of the library; the corpus is not edited)
-  lib/abi/bytes.bot: original probe: 1 SAME-FAILURE finding(s), value [[], [3, false], [3, false], [], [], [], [3, true]]
-  lib/abi/bytes.bot: merged copy:    0 SAME-FAILURE finding(s), value [[], [3, false], [3, false], [], [], [], [3, true]]
-  lib/abi/bytes.bot: merge holds (compiles, finding gone, same value)
+  stdlib/abi/bytes.bot: original probe: 1 SAME-FAILURE finding(s), value [[], [3, false], [3, false], [], [], [], [3, true]]
+  stdlib/abi/bytes.bot: merged copy:    0 SAME-FAILURE finding(s), value [[], [3, false], [3, false], [], [], [], [3, true]]
+  stdlib/abi/bytes.bot: merge holds (compiles, finding gone, same value)

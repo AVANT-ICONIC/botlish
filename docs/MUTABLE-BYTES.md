@@ -1,11 +1,11 @@
-# `abi::bytes::MutableBytes`: a writable value, and `linux::read`
+# `std::abi::bytes::MutableBytes`: a writable value, and `std::linux::read`
 
-> **Since LINUX-SYSCALL-TRANSPORTS.md** `linux::read` (lib/linux.bot) calls
-> `linux::sys::read`, the read(2) transport of the compilation target's
-> architecture (`lib/linux/sys.x86_64.bot`, whose body is the one shown
-> below -- returning `{result, data}` for `linux::read` to wrap in its
-> `ReadResult` -- or `lib/linux/sys.aarch64.bot`); the x86-64 transport is
-> spelled `linux::abi::x86_64::syscall`. Semantics and evidence are
+> **Since LINUX-SYSCALL-TRANSPORTS.md** `std::linux::read` (stdlib/linux.bot) calls
+> `std::linux::sys::read`, the read(2) transport of the compilation target's
+> architecture (`stdlib/linux/sys.x86_64.bot`, whose body is the one shown
+> below -- returning `{result, data}` for `std::linux::read` to wrap in its
+> `ReadResult` -- or `stdlib/linux/sys.aarch64.bot`); the x86-64 transport is
+> spelled `std::linux::abi::x86_64::syscall`. Semantics and evidence are
 > unchanged.
 
 ## Outcome
@@ -16,21 +16,21 @@ descriptor -- without libc, without a special `read` in the runtime, and without
 compiler knowing that syscall number 0 exists:
 
 ```botlish
-import abi
-import linux
+import std::abi
+import std::linux
 
-buffer = abi::bytes::zeroed(abi::usize(4096))
-result = linux::read(abi::i32(0), buffer)
+buffer = std::abi::bytes::zeroed(std::abi::usize(4096))
+result = std::linux::read(std::abi::i32(0), buffer)
 ...
 ```
 
 ```
 stdin
   --kernel read(2)-----------------> bytes written through a WRITABLE machine address
-local logical abi::bytes::MutableBytes      (linux::read's own detached copy of `buffer`)
-  --linux::ReadResult--------------> raw ssize_t + the updated buffer
-  --abi::bytes::freeze_prefix-------------> abi::bytes::Bytes of exactly the bytes read
-  --linux::write-------------------> write(2) to descriptor 1
+local logical std::abi::bytes::MutableBytes      (std::linux::read's own detached copy of `buffer`)
+  --std::linux::ReadResult--------------> raw ssize_t + the updated buffer
+  --std::abi::bytes::freeze_prefix-------------> std::abi::bytes::Bytes of exactly the bytes read
+  --std::linux::write-------------------> write(2) to descriptor 1
 ```
 
 `examples/linux/read-stdin.bot`, as a standalone executable, fed
@@ -41,7 +41,7 @@ every byte came from (`strace -f -k`):
 [pid N] read(0, "hello from stdin\n", 4096) = 17
  > botlish_linux_x86_64_syscall+0x1f
  > rt_linux_x86_64_syscall+0x493
- > botlish_fn_14+0x113               <- linux::read
+ > botlish_fn_14+0x113               <- std::linux::read
  > botlish_fn_0+0x78                 <- the program
 [pid N] write(1, "hello from stdin\n", 17) = 17     <- the already implemented raw write
  > botlish_linux_x86_64_syscall+0x1f ...
@@ -82,9 +82,9 @@ returning it and storing it are plain sharing, and *independence holds through e
 route at once* -- including the ones nobody enumerated -- because there is nothing
 that could write through a shared pointer. The update operations are:
 
-* `abi::bytes::replace(data, i, b)`: a fresh storage equal to `data` with byte `i`
+* `std::abi::bytes::replace(data, i, b)`: a fresh storage equal to `data` with byte `i`
   replaced (`rt_mbytes_set`: allocate, copy, write one byte; `data` is never written).
-* `linux::read(fd, data)`: starts with `local = abi::bytes::detach(data)` -- a
+* `std::linux::read(fd, data)`: starts with `local = std::abi::bytes::detach(data)` -- a
   fresh storage (`rt_mbytes_clone`) -- and the *kernel* writes into `local`; `local`
   is returned as `result.data`. The caller's `data` is untouched.
 
@@ -98,12 +98,12 @@ spec asked for a runtime-kind-aware copy mechanism "if it fits cleanly"; the cen
 says the boundaries are the wrong place for it in this architecture, and the
 kind-checked clone (`rt_mbytes_clone`, which refuses anything that is not a writable
 storage) is the one primitive such a mechanism would call. Nothing keys on the
-spelling `abi::bytes::MutableBytes`: the runtime kind (`KIND_MUTBYTES` / `{mutbytes HEX}`)
+spelling `std::abi::bytes::MutableBytes`: the runtime kind (`KIND_MUTBYTES` / `{mutbytes HEX}`)
 is the discriminator.
 
-## Source surface (lib/abi/bytes.bot, lib/linux.bot)
+## Source surface (stdlib/abi/bytes.bot, stdlib/linux.bot)
 
-One module, `abi::bytes` (`lib/abi/bytes.bot`), owns **both** opaque types and holds
+One module, `std::abi::bytes` (`stdlib/abi/bytes.bot`), owns **both** opaque types and holds
 only the primitive operations -- every function that projects or constructs a
 representation, and nothing else:
 
@@ -114,30 +114,30 @@ opaque struct MutableBytes:
     storage: any
 
 fn from_list(values: List[Byte]) -> Bytes
-fn length(data: Bytes) -> abi::Usize
+fn length(data: Bytes) -> std::abi::Usize
 
-fn zeroed(length: abi::Usize) -> MutableBytes
+fn zeroed(length: std::abi::Usize) -> MutableBytes
 fn from_bytes(data: Bytes) -> MutableBytes
-fn mutable_length(data: MutableBytes) -> abi::Usize
+fn mutable_length(data: MutableBytes) -> std::abi::Usize
 fn replace(data: MutableBytes, index: int, value: Byte) -> MutableBytes errors IndexNotFound
 fn detach(data: MutableBytes) -> MutableBytes
 fn freeze(data: MutableBytes) -> Bytes
-fn freeze_prefix(data: MutableBytes, count: abi::Usize) -> Bytes errors UpperOverrun
+fn freeze_prefix(data: MutableBytes, count: std::abi::Usize) -> Bytes errors UpperOverrun
 
-abi::x86_64::from_mutable_bytes(data: abi::bytes::MutableBytes) -> abi::x86_64::Register64   # root native
+std::abi::x86_64::from_mutable_bytes(data: std::abi::bytes::MutableBytes) -> std::abi::x86_64::Register64   # root native
 
-# lib/linux.bot
+# stdlib/linux.bot
 struct ReadResult:
     result: int
-    data: abi::bytes::MutableBytes
+    data: std::abi::bytes::MutableBytes
 
-fn read(fd: abi::I32, data: abi::bytes::MutableBytes) -> ReadResult
+fn read(fd: std::abi::I32, data: std::abi::bytes::MutableBytes) -> ReadResult
 ```
 
-Qualified with the full path (`abi::bytes::zeroed(n)`), the way `abi::x86_64::from_i32` is; after
-`import abi::bytes` the same functions are method candidates (`buffer.freeze_prefix(n)`). A struct
+Qualified with the full path (`std::abi::bytes::zeroed(n)`), the way `std::abi::x86_64::from_i32` is; after
+`import std::abi::bytes` the same functions are method candidates (`buffer.freeze_prefix(n)`). A struct
 cannot be imported by short name (`import type` accepts `type` declarations only), so signatures
-spell `abi::bytes::MutableBytes` in full.
+spell `std::abi::bytes::MutableBytes` in full.
 
 ### Why one module, and why these names
 
@@ -153,25 +153,25 @@ spell `abi::bytes::MutableBytes` in full.
 * **Primitives only.** All nine functions are one native call plus a wrap. Two could be derived --
   `freeze` as `freeze_prefix(d, mutable_length(d))` (but `freeze_prefix` declares `UpperOverrun`
   and the compiler cannot prove it away, leaving a handler for an impossible error) and `detach`
-  as `from_bytes(freeze(d))` (a second copy and wrapper in every `linux::read`, and `detach` is
+  as `from_bytes(freeze(d))` (a second copy and wrapper in every `std::linux::read`, and `detach` is
   the one place a future copy-on-write hooks in) -- and were deliberately kept. Policy sits above:
-  `linux::read`, `linux::write`.
+  `std::linux::read`, `std::linux::write`.
 * **Names follow the list API, not the spec's.** The spec named these before the rest of the
   library was in view (`mutable_bytes_set`, `mutable_bytes_copy`, ...). A namespace replaces the
   `mutable_bytes_` prefix; `replace` says the result is a different value (`set` implies mutation,
   and `with` is reserved for a future construct); `detach` names the purpose of the copy. One
   name still carries a prefix, `mutable_length`: a name denotes one function and both types need a
   length.
-* **`import abi` stays small.** `Bytes` left `lib/abi.bot`, which keeps only the numeric domains;
+* **`import std::abi` stays small.** `Bytes` left `stdlib/abi.bot`, which keeps only the numeric domains;
   a program that imports only `abi` no longer loads `byte` and its global errors.
 
 | | |
 |---|---|
-| constructor | `abi::bytes::zeroed(n)`: `n` **zero** bytes; nothing uninitialized is ever visible. A length beyond the collection ceiling (2^62 - 1) is the RANGE error every oversized collection is, and an allocation the machine cannot supply is reported as RANGE ("out of memory"), not an abort |
+| constructor | `std::abi::bytes::zeroed(n)`: `n` **zero** bytes; nothing uninitialized is ever visible. A length beyond the collection ceiling (2^62 - 1) is the RANGE error every oversized collection is, and an allocation the machine cannot supply is reported as RANGE ("out of memory"), not an abort |
 | `from_bytes` | an independent writable copy; changing it never changes the `Bytes` |
-| length | `abi::bytes::mutable_length(data) -> abi::Usize`; fixed for the value's life; there is no capacity |
-| update | `replace`: a **new value**; `data` is unchanged. `IndexNotFound` (the existing list/array convention) unless `0 <= index < length`; the value is a `byte::Byte` by typing |
-| `detach` | semantically the identity (a logical copy is the same value), physically a fresh storage: the "detach" a writable foreign access needs (below). The one addition beyond the spec's list, needed so `linux::read` can be ordinary Botlish |
+| length | `std::abi::bytes::mutable_length(data) -> std::abi::Usize`; fixed for the value's life; there is no capacity |
+| update | `replace`: a **new value**; `data` is unchanged. `IndexNotFound` (the existing list/array convention) unless `0 <= index < length`; the value is a `std::byte::Byte` by typing |
+| `detach` | semantically the identity (a logical copy is the same value), physically a fresh storage: the "detach" a writable foreign access needs (below). The one addition beyond the spec's list, needed so `std::linux::read` can be ordinary Botlish |
 | `freeze` / `freeze_prefix` | immutable snapshots (a copy). `freeze_prefix` with `count > length` is `UpperOverrun` and reads nothing outside the payload; `count: Usize` already excludes negatives |
 | not provided | slicing, indexing, concatenation, capacity, resizing, `Bytes` slicing, an address accessor, `CString` |
 
@@ -191,21 +191,21 @@ and different static types: nothing compares equal across them and nothing conve
   is a new value, so it cannot corrupt the container's equality or hash invariants
   (tested). No collection semantics were redesigned.
 * **Rendering** is the opaque-struct rule on every backend, alone or nested:
-  `<opaque abi::bytes::MutableBytes>` -- no address, allocator id, payload or sharing. The
-  explicit internal reveal shows `abi::bytes::MutableBytes {storage: <mutbytes 3: 4100ff>}`,
+  `<opaque std::abi::bytes::MutableBytes>` -- no address, allocator id, payload or sharing. The
+  explicit internal reveal shows `std::abi::bytes::MutableBytes {storage: <mutbytes 3: 4100ff>}`,
   which is how backends are compared byte for byte.
 
-## `linux::read`
+## `std::linux::read`
 
 ```botlish
-fn read(fd: abi::I32, data: abi::bytes::MutableBytes) -> ReadResult:
-    local = abi::bytes::detach(data)
-    result = abi::x86_64::to_int(
-        linux::abi::x86_64::syscall({
-            rax: abi::x86_64::register64(0),
-            rdi: abi::x86_64::from_i32(fd),
-            rsi: abi::x86_64::from_mutable_bytes(local),
-            rdx: abi::x86_64::from_usize(abi::bytes::mutable_length(local)),
+fn read(fd: std::abi::I32, data: std::abi::bytes::MutableBytes) -> ReadResult:
+    local = std::abi::bytes::detach(data)
+    result = std::abi::x86_64::to_int(
+        std::linux::abi::x86_64::syscall({
+            rax: std::abi::x86_64::register64(0),
+            rdi: std::abi::x86_64::from_i32(fd),
+            rsi: std::abi::x86_64::from_mutable_bytes(local),
+            rdx: std::abi::x86_64::from_usize(std::abi::bytes::mutable_length(local)),
         })
     )
     ReadResult {result: result, data: local}
@@ -222,15 +222,15 @@ fn read(fd: abi::I32, data: abi::bytes::MutableBytes) -> ReadResult:
   (tested). If the compiler proves `data` dead it *may* write into its storage
   directly -- nobody could tell -- but nothing here does.
 * **ONE syscall**: no retry, no loop, no filling. NIR has exactly one
-  `syscall_linux_x86_64` op in `linux::read` and no branch, jump, label or tail call.
+  `syscall_linux_x86_64` op in `std::linux::read` and no branch, jump, label or tail call.
 * **Result** is the kernel's raw signed `ssize_t` as an ordinary `Int`
-  (`abi::x86_64::to_int`): `> 0` bytes read, `0` end of file, `< 0` the kernel's
+  (`std::abi::x86_64::to_int`): `> 0` bytes read, `0` end of file, `< 0` the kernel's
   `-errno`, preserved exactly. No errno mapping, EOF is not an error, nothing is `null`.
 * **Short reads.** A positive result smaller than the buffer is normal. Only
   `[0, result)` was written; the rest holds what it held before (tested with a real
   short read from a pipe and a file: `AA AA AA AA AA AA` + `01 02 03` becomes
   `01 02 03 AA AA AA`). Nothing is resized: the buffer keeps its length, and
-  `abi::bytes::freeze_prefix(result.data, abi::usize(result.result))` yields the bytes read.
+  `std::abi::bytes::freeze_prefix(result.data, std::abi::usize(result.result))` yields the bytes read.
 * **Errors.** A refused read returns its raw negative result with the buffer
   unchanged (`-9`, EBADF, for an invalid descriptor, tested).
 * **No retained pointer.** The address is taken and consumed synchronously inside
@@ -239,7 +239,7 @@ fn read(fd: abi::I32, data: abi::bytes::MutableBytes) -> ReadResult:
 
 ### Stdin example and language notes
 
-`examples/linux/read-stdin.bot` does one `linux::read` of 4096 bytes from descriptor 0,
+`examples/linux/read-stdin.bot` does one `std::linux::read` of 4096 bytes from descriptor 0,
 and if the result is positive freezes exactly the returned prefix and writes it to
 descriptor 1; otherwise its value is the raw result (0 at EOF, `-errno` on error). It
 needs two conversions the compiler cannot prove away -- `result` is an ordinary `Int`
@@ -256,7 +256,7 @@ of an expression, so each fallible call is bound on its own line).
 | layout | identical to `Bytes`: `hdr(8) \| len(8) \| payload`, one allocation, no pointer to a second block; no capacity, no trailing NUL |
 | alignment | 16 bytes; the payload is at `object + 16`, O(1), no read |
 | allocation size | `16 + len`, rounded up to 16 (`allocationReport`: a 4096-byte value is one 4112-byte object, reported under its own kind `MutableBytes`) |
-| length | the 8-byte `len` field, `len <= 2^62 - 1` (checked before allocation); fits a small Int, hence an `abi::Usize` |
+| length | the 8-byte `len` field, `len <= 2^62 - 1` (checked before allocation); fits a small Int, hence an `std::abi::Usize` |
 | GC tracing | none: the payload holds no Botlish reference; the collector marks the header and frees the block with the layout it was allocated with. Non-moving, so liveness is sufficient for an address |
 | empty | a zero-length value is one shared static object (nothing in it can be written or observed); **every non-empty value is its own heap object, never a static constant** (no mutable native is context-free, so a compile-time-known mutable value cannot make two logical values share writable static storage) |
 | payload address | `rt_mbytes_addr`: object + 16 (a small Int) |
@@ -265,14 +265,14 @@ of an expression, so each fallible call is bound on its own line).
 NIR ops: `mbytesnew`, `mbytesfrom`, `mbyteslen`, `mbytesset`, `mbytesclone`,
 `mbytesfreeze`, `mbytesfreezeprefix`, `mbytesaddr`. All but `mbyteslen`/`mbytesaddr`
 allocate (GC safepoints); all are fallible only on a wrong-kind or out-of-range operand
-that a checked program cannot produce (lib/abi/bytes.bot proves each before the call).
+that a checked program cannot produce (stdlib/abi/bytes.bot proves each before the call).
 
 ## The writable address bridge and liveness
 
-`abi::x86_64::from_mutable_bytes(data) -> Register64` is the writable twin of
-`from_bytes`: a root native (only module `abi::bytes` can project the storage), statically
-requiring an `abi::bytes::MutableBytes` argument (`from_bytes(MutableBytes)`,
-`from_mutable_bytes(Bytes)`, of an Int, a String, a raw storage or an `abi::U8` are all
+`std::abi::x86_64::from_mutable_bytes(data) -> Register64` is the writable twin of
+`from_bytes`: a root native (only module `std::abi::bytes` can project the storage), statically
+requiring an `std::abi::bytes::MutableBytes` argument (`from_bytes(MutableBytes)`,
+`from_mutable_bytes(Bytes)`, of an Int, a String, a raw storage or an `std::abi::U8` are all
 compile-time `TYPE` errors; a `-strict 0` program replays the problem as a run-time
 TYPE before anything is evaluated), callable only directly, native only (the Tcl
 backends refuse it with `NATIVE-ONLY`). It knows no syscall, no argument number and no
@@ -288,7 +288,7 @@ libc. It does **not** copy.
   contents may change across the foreign call -- already holds, because every read of a
   storage is a runtime helper call that Cranelift treats as reading and writing all
   memory and can neither cache nor reorder across the syscall.
-* **Mutation barrier unchanged.** `linux::abi::x86_64::syscall` stays generic (it does not know
+* **Mutation barrier unchanged.** `std::linux::abi::x86_64::syscall` stays generic (it does not know
   syscall 0 writes memory); its strong memory/effect barrier is the one that matters.
 * **Verified.** Six routes by which a writable address reaches a syscall (inline,
   locals, register struct, helper, `if` merge, callee) run under GC stress with a second
@@ -298,7 +298,7 @@ libc. It does **not** copy.
 * **The raw layer is sharp, on purpose.** Because the bridge does not detach, a raw
   program that hands a syscall the address of a value other values share writes through
   all of them (a test pins this: `a = ...; b = a; raw read into from_mutable_bytes(a)`
-  changes `b` too). The safe theorem belongs to `linux::read`, which detaches first.
+  changes `b` too). The safe theorem belongs to `std::linux::read`, which detaches first.
   Future `direct`/raw-ABI restrictions may make the operation unavailable to ordinary
   application code; that policy is not implemented here.
 
@@ -342,7 +342,7 @@ mechanism is required at exactly the operations that write**, which is what
 GVN, hoisting or dead-call removal in HIR or NIR; Cranelift treats every runtime
 helper as an opaque call; no registration flag (`-context-free`, `-runtime`, ...)
 controls deduplication. The one allocation elision is static byte-constant folding for
-`abi::bytes::from_list` of a compile-time-known sequence, which is sound only because `Bytes` is
+`std::abi::bytes::from_list` of a compile-time-known sequence, which is sound only because `Bytes` is
 immutable; it is **not** applied to `MutableBytes` (none of its natives is
 `-context-free`). Tests assert that two `zeroed(n)` calls, and two `from_bytes` of the same
 constant, are four separate heap storages (while two constant `Bytes` are static, 0 allocations).
@@ -367,7 +367,7 @@ the original unchanged):
 | `ImmutableSet` | membership and equality unaffected by later updates of other copies |
 | `loop` producing many updates of one source | the source and every result independent |
 | `if` join | independent |
-| `linux::ReadResult` copies (`r2 = r1`, `bump(r1)`, `[r1, r3]`) | the buffer in one is never the other (natively, with a real read) |
+| `std::linux::ReadResult` copies (`r2 = r1`, `bump(r1)`, `[r1, r3]`) | the buffer in one is never the other (natively, with a real read) |
 
 **Coroutine/actor/thread transfer:** no such operation exists, so nothing was built.
 When one does, the receiver must get an independent logical value: a physical move is
@@ -382,25 +382,25 @@ test's own tuple):
 
 | program | total | MutableBytes | Bytes | Struct | List |
 |---|---|---|---|---|---|
-| `abi::bytes::zeroed(abi::usize(0))` | 0 | 0 | 0 | 0 | 0 |
-| `abi::bytes::zeroed(abi::usize(16))` (also 4096: one 4112-byte object) | 1 | 1 | 0 | 0 | 0 |
+| `std::abi::bytes::zeroed(std::abi::usize(0))` | 0 | 0 | 0 | 0 | 0 |
+| `std::abi::bytes::zeroed(std::abi::usize(16))` (also 4096: one 4112-byte object) | 1 | 1 | 0 | 0 | 0 |
 | `b = m; c = b; [len(c), len(m)]` (copy by binding) | 2 | 1 | 0 | 0 | 1 |
 | `id(id(m))` (copy through a function) | 2 | 1 | 0 | 1 | 0 |
 | `[m, m]` / `[m, put(m, ..)]` (into a List) | MutableBytes column 1 / 2 | | | | |
 | `put(m, 0, b)` (`replace`) | 4 | 2 | 0 | 2 | 0 |
-| `abi::bytes::freeze(m)` | 2 | 1 | 1 | 0 | 0 |
-| `rd(1000, m)` (`linux::read`, original + detach clone, + the returned wrapper) | 3 | 2 | 0 | 1 | 0 |
+| `std::abi::bytes::freeze(m)` | 2 | 1 | 1 | 0 | 0 |
+| `rd(1000, m)` (`std::linux::read`, original + detach clone, + the returned wrapper) | 3 | 2 | 0 | 1 | 0 |
 
 Reading: a binding, a List element and a function pass-and-return copy **no storage**;
 a function that carries the value across a call materializes the one-field wrapper
 `Struct` (existing behaviour: ABI-BYTES.md). An update costs one copy of the bytes (and
-a wrapper). A `linux::read` costs the detach clone beside the caller's buffer, plus the
+a wrapper). A `std::linux::read` costs the detach clone beside the caller's buffer, plus the
 wrapper for the returned buffer. These are the eager copies this milestone accepts;
 none is hidden.
 
 **Copy elision obtained for free:** the wrapper `Struct` is scalar-replaced inside a
-function (`abi::bytes::mutable_length(local)` is one `op mbyteslen` on the storage
-register); `linux::read`'s returned buffer is the same register the kernel wrote
+function (`std::abi::bytes::mutable_length(local)` is one `op mbyteslen` on the storage
+register); `std::linux::read`'s returned buffer is the same register the kernel wrote
 (`structnew` over the one storage) -- no second copy at the return. **Not done** (and
 not attempted): eliding the detach when `data` is a fresh temporary or dead after the
 call, returning the storage without the wrapper, in-place update of a dead value, and
@@ -424,19 +424,19 @@ unless unique". Source semantics do not change.
 
 ## Evidence
 
-* **NIR of `linux::read`** (the canonical one, from `-emit-nir`):
+* **NIR of `std::linux::read`** (the canonical one, from `-emit-nir`):
 
 ```
-func 14 "linux::read" params=2 ... pnames="fd.0 data.0" instance="abi::I32, abi::bytes::MutableBytes" results=2
-    %2 = callmulti 7 %1          ; abi::bytes::detach(data): the detached local storage
-    %5 = callmulti 9 %3          ; abi::x86_64::register64(0)
-    %6 = callmulti 11 %0         ; abi::x86_64::from_i32(fd)
+func 14 "std::linux::read" params=2 ... pnames="fd.0 data.0" instance="std::abi::I32, std::abi::bytes::MutableBytes" results=2
+    %2 = callmulti 7 %1          ; std::abi::bytes::detach(data): the detached local storage
+    %5 = callmulti 9 %3          ; std::abi::x86_64::register64(0)
+    %6 = callmulti 11 %0         ; std::abi::x86_64::from_i32(fd)
     %7 = op mbytesaddr %2        ; the WRITABLE address of THAT storage: rsi
-    %8 = callmulti 6 %2          ; abi::bytes::mutable_length(local)
-    %9 = callmulti 12 %8         ; abi::x86_64::from_usize(length): rdx
+    %8 = callmulti 6 %2          ; std::abi::bytes::mutable_length(local)
+    %9 = callmulti 12 %8         ; std::abi::x86_64::from_usize(length): rdx
     %11 = op syscall_linux_x86_64 %5 %6 %7 %9 %10 %10 %10   ; rax rdi rsi rdx r10 r8 r9 -- the ONE syscall
     %12 = op keepalive %2        ; the storage stays live across the syscall
-    %13 = call 10 %11            ; abi::x86_64::to_int
+    %13 = call 10 %11            ; std::abi::x86_64::to_int
     %14 = structnew 1 %2         ; the returned buffer: the SAME register the kernel wrote
     retmulti %13 %14
 ```
@@ -444,7 +444,7 @@ func 14 "linux::read" params=2 ... pnames="fd.0 data.0" instance="abi::I32, abi:
   No loop, no retry. A test checks the operand identities register by register (the
   address op's operand, the length call's operand, the keepalive's operand, the
   `ReadResult`'s data and the detach result are one register).
-* **Machine code** (`objdump` of the standalone executable's `linux::read`): `call
+* **Machine code** (`objdump` of the standalone executable's `std::linux::read`): `call
   botlish_fn_7` (the detach, whose own body is one `call rt_mbytes_clone`), then
   `call rt_mbytes_addr`, then `call rt_linux_x86_64_syscall`, then `call rt_keepalive`
   with `rsi` the same register as the address helper's, then `to_int` and `call
@@ -503,10 +503,10 @@ operations under a collection at every allocation.
 * **Every update copies the whole buffer.** A loop of *n* `replace` calls is
   O(n·length); there is no in-place path for a dead value. Correct, deliberately
   conservative, and measured above rather than hidden.
-* **`linux::read` allocates two storages and a wrapper** (the caller's, the detach,
+* **`std::linux::read` allocates two storages and a wrapper** (the caller's, the detach,
   the returned wrapper); a fresh temporary buffer is not elided.
 * **The raw writable bridge does not detach** (sharp edge, tested). It is raw-machine
-  territory like `from_bytes`; the safe theorem is `linux::read`'s.
+  territory like `from_bytes`; the safe theorem is `std::linux::read`'s.
 * **`replace` needs an `IndexNotFound` handler** at each call: the static
   completion proofs have no bounds family for it (adding one would touch
   hir/completions.tcl for little). A refinement `if n > 0` also does not apply to a
@@ -516,7 +516,7 @@ operations under a collection at every allocation.
   refused there (RANGE); natively the ceiling is 2^62 - 1 and exhaustion is reported
   as RANGE.
 * **No actor/thread transfer exists** to verify the receiver rule against.
-* **`abi::bytes::detach` is a public function.** It is semantically the identity;
+* **`std::abi::bytes::detach` is a public function.** It is semantically the identity;
   it exists because `linux` cannot touch the storage of an opaque struct, and a
   future compiler that proves deadness could make it free.
 
@@ -524,11 +524,11 @@ operations under a collection at every allocation.
 
 * **COW**: a uniqueness or reference-count bit on the storage and the two hooks above;
   then `freeze` and `from_bytes` become zero-copy where provable.
-* **Dead-value reuse / return transfer**: deadness facts across `linux::read`'s call
+* **Dead-value reuse / return transfer**: deadness facts across `std::linux::read`'s call
   boundary (the escape machinery does not span it today; ABI-BYTES.md had the same
   frontier) to elide the detach and the wrapper.
 * **Writable exposure to C** (done for one noescape call: C-POINTER-BORROWING.md
-  -- the detach-then-expose discipline of `linux::read`, generalized: the
+  -- the detach-then-expose discipline of `std::linux::read`, generalized: the
   call returns the copy C wrote as the parameter's updated value).
 * **Long-lived retained writable pointers / resources**: ownership anchoring, a
   lifetime beyond one synchronous call, destructors, and the `direct`/raw-ABI
@@ -540,7 +540,7 @@ operations under a collection at every allocation.
 ## Fuzz results
 
 `audit/mutable-bytes/tools/fuzz.tcl`, recorded in `audit/mutable-bytes/fuzz-result.txt` (re-run on the final
-`abi::bytes` layout). Each program is seeded individually (a failure replays with `-seed S -n 1`); the oracle is
+`std::abi::bytes` layout). Each program is seeded individually (a failure replays with `-seed S -n 1`); the oracle is
 an independent Tcl byte-list model that never reads what the program computes.
 
 | run | what | result |
@@ -598,7 +598,7 @@ test only, since equal values still hash equal without the count.
 
 ## Regression
 
-Every run below is the whole suite on the final tree (the `abi::bytes` layout, with `main`'s newest commits
+Every run below is the whole suite on the final tree (the `std::abi::bytes` layout, with `main`'s newest commits
 merged in: the `METHOD-ELIGIBLE` warning), native backend built from it, under `LANG=C.utf8 LC_ALL=C.utf8`.
 
 | run | command | result |
@@ -617,13 +617,13 @@ to any `MutableBytes` copy behaviour.
 
 ## Milestone report (the 48 items)
 
-1. **Declaration:** `opaque struct MutableBytes: storage: any` (lib/abi/bytes.bot, module `abi::bytes`, beside `Bytes`).
-2. **Constructor:** `abi::bytes::zeroed(length: abi::Usize)`, zero-filled.
-3. **`abi::bytes::from_bytes(data: Bytes)`:** an independent writable copy.
-4. **Length:** `abi::bytes::mutable_length(data) -> abi::Usize`.
-5. **Update:** `abi::bytes::replace(data, index, value) -> MutableBytes errors IndexNotFound`; a new value.
-6. **Freeze:** `abi::bytes::freeze(data) -> Bytes`, a copying snapshot.
-7. **Freeze prefix:** `abi::bytes::freeze_prefix(data, count: Usize) -> Bytes errors UpperOverrun`.
+1. **Declaration:** `opaque struct MutableBytes: storage: any` (stdlib/abi/bytes.bot, module `std::abi::bytes`, beside `Bytes`).
+2. **Constructor:** `std::abi::bytes::zeroed(length: std::abi::Usize)`, zero-filled.
+3. **`std::abi::bytes::from_bytes(data: Bytes)`:** an independent writable copy.
+4. **Length:** `std::abi::bytes::mutable_length(data) -> std::abi::Usize`.
+5. **Update:** `std::abi::bytes::replace(data, index, value) -> MutableBytes errors IndexNotFound`; a new value.
+6. **Freeze:** `std::abi::bytes::freeze(data) -> Bytes`, a copying snapshot.
+7. **Freeze prefix:** `std::abi::bytes::freeze_prefix(data, count: Usize) -> Bytes errors UpperOverrun`.
 8. **Native layout:** `KIND_MUTBYTES = 14`, `hdr(8) | len(8) | payload`, one allocation, 16-aligned, payload at +16, no tracing.
 9. **Tcl representation:** `{mutbytes HEX}`, a value kind of its own.
 10. **Equality:** by current contents.
@@ -640,11 +640,11 @@ to any `MutableBytes` copy behaviour.
 21. **Eager-copy strategy:** every update copies the whole buffer; measured in the allocation table.
 22. **Copy elision for free:** wrapper scalar replacement; the returned buffer is the register the kernel wrote.
 23. **Future COW:** the hook table above (`rt_mbytes_set` / `rt_mbytes_clone`).
-24. **Writable bridge:** `abi::x86_64::from_mutable_bytes(data) -> Register64`.
+24. **Writable bridge:** `std::abi::x86_64::from_mutable_bytes(data) -> Register64`.
 25. **Provenance:** the existing `keepAddr`, generalized to both bridges, not duplicated.
 26. **GC keepalive:** `op keepalive` of the exact storage after the syscall; six routes, mutant detected.
-27. **`linux::ReadResult`:** `struct ReadResult: result: int; data: abi::bytes::MutableBytes`.
-28. **`linux::read` source:** above.
+27. **`std::linux::ReadResult`:** `struct ReadResult: result: int; data: std::abi::bytes::MutableBytes`.
+28. **`std::linux::read` source:** above.
 29. **Register mapping:** `rax = 0, rdi = fd, rsi = payload address, rdx = length, r10 = r8 = r9 = 0`.
 30. **Caller's buffer:** unchanged (tested, incl. two reads of one original).
 31. **Short reads:** the raw positive count; only the prefix is written.
@@ -656,7 +656,7 @@ to any `MutableBytes` copy behaviour.
 37. **NIR evidence:** above.
 38. **Machine-code evidence:** above.
 39. **strace evidence:** above (stdin read, binary short read, EOF, bad fd).
-40. **libc `read` is not the wrapper path:** no libc read call in `linux::read`; no libc frame in the kernel's stack; one `syscall` instruction in the whole executable.
+40. **libc `read` is not the wrapper path:** no libc read call in `std::linux::read`; no libc frame in the kernel's stack; one `syscall` instruction in the whole executable.
 41. **Allocation measurements:** the table above.
 42. **GC-stress results:** suite 5766/5766; new suite 76/76; forty-read reassembly exact.
 43. **Fuzz results:** the table above.

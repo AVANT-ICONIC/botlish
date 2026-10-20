@@ -71,20 +71,27 @@ proc writeFile {path content} {
     close $channel
 }
 
-# Runs SCRIPT with a private library (tests/helpers.tcl's withPrivateLibrary)
-# holding the module fixtures every module test below uses:
+# Runs SCRIPT in an application directory, $lib (the programs a test writes
+# there are its entry files), holding the application modules every module
+# test below uses (IMPORTS.md, "Application modules"):
 #   geo          an enum VehicleType {Boat, Car}, a module binding, functions
 #   fleet::kinds an enum VehicleType {Boat, Car}: the same text, another type
 #   shapes       a struct, a refined type and a trait (not enums)
 proc withEnumModules {script} {
-    uplevel 1 [list withPrivateLibrary [string cat {
-        set lib $::core::libraryDir
+    set dir [makeDirectory enum-modules-[pid]-[incr ::enumModulesCounter]]
+    try {
+        uplevel 1 [list set lib $dir]
+        uplevel 1 [string cat {
         writeFile [file join $lib geo.bot] "enum VehicleType:\n    Boat,\n    Car,\n\ndefault_kind = VehicleType::Car\n\nfn default_vehicle() -> VehicleType:\n    VehicleType::Boat\n\nfn is_car(v: VehicleType) -> bool:\n    v == VehicleType::Car\n"
         file mkdir [file join $lib fleet]
         writeFile [file join $lib fleet kinds.bot] "enum VehicleType:\n    Boat,\n    Car,\n"
         writeFile [file join $lib shapes.bot] "struct Point:\n    x: int\n\nrefined type Label = str\n"
-    } \n $script]]
+    } \n $script]
+    } finally {
+        removeDirectory [file tail $dir]
+    }
 }
+set ::enumModulesCounter 0
 
 set vehicle {enum VehicleType:
     Boat,
@@ -102,8 +109,8 @@ set vehicle {enum VehicleType:
 # brackets), and `example` declares the IndexNotFound its MutableVector reads
 # may raise (a vector's length is not tracked statically).
 
-set principal [string cat {import mutable_array
-import mutable_vector
+set principal [string cat {import std::mutable_array
+import std::mutable_vector
 
 } $vehicle {
 struct Vehicle:
@@ -128,8 +135,8 @@ fn example() -> List[VehicleType] errors IndexNotFound:
         kind: b,
     }
 
-    array = mutable_array::create(2, vehicle.kind)
-    vector = mutable_vector::from_list([
+    array = std::mutable_array::create(2, vehicle.kind)
+    vector = std::mutable_vector::from_list([
         array.at(0),
         VehicleType::Boat,
     ])
@@ -305,7 +312,7 @@ test enum-qualifier-not-an-enum {a case qualified by a type that is not an enum 
 
 test enum-qualifier-unknown {a qualifier that names nothing is an unknown namespace, and says no enum of that name is visible} -body {
     enumError "Vehicle::Car\n"
-} -match glob -result {UNKNOWN-NAMESPACE: enum.bot:1:1: unknown namespace "Vehicle": no such module file * and no intrinsics of that namespace (nor is "Vehicle" an enum type visible in this file: a case is written Enum::Case)}
+} -match glob -result {UNKNOWN-NAMESPACE: enum.bot:1:1: unknown namespace "Vehicle": this program has no application root (it was compiled from text, not from a file beside its modules), so it has no application modules (nor is "Vehicle" an enum type visible in this file: a case is written Enum::Case)}
 
 test enum-cases-not-injected {a case is never visible by its bare name, and an enum type is not a value} -body {
     list \
@@ -445,7 +452,7 @@ test enum-hash-reorder-invariant {a case's hash depends on its enum's identity a
 } -result {1 1}
 
 test enum-reorder-invariant {reordering or adding cases changes no program-visible behavior} -body {
-    set program "x = E::B\ny = E::A\n\[x, y, x == y, x == E::B, hash(x) == hash(E::B), immutable_set::contains(immutable_set::from_list(\[x, y, x\]), E::B)\]\n"
+    set program "x = E::B\ny = E::A\n\[x, y, x == y, x == E::B, hash(x) == hash(E::B), std::immutable_set::contains(std::immutable_set::from_list(\[x, y, x\]), E::B)\]\n"
     set a [enumRun [withImports "enum E:\n    A,\n    B,\n$program"]]
     set b [enumRun [withImports "enum E:\n    B,\n    A,\n$program"]]
     set c [enumRun [withImports "enum E:\n    C,\n    B,\n    D,\n    A,\n$program"]]
@@ -477,23 +484,23 @@ test enum-debug-rendering {a case renders as its qualified spelling (debug outpu
 # Collections
 
 test enum-list {List[Enum]: construction, iteration, membership by equality} -body {
-    enumRun [withImports "${vehicle}fn has(xs: List\[VehicleType\], v: VehicleType) -> bool:\n    loop x in xs:\n        if x == v:\n            return true\n    false\nxs = \[VehicleType::Car, VehicleType::Boat, VehicleType::Car\]\nland = loop x in xs:\n    if x == VehicleType::Boat:\n        continue\n    x\n\[xs, land, list::length(land), has(xs, VehicleType::Boat), has(xs, VehicleType::Tank)\]\n"]
+    enumRun [withImports "${vehicle}fn has(xs: List\[VehicleType\], v: VehicleType) -> bool:\n    loop x in xs:\n        if x == v:\n            return true\n    false\nxs = \[VehicleType::Car, VehicleType::Boat, VehicleType::Car\]\nland = loop x in xs:\n    if x == VehicleType::Boat:\n        continue\n    x\n\[xs, land, std::list::length(land), has(xs, VehicleType::Boat), has(xs, VehicleType::Tank)\]\n"]
 } -result {same: [[VehicleType::Car, VehicleType::Boat, VehicleType::Car], [VehicleType::Car, VehicleType::Car], 2, true, false]}
 
 test enum-mutable-array {MutableArray[Enum]: repeated and factory construction, at, set, swap} -body {
-    enumRun [withImports "${vehicle}fn vehicle_for_index(i: int) -> VehicleType:\n    if i == 0:\n        VehicleType::Boat\n    else:\n        VehicleType::Car\n\nfn run() -> List\[VehicleType\] errors IndexNotFound:\n    a = mutable_array::create(3, VehicleType::Car)\n    g = mutable_array::generate(3, vehicle_for_index)\n    a.set(1, VehicleType::Tank)\n    old = g.swap(2, VehicleType::Truck)\n    \[a.at(0), a.at(1), a.at(2), g.at(0), g.at(2), old\]\n\nrun():\n    on IndexNotFound:\n        \[\]\n"]
+    enumRun [withImports "${vehicle}fn vehicle_for_index(i: int) -> VehicleType:\n    if i == 0:\n        VehicleType::Boat\n    else:\n        VehicleType::Car\n\nfn run() -> List\[VehicleType\] errors IndexNotFound:\n    a = std::mutable_array::create(3, VehicleType::Car)\n    g = std::mutable_array::generate(3, vehicle_for_index)\n    a.set(1, VehicleType::Tank)\n    old = g.swap(2, VehicleType::Truck)\n    \[a.at(0), a.at(1), a.at(2), g.at(0), g.at(2), old\]\n\nrun():\n    on IndexNotFound:\n        \[\]\n"]
 } -result {same: [VehicleType::Car, VehicleType::Tank, VehicleType::Car, VehicleType::Boat, VehicleType::Truck, VehicleType::Car]}
 
 test enum-mutable-vector {MutableVector[Enum]: push, pop, swap, at, iteration} -body {
-    enumRun [withImports "import mutable_vector\n${vehicle}fn run() -> List\[VehicleType\] errors IndexNotFound:\n    v = mutable_vector::from_list(\[VehicleType::Boat\])\n    v.push(VehicleType::Car)\n    v.push(VehicleType::Tank)\n    top = v.pop()\n    old = v.swap(0, VehicleType::Tractor)\n    seen = loop x in v:\n        x\n    \[top, old, v.at(0), v.length() == 2\] == \[top, old, v.at(0), true\]\n    list::append(seen, top)\n\nrun():\n    on IndexNotFound:\n        \[\]\n"]
+    enumRun [withImports "import std::mutable_vector\n${vehicle}fn run() -> List\[VehicleType\] errors IndexNotFound:\n    v = std::mutable_vector::from_list(\[VehicleType::Boat\])\n    v.push(VehicleType::Car)\n    v.push(VehicleType::Tank)\n    top = v.pop()\n    old = v.swap(0, VehicleType::Tractor)\n    seen = loop x in v:\n        x\n    \[top, old, v.at(0), v.length() == 2\] == \[top, old, v.at(0), true\]\n    std::list::append(seen, top)\n\nrun():\n    on IndexNotFound:\n        \[\]\n"]
 } -result {same: [VehicleType::Tractor, VehicleType::Car, VehicleType::Tank]}
 
 test enum-immutable-set {ImmutableSet[Enum]: deduplication and membership by nominal equality} -body {
-    enumRun [withImports "${vehicle}enum Other:\n    Car,\nfn same(x):\n    x\ns = immutable_set::from_list(\[VehicleType::Car, VehicleType::Boat, VehicleType::Car\])\n\[s, immutable_set::contains(s, VehicleType::Car), immutable_set::contains(s, VehicleType::Tank), immutable_set::contains(s, same(Other::Car)), s == immutable_set::from_list(\[VehicleType::Boat, VehicleType::Car\])\]\n"]
+    enumRun [withImports "${vehicle}enum Other:\n    Car,\nfn same(x):\n    x\ns = std::immutable_set::from_list(\[VehicleType::Car, VehicleType::Boat, VehicleType::Car\])\n\[s, std::immutable_set::contains(s, VehicleType::Car), std::immutable_set::contains(s, VehicleType::Tank), std::immutable_set::contains(s, same(Other::Car)), s == std::immutable_set::from_list(\[VehicleType::Boat, VehicleType::Car\])\]\n"]
 } -result {same: [{VehicleType::Car, VehicleType::Boat}, true, false, false, true]}
 
 test enum-collections-unrestricted {collections of cases stay unrestricted: create repeats the value, copies stay usable} -body {
-    set source [withImports "import mutable_vector\n${vehicle}a = mutable_array::create(2, VehicleType::Car)\nb = a\nv = mutable_vector::from_list(\[VehicleType::Car\])\nw = v\nxs = \[VehicleType::Car\]\nys = xs\n\[mutable_array::get(a, 0, VehicleType::Boat), mutable_array::get(b, 1, VehicleType::Boat), xs == ys\]\n"]
+    set source [withImports "import std::mutable_vector\n${vehicle}a = std::mutable_array::create(2, VehicleType::Car)\nb = a\nv = std::mutable_vector::from_list(\[VehicleType::Car\])\nw = v\nxs = \[VehicleType::Car\]\nys = xs\n\[std::mutable_array::get(a, 0, VehicleType::Boat), std::mutable_array::get(b, 1, VehicleType::Boat), xs == ys\]\n"]
     set hir [surface::compile $source enum.bot]
     set affinities {}
     dict for {e node} [dict get $hir exprs] {
@@ -541,15 +548,27 @@ test enum-module-diagnostics {a module's enum follows the import rules of its na
             ambiguous "import geo\nenum geo:\n    A,\ngeo::A\n"
             collision "import type geo::VehicleType\nenum VehicleType:\n    A,\n1\n"
             struct-qualifier "import shapes\nshapes::Point::Car\n"
-            intrinsic-namespace "enum mutable_array:\n    create,\nmutable_array::create(2, 0)\n"
+            intrinsic-namespace "enum enumfixture:\n    create,\nenumfixture::create(2, 0)\n"
+            standard-namespace "import std::mutable_array\nenum mutable_array:\n    create,\n\[mutable_array::create == mutable_array::create, std::mutable_array::capacity(std::mutable_array::create(2, 0))\]\n"
         } {
             writeFile [file join $lib $name.bot] $text
-            catch {surface::readProgramFile [file join $lib $name.bot]} message options
-            lappend results [lindex [dict get $options -errorcode] end]
+            # An intrinsic namespace outside std exists only where a process
+            # registers one (a test's fixture, like ffi_fixture).
+            core::native::register enumfixture::create -arity 2 -impl {apply {{n v} {core::value::int 0}}} \
+                -param-types {int int} -result-type int
+            try {
+                if {[catch {surface::readProgramFile [file join $lib $name.bot]} message options]} {
+                    lappend results [lindex [dict get $options -errorcode] end]
+                } else {
+                    lappend results accepted
+                }
+            } finally {
+                core::native::unregister enumfixture::create
+            }
         }
         set results
     }
-} -result {MISSING-IMPORT UNKNOWN-NAMESPACE UNKNOWN-ENUM-CASE AMBIGUOUS-QUALIFIER TYPE-IMPORT-COLLISION NOT-AN-ENUM AMBIGUOUS-QUALIFIER}
+} -result {MISSING-IMPORT UNKNOWN-NAMESPACE UNKNOWN-ENUM-CASE AMBIGUOUS-QUALIFIER TYPE-IMPORT-COLLISION NOT-AN-ENUM AMBIGUOUS-QUALIFIER accepted}
 
 # ---------------------------------------------------------------------------
 # Refinements, traits, contexts, coroutines
@@ -569,7 +588,7 @@ test enum-context-field {an enum is an ordinary context member, an immediate nat
 } -result {{same: [VehicleType::Tank, true]} {{context 0 "Settings" offset=0 words=2 fields="mode verbose"}}}
 
 test enum-coroutine-events {a coroutine yields and returns cases; enums add nothing to coroutine semantics} -body {
-    enumRun "import coroutine\nenum Event:\n    Start,\n    Tick,\n    Stop,\nfn events(n: int) -> Event:\n    yield Event::Start\n    loop i from 0 to n:\n        yield Event::Tick\n    Event::Stop\ncoroutine \{step: s, first: first\} = events(2)\nsecond = s()\nthird = s()\nfourth = s()\n\[first, second, third, fourth, coroutine::done?(s)\]\n"
+    enumRun "import std::coroutine\nenum Event:\n    Start,\n    Tick,\n    Stop,\nfn events(n: int) -> Event:\n    yield Event::Start\n    loop i from 0 to n:\n        yield Event::Tick\n    Event::Stop\ncoroutine \{step: s, first: first\} = events(2)\nsecond = s()\nthird = s()\nfourth = s()\n\[first, second, third, fourth, std::coroutine::done?(s)\]\n"
 } -result {same: [Event::Start, Event::Tick, Event::Tick, Event::Stop, true]}
 
 # ---------------------------------------------------------------------------
@@ -649,7 +668,7 @@ run(100, VehicleType::Car, 0)
 } -result {{same: 50} 0 0 {call return}}
 
 test enum-native-gc-stress {case values survive collection at every allocation} -body {
-    set source [withImports "${vehicle}struct Vehicle:\n    kind: VehicleType\n    name: str\nfn build(n: int) -> List\[Vehicle\]:\n    loop i from 0 to n:\n        k = if i == 0:\n            VehicleType::Boat\n        else:\n            VehicleType::Car\n        Vehicle \{kind: k, name: str::concat(\"v\", \"x\")\}\nxs = build(30)\nkinds = loop v in xs:\n    v.kind\n\[list::length(xs), kinds == kinds, immutable_set::from_list(kinds)\]\n"]
+    set source [withImports "${vehicle}struct Vehicle:\n    kind: VehicleType\n    name: str\nfn build(n: int) -> List\[Vehicle\]:\n    loop i from 0 to n:\n        k = if i == 0:\n            VehicleType::Boat\n        else:\n            VehicleType::Car\n        Vehicle \{kind: k, name: std::str::concat(\"v\", \"x\")\}\nxs = build(30)\nkinds = loop v in xs:\n    v.kind\n\[std::list::length(xs), kinds == kinds, std::immutable_set::from_list(kinds)\]\n"]
     set hir [surface::compile $source enum.bot]
     set plain [outcomeUnderHir cranelift $hir]
     set ::env(BOTLISH_NATIVE_GC_STRESS) 1
@@ -664,7 +683,7 @@ test enum-native-gc-stress {case values survive collection at every allocation} 
 test enum-executable-parity {a standalone executable carries the enum table and prints, compares and hashes cases identically} -constraints executableAot -body {
     withEnumModules {
         set path [file join $lib program.bot]
-        writeFile $path "import geo\nimport immutable_set\nenum Local:\n    A,\n    B,\nfn same(x):\n    x\n\[Local::B, geo::VehicleType::Car, same(Local::A) == Local::A, same(Local::A) == same(Local::B), hash(Local::A), immutable_set::from_list(\[Local::A, Local::A\])\]\n"
+        writeFile $path "import geo\nimport std::immutable_set\nenum Local:\n    A,\n    B,\nfn same(x):\n    x\n\[Local::B, geo::VehicleType::Car, same(Local::A) == Local::A, same(Local::A) == same(Local::B), hash(Local::A), std::immutable_set::from_list(\[Local::A, Local::A\])\]\n"
         set hir [surface::readProgramFile $path]
         set expected [lindex [outcomeUnderHir interp $hir] 1]
         native::executable $hir [file rootname $path]

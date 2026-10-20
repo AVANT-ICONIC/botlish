@@ -1,7 +1,7 @@
 # corpus.tcl -- observational audit of PROVES-NAMING over the corpus
 # (WARNINGS-PROVES-NAMING.md, "Corpus findings"). Compiles every program of
 # examples/stdlib, examples/surface, examples/refinement, bench/*.bot and
-# lib/*.bot with warnings on (collected, not emitted) and reports, at the
+# stdlib/*.bot with warnings on (collected, not emitted) and reports, at the
 # commit it runs on:
 #
 #   * every distinct finding (a library module's finding is reported once,
@@ -45,7 +45,7 @@ set programs [concat \
     [lsort [glob -directory [file join $auditRoot examples surface] *.bot]] \
     [lsort [glob -directory [file join $auditRoot examples refinement] *.bot]] \
     [lsort [glob -directory [file join $auditRoot bench] *.bot]] \
-    [lsort [glob -directory [file join $auditRoot lib] *.bot]]]
+    [lsort [glob -directory [file join $auditRoot stdlib] *.bot]]]
 
 # The surface examples that are deliberate rejections (their own headers say
 # so): expected not to compile.
@@ -239,8 +239,8 @@ if {$renames eq ""} {
 foreach {file pair} $renames {
     lassign $pair old new
     set scratch [file tempdir proves-naming-corpus]
-    set lib [file join $scratch lib]
-    file copy [file join $auditRoot lib] $lib
+    set lib [file join $scratch stdlib]
+    file copy [file join $auditRoot stdlib] $lib
     set path [file join $scratch $file]
     set text [readText $path]
     # Whole words only: \m (a word start: not after a letter, digit or _)

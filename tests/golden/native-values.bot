@@ -3,7 +3,7 @@
 # compile them -- specialized instances and their guards, raw (unboxed)
 # small Ints and their boxing frontiers, self tail calls turned into loops,
 # direct calls of exact callables, closure environments, the inline fast
-# path of a dynamic list::at, the bit_and identity fold -- a program's value
+# path of a dynamic std::list::at, the bit_and identity fold -- a program's value
 # is the one its source defines, the same on every backend:
 #
 #   * constants, direct calls, branch and loop values, and recursion compute
@@ -14,7 +14,7 @@
 #     folds or values only the run time sees;
 #   * Strings count Unicode scalar values (an astral character is one), and
 #     Lists compare structurally;
-#   * list::at and str::substring fail with their declared errors at every
+#   * std::list::at and std::str::substring fail with their declared errors at every
 #     out-of-range index, directly, through a function, and through a
 #     specialized instance, and a handler receives them;
 #   * a function specialized for its argument kinds, a callable chosen at
@@ -49,70 +49,70 @@
 #
 # Declarations: none (each program's functions are nested in its block).
 # One whole-program fact is shared: callable-arguments/native-with-declared-
-# error passes list::at through an untyped parameter, so the suite program's
+# error passes std::list::at through an untyped parameter, so the suite program's
 # erased-callable contract carries IndexNotFound, and a call whose callee has
 # neither an identity nor a contract is charged it (closure-composition's
 # call of a returned closure handles it for that reason).
 #
-# Imports: compiler (the body contract, compiler::CompilerError) and test;
-# list and str because the Tcl programs call list::length, list::at,
-# list::append, str::length, str::substring, str::concat and str::lowercase,
+# Imports: compiler (the body contract, std::compiler::CompilerError) and test;
+# list and str because the Tcl programs call std::list::length, std::list::at,
+# std::list::append, std::str::length, std::str::substring, std::str::concat and std::str::lowercase,
 # always qualified (no method syntax is used, so the suite-wide imports
 # change no call's meaning).
-import compiler
-import list
-import str
-import test
+import std::compiler
+import std::list
+import std::str
+import std::test
 
 # ---------------------------------------------------------------------------
 # Constants, calls, branches and loops (native.test, "Basic execution")
 
 fn register_basic_execution_tests():
     # native-basic-1: constants of every scalar kind, and a List of them.
-    fn constant_int() errors compiler::CompilerError:
+    fn constant_int() errors std::compiler::CompilerError:
         static compile:
             42
-    test::value("constant-values/int", 42, constant_int)
+    std::test::value("constant-values/int", 42, constant_int)
 
-    fn constant_true() errors compiler::CompilerError:
+    fn constant_true() errors std::compiler::CompilerError:
         static compile:
             true
-    test::value("constant-values/true", true, constant_true)
+    std::test::value("constant-values/true", true, constant_true)
 
-    fn constant_unit() errors compiler::CompilerError:
+    fn constant_unit() errors std::compiler::CompilerError:
         static compile:
             unit
-    test::value("constant-values/unit", unit, constant_unit)
+    std::test::value("constant-values/unit", unit, constant_unit)
 
-    fn constant_string() errors compiler::CompilerError:
+    fn constant_string() errors std::compiler::CompilerError:
         static compile:
             "text"
-    test::value("constant-values/string", "text", constant_string)
+    std::test::value("constant-values/string", "text", constant_string)
 
-    fn constant_list() errors compiler::CompilerError:
+    fn constant_list() errors std::compiler::CompilerError:
         static compile:
             [1, true, "a", unit]
-    test::value("constant-values/list", [1, true, "a", unit], constant_list)
+    std::test::value("constant-values/list", [1, true, "a", unit], constant_list)
 
     # native-basic-2: a function and a direct call.
-    fn call_without_arguments() errors compiler::CompilerError:
+    fn call_without_arguments() errors std::compiler::CompilerError:
         static compile:
             fn seven():
                 7
 
             seven()
-    test::value("direct-call/no-arguments", 7, call_without_arguments)
+    std::test::value("direct-call/no-arguments", 7, call_without_arguments)
 
-    fn call_with_arguments() errors compiler::CompilerError:
+    fn call_with_arguments() errors std::compiler::CompilerError:
         static compile:
             fn add(a, b):
                 a + b
 
             add(40, 2)
-    test::value("direct-call/two-arguments", 42, call_with_arguments)
+    std::test::value("direct-call/two-arguments", 42, call_with_arguments)
 
     # native-basic-3: an if's value form, nested in another's else branch.
-    fn branch_values() errors compiler::CompilerError:
+    fn branch_values() errors std::compiler::CompilerError:
         static compile:
             fn sign(n):
                 s = if n < 0:
@@ -125,10 +125,10 @@ fn register_basic_execution_tests():
                 s
 
             [sign(-5), sign(0), sign(9)]
-    test::value("branch-value-form", ["negative", "zero", "positive"], branch_values)
+    std::test::value("branch-value-form", ["negative", "zero", "positive"], branch_values)
 
     # native-basic-4: return from inside a bare loop, and continue.
-    fn loop_return() errors compiler::CompilerError:
+    fn loop_return() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 loop:
@@ -141,29 +141,29 @@ fn register_basic_execution_tests():
                     continue
 
             [f(), g(3)]
-    test::value("return-from-loop-and-continue", [42, 3], loop_return)
+    std::test::value("return-from-loop-and-continue", [42, 3], loop_return)
 
     # native-basic-4-bare-break: a loop left by a bare break is unit.
-    fn bare_break() errors compiler::CompilerError:
+    fn bare_break() errors std::compiler::CompilerError:
         static compile:
             fn h():
                 loop:
                     break
 
             h()
-    test::value("bare-break-loop-is-unit", unit, bare_break)
+    std::test::value("bare-break-loop-is-unit", unit, bare_break)
 
     # native-basic-5: return from inside a loop and its branches, in a
-    # recursive search whose list::at may fail. A strict caller must handle
+    # recursive search whose std::list::at may fail. A strict caller must handle
     # the declared error; no index here is out of range, so the handlers
     # never run.
-    fn search() errors compiler::CompilerError:
+    fn search() errors std::compiler::CompilerError:
         static compile:
             fn find(xs, i, target) errors IndexNotFound:
                 loop:
-                    if i == list::length(xs):
+                    if i == std::list::length(xs):
                         return -1
-                    if list::at(xs, i) == target:
+                    if std::list::at(xs, i) == target:
                         return i
                     return find(xs, i + 1, target)
 
@@ -174,22 +174,22 @@ fn register_basic_execution_tests():
                 on IndexNotFound:
                     return "IndexNotFound"
             [found, missing]
-    test::value("return-from-loop-in-recursive-search", [2, -1], search)
+    std::test::value("return-from-loop-in-recursive-search", [2, -1], search)
 
     # native-result-1 (its source-expressible half: Results have no source
     # spelling): kind tests, directly and on a function's parameter.
-    fn integer_test() errors compiler::CompilerError:
+    fn integer_test() errors std::compiler::CompilerError:
         static compile:
             integer?(1)
-    test::value("kind-test/integer", true, integer_test)
+    std::test::value("kind-test/integer", true, integer_test)
 
-    fn string_test() errors compiler::CompilerError:
+    fn string_test() errors std::compiler::CompilerError:
         static compile:
             fn f(x):
                 string?(x)
 
             f(1)
-    test::value("kind-test/string-of-parameter", false, string_test)
+    std::test::value("kind-test/string-of-parameter", false, string_test)
 
 # ---------------------------------------------------------------------------
 # Arbitrary-precision Ints (native.test, "Ints" and the small-Int
@@ -202,28 +202,28 @@ fn register_basic_execution_tests():
 
 fn register_int_tests(small_max: int, small_min: int, past_max: int, past_min: int, two_31: int, minus_two_31: int, root: int):
     # native-int-1: arithmetic and comparisons.
-    fn arithmetic() errors compiler::CompilerError:
+    fn arithmetic() errors std::compiler::CompilerError:
         static compile:
             [1 + 2, 10 - 20, 6 * 7, 3 < 4, 4 <= 4, 5 > 6, 7 >= 8, 3 == 3, 3 == 4, -(5)]
-    test::value("int-arithmetic-and-comparisons", [3, -10, 42, true, true, false, false, true, false, -5], arithmetic)
+    std::test::value("int-arithmetic-and-comparisons", [3, -10, 42, true, true, false, false, true, false, -5], arithmetic)
 
     # native-int-3: the boundaries of the tagged small-Int representation:
     # every sum, difference and product crossing an edge promotes exactly,
     # and comparisons across an edge hold. The literal program is the Tcl
     # test's (the compiler folds it, as it does there); /dynamic computes the
     # same expressions on the registration function's operands, at run time.
-    fn small_int_boundaries() errors compiler::CompilerError:
+    fn small_int_boundaries() errors std::compiler::CompilerError:
         static compile:
             [4611686018427387903 + 1, -4611686018427387904 - 1, -4611686018427387904 + -1, 2147483648 * 2147483648, -2147483648 * 2147483648, 3037000499 * 3037000499, 4611686018427387904 - 1, -4611686018427387905 + 1, 4611686018427387903 < 4611686018427387904, -4611686018427387905 < -4611686018427387904, 4611686018427387904 == 4611686018427387904]
-    test::value("small-int-boundaries", [4611686018427387904, -4611686018427387905, -4611686018427387905, 4611686018427387904, -4611686018427387904, 9223372030926249001, 4611686018427387903, -4611686018427387904, true, true, true], small_int_boundaries)
+    std::test::value("small-int-boundaries", [4611686018427387904, -4611686018427387905, -4611686018427387905, 4611686018427387904, -4611686018427387904, 9223372030926249001, 4611686018427387903, -4611686018427387904, true, true, true], small_int_boundaries)
 
-    fn small_int_boundaries_dynamic() errors compiler::CompilerError:
+    fn small_int_boundaries_dynamic() errors std::compiler::CompilerError:
         static compile:
             [small_max + 1, small_min - 1, small_min + -1, two_31 * two_31, minus_two_31 * two_31, root * root, past_max - 1, past_min + 1, small_max < past_max, past_min < small_min, small_max + 1 == past_max]
-    test::value("small-int-boundaries/dynamic", [4611686018427387904, -4611686018427387905, -4611686018427387905, 4611686018427387904, -4611686018427387904, 9223372030926249001, 4611686018427387903, -4611686018427387904, true, true, true], small_int_boundaries_dynamic)
+    std::test::value("small-int-boundaries/dynamic", [4611686018427387904, -4611686018427387905, -4611686018427387905, 4611686018427387904, -4611686018427387904, 9223372030926249001, 4611686018427387903, -4611686018427387904, true, true, true], small_int_boundaries_dynamic)
 
     # native-int-4: factorial of 30 through non-tail recursion (past 2^107).
-    fn factorial() errors compiler::CompilerError:
+    fn factorial() errors std::compiler::CompilerError:
         static compile:
             fn fact(n):
                 if n <= 1:
@@ -231,45 +231,45 @@ fn register_int_tests(small_max: int, small_min: int, past_max: int, past_min: i
                 n * fact(n - 1)
 
             fact(30)
-    test::value("factorial-by-non-tail-recursion", 265252859812191058636308480000000, factorial)
+    std::test::value("factorial-by-non-tail-recursion", 265252859812191058636308480000000, factorial)
 
     # native-repr-2, native-repr-10: an increment of a parameter whose only
     # caller passes the small-Int maximum leaves the small range: the sum is
     # exact (2^62). One below the maximum, it stays inside.
-    fn increment_at_max() errors compiler::CompilerError:
+    fn increment_at_max() errors std::compiler::CompilerError:
         static compile:
             fn add1(x):
                 x + 1
 
             add1(4611686018427387903)
-    test::value("small-max-increment/at-max", 4611686018427387904, increment_at_max)
+    std::test::value("small-max-increment/at-max", 4611686018427387904, increment_at_max)
 
-    fn increment_below_max() errors compiler::CompilerError:
+    fn increment_below_max() errors std::compiler::CompilerError:
         static compile:
             fn add1(x):
                 x + 1
 
             add1(4611686018427387902)
-    test::value("small-max-increment/below-max", 4611686018427387903, increment_below_max)
+    std::test::value("small-max-increment/below-max", 4611686018427387903, increment_below_max)
 
     # native-spec-11 (its value half): a specialized doubling of the
     # small-Int edges is exact (the results are past the small range, at
     # the i64 edges); /dynamic doubles the registration function's operands.
-    fn double_edges() errors compiler::CompilerError:
+    fn double_edges() errors std::compiler::CompilerError:
         static compile:
             fn double(x):
                 x * 2
 
             [double(4611686018427387903), double(-4611686018427387904)]
-    test::value("specialized-double-of-small-edges", [9223372036854775806, -9223372036854775808], double_edges)
+    std::test::value("specialized-double-of-small-edges", [9223372036854775806, -9223372036854775808], double_edges)
 
-    fn double_edges_dynamic() errors compiler::CompilerError:
+    fn double_edges_dynamic() errors std::compiler::CompilerError:
         static compile:
             fn double(x):
                 x * 2
 
             [double(small_max), double(small_min)]
-    test::value("specialized-double-of-small-edges/dynamic", [9223372036854775806, -9223372036854775808], double_edges_dynamic)
+    std::test::value("specialized-double-of-small-edges/dynamic", [9223372036854775806, -9223372036854775808], double_edges_dynamic)
 
 # ---------------------------------------------------------------------------
 # Small-Int representation (native.test, native-repr-*): raw arithmetic,
@@ -277,7 +277,7 @@ fn register_int_tests(small_max: int, small_min: int, past_max: int, past_min: i
 
 fn register_representation_tests():
     # native-repr-5: a branch joining a small literal and one past 2^64.
-    fn conservative_join() errors compiler::CompilerError:
+    fn conservative_join() errors std::compiler::CompilerError:
         static compile:
             fn pick(c):
                 y = if c:
@@ -287,38 +287,38 @@ fn register_representation_tests():
                 y + 1
 
             [pick(true), pick(false)]
-    test::value("branch-join-of-small-and-big", [2, 100000000000000000001], conservative_join)
+    std::test::value("branch-join-of-small-and-big", [2, 100000000000000000001], conservative_join)
 
     # native-repr-6: a small result crossing the return boundary.
-    fn small_result() errors compiler::CompilerError:
+    fn small_result() errors std::compiler::CompilerError:
         static compile:
             fn f(x):
                 x + 1
 
             [f(1), f(2)]
-    test::value("small-result-returned", [2, 3], small_result)
+    std::test::value("small-result-returned", [2, 3], small_result)
 
     # native-repr-7: small increments.
-    fn small_increments() errors compiler::CompilerError:
+    fn small_increments() errors std::compiler::CompilerError:
         static compile:
             fn add1(x):
                 x + 1
 
             [add1(5), add1(9)]
-    test::value("small-increments", [6, 10], small_increments)
+    std::test::value("small-increments", [6, 10], small_increments)
 
     # native-repr-8: three programs whose values do not depend on whether
     # their small Ints are raw: a small and a maximal increment, branch
     # arithmetic, and a countdown loop.
-    fn small_and_max() errors compiler::CompilerError:
+    fn small_and_max() errors std::compiler::CompilerError:
         static compile:
             fn add1(x):
                 x + 1
 
             [add1(5), add1(4611686018427387903)]
-    test::value("representation-independent/small-and-max-increment", [6, 4611686018427387904], small_and_max)
+    std::test::value("representation-independent/small-and-max-increment", [6, 4611686018427387904], small_and_max)
 
-    fn branch_arithmetic() errors compiler::CompilerError:
+    fn branch_arithmetic() errors std::compiler::CompilerError:
         static compile:
             fn f(x):
                 if x < 10:
@@ -327,9 +327,9 @@ fn register_representation_tests():
                     x - 1
 
             [f(1), f(20)]
-    test::value("representation-independent/branch-arithmetic", [2, 19], branch_arithmetic)
+    std::test::value("representation-independent/branch-arithmetic", [2, 19], branch_arithmetic)
 
-    fn countdowns() errors compiler::CompilerError:
+    fn countdowns() errors std::compiler::CompilerError:
         static compile:
             fn count(n, acc):
                 if n == 0:
@@ -337,11 +337,11 @@ fn register_representation_tests():
                 count(n - 1, acc + 1)
 
             [count(5, 0), count(0, 0)]
-    test::value("representation-independent/countdown", [5, 0], countdowns)
+    std::test::value("representation-independent/countdown", [5, 0], countdowns)
 
     # native-repr-11: a tail loop accumulating through a helper's raw
     # arithmetic.
-    fn accumulator() errors compiler::CompilerError:
+    fn accumulator() errors std::compiler::CompilerError:
         static compile:
             fn add1(x):
                 x + 1
@@ -352,18 +352,18 @@ fn register_representation_tests():
                 go(n - 1, add1(acc))
 
             go(2000, 0)
-    test::value("tail-loop-accumulating-through-helper", 2000, accumulator)
+    std::test::value("tail-loop-accumulating-through-helper", 2000, accumulator)
 
     # native-repr-13: a loop index bounded by a String's length (the
     # string_reverse shape); the substring's errors are declared and
     # handled, as a strict program must.
-    fn reverse() errors compiler::CompilerError:
+    fn reverse() errors std::compiler::CompilerError:
         static compile:
             fn reverse_from(text, index, reversed) errors LowerUnderrun, UpperOverrun:
-                if index == str::length(text):
+                if index == std::str::length(text):
                     return reversed
-                character = str::substring(text, index, index + 1)
-                reverse_from(text, index + 1, str::concat(character, reversed))
+                character = std::str::substring(text, index, index + 1)
+                reverse_from(text, index + 1, std::str::concat(character, reversed))
 
             reversed = reverse_from("hello", 0, ""):
                 on LowerUnderrun:
@@ -371,10 +371,10 @@ fn register_representation_tests():
                 on UpperOverrun:
                     return "UpperOverrun"
             reversed
-    test::value("string-reverse-loop", "olleh", reverse)
+    std::test::value("string-reverse-loop", "olleh", reverse)
 
     # native-repr-15: an equality-terminated countdown by steps of 2.
-    fn step_two() errors compiler::CompilerError:
+    fn step_two() errors std::compiler::CompilerError:
         static compile:
             fn count2(n, acc):
                 if n == 0:
@@ -382,24 +382,24 @@ fn register_representation_tests():
                 count2(n - 2, acc + 1)
 
             count2(10000, 0)
-    test::value("countdown-by-two", 5000, step_two)
+    std::test::value("countdown-by-two", 5000, step_two)
 
     # native-repr-16: a counter advanced by an opaque helper call.
-    fn opaque_step() errors compiler::CompilerError:
+    fn opaque_step() errors std::compiler::CompilerError:
         static compile:
             fn next_index(i):
                 i + 1
 
             fn scan(text, index, count):
-                if index >= str::length(text):
+                if index >= std::str::length(text):
                     return count
                 scan(text, next_index(index), count + 1)
 
             scan("abcde", 0, 0)
-    test::value("scan-with-opaque-step", 5, opaque_step)
+    std::test::value("scan-with-opaque-step", 5, opaque_step)
 
     # native-repr-18: a loop index that is also the returned value.
-    fn index_returned() errors compiler::CompilerError:
+    fn index_returned() errors std::compiler::CompilerError:
         static compile:
             fn f(n):
                 if n == 0:
@@ -407,10 +407,10 @@ fn register_representation_tests():
                 f(n - 1)
 
             f(5)
-    test::value("loop-index-returned", 0, index_returned)
+    std::test::value("loop-index-returned", 0, index_returned)
 
     # native-repr-19: a loop whose index never leaves it, returning unit.
-    fn unit_loop() errors compiler::CompilerError:
+    fn unit_loop() errors std::compiler::CompilerError:
         static compile:
             fn f(n):
                 if n == 0:
@@ -418,19 +418,19 @@ fn register_representation_tests():
                 f(n - 1)
 
             f(5)
-    test::value("loop-returning-unit", unit, unit_loop)
+    std::test::value("loop-returning-unit", unit, unit_loop)
 
     # native-repr-20: a nested arithmetic chain.
-    fn chain() errors compiler::CompilerError:
+    fn chain() errors std::compiler::CompilerError:
         static compile:
             fn f(x):
                 ((x + 1) * 2 - 3) + 10
 
             [f(1), f(100)]
-    test::value("arithmetic-chain", [11, 209], chain)
+    std::test::value("arithmetic-chain", [11, 209], chain)
 
     # native-repr-21: a loop index passed to an ordinary call.
-    fn passed_to_call() errors compiler::CompilerError:
+    fn passed_to_call() errors std::compiler::CompilerError:
         static compile:
             fn helper(x):
                 x
@@ -441,18 +441,18 @@ fn register_representation_tests():
                 f(n - 1)
 
             f(5)
-    test::value("loop-index-passed-to-call", 0, passed_to_call)
+    std::test::value("loop-index-passed-to-call", 0, passed_to_call)
 
     # native-repr-22: a bound value read in arithmetic, as an element and in
     # arithmetic again.
-    fn reused() errors compiler::CompilerError:
+    fn reused() errors std::compiler::CompilerError:
         static compile:
             fn f(x):
                 a = x + 1
                 [a + 2, a, a + 3]
 
             f(5)
-    test::value("bound-value-reused", [8, 6, 9], reused)
+    std::test::value("bound-value-reused", [8, 6, 9], reused)
 
 # ---------------------------------------------------------------------------
 # Strings and Lists (native.test, "Strings, lists, Results, equality")
@@ -460,121 +460,121 @@ fn register_representation_tests():
 fn register_string_and_list_tests():
     # native-string-1: String operations on non-ASCII characters, escapes,
     # equality and an empty slice at the end.
-    fn non_ascii() errors compiler::CompilerError:
+    fn non_ascii() errors std::compiler::CompilerError:
         static compile:
-            [str::length("héllo"), str::substring("héllo", 1, 3), str::concat("ä", "€"), str::lowercase("ABCÄ"), "a\"b\n\\c\t"]
-    test::value("string-operations/non-ascii-and-escapes", [5, "él", "ä€", "abcä", "a\"b\n\\c\t"], non_ascii)
+            [std::str::length("héllo"), std::str::substring("héllo", 1, 3), std::str::concat("ä", "€"), std::str::lowercase("ABCÄ"), "a\"b\n\\c\t"]
+    std::test::value("string-operations/non-ascii-and-escapes", [5, "él", "ä€", "abcä", "a\"b\n\\c\t"], non_ascii)
 
-    fn string_equality() errors compiler::CompilerError:
+    fn string_equality() errors std::compiler::CompilerError:
         static compile:
-            ["x" == "x", "x" == "y", "" == "", str::substring("abc", 3, 3)]
-    test::value("string-operations/equality-and-empty-slice", [true, false, true, ""], string_equality)
+            ["x" == "x", "x" == "y", "" == "", std::str::substring("abc", 3, 3)]
+    std::test::value("string-operations/equality-and-empty-slice", [true, false, true, ""], string_equality)
 
     # native-string-astral-1: a supplementary-plane character (U+1F642) is
     # one scalar value, not a surrogate pair.
-    fn astral() errors compiler::CompilerError:
+    fn astral() errors std::compiler::CompilerError:
         static compile:
-            [str::length("🙂"), str::length("a🙂b"), str::substring("a🙂b", 1, 2), "🙂" == "🙂", "🙂" == "🙃"]
-    test::value("astral-character-is-one-scalar", [1, 3, "🙂", true, false], astral)
+            [std::str::length("🙂"), std::str::length("a🙂b"), std::str::substring("a🙂b", 1, 2), "🙂" == "🙂", "🙂" == "🙃"]
+    std::test::value("astral-character-is-one-scalar", [1, 3, "🙂", true, false], astral)
 
     # native-list-1: List operations (append leaves its argument unchanged)
     # and structural equality.
-    fn list_operations() errors compiler::CompilerError:
+    fn list_operations() errors std::compiler::CompilerError:
         static compile:
             xs = [1, [2, 3], "four"]
-            [list::length(xs), list::at(xs, 1), list::append(xs, 5), xs]
-    test::value("list-operations/primitives", [3, [2, 3], [1, [2, 3], "four", 5], [1, [2, 3], "four"]], list_operations)
+            [std::list::length(xs), std::list::at(xs, 1), std::list::append(xs, 5), xs]
+    std::test::value("list-operations/primitives", [3, [2, 3], [1, [2, 3], "four", 5], [1, [2, 3], "four"]], list_operations)
 
-    fn list_equality() errors compiler::CompilerError:
+    fn list_equality() errors std::compiler::CompilerError:
         static compile:
             [[1, [2]] == [1, [2]], [1] == [1, 2], [1] == ["1"], [] == []]
-    test::value("list-operations/structural-equality", [true, false, false, true], list_equality)
+    std::test::value("list-operations/structural-equality", [true, false, false, true], list_equality)
 
 # ---------------------------------------------------------------------------
 # Declared errors at out-of-range indices (native.test: native-error-3,
 # native-spec-8, native-spec-11, native-listget-fast-5 and -6)
 
-# list::at(ITEMS, INDEX), called directly, is EXPECTED: its element, or
+# std::list::at(ITEMS, INDEX), called directly, is EXPECTED: its element, or
 # "IndexNotFound" when the handler receives that error.
 fn register_list_at(name: str, items: List[int], index: int, expected):
-    fn read() errors compiler::CompilerError:
+    fn read() errors std::compiler::CompilerError:
         static compile:
-            element = list::at(items, index):
+            element = std::list::at(items, index):
                 on IndexNotFound:
                     return "IndexNotFound"
             element
-    test::value(name, expected, read)
+    std::test::value(name, expected, read)
 
-# at(ITEMS, INDEX), the Tcl programs' function around list::at declaring
-# IndexNotFound (the dynamic list::at the native inline fast path compiles),
+# at(ITEMS, INDEX), the Tcl programs' function around std::list::at declaring
+# IndexNotFound (the dynamic std::list::at the native inline fast path compiles),
 # is EXPECTED, as above.
 fn register_list_at_in_function(name: str, items: List[int], index: int, expected):
-    fn read() errors compiler::CompilerError:
+    fn read() errors std::compiler::CompilerError:
         static compile:
             fn at(xs, i) errors IndexNotFound:
-                list::at(xs, i)
+                std::list::at(xs, i)
 
             element = at(items, index):
                 on IndexNotFound:
                     return "IndexNotFound"
             element
-    test::value(name, expected, read)
+    std::test::value(name, expected, read)
 
-# str::substring(TEXT, START, END), called directly, is EXPECTED: the slice,
+# std::str::substring(TEXT, START, END), called directly, is EXPECTED: the slice,
 # or the name of the declared error the handler receives.
 fn register_substring(name: str, text: str, start: int, end: int, expected: str):
-    fn slice() errors compiler::CompilerError:
+    fn slice() errors std::compiler::CompilerError:
         static compile:
-            piece = str::substring(text, start, end):
+            piece = std::str::substring(text, start, end):
                 on LowerUnderrun:
                     return "LowerUnderrun"
                 on UpperOverrun:
                     return "UpperOverrun"
             piece
-    test::value(name, expected, slice)
+    std::test::value(name, expected, slice)
 
 fn register_out_of_range_tests(empty: List[int], past_end: int, past_length: int):
-    # native-spec-8: list::at plus an Int in a function declaring
+    # native-spec-8: std::list::at plus an Int in a function declaring
     # IndexNotFound: in range at a constant index (no handler is needed: the
     # call cannot fail), on an empty List, and at a run-time index past the
     # end.
-    fn constant_index() errors compiler::CompilerError:
+    fn constant_index() errors std::compiler::CompilerError:
         static compile:
             fn first_plus(xs, n) errors IndexNotFound:
-                list::at(xs, 0) + n
+                std::list::at(xs, 0) + n
 
             first_plus([1, 2], 3)
-    test::value("list-at-plus/constant-index", 4, constant_index)
+    std::test::value("list-at-plus/constant-index", 4, constant_index)
 
-    fn plus_on_empty() errors compiler::CompilerError:
+    fn plus_on_empty() errors std::compiler::CompilerError:
         static compile:
             fn first_plus(xs, n) errors IndexNotFound:
-                list::at(xs, 0) + n
+                std::list::at(xs, 0) + n
 
             sum = first_plus(empty, 3):
                 on IndexNotFound:
                     return "IndexNotFound"
             sum
-    test::value("list-at-plus/empty-list", "IndexNotFound", plus_on_empty)
+    std::test::value("list-at-plus/empty-list", "IndexNotFound", plus_on_empty)
 
-    fn plus_past_end() errors compiler::CompilerError:
+    fn plus_past_end() errors std::compiler::CompilerError:
         static compile:
             fn at(xs, i) errors IndexNotFound:
-                list::at(xs, i) + 1
+                std::list::at(xs, i) + 1
 
             sum = at([1, 2], past_end):
                 on IndexNotFound:
                     return "IndexNotFound"
             sum
-    test::value("list-at-plus/index-past-end", "IndexNotFound", plus_past_end)
+    std::test::value("list-at-plus/index-past-end", "IndexNotFound", plus_past_end)
 
     # native-spec-11 (its declared-error half): a substring past a String's
     # end and the head of an empty List keep their declared errors in
     # specialized functions.
-    fn cut_past_end() errors compiler::CompilerError:
+    fn cut_past_end() errors std::compiler::CompilerError:
         static compile:
             fn cut(s, n) errors LowerUnderrun, UpperOverrun:
-                str::substring(s, 0, n)
+                std::str::substring(s, 0, n)
 
             piece = cut("abc", past_length):
                 on LowerUnderrun:
@@ -582,34 +582,34 @@ fn register_out_of_range_tests(empty: List[int], past_end: int, past_length: int
                 on UpperOverrun:
                     return "UpperOverrun"
             piece
-    test::value("specialized-errors/substring-past-end", "UpperOverrun", cut_past_end)
+    std::test::value("specialized-errors/substring-past-end", "UpperOverrun", cut_past_end)
 
-    fn head_of_empty() errors compiler::CompilerError:
+    fn head_of_empty() errors std::compiler::CompilerError:
         static compile:
             fn head(xs) errors IndexNotFound:
-                list::at(xs, 0) + 1
+                std::list::at(xs, 0) + 1
 
             first = head(empty):
                 on IndexNotFound:
                     return "IndexNotFound"
             first
-    test::value("specialized-errors/head-of-empty-list", "IndexNotFound", head_of_empty)
+    std::test::value("specialized-errors/head-of-empty-list", "IndexNotFound", head_of_empty)
 
 fn register_index_tests():
-    # native-error-3: list::at fails with IndexNotFound at the length, on an
+    # native-error-3: std::list::at fails with IndexNotFound at the length, on an
     # empty List, at a negative index and at an index past 2^64.
     register_list_at("list-at-out-of-range/index-equals-length", [1, 2], 2, "IndexNotFound")
     register_list_at("list-at-out-of-range/empty-list", [], 0, "IndexNotFound")
     register_list_at("list-at-out-of-range/negative-index", [1], -1, "IndexNotFound")
     register_list_at("list-at-out-of-range/big-index", [1], 100000000000000000000, "IndexNotFound")
-    # native-error-3: str::substring's range errors: a start after the end
+    # native-error-3: std::str::substring's range errors: a start after the end
     # and a negative start are LowerUnderrun, an end past the length
     # UpperOverrun.
     register_substring("substring-out-of-range/start-after-end", "abc", 2, 1, "LowerUnderrun")
     register_substring("substring-out-of-range/end-past-length", "abc", 0, 4, "UpperOverrun")
     register_substring("substring-out-of-range/negative-start", "abc", -1, 2, "LowerUnderrun")
     # native-listget-fast-5 and -6: the same failures through a function's
-    # dynamic list::at, and its boundary indices: index 0 of a one-element
+    # dynamic std::list::at, and its boundary indices: index 0 of a one-element
     # List succeeds, index 1 fails.
     register_list_at_in_function("list-at-in-function/index-equals-length", [1, 2], 2, "IndexNotFound")
     register_list_at_in_function("list-at-in-function/empty-list", [], 0, "IndexNotFound")
@@ -624,65 +624,65 @@ fn register_index_tests():
 # native-listget-fast-1, -3, -7, native-repr-14)
 
 fn register_list_reading_tests():
-    # native-listget-fast-1, -2: a dynamic list::at in a function (the call
+    # native-listget-fast-1, -2: a dynamic std::list::at in a function (the call
     # is proven in range: it needs no handler).
-    fn dynamic_read() errors compiler::CompilerError:
+    fn dynamic_read() errors std::compiler::CompilerError:
         static compile:
             fn at(xs, i) errors IndexNotFound:
-                list::at(xs, i)
+                std::list::at(xs, i)
 
             at([10, 20, 30], 1)
-    test::value("list-read-in-function", 20, dynamic_read)
+    std::test::value("list-read-in-function", 20, dynamic_read)
 
     # native-spec-9, native-listget-fast-4: a nested read of a matrix cell.
-    fn cell_read() errors compiler::CompilerError:
+    fn cell_read() errors std::compiler::CompilerError:
         static compile:
             fn cell(m, r, c) errors IndexNotFound:
-                list::at(list::at(m, r), c) * 2
+                std::list::at(std::list::at(m, r), c) * 2
 
             doubled = cell([[1, 2], [3, 4]], 1, 0):
                 on IndexNotFound:
                     return "IndexNotFound"
             doubled
-    test::value("nested-list-read", 6, cell_read)
+    std::test::value("nested-list-read", 6, cell_read)
 
     # native-listget-fast-3, native-repr-14: matmul's dot product loop, three
-    # dynamic reads per step and a count seeded by list::length.
-    fn dot_product() errors compiler::CompilerError:
+    # dynamic reads per step and a count seeded by std::list::length.
+    fn dot_product() errors std::compiler::CompilerError:
         static compile:
             fn dot(a_row, b, column, k, count, total) errors IndexNotFound:
                 if k == count:
                     return total
-                term = list::at(a_row, k) * list::at(list::at(b, k), column)
+                term = std::list::at(a_row, k) * std::list::at(std::list::at(b, k), column)
                 dot(a_row, b, column, k + 1, count, total + term)
 
-            product = dot([1, 2], [[1, 2], [3, 4]], 0, 0, list::length([1, 2]), 0):
+            product = dot([1, 2], [[1, 2], [3, 4]], 0, 0, std::list::length([1, 2]), 0):
                 on IndexNotFound:
                     return "IndexNotFound"
             product
-    test::value("dot-product-loop", 7, dot_product)
+    std::test::value("dot-product-loop", 7, dot_product)
 
     # native-spec-10 (its value half): a heterogeneous List claims no element
     # kind; its Int element still adds.
-    fn heterogeneous() errors compiler::CompilerError:
+    fn heterogeneous() errors std::compiler::CompilerError:
         static compile:
             fn bump(xs, i) errors IndexNotFound:
-                list::at(xs, i) + 1
+                std::list::at(xs, i) + 1
 
             bump([1, "a"], 0)
-    test::value("heterogeneous-list-int-element", 2, heterogeneous)
+    std::test::value("heterogeneous-list-int-element", 2, heterogeneous)
 
     # native-listget-fast-7 (its value half): an element read from a List
     # stays intact across a later allocation.
-    fn kept_across_allocation() errors compiler::CompilerError:
+    fn kept_across_allocation() errors std::compiler::CompilerError:
         static compile:
             fn f(xs, i) errors IndexNotFound:
-                v = list::at(xs, i)
-                y = str::concat("a very long string so it actually allocates", "more text here too")
+                v = std::list::at(xs, i)
+                y = std::str::concat("a very long string so it actually allocates", "more text here too")
                 [v, y]
 
             f(["first element also fairly long so nothing is virtualized away", "second"], 0)
-    test::value("list-element-kept-across-allocation", ["first element also fairly long so nothing is virtualized away", "a very long string so it actually allocatesmore text here too"], kept_across_allocation)
+    std::test::value("list-element-kept-across-allocation", ["first element also fairly long so nothing is virtualized away", "a very long string so it actually allocatesmore text here too"], kept_across_allocation)
 
 # ---------------------------------------------------------------------------
 # Calls: tail, non-tail, specialized and through values (native.test,
@@ -692,7 +692,7 @@ fn register_call_tests(past_end: int):
     # native-call-2, native-repr-17: a self tail call (a back edge natively;
     # its parameter stays a raw small Int across it). 5000 calls: the
     # interpreter runs its Botlish calls as nested Tcl evaluations.
-    fn countdown() errors compiler::CompilerError:
+    fn countdown() errors std::compiler::CompilerError:
         static compile:
             fn count(n, acc):
                 if n == 0:
@@ -700,10 +700,10 @@ fn register_call_tests(past_end: int):
                 count(n - 1, acc + 1)
 
             count(5000, 0)
-    test::value("self-tail-call-countdown", 5000, countdown)
+    std::test::value("self-tail-call-countdown", 5000, countdown)
 
     # native-call-4: calls that are not in tail position.
-    fn fibonacci() errors compiler::CompilerError:
+    fn fibonacci() errors std::compiler::CompilerError:
         static compile:
             fn fib(n):
                 if n <= 1:
@@ -711,12 +711,12 @@ fn register_call_tests(past_end: int):
                 fib(n - 1) + fib(n - 2)
 
             fib(15)
-    test::value("non-tail-recursion-fibonacci", 610, fibonacci)
+    std::test::value("non-tail-recursion-fibonacci", 610, fibonacci)
 
     # native-call-7: a function and a native passed as values to an untyped
     # parameter, and a callable chosen at run time. (The Tcl program passes
-    # the bare `length`, no longer a source name: str::length is its intent.)
-    fn function_and_native_arguments() errors compiler::CompilerError:
+    # the bare `length`, no longer a source name: std::str::length is its intent.)
+    fn function_and_native_arguments() errors std::compiler::CompilerError:
         static compile:
             fn apply(f, x):
                 f(x)
@@ -724,27 +724,27 @@ fn register_call_tests(past_end: int):
             fn inc(n):
                 n + 1
 
-            [apply(inc, 1), apply(str::length, "abc")]
-    test::value("callable-arguments/function-and-native", [2, 3], function_and_native_arguments)
+            [apply(inc, 1), apply(std::str::length, "abc")]
+    std::test::value("callable-arguments/function-and-native", [2, 3], function_and_native_arguments)
 
     # A native with a declared error passed as a value: in range it reads,
     # past the end its error reaches the caller's handler.
-    fn native_argument_failing() errors compiler::CompilerError:
+    fn native_argument_failing() errors std::compiler::CompilerError:
         static compile:
             fn apply2(f, x, y):
                 f(x, y)
 
             fn element_or_error(xs, i):
-                element = apply2(list::at, xs, i):
+                element = apply2(std::list::at, xs, i):
                     on IndexNotFound:
                         return "IndexNotFound"
                 element
 
             [element_or_error([1, 2], 1), element_or_error([1], past_end)]
-    test::value("callable-arguments/native-with-declared-error", [2, "IndexNotFound"], native_argument_failing)
+    std::test::value("callable-arguments/native-with-declared-error", [2, "IndexNotFound"], native_argument_failing)
 
     # pick chooses inc or dec at run time.
-    fn chosen_at_run_time() errors compiler::CompilerError:
+    fn chosen_at_run_time() errors std::compiler::CompilerError:
         static compile:
             fn apply(f, x):
                 f(x)
@@ -762,10 +762,10 @@ fn register_call_tests(past_end: int):
                     dec
 
             [apply(pick(true), 1), apply(pick(false), 1)]
-    test::value("callable-arguments/chosen-at-run-time", [2, 0], chosen_at_run_time)
+    std::test::value("callable-arguments/chosen-at-run-time", [2, 0], chosen_at_run_time)
 
     # native-call-8 (its value half): direct recursion (5000 self tail calls).
-    fn direct_recursion() errors compiler::CompilerError:
+    fn direct_recursion() errors std::compiler::CompilerError:
         static compile:
             fn even(n):
                 if n == 0:
@@ -773,11 +773,11 @@ fn register_call_tests(past_end: int):
                 even(n - 2)
 
             [even(10000), even(4)]
-    test::value("direct-recursion-by-two", [true, true], direct_recursion)
+    std::test::value("direct-recursion-by-two", [true, true], direct_recursion)
 
     # native-error-2 (its value half): a function declared before its
     # caller is bound when the caller runs.
-    fn declared_before_caller() errors compiler::CompilerError:
+    fn declared_before_caller() errors std::compiler::CompilerError:
         static compile:
             fn late():
                 1
@@ -787,20 +787,20 @@ fn register_call_tests(past_end: int):
 
             v = early()
             v
-    test::value("callee-declared-before-caller", 1, declared_before_caller)
+    std::test::value("callee-declared-before-caller", 1, declared_before_caller)
 
     # native-spec-1: an Int increment, specialized for its Int argument.
-    fn specialized_increment() errors compiler::CompilerError:
+    fn specialized_increment() errors std::compiler::CompilerError:
         static compile:
             fn inc(x):
                 x + 1
 
             inc(1)
-    test::value("specialized-increment", 2, specialized_increment)
+    std::test::value("specialized-increment", 2, specialized_increment)
 
     # native-spec-2: one equality function called with two Ints, two
     # Strings, and Int-or-String values (its generic instance).
-    fn equality_instances() errors compiler::CompilerError:
+    fn equality_instances() errors std::compiler::CompilerError:
         static compile:
             fn pick(flag):
                 if flag:
@@ -811,10 +811,10 @@ fn register_call_tests(past_end: int):
                 x == y
 
             [same(1, 1), same("a", "b"), same(pick(true), pick(false)), same(pick(false), "one")]
-    test::value("equality-in-several-instances", [true, false, false, true], equality_instances)
+    std::test::value("equality-in-several-instances", [true, false, false, true], equality_instances)
 
     # native-spec-2b: a type test's refinement on an Int-or-String argument.
-    fn refined_by_type_test() errors compiler::CompilerError:
+    fn refined_by_type_test() errors std::compiler::CompilerError:
         static compile:
             fn f(x):
                 if integer?(x):
@@ -829,11 +829,11 @@ fn register_call_tests(past_end: int):
                     "a"
 
             [f(41), f(pick(false))]
-    test::value("type-test-refines-argument", [42, 0], refined_by_type_test)
+    std::test::value("type-test-refines-argument", [42, 0], refined_by_type_test)
 
     # native-spec-5: a self tail call swapping an Int and a String argument
     # (1001 times).
-    fn swapping() errors compiler::CompilerError:
+    fn swapping() errors std::compiler::CompilerError:
         static compile:
             fn swap(a, b, n):
                 if n == 0:
@@ -841,10 +841,10 @@ fn register_call_tests(past_end: int):
                 swap(b, a, n - 1)
 
             swap(1, "x", 1001)
-    test::value("self-tail-call-swapping-kinds", ["x", 1], swapping)
+    std::test::value("self-tail-call-swapping-kinds", ["x", 1], swapping)
 
     # native-spec-6: a specialized caller calling a specialized callee.
-    fn specialized_callee() errors compiler::CompilerError:
+    fn specialized_callee() errors std::compiler::CompilerError:
         static compile:
             fn odd(n):
                 if n == 0:
@@ -857,10 +857,10 @@ fn register_call_tests(past_end: int):
                 odd(n - 1)
 
             [even(1000), odd(7)]
-    test::value("specialized-caller-and-callee", [true, true], specialized_callee)
+    std::test::value("specialized-caller-and-callee", [true, true], specialized_callee)
 
     # native-spec-7: a callee's Int result used by its caller's arithmetic.
-    fn callee_result() errors compiler::CompilerError:
+    fn callee_result() errors std::compiler::CompilerError:
         static compile:
             fn id(x):
                 x
@@ -869,7 +869,7 @@ fn register_call_tests(past_end: int):
                 id(y) + 1
 
             next(41)
-    test::value("callee-result-in-caller-arithmetic", 42, callee_result)
+    std::test::value("callee-result-in-caller-arithmetic", 42, callee_result)
 
 # ---------------------------------------------------------------------------
 # Closures (native.test, backends.test)
@@ -877,7 +877,7 @@ fn register_call_tests(past_end: int):
 fn register_closure_tests():
     # native-closure-2: two closures of one function keep separate
     # environments.
-    fn separate_environments() errors compiler::CompilerError:
+    fn separate_environments() errors std::compiler::CompilerError:
         static compile:
             fn make(step):
                 fn walk(n, acc):
@@ -889,12 +889,12 @@ fn register_closure_tests():
             a = make(2)
             b = make(10)
             [a(5, 0), b(5, 0), a(3, 1)]
-    test::value("closures-keep-separate-environments", [10, 50, 7], separate_environments)
+    std::test::value("closures-keep-separate-environments", [10, 50, 7], separate_environments)
 
     # native-closure-3: recursive closures over a captured value, three
     # nested closures, a closure created in a loop and returned, and
     # closures collected in a List.
-    fn recursive_closures() errors compiler::CompilerError:
+    fn recursive_closures() errors std::compiler::CompilerError:
         static compile:
             fn outer(k):
                 fn count(n):
@@ -906,9 +906,9 @@ fn register_closure_tests():
                 [count(6), twice(3)]
 
             outer(5)
-    test::value("closures/recursive-over-captured-value", [5, 10], recursive_closures)
+    std::test::value("closures/recursive-over-captured-value", [5, 10], recursive_closures)
 
-    fn nested_closures() errors compiler::CompilerError:
+    fn nested_closures() errors std::compiler::CompilerError:
         static compile:
             fn a(x):
                 fn b(y):
@@ -918,9 +918,9 @@ fn register_closure_tests():
                 b
 
             a(1)(2)(3)
-    test::value("closures/three-nested", 6, nested_closures)
+    std::test::value("closures/three-nested", 6, nested_closures)
 
-    fn closure_in_loop() errors compiler::CompilerError:
+    fn closure_in_loop() errors std::compiler::CompilerError:
         static compile:
             fn make():
                 loop:
@@ -930,9 +930,9 @@ fn register_closure_tests():
                     return get
 
             make()()
-    test::value("closures/created-in-loop", 7, closure_in_loop)
+    std::test::value("closures/created-in-loop", 7, closure_in_loop)
 
-    fn closures_in_list() errors compiler::CompilerError:
+    fn closures_in_list() errors std::compiler::CompilerError:
         static compile:
             fn make(n):
                 fn get():
@@ -942,20 +942,20 @@ fn register_closure_tests():
             fn collect(i, acc):
                 if i == 4:
                     return acc
-                collect(i + 1, list::append(acc, make(i)))
+                collect(i + 1, std::list::append(acc, make(i)))
 
             fs = collect(0, [])
-            [list::at(fs, 0)(), list::at(fs, 3)()]
-    test::value("closures/collected-in-list", [0, 3], closures_in_list)
+            [std::list::at(fs, 0)(), std::list::at(fs, 3)()]
+    std::test::value("closures/collected-in-list", [0, 3], closures_in_list)
 
     # differential-nested-closures (backends.test): composition returns a
     # closure over two callables. Its call is the one call in the suite
     # charged the program's erased-callable contract (a returned closure
-    # calling untyped parameters), which carries list::at's IndexNotFound
-    # because callable-arguments/native-with-declared-error passes list::at
+    # calling untyped parameters), which carries std::list::at's IndexNotFound
+    # because callable-arguments/native-with-declared-error passes std::list::at
     # through an untyped parameter: that is why it is handled. The handler
     # never runs.
-    fn composition() errors compiler::CompilerError:
+    fn composition() errors std::compiler::CompilerError:
         static compile:
             fn compose(f, g):
                 fn h(x):
@@ -972,7 +972,7 @@ fn register_closure_tests():
                 on IndexNotFound:
                     return "IndexNotFound"
             composed
-    test::value("closure-composition", 41, composition)
+    std::test::value("closure-composition", 41, composition)
 
 # ---------------------------------------------------------------------------
 # The bit_and identity fold (native-bitwise-fold.test): bit_and(a, K) is a
@@ -982,7 +982,7 @@ fn register_closure_tests():
 fn register_bitwise_fold_tests():
     # a in [0, 95] masked with 95: 32 and 33 have bit 5 set, which 95
     # clears (this miscompiled natively to [30, 31, 32, 33]).
-    fn clearing_a_bit() errors compiler::CompilerError:
+    fn clearing_a_bit() errors std::compiler::CompilerError:
         static compile:
             fn lim(x):
                 if x > 95:
@@ -998,10 +998,10 @@ fn register_bitwise_fold_tests():
 
             loop i from 30 to 34:
                 f(i)
-    test::value("bitwise-fold-interval-mask-clearing-a-bit", [30, 31, 0, 1], clearing_a_bit)
+    std::test::value("bitwise-fold-interval-mask-clearing-a-bit", [30, 31, 0, 1], clearing_a_bit)
 
     # The same mask on a call site whose Range is lim's narrowed summary.
-    fn narrowed_call_site() errors compiler::CompilerError:
+    fn narrowed_call_site() errors std::compiler::CompilerError:
         static compile:
             fn lim(x):
                 if x > 95:
@@ -1013,10 +1013,10 @@ fn register_bitwise_fold_tests():
                 bit_and(lim(k), 95)
 
             [f(32), f(0)]
-    test::value("bitwise-fold-narrowed-call-site", [0, 0], narrowed_call_site)
+    std::test::value("bitwise-fold-narrowed-call-site", [0, 0], narrowed_call_site)
 
     # a in [0, 15] masked with 15: the identity.
-    fn nibble_identity() errors compiler::CompilerError:
+    fn nibble_identity() errors std::compiler::CompilerError:
         static compile:
             fn lim(x):
                 if x > 15:
@@ -1031,10 +1031,10 @@ fn register_bitwise_fold_tests():
                 bit_and(lim(k), 15)
 
             [f(3), f(40), f(-2)]
-    test::value("bitwise-fold-nibble-identity-still-folds", [3, 15, 0], nibble_identity)
+    std::test::value("bitwise-fold-nibble-identity-still-folds", [3, 15, 0], nibble_identity)
 
     # a in [0, 1000] masked with 1023: the identity.
-    fn wide_interval() errors compiler::CompilerError:
+    fn wide_interval() errors std::compiler::CompilerError:
         static compile:
             fn lim(x):
                 if x > 1000:
@@ -1049,10 +1049,10 @@ fn register_bitwise_fold_tests():
                 bit_and(lim(k), 1023)
 
             [f(999), f(5000), f(-7)]
-    test::value("bitwise-fold-wide-interval-full-mask-folds", [999, 1000, 0], wide_interval)
+    std::test::value("bitwise-fold-wide-interval-full-mask-folds", [999, 1000, 0], wide_interval)
 
     # The exact values {1, 2} masked with 1: 2 & 1 = 0.
-    fn exact_set() errors compiler::CompilerError:
+    fn exact_set() errors std::compiler::CompilerError:
         static compile:
             fn pick(c):
                 if c:
@@ -1064,10 +1064,10 @@ fn register_bitwise_fold_tests():
                 bit_and(pick(c), 1)
 
             [f(true), f(false)]
-    test::value("bitwise-fold-exact-set-non-identity-kept", [1, 0], exact_set)
+    std::test::value("bitwise-fold-exact-set-non-identity-kept", [1, 0], exact_set)
 
     # The constant mask as the first operand.
-    fn mask_on_the_left() errors compiler::CompilerError:
+    fn mask_on_the_left() errors std::compiler::CompilerError:
         static compile:
             fn lim(x):
                 if x > 95:
@@ -1082,7 +1082,7 @@ fn register_bitwise_fold_tests():
                 bit_and(95, lim(k))
 
             [f(32), f(31), f(64)]
-    test::value("bitwise-fold-mask-on-the-left", [0, 31, 64], mask_on_the_left)
+    std::test::value("bitwise-fold-mask-on-the-left", [0, 31, 64], mask_on_the_left)
 
 # ---------------------------------------------------------------------------
 
@@ -1097,6 +1097,6 @@ fn register_native_values_tests():
     register_closure_tests()
     register_bitwise_fold_tests()
 
-with context test::suite()
+with context std::test::suite()
 register_native_values_tests()
-test::report()
+std::test::report()

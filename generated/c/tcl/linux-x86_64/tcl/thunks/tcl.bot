@@ -3,7 +3,7 @@
 # The thunked APIs of generic/tcl.h (static inline functions, table-redirected
 # names, macros): externs of the C wrappers in the shim library (C-BINDGEN.md,
 # "Thunks"). Build the shim with `tools/c-bindgen.tcl build`.
-import ffi::c
+import std::ffi::c
 import tcl::ctypes
 
 extern c library "botlish_shim_tcl_3850e119"
@@ -11,15 +11,15 @@ extern c library "tcl9.0"
 
 # C: static inline void TclBounceRefCount(Tcl_Obj *objPtr)
 extern c fn TclBounceRefCount named "botlish_tcl_TclBounceRefCount"(
-    objPtr: ffi::c::Ptr[tcl::ctypes::Tcl_Obj]
+    objPtr: std::ffi::c::Ptr[tcl::ctypes::Tcl_Obj]
 ) -> unit
 
 # C: macro Tcl_DStringLength, as Tcl_Size Tcl_DStringLength(Tcl_DString *dsPtr)
 extern c fn Tcl_DStringLength named "botlish_tcl_Tcl_DStringLength"(
-    dsPtr: ffi::c::Ptr[tcl::ctypes::Tcl_DString] read proven noescape
-) -> ffi::c::Long
+    dsPtr: std::ffi::c::Ptr[tcl::ctypes::Tcl_DString] read proven noescape
+) -> std::ffi::c::Long
 
 # C: macro Tcl_GetHashValue, as void *Tcl_GetHashValue(Tcl_HashEntry *h)
 extern c fn Tcl_GetHashValue named "botlish_tcl_Tcl_GetHashValue"(
-    h: ffi::c::Ptr[tcl::ctypes::Tcl_HashEntry] read proven noescape
-) -> ffi::c::Ptr[ffi::c::Void]
+    h: std::ffi::c::Ptr[tcl::ctypes::Tcl_HashEntry] read proven noescape
+) -> std::ffi::c::Ptr[std::ffi::c::Void]

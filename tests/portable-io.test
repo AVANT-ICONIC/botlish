@@ -1,19 +1,19 @@
-# portable-io.test -- the portable `io` text-output API (lib/io.bot) and its
-# Linux implementation (lib/linux/io.bot), CONTEXT-TRAITS.md:
+# portable-io.test -- the portable `io` text-output API (stdlib/io.bot) and its
+# Linux implementation (stdlib/linux/io.bot), CONTEXT-TRAITS.md:
 #
-#   import io
-#   import linux::io
+#   import std::io
+#   import std::linux::io
 #
 #   fn hello() errors WriteFailed:
-#       io::print_line("Hello, world!")
+#       std::io::print_line("Hello, world!")
 #
-#   with context linux::io::create()
+#   with context std::linux::io::create()
 #   hello()
 #
-# io::print/print_line/write_error/write_error_line need the io::IO context
+# std::io::print/print_line/write_error/write_error_line need the std::io::IO context
 # trait; hello declares no context and acquires the requirement; the
-# installed linux::io::LinuxIO is the one context implementing io::IO, so
-# every portable operation compiles to a direct call of linux::io's own
+# installed std::linux::io::LinuxIO is the one context implementing std::io::IO, so
+# every portable operation compiles to a direct call of std::linux::io's own
 # implementation, which writes with the raw write(2) path (no libc). Short
 # writes are completed; a failed or stalled write is WriteFailed; no count,
 # descriptor or errno reaches the portable caller. Real syscalls are checked
@@ -29,7 +29,7 @@ testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
 
 # Linux on x86-64 or AArch64: the native backend's whole runtime (native
 # stack maps, the stack guard, coroutines), and syscalls through the portable
-# wrappers (linux::write, linux::read, linux::io: each architecture's own
+# wrappers (std::linux::write, std::linux::read, std::linux::io: each architecture's own
 # transport, LINUX-SYSCALL-TRANSPORTS.md). linuxX86_64 is for a test that
 # runs the x86-64 transport or reads x86-64 machine code; one that only
 # compiles it (NIR, CLIF) needs no host.
@@ -61,7 +61,7 @@ proc readBinary {path} {
 }
 
 # The HIR of source TEXT, compiled as a program file (so lib modules load),
-# for a Linux target (linuxTarget: the host's own on Linux): linux::io is the
+# for a Linux target (linuxTarget: the host's own on Linux): std::linux::io is the
 # Linux platform's.
 proc ioHir {text} {
     set path [file join $::scratch p[incr ::programCounter].bot]
@@ -138,97 +138,97 @@ set helloText [readFile [file join $::projectRoot examples io hello.bot]]
 # Every portable operation, UTF-8 beyond ASCII (a two-byte and a four-byte
 # scalar), routed to stdout and stderr; the program's value says whether a
 # WriteFailed reached it.
-set routingText {import io
-import linux::io
+set routingText {import std::io
+import std::linux::io
 
-fn emit_all() -> str errors io::WriteFailed:
-    io::print("out:")
-    io::print_line(" é 𝄞")
-    io::write_error("err:")
-    io::write_error_line(" done")
+fn emit_all() -> str errors std::io::WriteFailed:
+    std::io::print("out:")
+    std::io::print_line(" é 𝄞")
+    std::io::write_error("err:")
+    std::io::write_error_line(" done")
     "ok"
 
-with context linux::io::create()
+with context std::linux::io::create()
 
 emit_all():
-    on io::WriteFailed:
+    on std::io::WriteFailed:
         "failed"
 }
 
 # The Hello World whose value says whether the write failed.
-set statusText {import io
-import linux::io
+set statusText {import std::io
+import std::linux::io
 
-fn hello() -> str errors io::WriteFailed:
-    io::print_line("Hello, world!")
+fn hello() -> str errors std::io::WriteFailed:
+    std::io::print_line("Hello, world!")
     "ok"
 
-with context linux::io::create()
+with context std::linux::io::create()
 
 hello():
-    on io::WriteFailed:
+    on std::io::WriteFailed:
         "failed"
 }
 
 # ---------------------------------------------------------------------------
 # The portable surface
 
-test io-portable-surface {io exports exactly print, print_line, write_error and write_error_line, each over one str and nothing else (no descriptor, buffer or count), all requiring the io::IO context trait whose operations are write_text and write_error_text; io::WriteFailed is the one error} -body {
-    set hir [ioHir "import io\n1\n"]
+test io-portable-surface {io exports exactly print, print_line, write_error and write_error_line, each over one str and nothing else (no descriptor, buffer or count), all requiring the std::io::IO context trait whose operations are write_text and write_error_text; std::io::WriteFailed is the one error} -body {
+    set hir [ioHir "import std::io\n1\n"]
     set source [dict get $hir traitSource]
-    set names [lsort [lmap b [dict get $source scopes [dict get $source modules io] bindings] {dict get $source bindings $b name}]]
-    set io [lindex [lmap entry [dict get $source traits] {expr {[dict get $entry id] eq "io::IO" ? $entry : [continue]}}] 0]
-    set shapes [lmap b [dict get $source scopes [dict get $source modules io] bindings] {
+    set names [lsort [lmap b [dict get $source scopes [dict get $source modules std::io] bindings] {dict get $source bindings $b name}]]
+    set io [lindex [lmap entry [dict get $source traits] {expr {[dict get $entry id] eq "std::io::IO" ? $entry : [continue]}}] 0]
+    set shapes [lmap b [dict get $source scopes [dict get $source modules std::io] bindings] {
         set block [hir::get $source [dict get $source bindings $b declaredBy] value]
         list [hir::get $source $block declaredParamTypes] [hir::get $source $block declaredResult] \
             [hir::get $source $block declaredErrors] [hir::contexts::required $source $block]
     }]
     list $names [dict get $io context] [lmap r [dict get $io requirements] {
         list [dict get $r name] [lmap p [dict get $r params] {dict get $p type}] [dict get $r result type] [dict get $r errors]
-    }] [lsort -unique $shapes] [lsearch -inline [hir::errorDecls $hir] io::WriteFailed]
-} -result {{io::print io::print_line io::write_error io::write_error_line} 1 {{write_text str unit io::WriteFailed} {write_error_text str unit io::WriteFailed}} {{str unit io::WriteFailed io::IO}} io::WriteFailed}
+    }] [lsort -unique $shapes] [lsearch -inline [hir::errorDecls $hir] std::io::WriteFailed]
+} -result {{std::io::print std::io::print_line std::io::write_error std::io::write_error_line} 1 {{write_text str unit std::io::WriteFailed} {write_error_text str unit std::io::WriteFailed}} {{str unit std::io::WriteFailed std::io::IO}} std::io::WriteFailed}
 
-test io-linux-implements {linux::io::LinuxIO implements io::IO through linux::io::write_text and linux::io::write_error_text, from its own module only} -body {
-    ioHir "import io\nimport linux::io\n1\n"
-    set s [hir::contexts::satisfiesTrait linux::io::LinuxIO io::IO]
+test io-linux-implements {std::linux::io::LinuxIO implements std::io::IO through std::linux::io::write_text and std::linux::io::write_error_text, from its own module only} -body {
+    ioHir "import std::io\nimport std::linux::io\n1\n"
+    set s [hir::contexts::satisfiesTrait std::linux::io::LinuxIO std::io::IO]
     list [dict get $s ok] [lmap {r impl} [dict get $s impls] {list $r [hir::traits::QualifiedName [dict get $impl unit] [dict get $impl name]]}]
-} -result {1 {{write_text linux::io::write_text} {write_error_text linux::io::write_error_text}}}
+} -result {1 {{write_text std::linux::io::write_text} {write_error_text std::linux::io::write_error_text}}}
 
-test io-transitive {hello declares no context: it requires io::IO through io::print_line, the one top-level call selects LinuxIO, and the compiled hello is the clone calling print_line's clone} -body {
+test io-transitive {hello declares no context: it requires std::io::IO through std::io::print_line, the one top-level call selects LinuxIO, and the compiled hello is the clone calling print_line's clone} -body {
     set hir [ioHir $::helloText]
     set source [dict get $hir traitSource]
     set hello [lindex [lmap e [hirFind $source bind] {
         expr {[dict get $source bindings [hir::get $source $e binding] name] eq "hello" ? [hir::get $source $e value] : [continue]}}] 0]
     list [expr {[dict exists $source exprs $hello contextParams] ? [dict get $source exprs $hello contextParams] : {}}] \
-        [hir::contexts::of $source $hello] [hir::contexts::explain $source $hello io::IO] \
+        [hir::contexts::of $source $hello] [hir::contexts::explain $source $hello std::io::IO] \
         [dict values [dict get $source contexts selections]]
-} -result {{} {direct {} required io::IO} {    hello
-     -> io::print_line
-        directly requires io::IO} {{io::IO linux::io::LinuxIO}}}
+} -result {{} {direct {} required std::io::IO} {    hello
+     -> std::io::print_line
+        directly requires std::io::IO} {{std::io::IO std::linux::io::LinuxIO}}}
 
-test io-nir-direct {NIR: io::print_line's clone calls linux::io::write_text directly with one operand (no context operand); write_text loads stdout's word from LinuxIO's slot; hello's clone calls print_line's clone with one operand} -body {
+test io-nir-direct {NIR: std::io::print_line's clone calls std::linux::io::write_text directly with one operand (no context operand); write_text loads stdout's word from LinuxIO's slot; hello's clone calls print_line's clone with one operand} -body {
     set nir [native::nir [ioHir $::helloText]]
-    set writeText [nirId $nir linux::io::write_text]
-    set printLine [nirId $nir io::print_line<io::IO=linux::io::LinuxIO>]
-    set print [nirBody $nir io::print_line<io::IO=linux::io::LinuxIO>]
+    set writeText [nirId $nir std::linux::io::write_text]
+    set printLine [nirId $nir std::io::print_line<std::io::IO=std::linux::io::LinuxIO>]
+    set print [nirBody $nir std::io::print_line<std::io::IO=std::linux::io::LinuxIO>]
     list [regexp -all -line "= call $writeText %\[0-9\]+\$" [join $print \n]] \
         [lsearch -all -inline -glob $print {*call*}] \
-        [lindex [nirBody $nir linux::io::write_text] 0] \
-        [lsearch -all -inline -glob [nirBody $nir hello<io::IO=linux::io::LinuxIO>] "*call $printLine *"] \
+        [lindex [nirBody $nir std::linux::io::write_text] 0] \
+        [lsearch -all -inline -glob [nirBody $nir hello<std::io::IO=std::linux::io::LinuxIO>] "*call $printLine *"] \
         [regexp -all {callvalue} $nir]
 } -match glob -result {1 {{%* = call * %*}} {%1 = contextload 8} {{%1 = call * %0}} 0}
 
-test io-tcl-backends {the Tcl backends verify the portable program and run it up to the write(2) boundary, which they refuse (NATIVE-ONLY), as for every linux::io program} -body {
+test io-tcl-backends {the Tcl backends verify the portable program and run it up to the write(2) boundary, which they refuse (NATIVE-ONLY), as for every std::linux::io program} -body {
     set hir [ioHir $::helloText]
     lmap backend {interp compile} {lrange [outcomeUnderHir $backend $hir] 0 1}
 } -result {{error {CORE SEMANTIC NATIVE-ONLY}} {error {CORE SEMANTIC NATIVE-ONLY}}}
 
-# A context implementing io::IO without Linux: every write fails when the
+# A context implementing std::io::IO without Linux: every write fails when the
 # text is longer than the context's limit, so the portable API runs on every
 # backend with a substitute environment (selected statically, like LinuxIO).
 set limitedLib {
-limited.bot {import io
-import str
+limited.bot {import std::io
+import std::str
 type Limit = Int in 0..1000
 
 context struct Limited:
@@ -237,23 +237,23 @@ context struct Limited:
 fn create(max: Limit) -> Limited:
     Limited {max: max}
 
-fn write_text(text: str, context c: Limited) -> unit errors io::WriteFailed:
-    if str::length(text) > c.max:
-        fail io::WriteFailed
+fn write_text(text: str, context c: Limited) -> unit errors std::io::WriteFailed:
+    if std::str::length(text) > c.max:
+        fail std::io::WriteFailed
     unit
 
-fn write_error_text(text: str, context c: Limited) -> unit errors io::WriteFailed:
-    fail io::WriteFailed
+fn write_error_text(text: str, context c: Limited) -> unit errors std::io::WriteFailed:
+    fail std::io::WriteFailed
 }
 }
 
-test io-substitute-context {a test context implementing io::IO is selected like LinuxIO: io::print_line succeeds or fails with io::WriteFailed by what its implementation does, the same on every backend} -body {
+test io-substitute-context {a test context implementing std::io::IO is selected like LinuxIO: std::io::print_line succeeds or fails with std::io::WriteFailed by what its implementation does, the same on every backend} -body {
     withPrivateLibrary {
         set f [open [file join $::core::libraryDir limited.bot] w]
         puts -nonewline $f [lindex $::limitedLib 1]
         close $f
         set result [lmap max {20 3} {
-            sourceAgree "import io\nimport limited\nfn greet() -> List\[str\] errors io::WriteFailed:\n    io::print_line(\"hi\")\n    io::print(\"there\")\n    \[\"ok\"\]\nwith context limited::create($max)\nr = greet():\n    on io::WriteFailed:\n        \[\"failed\"\]\nr\n"
+            sourceAgree "import std::io\nimport std::limited\nfn greet() -> List\[str\] errors std::io::WriteFailed:\n    std::io::print_line(\"hi\")\n    std::io::print(\"there\")\n    \[\"ok\"\]\nwith context std::limited::create($max)\nr = greet():\n    on std::io::WriteFailed:\n        \[\"failed\"\]\nr\n"
         }]
     }
     set result
@@ -262,13 +262,13 @@ test io-substitute-context {a test context implementing io::IO is selected like 
 # ---------------------------------------------------------------------------
 # The line operations' newline (S16, 2048-ENGINE-WORKLOAD.md): print_line and
 # write_error_line append it as a character, text.append_char('\n'), so
-# lib/io.bot carries no warning -- its two one-character String literals
+# stdlib/io.bot carries no warning -- its two one-character String literals
 # "\n" were ONE-CHAR-STRING-LITERAL findings every program importing io
 # printed, and a program importing io could not compile under -warnings
 # error.
 
-test io-warning-clean {a program importing io and linux::io (the S16 reproduction) collects no warning from lib/io.bot under the default policy, and compiles under -warnings error} -body {
-    set text "import io\nimport linux::io\nwith context linux::io::create()\nio::print_line(\"hi\"):\n    on io::WriteFailed:\n        unit\n"
+test io-warning-clean {a program importing io and std::linux::io (the S16 reproduction) collects no warning from stdlib/io.bot under the default policy, and compiles under -warnings error} -body {
+    set text "import std::io\nimport std::linux::io\nwith context std::linux::io::create()\nstd::io::print_line(\"hi\"):\n    on std::io::WriteFailed:\n        unit\n"
     set hir [surface::compile $text t.bot -warnings default -warning-channel "" -target [linuxTarget]]
     set strict [catch {surface::compile $text t.bot -warnings error -warning-channel "" -target [linuxTarget]} message]
     list [lmap w [hir::warnings::of $hir] {
@@ -276,46 +276,46 @@ test io-warning-clean {a program importing io and linux::io (the S16 reproductio
     }] $strict
 } -result {{} 0}
 
-# A substitute io::IO context declared by the program itself, holding only an
+# A substitute std::io::IO context declared by the program itself, holding only an
 # Int (a native context slot holds no String): its write_text and
 # write_error_text succeed exactly when they receive OUT and ERR, and fail
-# with io::WriteFailed otherwise.
+# with std::io::WriteFailed otherwise.
 proc expectingContext {out err} {
-    return [string map [list @OUT@ $out @ERR@ $err] {import io
-import str
+    return [string map [list @OUT@ $out @ERR@ $err] {import std::io
+import std::str
 type Tag = Int in 0..0
 context struct Expect:
     tag: Tag
-fn write_text(text: str, context c: Expect) -> unit errors io::WriteFailed:
+fn write_text(text: str, context c: Expect) -> unit errors std::io::WriteFailed:
     if text == @OUT@:
         return unit
-    fail io::WriteFailed
-fn write_error_text(text: str, context c: Expect) -> unit errors io::WriteFailed:
+    fail std::io::WriteFailed
+fn write_error_text(text: str, context c: Expect) -> unit errors std::io::WriteFailed:
     if text == @ERR@:
         return unit
-    fail io::WriteFailed
+    fail std::io::WriteFailed
 }]
 }
 
 test io-line-text-exact {print_line and write_error_line write exactly TEXT followed by one newline, as one write, on their own stream, on every backend: the empty text, a two-byte and a four-byte scalar, a text already ending in a newline; TEXT alone, or the other stream, is not what they write} -body {
     lmap {call out err} {
-        {io::print_line("é😀")}        {"é😀\n"}  {""}
-        {io::print_line("é😀")}        {"é😀"}    {""}
-        {io::print_line("")}           {"\n"}     {""}
-        {io::print_line("x\n")}        {"x\n\n"}  {""}
-        {io::write_error_line("é😀")}  {""}       {"é😀\n"}
-        {io::write_error_line("é😀")}  {"é😀\n"}  {"é😀"}
-        {io::write_error_line("")}     {""}       {"\n"}
-        {io::print("é😀")}             {"é😀"}    {""}
+        {std::io::print_line("é😀")}        {"é😀\n"}  {""}
+        {std::io::print_line("é😀")}        {"é😀"}    {""}
+        {std::io::print_line("")}           {"\n"}     {""}
+        {std::io::print_line("x\n")}        {"x\n\n"}  {""}
+        {std::io::write_error_line("é😀")}  {""}       {"é😀\n"}
+        {std::io::write_error_line("é😀")}  {"é😀\n"}  {"é😀"}
+        {std::io::write_error_line("")}     {""}       {"\n"}
+        {std::io::print("é😀")}             {"é😀"}    {""}
     } {
-        sourceAgree "[expectingContext $out $err]fn run() -> str errors io::WriteFailed:\n    $call\n    \"written\"\nwith context Expect {tag: 0}\nr = run():\n    on io::WriteFailed:\n        \"not written\"\nr\n"
+        sourceAgree "[expectingContext $out $err]fn run() -> str errors std::io::WriteFailed:\n    $call\n    \"written\"\nwith context Expect {tag: 0}\nr = run():\n    on std::io::WriteFailed:\n        \"not written\"\nr\n"
     }
 } -result [list {value {"written"}} {value {"not written"}} {value {"written"}} {value {"written"}} \
     {value {"written"}} {value {"not written"}} {value {"written"}} {value {"written"}}]
 
 test io-line-newline-is-a-character {NIR: print_line's and write_error_line's clones append the newline with one strappendchar of the immediate char 10 -- no strcat and no String constant} -body {
     set nir [native::nir [ioHir $::routingText]]
-    lmap name {io::print_line<io::IO=linux::io::LinuxIO> io::write_error_line<io::IO=linux::io::LinuxIO>} {
+    lmap name {std::io::print_line<std::io::IO=std::linux::io::LinuxIO> std::io::write_error_line<std::io::IO=std::linux::io::LinuxIO>} {
         set body [join [nirBody $nir $name] \n]
         list [regexp -all {op strappendchar } $body] [regexp -all -line {= char 10$} $body] \
             [regexp -all {op strcat } $body] [regexp -all { = str } $body]
@@ -348,7 +348,7 @@ test io-routing-utf8 {print and print_line write to descriptor 1, write_error an
 } {err: done
 } 18}
 
-test io-strace {each portable operation is one write(2) of the complete text on the right descriptor; the Hello World's write comes from the raw syscall boundary through linux::sys::write (linux::write's x86-64 transport), linux::write, linux::io::write_all, linux::io::write_text, print_line's clone and hello's clone -- no libc frame} -constraints {linuxX86_64 strace posixShell rustcLinker} -body {
+test io-strace {each portable operation is one write(2) of the complete text on the right descriptor; the Hello World's write comes from the raw syscall boundary through std::linux::sys::write (std::linux::write's x86-64 transport), std::linux::write, std::linux::io::write_all, std::linux::io::write_text, print_line's clone and hello's clone -- no libc frame} -constraints {linuxX86_64 strace posixShell rustcLinker} -body {
     set exe [buildExecutable routing $::routingText]
     set log [file join $::scratch strace.routing]
     exec strace -f -qq -e trace=write -o $log $exe >/dev/null 2>/dev/null
@@ -381,7 +381,7 @@ test io-strace {each portable operation is one write(2) of the complete text on 
         }
     }
     list $routing [lrange $frames 0 8]
-} -result {{{1 out: 4} {1 { \303\251 \360\235\204\236\n} 9} {2 err: 4} {2 { done\n} 6}} {botlish_linux_x86_64_syscall rt_linux_x86_64_syscall linux::sys::write linux::write linux::io::write_all linux::io::write_text io::print_line<io::IO=linux::io::LinuxIO> hello<io::IO=linux::io::LinuxIO> <program>}}
+} -result {{{1 out: 4} {1 { \303\251 \360\235\204\236\n} 9} {2 err: 4} {2 { done\n} 6}} {botlish_linux_x86_64_syscall rt_linux_x86_64_syscall std::linux::sys::write std::linux::write std::linux::io::write_all std::linux::io::write_text std::io::print_line<std::io::IO=std::linux::io::LinuxIO> hello<std::io::IO=std::linux::io::LinuxIO> <program>}}
 
 test io-short-write-completed {a short write is completed: when the kernel accepts 5 of the 14 bytes (strace-injected), the remaining 9 bytes are written next, and the caller sees success -- never a byte count} -constraints {nativeLinux straceInject posixShell} -body {
     set exe [buildExecutable status $::statusText]
@@ -392,7 +392,7 @@ test io-short-write-completed {a short write is completed: when the kernel accep
 "ok"
 }}
 
-test io-write-failed {a negative write result (the kernel's -errno, here an injected EBADF) and a write that makes no progress (0 bytes) are io::WriteFailed: the portable caller's handler runs; the errno never reaches it} -constraints {nativeLinux straceInject posixShell} -body {
+test io-write-failed {a negative write result (the kernel's -errno, here an injected EBADF) and a write that makes no progress (0 bytes) are std::io::WriteFailed: the portable caller's handler runs; the errno never reaches it} -constraints {nativeLinux straceInject posixShell} -body {
     set exe [buildExecutable status $::statusText]
     lmap inject {write:error=EBADF:when=1 write:retval=0:when=1} {
         set log [file join $::scratch strace.fail]
@@ -403,10 +403,10 @@ test io-write-failed {a negative write result (the kernel's -errno, here an inje
 }} {2 {"failed"
 }}}
 
-test io-allocations {allocation evidence: the context-trait path adds nothing -- io::print_line(text) allocates exactly what the direct linux::io::write_text(str::append_char(text, '\n')) does: the line String, the UTF-8 byte List and the Bytes (the operation's own), plus linux::io::create's 7 structs and the one struct linux::write builds} -constraints {nativeLinux} -body {
-    set pre "import io\nimport linux::io\nimport str\nwith context linux::io::create()\n"
-    lmap call {{io::print_line("Hello, world!")} {linux::io::write_text(str::append_char("Hello, world!", '\n'))}} {
-        set report [native::allocationReport [ioHir "${pre}r = $call:\n    on io::WriteFailed:\n        unit\nr\n"] summary]
+test io-allocations {allocation evidence: the context-trait path adds nothing -- std::io::print_line(text) allocates exactly what the direct std::linux::io::write_text(std::str::append_char(text, '\n')) does: the line String, the UTF-8 byte List and the Bytes (the operation's own), plus std::linux::io::create's 7 structs and the one struct std::linux::write builds} -constraints {nativeLinux} -body {
+    set pre "import std::io\nimport std::linux::io\nimport std::str\nwith context std::linux::io::create()\n"
+    lmap call {{std::io::print_line("Hello, world!")} {std::linux::io::write_text(std::str::append_char("Hello, world!", '\n'))}} {
+        set report [native::allocationReport [ioHir "${pre}r = $call:\n    on std::io::WriteFailed:\n        unit\nr\n"] summary]
         list [dict get $report total allocations] [dict get $report total allocatedBytes] \
             [lmap {k v} [dict get $report byKind] {expr {[dict get $v allocations] ? "$k=[dict get $v allocations]" : [continue]}}]
     }

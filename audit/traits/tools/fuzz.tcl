@@ -9,7 +9,7 @@
 # a join of two parameters' witnesses, a witness that does not satisfy the
 # trait, ...). -show 1 prints every program.
 #
-# Each program is a set of modules in a private temporary library plus an
+# Each program is a set of application modules in a temporary directory plus an
 # entry program:
 #
 #   * 2-4 traits (in the entry program, or in module `tr`, spelled through
@@ -586,7 +586,7 @@ proc intText {e} {
         op {
             lassign $e - op v
             if {$op eq "label"} {
-                return "str::length([viewText $v].label())"
+                return "std::str::length([viewText $v].label())"
             }
             return "[viewText $v].$op\()"
         }
@@ -597,7 +597,7 @@ proc intText {e} {
         concrete {
             lassign $e - id op v
             if {$op eq "label"} {
-                return "str::length($id\::label([viewText $v]))"
+                return "std::str::length($id\::label([viewText $v]))"
             }
             return "$id\::$op\([viewText $v])"
         }
@@ -642,7 +642,7 @@ proc elementText {e} {
         viewop {
             lassign $e - op a
             if {$op eq "label"} {
-                return "str::length([argText $a].label())"
+                return "std::str::length([argText $a].label())"
             }
             return "[argText $a].$op\()"
         }
@@ -657,7 +657,7 @@ proc elementText {e} {
 # {FILES ENTRY}: the module files ({PATH TEXT ...}) and the entry program.
 proc programText {} {
     set files {}
-    set entry "import str\n"
+    set entry "import std::str\n"
     if {[dict get $::P traitHome] eq "module"} {
         set text ""
         foreach t [dict keys [dict get $::P traits]] {
@@ -1279,13 +1279,10 @@ proc outcome {backend hir} {
 # ---------------------------------------------------------------------------
 # Driver
 
-# A private library: a copy of lib/ in a temporary directory, the generated
-# modules written into it per program.
+# The generated modules are application modules (IMPORTS.md, "Application
+# modules"): written per program into a temporary directory, the application
+# root the entry program is compiled with (surface::compile -root).
 set library [file tempdir botlish-trait-fuzz]
-foreach entry [glob -nocomplain -directory $::core::libraryDir *] {
-    file copy -force $entry $library
-}
-set ::core::libraryDir $library
 set generated {}
 
 set stats [dict create programs 0 accepted 0 rejected 0 instances 0 failures 0]
@@ -1322,7 +1319,7 @@ try {
         }
         set expectedKinds [lsort -unique [concat {*}[lmap r $rejects {lindex $r 0}]]]
         set problem ""
-        if {[catch {surface::compile $text fuzz.bot -warnings off} hir compileOptions]} {
+        if {[catch {surface::compile $text fuzz.bot -warnings off -root $library} hir compileOptions]} {
             set kind [lindex [dict get $compileOptions -errorcode] end]
             if {[lindex [dict get $compileOptions -errorcode] 1] eq "SYNTAX"} {
                 set kind SYNTAX

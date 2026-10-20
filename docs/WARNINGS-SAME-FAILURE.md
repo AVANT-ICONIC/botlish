@@ -444,7 +444,7 @@ finding, see the corpus audit, so the dedicated program is what shows this
 warning's text). Warnings go to stderr only (`sf-cli-stdout-clean`).
 
 **CI's plain corpus steps.** The brief expected them to gain `SAME-FAILURE`
-lines. They do not: no program those steps compile loads `abi::bytes`, the
+lines. They do not: no program those steps compile loads `std::abi::bytes`, the
 corpus's only finding. Reproduced locally: the native job's example step
 (`main.tcl -backend cranelift` over `examples/stdlib`, `examples/surface/0[1-8]`,
 `1[1-3]` and `examples/hir/0[1-3]`) exits 0 with exactly milestone 3's 314
@@ -452,7 +452,7 @@ stderr lines (8 `FIXED-ARITY-LIST-RETURN`, 301 `METHOD-ELIGIBLE`, 2
 `SAME-RETURN-VALUE`, and their notes) and 0 `SAME-FAILURE` lines; the Tcl jobs'
 `main.tcl -backend B` (its built-in examples), run on `interp`, exits 0 with an
 empty stderr. The
-`examples/linux` programs, which do load `abi::bytes`, print the finding, but no
+`examples/linux` programs, which do load `std::abi::bytes`, print the finding, but no
 CI step runs them through `main.tcl`; the tests that compile them run under the
 harness's `off` default.
 
@@ -714,20 +714,20 @@ the guards compiles, removes the finding and keeps every probed value.
 clean). The tree has moved twice under this workstream (milestone 3 pinned
 `faae181` and then re-checked `ffbd610`); `d9a71f5` is simply what is current,
 and the audit says so in its header. It compiles `examples/stdlib` (9),
-`examples/surface` (14), `bench/*.bot` (8) and `lib/*.bot` (8) with warnings
+`examples/surface` (14), `bench/*.bot` (8) and `stdlib/*.bot` (8) with warnings
 on. 35 of 39 compile standalone: the two deliberate rejections (`09`, `10`),
-and `lib/list.bot` and `lib/mutable_array.bot` (which use their own namespace
+and `stdlib/list.bot` and `stdlib/mutable_array.bot` (which use their own namespace
 without importing it, as milestones 2 and 3 recorded).
 
 **1 distinct finding**, hand-classified:
 
 | # | where | function | failure | exits | hand classification |
 |---|---|---|---|---|---|
-| 1 | `lib/abi/bytes.bot:141:9` (note `:143:9`) | `abi::bytes::replace` | `IndexNotFound` | 2 | **un-split repeated guard (combine-conditions candidate)**: the two halves of one bounds check, `if index < 0: fail IndexNotFound` / `elif index >= mutable_byte_store::count(data.storage): fail IndexNotFound`. The failure itself is uniform by design -- the function's header says "the same error list::at and mutable_array::set use" -- so a richer split is *not* a candidate; the natural responses are merging the guards into one `or` condition, or keeping the two-line form |
+| 1 | `stdlib/abi/bytes.bot:141:9` (note `:143:9`) | `std::abi::bytes::replace` | `IndexNotFound` | 2 | **un-split repeated guard (combine-conditions candidate)**: the two halves of one bounds check, `if index < 0: fail IndexNotFound` / `elif index >= std::mutable_byte_store::count(data.storage): fail IndexNotFound`. The failure itself is uniform by design -- the function's header says "the same error std::list::at and std::mutable_array::set use" -- so a richer split is *not* a candidate; the natural responses are merging the guards into one `or` condition, or keeping the two-line form |
 
-It is a library module's finding: `lib/abi/bytes.bot` is not in the `lib/*.bot`
-glob, but `lib/linux.bot` (which is) imports it, so it is first seen compiling
-`lib/linux.bot`, and every program that loads `abi::bytes` prints it
+It is a library module's finding: `stdlib/abi/bytes.bot` is not in the `stdlib/*.bot`
+glob, but `stdlib/linux.bot` (which is) imports it, so it is first seen compiling
+`stdlib/linux.bot`, and every program that loads `std::abi::bytes` prints it
 (`examples/linux/write.bot`, `read-stdin.bot`, `context-hello.bot`). No
 `examples/stdlib`, `examples/surface` or `bench` program has a finding.
 
@@ -738,8 +738,8 @@ positives 0**. The author would merge or keep the finding as is; it is not a
 finding they would do neither for, so it raises no warning-design issue.
 
 **The merge check (scratch copy, the corpus not edited).** The tool copies
-`lib/` to a temporary directory, merges the guard pair into `if index < 0 or
-index >= mutable_byte_store::count(data.storage): fail IndexNotFound`, and
+`stdlib/` to a temporary directory, merges the guard pair into `if index < 0 or
+index >= std::mutable_byte_store::count(data.storage): fail IndexNotFound`, and
 compiles a probe program against both copies that calls `replace` below range,
 at both ends of the range, at and beyond the length, on the empty value, and
 with an unchanged byte. The merged copy compiles, loses the finding, and the
@@ -751,10 +751,10 @@ the brief gave. The fail census of the corpus (every function the corpus
 compiles that has a structurally reachable `fail`): **15 functions, 28
 reachable fail sites, 0 re-raises; 2 functions with a single fail site; 12 near
 misses** -- functions with two fail sites that are two *distinct* failures, all
-the deliberate range-guard pattern: `abi::i8` ... `abi::usize` (10 checked
+the deliberate range-guard pattern: `std::abi::i8` ... `std::abi::usize` (10 checked
 creators, `AbiIntegerBelowRange`/`AbiIntegerAboveRange`),
-`abi::x86_64::register64` (`Register64BelowRange`/`Register64AboveRange`) and
-`byte::from_int` (`BelowRange`/`AboveRange`). Those are deliberately not
+`std::abi::x86_64::register64` (`Register64BelowRange`/`Register64AboveRange`) and
+`std::byte::from_int` (`BelowRange`/`AboveRange`). Those are deliberately not
 findings: different declared failures never group. The one finding is the one
 range check in the corpus that fails a *uniform* failure from both sides.
 
@@ -802,7 +802,7 @@ was added or removed.
 * **Second snapshot: the tree merged with `origin/main` `64659f7`** (merge
   `cb939a9`). While this milestone ran, `main` gained the refinement-values
   milestone (REFINEMENT-VALUES.md: `refined type` and `proves` contracts, new
-  parser, HIR and native code, a rewritten `lib/web.bot`, a new
+  parser, HIR and native code, a rewritten `stdlib/web.bot`, a new
   `examples/refinement/` program, and test files added and removed). The only
   textual conflict was AGENTS.md, where both sides appended independent text
   (both kept). Re-run on the merged tree: **`interp` 6090 tests, 6090 passed;
@@ -842,9 +842,9 @@ was added or removed.
   `sf-two-handlers-same-failure`, `sf-two-handlers-and-a-guard`,
   `sf-handlers-of-two-calls` and the mutant `handler-alternatives-counted-apart`.
 * Successor note (REFACTOR-WARNINGS-CLEAN.md): the warning-driven refactor
-  merged `abi::bytes::replace`'s two failures into one `fail IndexNotFound`
+  merged `std::abi::bytes::replace`'s two failures into one `fail IndexNotFound`
   after the nested in-range tests (`if index >= 0: if index < count: return
-  ...`), so programs that load `abi::bytes` no longer print this code. The
+  ...`), so programs that load `std::abi::bytes` no longer print this code. The
   merge check's own form (one guard, `index < 0 or index >= count`) was
   tried first and replaced: the native backend lowers an `or` condition as a
   materialized bool, the nested tests branch directly. A gate
@@ -895,7 +895,7 @@ payload-equality machinery, and any new CLI option or `BOTLISH_WARNINGS` value.
   uniformity argument. The over-count is pinned as a limitation (see
   "Reachability").
 * **CI's plain corpus steps gain no `SAME-FAILURE` line** (item 15 expected
-  some): none of their programs loads `abi::bytes`. They still exit 0.
+  some): none of their programs loads `std::abi::bytes`. They still exit 0.
 * **The breakage differed from the brief's list.** `tests/warnings.test`'s
   `warn-failures-are-not-returns` broke too (a complete-set assertion over a
   true finding) and was adapted with the file's existing code filter. On the
@@ -996,7 +996,7 @@ payload-equality machinery, and any new CLI option or `BOTLISH_WARNINGS` value.
 
 **Verification**
 
-33. *Corpus findings?* 1 at `d9a71f5`: `abi::bytes::replace`'s
+33. *Corpus findings?* 1 at `d9a71f5`: `std::abi::bytes::replace`'s
     `IndexNotFound` guard pair, an un-split repeated guard (combine-conditions
     candidate; the failure is uniform by design). 12 near misses, all
     distinct-failure range guards.

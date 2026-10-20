@@ -38,11 +38,11 @@ totals per run: Ir=44,138,830  Dr=10,348,987  Dw=7,437,021  I1mr=208  D1mr=59,88
     0.86%  [libc] _int_realloc                                                    Ir=  377,542.4  Dr=   65,103.4  Dw=   52,074.0  Bc=   52,079.0  Bcm=      329.6  Bi=        0.0  D1mr=        4.2  D1mw=        2.8
     0.85%  [runtime] rt_int_mod                                                   Ir=  374,000.0  Dr=   59,500.0  Dw=   51,000.0  Bc=   42,500.0  Bcm=    1,501.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
     0.70%  [rust-other] __rustc::__rust_no_alloc_shim_is_unstable_v2              Ir=  310,084.8  Dr=  155,042.4  Dw=   77,521.2  Bc=        0.0  Bcm=        0.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
-    0.69%  [botlish] 7 ascii::is_alphabetic                                       Ir=  303,500.0  Dr=   50,000.0  Dw=   61,000.0  Bc=   23,500.0  Bcm=        0.6  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
-    0.68%  [botlish] 9 web::is_unreserved                                         Ir=  300,000.0  Dr=   67,500.0  Dw=   65,000.0  Bc=   15,000.0  Bcm=      437.4  Bi=        0.0  D1mr=        2.2  D1mw=        0.0
+    0.69%  [botlish] 7 std::ascii::is_alphabetic                                       Ir=  303,500.0  Dr=   50,000.0  Dw=   61,000.0  Bc=   23,500.0  Bcm=        0.6  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
+    0.68%  [botlish] 9 std::web::is_unreserved                                         Ir=  300,000.0  Dr=   67,500.0  Dw=   65,000.0  Bc=   15,000.0  Bcm=      437.4  Bi=        0.0  D1mr=        2.2  D1mw=        0.0
     0.62%  [rust-other] __rustc::__rust_alloc                                     Ir=  274,084.8  Dr=   68,521.2  Dw=   68,521.2  Bc=        0.0  Bcm=        0.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
     0.60%  [rust-other] <alloc::raw_vec::RawVecInner>::finish_grow                Ir=  266,850.8  Dr=   52,057.8  Dw=   65,080.4  Bc=   26,027.6  Bcm=        8.2  Bi=   13,010.0  D1mr=        0.2  D1mw=        2.0
-    0.59%  [botlish] 8 ascii::is_alphanumeric                                     Ir=  261,500.0  Dr=   50,000.0  Dw=   54,000.0  Bc=   16,500.0  Bcm=        0.4  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
+    0.59%  [botlish] 8 std::ascii::is_alphanumeric                                     Ir=  261,500.0  Dr=   50,000.0  Dw=   54,000.0  Bc=   16,500.0  Bcm=        0.4  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
     0.57%  [rust-other] <alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and Ir=  253,539.0  Dr=   52,008.0  Dw=   39,006.0  Bc=   19,503.0  Bcm=        1.8  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
     0.56%  [runtime] <runtime::vm::Vm>::collect_with                              Ir=  245,570.0  Dr=   81,635.0  Dw=   40,844.0  Bc=   61,143.0  Bcm=       72.6  Bi=       18.0  D1mr=   13,688.6  D1mw=       15.0
     0.41%  [rust-other] __rustc::__rust_dealloc                                   Ir=  179,952.0  Dr=   44,988.0  Dw=   44,988.0  Bc=        0.0  Bcm=        0.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
@@ -50,47 +50,47 @@ totals per run: Ir=44,138,830  Dr=10,348,987  Dw=7,437,021  I1mr=208  D1mr=59,88
     0.38%  [botlish] 16 repeat_uri                                                Ir=  166,043.0  Dr=   24,011.0  Dw=   38,016.0  Bc=   20,002.0  Bcm=        3.6  Bi=        0.0  D1mr=        5.2  D1mw=        2.8
     0.36%  [runtime] rt_set_contains                                              Ir=  157,500.0  Dr=   32,500.0  Dw=   27,500.0  Bc=   22,500.0  Bcm=    2,500.4  Bi=        0.0  D1mr=        2.6  D1mw=        0.0
     0.32%  [rust-other] __rustc::__rdl_realloc                                    Ir=  143,167.2  Dr=   39,045.6  Dw=   32,538.0  Bc=    6,507.6  Bcm=        6.4  Bi=    6,507.6  D1mr=        0.2  D1mw=        0.0
-    0.32%  [botlish] 5 ascii::is_upper                                            Ir=  140,500.0  Dr=   25,000.0  Dw=   12,500.0  Bc=   21,000.0  Bcm=    7,000.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
+    0.32%  [botlish] 5 std::ascii::is_upper                                            Ir=  140,500.0  Dr=   25,000.0  Dw=   12,500.0  Bc=   21,000.0  Bcm=    7,000.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
     0.29%  [runtime] <runtime::vm::Vm>::new_str                                   Ir=  130,000.0  Dr=   32,500.0  Dw=   32,500.0  Bc=    6,500.0  Bcm=        0.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
-    0.27%  [botlish] 6 ascii::is_lower                                            Ir=  117,000.0  Dr=   22,000.0  Dw=   11,000.0  Bc=   18,000.0  Bcm=        0.4  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
+    0.27%  [botlish] 6 std::ascii::is_lower                                            Ir=  117,000.0  Dr=   22,000.0  Dw=   11,000.0  Bc=   18,000.0  Bcm=        0.4  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
     0.24%  [botlish] 11 high_nibble                                               Ir=  104,000.0  Dr=   13,000.0  Dw=   19,500.0  Bc=    6,500.0  Bcm=        0.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
     0.10%  [rust-other] __rustc::__rdl_dealloc                                    Ir=   44,988.0  Dr=   44,988.0  Dw=        0.0  Bc=        0.0  Bcm=        0.0  Bi=   44,988.0  D1mr=        0.2  D1mw=        0.0
 
 == Botlish -> Botlish calls, per callee (per run): count; INCLUSIVE cost of the non-self calls
       14,000.0  14 esc_char                              incl  56.05% of Ir  Ir=24,739,587.0  Dr=5,879,283.0  Dw=3,927,971.8  Bc=3,633,330.4  Bcm=  158,698.2  Bi=  269,244.6  D1mr=   47,719.4  D1mw=    8,892.0
-      12,500.0  7 ascii::is_alphabetic                   incl   1.27% of Ir  Ir=  561,000.0  Dr=   97,000.0  Dw=   84,500.0  Bc=   62,500.0  Bcm=    7,001.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
-      12,500.0  9 web::is_unreserved                     incl   4.11% of Ir  Ir=1,813,500.0  Dr=  335,000.0  Dw=  315,000.0  Bc=  193,000.0  Bcm=   14,439.2  Bi=   10,000.0  D1mr=        6.2  D1mw=        0.0
-      12,500.0  8 ascii::is_alphanumeric                 incl   1.96% of Ir  Ir=  866,000.0  Dr=  155,000.0  Dw=  142,500.0  Bc=   85,500.0  Bcm=   11,500.4  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
-      12,500.0  5 ascii::is_upper                        incl   0.32% of Ir  Ir=  140,500.0  Dr=   25,000.0  Dw=   12,500.0  Bc=   21,000.0  Bcm=    7,000.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
-      11,000.0  6 ascii::is_lower                        incl   0.27% of Ir  Ir=  117,000.0  Dr=   22,000.0  Dw=   11,000.0  Bc=   18,000.0  Bcm=        0.4  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
+      12,500.0  7 std::ascii::is_alphabetic                   incl   1.27% of Ir  Ir=  561,000.0  Dr=   97,000.0  Dw=   84,500.0  Bc=   62,500.0  Bcm=    7,001.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
+      12,500.0  9 std::web::is_unreserved                     incl   4.11% of Ir  Ir=1,813,500.0  Dr=  335,000.0  Dw=  315,000.0  Bc=  193,000.0  Bcm=   14,439.2  Bi=   10,000.0  D1mr=        6.2  D1mw=        0.0
+      12,500.0  8 std::ascii::is_alphanumeric                 incl   1.96% of Ir  Ir=  866,000.0  Dr=  155,000.0  Dw=  142,500.0  Bc=   85,500.0  Bcm=   11,500.4  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
+      12,500.0  5 std::ascii::is_upper                        incl   0.32% of Ir  Ir=  140,500.0  Dr=   25,000.0  Dw=   12,500.0  Bc=   21,000.0  Bcm=    7,000.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
+      11,000.0  6 std::ascii::is_lower                        incl   0.27% of Ir  Ir=  117,000.0  Dr=   22,000.0  Dw=   11,000.0  Bc=   18,000.0  Bcm=        0.4  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
        6,500.0  11 high_nibble                           incl   0.24% of Ir  Ir=  104,000.0  Dr=   13,000.0  Dw=   19,500.0  Bc=    6,500.0  Bcm=        0.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
        6,500.0  12 hex_pair                              incl  27.24% of Ir  Ir=12,022,826.0  Dr=2,992,540.4  Dw=1,728,797.0  Bc=1,878,705.8  Bcm=   41,295.0  Bi=  150,743.0  D1mr=   36,154.8  D1mw=    5,096.8
-       4,000.0  4 ascii::is_digit                        incl   0.10% of Ir  Ir=   43,500.0  Dr=    8,000.0  Dw=    4,000.0  Bc=    6,500.0  Bcm=    4,499.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
+       4,000.0  4 std::ascii::is_digit                        incl   0.10% of Ir  Ir=   43,500.0  Dr=    8,000.0  Dw=    4,000.0  Bc=    6,500.0  Bcm=    4,499.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
        4,000.0  13 esc_bytes                             incl  37.88% of Ir  Ir=16,719,906.0  Dr=4,092,720.4  Dw=2,527,561.0  Bc=2,591,065.8  Bcm=  114,308.8  Bi=  175,243.0  D1mr=   36,171.8  D1mw=    5,109.4
-       2,000.0  10 web::uri_escape_text                  incl  99.32% of Ir  Ir=43,836,529.4  Dr=10,297,942.6  Dw=7,382,163.4  Bc=6,432,975.8  Bcm=  294,349.6  Bi=  448,249.4  D1mr=   59,847.0  D1mw=   17,246.4
+       2,000.0  10 std::web::uri_escape_text                  incl  99.32% of Ir  Ir=43,836,529.4  Dr=10,297,942.6  Dw=7,382,163.4  Bc=6,432,975.8  Bcm=  294,349.6  Bi=  448,249.4  D1mr=   59,847.0  D1mw=   17,246.4
        2,000.0  15 esc_from                              incl  99.22% of Ir  Ir=43,796,529.4  Dr=10,289,942.6  Dw=7,368,163.4  Bc=6,430,975.8  Bcm=  294,348.4  Bi=  448,249.4  D1mr=   59,843.2  D1mw=   17,246.4
-           4.0  1 char::codepoint                        incl   0.00% of Ir  Ir=       60.0  Dr=       16.0  Dw=       12.0  Bc=        0.0  Bcm=        0.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
-           4.0  2 byte::from_int                         incl   0.00% of Ir  Ir=      108.0  Dr=       24.0  Dw=       12.0  Bc=       12.0  Bcm=        3.0  Bi=        0.0  D1mr=        1.0  D1mw=        0.0
-           1.0  3 byte::set                              incl   0.01% of Ir  Ir=    2,868.4  Dr=      657.2  Dw=      524.4  Bc=      385.6  Bcm=       41.2  Bi=       42.4  D1mr=       11.6  D1mw=        7.0
+           4.0  1 std::char::codepoint                        incl   0.00% of Ir  Ir=       60.0  Dr=       16.0  Dw=       12.0  Bc=        0.0  Bcm=        0.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
+           4.0  2 std::byte::from_int                         incl   0.00% of Ir  Ir=      108.0  Dr=       24.0  Dw=       12.0  Bc=       12.0  Bcm=        3.0  Bi=        0.0  D1mr=        1.0  D1mw=        0.0
+           1.0  3 std::byte::set                              incl   0.01% of Ir  Ir=    2,868.4  Dr=      657.2  Dw=      524.4  Bc=      385.6  Bcm=       41.2  Bi=       42.4  D1mr=       11.6  D1mw=        7.0
            1.0  16 repeat_uri                            incl  99.99% of Ir  Ir=44,134,572.4  Dr=10,347,953.6  Dw=7,436,179.4  Bc=6,466,977.8  Bcm=  295,854.4  Bi=  448,249.4  D1mr=   59,853.6  D1mw=   17,249.2
            1.0  0 <program>                              incl 100.00% of Ir  Ir=44,138,824.2  Dr=10,348,986.4  Dw=7,437,019.8  Bc=6,467,521.2  Bcm=  295,921.2  Bi=  448,320.8  D1mr=   59,888.8  D1mw=   17,267.8
 
 == Botlish -> Botlish calls, per caller -> callee (per run)
       14,000.0  15 esc_from  ->  14 esc_char
-      12,500.0  8 ascii::is_alphanumeric  ->  7 ascii::is_alphabetic
-      12,500.0  14 esc_char  ->  9 web::is_unreserved
-      12,500.0  9 web::is_unreserved  ->  8 ascii::is_alphanumeric
-      12,500.0  7 ascii::is_alphabetic  ->  5 ascii::is_upper
-      11,000.0  7 ascii::is_alphabetic  ->  6 ascii::is_lower
+      12,500.0  8 std::ascii::is_alphanumeric  ->  7 std::ascii::is_alphabetic
+      12,500.0  14 esc_char  ->  9 std::web::is_unreserved
+      12,500.0  9 std::web::is_unreserved  ->  8 std::ascii::is_alphanumeric
+      12,500.0  7 std::ascii::is_alphabetic  ->  5 std::ascii::is_upper
+      11,000.0  7 std::ascii::is_alphabetic  ->  6 std::ascii::is_lower
        6,500.0  12 hex_pair  ->  11 high_nibble
        6,500.0  13 esc_bytes  ->  12 hex_pair
-       4,000.0  8 ascii::is_alphanumeric  ->  4 ascii::is_digit
+       4,000.0  8 std::ascii::is_alphanumeric  ->  4 std::ascii::is_digit
        4,000.0  14 esc_char  ->  13 esc_bytes
-       2,000.0  16 repeat_uri  ->  10 web::uri_escape_text
-       2,000.0  10 web::uri_escape_text  ->  15 esc_from
-           4.0  3 byte::set  ->  1 char::codepoint
-           4.0  3 byte::set  ->  2 byte::from_int
-           1.0  0 <program>  ->  3 byte::set
+       2,000.0  16 repeat_uri  ->  10 std::web::uri_escape_text
+       2,000.0  10 std::web::uri_escape_text  ->  15 esc_from
+           4.0  3 std::byte::set  ->  1 std::char::codepoint
+           4.0  3 std::byte::set  ->  2 std::byte::from_int
+           1.0  0 <program>  ->  3 std::byte::set
            1.0  0 <program>  ->  16 repeat_uri
            1.0  botlish_audit_run  ->  0 <program>
 
@@ -118,15 +118,15 @@ totals per run: Ir=44,138,830  Dr=10,348,987  Dw=7,437,021  I1mr=208  D1mr=59,88
        6,500.0  12 hex_pair  ->  runtime::construct::rt_construct
        6,500.0  13 esc_bytes  ->  runtime::construct::rt_construct
        4,000.0  16 repeat_uri  ->  rt_str_len
-       2,500.0  9 web::is_unreserved  ->  rt_set_contains
+       2,500.0  9 std::web::is_unreserved  ->  rt_set_contains
        2,000.0  16 repeat_uri  ->  rt_int_mod
-           4.0  1 char::codepoint  ->  rt_char_codepoint
-           4.0  3 byte::set  ->  rt_list_append
+           4.0  1 std::char::codepoint  ->  rt_char_codepoint
+           4.0  3 std::byte::set  ->  rt_list_append
            3.0  0 <program>  ->  rt_list_new
            1.0  0 <program>  ->  rt_closure_new
-           1.0  3 byte::set  ->  rt_str_len
-           1.0  3 byte::set  ->  rt_list_new
-           1.0  3 byte::set  ->  rt_set_from_list
+           1.0  3 std::byte::set  ->  rt_str_len
+           1.0  3 std::byte::set  ->  rt_list_new
+           1.0  3 std::byte::set  ->  rt_set_from_list
 
 == calls made outside Botlish code, caller -> callee (per run; top 60)
       82,611.4  __rustc::__rust_dealloc  ->  __rustc::__rdl_dealloc

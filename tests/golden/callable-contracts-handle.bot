@@ -21,9 +21,9 @@
 # suites. This suite's program is the Tcl test's.
 #
 # Imports: compiler and test (every suite); coroutine, as the Tcl program.
-import compiler
-import coroutine
-import test
+import std::compiler
+import std::coroutine
+import std::test
 
 # sccHandle's error and messages.
 error E
@@ -35,7 +35,7 @@ struct Ev:
     value: int
 
 fn register_scc_declared_handle_tests():
-    fn coroutine_boundary_declared() errors compiler::CompilerError:
+    fn coroutine_boundary_declared() errors std::compiler::CompilerError:
         static compile:
             fn raise_e(m) -> int errors E:
                 fail E
@@ -54,8 +54,8 @@ fn register_scc_declared_handle_tests():
                     on E:
                         -1
             top()
-    test::value("scc-coroutine-boundary-declared", -1, coroutine_boundary_declared)
+    std::test::value("scc-coroutine-boundary-declared", -1, coroutine_boundary_declared)
 
-with context test::suite()
+with context std::test::suite()
 register_scc_declared_handle_tests()
-test::report()
+std::test::report()

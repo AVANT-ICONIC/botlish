@@ -2,7 +2,7 @@
 # iterable loop (RETURNING-ITERABLE-LOOPS.md; originally the minimal
 # element-binding List-traversal extension added for BYTE-SET.md).
 #
-# Covers the construct on its own (not only through byte::set): typing,
+# Covers the construct on its own (not only through std::byte::set): typing,
 # left-to-right order, evaluating the iterable exactly once, an empty
 # List, break/continue/return/error composition, nested loops, and
 # four-way backend parity.
@@ -88,7 +88,7 @@ f([1, 2])}]
 } -result 0
 
 test loop-in-broad-element-type {a broad/unknown-element List gives the binding a broad (any) type, not a validation error} -body {
-    set hir [loopSourceHir {import immutable_set
+    set hir [loopSourceHir {import std::immutable_set
 fn passthrough(x):
     x
 
@@ -377,7 +377,7 @@ test loop-in-continue-outside-loop {continue outside any loop is still rejected}
 # (hir/resolve.tcl's LISTLOOP-BREAK-VALUE, exercised above), never merely
 # widened to `any` or left for a later declared-result check to catch.
 
-test loop-in-no-break-still-precise {a listloop with no break at all keeps its precise List[R] typing (byte::set's own no-break shape)} -body {
+test loop-in-no-break-still-precise {a listloop with no break at all keeps its precise List[R] typing (std::byte::set's own no-break shape)} -body {
     set hir [loopSourceHir {v = loop x in [1, 2, 3]:
     x + 1
 v}]

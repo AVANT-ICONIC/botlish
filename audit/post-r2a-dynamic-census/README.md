@@ -21,7 +21,7 @@ byte-identical to production (`tools/validate-audit.sh`).
 | `profiles/counterfactual/exact-target/` | the exact-target counterfactual (`counterfactual/exact-target.diff`, applied only in a scratch worktree) |
 | `profiles/counterfactual/string-region-off/` | the frozen tree under `-string-region-opt 0` (StringRegion positive control) |
 | `probes/*.ir` | `bench/refined-checks.ir`'s own `check`/`q`, one input each. Never benchmarks |
-| `counterfactual/exact-target.diff` | audit-only `lib/web.bot` diff for the counterfactual, never applied to the tree |
+| `counterfactual/exact-target.diff` | audit-only `stdlib/web.bot` diff for the counterfactual, never applied to the tree |
 | `static/corpus-generality.md` | per-program static population of each candidate's pattern across the repository corpus (`tools/corpus.tcl`) |
 
 Tools:

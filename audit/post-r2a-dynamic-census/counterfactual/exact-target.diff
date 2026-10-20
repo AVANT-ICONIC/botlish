@@ -1,11 +1,11 @@
 # COUNTERFACTUAL (POST-R2A-DYNAMIC-CENSUS.md) -- audit-only, NEVER applied to
-# the tree's own lib/web.bot and never a proposed source change: the frozen
+# the tree's own stdlib/web.bot and never a proposed source change: the frozen
 # source's scan_while(start, predicate) hand-split into the two per-target
 # loops an exact-target specialization of scan_while would produce, applied
 # only inside a scratch worktree by tools/counterfactual.sh to measure what
 # the UNMODIFIED compiler does once the predicate target is statically exact.
---- a/lib/web.bot
-+++ b/lib/web.bot
+--- a/stdlib/web.bot
++++ b/stdlib/web.bot
 @@ -123,15 +123,22 @@
      # are an untyped-parameter Botlish function and a native, neither of
      # which is a "typed callable" that rule would block from flowing

@@ -48,9 +48,9 @@
 # immutable local binding (its one `bind`, whose value is what every read
 # sees: single assignment is what makes aliases sound without any flow
 # analysis) or to a scalar root constant (true/false/unit); a call of
-# `list` (a List literal), `list::append` of an exactly known List, `list::at`
+# `list` (a List literal), `std::list::append` of an exactly known List, `std::list::at`
 # of an exactly known List at an exactly known index (nested projection),
-# `list::length` of an exactly known List, `+ - *` of two exact Ints, and a
+# `std::list::length` of an exactly known List, `+ - *` of two exact Ints, and a
 # native with a fold (-fold: a floating-point operation) of exact arguments.
 # A `if` is exact when its condition is statically decided, or when both
 # branches provably produce the same exact value (never a per-position
@@ -60,7 +60,7 @@
 # user function, a MutableArray, anything read out of a value that is not
 # itself exactly known. A parameter never acquires a fact from how its body
 # indexes it or from what its callers pass: that would be a positional
-# schema (a record type), which belongs to structs. `list::at(test, 0)`
+# schema (a record type), which belongs to structs. `std::list::at(test, 0)`
 # proves only that `test` is a list and that the selector is exactly 0.
 #
 # Bounds (deterministic, named, reported)
@@ -258,7 +258,7 @@ proc hir::exact::CallFact {hir e node level stepsVar} {
             }
             return [list list $level {*}[lmap a $args {list e $a}]]
         }
-        list::append {
+        std::list::append {
             if {[llength $args] != 2} {
                 return ""
             }
@@ -269,7 +269,7 @@ proc hir::exact::CallFact {hir e node level stepsVar} {
             }
             return [concat $fact [list [list e [lindex $args 1]]]]
         }
-        list::at {
+        std::list::at {
             if {[llength $args] != 2} {
                 return ""
             }
@@ -287,7 +287,7 @@ proc hir::exact::CallFact {hir e node level stepsVar} {
             }
             return [SourceFact $hir $src [expr {[Level $fact] + 1}] steps]
         }
-        list::length {
+        std::list::length {
             if {[llength $args] != 1} {
                 return ""
             }
@@ -621,7 +621,7 @@ proc hir::exact::ElementRange {hir src exprRanges} {
     return [hir::range::point $n]
 }
 
-# The static type of `list::at(LISTEXPR, INDEXEXPR)` from exact facts, or ""
+# The static type of `std::list::at(LISTEXPR, INDEXEXPR)` from exact facts, or ""
 # when the list is not exactly known, the index is not exactly known, or the
 # index is outside the list (no claim is made about a read that raises).
 proc hir::exact::ProjectType {hir listExpr indexExpr} {
@@ -640,7 +640,7 @@ proc hir::exact::ProjectType {hir listExpr indexExpr} {
     return [ElementType $hir $src]
 }
 
-# The Range of `list::at(LISTEXPR, i)` for an index with Range INDEXRANGE, or
+# The Range of `std::list::at(LISTEXPR, i)` for an index with Range INDEXRANGE, or
 # "" when the list is not exactly known. Every successful read returns some
 # element at an index that is both in INDEXRANGE and inside the list, so the
 # result is the join of those elements' Ranges: an exact index selects one
@@ -715,7 +715,7 @@ proc hir::exact::LengthRange {hir listExpr} {
     return [hir::range::point [Length $fact]]
 }
 
-# Whether `list::at(LISTEXPR, i)` for i in INDEXRANGE stays inside an exactly
+# Whether `std::list::at(LISTEXPR, i)` for i in INDEXRANGE stays inside an exactly
 # known List: in (every reachable index is inside), out (none is: the read
 # always raises RANGE, kept as a run-time error -- there is no static
 # RANGE diagnostic to reuse), or "" (unknown, or the List is not exactly
@@ -753,12 +753,12 @@ proc hir::exact::BoundsOf {hir listExpr indexRange} {
 # hir/range.tcl and hir/completions.tcl share, so both read one fact domain.
 proc hir::exact::NativeRange {hir name argExprs argRanges exprRanges} {
     switch -- $name {
-        list::length {
+        std::list::length {
             if {[llength $argExprs] == 1} {
                 return [LengthRange $hir [lindex $argExprs 0]]
             }
         }
-        list::at {
+        std::list::at {
             if {[llength $argExprs] == 2} {
                 return [ProjectRange $hir [lindex $argExprs 0] [lindex $argRanges 1] $exprRanges]
             }

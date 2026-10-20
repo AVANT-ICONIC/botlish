@@ -23,22 +23,22 @@
 #
 # expect: [["name", "age"], ["Alice", "30"], ["Bob", "40"]]
 
-import list
-import str
+import std::list
+import std::str
 
 # The character at index, or "" past the end.
 fn peek(text, index) errors LowerUnderrun:
-    if index >= str::length(text):
+    if index >= std::str::length(text):
         return ""
 
-    str::substring(text, index, index + 1)
+    std::str::substring(text, index, index + 1)
 
 # An unquoted field that started at start, scanned up to index:
 # {field, index of the "," or "\n" that ends it, or the end}.
 fn scan_unquoted(text, start, index) errors LowerUnderrun, UpperOverrun:
     character = peek(text, index)
     if character == "" or character == "," or character == "\n":
-        return {field: str::substring(text, start, index), index: index}
+        return {field: std::str::substring(text, start, index), index: index}
 
     scan_unquoted(text, start, index + 1)
 
@@ -48,11 +48,11 @@ fn scan_quoted(text, index, field) errors LowerUnderrun:
     character = peek(text, index)
     if character == "\"":
         if peek(text, index + 1) == "\"":
-            return scan_quoted(text, index + 2, str::concat(field, "\""))
+            return scan_quoted(text, index + 2, std::str::concat(field, "\""))
 
         return {field: field, index: index + 1}
 
-    scan_quoted(text, index + 1, str::concat(field, character))
+    scan_quoted(text, index + 1, std::str::concat(field, character))
 
 # The field starting at index: {field, index just after it}.
 fn scan_field(text, index) errors LowerUnderrun, UpperOverrun:
@@ -65,7 +65,7 @@ fn scan_field(text, index) errors LowerUnderrun, UpperOverrun:
 # {fields, stop: index just after the record's "\n", or the end}.
 fn scan_record(text, index, fields) errors LowerUnderrun, UpperOverrun:
     scanned = scan_field(text, index)
-    more = list::append(fields, scanned.field)
+    more = std::list::append(fields, scanned.field)
     stop = scanned.index
     delimiter = peek(text, stop)
     if delimiter == ",":
@@ -78,11 +78,11 @@ fn scan_record(text, index, fields) errors LowerUnderrun, UpperOverrun:
 
 # The records from index on, appended to records.
 fn scan_records(text, index, records) errors LowerUnderrun, UpperOverrun:
-    if index >= str::length(text):
+    if index >= std::str::length(text):
         return records
 
     scanned = scan_record(text, index, [])
-    scan_records(text, scanned.stop, list::append(records, scanned.fields))
+    scan_records(text, scanned.stop, std::list::append(records, scanned.fields))
 
 fn csv_parse(text) errors LowerUnderrun, UpperOverrun:
     scan_records(text, 0, [])

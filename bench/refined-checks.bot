@@ -1,25 +1,25 @@
 # refined-checks.bot -- repeated refinement predicates: an outer
-# web::emailish? check whose result is re-checked in the then branch
-# (statically redundant), and web::uri_query_value? on a different value.
+# std::web::emailish? check whose result is re-checked in the then branch
+# (statically redundant), and std::web::uri_query_value? on a different value.
 #
 # Canonical surface-Botlish source (CANONICAL-SURFACE-BENCHMARKS.md);
 # migrated from the historical raw-core-IR fixture bench/refined-checks.ir
 # (deleted by REFINEMENT-VALUES.md, along with the Tcl-registered
-# lib/web.tcl it required). Everything this program's checks mean now comes
-# from ordinary source declarations in lib/web.bot:
+# stdlib/web.tcl it required). Everything this program's checks mean now comes
+# from ordinary source declarations in stdlib/web.bot:
 #
 #   refined type Emailish = str
 #   fn emailish?(v: str) -> bool proves v: Emailish
 #   refined type UriQueryValue = str
 #   fn uri_query_value?(value: str) -> bool proves value: UriQueryValue
 #
-# The inner web::emailish?(s) is decided, not run: the outer call is the
+# The inner std::web::emailish?(s) is decided, not run: the outer call is the
 # same proof-producing function on the same value, its true result is known
 # on this path, and the compiler proves the function repeatable
 # (hir/repeatable.tcl) -- generic proof/fact machinery, no knowledge of
-# email addresses. web::uri_query_value?(q) is a different predicate on a
+# email addresses. std::web::uri_query_value?(q) is a different predicate on a
 # different value, so it runs: q is an ordinary String (the percent-encoded
-# text web::uri_escape_text returns), and only this check proves it a
+# text std::web::uri_escape_text returns), and only this check proves it a
 # UriQueryValue.
 #
 # The first check's string is a Unicode-forcing case, not ASCII-only: "é"
@@ -29,16 +29,16 @@
 #
 # expect: [400, 0]
 
-import web
+import std::web
 
-q = web::uri_escape_text("a b")
+q = std::web::uri_escape_text("a b")
 
 fn check(n, acc, s, q):
     if n <= 0:
         return acc
-    hit = if web::emailish?(s):
-        if web::emailish?(s):
-            if web::uri_query_value?(q):
+    hit = if std::web::emailish?(s):
+        if std::web::emailish?(s):
+            if std::web::uri_query_value?(q):
                 1
             else:
                 0

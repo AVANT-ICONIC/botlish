@@ -1,5 +1,5 @@
 #!/usr/bin/env tclsh9.0
-# fuzz.tcl -- differential fuzzer for lib/web.bot's character-reading
+# fuzz.tcl -- differential fuzzer for stdlib/web.bot's character-reading
 # uri_escape_text and uri_query_value? (ENCODE-UTF8-ALLOCATION-RESEARCH.md).
 #
 #   tclsh9.0 audit/encode-utf8-allocation/tools/fuzz.tcl ?-seed N? ?-rounds N? ?-batch N? ?-backends LIST?
@@ -123,7 +123,7 @@ set checked 0
 set accepted 0
 for {set r 0} {$r < $rounds} {incr r} {
     set texts [lmap _ [lrepeat $batch x] {randomText}]
-    set program "import web\n\ntexts = \[[join [lmap t $texts {literal $t}] {, }]\]\nloop t in texts:\n    \[web::uri_escape_text(t), web::uri_query_value?(t), web::uri_query_value?(web::uri_escape_text(t))\]\n"
+    set program "import std::web\n\ntexts = \[[join [lmap t $texts {literal $t}] {, }]\]\nloop t in texts:\n    \[std::web::uri_escape_text(t), std::web::uri_query_value?(t), std::web::uri_query_value?(std::web::uri_escape_text(t))\]\n"
     set want "\[[join [lmap t $texts {
         set q [oracleQueryValue $t]
         if {$q} { incr accepted }

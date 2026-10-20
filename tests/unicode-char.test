@@ -4,7 +4,7 @@
 # UnicodeChar is a distinct builtin semantic scalar: exactly one Unicode
 # scalar value, never an Int, never a String, never implicitly convertible
 # to or from either. Its scalar value is observed only through the explicit,
-# total char::scalar_value/char::scalar_value operation. This file pins that
+# total std::char::scalar_value/std::char::scalar_value operation. This file pins that
 # distinction end to end: lexing, parsing, type inference/admissibility,
 # List[UnicodeChar] inference and projection, HIR round-trip, cross-module
 # behavior, dynamic/untyped soundness, and interp/compile/cranelift parity.
@@ -191,31 +191,31 @@ test char-take-int-rejects-char {a plain int parameter rejects a UnicodeChar arg
 take_int('A')} {*cannot be proven to satisfy*}
 } -result {{CORE SEMANTIC TYPE} 1}
 
-test char-take-int-accepts-codepoint {take_int(char::scalar_value('A')) is the legal spelling} -body {
-    surface::compile {import char
+test char-take-int-accepts-codepoint {take_int(std::char::scalar_value('A')) is the legal spelling} -body {
+    surface::compile {import std::char
 fn take_int(x: int):
     unit
 
-take_int(char::scalar_value('A'))} ok2.bot
+take_int(std::char::scalar_value('A'))} ok2.bot
     set ok 1
 } -result 1
 
-# A bare call of the native char::scalar_value is not itself a typed
+# A bare call of the native std::char::scalar_value is not itself a typed
 # callable invocation (that compile-time check applies to a declared or
 # inferred function parameter -- see char-scalar-value-static-contract
 # below); the native's own declared -param-types UnicodeChar is enforced
 # dynamically, exactly like any other native's declared parameter type
 # (e.g. bit_and's -param-types {int int}), never as numeric value-set
 # admissibility.
-test char-codepoint-rejects-int {char::scalar_value(65): 65 is not dynamically of kind UnicodeChar, so char::scalar_value's total contract still rejects it at run time, never silently treating it as a codepoint} -body {
-    outcomeUnder interp [sourceIR {import char
-char::scalar_value(65)}]
-} -result {error {CORE SEMANTIC TYPE} {char::scalar_value: expected UnicodeChar, got 65} {}}
+test char-codepoint-rejects-int {std::char::scalar_value(65): 65 is not dynamically of kind UnicodeChar, so std::char::scalar_value's total contract still rejects it at run time, never silently treating it as a codepoint} -body {
+    outcomeUnder interp [sourceIR {import std::char
+std::char::scalar_value(65)}]
+} -result {error {CORE SEMANTIC TYPE} {std::char::scalar_value: expected UnicodeChar, got 65} {}}
 
-test char-codepoint-rejects-string {char::scalar_value("A"): a one-character String is not dynamically a UnicodeChar either} -body {
-    outcomeUnder interp [sourceIR {import char
-char::scalar_value("A")}]
-} -result {error {CORE SEMANTIC TYPE} {char::scalar_value: expected UnicodeChar, got "A"} {}}
+test char-codepoint-rejects-string {std::char::scalar_value("A"): a one-character String is not dynamically a UnicodeChar either} -body {
+    outcomeUnder interp [sourceIR {import std::char
+std::char::scalar_value("A")}]
+} -result {error {CORE SEMANTIC TYPE} {std::char::scalar_value: expected UnicodeChar, got "A"} {}}
 
 test char-equality-same {'A' == 'A' is true} -body {
     outcomeUnder interp [sourceIR {'A' == 'A'}]
@@ -239,27 +239,27 @@ test char-kind-distinct {kind('A') is neither kind(65) nor kind("A")} -body {
 } -result {UnicodeChar int str}
 
 # ---------------------------------------------------------------------------
-# char::scalar_value semantics (spec items 4, 26-29, 65-66)
+# std::char::scalar_value semantics (spec items 4, 26-29, 65-66)
 
-test char-codepoint-ascii {char::scalar_value('A') = 65} -body {
-    outcomeUnder interp [sourceIR {import char
-char::scalar_value('A')}]
+test char-codepoint-ascii {std::char::scalar_value('A') = 65} -body {
+    outcomeUnder interp [sourceIR {import std::char
+std::char::scalar_value('A')}]
 } -result {value 65 {}}
 
-test char-codepoint-bmp {char::scalar_value('é') = 233 (the scalar value, not its two UTF-8 bytes 195/169)} -body {
-    outcomeUnder interp [sourceIR "import char
-char::scalar_value('é')"]
+test char-codepoint-bmp {std::char::scalar_value('é') = 233 (the scalar value, not its two UTF-8 bytes 195/169)} -body {
+    outcomeUnder interp [sourceIR "import std::char
+std::char::scalar_value('é')"]
 } -result {value 233 {}}
 
-test char-codepoint-supplementary {char::scalar_value('😀') = 128512} -body {
-    outcomeUnder interp [sourceIR "import char\nchar::scalar_value('\U0001F600')"]
+test char-codepoint-supplementary {std::char::scalar_value('😀') = 128512} -body {
+    outcomeUnder interp [sourceIR "import std::char\nstd::char::scalar_value('\U0001F600')"]
 } -result {value 128512 {}}
 
-test char-codepoint-total {char::scalar_value has no Error completion: it is a plain Int-returning call, never a Result} -body {
-    hir::types::show [hir::typeOf [sourceHir {import char
-char::scalar_value('A')}] \
-        [lindex [hirFind [sourceHir {import char
-char::scalar_value('A')}] call] 0]]
+test char-codepoint-total {std::char::scalar_value has no Error completion: it is a plain Int-returning call, never a Result} -body {
+    hir::types::show [hir::typeOf [sourceHir {import std::char
+std::char::scalar_value('A')}] \
+        [lindex [hirFind [sourceHir {import std::char
+std::char::scalar_value('A')}] call] 0]]
 } -result int
 
 # ---------------------------------------------------------------------------
@@ -281,36 +281,36 @@ test char-list-string-mix-not-uniform {['A', "A"] (UnicodeChar and String) is ne
 } -result list
 
 test char-consume-list {consume(chars: List[UnicodeChar]) accepts a char list literal} -body {
-    surface::compile {import list
+    surface::compile {import std::list
 fn consume(chars: List[UnicodeChar]) -> UnicodeChar errors IndexNotFound:
-    list::at(chars, 0)
+    std::list::at(chars, 0)
 
 consume(['-', '.', '_', '~'])} ok3.bot
     set ok 1
 } -result 1
 
 test char-consume-rejects-string-list {consume(List[UnicodeChar]) rejects a List[String] argument} -body {
-    rejects {import list
+    rejects {import std::list
 fn consume(chars: List[UnicodeChar]) -> UnicodeChar errors IndexNotFound:
-    list::at(chars, 0)
+    std::list::at(chars, 0)
 
 consume(["-", ".", "_", "~"])} {*cannot be proven to satisfy*}
 } -result {{CORE SEMANTIC TYPE} 1}
 
 test char-consume-rejects-int-list {consume(List[UnicodeChar]) rejects a List[int] argument} -body {
-    rejects {import list
+    rejects {import std::list
 fn consume(chars: List[UnicodeChar]) -> UnicodeChar errors IndexNotFound:
-    list::at(chars, 0)
+    std::list::at(chars, 0)
 
 consume([45, 46, 95, 126])} {*cannot be proven to satisfy*}
 } -result {{CORE SEMANTIC TYPE} 1}
 
-test char-list-get-projects {list::at(List[UnicodeChar], i) is typed UnicodeChar, recovered through the existing applied-type machinery with no List-specific char code} -body {
-    set h [sourceHir {import list
+test char-list-get-projects {std::list::at(List[UnicodeChar], i) is typed UnicodeChar, recovered through the existing applied-type machinery with no List-specific char code} -body {
+    set h [sourceHir {import std::list
 fn first(chars: List[UnicodeChar]) -> UnicodeChar errors IndexNotFound:
-    list::at(chars, 0)}]
-    # The call this program wrote: `import list` also loads lib/list.bot, whose
-    # own (untyped) list::at calls come first in the HIR.
+    std::list::at(chars, 0)}]
+    # The call this program wrote: `import std::list` also loads stdlib/list.bot, whose
+    # own (untyped) std::list::at calls come first in the HIR.
     set mine [lmap e [hirFind $h call] {
         if {[file tail [dict get [hir::sourceFile $h [lindex [hir::get $h $e origin] 1]] path]] ne "t.bot"} continue
         set e
@@ -319,27 +319,27 @@ fn first(chars: List[UnicodeChar]) -> UnicodeChar errors IndexNotFound:
 } -result UnicodeChar
 
 test char-alias-propagation {an alias (copy = chars) preserves the applied List[UnicodeChar] type} -body {
-    surface::compile {import list
+    surface::compile {import std::list
 fn chars() -> List[UnicodeChar]:
     ['A', 'B']
 
 fn first(chars: List[UnicodeChar]) -> UnicodeChar errors IndexNotFound:
     copy = chars
-    list::at(copy, 0)} ok4.bot
+    std::list::at(copy, 0)} ok4.bot
     set ok 1
 } -result 1
 
 test char-required-basic-payload {the milestone's own required payload (spec item 85) compiles end to end} -body {
-    surface::compile {import char
-import list
+    surface::compile {import std::char
+import std::list
 fn identity(c: UnicodeChar) -> UnicodeChar:
     c
 
 fn code(c: UnicodeChar) -> int:
-    char::scalar_value(c)
+    std::char::scalar_value(c)
 
 fn first(chars: List[UnicodeChar]) -> UnicodeChar errors IndexNotFound:
-    list::at(chars, 0)
+    std::list::at(chars, 0)
 
 fn sample() -> int errors IndexNotFound:
     chars = ['-', '.', '_', '~']
@@ -348,16 +348,16 @@ fn sample() -> int errors IndexNotFound:
 } -result 1
 
 test char-required-basic-payload-value {sample() above evaluates to code point 45 ('-')} -body {
-    outcomeUnder interp [sourceIR {import char
-import list
+    outcomeUnder interp [sourceIR {import std::char
+import std::list
 fn identity(c: UnicodeChar) -> UnicodeChar:
     c
 
 fn code(c: UnicodeChar) -> int:
-    char::scalar_value(c)
+    std::char::scalar_value(c)
 
 fn first(chars: List[UnicodeChar]) -> UnicodeChar errors IndexNotFound:
-    list::at(chars, 0)
+    std::list::at(chars, 0)
 
 fn sample() -> int errors IndexNotFound:
     chars = ['-', '.', '_', '~']
@@ -396,13 +396,13 @@ f(65)} {*cannot be proven to satisfy*}]
 } -result {0 {{CORE SEMANTIC TYPE} 1}}
 
 test char-container-erasure-ordinary {a List[UnicodeChar] erased by a declared broad result loses its precision, exactly like any other container (no runtime reconstruction, no char-specific rule); an untyped passthrough alone no longer erases it (semantic instance)} -body {
-    list [rejects {import immutable_set
-import list
+    list [rejects {import std::immutable_set
+import std::list
 fn passthrough(x) -> list:
     x
 
 fn consume(chars: List[UnicodeChar]) -> UnicodeChar errors IndexNotFound:
-    list::at(chars, 0)
+    std::list::at(chars, 0)
 
 chars = ['A']
 lost = passthrough(chars)
@@ -410,13 +410,13 @@ c = consume(lost):
     on IndexNotFound:
         'B'
 c} {*cannot be proven to satisfy*}] \
-        [catch {surface::compile {import immutable_set
-import list
+        [catch {surface::compile {import std::immutable_set
+import std::list
 fn passthrough(x):
     x
 
 fn consume(chars: List[UnicodeChar]) -> UnicodeChar errors IndexNotFound:
-    list::at(chars, 0)
+    std::list::at(chars, 0)
 
 chars = ['A']
 lost = passthrough(chars)
@@ -481,14 +481,14 @@ test char-hir-roundtrip-preserves-type {the read-back HIR's parameter/result typ
 # Source-type coexistence (spec item 92) and repeated-compilation isolation (93)
 
 test char-coexists-with-source-defined-type {a source-defined integer refinement (Small) and the builtin UnicodeChar resolve with no registry collision or ambiguity} -body {
-    surface::compile {import char
+    surface::compile {import std::char
 type Small = Int in 0..10
 
 fn one() -> Small:
     1
 
 fn f(c: UnicodeChar) -> int:
-    char::scalar_value(c)
+    std::char::scalar_value(c)
 
 f('A')} coexist.bot
     set ok 1
@@ -496,48 +496,48 @@ f('A')} coexist.bot
 
 test char-repeated-compilation-isolated {compiling several UnicodeChar programs repeatedly in one process needs no per-compilation registration and leaves no cross-run state} -body {
     for {set i 0} {$i < 20} {incr i} {
-        surface::compile "import char
-x = char::scalar_value('A')" rep$i.bot
+        surface::compile "import std::char
+x = std::char::scalar_value('A')" rep$i.bot
     }
     set ok 1
 } -result 1
 
 # ---------------------------------------------------------------------------
-# The `char` namespace has no module file: char::scalar_value is its one
+# The `char` namespace has no module file: std::char::scalar_value is its one
 # member, the intrinsic (STDLIB-NAMESPACES.md; spec items 21, 59, 76-77)
 
-test char-module-codepoint {char::scalar_value(c) in a program read with module loading resolves to the intrinsic, with no module file to load} -body {
-    set mainPath [makeFile {import char
+test char-module-codepoint {std::char::scalar_value(c) in a program read with module loading resolves to the intrinsic, with no module file to load} -body {
+    set mainPath [makeFile {import std::char
 fn f(c: UnicodeChar) -> int:
-    char::scalar_value(c)
+    std::char::scalar_value(c)
 
 f('A')
 } char-module-main.bot]
     outcomeUnder interp [hir::lower [surface::readProgramFile $mainPath]]
 } -result {value 65 {}}
 
-test char-scalar-value-static-contract {an Int reaching char::scalar_value through a typed or an untyped parameter is a compile-time error; the direct call char::scalar_value(65) is the native's run-time TYPE error, like any intrinsic's} -body {
-    set typed [makeFile {import char
+test char-scalar-value-static-contract {an Int reaching std::char::scalar_value through a typed or an untyped parameter is a compile-time error; the direct call std::char::scalar_value(65) is the native's run-time TYPE error, like any intrinsic's} -body {
+    set typed [makeFile {import std::char
 fn f(c: UnicodeChar) -> int:
-    char::scalar_value(c)
+    std::char::scalar_value(c)
 
 f(65)
 } char-typed-reject.bot]
-    set untyped [makeFile {import char
+    set untyped [makeFile {import std::char
 fn f(c):
-    char::scalar_value(c)
+    std::char::scalar_value(c)
 
 f(65)
 } char-untyped-reject.bot]
-    set direct [makeFile {import char
-char::scalar_value(65)
+    set direct [makeFile {import std::char
+std::char::scalar_value(65)
 } char-direct.bot]
     catch {surface::readProgramFile $typed} m1 o1
     catch {surface::readProgramFile $untyped} m2 o2
     list [dict get $o1 -errorcode] [string match {*cannot be proven to satisfy UnicodeChar*} $m1] \
-        [dict get $o2 -errorcode] [string match {*statically incompatible with UnicodeChar*native char::scalar_value requires UnicodeChar*} $m2] \
+        [dict get $o2 -errorcode] [string match {*statically incompatible with UnicodeChar*native std::char::scalar_value requires UnicodeChar*} $m2] \
         [outcomeUnder interp [hir::lower [surface::readProgramFile $direct]]]
-} -result {{CORE SEMANTIC TYPE} 1 {CORE SEMANTIC TYPE} 1 {error {CORE SEMANTIC TYPE} {char::scalar_value: expected UnicodeChar, got 65} {}}}
+} -result {{CORE SEMANTIC TYPE} 1 {CORE SEMANTIC TYPE} 1 {error {CORE SEMANTIC TYPE} {std::char::scalar_value: expected UnicodeChar, got 65} {}}}
 
 # ---------------------------------------------------------------------------
 # Backend parity: interp / compile / cranelift-generic / cranelift (spec item 84)
@@ -546,17 +546,17 @@ foreach {name src} {
     literal-ascii            {'A'}
     literal-bmp               "'é'"
     literal-supplementary     "'\U0001F600'"
-    codepoint-ascii            {import char
-char::scalar_value('A')}
-    codepoint-bmp              "import char
-char::scalar_value('é')"
-    codepoint-supplementary    "import char
-char::scalar_value('\U0001F600')"
+    codepoint-ascii            {import std::char
+std::char::scalar_value('A')}
+    codepoint-bmp              "import std::char
+std::char::scalar_value('é')"
+    codepoint-supplementary    "import std::char
+std::char::scalar_value('\U0001F600')"
     equality-same              {'A' == 'A'}
     equality-different          {'A' == 'B'}
     list-construction           {['-', '.', '_', '~']}
-    list-get                    {import list
-list::at(['-', '.', '_', '~'], 0)}
+    list-get                    {import std::list
+std::list::at(['-', '.', '_', '~'], 0)}
     dynamic-type-error           {fn add_one(x):
     x + 1
 
@@ -569,12 +569,12 @@ add_one('A')}
 
 # ---------------------------------------------------------------------------
 # Allocation (spec items 15-20, 52): an immediate representation allocates
-# nothing on the native backend for a character literal or char::scalar_value.
+# nothing on the native backend for a character literal or std::char::scalar_value.
 
-test char-native-no-allocation {char::scalar_value('A') allocates nothing on the native backend: UnicodeChar is an immediate, not a heap object} -body {
-    set h [sourceHir {import char
+test char-native-no-allocation {std::char::scalar_value('A') allocates nothing on the native backend: UnicodeChar is an immediate, not a heap object} -body {
+    set h [sourceHir {import std::char
 fn cp() -> int:
-    char::scalar_value('A')
+    std::char::scalar_value('A')
 
 cp()}]
     dict get [native::allocationReport $h summary] total allocations

@@ -17,7 +17,7 @@ struct, no source refactor: the milestone tests whether they are needed.
 fn identity(x): x                   identity(m : MutableArray[str])  ->  MutableArray[str]
 fn capacity(x): capacity(x)         capacity(m : MutableArray[str])  ->  int
 fn first(xs): list_get(xs, 0)       first(List[str]) -> str          first(List[int]) -> int
-list::find(xs, predicate)           find(List[str], is_b) -> str     find(List[int], big) -> int
+std::list::find(xs, predicate)           find(List[str], is_b) -> str     find(List[int], big) -> int
 ```
 
 The parameter/result relationship is never written down anywhere: it falls out
@@ -35,13 +35,13 @@ to the parent tree. `hir::specialize::KeyType` is untouched
 
 * 62 of 403 exact-block call sites in the corpus got a more precise semantic
   result (`any` -> `int`/`str`/`List[str]`/`List[List[int]]`/...); `chars_of`,
-  `list::find`, `ht_fold`, the recursive accumulators of `lex-strategy`,
+  `std::list::find`, `ht_fold`, the recursive accumulators of `lex-strategy`,
   `matmul`, `uri-steady`, `string_*`, `ai_text_clean` are among them.
 * The strict-contract counterfactual (`variant-all-trusted`, the exact same
   scratch experiment) goes **35 -> 32 sites** (10 -> 9 of 31 programs): three
-  call-boundary sites disappear (`list::find` erasure in `source-checks`,
+  call-boundary sites disappear (`std::list::find` erasure in `source-checks`,
   `classifier(c)` fed from `chars_of`, the `ht_fold` callback) and one is
-  re-attributed to the call (`test-selection`, `list::find`). The rest are
+  re-attributed to the call (`test-selection`, `std::list::find`). The rest are
   **definition-level obligations**, which an instance cannot discharge by
   design (a semantic instance never rescues a definition; see "Definition
   validity vs call-instance validity").
@@ -266,7 +266,7 @@ Three levels stay distinct:
 
 `hir/signatures.tcl` is untouched. Intrinsic contracts are still derived from
 declaration + body alone, independent of the caller population (`si-nogen-2/3`;
-`hir::moduleSignatures` still reports `list::find` params `{list any}`). Two
+`hir::moduleSignatures` still reports `std::list::find` params `{list any}`). Two
 consequences worth stating:
 
 * The *generic* walk types a call to an exact block with its instance result, so
@@ -339,7 +339,7 @@ The instance walk computes `calleeErrors`, reachability and `known` outcomes wit
 the ordinary machinery, so a concrete instance may have more precise reachability
 (`describe(41)` proves the `string?` arm unreachable: `int`, and `describe("hi")`
 is `str`). Declared error contracts stay authoritative and are not changed
-(`list::find` still `errors NotFound` -- the identity `list::NotFound` --,
+(`std::list::find` still `errors NotFound` -- the identity `std::list::NotFound` --,
 `si-hof-5`). Completion/error-set legality
 (`hir::errorsets`) is a definition-level check on the generic body and is not
 re-run per instance: instance types add no new completion diagnostic. The
@@ -348,9 +348,9 @@ a callable that declares errors passed into an untyped parameter (the erasure
 an instance makes legal) is charged to the call that passed it -- recovered
 as an exact call where its argument's type is exact, else bounded by the
 program's erased-callable contract (STATIC-COMPLETION-PROOFS.md, "Precision
-and the erased-callable contract"), so `list::find(xs, p)` with a `p` that
-may fail `E` makes that call charge `E` beside `list::NotFound`. One
-consequence of precision reaches it: `handle list::find(strs, p) NotFound: 0` now
+and the erased-callable contract"), so `std::list::find(xs, p)` with a `p` that
+may fail `E` makes that call charge `E` beside `std::list::NotFound`. One
+consequence of precision reaches it: `handle std::list::find(strs, p) NotFound: 0` now
 has the call's own type `str`, and the ordinary "handled result is the call's
 type, no implicit union widening" rule rejects the `0` (`si-hof-8`); with an `any`
 result that was silently accepted before.
@@ -470,15 +470,15 @@ in one program (`si-list-2`); `copy(xs): loop x in xs: x` gives `List[str]` /
 `List[int]` (`si-list-4`, and `mutarray-list-7`, which previously pinned `any`,
 now gives `List[mutarray]`).
 
-## list::find
+## std::list::find
 
-`list::find(xs, predicate)` is unchanged source (`errors NotFound`, no `T`):
+`std::list::find(xs, predicate)` is unchanged source (`errors NotFound`, no `T`):
 
 | call | result |
 |---|---|
 | `find(List[str], is_b)` (untyped or `s: str`-typed predicate) | `str` |
 | `find(List[int], big)` (untyped or `n: int`-typed predicate) | `int` |
-| `find(List[str], big)` with `big(n: int)` or untyped `big(n): n > 5` | rejected: `call to list::find with xs : List[str], predicate : big/1 -> bool is invalid: ...` |
+| `find(List[str], big)` with `big(n: int)` or untyped `big(n): n > 5` | rejected: `call to std::list::find with xs : List[str], predicate : big/1 -> bool is invalid: ...` |
 | `find([mutarray::create(1, "x")], nonempty)` | `MutableArray[str]` |
 
 Successful result `str`, error `NotFound`, `x : str`, `predicate(x) : bool` all
@@ -573,9 +573,9 @@ every exact-block call site's semantic type, 403 sites, 62 changed):
 |---|---|---|
 | `chars_of(...)` | `any` | `List[str]` / `list` |
 | `count_true`, `total_valid`, `valid_chars`, `check`, `drive`, `repeat_uri` | `any` | `int` |
-| `list::find(candidates, invalid_name?)` | `any` | `str` |
+| `std::list::find(candidates, invalid_name?)` | `any` | `str` |
 | `select_affected(...)` | `list` | `List[list]` |
-| `esc_bytes`, `esc_from`, `esc_char`, `web::uri_escape_text` | `any` | `str` |
+| `esc_bytes`, `esc_from`, `esc_char`, `std::web::uri_escape_text` | `any` | `str` |
 | `clean_ai_text`, `clean_from`, `clean_char`, `replace`, `reverse_*` | `any` | `str` |
 | `matmul`, `product_rows`, `product_row`, `dot` | `any` | `List[List[int]]`, `List[List[int]]`, `List[int]`, `int` |
 | `ht_fold` | `any` | `List[list]` |
@@ -596,10 +596,10 @@ every exact-block call site's semantic type, 403 sites, 62 changed):
 | after | 9 of 31 | 32 |
 
 Disappeared (call-boundary sites): `lex-strategy.bot:57:20` (`classifier(c)`, the
-`chars_of` accumulator relation), `source-checks.bot:89:40` (`list::find`
+`chars_of` accumulator relation), `source-checks.bot:89:40` (`std::list::find`
 erasing a bearing predicate), `hashtable.bot:362:47` (`ht_fold` callback).
 Re-attributed: `test-selection.bot:68:31` (erasure of the bearing `is_affected?`
-into `list::find`) is now `test-selection.bot:68:13`, reported at the call because
+into `std::list::find`) is now `test-selection.bot:68:13`, reported at the call because
 its instance is invalid under that regime (its inner definition-level site
 `affected?` requires `list` of an `any` element). Nothing new appears: the
 definition-level "inherited" duplicates the instance walk re-derives are recognized
@@ -647,10 +647,10 @@ the program's own calls that use the instance):
 | | `<str, int, list>` -> `list` | valid | 1 | `chars_of<str,int,List[str]>` |
 | | `<str, int, List[str]>` -> `List[str]` | valid | 0 | `chars_of<str,int,List[str]>` |
 | | `<str, int, List[never]>` -> `List[str]` | valid | 0 | same |
-| `list::all?` (lex-strategy) | `<List[str], native is_tcl_alnum>` -> `bool` | valid | 1 | `list::all?<List[str], native>` |
-| `list::find` (source-checks) | `<List[str], invalid_name?/1 -> bool>` -> `str` | valid | 1 | `list::find<List[str], block>` |
-| `list::find` (test-selection) | `<any, is_affected?/1 -> bool>` -> `any`; `<List[list], is_affected?/1 -> bool>` -> `list` | valid | 1 / 0 | `list::find<List[list], block>` |
-| `list::any?`/`none?` (test-selection) | `<any, changed?/1>` / `<List[str], changed?/1>` -> `bool` | valid | 0 / 1 | `<any, block>` / `<List[str], block>` |
+| `std::list::all?` (lex-strategy) | `<List[str], native is_tcl_alnum>` -> `bool` | valid | 1 | `std::list::all?<List[str], native>` |
+| `std::list::find` (source-checks) | `<List[str], invalid_name?/1 -> bool>` -> `str` | valid | 1 | `std::list::find<List[str], block>` |
+| `std::list::find` (test-selection) | `<any, is_affected?/1 -> bool>` -> `any`; `<List[list], is_affected?/1 -> bool>` -> `list` | valid | 1 / 0 | `std::list::find<List[list], block>` |
+| `std::list::any?`/`none?` (test-selection) | `<any, changed?/1>` / `<List[str], changed?/1>` -> `bool` | valid | 0 / 1 | `<any, block>` / `<List[str], block>` |
 | `geo_append` (csv_records) | `<list, any>`, `<any, mutarray>`, `<list, mutarray>` -> `list` | valid | 0 / 1 / 0 | `geo_append<list[mutarray,int], mutarray>` |
 | `scan_records` (csv_records) | `<str, any, list>`, `<any, int, list>`, `<str, int, list>` -> `list` | valid | 1 / 1 / 0 | one codegen instance |
 | `ht_fold` (hashtable) | `<any,int,int,List[never],ht_collect_pair/3 -> list>` -> `List[list]` | valid | 1 | not used by codegen (caller unused) |
@@ -919,7 +919,7 @@ implemented here.
 26. **Can one source `first` have both instances simultaneously?** Yes (`si-list-2`).
 27. **Does that require two emitted machine functions?** No, not necessarily (and in
     the corpus none is caused).
-28. **Can `list::find(List[str], predicate)` return `str` without a source type
+28. **Can `std::list::find(List[str], predicate)` return `str` without a source type
     variable?** Yes. 29. The int case returns `int`.
 30. **What blocks any case that still fails?** Definition-level obligations
     (`total_valid`, `select_affected`, `esc_bytes`), positional pairs and raw
@@ -928,15 +928,15 @@ implemented here.
 ### Real corpus
 
 31. **Which of the seven generic-relationship strict failures disappear?** Three
-    disappear (`list::find` erasure in `source-checks`, the `chars_of`/`classifier`
+    disappear (`std::list::find` erasure in `source-checks`, the `chars_of`/`classifier`
     relation, the `ht_fold` callback), one is re-attributed to the call
-    (`test-selection` `list::find`), and the rest are definition-level or struct
+    (`test-selection` `std::list::find`), and the rest are definition-level or struct
     (see above).
 32. **Does `chars_of` still need its result annotation?** No.
 33. **Do the CSV accumulator results remain `any`?** They are `list` (were `any`) and
     stay broad because the values come from a positional pair.
 34. **Does `ht_fold` improve?** Yes: `any` -> `List[list]`; its strict site is gone.
-35. **Do `list::find` predicate/result sites improve?** Yes: `str`, `int`,
+35. **Do `std::list::find` predicate/result sites improve?** Yes: `str`, `int`,
     `MutableArray[str]` results; the `source-checks` site disappears; the
     `test-selection` one is re-attributed.
 36. **Do `total_valid`, `select_affected`, `esc_bytes` still need annotations?**

@@ -1,7 +1,7 @@
 # corpus.tcl -- observational audit of FIXED-ARITY-LIST-RETURN over the
 # corpus (WARNINGS-FIXED-ARITY-LIST-RETURN.md, "Corpus findings"). Compiles
 # every program of examples/stdlib, examples/surface (minus the deliberate
-# rejections), bench/*.bot and lib/*.bot with warnings on (collected, not
+# rejections), bench/*.bot and stdlib/*.bot with warnings on (collected, not
 # emitted) and reports, at the commit it runs on:
 #
 #   * every distinct finding with the source line of each exit, the element
@@ -40,7 +40,7 @@ set programs [concat \
     [lsort [glob -directory [file join $auditRoot examples stdlib] *.bot]] \
     [lsort [glob -directory [file join $auditRoot examples surface] *.bot]] \
     [lsort [glob -directory [file join $auditRoot bench] *.bot]] \
-    [lsort [glob -directory [file join $auditRoot lib] *.bot]]]
+    [lsort [glob -directory [file join $auditRoot stdlib] *.bot]]]
 
 # HAND classification, per distinct (file, function, arity): {CATEGORY WHY}.
 #   convert   a multi-value result whose parts deserve names: the refactor
@@ -50,7 +50,7 @@ set programs [concat \
 # bar); none may be listed here as such -- the shape rule changes instead.
 set classified {
     {examples/stdlib/csv_chunked.bot chunked_new 3} {convert
-        {the ChunkedBuilder state [completedChunks, currentChunk, filled]: the file's own header names the three parts, which callers read back with list::at(builder, 0/1/2)}}
+        {the ChunkedBuilder state [completedChunks, currentChunk, filled]: the file's own header names the three parts, which callers read back with std::list::at(builder, 0/1/2)}}
     {examples/stdlib/csv_chunked.bot chunked_append 3} {convert
         {the same builder state, returned from both of its exits}}
     {examples/stdlib/ai_text_clean.bot sample 6} {annotate
@@ -72,24 +72,24 @@ set classified {
 # programmer acting on the finding would make.
 set conversions {
     examples/stdlib/csv_chunked.bot {
-        {    [[], mutable_array::allocate(chunk_size()), 0]}
-        {    {completed: [], current: mutable_array::allocate(chunk_size()), filled: 0}}
+        {    [[], std::mutable_array::allocate(chunk_size()), 0]}
+        {    {completed: [], current: std::mutable_array::allocate(chunk_size()), filled: 0}}
         {        return [more, fresh, 1]}
         {        return {completed: more, current: fresh, filled: 1}}
         {    [completed, current, filled + 1]}
         {    {completed: completed, current: current, filled: filled + 1}}
         {fn chunked_append(builder, value) errors IndexNotFound:
-    completed = list::at(builder, 0)
-    current = list::at(builder, 1)
-    filled = list::at(builder, 2)}
+    completed = std::list::at(builder, 0)
+    current = std::list::at(builder, 1)
+    filled = std::list::at(builder, 2)}
         {fn chunked_append(builder, value) errors IndexNotFound:
     completed = builder.completed
     current = builder.current
     filled = builder.filled}
         {fn chunked_finish(builder) errors IndexNotFound, LowerUnderrun, UpperOverrun:
-    completed = list::at(builder, 0)
-    current = list::at(builder, 1)
-    filled = list::at(builder, 2)}
+    completed = std::list::at(builder, 0)
+    current = std::list::at(builder, 1)
+    filled = std::list::at(builder, 2)}
         {fn chunked_finish(builder) errors IndexNotFound, LowerUnderrun, UpperOverrun:
     completed = builder.completed
     current = builder.current
@@ -327,7 +327,7 @@ foreach where [lsort -dictionary [dict keys $findings]] {
     set key [list [dict get $f file] [dict get $f name] [dict get $f arity]]
     if {![dict exists $classified $key] || [lindex [dict get $classified $key] 0] ne "annotate"} continue
     set path [file join $auditRoot [dict get $f file]]
-    if {[string match lib/* [dict get $f file]]} {
+    if {[string match stdlib/* [dict get $f file]]} {
         puts "  $where: a library module (not checked)"
         continue
     }
@@ -405,8 +405,8 @@ if {[file exists $historical]} {
         regsub {^(fn [a-z_]+\([^)]*\)):$} $line {\1 errors LowerUnderrun, UpperOverrun, IndexNotFound:}
     }]
     set source [join [concat {
-        "import list"
-        "import str"
+        "import std::list"
+        "import std::str"
         "fn geo_new(value):"
         "    {only: value}"
         "fn geo_append(fields, count, value):"

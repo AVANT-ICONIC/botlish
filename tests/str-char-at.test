@@ -1,12 +1,12 @@
-# str-char-at.test -- str::char_at (core/strings.tcl): the Unicode scalar at
+# str-char-at.test -- std::str::char_at (core/strings.tcl): the Unicode scalar at
 # a character index of a String as a UnicodeChar, the one operation that
 # reads a String's characters as values (ENCODE-UTF8-ALLOCATION-RESEARCH.md).
 #
 # Its contract, checked four-way (interp, compile, cranelift-generic,
-# cranelift) through one HIR: the scalar at 0 <= I < str::length(S), the same
-# index space as str::substring; any other Int -- negative, at or past the
+# cranelift) through one HIR: the scalar at 0 <= I < std::str::length(S), the same
+# index space as std::str::substring; any other Int -- negative, at or past the
 # end, a BigInt -- fails with the declared builtin error IndexNotFound,
-# exactly like list::at. A call whose index the compiler proves in range
+# exactly like std::list::at. A call whose index the compiler proves in range
 # (hir/completions.tcl, the `index str` bounds family) needs no handler and
 # lowers to the unchecked sibling op; `==` of two UnicodeChars lowers to a
 # word comparison (chareq). It is a context-free value operation, so a
@@ -34,31 +34,31 @@ proc nirBody {text name} {
 # ---------------------------------------------------------------------------
 # Values: ASCII, two-byte, three-byte and astral scalars, read by index.
 
-test str-char-at-values {str::char_at reads every scalar by character index on every backend} -body {
-    sourceAgree {import char
-import str
+test str-char-at-values {std::str::char_at reads every scalar by character index on every backend} -body {
+    sourceAgree {import std::char
+import std::str
 
 s = "a%é世😀z"
-loop i from 0 to str::length(s):
-    char::scalar_value(str::char_at(s, i))
+loop i from 0 to std::str::length(s):
+    std::char::scalar_value(std::str::char_at(s, i))
 }
 } -result {value {[97, 37, 233, 19990, 128512, 122]}}
 
 test str-char-at-equals-literal {a char_at result equals the char literal of the same scalar, astral included} -body {
-    sourceAgree {import str
+    sourceAgree {import std::str
 
 s = "%é😀"
-[str::char_at(s, 0) == '%', str::char_at(s, 1) == 'é', str::char_at(s, 2) == '😀', str::char_at(s, 2) == '%']
+[std::str::char_at(s, 0) == '%', std::str::char_at(s, 1) == 'é', std::str::char_at(s, 2) == '😀', std::str::char_at(s, 2) == '%']
 }
 } -result {value {[true, true, true, false]}}
 
 test str-char-at-agrees-with-substring {char_at(s, i) is the one scalar of substring(s, i, i + 1)} -body {
-    sourceAgree {import char
-import str
+    sourceAgree {import std::char
+import std::str
 
 s = "x é😀 ~"
-loop i from 0 to str::length(s):
-    char::scalar_value(str::char_at(s, i)) == char::scalar_value(str::char_at(str::substring(s, i, i + 1), 0))
+loop i from 0 to std::str::length(s):
+    std::char::scalar_value(std::str::char_at(s, i)) == std::char::scalar_value(std::str::char_at(std::str::substring(s, i, i + 1), 0))
 }
 } -result {value {[true, true, true, true, true, true]}}
 
@@ -73,26 +73,26 @@ foreach {name text index} {
     empty         {}     0
     bigint        ab     1208925819614629174706176
 } {
-    test str-char-at-index-not-found-$name "str::char_at(\"$text\", $index) fails with IndexNotFound on every backend" -body {
-        sourceAgree "import str\n\nfn at(s, i):\n    c = str::char_at(s, i):\n        on IndexNotFound:\n            return -1\n    1\n\nat(\"$text\", $index)\n"
+    test str-char-at-index-not-found-$name "std::str::char_at(\"$text\", $index) fails with IndexNotFound on every backend" -body {
+        sourceAgree "import std::str\n\nfn at(s, i):\n    c = std::str::char_at(s, i):\n        on IndexNotFound:\n            return -1\n    1\n\nat(\"$text\", $index)\n"
     } -result {value -1}
 }
 
 test str-char-at-unhandled-error {an index not proven in range leaves IndexNotFound as an obligation} -body {
-    sourceAgree {import str
+    sourceAgree {import std::str
 
 fn at(s, i):
-    str::char_at(s, i)
+    std::str::char_at(s, i)
 
 at("a", 0)
 }
 } -match glob -result {error {CORE SEMANTIC *} {*may produce the declared error "IndexNotFound"*}}
 
-test str-char-at-as-a-value {str::char_at called as a first-class value reads and fails exactly like a direct call} -body {
-    sourceAgree {import list
-import str
+test str-char-at-as-a-value {std::str::char_at called as a first-class value reads and fails exactly like a direct call} -body {
+    sourceAgree {import std::list
+import std::str
 
-fs = [str::char_at]
+fs = [std::str::char_at]
 
 fn read(f, s, i):
     f(s, i):
@@ -100,7 +100,7 @@ fn read(f, s, i):
             'x'
 
 loop i from 0 to 4:
-    read(list::at(fs, 0), "aé😀", i) == list::at(['a', 'é', '😀', 'x'], i)
+    read(std::list::at(fs, 0), "aé😀", i) == std::list::at(['a', 'é', '😀', 'x'], i)
 }
 } -result {value {[true, true, true, true]}}
 
@@ -108,14 +108,14 @@ loop i from 0 to 4:
 # Lowering: a guarded read is proven (no handler, unchecked op); an unguarded
 # one keeps the checked op; UnicodeChar equality is chareq.
 
-test str-char-at-proven-in-guarded-scan {a read under an i < str::length(s) guard is proven and lowers to strcharatproven} -body {
-    set hir [surface::compile {import str
+test str-char-at-proven-in-guarded-scan {a read under an i < std::str::length(s) guard is proven and lowers to strcharatproven} -body {
+    set hir [surface::compile {import std::str
 
 fn count_pct(s, i, acc):
-    if i < 0 or i >= str::length(s):
+    if i < 0 or i >= std::str::length(s):
         acc
     else:
-        hit = if str::char_at(s, i) == '%':
+        hit = if std::str::char_at(s, i) == '%':
             1
         else:
             0
@@ -130,10 +130,10 @@ count_pct("a%b%%", 0, 0)
 } -result {3 1 0 1 0}
 
 test str-char-at-checked-when-unproven {an unproven read keeps the checked strcharat op} -body {
-    set hir [surface::compile {import str
+    set hir [surface::compile {import std::str
 
 fn first(s):
-    str::char_at(s, 0):
+    std::str::char_at(s, 0):
         on IndexNotFound:
             return 'x'
 
@@ -146,17 +146,17 @@ first("") == 'x'
 # ---------------------------------------------------------------------------
 # Repeatability: a proof-producing predicate over char_at is a value check.
 
-test str-char-at-repeatable {a function that reads characters with str::char_at is proven repeatable} -body {
-    set hir [surface::compile {import str
+test str-char-at-repeatable {a function that reads characters with std::str::char_at is proven repeatable} -body {
+    set hir [surface::compile {import std::str
 
 refined type NoPercent = str
 
 fn no_percent?(s: str) -> bool proves s: NoPercent:
     fn from?(i):
-        if i < 0 or i >= str::length(s):
+        if i < 0 or i >= std::str::length(s):
             true
         else:
-            if str::char_at(s, i) == '%':
+            if std::str::char_at(s, i) == '%':
                 false
             else:
                 from?(i + 1)
@@ -172,14 +172,14 @@ no_percent?("abc")
 # No allocation: the read is an immediate, so a scan allocates nothing.
 
 test str-char-at-allocates-nothing {a char_at scan over a non-ASCII String allocates no object} -body {
-    set hir [surface::compile {import char
-import str
+    set hir [surface::compile {import std::char
+import std::str
 
 fn sum(s, i, acc):
-    if i < 0 or i >= str::length(s):
+    if i < 0 or i >= std::str::length(s):
         acc
     else:
-        sum(s, i + 1, acc + char::scalar_value(str::char_at(s, i)))
+        sum(s, i + 1, acc + std::char::scalar_value(std::str::char_at(s, i)))
 
 sum("déjà vu 😀", 0, 0)
 } -warnings off]

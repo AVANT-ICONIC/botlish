@@ -49,7 +49,7 @@ source [file join $root compiler compiler.tcl]
 source [file join $root surface surface.tcl]
 source [file join $root native native.tcl]
 
-set prelude {import list
+set prelude {import std::list
 
 type Small = Int in 0..9
 error OutOfRange
@@ -126,7 +126,7 @@ proc program {step n} {
     if {[dict get $options -workload] eq "tight"} {
         return "$prelude\nfn count(i: int, n: int, acc: int) -> int:\n    if i >= n:\n        return acc\n    v = mod(i, 20) - 5\n[dict get $counts $form]\n\ncount(0, $n, 0)\n"
     }
-    return "$prelude\n$step\nys = loop i from 0 to $n:\n    step(mod(i, 20) - 5)\nlist::length(ys)\n"
+    return "$prelude\n$step\nys = loop i from 0 to $n:\n    step(mod(i, 20) - 5)\nstd::list::length(ys)\n"
 }
 
 proc ms {us} {

@@ -11,7 +11,7 @@
 # a lookup scans its bucket with a collecting loop (`loop other in bucket:
 # if ... != ...: continue`) and tests the collected List's length; an insert
 # appends to the bucket (`bucket.append(...)`, a new List) and stores it
-# back with `set`, through `mutable_array::get(slot, [])`. The study's set
+# back with `set`, through `std::mutable_array::get(slot, [])`. The study's set
 # held keys; a map entry here is a struct {key, value}, and the count lives
 # in a one-slot MutableArray[int] (SPEC.md section 7), the only additions.
 #
@@ -20,8 +20,8 @@
 # `presized` mode) for the regime the application used.
 #
 # policy: none
-import list
-import mutable_array
+import std::list
+import std::mutable_array
 
 struct Entry:
     key: any
@@ -37,7 +37,7 @@ fn table_capacity(expected: int) -> int:
     2 * expected + 1
 
 fn fresh(expected: int) -> Table:
-    Table {buckets: mutable_array::create(table_capacity(expected), []), meta: mutable_array::create(1, 0)}
+    Table {buckets: std::mutable_array::create(table_capacity(expected), []), meta: std::mutable_array::create(1, 0)}
 
 fn slots(t: Table) -> int:
     t.buckets.capacity()
@@ -65,7 +65,7 @@ fn has?(t: Table, key) -> bool:
     bucket_of(t, key).holding(key).length() > 0
 
 fn probes(t: Table, key) -> int:
-    list::length(bucket_of(t, key))
+    std::list::length(bucket_of(t, key))
 
 # BUCKET with KEY's entry, if any, replaced by KEY -> VALUE.
 fn replaced(bucket: List[Entry], key, value) -> List[Entry]:
@@ -103,9 +103,9 @@ fn drop(t: Table, key) -> Table errors IndexNotFound:
 
 # The table of KEYS[i] -> VALS[i], in order (a later duplicate's value wins).
 fn from_lists(keys: list, vals: list) -> Table errors IndexNotFound:
-    n = list::length(keys)
+    n = std::list::length(keys)
     fn fill(t: Table, i: int) -> Table errors IndexNotFound:
         if i >= n:
             return t
-        fill(put(t, list::at(keys, i), list::at(vals, i)), i + 1)
+        fill(put(t, std::list::at(keys, i), std::list::at(vals, i)), i + 1)
     fill(fresh(n), 0)

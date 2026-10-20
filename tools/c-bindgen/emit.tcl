@@ -123,16 +123,16 @@ proc ::cbind::emit::Banner {module what} {
     return [join $lines \n]\n
 }
 
-# The converter of the scalar SCALAR (ffi::c::UInt -> c_uint).
+# The converter of the scalar SCALAR (std::ffi::c::UInt -> c_uint).
 proc ::cbind::emit::Converter {scalar} {
-    set base [string range $scalar 8 end]
+    set base [regsub {^std::ffi::c::} $scalar {}]
     return c_[string tolower [regsub -all {([a-z])([A-Z])} $base {\1_\2}]]
 }
 
 # A constant's value expression in a module.
 proc ::cbind::emit::ConstantValue {c} {
     variable ns
-    if {[dict get $c type] eq "ffi::c::Bool"} {
+    if {[dict get $c type] eq "std::ffi::c::Bool"} {
         return [expr {[dict get $c value] ? "true" : "false"}]
     }
     return "${ns}::ctypes::[Converter [dict get $c type]]([dict get $c value])"
@@ -166,7 +166,7 @@ proc ::cbind::emit::files {theModel} {
         if {![dict exists $groups $key]} { lappend moduleOrder $key; dict set groups $key {constants {} externs {}} }
         if {![dict exists $headerOf $key]} { dict set headerOf $key [dict get $c header] }
         dict with groups $key { lappend constants $c }
-        if {[dict get $c type] ne "ffi::c::Bool" && [dict get $c type] ni $converters} {
+        if {[dict get $c type] ne "std::ffi::c::Bool" && [dict get $c type] ni $converters} {
             lappend converters [dict get $c type]
         }
     }
@@ -188,7 +188,7 @@ proc ::cbind::emit::files {theModel} {
         set keys [lsort -unique $keys]
         set text [Banner "${ns}::[string map {:: ::} $key]" [ModuleWhat $key [dict get $headerOf $key]]]
         set imports {}
-        if {[llength [dict get $g externs]]} { lappend imports "import ffi::c" }
+        if {[llength [dict get $g externs]]} { lappend imports "import std::ffi::c" }
         if {[llength [dict get $g constants]] || [llength $keys]} { lappend imports "import ${ns}::ctypes" }
         if {[llength $imports]} { append text [join $imports \n]\n }
         if {[llength [dict get $g externs]]} {
@@ -250,7 +250,7 @@ proc ::cbind::emit::files {theModel} {
             "C tag a bound signature points to (never its fields), and the converters" \
             "that give its constants their C types (C-BINDGEN.md, \"Opaque types\"," \
             "\"Constants\")."]]
-        if {[llength $converters]} { append text "import ffi::c\n" }
+        if {[llength $converters]} { append text "import std::ffi::c\n" }
         foreach k [IdentityOrder $allKeys] {
             set id [dict get $ids $k]
             # A system header is named by its origin only: its path is the
@@ -260,7 +260,7 @@ proc ::cbind::emit::files {theModel} {
             append text "\n# $k$where$note\nopaque struct [dict get $id name]:\n    tag: unit\n"
         }
         foreach scalar [lsort $converters] {
-            append text "\n# A constant of C [dict get [core::cabi::scalarInfo [string range $scalar 8 end] $target] c].\nfn [Converter $scalar](value: $scalar) -> $scalar:\n    value\n"
+            append text "\n# A constant of C [dict get [core::cabi::scalarInfo [regsub {^std::ffi::c::} $scalar {}] $target] c].\nfn [Converter $scalar](value: $scalar) -> $scalar:\n    value\n"
         }
         dict set out "$ns/ctypes.bot" $text
     }
@@ -329,7 +329,7 @@ proc ::cbind::emit::Layouts {} {
         "as this target's C compiler gives them (C-BINDGEN-LAYOUTS.md). A layout" \
         "describes where a record's bytes are; the record's pointee identity is" \
         "${ns}::ctypes'."]]
-    append text "import ffi::c\n"
+    append text "import std::ffi::c\n"
     set keys [lsort -unique $keys]
     if {[llength $keys]} { append text "import ${ns}::ctypes\n" }
     append text $body

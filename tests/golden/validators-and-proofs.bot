@@ -5,7 +5,7 @@
 #   error Invalid
 #
 #   fn validate_mail(s: str) -> unit proves s: Mail errors Invalid:
-#       if str::length(s) < 4:
+#       if std::str::length(s) < 4:
 #           fail Invalid
 #       unit
 #
@@ -64,20 +64,20 @@
 # assert anyway.
 #
 # Imports: compiler and test (the framework); list and str (the Tcl
-# prelude's imports: list::length, list::at, str::length, str::concat,
-# str::substring); mutable_array and abi (the bounds and loop-interval
+# prelude's imports: std::list::length, std::list::at, std::str::length, std::str::concat,
+# std::str::substring); mutable_array and abi (the bounds and loop-interval
 # programs, which the Tcl harness's withImports gives exactly these
-# namespaces); linux::path and `import type linux::path::LinuxPath` (a
+# namespaces); std::linux::path and `import type std::linux::path::LinuxPath` (a
 # standard module's refinement, standing in for validator-mint-authority's
 # private module "path").
-import abi
-import compiler
-import linux::path
-import list
-import mutable_array
-import str
-import test
-import type linux::path::LinuxPath
+import std::abi
+import std::compiler
+import std::linux::path
+import std::list
+import std::mutable_array
+import std::str
+import std::test
+import type std::linux::path::LinuxPath
 
 # ---------------------------------------------------------------------------
 # Shared declarations (top-level only)
@@ -93,17 +93,17 @@ error Invalid
 error Other
 
 fn validate_mail(s: str) -> unit proves s: Mail errors Invalid:
-    if str::length(s) < 4:
+    if std::str::length(s) < 4:
         fail Invalid
     unit
 
 fn validate_long_mail(s: str) -> unit proves s: Mail errors Invalid:
-    if str::length(s) < 6:
+    if std::str::length(s) < 6:
         fail Invalid
     unit
 
 fn validate_strict(m: Mail) -> unit proves m: Strict errors Invalid:
-    if str::length(m) < 5:
+    if std::str::length(m) < 5:
         fail Invalid
     unit
 
@@ -111,13 +111,13 @@ fn validate_any_mail(s: str) -> unit proves s: Mail:
     unit
 
 fn mail?(s: str) -> bool proves s: Mail:
-    str::length(s) > 3
+    std::str::length(s) > 3
 
 fn send(m: Mail) -> int:
-    str::length(m)
+    std::str::length(m)
 
 fn send_strict(m: Strict) -> int:
-    100 * str::length(m)
+    100 * std::str::length(m)
 
 fn pair(u: unit, n: int) -> int:
     n
@@ -139,72 +139,72 @@ fn register_unit_type_tests():
     # validator-unit-result-annotation: "-> unit" declares the unit result;
     # a non-proving -> unit function is ordinary, with an untyped parameter
     # and with an else-less if as its body.
-    fn unit_body() errors compiler::CompilerError:
+    fn unit_body() errors std::compiler::CompilerError:
         static compile:
             fn log(x) -> unit:
                 unit
             [log(1), log("a")]
-    test::value("validator-unit-result-annotation/unit-body", [unit, unit], unit_body)
+    std::test::value("validator-unit-result-annotation/unit-body", [unit, unit], unit_body)
 
-    fn else_less_body() errors compiler::CompilerError:
+    fn else_less_body() errors std::compiler::CompilerError:
         static compile:
             fn log(x) -> unit:
                 if x > 1:
                     unit
             [log(1), log(2)]
-    test::value("validator-unit-result-annotation/else-less-if", [unit, unit], else_less_body)
+    std::test::value("validator-unit-result-annotation/else-less-if", [unit, unit], else_less_body)
 
     # validator-unit-result-checked: a declared -> unit is checked like any
     # declared result: a body whose value is not unit is a Type error.
-    fn int_body() errors compiler::CompilerError:
+    fn int_body() errors std::compiler::CompilerError:
         static compile:
             fn log(x) -> unit:
                 1
             log(1)
-    test::rejects_containing("validator-unit-result-checked/int-body", compiler::DiagnosticCode::Type, "function result does not prove declared type unit", int_body)
+    std::test::rejects_containing("validator-unit-result-checked/int-body", std::compiler::DiagnosticCode::Type, "function result does not prove declared type unit", int_body)
 
-    fn binding_body() errors compiler::CompilerError:
+    fn binding_body() errors std::compiler::CompilerError:
         static compile:
             fn log(x) -> unit:
                 y = x
             log(1)
-    test::rejects_containing("validator-unit-result-checked/binding-body", compiler::DiagnosticCode::Type, "function result does not prove declared type unit", binding_body)
+    std::test::rejects_containing("validator-unit-result-checked/binding-body", std::compiler::DiagnosticCode::Type, "function result does not prove declared type unit", binding_body)
 
-    fn returns_int() errors compiler::CompilerError:
+    fn returns_int() errors std::compiler::CompilerError:
         static compile:
             fn log(x) -> unit:
                 if x > 1:
                     return 3
                 unit
             log(1)
-    test::rejects("validator-unit-result-checked/returns-int", compiler::DiagnosticCode::Type, returns_int)
+    std::test::rejects("validator-unit-result-checked/returns-int", std::compiler::DiagnosticCode::Type, returns_int)
 
     # validator-unit-type-positions: "unit" names the unit type in every
     # type position: parameters, applied and structural function types,
     # fields (UnitBox).
-    fn type_positions() errors compiler::CompilerError:
+    fn type_positions() errors std::compiler::CompilerError:
         static compile:
             fn f(x: unit, g: Fn{args: [unit], return: unit}) -> List[unit]:
                 [g(x), UnitBox {value: x}.value]
             fn id(u: unit) -> unit:
                 u
             f(unit, id)
-    test::value("validator-unit-type-positions", [unit, unit], type_positions)
+    std::test::value("validator-unit-type-positions", [unit, unit], type_positions)
 
     # validator-unit-stays-a-value: "unit" is still the unit value outside
     # a type position, and it is no type constructor.
-    fn unit_value() errors compiler::CompilerError:
+    fn unit_value() errors std::compiler::CompilerError:
         static compile:
             x = unit
             [x, unit]
-    test::value("validator-unit-stays-a-value/value", [unit, unit], unit_value)
+    std::test::value("validator-unit-stays-a-value/value", [unit, unit], unit_value)
 
-    fn applied_unit() errors compiler::CompilerError:
+    fn applied_unit() errors std::compiler::CompilerError:
         static compile:
             fn f(x) -> unit[int]:
                 unit
             f(1)
-    test::rejects_message("validator-unit-stays-a-value/not-a-type-constructor", compiler::DiagnosticCode::Type, "unknown or invalid result type unit[int]: \"unit\" is not a type constructor", applied_unit)
+    std::test::rejects_message("validator-unit-stays-a-value/not-a-type-constructor", std::compiler::DiagnosticCode::Type, "unknown or invalid result type unit[int]: \"unit\" is not a type constructor", applied_unit)
 
 # ---------------------------------------------------------------------------
 # refinement-validators.test: the proof clause, both shapes, the same rules
@@ -213,95 +213,95 @@ fn register_proof_clause_tests():
     # validator-proof-result-shapes: a proof-producing function declares
     # -> bool (a predicate) or -> unit (a validator); any other result --
     # an int, none at all, a refinement of unit -- is ProofClause.
-    fn int_result() errors compiler::CompilerError:
+    fn int_result() errors std::compiler::CompilerError:
         static compile:
             fn validate_m(s: str) -> int proves s: Word:
                 1
             1
-    test::rejects_message("validator-proof-result-shapes/int-result", compiler::DiagnosticCode::ProofClause, "a proof-producing function must declare \"-> bool\" (a predicate: its true result is the proof) or \"-> unit\" (a validator: its normal completion is the proof), but \"proves s: Word\" is on a function declared -> int", int_result)
+    std::test::rejects_message("validator-proof-result-shapes/int-result", std::compiler::DiagnosticCode::ProofClause, "a proof-producing function must declare \"-> bool\" (a predicate: its true result is the proof) or \"-> unit\" (a validator: its normal completion is the proof), but \"proves s: Word\" is on a function declared -> int", int_result)
 
-    fn no_result() errors compiler::CompilerError:
+    fn no_result() errors std::compiler::CompilerError:
         static compile:
             fn validate_m(s: str) proves s: Word:
                 unit
             1
-    test::rejects_message("validator-proof-result-shapes/no-result", compiler::DiagnosticCode::ProofClause, "a proof-producing function must declare \"-> bool\" (a predicate: its true result is the proof) or \"-> unit\" (a validator: its normal completion is the proof), but \"proves s: Word\" is on a function with no declared result type", no_result)
+    std::test::rejects_message("validator-proof-result-shapes/no-result", std::compiler::DiagnosticCode::ProofClause, "a proof-producing function must declare \"-> bool\" (a predicate: its true result is the proof) or \"-> unit\" (a validator: its normal completion is the proof), but \"proves s: Word\" is on a function with no declared result type", no_result)
 
-    fn refined_unit_result() errors compiler::CompilerError:
+    fn refined_unit_result() errors std::compiler::CompilerError:
         static compile:
             fn validate_m(s: str) -> UnitTag proves s: Word:
                 unit
             1
-    test::rejects("validator-proof-result-shapes/refined-unit-result", compiler::DiagnosticCode::ProofClause, refined_unit_result)
+    std::test::rejects("validator-proof-result-shapes/refined-unit-result", std::compiler::DiagnosticCode::ProofClause, refined_unit_result)
 
-    fn validator_shape() errors compiler::CompilerError:
+    fn validator_shape() errors std::compiler::CompilerError:
         static compile:
             fn validate_m(s: str) -> unit proves s: Word:
                 unit
             1
-    test::value("validator-proof-result-shapes/validator-accepted", 1, validator_shape)
+    std::test::value("validator-proof-result-shapes/validator-accepted", 1, validator_shape)
 
-    fn predicate_shape() errors compiler::CompilerError:
+    fn predicate_shape() errors std::compiler::CompilerError:
         static compile:
             fn m?(s: str) -> bool proves s: Word:
                 true
             1
-    test::value("validator-proof-result-shapes/predicate-accepted", 1, predicate_shape)
+    std::test::value("validator-proof-result-shapes/predicate-accepted", 1, predicate_shape)
 
     # validator-proof-clause-rules: a validator's clause is validated
     # exactly like a predicate's: an ordinary parameter, a refinement type,
     # a declared carrier parameter.
-    fn unknown_parameter() errors compiler::CompilerError:
+    fn unknown_parameter() errors std::compiler::CompilerError:
         static compile:
             fn validate_m(s: str) -> unit proves t: Word:
                 unit
             1
-    test::rejects_containing("validator-proof-clause-rules/unknown-parameter", compiler::DiagnosticCode::ProofClause, "the function has no parameter \"t\" (its parameters: s)", unknown_parameter)
+    std::test::rejects_containing("validator-proof-clause-rules/unknown-parameter", std::compiler::DiagnosticCode::ProofClause, "the function has no parameter \"t\" (its parameters: s)", unknown_parameter)
 
-    fn flag_parameter() errors compiler::CompilerError:
+    fn flag_parameter() errors std::compiler::CompilerError:
         static compile:
             fn validate_m(s: str, flags :x) -> unit proves x: Word:
                 unit
             1
-    test::rejects_containing("validator-proof-clause-rules/flag-parameter", compiler::DiagnosticCode::ProofClause, "\"x\" is a flag, not an ordinary parameter", flag_parameter)
+    std::test::rejects_containing("validator-proof-clause-rules/flag-parameter", std::compiler::DiagnosticCode::ProofClause, "\"x\" is a flag, not an ordinary parameter", flag_parameter)
 
-    fn not_a_refinement() errors compiler::CompilerError:
+    fn not_a_refinement() errors std::compiler::CompilerError:
         static compile:
             fn validate_m(s: str) -> unit proves s: str:
                 unit
             1
-    test::rejects_containing("validator-proof-clause-rules/not-a-refinement", compiler::DiagnosticCode::ProofClause, "is str, which is not a refinement type", not_a_refinement)
+    std::test::rejects_containing("validator-proof-clause-rules/not-a-refinement", std::compiler::DiagnosticCode::ProofClause, "is str, which is not a refinement type", not_a_refinement)
 
-    fn carrier_mismatch() errors compiler::CompilerError:
+    fn carrier_mismatch() errors std::compiler::CompilerError:
         static compile:
             fn validate_m(n: int) -> unit proves n: Word:
                 unit
             1
-    test::rejects_containing("validator-proof-clause-rules/carrier-mismatch", compiler::DiagnosticCode::ProofClause, "proof carrier mismatch: parameter \"n\" is declared int, but Word refines str", carrier_mismatch)
+    std::test::rejects_containing("validator-proof-clause-rules/carrier-mismatch", std::compiler::DiagnosticCode::ProofClause, "proof carrier mismatch: parameter \"n\" is declared int, but Word refines str", carrier_mismatch)
 
-    fn untyped_parameter() errors compiler::CompilerError:
+    fn untyped_parameter() errors std::compiler::CompilerError:
         static compile:
             fn validate_m(s) -> unit proves s: Word:
                 unit
             1
-    test::rejects_containing("validator-proof-clause-rules/undeclared-parameter-type", compiler::DiagnosticCode::ProofClause, "the proven parameter \"s\" must declare its type", untyped_parameter)
+    std::test::rejects_containing("validator-proof-clause-rules/undeclared-parameter-type", std::compiler::DiagnosticCode::ProofClause, "the proven parameter \"s\" must declare its type", untyped_parameter)
 
-    fn unknown_refinement() errors compiler::CompilerError:
+    fn unknown_refinement() errors std::compiler::CompilerError:
         static compile:
             fn validate_m(s: str) -> unit proves s: Nope:
                 unit
             1
-    test::rejects("validator-proof-clause-rules/unknown-refinement", compiler::DiagnosticCode::ProofClause, unknown_refinement)
+    std::test::rejects("validator-proof-clause-rules/unknown-refinement", std::compiler::DiagnosticCode::ProofClause, unknown_refinement)
 
     # validator-mint-authority (its entry-program half): only the
     # refinement's owner may declare a validator of it; the entry program
-    # importing linux::path may not declare one of LinuxPath.
-    fn entry_mints() errors compiler::CompilerError:
+    # importing std::linux::path may not declare one of LinuxPath.
+    fn entry_mints() errors std::compiler::CompilerError:
         static compile:
             fn validate_fake(v: str) -> unit proves v: LinuxPath:
                 unit
             1
-    test::rejects("validator-mint-authority/entry-program", compiler::DiagnosticCode::RefinementMintAuthority, entry_mints)
+    std::test::rejects("validator-mint-authority/entry-program", std::compiler::DiagnosticCode::RefinementMintAuthority, entry_mints)
 
 # ---------------------------------------------------------------------------
 # refinement-validators.test: the fact after a normally completing call
@@ -309,28 +309,28 @@ fn register_proof_clause_tests():
 fn register_validator_fact_tests():
     # validator-predicate-is-no-validator: a predicate's call completing
     # proves nothing: only its true result does.
-    fn predicate_statement() errors compiler::CompilerError:
+    fn predicate_statement() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str) -> int:
                 mail?(s)
                 send(s)
             use("abcd")
-    test::rejects("validator-predicate-is-no-validator", compiler::DiagnosticCode::Type, predicate_statement)
+    std::test::rejects("validator-predicate-is-no-validator", std::compiler::DiagnosticCode::Type, predicate_statement)
 
     # validator-no-implicit-strengthening: without a validator call a
     # carrier value is still no refinement; the diagnostic names both
     # proofs.
-    fn unvalidated() errors compiler::CompilerError:
+    fn unvalidated() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str) -> int:
                 send(s)
             use("abcd")
-    test::rejects_message("validator-no-implicit-strengthening", compiler::DiagnosticCode::Type, "argument for parameter \"m\" cannot be proven to satisfy str[Mail] (argument type: str); expected Mail but found str: a refinement proof is required (a str value becomes Mail only where one of its owner's proof-producing functions has proven it: a predicate returned true for it, or a validator completed normally for it; there is no implicit conversion)", unvalidated)
+    std::test::rejects_message("validator-no-implicit-strengthening", std::compiler::DiagnosticCode::Type, "argument for parameter \"m\" cannot be proven to satisfy str[Mail] (argument type: str); expected Mail but found str: a refinement proof is required (a str value becomes Mail only where one of its owner's proof-producing functions has proven it: a predicate returned true for it, or a validator completed normally for it; there is no implicit conversion)", unvalidated)
 
     # validator-statement-call: after a statement call completes, the
     # argument is proven for the rest of the body. (top is the Tcl
     # harness's withTop: use's Invalid as -1.)
-    fn statement_call() errors compiler::CompilerError:
+    fn statement_call() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str) -> int errors Invalid:
                 validate_mail(s)
@@ -341,21 +341,21 @@ fn register_validator_fact_tests():
                         -1
                 r
             [top("abcd"), top("ab")]
-    test::value("validator-statement-call", [8, -1], statement_call)
+    std::test::value("validator-statement-call", [8, -1], statement_call)
 
     # validator-not-before-call: before the call, nothing is proven.
-    fn before_call() errors compiler::CompilerError:
+    fn before_call() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str) -> int errors Invalid:
                 n = send(s)
                 validate_mail(s)
                 n
             1
-    test::rejects("validator-not-before-call", compiler::DiagnosticCode::Type, before_call)
+    std::test::rejects("validator-not-before-call", std::compiler::DiagnosticCode::Type, before_call)
 
     # validator-binding-call: a bound validator call proves the same; the
     # binding is an ordinary unit.
-    fn binding_call() errors compiler::CompilerError:
+    fn binding_call() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str) -> int errors Invalid:
                 done = validate_mail(s)
@@ -369,11 +369,11 @@ fn register_validator_fact_tests():
                         -1
                 r
             [top("abcde"), top("a")]
-    test::value("validator-binding-call", [5, -1], binding_call)
+    std::test::value("validator-binding-call", [5, -1], binding_call)
 
     # validator-method-sugar: s.validate_mail() is the same call and proves
     # the same.
-    fn method_sugar() errors compiler::CompilerError:
+    fn method_sugar() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str) -> int errors Invalid:
                 s.validate_mail()
@@ -384,11 +384,11 @@ fn register_validator_fact_tests():
                         -1
                 r
             [top("abcd"), top("abc")]
-    test::value("validator-method-sugar", [4, -1], method_sugar)
+    std::test::value("validator-method-sugar", [4, -1], method_sugar)
 
     # validator-argument-order: a validator call as an argument proves its
     # argument for the arguments evaluated after it, not before.
-    fn proves_later_arguments() errors compiler::CompilerError:
+    fn proves_later_arguments() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str) -> int errors Invalid:
                 pair(validate_mail(s), send(s))
@@ -398,20 +398,20 @@ fn register_validator_fact_tests():
                         -1
                 r
             [top("abcd"), top("ab")]
-    test::value("validator-argument-order/later-argument", [4, -1], proves_later_arguments)
+    std::test::value("validator-argument-order/later-argument", [4, -1], proves_later_arguments)
 
-    fn earlier_argument() errors compiler::CompilerError:
+    fn earlier_argument() errors std::compiler::CompilerError:
         static compile:
             fn swap(n: int, u: unit) -> int:
                 n
             fn use(s: str) -> int errors Invalid:
                 swap(send(s), validate_mail(s))
             1
-    test::rejects("validator-argument-order/earlier-argument", compiler::DiagnosticCode::Type, earlier_argument)
+    std::test::rejects("validator-argument-order/earlier-argument", std::compiler::DiagnosticCode::Type, earlier_argument)
 
     # validator-chain: a validator may require a refinement another
     # validator proved: Strict from a Mail.
-    fn chain() errors compiler::CompilerError:
+    fn chain() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str) -> int errors Invalid:
                 validate_mail(s)
@@ -423,29 +423,29 @@ fn register_validator_fact_tests():
                         -1
                 r
             [top("abcdef"), top("abcd"), top("a")]
-    test::value("validator-chain/value", [606, -1, -1], chain)
+    std::test::value("validator-chain/value", [606, -1, -1], chain)
 
-    fn chain_from_carrier() errors compiler::CompilerError:
+    fn chain_from_carrier() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str) -> int errors Invalid:
                 validate_strict(s)
                 1
             1
-    test::rejects("validator-chain/unproven-carrier", compiler::DiagnosticCode::Type, chain_from_carrier)
+    std::test::rejects("validator-chain/unproven-carrier", std::compiler::DiagnosticCode::Type, chain_from_carrier)
 
     # validator-infallible: a validator without an errors clause is the
     # owner's prerogative: its every call proves.
-    fn infallible() errors compiler::CompilerError:
+    fn infallible() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str) -> int:
                 validate_any_mail(s)
                 send(s)
             [use("a"), use("")]
-    test::value("validator-infallible", [1, 0], infallible)
+    std::test::value("validator-infallible", [1, 0], infallible)
 
     # validator-last-statement: a validator call as a function's last
     # statement: the function completes with unit, nothing is after it.
-    fn last_statement() errors compiler::CompilerError:
+    fn last_statement() errors std::compiler::CompilerError:
         static compile:
             fn check(s: str) -> unit errors Invalid:
                 validate_mail(s)
@@ -458,12 +458,12 @@ fn register_validator_fact_tests():
                 else:
                     0
             [use("abcd"), use("ab")]
-    test::value("validator-last-statement", [1, -1], last_statement)
+    std::test::value("validator-last-statement", [1, -1], last_statement)
 
     # validator-callee-proves-nothing-for-caller: a wrapper that validates
     # its parameter proves nothing for its caller: the fact is about the
     # wrapper's own path.
-    fn wrapper() errors compiler::CompilerError:
+    fn wrapper() errors std::compiler::CompilerError:
         static compile:
             fn check(s: str) -> unit errors Invalid:
                 validate_mail(s)
@@ -471,11 +471,11 @@ fn register_validator_fact_tests():
                 check(s)
                 send(s)
             1
-    test::rejects("validator-callee-proves-nothing-for-caller", compiler::DiagnosticCode::Type, wrapper)
+    std::test::rejects("validator-callee-proves-nothing-for-caller", std::compiler::DiagnosticCode::Type, wrapper)
 
     # validator-closure-after-call: a function created after the call sees
     # the fact; one created before does not.
-    fn closure_after() errors compiler::CompilerError:
+    fn closure_after() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str) -> int errors Invalid:
                 validate_mail(s)
@@ -488,9 +488,9 @@ fn register_validator_fact_tests():
                         -1
                 r
             [top("abcd"), top("a")]
-    test::value("validator-closure-after-call/after", [4, -1], closure_after)
+    std::test::value("validator-closure-after-call/after", [4, -1], closure_after)
 
-    fn closure_before() errors compiler::CompilerError:
+    fn closure_before() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str) -> int errors Invalid:
                 fn earlier() -> int:
@@ -498,11 +498,11 @@ fn register_validator_fact_tests():
                 validate_mail(s)
                 earlier()
             1
-    test::rejects("validator-closure-after-call/before", compiler::DiagnosticCode::Type, closure_before)
+    std::test::rejects("validator-closure-after-call/before", std::compiler::DiagnosticCode::Type, closure_before)
 
     # validator-contract-inference: an untyped parameter validated before a
     # refinement use requires only the validator's carrier of its callers.
-    fn contract_inference() errors compiler::CompilerError:
+    fn contract_inference() errors std::compiler::CompilerError:
         static compile:
             fn relay(x) -> int errors Invalid:
                 validate_mail(x)
@@ -515,7 +515,7 @@ fn register_validator_fact_tests():
                         -1
                 r
             [top("abcd"), top("a")]
-    test::value("validator-contract-inference", [4, -1], contract_inference)
+    std::test::value("validator-contract-inference", [4, -1], contract_inference)
 
 # ---------------------------------------------------------------------------
 # refinement-validators.test: branches and joins
@@ -523,10 +523,10 @@ fn register_validator_fact_tests():
 fn register_validator_join_tests():
     # validator-inside-branch: a fact established in a branch holds in that
     # branch.
-    fn inside_branch() errors compiler::CompilerError:
+    fn inside_branch() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str) -> int errors Invalid:
-                if str::length(s) > 1:
+                if std::str::length(s) > 1:
                     validate_mail(s)
                     send(s)
                 else:
@@ -537,20 +537,20 @@ fn register_validator_join_tests():
                         -1
                 r
             [top("abcd"), top("a"), top("ab")]
-    test::value("validator-inside-branch", [4, 0, -1], inside_branch)
+    std::test::value("validator-inside-branch", [4, 0, -1], inside_branch)
 
     # validator-join-one-branch: a fact established in one branch only does
     # not survive the join, with or without an else.
-    fn else_less() errors compiler::CompilerError:
+    fn else_less() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str, c: bool) -> int errors Invalid:
                 if c:
                     validate_mail(s)
                 send(s)
             1
-    test::rejects("validator-join-one-branch/else-less", compiler::DiagnosticCode::Type, else_less)
+    std::test::rejects("validator-join-one-branch/else-less", std::compiler::DiagnosticCode::Type, else_less)
 
-    fn else_unit() errors compiler::CompilerError:
+    fn else_unit() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str, c: bool) -> int errors Invalid:
                 if c:
@@ -559,21 +559,21 @@ fn register_validator_join_tests():
                     unit
                 send(s)
             1
-    test::rejects("validator-join-one-branch/else-unit", compiler::DiagnosticCode::Type, else_unit)
+    std::test::rejects("validator-join-one-branch/else-unit", std::compiler::DiagnosticCode::Type, else_unit)
 
     # validator-join-all-branches: a fact survives the join when every
     # branch that completes normally proves it, by any validator or
     # predicate.
-    fn all_branches() errors compiler::CompilerError:
+    fn all_branches() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str) -> int errors Invalid:
-                if str::length(s) > 5:
+                if std::str::length(s) > 5:
                     validate_long_mail(s)
                 else:
                     validate_mail(s)
                 send(s)
             fn both(s: str) -> int:
-                if str::length(s) > 5:
+                if std::str::length(s) > 5:
                     validate_any_mail(s)
                 else:
                     if not mail?(s):
@@ -585,21 +585,21 @@ fn register_validator_join_tests():
                         -1
                 r
             [top("abcdefg"), top("abcd"), top("ab"), both("abcdefg"), both("abcd"), both("ab")]
-    test::value("validator-join-all-branches", [7, 4, -1, 7, 4, -2], all_branches)
+    std::test::value("validator-join-all-branches", [7, 4, -1, 7, 4, -2], all_branches)
 
     # validator-join-other-branch-leaves: a branch that returns, fails or
     # breaks contributes nothing to the join (fails is accepted, never
     # called).
-    fn leaving_branches() errors compiler::CompilerError:
+    fn leaving_branches() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str) -> int errors Invalid:
-                if str::length(s) > 2:
+                if std::str::length(s) > 2:
                     validate_mail(s)
                 else:
                     return 0
                 send(s)
             fn fails(s: str) -> int errors Invalid:
-                if str::length(s) > 2:
+                if std::str::length(s) > 2:
                     validate_mail(s)
                 else:
                     fail Invalid
@@ -607,19 +607,19 @@ fn register_validator_join_tests():
             fn breaks(xs: List[str]) -> int:
                 n = 0
                 total = loop x in xs:
-                    if str::length(x) > 3:
+                    if std::str::length(x) > 3:
                         validate_any_mail(x)
                     else:
                         break
                     send(x)
-                list::length(total)
+                std::list::length(total)
             fn top(s: str) -> int:
                 r = use(s):
                     on Invalid:
                         -1
                 r
             [top("abcd"), top("ab"), top("abc"), breaks(["abcd", "ab", "abcde"])]
-    test::value("validator-join-other-branch-leaves", [4, 0, -1, 1], leaving_branches)
+    std::test::value("validator-join-other-branch-leaves", [4, 0, -1, 1], leaving_branches)
 
 # ---------------------------------------------------------------------------
 # refinement-validators.test: loops
@@ -627,31 +627,31 @@ fn register_validator_join_tests():
 fn register_validator_loop_tests():
     # validator-loop-body: in a loop body the fact holds for the rest of
     # that iteration's body; not before the call, and not after the loop.
-    fn loop_body() errors compiler::CompilerError:
+    fn loop_body() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str) -> int errors Invalid:
-                sizes = loop x in [s, str::concat(s, "!")]:
+                sizes = loop x in [s, std::str::concat(s, "!")]:
                     validate_mail(x)
                     send(x)
-                list::length(sizes)
+                std::list::length(sizes)
             fn top(s: str) -> int:
                 r = use(s):
                     on Invalid:
                         -1
                 r
             [top("abcd"), top("abc"), top("a")]
-    test::value("validator-loop-body/rest-of-iteration", [2, -1, -1], loop_body)
+    std::test::value("validator-loop-body/rest-of-iteration", [2, -1, -1], loop_body)
 
-    fn after_counted_loop() errors compiler::CompilerError:
+    fn after_counted_loop() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str) -> int errors Invalid:
                 loop i from 0 to 2:
                     validate_mail(s)
                 send(s)
             1
-    test::rejects("validator-loop-body/after-counted-loop", compiler::DiagnosticCode::Type, after_counted_loop)
+    std::test::rejects("validator-loop-body/after-counted-loop", std::compiler::DiagnosticCode::Type, after_counted_loop)
 
-    fn before_call_in_body() errors compiler::CompilerError:
+    fn before_call_in_body() errors std::compiler::CompilerError:
         static compile:
             fn use(xs: List[str]) -> int errors Invalid:
                 sizes = loop x in xs:
@@ -660,9 +660,9 @@ fn register_validator_loop_tests():
                     n
                 1
             1
-    test::rejects("validator-loop-body/before-call-in-body", compiler::DiagnosticCode::Type, before_call_in_body)
+    std::test::rejects("validator-loop-body/before-call-in-body", std::compiler::DiagnosticCode::Type, before_call_in_body)
 
-    fn after_breaking_loop() errors compiler::CompilerError:
+    fn after_breaking_loop() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str, n: int) -> int errors Invalid:
                 loop:
@@ -672,11 +672,11 @@ fn register_validator_loop_tests():
                     break
                 send(s)
             1
-    test::rejects("validator-loop-body/after-breaking-loop", compiler::DiagnosticCode::Type, after_breaking_loop)
+    std::test::rejects("validator-loop-body/after-breaking-loop", std::compiler::DiagnosticCode::Type, after_breaking_loop)
 
     # validator-loop-handler-continue: a handler that continues the loop
     # contributes nothing: the rest of the body is proven.
-    fn handler_continues() errors compiler::CompilerError:
+    fn handler_continues() errors std::compiler::CompilerError:
         static compile:
             fn use(xs: List[str]) -> List[int]:
                 loop x in xs:
@@ -685,7 +685,7 @@ fn register_validator_loop_tests():
                             continue
                     send(x)
             use(["abcd", "ab", "abcdef"])
-    test::value("validator-loop-handler-continue", [4, 6], handler_continues)
+    std::test::value("validator-loop-handler-continue", [4, 6], handler_continues)
 
 # ---------------------------------------------------------------------------
 # refinement-validators.test: handled calls (the call's normal completion
@@ -694,7 +694,7 @@ fn register_validator_loop_tests():
 fn register_validator_handled_tests():
     # validator-handled-return: a handler that returns contributes nothing:
     # after the handled call the argument is proven.
-    fn handler_returns() errors compiler::CompilerError:
+    fn handler_returns() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str) -> int:
                 validate_mail(s):
@@ -707,11 +707,11 @@ fn register_validator_handled_tests():
                         return -2
                 send(s)
             [use("abcd"), use("ab"), bound("abcde"), bound("a")]
-    test::value("validator-handled-return", [4, -1, 5, -2], handler_returns)
+    std::test::value("validator-handled-return", [4, -1, 5, -2], handler_returns)
 
     # validator-handled-fail: a handler that fails contributes nothing
     # either.
-    fn handler_fails() errors compiler::CompilerError:
+    fn handler_fails() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str) -> int errors Other:
                 validate_mail(s):
@@ -724,11 +724,11 @@ fn register_validator_handled_tests():
                         -3
                 r
             [top2("abcd"), top2("ab")]
-    test::value("validator-handled-fail", [4, -3], handler_fails)
+    std::test::value("validator-handled-fail", [4, -3], handler_fails)
 
     # validator-handled-completes-unproven: a handler that completes
     # normally without proving kills the fact.
-    fn statement_handler_completes() errors compiler::CompilerError:
+    fn statement_handler_completes() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str) -> int:
                 validate_mail(s):
@@ -736,9 +736,9 @@ fn register_validator_handled_tests():
                         unit
                 send(s)
             use("abcd")
-    test::rejects("validator-handled-completes-unproven/statement", compiler::DiagnosticCode::Type, statement_handler_completes)
+    std::test::rejects("validator-handled-completes-unproven/statement", std::compiler::DiagnosticCode::Type, statement_handler_completes)
 
-    fn binding_handler_completes() errors compiler::CompilerError:
+    fn binding_handler_completes() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str) -> int:
                 done = validate_mail(s):
@@ -746,12 +746,12 @@ fn register_validator_handled_tests():
                         unit
                 send(s)
             use("abcd")
-    test::rejects("validator-handled-completes-unproven/binding", compiler::DiagnosticCode::Type, binding_handler_completes)
+    std::test::rejects("validator-handled-completes-unproven/binding", std::compiler::DiagnosticCode::Type, binding_handler_completes)
 
     # validator-handled-completes-reproven: a handler that completes
     # normally after proving the same refinement keeps the fact: by another
     # validator, or a predicate guard.
-    fn handler_reproves() errors compiler::CompilerError:
+    fn handler_reproves() errors std::compiler::CompilerError:
         static compile:
             fn fallback(s: str) -> int errors Invalid:
                 validate_long_mail(s):
@@ -771,11 +771,11 @@ fn register_validator_handled_tests():
                         -1
                 r
             [top2("abcdefg"), top2("abcd"), top2("ab"), guarded("abcdefg"), guarded("abcd"), guarded("ab")]
-    test::value("validator-handled-completes-reproven", [7, 4, -1, 7, 4, -2], handler_reproves)
+    std::test::value("validator-handled-completes-reproven", [7, 4, -1, 7, 4, -2], handler_reproves)
 
     # validator-handler-does-not-see-proof: inside a handler the failed
     # call's proof does not hold.
-    fn inside_handler() errors compiler::CompilerError:
+    fn inside_handler() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str) -> int:
                 validate_mail(s):
@@ -783,14 +783,14 @@ fn register_validator_handled_tests():
                         return send(s)
                 0
             use("abcd")
-    test::rejects_containing("validator-handler-does-not-see-proof", compiler::DiagnosticCode::Type, "argument for parameter \"m\" cannot be proven", inside_handler)
+    std::test::rejects_containing("validator-handler-does-not-see-proof", std::compiler::DiagnosticCode::Type, "argument for parameter \"m\" cannot be proven", inside_handler)
 
     # validator-handled-argument-failure: a handler also runs when a
     # validator argument of the handled call fails, so it does not see that
     # argument's proof either: of the two send(s) below, the one inside the
     # handled call (after its validator argument) is proven, the one in the
     # handler or after the handled call is not.
-    fn argument_failure() errors compiler::CompilerError:
+    fn argument_failure() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str) -> int errors Invalid:
                 v = pair(validate_mail(s), send(s)):
@@ -803,9 +803,9 @@ fn register_validator_handled_tests():
                         -1
                 r
             [top("abcd"), top("ab")]
-    test::value("validator-handled-argument-failure/value", [4, -7], argument_failure)
+    std::test::value("validator-handled-argument-failure/value", [4, -7], argument_failure)
 
-    fn handler_uses_argument() errors compiler::CompilerError:
+    fn handler_uses_argument() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str) -> int errors Invalid:
                 v = pair(validate_mail(s), send(s)):
@@ -813,9 +813,9 @@ fn register_validator_handled_tests():
                         send(s)
                 v
             1
-    test::rejects_at("validator-handled-argument-failure/in-handler", compiler::DiagnosticCode::Type, 813, 30, handler_uses_argument)
+    std::test::rejects_at("validator-handled-argument-failure/in-handler", std::compiler::DiagnosticCode::Type, 813, 30, handler_uses_argument)
 
-    fn after_handled_call() errors compiler::CompilerError:
+    fn after_handled_call() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str) -> int errors Invalid:
                 v = pair(validate_mail(s), send(s)):
@@ -823,16 +823,16 @@ fn register_validator_handled_tests():
                         -7
                 send(s)
             1
-    test::rejects_at("validator-handled-argument-failure/after-handled-call", compiler::DiagnosticCode::Type, 824, 22, after_handled_call)
+    std::test::rejects_at("validator-handled-argument-failure/after-handled-call", std::compiler::DiagnosticCode::Type, 824, 22, after_handled_call)
 
     # validator-handled-several-handlers: with several handlers, the fact
     # survives when each handler that completes proves it.
-    fn several_handlers() errors compiler::CompilerError:
+    fn several_handlers() errors std::compiler::CompilerError:
         static compile:
             fn validate_both(s: str) -> unit proves s: Mail errors Invalid, Other:
-                if str::length(s) < 4:
+                if std::str::length(s) < 4:
                     fail Invalid
-                if str::length(s) > 8:
+                if std::str::length(s) > 8:
                     fail Other
                 unit
             fn use(s: str) -> int:
@@ -843,12 +843,12 @@ fn register_validator_handled_tests():
                         validate_any_mail(s)
                 send(s)
             [use("abcd"), use("ab"), use("abcdefghij")]
-    test::value("validator-handled-several-handlers/each-handler-proves", [4, -1, 10], several_handlers)
+    std::test::value("validator-handled-several-handlers/each-handler-proves", [4, -1, 10], several_handlers)
 
-    fn one_handler_unproven() errors compiler::CompilerError:
+    fn one_handler_unproven() errors std::compiler::CompilerError:
         static compile:
             fn validate_both(s: str) -> unit proves s: Mail errors Invalid, Other:
-                if str::length(s) < 4:
+                if std::str::length(s) < 4:
                     fail Invalid
                 unit
             fn use(s: str) -> int:
@@ -859,7 +859,7 @@ fn register_validator_handled_tests():
                         unit
                 send(s)
             1
-    test::rejects("validator-handled-several-handlers/one-handler-unproven", compiler::DiagnosticCode::Type, one_handler_unproven)
+    std::test::rejects("validator-handled-several-handlers/one-handler-unproven", std::compiler::DiagnosticCode::Type, one_handler_unproven)
 
 # ---------------------------------------------------------------------------
 # refinement-validators.test: value identity (aliases, shadowing,
@@ -868,7 +868,7 @@ fn register_validator_handled_tests():
 fn register_validator_identity_tests():
     # validator-alias-root: validating an immutable alias proves the value
     # it aliases; a copy bound after the proof is proven.
-    fn alias_root() errors compiler::CompilerError:
+    fn alias_root() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str) -> int errors Invalid:
                 x = s
@@ -881,20 +881,20 @@ fn register_validator_identity_tests():
                         -1
                 r
             [top("abcd"), top("a")]
-    test::value("validator-alias-root", [12, -1], alias_root)
+    std::test::value("validator-alias-root", [12, -1], alias_root)
 
     # validator-alias-bound-before: exactly as for a predicate's true edge,
     # an alias bound before the proof keeps the type it was bound with.
-    fn alias_before_validator() errors compiler::CompilerError:
+    fn alias_before_validator() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str) -> int errors Invalid:
                 x = s
                 validate_mail(s)
                 send(x)
             1
-    test::rejects("validator-alias-bound-before/validator", compiler::DiagnosticCode::Type, alias_before_validator)
+    std::test::rejects("validator-alias-bound-before/validator", std::compiler::DiagnosticCode::Type, alias_before_validator)
 
-    fn alias_before_predicate() errors compiler::CompilerError:
+    fn alias_before_predicate() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str) -> int:
                 x = s
@@ -903,11 +903,11 @@ fn register_validator_identity_tests():
                 else:
                     0
             1
-    test::rejects("validator-alias-bound-before/predicate", compiler::DiagnosticCode::Type, alias_before_predicate)
+    std::test::rejects("validator-alias-bound-before/predicate", std::compiler::DiagnosticCode::Type, alias_before_predicate)
 
     # validator-shadowing: facts belong to values, not spellings: a later
     # binding of the same name is not proven.
-    fn rebound() errors compiler::CompilerError:
+    fn rebound() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str) -> int errors Invalid:
                 validate_mail(s)
@@ -917,9 +917,9 @@ fn register_validator_identity_tests():
                 else:
                     0
             1
-    test::rejects("validator-shadowing/rebound-in-branch", compiler::DiagnosticCode::Type, rebound)
+    std::test::rejects("validator-shadowing/rebound-in-branch", std::compiler::DiagnosticCode::Type, rebound)
 
-    fn inner_parameter() errors compiler::CompilerError:
+    fn inner_parameter() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str) -> int errors Invalid:
                 validate_mail(s)
@@ -927,19 +927,19 @@ fn register_validator_identity_tests():
                     send(s)
                 inner("x")
             1
-    test::rejects("validator-shadowing/inner-parameter", compiler::DiagnosticCode::Type, inner_parameter)
+    std::test::rejects("validator-shadowing/inner-parameter", std::compiler::DiagnosticCode::Type, inner_parameter)
 
-    fn other_value() errors compiler::CompilerError:
+    fn other_value() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str, t: str) -> int errors Invalid:
                 validate_mail(t)
                 send(s)
             1
-    test::rejects("validator-shadowing/other-value", compiler::DiagnosticCode::Type, other_value)
+    std::test::rejects("validator-shadowing/other-value", std::compiler::DiagnosticCode::Type, other_value)
 
     # validator-non-reference-argument: an argument that is not a plain
     # reference proves nothing.
-    fn call_result() errors compiler::CompilerError:
+    fn call_result() errors std::compiler::CompilerError:
         static compile:
             fn id(x: str) -> str:
                 x
@@ -947,28 +947,28 @@ fn register_validator_identity_tests():
                 validate_mail(id(s))
                 send(s)
             1
-    test::rejects("validator-non-reference-argument/call-result", compiler::DiagnosticCode::Type, call_result)
+    std::test::rejects("validator-non-reference-argument/call-result", std::compiler::DiagnosticCode::Type, call_result)
 
-    fn native_result() errors compiler::CompilerError:
+    fn native_result() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str) -> int errors Invalid:
-                validate_mail(str::concat(s, ""))
+                validate_mail(std::str::concat(s, ""))
                 send(s)
             1
-    test::rejects("validator-non-reference-argument/native-result", compiler::DiagnosticCode::Type, native_result)
+    std::test::rejects("validator-non-reference-argument/native-result", std::compiler::DiagnosticCode::Type, native_result)
 
     # validator-through-callables: a call through an Fn-typed value proves
     # nothing; a call through an immutable alias of the function itself is
     # a call of that function, as for predicates.
-    fn fn_typed() errors compiler::CompilerError:
+    fn fn_typed() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str, check: Fn{args: [str], return: unit, errors: [Invalid]}) -> int errors Invalid:
                 check(s)
                 send(s)
             1
-    test::rejects("validator-through-callables/fn-typed-parameter", compiler::DiagnosticCode::Type, fn_typed)
+    std::test::rejects("validator-through-callables/fn-typed-parameter", std::compiler::DiagnosticCode::Type, fn_typed)
 
-    fn function_alias() errors compiler::CompilerError:
+    fn function_alias() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str) -> int errors Invalid:
                 check = validate_mail
@@ -980,7 +980,7 @@ fn register_validator_identity_tests():
                         -1
                 r
             [top("abcd"), top("a")]
-    test::value("validator-through-callables/function-alias", [4, -1], function_alias)
+    std::test::value("validator-through-callables/function-alias", [4, -1], function_alias)
 
 # ---------------------------------------------------------------------------
 # refinement-validators.test: repeated calls and representation (their
@@ -990,7 +990,7 @@ fn register_validator_runtime_tests():
     # validator-repeat-never-decided: a repeated validator call on the same
     # value is never decided away: the program with the call twice computes
     # what one call would.
-    fn repeated() errors compiler::CompilerError:
+    fn repeated() errors std::compiler::CompilerError:
         static compile:
             fn use(s: str) -> int errors Invalid:
                 validate_mail(s)
@@ -1002,15 +1002,15 @@ fn register_validator_runtime_tests():
                         -1
                 r
             [top("abcd"), top("a")]
-    test::value("validator-repeat-never-decided", [4, -1], repeated)
+    std::test::value("validator-repeat-never-decided", [4, -1], repeated)
 
     # validator-representation-unchanged: a validator changes nothing at
     # run time: the validator-proven program and its twin over the carrier
     # (a non-proving check of the same body) compute the same value.
-    fn refined_program() errors compiler::CompilerError:
+    fn refined_program() errors std::compiler::CompilerError:
         static compile:
             fn consume(m: Mail) -> int:
-                str::length(m)
+                std::str::length(m)
             fn example(s: str) -> int errors Invalid:
                 validate_mail(s)
                 consume(s)
@@ -1022,16 +1022,16 @@ fn register_validator_runtime_tests():
                         -1
                 run(s, n - 1, acc + v)
             run("abcd", 20, 0)
-    test::value("validator-representation-unchanged/refined", 80, refined_program)
+    std::test::value("validator-representation-unchanged/refined", 80, refined_program)
 
-    fn carrier_program() errors compiler::CompilerError:
+    fn carrier_program() errors std::compiler::CompilerError:
         static compile:
             fn check_mail(s: str) -> unit errors Invalid:
-                if str::length(s) < 4:
+                if std::str::length(s) < 4:
                     fail Invalid
                 unit
             fn consume(m: str) -> int:
-                str::length(m)
+                std::str::length(m)
             fn example(s: str) -> int errors Invalid:
                 check_mail(s)
                 consume(s)
@@ -1043,7 +1043,7 @@ fn register_validator_runtime_tests():
                         -1
                 run(s, n - 1, acc + v)
             run("abcd", 20, 0)
-    test::value("validator-representation-unchanged/carrier", 80, carrier_program)
+    std::test::value("validator-representation-unchanged/carrier", 80, carrier_program)
 
 fn register_refinement_validators_tests():
     register_unit_type_tests()
@@ -1059,105 +1059,105 @@ fn register_refinement_validators_tests():
 # proven-bounds.test: what a bounds proof changes, observably
 
 fn register_proven_bounds_tests():
-    # bounds-declared-signature-unchanged (its source half): list::at still
+    # bounds-declared-signature-unchanged (its source half): std::list::at still
     # declares IndexNotFound, but a call the proof rules out has no
     # effective errors: it needs no handler.
-    fn proven_call_unhandled() errors compiler::CompilerError:
+    fn proven_call_unhandled() errors std::compiler::CompilerError:
         static compile:
             xs = [1, 2, 3]
-            list::at(xs, 1)
-    test::value("bounds-declared-signature-unchanged", 2, proven_call_unhandled)
+            std::list::at(xs, 1)
+    std::test::value("bounds-declared-signature-unchanged", 2, proven_call_unhandled)
 
     # bounds-values-agree-proven: programs whose every bounds check is
     # proven compute the same values on every backend.
-    fn proven_list_at() errors compiler::CompilerError:
+    fn proven_list_at() errors std::compiler::CompilerError:
         static compile:
             xs = [10, 20, 30]
             loop i from 0 to 3:
-                list::at(xs, i) + 1
-    test::value("bounds-values-agree-proven/list-at", [11, 21, 31], proven_list_at)
+                std::list::at(xs, i) + 1
+    std::test::value("bounds-values-agree-proven/list-at", [11, 21, 31], proven_list_at)
 
-    fn proven_array_set_at() errors compiler::CompilerError:
+    fn proven_array_set_at() errors std::compiler::CompilerError:
         static compile:
-            a = mutable_array::allocate(4)
+            a = std::mutable_array::allocate(4)
             loop i from 0 to 4:
-                mutable_array::set(a, i, i * i)
+                std::mutable_array::set(a, i, i * i)
             loop j down from 3 through 0:
-                mutable_array::at(a, j)
-    test::value("bounds-values-agree-proven/mutable-array-set-at", [9, 4, 1, 0], proven_array_set_at)
+                std::mutable_array::at(a, j)
+    std::test::value("bounds-values-agree-proven/mutable-array-set-at", [9, 4, 1, 0], proven_array_set_at)
 
-    fn proven_substring() errors compiler::CompilerError:
+    fn proven_substring() errors std::compiler::CompilerError:
         static compile:
             s = "héllo"
             loop i from 0 to 5:
-                str::substring(s, i, i + 1)
-    test::value("bounds-values-agree-proven/substring", ["h", "é", "l", "l", "o"], proven_substring)
+                std::str::substring(s, i, i + 1)
+    std::test::value("bounds-values-agree-proven/substring", ["h", "é", "l", "l", "o"], proven_substring)
 
-    fn proven_copy_freeze() errors compiler::CompilerError:
+    fn proven_copy_freeze() errors std::compiler::CompilerError:
         static compile:
-            a = mutable_array::from_list([1, 2, 3])
-            b = mutable_array::allocate(5)
-            mutable_array::copy(b, 1, a, 0, 3)
-            mutable_array::freeze(b, 5)
-    test::value("bounds-values-agree-proven/copy-freeze", [unit, 1, 2, 3, unit], proven_copy_freeze)
+            a = std::mutable_array::from_list([1, 2, 3])
+            b = std::mutable_array::allocate(5)
+            std::mutable_array::copy(b, 1, a, 0, 3)
+            std::mutable_array::freeze(b, 5)
+    std::test::value("bounds-values-agree-proven/copy-freeze", [unit, 1, 2, 3, unit], proven_copy_freeze)
 
-    fn proven_guarded_region() errors compiler::CompilerError:
+    fn proven_guarded_region() errors std::compiler::CompilerError:
         static compile:
             fn is_a(s, i):
-                if i >= 0 and i < str::length(s):
-                    str::substring(s, i, i + 1) == "a"
+                if i >= 0 and i < std::str::length(s):
+                    std::str::substring(s, i, i + 1) == "a"
                 else:
                     false
             [is_a("abc", 0), is_a("abc", 1), is_a("abc", 9), is_a("", 0)]
-    test::value("bounds-values-agree-proven/guarded-region", [true, false, false, false], proven_guarded_region)
+    std::test::value("bounds-values-agree-proven/guarded-region", [true, false, false, false], proven_guarded_region)
 
     # bounds-values-agree-unknown: an unknown site still fails when its
-    # check fails, handled, on every backend. (The mutable_array::set and
+    # check fails, handled, on every backend. (The std::mutable_array::set and
     # ::copy handlers return their marker: a handler's value must be
     # admissible as the call's own unit result, which the Tcl programs'
     # 2 / "lo" / "hi" are not -- they run only in a -strict 0 build.)
-    fn unknown_list_at() errors compiler::CompilerError:
+    fn unknown_list_at() errors std::compiler::CompilerError:
         static compile:
             fn g(xs, i):
-                list::at(xs, i):
+                std::list::at(xs, i):
                     on IndexNotFound:
                         -1
             [g([1, 2], 1), g([1, 2], 2), g([1, 2], -1), g([], 0)]
-    test::value("bounds-values-agree-unknown/list-at", [2, -1, -1, -1], unknown_list_at)
+    std::test::value("bounds-values-agree-unknown/list-at", [2, -1, -1, -1], unknown_list_at)
 
-    fn unknown_substring() errors compiler::CompilerError:
+    fn unknown_substring() errors std::compiler::CompilerError:
         static compile:
             fn s(t, a, b):
-                str::substring(t, a, b):
+                std::str::substring(t, a, b):
                     on LowerUnderrun:
                         "lo"
                     on UpperOverrun:
                         "hi"
             [s("abc", 0, 2), s("abc", -1, 2), s("abc", 2, 1), s("abc", 1, 9)]
-    test::value("bounds-values-agree-unknown/substring", ["ab", "lo", "lo", "hi"], unknown_substring)
+    std::test::value("bounds-values-agree-unknown/substring", ["ab", "lo", "lo", "hi"], unknown_substring)
 
-    fn unknown_array_set() errors compiler::CompilerError:
+    fn unknown_array_set() errors std::compiler::CompilerError:
         static compile:
             fn st(a, i):
-                mutable_array::set(a, i, 1):
+                std::mutable_array::set(a, i, 1):
                     on IndexNotFound:
                         return 2
-            b = mutable_array::allocate(2)
+            b = std::mutable_array::allocate(2)
             [st(b, 0), st(b, 2), st(b, -1)]
-    test::value("bounds-values-agree-unknown/mutable-array-set", [unit, 2, 2], unknown_array_set)
+    std::test::value("bounds-values-agree-unknown/mutable-array-set", [unit, 2, 2], unknown_array_set)
 
-    fn unknown_array_copy() errors compiler::CompilerError:
+    fn unknown_array_copy() errors std::compiler::CompilerError:
         static compile:
             fn c(a, b, i, n):
-                mutable_array::copy(a, i, b, 0, n):
+                std::mutable_array::copy(a, i, b, 0, n):
                     on LowerUnderrun:
                         return "lo"
                     on UpperOverrun:
                         return "hi"
-            x = mutable_array::allocate(3)
-            y = mutable_array::allocate(2)
+            x = std::mutable_array::allocate(3)
+            y = std::mutable_array::allocate(2)
             [c(x, y, 0, 2), c(x, y, 0, 3), c(x, y, 2, 2), c(x, y, -1, 1)]
-    test::value("bounds-values-agree-unknown/mutable-array-copy", [unit, "hi", "hi", "lo"], unknown_array_copy)
+    std::test::value("bounds-values-agree-unknown/mutable-array-copy", [unit, "hi", "hi", "lo"], unknown_array_copy)
 
 # ---------------------------------------------------------------------------
 # proof-loop-intervals.test: a counted loop's interval proves the operations
@@ -1166,370 +1166,370 @@ fn register_proven_bounds_tests():
 # error escaping the block).
 
 fn register_loop_interval_abi_tests():
-    # loop-interval-abi-conversion: abi::u8(i) needs no handler exactly
+    # loop-interval-abi-conversion: std::abi::u8(i) needs no handler exactly
     # when the loop keeps i in 0..255: both end kinds, both directions. (An
     # accepted loop's value is its 256 U8s, measured.)
-    fn up_to_256() errors compiler::CompilerError:
+    fn up_to_256() errors std::compiler::CompilerError:
         static compile:
             r = loop i from 0 to 256:
-                abi::u8(i)
-            list::length(r)
-    test::value("loop-interval-abi-conversion/from-0-to-256", 256, up_to_256)
+                std::abi::u8(i)
+            std::list::length(r)
+    std::test::value("loop-interval-abi-conversion/from-0-to-256", 256, up_to_256)
 
-    fn up_to_257() errors compiler::CompilerError:
+    fn up_to_257() errors std::compiler::CompilerError:
         static compile:
             loop i from 0 to 257:
-                abi::u8(i)
-    test::rejects("loop-interval-abi-conversion/from-0-to-257", compiler::DiagnosticCode::UnhandledError, up_to_257)
+                std::abi::u8(i)
+    std::test::rejects("loop-interval-abi-conversion/from-0-to-257", std::compiler::DiagnosticCode::UnhandledError, up_to_257)
 
-    fn up_through_255() errors compiler::CompilerError:
+    fn up_through_255() errors std::compiler::CompilerError:
         static compile:
             r = loop i from 0 through 255:
-                abi::u8(i)
-            list::length(r)
-    test::value("loop-interval-abi-conversion/from-0-through-255", 256, up_through_255)
+                std::abi::u8(i)
+            std::list::length(r)
+    std::test::value("loop-interval-abi-conversion/from-0-through-255", 256, up_through_255)
 
-    fn up_through_256() errors compiler::CompilerError:
+    fn up_through_256() errors std::compiler::CompilerError:
         static compile:
             loop i from 0 through 256:
-                abi::u8(i)
-    test::rejects("loop-interval-abi-conversion/from-0-through-256", compiler::DiagnosticCode::UnhandledError, up_through_256)
+                std::abi::u8(i)
+    std::test::rejects("loop-interval-abi-conversion/from-0-through-256", std::compiler::DiagnosticCode::UnhandledError, up_through_256)
 
-    fn from_minus_1() errors compiler::CompilerError:
+    fn from_minus_1() errors std::compiler::CompilerError:
         static compile:
             loop i from -1 to 256:
-                abi::u8(i)
-    test::rejects("loop-interval-abi-conversion/from-minus-1-to-256", compiler::DiagnosticCode::UnhandledError, from_minus_1)
+                std::abi::u8(i)
+    std::test::rejects("loop-interval-abi-conversion/from-minus-1-to-256", std::compiler::DiagnosticCode::UnhandledError, from_minus_1)
 
-    fn down_255_through_0() errors compiler::CompilerError:
+    fn down_255_through_0() errors std::compiler::CompilerError:
         static compile:
             r = loop i down from 255 through 0:
-                abi::u8(i)
-            list::length(r)
-    test::value("loop-interval-abi-conversion/down-from-255-through-0", 256, down_255_through_0)
+                std::abi::u8(i)
+            std::list::length(r)
+    std::test::value("loop-interval-abi-conversion/down-from-255-through-0", 256, down_255_through_0)
 
-    fn down_256_through_0() errors compiler::CompilerError:
+    fn down_256_through_0() errors std::compiler::CompilerError:
         static compile:
             loop i down from 256 through 0:
-                abi::u8(i)
-    test::rejects("loop-interval-abi-conversion/down-from-256-through-0", compiler::DiagnosticCode::UnhandledError, down_256_through_0)
+                std::abi::u8(i)
+    std::test::rejects("loop-interval-abi-conversion/down-from-256-through-0", std::compiler::DiagnosticCode::UnhandledError, down_256_through_0)
 
-    fn down_255_to_minus_1() errors compiler::CompilerError:
+    fn down_255_to_minus_1() errors std::compiler::CompilerError:
         static compile:
             r = loop i down from 255 to -1:
-                abi::u8(i)
-            list::length(r)
-    test::value("loop-interval-abi-conversion/down-from-255-to-minus-1", 256, down_255_to_minus_1)
+                std::abi::u8(i)
+            std::list::length(r)
+    std::test::value("loop-interval-abi-conversion/down-from-255-to-minus-1", 256, down_255_to_minus_1)
 
-    fn down_255_to_minus_2() errors compiler::CompilerError:
+    fn down_255_to_minus_2() errors std::compiler::CompilerError:
         static compile:
             loop i down from 255 to -2:
-                abi::u8(i)
-    test::rejects("loop-interval-abi-conversion/down-from-255-to-minus-2", compiler::DiagnosticCode::UnhandledError, down_255_to_minus_2)
+                std::abi::u8(i)
+    std::test::rejects("loop-interval-abi-conversion/down-from-255-to-minus-2", std::compiler::DiagnosticCode::UnhandledError, down_255_to_minus_2)
 
-    fn down_256_to_0() errors compiler::CompilerError:
+    fn down_256_to_0() errors std::compiler::CompilerError:
         static compile:
             loop i down from 256 to 0:
-                abi::u8(i)
-    test::rejects("loop-interval-abi-conversion/down-from-256-to-0", compiler::DiagnosticCode::UnhandledError, down_256_to_0)
+                std::abi::u8(i)
+    std::test::rejects("loop-interval-abi-conversion/down-from-256-to-0", std::compiler::DiagnosticCode::UnhandledError, down_256_to_0)
 
-    fn down_255_through_minus_1() errors compiler::CompilerError:
+    fn down_255_through_minus_1() errors std::compiler::CompilerError:
         static compile:
             loop i down from 255 through -1:
-                abi::u8(i)
-    test::rejects("loop-interval-abi-conversion/down-from-255-through-minus-1", compiler::DiagnosticCode::UnhandledError, down_255_through_minus_1)
+                std::abi::u8(i)
+    std::test::rejects("loop-interval-abi-conversion/down-from-255-through-minus-1", std::compiler::DiagnosticCode::UnhandledError, down_255_through_minus_1)
 
 fn register_loop_interval_list_tests():
     # loop-interval-list-at-offset: the interval of a loop over 1..4 proves
-    # list::at(xs, i - 1) on a 3-element List; one more iteration, or one
+    # std::list::at(xs, i - 1) on a 3-element List; one more iteration, or one
     # fewer on the low side, does not.
-    fn offset_1_to_4() errors compiler::CompilerError:
+    fn offset_1_to_4() errors std::compiler::CompilerError:
         static compile:
             xs = [10, 20, 30]
             loop i from 1 to 4:
-                list::at(xs, i - 1)
-    test::value("loop-interval-list-at-offset/from-1-to-4-minus-1", [10, 20, 30], offset_1_to_4)
+                std::list::at(xs, i - 1)
+    std::test::value("loop-interval-list-at-offset/from-1-to-4-minus-1", [10, 20, 30], offset_1_to_4)
 
-    fn offset_1_to_5() errors compiler::CompilerError:
+    fn offset_1_to_5() errors std::compiler::CompilerError:
         static compile:
             xs = [10, 20, 30]
             loop i from 1 to 5:
-                list::at(xs, i - 1)
-    test::rejects("loop-interval-list-at-offset/from-1-to-5-minus-1", compiler::DiagnosticCode::UnhandledError, offset_1_to_5)
+                std::list::at(xs, i - 1)
+    std::test::rejects("loop-interval-list-at-offset/from-1-to-5-minus-1", std::compiler::DiagnosticCode::UnhandledError, offset_1_to_5)
 
-    fn offset_0_to_4() errors compiler::CompilerError:
+    fn offset_0_to_4() errors std::compiler::CompilerError:
         static compile:
             xs = [10, 20, 30]
             loop i from 0 to 4:
-                list::at(xs, i - 1)
-    test::rejects("loop-interval-list-at-offset/from-0-to-4-minus-1", compiler::DiagnosticCode::UnhandledError, offset_0_to_4)
+                std::list::at(xs, i - 1)
+    std::test::rejects("loop-interval-list-at-offset/from-0-to-4-minus-1", std::compiler::DiagnosticCode::UnhandledError, offset_0_to_4)
 
-    fn offset_1_through_3() errors compiler::CompilerError:
+    fn offset_1_through_3() errors std::compiler::CompilerError:
         static compile:
             xs = [10, 20, 30]
             loop i from 1 through 3:
-                list::at(xs, i - 1)
-    test::value("loop-interval-list-at-offset/from-1-through-3-minus-1", [10, 20, 30], offset_1_through_3)
+                std::list::at(xs, i - 1)
+    std::test::value("loop-interval-list-at-offset/from-1-through-3-minus-1", [10, 20, 30], offset_1_through_3)
 
-    fn offset_1_through_4() errors compiler::CompilerError:
+    fn offset_1_through_4() errors std::compiler::CompilerError:
         static compile:
             xs = [10, 20, 30]
             loop i from 1 through 4:
-                list::at(xs, i - 1)
-    test::rejects("loop-interval-list-at-offset/from-1-through-4-minus-1", compiler::DiagnosticCode::UnhandledError, offset_1_through_4)
+                std::list::at(xs, i - 1)
+    std::test::rejects("loop-interval-list-at-offset/from-1-through-4-minus-1", std::compiler::DiagnosticCode::UnhandledError, offset_1_through_4)
 
-    fn direct_0_to_3() errors compiler::CompilerError:
+    fn direct_0_to_3() errors std::compiler::CompilerError:
         static compile:
             xs = [10, 20, 30]
             loop i from 0 to 3:
-                list::at(xs, i)
-    test::value("loop-interval-list-at-offset/from-0-to-3", [10, 20, 30], direct_0_to_3)
+                std::list::at(xs, i)
+    std::test::value("loop-interval-list-at-offset/from-0-to-3", [10, 20, 30], direct_0_to_3)
 
-    fn direct_0_to_4() errors compiler::CompilerError:
+    fn direct_0_to_4() errors std::compiler::CompilerError:
         static compile:
             xs = [10, 20, 30]
             loop i from 0 to 4:
-                list::at(xs, i)
-    test::rejects("loop-interval-list-at-offset/from-0-to-4", compiler::DiagnosticCode::UnhandledError, direct_0_to_4)
+                std::list::at(xs, i)
+    std::test::rejects("loop-interval-list-at-offset/from-0-to-4", std::compiler::DiagnosticCode::UnhandledError, direct_0_to_4)
 
-    fn direct_0_through_2() errors compiler::CompilerError:
+    fn direct_0_through_2() errors std::compiler::CompilerError:
         static compile:
             xs = [10, 20, 30]
             loop i from 0 through 2:
-                list::at(xs, i)
-    test::value("loop-interval-list-at-offset/from-0-through-2", [10, 20, 30], direct_0_through_2)
+                std::list::at(xs, i)
+    std::test::value("loop-interval-list-at-offset/from-0-through-2", [10, 20, 30], direct_0_through_2)
 
-    fn direct_0_through_3() errors compiler::CompilerError:
+    fn direct_0_through_3() errors std::compiler::CompilerError:
         static compile:
             xs = [10, 20, 30]
             loop i from 0 through 3:
-                list::at(xs, i)
-    test::rejects("loop-interval-list-at-offset/from-0-through-3", compiler::DiagnosticCode::UnhandledError, direct_0_through_3)
+                std::list::at(xs, i)
+    std::test::rejects("loop-interval-list-at-offset/from-0-through-3", std::compiler::DiagnosticCode::UnhandledError, direct_0_through_3)
 
     # loop-interval-list-at-descending: descending loops: the exclusive end
     # is skipped, the inclusive end is visited; each boundary is its own
     # negative.
-    fn down_2_through_0() errors compiler::CompilerError:
+    fn down_2_through_0() errors std::compiler::CompilerError:
         static compile:
             xs = [10, 20, 30]
             loop i down from 2 through 0:
-                list::at(xs, i)
-    test::value("loop-interval-list-at-descending/down-from-2-through-0", [30, 20, 10], down_2_through_0)
+                std::list::at(xs, i)
+    std::test::value("loop-interval-list-at-descending/down-from-2-through-0", [30, 20, 10], down_2_through_0)
 
-    fn down_3_through_0() errors compiler::CompilerError:
+    fn down_3_through_0() errors std::compiler::CompilerError:
         static compile:
             xs = [10, 20, 30]
             loop i down from 3 through 0:
-                list::at(xs, i)
-    test::rejects("loop-interval-list-at-descending/down-from-3-through-0", compiler::DiagnosticCode::UnhandledError, down_3_through_0)
+                std::list::at(xs, i)
+    std::test::rejects("loop-interval-list-at-descending/down-from-3-through-0", std::compiler::DiagnosticCode::UnhandledError, down_3_through_0)
 
-    fn down_2_through_minus_1() errors compiler::CompilerError:
+    fn down_2_through_minus_1() errors std::compiler::CompilerError:
         static compile:
             xs = [10, 20, 30]
             loop i down from 2 through -1:
-                list::at(xs, i)
-    test::rejects("loop-interval-list-at-descending/down-from-2-through-minus-1", compiler::DiagnosticCode::UnhandledError, down_2_through_minus_1)
+                std::list::at(xs, i)
+    std::test::rejects("loop-interval-list-at-descending/down-from-2-through-minus-1", std::compiler::DiagnosticCode::UnhandledError, down_2_through_minus_1)
 
-    fn down_2_to_minus_1() errors compiler::CompilerError:
+    fn down_2_to_minus_1() errors std::compiler::CompilerError:
         static compile:
             xs = [10, 20, 30]
             loop i down from 2 to -1:
-                list::at(xs, i)
-    test::value("loop-interval-list-at-descending/down-from-2-to-minus-1", [30, 20, 10], down_2_to_minus_1)
+                std::list::at(xs, i)
+    std::test::value("loop-interval-list-at-descending/down-from-2-to-minus-1", [30, 20, 10], down_2_to_minus_1)
 
-    fn down_2_to_minus_2() errors compiler::CompilerError:
+    fn down_2_to_minus_2() errors std::compiler::CompilerError:
         static compile:
             xs = [10, 20, 30]
             loop i down from 2 to -2:
-                list::at(xs, i)
-    test::rejects("loop-interval-list-at-descending/down-from-2-to-minus-2", compiler::DiagnosticCode::UnhandledError, down_2_to_minus_2)
+                std::list::at(xs, i)
+    std::test::rejects("loop-interval-list-at-descending/down-from-2-to-minus-2", std::compiler::DiagnosticCode::UnhandledError, down_2_to_minus_2)
 
-    fn down_3_to_0() errors compiler::CompilerError:
+    fn down_3_to_0() errors std::compiler::CompilerError:
         static compile:
             xs = [10, 20, 30]
             loop i down from 3 to 0:
-                list::at(xs, i)
-    test::rejects("loop-interval-list-at-descending/down-from-3-to-0", compiler::DiagnosticCode::UnhandledError, down_3_to_0)
+                std::list::at(xs, i)
+    std::test::rejects("loop-interval-list-at-descending/down-from-3-to-0", std::compiler::DiagnosticCode::UnhandledError, down_3_to_0)
 
-    fn down_3_to_0_offset() errors compiler::CompilerError:
+    fn down_3_to_0_offset() errors std::compiler::CompilerError:
         static compile:
             xs = [10, 20, 30]
             loop i down from 3 to 0:
-                list::at(xs, i - 1)
-    test::value("loop-interval-list-at-descending/down-from-3-to-0-minus-1", [30, 20, 10], down_3_to_0_offset)
+                std::list::at(xs, i - 1)
+    std::test::value("loop-interval-list-at-descending/down-from-3-to-0-minus-1", [30, 20, 10], down_3_to_0_offset)
 
-    fn down_4_to_0_offset() errors compiler::CompilerError:
+    fn down_4_to_0_offset() errors std::compiler::CompilerError:
         static compile:
             xs = [10, 20, 30]
             loop i down from 4 to 0:
-                list::at(xs, i - 1)
-    test::rejects("loop-interval-list-at-descending/down-from-4-to-0-minus-1", compiler::DiagnosticCode::UnhandledError, down_4_to_0_offset)
+                std::list::at(xs, i - 1)
+    std::test::rejects("loop-interval-list-at-descending/down-from-4-to-0-minus-1", std::compiler::DiagnosticCode::UnhandledError, down_4_to_0_offset)
 
     # loop-interval-bound-by-bindings: the bounds may be immutable bindings
     # and the arithmetic the Range machinery supports: their Ranges are
     # what the interval is made of.
-    fn bound_lo_hi() errors compiler::CompilerError:
+    fn bound_lo_hi() errors std::compiler::CompilerError:
         static compile:
             xs = [1, 2, 3]
             lo = 1
             hi = 3
             loop i from lo to hi + 1:
-                list::at(xs, i - 1)
-    test::value("loop-interval-bound-by-bindings/lo-1-hi-3", [1, 2, 3], bound_lo_hi)
+                std::list::at(xs, i - 1)
+    std::test::value("loop-interval-bound-by-bindings/lo-1-hi-3", [1, 2, 3], bound_lo_hi)
 
-    fn bound_hi_too_far() errors compiler::CompilerError:
+    fn bound_hi_too_far() errors std::compiler::CompilerError:
         static compile:
             xs = [1, 2, 3]
             lo = 1
             hi = 4
             loop i from lo to hi + 1:
-                list::at(xs, i - 1)
-    test::rejects("loop-interval-bound-by-bindings/lo-1-hi-4", compiler::DiagnosticCode::UnhandledError, bound_hi_too_far)
+                std::list::at(xs, i - 1)
+    std::test::rejects("loop-interval-bound-by-bindings/lo-1-hi-4", std::compiler::DiagnosticCode::UnhandledError, bound_hi_too_far)
 
-    fn bound_lo_plus_1() errors compiler::CompilerError:
+    fn bound_lo_plus_1() errors std::compiler::CompilerError:
         static compile:
             xs = [1, 2, 3]
             lo = 0
             loop i from lo + 1 to 4:
-                list::at(xs, i - 1)
-    test::value("loop-interval-bound-by-bindings/from-lo-plus-1", [1, 2, 3], bound_lo_plus_1)
+                std::list::at(xs, i - 1)
+    std::test::value("loop-interval-bound-by-bindings/from-lo-plus-1", [1, 2, 3], bound_lo_plus_1)
 
-    fn bound_lo() errors compiler::CompilerError:
+    fn bound_lo() errors std::compiler::CompilerError:
         static compile:
             xs = [1, 2, 3]
             lo = 0
             loop i from lo to 4:
-                list::at(xs, i - 1)
-    test::rejects("loop-interval-bound-by-bindings/from-lo", compiler::DiagnosticCode::UnhandledError, bound_lo)
+                std::list::at(xs, i - 1)
+    std::test::rejects("loop-interval-bound-by-bindings/from-lo", std::compiler::DiagnosticCode::UnhandledError, bound_lo)
 
-    fn bound_top_2() errors compiler::CompilerError:
+    fn bound_top_2() errors std::compiler::CompilerError:
         static compile:
             xs = [1, 2, 3]
             top = 2
             loop i down from top through 0:
-                list::at(xs, i)
-    test::value("loop-interval-bound-by-bindings/down-from-top-2", [3, 2, 1], bound_top_2)
+                std::list::at(xs, i)
+    std::test::value("loop-interval-bound-by-bindings/down-from-top-2", [3, 2, 1], bound_top_2)
 
-    fn bound_top_3() errors compiler::CompilerError:
+    fn bound_top_3() errors std::compiler::CompilerError:
         static compile:
             xs = [1, 2, 3]
             top = 3
             loop i down from top through 0:
-                list::at(xs, i)
-    test::rejects("loop-interval-bound-by-bindings/down-from-top-3", compiler::DiagnosticCode::UnhandledError, bound_top_3)
+                std::list::at(xs, i)
+    std::test::rejects("loop-interval-bound-by-bindings/down-from-top-3", std::compiler::DiagnosticCode::UnhandledError, bound_top_3)
 
 fn register_loop_interval_array_and_slice_tests():
-    # loop-interval-mutable-array: mutable_array::at and ::set: an offset
+    # loop-interval-mutable-array: std::mutable_array::at and ::set: an offset
     # index and a descending loop are proven against the allocation's
     # capacity; the off-by-one neighbours are not.
-    fn set_1_to_4() errors compiler::CompilerError:
+    fn set_1_to_4() errors std::compiler::CompilerError:
         static compile:
-            a = mutable_array::allocate(3)
+            a = std::mutable_array::allocate(3)
             loop i from 1 to 4:
-                mutable_array::set(a, i - 1, i)
-    test::value("loop-interval-mutable-array/set-from-1-to-4-minus-1", [unit, unit, unit], set_1_to_4)
+                std::mutable_array::set(a, i - 1, i)
+    std::test::value("loop-interval-mutable-array/set-from-1-to-4-minus-1", [unit, unit, unit], set_1_to_4)
 
-    fn set_1_to_5() errors compiler::CompilerError:
+    fn set_1_to_5() errors std::compiler::CompilerError:
         static compile:
-            a = mutable_array::allocate(3)
+            a = std::mutable_array::allocate(3)
             loop i from 1 to 5:
-                mutable_array::set(a, i - 1, i)
-    test::rejects("loop-interval-mutable-array/set-from-1-to-5-minus-1", compiler::DiagnosticCode::UnhandledError, set_1_to_5)
+                std::mutable_array::set(a, i - 1, i)
+    std::test::rejects("loop-interval-mutable-array/set-from-1-to-5-minus-1", std::compiler::DiagnosticCode::UnhandledError, set_1_to_5)
 
-    fn at_down_2_through_0() errors compiler::CompilerError:
+    fn at_down_2_through_0() errors std::compiler::CompilerError:
         static compile:
-            a = mutable_array::allocate(3)
+            a = std::mutable_array::allocate(3)
             loop i down from 2 through 0:
-                mutable_array::at(a, i)
-    test::value("loop-interval-mutable-array/at-down-from-2-through-0", [unit, unit, unit], at_down_2_through_0)
+                std::mutable_array::at(a, i)
+    std::test::value("loop-interval-mutable-array/at-down-from-2-through-0", [unit, unit, unit], at_down_2_through_0)
 
-    fn at_down_3_through_0() errors compiler::CompilerError:
+    fn at_down_3_through_0() errors std::compiler::CompilerError:
         static compile:
-            a = mutable_array::allocate(3)
+            a = std::mutable_array::allocate(3)
             loop i down from 3 through 0:
-                mutable_array::at(a, i)
-    test::rejects("loop-interval-mutable-array/at-down-from-3-through-0", compiler::DiagnosticCode::UnhandledError, at_down_3_through_0)
+                std::mutable_array::at(a, i)
+    std::test::rejects("loop-interval-mutable-array/at-down-from-3-through-0", std::compiler::DiagnosticCode::UnhandledError, at_down_3_through_0)
 
-    fn at_down_3_to_0() errors compiler::CompilerError:
+    fn at_down_3_to_0() errors std::compiler::CompilerError:
         static compile:
-            a = mutable_array::allocate(3)
+            a = std::mutable_array::allocate(3)
             loop i down from 3 to 0:
-                mutable_array::at(a, i - 1)
-    test::value("loop-interval-mutable-array/at-down-from-3-to-0-minus-1", [unit, unit, unit], at_down_3_to_0)
+                std::mutable_array::at(a, i - 1)
+    std::test::value("loop-interval-mutable-array/at-down-from-3-to-0-minus-1", [unit, unit, unit], at_down_3_to_0)
 
-    fn set_then_at() errors compiler::CompilerError:
+    fn set_then_at() errors std::compiler::CompilerError:
         static compile:
-            a = mutable_array::allocate(3)
+            a = std::mutable_array::allocate(3)
             loop i from 0 to 3:
-                mutable_array::set(a, i, i)
-                mutable_array::at(a, i)
-    test::value("loop-interval-mutable-array/set-then-at-from-0-to-3", [0, 1, 2], set_then_at)
+                std::mutable_array::set(a, i, i)
+                std::mutable_array::at(a, i)
+    std::test::value("loop-interval-mutable-array/set-then-at-from-0-to-3", [0, 1, 2], set_then_at)
 
-    fn set_0_to_4() errors compiler::CompilerError:
+    fn set_0_to_4() errors std::compiler::CompilerError:
         static compile:
-            a = mutable_array::allocate(3)
+            a = std::mutable_array::allocate(3)
             loop i from 0 to 4:
-                mutable_array::set(a, i, i)
-    test::rejects("loop-interval-mutable-array/set-from-0-to-4", compiler::DiagnosticCode::UnhandledError, set_0_to_4)
+                std::mutable_array::set(a, i, i)
+    std::test::rejects("loop-interval-mutable-array/set-from-0-to-4", std::compiler::DiagnosticCode::UnhandledError, set_0_to_4)
 
     # loop-interval-slice-bounds: a slice whose bounds are the loop variable
     # (plus or minus a constant) is proven when the loop keeps them inside
     # the String.
-    fn slice_1_to_5() errors compiler::CompilerError:
+    fn slice_1_to_5() errors std::compiler::CompilerError:
         static compile:
             s = "abcd"
             loop i from 1 to 5:
-                str::substring(s, i - 1, i)
-    test::value("loop-interval-slice-bounds/from-1-to-5", ["a", "b", "c", "d"], slice_1_to_5)
+                std::str::substring(s, i - 1, i)
+    std::test::value("loop-interval-slice-bounds/from-1-to-5", ["a", "b", "c", "d"], slice_1_to_5)
 
-    fn slice_1_to_6() errors compiler::CompilerError:
+    fn slice_1_to_6() errors std::compiler::CompilerError:
         static compile:
             s = "abcd"
             loop i from 1 to 6:
-                str::substring(s, i - 1, i)
-    test::rejects("loop-interval-slice-bounds/from-1-to-6", compiler::DiagnosticCode::UnhandledError, slice_1_to_6)
+                std::str::substring(s, i - 1, i)
+    std::test::rejects("loop-interval-slice-bounds/from-1-to-6", std::compiler::DiagnosticCode::UnhandledError, slice_1_to_6)
 
-    fn slice_0_to_4() errors compiler::CompilerError:
+    fn slice_0_to_4() errors std::compiler::CompilerError:
         static compile:
             s = "abcd"
             loop i from 0 to 4:
-                str::substring(s, i, i + 1)
-    test::value("loop-interval-slice-bounds/from-0-to-4-plus-1", ["a", "b", "c", "d"], slice_0_to_4)
+                std::str::substring(s, i, i + 1)
+    std::test::value("loop-interval-slice-bounds/from-0-to-4-plus-1", ["a", "b", "c", "d"], slice_0_to_4)
 
-    fn slice_0_to_5() errors compiler::CompilerError:
+    fn slice_0_to_5() errors std::compiler::CompilerError:
         static compile:
             s = "abcd"
             loop i from 0 to 5:
-                str::substring(s, i, i + 1)
-    test::rejects("loop-interval-slice-bounds/from-0-to-5-plus-1", compiler::DiagnosticCode::UnhandledError, slice_0_to_5)
+                std::str::substring(s, i, i + 1)
+    std::test::rejects("loop-interval-slice-bounds/from-0-to-5-plus-1", std::compiler::DiagnosticCode::UnhandledError, slice_0_to_5)
 
-    fn slice_down_3_through_0() errors compiler::CompilerError:
+    fn slice_down_3_through_0() errors std::compiler::CompilerError:
         static compile:
             s = "abcd"
             loop i down from 3 through 0:
-                str::substring(s, i, i + 1)
-    test::value("loop-interval-slice-bounds/down-from-3-through-0", ["d", "c", "b", "a"], slice_down_3_through_0)
+                std::str::substring(s, i, i + 1)
+    std::test::value("loop-interval-slice-bounds/down-from-3-through-0", ["d", "c", "b", "a"], slice_down_3_through_0)
 
-    fn slice_down_4_through_0() errors compiler::CompilerError:
+    fn slice_down_4_through_0() errors std::compiler::CompilerError:
         static compile:
             s = "abcd"
             loop i down from 4 through 0:
-                str::substring(s, i, i + 1)
-    test::rejects("loop-interval-slice-bounds/down-from-4-through-0", compiler::DiagnosticCode::UnhandledError, slice_down_4_through_0)
+                std::str::substring(s, i, i + 1)
+    std::test::rejects("loop-interval-slice-bounds/down-from-4-through-0", std::compiler::DiagnosticCode::UnhandledError, slice_down_4_through_0)
 
-    fn empty_slices() errors compiler::CompilerError:
+    fn empty_slices() errors std::compiler::CompilerError:
         static compile:
             s = "abcd"
             loop i from 0 to 5:
-                str::substring(s, i, i)
-    test::value("loop-interval-slice-bounds/empty-from-0-to-5", ["", "", "", "", ""], empty_slices)
+                std::str::substring(s, i, i)
+    std::test::value("loop-interval-slice-bounds/empty-from-0-to-5", ["", "", "", "", ""], empty_slices)
 
-    fn empty_slices_too_far() errors compiler::CompilerError:
+    fn empty_slices_too_far() errors std::compiler::CompilerError:
         static compile:
             s = "abcd"
             loop i from 0 to 6:
-                str::substring(s, i, i)
-    test::rejects("loop-interval-slice-bounds/empty-from-0-to-6", compiler::DiagnosticCode::UnhandledError, empty_slices_too_far)
+                std::str::substring(s, i, i)
+    std::test::rejects("loop-interval-slice-bounds/empty-from-0-to-6", std::compiler::DiagnosticCode::UnhandledError, empty_slices_too_far)
 
 fn register_loop_interval_scope_tests():
     # loop-interval-lockstep: a lockstep numeric domain gets the interval
@@ -1537,201 +1537,201 @@ fn register_loop_interval_scope_tests():
     # is still LockstepUnequal). (The abi programs add the U8's value, not
     # the U8 itself, to x: U8 + int is no arithmetic, a run-time TYPE
     # failure of the Tcl programs, which only compile them.)
-    fn lockstep_u8() errors compiler::CompilerError:
+    fn lockstep_u8() errors std::compiler::CompilerError:
         static compile:
             xs = [1, 2, 3]
             loop x in xs and i from 0 to 3:
-                abi::u8(i).value + x
-    test::value("loop-interval-lockstep/u8-from-0-to-3", [1, 3, 5], lockstep_u8)
+                std::abi::u8(i).value + x
+    std::test::value("loop-interval-lockstep/u8-from-0-to-3", [1, 3, 5], lockstep_u8)
 
-    fn lockstep_u8_top() errors compiler::CompilerError:
+    fn lockstep_u8_top() errors std::compiler::CompilerError:
         static compile:
             xs = [1, 2, 3]
             loop x in xs and i from 253 to 256:
-                abi::u8(i).value + x
-    test::value("loop-interval-lockstep/u8-from-253-to-256", [254, 256, 258], lockstep_u8_top)
+                std::abi::u8(i).value + x
+    std::test::value("loop-interval-lockstep/u8-from-253-to-256", [254, 256, 258], lockstep_u8_top)
 
-    fn lockstep_u8_over() errors compiler::CompilerError:
+    fn lockstep_u8_over() errors std::compiler::CompilerError:
         static compile:
             xs = [1, 2, 3]
             loop x in xs and i from 254 to 257:
-                abi::u8(i).value + x
-    test::rejects("loop-interval-lockstep/u8-from-254-to-257", compiler::DiagnosticCode::UnhandledError, lockstep_u8_over)
+                std::abi::u8(i).value + x
+    std::test::rejects("loop-interval-lockstep/u8-from-254-to-257", std::compiler::DiagnosticCode::UnhandledError, lockstep_u8_over)
 
-    fn lockstep_at() errors compiler::CompilerError:
+    fn lockstep_at() errors std::compiler::CompilerError:
         static compile:
             xs = [1, 2, 3]
             loop x in xs and i from 0 to 3:
-                list::at(xs, i) + x
-    test::value("loop-interval-lockstep/at-from-0-to-3", [2, 4, 6], lockstep_at)
+                std::list::at(xs, i) + x
+    std::test::value("loop-interval-lockstep/at-from-0-to-3", [2, 4, 6], lockstep_at)
 
-    fn lockstep_unequal() errors compiler::CompilerError:
+    fn lockstep_unequal() errors std::compiler::CompilerError:
         static compile:
             xs = [1, 2, 3]
             loop x in xs and i from 0 to 4:
-                list::at(xs, i) + x
-    test::rejects("loop-interval-lockstep/at-from-0-to-4-unequal", compiler::DiagnosticCode::LockstepUnequal, lockstep_unequal)
+                std::list::at(xs, i) + x
+    std::test::rejects("loop-interval-lockstep/at-from-0-to-4-unequal", std::compiler::DiagnosticCode::LockstepUnequal, lockstep_unequal)
 
-    fn lockstep_offset() errors compiler::CompilerError:
+    fn lockstep_offset() errors std::compiler::CompilerError:
         static compile:
             xs = [1, 2, 3]
             loop x in xs and i from 1 to 4:
-                list::at(xs, i - 1) + x
-    test::value("loop-interval-lockstep/at-from-1-to-4-minus-1", [2, 4, 6], lockstep_offset)
+                std::list::at(xs, i - 1) + x
+    std::test::value("loop-interval-lockstep/at-from-1-to-4-minus-1", [2, 4, 6], lockstep_offset)
 
     # loop-interval-not-after-the-loop: the induction binding exists only in
     # the loop body: an unproven read after (or beside) the loop stays
     # obligated, and the location names it.
-    fn known_after_loop() errors compiler::CompilerError:
+    fn known_after_loop() errors std::compiler::CompilerError:
         static compile:
             xs = [1, 2, 3]
             loop i from 0 to 3:
-                list::at(xs, i)
-            list::at(xs, 9)
-    test::rejects_at("loop-interval-not-after-the-loop/known-error-after", compiler::DiagnosticCode::KnownError, 1590, 13, known_after_loop)
+                std::list::at(xs, i)
+            std::list::at(xs, 9)
+    std::test::rejects_at("loop-interval-not-after-the-loop/known-error-after", std::compiler::DiagnosticCode::KnownError, 1590, 13, known_after_loop)
 
-    fn binding_after_loop() errors compiler::CompilerError:
+    fn binding_after_loop() errors std::compiler::CompilerError:
         static compile:
             xs = [1, 2, 3]
             n = 0
             loop i from 0 to 3:
-                list::at(xs, i)
-            list::at(xs, n)
-    test::value("loop-interval-not-after-the-loop/exact-binding-after", 1, binding_after_loop)
+                std::list::at(xs, i)
+            std::list::at(xs, n)
+    std::test::value("loop-interval-not-after-the-loop/exact-binding-after", 1, binding_after_loop)
 
-    fn parameter_after_loop() errors compiler::CompilerError:
+    fn parameter_after_loop() errors std::compiler::CompilerError:
         static compile:
             fn f(k):
                 loop i from 0 to 3:
                     i
-                abi::u8(k)
+                std::abi::u8(k)
             f(1)
-    test::rejects_at("loop-interval-not-after-the-loop/parameter-after", compiler::DiagnosticCode::UnhandledError, 1607, 17, parameter_after_loop)
+    std::test::rejects_at("loop-interval-not-after-the-loop/parameter-after", std::compiler::DiagnosticCode::UnhandledError, 1607, 17, parameter_after_loop)
 
-    fn sibling_loop() errors compiler::CompilerError:
+    fn sibling_loop() errors std::compiler::CompilerError:
         static compile:
             xs = [1, 2, 3]
             loop i from 0 to 3:
-                list::at(xs, i)
+                std::list::at(xs, i)
             loop j from 0 to 4:
-                list::at(xs, j)
-    test::rejects_at("loop-interval-not-after-the-loop/sibling-loop", compiler::DiagnosticCode::UnhandledError, 1617, 17, sibling_loop)
+                std::list::at(xs, j)
+    std::test::rejects_at("loop-interval-not-after-the-loop/sibling-loop", std::compiler::DiagnosticCode::UnhandledError, 1617, 17, sibling_loop)
 
     # loop-interval-nested-loops: an inner loop's interval is its own: the
     # outer variable's interval is intact after the inner loop ends, and
     # neither leaks into the other's body.
-    fn nested_both() errors compiler::CompilerError:
+    fn nested_both() errors std::compiler::CompilerError:
         static compile:
             xs = [1, 2, 3]
             loop i from 0 to 3:
                 loop j from 0 to 3:
-                    list::at(xs, i) + list::at(xs, j)
-    test::value("loop-interval-nested-loops/both-in-range", [[2, 3, 4], [3, 4, 5], [4, 5, 6]], nested_both)
+                    std::list::at(xs, i) + std::list::at(xs, j)
+    std::test::value("loop-interval-nested-loops/both-in-range", [[2, 3, 4], [3, 4, 5], [4, 5, 6]], nested_both)
 
-    fn nested_outer_intact() errors compiler::CompilerError:
+    fn nested_outer_intact() errors std::compiler::CompilerError:
         static compile:
             xs = [1, 2, 3]
             loop i from 0 to 3:
                 loop j from 0 to 4:
-                    list::at(xs, i)
-                list::at(xs, i)
-    test::value("loop-interval-nested-loops/outer-intact-after-inner", [1, 2, 3], nested_outer_intact)
+                    std::list::at(xs, i)
+                std::list::at(xs, i)
+    std::test::value("loop-interval-nested-loops/outer-intact-after-inner", [1, 2, 3], nested_outer_intact)
 
-    fn nested_inner_out_of_range() errors compiler::CompilerError:
+    fn nested_inner_out_of_range() errors std::compiler::CompilerError:
         static compile:
             xs = [1, 2, 3]
             loop i from 0 to 3:
                 loop j from 0 to 4:
-                    list::at(xs, j)
-                list::at(xs, i)
-    test::rejects_at("loop-interval-nested-loops/inner-out-of-range", compiler::DiagnosticCode::UnhandledError, 1645, 21, nested_inner_out_of_range)
+                    std::list::at(xs, j)
+                std::list::at(xs, i)
+    std::test::rejects_at("loop-interval-nested-loops/inner-out-of-range", std::compiler::DiagnosticCode::UnhandledError, 1645, 21, nested_inner_out_of_range)
 
     # loop-interval-empty-loops: a statically empty loop gets no
     # contradictory interval: its body is judged under no loop fact, so an
     # unproven access in it stays obligated; the empty loops themselves run.
-    fn empty_same_bounds() errors compiler::CompilerError:
+    fn empty_same_bounds() errors std::compiler::CompilerError:
         static compile:
             xs = [1, 2, 3]
             loop i from 5 to 5:
-                list::at(xs, i)
-    test::rejects("loop-interval-empty-loops/from-5-to-5", compiler::DiagnosticCode::UnhandledError, empty_same_bounds)
+                std::list::at(xs, i)
+    std::test::rejects("loop-interval-empty-loops/from-5-to-5", std::compiler::DiagnosticCode::UnhandledError, empty_same_bounds)
 
-    fn empty_reversed() errors compiler::CompilerError:
+    fn empty_reversed() errors std::compiler::CompilerError:
         static compile:
             xs = [1, 2, 3]
             loop i from 10 to 0:
-                list::at(xs, i)
-    test::rejects("loop-interval-empty-loops/from-10-to-0", compiler::DiagnosticCode::UnhandledError, empty_reversed)
+                std::list::at(xs, i)
+    std::test::rejects("loop-interval-empty-loops/from-10-to-0", std::compiler::DiagnosticCode::UnhandledError, empty_reversed)
 
-    fn empty_down_reversed() errors compiler::CompilerError:
+    fn empty_down_reversed() errors std::compiler::CompilerError:
         static compile:
             xs = [1, 2, 3]
             loop i down from 0 to 10:
-                list::at(xs, i)
-    test::rejects("loop-interval-empty-loops/down-from-0-to-10", compiler::DiagnosticCode::UnhandledError, empty_down_reversed)
+                std::list::at(xs, i)
+    std::test::rejects("loop-interval-empty-loops/down-from-0-to-10", std::compiler::DiagnosticCode::UnhandledError, empty_down_reversed)
 
-    fn empty_constant_index() errors compiler::CompilerError:
+    fn empty_constant_index() errors std::compiler::CompilerError:
         static compile:
             xs = [1, 2, 3]
             loop i from 5 to 5:
-                list::at(xs, 0)
-    test::value("loop-interval-empty-loops/from-5-to-5-constant-index", [], empty_constant_index)
+                std::list::at(xs, 0)
+    std::test::value("loop-interval-empty-loops/from-5-to-5-constant-index", [], empty_constant_index)
 
     # (The Tcl run of this loop is a -strict 0 build of the unhandled
     # program; strict, its conversion is handled.)
-    fn empty_abi() errors compiler::CompilerError:
+    fn empty_abi() errors std::compiler::CompilerError:
         static compile:
             loop i from 10 to 0:
-                abi::u8(i):
-                    on abi::AbiIntegerBelowRange:
+                std::abi::u8(i):
+                    on std::abi::AbiIntegerBelowRange:
                         continue
-                    on abi::AbiIntegerAboveRange:
+                    on std::abi::AbiIntegerAboveRange:
                         continue
-    test::value("loop-interval-empty-loops/from-10-to-0-u8-runs", [], empty_abi)
+    std::test::value("loop-interval-empty-loops/from-10-to-0-u8-runs", [], empty_abi)
 
-    fn empty_down() errors compiler::CompilerError:
+    fn empty_down() errors std::compiler::CompilerError:
         static compile:
             loop i down from 0 to 10:
                 i
-    test::value("loop-interval-empty-loops/down-from-0-to-10-runs", [], empty_down)
+    std::test::value("loop-interval-empty-loops/down-from-0-to-10-runs", [], empty_down)
 
     # loop-interval-runs-agree: the accepted programs compute the same
     # values on every backend.
-    fn runs_offset() errors compiler::CompilerError:
+    fn runs_offset() errors std::compiler::CompilerError:
         static compile:
             xs = [10, 20, 30]
             loop i from 1 to 4:
-                list::at(xs, i - 1)
-    test::value("loop-interval-runs-agree/list-at-offset", [10, 20, 30], runs_offset)
+                std::list::at(xs, i - 1)
+    std::test::value("loop-interval-runs-agree/list-at-offset", [10, 20, 30], runs_offset)
 
-    fn runs_descending() errors compiler::CompilerError:
+    fn runs_descending() errors std::compiler::CompilerError:
         static compile:
             xs = [10, 20, 30]
             loop i down from 2 through 0:
-                list::at(xs, i)
-    test::value("loop-interval-runs-agree/list-at-descending", [30, 20, 10], runs_descending)
+                std::list::at(xs, i)
+    std::test::value("loop-interval-runs-agree/list-at-descending", [30, 20, 10], runs_descending)
 
-    fn runs_u8() errors compiler::CompilerError:
+    fn runs_u8() errors std::compiler::CompilerError:
         static compile:
             loop i from 250 to 256:
-                abi::u8(i)
-    test::value("loop-interval-runs-agree/u8-from-250-to-256", [abi::U8 {value: 250}, abi::U8 {value: 251}, abi::U8 {value: 252}, abi::U8 {value: 253}, abi::U8 {value: 254}, abi::U8 {value: 255}], runs_u8)
+                std::abi::u8(i)
+    std::test::value("loop-interval-runs-agree/u8-from-250-to-256", [std::abi::U8 {value: 250}, std::abi::U8 {value: 251}, std::abi::U8 {value: 252}, std::abi::U8 {value: 253}, std::abi::U8 {value: 254}, std::abi::U8 {value: 255}], runs_u8)
 
-    fn runs_array() errors compiler::CompilerError:
+    fn runs_array() errors std::compiler::CompilerError:
         static compile:
-            a = mutable_array::allocate(3)
+            a = std::mutable_array::allocate(3)
             loop i down from 2 through 0:
-                mutable_array::set(a, i, i * 3)
+                std::mutable_array::set(a, i, i * 3)
             loop i from 1 to 4:
-                mutable_array::at(a, i - 1)
-    test::value("loop-interval-runs-agree/mutable-array", [0, 3, 6], runs_array)
+                std::mutable_array::at(a, i - 1)
+    std::test::value("loop-interval-runs-agree/mutable-array", [0, 3, 6], runs_array)
 
-    fn runs_slices() errors compiler::CompilerError:
+    fn runs_slices() errors std::compiler::CompilerError:
         static compile:
             s = "abcd"
             loop i from 1 to 5:
-                str::substring(s, i - 1, i)
-    test::value("loop-interval-runs-agree/substring", ["a", "b", "c", "d"], runs_slices)
+                std::str::substring(s, i - 1, i)
+    std::test::value("loop-interval-runs-agree/substring", ["a", "b", "c", "d"], runs_slices)
 
 fn register_proof_loop_intervals_tests():
     register_loop_interval_abi_tests()
@@ -1756,153 +1756,153 @@ fn register_bounds_theorem_tests():
     # 0..m), and computes the same values on every backend for negative
     # indices, indices beyond a machine word, a capacity that is no power of
     # two and an empty array.
-    fn reduced_mod() errors compiler::CompilerError:
+    fn reduced_mod() errors std::compiler::CompilerError:
         static compile:
             fn pick(a: MutableArray[int], h: int) -> int:
-                mutable_array::at(a, mod(h, mutable_array::capacity(a)))
-            a = mutable_array::from_list([10, 20, 30, 40, 50])
+                std::mutable_array::at(a, mod(h, std::mutable_array::capacity(a)))
+            a = std::mutable_array::from_list([10, 20, 30, 40, 50])
             loop h in [0, 7, -1, -8, 4611686018427387904, -1180591620717411303424]:
                 pick(a, h)
-    test::value("bounds-values-agree-reduced/mod", [10, 30, 50, 30, 50, 20], reduced_mod)
+    std::test::value("bounds-values-agree-reduced/mod", [10, 30, 50, 30, 50, 20], reduced_mod)
 
-    fn reduced_mask() errors compiler::CompilerError:
+    fn reduced_mask() errors std::compiler::CompilerError:
         static compile:
             fn masked(a: MutableArray[int], h: int) -> int:
-                if mutable_array::capacity(a) == 0:
+                if std::mutable_array::capacity(a) == 0:
                     return -1
-                mutable_array::at(a, bit_and(h, mutable_array::capacity(a) - 1))
-            a = mutable_array::from_list([10, 20, 30, 40, 50])
+                std::mutable_array::at(a, bit_and(h, std::mutable_array::capacity(a) - 1))
+            a = std::mutable_array::from_list([10, 20, 30, 40, 50])
             loop h in [0, 7, -1, -8, 4611686018427387904, -1180591620717411303424]:
                 masked(a, h)
-    test::value("bounds-values-agree-reduced/mask", [10, 50, 50, 10, 10, 10], reduced_mask)
+    std::test::value("bounds-values-agree-reduced/mask", [10, 50, 50, 10, 10, 10], reduced_mask)
 
-    fn reduced_mask_empty() errors compiler::CompilerError:
+    fn reduced_mask_empty() errors std::compiler::CompilerError:
         static compile:
             fn masked(a: MutableArray[int], h: int) -> int:
-                if mutable_array::capacity(a) == 0:
+                if std::mutable_array::capacity(a) == 0:
                     return -1
-                mutable_array::at(a, bit_and(h, mutable_array::capacity(a) - 1))
-            e = mutable_array::create(0, 0)
+                std::mutable_array::at(a, bit_and(h, std::mutable_array::capacity(a) - 1))
+            e = std::mutable_array::create(0, 0)
             loop h in [0, 7, -1, -8, 4611686018427387904, -1180591620717411303424]:
                 masked(e, h)
-    test::value("bounds-values-agree-reduced/mask-empty", [-1, -1, -1, -1, -1, -1], reduced_mask_empty)
+    std::test::value("bounds-values-agree-reduced/mask-empty", [-1, -1, -1, -1, -1, -1], reduced_mask_empty)
 
-    fn reduced_list() errors compiler::CompilerError:
+    fn reduced_list() errors std::compiler::CompilerError:
         static compile:
             fn item(xs: List[int], h: int) -> int:
-                list::at(xs, h.mod(list::length(xs)))
+                std::list::at(xs, h.mod(std::list::length(xs)))
             loop h in [0, 7, -1, -8, 4611686018427387904, -1180591620717411303424]:
                 item([1, 2, 3], h)
-    test::value("bounds-values-agree-reduced/list", [1, 2, 3, 2, 2, 3], reduced_list)
+    std::test::value("bounds-values-agree-reduced/list", [1, 2, 3, 2, 2, 3], reduced_list)
 
-    fn reduced_set() errors compiler::CompilerError:
+    fn reduced_set() errors std::compiler::CompilerError:
         static compile:
             fn put(a: MutableArray[int], h: int) -> MutableArray[int]:
                 a.set(h.mod(a.capacity()), h)
                 a
-            c = put(put(put(mutable_array::create(3, 0), -1), 4), 9)
-            loop i from 0 to mutable_array::capacity(c):
-                mutable_array::at(c, i)
-    test::value("bounds-values-agree-reduced/set", [9, 4, -1], reduced_set)
+            c = put(put(put(std::mutable_array::create(3, 0), -1), 4), 9)
+            loop i from 0 to std::mutable_array::capacity(c):
+                std::mutable_array::at(c, i)
+    std::test::value("bounds-values-agree-reduced/set", [9, 4, -1], reduced_set)
 
     # bounds-reduced-empty-container-stays-known-error (its source half): a
     # container of known size 0 has no element, so a read of it whose index
     # is reduced by that size (never reached: mod fails with ARITHMETIC
     # first) stays KnownError rather than becoming vacuously proven.
-    fn empty_array_reduced() errors compiler::CompilerError:
+    fn empty_array_reduced() errors std::compiler::CompilerError:
         static compile:
             fn f(h: int):
-                a = mutable_array::allocate(0)
-                mutable_array::at(a, mod(h, mutable_array::capacity(a)))
+                a = std::mutable_array::allocate(0)
+                std::mutable_array::at(a, mod(h, std::mutable_array::capacity(a)))
             0
-    test::rejects("bounds-reduced-empty-container-stays-known-error/array", compiler::DiagnosticCode::KnownError, empty_array_reduced)
+    std::test::rejects("bounds-reduced-empty-container-stays-known-error/array", std::compiler::DiagnosticCode::KnownError, empty_array_reduced)
 
-    fn empty_list_reduced() errors compiler::CompilerError:
+    fn empty_list_reduced() errors std::compiler::CompilerError:
         static compile:
             fn f(h: int):
                 xs = []
-                list::at(xs, h.mod(list::length(xs)))
+                std::list::at(xs, h.mod(std::list::length(xs)))
             0
-    test::rejects("bounds-reduced-empty-container-stays-known-error/list", compiler::DiagnosticCode::KnownError, empty_list_reduced)
+    std::test::rejects("bounds-reduced-empty-container-stays-known-error/list", std::compiler::DiagnosticCode::KnownError, empty_list_reduced)
 
     # bounds-values-agree-field-path: accesses through field paths proven
     # by the same path's size need no handler and compute the same values
     # on every backend: in-place writes reduced mod the field's capacity,
     # guarded reads of every index around it, a reduced List read and a
     # lockstep loop over a field.
-    fn field_path_reads() errors compiler::CompilerError:
+    fn field_path_reads() errors std::compiler::CompilerError:
         static compile:
             fn store(t: BoundsTable, h: int) -> BoundsTable:
-                t.slots.set(h.mod(mutable_array::capacity(t.slots)), h)
+                t.slots.set(h.mod(std::mutable_array::capacity(t.slots)), h)
                 t
             fn read(t: BoundsTable, i: int) -> int:
-                if i < 0 or i >= mutable_array::capacity(t.slots):
+                if i < 0 or i >= std::mutable_array::capacity(t.slots):
                     return -1
-                mutable_array::at(t.slots, i)
-            t = store(store(store(BoundsTable {slots: mutable_array::create(5, 0), names: ["a", "bb", "ccc"]}, -3), 11), 1180591620717411303424)
+                std::mutable_array::at(t.slots, i)
+            t = store(store(store(BoundsTable {slots: std::mutable_array::create(5, 0), names: ["a", "bb", "ccc"]}, -3), 11), 1180591620717411303424)
             loop i from -1 to 6:
                 read(t, i)
-    test::value("bounds-values-agree-field-path/write-read", [-1, 0, 11, -3, 0, 1180591620717411303424, -1], field_path_reads)
+    std::test::value("bounds-values-agree-field-path/write-read", [-1, 0, 11, -3, 0, 1180591620717411303424, -1], field_path_reads)
 
-    fn field_path_list() errors compiler::CompilerError:
+    fn field_path_list() errors std::compiler::CompilerError:
         static compile:
             fn name(t: BoundsTable, h: int) -> str:
-                list::at(t.names, h.mod(list::length(t.names)))
-            t = BoundsTable {slots: mutable_array::create(5, 0), names: ["a", "bb", "ccc"]}
+                std::list::at(t.names, h.mod(std::list::length(t.names)))
+            t = BoundsTable {slots: std::mutable_array::create(5, 0), names: ["a", "bb", "ccc"]}
             loop h in [0, -1, 4, 1180591620717411303424]:
                 name(t, h)
-    test::value("bounds-values-agree-field-path/list", ["a", "ccc", "bb", "bb"], field_path_list)
+    std::test::value("bounds-values-agree-field-path/list", ["a", "ccc", "bb", "bb"], field_path_list)
 
-    fn field_path_lockstep() errors compiler::CompilerError:
+    fn field_path_lockstep() errors std::compiler::CompilerError:
         static compile:
             fn widths(t: BoundsTable) -> List[int]:
-                loop x in t.names and k from 0 to list::length(t.names):
-                    str::length(x) + k
-            widths(BoundsTable {slots: mutable_array::create(5, 0), names: ["a", "bb", "ccc"]})
-    test::value("bounds-values-agree-field-path/lockstep", [1, 3, 5], field_path_lockstep)
+                loop x in t.names and k from 0 to std::list::length(t.names):
+                    std::str::length(x) + k
+            widths(BoundsTable {slots: std::mutable_array::create(5, 0), names: ["a", "bb", "ccc"]})
+    std::test::value("bounds-values-agree-field-path/lockstep", [1, 3, 5], field_path_lockstep)
 
     # bounds-field-path-lockstep (its source half): a counted clause one
     # longer than a field's List is provably unequal, and the diagnostic
     # names the field path.
-    fn field_path_lockstep_unequal() errors compiler::CompilerError:
+    fn field_path_lockstep_unequal() errors std::compiler::CompilerError:
         static compile:
             fn widths(t: BoundsTable) -> List[int]:
-                loop x in t.names and k from 0 to list::length(t.names) + 1:
-                    str::length(x) + k
+                loop x in t.names and k from 0 to std::list::length(t.names) + 1:
+                    std::str::length(x) + k
             0
-    test::rejects_containing("bounds-field-path-lockstep/unequal", compiler::DiagnosticCode::LockstepUnequal, "clause 1 iterates length(t.names) times but clause 2 iterates length(t.names) + 1 times", field_path_lockstep_unequal)
+    std::test::rejects_containing("bounds-field-path-lockstep/unequal", std::compiler::DiagnosticCode::LockstepUnequal, "clause 1 iterates length(t.names) times but clause 2 iterates length(t.names) + 1 times", field_path_lockstep_unequal)
 
     # bounds-values-agree-guarded-local: reads and writes at computed locals
     # proven by a guard need no handler and compute the same values on
     # every backend, in range, just outside it on both sides and far outside.
-    fn guarded_local_read() errors compiler::CompilerError:
+    fn guarded_local_read() errors std::compiler::CompilerError:
         static compile:
             fn after(xs: List[int], i: int) -> int:
                 t = i + 1
-                if t < 0 or t >= list::length(xs):
+                if t < 0 or t >= std::list::length(xs):
                     return -1
-                list::at(xs, t)
+                std::list::at(xs, t)
             loop i in [-3, -2, -1, 0, 1, 2, 3, 1180591620717411303424]:
                 after([10, 20, 30], i)
-    test::value("bounds-values-agree-guarded-local/after", [-1, -1, 10, 20, 30, -1, -1, -1], guarded_local_read)
+    std::test::value("bounds-values-agree-guarded-local/after", [-1, -1, 10, 20, 30, -1, -1, -1], guarded_local_read)
 
-    fn guarded_local_write() errors compiler::CompilerError:
+    fn guarded_local_write() errors std::compiler::CompilerError:
         static compile:
             fn bump(a: MutableArray[int], i: int) -> MutableArray[int]:
                 j = i * 2
-                if j >= 0 and j < mutable_array::capacity(a):
-                    mutable_array::set(a, j, mutable_array::at(a, j) + 1)
+                if j >= 0 and j < std::mutable_array::capacity(a):
+                    std::mutable_array::set(a, j, std::mutable_array::at(a, j) + 1)
                 a
-            b = bump(bump(bump(bump(mutable_array::create(5, 0), 0), 2), 1), -1)
-            loop k from 0 to mutable_array::capacity(b):
-                mutable_array::at(b, k)
-    test::value("bounds-values-agree-guarded-local/bump", [1, 0, 1, 0, 1], guarded_local_write)
+            b = bump(bump(bump(bump(std::mutable_array::create(5, 0), 0), 2), 1), -1)
+            loop k from 0 to std::mutable_array::capacity(b):
+                std::mutable_array::at(b, k)
+    std::test::value("bounds-values-agree-guarded-local/bump", [1, 0, 1, 0, 1], guarded_local_write)
 
 # ---------------------------------------------------------------------------
 
-with context test::suite()
+with context std::test::suite()
 register_refinement_validators_tests()
 register_proven_bounds_tests()
 register_proof_loop_intervals_tests()
 register_bounds_theorem_tests()
-test::report()
+std::test::report()

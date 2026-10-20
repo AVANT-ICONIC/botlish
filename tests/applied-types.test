@@ -14,8 +14,8 @@ source [file join [file dirname [file normalize [info script]]] helpers.tcl]
 
 set ::smallDecl "type Small = Int in 0..10\n\nfn one() -> Small:\n    1\n\nfn two() -> Small:\n    2\n\n"
 
-# The same declarations with `import list`, for programs that call list::*.
-set ::smallListDecl "import list\n$::smallDecl"
+# The same declarations with `import std::list`, for programs that call list::*.
+set ::smallListDecl "import std::list\n$::smallDecl"
 
 proc appliedTypeRejects {source} {
     catch {surface::compile $source reject.bot} message options
@@ -201,20 +201,20 @@ fn consume(xs: List[Small]) -> int:
     1
 } $::smallDecl]
         close $ch
-        set mainPath [makeFile {import appliedtypeslib
-appliedtypeslib::consume(appliedtypeslib::make_smalls())
+        set mainPath [makeFile {import std::appliedtypeslib
+std::appliedtypeslib::consume(std::appliedtypeslib::make_smalls())
 } applied-type-module-main.bot]
         try {
             set h [surface::readProgramFile $mainPath -strict 0]
             set sigs [hir::moduleSignatures $h]
-            list [hir::types::show [lindex [dict get [dict get $sigs appliedtypeslib::consume] params] 0]] \
-                 [hir::types::show [dict get [dict get $sigs appliedtypeslib::make_smalls] result]] \
+            list [hir::types::show [lindex [dict get [dict get $sigs std::appliedtypeslib::consume] params] 0]] \
+                 [hir::types::show [dict get [dict get $sigs std::appliedtypeslib::make_smalls] result]] \
                  [llength [hir::diagnostics $h]]
         } finally {
             removeFile applied-type-module-main.bot
         }
     }
-} -result {{List[int[appliedtypeslib::Small]]} {List[int[appliedtypeslib::Small]]} 0}
+} -result {{List[int[std::appliedtypeslib::Small]]} {List[int[std::appliedtypeslib::Small]]} 0}
 
 # ---------------------------------------------------------------------------
 # List construction inference: homogeneous, sibling LUB, heterogeneous, empty
@@ -362,22 +362,22 @@ take_smalls(make_tinys())} $::smallDecl]
 # Element read: the canonical List access primitive statically returns T
 # (spec 29-32, 71) and composes with existing scalar range facts (90-93)
 
-test applied-type-element-read-type {reading a List[Small] element through list::at statically returns Small} -body {
+test applied-type-element-read-type {reading a List[Small] element through std::list::at statically returns Small} -body {
     set h [surface::compile [format {%sfn read_small(xs: List[Small]) -> Small errors IndexNotFound:
-    list::at(xs, 0)} $::smallListDecl] readtype.bot -strict 0]
+    std::list::at(xs, 0)} $::smallListDecl] readtype.bot -strict 0]
     set call [lindex [hirFind $h call] end]
     hir::types::show [hir::typeOf $h $call]
 } -result {int[Small]}
 
 test applied-type-element-read-result-verifies {the read_small result contract verifies with no caller-derived rescue} -body {
     surface::compile [format {%sfn read_small(xs: List[Small]) -> Small errors IndexNotFound:
-    list::at(xs, 0)} $::smallListDecl] readverify.bot
+    std::list::at(xs, 0)} $::smallListDecl] readverify.bot
     set ok 1
 } -result 1
 
 test applied-type-element-read-range-fact {the vertical proof: List[Small] -> element read -> Small -> the existing [0,10] range fact, composing container typing with the bounded-integer machinery} -body {
     set h [surface::compile [format {%sfn read_small(xs: List[Small]) -> Small errors IndexNotFound:
-    list::at(xs, 0)} $::smallListDecl] readrange.bot -strict 0]
+    std::list::at(xs, 0)} $::smallListDecl] readrange.bot -strict 0]
     set block [lindex [hirFind $h block] end]
     set params [hir::get $h $block params]
     set outcome [hir::range::AnalyzeInstance $h verify {} $block $params \
@@ -385,9 +385,9 @@ test applied-type-element-read-range-fact {the vertical proof: List[Small] -> el
     hir::range::show [dict get $outcome result]
 } -result {[0, 10]}
 
-test applied-type-element-read-preserves-bounds-error {list::at's own out-of-bounds failure (the declared error IndexNotFound, uncaught here) is unchanged -- only the successful value's type improved} -body {
+test applied-type-element-read-preserves-bounds-error {std::list::at's own out-of-bounds failure (the declared error IndexNotFound, uncaught here) is unchanged -- only the successful value's type improved} -body {
     errorCodeOf {bind small {const int 1}} \
-        {call {ref list::at} {call {ref list} {const int 1}} {const int 5}}
+        {call {ref std::list::at} {call {ref list} {const int 1}} {const int 5}}
 } -result {CORE SEMANTIC UNCAUGHT-ERROR}
 
 # ---------------------------------------------------------------------------
@@ -396,7 +396,7 @@ test applied-type-element-read-preserves-bounds-error {list::at's own out-of-bou
 test applied-type-alias-preserved {ys = xs preserves List[Small] through ordinary immutable binding} -body {
     surface::compile [format {%sfn consume(xs: List[Small]) -> Small errors IndexNotFound:
     ys = xs
-    list::at(ys, 0)} $::smallListDecl] alias.bot
+    std::list::at(ys, 0)} $::smallListDecl] alias.bot
     set ok 1
 } -result 1
 
@@ -431,7 +431,7 @@ test applied-type-erasure-passthrough-alone-is-legal {passthrough(xs) by itself 
     x
 fn make_smalls() -> List[Small]:
     [one(), two()]
-1 + list::length(passthrough(make_smalls()))} $::smallListDecl] passthroughok.bot
+1 + std::list::length(passthrough(make_smalls()))} $::smallListDecl] passthroughok.bot
     set ok 1
 } -result 1
 
@@ -448,8 +448,8 @@ fn consume(xs: List[Small]) -> int:
     1
 } $::smallDecl]
         close $ch
-        set mainPath [makeFile {import appliedtypeslib2
-appliedtypeslib2::consume(appliedtypeslib2::make_smalls())
+        set mainPath [makeFile {import std::appliedtypeslib2
+std::appliedtypeslib2::consume(std::appliedtypeslib2::make_smalls())
 } applied-type-cross-module-ok.bot]
         try {
             set h [surface::readProgramFile $mainPath -strict 0]
@@ -467,10 +467,10 @@ test applied-type-cross-module-invalid {a cross-module direct call rejects a bro
     1
 } $::smallDecl]
         close $ch
-        set mainPath [makeFile {import appliedtypeslib3
+        set mainPath [makeFile {import std::appliedtypeslib3
 fn make_ints():
     [1, 2]
-appliedtypeslib3::consume(make_ints())
+std::appliedtypeslib3::consume(make_ints())
 } applied-type-cross-module-bad.bot]
         try {
             set h [surface::readProgramFile $mainPath -strict 0]
@@ -515,7 +515,7 @@ f([one()])} $::smallDecl] alias2.bot
 
 test applied-type-repeated-compilation {compiling the same List[T]-over-a-source-type program twice in one process succeeds both times} -body {
     set src [format {%sfn consume(xs: List[Small]) -> int:
-    list::length(xs)
+    std::list::length(xs)
 consume([one(), two()])} $::smallListDecl]
     set h1 [surface::compile $src rep1.bot]
     set h2 [surface::compile $src rep2.bot]
@@ -524,38 +524,38 @@ consume([one(), two()])} $::smallListDecl]
 } -result {2 2}
 
 test applied-type-sequential-non-leaking {two sequential programs declaring the same spelling "Small" with different domains, each used as List[Small]'s element, do not leak into each other} -body {
-    set h1 [surface::compile {import list
+    set h1 [surface::compile {import std::list
 type Small = Int in 0..10
 
 fn mk() -> Small:
     10
 
 fn consume(xs: List[Small]) -> int:
-    list::length(xs)
+    std::list::length(xs)
 
 consume([mk()])
 } seq1.bot]
     set v1 [core::formatValue [core::evalProgram [hir::lower $h1]]]
-    set h2 [surface::compile {import list
+    set h2 [surface::compile {import std::list
 type Small = Int in 100..110
 
 fn mk() -> Small:
     10
 
 fn consume(xs: List[Small]) -> int:
-    list::length(xs)
+    std::list::length(xs)
 
 consume([mk()])
 } seq2.bot -strict 0]
     set e2 [llength [hir::diagnostics $h2]]
-    set h3 [surface::compile {import list
+    set h3 [surface::compile {import std::list
 type Small = Int in 100..110
 
 fn mk() -> Small:
     105
 
 fn consume(xs: List[Small]) -> int:
-    list::length(xs)
+    std::list::length(xs)
 
 consume([mk()])
 } seq3.bot]

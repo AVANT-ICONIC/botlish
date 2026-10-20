@@ -1,6 +1,6 @@
 # Control for sound-b-return-range.bot: the same function written with
 # if/else instead of an early return is correctly rejected
-# (UNHANDLED-ERROR at the list::at).
+# (UNHANDLED-ERROR at the std::list::at).
 fn idx(k):
     if k > 0:
         5
@@ -9,9 +9,9 @@ fn idx(k):
 
 fn get(k):
     xs = [10, 20]
-    list::at(xs, idx(k))
+    std::list::at(xs, idx(k))
 
 args = argv():
     on InvalidArgumentEncoding:
         []
-get(list::length(args))
+get(std::list::length(args))

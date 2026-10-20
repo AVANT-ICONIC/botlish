@@ -3,7 +3,7 @@
 #
 # expect: [10, true]
 
-import list
+import std::list
 
 fn is_small(x):
     x < 10
@@ -15,4 +15,4 @@ fn apply_loop(f, i, n):
     n
 
 fs = [is_small]
-[apply_loop(is_small, 0, 100), list::at(fs, 0)(3)]
+[apply_loop(is_small, 0, 100), std::list::at(fs, 0)(3)]

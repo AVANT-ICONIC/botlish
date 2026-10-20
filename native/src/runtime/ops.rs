@@ -954,7 +954,7 @@ pub extern "C" fn rt_bytes_from_list(p: *mut Vm, l: Value) -> Value {
                     super::show::show(item)
                 };
                 let message = format!(
-                    "byte_store::from_list: element {position} must be a byte (an Int in 0..255), got {got}"
+                    "std::byte_store::from_list: element {position} must be a byte (an Int in 0..255), got {got}"
                 );
                 return vm(p).fail(RtError::Semantic { kind: "TYPE", message });
             }
@@ -981,7 +981,7 @@ fn bytes_operand(p: *mut Vm, v: Value, context: &str) -> Result<(), Value> {
 /// which is what `-result-range collection-length` promises).
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_bytes_len(p: *mut Vm, v: Value) -> Value {
-    if let Err(failed) = bytes_operand(p, v, "byte_store::byte_count") {
+    if let Err(failed) = bytes_operand(p, v, "std::byte_store::byte_count") {
         return failed;
     }
     make_small(bytes_of(v).len() as i64)
@@ -997,12 +997,12 @@ pub extern "C" fn rt_bytes_len(p: *mut Vm, v: Value) -> Value {
 /// ceiling; anything else is refused rather than truncated.
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_bytes_addr(p: *mut Vm, v: Value) -> Value {
-    if let Err(failed) = bytes_operand(p, v, "abi::x86_64::from_bytes") {
+    if let Err(failed) = bytes_operand(p, v, "std::abi::x86_64::from_bytes") {
         return failed;
     }
     let address = BytesObj::payload_address(v) as i64;
     if !fits_small(address) {
-        let message = format!("abi::x86_64::from_bytes: the payload address {address:#x} is outside the small-Int range");
+        let message = format!("std::abi::x86_64::from_bytes: the payload address {address:#x} is outside the small-Int range");
         return vm(p).fail(RtError::Semantic { kind: "RANGE", message });
     }
     make_small(address)
@@ -1088,7 +1088,7 @@ fn bin_extent(p: *mut Vm, storage: Value, offset: Value, code: Value, context: &
 /// that writes its fields next (`binstore`).
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_bytes_zeroed(p: *mut Vm, n: Value) -> Value {
-    let count = match index_operand(p, n, "binary::emit", "the layout size", MAX_COLLECTION_LENGTH) {
+    let count = match index_operand(p, n, "std::binary::emit", "the layout size", MAX_COLLECTION_LENGTH) {
         Ok(count) => count,
         Err(failed) => return failed,
     };
@@ -1098,7 +1098,7 @@ pub extern "C" fn rt_bytes_zeroed(p: *mut Vm, n: Value) -> Value {
 /// `binload %s %o %c`: the Int at offset O of storage S in encoding C.
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_bin_load(p: *mut Vm, storage: Value, offset: Value, code: Value) -> Value {
-    let (at, width, signed, big) = match bin_operands(p, storage, offset, code, "binary::parse") {
+    let (at, width, signed, big) = match bin_operands(p, storage, offset, code, "std::binary::parse") {
         Ok(operands) => operands,
         Err(failed) => return failed,
     };
@@ -1134,15 +1134,15 @@ pub extern "C" fn rt_bin_store(p: *mut Vm, storage: Value, offset: Value, code: 
     // whole-array layout write into byte storage (`mbytesclone`,
     // KIND_MUTBYTES: FIXED-LAYOUT-ARRAYS.md), private to that operation.
     if heap_kind(storage) != KIND_MUTBYTES {
-        if let Err(failed) = bytes_operand(p, storage, "binary::emit") {
+        if let Err(failed) = bytes_operand(p, storage, "std::binary::emit") {
             return failed;
         }
     }
-    let (at, width, signed, big) = match bin_extent(p, storage, offset, code, "binary::emit") {
+    let (at, width, signed, big) = match bin_extent(p, storage, offset, code, "std::binary::emit") {
         Ok(operands) => operands,
         Err(failed) => return failed,
     };
-    let bytes = match bin_encode(p, value, width, signed, big, "binary::emit") {
+    let bytes = match bin_encode(p, value, width, signed, big, "std::binary::emit") {
         Ok(bytes) => bytes,
         Err(failed) => return failed,
     };
@@ -1234,7 +1234,7 @@ fn index_operand(p: *mut Vm, v: Value, context: &str, what: &str, limit: usize) 
 /// `mutable_byte_store::zeroed`: N zero bytes in a fresh writable storage.
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_mbytes_new(p: *mut Vm, n: Value) -> Value {
-    let count = match index_operand(p, n, "mutable_byte_store::zeroed", "the length", MAX_COLLECTION_LENGTH) {
+    let count = match index_operand(p, n, "std::mutable_byte_store::zeroed", "the length", MAX_COLLECTION_LENGTH) {
         Ok(count) => count,
         Err(failed) => return failed,
     };
@@ -1244,7 +1244,7 @@ pub extern "C" fn rt_mbytes_new(p: *mut Vm, n: Value) -> Value {
 /// `mutable_byte_store::from_storage`: a fresh writable copy of immutable storage V.
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_mbytes_from(p: *mut Vm, v: Value) -> Value {
-    if let Err(failed) = bytes_operand(p, v, "mutable_byte_store::from_storage") {
+    if let Err(failed) = bytes_operand(p, v, "std::mutable_byte_store::from_storage") {
         return failed;
     }
     vm(p).metrics.record_list_copy(bytes_of(v).len());
@@ -1254,7 +1254,7 @@ pub extern "C" fn rt_mbytes_from(p: *mut Vm, v: Value) -> Value {
 /// `mutable_byte_store::count`: the fixed byte count of writable storage V.
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_mbytes_len(p: *mut Vm, v: Value) -> Value {
-    if let Err(failed) = mutbytes_operand(p, v, "mutable_byte_store::count") {
+    if let Err(failed) = mutbytes_operand(p, v, "std::mutable_byte_store::count") {
         return failed;
     }
     make_small(mutbytes_of(v).len() as i64)
@@ -1265,7 +1265,7 @@ pub extern "C" fn rt_mbytes_len(p: *mut Vm, v: Value) -> Value {
 /// M, and only then is its one byte written (it is still private here).
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_mbytes_set(p: *mut Vm, m: Value, i: Value, b: Value) -> Value {
-    const CONTEXT: &str = "mutable_byte_store::replace";
+    const CONTEXT: &str = "std::mutable_byte_store::replace";
     if let Err(failed) = mutbytes_operand(p, m, CONTEXT) {
         return failed;
     }
@@ -1302,7 +1302,7 @@ pub extern "C" fn rt_mbytes_set(p: *mut Vm, m: Value, i: Value, b: Value) -> Val
 /// `mutable_byte_store::detach`: a fresh storage equal to M (the detach).
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_mbytes_clone(p: *mut Vm, m: Value) -> Value {
-    if let Err(failed) = mutbytes_operand(p, m, "mutable_byte_store::detach") {
+    if let Err(failed) = mutbytes_operand(p, m, "std::mutable_byte_store::detach") {
         return failed;
     }
     vm(p).metrics.record_list_copy(mutbytes_of(m).len());
@@ -1312,7 +1312,7 @@ pub extern "C" fn rt_mbytes_clone(p: *mut Vm, m: Value) -> Value {
 /// `mutable_byte_store::freeze`: an immutable snapshot of all of M's bytes.
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_mbytes_freeze(p: *mut Vm, m: Value) -> Value {
-    if let Err(failed) = mutbytes_operand(p, m, "mutable_byte_store::freeze") {
+    if let Err(failed) = mutbytes_operand(p, m, "std::mutable_byte_store::freeze") {
         return failed;
     }
     vm(p).metrics.record_list_copy(mutbytes_of(m).len());
@@ -1322,7 +1322,7 @@ pub extern "C" fn rt_mbytes_freeze(p: *mut Vm, m: Value) -> Value {
 /// `mutable_byte_store::freeze_prefix`: an immutable snapshot of M's first N bytes.
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_mbytes_freeze_prefix(p: *mut Vm, m: Value, n: Value) -> Value {
-    const CONTEXT: &str = "mutable_byte_store::freeze_prefix";
+    const CONTEXT: &str = "std::mutable_byte_store::freeze_prefix";
     if let Err(failed) = mutbytes_operand(p, m, CONTEXT) {
         return failed;
     }
@@ -1343,13 +1343,13 @@ pub extern "C" fn rt_mbytes_freeze_prefix(p: *mut Vm, m: Value, n: Value) -> Val
 /// syscall that writes through the address has returned (`op keepalive`).
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_mbytes_addr(p: *mut Vm, m: Value) -> Value {
-    if let Err(failed) = mutbytes_operand(p, m, "abi::x86_64::from_mutable_bytes") {
+    if let Err(failed) = mutbytes_operand(p, m, "std::abi::x86_64::from_mutable_bytes") {
         return failed;
     }
     let address = BytesObj::payload_address(m) as i64;
     if !fits_small(address) {
         let message = format!(
-            "abi::x86_64::from_mutable_bytes: the payload address {address:#x} is outside the small-Int range"
+            "std::abi::x86_64::from_mutable_bytes: the payload address {address:#x} is outside the small-Int range"
         );
         return vm(p).fail(RtError::Semantic { kind: "RANGE", message });
     }
@@ -1831,7 +1831,7 @@ fn one_scalar(p: *mut Vm, s: Value, native: &str) -> Result<char, Value> {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_is_tcl_alpha(p: *mut Vm, s: Value) -> Value {
-    match one_scalar(p, s, "str::is_tcl_alpha") {
+    match one_scalar(p, s, "std::str::is_tcl_alpha") {
         Ok(c) => bool_value(tcl_alpha_char(c)),
         Err(no_value) => no_value,
     }
@@ -1839,7 +1839,7 @@ pub extern "C" fn rt_is_tcl_alpha(p: *mut Vm, s: Value) -> Value {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_is_tcl_alnum(p: *mut Vm, s: Value) -> Value {
-    match one_scalar(p, s, "str::is_tcl_alnum") {
+    match one_scalar(p, s, "std::str::is_tcl_alnum") {
         Ok(c) => bool_value(tcl_alnum_char(c)),
         Err(no_value) => no_value,
     }
@@ -1881,7 +1881,7 @@ fn region_one_scalar(p: *mut Vm, base: Value, start: Value, end: Value, native: 
 
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_str_region_is_tcl_alpha(p: *mut Vm, base: Value, start: Value, end: Value) -> Value {
-    match region_one_scalar(p, base, start, end, "str::is_tcl_alpha") {
+    match region_one_scalar(p, base, start, end, "std::str::is_tcl_alpha") {
         Ok(c) => bool_value(tcl_alpha_char(c)),
         Err(no_value) => no_value,
     }
@@ -1889,7 +1889,7 @@ pub extern "C" fn rt_str_region_is_tcl_alpha(p: *mut Vm, base: Value, start: Val
 
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_str_region_is_tcl_alnum(p: *mut Vm, base: Value, start: Value, end: Value) -> Value {
-    match region_one_scalar(p, base, start, end, "str::is_tcl_alnum") {
+    match region_one_scalar(p, base, start, end, "std::str::is_tcl_alnum") {
         Ok(c) => bool_value(tcl_alnum_char(c)),
         Err(no_value) => no_value,
     }
@@ -2234,7 +2234,7 @@ fn array_index(i: Value, n: usize) -> Option<usize> {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_mutarray_allocate(p: *mut Vm, capacity: Value) -> Value {
-    match array_capacity(p, capacity, "mutable_array::allocate") {
+    match array_capacity(p, capacity, "std::mutable_array::allocate") {
         Ok(n) => new_array_of(p, std::iter::repeat_n(UNIT, n).collect()),
         Err(failed) => failed,
     }
@@ -2244,7 +2244,7 @@ pub extern "C" fn rt_mutarray_allocate(p: *mut Vm, capacity: Value) -> Value {
 /// value placed N times: the compiler rejects an affine X).
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_mutarray_create(p: *mut Vm, capacity: Value, x: Value) -> Value {
-    match array_capacity(p, capacity, "mutable_array::create") {
+    match array_capacity(p, capacity, "std::mutable_array::create") {
         Ok(n) => new_array_of(p, std::iter::repeat_n(x, n).collect()),
         Err(failed) => failed,
     }
@@ -2301,7 +2301,7 @@ fn generate(p: *mut Vm, capacity: Value, factory: Value, d: Option<Value>, name:
 
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_mutarray_generate(p: *mut Vm, capacity: Value, factory: Value) -> Value {
-    generate(p, capacity, factory, None, "mutable_array::generate")
+    generate(p, capacity, factory, None, "std::mutable_array::generate")
 }
 
 #[unsafe(no_mangle)]
@@ -2435,7 +2435,7 @@ pub extern "C" fn rt_mutarray_copy_proven(p: *mut Vm, dst: Value, dst_start: Val
     // proof bug cannot become a wrong copy. One comparison beside a bulk copy.
     assert!(
         ds + n <= mutarray_of(dst).items().len() && ss + n <= mutarray_of(src).items().len(),
-        "proven mutable_array::copy out of bounds"
+        "proven std::mutable_array::copy out of bounds"
     );
     mutarray_copy_range(p, dst, ds, src, ss, n)
 }

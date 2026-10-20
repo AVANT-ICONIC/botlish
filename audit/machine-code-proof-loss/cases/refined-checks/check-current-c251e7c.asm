@@ -25,7 +25,7 @@
     2078:	mov    rsi,rbx
     207b:	mov    rdi,r14
     207e:	call   2083 <botlish_fn_23+0x5e>
-			207f: R_X86_64_PLT32	botlish_fn_9-0x4 ; web::emailish?<str>
+			207f: R_X86_64_PLT32	botlish_fn_9-0x4 ; std::web::emailish?<str>
     2083:	test   rax,rax
     2086:	jne    20b1 <botlish_fn_23+0x8c>
     208c:	xor    rax,rax

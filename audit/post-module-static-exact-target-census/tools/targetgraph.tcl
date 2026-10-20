@@ -35,7 +35,7 @@ set nir [dict get [native::lower::program $hir] text]
 proc names {hir bs} { join [lmap b $bs {dict get [hir::binding $hir $b] name}] {, } }
 
 set L {}
-lappend L "tree: [exec git -C $root rev-parse HEAD] (lib/web.bot diff lines: [llength [split [exec git -C $root diff -- lib/web.bot] \n]])"
+lappend L "tree: [exec git -C $root rev-parse HEAD] (stdlib/web.bot diff lines: [llength [split [exec git -C $root diff -- stdlib/web.bot] \n]])"
 set targets [lmap id [dict get $spec used] {
     expr {[string match "$scanner<*" [hir::specialize::label $spec $id]] ? $id : [continue]}
 }]

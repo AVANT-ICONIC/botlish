@@ -1,7 +1,7 @@
 #!/usr/bin/env tclsh9.0
 # fuzz.tcl -- randomized differential check of the ABI numeric domains
-# (ABI-NUMERIC-DOMAINS.md): abi::i8 ... abi::usize, .value, and the
-# abi::x86_64::from_* register encoders, for all ten domains.
+# (ABI-NUMERIC-DOMAINS.md): std::abi::i8 ... std::abi::usize, .value, and the
+# std::abi::x86_64::from_* register encoders, for all ten domains.
 #
 #   tclsh9.0 audit/abi-numeric-domains/tools/fuzz.tcl ?-n N? ?-seed S?
 #       ?-values V? ?-backends LIST? ?-gc-stress 0|1?
@@ -31,7 +31,7 @@
 #               re-created from .value with no handler (the field's domain
 #               proves it), twice, then encoded -- on every backend
 #   narrowing   values of one random domain narrowed into another through
-#               Int (`abi::t(s.value)`), against the target's oracle
+#               Int (`std::abi::t(s.value)`), against the target's oracle
 #
 # The run ends with "abi-numeric-fuzz programs N values V out-of-range O
 # constant-checks C failures F"; the exit status is 1 if F is not zero.
@@ -179,24 +179,24 @@ for {set p 0} {$p < $n} {incr p} {
         incr outOfRange [llength [lsearch -all -glob $want {"*}]]
         lappend expected "\[[join $want {, }]\]"
         append functions "fn c$index\(n: int):
-    x = abi::${ctor}(n):
-        on abi::AbiIntegerBelowRange:
+    x = std::abi::${ctor}(n):
+        on std::abi::AbiIntegerBelowRange:
             return \"below\"
-        on abi::AbiIntegerAboveRange:
+        on std::abi::AbiIntegerAboveRange:
             return \"above\"
-    \[x.value, abi::x86_64::${enc}(x).word\]
+    \[x.value, std::abi::x86_64::${enc}(x).word\]
 
-fn again$index\(x: abi::$s) -> abi::$s:
-    abi::${ctor}(x.value)
+fn again$index\(x: std::abi::$s) -> std::abi::$s:
+    std::abi::${ctor}(x.value)
 
 fn rt$index\(n: int):
-    x = abi::${ctor}(n):
-        on abi::AbiIntegerBelowRange:
+    x = std::abi::${ctor}(n):
+        on std::abi::AbiIntegerBelowRange:
             return \"below\"
-        on abi::AbiIntegerAboveRange:
+        on std::abi::AbiIntegerAboveRange:
             return \"above\"
     y = again$index\(again$index\(x))
-    \[y.value, abi::x86_64::${enc}(y).word\]
+    \[y.value, std::abi::x86_64::${enc}(y).word\]
 
 "
         append bindings "r$index = loop v in \[[join [lmap v $xs {lit $v}] {, }]\]:\n    c$index\(v)\n"
@@ -234,7 +234,7 @@ fn rt$index\(n: int):
         expr {$v >= $fmin && $v <= $fmax ? $v : $fmin}
     }]
     incr values [llength $xs]
-    set text "fn narrow(x: abi::$fs):\n    y = abi::${tctor}(x.value):\n        on abi::AbiIntegerBelowRange:\n            return \"below\"\n        on abi::AbiIntegerAboveRange:\n            return \"above\"\n    \[y.value, abi::x86_64::${tenc}(y).word\]\nfn entry(n: int):\n    x = abi::${fctor}(n):\n        on abi::AbiIntegerBelowRange:\n            return \"unreachable\"\n        on abi::AbiIntegerAboveRange:\n            return \"unreachable\"\n    narrow(x)\nloop v in \[[join [lmap v $xs {lit $v}] {, }]\]:\n    entry(v)\n"
+    set text "fn narrow(x: std::abi::$fs):\n    y = std::abi::${tctor}(x.value):\n        on std::abi::AbiIntegerBelowRange:\n            return \"below\"\n        on std::abi::AbiIntegerAboveRange:\n            return \"above\"\n    \[y.value, std::abi::x86_64::${tenc}(y).word\]\nfn entry(n: int):\n    x = std::abi::${fctor}(n):\n        on std::abi::AbiIntegerBelowRange:\n            return \"unreachable\"\n        on std::abi::AbiIntegerAboveRange:\n            return \"unreachable\"\n    narrow(x)\nloop v in \[[join [lmap v $xs {lit $v}] {, }]\]:\n    entry(v)\n"
     set narrowed [lmap v $xs {oracle $tmin $tmax $tsigned $v}]
     set want [list value "\[[join $narrowed {, }]\]" {}]
     if {[catch {outcomes [hirOfText $text]} got]} {
@@ -253,29 +253,29 @@ fn rt$index\(n: int):
     foreach c $constants {
         lassign $c ctor min max v
         incr constantChecks
-        if {[catch {hirOfText "abi::${ctor}([lit $v]).value\n" 0} hir]} {
+        if {[catch {hirOfText "std::abi::${ctor}([lit $v]).value\n" 0} hir]} {
             incr failures
-            puts "FAIL seed $seed constant abi::${ctor}($v): compile: $hir"
+            puts "FAIL seed $seed constant std::abi::${ctor}($v): compile: $hir"
             continue
         }
         set kinds [lsort -unique [lmap d [hir::diagnostics $hir] {dict get $d kind}]]
         set want [expr {$v < $min || $v > $max ? "KNOWN-ERROR" : ""}]
         if {$kinds ne $want} {
             incr failures
-            puts "FAIL seed $seed constant abi::${ctor}($v): diagnostics {$kinds}, expected {$want}"
+            puts "FAIL seed $seed constant std::abi::${ctor}($v): diagnostics {$kinds}, expected {$want}"
         } elseif {$want eq "KNOWN-ERROR"} {
             set message [dict get [lindex [hir::diagnostics $hir] 0] message]
-            set error [expr {$v < $min ? "abi::AbiIntegerBelowRange" : "abi::AbiIntegerAboveRange"}]
+            set error [expr {$v < $min ? "std::abi::AbiIntegerBelowRange" : "std::abi::AbiIntegerAboveRange"}]
             # The complete list of errors named, up to its ";".
             if {![string match "*declared error(s) $error;*" $message]} {
                 incr failures
-                puts "FAIL seed $seed constant abi::${ctor}($v): $message"
+                puts "FAIL seed $seed constant std::abi::${ctor}($v): $message"
             }
         } else {
             set outcome [outcomeUnderHir interp $hir]
             if {$outcome ne [list value $v {}]} {
                 incr failures
-                puts "FAIL seed $seed constant abi::${ctor}($v): $outcome"
+                puts "FAIL seed $seed constant std::abi::${ctor}($v): $outcome"
             }
         }
     }

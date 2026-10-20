@@ -1,6 +1,6 @@
 # corpus.tcl -- observational audit of SAME-FAILURE over the corpus
 # (WARNINGS-SAME-FAILURE.md, "Corpus findings"). Compiles every program of
-# examples/stdlib, examples/surface, bench/*.bot and lib/*.bot with warnings
+# examples/stdlib, examples/surface, bench/*.bot and stdlib/*.bot with warnings
 # on (collected, not emitted) and reports, at the commit it runs on:
 #
 #   * every distinct finding (a library module's finding is reported once,
@@ -41,7 +41,7 @@ set programs [concat \
     [lsort [glob -directory [file join $auditRoot examples stdlib] *.bot]] \
     [lsort [glob -directory [file join $auditRoot examples surface] *.bot]] \
     [lsort [glob -directory [file join $auditRoot bench] *.bot]] \
-    [lsort [glob -directory [file join $auditRoot lib] *.bot]]]
+    [lsort [glob -directory [file join $auditRoot stdlib] *.bot]]]
 
 # The surface examples that are deliberate rejections (their own headers say
 # so): expected not to compile.
@@ -58,42 +58,42 @@ set deliberate {examples/surface/09-mutual-recursion.bot examples/surface/10-dup
 # false positive (item 19's bar) and a warning-design issue; none may be
 # listed here as such -- the theorem changes instead.
 set classified {
-    {lib/abi/bytes.bot abi::bytes::replace IndexNotFound} {combine
-        {the two halves of one bounds check (`index < 0`, `index >= count`), written as an if/elif pair that fails the same IndexNotFound; the failure itself is uniform by design (the header: "the same error list::at and mutable_array::set use"), so a split is not a candidate: the natural responses are merging the guards into one `or` condition or keeping the two-line form}}
+    {stdlib/abi/bytes.bot std::abi::bytes::replace IndexNotFound} {combine
+        {the two halves of one bounds check (`index < 0`, `index >= count`), written as an if/elif pair that fails the same IndexNotFound; the failure itself is uniform by design (the header: "the same error std::list::at and std::mutable_array::set use"), so a split is not a candidate: the natural responses are merging the guards into one `or` condition or keeping the two-line form}}
 }
 
 # Curated merges for "combine" findings: FILE -> {OLD NEW} exact text
 # replacements (OLD must occur exactly once), and a probe program exercising
 # the function on both sides of every guard and in range.
 set merges {
-    lib/abi/bytes.bot {
+    stdlib/abi/bytes.bot {
         {    if index < 0:
         fail IndexNotFound
-    elif index >= mutable_byte_store::count(data.storage):
+    elif index >= std::mutable_byte_store::count(data.storage):
         fail IndexNotFound
     else:}
-        {    if index < 0 or index >= mutable_byte_store::count(data.storage):
+        {    if index < 0 or index >= std::mutable_byte_store::count(data.storage):
         fail IndexNotFound
     else:}
     }
 }
 set probes {
-    lib/abi/bytes.bot {import abi
-import abi::bytes
-import byte
-import str
+    stdlib/abi/bytes.bot {import std::abi
+import std::abi::bytes
+import std::byte
+import std::str
 
 fn mb(s: str):
-    abi::bytes::from_bytes(abi::bytes::from_list(str::encode_utf8(s)))
-fn tryset(m: abi::bytes::MutableBytes, i: int) -> List[any] errors IndexNotFound:
-    r = abi::bytes::replace(m, i, byte::from_int(88))
-    [abi::bytes::mutable_length(r).value, abi::bytes::freeze(r) == abi::bytes::freeze(m)]
-fn at(m: abi::bytes::MutableBytes, i: int):
+    std::abi::bytes::from_bytes(std::abi::bytes::from_list(std::str::encode_utf8(s)))
+fn tryset(m: std::abi::bytes::MutableBytes, i: int) -> List[any] errors IndexNotFound:
+    r = std::abi::bytes::replace(m, i, std::byte::from_int(88))
+    [std::abi::bytes::mutable_length(r).value, std::abi::bytes::freeze(r) == std::abi::bytes::freeze(m)]
+fn at(m: std::abi::bytes::MutableBytes, i: int):
     tryset(m, i):
         on IndexNotFound:
             []
 m = mb("abc")
-[at(m, 0 - 1), at(m, 0), at(m, 2), at(m, 3), at(m, 1000), at(abi::bytes::zeroed(abi::usize(0)), 0), at(mb("XYZ"), 0)]}
+[at(m, 0 - 1), at(m, 0), at(m, 2), at(m, 3), at(m, 1000), at(std::abi::bytes::zeroed(std::abi::usize(0)), 0), at(mb("XYZ"), 0)]}
 }
 
 proc readText {path} {
@@ -273,8 +273,8 @@ puts "## Merge check (scratch copy of the library; the corpus is not edited)"
 foreach {file pair} $merges {
     lassign $pair old new
     set scratch [file tempdir same-failure-corpus]
-    set lib [file join $scratch lib]
-    file copy [file join $auditRoot lib] $lib
+    set lib [file join $scratch stdlib]
+    file copy [file join $auditRoot stdlib] $lib
     set path [file join $scratch $file]
     set text [readText $path]
     set at [string first $old $text]

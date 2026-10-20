@@ -82,7 +82,7 @@ namespace eval surface::lexer {
     variable keywords {fn if elif else loop return break continue true false unit and or not type \
         struct error errors fail on yield}
     # Longest operators first ("::" before ":", so a module-qualified name
-    # like web::uri_escape does not lex as ":" ":"). "{" and "}" are not
+    # like std::web::uri_escape does not lex as ":" ":"). "{" and "}" are not
     # ordinary block syntax (Botlish blocks are ":" + indentation): they
     # denote a type declaration's finite integer-set domain
     # (surface/parser.tcl's Domain), a structural function type's fields

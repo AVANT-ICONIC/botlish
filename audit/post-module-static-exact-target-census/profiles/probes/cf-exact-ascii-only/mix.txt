@@ -125,7 +125,7 @@ executed Botlish-code instructions per run: 619,851 (28.1% of all Ir)
   heap/vm load                800.0    1.7%
   jmp                         400.0    0.8%
 
-== 9 web::emailish?: 33,600.0 executed instructions per run (5.4% of JIT)
+== 9 std::web::emailish?: 33,600.0 executed instructions per run (5.4% of JIT)
   mov reg-reg               8,000.0   23.8%
   frame: epilogue           3,200.0    9.5%
   frame: prologue           2,800.0    8.3%

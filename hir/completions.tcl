@@ -150,7 +150,7 @@ namespace eval hir::completions {
     # claim of impossibility the budget did not actually verify. Each
     # nested analysis walks with a count of its own (NewCtx), so this bounds
     # how wide the analyses of one walk get; maxDepth below bounds how deep
-    # they nest. Generous enough for every corpus shape (byte::set's own
+    # they nest. Generous enough for every corpus shape (std::byte::set's own
     # single-level from_int nesting, a handful of calls per literal-list
     # element).
     variable maxAnalyses 256
@@ -509,7 +509,7 @@ proc hir::completions::CallOpacity {hir node} {
         if {$from eq "" || $from >= [llength $args]} {
             return none
         }
-        # A native calling a callable argument (mutable_array::generate's
+        # A native calling a callable argument (std::mutable_array::generate's
         # factory): bounded by its contract or identity, else opaque.
         set type [hir::typeOf $hir [lindex $args $from]]
         if {[hir::types::IsExactBlock $type]} {
@@ -1369,7 +1369,7 @@ proc hir::completions::SeedParam {} {
 #                                        to a small literal list, either
 #                                        directly or via a further exact
 #                                        call boundary -- what lets
-#                                        `byte::set(['-','.','_','~'])`'s own
+#                                        `std::byte::set(['-','.','_','~'])`'s own
 #                                        literal-list proof see through the
 #                                        call into `set`'s own `chars`
 #                                        parameter, items 36-40)
@@ -1389,7 +1389,7 @@ proc hir::completions::SeedParam {} {
 #   sizes     FORM -> N                 (a List length / MutableArray
 #                                        capacity form proven equal to the
 #                                        Int N in the current branch, from
-#                                        an enclosing `list::length(xs) == N`)
+#                                        an enclosing `std::list::length(xs) == N`)
 #   exprs     exprId -> Range           (a per-walk cache so
 #                                        ComparisonNarrowing can read a
 #                                        condition's own already-evaluated
@@ -1624,8 +1624,8 @@ proc hir::completions::Eval {hirVar ctxVar diagnose enclosing guard e} {
             # The projected field's Range is what its static type implies,
             # exactly as hir::range::Expr's own project case computes it (a
             # field declared with an integer domain holds values of that
-            # domain: every construction proved it), so `byte::from_int(
-            # x.value)` for `x: abi::U8` is as decided here as it is for a
+            # domain: every construction proved it), so `std::byte::from_int(
+            # x.value)` for `x: std::abi::U8` is as decided here as it is for a
             # local bound to x.value (ABI-NUMERIC-DOMAINS.md).
             if {[Eval hir ctx $diagnose $enclosing $guard [dict get $node receiver]] eq {never}} {
                 return never
@@ -1675,13 +1675,13 @@ proc hir::completions::BranchOutcome {hir ctx condition outcome} {
 
 # The relational facts the `if` condition CONDITION establishes on its
 # OUTCOME branch, for IndexBounds alone, added to ctx: a comparison of an
-# Int value with a size (`i < list::length(xs)` true, `i >= list::length
+# Int value with a size (`i < std::list::length(xs)` true, `i >= std::list::length
 # (xs)` false, ... in either operand order) records the value's exclusive
 # upper bound as a hir/cardinality.tcl form (ctx.upperBounds, under the
 # value's RelationKey: a binding, or a computed local's defining
 # expression); an
 # equality of a List length or MutableArray capacity with an exact Int
-# (`list::length(bytes) == 1`) records that size (ctx.sizes). Only an Int
+# (`std::list::length(bytes) == 1`) records that size (ctx.sizes). Only an Int
 # comparison native (`< <= > >= ==`) is read; anything else adds nothing.
 # Every form names immutable values, so a fact stays true for the whole
 # branch. Each of the condition's Conjuncts contributes its own facts.
@@ -1736,8 +1736,8 @@ proc hir::completions::BranchRelation {hir ctxVar condition outcome} {
         >=/0 { set rel [list $x $y 0] }
     }
     lassign $rel low high k
-    # A constant below a size (`list::length(xs) > 0`, `str::length(s) >= 1`
-    # true, `str::length(s) < 1` false): LOW < SIZE + K, so SIZE >= LOW - K + 1.
+    # A constant below a size (`std::list::length(xs) > 0`, `std::str::length(s) >= 1`
+    # true, `std::str::length(s) < 1` false): LOW < SIZE + K, so SIZE >= LOW - K + 1.
     # An Int binding takes the same minimum (`if n > 0:`), which a size form
     # equal to that binding then reads (an array allocated or created with
     # capacity n).
@@ -1766,7 +1766,7 @@ proc hir::completions::BranchRelation {hir ctxVar condition outcome} {
 # (PROOF-FACT-CENSUS.md, G12). The binding an alias chain ends at with no
 # defining expression (a parameter, a loop variable), else {e D}, the
 # expression D the chain ends at: a computed local `j = i + 1` guarded by
-# `if j < 0 or j >= list::length(xs): return ...` is keyed by its one
+# `if j < 0 or j >= std::list::length(xs): return ...` is keyed by its one
 # defining expression, which every reference to j (and to any alias of j)
 # chases to. The relation is then about the value that one evaluation of D
 # bound -- the value every such reference reads, the binding being
@@ -1785,7 +1785,7 @@ proc hir::completions::RelationKey {hir e} {
 }
 
 # The form of E when it is exactly one container size -- a List length, a
-# MutableArray capacity or a String length (`list::length(xs)`, a binding
+# MutableArray capacity or a String length (`std::list::length(xs)`, a binding
 # of it, ...) -- else "".
 proc hir::completions::SizeForm {hir e} {
     set steps 0
@@ -1837,7 +1837,7 @@ proc hir::completions::EvalIf {hirVar ctxVar diagnose enclosing guard e node} {
         RestoreRelations ctx $savedRelations
         dict set after $outcome [dict get $ctx bindings]
     }
-    # When only one branch can complete normally (`if i >= list::length(xs):
+    # When only one branch can complete normally (`if i >= std::list::length(xs):
     # return acc` followed by the rest of the body), whatever follows the
     # `if` runs only on that branch's outcome: its condition relations
     # hold there too, exactly as JoinBindings keeps the live branch's range
@@ -1898,7 +1898,7 @@ proc hir::completions::SubsumeCollected {hirVar ctxVar diagnose guard e node res
 # The relational facts (ctx.upperBounds, ctx.sizes) in effect: what a scope
 # whose body may run zero times, or only on some other path -- a loop body,
 # a handler -- restores when it ends, so a fact established inside it (an
-# early `return`/`break` guard: `if j >= list::length(ys): break`) never
+# early `return`/`break` guard: `if j >= std::list::length(ys): break`) never
 # outlives it.
 proc hir::completions::Relations {ctx} {
     return [list [dict get $ctx upperBounds] [dict get $ctx sizes] [dict get $ctx minSizes]]
@@ -2140,7 +2140,7 @@ proc hir::completions::ExitsLoop {hir loop exprs} {
 # ctx.exactList already established -- the general form of (a), threaded
 # across an exact call boundary the same way an Int/UnicodeChar exact value
 # already is (ArgExactValues/ctx.exact): this is what lets
-# `byte::set(['-','.','_','~'])`'s own literal argument reach `set`'s own
+# `std::byte::set(['-','.','_','~'])`'s own literal argument reach `set`'s own
 # `loop c in chars:` (whose iterable is a plain `ref` to the parameter
 # `chars`, not the literal list expression itself) as a genuine small
 # literal list, with no `set`/`byte`-specific code anywhere in this file.
@@ -2190,7 +2190,7 @@ proc hir::completions::LiteralElements {fact} {
 # `bit_and bit_or bit_xor shift_left shift_right` and `mod` reuse
 # hir::range's own transfer functions (identical to hir::range::Call's own
 # native case), and any other native its -result-range metadata
-# (hir::range::RegisteredRange: char::scalar_value's [0, 0x10FFFF], a
+# (hir::range::RegisteredRange: std::char::scalar_value's [0, 0x10FFFF], a
 # length's collection-length, ...). On top of that bound this pass adds the
 # exact value of a native whose arguments its walk knows exactly (ctx.exact
 # reaches call-specific facts hir/range.tcl never sees): the length of a
@@ -2213,13 +2213,13 @@ proc hir::completions::NativeResultRange {hir ctx name argExprs argRanges} {
     if {$name eq {mod} && [llength $argRanges] == 2} {
         return [hir::range::Mod {*}$argRanges]
     }
-    if {$name in {str::length list::length} && [llength $argExprs] == 1} {
+    if {$name in {std::str::length std::list::length} && [llength $argExprs] == 1} {
         # The length of a String or List this walk knows exactly (a literal,
         # an exact binding, an exact argument of this call-specific walk) is
         # that exact number -- what a slice or index proof inside a callee
-        # needs from `n = str::length(s)` once s is a known argument.
+        # needs from `n = std::str::length(s)` once s is a known argument.
         set arg [lindex $argExprs 0]
-        if {$name eq {str::length}} {
+        if {$name eq {std::str::length}} {
             set v [ExactValueOf $hir $ctx $arg]
             if {$v ne {} && [core::value::kind $v] eq {str}} {
                 return [hir::range::point [string length [core::value::strOf $v]]]
@@ -2231,7 +2231,7 @@ proc hir::completions::NativeResultRange {hir ctx name argExprs argRanges} {
             }
         }
     }
-    if {$name eq {char::scalar_value} && [llength $argExprs] == 1} {
+    if {$name eq {std::char::scalar_value} && [llength $argExprs] == 1} {
         set v [ExactValueOf $hir $ctx [lindex $argExprs 0]]
         if {$v ne {} && [core::value::kind $v] eq {UnicodeChar}} {
             return [hir::range::point [core::value::charOf $v]]
@@ -2324,7 +2324,7 @@ proc hir::completions::EvalCall {hirVar ctxVar diagnose enclosing guard e node} 
             dict unset ctx folded $e
         }
         # A native that declares errors (-errors, core/native.tcl: `argv`,
-        # `list::at`) is held to the same legality rule as any other
+        # `std::list::at`) is held to the same legality rule as any other
         # fallible call, under its own call-specific facts
         # (NativeEffectiveFacts). So is one that calls a callable argument
         # while the program erases an error-bearing callable (IndirectFacts).
@@ -2874,7 +2874,7 @@ proc hir::completions::CheckNativeCallLegality {hirVar e name normal errors hand
 # ARGRANGES here). A native's declared -errors are all effective, except
 # for the natives whose errors depend only on their arguments, as their
 # registered -bounds (core/native.tcl) state: an indexed access (`index`:
-# list::at, mutable_array::at, mutable_array::set), whose IndexNotFound
+# std::list::at, std::mutable_array::at, std::mutable_array::set), whose IndexNotFound
 # IndexBounds proves impossible (the index always designates an element: no
 # obligation) or certain (it never does: the call cannot complete normally,
 # KNOWN-ERROR), and a slicing native (`slices`), whose LowerUnderrun/
@@ -2913,7 +2913,7 @@ proc hir::completions::NativeCallFacts {hirVar ctxVar guard e name argExprs argR
     upvar 1 $hirVar hir $ctxVar ctx
     set from [dict get [core::native::metadata $name] errorsFrom]
     if {$from ne ""} {
-        # A native calling a callable argument (mutable_array::generate's
+        # A native calling a callable argument (std::mutable_array::generate's
         # factory): it may complete normally, or with what the callable's
         # contract permits (the call's calleeErrors, hir/types.tcl's Call)
         # -- and with an erased-callable contract, with what the callable's
@@ -3068,8 +3068,8 @@ proc hir::completions::ExtentsVerdict {hir ctx name argExprs v} {
 # themselves, E is a list literal each of whose elements is proven; a layout
 # with arrays when E is (an alias of) a construction of its LayoutStruct
 # each of whose array fields is proven -- and any representation when E is
-# an exact copy of the same one (ExactCopy: what binary::load or
-# binary::parse made, or a field of it). `out` when one of those lengths is
+# an exact copy of the same one (ExactCopy: what std::binary::load or
+# std::binary::parse made, or a field of it). `out` when one of those lengths is
 # proven to be another. Nothing else: the length of a List is a fact about
 # the List, never about its type.
 proc hir::completions::ReprValueVerdict {hir ctx repr e} {
@@ -3138,9 +3138,9 @@ proc hir::completions::ReprValueVerdict {hir ctx repr e} {
 }
 
 # The representation the value of expression E is an exact copy of, or "":
-# a List or LayoutStruct binary::load copied out of live memory (its
+# a List or LayoutStruct std::binary::load copied out of live memory (its
 # operand's static type says what: NativeView[array N of E] or
-# NativeView[L], an edit alike), a LayoutStruct binary::parse imprinted (its
+# NativeView[L], an edit alike), a LayoutStruct std::binary::parse imprinted (its
 # layout operand), or a field of one of those (the field's representation),
 # followed through immutable bindings and handlers that never complete. Every fixed array in such a value has
 # exactly its extent: the copy made it so, and a value never changes.
@@ -3194,7 +3194,7 @@ proc hir::completions::ExactCopy {hir e} {
                 }
             } elseif {[hir::layouts::RoleOf $role op] eq "read"} {
                 # One designated representation copied out of bytes
-                # (binary::read, LAYOUT-UNIONS.md): exactly its arrays'
+                # (std::binary::read, LAYOUT-UNIONS.md): exactly its arrays'
                 # extents, as a parse makes them.
                 set repr [hir::layouts::PathField [hir::layouts::ConstText $hir [lindex $args [hir::layouts::RoleOf $role path]]]]
                 if {$repr ne ""} {
@@ -3291,7 +3291,7 @@ proc hir::completions::OperandSum {a b} {
 # hir/cardinality.tcl derives, plus the constant of an exactly known size),
 # N the exactly known size or "" -- known from a literal or exact value, an
 # exact argument of this call-specific walk, or an enclosing branch's
-# `list::length(xs) == N`-shaped equality (ctx.sizes). Two known sizes that
+# `std::list::length(xs) == N`-shaped equality (ctx.sizes). Two known sizes that
 # disagree mean the facts contradict each other: N is then "contradiction".
 proc hir::completions::SizesOf {hir ctx family container} {
     set steps 0
@@ -3397,7 +3397,7 @@ proc hir::completions::ProveLeOperand {ctx a b} {
 
 # 1 if operand A is provably <= the sequence size SIZES (SizesOf). A size
 # form's Range is its constant, or at least an enclosing branch's minimum
-# (ctx.minSizes: `if str::length(s) > 0:`).
+# (ctx.minSizes: `if std::str::length(s) > 0:`).
 proc hir::completions::ProveLeSize {ctx a sizes} {
     foreach form [dict get $sizes forms] {
         if {[hir::cardinality::IsConst $form]} {
@@ -3520,22 +3520,22 @@ proc hir::completions::SliceFacts {hir ctx slices} {
 #     entirely outside (hir::exact::BoundsOf's own rule);
 #   * relational: INDEX reads a counted-loop variable proven to satisfy
 #     0 <= i < FORM (ctx.indexBounds, NoteIndexBound) and FORM is exactly
-#     the container's own size form (hir/cardinality.tcl: list::length of
+#     the container's own size form (hir/cardinality.tcl: std::list::length of
 #     the same immutable List, or the capacity of the same MutableArray --
-#     `loop i from 0 to list::length(xs): list::at(xs, i)`).
+#     `loop i from 0 to std::list::length(xs): std::list::at(xs, i)`).
 #
 #   * branch relations (BranchRelations): INDEX reads a value an
 #     enclosing `if` proved below the container's size form -- a binding,
 #     or a computed local keyed by its defining expression (RelationKey) --
 #     and INDEX's own Range is provably >= 0 (`if i < 0 or i >=
-#     list::length(xs): ... else: list::at(xs, i)`, or the `and` form's then
-#     branch; `j = i + 1` guarded the same way, then `list::at(xs, j)`); or the
+#     std::list::length(xs): ... else: std::list::at(xs, i)`, or the `and` form's then
+#     branch; `j = i + 1` guarded the same way, then `std::list::at(xs, j)`); or the
 #     container's size form was proven equal to an exact N (`if
-#     list::length(bytes) == 1: list::at(bytes, 0)`), which the range check
+#     std::list::length(bytes) == 1: std::list::at(bytes, 0)`), which the range check
 #     above then uses.
 #   * reduction (ReducedIndex): INDEX is (an alias of) `mod(X, SIZE)` or
 #     `bit_and(X, SIZE - 1)` with SIZE the container's own size form
-#     (`list::at(xs, h.mod(list::length(xs)))`).
+#     (`std::list::at(xs, h.mod(std::list::length(xs)))`).
 #
 # The relational proofs are tried first: an index they place in range is in
 # range on every path that reaches the read, so if this walk's exact ranges
@@ -3564,8 +3564,8 @@ proc hir::completions::IndexBounds {hir ctx family container index indexRange} {
         }
         set size [hir::cardinality::FormConst [lindex $term 1]]
     } elseif {$family eq "str"} {
-        # A character index (str::char_at): checked against the String's
-        # length in Unicode scalars, the size str::length's guards state.
+        # A character index (std::str::char_at): checked against the String's
+        # length in Unicode scalars, the size std::str::length's guards state.
         set size [hir::cardinality::StrLength $hir $container steps]
     } else {
         set size [hir::cardinality::Capacity $hir $container steps]
@@ -3587,14 +3587,14 @@ proc hir::completions::IndexBounds {hir ctx family container index indexRange} {
     }
     set known [lsort -unique -integer $known]
     if {[llength $known] > 1} {
-        # Two proven sizes disagree (a branch's `list::length(xs) == 2`
+        # Two proven sizes disagree (a branch's `std::list::length(xs) == 2`
         # under this call's exact one-element xs): the facts cannot hold
         # together, so this code is unreachable on this path and the read
         # vacuously designates an element.
         return in
     }
     # A size an enclosing branch proved at least M (ctx.minSizes) that this
-    # path also knows to be exactly N < M (`if list::length(xs) < 1: return
+    # path also knows to be exactly N < M (`if std::list::length(xs) < 1: return
     # ...` under this call's exact empty xs) is the same contradiction: the
     # read is unreachable here.
     set min [MinSizeOf $ctx $sizes]
@@ -3629,7 +3629,7 @@ proc hir::completions::IndexBounds {hir ctx family container index indexRange} {
     if {$kind eq "expr" && 0 ni $known && [ReducedIndex $hir $ctx $binding $sizes $known]} {
         return in
     }
-    # A size an enclosing branch proved at least M (`if list::length(xs) >
+    # A size an enclosing branch proved at least M (`if std::list::length(xs) >
     # 0:`) holds every index in 0..M-1.
     if {$min ne "" && $indexRange ne {never}} {
         set lo [dict get $indexRange min]
@@ -3774,7 +3774,7 @@ proc hir::completions::EvalHandle {hirVar ctxVar diagnose enclosing guard e node
                 && ([NativeDeclaredErrors $hir $call [dict get [hir::symbol $hir $target] name]] ne {}
                     || [CallsCallable $hir [dict get [hir::symbol $hir $target] name]])} {
             # A handled call of a native with declared errors (`argv`,
-            # `list::at`), or of a coroutine segment (start, resume).
+            # `std::list::at`), or of a coroutine segment (start, resume).
             set name [dict get [hir::symbol $hir $target] name]
             lassign [NativeCallFacts hir ctx $guard $call $name $argExprs $argRanges] normal errors verdicts
             set callResult [hir::range::ConstrainType $hir $call \
@@ -4045,7 +4045,7 @@ proc hir::completions::mayReturnNormallyOf {hir e} {
 }
 
 # The Range fact this pass computed for a checked call expression E (item
-# 69's own char::scalar_value pins), or hir::range::unknown if E was never
+# 69's own std::char::scalar_value pins), or hir::range::unknown if E was never
 # reached by a top-level checkBlock walk.
 proc hir::completions::resultRangeOf {hir e} {
     set node [hir::node $hir $e]

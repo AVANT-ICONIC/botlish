@@ -1,10 +1,10 @@
 # linuxabi.tcl -- the raw Linux kernel transitions, one per architecture
 # (LINUX-X86-64-SYSCALL.md, LINUX-SYSCALL-TRANSPORTS.md).
 #
-#   linux::abi::x86_64::syscall({rax: R, rdi: R, rsi: R, rdx: R, r10: R, r8: R, r9: R})
-#       -> abi::x86_64::Register64             R: abi::x86_64::Register64
-#   linux::abi::aarch64::syscall({x8: R, x0: R, x1: R, x2: R, x3: R, x4: R, x5: R})
-#       -> abi::aarch64::Register64            R: abi::aarch64::Register64
+#   std::linux::abi::x86_64::syscall({rax: R, rdi: R, rsi: R, rdx: R, r10: R, r8: R, r9: R})
+#       -> std::abi::x86_64::Register64        R: std::abi::x86_64::Register64
+#   std::linux::abi::aarch64::syscall({x8: R, x0: R, x1: R, x2: R, x3: R, x4: R, x5: R})
+#       -> std::abi::aarch64::Register64       R: std::abi::aarch64::Register64
 #
 # Each is one root native, registered under its qualified name (no module
 # file defines it: surface/modules.tcl and surface/lower.tcl resolve a
@@ -16,7 +16,7 @@
 # The argument is a syscall-input description, not an inline assembly API:
 # an anonymous struct whose fields are named after the architecture's Linux
 # syscall register convention and are that architecture's Register64 values
-# (lib/abi/x86_64.bot, lib/abi/aarch64.bot):
+# (stdlib/abi/x86_64.bot, stdlib/abi/aarch64.bot):
 #
 #   x86-64   rax the number, rdi rsi rdx r10 r8 r9 arguments 1-6,
 #            `syscall`, the result in rax
@@ -26,7 +26,7 @@
 # The number register is required; an omitted argument register is zero.
 # Any other field is rejected (hir/syscall.tcl: UNKNOWN-FIELD), and so is a
 # missing number register (MISSING-FIELD) or a field that is not the
-# transport's own Register64 (TYPE: an abi::aarch64::Register64 is never an
+# transport's own Register64 (TYPE: a std::abi::aarch64::Register64 is never an
 # x86-64 register). The result is the raw result register after the
 # transition, as a Register64: no errno, no -1 convention, no retry, no
 # Result -- the kernel's own return value, nothing above it.
@@ -34,9 +34,9 @@
 # A transport knows its architecture's Linux *transport* convention (which
 # register carries what) and nothing about individual syscalls: no syscall
 # number, argument meaning or signature is known to the compiler. getpid is
-# `rax: abi::x86_64::register64(39)` on x86-64 and `x8:
-# abi::aarch64::register64(172)` on AArch64, in ordinary Botlish
-# (lib/linux/sys.x86_64.bot, lib/linux/sys.aarch64.bot: the architecture's
+# `rax: std::abi::x86_64::register64(39)` on x86-64 and `x8:
+# std::abi::aarch64::register64(172)` on AArch64, in ordinary Botlish
+# (stdlib/linux/sys.x86_64.bot, stdlib/linux/sys.aarch64.bot: the architecture's
 # syscall numbers are source data of the library the compilation target
 # selects).
 #
@@ -57,7 +57,7 @@
 # some other host facility (a Tcl `pid` would test the wrong abstraction): a
 # call raises the semantic error NATIVE-ONLY when it runs. Only the call is
 # refused -- a program that defines but never calls it, and every pure
-# abi::x86_64 / abi::aarch64 conversion, runs on every backend.
+# std::abi::x86_64 / std::abi::aarch64 conversion, runs on every backend.
 
 namespace eval core::linuxabi {
     # ARCH -> the transport of the Linux syscall convention of architecture
@@ -67,26 +67,26 @@ namespace eval core::linuxabi {
     #                 convention's own order: the number register first,
     #                 then arguments 1-6
     #   abi           the namespace of its register type, conversions and
-    #                 address bridges (lib/abi/x86_64.bot, lib/abi/aarch64.bot)
+    #                 address bridges (stdlib/abi/x86_64.bot, stdlib/abi/aarch64.bot)
     #   registerType  the struct declaration identity of one register word
     #   op            the NIR op it lowers to (native/src/nir.rs)
     #   instruction   the machine instruction its boundary executes
     #   label         the architecture, as messages name it
     variable transports [dict create \
         x86_64 {
-            native linux::abi::x86_64::syscall
+            native std::linux::abi::x86_64::syscall
             registers {rax rdi rsi rdx r10 r8 r9}
-            abi abi::x86_64
-            registerType abi::x86_64::Register64
+            abi std::abi::x86_64
+            registerType std::abi::x86_64::Register64
             op syscall_linux_x86_64
             instruction syscall
             label x86-64
         } \
         aarch64 {
-            native linux::abi::aarch64::syscall
+            native std::linux::abi::aarch64::syscall
             registers {x8 x0 x1 x2 x3 x4 x5}
-            abi abi::aarch64
-            registerType abi::aarch64::Register64
+            abi std::abi::aarch64
+            registerType std::abi::aarch64::Register64
             op syscall_linux_aarch64
             instruction {svc #0}
             label AArch64
@@ -151,13 +151,13 @@ foreach arch [core::linuxabi::architectures] {
         -impl [list core::linuxabi::syscallImpl $arch] \
         -param-types {struct} -result-type struct -runtime {raw-syscall} \
         -result-shape [list named-struct [core::linuxabi::transport $arch registerType]]
-    # Each transport's namespace (linux::abi::x86_64, linux::abi::aarch64) is
+    # Each transport's namespace (std::linux::abi::x86_64, std::linux::abi::aarch64) is
     # a direct module (DIRECT-MODULES.md): the raw kernel transition is
     # ambient process authority, not yet a capability. A call into it is a
     # direct edge of the calling module, which either mediates it through a
-    # context it defines itself or is declared `direct module` (linux::sys
+    # context it defines itself or is declared `direct module` (std::linux::sys
     # is). The namespace is the smallest module boundary of raw syscall
-    # authority: abi::x86_64's and abi::aarch64's register and address
+    # authority: std::abi::x86_64's and std::abi::aarch64's register and address
     # conversions take no authority by themselves.
     core::native::declareDirectNamespace \
         [core::native::namespaceOf [core::linuxabi::transport $arch native]]

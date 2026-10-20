@@ -178,7 +178,7 @@ test float-type-family {the float family is a table (core/type.tcl): Float64 is 
     list [core::type::floatTypes] [core::type::isFloat Float64] [core::type::isFloat int] \
         [expr {"Float64" in [core::type::scalarKinds]}] [core::type::floatInfo Float64] \
         [lmap op {+ - * / neg < <= > >=} {core::native::exists [core::float::operatorNative Float64 $op]}]
-} -result {Float64 1 0 1 {width 64 precision 53 minExponent -1022 maxExponent 1023 namespace float64} {1 1 1 1 1 1 1 1 1}}
+} -result {Float64 1 0 1 {width 64 precision 53 minExponent -1022 maxExponent 1023 namespace std::float64} {1 1 1 1 1 1 1 1 1}}
 
 # ---------------------------------------------------------------------------
 # Arithmetic, comparisons, equality
@@ -197,12 +197,12 @@ test float-equality-not-coercive {== between a Float64 and an Int is false (diff
 
 test float-runtime-values {operations on values computed at run time (parameters, recursion, loops), every backend agreeing} -body {
     value [string cat \
-        "import list\n" \
+        "import std::list\n" \
         "fn power(x: Float64, n: int) -> Float64 errors NonFiniteFloat:\n" \
         "    if n == 0:\n        1.0\n    else:\n        x * power(x, n - 1)\n" \
         "fn sum(xs: List\[Float64\], i: int, acc: Float64) -> Float64 errors NonFiniteFloat:\n" \
-        "    if i == list::length(xs):\n        acc\n    else:\n" \
-        "        x = list::at(xs, i):\n            on IndexNotFound:\n                0.0\n" \
+        "    if i == std::list::length(xs):\n        acc\n    else:\n" \
+        "        x = std::list::at(xs, i):\n            on IndexNotFound:\n                0.0\n" \
         "        sum(xs, i + 1, acc + x)\n" \
         "fn mean(xs: List\[Float64\]) -> Float64 errors NonFiniteFloat:\n" \
         "    total = loop x in xs:\n        x\n" \
@@ -229,18 +229,18 @@ test float-control-flow-joins {an if of two Float64 branches is a Float64; local
 
 test float-aggregates {Float64 values in Lists, structs, enums' neighbours and MutableVectors: stored, compared and hashed by content on every backend} -body {
     value [string cat \
-        "import list\nimport mutable_vector\n" \
+        "import std::list\nimport std::mutable_vector\n" \
         "struct Point:\n    x: Float64\n    y: Float64\n" \
         "p = Point {x: 1.5, y: -0.25}\n" \
         "q = Point {x: 1.5, y: -0.25}\n" \
-        "v = mutable_vector::from_list(\[0.5, 1.5\])\n" \
+        "v = std::mutable_vector::from_list(\[0.5, 1.5\])\n" \
         "v.push(2.5)\n" \
         "xs = \[1.0, 2.0, 3.0\]\n" \
-        "\[p == q, p.x, list::length(xs), hash(p) == hash(q), hash(1.5) == hash(1.5), hash(1.5) == hash(2.5), v.length(), xs == \[1.0, 2.0, 3.0\]\]\n"]
+        "\[p == q, p.x, std::list::length(xs), hash(p) == hash(q), hash(1.5) == hash(1.5), hash(1.5) == hash(2.5), v.length(), xs == \[1.0, 2.0, 3.0\]\]\n"]
 } -result {[true, 1.5, 3, true, true, false, 3, true]}
 
 test float-list-inference {a List literal of Float64 values is a List[Float64], and an element read recovers Float64} -body {
-    set hir [floatHir "import list\nxs = \[1.0, 2.5\]\nx = list::at(xs, 0):\n    on IndexNotFound:\n        0.0\nx\n"]
+    set hir [floatHir "import std::list\nxs = \[1.0, 2.5\]\nx = std::list::at(xs, 0):\n    on IndexNotFound:\n        0.0\nx\n"]
     join [lmap name {xs x} {hir::types::show [hir::bindingType $hir [hir::lookup $hir [hir::top $hir] $name]]}]
 } -result {List[Float64] Float64}
 
@@ -276,7 +276,7 @@ test float-resolution-default-int {with no floating-point operand an operator is
 test float-resolution-mixed-operands {a Float64 operator with an operand of another kind is a TYPE error where it is written: no implicit conversion, and no cascade} -body {
     list [rejection "x = 1.5\nx + 1\n"] [rejection "x = 2\n1.5 * x\n"] [rejection "1 < 2.0\n"] \
         [rejectionKinds "x = 1.5\nx + 1\n"]
-} -result {{TYPE: the operands of "+" are Float64 and int: a Float64 operation needs Float64 operands, and nothing converts one implicitly (float64::from_int makes an Int a Float64)} {TYPE: the operands of "*" are Float64 and int: a Float64 operation needs Float64 operands, and nothing converts one implicitly (float64::from_int makes an Int a Float64)} {TYPE: the operands of "<" are int and Float64: a Float64 operation needs Float64 operands, and nothing converts one implicitly (float64::from_int makes an Int a Float64)} TYPE}
+} -result {{TYPE: the operands of "+" are Float64 and int: a Float64 operation needs Float64 operands, and nothing converts one implicitly (std::float64::from_int makes an Int a Float64)} {TYPE: the operands of "*" are Float64 and int: a Float64 operation needs Float64 operands, and nothing converts one implicitly (std::float64::from_int makes an Int a Float64)} {TYPE: the operands of "<" are int and Float64: a Float64 operation needs Float64 operands, and nothing converts one implicitly (std::float64::from_int makes an Int a Float64)} TYPE}
 
 test float-no-integer-division {"/" has no Int meaning: a division no floating-point operand selects is a TYPE error; mod and shifts remain the Int tools} -body {
     list [rejection "7 / 2\n"] [rejection "fn d(a, b):\n    a / b\nd(1, 2)\n"] [value "\[mod(7, 2), shift_right(7, 1)\]\n"]
@@ -320,28 +320,28 @@ test float-nonfinite-propagates {a NonFiniteFloat propagates through the functio
 } -result {{[1.0e200, -1.0]} {UNHANDLED-ERROR: this call may produce the declared error "NonFiniteFloat", which is neither handled here nor admitted by the enclosing function's own "errors" declaration}}
 
 test float-nonfinite-decided-at-compile-time {a computation of exactly known operands is decided: a finite result needs no handler, a non-finite one is a compile-time KNOWN-ERROR (handled or not), through locals and exact calls alike -- the decision is the run's own computation} -body {
-    list [value "import float64\nx = 1.5\ny = -2.0\n\[x / y, x * 1.0e300, float64::from_int(3)\]\n"] \
+    list [value "import std::float64\nx = 1.5\ny = -2.0\n\[x / y, x * 1.0e300, std::float64::from_int(3)\]\n"] \
         [lmap text [list "1.0 / 0.0\n" "x = 0.0\n0.0 / x\n" "big = 1.0e308\nbig * 10.0\n" \
                 "r = 1.0 / 0.0:\n    on NonFiniteFloat:\n        0.0\nr\n" \
-                "import float64\nfloat64::from_int(shift_left(1, 1024))\n" \
+                "import std::float64\nstd::float64::from_int(shift_left(1, 1024))\n" \
                 "fn inv(x: Float64) -> Float64 errors NonFiniteFloat:\n    1.0 / x\nr = inv(0.0):\n    on NonFiniteFloat:\n        0.0\nr\n"] {
             regsub { under the facts.*} [rejection $text] {}
         }]
-} -result {{[-0.75, 1.5e300, 3.0]} {{KNOWN-ERROR: this Float64 "/" can never complete normally} {KNOWN-ERROR: this Float64 "/" can never complete normally} {KNOWN-ERROR: this Float64 "*" can never complete normally} {KNOWN-ERROR: this Float64 "/" can never complete normally} {KNOWN-ERROR: this call of "float64::from_int" can never complete normally} {KNOWN-ERROR: this call can never complete normally}}}
+} -result {{[-0.75, 1.5e300, 3.0]} {{KNOWN-ERROR: this Float64 "/" can never complete normally} {KNOWN-ERROR: this Float64 "/" can never complete normally} {KNOWN-ERROR: this Float64 "*" can never complete normally} {KNOWN-ERROR: this Float64 "/" can never complete normally} {KNOWN-ERROR: this call of "std::float64::from_int" can never complete normally} {KNOWN-ERROR: this call can never complete normally}}}
 
 # ---------------------------------------------------------------------------
 # NonFiniteFloat's payload: which non-finite result it was
 
 test float-nonfinite-payload {NonFiniteFloat carries {result: NonFiniteResult}: the infinity of the result's sign, or NotANumber for 0.0 / 0.0 -- for overflow, division by zero, from_int and a native called as a value, on every backend} -body {
-    value [string cat "import float64\n" \
+    value [string cat "import std::float64\n" \
         "fn mul(a: Float64, b: Float64) -> NonFiniteResult:\n    a * b:\n        on NonFiniteFloat {result}:\n            return result\n    NonFiniteResult::NotANumber\n" \
         "fn div(a: Float64, b: Float64) -> NonFiniteResult:\n    a / b:\n        on NonFiniteFloat {result}:\n            return result\n    NonFiniteResult::NotANumber\n" \
         "fn add(a: Float64, b: Float64) -> NonFiniteResult:\n    a + b:\n        on NonFiniteFloat {result}:\n            return result\n    NonFiniteResult::NotANumber\n" \
         "fn sub(a: Float64, b: Float64) -> NonFiniteResult:\n    a - b:\n        on NonFiniteFloat {result}:\n            return result\n    NonFiniteResult::NotANumber\n" \
         "fn converted(n: int) -> NonFiniteResult:\n" \
-        "    float64::from_int(n):\n        on NonFiniteFloat {result}:\n            return result\n" \
+        "    std::float64::from_int(n):\n        on NonFiniteFloat {result}:\n            return result\n" \
         "    NonFiniteResult::NotANumber\n" \
-        "conv = float64::from_int\n" \
+        "conv = std::float64::from_int\n" \
         "fn by_value(n: int) -> NonFiniteResult:\n" \
         "    conv(n):\n        on NonFiniteFloat {result}:\n            return result\n" \
         "    NonFiniteResult::NotANumber\n" \
@@ -415,18 +415,18 @@ test float-decided-equals-run {a decided operation and the same operation at run
         "fn div(a: Float64, b: Float64) -> Float64:\n    a / b:\n        on NonFiniteFloat:\n            0.0\n" \
         "fn add(a: Float64, b: Float64) -> Float64:\n    a + b:\n        on NonFiniteFloat:\n            0.0\n" \
         "fn sub(a: Float64, b: Float64) -> Float64:\n    a - b:\n        on NonFiniteFloat:\n            0.0\n"]
-    set constant [value "import float64\n\[[join $decided {, }]\]\n"]
+    set constant [value "import std::float64\n\[[join $decided {, }]\]\n"]
     set computed [value "$functions\[[join $run {, }]\]\n"]
     list [expr {$constant eq $computed}] [llength [split $constant ,]]
 } -result {1 20}
 
 # ---------------------------------------------------------------------------
-# Conversions (float64::from_int, float64::truncate)
+# Conversions (std::float64::from_int, std::float64::truncate)
 
-test float-conversions {float64::from_int is the nearest Float64 (ties to even), NonFiniteFloat beyond the range; float64::truncate drops the fraction toward zero, exactly} -body {
-    value [string cat "import float64\n" \
-        "fn f(n: int) -> Float64:\n    float64::from_int(n):\n        on NonFiniteFloat:\n            -1.0\n" \
-        "fn t(x: Float64) -> int:\n    float64::truncate(x)\n" \
+test float-conversions {std::float64::from_int is the nearest Float64 (ties to even), NonFiniteFloat beyond the range; std::float64::truncate drops the fraction toward zero, exactly} -body {
+    value [string cat "import std::float64\n" \
+        "fn f(n: int) -> Float64:\n    std::float64::from_int(n):\n        on NonFiniteFloat:\n            -1.0\n" \
+        "fn t(x: Float64) -> int:\n    std::float64::truncate(x)\n" \
         "\[f(0), f(-7), f(9007199254740993), f(9007199254740995), f(123456789012345678901234567890), f(shift_left(1, 1024)), f(shift_left(1, 1023)),\n" \
         " t(2.7), t(-2.7), t(0.5), t(1.0e20), t(-1.0e300) == 0 - shift_left(1, 0) * 0 - t(1.0e300)\]\n"]
 } -result {[0.0, -7.0, 9007199254740992.0, 9007199254740996.0, 1.2345678901234568e29, -1.0, 8.98846567431158e307, 2, -2, 0, 100000000000000000000, true]}
@@ -444,7 +444,7 @@ test float-from-int-parity {from_int of large Ints rounds identically on the Tcl
     }
     # Values at a tie: 2^53 + 1 and 2^60 + 2^7 round to even.
     lappend ints [expr {2**53 + 1}] [expr {2**60 + 2**7}] [expr {2**60 + 3 * 2**7}]
-    set text "import float64\nfn f(n: int) -> Float64:\n    float64::from_int(n):\n        on NonFiniteFloat:\n            -1.0\n\[[join [lmap n $ints {string cat "f($n)"}] {, }]\]\n"
+    set text "import std::float64\nfn f(n: int) -> Float64:\n    std::float64::from_int(n):\n        on NonFiniteFloat:\n            -1.0\n\[[join [lmap n $ints {string cat "f($n)"}] {, }]\]\n"
     set outcome [agree $text]
     list [lindex $outcome 0] [llength [split [lindex $outcome 1] ,]]
 } -result {value 83}
@@ -540,12 +540,12 @@ test float-native-executable {a standalone executable computes, decides and prin
     set dir [makeDirectory float-exe-[pid]]
     set path [file join $dir prog.bot]
     set channel [open $path w]
-    puts -nonewline $channel [string cat "import float64\n" \
+    puts -nonewline $channel [string cat "import std::float64\n" \
         "fn grow(x: Float64, n: int) -> Float64 errors NonFiniteFloat:\n    if n == 0:\n        x\n    else:\n        grow(x * 10.0, n - 1)\n" \
         "a = grow(1.5, 300):\n    on NonFiniteFloat:\n        -1.0\n" \
         "b = grow(1.5, 400):\n    on NonFiniteFloat:\n        -1.0\n" \
         "fn kind(x: Float64) -> NonFiniteResult:\n    x * 1.0e300:\n        on NonFiniteFloat {result}:\n            return result\n    NonFiniteResult::NotANumber\n" \
-        "\[a, b, 0.1 + 0.2, float64::truncate(a) > 0, kind(-1.0e300)\]\n"]
+        "\[a, b, 0.1 + 0.2, std::float64::truncate(a) > 0, kind(-1.0e300)\]\n"]
     close $channel
     set hir [surface::readProgramFile $path -warnings off -cache ""]
     set exe [native::executable $hir [file join $dir prog]]
@@ -555,7 +555,7 @@ test float-native-executable {a standalone executable computes, decides and prin
 } -result {1 {[1.500000000000003e300, -1.0, 0.30000000000000004, true, NonFiniteResult::NegativeInfinity]}}
 
 # ---------------------------------------------------------------------------
-# C double (ffi::c::Double)
+# C double (std::ffi::c::Double)
 
 # The fixture builds wherever C calls run (nativeCCalls: Linux x86-64 and
 # AArch64, macOS AArch64, MACOS-AARCH64-MILESTONE-6.md), so the double tests
@@ -574,20 +574,20 @@ if {[testConstraint cCompiler] && [testConstraint nativeCCalls] && [testConstrai
 testConstraint floatFixture [expr {$::floatFixtureDir ne "" && [testConstraint rustcLinker]}]
 
 set ::floatBindings [string cat \
-    "import ffi::c\n" \
+    "import std::ffi::c\n" \
     "extern c library \"botlish_float_fixture\"\n" \
-    "extern c fn twice named \"bff_twice\"(x: ffi::c::Double) -> ffi::c::Double\n" \
-    "extern c fn add3 named \"bff_add3\"(a: ffi::c::Double, b: ffi::c::Double, c: ffi::c::Double) -> ffi::c::Double\n" \
-    "extern c fn mix named \"bff_mix\"(n: ffi::c::Int, x: ffi::c::Double, k: ffi::c::Long, y: ffi::c::Double) -> ffi::c::Double\n" \
-    "extern c fn sum10 named \"bff_sum10\"(a: ffi::c::Double, b: ffi::c::Double, c: ffi::c::Double, d: ffi::c::Double, e: ffi::c::Double, f: ffi::c::Double, g: ffi::c::Double, h: ffi::c::Double, i: ffi::c::Double, j: ffi::c::Double) -> ffi::c::Double\n" \
-    "extern c fn positive_infinity named \"bff_positive_infinity\"() -> ffi::c::Double\n" \
-    "extern c fn negative_infinity named \"bff_negative_infinity\"() -> ffi::c::Double\n" \
-    "extern c fn not_a_number named \"bff_not_a_number\"() -> ffi::c::Double\n" \
-    "extern c fn negative_zero named \"bff_negative_zero\"() -> ffi::c::Double\n" \
-    "extern c fn largest named \"bff_largest\"() -> ffi::c::Double\n" \
-    "extern c fn smallest named \"bff_smallest\"() -> ffi::c::Double\n" \
-    "extern c fn signbit named \"bff_signbit\"(x: ffi::c::Double) -> ffi::c::Int\n" \
-    "extern c fn bits_high named \"bff_bits_high\"(x: ffi::c::Double) -> ffi::c::LongLong\n"]
+    "extern c fn twice named \"bff_twice\"(x: std::ffi::c::Double) -> std::ffi::c::Double\n" \
+    "extern c fn add3 named \"bff_add3\"(a: std::ffi::c::Double, b: std::ffi::c::Double, c: std::ffi::c::Double) -> std::ffi::c::Double\n" \
+    "extern c fn mix named \"bff_mix\"(n: std::ffi::c::Int, x: std::ffi::c::Double, k: std::ffi::c::Long, y: std::ffi::c::Double) -> std::ffi::c::Double\n" \
+    "extern c fn sum10 named \"bff_sum10\"(a: std::ffi::c::Double, b: std::ffi::c::Double, c: std::ffi::c::Double, d: std::ffi::c::Double, e: std::ffi::c::Double, f: std::ffi::c::Double, g: std::ffi::c::Double, h: std::ffi::c::Double, i: std::ffi::c::Double, j: std::ffi::c::Double) -> std::ffi::c::Double\n" \
+    "extern c fn positive_infinity named \"bff_positive_infinity\"() -> std::ffi::c::Double\n" \
+    "extern c fn negative_infinity named \"bff_negative_infinity\"() -> std::ffi::c::Double\n" \
+    "extern c fn not_a_number named \"bff_not_a_number\"() -> std::ffi::c::Double\n" \
+    "extern c fn negative_zero named \"bff_negative_zero\"() -> std::ffi::c::Double\n" \
+    "extern c fn largest named \"bff_largest\"() -> std::ffi::c::Double\n" \
+    "extern c fn smallest named \"bff_smallest\"() -> std::ffi::c::Double\n" \
+    "extern c fn signbit named \"bff_signbit\"(x: std::ffi::c::Double) -> std::ffi::c::Int\n" \
+    "extern c fn bits_high named \"bff_bits_high\"(x: std::ffi::c::Double) -> std::ffi::c::LongLong\n"]
 
 # The value of the C double program MAIN (after the bindings) on BACKEND.
 proc floatCValue {main backend} {
@@ -598,7 +598,7 @@ proc floatCValue {main backend} {
     return [lrange $outcome 0 1]
 }
 
-test float-c-double-type {ffi::c::Double is Float64 under its C ABI name: its values are Float64s, its ABI class f64, and a C function returning one declares NonFiniteFloat} -body {
+test float-c-double-type {std::ffi::c::Double is Float64 under its C ABI name: its values are Float64s, its ABI class f64, and a C function returning one declares NonFiniteFloat} -body {
     set hir [surface::compile "$::floatBindings\nx = twice(1.5):\n    on NonFiniteFloat:\n        0.0\nx\n" t.bot -warnings off]
     set record [dict get [hir::foreign::declarations $hir] twice]
     list [hir::types::show [hir::bindingType $hir [hir::lookup $hir [hir::top $hir] x]]] [dict get $record abi] \
@@ -649,7 +649,7 @@ test float-c-double-tcl-backends {the Tcl backends refuse a C call at run time, 
 test float-target-independent {the float family and its operations are the same on every compilation target: compiling for each target of the C ABI table gives the same HIR types and the same decided values} -body {
     set results {}
     foreach target [core::cabi::targetNames] {
-        set hir [surface::compile "import ffi::c\nfn f(x: ffi::c::Double) -> Float64 errors NonFiniteFloat:\n    x * 2.0\nr = f(1.5):\n    on NonFiniteFloat:\n        0.0\n\[r, 1.0 / 3.0\]\n" t.bot -warnings off -target $target]
+        set hir [surface::compile "import std::ffi::c\nfn f(x: std::ffi::c::Double) -> Float64 errors NonFiniteFloat:\n    x * 2.0\nr = f(1.5):\n    on NonFiniteFloat:\n        0.0\n\[r, 1.0 / 3.0\]\n" t.bot -warnings off -target $target]
         lappend results [lindex [outcomeUnderHir interp $hir] 1]
     }
     lsort -unique $results

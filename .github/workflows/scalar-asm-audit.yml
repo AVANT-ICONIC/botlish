@@ -21,7 +21,7 @@ on:
       - "hir/**"
       - "compiler/**"
       - "surface/**"
-      - "lib/**"
+      - "stdlib/**"
       - "native/lower.tcl"
       - "native/native.tcl"
       - "native/generate-scalar-audit.tcl"

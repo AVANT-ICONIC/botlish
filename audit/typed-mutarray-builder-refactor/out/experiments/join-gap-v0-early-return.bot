@@ -1,13 +1,13 @@
-import list
-import mutable_array
+import std::list
+import std::mutable_array
 
 fn g(storage, length, value):
-    if length < mutable_array::capacity(storage):
+    if length < std::mutable_array::capacity(storage):
         return storage
 
-    fresh = mutable_array::create(length * 2 + 1, value)
-    mutable_array::copy(fresh, 0, storage, 0, length)
+    fresh = std::mutable_array::create(length * 2 + 1, value)
+    std::mutable_array::copy(fresh, 0, storage, 0, length)
     fresh
 
-s = mutable_array::create(1, "a")
-list::length(mutable_array::freeze(g(s, 1, "b"), 1))
+s = std::mutable_array::create(1, "a")
+std::list::length(std::mutable_array::freeze(g(s, 1, "b"), 1))

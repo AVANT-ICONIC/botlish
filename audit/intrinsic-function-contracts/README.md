@@ -8,7 +8,7 @@ backend built (`cargo build --release --manifest-path native/Cargo.toml`).
 
 | tool | output | what |
 |---|---|---|
-| `tools/census.tcl OUTDIR` | `out/census.txt`, `out/params.txt` | corpus-wide body-inference census: every parameter of every function of `bench/*.bot`, `examples/stdlib/*.bot`, `examples/surface/*.bot` and the `lib/*.bot` modules they load (each definition once), with its inferred contract and provenance (spec item 58) |
+| `tools/census.tcl OUTDIR` | `out/census.txt`, `out/params.txt` | corpus-wide body-inference census: every parameter of every function of `bench/*.bot`, `examples/stdlib/*.bot`, `examples/surface/*.bot` and the `stdlib/*.bot` modules they load (each definition once), with its inferred contract and provenance (spec item 58) |
 | `tools/callsites.tcl OUTFILE` | `out/callsites-{before,after}.txt` | every compiled `callvalue` site of the canonical benchmarks (relifted pipeline, as `bench/bench.tcl` compiles), callee type in the source HIR and in the used instance, classified Fn / bare block/native / any (items 49-50, 87) |
 | `tools/keyfunctions.tcl OUTFILE` | `out/keyfunctions-{before,after}.txt` | intrinsic signature, exact Block type and structural supertype, and every used instance (label, AOT status and blockers, seeded parameters, result) of `scan_while`, `local_char?`, `label_char?`, ... (items 39, 52-55) |
 | `tools/nir.tcl OUTDIR` | (scratch) | instance labels + full NIR of every canonical benchmark, for before/after diffs (items 62, 76) |

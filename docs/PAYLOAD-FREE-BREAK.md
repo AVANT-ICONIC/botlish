@@ -293,12 +293,12 @@ the correct, innermost position regardless of nesting depth.
 
 ## Corpus blast-radius search (item 45)
 
-Searched `lib/`, `examples/`, `bench/`, `tests/` for every `break VALUE`
+Searched `stdlib/`, `examples/`, `bench/`, `tests/` for every `break VALUE`
 occurrence before any production edit. Classified:
 
 - **Real, non-test Botlish source (`.bot`)**: `examples/surface/07-loop-
   break.bot` (`break 42`), `examples/surface/08-return.bot` (`break b`).
-  Both migrated (see "Real-source migration" below). `lib/*.bot` and
+  Both migrated (see "Real-source migration" below). `stdlib/*.bot` and
   `bench/*.bot` contain zero `break` occurrences of any kind.
 - **Raw core-IR/HIR text below the surface parser, non-test**:
   `examples/02-loop-break.ir`, `examples/hir/05-control.hir`/`.ir`, and
@@ -423,7 +423,7 @@ rather than as removed code.
 
 ## Canonical controls (item 62)
 
-`fib`, `loop-count`, `sum-refined`, `refined-checks` (and `web::emailish?`'s
+`fib`, `loop-count`, `sum-refined`, `refined-checks` (and `std::web::emailish?`'s
 own `scan_while`) are untouched by every change in this milestone: no
 production logic changed at all (only documentation and the surface
 parser, which none of these four benchmarks' own generated programs ever
@@ -436,7 +436,7 @@ its own stated purpose.
 
 ## List stdlib controls (item 63)
 
-`list::any?`/`all?`/`none?`/`find` (`lib/list.bot`) contain no `break` of
+`std::list::any?`/`all?`/`none?`/`find` (`stdlib/list.bot`) contain no `break` of
 any kind (confirmed by the corpus search above) and were not touched. Their
 four `callvalue` sites are unaffected.
 
@@ -618,17 +618,17 @@ dogfooding workloads this milestone was meant to precede.
     `08-return.bot`), both migrated. Three real, non-test raw core-IR/HIR
     uses (`examples/02-loop-break.ir`, `examples/hir/05-control.hir`/`.ir`,
     `bench/loop-count.ir`), all deliberately left unchanged (two-tier
-    design). `lib/*.bot` and `bench/*.bot`: zero.
+    design). `stdlib/*.bot` and `bench/*.bot`: zero.
 31. **Which test cases depended on the old behavior?** See "Test
     migration" above for the full, itemized list (10 test files touched;
     ~20 individual test cases rewritten or replaced).
 32. **Were any benchmark/source programs changed?** No benchmark
     (`bench/*.ir`, `bench/*.bot`) was changed. Two documentation/example
     programs (`examples/surface/07-loop-break.bot`, `08-return.bot`) were.
-33. **Are `list::any?`/`all?`/`none?`/`find` unchanged?** Yes, byte-for-byte
+33. **Are `std::list::any?`/`all?`/`none?`/`find` unchanged?** Yes, byte-for-byte
     (no `break` of any kind in their source).
 34. **Are the existing `scan_while` and four stdlib `callvalue` sites
-    unchanged?** Yes -- `web::emailish?`'s `scan_while` was never touched,
+    unchanged?** Yes -- `std::web::emailish?`'s `scan_while` was never touched,
     and this milestone made no change anywhere near a `callvalue` site.
 
 ## Stop conditions actually triggered

@@ -303,8 +303,8 @@ proc hir::modulebinding::ImmutableExpr {hir e factsVar activeVar} {
             # below), just with the element binding's own fact seeded from
             # each of the iterable's own item proofs in turn: this is the
             # one general rule that lets an exact, context-free call like
-            # `byte::set(['-', '.', '_', '~'])` prove retainable, without
-            # any byte::set-specific code here (see BYTE-SET.md).
+            # `std::byte::set(['-', '.', '_', '~'])` prove retainable, without
+            # any std::byte::set-specific code here (see BYTE-SET.md).
             set iterProof [ImmutableExpr $hir [dict get $node iterable] facts active]
             if {[lindex $iterProof 0] ne "ok"} {
                 return $iterProof
@@ -338,7 +338,7 @@ proc hir::modulebinding::ImmutableExpr {hir e factsVar activeVar} {
             # lives (the `handle` case below). `diverge` lets a sibling
             # branch's own proof stand on its own (MergeDivergentProofs)
             # instead of forcing every transitively-reachable `fail` inside
-            # an inlined callee body (e.g. byte::from_int's own) to itself
+            # an inlined callee body (e.g. std::byte::from_int's own) to itself
             # carry a retainable value, which it never can by construction.
             # hir/errorsets.tcl has already proven, completely separately,
             # that every `fail` this pass encounters is legitimately
@@ -356,7 +356,7 @@ proc hir::modulebinding::ImmutableExpr {hir e factsVar activeVar} {
             # diverges (its own body ends in a `fail`, e.g. re-raising a
             # partially-handled error) contributes no value of its own and
             # is dropped from the fold (MergeDivergentProofs) -- e.g. what
-            # lets `byte::set([...]): on byte::BelowRange: {} on byte::AboveRange: {}`
+            # lets `std::byte::set([...]): on std::byte::BelowRange: {} on std::byte::AboveRange: {}`
             # retain as a module binding (BYTE-SET.md's own listloop case
             # above is the identical idea one level up: prove every
             # reachable possibility, never pick one arbitrarily).
@@ -432,25 +432,25 @@ proc hir::modulebinding::ImmutableNative {hir symbol proofs} {
         list {
             return [list ok [list list $proofs]]
         }
-        list::append {
+        std::list::append {
             set sourceProof [lindex $proofs 0]
             if {[lindex $sourceProof 0] ne "list"} {
-                return {bad unknown "list::append source List is not structurally known"}
+                return {bad unknown "std::list::append source List is not structurally known"}
             }
             return [list ok [list list [concat [lindex $sourceProof 1] [lindex $proofs 1]]]]
         }
-        immutable_set::from_list {
+        std::immutable_set::from_list {
             # MINIMAL-IMMUTABLE-SET.md item 36: the same structural-proof
-            # pattern list::append uses above -- immutable_set::from_list's
+            # pattern std::list::append uses above -- std::immutable_set::from_list's
             # source List must itself be structurally known (built from
-            # `list`/`list::append`, not e.g. a mutable-array freeze whose
+            # `list`/`std::list::append`, not e.g. a mutable-array freeze whose
             # proof this pass cannot see through) for the resulting
             # ImmutableSet to be a retainable module value. Construction's
             # own dedup is a runtime detail, not part of this static proof:
             # the element proofs it retains are the source List's, verbatim.
             set sourceProof [lindex $proofs 0]
             if {[lindex $sourceProof 0] ne "list"} {
-                return {bad unknown "immutable_set::from_list source List is not structurally known"}
+                return {bad unknown "std::immutable_set::from_list source List is not structurally known"}
             }
             return [list ok [list set [lindex $sourceProof 1]]]
         }

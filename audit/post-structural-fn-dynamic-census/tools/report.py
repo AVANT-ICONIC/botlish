@@ -22,11 +22,11 @@ def targetlabel(p,t):
     if t.startswith('Native '):return t
     fid=t.split()[1];return 'Block '+block(p,fid)+' ('+functions[p,fid]['name']+')'
 source={
- 'list::any?':'lib/list.bot:61 predicate(x)',
- 'list::all?':'lib/list.bot:67 predicate(x)',
- 'list::none?':'lib/list.bot:73 predicate(x)',
- 'list::find':'lib/list.bot:79 predicate(x)',
- 'scan_while':'lib/web.bot:128 predicate(char_at(i))',
+ 'std::list::any?':'stdlib/list.bot:61 predicate(x)',
+ 'std::list::all?':'stdlib/list.bot:67 predicate(x)',
+ 'std::list::none?':'stdlib/list.bot:73 predicate(x)',
+ 'std::list::find':'stdlib/list.bot:79 predicate(x)',
+ 'scan_while':'stdlib/web.bot:128 predicate(char_at(i))',
  'classify_leading':'bench/source-checks.bot:56 check(c)',
  'classify':'bench/lex-strategy.bot:57 classifier(c)',
 }
@@ -103,7 +103,7 @@ audit is edited. HIR, specialization keys/instances, lowering, NIR, representati
 allocation policy and register allocation retain their production behavior.
 Counter hooks exist only in a scratch native crate, behind `BOTLISH_CENSUS`.
 Cost profiles have these hooks **disabled**. A separate historical oracle control
-patches only a scratch copy of `lib/web.bot`, explicitly outside headline counts.
+patches only a scratch copy of `stdlib/web.bot`, explicitly outside headline counts.
 
 All 30 production/audit-off object disassemblies **including instruction bytes
 and relocations** agree. Instrumented/uninstrumented values, allocations, GC
@@ -166,9 +166,9 @@ profile lookup keys. `e216` in two programs is two compiled sites. Code target
 IDs are also scoped to their program.
 
 Source-metadata observation: assembled surface HIR sometimes reports the entry
-program's filename beside imported library line/node data (e.g. `list::any?`
-at line 61). The source labels above were checked against `lib/list.bot` and
-`lib/web.bot` definitions and module provenance, rather than trusting that
+program's filename beside imported library line/node data (e.g. `std::list::any?`
+at line 61). The source labels above were checked against `stdlib/list.bot` and
+`stdlib/web.bot` definitions and module provenance, rather than trusting that
 filename alone. This pre-existing attribution issue is reported, not fixed.''')
 heading('Per-site results: static facts and dynamic populations')
 table(['ID / program','Source site / instance / expr','Provenance','Full inferred callee type in used instance','Audit-only static code-target set','Calls','Observed target count','Observed targets: counts; objects','Capturing?'],[
@@ -197,7 +197,7 @@ it is not caused by instrumentation.
 Both structural sites have `errors: []`; there are no nonempty structural Fn
 error sets here. The other seven have no structural Fn error contract to count;
 do not describe them as seven fully typed error-free Fn sites. Their recovered
-actual predicates have no declared checked errors. `list::find` itself can
+actual predicates have no declared checked errors. `std::list::find` itself can
 raise `NotFound`, independently of its predicate, and the canonical handlers
 remain intact. No error-bearing control was invented.''')
 heading('HOF ingress: every used instance and actual caller')
@@ -209,7 +209,7 @@ for s in sites:
         a=next(a for a in records if a['kind']=='argument' and a['program']==s['program'] and a['instance']==c['instance'] and a['call']==c['expr'] and a['index']=='1')
         ingress.append([s['sid']+' '+s['label']+'/'+s['instance'],'predicate',instances[s['program'],c['instance']]['label']+'/'+c['instance']+' @'+c['expr'],a['expr']+' : '+a['type'],a['rawtype'] if len(a['rawtype'].split())>1 else 'not exact here; trace outer callers',a['captures'] or 'none / unknown for bare kind',s['targets']])
 table(['Site / contributing instance','Parameter','Actual caller','Full callable argument type','Immediate exact fact','Lexical captures','Offline union'],ingress)
-add('''\n`list::any?` has one used predicate instance with **two actual compiled caller
+add('''\n`std::list::any?` has one used predicate instance with **two actual compiled caller
 instances**, both at source expression e75: `affected?<list, block>` and
 `affected?<any, block>`. Their immediate arguments are bare `block`, not exact.
 Tracing `changed?` through `select_affected`, and through `is_affected?`'s
@@ -220,9 +220,9 @@ capture from `first_affected`, reaches the exact `Block e55` factory result.
 Thus a **single pass using only already-exact immediate ingress** covers 6 HOF
 sites / 8,049 calls; propagating those ingress facts through the closed caller
 chain covers all 7 HOF sites / 8,101 calls. Neither result needs List/if joins.''')
-heading('scan_while and web::emailish? continuity')
+heading('scan_while and std::web::emailish? continuity')
 add('''Two compiled predicate sites represent **one** library source expression,
-`lib/web.bot:128`. Both used instances are `scan_while<generic>` (i20, e216).
+`stdlib/web.bot:128`. Both used instances are `scan_while<generic>` (i20, e216).
 Each has two known callers: local-part scanning passes exact `Block e183`
 (`local_char?`), and TLD scanning passes exact `Native is_tcl_alpha`.
 The static union is two targets in each program. In `refined-checks`, e183 is
@@ -234,7 +234,7 @@ activations and zero predicate calls: its URI workload never calls emailish?.
 The source aggregation is therefore 8,000 calls, **96.1885%** of all callvalue
 executions. The scanner remains dominant. Potential scan-range lengths were
 not separately profiled; inspected elements equal the 8,000 measured predicates.''')
-heading('list::any?, list::all?, list::none? and list::find; early exit')
+heading('std::list::any?, std::list::all?, std::list::none? and std::list::find; early exit')
 table(['Helper / program','Used predicate instances','Static sites','Helper activations','Potential elements','Inspected / predicate calls','Static and observed set'],[
 ['any? / test-selection',1,1,31,54,52,'Block e55, capturing'],
 ['all? / lex-strategy',1,1,8,66,38,'Native is_tcl_alnum'],
@@ -437,7 +437,7 @@ add(f'\nGenerated JIT machine bytes (direct bodies plus generic entries): '
 heading('Singleton-only, HOF-ingress-only, local-LUB-only and combined ceilings')
 table(['Hypothetical scope','Sites','Executions','Execution coverage','Current attributable machinery Ir (not net savings)'],[
 ['Provable singleton only',5,101,pct(101,N),sum(s['machinery'] for s in sites if s['k']==1)],
-['HOF immediate already-exact caller facts only',6,8049,pct(8049,N),sum(s['machinery'] for s in sites if s['category']=='HOF parameter' and s['name']!='list::any?')],
+['HOF immediate already-exact caller facts only',6,8049,pct(8049,N),sum(s['machinery'] for s in sites if s['category']=='HOF parameter' and s['name']!='std::list::any?')],
 ['HOF ingress through known caller chain',7,8101,pct(8101,N),sum(s['machinery'] for s in sites if s['category']=='HOF parameter')],
 ['Local Fn joins only (List + if/return-result)',2,216,pct(216,N),sum(s['machinery'] for s in sites if s['category']!='HOF parameter')],
 ['Union of HOF ingress and local joins',9,N,'100%',401467],['Intersection / double-counted sites',0,0,'0%',0]])

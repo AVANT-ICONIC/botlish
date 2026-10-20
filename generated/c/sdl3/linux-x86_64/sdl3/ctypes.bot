@@ -4,7 +4,7 @@
 # C tag a bound signature points to (never its fields), and the converters
 # that give its constants their C types (C-BINDGEN.md, "Opaque types",
 # "Constants").
-import ffi::c
+import std::ffi::c
 
 # struct SDL_AssertData (include/SDL3/SDL_assert.h), a complete C type whose layout is blocked (layouts.tsv)
 opaque struct SDL_AssertData:
@@ -415,37 +415,37 @@ opaque struct XEvent:
     tag: unit
 
 # A constant of C int.
-fn c_int(value: ffi::c::Int) -> ffi::c::Int:
+fn c_int(value: std::ffi::c::Int) -> std::ffi::c::Int:
     value
 
 # A constant of C long.
-fn c_long(value: ffi::c::Long) -> ffi::c::Long:
+fn c_long(value: std::ffi::c::Long) -> std::ffi::c::Long:
     value
 
 # A constant of C long long.
-fn c_long_long(value: ffi::c::LongLong) -> ffi::c::LongLong:
+fn c_long_long(value: std::ffi::c::LongLong) -> std::ffi::c::LongLong:
     value
 
 # A constant of C signed char.
-fn c_schar(value: ffi::c::SChar) -> ffi::c::SChar:
+fn c_schar(value: std::ffi::c::SChar) -> std::ffi::c::SChar:
     value
 
 # A constant of C short.
-fn c_short(value: ffi::c::Short) -> ffi::c::Short:
+fn c_short(value: std::ffi::c::Short) -> std::ffi::c::Short:
     value
 
 # A constant of C unsigned char.
-fn c_uchar(value: ffi::c::UChar) -> ffi::c::UChar:
+fn c_uchar(value: std::ffi::c::UChar) -> std::ffi::c::UChar:
     value
 
 # A constant of C unsigned int.
-fn c_uint(value: ffi::c::UInt) -> ffi::c::UInt:
+fn c_uint(value: std::ffi::c::UInt) -> std::ffi::c::UInt:
     value
 
 # A constant of C unsigned long.
-fn c_ulong(value: ffi::c::ULong) -> ffi::c::ULong:
+fn c_ulong(value: std::ffi::c::ULong) -> std::ffi::c::ULong:
     value
 
 # A constant of C unsigned short.
-fn c_ushort(value: ffi::c::UShort) -> ffi::c::UShort:
+fn c_ushort(value: std::ffi::c::UShort) -> std::ffi::c::UShort:
     value

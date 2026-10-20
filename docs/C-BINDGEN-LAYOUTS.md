@@ -34,8 +34,8 @@ a raw Win32 binding generated on Linux from MinGW-w64's headers.
 > must not become one.
 
 Nothing in the compiler changed for this: a generated layout is source an
-author could have written, compiled, viewed (`binary::native::view`), edited
-(`binary::native::edit`) and written into byte storage (`binary::write`)
+author could have written, compiled, viewed (`std::binary::native::view`), edited
+(`std::binary::native::edit`) and written into byte storage (`std::binary::write`)
 by the ordinary machinery of NATIVE-LAYOUT-VIEWS.md and
 NATIVE-LAYOUT-WRITES.md. The layout language is unchanged.
 
@@ -46,19 +46,19 @@ NATIVE-LAYOUT-WRITES.md. The layout language is unchanged.
 layout SYSTEMTIME:
     size 16
     align 2
-    field wYear: ffi::c::UShort at 0           # WORD wYear
-    field wMonth: ffi::c::UShort at 2          # WORD wMonth
+    field wYear: std::ffi::c::UShort at 0           # WORD wYear
+    field wMonth: std::ffi::c::UShort at 2          # WORD wMonth
     ...
-    field wMilliseconds: ffi::c::UShort at 14  # WORD wMilliseconds
+    field wMilliseconds: std::ffi::c::UShort at 14  # WORD wMilliseconds
 
 # struct _PROCESS_INFORMATION, typedef PROCESS_INFORMATION (processthreadsapi.h:96): sizeof 24, _Alignof 8
 layout PROCESS_INFORMATION:
     size 24
     align 8
-    field hProcess: ffi::c::Ptr[ffi::c::Void] at 0  # HANDLE hProcess
-    field hThread: ffi::c::Ptr[ffi::c::Void] at 8   # HANDLE hThread
-    field dwProcessId: ffi::c::ULong at 16          # DWORD dwProcessId
-    field dwThreadId: ffi::c::ULong at 20           # DWORD dwThreadId
+    field hProcess: std::ffi::c::Ptr[std::ffi::c::Void] at 0  # HANDLE hProcess
+    field hThread: std::ffi::c::Ptr[std::ffi::c::Void] at 8   # HANDLE hThread
+    field dwProcessId: std::ffi::c::ULong at 16          # DWORD dwProcessId
+    field dwThreadId: std::ffi::c::ULong at 20           # DWORD dwThreadId
 ```
 
 ## Contents
@@ -180,8 +180,8 @@ opaque struct SYSTEMTIME:
     tag: unit
 ```
 
-A signature keeps `ffi::c::Ptr[win32::ctypes::SYSTEMTIME]`; a program views
-the memory with `binary::native::view(win32::layouts::SYSTEMTIME, p)`. The
+A signature keeps `std::ffi::c::Ptr[win32::ctypes::SYSTEMTIME]`; a program views
+the memory with `std::binary::native::view(win32::layouts::SYSTEMTIME, p)`. The
 layout is not the identity's definition and the identity is not a layout's:
 Botlish has no way to say "this opaque type has that layout" and this
 milestone adds none (NATIVE-LAYOUT-VIEWS.md: `NativeView[L]` is the address
@@ -190,11 +190,11 @@ word of any data pointer). The ctypes comment now names the layout (or
 so a reader finds it.
 
 A pointer field keeps its pointee's identity: `bgf_node *next` is
-`ffi::c::Ptr[bgf::ctypes::bgf_node]`, never `Ptr[Void]`; a pointer to a
+`std::ffi::c::Ptr[bgf::ctypes::bgf_node]`, never `Ptr[Void]`; a pointer to a
 record whose layout is blocked, or to an incomplete one, is an ordinary
 typed pointer and blocks nothing (`layout-pointer-blocks` is a mutant).
 Function-pointer fields use the existing callback mapping
-(`ffi::c::FnPtr[Fn{...}]`), its own blockers included (`unsupported-pointer`:
+(`std::ffi::c::FnPtr[Fn{...}]`), its own blockers included (`unsupported-pointer`:
 TclStubs holds variadic function pointers, `tcl_Panic` among them).
 
 ## 4. Representable subset
@@ -203,7 +203,7 @@ A record is `layout-direct` when it is complete and every member is one of:
 
 * a C integer scalar: `char` .. `unsigned long long`, an integer typedef or
   an enum, the scalar the binding model's ABI probes confirm
-  (`ffi::c::Int`, `ffi::c::ULong`, ...: target widths);
+  (`std::ffi::c::Int`, `std::ffi::c::ULong`, ...: target widths);
 * a data or function pointer of the existing pointer mapping;
 * a record with an emitted layout, nested by value (its fields designated
   `L.inner.x`).
@@ -226,7 +226,7 @@ report "Layout blockers"):
 | `anonymous-overlay` | an anonymous union member (its members overlap the record's) | |
 | `bitfield` | `T name : W` | declared type, width |
 | `float`, `double`, `long-double`, `complex` | floating members | |
-| `c-bool` | C `_Bool` (`bool`) | never `ffi::c::Bool` in a layout; never a `U8` |
+| `c-bool` | C `_Bool` (`bool`) | never `std::ffi::c::Bool` in a layout; never a `U8` |
 | `volatile`, `atomic` | qualified members | |
 | `unsupported-field-type`, `unsupported-pointer`, `va-list`, `typedef-abi-mismatch`, `enum-unknown-abi`, `unresolved-typedef` | a type outside the ABI universe, or one the probes do not confirm | the model's own reason |
 | `unsupported-calling-convention` | a function-pointer member with a convention the target does not take as its default | |
@@ -238,7 +238,7 @@ holding a `_Bool`: blocked transitively), `bgf_points4` (`bgf_point
 pts[4]`: an array of a representable record, still an array) and
 `bgf_matrix` (`int m[2][3]`) are blocked, not flattened: no
 array becomes N synthetic fields (`layout-array-flattened` is a mutant).
-Win32's `BOOL` is `int` and binds as `ffi::c::Int`: only the C `_Bool` type
+Win32's `BOOL` is `int` and binds as `std::ffi::c::Int`: only the C `_Bool` type
 is `c-bool`.
 
 ## 5. Probe method
@@ -319,7 +319,7 @@ and a row per member, for later pressure analysis:
 ```
 kind   record           index name  status        offset size align c                type          detail
 record struct bgf_chars -     -     layout-blocked -      20   4     struct bgf_chars -             typedefs=bgf_chars; identity=bgf::ctypes::bgf_chars; header=include/bgf/bgf_records.h:181; blockers=fixed-array: ...; roots=fixed-array; pointed-by=1
-field  struct bgf_chars 0     len   scalar         0      4    -     int len          ffi::c::Int   c=len
+field  struct bgf_chars 0     len   scalar         0      4    -     int len          std::ffi::c::Int   c=len
 field  struct bgf_chars 1     name  fixed-array    4      16   -     char name[16]    -             c=name; element=char char; bounds=16; extent=16; blockers=...
 ```
 
@@ -493,7 +493,7 @@ layouts, `cb-win32-verified-gcc`.)
 records the target, the Tcl backends run it, and the native driver refuses
 to run it on Linux (NATIVE TARGET: `cb-win32-layouts-compile`). Compiled for
 a Linux target the same layouts are wrong, and say so: `field
-dwHighDateTime: ffi::c::ULong at 4` of FILETIME does not fit in 8 bytes when
+dwHighDateTime: std::ffi::c::ULong at 4` of FILETIME does not fit in 8 bytes when
 `unsigned long` is 64 bits (LAYOUT-FIELD-BOUNDS; Compilerpedia
 `concept.c-bindgen-layouts`).
 
@@ -559,7 +559,7 @@ Per binding, records / bound APIs gaining a layout of a record they point to
 | fixed arrays | 3 / 39 | 11 / 6 | 19 / 155 | 249 / 153 | 282 | 353 |
 | unions and anonymous overlays | 0 / 0 | 3 / 1 | 10 / 70 | 113 / 51 | 126 | 122 |
 | float fields | 0 / 0 | 16 / 25 | 0 / 0 | 14 / 8 | 30 | 33 |
-| ffi::c::Bool fields | 0 / 0 | 14 / 3 | 0 / 0 | 0 / 0 | 14 | 3 |
+| std::ffi::c::Bool fields | 0 / 0 | 14 / 3 | 0 / 0 | 0 / 0 | 14 | 3 |
 | bitfields | 0 / 0 | 0 / 0 | 2 / 0 | 13 / 10 | 15 | 10 |
 | flexible array members | 0 / 0 | 0 / 0 | 0 / 0 | 1 / 0 | 1 | 0 |
 | double fields | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 0 | 0 |
@@ -663,15 +663,15 @@ runs it on both native backends:
 
 1. C fills every field of a record with typed stores of distinct values
    (`memcpy` from a typed temporary, so `const` members are written too);
-   Botlish reads every field through `binary::native::view` and compares;
+   Botlish reads every field through `std::binary::native::view` and compares;
 2. Botlish stores distinct values into every field of C memory filled with
-   `0xA5` through `binary::native::edit`/`binary::store` (pointer fields
+   `0xA5` through `std::binary::native::edit`/`std::binary::store` (pointer fields
    with pointers C handed out); C checks every field and that every padding
    byte is still `0xA5`;
-3. Botlish builds the record in `abi::bytes::MutableBytes` with
-   `binary::write` and `binary::write_foreign`; C checks that image, its
-   padding zero; `binary::parse` reads a pointer-free one back;
-4. `binary::layout_length` and `binary::layout_alignment` are C's sizeof and
+3. Botlish builds the record in `std::abi::bytes::MutableBytes` with
+   `std::binary::write` and `std::binary::write_foreign`; C checks that image, its
+   padding zero; `std::binary::parse` reads a pointer-free one back;
+4. `std::binary::layout_length` and `std::binary::layout_alignment` are C's sizeof and
    _Alignof.
 
 Fixture 286 checks, Tcl 329, SDL3 826, BoringSSL 406: no failure on

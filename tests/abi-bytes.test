@@ -1,13 +1,13 @@
-# abi-bytes.test -- abi::bytes::Bytes, the first owned ABI memory value, and the
+# abi-bytes.test -- std::abi::bytes::Bytes, the first owned ABI memory value, and the
 # thin write(2) wrapper built on it (ABI-BYTES.md):
 #
-#   abi::bytes::from_list(values: List[Byte]) -> abi::bytes::Bytes       eager, owned, contiguous
-#   abi::bytes::length(data: abi::bytes::Bytes) -> abi::Usize
-#   abi::x86_64::from_bytes(data: abi::bytes::Bytes) -> abi::x86_64::Register64
+#   std::abi::bytes::from_list(values: List[Byte]) -> std::abi::bytes::Bytes       eager, owned, contiguous
+#   std::abi::bytes::length(data: std::abi::bytes::Bytes) -> std::abi::Usize
+#   std::abi::x86_64::from_bytes(data: std::abi::bytes::Bytes) -> std::abi::x86_64::Register64
 #                                                      the raw address bridge
-#   linux::write(fd: abi::I32, data: abi::bytes::Bytes) -> Int   ONE write(2) syscall
+#   std::linux::write(fd: std::abi::I32, data: std::abi::bytes::Bytes) -> Int   ONE write(2) syscall
 #
-# abi::bytes::Bytes is an opaque struct (OPAQUE-STRUCTS.md) over a byte storage value
+# std::abi::bytes::Bytes is an opaque struct (OPAQUE-STRUCTS.md) over a byte storage value
 # of its own runtime kind. Its pure semantics (construction, length, equality,
 # hash, aliasing, rendering, the opacity and typing diagnostics) are tested on
 # every backend. The address bridge and write are native only (Linux x86-64),
@@ -32,7 +32,7 @@ testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64}}]
 # Linux on x86-64 or AArch64: the native backend's whole runtime (native
 # stack maps, the stack guard, coroutines), and syscalls through the portable
-# wrappers (linux::write, linux::read, linux::io: each architecture's own
+# wrappers (std::linux::write, std::linux::read, std::linux::io: each architecture's own
 # transport, LINUX-SYSCALL-TRANSPORTS.md). linuxX86_64 is for a test that
 # runs the x86-64 transport or reads x86-64 machine code; one that only
 # compiles it (NIR, CLIF) needs no host.
@@ -47,7 +47,7 @@ set scratch [makeDirectory abi-bytes-scratch]
 set programCounter 0
 
 # The HIR of source TEXT, a program file, for C ABI target TARGET ("" a
-# Linux target, linuxTarget: the host's own on Linux -- linux::write is the
+# Linux target, linuxTarget: the host's own on Linux -- std::linux::write is the
 # Linux platform's).
 proc bytesHir {text {strict 1} {target ""}} {
     if {$target eq ""} {
@@ -136,9 +136,9 @@ proc nirFunctionId {nir name} {
 }
 
 # Botlish source of a List[Byte] literal of byte values N... (each
-# `byte::from_int(N)`, which needs no handler for a constant in 0..255).
+# `std::byte::from_int(N)`, which needs no handler for a constant in 0..255).
 proc byteList {args} {
-    return "\[[join [lmap n $args {string cat "byte::from_int($n)"}] {, }]\]"
+    return "\[[join [lmap n $args {string cat "std::byte::from_int($n)"}] {, }]\]"
 }
 
 # The user-facing text (evidence shown, representation NOT revealed) of
@@ -167,126 +167,126 @@ proc shownOn {text} {
 }
 
 # The prelude every pure program starts with.
-set pure {import abi
-import abi::bytes
-import byte
-import str
+set pure {import std::abi
+import std::abi::bytes
+import std::byte
+import std::str
 }
 
 # ---------------------------------------------------------------------------
 # Registration: the privileged surface is small and knows no syscall
 
-test abi-bytes-natives-registered {three natives and no more serve the immutable Bytes: byte_store::from_list and byte_store::byte_count (the owned storage's creation and length) and abi::x86_64::from_bytes (the raw address bridge, the one operation that needs a machine). The bridge is not context-free (an address belongs to one run), allocates nothing, and knows no syscall} -body {
-    set bridge [core::native::metadata abi::x86_64::from_bytes]
-    # (The writable counterpart's own natives -- byte_store::mutable_*, freeze,
+test abi-bytes-natives-registered {three natives and no more serve the immutable Bytes: std::byte_store::from_list and std::byte_store::byte_count (the owned storage's creation and length) and std::abi::x86_64::from_bytes (the raw address bridge, the one operation that needs a machine). The bridge is not context-free (an address belongs to one run), allocates nothing, and knows no syscall} -body {
+    set bridge [core::native::metadata std::abi::x86_64::from_bytes]
+    # (The writable counterpart's own natives -- std::byte_store::mutable_*, freeze,
     # freeze_prefix, from_mutable_bytes -- are pinned by tests/abi-mutable-bytes.test.)
     # The only natives named for writing are the layout writes into a
     # MutableBytes (NATIVE-LAYOUT-WRITES.md): each returns a new value and
     # writes through no address; no native exposes storage or keeps it alive.
-    list [lsort [lsearch -all -inline -not -regexp [lsearch -all -inline [core::native::names] byte_store::*] {mutable|freeze}]] \
-        [dict get [core::native::metadata byte_store::from_list] paramTypes] \
-        [dict get [core::native::metadata byte_store::from_list] contextFree] \
-        [dict get [core::native::metadata byte_store::byte_count] resultRange] \
+    list [lsort [lsearch -all -inline -not -regexp [lsearch -all -inline [core::native::names] std::byte_store::*] {mutable|freeze}]] \
+        [dict get [core::native::metadata std::byte_store::from_list] paramTypes] \
+        [dict get [core::native::metadata std::byte_store::from_list] contextFree] \
+        [dict get [core::native::metadata std::byte_store::byte_count] resultRange] \
         [dict get $bridge arity] [dict get $bridge paramTypes] [dict get $bridge resultShape] \
         [dict get $bridge contextFree] [dict get $bridge runtime] [dict get $bridge errors] \
         [lsearch -all -inline -regexp [core::native::names] {(?i)write|keepalive|pointer|ptr}]
-} -result {{byte_store::byte_count byte_store::from_list} list 1 collection-length 1 struct {named-struct abi::x86_64::Register64} 0 raw-address {} {binary::write binary::write_foreign}}
+} -result {{std::byte_store::byte_count std::byte_store::from_list} list 1 collection-length 1 struct {named-struct std::abi::x86_64::Register64} 0 raw-address {} {std::binary::write std::binary::write_foreign}}
 
-test abi-bytes-declaration {abi::bytes::Bytes is declared in lib/abi/bytes.bot (module abi::bytes, which owns both byte types) as an opaque struct with one hidden field; it is a source-level opaque struct like any other (OPAQUE-STRUCTS.md)} -body {
-    set text [read [open [file join $::projectRoot lib abi bytes.bot]]]
-    set hir [bytesHir "import abi\nimport abi::bytes\nabi::bytes::length(abi::bytes::from_list(\[\])).value"]
+test abi-bytes-declaration {std::abi::bytes::Bytes is declared in stdlib/abi/bytes.bot (module std::abi::bytes, which owns both byte types) as an opaque struct with one hidden field; it is a source-level opaque struct like any other (OPAQUE-STRUCTS.md)} -body {
+    set text [read [open [file join $::projectRoot stdlib abi bytes.bot]]]
+    set hir [bytesHir "import std::abi\nimport std::abi::bytes\nstd::abi::bytes::length(std::abi::bytes::from_list(\[\])).value"]
     list [regexp -line {^opaque struct Bytes:$} $text] [regexp -line {^    storage: any$} $text] \
-        [hir::structs::isOpaque abi::bytes::Bytes] [hir::structs::names abi::bytes::Bytes] [hir::structs::owner abi::bytes::Bytes]
-} -result {1 1 1 storage abi::bytes}
+        [hir::structs::isOpaque std::abi::bytes::Bytes] [hir::structs::names std::abi::bytes::Bytes] [hir::structs::owner std::abi::bytes::Bytes]
+} -result {1 1 1 storage std::abi::bytes}
 
 # ---------------------------------------------------------------------------
 # Construction, length, equality, hash, aliasing: every backend
 
-test abi-bytes-length-empty-and-nonempty {the length is the exact byte count, an abi::Usize: the empty Bytes has length 0, a one-byte Bytes 1, and a payload with an embedded NUL at any position counts it} -body {
-    agree "${::pure}\[abi::bytes::length(abi::bytes::from_list(\[\])).value, abi::bytes::length(abi::bytes::from_list([byteList 7])).value, abi::bytes::length(abi::bytes::from_list([byteList 65 0 66])).value, abi::bytes::length(abi::bytes::from_list([byteList 0])).value, abi::bytes::length(abi::bytes::from_list([byteList 0 0 0 0 0])).value, abi::bytes::length(abi::bytes::from_list([byteList 255 0])).value\]"
+test abi-bytes-length-empty-and-nonempty {the length is the exact byte count, a std::abi::Usize: the empty Bytes has length 0, a one-byte Bytes 1, and a payload with an embedded NUL at any position counts it} -body {
+    agree "${::pure}\[std::abi::bytes::length(std::abi::bytes::from_list(\[\])).value, std::abi::bytes::length(std::abi::bytes::from_list([byteList 7])).value, std::abi::bytes::length(std::abi::bytes::from_list([byteList 65 0 66])).value, std::abi::bytes::length(std::abi::bytes::from_list([byteList 0])).value, std::abi::bytes::length(std::abi::bytes::from_list([byteList 0 0 0 0 0])).value, std::abi::bytes::length(std::abi::bytes::from_list([byteList 255 0])).value\]"
 } -result {[0, 1, 3, 1, 5, 2]}
 
-test abi-bytes-length-is-an-abi-usize {the length accessor returns an abi::Usize: it is accepted where an abi::Usize is required (and needs no re-proof of 0..2^64-1), and is not an abi::U64} -body {
-    list [agree "${::pure}fn takes(n: abi::Usize) -> int:\n    n.value\ntakes(abi::bytes::length(abi::bytes::from_list([byteList 1 2])))"] \
-        [lindex [strictError "${::pure}fn takes(n: abi::U64) -> int:\n    n.value\ntakes(abi::bytes::length(abi::bytes::from_list([byteList 1 2])))"] 0]
+test abi-bytes-length-is-an-abi-usize {the length accessor returns a std::abi::Usize: it is accepted where a std::abi::Usize is required (and needs no re-proof of 0..2^64-1), and is not a std::abi::U64} -body {
+    list [agree "${::pure}fn takes(n: std::abi::Usize) -> int:\n    n.value\ntakes(std::abi::bytes::length(std::abi::bytes::from_list([byteList 1 2])))"] \
+        [lindex [strictError "${::pure}fn takes(n: std::abi::U64) -> int:\n    n.value\ntakes(std::abi::bytes::length(std::abi::bytes::from_list([byteList 1 2])))"] 0]
 } -result {2 TYPE}
 
 test abi-bytes-length-is-bytes-not-scalars {a String's UTF-8 encoding is longer than its scalar count: the Bytes of "h\u00e9llo \u2603 \U0001f600" has the encoded byte count, never the Unicode scalar count} -body {
-    agree "${::pure}s = \"h\u00e9llo \u2603 \U0001f600\"\nd = abi::bytes::from_list(str::encode_utf8(s))\n\[str::length(s), abi::bytes::length(d).value\]"
+    agree "${::pure}s = \"h\u00e9llo \u2603 \U0001f600\"\nd = std::abi::bytes::from_list(std::str::encode_utf8(s))\n\[std::str::length(s), std::abi::bytes::length(d).value\]"
 } -result {[9, 15]}
 
-test abi-bytes-utf8-reuses-the-existing-encoder {the canonical creation is abi::bytes::from_list(str::encode_utf8(s)): the existing encoder's byte List, no second Unicode encoder (lib/abi/bytes.bot has no encoder and no String-specific entry point)} -body {
-    set text [read [open [file join $::projectRoot lib abi bytes.bot]]]
+test abi-bytes-utf8-reuses-the-existing-encoder {the canonical creation is std::abi::bytes::from_list(std::str::encode_utf8(s)): the existing encoder's byte List, no second Unicode encoder (stdlib/abi/bytes.bot has no encoder and no String-specific entry point)} -body {
+    set text [read [open [file join $::projectRoot stdlib abi bytes.bot]]]
     list [regexp -all -line {^[^#\n]*(utf8|encode|decode|str::)} $text] \
-        [agree "${::pure}d = abi::bytes::from_list(str::encode_utf8(\"abc\"))\nd == abi::bytes::from_list([byteList 97 98 99])"]
+        [agree "${::pure}d = std::abi::bytes::from_list(std::str::encode_utf8(\"abc\"))\nd == std::abi::bytes::from_list([byteList 97 98 99])"]
 } -result {0 true}
 
 test abi-bytes-equality-is-by-bytes {equal iff the same bytes: [A, B] == [A, B]; a different last byte, a prefix, a longer Bytes, the empty Bytes and a NUL-padded Bytes are all unequal; equality never depends on how the Bytes were built} -body {
-    agree "${::pure}fn mk(s: str):\n    abi::bytes::from_list(str::encode_utf8(s))\nab = abi::bytes::from_list([byteList 65 66])\n\[ab == abi::bytes::from_list([byteList 65 66]), ab == abi::bytes::from_list([byteList 65 67]), ab == abi::bytes::from_list([byteList 65]), ab == abi::bytes::from_list([byteList 65 66 0]), abi::bytes::from_list(\[\]) == abi::bytes::from_list(\[\]), abi::bytes::from_list(\[\]) == abi::bytes::from_list([byteList 0]), ab == mk(\"AB\"), mk(\"AB\") == mk(\"AB\"), abi::bytes::from_list([byteList 0]) == abi::bytes::from_list([byteList 0 0])\]"
+    agree "${::pure}fn mk(s: str):\n    std::abi::bytes::from_list(std::str::encode_utf8(s))\nab = std::abi::bytes::from_list([byteList 65 66])\n\[ab == std::abi::bytes::from_list([byteList 65 66]), ab == std::abi::bytes::from_list([byteList 65 67]), ab == std::abi::bytes::from_list([byteList 65]), ab == std::abi::bytes::from_list([byteList 65 66 0]), std::abi::bytes::from_list(\[\]) == std::abi::bytes::from_list(\[\]), std::abi::bytes::from_list(\[\]) == std::abi::bytes::from_list([byteList 0]), ab == mk(\"AB\"), mk(\"AB\") == mk(\"AB\"), std::abi::bytes::from_list([byteList 0]) == std::abi::bytes::from_list([byteList 0 0])\]"
 } -result {[true, false, false, false, true, false, true, true, false]}
 
 test abi-bytes-hash-agrees-with-equality {hash is by the bytes and consistent with ==: equal Bytes hash equal (however built), different Bytes hash differently here, and the hash is the same on every backend} -body {
-    agree "${::pure}fn mk(s: str):\n    abi::bytes::from_list(str::encode_utf8(s))\n\[hash(mk(\"AB\")) == hash(abi::bytes::from_list([byteList 65 66])), hash(mk(\"AB\")) == hash(mk(\"AC\")), hash(abi::bytes::from_list(\[\])) == hash(abi::bytes::from_list([byteList 0])), hash(abi::bytes::from_list([byteList 0])) == hash(abi::bytes::from_list([byteList 0 0])), hash(abi::bytes::from_list([byteList 1 2 3])) >= 0\]"
+    agree "${::pure}fn mk(s: str):\n    std::abi::bytes::from_list(std::str::encode_utf8(s))\n\[hash(mk(\"AB\")) == hash(std::abi::bytes::from_list([byteList 65 66])), hash(mk(\"AB\")) == hash(mk(\"AC\")), hash(std::abi::bytes::from_list(\[\])) == hash(std::abi::bytes::from_list([byteList 0])), hash(std::abi::bytes::from_list([byteList 0])) == hash(std::abi::bytes::from_list([byteList 0 0])), hash(std::abi::bytes::from_list([byteList 1 2 3])) >= 0\]"
 } -result {[true, false, false, false, true]}
 
 test abi-bytes-hash-values-agree-across-backends {the hash VALUES (not just their consistency with ==) are identical on the interpreter, the compiler and both native modes: the Tcl hash of a byte storage and the runtime's hash of the same bytes are the same function (the byte count, then the bytes)} -body {
-    set shown [agree "${::pure}fn mk(s: str):\n    abi::bytes::from_list(str::encode_utf8(s))\n\[hash(abi::bytes::from_list(\[\])), hash(abi::bytes::from_list([byteList 0])), hash(abi::bytes::from_list([byteList 255 0 1])), hash(mk(\"h\u00e9llo \u2603\")), hash(abi::bytes::from_list(\[\])) == hash(abi::bytes::from_list(\[\]))\]"]
+    set shown [agree "${::pure}fn mk(s: str):\n    std::abi::bytes::from_list(std::str::encode_utf8(s))\n\[hash(std::abi::bytes::from_list(\[\])), hash(std::abi::bytes::from_list([byteList 0])), hash(std::abi::bytes::from_list([byteList 255 0 1])), hash(mk(\"h\u00e9llo \u2603\")), hash(std::abi::bytes::from_list(\[\])) == hash(std::abi::bytes::from_list(\[\]))\]"]
     list [string match DISAGREE* $shown] [string match ERROR* $shown] [regexp {^\[[0-9]+, [0-9]+, [0-9]+, [0-9]+, true\]$} $shown]
 } -result {0 0 1}
 
 test abi-bytes-byte-sequences-never-collide-with-lists {a Bytes and a List of the same numbers are different kinds: never equal, and a Bytes is not a pointer, a String or an Int} -body {
-    agree "${::pure}b = abi::bytes::from_list([byteList 65])\n\[b == \[65\], b == \"A\", b == 65, \[b\] == \[abi::bytes::from_list([byteList 65])\]\]"
+    agree "${::pure}b = std::abi::bytes::from_list([byteList 65])\n\[b == \[65\], b == \"A\", b == 65, \[b\] == \[std::abi::bytes::from_list([byteList 65])\]\]"
 } -result {[false, false, false, true]}
 
-test abi-bytes-aliasing-is-ordinary-value-use {a = abi::bytes::from_list(...); b = a is ordinary value use (Bytes is not affine or move-only): both names see the same bytes and are equal, and [a, a] holds two equal values whatever the physical sharing} -body {
-    agree "${::pure}fn mk(s: str):\n    abi::bytes::from_list(str::encode_utf8(s))\na = mk(\"alias\")\nb = a\nxs = \[a, a, b\]\n\[a == b, abi::bytes::length(b).value, xs == \[a, b, a\], xs == \[a, a, mk(\"other\")\], xs == \[mk(\"alias\"), mk(\"alias\"), mk(\"alias\")\]\]"
+test abi-bytes-aliasing-is-ordinary-value-use {a = std::abi::bytes::from_list(...); b = a is ordinary value use (Bytes is not affine or move-only): both names see the same bytes and are equal, and [a, a] holds two equal values whatever the physical sharing} -body {
+    agree "${::pure}fn mk(s: str):\n    std::abi::bytes::from_list(std::str::encode_utf8(s))\na = mk(\"alias\")\nb = a\nxs = \[a, a, b\]\n\[a == b, std::abi::bytes::length(b).value, xs == \[a, b, a\], xs == \[a, a, mk(\"other\")\], xs == \[mk(\"alias\"), mk(\"alias\"), mk(\"alias\")\]\]"
 } -result {[true, 5, true, false, true]}
 
 test abi-bytes-in-collections {a Bytes can be stored in a List and an ImmutableSet and compared there: equality is by bytes, so a set deduplicates equal Bytes} -body {
-    agree "${::pure}import immutable_set\nimport list\nfn mk(s: str):\n    abi::bytes::from_list(str::encode_utf8(s))\ns = immutable_set::from_list(\[mk(\"a\"), mk(\"b\"), mk(\"a\")\])\n\[list::length(\[mk(\"a\"), mk(\"a\")\]), immutable_set::contains(s, mk(\"a\")), immutable_set::contains(s, mk(\"c\")), s == immutable_set::from_list(\[mk(\"b\"), mk(\"a\")\])\]"
+    agree "${::pure}import std::immutable_set\nimport std::list\nfn mk(s: str):\n    std::abi::bytes::from_list(std::str::encode_utf8(s))\ns = std::immutable_set::from_list(\[mk(\"a\"), mk(\"b\"), mk(\"a\")\])\n\[std::list::length(\[mk(\"a\"), mk(\"a\")\]), std::immutable_set::contains(s, mk(\"a\")), std::immutable_set::contains(s, mk(\"c\")), s == std::immutable_set::from_list(\[mk(\"b\"), mk(\"a\")\])\]"
 } -result {[2, true, false, true]}
 
 test abi-bytes-eager-construction-is-independent-of-the-source {the Bytes owns its bytes: after construction the source List (or String) is irrelevant. Many Bytes built from one source List are independent values; building from a shorter-lived temporary changes nothing} -body {
-    agree "${::pure}fn mk(n: int):\n    xs = \[byte::from_int(1), byte::from_int(2)\]\n    abi::bytes::from_list(xs)\na = mk(0)\nb = mk(1)\nxs2 = \[byte::from_int(9)\]\nc = abi::bytes::from_list(xs2)\nd = abi::bytes::from_list(xs2)\n\[a == b, c == d, abi::bytes::length(c).value\]"
+    agree "${::pure}fn mk(n: int):\n    xs = \[std::byte::from_int(1), std::byte::from_int(2)\]\n    std::abi::bytes::from_list(xs)\na = mk(0)\nb = mk(1)\nxs2 = \[std::byte::from_int(9)\]\nc = std::abi::bytes::from_list(xs2)\nd = std::abi::bytes::from_list(xs2)\n\[a == b, c == d, std::abi::bytes::length(c).value\]"
 } -result {[true, true, 1]}
 
 test abi-bytes-large-values {a large payload (every byte value, many times over) has the exact length and equality by bytes, on every backend} -body {
-    agree "${::pure}fn pattern(n: int):\n    loop i from 0 to n:\n        byte::from_int(mod(i, 256))\na = abi::bytes::from_list(pattern(3000))\nb = abi::bytes::from_list(pattern(3000))\nc = abi::bytes::from_list(pattern(2999))\n\[abi::bytes::length(a).value, a == b, a == c, hash(a) == hash(b), hash(a) == hash(c)\]"
+    agree "${::pure}fn pattern(n: int):\n    loop i from 0 to n:\n        std::byte::from_int(mod(i, 256))\na = std::abi::bytes::from_list(pattern(3000))\nb = std::abi::bytes::from_list(pattern(3000))\nc = std::abi::bytes::from_list(pattern(2999))\n\[std::abi::bytes::length(a).value, a == b, a == c, hash(a) == hash(b), hash(a) == hash(c)\]"
 } -result {[3000, true, false, true, false]}
 
 # ---------------------------------------------------------------------------
 # Rendering: opaque, nominal, no representation, no address
 
 test abi-bytes-rendering-is-opaque {normal rendering is the nominal opaque form on every backend, alone or inside a List or struct: no address, no allocator metadata, no storage bytes} -body {
-    set text "${::pure}fn mk(s: str):\n    abi::bytes::from_list(str::encode_utf8(s))\nstruct Holder:\n    data: abi::bytes::Bytes\n\[mk(\"secret\"), abi::bytes::from_list(\[\]), Holder {data: mk(\"x\")}\]"
+    set text "${::pure}fn mk(s: str):\n    std::abi::bytes::from_list(std::str::encode_utf8(s))\nstruct Holder:\n    data: std::abi::bytes::Bytes\n\[mk(\"secret\"), std::abi::bytes::from_list(\[\]), Holder {data: mk(\"x\")}\]"
     shownOn $text
-} -result {[<opaque abi::bytes::Bytes>, <opaque abi::bytes::Bytes>, Holder {data: <opaque abi::bytes::Bytes>}]}
+} -result {[<opaque std::abi::bytes::Bytes>, <opaque std::abi::bytes::Bytes>, Holder {data: <opaque std::abi::bytes::Bytes>}]}
 
 test abi-bytes-internal-reveal-shows-the-storage {the explicit internal reveal (the test harness's differential printer) does show the representation, identically on every backend: this is how the backends are compared on every byte} -body {
-    agree "${::pure}\[abi::bytes::from_list([byteList 65 0 255]), abi::bytes::from_list(\[\])\]"
-} -result {[abi::bytes::Bytes {storage: <bytes 3: 4100ff>}, abi::bytes::Bytes {storage: <bytes 0: >}]}
+    agree "${::pure}\[std::abi::bytes::from_list([byteList 65 0 255]), std::abi::bytes::from_list(\[\])\]"
+} -result {[std::abi::bytes::Bytes {storage: <bytes 3: 4100ff>}, std::abi::bytes::Bytes {storage: <bytes 0: >}]}
 
 # ---------------------------------------------------------------------------
 # The opacity boundary: nothing outside module abi sees the storage
 
 test abi-bytes-no-projection-outside-the-owner {x.storage, x.pointer, x.address, x.length and a destructuring are all OPAQUE-REPRESENTATION outside module abi: there is no accessor but the owner's functions} -body {
     lmap field {storage pointer address length capacity is_heap} {
-        lindex [strictError "${::pure}d = abi::bytes::from_list(\[\])\nd.$field"] 0
+        lindex [strictError "${::pure}d = std::abi::bytes::from_list(\[\])\nd.$field"] 0
     }
 } -result {OPAQUE-REPRESENTATION OPAQUE-REPRESENTATION OPAQUE-REPRESENTATION OPAQUE-REPRESENTATION OPAQUE-REPRESENTATION OPAQUE-REPRESENTATION}
 
 test abi-bytes-no-destructuring-outside-the-owner {a destructuring pattern is a projection: also OPAQUE-REPRESENTATION} -body {
-    lindex [strictError "${::pure}d = abi::bytes::from_list(\[\])\n{storage} = d\nstorage"] 0
+    lindex [strictError "${::pure}d = std::abi::bytes::from_list(\[\])\n{storage} = d\nstorage"] 0
 } -result OPAQUE-REPRESENTATION
 
-test abi-bytes-no-construction-outside-the-owner {abi::bytes::Bytes {...} is OPAQUE-CONSTRUCTION anywhere but module abi, even with the storage native's own result, so the byte_store natives cannot manufacture a Bytes} -body {
-    list [lindex [strictError "import abi\nimport abi::bytes\nabi::bytes::Bytes {storage: 1}"] 0] \
-        [lindex [strictError "import abi\nimport abi::bytes\nimport byte_store\nabi::bytes::Bytes {storage: byte_store::from_list(\[\])}"] 0] \
-        [lindex [strictError "import abi\nimport abi::bytes\nabi::bytes::Bytes {}"] 0]
+test abi-bytes-no-construction-outside-the-owner {std::abi::bytes::Bytes {...} is OPAQUE-CONSTRUCTION anywhere but module abi, even with the storage native's own result, so the byte_store natives cannot manufacture a Bytes} -body {
+    list [lindex [strictError "import std::abi\nimport std::abi::bytes\nstd::abi::bytes::Bytes {storage: 1}"] 0] \
+        [lindex [strictError "import std::abi\nimport std::abi::bytes\nimport std::byte_store\nstd::abi::bytes::Bytes {storage: std::byte_store::from_list(\[\])}"] 0] \
+        [lindex [strictError "import std::abi\nimport std::abi::bytes\nstd::abi::bytes::Bytes {}"] 0]
 } -result {OPAQUE-CONSTRUCTION OPAQUE-CONSTRUCTION OPAQUE-CONSTRUCTION}
 
 test abi-bytes-no-accessor-surface {the module that owns the byte types has exactly the small primitive surface -- the Bytes pair (from_list, length) and the MutableBytes operations pinned by tests/abi-mutable-bytes.test -- and nothing that indexes, slices, takes an address or a pointer, or exposes a capacity: no at, slice, substring, address, pointer, capacity or is_heap} -body {
-    set text [read [open [file join $::projectRoot lib abi bytes.bot]]]
+    set text [read [open [file join $::projectRoot stdlib abi bytes.bot]]]
     set fns [lmap line [split $text \n] {
         if {![regexp {^fn ([a-z0-9_]+)} $line -> name]} continue
         set name
@@ -294,39 +294,39 @@ test abi-bytes-no-accessor-surface {the module that owns the byte types has exac
     list [lsearch -all -inline -regexp $fns {^(at|slice|substring|address|pointer|capacity|is_heap|storage|get)$}] $fns
 } -result {{} {from_list length zeroed from_bytes mutable_length replace detach freeze freeze_prefix}}
 
-test abi-bytes-byte-store-gives-no-address {a byte storage value alone yields no address and no bytes: the only natives that accept one are byte_count and the opaque-struct-typed bridge, so abi::x86_64::from_bytes of a raw storage or of any other value is a compile-time TYPE error} -body {
-    list [lindex [strictError "import abi::x86_64\nimport byte_store\nabi::x86_64::from_bytes(byte_store::from_list(\[\]))"] 0] \
-        [lindex [strictError "import abi::x86_64\nabi::x86_64::from_bytes(1)"] 0] \
-        [lindex [strictError "import abi::x86_64\nabi::x86_64::from_bytes(\"text\")"] 0] \
-        [lindex [strictError "import abi::x86_64\nimport abi\nimport abi::bytes\nabi::x86_64::from_bytes(abi::u8(1))"] 0]
+test abi-bytes-byte-store-gives-no-address {a byte storage value alone yields no address and no bytes: the only natives that accept one are byte_count and the opaque-struct-typed bridge, so std::abi::x86_64::from_bytes of a raw storage or of any other value is a compile-time TYPE error} -body {
+    list [lindex [strictError "import std::abi::x86_64\nimport std::byte_store\nstd::abi::x86_64::from_bytes(std::byte_store::from_list(\[\]))"] 0] \
+        [lindex [strictError "import std::abi::x86_64\nstd::abi::x86_64::from_bytes(1)"] 0] \
+        [lindex [strictError "import std::abi::x86_64\nstd::abi::x86_64::from_bytes(\"text\")"] 0] \
+        [lindex [strictError "import std::abi::x86_64\nimport std::abi\nimport std::abi::bytes\nstd::abi::x86_64::from_bytes(std::abi::u8(1))"] 0]
 } -result {TYPE TYPE TYPE TYPE}
 
 # ---------------------------------------------------------------------------
 # Constructor validity: only bytes, no coercion
 
-test abi-bytes-rejects-non-byte-lists-statically {abi::bytes::from_list accepts only a List of bytes: a List statically known not to be (Strings, UnicodeChars, out-of-range or negative Ints, an Int-typed List) is rejected by ordinary typing -- never truncated, wrapped, signed-reinterpreted or coerced} -body {
+test abi-bytes-rejects-non-byte-lists-statically {std::abi::bytes::from_list accepts only a List of bytes: a List statically known not to be (Strings, UnicodeChars, out-of-range or negative Ints, an Int-typed List) is rejected by ordinary typing -- never truncated, wrapped, signed-reinterpreted or coerced} -body {
     set results {}
-    foreach arg {"\[\"a\", \"b\"\]" "\['a'\]" "\[256\]" "\[0 - 1\]" "\[1, 2, 3\]" "\[byte::from_int(1), 300\]" "\"text\"" "7"} {
-        lappend results [lindex [strictError "${::pure}abi::bytes::from_list($arg)"] 0]
+    foreach arg {"\[\"a\", \"b\"\]" "\['a'\]" "\[256\]" "\[0 - 1\]" "\[1, 2, 3\]" "\[std::byte::from_int(1), 300\]" "\"text\"" "7"} {
+        lappend results [lindex [strictError "${::pure}std::abi::bytes::from_list($arg)"] 0]
     }
     set results
 } -result {TYPE TYPE TYPE TYPE TYPE TYPE TYPE TYPE}
 
-test abi-bytes-out-of-range-from-int-is-not-a-byte {byte::from_int(256) is the existing checked conversion's KNOWN-ERROR: an out-of-range element never reaches abi::bytes::from_list} -body {
-    lindex [strictError "${::pure}abi::bytes::from_list(\[byte::from_int(256)\])"] 0
+test abi-bytes-out-of-range-from-int-is-not-a-byte {std::byte::from_int(256) is the existing checked conversion's KNOWN-ERROR: an out-of-range element never reaches std::abi::bytes::from_list} -body {
+    lindex [strictError "${::pure}std::abi::bytes::from_list(\[std::byte::from_int(256)\])"] 0
 } -result KNOWN-ERROR
 
 test abi-bytes-accepts-a-typed-dynamic-list {a List[Byte] produced by a loop (every element proven a byte) is accepted, and the Bytes holds exactly the values, in order} -body {
-    agree "${::pure}fn upto(n: int):\n    loop i from 0 to n:\n        byte::from_int(mod(i, 256))\nabi::bytes::from_list(upto(5)) == abi::bytes::from_list([byteList 0 1 2 3 4])"
+    agree "${::pure}fn upto(n: int):\n    loop i from 0 to n:\n        std::byte::from_int(mod(i, 256))\nstd::abi::bytes::from_list(upto(5)) == std::abi::bytes::from_list([byteList 0 1 2 3 4])"
 } -result true
 
-test abi-bytes-an-untyped-list-parameter-is-not-accepted {an argument whose element type is not proven (an untyped parameter, a List[int]) cannot reach abi::bytes::from_list: the contract is the parameter's List[Byte] type, checked statically} -body {
-    list [lindex [strictError "${::pure}fn f(xs):\n    abi::bytes::from_list(xs)\nf(\[1\])"] 0] \
-        [lindex [strictError "${::pure}fn f(xs: List\[int\]):\n    abi::bytes::from_list(xs)\nf(\[1\])"] 0]
+test abi-bytes-an-untyped-list-parameter-is-not-accepted {an argument whose element type is not proven (an untyped parameter, a List[int]) cannot reach std::abi::bytes::from_list: the contract is the parameter's List[Byte] type, checked statically} -body {
+    list [lindex [strictError "${::pure}fn f(xs):\n    std::abi::bytes::from_list(xs)\nf(\[1\])"] 0] \
+        [lindex [strictError "${::pure}fn f(xs: List\[int\]):\n    std::abi::bytes::from_list(xs)\nf(\[1\])"] 0]
 } -result {TYPE TYPE}
 
 test abi-bytes-unchecked-program-still-refuses-a-non-byte {a -strict 0 program (diagnostics kept) that passes a non-byte List still fails at run time with the ordinary TYPE error, naming the element: no element is ever truncated or coerced on any backend} -body {
-    set text "${::pure}abi::bytes::from_list(\[\"a\"\])"
+    set text "${::pure}std::abi::bytes::from_list(\[\"a\"\])"
     set hir [bytesHir $text 0]
     set seen {}
     foreach backend $::allBackends {
@@ -338,45 +338,45 @@ test abi-bytes-unchecked-program-still-refuses-a-non-byte {a -strict 0 program (
 # ---------------------------------------------------------------------------
 # The address bridge: static contract
 
-test abi-bytes-bridge-contract {abi::x86_64::from_bytes takes exactly one abi::bytes::Bytes (ARITY otherwise) and no run-time check is ever inserted: its argument is statically a Bytes. It is not a function value} -body {
-    set pre "import abi\nimport abi::bytes\nimport abi::x86_64\n"
-    list [lindex [strictError "${pre}abi::x86_64::from_bytes()"] 0] \
-        [lindex [strictError "${pre}d = abi::bytes::from_list(\[\])\nabi::x86_64::from_bytes(d, d)"] 0] \
-        [lindex [strictError "${pre}f = abi::x86_64::from_bytes\n1"] 0] \
-        [lindex [strictError "${pre}d = abi::bytes::from_list(\[\])\nxs = \[abi::x86_64::from_bytes\]\nxs"] 0] \
-        [strictError "${pre}d = abi::bytes::from_list(\[\])\nabi::x86_64::to_int(abi::x86_64::from_bytes(d)) + 0"]
+test abi-bytes-bridge-contract {std::abi::x86_64::from_bytes takes exactly one std::abi::bytes::Bytes (ARITY otherwise) and no run-time check is ever inserted: its argument is statically a Bytes. It is not a function value} -body {
+    set pre "import std::abi\nimport std::abi::bytes\nimport std::abi::x86_64\n"
+    list [lindex [strictError "${pre}std::abi::x86_64::from_bytes()"] 0] \
+        [lindex [strictError "${pre}d = std::abi::bytes::from_list(\[\])\nstd::abi::x86_64::from_bytes(d, d)"] 0] \
+        [lindex [strictError "${pre}f = std::abi::x86_64::from_bytes\n1"] 0] \
+        [lindex [strictError "${pre}d = std::abi::bytes::from_list(\[\])\nxs = \[std::abi::x86_64::from_bytes\]\nxs"] 0] \
+        [strictError "${pre}d = std::abi::bytes::from_list(\[\])\nstd::abi::x86_64::to_int(std::abi::x86_64::from_bytes(d)) + 0"]
 } -match glob -result {ARITY ARITY TYPE TYPE {no error}}
 
-test abi-bytes-bridge-result-is-a-register-not-an-integer {the bridge returns the raw machine transport, a Register64 (statically typed so): not an Int, so no address is an application-level integer unless the raw layer's own explicit abi::x86_64::to_int is applied} -body {
-    set hir [bytesHir "import abi\nimport abi::bytes\nimport abi::x86_64\nd = abi::bytes::from_list(\[\])\nabi::x86_64::from_bytes(d)"]
+test abi-bytes-bridge-result-is-a-register-not-an-integer {the bridge returns the raw machine transport, a Register64 (statically typed so): not an Int, so no address is an application-level integer unless the raw layer's own explicit std::abi::x86_64::to_int is applied} -body {
+    set hir [bytesHir "import std::abi\nimport std::abi::bytes\nimport std::abi::x86_64\nd = std::abi::bytes::from_list(\[\])\nstd::abi::x86_64::from_bytes(d)"]
     set types {}
     dict for {e node} [dict get $hir exprs] {
         if {[dict get $node kind] eq "call" && [lindex [dict get $node target] 0] eq "native"
-                && [dict get [hir::symbol $hir [lindex [dict get $node target] 1]] name] eq "abi::x86_64::from_bytes"} {
+                && [dict get [hir::symbol $hir [lindex [dict get $node target] 1]] name] eq "std::abi::x86_64::from_bytes"} {
             lappend types [hir::types::show [hir::typeOf $hir $e]]
         }
     }
     set types
-} -result abi::x86_64::Register64
+} -result std::abi::x86_64::Register64
 
 test abi-bytes-unchecked-bridge-replays-the-contract {a -strict 0 program that breaks the bridge's contract still never takes an address natively: the problem is replayed as a run-time error before anything is evaluated} -body {
-    set hir [bytesHir "import abi::x86_64\nabi::x86_64::from_bytes(\"not bytes\")" 0]
+    set hir [bytesHir "import std::abi::x86_64\nstd::abi::x86_64::from_bytes(\"not bytes\")" 0]
     lrange [outcomeUnderHir cranelift $hir] 0 1
 } -result {error {CORE SEMANTIC TYPE}}
 
 # ---------------------------------------------------------------------------
 # The Tcl backends refuse the machine-only operations
 
-test abi-bytes-tcl-backends-refuse-the-address {interp and compile refuse abi::x86_64::from_bytes and linux::write with NATIVE-ONLY (they do not imitate an address or a write with a Tcl channel); a program that defines but never calls them runs everywhere, and the pure Bytes operations run on both} -body {
-    set write "direct module\nimport abi\nimport abi::bytes\nimport linux\n"
-    list [lmap b {interp compile} {lrange [outcomeUnderHir $b [bytesHir "${write}linux::write(abi::i32(1), abi::bytes::from_list(\[\]))"]] 0 1}] \
-        [lmap b {interp compile} {lrange [outcomeUnderHir $b [bytesHir "import abi\nimport abi::bytes\nimport abi::x86_64\nabi::x86_64::to_int(abi::x86_64::from_bytes(abi::bytes::from_list(\[\])))"]] 0 1}] \
-        [agree "${write}fn emit():\n    linux::write(abi::i32(1), abi::bytes::from_list(\[\]))\n7" {interp compile}]
+test abi-bytes-tcl-backends-refuse-the-address {interp and compile refuse std::abi::x86_64::from_bytes and std::linux::write with NATIVE-ONLY (they do not imitate an address or a write with a Tcl channel); a program that defines but never calls them runs everywhere, and the pure Bytes operations run on both} -body {
+    set write "direct module\nimport std::abi\nimport std::abi::bytes\nimport std::linux\n"
+    list [lmap b {interp compile} {lrange [outcomeUnderHir $b [bytesHir "${write}std::linux::write(std::abi::i32(1), std::abi::bytes::from_list(\[\]))"]] 0 1}] \
+        [lmap b {interp compile} {lrange [outcomeUnderHir $b [bytesHir "import std::abi\nimport std::abi::bytes\nimport std::abi::x86_64\nstd::abi::x86_64::to_int(std::abi::x86_64::from_bytes(std::abi::bytes::from_list(\[\])))"]] 0 1}] \
+        [agree "${write}fn emit():\n    std::linux::write(std::abi::i32(1), std::abi::bytes::from_list(\[\]))\n7" {interp compile}]
 } -result {{{error {CORE SEMANTIC NATIVE-ONLY}} {error {CORE SEMANTIC NATIVE-ONLY}}} {{error {CORE SEMANTIC NATIVE-ONLY}} {error {CORE SEMANTIC NATIVE-ONLY}}} 7}
 
-test abi-bytes-no-fake-write-on-tcl-backends {no Tcl-backend implementation exists for write(2): the Tcl side of linux::write is the syscall refusal, nothing is printed, and nothing in core or lib routes writes through puts or a Tcl channel} -body {
+test abi-bytes-no-fake-write-on-tcl-backends {no Tcl-backend implementation exists for write(2): the Tcl side of std::linux::write is the syscall refusal, nothing is printed, and nothing in core or lib routes writes through puts or a Tcl channel} -body {
     set hits {}
-    foreach file [concat [glob -directory [file join $::projectRoot core] *.tcl] [glob -directory [file join $::projectRoot lib] *.bot]] {
+    foreach file [concat [glob -directory [file join $::projectRoot core] *.tcl] [glob -directory [file join $::projectRoot stdlib] *.bot]] {
         set channel [open $file r]
         set lineNumber 0
         foreach line [split [read $channel] \n] {
@@ -419,34 +419,34 @@ proc readBinary {path} {
 }
 
 # The lines of a program that writes to descriptor 3 (and the prelude): every
-# program below starts with this. Its `out` calls linux::write, a callable of
+# program below starts with this. Its `out` calls std::linux::write, a callable of
 # the direct module linux, from a context-free function, so every such
 # program is a direct module (DIRECT-MODULES.md) and says so first.
 set linuxPrelude {direct module
-import abi
-import abi::bytes
-import abi::x86_64
-import byte
-import linux
-import linux::abi::x86_64
-import str
-import type byte::Byte
+import std::abi
+import std::abi::bytes
+import std::abi::x86_64
+import std::byte
+import std::linux
+import std::linux::abi::x86_64
+import std::str
+import type std::byte::Byte
 
 fn mk(s: str):
-    abi::bytes::from_list(str::encode_utf8(s))
+    std::abi::bytes::from_list(std::str::encode_utf8(s))
 
 fn pattern(n: int):
     loop i from 0 to n:
-        byte::from_int(mod(i, 256))
+        std::byte::from_int(mod(i, 256))
 
 fn doubled(s: str, k: int) -> str:
     if k == 0:
         s
     else:
-        doubled(str::concat(s, s), k - 1)
+        doubled(std::str::concat(s, s), k - 1)
 
-fn out(fd: int, data: abi::bytes::Bytes) -> int errors abi::AbiIntegerBelowRange, abi::AbiIntegerAboveRange:
-    linux::write(abi::i32(fd), data)
+fn out(fd: int, data: std::abi::bytes::Bytes) -> int errors std::abi::AbiIntegerBelowRange, std::abi::AbiIntegerAboveRange:
+    std::linux::write(std::abi::i32(fd), data)
 }
 
 # {STDOUT FILE3 FILE4} of one run of EXECUTABLE with descriptor 3 (and 4)
@@ -493,44 +493,44 @@ test abi-bytes-example-file-on-every-backend {the example file's value is 20 on 
 } -result {{error {CORE SEMANTIC NATIVE-ONLY}} {error {CORE SEMANTIC NATIVE-ONLY}} {value 20} {value 20}}
 
 test abi-bytes-write-returns-the-count-and-the-bytes-arrive {a small write (static storage) and a dynamic one (heap storage) both go through the same wrapper and syscall: the kernel's result is the byte count, and descriptor 3 holds exactly the bytes} -constraints {nativeLinux posixShell} -body {
-    set exe [buildExecutable basic "${::linuxPrelude}\nstatic = abi::bytes::from_list(str::encode_utf8(\"hello\\n\"))\ndynamic = mk(\"world\\n\")\n\[out(3, static), out(3, dynamic)\]"]
+    set exe [buildExecutable basic "${::linuxPrelude}\nstatic = std::abi::bytes::from_list(std::str::encode_utf8(\"hello\\n\"))\ndynamic = mk(\"world\\n\")\n\[out(3, static), out(3, dynamic)\]"]
     lassign [runExecutable $exe] stdout f3 f4
     list $stdout $f3 [string length $f4]
 } -result "{\[6, 6\]} {hello\nworld\n} 0"
 
-test abi-bytes-empty-write {linux::write of the empty Bytes performs the syscall with a zero count and returns 0, writing nothing -- whether the empty Bytes was built statically or dynamically, without relying on what address a zero-length payload has} -constraints {nativeLinux posixShell} -body {
-    set exe [buildExecutable empty "${::linuxPrelude}\nstatic = abi::bytes::from_list(\[\])\ndynamic = mk(\"\")\n\[out(3, static), out(3, dynamic), out(4, static)\]"]
+test abi-bytes-empty-write {std::linux::write of the empty Bytes performs the syscall with a zero count and returns 0, writing nothing -- whether the empty Bytes was built statically or dynamically, without relying on what address a zero-length payload has} -constraints {nativeLinux posixShell} -body {
+    set exe [buildExecutable empty "${::linuxPrelude}\nstatic = std::abi::bytes::from_list(\[\])\ndynamic = mk(\"\")\n\[out(3, static), out(3, dynamic), out(4, static)\]"]
     lassign [runExecutable $exe] stdout f3 f4
     list $stdout [string length $f3] [string length $f4]
 } -result {{[0, 0, 0]} 0 0}
 
 test abi-bytes-empty-write-to-an-invalid-descriptor-is-still-the-syscall {a zero-length write to a bad descriptor is EBADF (-9): the descriptor is checked by the kernel even with a zero count, proving the empty write is a real syscall} -constraints {nativeLinux posixShell} -body {
-    set exe [buildExecutable emptybad "${::linuxPrelude}\nout(1000, abi::bytes::from_list(\[\]))"]
+    set exe [buildExecutable emptybad "${::linuxPrelude}\nout(1000, std::abi::bytes::from_list(\[\]))"]
     lindex [runExecutable $exe] 0
 } -result -9
 
 test abi-bytes-embedded-nul {a payload 41 00 42 is three bytes, not a C string: the kernel receives A, NUL, B -- from static storage and from heap storage alike, with the NUL at the start, in the middle and at the end} -constraints {nativeLinux posixShell} -body {
-    set exe [buildExecutable nul "${::linuxPrelude}\nfn nul3(m: Byte):\n    abi::bytes::from_list(\[byte::from_int(65), m, byte::from_int(66)\])\nfn edges(z: Byte):\n    abi::bytes::from_list(\[z, byte::from_int(67), z\])\nzero = byte::from_int(0)\n\[out(3, abi::bytes::from_list(\[byte::from_int(65), byte::from_int(0), byte::from_int(66)\])), out(3, nul3(zero)), out(4, edges(zero)), out(4, abi::bytes::from_list(\[byte::from_int(0)\])), abi::bytes::length(nul3(zero)).value\]"]
+    set exe [buildExecutable nul "${::linuxPrelude}\nfn nul3(m: Byte):\n    std::abi::bytes::from_list(\[std::byte::from_int(65), m, std::byte::from_int(66)\])\nfn edges(z: Byte):\n    std::abi::bytes::from_list(\[z, std::byte::from_int(67), z\])\nzero = std::byte::from_int(0)\n\[out(3, std::abi::bytes::from_list(\[std::byte::from_int(65), std::byte::from_int(0), std::byte::from_int(66)\])), out(3, nul3(zero)), out(4, edges(zero)), out(4, std::abi::bytes::from_list(\[std::byte::from_int(0)\])), std::abi::bytes::length(nul3(zero)).value\]"]
     lassign [runExecutable $exe] stdout f3 f4
     list $stdout [binary encode hex $f3] [binary encode hex $f4]
 } -result {{[3, 3, 3, 1, 3]} 410042410042 00430000}
 
 test abi-bytes-utf8-write {a String with multi-byte scalars written through the existing encoder: the result is the encoded byte count (not the scalar count) and the kernel receives exactly the encoded bytes} -constraints {nativeLinux posixShell} -body {
     set text "héllo ☃ \U0001f600\n"
-    set exe [buildExecutable utf8 "${::linuxPrelude}\ns = \"héllo ☃ \U0001f600\\n\"\n\[str::length(s), out(3, mk(s)), out(4, abi::bytes::from_list(str::encode_utf8(\"héllo ☃ \U0001f600\\n\")))\]"]
+    set exe [buildExecutable utf8 "${::linuxPrelude}\ns = \"héllo ☃ \U0001f600\\n\"\n\[std::str::length(s), out(3, mk(s)), out(4, std::abi::bytes::from_list(std::str::encode_utf8(\"héllo ☃ \U0001f600\\n\")))\]"]
     lassign [runExecutable $exe] stdout f3 f4
     list $stdout [string length $text] [string length [utf8 $text]] [expr {$f3 eq [utf8 $text]}] [expr {$f4 eq [utf8 $text]}]
 } -result {{[10, 16, 16]} 10 16 1 1}
 
 test abi-bytes-large-heap-write {a heap-backed payload of 81920 bytes (1-, 2-, 3- and 4-byte UTF-8 scalars repeated 8192 times, built dynamically: a storage of header + 81920 bytes) written to a file: the result is 81920 and every byte arrives} -constraints {nativeLinux posixShell} -body {
     set seed "A\u00e9\u2603\U0001f600"
-    set exe [buildExecutable large "${::linuxPrelude}\nbig = abi::bytes::from_list(str::encode_utf8(doubled(\"$seed\", 13)))\n\[abi::bytes::length(big).value, out(3, big)\]"]
+    set exe [buildExecutable large "${::linuxPrelude}\nbig = std::abi::bytes::from_list(std::str::encode_utf8(doubled(\"$seed\", 13)))\n\[std::abi::bytes::length(big).value, out(3, big)\]"]
     lassign [runExecutable $exe] stdout f3 f4
     list $stdout [expr {$f3 eq [string repeat [utf8 $seed] 8192]}] [string length $f3]
 } -result {{[81920, 81920]} 1 81920}
 
 test abi-bytes-every-byte-value-heap-write {a dynamically built payload holding every byte value 0..255 (and then again, 3000 bytes) is a heap storage whose every byte arrives exactly: no value is truncated, signed, or treated as a terminator} -constraints {nativeLinux posixShell} -body {
-    set exe [buildExecutable allvalues "${::linuxPrelude}\n\[out(3, abi::bytes::from_list(pattern(3000))), out(4, abi::bytes::from_list(pattern(256)))\]"]
+    set exe [buildExecutable allvalues "${::linuxPrelude}\n\[out(3, std::abi::bytes::from_list(pattern(3000))), out(4, std::abi::bytes::from_list(pattern(256)))\]"]
     lassign [runExecutable $exe] stdout f3 f4
     set expected3 {}
     for {set i 0} {$i < 3000} {incr i} { lappend expected3 [expr {$i % 256}] }
@@ -541,7 +541,7 @@ test abi-bytes-every-byte-value-heap-write {a dynamically built payload holding 
 
 test abi-bytes-write-to-a-pipe {the same write to a real pipe (descriptor 3 is the read end Tcl holds): the large payload exceeds the pipe's buffer, so the kernel returns only when the reader has taken it all, and the reader receives every byte} -constraints {nativeLinux posixShell} -body {
     set seed "A\u00e9\u2603\U0001f600"
-    set exe [buildExecutable pipe "${::linuxPrelude}\nbig = abi::bytes::from_list(str::encode_utf8(doubled(\"$seed\", 14)))\nsmall = mk(\"tail\")\n\[out(3, big), out(3, small)\]"]
+    set exe [buildExecutable pipe "${::linuxPrelude}\nbig = std::abi::bytes::from_list(std::str::encode_utf8(doubled(\"$seed\", 14)))\nsmall = mk(\"tail\")\n\[out(3, big), out(3, small)\]"]
     set channel [open |[list sh -c {exec "$0" 3>&1 1>/dev/null} $exe] rb]
     set data [read $channel]
     close $channel
@@ -549,29 +549,29 @@ test abi-bytes-write-to-a-pipe {the same write to a real pipe (descriptor 3 is t
 } -result {163844 1 tail}
 
 test abi-bytes-repeated-writes-of-one-value {one Bytes written again and again: producing a raw call pointer neither consumes nor invalidates the value (it is not a resource), so every write sees identical contents, from a static and a heap storage} -constraints {nativeLinux posixShell} -body {
-    set exe [buildExecutable repeated "${::linuxPrelude}\nstatic = abi::bytes::from_list(str::encode_utf8(\"static\\n\"))\ndynamic = mk(\"dynamic\\n\")\nrs = \[out(3, static), out(3, static), out(3, dynamic), out(3, dynamic), out(3, dynamic), out(3, static)\]\nrs"]
+    set exe [buildExecutable repeated "${::linuxPrelude}\nstatic = std::abi::bytes::from_list(std::str::encode_utf8(\"static\\n\"))\ndynamic = mk(\"dynamic\\n\")\nrs = \[out(3, static), out(3, static), out(3, dynamic), out(3, dynamic), out(3, dynamic), out(3, static)\]\nrs"]
     lassign [runExecutable $exe] stdout f3 f4
     list $stdout $f3
 } -result "{\[7, 7, 8, 8, 8, 7\]} {static\nstatic\ndynamic\ndynamic\ndynamic\nstatic\n}"
 
-test abi-bytes-aliased-writes {a = abi::bytes::from_list(...); b = a: writing a and b writes the identical bytes (the physical representation may be shared or copied, and cannot be told apart), also through a List of aliases and a closure over the value} -constraints {nativeLinux posixShell} -body {
+test abi-bytes-aliased-writes {a = std::abi::bytes::from_list(...); b = a: writing a and b writes the identical bytes (the physical representation may be shared or copied, and cannot be told apart), also through a List of aliases and a closure over the value} -constraints {nativeLinux posixShell} -body {
     set exe [buildExecutable alias "${::linuxPrelude}\na = mk(\"shared\\n\")\nb = a\nxs = \[a, b, a\]\nfn emit() -> int:\n    out(4, b)\nr1 = out(3, a)\nr2 = out(3, b)\nr3 = loop x in xs:\n    out(3, x)\nr4 = emit()\n\[r1, r2, r3, r4\]"]
     lassign [runExecutable $exe] stdout f3 f4
     list $stdout $f3 $f4
 } -result "{\[7, 7, \[7, 7, 7\], 7\]} {shared\nshared\nshared\nshared\nshared\n} {shared\n}"
 
 test abi-bytes-write-error-is-the-raw-negative-result {a write the kernel refuses returns its raw negative -errno as an ordinary Int, preserved exactly (never reread as unsigned): an invalid descriptor is EBADF (-9) on Linux, for a static, a heap and an empty payload alike; a closed descriptor too} -constraints {nativeLinux posixShell} -body {
-    set exe [buildExecutable badfd "${::linuxPrelude}\n\[out(1000, mk(\"x\")), out(1000, abi::bytes::from_list(str::encode_utf8(\"static\"))), out(1000, abi::bytes::from_list(\[\])), out(63, abi::bytes::from_list(pattern(10))), abi::x86_64::to_int(abi::x86_64::register64(0 - 9)) < 0\]"]
+    set exe [buildExecutable badfd "${::linuxPrelude}\n\[out(1000, mk(\"x\")), out(1000, std::abi::bytes::from_list(std::str::encode_utf8(\"static\"))), out(1000, std::abi::bytes::from_list(\[\])), out(63, std::abi::bytes::from_list(pattern(10))), std::abi::x86_64::to_int(std::abi::x86_64::register64(0 - 9)) < 0\]"]
     lindex [runExecutable $exe] 0
 } -result {[-9, -9, -9, -9, true]}
 
-test abi-bytes-short-write-is-reported-not-completed {a REAL short write: descriptor 3 is a pipe set non-blocking (by the test program's own raw fcntl), filled with a 40960-byte write, then a 81920-byte write that the kernel can only partly accept. linux::write returns exactly the kernel's short count (0 < n < 81920) and writes nothing more (no loop, no retry); the next write finds the pipe full and returns the raw -EAGAIN (-11); and the pipe holds exactly the first payload followed by the first n bytes of the second} -constraints {linuxX86_64 posixShell} -body {
+test abi-bytes-short-write-is-reported-not-completed {a REAL short write: descriptor 3 is a pipe set non-blocking (by the test program's own raw fcntl), filled with a 40960-byte write, then a 81920-byte write that the kernel can only partly accept. std::linux::write returns exactly the kernel's short count (0 < n < 81920) and writes nothing more (no loop, no retry); the next write finds the pipe full and returns the raw -EAGAIN (-11); and the pipe holds exactly the first payload followed by the first n bytes of the second} -constraints {linuxX86_64 posixShell} -body {
     set program "${::linuxPrelude}
-fn nonblock(fd: abi::I32) -> int:
-    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(72), rdi: abi::x86_64::from_i32(fd), rsi: abi::x86_64::register64(4), rdx: abi::x86_64::register64(2048)}))
-a = abi::bytes::from_list(str::encode_utf8(doubled(\"0123456789\", 12)))
-b = abi::bytes::from_list(str::encode_utf8(doubled(\"abcdefghij\", 13)))
-r0 = nonblock(abi::i32(3))
+fn nonblock(fd: std::abi::I32) -> int:
+    std::abi::x86_64::to_int(std::linux::abi::x86_64::syscall({rax: std::abi::x86_64::register64(72), rdi: std::abi::x86_64::from_i32(fd), rsi: std::abi::x86_64::register64(4), rdx: std::abi::x86_64::register64(2048)}))
+a = std::abi::bytes::from_list(std::str::encode_utf8(doubled(\"0123456789\", 12)))
+b = std::abi::bytes::from_list(std::str::encode_utf8(doubled(\"abcdefghij\", 13)))
+r0 = nonblock(std::abi::i32(3))
 r1 = out(3, a)
 r2 = out(3, b)
 r3 = out(3, b)
@@ -597,9 +597,9 @@ r3 = out(3, b)
         [expr {[string length $data] == 40960 + $short}]
 } -result {1 -11 1 1}
 
-test abi-bytes-write-is-exactly-one-syscall {the wrapper performs ONE write(2) and returns exactly the kernel's result: a short write (a pipe, a signal) is reported as the short count and never completed or retried by the wrapper. Verified structurally here -- linux::write's x86-64 transport, linux::sys::write, has exactly one syscall op in its NIR and no branch, jump, label or tail call, so there is no loop or retry to complete a partial write -- and observed in the preceding test, which provokes a real short write on a non-blocking pipe} -body {
+test abi-bytes-write-is-exactly-one-syscall {the wrapper performs ONE write(2) and returns exactly the kernel's result: a short write (a pipe, a signal) is reported as the short count and never completed or retried by the wrapper. Verified structurally here -- std::linux::write's x86-64 transport, std::linux::sys::write, has exactly one syscall op in its NIR and no branch, jump, label or tail call, so there is no loop or retry to complete a partial write -- and observed in the preceding test, which provokes a real short write on a non-blocking pipe} -body {
     set nir [native::nir [bytesHir "${::linuxPrelude}\nout(3, mk(\"x\"))" 1 linux-x86_64]]
-    set body [nirFunction $nir linux::sys::write]
+    set body [nirFunction $nir std::linux::sys::write]
     list [regexp -all {op syscall_linux_x86_64} $body] [regexp -all {\mjump\M|\mbr\M|\mtail\M|\mlabel\M} $body]
 } -result {1 0}
 
@@ -609,19 +609,19 @@ test abi-bytes-write-is-exactly-one-syscall {the wrapper performs ONE write(2) a
 test abi-bytes-gc-stress-writes-are-exact {with BOTLISH_NATIVE_GC_STRESS=1 every write is still exact: static, small dynamic and large heap storages, the empty Bytes, UTF-8, embedded NULs, aliases and a List of Bytes -- run many times so an accidental liveness assumption would show} -constraints {nativeLinux posixShell} -body {
     set program "${::linuxPrelude}
 fn nul3(m: Byte):
-    abi::bytes::from_list(\[byte::from_int(65), m, byte::from_int(66)\])
-zero = byte::from_int(0)
-static = abi::bytes::from_list(str::encode_utf8(\"static\\n\"))
+    std::abi::bytes::from_list(\[std::byte::from_int(65), m, std::byte::from_int(66)\])
+zero = std::byte::from_int(0)
+static = std::abi::bytes::from_list(std::str::encode_utf8(\"static\\n\"))
 alias = mk(\"alias\\n\")
 copy = alias
 rs = loop round from 0 to 40:
     a = out(3, mk(\"round dynamic\\n\"))
     b = out(3, nul3(zero))
     c = out(3, static)
-    d = out(3, abi::bytes::from_list(pattern(300)))
+    d = out(3, std::abi::bytes::from_list(pattern(300)))
     e = out(4, copy)
     f = out(4, alias)
-    g = out(3, abi::bytes::from_list(\[\]))
+    g = out(3, std::abi::bytes::from_list(\[\]))
     a + b + c + d + e + f + g
 rs"
     set exe [buildExecutable gcstress $program]
@@ -635,13 +635,13 @@ rs"
 } -result {1 1 1}
 
 test abi-bytes-gc-stress-in-process {the in-process native runs (specialized and unspecialized) under GC stress give the same results as without stress: lengths, equality and hashes of Bytes held in Lists, and write results} -constraints {nativeLinux} -body {
-    # The prelude with `import list` first (after the marker, which must lead).
-    set text "[string map [list "direct module\n" "direct module\nimport list\n"] $::linuxPrelude]
+    # The prelude with `import std::list` first (after the marker, which must lead).
+    set text "[string map [list "direct module\n" "direct module\nimport std::list\n"] $::linuxPrelude]
 a = mk(\"alias\\n\")
-xs = \[a, mk(\"other\\n\"), a, abi::bytes::from_list(pattern(100))\]
+xs = \[a, mk(\"other\\n\"), a, std::abi::bytes::from_list(pattern(100))\]
 sizes = loop x in xs:
-    abi::bytes::length(x).value
-\[sizes, xs == \[a, mk(\"other\\n\"), a, abi::bytes::from_list(pattern(100))\], hash(a) == hash(mk(\"alias\\n\")), out(1000, a), out(1000, list::at(xs, 0))\]"
+    std::abi::bytes::length(x).value
+\[sizes, xs == \[a, mk(\"other\\n\"), a, std::abi::bytes::from_list(pattern(100))\], hash(a) == hash(mk(\"alias\\n\")), out(1000, a), out(1000, std::list::at(xs, 0))\]"
     set plain [outcomesOf $text $::nativeBackends]
     withEnv BOTLISH_NATIVE_GC_STRESS 1 {set stressed [outcomesOf $text $::nativeBackends]}
     list [expr {$plain eq $stressed}] [lindex $stressed 0 1] [lindex $stressed 1 1]
@@ -656,61 +656,61 @@ sizes = loop x in xs:
 # written inline in the register literal, bound to a local, held in a register
 # struct bound to a local, returned by a helper function, merged across an
 # `if`, or passed to a callee that makes the syscall. Every such program calls
-# linux::abi::x86_64::syscall from a context-free function (raw_write, and w
+# std::linux::abi::x86_64::syscall from a context-free function (raw_write, and w
 # by most routes), so it is a direct module (DIRECT-MODULES.md).
 set livenessHeader {direct module
-import abi
-import abi::bytes
-import abi::x86_64
-import byte
-import linux::abi::x86_64
-import str
+import std::abi
+import std::abi::bytes
+import std::abi::x86_64
+import std::byte
+import std::linux::abi::x86_64
+import std::str
 
 fn doubled(s: str, k: int) -> str:
     if k == 0:
         s
     else:
-        doubled(str::concat(s, s), k - 1)
+        doubled(std::str::concat(s, s), k - 1)
 
-fn addr_of(d: abi::bytes::Bytes) -> abi::x86_64::Register64:
-    abi::x86_64::from_bytes(d)
+fn addr_of(d: std::abi::bytes::Bytes) -> std::abi::x86_64::Register64:
+    std::abi::x86_64::from_bytes(d)
 
-fn raw_write(fd: abi::x86_64::Register64, addr: abi::x86_64::Register64, n: abi::x86_64::Register64) -> int:
-    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(1), rdi: fd, rsi: addr, rdx: n}))
+fn raw_write(fd: std::abi::x86_64::Register64, addr: std::abi::x86_64::Register64, n: std::abi::x86_64::Register64) -> int:
+    std::abi::x86_64::to_int(std::linux::abi::x86_64::syscall({rax: std::abi::x86_64::register64(1), rdi: fd, rsi: addr, rdx: n}))
 
 }
 set livenessFooter {
 sa = doubled("A", 11)
 sb = doubled("B", 11)
 rs = loop i from 0 to 30:
-    w(abi::i32(3), sa, sb)
+    w(std::abi::i32(3), sa, sb)
 rs
 }
 set livenessShapes [dict create \
-    inline {fn w(fd: abi::I32, a: str, b: str) -> int:
-    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(1), rdi: abi::x86_64::from_i32(fd), rsi: abi::x86_64::from_bytes(abi::bytes::from_list(str::encode_utf8(a))), rdx: abi::x86_64::from_usize(abi::bytes::length(abi::bytes::from_list(str::encode_utf8(b))))}))
+    inline {fn w(fd: std::abi::I32, a: str, b: str) -> int:
+    std::abi::x86_64::to_int(std::linux::abi::x86_64::syscall({rax: std::abi::x86_64::register64(1), rdi: std::abi::x86_64::from_i32(fd), rsi: std::abi::x86_64::from_bytes(std::abi::bytes::from_list(std::str::encode_utf8(a))), rdx: std::abi::x86_64::from_usize(std::abi::bytes::length(std::abi::bytes::from_list(std::str::encode_utf8(b))))}))
 } \
-    locals {fn w(fd: abi::I32, a: str, b: str) -> int:
-    addr = abi::x86_64::from_bytes(abi::bytes::from_list(str::encode_utf8(a)))
-    n = abi::x86_64::from_usize(abi::bytes::length(abi::bytes::from_list(str::encode_utf8(b))))
-    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(1), rdi: abi::x86_64::from_i32(fd), rsi: addr, rdx: n}))
+    locals {fn w(fd: std::abi::I32, a: str, b: str) -> int:
+    addr = std::abi::x86_64::from_bytes(std::abi::bytes::from_list(std::str::encode_utf8(a)))
+    n = std::abi::x86_64::from_usize(std::abi::bytes::length(std::abi::bytes::from_list(std::str::encode_utf8(b))))
+    std::abi::x86_64::to_int(std::linux::abi::x86_64::syscall({rax: std::abi::x86_64::register64(1), rdi: std::abi::x86_64::from_i32(fd), rsi: addr, rdx: n}))
 } \
-    struct {fn w(fd: abi::I32, a: str, b: str) -> int:
-    regs = {rax: abi::x86_64::register64(1), rdi: abi::x86_64::from_i32(fd), rsi: abi::x86_64::from_bytes(abi::bytes::from_list(str::encode_utf8(a))), rdx: abi::x86_64::from_usize(abi::bytes::length(abi::bytes::from_list(str::encode_utf8(b))))}
-    abi::x86_64::to_int(linux::abi::x86_64::syscall(regs))
+    struct {fn w(fd: std::abi::I32, a: str, b: str) -> int:
+    regs = {rax: std::abi::x86_64::register64(1), rdi: std::abi::x86_64::from_i32(fd), rsi: std::abi::x86_64::from_bytes(std::abi::bytes::from_list(std::str::encode_utf8(a))), rdx: std::abi::x86_64::from_usize(std::abi::bytes::length(std::abi::bytes::from_list(std::str::encode_utf8(b))))}
+    std::abi::x86_64::to_int(std::linux::abi::x86_64::syscall(regs))
 } \
-    helper {fn w(fd: abi::I32, a: str, b: str) -> int:
-    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(1), rdi: abi::x86_64::from_i32(fd), rsi: addr_of(abi::bytes::from_list(str::encode_utf8(a))), rdx: abi::x86_64::from_usize(abi::bytes::length(abi::bytes::from_list(str::encode_utf8(b))))}))
+    helper {fn w(fd: std::abi::I32, a: str, b: str) -> int:
+    std::abi::x86_64::to_int(std::linux::abi::x86_64::syscall({rax: std::abi::x86_64::register64(1), rdi: std::abi::x86_64::from_i32(fd), rsi: addr_of(std::abi::bytes::from_list(std::str::encode_utf8(a))), rdx: std::abi::x86_64::from_usize(std::abi::bytes::length(std::abi::bytes::from_list(std::str::encode_utf8(b))))}))
 } \
-    join {fn w(fd: abi::I32, a: str, b: str) -> int:
-    addr = if str::length(a) > 0:
-        abi::x86_64::from_bytes(abi::bytes::from_list(str::encode_utf8(a)))
+    join {fn w(fd: std::abi::I32, a: str, b: str) -> int:
+    addr = if std::str::length(a) > 0:
+        std::abi::x86_64::from_bytes(std::abi::bytes::from_list(std::str::encode_utf8(a)))
     else:
-        abi::x86_64::register64(0)
-    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(1), rdi: abi::x86_64::from_i32(fd), rsi: addr, rdx: abi::x86_64::from_usize(abi::bytes::length(abi::bytes::from_list(str::encode_utf8(b))))}))
+        std::abi::x86_64::register64(0)
+    std::abi::x86_64::to_int(std::linux::abi::x86_64::syscall({rax: std::abi::x86_64::register64(1), rdi: std::abi::x86_64::from_i32(fd), rsi: addr, rdx: std::abi::x86_64::from_usize(std::abi::bytes::length(std::abi::bytes::from_list(std::str::encode_utf8(b))))}))
 } \
-    callee {fn w(fd: abi::I32, a: str, b: str) -> int:
-    raw_write(abi::x86_64::from_i32(fd), abi::x86_64::from_bytes(abi::bytes::from_list(str::encode_utf8(a))), abi::x86_64::from_usize(abi::bytes::length(abi::bytes::from_list(str::encode_utf8(b)))))
+    callee {fn w(fd: std::abi::I32, a: str, b: str) -> int:
+    raw_write(std::abi::x86_64::from_i32(fd), std::abi::x86_64::from_bytes(std::abi::bytes::from_list(std::str::encode_utf8(a))), std::abi::x86_64::from_usize(std::abi::bytes::length(std::abi::bytes::from_list(std::str::encode_utf8(b)))))
 }]
 set livenessProgram "$livenessHeader[dict get $livenessShapes inline]$livenessFooter"
 
@@ -725,7 +725,7 @@ dict for {shape body} $livenessShapes {
 }
 
 test abi-bytes-liveness-join-else-branch {the `if` route's other branch (no Bytes: a null address register word) still runs correctly -- the storage register is defined on only one path, and the keepalive after the join is then a use of the zero a conditionally defined register has -- and the kernel reports EFAULT for a null buffer with a nonzero count} -constraints {linuxX86_64 posixShell} -body {
-    set text "$::livenessHeader[dict get $::livenessShapes join]\nrs = \[w(abi::i32(3), \"\", \"B\"), w(abi::i32(3), \"A\", \"B\")\]\nrs"
+    set text "$::livenessHeader[dict get $::livenessShapes join]\nrs = \[w(std::abi::i32(3), \"\", \"B\"), w(std::abi::i32(3), \"A\", \"B\")\]\nrs"
     set exe [buildExecutable liveness-join-else $text]
     lassign [runExecutable $exe 1] stdout f3 f4
     list $stdout $f3
@@ -746,11 +746,11 @@ test abi-bytes-liveness-mutant-without-keepalive-is-detected {the inline program
 # ---------------------------------------------------------------------------
 # NIR evidence
 
-test abi-bytes-nir-write-path {NIR of the canonical write path, dynamic input: the Bytes' construction is one op over its List (abi::bytes::from_list' instance), the length is one field read, the address is one op over the storage, the fd and the length are encoded by their ordinary from_i32/from_usize instances, ONE syscall op takes the four words in register order, a keepalive of the same storage follows it, and the signed result is converted by to_int} -body {
+test abi-bytes-nir-write-path {NIR of the canonical write path, dynamic input: the Bytes' construction is one op over its List (std::abi::bytes::from_list' instance), the length is one field read, the address is one op over the storage, the fd and the length are encoded by their ordinary from_i32/from_usize instances, ONE syscall op takes the four words in register order, a keepalive of the same storage follows it, and the signed result is converted by to_int} -body {
     set nir [native::nir [bytesHir "${::linuxPrelude}\nout(3, mk(\"hi\"))" 1 linux-x86_64]]
     set names [dict create]
     foreach {- id name} [regexp -all -inline -line {^func ([0-9]+) "([^"]+)"} $nir] { dict set names $id $name }
-    set write [nirFunction $nir linux::sys::write]
+    set write [nirFunction $nir std::linux::sys::write]
     set seq {}
     foreach line [split $write \n] {
         if {[regexp {^\s+(%[0-9]+) = op (bytesaddr|syscall_linux_x86_64|keepalive) } $line -> reg op]} {
@@ -759,15 +759,15 @@ test abi-bytes-nir-write-path {NIR of the canonical write path, dynamic input: t
             lappend seq [dict get $names $id]
         }
     }
-    set body [nirFunction $nir abi::bytes::from_list]
-    set lengthBody [nirFunction $nir abi::bytes::length]
+    set body [nirFunction $nir std::abi::bytes::from_list]
+    set lengthBody [nirFunction $nir std::abi::bytes::length]
     list $seq [regexp -all {op bytesfromlist} $body] [regexp -all {op byteslen} $lengthBody] \
         [regexp -all {op syscall_linux_x86_64} $nir]
-} -result {{abi::x86_64::register64 abi::x86_64::from_i32 bytesaddr abi::bytes::length abi::x86_64::from_usize syscall_linux_x86_64 keepalive abi::x86_64::to_int} 1 1 1}
+} -result {{std::abi::x86_64::register64 std::abi::x86_64::from_i32 bytesaddr std::abi::bytes::length std::abi::x86_64::from_usize syscall_linux_x86_64 keepalive std::abi::x86_64::to_int} 1 1 1}
 
 test abi-bytes-nir-register-order-and-keepalive-operand {the syscall's operands are, in register order, rax = the register64(1) word, rdi = the fd word, rsi = THE ADDRESS (the bytesaddr result, never any other register), rdx = the length word, then the zero constant for r10 r8 r9 -- and the keepalive's operand is exactly bytesaddr's operand} -body {
     set nir [native::nir [bytesHir "${::linuxPrelude}\nout(3, mk(\"hi\"))" 1 linux-x86_64]]
-    set write [nirFunction $nir linux::sys::write]
+    set write [nirFunction $nir std::linux::sys::write]
     regexp {(%[0-9]+) = op bytesaddr (%[0-9]+)} $write -> address storage
     regexp {op syscall_linux_x86_64 (%[0-9]+) (%[0-9]+) (%[0-9]+) (%[0-9]+) (%[0-9]+) (%[0-9]+) (%[0-9]+)} $write -> rax rdi rsi rdx r10 r8 r9
     regexp {op keepalive (%[0-9]+)} $write -> kept
@@ -783,9 +783,9 @@ test abi-bytes-nir-register-order-and-keepalive-operand {the syscall's operands 
     list [dict get $producer $rax] [dict get $producer $rdi] [expr {$rsi eq $address}] [dict get $producer $rdx] \
         [expr {$r10 eq $zero && $r8 eq $zero && $r9 eq $zero}] [expr {$kept eq $storage}] \
         [expr {$rsi ne $rdx && $rsi ne $rdi && $rsi ne $rax}]
-} -result {abi::x86_64::register64 abi::x86_64::from_i32 1 abi::x86_64::from_usize 1 1 1}
+} -result {std::abi::x86_64::register64 std::abi::x86_64::from_i32 1 std::abi::x86_64::from_usize 1 1 1}
 
-test abi-bytes-nir-dynamic-payload-precedes-the-syscall {a payload built dynamically immediately before the syscall is fully initialized first: in a function that builds the Bytes from its argument and writes it, the conversion (strutf8bytes, then abi::bytes::from_list' bytesfromlist instance) is emitted and completed before the call that takes the address and executes the one syscall -- the data dependency (the storage register) forces the order, and nothing is hoisted past the syscall's all-memory barrier} -body {
+test abi-bytes-nir-dynamic-payload-precedes-the-syscall {a payload built dynamically immediately before the syscall is fully initialized first: in a function that builds the Bytes from its argument and writes it, the conversion (strutf8bytes, then std::abi::bytes::from_list' bytesfromlist instance) is emitted and completed before the call that takes the address and executes the one syscall -- the data dependency (the storage register) forces the order, and nothing is hoisted past the syscall's all-memory barrier} -body {
     set text "${::linuxPrelude}\nfn emit(s: str) -> int:\n    out(3, mk(s))\nemit(\"x\")"
     set nir [native::nir [bytesHir $text]]
     set names [dict create]
@@ -802,14 +802,14 @@ test abi-bytes-nir-dynamic-payload-precedes-the-syscall {a payload built dynamic
         return $seq
     }
     list [orderOf $names [nirFunction $nir emit]] [orderOf $names [nirFunction $nir mk]] \
-        [orderOf $names [nirFunction $nir out]] [regexp -all {op bytesfromlist} [nirFunction $nir abi::bytes::from_list]]
-} -result {{mk out} {strutf8bytes abi::bytes::from_list} {abi::i32 linux::write} 1}
+        [orderOf $names [nirFunction $nir out]] [regexp -all {op bytesfromlist} [nirFunction $nir std::abi::bytes::from_list]]
+} -result {{mk out} {strutf8bytes std::abi::bytes::from_list} {std::abi::i32 std::linux::write} 1}
 
-test abi-bytes-clif-keepalive-and-stack-map {CLIF of linux::sys::write (linux::write's x86-64 transport): rt_bytes_addr, then the syscall helper, then rt_keepalive, in that order, with the keepalive's operand the very value rt_bytes_addr took (the storage), and the syscall call's stack map names the stack slot that holds that storage -- so the collector sees it as a root at the syscall's own safepoint} -body {
+test abi-bytes-clif-keepalive-and-stack-map {CLIF of std::linux::sys::write (std::linux::write's x86-64 transport): rt_bytes_addr, then the syscall helper, then rt_keepalive, in that order, with the keepalive's operand the very value rt_bytes_addr took (the storage), and the syscall call's stack map names the stack slot that holds that storage -- so the collector sees it as a root at the syscall's own safepoint} -body {
     set clif [native::clif [bytesHir "${::linuxPrelude}\nout(3, mk(\"hi\"))" 1 linux-x86_64]]
     set helperOf [dict create]
     foreach {- ref name} [regexp -all -inline -line {^; (u0:[0-9]+) = (rt_[a-z0-9_]+)} $clif] { dict set helperOf $ref $name }
-    regexp {; function [0-9]+ "linux::sys::write": botlish_fn_[0-9]+} $clif header
+    regexp {; function [0-9]+ "std::linux::sys::write": botlish_fn_[0-9]+} $clif header
     set start [string first $header $clif]
     set block [string range $clif $start [string first "\n\}" $clif $start]]
     # fnK -> helper name
@@ -840,9 +840,9 @@ test abi-bytes-clif-keepalive-and-stack-map {CLIF of linux::sys::write (linux::w
         [regexp "ss0\\+$offset\[,\\]\]" [lindex $syscall 2]]
 } -result {{rt_bytes_addr rt_linux_x86_64_syscall rt_keepalive} 1 1}
 
-test abi-bytes-nir-static-constant {NIR of a small constant: abi::bytes::from_list(str::encode_utf8("hello\n")) is one static byte-storage constant (`bytes "HEX"`): no abi::bytes::from_list call, no op bytesfromlist, no List, no String -- and it goes through the very same linux::write (whose transport linux::sys::write has one bytesaddr, one syscall, one keepalive), so there are not two source semantics for the two physical forms} -body {
-    set nir [native::nir [bytesHir "${::linuxPrelude}\nout(3, abi::bytes::from_list(str::encode_utf8(\"hello\\n\")))" 1 linux-x86_64]]
-    set write [nirFunction $nir linux::sys::write]
+test abi-bytes-nir-static-constant {NIR of a small constant: std::abi::bytes::from_list(std::str::encode_utf8("hello\n")) is one static byte-storage constant (`bytes "HEX"`): no std::abi::bytes::from_list call, no op bytesfromlist, no List, no String -- and it goes through the very same std::linux::write (whose transport std::linux::sys::write has one bytesaddr, one syscall, one keepalive), so there are not two source semantics for the two physical forms} -body {
+    set nir [native::nir [bytesHir "${::linuxPrelude}\nout(3, std::abi::bytes::from_list(std::str::encode_utf8(\"hello\\n\")))" 1 linux-x86_64]]
+    set write [nirFunction $nir std::linux::sys::write]
     list [regexp -all {= bytes "([0-9a-f]*)"} $nir] [lindex [regexp -inline {= bytes "([0-9a-f]*)"} $nir] 1] \
         [regexp -all {op bytesfromlist|op strutf8bytes|op listnew} [nirFunction $nir <program>]] \
         [regexp -all {op bytesaddr} $write] [regexp -all {op syscall_linux_x86_64} $write] [regexp -all {op keepalive} $write]
@@ -850,12 +850,12 @@ test abi-bytes-nir-static-constant {NIR of a small constant: abi::bytes::from_li
 
 test abi-bytes-nir-static-forms {every statically known byte sequence is a constant: an exactly known literal List of bytes, the empty List, an encode_utf8 of a known (even empty or non-ASCII) String -- and a dynamic argument is never one} -body {
     set forms [list \
-        "abi::bytes::from_list(\[byte::from_int(1), byte::from_int(2)\])" \
-        "abi::bytes::from_list(\[\])" \
-        "abi::bytes::from_list(str::encode_utf8(\"\"))" \
-        "abi::bytes::from_list(str::encode_utf8(\"hé\"))" \
+        "std::abi::bytes::from_list(\[std::byte::from_int(1), std::byte::from_int(2)\])" \
+        "std::abi::bytes::from_list(\[\])" \
+        "std::abi::bytes::from_list(std::str::encode_utf8(\"\"))" \
+        "std::abi::bytes::from_list(std::str::encode_utf8(\"hé\"))" \
         "mk(\"dynamic\")" \
-        "abi::bytes::from_list(pattern(3))"]
+        "std::abi::bytes::from_list(pattern(3))"]
     lmap form $forms {
         set nir [native::nir [bytesHir "${::linuxPrelude}\nout(3, $form)"]]
         list [regexp -all {= bytes "} $nir] [regexp -all {op bytesfromlist} $nir]
@@ -875,9 +875,9 @@ proc allocationsOf {text} {
 }
 
 test abi-bytes-allocations-empty-and-constant {the empty Bytes and a small constant Bytes allocate nothing at all: the storage is a static constant, the wrapper is scalar-replaced, and writing them allocates nothing (total, Bytes, Struct, List); a dynamically built empty Bytes allocates no storage either (only its source List)} -constraints nativeLinux -body {
-    list [allocationsOf "out(3, abi::bytes::from_list(\[\]))"] \
-        [allocationsOf "out(3, abi::bytes::from_list(str::encode_utf8(\"hello\\n\")))"] \
-        [allocationsOf "out(3, abi::bytes::from_list(\[byte::from_int(1), byte::from_int(2)\]))"] \
+    list [allocationsOf "out(3, std::abi::bytes::from_list(\[\]))"] \
+        [allocationsOf "out(3, std::abi::bytes::from_list(std::str::encode_utf8(\"hello\\n\")))"] \
+        [allocationsOf "out(3, std::abi::bytes::from_list(\[std::byte::from_int(1), std::byte::from_int(2)\]))"] \
         [allocationsOf "dyn = mk(\"\")\nout(3, dyn)"]
 } -result {{0 0 0 0} {0 0 0 0} {0 0 0 0} {1 0 0 1}}
 
@@ -931,10 +931,10 @@ proc machineCalls {exe function} {
     return $calls
 }
 
-test abi-bytes-machine-code-write-function {the machine code of linux::sys::write (linux::write's x86-64 transport) in a standalone executable: it calls the runtime helper that takes the payload address, then the one syscall helper, then the keepalive helper, then to_int; the address helper and the keepalive helper are given the SAME register (the storage) as their operand, so the storage is live across the syscall; and there is no call to libc's write, send or syscall anywhere in it} -constraints {linuxX86_64 objdump rustcLinker} -body {
+test abi-bytes-machine-code-write-function {the machine code of std::linux::sys::write (std::linux::write's x86-64 transport) in a standalone executable: it calls the runtime helper that takes the payload address, then the one syscall helper, then the keepalive helper, then to_int; the address helper and the keepalive helper are given the SAME register (the storage) as their operand, so the storage is live across the syscall; and there is no call to libc's write, send or syscall anywhere in it} -constraints {linuxX86_64 objdump rustcLinker} -body {
     set text "${::linuxPrelude}\nout(3, mk(\"hi\"))"
     set exe [buildExecutable machine $text]
-    set id [nirFunctionId [native::nir [bytesHir $text]] linux::sys::write]
+    set id [nirFunctionId [native::nir [bytesHir $text]] std::linux::sys::write]
     set calls [machineCalls $exe botlish_fn_$id]
     set targets [lmap c $calls {lindex $c 0}]
     set helpers [lsearch -all -inline -regexp $targets {^rt_}]
@@ -987,7 +987,7 @@ test abi-bytes-kernel-sees-the-write {strace of the standalone example: the kern
 } -result {{write(1, "Hello from Botlish!\n", 20) = 20} 1 1 1 0 1 2}
 
 test abi-bytes-kernel-sees-the-nul-payload {strace of a write of 41 00 42: the kernel receives three bytes "A\0B" (NUL included, count 3), not a C string cut at the NUL -- the registers carry exactly the payload's address and count} -constraints {nativeLinux strace posixShell} -body {
-    set exe [buildExecutable nulstrace "${::linuxPrelude}\nfn nul3(m: Byte):\n    abi::bytes::from_list(\[byte::from_int(65), m, byte::from_int(66)\])\nout(3, nul3(byte::from_int(0)))"]
+    set exe [buildExecutable nulstrace "${::linuxPrelude}\nfn nul3(m: Byte):\n    std::abi::bytes::from_list(\[std::byte::from_int(65), m, std::byte::from_int(66)\])\nout(3, nul3(std::byte::from_int(0)))"]
     set log [file join $::outputDir strace.nul]
     exec strace -f -qq -e trace=write -o $log sh -c {exec "$0" 3>"$1"} $exe [file join $::outputDir strace.fd3] >/dev/null 2>@1
     set lines [lsearch -all -inline -regexp [split [readBinary $log] \n] {write\(3,}]
@@ -1006,7 +1006,7 @@ test abi-bytes-kernel-sees-the-count-not-the-scalars {strace of a UTF-8 write: t
     set first
 } -result {write(3, "\xc3\xa9\xe2\x98\x83", 5) = 5}
 
-test abi-bytes-the-example-never-routes-through-libc-write {the Botlish write is the generic syscall: linux::write's transport's machine code and every helper it calls contain no call into libc, and rt_linux_x86_64_syscall's chain ends at the one inline-asm `syscall` instruction of the whole executable (the earlier syscall milestone's own evidence, here for the write path)} -constraints {linuxX86_64 objdump} -body {
+test abi-bytes-the-example-never-routes-through-libc-write {the Botlish write is the generic syscall: std::linux::write's transport's machine code and every helper it calls contain no call into libc, and rt_linux_x86_64_syscall's chain ends at the one inline-asm `syscall` instruction of the whole executable (the earlier syscall milestone's own evidence, here for the write path)} -constraints {linuxX86_64 objdump} -body {
     set exe [file join $::executableDir example]
     if {![file exists $exe]} {
         native::executable [surface::readProgramFile [file join $::projectRoot examples linux write.bot]] $exe

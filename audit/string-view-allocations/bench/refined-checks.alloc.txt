@@ -43,18 +43,18 @@ top allocation sites by bytes:
     10. func                             closure           400 allocations  22.4 KB
     11. func                             closure           400 allocations  22.4 KB
     12. func                             closure           400 allocations  19.2 KB
-    13. /home/user/botlish/lib/web.bot:31 listnew             1 allocations  152 B
-    14. /home/user/botlish/lib/web.bot:145 strcat              3 allocations  130 B
-    15. /home/user/botlish/lib/web.bot:145 substr              3 allocations  123 B
-    16. /home/user/botlish/lib/web.bot:132 strutf8bytes        3 allocations  96 B
-    17. /home/user/botlish/lib/web.bot:33 closure             1 allocations  48 B
-    18. /home/user/botlish/lib/web.bot:122 closure             1 allocations  48 B
-    19. /home/user/botlish/lib/web.bot:125 closure             1 allocations  48 B
-    20. /home/user/botlish/lib/web.bot:131 closure             1 allocations  48 B
-    21. /home/user/botlish/lib/web.bot:141 closure             1 allocations  48 B
-    22. /home/user/botlish/lib/web.bot:129 strcat              1 allocations  43 B
-    23. /home/user/botlish/lib/web.bot:129 strcat              1 allocations  43 B
-    24. /home/user/botlish/lib/web.bot:123 strcat              1 allocations  42 B
+    13. /home/user/botlish/stdlib/web.bot:31 listnew             1 allocations  152 B
+    14. /home/user/botlish/stdlib/web.bot:145 strcat              3 allocations  130 B
+    15. /home/user/botlish/stdlib/web.bot:145 substr              3 allocations  123 B
+    16. /home/user/botlish/stdlib/web.bot:132 strutf8bytes        3 allocations  96 B
+    17. /home/user/botlish/stdlib/web.bot:33 closure             1 allocations  48 B
+    18. /home/user/botlish/stdlib/web.bot:122 closure             1 allocations  48 B
+    19. /home/user/botlish/stdlib/web.bot:125 closure             1 allocations  48 B
+    20. /home/user/botlish/stdlib/web.bot:131 closure             1 allocations  48 B
+    21. /home/user/botlish/stdlib/web.bot:141 closure             1 allocations  48 B
+    22. /home/user/botlish/stdlib/web.bot:129 strcat              1 allocations  43 B
+    23. /home/user/botlish/stdlib/web.bot:129 strcat              1 allocations  43 B
+    24. /home/user/botlish/stdlib/web.bot:123 strcat              1 allocations  42 B
     25. func <program>                   listnew             1 allocations  40 B
 
 excluded: num-bigint limb buffers, the shadow stack (fixed ~32 MB), Cranelift/JIT code, process bookkeeping.

@@ -30,14 +30,14 @@
 #
 # expect: ["hello", "hello  world", "AI-generated", "\"hello\"", "'hello'", "wait... what?"]
 
-import str
+import std::str
 
 # The character at index, or "" past the end (examples/stdlib/csv.bot's peek).
 fn peek(text, index) errors LowerUnderrun:
-    if index >= str::length(text):
+    if index >= std::str::length(text):
         return ""
 
-    str::substring(text, index, index + 1)
+    std::str::substring(text, index, index + 1)
 
 # 1 if character (one peek()'d character) is in this benchmark's explicit
 # emoji set -- see the file header for why this is not general Unicode
@@ -70,10 +70,10 @@ fn clean_char(character):
 
 # text's characters from index on, cleaned and appended to done.
 fn clean_from(text, index, done) errors LowerUnderrun:
-    if index >= str::length(text):
+    if index >= std::str::length(text):
         return done
 
-    clean_from(text, index + 1, str::concat(done, clean_char(peek(text, index))))
+    clean_from(text, index + 1, std::str::concat(done, clean_char(peek(text, index))))
 
 fn clean_ai_text(text) errors LowerUnderrun:
     clean_from(text, 0, "")

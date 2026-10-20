@@ -112,8 +112,8 @@ test lex-trailing-question-identifiers {a single terminal ? is ordinary identifi
 } -result {IDENT:foo IDENT:foo? IDENT:Foo? IDENT:snake_case? IDENT:ready? = true NEWLINE EOF}
 
 test lex-trailing-question-call {a trailing-? identifier works as a call callee, qualified or not} -body {
-    list [tokens "foo?(x)"] [tokens "web::foo?(x)"]
-} -result {{IDENT:foo? ( IDENT:x ) NEWLINE EOF} {IDENT:web :: IDENT:foo? ( IDENT:x ) NEWLINE EOF}}
+    list [tokens "foo?(x)"] [tokens "std::web::foo?(x)"]
+} -result {{IDENT:foo? ( IDENT:x ) NEWLINE EOF} {IDENT:std :: IDENT:web :: IDENT:foo? ( IDENT:x ) NEWLINE EOF}}
 
 test lex-trailing-question-declaration {a trailing-? identifier works as a function name and a parameter name} -body {
     tokens "fn foo?(x):\n    valid?"

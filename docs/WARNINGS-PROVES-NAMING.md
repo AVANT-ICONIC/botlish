@@ -379,9 +379,9 @@ every program of `examples/stdlib` plus the refinement example
 `main.tcl -backend interp` (its built-in examples) exits 0 with an empty
 stderr. The refinement example, which CI does not run through `main.tcl`, was
 written before this warning and gains nothing: its 43 stderr lines (the
-`METHOD-ELIGIBLE` and `SAME-RETURN-VALUE` findings of `lib/web.bot` and of the
+`METHOD-ELIGIBLE` and `SAME-RETURN-VALUE` findings of `stdlib/web.bot` and of the
 example) contain no `PROVES-NAMING` line, because both of its proves functions
-(`web::emailish?`, `web::uri_query_value?`) already follow the convention. Zero
+(`std::web::emailish?`, `std::web::uri_query_value?`) already follow the convention. Zero
 is the honest count, as milestone 4's was. Re-run on the merged tree (with the
 validator feature), the native step's stderr is byte-identical, and the interp
 step's still empty.
@@ -445,7 +445,7 @@ the compiler rejects (`refinement-proof-target-missing`,
 `emailish-predicate.test` declares `emailish?`; the refinement fuzzer's
 predicates are `p1?`, `q1?`, `p2?`, `p3?`, `n1?` (and it compiles with
 `-warnings off`); `examples/refinement/refined-strings.bot` and
-`bench/refined-checks.bot` use `web::emailish?` and `web::uri_query_value?`. So
+`bench/refined-checks.bot` use `std::web::emailish?` and `std::web::uri_query_value?`. So
 no refinement test, example or fuzzer needed an adaptation, and no test's
 function names were changed.
 
@@ -680,13 +680,13 @@ audit's header** (this milestone's tip; its corpus paths -- `examples`,
 gave the same output: neither this milestone nor the merged validator feature
 edits the corpus). It compiles `examples/stdlib` (9), `examples/surface` (14),
 `examples/refinement` (1, new since milestone 4), `bench/*.bot` (8) and
-`lib/*.bot` (8) with warnings on. 36 of 40 compile standalone: the two
-deliberate rejections (`09`, `10`), and `lib/list.bot` and
-`lib/mutable_array.bot` (which use their own namespace without importing it,
+`stdlib/*.bot` (8) with warnings on. 36 of 40 compile standalone: the two
+deliberate rejections (`09`, `10`), and `stdlib/list.bot` and
+`stdlib/mutable_array.bot` (which use their own namespace without importing it,
 as milestones 2-4 recorded).
 
 **0 findings.** The expectation held: the refinement milestone rewrote
-`lib/web.bot` and added `examples/refinement/` before this warning existed, and
+`stdlib/web.bot` and added `examples/refinement/` before this warning existed, and
 its names already conform.
 
 **Census of proves-fitted functions** (every function declaration whose block
@@ -696,8 +696,8 @@ checked against the pass's findings -- "census and findings agree: yes"):
 
 | where | name | ordinary parameters | result | shape | name |
 |---|---|---|---|---|---|
-| `lib/web.bot:107:1` | `emailish?` | 1 | `bool` | predicate | conforms |
-| `lib/web.bot:230:1` | `uri_query_value?` | 1 | `bool` | predicate | conforms |
+| `stdlib/web.bot:107:1` | `emailish?` | 1 | `bool` | predicate | conforms |
+| `stdlib/web.bot:230:1` | `uri_query_value?` | 1 | `bool` | predicate | conforms |
 
 **2 proves-fitted functions, both conforming predicates; no validator, no
 out-of-shape proves function.** (The corpus has no validator because the
@@ -707,10 +707,10 @@ corpus refactor is a later milestone.) So the hand-classification categories
 conventional name -- are all **0**, and **false positives are 0**.
 
 **The rename check, per finding**, has nothing to run on. Its machinery (a
-curated rename applied with whole-word matching to a scratch copy of `lib/`, a
+curated rename applied with whole-word matching to a scratch copy of `stdlib/`, a
 probe program compiled against both copies that must compile, lose the finding
 and keep its value) was exercised once by hand on a scratch copy of the tree in
-which `web::emailish?` was renamed `is_emailish` (with a temporary table entry):
+which `std::web::emailish?` was renamed `is_emailish` (with a temporary table entry):
 the audit reported that one finding, classified, the census agreed, and the
 rename back to `emailish?` held ("compiles, finding gone, same value `[true,
 false]`"). That run found and fixed a bug in the tool's whole-word pattern
@@ -763,8 +763,8 @@ other test was added or removed.
   backend and changes no HIR (pinned).
 * **Second snapshot: the tree merged with `origin/main` `0246598`** (merge
   `3f422d2`). While this milestone ran, `main` gained the encode-utf8
-  allocation work (`str::char_at` reading String characters as UnicodeChars,
-  `lib/web.bot` without its `encode_utf8` List, native runtime and codegen
+  allocation work (`std::str::char_at` reading String characters as UnicodeChars,
+  `stdlib/web.bot` without its `encode_utf8` List, native runtime and codegen
   changes, `tests/str-char-at.test` among the new tests). The merge had no
   conflict; the native backend was rebuilt from the merged tree. Re-run there:
   **`interp` 6247 tests, 6247 passed; `compile` 6247, 6243 passed, 4 skipped,
@@ -772,7 +772,7 @@ other test was added or removed.
   passed-partial, 60 unsupported), 0 failed** (6247 = 6222 + the 25 tests
   `main` added). The corpus audit on the merged tree is identical to the
   pre-merge audit apart from its commit header (0 findings; the same two
-  proves functions of `lib/web.bot`, at the same lines), and CI's example
+  proves functions of `stdlib/web.bot`, at the same lines), and CI's example
   steps are unchanged (native: exit 0, the same 314 stderr lines, no
   `PROVES-NAMING` line; interp: exit 0, empty stderr).
 
@@ -795,7 +795,7 @@ other test was added or removed.
 * Successor note (REFACTOR-WARNINGS-CLEAN.md): the corpus still has no finding
   of this code, and is now held there: a gate
   (`audit/refactor/tools/gate.tcl`, CI) fails on any new one in `examples/`,
-  `bench/` or `lib/`.
+  `bench/` or `stdlib/`.
 
 ## Future warning candidates
 
@@ -925,7 +925,7 @@ new CLI option or `BOTLISH_WARNINGS` value.
 
 **Verification**
 
-32. *Corpus findings and census?* 0 findings. Census: 2 proves-fitted functions in the corpus, `web::emailish?` and `web::uri_query_value?`, both one-parameter `bool` predicates with conforming names; no validator and no out-of-shape proves function.
+32. *Corpus findings and census?* 0 findings. Census: 2 proves-fitted functions in the corpus, `std::web::emailish?` and `std::web::uri_query_value?`, both one-parameter `bool` predicates with conforming names; no validator and no out-of-shape proves function.
 33. *False positives?* Zero.
 34. *Rename law at which levels?* Unit (`pn-rename-is-semantics-preserving`),
     the fuzzer (2000 seeds, required) and per corpus finding (none exist; the

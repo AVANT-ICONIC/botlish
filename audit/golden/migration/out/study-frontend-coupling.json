@@ -34,7 +34,7 @@
    {
     "claim": "A program with source-module imports does not read back: module-section bindings have no declaring scope in the text, so hir::parse rejects the first reference to one. The repository's own tests acknowledge this.",
     "evidence": [
-     "Experiment: traits-path.bot -> 'HIR text line 20: binding b1 (linux::path::nul_free?) is not declared and is not a root name (HIR PARSE)'",
+     "Experiment: traits-path.bot -> 'HIR text line 20: binding b1 (std::linux::path::nul_free?) is not declared and is not a root name (HIR PARSE)'",
      "hir/read.tcl:544-546",
      "hir/resolve.tcl:111-114,141-155 (module sections are their own program-kind scopes recorded in modules/moduleScopeIds)",
      "tests/error-payloads.test:349 ('HIR text of a program with modules does not read back')",
@@ -206,7 +206,7 @@
   "experiments": [
    {
     "what": "traits-path.bot: compile with surface::readProgramFile -warnings off, hir::format, hir::parse",
-    "result": "front end 1.72 s, 1679 exprs; format 44 ms (24 ms on a later run), 125,181 chars; parse fails after 16 ms: 'binding b1 (linux::path::nul_free?) is not declared and is not a root name' (module section). The in-memory HIR has 31 top-level tables, e.g. semantic (25 KB), traitSource (690 KB), modules/moduleScopeIds, staticStats."
+    "result": "front end 1.72 s, 1679 exprs; format 44 ms (24 ms on a later run), 125,181 chars; parse fails after 16 ms: 'binding b1 (std::linux::path::nul_free?) is not declared and is not a root name' (module section). The in-memory HIR has 31 top-level tables, e.g. semantic (25 KB), traitSource (690 KB), modules/moduleScopeIds, staticStats."
    },
    {
     "what": "Module-free programs (15-enums, sum-refined, string_replace, ai_text_clean, inst.bot, escape.bot, synthetic big.bot): format, parse, then compare format(parse(text)) == text, Core IR, NIR (specialized and -specialize 0), and values on interp, compile, compile-hir, cranelift-generic, cranelift",
@@ -369,14 +369,14 @@
     "verified": false
    },
    {
-    "claim": "Caching the front end across processes works if the stored HIR (its plain Tcl string) comes with a snapshot of the registries. For a0.bot, traits-path (2/2 passed) and harness (13/13 passed), all five backends passed in a fresh process. With the HIR alone: interp passes (compile-hir also passed on harness), while compile fails (NOT-A-CONTEXT: its Core IR rebuild resolves struct heads against an empty registry) and native fails (unknown type linux::path::LinuxPath / CONTEXT-NATIVE-LOWERING-UNSUPPORTED). Loading takes 3-5 ms against a 1.7-1.8 s front end. The HIR dict is about 1 MB (1.38 MB traits-path, 0.97 MB harness); the registries are about 70 KB.",
+    "claim": "Caching the front end across processes works if the stored HIR (its plain Tcl string) comes with a snapshot of the registries. For a0.bot, traits-path (2/2 passed) and harness (13/13 passed), all five backends passed in a fresh process. With the HIR alone: interp passes (compile-hir also passed on harness), while compile fails (NOT-A-CONTEXT: its Core IR rebuild resolves struct heads against an empty registry) and native fails (unknown type std::linux::path::LinuxPath / CONTEXT-NATIVE-LOWERING-UNSUPPORTED). Loading takes 3-5 ms against a 1.7-1.8 s front end. The HIR dict is about 1 MB (1.38 MB traits-path, 0.97 MB harness); the registries are about 70 KB.",
     "evidence": [
      "save.tcl/load.tcl experiments, modes hir-only, hir+regs, hirtext"
     ],
     "verified": true
    },
    {
-    "claim": "The HIR text format (hir::format/hir::parse) does not work as a cache format. It failed to read back traits-path ('binding b1 (linux::path::nul_free?) is not declared and is not a root name'), and by design it leaves out the semantic-instance side table and other compiler-internal tables.",
+    "claim": "The HIR text format (hir::format/hir::parse) does not work as a cache format. It failed to read back traits-path ('binding b1 (std::linux::path::nul_free?) is not declared and is not a root name'), and by design it leaves out the semantic-instance side table and other compiler-internal tables.",
     "evidence": [
      "load.tcl hirtext mode on traits-path",
      "hir/hir.tcl:62-75 (warnings and semantic not printed by hir::format)",
@@ -457,7 +457,7 @@
    },
    {
     "what": "save.tcl/load.tcl: compile in one process; save the HIR dict string, a snapshot of 11 registry variables, and hir::format text; in a fresh process load in three modes (HIR only, HIR plus registries, HIR text) and run all 5 backends. Done for a0.bot, traits-path.bot and harness.bot",
-    "result": "HIR plus registries: every backend passed for all three programs; load 1-5 ms. HIR only: compile, native and (for a0/traits-path) compile-hir failed; interp passed (and compile-hir on harness). HIR text: worked for a0 (no modules) but failed to parse traits-path ('binding b1 (linux::path::nul_free?) is not declared')"
+    "result": "HIR plus registries: every backend passed for all three programs; load 1-5 ms. HIR only: compile, native and (for a0/traits-path) compile-hir failed; interp passed (and compile-hir on harness). HIR text: worked for a0 (no modules) but failed to parse traits-path ('binding b1 (std::linux::path::nul_free?) is not declared')"
    },
    {
     "what": "profile.tcl with backends executable,cranelift on examples/surface/02-recursion.bot",
@@ -480,7 +480,7 @@
   ]
  },
  {
-  "summary": "The cleanest seam in the front end is the argument list of hir::buildSyntax: syntax-node dicts plus an options dict (-origin, -files, -modules, -imports, -type-decls, -error-decls, -struct-decls, -trait-decls), all plain data (surface/modules.tcl:1097-1111). Everything before that point runs once per program. Everything after it is one indivisible unit, hir::BuildOnce (registry reset, resolve, hygiene, check), which runs many times per program: once per static-decision round, once per method-call trial, once more for trait monomorphization, plus its own inner reruns. The best first step for a Botlish front end is the lexer and parser, which turn text into AST dicts and are pure apart from one core:: call (core::value::isValidScalar). The next step adds lowering and the module loader, emitting buildSyntax's inputs; this needs an exported table of native names and builtin type names. Moving the analyses means moving the whole build loop together: BuildOnce, the static loop with staticdeps, DecideMethodCalls and monomorphize. Otherwise every build costs a cross-language call carrying the HIR in both directions. That is also where the time goes. In four small golden suites, the per-build analysis took about 76-83% of front-end time; parsing took 9-16% (60-75% of that is the lexer, and most of it re-parses lib/test.bot in each fresh process); lowering and loading took 3-6%. Inside a build, hir::types::infer (the type walk plus semantic-instance walks) is the largest single pass at 12-32% of the front end, followed by completions (the errorsets pass), hygiene, affine, mutvec::Elaborate, resolve and semantic::verify. Keeping Tcl as the orchestration language is workable: a Botlish program's result already comes back to Tcl as a host runtime value (native::Outcome), and input can arrive through argv() or stdin, since there is no openat. Compile-once only works inside one process today, and only until another compilation runs. Experiments showed three hidden couplings. First, backends read process-global registries that the front end's last build filled. Second, HIR text cannot round-trip module programs or source origins, and it drops side tables. Third, the Tcl 'compile' backend re-runs hir::build on Core IR, and native lowering reuses hir::types::inferRegion, range, escape and aot from hir/. Other couplings: diagnostics a program can observe include message text, which can contain internal ids and hygiene names, so a reimplementation must reproduce id allocation, walk order and wording exactly. The semantic-instance budget also depends on Tcl's own call depth ([info level] > 700). Language prerequisites I infer for a Botlish front end are a string-keyed map and payload-bearing sum types, since enums are payload-free today.",
+  "summary": "The cleanest seam in the front end is the argument list of hir::buildSyntax: syntax-node dicts plus an options dict (-origin, -files, -modules, -imports, -type-decls, -error-decls, -struct-decls, -trait-decls), all plain data (surface/modules.tcl:1097-1111). Everything before that point runs once per program. Everything after it is one indivisible unit, hir::BuildOnce (registry reset, resolve, hygiene, check), which runs many times per program: once per static-decision round, once per method-call trial, once more for trait monomorphization, plus its own inner reruns. The best first step for a Botlish front end is the lexer and parser, which turn text into AST dicts and are pure apart from one core:: call (core::value::isValidScalar). The next step adds lowering and the module loader, emitting buildSyntax's inputs; this needs an exported table of native names and builtin type names. Moving the analyses means moving the whole build loop together: BuildOnce, the static loop with staticdeps, DecideMethodCalls and monomorphize. Otherwise every build costs a cross-language call carrying the HIR in both directions. That is also where the time goes. In four small golden suites, the per-build analysis took about 76-83% of front-end time; parsing took 9-16% (60-75% of that is the lexer, and most of it re-parses stdlib/test.bot in each fresh process); lowering and loading took 3-6%. Inside a build, hir::types::infer (the type walk plus semantic-instance walks) is the largest single pass at 12-32% of the front end, followed by completions (the errorsets pass), hygiene, affine, mutvec::Elaborate, resolve and semantic::verify. Keeping Tcl as the orchestration language is workable: a Botlish program's result already comes back to Tcl as a host runtime value (native::Outcome), and input can arrive through argv() or stdin, since there is no openat. Compile-once only works inside one process today, and only until another compilation runs. Experiments showed three hidden couplings. First, backends read process-global registries that the front end's last build filled. Second, HIR text cannot round-trip module programs or source origins, and it drops side tables. Third, the Tcl 'compile' backend re-runs hir::build on Core IR, and native lowering reuses hir::types::inferRegion, range, escape and aot from hir/. Other couplings: diagnostics a program can observe include message text, which can contain internal ids and hygiene names, so a reimplementation must reproduce id allocation, walk order and wording exactly. The semantic-instance budget also depends on Tcl's own call depth ([info level] > 700). Language prerequisites I infer for a Botlish front end are a string-keyed map and payload-bearing sum types, since enums are payload-free today.",
   "claims": [
    {
     "claim": "The pipeline of surface::readProgramFile: load libraries named by '# requires' comments, then compileProgramFile: surface::parse the entry file, then BuildProgram (NewState, then CollectAndLoad: check imports, LoadNamespace recursively (ParseModule, checks, SplitTypeDecls, LowerStatements, RemapFile into a section), CheckRef per qualified reference with static-site deferral), then hir::buildSyntax, then surface::lower::Finish (strict raise plus hir::warnings::run).",
@@ -538,7 +538,7 @@
     "verified": true
    },
    {
-    "claim": "The backends depend on registries the front end left in the process, so a HIR value is not self-contained. A HIR dict dumped and reloaded in a fresh process runs on interp, but fails on compile (NOT-A-CONTEXT) and on cranelift (unknown type linux::path::LinuxPath). In the building process, compiling an unrelated program first makes cranelift fail on the original HIR with CONTEXT-NATIVE-LOWERING-UNSUPPORTED.",
+    "claim": "The backends depend on registries the front end left in the process, so a HIR value is not self-contained. A HIR dict dumped and reloaded in a fresh process runs on interp, but fails on compile (NOT-A-CONTEXT) and on cranelift (unknown type std::linux::path::LinuxPath). In the building process, compiling an unrelated program first makes cranelift fail on the original HIR with CONTEXT-NATIVE-LOWERING-UNSUPPORTED.",
     "evidence": [
      "experiment: dump/load of traits-path HIR",
      "experiment: control run plus intervening surface::compile",
@@ -604,7 +604,7 @@
      "hir/static.tcl:593-614 (Reified)",
      "hir/static.tcl:1046-1061 (PredictionOf/InternalIds)",
      "hir/hir.tcl:263-272 (NewId counters)",
-     "lib/test.bot:546, 615-635 (rejects_message/containing)",
+     "stdlib/test.bot:546, 615-635 (rejects_message/containing)",
      "LARGE-SCALE-GOLDEN-MIGRATION.md:383 (hygiene-name message finding)"
     ],
     "verified": true
@@ -617,7 +617,7 @@
     "verified": true
    },
    {
-    "claim": "The time is in the per-build analysis. BuildOnce plus BuildFull overhead was about 76-83% of the front end. Parsing was 9-16%, mostly re-parsing library modules (lib/test.bot alone takes about 0.19 s) in each fresh process, and lexing is 60-75% of parse time. Lowering and module loading were 3-6%.",
+    "claim": "The time is in the per-build analysis. BuildOnce plus BuildFull overhead was about 76-83% of the front end. Parsing was 9-16%, mostly re-parsing library modules (stdlib/test.bot alone takes about 0.19 s) in each fresh process, and lexing is 60-75% of parse time. Lowering and module loading were 3-6%.",
     "evidence": [
      "experiment: profiles of traits-path, representation, errors, loops",
      "experiment: per-file lex/parse/lower timing"
@@ -654,7 +654,7 @@
     "evidence": [
      "native/native.tcl:151-215",
      "ARGV.md:1-40",
-     "lib/linux/io.bot:54-57, 100"
+     "stdlib/linux/io.bot:54-57, 100"
     ],
     "verified": true
    },
@@ -696,15 +696,15 @@
    },
    {
     "what": "Per-file timing of lex (surface::lexer::tokenize), parse and lower (surface::lower::Sequence), with a warm second pass.",
-    "result": "lib/test.bot (730 lines, 29.7K chars): lex 0.14-0.25 s, parse 0.19-0.25 s, lower 0.02 s. errors.bot: lex 0.13-0.15, parse 0.18-0.20. Lexing is about 60-75% of parse time. Doubling or quadrupling test.bot shows the lexer is linear at about 4.5 us per char."
+    "result": "stdlib/test.bot (730 lines, 29.7K chars): lex 0.14-0.25 s, parse 0.19-0.25 s, lower 0.02 s. errors.bot: lex 0.13-0.15, parse 0.18-0.20. Lexing is about 60-75% of parse time. Doubling or quadrupling test.bot shows the lexer is linear at about 4.5 us per char."
    },
    {
     "what": "HIR text round trip: hir::format, then hir::parse, compared, then run on interp and cranelift.",
-    "result": "traits-path with -origins 1 fails ('origin file f4 does not match its position'). Without origins it also fails ('binding b1 (linux::path::nul_free?) is not declared'). Import-free sum-refined.bot and 15-enums.bot round-trip without origins and give the same results on interp and cranelift, but lose methodCalls, methodChoices, flagAllowed, coroutines, semantic, contexts, affine, mutvec and methodDecided, and the NIR text differs (sizes 163940 vs 37477, not investigated)."
+    "result": "traits-path with -origins 1 fails ('origin file f4 does not match its position'). Without origins it also fails ('binding b1 (std::linux::path::nul_free?) is not declared'). Import-free sum-refined.bot and 15-enums.bot round-trip without origins and give the same results on interp and cranelift, but lose methodCalls, methodChoices, flagAllowed, coroutines, semantic, contexts, affine, mutvec and methodDecided, and the NIR text differs (sizes 163940 vs 37477, not investigated)."
    },
    {
     "what": "Compile once and run elsewhere: dumped the traits-path HIR dict string (1.38 MB) to a file and loaded it in a fresh process with no compile.",
-    "result": "interp: '2 passed, 0 failed'. compile: ERR NOT-A-CONTEXT (struct registry empty). cranelift: ERR 'core::type: unknown type linux::path::LinuxPath'."
+    "result": "interp: '2 passed, 0 failed'. compile: ERR NOT-A-CONTEXT (struct registry empty). cranelift: ERR 'core::type: unknown type std::linux::path::LinuxPath'."
    },
    {
     "what": "Control: the same HIR in the building process, then again after compiling an unrelated trivial program.",
@@ -731,7 +731,7 @@
   ]
  },
  {
-  "summary": "Yes, Tcl can stay the orchestrator, but only across a process boundary. Today Tcl never calls Botlish code in-process. native::evalHir lowers HIR to NIR in Tcl, writes it to a temp file, starts the botlish-native process for each run, and parses one `value`/`error` line from its stdout. AOT executables are separate ELF binaries that print the program's final value and exit 0, or exit 1 on a run-time failure.\n\nGetting source in works today only through argv():\n- JIT path: a hex-encoded --argv-file has no size limit. A 1 MB argument went through intact, astral characters included. Arguments must be strict UTF-8, and NUL is refused by the Tcl injection layer.\n- AOT path: real argv, at most 131071 bytes per argument (verified) and about 2 MB in total.\n- stdin and files cannot be used for text. linux::io::read returns MutableBytes, but abi::bytes deliberately has no indexing or decoding, no native turns bytes into a String, and there is no openat wrapper.\n\nGetting output back:\n- Best: one top-level String result. The protocol escapes about 4 characters per space or newline.\n- Avoid nested results. Escaping doubles with each nesting level: 16 characters per space inside a List[String], and a 3-level list returned 46.9x its size.\n- Alternative: AOT stdout via io::print. In the JIT path, io::print output is mixed into the protocol pipe and native::evalHir throws it away.\n\nDeployment should be an AOT executable (2-4 ms start-up, about 0.7-0.8 s to link). evalHir repeats the Tcl HIR-to-NIR lowering on every call: 0.5 s for traits-path and 1.0 s for representation, about 20x the Cranelift time. AOT requires every used specialized instance to be closed (fully typed). The golden suites with lib/test.bot are closed, but the untyped examples/stdlib/hashtable.bot has 4 guarded regions, so a Botlish compiler must be written typed.\n\nDiagnostics have to be data. There is no exit-status facility, and an unhandled declared error at top level is a compile error. A run-time failure shows up as `error {CODE} MSG` (JIT) or as exit 1 plus a stderr line (AOT, including NATIVE LIMIT STACK). Recursion is not a problem: 10^7 non-tail frames ran fine, and 10^8 failed cleanly.\n\nThe real coupling is the format the Botlish front end would hand back. The Tcl backends consume an in-memory HIR dict with about 31 top-level tables and side tables, and native/lower.tcl calls dozens of hir/ analyses (range, specialize, escape, aot, affine releases, types, contexts). HIR text (hir::format/hir::parse) is a debugging format: it fails on any program that imports a module, and it drops 9 side tables (affine, contexts, coroutines, mutvec, semantic, method decisions, flagAllowed). The full dict printed as text is 1.38 MB for traits-path, half of it traitSource. So a Botlish front end must either emit that dict, or a new complete interchange format has to be built, or the Botlish part stops at an earlier boundary such as the AST. But parsing is only about 14% of front-end time for traits-path (271 of 1890 ms); signatures, errorsets, static decisions and affine are larger.\n\nWhat a compiler written in Botlish would lean on:\n- Present: structs (recursive types allowed), payload-free enums, error payloads, static traits, typed MutableVector/MutableArray (good for dense integer ids), closures, `hash`.\n- Strings: concat (linear only thanks to virtual-construction plans; quadratic with them off), substring, length, and char_at (O(1) on ASCII Strings, but it decodes from the start on any non-ASCII String: 187 vs 38 ms at 20K characters).\n- Missing or limited:\n  - Maps: no map or dict type. ImmutableSet has only from_list and contains, with O(n) membership. Hash tables have to be hand-written and typed to stay AOT-ready.\n  - Strings: no String ordering (`<` is Int-only), no character-to-String, Int-to-String or String-to-Int conversion, no String iteration, no character classifiers, no bytes-to-String decoding.\n  - Types: no type variables or user-defined generic types, no enum payloads or `match`.\n  - Process: no file I/O and no exit status.",
+  "summary": "Yes, Tcl can stay the orchestrator, but only across a process boundary. Today Tcl never calls Botlish code in-process. native::evalHir lowers HIR to NIR in Tcl, writes it to a temp file, starts the botlish-native process for each run, and parses one `value`/`error` line from its stdout. AOT executables are separate ELF binaries that print the program's final value and exit 0, or exit 1 on a run-time failure.\n\nGetting source in works today only through argv():\n- JIT path: a hex-encoded --argv-file has no size limit. A 1 MB argument went through intact, astral characters included. Arguments must be strict UTF-8, and NUL is refused by the Tcl injection layer.\n- AOT path: real argv, at most 131071 bytes per argument (verified) and about 2 MB in total.\n- stdin and files cannot be used for text. std::linux::io::read returns MutableBytes, but std::abi::bytes deliberately has no indexing or decoding, no native turns bytes into a String, and there is no openat wrapper.\n\nGetting output back:\n- Best: one top-level String result. The protocol escapes about 4 characters per space or newline.\n- Avoid nested results. Escaping doubles with each nesting level: 16 characters per space inside a List[String], and a 3-level list returned 46.9x its size.\n- Alternative: AOT stdout via std::io::print. In the JIT path, std::io::print output is mixed into the protocol pipe and native::evalHir throws it away.\n\nDeployment should be an AOT executable (2-4 ms start-up, about 0.7-0.8 s to link). evalHir repeats the Tcl HIR-to-NIR lowering on every call: 0.5 s for traits-path and 1.0 s for representation, about 20x the Cranelift time. AOT requires every used specialized instance to be closed (fully typed). The golden suites with stdlib/test.bot are closed, but the untyped examples/stdlib/hashtable.bot has 4 guarded regions, so a Botlish compiler must be written typed.\n\nDiagnostics have to be data. There is no exit-status facility, and an unhandled declared error at top level is a compile error. A run-time failure shows up as `error {CODE} MSG` (JIT) or as exit 1 plus a stderr line (AOT, including NATIVE LIMIT STACK). Recursion is not a problem: 10^7 non-tail frames ran fine, and 10^8 failed cleanly.\n\nThe real coupling is the format the Botlish front end would hand back. The Tcl backends consume an in-memory HIR dict with about 31 top-level tables and side tables, and native/lower.tcl calls dozens of hir/ analyses (range, specialize, escape, aot, affine releases, types, contexts). HIR text (hir::format/hir::parse) is a debugging format: it fails on any program that imports a module, and it drops 9 side tables (affine, contexts, coroutines, mutvec, semantic, method decisions, flagAllowed). The full dict printed as text is 1.38 MB for traits-path, half of it traitSource. So a Botlish front end must either emit that dict, or a new complete interchange format has to be built, or the Botlish part stops at an earlier boundary such as the AST. But parsing is only about 14% of front-end time for traits-path (271 of 1890 ms); signatures, errorsets, static decisions and affine are larger.\n\nWhat a compiler written in Botlish would lean on:\n- Present: structs (recursive types allowed), payload-free enums, error payloads, static traits, typed MutableVector/MutableArray (good for dense integer ids), closures, `hash`.\n- Strings: concat (linear only thanks to virtual-construction plans; quadratic with them off), substring, length, and char_at (O(1) on ASCII Strings, but it decodes from the start on any non-ASCII String: 187 vs 38 ms at 20K characters).\n- Missing or limited:\n  - Maps: no map or dict type. ImmutableSet has only from_list and contains, with O(n) membership. Hash tables have to be hand-written and typed to stay AOT-ready.\n  - Strings: no String ordering (`<` is Int-only), no character-to-String, Int-to-String or String-to-Int conversion, no String iteration, no character classifiers, no bytes-to-String decoding.\n  - Types: no type variables or user-defined generic types, no enum payloads or `match`.\n  - Process: no file I/O and no exit status.",
   "claims": [
    {
     "claim": "Tcl talks to a native Botlish program only at process level. Each native::evalHir run starts the botlish-native process: the NIR goes in as a temp file and the value or error comes back on stdout. Program mode only, so a native program cannot run in or return to a Tcl environment.",
@@ -772,14 +772,14 @@
     "verified": true
    },
    {
-    "claim": "stdin and files cannot carry text into a Botlish program today. linux::io::read can fill a MutableBytes from fd 0, but abi::bytes deliberately has no indexing or decoding, no registered native turns bytes into a String, and there is no openat or file wrapper (only fds 0/1/2). The raw syscall could open a file in principle, but the bytes still cannot be decoded.",
+    "claim": "stdin and files cannot carry text into a Botlish program today. std::linux::io::read can fill a MutableBytes from fd 0, but std::abi::bytes deliberately has no indexing or decoding, no registered native turns bytes into a String, and there is no openat or file wrapper (only fds 0/1/2). The raw syscall could open a file in principle, but the bytes still cannot be decoded.",
     "evidence": [
-     "lib/abi/bytes.bot:89 ('Not here, deliberately: slicing, indexing, concatenation...')",
-     "lib/io.bot:34 ('Not here (deliberately): input, files, paths...')",
-     "lib/linux/io.bot:54-56 (no openat/other descriptors)",
-     "lib/linux.bot:57,99 (only write/read)",
-     "native registry dump (experiment): only str::encode_utf8 crosses String->bytes; no decode",
-     "core/linuxabi.tcl header (generic linux::abi::syscall)"
+     "stdlib/abi/bytes.bot:89 ('Not here, deliberately: slicing, indexing, concatenation...')",
+     "stdlib/io.bot:34 ('Not here (deliberately): input, files, paths...')",
+     "stdlib/linux/io.bot:54-56 (no openat/other descriptors)",
+     "stdlib/linux.bot:57,99 (only write/read)",
+     "native registry dump (experiment): only std::str::encode_utf8 crosses String->bytes; no decode",
+     "core/linuxabi.tcl header (generic std::linux::abi::syscall)"
     ],
     "verified": true
    },
@@ -793,7 +793,7 @@
     "verified": true
    },
    {
-    "claim": "In the JIT path a program's own stdout writes, and its stderr (merged with 2>@1), land in the protocol pipe ahead of the value line. native::Outcome ignores them, so evalHir loses io::print output.",
+    "claim": "In the JIT path a program's own stdout writes, and its stderr (merged with 2>@1), land in the protocol pipe ahead of the value line. native::Outcome ignores them, so evalHir loses std::io::print output.",
     "evidence": [
      "native/native.tcl:173 (2>@1), 189-216 (Outcome scans lines in reverse for value/error)",
      "experiment: examples/io/hello.bot via native::Driver -> lines {Hello, world!} {value unit}; native::evalHir -> unit"
@@ -801,7 +801,7 @@
     "verified": true
    },
    {
-    "claim": "An AOT executable prints `show(result)` (Botlish literal syntax with \\\\ \\\" \\n \\r \\t escapes) on stdout and exits 0. On a run-time error it prints the message and code on stderr and exits 1. Earlier io::print writes come first, followed by the result line (e.g. `unit`).",
+    "claim": "An AOT executable prints `show(result)` (Botlish literal syntax with \\\\ \\\" \\n \\r \\t escapes) on stdout and exits 0. On a run-time error it prints the message and code on stderr and exits 1. Earlier std::io::print writes come first, followed by the result line (e.g. `unit`).",
     "evidence": [
      "native/src/runtime/aot.rs:24-58",
      "native/src/runtime/show.rs:46-61",
@@ -814,7 +814,7 @@
     "claim": "Botlish has no exit-status facility. An unhandled declared error at the top level is a compile-time error, so failures and diagnostics have to be returned as data (the result value or stderr text) for Tcl to interpret. Only run-time failures (e.g. stack exhaustion) reach Tcl as `error` lines (JIT) or exit 1 (AOT).",
     "evidence": [
      "tests/golden/run.tcl:15",
-     "experiment: echo.bot with an unhandled list::at at top level was rejected at compile time ('may produce the declared error \"IndexNotFound\", which is neither handled here...')",
+     "experiment: echo.bot with an unhandled std::list::at at top level was rejected at compile time ('may produce the declared error \"IndexNotFound\", which is neither handled here...')",
      "experiment: rec.bot at depth 10^8 -> stderr 'error {NATIVE LIMIT STACK} ...', exit 1 (native/src/runtime/platform/x86_64_linux.rs:32)"
     ],
     "verified": true
@@ -828,7 +828,7 @@
     "verified": true
    },
    {
-    "claim": "A compiler-sized Botlish program can be AOT-built only if every used specialized instance is closed. Typed programs, including the golden suites with lib/test.bot (coroutines, MutableVector, closures), are closed. Untyped code (raw MutableArray hash tables, unannotated callable parameters) is guarded and gets rejected.",
+    "claim": "A compiler-sized Botlish program can be AOT-built only if every used specialized instance is closed. Typed programs, including the golden suites with stdlib/test.bot (coroutines, MutableVector, closures), are closed. Untyped code (raw MutableArray hash tables, unannotated callable parameters) is guarded and gets rejected.",
     "evidence": [
      "native/native.tcl:254-285 (NATIVE AOT NOT-READY)",
      "README.md:2288-2290",
@@ -861,7 +861,7 @@
     "evidence": [
      "hir/format.tcl:1",
      "hir/read.tcl:15-17",
-     "experiment: traits-path.bot, echo.bot and examples/surface/14-modules.bot all failed hir::parse ('binding b1 (mathish::inc) is not declared and is not a root name'); 15-enums.bot round-tripped and ran identically on cranelift, minus 9 side tables"
+     "experiment: traits-path.bot, echo.bot and examples/surface/14-modules.bot all failed hir::parse ('binding b1 (std::mathish::inc) is not declared and is not a root name'); 15-enums.bot round-tripped and ran identically on cranelift, minus 9 side tables"
     ],
     "verified": true
    },
@@ -892,14 +892,14 @@
     "evidence": [
      "native/src/runtime/strobj.rs:9 (ascii flag: chars == byte_len)",
      "LANGUAGE-LIBRARY-DEFICIENCIES.md items 1 and 4 (lines 47-70, 209-216)",
-     "experiment: str::length of a 16-char text containing 𝄞 and U+2028 = 16; 20K-char char_at scan 38 ms (ASCII) vs 187 ms (one é per 10 characters), about 40 ms of each being process overhead"
+     "experiment: std::str::length of a 16-char text containing 𝄞 and U+2028 = 16; 20K-char char_at scan 38 ms (ASCII) vs 187 ms (one é per 10 characters), about 40 ms of each being process overhead"
     ],
     "verified": true
    },
    {
     "claim": "Missing facilities a compiler would want: a map/dict type (none registered; ImmutableSet has only from_list/contains with O(n) membership and O(n^2) construction); String ordering (`<` takes {int int}); character-to-String, Int-to-String and String-to-Int conversion; String iteration; character classifiers; a sort routine; user-defined generic types or type variables; enum payloads and match.",
     "evidence": [
-     "registry dump (experiment): no map natives; `<` paramTypes {int int}; no str::of_char/str::from_int/parse",
+     "registry dump (experiment): no map natives; `<` paramTypes {int int}; no std::str::of_char/std::str::from_int/parse",
      "MINIMAL-IMMUTABLE-SET.md:21-25",
      "LANGUAGE-LIBRARY-DEFICIENCIES.md:22-38 (items 3, 4, 9, 10, 11), 188-245",
      "GOLDEN-TEST-FRAMEWORK.md:298 ('Botlish has no type variables'); ABI-NUMERIC-DOMAINS.md:128",
@@ -977,15 +977,15 @@
   "open_questions": [
    "What should the front end hand back: the full HIR dict as Tcl text (1.4 MB for a small suite, half of it traitSource), an extended and complete HIR text with modules and side tables, or an earlier boundary (AST or pre-resolution syntax) that leaves resolution and analysis in Tcl? Parsing alone is only about 14% of front-end time on the one suite profiled.",
    "Which hir/ analyses must stay in Tcl as long as native/lower.tcl stays Tcl (range, specialize, escape, aot, affine release scopes, contexts, mutvec)? If they move to Botlish, the native lowering may have to move with them.",
-   "Would the runtime accept a bytes-to-String UTF-8 decode native, or an abi::bytes accessor, plus a file-open wrapper? lib/abi/bytes.bot and lib/linux/io.bot rule these out 'deliberately' today, and without them source text arrives only through argv.",
+   "Would the runtime accept a bytes-to-String UTF-8 decode native, or a std::abi::bytes accessor, plus a file-open wrapper? stdlib/abi/bytes.bot and stdlib/linux/io.bot rule these out 'deliberately' today, and without them source text arrives only through argv.",
    "Does virtual construction stay linear in a realistic emitter, where partial text is stored in struct fields or MutableVector elements, given that those are materialization barriers? Only accumulator and right-fold shapes were measured.",
    "Can a typed hash table over str keys be written once and stay AOT-closed without type variables, or must it be duplicated per key/value type? Not tested.",
-   "Exit status: is a raw exit_group via linux::abi::syscall acceptable for a compiler binary, or should a proper exit facility be added? Not tested.",
+   "Exit status: is a raw exit_group via std::linux::abi::syscall acceptable for a compiler binary, or should a proper exit facility be added? Not tested.",
    "How do the timings scale to a compiler-sized program (tens of thousands of lines)? There are only two data points for Tcl NIR lowering (about 10-13 µs per NIR character) and for Cranelift (about 0.6 ms per 1K characters)."
   ]
  },
  {
-  "summary": "The most expensive part of the front end is the type-inference core that runs inside every build. hir::signatures::infer drives hir::types::infer, which also drives the opportunistic semantic instances (hir::semantic::Call/Analyze/Walk), and hir::semantic::verify re-checks those instances. The bench's 'signatures' phase is mostly this whole-program type walk, not contract solving, because hir::types::infer and the instance walks are not in the profiled phase list and so count toward it. On representation.bot, signatures::infer took 844 ms inclusive: 420 ms generic typing walk, 283 ms instance walks, about 124 ms requirement collection, solving and installation. Each checked build does at least two full typings. The second signature round only confirms the trusted contracts and costs about as much as the first (254+192 ms and 120+142 ms on representation.bot); even a program that only imports compiler and test needs both. The time that grows faster than program size is the semantic-instance layer. On a generated program, front end 0.79/1.91/8.65/38.3 s at 25/50/100/200 units with instances on, and 0.95/2.13/4.39 s at 50/100/200 with them off, which is linear. The reason is O(program) work per instance: semantic::Walk analyzes over a copy-on-write copy of the whole HIR, semantic::View copies the HIR and re-interns types again for verification, and verify and End scan lists, costing O(instances x calls). Instances grow with the program, so the total is about quadratic. That fits destructuring.bot (15k HIR expressions), where signatures 39% plus semantic-instances 14.5% dominate. Next come avoidable whole-program rescans repeated in every build: hygiene renames each module definition with a scan of every expression (errors.bot: 153 renames, 524 ms, 10%), and hir::contexts::Walk rebuilds the same parent maps about 10 times per build (representation.bot: 298 ms, 9%). The bench's 'static-decisions' phase is mostly not decision logic: it is per-build elaboration (mutvec::Elaborate, traits::Stamp) that BuildFull runs. Work done once per program (parse, module loading, surface lowering) is 13-34% of the small suites I measured but about 1-2% of large ones. Everything else is paid on each of the 329 builds, including re-analyzing about 1450 HIR expressions of lib/test.bot, lib/compiler.bot and their imports in every build (about 0.5 s each). Parsing, surface lowering and the decision scheduler are cleanly separable but cheap. The hot typing core shares one mutable HIR dict and per-compilation global registries with about 12k lines of tightly coupled analyses, so it can only be split off as a whole build (syntax in, HIR out). The quadratic, per-build and per-round costs are algorithmic and would stay in any language; the roughly 0.65 µs to read a node field and about 40 µs per expression per walk are Tcl overhead that compiled code would cut by a large constant factor.",
+  "summary": "The most expensive part of the front end is the type-inference core that runs inside every build. hir::signatures::infer drives hir::types::infer, which also drives the opportunistic semantic instances (hir::semantic::Call/Analyze/Walk), and hir::semantic::verify re-checks those instances. The bench's 'signatures' phase is mostly this whole-program type walk, not contract solving, because hir::types::infer and the instance walks are not in the profiled phase list and so count toward it. On representation.bot, signatures::infer took 844 ms inclusive: 420 ms generic typing walk, 283 ms instance walks, about 124 ms requirement collection, solving and installation. Each checked build does at least two full typings. The second signature round only confirms the trusted contracts and costs about as much as the first (254+192 ms and 120+142 ms on representation.bot); even a program that only imports compiler and test needs both. The time that grows faster than program size is the semantic-instance layer. On a generated program, front end 0.79/1.91/8.65/38.3 s at 25/50/100/200 units with instances on, and 0.95/2.13/4.39 s at 50/100/200 with them off, which is linear. The reason is O(program) work per instance: semantic::Walk analyzes over a copy-on-write copy of the whole HIR, semantic::View copies the HIR and re-interns types again for verification, and verify and End scan lists, costing O(instances x calls). Instances grow with the program, so the total is about quadratic. That fits destructuring.bot (15k HIR expressions), where signatures 39% plus semantic-instances 14.5% dominate. Next come avoidable whole-program rescans repeated in every build: hygiene renames each module definition with a scan of every expression (errors.bot: 153 renames, 524 ms, 10%), and hir::contexts::Walk rebuilds the same parent maps about 10 times per build (representation.bot: 298 ms, 9%). The bench's 'static-decisions' phase is mostly not decision logic: it is per-build elaboration (mutvec::Elaborate, traits::Stamp) that BuildFull runs. Work done once per program (parse, module loading, surface lowering) is 13-34% of the small suites I measured but about 1-2% of large ones. Everything else is paid on each of the 329 builds, including re-analyzing about 1450 HIR expressions of stdlib/test.bot, stdlib/compiler.bot and their imports in every build (about 0.5 s each). Parsing, surface lowering and the decision scheduler are cleanly separable but cheap. The hot typing core shares one mutable HIR dict and per-compilation global registries with about 12k lines of tightly coupled analyses, so it can only be split off as a whole build (syntax in, HIR out). The quadratic, per-build and per-round costs are algorithmic and would stay in any language; the roughly 0.65 µs to read a node field and about 40 µs per expression per walk are Tcl overhead that compiled code would cut by a large constant factor.",
   "claims": [
    {
     "claim": "The bench's 'signatures' phase is really whole-program type inference plus semantic instances, not only contract solving. bench/golden-suites.tcl counts any unprofiled callee's time toward its caller, and hir::types::infer and every hir::semantic::* proc except verify are unprofiled, so all of it lands under hir::signatures::infer.",
@@ -1003,7 +1003,7 @@
     "evidence": [
      "hir/signatures.tcl:247-279 (loop: Install, hir::types::infer, Collect, Solve; return only when next == seeds)",
      "rounds.tcl on representation.bot: build 1 typings 253.7 + 192.4 ms, build 2 typings 120.0 + 141.5 ms",
-     "min.bot (import compiler, import test, 1): hir::types::infer called 2 times for 1 build"
+     "min.bot (import std::compiler, import std::test, 1): hir::types::infer called 2 times for 1 build"
     ],
     "verified": true
    },
@@ -1050,7 +1050,7 @@
      "hir/hir.tcl:424-465 (BuildFull: UsesCoroutines, Stamp, BuildOnce, DecideMethodCalls, monomorphize, ElaborateResumes, mutvec::Elaborate)",
      "errors.bot bench profile: static-decisions 772 ms",
      "errors.bot deep profile: decide self 40 + Expand 29 + Sites 7 + Simulate 1.5 + Attribute 1.1 + Round 0.9 = ~80 ms of decision logic, versus mutvec::Elaborate 455 + BuildFull self (incl. UsesCoroutines) 98 + Stamp 79 + ElaborateResumes 7 = ~640 ms",
-     "lib/test.bot uses MutableVector and a coroutine, so every golden suite pays mutvec::Elaborate (gated by Used) and Stamp in every build"
+     "stdlib/test.bot uses MutableVector and a coroutine, so every golden suite pays mutvec::Elaborate (gated by Used) and Stamp in every build"
     ],
     "verified": true
    },
@@ -1085,7 +1085,7 @@
    {
     "claim": "Every build of every golden suite re-resolves and re-analyzes the test framework and compiler library: about 1450 HIR exprs and about 0.5 s per build. The library code is 53-86% of the analyzed HIR in the suites measured.",
     "evidence": [
-     "min.bot (import compiler, import test): 1451 HIR exprs, front end 0.80 s, of which parse 0.22 s plus module loading about 0.06 s",
+     "min.bot (import std::compiler, import std::test): 1451 HIR exprs, front end 0.80 s, of which parse 0.22 s plus module loading about 0.06 s",
      "HIR sizes: traits-path 1679, harness 2250, representation 2656, errors 2731 exprs",
      "surface/modules.tcl:1105-1110 (-modules sections passed to every hir::buildSyntax build)",
      "inferred lower bound: 329 builds x ~0.5 s ~= 165 s across the corpus"
@@ -1192,8 +1192,8 @@
    "Could intermediate decision builds skip mutvec::Elaborate, ElaborateResumes and Stamp, since Attribute only reads diagnostics? Elaborate's body (hir/mutvec.tcl:369-596) records no diagnostic, but staticdeps::Deps reads that round's HIR, so this needs checking.",
    "Could hygiene run once on the final HIR, or be indexed (binding -> its refs)? Some messages print binding names (the known hygiene-name gap in STATIC-DECISION-ECONOMICS.md), so diagnostic wording must be checked first.",
    "For compile-once across processes, or a frontend written in Botlish with Tcl still orchestrating: hir::format does not print the 'semantic' side table, and hir/specialize.tcl:1014 reads it for precision. Does the HIR text round trip carry everything the backends use, or would a reader need to re-run hir::check?",
-   "lib/ has no hash-map type (only lists, ImmutableSet, MutableVector/MutableArray). A Botlish front end would need maps or dense-id arrays to avoid the same per-node lookup and copying costs. Which language milestone would supply that?",
-   "Could analysis summaries of library modules (lib/test.bot, lib/compiler.bot) be cached across builds and suites? Instances are keyed by caller argument types, and trait/affine monomorphization clones module functions, so only the caller-independent parts look cacheable."
+   "stdlib/ has no hash-map type (only lists, ImmutableSet, MutableVector/MutableArray). A Botlish front end would need maps or dense-id arrays to avoid the same per-node lookup and copying costs. Which language milestone would supply that?",
+   "Could analysis summaries of library modules (stdlib/test.bot, stdlib/compiler.bot) be cached across builds and suites? Instances are keyed by caller argument types, and trait/affine monomorphization clones module functions, so only the caller-independent parts look cacheable."
   ]
  },
  {
@@ -1206,7 +1206,7 @@
    {
     "claim": "The format prints declarations, then only the entry program's top scope header and the root expressions. Module section scopes are never printed.",
     "verdict": "confirmed",
-    "evidence": "Read hir/format.tcl:72-103, 226-235 and hir/read.tcl:362-378. One detail: the module sections' root expressions (including their `bind` lines) are printed, flattened under the entry program's header with no scope. Running main's format on examples/surface/14-modules.bot gives `program s2` followed by `e1 bind b1 mathish::inc`, although e1's scope is s3. Blocks also print `staticRefs (...)` (hir/format.tcl:351-352), and the reader reads it back (hir/read.tcl:905)."
+    "evidence": "Read hir/format.tcl:72-103, 226-235 and hir/read.tcl:362-378. One detail: the module sections' root expressions (including their `bind` lines) are printed, flattened under the entry program's header with no scope. Running main's format on examples/surface/14-modules.bot gives `program s2` followed by `e1 bind b1 std::mathish::inc`, although e1's scope is s3. Blocks also print `staticRefs (...)` (hir/format.tcl:351-352), and the reader reads it back (hir/read.tcl:905)."
    },
    {
     "claim": "Backend-facing analysis facts are deliberately printed and read back with fallbacks: affine moves and releases, contexts, trait clones, coroutine effect and resume, proofs, declared errors, known.",
@@ -1216,7 +1216,7 @@
    {
     "claim": "A program with source-module imports does not read back, and the repository's tests acknowledge this.",
     "verdict": "confirmed",
-    "evidence": "Reproduced: traits-path fails with 'HIR text line 20: binding b1 (linux::path::nul_free?) is not declared and is not a root name', and 14-modules.bot fails at line 2 (mathish::inc). The error comes from hir/read.tcl:543-545, and the module scopes come from hir/resolve.tcl:111-114 and 141-155. The tests say so at tests/error-payloads.test:349, tests/immutable-set.test:46-50 and tests/loop-collecting.test:582. Scale: 21 of 41 examples/*/*.bot plus bench/*.bot programs import a source module."
+    "evidence": "Reproduced: traits-path fails with 'HIR text line 20: binding b1 (std::linux::path::nul_free?) is not declared and is not a root name', and 14-modules.bot fails at line 2 (std::mathish::inc). The error comes from hir/read.tcl:543-545, and the module scopes come from hir/resolve.tcl:111-114 and 141-155. The tests say so at tests/error-payloads.test:349, tests/immutable-set.test:46-50 and tests/loop-collecting.test:582. Scale: 21 of 41 examples/*/*.bot plus bench/*.bot programs import a source module."
    },
    {
     "claim": "Both backends need module identity from HIR tables the text lacks.",
@@ -1226,7 +1226,7 @@
    {
     "claim": "All 88 golden suites import modules, so none can round-trip today.",
     "verdict": "confirmed",
-    "evidence": "88 tests/golden/*.bot files, and `grep -L 'import test'` finds none. Separately, 11 suites contain String literals with a real \\n, which would still fail after module support (claim 11)."
+    "evidence": "88 tests/golden/*.bot files, and `grep -L 'import std::test'` finds none. Separately, 11 suites contain String literals with a real \\n, which would still fail after module support (claim 11)."
    },
    {
     "claim": "For module-free programs the round trip is semantically exact: Core IR, specialized and generic NIR identical except where boundsVerdicts matter.",
@@ -1256,7 +1256,7 @@
    {
     "claim": "A String literal containing a newline breaks the line-based reader. Other awkward literals round-trip.",
     "verdict": "confirmed",
-    "evidence": "Reproduced 'HIR text line 3: not a list of words' for \"line1\\nline2\", \"ab\\n\" and \"a\\n# not a comment\". These round-trip with equal interp and native values: \\r, {, }{, quotes, #x, ' : ' with @, backslash, trailing spaces, tab, and [x]$y. The newline literal also appears in lib/io.bot:59 and :67 and in 11 golden suites (e.g. tests/golden/contexts.bot:559 and bits-bytes-hashing.bot:436)."
+    "evidence": "Reproduced 'HIR text line 3: not a list of words' for \"line1\\nline2\", \"ab\\n\" and \"a\\n# not a comment\". These round-trip with equal interp and native values: \\r, {, }{, quotes, #x, ' : ' with @, backslash, trailing spaces, tab, and [x]$y. The newline literal also appears in stdlib/io.bot:59 and :67 and in 11 golden suites (e.g. tests/golden/contexts.bot:559 and bits-bytes-hashing.bot:436)."
    },
    {
     "claim": "The in-memory HIR is not self-contained: once another program is compiled in the same process, native lowering of the first HIR fails.",
@@ -1286,7 +1286,7 @@
    {
     "claim": "Analysis, decisions and monomorphization are about two-thirds of front-end time, and syntax is about 13-17%.",
     "verdict": "partly",
-    "evidence": "I profiled with the same wrapper set as bench/golden-suites.tcl:37-66 while the machine was loaded. Analysis-type phases came to about 60-65%, which agrees. Syntax was larger than claimed: on traits-path, parse was 17-21% and loader self time (BuildProgram/LowerStatements) 5-6%, about 23-27% in total over two runs; on harness, parse alone was 18%. Parse time is mostly library re-parsing: of 233 ms of parse on traits-path, lib/test.bot took 176 ms and the suite file 21 ms. The largest single phase is hir::signatures::infer (type inference) at 16-19%. Next come static::decide self time (10-17%), errorsets (7-9%) and affine (6-9%)."
+    "evidence": "I profiled with the same wrapper set as bench/golden-suites.tcl:37-66 while the machine was loaded. Analysis-type phases came to about 60-65%, which agrees. Syntax was larger than claimed: on traits-path, parse was 17-21% and loader self time (BuildProgram/LowerStatements) 5-6%, about 23-27% in total over two runs; on harness, parse alone was 18%. Parse time is mostly library re-parsing: of 233 ms of parse on traits-path, stdlib/test.bot took 176 ms and the suite file 21 ms. The largest single phase is hir::signatures::infer (type inference) at 16-19%. Next come static::decide self time (10-17%), errorsets (7-9%) and affine (6-9%)."
    },
    {
     "claim": "Core IR is fully textual but is no substitute boundary: native refuses it and the Tcl compiler's Core-IR path re-analyzes with hir::build.",
@@ -1315,7 +1315,7 @@
    "Tcl-side native lowering costs about as much as the front end, so a Botlish front end does not make compile-once cheap. traits-path: native::nir 551-608 ms specialized plus 254-284 ms generic, against a 1.5-1.9 s front end. harness: 1101 ms plus 550 ms, against 1617 ms. golden run.tcl lowers each suite to NIR twice: generic and specialized.",
    "Counterexample: losing `semantic` turns a working native compile into NATIVE UNSUPPORTED struct-shape. examples/stdlib/csv_records.bot:357:23 fails when only the semantic table is removed. A text format would also have to carry `semantic` and `coroutines`, not just module sections, newline-safe literals and boundsVerdicts.",
    "The registry coupling can fail silently. Native lowering of a still-valid in-memory HIR, after another compile in the same process, emitted `unreachable` in place of the program's result with no lowering error. Separately, error declarations leak from one compilation into the next program's HIR and HIR text (hir/errordecls.tcl:169-173; hir/hir.tcl BuildOnce stores the result as errorDecls).",
-   "Compile-once opportunity that needs no Botlish rewrite: library modules are re-parsed and re-analyzed for every program. lib/test.bot alone takes 176 of 233 ms of traits-path's parse time, and every golden suite imports it. Caching library ASTs or analyzed sections would cut the 'syntax' share.",
+   "Compile-once opportunity that needs no Botlish rewrite: library modules are re-parsed and re-analyzed for every program. stdlib/test.bot alone takes 176 of 233 ms of traits-path's parse time, and every golden suite imports it. Caching library ASTs or analyzed sections would cut the 'syntax' share.",
    "The golden runner's default `compile` backend is not compile-once. tests/golden/run.tcl:202 and 93-97 run Core IR through core::compiler, which calls hir::build again (compiler/compiler.tcl:582-584). The compile-hir path, which reuses the HIR, is opt-in.",
    "Limits relevant to a large Botlish front end, from NATIVE-BOTLISH-LOWERING-IMPL.md §1 and §9 (not re-measured): the front end overflows Tcl nesting in hir::completions at a static call depth of about 110 (2,000-line synthetic chain), and the specializer and semantic-instance budgets are 8/1000 and 16/2000."
   ]
@@ -1335,7 +1335,7 @@
    {
     "claim": "The front end fills process-wide registries that are not part of the HIR value (imports, errordecls, structs, enums, traits, sourcetypes into core::type/core::native), all from hir::BuildOnce.",
     "verdict": "confirmed",
-    "evidence": "I read hir/hir.tcl:471-543 (BuildOnce). A namespace-variable diff around the traits-path front end showed changes to hir::enums::registry, hir::structs::{registry,affinity}, hir::errordecls::{payloads,current}, hir::sourcetypes::generation, hir::imports::table, hir::traits::{unitNames,impls,registry} and core::type::registry. core/type.tcl:444-456 (definePredicate) registers predicate natives into core::native. Qualification: much of this content is also in the HIR. sourceTypes carries enum and struct entries with fields, opaque and context flags (the test::Suite entry has 'context 1'). The backends just do not read it from there."
+    "evidence": "I read hir/hir.tcl:471-543 (BuildOnce). A namespace-variable diff around the traits-path front end showed changes to hir::enums::registry, hir::structs::{registry,affinity}, hir::errordecls::{payloads,current}, hir::sourcetypes::generation, hir::imports::table, hir::traits::{unitNames,impls,registry} and core::type::registry. core/type.tcl:444-456 (definePredicate) registers predicate natives into core::native. Qualification: much of this content is also in the HIR. sourceTypes carries enum and struct entries with fields, opaque and context flags (the std::test::Suite entry has 'context 1'). The backends just do not read it from there."
    },
    {
     "claim": "The backends read those registries rather than the HIR (hir::lower via errordecls::hasPayload and IsAffine; native lowering via enums::cases, structs::names/fieldTypes, errordecls, core::native::metadata, written into the NIR header).",
@@ -1385,12 +1385,12 @@
    {
     "claim": "Caching works across processes if the HIR dict string is stored with a registry snapshot; with HIR alone only interp (and sometimes compile-hir) passes; load is milliseconds; HIR about 1 MB, registries about 70 KB.",
     "verdict": "confirmed",
-    "evidence": "Reproduced for traits-path with 12 registry variables: all 5 backends passed in a fresh process, load took 7-8 ms, the HIR was 1,378,194 bytes and the registries 69,170 bytes. With HIR only: interp passed, compile failed with NOT-A-CONTEXT, and compile-hir and both native backends failed with 'unknown type linux::path::LinuxPath'. For my module-free a0 program, HIR only passed interp, compile and compile-hir; native failed. About half of traits-path's HIR string is traitSource (690 KB), a complete embedded copy of the pre-monomorphization HIR that no backend reads (hir/traits.tcl:2281-2284)."
+    "evidence": "Reproduced for traits-path with 12 registry variables: all 5 backends passed in a fresh process, load took 7-8 ms, the HIR was 1,378,194 bytes and the registries 69,170 bytes. With HIR only: interp passed, compile failed with NOT-A-CONTEXT, and compile-hir and both native backends failed with 'unknown type std::linux::path::LinuxPath'. For my module-free a0 program, HIR only passed interp, compile and compile-hir; native failed. About half of traits-path's HIR string is traitSource (690 KB), a complete embedded copy of the pre-monomorphization HIR that no backend reads (hir/traits.tcl:2281-2284)."
    },
    {
     "claim": "The HIR text format (hir::format/hir::parse) does not work as a cache format: traits-path fails to read back, and it omits the semantic side table by design.",
     "verdict": "confirmed",
-    "evidence": "Reproduced. Text formatted with the registries loaded failed to parse in a fresh process: 'HIR text line 20: binding b1 (linux::path::nul_free?) is not declared and is not a root name'. The module-free a0 program round-trips and passes all 5 backends. hir/hir.tcl:68-82 documents that warnings and semantic are not printed. hir::format itself also depends on the registries: in a fresh process without them it fails with 'core::type: unknown type \"linux::path::LinuxPath\"'."
+    "evidence": "Reproduced. Text formatted with the registries loaded failed to parse in a fresh process: 'HIR text line 20: binding b1 (std::linux::path::nul_free?) is not declared and is not a root name'. The module-free a0 program round-trips and passes all 5 backends. hir/hir.tcl:68-82 documents that warnings and semantic are not printed. hir::format itself also depends on the registries: in a fresh process without them it fails with 'core::type: unknown type \"std::linux::path::LinuxPath\"'."
    },
    {
     "claim": "The HIR already carries the program's declarations (sourceTypes, errorDecls, errorPayloads, traits), hir::read shows how to re-register them, so backends could take them from the HIR; imports and trait impl tables are not carried.",
@@ -1418,9 +1418,9 @@
    "Any surface compile resets the struct and enum registries, even one declaring nothing (hir/hir.tcl:481-492: surface always passes -struct-decls and -type-decls). Compiling '1 + 2' after A0 and before running A0 made specialized cranelift miscompile A0: a run-time trap, NATIVE BUG 'native code reached a point HIR proved unreachable'. This is not a clean lowering error.",
    "The Tcl compiler re-enters the quadratic hir::lower once per block expression. CompileBlock calls hir::lower::params/body (compiler/compiler.tcl:669). On traits-path compile-hir made 718 hir::affine::temporaries calls, taking 0.67 s of the 0.80 s backend.",
    "main.tcl -backend compile lowers twice (main.tcl:111-112, then compiler/compiler.tcl:178). After the run it calls core::compiler::programTypes $program (main.tcl:183-186), which goes compiler.tcl:223 -> compileUnit -> GenerateUnit -> hir::build at compiler.tcl:588. That repeats a whole BuildOnce + hir::check and a second code generation just to print types.",
-   "Trait monomorphization is a full second whole-program build (hir/hir.tcl:443-447, hir::traits::monomorphize at hir/traits.tcl:2250). On traits-path it took 0.557 s, 34% of the front end. It runs whenever any loaded module declares a trait (lib/io.bot, lib/io/path.bot), or for the affine plan of coroutine-using programs (hir/hir.tcl:430-431). It is a separable front-end cost the investigation counted as 'builds'.",
+   "Trait monomorphization is a full second whole-program build (hir/hir.tcl:443-447, hir::traits::monomorphize at hir/traits.tcl:2250). On traits-path it took 0.557 s, 34% of the front end. It runs whenever any loaded module declares a trait (stdlib/io.bot, stdlib/io/path.bot), or for the affine plan of coroutine-using programs (hir/hir.tcl:430-431). It is a separable front-end cost the investigation counted as 'builds'.",
    "The final HIR embeds the whole pre-monomorphization HIR as traitSource (hir/traits.tcl:2281-2284; 690 KB of traits-path's 1.38 MB). Only hir/contexts.tcl:1124 and hir/warnings.tcl:137 read it, never a backend, so a cache or front-end seam could drop half the payload.",
-   "hir::format, the HIR's own text printer, depends on the registries: in a fresh process without them it fails with 'core::type: unknown type \"linux::path::LinuxPath\"'. Even the documented textual interface is registry-coupled.",
+   "hir::format, the HIR's own text printer, depends on the registries: in a fresh process without them it fails with 'core::type: unknown type \"std::linux::path::LinuxPath\"'. Even the documented textual interface is registry-coupled.",
    "The front end reads Tcl-registered native metadata: 92 natives at startup, each with paramTypes, resultType, ownership, completion, errors, bounds, resultRange, resultLength, dropForm and more (core/native.tcl:699-705 metadata, registrations across core/*.tcl). A Botlish front end would need this exported as data or would have to query Tcl for it.",
    "The golden 'compile' backend runs a different HIR from the front end's: an HIR rebuilt from Core IR with -strict 0. For -origin ir it skips mutvec elaboration (hir/hir.tcl:452-460), and it re-resolves struct heads against the registries. Only compile-hir, which runs only on request (tests/golden/run.tcl:202), runs the front end's HIR on the Tcl compiler.",
    "Cache keys also need the environment. Lowering options come from BOTLISH_NATIVE_* variables (native/lower.tcl:1260-1280 and 1381-1395). The warnings policy comes from BOTLISH_WARNINGS (hir/warnings.tcl:103-108). surface::readProgramFile loads Tcl libraries named in '# requires:' comments into the process (surface/surface.tcl:52-56, core/core.tcl:36-52); that is process state outside the HIR, used by audit/direct-hir-native-path/probes/module-web.bot and by .ir/.hir fixtures.",
@@ -1455,14 +1455,14 @@
     "evidence": "Real hidden channels exist. hir/resolve.tcl:1568 and hir/contexts.tcl:139 read hir::traits::Planning, which monomorphize sets (traits.tcl:2251-2267), and surface::lower::staticDeferred is set around lowering (modules.tcl:953-961). But the affine variables (affine.tcl:105-127) and the completions cache (completions.tcl:175-203, reset per pass) are private per-run state of one pass, not channels between passes. The coupling that actually blocks moving one pass is the HIR dict plus the name-keyed process registries (hir::structs/enums/traits/errordecls/imports, core::type, core::native)."
    },
    {
-    "claim": "Backends depend on registries the front end left in the process, so a HIR value is not self-contained. In a fresh process interp runs, compile fails NOT-A-CONTEXT and cranelift fails 'unknown type linux::path::LinuxPath'. An intervening compile makes cranelift fail with CONTEXT-NATIVE-LOWERING-UNSUPPORTED.",
+    "claim": "Backends depend on registries the front end left in the process, so a HIR value is not self-contained. In a fresh process interp runs, compile fails NOT-A-CONTEXT and cranelift fails 'unknown type std::linux::path::LinuxPath'. An intervening compile makes cranelift fail with CONTEXT-NATIVE-LOWERING-UNSUPPORTED.",
     "verdict": "confirmed",
-    "evidence": "Reproduced with a dumped traits-path HIR (1,378,194 chars) loaded in fresh processes: interp '2 passed, 0 failed'; compile 'CORE SEMANTIC NOT-A-CONTEXT' (1 build); compile-hir and cranelift fail with 'core::type: unknown type \"linux::path::LinuxPath\"'. In-process, after compiling examples/surface/01-arithmetic.bot, cranelift fails with CONTEXT-NATIVE-LOWERING-UNSUPPORTED (test::Suite). Two additions. compile survives only on a core::compiler::cache hit (compiler/compiler.tcl:152-163): run uncached, or with the cache cleared, it fails with 'key \"compiler::SourceLocation\" not known'. Also, hir::format of the reloaded dict fails in a fresh process with the same unknown-type error."
+    "evidence": "Reproduced with a dumped traits-path HIR (1,378,194 chars) loaded in fresh processes: interp '2 passed, 0 failed'; compile 'CORE SEMANTIC NOT-A-CONTEXT' (1 build); compile-hir and cranelift fail with 'core::type: unknown type \"std::linux::path::LinuxPath\"'. In-process, after compiling examples/surface/01-arithmetic.bot, cranelift fails with CONTEXT-NATIVE-LOWERING-UNSUPPORTED (std::test::Suite). Two additions. compile survives only on a core::compiler::cache hit (compiler/compiler.tcl:152-163): run uncached, or with the cache cleared, it fails with 'key \"std::compiler::SourceLocation\" not known'. Also, hir::format of the reloaded dict fails in a fresh process with the same unknown-type error."
    },
    {
     "claim": "HIR text is not a complete interchange format: -origins 1 fails on source origins, module programs fail (undeclared module bindings), and single-file programs drop methodCalls, methodChoices, flagAllowed, coroutines, semantic, contexts, affine, mutvec, methodDecided.",
     "verdict": "confirmed",
-    "evidence": "Reproduced. traits-path -origins 1 gives 'origin file f4 does not match its position (ir 0)', and even import-free 15-enums.bot fails the same way with f1: the reader accepts only {ir PATH} origins (hir/read.tcl:793-795). Without origins, traits-path fails with 'binding b1 (linux::path::nul_free?) is not declared'. 15-enums.bot and bench/sum-refined.bot round-trip (identical re-formatted text) and lose exactly the nine listed keys."
+    "evidence": "Reproduced. traits-path -origins 1 gives 'origin file f4 does not match its position (ir 0)', and even import-free 15-enums.bot fails the same way with f1: the reader accepts only {ir PATH} origins (hir/read.tcl:793-795). Without origins, traits-path fails with 'binding b1 (std::linux::path::nul_free?) is not declared'. 15-enums.bot and bench/sum-refined.bot round-trip (identical re-formatted text) and lose exactly the nine listed keys."
    },
    {
     "claim": "(experiment) After a HIR text round trip the NIR text differs substantially (163940 vs 37477 chars).",
@@ -1500,9 +1500,9 @@
     "evidence": "hir/semantic.tcl:160 (levelLimit 700), 351 (nesting decline when [info level] > $levelLimit). Runners also raise interp recursionlimit to 100000 (tests/golden/run.tcl:59)."
    },
    {
-    "claim": "Time is in the per-build analysis (~76-83% of the front end); parsing 9-16%, mostly lib/test.bot (~0.19 s) in each fresh process, lexing 60-75% of parse; lowering and loading 3-6%.",
+    "claim": "Time is in the per-build analysis (~76-83% of the front end); parsing 9-16%, mostly stdlib/test.bot (~0.19 s) in each fresh process, lexing 60-75% of parse; lowering and loading 3-6%.",
     "verdict": "confirmed",
-    "evidence": "My profile of traits-path (1.72 s, 2 builds): lex 0.194 + parse 0.094 = 16.7% (lexer 67%); load + collect + lower-seq + buildProgram 0.089 s (5%); the remaining ~78% is build/analysis. errors.bot (4.23 s, 3 builds): lex + parse 9.1%. lib/test.bot alone: lex 0.13-0.18 s, parse incl. lex 0.17-0.19 s. Qualification: tests/golden/run.tcl runs all suites in one process (run.tcl:202-222), and ParseModule caches by {path text} (modules.tcl:120-143), so there test.bot is parsed once per runner; the per-suite cost applies to fresh processes (bench/golden-suites.tcl)."
+    "evidence": "My profile of traits-path (1.72 s, 2 builds): lex 0.194 + parse 0.094 = 16.7% (lexer 67%); load + collect + lower-seq + buildProgram 0.089 s (5%); the remaining ~78% is build/analysis. errors.bot (4.23 s, 3 builds): lex + parse 9.1%. stdlib/test.bot alone: lex 0.13-0.18 s, parse incl. lex 0.17-0.19 s. Qualification: tests/golden/run.tcl runs all suites in one process (run.tcl:202-222), and ParseModule caches by {path text} (modules.tcl:120-143), so there test.bot is parsed once per runner; the per-suite cost applies to fresh processes (bench/golden-suites.tcl)."
    },
    {
     "claim": "Within a build, hir::types::infer (with semantic walks) is the largest pass (12-32%), followed by completions/errorsets, hygiene, affine, mutvec::Elaborate, resolve, semantic::verify.",
@@ -1522,7 +1522,7 @@
    {
     "claim": "Tcl can stay the orchestrator: native::Outcome reads the run's value as host runtime values; input via argv() on all backends and read(2) on stdin under Linux native; there is no openat.",
     "verdict": "partly",
-    "evidence": "native::Outcome/Driver: native/native.tcl:149-215 (NIR in via a temp file, value back on stdout); argv on all backends: ARGV.md. stdin read is linux::read -> linux::abi::syscall, which the Tcl backends refuse (core/linuxabi.tcl:69-71, lib/linux.bot:47), so it is native/AOT only. There is no openat function (lib/linux/io.bot:57), but the raw syscall transport plus abi::x86_64::from_bytes (lib/linux.bot:57-65) looks enough to write one as ordinary Botlish (inference, untested). Each native run is a fresh botlish-native process with its own Cranelift compile, so a Botlish front end would pay JIT per invocation unless AOT-built (native::executable takes closed programs only, native.tcl:254-280)."
+    "evidence": "native::Outcome/Driver: native/native.tcl:149-215 (NIR in via a temp file, value back on stdout); argv on all backends: ARGV.md. stdin read is std::linux::read -> std::linux::abi::syscall, which the Tcl backends refuse (core/linuxabi.tcl:69-71, stdlib/linux.bot:47), so it is native/AOT only. There is no openat function (stdlib/linux/io.bot:57), but the raw syscall transport plus std::abi::x86_64::from_bytes (stdlib/linux.bot:57-65) looks enough to write one as ordinary Botlish (inference, untested). Each native run is a fresh botlish-native process with its own Cranelift compile, so a Botlish front end would pay JIT per invocation unless AOT-built (native::executable takes closed programs only, native.tcl:254-280)."
    },
    {
     "claim": "Language prerequisites: enums are payload-free and there is no map type; HIR ids are dense per-kind counters (vectors possible) but name-keyed registries need maps.",
@@ -1532,7 +1532,7 @@
    {
     "claim": "Module ASTs are cached only in-process, keyed by file text; lowered sections are not reusable across programs because FileIds are assigned in load order and remapped; a cross-process AST cache would be a cheap form of compile-once for libraries.",
     "verdict": "partly",
-    "evidence": "The cache (modules.tcl:120-143, cleared past 64), the load-order FileId (LoadNamespace, about modules.tcl:519-521) and RemapFile (modules.tcl:340ff) are confirmed. But an AST cache saves only parsing (about 9-17% cold). Library code is resolved and analyzed inside every whole-program build: there is no separate compilation (modules.tcl:108-112), and library facts depend on the whole program (the erased-callable contract, LARGE-SCALE-GOLDEN-MIGRATION.md:226-231; semantic instances). lib/test.bot is 1393 of 1679 HIR expressions in traits-path (83%) and 1393 of 2731 in errors.bot (51%), re-analyzed in every build."
+    "evidence": "The cache (modules.tcl:120-143, cleared past 64), the load-order FileId (LoadNamespace, about modules.tcl:519-521) and RemapFile (modules.tcl:340ff) are confirmed. But an AST cache saves only parsing (about 9-17% cold). Library code is resolved and analyzed inside every whole-program build: there is no separate compilation (modules.tcl:108-112), and library facts depend on the whole program (the erased-callable contract, LARGE-SCALE-GOLDEN-MIGRATION.md:226-231; semantic instances). stdlib/test.bot is 1393 of 1679 HIR expressions in traits-path (83%) and 1393 of 2731 in errors.bot (51%), re-analyzed in every build."
    },
    {
     "claim": "(summary) Compile-once only works inside one process today, and only until another compilation runs.",
@@ -1542,16 +1542,16 @@
   ],
   "missed": [
    "Cross-process compile-once nearly works with existing code: save the declaration header lines of hir::format (hir/format.tcl:80-98) next to the HIR dict, replay them with hir::read::TypeDecls/ErrorDecls (hir/read.tcl:76-130, 352-358) in a fresh process, and traits-path.bot and harness.bot then pass on cranelift, compile-hir and compile (experiment). The open question about restoring registries is answered for these suites.",
-   "lib/test.bot dominates every build: 1393 of 1679 HIR expressions in traits-path (83%) and 1393 of 2731 in errors.bot (51%). Modules have no separate compilation (surface/modules.tcl:108-112), and library facts depend on the whole program (erased-callable contract, LARGE-SCALE-GOLDEN-MIGRATION.md:226-231), so the framework is re-resolved and re-analyzed in every static round and method trial. Analysis results cannot be cached per library.",
+   "stdlib/test.bot dominates every build: 1393 of 1679 HIR expressions in traits-path (83%) and 1393 of 2731 in errors.bot (51%). Modules have no separate compilation (surface/modules.tcl:108-112), and library facts depend on the whole program (erased-callable contract, LARGE-SCALE-GOLDEN-MIGRATION.md:226-231), so the framework is re-resolved and re-analyzed in every static round and method trial. Analysis results cannot be cached per library.",
    "Builds come mostly from method-call trials in the expensive suites: mutable-vector 21 of 30, mutable-array 14 of 21 (STATIC-DECISION-ECONOMICS.md:249-260). Corpus-wide, 81 of 329 builds are trials, and the batched front end takes 1,347 s for 88 suites, against 35,857 s sequentially (LARGE-SCALE-GOLDEN-MIGRATION.md:400-412). DecideMethodCalls (hir/hir.tcl:627-806) is a major separable cost driver beside the static rounds.",
    "The front end's type system and value representation are shared with the Tcl runtime, not only through registries. HIR analyses call core::type's algebra (subtype, narrow, normalize, integerFacts, evidenceOf, refinementOf; core/type.tcl), and HIR constants are core/value.tcl runtime values compared with core::value::equal/intOf (hir/exactvalue.tcl:192, 389, 485, 718; hir/range.tcl:767, 887). A Botlish front end must reimplement core/type.tcl's semantics too.",
    "hir/ never calls back into surface/ (grep finds only comments, e.g. hir/static.tcl:56, 1426), so surface -> hir is a clean one-way dependency. The surface lowering is small (surface/lower.tcl 824 lines, parser 3070, lexer 485, modules 1128) against about 49K lines in hir/.",
    "native::prepareHir re-runs the full hir::check when a -strict 0 HIR has violatedDeclared (native/prepare.tcl:31-58), and the Tcl test harness's cranelift backend hir::builds hand-written Core IR (tests/helpers.tcl:38-43). The native backend can therefore need the whole analysis suite, not only the shared lowering analyses.",
-   "The 'compile' backend survives an intervening compilation only through core::compiler::cache (compiler/compiler.tcl:152-163). Without a cache hit it fails with 'key \"compiler::SourceLocation\" not known' (experiment). Even hir::format of a reloaded HIR dict fails in a fresh process (unknown type linux::path::LinuxPath), so a reloaded dict cannot even be re-serialized without the registries.",
-   "tests/golden/run.tcl compiles and runs suites in one process, ordered compile -> all backends -> next suite (run.tcl:164-222). That ordering is what keeps the registries valid, and with the ParseModule cache it means lib/test.bot is parsed once per runner, not once per suite.",
-   "Static-site keys are origin file:start (hir/static.tcl:406-409), and rejected sites reify line/column into compiler::SourceLocation (static.tcl:617-625). A Botlish loader/lowerer must reproduce FileId assignment in load order and character offsets, not only node shapes, for decisions and observable locations to match.",
+   "The 'compile' backend survives an intervening compilation only through core::compiler::cache (compiler/compiler.tcl:152-163). Without a cache hit it fails with 'key \"std::compiler::SourceLocation\" not known' (experiment). Even hir::format of a reloaded HIR dict fails in a fresh process (unknown type std::linux::path::LinuxPath), so a reloaded dict cannot even be re-serialized without the registries.",
+   "tests/golden/run.tcl compiles and runs suites in one process, ordered compile -> all backends -> next suite (run.tcl:164-222). That ordering is what keeps the registries valid, and with the ParseModule cache it means stdlib/test.bot is parsed once per runner, not once per suite.",
+   "Static-site keys are origin file:start (hir/static.tcl:406-409), and rejected sites reify line/column into std::compiler::SourceLocation (static.tcl:617-625). A Botlish loader/lowerer must reproduce FileId assignment in load order and character offsets, not only node shapes, for decisions and observable locations to match.",
    "Warnings (open question): hir::warnings::run took 0.08 s on traits-path against a 1.64 s front end (about 5%), once per program; it is a small separable leaf.",
-   "Running a Botlish front end from Tcl: each native run is a separate botlish-native process, with NIR in via a temp file and argv via --argv-file (native/native.tcl:149-185), JIT-compiled per run. Standalone AOT exists only for closed programs (native/native.tcl:254-280). stdin/file input relies on linux::abi::syscall, which the Tcl backends refuse (core/linuxabi.tcl:69-71). So a front end that reads input would be native-only, while argv-supplied input works on all backends."
+   "Running a Botlish front end from Tcl: each native run is a separate botlish-native process, with NIR in via a temp file and argv via --argv-file (native/native.tcl:149-185), JIT-compiled per run. Standalone AOT exists only for closed programs (native/native.tcl:254-280). stdin/file input relies on std::linux::abi::syscall, which the Tcl backends refuse (core/linuxabi.tcl:69-71). So a front end that reads input would be native-only, while argv-supplied input works on all backends."
   ]
  },
  {
@@ -1577,9 +1577,9 @@
     "evidence": "Built an AOT echo executable (native::executable, 528 ms). A 131071-byte argument ran; 131072 bytes gave OSError errno 7 (E2BIG). getconf ARG_MAX = 2097152. Code: native/src/runtime/aot.rs:1-15."
    },
    {
-    "claim": "stdin and files cannot carry text into a Botlish program: abi::bytes has no indexing or decoding, no native turns bytes into a String, no openat wrapper.",
+    "claim": "stdin and files cannot carry text into a Botlish program: std::abi::bytes has no indexing or decoding, no native turns bytes into a String, no openat wrapper.",
     "verdict": "partly",
-    "evidence": "Confirmed: the API has no byte accessor (lib/abi/bytes.bot:88-90; the registry dump has only byte_store::from_list/byte_count and mutable_byte_store::*) and no decode native. Refuted in practice: Bytes support == (bytes.bot:16-17). A native program reading fd 0 one byte at a time (linux::read with a 1-byte MutableBytes) and comparing freeze(r.data) with abi::bytes::from_list(str::encode_utf8(\"h\")) decoded piped input 'hixh' to \"hi?h\". A 256-entry table would decode any byte. The remaining limits are real: one syscall per byte, native only, and non-ASCII scalars cannot be turned back into Strings (no character-to-String operation), so source would live as List/MutableArray of Ints. A file could be opened with raw openat (231/257-style numbers are unrestricted, hir/syscall.tcl:30)."
+    "evidence": "Confirmed: the API has no byte accessor (stdlib/abi/bytes.bot:88-90; the registry dump has only std::byte_store::from_list/byte_count and mutable_byte_store::*) and no decode native. Refuted in practice: Bytes support == (bytes.bot:16-17). A native program reading fd 0 one byte at a time (std::linux::read with a 1-byte MutableBytes) and comparing freeze(r.data) with std::abi::bytes::from_list(std::str::encode_utf8(\"h\")) decoded piped input 'hixh' to \"hi?h\". A 256-entry table would decode any byte. The remaining limits are real: one syscall per byte, native only, and non-ASCII scalars cannot be turned back into Strings (no character-to-String operation), so source would live as List/MutableArray of Ints. A file could be opened with raw openat (231/257-style numbers are unrestricted, hir/syscall.tcl:30)."
    },
    {
     "claim": "Each nesting level of the JIT result protocol re-escapes the level below, so strings with spaces or newlines grow exponentially with depth: about 4 characters per space at top level, 16 inside a List[String].",
@@ -1587,7 +1587,7 @@
     "evidence": "Measured. A top-level String of 1000 'a ' pairs plus one newline (2002 characters) gave a 5015-character line, 4 per space; with 1000 newlines a newline cost 3. The same String inside a List gave 17033, 16 per space. Qualification: the blow-up happens only when the string needs backslash escaping (a newline or CR, a backslash, or unbalanced braces; show.rs:327-341). Otherwise brace quoting applies at every level. The same 2001 characters without a newline gave 2015 at top level and 2024 inside a List, about 1x."
    },
    {
-    "claim": "In the JIT path a program's stdout and stderr land in the protocol pipe; native::Outcome ignores them, so evalHir loses io::print output.",
+    "claim": "In the JIT path a program's stdout and stderr land in the protocol pipe; native::Outcome ignores them, so evalHir loses std::io::print output.",
     "verdict": "confirmed",
     "evidence": "Ran examples/io/hello.bot. native::Driver returned {Hello, world!} {value unit}; native::evalHir returned unit. Note: native::Driver (native.tcl:151-186) does keep the lines, so a Tcl orchestrator can read them; only evalHir/Outcome (189-216) drops them."
    },
@@ -1599,7 +1599,7 @@
    {
     "claim": "Botlish has no exit-status facility; an unhandled declared error at top level is a compile-time error; failures must be returned as data.",
     "verdict": "partly",
-    "evidence": "Confirmed: an unhandled declared error is a compile error. A top-level call that may raise abi::x86_64::Register64AboveRange was rejected ('may produce the declared error ... neither handled here'). tests/golden/run.tcl:15 states the library-level fact. Refuted for native code: a program calling linux::abi::syscall({rax: register64(231), rdi: register64(3)}) (exit_group) made `botlish-native run` exit with status 3. So an exit status is reachable through the raw syscall today, native only. native::Driver would report it as NATIVE BUG because there is no value line (native.tcl:177-181), but an AOT executable gets a real exit code."
+    "evidence": "Confirmed: an unhandled declared error is a compile error. A top-level call that may raise std::abi::x86_64::Register64AboveRange was rejected ('may produce the declared error ... neither handled here'). tests/golden/run.tcl:15 states the library-level fact. Refuted for native code: a program calling std::linux::abi::syscall({rax: register64(231), rdi: register64(3)}) (exit_group) made `botlish-native run` exit with status 3. So an exit status is reachable through the raw syscall today, native only. native::Driver would report it as NATIVE BUG because there is no value line (native.tcl:177-181), but an AOT executable gets a real exit code."
    },
    {
     "claim": "Recursion depth is ample: 1 GiB worker stack, and stack exhaustion fails cleanly.",
@@ -1607,7 +1607,7 @@
     "evidence": "Read main.rs:66-72 and aot.rs:25-30 (1<<30 default, BOTLISH_NATIVE_STACK_BYTES) and the guard-page fault handler in platform/x86_64_linux.rs:32-52, which writes the NATIVE LIMIT STACK line and exits. I did not re-run the 10^7/10^8 depth experiment."
    },
    {
-    "claim": "AOT needs every used specialized instance closed. Typed code (the golden suites with lib/test.bot) is closed; untyped code is guarded and rejected.",
+    "claim": "AOT needs every used specialized instance closed. Typed code (the golden suites with stdlib/test.bot) is closed; untyped code is guarded and rejected.",
     "verdict": "confirmed",
     "evidence": "native.tcl:254-285. Ran hir::specialize::regions: traits-path closed 48; examples/stdlib/hashtable.bot closed 23, guarded 4, the first being ht_should_grow (UnknownCallResultKind: `counts: mutarray` is the raw kind, hashtable.bot:83-87, 129-130). I also wrote a 30-line typed str->int open-addressing table (MutableArray[str]/[int]/[bool], hash, mod). It ran on native and interp (229) and was closed 6/6. A typed table can stay AOT-ready, but without type variables it has to be duplicated per key/value type."
    },
@@ -1619,12 +1619,12 @@
    {
     "claim": "The coupling is the HIR handoff: backends consume the in-memory HIR dict and side tables, and native lowering calls many hir/ analyses directly. Whatever a Botlish front end emits must rebuild that dict.",
     "verdict": "partly",
-    "evidence": "Confirmed that native/lower.tcl uses 18 hir sub-namespaces (affine, aot, blockescape, completions, construction, contexts, enums, errordecls, escape, exact, mutvec, range, specialize, stringregion, structs, syscall, traversal, types), plus hir::get 76x and others. prepareHir re-runs hir::check only for a violatedDeclared HIR (prepare.tcl:32-35). Incomplete and materially wrong as a recipe: the dict alone is NOT sufficient. Writing the traits-path dict to a file and reading it in a fresh tclsh, native::evalHir failed with 'core::type: unknown type \"linux::path::LinuxPath\"', while interp succeeded. In one process, after compiling a second program (15-enums.bot), the first program's HIR failed on compile (key \"compiler::SourceLocation\" not known) and on native (the same unknown type). Only interp still worked. The backends read process-global registries outside the dict: core::type::registry, hir::structs::registry, hir::enums::registry and hir::errordecls payloads (structs.tcl:189-210, enums.tcl:81-115, errordecls.tcl:278-312), and every build resets them (hir.tcl:472-505; sourcetypes.tcl:24-72 documents 'not built for concurrent or nested compilation'). A Botlish front end's output must therefore also let Tcl repopulate those registries, as hir/read.tcl:79-135 does for HIR text."
+    "evidence": "Confirmed that native/lower.tcl uses 18 hir sub-namespaces (affine, aot, blockescape, completions, construction, contexts, enums, errordecls, escape, exact, mutvec, range, specialize, stringregion, structs, syscall, traversal, types), plus hir::get 76x and others. prepareHir re-runs hir::check only for a violatedDeclared HIR (prepare.tcl:32-35). Incomplete and materially wrong as a recipe: the dict alone is NOT sufficient. Writing the traits-path dict to a file and reading it in a fresh tclsh, native::evalHir failed with 'core::type: unknown type \"std::linux::path::LinuxPath\"', while interp succeeded. In one process, after compiling a second program (15-enums.bot), the first program's HIR failed on compile (key \"std::compiler::SourceLocation\" not known) and on native (the same unknown type). Only interp still worked. The backends read process-global registries outside the dict: core::type::registry, hir::structs::registry, hir::enums::registry and hir::errordecls payloads (structs.tcl:189-210, enums.tcl:81-115, errordecls.tcl:278-312), and every build resets them (hir.tcl:472-505; sourcetypes.tcl:24-72 documents 'not built for concurrent or nested compilation'). A Botlish front end's output must therefore also let Tcl repopulate those registries, as hir/read.tcl:79-135 does for HIR text."
    },
    {
     "claim": "HIR text (hir::format/hir::parse) is not a usable interchange format: it is debugging output, fails for any program importing a module, and drops 9 side tables.",
     "verdict": "confirmed",
-    "evidence": "hir/format.tcl:1. Ran: 14-modules.bot failed with 'HIR text line 2: binding b1 (mathish::inc) is not declared and is not a root name'. 15-enums.bot and 03-closure.bot parsed and gave the same native value but lacked methodChoices, methodCalls, flagAllowed, coroutines, semantic, contexts, affine, mutvec and methodDecided."
+    "evidence": "hir/format.tcl:1. Ran: 14-modules.bot failed with 'HIR text line 2: binding b1 (std::mathish::inc) is not declared and is not a root name'. 15-enums.bot and 03-closure.bot parsed and gave the same native value but lacked methodChoices, methodCalls, flagAllowed, coroutines, semantic, contexts, affine, mutvec and methodDecided."
    },
    {
     "claim": "For traits-path the full HIR dict is 1.38 MB as Tcl text (traitSource 690 KB, exprs 496 KB); hir::format text 125 KB.",
@@ -1634,7 +1634,7 @@
    {
     "claim": "Front-end time for traits-path (1.89 s): parse 271 ms (about 14%), signatures 329, errorsets 202, static-decisions 191, affine 173 ...",
     "verdict": "partly",
-    "evidence": "My run of bench/golden-suites.tcl -one traits-path -profile 1: front end 1.76 s, parse 361 ms (about 20%), signatures 283, errorsets 171, static-decisions 171, affine 132; builds 2. The numbers are noisy under the concurrent benchmark. Missed qualification: almost all of the parse time is library modules (lib/test.bot and others). Cold, 6 parse calls covered 1186 lines in 272 ms. surface::modules::ParseModule caches library ASTs per process (surface/modules.tcl:130-143), so warm recompiles of the same suite took 1552 and 1587 ms with parse at 14-16 ms (74 lines), about 1%. Per-build phases are summed over the 2 builds static decisions caused."
+    "evidence": "My run of bench/golden-suites.tcl -one traits-path -profile 1: front end 1.76 s, parse 361 ms (about 20%), signatures 283, errorsets 171, static-decisions 171, affine 132; builds 2. The numbers are noisy under the concurrent benchmark. Missed qualification: almost all of the parse time is library modules (stdlib/test.bot and others). Cold, 6 parse calls covered 1186 lines in 272 ms. surface::modules::ParseModule caches library ASTs per process (surface/modules.tcl:130-143), so warm recompiles of the same suite took 1552 and 1587 ms with parse at 14-16 ms (74 lines), about 1%. Per-build phases are summed over the 2 builds static decisions caused."
    },
    {
     "claim": "Native String building is linear only thanks to virtual-construction plans; barriers (List element, capture, native operation, dynamic call) fall back to eager copying.",
@@ -1644,12 +1644,12 @@
    {
     "claim": "Strings count Unicode scalars; char_at is O(1) on ASCII but decodes from byte 0 on any non-ASCII String, so index scans are quadratic unless the loop has the traversal-plan shape.",
     "verdict": "partly",
-    "evidence": "strobj.rs:5-10 (ascii flag) and ops.rs:1329-1340. Correction from LANGUAGE-LIBRARY-DEFICIENCIES.md item 1 (lines 47-70): the traversal plan covers only a self-tail +1 loop from literal 0 that reads through a `peek` (width-1 substring) helper. A loop that reads with str::char_at gets no cursor in any shape. So char_at scans of non-ASCII text are always quadratic; only peek-slice scans of that one shape are linear."
+    "evidence": "strobj.rs:5-10 (ascii flag) and ops.rs:1329-1340. Correction from LANGUAGE-LIBRARY-DEFICIENCIES.md item 1 (lines 47-70): the traversal plan covers only a self-tail +1 loop from literal 0 that reads through a `peek` (width-1 substring) helper. A loop that reads with std::str::char_at gets no cursor in any shape. So char_at scans of non-ASCII text are always quadratic; only peek-slice scans of that one shape are linear."
    },
    {
     "claim": "Missing: a map/dict type, String ordering, character-to-String, Int-to-String and String-to-Int conversion, String iteration, character classifiers, a sort routine, type variables, enum payloads and match.",
     "verdict": "partly",
-    "evidence": "Registry dump: no map natives; `<` takes {int int}; ImmutableSet only from_list/contains, O(n) in the reference (core/immutableset.tcl:59-67) and natively (ops.rs:1736-1745). No `match` in surface/parser.tcl. 'No type variables' is at GOLDEN-TEST-FRAMEWORK.md:298. Wrong item: character classifiers exist. str::is_tcl_alpha and str::is_tcl_alnum are registered natives over one-scalar Strings (core/tclcompat.tcl:49-51, 115), and lib/ascii.bot classifies Bytes; only UnicodeChar classifiers are missing (deficiencies item 9). String ordering, Int<->String and sorting are absent as built-ins but writable in Botlish over str::char_at plus char::scalar_value, digit tables and substring."
+    "evidence": "Registry dump: no map natives; `<` takes {int int}; ImmutableSet only from_list/contains, O(n) in the reference (core/immutableset.tcl:59-67) and natively (ops.rs:1736-1745). No `match` in surface/parser.tcl. 'No type variables' is at GOLDEN-TEST-FRAMEWORK.md:298. Wrong item: character classifiers exist. std::str::is_tcl_alpha and std::str::is_tcl_alnum are registered natives over one-scalar Strings (core/tclcompat.tcl:49-51, 115), and stdlib/ascii.bot classifies Bytes; only UnicodeChar classifiers are missing (deficiencies item 9). String ordering, Int<->String and sorting are absent as built-ins but writable in Botlish over std::str::char_at plus std::char::scalar_value, digit tables and substring."
    },
    {
     "claim": "Present: structs (recursive declarations allowed), payload-free enums, error payloads, static traits, typed MutableVector/MutableArray, closures, hash/mod.",
@@ -1663,14 +1663,14 @@
    }
   ],
   "missed": [
-   "The HIR dict is not self-contained, which bears directly on compile-once. Backends read process-global registries outside it: core::type::registry (core/type.tcl:81-84), hir::structs registry (hir/structs.tcl:189-210), hir::enums registry (hir/enums.tcl:81-115) and hir::errordecls payloads (hir/errordecls.tcl:278-312). Every hir::BuildOnce resets and repopulates them (hir/hir.tcl:472-505). Verified: the traits-path dict in a fresh tclsh fails native with unknown type linux::path::LinuxPath. Compiling a second program in the same process breaks the first HIR on compile (key \"compiler::SourceLocation\" not known) and native. Only interp survives. hir/sourcetypes.tcl:24-72 documents this as accepted design ('not built for concurrent or nested compilation').",
+   "The HIR dict is not self-contained, which bears directly on compile-once. Backends read process-global registries outside it: core::type::registry (core/type.tcl:81-84), hir::structs registry (hir/structs.tcl:189-210), hir::enums registry (hir/enums.tcl:81-115) and hir::errordecls payloads (hir/errordecls.tcl:278-312). Every hir::BuildOnce resets and repopulates them (hir/hir.tcl:472-505). Verified: the traits-path dict in a fresh tclsh fails native with unknown type std::linux::path::LinuxPath. Compiling a second program in the same process breaks the first HIR on compile (key \"std::compiler::SourceLocation\" not known) and native. Only interp survives. hir/sourcetypes.tcl:24-72 documents this as accepted design ('not built for concurrent or nested compilation').",
    "The replay mechanism exists only for HIR text: hir/read.tcl:79-135 re-registers enums, source types and structs through hir::sourcetypes::apply and hir::structs::applyEntries. A full-dict (or Botlish-emitted) handoff needs an equivalent loader.",
    "Tcl does call Botlish in-process: the interp and compile backends run a program inside the Tcl process and return core values directly, with no protocol escaping (tests/golden/run.tcl:86-101; core::process::withArgv injects argv, core/process.tcl:65-77). So a Botlish front end can run in-process on the Tcl backends, slowly, but only if it does no I/O.",
-   "All I/O is NATIVE-ONLY. hello.bot on interp and compile fails with CORE SEMANTIC NATIVE-ONLY (abi::x86_64::from_bytes), per lib/linux.bot:43-46. A Botlish front end that reads stdin, writes stdout or exits via syscall cannot be differentially tested on the Tcl backends; an argv-in, value-out front end can run on all four.",
-   "The library AST cache (surface/modules.tcl:130-143, keyed on path plus source, up to 64 entries) makes parse about 1% of a warm recompile: 14-16 ms of 1552-1587 ms for traits-path, against 272 ms cold, almost all lib/test.bot and other modules. Rewriting the parser in Botlish targets the smallest phase; the per-build hir/ analyses (signatures, errorsets, affine, static decisions) dominate and repeat per build.",
-   "An exit status is available natively today through linux::abi::syscall with exit_group 231 (verified exit 3). hir/syscall.tcl:30 says no syscall number is known to the compiler, so openat is equally reachable for file input.",
-   "Stdin bytes are readable and decodable today, natively, one read(2) per byte compared by Bytes equality (verified 'hixh' -> \"hi?h\"; lib/abi/bytes.bot:16-17 says Bytes support compare and hash). Non-ASCII scalars cannot be rebuilt as Strings (LANGUAGE-LIBRARY-DEFICIENCIES.md item 3). native::Driver's child inherits the Tcl process's stdin (native.tcl:173, open |... r), so an orchestrator could open the pipe r+ to feed it.",
-   "Performance pitfalls specific to compiler-shaped code: a function reading a program-level non-Int value (a keyword table, a set) becomes generic, as do its callers, losing specialization and traversal plans (LANGUAGE-LIBRARY-DEFICIENCIES.md item 2, lines 72-96). A constant List literal is rebuilt on every call (item 6, lines 113-128). str::char_at of a short String or slice materializes it (item 5).",
+   "All I/O is NATIVE-ONLY. hello.bot on interp and compile fails with CORE SEMANTIC NATIVE-ONLY (std::abi::x86_64::from_bytes), per stdlib/linux.bot:43-46. A Botlish front end that reads stdin, writes stdout or exits via syscall cannot be differentially tested on the Tcl backends; an argv-in, value-out front end can run on all four.",
+   "The library AST cache (surface/modules.tcl:130-143, keyed on path plus source, up to 64 entries) makes parse about 1% of a warm recompile: 14-16 ms of 1552-1587 ms for traits-path, against 272 ms cold, almost all stdlib/test.bot and other modules. Rewriting the parser in Botlish targets the smallest phase; the per-build hir/ analyses (signatures, errorsets, affine, static decisions) dominate and repeat per build.",
+   "An exit status is available natively today through std::linux::abi::syscall with exit_group 231 (verified exit 3). hir/syscall.tcl:30 says no syscall number is known to the compiler, so openat is equally reachable for file input.",
+   "Stdin bytes are readable and decodable today, natively, one read(2) per byte compared by Bytes equality (verified 'hixh' -> \"hi?h\"; stdlib/abi/bytes.bot:16-17 says Bytes support compare and hash). Non-ASCII scalars cannot be rebuilt as Strings (LANGUAGE-LIBRARY-DEFICIENCIES.md item 3). native::Driver's child inherits the Tcl process's stdin (native.tcl:173, open |... r), so an orchestrator could open the pipe r+ to feed it.",
+   "Performance pitfalls specific to compiler-shaped code: a function reading a program-level non-Int value (a keyword table, a set) becomes generic, as do its callers, losing specialization and traversal plans (LANGUAGE-LIBRARY-DEFICIENCIES.md item 2, lines 72-96). A constant List literal is rebuilt on every call (item 6, lines 113-128). std::str::char_at of a short String or slice materializes it (item 5).",
    "traitSource, half of the 1.38 MB dict, is read only by warnings and the context-trait summary (hir/warnings.tcl:137, hir/contexts.tcl:1111-1124; written at hir/traits.tcl:2284). A backend handoff need not carry it.",
    "Protocol escaping stays about 1x at any nesting depth for strings with no newline, CR, backslash or unbalanced braces (show.rs:327-341, measured 2001 -> 2015 at top level and 2024 inside a List). Escaping newlines in the payload (or using a newline-free serialization) avoids the exponential case entirely.",
    "The botlish-native bench and batch modes compile once and run many times in one process (main.rs:3-6, 380-420), but argv is fixed per process, so they cannot serve as a resident compile server."

@@ -1,30 +1,30 @@
---- a/lib/web.bot
-+++ b/lib/web.bot
+--- a/stdlib/web.bot
++++ b/stdlib/web.bot
 @@ -228,27 +228,27 @@
- # to it (lib/web.tcl's uriEscape). Refinements carry no runtime evidence, so
+ # to it (stdlib/web.tcl's uriEscape). Refinements carry no runtime evidence, so
  # the proposition is now this structural check, owned and defined here.
  fn uri_query_value?(value: str) -> bool proves value: UriQueryValue:
--    bytes = str::encode_utf8(value)
-+    n = str::length(value)
+-    bytes = std::str::encode_utf8(value)
++    n = std::str::length(value)
  
      fn upper_hex?(i):
--        if i < 0 or i >= list::length(bytes):
+-        if i < 0 or i >= std::list::length(bytes):
 +        if i < 0 or i >= n:
              false
          else:
--            b = list::at(bytes, i)
--            ascii::is_digit(b) or (b >= 65 and b <= 70)
-+            h = str::substring(value, i, i + 1)
+-            b = std::list::at(bytes, i)
+-            std::ascii::is_digit(b) or (b >= 65 and b <= 70)
++            h = std::str::substring(value, i, i + 1)
 +            h == "0" or h == "1" or h == "2" or h == "3" or h == "4" or h == "5" or h == "6" or h == "7" or h == "8" or h == "9" or h == "A" or h == "B" or h == "C" or h == "D" or h == "E" or h == "F"
  
      fn valid_from?(i):
--        if i < 0 or i >= list::length(bytes):
+-        if i < 0 or i >= std::list::length(bytes):
 +        if i < 0 or i >= n:
              true
          else:
--            b = list::at(bytes, i)
+-            b = std::list::at(bytes, i)
 -            if b == 37:
-+            c = str::substring(value, i, i + 1)
++            c = std::str::substring(value, i, i + 1)
 +            if c == "%":
                  if upper_hex?(i + 1) and upper_hex?(i + 2):
                      valid_from?(i + 3)

@@ -8,7 +8,7 @@
 # empty position and whether the tile is a 4 (one time in ten) or a 2.
 #
 # It prints the first moves' boards, then the final board, the score and
-# the largest tile. Output goes through io::print_line, which needs the
+# the largest tile. Output goes through std::io::print_line, which needs the
 # native backend:
 #
 #   tclsh9.0 main.tcl -backend cranelift examples/games/2048/demo.bot
@@ -17,10 +17,10 @@
 #
 #   tclsh9.0 main.tcl -emit-native-executable examples/games/2048/demo.bot
 import game2048
-import io
-import linux::io
-import list
-import str
+import std::io
+import std::linux::io
+import std::list
+import std::str
 
 # ---------------------------------------------------------------------------
 # Text: Botlish has no Int-to-String conversion and no integer division, so
@@ -56,7 +56,7 @@ fn decimal(n: int) -> str:
 
 # TEXT right-aligned in a field of six characters.
 fn field(text: str) -> str:
-    gap = 6 - str::length(text)
+    gap = 6 - std::str::length(text)
     if gap <= 0:
         return text
     padding = "      ".substring(0, gap):
@@ -74,7 +74,7 @@ fn cell_text(value: int) -> str:
 
 fn joined(parts: List[str]) -> str:
     fn from(i: int) -> str:
-        if i >= list::length(parts):
+        if i >= std::list::length(parts):
             return ""
         parts.get(i, "").concat(from(i + 1))
     from(0)
@@ -128,7 +128,7 @@ struct Turn:
 fn spawned(game: game2048::Game, seed: int, moves: int) -> Turn:
     roll = next_seed(seed)
     empties = game.board.empty_positions()
-    count = list::length(empties)
+    count = std::list::length(empties)
     if count == 0:
         return Turn {game: game, seed: roll, moves: moves}
     at = empties.get(roll.mod(count), game2048::Position {row: 0, column: 0})
@@ -151,14 +151,14 @@ fn largest(board: game2048::Board) -> int:
 # ---------------------------------------------------------------------------
 # The game
 
-fn show(board: game2048::Board, title: str) errors io::WriteFailed:
-    io::print_line(title)
+fn show(board: game2048::Board, title: str) errors std::io::WriteFailed:
+    std::io::print_line(title)
     loop line in board.board_lines():
-        io::print_line(line)
+        std::io::print_line(line)
 
 # Plays TURN's game to its end, printing the boards of its first SHOWN
 # moves.
-fn play(turn: Turn, shown: int) -> Turn errors io::WriteFailed:
+fn play(turn: Turn, shown: int) -> Turn errors std::io::WriteFailed:
     if turn.game.game_over?():
         return turn
     choice = choose(turn.game)
@@ -168,16 +168,16 @@ fn play(turn: Turn, shown: int) -> Turn errors io::WriteFailed:
         choice.move.game.board.show(title)
     choice.move.game.spawned(turn.seed, moves).play(shown)
 
-fn main() errors io::WriteFailed:
+fn main() errors std::io::WriteFailed:
     first = game2048::new_game().spawned(2048, 0)
     start = first.game.spawned(first.seed, 0)
     start.game.board.show("start")
     final = start.play(5)
     final.game.board.show("game over after ".concat(decimal(final.moves)).concat(" moves"))
-    io::print_line("score ".concat(decimal(final.game.score)).concat(", largest tile ").concat(decimal(largest(final.game.board))))
+    std::io::print_line("score ".concat(decimal(final.game.score)).concat(", largest tile ").concat(decimal(largest(final.game.board))))
 
-with context linux::io::create()
+with context std::linux::io::create()
 
 main():
-    on io::WriteFailed:
+    on std::io::WriteFailed:
         unit

@@ -138,7 +138,7 @@
         block {
 >>>>
 
-@@ native-factory-widens mutable_array::generate with a factory of structural type is still charged the erased-callable contract
+@@ native-factory-widens std::mutable_array::generate with a factory of structural type is still charged the erased-callable contract
 ## hir/completions.tcl
 <<<<
             set errors [lsort -unique [concat $errors $extra]]

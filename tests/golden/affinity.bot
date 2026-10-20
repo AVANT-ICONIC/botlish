@@ -21,7 +21,7 @@
 #   self tail call, a supervisor coroutine owning its child -- the new
 #   owner continues the same coroutine: a move never forks it, its cached
 #   terminal result (and its terminal failure) answers every later resume,
-#   and coroutine::done? observes a live handle without moving it. A
+#   and std::coroutine::done? observes a live handle without moving it. A
 #   function may resume a live parameter any number of times.
 # * Releases. A value is released where its owner dies: at its last use, on
 #   a fail or an early exit while it is live, when a destructuring omits
@@ -66,16 +66,16 @@
 # (might_fail) take the failing and the passing input as parameters of their
 # registration function (1 and 0), so no compiler could fold them.
 #
-# Imports: compiler and test for the framework; coroutine (coroutine::done?)
-# and list (list::length), which the Tcl programs' shared declarations
-# import; str for af-explicit-fn's str::length. No test here is about a
+# Imports: compiler and test for the framework; coroutine (std::coroutine::done?)
+# and list (std::list::length), which the Tcl programs' shared declarations
+# import; str for af-explicit-fn's std::str::length. No test here is about a
 # missing import or about which methods are visible (none uses method
 # syntax).
-import compiler
-import coroutine
-import list
-import str
-import test
+import std::compiler
+import std::coroutine
+import std::list
+import std::str
+import std::test
 
 # ---------------------------------------------------------------------------
 # Declarations the tests need (top-level only).
@@ -212,7 +212,7 @@ fn register_principal_tests():
     # af-principal-preserve: caller step -> parameter -> Advanced.step ->
     # destructured step2 -> resumed: one continuation (the cached terminal
     # result answers the later resume), no alias.
-    fn b_preserve() errors compiler::CompilerError:
+    fn b_preserve() errors std::compiler::CompilerError:
         static compile:
             fn advance(step: Coroutine{args: [Message], return: Event}, message: Message) -> Advanced:
                 event = step(message)
@@ -226,11 +226,11 @@ fn register_principal_tests():
                 Message {value: 20}
             )
             next = step2(Message {value: 30})
-            [event.value, next.value, coroutine::done?(step2)]
-    test::value("af-principal-preserve/value", [20, 20, true], b_preserve)
+            [event.value, next.value, std::coroutine::done?(step2)]
+    std::test::value("af-principal-preserve/value", [20, 20, true], b_preserve)
 
     # ... and the original step is moved.
-    fn b_preserve_moved() errors compiler::CompilerError:
+    fn b_preserve_moved() errors std::compiler::CompilerError:
         static compile:
             fn advance(step: Coroutine{args: [Message], return: Event}, message: Message) -> Advanced:
                 event = step(message)
@@ -244,12 +244,12 @@ fn register_principal_tests():
                 Message {value: 20}
             )
             step(Message {value: 30})
-    test::rejects("af-principal-preserve/use-after-move", compiler::DiagnosticCode::UseAfterMove, b_preserve_moved)
+    std::test::rejects("af-principal-preserve/use-after-move", std::compiler::DiagnosticCode::UseAfterMove, b_preserve_moved)
 
     # af-principal-struct: storing a handle in a struct moves it;
     # destructuring the struct continues the same coroutine; the
     # destructuring moves the struct.
-    fn b_struct_stored() errors compiler::CompilerError:
+    fn b_struct_stored() errors std::compiler::CompilerError:
         static compile:
             coroutine {step} = worker(10)
             running = Running {
@@ -257,9 +257,9 @@ fn register_principal_tests():
                 step: step
             }
             step(Message {value: 1})
-    test::rejects("af-principal-struct/stored", compiler::DiagnosticCode::UseAfterMove, b_struct_stored)
+    std::test::rejects("af-principal-struct/stored", std::compiler::DiagnosticCode::UseAfterMove, b_struct_stored)
 
-    fn b_struct_destructure() errors compiler::CompilerError:
+    fn b_struct_destructure() errors std::compiler::CompilerError:
         static compile:
             coroutine {step} = worker(10)
             running = Running {
@@ -269,9 +269,9 @@ fn register_principal_tests():
             {step: next} = running
             e = next(Message {value: 1})
             e.value
-    test::value("af-principal-struct/destructure", 1, b_struct_destructure)
+    std::test::value("af-principal-struct/destructure", 1, b_struct_destructure)
 
-    fn b_struct_moved() errors compiler::CompilerError:
+    fn b_struct_moved() errors std::compiler::CompilerError:
         static compile:
             coroutine {step} = worker(10)
             running = Running {
@@ -280,45 +280,45 @@ fn register_principal_tests():
             }
             {step: next} = running
             running.name
-    test::rejects("af-principal-struct/moved-struct", compiler::DiagnosticCode::UseAfterMove, b_struct_moved)
+    std::test::rejects("af-principal-struct/moved-struct", std::compiler::DiagnosticCode::UseAfterMove, b_struct_moved)
 
     # af-principal-list: a List literal consumes its elements; the List is
     # affine and moves whole; the moved List dies with its new owner (the
     # release of both coroutines is the Tcl test's live count).
-    fn b_list_element() errors compiler::CompilerError:
+    fn b_list_element() errors std::compiler::CompilerError:
         static compile:
             coroutine {step: a} = worker(1)
             coroutine {step: b} = worker(2)
             steps = [a, b]
             a(Message {value: 1})
-    test::rejects("af-principal-list/element", compiler::DiagnosticCode::UseAfterMove, b_list_element)
+    std::test::rejects("af-principal-list/element", std::compiler::DiagnosticCode::UseAfterMove, b_list_element)
 
-    fn b_list_whole() errors compiler::CompilerError:
+    fn b_list_whole() errors std::compiler::CompilerError:
         static compile:
             coroutine {step: a} = worker(1)
             coroutine {step: b} = worker(2)
             steps = [a, b]
             other = steps
-            list::length(steps)
-    test::rejects("af-principal-list/whole", compiler::DiagnosticCode::UseAfterMove, b_list_whole)
+            std::list::length(steps)
+    std::test::rejects("af-principal-list/whole", std::compiler::DiagnosticCode::UseAfterMove, b_list_whole)
 
-    fn b_list_drop() errors compiler::CompilerError:
+    fn b_list_drop() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 coroutine {step: a} = worker(1)
                 coroutine {step: b} = worker(2)
                 steps = [a, b]
                 other = steps
-                list::length(other) * 10
+                std::list::length(other) * 10
             f()
-    test::value("af-principal-list/drop", 20, b_list_drop)
+    std::test::value("af-principal-list/drop", 20, b_list_drop)
 
     # af-principal-theorem: NamedWorker owns the worker, returning it moves
     # it to the caller, destructuring moves it into step, invoke is
     # specialized against the Coroutine contract and resumes the same
     # continuation; an ordinary function passed to the same invoke stays
     # usable at its binding.
-    fn b_theorem() errors compiler::CompilerError:
+    fn b_theorem() errors std::compiler::CompilerError:
         static compile:
             fn make_named(seed: int) -> NamedWorker:
                 coroutine {step} = worker(seed)
@@ -339,11 +339,11 @@ fn register_principal_tests():
             )
             d = invoke(double, 4)
             [result.value, d, double(5)]
-    test::value("af-principal-theorem", [20, 8, 10], b_theorem)
+    std::test::value("af-principal-theorem", [20, 8, 10], b_theorem)
 
     # af-exact-alias: an exact function aliased twice stays one
     # unrestricted identity: no move.
-    fn b_exact_alias() errors compiler::CompilerError:
+    fn b_exact_alias() errors std::compiler::CompilerError:
         static compile:
             fn positive(x: int) -> bool:
                 x > 0
@@ -352,13 +352,13 @@ fn register_principal_tests():
             b = a
 
             [a(1), b(2), positive(3)]
-    test::value("af-exact-alias", [true, true, true], b_exact_alias)
+    std::test::value("af-exact-alias", [true, true, true], b_exact_alias)
 
     # af-explicit-fn: an explicitly typed Fn HOF behaves as before for
     # functions; a coroutine with the same contract is no Fn; a function is
     # no Coroutine; a Fn-typed struct field or result is no Coroutine either
     # -- the messages naming the callable kinds, not merely an erasure.
-    fn b_explicit_fn() errors compiler::CompilerError:
+    fn b_explicit_fn() errors std::compiler::CompilerError:
         static compile:
             fn apply(
                 predicate: Fn{
@@ -371,11 +371,11 @@ fn register_principal_tests():
                 predicate(value)
 
             fn long?(s: str) -> bool:
-                str::length(s) > 3
+                std::str::length(s) > 3
             [apply(long?, "abcd"), apply(long?, "ab")]
-    test::value("af-explicit-fn/fn", [true, false], b_explicit_fn)
+    std::test::value("af-explicit-fn/fn", [true, false], b_explicit_fn)
 
-    fn b_coroutine_to_fn() errors compiler::CompilerError:
+    fn b_coroutine_to_fn() errors std::compiler::CompilerError:
         static compile:
             fn w(resume Query) -> bool:
                 yield true
@@ -384,44 +384,44 @@ fn register_principal_tests():
                 f(x)
             coroutine {step} = w()
             apply(step, Query {v: "a"})
-    test::rejects("af-explicit-fn/coroutine-to-fn", compiler::DiagnosticCode::CoroutineNotFunction, b_coroutine_to_fn)
+    std::test::rejects("af-explicit-fn/coroutine-to-fn", std::compiler::DiagnosticCode::CoroutineNotFunction, b_coroutine_to_fn)
 
-    fn b_function_to_coroutine() errors compiler::CompilerError:
+    fn b_function_to_coroutine() errors std::compiler::CompilerError:
         static compile:
             fn drive(s: Coroutine{args: [Message], return: Event}) -> Event:
                 s(Message {value: 1})
             fn h(m: Message) -> Event:
                 Event {value: m.value}
             drive(h)
-    test::rejects_containing("af-explicit-fn/function-to-coroutine", compiler::DiagnosticCode::Type, "only a coroutine handle is a Coroutine: a function value is not one", b_function_to_coroutine)
+    std::test::rejects_containing("af-explicit-fn/function-to-coroutine", std::compiler::DiagnosticCode::Type, "only a coroutine handle is a Coroutine: a function value is not one", b_function_to_coroutine)
 
-    fn b_fn_param_to_coroutine() errors compiler::CompilerError:
+    fn b_fn_param_to_coroutine() errors std::compiler::CompilerError:
         static compile:
             fn drive(s: Coroutine{args: [Message], return: Event}) -> Event:
                 s(Message {value: 1})
             fn relay(f: Fn{args: [Message], return: Event, errors: []}) -> Event:
                 drive(f)
             1
-    test::rejects_containing("af-explicit-fn/fn-param-to-coroutine", compiler::DiagnosticCode::Type, "only a coroutine handle is a Coroutine: a function value is not one", b_fn_param_to_coroutine)
+    std::test::rejects_containing("af-explicit-fn/fn-param-to-coroutine", std::compiler::DiagnosticCode::Type, "only a coroutine handle is a Coroutine: a function value is not one", b_fn_param_to_coroutine)
 
-    fn b_struct_field() errors compiler::CompilerError:
+    fn b_struct_field() errors std::compiler::CompilerError:
         static compile:
             coroutine {step} = worker(1)
             h = Holder {f: step}
             1
-    test::rejects_containing("af-explicit-fn/struct-field", compiler::DiagnosticCode::Type, "a coroutine handle is not a function value: Coroutine and Fn are distinct callable kinds", b_struct_field)
+    std::test::rejects_containing("af-explicit-fn/struct-field", std::compiler::DiagnosticCode::Type, "a coroutine handle is not a function value: Coroutine and Fn are distinct callable kinds", b_struct_field)
 
-    fn b_fn_result() errors compiler::CompilerError:
+    fn b_fn_result() errors std::compiler::CompilerError:
         static compile:
             fn as_fn(n: int) -> Fn{args: [Message], return: Event, errors: []}:
                 make(n)
             1
-    test::rejects_containing("af-explicit-fn/result", compiler::DiagnosticCode::Type, "a coroutine handle is not a function value: Coroutine and Fn are distinct callable kinds", b_fn_result)
+    std::test::rejects_containing("af-explicit-fn/result", std::compiler::DiagnosticCode::Type, "a coroutine handle is not a function value: Coroutine and Fn are distinct callable kinds", b_fn_result)
 
     # af-generic-dual: one untyped HOF instantiated with an ordinary
     # function and with a coroutine: the function stays usable, the
     # coroutine's instance resumes it.
-    fn b_generic_dual() errors compiler::CompilerError:
+    fn b_generic_dual() errors std::compiler::CompilerError:
         static compile:
             fn positive(x: int) -> bool:
                 x > 0
@@ -431,7 +431,7 @@ fn register_principal_tests():
             b = invoke(step, Message {value: 20})
             c = positive(1)
             [a, b.value, c]
-    test::value("af-generic-dual", [true, 20, true], b_generic_dual)
+    std::test::value("af-generic-dual", [true, 20, true], b_generic_dual)
 
 # ---------------------------------------------------------------------------
 # Affine aggregates (item 66) and joins (item 49)
@@ -440,35 +440,35 @@ fn register_aggregate_tests(failing: int, passing: int):
     # af-aggregate-move: binding an affine struct moves the whole value: a
     # later use of the old binding, even of an unrestricted field, is
     # UseAfterMove; the new binding owns it.
-    fn b_move_field() errors compiler::CompilerError:
+    fn b_move_field() errors std::compiler::CompilerError:
         static compile:
             r = Running {name: "a", step: make(1)}
             q = r
             r.name
-    test::rejects("af-aggregate-move/field", compiler::DiagnosticCode::UseAfterMove, b_move_field)
+    std::test::rejects("af-aggregate-move/field", std::compiler::DiagnosticCode::UseAfterMove, b_move_field)
 
-    fn b_move_destructure() errors compiler::CompilerError:
+    fn b_move_destructure() errors std::compiler::CompilerError:
         static compile:
             r = Running {name: "a", step: make(1)}
             q = r
             {step} = r
             1
-    test::rejects("af-aggregate-move/destructure", compiler::DiagnosticCode::UseAfterMove, b_move_destructure)
+    std::test::rejects("af-aggregate-move/destructure", std::compiler::DiagnosticCode::UseAfterMove, b_move_destructure)
 
-    fn b_move_value() errors compiler::CompilerError:
+    fn b_move_value() errors std::compiler::CompilerError:
         static compile:
             r = Running {name: "a", step: make(1)}
             q = r
             {step, name} = q
             e = step(Message {value: 5})
             [name, e.value]
-    test::value("af-aggregate-move/value", ["a", 5], b_move_value)
+    std::test::value("af-aggregate-move/value", ["a", 5], b_move_value)
 
     # af-aggregate-destructure: destructuring consumes the struct: the
     # selected affine field moves into its binding (the omitted one is
     # released there: the Tcl test's live count), unrestricted fields bind
     # normally, a nested pattern follows the same ownership tree.
-    fn b_destructure_selected() errors compiler::CompilerError:
+    fn b_destructure_selected() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 p = Pair {first: make(1), second: make(2)}
@@ -476,9 +476,9 @@ fn register_aggregate_tests(failing: int, passing: int):
                 e = first(Message {value: 3})
                 e.value
             f()
-    test::value("af-aggregate-destructure/selected", 3, b_destructure_selected)
+    std::test::value("af-aggregate-destructure/selected", 3, b_destructure_selected)
 
-    fn b_destructure_nested() errors compiler::CompilerError:
+    fn b_destructure_nested() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 o = Outer {tag: 7, pair: Pair {first: make(1), second: make(2)}}
@@ -486,12 +486,12 @@ fn register_aggregate_tests(failing: int, passing: int):
                 e = second(Message {value: 5})
                 tag * 100 + e.value
             f()
-    test::value("af-aggregate-destructure/nested", 705, b_destructure_nested)
+    std::test::value("af-aggregate-destructure/nested", 705, b_destructure_nested)
 
     # af-aggregate-branch: a move on one branch only leaves the binding
     # maybe-moved; a branch that returns does not reach the join, so the
     # remaining path keeps it live.
-    fn b_branch_maybe_moved() errors compiler::CompilerError:
+    fn b_branch_maybe_moved() errors std::compiler::CompilerError:
         static compile:
             fn f(c: bool) -> int:
                 r = Running {name: "a", step: make(1)}
@@ -500,9 +500,9 @@ fn register_aggregate_tests(failing: int, passing: int):
                 {step} = r
                 1
             f(true)
-    test::rejects("af-aggregate-branch/maybe-moved", compiler::DiagnosticCode::AffineNotDefinitelyLive, b_branch_maybe_moved)
+    std::test::rejects("af-aggregate-branch/maybe-moved", std::compiler::DiagnosticCode::AffineNotDefinitelyLive, b_branch_maybe_moved)
 
-    fn b_branch_return() errors compiler::CompilerError:
+    fn b_branch_return() errors std::compiler::CompilerError:
         static compile:
             fn f(c: bool) -> int:
                 r = Running {name: "a", step: make(1)}
@@ -514,11 +514,11 @@ fn register_aggregate_tests(failing: int, passing: int):
                 e = step(Message {value: 8})
                 e.value
             [f(true), f(false)]
-    test::value("af-aggregate-branch/return", [9, 8], b_branch_return)
+    std::test::value("af-aggregate-branch/return", [9, 8], b_branch_return)
 
     # af-aggregate-return-fail: an affine struct is returned (moved to the
     # caller); a fail while one is live releases it and propagates.
-    fn b_return_fail() errors compiler::CompilerError:
+    fn b_return_fail() errors std::compiler::CompilerError:
         static compile:
             fn build(n: int) -> Running:
                 Running {name: "r", step: make(n)}
@@ -533,13 +533,13 @@ fn register_aggregate_tests(failing: int, passing: int):
                     on Boom:
                         -1
             [h(failing), h(passing)]
-    test::value("af-aggregate-return-fail", [-1, 6], b_return_fail)
+    std::test::value("af-aggregate-return-fail", [-1, 6], b_return_fail)
 
     # af-join: an if whose branches each produce a coroutine joins them into
     # one owner; a discarded affine value -- a handle, a struct owning one,
     # a List owning one -- is accepted as a statement (released right after
     # it: the Tcl test's live count).
-    fn b_join() errors compiler::CompilerError:
+    fn b_join() errors std::compiler::CompilerError:
         static compile:
             fn pick(c: bool) -> int:
                 s = if c:
@@ -549,9 +549,9 @@ fn register_aggregate_tests(failing: int, passing: int):
                 e = s(Message {value: 9})
                 e.value
             [pick(true), pick(false)]
-    test::value("af-join/join", [9, 9], b_join)
+    std::test::value("af-join/join", [9, 9], b_join)
 
-    fn b_discard() errors compiler::CompilerError:
+    fn b_discard() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 make(1)
@@ -559,7 +559,7 @@ fn register_aggregate_tests(failing: int, passing: int):
                 [make(3)]
                 0
             f()
-    test::value("af-join/discard", 0, b_discard)
+    std::test::value("af-join/discard", 0, b_discard)
 
 # ---------------------------------------------------------------------------
 # Call boundaries (items 13-19, 67)
@@ -568,23 +568,23 @@ fn register_call_tests(failing: int, passing: int):
     # af-call-transfer: an affine argument moves into the parameter; several
     # affine arguments; a move through several call levels; repeated
     # resumes of a live parameter.
-    fn b_transfer_moved() errors compiler::CompilerError:
+    fn b_transfer_moved() errors std::compiler::CompilerError:
         static compile:
             s = make(1)
             consume(s, 1)
             s(Message {value: 2})
-    test::rejects("af-call-transfer/moved", compiler::DiagnosticCode::UseAfterMove, b_transfer_moved)
+    std::test::rejects("af-call-transfer/moved", std::compiler::DiagnosticCode::UseAfterMove, b_transfer_moved)
 
-    fn b_transfer_several() errors compiler::CompilerError:
+    fn b_transfer_several() errors std::compiler::CompilerError:
         static compile:
             fn both(a: Coroutine{args: [Message], return: Event}, b: Coroutine{args: [Message], return: Event}) -> int:
                 x = a(Message {value: 1})
                 y = b(Message {value: 2})
                 x.value + y.value
             both(make(1), make(2))
-    test::value("af-call-transfer/several", 3, b_transfer_several)
+    std::test::value("af-call-transfer/several", 3, b_transfer_several)
 
-    fn b_transfer_levels() errors compiler::CompilerError:
+    fn b_transfer_levels() errors std::compiler::CompilerError:
         static compile:
             fn l3(s: Coroutine{args: [Message], return: Event}) -> int:
                 consume(s, 3)
@@ -593,9 +593,9 @@ fn register_call_tests(failing: int, passing: int):
             fn l1(s: Coroutine{args: [Message], return: Event}) -> int:
                 l2(s)
             l1(make(1))
-    test::value("af-call-transfer/levels", 3, b_transfer_levels)
+    std::test::value("af-call-transfer/levels", 3, b_transfer_levels)
 
-    fn b_transfer_repeated() errors compiler::CompilerError:
+    fn b_transfer_repeated() errors std::compiler::CompilerError:
         static compile:
             fn ticks() -> T:
                 yield T {n: 1}
@@ -607,32 +607,32 @@ fn register_call_tests(failing: int, passing: int):
                 a.n * 10 + b.n
             coroutine {step} = ticks()
             drive(step)
-    test::value("af-call-transfer/repeated", 23, b_transfer_repeated)
+    std::test::value("af-call-transfer/repeated", 23, b_transfer_repeated)
 
     # af-call-return: a function returns its affine parameter (caller ->
     # parameter -> result -> caller's binding: the same coroutine, its
     # terminal result cached) or a new affine value; the caller owns it.
-    fn b_return_preserve() errors compiler::CompilerError:
+    fn b_return_preserve() errors std::compiler::CompilerError:
         static compile:
             fn preserve(step: Coroutine{args: [Message], return: Event}) -> Coroutine{args: [Message], return: Event}:
                 step(Message {value: 7})
                 return step
             s = preserve(make(1))
             e = s(Message {value: 8})
-            [e.value, coroutine::done?(s)]
-    test::value("af-call-return/preserve", [7, true], b_return_preserve)
+            [e.value, std::coroutine::done?(s)]
+    std::test::value("af-call-return/preserve", [7, true], b_return_preserve)
 
-    fn b_return_fresh() errors compiler::CompilerError:
+    fn b_return_fresh() errors std::compiler::CompilerError:
         static compile:
             s = make(4)
             e = s(Message {value: 5})
             e.value
-    test::value("af-call-return/fresh", 5, b_return_fresh)
+    std::test::value("af-call-return/fresh", 5, b_return_fresh)
 
     # af-call-release: the callee owns its affine parameter: released at its
     # last use when it returns normally, by its exit cleanup when it fails
     # (the Tcl test's live counts).
-    fn b_release_normal() errors compiler::CompilerError:
+    fn b_release_normal() errors std::compiler::CompilerError:
         static compile:
             fn keep(s: Coroutine{args: [Message], return: Event}, k: int) -> int:
                 k + 1
@@ -640,9 +640,9 @@ fn register_call_tests(failing: int, passing: int):
                 x = keep(make(1), 2)
                 x * 10
             f()
-    test::value("af-call-release/normal", 30, b_release_normal)
+    std::test::value("af-call-release/normal", 30, b_release_normal)
 
-    fn b_release_fail() errors compiler::CompilerError:
+    fn b_release_fail() errors std::compiler::CompilerError:
         static compile:
             fn eat(s: Coroutine{args: [Message], return: Event}, k: int) -> int errors Boom:
                 might_fail(k)
@@ -652,14 +652,14 @@ fn register_call_tests(failing: int, passing: int):
                     on Boom:
                         -1
             [g(failing), g(passing)]
-    test::value("af-call-release/fail", [-1, 0], b_release_fail)
+    std::test::value("af-call-release/fail", [-1, 0], b_release_fail)
 
     # af-call-pending: a later argument fails after an earlier affine
     # argument moved into the call's temporary -- a reference, a fresh
     # value, a struct field, a List element: the call is never entered, the
     # temporary releases the value (the Tcl test's live counts), and the
     # failure reaches the handler.
-    fn b_pending_reference() errors compiler::CompilerError:
+    fn b_pending_reference() errors std::compiler::CompilerError:
         static compile:
             fn f(k: int) -> int errors Boom:
                 coroutine {step} = worker(1)
@@ -669,9 +669,9 @@ fn register_call_tests(failing: int, passing: int):
                     on Boom:
                         -1
             [g(failing), g(passing)]
-    test::value("af-call-pending/reference", [-1, 0], b_pending_reference)
+    std::test::value("af-call-pending/reference", [-1, 0], b_pending_reference)
 
-    fn b_pending_fresh() errors compiler::CompilerError:
+    fn b_pending_fresh() errors std::compiler::CompilerError:
         static compile:
             fn f(k: int) -> int errors Boom:
                 consume(make(5), might_fail(k))
@@ -680,9 +680,9 @@ fn register_call_tests(failing: int, passing: int):
                     on Boom:
                         -1
             [g(failing), g(passing)]
-    test::value("af-call-pending/fresh", [-1, 0], b_pending_fresh)
+    std::test::value("af-call-pending/fresh", [-1, 0], b_pending_fresh)
 
-    fn b_pending_field() errors compiler::CompilerError:
+    fn b_pending_field() errors std::compiler::CompilerError:
         static compile:
             fn f(k: int) -> int errors Boom:
                 coroutine {step} = worker(1)
@@ -694,9 +694,9 @@ fn register_call_tests(failing: int, passing: int):
                     on Boom:
                         -1
             [g(failing), g(passing)]
-    test::value("af-call-pending/field", [-1, 0], b_pending_field)
+    std::test::value("af-call-pending/field", [-1, 0], b_pending_field)
 
-    fn b_pending_element() errors compiler::CompilerError:
+    fn b_pending_element() errors std::compiler::CompilerError:
         static compile:
             fn f(k: int) -> int errors Boom:
                 xs = [make(1), make(might_fail(k))]
@@ -706,11 +706,11 @@ fn register_call_tests(failing: int, passing: int):
                     on Boom:
                         -1
             [g(failing), g(passing)]
-    test::value("af-call-pending/element", [-1, 0], b_pending_element)
+    std::test::value("af-call-pending/element", [-1, 0], b_pending_element)
 
     # af-call-tail: a self tail call passes its affine parameter on; the
     # final call resumes the same coroutine.
-    fn b_tail() errors compiler::CompilerError:
+    fn b_tail() errors std::compiler::CompilerError:
         static compile:
             fn drive(s: Coroutine{args: [Message], return: Event}, n: int) -> int:
                 if n == 0:
@@ -718,12 +718,12 @@ fn register_call_tests(failing: int, passing: int):
                     return e.value
                 return drive(s, n - 1)
             drive(make(1), 5)
-    test::value("af-call-tail", 42, b_tail)
+    std::test::value("af-call-tail", 42, b_tail)
 
     # af-call-construction-argument: an affine argument of a coroutine
     # construction moves into the coroutine: a supervisor coroutine owns
     # its child and resumes it.
-    fn b_construction_argument() errors compiler::CompilerError:
+    fn b_construction_argument() errors std::compiler::CompilerError:
         static compile:
             fn sup(child: Coroutine{args: [Message], return: Event}, resume Message) -> Event:
                 m = yield Event {value: 0}
@@ -731,7 +731,7 @@ fn register_call_tests(failing: int, passing: int):
             coroutine {step, first} = sup(make(7))
             e = step(Message {value: 5})
             [first.value, e.value]
-    test::value("af-call-construction-argument", [0, 5], b_construction_argument)
+    std::test::value("af-call-construction-argument", [0, 5], b_construction_argument)
 
 # ---------------------------------------------------------------------------
 # Lists (items 29-31, 62, 68)
@@ -741,29 +741,29 @@ fn register_list_tests(failing: int, passing: int):
     # construction consumes the elements; a whole-List move, return and
     # argument; dropping a List releases every element, also on an early
     # exit (the Tcl test's live count).
-    fn b_list_move() errors compiler::CompilerError:
+    fn b_list_move() errors std::compiler::CompilerError:
         static compile:
             fn mk(n: int) -> List[Coroutine{args: [Message], return: Event}]:
                 [make(n), make(n + 1)]
             fn count(xs: List[Coroutine{args: [Message], return: Event}]) -> int:
-                list::length(xs)
+                std::list::length(xs)
             xs = mk(1)
             ys = xs
             count(ys)
-    test::value("af-list-ownership/move", 2, b_list_move)
+    std::test::value("af-list-ownership/move", 2, b_list_move)
 
-    fn b_list_early_exit() errors compiler::CompilerError:
+    fn b_list_early_exit() errors std::compiler::CompilerError:
         static compile:
             fn f(k: int) -> int errors Boom:
                 xs = [make(1), make(2), make(3)]
                 might_fail(k)
-                list::length(xs)
+                std::list::length(xs)
             fn g(k: int) -> int:
                 f(k):
                     on Boom:
                         -1
             [g(failing), g(passing)]
-    test::value("af-list-ownership/early-exit", [-1, 3], b_list_early_exit)
+    std::test::value("af-list-ownership/early-exit", [-1, 3], b_list_early_exit)
 
 # ---------------------------------------------------------------------------
 # Callable contracts (items 2-5, 33-35, 69)
@@ -772,7 +772,7 @@ fn register_contract_tests():
     # af-contract-forms: Coroutine{...} reads like Fn{...}: zero args, the
     # errors written out; more than one argument, or a scalar one, is
     # CoroutineContract.
-    fn b_forms_zero_args() errors compiler::CompilerError:
+    fn b_forms_zero_args() errors std::compiler::CompilerError:
         static compile:
             fn ticks() -> T:
                 yield T {n: 1}
@@ -783,35 +783,35 @@ fn register_contract_tests():
                 a.n * 10 + b.n
             coroutine {step} = ticks()
             pump(step)
-    test::value("af-contract-forms/zero-args", 22, b_forms_zero_args)
+    std::test::value("af-contract-forms/zero-args", 22, b_forms_zero_args)
 
-    fn b_forms_two_args() errors compiler::CompilerError:
+    fn b_forms_two_args() errors std::compiler::CompilerError:
         static compile:
             fn f(s: Coroutine{args: [Message, Message], return: Event}) -> int:
                 1
             1
-    test::rejects("af-contract-forms/two-args", compiler::DiagnosticCode::CoroutineContract, b_forms_two_args)
+    std::test::rejects("af-contract-forms/two-args", std::compiler::DiagnosticCode::CoroutineContract, b_forms_two_args)
 
-    fn b_forms_scalar_arg() errors compiler::CompilerError:
+    fn b_forms_scalar_arg() errors std::compiler::CompilerError:
         static compile:
             fn f(s: Coroutine{args: [int], return: Event}) -> int:
                 1
             1
-    test::rejects("af-contract-forms/scalar-arg", compiler::DiagnosticCode::CoroutineContract, b_forms_scalar_arg)
+    std::test::rejects("af-contract-forms/scalar-arg", std::compiler::DiagnosticCode::CoroutineContract, b_forms_scalar_arg)
 
     # af-contract-compat: a return mismatch is a Type error naming the
     # contract part; an error-raising constructor declared beside does not
     # matter to a no-error handle; coroutines of different constructors
     # with one contract share one type (one List); a resume charges the
     # contract's errors.
-    fn b_compat_return() errors compiler::CompilerError:
+    fn b_compat_return() errors std::compiler::CompilerError:
         static compile:
             fn f(s: Coroutine{args: [Message], return: Message}) -> int:
                 1
             f(make(1))
-    test::rejects_message("af-contract-compat/return", compiler::DiagnosticCode::Type, "argument for parameter \"s\" cannot be proven to satisfy Coroutine{args: [Message], return: Message, errors: []} (argument type: Coroutine{args: [Message], return: Event, errors: []}); return incompatible: each resume returns Event, not usable as Message", b_compat_return)
+    std::test::rejects_message("af-contract-compat/return", std::compiler::DiagnosticCode::Type, "argument for parameter \"s\" cannot be proven to satisfy Coroutine{args: [Message], return: Message, errors: []} (argument type: Coroutine{args: [Message], return: Event, errors: []}); return incompatible: each resume returns Event, not usable as Message", b_compat_return)
 
-    fn b_compat_accepted() errors compiler::CompilerError:
+    fn b_compat_accepted() errors std::compiler::CompilerError:
         static compile:
             fn w2(seed: int, resume Message) -> Event errors Boom:
                 m = yield Event {value: seed}
@@ -823,9 +823,9 @@ fn register_contract_tests():
             f(make(1))
             g = 1
             g
-    test::value("af-contract-compat/accepted", 1, b_compat_accepted)
+    std::test::value("af-contract-compat/accepted", 1, b_compat_accepted)
 
-    fn b_compat_one_type() errors compiler::CompilerError:
+    fn b_compat_one_type() errors std::compiler::CompilerError:
         static compile:
             fn other(x: str, resume Message) -> Event:
                 m = yield Event {value: 100}
@@ -834,10 +834,10 @@ fn register_contract_tests():
             coroutine {step: b} = other("x")
             xs = [a, b]
             ys = xs
-            list::length(ys)
-    test::value("af-contract-compat/one-type", 2, b_compat_one_type)
+            std::list::length(ys)
+    std::test::value("af-contract-compat/one-type", 2, b_compat_one_type)
 
-    fn b_compat_errors() errors compiler::CompilerError:
+    fn b_compat_errors() errors std::compiler::CompilerError:
         static compile:
             fn w2(seed: int, resume Message) -> Event errors Boom:
                 m = yield Event {value: seed}
@@ -853,12 +853,12 @@ fn register_contract_tests():
                 on Boom:
                     Event {value: 0}
             f(step)
-    test::value("af-contract-compat/errors", -7, b_compat_errors)
+    std::test::value("af-contract-compat/errors", -7, b_compat_errors)
 
     # af-contract-error-set: an error-set mismatch names the extra error; an
     # unhandled error a resume through a Coroutine parameter may raise is
     # UnhandledError.
-    fn b_error_set_mismatch() errors compiler::CompilerError:
+    fn b_error_set_mismatch() errors std::compiler::CompilerError:
         static compile:
             fn w2(seed: int, resume Message) -> Event errors Boom:
                 m = yield Event {value: seed}
@@ -871,21 +871,21 @@ fn register_contract_tests():
                 on Boom:
                     Event {value: 0}
             f(step)
-    test::rejects_containing("af-contract-error-set/mismatch", compiler::DiagnosticCode::Type, "error set incompatible: a resume may raise Boom", b_error_set_mismatch)
+    std::test::rejects_containing("af-contract-error-set/mismatch", std::compiler::DiagnosticCode::Type, "error set incompatible: a resume may raise Boom", b_error_set_mismatch)
 
-    fn b_error_set_unhandled() errors compiler::CompilerError:
+    fn b_error_set_unhandled() errors std::compiler::CompilerError:
         static compile:
             fn f(s: Coroutine{args: [Message], return: Event, errors: [Boom]}) -> int:
                 e = s(Message {value: 9})
                 e.value
             1
-    test::rejects("af-contract-error-set/unhandled", compiler::DiagnosticCode::UnhandledError, b_error_set_unhandled)
+    std::test::rejects("af-contract-error-set/unhandled", std::compiler::DiagnosticCode::UnhandledError, b_error_set_unhandled)
 
     # af-contract-fn-param: a function value receiving an affine argument
     # must own it: a typed function satisfies Fn{args: [Coroutine{...}]},
     # an untyped one does not (it has no specialization to carry
     # ownership).
-    fn b_fn_param_typed() errors compiler::CompilerError:
+    fn b_fn_param_typed() errors std::compiler::CompilerError:
         static compile:
             fn apply(f: Fn{args: [Coroutine{args: [Message], return: Event}], return: int}, s: Coroutine{args: [Message], return: Event}) -> int:
                 f(s)
@@ -893,16 +893,16 @@ fn register_contract_tests():
                 e = c(Message {value: 5})
                 e.value
             apply(take, make(1))
-    test::value("af-contract-fn-param/typed", 5, b_fn_param_typed)
+    std::test::value("af-contract-fn-param/typed", 5, b_fn_param_typed)
 
-    fn b_fn_param_untyped() errors compiler::CompilerError:
+    fn b_fn_param_untyped() errors std::compiler::CompilerError:
         static compile:
             fn apply(f: Fn{args: [Coroutine{args: [Message], return: Event}], return: int}, s: Coroutine{args: [Message], return: Event}) -> int:
                 f(s)
             fn take(c) -> int:
                 1
             apply(take, make(1))
-    test::rejects("af-contract-fn-param/untyped", compiler::DiagnosticCode::Type, b_fn_param_untyped)
+    std::test::rejects("af-contract-fn-param/untyped", std::compiler::DiagnosticCode::Type, b_fn_param_untyped)
 
 # ---------------------------------------------------------------------------
 # Generic callables (items 36-43) and the coroutine protocol
@@ -911,7 +911,7 @@ fn register_generic_tests():
     # af-generic-return: a generic HOF that resumes its argument and returns
     # it moves the coroutine in and back out; instantiated with a function
     # it is ordinary value semantics.
-    fn b_generic_return() errors compiler::CompilerError:
+    fn b_generic_return() errors std::compiler::CompilerError:
         static compile:
             fn inc(x: int) -> int:
                 x + 1
@@ -919,33 +919,33 @@ fn register_generic_tests():
             e = s2(Message {value: 8})
             f = advance_and_return(inc, 1)
             [e.value, f(10), inc(1)]
-    test::value("af-generic-return", [7, 11, 2], b_generic_return)
+    std::test::value("af-generic-return", [7, 11, 2], b_generic_return)
 
     # af-generic-ownership: a generic HOF that would duplicate or compare
     # its affine argument is invalid for the call that gives it one,
     # reported at that call with the instance's own ownership error; given
     # an unrestricted argument it is ordinary.
-    fn b_generic_duplicate() errors compiler::CompilerError:
+    fn b_generic_duplicate() errors std::compiler::CompilerError:
         static compile:
             dup(make(1))
             1
-    test::rejects_at("af-generic-ownership/duplicate", compiler::DiagnosticCode::UseAfterMove, 930, 13, b_generic_duplicate)
+    std::test::rejects_at("af-generic-ownership/duplicate", std::compiler::DiagnosticCode::UseAfterMove, 930, 13, b_generic_duplicate)
 
-    fn b_generic_equality() errors compiler::CompilerError:
+    fn b_generic_equality() errors std::compiler::CompilerError:
         static compile:
             same(make(1))
-    test::rejects_at("af-generic-ownership/equality", compiler::DiagnosticCode::AffineEqualityUnsupported, 936, 13, b_generic_equality)
+    std::test::rejects_at("af-generic-ownership/equality", std::compiler::DiagnosticCode::AffineEqualityUnsupported, 936, 13, b_generic_equality)
 
-    fn b_generic_unrestricted() errors compiler::CompilerError:
+    fn b_generic_unrestricted() errors std::compiler::CompilerError:
         static compile:
             x = dup(1)
-            list::length(x)
-    test::value("af-generic-ownership/unrestricted", 2, b_generic_unrestricted)
+            std::list::length(x)
+    std::test::value("af-generic-ownership/unrestricted", 2, b_generic_unrestricted)
 
     # af-generic-terminal: through a struct, a destructuring, a generic
     # HOF's result and several moves a coroutine keeps one execution:
     # terminal success and terminal failure stay cached.
-    fn b_generic_terminal() errors compiler::CompilerError:
+    fn b_generic_terminal() errors std::compiler::CompilerError:
         static compile:
             fn w3(resume Message) -> Event errors Boom:
                 m = yield Event {value: 1}
@@ -967,15 +967,15 @@ fn register_generic_tests():
                 y = f(Message {value: 2}):
                     on Boom:
                         Event {value: -2}
-                [a.value, b.value, x.value, y.value, coroutine::done?(again) == coroutine::done?(f)]
+                [a.value, b.value, x.value, y.value, std::coroutine::done?(again) == std::coroutine::done?(f)]
             run()
-    test::value("af-generic-terminal", [6, 6, -1, -2, true], b_generic_terminal)
+    std::test::value("af-generic-terminal", [6, 6, -1, -2, true], b_generic_terminal)
 
     # af-generic-inferred-contract: an untyped parameter the body calls with
     # no arguments, testing the result, has an inferred callable contract,
     # not a callable kind: a coroutine with a compatible contract satisfies
     # it (specialized), and so does a function.
-    fn b_inferred_contract() errors compiler::CompilerError:
+    fn b_inferred_contract() errors std::compiler::CompilerError:
         static compile:
             fn flip() -> bool:
                 yield true
@@ -984,12 +984,12 @@ fn register_generic_tests():
                 true
             coroutine {step} = flip()
             [ask(step), ask(yes)]
-    test::value("af-generic-inferred-contract", [false, true], b_inferred_contract)
+    std::test::value("af-generic-inferred-contract", [false, true], b_inferred_contract)
 
     # af-generic-nested: a generic function declared inside another one
     # cannot be specialized for an affine argument; a typed parameter can
     # take it.
-    fn b_nested_untyped() errors compiler::CompilerError:
+    fn b_nested_untyped() errors std::compiler::CompilerError:
         static compile:
             fn outer() -> int:
                 fn inner(c):
@@ -997,9 +997,9 @@ fn register_generic_tests():
                 e = inner(make(1))
                 e.value
             outer()
-    test::rejects("af-generic-nested/untyped", compiler::DiagnosticCode::AffineGenericNestedUnsupported, b_nested_untyped)
+    std::test::rejects("af-generic-nested/untyped", std::compiler::DiagnosticCode::AffineGenericNestedUnsupported, b_nested_untyped)
 
-    fn b_nested_typed() errors compiler::CompilerError:
+    fn b_nested_typed() errors std::compiler::CompilerError:
         static compile:
             fn outer() -> int:
                 fn inner(c: Coroutine{args: [Message], return: Event}) -> Event:
@@ -1007,28 +1007,28 @@ fn register_generic_tests():
                 e = inner(make(1))
                 e.value
             outer()
-    test::value("af-generic-nested/typed", 1, b_nested_typed)
+    std::test::value("af-generic-nested/typed", 1, b_nested_typed)
 
-    # af-done-generalized: coroutine::done? observes a live handle however
+    # af-done-generalized: std::coroutine::done? observes a live handle however
     # ownership reached it -- a parameter, a destructuring, a return, a
     # generic HOF's return -- without moving it.
-    fn b_done_generalized() errors compiler::CompilerError:
+    fn b_done_generalized() errors std::compiler::CompilerError:
         static compile:
             fn d(s: Coroutine{args: [Message], return: Event}) -> bool:
-                x = coroutine::done?(s)
+                x = std::coroutine::done?(s)
                 s(Message {value: 1})
-                coroutine::done?(s) and not x
+                std::coroutine::done?(s) and not x
             r = Running {name: "r", step: make(1)}
             {step} = r
             t = ret(step)
-            a = coroutine::done?(t)
+            a = std::coroutine::done?(t)
             [d(t), a, d(make(2))]
-    test::value("af-done-generalized", [true, false, true], b_done_generalized)
+    std::test::value("af-done-generalized", [true, false, true], b_done_generalized)
 
     # af-generic-transitive: a generic HOF passing its affine argument to
     # another generic HOF, and a recursive one, specialize transitively;
     # the recursion resumes the same coroutine and returns it.
-    fn b_generic_transitive() errors compiler::CompilerError:
+    fn b_generic_transitive() errors std::compiler::CompilerError:
         static compile:
             fn w5(resume Message) -> Event:
                 a = yield Event {value: 0}
@@ -1039,22 +1039,22 @@ fn register_generic_tests():
             e = last(Message {value: 100})
             x = resume_through(make(1), Message {value: 4})
             [e.value, x.value]
-    test::value("af-generic-transitive", [3, 4], b_generic_transitive)
+    std::test::value("af-generic-transitive", [3, 4], b_generic_transitive)
 
     # af-coroutine-affine-protocol: a coroutine's result and message stay
     # unrestricted: an affine result would be cached and returned again by
     # every later resume, an affine message to a completed coroutine would
     # never be received.
-    fn b_protocol_result() errors compiler::CompilerError:
+    fn b_protocol_result() errors std::compiler::CompilerError:
         static compile:
             fn gen() -> Coroutine{args: [Message], return: Event}:
                 yield make(1)
                 make(2)
             coroutine {step} = gen()
             1
-    test::rejects("af-coroutine-affine-protocol/result", compiler::DiagnosticCode::CoroutineContract, b_protocol_result)
+    std::test::rejects("af-coroutine-affine-protocol/result", std::compiler::DiagnosticCode::CoroutineContract, b_protocol_result)
 
-    fn b_protocol_message() errors compiler::CompilerError:
+    fn b_protocol_message() errors std::compiler::CompilerError:
         static compile:
             fn sink(resume Cmd) -> int:
                 c = yield 1
@@ -1062,7 +1062,7 @@ fn register_generic_tests():
                 2
             coroutine {step} = sink()
             1
-    test::rejects("af-coroutine-affine-protocol/message", compiler::DiagnosticCode::CoroutineContract, b_protocol_message)
+    std::test::rejects("af-coroutine-affine-protocol/message", std::compiler::DiagnosticCode::CoroutineContract, b_protocol_message)
 
 # ---------------------------------------------------------------------------
 # One program through every transfer (item 73)
@@ -1072,7 +1072,7 @@ fn register_transfer_tests():
     # callee; a handle returned inside a struct, the struct moved and
     # destructured, the handle given to a generic HOF; a List owning two
     # handles moved; the same HOF given a function.
-    fn b_transfers() errors compiler::CompilerError:
+    fn b_transfers() errors std::compiler::CompilerError:
         static compile:
             fn run_once(step: Coroutine{args: [Message], return: Event}, m: Message) -> Event:
                 step(m)
@@ -1092,7 +1092,7 @@ fn register_transfer_tests():
                 d = invoke(double, 7)
                 e1.value + e2.value + d
             main()
-    test::value("af-native-evidence", 20, b_transfers)
+    std::test::value("af-native-evidence", 20, b_transfers)
 
 # ---------------------------------------------------------------------------
 
@@ -1105,6 +1105,6 @@ fn register_affinity_tests():
     register_generic_tests()
     register_transfer_tests()
 
-with context test::suite()
+with context std::test::suite()
 register_affinity_tests()
-test::report()
+std::test::report()

@@ -14,7 +14,7 @@
 # the namespace that owns the type), never a runtime value kind. It has no
 # layout, no representation, no tag and no runtime membership test. Its
 # identity is a namespace member's (`ui::Named` for a trait declared by
-# lib/ui.bot, the bare name in the entry program), exactly like a struct or a
+# stdlib/ui.bot, the bare name in the entry program), exactly like a struct or a
 # refinement, and it is importable with `import type`.
 #
 # Types (hir/types.tcl)
@@ -41,7 +41,7 @@
 # Satisfies(T, N): T has one canonical owner namespace (WitnessOwner), and
 # for every requirement R of N the owner's own function named R (a top-level
 # `fn` of that module or of the entry program, or for a built-in scalar family
-# the intrinsic of its namespace: `str::length`) has a signature compatible
+# the intrinsic of its namespace: `std::str::length`) has a signature compatible
 # with R with N replaced by T, decided by the existing structural function
 # compatibility (hir::types::FnMismatch: arity, contravariant parameters under
 # declared-parameter admissibility, covariant result, error-set subset) from
@@ -524,13 +524,13 @@ proc hir::traits::WitnessOwner {type} {
         return [list "" none "$name is a compiler-registered type with no source owner"]
     }
     switch -- [core::type::base $type] {
-        str { return [list str builtin] }
-        UnicodeChar { return [list char builtin] }
+        str { return [list std::str builtin] }
+        UnicodeChar { return [list std::char builtin] }
     }
     return [list "" none "[hir::types::show $type] has no canonical operation namespace"]
 }
 
-# "module \"m\"" / "the entry program" / "namespace \"str\"".
+# "module \"m\"" / "the entry program" / "namespace \"std::str\"".
 proc hir::traits::OwnerPhrase {owner kind} {
     if {$kind eq "builtin"} {
         return "the intrinsics of namespace \"$owner\""

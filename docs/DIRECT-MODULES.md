@@ -1,28 +1,28 @@
 # Direct modules and contextual capability boundaries
 
 ```
-# lib/linux.bot -- the raw, explicit low-level layer
+# stdlib/linux.bot -- the raw, explicit low-level layer
 direct module
 
-import abi
-import abi::bytes
-import linux::sys
+import std::abi
+import std::abi::bytes
+import std::linux::sys
 
-fn write(fd: abi::I32, data: abi::bytes::Bytes) -> int:
-    linux::sys::write(fd, data)        # the architecture's raw syscall
+fn write(fd: std::abi::I32, data: std::abi::bytes::Bytes) -> int:
+    std::linux::sys::write(fd, data)        # the architecture's raw syscall
 ```
 
 ```
-# lib/linux/io.bot -- an ordinary module: it contextualizes that authority
-import linux
+# stdlib/linux/io.bot -- an ordinary module: it contextualizes that authority
+import std::linux
 ...
 opaque context struct LinuxIO:
     stdin: FileDescriptor
     stdout: FileDescriptor
     stderr: FileDescriptor
 
-fn write(data: abi::bytes::Bytes, context io: LinuxIO) -> int:
-    io.stdout.raw.write(data)          # linux::write, mediated by LinuxIO
+fn write(data: std::abi::bytes::Bytes, context io: LinuxIO) -> int:
+    io.stdout.raw.write(data)          # std::linux::write, mediated by LinuxIO
 ```
 
 > Raw authority may be straightforward inside low-level modules. Ordinary
@@ -68,14 +68,14 @@ module defines itself. Then the module is ordinary, and so is everything above
 it:
 
 ```
-linux::abi::x86_64,   DIRECT (intrinsic)        the raw syscall transitions
-linux::abi::aarch64
+std::linux::abi::x86_64,   DIRECT (intrinsic)        the raw syscall transitions
+std::linux::abi::aarch64
    |
-linux::sys            DIRECT (`direct module`)  one architecture's numbers and registers
+std::linux::sys            DIRECT (`direct module`)  one architecture's numbers and registers
    |
 linux                 DIRECT (`direct module`)  write(fd, data), read(fd, data)
    |
-linux::io             ordinary                  defines LinuxIO; every call into linux requires it
+std::linux::io             ordinary                  defines LinuxIO; every call into linux requires it
    |
 io, 2048, ...         ordinary                  see only the LinuxIO capability
 ```
@@ -83,7 +83,7 @@ io, 2048, ...         ordinary                  see only the LinuxIO capability
 The taint stops at the module that contextualizes the authority.
 
 "Direct" is not "unsafe". A direct module can be perfectly memory-correct
-(lib/linux.bot is ordinary, checked Botlish); a non-direct module can still
+(stdlib/linux.bot is ordinary, checked Botlish); a non-direct module can still
 contain bugs. A context does not make a syscall or a future C call
 physically safer -- the machine operation still occurs underneath -- it makes
 the *authority* to perform it explicit and mediated. The distinction is
@@ -95,7 +95,7 @@ architectural authority, not machine risk.
 # comments and blank lines may come first (a #! line is a comment)
 direct module
 
-import linux::abi::x86_64
+import std::linux::abi::x86_64
 ...
 ```
 
@@ -132,12 +132,12 @@ A module is **designated direct** when
 * it is an intrinsic namespace the compiler declares direct:
   `core::native::declareDirectNamespace NS`, registration metadata beside the
   namespace's natives. Today exactly the raw syscall transports,
-  `linux::abi::x86_64` and `linux::abi::aarch64` (core/linuxabi.tcl declares
-  each entry of its transport table), and `binary::native`, whose
-  `binary::native::view` reads live native memory (core/binary.tcl,
-  NATIVE-LAYOUT-VIEWS.md section 8) and whose `binary::native::edit` makes
+  `std::linux::abi::x86_64` and `std::linux::abi::aarch64` (core/linuxabi.tcl declares
+  each entry of its transport table), and `std::binary::native`, whose
+  `std::binary::native::view` reads live native memory (core/binary.tcl,
+  NATIVE-LAYOUT-VIEWS.md section 8) and whose `std::binary::native::edit` makes
   write authority over it (NATIVE-LAYOUT-WRITES.md section 5); storing
-  through an edit someone made (`binary::store`) is not direct.
+  through an edit someone made (`std::binary::store`) is not direct.
 
 Nothing else designates one: no module name (`raw`, `syscall`, `ffi`,
 `linux...`), path, library or naming convention is ever read
@@ -172,7 +172,7 @@ granularity splits modules.
   reachability -- so it over-approximates (`dm-value-trait-operation`,
   `dm-foreign-context-trait`; a module's own context trait mediates its
   operations like any of its contexts, `dm-context-trait-mediates`).
-* Method syntax is an ordinary call: `abi::i32(1).write(data)` is an edge into
+* Method syntax is an ordinary call: `std::abi::i32(1).write(data)` is an edge into
   `linux`; DIRECT is an *obligation* of the selected call
   (`hir::MethodObligationKinds`), never a reason another candidate fits
   better (`dm-method-sugar-two-candidates`).
@@ -246,7 +246,7 @@ fs::value()
 `raw` is direct, `fs` contextualized, the program ordinary; with `fn open()
 -> Probe`, a context-free constructor, `fs` is DIRECT
 (`dm-context-construction-chain`). The standard library needs none of this:
-`linux::io::create()` makes LinuxIO's three descriptor tokens with no
+`std::linux::io::create()` makes LinuxIO's three descriptor tokens with no
 syscall (§5).
 
 **Why no constructor exemption.** Exempting the direct calls of a function
@@ -284,7 +284,7 @@ constructor is mediated by it.
 
 What the chain does not add is unforgeability: `fs::root()` is a
 context-free function any importer may call and install, as
-`linux::io::create()` is. That is every context's property: a context makes
+`std::linux::io::create()` is. That is every context's property: a context makes
 the capability explicit and visible where it is installed and required, not
 unobtainable (§4: no adequacy of a context's policy is claimed).
 
@@ -313,18 +313,18 @@ direct module either declares `direct module` (a deliberately low-level
 program, examples/linux/getpid.bot) or defines its own context:
 
 ```
-import abi
-import abi::bytes
-import linux
-import str
+import std::abi
+import std::abi::bytes
+import std::linux
+import std::str
 
 context struct LocalIO:
-    out: abi::I32
+    out: std::abi::I32
 
 fn emit(text: str, context io: LocalIO) -> int:
-    linux::write(io.out, abi::bytes::from_list(str::encode_utf8(text)))
+    std::linux::write(io.out, std::abi::bytes::from_list(std::str::encode_utf8(text)))
 
-with context LocalIO {out: abi::i32(1)}
+with context LocalIO {out: std::abi::i32(1)}
 emit("hello\n")
 ```
 
@@ -364,13 +364,13 @@ into a non-direct module got there through an edge or from a direct module.
 
 ```
 DIRECT: main.bot:7:5: the entry program uses direct authority: function "emit" calls
-linux::write, a callable of the direct module "linux", without a context defined by the
+std::linux::write, a callable of the direct module "std::linux", without a context defined by the
 entry program; require one of this module's own contexts ("context NAME: T", T a context
 struct or context trait declared by the entry program) in "emit", the function that makes
 the direct call, or declare the module direct with `direct module` as its first line
 
 DIRECT: b.bot:6:25: module "b" uses direct authority: function "b::raw_pid" calls
-linux::abi::x86_64::syscall, a callable of the direct module "linux::abi::x86_64",
+std::linux::abi::x86_64::syscall, a callable of the direct module "std::linux::abi::x86_64",
 without a context defined by "b" ("b::raw_pid" requires a::ContextA, a context defined by module "a", but a
 context mediates direct authority only in the module that defines it: a context declared
 by "b" itself); require one of this module's own contexts ... or declare the module direct
@@ -397,7 +397,7 @@ are still reported (`dm-diagnostics-recover`).
 
 DIRECT and DIRECT-CALLABLE-VALUE are recoverable: a `static compile:` block
 whose body makes an unmediated direct call is rejected with
-`compiler::DiagnosticCode::Direct` (`DirectCallableValue`), through the normal
+`std::compiler::DiagnosticCode::Direct` (`DirectCallableValue`), through the normal
 diagnostic-value mechanism (`dm-static-compile-*`). STALE-DIRECT-MODULE is
 located at the file header, never in a block (`tests/static-compile.test`'s
 census, class `header`). Directness is the final program's: a direct module
@@ -453,26 +453,26 @@ policy.
 ## 5. The standard library: the syscall boundary
 
 * **The direct modules of raw syscall authority are the transports
-  `linux::abi::x86_64` and `linux::abi::aarch64`**, the intrinsic namespaces
-  of `linux::abi::x86_64::syscall` and `linux::abi::aarch64::syscall` (the
+  `std::linux::abi::x86_64` and `std::linux::abi::aarch64`**, the intrinsic namespaces
+  of `std::linux::abi::x86_64::syscall` and `std::linux::abi::aarch64::syscall` (the
   raw kernel transitions, LINUX-SYSCALL-TRANSPORTS.md), each declared direct
   by `core::native::declareDirectNamespace` beside its registration in
   core/linuxabi.tcl's loop over the transport table: a third architecture's
   transport is direct by the same line. They are the smallest module
-  boundary of raw syscall authority: `abi::x86_64`'s and `abi::aarch64`'s
+  boundary of raw syscall authority: `std::abi::x86_64`'s and `std::abi::aarch64`'s
   register and address conversions (`from_bytes`, `from_mutable_bytes`,
   `register64`, ...) take no authority by themselves -- an address does
   nothing without the syscall -- and stay ordinary.
-* **`linux::sys` (lib/linux/sys.x86_64.bot, lib/linux/sys.aarch64.bot, the
+* **`std::linux::sys` (stdlib/linux/sys.x86_64.bot, stdlib/linux/sys.aarch64.bot, the
   target's architecture selecting one) is a declared direct module**, in
   both files: its `write` and `read` call the architecture's transport for
   any descriptor with no context.
-* **`linux` (lib/linux.bot) is a declared direct module.** `write(fd, data)`
-  and `read(fd, data)` call `linux::sys` with no context: they take *any*
+* **`linux` (stdlib/linux.bot) is a declared direct module.** `write(fd, data)`
+  and `read(fd, data)` call `std::linux::sys` with no context: they take *any*
   descriptor, raw process authority, by design (the explicit low-level
   layer, the same source on every architecture). Its marker is justified by
   inference (two undischarged edges).
-* **`linux::io` (lib/linux/io.bot) is ordinary -- contextualized.** Every
+* **`std::linux::io` (stdlib/linux/io.bot) is ordinary -- contextualized.** Every
   function that calls into `linux` requires `LinuxIO`, the opaque context it
   defines. One function needed a change: `write_all(fd, bytes)` (the
   short-write completion loop behind `write_text`) made its `fd.raw.write`
@@ -482,17 +482,17 @@ policy.
   context parameter loads nothing until projected: CONTEXTS.md, "Loads").
   That is the rule's one friction in the existing library: the FileDescriptor
   token is already a capability-like value (opaque, minted only by
-  linux::io), but the rule mediates by context, not by token, so the context
+  std::linux::io), but the rule mediates by context, not by token, so the context
   is carried to the direct point as the rule requires.
-* **Everything above is ordinary**: `io` (whose context trait `io::IO`
-  linux::io implements), `linux::path`, the 2048 engine and demo (unchanged:
-  they use linux::io only).
+* **Everything above is ordinary**: `io` (whose context trait `std::io::IO`
+  std::linux::io implements), `std::linux::path`, the 2048 engine and demo (unchanged:
+  they use std::linux::io only).
 * **No module split was required.** The existing boundaries already matched:
   the raw transitions are their own intrinsic namespaces, the
   architecture's register convention and the descriptor-taking wrappers
-  their own modules, the capability layer another. (linux::sys was split
+  their own modules, the capability layer another. (std::linux::sys was split
   out of linux for the AArch64 port, not for directness; both are direct.)
-* **Context establishment.** `linux::io::create()` builds the three
+* **Context establishment.** `std::linux::io::create()` builds the three
   descriptor tokens 0, 1, 2 with no syscall, so installing LinuxIO needs no
   direct authority: no bootstrap exception was needed.
 * Programs that call `linux` or a transport themselves are low-level by
@@ -518,7 +518,7 @@ tests of the syscall path are unchanged.
 | HIR | hir/hir.tcl: `-module-decls` -> `moduleDecls`; `hir::direct::verify` in `CheckOnce` after contexts; DIRECT an obligation kind of method calls; the monomorphized program keeps the checked program's summary |
 | intrinsic metadata | core/native.tcl `declareDirectNamespace`, `isDirectNamespace`, `directNamespaces`, `namespaceOf`; core/linuxabi.tcl declares each transport's namespace |
 | the analysis | hir/direct.tcl |
-| static intrinsics | hir/static.tcl codes `DIRECT` -> `Direct`, `DIRECT-CALLABLE-VALUE` -> `DirectCallableValue`; lib/compiler.bot; lib/test.bot's `code_name` |
+| static intrinsics | hir/static.tcl codes `DIRECT` -> `Direct`, `DIRECT-CALLABLE-VALUE` -> `DirectCallableValue`; stdlib/compiler.bot; stdlib/test.bot's `code_name` |
 
 The analysis is one structural pass over the program's expressions: for each
 call, its exact target's unit (memoized per scope) and whether it is
@@ -537,7 +537,7 @@ What HIR keeps: `moduleDecls` (the declarations, as given) and `direct`:
 units {NS {declared 0|1 marker ORIGIN provided 0|1 inferred 0|1 status STATUS
            edges {{function NAME origin ORIGIN target D callee NAME via call|trait
                    discharged CONTEXT foreign {{CONTEXT OWNER} ...}} ...}} ...}
-intrinsic {linux::abi::x86_64 ...}
+intrinsic {std::linux::abi::x86_64 ...}
 ```
 
 STATUS is `ordinary`, `contextualized`, `direct`, `provided` (an intrinsic
@@ -569,12 +569,12 @@ context that mediates it:
 
 ```
 module raw: direct (declared direct, inferred direct)
-    raw::getpid -> linux::abi::x86_64::syscall (direct module linux::abi::x86_64, raw.bot:10:25): undischarged
+    raw::getpid -> std::linux::abi::x86_64::syscall (direct module std::linux::abi::x86_64, raw.bot:10:25): undischarged
 module wrapper: contextualized (declared ordinary, inferred ordinary)
     wrapper::pid -> raw::getpid (direct module raw, wrapper.bot:10:5): mediated by wrapper::Pids
 module consumer: ordinary (declared ordinary, inferred ordinary)
 entry program: ordinary (declared ordinary, inferred ordinary)
-intrinsic linux::abi::x86_64: provided direct by the compiler
+intrinsic std::linux::abi::x86_64: provided direct by the compiler
 ```
 
 `hir::direct::explain HIR NS` answers "why is this module direct?" for one
@@ -681,22 +681,22 @@ distinct and the summary keeps each:
   `contextualized`, `direct`, `provided`); otherwise DIRECT (`unacknowledged`)
   or STALE-DIRECT-MODULE (`stale`).
 
-**Syscall integration (item 75).** §5: the transports `linux::abi::x86_64`
-and `linux::abi::aarch64` direct by intrinsic metadata
-(`core::native::declareDirectNamespace`); `linux::sys` (both architectures'
+**Syscall integration (item 75).** §5: the transports `std::linux::abi::x86_64`
+and `std::linux::abi::aarch64` direct by intrinsic metadata
+(`core::native::declareDirectNamespace`); `std::linux::sys` (both architectures'
 files) and `linux` direct by their markers, justified by their `write` and
-`read`; `linux::io` imports `linux` and is contextualized by its own LinuxIO
+`read`; `std::linux::io` imports `linux` and is contextualized by its own LinuxIO
 (write, write_error, read, write_all); nothing else in the library imports
-`linux`, `linux::sys` or a transport; no wrapper remains direct; no module
+`linux`, `std::linux::sys` or a transport; no wrapper remains direct; no module
 split was required.
 
 **Context limitations (item 76).** One concrete case of friction:
-`linux::io::write_all(fd, bytes)` receives an opaque, module-minted
+`std::linux::io::write_all(fd, bytes)` receives an opaque, module-minted
 FileDescriptor and still had to require LinuxIO, because the rule mediates
 by the context in the function that makes the direct call, not by a token
 argument. The rule was kept: the change is one context entry, free natively.
 No other existing context API was affected, and no bootstrap limitation
-appeared (linux::io::create makes no syscall). The latent one -- a context
+appeared (std::linux::io::create makes no syscall). The latent one -- a context
 whose *construction* needs raw authority, a future `openat`-minted
 descriptor -- has a pattern under the unchanged rule and no exemption (§3,
 "Context construction"): the owning module mints an authority-free first
@@ -749,7 +749,7 @@ unmarked raw root with DIRECT and runs a declared direct root
 (`dm-single-executable`).
 34-37, 64. §3 Diagnostics.
 38. §3 Static intrinsics; `Direct`, `DirectCallableValue` added to
-`compiler::DiagnosticCode` (97 cases), the census and `test::code_name`.
+`std::compiler::DiagnosticCode` (97 cases), the census and `std::test::code_name`.
 39-41. No suppression; no silent promotion; no sticky permission.
 42-47. The acceptance tests named in §10.
 49. Contexts and opaque structs unchanged.
@@ -787,7 +787,7 @@ Before the merge, on the same analysis:
 | `audit/hir-interchange/tools/roundtrip.tcl -via interchange` / `-via cache`, the same 12 suites | 108 / 120 artifacts and outcomes, 0 differ |
 | `audit/hir-interchange/tools/mutate.tcl` | 27 mutants, 27 killed |
 | `audit/contexts/tools/fuzz.tcl -n 100 -seed 20261017` | 100 programs, 0 disagreements |
-| `audit/contexts/tools/mutate.tcl -n 30` | 26 mutants, 26 killed (one, `stdout-stderr-swapped`, no longer applied before this milestone -- lib/linux/io.bot's write had become `io.stdout.raw.write(data)` -- and its text was updated; it is killed) |
+| `audit/contexts/tools/mutate.tcl -n 30` | 26 mutants, 26 killed (one, `stdout-stderr-swapped`, no longer applied before this milestone -- stdlib/linux/io.bot's write had become `io.stdout.raw.write(data)` -- and its text was updated; it is killed) |
 | `single/build.sh`, then `single/smoke-test.sh` and `dm-single-executable` with the built executable | smoke test passed; the test passes |
 | NIR of examples/io/hello.bot and examples/linux/context-hello.bot, before and after | identical but for expression ids (`write_all`'s new context parameter loads nothing) |
 

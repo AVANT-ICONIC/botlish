@@ -1,5 +1,5 @@
-tree: 924482b9774589a55612ffcec5f394e11b3d6db4 (lib/web.bot diff lines: 0)
-columns: module = web::emailish?(s) via .bot, root = emailish?(s) via .ir; each on interp compile cranelift-generic cranelift
+tree: 924482b9774589a55612ffcec5f394e11b3d6db4 (stdlib/web.bot diff lines: 0)
+columns: module = std::web::emailish?(s) via .bot, root = emailish?(s) via .ir; each on interp compile cranelift-generic cranelift
 0   someone@example.com                                        module=true/true/true/true root=true/true/true/true
 1   café@例え.テスト                                                module=true/true/true/true root=true/true/true/true
 2   not-an-email                                               module=false/false/false/false root=false/false/false/false

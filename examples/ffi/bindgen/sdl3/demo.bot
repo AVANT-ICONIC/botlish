@@ -22,12 +22,12 @@
 # constants of their C types.
 direct module
 
-import abi
-import abi::bytes
-import byte
-import ffi::c
-import list
-import str
+import std::abi
+import std::abi::bytes
+import std::byte
+import std::ffi::c
+import std::list
+import std::str
 import sdl3::init
 import sdl3::render
 import sdl3::thunks::bits
@@ -35,16 +35,16 @@ import sdl3::timer
 import sdl3::version
 import sdl3::video
 
-fn nul() -> byte::Byte:
+fn nul() -> std::byte::Byte:
     0
 
 # The bytes of TEXT and the NUL the C API needs.
-fn cstring(text: str) -> abi::bytes::Bytes:
-    abi::bytes::from_list(str::encode_utf8(text).append(nul()))
+fn cstring(text: str) -> std::abi::bytes::Bytes:
+    std::abi::bytes::from_list(std::str::encode_utf8(text).append(nul()))
 
 started = sdl3::init::SDL_Init(sdl3::init::SDL_INIT_VIDEO)
 window = cstring("Botlish over generated SDL3").SDL_CreateWindow(320, 240, sdl3::video::SDL_WINDOW_RESIZABLE)
-no_name = ffi::c::null[ffi::c::Char]()
+no_name = std::ffi::c::null[std::ffi::c::Char]()
 renderer = window.SDL_CreateRenderer(no_name)
 driver = sdl3::video::SDL_GetCurrentVideoDriver()
 colored = renderer.SDL_SetRenderDrawColor(32, 96, 160, 255)

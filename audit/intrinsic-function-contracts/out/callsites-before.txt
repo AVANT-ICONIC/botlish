@@ -1,6 +1,6 @@
 tree: 67380f41d56fc62986485999057e3976d4f01273 (plus any uncommitted working-tree changes)
 
-lex-strategy.bot list::all?<List[str], native> @e18
+lex-strategy.bot std::list::all?<List[str], native> @e18
     source callee type:   any
     instance callee type: native   => bare block/native
     source call result:   any; instance: any
@@ -15,7 +15,7 @@ refined-checks.bot scan_while<generic> @e216
     instance callee type: any   => any
     source call result:   any; instance: any
     HIR target: ""   calleeErrors: {}
-source-checks.bot list::find<List[str], block> @e42
+source-checks.bot std::list::find<List[str], block> @e42
     source callee type:   any
     instance callee type: block   => bare block/native
     source call result:   any; instance: any
@@ -25,17 +25,17 @@ source-checks.bot classify_leading<generic> @e91
     instance callee type: Fn{args: [any], return: any, errors: []}   => structural Fn
     source call result:   bool; instance: any
     HIR target: ""   calleeErrors: {}
-test-selection.bot list::any?<any, block> @e6
+test-selection.bot std::list::any?<any, block> @e6
     source callee type:   any
     instance callee type: block   => bare block/native
     source call result:   any; instance: any
     HIR target: ""   calleeErrors: {}
-test-selection.bot list::none?<List[str], block> @e31
+test-selection.bot std::list::none?<List[str], block> @e31
     source callee type:   any
     instance callee type: block   => bare block/native
     source call result:   any; instance: any
     HIR target: ""   calleeErrors: {}
-test-selection.bot list::find<List[list], block> @e42
+test-selection.bot std::list::find<List[list], block> @e42
     source callee type:   any
     instance callee type: block   => bare block/native
     source call result:   any; instance: any

@@ -11,7 +11,7 @@ function 0 "<program>"
   depth reservation: yes
   storage: native frame
 
-function 1 "web::uri_escape_text"
+function 1 "std::web::uri_escape_text"
   NIR regs: 10
   raw regs: 1
   managed-capable regs: 9

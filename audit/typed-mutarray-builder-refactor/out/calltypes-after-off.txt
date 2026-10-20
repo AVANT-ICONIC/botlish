@@ -6,7 +6,7 @@
    52:5   chars_of                 : any
    66:5   count_true               : any
    69:5   count_true               : any
-   72:5   list::all?               : bool
+   72:5   std::list::all?               : bool
    79:5   total_valid              : any
    85:12  fully_alnum?             : bool
    56:15  chars_of                 : any
@@ -28,54 +28,54 @@
    85:8   valid_start?             : bool
    63:9   valid_start?             : bool
    59:13  classify_leading         : List[bool]
-   89:17  list::find               : any
+   89:17  std::list::find               : any
 == sum-refined.bot
    35:1   refined_sum              : int
    31:9   refined_sum              : int
    31:28  step                     : int
 == test-selection.bot
-   57:5   list::any?               : bool
+   57:5   std::list::any?               : bool
    71:5   test_name                : any
    67:9   affected?                : bool
    96:9   changed?                 : bool
-   68:13  list::find               : any
+   68:13  std::list::find               : any
    93:14  make_changed?            : block(e55)/1 -> bool
    94:14  make_changed?            : block(e55)/1 -> bool
    98:14  select_affected          : list
    99:14  select_affected          : list
    57:16  test_deps                : any
    61:16  affected?                : bool
-  102:19  list::none?              : bool
+  102:19  std::list::none?              : bool
   104:52  first_affected           : any
 == uri-steady.bot
    39:1   repeat_uri               : any
    37:5   repeat_uri               : any
-   63:5   ascii::is_upper          : bool
-   66:5   ascii::is_alphabetic     : bool
-  190:5   ascii::is_alphanumeric   : bool
+   63:5   std::ascii::is_upper          : bool
+   66:5   std::ascii::is_alphabetic     : bool
+  190:5   std::ascii::is_alphanumeric   : bool
   223:5   esc_from                 : any
-  176:9   byte::from_int           : int[Byte]
-  195:9   byte::nibble             : int[Nibble]
+  176:9   std::byte::from_int           : int[Byte]
+  195:9   std::byte::nibble             : int[Nibble]
   134:13  scan_while               : int
   204:13  esc_bytes                : any
   215:13  esc_bytes                : any
   221:13  esc_from                 : any
-   36:15  web::uri_escape_text     : any
+   36:15  std::web::uri_escape_text     : any
   161:16  char_at                  : str
   180:16  char_at                  : str
-  210:16  web::is_unreserved       : bool
+  210:16  std::web::is_unreserved       : bool
   173:17  scan_while               : int
   181:17  domain?                  : bool
   213:17  esc_bytes                : any
-  176:18  char::codepoint          : int
-   63:20  ascii::is_lower          : bool
+  176:18  std::char::codepoint          : int
+   63:20  std::ascii::is_lower          : bool
   164:20  char_at                  : str
   166:20  tld?                     : bool
-  195:22  byte::high_nibble        : int[HighNibble]
+  195:22  std::byte::high_nibble        : int[HighNibble]
   169:24  label_char?              : bool
-   66:25  ascii::is_digit          : bool
+   66:25  std::ascii::is_digit          : bool
   128:26  char_at                  : str
-  187:31  byte::set                : ImmutableSet[int[Byte]]
+  187:31  std::byte::set                : ImmutableSet[int[Byte]]
   169:36  char_at                  : str
   198:37  high_nibble              : int[Nibble]
   221:47  esc_char                 : any

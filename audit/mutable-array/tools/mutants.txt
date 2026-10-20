@@ -144,7 +144,7 @@
         KIND_MUTVEC => {
 >>>>
 
-@@ list-extraction-aliases an array a binding takes out of a List (list::at) is not copied: the binding's mutations reach the List's element
+@@ list-extraction-aliases an array a binding takes out of a List (std::list::at) is not copied: the binding's mutations reach the List's element
 ## hir/mutvec.tcl
 <<<<
             if {![Fresh $hir $value] && ![Moved $hir $parent $value]} {
@@ -152,7 +152,7 @@
             }
 ====
             if {![Fresh $hir $value] && ![Moved $hir $parent $value]
-                    && !([hir::affine::NativeName $hir $value] eq "list::at" && [Kind [hir::affine::BindingType $hir $b]] eq "array")} {
+                    && !([hir::affine::NativeName $hir $value] eq "std::list::at" && [Kind [hir::affine::BindingType $hir $b]] eq "array")} {
                 lappend wraps [list $value [ShareNative] $d]
             }
 >>>>

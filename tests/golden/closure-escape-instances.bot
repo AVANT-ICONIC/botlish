@@ -17,11 +17,11 @@
 # Declarations: Detail and Record, the Tcl program's T and S (renamed, as in
 # closure-escape.bot).
 #
-# Imports: compiler and test (the framework); list (list::length, called
+# Imports: compiler and test (the framework); list (std::list::length, called
 # qualified). No test here is about an import or about method calls.
-import compiler
-import list
-import test
+import std::compiler
+import std::list
+import std::test
 
 struct Detail:
     g: int
@@ -34,15 +34,15 @@ fn register_never_element_instance_tests():
     # native-listloop-never-element-neighbours, its fifth program: total's
     # parameter is untyped; one call passes a one-Record List, the other []
     # (the instance whose loop element is never-typed).
-    fn mixed_callers() errors compiler::CompilerError:
+    fn mixed_callers() errors std::compiler::CompilerError:
         static compile:
             fn total(xs) -> int:
                 ys = loop x in xs:
                     x.t.g + x.f
-                list::length(ys)
+                std::list::length(ys)
             [total([Record {f: 1, t: Detail {g: 2}}]), total([])]
-    test::value("never-element/mixed-callers", [1, 0], mixed_callers)
+    std::test::value("never-element/mixed-callers", [1, 0], mixed_callers)
 
-with context test::suite()
+with context std::test::suite()
 register_never_element_instance_tests()
-test::report()
+std::test::report()

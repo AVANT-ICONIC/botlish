@@ -3,8 +3,8 @@
 # on refined-checks' hot path costs (PROOF-FACT-CENSUS.md, performance
 # context). Observation only: the compiler is not changed. It emits the
 # benchmark's NIR (native/explain-native.tcl's standalone program.nir),
-# deletes the single `op regioncheck` line -- in lib/web.bot's char_at,
-# whose str::substring the completion proof already proves in range (its
+# deletes the single `op regioncheck` line -- in stdlib/web.bot's char_at,
+# whose std::str::substring the completion proof already proves in range (its
 # result register is never read) -- and times both NIR files in-process
 # with the native driver's own bench mode (JIT excluded).
 #

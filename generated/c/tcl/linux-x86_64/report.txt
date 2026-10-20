@@ -43,7 +43,7 @@ Pointer contracts (bound APIs)
     unknown                                                                  205    99.5%
 
 Capability pressure (API names a missing FFI capability blocks or limits)
-  C _Bool in the signature (blocked without ffi::c::Bool)                      0     0.0%
+  C _Bool in the signature (blocked without std::ffi::c::Bool)                 0     0.0%
     of them bound now, bool their only blocker                                 0     0.0%
   float/double                                                                 9     1.0%
   aggregates by value (struct, union)                                          0     0.0%
@@ -82,7 +82,7 @@ Layout blockers (records blocked; a record may have several)
       double                                                                   1     2.6%
 
 Layout pressure (blocked records a missing feature would make layouts: directly + transitively)
-  ffi::c::Bool fields                                                          0     0.0%  0 + 0
+  std::ffi::c::Bool fields                                                     0     0.0%  0 + 0
   float fields                                                                 0     0.0%  0 + 0
   double fields                                                                2     5.3%  1 + 1
   float and double fields                                                      2     5.3%  1 + 1
@@ -111,7 +111,7 @@ API pressure (bound APIs pointing to C records)
       outside the profile's records (a system header's)                        1     2.0%
     incomplete (opaque only)                                                  24    47.1%
   bound APIs a missing feature would give a layout of a record they point to:
-      ffi::c::Bool fields                                                      0     0.0%  0 records
+      std::ffi::c::Bool fields                                                 0     0.0%  0 records
       float fields                                                             0     0.0%  0 records
       double fields                                                          204    29.6%  2 records
       float and double fields                                                204    29.6%  2 records
@@ -162,7 +162,7 @@ Macros
 
 Generated source
   Botlish files                                                               11
-  lines                                                                     5945
+  lines                                                                     6035
   extern c fn declarations                                                   820
   opaque types                                                                59
   constants                                                                  219

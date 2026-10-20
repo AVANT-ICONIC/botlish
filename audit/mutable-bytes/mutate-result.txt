@@ -1,4 +1,4 @@
-# Final mutation run (tools/mutate.tcl -fuzz 12) on the final layout (abi::bytes): 18 mutants, all killed in ONE pass (no mutant refused by the tool's guard).
+# Final mutation run (tools/mutate.tcl -fuzz 12) on the final layout (std::abi::bytes): 18 mutants, all killed in ONE pass (no mutant refused by the tool's guard).
 
    killed: clone-aliases by 6 test(s) abi-mutable-bytes-allocations abi-mutable-bytes-read-binary-prefix-and-suffix abi-mutable-bytes-read-does-not-change-the-callers-buffer abi-mutable-bytes-read-larger-input-reads-one-chunk abi-mutable-bytes-read-short-read-and-untouched-suffix abi-mutable-bytes-wrapper-read-never-writes-through-shared-values... fuzz failures 48
    killed: set-aliases by 24 test(s) abi-mutable-bytes-allocations abi-mutable-bytes-allocations-aggregates abi-mutable-bytes-copies-are-independent-any abi-mutable-bytes-copies-are-independent-binding abi-mutable-bytes-copies-are-independent-branch-join abi-mutable-bytes-copies-are-independent-closure... fuzz failures 0

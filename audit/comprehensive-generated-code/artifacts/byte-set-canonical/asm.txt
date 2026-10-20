@@ -53,7 +53,7 @@ Disassembly of section .text:
   b5:	pop    rbp
   b6:	ret
 
-00000000000000b7 <botlish_fn_1>:  ;; char::codepoint<UnicodeChar>
+00000000000000b7 <botlish_fn_1>:  ;; std::char::codepoint<UnicodeChar>
   b7:	push   rbp
   b8:	mov    rbp,rsp
   bb:	call   c0 <botlish_fn_1+0x9>
@@ -62,7 +62,7 @@ Disassembly of section .text:
   c3:	pop    rbp
   c4:	ret
 
-00000000000000c5 <botlish_entry_1>:  ;; char::codepoint<UnicodeChar>
+00000000000000c5 <botlish_entry_1>:  ;; std::char::codepoint<UnicodeChar>
   c5:	push   rbp
   c6:	mov    rbp,rsp
   c9:	mov    rsi,QWORD PTR [rdx]
@@ -73,7 +73,7 @@ Disassembly of section .text:
   d5:	ret
 	...
 
-00000000000000d8 <botlish_fn_2>:  ;; byte::from_int<int>
+00000000000000d8 <botlish_fn_2>:  ;; std::byte::from_int<int>
   d8:	push   rbp
   d9:	mov    rbp,rsp
   dc:	sub    rsp,0x10
@@ -150,7 +150,7 @@ Disassembly of section .text:
  1f5:	add    BYTE PTR [rax],al
 	...
 
-00000000000001f8 <botlish_entry_2>:  ;; byte::from_int<int>
+00000000000001f8 <botlish_entry_2>:  ;; std::byte::from_int<int>
  1f8:	push   rbp
  1f9:	mov    rbp,rsp
  1fc:	mov    rsi,QWORD PTR [rdx]
@@ -164,7 +164,7 @@ Disassembly of section .text:
  20d:	add    BYTE PTR [rax],al
 	...
 
-0000000000000210 <botlish_fn_3>:  ;; byte::set<List[UnicodeChar]>
+0000000000000210 <botlish_fn_3>:  ;; std::byte::set<List[UnicodeChar]>
  210:	push   rbp
  211:	mov    rbp,rsp
  214:	sub    rsp,0x60
@@ -313,7 +313,7 @@ Disassembly of section .text:
  445:	add    BYTE PTR [rax],al
 	...
 
-0000000000000448 <botlish_entry_3>:  ;; byte::set<List[UnicodeChar]>
+0000000000000448 <botlish_entry_3>:  ;; std::byte::set<List[UnicodeChar]>
  448:	push   rbp
  449:	mov    rbp,rsp
  44c:	mov    rsi,QWORD PTR [rdx]

@@ -26,8 +26,8 @@ One other test reads them for the same reason, a subject the refactor
 removed from the live program: `tests/native-string-region.test`'s
 `region-csv-corpus-1` measures the String-region optimization on `csv.bot`'s
 `peek()` comparisons, which the live `csv.bot` no longer makes (it reads
-characters with `str::char_at`).
+characters with `std::str::char_at`).
 
-They import the live `lib/` modules, so a library's findings print here
+They import the live `stdlib/` modules, so a library's findings print here
 exactly as the manifest (`audit/refactor/manifest.txt`) says they print
 everywhere else.

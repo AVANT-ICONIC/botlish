@@ -576,7 +576,7 @@ proc hir::BuildFull {nodes options given halt checkedVar {seeds {}}} {
         if {[lindex [dict get $options -origin] 0] ne "ir"} {
             hir::mutvec::Elaborate hir
         }
-        # The layout a binary::emit reads from its value's static type
+        # The layout a std::binary::emit reads from its value's static type
         # (BINARY-LAYOUT.md), written out as the descriptor constant every
         # backend reads instead (hir::layouts::Elaborate).
         hir::layouts::Elaborate hir
@@ -646,7 +646,7 @@ proc hir::BuildOnce {nodes options given choices halt checkedVar} {
         hir::errordecls::resolvePayloads
     }
     # A source program's extern c fn declarations and link plan (C-FFI.md):
-    # their C types name the program's own (opaque structs, ffi::c's
+    # their C types name the program's own (opaque structs, std::ffi::c's
     # scalars), so they are registered once those are. A frontend that
     # passes -error-decls (even empty) compiles a program of its own: no
     # extern of an earlier compilation stays declared. Core IR text keeps

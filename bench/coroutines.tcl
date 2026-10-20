@@ -59,7 +59,7 @@ foreach {option value} $args {
     }
 }
 
-set prelude "import coroutine\nstruct V:\n    n: int\n"
+set prelude "import std::coroutine\nstruct V:\n    n: int\n"
 
 proc program {kind n {depth 1}} {
     return [surface::compile [programText $kind $n $depth] -warnings off]
@@ -124,7 +124,7 @@ proc programText {kind n {depth 1}} {
         hold {
             append p "fn down(d: int, k: int) -> int:\n    if d == 0:\n        yield V {n: k}\n        return k\n    down(d - 1, k) + 1\n"
             append p "fn w(k: int) -> V:\n    return V {n: down($depth, k)}\n"
-            append p "fn hold(k: int) -> int:\n    if k == 0:\n        return 0\n    coroutine {step, first} = w(k)\n    x = hold(k - 1)\n    if coroutine::done?(step):\n        return x\n    x + first.n\n"
+            append p "fn hold(k: int) -> int:\n    if k == 0:\n        return 0\n    coroutine {step, first} = w(k)\n    x = hold(k - 1)\n    if std::coroutine::done?(step):\n        return x\n    x + first.n\n"
             append p "hold($n)\n"
         }
         exit-return {
@@ -175,7 +175,7 @@ proc programText {kind n {depth 1}} {
         }
         terminal {
             append p "fn w(k: int) -> V:\n    yield V {n: k}\n    return V {n: k + 1}\n"
-            append p "fn hold(k: int) -> int:\n    if k == 0:\n        return 0\n    coroutine {step, first} = w(k)\n    last = step()\n    x = hold(k - 1)\n    if coroutine::done?(step):\n        return x + last.n\n    x\n"
+            append p "fn hold(k: int) -> int:\n    if k == 0:\n        return 0\n    coroutine {step, first} = w(k)\n    last = step()\n    x = hold(k - 1)\n    if std::coroutine::done?(step):\n        return x + last.n\n    x\n"
             append p "hold($n)\n"
         }
     }

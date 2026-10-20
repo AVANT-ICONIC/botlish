@@ -1,8 +1,8 @@
 exact_calls=42 false_false=0 false_true=0 true_false=6 true_true=36 completion_checks_removed=0 call_safepoints_removed=6
-call caller=0 caller_name="<program>" callee=1 callee_name="web::uri_escape_text" may_error=true may_gc=true
+call caller=0 caller_name="<program>" callee=1 callee_name="std::web::uri_escape_text" may_error=true may_gc=true
 call caller=0 caller_name="<program>" callee=8 callee_name="check" may_error=true may_gc=true
 call caller=0 caller_name="<program>" callee=8 callee_name="check" may_error=true may_gc=true
-call caller=1 caller_name="web::uri_escape_text" callee=7 callee_name="esc_from" may_error=true may_gc=true
+call caller=1 caller_name="std::web::uri_escape_text" callee=7 callee_name="esc_from" may_error=true may_gc=true
 call caller=4 caller_name="hex_pair" callee=2 callee_name="high_nibble" may_error=true may_gc=false
 call caller=5 caller_name="esc_bytes" callee=4 callee_name="hex_pair" may_error=true may_gc=true
 call caller=6 caller_name="esc_char" callee=3 callee_name="is_unreserved" may_error=true may_gc=false

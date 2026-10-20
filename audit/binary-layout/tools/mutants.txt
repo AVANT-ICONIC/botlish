@@ -120,14 +120,14 @@
 <<<<
     foreach field $fields {
         set name [lindex $field 0]
-        set bytes [EncodeRepr binary::emit [lrange $field 2 end] [core::value::structGet $value $name] \
+        set bytes [EncodeRepr std::binary::emit [lrange $field 2 end] [core::value::structGet $value $name] \
             $bytes [expr {$base + [lindex $field 1]}] "field \"$name\" of $structId"]
     }
 ====
     set cursor $base
     foreach field $fields {
         set name [lindex $field 0]
-        set bytes [EncodeRepr binary::emit [lrange $field 2 end] [core::value::structGet $value $name] \
+        set bytes [EncodeRepr std::binary::emit [lrange $field 2 end] [core::value::structGet $value $name] \
             $bytes $cursor "field \"$name\" of $structId"]
         switch -- [lindex $field 2] {
             layout { set cursor [expr {$cursor + [lindex $field 3 1]}] }
@@ -408,7 +408,7 @@ proc core::binary::EncodeRepr {operation repr value bytes at what} {
         let message = format!("{context}: {} is outside
 >>>>
 
-@@ elaboration-skipped binary::emit is never elaborated to binary#emit with its value's static layout
+@@ elaboration-skipped std::binary::emit is never elaborated to binary#emit with its value's static layout
 ## hir/hir.tcl
 <<<<
         hir::layouts::Elaborate hir
@@ -432,7 +432,7 @@ proc core::binary::EncodeRepr {operation repr value bytes at what} {
         if {0 && !$root && [hir::layouts::lookup $name [CtxNamespace $ctx]] ne ""} {
 >>>>
 
-@@ parse-result-boxed-escape a parse result is never held as fields: every binary::parse builds its object
+@@ parse-result-boxed-escape a parse result is never held as fields: every std::binary::parse builds its object
 ## hir/escape.tcl
 <<<<
     if {[hir::layouts::OfType $type] eq ""} {

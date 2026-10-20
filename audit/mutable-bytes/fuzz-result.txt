@@ -1,4 +1,4 @@
-# Fuzz campaigns on the final layout (abi::bytes), recorded from the final matrix run
+# Fuzz campaigns on the final layout (std::abi::bytes), recorded from the final matrix run
 ## tclsh9.0 audit/mutable-bytes/tools/fuzz.tcl -mode both -n 60 -seed 1 -items 12
 mutable-bytes-fuzz programs 60 values 787 failures 0
 ## tclsh9.0 audit/mutable-bytes/tools/fuzz.tcl -mode pure -n 40 -seed 9001 -items 14

@@ -18,7 +18,7 @@ existing behavior with direct HIR/range evidence rather than trusting the
 prior report's prose, (2) exercising the mechanism's edge cases (join,
 weakening, budget, open callers, forwarding, recursion) with focused tests,
 since the prior milestone's own tests never inspected a `params` entry
-directly, and (3) classifying exactly why `byte::nibble`'s body still
+directly, and (3) classifying exactly why `std::byte::nibble`'s body still
 lowers to a generic `rt_int_shr` helper call despite that. All three are
 done below. Nothing was added to `hir/specialize.tcl`, `hir/range.tcl`,
 `native/lower.tcl`, or any Rust source.
@@ -29,7 +29,7 @@ done below. Nothing was added to `hir/specialize.tcl`, `hir/range.tcl`,
   existing parameter-fact mechanism at the one layer the prior milestone's
   own tests did not inspect (`dict get ... params`, not just a call
   expression's own Range or a function's result summary): the real
-  `byte::nibble` acceptance case (3 tests), and 12 synthetic tests using
+  `std::byte::nibble` acceptance case (3 tests), and 12 synthetic tests using
   plain integer literals for every mandated scenario (single caller,
   two-site join, weaker-caller widening, exact-set union within/beyond the
   existing 32-value budget, open/dynamic-caller fallback, branch-narrowed
@@ -37,7 +37,7 @@ done below. Nothing was added to `hir/specialize.tcl`, `hir/range.tcl`,
   widening, plain-interval propagation, dense-set canonicalization).
 - This report.
 
-Nothing else changed: `lib/byte.bot` and `lib/web.bot` are byte-identical
+Nothing else changed: `stdlib/byte.bot` and `stdlib/web.bot` are byte-identical
 to `HEAD~1` (spec §85, §36-37), `hir/specialize.tcl` and `hir/range.tcl` are
 unmodified, and no Rust source (`native/src/**`) was touched. `git status`
 on this branch shows exactly the one new test file plus this report.
@@ -51,8 +51,8 @@ milestone's own prose:
 - `tclsh9.0 native/explain-native.tcl bench/refined-checks.ir OUTDIR` (the
   existing diagnostic driver from the *previous* milestone, unmodified)
   against the real, unmodified `bench/refined-checks.ir` -- the actual
-  program that drives `web::uri_escape_text` -> local `high_nibble` ->
-  `byte::high_nibble`/`byte::nibble`, i.e. the literal acceptance case in
+  program that drives `std::web::uri_escape_text` -> local `high_nibble` ->
+  `std::byte::high_nibble`/`std::byte::nibble`, i.e. the literal acceptance case in
   the milestone's own words.
 - A small ad hoc probe script (`hir::specialize::analyze` +
   `hir::range::analyze`, then printing every used instance's own `params`
@@ -70,7 +70,7 @@ Fresh evidence from `HEAD`, `bench/refined-checks.ir` (unmodified), via
 `native/explain-native.tcl`:
 
 ```
-instance i9 (byte::nibble<int>): generic=0 block=e14
+instance i9 (std::byte::nibble<int>): generic=0 block=e14
   param 0 (x) range: [0, 240] {0,16,32,48,64,80,96,112,128,144,160,176,192,208,224,240}
   result range: [0, 15]
 ```
@@ -86,7 +86,7 @@ The parameter's *semantic* type (`hir::specialize::explain`'s own
 `aot-spec.txt`) is plain `x : int`, not a nominal `HighNibble` -- which is
 correct per spec §25 ("do not require HighNibble nominality for success")
 and consistent with `BYTE-NIBBLE-BIT-ARITHMETIC.md §7`'s own documented
-architecture wall: a call to `byte::high_nibble`/`byte::nibble` from
+architecture wall: a call to `std::byte::high_nibble`/`std::byte::nibble` from
 another module infers plain `int`, because these are ordinary Botlish
 functions, not natives with a declared nominal parameter type. The
 *optimization* fact -- the interval and the sparse exact set -- is present
@@ -97,7 +97,7 @@ Inside the body, the parameter's own `ref` expressions see the same fact,
 not just the instance's entry summary (`range-exprs.txt`, `hir.txt`):
 
 ```
-e13 bind b3 byte::nibble : block(e14)/1 -> int[Nibble]
+e13 bind b3 std::byte::nibble : block(e14)/1 -> int[Nibble]
     e14 block s6 (b10 x) ... : block(e14)/1 -> int[Nibble]
         e15 call native(bit_and) : int          -- range [0, 15]   (final AND with 15)
             e17 call native(bit_or) : int        -- range [0, 255]
@@ -123,10 +123,10 @@ because `hir::range::analyze`'s existing interprocedural fixpoint already
 *is* general caller-to-callee argument propagation, not merely
 callee-to-caller result propagation:
 
-1. **`byte::high_nibble`'s own declared result** (`fn high_nibble(b) ->
+1. **`std::byte::high_nibble`'s own declared result** (`fn high_nibble(b) ->
    HighNibble:`, verified by the *previous* milestone,
    `CROSS-MODULE-REFINED-SIGNATURES.md`) makes the call expression
-   `byte::high_nibble(b)`'s own semantic type `int[HighNibble]` at every
+   `std::byte::high_nibble(b)`'s own semantic type `int[HighNibble]` at every
    call site, regardless of the argument.
 2. `hir::range::Call`, when a call resolves to an exact block instance,
    intersects that call expression's Range against `TypeFact(semantic
@@ -135,7 +135,7 @@ callee-to-caller result propagation:
    `[0,240]` + the 16-value exact set purely from `core::type::integerFacts`
    -- generic machinery, no name `HighNibble` anywhere in `hir/range.tcl`.
 3. That call expression *is* the argument expression at the very next call,
-   `byte::nibble(byte::high_nibble(b))`. `hir::range::Call`'s general
+   `std::byte::nibble(std::byte::high_nibble(b))`. `hir::range::Call`'s general
    argument-collection loop (`foreach a [dict get $node args] { set r [Expr
    hir ctx $a] ... }`) reads its already-computed Range like any other
    expression -- a Ref, an arithmetic expression, a branch-narrowed local,
@@ -147,11 +147,11 @@ callee-to-caller result propagation:
    pass reached contributes its own argument Range to its target
    instance's `contributions`, *joined* (`hir::range::join`, the same
    join every other lattice operation in this file uses) across every
-   caller that reaches that instance in that round. `byte::nibble<int>`
+   caller that reaches that instance in that round. `std::byte::nibble<int>`
    has exactly one caller in the real program (`high_nibble`'s own local
    wrapper), so the join is trivial here, but §closed-call-two-site-join
    below shows it is a real join, not a single-caller special case.
-5. The next round's `SettleInstance` for `byte::nibble<int>` starts its own
+5. The next round's `SettleInstance` for `std::byte::nibble<int>` starts its own
    body analysis from that joined fact as the parameter's entry Range
    (`ctx bindings`), so every `ref x` inside the body reads it -- this is
    the same `ctx bindings` mechanism the file already used before this
@@ -175,7 +175,7 @@ at a `params` entry and read it.
 
 **Closedness.** An instance's caller set is closed exactly when
 `hir::specialize`'s own architecture already guarantees it: a *specialized*
-instance (`byte::nibble<int>`, `f<int>`, ...) is, by `hir::specialize`'s own
+instance (`std::byte::nibble<int>`, `f<int>`, ...) is, by `hir::specialize`'s own
 invariant (`specialize.tcl`'s header: "a materialized Block retains a
 generic entry"), reachable *only* through the direct calls that
 `hir::specialize::Handle`'s `call` case resolved to it -- never through a
@@ -222,7 +222,7 @@ was added.
 
 **Type vs. flow facts (spec §9-10 boundary).** The mechanism attaches facts
 to a parameter's `hir::range` entry, never to its semantic
-`hir::types`/`hir::specialize` key type. `byte::nibble<int>`'s parameter is
+`hir::types`/`hir::specialize` key type. `std::byte::nibble<int>`'s parameter is
 semantically `int`, with `[0,240]`+exact-set optimization facts riding
 alongside; nothing here infers a nominal `HighNibble` parameter type, and
 nothing needed to. Where a caller-proven fact *would* need to become a
@@ -257,7 +257,7 @@ finite and monotone before this milestone touched it.
 | Test | Scenario | Result |
 |---|---|---|
 | `closed-call-real-byte-nibble-param` | real acceptance case | `[0,240] {0,16,...,240}` |
-| `closed-call-real-byte-nibble-is-closed` | instance identity by kind, not by refined type | `byte::nibble<int>`, not generic |
+| `closed-call-real-byte-nibble-is-closed` | instance identity by kind, not by refined type | `std::byte::nibble<int>`, not generic |
 | `closed-call-real-byte-nibble-body-sees-fact` | body `ref x` sees the joined fact | same as param entry |
 | `closed-call-single-exact-caller` | one caller, sparse point | `{1}` |
 | `closed-call-two-site-join` | two disjoint 2-value sets | `{1,4,7,10}` |
@@ -275,7 +275,7 @@ finite and monotone before this milestone touched it.
 Every synthetic test uses plain integer literals and ordinary `bit_and`/
 `mod` calls -- no `core::type::register`, no `Byte`/`Nibble`/`HighNibble`
 name anywhere except the three real-corpus tests, which read the actual
-`bench/refined-checks.ir` and therefore necessarily name `byte::nibble` (a
+`bench/refined-checks.ir` and therefore necessarily name `std::byte::nibble` (a
 test asking "does the real acceptance case hold" cannot avoid naming the
 real function; the *mechanism* it exercises, `hir::range::analyze`, still
 contains no such name). This directly answers spec §75/§28/§43: the
@@ -402,7 +402,7 @@ of this particular imprecision.
 
 ## Remaining codegen defect: classified
 
-The dominant, decisive reason `byte::nibble` still contains `%6 = op ishr
+The dominant, decisive reason `std::byte::nibble` still contains `%6 = op ishr
 %0 %4` (and lowers to `rt_int_shr`) is **class D** (spec §63: "Cranelift
 lowering failed to exploit an already-raw operation") -- more precisely,
 Cranelift lowering never *attempts* to, regardless of any fact's quality,
@@ -439,7 +439,7 @@ the first place. The milestone's own closing question (spec §100) is now
 answerable exactly as its own example anticipates:
 
 ```
-inside byte::nibble:
+inside std::byte::nibble:
     %0 is proven nonnegative
     %0 <= 240
     %0 belongs to {0,16,...,240}
@@ -460,7 +460,7 @@ intermediate `x&15`/`x>>4` values noted above), not fact propagation.
    interprocedural fixpoint, built for the prior milestone's own
    *result*-propagation direction but general enough to also do this one.
 2. All of it arrived intact: both the interval and the sparse exact set,
-   for the real `byte::nibble` case. Nothing was found missing at the
+   for the real `std::byte::nibble` case. Nothing was found missing at the
    parameter-fact layer itself (see the body-analysis section for the two
    things *downstream* of the parameter that are still imprecise).
 3. No layer lost it; the audit's finding is that no loss exists at this
@@ -481,10 +481,10 @@ intermediate `x&15`/`x>>4` values noted above), not fact propagation.
    source function (verified, `closed-call-open-caller-fallback`).
 8. No: `hir::specialize`'s `KeyType` already strips ranges/exact-sets
    (and named refinements) down to kind before this milestone, and
-   nothing here changes that. `byte::nibble<int>` is the same one
+   nothing here changes that. `std::byte::nibble<int>` is the same one
    instance whether its caller passes `{16}` or `{16,32,48}`.
-9. Zero: `byte::nibble` has exactly the one instance
-   (`byte::nibble<int>`) it already had.
+9. Zero: `std::byte::nibble` has exactly the one instance
+   (`std::byte::nibble<int>`) it already had.
 10. The same self-tail/recursive backedge mechanism the prior milestone
     built for result propagation (`selfRecursiveOf`/`poisonedOf`) already
     covers it, because a self-tail call is just another entry in the same
@@ -499,7 +499,7 @@ intermediate `x&15`/`x>>4` values noted above), not fact propagation.
 13. Yes.
 14. Remains `int`, with the facts riding alongside (spec §9's own
     distinction). Not `HighNibble` nominally.
-15. Because `byte::nibble`/`byte::high_nibble` are ordinary Botlish
+15. Because `std::byte::nibble`/`std::byte::high_nibble` are ordinary Botlish
     functions, not natives with a declared nominal parameter type
     (`BYTE-NIBBLE-BIT-ARITHMETIC.md §7`'s own documented architecture
     wall); the optimization fact does not need the nominal type to be

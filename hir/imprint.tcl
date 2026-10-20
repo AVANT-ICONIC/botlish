@@ -8,11 +8,11 @@
 #   fn first(xs: List[T]) -> T                 T established by the List
 #   fn lookup(m: MutableArray[K], key: K) -> K  K established, then used
 #   fn empty() -> List[T]                       T only in the result
-#   ffi::c::null() -> ffi::c::Ptr[T]            (an intrinsic, the same way)
+#   std::ffi::c::null() -> std::ffi::c::Ptr[T]  (an intrinsic, the same way)
 #
 # A variable is *established* by an argument when it occurs inside an applied
 # type of the parameter (an element of List, ImmutableSet, MutableArray or
-# MutableVector, a pointee of ffi::c::Ptr, a type of an ffi::c::FnPtr
+# MutableVector, a pointee of std::ffi::c::Ptr, a type of a std::ffi::c::FnPtr
 # signature): the argument's static type there says what it is. A bare
 # parameter `x: T`, or T inside a Fn type, establishes nothing: it only *uses*
 # a variable an earlier parameter established (left to right), so
@@ -22,7 +22,7 @@
 #
 # A variable that occurs only in the result is supplied at the call:
 #
-#   ffi::c::null[ssl::SSL]()      empty[int]()      first[str](xs)
+#   std::ffi::c::null[ssl::SSL]()      empty[int]()      first[str](xs)
 #
 # Explicit imprints are all or nothing: `f[A, B](...)` gives every variable of
 # f, in the order they first occur in its signature (parameter types left to
@@ -44,7 +44,7 @@
 # and is compiled once (as values of any type are). A variable bound to an
 # affine type where values of it exist would let the body copy them, so a
 # binding that is affine in a value position is rejected; in a pointee
-# position (ffi::c::Ptr[T]) no value of T exists and any pointee is fine.
+# position (std::ffi::c::Ptr[T]) no value of T exists and any pointee is fine.
 #
 # An imprinted callable is not a value: a reference to one is only the callee
 # of a call (a function value has no call site to imprint at).
@@ -159,7 +159,7 @@ proc hir::imprint::CheckSignature {hirVar e params names} {
     foreach problem [Unestablished $params] {
         lassign $problem index name
         hir::Diagnose hir TYPE [format \
-            {unknown or invalid type for parameter "%s": no type named %s is visible here, and as an imprint variable %s is not established -- a parameter whose type is %s itself (or holds it in a Fn type) cannot say what %s is; an earlier parameter must hold it in an applied type (List[%s], MutableArray[%s], ffi::c::Ptr[%s], ...), or it may occur in the result only, to be imprinted at each call (f[TYPE](...))} \
+            {unknown or invalid type for parameter "%s": no type named %s is visible here, and as an imprint variable %s is not established -- a parameter whose type is %s itself (or holds it in a Fn type) cannot say what %s is; an earlier parameter must hold it in an applied type (List[%s], MutableArray[%s], std::ffi::c::Ptr[%s], ...), or it may occur in the result only, to be imprinted at each call (f[TYPE](...))} \
             [lindex $names $index] $name $name $name $name $name $name $name] $e
         lset params $index {}
     }
@@ -205,7 +205,7 @@ proc hir::imprint::BlockSignature {hir e} {
 # The imprint variables of the functions whose bodies resolution context CTX
 # is in (hir/resolve.tcl's `blocks`, outermost first): the names a call's
 # explicit imprint there may forward (`fn mynull() -> Ptr[T]:
-# ffi::c::null[T]()`), each the rigid variable of its function.
+# std::ffi::c::null[T]()`), each the rigid variable of its function.
 proc hir::imprint::EnclosingVariables {hir ctx} {
     set vars {}
     if {![dict exists $ctx blocks]} {

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Reuse the historical exact-target *control*, on today's surface source.
 
-Only a fresh scratch copy of lib/web.bot is patched. This is an oracle
+Only a fresh scratch copy of stdlib/web.bot is patched. This is an oracle
 ceiling with caller-specific scanner clones, not a finite-dispatch model.
 """
 import hashlib, os, pathlib, shutil, subprocess, sys
@@ -22,7 +22,7 @@ for name in paths:
     shutil.copy2(root/name,target)
 patch=root/'audit/post-module-static-exact-target-census/counterfactual/exact-target.diff'
 subprocess.run(['patch','-p1','-d',str(scratch),'-i',str(patch)],check=True)
-(out/'scratch-web.diff').write_text(subprocess.run(['diff','-u',root/'lib/web.bot',scratch/'lib/web.bot'],capture_output=True,text=True).stdout)
+(out/'scratch-web.diff').write_text(subprocess.run(['diff','-u',root/'stdlib/web.bot',scratch/'stdlib/web.bot'],capture_output=True,text=True).stdout)
 emit=root/'audit/post-structural-fn-dynamic-census/tools/emit.tcl'
 prof=root/'audit/post-r2a-dynamic-census/tools/profile-nir.sh'
 for name,tree,region in [('exact',scratch,1),('exact-noregion',scratch,0),('production-noregion',root,0)]:

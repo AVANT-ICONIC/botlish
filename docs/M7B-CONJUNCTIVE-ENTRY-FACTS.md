@@ -605,7 +605,7 @@ Identical to the M7.a.a baseline in every field. Expected: neither frozen
 workload contains a declared `List[Byte]`-shaped (or `ImmutableSet[Byte]`
 -shaped) parameter reached only by a specialization whose key coarsens the
 element evidence -- M7.a's own audit already established this precise
-gap exists in `web::is_unreserved`'s *scalar* `Byte` parameter (already
+gap exists in `std::web::is_unreserved`'s *scalar* `Byte` parameter (already
 fixed by M1) but not in any aggregate parameter of either fenced program.
 No frozen `.bot`/`.ir` source was changed to obtain this (or any) result.
 
@@ -627,7 +627,7 @@ No frozen `.bot`/`.ir` source was changed to obtain this (or any) result.
   or NIR op counts perturbed.
 - M7.a's own repaired S03b (the legal open/shared-instance twin) continues
   to widen the shared instance's entry facts exactly as before
-  (`byte::from_int<int>`'s own `value` view stays `int`, entry
+  (`std::byte::from_int<int>`'s own `value` view stays `int`, entry
   `[-∞, +∞]`) -- this milestone's own aggregate-only fix does not touch
   scalar seeding at all, confirmed by the unperturbed scenario output.
 
@@ -689,7 +689,7 @@ next push to main, exactly as M7.a.a's own report recorded.
 
 `git diff --stat` against the pre-M7.b tree: `hir/range.tcl` (+81),
 `hir/specialize.tcl` (+23/-2), `hir/types.tcl` (+31/-1), plus one new test
-file and this report. Zero lines changed in `core/`, `native/`, `lib/*.bot`,
+file and this report. Zero lines changed in `core/`, `native/`, `stdlib/*.bot`,
 `surface/`, `compiler/`, or any other `hir/*.tcl` file. Every frozen
 `.bot`/`.ir` workload (`bench/uri-steady.bot`, `bench/refined-checks.ir`,
 `bench/fib.ir`, `bench/loop-count.ir`, `bench/sum-refined.ir`, every

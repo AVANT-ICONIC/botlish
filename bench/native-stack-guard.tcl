@@ -76,12 +76,12 @@ fib(25)
 
 count(2000000, 0)
 } \
-    allocation {import str
+    allocation {import std::str
 fn churn(i: int, total: int) -> int:
     if i == 0:
         return total
-    s = str::concat("ab", "cd")
-    churn(i - 1, total + str::length(s))
+    s = std::str::concat("ab", "cd")
+    churn(i - 1, total + std::str::length(s))
 
 churn(200000, 0)
 } \

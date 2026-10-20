@@ -37,7 +37,7 @@
 # and a driver -- at the top level or inside a function -- that constructs
 # `coroutine {step, first} = w0(ARG)` (field forms and renames vary), then
 # resumes it 0..6 times (with Msg messages or none, as the oracle's protocol
-# says), checks `coroutine::done?` in between and moves the handle to new
+# says), checks `std::coroutine::done?` in between and moves the handle to new
 # names; every operation is handled when the root declares errors. After
 # the construction and after every resume the driver reads the side-effect
 # checksum: how far the body has run (eager construction, no re-run after
@@ -495,16 +495,16 @@ proc generate {seed} {
     }
 
     # Text.
-    set lines [list "import coroutine" "import mutable_array" "" "error Boom" "" \
+    set lines [list "import std::coroutine" "import std::mutable_array" "" "error Boom" "" \
         "struct Msg:" "    v: int" "" "struct Other:" "    w: int" "" \
         "struct Ev:" "    tag: int" "    v: int" "" \
         "fn take(m: Msg) -> int:" "    m.v" "" \
         "context struct Log:" "    digits: MutableArray\[int\]" "" \
         "fn seen(context log: Log) -> int:" \
-        "    mutable_array::at(log.digits, 0):" "        on IndexNotFound:" "            -1" "" \
+        "    std::mutable_array::at(log.digits, 0):" "        on IndexNotFound:" "            -1" "" \
         "fn note(v: int, context log: Log) -> int:" \
         "    old = seen()" \
-        "    mutable_array::set(log.digits, 0, old * 3 + v):" "        on IndexNotFound:" "            unit" "    v" "" \
+        "    std::mutable_array::set(log.digits, 0, old * 3 + v):" "        on IndexNotFound:" "            unit" "    v" "" \
         "fn gen(n: int) -> Ev:" "    yield Ev {tag: 50, v: n}" "    return Ev {tag: 51, v: n + 1}" ""]
     if {$fault eq "conflict"} {
         lappend lines "fn other(resume Other) -> int:" "    m = yield Ev {tag: 77, v: 0}" "    m.w" ""
@@ -520,7 +520,7 @@ proc generate {seed} {
         append fields [expr {$firstName eq "first" ? ", first" : ", first: $firstName"}]
         lappend observed $firstName
     }
-    lappend lines "with context Log {digits: mutable_array::create(1, 0)}"
+    lappend lines "with context Log {digits: std::mutable_array::create(1, 0)}"
     lappend driver "coroutine {$fields} = w0($arg)[expr {$rootErrors ? ":" : ""}]"
     if {$rootErrors} {
         lappend driver {*}$handler
@@ -530,7 +530,7 @@ proc generate {seed} {
     if {$fault eq "branchmove"} {
         # Moved on one path only: the next use of the handle is not
         # definitely live.
-        lappend driver "if coroutine::done?($stepName):" "    gone = $stepName"
+        lappend driver "if std::coroutine::done?($stepName):" "    gone = $stepName"
         if {[llength $ops] == 1} {
             lappend ops [list done]
         }
@@ -579,7 +579,7 @@ proc generate {seed} {
             }
             done {
                 incr d
-                lappend driver "d$d = coroutine::done?($current)"
+                lappend driver "d$d = std::coroutine::done?($current)"
                 lappend observed d$d
                 set releaseAfter "bind d$d"
             }
@@ -587,7 +587,7 @@ proc generate {seed} {
     }
     switch -- $fault {
         aftermove {
-            lappend driver "late = coroutine::done?($moved)"
+            lappend driver "late = std::coroutine::done?($moved)"
         }
         storage {
             # (A List element is an ownership-moving position since

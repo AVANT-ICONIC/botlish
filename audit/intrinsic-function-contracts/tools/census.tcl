@@ -2,7 +2,7 @@
 # census.tcl -- INTRINSIC-FUNCTION-CONTRACT-INFERENCE.md's corpus-wide
 # body-inference census (spec item 58): every parameter of every function
 # of every canonical source program -- bench/*.bot, examples/stdlib/*.bot,
-# examples/surface/*.bot -- and of every lib/*.bot module those programs
+# examples/surface/*.bot -- and of every stdlib/*.bot module those programs
 # load, each function counted once (keyed by its source file and line), as
 # the ordinary surface pipeline infers it (surface::readProgramFile, the
 # HIR `main.tcl` lowers). Observation only.

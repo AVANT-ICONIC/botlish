@@ -21,7 +21,7 @@ Both changes are two small, surgical edits:
   $resolved` (the already-computed, already-validated resolved type)
   instead of `MakeList $name` (the bare symbolic name).
 
-No other production file changed. `core/`, `native/`, and `lib/*.bot` are
+No other production file changed. `core/`, `native/`, and `stdlib/*.bot` are
 untouched (`git diff --stat`: only `hir/range.tcl`, `hir/types.tcl`, and
 seven test files, plus one new test file).
 
@@ -493,9 +493,9 @@ not by breadth of current use.
    illegal under the *pre-M7.a.a* language rule -- and only ever ran because
    this file's own `sourceHir`/`nirOf` helpers always pass `-strict 0`.
 2. `tests/checked-domain-proof-provenance.test`'s `checked-domain-shared-
-   instance-byte-set`: called `byte::set(chars)` with `chars` left
+   instance-byte-set`: called `std::byte::set(chars)` with `chars` left
    *undeclared* inside `dyn`, so a broad/`any` argument was passed where
-   `byte::set`'s own declared `List[UnicodeChar]` parameter is required --
+   `std::byte::set`'s own declared `List[UnicodeChar]` parameter is required --
    illegal under `STRICT-TYPED-PARAMETERS.md`, again masked only by
    `-strict 0`.
 3. `tests/hir-range.test`'s `condition-outcome-12`: passed a Bearing
@@ -517,7 +517,7 @@ test name, same intent, corrected/replaced source):
    a literal), now legal because it is declared.
 3. Replaced with M7.a's own constructed legal twin, scenario S03b
    (`audit/m7a-instance-selection/tools/scenarios.tcl`): `dyn` is left
-   undeclared and locally handles `byte::from_int`'s own errors itself
+   undeclared and locally handles `std::byte::from_int`'s own errors itself
    (never Bearing), so it legally erases through `caller`'s untyped `g` --
    the identical adversarial *shape* (shared instance, one safe literal
    caller, one genuinely open caller through `callvalue`), now a real
@@ -551,7 +551,7 @@ now genuinely verified. `checked-domain-shared-instance-byte-set`, with its
 now-legal-and-still-dynamic `dyn(chars: List[UnicodeChar])` fixture, also
 now genuinely reports `1` (verified by the passing test) -- i.e. the
 declared-but-dynamic caller and the literal-argument caller really do share
-one `byte::set<List[UnicodeChar]>` NIR instance, which is the actual
+one `std::byte::set<List[UnicodeChar]>` NIR instance, which is the actual
 soundness-relevant fact these fixtures exist to pin (no per-instance
 optimization could soundly treat that shared instance's own inner checked
 construction as unconditionally safe, since the dynamic caller's argument
@@ -560,11 +560,11 @@ contents are not statically known).
 **Q31 (does the legal open/shared-instance fixture genuinely broaden the
 entry fact)? Required: yes.** `condition-outcome-12`'s replacement passes
 `45` through `dyn`, itself only reachable via `caller`'s untyped `g`
-(`callvalue`), into the shared `byte::from_int<int>` instance -- confirmed
+(`callvalue`), into the shared `std::byte::from_int<int>` instance -- confirmed
 directly (not merely asserted): the test's own body computes
-`hir::range::ConditionOutcome` for both of `byte::from_int`'s comparisons
+`hir::range::ConditionOutcome` for both of `std::byte::from_int`'s comparisons
 (`value < 0`, `value > 255`) against the shared instance and gets `{}`
-(Unknown) for both, even though the *other* caller (`byte::from_int(45)`
+(Unknown) for both, even though the *other* caller (`std::byte::from_int(45)`
 alone) would have decided both `AlwaysFalse` -- exactly the widening
 `OpenInstances`/entry-range-join machinery produces for a genuinely
 unconstrained caller, the fact this fixture is meant to pin.
@@ -584,7 +584,7 @@ with an empty literal, so the M7A audit's own frozen-corpus census (19/17/
 7055 B/14 guards for `uri-steady`; 39/33/16743 B/24 guards for
 `refined-checks`) is untouched by construction -- confirmed by the full
 suite's own frozen-corpus tests (`tests/checked-domain-proof-provenance.test`,
-`tests/setfromlist-equality-total.test`'s own `byte::set`-through-the-real-
+`tests/setfromlist-equality-total.test`'s own `std::byte::set`-through-the-real-
 file tests) passing unmodified.
 
 ## M1-M7.a regression controls
@@ -677,7 +677,7 @@ next push to main, per this milestone's own scope instruction (item 56).
 
 `git diff --stat` against the pre-milestone tree: `hir/range.tcl` (+45/-9),
 `hir/types.tcl` (+17/-1), and eight test files (seven modified, one new).
-Zero lines changed in `core/`, `native/`, `lib/*.bot`, `surface/`, or any
+Zero lines changed in `core/`, `native/`, `stdlib/*.bot`, `surface/`, or any
 other `hir/*.tcl` file. `encode_utf8`'s own native registration
 (`core/strings.tcl`) is byte-for-byte unchanged -- the canonicalization fix
 is entirely inside the generic consumer (`hir/types.tcl::ShapeResult`), per
@@ -796,12 +796,12 @@ unmodified).
 29. **What was wrong with `funcHeaderCount`?** `llength` of `regexp -all`'s
     own already-integer return value is always `1`.
 30. **What do the repaired header-count assertions actually prove?** That
-    `byte::set`'s literal-argument caller and its now-legal
+    `std::byte::set`'s literal-argument caller and its now-legal
     declared-but-dynamic caller genuinely share one NIR instance (real
     count: `1`, verified, not vacuously true).
 31. **Does the legal open/shared-instance fixture genuinely broaden the
     entry fact? Required: yes.** Confirmed directly via `ConditionOutcome`
-    returning Unknown for both of `byte::from_int`'s comparisons under the
+    returning Unknown for both of `std::byte::from_int`'s comparisons under the
     shared instance.
 
 ## Stop condition
@@ -825,7 +825,7 @@ All conditions from the brief hold:
 6. Mixed empty/non-empty callers are sound under the chosen (Model A,
    identity-unchanged) specialization model (verified directly, including
    a third-caller stability check).
-7. `char::encode_utf8` (`encode_utf8`, its real source spelling) has the
+7. `std::char::encode_utf8` (`encode_utf8`, its real source spelling) has the
    canonical semantic `List[Byte]` result type, verified structurally, not
    merely by display text.
 8. The canonicalization fix is generic (one shared `ShapeResult` case),
@@ -872,7 +872,7 @@ M7.a's own recommended scope (see M7A-INSTANCE-SELECTION-THEOREM-AUDIT.md,
 ```
 
 M7.a.a has now fully consumed **item 4 (D)**: the three fixtures M7.a named
-(M4 empty-list, M5 `byte::set` shared-instance, M6 `condition-outcome-12`)
+(M4 empty-list, M5 `std::byte::set` shared-instance, M6 `condition-outcome-12`)
 are repaired, `funcHeaderCount` is fixed, and the `-from-int` fixture's own
 "genuinely dynamic" caller gap was already legal and needed no repair (only
 `checked-domain-shared-instance-byte-set` and `condition-outcome-12` were
@@ -954,22 +954,22 @@ The producer table above lists a `listloop`'s natural completion as
 is `never`. That left the loop's type to the body even when the *domain* is
 provably empty, and the body's type then describes an iteration that cannot
 happen: its element binding is `never`, and a handled call of it
-(`b = byte::from_int(v): on BelowRange: 0 ...`) is typed by its handlers'
+(`b = std::byte::from_int(v): on BelowRange: 0 ...`) is typed by its handlers'
 join, an Int. So the `List[never]` instance of
 
 ```botlish
-fn bytes_of(values: List[int]) -> abi::bytes::Bytes:
+fn bytes_of(values: List[int]) -> std::abi::bytes::Bytes:
     bs = loop v in values:
-        b = byte::from_int(v):
-            on byte::BelowRange:
+        b = std::byte::from_int(v):
+            on std::byte::BelowRange:
                 0
-            on byte::AboveRange:
+            on std::byte::AboveRange:
                 255
         b
-    abi::bytes::from_list(bs)
+    std::abi::bytes::from_list(bs)
 ```
 
-typed `bs` as `List[int]` and rejected its own call of `abi::bytes::from_list`
+typed `bs` as `List[int]` and rejected its own call of `std::abi::bytes::from_list`
 ("call to bytes_of with values : List[never] is invalid"), though the
 generic analysis (`bs : List[Byte]`) and every non-empty caller were fine.
 The same happened, with no instance, to a `loop v in []:` written in a
@@ -990,7 +990,7 @@ only typed:
 
 - A semantic instance's diagnostics in code that instance proves unreachable
   are not the call's (`hir::semantic::verify`): a typed call *inside* the
-  body (`abi::bytes::from_list([b])` per element) no longer makes the empty
+  body (`std::abi::bytes::from_list([b])` per element) no longer makes the empty
   caller's instance invalid. The definition's own verification still checks
   the body as written.
 - Native lowering does not lower an unreachable loop body

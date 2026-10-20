@@ -55,13 +55,13 @@ proc mfSame {a b} {
 }
 
 # Runs SCRIPT with the filter's guess for the second link of $::mfChain wrong
-# (`list::at`, the candidate the build's default narrowing makes of it): a
+# (`std::list::at`, the candidate the build's default narrowing makes of it): a
 # decision made from a receiver the next build does not give it.
 proc mfWithWrongGuess {script} {
     rename hir::methodfilter::Survivors hir::methodfilter::SurvivorsReal
     proc hir::methodfilter::Survivors {hir calls key {guess 0}} {
         if {$guess && [string match {*/y=/*} $key]} {
-            return list::at
+            return std::list::at
         }
         hir::methodfilter::SurvivorsReal $hir $calls $key $guess
     }
@@ -73,15 +73,15 @@ proc mfWithWrongGuess {script} {
     }
 }
 
-set ::mfImports "import list\nimport str\nimport mutable_array\nimport mutable_vector\n\n"
+set ::mfImports "import std::list\nimport std::str\nimport std::mutable_array\nimport std::mutable_vector\n\n"
 
 # A chain: each `arr.at(i)` is a receiver whose type the previous one narrows,
 # so the exact decision decides one link per pass.
-set ::mfChain "${::mfImports}fn f() -> List\[int\] errors IndexNotFound:\n    arr = mutable_array::create(3, 0)\n    x = arr.at(0)\n    y = arr.at(1)\n    z = arr.at(2)\n    \[x, y, z\]\n\nr = f():\n    on IndexNotFound:\n        \[\]\nr\n"
+set ::mfChain "${::mfImports}fn f() -> List\[int\] errors IndexNotFound:\n    arr = std::mutable_array::create(3, 0)\n    x = arr.at(0)\n    y = arr.at(1)\n    z = arr.at(2)\n    \[x, y, z\]\n\nr = f():\n    on IndexNotFound:\n        \[\]\nr\n"
 
 # Receivers of three kinds, each typed: every call is settled by its kind
 # (the second wave, for a call whose receiver an earlier default narrowed).
-set ::mfTyped "${::mfImports}fn g(xs: List\[int\], s: str, v: MutableVector\[int\]) -> int errors IndexNotFound:\n    a = xs.length()\n    b = s.length()\n    c = v.length()\n    d = xs.at(0)\n    e = v.at(0)\n    a + b + c + d + e\n\nr = g(\[1, 2\], \"abc\", mutable_vector::from_list(\[4, 5\])):\n    on IndexNotFound:\n        -1\nr\n"
+set ::mfTyped "${::mfImports}fn g(xs: List\[int\], s: str, v: MutableVector\[int\]) -> int errors IndexNotFound:\n    a = xs.length()\n    b = s.length()\n    c = v.length()\n    d = xs.at(0)\n    e = v.at(0)\n    a + b + c + d + e\n\nr = g(\[1, 2\], \"abc\", std::mutable_vector::from_list(\[4, 5\])):\n    on IndexNotFound:\n        -1\nr\n"
 
 # An untyped receiver nothing narrows: every candidate fits it.
 set ::mfAmbiguous "${::mfImports}fn u(x) -> int:\n    x.length()\n\nu(\[1, 2\])\n"
@@ -91,38 +91,38 @@ set ::mfNoApplicable "${::mfImports}fn k(n: int) -> int:\n    n.length()\n\nk(3)
 
 # A lexical candidate beside an imported one: both fit, and a lexical name is
 # never ruled out by kind.
-set ::mfLexical "import list\nimport str\n\nfn length(xs: List\[int\]) -> int:\n    0\n\nfn m(ys: List\[int\]) -> int:\n    ys.length()\n\nm(\[1, 2\])\n"
+set ::mfLexical "import std::list\nimport std::str\n\nfn length(xs: List\[int\]) -> int:\n    0\n\nfn m(ys: List\[int\]) -> int:\n    ys.length()\n\nm(\[1, 2\])\n"
 
 # An untyped receiver an explicit qualified call narrows before the method
 # calls: the narrowed kind settles them.
-set ::mfNarrowed "${::mfImports}fn u(x) -> int errors IndexNotFound:\n    n = list::length(x)\n    a = x.at(0)\n    b = x.length()\n    n + b + a\n\nr = u(\[5, 6, 7\]):\n    on IndexNotFound:\n        -1\nr\n"
+set ::mfNarrowed "${::mfImports}fn u(x) -> int errors IndexNotFound:\n    n = std::list::length(x)\n    a = x.at(0)\n    b = x.length()\n    n + b + a\n\nr = u(\[5, 6, 7\]):\n    on IndexNotFound:\n        -1\nr\n"
 
 # Results of method calls as receivers: `m` is bound to a method call's result
 # and `ll.at(1)` is one, so the receivers of the calls on them are known only
 # once the first calls are decided.
-set ::mfNested "${::mfImports}fn n() -> int errors IndexNotFound:\n    ll = \[\[1, 2\], \[3\]\]\n    a = mutable_array::create(2, \[7, 8, 9\])\n    m = ll.get(0, \[0\])\n    k = a.at(0)\n    m.length() + k.length() + ll.at(1).length()\n\nr = n():\n    on IndexNotFound:\n        -1\nr\n"
+set ::mfNested "${::mfImports}fn n() -> int errors IndexNotFound:\n    ll = \[\[1, 2\], \[3\]\]\n    a = std::mutable_array::create(2, \[7, 8, 9\])\n    m = ll.get(0, \[0\])\n    k = a.at(0)\n    m.length() + k.length() + ll.at(1).length()\n\nr = n():\n    on IndexNotFound:\n        -1\nr\n"
 
 # A call nothing can settle (a function of the file named like the method
-# fits a List receiver as list::length does) beside calls that are settled:
+# fits a List receiver as std::list::length does) beside calls that are settled:
 # the filter must give up before it builds.
-set ::mfHopeless "${::mfImports}fn length(xs: List\[int\]) -> int:\n    0\n\nfn m(ys: List\[int\]) -> int:\n    ys.length()\n\nfn f() -> int errors IndexNotFound:\n    arr = mutable_array::create(3, 0)\n    arr.at(0) + arr.at(1) + m(\[1, 2\])\n\nr = f():\n    on IndexNotFound:\n        -1\nr\n"
+set ::mfHopeless "${::mfImports}fn length(xs: List\[int\]) -> int:\n    0\n\nfn m(ys: List\[int\]) -> int:\n    ys.length()\n\nfn f() -> int errors IndexNotFound:\n    arr = std::mutable_array::create(3, 0)\n    arr.at(0) + arr.at(1) + m(\[1, 2\])\n\nr = f():\n    on IndexNotFound:\n        -1\nr\n"
 
 # Two functions, the first needing two decisions in a row and the second one:
 # the exact decision records the second function's call before the first's
 # second one, the filter in the order of the calls.
-set ::mfOrder "${::mfImports}fn first(v: MutableVector\[int\]) -> int errors IndexNotFound:\n    c = v.length()\n    c + v.at(0)\n\nfn second(s: str) -> int:\n    s.length()\n\nr = first(mutable_vector::from_list(\[4, 5\])):\n    on IndexNotFound:\n        -1\nr + second(\"abc\")\n"
+set ::mfOrder "${::mfImports}fn first(v: MutableVector\[int\]) -> int errors IndexNotFound:\n    c = v.length()\n    c + v.at(0)\n\nfn second(s: str) -> int:\n    s.length()\n\nr = first(std::mutable_vector::from_list(\[4, 5\])):\n    on IndexNotFound:\n        -1\nr + second(\"abc\")\n"
 
 # ---------------------------------------------------------------------------
 # The exclusion rule
 
 test mf-native-mismatch-rule {NativeMismatch is the rule hir::MethodCallProblems reports a native's TYPE problem by: a receiver of a known kind other than the one the native's first parameter requires, nothing for an unknown kind, never, or a native that requires none} -body {
-    list [hir::methodfilter::NativeMismatch str::length {list int}] \
-        [hir::methodfilter::NativeMismatch list::length {list int}] \
-        [hir::methodfilter::NativeMismatch list::length int] \
-        [hir::methodfilter::NativeMismatch list::length never] \
-        [hir::methodfilter::NativeMismatch list::length any] \
-        [hir::methodfilter::NativeMismatch mutable_array::at {list int}] \
-        [hir::methodfilter::NativeMismatch mutable_array::at {mutarray int}]
+    list [hir::methodfilter::NativeMismatch std::str::length {list int}] \
+        [hir::methodfilter::NativeMismatch std::list::length {list int}] \
+        [hir::methodfilter::NativeMismatch std::list::length int] \
+        [hir::methodfilter::NativeMismatch std::list::length never] \
+        [hir::methodfilter::NativeMismatch std::list::length any] \
+        [hir::methodfilter::NativeMismatch std::mutable_array::at {list int}] \
+        [hir::methodfilter::NativeMismatch std::mutable_array::at {mutarray int}]
 } -result {{list str} {} {int list} {} {} {list mutarray} {}}
 
 test mf-native-rule-one-statement {hir::MethodCallProblems asks NativeMismatch for the native TYPE problem and states no kind rule of its own} -body {
@@ -133,17 +133,17 @@ test mf-native-rule-one-statement {hir::MethodCallProblems asks NativeMismatch f
 test mf-excluded-by-kind {a native is ruled out by its first parameter's kind, a module function by the kind of its declared or inferred first-parameter contract, a lexical name (a bare display) never; an unknown or never receiver rules out nothing} -body {
     set hir [dict get [mfCompile $::mfChain 0] hir]
     proc excluded {hir cand type} {hir::methodfilter::ResetCache; hir::methodfilter::Excluded $hir $cand $type}
-    list [excluded $hir list::at {mutarray int}] \
-        [excluded $hir mutable_array::at {mutarray int}] \
-        [excluded $hir mutable_array::at {list int}] \
-        [excluded $hir mutable_vector::at {mutarray int}] \
-        [excluded $hir list::get {mutarray int}] \
-        [excluded $hir mutable_array::get {mutarray int}] \
-        [excluded $hir mutable_array::get {list int}] \
-        [excluded $hir list::get {list int}] \
-        [excluded $hir list::get any] \
-        [excluded $hir list::get never] \
-        [excluded $hir list::length int] \
+    list [excluded $hir std::list::at {mutarray int}] \
+        [excluded $hir std::mutable_array::at {mutarray int}] \
+        [excluded $hir std::mutable_array::at {list int}] \
+        [excluded $hir std::mutable_vector::at {mutarray int}] \
+        [excluded $hir std::list::get {mutarray int}] \
+        [excluded $hir std::mutable_array::get {mutarray int}] \
+        [excluded $hir std::mutable_array::get {list int}] \
+        [excluded $hir std::list::get {list int}] \
+        [excluded $hir std::list::get any] \
+        [excluded $hir std::list::get never] \
+        [excluded $hir std::list::length int] \
         [excluded $hir at {list int}] \
         [excluded $hir nosuch::fn {list int}]
 } -result {1 0 1 1 1 0 1 0 0 0 1 0 0}
@@ -151,7 +151,7 @@ test mf-excluded-by-kind {a native is ruled out by its first parameter's kind, a
 # ---------------------------------------------------------------------------
 # What the filter decides, and its cost
 
-test mf-chain-decided-in-one-wave {a receiver chain of three calls on one MutableArray: the earlier calls stand at `list::at` in the first build, which narrows the binding to nothing for the later ones, so their receivers are `never`; the filter reads them as the binding's defined type, decides the three in one wave and finds the receivers right in the one build it makes (the exact decision tries every candidate index of every pass: six builds), and the decisions and the program are the exact one's} -body {
+test mf-chain-decided-in-one-wave {a receiver chain of three calls on one MutableArray: the earlier calls stand at `std::list::at` in the first build, which narrows the binding to nothing for the later ones, so their receivers are `never`; the filter reads them as the binding's defined type, decides the three in one wave and finds the receivers right in the one build it makes (the exact decision tries every candidate index of every pass: six builds), and the decisions and the program are the exact one's} -body {
     set exact [mfCompile $::mfChain 0]
     set filtered [mfCompile $::mfChain 1]
     list [dict get $exact methodTrials] [dict get $exact methodFinals] \
@@ -159,7 +159,7 @@ test mf-chain-decided-in-one-wave {a receiver chain of three calls on one Mutabl
         [mfSame $filtered $exact] [dict get $filtered diagnostics]
 } -result {6 1 1 1 0 1 {}}
 
-test mf-typed-receivers-one-build {every receiver typed: the first wave decides all five calls (`v.at(0)` has the receiver `never` while `v.length()` stands at its first candidate, `list::length`, which narrows `v` to a List, so it is read as the parameter's declared type) and the one build is the final program} -body {
+test mf-typed-receivers-one-build {every receiver typed: the first wave decides all five calls (`v.at(0)` has the receiver `never` while `v.length()` stands at its first candidate, `std::list::length`, which narrows `v` to a List, so it is read as the parameter's declared type) and the one build is the final program} -body {
     set exact [mfCompile $::mfTyped 0]
     set filtered [mfCompile $::mfTyped 1]
     list [dict get $filtered methodTrials] [dict get $filtered methodFiltered] \
@@ -175,7 +175,7 @@ test mf-first-candidates-no-build {calls the filter decides to their first candi
 } -result {1 0 1 1 1}
 
 test mf-trait-operation-needs-no-build {a trait operation decided before any build lets a program whose other calls settle at their first candidates be certified without a build at all} -body {
-    set text "import list\nimport str\n\ntrait Measured:\n    fn length(value: Measured) -> int\n\nfn size(v: Measured) -> int:\n    v.length()\n\nsize(\"abcd\") + \[1, 2\].length()\n"
+    set text "import std::list\nimport std::str\n\ntrait Measured:\n    fn length(value: Measured) -> int\n\nfn size(v: Measured) -> int:\n    v.length()\n\nsize(\"abcd\") + \[1, 2\].length()\n"
     set exact [mfCompile $text 0]
     set filtered [mfCompile $text 1]
     list [dict get $filtered methodFiltered] [mfSame $filtered $exact] \
@@ -192,7 +192,7 @@ test mf-audit-returns-the-exact-program {under the audit the program is the exac
         [expr {[lsort -stride 2 [dict get $filtered hir methodDecided]] eq [lsort -stride 2 [dict get $exact hir methodDecided]]}]
 } -match glob -result {* 1 1 1}
 
-test mf-stale-decision-taken-back {a decision made from a receiver that the next build does not give is taken back (here the filter is made to decide the second link of the chain to `list::at`), decided again from the receiver the build gives (with the decision after it, whose receiver the wrong one had poisoned), and the certified result is the exact decision's} -body {
+test mf-stale-decision-taken-back {a decision made from a receiver that the next build does not give is taken back (here the filter is made to decide the second link of the chain to `std::list::at`), decided again from the receiver the build gives (with the decision after it, whose receiver the wrong one had poisoned), and the certified result is the exact decision's} -body {
     set exact [mfCompile $::mfChain 0]
     mfWithWrongGuess {
         set filtered [mfCompile $::mfChain 1]
@@ -239,7 +239,7 @@ test mf-domain-parameter-not-compared {a candidate whose first parameter is an i
         set f [open [file join $::core::libraryDir pickdom.bot] w]
         puts $f "type Small = Int in 0..10\n\nfn pick(n: Small) -> int:\n    n\n"
         close $f
-        set text "import pickdom\n\nfn pick(n: int) -> int:\n    n\n\n5.pick()\n"
+        set text "import std::pickdom\n\nfn pick(n: int) -> int:\n    n\n\n5.pick()\n"
         set exact [mfCompile $text 0]
         set filtered [mfCompile $text 1]
         list [lmap d [dict get $filtered diagnostics] {lindex $d 0}] [mfSame $filtered $exact] \
@@ -255,7 +255,7 @@ test mf-problem-in-the-chosen-candidate {a call whose only surviving candidate h
 } -result {{NO-APPLICABLE-METHOD TYPE} 1 0}
 
 test mf-trait-operation-is-not-the-filters {a method-style call on a trait view is an operation of the trait: it is decided by the trait before the filter looks, whatever candidates are visible by name, and never taken back by a later wave; the filter decides the calls beside it, in a build of its own, and certifies the lot} -body {
-    set text "import list\nimport str\nimport mutable_array\n\ntrait Measured:\n    fn length(value: Measured) -> int\n\nfn size(v: Measured) -> int:\n    v.length()\n\nfn h() -> int errors IndexNotFound:\n    a = mutable_array::allocate(2)\n    mutable_array::set(a, 0, 5)\n    a.at(0) + a.get(1, -1)\n\nr = h():\n    on IndexNotFound:\n        -1\nsize(\"abcd\") + \[1, 2\].length() + r\n"
+    set text "import std::list\nimport std::str\nimport std::mutable_array\n\ntrait Measured:\n    fn length(value: Measured) -> int\n\nfn size(v: Measured) -> int:\n    v.length()\n\nfn h() -> int errors IndexNotFound:\n    a = std::mutable_array::allocate(2)\n    std::mutable_array::set(a, 0, 5)\n    a.at(0) + a.get(1, -1)\n\nr = h():\n    on IndexNotFound:\n        -1\nsize(\"abcd\") + \[1, 2\].length() + r\n"
     set exact [mfCompile $text 0]
     set filtered [mfCompile $text 1]
     list [dict get $filtered diagnostics] [mfSame $filtered $exact] [dict get $filtered methodFiltered] \
@@ -265,12 +265,12 @@ test mf-trait-operation-is-not-the-filters {a method-style call on a trait view 
 test mf-contract-kinds-by-source {a module function is ruled out by the kind of its declared first parameter, of the contract inferred for an untyped one by forwarding it to a declared parameter (trusted), and of the contract a native's parameter imposes on it (checked); a receiver of the right kind, or any, is not ruled out} -body {
     withPrivateLibrary {
         set f [open [file join $::core::libraryDir mfkinds.bot] w]
-        puts $f "import list\n\nfn declared(xs: List\[int\]) -> int:\n    1\n\nfn trusted(xs) -> int:\n    declared(xs)\n\nfn checked(xs) -> int:\n    list::length(xs)\n"
+        puts $f "import std::list\n\nfn declared(xs: List\[int\]) -> int:\n    1\n\nfn trusted(xs) -> int:\n    declared(xs)\n\nfn checked(xs) -> int:\n    std::list::length(xs)\n"
         close $f
-        set hir [dict get [mfCompile "import list\nimport mfkinds\n\n1\n" 0] hir]
+        set hir [dict get [mfCompile "import std::list\nimport std::mfkinds\n\n1\n" 0] hir]
         proc excluded {hir cand type} {hir::methodfilter::ResetCache; hir::methodfilter::Excluded $hir $cand $type}
         set results {}
-        foreach cand {mfkinds::declared mfkinds::trusted mfkinds::checked} {
+        foreach cand {std::mfkinds::declared std::mfkinds::trusted std::mfkinds::checked} {
             lappend results [excluded $hir $cand str] [excluded $hir $cand {list int}] [excluded $hir $cand any] [excluded $hir $cand never]
         }
         set results
@@ -320,20 +320,20 @@ test mf-seeds-are-decided {a call seeded by an earlier round is decided: with ev
         [expr {[lsort -stride 2 [dict get $some hir methodDecided]] eq [lsort -stride 2 $decided]}]
 } -result {0 1 1 1 1}
 
-test mf-poisoned-receiver-is-not-guessed {a receiver that is `never` because the program itself narrowed its binding to nothing (an explicit call of `mutable_array::at` on a List) is read as the binding's defined type only as a guess: the decision `list::at`, which is the first candidate and so needs no build, is not certified, because the receiver in the build is still `never`; the exact decision reports the ambiguity a `never` receiver has} -body {
-    set text "${::mfImports}fn bad(a: List\[int\]) -> int errors IndexNotFound:\n    n = mutable_array::at(a, 0)\n    n + a.at(0)\n\nr = bad(\[1\]):\n    on IndexNotFound:\n        -1\nr\n"
+test mf-poisoned-receiver-is-not-guessed {a receiver that is `never` because the program itself narrowed its binding to nothing (an explicit call of `std::mutable_array::at` on a List) is read as the binding's defined type only as a guess: the decision `std::list::at`, which is the first candidate and so needs no build, is not certified, because the receiver in the build is still `never`; the exact decision reports the ambiguity a `never` receiver has} -body {
+    set text "${::mfImports}fn bad(a: List\[int\]) -> int errors IndexNotFound:\n    n = std::mutable_array::at(a, 0)\n    n + a.at(0)\n\nr = bad(\[1\]):\n    on IndexNotFound:\n        -1\nr\n"
     set exact [mfCompile $text 0]
     set filtered [mfCompile $text 1]
     list [lmap d [dict get $filtered diagnostics] {lindex $d 0}] [mfSame $filtered $exact] \
         [dict get $filtered methodFiltered] [mfSame [mfCompile $text 1 1] $exact]
 } -result {AMBIGUOUS-METHOD-CALL 1 0 1}
 
-test mf-two-survivors-are-not-decided {two candidates that both fit a receiver (the String receiver of a module's `length(s: str)` and `str::length`, with `list::length` ruled out and so the first of the survivors not the standing first candidate) are the exact decision's: the filter makes no build for them, however it could order them} -body {
+test mf-two-survivors-are-not-decided {two candidates that both fit a receiver (the String receiver of a module's `length(s: str)` and `std::str::length`, with `std::list::length` ruled out and so the first of the survivors not the standing first candidate) are the exact decision's: the filter makes no build for them, however it could order them} -body {
     withPrivateLibrary {
         set f [open [file join $::core::libraryDir mfpick.bot] w]
         puts $f "fn length(s: str) -> int:\n    1\n"
         close $f
-        set text "import list\nimport str\nimport mfpick\n\nfn m(s: str) -> int:\n    s.length()\n\nm(\"ab\")\n"
+        set text "import std::list\nimport std::str\nimport std::mfpick\n\nfn m(s: str) -> int:\n    s.length()\n\nm(\"ab\")\n"
         set exact [mfCompile $text 0]
         set filtered [mfCompile $text 1]
         list [lmap d [dict get $filtered diagnostics] {lindex $d 0}] [mfSame $filtered $exact] \
@@ -350,7 +350,7 @@ test mf-nested-results-need-a-second-wave {a method call whose receiver is anoth
 } -result {1 1 {} 1 1}
 
 test mf-user-function-result-is-not-closed {a receiver that is the result of a function of the program is not settled before the calls inside that function are: its result is inferred from them, so the filter waits for the second wave instead of handing the outer call over} -body {
-    set text "${::mfImports}fn pick(a: MutableArray\[List\[int\]\]):\n    a.get(0, \[0\])\n\nfn n() -> int:\n    arr = mutable_array::create(2, \[7, 8\])\n    pick(arr).length()\n\nn()\n"
+    set text "${::mfImports}fn pick(a: MutableArray\[List\[int\]\]):\n    a.get(0, \[0\])\n\nfn n() -> int:\n    arr = std::mutable_array::create(2, \[7, 8\])\n    pick(arr).length()\n\nn()\n"
     set exact [mfCompile $text 0]
     set filtered [mfCompile $text 1]
     list [dict get $filtered methodFiltered] [dict get $filtered diagnostics] [mfSame $filtered $exact] \

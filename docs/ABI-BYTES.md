@@ -1,10 +1,10 @@
-# `abi::bytes::Bytes`: the first owned ABI memory value, and `linux::write`
+# `std::abi::bytes::Bytes`: the first owned ABI memory value, and `std::linux::write`
 
-> **Since LINUX-SYSCALL-TRANSPORTS.md** `linux::write` (lib/linux.bot) calls
-> `linux::sys::write`, the write(2) transport of the compilation target's
-> architecture (`lib/linux/sys.x86_64.bot`, whose body is the one shown
-> below, or `lib/linux/sys.aarch64.bot`); the x86-64 transport is spelled
-> `linux::abi::x86_64::syscall`. Semantics, layout and evidence are
+> **Since LINUX-SYSCALL-TRANSPORTS.md** `std::linux::write` (stdlib/linux.bot) calls
+> `std::linux::sys::write`, the write(2) transport of the compilation target's
+> architecture (`stdlib/linux/sys.x86_64.bot`, whose body is the one shown
+> below, or `stdlib/linux/sys.aarch64.bot`); the x86-64 transport is spelled
+> `std::linux::abi::x86_64::syscall`. Semantics, layout and evidence are
 > unchanged.
 
 ## Outcome
@@ -15,23 +15,23 @@ to a file descriptor -- without libc, without a special `write` in the runtime,
 and without the compiler knowing what `write` is:
 
 ```botlish
-import abi
-import linux
-import str
+import std::abi
+import std::linux
+import std::str
 
-data = abi::bytes::from_list(str::encode_utf8("Hello from Botlish!\n"))
-linux::write(abi::i32(1), data)
+data = std::abi::bytes::from_list(std::str::encode_utf8("Hello from Botlish!\n"))
+std::linux::write(std::abi::i32(1), data)
 ```
 
 ```
 String
-  --str::encode_utf8-----------> List of bytes                (existing encoder)
-  --abi::bytes::from_list-----------------> abi::bytes::Bytes                    (ordinary Botlish, opaque struct)
+  --std::str::encode_utf8-----------> List of bytes                (existing encoder)
+  --std::abi::bytes::from_list-----------------> std::abi::bytes::Bytes                    (ordinary Botlish, opaque struct)
                                    hidden field: owned byte storage
-  --linux::write---------------> address + abi::Usize length    (both from THE SAME Bytes)
-  --abi::x86_64::from_bytes----> Register64 (rsi)               (raw bridge: address bits)
-  --abi::x86_64::from_usize----> Register64 (rdx)
-  --linux::abi::x86_64::syscall--------> the x86-64 `syscall` instruction, rax = 1
+  --std::linux::write---------------> address + std::abi::Usize length    (both from THE SAME Bytes)
+  --std::abi::x86_64::from_bytes----> Register64 (rsi)               (raw bridge: address bits)
+  --std::abi::x86_64::from_usize----> Register64 (rdx)
+  --std::linux::abi::x86_64::syscall--------> the x86-64 `syscall` instruction, rax = 1
   --> kernel write(2) --> descriptor 1
 ```
 
@@ -48,7 +48,7 @@ $ strace -f -qq -k -e trace=write ./write
 write(1, "Hello from Botlish!\n", 20) = 20
  > write(botlish_linux_x86_64_syscall+0x1f)
  > write(rt_linux_x86_64_syscall+0x493)
- > write(botlish_fn_7+0xd1)              <- linux::write
+ > write(botlish_fn_7+0xd1)              <- std::linux::write
  > write(botlish_fn_0+0x3d)              <- the program
  ...
 write(1, "20\n", 3) = 3                  <- the runner's own result line: libc __write
@@ -58,38 +58,38 @@ That chain -- not a complete FFI system -- is the milestone.
 
 ## Source surface
 
-### `abi::bytes::Bytes` (lib/abi/bytes.bot)
+### `std::abi::bytes::Bytes` (stdlib/abi/bytes.bot)
 
 ```botlish
 opaque struct Bytes:
     storage: any
 
 fn from_list(values: List[Byte]) -> Bytes:
-    Bytes {storage: byte_store::from_list(values)}
+    Bytes {storage: std::byte_store::from_list(values)}
 
-fn length(data: Bytes) -> abi::Usize:
-    abi::Usize {value: byte_store::byte_count(data.storage)}
+fn length(data: Bytes) -> std::abi::Usize:
+    std::abi::Usize {value: std::byte_store::byte_count(data.storage)}
 ```
 
-> **Layout note (MUTABLE-BYTES.md).** `Bytes` originally lived in `lib/abi.bot` as
-> `abi::Bytes` with `abi::bytes(...)` and `abi::bytes_length(...)`. The writable
+> **Layout note (MUTABLE-BYTES.md).** `Bytes` originally lived in `stdlib/abi.bot` as
+> `std::abi::Bytes` with `std::abi::bytes(...)` and `std::abi::bytes_length(...)`. The writable
 > counterpart made the module the home of *two* opaque types, and the single-owner
 > rule of OPAQUE-STRUCTS.md means one module must own both for them to convert into
-> each other without a public accessor, so both moved to `lib/abi/bytes.bot` (module
-> `abi::bytes`): `abi::bytes::Bytes`, `abi::bytes::from_list`, `abi::bytes::length`.
-> `lib/abi.bot` keeps only the numeric domains. Everything below describes the same
+> each other without a public accessor, so both moved to `stdlib/abi/bytes.bot` (module
+> `std::abi::bytes`): `std::abi::bytes::Bytes`, `std::abi::bytes::from_list`, `std::abi::bytes::length`.
+> `stdlib/abi.bot` keeps only the numeric domains. Everything below describes the same
 > semantics under those names.
 
-(`Byte` is `byte::Byte` via `import type byte::Byte`.) `abi::bytes::Bytes` is an
+(`Byte` is `std::byte::Byte` via `import type std::byte::Byte`.) `std::abi::bytes::Bytes` is an
 **opaque struct** (OPAQUE-STRUCTS.md): its one hidden field is the owned byte
-storage, and only module `abi::bytes` can construct or project it. Nothing new was
+storage, and only module `std::abi::bytes` can construct or project it. Nothing new was
 invented for privacy.
 
 | | |
 |---|---|
-| creator | `abi::bytes::from_list(values: List[Byte]) -> abi::bytes::Bytes`: the empty List gives the empty Bytes |
-| length | `abi::bytes::length(data: abi::bytes::Bytes) -> abi::Usize` (already a valid native buffer extent; no caller re-proves `0 <= n <= 2^64-1`) |
-| accepted bytes | exactly `byte::Byte` (`Int in 0..255`), by the ordinary typing of the parameter |
+| creator | `std::abi::bytes::from_list(values: List[Byte]) -> std::abi::bytes::Bytes`: the empty List gives the empty Bytes |
+| length | `std::abi::bytes::length(data: std::abi::bytes::Bytes) -> std::abi::Usize` (already a valid native buffer extent; no caller re-proves `0 <= n <= 2^64-1`) |
+| accepted bytes | exactly `std::byte::Byte` (`Int in 0..255`), by the ordinary typing of the parameter |
 | not provided | slicing, indexing, concatenation, capacity, mutation, an address, a pointer, `is_heap`, NUL termination |
 
 A `Bytes` is not a String, a C string, a pointer, a borrow, a resource, a
@@ -98,63 +98,63 @@ byte; the length is explicit and authoritative.
 
 **Typing note.** `List[T]` admissibility is invariant (MINIMAL-APPLIED-LIST-
 TYPES.md), so a bare literal `[1, 2, 3]` (a `List[int]`) is not a `List[Byte]`:
-`abi::bytes::from_list([1, 2, 3])` is a compile-time TYPE error, exactly as the spec asks
+`std::abi::bytes::from_list([1, 2, 3])` is a compile-time TYPE error, exactly as the spec asks
 for any list not statically known to hold bytes -- nothing is truncated,
 wrapped, signed-reinterpreted or coerced. A byte List is written with the
-existing checked conversion (`[byte::from_int(65), byte::from_int(0)]`, which
+existing checked conversion (`[std::byte::from_int(65), std::byte::from_int(0)]`, which
 needs no handler for a constant in range), produced by a typed loop
-(`loop i from 0 to n: byte::from_int(mod(i, 256))`), or comes from
-`str::encode_utf8`, whose result is already a `List[Byte]`.
+(`loop i from 0 to n: std::byte::from_int(mod(i, 256))`), or comes from
+`std::str::encode_utf8`, whose result is already a `List[Byte]`.
 
-### `abi::x86_64::from_bytes` (core/bytestore.tcl; hir/syscall.tcl)
+### `std::abi::x86_64::from_bytes` (core/bytestore.tcl; hir/syscall.tcl)
 
 ```
-abi::x86_64::from_bytes(data: abi::bytes::Bytes) -> abi::x86_64::Register64
+std::abi::x86_64::from_bytes(data: std::abi::bytes::Bytes) -> std::abi::x86_64::Register64
 ```
 
 The narrowest raw bridge: it knows only "produce the machine address of this
 contiguous Bytes payload, as register contents". It does not know `write`, does
 not know which syscall argument it will become, and is not a pointer type:
-`abi::bytes::Bytes` itself exposes no address, and the result is the same transport
+`std::abi::bytes::Bytes` itself exposes no address, and the result is the same transport
 value as every other register word (`Register64`: no arithmetic, no ordering).
 It is a **root native** registered under its qualified name (like
-`linux::abi::x86_64::syscall`), because only module `abi::bytes` may project the storage out
+`std::linux::abi::x86_64::syscall`), because only module `std::abi::bytes` may project the storage out
 of a `Bytes`; the native's static contract (`hir::syscall::BytesProblems`) is
-that it takes exactly one argument whose static type is `abi::bytes::Bytes` (ARITY /
+that it takes exactly one argument whose static type is `std::abi::bytes::Bytes` (ARITY /
 TYPE otherwise, no run-time check ever inserted) and that it is only ever
 *called* (a reference to it that is not a callee is TYPE). A raw storage
-(`byte_store::from_list(...)`), an Int, a String, or an `abi::U8` is a
+(`std::byte_store::from_list(...)`), an Int, a String, or an `std::abi::U8` is a
 compile-time TYPE error.
 
 Native only: the address of a machine object exists only on the native
 backend. The Tcl backends raise `NATIVE-ONLY` exactly as they do for
-`linux::abi::x86_64::syscall`, and nothing imitates an address.
+`std::linux::abi::x86_64::syscall`, and nothing imitates an address.
 
-### `byte_store::from_list` / `byte_store::byte_count` (core/bytestore.tcl)
+### `std::byte_store::from_list` / `std::byte_store::byte_count` (core/bytestore.tcl)
 
 The two natives that make and measure the storage value. `byte_store` is the
 family namespace of the storage kind (as `immutable_set` is for
 `ImmutableSet`). They do not give out a `Bytes` (constructing one outside
-module `abi::bytes` is `OPAQUE-CONSTRUCTION`) and a raw storage yields no address, so
+module `std::abi::bytes` is `OPAQUE-CONSTRUCTION`) and a raw storage yields no address, so
 neither can manufacture a pointer. There is deliberately no operation that
 reads, slices or iterates the bytes. (`byte_count` rather than `length`: a
 member named `length` would make every `xs.length()` method-sugar hint also
-suggest `import byte_store`.)
+suggest `import std::byte_store`.)
 
-### `linux::write` (lib/linux.bot)
+### `std::linux::write` (stdlib/linux.bot)
 
 ```botlish
-import abi
-import abi::x86_64
-import linux::abi::x86_64
+import std::abi
+import std::abi::x86_64
+import std::linux::abi::x86_64
 
-fn write(fd: abi::I32, data: abi::bytes::Bytes) -> int:
-    abi::x86_64::to_int(
-        linux::abi::x86_64::syscall({
-            rax: abi::x86_64::register64(1),
-            rdi: abi::x86_64::from_i32(fd),
-            rsi: abi::x86_64::from_bytes(data),
-            rdx: abi::x86_64::from_usize(abi::bytes::length(data)),
+fn write(fd: std::abi::I32, data: std::abi::bytes::Bytes) -> int:
+    std::abi::x86_64::to_int(
+        std::linux::abi::x86_64::syscall({
+            rax: std::abi::x86_64::register64(1),
+            rdi: std::abi::x86_64::from_i32(fd),
+            rsi: std::abi::x86_64::from_bytes(data),
+            rdx: std::abi::x86_64::from_usize(std::abi::bytes::length(data)),
         })
     )
 ```
@@ -168,7 +168,7 @@ fn write(fd: abi::I32, data: abi::bytes::Bytes) -> int:
   calling convention): `rax = 1` (SYS_write), `rdi = fd`, `rsi = the address of
   data's payload`, `rdx = data's byte count`; `r10 r8 r9 = 0`.
 * **Result.** The kernel's raw signed `ssize_t` as an ordinary Botlish `Int`
-  (`abi::x86_64::to_int`): `>= 0` is the number of bytes written; `< 0` is the
+  (`std::abi::x86_64::to_int`): `>= 0` is the number of bytes written; `< 0` is the
   kernel's `-errno`, preserved exactly (never reread as unsigned, never `-1`).
   An invalid descriptor is `-9` (EBADF). No errno mapping exists yet: this is the
   thin syscall-level wrapper, and a later wrapper can translate negative
@@ -179,7 +179,7 @@ fn write(fd: abi::I32, data: abi::bytes::Bytes) -> int:
   is a policy for a higher I/O abstraction. (NIR: exactly one
   `syscall_linux_x86_64` op, no branch, no loop; and a test provokes a **real**
   short write -- a non-blocking pipe filled to the point where the kernel accepts
-  only part of an 81920-byte payload: `linux::write` returns exactly that short
+  only part of an 81920-byte payload: `std::linux::write` returns exactly that short
   count, the pipe holds exactly the bytes the kernel took, and the next write
   returns the raw `-11` (EAGAIN).)
 * **No retained pointer.** The address is taken and consumed synchronously by
@@ -191,19 +191,19 @@ fn write(fd: abi::I32, data: abi::bytes::Bytes) -> int:
 
 ## Semantics
 
-* **Owned, eager.** `abi::bytes::from_list(values)` converts the List into storage the
+* **Owned, eager.** `std::abi::bytes::from_list(values)` converts the List into storage the
   resulting `Bytes` owns, immediately. The List (or the String it was encoded
   from) is irrelevant afterwards; the Bytes is not a view of it and does not
   retain it. Even when the source is already an immutable List the model is
   eager conversion into ABI-compatible contiguous storage; a later optimization
-  may reuse compatible storage without changing semantics. Once `abi::bytes::from_list`
+  may reuse compatible storage without changing semantics. Once `std::abi::bytes::from_list`
   returns, the value independently provides the contiguous extent the ABI needs.
 * **A value, not a pointer.** The semantic value is the bytes themselves.
   Backing address, inline-versus-heap representation, buffer identity,
   allocation identity and sharing identity are not observable. `b = a` is
   ordinary value use (`Bytes` is not affine or move-only); `[a, a]` is fine; the
   implementation may copy or share. There are no reference counts.
-* **Equality and hash are by the bytes.** `abi::bytes::from_list([a, b]) == abi::bytes::from_list([a,
+* **Equality and hash are by the bytes.** `std::abi::bytes::from_list([a, b]) == std::abi::bytes::from_list([a,
   b])` is `true`; `[a, c]` is `false`; a prefix, a longer Bytes, the empty Bytes
   and a NUL-padded Bytes are all unequal. Two storages never compare by
   identity or address. `hash` is consistent with it, and the *values* of the
@@ -214,14 +214,14 @@ fn write(fd: abi::I32, data: abi::bytes::Bytes) -> int:
   their fields, and the one field is a *byte storage value*, a runtime kind whose
   generic equality/hash is value-oriented (below).
 * **Rendering** follows the opaque-struct rule on every backend, alone or nested:
-  `<opaque abi::bytes::Bytes>` -- no address, allocator metadata, heap id or storage
+  `<opaque std::abi::bytes::Bytes>` -- no address, allocator metadata, heap id or storage
   bytes. The explicit internal reveal (the test harness's differential printer)
-  shows `abi::bytes::Bytes {storage: <bytes 3: 4100ff>}`, which is how backends are
+  shows `std::abi::bytes::Bytes {storage: <bytes 3: 4100ff>}`, which is how backends are
   compared byte for byte.
-* **Length.** One exact byte count. UTF-8: `abi::bytes::length(abi::bytes::from_list(
-  str::encode_utf8("héllo ☃ \U0001f600")))` is `15`, the encoded byte
-  count, while `str::length` of the String is `9`.
-* **Empty.** `abi::bytes::from_list([])` has length 0. The representation does not promise a
+* **Length.** One exact byte count. UTF-8: `std::abi::bytes::length(std::abi::bytes::from_list(
+  std::str::encode_utf8("héllo ☃ \U0001f600")))` is `15`, the encoded byte
+  count, while `std::str::length` of the String is `9`.
+* **Empty.** `std::abi::bytes::from_list([])` has length 0. The representation does not promise a
   null address and `null` has no semantic significance (Botlish still has no
   `null`); a zero-count write is tested not to depend on what address a
   zero-length payload happens to have (it is a valid one-past address; a
@@ -236,8 +236,8 @@ fn write(fd: abi::I32, data: abi::bytes::Bytes) -> int:
 ### Layers
 
 ```
-HIR / semantic        abi::bytes::Bytes: opaque struct {storage: any}   (a one-field struct)
-Tcl backends          {struct {abi::bytes::Bytes storage} {{bytestore HEX}}}
+HIR / semantic        std::abi::bytes::Bytes: opaque struct {storage: any}   (a one-field struct)
+Tcl backends          {struct {std::abi::bytes::Bytes storage} {{bytestore HEX}}}
                       the storage is a distinct value kind {bytestore HEX}: lowercase
                       hexadecimal text, two digits per byte (the empty storage is
                       {bytestore {}}); equality = string equality of the hex; hash as above
@@ -248,7 +248,7 @@ native NIR            one-field struct, scalar-replaced (below); the field is a 
 The field is typed `any` because no source type spells the storage; every native
 that accepts one checks its kind at run time (`rt_bytes_len`, `rt_bytes_addr`
 refuse anything else with TYPE), and the only way a storage reaches a `Bytes`
-field is `abi::bytes::from_list` itself (an opaque construction nobody else may write).
+field is `std::abi::bytes::from_list` itself (an opaque construction nobody else may write).
 
 ### Native heap object (runtime/bytesobj.rs)
 
@@ -263,7 +263,7 @@ offset  size  field
   second allocation` does not occur. Size `16 + len` rounded up to 16.
 * **Length representation:** the 8-byte `len` field; `len <= MAX_COLLECTION_LENGTH`
   (2^62 - 1, checked before allocation: RANGE), so the length always fits a small
-  Int and hence an `abi::Usize`; `-result-range collection-length` is therefore a
+  Int and hence an `std::abi::Usize`; `-result-range collection-length` is therefore a
   real checked fact, which is why `Usize {value: byte_count(...)}` needs no
   proof obligation from callers.
 * **Payload alignment:** 16 bytes (the allocation is 16-aligned and the payload
@@ -287,9 +287,9 @@ Allocation counts (`native::allocationReport`, in-process, specialized backend;
 
 | program | Bytes storage | wrapper (Struct) | List | notes |
 |---|---|---|---|---|
-| `out(3, abi::bytes::from_list([]))` | 0 | 0 | 0 | the shared **static** empty storage; total allocations 0 |
-| `out(3, abi::bytes::from_list(str::encode_utf8("hello\n")))` | 0 | 0 | 0 | a **static constant** (`bytes "68656c6c6f0a"`): no List, no String, no heap buffer; total 0 |
-| `out(3, abi::bytes::from_list([byte::from_int(1), byte::from_int(2)]))` | 0 | 0 | 0 | a static constant as well |
+| `out(3, std::abi::bytes::from_list([]))` | 0 | 0 | 0 | the shared **static** empty storage; total allocations 0 |
+| `out(3, std::abi::bytes::from_list(std::str::encode_utf8("hello\n")))` | 0 | 0 | 0 | a **static constant** (`bytes "68656c6c6f0a"`): no List, no String, no heap buffer; total 0 |
+| `out(3, std::abi::bytes::from_list([std::byte::from_int(1), std::byte::from_int(2)]))` | 0 | 0 | 0 | a static constant as well |
 | `out(3, mk("hello\n"))` (dynamic) | 1 | 0 | 1 | the Bytes wrapper is scalar-replaced; writing allocates nothing more |
 | same, 5120 and 163840 bytes | 1 | 0 | 1 | one object of `16 + n` bytes, whatever n |
 | `a = mk(..); b = a; out(a); out(b); out(a)` | 1 | 0 | 1 | aliasing allocates nothing |
@@ -297,36 +297,36 @@ Allocation counts (`native::allocationReport`, in-process, specialized backend;
 | unspecialized (`-specialize 0`) | 1 | >0 | | the generic baseline materializes the wrapper (and the Register64 transport) where it carries values across calls; the storage is still one allocation |
 
 * **Optimized:** (1) the wrapper `Bytes` struct disappears under the existing
-  struct scalar replacement: `abi::bytes::from_list` returns the storage as its one field,
-  `abi::bytes::length(data.0)` is one `op byteslen`, a Bytes passed to
-  `linux::write` is a virtual parameter. (2) The empty Bytes is one shared
-  static object. (3) **Static constants:** `abi::bytes::from_list` of a compile-time-known byte
-  sequence (`str::encode_utf8` of an exactly known String of any length -- empty
+  struct scalar replacement: `std::abi::bytes::from_list` returns the storage as its one field,
+  `std::abi::bytes::length(data.0)` is one `op byteslen`, a Bytes passed to
+  `std::linux::write` is a virtual parameter. (2) The empty Bytes is one shared
+  static object. (3) **Static constants:** `std::abi::bytes::from_list` of a compile-time-known byte
+  sequence (`std::str::encode_utf8` of an exactly known String of any length -- empty
   or non-ASCII included -- or an exactly known List of constant bytes
-  / `byte::from_int` of a constant) lowers to `%b = bytes "HEX"`, a program-lifetime
+  / `std::byte::from_int` of a constant) lowers to `%b = bytes "HEX"`, a program-lifetime
   object installed at startup: **no heap buffer, no List, no run-time conversion**.
   Source semantics are unchanged (a Bytes has no identity), and the AOT
   executable embeds the bytes as a `\xNN` byte-string literal.
 * **Not optimized (reported, not hidden):** a *dynamic* small Bytes is a heap
   object (there is no stack/scratch/inline form for it: the existing escape machinery
-  does not span the `linux::write` call boundary, and building that was out of
+  does not span the `std::linux::write` call boundary, and building that was out of
   scope); conversion from a List is an eager copy (the source List is built first:
   one List + one Bytes); a `Bytes` stored in a List or a module static binding
-  materializes its one-field wrapper; and `abi::bytes::from_list` of a List that is not
+  materializes its one-field wrapper; and `std::abi::bytes::from_list` of a List that is not
   statically known (a parameter, a loop result) is the generic runtime
   conversion. (Collecting loops build their result List with one allocation
   per iteration in the native backend -- `pattern(n)` allocated n+1 Lists --
   which is existing behavior, unrelated to this change, and why the large-payload
   tests build big Bytes from a doubled String instead.)
 * **Compiler facts.** Within one expression the length range is
-  `[0, 2^62-1]` (`collection-length`). The *exact* length of `abi::bytes::from_list([b1, b2,
-  b3])` is not propagated to `abi::bytes::length(data)` across the function
+  `[0, 2^62-1]` (`collection-length`). The *exact* length of `std::abi::bytes::from_list([b1, b2,
+  b3])` is not propagated to `std::abi::bytes::length(data)` across the function
   boundary: that would be a field fact about an opaque struct crossing an
   interprocedural boundary (G5), which this milestone does not build.
 
 ## The raw address bridge and liveness across the syscall
 
-When the raw address of a payload is passed to `linux::abi::x86_64::syscall`, the
+When the raw address of a payload is passed to `std::linux::abi::x86_64::syscall`, the
 backing storage must stay valid and unmoved until the syscall returns, under GC
 stress, allocation immediately before the syscall, specialization, generic
 lowering, inlining and scalar replacement. This is **explicit in the lowering
@@ -334,7 +334,7 @@ lowering, inlining and scalar replacement. This is **explicit in the lowering
 lexical lifetime**:
 
 * The collector never moves objects, so *validity* only requires liveness.
-* `abi::x86_64::from_bytes(d)` lowers to `%b = <the storage of d>; %a = op
+* `std::abi::x86_64::from_bytes(d)` lowers to `%b = <the storage of d>; %a = op
   bytesaddr %b` (`BytesAddrCall`). `%a` is the Register64's one word.
 * The lowering records that `%a` points into `%b` (`fn keepAddr`, a map from a
   register to the storages whose address it may hold). That provenance flows,
@@ -350,19 +350,19 @@ lexical lifetime**:
   (never removed, never moved by Cranelift: a side-effecting call), so `%b` is a
   live GC root from its definition through every safepoint -- including the
   syscall's own -- until the kernel has returned. The wrapper function
-  `linux::write` has one `keepalive`, the same register `bytesaddr` took.
+  `std::linux::write` has one `keepalive`, the same register `bytesaddr` took.
 
 ```
-func 7 "linux::write" params=2 ...                  ; data is the virtual field data.0 = %1
-    %4 = callmulti 3 %2          ; abi::x86_64::register64(1)
-    %5 = callmulti 5 %0          ; abi::x86_64::from_i32(fd)
+func 7 "std::linux::write" params=2 ...                  ; data is the virtual field data.0 = %1
+    %4 = callmulti 3 %2          ; std::abi::x86_64::register64(1)
+    %5 = callmulti 5 %0          ; std::abi::x86_64::from_i32(fd)
     %6 = op bytesaddr %1         ; the address: rsi
-    %7 = callmulti 2 %1          ; abi::bytes::length(data)
-    %8 = callmulti 6 %7          ; abi::x86_64::from_usize(length): rdx
+    %7 = callmulti 2 %1          ; std::abi::bytes::length(data)
+    %8 = callmulti 6 %7          ; std::abi::x86_64::from_usize(length): rdx
     %9 = int 0
     %10 = op syscall_linux_x86_64 %4 %5 %6 %8 %9 %9 %9      ; rax rdi rsi rdx r10 r8 r9
     %11 = op keepalive %1        ; the storage stays live across the syscall
-    %12 = call 4 %10             ; abi::x86_64::to_int
+    %12 = call 4 %10             ; std::abi::x86_64::to_int
     ret %12
 ```
 
@@ -382,7 +382,7 @@ func 7 "linux::write" params=2 ...                  ; data is the virtual field 
   lowering tracks provenance through the routes above, **not** through a value
   stored in a module static or captured by a closure, nor merged by anything but
   `if`. That is the raw layer's sharp edge, deliberately: the safe wrapper
-  theorem is that `linux::write(fd, data)` takes the address from `data`, makes
+  theorem is that `std::linux::write(fd, data)` takes the address from `data`, makes
   the syscall synchronously while `data` is live, and neither exposes nor retains
   the address. Raw `Register64` programs are not made memory-safe in general; keep
   `from_bytes` and the syscall in one function and the guarantee is exact.
@@ -394,31 +394,31 @@ func 7 "linux::write" params=2 ...                  ; data is the virtual field 
 
 ### Effects (unchanged)
 
-`linux::abi::x86_64::syscall` stays generic: seven registers in, the `syscall`
+`std::linux::abi::x86_64::syscall` stays generic: seven registers in, the `syscall`
 instruction, raw rax out; the compiler still knows no syscall number
-(`write` is `rax: register64(1)`, ordinary data in `lib/linux.bot`). Its strong
+(`write` is `rax: register64(1)`, ordinary data in `stdlib/linux.bot`). Its strong
 memory/effect barrier is preserved and matters more now that the kernel reads
 Botlish-owned memory: it is a real helper call (Cranelift treats it as reading
 and writing all memory, never merges, hoists, reorders or deletes it) and a
 GC safepoint; the payload is fully written before the address is taken because
-the storage is created by `abi::bytes::from_list` before any use (`bytesfromlist` or a
+the storage is created by `std::abi::bytes::from_list` before any use (`bytesfromlist` or a
 static constant precedes `bytesaddr` in dependence order), and nothing can reuse
-scratch storage because there is none. `byte_store::from_list` is
+scratch storage because there is none. `std::byte_store::from_list` is
 `-context-free 1`, so a module binding may be initialized with a Bytes;
-`abi::x86_64::from_bytes` is not context-free (an address is a property of one
-run) and `linux::write` is never foldable.
+`std::abi::x86_64::from_bytes` is not context-free (an address is a property of one
+run) and `std::linux::write` is never foldable.
 
 ## Backend support
 
 | | interp | compile | cranelift-generic | cranelift / standalone |
 |---|---|---|---|---|
-| `abi::bytes::from_list`, `abi::bytes::length`, `==`, `hash`, rendering, aliasing, collections | yes | yes | yes | yes |
-| `abi::x86_64::from_bytes` | `NATIVE-ONLY` | `NATIVE-ONLY` | yes (Linux x86-64) | yes (Linux x86-64) |
-| `linux::write` | `NATIVE-ONLY` | `NATIVE-ONLY` | yes | yes |
+| `std::abi::bytes::from_list`, `std::abi::bytes::length`, `==`, `hash`, rendering, aliasing, collections | yes | yes | yes | yes |
+| `std::abi::x86_64::from_bytes` | `NATIVE-ONLY` | `NATIVE-ONLY` | yes (Linux x86-64) | yes (Linux x86-64) |
+| `std::linux::write` | `NATIVE-ONLY` | `NATIVE-ONLY` | yes | yes |
 
 Nothing fakes `write` on the Tcl backends with `puts`, a Tcl channel or libc
-(a test greps `core/` and `lib/` for exactly that). Only the *call* is refused,
-when it runs: a program that defines `emit()` calling `linux::write` but never
+(a test greps `core/` and `stdlib/` for exactly that). Only the *call* is refused,
+when it runs: a program that defines `emit()` calling `std::linux::write` but never
 calls it runs everywhere.
 
 ## Evidence
@@ -432,7 +432,7 @@ All of it is run, not asserted from source.
   word, 0 0 0` (checked register by register), a `keepalive` of `bytesaddr`'s own
   operand, then `to_int`. For a constant, one `bytes "68656c6c6f0a"` and no
   `bytesfromlist`.
-* **Machine code** (`objdump` of the standalone executable's `linux::write`):
+* **Machine code** (`objdump` of the standalone executable's `std::linux::write`):
   `call rt_bytes_addr` with rsi = r12 (the storage), then `call
   rt_linux_x86_64_syscall`, then `call rt_keepalive` with rsi = r12 again; no call to
   libc `write`, `send` or `syscall(3)` in it. `rt_linux_x86_64_syscall` reaches
@@ -458,7 +458,7 @@ All of it is run, not asserted from source.
 
 * registration (three natives, no write/keepalive/pointer native), the declaration;
 * **every backend**: length (empty, NUL anywhere, UTF-8 bytes-not-scalars),
-  `abi::Usize`, equality by bytes, hash consistency *and hash values agreeing*,
+  `std::abi::Usize`, equality by bytes, hash consistency *and hash values agreeing*,
   aliasing, collections (`List`, `ImmutableSet`), eager independence of the source,
   large values, rendering, the internal reveal, opaque construction/projection/
   destructuring diagnostics, no accessor surface, typing (non-byte lists rejected
@@ -491,27 +491,27 @@ twelve mutants of exactly the failures this boundary is prone to -- see
 ## Limitations discovered
 
 * **No dynamic small-`Bytes` fast path** (stack/scratch/inline): see above.
-* **Literal byte Lists** need `byte::from_int` per element (invariant `List[T]`).
-  Observed (an existing limit, unrelated to `abi::bytes::from_list`): past roughly 1,500-2,000
-  constant `byte::from_int(N)` calls in *one program*, later calls lose their
+* **Literal byte Lists** need `std::byte::from_int` per element (invariant `List[T]`).
+  Observed (an existing limit, unrelated to `std::abi::bytes::from_list`): past roughly 1,500-2,000
+  constant `std::byte::from_int(N)` calls in *one program*, later calls lose their
   call-specific completion proof (`this call may produce the declared error
   "AboveRange"` for a literal 67): four 256-element literals compile, eight do not.
   The fuzzer's generated programs therefore build their Lists with closed-form
   loops instead of per-byte literals.
-* **`import abi::bytes` loads `byte`** (for `Byte` in `abi::bytes::from_list`'s signature): the
+* **`import std::abi::bytes` loads `byte`** (for `Byte` in `std::abi::bytes::from_list`'s signature): the
   `byte::` types and the global errors `BelowRange`/`AboveRange` are part of every
-  program that imports `abi::bytes`, so such a program cannot declare its own `error
-  BelowRange` (error names are global). Since the byte values moved out of `lib/abi.bot`
+  program that imports `std::abi::bytes`, so such a program cannot declare its own `error
+  BelowRange` (error names are global). Since the byte values moved out of `stdlib/abi.bot`
   (MUTABLE-BYTES.md), a program that imports only `abi` no longer loads `byte` and can
   declare it (this was a limitation of the first layout, where `Bytes` lived in `abi`).
 * **A module-level binding cannot hold a `Bytes`**: module binding initializers
   must be context-free scalars/Lists (an existing rule: a struct is not an
-  accepted initializer), so `payload = abi::bytes::from_list(...)` in a library module is
+  accepted initializer), so `payload = std::abi::bytes::from_list(...)` in a library module is
   rejected (`module binding initializer must be context-free`). A Bytes lives in
   entry-program bindings, arguments, closures and Lists (all tested).
 * **Collecting loops allocate a List per iteration natively** (existing), so a
   loop-built 70000-byte List takes seconds; not caused by this change.
-* **Exact length is not propagated across `abi::bytes::length`.**
+* **Exact length is not propagated across `std::abi::bytes::length`.**
 * **Provenance is intra-function** (above): an address merged by anything but `if`,
   stored in a module static or captured by a closure loses its keepalive.
 * **The standalone runner always prints its result**, so the example's stdout is
@@ -544,17 +544,17 @@ twelve mutants of exactly the failures this boundary is prone to -- see
 
 ## Milestone report
 
-1. **`abi::bytes::Bytes` declaration:** `opaque struct Bytes:` with the one hidden field
-   `storage: any` (lib/abi/bytes.bot).
-2. **Creator:** `abi::bytes::from_list(values: List[Byte]) -> abi::bytes::Bytes`.
-3. **Accepted source bytes:** exactly `byte::Byte` (0..255), by the parameter's
+1. **`std::abi::bytes::Bytes` declaration:** `opaque struct Bytes:` with the one hidden field
+   `storage: any` (stdlib/abi/bytes.bot).
+2. **Creator:** `std::abi::bytes::from_list(values: List[Byte]) -> std::abi::bytes::Bytes`.
+3. **Accepted source bytes:** exactly `std::byte::Byte` (0..255), by the parameter's
    `List[Byte]` typing; ordinary diagnostics otherwise.
-4. **Eager conversion:** `byte_store::from_list` copies into an owned storage when
-   `abi::bytes::from_list` is called; no view, no retention (or a static constant for a
+4. **Eager conversion:** `std::byte_store::from_list` copies into an owned storage when
+   `std::abi::bytes::from_list` is called; no view, no retention (or a static constant for a
    compile-time-known sequence).
 5. **Equality/hash:** by the bytes; hash = byte count (LE u64) then the bytes under
    kind tag 9; identical values on all four backends.
-6. **Length:** `abi::bytes::length(data) -> abi::Usize`.
+6. **Length:** `std::abi::bytes::length(data) -> std::abi::Usize`.
 7. **Hidden representation:** an opaque one-field struct over a `bytestore` value
    (`{bytestore HEX}` in Tcl; a `KIND_BYTES` object natively).
 8. **Inline/stack/static:** static constants (compile-time-known bytes) and the shared
@@ -569,7 +569,7 @@ twelve mutants of exactly the failures this boundary is prone to -- see
     one allocation; length is the stored `len`; no tracing of the payload.
 14. **GC tracing/liveness:** marks only (no children); non-moving collector;
     liveness through the syscall by `keepalive` (above).
-15. **Raw bridge:** `abi::x86_64::from_bytes(data) -> Register64` (native
+15. **Raw bridge:** `std::abi::x86_64::from_bytes(data) -> Register64` (native
     `bytesaddr`).
 16. **Why the backing stays valid:** non-moving collector + a `keepalive` of the
     storage after every syscall that takes an address derived from it, tracked in
@@ -577,8 +577,8 @@ twelve mutants of exactly the failures this boundary is prone to -- see
 17. **Does the address escape:** it is a Register64 word and may leave the
     function; provenance is tracked through the listed routes, not through module
     statics/closures; classified as raw-machine territory, documented.
-18. **`linux::write`:** as above.
-19. **`lib/linux.bot` imports:** `abi`, `abi::bytes`, `abi::x86_64`, `linux::abi`.
+18. **`std::linux::write`:** as above.
+19. **`stdlib/linux.bot` imports:** `abi`, `std::abi::bytes`, `std::abi::x86_64`, `std::linux::abi`.
 20. **Register mapping:** `rax=1, rdi=fd, rsi=address, rdx=count, r10=r8=r9=0`.
 21. **Return value:** the kernel's raw signed result as an Int (`to_int`).
 22. **Short writes:** one syscall, the kernel's result returned unchanged.
@@ -633,7 +633,7 @@ using an escape Botlish strings do not have; a mutant index drawn with `rand()`
 for the program and again for the oracle, so the two compared different bytes
 (seed 9023 failed identically on all four backends, which is what pointed at the
 oracle); and a first generator that hit the compiler's existing proof budget at
-about 1500-2000 constant `byte::from_int` calls, so the generators are
+about 1500-2000 constant `std::byte::from_int` calls, so the generators are
 closed-form (one call per sequence).
 
 ## Mutation results

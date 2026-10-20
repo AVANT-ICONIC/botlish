@@ -172,34 +172,34 @@ proc rejectedBody {rejection i indent} {
     return [list [list "${pad}fn want_${i}(x: int) -> int:" "${pad}    x" "${pad}want_${i}(\"s\")"] Type]
 }
 proc nestedSuite {k rejection} {
-    set lines {"import compiler" "import test" "" "fn register_bench(n: int):"}
+    set lines {"import std::compiler" "import std::test" "" "fn register_bench(n: int):"}
     for {set i 0} {$i < $k} {incr i} {
-        lappend lines "    fn body_${i}() errors compiler::CompilerError:" "        static compile:"
+        lappend lines "    fn body_${i}() errors std::compiler::CompilerError:" "        static compile:"
         if {$rejection ne "none" && $i % 3 == 2} {
             lassign [rejectedBody $rejection $i 12] body code
-            lappend lines {*}$body "    test::rejects(\"t$i\", compiler::DiagnosticCode::$code, body_${i})"
+            lappend lines {*}$body "    std::test::rejects(\"t$i\", std::compiler::DiagnosticCode::$code, body_${i})"
         } else {
-            lappend lines "            n * $i + $i" "    test::value(\"t$i\", 7 * $i + $i, body_${i})"
+            lappend lines "            n * $i + $i" "    std::test::value(\"t$i\", 7 * $i + $i, body_${i})"
         }
     }
-    lappend lines "" "with context test::suite()" "register_bench(7)" "test::report()" ""
+    lappend lines "" "with context std::test::suite()" "register_bench(7)" "std::test::report()" ""
     return [join $lines \n]
 }
 proc topLevelSuite {k rejection} {
-    set lines {"import compiler" "import test" ""}
+    set lines {"import std::compiler" "import std::test" ""}
     set registrations {}
     for {set i 0} {$i < $k} {incr i} {
-        lappend lines "fn body_${i}() errors compiler::CompilerError:" "    static compile:"
+        lappend lines "fn body_${i}() errors std::compiler::CompilerError:" "    static compile:"
         if {$rejection ne "none" && $i % 3 == 2} {
             lassign [rejectedBody $rejection $i 8] body code
             lappend lines {*}$body ""
-            lappend registrations "    test::rejects(\"t$i\", compiler::DiagnosticCode::$code, body_${i})"
+            lappend registrations "    std::test::rejects(\"t$i\", std::compiler::DiagnosticCode::$code, body_${i})"
         } else {
             lappend lines "        7 * $i + $i" ""
-            lappend registrations "    test::value(\"t$i\", 7 * $i + $i, body_${i})"
+            lappend registrations "    std::test::value(\"t$i\", 7 * $i + $i, body_${i})"
         }
     }
-    lappend lines "fn register_bench():" {*}$registrations "" "with context test::suite()" "register_bench()" "test::report()" ""
+    lappend lines "fn register_bench():" {*}$registrations "" "with context std::test::suite()" "register_bench()" "std::test::report()" ""
     return [join $lines \n]
 }
 
@@ -217,8 +217,8 @@ if {"golden" in $parts} {
 # ---------------------------------------------------------------------------
 # mixed: independent sites rejected at different stages
 
-set mixedDecls {import compiler
-import list
+set mixedDecls {import std::compiler
+import std::list
 
 error Boom
 
@@ -258,7 +258,7 @@ proc mixedBody {i pad} {
         3 { return [list "${pad}r = always():" "${pad}    on Boom:" "${pad}        0" "${pad}r"] }
         4 { return [list "${pad}always()"] }
         5 { return [list "${pad}measure(Thing \{v: $i\})"] }
-        6 { return [list "${pad}with context compiler::SourceLocation \{line: 1, column: 1\}" "${pad}0"] }
+        6 { return [list "${pad}with context std::compiler::SourceLocation \{line: 1, column: 1\}" "${pad}0"] }
     }
 }
 proc mixedProgram {k nested} {
@@ -271,9 +271,9 @@ proc mixedProgram {k nested} {
         set pad ""
     }
     for {set i 0} {$i < $k} {incr i} {
-        lappend lines "${pad}fn probe_${i}() -> int errors compiler::CompilerError:" "${pad}    static compile:"
+        lappend lines "${pad}fn probe_${i}() -> int errors std::compiler::CompilerError:" "${pad}    static compile:"
         lappend lines {*}[mixedBody $i "${pad}        "]
-        lappend calls "r_$i = probe_${i}():" "    on compiler::CompilerError \{code\}:" "        -1"
+        lappend calls "r_$i = probe_${i}():" "    on std::compiler::CompilerError \{code\}:" "        -1"
     }
     if {$nested} {
         set body [lmap c $calls {string cat "    " $c}]
@@ -300,7 +300,7 @@ if {"mixed" in $parts} {
 # block completes with -- rejected (UNHANDLED-ERROR) only once the block
 # inside it is.
 proc nestedChain {d} {
-    set lines {"import compiler" "" "fn outer() -> int errors compiler::CompilerError:"}
+    set lines {"import std::compiler" "" "fn outer() -> int errors std::compiler::CompilerError:"}
     set pad "    "
     for {set i 0} {$i < $d} {incr i} {
         lappend lines "${pad}static compile:" "${pad}    fn level_${i}() -> int:"
@@ -311,17 +311,17 @@ proc nestedChain {d} {
         set pad [string range $pad 0 end-8]
         lappend lines "${pad}    level_${i}()"
     }
-    lappend lines "" "r = outer():" "    on compiler::CompilerError:" "        0" "r" ""
+    lappend lines "" "r = outer():" "    on std::compiler::CompilerError:" "        0" "r" ""
     return [join $lines \n]
 }
 # K sites in one function's statement sequence, each rejected: each one's
 # rejection makes the rest unreachable, so the next is judged without it.
 proc sequenceChain {k} {
-    set lines {"import compiler" "" "fn run() -> int errors compiler::CompilerError:"}
+    set lines {"import std::compiler" "" "fn run() -> int errors std::compiler::CompilerError:"}
     for {set i 0} {$i < $k} {incr i} {
         lappend lines "    static compile:" "        missing_$i" "    static compile:" "        fn want_${i}(x: int) -> int:" "            x" "        want_${i}(\"s\")"
     }
-    lappend lines "    0" "" "r = run():" "    on compiler::CompilerError:" "        0" "r" ""
+    lappend lines "    0" "" "r = run():" "    on std::compiler::CompilerError:" "        0" "r" ""
     return [join $lines \n]
 }
 
@@ -338,7 +338,7 @@ if {"chain" in $parts} {
 # ---------------------------------------------------------------------------
 # erased: the erased-callable contract
 
-set erasedDecls {import compiler
+set erasedDecls {import std::compiler
 
 error E1
 error E2
@@ -365,7 +365,7 @@ proc erasedProgram {k contributors consumers early} {
     set lines [split $::erasedDecls \n]
     set calls {}
     for {set i 0} {$i < $k} {incr i} {
-        lappend lines "fn site_${i}() -> int errors compiler::CompilerError:" "    static compile:"
+        lappend lines "fn site_${i}() -> int errors std::compiler::CompilerError:" "    static compile:"
         if {$i < $contributors} {
             set raiser [expr {$i % 2 == 0 ? "raise_e1" : "raise_e2"}]
             set err [expr {$i % 2 == 0 ? "E1" : "E2"}]
@@ -380,7 +380,7 @@ proc erasedProgram {k contributors consumers early} {
         } else {
             lappend lines "        fn give_${i}() -> int:" "            $i" "        apply(give_$i)"
         }
-        lappend calls "r_$i = site_${i}():" "    on compiler::CompilerError:" "        -1"
+        lappend calls "r_$i = site_${i}():" "    on std::compiler::CompilerError:" "        -1"
     }
     lappend lines {*}$calls "0" ""
     return [join $lines \n]
@@ -398,8 +398,8 @@ if {"erased" in $parts} {
 # ---------------------------------------------------------------------------
 # contract: callback registries through verified structural contracts
 
-set contractDecls {import compiler
-import list
+set contractDecls {import std::compiler
+import std::list
 
 struct Handler:
     name: str
@@ -416,14 +416,14 @@ proc contractProgram {k} {
     set lines [split $::contractDecls \n]
     set calls {}
     for {set i 0} {$i < $k} {incr i} {
-        lappend lines "fn site_${i}() -> int errors compiler::CompilerError:" "    static compile:"
+        lappend lines "fn site_${i}() -> int errors std::compiler::CompilerError:" "    static compile:"
         switch -- [expr {$i % 4}] {
             0 { lappend lines "        fn add_${i}(x: int) -> int:" "            x + $i" "        dispatch(Handler \{name: \"h$i\", run: add_$i\}, 1)" }
             1 { lappend lines "        fn times_${i}(x: int) -> int:" "            x * $i" "        apply(times_$i, 2)" }
             2 { lappend lines "        fn want_${i}(x: int) -> int:" "            x" "        want_${i}(\"s\")" }
             3 { lappend lines "        missing_$i" }
         }
-        lappend calls "r_$i = site_${i}():" "    on compiler::CompilerError:" "        -1"
+        lappend calls "r_$i = site_${i}():" "    on std::compiler::CompilerError:" "        -1"
     }
     lappend lines {*}$calls "0" ""
     return [join $lines \n]
@@ -440,22 +440,22 @@ if {"contract" in $parts} {
 # probes: an ordinary application
 
 proc probesProgram {k nested} {
-    set lines {"import compiler" "import list" "" "struct Config:" "    level: int" ""}
+    set lines {"import std::compiler" "import std::list" "" "struct Config:" "    level: int" ""}
     set pad [expr {$nested ? "    " : ""}]
     if {$nested} {
         lappend lines "fn detect() -> List\[bool\]:"
     }
     set names {}
     for {set i 0} {$i < $k} {incr i} {
-        lappend lines "${pad}fn feature_${i}() -> int errors compiler::CompilerError:" "${pad}    static compile:"
+        lappend lines "${pad}fn feature_${i}() -> int errors std::compiler::CompilerError:" "${pad}    static compile:"
         switch -- [expr {$i % 5}] {
-            0 { lappend lines "${pad}        list::length(\[1, 2, $i\])" }
+            0 { lappend lines "${pad}        std::list::length(\[1, 2, $i\])" }
             1 { lappend lines "${pad}        optional_api_${i}(1)" }
             2 { lappend lines "${pad}        c = Config \{level: $i\}" "${pad}        c.level" }
             3 { lappend lines "${pad}        c = Config \{level: $i\}" "${pad}        c.verbosity" }
             4 { lappend lines "${pad}        fn adapt_${i}(x: str) -> int:" "${pad}            1" "${pad}        adapt_${i}($i)" }
         }
-        lappend lines "${pad}fn has_${i}() -> bool:" "${pad}    r = feature_${i}():" "${pad}        on compiler::CompilerError:" "${pad}            -1" "${pad}    r >= 0"
+        lappend lines "${pad}fn has_${i}() -> bool:" "${pad}    r = feature_${i}():" "${pad}        on std::compiler::CompilerError:" "${pad}            -1" "${pad}    r >= 0"
         lappend names "has_${i}()"
     }
     if {$nested} {
@@ -478,20 +478,20 @@ if {"probes" in $parts} {
 # methods: method-style calls with several candidates
 
 proc methodsProgram {k} {
-    set lines {"import compiler" "import list" "import str" ""}
+    set lines {"import std::compiler" "import std::list" "import std::str" ""}
     set calls {}
     for {set i 0} {$i < $k} {incr i} {
-        lappend lines "fn site_${i}() -> int errors compiler::CompilerError:" "    static compile:"
+        lappend lines "fn site_${i}() -> int errors std::compiler::CompilerError:" "    static compile:"
         if {$i % 3 == 2} {
             lappend lines "        xs = \[1, 2, $i\]" "        fn want_${i}(x: int) -> int:" "            x" "        want_${i}(xs.length() == 3)"
         } else {
             lappend lines "        xs = \[1, 2, $i\]" "        s = \"abc\"" "        xs.length() + s.length()"
         }
-        lappend calls "r_$i = site_${i}():" "    on compiler::CompilerError:" "        -1"
+        lappend calls "r_$i = site_${i}():" "    on std::compiler::CompilerError:" "        -1"
     }
     # A call outside every block whose receiver a block's decision changes.
-    lappend lines "fn outside() -> int errors compiler::CompilerError:" "    xs = static compile:" "        \[1, missing_outside\]" "    xs.length()"
-    lappend calls "r_out = outside():" "    on compiler::CompilerError:" "        -1"
+    lappend lines "fn outside() -> int errors std::compiler::CompilerError:" "    xs = static compile:" "        \[1, missing_outside\]" "    xs.length()"
+    lappend calls "r_out = outside():" "    on std::compiler::CompilerError:" "        -1"
     lappend lines {*}$calls "0" ""
     return [join $lines \n]
 }

@@ -3,17 +3,17 @@ tree: 924482b9774589a55612ffcec5f394e11b3d6db4 (worktree diff:  1 file changed, 
 
 == used instances: 27
   i0 <program> generic
-  i2 char::codepoint<UnicodeChar> 
-  i16 byte::high_nibble<int> 
-  i17 byte::nibble<int> 
-  i3 byte::from_int<int> 
-  i1 byte::set<List[UnicodeChar]> 
-  i12 ascii::is_digit<int> 
-  i10 ascii::is_upper<int> 
-  i11 ascii::is_lower<int> 
-  i9 ascii::is_alphabetic<int> 
-  i8 ascii::is_alphanumeric<int> 
-  i19 web::emailish?<str> ; materializes e173 e183 e211 e226 e241 e260
+  i2 std::char::codepoint<UnicodeChar> 
+  i16 std::byte::high_nibble<int> 
+  i17 std::byte::nibble<int> 
+  i3 std::byte::from_int<int> 
+  i1 std::byte::set<List[UnicodeChar]> 
+  i12 std::ascii::is_digit<int> 
+  i10 std::ascii::is_upper<int> 
+  i11 std::ascii::is_lower<int> 
+  i9 std::ascii::is_alphabetic<int> 
+  i8 std::ascii::is_alphanumeric<int> 
+  i19 std::web::emailish?<str> ; materializes e173 e183 e211 e226 e241 e260
   i21 char_at<generic> generic; CLOSED; OPEN; blockescape-flattened captures=[v]
   i26 local_char?<generic> generic; not-closed; OPEN
   i25 label_char?<str> 
@@ -21,8 +21,8 @@ tree: 924482b9774589a55612ffcec5f394e11b3d6db4 (worktree diff:  1 file changed, 
   i24 scan_alpha<generic> generic; CLOSED; OPEN; blockescape-flattened captures=[n, v]
   i23 tld?<generic> generic; CLOSED; OPEN; blockescape-flattened captures=[n, v]
   i22 domain?<generic> generic; CLOSED; OPEN; blockescape-flattened captures=[n, v]
-  i7 web::is_unreserved<int> 
-  i4 web::uri_escape_text<str> 
+  i7 std::web::is_unreserved<int> 
+  i4 std::web::uri_escape_text<str> 
   i15 high_nibble<int> 
   i14 hex_pair<int> 
   i13 esc_bytes<List[int], int, str> 
@@ -31,32 +31,32 @@ tree: 924482b9774589a55612ffcec5f394e11b3d6db4 (worktree diff:  1 file changed, 
   i18 check<int, int, str, str> 
 
 == block environments (used instances; envless = no lexical captures)
-  char::codepoint<UnicodeChar> (e2): envless captures=[] staticRefs=[]
-  byte::high_nibble<int> (e7): envless captures=[] staticRefs=[]
-  byte::nibble<int> (e19): envless captures=[] staticRefs=[]
-  byte::from_int<int> (e58): envless captures=[] staticRefs=[]
-  byte::set<List[UnicodeChar]> (e73): envless captures=[] staticRefs=[byte::from_int, char::codepoint]
-  ascii::is_digit<int> (e86): envless captures=[] staticRefs=[]
-  ascii::is_upper<int> (e101): envless captures=[] staticRefs=[]
-  ascii::is_lower<int> (e116): envless captures=[] staticRefs=[]
-  ascii::is_alphabetic<int> (e131): envless captures=[] staticRefs=[ascii::is_upper, ascii::is_lower]
-  ascii::is_alphanumeric<int> (e144): envless captures=[] staticRefs=[ascii::is_alphabetic, ascii::is_digit]
-  web::emailish?<str> (e167): envless captures=[] staticRefs=[web::local_extra_chars]
+  std::char::codepoint<UnicodeChar> (e2): envless captures=[] staticRefs=[]
+  std::byte::high_nibble<int> (e7): envless captures=[] staticRefs=[]
+  std::byte::nibble<int> (e19): envless captures=[] staticRefs=[]
+  std::byte::from_int<int> (e58): envless captures=[] staticRefs=[]
+  std::byte::set<List[UnicodeChar]> (e73): envless captures=[] staticRefs=[std::byte::from_int, std::char::codepoint]
+  std::ascii::is_digit<int> (e86): envless captures=[] staticRefs=[]
+  std::ascii::is_upper<int> (e101): envless captures=[] staticRefs=[]
+  std::ascii::is_lower<int> (e116): envless captures=[] staticRefs=[]
+  std::ascii::is_alphabetic<int> (e131): envless captures=[] staticRefs=[std::ascii::is_upper, std::ascii::is_lower]
+  std::ascii::is_alphanumeric<int> (e144): envless captures=[] staticRefs=[std::ascii::is_alphabetic, std::ascii::is_digit]
+  std::web::emailish?<str> (e167): envless captures=[] staticRefs=[std::web::local_extra_chars]
   char_at<generic> (e173): captures captures=[v] staticRefs=[]
-  local_char?<generic> (e183): envless captures=[] staticRefs=[web::local_extra_chars]
+  local_char?<generic> (e183): envless captures=[] staticRefs=[std::web::local_extra_chars]
   label_char?<str> (e197): envless captures=[] staticRefs=[]
   scan_while<generic> (e211): captures captures=[n, char_at] staticRefs=[]
   scan_alpha<generic> (e226): captures captures=[n, char_at] staticRefs=[]
   tld?<generic> (e241): captures captures=[scan_alpha, n] staticRefs=[]
   domain?<generic> (e260): captures captures=[n, char_at, tld?, label_char?] staticRefs=[]
-  web::is_unreserved<int> (e371): envless captures=[] staticRefs=[ascii::is_alphanumeric, web::additional_unreserved_chars]
-  web::uri_escape_text<str> (e385): envless captures=[] staticRefs=[byte::nibble, byte::high_nibble, web::hex_digits, web::is_unreserved]
-  high_nibble<int> (e387): envless captures=[] staticRefs=[byte::nibble, byte::high_nibble]
-  hex_pair<int> (e394): captures captures=[high_nibble] staticRefs=[web::hex_digits]
+  std::web::is_unreserved<int> (e371): envless captures=[] staticRefs=[std::ascii::is_alphanumeric, std::web::additional_unreserved_chars]
+  std::web::uri_escape_text<str> (e385): envless captures=[] staticRefs=[std::byte::nibble, std::byte::high_nibble, std::web::hex_digits, std::web::is_unreserved]
+  high_nibble<int> (e387): envless captures=[] staticRefs=[std::byte::nibble, std::byte::high_nibble]
+  hex_pair<int> (e394): captures captures=[high_nibble] staticRefs=[std::web::hex_digits]
   esc_bytes<List[int], int, str> (e411): captures captures=[esc_bytes, hex_pair] staticRefs=[]
-  esc_char<str> (e440): captures captures=[esc_bytes] staticRefs=[web::is_unreserved]
+  esc_char<str> (e440): captures captures=[esc_bytes] staticRefs=[std::web::is_unreserved]
   esc_from<str, int, str> (e473): captures captures=[esc_from, esc_char] staticRefs=[]
-  check<int, int, str, str> (e508): captures captures=[check] staticRefs=[web::emailish?]
+  check<int, int, str, str> (e508): captures captures=[check] staticRefs=[std::web::emailish?]
 
 == OpenInstances: 6 (char_at<generic>, local_char?<generic>, scan_while<generic>, scan_alpha<generic>, tld?<generic>, domain?<generic>)
 == blockescape virtual bindings: 5
@@ -119,17 +119,17 @@ tree: 924482b9774589a55612ffcec5f394e11b3d6db4 (worktree diff:  1 file changed, 
   per-function machine bytes: 1443 39 289 617 74 74 74 125 125 601 262 222 238 528 452 452 1244 137 94 103 474 491 426 451 344
 
 == parameter entry Ranges (hir::range::analyze)
-  char::codepoint<UnicodeChar>: c=[-∞, +∞]
-  byte::high_nibble<int>: b=[-∞, +∞]
-  byte::nibble<int>: x=[0, 240] {0,16,32,48,64,80,96,112,128,144,160,176,192,208,224,240}
-  byte::from_int<int>: value=[0, +∞]
-  byte::set<List[UnicodeChar]>: chars=[-∞, +∞]
-  ascii::is_digit<int>: b=[0, 255]
-  ascii::is_upper<int>: b=[0, 255]
-  ascii::is_lower<int>: b=[0, 255]
-  ascii::is_alphabetic<int>: b=[0, 255]
-  ascii::is_alphanumeric<int>: b=[0, 255]
-  web::emailish?<str>: v=[-∞, +∞]
+  std::char::codepoint<UnicodeChar>: c=[-∞, +∞]
+  std::byte::high_nibble<int>: b=[-∞, +∞]
+  std::byte::nibble<int>: x=[0, 240] {0,16,32,48,64,80,96,112,128,144,160,176,192,208,224,240}
+  std::byte::from_int<int>: value=[0, +∞]
+  std::byte::set<List[UnicodeChar]>: chars=[-∞, +∞]
+  std::ascii::is_digit<int>: b=[0, 255]
+  std::ascii::is_upper<int>: b=[0, 255]
+  std::ascii::is_lower<int>: b=[0, 255]
+  std::ascii::is_alphabetic<int>: b=[0, 255]
+  std::ascii::is_alphanumeric<int>: b=[0, 255]
+  std::web::emailish?<str>: v=[-∞, +∞]
   char_at<generic>: i=[-∞, +∞]
   local_char?<generic>: c=[-∞, +∞]
   label_char?<str>: c=[-∞, +∞]
@@ -137,8 +137,8 @@ tree: 924482b9774589a55612ffcec5f394e11b3d6db4 (worktree diff:  1 file changed, 
   scan_alpha<generic>: start=[-∞, +∞]
   tld?<generic>: i=[-∞, +∞]
   domain?<generic>: start=[-∞, +∞]
-  web::is_unreserved<int>: b=[0, 255]
-  web::uri_escape_text<str>: s=[-∞, +∞]
+  std::web::is_unreserved<int>: b=[0, 255]
+  std::web::uri_escape_text<str>: s=[-∞, +∞]
   high_nibble<int>: b=[-∞, +∞]
   hex_pair<int>: b=[-∞, +∞]
   esc_bytes<List[int], int, str>: bytes=[-∞, +∞]  i=[0, 4611686018427387903]  acc=[-∞, +∞]

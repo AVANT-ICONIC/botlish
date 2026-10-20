@@ -10,7 +10,7 @@
 # against the tree before the conversion and once against the tree after it,
 # on every backend, and every outcome (value, or error code) must be
 # identical. The compiler is this checkout's in both; only the corpus
-# sources (examples/, bench/, lib/) differ: the BEFORE tree is extracted
+# sources (examples/, bench/, stdlib/) differ: the BEFORE tree is extracted
 # from COMMIT with `git archive`, the AFTER tree is DIR (default: this
 # checkout).
 #
@@ -19,7 +19,7 @@
 #   program PATH              the corpus file probed: an entry program (the
 #                             driver is appended after its own statements,
 #                             as tests/stdlib.test's drivers are) or a library
-#                             module lib/NS.bot (the driver follows
+#                             module stdlib/NS.bot (the driver follows
 #                             `import NS`)
 #   probe ID DRIVER           Botlish statements whose last value is the
 #                             probe's outcome; a declared error the driver
@@ -60,7 +60,7 @@ source [file join $root examples stdlib corpus.tcl]
 set scratch [file tempdir refactor-probe]
 set beforeTree [file join $scratch before]
 file mkdir $beforeTree
-exec git -C $root archive $before examples bench lib | tar -x -C $beforeTree
+exec git -C $root archive $before examples bench stdlib | tar -x -C $beforeTree
 set realLib $::core::libraryDir
 
 proc readText {path} {
@@ -83,8 +83,8 @@ proc handled {driver errors} {
 # The HIR of PROGRAM (relative path) of TREE followed by DRIVER, handling
 # the declared errors the driver leaves unhandled (one per rejection).
 proc probeHir {tree program driver} {
-    if {[string match lib/*.bot $program]} {
-        set ns [string map {/ ::} [string range [file rootname $program] 4 end]]
+    if {[string match stdlib/*.bot $program]} {
+        set ns std::[string map {/ ::} [string range [file rootname $program] 7 end]]
         set prefix "import $ns\n"
     } else {
         set prefix "[readText [file join $tree $program]]\n"
@@ -94,7 +94,7 @@ proc probeHir {tree program driver} {
         append prefix $line
     }
     set errors {}
-    set ::core::libraryDir [file join $tree lib]
+    set ::core::libraryDir [file join $tree stdlib]
     try {
         while 1 {
             set text [expr {$errors eq {} ? $driver : [handled $driver $errors]}]
@@ -118,7 +118,7 @@ proc outcomes {tree program driver} {
     if {[catch {probeHir $tree $program $driver} hir options]} {
         return [lrepeat [llength $backends] [list rejected [dict get $options -errorcode]]]
     }
-    set ::core::libraryDir [file join $tree lib]
+    set ::core::libraryDir [file join $tree stdlib]
     try {
         return [lmap backend $backends {outcome $backend $hir}]
     } finally {

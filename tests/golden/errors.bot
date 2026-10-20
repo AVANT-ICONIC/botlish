@@ -6,12 +6,12 @@
 # module-qualified error identity, the builtin errors (IndexNotFound,
 # LowerUnderrun, UpperOverrun), run-time errors of accepted static compile
 # blocks, and completion precision around callables.
-import byte
-import compiler
-import list
-import mutable_array
-import str
-import test
+import std::byte
+import std::compiler
+import std::list
+import std::mutable_array
+import std::str
+import std::test
 
 # ---------------------------------------------------------------------------
 # Declarations the tests need (top-level only). Each keeps the Tcl test's own
@@ -67,28 +67,28 @@ error MyApplicationError:
     code: int
 
 # ---------------------------------------------------------------------------
-# A custom check: a rejection's code, location and message. lib/test.bot
+# A custom check: a rejection's code, location and message. stdlib/test.bot
 # compares codes and locations only; the Tcl tests that use this compare the
 # message too (its wording, or the error identity only the message names).
 # BODY goes through an untyped parameter, as in the library's own helpers.
 
 # BODY's block must be rejected with EXPECTED and exactly the message WANTED,
 # and, when LINE is positive, at LINE:COLUMN of this file.
-nomethod fn err_rejects_message(name: str, expected: compiler::DiagnosticCode, line: int, column: int, wanted: str, body, context suite: test::Suite) -> unit:
-    fn check() -> test::Match:
-        place = compiler::SourceLocation {line: line, column: column}
+nomethod fn err_rejects_message(name: str, expected: std::compiler::DiagnosticCode, line: int, column: int, wanted: str, body, context suite: std::test::Suite) -> unit:
+    fn check() -> std::test::Match:
+        place = std::compiler::SourceLocation {line: line, column: column}
         shown = if line > 0:
-            test::diagnostic_text(expected, place).concat(", message: ").concat(wanted)
+            std::test::diagnostic_text(expected, place).concat(", message: ").concat(wanted)
         else:
-            "compiler diagnostic ".concat(test::code_name(expected)).concat(", message: ").concat(wanted)
+            "compiler diagnostic ".concat(std::test::code_name(expected)).concat(", message: ").concat(wanted)
         actual = body():
-            on compiler::CompilerError {code, primary, message}:
+            on std::compiler::CompilerError {code, primary, message}:
                 located = line <= 0 or (primary.line == line and primary.column == column)
                 if code == expected and located and message == wanted:
-                    return test::passed()
-                return test::mismatch(shown, test::diagnostic_text(code, primary), message)
-        test::mismatch(shown, "value ".concat(test::describe(actual)), "")
-    test::case(name, check)
+                    return std::test::passed()
+                return std::test::mismatch(shown, std::test::diagnostic_text(code, primary), message)
+        std::test::mismatch(shown, "value ".concat(std::test::describe(actual)), "")
+    std::test::case(name, check)
 
 # ---------------------------------------------------------------------------
 # Layout. A test body is a function of no arguments named b_..., nested in the
@@ -112,7 +112,7 @@ nomethod fn err_rejects_message(name: str, expected: compiler::DiagnosticCode, l
 # call, so a handler for HocE2 alone is UNHANDLED-ERROR, in bad, for
 # HocE1. The function is pinned by the location (generic(x) in bad), the
 # error by the message, which is where the diagnostic names it.
-fn b_original() errors compiler::CompilerError:
+fn b_original() errors std::compiler::CompilerError:
     static compile:
         fn raise(x) -> int errors HocE1, HocE2:
             if x == 1:
@@ -137,7 +137,7 @@ fn b_original() errors compiler::CompilerError:
 # (VERIFIED-CALLABLE-CONTRACT-BOUNDARY.md) that was charged to the runner's
 # (c.run)() and the suite did not compile (NEW-FRAMEWORK-LIMITATION, C3);
 # now that call is bounded by its contract, errors: [].
-fn b_original_both() errors compiler::CompilerError:
+fn b_original_both() errors std::compiler::CompilerError:
     static compile:
         fn raise(x) -> int errors HocE1, HocE2:
             if x == 1:
@@ -164,7 +164,7 @@ fn b_original_both() errors compiler::CompilerError:
 # errors-rejects-unhandled-in-declaring-function: a function whose own
 # `errors` clause omits TooBig cannot let a call raise it (UNHANDLED-ERROR
 # at that call).
-fn b_unhandled_in_declaring() errors compiler::CompilerError:
+fn b_unhandled_in_declaring() errors std::compiler::CompilerError:
     static compile:
         fn check(n) -> int errors TooSmall, TooBig:
             if n < 0:
@@ -180,7 +180,7 @@ fn b_unhandled_in_declaring() errors compiler::CompilerError:
 
 # errors-rejects-fail-of-undeclared-name: `errors Whatever` and
 # `fail Whatever` with no `error Whatever` declaration.
-fn b_undeclared_name() errors compiler::CompilerError:
+fn b_undeclared_name() errors std::compiler::CompilerError:
     static compile:
         fn f() -> int errors Whatever:
             fail Whatever
@@ -190,7 +190,7 @@ fn b_undeclared_name() errors compiler::CompilerError:
 # test-defined bounded function -- an in-range literal needs no handler,
 # an out-of-range literal on either side is KNOWN-ERROR, a dynamic
 # argument leaves both errors possible (UNHANDLED-ERROR).
-fn b_bounded_safe() errors compiler::CompilerError:
+fn b_bounded_safe() errors std::compiler::CompilerError:
     static compile:
         fn bounded(x: int) -> int errors TooSmall, TooLarge:
             if x < 10:
@@ -202,7 +202,7 @@ fn b_bounded_safe() errors compiler::CompilerError:
                     x
         bounded(15)
 
-fn b_bounded_too_small() errors compiler::CompilerError:
+fn b_bounded_too_small() errors std::compiler::CompilerError:
     static compile:
         fn bounded(x: int) -> int errors TooSmall, TooLarge:
             if x < 10:
@@ -214,7 +214,7 @@ fn b_bounded_too_small() errors compiler::CompilerError:
                     x
         bounded(5)
 
-fn b_bounded_too_large() errors compiler::CompilerError:
+fn b_bounded_too_large() errors std::compiler::CompilerError:
     static compile:
         fn bounded(x: int) -> int errors TooSmall, TooLarge:
             if x < 10:
@@ -226,7 +226,7 @@ fn b_bounded_too_large() errors compiler::CompilerError:
                     x
         bounded(25)
 
-fn b_bounded_dynamic() errors compiler::CompilerError:
+fn b_bounded_dynamic() errors std::compiler::CompilerError:
     static compile:
         fn bounded(x: int) -> int errors TooSmall, TooLarge:
             if x < 10:
@@ -241,12 +241,12 @@ fn b_bounded_dynamic() errors compiler::CompilerError:
 
 # errors-byte-from-int-known-failure-with-handler-still-rejected: a
 # handler does not make a statically known failure of a module's function
-# (byte::from_int(999): byte::AboveRange) legal.
-fn b_byte_known_failure() errors compiler::CompilerError:
+# (std::byte::from_int(999): std::byte::AboveRange) legal.
+fn b_byte_known_failure() errors std::compiler::CompilerError:
     static compile:
-        byte::high_nibble(0)
-        x = byte::from_int(999):
-            on byte::AboveRange:
+        std::byte::high_nibble(0)
+        x = std::byte::from_int(999):
+            on std::byte::AboveRange:
                 255
         x
 
@@ -257,7 +257,7 @@ fn register_explicit_errors_tests(big: int):
     # compiler rejects (KNOWN-ERROR: the Tcl helper compiles with -strict 0
     # and never looks at diagnostics); here 20 is BIG, a parameter of this
     # registration function, which the analysis cannot decide.
-    fn b_propagation() errors compiler::CompilerError:
+    fn b_propagation() errors std::compiler::CompilerError:
         static compile:
             fn check(n) -> int errors TooSmall, TooBig:
                 if n < 0:
@@ -275,23 +275,23 @@ fn register_explicit_errors_tests(big: int):
                 on TooBig:
                     -2
             r
-    test::value("errors-propagation-through-declaring-caller", -2, b_propagation)
+    std::test::value("errors-propagation-through-declaring-caller", -2, b_propagation)
 
     # The bodies above (top-level: they capture nothing).
-    test::rejects_at("errors-rejects-unhandled-in-declaring-function", compiler::DiagnosticCode::UnhandledError, 178, 13, b_unhandled_in_declaring)
-    test::rejects("errors-rejects-fail-of-undeclared-name", compiler::DiagnosticCode::UndeclaredError, b_undeclared_name)
-    test::value("errors-generic-bounded-fixture/safe", 15, b_bounded_safe)
-    test::rejects("errors-generic-bounded-fixture/too-small", compiler::DiagnosticCode::KnownError, b_bounded_too_small)
-    test::rejects("errors-generic-bounded-fixture/too-large", compiler::DiagnosticCode::KnownError, b_bounded_too_large)
-    test::rejects_at("errors-generic-bounded-fixture/dynamic", compiler::DiagnosticCode::UnhandledError, 240, 13, b_bounded_dynamic)
-    test::rejects("errors-byte-from-int-known-failure-with-handler-still-rejected", compiler::DiagnosticCode::KnownError, b_byte_known_failure)
+    std::test::rejects_at("errors-rejects-unhandled-in-declaring-function", std::compiler::DiagnosticCode::UnhandledError, 178, 13, b_unhandled_in_declaring)
+    std::test::rejects("errors-rejects-fail-of-undeclared-name", std::compiler::DiagnosticCode::UndeclaredError, b_undeclared_name)
+    std::test::value("errors-generic-bounded-fixture/safe", 15, b_bounded_safe)
+    std::test::rejects("errors-generic-bounded-fixture/too-small", std::compiler::DiagnosticCode::KnownError, b_bounded_too_small)
+    std::test::rejects("errors-generic-bounded-fixture/too-large", std::compiler::DiagnosticCode::KnownError, b_bounded_too_large)
+    std::test::rejects_at("errors-generic-bounded-fixture/dynamic", std::compiler::DiagnosticCode::UnhandledError, 240, 13, b_bounded_dynamic)
+    std::test::rejects("errors-byte-from-int-known-failure-with-handler-still-rejected", std::compiler::DiagnosticCode::KnownError, b_byte_known_failure)
 
 # ---------------------------------------------------------------------------
 # error-payloads.test
 
 # ep-fail-missing-payload: `fail NAME` of an error that declares a
 # payload is MISSING-ERROR-PAYLOAD; the Tcl test pins the message too.
-fn b_missing_payload() errors compiler::CompilerError:
+fn b_missing_payload() errors std::compiler::CompilerError:
     static compile:
         fn f(x: int) errors ObjectNotFound:
             fail ObjectNotFound
@@ -300,19 +300,19 @@ fn b_missing_payload() errors compiler::CompilerError:
 # ep-fail-unexpected-payload: a payload given to a payload-free error,
 # the empty `{}` included, is UNEXPECTED-ERROR-PAYLOAD; the bare `fail`
 # of it is fine.
-fn b_unexpected_payload() errors compiler::CompilerError:
+fn b_unexpected_payload() errors std::compiler::CompilerError:
     static compile:
         fn f(x: int) errors ConnectionLost:
             fail ConnectionLost {message: "lost"}
         1
 
-fn b_unexpected_empty_payload() errors compiler::CompilerError:
+fn b_unexpected_empty_payload() errors std::compiler::CompilerError:
     static compile:
         fn f(x: int) errors ConnectionLost:
             fail ConnectionLost {}
         1
 
-fn b_payload_free_fail() errors compiler::CompilerError:
+fn b_payload_free_fail() errors std::compiler::CompilerError:
     static compile:
         fn f(x: int) -> int errors ConnectionLost:
             if x > 1:
@@ -323,7 +323,7 @@ fn b_payload_free_fail() errors compiler::CompilerError:
 fn register_error_payloads_tests():
     # ep-principal: the whole binding, a renaming destructuring and an
     # ignored payload (and the success path), on every backend.
-    fn b_principal() errors compiler::CompilerError:
+    fn b_principal() errors std::compiler::CompilerError:
         static compile:
             fn fetch(uri: str) -> str errors PageNotFound:
                 if uri == "":
@@ -349,11 +349,11 @@ fn register_error_payloads_tests():
                     on PageNotFound:
                         "fallback"
             [whole("/x"), rename("/z"), ignored("/v"), whole("")]
-    test::value("ep-principal", ["/x", "/z", "fallback", "home"], b_principal)
+    std::test::value("ep-principal", ["/x", "/z", "fallback", "home"], b_principal)
 
     # ep-principal-ints: field destructuring and nested destructuring of the
     # payload, failing and succeeding.
-    fn b_principal_ints() errors compiler::CompilerError:
+    fn b_principal_ints() errors std::compiler::CompilerError:
         static compile:
             fn fetch(uri: str) -> str errors PageNotFound:
                 if uri == "":
@@ -370,7 +370,7 @@ fn register_error_payloads_tests():
                 page = fetch(uri):
                     on PageNotFound {statusCode}:
                         return statusCode
-                str::length(page)
+                std::str::length(page)
             fn nested(uri: str) -> int:
                 page = fetch(uri):
                     on PageNotFound {
@@ -379,21 +379,21 @@ fn register_error_payloads_tests():
                             length,
                         }
                     }:
-                        return length + str::length(payloadStream)
+                        return length + std::str::length(payloadStream)
                 -1
             [fields("/y"), nested("/w"), fields(""), nested("")]
-    test::value("ep-principal-ints", [404, 0, 4, -1], b_principal_ints)
+    std::test::value("ep-principal-ints", [404, 0, 4, -1], b_principal_ints)
 
     # The bodies above (top-level: they capture nothing).
-    err_rejects_message("ep-fail-missing-payload", compiler::DiagnosticCode::MissingErrorPayload, 0, 0, "error \"ObjectNotFound\" carries a payload, which \"fail ObjectNotFound\" must construct: write \"fail ObjectNotFound {uri: ...}\" (the error's name alone is not its payload)", b_missing_payload)
-    test::rejects("ep-fail-unexpected-payload/fields", compiler::DiagnosticCode::UnexpectedErrorPayload, b_unexpected_payload)
-    test::rejects("ep-fail-unexpected-payload/empty", compiler::DiagnosticCode::UnexpectedErrorPayload, b_unexpected_empty_payload)
-    test::value("ep-fail-unexpected-payload/payload-free", 1, b_payload_free_fail)
+    err_rejects_message("ep-fail-missing-payload", std::compiler::DiagnosticCode::MissingErrorPayload, 0, 0, "error \"ObjectNotFound\" carries a payload, which \"fail ObjectNotFound\" must construct: write \"fail ObjectNotFound {uri: ...}\" (the error's name alone is not its payload)", b_missing_payload)
+    std::test::rejects("ep-fail-unexpected-payload/fields", std::compiler::DiagnosticCode::UnexpectedErrorPayload, b_unexpected_payload)
+    std::test::rejects("ep-fail-unexpected-payload/empty", std::compiler::DiagnosticCode::UnexpectedErrorPayload, b_unexpected_empty_payload)
+    std::test::value("ep-fail-unexpected-payload/payload-free", 1, b_payload_free_fail)
 
     # ep-propagation-through-handled-call: an error the handlers of a handled
     # call do not name passes through it unchanged -- identity and payload --
     # while the one it names is handled there.
-    fn b_through_handled_call() errors compiler::CompilerError:
+    fn b_through_handled_call() errors std::compiler::CompilerError:
         static compile:
             fn raise(k: int, v: int) -> int errors E1, E2, E3:
                 if k == 1:
@@ -417,11 +417,11 @@ fn register_error_payloads_tests():
                         return ["E3", uri]
                 r
             [op(1, 5), op(2, 5), op(3, 5), op(0, 5)]
-    test::value("ep-propagation-through-handled-call", [["E1", {code: 5}], ["E2", 6], 105, 5], b_through_handled_call)
+    std::test::value("ep-propagation-through-handled-call", [["E1", {code: 5}], ["E2", 6], 105, 5], b_through_handled_call)
 
     # ep-same-shape-distinct: errors with identical payload fields are handled
     # by their own handlers only: selection compares identities, never shapes.
-    fn b_same_shape() errors compiler::CompilerError:
+    fn b_same_shape() errors std::compiler::CompilerError:
         static compile:
             fn g(x: int) -> int errors A, ObjectNotFound:
                 if x == 1:
@@ -432,41 +432,41 @@ fn register_error_payloads_tests():
             fn f(x: int) -> str:
                 v = g(x):
                     on ObjectNotFound {uri}:
-                        return str::concat("object ", uri)
+                        return std::str::concat("object ", uri)
                     on A {uri}:
-                        return str::concat("a ", uri)
+                        return std::str::concat("a ", uri)
                 "none"
             [f(1), f(2), f(3)]
-    test::value("ep-same-shape-distinct", ["a a", "object o", "none"], b_same_shape)
+    std::test::value("ep-same-shape-distinct", ["a a", "object o", "none"], b_same_shape)
 
 # ---------------------------------------------------------------------------
 # namespaced-errors.test
 
 # nerr-stdlib-qualified-use: outside its module a stdlib error is spelled
-# qualified (list::find's NotFound is list::NotFound); the bare short name
+# qualified (std::list::find's NotFound is std::list::NotFound); the bare short name
 # is unknown there.
-fn b_qualified() errors compiler::CompilerError:
+fn b_qualified() errors std::compiler::CompilerError:
     static compile:
         fn big(x):
             x > 5
-        r = list::find([1, 2], big):
-            on list::NotFound:
+        r = std::list::find([1, 2], big):
+            on std::list::NotFound:
                 0
         r
 
-fn b_bare() errors compiler::CompilerError:
+fn b_bare() errors std::compiler::CompilerError:
     static compile:
         fn big(x):
             x > 5
-        r = list::find([1, 2], big):
+        r = std::list::find([1, 2], big):
             on NotFound:
                 0
         r
 
 fn register_namespaced_errors_tests():
     # The bodies above (top-level: they capture nothing).
-    test::value("nerr-stdlib-qualified-use/qualified", 0, b_qualified)
-    test::rejects("nerr-stdlib-qualified-use/bare", compiler::DiagnosticCode::UndeclaredError, b_bare)
+    std::test::value("nerr-stdlib-qualified-use/qualified", 0, b_qualified)
+    std::test::rejects("nerr-stdlib-qualified-use/bare", std::compiler::DiagnosticCode::UndeclaredError, b_bare)
 
 # ---------------------------------------------------------------------------
 # higher-order-completions.test
@@ -474,12 +474,12 @@ fn register_namespaced_errors_tests():
 fn register_higher_order_completions_tests():
     # The body is the first function of this file (top-level: it captures
     # nothing; see there).
-    err_rejects_message("hoc-original-payload-free", compiler::DiagnosticCode::UnhandledError, 128, 13, "this call may produce the declared error \"HocE1\", which is neither handled here nor admitted by the enclosing function's own \"errors\" declaration", b_original)
-    test::value("hoc-original-payload-free-both-handled", [0, -2, -1], b_original_both)
+    err_rejects_message("hoc-original-payload-free", std::compiler::DiagnosticCode::UnhandledError, 128, 13, "this call may produce the declared error \"HocE1\", which is neither handled here nor admitted by the enclosing function's own \"errors\" declaration", b_original)
+    std::test::value("hoc-original-payload-free-both-handled", [0, -2, -1], b_original_both)
 
     # hoc-precise-without-erasure: exact narrowing -- maybe(k, 1) can only
     # fail HocE1, so a handler for HocE1 alone is enough.
-    fn b_precise() errors compiler::CompilerError:
+    fn b_precise() errors std::compiler::CompilerError:
         static compile:
             fn maybe(x: int, y: int) -> int errors HocE1, HocMaybeE2:
                 if x < 0:
@@ -494,7 +494,7 @@ fn register_higher_order_completions_tests():
                     on HocE1:
                         -1
             [use0(-1), use0(5)]
-    test::value("hoc-precise-without-erasure", [-1, 5], b_precise)
+    std::test::value("hoc-precise-without-erasure", [-1, 5], b_precise)
 
 # ---------------------------------------------------------------------------
 # static-compile.test
@@ -503,26 +503,26 @@ fn register_static_compile_tests():
     # sc-success-runtime-error: an accepted (inner) block that fails at run
     # time fails with its ordinary error, the builtin IndexNotFound, never
     # CompilerError.
-    fn b_runtime_error() errors compiler::CompilerError:
+    fn b_runtime_error() errors std::compiler::CompilerError:
         static compile:
-            fn at(xs: List[int], i: int) -> int errors IndexNotFound, compiler::CompilerError:
+            fn at(xs: List[int], i: int) -> int errors IndexNotFound, std::compiler::CompilerError:
                 static compile:
-                    list::at(xs, i)
+                    std::list::at(xs, i)
             fn probe(i: int) -> int:
                 r = at([10, 20], i):
                     on IndexNotFound:
                         -1
-                    on compiler::CompilerError:
+                    on std::compiler::CompilerError:
                         -2
                 r
             [probe(1), probe(5)]
-    test::value("sc-success-runtime-error", [20, -1], b_runtime_error)
+    std::test::value("sc-success-runtime-error", [20, -1], b_runtime_error)
 
     # sc-success-declared-error: a declared application error raised by an
     # accepted (inner) block is that error, with its payload.
-    fn b_declared_error() errors compiler::CompilerError:
+    fn b_declared_error() errors std::compiler::CompilerError:
         static compile:
-            fn f(x: int) -> int errors MyApplicationError, compiler::CompilerError:
+            fn f(x: int) -> int errors MyApplicationError, std::compiler::CompilerError:
                 static compile:
                     if x > 1:
                         fail MyApplicationError {code: x}
@@ -531,11 +531,11 @@ fn register_static_compile_tests():
                 r = f(x):
                     on MyApplicationError {code}:
                         code * 100
-                    on compiler::CompilerError:
+                    on std::compiler::CompilerError:
                         -1
                 r
             [probe(1), probe(7)]
-    test::value("sc-success-declared-error", [1, 700], b_declared_error)
+    std::test::value("sc-success-declared-error", [1, 700], b_declared_error)
 
 # ---------------------------------------------------------------------------
 # mutable-array-type.test
@@ -545,52 +545,52 @@ fn register_mutable_array_type_tests():
     # freeze or copy past either end of the array is LowerUnderrun or
     # UpperOverrun -- builtin errors, handled by name. (The Tcl test compiles
     # six programs; here they are six functions of one body.)
-    fn b_bounds() errors compiler::CompilerError:
+    fn b_bounds() errors std::compiler::CompilerError:
         static compile:
             fn at_past_end(i: int) -> str:
-                m = mutable_array::create(3, 0)
-                r = mutable_array::at(m, i + 3):
+                m = std::mutable_array::create(3, 0)
+                r = std::mutable_array::at(m, i + 3):
                     on IndexNotFound:
                         return "IndexNotFound"
                 "completed"
             fn at_negative(i: int) -> str:
-                m = mutable_array::create(3, 0)
-                r = mutable_array::at(m, i - 1):
+                m = std::mutable_array::create(3, 0)
+                r = std::mutable_array::at(m, i - 1):
                     on IndexNotFound:
                         return "IndexNotFound"
                 "completed"
             fn set_past_end(i: int) -> str:
-                m = mutable_array::create(3, 0)
-                r = mutable_array::set(m, i + 3, 1):
+                m = std::mutable_array::create(3, 0)
+                r = std::mutable_array::set(m, i + 3, 1):
                     on IndexNotFound:
                         return "IndexNotFound"
                 "completed"
             fn freeze_past_end(i: int) -> str:
-                m = mutable_array::create(3, 0)
-                r = mutable_array::freeze(m, i + 4):
+                m = std::mutable_array::create(3, 0)
+                r = std::mutable_array::freeze(m, i + 4):
                     on LowerUnderrun:
                         return "LowerUnderrun"
                     on UpperOverrun:
                         return "UpperOverrun"
                 "completed"
             fn freeze_negative(i: int) -> str:
-                m = mutable_array::create(3, 0)
-                r = mutable_array::freeze(m, i - 1):
+                m = std::mutable_array::create(3, 0)
+                r = std::mutable_array::freeze(m, i - 1):
                     on LowerUnderrun:
                         return "LowerUnderrun"
                     on UpperOverrun:
                         return "UpperOverrun"
                 "completed"
             fn copy_past_end(i: int) -> str:
-                m = mutable_array::create(3, 0)
-                r = mutable_array::copy(m, i + 2, m, 0, 2):
+                m = std::mutable_array::create(3, 0)
+                r = std::mutable_array::copy(m, i + 2, m, 0, 2):
                     on LowerUnderrun:
                         return "LowerUnderrun"
                     on UpperOverrun:
                         return "UpperOverrun"
                 "completed"
             [at_past_end(0), at_negative(0), set_past_end(0), freeze_past_end(0), freeze_negative(0), copy_past_end(0)]
-    test::value("mat-run-7", ["IndexNotFound", "IndexNotFound", "IndexNotFound", "UpperOverrun", "LowerUnderrun", "UpperOverrun"], b_bounds)
+    std::test::value("mat-run-7", ["IndexNotFound", "IndexNotFound", "IndexNotFound", "UpperOverrun", "LowerUnderrun", "UpperOverrun"], b_bounds)
 
 # ---------------------------------------------------------------------------
 
@@ -602,6 +602,6 @@ fn register_errors_tests():
     register_static_compile_tests()
     register_mutable_array_type_tests()
 
-with context test::suite()
+with context std::test::suite()
 register_errors_tests()
-test::report()
+std::test::report()

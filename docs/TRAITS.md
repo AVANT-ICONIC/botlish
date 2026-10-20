@@ -106,7 +106,7 @@ loader (surface/modules.tcl) collects every loaded module's.
 ## Identity, namespaces and imports
 
 * A trait's identity is a namespace member's: `ui::named::Named` for a trait
-  declared by lib/ui/named.bot, the bare `Named` for one the entry program
+  declared by stdlib/ui/named.bot, the bare `Named` for one the entry program
   declares -- exactly like a struct or a refinement. Traits share the type
   namespace: no struct, type, refinement, built-in or second trait of the
   same identity (`TRAIT-NAME-COLLISION`).
@@ -171,7 +171,7 @@ trait `N`:
    top-level `fn` named `R` -- from an index of every unit's top-level
    definitions by source name, built from the resolved program before any
    check (`hir::traits::index`) -- or, for a built-in owner, the intrinsic
-   `owner::R` (`str::length`). Only the owner: no import, no call site, no
+   `owner::R` (`std::str::length`). Only the owner: no import, no call site, no
    other namespace, no helper the caller declares. A value binding is not an
    implementation. A namespace has at most one binding per name (a second is
    `DUPLICATE`; there are no overload sets), so there is never an ambiguous
@@ -376,7 +376,7 @@ witness is ordinary self recursion.
 ## Lowering and ABI
 
 * **Trait calls** lower, in build 2, to `call block(E_impl) args` -- the
-  same direct call (HIR `target {block E}` or `{native str::length}`) a
+  same direct call (HIR `target {block E}` or `{native std::str::length}`) a
   hand-written concrete call gets. In NIR: `%1 = call <impl id> %0`; in
   Cranelift: `call fnN(...)` through a `colocated` function reference; in
   machine code: `call` with an `R_X86_64_PLT32` relocation to the
@@ -423,7 +423,7 @@ witness is ordinary self recursion.
 
 * **`any`.** A view stored where `any` is accepted (`[v, 1]`, an untyped
   parameter, `v == x`) is only its concrete value: no trait metadata, and
-  the trait is not recovered from it (`describe(list::at(xs, 0))` is
+  the trait is not recovered from it (`describe(std::list::at(xs, 0))` is
   `TRAIT-NOT-SATISFIED`: `any` has no owner). Aggregate construction erases
   a view to `any` (`MakeStruct`/`MakeList`/...).
 * **Storage.** No trait-typed struct field, container element or function
@@ -452,8 +452,8 @@ witness is ordinary self recursion.
   separate.
 * **Integer domains** (`type Meters = Int in 0..1000`): the declaring
   namespace implements; the domain's range semantics are unchanged.
-* **Built-in scalars**: `str` through the `str` intrinsics (`str::length`,
-  `str::lowercase`, ...), `UnicodeChar` through `char`. `int` and `bool`
+* **Built-in scalars**: `str` through the `str` intrinsics (`std::str::length`,
+  `std::str::lowercase`, ...), `UnicodeChar` through `char`. `int` and `bool`
   have no operation namespace and satisfy nothing.
 * **Applied, container and callable types** are not witnesses yet (no
   canonical owner): the explanation says so.
@@ -777,7 +777,7 @@ snapshot:
 | `audit/same-failure/tools/fuzz.tcl` | 300 seeds, 0 failures, 0 extra warnings |
 | `audit/fixed-arity-list-return/tools/fuzz.tcl` | 300 seeds, 204 of 204 conversions, 0 failures, 0 extra warnings |
 
-After merging `main` (the `str::char_at`/encode_utf8 allocation work, with
+After merging `main` (the `std::str::char_at`/encode_utf8 allocation work, with
 Rust runtime changes, so the native backend was rebuilt; then refinement
 validators and the `PROVES-NAMING` warning, which touch hir/types.tcl,
 hir/resolve.tcl, hir/warnings.tcl, the parser and HIR text), on the merged
@@ -866,7 +866,7 @@ concrete function.
 specialized to a refined `str` and to a module struct with no erased path
 object). Still needed: the path refinements and their validators in the
 library, an I/O trait whose operations need a context (above), relational or
-multi-value operations (`io::copy`) as context operations rather than trait
+multi-value operations (`std::io::copy`) as context operations rather than trait
 methods, and probably trait-polymorphic functions inside modules used across
 module boundaries at scale (supported, but only exercised by tests).
 

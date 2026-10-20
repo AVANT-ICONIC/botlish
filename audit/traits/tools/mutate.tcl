@@ -90,7 +90,7 @@ proc writeFile {path text} {
 
 # A private copy of the compiler sources, tests and the trait fuzzer.
 set tree [file tempdir botlish-trait-mutants]
-foreach dir {compiler core hir surface lib tests audit/traits} {
+foreach dir {compiler core hir surface stdlib tests audit/traits} {
     file mkdir [file dirname [file join $tree $dir]]
     file copy [file join $root $dir] [file join $tree $dir]
 }

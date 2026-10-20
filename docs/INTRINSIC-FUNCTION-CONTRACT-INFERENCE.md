@@ -26,7 +26,7 @@ Headline results on the canonical corpus (all measured, see
   is now typed `bool` in both the source and the used instance view. The
   call stays `callvalue` (no target is inferred), but the instance
   `scan_while<generic>` goes from AOT **open to closed**, and its callers
-  `tld?`, `domain?` and `web::emailish?<str>` from transitively open to
+  `tld?`, `domain?` and `std::web::emailish?<str>` from transitively open to
   transitively closed.
 - **`local_char?(c)` and `label_char?(c)`** infer `c : str` from
   `is_tcl_alnum(c)`; set membership and `==` impose nothing.
@@ -397,7 +397,7 @@ generic helper.
 
 ## Why list helpers remain partly untyped
 
-**Q34. What does body inference discover about `list::all?`'s predicate?**
+**Q34. What does body inference discover about `std::list::all?`'s predicate?**
 Everything except its argument type: it is called with one argument, its
 result is an `if` condition (`bool`), the call admits no errors, and it
 does not escape. `xs` itself infers `list` (the loop iterable, checked).
@@ -408,17 +408,17 @@ does not escape. `xs` itself infers `list` (the loop iterable, checked).
 variable. That is the item-88 stop condition; no type variable was
 invented.
 
-**Q38. Which helpers remain untyped for this reason?** `list::any?`,
-`list::all?`, `list::none?`, `list::find` (predicate relational, `xs :
+**Q38. Which helpers remain untyped for this reason?** `std::list::any?`,
+`std::list::all?`, `std::list::none?`, `std::list::find` (predicate relational, `xs :
 list`), and `hashtable.bot`'s `ht_fold(combine)` (called with the
 caller-supplied accumulator and table values). Checked-only predicates
-still pass through them: `list::all?(["a", "b"], one?)` with `one?(c):
+still pass through them: `std::list::all?(["a", "b"], one?)` with `one?(c):
 length(c) == 1` is valid (`ic-checked-not-bearing`).
 
-**`scan_while` vs `list::all?` (item 57).** `scan_while` calls its predicate
+**`scan_while` vs `std::list::all?` (item 57).** `scan_while` calls its predicate
 with `char_at(i)`, whose type is intrinsic -- `char_at`'s result is
 `substring`'s registered `-result-type` `str`, whatever the caller passes --
-so its contract is concrete and complete. `list::all?` calls its predicate
+so its contract is concrete and complete. `std::list::all?` calls its predicate
 with an element of its own parameter `xs`, whose element type exists only at
 each call site. This is the boundary of the current non-generic type
 system: a body can fix its callable's argument types only when it
@@ -514,9 +514,9 @@ Both were implemented as variants and measured
   structural, bearing, `any` rejected): **10 of 31 canonical programs are
   rejected, including 4 of the 8 canonical benchmarks**: `lex-strategy`
   (`classifier(c)` and `valid_chars(list_get(tokens, i), ...)`),
-  `source-checks` (`list::find(candidates, invalid_name?)` is an erasure of
+  `source-checks` (`std::list::find(candidates, invalid_name?)` is an erasure of
   a now-bearing callable into a relational helper), `test-selection` (four
-  sites, e.g. `test_name(found)` with `found` from `list::find`),
+  sites, e.g. `test_name(found)` with `found` from `std::list::find`),
   `uri-steady` (`hex_pair(list_get(bytes, i))`), and `csv*`, `hashtable`,
   `matmul`. Not one is a real type error (every such program runs correctly
   on every backend); every one is an argument of static type `any` because
@@ -624,7 +624,7 @@ call result there.
 
 ## scan_while before/after
 
-Source (unchanged, `lib/web.bot:126`):
+Source (unchanged, `stdlib/web.bot:126`):
 
 ```
 fn scan_while(start, predicate):
@@ -643,7 +643,7 @@ fn scan_while(start, predicate):
 | call error contract | none (untyped: charged nothing) | `[]` (charged `[]`) |
 | call form (Q25) | `callvalue` | `callvalue` |
 | instance `scan_while<generic>` AOT (Q26) | **open**: `DynamicCall`, `UnknownCallResultKind` | **closed** |
-| `tld?`, `domain?`, `web::emailish?<str>` | closed, transitively open | closed, transitively closed |
+| `tld?`, `domain?`, `std::web::emailish?<str>` | closed, transitively open | closed, transitively closed |
 | instance label | `scan_while<generic>` | `scan_while<generic>` |
 | generated code | `guardbool` on the call's result | no guard: the result is proven `bool` (-32 bytes) |
 
@@ -715,7 +715,7 @@ which 9 declared and **363 untyped and inspected (Q43)**.
 | narrowed, structural `Fn` (Q46) | 1 (`scan_while`'s predicate) |
 | narrowed, trusted non-`Fn` | 0 |
 | **any**: no requirement (Q45) | 44 |
-| **any**: relational callable constraint (Q47) | 5 (`list::any?/all?/none?/find`'s predicate, `ht_fold`'s `combine`) |
+| **any**: relational callable constraint (Q47) | 5 (`std::list::any?/all?/none?/find`'s predicate, `ht_fold`'s `combine`) |
 | conflicting requirements (Q48) | 0 |
 
 So **314 of 363 narrowed (86.5%)** and 49 remain `any`. By type: `int` 136,
@@ -727,7 +727,7 @@ Before this milestone every one of the 363 was `any`.
 
 **Q49. Which real functions gained the most useful precision?**
 `scan_while` (its predicate contract types the corpus's hottest indirect
-call and closes its AOT region), `web::emailish?(v)` and its helpers
+call and closes its AOT region), `std::web::emailish?(v)` and its helpers
 (`char_at(i)`, `tld?(i)`, `domain?(start)`: `str`/`int`), the CSV and
 hash-table helpers (`table : mutarray`, indices `int`, fields `str`), and
 `choose_classifier(strict_mode) : bool`.
@@ -739,14 +739,14 @@ used instance (Q50):
 
 | site | before | after |
 |---|---|---|
-| `list::all?@e18` (lex-strategy) | bare native | bare native |
+| `std::list::all?@e18` (lex-strategy) | bare native | bare native |
 | `classify@e119` (lex-strategy) | Fn (return any) | Fn (return **bool**) |
 | `scan_while@e216` (refined-checks) | **any** | **Fn{args: [str], return: bool, errors: []}** |
-| `list::find@e42` (source-checks) | bare block | bare block |
+| `std::list::find@e42` (source-checks) | bare block | bare block |
 | `classify_leading@e91` (source-checks) | Fn (return any) | Fn (return **bool**) |
-| `list::any?@e6` (test-selection) | bare block | bare block |
-| `list::none?@e31` (test-selection) | bare block | bare block |
-| `list::find@e42` (test-selection) | bare block | bare block |
+| `std::list::any?@e6` (test-selection) | bare block | bare block |
+| `std::list::none?@e31` (test-selection) | bare block | bare block |
+| `std::list::find@e42` (test-selection) | bare block | bare block |
 | `scan_while@e216` (uri-steady) | **any** | **Fn{args: [str], return: bool, errors: []}** |
 | **totals** | Fn 2, bare 5, any 2 | **Fn 4, bare 5, any 0** |
 
@@ -881,7 +881,7 @@ typing round only where a trusted contract exists.
 `tclsh9.0 bench/bench.tcl -runs 1` with the native backend available: exit
 0, no `VALUES DIFFER` on any of the 8 canonical programs (interp, compile
 and Cranelift agree). Canonical sources are unchanged, and
-`web::emailish?` was not refactored.
+`std::web::emailish?` was not refactored.
 
 ## Known limitations
 
@@ -907,7 +907,7 @@ and Cranelift agree). Canonical sources are unchanged, and
   keeps every expression's printed type but recovers an exact Block's
   contract from declarations only.
 - **Backend-specific bridge HIR**: on the native backend a module-bridged
-  native (`emailish?` -> `web::emailish?`) is typed as its module function,
+  native (`emailish?` -> `std::web::emailish?`) is typed as its module function,
   so its inferred contract, not the native's `-param-types`, constrains its
   callers there; both say `str` for every canonical case.
 
@@ -919,7 +919,7 @@ The remaining callable opacity now divides cleanly (item 92.20):
    predicate, every checked parameter contract.
 2. **Caller/instance refinement still missing**: `local_char?(c)`'s body
    still guards `is_tcl_alnum(c)` although every caller passes a `str`;
-   `list::all?`'s instance still sees a bare `native`/`block` predicate
+   `std::list::all?`'s instance still sees a bare `native`/`block` predicate
    although each instance's callers pass one exact callable; checked
    contracts are not seeded because only callers can prove them. That is
    the next milestone's caller-ingress refinement, which can now start from

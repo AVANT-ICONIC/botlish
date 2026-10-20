@@ -1,11 +1,11 @@
 # check-unicode-parity.tcl -- cross-language differential check for
-# web::Emailish's Unicode-aware grammar (NATIVE-TCL-UNICODE.md): runs the
+# std::web::Emailish's Unicode-aware grammar (NATIVE-TCL-UNICODE.md): runs the
 # same corpus of email-shaped strings through
 #
 #   Tcl      core::regex::matches against emailRegex below (the reference
-#            grammar, formerly lib/web.tcl's validator)
-#   Botlish  web::emailish? (lib/web.bot, the proof-producing predicate of
-#            the refinement web::Emailish, REFINEMENT-VALUES.md) on
+#            grammar, formerly stdlib/web.tcl's validator)
+#   Botlish  std::web::emailish? (stdlib/web.bot, the proof-producing predicate of
+#            the refinement std::web::Emailish, REFINEMENT-VALUES.md) on
 #            interp/compile/cranelift-generic/cranelift
 #   Python   bench/equivalents/python/refined_checks.py's emailish()
 #   Rust     bench/equivalents/rust/refined_checks.rs's emailish() (via the
@@ -59,7 +59,7 @@ proc tclReference {s} {
 }
 
 proc emailishUnder {backend s} {
-    set source "import web\nweb::emailish?(\"[string map {\\ \\\\ \" \\\"} $s]\")\n"
+    set source "import std::web\nstd::web::emailish?(\"[string map {\\ \\\\ \" \\\"} $s]\")\n"
     set hir [surface::compile $source -warnings off]
     if {$backend in {cranelift cranelift-generic}} {
         set options [expr {$backend eq "cranelift-generic" ? {-specialize 0} : {}}]

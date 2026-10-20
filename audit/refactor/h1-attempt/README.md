@@ -18,7 +18,7 @@ has (`tr(1)`'s two sets):
 marks = "–—‘’“”"
 normalized = "--''\"\""
 ...
-        loop i from 0 to str::length(marks):
+        loop i from 0 to std::str::length(marks):
             if marks.char_at(i) == c:
                 return normalized.substring(i, i + 1)
 ```
@@ -52,7 +52,7 @@ contortion. This one is, for four reasons, the first decisive:
 1. **It keeps the one-character String; it only hides it.** At run time
    `normalized.substring(i, i + 1)` *is* `"-"`, `"'"` or `"\""`: the function
    still produces a single character as text, because its consumer
-   (`str::concat` in `clean_from`) appends text. The warning is literals-only
+   (`std::str::concat` in `clean_from`) appends text. The warning is literals-only
    by design (a computed String is never reported), so slicing the character
    out of a longer literal removes the finding without removing what it
    reports -- the absence of a character-to-text construction. A finding
@@ -100,7 +100,7 @@ REFACTOR-WARNINGS-CLEAN.md, section 15, finding 11 turns this into a
 recommendation about a candidate warning.
 
 The obstruction is therefore **character-to-text construction**: with a way
-to append a character to text (`str::of_char`, or a `str::concat` that takes
+to append a character to text (`std::str::of_char`, or a `std::str::concat` that takes
 a UnicodeChar, or a builder), `clean_char` could map a character to a
 character and its caller append it. The three findings stay in the manifest,
 tagged `H1`.

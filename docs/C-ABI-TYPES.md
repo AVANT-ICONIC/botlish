@@ -1,30 +1,30 @@
 # C-ABI-TYPES.md
 
 The smallest C ABI type universe the header archaeology justifies: C integer
-scalars by identity, `ffi::c::Void`, typed data pointers, function-pointer
+scalars by identity, `std::ffi::c::Void`, typed data pointers, function-pointer
 types, and the five pointer operations -- plus the general callable
-imprinting `ffi::c::null[T]()` needs.
+imprinting `std::ffi::c::null[T]()` needs.
 
 > Model the C ABI values Botlish actually needs. Do not model the C
 > language.
 
 ```botlish
-import ffi::c
+import std::ffi::c
 
 opaque struct SSL:               # the pointee identity of C's `struct ssl_st`
     tag: unit
 
-fn status(p: ffi::c::Ptr[SSL]) -> bool:
+fn status(p: std::ffi::c::Ptr[SSL]) -> bool:
     p.null?()
 
 fn demo() -> bool:
-    p = ffi::c::null[SSL]()      # ffi::c::Ptr[SSL]: imprinted at the call
+    p = std::ffi::c::null[SSL]()      # std::ffi::c::Ptr[SSL]: imprinted at the call
     q = p.clone()                # a second alias: same address, same type
-    v = ffi::c::erase(q)         # ffi::c::Ptr[ffi::c::Void] (q is moved)
-    r = ffi::c::retype[SSL](v)   # ffi::c::Ptr[SSL] again (v is moved)
+    v = std::ffi::c::erase(q)         # std::ffi::c::Ptr[std::ffi::c::Void] (q is moved)
+    r = std::ffi::c::retype[SSL](v)   # std::ffi::c::Ptr[SSL] again (v is moved)
     status(r) and p.null?()
 
-fn add(a: ffi::c::UChar, b: ffi::c::UChar) -> int:
+fn add(a: std::ffi::c::UChar, b: std::ffi::c::UChar) -> int:
     a + b                        # Botlish arithmetic: add(255, 255) is 510
 ```
 
@@ -44,8 +44,8 @@ language.
 * [The substrate in one picture](#the-substrate-in-one-picture)
 * [C integer scalars](#c-integer-scalars)
 * [Targets](#targets)
-* [ffi::c::Void](#fficvoid)
-* [ffi::c::Ptr\[T\]](#fficptrt)
+* [std::ffi::c::Void](#fficvoid)
+* [std::ffi::c::Ptr\[T\]](#fficptrt)
 * [The pointer operations](#the-pointer-operations)
 * [Function pointers](#function-pointers)
 * [Imprinting](#imprinting)
@@ -64,31 +64,31 @@ language.
 ## The substrate in one picture
 
 ```
-ffi::c::Char ... ffi::c::ULongLong   C integer ABI identities
+std::ffi::c::Char ... std::ffi::c::ULongLong   C integer ABI identities
         |                            (an integer domain per C type, its range
         v                            the compilation's target's)
 ordinary Botlish Int values
 
-ffi::c::Void                         a permanently incomplete pointee
+std::ffi::c::Void                         a permanently incomplete pointee
 
-ffi::c::Ptr[T]                       a typed opaque C data pointer: affine,
+std::ffi::c::Ptr[T]                       a typed opaque C data pointer: affine,
                                      explicitly cloneable, nullable, not an
                                      Int, no ownership semantics
 
-ffi::c::FnPtr[Fn{args: [..], return: R}]
+std::ffi::c::FnPtr[Fn{args: [..], return: R}]
                                      a C function pointer: signature-bearing,
                                      distinct from data pointers, not callable
                                      yet
 
-ffi::c::null[T]()                    Ptr[T]: an explicit result imprint
-ffi::c::null?(p)                     the pointer-zero test
-ffi::c::clone(p)                     a second alias
-ffi::c::erase(p)                     Ptr[T] -> Ptr[Void]
-ffi::c::retype[T](p)                 Ptr[Void] -> Ptr[T]
+std::ffi::c::null[T]()                    Ptr[T]: an explicit result imprint
+std::ffi::c::null?(p)                     the pointer-zero test
+std::ffi::c::clone(p)                     a second alias
+std::ffi::c::erase(p)                     Ptr[T] -> Ptr[Void]
+std::ffi::c::retype[T](p)                 Ptr[Void] -> Ptr[T]
 ```
 
-Everything is reached through `import ffi::c`, like every other namespace
-(IMPORTS.md). `lib/ffi/c.bot` is the namespace's module file: it documents
+Everything is reached through `import std::ffi::c`, like every other namespace
+(IMPORTS.md). `stdlib/ffi/c.bot` is the namespace's module file: it documents
 it, and declares nothing a file spells -- the scalars are the namespace's
 intrinsic type declarations, `Void`, `Ptr` and `FnPtr` its intrinsic types,
 and the operations its intrinsic natives (`core/cabi.tcl`).
@@ -96,11 +96,11 @@ and the operations its intrinsic natives (`core/cabi.tcl`).
 ## C integer scalars
 
 ```
-ffi::c::Char    ffi::c::SChar    ffi::c::UChar
-ffi::c::Short   ffi::c::UShort
-ffi::c::Int     ffi::c::UInt
-ffi::c::Long    ffi::c::ULong
-ffi::c::LongLong  ffi::c::ULongLong
+std::ffi::c::Char    std::ffi::c::SChar    std::ffi::c::UChar
+std::ffi::c::Short   std::ffi::c::UShort
+std::ffi::c::Int     std::ffi::c::UInt
+std::ffi::c::Long    std::ffi::c::ULong
+std::ffi::c::LongLong  std::ffi::c::ULongLong
 ```
 
 Each is an **integer domain** -- the existing `type Child = Int in LO..HI`
@@ -110,56 +110,56 @@ records which C type it is on which target: `{c {unsigned long} target
 windows-x86_64 bits 32 signed 0}` (core::type's `-c-abi`, read by
 `core::type::cabiOf`). Nothing reads a width or a signedness from a name.
 
-**Why not fixed-width names.** `ffi::c::Long` means C `long`, not "a signed
+**Why not fixed-width names.** `std::ffi::c::Long` means C `long`, not "a signed
 64-bit integer": it is 64 bits on LP64 (Linux, macOS) and 32 on LLP64
 (Windows). A binding that says `long` must keep saying `long` on every
 target, and the width is the target's fact. `I32`-style names would bake one
 data model into every binding.
 
-**Identity is not width.** On Windows x86-64 `ffi::c::Int` and `ffi::c::Long`
+**Identity is not width.** On Windows x86-64 `std::ffi::c::Int` and `std::ffi::c::Long`
 are both `Int in -2^31..2^31-1`, and they stay two types: identity is the
 registry name (the existing rule for domains: two declarations of one range
-are never identified), so `core::type::subtype ffi::c::Int ffi::c::Long` is
-0 both ways and a parameter declared `ffi::c::Long` is a `long` parameter
+are never identified), so `core::type::subtype std::ffi::c::Int std::ffi::c::Long` is
+0 both ways and a parameter declared `std::ffi::c::Long` is a `long` parameter
 whatever value reaches it. A *value* moves between them by its range, like
-between any two domains: an `ffi::c::Int` argument is admitted where an
-`ffi::c::Long` is declared because its range proves it fits. The declared
+between any two domains: an `std::ffi::c::Int` argument is admitted where an
+`std::ffi::c::Long` is declared because its range proves it fits. The declared
 type is what a later C call lowers by.
 
 **Values are Ints.** There is no second arithmetic universe. `a + b` of two
-`ffi::c::UChar`s is Botlish addition (255 + 255 is 510, an Int); there is no
+`std::ffi::c::UChar`s is Botlish addition (255 + 255 is 510, an Int); there is no
 integer promotion, no usual arithmetic conversion, no wrapping and no
 truncation -- C's source-level arithmetic rules are not the FFI value
 boundary's business. Into a scalar, an Int goes only where its range proves
 it fits (the ordinary admission rule of every domain, hir/range.tcl): `fn
-f(x: int) -> ffi::c::UInt: x` is rejected, and the guarded version is
+f(x: int) -> std::ffi::c::UInt: x` is rejected, and the guarded version is
 accepted. The analyses see the exact bounds through `core::type::
 integerFacts`, as for every domain, so a later C call can prove "fits C
 unsigned long" from ordinary facts.
 
-**Plain char** is `ffi::c::Char`, distinct from `SChar` and `UChar`, and its
+**Plain char** is `std::ffi::c::Char`, distinct from `SChar` and `UChar`, and its
 signedness is the target's: signed on x86-64 (Linux, macOS, Windows) and on
 Apple and Windows AArch64, unsigned on Linux AArch64. It is never Botlish's
 Byte and never `unsigned char` silently.
 
 **No `size_t`; one floating type.** The binding generator knows
 from its ABI probe which C type `size_t` (`ptrdiff_t`, `wchar_t`, `int64_t`,
-...) is on a profile, and emits an alias of it (`size_t` -> `ffi::c::ULong`
+...) is on a profile, and emits an alias of it (`size_t` -> `std::ffi::c::ULong`
 on LP64); the archaeology found numeric typedef identity not worth making
 nominal (C-HEADER-ARCHAEOLOGY.md item 63). `double` appears in 1 + 7
 functions of the subject libraries: floats were their own language milestone
-(FLOAT64-MILESTONE-1.md), which added `ffi::c::Double`, C `double` as
+(FLOAT64-MILESTONE-1.md), which added `std::ffi::c::Double`, C `double` as
 Botlish's Float64 under its C name, for `extern c fn` parameters and results
 (passed in the target's floating-point registers; a NaN or an infinity
 returned by C fails the call with `NonFiniteFloat`). It is a value type, not
-a pointee: `Ptr[ffi::c::Double]` is not admitted yet. C `float` and `long
+a pointee: `Ptr[std::ffi::c::Double]` is not admitted yet. C `float` and `long
 double` have no Botlish type.
 
 **`_Bool` came later.** Neither subject library uses it in its public API,
 so it was left out here; SDL3 uses it in 506 of its 1,405 API names, and the
-binding generator's milestone added `ffi::c::Bool`, which is Botlish's own
+binding generator's milestone added `std::ffi::c::Bool`, which is Botlish's own
 `bool` with C `_Bool`'s ABI (one byte, 0 or 1; C-FFI.md section 3,
-C-BINDGEN.md "C bool"). A pointer may point to one (`ffi::c::Ptr[ffi::c::Bool]`)
+C-BINDGEN.md "C bool"). A pointer may point to one (`std::ffi::c::Ptr[std::ffi::c::Bool]`)
 and a function pointer's signature may hold one. It is the only primitive
 that milestone added.
 
@@ -193,7 +193,7 @@ toolchain's, never the other's.
 target is `-target NAME` (main.tcl; `surface::compile`, `surface::
 readProgramFile` and `surface::modules::compileProgramFile` take the same
 option), the host's by default (`core::cabi::hostTarget`; a host outside the
-table can still compile everything but `import ffi::c`, which then needs
+table can still compile everything but `import std::ffi::c`, which then needs
 `-target`). The target changes static types, and the HIR records it
 (`hir::cabi::targetOf`; "" for a HIR that read no target fact, which is
 every target's): the Tcl backends run a program compiled for any target,
@@ -206,7 +206,7 @@ stack argument at Apple's packed offset (tests/c-ffi.test's `cf-abi-*`);
 the other rows are metadata, tested as such (`ca-lp64-llp64`,
 `ca-char-signedness`, `ca-scalar-matrix-llp64`, tests/target-model.test).
 
-**Isolation.** When a file imports `ffi::c`, the loader (`surface/
+**Isolation.** When a file imports `std::ffi::c`, the loader (`surface/
 modules.tcl`'s `LoadNamespace`) adds the eleven scalar declarations for the
 compilation's target to the module's own (`hir::cabi::NamespaceTypeDecls`),
 so they are ordinary per-compilation source types: registered by
@@ -214,7 +214,7 @@ so they are ordinary per-compilation source types: registered by
 by `hir::activate`, printed in HIR text as
 
 ```
-type ffi::c::Long parent Int domain interval -2147483648 2147483647 cabi {long} windows-x86_64
+type std::ffi::c::Long parent Int domain interval -2147483648 2147483647 cabi {long} windows-x86_64
 ```
 
 and read back by re-deriving the metadata from the C type and the target (a
@@ -225,13 +225,13 @@ the target is part of `surface::cache::Key`). No new registry was needed.
 Interchange text read as a compilation for another target is refused, never
 reinterpreted (`hir::interchange::decode -target`, HIR-INTERCHANGE.md).
 
-## ffi::c::Void
+## std::ffi::c::Void
 
 C's `void`, as a **permanently incomplete pointee**: it exists so that
-`ffi::c::Ptr[ffi::c::Void]` -- C's `void *` -- is well typed. It is not
+`std::ffi::c::Ptr[std::ffi::c::Void]` -- C's `void *` -- is well typed. It is not
 `unit`, not a top type, not `any`, not `never` and not a type of values: a
 parameter, a result, a List element, a struct field, a layout field, a C
-signature's argument and a construction `ffi::c::Void {...}` of it are all
+signature's argument and a construction `std::ffi::c::Void {...}` of it are all
 rejected with one message (`hir::cabi::VoidMessage`). Statically it is the
 pointee identity `void` inside `{cptr void}`, never a type a value has.
 
@@ -239,7 +239,7 @@ A C function returning `void` will return Botlish's `unit`: a C signature's
 result is `unit` (`FnPtr[Fn{args: [...], return: unit}]`), never a fictitious
 value of `Void`.
 
-## ffi::c::Ptr[T]
+## std::ffi::c::Ptr[T]
 
 A **typed opaque C data pointer**: an address with a statically known
 pointee identity, `{cptr T}` in HIR (hir/types.tcl). Valid pointees
@@ -247,8 +247,8 @@ pointee identity, `{cptr T}` in HIR (hir/types.tcl). Valid pointees
 
 | pointee | example | C |
 |---|---|---|
-| `ffi::c::Void` | `Ptr[ffi::c::Void]` | `void *` |
-| a C integer scalar | `Ptr[ffi::c::Int]`, `Ptr[ffi::c::Char]` | `int *`, `char *` |
+| `std::ffi::c::Void` | `Ptr[std::ffi::c::Void]` | `void *` |
+| a C integer scalar | `Ptr[std::ffi::c::Int]`, `Ptr[std::ffi::c::Char]` | `int *`, `char *` |
 | an opaque struct | `Ptr[SSL]` | `SSL *` (`struct ssl_st *`) |
 | a pointer | `Ptr[Ptr[SSL]]`, `Ptr[Ptr[Ptr[Tcl_Obj]]]` | `SSL **`, ... |
 | a function pointer | `Ptr[FnPtr[Fn{...}]]` | a pointer to a callback variable |
@@ -256,7 +256,7 @@ pointee identity, `{cptr T}` in HIR (hir/types.tcl). Valid pointees
 Everything else is rejected, because nothing gives it a C representation
 contract: `int`, `bool`, `str`, `List[int]`, an enum, a `Fn`, an ordinary
 (non-opaque) struct, `LayoutStruct[L]`, and an integer domain that is not one
-of the C scalars (`binary::U32`, `byte::Byte`). Nesting is structural, to any
+of the C scalars (`std::binary::U32`, `std::byte::Byte`). Nesting is structural, to any
 depth: nothing special-cases two or three levels; the archaeology's maximum
 of three is not a limit.
 
@@ -266,7 +266,7 @@ integer conversion exists, in either direction. `p + 1`, `p < q`, `bit_and(p,
 1)` and passing a pointer where an `int` is declared are compile-time TYPE
 errors (`hir::cabi::verify`: "a pointer is an opaque address, not an Int");
 an Int where a pointer is declared, or given to `retype`, is the ordinary
-TYPE mismatch. There is no `ffi::c::Ptr[T](n)`, no `from_int`, and no
+TYPE mismatch. There is no `std::ffi::c::Ptr[T](n)`, no `from_int`, and no
 public way at all to make a pointer from an Int.
 
 **Invariant, no implicit conversion.** `Ptr[A]` is a `Ptr[B]` only when A is
@@ -307,11 +307,11 @@ binding builds on top.
 
 | operation | type | ownership | native code |
 |---|---|---|---|
-| `ffi::c::null[T]()` | `Ptr[T]` | -- | the constant word |
-| `ffi::c::null?(p)`, `p.null?()` | any C pointer -> `bool` | observes `p` | one comparison |
-| `ffi::c::clone(p)`, `p.clone()` | `p`'s own type | observes `p` | none (the same word) |
-| `ffi::c::erase(p)` | `Ptr[T]` -> `Ptr[Void]` | moves `p` | none |
-| `ffi::c::retype[T](p)` | `Ptr[Void]` -> `Ptr[T]` | moves `p` | none |
+| `std::ffi::c::null[T]()` | `Ptr[T]` | -- | the constant word |
+| `std::ffi::c::null?(p)`, `p.null?()` | any C pointer -> `bool` | observes `p` | one comparison |
+| `std::ffi::c::clone(p)`, `p.clone()` | `p`'s own type | observes `p` | none (the same word) |
+| `std::ffi::c::erase(p)` | `Ptr[T]` -> `Ptr[Void]` | moves `p` | none |
+| `std::ffi::c::retype[T](p)` | `Ptr[Void]` -> `Ptr[T]` | moves `p` | none |
 
 None reads memory, calls foreign code, allocates or retains anything. `clone`
 copies the address, never the pointee, and touches no reference count: it is
@@ -331,8 +331,8 @@ Foo lives there, alignment, lifetime, ownership or safety.
 ## Function pointers
 
 ```botlish
-ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]], return: ffi::c::Int}]   # int (*)(void *)
-ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]], return: unit}]          # void (*)(void *)
+std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Void]], return: std::ffi::c::Int}]   # int (*)(void *)
+std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Void]], return: unit}]          # void (*)(void *)
 ```
 
 A C function pointer is its own type category, `{cfnptr F}`, F the
@@ -370,7 +370,7 @@ The archaeology's specimens (`ca-fnptr-specimens`):
 | a function returning a callback | `FnPtr[Fn{args: [Int], return: FnPtr[Fn{...}]}]` |
 | a pointer to a callback typedef | `Ptr[FnPtr[Fn{...}]]` |
 
-(every name in `ffi::c::`, the opaque tags declared by the binding). A
+(every name in `std::ffi::c::`, the opaque tags declared by the binding). A
 callback typedef (`Tcl_ObjCmdProc`) is a binding-generator alias of its
 `FnPtr` type -- naming the protocol is generator policy, not a compiler
 primitive. **Variadic** function pointers are deferred: no spelling exists
@@ -379,7 +379,7 @@ written yet; a variadic flag belongs with vararg calling, if ever.
 
 ## Imprinting
 
-`ffi::c::null[T]()` is not a generic function, a template, a monomorphized
+`std::ffi::c::null[T]()` is not a generic function, a template, a monomorphized
 native or a native per T: there is one `null`, and the brackets supply the
 **imprint** that determines its statically returned pointer type. The
 mechanism is general -- user functions take part through exactly the same
@@ -389,7 +389,7 @@ and no specialization keyed by a variable.
 
 ```botlish
 fn first(xs: List[T]) -> T errors IndexNotFound:   # T established by the List
-    list::at(xs, 0)
+    std::list::at(xs, 0)
 
 fn lookup(m: MutableArray[K], key: K) -> K:        # K established, then used
     key
@@ -411,7 +411,7 @@ The rules (hir/imprint.tcl):
 * **Establishing.** A variable is established by an argument when it occurs
   inside an applied type of the parameter: an element of `List`,
   `ImmutableSet`, `MutableArray` or `MutableVector`, a pointee of
-  `ffi::c::Ptr`, a type of an `ffi::c::FnPtr` signature. The argument's static
+  `std::ffi::c::Ptr`, a type of an `std::ffi::c::FnPtr` signature. The argument's static
   type there says what it is.
 * **Using.** A bare parameter `x: T`, or `T` inside a `Fn` type, establishes
   nothing: it uses a variable an *earlier* parameter established (left to
@@ -437,13 +437,13 @@ The rules (hir/imprint.tcl):
   affine type (the body may copy its values); one that occurs only as a
   pointee (`Ptr[T]`) may be any valid pointee, a pointer included.
 * **Not a value.** An imprinted callable is only called: `g = empty` and `g =
-  ffi::c::null` are rejected (a function value has no call site to imprint
+  std::ffi::c::null` are rejected (a function value has no call site to imprint
   at).
 
 **What existed, what changed, what did not.** Before this milestone Botlish
 had no type variables anywhere: `fn first(xs: List[T]) -> T` was "unknown
 type T". It had imprinting of *types* from construction values
-(`mutable_array::create`'s element from its default, `LayoutStruct[L]` from a
+(`std::mutable_array::create`'s element from its default, `LayoutStruct[L]` from a
 layout, NATIVE-BOTLISH-LOWERING-IMPL.md §6.3), per-native result rules
 (`-result-shape`), and semantic instances that recover "result type ==
 parameter type" from an untyped body (OPPORTUNISTIC-SEMANTIC-INSTANCES.md).
@@ -460,8 +460,8 @@ This milestone added:
 * the syntax `NAME[TYPE, ...](...)`, `ns::NAME[...](...)`, `x.NAME[...](...)`
   (surface/parser.tcl; the token after `]` decides between it and an applied
   type's construction `NAME[TYPE] {...}`), a call's `imprint` field in HIR
-  and in HIR text (`call native(ffi::c::null) imprint [SSL]`);
-* the `IMPRINT` diagnostic (and its `compiler::DiagnosticCode::Imprint`).
+  and in HIR text (`call native(std::ffi::c::null) imprint [SSL]`);
+* the `IMPRINT` diagnostic (and its `std::compiler::DiagnosticCode::Imprint`).
 
 No specialization or instance machinery changed: an imprinted function is
 one codegen function; a semantic instance of it is requested only when an
@@ -476,11 +476,11 @@ exist; ordering imprints by name.
 
 **HIR.** The C types are semantic type facts, never strings a later pass
 reparses: a scalar is the canonical domain type `{refined int
-{ffi::c::Long}}` whose registry entry carries the C ABI metadata; a data
+{std::ffi::c::Long}}` whose registry entry carries the C ABI metadata; a data
 pointer `{cptr POINTEE}`; a function pointer `{cfnptr {fn {...}}}`; a
 variable `{imprint T}`. Types print as the programmer spells them --
-`ffi::c::ULong`, `ffi::c::Ptr[SSL]`, `ffi::c::Ptr[ffi::c::Void]`,
-`ffi::c::FnPtr[Fn{args: [...], return: R}]` -- and HIR text reads them back
+`std::ffi::c::ULong`, `std::ffi::c::Ptr[SSL]`, `std::ffi::c::Ptr[std::ffi::c::Void]`,
+`std::ffi::c::FnPtr[Fn{args: [...], return: R}]` -- and HIR text reads them back
 (`hir::read::ParseType`). The bare kind `cptr` (a pointer of no single
 pointee, the join of two pointer types) prints as `cptr`.
 
@@ -517,24 +517,24 @@ target-width representation proper (rule 60) is for the C call boundary
 
 **C scalars are layout fields with no C-specific rule** (BINARY-LAYOUT.md's
 "Scalar encodings": the encoding follows from the interval). `field n:
-ffi::c::UInt at 0` is a 4-byte unsigned field; `ffi::c::Long` is 8 bytes on
-LP64 and 4 on LLP64; `ffi::c::Char` signed or unsigned by target
+std::ffi::c::UInt at 0` is a 4-byte unsigned field; `std::ffi::c::Long` is 8 bytes on
+LP64 and 4 on LLP64; `std::ffi::c::Char` signed or unsigned by target
 (`ca-layout-target-encodings`); 4000000000 round-trips through
-`binary::emit` and `binary::parse` on every backend.
+`std::binary::emit` and `std::binary::parse` on every backend.
 
 > **Follow-up (NATIVE-LAYOUT-VIEWS.md).** Pointer fields now exist and are
 > *native-only*: a layout with one is read through a native view of live
-> native memory (`binary::native::view`, `NativeView[L]`), where the pointer
+> native memory (`std::binary::native::view`, `NativeView[L]`), where the pointer
 > is the one foreign memory holds -- the first mechanism below -- and
-> `binary::parse` / `binary::emit` of it are `LAYOUT-NATIVE-ONLY`. The
+> `std::binary::parse` / `std::binary::emit` of it are `LAYOUT-NATIVE-ONLY`. The
 > paragraphs below are this milestone's account. NATIVE-LAYOUT-WRITES.md
-> then wrote them: through a native edit (`binary::store`), and into byte
+> then wrote them: through a native edit (`std::binary::store`), and into byte
 > storage only by the explicit foreign encoding of an existing pointer
-> (`binary::write_foreign`) -- still never decoded back from bytes.
+> (`std::binary::write_foreign`) -- still never decoded back from bytes.
 
 **Pointer fields remain deliberately unsupported** (LAYOUT-FIELD-TYPE: "a C
 pointer, not a binary scalar: imprinting arbitrary bytes into it would
-fabricate a pointer"). `binary::parse(L, bytes)` accepts arbitrary bytes; if
+fabricate a pointer"). `std::binary::parse(L, bytes)` accepts arbitrary bytes; if
 it could produce a `Ptr[T]`, any byte string would become authority to an
 address nothing gave the program. The archaeology makes pointer fields the
 next layout requirement (52 + 27 structs need only that), and the safe
@@ -585,48 +585,48 @@ access.
   probed integer scalar plus generated constants (its storage is an ABI
   probe fact, and Botlish's closed `enum` would reject the values C passes);
   an array parameter is a pointer to the call, an array field a future
-  layout repetition. No `ffi::c::Typedef`, no C enum type, no C array type.
+  layout repetition. No `std::ffi::c::Typedef`, no C enum type, no C array type.
 
 ## Diagnostics
 
 | situation | kind | message (abridged) |
 |---|---|---|
-| invalid pointee `Ptr[int]`, `Ptr[str]`, ordinary struct, ... | TYPE | invalid pointee in ffi::c::Ptr[int]: int has no C representation ... |
-| `ffi::c::Void` as a value type, or constructed | TYPE | ffi::c::Void is C's void: an incomplete type with no values ... |
-| a pointer as an Int (`p + 1`, `p < q`, an `int` parameter) | TYPE | argument 1 of + is ffi::c::Ptr[ffi::c::Int], a C pointer, where + requires int ... |
-| an Int as a pointer (`take(1234)`, `retype[A](1234)`) | TYPE | ... cannot be proven to satisfy ffi::c::Ptr[A] (argument type: int) |
-| `ffi::c::Ptr[A](1234)` | UNKNOWN-SYMBOL | ffi::c::Ptr is a type, not a value or a function: no pointer is made from an Int ... |
-| implicit pointer-type mismatch | TYPE | ... cannot be proven to satisfy ffi::c::Ptr[SSL] (argument type: ffi::c::Ptr[Ctx]) |
-| `retype` of a non-`Ptr[Void]` | TYPE | ... a pointer's pointee identity is never converted implicitly (ffi::c::erase ...) |
-| `erase` of a function pointer | IMPRINT | ... the C function pointer ... where a data pointer ffi::c::Ptr[T] is required: data and function pointers are distinct ... |
+| invalid pointee `Ptr[int]`, `Ptr[str]`, ordinary struct, ... | TYPE | invalid pointee in std::ffi::c::Ptr[int]: int has no C representation ... |
+| `std::ffi::c::Void` as a value type, or constructed | TYPE | std::ffi::c::Void is C's void: an incomplete type with no values ... |
+| a pointer as an Int (`p + 1`, `p < q`, an `int` parameter) | TYPE | argument 1 of + is std::ffi::c::Ptr[std::ffi::c::Int], a C pointer, where + requires int ... |
+| an Int as a pointer (`take(1234)`, `retype[A](1234)`) | TYPE | ... cannot be proven to satisfy std::ffi::c::Ptr[A] (argument type: int) |
+| `std::ffi::c::Ptr[A](1234)` | UNKNOWN-SYMBOL | std::ffi::c::Ptr is a type, not a value or a function: no pointer is made from an Int ... |
+| implicit pointer-type mismatch | TYPE | ... cannot be proven to satisfy std::ffi::c::Ptr[SSL] (argument type: std::ffi::c::Ptr[Ctx]) |
+| `retype` of a non-`Ptr[Void]` | TYPE | ... a pointer's pointee identity is never converted implicitly (std::ffi::c::erase ...) |
+| `erase` of a function pointer | IMPRINT | ... the C function pointer ... where a data pointer std::ffi::c::Ptr[T] is required: data and function pointers are distinct ... |
 | a function pointer where `Ptr[Void]` or `Fn` is declared | TYPE | the ordinary mismatch |
 | calling a function pointer | TYPE | cb is a C function pointer ...: Botlish cannot call one yet |
-| invalid C signature | TYPE | invalid signature in ffi::c::FnPtr[...]: argument 1: int is not a C ABI value type ... |
-| a pointer layout field | LAYOUT-FIELD-TYPE | ... imprinting arbitrary bytes into it would fabricate a pointer ... (since NATIVE-LAYOUT-VIEWS.md: the field is legal, and `binary::parse`/`emit` of its layout is LAYOUT-NATIVE-ONLY) |
+| invalid C signature | TYPE | invalid signature in std::ffi::c::FnPtr[...]: argument 1: int is not a C ABI value type ... |
+| a pointer layout field | LAYOUT-FIELD-TYPE | ... imprinting arbitrary bytes into it would fabricate a pointer ... (since NATIVE-LAYOUT-VIEWS.md: the field is legal, and `std::binary::parse`/`emit` of its layout is LAYOUT-NATIVE-ONLY) |
 | bare unestablished imprint variable | TYPE | unknown or invalid type for parameter "x": no type named T is visible here, and as an imprint variable T is not established ... |
-| missing / wrong number of / unbindable explicit imprints | IMPRINT | empty: imprint variable T is not established ...; convert takes 2 imprint(s), [A, B] ...; ffi::c::null: T is imprinted as int, which cannot be a pointee ... |
+| missing / wrong number of / unbindable explicit imprints | IMPRINT | empty: imprint variable T is not established ...; convert takes 2 imprint(s), [A, B] ...; std::ffi::c::null: T is imprinted as int, which cannot be a pointee ... |
 | an imprinted callable as a value | IMPRINT | empty has imprint variables, so it is not a value ... |
 | moves, captures, equality | the affine kinds | USE-AFTER-MOVE, AFFINE-CAPTURE-UNSUPPORTED, AFFINE-EQUALITY-UNSUPPORTED |
 
 Existing kinds are used wherever they describe the error; the one new kind,
 `IMPRINT`, is the imprinting mechanism's (not C's), recoverable in a `static
-compile:` block as `compiler::DiagnosticCode::Imprint`. `UNKNOWN-TARGET` is
-the loader's, for `import ffi::c` on a host outside the target table with no
+compile:` block as `std::compiler::DiagnosticCode::Imprint`. `UNKNOWN-TARGET` is
+the loader's, for `import std::ffi::c` on a host outside the target table with no
 `-target`.
 
 ## Evidence: the archaeology, category by category
 
 | category | evidence (C-HEADER-ARCHAEOLOGY.md) | here |
 |---|---|---|
-| integer scalars | in essentially every function; `long` 8 bytes here, 4 on Windows; plain `char` fields in 6 + 2 structs | `ffi::c::Char` ... `ULongLong`, target-resolved |
+| integer scalars | in essentially every function; `long` 8 bytes here, 4 on Windows; plain `char` fields in 6 + 2 structs | `std::ffi::c::Char` ... `ULongLong`, target-resolved |
 | `Ptr[T]` | 3,012 of 3,109 BoringSSL and 884 of 919 Tcl functions take or return pointers; 2,098 + 405 opaque-struct pointers | typed pointers over opaque struct identities |
 | `Ptr[Ptr[T]]` | 367 + 68 functions, depth up to 3 | structural nesting, any depth |
-| `Ptr[Void]` | 421 + 106 `void *` parameters, every userdata (57 of Tcl's 66 callbacks pass `void *clientData`) | `ffi::c::Void` and `erase`/`retype` |
-| function-pointer type | 145 + 112 callback typedefs; 451 + 52 functions take callbacks | `ffi::c::FnPtr[Fn{...}]` |
+| `Ptr[Void]` | 421 + 106 `void *` parameters, every userdata (57 of Tcl's 66 callbacks pass `void *clientData`) | `std::ffi::c::Void` and `erase`/`retype` |
+| function-pointer type | 145 + 112 callback typedefs; 451 + 52 functions take callbacks | `std::ffi::c::FnPtr[Fn{...}]` |
 | `Void` | required for `void *` | an incomplete pointee |
 
 Omitted, and why: floats (1 + 7 functions; their own milestone); `_Bool` (0
-public uses; added later for SDL3, `ffi::c::Bool`); `size_t`/`ptrdiff_t`/`wchar_t` as primitives (generator
+public uses; added later for SDL3, `std::ffi::c::Bool`); `size_t`/`ptrdiff_t`/`wchar_t` as primitives (generator
 aliases: typedef identity is not worth making nominal); C enums (21 + 2
 signatures, probed integer scalar + constants); arrays (49 + 5 fields: future
 layout repetition; parameters decay to pointers); varargs and `va_list` (5 +
@@ -651,7 +651,7 @@ and general generic declarations.
 > **Follow-up (C-POINTER-BORROWING.md).** Passing existing Botlish byte
 > storage to a C pointer parameter now exists as a call-boundary capability:
 > a per-parameter foreign call contract (access read | write, escape
-> noescape | captures | unknown) admits an `abi::bytes::Bytes` or
+> noescape | captures | unknown) admits an `std::abi::bytes::Bytes` or
 > `MutableBytes` for one call, never as a `Ptr` value. An `extern c fn`
 > attaches the same contract to its parameters (that document's section
 > 14).
@@ -785,7 +785,7 @@ compile-cost table.
 | `hir/cabi.tcl` | scalar declarations per target; `Ptr`/`FnPtr` resolution; pointee and signature validation; the not-an-Int check |
 | `hir/imprint.tcl` | imprint variables, establishment, binding, substitution, verification |
 | `hir/types.tcl` | `{cptr P}`, `{cfnptr F}`, `{imprint T}`; affinity; display |
-| `lib/ffi/c.bot` | the namespace's module file |
+| `stdlib/ffi/c.bot` | the namespace's module file |
 | `native/src/runtime/value.rs`, `ops.rs`, `show.rs`, `nir.rs`, `codegen/clif.rs`, `native/lower.tcl` | the C address word and its ops |
 | `tests/c-abi-types.test` | the tests |
 | `audit/c-abi-types/tools/` | mutants and fuzzer |

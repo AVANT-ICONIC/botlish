@@ -136,8 +136,8 @@ gets today, and where the toolchain enters:
 
 The Tcl backends (`interp`, `compile`) need nothing native and run
 anywhere Tcl 9 runs; on Windows they are untested by CI (E13/E14 run them
-for the first time). They cannot print: the only `io::IO` implementation
-is `linux::io`, raw Linux syscalls (`main.tcl:58-62`, `lib/linux/io.bot`)
+for the first time). They cannot print: the only `std::io::IO` implementation
+is `std::linux::io`, raw Linux syscalls (`main.tcl:58-62`, `stdlib/linux/io.bot`)
 [C].
 
 ### 2.2 The seams
@@ -232,9 +232,9 @@ specific, needs work), **Windows** (Windows-specific but toolchain-neutral),
 
 | component | where | class | notes |
 |---|---|---|---|
-| `io::IO` context trait | `lib/io.bot:48` | neutral | the seam a Windows IO context plugs into [C] |
-| its one implementation | `lib/linux/io.bot` over `linux::sys` | Linux by design | no Windows implementation: programs cannot print on Windows (B9) [C] |
-| `io::path::Path` | `lib/io/path.bot` | neutral | only `linux::path` implements it [C] |
+| `std::io::IO` context trait | `stdlib/io.bot:48` | neutral | the seam a Windows IO context plugs into [C] |
+| its one implementation | `stdlib/linux/io.bot` over `std::linux::sys` | Linux by design | no Windows implementation: programs cannot print on Windows (B9) [C] |
+| `std::io::path::Path` | `stdlib/io/path.bot` | neutral | only `std::linux::path` implements it [C] |
 | Win32 from Botlish | `audit/windows-toolchain/programs/win32.bot` | Windows | `GetStdHandle` + `WriteFile` with hand-written facts works [V: E10] |
 
 ### 3.6 FFI and the binding generator
@@ -243,7 +243,7 @@ Section 7 has the detail; the classification:
 
 | component | class |
 |---|---|
-| `ffi::c` scalars, `Bool`, `Double`, `Ptr`, `FnPtr`; `extern c fn` contract | neutral |
+| `std::ffi::c` scalars, `Bool`, `Double`, `Ptr`, `FnPtr`; `extern c fn` contract | neutral |
 | varargs, aggregates by value, `float`, `long double` | refused everywhere (neutral) |
 | `tools/cheader/toolchain.tcl` triples (`windows-x86_64-gnu` → `x86_64-w64-mingw32`; no msvc entry) | MinGW |
 | `profiles/win32.tcl` (MinGW 11.0.1 version pin, `_mingw*.h` privates, `libNAME.a` import libraries) | MinGW |
@@ -283,7 +283,7 @@ Section 7 has the detail; the classification:
 | atomics | the guard's lock-free publication (`platform/guard.rs`), Unix-only today; plain `std` atomics a Windows guard can reuse | neutral |
 | TLS | `thread_local!` only (`vm.rs:97`, `coroutine.rs:172`); generated code uses none | neutral |
 | event loop | none exists | -- |
-| file system, paths | Tcl `file` commands in the front end; `std::path` and rename-into-place in the driver; `io::path::Path` has only a Linux implementation | neutral; the platform path is B9 |
+| file system, paths | Tcl `file` commands in the front end; `std::path` and rename-into-place in the driver; `std::io::path::Path` has only a Linux implementation | neutral; the platform path is B9 |
 | native library discovery | `-L DIR` and the linker's own search; for MSVC rustc sets up `LIB`; no run-time search path | MinGW spelling today (section 5) |
 | build scripts, self-hosting | Cargo builds `native/` (portable); the compiler is Tcl, not self-hosted; `single/build.sh` is bash and Linux-only | neutral / Linux by design |
 | artifacts encoding ELF/Mach-O/POSIX | the stub linker's ELF reader and image (`aot.rs:463-758`); `relax_context_got`'s ELF rewrite; `tests/binary-header.tcl`; the scalar-assembly audit corpus (objdump of ELF); the Linux and macOS generated bindings | Linux/macOS by design; none blocks Windows |
@@ -461,7 +461,7 @@ same results.
 | check | msvc a | msvc b | msvc c | gnu a | gnu b | gnu c |
 |---|---|---|---|---|---|---|
 | uri-steady, cranelift | pass | pass | pass | pass | pass | pass |
-| uri-steady, GC stress | crash | crash | crash | wrong (`IndexNotFound`) | wrong (`byte::AboveRange`) | wrong (`byte::AboveRange`) |
+| uri-steady, GC stress | crash | crash | crash | wrong (`IndexNotFound`) | wrong (`std::byte::AboveRange`) | wrong (`std::byte::AboveRange`) |
 | uri-steady, GC stress, fallback plan | pass | pass | pass | segfault | segfault | segfault |
 | uri-steady, GC stress, fallback plan, no walk | -- | -- | **pass** | -- | -- | **pass** |
 | uri-steady, GC stress, all-shadow, no walk | -- | **pass** | **pass** | -- | **pass** | **pass** |
@@ -554,16 +554,16 @@ c-ffi.test needs a Win64 model (four positional registers, shadow space).
 
 | C | Botlish on Windows x86-64 | status |
 |---|---|---|
-| `long` / `unsigned long` | `ffi::c::Long`/`ULong`, 32 bits (LLP64) | correct [V: E8, sizeof 4] |
-| `wchar_t`, `WCHAR` | no primitive; the binding resolves `WCHAR` to `ffi::c::UShort` | correct width [V: E8, sizeof 2]; wide strings cannot be exposed (byte pointees only) |
+| `long` / `unsigned long` | `std::ffi::c::Long`/`ULong`, 32 bits (LLP64) | correct [V: E8, sizeof 4] |
+| `wchar_t`, `WCHAR` | no primitive; the binding resolves `WCHAR` to `std::ffi::c::UShort` | correct width [V: E8, sizeof 2]; wide strings cannot be exposed (byte pointees only) |
 | pointer-sized (`SIZE_T`, `ULONG_PTR`, `LPARAM`) | resolved through the typedef per target (`ULongLong`, `LongLong`) | correct [C]; no `size_t`/`intptr_t` primitive |
-| pointers | `ffi::c::Ptr[T]`, 64-bit | correct [V: E8] |
+| pointers | `std::ffi::c::Ptr[T]`, 64-bit | correct [V: E8] |
 | structs, unions | layouts probed from the toolchain (`layouts.bot`); by value refused | layouts are the probed toolchain's: MinGW's today |
 | enums | probed per toolchain | MinGW's today |
-| function pointers | `ffi::c::FnPtr[Fn{...}]`, no convention field, never called | adequate for x64 (one convention) |
+| function pointers | `std::ffi::c::FnPtr[Fn{...}]`, no convention field, never called | adequate for x64 (one convention) |
 | variadics | refused (`surface/parser.tcl:1521`) | independent FFI work: Win64 varargs pass doubles in both registers |
 | `float`, `long double` | no type | `long double` differs (MinGW 80-bit, MSVC = double) -- unsupported either way |
-| `_Bool`, `double` | `ffi::c::Bool`, `ffi::c::Double` | correct [V: E8 for double] |
+| `_Bool`, `double` | `std::ffi::c::Bool`, `std::ffi::c::Double` | correct [V: E8 for double] |
 
 **Calling conventions.** On x86-64 Windows there is one C convention: the
 compilers ignore `__stdcall`, `__cdecl` and `__fastcall` there, and the
@@ -623,7 +623,7 @@ is, and a MinGW native path ties every Windows binding to MinGW's headers.
 
 **Does choosing MSVC now cost complexity before bindgen can benefit?**
 Only in timing. The next native milestones (section 10) need a handful of
-kernel32 functions, which are hand-written declarations like `lib/linux.bot`'s
+kernel32 functions, which are hand-written declarations like `stdlib/linux.bot`'s
 syscall wrappers (E10 is that). Generating from the SDK needs the SDK
 headers, which are not redistributable: generation moves to a Windows host
 or a Windows CI runner (the c-bindgen workflow runs on Linux today), or to
@@ -699,11 +699,11 @@ Work the port needs under either toolchain, with the evidence:
   outputs, the linked run, `single/` and the tests' `file rootname`s.
   MinGW's gcc appends `.exe` to the link output and the driver then cannot
   find it (E14a); `link.exe` does not (E13a).
-- **B9. Platform IO.** There is no Windows `io::IO`: a program cannot
+- **B9. Platform IO.** There is no Windows `std::io::IO`: a program cannot
   print on Windows. A `win32` (or `windows`) platform namespace designated
   in `core/cabi.tcl`'s `platforms`, over kernel32 (`GetStdHandle`,
   `WriteFile`/`WriteConsoleW`), is the Windows counterpart of
-  `linux::io` -- a direct module, like `linux`.
+  `std::linux::io` -- a direct module, like `linux`.
 - **B10. One Windows target per driver.** `same_target` ignores the
   environment (E2, E10), and the driver calls whatever `rustc` is first on
   `PATH`. Whichever toolchain is chosen, the driver should refuse a
@@ -860,7 +860,7 @@ The milestones after it, in the order the census suggests:
 2. **C calls and Windows platform IO** -- `C_CALLS` for windows-msvc (E13
    already passes the probe), a Win64 model in `c-ffi.test` and a fixture
    without ELF assembly, and a Windows platform namespace designated in
-   `core/cabi.tcl`'s `platforms` whose context implements `io::IO` over
+   `core/cabi.tcl`'s `platforms` whose context implements `std::io::IO` over
    kernel32 (`GetStdHandle`, `WriteFile`/`WriteConsoleW`, hand-written
    declarations as in `win32.bot`): the first Botlish program that prints
    on Windows. IO needs C calls, so the two go together.

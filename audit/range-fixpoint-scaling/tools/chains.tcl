@@ -13,12 +13,12 @@ lassign $argv shape n out
 set lines {}
 switch -- $shape {
     chain {
-        lappend lines "import list" "fn f0(x, y):" "    \[x, y\]"
+        lappend lines "import std::list" "fn f0(x, y):" "    \[x, y\]"
         for {set i 1} {$i <= $n} {incr i} {
             set p [expr {$i - 1}]
             lappend lines "fn f$i\(x, y):" "    a = x + $i" "    b = \[a, y, \"s$i\"\]" \
-                "    if a < y:" "        f$p\(a, list::length(b))" "    else:" \
-                "        c = loop k from 0 to 3:" "            k * a" "        f$p\(list::length(c), y)"
+                "    if a < y:" "        f$p\(a, std::list::length(b))" "    else:" \
+                "        c = loop k from 0 to 3:" "            k * a" "        f$p\(std::list::length(c), y)"
         }
         lappend lines "f$n\(1, 1000)"
     }

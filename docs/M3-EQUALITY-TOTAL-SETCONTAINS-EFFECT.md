@@ -34,14 +34,14 @@ below), including one fixture that still raises the real, pre-existing
 `EQUALITY` error at runtime.
 
 The motivating cascade happened exactly as predicted, with **no
-`esc_char`-specific or `web::is_unreserved`-specific code anywhere**:
+`esc_char`-specific or `std::web::is_unreserved`-specific code anywhere**:
 
 ```
 additional_unreserved_chars : ImmutableSet[Byte], b : Byte, both
 equality-total (HIR, already available -- M1's own fact-transport payoff)
-    -> web::is_unreserved's own SetContains call: setcontainstotal
-    -> web::is_unreserved's own function may_error: true -> false
-    -> esc_char -> web::is_unreserved edge: may_error true -> false
+    -> std::web::is_unreserved's own SetContains call: setcontainstotal
+    -> std::web::is_unreserved's own function may_error: true -> false
+    -> esc_char -> std::web::is_unreserved edge: may_error true -> false
        (existing, unmodified nir.rs::summarize_call_effects fixed point)
     -> esc_char's own caller-side completion retest (`test rax,rax; je`)
        disappears from the generated machine code
@@ -65,7 +65,7 @@ Structural results, `uri-steady` (whole program, includes module init):
 | allocations / bytes | 61510 / 2544568 | 61510 / 2544568 (unchanged) |
 
 Two functions shrink, both entirely attributable to the one retest and the
-one internal recheck this milestone removes: `web::is_unreserved<generic>`
+one internal recheck this milestone removes: `std::web::is_unreserved<generic>`
 190B -> 155B (-35B, its own internal `rt_set_contains` NO_VALUE recheck
 gone) and `esc_char<generic>` 525B -> 516B (-9B, the caller-side
 `test rax,rax; je` gone). Every other function is byte-for-byte identical.
@@ -94,8 +94,8 @@ started from (commit `5d0a41b`, the post-M2 tree):
 
 | layer | representation |
 |---|---|
-| source | `lib/web.bot:68`, `immutable_set_contains(additional_unreserved_chars, b)` inside `is_unreserved` |
-| semantic HIR type of `additional_unreserved_chars` (module-scope `root` binding) | `ImmutableSet[Byte]` (`{immutableSet {refined int {Byte}}}`) -- exact, from `byte::set([...])`'s own `-result-shape` inference (MINIMAL-IMMUTABLE-SET.md), unconditional (a `root` binding's type is exactly its value's type) |
+| source | `stdlib/web.bot:68`, `immutable_set_contains(additional_unreserved_chars, b)` inside `is_unreserved` |
+| semantic HIR type of `additional_unreserved_chars` (module-scope `root` binding) | `ImmutableSet[Byte]` (`{immutableSet {refined int {Byte}}}`) -- exact, from `std::byte::set([...])`'s own `-result-shape` inference (MINIMAL-IMMUTABLE-SET.md), unconditional (a `root` binding's type is exactly its value's type) |
 | semantic HIR type of `b` | `Byte` (`declaredParamTypes`, `int[Byte]`) |
 | `is_unreserved<generic>`'s own instance view of `b` (post-M1) | `int[Byte]` -- **already correct**, M1's own payoff |
 | `is_unreserved<generic>`'s own instance view of `additional_unreserved_chars` | `ImmutableSet[Byte]` -- a captured module value, always exact (M0/M1; unaffected by specialization, since it never goes through `KeyType`'s own kind-only reduction -- captures of immutable module bindings keep their exact type, `hir::callables.tcl`'s own header) |
@@ -113,7 +113,7 @@ already resolves `==` to `veq`/`ieq`/`streq` from its own two argument
 expressions' static types. Both operand types -- the set's own applied
 element type and the needle's own static type -- are already ordinary,
 fully-resolved HIR facts by the time this proc runs (nothing upstream ever
-lost them: `ImmutableSet[Byte]` survives from `byte::set`'s own
+lost them: `ImmutableSet[Byte]` survives from `std::byte::set`'s own
 `-result-shape` inference through the module-scope `root` binding and its
 capture into `is_unreserved`'s own instance view unconditionally, and `Byte`
 survives through M1's own declared-parameter-fact transport). The proc
@@ -197,9 +197,9 @@ site or any fixture the corpus census below found.
 
 ## Why Byte qualifies
 
-`Byte` is `type Byte = Int in 0..255` (`lib/byte.bot:100`), a source-defined
+`Byte` is `type Byte = Int in 0..255` (`stdlib/byte.bot:100`), a source-defined
 bounded refinement of `Int` (SOURCE-DEFINED-INTEGER-DOMAINS.md). Its static
-type, wherever it appears (a declared parameter, `byte::set`'s own
+type, wherever it appears (a declared parameter, `std::byte::set`'s own
 `-result-shape`-inferred `ImmutableSet[Byte]`), is the core form
 `{refined int {Byte}}`. `hir::types::kindOf` normalizes this via
 `core::type::base`, which returns `int` for any `refined` form -- so
@@ -335,13 +335,13 @@ proven equality-total through the identical mechanism.
 
 ## SetContains corpus census
 
-Searched the entire frozen corpus (`lib/*.bot`, `bench/*.bot`,
+Searched the entire frozen corpus (`stdlib/*.bot`, `bench/*.bot`,
 `bench/*.ir`, every `audit/comprehensive-generated-code/probes/*.bot`
 fixture) for `immutable_set_contains` call sites:
 
 | site | count |
 |---|---:|
-| `lib/web.bot:68` (`web::is_unreserved`) | 1 |
+| `stdlib/web.bot:68` (`std::web::is_unreserved`) | 1 |
 | everywhere else in the frozen corpus | 0 |
 
 **Exactly one** real `SetContains` call site exists in the whole frozen
@@ -356,10 +356,10 @@ the frozen benchmarks happen not to need them.
 
 | local op / edge | before | after |
 |---|---|---|
-| `web::is_unreserved`'s own `SetContains` local op | `may_error=true` (opcode `setcontains`) | `may_error=false` (opcode `setcontainstotal`) |
-| `web::is_unreserved` function aggregate | `may_error=true` | `may_error=false` |
-| `<program> -> web::is_unreserved` edge (module init, `web-unreserved-256` only) | `may_error=true` | `may_error=false` |
-| `esc_char -> web::is_unreserved` edge | `may_error=true` | `may_error=false` |
+| `std::web::is_unreserved`'s own `SetContains` local op | `may_error=true` (opcode `setcontains`) | `may_error=false` (opcode `setcontainstotal`) |
+| `std::web::is_unreserved` function aggregate | `may_error=true` | `may_error=false` |
+| `<program> -> std::web::is_unreserved` edge (module init, `web-unreserved-256` only) | `may_error=true` | `may_error=false` |
+| `esc_char -> std::web::is_unreserved` edge | `may_error=true` | `may_error=false` |
 | `esc_char`'s own caller-side completion retest | present (`test rax,rax; je`) | absent |
 
 No other function's `may_error`/`may_gc` moved in any measured workload
@@ -371,9 +371,9 @@ above and no others).
 
 | caller -> call expression | target | call form | may_error before | may_error after |
 |---|---|---|---|---|
-| `esc_char -> web::is_unreserved` | `{block}` exact (M2) | direct `callenv` (M2, unchanged) | true | **false** |
-| `web::is_unreserved -> ascii::is_alphanumeric` | `{block}` exact | direct `call` | false (M1) | false |
-| (module init) `<program> -> web::is_unreserved` (web-unreserved-256 only) | `{block}` exact | direct `callenv` | true | **false** |
+| `esc_char -> std::web::is_unreserved` | `{block}` exact (M2) | direct `callenv` (M2, unchanged) | true | **false** |
+| `std::web::is_unreserved -> std::ascii::is_alphanumeric` | `{block}` exact | direct `call` | false (M1) | false |
+| (module init) `<program> -> std::web::is_unreserved` (web-unreserved-256 only) | `{block}` exact | direct `callenv` | true | **false** |
 
 ## `web-unreserved-256` structural delta
 
@@ -385,7 +385,7 @@ above and no others).
 | `false_false` / `true_false` / `true_true` (call_effect_report matrix) | 6 / 4 / 7 | 8 / 2 / 7 |
 | `completion_checks_removed` | 6 | 8 |
 
-Two call edges into `web::is_unreserved` exist in this workload (one from
+Two call edges into `std::web::is_unreserved` exist in this workload (one from
 module-scope `<program>` init, one from `esc_char`); both flip to
 `may_error=false`, matching the -44B delta seen identically in `uri-steady`
 and `refined-checks` (the same two-instruction removal -- one internal
@@ -400,17 +400,17 @@ happens to cost the same number of bytes as `esc_char`'s own).
 ## `uri-steady` structural delta
 
 See "Outcome" above for the full table. Machine code 7155 -> 7111B (-44B,
--0.6%); `web::is_unreserved<generic>` 190 -> 155B; `esc_char<generic>`
+-0.6%); `std::web::is_unreserved<generic>` 190 -> 155B; `esc_char<generic>`
 525 -> 516B; every other function byte-for-byte identical (confirmed by
 diffing `summary.txt` in full, not merely eyeballing the two changed
 lines). `params.txt` has **zero** diff (M1 control, see below).
 `roots.txt` has exactly one line changed (the same
-`esc_char -> web::is_unreserved` effect flag) and no other root/safepoint
+`esc_char -> std::web::is_unreserved` effect flag) and no other root/safepoint
 line moved.
 
 ## Machine-code excerpt before/after
 
-`esc_char<generic>`'s own call into `web::is_unreserved` (objdump, both
+`esc_char<generic>`'s own call into `std::web::is_unreserved` (objdump, both
 from freshly re-probed `bench/uri-steady.bot`):
 
 ```
@@ -427,7 +427,7 @@ cmp    rax,0x6
 je     <false path>
 ```
 
-`web::is_unreserved`'s own body (`botlish_fn_9`), after its call to
+`std::web::is_unreserved`'s own body (`botlish_fn_9`), after its call to
 `rt_set_contains`:
 
 ```
@@ -491,7 +491,7 @@ required to reach the stop condition.
   `op_may_allocate`, and `SetContainsTotal` is absent from it exactly like
   `SetContains` already is.
 * **Roots/safepoints**: `roots.txt` for `uri-steady` differs by exactly one
-  line (the `esc_char -> web::is_unreserved` effect flag text); no root or
+  line (the `esc_char -> std::web::is_unreserved` effect flag text); no root or
   safepoint entry was added, removed, or moved.
 * **GC stress**: `BOTLISH_NATIVE_GC_STRESS=1 tclsh9.0 tests/all.tcl`, run
   over the full suite including the new test file -- see "Full regression"
@@ -499,7 +499,7 @@ required to reach the stop condition.
 
 ## M1 regression controls
 
-* `web::is_unreserved<generic>`'s own parameter view of `b`: **still**
+* `std::web::is_unreserved<generic>`'s own parameter view of `b`: **still**
   `int[Byte]` (`tests/setcontains-equality-total.test`'s
   `setcontains-m1-control-is-unreserved-param-view-unchanged`, re-deriving
   it the same way `hir-specialize-m1-module-closure` does).
@@ -509,11 +509,11 @@ required to reach the stop condition.
   columns in the "Outcome" table: generic instances 9/9, int/raw 6/6).
 * ASCII call edges' own `may_error=false` status (M1's own five collapses)
   unchanged -- confirmed by the `effects.txt` diffs showing no line other
-  than the `web::is_unreserved`-related ones above.
+  than the `std::web::is_unreserved`-related ones above.
 
 ## M2 regression controls
 
-* `esc_char -> web::is_unreserved`'s target: still exact `{block}`,
+* `esc_char -> std::web::is_unreserved`'s target: still exact `{block}`,
   unchanged.
 * Call form: still direct `callenv` (`tests/setcontains-equality-total.test`'s
   `setcontains-m2-control-esc-char-edge-still-direct-callenv`), never
@@ -570,16 +570,16 @@ FENCE remains intact.
 
 | fact | before M3 | after M3 |
 |---|---|---|
-| `web::is_unreserved`'s own `SetContains` local-op effect | `may_error=true` (blind to operand types) | `may_error=false` (proven from static operand types) |
-| `web::is_unreserved` function aggregate | `may_error=true` | `may_error=false` |
-| `esc_char -> web::is_unreserved` edge | `may_error=true` | `may_error=false` |
+| `std::web::is_unreserved`'s own `SetContains` local-op effect | `may_error=true` (blind to operand types) | `may_error=false` (proven from static operand types) |
+| `std::web::is_unreserved` function aggregate | `may_error=true` | `may_error=false` |
+| `esc_char -> std::web::is_unreserved` edge | `may_error=true` | `may_error=false` |
 | `esc_char`'s own caller-side completion retest | present | **gone -- this was M2's own identified next first loss, now closed** |
 | Generic `SetContains` (broad/erased/unsupported operands) | `may_error=true` | unchanged, `may_error=true` |
-| `esc_char -> web::is_unreserved` call target/form | exact `{block}`, direct `callenv` (M2) | unchanged |
-| `web::is_unreserved<generic>`'s own declared-Byte parameter view (M1) | `int[Byte]` | unchanged |
+| `esc_char -> std::web::is_unreserved` call target/form | exact `{block}`, direct `callenv` (M2) | unchanged |
+| `std::web::is_unreserved<generic>`'s own declared-Byte parameter view (M1) | `int[Byte]` | unchanged |
 | Tagged Bool discrimination on the edge's own result | `cmp rax,0x6` present | unchanged, still present |
-| `SetFromList`'s own analogous dedup-equality question | unaddressed (`byte::set`'s own module-init construction) | unaddressed -- explicit follow-up, not started here |
-| `web::is_unreserved`'s own internal `rt_set_contains` NO_VALUE recheck | present | **gone**, since the call site is now proven to never need it |
+| `SetFromList`'s own analogous dedup-equality question | unaddressed (`std::byte::set`'s own module-init construction) | unaddressed -- explicit follow-up, not started here |
+| `std::web::is_unreserved`'s own internal `rt_set_contains` NO_VALUE recheck | present | **gone**, since the call site is now proven to never need it |
 
 ## SetFromList follow-up assessment
 
@@ -588,10 +588,10 @@ own dedup pass (`rt_set_from_list`) calls the identical `equal` for its own
 duplicate-elimination comparisons, and the *identical* static predicate
 (`hir::types::IsEqualityTotal` on the source `List[T]`'s own element type)
 would in principle let a `SetFromListTotal`-shaped refinement apply the
-same way. `byte::set`'s own construction happens once, at module
+same way. `std::byte::set`'s own construction happens once, at module
 initialization (confirmed unaffected here: `params.txt`/allocation counts
 show no movement in any module-init code), so it is not part of
-`web::is_unreserved`'s own steady-state cost and was correctly kept out of
+`std::web::is_unreserved`'s own steady-state cost and was correctly kept out of
 this milestone's own causal experiment (spec items 44-45's own reasoning).
 Recorded as the clearest, most directly analogous next candidate.
 
@@ -601,7 +601,7 @@ Unaffected by this milestone. `refined-checks`'s own remaining generic-
 instance guards (`StringRegion` scanner index guards, M1's own family 1b)
 are on parameters with no declared type and no relationship to
 `SetContains`; this milestone's own `refined-checks` diff is exactly the
-one `esc_char -> web::is_unreserved` edge (see "Effect propagation"
+one `esc_char -> std::web::is_unreserved` edge (see "Effect propagation"
 above), confirming no incidental movement in that unrelated family.
 
 ## Recommended next milestone
@@ -672,8 +672,8 @@ second, independent candidate carried forward unchanged from M1/M2.
 
 ## Required URI questions
 
-18. **`web::is_unreserved` may_error before/after?** true -> false.
-19. **`esc_char -> web::is_unreserved` may_error before/after?** true ->
+18. **`std::web::is_unreserved` may_error before/after?** true -> false.
+19. **`esc_char -> std::web::is_unreserved` may_error before/after?** true ->
     false.
 20. **Still direct `callenv`?** Yes.
 21. **Does the `test rax,rax` completion retest disappear?** Yes,
@@ -710,12 +710,12 @@ second, independent candidate carried forward unchanged from M1/M2.
 35. **Generic instance count before/after?** 9 -> 9, unchanged.
 36. **Allocations/bytes before/after?** 61510/2544568, unchanged.
 37. **`web-unreserved-256` machine-code/effect delta?** 15485 -> 15441B;
-    both call edges into `web::is_unreserved` flip to `may_error=false`.
+    both call edges into `std::web::is_unreserved` flip to `may_error=false`.
 38. **Cranelift timing?** See "Timing" above -- structural evidence is
     primary; a two-instruction, 44-byte change is not expected to be
     distinguishable from this host's own noise band.
 39. **Any `refined-checks` movement attributable solely to SetContains?**
-    Yes -- exactly the one `esc_char -> web::is_unreserved` edge; nothing
+    Yes -- exactly the one `esc_char -> std::web::is_unreserved` edge; nothing
     else in that workload's `effects.txt`/`summary.txt` moved.
 
 ## Required scope questions
@@ -749,7 +749,7 @@ All thirteen conditions of spec section 85 hold:
    directly by two dedicated fixtures.
 5. Genuine EQUALITY runtime failures remain intact, confirmed by a
    dedicated runtime fixture that still raises the error.
-6. `web::is_unreserved` becomes `may_error=false` through ordinary effect
+6. `std::web::is_unreserved` becomes `may_error=false` through ordinary effect
    aggregation (`nir.rs`, unmodified), confirmed in `effects.txt`.
 7. `esc_char`'s already-direct `callenv` naturally inherits
    `may_error=false`, confirmed in `effects.txt` and the disassembly.

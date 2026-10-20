@@ -3,7 +3,7 @@
 # The thunked APIs of include/openssl/pool.h (static inline functions, table-redirected
 # names, macros): externs of the C wrappers in the shim library (C-BINDGEN.md,
 # "Thunks"). Build the shim with `tools/c-bindgen.tcl build`.
-import ffi::c
+import std::ffi::c
 import boringssl::ctypes
 
 extern c library "botlish_shim_boringssl_371bf922"
@@ -12,158 +12,158 @@ extern c library "stdc++"
 
 # C: static inline void sk_CRYPTO_BUFFER_call_free_func(OPENSSL_sk_free_func free_func, void *ptr)
 extern c fn sk_CRYPTO_BUFFER_call_free_func named "botlish_boringssl_sk_CRYPTO_BUFFER_call_free_func"(
-    free_func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]], return: unit}] proven noescape,
-    ptr: ffi::c::Ptr[ffi::c::Void]
+    free_func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Void]], return: unit}] proven noescape,
+    ptr: std::ffi::c::Ptr[std::ffi::c::Void]
 ) -> unit
 
 # C: static inline void *sk_CRYPTO_BUFFER_call_copy_func(OPENSSL_sk_copy_func copy_func, const void *ptr)
 extern c fn sk_CRYPTO_BUFFER_call_copy_func named "botlish_boringssl_sk_CRYPTO_BUFFER_call_copy_func"(
-    copy_func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]], return: ffi::c::Ptr[ffi::c::Void]}] proven noescape,
-    ptr: ffi::c::Ptr[ffi::c::Void]
-) -> ffi::c::Ptr[ffi::c::Void]
+    copy_func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Void]], return: std::ffi::c::Ptr[std::ffi::c::Void]}] proven noescape,
+    ptr: std::ffi::c::Ptr[std::ffi::c::Void]
+) -> std::ffi::c::Ptr[std::ffi::c::Void]
 
 # C: static inline int sk_CRYPTO_BUFFER_call_cmp_func(OPENSSL_sk_cmp_func cmp_func, const void *a, const void *b)
 extern c fn sk_CRYPTO_BUFFER_call_cmp_func named "botlish_boringssl_sk_CRYPTO_BUFFER_call_cmp_func"(
-    cmp_func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Ptr[ffi::c::Void]], ffi::c::Ptr[ffi::c::Ptr[ffi::c::Void]]], return: ffi::c::Int}] proven noescape,
-    a: ffi::c::Ptr[ffi::c::Void],
-    b: ffi::c::Ptr[ffi::c::Void]
-) -> ffi::c::Int
+    cmp_func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Ptr[std::ffi::c::Void]], std::ffi::c::Ptr[std::ffi::c::Ptr[std::ffi::c::Void]]], return: std::ffi::c::Int}] proven noescape,
+    a: std::ffi::c::Ptr[std::ffi::c::Void],
+    b: std::ffi::c::Ptr[std::ffi::c::Void]
+) -> std::ffi::c::Int
 
 # C: static inline int sk_CRYPTO_BUFFER_call_delete_if_func(OPENSSL_sk_delete_if_func func, void *obj, void *data)
 extern c fn sk_CRYPTO_BUFFER_call_delete_if_func named "botlish_boringssl_sk_CRYPTO_BUFFER_call_delete_if_func"(
-    func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[ffi::c::Void]], return: ffi::c::Int}] proven noescape,
-    obj: ffi::c::Ptr[ffi::c::Void],
-    data: ffi::c::Ptr[ffi::c::Void]
-) -> ffi::c::Int
+    func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Void], std::ffi::c::Ptr[std::ffi::c::Void]], return: std::ffi::c::Int}] proven noescape,
+    obj: std::ffi::c::Ptr[std::ffi::c::Void],
+    data: std::ffi::c::Ptr[std::ffi::c::Void]
+) -> std::ffi::c::Int
 
 # C: static inline struct stack_st_CRYPTO_BUFFER *sk_CRYPTO_BUFFER_new(sk_CRYPTO_BUFFER_cmp_func comp)
 extern c fn sk_CRYPTO_BUFFER_new named "botlish_boringssl_sk_CRYPTO_BUFFER_new"(
-    comp: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]], ffi::c::Ptr[ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]]], return: ffi::c::Int}]
-) -> ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER]
+    comp: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]], std::ffi::c::Ptr[std::ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]]], return: std::ffi::c::Int}]
+) -> std::ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER]
 
 # C: static inline struct stack_st_CRYPTO_BUFFER *sk_CRYPTO_BUFFER_new_null(void)
 extern c fn sk_CRYPTO_BUFFER_new_null named "botlish_boringssl_sk_CRYPTO_BUFFER_new_null"(
     
-) -> ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER]
+) -> std::ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER]
 
 # C: static inline size_t sk_CRYPTO_BUFFER_num(const struct stack_st_CRYPTO_BUFFER *sk)
 extern c fn sk_CRYPTO_BUFFER_num named "botlish_boringssl_sk_CRYPTO_BUFFER_num"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER]
-) -> ffi::c::ULong
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER]
+) -> std::ffi::c::ULong
 
 # C: static inline void sk_CRYPTO_BUFFER_zero(struct stack_st_CRYPTO_BUFFER *sk)
 extern c fn sk_CRYPTO_BUFFER_zero named "botlish_boringssl_sk_CRYPTO_BUFFER_zero"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER]
 ) -> unit
 
 # C: static inline CRYPTO_BUFFER *sk_CRYPTO_BUFFER_value(const struct stack_st_CRYPTO_BUFFER *sk, size_t i)
 extern c fn sk_CRYPTO_BUFFER_value named "botlish_boringssl_sk_CRYPTO_BUFFER_value"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER],
-    i: ffi::c::ULong
-) -> ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER],
+    i: std::ffi::c::ULong
+) -> std::ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]
 
 # C: static inline CRYPTO_BUFFER *sk_CRYPTO_BUFFER_last(const struct stack_st_CRYPTO_BUFFER *sk)
 extern c fn sk_CRYPTO_BUFFER_last named "botlish_boringssl_sk_CRYPTO_BUFFER_last"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER]
-) -> ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER]
+) -> std::ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]
 
 # C: static inline CRYPTO_BUFFER *sk_CRYPTO_BUFFER_set(struct stack_st_CRYPTO_BUFFER *sk, size_t i, CRYPTO_BUFFER *p)
 extern c fn sk_CRYPTO_BUFFER_set named "botlish_boringssl_sk_CRYPTO_BUFFER_set"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER],
-    i: ffi::c::ULong,
-    p: ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]
-) -> ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER],
+    i: std::ffi::c::ULong,
+    p: std::ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]
+) -> std::ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]
 
 # C: static inline void sk_CRYPTO_BUFFER_free(struct stack_st_CRYPTO_BUFFER *sk)
 extern c fn sk_CRYPTO_BUFFER_free named "botlish_boringssl_sk_CRYPTO_BUFFER_free"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER]
 ) -> unit
 
 # C: static inline void sk_CRYPTO_BUFFER_pop_free(struct stack_st_CRYPTO_BUFFER *sk, sk_CRYPTO_BUFFER_free_func free_func)
 extern c fn sk_CRYPTO_BUFFER_pop_free named "botlish_boringssl_sk_CRYPTO_BUFFER_pop_free"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER],
-    free_func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]], return: unit}]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER],
+    free_func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]], return: unit}]
 ) -> unit
 
 # C: static inline size_t sk_CRYPTO_BUFFER_insert(struct stack_st_CRYPTO_BUFFER *sk, CRYPTO_BUFFER *p, size_t where)
 extern c fn sk_CRYPTO_BUFFER_insert named "botlish_boringssl_sk_CRYPTO_BUFFER_insert"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER],
-    p: ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER],
-    where: ffi::c::ULong
-) -> ffi::c::ULong
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER],
+    p: std::ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER],
+    where: std::ffi::c::ULong
+) -> std::ffi::c::ULong
 
 # C: static inline CRYPTO_BUFFER *sk_CRYPTO_BUFFER_delete(struct stack_st_CRYPTO_BUFFER *sk, size_t where)
 extern c fn sk_CRYPTO_BUFFER_delete named "botlish_boringssl_sk_CRYPTO_BUFFER_delete"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER],
-    where: ffi::c::ULong
-) -> ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER],
+    where: std::ffi::c::ULong
+) -> std::ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]
 
 # C: static inline CRYPTO_BUFFER *sk_CRYPTO_BUFFER_delete_ptr(struct stack_st_CRYPTO_BUFFER *sk, const CRYPTO_BUFFER *p)
 extern c fn sk_CRYPTO_BUFFER_delete_ptr named "botlish_boringssl_sk_CRYPTO_BUFFER_delete_ptr"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER],
-    p: ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]
-) -> ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER],
+    p: std::ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]
+) -> std::ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]
 
 # C: static inline void sk_CRYPTO_BUFFER_delete_if(struct stack_st_CRYPTO_BUFFER *sk, sk_CRYPTO_BUFFER_delete_if_func func, void *data)
 extern c fn sk_CRYPTO_BUFFER_delete_if named "botlish_boringssl_sk_CRYPTO_BUFFER_delete_if"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER],
-    func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER], ffi::c::Ptr[ffi::c::Void]], return: ffi::c::Int}],
-    data: ffi::c::Ptr[ffi::c::Void]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER],
+    func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER], std::ffi::c::Ptr[std::ffi::c::Void]], return: std::ffi::c::Int}],
+    data: std::ffi::c::Ptr[std::ffi::c::Void]
 ) -> unit
 
 # C: static inline int sk_CRYPTO_BUFFER_find(const struct stack_st_CRYPTO_BUFFER *sk, size_t *out_index, const CRYPTO_BUFFER *p)
 extern c fn sk_CRYPTO_BUFFER_find named "botlish_boringssl_sk_CRYPTO_BUFFER_find"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER],
-    out_index: ffi::c::Ptr[ffi::c::ULong],
-    p: ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]
-) -> ffi::c::Int
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER],
+    out_index: std::ffi::c::Ptr[std::ffi::c::ULong],
+    p: std::ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]
+) -> std::ffi::c::Int
 
 # C: static inline CRYPTO_BUFFER *sk_CRYPTO_BUFFER_shift(struct stack_st_CRYPTO_BUFFER *sk)
 extern c fn sk_CRYPTO_BUFFER_shift named "botlish_boringssl_sk_CRYPTO_BUFFER_shift"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER]
-) -> ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER]
+) -> std::ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]
 
 # C: static inline size_t sk_CRYPTO_BUFFER_push(struct stack_st_CRYPTO_BUFFER *sk, CRYPTO_BUFFER *p)
 extern c fn sk_CRYPTO_BUFFER_push named "botlish_boringssl_sk_CRYPTO_BUFFER_push"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER],
-    p: ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]
-) -> ffi::c::ULong
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER],
+    p: std::ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]
+) -> std::ffi::c::ULong
 
 # C: static inline CRYPTO_BUFFER *sk_CRYPTO_BUFFER_pop(struct stack_st_CRYPTO_BUFFER *sk)
 extern c fn sk_CRYPTO_BUFFER_pop named "botlish_boringssl_sk_CRYPTO_BUFFER_pop"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER]
-) -> ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER]
+) -> std::ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]
 
 # C: static inline struct stack_st_CRYPTO_BUFFER *sk_CRYPTO_BUFFER_dup(const struct stack_st_CRYPTO_BUFFER *sk)
 extern c fn sk_CRYPTO_BUFFER_dup named "botlish_boringssl_sk_CRYPTO_BUFFER_dup"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER]
-) -> ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER]
+) -> std::ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER]
 
 # C: static inline void sk_CRYPTO_BUFFER_sort(struct stack_st_CRYPTO_BUFFER *sk)
 extern c fn sk_CRYPTO_BUFFER_sort named "botlish_boringssl_sk_CRYPTO_BUFFER_sort"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER]
 ) -> unit
 
 # C: static inline void sk_CRYPTO_BUFFER_sort_and_dedup(struct stack_st_CRYPTO_BUFFER *sk, sk_CRYPTO_BUFFER_free_func free_func)
 extern c fn sk_CRYPTO_BUFFER_sort_and_dedup named "botlish_boringssl_sk_CRYPTO_BUFFER_sort_and_dedup"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER],
-    free_func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]], return: unit}]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER],
+    free_func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]], return: unit}]
 ) -> unit
 
 # C: static inline int sk_CRYPTO_BUFFER_is_sorted(const struct stack_st_CRYPTO_BUFFER *sk)
 extern c fn sk_CRYPTO_BUFFER_is_sorted named "botlish_boringssl_sk_CRYPTO_BUFFER_is_sorted"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER]
-) -> ffi::c::Int
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER]
+) -> std::ffi::c::Int
 
 # C: static inline sk_CRYPTO_BUFFER_cmp_func sk_CRYPTO_BUFFER_set_cmp_func(struct stack_st_CRYPTO_BUFFER *sk, sk_CRYPTO_BUFFER_cmp_func comp)
 extern c fn sk_CRYPTO_BUFFER_set_cmp_func named "botlish_boringssl_sk_CRYPTO_BUFFER_set_cmp_func"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER],
-    comp: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]], ffi::c::Ptr[ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]]], return: ffi::c::Int}]
-) -> ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]], ffi::c::Ptr[ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]]], return: ffi::c::Int}]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER],
+    comp: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]], std::ffi::c::Ptr[std::ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]]], return: std::ffi::c::Int}]
+) -> std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]], std::ffi::c::Ptr[std::ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]]], return: std::ffi::c::Int}]
 
 # C: static inline struct stack_st_CRYPTO_BUFFER *sk_CRYPTO_BUFFER_deep_copy(const struct stack_st_CRYPTO_BUFFER *sk, sk_CRYPTO_BUFFER_copy_func copy_func, sk_CRYPTO_BUFFER_free_func free_func)
 extern c fn sk_CRYPTO_BUFFER_deep_copy named "botlish_boringssl_sk_CRYPTO_BUFFER_deep_copy"(
-    sk: ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER],
-    copy_func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]], return: ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]}],
-    free_func: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]], return: unit}]
-) -> ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER]
+    sk: std::ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER],
+    copy_func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]], return: std::ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]}],
+    free_func: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[boringssl::ctypes::CRYPTO_BUFFER]], return: unit}]
+) -> std::ffi::c::Ptr[boringssl::ctypes::stack_st_CRYPTO_BUFFER]

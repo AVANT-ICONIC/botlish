@@ -14,13 +14,13 @@
 # Two root primitives, registered under their qualified `immutable_set`
 # names like core/lists.tcl's `list` ones (STDLIB-NAMESPACES.md):
 #
-#   immutable_set::from_list(List[T]) -> ImmutableSet[T]
+#   std::immutable_set::from_list(List[T]) -> ImmutableSet[T]
 #       Construction: deduplicates by core::value::equal. Total whenever
 #       equality itself is total for the members involved -- see the
 #       EQUALITY note on Dedup below, which is an existing restriction of
 #       core::value::equal (block/native/mutarray have no structural
 #       equality), not a new failure mode this milestone invents.
-#   immutable_set::contains(ImmutableSet, any) -> Bool
+#   std::immutable_set::contains(ImmutableSet, any) -> Bool
 #       Membership: total for a valid ImmutableSet argument. A queried value
 #       of a different kind, or simply absent, returns false -- never an
 #       Error completion (spec items 19-20).
@@ -52,12 +52,12 @@ proc core::immutableset::Dedup {items} {
 }
 
 proc core::immutableset::fromList {l} {
-    set items [core::value::items [core::value::expect list $l immutable_set::from_list]]
+    set items [core::value::items [core::value::expect list $l std::immutable_set::from_list]]
     return [core::value::immutableSet [Dedup $items]]
 }
 
 proc core::immutableset::contains {s v} {
-    set items [core::value::immutableSetItems [core::value::expect immutableSet $s immutable_set::contains]]
+    set items [core::value::immutableSetItems [core::value::expect immutableSet $s std::immutable_set::contains]]
     core::value::check $v
     foreach item $items {
         if {[core::value::equal $item $v]} {
@@ -69,12 +69,12 @@ proc core::immutableset::contains {s v} {
 
 # List[T] -> ImmutableSet[T]: -result-shape {immutable-set 0} is the generic
 # native-metadata relationship hir/types.tcl's ordinary (non-specialization)
-# inference already consults for `list`/`list::at`/`list::append`
+# inference already consults for `list`/`std::list::at`/`std::list::append`
 # (MINIMAL-APPLIED-LIST-TYPES.md) -- no ImmutableSet-specific inference code,
 # no source-level generic function.
-core::native::register immutable_set::from_list -arity 1 -impl core::immutableset::fromList \
+core::native::register std::immutable_set::from_list -arity 1 -impl core::immutableset::fromList \
     -param-types {list} -result-type immutableSet -runtime {set-alloc structural-equality} \
     -result-shape {immutable-set 0} -context-free 1 -ownership {equality}
-core::native::register immutable_set::contains -arity 2 -impl core::immutableset::contains \
+core::native::register std::immutable_set::contains -arity 2 -impl core::immutableset::contains \
     -param-types {immutableSet any} -result-type bool -runtime structural-equality -context-free 1 \
     -ownership {equality equality}

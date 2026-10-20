@@ -78,36 +78,36 @@ proc agreedValue {source} {
     return [lindex [lindex $outcomes 0] 1]
 }
 
-set unknownList "fn f(xs, i) errors IndexNotFound:\n    list::at(xs, i)\nf(\[1, 2\], 1)"
+set unknownList "fn f(xs, i) errors IndexNotFound:\n    std::list::at(xs, i)\nf(\[1, 2\], 1)"
 
 # ---------------------------------------------------------------------------
 # The verdict structure
 
 test bounds-verdict-index {an indexed access has one check: proven when the index provably designates an element, else it keeps IndexNotFound} -body {
     list \
-        [verdictOf "xs = \[1, 2, 3\]\nloop i from 0 to 3:\n    list::at(xs, i)" list::at] \
-        [verdictOf $unknownList list::at] \
-        [verdictOf "a = mutable_array::allocate(3)\nmutable_array::set(a, 2, 0)" mutable_array::set] \
-        [verdictOf "fn f(a, i) errors IndexNotFound:\n    mutable_array::at(a, i)\nf(mutable_array::allocate(1), 0)" mutable_array::at]
+        [verdictOf "xs = \[1, 2, 3\]\nloop i from 0 to 3:\n    std::list::at(xs, i)" std::list::at] \
+        [verdictOf $unknownList std::list::at] \
+        [verdictOf "a = std::mutable_array::allocate(3)\nstd::mutable_array::set(a, 2, 0)" std::mutable_array::set] \
+        [verdictOf "fn f(a, i) errors IndexNotFound:\n    std::mutable_array::at(a, i)\nf(std::mutable_array::allocate(1), 0)" std::mutable_array::at]
 } -result [list {{{}} 1} {IndexNotFound 0} {{{}} 1} {IndexNotFound 0}]
 
 test bounds-verdict-slice {a slice has two bound checks, each ruled out on its own: the verdict names what each may still raise (the second case proves LowerUnderrun away with `n >= 0` and keeps UpperOverrun)} -body {
     list \
-        [verdictOf "s = \"abcd\"\nstr::substring(s, 1, 3)" str::substring] \
-        [verdictOf "fn f(s, n) errors LowerUnderrun, UpperOverrun:\n    if n >= 0:\n        str::substring(s, 0, n)\n    else:\n        \"\"\nf(\"ab\", 1)" str::substring] \
-        [verdictOf "fn f(s, i) errors LowerUnderrun, UpperOverrun:\n    if i >= 0 and i < str::length(s):\n        str::substring(s, i, i + 1)\n    else:\n        \"\"\nf(\"ab\", 1)" str::substring] \
-        [verdictOf "fn f(s, i, j) errors LowerUnderrun, UpperOverrun:\n    if i >= 0:\n        str::substring(s, i, j)\n    else:\n        \"\"\nf(\"ab\", 1, 2)" str::substring]
+        [verdictOf "s = \"abcd\"\nstd::str::substring(s, 1, 3)" std::str::substring] \
+        [verdictOf "fn f(s, n) errors LowerUnderrun, UpperOverrun:\n    if n >= 0:\n        std::str::substring(s, 0, n)\n    else:\n        \"\"\nf(\"ab\", 1)" std::str::substring] \
+        [verdictOf "fn f(s, i) errors LowerUnderrun, UpperOverrun:\n    if i >= 0 and i < std::str::length(s):\n        std::str::substring(s, i, i + 1)\n    else:\n        \"\"\nf(\"ab\", 1)" std::str::substring] \
+        [verdictOf "fn f(s, i, j) errors LowerUnderrun, UpperOverrun:\n    if i >= 0:\n        std::str::substring(s, i, j)\n    else:\n        \"\"\nf(\"ab\", 1, 2)" std::str::substring]
 } -result [list {{{}} 1} {UpperOverrun 0} {{{}} 1} {{{LowerUnderrun UpperOverrun}} 0}]
 
-test bounds-verdict-two-slices-not-conflated {mutable_array::copy checks a destination and a source slice that raise the same declared errors: the verdict keeps them apart, and only a call with both proven is proven} -body {
-    set decl "fn f(%s) errors LowerUnderrun, UpperOverrun:\n    %s\n    mutable_array::copy(dst, 0, src, 0, 2)\nf(%s)"
-    set dstOk "dst = mutable_array::allocate(4)"
-    set srcOk "src = mutable_array::allocate(4)"
+test bounds-verdict-two-slices-not-conflated {std::mutable_array::copy checks a destination and a source slice that raise the same declared errors: the verdict keeps them apart, and only a call with both proven is proven} -body {
+    set decl "fn f(%s) errors LowerUnderrun, UpperOverrun:\n    %s\n    std::mutable_array::copy(dst, 0, src, 0, 2)\nf(%s)"
+    set dstOk "dst = std::mutable_array::allocate(4)"
+    set srcOk "src = std::mutable_array::allocate(4)"
     list \
-        [verdictOf [format $decl src $dstOk {mutable_array::allocate(1)}] mutable_array::copy] \
-        [verdictOf [format $decl dst $srcOk {mutable_array::allocate(1)}] mutable_array::copy] \
-        [verdictOf [format $decl k "$dstOk\n    $srcOk" 0] mutable_array::copy] \
-        [verdictOf [format $decl "dst, src" "" {mutable_array::allocate(1), mutable_array::allocate(1)}] mutable_array::copy]
+        [verdictOf [format $decl src $dstOk {std::mutable_array::allocate(1)}] std::mutable_array::copy] \
+        [verdictOf [format $decl dst $srcOk {std::mutable_array::allocate(1)}] std::mutable_array::copy] \
+        [verdictOf [format $decl k "$dstOk\n    $srcOk" 0] std::mutable_array::copy] \
+        [verdictOf [format $decl "dst, src" "" {std::mutable_array::allocate(1), std::mutable_array::allocate(1)}] std::mutable_array::copy]
 } -result [list {{{} UpperOverrun} 0} {{UpperOverrun {}} 0} {{{} {}} 1} {{UpperOverrun UpperOverrun} 0}]
 
 test bounds-verdict-per-element-union {a literal-List loop walks its body once per element: a check is proven only if every walk proved it, in either order (a later element never overwrites an earlier unproven one)} -body {
@@ -125,23 +125,23 @@ test bounds-verdict-per-element-union {a literal-List loop walks its body once p
 } -result {e1 IndexNotFound e2 IndexNotFound e3 {LowerUnderrun UpperOverrun} e4 {{}}}
 
 test bounds-verdict-literal-loop-walks {a call inside a literal-List loop is proven only if it is for every element; a body that fails for one element is checked} -body {
-    set body "    list::at(\[10, 20\], x)"
+    set body "    std::list::at(\[10, 20\], x)"
     list \
-        [verdictOf "loop x in \[0, 1\]:\n$body" list::at] \
-        [verdictOf "loop x in \[1, 0\]:\n$body" list::at] \
-        [verdictOf "loop x in \[0, 1, 2\]:\n    r = list::at(\[10, 20\], x):\n        on IndexNotFound:\n            0\n    r" list::at] \
-        [verdictOf "loop x in \[2, 1\]:\n    r = list::at(\[10, 20\], x):\n        on IndexNotFound:\n            0\n    r" list::at]
+        [verdictOf "loop x in \[0, 1\]:\n$body" std::list::at] \
+        [verdictOf "loop x in \[1, 0\]:\n$body" std::list::at] \
+        [verdictOf "loop x in \[0, 1, 2\]:\n    r = std::list::at(\[10, 20\], x):\n        on IndexNotFound:\n            0\n    r" std::list::at] \
+        [verdictOf "loop x in \[2, 1\]:\n    r = std::list::at(\[10, 20\], x):\n        on IndexNotFound:\n            0\n    r" std::list::at]
 } -result [list {{{}} 1} {{{}} 1} {IndexNotFound 0} {IndexNotFound 0}]
 
 test bounds-verdict-stamped-on-native-call-not-handle {the verdict is on the native call node, whatever handles it: a handler's presence is not the proof (a handled unknown call is unproven, a handled proven call proven)} -body {
     list \
-        [verdictOf "fn f(xs, i):\n    list::at(xs, i):\n        on IndexNotFound:\n            0\nf(\[1\], 0)" list::at] \
-        [verdictOf "xs = \[1, 2, 3\]\nloop i from 0 to 3:\n    list::at(xs, i):\n        on IndexNotFound:\n            0" list::at]
+        [verdictOf "fn f(xs, i):\n    std::list::at(xs, i):\n        on IndexNotFound:\n            0\nf(\[1\], 0)" std::list::at] \
+        [verdictOf "xs = \[1, 2, 3\]\nloop i from 0 to 3:\n    std::list::at(xs, i):\n        on IndexNotFound:\n            0" std::list::at]
 } -result [list {IndexNotFound 0} {{{}} 1}]
 
 test bounds-verdict-unreached-call-unproven {a call the proof never reaches carries no verdict: no verdict is never read as proven} -body {
-    set hir [boundsHir "fn f(xs):\n    if 1 > 2:\n        list::at(xs, 0)\n    else:\n        0\nf(\[1\])"]
-    set e [nativeCall $hir list::at]
+    set hir [boundsHir "fn f(xs):\n    if 1 > 2:\n        std::list::at(xs, 0)\n    else:\n        0\nf(\[1\])"]
+    set e [nativeCall $hir std::list::at]
     list [hir::completions::BoundsVerdictsOf $hir $e] [hir::completions::BoundsProven $hir $e]
 } -result {{} 0}
 
@@ -166,46 +166,46 @@ proc strictKind {source} {
 
 test bounds-reduced-mod-index {an index reduced mod the container's own size designates an element (mod returns only for a nonzero divisor, and then 0 <= r < |d|): every indexed access, every way of writing it (inline, method syntax, through local bindings of the size and of the index), a parameter or a local container} -body {
     list \
-        [verdictOf "fn f(a: MutableArray\[int\], h: int) -> int:\n    mutable_array::at(a, mod(h, mutable_array::capacity(a)))\nf(mutable_array::create(3, 0), -7)" mutable_array::at] \
-        [verdictOf "fn f(a: MutableArray\[int\], h: int):\n    c = mutable_array::capacity(a)\n    i = h.mod(c)\n    mutable_array::set(a, i, h)\nf(mutable_array::create(3, 0), -7)" mutable_array::set] \
-        [verdictOf "fn f(xs: List\[int\], k) -> int:\n    list::at(xs, hash(k).mod(list::length(xs)))\nf(\[1, 2, 3\], \"k\")" list::at] \
-        [verdictOf "fn f(s: str, h: int):\n    str::char_at(s, mod(h + 1, str::length(s)))\nf(\"abc\", 5)" str::char_at] \
-        [verdictOf "fn f(h: int) -> int:\n    a = mutable_array::create(5, 0)\n    mutable_array::at(a, mod(h, mutable_array::capacity(a)))\nf(9)" mutable_array::at]
+        [verdictOf "fn f(a: MutableArray\[int\], h: int) -> int:\n    std::mutable_array::at(a, mod(h, std::mutable_array::capacity(a)))\nf(std::mutable_array::create(3, 0), -7)" std::mutable_array::at] \
+        [verdictOf "fn f(a: MutableArray\[int\], h: int):\n    c = std::mutable_array::capacity(a)\n    i = h.mod(c)\n    std::mutable_array::set(a, i, h)\nf(std::mutable_array::create(3, 0), -7)" std::mutable_array::set] \
+        [verdictOf "fn f(xs: List\[int\], k) -> int:\n    std::list::at(xs, hash(k).mod(std::list::length(xs)))\nf(\[1, 2, 3\], \"k\")" std::list::at] \
+        [verdictOf "fn f(s: str, h: int):\n    std::str::char_at(s, mod(h + 1, std::str::length(s)))\nf(\"abc\", 5)" std::str::char_at] \
+        [verdictOf "fn f(h: int) -> int:\n    a = std::mutable_array::create(5, 0)\n    std::mutable_array::at(a, mod(h, std::mutable_array::capacity(a)))\nf(9)" std::mutable_array::at]
 } -result [lrepeat 5 {{{}} 1}]
 
 test bounds-reduced-mod-rejected {mod proves nothing by a divisor that is not exactly the container's size: another container's size, the size plus one, an unrelated Int, or the size of the container a read reached through another binding} -body {
-    set decl "fn f(a: MutableArray\[int\], b: MutableArray\[int\], h: int, n: int) -> int errors IndexNotFound:\n    %s\nf(mutable_array::create(2, 0), mutable_array::create(3, 0), 5, 4)"
+    set decl "fn f(a: MutableArray\[int\], b: MutableArray\[int\], h: int, n: int) -> int errors IndexNotFound:\n    %s\nf(std::mutable_array::create(2, 0), std::mutable_array::create(3, 0), 5, 4)"
     list \
-        [verdictOf [format $decl "mutable_array::at(a, mod(h, mutable_array::capacity(b)))"] mutable_array::at] \
-        [verdictOf [format $decl "mutable_array::at(a, mod(h, mutable_array::capacity(a) + 1))"] mutable_array::at] \
-        [verdictOf [format $decl "mutable_array::at(a, mod(h, n))"] mutable_array::at] \
-        [verdictOf [format $decl "i = mod(h, mutable_array::capacity(b))\n    mutable_array::at(a, i)"] mutable_array::at]
+        [verdictOf [format $decl "std::mutable_array::at(a, mod(h, std::mutable_array::capacity(b)))"] std::mutable_array::at] \
+        [verdictOf [format $decl "std::mutable_array::at(a, mod(h, std::mutable_array::capacity(a) + 1))"] std::mutable_array::at] \
+        [verdictOf [format $decl "std::mutable_array::at(a, mod(h, n))"] std::mutable_array::at] \
+        [verdictOf [format $decl "i = mod(h, std::mutable_array::capacity(b))\n    std::mutable_array::at(a, i)"] std::mutable_array::at]
 } -result [lrepeat 4 {IndexNotFound 0}]
 
 test bounds-reduced-mask-index {bit_and(x, m), in either operand order, is in 0..m for m >= 0 whatever x is, so it designates an element when m + 1 is the container's own size and m >= 0 is proven: by a guard on the size (== 0, <= 0 on a local binding, < 1), a known size, a nonnegative form, or m's own Range; no power of two is needed} -body {
-    set decl "fn f(a: MutableArray\[int\], b: MutableArray\[int\], h: int, m: int) -> int:\n    %s\nf(mutable_array::create(3, 0), mutable_array::create(6, 0), -5, 4)"
+    set decl "fn f(a: MutableArray\[int\], b: MutableArray\[int\], h: int, m: int) -> int:\n    %s\nf(std::mutable_array::create(3, 0), std::mutable_array::create(6, 0), -5, 4)"
     list \
-        [verdictOf [format $decl "if mutable_array::capacity(a) == 0:\n        return 0\n    mutable_array::at(a, bit_and(h, mutable_array::capacity(a) - 1))"] mutable_array::at] \
-        [verdictOf [format $decl "cap = mutable_array::capacity(a)\n    if cap <= 0:\n        return 0\n    mutable_array::at(a, bit_and(cap - 1, h))"] mutable_array::at] \
-        [verdictOf [format $decl "if mutable_array::capacity(a) < 1:\n        return 0\n    mutable_array::at(a, bit_and(mutable_array::capacity(a) - 1, h))"] mutable_array::at] \
-        [verdictOf [format $decl "c = mutable_array::create(6, 0)\n    mutable_array::at(c, bit_and(h, mutable_array::capacity(c) - 1))"] mutable_array::at] \
-        [verdictOf [format $decl "c = mutable_array::create(mutable_array::capacity(b) + 1, 0)\n    mutable_array::at(c, bit_and(h, mutable_array::capacity(b)))"] mutable_array::at] \
-        [verdictOf [format $decl "if m < 0:\n        return 0\n    c = mutable_array::create(m + 1, 0)\n    mutable_array::at(c, bit_and(h, m))"] mutable_array::at]
+        [verdictOf [format $decl "if std::mutable_array::capacity(a) == 0:\n        return 0\n    std::mutable_array::at(a, bit_and(h, std::mutable_array::capacity(a) - 1))"] std::mutable_array::at] \
+        [verdictOf [format $decl "cap = std::mutable_array::capacity(a)\n    if cap <= 0:\n        return 0\n    std::mutable_array::at(a, bit_and(cap - 1, h))"] std::mutable_array::at] \
+        [verdictOf [format $decl "if std::mutable_array::capacity(a) < 1:\n        return 0\n    std::mutable_array::at(a, bit_and(std::mutable_array::capacity(a) - 1, h))"] std::mutable_array::at] \
+        [verdictOf [format $decl "c = std::mutable_array::create(6, 0)\n    std::mutable_array::at(c, bit_and(h, std::mutable_array::capacity(c) - 1))"] std::mutable_array::at] \
+        [verdictOf [format $decl "c = std::mutable_array::create(std::mutable_array::capacity(b) + 1, 0)\n    std::mutable_array::at(c, bit_and(h, std::mutable_array::capacity(b)))"] std::mutable_array::at] \
+        [verdictOf [format $decl "if m < 0:\n        return 0\n    c = std::mutable_array::create(m + 1, 0)\n    std::mutable_array::at(c, bit_and(h, m))"] std::mutable_array::at]
 } -result [lrepeat 6 {{{}} 1}]
 
 test bounds-reduced-mask-rejected {a mask proves nothing without m >= 0 (an empty container's mask is -1, and x & -1 = x), with the size itself as the mask, or with another container's size} -body {
-    set decl "fn f(a: MutableArray\[int\], b: MutableArray\[int\], h: int) -> int errors IndexNotFound:\n    %s\nf(mutable_array::create(3, 0), mutable_array::create(6, 0), -5)"
+    set decl "fn f(a: MutableArray\[int\], b: MutableArray\[int\], h: int) -> int errors IndexNotFound:\n    %s\nf(std::mutable_array::create(3, 0), std::mutable_array::create(6, 0), -5)"
     list \
-        [verdictOf [format $decl "mutable_array::at(a, bit_and(h, mutable_array::capacity(a) - 1))"] mutable_array::at] \
-        [verdictOf [format $decl "if mutable_array::capacity(a) == 0:\n        return 0\n    mutable_array::at(a, bit_and(h, mutable_array::capacity(a)))"] mutable_array::at] \
-        [verdictOf [format $decl "if mutable_array::capacity(b) == 0:\n        return 0\n    mutable_array::at(a, bit_and(h, mutable_array::capacity(b) - 1))"] mutable_array::at]
+        [verdictOf [format $decl "std::mutable_array::at(a, bit_and(h, std::mutable_array::capacity(a) - 1))"] std::mutable_array::at] \
+        [verdictOf [format $decl "if std::mutable_array::capacity(a) == 0:\n        return 0\n    std::mutable_array::at(a, bit_and(h, std::mutable_array::capacity(a)))"] std::mutable_array::at] \
+        [verdictOf [format $decl "if std::mutable_array::capacity(b) == 0:\n        return 0\n    std::mutable_array::at(a, bit_and(h, std::mutable_array::capacity(b) - 1))"] std::mutable_array::at]
 } -result [lrepeat 3 {IndexNotFound 0}]
 
 test bounds-reduced-empty-container-stays-known-error {a container of known size 0 has no element: a read of it whose index is reduced by that size is never reached (mod fails with ARITHMETIC first), and stays KNOWN-ERROR as before rather than becoming vacuously proven} -body {
     list \
-        [verdictOf "fn f(h: int) -> int:\n    a = mutable_array::allocate(0)\n    mutable_array::at(a, mod(h, mutable_array::capacity(a)))\nf(3)" mutable_array::at] \
-        [strictKind "fn f(h: int):\n    a = mutable_array::allocate(0)\n    mutable_array::at(a, mod(h, mutable_array::capacity(a)))\n0"] \
-        [strictKind "fn f(h: int) -> int:\n    xs = \[\]\n    list::at(xs, h.mod(list::length(xs)))\n0"]
+        [verdictOf "fn f(h: int) -> int:\n    a = std::mutable_array::allocate(0)\n    std::mutable_array::at(a, mod(h, std::mutable_array::capacity(a)))\nf(3)" std::mutable_array::at] \
+        [strictKind "fn f(h: int):\n    a = std::mutable_array::allocate(0)\n    std::mutable_array::at(a, mod(h, std::mutable_array::capacity(a)))\n0"] \
+        [strictKind "fn f(h: int) -> int:\n    xs = \[\]\n    std::list::at(xs, h.mod(std::list::length(xs)))\n0"]
 } -result {{IndexNotFound 0} KNOWN-ERROR KNOWN-ERROR}
 
 test bounds-reduced-contradicted-size {a size a guard proved at least 1 that the call-specific walk knows to be 0 (an exact empty List argument) is a contradiction, like two disagreeing known sizes: the masked read is unreachable there, so the call has no effective errors; without the guard the same call may fail} -body {
@@ -213,10 +213,10 @@ test bounds-reduced-contradicted-size {a size a guard proved at least 1 that the
         set hir [boundsHir $source]
         return [hir::completions::effectiveErrorsOf $hir [nativeCall $hir f]]
     }
-    set body "    list::at(xs, bit_and(list::length(xs) - 1, h))\nf(\[\], -1)"
+    set body "    std::list::at(xs, bit_and(std::list::length(xs) - 1, h))\nf(\[\], -1)"
     list \
-        [callErrors "fn f(xs: List\[int\], h: int):\n    if list::length(xs) < 1:\n        return -1\n$body"] \
-        [callErrors "fn f(xs: List\[int\], h: int):\n    if list::length(xs) == 0:\n        return -1\n$body"] \
+        [callErrors "fn f(xs: List\[int\], h: int):\n    if std::list::length(xs) < 1:\n        return -1\n$body"] \
+        [callErrors "fn f(xs: List\[int\], h: int):\n    if std::list::length(xs) == 0:\n        return -1\n$body"] \
         [callErrors "fn f(xs: List\[int\], h: int) errors IndexNotFound:\n$body"]
 } -result {{} {} IndexNotFound}
 
@@ -227,42 +227,42 @@ test bounds-reduced-contradicted-size {a size a guard proved at least 1 that the
 set fieldStructs "struct T:\n    s: MutableArray\[int\]\n    r: MutableArray\[int\]\nstruct Outer:\n    inner: T\nstruct Board:\n    cells: List\[int\]\n    name: str\n"
 
 test bounds-field-path-index {a guard, a counted loop or a reduction on the size of a field path proves an access through the same path written again: a parameter's field, a nested path, a struct bound to a construction, a List and a String field, and a slice of a String field} -body {
-    set decl "${fieldStructs}fn f(t: T, o: Outer, b: Board, a: MutableArray\[int\], i: int, h: int):\n    %s\nf(T {s: mutable_array::create(2, 0), r: mutable_array::create(3, 0)}, Outer {inner: T {s: mutable_array::create(2, 0), r: mutable_array::create(3, 0)}}, Board {cells: \[1\], name: \"ab\"}, mutable_array::create(1, 0), 1, 5)"
+    set decl "${fieldStructs}fn f(t: T, o: Outer, b: Board, a: MutableArray\[int\], i: int, h: int):\n    %s\nf(T {s: std::mutable_array::create(2, 0), r: std::mutable_array::create(3, 0)}, Outer {inner: T {s: std::mutable_array::create(2, 0), r: std::mutable_array::create(3, 0)}}, Board {cells: \[1\], name: \"ab\"}, std::mutable_array::create(1, 0), 1, 5)"
     list \
-        [verdictOf [format $decl "if i < 0 or i >= mutable_array::capacity(t.s):\n        return 0\n    mutable_array::at(t.s, i)"] mutable_array::at] \
-        [verdictOf [format $decl "loop k from 0 to list::length(b.cells):\n        list::at(b.cells, k)"] list::at] \
-        [verdictOf [format $decl "mutable_array::at(o.inner.s, mod(h, mutable_array::capacity(o.inner.s)))"] mutable_array::at] \
-        [verdictOf [format $decl "u = T {s: a, r: a}\n    mutable_array::at(u.s, mod(h, mutable_array::capacity(u.s)))"] mutable_array::at] \
-        [verdictOf [format $decl "str::char_at(b.name, h.mod(str::length(b.name)))"] str::char_at] \
-        [verdictOf [format $decl "if i < 0 or i > str::length(b.name):\n        return \"\"\n    str::substring(b.name, i, str::length(b.name))"] str::substring]
+        [verdictOf [format $decl "if i < 0 or i >= std::mutable_array::capacity(t.s):\n        return 0\n    std::mutable_array::at(t.s, i)"] std::mutable_array::at] \
+        [verdictOf [format $decl "loop k from 0 to std::list::length(b.cells):\n        std::list::at(b.cells, k)"] std::list::at] \
+        [verdictOf [format $decl "std::mutable_array::at(o.inner.s, mod(h, std::mutable_array::capacity(o.inner.s)))"] std::mutable_array::at] \
+        [verdictOf [format $decl "u = T {s: a, r: a}\n    std::mutable_array::at(u.s, mod(h, std::mutable_array::capacity(u.s)))"] std::mutable_array::at] \
+        [verdictOf [format $decl "std::str::char_at(b.name, h.mod(std::str::length(b.name)))"] std::str::char_at] \
+        [verdictOf [format $decl "if i < 0 or i > std::str::length(b.name):\n        return \"\"\n    std::str::substring(b.name, i, std::str::length(b.name))"] std::str::substring]
 } -result [lrepeat 6 {{{}} 1}]
 
 test bounds-field-path-write {a write through a field place, t.s.set(i, v), is proven by a guard or a reduction on the same path's capacity, or on a local copy of the field (a copy has the field's capacity): the in-place write has no local-alias form} -body {
-    set decl "${fieldStructs}fn f(t: T, i: int, h: int) -> T:\n    %s\n    t\nf(T {s: mutable_array::create(2, 0), r: mutable_array::create(3, 0)}, 1, 5)"
+    set decl "${fieldStructs}fn f(t: T, i: int, h: int) -> T:\n    %s\n    t\nf(T {s: std::mutable_array::create(2, 0), r: std::mutable_array::create(3, 0)}, 1, 5)"
     list \
-        [verdictOf [format $decl "if i < 0 or i >= mutable_array::capacity(t.s):\n        return t\n    t.s.set(i, 7)"] mutable_array::set] \
-        [verdictOf [format $decl "s = t.s\n    if i < 0 or i >= mutable_array::capacity(s):\n        return t\n    t.s.set(i, 7)"] mutable_array::set] \
-        [verdictOf [format $decl "t.s.set(h.mod(t.s.capacity()), 7)"] mutable_array::set]
+        [verdictOf [format $decl "if i < 0 or i >= std::mutable_array::capacity(t.s):\n        return t\n    t.s.set(i, 7)"] std::mutable_array::set] \
+        [verdictOf [format $decl "s = t.s\n    if i < 0 or i >= std::mutable_array::capacity(s):\n        return t\n    t.s.set(i, 7)"] std::mutable_array::set] \
+        [verdictOf [format $decl "t.s.set(h.mod(t.s.capacity()), 7)"] std::mutable_array::set]
 } -result [lrepeat 3 {{{}} 1}]
 
 test bounds-field-path-rejected {a field path's size proves nothing about another field, the same field of another struct, or the field of a call result written twice (two calls, two values)} -body {
-    set decl "${fieldStructs}fn mk(a: MutableArray\[int\]) -> T:\n    T {s: a, r: a}\nfn f(t: T, u: T, a: MutableArray\[int\], i: int, h: int) -> int errors IndexNotFound:\n    %s\nf(T {s: mutable_array::create(2, 0), r: mutable_array::create(3, 0)}, T {s: mutable_array::create(2, 0), r: mutable_array::create(3, 0)}, mutable_array::create(1, 0), 1, 5)"
+    set decl "${fieldStructs}fn mk(a: MutableArray\[int\]) -> T:\n    T {s: a, r: a}\nfn f(t: T, u: T, a: MutableArray\[int\], i: int, h: int) -> int errors IndexNotFound:\n    %s\nf(T {s: std::mutable_array::create(2, 0), r: std::mutable_array::create(3, 0)}, T {s: std::mutable_array::create(2, 0), r: std::mutable_array::create(3, 0)}, std::mutable_array::create(1, 0), 1, 5)"
     list \
-        [verdictOf [format $decl "if i < 0 or i >= mutable_array::capacity(t.r):\n        return 0\n    mutable_array::at(t.s, i)"] mutable_array::at] \
-        [verdictOf [format $decl "mutable_array::at(t.s, mod(h, mutable_array::capacity(u.s)))"] mutable_array::at] \
-        [verdictOf [format $decl "mutable_array::at(mk(a).s, mod(h, mutable_array::capacity(mk(a).s)))"] mutable_array::at]
+        [verdictOf [format $decl "if i < 0 or i >= std::mutable_array::capacity(t.r):\n        return 0\n    std::mutable_array::at(t.s, i)"] std::mutable_array::at] \
+        [verdictOf [format $decl "std::mutable_array::at(t.s, mod(h, std::mutable_array::capacity(u.s)))"] std::mutable_array::at] \
+        [verdictOf [format $decl "std::mutable_array::at(mk(a).s, mod(h, std::mutable_array::capacity(mk(a).s)))"] std::mutable_array::at]
 } -result [lrepeat 3 {IndexNotFound 0}]
 
 test bounds-field-path-lockstep {the lockstep cardinality proof reads the same keys: a clause over a field's List and a counted clause to that field path's length are equal; a clause one longer is provably unequal, and the diagnostic names the path} -body {
     set decl "${fieldStructs}fn f(b: Board) -> List\[int\]:\n    loop x in b.cells and k from 0 to %s:\n        x + k\n0"
-    set path [makeFile [withImports [format $decl "list::length(b.cells) + 1"]] proven-bounds-lockstep.bot]
+    set path [makeFile [withImports [format $decl "std::list::length(b.cells) + 1"]] proven-bounds-lockstep.bot]
     try {
         catch {surface::readProgramFile $path -warnings off} message options
     } finally {
         removeFile proven-bounds-lockstep.bot
     }
     set first [lindex [dict get $options -diagnostics] 0]
-    list [strictKind [format $decl "list::length(b.cells)"]] [lindex [dict get $first errorcode] end] \
+    list [strictKind [format $decl "std::list::length(b.cells)"]] [lindex [dict get $first errorcode] end] \
         [string match "*clause 1 iterates length(b.cells) times but clause 2 iterates length(b.cells) + 1 times*" [dict get $first message]]
 } -result {{} LOCKSTEP-UNEQUAL 1}
 
@@ -277,21 +277,21 @@ test bounds-field-path-lockstep {the lockstep cardinality proof reads the same k
 # vector built with pushes, then walked twice -- one (Evaluation, Epoch).
 # A vector nothing resizes keeps its key's length, like a List.
 
-set vectorDecls "import mutable_vector\nstruct Box:\n    v: MutableVector\[int\]\ncontext struct Log:\n    items: MutableVector\[int\]\nfn add(x: int, context log: Log):\n    log.items.push(x)\n"
+set vectorDecls "import std::mutable_vector\nstruct Box:\n    v: MutableVector\[int\]\ncontext struct Log:\n    items: MutableVector\[int\]\nfn add(x: int, context log: Log):\n    log.items.push(x)\n"
 # Each body reads a List an earlier loop collected over a vector at an index
 # proven only against a later loop's length (or the reverse after a pop),
 # the vector changed between them: {NAME BODY H}, f(..., H, ...) reaching an
 # index the earlier List does not have.
 set vectorSnapshots {
-    local-counted {v = mutable_vector::from_list([1, 2, 3])
+    local-counted {v = std::mutable_vector::from_list([1, 2, 3])
     ys = loop x in v:
         x * 10
     v.push(4)
     zs = loop x in v:
         x
-    loop k from 0 to list::length(zs):
+    loop k from 0 to std::list::length(zs):
         ys.at(k)} 0
-    local-mod {v = mutable_vector::from_list([1, 2, 3])
+    local-mod {v = std::mutable_vector::from_list([1, 2, 3])
     ys = loop x in v:
         x * 10
     v.push(4)
@@ -299,27 +299,27 @@ set vectorSnapshots {
     v.push(6)
     zs = loop x in v:
         x
-    ys.at(h.mod(list::length(zs)))} 4
-    local-mask {v = mutable_vector::from_list([1, 2])
+    ys.at(h.mod(std::list::length(zs)))} 4
+    local-mask {v = std::mutable_vector::from_list([1, 2])
     ys = loop x in v:
         x * 10
     v.push(3)
     v.push(4)
     zs = loop x in v:
         x
-    if list::length(zs) == 0:
+    if std::list::length(zs) == 0:
         return -1
-    ys.at(bit_and(h, list::length(zs) - 1))} 3
-    local-guard {v = mutable_vector::from_list([1, 2])
+    ys.at(bit_and(h, std::list::length(zs) - 1))} 3
+    local-guard {v = std::mutable_vector::from_list([1, 2])
     ys = loop x in v:
         x * 10
     v.push(3)
     zs = loop x in v:
         x
-    if h >= 0 and h < list::length(zs):
+    if h >= 0 and h < std::list::length(zs):
         return ys.at(h)
     -1} 2
-    local-pop {v = mutable_vector::from_list([1, 2, 3])
+    local-pop {v = std::mutable_vector::from_list([1, 2, 3])
     ys = loop x in v:
         x * 10
     v.pop():
@@ -327,21 +327,21 @@ set vectorSnapshots {
             0
     zs = loop x in v:
         x
-    loop k from 0 to list::length(ys):
+    loop k from 0 to std::list::length(ys):
         zs.at(k)} 0
-    local-clear {v = mutable_vector::from_list([1, 2])
+    local-clear {v = std::mutable_vector::from_list([1, 2])
     ys = loop x in v:
         x
     v.clear()
     zs = loop x in v:
         x
-    zs.at(h.mod(list::length(ys)))} 1
+    zs.at(h.mod(std::list::length(ys)))} 1
     parameter {ys = loop x in w:
         x * 10
     w.push(4)
     zs = loop x in w:
         x
-    loop k from 0 to list::length(zs):
+    loop k from 0 to std::list::length(zs):
         ys.at(k)} 0
     field-path {ys = loop x in b.v:
         x * 10
@@ -349,15 +349,15 @@ set vectorSnapshots {
     b.v.push(5)
     zs = loop x in b.v:
         x
-    ys.at(h.mod(list::length(zs)))} 4
+    ys.at(h.mod(std::list::length(zs)))} 4
     context-callee {ys = loop x in log.items:
         x * 10
     add(7)
     add(8)
     zs = loop x in log.items:
         x
-    ys.at(h.mod(list::length(zs)))} 3
-    copy-then-copy {v = mutable_vector::from_list([1, 2, 3])
+    ys.at(h.mod(std::list::length(zs)))} 3
+    copy-then-copy {v = std::mutable_vector::from_list([1, 2, 3])
     c1 = v
     v.push(4)
     c2 = v
@@ -365,24 +365,24 @@ set vectorSnapshots {
         x * 10
     zs = loop x in c2:
         x
-    ys.at(h.mod(list::length(zs)))} 3
-    through-copy {v = mutable_vector::from_list([1, 2, 3])
+    ys.at(h.mod(std::list::length(zs)))} 3
+    through-copy {v = std::mutable_vector::from_list([1, 2, 3])
     c1 = v
     c1.push(4)
     ys = loop x in v:
         x * 10
     zs = loop x in c1:
         x
-    ys.at(h.mod(list::length(zs)))} 3
-    loop-body {v = mutable_vector::from_list([1, 2, 3])
+    ys.at(h.mod(std::list::length(zs)))} 3
+    loop-body {v = std::mutable_vector::from_list([1, 2, 3])
     ys = loop x in v:
         x * 10
     loop i from 0 to 2:
         v.push(i)
     zs = loop x in v:
         x
-    ys.at(h.mod(list::length(zs)))} 4
-    handler {v = mutable_vector::from_list([1, 2, 3])
+    ys.at(h.mod(std::list::length(zs)))} 4
+    handler {v = std::mutable_vector::from_list([1, 2, 3])
     ys = loop x in v:
         x * 10
     n = v.at(7):
@@ -391,31 +391,31 @@ set vectorSnapshots {
             0
     zs = loop x in v:
         x
-    ys.at(h.mod(list::length(zs)))} 3
-    branch {v = mutable_vector::from_list([1, 2, 3])
+    ys.at(h.mod(std::list::length(zs)))} 3
+    branch {v = std::mutable_vector::from_list([1, 2, 3])
     ys = loop x in v:
         x * 10
     if h > 0:
         v.push(4)
     zs = loop x in v:
         x
-    ys.at(h.mod(list::length(zs)))} 3
-    loop-encloses-later {v = mutable_vector::from_list([1, 2, 3])
+    ys.at(h.mod(std::list::length(zs)))} 3
+    loop-encloses-later {v = std::mutable_vector::from_list([1, 2, 3])
     ys = loop x in v:
         x * 10
     loop t from 0 to 3:
         zs = loop x in v:
             x
         v.push(t)
-        ys.at(h.mod(list::length(zs)))} 4
-    own-body {v = mutable_vector::from_list([1, 2, 3])
+        ys.at(h.mod(std::list::length(zs)))} 4
+    own-body {v = std::mutable_vector::from_list([1, 2, 3])
     zs = loop x in v:
         v.push(x)
         x
     ws = loop x in v:
         x
-    zs.at(h.mod(list::length(ws)))} 4
-    copies-each-pushed {v = mutable_vector::from_list([1, 2, 3])
+    zs.at(h.mod(std::list::length(ws)))} 4
+    copies-each-pushed {v = std::mutable_vector::from_list([1, 2, 3])
     c1 = v
     c1.push(4)
     c2 = v
@@ -425,30 +425,30 @@ set vectorSnapshots {
         x * 10
     zs = loop x in c2:
         x
-    ys.at(h.mod(list::length(zs)))} 4
+    ys.at(h.mod(std::list::length(zs)))} 4
     context-branch-callee {ys = loop x in log.items:
         x * 10
     if h > 0:
         add(h)
     zs = loop x in log.items:
         x
-    ys.at(h.mod(list::length(zs)))} 2
-    branch-push-then-read {v = mutable_vector::from_list([1, 2, 3])
+    ys.at(h.mod(std::list::length(zs)))} 2
+    branch-push-then-read {v = std::mutable_vector::from_list([1, 2, 3])
     ys = loop x in v:
         x * 10
     if h > 0:
         v.push(4)
         zs = loop x in v:
             x
-        return ys.at(h.mod(list::length(zs)))
+        return ys.at(h.mod(std::list::length(zs)))
     0} 3
-    condition-site {v = mutable_vector::from_list([1, 2, 3])
+    condition-site {v = std::mutable_vector::from_list([1, 2, 3])
     ys = loop x in v:
         x
     if v.pop() > 0:
         zs = loop x in v:
             x * 10
-        return zs.at(h.mod(list::length(ys)))
+        return zs.at(h.mod(std::list::length(ys)))
     0} 2
     context-transitive {fn mid(x: int) -> int:
         add(x)
@@ -458,7 +458,7 @@ set vectorSnapshots {
     k = mid(h)
     zs = loop x in log.items:
         x
-    ys.at(k.mod(list::length(zs)))} 2
+    ys.at(k.mod(std::list::length(zs)))} 2
     context-resume {fn worker(context l: Log) -> int:
         l.items.push(7)
         yield 0
@@ -472,7 +472,7 @@ set vectorSnapshots {
     k = drive(step)
     zs = loop x in log.items:
         x
-    ys.at(h.mod(list::length(zs))) + k} 3
+    ys.at(h.mod(std::list::length(zs))) + k} 3
     context-resume-value {fn worker(context l: Log) -> int:
         l.items.push(7)
         yield 0
@@ -488,7 +488,7 @@ set vectorSnapshots {
     k = apply(drive, step)
     zs = loop x in log.items:
         x
-    ys.at(h.mod(list::length(zs))) + k} 3
+    ys.at(h.mod(std::list::length(zs))) + k} 3
 }
 # The program of one snapshot shape: f declares ERRORS ("" for none) and is
 # called at H (with HANDLER, if any, as the call's handler).
@@ -497,14 +497,14 @@ proc vectorSnapshotProgram {body h errors {handler ""}} {
     if {$errors ne ""} {
         append signature " errors $errors"
     }
-    set v "mutable_vector::from_list(\[1, 2, 3\])"
-    return "${::vectorDecls}$signature:\n    $body\n\nwith context Log {items: mutable_vector::from_list(\[1, 2\])}\nf(Box {v: $v}, $h, $v)$handler\n"
+    set v "std::mutable_vector::from_list(\[1, 2, 3\])"
+    return "${::vectorDecls}$signature:\n    $body\n\nwith context Log {items: std::mutable_vector::from_list(\[1, 2\])}\nf(Box {v: $v}, $h, $v)$handler\n"
 }
 
 test bounds-vector-snapshots-rejected {a List collected over a MutableVector has the length that loop's evaluation saw: an index proven against a later loop over the vector (a counted loop, mod, a mask, a guard) or an earlier one after a pop or clear, a mutation between them, proves nothing about it -- a local, a parameter, a field path, a context member a callee grows (also in a branch), two copies taken around a push, a push through a copy, a push in a loop body, a handler or a branch, a push in a loop body after a later loop over the vector in it, the earlier loop's own body pushing, a push in a branch before the later loop in it, a pop in the condition of the branch the later loop is in, a context member grown by a callee's callee, or by a coroutine body a callee resumes (directly, or through a function value given the handle) -- so the read is checked and a function without `errors` is rejected} -body {
     lmap {name body h} $vectorSnapshots {
         list $name [strictKind [vectorSnapshotProgram $body $h ""]] \
-            [verdictOf [vectorSnapshotProgram $body $h IndexNotFound ":\n    on IndexNotFound:\n        -424242"] list::at]
+            [verdictOf [vectorSnapshotProgram $body $h IndexNotFound ":\n    on IndexNotFound:\n        -424242"] std::list::at]
     }
 } -result {{local-counted UNHANDLED-ERROR {IndexNotFound 0}} {local-mod UNHANDLED-ERROR {IndexNotFound 0}} {local-mask UNHANDLED-ERROR {IndexNotFound 0}} {local-guard UNHANDLED-ERROR {IndexNotFound 0}} {local-pop UNHANDLED-ERROR {IndexNotFound 0}} {local-clear UNHANDLED-ERROR {IndexNotFound 0}} {parameter UNHANDLED-ERROR {IndexNotFound 0}} {field-path UNHANDLED-ERROR {IndexNotFound 0}} {context-callee UNHANDLED-ERROR {IndexNotFound 0}} {copy-then-copy UNHANDLED-ERROR {IndexNotFound 0}} {through-copy UNHANDLED-ERROR {IndexNotFound 0}} {loop-body UNHANDLED-ERROR {IndexNotFound 0}} {handler UNHANDLED-ERROR {IndexNotFound 0}} {branch UNHANDLED-ERROR {IndexNotFound 0}} {loop-encloses-later UNHANDLED-ERROR {IndexNotFound 0}} {own-body UNHANDLED-ERROR {IndexNotFound 0}} {copies-each-pushed UNHANDLED-ERROR {IndexNotFound 0}} {context-branch-callee UNHANDLED-ERROR {IndexNotFound 0}} {branch-push-then-read UNHANDLED-ERROR {IndexNotFound 0}} {condition-site UNHANDLED-ERROR {IndexNotFound 0}} {context-transitive UNHANDLED-ERROR {IndexNotFound 0}} {context-resume UNHANDLED-ERROR {IndexNotFound 0}} {context-resume-value UNHANDLED-ERROR {IndexNotFound 0}}}
 
@@ -521,7 +521,7 @@ test bounds-vector-snapshots-fail {each snapshot shape the prover leaves checked
 
 test bounds-vector-snapshots-lockstep {a lockstep clause over a MutableVector and a List an earlier loop collected over it, the vector grown in between, are not proven equal (a local or a field path): LOCKSTEP-UNPROVEN, the diagnostic naming each loop's evaluation of the vector by where it is written} -body {
     set out {}
-    foreach {v setup} {v "v = mutable_vector::from_list(\[1, 2, 3\])\n    " b.v ""} {
+    foreach {v setup} {v "v = std::mutable_vector::from_list(\[1, 2, 3\])\n    " b.v ""} {
         set source "${vectorDecls}fn f(b: Box) -> List\[int\]:\n    ${setup}ys = loop x in $v:\n        x * 10\n    $v.push(4)\n    loop a in $v and y in ys:\n        a + y\n0"
         set path [makeFile [withImports $source] proven-bounds-vector-lockstep.bot]
         try {
@@ -536,53 +536,53 @@ test bounds-vector-snapshots-lockstep {a lockstep clause over a MutableVector an
 } -result {LOCKSTEP-UNPROVEN {{could not prove length(v at 13:15) == length(v at 10:20)}} LOCKSTEP-UNPROVEN {{could not prove length(b.v at 12:15) == length(b.v at 9:20)}}}
 
 test bounds-vector-same-place-lockstep {a lockstep loop evaluates its domains once, in written order, before its first iteration: two clauses over the same vector place (a local, a field path), with no mutation before or between them in the loop's statement, walk the same vector and are proven equal (and agree on every backend); a copy of the vector (w = v, then v pushed) is another place and stays unproven} -body {
-    set same "${vectorDecls}fn f(b: Box) -> List\[List\[int\]\]:\n    v = mutable_vector::from_list(\[1, 2, 3\])\n    v.push(4)\n    p = loop a in v and c in v:\n        a + c\n    q = loop a in b.v and c in b.v:\n        a * c\n    \[p, q\]\nf(Box {v: mutable_vector::from_list(\[5, 6\])})"
-    set copy "${vectorDecls}fn f() -> List\[int\]:\n    v = mutable_vector::from_list(\[1, 2, 3\])\n    w = v\n    v.push(4)\n    loop a in v and c in w:\n        a + c\n0"
+    set same "${vectorDecls}fn f(b: Box) -> List\[List\[int\]\]:\n    v = std::mutable_vector::from_list(\[1, 2, 3\])\n    v.push(4)\n    p = loop a in v and c in v:\n        a + c\n    q = loop a in b.v and c in b.v:\n        a * c\n    \[p, q\]\nf(Box {v: std::mutable_vector::from_list(\[5, 6\])})"
+    set copy "${vectorDecls}fn f() -> List\[int\]:\n    v = std::mutable_vector::from_list(\[1, 2, 3\])\n    w = v\n    v.push(4)\n    loop a in v and c in w:\n        a + c\n0"
     list [strictKind $same] [agreedValue $same] [strictKind $copy]
 } -result {{} {[[2, 4, 6, 8], [25, 36]]} LOCKSTEP-UNPROVEN}
 
 test bounds-fixed-length-snapshots-proven {a List and a MutableArray keep their keyed lengths: two loops over one List or one MutableArray (a parameter, a field path), the array written in place between them, have one length, so a reduction or a counted loop by the later one proves a read of the earlier, and a lockstep over a field's array and a List collected over it is accepted; so does an iterable of no collection type (an untyped parameter), which a loop requires to be a List} -body {
-    set decl "struct T:\n    s: MutableArray\[int\]\nfn f(xs: List\[int\], a: MutableArray\[int\], t: T, h: int) -> any:\n    %s\nf(\[1, 2, 3\], mutable_array::create(3, 0), T {s: mutable_array::create(3, 0)}, 7)"
+    set decl "struct T:\n    s: MutableArray\[int\]\nfn f(xs: List\[int\], a: MutableArray\[int\], t: T, h: int) -> any:\n    %s\nf(\[1, 2, 3\], std::mutable_array::create(3, 0), T {s: std::mutable_array::create(3, 0)}, 7)"
     list \
-        [verdictOf [format $decl "ys = loop x in xs:\n        x * 10\n    zs = loop x in xs:\n        x\n    ys.at(h.mod(list::length(zs)))"] list::at] \
-        [verdictOf [format $decl "ys = loop x in a:\n        x * 10\n    a.set(h.mod(a.capacity()), 9)\n    zs = loop x in a:\n        x\n    ys.at(h.mod(list::length(zs)))"] list::at] \
-        [verdictOf [format $decl "ys = loop x in t.s:\n        x * 10\n    t.s.set(h.mod(t.s.capacity()), 9)\n    zs = loop x in t.s:\n        x\n    loop k from 0 to list::length(zs):\n        ys.at(k)"] list::at] \
+        [verdictOf [format $decl "ys = loop x in xs:\n        x * 10\n    zs = loop x in xs:\n        x\n    ys.at(h.mod(std::list::length(zs)))"] std::list::at] \
+        [verdictOf [format $decl "ys = loop x in a:\n        x * 10\n    a.set(h.mod(a.capacity()), 9)\n    zs = loop x in a:\n        x\n    ys.at(h.mod(std::list::length(zs)))"] std::list::at] \
+        [verdictOf [format $decl "ys = loop x in t.s:\n        x * 10\n    t.s.set(h.mod(t.s.capacity()), 9)\n    zs = loop x in t.s:\n        x\n    loop k from 0 to std::list::length(zs):\n        ys.at(k)"] std::list::at] \
         [strictKind [format $decl "ys = loop x in t.s:\n        x * 10\n    t.s.set(h.mod(t.s.capacity()), 9)\n    loop x in t.s and y in ys:\n        x + y"]] \
-        [strictKind "fn g(zs, h: int):\n    ys = loop x in zs:\n        x * 10\n    r = loop a in zs and y in ys:\n        a + y\n    ys.at(h.mod(list::length(r)))\ng(\[1, 2\], 3)"]
+        [strictKind "fn g(zs, h: int):\n    ys = loop x in zs:\n        x * 10\n    r = loop a in zs and y in ys:\n        a + y\n    ys.at(h.mod(std::list::length(r)))\ng(\[1, 2\], 3)"]
 } -result [list {{{}} 1} {{{}} 1} {{{}} 1} {} {}]
 
 # A vector nothing in the program mutates (vectorDecls' only mutation is the
 # context member's, in add): {NAME BODY H}, f(..., H, ...).
 set vectorUnmutated {
-    local-counted {v = mutable_vector::from_list([1, 2, 3])
+    local-counted {v = std::mutable_vector::from_list([1, 2, 3])
     ys = loop x in v:
         x * 10
     zs = loop x in v:
         x
-    loop k from 0 to list::length(zs):
+    loop k from 0 to std::list::length(zs):
         ys.at(k)} 0
     parameter-mod {ys = loop x in w:
         x * 10
     zs = loop x in w:
         x
-    ys.at(h.mod(list::length(zs)))} 4
+    ys.at(h.mod(std::list::length(zs)))} 4
     field-guard {ys = loop x in b.v:
         x * 10
     zs = loop x in b.v:
         x
-    if h >= 0 and h < list::length(zs):
+    if h >= 0 and h < std::list::length(zs):
         return ys.at(h)
     -1} 2
-    copy-mask {v = mutable_vector::from_list([1, 2, 3])
+    copy-mask {v = std::mutable_vector::from_list([1, 2, 3])
     c1 = v
     ys = loop x in v:
         x * 10
     zs = loop x in c1:
         x
-    if list::length(zs) == 0:
+    if std::list::length(zs) == 0:
         return -1
-    ys.at(bit_and(h, list::length(zs) - 1))} 7
-    lockstep-collected {v = mutable_vector::from_list([1, 2, 3])
+    ys.at(bit_and(h, std::list::length(zs) - 1))} 7
+    lockstep-collected {v = std::mutable_vector::from_list([1, 2, 3])
     ys = loop x in v:
         x * 10
     loop a in v and y in ys:
@@ -591,7 +591,7 @@ set vectorUnmutated {
         x * 10
     loop a in b.v and y in ys:
         a + y} 0
-    lockstep-copy {v = mutable_vector::from_list([1, 2, 3])
+    lockstep-copy {v = std::mutable_vector::from_list([1, 2, 3])
     c1 = v
     loop a in v and c in c1:
         a + c} 0
@@ -600,7 +600,7 @@ set vectorUnmutated {
 test bounds-vector-unmutated-proven {a MutableVector the program never mutates keeps its key's length, like a List: two loops over a local, a parameter, a field path or a copy of the vector have one length, so a counted loop, a reduction, a guard or a mask by the later one proves a read of the earlier -- accepted without `errors`, the read proven, every backend agreeing -- and a lockstep over the vector and a List collected over it (a local, a field path) or over the vector and a copy is accepted} -body {
     lmap {name body h} $vectorUnmutated {
         set program [vectorSnapshotProgram $body $h ""]
-        set proven [expr {[string match lockstep-* $name] ? "-" : [lindex [verdictOf $program list::at] 1]}]
+        set proven [expr {[string match lockstep-* $name] ? "-" : [lindex [verdictOf $program std::list::at] 1]}]
         list $name [strictKind $program] $proven [agreedValue $program]
     }
 } -result {{local-counted {} 1 {[10, 20, 30]}} {parameter-mod {} 1 20} {field-guard {} 1 30} {copy-mask {} 1 30} {lockstep-collected {} - {[11, 22, 33]}} {lockstep-field {} - {[11, 22, 33]}} {lockstep-copy {} - {[2, 4, 6]}}}
@@ -609,51 +609,51 @@ test bounds-vector-unmutated-proven {a MutableVector the program never mutates k
 # loop over the same place with no mutation between the two (vectorDecls'
 # add grows the context member): {NAME BODY H}, f(..., H, ...).
 set vectorQuiet {
-    built-then-walked {v = mutable_vector::from_list([0])
+    built-then-walked {v = std::mutable_vector::from_list([0])
     loop i from 1 to 5:
         v.push(i * i)
     ys = loop x in v:
         x
     zs = loop x in v:
         x * 2
-    loop k from 0 to list::length(zs):
+    loop k from 0 to std::list::length(zs):
         ys.at(k) + zs.at(k)} 0
-    pushed-before {v = mutable_vector::from_list([1, 2, 3])
+    pushed-before {v = std::mutable_vector::from_list([1, 2, 3])
     v.push(4)
     ys = loop x in v:
         x * 10
     zs = loop x in v:
         x
-    ys.at(h.mod(list::length(zs)))} 7
-    pushed-after {v = mutable_vector::from_list([1, 2, 3])
+    ys.at(h.mod(std::list::length(zs)))} 7
+    pushed-after {v = std::mutable_vector::from_list([1, 2, 3])
     ys = loop x in v:
         x * 10
     zs = loop x in v:
         x
-    r = ys.at(h.mod(list::length(zs)))
+    r = ys.at(h.mod(std::list::length(zs)))
     v.push(r)
     r} 4
-    one-iteration {v = mutable_vector::from_list([1, 2, 3])
+    one-iteration {v = std::mutable_vector::from_list([1, 2, 3])
     loop t from 0 to 3:
         ys = loop x in v:
             x * 10
         zs = loop x in v:
             x
         v.push(t)
-        ys.at(h.mod(list::length(zs)))} 4
-    own-body-after {v = mutable_vector::from_list([1, 2, 3])
+        ys.at(h.mod(std::list::length(zs)))} 4
+    own-body-after {v = std::mutable_vector::from_list([1, 2, 3])
     ys = loop x in v:
         x * 10
     zs = loop x in v:
         v.push(x)
         x
-    ys.at(h.mod(list::length(zs)))} 4
+    ys.at(h.mod(std::list::length(zs)))} 4
     parameter-guard {w.push(4)
     ys = loop x in w:
         x * 10
     zs = loop x in w:
         x
-    if h >= 0 and h < list::length(zs):
+    if h >= 0 and h < std::list::length(zs):
         return ys.at(h)
     -1} 3
     field-mask {b.v.push(4)
@@ -661,24 +661,24 @@ set vectorQuiet {
         x * 10
     zs = loop x in b.v:
         x
-    if list::length(zs) == 0:
+    if std::list::length(zs) == 0:
         return -1
-    ys.at(bit_and(h, list::length(zs) - 1))} 7
+    ys.at(bit_and(h, std::list::length(zs) - 1))} 7
     context-no-call {add(7)
     ys = loop x in log.items:
         x * 10
     zs = loop x in log.items:
         x
-    ys.at(h.mod(list::length(zs)))} 5
-    copy-pushed {v = mutable_vector::from_list([1, 2, 3])
+    ys.at(h.mod(std::list::length(zs)))} 5
+    copy-pushed {v = std::mutable_vector::from_list([1, 2, 3])
     ys = loop x in v:
         x * 10
     c = v
     c.push(4)
     zs = loop x in v:
         x
-    ys.at(h.mod(list::length(zs)))} 4
-    copy-pushed-mutated {v = mutable_vector::from_list([1, 2, 3])
+    ys.at(h.mod(std::list::length(zs)))} 4
+    copy-pushed-mutated {v = std::mutable_vector::from_list([1, 2, 3])
     v.push(4)
     ys = loop x in v:
         x * 10
@@ -686,8 +686,8 @@ set vectorQuiet {
     c.push(5)
     zs = loop x in v:
         x
-    ys.at(h.mod(list::length(zs)))} 6
-    nested-copy-pushed {v = mutable_vector::from_list([1, 2, 3])
+    ys.at(h.mod(std::list::length(zs)))} 6
+    nested-copy-pushed {v = std::mutable_vector::from_list([1, 2, 3])
     c = v
     c.push(4)
     ys = loop x in v:
@@ -695,29 +695,29 @@ set vectorQuiet {
     fn g(k: int) -> int:
         zs = loop x in v:
             x
-        ys.at(k.mod(list::length(zs)))
+        ys.at(k.mod(std::list::length(zs)))
     g(h)} 5
-    branch-read-then-push {v = mutable_vector::from_list([1, 2, 3])
+    branch-read-then-push {v = std::mutable_vector::from_list([1, 2, 3])
     ys = loop x in v:
         x * 10
     if h > 0:
         zs = loop x in v:
             x
-        r = ys.at(h.mod(list::length(zs)))
+        r = ys.at(h.mod(std::list::length(zs)))
         v.push(r)
         return r + v.length()
     v.length()} 4
-    else-pushes {v = mutable_vector::from_list([1, 2, 3])
+    else-pushes {v = std::mutable_vector::from_list([1, 2, 3])
     ys = loop x in v:
         x * 10
     if h > 0:
         zs = loop x in v:
             x
-        return ys.at(h.mod(list::length(zs)))
+        return ys.at(h.mod(std::list::length(zs)))
     else:
         v.push(4)
     0} 4
-    then-pushes {v = mutable_vector::from_list([1, 2, 3])
+    then-pushes {v = std::mutable_vector::from_list([1, 2, 3])
     ys = loop x in v:
         x * 10
     if h < 0:
@@ -725,20 +725,20 @@ set vectorQuiet {
     else:
         zs = loop x in v:
             x
-        return ys.at(h.mod(list::length(zs)))
+        return ys.at(h.mod(std::list::length(zs)))
     0} 4
-    handler-read-then-push {v = mutable_vector::from_list([1, 2, 3])
+    handler-read-then-push {v = std::mutable_vector::from_list([1, 2, 3])
     ys = loop x in v:
         x * 10
     n = v.at(7):
         on IndexNotFound:
             zs = loop x in v:
                 x
-            k = ys.at(h.mod(list::length(zs)))
+            k = ys.at(h.mod(std::list::length(zs)))
             v.push(k)
             k
     n + v.length()} 4
-    swap-between {v = mutable_vector::from_list([1, 2, 3])
+    swap-between {v = std::mutable_vector::from_list([1, 2, 3])
     ys = loop x in v:
         x * 10
     old = v.swap(0, 7):
@@ -746,8 +746,8 @@ set vectorQuiet {
             0
     zs = loop x in v:
         x
-    ys.at(h.mod(list::length(zs))) + old} 4
-    third-copy-pushed {v = mutable_vector::from_list([1, 2, 3])
+    ys.at(h.mod(std::list::length(zs))) + old} 4
+    third-copy-pushed {v = std::mutable_vector::from_list([1, 2, 3])
     w2 = v
     ys = loop x in v:
         x * 10
@@ -755,7 +755,7 @@ set vectorQuiet {
         x
     u = v
     u.push(9)
-    ys.at(h.mod(list::length(zs))) + u.length()} 4
+    ys.at(h.mod(std::list::length(zs))) + u.length()} 4
     context-local-copy {items = log.items
     ys = loop x in items:
         x * 10
@@ -763,7 +763,7 @@ set vectorQuiet {
     add(8)
     zs = loop x in items:
         x
-    ys.at(h.mod(list::length(zs)))} 3
+    ys.at(h.mod(std::list::length(zs)))} 3
     context-free-call {fn twice(x: int) -> int:
         x * 2
     ys = loop x in log.items:
@@ -771,7 +771,7 @@ set vectorQuiet {
     k = twice(h)
     zs = loop x in log.items:
         x
-    ys.at(k.mod(list::length(zs)))} 3
+    ys.at(k.mod(std::list::length(zs)))} 3
     context-value-argument {fn grow(l: Log) -> int:
         l.items.push(9)
         l.items.length()
@@ -780,8 +780,8 @@ set vectorQuiet {
     n = grow(log)
     zs = loop x in log.items:
         x
-    ys.at(h.mod(list::length(zs))) + n * 1000 + log.items.length() * 100} 3
-    copy-of-pushed-nested {v = mutable_vector::from_list([1, 2, 3])
+    ys.at(h.mod(std::list::length(zs))) + n * 1000 + log.items.length() * 100} 3
+    copy-of-pushed-nested {v = std::mutable_vector::from_list([1, 2, 3])
     w2 = v
     v.push(4)
     ys = loop x in w2:
@@ -789,7 +789,7 @@ set vectorQuiet {
     fn g(k: int) -> int:
         zs = loop x in w2:
             x
-        ys.at(k.mod(list::length(zs)))
+        ys.at(k.mod(std::list::length(zs)))
     g(h)} 4
     context-copy-nested {items = log.items
     ys = loop x in items:
@@ -798,21 +798,21 @@ set vectorQuiet {
     fn g(k: int) -> int:
         zs = loop x in items:
             x
-        ys.at(k.mod(list::length(zs)))
+        ys.at(k.mod(std::list::length(zs)))
     g(h)} 3
-    lockstep-built {v = mutable_vector::from_list([1, 2, 3])
+    lockstep-built {v = std::mutable_vector::from_list([1, 2, 3])
     v.push(4)
     ys = loop x in v:
         x * 10
     loop a in v and y in ys:
         a + y} 0
-    lockstep-own-body {v = mutable_vector::from_list([1, 2, 3])
+    lockstep-own-body {v = std::mutable_vector::from_list([1, 2, 3])
     ys = loop x in v:
         x * 10
     loop a in v and y in ys:
         v.push(a)
         a + y} 0
-    lockstep-swap {v = mutable_vector::from_list([1, 2, 3])
+    lockstep-swap {v = std::mutable_vector::from_list([1, 2, 3])
     ys = loop x in v:
         x * 10
     old = v.swap(0, 7):
@@ -820,7 +820,7 @@ set vectorQuiet {
             0
     loop a in v and y in ys:
         a + y + old} 0
-    lockstep-third-copy {v = mutable_vector::from_list([1, 2, 3])
+    lockstep-third-copy {v = std::mutable_vector::from_list([1, 2, 3])
     w2 = v
     u = v
     u.push(9)
@@ -837,7 +837,7 @@ set vectorQuiet {
 test bounds-vector-quiet-runs-proven {two loops over one vector place with nothing between them that can mutate it have one length, whatever mutates it before or after them: the vector built by pushes in a loop, then walked twice; pushed before both loops or after both; both loops in one iteration of a loop that pushes after them; the later loop's own body pushing (its domain is evaluated first); a parameter, a field path, a context member no call between the loops can grow; a copy pushed between the loops (another place), also when the vector itself is pushed before both, or with the later loop in a nested function; the later loop in a branch or a handler before the body's own push (the body runs at most once, entered with nothing that can mutate the vector before it), or in the branch the other branch of which pushes (written before it or after it); a swap between the loops (registered -keeps-length: it replaces an element); a copy of a copy read while a third copy is pushed; a local copy of a context member a callee grows; a context member around a call of a function that cannot reach the installed context (it requires no context, or gets the context as an ordinary argument, a copy); a place nothing resizes read once in a nested function (a copy of a vector pushed before it, a local copy of a context member) -- a counted loop, a reduction, a guard or a mask by the later one proves a read of the earlier, accepted without `errors`, the read proven, every backend agreeing -- and a lockstep over the vector and a List collected over it after pushes, or with the lockstep's own body pushing, or around a swap, over a vector and a copy while a third copy is pushed, or over a local copy of a context member around a callee's push to the member, is accepted} -body {
     lmap {name body h} $vectorQuiet {
         set program [vectorSnapshotProgram $body $h ""]
-        set proven [expr {[string match lockstep-* $name] ? "-" : [lindex [verdictOf $program list::at] 1]}]
+        set proven [expr {[string match lockstep-* $name] ? "-" : [lindex [verdictOf $program std::list::at] 1]}]
         list $name [strictKind $program] $proven [agreedValue $program]
     }
 } -result {{built-then-walked {} 1 {[0, 3, 12, 27, 48]}} {pushed-before {} 1 40} {pushed-after {} 1 20} {one-iteration {} 1 {[20, 10, 10]}} {own-body-after {} 1 20} {parameter-guard {} 1 40} {field-mask {} 1 40} {context-no-call {} 1 70} {copy-pushed {} 1 20} {copy-pushed-mutated {} 1 30} {nested-copy-pushed {} 1 30} {branch-read-then-push {} 1 24} {else-pushes {} 1 20} {then-pushes {} 1 20} {handler-read-then-push {} 1 24} {swap-between {} 1 21} {third-copy-pushed {} 1 24} {context-local-copy {} 1 20} {context-free-call {} 1 10} {context-value-argument {} 1 3220} {copy-of-pushed-nested {} 1 20} {context-copy-nested {} 1 20} {lockstep-built {} - {[11, 22, 33, 44]}} {lockstep-own-body {} - {[11, 22, 33]}} {lockstep-swap {} - {[18, 23, 34]}} {lockstep-third-copy {} - {[15, 26, 37]}} {lockstep-context-copy {} - {[11, 22]}}}
@@ -849,84 +849,84 @@ test bounds-vector-quiet-runs-proven {two loops over one vector place with nothi
 # (The baseline accepted the counted-loop form and read past the List's
 # end natively.)
 set vectorOperationValues {
-    local-counted {v = mutable_vector::from_list([1, 2, 3])
+    local-counted {v = std::mutable_vector::from_list([1, 2, 3])
     ys = loop x in v:
         x * 10
-    p = mutable_vector::push
+    p = std::mutable_vector::push
     p(v, 4)
     zs = loop x in v:
         x
-    loop k from 0 to list::length(zs):
+    loop k from 0 to std::list::length(zs):
         ys.at(k)}
-    local-mod {v = mutable_vector::from_list([1, 2, 3])
+    local-mod {v = std::mutable_vector::from_list([1, 2, 3])
     ys = loop x in v:
         x * 10
-    p = mutable_vector::push
+    p = std::mutable_vector::push
     p(v, 4)
     p(v, 5)
     zs = loop x in v:
         x
-    ys.at(h.mod(list::length(zs)))}
+    ys.at(h.mod(std::list::length(zs)))}
     field-counted {ys = loop x in b.v:
         x * 10
-    p = mutable_vector::push
+    p = std::mutable_vector::push
     p(b.v, 4)
     zs = loop x in b.v:
         x
-    loop k from 0 to list::length(zs):
+    loop k from 0 to std::list::length(zs):
         ys.at(k)}
-    clear-argument {v = mutable_vector::from_list([1, 2])
+    clear-argument {v = std::mutable_vector::from_list([1, 2])
     ys = loop x in v:
         x
-    once(mutable_vector::clear, v)
+    once(std::mutable_vector::clear, v)
     zs = loop x in v:
         x
-    zs.at(h.mod(list::length(ys)))}
+    zs.at(h.mod(std::list::length(ys)))}
     lockstep {ys = loop x in b.v:
         x * 10
-    p = mutable_vector::push
+    p = std::mutable_vector::push
     p(b.v, 4)
     loop a in b.v and y in ys:
         a + y}
-    capacity {v = mutable_vector::from_list([1, 2, 3])
+    capacity {v = std::mutable_vector::from_list([1, 2, 3])
     ys = loop x in v:
         x
-    a = mutable_array::from_list(ys)
-    g = Grow {grow: mutable_vector::push}
+    a = std::mutable_array::from_list(ys)
+    g = Grow {grow: std::mutable_vector::push}
     g.grow(v, 4)
     zs = loop x in v:
         x
-    c = mutable_array::from_list(zs)
+    c = std::mutable_array::from_list(zs)
     a.at(h.mod(c.capacity()))}
 }
 
 test bounds-vector-operation-value {a vector grown through a mutating operation taken as a value -- bound to a name, passed to a function, stored in a field -- is rejected at the operation (MUTABLE-PLACE-RECEIVER), so no proof made from two loops around the hidden push (a mod, a counted loop, a lockstep, two arrays' capacities) is ever relied on} -body {
     set extra "fn once(g: Fn{args: \[MutableVector\[int\]\], return: unit}, w: MutableVector\[int\]):\n    g(w)\nstruct Grow:\n    grow: Fn{args: \[MutableVector\[int\], int\], return: unit}\n"
-    set decls [string map [list "import mutable_vector\n" "import mutable_vector\nimport mutable_array\n"] $::vectorDecls]$extra
+    set decls [string map [list "import std::mutable_vector\n" "import std::mutable_vector\nimport std::mutable_array\n"] $::vectorDecls]$extra
     lmap {name body} $vectorOperationValues {
         list $name [strictKind [string map [list $::vectorDecls $decls] [vectorSnapshotProgram $body 4 ""]]]
     }
 } -result {{local-counted MUTABLE-PLACE-RECEIVER} {local-mod MUTABLE-PLACE-RECEIVER} {field-counted MUTABLE-PLACE-RECEIVER} {clear-argument MUTABLE-PLACE-RECEIVER} {lockstep MUTABLE-PLACE-RECEIVER} {capacity MUTABLE-PLACE-RECEIVER}}
 
 test bounds-vector-mutated-operand {a lockstep loop's domains run in written order before its body: a domain over a vector evaluated before a mutation in another domain's operands has the length the vector had before it (proven equal to a List collected over it earlier), one evaluated after it has its own length (LOCKSTEP-UNPROVEN, which the counts differing at run time confirm)} -body {
-    set decl "${vectorDecls}fn f() -> List\[int\] errors IndexNotFound:\n    v = mutable_vector::from_list(\[1, 2, 3\])\n    ys = loop x in v:\n        x * 10\n    %s\n    r\nr = f():\n    on IndexNotFound:\n        \[\]\nr\n"
-    set before [format $decl "r = loop a in ys and c in v and k from 0 to list::length(ys) + v.pop() * 0:\n        a + c"]
-    set after [format $decl "r = loop a in ys and k from 0 to list::length(ys) + v.pop() * 0 and c in v:\n        a + c"]
-    set counts [format $decl "n = list::length(ys) + v.pop() * 0\n    r = \[n, mutable_vector::length(v)\]"]
+    set decl "${vectorDecls}fn f() -> List\[int\] errors IndexNotFound:\n    v = std::mutable_vector::from_list(\[1, 2, 3\])\n    ys = loop x in v:\n        x * 10\n    %s\n    r\nr = f():\n    on IndexNotFound:\n        \[\]\nr\n"
+    set before [format $decl "r = loop a in ys and c in v and k from 0 to std::list::length(ys) + v.pop() * 0:\n        a + c"]
+    set after [format $decl "r = loop a in ys and k from 0 to std::list::length(ys) + v.pop() * 0 and c in v:\n        a + c"]
+    set counts [format $decl "n = std::list::length(ys) + v.pop() * 0\n    r = \[n, std::mutable_vector::length(v)\]"]
     list [strictKind $before] [agreedValue $before] [strictKind $after] [agreedValue $counts]
 } -result {{} {[11, 22, 33]} LOCKSTEP-UNPROVEN {[3, 2]}}
 
 test bounds-vector-context-yield {a yield of a coroutine body is a mutation of the context members it reads: the resumer runs before the body goes on, and may grow one through its own context parameter -- two loops over a member around a yield are unrelated (rejected without `errors`; declared and handled, every backend fails the read), and around a yield over a local vector they are one length} -body {
-    set decl "${vectorDecls}fn body(h: int, context log: Log) -> int%s:\n    ys = loop x in log.items:\n        x * 10\n    yield 0\n    zs = loop x in log.items:\n        x\n    ys.at(h.mod(list::length(zs)))\nfn f(context log: Log) -> int%s:\n    coroutine {step, first} = body(3)\n    add(7)\n    add(8)\n    step()\nwith context Log {items: mutable_vector::from_list(\[1, 2\])}\nf()%s\n"
-    set local "${vectorDecls}fn body(h: int) -> int:\n    v = mutable_vector::from_list(\[1, 2, 3\])\n    v.push(4)\n    ys = loop x in v:\n        x * 10\n    yield 0\n    zs = loop x in v:\n        x\n    ys.at(h.mod(list::length(zs)))\nfn f() -> int:\n    coroutine {step, first} = body(5)\n    step()\nf()\n"
+    set decl "${vectorDecls}fn body(h: int, context log: Log) -> int%s:\n    ys = loop x in log.items:\n        x * 10\n    yield 0\n    zs = loop x in log.items:\n        x\n    ys.at(h.mod(std::list::length(zs)))\nfn f(context log: Log) -> int%s:\n    coroutine {step, first} = body(3)\n    add(7)\n    add(8)\n    step()\nwith context Log {items: std::mutable_vector::from_list(\[1, 2\])}\nf()%s\n"
+    set local "${vectorDecls}fn body(h: int) -> int:\n    v = std::mutable_vector::from_list(\[1, 2, 3\])\n    v.push(4)\n    ys = loop x in v:\n        x * 10\n    yield 0\n    zs = loop x in v:\n        x\n    ys.at(h.mod(std::list::length(zs)))\nfn f() -> int:\n    coroutine {step, first} = body(5)\n    step()\nf()\n"
     set handled [format $decl " errors IndexNotFound" " errors IndexNotFound" ":\n    on IndexNotFound:\n        -424242"]
-    list [strictKind [format $decl "" "" ""]] [verdictOf $handled list::at] [agreedValue $handled] \
-        [strictKind $local] [lindex [verdictOf $local list::at] 1] [agreedValue $local]
+    list [strictKind [format $decl "" "" ""]] [verdictOf $handled std::list::at] [agreedValue $handled] \
+        [strictKind $local] [lindex [verdictOf $local std::list::at] 1] [agreedValue $local]
 } -result {UNHANDLED-ERROR {IndexNotFound 0} -424242 {} 1 20}
 
-test bounds-vector-static-block {a static compile block that binds names is compiled as a branch that always runs (hir/static.tcl): a loop over the vector in it before its own push continues the run before the block, so the block is accepted and its read proven, and a rejected one's lockstep diagnostic records the two evaluations its message locates as related origins (compiler::CompilerError's related, in the message's order)} -body {
-    set accepted "import compiler\n${vectorDecls}fn g(h: int) -> int errors compiler::CompilerError:\n    v = mutable_vector::from_list(\[1, 2, 3\])\n    v.push(4)\n    ys = loop x in v:\n        x * 10\n    static compile:\n        zs = loop x in v:\n            x\n        r = ys.at(h.mod(list::length(zs)))\n        v.push(6)\n        r\nr = g(5):\n    on compiler::CompilerError {code, primary, message}:\n        -1\nr\n"
-    set rejected "import compiler\n${vectorDecls}fn g() -> int errors compiler::CompilerError:\n    v = mutable_vector::from_list(\[1, 2, 3\])\n    static compile:\n        ys = loop x in v:\n            x * 10\n        v.push(4)\n        loop a in v and y in ys:\n            a + y\n        0\nr = g():\n    on compiler::CompilerError details:\n        loop at in details.related:\n            \[at.line, at.column\]\nr\n"
+test bounds-vector-static-block {a static compile block that binds names is compiled as a branch that always runs (hir/static.tcl): a loop over the vector in it before its own push continues the run before the block, so the block is accepted and its read proven, and a rejected one's lockstep diagnostic records the two evaluations its message locates as related origins (std::compiler::CompilerError's related, in the message's order)} -body {
+    set accepted "import std::compiler\n${vectorDecls}fn g(h: int) -> int errors std::compiler::CompilerError:\n    v = std::mutable_vector::from_list(\[1, 2, 3\])\n    v.push(4)\n    ys = loop x in v:\n        x * 10\n    static compile:\n        zs = loop x in v:\n            x\n        r = ys.at(h.mod(std::list::length(zs)))\n        v.push(6)\n        r\nr = g(5):\n    on std::compiler::CompilerError {code, primary, message}:\n        -1\nr\n"
+    set rejected "import std::compiler\n${vectorDecls}fn g() -> int errors std::compiler::CompilerError:\n    v = std::mutable_vector::from_list(\[1, 2, 3\])\n    static compile:\n        ys = loop x in v:\n            x * 10\n        v.push(4)\n        loop a in v and y in ys:\n            a + y\n        0\nr = g():\n    on std::compiler::CompilerError details:\n        loop at in details.related:\n            \[at.line, at.column\]\nr\n"
     list [agreedValue $accepted] [agreedValue $rejected]
 } -result {20 {[[15, 19], [12, 24]]}}
 
@@ -935,50 +935,50 @@ test bounds-vector-static-block {a static compile block that binds names is comp
 # local bound to a computed value is keyed by its one defining expression
 
 test bounds-guarded-local-index {a guard on a local bound to a computed index proves the access through it, or through an alias of it, in either guard form: an offset, a call result, a product; the guard's lower half may be the local's own Range} -body {
-    set decl "fn g(n: int) -> int:\n    n - 1\nfn f(a: MutableArray\[int\], xs: List\[int\], s: str, i: int, h: int):\n    %s\nf(mutable_array::create(3, 0), \[1, 2\], \"abc\", 1, 5)"
+    set decl "fn g(n: int) -> int:\n    n - 1\nfn f(a: MutableArray\[int\], xs: List\[int\], s: str, i: int, h: int):\n    %s\nf(std::mutable_array::create(3, 0), \[1, 2\], \"abc\", 1, 5)"
     list \
-        [verdictOf [format $decl "j = i + 1\n    if j < 0 or j >= mutable_array::capacity(a):\n        return 0\n    mutable_array::at(a, j)"] mutable_array::at] \
-        [verdictOf [format $decl "t = g(i)\n    if t >= 0 and t < list::length(xs):\n        list::at(xs, t)\n    else:\n        0"] list::at] \
-        [verdictOf [format $decl "j = i + 1\n    if j < 0 or j >= mutable_array::capacity(a):\n        return 0\n    k = j\n    mutable_array::set(a, k, 1)"] mutable_array::set] \
-        [verdictOf [format $decl "j = h.mod(7)\n    if j >= mutable_array::capacity(a):\n        return 0\n    mutable_array::at(a, j)"] mutable_array::at] \
-        [verdictOf [format $decl "j = i * 2\n    if j < 0 or j >= str::length(s):\n        return 0\n    str::char_at(s, j)"] str::char_at]
+        [verdictOf [format $decl "j = i + 1\n    if j < 0 or j >= std::mutable_array::capacity(a):\n        return 0\n    std::mutable_array::at(a, j)"] std::mutable_array::at] \
+        [verdictOf [format $decl "t = g(i)\n    if t >= 0 and t < std::list::length(xs):\n        std::list::at(xs, t)\n    else:\n        0"] std::list::at] \
+        [verdictOf [format $decl "j = i + 1\n    if j < 0 or j >= std::mutable_array::capacity(a):\n        return 0\n    k = j\n    std::mutable_array::set(a, k, 1)"] std::mutable_array::set] \
+        [verdictOf [format $decl "j = h.mod(7)\n    if j >= std::mutable_array::capacity(a):\n        return 0\n    std::mutable_array::at(a, j)"] std::mutable_array::at] \
+        [verdictOf [format $decl "j = i * 2\n    if j < 0 or j >= std::str::length(s):\n        return 0\n    std::str::char_at(s, j)"] std::str::char_at]
 } -result [lrepeat 5 {{{}} 1}]
 
 test bounds-guarded-local-rejected {a guard on a computed local proves nothing with only its upper half when the local may be negative, against another container's size, written inline (each written `i + 1` is its own expression), or once its scope ended (a guard on a nonnegative local in a loop body that may run zero times, the read after the loop)} -body {
-    set decl "fn f(a: MutableArray\[int\], b: MutableArray\[int\], i: int) -> int errors IndexNotFound:\n    %s\nf(mutable_array::create(3, 0), mutable_array::create(5, 0), 1)"
+    set decl "fn f(a: MutableArray\[int\], b: MutableArray\[int\], i: int) -> int errors IndexNotFound:\n    %s\nf(std::mutable_array::create(3, 0), std::mutable_array::create(5, 0), 1)"
     list \
-        [verdictOf [format $decl "j = i + 1\n    if j >= mutable_array::capacity(a):\n        return 0\n    mutable_array::at(a, j)"] mutable_array::at] \
-        [verdictOf [format $decl "j = i + 1\n    if j < 0 or j >= mutable_array::capacity(b):\n        return 0\n    mutable_array::at(a, j)"] mutable_array::at] \
-        [verdictOf [format $decl "if i + 1 < 0 or i + 1 >= mutable_array::capacity(a):\n        return 0\n    mutable_array::at(a, i + 1)"] mutable_array::at] \
-        [verdictOf [format $decl "j = mod(i, 1000)\n    loop k from 0 to i - 500:\n        if j >= mutable_array::capacity(a):\n            return k\n    mutable_array::at(a, j)"] mutable_array::at]
+        [verdictOf [format $decl "j = i + 1\n    if j >= std::mutable_array::capacity(a):\n        return 0\n    std::mutable_array::at(a, j)"] std::mutable_array::at] \
+        [verdictOf [format $decl "j = i + 1\n    if j < 0 or j >= std::mutable_array::capacity(b):\n        return 0\n    std::mutable_array::at(a, j)"] std::mutable_array::at] \
+        [verdictOf [format $decl "if i + 1 < 0 or i + 1 >= std::mutable_array::capacity(a):\n        return 0\n    std::mutable_array::at(a, i + 1)"] std::mutable_array::at] \
+        [verdictOf [format $decl "j = mod(i, 1000)\n    loop k from 0 to i - 500:\n        if j >= std::mutable_array::capacity(a):\n            return k\n    std::mutable_array::at(a, j)"] std::mutable_array::at]
 } -result [lrepeat 4 {IndexNotFound 0}]
 
-test bounds-declared-signature-unchanged {proving a check never changes the native's declared signature: list::at is still errors IndexNotFound, and the call's effective errors are the proof's} -body {
-    set hir [boundsHir "xs = \[1, 2, 3\]\nlist::at(xs, 1)"]
-    set e [nativeCall $hir list::at]
-    list [dict get [core::native::metadata list::at] errors] [dict get [core::native::metadata list::at] bounds] \
+test bounds-declared-signature-unchanged {proving a check never changes the native's declared signature: std::list::at is still errors IndexNotFound, and the call's effective errors are the proof's} -body {
+    set hir [boundsHir "xs = \[1, 2, 3\]\nstd::list::at(xs, 1)"]
+    set e [nativeCall $hir std::list::at]
+    list [dict get [core::native::metadata std::list::at] errors] [dict get [core::native::metadata std::list::at] bounds] \
         [hir::completions::effectiveErrorsOf $hir $e]
 } -result {IndexNotFound {index list 0 1} {}}
 
 # ---------------------------------------------------------------------------
 # Native lowering
 
-test bounds-nir-index-ops {proven list::at / mutable_array::at / ::set lower to the check-free opcodes, unproven ones keep the checked opcode} -body {
-    set text [boundsNir "xs = \[1, 2, 3\]\na = mutable_array::allocate(3)\nloop i from 0 to 3:\n    mutable_array::set(a, i, list::at(xs, i))\nloop j from 0 to 3:\n    mutable_array::at(a, j)"]
-    set unknown [boundsNir "fn f(xs, a, i) errors IndexNotFound:\n    mutable_array::set(a, i, list::at(xs, i))\n    mutable_array::at(a, i)\nf(\[1\], mutable_array::allocate(1), 0)"]
+test bounds-nir-index-ops {proven std::list::at / std::mutable_array::at / ::set lower to the check-free opcodes, unproven ones keep the checked opcode} -body {
+    set text [boundsNir "xs = \[1, 2, 3\]\na = std::mutable_array::allocate(3)\nloop i from 0 to 3:\n    std::mutable_array::set(a, i, std::list::at(xs, i))\nloop j from 0 to 3:\n    std::mutable_array::at(a, j)"]
+    set unknown [boundsNir "fn f(xs, a, i) errors IndexNotFound:\n    std::mutable_array::set(a, i, std::list::at(xs, i))\n    std::mutable_array::at(a, i)\nf(\[1\], std::mutable_array::allocate(1), 0)"]
     list [pairCounts $text listget] [pairCounts $text mutarrayget] [pairCounts $text mutarrayset] \
         [pairCounts $unknown listget] [pairCounts $unknown mutarrayget] [pairCounts $unknown mutarrayset]
 } -result {{0 1} {0 1} {0 1} {1 0} {1 0} {1 0}}
 
 test bounds-nir-reduced-index {a read or write whose index is reduced mod, or masked by, the container's own size lowers to the check-free opcode; reduced by another size (another array's, the length plus one) or masked without a proven m >= 0 it keeps the checked one} -body {
-    set proven [boundsNir "fn f(a: MutableArray\[int\], xs: List\[int\], h: int) -> int:\n    i = h.mod(mutable_array::capacity(a))\n    mutable_array::set(a, i, h)\n    if mutable_array::capacity(a) == 0:\n        return 0\n    mutable_array::at(a, bit_and(h, mutable_array::capacity(a) - 1)) + list::at(xs, h.mod(list::length(xs)))\nf(mutable_array::create(3, 0), \[1, 2\], 7)"]
-    set unknown [boundsNir "fn f(a: MutableArray\[int\], b: MutableArray\[int\], xs: List\[int\], h: int) -> int errors IndexNotFound:\n    i = h.mod(mutable_array::capacity(b))\n    mutable_array::set(a, i, h)\n    mutable_array::at(a, bit_and(h, mutable_array::capacity(a) - 1)) + list::at(xs, h.mod(list::length(xs) + 1))\nf(mutable_array::create(3, 0), mutable_array::create(3, 0), \[1, 2\], 7)"]
+    set proven [boundsNir "fn f(a: MutableArray\[int\], xs: List\[int\], h: int) -> int:\n    i = h.mod(std::mutable_array::capacity(a))\n    std::mutable_array::set(a, i, h)\n    if std::mutable_array::capacity(a) == 0:\n        return 0\n    std::mutable_array::at(a, bit_and(h, std::mutable_array::capacity(a) - 1)) + std::list::at(xs, h.mod(std::list::length(xs)))\nf(std::mutable_array::create(3, 0), \[1, 2\], 7)"]
+    set unknown [boundsNir "fn f(a: MutableArray\[int\], b: MutableArray\[int\], xs: List\[int\], h: int) -> int errors IndexNotFound:\n    i = h.mod(std::mutable_array::capacity(b))\n    std::mutable_array::set(a, i, h)\n    std::mutable_array::at(a, bit_and(h, std::mutable_array::capacity(a) - 1)) + std::list::at(xs, h.mod(std::list::length(xs) + 1))\nf(std::mutable_array::create(3, 0), std::mutable_array::create(3, 0), \[1, 2\], 7)"]
     list [pairCounts $proven mutarrayset] [pairCounts $proven mutarrayget] [pairCounts $proven listget] \
         [pairCounts $unknown mutarrayset] [pairCounts $unknown mutarrayget] [pairCounts $unknown listget]
 } -result {{0 1} {0 1} {0 1} {1 0} {1 0} {1 0}}
 
 test bounds-nir-field-path-write {a write through a field place reduced by the field path's own capacity lowers to mutarraysetproven, in place (no logical copy of the field: no mvshare), and the read through the path to mutarraygetproven; reduced by another field's capacity both stay checked} -body {
-    set source "struct T:\n    s: MutableArray\[int\]\n    r: MutableArray\[int\]\nfn store(t: T, h: int) -> T%s:\n    t.s.set(h.mod(mutable_array::capacity(t.%s)), h)\n    t\nfn read(t: T, h: int) -> int%s:\n    mutable_array::at(t.s, h.mod(mutable_array::capacity(t.%s)))\nread(store(T {s: mutable_array::create(3, 0), r: mutable_array::create(4, 0)}, 5), 5)"
+    set source "struct T:\n    s: MutableArray\[int\]\n    r: MutableArray\[int\]\nfn store(t: T, h: int) -> T%s:\n    t.s.set(h.mod(std::mutable_array::capacity(t.%s)), h)\n    t\nfn read(t: T, h: int) -> int%s:\n    std::mutable_array::at(t.s, h.mod(std::mutable_array::capacity(t.%s)))\nread(store(T {s: std::mutable_array::create(3, 0), r: std::mutable_array::create(4, 0)}, 5), 5)"
     set proven [boundsNir [format $source "" s "" s]]
     set unknown [boundsNir [format $source " errors IndexNotFound" r " errors IndexNotFound" r]]
     list [pairCounts $proven mutarrayset] [pairCounts $proven mutarrayget] [opCount $proven mvshare] \
@@ -986,7 +986,7 @@ test bounds-nir-field-path-write {a write through a field place reduced by the f
 } -result {{0 1} {0 1} 0 {1 0} {1 0}}
 
 test bounds-nir-guarded-local {a read and a write at a computed local guarded against the container's size lower to the check-free opcodes; guarded on one side only they keep the checked ones} -body {
-    set source "fn f(a: MutableArray\[int\], i: int) -> int%s:\n    j = i + 1\n    if %sj >= mutable_array::capacity(a):\n        return 0\n    mutable_array::set(a, j, i)\n    mutable_array::at(a, j)\nf(mutable_array::create(3, 0), 1)"
+    set source "fn f(a: MutableArray\[int\], i: int) -> int%s:\n    j = i + 1\n    if %sj >= std::mutable_array::capacity(a):\n        return 0\n    std::mutable_array::set(a, j, i)\n    std::mutable_array::at(a, j)\nf(std::mutable_array::create(3, 0), 1)"
     set proven [boundsNir [format $source "" "j < 0 or "]]
     set unknown [boundsNir [format $source " errors IndexNotFound" ""]]
     list [pairCounts $proven mutarrayset] [pairCounts $proven mutarrayget] \
@@ -994,66 +994,66 @@ test bounds-nir-guarded-local {a read and a write at a computed local guarded ag
 } -result {{0 1} {0 1} {1 0} {1 0}}
 
 test bounds-nir-slice-ops {proven substring / freeze / copy lower to the check-free opcodes, unproven ones keep the checked opcode} -body {
-    set text [boundsNir "s = \"abcd\"\na = mutable_array::allocate(3)\nb = mutable_array::allocate(5)\nmutable_array::copy(a, 0, b, 2, 3)\n\[str::substring(s, 1, 3), mutable_array::freeze(a, 3)\]"]
-    set unknown [boundsNir "fn f(s, a, b, n) errors LowerUnderrun, UpperOverrun:\n    mutable_array::copy(a, 0, b, 0, n)\n    \[str::substring(s, 0, n), mutable_array::freeze(a, n)\]\nf(\"abc\", mutable_array::allocate(3), mutable_array::allocate(3), 2)"]
+    set text [boundsNir "s = \"abcd\"\na = std::mutable_array::allocate(3)\nb = std::mutable_array::allocate(5)\nstd::mutable_array::copy(a, 0, b, 2, 3)\n\[std::str::substring(s, 1, 3), std::mutable_array::freeze(a, 3)\]"]
+    set unknown [boundsNir "fn f(s, a, b, n) errors LowerUnderrun, UpperOverrun:\n    std::mutable_array::copy(a, 0, b, 0, n)\n    \[std::str::substring(s, 0, n), std::mutable_array::freeze(a, n)\]\nf(\"abc\", std::mutable_array::allocate(3), std::mutable_array::allocate(3), 2)"]
     list [pairCounts $text substr] [pairCounts $text mutarrayfreeze] [pairCounts $text mutarraycopy] \
         [pairCounts $unknown substr] [pairCounts $unknown mutarrayfreeze] [pairCounts $unknown mutarraycopy]
 } -result {{0 1} {0 1} {0 1} {1 0} {1 0} {1 0}}
 
 test bounds-nir-substring-one-check-proven-stays-checked {a substring with LowerUnderrun ruled out (n >= 0) but UpperOverrun unproven keeps the checked operation} -body {
-    set text [boundsNir "fn f(s, n) errors UpperOverrun:\n    if n >= 0:\n        str::substring(s, 0, n)\n    else:\n        \"\"\nf(\"abc\", 2)"]
+    set text [boundsNir "fn f(s, n) errors UpperOverrun:\n    if n >= 0:\n        std::str::substring(s, 0, n)\n    else:\n        \"\"\nf(\"abc\", 2)"]
     pairCounts $text substr
 } -result {1 0}
 
 test bounds-nir-copy-one-slice-proven-stays-checked {a copy with the destination slice proven and the source unknown (or the reverse) keeps the whole checked operation: per-check proof state is never turned into an error-name guess} -body {
-    set decl "fn f(%s) errors LowerUnderrun, UpperOverrun:\n    %s\n    mutable_array::copy(dst, 0, src, 0, 2)\nf(%s)"
+    set decl "fn f(%s) errors LowerUnderrun, UpperOverrun:\n    %s\n    std::mutable_array::copy(dst, 0, src, 0, 2)\nf(%s)"
     list \
-        [pairCounts [boundsNir [format $decl src "dst = mutable_array::allocate(4)" {mutable_array::allocate(1)}]] mutarraycopy] \
-        [pairCounts [boundsNir [format $decl dst "src = mutable_array::allocate(4)" {mutable_array::allocate(1)}]] mutarraycopy] \
-        [pairCounts [boundsNir [format $decl k "dst = mutable_array::allocate(4)\n    src = mutable_array::allocate(4)" 0]] mutarraycopy]
+        [pairCounts [boundsNir [format $decl src "dst = std::mutable_array::allocate(4)" {std::mutable_array::allocate(1)}]] mutarraycopy] \
+        [pairCounts [boundsNir [format $decl dst "src = std::mutable_array::allocate(4)" {std::mutable_array::allocate(1)}]] mutarraycopy] \
+        [pairCounts [boundsNir [format $decl k "dst = std::mutable_array::allocate(4)\n    src = std::mutable_array::allocate(4)" 0]] mutarraycopy]
 } -result {{1 0} {1 0} {0 1}}
 
 test bounds-nir-handler-is-not-the-proof {a handler (or an errors clause) never makes a check unnecessary: an unknown handled call stays checked; a proven call with a handler is proven}  -body {
-    set handledUnknown [boundsNir "fn f(xs, i):\n    list::at(xs, i):\n        on IndexNotFound:\n            -1\nf(\[1, 2\], 5)"]
-    set handledProven [boundsNir "xs = \[1, 2, 3\]\nloop i from 0 to 3:\n    list::at(xs, i):\n        on IndexNotFound:\n            -1"]
-    set declared [boundsNir "fn f(xs, i) errors IndexNotFound:\n    list::at(xs, i)\nf(\[1, 2\], 5):\n    on IndexNotFound:\n        -1"]
+    set handledUnknown [boundsNir "fn f(xs, i):\n    std::list::at(xs, i):\n        on IndexNotFound:\n            -1\nf(\[1, 2\], 5)"]
+    set handledProven [boundsNir "xs = \[1, 2, 3\]\nloop i from 0 to 3:\n    std::list::at(xs, i):\n        on IndexNotFound:\n            -1"]
+    set declared [boundsNir "fn f(xs, i) errors IndexNotFound:\n    std::list::at(xs, i)\nf(\[1, 2\], 5):\n    on IndexNotFound:\n        -1"]
     list [pairCounts $handledUnknown listget] [pairCounts $handledProven listget] [pairCounts $declared listget]
 } -result {{1 0} {0 1} {1 0}}
 
 test bounds-nir-opt-off {-proven-bounds-opt 0 lowers every call checked, exactly as before the optimization} -body {
-    set source "xs = \[1, 2, 3\]\nloop i from 0 to 3:\n    list::at(xs, i)"
+    set source "xs = \[1, 2, 3\]\nloop i from 0 to 3:\n    std::list::at(xs, i)"
     list [pairCounts [boundsNir $source -proven-bounds-opt 0] listget] [pairCounts [boundsNir $source] listget]
 } -result {{1 0} {0 1}}
 
 test bounds-nir-region-check-omitted {a String region (a substring consumed only by ==) validated by a proof needs no regioncheck; the unproven region keeps it} -body {
-    set proven "fn is_a(s, i):\n    if i >= 0 and i < str::length(s):\n        str::substring(s, i, i + 1) == \"a\"\n    else:\n        false\nis_a(\"abc\", 0)"
-    set unknown "fn is_a(s, i) errors LowerUnderrun, UpperOverrun:\n    str::substring(s, i, i + 1) == \"a\"\nis_a(\"abc\", 0)"
+    set proven "fn is_a(s, i):\n    if i >= 0 and i < std::str::length(s):\n        std::str::substring(s, i, i + 1) == \"a\"\n    else:\n        false\nis_a(\"abc\", 0)"
+    set unknown "fn is_a(s, i) errors LowerUnderrun, UpperOverrun:\n    std::str::substring(s, i, i + 1) == \"a\"\nis_a(\"abc\", 0)"
     list [opCount [boundsNir $proven] regioncheck] [opCount [boundsNir $unknown] regioncheck] \
         [opCount [boundsNir $proven -proven-bounds-opt 0] regioncheck] \
         [pairCounts [boundsNir $proven] substr]
 } -result {0 1 1 {0 0}}
 
 test bounds-nir-short-slice-region-check-omitted {the same for the ShortString slice form: the proven one has no regioncheck in front of strsliceshort} -body {
-    set proven "fn first(s, i):\n    if i >= 0 and i < str::length(s):\n        c = str::substring(s, i, i + 1)\n        if c == \"a\":\n            1\n        else:\n            0\n    else:\n        0\nfirst(\"abc\", 0)"
+    set proven "fn first(s, i):\n    if i >= 0 and i < std::str::length(s):\n        c = std::str::substring(s, i, i + 1)\n        if c == \"a\":\n            1\n        else:\n            0\n    else:\n        0\nfirst(\"abc\", 0)"
     set text [boundsNir $proven]
     set off [boundsNir $proven -proven-bounds-opt 0]
     list [opCount $text regioncheck] [expr {[opCount $off regioncheck] >= 1}]
 } -result {0 1}
 
-test bounds-nir-refined-checks-benchmark {bench/refined-checks.bot (lib/web.bot's char_at): the census's redundant regioncheck and the proven substrings/reads are gone, at least the hot path's checks are check-free} -body {
+test bounds-nir-refined-checks-benchmark {bench/refined-checks.bot (stdlib/web.bot's char_at): the census's redundant regioncheck and the proven substrings/reads are gone, at least the hot path's checks are check-free} -body {
     set hir [surface::readProgramFile [file join $::projectRoot bench refined-checks.bot] -strict 0]
     set text [native::nir $hir]
     list [opCount $text regioncheck] [opCount $text substr] [expr {[opCount $text listgetproven] > 0}] \
         [expr {[opCount [native::nir $hir -proven-bounds-opt 0] regioncheck] > 0}]
 } -result {0 0 1 1}
 
-test bounds-nir-get-is-ordinary-botlish {list::get is not special: it is Botlish over `at` with its own handler, its inner `at` is unproven (the index parameter is unconstrained in its own body), so it keeps the checked read -- a recorded frontier, not a special case} -body {
-    set text [boundsNir "xs = \[1, 2, 3\]\nloop i from 0 to 3:\n    list::get(xs, i, 0)"]
+test bounds-nir-get-is-ordinary-botlish {std::list::get is not special: it is Botlish over `at` with its own handler, its inner `at` is unproven (the index parameter is unconstrained in its own body), so it keeps the checked read -- a recorded frontier, not a special case} -body {
+    set text [boundsNir "xs = \[1, 2, 3\]\nloop i from 0 to 3:\n    std::list::get(xs, i, 0)"]
     list [expr {[opCount $text listget] >= 1}] [opCount $text listgetproven]
 } -result {1 0}
 
 test bounds-nir-function-stops-being-fallible {a function whose only fallible operation is a proven read no longer may error, so its callers drop their completion checks (the check-free opcode is outside op_may_error); with the optimization off it still may} -body {
-    set source "fn pick(xs, k):\n    if k >= 0 and k < list::length(xs):\n        list::at(xs, k) + 1\n    else:\n        0\npick(\[10, 20, 30\], 1) + pick(\[1\], 5)"
+    set source "fn pick(xs, k):\n    if k >= 0 and k < std::list::length(xs):\n        std::list::at(xs, k) + 1\n    else:\n        0\npick(\[10, 20, 30\], 1) + pick(\[1\], 5)"
     proc mayError {source args} {
         set nir [native::nir [boundsHir $source] {*}$args -tiny-leaf-inline-opt 0]
         lmap line [native::Driver calls $nir] {
@@ -1065,7 +1065,7 @@ test bounds-nir-function-stops-being-fallible {a function whose only fallible op
 } -result {{false false} {true true}}
 
 test bounds-clif-no-bounds-path {the proven read is the bare element load: its CLIF has no bounds comparison and fewer branches, the checked read has both} -body {
-    set source "xs = \[1, 2, 3\]\nloop i from 0 to 3:\n    list::at(xs, i)"
+    set source "xs = \[1, 2, 3\]\nloop i from 0 to 3:\n    std::list::at(xs, i)"
     set proven [native::clif [boundsHir $source]]
     set off [native::clif [boundsHir $source] -proven-bounds-opt 0]
     list [regexp -all {icmp ult} $proven] [expr {[regexp -all {icmp ult} $off] > 0}] \
@@ -1079,12 +1079,12 @@ test bounds-compiler-direct-call {a proven bounds-bearing native is a direct cal
     proc codeOf {source} {
         return [dict get [core::compiler::compileHir [boundsHir $source]] code]
     }
-    set proven [codeOf "xs = \[1, 2, 3\]\nloop i from 0 to 3:\n    list::at(xs, i)"]
-    set handled [codeOf "fn f(xs, i):\n    list::at(xs, i):\n        on IndexNotFound:\n            -1\nf(\[1, 2\], 5)"]
+    set proven [codeOf "xs = \[1, 2, 3\]\nloop i from 0 to 3:\n    std::list::at(xs, i)"]
+    set handled [codeOf "fn f(xs, i):\n    std::list::at(xs, i):\n        on IndexNotFound:\n            -1\nf(\[1, 2\], 5)"]
     set declared [codeOf $unknownList]
-    # `import list` loads lib/list.bot, whose own handled `at` is a callValue
+    # `import std::list` loads stdlib/list.bot, whose own handled `at` is a callValue
     # in every program that imports it: the baseline the proven call must not add to.
-    set baseline [regexp -all {callValue} [codeOf "import list\n1"]]
+    set baseline [regexp -all {callValue} [codeOf "import std::list\n1"]]
     list [expr {[regexp -all {callValue} $proven] - $baseline}] [expr {[regexp -all {callValue} $handled] > $baseline}] [expr {[regexp -all {callValue} $declared] > $baseline}]
 } -result {0 1 1}
 
@@ -1093,33 +1093,33 @@ test bounds-compiler-direct-call {a proven bounds-bearing native is a direct cal
 
 test bounds-values-agree-proven {programs whose every bounds check is proven compute the same values on every backend} -body {
     list \
-        [agreedValue "xs = \[10, 20, 30\]\nloop i from 0 to 3:\n    list::at(xs, i) + 1"] \
-        [agreedValue "a = mutable_array::allocate(4)\nloop i from 0 to 4:\n    mutable_array::set(a, i, i * i)\nloop j down from 3 through 0:\n    mutable_array::at(a, j)"] \
-        [agreedValue "s = \"héllo\"\nloop i from 0 to 5:\n    str::substring(s, i, i + 1)"] \
-        [agreedValue "a = mutable_array::from_list(\[1, 2, 3\])\nb = mutable_array::allocate(5)\nmutable_array::copy(b, 1, a, 0, 3)\nmutable_array::freeze(b, 5)"] \
-        [agreedValue "fn is_a(s, i):\n    if i >= 0 and i < str::length(s):\n        str::substring(s, i, i + 1) == \"a\"\n    else:\n        false\n\[is_a(\"abc\", 0), is_a(\"abc\", 1), is_a(\"abc\", 9), is_a(\"\", 0)\]"]
+        [agreedValue "xs = \[10, 20, 30\]\nloop i from 0 to 3:\n    std::list::at(xs, i) + 1"] \
+        [agreedValue "a = std::mutable_array::allocate(4)\nloop i from 0 to 4:\n    std::mutable_array::set(a, i, i * i)\nloop j down from 3 through 0:\n    std::mutable_array::at(a, j)"] \
+        [agreedValue "s = \"héllo\"\nloop i from 0 to 5:\n    std::str::substring(s, i, i + 1)"] \
+        [agreedValue "a = std::mutable_array::from_list(\[1, 2, 3\])\nb = std::mutable_array::allocate(5)\nstd::mutable_array::copy(b, 1, a, 0, 3)\nstd::mutable_array::freeze(b, 5)"] \
+        [agreedValue "fn is_a(s, i):\n    if i >= 0 and i < std::str::length(s):\n        std::str::substring(s, i, i + 1) == \"a\"\n    else:\n        false\n\[is_a(\"abc\", 0), is_a(\"abc\", 1), is_a(\"abc\", 9), is_a(\"\", 0)\]"]
 } -result [list {[11, 21, 31]} {[9, 4, 1, 0]} {["h", "é", "l", "l", "o"]} {[unit, 1, 2, 3, unit]} {[true, false, false, false]}]
 
 test bounds-values-agree-unknown {an unknown site still fails when its check fails, handled or not, on every backend} -body {
     list \
-        [agreedValue "fn g(xs, i):\n    list::at(xs, i):\n        on IndexNotFound:\n            -1\n\[g(\[1, 2\], 1), g(\[1, 2\], 2), g(\[1, 2\], -1), g(\[\], 0)\]"] \
-        [agreedValue "fn s(t, a, b):\n    str::substring(t, a, b):\n        on LowerUnderrun:\n            \"lo\"\n        on UpperOverrun:\n            \"hi\"\n\[s(\"abc\", 0, 2), s(\"abc\", -1, 2), s(\"abc\", 2, 1), s(\"abc\", 1, 9)\]"] \
-        [agreedValue "fn st(a, i):\n    mutable_array::set(a, i, 1):\n        on IndexNotFound:\n            2\nb = mutable_array::allocate(2)\n\[st(b, 0), st(b, 2), st(b, -1)\]"] \
-        [agreedValue "fn c(a, b, i, n):\n    mutable_array::copy(a, i, b, 0, n):\n        on LowerUnderrun:\n            \"lo\"\n        on UpperOverrun:\n            \"hi\"\nx = mutable_array::allocate(3)\ny = mutable_array::allocate(2)\n\[c(x, y, 0, 2), c(x, y, 0, 3), c(x, y, 2, 2), c(x, y, -1, 1)\]"]
+        [agreedValue "fn g(xs, i):\n    std::list::at(xs, i):\n        on IndexNotFound:\n            -1\n\[g(\[1, 2\], 1), g(\[1, 2\], 2), g(\[1, 2\], -1), g(\[\], 0)\]"] \
+        [agreedValue "fn s(t, a, b):\n    std::str::substring(t, a, b):\n        on LowerUnderrun:\n            \"lo\"\n        on UpperOverrun:\n            \"hi\"\n\[s(\"abc\", 0, 2), s(\"abc\", -1, 2), s(\"abc\", 2, 1), s(\"abc\", 1, 9)\]"] \
+        [agreedValue "fn st(a, i):\n    std::mutable_array::set(a, i, 1):\n        on IndexNotFound:\n            2\nb = std::mutable_array::allocate(2)\n\[st(b, 0), st(b, 2), st(b, -1)\]"] \
+        [agreedValue "fn c(a, b, i, n):\n    std::mutable_array::copy(a, i, b, 0, n):\n        on LowerUnderrun:\n            \"lo\"\n        on UpperOverrun:\n            \"hi\"\nx = std::mutable_array::allocate(3)\ny = std::mutable_array::allocate(2)\n\[c(x, y, 0, 2), c(x, y, 0, 3), c(x, y, 2, 2), c(x, y, -1, 1)\]"]
 } -result [list {[2, -1, -1, -1]} {["ab", "lo", "lo", "hi"]} {[unit, 2, 2]} {[unit, "hi", "hi", "lo"]}]
 
 test bounds-values-agree-reduced {indices reduced mod or masked by the container's own size compute the same values on every backend, for negative indices, indices beyond a machine word, a capacity that is no power of two and an empty array} -body {
-    set reads "fn pick(a: MutableArray\[int\], h: int) -> int:\n    mutable_array::at(a, mod(h, mutable_array::capacity(a)))\nfn masked(a: MutableArray\[int\], h: int) -> int:\n    if mutable_array::capacity(a) == 0:\n        return -1\n    mutable_array::at(a, bit_and(h, mutable_array::capacity(a) - 1))\nfn item(xs: List\[int\], h: int) -> int:\n    list::at(xs, h.mod(list::length(xs)))\nhs = \[0, 7, -1, -8, 4611686018427387904, -1180591620717411303424\]\na = mutable_array::from_list(\[10, 20, 30, 40, 50\])\n"
+    set reads "fn pick(a: MutableArray\[int\], h: int) -> int:\n    std::mutable_array::at(a, mod(h, std::mutable_array::capacity(a)))\nfn masked(a: MutableArray\[int\], h: int) -> int:\n    if std::mutable_array::capacity(a) == 0:\n        return -1\n    std::mutable_array::at(a, bit_and(h, std::mutable_array::capacity(a) - 1))\nfn item(xs: List\[int\], h: int) -> int:\n    std::list::at(xs, h.mod(std::list::length(xs)))\nhs = \[0, 7, -1, -8, 4611686018427387904, -1180591620717411303424\]\na = std::mutable_array::from_list(\[10, 20, 30, 40, 50\])\n"
     list \
         [agreedValue "${reads}loop h in hs:\n    pick(a, h)"] \
         [agreedValue "${reads}loop h in hs:\n    masked(a, h)"] \
-        [agreedValue "${reads}e = mutable_array::create(0, 0)\nloop h in hs:\n    masked(e, h)"] \
+        [agreedValue "${reads}e = std::mutable_array::create(0, 0)\nloop h in hs:\n    masked(e, h)"] \
         [agreedValue "${reads}loop h in hs:\n    item(\[1, 2, 3\], h)"] \
-        [agreedValue "fn put(a: MutableArray\[int\], h: int) -> MutableArray\[int\]:\n    a.set(h.mod(a.capacity()), h)\n    a\nb = mutable_array::create(3, 0)\nc = put(put(put(b, -1), 4), 9)\nloop i from 0 to mutable_array::capacity(c):\n    mutable_array::at(c, i)"]
+        [agreedValue "fn put(a: MutableArray\[int\], h: int) -> MutableArray\[int\]:\n    a.set(h.mod(a.capacity()), h)\n    a\nb = std::mutable_array::create(3, 0)\nc = put(put(put(b, -1), 4), 9)\nloop i from 0 to std::mutable_array::capacity(c):\n    std::mutable_array::at(c, i)"]
 } -result {{[10, 30, 50, 30, 50, 20]} {[10, 50, 50, 10, 10, 10]} {[-1, -1, -1, -1, -1, -1]} {[1, 2, 3, 2, 2, 3]} {[9, 4, -1]}}
 
 test bounds-values-agree-field-path {accesses through field paths proven by the same path's size compute the same values on every backend: in-place writes reduced mod the field's capacity, guarded reads of every index around it, a reduced List read and a lockstep loop over a field} -body {
-    set table "struct Table:\n    slots: MutableArray\[int\]\n    names: List\[str\]\nfn store(t: Table, h: int) -> Table:\n    t.slots.set(h.mod(mutable_array::capacity(t.slots)), h)\n    t\nfn read(t: Table, i: int) -> int:\n    if i < 0 or i >= mutable_array::capacity(t.slots):\n        return -1\n    mutable_array::at(t.slots, i)\nfn name(t: Table, h: int) -> str:\n    list::at(t.names, h.mod(list::length(t.names)))\nfn widths(t: Table) -> List\[int\]:\n    loop x in t.names and k from 0 to list::length(t.names):\n        str::length(x) + k\nt = store(store(store(Table {slots: mutable_array::create(5, 0), names: \[\"a\", \"bb\", \"ccc\"\]}, -3), 11), 1180591620717411303424)\n"
+    set table "struct Table:\n    slots: MutableArray\[int\]\n    names: List\[str\]\nfn store(t: Table, h: int) -> Table:\n    t.slots.set(h.mod(std::mutable_array::capacity(t.slots)), h)\n    t\nfn read(t: Table, i: int) -> int:\n    if i < 0 or i >= std::mutable_array::capacity(t.slots):\n        return -1\n    std::mutable_array::at(t.slots, i)\nfn name(t: Table, h: int) -> str:\n    std::list::at(t.names, h.mod(std::list::length(t.names)))\nfn widths(t: Table) -> List\[int\]:\n    loop x in t.names and k from 0 to std::list::length(t.names):\n        std::str::length(x) + k\nt = store(store(store(Table {slots: std::mutable_array::create(5, 0), names: \[\"a\", \"bb\", \"ccc\"\]}, -3), 11), 1180591620717411303424)\n"
     list \
         [agreedValue "${table}loop i from -1 to 6:\n    read(t, i)"] \
         [agreedValue "${table}loop h in \[0, -1, 4, 1180591620717411303424\]:\n    name(t, h)"] \
@@ -1127,17 +1127,17 @@ test bounds-values-agree-field-path {accesses through field paths proven by the 
 } -result {{[-1, 0, 11, -3, 0, 1180591620717411303424, -1]} {["a", "ccc", "bb", "bb"]} {[1, 3, 5]}}
 
 test bounds-values-agree-guarded-local {reads and writes at computed locals proven by a guard compute the same values on every backend, for indices in range, just outside it on both sides and far outside it} -body {
-    set fns "fn after(xs: List\[int\], i: int) -> int:\n    t = i + 1\n    if t < 0 or t >= list::length(xs):\n        return -1\n    list::at(xs, t)\nfn bump(a: MutableArray\[int\], i: int) -> MutableArray\[int\]:\n    j = i * 2\n    if j >= 0 and j < mutable_array::capacity(a):\n        mutable_array::set(a, j, mutable_array::at(a, j) + 1)\n    a\n"
+    set fns "fn after(xs: List\[int\], i: int) -> int:\n    t = i + 1\n    if t < 0 or t >= std::list::length(xs):\n        return -1\n    std::list::at(xs, t)\nfn bump(a: MutableArray\[int\], i: int) -> MutableArray\[int\]:\n    j = i * 2\n    if j >= 0 and j < std::mutable_array::capacity(a):\n        std::mutable_array::set(a, j, std::mutable_array::at(a, j) + 1)\n    a\n"
     list \
         [agreedValue "${fns}loop i in \[-3, -2, -1, 0, 1, 2, 3, 1180591620717411303424\]:\n    after(\[10, 20, 30\], i)"] \
-        [agreedValue "${fns}b = bump(bump(bump(bump(mutable_array::create(5, 0), 0), 2), 1), -1)\nloop k from 0 to mutable_array::capacity(b):\n    mutable_array::at(b, k)"]
+        [agreedValue "${fns}b = bump(bump(bump(bump(std::mutable_array::create(5, 0), 0), 2), 1), -1)\nloop k from 0 to std::mutable_array::capacity(b):\n    std::mutable_array::at(b, k)"]
 } -result {{[-1, -1, 10, 20, 30, -1, -1, -1]} {[1, 0, 1, 0, 1]}}
 
 test bounds-values-agree-known-error-checked {a certain failure (KNOWN-ERROR, accepted only without -strict) is never proven: it stays a checked operation and still fails identically everywhere} -body {
     list \
-        [verdictOf "loop x in \[0, 5\]:\n    list::at(\[1, 2\], x):\n        on IndexNotFound:\n            7" list::at] \
-        [agreedValue "loop x in \[0, 5\]:\n    list::at(\[1, 2\], x):\n        on IndexNotFound:\n            7"] \
-        [agreedValue "list::at(\[1, 2\], 5):\n    on IndexNotFound:\n        7"]
+        [verdictOf "loop x in \[0, 5\]:\n    std::list::at(\[1, 2\], x):\n        on IndexNotFound:\n            7" std::list::at] \
+        [agreedValue "loop x in \[0, 5\]:\n    std::list::at(\[1, 2\], x):\n        on IndexNotFound:\n            7"] \
+        [agreedValue "std::list::at(\[1, 2\], 5):\n    on IndexNotFound:\n        7"]
 } -result {{IndexNotFound 0} {[1, 7]} 7}
 
 cleanupTests

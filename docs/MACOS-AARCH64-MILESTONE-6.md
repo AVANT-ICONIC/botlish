@@ -26,8 +26,8 @@ Botlish -> HIR -> NIR -> Cranelift (apple_aarch64 foreign signatures) -> Mach-O 
 
 **Before** (main at 2786a81, every macOS run since milestone 5, e.g. run
 [39365936272](https://github.com/mwagner-webdev/botlish/actions/runs/39365936272)):
-native-status's `c-call` probe -- `extern c fn labs(x: ffi::c::Long) ->
-ffi::c::Long`, `labs(-5)` -- was refused before the linker ran:
+native-status's `c-call` probe -- `extern c fn labs(x: std::ffi::c::Long) ->
+std::ffi::c::Long`, `labs(-5)` -- was refused before the linker ran:
 
 ```text
 error {NATIVE LINK} {native link failed: this program calls C or declares a C library
@@ -104,7 +104,7 @@ the C callee on Linux x86-64:
 |---|---|---|---|
 | 1 | `extern c fn NAME [named "SYMBOL"](PARAMS) -> T [FACT]` and `extern c library "NAME"`: located `EXTERN-SYNTAX` errors | surface/parser.tcl `ExternDecl`, `ExternParam` | portable |
 | 2 | The link symbol: the name, or `named`'s string, never decorated | the same; hir/foreign.tcl | portable (the object crate adds Mach-O's `_`) |
-| 3 | C types: `ffi::c` scalars declared per compilation for its target, their width and signedness the target row's (`charSigned 1` for macos-aarch64) | core/cabi.tcl, hir/cabi.tcl `NamespaceTypeDecls` | portable (milestone 2) |
+| 3 | C types: `std::ffi::c` scalars declared per compilation for its target, their width and signedness the target row's (`charSigned 1` for macos-aarch64) | core/cabi.tcl, hir/cabi.tcl `NamespaceTypeDecls` | portable (milestone 2) |
 | 4 | HIR: the extern native `extern#KEY`, the `foreign` and `links` side tables, the ABI class of each parameter and result | hir/foreign.tcl | portable |
 | 5 | HIRX and the cache: the side tables and the declarations travel; the target is in the cache key | hir/interchange.tcl, surface/cache.tcl | portable |
 | 6 | Native lowering: the header's `link` lines and `foreign N "SYMBOL" params=... result=...` entries, `foreigncall` after the arguments and exposures | native/lower.tcl | portable |
@@ -478,7 +478,7 @@ the rest. The count is of integer-register parameters, not positions:
 AAPCS64's register assignment, which Apple keeps, counts integers and
 doubles separately (x0-x7, v0-v7). When this milestone was written every
 Botlish C class was an integer register; the Float64 milestone, merged into
-it before it reached main, added `ffi::c::Double`, and the merge made
+it before it reached main, added `std::ffi::c::Double`, and the merge made
 `c_signature` skip the doubles in the count
 (`ffi_apple_doubles_leave_the_integer_registers`; the mutant
 `doubles-counted-as-integer-registers`; section 33). Botlish still places nothing: the
@@ -584,7 +584,7 @@ GC stress) as on Linux x86-64 and AArch64:
 
 Plain `char` is signed under Apple's arm64 ABI (as on x86-64) and unsigned
 under AAPCS64. The target table has said so since milestone 2
-(`core/cabi.tcl`'s `macos-aarch64` row: `charSigned 1`), so `ffi::c::Char`
+(`core/cabi.tcl`'s `macos-aarch64` row: `charSigned 1`), so `std::ffi::c::Char`
 on macOS is -128..127. This milestone checks it against the C compiler:
 
 * `cf-char-target`: `bcf_widen_char(c)` returns `(long)c` as Apple clang
@@ -592,7 +592,7 @@ on macOS is -128..127. This milestone checks it against the C compiler:
   `-128`, `127`, `-2` (an unsigned `char` would give 255, 128, 127, 254),
   `echo_char` returns both bounds, and a value outside the range is a
   compile-time error: `TYPE: main.bot:4:16: argument 1 of bcf::echo_char
-  cannot be proven to satisfy ffi::c::Char (argument type: int)` for
+  cannot be proven to satisfy std::ffi::c::Char (argument type: int)` for
   `echo_char(128)`.
 * `cf-abi-register-extension` passes `(char)-3` as the eighth argument: x7
   arrives `0xfffffffd` in its low 32 bits from Botlish's call and from
@@ -704,7 +704,7 @@ Pointers are 64-bit words in general-purpose registers and 8-byte aligned
 stack slots under both conventions; the evidence is that every bit
 crosses:
 
-* `cf-pointers` (C-FFI.md's): `ffi::c::null[T]()` into C is NULL, a NULL
+* `cf-pointers` (C-FFI.md's): `std::ffi::c::null[T]()` into C is NULL, a NULL
   from C is null, a C address round-trips with its identity (C compares).
 * `cf-pointer-width` (new) -- **64-bit round trips**: C's static address
   needs more than 32 bits (`bcf_needs_64_bits(p)` = 1: on macOS every
@@ -1239,11 +1239,11 @@ and this milestone does not claim it. What it still needs:
 
 ## 32. Prerequisites for Darwin IO
 
-Darwin IO (roadmap 9) is libSystem through C calls behind `io::IO`, never
+Darwin IO (roadmap 9) is libSystem through C calls behind `std::io::IO`, never
 raw Darwin syscalls (the doctrine: Darwin's syscall interface is private).
 This milestone supplies the call: libSystem functions declared by their
 prototypes link and resolve (`cf-system-library`,
-`cf-system-symbol-resolved`), with `ffi::c` types sized by the macOS row.
+`cf-system-symbol-resolved`), with `std::ffi::c` types sized by the macOS row.
 What Darwin IO still needs:
 
 1. **Byte borrowing on macOS** (section 31): `write(int, const void *,
@@ -1259,7 +1259,7 @@ What Darwin IO still needs:
    different error protocol -- the Darwin IO milestone's decision.
 4. **A platform module**: a `darwin`-style namespace designated a platform
    in core/cabi.tcl's `platforms` table (never by spelling), its context
-   implementing `io::IO`, selected by `hir::contexts` on macos-aarch64
+   implementing `std::io::IO`, selected by `hir::contexts` on macos-aarch64
    while LinuxIO stays Linux's (the context-traits tests), and its
    directness from its retaining calls if any (C-FFI.md section 9).
 5. **Its tests**: portable-io.test on macOS, a macOS twin of
@@ -1268,7 +1268,7 @@ What Darwin IO still needs:
 ## 33. The merge with Float64
 
 The Float64 milestone (FLOAT64-MILESTONE-1.md) reached main while this one
-was on its branch, and added C `double` (`ffi::c::Double`, ABI class
+was on its branch, and added C `double` (`std::ffi::c::Double`, ABI class
 `f64`) to the C FFI. On main, macOS refused every C call, so its double
 tests ran on Linux only. Merging the two opened C calls with doubles on
 macOS, and needed two changes beyond the textual merge:

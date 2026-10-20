@@ -28,4 +28,4 @@ fn flag(x):
 g = choose(flag(1), count_up, other)
 a = [count_up(5, 0), count_up(5, "a"), count_up(5, true), count_up(5, [1]), count_up(5, ["a"])]
 b = [count_up(5, [true]), count_up(5, [[1]]), count_up(5, other), count_up(5, flag), count_up(5, [[true]])]
-[list::length(a) + list::length(b), g(20, 0)]
+[std::list::length(a) + std::list::length(b), g(20, 0)]

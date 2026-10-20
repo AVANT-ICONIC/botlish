@@ -2,7 +2,7 @@
 # keyfunctions.tcl -- INTRINSIC-FUNCTION-CONTRACT-INFERENCE.md's per-
 # function before/after record (spec items 39, 52-55): for each key function
 # of the canonical benchmarks, in the relifted pipeline bench/bench.tcl
-# compiles (native::prepareHir ..., so web::emailish?'s
+# compiles (native::prepareHir ..., so std::web::emailish?'s
 # helpers are present through the module-native bridge),
 #
 #   * the source/intrinsic signature (hir::signatures, when the tree has it)
@@ -39,7 +39,7 @@ proc blockNamed {hir name} {
 set L {}
 lappend L "tree: [exec git -C $root rev-parse HEAD] (plus any uncommitted working-tree changes)"
 foreach {program names} {
-    refined-checks {scan_while local_char? label_char? tld? domain? char_at web::emailish?}
+    refined-checks {scan_while local_char? label_char? tld? domain? char_at std::web::emailish?}
     uri-steady {scan_while local_char?}
     lex-strategy {lenient_ident_char? choose_classifier classify}
     source-checks {is_underscore? is_hyphen? classify_leading}

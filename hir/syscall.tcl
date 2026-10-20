@@ -1,10 +1,10 @@
 # syscall.tcl -- the static contract of the Linux syscall transports
 # (core/linuxabi.tcl, LINUX-X86-64-SYSCALL.md, LINUX-SYSCALL-TRANSPORTS.md):
-# the one argument of linux::abi::x86_64::syscall and of
-# linux::abi::aarch64::syscall is a syscall-input description, an anonymous
+# the one argument of std::linux::abi::x86_64::syscall and of
+# std::linux::abi::aarch64::syscall is a syscall-input description, an anonymous
 # struct naming that architecture's Linux syscall registers, each holding the
-# architecture's own Register64 (abi::x86_64::Register64,
-# abi::aarch64::Register64).
+# architecture's own Register64 (std::abi::x86_64::Register64,
+# std::abi::aarch64::Register64).
 #
 #   hir::syscall::verify HIRVAR      diagnostics, part of hir::CheckOnce
 #
@@ -24,9 +24,9 @@
 #     argument register is zero (the lowering's job, native/lower.tcl);
 #   * every field is statically the transport's own Register64 (TYPE): no
 #     runtime check is ever inserted, and the native backend relies on it --
-#     a Register64's word is a proven -2^63..2^63-1 Int (lib/abi/x86_64.bot,
-#     lib/abi/aarch64.bot) -- and the architectures are never mixed (an
-#     abi::aarch64::Register64 is no x86-64 register).
+#     a Register64's word is a proven -2^63..2^63-1 Int (stdlib/abi/x86_64.bot,
+#     stdlib/abi/aarch64.bot) -- and the architectures are never mixed (an
+#     std::abi::aarch64::Register64 is no x86-64 register).
 #
 # And a transport is only ever *called*: a reference to one that is not the
 # callee of a direct call is TYPE. It has no function value -- its parameter
@@ -136,7 +136,9 @@ proc hir::syscall::Problems {hir e node} {
     }
     set problems {}
     set registerType [core::linuxabi::registerType $native]
-    set abiFile lib/[string map {:: /} $abi].bot
+    # The abi module's file, for the message (std::abi::x86_64 is
+    # stdlib/abi/x86_64.bot: STD-NAMESPACE.md).
+    set abiFile stdlib/[string map {:: /} [regsub {^std::} $abi {}]].bot
     dict for {name info} $fields {
         lassign $info fieldType nameOrigin valueOrigin
         if {$name ni $registers} {
@@ -150,7 +152,7 @@ proc hir::syscall::Problems {hir e node} {
         }
         if {![hir::structs::declared $registerType] || ![hir::types::subtype $fieldType [list nstruct $registerType]]} {
             lappend problems [list TYPE \
-                "syscall register \"$name\" must be an $registerType (${abi}::register64(...), $abiFile): a register holds one 64-bit word, never an arbitrary value, and no run-time check is inserted; its type here is [hir::types::show $fieldType]" \
+                "syscall register \"$name\" must be a $registerType (${abi}::register64(...), $abiFile): a register holds one 64-bit word, never an arbitrary value, and no run-time check is inserted; its type here is [hir::types::show $fieldType]" \
                 $arg $valueOrigin]
         }
     }
@@ -162,23 +164,23 @@ proc hir::syscall::Problems {hir e node} {
 }
 
 # Every way call E (NODE) of an address bridge (ABI::from_bytes or
-# ABI::from_mutable_bytes, ABI abi::x86_64 or abi::aarch64: core/
+# ABI::from_mutable_bytes, ABI std::abi::x86_64 or std::abi::aarch64: core/
 # bytestore.tcl) breaks its contract: a list of {KIND MESSAGE EXPR ORIGIN},
 # as Problems. A bridge takes exactly one
 # argument, and it must statically be the bridge's own opaque struct -- an
-# abi::bytes::Bytes for the readable bridge, an abi::bytes::MutableBytes for the writable
+# std::abi::bytes::Bytes for the readable bridge, a std::abi::bytes::MutableBytes for the writable
 # one, never the other: no run-time check is ever inserted, and native
 # lowering relies on it: it reads the struct's one storage field without
 # looking at the value's kind. (An opaque struct cannot be forged: only
-# module abi can construct one, OPAQUE-STRUCTS.md, so a static abi::bytes::Bytes
-# always holds a byte storage and a static abi::bytes::MutableBytes a writable one.)
+# module abi can construct one, OPAQUE-STRUCTS.md, so a static std::abi::bytes::Bytes
+# always holds a byte storage and a static std::abi::bytes::MutableBytes a writable one.)
 proc hir::syscall::BytesProblems {hir e node} {
     set native [dict get [hir::symbol $hir [lindex [dict get $node target] 1]] name]
     set bytesType [core::bytestore::bridgeType $native]
     set args [dict get $node args]
     if {[llength $args] != 1} {
         return [list [list ARITY \
-            "$native takes exactly one argument, an $bytesType ([llength $args] given)" $e ""]]
+            "$native takes exactly one argument, a $bytesType ([llength $args] given)" $e ""]]
     }
     set arg [lindex $args 0]
     set type [hir::typeOf $hir $arg]
@@ -187,7 +189,7 @@ proc hir::syscall::BytesProblems {hir e node} {
     }
     if {![hir::structs::declared $bytesType] || ![hir::types::subtype $type [list nstruct $bytesType]]} {
         return [list [list TYPE \
-            "the argument of $native must be an $bytesType ([expr {[core::bytestore::bridgeWritable $native] ? "abi::bytes::zeroed(...)" : "abi::bytes::from_list(...)"}], lib/abi/bytes.bot): the address of an arbitrary value has no meaning, a readable Bytes is never a writable address and a MutableBytes is never a readable one, and no run-time check is inserted; its type here is [hir::types::show $type]" \
+            "the argument of $native must be a $bytesType ([expr {[core::bytestore::bridgeWritable $native] ? "std::abi::bytes::zeroed(...)" : "std::abi::bytes::from_list(...)"}], stdlib/abi/bytes.bot): the address of an arbitrary value has no meaning, a readable Bytes is never a writable address and a MutableBytes is never a readable one, and no run-time check is inserted; its type here is [hir::types::show $type]" \
             $arg ""]]
     }
     return {}

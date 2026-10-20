@@ -4,25 +4,25 @@
      return [core::value::listOf $bytes]
  }
  
-+# (str::char_at S I): the Unicode scalar at character index I as a
++# (std::str::char_at S I): the Unicode scalar at character index I as a
 +# UnicodeChar (PROTOTYPE, ENCODE-UTF8-ALLOCATION-RESEARCH.md); any other
-+# Int fails with IndexNotFound, exactly like list::at.
++# Int fails with IndexNotFound, exactly like std::list::at.
 +proc core::strings::charAt {s index} {
-+    set text [Text $s str::char_at]
-+    set i [core::value::intOf [core::value::expect int $index str::char_at]]
++    set text [Text $s std::str::char_at]
++    set i [core::value::intOf [core::value::expect int $index std::str::char_at]]
 +    if {$i < 0 || $i >= [string length $text]} {
 +        core::native::failDeclared IndexNotFound \
-+            "str::char_at: index $i is outside 0..[expr {[string length $text] - 1}]"
++            "std::str::char_at: index $i is outside 0..[expr {[string length $text] - 1}]"
 +    }
 +    return [core::value::char [scan [string index $text $i] %c]]
 +}
 +
-+core::native::register str::char_at -arity 2 -impl core::strings::charAt \
++core::native::register std::str::char_at -arity 2 -impl core::strings::charAt \
 +    -param-types {str int} -result-type UnicodeChar -runtime {char-index range-check} \
 +    -context-free 1 -errors IndexNotFound -bounds {index str 0 1}
- core::native::register str::length    -arity 1 -impl core::strings::length \
+ core::native::register std::str::length    -arity 1 -impl core::strings::length \
      -param-types {str} -result-type int -runtime char-index -result-range collection-length -context-free 1
- core::native::register str::substring -arity 3 -impl core::strings::substring \
+ core::native::register std::str::substring -arity 3 -impl core::strings::substring \
 --- a/hir/completions.tcl
 +++ b/hir/completions.tcl
 @@ -1517,6 +1517,8 @@
@@ -37,12 +37,12 @@
 --- a/native/lower.tcl
 +++ b/native/lower.tcl
 @@ -110,6 +110,7 @@
-         str::lowercase    {op strlower} \
-         str::concat       {op strcat} \
-         str::encode_utf8  {op strutf8bytes} \
-+        str::char_at      {op strcharat} \
-         str::is_tcl_alpha {op strtclalpha} \
-         str::is_tcl_alnum {op strtclalnum} \
+         std::str::lowercase    {op strlower} \
+         std::str::concat       {op strcat} \
+         std::str::encode_utf8  {op strutf8bytes} \
++        std::str::char_at      {op strcharat} \
+         std::str::is_tcl_alpha {op strtclalpha} \
+         std::str::is_tcl_alnum {op strtclalnum} \
          argv         {op argv} \
 @@ -7080,7 +7081,7 @@
  namespace eval native::lower {
@@ -59,7 +59,7 @@
      /// builds on this plus List/Int operations instead of needing its own
      /// native.
      StrUtf8Bytes,
-+    /// PROTOTYPE: `str::char_at` (checked, IndexNotFound) and its proven sibling.
++    /// PROTOTYPE: `std::str::char_at` (checked, IndexNotFound) and its proven sibling.
 +    StrCharAt,
 +    StrCharAtProven,
      /// `argv()` (core/process.tcl, ARGV.md): the process argument snapshot
@@ -84,12 +84,12 @@
 +    matches!(op, IMod | IShl | IShr | VEq | Hash | Substr | StrCat | StrUtf8Bytes | StrCharAt | Argv | StrIsTclAlpha | StrIsTclAlnum
          // A non-byte element (TYPE, never a truncation), an operand that is
          // not a byte storage (TYPE), an oversized storage (RANGE). A checked
-         // program cannot produce any of them: lib/abi/bytes.bot's creator takes
+         // program cannot produce any of them: stdlib/abi/bytes.bot's creator takes
 @@ -1216,6 +1216,33 @@
      r
  }
  
-+/// PROTOTYPE `str::char_at`: the scalar at character index I as a
++/// PROTOTYPE `std::str::char_at`: the scalar at character index I as a
 +/// UnicodeChar immediate (no allocation). ASCII: a byte read; otherwise a
 +/// forward decode from byte 0 (the same seek rt_substr pays).
 +fn char_at_index(p: *mut Vm, s: Value, i: usize) -> Value {
@@ -218,46 +218,46 @@
                          // The owned byte storage (ABI-BYTES.md). from_list
                          // allocates one object (or returns the static empty
                          // one) and is fallible (a non-byte element is TYPE);
---- a/lib/web.bot
-+++ b/lib/web.bot
+--- a/stdlib/web.bot
++++ b/stdlib/web.bot
 @@ -63,6 +63,7 @@
  # about them comes from these declarations.
- import ascii
- import byte
-+import char
- import immutable_set
- import list
- import str
+ import std::ascii
+ import std::byte
++import std::char
+ import std::immutable_set
+ import std::list
+ import std::str
 @@ -228,30 +229,39 @@
- # to it (lib/web.tcl's uriEscape). Refinements carry no runtime evidence, so
+ # to it (stdlib/web.tcl's uriEscape). Refinements carry no runtime evidence, so
  # the proposition is now this structural check, owned and defined here.
  fn uri_query_value?(value: str) -> bool proves value: UriQueryValue:
--    bytes = str::encode_utf8(value)
+-    bytes = std::str::encode_utf8(value)
  
 +    # Every byte of a non-ASCII scalar's UTF-8 encoding is >= 0x80, so it is
 +    # neither unreserved nor '%' nor a hex digit: the byte condition holds
 +    # exactly when every scalar is ASCII and the scalar condition holds.
      fn upper_hex?(i):
--        if i < 0 or i >= list::length(bytes):
-+        if i < 0 or i >= str::length(value):
+-        if i < 0 or i >= std::list::length(bytes):
++        if i < 0 or i >= std::str::length(value):
              false
          else:
--            b = list::at(bytes, i)
--            ascii::is_digit(b) or (b >= 65 and b <= 70)
-+            v = char::scalar_value(str::char_at(value, i))
+-            b = std::list::at(bytes, i)
+-            std::ascii::is_digit(b) or (b >= 65 and b <= 70)
++            v = std::char::scalar_value(std::str::char_at(value, i))
 +            if v > 127:
 +                false
 +            else:
-+                ascii::is_digit(v) or (v >= 65 and v <= 70)
++                std::ascii::is_digit(v) or (v >= 65 and v <= 70)
  
      fn valid_from?(i):
--        if i < 0 or i >= list::length(bytes):
-+        if i < 0 or i >= str::length(value):
+-        if i < 0 or i >= std::list::length(bytes):
++        if i < 0 or i >= std::str::length(value):
              true
          else:
--            b = list::at(bytes, i)
+-            b = std::list::at(bytes, i)
 -            if b == 37:
-+            c = str::char_at(value, i)
++            c = std::str::char_at(value, i)
 +            if c == '%':
                  if upper_hex?(i + 1) and upper_hex?(i + 2):
                      valid_from?(i + 3)
@@ -267,7 +267,7 @@
 -                if is_unreserved(b):
 -                    valid_from?(i + 1)
 -                else:
-+                v = char::scalar_value(c)
++                v = std::char::scalar_value(c)
 +                if v > 127:
                      false
 +                else:
@@ -280,20 +280,20 @@
  
 @@ -263,27 +273,33 @@
      fn hex_pair(b):
-         str::concat(list::at(hex_digits, high_nibble(b)), list::at(hex_digits, mod(b, 16)))
+         std::str::concat(std::list::at(hex_digits, high_nibble(b)), std::list::at(hex_digits, mod(b, 16)))
  
 -    fn esc_bytes(bytes, i, acc):
--        if i < 0 or i >= list::length(bytes):
+-        if i < 0 or i >= std::list::length(bytes):
 -            acc
 -        else:
--            esc_bytes(bytes, i + 1, str::concat(acc, str::concat("%", hex_pair(list::at(bytes, i)))))
+-            esc_bytes(bytes, i + 1, std::str::concat(acc, std::str::concat("%", hex_pair(std::list::at(bytes, i)))))
 +    fn pct(b):
-+        str::concat("%", hex_pair(b))
++        std::str::concat("%", hex_pair(b))
  
 -    fn esc_char(c):
--        bytes = str::encode_utf8(c)
--        if list::length(bytes) == 1:
--            b = list::at(bytes, 0)
+-        bytes = std::str::encode_utf8(c)
+-        if std::list::length(bytes) == 1:
+-            b = std::list::at(bytes, 0)
 -            if is_unreserved(b):
 -                c
 -            else:
@@ -304,26 +304,26 @@
 +    # The %XX escapes of the UTF-8 bytes of the non-ASCII scalar V.
 +    fn esc_scalar(v):
 +        if v < 2048:
-+            str::concat(pct(bit_or(192, shift_right(v, 6))), cont(v, 0))
++            std::str::concat(pct(bit_or(192, shift_right(v, 6))), cont(v, 0))
          else:
 -            esc_bytes(bytes, 0, "")
 +            if v < 65536:
-+                str::concat(pct(bit_or(224, shift_right(v, 12))), str::concat(cont(v, 6), cont(v, 0)))
++                std::str::concat(pct(bit_or(224, shift_right(v, 12))), std::str::concat(cont(v, 6), cont(v, 0)))
 +            else:
-+                str::concat(pct(bit_or(240, shift_right(v, 18))), str::concat(cont(v, 12), str::concat(cont(v, 6), cont(v, 0))))
++                std::str::concat(pct(bit_or(240, shift_right(v, 18))), std::str::concat(cont(v, 12), std::str::concat(cont(v, 6), cont(v, 0))))
  
      fn esc_from(text, i, acc):
-         if i < 0 or i >= str::length(text):
+         if i < 0 or i >= std::str::length(text):
              acc
          else:
--            esc_from(text, i + 1, str::concat(acc, esc_char(str::substring(text, i, i + 1))))
-+            v = char::scalar_value(str::char_at(text, i))
+-            esc_from(text, i + 1, std::str::concat(acc, esc_char(std::str::substring(text, i, i + 1))))
++            v = std::char::scalar_value(std::str::char_at(text, i))
 +            if v > 127:
-+                esc_from(text, i + 1, str::concat(acc, esc_scalar(v)))
++                esc_from(text, i + 1, std::str::concat(acc, esc_scalar(v)))
 +            else:
 +                if is_unreserved(v):
-+                    esc_from(text, i + 1, str::concat(acc, str::substring(text, i, i + 1)))
++                    esc_from(text, i + 1, std::str::concat(acc, std::str::substring(text, i, i + 1)))
 +                else:
-+                    esc_from(text, i + 1, str::concat(acc, pct(v)))
++                    esc_from(text, i + 1, std::str::concat(acc, pct(v)))
  
      esc_from(s, 0, "")

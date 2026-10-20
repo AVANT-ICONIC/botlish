@@ -348,7 +348,7 @@ after its source was deleted, run with an empty environment (`env -i
 PATH=/nonexistent`) from a third directory: `[6765, 100, 42]`, exit 0,
 nothing on standard error (30 ms, the first run of the file; about 3 ms
 a process for a trivial program, section 21). The same under
-`BOTLISH_NATIVE_GC_STRESS=1`. A runtime error (`mutable_array::allocate(0 -
+`BOTLISH_NATIVE_GC_STRESS=1`. A runtime error (`std::mutable_array::allocate(0 -
 1)`) exits 1 with nothing on standard output and `... (CORE SEMANTIC
 RANGE)` on standard error. `down(100000)`, a deep finite recursion, prints
 100000.
@@ -465,7 +465,7 @@ directory other than the input's:
 - `../app dir/relative.bot` (relative, with spaces): `executable: ../app
   dir/relative`, the executable at `app dir/relative`;
 - an absolute input path; `-target` naming the host's own target (the
-  program imports `ffi::c`, so its HIR records the target); `-backend
+  program imports `std::ffi::c`, so its HIR records the target); `-backend
   cranelift-generic` (executables are always closed and specialized: one
   mode, section 19);
 - each written beside its input, executable, the host's format, printing
@@ -504,7 +504,7 @@ libSystem's `argc`/`argv` on macOS.
 Output paths (section 14) and the executable's output: the value is one
 line on standard output; a runtime error and NATIVE LIMIT STACK are on
 standard error with exit status 1; nothing else is written. A program's own
-printed output (io::print_line) needs `linux::io` and does not compile for
+printed output (std::io::print_line) needs `std::linux::io` and does not compile for
 macOS (section 27).
 
 ## 16. Execution outside the source directory and unsupported C calls
@@ -566,7 +566,7 @@ executable on macOS: `2002720`, plain and under `BOTLISH_NATIVE_GC_STRESS=1`
 cranelift-generic and cranelift. Its seed mixes in the length of the process
 argument vector, which the executable reads from its real arguments (one,
 as the in-process default). The engine and the benchmark are unchanged. The
-interactive demo (`demo.bot`) prints through `linux::io` and stays Linux's
+interactive demo (`demo.bot`) prints through `std::linux::io` and stays Linux's
 (`workload-2048-demo-executable` keeps `nativeLinux`): it awaits the Darwin
 IO milestone.
 
@@ -816,8 +816,8 @@ now that the link it needs exists:
 
 - `linux::*` stays the Linux platform's: importing it for `macos-aarch64` is
   UNSUPPORTED-PLATFORM (milestone 2), so `examples/io/hello.bot` and the
-  2048 demo (`linux::io`) still do not compile for macOS; they await the
-  Darwin IO milestone (roadmap entry 9: an `io::IO` implementation over
+  2048 demo (`std::linux::io`) still do not compile for macOS; they await the
+  Darwin IO milestone (roadmap entry 9: an `std::io::IO` implementation over
   libSystem C calls, after the C FFI milestone). No Darwin syscall, libc
   binding or `macos::io` was added.
 - What a macOS executable can write today is what every executable writes

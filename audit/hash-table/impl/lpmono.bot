@@ -8,8 +8,8 @@
 # instead of re-reading the slot's hash (brief section 9, organization B).
 #
 # policy: 7/10
-import list
-import mutable_array
+import std::list
+import std::mutable_array
 
 struct Table:
     hashes: MutableArray[int]
@@ -23,7 +23,7 @@ fn fresh(expected: int) -> Table:
             return cap
         capacity_for(cap * 2)
     cap = capacity_for(8)
-    Table {hashes: mutable_array::create(cap, -1), keys: mutable_array::allocate(cap), vals: mutable_array::allocate(cap), meta: mutable_array::create(1, 0)}
+    Table {hashes: std::mutable_array::create(cap, -1), keys: std::mutable_array::allocate(cap), vals: std::mutable_array::allocate(cap), meta: std::mutable_array::create(1, 0)}
 
 fn slots(t: Table) -> int:
     t.hashes.capacity()
@@ -111,7 +111,7 @@ fn put(t: Table, key, value) -> Table errors IndexNotFound:
     count = t.meta.at(0)
     if (count + 1) * 10 > cap * 7:
         bigger = 2 * cap
-        g = moved(t, 0, Table {hashes: mutable_array::create(bigger, -1), keys: mutable_array::allocate(bigger), vals: mutable_array::allocate(bigger), meta: mutable_array::create(1, 0)}, bigger)
+        g = moved(t, 0, Table {hashes: std::mutable_array::create(bigger, -1), keys: std::mutable_array::allocate(bigger), vals: std::mutable_array::allocate(bigger), meta: std::mutable_array::create(1, 0)}, bigger)
         j = slot_from(g, h, key, h.mod(bigger), bigger)
         g.hashes.set(j, h)
         g.keys.set(j, key)
@@ -160,9 +160,9 @@ fn drop(t: Table, key) -> Table errors IndexNotFound:
 
 # The table of KEYS[i] -> VALS[i], in order (a later duplicate's value wins).
 fn from_lists(keys: list, vals: list) -> Table errors IndexNotFound:
-    n = list::length(keys)
+    n = std::list::length(keys)
     fn fill(t: Table, i: int) -> Table errors IndexNotFound:
         if i >= n:
             return t
-        fill(put(t, list::at(keys, i), list::at(vals, i)), i + 1)
+        fill(put(t, std::list::at(keys, i), std::list::at(vals, i)), i + 1)
     fill(fresh(n), 0)

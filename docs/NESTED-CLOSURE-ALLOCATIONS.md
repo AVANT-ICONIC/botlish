@@ -52,7 +52,7 @@ is under `audit/nested-closure-allocations/`.
   allocation and root reports, corpus summary, census) for the before/on/off
   states.
 
-No change to `core/`, `surface/`, `lib/web.bot`, `lib/web.tcl`, or any
+No change to `core/`, `surface/`, `stdlib/web.bot`, `stdlib/web.tcl`, or any
 `examples/stdlib/*.bot` source, and no change to `native/src/` (Rust): this
 is purely a compiler-side representation change, using exactly the NIR ops
 and runtime the String-view and prior Block-virtualization milestones
@@ -114,7 +114,7 @@ closures, not to redesign what it produces for the sixth.
 
 ## `refined-checks.ir`'s Block allocation census (before this milestone)
 
-`lib/web.tcl`'s `Emailish?` native-body (see `STRING-VIEW-ALLOCATIONS.md`
+`stdlib/web.tcl`'s `Emailish?` native-body (see `STRING-VIEW-ALLOCATIONS.md`
 for the full source) is one `block {v}` whose body sequentially binds eight
 local helper Blocks: `char_at`, `is_local_char`, `is_label_char`,
 `scan_local`, `scan_label`, `scan_alpha`, `tld_ok`, `domain_loop`. Of
@@ -140,7 +140,7 @@ reproduced at `audit/nested-closure-allocations/refined-checks/off/alloc.txt`):
 exactly, now individually re-verified rather than assumed. The remaining 5
 non-recurrent Block allocations (of 7,205 total) are `web.bot`'s own
 `uriEscape`/`uri_escape_text` machinery: 1 module-startup closure
-(`web::uri_escape_text` itself, `web.bot:33`) plus 4 of its own nested
+(`std::web::uri_escape_text` itself, `web.bot:33`) plus 4 of its own nested
 helpers (`hex_pair`, `esc_bytes`, `esc_char`, `esc_from`) that this
 milestone's same general mechanism also happens to virtualize (see
 "Reach beyond refined-checks" below) -- computed once per program run, not
@@ -303,7 +303,7 @@ their own capture parameters, precisely like `n`.
 
 ## Evidence: `scan_local`, before and after (family "G", self-recursive + sibling-captured)
 
-Source (`lib/web.tcl`): `scan_local(i) = if i>=n: i else if
+Source (`stdlib/web.tcl`): `scan_local(i) = if i>=n: i else if
 is_local_char(char_at(i)): scan_local(i+1) else i`.
 
 **Before** (`audit/nested-closure-allocations/refined-checks/off/nir.txt`):
@@ -365,7 +365,7 @@ capture-explicit body).
 eliminated.** All 6,000 of the dominant 7,200 recurrent allocations from
 `scan_local`/`scan_label`/`scan_alpha`/`tld_ok`/`domain_loop` are gone;
 `char_at`'s own 1,200 (800 + 400) remain, for the `wantRegion` reason
-above. The +1 (1,201 vs 1,200) is `web::uri_escape_text`'s own
+above. The +1 (1,201 vs 1,200) is `std::web::uri_escape_text`'s own
 module-startup closure (`web.bot:33`), unrelated and untouched (see
 "Reach beyond refined-checks").
 
@@ -450,13 +450,13 @@ finding for its own corpus reach).
 Within `refined-checks.ir` itself, the same general mechanism also happens
 to virtualize four of `web.bot`'s own `uriEscape`/`uri_escape_text` nested
 helpers (`hex_pair`, `esc_bytes`, `esc_char`, `esc_from` -- each captures
-`web::hex_digits`, itself an envless native table, or another of these
+`std::web::hex_digits`, itself an envless native table, or another of these
 four) -- a byproduct, not a target: they run once per program invocation on
 a 3-byte literal, so their own allocation-count contribution was already
 negligible (5 objects total, before and after -- the milestone's own #52-53
 explicitly scoped module-lifetime closures out, and this milestone made no
 attempt to target them; that they benefit anyway is incidental to the
-general, structural nature of the fix). `web::uri_escape_text` itself (the
+general, structural nature of the fix). `std::web::uri_escape_text` itself (the
 one binding the native-to-module bridge reaches by BindingId from outside
 any ordinary call/ref structure) correctly still materializes: my
 eligibility fixpoint's #5 rule (a candidate with no external or sibling
@@ -534,7 +534,7 @@ restore the fully-materializing baseline (7,205 Block allocations, `[400,
 4. **Which genuinely escape?** None of the 7,200 (see the taxonomy table:
    every one is class D and/or G, never A/B/C/E/H). The 5 module-startup
    closures also do not escape in the ordinary sense, but 1 of them
-   (`web::uri_escape_text` itself) is reached by a mechanism (the
+   (`std::web::uri_escape_text` itself) is reached by a mechanism (the
    native-to-module bridge) this analysis does not model as a call, so it
    is conservatively left materialized.
 5. **Which exist only to transport captures to exact calls?** Five of the

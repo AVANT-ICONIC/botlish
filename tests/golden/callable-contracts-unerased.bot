@@ -17,8 +17,8 @@
 # out (Job and quiet are the ones the program uses).
 #
 # Imports: compiler and test (every suite).
-import compiler
-import test
+import std::compiler
+import std::test
 
 struct Job:
     run: Fn{args: [], return: int}
@@ -28,7 +28,7 @@ struct Apply:
 
 fn register_scc_unerased_tests():
     # scc-any-parameter-call/clean: accepted (value 0, the program's).
-    fn any_parameter_call() errors compiler::CompilerError:
+    fn any_parameter_call() errors std::compiler::CompilerError:
         static compile:
             fn quiet() -> int:
                 7
@@ -37,8 +37,8 @@ fn register_scc_unerased_tests():
                 f(x)
             a = Apply {run: apply}
             0
-    test::value("scc-any-parameter-call/clean", 0, any_parameter_call)
+    std::test::value("scc-any-parameter-call/clean", 0, any_parameter_call)
 
-with context test::suite()
+with context std::test::suite()
 register_scc_unerased_tests()
-test::report()
+std::test::report()

@@ -1,0 +1,462 @@
+# std-namespace.test -- the compiler-owned root namespace std, absolute
+# (rooted) namespace paths, and local modules beside standard ones
+# (STD-NAMESPACE.md).
+#
+# Every public standard namespace is under std (std::list, std::str,
+# std::abi::x86_64, std::linux::io, ...), read from stdlib/, the directory of
+# the namespace std beside the compiler; a leading "::" roots any namespace
+# path explicitly; a path's first segment decides its origin, so an
+# application module list.bot and std::list are two namespaces, a missing
+# local module never falls back to the standard library, and no application
+# file is ever a standard namespace.
+#
+# Every application is a fresh directory of the tcltest temporary directory;
+# programs are compiled by surface::readProgramFile (main.tcl's front end), by
+# main.tcl as its own process, or by a bundled compiler packed the way
+# single/package.tcl packs the single executable.
+
+source [file join [file dirname [file normalize [info script]]] helpers.tcl]
+source [file join $::projectRoot surface surface.tcl]
+source [file join $::projectRoot native native.tcl]
+
+interp recursionlimit {} 100000
+
+testConstraint nativeBuilt [expr {![catch {native::binary}]}]
+testConstraint zipfs [expr {[info commands zipfs] ne ""}]
+
+set mainScript [file join $::projectRoot main.tcl]
+set ::appCounter 0
+
+# A fresh application directory holding FILES ({RELATIVE-PATH TEXT ...}): its
+# absolute path.
+proc app {files} {
+    set dir [makeDirectory stdns-[pid]-[incr ::appCounter]]
+    foreach {relative text} $files {
+        writeText [file join $dir {*}[file split $relative]] $text
+    }
+    return $dir
+}
+
+proc writeText {path text} {
+    file mkdir [file dirname $path]
+    set channel [open $path w]
+    fconfigure $channel -encoding utf-8 -translation lf
+    puts -nonewline $channel $text
+    close $channel
+}
+
+proc appHir {dir {main main.bot}} {
+    return [surface::readProgramFile [file join $dir $main] -warnings off -cache "" -target [linuxTarget]]
+}
+
+# The value of DIR/main.bot on each of BACKENDS, or the first backend's error.
+proc appValues {dir {backends {interp compile cranelift-generic cranelift}}} {
+    set hir [appHir $dir]
+    lmap backend $backends {
+        lassign [outcomeUnderHir $backend $hir] tag value
+        expr {$tag eq "value" ? $value : "$tag: $value"}
+    }
+}
+
+# "KIND: MESSAGE" of the compilation of DIR/MAIN, with DIR spelled APP and the
+# library directory LIB, or accepted.
+proc appRejection {dir {main main.bot}} {
+    if {[catch {appHir $dir $main} message options]} {
+        set kind [lindex [dict get $options -errorcode] end]
+        return "$kind: [string map [list $dir APP $::core::libraryDir LIB] $message]"
+    }
+    return accepted
+}
+
+# The kind of the first rejection of the program text SOURCE (no file, no
+# application root), or accepted.
+proc textRejection {source} {
+    if {[catch {surface::compile $source t.bot -warnings off} message options]} {
+        return "[lindex [dict get $options -errorcode] end]: $message"
+    }
+    return accepted
+}
+
+proc removeApps {} {
+    foreach dir [glob -nocomplain -directory [temporaryDirectory] stdns-[pid]-*] {
+        file delete -force $dir
+    }
+}
+
+# The core IR of the HIR of DIR/main.bot: what every backend runs, with no
+# source location in it, so two spellings of one program compare equal.
+proc appCore {dir} {
+    return [hir::lower [appHir $dir]]
+}
+
+# The targets of every call of HIR whose callee is a native, in walk order.
+proc nativeTargets {hir} {
+    set targets {}
+    foreach e [hir::walk $hir] {
+        if {[hir::kind $hir $e] eq "call"} {
+            lassign [hir::get $hir $e target] kind target
+            if {$kind eq "native"} {
+                lappend targets [dict get [hir::symbol $hir $target] name]
+            }
+        }
+    }
+    return $targets
+}
+
+set localList {fn shuffle(xs):
+    xs
+
+fn length(xs) -> int:
+    99
+}
+
+# ---------------------------------------------------------------------------
+# 1-3. Local modules, ::std::list, and both together
+
+test std-local-module {an ordinary local module beside the entry file is imported by its bare name} -body {
+    appValues [app {
+        main.bot "import game\n\ngame::score(4)\n"
+        game.bot "fn score(n: int) -> int:\n    n * 10\n"
+    }]
+} -cleanup removeApps -result {40 40 40 40}
+
+test std-import-rooted {import ::std::list is the standard list, used rooted and unrooted} -body {
+    appValues [app {
+        main.bot "import ::std::list\n\n\[std::list::length(\[1, 2\]), ::std::list::length(\[1, 2, 3\]), \[4\].length()\]\n"
+    }]
+} -cleanup removeApps -result {{[2, 3, 1]} {[2, 3, 1]} {[2, 3, 1]} {[2, 3, 1]}}
+
+test std-local-and-standard-list {a local list.bot and ::std::list coexist: two namespaces, two modules, each member its own} -body {
+    set dir [app [list main.bot "import list\nimport ::std::list\n\n\[list::length(\[1\]), std::list::length(\[1\]), list::shuffle(\[2, 1\]), std::list::get(\[5\], 0, 0)\]\n" \
+        list.bot $localList]]
+    set hir [appHir $dir]
+    list [appValues $dir] \
+        [lsort [lmap {id file} [dict get $hir files] {string map [list $dir APP $::core::libraryDir LIB] [dict get $file path]}]] \
+        [lsort [dict keys [dict get $hir modules]]]
+} -cleanup removeApps -result {{{[99, 1, [2, 1], 5]} {[99, 1, [2, 1], 5]} {[99, 1, [2, 1], 5]} {[99, 1, [2, 1], 5]}} {APP/list.bot APP/main.bot LIB/list.bot} {list std::list}}
+
+test std-local-and-standard-identities {the local module's members are its own: its error and its type are list::, distinct from std::list's} -body {
+    set dir [app {
+        main.bot "import list\nimport std::list\n\nfn pick(xs: List\[int\], i: list::Index) -> int errors list::Missing:\n    if i >= std::list::length(xs):\n        fail list::Missing\n    std::list::get(xs, i, 0)\n\nfn try(n: int) -> int:\n    if n < 0 or n > 100:\n        return -2\n    r = pick(\[7, 8\], n):\n        on list::Missing:\n            -1\n    r\n\n\[try(5), try(1)\]\n"
+        list.bot "error Missing\ntype Index = Int in 0..100\n"
+    }]
+    set hir [appHir $dir]
+    list [appValues $dir] [lsort [lmap t [dict get $hir sourceTypes] {dict get $t name}]] \
+        [expr {"list::Missing" in [dict get $hir errorDecls]}] \
+        [expr {"std::list::NotFound" in [dict get $hir errorDecls]}]
+} -cleanup removeApps -result {{{[-1, 8]} {[-1, 8]} {[-1, 8]} {[-1, 8]}} list::Index 1 1}
+
+test std-local-and-standard-errors {a local error and the standard one of the same short name are distinct identities on every backend} -body {
+    set dir [app {
+        main.bot "import list\nimport std::list\n\nfn local_missing(n: int) -> int errors list::NotFound:\n    if n == 0:\n        fail list::NotFound\n    n\n\nfn big(x) -> bool:\n    x > 5\n\nargs = argv():\n    on InvalidArgumentEncoding:\n        \[\]\na = local_missing(std::list::length(args)):\n    on list::NotFound:\n        1\nb = std::list::find(\[1, 2\], big):\n    on std::list::NotFound:\n        2\n\[a, b\]\n"
+        list.bot "error NotFound\n"
+    }]
+    appValues $dir
+} -cleanup removeApps -result {{[1, 2]} {[1, 2]} {[1, 2]} {[1, 2]}}
+
+test std-method-candidates-both {with both imports, a method call sees both modules' candidates, decided by the ordinary rule (no precedence)} -body {
+    set dir [app [list main.bot "import list\nimport std::list\n\n\[2, 1\].shuffle()\n" list.bot $localList]]
+    set ambiguous [app [list main.bot "import list\nimport std::list\n\nq = \[2, 1\]\nq.length()\n" list.bot $localList]]
+    list [appValues $dir {interp compile}] [lindex [split [appRejection $ambiguous] :] 0]
+} -cleanup removeApps -result {{{[2, 1]} {[2, 1]}} AMBIGUOUS-METHOD-CALL}
+
+# ---------------------------------------------------------------------------
+# 4-5. Rooted qualification wherever a namespace path is written
+
+test std-rooted-callable {::std::list::at and ::std::str::length are the very natives std::list::at and std::str::length: one callee, one core IR} -body {
+    set rooted [app {
+        main.bot "import ::std::list\nimport ::std::str\n\nv = ::std::list::at(\[10, 20\], 1):\n    on IndexNotFound:\n        0\n\[v, ::std::str::length(\"abc\")\]\n"
+    }]
+    set plain [app {
+        main.bot "import std::list\nimport std::str\n\nv = std::list::at(\[10, 20\], 1):\n    on IndexNotFound:\n        0\n\[v, std::str::length(\"abc\")\]\n"
+    }]
+    list [appValues $rooted] [lsort -unique [nativeTargets [appHir $rooted]]] [expr {[appCore $rooted] eq [appCore $plain]}]
+} -cleanup removeApps -result {{{[20, 3]} {[20, 3]} {[20, 3]} {[20, 3]}} {list std::list::at std::str::length} 1}
+
+test std-rooted-types-and-constructions {rooted types, type imports, constructions and errors name the same canonical identities} -body {
+    set rooted [app {
+        main.bot "import ::std::abi\nimport type ::std::abi::U8Value\nimport ::std::list\n\nfn widen(x: ::std::abi::U8Value, ys: List\[::std::abi::U8\]) -> ::std::abi::U8Value errors ::std::list::NotFound:\n    if std::list::length(ys) == 0:\n        fail ::std::list::NotFound\n    x\n\nfn short(x: U8Value) -> U8Value:\n    x\n\nr = widen(7, \[::std::abi::U8 {value: 3}\]):\n    on ::std::list::NotFound:\n        0\n\[r, short(9), ::std::abi::U8 {value: 4}.value\]\n"
+    }]
+    set plain [app {
+        main.bot "import std::abi\nimport type std::abi::U8Value\nimport std::list\n\nfn widen(x: std::abi::U8Value, ys: List\[std::abi::U8\]) -> std::abi::U8Value errors std::list::NotFound:\n    if std::list::length(ys) == 0:\n        fail std::list::NotFound\n    x\n\nfn short(x: U8Value) -> U8Value:\n    x\n\nr = widen(7, \[std::abi::U8 {value: 3}\]):\n    on std::list::NotFound:\n        0\n\[r, short(9), std::abi::U8 {value: 4}.value\]\n"
+    }]
+    list [appValues $rooted] [expr {[appCore $rooted] eq [appCore $plain]}]
+} -cleanup removeApps -result {{{[7, 9, 4]} {[7, 9, 4]} {[7, 9, 4]} {[7, 9, 4]}} 1}
+
+test std-rooted-contexts {rooted context parameter types and context constructions, of a standard and an application context, are the unrooted ones} -body {
+    set rooted [app {
+        cfg.bot "type Limit = Int in 0..1000\n\ncontext struct Config:\n    limit: Limit\n"
+        main.bot "import ::std::test\nimport ::std::list\nimport ::cfg\n\nfn registered_count(context suite: ::std::test::Suite) -> int:\n    std::list::length(std::test::registered())\n\nfn limit(context c: ::cfg::Config) -> int:\n    c.limit\n\nwith context ::std::test::suite()\nwith context ::cfg::Config {limit: 7}\n\[registered_count(), limit()\]\n"
+    }]
+    set plain [app {
+        cfg.bot "type Limit = Int in 0..1000\n\ncontext struct Config:\n    limit: Limit\n"
+        main.bot "import std::test\nimport std::list\nimport cfg\n\nfn registered_count(context suite: std::test::Suite) -> int:\n    std::list::length(std::test::registered())\n\nfn limit(context c: cfg::Config) -> int:\n    c.limit\n\nwith context std::test::suite()\nwith context cfg::Config {limit: 7}\n\[registered_count(), limit()\]\n"
+    }]
+    # An installed context's binding is named by its `with` statement's source
+    # offset (context#OFFSET), which the longer rooted spelling moves: a
+    # position, not an identity.
+    set positional {context#[0-9]+}
+    list [appValues $rooted] [expr {[regsub -all $positional [appCore $rooted] context#N]
+        eq [regsub -all $positional [appCore $plain] context#N]}]
+} -cleanup removeApps -result {{{[0, 7]} {[0, 7]} {[0, 7]} {[0, 7]}} 1}
+
+test std-rooted-enum-case {a rooted enum case of a standard namespace is the case std::compiler::DiagnosticCode::UnknownSymbol} -body {
+    appValues [app {
+        main.bot "import ::std::compiler\n\n::std::compiler::DiagnosticCode::UnknownSymbol == std::compiler::DiagnosticCode::UnknownSymbol\n"
+    }] {interp compile}
+} -cleanup removeApps -result {true true}
+
+test std-rooted-application-namespace {a rooted path names an application module too: ::game is game (every path is resolved from the root)} -body {
+    appValues [app {
+        main.bot "import ::game\n\n\[::game::score(1), game::score(2)\]\n"
+        game.bot "fn score(n: int) -> int:\n    n * 10\n"
+    }] {interp compile}
+} -cleanup removeApps -result {{[10, 20]} {[10, 20]}}
+
+test std-rooted-imprint {a rooted callee with explicit imprints, and rooted imprint types (std::ffi::c)} -body {
+    appValues [app {
+        main.bot "import ::std::ffi::c\n\np = ::std::ffi::c::null\[::std::ffi::c::Void\]()\n::std::ffi::c::null?(p)\n"
+    }] {interp compile}
+} -cleanup removeApps -result {true true}
+
+test std-rooted-duplicate-import {import std::list and import ::std::list are one namespace: DUPLICATE-IMPORT} -body {
+    appRejection [app {main.bot "import std::list\nimport ::std::list\n1\n"}]
+} -cleanup removeApps -result {DUPLICATE-IMPORT: APP/main.bot:2:8: namespace "std::list" is already imported (first imported at APP/main.bot:1:8)}
+
+test std-rooted-is-not-a-type-qualifier {a rooted qualifier is a namespace path: ::Color::Red is not the file's enum's case} -body {
+    list [appValues [app {main.bot "enum Color:\n    Red\nColor::Red == Color::Red\n"}] {interp}] \
+        [lindex [split [appRejection [app {main.bot "enum Color:\n    Red\n::Color::Red\n"}]] :] 0]
+} -cleanup removeApps -result {true UNKNOWN-NAMESPACE}
+
+test std-rooted-name-needs-a-namespace {a rooted name with one segment is ROOTED-NAME at the root marker: in a value, a type and an error name} -body {
+    lmap source {
+        "fn f(x):\n    x\n::f(1)\n"
+        "fn f(x: ::Point):\n    x\n"
+        "fn f() errors E:\n    fail ::E\n"
+    } {
+        catch {surface::parse $source t.bot} message options
+        list [lindex [dict get $options -errorcode] 2 end] [regexp {^t.bot:[0-9]+:[0-9]+: ROOTED-NAME: } $message]
+    }
+} -match glob -result {{* 1} {* 1} {* 1}}
+
+test std-rooted-ast {the AST keeps the root marker where the loader decides with it, and canonical spellings everywhere else} -body {
+    set ast [surface::parse "import ::std::list\nimport type ::std::abi::U8Value\nfn f(x: ::std::abi::U8Value) errors ::std::list::NotFound:\n    ::std::list::at(\[x\], 0)\n"]
+    set fn [lindex [dict get $ast body] 0]
+    list [lmap i [dict get $ast imports] {list [dict get $i namespace] [dict get $i rooted]}] \
+        [lindex [dict get $fn params] 0 2] [lindex [dict get $fn errors] 0 0] \
+        [string match "*(qualname ::std::list::at)*" [surface::formatAst $ast]]
+} -result {{{std::list 1} {std::abi 1}} std::abi::U8Value std::list::NotFound 1}
+
+test std-import-glued-is-a-qualified-name {`import::f` glued to the word stays a qualified name, `import ::std::list` is an import} -body {
+    list [llength [dict get [surface::parse "import ::std::list\n"] imports]] \
+        [dict get [lindex [dict get [surface::parse "x = 1\nimport::f(1)\n"] body] 1] kind]
+} -result {1 call}
+
+# ---------------------------------------------------------------------------
+# 6. Intrinsic-only standard namespaces
+
+test std-intrinsic-only-namespaces {std::str and std::char have no module file and are importable, rooted or not} -body {
+    list [file exists [file join $::core::libraryDir str.bot]] [file exists [file join $::core::libraryDir char.bot]] \
+        [appValues [app {main.bot "import ::std::str\nimport std::char\n\n\[::std::str::length(\"ab\"), std::char::scalar_value('A'), \"x\".concat(\"y\")\]\n"}] {interp compile}]
+} -cleanup removeApps -result {0 0 {{[2, 65, "xy"]} {[2, 65, "xy"]}}}
+
+test std-intrinsic-unknown-member {an unknown member of an intrinsic-only namespace lists its intrinsics} -body {
+    appRejection [app {main.bot "import std::str\nstd::str::reverse(\"a\")\n"}]
+} -cleanup removeApps -result {UNKNOWN-SYMBOL: APP/main.bot:2:1: namespace "std::str" has no definition "reverse" (its members are the intrinsics: append_char, char_at, concat, encode_utf8, is_tcl_alnum, is_tcl_alpha, length, lowercase, substring)}
+
+test std-intrinsics-are-registered-under-std {every public qualified intrinsic is registered under std::, and no flat name is (internal # natives are no namespace's)} -body {
+    set flat {}
+    set public 0
+    foreach name [core::native::names] {
+        if {[string first :: $name] < 0 || [string match extern#* $name]} {
+            continue
+        }
+        if {[string match ffi_fixture::* $name] || [string match cbtest::* $name]} {
+            # A test process's own fixtures (core::cabi::installTestFixture).
+            continue
+        }
+        if {![string match std::* $name]} {
+            lappend flat $name
+        }
+        incr public
+    }
+    list $flat [expr {$public > 60}] [core::native::isQualifiedNative list::at] [core::native::isQualifiedNative std::list::at]
+} -result {{} 1 0 1}
+
+test std-intrinsic-protected {a std::str module file may define a new member, never an intrinsic's (DUPLICATE-NATIVE)} -body {
+    withPrivateLibrary {
+        writeText [file join $::core::libraryDir str.bot] "fn length(s):\n    0\n"
+        set denied [appRejection [app {main.bot "import std::str\n1\n"}]]
+        writeText [file join $::core::libraryDir str.bot] "fn shout(s):\n    std::str::concat(s, \"!\")\n"
+        set allowed [appValues [app {main.bot "import std::str\nstd::str::shout(\"a\")\n"}] {interp}]
+        file delete [file join $::core::libraryDir str.bot]
+    }
+    list [lindex [split $denied :] 0] $allowed
+} -cleanup removeApps -result {DUPLICATE-NATIVE {{"a!"}}}
+
+# ---------------------------------------------------------------------------
+# 7. std is reserved
+
+test std-reserved-shadow-file {an application file std/list.bot never shadows std::list: importing std::list beside it is RESERVED-NAMESPACE, rooted or not} -body {
+    set dir [app {
+        main.bot "import std::list\nstd::list::length(\[1\])\n"
+        rooted.bot "import ::std::list\n1\n"
+        std/list.bot "fn length(xs) -> int:\n    99\n"
+    }]
+    list [appRejection $dir] [lindex [split [appRejection $dir rooted.bot] :] 0]
+} -cleanup removeApps -result {{RESERVED-NAMESPACE: APP/main.bot:1:8: application file APP/std/list.bot would be the namespace "std::list", but std and every namespace under it belong to the standard library: an application module is never a standard namespace, and `import std::list` never chooses between the two (it names the standard library's LIB/list.bot); move or rename the application file out of the application's std/ directory} RESERVED-NAMESPACE}
+
+test std-reserved-new-namespace {an application file std/mine.bot does not make std::mine exist} -body {
+    appRejection [app {
+        main.bot "import std::mine\n1\n"
+        std/mine.bot "fn f() -> int:\n    1\n"
+    }]
+} -cleanup removeApps -match glob -result {RESERVED-NAMESPACE: APP/main.bot:1:8: application file APP/std/mine.bot would be the namespace "std::mine"*(the standard library has no such namespace)*}
+
+test std-reserved-unimported {an application's std/ directory that no import names collides with nothing} -body {
+    appValues [app {
+        main.bot "import std::str\nstd::str::length(\"abc\")\n"
+        std/list.bot "fn length(xs) -> int:\n    99\n"
+    }] {interp}
+} -cleanup removeApps -result 3
+
+test std-reserved-root {std itself is no namespace: import std, import ::std and a qualifier std are rejected} -body {
+    list [appRejection [app {main.bot "import std\n1\n"}]] \
+        [lindex [split [appRejection [app {main.bot "import ::std\n1\n"}]] :] 0] \
+        [appRejection [app {main.bot "import std::list\nstd::length(\[1\])\n"}]] \
+        [lindex [split [appRejection [app {main.bot "import std::list\nstd::Point {x: 1}\n"}]] :] 0]
+} -cleanup removeApps -result {{UNKNOWN-NAMESPACE: APP/main.bot:1:8: "std" is the root of the standard library, not a namespace: it has no module and no members; import one of the standard namespaces under it (`import std::list`; `-help stdlib` lists them)} UNKNOWN-NAMESPACE {UNKNOWN-NAMESPACE: APP/main.bot:2:1: "std" is the root of the standard library, not a namespace: it has no members, and a qualifier "std" never names anything else (a type of this file included); "std::length" names nothing -- a standard member is NAMESPACE::name for a namespace under it (std::list::at)} UNKNOWN-NAMESPACE}
+
+test std-reserved-standard-module-sees-std-only {a standard-library module imports standard namespaces only: an application module of the name never reaches it} -body {
+    withPrivateLibrary {
+        writeText [file join $::core::libraryDir helper.bot] "import game\n\nfn f() -> int:\n    game::g()\n"
+        set result [appRejection [app {
+            main.bot "import std::helper\nstd::helper::f()\n"
+            game.bot "fn g() -> int:\n    1\n"
+        }]]
+    }
+    set result
+} -cleanup removeApps -match glob -result {UNKNOWN-NAMESPACE: LIB/helper.bot:1:8: unknown namespace "game": a standard-library module imports standard namespaces only (std::...)}
+
+# ---------------------------------------------------------------------------
+# 8. A missing local module never falls back to std
+
+test std-missing-local-no-fallback {import list with no list.bot is UNKNOWN-NAMESPACE naming std::list, never std::list itself} -body {
+    appRejection [app {main.bot "import list\nlist::length(\[1\])\n"}]
+} -cleanup removeApps -result {UNKNOWN-NAMESPACE: APP/main.bot:1:8: unknown namespace "list": no such module file APP/list.bot (an application's own modules are the files beside its entry program); the standard library's namespace of that name is std::list (`import std::list`): standard namespaces are named from the root std, and a namespace outside it is never looked up there}
+
+test std-missing-local-flat-reference {a flat list::at after import std::list names no namespace: UNKNOWN-NAMESPACE, never std::list::at} -body {
+    appRejection [app {main.bot "import std::list\nlist::length(\[1\])\n"}]
+} -cleanup removeApps -match glob -result {UNKNOWN-NAMESPACE: APP/main.bot:2:1: unknown namespace "list": no such module file APP/list.bot *the standard library's namespace of that name is std::list*}
+
+test std-missing-local-text {program text with no application root imports standard namespaces only, and says so} -body {
+    list [textRejection "import list\n1\n"] [textRejection "import std::list\nstd::list::length(\[1\])\n"]
+} -match glob -result {{UNKNOWN-NAMESPACE: t.bot:1:8: unknown namespace "list": this program has no application root*std::list*} accepted}
+
+test std-missing-standard {a standard namespace that does not exist names the standard library's path} -body {
+    appRejection [app {main.bot "import std::nosuch\n1\n"}]
+} -cleanup removeApps -result {UNKNOWN-NAMESPACE: APP/main.bot:1:8: unknown namespace "std::nosuch": the standard library has no such module file LIB/nosuch.bot and no intrinsics of that namespace}
+
+# ---------------------------------------------------------------------------
+# 9. The working directory changes nothing
+
+# The output of `main.tcl ARGS` run as its own process from the working
+# directory CWD.
+proc compilerIn {cwd args} {
+    set command [list [info nameofexecutable] $::mainScript {*}$args]
+    return [exec sh -c "cd [list $cwd] && exec $command 2>&1"]
+}
+
+test std-cwd-independence {main.tcl compiles the same program from any working directory, ignoring a decoy stdlib/, std/ and list.bot there} -body {
+    set dir [app [list main.bot "import list\nimport ::std::list\n\n\[list::shuffle(\[1, 2\]), std::list::length(\[1, 2, 3\])\]\n" list.bot $localList]]
+    set decoy [app {
+        stdlib/list.bot "fn length(xs) -> int:\n    -1\n"
+        std/list.bot "fn length(xs) -> int:\n    -2\n"
+        list.bot "fn shuffle(xs):\n    0\n"
+        main.bot "1\n"
+    }]
+    set main [file join $dir main.bot]
+    set outputs [lmap cwd [list $decoy $dir /] {compilerIn $cwd -backend interp $main}]
+    list [expr {[string first "value: \[\[1, 2\], 3\]" [lindex $outputs 0]] >= 0}] [llength [lsort -unique $outputs]]
+} -cleanup removeApps -result {1 1}
+
+test std-library-dir-is-the-compilers {the standard library's root is stdlib/ beside the compiler's own core/, whatever the working directory} -body {
+    set dir [app {probe.tcl {puts $::core::libraryDir}}]
+    set probe [file join $dir probe.tcl]
+    set out [exec sh -c "cd / && exec [list [info nameofexecutable]] -encoding utf-8 /dev/stdin" << "source [list [file join $::projectRoot core core.tcl]]\nsource [list $probe]\n"]
+    list [expr {[file normalize $out] eq [file normalize [file join $::projectRoot stdlib]]}] [file isdirectory $out]
+} -cleanup removeApps -result {1 1}
+
+# ---------------------------------------------------------------------------
+# 10. The bundled compiler finds its standard library inside itself
+
+# A bundled compiler packed by single/package.tcl with this process's tclsh as
+# its base kit (the single executable's packing, on a dynamically linked
+# Tcl): the path of the executable, made once.
+proc bundledCompiler {} {
+    if {[info exists ::bundled]} {
+        return $::bundled
+    }
+    set ::bundled [file join [makeDirectory stdns-bundle-[pid]] botlish]
+    exec [info nameofexecutable] [file join $::projectRoot single package.tcl] $::bundled \
+        [file dirname [native::binary]]
+    return $::bundled
+}
+
+test std-bundled-standard-library {the bundled compiler reads std from its own archive, never the checkout or the working directory, and runs local beside standard modules} -constraints {zipfs nativeBuilt} -body {
+    set exe [bundledCompiler]
+    set dir [app [list main.bot "import list\nimport ::std::list\n\n\[list::shuffle(\[1, 2\]), ::std::list::length(\[1, 2, 3\])\]\n" list.bot $localList \
+        missing.bot "import std::nosuch\n1\n"]]
+    set value [exec sh -c "cd / && exec [list $exe] -backend interp [list [file join $dir main.bot]] 2>&1"]
+    catch {exec sh -c "cd / && exec [list $exe] [list [file join $dir missing.bot]] 2>&1"} missing
+    list [expr {[string first "value: \[\[1, 2\], 3\]" $value] >= 0}] \
+        [regexp {no such module file //zipfs:/app/botlish/stdlib/nosuch\.bot} $missing]
+} -cleanup removeApps -result {1 1}
+
+test std-bundled-native {the bundled compiler's native backends run a program of local and standard modules} -constraints {zipfs nativeBuilt} -body {
+    set exe [bundledCompiler]
+    set dir [app [list main.bot "import list\nimport std::list\n\n\[list::shuffle(\[3\]), std::list::length(\[1, 2\])\]\n" list.bot $localList]]
+    exec sh -c "cd / && exec [list $exe] -backend cranelift [list [file join $dir main.bot]] 2>&1"
+} -cleanup removeApps -match glob -result {*value: \[\[3\], 2\]*}
+
+# ---------------------------------------------------------------------------
+# 11. An application executable needs no Botlish source
+
+test std-executable-needs-no-source {a natively compiled executable of local and standard modules runs with its source gone} -constraints {executableAot nativeBuilt} -body {
+    set dir [app [list main.bot "import list\nimport std::list\nimport std::str\n\n\[list::shuffle(\[1\]), std::list::length(\[1, 2\]), std::str::length(\"abc\")\]\n" list.bot $localList]]
+    exec [info nameofexecutable] $::mainScript -emit-native-executable [file join $dir main.bot] 2>@1
+    set exe [file join [makeDirectory stdns-exe-[pid]] main]
+    file rename [file join $dir main] $exe
+    file delete -force $dir
+    exec $exe
+} -cleanup {removeApps; file delete -force [file join [temporaryDirectory] stdns-exe-[pid]]} -result {[[1], 2, 3]}
+
+# ---------------------------------------------------------------------------
+# 12. Representative public APIs of every area, unchanged
+
+test std-representative-apis {representative standard APIs of every area run as before under their std:: names, on every backend} -body {
+    appValues [app {main.bot "import std::list
+import std::str
+import std::mutable_array
+import std::mutable_vector
+import std::immutable_set
+import std::abi
+import std::abi::bytes
+import std::ascii
+import std::char
+import std::float64
+import std::web
+
+a = std::mutable_array::create(2, 0)
+std::mutable_array::set(a, 1, 7)
+v = std::mutable_vector::from_list(\[1\])
+v.push(2)
+s = std::immutable_set::from_list(\[1, 2\])
+b = std::abi::bytes::from_list(std::str::encode_utf8(\"abc\"))
+\[std::list::get(\[1, 2\], 5, 9), std::str::concat(\"a\", \"b\"), std::mutable_array::get(a, 1, 0), v.length(), s.contains(2),
+    std::abi::u8(200).value, std::abi::bytes::length(b).value, std::ascii::is_alphabetic(65),
+    std::char::scalar_value('z'), std::float64::truncate(2.75), std::web::uri_escape_text(\"a b\")\]
+"}]
+} -cleanup removeApps -result {{[9, "ab", 7, 2, true, 200, 3, true, 122, 2, "a%20b"]} {[9, "ab", 7, 2, true, 200, 3, true, 122, 2, "a%20b"]} {[9, "ab", 7, 2, true, 200, 3, true, 122, 2, "a%20b"]} {[9, "ab", 7, 2, true, 200, 3, true, 122, 2, "a%20b"]}}
+
+cleanupTests

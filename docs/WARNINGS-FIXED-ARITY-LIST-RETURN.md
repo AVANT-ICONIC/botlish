@@ -14,11 +14,11 @@ fn scan_quoted(text, index, field) errors LowerUnderrun:
     character = peek(text, index)
     if character == "\"":
         if peek(text, index + 1) == "\"":
-            return scan_quoted(text, index + 2, str::concat(field, "\""))
+            return scan_quoted(text, index + 2, std::str::concat(field, "\""))
 
         return [field, index + 1]
 
-    scan_quoted(text, index + 1, str::concat(field, character))
+    scan_quoted(text, index + 1, std::str::concat(field, character))
 ```
 ```
 t.bot:10:13: warning: a 2-element list is returned from all 3 value exits; a struct value names the parts (FIXED-ARITY-LIST-RETURN)
@@ -159,7 +159,7 @@ else-less `if` whose branch returns, and an elif chain with and without `else`.
 fn f(xs) errors Empty:
     if xs == []:
         fail Empty
-    [xs, list::length(xs)]
+    [xs, std::list::length(xs)]
 ```
 
 This is the common shape. A "fail blocks" rule would miss most guard-before-
@@ -207,8 +207,8 @@ never complete (type `never`) is likewise not a value exit (inherited from
   counts like `[table, index]`, and `[compute(x), y + 1]` counts
   (`fa-element-types-irrelevant`, `fa-computed-elements-count`).
 * **Literal-shaped means milestone 2's provenance.** A literal is a call
-  carrying `written {form list}`. Anything else is a mismatch: `list::append`,
-  `str::concat`, a method-sugar construction, an operator, a call of another
+  carrying `written {form list}`. Anything else is a mismatch: `std::list::append`,
+  `std::str::concat`, a method-sugar construction, an operator, a call of another
   list-returning function, an `if`/`loop`/handled value. A call without the
   marker (core IR, `.hir` input) is never a literal, which is the fail-safe
   direction. The standing argument against deriving literal-ness from callee
@@ -340,11 +340,11 @@ fixed-shape list. The mitigations, together:
   projection on a result of unknown struct type (`any`) is a `TYPE` error,
   because projections are resolved statically. A leftover positional read that
   flows into a *source* function whose inferred parameter type is a list
-  (`list::get(r, 0, d)`) is a compile-time `TYPE` error. **But a leftover
-  direct native read (`list::at(r, 1)`, `list::length(r)`, `loop x in r`)
-  compiles** and fails at run time with a kind error ("list::at: expected list,
+  (`std::list::get(r, 0, d)`) is a compile-time `TYPE` error. **But a leftover
+  direct native read (`std::list::at(r, 1)`, `std::list::length(r)`, `loop x in r`)
+  compiles** and fails at run time with a kind error ("std::list::at: expected list,
   got {p0: 1, p1: 2}"). Botlish checks native argument kinds at run time, even
-  under `-strict 1` (`str::length(5)` compiles too). **A leftover `==` against a
+  under `-strict 1` (`std::str::length(5)` compiles too). **A leftover `==` against a
   list literal compiles and is silently `false`.** These are pinned as the
   checker actually is, in `fa-conversion-*` (two of them marked GAP). So a
   conversion cannot silently mis-read a part. It either fails to compile or
@@ -494,9 +494,9 @@ Interleaved compilations under different modes do not interact.
 `audit/fixed-arity-list-return/corpus-audit.txt`, at the **pinned commit
 `faae181`** (the corpus paths clean; `faae181` was `origin/main` and this
 milestone's base). It compiles `examples/stdlib` (9), `examples/surface` (14;
-`09`/`10` are the deliberate rejections), `bench/*.bot` (8) and `lib/*.bot` (8).
+`09`/`10` are the deliberate rejections), `bench/*.bot` (8) and `stdlib/*.bot` (8).
 35 of 39 compile standalone. The four that do not are the two rejections, and
-`lib/list.bot` and `lib/mutable_array.bot` (which use their own namespace
+`stdlib/list.bot` and `stdlib/mutable_array.bot` (which use their own namespace
 without importing it, a pre-existing state that milestone 2's audit already
 recorded).
 
@@ -505,7 +505,7 @@ classified by hand:
 
 | # | where | function | shape | element types (informational) | hand classification |
 |---|---|---|---|---|---|
-| 1 | `examples/stdlib/csv_chunked.bot:29` | `chunked_new` | 3-element, 1 exit | heterogeneous (`List[never]`, `mutarray`, `int`) | **convert**: the ChunkedBuilder state `[completedChunks, currentChunk, filled]`; the file's own header names the three parts, and callers read them back with `list::at(builder, 0/1/2)`. STRUCTS.md already called it "a definite struct candidate" |
+| 1 | `examples/stdlib/csv_chunked.bot:29` | `chunked_new` | 3-element, 1 exit | heterogeneous (`List[never]`, `mutarray`, `int`) | **convert**: the ChunkedBuilder state `[completedChunks, currentChunk, filled]`; the file's own header names the three parts, and callers read them back with `std::list::at(builder, 0/1/2)`. STRUCTS.md already called it "a definite struct candidate" |
 | 2 | `examples/stdlib/csv_chunked.bot:44` | `chunked_append` | 3-element, 2 exits | heterogeneous | **convert**: the same state |
 | 3 | `examples/stdlib/ai_text_clean.bot:84` | `sample` | 6-element, 1 exit | same-element (`str`) | **annotate**: the sample's list of check results, printed as the program's value and compared with `# expect: [...]`; never read by position |
 | 4 | `examples/stdlib/csv_records.bot:515` | `sample_checks` | 7-element, 1 exit | heterogeneous (`int`, `any`..., `bool`) | **annotate**: the sample's observation vector (`# expect: [2, "Alice", ...]`), consumed whole |
@@ -559,7 +559,7 @@ function, a helper chain that v1 does not follow. That is the one place the
 coinductive extension (below) would have found more. The live corpus has no
 list-returning helper chain, so per item 12 the extension stays unbuilt.
 
-**Library findings.** None. `lib/*.bot` carries no `FIXED-ARITY-LIST-RETURN`
+**Library findings.** None. `stdlib/*.bot` carries no `FIXED-ARITY-LIST-RETURN`
 finding at `faae181`, so no program that imports a library prints one, and the
 milestone-1/2 fuzzers' library baselines are unaffected.
 
@@ -576,7 +576,7 @@ policy explicitly (149/149 on `interp`, `compile`, `cranelift-generic`,
   1-element exits mismatch; single exit warns, single 1-element silent; mixed
   arity; element types irrelevant; computed elements; nested literals use the
   outer arity.
-* **Literal-ness:** `list::append`, `str::concat`, a method-sugar construction,
+* **Literal-ness:** `std::list::append`, `std::str::concat`, a method-sugar construction,
   a computed-only function, an operator, a function-value call, a call of
   another list-returning function, `return if`, an `if`-valued binding, a
   collecting loop, a handled value, core-IR input, `.hir`-text input.
@@ -621,7 +621,7 @@ policy explicitly (149/149 on `interp`, `compile`, `cranelift-generic`,
   machine-readable output, the annotation changes nothing else.
 * **Backends:** four backends in process (on and off).
 * **The conversion's checker as it is:** field reads checked, converted reads
-  compile, leftover via a source function is `TYPE`, leftover `list::at` is a
+  compile, leftover via a source function is `TYPE`, leftover `std::list::at` is a
   run-time kind error (GAP), leftover `==` is silently `false` (GAP).
 * **CLI:** modes, `-Wno-fixed-arity-list-return`, unknown mode, stdout/stderr
   separation, `-backend cranelift -warnings error` prints no value, identical
@@ -678,7 +678,7 @@ under all three modes:
 
 **The conversion law (the weakened analogue of milestone 2's round-trip law),
 in exact terms.** There is no exact round trip: converting changes types at
-call sites and shrinks the error surface (`list::at` is fallible, `r.pk` is
+call sites and shrinks the error surface (`std::list::at` is fallible, `r.pk` is
 total). For every program with a predicted warning, the converted program is
 built from the same construction:
 
@@ -749,7 +749,7 @@ MULTI-VALUE-RESULTS.md, this report, the README's warnings section, and a
 paragraph in AGENTS.md's "Compiler warnings" (what to re-run when changing the
 facts this warning reads).
 It also adapted 8 tests in two existing test files (below). **No corpus file
-(`examples/`, `bench/`, `lib/`) was edited.** The annotation needed no recording,
+(`examples/`, `bench/`, `stdlib/`) was edited.** The annotation needed no recording,
 so no frontend file changed either.
 
 **The breakage, and its adaptation in this milestone.** Adding a third code
@@ -780,7 +780,7 @@ file's existing code filters (their comment now names this warning too), and the
 stats pins gained the third code. No pin was weakened: each still asserts the
 complete set of its own warning code. `tests/warnings.test` passes 81/81 and
 `tests/method-eligible.test` 145/145 on all four backends. **Not affected:**
-complete-set tests over programs that import a library (no `lib/*.bot` finding
+complete-set tests over programs that import a library (no `stdlib/*.bot` finding
 exists), the milestone-1 fuzzer's library baseline and the milestone-2 fuzzer
 (their generated programs return no list literal; both smoke runs pass in the
 regression), and `tests/flags.test`'s `-warnings error` test.
@@ -800,7 +800,7 @@ tree:
   audited paths are byte-identical to `ffbd610`) is **identical to the
   `faae181` audit** apart from its commit header. Same 8 findings, same
   classifications, same scratch checks. The two snapshots agree. The contexts
-  milestone added `examples/linux/context-hello.bot` and `lib/linux/io.bot`,
+  milestone added `examples/linux/context-hello.bot` and `stdlib/linux/io.bot`,
   outside the audit's corpus definition. They carry **no** finding
   (`context-hello.bot` compiles with `io.bot`, 0 warnings; `io.bot` does not
   compile standalone, `CONTEXT-FUNCTION-VALUE`);
@@ -893,7 +893,7 @@ this milestone**: 5957 minus the 149 new ones, since no other test file changed.
   never a wrong one.
 * **Interprocedural unreachability is not used.** A structurally reachable
   function nobody calls still warns.
-* **The conversion's safety net has holes** (item 16): a leftover `list::at` on a
+* **The conversion's safety net has holes** (item 16): a leftover `std::list::at` on a
   converted result fails at run time rather than at compile time, and a
   leftover `==` against a list is silently `false`.
 * **A pruning-enabled finding needs its dead exit handled on conversion**,
@@ -938,9 +938,9 @@ ready patch), and its six findings to annotate take `-> list`.
 ## Deviations from the brief
 
 * **The conversion's checker is weaker than item 16 says.** The brief states
-  that "positional `list::at(r, k)` call sites become type errors". In Botlish
+  that "positional `std::list::at(r, k)` call sites become type errors". In Botlish
   as it is, they do not: native argument kinds are checked at run time, even
-  with `-strict 1`, so `list::at(convertedStruct, 1)` compiles and fails at run
+  with `-strict 1`, so `std::list::at(convertedStruct, 1)` compiles and fails at run
   time. Leftover reads through source functions are compile-time errors, field
   reads are checked statically, and `==` against a list is silently `false`.
   This report and the tests state the checker as it is.

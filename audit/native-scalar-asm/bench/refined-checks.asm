@@ -7,28 +7,28 @@
 ;
 ; function symbol -> Botlish label:
 ;   botlish_fn_0 / botlish_entry_0 -> <program entry>
-;   botlish_fn_1 / botlish_entry_1 -> byte::from_int<int>
-;   botlish_fn_2 / botlish_entry_2 -> byte::set<List[UnicodeChar]>
-;   botlish_fn_3 / botlish_entry_3 -> ascii::is_digit<int>
-;   botlish_fn_4 / botlish_entry_4 -> ascii::is_upper<int>
-;   botlish_fn_5 / botlish_entry_5 -> ascii::is_lower<int>
-;   botlish_fn_6 / botlish_entry_6 -> ascii::is_alphabetic<int>
-;   botlish_fn_7 / botlish_entry_7 -> ascii::is_alphanumeric<int>
-;   botlish_fn_8 / botlish_entry_8 -> web::emailish?<str>
+;   botlish_fn_1 / botlish_entry_1 -> std::byte::from_int<int>
+;   botlish_fn_2 / botlish_entry_2 -> std::byte::set<List[UnicodeChar]>
+;   botlish_fn_3 / botlish_entry_3 -> std::ascii::is_digit<int>
+;   botlish_fn_4 / botlish_entry_4 -> std::ascii::is_upper<int>
+;   botlish_fn_5 / botlish_entry_5 -> std::ascii::is_lower<int>
+;   botlish_fn_6 / botlish_entry_6 -> std::ascii::is_alphabetic<int>
+;   botlish_fn_7 / botlish_entry_7 -> std::ascii::is_alphanumeric<int>
+;   botlish_fn_8 / botlish_entry_8 -> std::web::emailish?<str>
 ;   botlish_fn_9 / botlish_entry_9 -> char_at<int>
 ;   botlish_fn_10 / botlish_entry_10 -> char_at<int>
 ;   botlish_fn_11 / botlish_entry_11 -> char_is?<int, any>
 ;   botlish_fn_12 / botlish_entry_12 -> local_char?<str>
 ;   botlish_fn_13 / botlish_entry_13 -> local_char?<generic>
 ;   botlish_fn_14 / botlish_entry_14 -> scan_while<int, block(e276)>
-;   botlish_fn_15 / botlish_entry_15 -> scan_while<int, native(str::is_tcl_alpha)>
+;   botlish_fn_15 / botlish_entry_15 -> scan_while<int, native(std::str::is_tcl_alpha)>
 ;   botlish_fn_16 / botlish_entry_16 -> tld?<int>
 ;   botlish_fn_17 / botlish_entry_17 -> domain?<int>
-;   botlish_fn_18 / botlish_entry_18 -> web::is_unreserved<int>
-;   botlish_fn_19 / botlish_entry_19 -> web::uri_query_value?<str>
+;   botlish_fn_18 / botlish_entry_18 -> std::web::is_unreserved<int>
+;   botlish_fn_19 / botlish_entry_19 -> std::web::uri_query_value?<str>
 ;   botlish_fn_20 / botlish_entry_20 -> upper_hex?<int>
 ;   botlish_fn_21 / botlish_entry_21 -> valid_from?<int>
-;   botlish_fn_22 / botlish_entry_22 -> web::uri_escape_text<str>
+;   botlish_fn_22 / botlish_entry_22 -> std::web::uri_escape_text<str>
 ;   botlish_fn_23 / botlish_entry_23 -> high_nibble<int>
 ;   botlish_fn_24 / botlish_entry_24 -> hex_pair<int>
 ;   botlish_fn_25 / botlish_entry_25 -> pct<int>
@@ -211,7 +211,7 @@ Disassembly of section .text:
      3ee:	mov    rsi,rax
      3f1:	mov    rdi,QWORD PTR [rsp+0x158]
      3f9:	call   3fe <botlish_fn_0+0x3fe>
-			3fa: R_X86_64_PLT32	botlish_fn_2-0x4 ; byte::set<List[UnicodeChar]>
+			3fa: R_X86_64_PLT32	botlish_fn_2-0x4 ; std::byte::set<List[UnicodeChar]>
      3fe:	test   rax,rax
      401:	je     4e8 <botlish_fn_0+0x4e8>
      407:	mov    rdi,QWORD PTR [rsp+0x158]
@@ -219,7 +219,7 @@ Disassembly of section .text:
      413:	mov    QWORD PTR [rcx+0x10],rax
      417:	mov    esi,0xe2a0e1
      41c:	call   421 <botlish_fn_0+0x421>
-			41d: R_X86_64_PLT32	botlish_fn_22-0x4 ; web::uri_escape_text<str>
+			41d: R_X86_64_PLT32	botlish_fn_22-0x4 ; std::web::uri_escape_text<str>
      421:	test   rax,rax
      424:	je     4e8 <botlish_fn_0+0x4e8>
      42a:	mov    QWORD PTR [rsp],rax
@@ -289,7 +289,7 @@ Disassembly of section .text:
      55f:	pop    rbp
      560:	ret
 
-0000000000000561 <botlish_fn_1: byte::from_int<int>>:
+0000000000000561 <botlish_fn_1: std::byte::from_int<int>>:
      561:	push   rbp
      562:	mov    rbp,rsp
      565:	mov    r10,rsi
@@ -310,18 +310,18 @@ Disassembly of section .text:
      59b:	pop    rbp
      59c:	ret
 
-000000000000059d <botlish_entry_1: byte::from_int<int>>:
+000000000000059d <botlish_entry_1: std::byte::from_int<int>>:
      59d:	push   rbp
      59e:	mov    rbp,rsp
      5a1:	mov    rsi,QWORD PTR [rdx]
      5a4:	call   5a9 <botlish_entry_1+0xc>
-			5a5: R_X86_64_PLT32	botlish_fn_1-0x4 ; byte::from_int<int>
+			5a5: R_X86_64_PLT32	botlish_fn_1-0x4 ; std::byte::from_int<int>
      5a9:	mov    rsp,rbp
      5ac:	pop    rbp
      5ad:	ret
 	...
 
-00000000000005b0 <botlish_fn_2: byte::set<List[UnicodeChar]>>:
+00000000000005b0 <botlish_fn_2: std::byte::set<List[UnicodeChar]>>:
      5b0:	push   rbp
      5b1:	mov    rbp,rsp
      5b4:	sub    rsp,0x90
@@ -424,7 +424,7 @@ Disassembly of section .text:
      750:	or     rsi,0x1
      754:	mov    rdi,r13
      757:	call   75c <botlish_fn_2+0x1ac>
-			758: R_X86_64_PLT32	botlish_fn_1-0x4 ; byte::from_int<int>
+			758: R_X86_64_PLT32	botlish_fn_1-0x4 ; std::byte::from_int<int>
      75c:	test   rax,rax
      75f:	je     7b1 <botlish_fn_2+0x201>
      765:	mov    QWORD PTR [rsp+0x20],rax
@@ -488,17 +488,17 @@ Disassembly of section .text:
      855:	add    BYTE PTR [rax],al
 	...
 
-0000000000000858 <botlish_entry_2: byte::set<List[UnicodeChar]>>:
+0000000000000858 <botlish_entry_2: std::byte::set<List[UnicodeChar]>>:
      858:	push   rbp
      859:	mov    rbp,rsp
      85c:	mov    rsi,QWORD PTR [rdx]
      85f:	call   864 <botlish_entry_2+0xc>
-			860: R_X86_64_PLT32	botlish_fn_2-0x4 ; byte::set<List[UnicodeChar]>
+			860: R_X86_64_PLT32	botlish_fn_2-0x4 ; std::byte::set<List[UnicodeChar]>
      864:	mov    rsp,rbp
      867:	pop    rbp
      868:	ret
 
-0000000000000869 <botlish_fn_3: ascii::is_digit<int>>:
+0000000000000869 <botlish_fn_3: std::ascii::is_digit<int>>:
      869:	push   rbp
      86a:	mov    rbp,rsp
      86d:	cmp    rsi,0x30
@@ -514,18 +514,18 @@ Disassembly of section .text:
      89d:	pop    rbp
      89e:	ret
 
-000000000000089f <botlish_entry_3: ascii::is_digit<int>>:
+000000000000089f <botlish_entry_3: std::ascii::is_digit<int>>:
      89f:	push   rbp
      8a0:	mov    rbp,rsp
      8a3:	mov    rsi,QWORD PTR [rdx]
      8a6:	sar    rsi,1
      8a9:	call   8ae <botlish_entry_3+0xf>
-			8aa: R_X86_64_PLT32	botlish_fn_3-0x4 ; ascii::is_digit<int>
+			8aa: R_X86_64_PLT32	botlish_fn_3-0x4 ; std::ascii::is_digit<int>
      8ae:	mov    rsp,rbp
      8b1:	pop    rbp
      8b2:	ret
 
-00000000000008b3 <botlish_fn_4: ascii::is_upper<int>>:
+00000000000008b3 <botlish_fn_4: std::ascii::is_upper<int>>:
      8b3:	push   rbp
      8b4:	mov    rbp,rsp
      8b7:	cmp    rsi,0x41
@@ -541,18 +541,18 @@ Disassembly of section .text:
      8e7:	pop    rbp
      8e8:	ret
 
-00000000000008e9 <botlish_entry_4: ascii::is_upper<int>>:
+00000000000008e9 <botlish_entry_4: std::ascii::is_upper<int>>:
      8e9:	push   rbp
      8ea:	mov    rbp,rsp
      8ed:	mov    rsi,QWORD PTR [rdx]
      8f0:	sar    rsi,1
      8f3:	call   8f8 <botlish_entry_4+0xf>
-			8f4: R_X86_64_PLT32	botlish_fn_4-0x4 ; ascii::is_upper<int>
+			8f4: R_X86_64_PLT32	botlish_fn_4-0x4 ; std::ascii::is_upper<int>
      8f8:	mov    rsp,rbp
      8fb:	pop    rbp
      8fc:	ret
 
-00000000000008fd <botlish_fn_5: ascii::is_lower<int>>:
+00000000000008fd <botlish_fn_5: std::ascii::is_lower<int>>:
      8fd:	push   rbp
      8fe:	mov    rbp,rsp
      901:	cmp    rsi,0x61
@@ -568,18 +568,18 @@ Disassembly of section .text:
      931:	pop    rbp
      932:	ret
 
-0000000000000933 <botlish_entry_5: ascii::is_lower<int>>:
+0000000000000933 <botlish_entry_5: std::ascii::is_lower<int>>:
      933:	push   rbp
      934:	mov    rbp,rsp
      937:	mov    rsi,QWORD PTR [rdx]
      93a:	sar    rsi,1
      93d:	call   942 <botlish_entry_5+0xf>
-			93e: R_X86_64_PLT32	botlish_fn_5-0x4 ; ascii::is_lower<int>
+			93e: R_X86_64_PLT32	botlish_fn_5-0x4 ; std::ascii::is_lower<int>
      942:	mov    rsp,rbp
      945:	pop    rbp
      946:	ret
 
-0000000000000947 <botlish_fn_6: ascii::is_alphabetic<int>>:
+0000000000000947 <botlish_fn_6: std::ascii::is_alphabetic<int>>:
      947:	push   rbp
      948:	mov    rbp,rsp
      94b:	sub    rsp,0x10
@@ -590,13 +590,13 @@ Disassembly of section .text:
      95e:	mov    rsi,r12
      961:	mov    rdi,r14
      964:	call   969 <botlish_fn_6+0x22>
-			965: R_X86_64_PLT32	botlish_fn_4-0x4 ; ascii::is_upper<int>
+			965: R_X86_64_PLT32	botlish_fn_4-0x4 ; std::ascii::is_upper<int>
      969:	cmp    rax,0x6
      96d:	je     99c <botlish_fn_6+0x55>
      973:	mov    rsi,r12
      976:	mov    rdi,r14
      979:	call   97e <botlish_fn_6+0x37>
-			97a: R_X86_64_PLT32	botlish_fn_5-0x4 ; ascii::is_lower<int>
+			97a: R_X86_64_PLT32	botlish_fn_5-0x4 ; std::ascii::is_lower<int>
      97e:	cmp    rax,0x6
      982:	je     992 <botlish_fn_6+0x4b>
      988:	mov    eax,0x2
@@ -611,18 +611,18 @@ Disassembly of section .text:
      9b1:	pop    rbp
      9b2:	ret
 
-00000000000009b3 <botlish_entry_6: ascii::is_alphabetic<int>>:
+00000000000009b3 <botlish_entry_6: std::ascii::is_alphabetic<int>>:
      9b3:	push   rbp
      9b4:	mov    rbp,rsp
      9b7:	mov    rsi,QWORD PTR [rdx]
      9ba:	sar    rsi,1
      9bd:	call   9c2 <botlish_entry_6+0xf>
-			9be: R_X86_64_PLT32	botlish_fn_6-0x4 ; ascii::is_alphabetic<int>
+			9be: R_X86_64_PLT32	botlish_fn_6-0x4 ; std::ascii::is_alphabetic<int>
      9c2:	mov    rsp,rbp
      9c5:	pop    rbp
      9c6:	ret
 
-00000000000009c7 <botlish_fn_7: ascii::is_alphanumeric<int>>:
+00000000000009c7 <botlish_fn_7: std::ascii::is_alphanumeric<int>>:
      9c7:	push   rbp
      9c8:	mov    rbp,rsp
      9cb:	sub    rsp,0x10
@@ -633,13 +633,13 @@ Disassembly of section .text:
      9de:	mov    rsi,r12
      9e1:	mov    rdi,r14
      9e4:	call   9e9 <botlish_fn_7+0x22>
-			9e5: R_X86_64_PLT32	botlish_fn_6-0x4 ; ascii::is_alphabetic<int>
+			9e5: R_X86_64_PLT32	botlish_fn_6-0x4 ; std::ascii::is_alphabetic<int>
      9e9:	cmp    rax,0x6
      9ed:	je     a1c <botlish_fn_7+0x55>
      9f3:	mov    rsi,r12
      9f6:	mov    rdi,r14
      9f9:	call   9fe <botlish_fn_7+0x37>
-			9fa: R_X86_64_PLT32	botlish_fn_3-0x4 ; ascii::is_digit<int>
+			9fa: R_X86_64_PLT32	botlish_fn_3-0x4 ; std::ascii::is_digit<int>
      9fe:	cmp    rax,0x6
      a02:	je     a12 <botlish_fn_7+0x4b>
      a08:	mov    eax,0x2
@@ -654,18 +654,18 @@ Disassembly of section .text:
      a31:	pop    rbp
      a32:	ret
 
-0000000000000a33 <botlish_entry_7: ascii::is_alphanumeric<int>>:
+0000000000000a33 <botlish_entry_7: std::ascii::is_alphanumeric<int>>:
      a33:	push   rbp
      a34:	mov    rbp,rsp
      a37:	mov    rsi,QWORD PTR [rdx]
      a3a:	sar    rsi,1
      a3d:	call   a42 <botlish_entry_7+0xf>
-			a3e: R_X86_64_PLT32	botlish_fn_7-0x4 ; ascii::is_alphanumeric<int>
+			a3e: R_X86_64_PLT32	botlish_fn_7-0x4 ; std::ascii::is_alphanumeric<int>
      a42:	mov    rsp,rbp
      a45:	pop    rbp
      a46:	ret
 
-0000000000000a47 <botlish_fn_8: web::emailish?<str>>:
+0000000000000a47 <botlish_fn_8: std::web::emailish?<str>>:
      a47:	push   rbp
      a48:	mov    rbp,rsp
      a4b:	sub    rsp,0x40
@@ -753,12 +753,12 @@ Disassembly of section .text:
      b84:	pop    rbp
      b85:	ret
 
-0000000000000b86 <botlish_entry_8: web::emailish?<str>>:
+0000000000000b86 <botlish_entry_8: std::web::emailish?<str>>:
      b86:	push   rbp
      b87:	mov    rbp,rsp
      b8a:	mov    rsi,QWORD PTR [rdx]
      b8d:	call   b92 <botlish_entry_8+0xc>
-			b8e: R_X86_64_PLT32	botlish_fn_8-0x4 ; web::emailish?<str>
+			b8e: R_X86_64_PLT32	botlish_fn_8-0x4 ; std::web::emailish?<str>
      b92:	mov    rsp,rbp
      b95:	pop    rbp
      b96:	ret
@@ -1095,7 +1095,7 @@ Disassembly of section .text:
      f91:	pop    rbp
      f92:	ret
 
-0000000000000f93 <botlish_fn_15: scan_while<int, native(str::is_tcl_alpha)>>:
+0000000000000f93 <botlish_fn_15: scan_while<int, native(std::str::is_tcl_alpha)>>:
      f93:	push   rbp
      f94:	mov    rbp,rsp
      f97:	sub    rsp,0x40
@@ -1173,7 +1173,7 @@ Disassembly of section .text:
     10a4:	mov    rcx,r14
     10a7:	jmp    fcc <botlish_fn_15+0x39>
 
-00000000000010ac <botlish_entry_15: scan_while<int, native(str::is_tcl_alpha)>>:
+00000000000010ac <botlish_entry_15: scan_while<int, native(std::str::is_tcl_alpha)>>:
     10ac:	push   rbp
     10ad:	mov    rbp,rsp
     10b0:	mov    rsi,QWORD PTR [rdx]
@@ -1183,7 +1183,7 @@ Disassembly of section .text:
     10bf:	sar    rsi,1
     10c2:	mov    rdx,rax
     10c5:	call   10ca <botlish_entry_15+0x1e>
-			10c6: R_X86_64_PLT32	botlish_fn_15-0x4 ; scan_while<int, native(str::is_tcl_alpha)>
+			10c6: R_X86_64_PLT32	botlish_fn_15-0x4 ; scan_while<int, native(std::str::is_tcl_alpha)>
     10ca:	shl    rax,1
     10cd:	or     rax,0x1
     10d1:	mov    rcx,rax
@@ -1211,7 +1211,7 @@ Disassembly of section .text:
     110d:	mov    rbx,rsi
     1110:	mov    rcx,r12
     1113:	call   1118 <botlish_fn_16+0x30>
-			1114: R_X86_64_PLT32	botlish_fn_15-0x4 ; scan_while<int, native(str::is_tcl_alpha)>
+			1114: R_X86_64_PLT32	botlish_fn_15-0x4 ; scan_while<int, native(std::str::is_tcl_alpha)>
     1118:	test   rdx,rdx
     111b:	jne    1136 <botlish_fn_16+0x4e>
     1121:	xor    rax,rax
@@ -1390,7 +1390,7 @@ Disassembly of section .text:
     1387:	pop    rbp
     1388:	ret
 
-0000000000001389 <botlish_fn_18: web::is_unreserved<int>>:
+0000000000001389 <botlish_fn_18: std::web::is_unreserved<int>>:
     1389:	push   rbp
     138a:	mov    rbp,rsp
     138d:	sub    rsp,0x10
@@ -1401,7 +1401,7 @@ Disassembly of section .text:
     13a0:	sar    rsi,1
     13a3:	mov    rbx,rdi
     13a6:	call   13ab <botlish_fn_18+0x22>
-			13a7: R_X86_64_PLT32	botlish_fn_7-0x4 ; ascii::is_alphanumeric<int>
+			13a7: R_X86_64_PLT32	botlish_fn_7-0x4 ; std::ascii::is_alphanumeric<int>
     13ab:	cmp    rax,0x6
     13af:	je     13e6 <botlish_fn_18+0x5d>
     13b5:	mov    rax,QWORD PTR [rbx+0x30]
@@ -1424,17 +1424,17 @@ Disassembly of section .text:
     13fb:	pop    rbp
     13fc:	ret
 
-00000000000013fd <botlish_entry_18: web::is_unreserved<int>>:
+00000000000013fd <botlish_entry_18: std::web::is_unreserved<int>>:
     13fd:	push   rbp
     13fe:	mov    rbp,rsp
     1401:	mov    rsi,QWORD PTR [rdx]
     1404:	call   1409 <botlish_entry_18+0xc>
-			1405: R_X86_64_PLT32	botlish_fn_18-0x4 ; web::is_unreserved<int>
+			1405: R_X86_64_PLT32	botlish_fn_18-0x4 ; std::web::is_unreserved<int>
     1409:	mov    rsp,rbp
     140c:	pop    rbp
     140d:	ret
 
-000000000000140e <botlish_fn_19: web::uri_query_value?<str>>:
+000000000000140e <botlish_fn_19: std::web::uri_query_value?<str>>:
     140e:	push   rbp
     140f:	mov    rbp,rsp
     1412:	sub    rsp,0x10
@@ -1449,12 +1449,12 @@ Disassembly of section .text:
     1437:	pop    rbp
     1438:	ret
 
-0000000000001439 <botlish_entry_19: web::uri_query_value?<str>>:
+0000000000001439 <botlish_entry_19: std::web::uri_query_value?<str>>:
     1439:	push   rbp
     143a:	mov    rbp,rsp
     143d:	mov    rsi,QWORD PTR [rdx]
     1440:	call   1445 <botlish_entry_19+0xc>
-			1441: R_X86_64_PLT32	botlish_fn_19-0x4 ; web::uri_query_value?<str>
+			1441: R_X86_64_PLT32	botlish_fn_19-0x4 ; std::web::uri_query_value?<str>
     1445:	mov    rsp,rbp
     1448:	pop    rbp
     1449:	ret
@@ -1529,7 +1529,7 @@ Disassembly of section .text:
     1546:	mov    rdi,r12
     1549:	mov    rsi,r13
     154c:	call   1551 <botlish_fn_20+0x101>
-			154d: R_X86_64_PLT32	botlish_fn_3-0x4 ; ascii::is_digit<int>
+			154d: R_X86_64_PLT32	botlish_fn_3-0x4 ; std::ascii::is_digit<int>
     1551:	cmp    rax,0x6
     1555:	jne    1563 <botlish_fn_20+0x113>
     155b:	mov    rax,rbx
@@ -1631,7 +1631,7 @@ Disassembly of section .text:
     16ab:	jg     176d <botlish_fn_21+0x1a5>
     16b1:	mov    rdi,r12
     16b4:	call   16b9 <botlish_fn_21+0xf1>
-			16b5: R_X86_64_PLT32	botlish_fn_18-0x4 ; web::is_unreserved<int>
+			16b5: R_X86_64_PLT32	botlish_fn_18-0x4 ; std::web::is_unreserved<int>
     16b9:	cmp    rax,0x6
     16bd:	jne    176d <botlish_fn_21+0x1a5>
     16c3:	mov    rsi,r13
@@ -1737,7 +1737,7 @@ Disassembly of section .text:
     1823:	pop    rbp
     1824:	ret
 
-0000000000001825 <botlish_fn_22: web::uri_escape_text<str>>:
+0000000000001825 <botlish_fn_22: std::web::uri_escape_text<str>>:
     1825:	push   rbp
     1826:	mov    rbp,rsp
     1829:	sub    rsp,0x10
@@ -1760,7 +1760,7 @@ Disassembly of section .text:
     186b:	pop    rbp
     186c:	ret
 
-000000000000186d <botlish_entry_22: web::uri_escape_text<str>>:
+000000000000186d <botlish_entry_22: std::web::uri_escape_text<str>>:
     186d:	push   rbp
     186e:	mov    rbp,rsp
     1871:	sub    rsp,0x10
@@ -1773,7 +1773,7 @@ Disassembly of section .text:
     1889:	mov    rsi,rax
     188c:	mov    rdi,r12
     188f:	call   1894 <botlish_entry_22+0x27>
-			1890: R_X86_64_PLT32	botlish_fn_22-0x4 ; web::uri_escape_text<str>
+			1890: R_X86_64_PLT32	botlish_fn_22-0x4 ; std::web::uri_escape_text<str>
     1894:	mov    r12,QWORD PTR [rsp]
     1898:	add    rsp,0x10
     189c:	mov    rsp,rbp
@@ -2267,7 +2267,7 @@ Disassembly of section .text:
     2037:	jg     215f <botlish_fn_28+0x272>
     203d:	mov    rdi,QWORD PTR [rsp+0xa0]
     2045:	call   204a <botlish_fn_28+0x15d>
-			2046: R_X86_64_PLT32	botlish_fn_18-0x4 ; web::is_unreserved<int>
+			2046: R_X86_64_PLT32	botlish_fn_18-0x4 ; std::web::is_unreserved<int>
     204a:	cmp    rax,0x6
     204e:	je     20e2 <botlish_fn_28+0x1f5>
     2054:	mov    rsi,r12
@@ -2420,7 +2420,7 @@ Disassembly of section .text:
     231e:	mov    rsi,rbx
     2321:	mov    rdi,r14
     2324:	call   2329 <botlish_fn_29+0x5b>
-			2325: R_X86_64_PLT32	botlish_fn_8-0x4 ; web::emailish?<str>
+			2325: R_X86_64_PLT32	botlish_fn_8-0x4 ; std::web::emailish?<str>
     2329:	test   rax,rax
     232c:	jne    2357 <botlish_fn_29+0x89>
     2332:	xor    rax,rax
@@ -2442,7 +2442,7 @@ Disassembly of section .text:
     2377:	mov    rsi,r12
     237a:	mov    rdi,r14
     237d:	call   2382 <botlish_fn_29+0xb4>
-			237e: R_X86_64_PLT32	botlish_fn_19-0x4 ; web::uri_query_value?<str>
+			237e: R_X86_64_PLT32	botlish_fn_19-0x4 ; std::web::uri_query_value?<str>
     2382:	cmp    rax,0x6
     2386:	je     2396 <botlish_fn_29+0xc8>
     238c:	mov    edx,0x1

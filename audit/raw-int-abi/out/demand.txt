@@ -38,19 +38,19 @@ bench/refined-checks.bot:
   B: rbox 10 runbox 10; machine bytes 9068; rbox classes frontier 5 mixed 3 mixed-callers 2
   C: rbox 8 runbox 9; machine bytes 9046; rbox classes frontier 5 mixed 3
   D: rbox 7 runbox 9; machine bytes 9080; rbox classes frontier 5 other 2
-    selected   ascii::is_digit<int>.b: raw demand parameter b -> raw rige @e144
-    selected   ascii::is_upper<int>.b: raw demand parameter b -> raw rige @e159
-    selected   ascii::is_lower<int>.b: raw demand parameter b -> raw rige @e174
-    selected   ascii::is_alphabetic<int>.b: raw demand parameter b -> argument 0 of ascii::is_upper<int> -> parameter b -> raw rige @e159
-    selected   ascii::is_alphanumeric<int>.b: raw demand parameter b -> argument 0 of ascii::is_digit<int> -> parameter b -> raw rige @e144
+    selected   std::ascii::is_digit<int>.b: raw demand parameter b -> raw rige @e144
+    selected   std::ascii::is_upper<int>.b: raw demand parameter b -> raw rige @e159
+    selected   std::ascii::is_lower<int>.b: raw demand parameter b -> raw rige @e174
+    selected   std::ascii::is_alphabetic<int>.b: raw demand parameter b -> argument 0 of std::ascii::is_upper<int> -> parameter b -> raw rige @e159
+    selected   std::ascii::is_alphanumeric<int>.b: raw demand parameter b -> argument 0 of std::ascii::is_digit<int> -> parameter b -> raw rige @e144
     selected   check<int, int, str, str>.n: raw demand self-tail loop slot n
-    mixed      byte::high_nibble<int>.result: raw demand result of byte::high_nibble<int> (argument 0 of byte::nibble<int>) -> parameter x -> raw rishr @e84; but tagged: tagged native bit_and
-    mixed      byte::nibble<int>.x: raw demand parameter x -> raw rishr @e84; but tagged: tagged native bit_and
-    suppressed byte::nibble<int>.result: no raw consumer; tagged: result of high_nibble<int> (tagged native list_get)
-    suppressed byte::from_int<int>.result: no raw consumer; tagged: result of byte::from_int<int> (list loop result element)
+    mixed      std::byte::high_nibble<int>.result: raw demand result of std::byte::high_nibble<int> (argument 0 of std::byte::nibble<int>) -> parameter x -> raw rishr @e84; but tagged: tagged native bit_and
+    mixed      std::byte::nibble<int>.x: raw demand parameter x -> raw rishr @e84; but tagged: tagged native bit_and
+    suppressed std::byte::nibble<int>.result: no raw consumer; tagged: result of high_nibble<int> (tagged native list_get)
+    suppressed std::byte::from_int<int>.result: no raw consumer; tagged: result of std::byte::from_int<int> (list loop result element)
     mixed      scan_while<any, block(e239)>.result: raw demand result of scan_while<any, block(e239)> (bind local_end) -> raw rieq @e359; but tagged: tagged argument 0 of char_at<generic>
     suppressed scan_while<any, native(is_tcl_alpha)>.result: no raw consumer; tagged: tagged native ==, tagged native -
-    mixed      web::is_unreserved<int>.b: raw demand parameter b -> argument 0 of ascii::is_alphanumeric<int> -> parameter b -> argument 0 of ascii::is_digit<int> -> parameter b -> raw rige @e144; but tagged: tagged native immutable_set_contains
+    mixed      std::web::is_unreserved<int>.b: raw demand parameter b -> argument 0 of std::ascii::is_alphanumeric<int> -> parameter b -> argument 0 of std::ascii::is_digit<int> -> parameter b -> raw rige @e144; but tagged: tagged native immutable_set_contains
     suppressed high_nibble<int>.result: no raw consumer; tagged: result of high_nibble<int> (tagged native list_get)
     mixed      esc_bytes<List[int], int, str>.i: raw demand self-tail loop slot i; but tagged: tagged native list_get
     mixed      esc_from<str, int, str>.i: raw demand self-tail loop slot i; but tagged: tagged native substring
@@ -87,16 +87,16 @@ bench/uri-steady.bot:
   B: rbox 8 runbox 6; machine bytes 5459; rbox classes frontier 2 mixed 3 mixed-callers 2 other 1
   C: rbox 6 runbox 5; machine bytes 5437; rbox classes frontier 2 mixed 3 other 1
   D: rbox 5 runbox 5; machine bytes 5471; rbox classes frontier 2 other 3
-    selected   ascii::is_digit<int>.b: raw demand parameter b -> raw rige @e88
-    selected   ascii::is_upper<int>.b: raw demand parameter b -> raw rige @e103
-    selected   ascii::is_lower<int>.b: raw demand parameter b -> raw rige @e118
-    selected   ascii::is_alphabetic<int>.b: raw demand parameter b -> argument 0 of ascii::is_upper<int> -> parameter b -> raw rige @e103
-    selected   ascii::is_alphanumeric<int>.b: raw demand parameter b -> argument 0 of ascii::is_digit<int> -> parameter b -> raw rige @e88
-    mixed      byte::high_nibble<int>.result: raw demand result of byte::high_nibble<int> (argument 0 of byte::nibble<int>) -> parameter x -> raw rishr @e28; but tagged: tagged native bit_and
-    mixed      byte::nibble<int>.x: raw demand parameter x -> raw rishr @e28; but tagged: tagged native bit_and
-    suppressed byte::nibble<int>.result: no raw consumer; tagged: result of high_nibble<int> (tagged native list_get)
-    suppressed byte::from_int<int>.result: no raw consumer; tagged: result of byte::from_int<int> (list loop result element)
-    mixed      web::is_unreserved<int>.b: raw demand parameter b -> argument 0 of ascii::is_alphanumeric<int> -> parameter b -> argument 0 of ascii::is_digit<int> -> parameter b -> raw rige @e88; but tagged: tagged native immutable_set_contains
+    selected   std::ascii::is_digit<int>.b: raw demand parameter b -> raw rige @e88
+    selected   std::ascii::is_upper<int>.b: raw demand parameter b -> raw rige @e103
+    selected   std::ascii::is_lower<int>.b: raw demand parameter b -> raw rige @e118
+    selected   std::ascii::is_alphabetic<int>.b: raw demand parameter b -> argument 0 of std::ascii::is_upper<int> -> parameter b -> raw rige @e103
+    selected   std::ascii::is_alphanumeric<int>.b: raw demand parameter b -> argument 0 of std::ascii::is_digit<int> -> parameter b -> raw rige @e88
+    mixed      std::byte::high_nibble<int>.result: raw demand result of std::byte::high_nibble<int> (argument 0 of std::byte::nibble<int>) -> parameter x -> raw rishr @e28; but tagged: tagged native bit_and
+    mixed      std::byte::nibble<int>.x: raw demand parameter x -> raw rishr @e28; but tagged: tagged native bit_and
+    suppressed std::byte::nibble<int>.result: no raw consumer; tagged: result of high_nibble<int> (tagged native list_get)
+    suppressed std::byte::from_int<int>.result: no raw consumer; tagged: result of std::byte::from_int<int> (list loop result element)
+    mixed      std::web::is_unreserved<int>.b: raw demand parameter b -> argument 0 of std::ascii::is_alphanumeric<int> -> parameter b -> argument 0 of std::ascii::is_digit<int> -> parameter b -> raw rige @e88; but tagged: tagged native immutable_set_contains
     suppressed high_nibble<int>.result: no raw consumer; tagged: result of high_nibble<int> (tagged native list_get)
     mixed      esc_bytes<List[int], int, str>.i: raw demand self-tail loop slot i; but tagged: tagged native list_get
     mixed      esc_from<str, int, str>.i: raw demand self-tail loop slot i; but tagged: tagged native substring

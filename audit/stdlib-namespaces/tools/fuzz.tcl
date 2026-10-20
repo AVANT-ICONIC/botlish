@@ -1,8 +1,8 @@
 #!/usr/bin/env tclsh9.0
 # fuzz.tcl -- bounded randomized check of the standard-namespace cleanup
-# (STDLIB-NAMESPACES.md): list::at / list::get, mutable_array::at /
-# mutable_array::get / mutable_array::set, the slices (str::substring,
-# mutable_array::freeze, mutable_array::copy) and their LowerUnderrun /
+# (STDLIB-NAMESPACES.md): std::list::at / std::list::get, std::mutable_array::at /
+# std::mutable_array::get / std::mutable_array::set, the slices (std::str::substring,
+# std::mutable_array::freeze, std::mutable_array::copy) and their LowerUnderrun /
 # UpperOverrun, str::* and list::* intrinsics in free and method spelling,
 # the eager default of get, and the programs the cleanup made illegal.
 #
@@ -13,45 +13,46 @@
 # end, negative, a BigInt) and random defaults, as a List of checks whose
 # expected value an independent Tcl oracle computes:
 #
-#   get        list::get(XS, I, D) / XS.get(I, D) (after `import list`)
-#   explicit   list::get(XS, I, D) == the explicit at-with-handler program
-#              (`v = list::at(xs, i): on IndexNotFound: d`) -- the theorem
+#   get        std::list::get(XS, I, D) / XS.get(I, D) (after `import std::list`)
+#   explicit   std::list::get(XS, I, D) == the explicit at-with-handler program
+#              (`v = std::list::at(xs, i): on IndexNotFound: d`) -- the theorem
 #              that get has no semantics of its own
-#   at         list::at through a handled call, free and method spelling:
+#   at         std::list::at through a handled call, free and method spelling:
 #              the element, or the handler's "missing" for IndexNotFound
-#   array      the same three for mutable_array::from_list(XS) with
-#              mutable_array::at/get, plus mutable_array::set followed by a
-#              read, by method spelling (with `import list` and `import
+#   array      the same three for std::mutable_array::from_list(XS) with
+#              std::mutable_array::at/get, plus std::mutable_array::set followed by a
+#              read, by method spelling (with `import std::list` and `import
 #              mutable_array` both present, a receiver's kind picks the
 #              namespace: IMPORTS.md)
-#   eager      list::get(XS, I, mark(D)): mark counts its own evaluations in
+#   eager      std::list::get(XS, I, mark(D)): mark counts its own evaluations in
 #              a one-slot MutableArray, a member of an installed context (an
 #              array is a value: only a context member is a place every
 #              function shares), read back at the end -- the default is
 #              evaluated exactly once per call, present index or not
-#   strings    str::concat/str::length/list::append/list::length, free and
+#   strings    std::str::concat/std::str::length/std::list::append/std::list::length, free and
 #              method spelling
-#   slice      str::substring(S, A, B), free and by method, over Strings with
+#   slice      std::str::substring(S, A, B), free and by method, over Strings with
 #              multi-byte scalars and bounds inside, just outside and BigInt:
 #              the characters, or the slice rule's error (core::native::
 #              checkSlice: START against 0..N first, then END against
 #              START..N; below is LowerUnderrun, above UpperOverrun)
-#   freeze     mutable_array::freeze(from_list(XS), C): the slice 0..C
-#   copy       mutable_array::copy within one array (overlapping ranges,
+#   freeze     std::mutable_array::freeze(from_list(XS), C): the slice 0..C
+#   copy       std::mutable_array::copy within one array (overlapping ranges,
 #              memmove semantics), destination slice checked before source
-#   set        mutable_array::set at any index: the array afterwards, or
+#   set        std::mutable_array::set at any index: the array afterwards, or
 #              IndexNotFound
 #
 # The oracle checks every backend's value, and the backends must agree.
 #
 # Each program also has one NEGATIVE program, rotating through the shapes
 # the cleanup must reject: `a eq b` (syntax), `eq(a, b)` and every
-# historical root name (unbound), the removed `char::codepoint` wrapper (an
+# historical root name (unbound), the removed `std::char::codepoint` wrapper (an
 # unknown member of namespace char), a scratch library module of an
 # intrinsic's namespace redefining that member (DUPLICATE-NATIVE), a provably missing literal
-# index (KNOWN-ERROR), an unproven list::at in an undeclaring function
+# index (KNOWN-ERROR), an unproven std::list::at in an undeclaring function
 # (UNHANDLED-ERROR), a method spelling of an intrinsic whose namespace the
-# program does not import (no function visible), get applied to a non-List (the TYPE error
+# program does not import (no function visible: MISSING-IMPORT, naming the
+# import to add, DIAGNOSTIC-RECOVERY.md), get applied to a non-List (the TYPE error
 # propagates on every backend: it is not swallowed into the default), an
 # inverted literal substring and an out-of-range literal set (KNOWN-ERROR),
 # and an unproven substring in an undeclaring function (UNHANDLED-ERROR). A
@@ -128,32 +129,32 @@ proc literalString {} { return [pick {"" a bc "héllo" "x y"}] }
 # ---------------------------------------------------------------------------
 # Program text
 
-set ::prelude {import list
-import str
-import mutable_array
+set ::prelude {import std::list
+import std::str
+import std::mutable_array
 
 context struct Log:
     marks: MutableArray[int]
 fn marks(context log: Log):
-    mutable_array::get(log.marks, 0, -1)
+    std::mutable_array::get(log.marks, 0, -1)
 fn mark(v, context log: Log):
-    mutable_array::set(log.marks, 0, marks() + 1):
+    std::mutable_array::set(log.marks, 0, marks() + 1):
         on IndexNotFound:
             unit
     v
-with context Log {marks: mutable_array::create(1, 0)}
+with context Log {marks: std::mutable_array::create(1, 0)}
 fn explicit(xs, i, d):
-    v = list::at(xs, i):
+    v = std::list::at(xs, i):
         on IndexNotFound:
             d
     v
 fn explicit_array(a, i, d):
-    v = mutable_array::at(a, i):
+    v = std::mutable_array::at(a, i):
         on IndexNotFound:
             d
     v
 fn at_free(xs, i):
-    v = list::at(xs, i):
+    v = std::list::at(xs, i):
         on IndexNotFound:
             "missing"
     v
@@ -163,13 +164,13 @@ fn at_method(xs: list, i):
             "missing"
     v
 fn array_at(xs, i):
-    a = mutable_array::from_list(xs)
+    a = std::mutable_array::from_list(xs)
     v = a.at(i):
         on IndexNotFound:
             "missing"
     v
 fn set_then_read(xs, i, value):
-    a = mutable_array::from_list(xs)
+    a = std::mutable_array::from_list(xs)
     done = a.set(i, value):
         on IndexNotFound:
             return "missing"
@@ -178,13 +179,13 @@ fn set_then_read(xs, i, value):
             "missing"
     v
 fn set_at(xs, i, value):
-    a = mutable_array::from_list(xs)
-    done = mutable_array::set(a, i, value):
+    a = std::mutable_array::from_list(xs)
+    done = std::mutable_array::set(a, i, value):
         on IndexNotFound:
             return "missing"
-    mutable_array::freeze(a, mutable_array::capacity(a))
+    std::mutable_array::freeze(a, std::mutable_array::capacity(a))
 fn slice_of(s, a, b):
-    v = str::substring(s, a, b):
+    v = std::str::substring(s, a, b):
         on LowerUnderrun:
             return "lower"
         on UpperOverrun:
@@ -198,21 +199,21 @@ fn slice_method(s, a, b):
             return "upper"
     v
 fn freeze_of(xs, n):
-    a = mutable_array::from_list(xs)
-    v = mutable_array::freeze(a, n):
+    a = std::mutable_array::from_list(xs)
+    v = std::mutable_array::freeze(a, n):
         on LowerUnderrun:
             return "lower"
         on UpperOverrun:
             return "upper"
     v
 fn copy_within(xs, ds, ss, n):
-    a = mutable_array::from_list(xs)
-    done = mutable_array::copy(a, ds, a, ss, n):
+    a = std::mutable_array::from_list(xs)
+    done = std::mutable_array::copy(a, ds, a, ss, n):
         on LowerUnderrun:
             return "lower"
         on UpperOverrun:
             return "upper"
-    mutable_array::freeze(a, mutable_array::capacity(a))
+    std::mutable_array::freeze(a, std::mutable_array::capacity(a))
 }
 
 # The slice rule (core::native::checkSlice): "" for a valid slice
@@ -249,15 +250,15 @@ proc genCheck {} {
     set missing [expr {$elem eq "" ? {"missing"} : $elem}]
     set check [pick {get get-method explicit at at-method array-get array-get-method array-explicit array-at array-set eager strings lists slice slice-method freeze copy set}]
     switch -- $check {
-        get { return [list "list::get($xs, $i, $d)" $got 0] }
+        get { return [list "std::list::get($xs, $i, $d)" $got 0] }
         get-method { return [list "$xs.get($i, $d)" $got 0] }
-        explicit { return [list "list::get($xs, $i, $d) == explicit($xs, $i, $d)" true 0] }
+        explicit { return [list "std::list::get($xs, $i, $d) == explicit($xs, $i, $d)" true 0] }
         at { return [list "at_free($xs, $i)" $missing 0] }
         at-method { return [list "at_method($xs, $i)" $missing 0] }
-        array-get { return [list "mutable_array::get(mutable_array::from_list($xs), $i, $d)" $got 0] }
-        array-get-method { return [list "mutable_array::from_list($xs).get($i, $d)" $got 0] }
+        array-get { return [list "std::mutable_array::get(std::mutable_array::from_list($xs), $i, $d)" $got 0] }
+        array-get-method { return [list "std::mutable_array::from_list($xs).get($i, $d)" $got 0] }
         array-explicit {
-            return [list "mutable_array::get(mutable_array::from_list($xs), $i, $d) == explicit_array(mutable_array::from_list($xs), $i, $d)" true 0]
+            return [list "std::mutable_array::get(std::mutable_array::from_list($xs), $i, $d) == explicit_array(std::mutable_array::from_list($xs), $i, $d)" true 0]
         }
         array-at { return [list "array_at($xs, $i)" $missing 0] }
         array-set {
@@ -270,16 +271,16 @@ proc genCheck {} {
             set stored [lindex $items [rnd 0 [expr {$len - 1}]]]
             return [list "set_then_read($xs, $j, [lindex $stored 0])" [lindex $stored 1] 0]
         }
-        eager { return [list "list::get($xs, $i, mark($d))" $got 1] }
+        eager { return [list "std::list::get($xs, $i, mark($d))" $got 1] }
         strings {
             set a [literalString]
             set b [literalString]
             set joined "$a$b"
-            return [list "\[str::concat(\"$a\", \"$b\") == \"$a\".concat(\"$b\"), \"$a\".concat(\"$b\").length(), str::length(\"$joined\")\]" \
+            return [list "\[std::str::concat(\"$a\", \"$b\") == \"$a\".concat(\"$b\"), \"$a\".concat(\"$b\").length(), std::str::length(\"$joined\")\]" \
                 "\[true, [string length $joined], [string length $joined]\]" 0]
         }
         lists {
-            return [list "\[list::length(list::append($xs, $d)), $xs.append($d).length(), list::get(list::append($xs, $d), $len, \"no\") == $d\]" \
+            return [list "\[std::list::length(std::list::append($xs, $d)), $xs.append($d).length(), std::list::get(std::list::append($xs, $d), $len, \"no\") == $d\]" \
                 "\[[expr {$len + 1}], [expr {$len + 1}], true\]" 0]
         }
         slice - slice-method {
@@ -387,8 +388,8 @@ foreach name [core::native::names] {
 set ::historical {
     {list_get([1], 0)} {list_append([1], 2)} {list_length([1])} {concat("a", "b")} {length("a")}
     {substring("ab", 0, 1)} {lowercase("A")} {encode_utf8("a")} {is_tcl_alpha("a")} {is_tcl_alnum("a")}
-    {char_codepoint('a')} {mutable_array_allocate(1)} {mutable_array_get(mutable_array::allocate(1), 0)}
-    {mutable_array_set(mutable_array::allocate(1), 0, 1)} {immutable_set_from_list([1])}
+    {char_codepoint('a')} {mutable_array_allocate(1)} {mutable_array_get(std::mutable_array::allocate(1), 0)}
+    {mutable_array_set(std::mutable_array::allocate(1), 0, 1)} {immutable_set_from_list([1])}
 }
 
 # {SOURCE STRICT CHECK} of a negative program: CHECK is a script that, given
@@ -402,9 +403,9 @@ proc negative {k} {
         1 { return [list "eq(\"a\", \"a\")" 1 {expect-message UNBOUND}] }
         2 {
             if {[rnd 0 15] == 0} {
-                return [list {char::codepoint('a')} 1 {expect-message UNKNOWN-SYMBOL}]
+                return [list {std::char::codepoint('a')} 1 {expect-message UNKNOWN-SYMBOL}]
             }
-            return [list "import mutable_array\nimport immutable_set\n[pick $::historical]" 1 {expect-message UNBOUND}]
+            return [list "import std::mutable_array\nimport std::immutable_set\n[pick $::historical]" 1 {expect-message UNBOUND}]
         }
         3 {
             set full [pick $::protected]
@@ -412,20 +413,21 @@ proc negative {k} {
             set ns [string range $full 0 [expr {$i - 1}]]
             set member [string range $full [expr {$i + 2}] end]
             # a module file is where a namespace's members are defined: a scratch
-            # library holds NS.bot (path = namespace) defining the intrinsic's name
-            set ::negativeModule [list [string map {:: /} $ns].bot "fn ${member}(x):\n    x\n"]
+            # library holds NS.bot (path = namespace below std: std::list is
+            # list.bot) defining the intrinsic's name
+            set ::negativeModule [list [string map {:: /} [regsub {^std::} $ns {}]].bot "fn ${member}(x):\n    x\n"]
             return [list "import $ns\n1\n" 1 {expect-code {SURFACE MODULE DUPLICATE-NATIVE}}]
         }
-        4 { return [list "import list\nlist::at($xs, [expr {$len + [rnd 0 3]}])" 1 {expect-message KNOWN-ERROR}] }
-        5 { return [list "import list\nfn f(xs, i):\n    list::at(xs, i)\nf($xs, 0)" 1 {expect-message UNHANDLED-ERROR}] }
-        6 { return [list "$xs.at(0)" 1 {expect-text {no function named "at" is visible}}] }
-        7 { return [list "import list\nlist::get(\"abc\", 0, 1)" 0 {expect-runtime {CORE SEMANTIC TYPE}}] }
+        4 { return [list "import std::list\nstd::list::at($xs, [expr {$len + [rnd 0 3]}])" 1 {expect-message KNOWN-ERROR}] }
+        5 { return [list "import std::list\nfn f(xs, i):\n    std::list::at(xs, i)\nf($xs, 0)" 1 {expect-message UNHANDLED-ERROR}] }
+        6 { return [list "$xs.at(0)" 1 {expect-text {namespace "std::list" is not imported; add `import std::list`}}] }
+        7 { return [list "import std::list\nstd::list::get(\"abc\", 0, 1)" 0 {expect-runtime {CORE SEMANTIC TYPE}}] }
         8 {
             set a [rnd 1 3]
-            return [list "import str\nstr::substring(\"abc\", $a, [expr {$a - [rnd 1 2]}])" 1 {expect-message KNOWN-ERROR}]
+            return [list "import std::str\nstd::str::substring(\"abc\", $a, [expr {$a - [rnd 1 2]}])" 1 {expect-message KNOWN-ERROR}]
         }
-        9 { return [list "import str\nfn f(s, a):\n    str::substring(s, a, a + 1)\nf(\"abc\", 0)" 1 {expect-message UNHANDLED-ERROR}] }
-        10 { return [list "import mutable_array\na = mutable_array::allocate(2)\nmutable_array::set(a, [rnd 2 5], 0)" 1 {expect-message KNOWN-ERROR}] }
+        9 { return [list "import std::str\nfn f(s, a):\n    std::str::substring(s, a, a + 1)\nf(\"abc\", 0)" 1 {expect-message UNHANDLED-ERROR}] }
+        10 { return [list "import std::mutable_array\na = std::mutable_array::allocate(2)\nstd::mutable_array::set(a, [rnd 2 5], 0)" 1 {expect-message KNOWN-ERROR}] }
     }
 }
 
@@ -496,7 +498,7 @@ try {
         incr negatives
         if {[info exists ::negativeModule]} {
             set savedLibrary $::core::libraryDir
-            set ::core::libraryDir [file join $scratch lib]
+            set ::core::libraryDir [file join $scratch stdlib]
             file delete -force $::core::libraryDir
             file copy $savedLibrary $::core::libraryDir
             lassign $::negativeModule modulePath moduleText

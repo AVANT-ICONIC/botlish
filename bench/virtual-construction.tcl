@@ -8,8 +8,8 @@
 # value: it is passed as an ordinary argument to a self-recursive function
 # (the corpus's own "outer recursion drives N repeats" idiom), never unrolled
 # or known to any recognizer. Each probe builds one String or List by
-# ordinary immutable concatenation (concat / list::append) and observes it
-# once at the end (length / list::length), so the program value is an Int
+# ordinary immutable concatenation (concat / std::list::append) and observes it
+# once at the end (length / std::list::length), so the program value is an Int
 # that is identical for every setting.
 #
 # -opt selects native::lower::program's -virtual-construction-opt (0 = the
@@ -36,93 +36,93 @@ interp recursionlimit {} 2000000
 
 namespace eval vcbench {}
 
-set vcbench::digits {import list
-import str
+set vcbench::digits {import std::list
+import std::str
 digits = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]}
 
 # PROBE -> {kind description source-template}; %N% is replaced by N.
 set vcbench::probes [dict create \
-    str_append [list String "acc = str::concat(acc, \"ab\"), N times" {
+    str_append [list String "acc = std::str::concat(acc, \"ab\"), N times" {
 fn build(i, n, acc):
     if i >= n:
         return acc
-    build(i + 1, n, str::concat(acc, "ab"))
+    build(i + 1, n, std::str::concat(acc, "ab"))
 
-str::length(build(0, %N%, ""))
+std::str::length(build(0, %N%, ""))
 }] \
-    str_prepend [list String "acc = str::concat(\"ab\", acc), N times (reverse_from's shape)" {
+    str_prepend [list String "acc = std::str::concat(\"ab\", acc), N times (reverse_from's shape)" {
 fn build(i, n, acc):
     if i >= n:
         return acc
-    build(i + 1, n, str::concat("ab", acc))
+    build(i + 1, n, std::str::concat("ab", acc))
 
-str::length(build(0, %N%, ""))
+std::str::length(build(0, %N%, ""))
 }] \
-    str_helper [list String "acc = str::concat(acc, piece(i)); piece returns a 3-piece concat" "$vcbench::digits
+    str_helper [list String "acc = std::str::concat(acc, piece(i)); piece returns a 3-piece concat" "$vcbench::digits
 fn piece(i):
-    str::concat(\"<\", str::concat(list::at(digits, mod(i, 10)), \">\"))
+    std::str::concat(\"<\", std::str::concat(std::list::at(digits, mod(i, 10)), \">\"))
 
 fn build(i, n, acc):
     if i >= n:
         return acc
-    build(i + 1, n, str::concat(acc, piece(i)))
+    build(i + 1, n, std::str::concat(acc, piece(i)))
 
-str::length(build(0, %N%, \"\"))
+std::str::length(build(0, %N%, \"\"))
 "] \
-    str_chain3 [list String "acc = str::concat(acc, c(i)); c/b/a is a 3-level helper chain" "$vcbench::digits
+    str_chain3 [list String "acc = std::str::concat(acc, c(i)); c/b/a is a 3-level helper chain" "$vcbench::digits
 fn a(i):
-    str::concat(\"a\", list::at(digits, mod(i, 10)))
+    std::str::concat(\"a\", std::list::at(digits, mod(i, 10)))
 
 fn b(i):
-    str::concat(a(i), \"b\")
+    std::str::concat(a(i), \"b\")
 
 fn c(i):
-    str::concat(b(i), \"c\")
+    std::str::concat(b(i), \"c\")
 
 fn build(i, n, acc):
     if i >= n:
         return acc
-    build(i + 1, n, str::concat(acc, c(i)))
+    build(i + 1, n, std::str::concat(acc, c(i)))
 
-str::length(build(0, %N%, \"\"))
+std::str::length(build(0, %N%, \"\"))
 "] \
-    str_bind [list String "x = str::concat(acc, \"a\"); y = str::concat(x, \"b\"); recurse with y" {
+    str_bind [list String "x = std::str::concat(acc, \"a\"); y = std::str::concat(x, \"b\"); recurse with y" {
 fn build(i, n, acc):
     if i >= n:
         return acc
-    x = str::concat(acc, "a")
-    y = str::concat(x, "b")
+    x = std::str::concat(acc, "a")
+    y = std::str::concat(x, "b")
     build(i + 1, n, y)
 
-str::length(build(0, %N%, ""))
+std::str::length(build(0, %N%, ""))
 }] \
     str_branch [list String "acc extended by one of two branch-local concats" {
 fn build(i, n, acc):
     if i >= n:
         return acc
     next = if mod(i, 2) == 0:
-        str::concat(acc, "ab")
+        std::str::concat(acc, "ab")
     else:
-        str::concat(str::concat(acc, "c"), "d")
+        std::str::concat(std::str::concat(acc, "c"), "d")
     build(i + 1, n, next)
 
-str::length(build(0, %N%, ""))
+std::str::length(build(0, %N%, ""))
 }] \
-    list::append [list List "acc = list::append(acc, i), N times" {
+    std::list::append [list List "acc = std::list::append(acc, i), N times" {
 fn build(i, n, acc):
     if i >= n:
         return acc
-    build(i + 1, n, list::append(acc, i))
+    build(i + 1, n, std::list::append(acc, i))
 
-list::length(build(0, %N%, []))
+std::list::length(build(0, %N%, []))
 }] \
-    list_append2 [list List "acc = list::append(list::append(acc, i), i + 1), N/2 times" {
+    list_append2 [list List "acc = std::list::append(std::list::append(acc, i), i + 1), N/2 times" {
 fn build(i, n, acc):
     if i >= n:
         return acc
-    build(i + 2, n, list::append(list::append(acc, i), i + 1))
+    build(i + 2, n, std::list::append(std::list::append(acc, i), i + 1))
 
-list::length(build(0, %N%, []))
+std::list::length(build(0, %N%, []))
 }]]
 
 proc vcbench::source {probe n} {

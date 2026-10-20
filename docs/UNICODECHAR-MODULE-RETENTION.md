@@ -13,10 +13,10 @@ canonical target shape from the milestone brief,
 
 ```botlish
 additional_unreserved_chars =
-    byte::set(['-', '.', '_', '~'])
+    std::byte::set(['-', '.', '_', '~'])
 ```
 
-is no longer blocked on the UnicodeChar side of this gap (`byte::set`
+is no longer blocked on the UnicodeChar side of this gap (`std::byte::set`
 itself remains a later milestone).
 
 ## Root cause of the retention gap
@@ -270,10 +270,10 @@ diff is exactly as narrow as the milestone brief expects.
 
 ## Deferred (unchanged scope)
 
-`byte::set`, checked `UnicodeChar -> Byte` conversion, ASCII
-classification (`ascii::is_digit`/etc.), and URI/`web::is_unreserved`
+`std::byte::set`, checked `UnicodeChar -> Byte` conversion, ASCII
+classification (`std::ascii::is_digit`/etc.), and URI/`std::web::is_unreserved`
 changes were **not** started here. This milestone only removes the
-UnicodeChar module-retention blocker so that `byte::set`'s own future
+UnicodeChar module-retention blocker so that `std::byte::set`'s own future
 canonical module-level use case will be retainable immediately once that
 native lands.
 
@@ -309,7 +309,7 @@ once and reused; no runtime representation change).
 13. **Was an Eq/typeclass/capability system added?** No.
 14. **Were Blocks/Native/MutableArray statically forbidden as set
     elements?** No.
-15. **Was `byte::set` added?** No.
+15. **Was `std::byte::set` added?** No.
 16. **Was Byte conversion added?** No.
 17. **Was ASCII added?** No.
 18. **Was URI logic changed?** No.
@@ -329,7 +329,7 @@ once and reused; no runtime representation change).
 3. `ImmutableSet[UnicodeChar]` built from such a List can be retained
    through the already-existing `immutable_set_from_list` proof. ✓
 4. The intended shape (`additional_unreserved_chars = <future
-   byte::set>(['-', '.', '_', '~'])`) is no longer blocked by UnicodeChar
+   std::byte::set>(['-', '.', '_', '~'])`) is no longer blocked by UnicodeChar
    module-retention semantics. ✓
 5. ImmutableSet documentation no longer falsely claims unconditional
    membership totality. ✓

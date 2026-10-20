@@ -21,29 +21,29 @@
 # The obstructions, by name (the report has the evidence for each):
 #
 #   char->text   the value is a single character that must become text
-#                (an operand of str::concat, a String result, a table of
+#                (an operand of std::str::concat, a String result, a table of
 #                text). Botlish's one character-to-text construction is
-#                str::append_char, the append of a UnicodeChar to a String
-#                as a new flat String (it closed lib/io.bot's two newlines),
+#                std::str::append_char, the append of a UnicodeChar to a String
+#                as a new flat String (it closed stdlib/io.bot's two newlines),
 #                and it does not reach these: it is no piece of a virtual
 #                construction (hir/construction.tcl), so a join or an
 #                escape spelled with it materializes Strings that
-#                str::concat's construction plan never does (measured on
-#                cranelift: a linux::path::concat join 7 -> 8 Strings,
-#                examples/io/child-path.bot 4 -> 7, web::uri_escape_text of
+#                std::str::concat's construction plan never does (measured on
+#                cranelift: a std::linux::path::concat join 7 -> 8 Strings,
+#                examples/io/child-path.bot 4 -> 7, std::web::uri_escape_text of
 #                an 11-character text 1 -> 28), a character that begins text
 #                (pct's "%") has no seed but "", and a one-character String
-#                result (clean_char's) stays one. There is no str::of_char,
+#                result (clean_char's) stays one. There is no std::str::of_char,
 #                and the only literal-free spelling slices the character out
 #                of a longer literal, which keeps the one-character String
 #                at run time and only hides it from a literals-only check.
 #   classifier   the character is also consumed by a String-taking
-#                classifier (str::is_tcl_alnum / str::is_tcl_alpha) in the
+#                classifier (std::str::is_tcl_alnum / std::str::is_tcl_alpha) in the
 #                same predicate or uniform predicate contract
 #                (Fn{args: [str]}), so it is a one-character String there;
 #                comparing it as a character means decoding that String
-#                again (str::length(c) == 1 and c.char_at(0) == '_').
-#   index-proof  the natural character spelling's str::char_at index is not
+#                again (std::str::length(c) == 1 and c.char_at(0) == '_').
+#   index-proof  the natural character spelling's std::str::char_at index is not
 #                proven in range by today's completion proof.
 #   test-datum   a test datum whose length 1 is the case's subject.
 #   core-ir-roundtrip
@@ -98,7 +98,7 @@ program examples/surface/15-enums.bot
 
 program examples/refinement/refined-strings.bot
 program examples/io/child-path.bot
-  ONE-CHAR-STRING-LITERAL 19:59 none -- char->text: the " " that separates the two printed paths is a single character appended as text (str::concat)
+  ONE-CHAR-STRING-LITERAL 19:74 none -- char->text: the " " that separates the two printed paths is a single character appended as text (std::str::concat)
 program examples/io/hello.bot
 program examples/io/show-path.bot
 program examples/abi/numeric-domains.bot
@@ -113,12 +113,12 @@ program examples/linux/write.bot
 
 program bench/fib.bot
 program bench/lex-strategy.bot
-  ONE-CHAR-STRING-LITERAL 44:34 none -- classifier: lenient_ident_char?(c) joins str::is_tcl_alnum (String-taking) and is chosen against it at a callable join (Fn{args: [str]}), so c is a one-character String; c == '_' would need c decoded again
-  ONE-CHAR-STRING-LITERAL 44:46 none -- classifier: the "-" beside it, as above
+  ONE-CHAR-STRING-LITERAL 44:39 none -- classifier: lenient_ident_char?(c) joins std::str::is_tcl_alnum (String-taking) and is chosen against it at a callable join (Fn{args: [str]}), so c is a one-character String; c == '_' would need c decoded again
+  ONE-CHAR-STRING-LITERAL 44:51 none -- classifier: the "-" beside it, as above
 program bench/loop-count.bot
 program bench/refined-checks.bot
 program bench/source-checks.bot
-  ONE-CHAR-STRING-LITERAL 51:10 none -- classifier: is_underscore? is one of a List of classifiers applied to the same value with str::is_tcl_alpha and str::is_tcl_alnum (Fn{args: [str]}), so its argument is a one-character String
+  ONE-CHAR-STRING-LITERAL 51:10 none -- classifier: is_underscore? is one of a List of classifiers applied to the same value with std::str::is_tcl_alpha and std::str::is_tcl_alnum (Fn{args: [str]}), so its argument is a one-character String
   ONE-CHAR-STRING-LITERAL 54:10 none -- classifier: is_hyphen?, as above
 program bench/sum-refined.bot
 program bench/test-selection.bot
@@ -128,24 +128,24 @@ program bench/uri-steady.bot
 # lib (standalone compiles; every module also loads through `import NS`,
 # whose expected warnings are the module's entries below)
 
-program lib/abi.bot
-program lib/ascii.bot
-program lib/binary.bot
-program lib/byte.bot
-program lib/compiler.bot
-fails lib/io.bot CORE SEMANTIC CONTEXT-FUNCTION-VALUE -- entry-program value: compiled as an entry program, a module's last declaration is the program's value, and io's last function requires a context, so it cannot be a value; no module member could end the file without adding to its API (verified through `import io`)
-program lib/linux.bot
-fails lib/list.bot SURFACE MODULE MISSING-IMPORT -- own-namespace intrinsics: list.bot calls its namespace's intrinsic list::at, which needs no import as module `list` and may not be imported there (SELF-IMPORT), while an entry program needs `import list`; xs.at(i) compiles both ways but is a field projection when instantiated (verified through `import list`)
-program lib/mathish.bot
-fails lib/mutable_array.bot SURFACE MODULE MISSING-IMPORT -- own-namespace intrinsics: mutable_array.bot calls mutable_array::at, as for lib/list.bot (verified through `import mutable_array`)
-fails lib/test.bot CORE SEMANTIC CONTEXT-FUNCTION-VALUE -- entry-program value: as for lib/io.bot, the last declaration (report) requires a context (the test suite), so it cannot be a value (verified through `import test`)
-program lib/web.bot
-  ONE-CHAR-STRING-LITERAL 105:47 none -- classifier: local_extra_chars is queried by local_char?(c: str), which also classifies c with str::is_tcl_alnum and is passed to scan_while beside str::is_tcl_alpha (Fn{args: [str]}): a set of characters would need c decoded again
+program stdlib/abi.bot
+program stdlib/ascii.bot
+program stdlib/binary.bot
+program stdlib/byte.bot
+program stdlib/compiler.bot
+fails stdlib/io.bot CORE SEMANTIC CONTEXT-FUNCTION-VALUE -- entry-program value: compiled as an entry program, a module's last declaration is the program's value, and io's last function requires a context, so it cannot be a value; no module member could end the file without adding to its API (verified through `import std::io`)
+program stdlib/linux.bot
+fails stdlib/list.bot SURFACE MODULE MISSING-IMPORT -- own-namespace intrinsics: list.bot calls its namespace's intrinsic std::list::at, which needs no import as module `list` and may not be imported there (SELF-IMPORT), while an entry program needs `import std::list`; xs.at(i) compiles both ways but is a field projection when instantiated (verified through `import std::list`)
+program stdlib/mathish.bot
+fails stdlib/mutable_array.bot SURFACE MODULE MISSING-IMPORT -- own-namespace intrinsics: mutable_array.bot calls std::mutable_array::at, as for stdlib/list.bot (verified through `import std::mutable_array`)
+fails stdlib/test.bot CORE SEMANTIC CONTEXT-FUNCTION-VALUE -- entry-program value: as for stdlib/io.bot, the last declaration (report) requires a context (the test suite), so it cannot be a value (verified through `import std::test`)
+program stdlib/web.bot
+  ONE-CHAR-STRING-LITERAL 105:72 none -- classifier: local_extra_chars is queried by local_char?(c: str), which also classifies c with std::str::is_tcl_alnum and is passed to scan_while beside std::str::is_tcl_alpha (Fn{args: [str]}): a set of characters would need c decoded again
   ONE-CHAR-STRING-LITERAL 105:52 none -- classifier: the set's "_", as above
   ONE-CHAR-STRING-LITERAL 105:57 none -- classifier: the set's "%", as above
   ONE-CHAR-STRING-LITERAL 105:62 none -- classifier: the set's "+", as above
   ONE-CHAR-STRING-LITERAL 105:67 none -- classifier: the set's "-", as above
-  ONE-CHAR-STRING-LITERAL 136:38 none -- classifier: label_char?(c) is str::is_tcl_alnum(c) or c == "-", over the one-character String the String classifier needs
+  ONE-CHAR-STRING-LITERAL 136:43 none -- classifier: label_char?(c) is std::str::is_tcl_alnum(c) or c == "-", over the one-character String the String classifier needs
   ONE-CHAR-STRING-LITERAL 219:15 none -- char->text: hex_digits is the table of hexadecimal digits as text, concatenated into %XX escapes (hex_pair); a "0123456789ABCDEF" slice would keep each digit a one-character String
   ONE-CHAR-STRING-LITERAL 219:20 none -- char->text: the digit "1", as above
   ONE-CHAR-STRING-LITERAL 219:25 none -- char->text: the digit "2", as above
@@ -163,14 +163,14 @@ program lib/web.bot
   ONE-CHAR-STRING-LITERAL 219:85 none -- char->text: the digit "E", as above
   ONE-CHAR-STRING-LITERAL 219:90 none -- char->text: the digit "F", as above
   ONE-CHAR-STRING-LITERAL 275:9 none -- char->text: pct's "%" begins every escape it writes as text
-program lib/abi/aarch64.bot
-program lib/abi/bytes.bot
-program lib/abi/x86_64.bot
-program lib/ffi/c.bot
-fails lib/io/path.bot CORE SEMANTIC TRAIT-POLYMORPHIC-FUNCTION-VALUE -- entry-program value: as for lib/io.bot, the last declaration (text) is trait-polymorphic and cannot be a value (verified through `import io::path`)
-fails lib/linux/io.bot CORE SEMANTIC CONTEXT-FUNCTION-VALUE -- entry-program value: as for lib/io.bot, the last declaration (write_error_text) requires a context; only reordering create() last would compile it, an invariant nothing states (verified through `import linux::io`)
-program lib/linux/path.bot
-  ONE-CHAR-STRING-LITERAL 81:55 none -- index-proof: the natural path.char_at(n - 1) == '/' is not proven in range (the index proof relates only a guarded name to the length, not n - 1 to n; the slice proof does), and concat's errors are fixed by io::path::Path; the provable path.substring(n - 1, n).char_at(0) decodes a slice made only to be decoded (two allocations a call)
-  ONE-CHAR-STRING-LITERAL 84:39 none -- char->text: the "/" joining PATH and COMPONENT is a single character appended as text
-program lib/linux/sys.aarch64.bot
-program lib/linux/sys.x86_64.bot
+program stdlib/abi/aarch64.bot
+program stdlib/abi/bytes.bot
+program stdlib/abi/x86_64.bot
+program stdlib/ffi/c.bot
+fails stdlib/io/path.bot CORE SEMANTIC TRAIT-POLYMORPHIC-FUNCTION-VALUE -- entry-program value: as for stdlib/io.bot, the last declaration (text) is trait-polymorphic and cannot be a value (verified through `import std::io::path`)
+fails stdlib/linux/io.bot CORE SEMANTIC CONTEXT-FUNCTION-VALUE -- entry-program value: as for stdlib/io.bot, the last declaration (write_error_text) requires a context; only reordering create() last would compile it, an invariant nothing states (verified through `import std::linux::io`)
+program stdlib/linux/path.bot
+  ONE-CHAR-STRING-LITERAL 81:55 none -- index-proof: the natural path.char_at(n - 1) == '/' is not proven in range (the index proof relates only a guarded name to the length, not n - 1 to n; the slice proof does), and concat's errors are fixed by std::io::path::Path; the provable path.substring(n - 1, n).char_at(0) decodes a slice made only to be decoded (two allocations a call)
+  ONE-CHAR-STRING-LITERAL 84:49 none -- char->text: the "/" joining PATH and COMPONENT is a single character appended as text
+program stdlib/linux/sys.aarch64.bot
+program stdlib/linux/sys.x86_64.bot

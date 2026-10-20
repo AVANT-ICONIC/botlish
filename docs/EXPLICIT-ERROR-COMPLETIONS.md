@@ -48,9 +48,9 @@ native (Cranelift) backends, `cranelift-generic` and `cranelift`. The old
 callable refinement-type constructor syntax (`Byte(x)`, `Nibble(x)`, ...) is
 removed from the language entirely; `core::type::declareIntConstructor`
 now only registers the type's membership predicate, nothing callable.
-`byte::from_int(value) -> Byte errors BelowRange, AboveRange:` is the new,
-explicit, fallible conversion `lib/byte.bot`'s own `byte::set` and
-`lib/web.bot`'s module init and `esc_char` are migrated to use.
+`std::byte::from_int(value) -> Byte errors BelowRange, AboveRange:` is the new,
+explicit, fallible conversion `stdlib/byte.bot`'s own `std::byte::set` and
+`stdlib/web.bot`'s module init and `esc_char` are migrated to use.
 
 Full regression, native/Cranelift parity, and GC stress are reported below
 under "Full regression / GC stress".
@@ -167,7 +167,7 @@ an untyped call it cannot identify as raising nothing.
 
 This is a **flow-insensitive, signature-based** check: it never narrows a
 callee's declared error set based on a specific call site's own argument
-facts (e.g. it does not attempt to prove "`byte::from_int(45)` can never
+facts (e.g. it does not attempt to prove "`std::byte::from_int(45)` can never
 actually reach `fail BelowRange`, so this particular call site doesn't need
 an `on BelowRange` handler"). See "Static known-failure elimination:
 explicitly not implemented" below.
@@ -255,9 +255,9 @@ registers a native whose `-impl`/`-native-body` is
 to minimize blast radius on code outside this milestone's own stated
 scope.
 
-## `byte::from_int` / `byte::set` / `web.bot` migration
+## `std::byte::from_int` / `std::byte::set` / `web.bot` migration
 
-`lib/byte.bot`:
+`stdlib/byte.bot`:
 
 ```botlish
 fn from_int(value) -> Byte errors BelowRange, AboveRange:
@@ -274,17 +274,17 @@ fn from_int(value) -> Byte errors BelowRange, AboveRange:
 would require STRICT-TYPED-PARAMETERS.md's own static-proof admissibility
 at every call site (never a runtime check for a *declared* parameter type)
 -- which would break exactly the call shapes this function exists to
-serve, e.g. `byte::from_int(list_get(bytes, 0))`, where the argument is
+serve, e.g. `std::byte::from_int(list_get(bytes, 0))`, where the argument is
 dynamically always an `int` but not statically provable as one. Leaving
 `value` untyped relies on the same ordinary dynamic kind-checking every
 other untyped Botlish function's `<`/`>` operators already do.
 
-`byte::set` (`lib/byte.bot`):
+`std::byte::set` (`stdlib/byte.bot`):
 
 ```botlish
 fn set(chars: List[UnicodeChar]) -> ImmutableSet[Byte] errors BelowRange, AboveRange:
     bytes = loop c in chars:
-        from_int(char::codepoint(c))
+        from_int(std::char::codepoint(c))
     immutable_set_from_list(bytes)
 ```
 
@@ -293,12 +293,12 @@ propagation, exactly as `hir/errorsets.tcl`'s rule allows: `from_int`'s
 call is unhandled inside `set`'s own body, but `set`'s own `errors
 BelowRange, AboveRange` admits it.
 
-`lib/web.bot`'s module init and `esc_char` handle explicitly at the call
+`stdlib/web.bot`'s module init and `esc_char` handle explicitly at the call
 site (see "Module initialization" below for the module-init case
 specifically):
 
 ```botlish
-b = byte::from_int(list_get(bytes, 0)):
+b = std::byte::from_int(list_get(bytes, 0)):
     on BelowRange:
         0
     on AboveRange:
@@ -313,15 +313,15 @@ parameter contract already required elsewhere in this file.
 
 ## Module initialization ("Outcome B") and the invariant-container fallback
 
-`lib/web.bot`'s `additional_unreserved_chars = byte::set([...])` is a
+`stdlib/web.bot`'s `additional_unreserved_chars = std::byte::set([...])` is a
 *retained module-scope binding* (`hir/modulebinding.tcl`,
 MINIMAL-IMMUTABLE-SET.md/BYTE-SET.md): it must be proven both
 context-free and structurally immutable at compile time, once, so it can
 be built at program startup and reused by every call rather than
-reconstructed. Since `byte::set` now declares two possible errors, this
+reconstructed. Since `std::byte::set` now declares two possible errors, this
 binding's own initializer has to be a **handled** call (**Outcome B**:
 handle explicitly at the module-init site, chosen over silently widening
-`byte::set`'s own contract or forbidding fallible calls from module
+`std::byte::set`'s own contract or forbidding fallible calls from module
 init entirely) -- with an unreachable-in-practice fallback for each named
 error, since `'-'`, `'.'`, `'_'`, `'~'` are of course always in `Byte`'s
 domain.
@@ -337,19 +337,19 @@ bottom type `never`), is **never** admissible as this binding's declared
 independently ("satisfying no `ImmutableSet[T]` parameter under initial
 invariance"). The fallback therefore has to be a genuine, one-element
 `ImmutableSet[Byte]`, built from an actual (equally unreachable-in-
-practice) `byte::from_int(0): on ... on ...` conversion:
+practice) `std::byte::from_int(0): on ... on ...` conversion:
 
 ```botlish
-additional_unreserved_chars = byte::set(['-', '.', '_', '~']):
+additional_unreserved_chars = std::byte::set(['-', '.', '_', '~']):
     on BelowRange:
-        placeholder = byte::from_int(0):
+        placeholder = std::byte::from_int(0):
             on BelowRange:
                 0
             on AboveRange:
                 0
         immutable_set_from_list([placeholder])
     on AboveRange:
-        placeholder = byte::from_int(0):
+        placeholder = std::byte::from_int(0):
             on BelowRange:
                 0
             on AboveRange:
@@ -362,7 +362,7 @@ context-free/immutability proof (`ImmutableExpr`), not just to `web.bot`:
 proving a module-scope binding's initializer immutable requires *inlining*
 the callee's own body with the call's concrete argument facts
 (`ImmutableBlockCall`, the same mechanism that already lets
-`byte::set(['-', '.', '_', '~'])` prove retainable at all), and that walk
+`std::byte::set(['-', '.', '_', '~'])` prove retainable at all), and that walk
 reaches `from_int`'s own internal `fail BelowRange`/`fail AboveRange`
 nodes. Previously, any `fail` reached this way made the *whole* proof
 `bad` (an unconditional "no retainable value" failure) -- unconditionally,
@@ -386,12 +386,12 @@ pass encounters is legitimately handled or re-declared somewhere;
 
 This milestone does **not** attempt to statically prove a specific `fail`
 production unreachable for a specific call site's own argument facts (e.g.
-narrowing away `byte::from_int(45)`'s two `fail` branches because `45` is
+narrowing away `std::byte::from_int(45)`'s two `fail` branches because `45` is
 a compile-time-provable in-range literal) and eliminate the corresponding
 `on` handler requirement. Every fallible call site handles (or re-declares)
 every one of its callee's declared errors, unconditionally, even where the
 concrete value in hand makes a particular error provably unreachable (see
-`byte::from_int(45)`'s call sites throughout `lib/web.bot`, and the module-
+`std::byte::from_int(45)`'s call sites throughout `stdlib/web.bot`, and the module-
 init fallback above, all of which carry handlers for branches that can
 never actually run). This is the explicitly permitted scope boundary
 (the original brief's own item 82): the propagation/handling *mechanism*
@@ -492,7 +492,7 @@ and without the required re-declaration); top-level closure; cross-module
 signatures (both the success and the unhandled-rejection case); HIR
 format/parse round-trip; callable-constructor-syntax removal; all-four-
 backend parity across every branch of a two-error function, in both
-per-path and single-multi-path-pass forms; `byte::from_int` itself,
+per-path and single-multi-path-pass forms; `std::byte::from_int` itself,
 exhaustively (in-range, below-range, above-range, unhandled-rejected),
 cross-backend.
 
@@ -503,7 +503,7 @@ Updated for the callable-syntax removal: `tests/ascii.test`,
 literal with its own exact-value fact is accepted with no explicit
 `Byte(...)` at all" precedent `tests/ascii.test`'s own pre-existing
 `ascii-accepts-provably-in-range-literal` test already established;
-genuinely dynamic uses (a loop variable) become `byte::from_int(n): on
+genuinely dynamic uses (a loop variable) become `std::byte::from_int(n): on
 BelowRange: ... on AboveRange: ...`; `tests/native-byte.test`'s six tests
 that specifically exercised the now-removed callable checked-constructor
 syntax and its native lowering are removed (the property they pinned --
@@ -518,7 +518,7 @@ SEMANTIC RANGE` kind to the new mechanism's `CORE SEMANTIC UNCAUGHT-ERROR`
 (an unhandled `fail` reaching the program boundary,
 `core/completion.tcl`'s `atProgramBoundary` -- observed only via
 `-strict 0`, per "Top-level closure" above); `tests/surface-modules.test`'s
-own startup-allocation-shape counts updated for `byte::set`'s now-two-
+own startup-allocation-shape counts updated for `std::byte::set`'s now-two-
 handler-branch module init (5 `listnew` ops where there were 3, one extra
 per unreachable-in-practice handler branch, still lowered like any `if`'s
 untaken branch).
@@ -580,7 +580,7 @@ result type instead of plain `int`, which is unaffected by it.
 ## Semantic source fence
 
 Every runtime failure this milestone introduces or touches is a **declared**
-completion: `byte::from_int`'s two possible errors are named in its own
+completion: `std::byte::from_int`'s two possible errors are named in its own
 `errors` clause and checked, statically, at every call site
 (`hir/errorsets.tcl`), before any backend runs. No code path in this
 milestone raises an undeclared runtime completion the way the old callable
@@ -593,6 +593,6 @@ a static `UNHANDLED-ERROR` diagnostic); it is not a new hole, it is what
 to run a program with diagnostics deliberately suppressed. The invariant
 this milestone set out to restore -- known failure rejected at compile
 time, unknown failure a declared runtime completion, never an undeclared
-one -- holds for every path through `byte::set`/`byte::from_int`/
-`web::is_unreserved`'s own migration, and for the general `error`/`errors`/
+one -- holds for every path through `std::byte::set`/`std::byte::from_int`/
+`std::web::is_unreserved`'s own migration, and for the general `error`/`errors`/
 `fail`/`handle` mechanism itself, on all four backends.

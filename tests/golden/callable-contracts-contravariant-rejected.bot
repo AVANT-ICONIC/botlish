@@ -25,8 +25,8 @@
 # program's.
 #
 # Imports: compiler and test (every suite).
-import compiler
-import test
+import std::compiler
+import std::test
 
 error E1
 
@@ -38,7 +38,7 @@ fn register_scc_contravariant_rejected_tests():
     # scc-contravariant-rejected: call1 calls its untyped parameter; given
     # Fn{args: [Fn{... errors: [E1]}, int], errors: []} it is rejected (Type
     # at the field, for E1), where it used to escape at run time.
-    fn contravariant_rejected() errors compiler::CompilerError:
+    fn contravariant_rejected() errors std::compiler::CompilerError:
         static compile:
             fn raise1(x: int) -> int errors E1:
                 if x > 0:
@@ -49,9 +49,9 @@ fn register_scc_contravariant_rejected_tests():
             fn go(j: Job, k: int):
                 (j.run)(raise1, k)
             go(Job {run: call1}, 1)
-    test::rejects_at("scc-contravariant-rejected", compiler::DiagnosticCode::Type, 51, 26, contravariant_rejected)
-    test::rejects_containing("scc-contravariant-rejected/identity", compiler::DiagnosticCode::Type, "declared error \"E1\"", contravariant_rejected)
+    std::test::rejects_at("scc-contravariant-rejected", std::compiler::DiagnosticCode::Type, 51, 26, contravariant_rejected)
+    std::test::rejects_containing("scc-contravariant-rejected/identity", std::compiler::DiagnosticCode::Type, "declared error \"E1\"", contravariant_rejected)
 
-with context test::suite()
+with context std::test::suite()
 register_scc_contravariant_rejected_tests()
-test::report()
+std::test::report()

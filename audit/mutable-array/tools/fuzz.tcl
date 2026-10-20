@@ -28,7 +28,7 @@
 #                 MutableVector element -- where the source is, half the
 #                 time, a fresh array no operation ever mutates (the route
 #                 that let a skipped copy go unnoticed, MUTABLE-VECTOR.md),
-#                 capacity, at, set, swap, mutable_array::copy (memmove
+#                 capacity, at, set, swap, std::mutable_array::copy (memmove
 #                 semantics, every slice checked before anything moves), a
 #                 function that mutates its parameter (the caller's array is
 #                 unchanged) or returns it, iteration over a snapshot while
@@ -100,10 +100,10 @@ foreach {option value} $argv {
 set argv {}
 source [file join $root tests helpers.tcl]
 
-set prelude {import coroutine
-import list
-import mutable_array
-import mutable_vector
+set prelude {import std::coroutine
+import std::list
+import std::mutable_array
+import std::mutable_vector
 
 error Boom
 
@@ -164,13 +164,13 @@ fn fail3(i: int) -> Coroutine{args: [Msg], return: Ev} errors Boom:
     make(i + 30)
 
 fn spare() -> MutableArray[Coroutine{args: [Msg], return: Ev}]:
-    mutable_array::generate(1, mk20)
+    std::mutable_array::generate(1, mk20)
 
 fn spare_jobs() -> MutableArray[Job]:
-    mutable_array::generate(1, job10)
+    std::mutable_array::generate(1, job10)
 
 fn arrays() -> MutableVector[MutableArray[Coroutine{args: [Msg], return: Ev}]]:
-    mutable_vector::from_list([])
+    std::mutable_vector::from_list([])
 
 fn tens(i: int) -> int:
     i * 10
@@ -194,7 +194,7 @@ fn vcontents(v: MutableVector[int]) -> List[int]:
 fn vslot(m: MutableArray[MutableVector[int]], i: int) -> List[int]:
     v = m.at(i):
         on IndexNotFound:
-            mutable_vector::from_list([-1])
+            std::mutable_vector::from_list([-1])
     vcontents(v)
 
 fn vpush(m: MutableArray[MutableVector[int]], i: int, x: int) -> MutableArray[MutableVector[int]]:
@@ -211,7 +211,7 @@ fn ident(a: MutableArray[int]) -> MutableArray[int]:
     a
 
 fn either(c: int, a: MutableArray[int]) -> MutableArray[int]:
-    w = mutable_array::create(2, 1)
+    w = std::mutable_array::create(2, 1)
     if c > 0:
         return w
     a
@@ -224,14 +224,14 @@ fn wrap(x):
 
 fn gpoke(x, i, v):
     y = x
-    mutable_array::set(y, i, v):
+    std::mutable_array::set(y, i, v):
         on IndexNotFound:
             unit
     y
 
 fn gwrapset(x, i, v):
     s = {data: x}
-    mutable_array::set(s.data, i, v):
+    std::mutable_array::set(s.data, i, v):
         on IndexNotFound:
             unit
     s.data
@@ -240,15 +240,15 @@ fn box_values(b: Box) -> MutableArray[int]:
     b.values
 
 fn first_of(xs: List[MutableArray[int]]) -> MutableArray[int]:
-    a = list::at(xs, 0):
+    a = std::list::at(xs, 0):
         on IndexNotFound:
-            mutable_array::create(0, 0)
+            std::mutable_array::create(0, 0)
     a
 
 fn vfirst(v: MutableVector[MutableArray[int]]) -> MutableArray[int]:
     a = v.at(0):
         on IndexNotFound:
-            mutable_array::create(0, 0)
+            std::mutable_array::create(0, 0)
     a
 
 fn bump(a: MutableArray[int], i: int, x: int) -> MutableArray[int]:
@@ -427,12 +427,12 @@ proc USource {stateVar p seq} {
     }
     set values [Ints [expr {1 + [Rand 4]}]]
     set f [Fresh state f]
-    Emit state "$f = mutable_array::from_list(\[[join $values {, }]\])"
+    Emit state "$f = std::mutable_array::from_list(\[[join $values {, }]\])"
     dict set state frozen $f $values
     return [list $f $values]
 }
 
-# mutable_array::copy(DST, DS, SRC, SS, N) on the model: every slice is
+# std::mutable_array::copy(DST, DS, SRC, SS, N) on the model: every slice is
 # checked before anything moves (destination first); an overlapping copy
 # within one array reads the source as it was (memmove).
 proc UCopyModel {dst ds src ss n} {
@@ -468,12 +468,12 @@ proc UOperation {stateVar} {
             set count [Rand 5]
             set x [Rand 10]
             set a [UNew state [lrepeat $count $x]]
-            Emit state "$a = mutable_array::create($count, $x)"
+            Emit state "$a = std::mutable_array::create($count, $x)"
         }
         fromlist {
             set values [Ints [expr {1 + [Rand 4]}]]
             set a [UNew state $values]
-            Emit state "$a = mutable_array::from_list(\[[join $values {, }]\])"
+            Emit state "$a = std::mutable_array::from_list(\[[join $values {, }]\])"
         }
         generate {
             set count [Rand 5]
@@ -483,7 +483,7 @@ proc UOperation {stateVar} {
                 lappend values [expr {$f eq "tens" ? $i * 10 : $i * $i}]
             }
             set a [UNew state $values]
-            Emit state "$a = mutable_array::generate($count, $f)"
+            Emit state "$a = std::mutable_array::generate($count, $f)"
         }
         copy {
             lassign [USource state $p $seq] p seq
@@ -495,7 +495,7 @@ proc UOperation {stateVar} {
         at {
             set i [expr {[Rand [expr {$len + 2}]] - 1}]
             set x [Fresh state x]
-            Handled state $x "mutable_array::at($p, $i + zero)" -1
+            Handled state $x "std::mutable_array::at($p, $i + zero)" -1
             ObserveInt state $x [expr {$i >= 0 && $i < $len ? [lindex $seq $i] : -1}]
         }
         set {
@@ -526,7 +526,7 @@ proc UOperation {stateVar} {
             set ds [Rand [expr {$len + 2}]]
             set ss [Rand [expr {[llength $srcSeq] + 2}]]
             set n [Rand 4]
-            Emit state "mutable_array::copy($p, $ds + zero, $src, $ss + zero, $n + zero):" \
+            Emit state "std::mutable_array::copy($p, $ds + zero, $src, $ss + zero, $n + zero):" \
                 "    on LowerUnderrun:" "        unit" "    on UpperOverrun:" "        unit"
             lassign [UCopyModel $seq $ds $srcSeq $ss $n] ok after
             dict set state places $p $after
@@ -592,7 +592,7 @@ proc UOperation {stateVar} {
             set xs [Fresh state xs]
             set a [UNew state $seq]
             Emit state "$xs = \[$p\]"
-            Handled state $a "list::at($xs, 0 + zero)" "mutable_array::create(0, 0)"
+            Handled state $a "std::list::at($xs, 0 + zero)" "std::mutable_array::create(0, 0)"
             UTouch state $a
             Observe state "contents(first_of($xs))" $seq
         }
@@ -629,7 +629,7 @@ proc UOperation {stateVar} {
             lassign [USource state $p $seq] p seq
             set v [Fresh state vv]
             set a [UNew state $seq]
-            Emit state "$v = mutable_vector::from_list(\[$p\])" "$a = vfirst($v)"
+            Emit state "$v = std::mutable_vector::from_list(\[$p\])" "$a = vfirst($v)"
             UTouch state $a
             Observe state "contents(vfirst($v))" $seq
         }
@@ -689,12 +689,12 @@ proc UOperation {stateVar} {
             set v [Fresh state v]
             set m [Fresh state m]
             if {$values eq {}} {
-                Emit state "$v = mutable_vector::from_list(\[0\])"
+                Emit state "$v = std::mutable_vector::from_list(\[0\])"
                 set values 0
             } else {
-                Emit state "$v = mutable_vector::from_list(\[[join $values {, }]\])"
+                Emit state "$v = std::mutable_vector::from_list(\[[join $values {, }]\])"
             }
-            Emit state "$m = mutable_array::create($count, $v)"
+            Emit state "$m = std::mutable_array::create($count, $v)"
             dict set state nests $m [lrepeat $count $values]
             dict set state frozenVectors $v $values
         }
@@ -729,13 +729,13 @@ proc UFault {stateVar} {
     if {$mutatedBindings ne {}} { lappend kinds capture }
     switch -- [Pick $kinds] {
         temporary {
-            Emit state "mutable_array::create(1, 0).set(0, 1):" "    on IndexNotFound:" "        unit"
+            Emit state "std::mutable_array::create(1, 0).set(0, 1):" "    on IndexNotFound:" "        unit"
             return MUTABLE-PLACE-RECEIVER
         }
         wrongtype {
             set p [expr {$places eq {} ? "late" : [Pick $places]}]
             if {$places eq {}} {
-                Emit state "late = mutable_array::from_list(\[1\])"
+                Emit state "late = std::mutable_array::from_list(\[1\])"
             }
             Emit state "$p.set(0, \"s\"):" "    on IndexNotFound:" "        unit"
             return TYPE
@@ -854,7 +854,7 @@ proc AElement {kind c} {
 proc AGenerated {stateVar kind count factory base} {
     upvar 1 $stateVar state
     set q [Fresh state [expr {$kind eq "co" ? "q" : "jq"}]]
-    Emit state "$q = mutable_array::generate($count, $factory)"
+    Emit state "$q = std::mutable_array::generate($count, $factory)"
     set ranks {}
     for {set i 0} {$i < $count} {incr i} { lappend ranks [ANew state [expr {$base + $i}]] }
     dict set state arrs $q [list $kind $ranks]
@@ -925,7 +925,7 @@ proc AOperation {stateVar} {
             set k [expr {1 + [Rand 3]}]
             set count [Rand 5]
             set q [Fresh state q]
-            Emit state "$q = mutable_array::generate($count, fail$k):" "    on Boom:" "        spare()"
+            Emit state "$q = std::mutable_array::generate($count, fail$k):" "    on Boom:" "        spare()"
             if {$count > $k} {
                 set made {}
                 for {set i 0} {$i < $k} {incr i} { lappend made [ANew state [expr {30 + $i}]] }
@@ -1144,11 +1144,11 @@ proc AFault {stateVar} {
     if {[dict get $state pools] ne {}} { lappend kinds project }
     switch -- [Pick $kinds] {
         temporary {
-            Handled state late "mutable_array::swap(spare(), 0, make(1))" "make(2)"
+            Handled state late "std::mutable_array::swap(spare(), 0, make(1))" "make(2)"
             return MUTABLE-PLACE-RECEIVER
         }
         handleaftermove {
-            Emit state "late = coroutine::done?([Pick $movedHandles])"
+            Emit state "late = std::coroutine::done?([Pick $movedHandles])"
             return USE-AFTER-MOVE
         }
         arrayaftermove {
@@ -1158,7 +1158,7 @@ proc AFault {stateVar} {
         at {
             set p [Pick $arrays]
             set fallback [expr {[lindex [dict get $state arrs $p] 0] eq "co" ? "make(1)" : "Job {id: 0, step: make(1)}"}]
-            Handled state late "mutable_array::at($p, 0)" $fallback
+            Handled state late "std::mutable_array::at($p, 0)" $fallback
             return AFFINE-ELEMENT-COPY-OUT
         }
         duplicate {
@@ -1169,13 +1169,13 @@ proc AFault {stateVar} {
                 Emit state "dup = make(1)"
                 set handles dup
             }
-            Emit state "late = mutable_array::create(2, [Pick $handles])"
+            Emit state "late = std::mutable_array::create(2, [Pick $handles])"
             return AFFINE-DUPLICATION-UNSUPPORTED
         }
         wrongtype {
             set p [Pick $arrays]
             set fallback [expr {[lindex [dict get $state arrs $p] 0] eq "co" ? "make(1)" : "Job {id: 0, step: make(1)}"}]
-            Handled state late "mutable_array::swap($p, 0, 5)" $fallback
+            Handled state late "std::mutable_array::swap($p, 0, 5)" $fallback
             return TYPE
         }
         erase {

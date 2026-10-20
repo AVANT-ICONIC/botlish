@@ -2,10 +2,10 @@
 # bounded exact-set transfer for bit_and/bit_or/bit_xor (hir::range::BitOp,
 # via the generalized hir::range::CrossExact), and shift_right/shift_left
 # transfer that actually consults the shift amount. Deliberately generic --
-# no assertion here names Byte/Nibble/HighNibble/byte::nibble; HighNibble's
+# no assertion here names Byte/Nibble/HighNibble/std::byte::nibble; HighNibble's
 # own 16-value domain is reused only as test *data* in a couple of cases
 # (same precedent as tests/hir-range-exact.test), never as a named concept
-# any assertion depends on. The real byte::nibble body's own facts are
+# any assertion depends on. The real std::byte::nibble body's own facts are
 # pinned separately, in tests/native-bitshift.test (which needs the full
 # corpus/native-lowering machinery this file does not source).
 

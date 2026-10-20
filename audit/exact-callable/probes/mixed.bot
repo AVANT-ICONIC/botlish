@@ -3,16 +3,16 @@
 #
 # expect: [4, 3]
 
-import str
+import std::str
 
 fn bot_alpha(c):
-    str::is_tcl_alpha(c) or c == "_"
+    std::str::is_tcl_alpha(c) or c == "_"
 
 fn count_while(p, s):
-    loop i from 0 to str::length(s):
-        if p(str::substring(s, i, i + 1)):
+    loop i from 0 to std::str::length(s):
+        if p(std::str::substring(s, i, i + 1)):
             continue
         return i
-    str::length(s)
+    std::str::length(s)
 
-[count_while(bot_alpha, "ab_c1"), count_while(str::is_tcl_alpha, "abc1")]
+[count_while(bot_alpha, "ab_c1"), count_while(std::str::is_tcl_alpha, "abc1")]

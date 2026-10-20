@@ -15,8 +15,8 @@
 #     method). The operations: a scalar field read through a view (and eight
 #     of them summed, the clearer per-read cost over the loop), a field
 #     two nested layouts deep, a pointer field (and its null test), making a
-#     view, binary::load of a whole record; beside the byte-backed
-#     equivalents: binary::parse of the same record then the same field
+#     view, std::binary::load of a whole record; beside the byte-backed
+#     equivalents: std::binary::parse of the same record then the same field
 #     read, and the field read of a LayoutStruct already imprinted.
 #   * The heap allocations of each program (Cranelift's counters) and per
 #     operation over its baseline.
@@ -47,53 +47,53 @@ foreach {option value} $args {
     }
 }
 
-set prelude {import abi
-import abi::bytes
-import binary
-import binary::native
-import byte
-import ffi::c
+set prelude {import std::abi
+import std::abi::bytes
+import std::binary
+import std::binary::native
+import std::byte
+import std::ffi::c
 import ffi_fixture
-import list
+import std::list
 
-fn bytes_of(values: List[int]) -> abi::bytes::Bytes:
+fn bytes_of(values: List[int]) -> std::abi::bytes::Bytes:
     bs = loop v in values:
-        b = byte::from_int(v):
-            on byte::BelowRange:
+        b = std::byte::from_int(v):
+            on std::byte::BelowRange:
                 0
-            on byte::AboveRange:
+            on std::byte::AboveRange:
                 255
         b
-    abi::bytes::from_list(bs)
+    std::abi::bytes::from_list(bs)
 
 layout Inner:
     size 4
     align 2
-    field x: binary::I16 at 0
-    field y: binary::U16 at 2
+    field x: std::binary::I16 at 0
+    field y: std::binary::U16 at 2
 
 layout Outer:
     size 12
     align 4
-    field count: binary::U32 at 0
+    field count: std::binary::U32 at 0
     field inner: Inner at 4
-    field last: binary::U8 at 8
+    field last: std::binary::U8 at 8
 
 layout Rec:
     size 32
     align 8
-    field head: binary::U8 at 0
+    field head: std::binary::U8 at 0
     field outer: Outer at 4
-    field word: binary::U32 at 16
-    field next: ffi::c::Ptr[ffi::c::Void] at 24
+    field word: std::binary::U32 at 16
+    field next: std::ffi::c::Ptr[std::ffi::c::Void] at 24
 
 layout RecBytes:
     size 32
     align 8
-    field head: binary::U8 at 0
+    field head: std::binary::U8 at 0
     field outer: Outer at 4
-    field word: binary::U32 at 16
-    field next: binary::U64 at 24
+    field word: std::binary::U32 at 16
+    field next: std::binary::U64 at 24
 
 fn record() -> List[int]:
     [200, 0, 0, 0, 1, 0, 0, 0, 57, 48, 49, 212, 7, 0, 0, 0, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
@@ -114,10 +114,10 @@ proc Fn {n body} {
 # SETUP lines, then BODY lines as a collecting loop `i from 0 to n`, then
 # the List's length.
 proc Each {setup lines} {
-    return [concat $setup [list "xs = loop i from 0 to n:"] [lmap line $lines {string cat "    " $line}] [list "list::length(xs)"]]
+    return [concat $setup [list "xs = loop i from 0 to n:"] [lmap line $lines {string cat "    " $line}] [list "std::list::length(xs)"]]
 }
 
-set viewSetup {"p = ffi_fixture::memory[ffi::c::Void](bytes_of(record()))" "v = binary::native::view(Rec, p)"}
+set viewSetup {"p = ffi_fixture::memory[std::ffi::c::Void](bytes_of(record()))" "v = std::binary::native::view(Rec, p)"}
 set bytesSetup {"d = bytes_of(record())"}
 
 proc programText {kind n} {
@@ -128,16 +128,16 @@ proc programText {kind n} {
         view-scalar   { append p [Fn $n [Each $::viewSetup {v.word}]] }
         view-nested   { append p [Fn $n [Each $::viewSetup {v.outer.inner.x}]] }
         view-pointer  { append p [Fn $n [Each $::viewSetup {"q = v.next" "q.null?()"}]] }
-        view-make     { append p [Fn $n [Each $::viewSetup {"w = binary::native::view(Rec, p)" "i"}]] }
+        view-make     { append p [Fn $n [Each $::viewSetup {"w = std::binary::native::view(Rec, p)" "i"}]] }
         view-scalar8  { append p [Fn $n [Each $::viewSetup {"v.word + v.head + v.outer.count + v.outer.last + v.word + v.head + v.outer.count + v.outer.last"}]] }
-        view-load     { append p [Fn $n [Each $::viewSetup {"{word: w, next: q} = binary::load(v)" "w"}]] }
+        view-load     { append p [Fn $n [Each $::viewSetup {"{word: w, next: q} = std::binary::load(v)" "w"}]] }
         bytes-base    { append p [Fn $n [Each $::bytesSetup {i}]] }
-        bytes-parse-scalar { append p [Fn $n [Each $::bytesSetup {"s = binary::parse(RecBytes, d)" "s.word"}]] }
-        bytes-parse-nested { append p [Fn $n [Each $::bytesSetup {"s = binary::parse(RecBytes, d)" "s.outer.inner.x"}]] }
-        held-base     { append p [Fn $n [Each [concat $::bytesSetup {"s = binary::parse(RecBytes, d)"}] {i}]] }
-        held-scalar   { append p [Fn $n [Each [concat $::bytesSetup {"s = binary::parse(RecBytes, d)"}] {s.word}]] }
-        held-scalar8  { append p [Fn $n [Each [concat $::bytesSetup {"s = binary::parse(RecBytes, d)"}] {"s.word + s.head + s.outer.count + s.outer.last + s.word + s.head + s.outer.count + s.outer.last"}]] }
-        held-nested   { append p [Fn $n [Each [concat $::bytesSetup {"s = binary::parse(RecBytes, d)"}] {s.outer.inner.x}]] }
+        bytes-parse-scalar { append p [Fn $n [Each $::bytesSetup {"s = std::binary::parse(RecBytes, d)" "s.word"}]] }
+        bytes-parse-nested { append p [Fn $n [Each $::bytesSetup {"s = std::binary::parse(RecBytes, d)" "s.outer.inner.x"}]] }
+        held-base     { append p [Fn $n [Each [concat $::bytesSetup {"s = std::binary::parse(RecBytes, d)"}] {i}]] }
+        held-scalar   { append p [Fn $n [Each [concat $::bytesSetup {"s = std::binary::parse(RecBytes, d)"}] {s.word}]] }
+        held-scalar8  { append p [Fn $n [Each [concat $::bytesSetup {"s = std::binary::parse(RecBytes, d)"}] {"s.word + s.head + s.outer.count + s.outer.last + s.word + s.head + s.outer.count + s.outer.last"}]] }
+        held-nested   { append p [Fn $n [Each [concat $::bytesSetup {"s = std::binary::parse(RecBytes, d)"}] {s.outer.inner.x}]] }
         default { error "unknown program $kind" }
     }
     return $p
@@ -177,10 +177,10 @@ set operations {
     "view: eight scalar reads summed (8 loads)" view-scalar8 view-base
     "view: a field two layouts deep (v.outer.inner.x, one load)" view-nested view-base
     "view: a pointer field and its null test" view-pointer view-base
-    "view: make a view (binary::native::view, a null test)" view-make view-base
-    "view: binary::load of the whole record (4 leaves, 2 nested)" view-load view-base
-    "bytes: binary::parse of the same record, then the scalar" bytes-parse-scalar bytes-base
-    "bytes: binary::parse of the same record, then the nested field" bytes-parse-nested bytes-base
+    "view: make a view (std::binary::native::view, a null test)" view-make view-base
+    "view: std::binary::load of the whole record (4 leaves, 2 nested)" view-load view-base
+    "bytes: std::binary::parse of the same record, then the scalar" bytes-parse-scalar bytes-base
+    "bytes: std::binary::parse of the same record, then the nested field" bytes-parse-nested bytes-base
     "bytes: the scalar of a LayoutStruct already imprinted" held-scalar held-base
     "bytes: the nested field of a LayoutStruct already imprinted" held-nested held-base
     "bytes: eight scalar reads of a LayoutStruct already imprinted, summed" held-scalar8 held-base

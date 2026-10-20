@@ -122,12 +122,12 @@ summary: The standard namespaces: their modules, intrinsic operations, functions
 index: stdlib
 
 == ABOUT THIS INDEX
-A standard namespace NAME is the module lib/NAME.bot, the compiler's
+A standard namespace NAME is the module stdlib/NAME.bot, the compiler's
 intrinsics registered under NAME::, or both; a file uses its members after
-`import NAME` (concept.imports), and the root namespace's primitives need
-no import. Below are the namespaces; each namespace's page lists its
-members, and every member has a page of its own: -help list::at,
--help str::concat, -help test::value. The signatures, errors and backend
+`import NAME` (concept.imports), and the root namespace's primitives need no
+import. Below are the namespaces; each namespace's page lists its members,
+and every member has a page of its own: -help std::list::at, -help
+std::str::concat, -help std::test::value. The signatures, errors and backend
 availability are generated from the compiler's registry and the library
 sources (tools/compilerpedia.tcl generate), so they are what this compiler
 accepts. Looking a symbol up never imports or loads anything.

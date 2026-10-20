@@ -1,81 +1,81 @@
-# lists.test -- the list primitives list::length, list::at and list::append,
+# lists.test -- the list primitives std::list::length, std::list::at and std::list::append,
 # and runtime-requirement metadata of natives.
 
 source [file join [file dirname [file normalize [info script]]] helpers.tcl]
 source [file join $::projectRoot surface surface.tcl]
 
-test lists-1 {list::length counts elements, nested lists count once} -body {
-    list [run {call {ref list::length} {call {ref list}}}] \
-         [run {call {ref list::length} {call {ref list} {const 1} {const str a} {call {ref list} {const 2} {const 3}}}}]
+test lists-1 {std::list::length counts elements, nested lists count once} -body {
+    list [run {call {ref std::list::length} {call {ref list}}}] \
+         [run {call {ref std::list::length} {call {ref list} {const 1} {const str a} {call {ref list} {const 2} {const 3}}}}]
 } -result {0 3}
 
-test lists-2 {list::at returns the element itself, of any kind} -body {
-    list [run {call {ref list::at} {call {ref list} {const 7} {const str a}} {const 0}}] \
-         [run {call {ref list::at} {call {ref list} {const 7} {const str a}} {const 1}}] \
-         [run {call {ref list::at} {call {ref list} {const 7} {call {ref list} {const 8}}} {const 1}}]
+test lists-2 {std::list::at returns the element itself, of any kind} -body {
+    list [run {call {ref std::list::at} {call {ref list} {const 7} {const str a}} {const 0}}] \
+         [run {call {ref std::list::at} {call {ref list} {const 7} {const str a}} {const 1}}] \
+         [run {call {ref std::list::at} {call {ref list} {const 7} {call {ref list} {const 8}}} {const 1}}]
 } -result {7 {"a"} {[8]}}
 
-test lists-3 {list::at outside the list fails with the declared error IndexNotFound, on both sides; unhandled at the program boundary (a raw core IR program has no static error check) it is the uncaught declared error} -body {
-    list [errorCodeOf {call {ref list::at} {call {ref list} {const 1}} {const 1}}] \
-         [errorCodeOf {call {ref list::at} {call {ref list} {const 1}} {const -1}}] \
-         [errorCodeOf {call {ref list::at} {call {ref list}} {const 0}}] \
-         [errorCodeOf {call {ref list::at} {call {ref list} {const 1}} {const 100000000000000000000}}]
+test lists-3 {std::list::at outside the list fails with the declared error IndexNotFound, on both sides; unhandled at the program boundary (a raw core IR program has no static error check) it is the uncaught declared error} -body {
+    list [errorCodeOf {call {ref std::list::at} {call {ref list} {const 1}} {const 1}}] \
+         [errorCodeOf {call {ref std::list::at} {call {ref list} {const 1}} {const -1}}] \
+         [errorCodeOf {call {ref std::list::at} {call {ref list}} {const 0}}] \
+         [errorCodeOf {call {ref std::list::at} {call {ref list} {const 1}} {const 100000000000000000000}}]
 } -result {{CORE SEMANTIC UNCAUGHT-ERROR} {CORE SEMANTIC UNCAUGHT-ERROR} {CORE SEMANTIC UNCAUGHT-ERROR} {CORE SEMANTIC UNCAUGHT-ERROR}}
 
-test lists-4 {list::at's failure is the declared error IndexNotFound, which a handler catches} -body {
-    list [catch {core::evalProgram {{call {ref list::at} {call {ref list} {const 1} {const 2}} {const 2}}}} message] $message \
-        [run {handle {call {ref list::at} {call {ref list} {const 1} {const 2}} {const 2}} IndexNotFound {block {} {const str missing}}}]
+test lists-4 {std::list::at's failure is the declared error IndexNotFound, which a handler catches} -body {
+    list [catch {core::evalProgram {{call {ref std::list::at} {call {ref list} {const 1} {const 2}} {const 2}}}} message] $message \
+        [run {handle {call {ref std::list::at} {call {ref list} {const 1} {const 2}} {const 2}} IndexNotFound {block {} {const str missing}}}]
 } -result {1 {uncaught propagated error: <error IndexNotFound>} {"missing"}}
 
-test lists-5 {list::append returns a new list and leaves its argument unchanged} -body {
+test lists-5 {std::list::append returns a new list and leaves its argument unchanged} -body {
     run {bind xs {call {ref list} {const 1}}} \
-        {bind ys {call {ref list::append} {ref xs} {const 2}}} \
-        {bind zs {call {ref list::append} {ref xs} {call {ref list} {const 3}}}} \
+        {bind ys {call {ref std::list::append} {ref xs} {const 2}}} \
+        {bind zs {call {ref std::list::append} {ref xs} {call {ref list} {const 3}}}} \
         {call {ref list} {ref xs} {ref ys} {ref zs}}
 } -result {[[1], [1, 2], [1, [3]]]}
 
 test lists-6 {arguments of the wrong kind are TYPE errors} -body {
-    list [errorCodeOf {call {ref list::length} {const str abc}}] \
-         [errorCodeOf {call {ref list::at} {const str abc} {const 0}}] \
-         [errorCodeOf {call {ref list::at} {call {ref list} {const 1}} {const str 0}}] \
-         [errorCodeOf {call {ref list::append} {const 1} {const 2}}]
+    list [errorCodeOf {call {ref std::list::length} {const str abc}}] \
+         [errorCodeOf {call {ref std::list::at} {const str abc} {const 0}}] \
+         [errorCodeOf {call {ref std::list::at} {call {ref list} {const 1}} {const str 0}}] \
+         [errorCodeOf {call {ref std::list::append} {const 1} {const 2}}]
 } -result {{CORE SEMANTIC TYPE} {CORE SEMANTIC TYPE} {CORE SEMANTIC TYPE} {CORE SEMANTIC TYPE}}
 
 test lists-7 {arity is exact} -body {
-    list [errorCodeOf {call {ref list::length}}] \
-         [errorCodeOf {call {ref list::at} {call {ref list}}}] \
-         [errorCodeOf {call {ref list::append} {call {ref list}} {const 1} {const 2}}]
+    list [errorCodeOf {call {ref std::list::length}}] \
+         [errorCodeOf {call {ref std::list::at} {call {ref list}}}] \
+         [errorCodeOf {call {ref std::list::append} {call {ref list}} {const 1} {const 2}}]
 } -result {{CORE SEMANTIC ARITY} {CORE SEMANTIC ARITY} {CORE SEMANTIC ARITY}}
 
 test lists-8 {both backends agree, including errors} -body {
     lmap program {
-        {{call {ref list::at} {call {ref list} {const 1} {const 2}} {const 1}}}
-        {{call {ref list::at} {call {ref list} {const 1} {const 2}} {const 2}}}
-        {{call {ref list::at} {const str x} {const 0}}}
-        {{call {ref list::append} {call {ref list} {const 1}} {call {ref list} {const 2}}}}
-        {{call {ref list::length} {call {ref list::append} {call {ref list}} {const 1}}}}
+        {{call {ref std::list::at} {call {ref list} {const 1} {const 2}} {const 1}}}
+        {{call {ref std::list::at} {call {ref list} {const 1} {const 2}} {const 2}}}
+        {{call {ref std::list::at} {const str x} {const 0}}}
+        {{call {ref std::list::append} {call {ref list} {const 1}} {call {ref list} {const 2}}}}
+        {{call {ref std::list::length} {call {ref std::list::append} {call {ref list}} {const 1}}}}
     } {differential $program}
 } -result {same same same same same}
 
 test lists-9 {signatures: what HIR types calls of the list primitives as} -body {
-    list [hir::types::nativeSignature list::length] \
-         [hir::types::nativeSignature list::at] \
-         [hir::types::nativeSignature list::append]
+    list [hir::types::nativeSignature std::list::length] \
+         [hir::types::nativeSignature std::list::at] \
+         [hir::types::nativeSignature std::list::append]
 } -result {{list int} {{list int} any} {{list any} list}}
 
 test lists-10 {a call that returned proves its list argument is a list} -body {
-    set h [hirOf {bind f {block {xs} {call {ref list::length} {ref xs}} {ref xs}}}]
+    set h [hirOf {bind f {block {xs} {call {ref std::list::length} {ref xs}} {ref xs}}}]
     hirRefTypes $h xs
 } -result {any list}
 
 test lists-11 {the primitives can be named from source} -body {
-    set h [surface::compile "import list\nxs = \[1, 2\]\n\[list::length(xs), list::at(xs, 1), list::append(xs, 3)\]" t.bot]
+    set h [surface::compile "import std::list\nxs = \[1, 2\]\n\[std::list::length(xs), std::list::at(xs, 1), std::list::append(xs, 3)\]" t.bot]
     core::value::show [core::compiler::evalHir $h]
 } -result {[2, 2, [1, 2, 3]]}
 
 test lists-12 {runtime requirements are metadata, sorted and validated} -body {
-    list [dict get [core::native::metadata list::append] runtime] \
-         [dict get [core::native::metadata str::substring] runtime] \
+    list [dict get [core::native::metadata std::list::append] runtime] \
+         [dict get [core::native::metadata std::str::substring] runtime] \
          [dict get [core::native::metadata +] runtime] \
          [dict get [core::native::metadata integer?] runtime] \
          [catch {core::registerNative test-bad-runtime -arity 0 -impl list -runtime {gc}} message] \

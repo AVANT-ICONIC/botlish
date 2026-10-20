@@ -1,6 +1,6 @@
 instance i0 (<program>): generic=1 block=program
   result range: [-∞, +∞]
-instance i1 (web::uri_escape_text<generic>): generic=1 block=e21
+instance i1 (std::web::uri_escape_text<generic>): generic=1 block=e21
   param 0 (s) range: [-∞, +∞]
   result range: [-∞, +∞]
 instance i7 (high_nibble<generic>): generic=1 block=e23

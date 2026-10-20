@@ -19,34 +19,53 @@
 # namespace: its own definitions are plain names and its types keep their
 # bare names.
 #
-# Namespace <-> file: deterministic and search-free. A standard namespace
-# NAME maps to exactly one path, $::core::libraryDir/NAME.bot (the same
-# directory as the existing Tcl library convention, lib/NAME.tcl -- see
-# core/core.tcl): the file's path *is* its namespace, so there is nothing to
-# disagree with, and there is no `namespace` declaration (the parser rejects
-# one with a message saying so). A nested namespace (NAME of several
-# "::"-separated segments, `abi::x86_64`) maps one directory per leading
-# segment: $::core::libraryDir/abi/x86_64.bot. Nesting is a naming path only:
-# `abi::x86_64` and `abi` are two unrelated modules (neither loads, contains
-# or sees the other implicitly), each its own file. A program's own modules
-# map the same way under its application root, the directory of its entry
-# file ("Application modules", below), for the imports its own files write:
-# a standard namespace first, the application's file otherwise, and the two
-# never both (MODULE-COLLISION), so "two files define namespace NAME" cannot
-# arise: NAME has only ever one candidate file. A missing file is a clear
+# Namespace <-> file: deterministic and search-free (STD-NAMESPACE.md). Every
+# namespace path is resolved from the namespace root, and its first segment
+# says whose it is -- its *origin*, which is never part of its identity:
+#
+#   std::NAME   the standard library's: the compiler-owned root namespace std
+#               is the directory $::core::libraryDir (stdlib/ beside core/:
+#               core/core.tcl), so std::NAME is exactly the path
+#               $::core::libraryDir/NAME.bot, or compiler intrinsics of
+#               std::NAME (StandardNamespace, ModulePath);
+#   NAME        the application's: the module ROOT/NAME.bot under the
+#               program's application root, the directory of its entry file
+#               ("Application modules", below).
+#
+# The file's path *is* its namespace, so there is nothing to disagree with,
+# and there is no `namespace` declaration (the parser rejects one with a
+# message saying so). A nested namespace (NAME of several "::"-separated
+# segments, `std::abi::x86_64`) maps one directory per leading segment:
+# $::core::libraryDir/abi/x86_64.bot. Nesting is a naming path only:
+# `std::abi::x86_64` and `std::abi` are two unrelated modules (neither loads,
+# contains or sees the other implicitly), each its own file. A path names one
+# origin and has only ever one candidate file there, so "two files define
+# namespace NAME" cannot arise, adding a file elsewhere never changes what an
+# import resolves to, and nothing falls back from one origin to another (a
+# missing application `list` is never std::list). A missing file is a clear
 # diagnostic (Error, below), never silently ignored or guessed at.
 #
+# Rooted paths (STD-NAMESPACE.md, "Rooted paths"). A leading "::" names the
+# namespace root explicitly: `import ::std::list`, `::std::list::at(xs, 0)`,
+# `x: ::std::abi::U8Value`, `on ::std::list::NotFound:`. Every path is
+# resolved from the root, so the parser records the canonical path
+# (`std::list`) and, on an import, a qualified value or a construction, a
+# `rooted` flag, which only the loader reads (CheckRef: a rooted qualifier is
+# always a namespace, never a type of the file). The root marker is never
+# part of an identity: `::std::list::at` and `std::list::at` are one callee,
+# one HIR, one cache entry's worth of program.
+#
 # Architecture-specific modules (LINUX-SYSCALL-TRANSPORTS.md). A namespace
-# whose source differs by machine architecture -- linux::sys, the Linux
+# whose source differs by machine architecture -- std::linux::sys, the Linux
 # syscall numbers and register conventions -- has no NAME.bot but one file
-# per architecture instead, NAME.ARCH.bot (lib/linux/sys.x86_64.bot,
-# lib/linux/sys.aarch64.bot; ARCH one of core::cabi::architectures), and the
+# per architecture instead, NAME.ARCH.bot (stdlib/linux/sys.x86_64.bot,
+# stdlib/linux/sys.aarch64.bot; ARCH one of core::cabi::architectures), and the
 # compilation target's architecture (the same -target, the host's by
-# default, that ffi::c's widths follow) picks the one that defines NAME
+# default, that std::ffi::c's widths follow) picks the one that defines NAME
 # (ModuleFile). Still one file per namespace per compilation, still no
 # search: a namespace segment cannot contain a dot, so NAME.ARCH.bot is never
 # another namespace's file, and the qualified spelling stays the only one
-# (linux::sys::write is defined by exactly the target's file). A namespace
+# (std::linux::sys::write is defined by exactly the target's file). A namespace
 # with both kinds of file is AMBIGUOUS-MODULE; one with no file for the
 # target's architecture is UNSUPPORTED-ARCHITECTURE (and, on a host that is
 # no known target, UNKNOWN-TARGET: compile with -target). The selection is by
@@ -56,22 +75,22 @@
 # Platform namespaces. The target table designates the standard namespace
 # trees that are an operating system's platform interface
 # (core::cabi::platformOf): the `linux` namespace and every namespace under
-# it (linux::sys, linux::io, linux::path, the syscall transports
-# linux::abi::x86_64 and linux::abi::aarch64) are Linux's. Nothing is
+# it (std::linux::sys, std::linux::io, std::linux::path, the syscall transports
+# std::linux::abi::x86_64 and std::linux::abi::aarch64) are Linux's. Nothing is
 # inferred from a spelling: a module that happens to be named like an
 # operating system (a private library's `windows`) is no platform's. Importing one is UNSUPPORTED-PLATFORM
 # when the compilation target's operating system is another one
-# (linux::sys for macos-aarch64 never becomes lib/linux/sys.aarch64.bot just
+# (std::linux::sys for macos-aarch64 never becomes stdlib/linux/sys.aarch64.bot just
 # because both are AArch64), and UNKNOWN-TARGET on a host that is no known
 # target (PlatformCheck, before any file is chosen). Nothing is mapped or
 # substituted: a Linux module is never another system's. An architecture-
-# specific namespace outside a platform (abi::aarch64, a demo::arch) stays
+# specific namespace outside a platform (std::abi::aarch64, a demo::arch) stays
 # available to every operating system of its architecture, and an
 # application module is the application's whatever its name.
 #
 # Target dependence. A build reads the target in exactly three places: an
 # architecture-specific module's file (ModuleFile), a platform namespace's
-# check (PlatformCheck) and ffi::c's scalars (hir::cabi::NamespaceTypeDecls).
+# check (PlatformCheck) and std::ffi::c's scalars (hir::cabi::NamespaceTypeDecls).
 # The loader records whether any of them ran (STATE's `targetRead`), and the
 # HIR records the target only then (BuildProgram: its `target`, "" for a
 # program whose HIR is the same for every target), so a HIR built for one
@@ -104,7 +123,7 @@
 # cycle (Error CYCLE); one already fully loaded is simply reused (each module
 # is parsed and resolved at most once per program, regardless of how many
 # files import it). A namespace exists if it has a module file or compiler
-# intrinsics (`str`, `linux::abi::x86_64`), so an intrinsics-only namespace is
+# intrinsics (`str`, `std::linux::abi::x86_64`), so an intrinsics-only namespace is
 # importable with no file. The result of the header, per file, is its
 # import environment (NewState's `imports`: the dependency graph), handed to
 # hir::buildSyntax as -imports; the AST (cached, importer-neutral) keeps the
@@ -162,6 +181,10 @@
 # qualified reference always names an established binding of another unit.
 
 namespace eval surface::modules {
+    # The root namespace of the standard library (STD-NAMESPACE.md): `std`
+    # and every namespace under it are the compiler's, never an
+    # application's, and std itself names no module.
+    variable standardRoot std
     # Module ASTs by {PATH SOURCE}: surface::parse is a pure function of a
     # file's text and path, so a module whose file still has exactly the
     # text it had is not lexed and parsed again by the next compilation in
@@ -194,11 +217,40 @@ proc surface::modules::ParseModule {path} {
     return $ast
 }
 
-# The standard library's path for namespace NAME, in $::core::libraryDir. A
-# nested NAME (`abi::x86_64`) is one directory per leading segment
-# (lib/abi/x86_64.bot): never a "::" in a file name.
+# 1 if the canonical namespace NS is a standard namespace: a namespace under
+# the standard library's root (std::list, std::abi::x86_64). The root itself
+# is no namespace (no module, no members).
+proc surface::modules::StandardNamespace {ns} {
+    variable standardRoot
+    return [string match ${standardRoot}::* $ns]
+}
+
+# 1 if the canonical namespace NS is reserved to the standard library: the
+# root std or a namespace under it, which no application module can be.
+proc surface::modules::ReservedNamespace {ns} {
+    variable standardRoot
+    return [expr {$ns eq $standardRoot || [StandardNamespace $ns]}]
+}
+
+# The standard library's path for the standard namespace NAME, in
+# $::core::libraryDir, the directory of the namespace std: std::list is
+# stdlib/list.bot, and a nested NAME (`std::abi::x86_64`) is one directory
+# per leading segment below std (stdlib/abi/x86_64.bot): never a "::" in a
+# file name. "" for a namespace outside the standard library, which has no
+# file there.
 proc surface::modules::ModulePath {name} {
-    return [NamespaceFile $::core::libraryDir $name]
+    variable standardRoot
+    if {![StandardNamespace $name]} {
+        return ""
+    }
+    return [NamespaceFile $::core::libraryDir [string range $name [string length ${standardRoot}::] end]]
+}
+
+# 1 if the file PATH is inside the standard library's directory: never an
+# application module, even under an application root that contains it.
+proc surface::modules::InStandardLibrary {path} {
+    set library [file normalize $::core::libraryDir]
+    return [expr {[string first $library/ [file normalize $path]] == 0}]
 }
 
 # The path of namespace NAME's file under the directory DIR (ModulePath's
@@ -217,23 +269,30 @@ proc surface::modules::NamespaceFile {dir name} {
 # *application root* is the directory of its entry file (compileProgramFile;
 # STATE's `root`, "" for program text with no file of its own unless the
 # caller names one). An *application file* is the entry program or a module
-# loaded from that root. For an import written in an application file,
-# namespace NAME is, in this order and with no search beyond it:
+# loaded from that root. A namespace NAME an import names is, by its first
+# segment and nothing else (STD-NAMESPACE.md):
 #
-#   1. a standard namespace -- $::core::libraryDir/NAME.bot (or its
-#      architecture-specific files, ModuleFile below), or compiler
-#      intrinsics of NAME -- exactly as before: application files never
-#      replace one;
-#   2. else the application module ROOT/NAME.bot (nested: ROOT/a/b.bot for
-#      a::b), one namespace like any module, loaded once;
-#   3. else no namespace (UNKNOWN-NAMESPACE, naming both places).
+#   * std::NAME: the standard namespace -- $::core::libraryDir/NAME.bot (or
+#     its architecture-specific files, ModuleFile below), or compiler
+#     intrinsics of std::NAME -- for every file alike. An application file
+#     ROOT/std/NAME.bot is never one: importing std::NAME from an
+#     application that has it is RESERVED-NAMESPACE, never a silent choice
+#     of either file;
+#   * std itself: no namespace (the root of the standard library);
+#   * any other NAME, imported by an application file: the application
+#     module ROOT/NAME.bot (nested: ROOT/a/b.bot for a::b), one namespace like
+#     any module, loaded once; else no namespace (UNKNOWN-NAMESPACE, which
+#     names the standard namespace std::NAME when there is one: the hint of a
+#     missing `std::`, never a fallback to it).
 #
-# A file ROOT/NAME.bot for a standard namespace NAME that an application file
-# imports is MODULE-COLLISION, never a silent choice; the entry file itself
-# is not a module (importing it is SELF-IMPORT, or CYCLE from a module). A
-# standard-library module's imports are resolved in the standard library
-# only. Nothing reads the shell's working directory, an environment variable
-# or a parent directory.
+# A standard-library module, and program text with no application root,
+# imports standard namespaces only. The entry file itself is not a module
+# (importing it is SELF-IMPORT, or CYCLE from a module). A namespace outside
+# std with compiler intrinsics exists only in a test process that registers
+# one (core::cabi::installTestFixture's ffi_fixture, a test's cbtest): an
+# application file of its name beside it is MODULE-COLLISION. Nothing reads
+# the shell's working directory, an environment variable or a parent
+# directory, and nothing searches: each path has one candidate file.
 
 # 1 if the file of module KEY ("" for the entry program) is an application
 # file of STATE's program.
@@ -242,78 +301,120 @@ proc surface::modules::IsApplicationFile {state key} {
         && ($key eq "" || [dict exists $state application $key])}]
 }
 
-# The application module file ROOT/NAME.bot of STATE's program, if it is a
-# file and is neither the entry program nor the standard library's own file
-# (an application root inside lib/), else "".
-proc surface::modules::ApplicationFile {state name} {
+# The file ROOT/NAME.bot under STATE's application root, if there is one
+# outside the standard library's directory (an application root inside
+# stdlib/ never makes a standard module an application's), else "".
+proc surface::modules::RootFile {state name} {
+    if {[dict get $state root] eq ""} {
+        return ""
+    }
     set path [NamespaceFile [dict get $state root] $name]
-    if {![file isfile $path] || [file normalize $path] eq [file normalize [ModulePath $name]]} {
+    if {![file isfile $path] || [InStandardLibrary $path]} {
         return ""
     }
     return $path
 }
 
-# The module file the namespace NAME, imported at SPAN by the file of module
-# KEY, denotes: its standard-library file, an application module file, or ""
-# for a namespace with no file (intrinsics only, or none at all). Raises
-# MODULE-COLLISION, SELF-IMPORT and CYCLE as the rules above say.
+# The application module file of namespace NAME in STATE's program (RootFile),
+# never one of a reserved namespace, else "".
+proc surface::modules::ApplicationFile {state name} {
+    if {[ReservedNamespace $name]} {
+        return ""
+    }
+    return [RootFile $state $name]
+}
+
+# The module file the namespace NAME (canonical), imported at SPAN by the
+# file of module KEY, denotes: its standard-library file, an application
+# module file, or "" for a namespace with no file (intrinsics only, or none
+# at all). Raises RESERVED-NAMESPACE, MODULE-COLLISION, SELF-IMPORT and CYCLE
+# as the rules above say.
 proc surface::modules::ResolveModule {stateVar key name span} {
     upvar 1 $stateVar state
-    set hasStandard [HasModule $name]
-    set isStandard [expr {$hasStandard || [IntrinsicMembers $name] ne ""}]
-    if {![IsApplicationFile $state $key]} {
-        if {$isStandard} {
+    variable standardRoot
+    if {$name eq $standardRoot} {
+        Error UNKNOWN-NAMESPACE $span "\"$standardRoot\" is the root of the standard library, not a namespace: it has no module and no members; import one of the standard namespaces under it (`import ${standardRoot}::list`; `-help stdlib` lists them)"
+    }
+    if {[StandardNamespace $name]} {
+        if {[IsApplicationFile $state $key]} {
+            set shadow [RootFile $state $name]
+            if {$shadow ne ""} {
+                if {[NamespaceExists $name]} {
+                    set standard "it names the standard library's [StandardFiles $name]"
+                } else {
+                    set standard "the standard library has no such namespace"
+                }
+                Error RESERVED-NAMESPACE $span "application file $shadow would be the namespace \"$name\", but $standardRoot and every namespace under it belong to the standard library: an application module is never a standard namespace, and `import $name` never chooses between the two ($standard); move or rename the application file out of the application's $standardRoot/ directory"
+            }
+        }
+        if {[NamespaceExists $name]} {
             PlatformCheck state $name $span
         }
-        if {$hasStandard} {
+        if {[HasModule $name]} {
             return [ModuleFile $name [dict get $state target] $span]
         }
         return ""
     }
+    if {![IsApplicationFile $state $key]} {
+        # A standard-library module, or program text with no application
+        # root: there is no application module to import.
+        return ""
+    }
     set application [ApplicationFile $state $name]
     if {$application ne "" && [file normalize $application] eq [dict get $state entry]} {
-        if {!$isStandard} {
-            if {$key eq ""} {
-                Error SELF-IMPORT $span "\"$name\" names this program's own entry file ($application): an entry program is in no namespace and is not a module, so it cannot be imported"
-            }
-            set chain [concat [list "$application (the entry program)"] [dict get $state stack] [list $name]]
-            Error CYCLE $span "module dependency cycle: [join $chain { -> }] (an entry program is not a module and cannot be imported)"
+        if {$key eq ""} {
+            Error SELF-IMPORT $span "\"$name\" names this program's own entry file ($application): an entry program is in no namespace and is not a module, so it cannot be imported"
         }
-        # The entry program named like a standard namespace imports that one.
-        set application ""
+        set chain [concat [list "$application (the entry program)"] [dict get $state stack] [list $name]]
+        Error CYCLE $span "module dependency cycle: [join $chain { -> }] (an entry program is not a module and cannot be imported)"
     }
-    if {$application ne "" && $isStandard} {
-        Error MODULE-COLLISION $span "application module $application has the name of the standard namespace \"$name\" ([expr {$hasStandard ? "the standard library's [StandardFiles $name]" : "compiler intrinsics"}]), which `import $name` names: a standard namespace is never replaced by an application file, and never silently chosen over one; rename the application module"
-    }
-    if {$isStandard} {
-        PlatformCheck state $name $span
-    }
-    if {$hasStandard} {
-        return [ModuleFile $name [dict get $state target] $span]
+    if {$application ne "" && [IntrinsicMembers $name] ne ""} {
+        Error MODULE-COLLISION $span "application module $application has the name of the intrinsic namespace \"$name\" (compiler intrinsics registered in this process), which `import $name` names: an intrinsic namespace is never replaced by an application file, and never silently chosen over one; rename the application module"
     }
     return $application
 }
 
-# 1 if NS names a namespace for the file of module KEY of STATE's program:
-# NamespaceExists, or an application module (above).
+# 1 if NS (canonical) names a namespace for the file of module KEY of STATE's
+# program: a standard namespace (NamespaceExists), an intrinsic namespace, or
+# an application module of an application file (above).
 proc surface::modules::NamespaceExistsFor {state key ns} {
+    if {[ReservedNamespace $ns]} {
+        return [NamespaceExists $ns]
+    }
     return [expr {[NamespaceExists $ns]
         || ([IsApplicationFile $state $key] && [ApplicationFile $state $ns] ne "")}]
 }
 
-# The UNKNOWN-NAMESPACE explanation of NS for the file of module KEY of
-# STATE's program: where it looked.
+# The UNKNOWN-NAMESPACE explanation of NS (canonical) for the file of module
+# KEY of STATE's program: where it looked, and the standard namespace of that
+# name when NS is missing its std:: (a hint, never a fallback).
 proc surface::modules::NoSuchNamespace {state key ns} {
-    if {[IsApplicationFile $state $key]} {
-        return "no such module file [NamespaceFile [dict get $state root] $ns] (an application's own modules are the files beside its entry program), and in the standard library no such module file [ModulePath $ns] and no intrinsics of that namespace"
+    variable standardRoot
+    if {[StandardNamespace $ns]} {
+        return "the standard library has no such module file [ModulePath $ns] and no intrinsics of that namespace"
     }
-    return "no such module file [ModulePath $ns] and no intrinsics of that namespace"
+    set hint ""
+    if {[NamespaceExists ${standardRoot}::$ns]} {
+        set hint "; the standard library's namespace of that name is ${standardRoot}::$ns (`import ${standardRoot}::$ns`): standard namespaces are named from the root std, and a namespace outside it is never looked up there"
+    }
+    if {[IsApplicationFile $state $key]} {
+        set path [NamespaceFile [dict get $state root] $ns]
+        if {[file isfile $path] && [InStandardLibrary $path]} {
+            # An application root inside stdlib/ (RootFile).
+            return "$path is in the standard library's directory, so it is the standard namespace ${standardRoot}::$ns (`import ${standardRoot}::$ns`), never an application module"
+        }
+        return "no such module file $path (an application's own modules are the files beside its entry program)$hint"
+    }
+    if {$key ne "" && [StandardNamespace $key]} {
+        return "a standard-library module imports standard namespaces only (std::...)$hint"
+    }
+    return "this program has no application root (it was compiled from text, not from a file beside its modules), so it has no application modules$hint"
 }
 
 # The operating system whose platform the standard namespace NAME belongs
 # to, or "": the target table's designation (core::cabi::platformOf) --
-# `linux`, `linux::sys` and `linux::abi::x86_64` are Linux's (header,
-# "Platform namespaces").
+# `std::linux`, `std::linux::sys` and `std::linux::abi::x86_64` are Linux's
+# (header, "Platform namespaces").
 proc surface::modules::PlatformOf {name} {
     return [core::cabi::platformOf $name]
 }
@@ -336,9 +437,20 @@ proc surface::modules::PlatformCheck {stateVar name span} {
     }
     set meta [core::cabi::target $target]
     if {[dict get $meta os] ne $os} {
-        Error UNSUPPORTED-PLATFORM $span "namespace \"$name\" belongs to the $system platform (the standard namespace $os and every namespace under it), which is unavailable for target $target ([core::cabi::systemName [dict get $meta os]] on [dict get $meta arch]): a $system module is never chosen for, mapped to or substituted on another operating system, whatever the architecture; compile for a $system target (-target $os-[dict get $meta arch]) or import no $system namespace"
+        Error UNSUPPORTED-PLATFORM $span "namespace \"$name\" belongs to the $system platform (the standard namespace [PlatformRoot $os] and every namespace under it), which is unavailable for target $target ([core::cabi::systemName [dict get $meta os]] on [dict get $meta arch]): a $system module is never chosen for, mapped to or substituted on another operating system, whatever the architecture; compile for a $system target (-target $os-[dict get $meta arch]) or import no $system namespace"
     }
     dict set state targetRead 1
+}
+
+# The platform root namespace of the operating system OS (core::cabi's
+# `platforms`: std::linux for linux).
+proc surface::modules::PlatformRoot {os} {
+    dict for {root system} $::core::cabi::platforms {
+        if {$system eq $os} {
+            return $root
+        }
+    }
+    return $os
 }
 
 # The C ABI target a tool on this host compiles the program text SOURCE for
@@ -373,17 +485,26 @@ proc surface::modules::PlatformTarget {source} {
     return ""
 }
 
-# The path of NAME's architecture-specific module file for architecture
-# ARCH: ModulePath with ARCH before the extension (lib/linux/sys.x86_64.bot).
+# The path of the standard namespace NAME's architecture-specific module file
+# for architecture ARCH: ModulePath with ARCH before the extension
+# (stdlib/linux/sys.x86_64.bot for std::linux::sys); "" outside the standard
+# library.
 proc surface::modules::ArchModulePath {name arch} {
-    return "[file rootname [ModulePath $name]].$arch.bot"
+    set path [ModulePath $name]
+    if {$path eq ""} {
+        return ""
+    }
+    return "[file rootname $path].$arch.bot"
 }
 
-# NAME's architecture-specific module files that exist, as {ARCH PATH ...}
-# in architecture order. Each candidate is one fixed path per known
-# architecture: no search.
+# The standard namespace NAME's architecture-specific module files that
+# exist, as {ARCH PATH ...} in architecture order. Each candidate is one
+# fixed path per known architecture: no search.
 proc surface::modules::ArchModuleFiles {name} {
     set files {}
+    if {![StandardNamespace $name]} {
+        return $files
+    }
     foreach arch [core::cabi::architectures] {
         set path [ArchModulePath $name $arch]
         if {[file exists $path]} {
@@ -393,25 +514,27 @@ proc surface::modules::ArchModuleFiles {name} {
     return $files
 }
 
-# 1 if namespace NAME has a module source: its file, or architecture-specific
-# files (whether or not one is the compilation target's).
+# 1 if the standard namespace NAME has a module source: its file, or
+# architecture-specific files (whether or not one is the compilation
+# target's). 0 for every namespace outside the standard library.
 proc surface::modules::HasModule {name} {
-    return [expr {[file exists [ModulePath $name]] || [ArchModuleFiles $name] ne ""}]
+    set path [ModulePath $name]
+    return [expr {($path ne "" && [file exists $path]) || [ArchModuleFiles $name] ne ""}]
 }
 
-# The standard library's files of namespace NAME, for a message: its module
-# file, or its architecture-specific files.
+# The standard library's files of the standard namespace NAME, for a
+# message: its module file, its architecture-specific files, or "compiler
+# intrinsics" for a namespace with none.
 proc surface::modules::StandardFiles {name} {
-    if {[file exists [ModulePath $name]]} {
-        return [ModulePath $name]
+    set path [ModulePath $name]
+    if {$path ne "" && [file exists $path]} {
+        return $path
     }
-    return [join [dict values [ArchModuleFiles $name]] {, }]
-}
-
-# 1 if PATH is one of the standard library's files of namespace NAME (as
-# ModuleFile returns them), not an application module.
-proc surface::modules::IsStandardFile {name path} {
-    return [expr {$path eq [ModulePath $name] || $path in [dict values [ArchModuleFiles $name]]}]
+    set files [dict values [ArchModuleFiles $name]]
+    if {$files eq ""} {
+        return "compiler intrinsics"
+    }
+    return [join $files {, }]
 }
 
 # The module file that defines namespace NAME when compiling for C ABI
@@ -422,6 +545,9 @@ proc surface::modules::IsStandardFile {name path} {
 # without a known target, UNSUPPORTED-ARCHITECTURE for no file of TARGET's
 # architecture, UNKNOWN-NAMESPACE for none at all.
 proc surface::modules::ModuleFile {name target usedAtSpan} {
+    if {![StandardNamespace $name]} {
+        Error UNKNOWN-NAMESPACE $usedAtSpan "unknown namespace \"$name\": the standard library's namespaces are under std (a module of the standard library is std::NAME)"
+    }
     set path [ModulePath $name]
     set archFiles [ArchModuleFiles $name]
     if {[file exists $path]} {
@@ -453,14 +579,18 @@ proc surface::modules::Error {kind span message} {
     throw [list SURFACE MODULE $kind] "[surface::ast::location $span]: $message"
 }
 
-# {NAMESPACE NAME SPAN KIND} of every mod::name reference in AST (a program
-# node, or any node -- used both for a whole file and, recursively, isn't
-# needed below this), in source order. KIND is value (an expression
+# {NAMESPACE NAME SPAN KIND ROOTED} of every mod::name reference in AST (a
+# program node, or any node -- used both for a whole file and, recursively,
+# isn't needed below this), in source order. KIND is value (an expression
 # `ns::name`), struct (a construction `ns::Name {...}`), type (a qualified
 # type annotation `ns::Name`: a struct or a source-defined `type`) or error
 # (a qualified error `ns::Name` in a `fail`, an `on` handler, an `errors`
 # clause or a function type's `errors` list: ERROR-PAYLOADS.md, "Module-
-# qualified error identity").
+# qualified error identity"). NAMESPACE is the canonical path; ROOTED is 1
+# for a value or a construction written from the root (`::std::list::at`),
+# whose qualifier is always a namespace (CheckRef). A type or an error name
+# is a namespace member however it is spelled, and the parser keeps it
+# canonical (STD-NAMESPACE.md): its ROOTED is 0.
 proc surface::modules::QualifiedRefs {ast} {
     set found {}
     QualifiedRefsWalk $ast found
@@ -478,7 +608,8 @@ proc surface::modules::QualifiedRefsWalk {node foundVar} {
     }
     switch -- [dict get $node kind] {
         qualname {
-            lappend found [list [dict get $node namespace] [dict get $node name] [dict get $node span] value]
+            lappend found [list [dict get $node namespace] [dict get $node name] [dict get $node span] value \
+                [dict getdef $node rooted 0]]
             return
         }
         fail {
@@ -494,7 +625,7 @@ proc surface::modules::QualifiedRefsWalk {node foundVar} {
             # (STRUCTS.md); its field values may hold more references.
             if {[dict get $node namespace] ne ""} {
                 lappend found [list [dict get $node namespace] [dict get $node name] \
-                    [dict get $node nameSpan] struct]
+                    [dict get $node nameSpan] struct [dict getdef $node rooted 0]]
             }
             if {[dict exists $node typeArg]} {
                 # NAME[TYPE] { ... } (BINARY-LAYOUT.md): `LayoutStruct[geo::
@@ -534,7 +665,7 @@ proc surface::modules::QualifiedRefsWalk {node foundVar} {
             }
         }
         externfn {
-            # An extern declaration's C types (C-FFI.md): `ffi::c::Ptr[...]`
+            # An extern declaration's C types (C-FFI.md): `std::ffi::c::Ptr[...]`
             # and every qualified pointee name their namespaces.
             foreach param [dict get $node params] {
                 TypeRefs [dict get $param type] [dict get $param typeSpan] found
@@ -593,7 +724,7 @@ proc surface::modules::ErrorRef {spelling span foundVar} {
     set cut [string last :: $spelling]
     if {$cut > 0} {
         lappend found [list [string range $spelling 0 [expr {$cut - 1}]] \
-            [string range $spelling [expr {$cut + 2}] end] $span error]
+            [string range $spelling [expr {$cut + 2}] end] $span error 0]
     }
 }
 
@@ -607,9 +738,9 @@ proc surface::modules::TypeRefs {type span foundVar} {
     }
     if {[llength $type] == 1} {
         # Split at the last "::": the namespace may itself be nested
-        # ("abi::x86_64::Register64" is Register64 of abi::x86_64).
+        # ("std::abi::x86_64::Register64" is Register64 of std::abi::x86_64).
         if {[regexp {^((?:[A-Za-z_][A-Za-z0-9_]*::)*[A-Za-z_][A-Za-z0-9_]*)::([A-Za-z_][A-Za-z0-9_]*)$} $type -> namespaceName name]} {
-            lappend found [list $namespaceName $name $span type]
+            lappend found [list $namespaceName $name $span type 0]
         }
         return
     }
@@ -632,7 +763,7 @@ proc surface::modules::TypeRefs {type span foundVar} {
         foreach error [dict get $arg errors] { ErrorRef $error $span found }
         return
     }
-    # A qualified type constructor (`ffi::c::Ptr[...]`, C-ABI-TYPES.md) is a
+    # A qualified type constructor (`std::ffi::c::Ptr[...]`, C-ABI-TYPES.md) is a
     # reference to its namespace too.
     TypeRefs $head $span found
     TypeRefs $arg $span found
@@ -830,7 +961,7 @@ proc surface::modules::LoadNamespace {stateVar name usedAtSpan {path ""}} {
     if {![file exists $path]} {
         Error UNKNOWN-NAMESPACE $usedAtSpan "unknown namespace \"$name\": no such module file $path"
     }
-    if {![IsStandardFile $name $path]} {
+    if {![StandardNamespace $name]} {
         dict set state application $name 1
     } elseif {$path in [dict values [ArchModuleFiles $name]]} {
         # The target's architecture chose the file (ModuleFile).
@@ -893,7 +1024,7 @@ proc surface::modules::LoadNamespace {stateVar name usedAtSpan {path ""}} {
     # The layouts it declares (BINARY-LAYOUT.md): members of the namespace
     # named `NAME::Layout` like its structs -- in a type position
     # (`LayoutStruct[NAME::Layout]`, a layout field's type) and as the layout
-    # operand of a binary operation (`binary::parse(NAME::Layout, data)`),
+    # operand of a binary operation (`std::binary::parse(NAME::Layout, data)`),
     # never imported with `import type` (a layout is not a type).
     dict set state loadedLayouts $name [lmap statement [dict get $ast body] {
         if {[dict get $statement kind] ne "layoutdecl"} continue
@@ -912,7 +1043,7 @@ proc surface::modules::LoadNamespace {stateVar name usedAtSpan {path ""}} {
     }]
     lassign [surface::lower::SplitTypeDecls [dict get $ast body] $name] executable decls errorDecls structDecls traitDecls \
         externDecls linkDecls
-    # The namespace's intrinsic types (C-ABI-TYPES.md): ffi::c's C integer
+    # The namespace's intrinsic types (C-ABI-TYPES.md): std::ffi::c's C integer
     # scalars, declared for the compilation's C target as if the module
     # declared them itself.
     if {[hir::cabi::HasNamespaceTypes $name]} {
@@ -960,13 +1091,13 @@ proc surface::modules::ModuleDecl {ast fileId} {
 # Raises DUPLICATE-NATIVE if the module AST (the file of namespace NAME) defines
 # (a function or an immutable binding) a member NAME::MEMBER that is a
 # compiler/runtime-provided intrinsic: a root native registered under that
-# qualified name (core::native::isQualifiedNative -- list::at, str::concat,
-# mutable_array::set, linux::abi::x86_64::syscall, ...). Every reference spelled
+# qualified name (core::native::isQualifiedNative -- std::list::at, std::str::concat,
+# std::mutable_array::set, std::linux::abi::x86_64::syscall, ...). Every reference spelled
 # NAME::MEMBER denotes the native (surface/lower.tcl), so such a definition
 # could never be named, would silently not replace the intrinsic, and
 # Botlish has no overloading for it to coexist as. The protection is per
 # member, not per namespace: NAME's module may define any other member
-# (lib/list.bot's list::get beside the intrinsic list::at). WHO describes the
+# (stdlib/list.bot's std::list::get beside the intrinsic std::list::at). WHO describes the
 # module for the message. An entry program is no namespace (NAME ""): its
 # definitions are plain names, which can never be spelled with "::".
 proc surface::modules::CheckNativeMembers {ast name who} {
@@ -991,8 +1122,8 @@ proc surface::modules::IntrinsicMembers {ns} {
 }
 
 # 1 if NS names a real namespace: a source module file ($libraryDir/NS.bot)
-# or a namespace of compiler-provided intrinsics (`str`, `linux::abi::x86_64`).
-# A bare prefix of either (`linux::abi` of `linux::abi::x86_64`) is not one: namespaces are
+# or a namespace of compiler-provided intrinsics (`str`, `std::linux::abi::x86_64`).
+# A bare prefix of either (`std::linux::abi` of `std::linux::abi::x86_64`) is not one: namespaces are
 # exact, never trees.
 proc surface::modules::NamespaceExists {ns} {
     return [expr {[HasModule $ns] || [IntrinsicMembers $ns] ne ""}]
@@ -1152,7 +1283,7 @@ proc surface::modules::CheckImports {stateVar ast own} {
 # the file's own, or imported *exactly* (an imported parent or child never
 # counts)? If so, does that namespace have the member? A reference into a
 # namespace that is not imported is MISSING-IMPORT even when the member
-# exists (`str::concat` without `import str`); one into a namespace that does
+# exists (`std::str::concat` without `import std::str`); one into a namespace that does
 # not exist at all is UNKNOWN-NAMESPACE (no import could repair it); an
 # authorized reference to a member the namespace lacks is UNKNOWN-SYMBOL.
 #
@@ -1167,14 +1298,15 @@ proc surface::modules::CollectAndLoad {stateVar ast {key ""}} {
     dict set state imports $key $env
     set imported [dict get $env namespaces]
     # STATIC-COMPILE.md: a file using a static intrinsic names the error its
-    # rejected blocks complete with, compiler::CompilerError -- an ordinary
+    # rejected blocks complete with, std::compiler::CompilerError -- an ordinary
     # namespaced declaration, so the file imports its namespace like any
     # other (no implicit import).
     set sites [StaticSites $ast]
-    if {$sites ne {} && "compiler" ni $imported && $own ne "compiler"} {
+    set compilerNs [namespace qualifiers $::hir::static::errorName]
+    if {$sites ne {} && $compilerNs ni $imported && $own ne $compilerNs} {
         set site [lindex $sites 0]
         Error MISSING-IMPORT [dict get $site staticSpan] \
-            "namespace \"compiler\" is not imported; add `import compiler` to use `static [dict get $site operation]:` (a block it rejects completes with the error compiler::CompilerError)"
+            "namespace \"$compilerNs\" is not imported; add `import $compilerNs` to use `static [dict get $site operation]:` (a block it rejects completes with the error $::hir::static::errorName)"
     }
     foreach ref [QualifiedRefs $ast] {
         set site [StaticSiteOf $sites [lindex $ref 2]]
@@ -1217,8 +1349,18 @@ proc surface::modules::CollectAndLoad {stateVar ast {key ""}} {
 # authorized and names a real member.
 proc surface::modules::CheckRef {stateVar ast own key env imported ref} {
     upvar 1 $stateVar state
-    lassign $ref namespaceName symbolName span refKind
-    if {$refKind eq "value"} {
+    variable standardRoot
+    lassign $ref namespaceName symbolName span refKind rooted
+    if {$namespaceName eq $standardRoot} {
+        # `std::name`: the standard library's root is reserved -- no
+        # namespace, no members, and never a type of the file
+        # (STD-NAMESPACE.md).
+        Error UNKNOWN-NAMESPACE $span "\"$standardRoot\" is the root of the standard library, not a namespace: it has no members, and a qualifier \"$standardRoot\" never names anything else (a type of this file included); \"${standardRoot}::$symbolName\" names nothing -- a standard member is NAMESPACE::name for a namespace under it (${standardRoot}::list::at)"
+    }
+    # A rooted qualifier (`::game::Color::Red`) is a namespace path from the
+    # root: never a type the file declares or imports by its short name.
+    set typeQualifier [expr {!$rooted || [string first :: $namespaceName] >= 0}]
+    if {$refKind eq "value" && $typeQualifier} {
         # `Enum::Case` (ENUMS.md): a qualifier that names an enum type
         # visible in this file makes the reference a case of it, decided
         # (and the case checked) by HIR resolution -- never a namespace
@@ -1226,7 +1368,7 @@ proc surface::modules::CheckRef {stateVar ast own key env imported ref} {
         set enum [EnumQualifier state $ast $own $env $namespaceName]
         if {$enum ne ""} {
             if {$namespaceName in $imported || [NamespaceExistsFor $state $key $namespaceName]} {
-                # (Imported or not: `list::length` must never mean an
+                # (Imported or not: `std::list::length` must never mean an
                 # intrinsic in one file and a case in another because
                 # of an enum's name.)
                 Error AMBIGUOUS-QUALIFIER $span \
@@ -1238,7 +1380,7 @@ proc surface::modules::CheckRef {stateVar ast own key env imported ref} {
     if {$namespaceName eq $own && $own ne ""
             && $refKind in {value} && [core::native::isQualifiedNative "${namespaceName}::$symbolName"]} {
         # A reference to an intrinsic of the file's own namespace
-        # (lib/list.bot's own list::at): no import, nothing to load.
+        # (stdlib/list.bot's own std::list::at): no import, nothing to load.
         return
     }
     if {$namespaceName eq $own && $own ne "" && $key ne ""} {
@@ -1246,16 +1388,19 @@ proc surface::modules::CheckRef {stateVar ast own key env imported ref} {
         # import (the HIR resolver checks the member is established).
         return
     }
-    if {$refKind eq "struct" && [EnumQualifier state $ast $own $env $namespaceName] ne ""} {
+    if {$refKind eq "struct" && $typeQualifier && [EnumQualifier state $ast $own $env $namespaceName] ne ""} {
         # `Enum::Case { ... }` (ENUMS.md): a payload-free case is a
         # value, written without an initializer.
         Error NOT-A-STRUCT $span \
             "\"${namespaceName}::$symbolName\" names a case of the enum $namespaceName, not a struct: a payload-free case is written ${namespaceName}::$symbolName, without braces (payload-bearing cases are not supported)"
     }
     if {$namespaceName ni $imported} {
-        if {$refKind eq "value" && ![NamespaceExistsFor $state $key $namespaceName]} {
+        if {$refKind eq "value" && !$rooted && ![NamespaceExistsFor $state $key $namespaceName]
+                && ![NamespaceExists ${standardRoot}::$namespaceName]} {
             # `Struct::Case`, `int::Case`: a case qualified by a type that
-            # is not an enum (ENUMS.md). Types are not namespaces.
+            # is not an enum (ENUMS.md). Types are not namespaces. (A
+            # qualifier that is a standard namespace's name without its
+            # std::, `std::list::at`, is reported as the namespace it misses.)
             set other [OtherTypeQualifier state $ast $own $env $namespaceName]
             if {$other ne ""} {
                 Error NOT-AN-ENUM $span \
@@ -1273,7 +1418,13 @@ proc surface::modules::CheckRef {stateVar ast own key env imported ref} {
                     Error MISSING-IMPORT $span "namespace \"$prefix\" is not imported; add `import $prefix` to use `${namespaceName}::$symbolName`"
                 }
             }
-            Error UNKNOWN-NAMESPACE $span "unknown namespace \"$namespaceName\": [NoSuchNamespace $state $key $namespaceName][expr {$refKind eq "value" ? " (nor is \"$namespaceName\" an enum type visible in this file: a case is written Enum::Case)" : ""}]"
+            set note ""
+            if {$rooted} {
+                set note " (a rooted qualifier is a namespace path from the root, never a type: a case of an enum this file declares or imports is written without the leading \"::\", Enum::Case)"
+            } elseif {$refKind eq "value"} {
+                set note " (nor is \"$namespaceName\" an enum type visible in this file: a case is written Enum::Case)"
+            }
+            Error UNKNOWN-NAMESPACE $span "unknown namespace \"$namespaceName\": [NoSuchNamespace $state $key $namespaceName]$note"
         }
         set note ""
         set related [RelatedImport $namespaceName $imported]
@@ -1285,7 +1436,7 @@ proc surface::modules::CheckRef {stateVar ast own key env imported ref} {
     set natives [IntrinsicMembers $namespaceName]
     if {$refKind eq "value" && [core::native::isQualifiedNative "${namespaceName}::$symbolName"]} {
         # A root native registered under a qualified name
-        # (linux::abi::x86_64::syscall, str::concat): no module file defines it,
+        # (std::linux::abi::x86_64::syscall, std::str::concat): no module file defines it,
         # so nothing more is loaded (surface/lower.tcl lowers it to a
         # root reference).
         return
@@ -1309,8 +1460,8 @@ proc surface::modules::CheckRef {stateVar ast own key env imported ref} {
         return
     }
     if {$symbolName in [hir::cabi::IntrinsicTypeNames $namespaceName]} {
-        # ffi::c::Void, ffi::c::Ptr, ffi::c::FnPtr (C-ABI-TYPES.md) and
-        # ffi::c::Bool (C _Bool, bool itself): intrinsic types of the
+        # std::ffi::c::Void, std::ffi::c::Ptr, std::ffi::c::FnPtr (C-ABI-TYPES.md) and
+        # std::ffi::c::Bool (C _Bool, bool itself): intrinsic types of the
         # namespace, resolved by hir/cabi.tcl -- and nothing else: no value,
         # function or construction is named so.
         if {$refKind eq "type"} {
@@ -1577,7 +1728,7 @@ proc surface::modules::LoadNamespaces {namespaces args} {
 proc surface::modules::BuildProgram {ast strict {target ""} {root ""}} {
     set state [NewState [dict create f1 [dict get $ast span file]] 2]
     # The C ABI target (C-ABI-TYPES.md): the host's unless given. Only a
-    # file importing ffi::c, or an architecture-specific module (ModuleFile),
+    # file importing std::ffi::c, or an architecture-specific module (ModuleFile),
     # reads it.
     dict set state target [hir::cabi::ResolveTarget $target]
     if {$root ne ""} {
@@ -1617,7 +1768,7 @@ proc surface::modules::BuildProgram {ast strict {target ""} {root ""}} {
 # namespaces from the standard library, and the program's own application
 # modules from the directory PATH is in, its application root (above).
 # -strict as surface::lowerToHir's. -target NAME is the C ABI target whose
-# data model ffi::c's integer scalars follow (C-ABI-TYPES.md; core/cabi.tcl:
+# data model std::ffi::c's integer scalars follow (C-ABI-TYPES.md; core/cabi.tcl:
 # the host's when "", the default). -cache DIR reads the HIR from the
 # front-end cache in DIR when it holds this compilation's, and keeps it there
 # otherwise (surface/cache.tcl; "" for none, the default

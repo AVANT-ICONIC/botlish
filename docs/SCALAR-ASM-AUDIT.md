@@ -372,7 +372,7 @@ Ints by design, per the file's own header) — the finding is about the
 Reconfirmed today, byte-for-byte the same failure `NATIVE-AUDIT.md` §5
 already diagnosed: `native/lower.tcl`'s `natives` dict is a fixed whitelist
 of built-in operators; a library-registered native
-(`core::type::definePredicate`/`core::native::register` — `lib/web.tcl`'s
+(`core::type::definePredicate`/`core::native::register` — `stdlib/web.tcl`'s
 `Emailish?`/`uriEscape`) is entirely absent from it, and `NativeCall`
 raises `NATIVE UNSUPPORTED` before ever checking whether HIR already proved
 the call's outcome statically.

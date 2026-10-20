@@ -26,7 +26,7 @@
 #   its reverse, do not; a hash is a nonnegative Int below 2^61; and the
 #   hash of a given String, Int or bignum is one reference value on every
 #   backend (bit-identical natively).
-# * str::length counts an astral character (U+1F642) as one scalar value.
+# * std::str::length counts an astral character (U+1F642) as one scalar value.
 # * The values of the standalone-executable test programs: big integers,
 #   Unicode Strings and characters, unit, nested Lists and sets; recursion
 #   over Strings; an escaping typed closure; module statics, typed Byte
@@ -52,33 +52,33 @@
 # Literal operands. The Tcl programs are ported as written, literal
 # operands included: the reference interpreter and the Tcl compiler compute
 # every operation here at run time, and natively the shifts, mod, hash,
-# str::length and the byte functions run too. Natively the compiler does
+# std::str::length and the byte functions run too. Natively the compiler does
 # compute bit_and, bit_or and bit_xor of literal operands itself -- and of
 # a registration function's parameters just as well, when its one call
 # passes literals (the range analysis carries them in), so an input would
 # not change that: their native run-time forms are what the exhaustive byte
 # tests run, over operands a recursion counts. mod and the hash reference
 # values are tables whose helper takes the operands as inputs (registered
-# with many values, they are constants nowhere). str::length of the astral
+# with many values, they are constants nowhere). std::str::length of the astral
 # character is also run on an input String (NAME/dynamic): natively a
 # literal one-character String is a packed short String with its own
 # length operation.
 #
 # Imports: compiler and test (the framework); byte (the nibble functions,
 # and Byte, written bare by native-executable-modules: `import type
-# byte::Byte`); str (concat and length); immutable_set
+# std::byte::Byte`); str (concat and length); immutable_set
 # (native-executable-values' set); web (native-executable-modules' and
-# -source-refinements' web::is_unreserved, uri_escape_text, emailish? and
+# -source-refinements' std::web::is_unreserved, uri_escape_text, emailish? and
 # uri_query_value?). No test here is about an import or about which methods
 # are visible: every call in a body names a function of its block, a
 # module function by its qualified name or a root native.
-import byte
-import compiler
-import immutable_set
-import str
-import test
-import type byte::Byte
-import web
+import std::byte
+import std::compiler
+import std::immutable_set
+import std::str
+import std::test
+import type std::byte::Byte
+import std::web
 
 # ---------------------------------------------------------------------------
 # Shifts (native-bitshift.test)
@@ -90,32 +90,32 @@ import web
 fn register_generic_shift_tests():
     # bitshift-generic-negative-parity: a negative Int shifted right floors
     # (sign-extends): -1 >> 3 is -1, -200 >> 4 is -13, -17 >> 1 is -9.
-    fn b_negative() errors compiler::CompilerError:
+    fn b_negative() errors std::compiler::CompilerError:
         static compile:
             [shift_right(-1, 3), shift_right(-200, 4), shift_right(-17, 1)]
-    test::value("bitshift-generic-negative-parity", [-1, -13, -9], b_negative)
+    std::test::value("bitshift-generic-negative-parity", [-1, -13, -9], b_negative)
 
     # bitshift-generic-negative-value: shift_right(-1, 3) is -1, not a
     # machine-width truncation.
-    fn b_negative_value() errors compiler::CompilerError:
+    fn b_negative_value() errors std::compiler::CompilerError:
         static compile:
             shift_right(-1, 3)
-    test::value("bitshift-generic-negative-value", -1, b_negative_value)
+    std::test::value("bitshift-generic-negative-value", -1, b_negative_value)
 
     # bitshift-generic-bigint-parity: operands and results well past 64
     # bits stay exact.
-    fn b_bigint() errors compiler::CompilerError:
+    fn b_bigint() errors std::compiler::CompilerError:
         static compile:
             [shift_left(123456789012345678901234567890, 40), shift_right(123456789012345678901234567890123456789012345678, 30)]
-    test::value("bitshift-generic-bigint-parity", [135742175046962388768696238876733881712640, 114978094596737696697222597794722259779], b_bigint)
+    std::test::value("bitshift-generic-bigint-parity", [135742175046962388768696238876733881712640, 114978094596737696697222597794722259779], b_bigint)
 
     # bitshift-generic-boundary-values-parity: at the small-Int edge
     # (2^62 - 1 and 2^62, and the halves that double to just below and to
     # exactly 2^62) the shifts stay exact.
-    fn b_boundary() errors compiler::CompilerError:
+    fn b_boundary() errors std::compiler::CompilerError:
         static compile:
             [shift_right(4611686018427387903, 1), shift_right(4611686018427387904, 1), shift_left(2305843009213693951, 1), shift_left(2305843009213693952, 1)]
-    test::value("bitshift-generic-boundary-values-parity", [2305843009213693951, 2305843009213693952, 4611686018427387902, 4611686018427387904], b_boundary)
+    std::test::value("bitshift-generic-boundary-values-parity", [2305843009213693951, 2305843009213693952, 4611686018427387902, 4611686018427387904], b_boundary)
 
 # Shifts whose operands (and counts) arrive through a function's
 # parameters, as the Tcl programs pass them: the tagged-Int run-time path.
@@ -123,36 +123,36 @@ fn register_tagged_shift_tests():
     # bitshift-shl-overflow-tagged-reported: a parameter shifted left by 62
     # promotes past 2^63 instead of wrapping (shift_left(2, 62) is 2^63, not
     # i64::MIN).
-    fn b_overflow_reported() errors compiler::CompilerError:
+    fn b_overflow_reported() errors std::compiler::CompilerError:
         static compile:
             fn g(y):
                 shift_left(y, 62)
 
             [g(2), g(-20), g(1)]
-    test::value("bitshift-shl-overflow-tagged-reported", [9223372036854775808, -92233720368547758080, 4611686018427387904], b_overflow_reported)
+    std::test::value("bitshift-shl-overflow-tagged-reported", [9223372036854775808, -92233720368547758080, 4611686018427387904], b_overflow_reported)
 
     # bitshift-shl-stays-small-tagged: left shifts whose results stay in or
     # reach exactly the edges of the small-Int and i64 domains (-2^62, 2^61,
     # -2^63), and the zero cases.
-    fn b_stays_small() errors compiler::CompilerError:
+    fn b_stays_small() errors std::compiler::CompilerError:
         static compile:
             fn g(y, k):
                 shift_left(y, k)
 
             [g(1, 61), g(-1, 62), g(-2, 61), g(3, 4), g(-5, 7), g(0, 63), g(1, 0), g(-1, 63)]
-    test::value("bitshift-shl-stays-small-tagged", [2305843009213693952, -4611686018427387904, -4611686018427387904, 48, -640, 0, 1, -9223372036854775808], b_stays_small)
+    std::test::value("bitshift-shl-stays-small-tagged", [2305843009213693952, -4611686018427387904, -4611686018427387904, 48, -640, 0, 1, -9223372036854775808], b_stays_small)
 
     # bitshift-shl-overflow-top-level: the reported straight-line form,
     # x = 2 then shift_left(x, 62), is 2^63.
-    fn b_overflow_top_level() errors compiler::CompilerError:
+    fn b_overflow_top_level() errors std::compiler::CompilerError:
         static compile:
             x = 2
             shift_left(x, 62)
-    test::value("bitshift-shl-overflow-top-level", 9223372036854775808, b_overflow_top_level)
+    std::test::value("bitshift-shl-overflow-top-level", 9223372036854775808, b_overflow_top_level)
 
     # bitshift-shl-raw-bounded-boundary: an operand the compiler bounds to
     # [0, 3], shifted left by 61, reaches 3 * 2^61 (past 2^62): exact.
-    fn b_raw_bounded_boundary() errors compiler::CompilerError:
+    fn b_raw_bounded_boundary() errors std::compiler::CompilerError:
         static compile:
             fn g(y):
                 shift_left(y, 61)
@@ -161,11 +161,11 @@ fn register_tagged_shift_tests():
                 bit_and(i, 3)
 
             [g(pick(0)), g(pick(1)), g(pick(2)), g(pick(3))]
-    test::value("bitshift-shl-raw-bounded-boundary", [0, 2305843009213693952, 4611686018427387904, 6917529027641081856], b_raw_bounded_boundary)
+    std::test::value("bitshift-shl-raw-bounded-boundary", [0, 2305843009213693952, 4611686018427387904, 6917529027641081856], b_raw_bounded_boundary)
 
     # bitshift-shl-raw-bounded-fits: an operand bounded to [0, 1], shifted
     # left by 61, stays below 2^62 (the raw path's own boundary): exact.
-    fn b_raw_bounded_fits() errors compiler::CompilerError:
+    fn b_raw_bounded_fits() errors std::compiler::CompilerError:
         static compile:
             fn g(y):
                 shift_left(y, 61)
@@ -174,30 +174,30 @@ fn register_tagged_shift_tests():
                 bit_and(i, 1)
 
             [g(pick(0)), g(pick(1)), g(pick(2)), g(pick(3))]
-    test::value("bitshift-shl-raw-bounded-fits", [0, 2305843009213693952, 0, 2305843009213693952], b_raw_bounded_fits)
+    std::test::value("bitshift-shl-raw-bounded-fits", [0, 2305843009213693952, 0, 2305843009213693952], b_raw_bounded_fits)
 
     # bitshift-shr-negative-tagged: right shifts of negative parameters by
     # large counts -- 62, 63, 64, 100, and MAX_SHIFT itself -- floor to -1
     # (or -2 when the shifted-out part makes it round down), positive ones
     # to 0.
-    fn b_shr_negative() errors compiler::CompilerError:
+    fn b_shr_negative() errors std::compiler::CompilerError:
         static compile:
             fn g(y, k):
                 shift_right(y, k)
 
             [g(-1, 1), g(-3, 1), g(-20, 62), g(-4611686018427387904, 62), g(-4611686018427387904, 63), g(-4611686018427387905, 62), g(-5, 64), g(-5, 100), g(5, 100), g(-1267650600228229401496703205377, 100), g(-7, 1048576), g(7, 1048576)]
-    test::value("bitshift-shr-negative-tagged", [-1, -2, -1, -1, -1, -2, -1, -1, 0, -2, -1, 0], b_shr_negative)
+    std::test::value("bitshift-shr-negative-tagged", [-1, -2, -1, -1, -1, -2, -1, -1, 0, -2, -1, 0], b_shr_negative)
 
     # bitshift-shift-count-max-shift-boundary: a count of exactly MAX_SHIFT
     # (1048576) is accepted: y shifted left by it and back right by one less
     # is 2 * y.
-    fn b_max_shift() errors compiler::CompilerError:
+    fn b_max_shift() errors std::compiler::CompilerError:
         static compile:
             fn g(y, k):
                 shift_right(shift_left(y, k), k - 1)
 
             [g(1, 1048576), g(-3, 1048576), g(0, 1048576)]
-    test::value("bitshift-shift-count-max-shift-boundary", [2, -6, 0], b_max_shift)
+    std::test::value("bitshift-shift-count-max-shift-boundary", [2, -6, 0], b_max_shift)
 
 # ---------------------------------------------------------------------------
 # Bitwise operations and bytes (native-byte.test)
@@ -205,28 +205,28 @@ fn register_tagged_shift_tests():
 fn register_bitwise_tests():
     # native-bitops-parity and native-bitops-value (one program): bit_and,
     # bit_or, bit_xor, shift_left and shift_right of small Ints.
-    fn b_bitops() errors compiler::CompilerError:
+    fn b_bitops() errors std::compiler::CompilerError:
         static compile:
             [bit_and(171, 15), bit_or(5, 8), bit_xor(255, 15), shift_left(3, 5), shift_right(200, 3)]
-    test::value("native-bitops", [11, 13, 240, 96, 25], b_bitops)
+    std::test::value("native-bitops", [11, 13, 240, 96, 25], b_bitops)
 
 fn register_byte_tests():
     # native-byte-basic-parity: the nibble functions on 171 (0xAB), the
     # complement of 0 and 240, and the positions of 10.
-    fn b_basic() errors compiler::CompilerError:
+    fn b_basic() errors std::compiler::CompilerError:
         static compile:
-            [byte::high_nibble(171), byte::low_nibble(171), byte::nibble(byte::high_nibble(171)), byte::nibble(byte::low_nibble(171)), byte::complement(0), byte::complement(240), byte::position_low(10), byte::position_high(10)]
-    test::value("native-byte-basic-parity", [160, 11, 10, 11, 255, 15, 10, 160], b_basic)
+            [std::byte::high_nibble(171), std::byte::low_nibble(171), std::byte::nibble(std::byte::high_nibble(171)), std::byte::nibble(std::byte::low_nibble(171)), std::byte::complement(0), std::byte::complement(240), std::byte::position_low(10), std::byte::position_high(10)]
+    std::test::value("native-byte-basic-parity", [160, 11, 10, 11, 255, 15, 10, 160], b_basic)
 
     # native-byte-reconstruction-exhaustive: high_nibble(b) | low_nibble(b)
     # is b, for every b in 0..255.
-    fn b_reconstruction() errors compiler::CompilerError:
+    fn b_reconstruction() errors std::compiler::CompilerError:
         static compile:
             fn check_all(i, acc):
                 if i > 255:
                     acc
                 else:
-                    ok = bit_or(byte::high_nibble(i), byte::low_nibble(i)) == i
+                    ok = bit_or(std::byte::high_nibble(i), std::byte::low_nibble(i)) == i
                     next_acc = if acc:
                         ok
                     else:
@@ -234,18 +234,18 @@ fn register_byte_tests():
                     check_all(i + 1, next_acc)
 
             check_all(0, true)
-    test::value("native-byte-reconstruction-exhaustive", true, b_reconstruction)
+    std::test::value("native-byte-reconstruction-exhaustive", true, b_reconstruction)
 
     # native-byte-normalization-exhaustive: nibble(high_nibble(b)) is
     # b >> 4 and nibble(low_nibble(b)) is mod(b, 16), for every b in 0..255.
-    fn b_normalization() errors compiler::CompilerError:
+    fn b_normalization() errors std::compiler::CompilerError:
         static compile:
             fn check_all(i, acc):
                 if i > 255:
                     acc
                 else:
-                    hi_ok = byte::nibble(byte::high_nibble(i)) == shift_right(i, 4)
-                    lo_ok = byte::nibble(byte::low_nibble(i)) == mod(i, 16)
+                    hi_ok = std::byte::nibble(std::byte::high_nibble(i)) == shift_right(i, 4)
+                    lo_ok = std::byte::nibble(std::byte::low_nibble(i)) == mod(i, 16)
                     both_ok = if hi_ok:
                         lo_ok
                     else:
@@ -257,17 +257,17 @@ fn register_byte_tests():
                     check_all(i + 1, next_acc)
 
             check_all(0, true)
-    test::value("native-byte-normalization-exhaustive", true, b_normalization)
+    std::test::value("native-byte-normalization-exhaustive", true, b_normalization)
 
     # native-byte-complement-exhaustive: complement is its own inverse, for
     # every b in 0..255.
-    fn b_complement() errors compiler::CompilerError:
+    fn b_complement() errors std::compiler::CompilerError:
         static compile:
             fn check_all(i, acc):
                 if i > 255:
                     acc
                 else:
-                    ok = byte::complement(byte::complement(i)) == i
+                    ok = std::byte::complement(std::byte::complement(i)) == i
                     next_acc = if acc:
                         ok
                     else:
@@ -275,18 +275,18 @@ fn register_byte_tests():
                     check_all(i + 1, next_acc)
 
             check_all(0, true)
-    test::value("native-byte-complement-exhaustive", true, b_complement)
+    std::test::value("native-byte-complement-exhaustive", true, b_complement)
 
     # native-byte-position-exhaustive: position_low and position_high
     # round-trip through nibble, for every n in 0..15.
-    fn b_position() errors compiler::CompilerError:
+    fn b_position() errors std::compiler::CompilerError:
         static compile:
             fn check_all(i, acc):
                 if i > 15:
                     acc
                 else:
-                    low_ok = byte::nibble(byte::position_low(i)) == i
-                    high_ok = byte::nibble(byte::position_high(i)) == i
+                    low_ok = std::byte::nibble(std::byte::position_low(i)) == i
+                    high_ok = std::byte::nibble(std::byte::position_high(i)) == i
                     ok = if low_ok:
                         high_ok
                     else:
@@ -298,17 +298,17 @@ fn register_byte_tests():
                     check_all(i + 1, next_acc)
 
             check_all(0, true)
-    test::value("native-byte-position-exhaustive", true, b_position)
+    std::test::value("native-byte-position-exhaustive", true, b_position)
 
 # ---------------------------------------------------------------------------
 # Euclidean mod (native-hashing.test)
 
 # mod(A, B) is EXPECTED, A and B inputs (computed at run time).
 fn register_mod_case(name: str, a: int, b: int, expected: int):
-    fn b_mod() errors compiler::CompilerError:
+    fn b_mod() errors std::compiler::CompilerError:
         static compile:
             mod(a, b)
-    test::value(name, expected, b_mod)
+    std::test::value(name, expected, b_mod)
 
 fn register_mod_tests():
     # mod-sign-A-B: 0 <= mod(a, b) < |b| whatever the signs.
@@ -330,72 +330,72 @@ fn register_mod_tests():
 
 fn register_hash_law_tests():
     # hash-deterministic-1: hash is stable across repeated calls.
-    fn b_deterministic() errors compiler::CompilerError:
+    fn b_deterministic() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 a = hash("hello")
                 b = hash("hello")
                 a == b
             f()
-    test::value("hash-deterministic-1", true, b_deterministic)
+    std::test::value("hash-deterministic-1", true, b_deterministic)
 
     # hash-consistent-with-eq-1: distinct String values with equal content
     # hash equal.
-    fn b_consistent() errors compiler::CompilerError:
+    fn b_consistent() errors std::compiler::CompilerError:
         static compile:
             fn f():
-                a = str::concat("hel", "lo")
-                b = str::concat("hel", "lo")
+                a = std::str::concat("hel", "lo")
+                b = std::str::concat("hel", "lo")
                 hash(a) == hash(b)
             f()
-    test::value("hash-consistent-with-eq-1", true, b_consistent)
+    std::test::value("hash-consistent-with-eq-1", true, b_consistent)
 
     # hash-consistent-with-eq-astral-1: the same with a supplementary-plane
     # character (U+1F642).
-    fn b_consistent_astral() errors compiler::CompilerError:
+    fn b_consistent_astral() errors std::compiler::CompilerError:
         static compile:
             fn f():
-                a = str::concat("x", "🙂")
-                b = str::concat("x", "🙂")
+                a = std::str::concat("x", "🙂")
+                b = std::str::concat("x", "🙂")
                 hash(a) == hash(b)
             f()
-    test::value("hash-consistent-with-eq-astral-1", true, b_consistent_astral)
+    std::test::value("hash-consistent-with-eq-astral-1", true, b_consistent_astral)
 
     # hash-kind-distinguishing-1: the Int 1 and the String "1" do not hash
     # equal.
-    fn b_kind() errors compiler::CompilerError:
+    fn b_kind() errors std::compiler::CompilerError:
         static compile:
             hash(1) == hash("1")
-    test::value("hash-kind-distinguishing-1", false, b_kind)
+    std::test::value("hash-kind-distinguishing-1", false, b_kind)
 
     # hash-list-order-1: a List's hash depends on its elements' order.
-    fn b_list_order() errors compiler::CompilerError:
+    fn b_list_order() errors std::compiler::CompilerError:
         static compile:
             hash([1, 2]) == hash([2, 1])
-    test::value("hash-list-order-1", false, b_list_order)
+    std::test::value("hash-list-order-1", false, b_list_order)
 
     # hash-list-content-1: equal Lists hash equal.
-    fn b_list_content() errors compiler::CompilerError:
+    fn b_list_content() errors std::compiler::CompilerError:
         static compile:
             hash([1, 2, "x"]) == hash([1, 2, "x"])
-    test::value("hash-list-content-1", true, b_list_content)
+    std::test::value("hash-list-content-1", true, b_list_content)
 
     # hash-range-1: a hash is nonnegative and below 2^61.
-    fn b_range() errors compiler::CompilerError:
+    fn b_range() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 h = hash("some longer string to hash, well past any short-string special case")
                 [h >= 0, h < 2305843009213693952]
             f()
-    test::value("hash-range-1", [true, true], b_range)
+    std::test::value("hash-range-1", [true, true], b_range)
 
 # hash(VALUE) is the reference value EXPECTED, VALUE an input: the same
 # value on every backend.
 fn register_hash_reference_case(name: str, value, expected: int):
-    fn b_hash() errors compiler::CompilerError:
+    fn b_hash() errors std::compiler::CompilerError:
         static compile:
             hash(value)
-    test::value(name, expected, b_hash)
+    std::test::value(name, expected, b_hash)
 
 fn register_hash_reference_tests():
     register_hash_reference_case("hash-parity-str-1", "the quick brown fox", 315109004920056613)
@@ -406,20 +406,20 @@ fn register_hash_reference_tests():
 # Astral Strings (native-csv-records.test)
 
 fn register_astral_length_tests(smile: str):
-    # csv-records-astral-length-1: str::length of U+1F642 is 1, one scalar
+    # csv-records-astral-length-1: std::str::length of U+1F642 is 1, one scalar
     # value (not a surrogate pair, not its four UTF-8 bytes).
-    fn b_astral_length() errors compiler::CompilerError:
+    fn b_astral_length() errors std::compiler::CompilerError:
         static compile:
-            str::length("🙂")
-    test::value("csv-records-astral-length-1", 1, b_astral_length)
+            std::str::length("🙂")
+    std::test::value("csv-records-astral-length-1", 1, b_astral_length)
 
     # The same character as an input String: natively a literal
     # one-character String is a packed short String, with its own length
     # operation.
-    fn b_astral_length_dynamic() errors compiler::CompilerError:
+    fn b_astral_length_dynamic() errors std::compiler::CompilerError:
         static compile:
-            str::length(smile)
-    test::value("csv-records-astral-length-1/dynamic", 1, b_astral_length_dynamic)
+            std::str::length(smile)
+    std::test::value("csv-records-astral-length-1/dynamic", 1, b_astral_length_dynamic)
 
 # ---------------------------------------------------------------------------
 # The standalone-executable programs' values (native-executable.test)
@@ -428,29 +428,29 @@ fn register_executable_program_tests():
     # native-executable-values: a bignum product, a String with non-ASCII,
     # astral and escaped characters, a character, true, unit, a nested List
     # and a set. (The Tcl program's String also holds a NUL character,
-    # which Botlish source has no escape for, and a last element str::length,
+    # which Botlish source has no escape for, and a last element std::str::length,
     # a function value no test can compare.)
-    fn b_values() errors compiler::CompilerError:
+    fn b_values() errors std::compiler::CompilerError:
         static compile:
             big = 9223372036854775808
-            [big * big, "aé🙂\n\t\\\"", '🙂', true, unit, [1, [2, 3]], immutable_set::from_list([3, 2, 3])]
-    test::value("native-executable-values", [85070591730234615865843651857942052864, "aé🙂\n\t\\\"", '🙂', true, unit, [1, [2, 3]], immutable_set::from_list([2, 3])], b_values)
+            [big * big, "aé🙂\n\t\\\"", '🙂', true, unit, [1, [2, 3]], std::immutable_set::from_list([3, 2, 3])]
+    std::test::value("native-executable-values", [85070591730234615865843651857942052864, "aé🙂\n\t\\\"", '🙂', true, unit, [1, [2, 3]], std::immutable_set::from_list([2, 3])], b_values)
 
     # native-executable-roots: a recursion whose every frame allocates a
     # String before its call returns: "xy" a hundred times.
-    fn b_roots() errors compiler::CompilerError:
+    fn b_roots() errors std::compiler::CompilerError:
         static compile:
             fn build(n):
                 if n < 1:
                     return ""
-                prefix = str::concat("x", "y")
-                str::concat(prefix, build(n - 1))
+                prefix = std::str::concat("x", "y")
+                std::str::concat(prefix, build(n - 1))
             build(100)
-    test::value("native-executable-roots", "xyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxy", b_roots)
+    std::test::value("native-executable-roots", "xyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxyxy", b_roots)
 
     # native-executable-closure: an escaping closure over a typed
     # parameter keeps the captured value.
-    fn b_closure() errors compiler::CompilerError:
+    fn b_closure() errors std::compiler::CompilerError:
         static compile:
             fn make_adder(x: int):
                 fn add(y: int):
@@ -458,54 +458,54 @@ fn register_executable_program_tests():
                 add
             add10 = make_adder(10)
             add10(32)
-    test::value("native-executable-closure", 42, b_closure)
+    std::test::value("native-executable-closure", 42, b_closure)
 
     # native-executable-modules: a Byte parameter passed to a module
     # function, and a module function percent-encoding non-ASCII text.
-    fn b_modules() errors compiler::CompilerError:
+    fn b_modules() errors std::compiler::CompilerError:
         static compile:
             fn check(b: Byte) -> bool:
-                web::is_unreserved(b)
-            [check(45), check(32), web::uri_escape_text("a b/é🙂")]
-    test::value("native-executable-modules", [true, false, "a%20b%2F%C3%A9%F0%9F%99%82"], b_modules)
+                std::web::is_unreserved(b)
+            [check(45), check(32), std::web::uri_escape_text("a b/é🙂")]
+    std::test::value("native-executable-modules", [true, false, "a%20b%2F%C3%A9%F0%9F%99%82"], b_modules)
 
     # native-executable-generic-entry: functions chosen at run time and
     # called through an untyped parameter.
-    fn b_generic_entry() errors compiler::CompilerError:
+    fn b_generic_entry() errors std::compiler::CompilerError:
         static compile:
             fn build():
-                str::concat("x", "y")
+                std::str::concat("x", "y")
             fn other():
-                str::concat("z", "w")
+                std::str::concat("z", "w")
             fn pick(flag: bool):
                 if flag:
                     build
                 else:
                     other
             fn apply(f):
-                prefix = str::concat("a", "b")
+                prefix = std::str::concat("a", "b")
                 [prefix, f()]
             [apply(pick(true)), apply(pick(false))]
-    test::value("native-executable-generic-entry", [["ab", "xy"], ["ab", "zw"]], b_generic_entry)
+    std::test::value("native-executable-generic-entry", [["ab", "xy"], ["ab", "zw"]], b_generic_entry)
 
     # native-executable-source-refinements: a proof-producing predicate on
     # a module value, a typed wrapper around another, and a byte function.
-    fn b_source_refinements() errors compiler::CompilerError:
+    fn b_source_refinements() errors std::compiler::CompilerError:
         static compile:
-            q = web::uri_escape_text("a b")
+            q = std::web::uri_escape_text("a b")
             fn check(s: str) -> bool:
-                web::emailish?(s)
-            [web::uri_query_value?(q), str::length(q), check("a@b.co"), byte::high_nibble(171)]
-    test::value("native-executable-source-refinements", [true, 5, true, 160], b_source_refinements)
+                std::web::emailish?(s)
+            [std::web::uri_query_value?(q), std::str::length(q), check("a@b.co"), std::byte::high_nibble(171)]
+    std::test::value("native-executable-source-refinements", [true, 5, true, 160], b_source_refinements)
 
     # native-executable-native-shadow: a local function named like the
     # root native integer? is that local function.
-    fn b_native_shadow() errors compiler::CompilerError:
+    fn b_native_shadow() errors std::compiler::CompilerError:
         static compile:
             fn integer?(s):
-                str::length(s)
+                std::str::length(s)
             integer?("abc")
-    test::value("native-executable-native-shadow", 3, b_native_shadow)
+    std::test::value("native-executable-native-shadow", 3, b_native_shadow)
 
 # ---------------------------------------------------------------------------
 
@@ -520,6 +520,6 @@ fn register_bits_bytes_hashing_tests():
     register_astral_length_tests("🙂")
     register_executable_program_tests()
 
-with context test::suite()
+with context std::test::suite()
 register_bits_bytes_hashing_tests()
-test::report()
+std::test::report()

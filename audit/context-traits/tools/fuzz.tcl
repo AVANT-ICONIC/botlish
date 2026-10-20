@@ -5,7 +5,7 @@
 #   tclsh9.0 audit/context-traits/tools/fuzz.tcl ?-n N? ?-seed S? ?-dump 1?
 #                                                ?-backends LIST?
 #
-# Each program has, in a private library:
+# Each program has, as application modules beside it:
 #
 #   fz/tr.bot     1..3 context traits T0.. over a pool of operations (op0..op3,
 #                 each `(n: int) -> int`, some declaring `errors Fail`); two
@@ -63,16 +63,12 @@ while {[lindex $args 0] in {-n -seed -dump -backends}} {
     set args [lrange $args 2 end]
 }
 
-# A private library (a copy of lib/ plus the generated fz/ modules) and a
-# private scratch directory, never under a fixed name (AGENTS.md).
+# A private scratch directory, never under a fixed name (AGENTS.md): the
+# application root of every entry program written into it, holding the
+# generated fz/ modules as application modules (IMPORTS.md).
 set scratch [file tempdir context-traits-fuzz]
-set library [file join $scratch lib]
-file mkdir $library
-foreach entry [glob -directory [file join $root lib] *] {
-    file copy $entry $library
-}
+set library $scratch
 file mkdir [file join $library fz]
-set ::core::libraryDir $library
 
 proc rnd {n} {
     set ::rng [expr {($::rng * 1103515245 + 12345) % 2147483648}]

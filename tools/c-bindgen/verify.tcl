@@ -14,7 +14,7 @@
 #
 #   sizeof(T) and _Alignof(T) are the layout's size and align;
 #   for every field: __builtin_offsetof(T, member) is its offset;
-#     a scalar field of ffi::c::X: the member is of integer class
+#     a scalar field of std::ffi::c::X: the member is of integer class
 #       (__builtin_classify_type 1), of X's width and signedness on the
 #       target (core/cabi.tcl's table), and no _Bool ((T)2 == 2);
 #     a pointer field: of pointer class (5) and the target's pointer width;
@@ -218,9 +218,9 @@ proc ::cbind::verify::Fields {c name base byName records members sizes target po
                 append last "\[[expr {$n - 1}]\]"
                 set count [expr {$count * $n}]
             }
-            if {[regexp {^ffi::c::(Ptr|FnPtr)\[} $type]} {
+            if {[regexp {^std::ffi::c::(Ptr|FnPtr)\[} $type]} {
                 set width $pointerBytes
-            } elseif {[regexp {^ffi::c::([A-Za-z]+)$} $type -> scalar]} {
+            } elseif {[regexp {^std::ffi::c::([A-Za-z]+)$} $type -> scalar]} {
                 set width [expr {[dict get [core::cabi::scalarInfo $scalar $target] bits] / 8}]
             } elseif {[dict exists $sizes $type]} {
                 set width [dict get $sizes $type]
@@ -231,9 +231,9 @@ proc ::cbind::verify::Fields {c name base byName records members sizes target po
             set m $path
             set label "\"$name.$fname, its first element\""
         }
-        if {[regexp {^ffi::c::(Ptr|FnPtr)\[} $type]} {
+        if {[regexp {^std::ffi::c::(Ptr|FnPtr)\[} $type]} {
             append text "BOTLISH_POINTER($c, $m, $offset, $pointerBytes, $label);\n"
-        } elseif {[regexp {^ffi::c::([A-Za-z]+)$} $type -> scalar]} {
+        } elseif {[regexp {^std::ffi::c::([A-Za-z]+)$} $type -> scalar]} {
             set info [core::cabi::scalarInfo $scalar $target]
             append text "BOTLISH_SCALAR($c, $m, $offset, [expr {[dict get $info bits] / 8}], [dict get $info signed], $label);\n"
         } elseif {[dict exists $sizes $type]} {

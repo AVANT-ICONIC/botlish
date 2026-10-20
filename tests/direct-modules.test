@@ -4,7 +4,7 @@
 # A module is designated direct by its file's first line, `direct module`, or
 # -- for an intrinsic namespace -- by the compiler's registration metadata
 # (core::native::declareDirectNamespace: the syscall transports,
-# linux::abi::x86_64 and linux::abi::aarch64). A call into a direct
+# std::linux::abi::x86_64 and std::linux::abi::aarch64). A call into a direct
 # module is a direct edge of the calling module; it is mediated when the
 # function that makes it requires a context the calling module declares
 # itself. A module with an unmediated edge is inferred direct, and the
@@ -108,29 +108,29 @@ proc appValues {dir backends} {
 # direct module all the same.
 set rawModule {direct module
 
-import abi::x86_64
-import linux::abi::x86_64
+import std::abi::x86_64
+import std::linux::abi::x86_64
 
 struct Reading:
     value: int
 
 fn getpid() -> int:
-    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39)}))
+    std::abi::x86_64::to_int(std::linux::abi::x86_64::syscall({rax: std::abi::x86_64::register64(39)}))
 
 fn add(a: int, b: int) -> int:
     a + b
 }
 
 # The writing preamble of the linux-layer programs.
-set writeImports "import abi\nimport abi::bytes\nimport linux\nimport str\n"
+set writeImports "import std::abi\nimport std::abi::bytes\nimport std::linux\nimport std::str\n"
 
 # ---------------------------------------------------------------------------
 # Syntax
 
 test dm-parse-marker {`direct module` is the file's first construct, after comments and blank lines only (a #! line is a comment); the AST records its span, a file without it records ""} -body {
-    set a [surface::parse "direct module\n\nimport linux\n1\n" t.bot]
-    set b [surface::parse "#!/usr/bin/env botlish\n# a comment\n\ndirect module\nimport linux\n1\n" t.bot]
-    set c [surface::parse "import linux\n1\n" t.bot]
+    set a [surface::parse "direct module\n\nimport std::linux\n1\n" t.bot]
+    set b [surface::parse "#!/usr/bin/env botlish\n# a comment\n\ndirect module\nimport std::linux\n1\n" t.bot]
+    set c [surface::parse "import std::linux\n1\n" t.bot]
     list [dict get $a direct line] [dict get $a direct column] [dict get $a direct endColumn] \
         [dict get $b direct line] [dict get $c direct] \
         [lindex [split [surface::formatAst $a -spans 1] \n] 0]
@@ -143,12 +143,12 @@ test dm-parse-contextual {direct and module are contextual words: ordinary names
 
 test dm-parse-misplaced {the marker is located syntax: after an import, after a declaration, inside a function, inside a static block, duplicated, or with a name, each a located error} -body {
     lmap src [list \
-        "import linux\ndirect module\n" \
+        "import std::linux\ndirect module\n" \
         "fn f():\n    1\ndirect module\n" \
         "fn f():\n    direct module\n" \
-        "fn f() errors compiler::CompilerError:\n    static compile:\n        direct module\n" \
+        "fn f() errors std::compiler::CompilerError:\n    static compile:\n        direct module\n" \
         "direct module\ndirect module\n" \
-        "direct module\nimport str\n\ndirect module\n" \
+        "direct module\nimport std::str\n\ndirect module\n" \
         "direct module linux\n" \
         "direct module:\n"] {
         if {[catch {surface::parse $src t.bot} message]} {
@@ -161,7 +161,7 @@ test dm-parse-misplaced {the marker is located syntax: after an import, after a 
 } -result {{2:1 DIRECT-MODULE-POSITION} {3:1 DIRECT-MODULE-POSITION} {2:5 DIRECT-MODULE-POSITION} {3:9 DIRECT-MODULE-POSITION} {2:1 DUPLICATE-DIRECT-MODULE} {4:1 DUPLICATE-DIRECT-MODULE} {1:15 DIRECT-MODULE-FORM} {1:14 DIRECT-MODULE-FORM}}
 
 test dm-parse-recover {a recovering parse reports every misplaced marker and keeps the valid one} -body {
-    set ast [surface::parse "direct module\nimport str\ndirect module\nfn f():\n    direct module\n" t.bot -recover 1]
+    set ast [surface::parse "direct module\nimport std::str\ndirect module\nfn f():\n    direct module\n" t.bot -recover 1]
     list [dict get $ast direct line] [lmap d [dict get $ast diagnostics] {list [dict get $d line] [dict get $d code]}]
 } -result {1 {{3 DUPLICATE-DIRECT-MODULE} {5 DIRECT-MODULE-POSITION}}}
 
@@ -174,11 +174,11 @@ test dm-no-call-or-function-syntax {there is no call-, function- or block-level 
 # ---------------------------------------------------------------------------
 # Designation
 
-test dm-intrinsic-linux-abi {the syscall transports linux::abi::x86_64 and linux::abi::aarch64 -- the raw kernel transitions -- and binary::native, whose view reads live native memory (NATIVE-LAYOUT-VIEWS.md), are the intrinsic namespaces the compiler declares direct: registry metadata, not a name; linux (the source module) is direct by its own marker; abi::x86_64's address and register conversions are not direct} -body {
+test dm-intrinsic-linux-abi {the syscall transports std::linux::abi::x86_64 and std::linux::abi::aarch64 -- the raw kernel transitions -- and std::binary::native, whose view reads live native memory (NATIVE-LAYOUT-VIEWS.md), are the intrinsic namespaces the compiler declares direct: registry metadata, not a name; linux (the source module) is direct by its own marker; std::abi::x86_64's address and register conversions are not direct} -body {
     list [core::native::directNamespaces] [core::native::isDirectNamespace linux] \
-        [core::native::isDirectNamespace abi::x86_64] \
-        [regexp {\ndirect module\n\nimport abi\n} [core::ReadFile [file join $::projectRoot lib linux.bot]]]
-} -result {{binary::native linux::abi::aarch64 linux::abi::x86_64} 0 0 1}
+        [core::native::isDirectNamespace std::abi::x86_64] \
+        [regexp {\ndirect module\n\nimport std::abi\n} [core::ReadFile [file join $::projectRoot stdlib linux.bot]]]
+} -result {{std::binary::native std::linux::abi::aarch64 std::linux::abi::x86_64} 0 0 1}
 
 test dm-intrinsic-metadata-participates {a probe intrinsic namespace declared direct is a direct module exactly like a source one: calling it unmediated is DIRECT, from a function requiring the caller's own context it is contextualized; undeclared, it is an ordinary namespace} -body {
     core::native::register dmprobe::poke -arity 1 -impl {apply {{x} {return $x}}} -param-types {int} -result-type int
@@ -202,48 +202,48 @@ test dm-declare-requires-members {only an intrinsic namespace with members can b
 test dm-no-name-heuristic {directness is never read from a name: a module named raw, syscall or ffi that calls nothing direct is ordinary, and a direct module named anything is direct} -body {
     set dir [app [list main.bot "import raw\nimport syscall\nimport ffi_bits\n\n\[raw::one(), syscall::one(), ffi_bits::one()\]\n" \
         raw.bot "fn one() -> int:\n    1\n" syscall.bot "fn one() -> int:\n    1\n" ffi_bits.bot "fn one() -> int:\n    1\n" \
-        other.bot "direct module\n\nimport linux::abi::x86_64\n"]]
+        other.bot "direct module\n\nimport std::linux::abi::x86_64\n"]]
     statuses [appHir $dir]
 } -cleanup removeApps -result {raw ordinary syscall ordinary ffi_bits ordinary {} ordinary}
 
 # ---------------------------------------------------------------------------
 # The syscall acceptance case (the real Linux layer)
 
-test dm-syscall-unacknowledged {an ordinary program calling linux::write, a callable of the direct module linux, from a context-free function is DIRECT, at the call, naming the module, the function, the direct module and both remedies} -body {
-    appRejection [app [list main.bot "${::writeImports}\nfn emit(text: str) -> int:\n    linux::write(abi::i32(1), abi::bytes::from_list(str::encode_utf8(text)))\n\nemit(\"x\")\n"]]
-} -cleanup removeApps -result {DIRECT: main.bot:7:5: the entry program uses direct authority: function "emit" calls linux::write, a callable of the direct module "linux", without a context defined by the entry program; require one of this module's own contexts ("context NAME: T", T a context struct or context trait declared by the entry program) in "emit", the function that makes the direct call, or declare the module direct with `direct module` as its first line}
+test dm-syscall-unacknowledged {an ordinary program calling std::linux::write, a callable of the direct module linux, from a context-free function is DIRECT, at the call, naming the module, the function, the direct module and both remedies} -body {
+    appRejection [app [list main.bot "${::writeImports}\nfn emit(text: str) -> int:\n    std::linux::write(std::abi::i32(1), std::abi::bytes::from_list(std::str::encode_utf8(text)))\n\nemit(\"x\")\n"]]
+} -cleanup removeApps -result {DIRECT: main.bot:7:5: the entry program uses direct authority: function "emit" calls std::linux::write, a callable of the direct module "std::linux", without a context defined by the entry program; require one of this module's own contexts ("context NAME: T", T a context struct or context trait declared by the entry program) in "emit", the function that makes the direct call, or declare the module direct with `direct module` as its first line}
 
 test dm-syscall-declared {the same program declared `direct module` compiles: a deliberately low-level program; natively the write happens (the Tcl backends refuse the raw path, NATIVE-ONLY, as always)} -constraints {nativeBuilt linuxX86_64} -body {
-    set dir [app [list main.bot "direct module\n\n${::writeImports}\nfn emit(text: str) -> int:\n    linux::write(abi::i32(1), abi::bytes::from_list(str::encode_utf8(text)))\n\nemit(\"\")\n"]]
-    list [statuses [appHir $dir] {"" linux linux::io}] [appValues $dir {interp cranelift}]
-} -cleanup removeApps -result {{linux direct {} direct} {NATIVE-ONLY 0}}
+    set dir [app [list main.bot "direct module\n\n${::writeImports}\nfn emit(text: str) -> int:\n    std::linux::write(std::abi::i32(1), std::abi::bytes::from_list(std::str::encode_utf8(text)))\n\nemit(\"\")\n"]]
+    list [statuses [appHir $dir] {"" std::linux std::linux::io}] [appValues $dir {interp cranelift}]
+} -cleanup removeApps -result {{std::linux direct {} direct} {NATIVE-ONLY 0}}
 
 test dm-syscall-contextualized {the same raw call from a function requiring LocalIO, a context the program declares itself, compiles with no `direct module`: the program is contextualized, not direct} -constraints {nativeBuilt linuxX86_64} -body {
-    set dir [app [list main.bot "${::writeImports}\ncontext struct LocalIO:\n    out: abi::I32\n\nfn emit(text: str, context io: LocalIO) -> int:\n    linux::write(io.out, abi::bytes::from_list(str::encode_utf8(text)))\n\nwith context LocalIO {out: abi::i32(1)}\n\nemit(\"\")\n"]]
+    set dir [app [list main.bot "${::writeImports}\ncontext struct LocalIO:\n    out: std::abi::I32\n\nfn emit(text: str, context io: LocalIO) -> int:\n    std::linux::write(io.out, std::abi::bytes::from_list(std::str::encode_utf8(text)))\n\nwith context LocalIO {out: std::abi::i32(1)}\n\nemit(\"\")\n"]]
     set hir [appHir $dir]
     list [statuses $hir {""}] [lmap e [dict get $hir direct units "" edges] {list [dict get $e function] [dict get $e callee] [dict get $e discharged]}] \
         [appValues $dir {cranelift}]
-} -cleanup removeApps -result {{{} contextualized} {{emit linux::write LocalIO}} 0}
+} -cleanup removeApps -result {{{} contextualized} {{emit std::linux::write LocalIO}} 0}
 
-test dm-syscall-stdlib-layering {the standard library's own boundary: the transport provided direct, linux::sys (the architecture's syscall numbers and registers) and linux declared direct modules, linux::io contextualized by its LinuxIO, and a program using linux::io ordinary} -body {
+test dm-syscall-stdlib-layering {the standard library's own boundary: the transport provided direct, std::linux::sys (the architecture's syscall numbers and registers) and std::linux declared direct modules, std::linux::io contextualized by its LinuxIO, and a program using std::linux::io ordinary} -body {
     set hir [surface::readProgramFile [file join $::projectRoot examples linux context-hello.bot] -warnings off -cache "" -target [linuxTarget]]
-    list [statuses $hir {linux::sys linux linux::io ""}] [llength [dict get $hir direct intrinsic]]
-} -result {{linux::sys direct linux direct linux::io contextualized {} ordinary} 1}
+    list [statuses $hir {std::linux::sys std::linux std::linux::io ""}] [llength [dict get $hir direct intrinsic]]
+} -result {{std::linux::sys direct std::linux direct std::linux::io contextualized {} ordinary} 1}
 
 test dm-syscall-raw-getpid {a raw syscall at the entry program's top level is undischarged whatever the program declares around it: top-level code has no context} -body {
-    appRejection [app [list main.bot "import abi::x86_64\nimport linux::abi::x86_64\n\ncontext struct Local:\n    ok: bool\n\nwith context Local {ok: true}\nabi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39)}))\n"]]
-} -cleanup removeApps -result {DIRECT: main.bot:8:21: the entry program uses direct authority in its top-level code: it calls linux::abi::x86_64::syscall, a callable of the direct module "linux::abi::x86_64", and top-level code has no context, so the call is never mediated; move it into a function that requires a context defined by the entry program, or declare the module direct with `direct module` as its first line}
+    appRejection [app [list main.bot "import std::abi::x86_64\nimport std::linux::abi::x86_64\n\ncontext struct Local:\n    ok: bool\n\nwith context Local {ok: true}\nstd::abi::x86_64::to_int(std::linux::abi::x86_64::syscall({rax: std::abi::x86_64::register64(39)}))\n"]]
+} -cleanup removeApps -result {DIRECT: main.bot:8:26: the entry program uses direct authority in its top-level code: it calls std::linux::abi::x86_64::syscall, a callable of the direct module "std::linux::abi::x86_64", and top-level code has no context, so the call is never mediated; move it into a function that requires a context defined by the entry program, or declare the module direct with `direct module` as its first line}
 
 # ---------------------------------------------------------------------------
 # Stale declarations
 
 test dm-stale-no-authority {`direct module` with no call into a direct module is STALE-DIRECT-MODULE, at the marker} -body {
     list [appRejection [app {main.bot "direct module\n\n1\n"}]] \
-        [appRejection [app {main.bot "direct module\n\nimport linux\n\nfn f(r: linux::ReadResult) -> int:\n    r.result\n\n1\n"}]]
+        [appRejection [app {main.bot "direct module\n\nimport std::linux\n\nfn f(r: std::linux::ReadResult) -> int:\n    r.result\n\n1\n"}]]
 } -cleanup removeApps -result {{STALE-DIRECT-MODULE: main.bot:1:1: `direct module` is unnecessary: the entry program makes no call into a direct module, so it exposes no direct authority; remove the declaration (it must state exactly what the compiler infers)} {STALE-DIRECT-MODULE: main.bot:1:1: `direct module` is unnecessary: the entry program makes no call into a direct module, so it exposes no direct authority; remove the declaration (it must state exactly what the compiler infers)}}
 
 test dm-stale-fully-mediated {a module whose every direct call is mediated by its own context must drop its marker: the marker is not a permission bit under which authority can accumulate} -body {
-    appRejection [app [list main.bot "direct module\n\nimport m\n\n1\n" m.bot "direct module\n\nimport abi::x86_64\nimport linux::abi::x86_64\n\ncontext struct Pids:\n    ok: bool\n\nfn pid(context p: Pids) -> int:\n    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39)}))\n"]]
+    appRejection [app [list main.bot "direct module\n\nimport m\n\n1\n" m.bot "direct module\n\nimport std::abi::x86_64\nimport std::linux::abi::x86_64\n\ncontext struct Pids:\n    ok: bool\n\nfn pid(context p: Pids) -> int:\n    std::abi::x86_64::to_int(std::linux::abi::x86_64::syscall({rax: std::abi::x86_64::register64(39)}))\n"]]
 } -cleanup removeApps -result {STALE-DIRECT-MODULE: m.bot:1:1: `direct module` is unnecessary: all direct authority in module "m" is mediated by contexts defined by "m" (every call into a direct module is in a function requiring one of them); remove the declaration (it must state exactly what the compiler infers)
 main.bot:1:1: `direct module` is unnecessary: the entry program makes no call into a direct module, so it exposes no direct authority; remove the declaration (it must state exactly what the compiler infers) (CORE SEMANTIC STALE-DIRECT-MODULE)}
 
@@ -258,11 +258,11 @@ test dm-no-silent-promotion {a new unmediated call in an ordinary module is a co
 # The context must reach the direct point
 
 test dm-helper-not-laundered {a contextual outer function calling a context-free helper that makes the direct call does not mediate it: the helper is the unmediated edge} -body {
-    appRejection [app [list main.bot "${::writeImports}\ncontext struct LocalIO:\n    out: abi::I32\n\nfn low(fd: abi::I32, text: str) -> int:\n    linux::write(fd, abi::bytes::from_list(str::encode_utf8(text)))\n\nfn high(text: str, context io: LocalIO) -> int:\n    low(io.out, text)\n\nwith context LocalIO {out: abi::i32(1)}\nhigh(\"\")\n"]]
-} -cleanup removeApps -result {DIRECT: main.bot:10:5: the entry program uses direct authority: function "low" calls linux::write, a callable of the direct module "linux", without a context defined by the entry program; require one of this module's own contexts ("context NAME: T", T a context struct or context trait declared by the entry program) in "low", the function that makes the direct call, or declare the module direct with `direct module` as its first line}
+    appRejection [app [list main.bot "${::writeImports}\ncontext struct LocalIO:\n    out: std::abi::I32\n\nfn low(fd: std::abi::I32, text: str) -> int:\n    std::linux::write(fd, std::abi::bytes::from_list(std::str::encode_utf8(text)))\n\nfn high(text: str, context io: LocalIO) -> int:\n    low(io.out, text)\n\nwith context LocalIO {out: std::abi::i32(1)}\nhigh(\"\")\n"]]
+} -cleanup removeApps -result {DIRECT: main.bot:10:5: the entry program uses direct authority: function "low" calls std::linux::write, a callable of the direct module "std::linux", without a context defined by the entry program; require one of this module's own contexts ("context NAME: T", T a context struct or context trait declared by the entry program) in "low", the function that makes the direct call, or declare the module direct with `direct module` as its first line}
 
 test dm-helper-carries-the-context {carrying the module's own context onto the helper, where the direct call is, makes the program ordinary again; pure helpers below or beside the contextual functions need no context} -constraints {nativeBuilt linuxX86_64} -body {
-    set dir [app [list main.bot "${::writeImports}\ncontext struct LocalIO:\n    out: abi::I32\n\nfn encoded(text: str) -> abi::bytes::Bytes:\n    abi::bytes::from_list(str::encode_utf8(text))\n\nfn low(text: str, context io: LocalIO) -> int:\n    linux::write(io.out, encoded(text))\n\nfn high(text: str, context io: LocalIO) -> int:\n    low(text)\n\nwith context LocalIO {out: abi::i32(1)}\nhigh(\"\")\n"]]
+    set dir [app [list main.bot "${::writeImports}\ncontext struct LocalIO:\n    out: std::abi::I32\n\nfn encoded(text: str) -> std::abi::bytes::Bytes:\n    std::abi::bytes::from_list(std::str::encode_utf8(text))\n\nfn low(text: str, context io: LocalIO) -> int:\n    std::linux::write(io.out, encoded(text))\n\nfn high(text: str, context io: LocalIO) -> int:\n    low(text)\n\nwith context LocalIO {out: std::abi::i32(1)}\nhigh(\"\")\n"]]
     set hir [appHir $dir]
     list [statuses $hir {""}] [lmap e [dict get $hir direct units "" edges] {list [dict get $e function] [dict get $e discharged]}] \
         [appValues $dir {cranelift}]
@@ -279,14 +279,14 @@ test dm-nested-function-is-its-own {a function nested in a contextual function i
 test dm-foreign-context {a context of another module does not mediate: B's function requiring a::ContextA leaves B inferred direct, and the diagnostic says why} -body {
     set files [list main.bot "import a\nimport b\n\nwith context a::ContextA {ok: true}\nb::raw_pid()\n" \
         a.bot "context struct ContextA:\n    ok: bool\n" \
-        b.bot "import a\nimport abi::x86_64\nimport linux::abi::x86_64\n\nfn raw_pid(context c: a::ContextA) -> int:\n    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39)}))\n"]
+        b.bot "import a\nimport std::abi::x86_64\nimport std::linux::abi::x86_64\n\nfn raw_pid(context c: a::ContextA) -> int:\n    std::abi::x86_64::to_int(std::linux::abi::x86_64::syscall({rax: std::abi::x86_64::register64(39)}))\n"]
     appRejection [app $files]
-} -cleanup removeApps -result {DIRECT: b.bot:6:25: module "b" uses direct authority: function "b::raw_pid" calls linux::abi::x86_64::syscall, a callable of the direct module "linux::abi::x86_64", without a context defined by "b" ("b::raw_pid" requires a::ContextA, a context defined by module "a", but a context mediates direct authority only in the module that defines it: a context declared by "b" itself); require one of this module's own contexts ("context NAME: T", T a context struct or context trait declared by "b") in "b::raw_pid", the function that makes the direct call, or declare the module direct with `direct module` as its first line}
+} -cleanup removeApps -result {DIRECT: b.bot:6:30: module "b" uses direct authority: function "b::raw_pid" calls std::linux::abi::x86_64::syscall, a callable of the direct module "std::linux::abi::x86_64", without a context defined by "b" ("b::raw_pid" requires a::ContextA, a context defined by module "a", but a context mediates direct authority only in the module that defines it: a context declared by "b" itself); require one of this module's own contexts ("context NAME: T", T a context struct or context trait declared by "b") in "b::raw_pid", the function that makes the direct call, or declare the module direct with `direct module` as its first line}
 
 test dm-own-context {defining ContextB in B and requiring it at the raw call makes B non-direct (contextualized), whatever other contexts the function also requires} -body {
     set files [list main.bot "import a\nimport b\n\nwith context a::ContextA {ok: true}\nwith context b::create()\nb::raw_pid()\n" \
         a.bot "context struct ContextA:\n    ok: bool\n" \
-        b.bot "import a\nimport abi::x86_64\nimport linux::abi::x86_64\n\nopaque context struct ContextB:\n    ok: bool\n\nfn create() -> ContextB:\n    ContextB {ok: true}\n\nfn raw_pid(context c: a::ContextA, d: ContextB) -> int:\n    abi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39)}))\n"]
+        b.bot "import a\nimport std::abi::x86_64\nimport std::linux::abi::x86_64\n\nopaque context struct ContextB:\n    ok: bool\n\nfn create() -> ContextB:\n    ContextB {ok: true}\n\nfn raw_pid(context c: a::ContextA, d: ContextB) -> int:\n    std::abi::x86_64::to_int(std::linux::abi::x86_64::syscall({rax: std::abi::x86_64::register64(39)}))\n"]
     statuses [appHir [app $files]] {a b ""}
 } -cleanup removeApps -result {a ordinary b contextualized {} ordinary}
 
@@ -348,12 +348,12 @@ test dm-tooling-explains {main.tcl -direct explains every unit: declaration, inf
     }]
     join $lines \n
 } -cleanup removeApps -result {module raw: direct (declared direct, inferred direct)
-    raw::getpid -> linux::abi::x86_64::syscall (direct module linux::abi::x86_64, raw.bot:10:25): undischarged
+    raw::getpid -> std::linux::abi::x86_64::syscall (direct module std::linux::abi::x86_64, raw.bot:10:30): undischarged
 module wrapper: contextualized (declared ordinary, inferred ordinary)
     wrapper::pid -> raw::getpid (direct module raw, wrapper.bot:10:5): mediated by wrapper::Pids
 module consumer: ordinary (declared ordinary, inferred ordinary)
 entry program: ordinary (declared ordinary, inferred ordinary)
-intrinsic linux::abi::x86_64: provided direct by the compiler}
+intrinsic std::linux::abi::x86_64: provided direct by the compiler}
 
 # ---------------------------------------------------------------------------
 # Module granularity
@@ -381,7 +381,7 @@ test dm-direct-module-with-contexts {a direct module may contextualize some auth
 # Types and imports are not authority
 
 test dm-import-is-not-authority {importing a direct module is not direct: its types are usable in signatures, constructions and projections with no `direct module`} -body {
-    set dir [app [list main.bot "import abi::bytes\nimport linux\nimport raw\n\nfn shown(r: raw::Reading) -> int:\n    r.value\n\nfn result_of(r: linux::ReadResult) -> int:\n    r.result\n\nshown(raw::Reading {value: 4})\n" raw.bot $::rawModule]]
+    set dir [app [list main.bot "import std::abi::bytes\nimport std::linux\nimport raw\n\nfn shown(r: raw::Reading) -> int:\n    r.value\n\nfn result_of(r: std::linux::ReadResult) -> int:\n    r.result\n\nshown(raw::Reading {value: 4})\n" raw.bot $::rawModule]]
     list [statuses [appHir $dir] {""}] [appValues $dir {interp compile}]
 } -cleanup removeApps -result {{{} ordinary} {4 4}}
 
@@ -454,7 +454,7 @@ test dm-value-trait-operation {a value-trait operation may run a direct module's
 # Module structure
 
 test dm-cycles-stay-forbidden {module cycles are still forbidden (CYCLE), direct or not: there is no partial analysis order for directness to disappear in} -body {
-    appKind [app {main.bot "import a\n\na::f()\n" a.bot "direct module\n\nimport b\nimport linux::abi::x86_64\n\nfn f() -> int:\n    1\n" b.bot "import a\n\nfn g() -> int:\n    1\n"}]
+    appKind [app {main.bot "import a\n\na::f()\n" a.bot "direct module\n\nimport b\nimport std::linux::abi::x86_64\n\nfn f() -> int:\n    1\n" b.bot "import a\n\nfn g() -> int:\n    1\n"}]
 } -cleanup removeApps -result {CYCLE}
 
 test dm-root-not-special {the entry program and an application module with the same code get the same verdict} -body {
@@ -474,16 +474,16 @@ test dm-unreachable-code-counts {a direct call in unreachable or uncalled code s
 } -cleanup removeApps -result {DIRECT DIRECT}
 
 test dm-method-sugar {a direct callable reached through method syntax is a direct edge (an obligation of the selected call, never a reason to pick another candidate)} -body {
-    appKind [app [list main.bot "${::writeImports}\nfn emit(text: str) -> int:\n    abi::i32(1).write(abi::bytes::from_list(str::encode_utf8(text)))\n\nemit(\"\")\n"]]
+    appKind [app [list main.bot "${::writeImports}\nfn emit(text: str) -> int:\n    std::abi::i32(1).write(std::abi::bytes::from_list(std::str::encode_utf8(text)))\n\nemit(\"\")\n"]]
 } -cleanup removeApps -result {DIRECT}
 
 test dm-method-sugar-two-candidates {with another visible candidate of the name, the direct one is still selected and its call is DIRECT -- never NO-APPLICABLE-METHOD} -body {
-    appKind [app [list main.bot "${::writeImports}\nfn write(label: str, n: int) -> int:\n    n\n\nfn emit(text: str) -> int:\n    abi::i32(1).write(abi::bytes::from_list(str::encode_utf8(text)))\n\nemit(\"\")\n"]]
+    appKind [app [list main.bot "${::writeImports}\nfn write(label: str, n: int) -> int:\n    n\n\nfn emit(text: str) -> int:\n    std::abi::i32(1).write(std::abi::bytes::from_list(std::str::encode_utf8(text)))\n\nemit(\"\")\n"]]
 } -cleanup removeApps -result {DIRECT}
 
 test dm-coroutine-thunk {a coroutine construction's thunk runs where it is constructed: a direct call it makes is mediated by the constructing function's context} -body {
-    set dir [app [list main.bot "import coroutine\nimport gen\n\ncontext struct C:\n    ok: bool\n\nfn first(context c: C) -> int:\n    coroutine {step, first} = gen::count(1)\n    first\n\nwith context C {ok: true}\nfirst()\n" \
-        gen.bot "direct module\n\nimport coroutine\nimport raw\n\nfn count(n: int) -> int:\n    yield raw::add(n, 0)\n    n + 1\n" raw.bot $::rawModule]]
+    set dir [app [list main.bot "import std::coroutine\nimport gen\n\ncontext struct C:\n    ok: bool\n\nfn first(context c: C) -> int:\n    coroutine {step, first} = gen::count(1)\n    first\n\nwith context C {ok: true}\nfirst()\n" \
+        gen.bot "direct module\n\nimport std::coroutine\nimport raw\n\nfn count(n: int) -> int:\n    yield raw::add(n, 0)\n    n + 1\n" raw.bot $::rawModule]]
     list [statuses [appHir $dir] {""}] [appValues $dir {interp compile}]
 } -cleanup removeApps -result {{{} contextualized} {1 1}}
 
@@ -491,22 +491,22 @@ test dm-coroutine-thunk {a coroutine construction's thunk runs where it is const
 # Static intrinsics
 
 test dm-static-compile-direct {a static block whose body makes an unmediated direct call is rejected with DiagnosticCode::Direct (the rejected program has no direct call left)} -body {
-    set dir [app [list main.bot "import compiler\nimport raw\n\nfn probe() -> int errors compiler::CompilerError:\n    static compile:\n        raw::add(1, 2)\n\nr = probe():\n    on compiler::CompilerError {code}:\n        if code == compiler::DiagnosticCode::Direct:\n            1\n        else:\n            0\nr\n" raw.bot $::rawModule]]
+    set dir [app [list main.bot "import std::compiler\nimport raw\n\nfn probe() -> int errors std::compiler::CompilerError:\n    static compile:\n        raw::add(1, 2)\n\nr = probe():\n    on std::compiler::CompilerError {code}:\n        if code == std::compiler::DiagnosticCode::Direct:\n            1\n        else:\n            0\nr\n" raw.bot $::rawModule]]
     list [statuses [appHir $dir] {""}] [appValues $dir {interp compile}]
 } -cleanup removeApps -result {{{} ordinary} {1 1}}
 
 test dm-static-compile-callable-value {DIRECT-CALLABLE-VALUE in a static block is DiagnosticCode::DirectCallableValue} -body {
-    set dir [app [list main.bot "import compiler\nimport raw\n\nfn probe() -> int errors compiler::CompilerError:\n    static compile:\n        f = \[raw::add\]\n        1\n\nr = probe():\n    on compiler::CompilerError {code}:\n        if code == compiler::DiagnosticCode::DirectCallableValue:\n            1\n        else:\n            0\nr\n" raw.bot $::rawModule]]
+    set dir [app [list main.bot "import std::compiler\nimport raw\n\nfn probe() -> int errors std::compiler::CompilerError:\n    static compile:\n        f = \[raw::add\]\n        1\n\nr = probe():\n    on std::compiler::CompilerError {code}:\n        if code == std::compiler::DiagnosticCode::DirectCallableValue:\n            1\n        else:\n            0\nr\n" raw.bot $::rawModule]]
     appValues $dir {interp compile}
 } -cleanup removeApps -result {1 1}
 
 test dm-static-compile-accepted-in-direct-module {in a direct module the same block is accepted: the module is direct by the block's own call} -body {
-    set dir [app [list main.bot "direct module\n\nimport compiler\nimport raw\n\nfn probe() -> int errors compiler::CompilerError:\n    static compile:\n        raw::add(1, 2)\n\nr = probe():\n    on compiler::CompilerError:\n        0\nr\n" raw.bot $::rawModule]]
+    set dir [app [list main.bot "direct module\n\nimport std::compiler\nimport raw\n\nfn probe() -> int errors std::compiler::CompilerError:\n    static compile:\n        raw::add(1, 2)\n\nr = probe():\n    on std::compiler::CompilerError:\n        0\nr\n" raw.bot $::rawModule]]
     list [statuses [appHir $dir] {""}] [appValues $dir {interp compile}]
 } -cleanup removeApps -result {{{} direct} {3 3}}
 
 test dm-static-compile-final-program {directness is the final program's: a direct module whose only direct call is in a block rejected for another reason is stale} -body {
-    appKind [app [list main.bot "direct module\n\nimport compiler\nimport raw\n\nfn probe() -> int errors compiler::CompilerError:\n    static compile:\n        raw::add(1, \"two\")\n\nr = probe():\n    on compiler::CompilerError:\n        0\nr\n" raw.bot $::rawModule]]
+    appKind [app [list main.bot "direct module\n\nimport std::compiler\nimport raw\n\nfn probe() -> int errors std::compiler::CompilerError:\n    static compile:\n        raw::add(1, \"two\")\n\nr = probe():\n    on std::compiler::CompilerError:\n        0\nr\n" raw.bot $::rawModule]]
 } -cleanup removeApps -result {STALE-DIRECT-MODULE}
 
 # ---------------------------------------------------------------------------
@@ -535,7 +535,7 @@ test dm-deterministic {two compilations of one program give the identical summar
 } -cleanup removeApps -result {1 {{} ordinary x ordinary y ordinary} {{} ordinary x ordinary y ordinary}}
 
 test dm-core-ir-untouched {programs past the source boundary are not judged: core IR text calling the raw syscall builds as it always did, with no directness summary} -body {
-    set hir [hir::build {{call {ref linux::abi::x86_64::syscall} {const 39}}} -strict 0]
+    set hir [hir::build {{call {ref std::linux::abi::x86_64::syscall} {const 39}}} -strict 0]
     list [dict exists $hir direct] [lmap d [hir::diagnostics $hir] {dict get $d kind}]
 } -result {0 TYPE}
 
@@ -564,9 +564,9 @@ test dm-single-executable {the single executable, run from outside the checkout 
     set dir [app $::transitiveApp]
     set home [makeDirectory dm-single-home-[pid]]
     set ok [exec env -i HOME=$home $::singleExecutable -backend cranelift -warnings off [file join $dir main.bot] 2>@1]
-    set direct [app [list main.bot "import abi::x86_64\nimport linux::abi::x86_64\n\nabi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39)})) > 0\n"]]
+    set direct [app [list main.bot "import std::abi::x86_64\nimport std::linux::abi::x86_64\n\nstd::abi::x86_64::to_int(std::linux::abi::x86_64::syscall({rax: std::abi::x86_64::register64(39)})) > 0\n"]]
     catch {exec env -i HOME=$home $::singleExecutable -backend cranelift -warnings off [file join $direct main.bot] 2>@1} rejected
-    set declared [app [list main.bot "direct module\n\nimport abi::x86_64\nimport linux::abi::x86_64\n\nabi::x86_64::to_int(linux::abi::x86_64::syscall({rax: abi::x86_64::register64(39)})) > 0\n"]]
+    set declared [app [list main.bot "direct module\n\nimport std::abi::x86_64\nimport std::linux::abi::x86_64\n\nstd::abi::x86_64::to_int(std::linux::abi::x86_64::syscall({rax: std::abi::x86_64::register64(39)})) > 0\n"]]
     set run [exec env -i HOME=$home $::singleExecutable -backend cranelift -warnings off [file join $declared main.bot] 2>@1]
     file delete -force $home
     list [regexp {value: true} $ok] [regexp {DIRECT} $rejected] [regexp {value: true} $run]

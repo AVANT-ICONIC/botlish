@@ -1,23 +1,23 @@
 # NATIVE-LAYOUT-WRITES.md
 
 > Partially superseded by FIXED-LAYOUT-ARRAYS.md: designators name array
-> elements statically (`L.pts[2].x`), `binary::store_element` writes one
+> elements statically (`L.pts[2].x`), `std::binary::store_element` writes one
 > element of a live array at a dynamic index, and a whole array is written
 > from a List (section 22's "Fixed arrays" item).
 
 > Partially superseded by LAYOUT-UNIONS.md: an edit writes a union one
-> alternative at a time (`binary::store(e, L.u.alt, v)`, through
+> alternative at a time (`std::binary::store(e, L.u.alt, v)`, through
 > `NativeEdit[U]`), touching exactly that alternative's bytes; a designator
 > names an alternative, never a union, and byte storage is written the same
-> way (`binary::write`, `binary::write_foreign` through a pointer
+> way (`std::binary::write`, `std::binary::write_foreign` through a pointer
 > alternative).
 
 Native layout writes: the write half of the native-layout model. Live native
 memory is written through a writable native capability, `NativeEdit[L]`
-(`binary::native::edit`, `binary::store`); byte storage the program owns is
-written a field at a time through the same layouts (`binary::write`), and an
+(`std::binary::native::edit`, `std::binary::store`); byte storage the program owns is
+written a field at a time through the same layouts (`std::binary::write`), and an
 existing C pointer is encoded into a pointer field of it only by an explicit
-foreign write (`binary::write_foreign`).
+foreign write (`std::binary::write_foreign`).
 
 > The layout determines where the bits are. The backing decides what those
 > bits are allowed to mean. A `NativeEdit` grants live write authority; it
@@ -28,11 +28,11 @@ foreign write (`binary::write_foreign`).
 ```botlish
 direct module                                  # making an edit is raw authority
 
-import abi
-import abi::bytes
-import binary
-import binary::native
-import ffi::c
+import std::abi
+import std::abi::bytes
+import std::binary
+import std::binary::native
+import std::ffi::c
 
 opaque struct Node:
     tag: unit
@@ -40,37 +40,37 @@ opaque struct Node:
 layout POINT:
     size 4
     align 2
-    field x: binary::I16 at 0
-    field y: binary::U16 at 2
+    field x: std::binary::I16 at 0
+    field y: std::binary::U16 at 2
 
 layout RECORD:
     size 24
     align 8
-    field count: ffi::c::UInt at 0
+    field count: std::ffi::c::UInt at 0
     field origin: POINT at 4
-    field next: ffi::c::Ptr[Node] at 8
-    field callback: ffi::c::FnPtr[Fn{args: [ffi::c::Int], return: ffi::c::Int}] at 16
+    field next: std::ffi::c::Ptr[Node] at 8
+    field callback: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Int], return: std::ffi::c::Int}] at 16
 
 # Live memory foreign code handed out: read and written in place.
-fn reset(p: ffi::c::Ptr[Node], q: ffi::c::Ptr[Node]) -> int errors NativeEditNull:
-    e = binary::native::edit(RECORD, p)        # NativeEdit[RECORD]: p observed, nothing touched
-    binary::store(e, RECORD.count, 0)          # one 4-byte store at offset 0
-    binary::store(e, RECORD.origin.x, -1)      # a path: one store at offset 4
+fn reset(p: std::ffi::c::Ptr[Node], q: std::ffi::c::Ptr[Node]) -> int errors NativeEditNull:
+    e = std::binary::native::edit(RECORD, p)        # NativeEdit[RECORD]: p observed, nothing touched
+    std::binary::store(e, RECORD.count, 0)          # one 4-byte store at offset 0
+    std::binary::store(e, RECORD.origin.x, -1)      # a path: one store at offset 4
     o = e.origin                               # NativeEdit[POINT]: the subrecord, no read
-    binary::store(o, POINT.y, 7)               # one store at offset 6
-    binary::store(e, RECORD.next, q)           # q's address bits; q observed, still q's
+    std::binary::store(o, POINT.y, 7)               # one store at offset 6
+    std::binary::store(e, RECORD.next, q)           # q's address bits; q observed, still q's
     e.count + o.y                              # reads, exactly a view's
 
 # A record built in byte storage the program owns, for a C call.
-fn build(q: ffi::c::Ptr[Node]) -> abi::bytes::MutableBytes errors LayoutLengthMismatch:
-    d0 = abi::bytes::zeroed(abi::usize(binary::layout_length(RECORD)))
-    d1 = binary::write(d0, RECORD.count, 3)    # a new MutableBytes: d0 unchanged
-    d2 = binary::write(d1, RECORD.origin.y, 9)
-    binary::write_foreign(d2, RECORD.next, q)  # the explicit foreign encoding
+fn build(q: std::ffi::c::Ptr[Node]) -> std::abi::bytes::MutableBytes errors LayoutLengthMismatch:
+    d0 = std::abi::bytes::zeroed(std::abi::usize(std::binary::layout_length(RECORD)))
+    d1 = std::binary::write(d0, RECORD.count, 3)    # a new MutableBytes: d0 unchanged
+    d2 = std::binary::write(d1, RECORD.origin.y, 9)
+    std::binary::write_foreign(d2, RECORD.next, q)  # the explicit foreign encoding
 ```
 
 The record `build` returns is handed to C by the existing borrowing contract
-(C-POINTER-BORROWING.md): `extern c fn use_record(r: ffi::c::Ptr[ffi::c::UChar]
+(C-POINTER-BORROWING.md): `extern c fn use_record(r: std::ffi::c::Ptr[std::ffi::c::UChar]
 read noescape) -> ...` exposes its storage for the one call.
 
 ## Contents
@@ -111,21 +111,21 @@ read noescape) -> ...` exposes its storage for the one call.
         |               |              |                  |
    byte storage     byte storage   native memory     native memory
      (read)          (write)          (read)            (write)
- binary::parse    binary::write   binary::native::  binary::native::edit
+ std::binary::parse    std::binary::write   std::binary::native::  std::binary::native::edit
  LayoutStruct[L]  write_foreign      view(L, p)      (L, p): NativeEdit[L]
-  (a copy)        (a new value)   NativeView[L]      binary::store
+  (a copy)        (a new value)   NativeView[L]      std::binary::store
 ```
 
 The two write mechanisms are deliberately asymmetric, because their backings
 are:
 
-| | `LayoutStruct[L]` | `abi::bytes::MutableBytes` | `NativeView[L]` | `NativeEdit[L]` |
+| | `LayoutStruct[L]` | `std::abi::bytes::MutableBytes` | `NativeView[L]` | `NativeEdit[L]` |
 |---|---|---|---|---|
 | what it is | an immutable value: a copy of the fields | byte storage the program owns: a value | a window onto live native memory | write authority over live native memory |
-| made by | `binary::parse`, construction | `abi::bytes::zeroed`, `from_bytes`, a write | `binary::native::view(L, p)` | `binary::native::edit(L, p)` |
+| made by | `std::binary::parse`, construction | `std::abi::bytes::zeroed`, `from_bytes`, a write | `std::binary::native::view(L, p)` | `std::binary::native::edit(L, p)` |
 | holds | the field values | the bytes | the address | the address |
-| read | a field | `binary::parse` of a frozen copy | `v.f`, `binary::load` | `e.f`, `binary::load` (a view's reads) |
-| written | never (build a new one) | `binary::write`, `binary::write_foreign`: a **new** value | never | `binary::store`: **in place** |
+| read | a field | `std::binary::parse` of a frozen copy | `v.f`, `std::binary::load` | `e.f`, `std::binary::load` (a view's reads) |
+| written | never (build a new one) | `std::binary::write`, `std::binary::write_foreign`: a **new** value | never | `std::binary::store`: **in place** |
 | a pointer field | read from native memory only | written only by `write_foreign`, never parsed | read | read and stored |
 | authority | none | none | direct to make, ordinary to read | direct to make, ordinary to use |
 | ownership | its own | its own | none | none |
@@ -145,17 +145,17 @@ is bytes the program owns, filled through a layout and exposed for a call.
 | form | what |
 |---|---|
 | `NativeEdit[L]` | the type of a native edit of layout L: a built-in applied type like `NativeView[L]`; its argument names a layout |
-| `binary::native::edit(L, p)` | `NativeEdit[L]` of the memory the data pointer `p` addresses: L a layout name (static), `p` statically an `ffi::c::Ptr[T]`, observed; `errors NativeEditNull` |
-| `e.f`, `{a: x} = e`, `binary::load(e)` | reads, exactly a view's; a nested layout's field is a `NativeEdit[Inner]` |
-| `binary::store(e, L.f, v)` | `v` written into field f of the memory `e` addresses; `e` statically `NativeEdit[L]`; returns unit; declares nothing |
-| `binary::write(d, L.f, v)` | the `abi::bytes::MutableBytes` d with ordinary field f written: a new value; `errors LayoutLengthMismatch` unless `d` has exactly L's size |
-| `binary::write_foreign(d, L.p, q)` | the same for a C pointer field p and an existing pointer `q` of exactly its type, observed |
+| `std::binary::native::edit(L, p)` | `NativeEdit[L]` of the memory the data pointer `p` addresses: L a layout name (static), `p` statically an `std::ffi::c::Ptr[T]`, observed; `errors NativeEditNull` |
+| `e.f`, `{a: x} = e`, `std::binary::load(e)` | reads, exactly a view's; a nested layout's field is a `NativeEdit[Inner]` |
+| `std::binary::store(e, L.f, v)` | `v` written into field f of the memory `e` addresses; `e` statically `NativeEdit[L]`; returns unit; declares nothing |
+| `std::binary::write(d, L.f, v)` | the `std::abi::bytes::MutableBytes` d with ordinary field f written: a new value; `errors LayoutLengthMismatch` unless `d` has exactly L's size |
+| `std::binary::write_foreign(d, L.p, q)` | the same for a C pointer field p and an existing pointer `q` of exactly its type, observed |
 | `NativeEditNull` | the builtin declared error of an edit of the null pointer (beside `NativeViewNull`, `LayoutLengthMismatch`) |
-| `LAYOUT-FOREIGN-WRITE` | the diagnostic of a foreign write of a field that is no pointer field (`compiler::DiagnosticCode::LayoutForeignWrite`) |
+| `LAYOUT-FOREIGN-WRITE` | the diagnostic of a foreign write of a field that is no pointer field (`std::compiler::DiagnosticCode::LayoutForeignWrite`) |
 
-`binary::native` keeps being the one namespace of native-memory authority and
-now has two members, `view` and `edit`; `binary::store`, `binary::write` and
-`binary::write_foreign` are `binary`'s. All four are `nomethod` (each takes
+`std::binary::native` keeps being the one namespace of native-memory authority and
+now has two members, `view` and `edit`; `std::binary::store`, `std::binary::write` and
+`std::binary::write_foreign` are `binary`'s. All four are `nomethod` (each takes
 a static operand -- the edit its layout, the others a field designator --
 that is never a receiver value); none is context-free (a write is an
 effect: never folded, merged or dropped). No
@@ -192,13 +192,13 @@ read from the registry along the path (`hir::layouts::PathField`).
 
 A designator names a leaf: a scalar or a pointer field. A nested layout is
 written through its fields (`RECORD.origin` alone is `LAYOUT-OPERAND`), and a
-whole pointer-free record is still emitted by `binary::emit`. No runtime string
+whole pointer-free record is still emitted by `std::binary::emit`. No runtime string
 names a field; a String-literal spelling was rejected because it would look
 like one (and one-letter field names would warn, ONE-CHAR-STRING-LITERAL).
 
 A store's designator must be rooted at its edit's own layout
-(`LAYOUT-OPERAND` otherwise): `binary::store(e, RECORD.origin.x, v)` and
-`binary::store(e.origin, POINT.x, v)` write the same bytes.
+(`LAYOUT-OPERAND` otherwise): `std::binary::store(e, RECORD.origin.x, v)` and
+`std::binary::store(e.origin, POINT.x, v)` write the same bytes.
 
 ## 4. NativeEdit: the type, its reads, its subrecords
 
@@ -222,7 +222,7 @@ or from a view to an edit.
 
 **Reads.** Every read a view supports reads the same through an edit of the
 same memory (`ne-read-parity`): scalar fields, a u64 BigInt, nested fields at
-any depth, destructuring, `binary::load` of the record and of a subrecord,
+any depth, destructuring, `std::binary::load` of the record and of a subrecord,
 pointer fields (a fresh affine pointer, exactly as through a view). A read
 never returns a writable reference to a field: field values are ordinary
 values.
@@ -230,7 +230,7 @@ values.
 **Subrecords.** A nested layout read through `NativeEdit[Outer]` is
 `NativeEdit[Inner]` (through `NativeView[Outer]` it stays `NativeView[Inner]`):
 the outer address plus the field's offset, nothing read or copied. Chains
-fold: `binary::store(e.outer.inner, Inner.y, v)` is one store at the absolute
+fold: `std::binary::store(e.outer.inner, Inner.y, v)` is one store at the absolute
 offset (no intermediate address computation, native lowering's `ViewBase`),
 exactly as a chained read is one load. There is no parent/subview borrow
 rule: both are raw windows onto one piece of foreign memory.
@@ -238,8 +238,8 @@ rule: both are raw windows onto one piece of foreign memory.
 ## 5. Authority: direct modules
 
 Writing live process memory is raw authority, at least as much as reading it.
-`binary::native::edit` is a member of `binary::native`, which is designated
-direct (`core::native::declareDirectNamespace binary::native`), so making an
+`std::binary::native::edit` is a member of `std::binary::native`, which is designated
+direct (`core::native::declareDirectNamespace std::binary::native`), so making an
 edit is a direct edge of the calling module: `DIRECT` unless the module is
 `direct module` or mediates the call through a context it declares itself
 (`ne-direct`). Using an edit someone else made -- storing through it,
@@ -271,8 +271,8 @@ owner's; an edit keeps nothing alive.
 
 ## 7. Scalar stores
 
-`binary::store(e, L.f, v)` for every scalar encoding a view reads (the eight
-fixed-width encodings, the target's C scalars `ffi::c::UInt`, `Long`, `ULong`,
+`std::binary::store(e, L.f, v)` for every scalar encoding a view reads (the eight
+fixed-width encodings, the target's C scalars `std::ffi::c::UInt`, `Long`, `ULong`,
 ...): the value is written at the base address plus the constant absolute
 offset, in exactly the field's width and encoding, little-endian, aligned or
 not (packed layouts: `ne-packed-stores`), as one unaligned store. Never a
@@ -286,7 +286,7 @@ values are held to (`hir::range::ProvesValueAcceptedBy`, from
 Int a comparison bounded; -1 and 65536 for a U16 field are `TYPE`, and so is
 an unbounded Int (`ne-store-value-types`). C scalar fields keep Botlish's
 exact-domain semantics for the compilation's target: `4294967296` is no
-`ffi::c::UInt`, `18446744073709551615` is an `ffi::c::ULong` on LP64. No C
+`std::ffi::c::UInt`, `18446744073709551615` is an `std::ffi::c::ULong` on LP64. No C
 conversion rule exists. The runtime encoder still range-checks (a value no
 checked program can produce: a `-strict 0` program's), and fails *before
 anything is written* (`nedit_store_refuses_out_of_range_values_before_writing`,
@@ -294,7 +294,7 @@ anything is written* (`nedit_store_refuses_out_of_range_values_before_writing`,
 
 ## 8. Pointer and FnPtr stores; source-pointer ownership
 
-A pointer field (`ffi::c::Ptr[T]`, `ffi::c::FnPtr[F]`) is stored from an
+A pointer field (`std::ffi::c::Ptr[T]`, `std::ffi::c::FnPtr[F]`) is stored from an
 existing pointer of exactly its declared type: the same pointee identity or
 signature (no `Ptr[Other]`, no implicit erasure to `Ptr[Void]`, no function
 pointer for a data pointer, no Int: `TYPE`, with the reason). The store writes
@@ -322,8 +322,8 @@ facts Botlish knows; protocol facts are the wrapper's.
 
 ## 9. MutableBytes: ordinary layout writes
 
-`binary::write(d, L.f, v)` encodes `v` into field f's bytes of the
-`abi::bytes::MutableBytes` d according to L and returns the result as a new
+`std::binary::write(d, L.f, v)` encodes `v` into field f's bytes of the
+`std::abi::bytes::MutableBytes` d according to L and returns the result as a new
 value; every byte the field does not own is d's (`ne-write-value-semantics`:
 d, a copy held in a List and a struct field, and a second write from d all
 keep their own bytes). This is MUTABLE-BYTES.md's rule unchanged -- published
@@ -338,7 +338,7 @@ storage the result; neither exists, and the semantics do not need one.
 
 The storage must be exactly L's size: fewer or more bytes is the declared
 `LayoutLengthMismatch`, before anything is written (`ne-write-length`) -- the
-exact-length rule of `binary::parse`, no prefix write, no cursor. Botlish
+exact-length rule of `std::binary::parse`, no prefix write, no cursor. Botlish
 knows a `MutableBytes`' length, so this is checked at run time; the front end
 does not track the length statically, so every call handles or admits the
 error (a builder function with one `errors LayoutLengthMismatch` clause covers
@@ -347,24 +347,24 @@ Byte writes run on every backend.
 
 ## 10. The explicit foreign write
 
-`binary::write_foreign(d, L.p, q)` is the one operation that puts a pointer's
+`std::binary::write_foreign(d, L.p, q)` is the one operation that puts a pointer's
 representation into bytes, and it is legal only when
 
 1. L statically has the field the designator names;
 2. that field is a C pointer field (`LAYOUT-FOREIGN-WRITE` otherwise: an
-   ordinary field is written by `binary::write`);
+   ordinary field is written by `std::binary::write`);
 3. `q` is statically a pointer of exactly the field's type (`TYPE`: an Int
    is never encoded into a pointer field);
 4. the field lies inside the layout and `d` has exactly the layout's size
    (`LayoutLengthMismatch`);
-5. `d` is an `abi::bytes::MutableBytes` (`BINARY-OPERAND` otherwise).
+5. `d` is an `std::abi::bytes::MutableBytes` (`BINARY-OPERAND` otherwise).
 
 It encodes `q`'s address bits, little-endian, in the target's pointer width;
 null as zero bytes (`ne-write-foreign`). `q` is observed: the bytes do not own
 it, keep it alive or carry any dependency on it (`ne-write-foreign-observes`).
-An ordinary `binary::write` of a pointer field stays `LAYOUT-NATIVE-ONLY`
+An ordinary `std::binary::write` of a pointer field stays `LAYOUT-NATIVE-ONLY`
 (ordinary byte serialization never encodes a pointer), and so does
-`binary::emit` of a pointer-bearing `LayoutStruct` (`ne-ordinary-serialization-
+`std::binary::emit` of a pointer-bearing `LayoutStruct` (`ne-ordinary-serialization-
 unchanged`). No whole-record foreign emission was added: the field write is
 the smaller surface.
 
@@ -374,13 +374,13 @@ conjure authority by decoding. After a foreign write the bytes hold a
 pointer's bits, and
 
 ```
-existing Ptr[T]  -> binary::write_foreign into MutableBytes      YES
+existing Ptr[T]  -> std::binary::write_foreign into MutableBytes      YES
 those bytes      -> C observes the pointer (noescape exposure)    YES   ne-c-oracle-built
-those bytes      -> binary::parse as Ptr[T]                       NO    LAYOUT-NATIVE-ONLY
+those bytes      -> std::binary::parse as Ptr[T]                       NO    LAYOUT-NATIVE-ONLY
 native memory holding those bits -> NativeView / NativeEdit read  YES   ne-foreign-encoding-asymmetry
 ```
 
-`binary::parse` of a pointer layout is rejected whatever the bytes came from;
+`std::binary::parse` of a pointer layout is rejected whatever the bytes came from;
 a layout declaring the word as an integer (a bits twin) reads it as an inert
 Int, as it always could read native memory's bits, with no pointer operation;
 and the only way back to a pointer is native memory, through a view or an
@@ -408,8 +408,8 @@ only the scalar subrecords, or keep the edit private.
 
 **The caller-constructed record** -- the Win32 shape
 (`x.cbSize = sizeof x; x.handle = h; x.callback = cb; SomeApi(&x)`) -- is
-`abi::bytes::zeroed(abi::usize(binary::layout_length(L)))`, `binary::write`
-for the ordinary fields, `binary::write_foreign` for the pointer, handle and
+`std::abi::bytes::zeroed(std::abi::usize(std::binary::layout_length(L)))`, `std::binary::write`
+for the ordinary fields, `std::binary::write_foreign` for the pointer, handle and
 callback fields, and the existing exposure of the storage to the call. The
 borrowing semantics are unchanged: the outer storage is exposed only to a
 `noescape` parameter of known access, and nothing inspects the pointer fields
@@ -443,8 +443,8 @@ generated layouts, whose padding is a compiler fact, not Botlish storage.
 | a designator ending at a nested layout | `LAYOUT-OPERAND` |
 | a store's field of another layout than its edit's | `LAYOUT-OPERAND` |
 | a value not proven in its field's type (an out-of-range Int, another pointee, an Int for a pointer) | `TYPE` (at the value, naming the field and the facts) |
-| an ordinary `binary::write` of a pointer field | `LAYOUT-NATIVE-ONLY` |
-| a `binary::write_foreign` of an ordinary field | `LAYOUT-FOREIGN-WRITE` (new) |
+| an ordinary `std::binary::write` of a pointer field | `LAYOUT-NATIVE-ONLY` |
+| a `std::binary::write_foreign` of an ordinary field | `LAYOUT-FOREIGN-WRITE` (new) |
 | a byte write into storage of another size | the declared `LayoutLengthMismatch` |
 | an edit of the null pointer | the declared `NativeEditNull` (not `NativeViewNull`: the access named is write) |
 | an edit of a non-null pointer on interp / compile | the run-time `NATIVE-ONLY` |
@@ -454,7 +454,7 @@ generated layouts, whose padding is a compiler fact, not Botlish storage.
 
 `LAYOUT-FOREIGN-WRITE` is classified in `tests/static-compile.test`'s census
 (a `static compile:` block can produce it: its case is
-`compiler::DiagnosticCode::LayoutForeignWrite`) and documented in
+`std::compiler::DiagnosticCode::LayoutForeignWrite`) and documented in
 Compilerpedia (`error.layout-foreign-write`). An edit of the null pointer has
 its own error rather than `NativeViewNull` because the diagnostic names the
 operation that failed, and a view's name would say read access.
@@ -484,11 +484,11 @@ distinct operations; none exists.
 
 ## 14. Representation and lowering
 
-**HIR.** `NativeEdit[L]` is `{nedit L}`. `binary::native::edit(L, p)` is a
+**HIR.** `NativeEdit[L]` is `{nedit L}`. `std::binary::native::edit(L, p)` is a
 call of its root native whose layout operand resolution turns into L's
 descriptor constant; its result shape `{native-edit 0}` types it. Reads
 elaborate exactly as a view's (`hir::layouts::Elaborate`: `e.f` becomes
-`binary#view_field(e, FIELD)`, `binary::load(e)` becomes `binary#load(e,
+`binary#view_field(e, FIELD)`, `std::binary::load(e)` becomes `binary#load(e,
 DESCRIPTOR)`); `binary#view_field`'s result shape `{view-field 0 1}` gives a
 nested layout read through an edit the type `NativeEdit[Inner]` when
 specialization re-infers a function (`ne-specialization`). The writes need no
@@ -503,13 +503,13 @@ fixture's fifth; native/src/nir.rs, runtime/nview.rs), and lowering emits one
 per write (native/lower.tcl's `LayoutWrite`):
 
 ```
-binary::native::edit(L, p)       %n = op cptrisnull %p ; br %n L1 L0 ; L1: faildeclared NativeEditNull ; L0: (the edit is %p)
-binary::store(e, L.f, v)         op nativestore %e %OFFSET %ENCODING %v       (binstore's encoding word)
-binary::store(e, L.p, q)         op nativestoreptr %e %OFFSET %WIDTH %q
-binary::store(e.a.b, B.f, v)     one nativestore at the absolute offset       (ViewBase folds the subrecords)
-binary::write(d, L.f, v)         op mbyteslen / ieq / br / faildeclared LayoutLengthMismatch ;
+std::binary::native::edit(L, p)       %n = op cptrisnull %p ; br %n L1 L0 ; L1: faildeclared NativeEditNull ; L0: (the edit is %p)
+std::binary::store(e, L.f, v)         op nativestore %e %OFFSET %ENCODING %v       (binstore's encoding word)
+std::binary::store(e, L.p, q)         op nativestoreptr %e %OFFSET %WIDTH %q
+std::binary::store(e.a.b, B.f, v)     one nativestore at the absolute offset       (ViewBase folds the subrecords)
+std::binary::write(d, L.f, v)         op mbyteslen / ieq / br / faildeclared LayoutLengthMismatch ;
                                  %s = op mbyteswrite %storage %OFFSET %ENCODING %v   (a fresh storage)
-binary::write_foreign(d, L.p, q) ... ; %s = op mbyteswriteptr %storage %OFFSET %WIDTH %q
+std::binary::write_foreign(d, L.p, q) ... ; %s = op mbyteswriteptr %storage %OFFSET %WIDTH %q
 ```
 
 Each op is a runtime helper call: `nativestore` encodes the value with the
@@ -526,8 +526,8 @@ the layout at run time (`ne-nir`; the mutant `copy-per-store` is killed by
 the NIR and allocation tests).
 
 `main.tcl -emit-nir` of three writes (`put` stores through an edit of
-`Deep`: `binary::store(e, Deep.head, 7)`, `binary::store(e.outer.inner,
-Inner.y, 513)`, `binary::store(e, Deep.outer.inner.x, -2)`; `link` stores a
+`Deep`: `std::binary::store(e, Deep.head, 7)`, `std::binary::store(e.outer.inner,
+Inner.y, 513)`, `std::binary::store(e, Deep.outer.inner.x, -2)`; `link` stores a
 pointer; `build` makes a record in bytes):
 
 ```
@@ -555,7 +555,7 @@ func 4 "link" params=2 ... pnames="e q"
 end
 
 func 5 "build" params=1 ... pnames="q" results=1
-    %3 = callmulti 1 %1                   ; abi::bytes::zeroed(abi::usize(16))
+    %3 = callmulti 1 %1                   ; std::abi::bytes::zeroed(std::abi::usize(16))
     %4 = call 2 %3
     %5 = structget 0 %4                   ; its storage
     %8 = op mbyteslen %5                  ; exactly the layout's size, or LayoutLengthMismatch
@@ -580,13 +580,13 @@ Tcl backends refuse it (`NATIVE-ONLY`).
 ## 15. The Tcl backends
 
 They have no native memory, so they keep the honest capability boundary of
-the read milestone: `binary::native::edit` is `NativeEditNull` for a null
+the read milestone: `std::binary::native::edit` is `NativeEditNull` for a null
 pointer and the run-time refusal `NATIVE-ONLY` ("reads and writes live
 native process memory ...") for any other; an edit can therefore never exist
-there, and `binary::store` refuses too (core/binary.tcl). Byte storage is
-theirs: `binary::write` and `binary::write_foreign` run on interp and
+there, and `std::binary::store` refuses too (core/binary.tcl). Byte storage is
+theirs: `std::binary::write` and `std::binary::write_foreign` run on interp and
 compile exactly as natively (core/binary.tcl's reference implementation,
-sharing `ScalarPiece`, the scalar encoder `binary::emit` now uses too); a C
+sharing `ScalarPiece`, the scalar encoder `std::binary::emit` now uses too); a C
 pointer value has its address there as well (the fixture's addresses, null),
 so the foreign write encodes it -- nothing is fabricated (`ne-tcl-backends`,
 `ne-write-foreign` on all four backends). The Tcl compiler compiles every
@@ -600,7 +600,7 @@ the designator constant carries the absolute offset and the encoding, the
 descriptor constant an edit's layout. `NativeEdit[L]` prints and reads back as
 HIR text (`ne-hir-text-roundtrip`: format, read, format is identical and the
 read HIR runs; HIR text of a program importing a library module does not
-round trip in general -- `binary::store` needs `import binary` -- so the
+round trip in general -- `std::binary::store` needs `import std::binary` -- so the
 writes are carried by interchange). `hir/interchange.tcl` carries the HIR
 dict: a program written as `.hirx` and read back after another compilation
 declaring a same-named layout with other offsets writes through its own
@@ -610,7 +610,7 @@ backend write the bytes the source does (`ne-interchange-fresh-process`); two
 compilations of a same-named layout with swapped offsets keep their own
 writes (`ne-isolation`); the front-end cache stores and reads back a program
 of stores and writes (`ne-cache`). The pointer width comes from the target
-the program's `ffi::c` scalars were declared for, already in the cache key.
+the program's `std::ffi::c` scalars were declared for, already in the cache key.
 
 ## 17. Targets
 
@@ -642,14 +642,14 @@ at each end.
 | edit: a store two layouts deep, by path (`Rec.outer.inner.x`) | 2-19 ns | 14-22 ns |
 | edit: the same store through the subrecord `e.outer.inner` | noise-16 ns | 15-24 ns |
 | edit: a pointer store (`Rec.next`) | 12-14 ns | 10-15 ns |
-| edit: make an edit (`binary::native::edit`: a null test) | about 0-3 ns | about 1-5 ns (one outlier, 48) |
+| edit: make an edit (`std::binary::native::edit`: a null test) | about 0-3 ns | about 1-5 ns (one outlier, 48) |
 | edit: a store, then a read of the field | 32-36 ns | 34-36 ns |
 | edit: one scalar store into a 4,096-byte record | noise-22 ns | 16-20 ns |
-| bytes: one `binary::write` (32 bytes) | 436-451 ns | 98-119 ns |
-| bytes: three `binary::write`s in a chain | 647-678 ns | 334-367 ns |
-| bytes: one `binary::write_foreign` (a pointer field) | 420-452 ns | 92-99 ns |
-| bytes: one `binary::write` into a 4,096-byte record | 1,099-1,166 ns | 677-752 ns |
-| reference: `abi::bytes::replace` of one byte (32 bytes) | 394-442 ns | 249-253 ns |
+| bytes: one `std::binary::write` (32 bytes) | 436-451 ns | 98-119 ns |
+| bytes: three `std::binary::write`s in a chain | 647-678 ns | 334-367 ns |
+| bytes: one `std::binary::write_foreign` (a pointer field) | 420-452 ns | 92-99 ns |
+| bytes: one `std::binary::write` into a 4,096-byte record | 1,099-1,166 ns | 677-752 ns |
+| reference: `std::abi::bytes::replace` of one byte (32 bytes) | 394-442 ns | 249-253 ns |
 
 ("noise": a negative difference in one of the runs; the single-store rows
 are within the loop's jitter, and the eight-store row is the measurement.)
@@ -657,13 +657,13 @@ are within the loop's jitter, and the eight-store row is the measurement.)
 Heap allocations per operation (Cranelift's counters, specialized): every
 store -- scalar, nested by path or through a subrecord, pointer, into the
 4,096-byte record -- and making an edit **0**, the program's allocations
-exactly its baseline's; one `binary::write` or `binary::write_foreign` **1**
+exactly its baseline's; one `std::binary::write` or `std::binary::write_foreign` **1**
 (its fresh `MutableBytes` storage, no struct: the wrapper of a write's result
 is never built when the result is consumed in place), three chained writes
-**3** (three storages, still no wrapper), `abi::bytes::replace` 2 (its storage
+**3** (three storages, still no wrapper), `std::abi::bytes::replace` 2 (its storage
 and its wrapper). With specialization off, a write allocates its storage and
 two structs -- the `MutableBytes` wrapper and the benchmark's
-`abi::bytes::mutable_length` result -- exactly as `replace` does there; a
+`std::abi::bytes::mutable_length` result -- exactly as `replace` does there; a
 chain still builds no intermediate wrapper.
 
 * **A store is about 17-18 ns** (eight of them: 136-147 ns): one runtime
@@ -679,7 +679,7 @@ chain still builds no intermediate wrapper.
   (677-752 ns for 4,096 bytes), which is value semantics (section 9), not a
   surprise: a program that builds a large record field by field pays one copy
   per field. A write is cheaper than the existing per-byte
-  `abi::bytes::replace` (249-253 ns), which also builds its wrapper.
+  `std::abi::bytes::replace` (249-253 ns), which also builds its wrapper.
 * **Surprising fixed overhead**: none in the operations themselves. The
   unspecialized byte rows are 3-4x the specialized ones because of the two
   wrapper structs above, the same overhead every `MutableBytes` operation has
@@ -728,7 +728,7 @@ assertions; padding at 26-27, 36-39 and 65-71.
 
 * *Native edits* (`ne-c-oracle-edit`, `ne-c-oracle-edit-bytes`): C resets
   its record to 0xA5 and hands out its address; Botlish writes it through
-  `binary::native::edit`; C checks every field with its own typed reads
+  `std::binary::native::edit`; C checks every field with its own typed reads
   (`bne_check_live`, a mask of mismatching fields), the data pointer against
   the object it handed out and the function pointer against its own
   function, every padding byte against the sentinel. Case 0 writes every
@@ -738,8 +738,8 @@ assertions; padding at 26-27, 36-39 and 65-71.
   sentinel intact. All three: mask 0. The record's bytes, copied out by C,
   are the test's model of every scalar.
 * *The caller-constructed record* (`ne-c-oracle-built`): Botlish builds the
-  same record in byte storage it owns -- `abi::bytes::zeroed`, sixteen
-  `binary::write`s, two `binary::write_foreign`s (C's pointer and function
+  same record in byte storage it owns -- `std::abi::bytes::zeroed`, sixteen
+  `std::binary::write`s, two `std::binary::write_foreign`s (C's pointer and function
   pointer, or null ones) -- and passes it to `bne_check_built(bytes: Ptr[UChar]
   read noescape, n, which)`, the existing borrowing contract; C copies the
   bytes into its struct and finds every field, both pointers identical to its
@@ -763,16 +763,16 @@ two or three levels deep, and in the outermost zero to three pointer fields
 -- data and function pointers, aligned or not), a random initial record
 (every byte random: padding, fields, pointer words) and one to eight writes
 to random leaves, scalar or pointer, some through a nested edit
-(`binary::store(e.f2, INNER.f0, v)`), the others by a path from the root,
+(`std::binary::store(e.f2, INNER.f0, v)`), the others by a path from the root,
 fields sometimes written twice; values biased to each encoding's extremes
 and zero, a pointer null, the run-time address of a fixture record, or a
 function's address. The fuzzer applies the writes to the initial bytes
 itself (little-endian, two's complement, a pointer's address bits: its own
 model, never a descriptor or generated code), and each program performs
-them twice: through `binary::native::edit` into fixture memory, returning
+them twice: through `std::binary::native::edit` into fixture memory, returning
 the memory's bytes (`ffi_fixture::memory_bytes`), every written field read
 back and every written pointer's address; and into a `MutableBytes` of the
-same initial bytes (`binary::write`, `binary::write_foreign`), returning the
+same initial bytes (`std::binary::write`, `std::binary::write_foreign`), returning the
 result's bytes and the operand's (unchanged). Both byte lists must equal the
 model's exactly. Seeds 17, 41 and 99 at 40 programs each, seed 3 at 20 on
 all four backends (interp and compile run the byte half and must refuse the
@@ -826,8 +826,8 @@ Run in a 4-core container on 2026-10-18 (Linux x86-64), after the change:
   golden suites passed on every backend. Two entries failed, one test on
   both Tcl backends: `abi-bytes-natives-registered`, an inventory pinning
   that no native is named for writing (its regexp
-  `write|keepalive|pointer|ptr`), which `binary::write` and
-  `binary::write_foreign` now are -- each returns a new `MutableBytes` and
+  `write|keepalive|pointer|ptr`), which `std::binary::write` and
+  `std::binary::write_foreign` now are -- each returns a new `MutableBytes` and
   writes through no address. The test now expects exactly those two, and
   abi-bytes.test passes whole (73/73). The other inventories this milestone
   grows were updated as it was written and pass whole:
@@ -921,11 +921,11 @@ Run in a 4-core container on 2026-10-18 (Linux x86-64), after the change:
 NATIVE-LAYOUT-VIEWS.md section 16 listed what writes would have to decide:
 
 1. **Pointer encoding into bytes.** Yes, by the explicit
-   `binary::write_foreign` only; ordinary `binary::emit` and `binary::write`
+   `std::binary::write_foreign` only; ordinary `std::binary::emit` and `std::binary::write`
    never encode one; bytes are never re-materialized as a pointer except by
    copying them into native memory and reading that memory through a view or
    an edit (section 10).
-2. **Write authority.** One namespace, `binary::native`, with a read and a
+2. **Write authority.** One namespace, `std::binary::native`, with a read and a
    write constructor; a view never upgrades, and an edit is made from a
    pointer separately (sections 4, 5).
 3. **Affinity of a writable view.** Unrestricted, not affine: affinity would
@@ -945,7 +945,7 @@ NATIVE-LAYOUT-VIEWS.md section 16 listed what writes would have to decide:
    field-wise (sections 9, 10).
 8. **Bitfields and unions.** Still absent; their writes wait for the
    representation (section 22).
-9. **`ffi::c::Bool` fields.** Still not a layout field: no generic write
+9. **`std::ffi::c::Bool` fields.** Still not a layout field: no generic write
    encoder needed one (section 22).
 10. **Volatile / concurrent memory.** Plain stores, in program order, never
     cached; no volatile, atomic or fenced operation (section 13).
@@ -966,13 +966,13 @@ touch), as input to the C-bindgen layout milestone:
   exactly the size, so a record built in bytes is exactly `sizeof(T)`.
 * **Padding is the gaps.** A write never touches padding, so a generated
   layout need not (and cannot) declare it; but a caller-constructed record's
-  padding is whatever its storage held (zero from `abi::bytes::zeroed`):
+  padding is whatever its storage held (zero from `std::abi::bytes::zeroed`):
   APIs that compare whole structs (`memcmp`) or hash them see that.
 * **Pointer and function pointer fields** with their exact pointee identity
-  (an opaque struct per C struct type, `ffi::c::Void` for `void *`) and
+  (an opaque struct per C struct type, `std::ffi::c::Void` for `void *`) and
   signature: stores and foreign writes admit only the exact type, so a
   generator that erases pointees to `Void` forces every caller through
-  `ffi::c::erase`/`retype`. Handles typed as pointers (`HWND`, `HANDLE`) need
+  `std::ffi::c::erase`/`retype`. Handles typed as pointers (`HWND`, `HANDLE`) need
   the same.
 * **Fixed arrays** (`char name[16]`, `POINT pts[4]`, `WCHAR szDevice[32]`):
   not representable. A designator names a leaf; an array would need an
@@ -980,7 +980,7 @@ touch), as input to the C-bindgen layout milestone:
   descriptor -- and their writes (store one element, a whole array from a
   List). Until then a generator can only emit arrays of bytes as runs of U8
   fields or skip the struct. (Done in FIXED-LAYOUT-ARRAYS.md: static element
-  designators, binary::store_element, whole-array writes from a List.)
+  designators, std::binary::store_element, whole-array writes from a List.)
 * **Bitfields** (`unsigned flags : 3`): not representable. A write of one is
   a read-modify-write of its storage unit, which a store is not; the
   generator must at least emit the storage unit as a scalar field (the
@@ -991,15 +991,15 @@ touch), as input to the C-bindgen layout milestone:
   every other's reading, so the representation needs an explicit overlay
   first. A generator could emit one layout per alternative over the same
   bytes, each written separately.
-* **`ffi::c::Bool` fields** (SDL3): not a layout field yet. A write would be
+* **`std::ffi::c::Bool` fields** (SDL3): not a layout field yet. A write would be
   one byte, 0 or 1; a read of any other byte must be the `NATIVE BOOL`
-  failure a C result has. Today a generator must use `binary::U8`.
+  failure a C result has. Today a generator must use `std::binary::U8`.
 * **Compiler-specific packing and alignment** (`#pragma pack`,
   `__declspec(align)`, `__attribute__((packed, aligned))`): already
   representable as explicit offsets and an explicit alignment; nothing
   consumes `align` yet (no native allocation places a layout), so a
   generator should still emit it truthfully for the allocation milestone.
-* **`cbSize`-style self-describing fields** need `binary::layout_length(L)`,
+* **`cbSize`-style self-describing fields** need `std::binary::layout_length(L)`,
   a compile-time constant that fits any U32/U16 field.
 * **Facts no layout states.** Endianness (big-endian network structs:
   recorded per field in the registry, but no syntax), floating-point fields
@@ -1010,14 +1010,14 @@ touch), as input to the C-bindgen layout milestone:
 
 ## 23. Not here
 
-No native record allocation (`binary::native::allocate`, `NativeRecord[L]`,
+No native record allocation (`std::binary::native::allocate`, `NativeRecord[L]`,
 malloc-backed layouts, Botlish-owned stable addresses, free or destructor
 semantics); no C bindgen change, C header struct probing or `extern c
 struct`; no layout guarantee, `repr(C)` or pinning for an ordinary Botlish
 value; no ownership or lifetime tracking of foreign memory, no hidden pointer
 dependency, no borrow checking; no aggregate C ABI (records by value),
 callbacks into Botlish, floating point, arrays, unions, bitfields, dynamic or
-trailing extents, `ffi::c::Bool` fields, volatile or atomic memory; no pointer
+trailing extents, `std::ffi::c::Bool` fields, volatile or atomic memory; no pointer
 arithmetic, `Ptr <-> Int` or `Ptr -> Bytes` conversion, and no decoding of a
 pointer from bytes. No edit-to-view reduction, no whole-record foreign
 emission, no method syntax for the writes.
@@ -1055,11 +1055,11 @@ share this code: `bin_encode`, `ViewBase`, the subtype rule).
 | `hir/types.tcl` | `{nedit L}`: `IsNativeEdit`, `IsNativeMemory`, resolution, subtyping, joins, projection, the `native-edit` and `view-field` result shapes |
 | `hir/resolve.tcl` | `FieldPathOperand`; `NativeEdit[L]` |
 | `hir/range.tcl`, `hir/structs.tcl`, `hir/affine.tcl`, `hir/cabi.tcl`, `hir/read.tcl`, `hir/escape.tcl` | admission, projection check, ownership of reads, not-a-pointer, HIR text, a write's result held as its storage |
-| `hir/static.tcl`, `lib/compiler.bot`, `lib/test.bot` | `LAYOUT-FOREIGN-WRITE` |
+| `hir/static.tcl`, `stdlib/compiler.bot`, `stdlib/test.bot` | `LAYOUT-FOREIGN-WRITE` |
 | `core/binary.tcl`, `core/native.tcl`, `core/cabi.tcl` | the operations and their reference implementation, the roles and shapes, `NativeEditNull`, the byte fixture |
 | `native/lower.tcl` | `LayoutWrite`, `LayoutCall`'s `edit` |
 | `native/src/runtime/nview.rs`, `ops.rs`, `nir.rs`, `codegen/clif.rs`, `runtime/error.rs` | `nativestore`, `nativestoreptr`, `mbyteswrite`, `mbyteswriteptr`, `cptrfixturebytes`; `bin_encode`; the replay kinds |
 | `tests/native-edit.test`, `tests/cffi/nedit-fixture.c` | the suite and the C oracle |
 | `audit/native-edit/tools/` | the fuzzer and the mutants |
 | `bench/native-edit.tcl` | the performance report |
-| `compilerpedia/` | `stdlib.binary::native::edit`, `::store`, `::write`, `::write_foreign`, `error.layout-foreign-write` |
+| `compilerpedia/` | `stdlib.std::binary::native::edit`, `::store`, `::write`, `::write_foreign`, `error.layout-foreign-write` |

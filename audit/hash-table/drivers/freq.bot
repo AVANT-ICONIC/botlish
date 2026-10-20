@@ -8,9 +8,9 @@
 #
 #   argv: T ?MODE?   (MODE "none" builds the tokens and counts nothing: the
 #                    baseline tools/mixed.tcl subtracts)
-import list
-import str
-import char
+import std::list
+import std::str
+import std::char
 import table
 import keys
 
@@ -19,11 +19,11 @@ fn int_of(text: str) -> int errors IndexNotFound:
     fn digits(i: int, acc: int) -> int errors IndexNotFound:
         if i >= n:
             return acc
-        digits(i + 1, acc * 10 + char::scalar_value(text.char_at(i)) - 48)
+        digits(i + 1, acc * 10 + std::char::scalar_value(text.char_at(i)) - 48)
     digits(0, 0)
 
 fn counted(t: table::Table, tokens: List[str], i: int, sum: int) errors IndexNotFound:
-    if i >= list::length(tokens):
+    if i >= std::list::length(tokens):
         return sum
     w = tokens.at(i)
     c = table::get(t, w, 0)
@@ -40,7 +40,7 @@ fn main(args: List[str]) errors IndexNotFound:
     tokens = loop i from 0 to n:
         words.get(mod(i * 40503 + 7, v), "")
     if args.get(2, "count") == "none":
-        return list::length(tokens)
+        return std::list::length(tokens)
     counted(table::fresh(0), tokens, 0, 0)
 
 args = argv():

@@ -78,7 +78,7 @@ set host [core::cabi::hostTarget]
 set target [expr {[dict get $options -target] eq "" ? $host : [dict get $options -target]}]
 
 # The model: the target's data model, in this file's own words. C integer
-# spelling -> the ffi::c scalar; the stdint names -> their C type on the
+# spelling -> the std::ffi::c scalar; the stdint names -> their C type on the
 # target (LP64 Linux and macOS, LLP64 Windows: MinGW-w64's int64_t is long
 # long).
 set scalars [dict create char Char {signed char} SChar {unsigned char} UChar short Short \
@@ -207,42 +207,42 @@ proc drawField {r i name earlier typedefs enums self selfName {kind struct}} {
     }
     if {$x < 0.32} {
         set c [pick [dict keys $::scalars]]
-        return [dict create c "$c $name" expect ffi::c::[dict get $::scalars $c] members [list [list $name $name]]]
+        return [dict create c "$c $name" expect std::ffi::c::[dict get $::scalars $c] members [list [list $name $name]]]
     } elseif {$x < 0.44} {
         set s [pick [dict keys $::stdints]]
-        return [dict create c "$s $name" expect ffi::c::[dict get $::scalars [dict get $::stdints $s]] members [list [list $name $name]]]
+        return [dict create c "$s $name" expect std::ffi::c::[dict get $::scalars [dict get $::stdints $s]] members [list [list $name $name]]]
     } elseif {$x < 0.52} {
         set t [pick $typedefs]
-        return [dict create c "[dict get $t name] $name" expect ffi::c::[dict get $::scalars [typedefScalar $typedefs [dict get $t name]]] members [list [list $name $name]]]
+        return [dict create c "[dict get $t name] $name" expect std::ffi::c::[dict get $::scalars [typedefScalar $typedefs [dict get $t name]]] members [list [list $name $name]]]
     } elseif {$x < 0.58 && [llength $enums]} {
         set e [pick $enums]
         set neg [expr {[lindex [dict get $e values] 0] < 0}]
-        return [dict create c "enum [dict get $e name] $name" expect [expr {$neg ? "ffi::c::Int" : "ffi::c::UInt"}] members [list [list $name $name]]]
+        return [dict create c "enum [dict get $e name] $name" expect [expr {$neg ? "std::ffi::c::Int" : "std::ffi::c::UInt"}] members [list [list $name $name]]]
     } elseif {$x < 0.74} {
         set shape [pick {void char self opaque earlier pointer}]
         switch -- $shape {
-            void { return [dict create c "void *$name" expect "ffi::c::Ptr\[ffi::c::Void\]" members [list [list $name $name]]] }
-            char { return [dict create c "const char *$name" expect "ffi::c::Ptr\[ffi::c::Char\]" members [list [list $name $name]]] }
-            opaque { return [dict create c "struct lf_opaque *$name" expect "ffi::c::Ptr\[lf::ctypes::lf_opaque\]" members [list [list $name $name]]] }
-            pointer { return [dict create c "void **$name" expect "ffi::c::Ptr\[ffi::c::Ptr\[ffi::c::Void\]\]" members [list [list $name $name]]] }
+            void { return [dict create c "void *$name" expect "std::ffi::c::Ptr\[std::ffi::c::Void\]" members [list [list $name $name]]] }
+            char { return [dict create c "const char *$name" expect "std::ffi::c::Ptr\[std::ffi::c::Char\]" members [list [list $name $name]]] }
+            opaque { return [dict create c "struct lf_opaque *$name" expect "std::ffi::c::Ptr\[lf::ctypes::lf_opaque\]" members [list [list $name $name]]] }
+            pointer { return [dict create c "void **$name" expect "std::ffi::c::Ptr\[std::ffi::c::Ptr\[std::ffi::c::Void\]\]" members [list [list $name $name]]] }
             self {
-                if {$self eq ""} { return [dict create c "struct lf_opaque *$name" expect "ffi::c::Ptr\[lf::ctypes::lf_opaque\]" members [list [list $name $name]]] }
-                return [dict create c "$self *$name" expect "ffi::c::Ptr\[lf::ctypes::$selfName\]" members [list [list $name $name]]]
+                if {$self eq ""} { return [dict create c "struct lf_opaque *$name" expect "std::ffi::c::Ptr\[lf::ctypes::lf_opaque\]" members [list [list $name $name]]] }
+                return [dict create c "$self *$name" expect "std::ffi::c::Ptr\[lf::ctypes::$selfName\]" members [list [list $name $name]]]
             }
             earlier {
                 set named [lmap e $earlier {expr {[dict get $e anonymous] ? [continue] : $e}}]
-                if {![llength $named]} { return [dict create c "void *$name" expect "ffi::c::Ptr\[ffi::c::Void\]" members [list [list $name $name]]] }
+                if {![llength $named]} { return [dict create c "void *$name" expect "std::ffi::c::Ptr\[std::ffi::c::Void\]" members [list [list $name $name]]] }
                 set e [pick $named]
-                return [dict create c "[dict get $e kind] [dict get $e tag] *$name" expect "ffi::c::Ptr\[lf::ctypes::[dict get $e name]\]" members [list [list $name $name]]]
+                return [dict create c "[dict get $e kind] [dict get $e tag] *$name" expect "std::ffi::c::Ptr\[lf::ctypes::[dict get $e name]\]" members [list [list $name $name]]]
             }
         }
     } elseif {$x < 0.80} {
         return [drawArray $name $emitted]
     } elseif {$x < 0.86} {
         if {[chance 0.5]} {
-            return [dict create c "int (*$name)(int, void *)" expect "ffi::c::FnPtr\[Fn{args: \[ffi::c::Int, ffi::c::Ptr\[ffi::c::Void\]\], return: ffi::c::Int}\]" members [list [list $name $name]]]
+            return [dict create c "int (*$name)(int, void *)" expect "std::ffi::c::FnPtr\[Fn{args: \[std::ffi::c::Int, std::ffi::c::Ptr\[std::ffi::c::Void\]\], return: std::ffi::c::Int}\]" members [list [list $name $name]]]
         }
-        return [dict create c "lf_callback $name" expect "ffi::c::FnPtr\[Fn{args: \[ffi::c::Long\], return: unit}\]" members [list [list $name $name]]]
+        return [dict create c "lf_callback $name" expect "std::ffi::c::FnPtr\[Fn{args: \[std::ffi::c::Long\], return: unit}\]" members [list [list $name $name]]]
     } elseif {$x < 0.93 && [llength $emitted]} {
         set e [pick $emitted]
         return [dict create c "[dict get $e kind] [dict get $e tag] $name" expect nested nested [dict get $e key] members [list [list $name $name]]]
@@ -255,14 +255,14 @@ proc drawField {r i name earlier typedefs enums self selfName {kind struct}} {
         if {$kind eq "union"} {
             return [dict create c "struct { $a ${name}_a; $b ${name}_b; }" expect anonymous \
                 synthetic ${selfName}_member[expr {$i + 1}] slot member[expr {$i + 1}] synthKind struct \
-                inner [list [dict create c "$a ${name}_a" expect ffi::c::[dict get $::scalars $a] members [list [list ${name}_a ${name}_a]]] \
-                    [dict create c "$b ${name}_b" expect ffi::c::[dict get $::scalars $b] members [list [list ${name}_b ${name}_b]]]]]
+                inner [list [dict create c "$a ${name}_a" expect std::ffi::c::[dict get $::scalars $a] members [list [list ${name}_a ${name}_a]]] \
+                    [dict create c "$b ${name}_b" expect std::ffi::c::[dict get $::scalars $b] members [list [list ${name}_b ${name}_b]]]]]
         }
         return [dict create c "struct { $a ${name}_a; $b ${name}_b; }" expect promoted \
-            types [list ffi::c::[dict get $::scalars $a] ffi::c::[dict get $::scalars $b]] \
+            types [list std::ffi::c::[dict get $::scalars $a] std::ffi::c::[dict get $::scalars $b]] \
             members [list [list ${name}_a ${name}_a] [list ${name}_b ${name}_b]]]
     }
-    return [dict create c "int $name" expect ffi::c::Int members [list [list $name $name]]]
+    return [dict create c "int $name" expect std::ffi::c::Int members [list [list $name $name]]]
 }
 
 # An anonymous union member I of the record SELFNAME (LAYOUT-UNIONS.md): a
@@ -280,7 +280,7 @@ proc drawAnonymous {i name selfName earlier kind} {
         switch -- [pick {scalar scalar array struct record blocked}] {
             scalar {
                 set c [pick [dict keys $::scalars]]
-                lappend inner [dict create c "$c $iname" expect ffi::c::[dict get $::scalars $c] members [list [list $iname $iname]]]
+                lappend inner [dict create c "$c $iname" expect std::ffi::c::[dict get $::scalars $c] members [list [list $iname $iname]]]
             }
             array { lappend inner [drawArray $iname [lmap e $earlier {expr {![dict get $e anonymous] && [dict get $e expectStatus] eq "layout" ? $e : [continue]}}]] }
             struct {
@@ -288,8 +288,8 @@ proc drawAnonymous {i name selfName earlier kind} {
                 set b [pick [dict keys $::scalars]]
                 lappend inner [dict create c "struct { $a ${iname}_x; $b ${iname}_y; }" expect anonymous \
                     synthetic ${synth}_member[expr {$j + 1}] slot member[expr {$j + 1}] synthKind struct \
-                    inner [list [dict create c "$a ${iname}_x" expect ffi::c::[dict get $::scalars $a] members [list [list ${iname}_x ${iname}_x]]] \
-                        [dict create c "$b ${iname}_y" expect ffi::c::[dict get $::scalars $b] members [list [list ${iname}_y ${iname}_y]]]]]
+                    inner [list [dict create c "$a ${iname}_x" expect std::ffi::c::[dict get $::scalars $a] members [list [list ${iname}_x ${iname}_x]]] \
+                        [dict create c "$b ${iname}_y" expect std::ffi::c::[dict get $::scalars $b] members [list [list ${iname}_y ${iname}_y]]]]]
             }
             record {
                 set emitted [lmap e $earlier {expr {![dict get $e anonymous] && [dict get $e expectStatus] eq "layout" ? $e : [continue]}}]
@@ -297,7 +297,7 @@ proc drawAnonymous {i name selfName earlier kind} {
                     set e [pick $emitted]
                     lappend inner [dict create c "[dict get $e kind] [dict get $e tag] $iname" expect nested nested [dict get $e key] members [list [list $iname $iname]]]
                 } else {
-                    lappend inner [dict create c "int $iname" expect ffi::c::Int members [list [list $iname $iname]]]
+                    lappend inner [dict create c "int $iname" expect std::ffi::c::Int members [list [list $iname $iname]]]
                 }
             }
             blocked {
@@ -334,19 +334,19 @@ proc drawArray {name emitted} {
     switch -- [pick {scalar scalar stdint pointer rows record inner}] {
         scalar {
             set c [pick [dict keys $::scalars]]
-            return [dict create c "$c $name\[$n\]" expect "array $n of ffi::c::[dict get $::scalars $c]" members [list [list $name $name]]]
+            return [dict create c "$c $name\[$n\]" expect "array $n of std::ffi::c::[dict get $::scalars $c]" members [list [list $name $name]]]
         }
         stdint {
             set t [pick [dict keys $::stdints]]
-            return [dict create c "$t $name\[$n\]" expect "array $n of ffi::c::[dict get $::scalars [dict get $::stdints $t]]" members [list [list $name $name]]]
+            return [dict create c "$t $name\[$n\]" expect "array $n of std::ffi::c::[dict get $::scalars [dict get $::stdints $t]]" members [list [list $name $name]]]
         }
         pointer {
-            return [dict create c "void *$name\[$n\]" expect "array $n of ffi::c::Ptr\[ffi::c::Void\]" members [list [list $name $name]]]
+            return [dict create c "void *$name\[$n\]" expect "array $n of std::ffi::c::Ptr\[std::ffi::c::Void\]" members [list [list $name $name]]]
         }
         rows {
             set m [between 1 4]
             set c [pick [dict keys $::scalars]]
-            return [dict create c "$c $name\[$n\]\[$m\]" expect "array $n of array $m of ffi::c::[dict get $::scalars $c]" members [list [list $name $name]]]
+            return [dict create c "$c $name\[$n\]\[$m\]" expect "array $n of array $m of std::ffi::c::[dict get $::scalars $c]" members [list [list $name $name]]]
         }
         record {
             if {[llength $emitted]} {
@@ -625,9 +625,9 @@ proc arrayShape {type layouts} {
         set type $inner
     }
     if {![llength $extents]} { return {{} {}} }
-    if {[regexp {^ffi::c::(Ptr|FnPtr)\[} $type]} {
+    if {[regexp {^std::ffi::c::(Ptr|FnPtr)\[} $type]} {
         set width [expr {[dict get [core::cabi::target $::target] pointer] / 8}]
-    } elseif {[regexp {^ffi::c::([A-Za-z]+)$} $type -> scalar]} {
+    } elseif {[regexp {^std::ffi::c::([A-Za-z]+)$} $type -> scalar]} {
         set width [expr {[dict get [core::cabi::scalarInfo $scalar $::target] bits] / 8}]
     } else {
         set width [lindex [dict get $layouts $type] 0]

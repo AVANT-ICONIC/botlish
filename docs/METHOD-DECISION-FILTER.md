@@ -20,17 +20,17 @@ never its outcome.
 ## The idea
 
 Most method calls are settled by the kind of the receiver. `xs.length()` on a
-List cannot be `str::length`, because the native's first parameter is a String
+List cannot be `std::str::length`, because the native's first parameter is a String
 -- and that is exactly the TYPE problem a trial build finds in the call
 (`hir::MethodCallProblems`). The filter derives the same fact without a build.
 
 * **Excluded.** A candidate is *excluded* for a call when the receiver's type
   already makes the ordinary call invalid by kind alone:
-  * a qualified native (`list::at`) whose first parameter has another known
+  * a qualified native (`std::list::at`) whose first parameter has another known
     kind than the receiver's -- `hir::methodfilter::NativeMismatch`, the one
     statement of the rule: `hir::MethodCallProblems` reports its TYPE problem
     by it and the filter excludes by it;
-  * a module function (`mutable_array::get`) one of whose first-parameter
+  * a module function (`std::mutable_array::get`) one of whose first-parameter
     contracts -- declared, trusted-inferred or checked-inferred
     (hir/signatures.tcl) -- has another kind than the receiver's, when both
     are among the plain value kinds `int str bool unit UnicodeChar list struct
@@ -46,7 +46,7 @@ List cannot be `str::length`, because the native's first parameter is a String
 * **Waves.** The receiver's type is read from the last build, in which the
   calls not yet decided stand at their first candidate. Those defaults can
   poison the receivers after them: in `a.at(0)`, `a.at(1)`, `a.at(2)` on a
-  MutableArray, `list::at` standing for the first call narrows `a` to nothing
+  MutableArray, `std::list::at` standing for the first call narrows `a` to nothing
   for the others. A receiver that is a plain reference to a binding is
   therefore *guessed* to have the type the binding was defined with (a
   parameter's declared type, else the type of its value) whenever that has a

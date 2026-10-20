@@ -488,7 +488,7 @@ if {"test-log" ni [core::native::names]} {
 # header itself).
 proc withImports {source} {
     set header ""
-    foreach ns {abi::x86_64 abi ascii byte char immutable_set list mutable_array str web} {
+    foreach ns {std::abi::x86_64 std::abi std::ascii std::byte std::char std::immutable_set std::list std::mutable_array std::str std::web} {
         if {[regexp -- "(^|\[^A-Za-z0-9_:\])${ns}::" $source] && ![regexp -- "(^|\n)import ${ns}(\n|\$)" $source]} {
             append header "import $ns\n"
         }
@@ -499,8 +499,8 @@ proc withImports {source} {
 # Runs SCRIPT in the caller's scope with $::core::libraryDir pointed at a
 # private copy of the library (every module and subdirectory of the current
 # one), restoring it afterwards. A test that needs a throwaway module next to
-# the standard ones writes it there, never into the real lib/: runs in one
-# checkout share lib/, so a fixed module name there makes concurrent runs
+# the standard ones writes it there, never into the real stdlib/: runs in one
+# checkout share stdlib/, so a fixed module name there makes concurrent runs
 # delete each other's module, and a run cut short leaves it behind. The copy
 # is a tcltest temporary directory, named per process so runs that share a
 # -tmpdir do not collide either.

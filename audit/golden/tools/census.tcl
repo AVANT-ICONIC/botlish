@@ -5,12 +5,12 @@
 #
 #   tclsh9.0 audit/golden/tools/census.tcl ?FILE.bot ...?
 #
-# A case is a registration call of the library (test::value, test::holds,
-# test::rejects, test::rejects_at, test::rejects_any, test::case); ownhelper
+# A case is a registration call of the library (std::test::value, std::test::holds,
+# std::test::rejects, std::test::rejects_at, std::test::rejects_any, std::test::case); ownhelper
 # counts the calls of a suite's own registration helpers (its matchers over
-# test::case, named PREFIX_rejects_..., and a registration function called
+# std::test::case, named PREFIX_rejects_..., and a registration function called
 # with a test's name, register_..._test("name", ...)). A body is a function
-# declaring `errors compiler::CompilerError` (toplevelbody: one declared at the
+# declaring `errors std::compiler::CompilerError` (toplevelbody: one declared at the
 # suite's top level, outside any registration function); helpers are the
 # suite's other top-level functions (its own matchers, shared code under
 # test).
@@ -27,21 +27,21 @@ proc count {pattern text} {
 
 set columns {
     cases       {^\s+test::(value|holds|rejects|rejects_at|rejects_any|rejects_message|rejects_containing|case)\(}
-    value       {^\s+test::value\(}
-    holds       {^\s+test::holds\(}
-    rejects     {^\s+test::rejects\(}
-    rejects_at  {^\s+test::rejects_at\(}
-    rejects_any {^\s+test::rejects_any\(}
-    rejects_msg {^\s+test::rejects_(message|containing)\(}
-    custom      {^\s+test::case\(}
+    value       {^\s+std::test::value\(}
+    holds       {^\s+std::test::holds\(}
+    rejects     {^\s+std::test::rejects\(}
+    rejects_at  {^\s+std::test::rejects_at\(}
+    rejects_any {^\s+std::test::rejects_any\(}
+    rejects_msg {^\s+std::test::rejects_(message|containing)\(}
+    custom      {^\s+std::test::case\(}
     ownhelper   {^\s+(?:[a-z]+_rejects_[a-z_]+|register_[a-z_]+)\("}
-    bodies      {^\s*fn \S+\(\) errors compiler::CompilerError:}
-    toplevelbody {^fn \S+\(\) errors compiler::CompilerError:}
+    bodies      {^\s*fn \S+\(\) errors std::compiler::CompilerError:}
+    toplevelbody {^fn \S+\(\) errors std::compiler::CompilerError:}
     static      {^\s+static compile:}
-    handlers    {^\s+on (?!compiler::CompilerError)\S+}
+    handlers    {^\s+on (?!std::compiler::CompilerError)\S+}
     registrars  {^fn register_\S+\(}
     toplevel    {^(struct|enum|error|type|refined type|trait|context struct|opaque struct|opaque context struct) }
-    helpers     {^(nomethod )?fn (?!register_)[^(]+\((?!\) errors compiler::CompilerError:)}
+    helpers     {^(nomethod )?fn (?!register_)[^(]+\((?!\) errors std::compiler::CompilerError:)}
 }
 
 set totals [dict create]

@@ -705,7 +705,7 @@ proc hir::warnings::NamedCallee {hir node} {
     return ""
 }
 
-# The member of a possibly namespace-qualified NAME ("list::at" -> "at").
+# The member of a possibly namespace-qualified NAME ("std::list::at" -> "at").
 proc hir::warnings::MemberName {name} {
     set i [string last :: $name]
     if {$i < 0} {
@@ -716,7 +716,7 @@ proc hir::warnings::MemberName {name} {
 
 # HIR as name resolution saw it: hygiene (hir/hygiene.tcl) renamed every
 # binding of a module's own section scope to its qualified spelling
-# ("list::find") after resolution, but the lookup a method call makes (a
+# ("std::list::find") after resolution, but the lookup a method call makes (a
 # scope's `names`, and an imported namespace's members) works on the names as
 # written ("find"). The view differs from HIR in exactly those scopes' name
 # tables; nothing else of it is touched or read differently. (The #N renames
@@ -891,7 +891,7 @@ proc hir::warnings::SugarFieldSafe {hir receiver name ns fields} {
 #     exit whose value can never complete (type never) is likewise not a
 #     value exit.
 #   * a self-call exit counts (above).
-# Anything else -- a computed list (list::append, str::concat, method sugar,
+# Anything else -- a computed list (std::list::append, std::str::concat, method sugar,
 # an operator), a struct, a mutable value, a parameter, an `if`/`loop`/handled
 # value, a call through a function value, indirect or mutual recursion -- is a
 # mismatch, and one mismatch silences. No element is looked at: no types, no
@@ -1389,7 +1389,7 @@ proc hir::warnings::ProvesShape {fn} {
 # The name the function bound through binding B was written with: the
 # spelling hygiene recorded when it renamed the binding (NAME#N), else its
 # name; for a module's own definition, the member the module declared
-# ("emailish?" for web::emailish?). A name read back from HIR text keeps no
+# ("emailish?" for std::web::emailish?). A name read back from HIR text keeps no
 # spelling, so a hygiene suffix there is dropped (source can never spell #).
 proc hir::warnings::WrittenName {hir b} {
     set binding [dict get $hir bindings $b]
@@ -1426,7 +1426,7 @@ proc hir::warnings::ConventionalName {kind name} {
 #     every written "..." to one (surface/lower.tcl: `"text"` -> const str
 #     text), and HIR text spells one as `const str ...` -- whose exact value
 #     (hir::exact::Of, the fact milestone 1's grouping uses) is a String, and
-#   * that String's length is 1, counted by the language's own str::length
+#   * that String's length is 1, counted by the language's own std::str::length
 #     (core::strings::length, its reference implementation): characters, i.e.
 #     Unicode scalar values, never bytes. Escapes are already resolved in the
 #     exact value ("\n" is one character), a supplementary-plane character is

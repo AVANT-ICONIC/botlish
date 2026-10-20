@@ -48,6 +48,6 @@ product, recorded because a differential test is only as good as its oracle:
   (where +1 can land on the byte the pattern already had) could disagree.
   Fixed: the index is a function of the spec; a failure now reports the first
   mismatching slot.
-* the first generator emitted one `byte::from_int` call per byte and reached
+* the first generator emitted one `std::byte::from_int` call per byte and reached
   the compiler's existing proof budget at about 1500-2000 constant calls; the
   generators are now closed-form (one call per sequence).

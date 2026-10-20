@@ -37,7 +37,7 @@ func 0 "<program>" params=0 env=0 regs=33 pnames="" captures=0 instance="generic
     ret %32
 end
 
-func 1 "web::uri_escape_text" params=1 env=1 regs=6 pnames="s" captures=1 instance="generic" rawregs="2" @e21
+func 1 "std::web::uri_escape_text" params=1 env=1 regs=6 pnames="s" captures=1 instance="generic" rawregs="2" @e21
     %1 = int 0 @e300
     %2 = rawint 0
     %3 = str "" @e301
@@ -398,7 +398,7 @@ func 3 "is_unreserved" params=1 env=0 regs=62 pnames="b" captures=0 instance="ge
     ret %4
 end
 
-func 4 "hex_pair" params=2 env=0 regs=9 pnames="b web::hex_digits" captures=0 instance="generic" rawregs="5" @e191
+func 4 "hex_pair" params=2 env=0 regs=9 pnames="b std::web::hex_digits" captures=0 instance="generic" rawregs="5" @e191
     %2 = call 2 %0 @e197
     %3 = op listget %1 %2 @e194
     %4 = int 16 @e206
@@ -410,7 +410,7 @@ func 4 "hex_pair" params=2 env=0 regs=9 pnames="b web::hex_digits" captures=0 in
     ret %8
 end
 
-func 5 "esc_bytes" params=4 env=0 regs=15 pnames="bytes i acc web::hex_digits" captures=0 instance="generic" rawregs="8" @e208
+func 5 "esc_bytes" params=4 env=0 regs=15 pnames="bytes i acc std::web::hex_digits" captures=0 instance="generic" rawregs="8" @e208
     guard list %0 "list_length" @e213
     %4 = op listlen %0 @e213
     guard int %1 ">=" @e210
@@ -434,7 +434,7 @@ func 5 "esc_bytes" params=4 env=0 regs=15 pnames="bytes i acc web::hex_digits" c
     ret %6
 end
 
-func 6 "esc_char" params=2 env=0 regs=22 pnames="c web::hex_digits" captures=0 instance="generic" rawregs="4 6 10 15 19" @e237
+func 6 "esc_char" params=2 env=0 regs=22 pnames="c std::web::hex_digits" captures=0 instance="generic" rawregs="4 6 10 15 19" @e237
     guard str %0 "encode_utf8" @e239
     %2 = op strutf8bytes %0 @e239
     %3 = op listlen %2 @e245
@@ -473,7 +473,7 @@ func 6 "esc_char" params=2 env=0 regs=22 pnames="c web::hex_digits" captures=0 i
     ret %8
 end
 
-func 7 "esc_from" params=4 env=0 regs=16 pnames="text i acc web::hex_digits" captures=0 instance="generic" rawregs="8 11" @e268
+func 7 "esc_from" params=4 env=0 regs=16 pnames="text i acc std::web::hex_digits" captures=0 instance="generic" rawregs="8 11" @e268
     guard str %0 "length" @e273
     %4 = op strlen %0 @e273
     guard int %1 ">=" @e270

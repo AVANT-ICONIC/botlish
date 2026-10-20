@@ -1,10 +1,10 @@
 # unicode-strings.bot -- Strings at the Unicode edges, as a source-level
 # specification: the String operations whose answers depend on the Unicode
 # character database (character classes, lowercase) and the String
-# predicate built on them (web::emailish?), on non-ASCII, multi-byte and
+# predicate built on them (std::web::emailish?), on non-ASCII, multi-byte and
 # astral characters, with the same answer on every backend.
 #
-# Character classes (str::is_tcl_alpha, str::is_tcl_alnum;
+# Character classes (std::str::is_tcl_alpha, std::str::is_tcl_alnum;
 # NATIVE-TCL-UNICODE.md), each of a String of exactly one Unicode scalar:
 #   * is_tcl_alpha is true exactly for a letter, General_Category Lu, Ll, Lt,
 #     Lm or Lo: an ASCII letter, a Latin letter beyond ASCII, a CJK
@@ -16,7 +16,7 @@
 #     combining mark (Mn) or punctuation (Pc, Po): the classes are Tcl 9's
 #     [:alpha:] and [:alnum:], narrower than Rust's is_alphabetic /
 #     is_alphanumeric and Python's isalnum.
-# web::emailish? (lib/web.bot) uses them, so its grammar -- a local part of
+# std::web::emailish? (stdlib/web.bot) uses them, so its grammar -- a local part of
 #   alnum characters and . _ % + -, "@", one or more labels of alnum
 #   characters and "-" each followed by ".", and a top-level domain of at
 #   least two alpha characters -- is Unicode-aware in every position: an
@@ -26,7 +26,7 @@
 #   TLD, empty labels, a trailing dot, a missing part) are rejected. A
 #   re-check of an address inside its own true branch answers like the first
 #   check.
-# Lowercase (str::lowercase, README.md "Strings"): the Unicode 16 simple
+# Lowercase (std::str::lowercase, README.md "Strings"): the Unicode 16 simple
 #   (one-to-one, UnicodeData.txt) lowercase mapping, scalar by scalar, so
 #   the length never changes: ASCII and Latin-1 letters; CAPITAL SHARP S to
 #   sharp s; SIGMA always to the medial sigma, even last in a word; DOTTED
@@ -62,28 +62,28 @@
 # ASCII K, and the row silently tests ASCII instead).
 #
 # Imports: compiler and test are the framework's (bodies declare
-# compiler::CompilerError); str for the primitives under test; web for
-# web::emailish?.
-import compiler
-import str
-import test
-import web
+# std::compiler::CompilerError); str for the primitives under test; web for
+# std::web::emailish?.
+import std::compiler
+import std::str
+import std::test
+import std::web
 
 # ---------------------------------------------------------------------------
-# Character classes: str::is_tcl_alpha and str::is_tcl_alnum
+# Character classes: std::str::is_tcl_alpha and std::str::is_tcl_alnum
 
 # native-tcl-unicode-alpha-LABEL / native-tcl-unicode-alnum-LABEL: the one
 # character C is (ALPHA) a letter and (ALNUM) a letter or decimal digit.
 fn register_character_class(label: str, c: str, alpha: bool, alnum: bool):
-    fn b_alpha() errors compiler::CompilerError:
+    fn b_alpha() errors std::compiler::CompilerError:
         static compile:
-            str::is_tcl_alpha(c)
-    test::value("native-tcl-unicode-alpha-".concat(label), alpha, b_alpha)
+            std::str::is_tcl_alpha(c)
+    std::test::value("native-tcl-unicode-alpha-".concat(label), alpha, b_alpha)
 
-    fn b_alnum() errors compiler::CompilerError:
+    fn b_alnum() errors std::compiler::CompilerError:
         static compile:
-            str::is_tcl_alnum(c)
-    test::value("native-tcl-unicode-alnum-".concat(label), alnum, b_alnum)
+            std::str::is_tcl_alnum(c)
+    std::test::value("native-tcl-unicode-alnum-".concat(label), alnum, b_alnum)
 
 fn register_character_class_tests():
     #                        label                          char       alpha  alnum
@@ -102,14 +102,14 @@ fn register_character_class_tests():
     register_character_class("full-stop-Po",               ".", false, false)    # U+002E Po
 
 # ---------------------------------------------------------------------------
-# web::emailish? on the Unicode corpus
+# std::web::emailish? on the Unicode corpus
 
-# native-tcl-unicode-emailish-LABEL: web::emailish?(ADDRESS) is EXPECTED.
+# native-tcl-unicode-emailish-LABEL: std::web::emailish?(ADDRESS) is EXPECTED.
 fn register_emailish(label: str, address: str, expected: bool):
-    fn b_emailish() errors compiler::CompilerError:
+    fn b_emailish() errors std::compiler::CompilerError:
         static compile:
-            web::emailish?(address)
-    test::value("native-tcl-unicode-emailish-".concat(label), expected, b_emailish)
+            std::web::emailish?(address)
+    std::test::value("native-tcl-unicode-emailish-".concat(label), expected, b_emailish)
 
 fn register_emailish_tests():
     # ascii-valid, ascii-invalid, missing-local-part and empty-string are
@@ -136,29 +136,29 @@ fn register_emailish_tests():
     register_emailish("numeric-non-Nd-rejected", "a@例え.Ⅰ", false)
 
     # native-tcl-unicode-emailish-known-result-recheck: a redundant
-    # web::emailish? check inside its own true branch answers like the first.
-    fn b_known_result_recheck() errors compiler::CompilerError:
+    # std::web::emailish? check inside its own true branch answers like the first.
+    fn b_known_result_recheck() errors std::compiler::CompilerError:
         static compile:
             fn f(s: str) -> str:
-                if web::emailish?(s):
-                    if web::emailish?(s):
+                if std::web::emailish?(s):
+                    if std::web::emailish?(s):
                         "yes"
                     else:
                         "no"
                 else:
                     "no"
             f("someone@example.com")
-    test::value("native-tcl-unicode-emailish-known-result-recheck", "yes", b_known_result_recheck)
+    std::test::value("native-tcl-unicode-emailish-known-result-recheck", "yes", b_known_result_recheck)
 
 # ---------------------------------------------------------------------------
-# str::lowercase: the Unicode 16 simple lowercase mapping
+# std::str::lowercase: the Unicode 16 simple lowercase mapping
 
-# native-tcl-unicode-lowercase-LABEL: str::lowercase(TEXT) is EXPECTED.
+# native-tcl-unicode-lowercase-LABEL: std::str::lowercase(TEXT) is EXPECTED.
 fn register_lowercase(label: str, text: str, expected: str):
-    fn b_lowercase() errors compiler::CompilerError:
+    fn b_lowercase() errors std::compiler::CompilerError:
         static compile:
-            str::lowercase(text)
-    test::value("native-tcl-unicode-lowercase-".concat(label), expected, b_lowercase)
+            std::str::lowercase(text)
+    std::test::value("native-tcl-unicode-lowercase-".concat(label), expected, b_lowercase)
 
 fn register_lowercase_tests():
     #                  label                   text      lowercase
@@ -185,6 +185,6 @@ fn register_native_tcl_unicode_tests():
     register_emailish_tests()
     register_lowercase_tests()
 
-with context test::suite()
+with context std::test::suite()
 register_native_tcl_unicode_tests()
-test::report()
+std::test::report()

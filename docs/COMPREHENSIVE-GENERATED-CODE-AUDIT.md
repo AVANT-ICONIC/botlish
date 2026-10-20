@@ -17,10 +17,10 @@ proposed order.
 | # | Root cause (short) | Representative symptoms |
 |---|---|---|
 | RC1 | **Instance selection ignores proven parameter facts.** Specialization keys are kind-only and chosen before any range fact exists. Generic instances are seeded with `any`, even for *declared* parameter types. Every function that references a module-retained value is a value-capturing closure, and those are forced generic. | `guard int` + tagged compares in every ASCII predicate on the URI path; 26 of 33 functions in `refined-checks` generic; 27 parameter guards there. |
-| RC2 | **Proven value facts have no control-flow consumer.** `hir::range` proves intervals and exact sets per instance. Lowering uses them only to choose raw vs tagged representation, fold bitwise ops, and substitute closed call results. Nothing uses a range to decide a comparison or delete a branch. `effectiveErrors` has no consumer at all, and `may_error` is recomputed structurally, per function, in Rust. | `byte::from_int(45)` keeps both checks and both `fail` paths although the instance's own entry range is `[45,45]`; `BelowRange` survives in `byte::set` although the entry range is `[0,+∞]`. |
-| RC3 | **Call boundaries are opaque.** Tagged ABI, out-of-line tiny functions, Bool re-materialized and re-tested at every return, effects summarized per callee. Tiny-leaf inlining only accepts straight-line bodies of a fixed op list. | ASCII composition = up to 5 real calls per byte; `char::codepoint` = wrapper call + runtime helper call for a one-shift payload extraction. |
+| RC2 | **Proven value facts have no control-flow consumer.** `hir::range` proves intervals and exact sets per instance. Lowering uses them only to choose raw vs tagged representation, fold bitwise ops, and substitute closed call results. Nothing uses a range to decide a comparison or delete a branch. `effectiveErrors` has no consumer at all, and `may_error` is recomputed structurally, per function, in Rust. | `std::byte::from_int(45)` keeps both checks and both `fail` paths although the instance's own entry range is `[45,45]`; `BelowRange` survives in `std::byte::set` although the entry range is `[0,+∞]`. |
+| RC3 | **Call boundaries are opaque.** Tagged ABI, out-of-line tiny functions, Bool re-materialized and re-tested at every return, effects summarized per callee. Tiny-leaf inlining only accepts straight-line bodies of a fixed op list. | ASCII composition = up to 5 real calls per byte; `std::char::codepoint` = wrapper call + runtime helper call for a one-shift payload extraction. |
 | RC4 | **Compiler-internal representations drop facts their own construction already guarantees** (loop index bounds, unique ownership of an accumulator, byte positions). | Collecting `listloop`: tagged index with overflow/BigInt slow paths, re-checked `listget` bounds, **O(n²) persistent-append accumulator** (92% of bytes allocated in the ASCII probe), temporary `List[Byte]` → dedup scan; StringRegions carry character indices only, so non-ASCII region ops re-seek (112,000 UTF-8 seek bytes per `refined-checks` run). |
-| RC5 | **Front-of-pipeline rewrites, module lowering and siloed lattices erase identity before analysis sees it.** `ExpandNativeBodies` pastes validator bodies into raw IR before HIR type-test refinement. Module-retained values are closure captures, and the retention proof is thrown away. The completion proof keeps private native facts. | Second `Emailish?` scan per steady-state iteration of `refined-checks` (decided statically on interp/compile, executed natively); 5.1 KB duplicate scanner copy; the constant set is never known and is scanned with generic `equal`; `char::codepoint`'s upper bound never reaches codegen. |
+| RC5 | **Front-of-pipeline rewrites, module lowering and siloed lattices erase identity before analysis sees it.** `ExpandNativeBodies` pastes validator bodies into raw IR before HIR type-test refinement. Module-retained values are closure captures, and the retention proof is thrown away. The completion proof keeps private native facts. | Second `Emailish?` scan per steady-state iteration of `refined-checks` (decided statically on interp/compile, executed natively); 5.1 KB duplicate scanner copy; the constant set is never known and is scanned with generic `equal`; `std::char::codepoint`'s upper bound never reaches codegen. |
 
 Two **correctness bugs** turned up along the way. They are reported
 separately from the optimization findings, in §1:
@@ -36,7 +36,7 @@ separately from the optimization findings, in §1:
   instrument, and several required probe workloads contain handlers.
 - **C2 (native crash, not fixed):** a user function that calls a module
   function which is itself a closure over a retained module value (e.g.
-  `fn f(b: Byte) -> bool: web::is_unreserved(b)`) fails native lowering
+  `fn f(b: Byte) -> bool: std::web::is_unreserved(b)`) fails native lowering
   with `NATIVE BUG: binding … is not reachable`. The failure is loud (no
   wrong values) and doesn't corrupt any evidence, so it is documented, not
   fixed.
@@ -57,12 +57,12 @@ benchmark or corpus program does (verified byte-for-byte, §30).
 7. Representation inventory
 8. Benchmark baseline
 9. Positive control: nibble/bit work
-10. `byte::from_int` audit
-11. `byte::set` audit
-12. `char::codepoint` / UnicodeChar audit
+10. `std::byte::from_int` audit
+11. `std::byte::set` audit
+12. `std::char::codepoint` / UnicodeChar audit
 13. Byte representation audit
 14. ASCII audit
-15. `web::is_unreserved` audit
+15. `std::web::is_unreserved` audit
 16. ImmutableSet audit
 17. `listloop` audit
 18. Error-completion audit
@@ -86,7 +86,7 @@ benchmark or corpus program does (verified byte-for-byte, §30).
 
 ### C1 — `hir::range` ignored `handle` nodes (S0 miscompile, fixed)
 
-**Found while tracing** the `byte::from_int` dynamic probe: `callfacts.txt`
+**Found while tracing** the `std::byte::from_int` dynamic probe: `callfacts.txt`
 showed the handled call's argument with no range fact at all, which led to
 `hir::range::Expr`.
 
@@ -117,7 +117,7 @@ eligibility and for closed-result constants. Both `cranelift` and
 | file | interp (correct) | cranelift before fix |
 |---|---|---|
 | `handle-range-entry.bot` (`f(5)` + handled `f(2^62-1)`, body `x + 1`) | `[6, [4611686018427387904]]` | `[6, [-4611686018427387904]]` (raw add wrapped the tag) |
-| `handle-range-bigint.bot` (`byte::from_int(45)` + handled `from_int(±10^23)`) | `[45, [1, 2]]` | `[45, [2, 2]]` (BigInt pointer compared raw) |
+| `handle-range-bigint.bot` (`std::byte::from_int(45)` + handled `from_int(±10^23)`) | `[45, [1, 2]]` | `[45, [2, 2]]` (BigInt pointer compared raw) |
 | `handle-return-result.bot` (`return 2^62-1` inside a handler) | `[4611686018427387904, 6]` | `[6, 6]` (`ClosedResult` substituted 5) |
 
 **Fix** (the only production change of this milestone): `hir/range.tcl`
@@ -136,19 +136,19 @@ three reproductions agree on all four backends.
 
 ```botlish
 fn f(b: Byte) -> bool:
-    web::is_unreserved(b)
+    std::web::is_unreserved(b)
 f(45)
 ```
 
 interp: `true`. cranelift: `NATIVE BUG: native lowering: binding b46 is not
 reachable from e322`. **First cause:** the HIR `captures` list of the user
 function `f` is empty, even though `f` references the module-scope binding
-`web::is_unreserved`, and that binding is a *closure* (it captures the
+`std::web::is_unreserved`, and that binding is a *closure* (it captures the
 retained `additional_unreserved_chars`). `hir::aot::context` therefore
 classifies `f` as envless/static. `native::lower::Access` then has no
 capture slot through which to reach the module binding. Module functions
 calling each other work, because their captures *do* include module
-bindings: `web::uri_escape_text` captures `web::is_unreserved`. So do calls
+bindings: `std::web::uri_escape_text` captures `std::web::is_unreserved`. So do calls
 from the program root.
 
 Not fixed: the failure is loud (compile-time `NATIVE BUG`, never a wrong
@@ -157,7 +157,7 @@ deciding how module closures are reached from user code, which is exactly
 the module-value representation question RC5 raises. **Audit consequence:**
 the only way to call the web path natively today is from program top level
 or from another module function. A steady-state URI-escaping measurement
-probe (`rep(k) = ... web::uri_escape_text(...)`) could not be compiled, so
+probe (`rep(k) = ... std::web::uri_escape_text(...)`) could not be compiled, so
 Byte/ASCII steady-state timing is measured through
 `probes/steady-ascii.bot` instead (§8).
 
@@ -210,14 +210,14 @@ alternate version of any library function.
 | `from-int-literal.bot` | D: exact literal 45 | `tests/errors.test` known-safe-literal |
 | `from-int-dynamic.bot` | A: unconstrained Int (listloop element), both errors handled | `tests/ascii.test` loop shape |
 | `from-int-nonneg.bot` | B: statically nonnegative | `tests/errors.test` partial-range-elimination (verbatim `nonneg`/`g`) |
-| `from-int-byte.bot` | C: statically Byte-range (`byte::complement` result) | brief item 10 |
+| `from-int-byte.bot` | C: statically Byte-range (`std::byte::complement` result) | brief item 10 |
 | `from-int-invalid.bot` | E: `from_int(999)` | `tests/errors.test` known-failure-literal (verbatim) |
-| `byte-set-canonical.bot` | `byte::set(['-','.','_','~'])` standalone | `tests/byte-set.test` byte-set-canonical (verbatim) |
-| `byte-set-dynamic.bot` | `byte::set` on a non-literal list, AboveRange handled | brief item 14 |
+| `byte-set-canonical.bot` | `std::byte::set(['-','.','_','~'])` standalone | `tests/byte-set.test` byte-set-canonical (verbatim) |
+| `byte-set-dynamic.bot` | `std::byte::set` on a non-literal list, AboveRange handled | brief item 14 |
 | `ascii-256.bot` | all five predicates over 0..255 | `tests/ascii.test` ascii-backend-parity-256 |
-| `web-unreserved-256.bot` | `web::is_unreserved` over 0..255 | `tests/web-unreserved.test` parity-256 |
+| `web-unreserved-256.bot` | `std::web::is_unreserved` over 0..255 | `tests/web-unreserved.test` parity-256 |
 | `web-unreserved-literals.bot` | `is_unreserved` on six exact literals | `tests/web-unreserved.test` set-built-once (verbatim) |
-| `steady-ascii.bot` | 1024 × 256 `ascii::is_alphanumeric` calls from a proven-`Byte` caller (timing only) | brief item 126 |
+| `steady-ascii.bot` | 1024 × 256 `std::ascii::is_alphanumeric` calls from a proven-`Byte` caller (timing only) | brief item 126 |
 | `steady-ascii-param.bot` / `steady-ascii-capture.bot` | the same work through a static classifier / through a closure capturing a List (the web module's instance shape) | brief items 20, 126 |
 
 **Severity and category** use the brief's S0–S4 and A–J scales.
@@ -250,12 +250,12 @@ Uncurated full dumps are not committed.
 - Audited revision: `39bac41` ("Regenerate the scalar assembly audit
   corpus"), on top of the static-completion-proof milestone (`2a1cf1e`)
   and the explicit-error milestone (`90cfe54`).
-- Frozen vertical, unchanged here: `lib/byte.bot` (`from_int`, `set`,
-  nibble helpers, `Byte`/`Nibble`/`LowNibble`/`HighNibble`), `lib/ascii.bot`,
-  `lib/char.bot`, `lib/web.bot` (`is_unreserved`,
+- Frozen vertical, unchanged here: `stdlib/byte.bot` (`from_int`, `set`,
+  nibble helpers, `Byte`/`Nibble`/`LowNibble`/`HighNibble`), `stdlib/ascii.bot`,
+  `stdlib/char.bot`, `stdlib/web.bot` (`is_unreserved`,
   `additional_unreserved_chars`, `uri_escape_text`), plus
   error/errors/fail/handle and completion-proof semantics.
-  `git diff 39bac41 -- lib/ bench/ examples/` is empty.
+  `git diff 39bac41 -- stdlib/ bench/ examples/` is empty.
 - Toolchain: Tcl 9.0.1 (the repository pin, AGENTS.md), rustc 1.98.1,
   cranelift-codegen 0.135.2, x86-64 Linux (4-vCPU Xeon @ 2.80 GHz KVM guest).
 - The committed `audit/native-scalar-asm/` corpus was *not* regenerated.
@@ -381,11 +381,11 @@ Yes, five of them:
   completions. Only the evidence form crosses into specialization, and there
   it is dropped from keys and (for generic instances) from seeds. The range
   forms are recomputed later from whatever the view type still says.
-- **`char::codepoint`'s result:** `hir::range` knows `[0,+∞]` (registry
+- **`std::char::codepoint`'s result:** `hir::range` knows `[0,+∞]` (registry
   `-result-range nonneg`). `hir/completions.tcl` has its own
   `NativeResultRange` table with `[0,0x10FFFF]`, exact for a literal. The
   codegen-facing lattice never gets the upper bound, so `from_int`'s
-  comparisons inside `byte::set` stay tagged (`[0,+∞]` is not
+  comparisons inside `std::byte::set` stay tagged (`[0,+∞]` is not
   `fitsSmall`).
 - **A call's result:** completions says `from_int(45)` = `[45,45]{45}`;
   `hir::range` says the same call is `[0,255]` (F20).
@@ -474,7 +474,7 @@ temporary. They never diverge in representation, only in range facts. A
 generic instance comes from one of five causes: (a) non-Int closure
 captures (observed: the whole web module and the `Emailish?` scanners),
 (b) materialized Block values, whose generic entry is "open" (observed:
-`web::is_unreserved`, `uri_escape_text`), (c) self-tail key widening,
+`std::web::is_unreserved`, `uri_escape_text`), (c) self-tail key widening,
 (d) the 8-instance limit, (e) `-specialize 0`. (c) and (d) are not
 decisive in any audited workload.
 
@@ -575,7 +575,7 @@ and differs only in RC1's instance selection. The generic chain costs
 **+8.6 ns (+52%) per classification**. (`-specialize 0` is *not* a proxy for
 the generic chain: `SemanticInstances` seeds generic instances with the
 semantic types, which *include* declared parameter types, so it compiles
-`ascii::is_digit` without a guard. See F05.)
+`std::ascii::is_digit` without a guard. See F05.)
 
 **Pre/post semantic-milestone snapshots (item 108)**, from the committed
 `audit/native-scalar-asm/README.md` history (structure only; timings from
@@ -584,7 +584,7 @@ other sessions are not comparable):
 | snapshot | `refined-checks` functions / bytes | what changed |
 |---|---|---|
 | before the ASCII milestone (`c77a0e2`) | 25 / 16,284 | — |
-| ASCII + `is_unreserved` + `byte::set` initializer (`6b10713`) | 32 / 18,093 | source shape: new web/ascii/byte functions |
+| ASCII + `is_unreserved` + `std::byte::set` initializer (`6b10713`) | 32 / 18,093 | source shape: new web/ascii/byte functions |
 | explicit errors (`378451c`) | 34 / 19,043 | source shape: `from_int` + handler in `esc_char` |
 | static completion proofs (`2a1cf1e`) | 33 / 17,855 | source shape: `esc_char`'s conversion removed |
 | **final fence (this audit, `39bac41`)** | **33 / 17,855** | — |
@@ -597,17 +597,17 @@ consumer.
 
 ## 9. Positive control: nibble/bit work
 
-Workload: `web::uri_escape_text`'s nested `high_nibble(b) =
-byte::nibble(byte::high_nibble(b))`, as compiled inside
+Workload: `std::web::uri_escape_text`'s nested `high_nibble(b) =
+std::byte::nibble(std::byte::high_nibble(b))`, as compiled inside
 `bench/refined-checks.ir` (function 11). The same function lowered with
 `-tiny-leaf-inline-opt 0` is the "before inlining" view.
 
 | stage | what happens |
 |---|---|
-| source facts | `byte::high_nibble(b) -> HighNibble` (declared result, source-defined exact domain {0,16,…,240}); `byte::nibble(x) -> Nibble` |
+| source facts | `std::byte::high_nibble(b) -> HighNibble` (declared result, source-defined exact domain {0,16,…,240}); `std::byte::nibble(x) -> Nibble` |
 | HIR / static proof | result contracts verified once per body; the call's semantic type is `int[HighNibble]` |
-| specialization | `hir::specialize::Analyze` **replaces the inferred result with the declared result**: the callee's result type crosses the call boundary. `byte::nibble` is called with key `int`, and `RefinementFacts` proves `{HighNibble}` for its parameter, so the instance seed is `int[HighNibble]` |
-| range analysis | `TypeFact(int[HighNibble])` = `[0,240]` exact 16 values; exact-caller propagation gives `byte::nibble<int>` the entry `{0,16,…,240}`; `BitOp` exact transfer: `x & 15` = `{0}`, `x >> 4` ∈ `[0,15]`, `0 \| y` = `y`, `(…) & 15` = identity |
+| specialization | `hir::specialize::Analyze` **replaces the inferred result with the declared result**: the callee's result type crosses the call boundary. `std::byte::nibble` is called with key `int`, and `RefinementFacts` proves `{HighNibble}` for its parameter, so the instance seed is `int[HighNibble]` |
+| range analysis | `TypeFact(int[HighNibble])` = `[0,240]` exact 16 values; exact-caller propagation gives `std::byte::nibble<int>` the entry `{0,16,…,240}`; `BitOp` exact transfer: `x & 15` = `{0}`, `x >> 4` ∈ `[0,15]`, `0 \| y` = `y`, `(…) & 15` = identity |
 | lowering (the consumer) | `FoldPureBitwise` reads `hir::range::of` **per expression**: point result → constant (`x & 15` → 0), identity OR/AND → operand; `RawEligibleShift` makes `>> 4` raw; tiny-leaf inlining removes both calls (straight-line body, only safe ops, no guard, no known error) |
 | NIR | `guard int %0; iand %0 240; runbox; rishr 4; rbox; ret`. The four-op `nibble` body became one shift |
 | machine code | `and rsi,0x1e1; sar rax,5; shl rax,1; or rax,1` on the fast path (+ the generic guard, see below) |
@@ -646,11 +646,11 @@ consumer reads:
   `mayReturnNormally` and `resultRangeFact` as *HIR node fields*, deliberately
   kept out of `hir::range` to avoid codegen changes (STATIC-COMPLETION-PROOFS.md,
   "HIR representation"). Nothing reads them (RC2);
-- ASCII and `web::is_unreserved` rely on *branch* facts (`b >= 48 and
+- ASCII and `std::web::is_unreserved` rely on *branch* facts (`b >= 48 and
   b <= 57`) and on *instance selection* (`Byte` reaching a closure's
   callee). No lowering consumer turns a range into a decided branch, and
   instance keys drop the evidence (RC1, RC2);
-- `byte::set` and `char::codepoint` added facts to the completion proof's
+- `std::byte::set` and `std::char::codepoint` added facts to the completion proof's
   private table (`NativeResultRange`), not to the codegen-facing lattice
   (RC5).
 
@@ -668,7 +668,7 @@ their facts live on nodes, outside this path entirely.
 
 ---
 
-## 10. `byte::from_int` audit
+## 10. `std::byte::from_int` audit
 
 ```botlish
 fn from_int(value: int) -> Byte errors BelowRange, AboveRange:
@@ -711,12 +711,12 @@ entire residue is one missing consumer away from disappearing** in this
 probe, because here the instance happens to have a single caller.
 
 When the instance is shared with a dynamic caller (e.g. `web-unreserved-256`
-calls `from_int` both from `byte::set` and from the handled top-level loop),
+calls `from_int` both from `std::byte::set` and from the handled top-level loop),
 the joined entry range can no longer decide anything. That limit is RC1, not
 RC2.
 
 ```
-FACT: effectiveErrors(byte::from_int(45)) = {}
+FACT: effectiveErrors(std::byte::from_int(45)) = {}
 completion proof      yes (node e85)
 call node field       yes
 specializer           ignores (key {int})                 <-- FIRST NON-CONSUMPTION (call-site fact)
@@ -760,28 +760,28 @@ machinery really is cheap, and other costs dominate.
 
 ---
 
-## 11. `byte::set` audit
+## 11. `std::byte::set` audit
 
 ```botlish
 fn set(chars: List[UnicodeChar]) -> ImmutableSet[Byte] errors AboveRange:
     bytes = loop c in chars:
-        from_int(char::codepoint(c))
+        from_int(std::char::codepoint(c))
     immutable_set_from_list(bytes)
 ```
 
 **Facts.** The completion proof stamps the inner call e77 with
-`effectiveErrors={AboveRange}`, generically, from `char::codepoint`'s
-`[0,0x10FFFF]`. The module initializer call `byte::set(['-','.','_','~'])`
+`effectiveErrors={AboveRange}`, generically, from `std::char::codepoint`'s
+`[0,0x10FFFF]`. The module initializer call `std::byte::set(['-','.','_','~'])`
 gets `effectiveErrors={}` (literal-list elements enumerated by
 `LiteralListOf`).
 
 **Where `BelowRange` stops being impossible (item 14).**
 
 ```
-FACT: char::codepoint(c) >= 0   (so BelowRange is impossible)
+FACT: std::char::codepoint(c) >= 0   (so BelowRange is impossible)
 completion proof        yes ([0,0x10FFFF], own NativeResultRange table)
 call node e77           effectiveErrors={AboveRange}
-hir::range              char::codepoint<UnicodeChar> result [0,+∞] (registry `nonneg`);
+hir::range              std::char::codepoint<UnicodeChar> result [0,+∞] (registry `nonneg`);
                         from_int<int> entry [0,+∞]   retained (lower bound only)
 native lowerer          `op ilt %0 0` emitted, tagged     <-- FIRST NON-CONSUMPTION (RC2)
                         upper bound 0x10FFFF never reached hir::range   <-- LOST (RC5, F03)
@@ -792,8 +792,8 @@ assembly                BelowRange compare + branch + cold fail block per elemen
 
 `bench/refined-checks.ir` (and `probes/byte-set-canonical.bot`, identical
 code): `<program>` builds the 4-element `List[UnicodeChar]`, calls
-`byte::set<List[UnicodeChar]>` once, and the result becomes a closure capture
-of `web::is_unreserved`.
+`std::byte::set<List[UnicodeChar]>` once, and the result becomes a closure capture
+of `std::web::is_unreserved`.
 
 | step | allocations | loops | calls (per element) | checks (per element) | element stores | temporaries |
 |---|---:|---:|---|---|---:|---|
@@ -801,7 +801,7 @@ of `web::is_unreserved`.
 | `listloop` setup | 1 List (empty accumulator) | 1 | `rt_list_len` once | — | — | index, accumulator |
 | per element: loop test | — | — | — | tagged `ilt` (tag test + compare + Bool) | — | — |
 | per element: `list_get` | — | — | — | tag test + bounds compare (inline) | — | — |
-| per element: `char::codepoint` | — | — | **2** (wrapper fn + `rt_char_codepoint`) | — | — | — |
+| per element: `std::char::codepoint` | — | — | **2** (wrapper fn + `rt_char_codepoint`) | — | — | — |
 | per element: `from_int` | — | — | 1 | tagged `<0` and `>255` + caller `may_error` test | — | — |
 | per element: `listappend` | **1 List** (copy of all previous) | — | `rt_list_append` | NO_VALUE test | k+1 (copy) | a new accumulator |
 | per element: index `+1` | — | — | — | tag + overflow check, `rt_int_add` slow path | — | — |
@@ -817,7 +817,7 @@ accumulator and the index.
 
 | item | classification |
 |---|---|
-| `char::codepoint` extraction, one range check (`>255`), membership dedup, the final set | semantically required |
+| `std::char::codepoint` extraction, one range check (`>255`), membership dedup, the final set | semantically required |
 | `<0` check + `BelowRange` block; `>255` check for the four literal chars; the loop-index tag/overflow checks; `listget` bounds re-check | proof-removable (facts exist: RC2, RC4) |
 | wrapper call around `rt_char_codepoint`; Bool materialization; root-slot stores for an Int index | representation / call-boundary artifacts (RC3, RC4) |
 | per-append full copy; temporary `List[Byte]`; O(n²) set dedup of known-distinct literals | fusion / container-representation opportunities (RC4) |
@@ -833,25 +833,25 @@ use and never escapes), and neither is inlining. The existing
 **Dynamic list (`probes/byte-set-dynamic.bot`).** Same NIR body (the
 instance is keyed on `List[UnicodeChar]`, not on contents). The runtime
 AboveRange is produced by the shared `from_int<int>` and propagated by
-`byte::set`'s `test rax,rax`, then caught by the handler at the call site.
+`std::byte::set`'s `test rax,rax`, then caught by the handler at the call site.
 
 ---
 
-## 12. `char::codepoint` / UnicodeChar audit
+## 12. `std::char::codepoint` / UnicodeChar audit
 
 | question (item 16–17) | answer | evidence |
 |---|---|---|
 | Does the lowerer know UnicodeChar is immediate? | **The runtime does; the op table does not use it.** | `value.rs`: `(cp<<3)\|4`; `clif.rs:1515`: `CharCodepoint => rt_char_codepoint` |
-| Does it call a helper? | **Yes**, two: the Botlish function `char::codepoint<UnicodeChar>` (39 bytes, `push/mov/call rt_char_codepoint/pop/ret`) and the runtime helper. | `artifacts/byte-set-canonical/asm.txt` |
+| Does it call a helper? | **Yes**, two: the Botlish function `std::char::codepoint<UnicodeChar>` (39 bytes, `push/mov/call rt_char_codepoint/pop/ret`) and the runtime helper. | `artifacts/byte-set-canonical/asm.txt` |
 | Direct payload extraction? | No. `v >> 2` already *is* the tagged Int `(cp<<1)\|1`: one shift | — |
-| Exact literal still through the helper? | Yes, whenever the call happens at runtime. In `byte::set` the literal is a *list element* reached through `listget`, so no pass could see it anyway. | — |
-| Where is exactness lost? | `hir::range` has **no UnicodeChar domain** (Range is Int-only), so a literal char's codepoint is exact only inside `hir/completions.tcl`. Inside `byte::set` exactness is gone even earlier, at the listloop element binding (unseeded). | completions `resultRangeFact=[0,1114111]`; `hir::range` `[0,+∞]` |
-| Unnecessary kind guards / boxing for UnicodeChar parameters? | **No.** `char::codepoint<UnicodeChar>` has no guard (typed param + UnicodeChar key). | NIR func 1 |
+| Exact literal still through the helper? | Yes, whenever the call happens at runtime. In `std::byte::set` the literal is a *list element* reached through `listget`, so no pass could see it anyway. | — |
+| Where is exactness lost? | `hir::range` has **no UnicodeChar domain** (Range is Int-only), so a literal char's codepoint is exact only inside `hir/completions.tcl`. Inside `std::byte::set` exactness is gone even earlier, at the listloop element binding (unseeded). | completions `resultRangeFact=[0,1114111]`; `hir::range` `[0,+∞]` |
+| Unnecessary kind guards / boxing for UnicodeChar parameters? | **No.** `std::char::codepoint<UnicodeChar>` has no guard (typed param + UnicodeChar key). | NIR func 1 |
 | Why not tiny-leaf inlined? | `charcodepoint` is not in `leafInlineSafeOps` (the list is Int arithmetic/compare/bitwise only), although it is total and allocation-free | `native/lower.tcl:217` |
 
 Classification: **B** (the representation fact "immediate scalar" is
 retained but the lowering maps the op to a generic helper), plus **E** (a
-call boundary for a one-shift body). Cost per `byte::set` element: 2
+call boundary for a one-shift body). Cost per `std::byte::set` element: 2
 calls, 8 instructions of call/frame, plus the helper's own body, instead of
 one shift.
 
@@ -859,8 +859,8 @@ one shift.
 
 ## 13. Byte representation audit
 
-Trace of one `Byte` through `web::is_unreserved` (URI path, `refined-checks`)
-and through `ascii::is_digit` called directly (`ascii-256`):
+Trace of one `Byte` through `std::web::is_unreserved` (URI path, `refined-checks`)
+and through `std::ascii::is_digit` called directly (`ascii-256`):
 
 | stage | direct call (`ascii-256`) | URI path (`esc_char` → `is_unreserved`) |
 |---|---|---|
@@ -941,7 +941,7 @@ and only one of its ten calls carries an error check.
 
 ### Leaf predicates (item 21)
 
-`ascii::is_digit(b) = b >= 48 and b <= 57` (is_upper/is_lower identical in
+`std::ascii::is_digit(b) = b >= 48 and b <= 57` (is_upper/is_lower identical in
 shape). Two compiled forms exist, and which one a call gets is decided
 entirely by the *caller's* instance (§13):
 
@@ -981,7 +981,7 @@ branch pairs on one unboxed register.
 ### Inlining vs specialization (item 23)
 
 Classifying a non-alphanumeric byte such as `'-'` (45) through
-`ascii::is_alphanumeric` (dynamic path: 5 calls, 3 comparisons evaluated):
+`std::ascii::is_alphanumeric` (dynamic path: 5 calls, 3 comparisons evaluated):
 
 | configuration | calls | guards | tagged compares | `may_error` checks | ≈ instructions |
 |---|---:|---:|---:|---:|---:|
@@ -1044,18 +1044,18 @@ the only part the source actually asks for, ≈ 6–12.
 
 ---
 
-## 15. `web::is_unreserved` audit
+## 15. `std::web::is_unreserved` audit
 
 ```botlish
 fn is_unreserved(b: Byte) -> bool:
-    ascii::is_alphanumeric(b) or immutable_set_contains(additional_unreserved_chars, b)
+    std::ascii::is_alphanumeric(b) or immutable_set_contains(additional_unreserved_chars, b)
 ```
 
 `refined-checks` function 9 / `web-unreserved-256` function 9, 199 bytes,
 `env=1 captures=1 instance="generic"`:
 
 ```
-%1 = call 8 %0            ; ascii::is_alphanumeric<generic> -- real call, may_error=true
+%1 = call 8 %0            ; std::ascii::is_alphanumeric<generic> -- real call, may_error=true
 br %1 L0 L1               ; true → return true (short-circuit)
 L1: %4 = capture 0        ; the retained set: closure → caps → slot (2 dependent loads)
     %5 = op setcontains %4 %0   ; rt_set_contains: linear scan, `equal` per member
@@ -1066,7 +1066,7 @@ L1: %4 = capture 0        ; the retained set: closure → caps → slot (2 depen
 |---|---|---|
 | instance | always `<generic>`, even for exact literal arguments (`web-unreserved-literals`: arg ranges `[45,45]`… at the call sites) | captures a non-Int value → generic key (RC1, F06). The generic instance is also a materialized Block, hence **open** to range propagation, so the exact 45 never reaches it (`params.txt`: entry `[-∞,+∞]`) |
 | Byte argument | tagged word; parameter view type `any` | F05 |
-| call to `ascii::is_alphanumeric` | real call into the generic ASCII chain; `test rax,rax` + `cmp rax,6` after it | RC1 → guards → `may_error` (F08); RC3 |
+| call to `std::ascii::is_alphanumeric` | real call into the generic ASCII chain; `test rax,rax` + `cmp rax,6` after it | RC1 → guards → `may_error` (F08); RC3 |
 | short-circuit | direct: `je` to a `mov eax,6` return block | — |
 | retained set | `capture 0`: two dependent loads per call | module value lowered as a closure capture (RC5, F13) |
 | `setcontains` | `rt_set_contains` call; 1–4 `equal` calls inside (per member: `kind_of` ×2, dispatch, compare) | generic ImmutableSet (F13) |
@@ -1085,7 +1085,7 @@ of every string `uri_escape_text` escapes.
 
 | layer | what it knows about `{45,46,95,126}` |
 |---|---|
-| source | `byte::set(['-', '.', '_', '~'])`, a module binding |
+| source | `std::byte::set(['-', '.', '_', '~'])`, a module binding |
 | HIR | the initializer call node; type `ImmutableSet[int[Byte]]`; the literal list's element *types* (`List[UnicodeChar]`) |
 | completion proof | the literal list's exact codepoints, **only as inputs** to `effectiveErrors({})`; the set value itself is never computed |
 | module-retention proof | "initialized once, transitively immutable". **Discarded** after `hir::modulebinding::validate` |
@@ -1101,7 +1101,7 @@ of every string `uri_escape_text` escapes.
 
 **It never knows it.** The exact *codepoints* of the four literal chars
 exist only transiently inside the completion proof, as argument facts for
-one `effectiveErrors` computation. No pass evaluates `byte::set` on
+one `effectiveErrors` computation. No pass evaluates `std::byte::set` on
 them. No lattice represents a set value. The retention proof that would
 license treating the binding as a compile-time constant is discarded
 after validation. From specialization onward the compiler knows only
@@ -1132,7 +1132,7 @@ Byte-set membership on a measured path is the four-element constant.
 
 ## 17. `listloop` audit
 
-Generic construct, as lowered by `native::lower::ListLoop` (`byte::set`'s
+Generic construct, as lowered by `native::lower::ListLoop` (`std::byte::set`'s
 loop, `artifacts/byte-set-canonical/`):
 
 ```
@@ -1220,10 +1220,10 @@ Native mechanisms (`native/src/codegen/clif.rs`, `runtime/ops.rs`):
 | shape (item 36) | workload | residue on the success path |
 |---|---|---|
 | direct `fail` | `from_int` | out-of-line blocks only |
-| propagating call | `byte::set` → `from_int` | `test rax,rax; je` → shared exit |
+| propagating call | `std::byte::set` → `from_int` | `test rax,rax; je` → shared exit |
 | handled call | `from-int-dynamic` `<program>` | the same `test`/`jne`; dispatch (2 × `rt_declared_error`, `rt_clear_declared_error`) is cold |
 | statically error-free call | `from_int(45)`, `from_int(complement(n))` | **callee: both compares + both fail blocks; caller: `test`/`jne`** |
-| partially error-free call | `from_int(nonneg(m))`, `byte::set`'s inner call | the impossible `BelowRange` compare + block |
+| partially error-free call | `from_int(nonneg(m))`, `std::byte::set`'s inner call | the impossible `BelowRange` compare + block |
 
 ### `may_error` is function-global (items 39–40)
 
@@ -1275,7 +1275,7 @@ Allocation: 23 objects, 1,085 bytes per run; 40 static constants.
 
 | phase | work | allocations |
 |---|---|---:|
-| module init | `hex_digits` list (1); char-literal list (1); `byte::set`: accumulator (1) + 4 appends (4) + set (1); closures `is_unreserved`, `uri_escape_text` (2) | 10 |
+| module init | `hex_digits` list (1); char-literal list (1); `std::byte::set`: accumulator (1) + 4 appends (4) + set (1); closures `is_unreserved`, `uri_escape_text` (2) | 10 |
 | one-time `uriEscape("a b")` | `encode_utf8` ×3, `substring` ×3, `concat` ×6 | 12 |
 | result list | `[check(...), check(...)]` | 1 |
 | **steady state**: `check` × 400 × 2 inputs, `Emailish?` scans | StringRegion comparisons only | **0** |
@@ -1375,13 +1375,13 @@ check instructions; no Vm loads except the constant table).
 ## 22. GC / rooting / call-ABI observations (items 54–56)
 
 - **Allocation-free scalar functions carry no root machinery** (item 55):
-  `ascii::*` (both forms), `from_int` (both forms), `char::codepoint`,
-  `web::is_unreserved` have 0 safepoints, 0 root candidates, 0 shadow slots.
+  `ascii::*` (both forms), `from_int` (both forms), `std::char::codepoint`,
+  `std::web::is_unreserved` have 0 safepoints, 0 root candidates, 0 shadow slots.
   F3's safepoint-aware liveness works as intended (positive).
 - Root bookkeeping appears exactly where an op may allocate. Tagged
   `iadd`/`isub`/`imul` count as allocating (BigInt overflow path,
   `op_may_allocate`), so **a tagged loop index makes a loop a safepoint** and
-  forces a shadow-slot store of the index each iteration (`byte::set`,
+  forces a shadow-slot store of the index each iteration (`std::byte::set`,
   `<program>` listloops). This is **introduced by downstream uncertainty**
   (RC4, F10), not by the calling convention.
 - Shadow slots are sized to max-live roots. The one outlier is startup-only:
@@ -1412,9 +1412,9 @@ data the next layer reads. **lost** = gone from that data;
 | Byte `[0,255]` | integer domain (`core::type::integerFacts`) | `hir::range` per instance (via view type) | generic instances: **lost** with the evidence. Specialized: **unused** for control flow (raw eligibility only), then repacked tagged at every call boundary | generic: tagged compares with `rt_int_cmp`; specialized: one `sar` per callee |
 | Nibble `[0,15]` / HighNibble exact | integer domain + declared results | **machine code** (fully consumed: `FoldPureBitwise`, `RawEligibleShift`, inlining) | only where the enclosing instance is generic (`high_nibble<generic>`: `guard int` on its input) | positive control: one `and` + `sar` |
 | UnicodeChar scalar identity | literal / type | NIR (`UnicodeChar` key, tagged immediate) | **unused** by `clif.rs` (`CharCodepoint` → `rt_char_codepoint`) and by the tiny-leaf safe-op list | 2 calls per codepoint |
-| `char::codepoint` nonnegative | registry `-result-range nonneg` (hir::range); completions' own table | `hir::range`: `from_int<int>` entry `[0,+∞]` | **unused** by `native::lower::If` | `BelowRange` compare + block per `byte::set` element |
-| `char::codepoint ≤ 0x10FFFF` | `hir/completions.tcl` `NativeResultRange` only | completions (node `resultRangeFact`) | **lost**: never enters `hir::range` (siloed lattice) | `from_int` compares tagged instead of raw inside `byte::set` |
-| exact char codepoint (literal) | completions | completions only (`hir::range` has no UnicodeChar domain); inside `byte::set` already gone at the listloop element binding | **lost** before specialization | helper call for a literal |
+| `std::char::codepoint` nonnegative | registry `-result-range nonneg` (hir::range); completions' own table | `hir::range`: `from_int<int>` entry `[0,+∞]` | **unused** by `native::lower::If` | `BelowRange` compare + block per `std::byte::set` element |
+| `std::char::codepoint ≤ 0x10FFFF` | `hir/completions.tcl` `NativeResultRange` only | completions (node `resultRangeFact`) | **lost**: never enters `hir::range` (siloed lattice) | `from_int` compares tagged instead of raw inside `std::byte::set` |
+| exact char codepoint (literal) | completions | completions only (`hir::range` has no UnicodeChar domain); inside `std::byte::set` already gone at the listloop element binding | **lost** before specialization | helper call for a literal |
 | `effectiveErrors={}` | completions (node field) | HIR node | **unused**: nothing downstream reads the field | callee compares + `faildeclared` blocks; caller `test rax,rax` |
 | `effectiveErrors={AboveRange}` | completions | HIR node (+ instance range `[0,+∞]`) | **unused** (node); range **unused** by `If` | `BelowRange` path |
 | exact four-member ImmutableSet | **never introduced** (literal codepoints exist transiently inside one completions computation) | — | — | closure capture load + `rt_set_contains` linear `equal` scan |
@@ -1431,9 +1431,9 @@ data the next layer reads. **lost** = gone from that data;
 | C1 | any program with `handle` | calls/returns inside a handle | `hir::range::Expr` had no `handle` case | wrong ranges → miscompile (fixed) | correctness | **S0** |
 | C2 | user fn → module closure | module binding captured | HIR `captures` of user functions omit module closures | `NATIVE BUG` at compile time (not fixed) | correctness (crash) | **S0** (loud) |
 | F01 | `from_int(45)`, `from_int(Byte)` | `effectiveErrors={}`; instance range decides both compares | `native::lower::If` never decides from ranges; node field never read | 2 compares + 2 fail blocks + caller check | B, F | S3 |
-| F02 | `from_int(nonneg)`, `byte::set` | `effectiveErrors={AboveRange}`; entry `[0,+∞]` | `native::lower::If`; one-sided range not `fitsSmall` | `BelowRange` path; tagged compares (329 vs 118 B) | B | S3 |
-| F03 | `byte::set` | codepoint ≤ 0x10FFFF | siloed in completions' `NativeResultRange` | tagged instead of raw compares | A | S4 (startup here) |
-| F04 | `byte::set`, `char::codepoint` | UnicodeChar is an immediate; body is one shift | `clif.rs` op table → helper; `leafInlineSafeOps` | 2 calls per element | B, E | S3 |
+| F02 | `from_int(nonneg)`, `std::byte::set` | `effectiveErrors={AboveRange}`; entry `[0,+∞]` | `native::lower::If`; one-sided range not `fitsSmall` | `BelowRange` path; tagged compares (329 vs 118 B) | B | S3 |
+| F03 | `std::byte::set` | codepoint ≤ 0x10FFFF | siloed in completions' `NativeResultRange` | tagged instead of raw compares | A | S4 (startup here) |
+| F04 | `std::byte::set`, `std::char::codepoint` | UnicodeChar is an immediate; body is one shift | `clif.rs` op table → helper; `leafInlineSafeOps` | 2 calls per element | B, E | S3 |
 | F05 | ASCII on URI path | declared `b: Byte` (discharged at every call) | `hir::specialize::Analyze` seeds `any`; `RefineParams` skips `any` (the non-specializing `-specialize 0` path honors the declaration and emits no guard) | `guard int`, tagged compares, 377 vs 74 B per leaf; +8.6 ns (+52%) per classification (§8) | A | S2 |
 | F06 | whole `web` module | exact callee, Byte/str args | `hir::specialize::Handle`: non-Int captures → generic key | 12/16 generic fns (`web-unreserved-256`), 26/33 (`refined-checks`); 10 guards in URI helpers | D, G | **S1** |
 | F07 | ASCII composition | ≤6-compare CFG | `LeafExprStructural` rejects `if` and block calls | 5 calls per classified byte, Bool round trips | E | S3 |
@@ -1441,8 +1441,8 @@ data the next layer reads. **lost** = gone from that data;
 | F09 | every fallible call | per-call `effectiveErrors` | `nir.rs` `summarize_call_effects` (per function, structural) | checks after statically error-free calls | F | S3 |
 | F10 | collecting `listloop` | `0 ≤ idx < len ≤ SMALL_MAX` | `ListLoop` → NIR (no raw index / unchecked get) | tagged index ops + safepoint + root stores; `listget` re-check | A | S2 |
 | F11 | collecting `listloop` | accumulator uniquely owned until exit | `ListLoop` uses persistent `listappend` | n allocations, O(n²) copies (≈92% of bytes in `ascii-256`) | G | S2 |
-| F12 | `byte::set` | temporary list has one consumer; literal elements distinct | no fusion; `setfromlist` O(n²) dedup | extra List + dedup | G, H | S4 |
-| F13 | `web::is_unreserved` | constant set `{45,46,95,126}`, retained, immutable | never computed; retention proof discarded | capture loads + `rt_set_contains` + ≤4 `equal` calls | A, G | S3 |
+| F12 | `std::byte::set` | temporary list has one consumer; literal elements distinct | no fusion; `setfromlist` O(n²) dedup | extra List + dedup | G, H | S4 |
+| F13 | `std::web::is_unreserved` | constant set `{45,46,95,126}`, retained, immutable | never computed; retention proof discarded | capture loads + `rt_set_contains` + ≤4 `equal` calls | A, G | S3 |
 | F14 | `refined-checks` | `Emailish?(s)` decided in the then-branch | `native::ExpandNativeBodies` (pre-HIR) erases type-test identity | 2nd full scan per iteration; 5,144 B duplicate; dead `fnvalue` → extra generic instances | A | S2 |
 | F15 | `refined-checks` scanners | index kind from callers; closure removed by blockescape | capture policy decided in specialize *before* blockescape | `guard int`/tagged index per char; 14 guards | D | S2 |
 | F16 | `refined-checks` (non-ASCII) | byte position already reached by the scan | regions are char-indexed; traversal plan shape-limited | 112,000 seek bytes/run | C | S2 |
@@ -1507,7 +1507,7 @@ Static runtime-helper call sites in `refined-checks` (relocations in
 | `rt_list_get` | 5 | no (fallback of the inline fast path) | — |
 | `rt_value_eq` | 2 | yes (`domain_loop`) | semantically polymorphic (`veq` on an unknown kind) |
 | `rt_set_contains` | 1 | once per URI byte | exactly known set (F13) |
-| `rt_char_codepoint` | 1 | once per `byte::set` element | exactly known representation (F04) |
+| `rt_char_codepoint` | 1 | once per `std::byte::set` element | exactly known representation (F04) |
 | `rt_list_append` / `rt_list_new` / `rt_set_from_list` / `rt_str_cat` / `rt_substr` / `rt_str_utf8_bytes` / `rt_closure_new` | 1 / 4 / 1 / 4 / 1 / 1 / 2 | startup / one-time | semantically required allocation (the accumulator copying is not, F11) |
 | `rt_fail_declared` | 2 | no | cold |
 
@@ -1519,13 +1519,13 @@ Static runtime-helper call sites in `refined-checks` (relocations in
 | `ascii-256` | 1 literal + 1 accumulator | 256 rows (semantic) + **256 accumulator copies** (container growth, O(n²)) | 92% of bytes are accumulator copies (F11) |
 | `byte-set-canonical` | 7 (1 literal, 1 + 4 accumulator, 1 set) | — | 5 of 7 are temporary construction |
 | `ai_text_clean` | 1 | 55 `decodecharat` 1-char Strings (materialized for `clean_char`'s `str` parameter) + 55 `strcat` (source-level O(n²) concat) | composition + semantic |
-| ASCII predicates, `from_int`, `char::codepoint`, `is_unreserved` | — | **0** | item 85 ✓: every scalar predicate/conversion is allocation-free |
+| ASCII predicates, `from_int`, `std::char::codepoint`, `is_unreserved` | — | **0** | item 85 ✓: every scalar predicate/conversion is allocation-free |
 
 Temporary-object lifetimes (item 86): the `List[Byte]` temporary in
-`byte::set`, the listloop accumulators, the StringRegions and the
+`std::byte::set`, the listloop accumulators, the StringRegions and the
 `web` closures never escape. The compiler proves non-escape for the regions
 (and for scalar-replaced fixed-shape Lists and virtualized Blocks), not for
-the accumulator or the `byte::set` temporary. The retained set and the two
+the accumulator or the `std::byte::set` temporary. The retained set and the two
 module closures are genuinely retained.
 
 ## 26. Code-size and hot-path decomposition
@@ -1555,7 +1555,7 @@ module closures are genuinely retained.
 | URI escaping helpers | 3,216 | 18.0% | all generic (F06) |
 | ASCII chain + `is_unreserved` | 1,674 | 9.4% | the same code as `<int>` instances would be ≈570 B (F05/F06): ≈1,100 B of generic overhead |
 | `<program>` | 1,172 | 6.6% | startup |
-| `byte::set` + `from_int` + `char::codepoint` | 1,001 | 5.6% | startup |
+| `std::byte::set` + `from_int` + `std::char::codepoint` | 1,001 | 5.6% | startup |
 | `check` | 504 | 2.8% | steady-state driver |
 
 By *instruction class* (heuristic, `tools/asm-classes.py`: classifies by
@@ -1581,13 +1581,13 @@ Static instruction counts along the common (fast) path, from `asm.txt`:
 
 | function | source semantics | generated (fast path) |
 |---|---|---|
-| `ascii::is_digit<int>` | 2 comparisons + conjunction | 11: frame 4 + `ret`, 1 unbox (`sar`), 2 `cmp` + 2 `jcc`, 1 Bool constant |
-| `ascii::is_digit<generic>` | same | 36: frame + callee-saves 12, guard 5, 2 × (tag test + `cmp` + `cmov` Bool + `cmp r,6` + `jcc`) ≈ 17, moves 2 |
-| `ascii::is_alphanumeric<int>` | 1 disjunction of two calls | 19 own (+ callees): frame + 2 callee-saves 11, 4 arg/Vm moves, `call`, `cmp rax,6`, `je`, Bool; a second call when the first is false |
-| `web::is_unreserved<generic>` | 1 call, 1 membership, 1 disjunction | ≈36 own: frame + 3 callee-saves 13, `call` + `may_error` test + Bool test, 2 capture loads, `rt_set_contains` + NO_VALUE test + Bool test, Bool re-materialization |
-| `byte::from_int<int>`, raw (`[45,45]`/`[0,255]`) | 0 comparisons needed at a proven-safe site, 2 in general | 12: frame 4 + `ret`, `mov`+`sar`, 2 × (`cmp`,`jcc`), return move; caller: `mov`, `call`, `test`, `jne` |
-| `byte::from_int<int>`, tagged | 2 comparisons (value may be a BigInt) | 29 (§10) |
-| `byte::set` loop body | codepoint, 1 range check, append | ≈53 per element + callees: tagged loop test 11, `listget` tag/bounds + load 11, 2 calls into `char::codepoint` (+ helper), `from_int` call + check, `rt_list_append` + check, 3 root-slot stores, tagged `iadd` with overflow test 10, backedge |
+| `std::ascii::is_digit<int>` | 2 comparisons + conjunction | 11: frame 4 + `ret`, 1 unbox (`sar`), 2 `cmp` + 2 `jcc`, 1 Bool constant |
+| `std::ascii::is_digit<generic>` | same | 36: frame + callee-saves 12, guard 5, 2 × (tag test + `cmp` + `cmov` Bool + `cmp r,6` + `jcc`) ≈ 17, moves 2 |
+| `std::ascii::is_alphanumeric<int>` | 1 disjunction of two calls | 19 own (+ callees): frame + 2 callee-saves 11, 4 arg/Vm moves, `call`, `cmp rax,6`, `je`, Bool; a second call when the first is false |
+| `std::web::is_unreserved<generic>` | 1 call, 1 membership, 1 disjunction | ≈36 own: frame + 3 callee-saves 13, `call` + `may_error` test + Bool test, 2 capture loads, `rt_set_contains` + NO_VALUE test + Bool test, Bool re-materialization |
+| `std::byte::from_int<int>`, raw (`[45,45]`/`[0,255]`) | 0 comparisons needed at a proven-safe site, 2 in general | 12: frame 4 + `ret`, `mov`+`sar`, 2 × (`cmp`,`jcc`), return move; caller: `mov`, `call`, `test`, `jne` |
+| `std::byte::from_int<int>`, tagged | 2 comparisons (value may be a BigInt) | 29 (§10) |
+| `std::byte::set` loop body | codepoint, 1 range check, append | ≈53 per element + callees: tagged loop test 11, `listget` tag/bounds + load 11, 2 calls into `std::char::codepoint` (+ helper), `from_int` call + check, `rt_list_append` + check, 3 root-slot stores, tagged `iadd` with overflow test 10, backedge |
 | `scan_local<generic>` (StringRegion) | one character classification per iteration | per character: `guard int`, tagged `ige` + Bool, `callmulti char_at` (its own 2 guards, overflow-checked `iadd`, `rt_str_region_check`, out-pointer return), `rt_str_region_is_tcl_alnum`, up to 5 `rt_str_region_eq`, tagged `iadd`, `tail` |
 
 ### Botlish vs Cranelift (items 79–81)
@@ -1627,7 +1627,7 @@ range reaches it either.
 
 **Evidence.** The same five ASCII predicates: 0 guards, 74 B leaves, 1/10
 checked calls through a proven-Byte caller (`ascii-256`); 3 guards, 377 B
-leaves, 16/17 checked calls through `web::is_unreserved` (`web-unreserved-256`).
+leaves, 16/17 checked calls through `std::web::is_unreserved` (`web-unreserved-256`).
 All 27 guards in `refined-checks` sit in generic instances (§25).
 
 ### RC2: proven value and completion facts have no control-flow consumer
@@ -1643,7 +1643,7 @@ structure.
 
 **Evidence.** `from_int<int>` with entry range `[45,45]` (or `[0,255]`)
 compiles both comparisons and both `faildeclared` blocks. With `[0,+∞]`
-(`byte::set`) the `BelowRange` path survives. One consumer would remove
+(`std::byte::set`) the `BelowRange` path survives. One consumer would remove
 both, and `may_error` would then fall out of `nir.rs` unchanged (§10, §18).
 
 ### RC3: call boundaries are opaque
@@ -1657,7 +1657,7 @@ inlining accepts only straight-line bodies of Int ops. Several trivial ops
 helper calls.
 
 **Evidence.** ASCII classification: ≈80 instructions with perfect
-representation, ≈85% of them call overhead (§14). `char::codepoint`: 2 calls
+representation, ≈85% of them call overhead (§14). `std::char::codepoint`: 2 calls
 for one shift (§12).
 
 ### RC4: compiler-internal representations drop facts they could carry
@@ -1686,7 +1686,7 @@ sharing the codegen-facing lattice.
 
 **Evidence.** The redundant second `Emailish?` scan and its duplicate
 5,144 B body (§19). The constant set is never known (§16). `from_int`'s
-comparisons stay tagged inside `byte::set` (§11).
+comparisons stay tagged inside `std::byte::set` (§11).
 
 The brief's example hypotheses map onto these as follows. "Call-site facts
 not part of specialization" and "representation selection sees only coarse
@@ -1728,8 +1728,8 @@ affected layers.
 | Root cause | Findings explained | Candidate fix family | Leverage (evidence) | Complexity | Semantic risk |
 |---|---|---|---|---|---|
 | RC1 instance selection ignores proven parameter facts | F05 F06 F08 F15 F19 F21 (+caps RC2) | 1a + 1b (+1d) | **highest on the fenced vertical**: all 27 guards in `refined-checks`; 26/33 generic functions in `refined-checks`; ASCII leaves 377 → 74 B; the 5 checked calls inside the ASCII chain become unchecked (as in `ascii-256`) | low (1a) / medium (1b) | low / low–medium |
-| RC2 no control-flow consumer for proven facts | F01 F02 F09 F20 (F10 bounds) | 2a + 2d (+2c) | every safe/partially safe `from_int` site; `BelowRange` in `byte::set`; hot loop tests in `fib`/`check`; any range-decided branch in general | medium (2a) / low (2d) | medium (depends on `hir::range` soundness) / low |
-| RC3 opaque call boundaries | F04 F07 F17 F18 | 3a + 3b | ASCII per-byte path ≈8× fewer instructions after RC1; `char::codepoint` 2 calls → 1 shift; string length/equality helpers on every character | medium (3a) / low (3b) | low–medium / low |
+| RC2 no control-flow consumer for proven facts | F01 F02 F09 F20 (F10 bounds) | 2a + 2d (+2c) | every safe/partially safe `from_int` site; `BelowRange` in `std::byte::set`; hot loop tests in `fib`/`check`; any range-decided branch in general | medium (2a) / low (2d) | medium (depends on `hir::range` soundness) / low |
+| RC3 opaque call boundaries | F04 F07 F17 F18 | 3a + 3b | ASCII per-byte path ≈8× fewer instructions after RC1; `std::char::codepoint` 2 calls → 1 shift; string length/equality helpers on every character | medium (3a) / low (3b) | low–medium / low |
 | RC4 internal representations drop construction facts | F10 F11 F12 F16 F22 | 4a + 4b (+4d later) | every collecting `listloop` iteration; O(n²) → O(n) copies (≈92% of bytes in the ASCII probe); non-ASCII region scans | low–medium / medium / high | low / medium / medium |
 | RC5 identity erased or siloed before analysis | F03 F13 F14 (F06) C2 | 5a + 5b + 5c | `refined-checks` steady state (redundant scan, 29% of its code); the constant set; the C2 crash | medium / high / low | low–medium / medium / low |
 
@@ -1765,7 +1765,7 @@ Botlish already proves. None needs a new proof or a `.bot` change.
    second; if M1's 1b already specializes module closures, M2's code
    benefit shrinks but its correctness value (C2) does not.
 3. **M3: control-flow consumers for proven facts** (2a, 2d, then 2c).
-   The error-edge and range-check residue (`from_int`, `byte::set`) plus
+   The error-edge and range-check residue (`from_int`, `std::byte::set`) plus
    hot loop tests. It follows M1 because instance precision determines how
    often a joined range decides anything. It follows C1 (done here) because
    it raises the stakes of `hir::range` soundness. The entry criterion
@@ -1853,7 +1853,7 @@ interfere, so a first, concurrent attempt was discarded.
   interp value for `handle-range-entry`'s shape;
 - `errors-handler-return-joins-result-range`: the same for a `return` inside a
   handler body;
-- `errors-handled-byte-from-int-bigint`: `byte::from_int(45)` + a handled
+- `errors-handled-byte-from-int-bigint`: `std::byte::from_int(45)` + a handled
   BigInt `from_int`, through a real module file.
 
 All three **fail on the unfixed tree** (verified by stashing `hir/range.tcl`)
@@ -1866,7 +1866,7 @@ Before/after NIR, byte-for-byte (`native::nir`), for `bench/fib.ir`,
 all nine `examples/stdlib/*.bot`: **13/13 identical**. None of them contains
 a `handle`. Probe programs: NIR identical for all of them. One *fact*
 changed: in `probes/web-unreserved-256.bot`, `from_int<int>`'s entry range
-was `[0,+∞]` before the fix (unsound: only `byte::set`'s call was visible)
+was `[0,+∞]` before the fix (unsound: only `std::byte::set`'s call was visible)
 and is `[-∞,+∞]` after. Its NIR is unchanged because `[0,+∞]` was not
 `fitsSmall` either way. The artifacts committed for probes with handlers are
 the post-fix outputs.
@@ -1911,7 +1911,7 @@ byte-identical to the committed `audit/native-scalar-asm/` corpus (§3).
 
 | stop condition (item 133) | status |
 |---|---|
-| 1. no frozen `.bot` source changed | ✅ `git diff 39bac41 -- lib/ bench/ examples/` is empty |
+| 1. no frozen `.bot` source changed | ✅ `git diff 39bac41 -- stdlib/ bench/ examples/` is empty |
 | 2. no optimizer/representation/lowering/backend behavior changed | ✅ The only production change is the C1 correctness fix in `hir/range.tcl` (analysis soundness). It adds recorded calls and return/break ranges, never narrows, and changes no benchmark program's NIR |
 | 3. baseline captured | ✅ §8 (timing, code size, functions, allocations, guards) |
 | 4. pipeline and fact ownership documented | ✅ §4–§7 |
@@ -1919,7 +1919,7 @@ byte-identical to the committed `audit/native-scalar-asm/` corpus (§3).
 | 6. every major inefficiency has a first-loss / first-non-consumption point | ✅ §23–§24 |
 | 7. Nibble/bit analyzed as positive control | ✅ §9 |
 | 8. `from_int(45)` safe-call residue explained | ✅ §10 |
-| 9. `byte::set` impossible `BelowRange` explained | ✅ §11 |
+| 9. `std::byte::set` impossible `BelowRange` explained | ✅ §11 |
 | 10. ASCII call/guard overhead explained | ✅ §13–§14 (measured: +52% generic) |
 | 11. constant ImmutableSet generality explained | ✅ §16 |
 | 12. listloop bounds/helper/accumulator overhead explained | ✅ §17 |

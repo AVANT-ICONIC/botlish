@@ -49,7 +49,7 @@ Most current behaviour follows from it:
 
 * Facts that reach code generation are **interval facts**: exact Ints,
   intervals, source domains, induction and recursive-result Ranges.
-* **Relational and cardinality facts** (`i < list::length(xs)`, String
+* **Relational and cardinality facts** (`i < std::list::length(xs)`, String
   lengths, capacities) and **completion verdicts** live only in completions.
   Nothing downstream reads them.
 
@@ -77,16 +77,16 @@ harness (§K), not for merging two analyses that answer different questions.
    to the checked op, and the Tcl compiler routes it through its generic
    call.
    * *Measured:* on `bench/refined-checks.bot`, deleting the single
-     provably redundant `regioncheck` on its hot path (lib/web.bot
+     provably redundant `regioncheck` on its hot path (stdlib/web.bot
      `char_at`) cuts the run from 612 to 558 µs median, about 9%.
 2. **G3: completions does not give a counted loop's variable an interval.**
-   `loop i from 0 to 256: byte::from_int(i)` and `abi::u8(i)` are rejected.
-   So is `list::at(lit3, i - 1)` over `1..4`. range has the fact
+   `loop i from 0 to 256: std::byte::from_int(i)` and `std::abi::u8(i)` are rejected.
+   So is `std::list::at(lit3, i - 1)` over `1..4`. range has the fact
    (`[0, 255]`).
 3. **G5: struct field values are never facts**, in either analysis, even
    locally. Only the *declared field domain* survives projection.
-   * `p = Plain {index: 1}; list::at(xs, p.index)` needs a handler.
-   * `abi::x86_64::from_u64(abi::u64(2^64 - 1))` keeps its comparison.
+   * `p = Plain {index: 1}; std::list::at(xs, p.index)` needs a handler.
+   * `std::abi::x86_64::from_u64(std::abi::u64(2^64 - 1))` keeps its comparison.
    * The `from_u64` case is therefore representative of a general
      limitation, not an isolated one.
 4. **G2: `loop x in xs` reads every element with the checked `listget`**,
@@ -278,24 +278,24 @@ Columns:
 * **Interval, branch and early return: R:P.** range has no `and`/`or`
   decomposition, because an `or` is lowered to nested `if`s and
   `ComparisonNarrowing` returns `{}` for them.
-  * `d-early-return`: after `if i < 0 or i >= list::length(xs): return`, the
-    index's range at `list::at` is still `[-1, 5] {-1,1,5}`.
+  * `d-early-return`: after `if i < 0 or i >= std::list::length(xs): return`, the
+    index's range at `std::list::at` is still `[-1, 5] {-1,1,5}`.
   * completions decomposes the same condition (`Conjuncts`) and proves the
     read.
   * Gap G11 (codegen only).
 * **Counted-loop variable, interval: C:N.** `EvalCountloop` (`616`) leaves
   the binding unknown and records only `indexBounds`. range seeds
   `[start, end-1]` (`InductionSeed`, `846`).
-  * `q-countloop-interval`: `byte::from_int(i)` over `0..256` is rejected,
+  * `q-countloop-interval`: `std::byte::from_int(i)` over `0..256` is rejected,
     with range showing `[0, 255]` at the same call.
   * Gap G3.
 * **Counted-loop variable, relation: N descending.** `NoteIndexBound` (`641`)
   returns early unless `direction eq "up"`.
-  * `l-loop-forms`: `loop i down from list::length(xs) - 1 through 0:
-    list::at(xs, i)` is rejected.
+  * `l-loop-forms`: `loop i down from std::list::length(xs) - 1 through 0:
+    std::list::at(xs, i)` is rejected.
   * Gap G4.
 * **Struct construction and projection, field value: N.** `p = Plain {index:
-  1}; list::at(xs, p.index)` is rejected, and so is the nested
+  1}; std::list::at(xs, p.index)` is rejected, and so is the nested
   `o.inner.index` (`s-struct-facts`). range and completions both type the
   struct `unknown`.
   * Gap G5.
@@ -310,8 +310,8 @@ Columns:
   Ranges, exact scalars and literal Lists cross a call. Relations and forms
   never do.
 * **Call result, Card. and field value: N.** From `r-return-facts`:
-  * `list::at(three(), 2)`, `str::substring(text(), 0, 3)` and
-    `list::at(xs, holder().index)` are all rejected;
+  * `std::list::at(three(), 2)`, `std::str::substring(text(), 0, 3)` and
+    `std::list::at(xs, holder().index)` are all rejected;
   * `exact() - 40`, `ranged(true)` and a domain-typed result are all proven.
   * Gap G6.
 * **Handler exit: N.** From `u-handler-exit`: after `v = g(k): on Boom: 0`,
@@ -329,7 +329,7 @@ Columns:
   * same effective errors, same argument Ranges, same `op listget`;
   * method and bound-name spellings are identical to each other;
   * the qualified spelling differs only in that module-level bindings
-    (`at = list::at`) are passed to the function as extra parameters
+    (`at = std::list::at`) are passed to the function as extra parameters
     (`pnames="xs length at"`) and its instance is keyed `generic` (`xs :
     any`).
   * That is lambda-lifting of captured module bindings, not fact loss (G16).
@@ -343,7 +343,7 @@ Columns:
 | `return` value into the call's result Range | **duplicated rule that drifted unsoundly** (S1, fixed by porting range's rule) |
 | Counted/lockstep loop variable | **same source fact interpreted differently**, and lossy on the C side: range has the interval, C has only the relation (G3) |
 | `and`/`or` conjuncts, infeasible-branch pruning | **intentional independent reasoning** (completions header `24-30`); range lacking it is G11 |
-| `mod` → `[0, |d|-1]`, exact `str::length`, `char::scalar_value` → `[0, 0x10FFFF]` | **intentional independent reasoning** (kept out of codegen on purpose: comment at completions `776-785`) |
+| `mod` → `[0, |d|-1]`, exact `std::str::length`, `std::char::scalar_value` → `[0, 0x10FFFF]` | **intentional independent reasoning** (kept out of codegen on purpose: comment at completions `776-785`) |
 | `DifferenceOffset` (`b - a` where `b = a + K`) | range only: **duplicated rule that drifted** (precision only) |
 | `IndexBounds` constant-size check vs `hir::exact::BoundsOf` | **duplicated rule** (`BoundsOf` has no callers left) |
 | Handler typing | **one analysis consuming the other's result** (`range::analyzeSequence`) |
@@ -365,7 +365,7 @@ these places. All are per specialization instance.
 | range `fitsSmall` | per-instance Range | `RawEligibleCall` / `RawIntOp` (`6645`, `6760`) | `iadd` (tag test, `sadd_overflow`, `rt_int_add`) | `riadd` (plain `iadd`) |
 | range (point shift amount, nonnegative small value) | Range | `RawEligibleShift` (`6718`) | `ishl`/`ishr` (`op_may_error`: RANGE) | `rishl`/`rishr`: **drops an error exit** |
 | range bounds `fitsSmall` | Range | `RawCountDomain` (`7212`) | tagged `ilt`/`iadd` | `rilt`/`riadd` |
-| range `ConditionOutcome` | Range | `If` (`6958`) + `PureDecidedCondition` (`6888`) | both arms + condition | the live arm only (this is what removes `abi::u8`'s checks) |
+| range `ConditionOutcome` | Range | `If` (`6958`) + `PureDecidedCondition` (`6888`) | both arms + condition | the live arm only (this is what removes `std::abi::u8`'s checks) |
 | range point result | Range | `ClosedResult` (`4762`) | the call's result register | a constant (the call still runs) |
 | `hir/traversal.tcl` plan | plan dict | `TraversalAccess` (`5487`) | `substr` call | `ige` + infallible `decodecharat` |
 | `hir/escape.tcl` `ScalarUse` | constant index within a literal's arity | virtual-field interception (`lower.tcl:4913-4952`) | `listget` | a register |
@@ -398,14 +398,14 @@ baseline for these probes).
 
 ```
 fn doubled(xs):
-    loop i from 0 to list::length(xs):
-        list::at(xs, i) * 2
+    loop i from 0 to std::list::length(xs):
+        std::list::at(xs, i) * 2
 ```
 
-* **Where `0 <= i < list::length(xs)` is established.**
+* **Where `0 <= i < std::list::length(xs)` is established.**
   `EvalCountloop` → `NoteIndexBound` (`completions.tcl:616`, `641`).
   * The loop is ascending, and the start's Range `[0, 0]` is ≥ 0.
-  * So `indexBounds(i) = IntForm(list::length(xs))`.
+  * So `indexBounds(i) = IntForm(std::list::length(xs))`.
 * **How the symbolic length is represented.** `hir/cardinality.tcl`
   `IntForm` gives the linear form `{0 {{len {b xs}} 1}}`. The atom is keyed
   on `xs`'s binding (immutable).
@@ -438,10 +438,10 @@ fn doubled(xs):
 
 * **What proves both reads and writes.** `Capacity` (`cardinality.tcl:343`)
   gives a `cap` atom for:
-  * `a = mutable_array::allocate(n)`, read in `loop i from 0 to n` or `to
-    mutable_array::capacity(a)`;
-  * a parameter `a` read in `loop i from 0 to mutable_array::capacity(a)`.
-* **Result:** `mutable_array::set(a, i, ...)` and `at(a, i)` both get
+  * `a = std::mutable_array::allocate(n)`, read in `loop i from 0 to n` or `to
+    std::mutable_array::capacity(a)`;
+  * a parameter `a` read in `loop i from 0 to std::mutable_array::capacity(a)`.
+* **Result:** `std::mutable_array::set(a, i, ...)` and `at(a, i)` both get
   `effective {}`.
 * **Why it is sound.** Capacity is fixed at allocation, and no fact refers
   to contents, so mutation invalidates nothing (§I).
@@ -453,8 +453,8 @@ fn doubled(xs):
 ### C. Slice proof (`c-slice.bot`)
 
 ```
-if start >= 0 and end >= start and end <= str::length(text):
-    str::substring(text, start, end)
+if start >= 0 and end >= start and end <= std::str::length(text):
+    std::str::substring(text, start, end)
 ```
 
 * **How the two checks are ruled out independently.** `SliceFacts` (`1430`)
@@ -462,7 +462,7 @@ if start >= 0 and end >= start and end <= str::length(text):
   check on its own, from the decomposed conjuncts:
   * `LowerUnderrun` needs `start >= 0` (narrowing) and `end >= start`
     (`ProveLe`);
-  * `UpperOverrun` needs `end <= str::length(text)` (`upperBounds` + `slen`
+  * `UpperOverrun` needs `end <= std::str::length(text)` (`upperBounds` + `slen`
     form).
 * **Result:** `effective {}`.
 * **Dropping the last conjunct** (`cut_lower`) leaves `effective
@@ -475,15 +475,15 @@ if start >= 0 and end >= start and end <= str::length(text):
 ### D. Branch / early-return proof (`d-early-return.bot`)
 
 ```
-if i < 0 or i >= list::length(xs):
+if i < 0 or i >= std::list::length(xs):
     return fallback
-list::at(xs, i)
+std::list::at(xs, i)
 ```
 
 * **How the facts survive the early return.**
   * `EvalIf` (`511`) finds that the then-branch cannot complete normally.
   * The condition's false outcome is carried forward: `Conjuncts` splits the
-    false `or` into `i >= 0` (narrowing) and `i < list::length(xs)` (an
+    false `or` into `i >= 0` (narrowing) and `i < std::list::length(xs)` (an
     `upperBounds` entry keyed on `i`).
   * Result: `effective {}`.
 * **range's view at the read:** `[-1, 5] {-1,1,5}`, un-narrowed (no `and`/
@@ -495,8 +495,8 @@ list::at(xs, i)
 ### E. Struct-domain projection (`e-struct-domain-projection.bot`)
 
 ```
-fn direct(x: abi::U8):
-    byte::from_int(x.value)
+fn direct(x: std::abi::U8):
+    std::byte::from_int(x.value)
 ```
 
 1. **Declared field domain.** `x.value : int[AbiU8Value]`, which is
@@ -504,16 +504,16 @@ fn direct(x: abi::U8):
 2. **range.** `project` → `ConstrainType` (`range.tcl:945-956`) gives
    `[0, 255]`.
 3. **completions.** The same rule, since `0a3ff16` (`project` →
-   `ConstrainType`). The call-specific walk of `byte::from_int` under
+   `ConstrainType`). The call-specific walk of `std::byte::from_int` under
    `[0, 255]` decides both of its checks, so the call has `effective {}`,
    through a local (`via_local`) and directly (`direct`) alike.
-4. **Native.** The shared `byte::from_int<int>` instance's entry is
+4. **Native.** The shared `std::byte::from_int<int>` instance's entry is
    `[0, 255]`, so M6 decides both comparisons. Its NIR is:
    ```
-   func 3 "byte::from_int" ... instance="int"
+   func 3 "std::byte::from_int" ... instance="int"
        ret %0
    ```
-   `plus_one(x: abi::U8)` gets raw arithmetic (`runbox`, `riadd`, `rbox`).
+   `plus_one(x: std::abi::U8)` gets raw arithmetic (`runbox`, `riadd`, `rbox`).
 
 **Working.** One representation footnote, which is not a proof issue:
 `direct`'s parameter is a materialized struct (`structget 0 %0`) while
@@ -525,13 +525,13 @@ caller passes one. Without that caller, `direct` gets `pnames="x.0"`.
 ### F. Closed call with a known struct value (`f-closed-abi-u64.bot`, `f2-closed-int-vs-struct.bot`)
 
 1. **In the caller,** the literal has Range `{18446744073709551615}`.
-2. **The creator is decided.** `abi::u64<int>`'s entry is that point (M9
+2. **The creator is decided.** `std::abi::u64<int>`'s entry is that point (M9
    instance entry, joined over its one caller), so both of its checks are
    decided: `retmulti %0`. **This is the last place the exact value is
    known.**
 3. **Construction drops it.** `U64 {value: value}`: the struct Range is
    `unknown`, and the creator's result Range is `[-∞, +∞]`.
-4. **The encoder sees only the declared domain.** `from_u64<abi::U64>`'s
+4. **The encoder sees only the declared domain.** `from_u64<std::abi::U64>`'s
    parameter is the struct (entry `unknown`), and `value.value` is
    `[0, 2^64-1]` from the declared domain. So `igt %0 9223372036854775807`
    and the `isub` path stay.
@@ -587,15 +587,15 @@ fn count_ge(i: Small, n: Small) -> int:      # accepted
     {LowerUnderrun}`).
   * `index: Nat` with `type Nat = Int in 0..2^62-1` removes both
     (`reverse_nat`: `effective {}`). The recursive call `reverse_nat(text,
-    index + 1, ...)` is verified, because `index < str::length(text) ≤
+    index + 1, ...)` is verified, because `index < std::str::length(text) ≤
     2^62-1`.
 
-### I. `list::get` (`i-get-in-counted-loop.bot`)
+### I. `std::list::get` (`i-get-in-counted-loop.bot`)
 
 1. **In the caller,** the loop proves `0 <= i < len(xs)` (completions,
    relation) and `i ∈ [0, 2^62-2]` (range).
-2. **The call** `list::get(xs, i, 0)` is an ordinary call: `call 1`.
-3. **Inside the shared `list::get<List[int], int, int>` instance:**
+2. **The call** `std::list::get(xs, i, 0)` is an ordinary call: `call 1`.
+3. **Inside the shared `std::list::get<List[int], int, int>` instance:**
    * range has entry `i ∈ [0, 2^62-2]`, joined over callers (M9).
    * completions stamps `effectiveErrors {IndexNotFound}` on the `handle`
      node, because `get`'s body is walked with `index` unconstrained.
@@ -641,7 +641,7 @@ legality side, which has none by design.
 * **Where:** `range.tcl`, `SettleInstance` and the caller fold.
 * **How:** a self call's arguments feed the instance's own entry. Growth is
   widened to infinity after a few passes. Ordinary `< <= > >=` narrowing
-  bounds the continuing branch, so `if index >= str::length(text): return`
+  bounds the continuing branch, so `if index >= std::str::length(text): return`
   keeps `index ≤ 2^62-1`.
 * **Example:** `reverse_ge` gets `index ∈ [0, 4611686018427387903]` from this
   mechanism alone; induction declines it ("unsupported relational form").
@@ -676,7 +676,7 @@ legality side, which has none by design.
     `Invariant`). That is a call determined by its argument values (a
     native classified so, `hir::repeatable::Native`, or registered
     `-mutation-stable`, its result fixed however the mutable values behind
-    its arguments are mutated in place, like `mutable_array::capacity`; or a
+    its arguments are mutated in place, like `std::mutable_array::capacity`; or a
     function whose body is determined by its arguments,
     `hir::repeatable::Block`) over invariant arguments: literals, unchanged
     parameters, root bindings, context parameters (one installed value per
@@ -686,7 +686,7 @@ legality side, which has none by design.
     captures, and bindings from outside the function (captured, top-level,
     module-static) when every self call invokes the running closure
     (`SameClosure`: through the function's own binding).
-    A registered result Range alone is not enough: `i == char::scalar_value(c)`
+    A registered result Range alone is not enough: `i == std::char::scalar_value(c)`
     with `c` recomputed every step can be stepped past, and so can a
     captured `c` when a self call reaches another closure of the same
     function (`mod-lowering-other-closure-bound`).
@@ -704,7 +704,7 @@ legality side, which has none by design.
     continuing side (it is counted, and the proof declines);
   * a bound read through a native neither classified repeatable nor
     registered `-mutation-stable`, even over an unchanged argument
-    (`mutable_vector::length`, which a push in the body changes; `hash`);
+    (`std::mutable_vector::length`, which a push in the body changes; `hash`);
   * steps of 2 or more ("step may skip equality terminator",
     `range-induction-3`);
   * caller-propagated (non-literal) seeds.
@@ -760,20 +760,20 @@ legality side, which has none by design.
 ## G. Positive controls: why facts reach machine code today
 
 1. **Virtual one-field ABI struct** (`e`, agent probe `u8.bot`).
-   * `abi::u8(7)` → `callmulti`.
+   * `std::abi::u8(7)` → `callmulti`.
    * The creator's companion variant is `retmulti %0` (no check, no struct).
-   * `bump(x: abi::U8)` gets `pnames="x.0"`: the field is scalar-replaced
+   * `bump(x: std::abi::U8)` gets `pnames="x.0"`: the field is scalar-replaced
      into a register.
    * **Why it survives:** escape proves that every exact caller passes a
      recognized construction of the same descriptor and that every use is a
      projection. The declared field domain is re-derived at each projection
      from the static type, so no field fact has to travel.
-2. **Raw Int from a source domain.** `plus_one(x: abi::U8)` → `runbox`,
+2. **Raw Int from a source domain.** `plus_one(x: std::abi::U8)` → `runbox`,
    `riadd`, `rbox`.
    * **Why it survives:** `ConstrainType` reads `int[AbiU8Value]` at the
      projection, and `RawEligibleCall` sees that both operands and the
      result `[1, 256]` fit small.
-3. **Closed constant creator (M6).** In probe `e`, `abi::u8<int>` has entry
+3. **Closed constant creator (M6).** In probe `e`, `std::abi::u8<int>` has entry
    `{0, 7, 9, 200, 255}`: the join of its five callers, all in range. Both
    `if value < 0` / `elif value > 255` are decided, so the companion variant
    is `retmulti %0` and the canonical one `structnew` + `ret`, neither with
@@ -883,7 +883,7 @@ Compile-time notes are estimates.
 * **Class:** C (both bounds are evaluated right there). Same fact, read
   differently.
 * **Impact:** semantic friction.
-  * `byte::from_int(i)` over `0..256`, `abi::u8(i)`, and `list::at(lit,
+  * `std::byte::from_int(i)` over `0..256`, `std::abi::u8(i)`, and `std::list::at(lit,
     i - 1)` are rejected.
   * The index prover also needs `i`'s min ≥ 0 (G13).
 * **Reproducers:** `q-countloop-interval.bot`, `t-relational-prover-pairs.bot`.
@@ -898,7 +898,7 @@ Compile-time notes are estimates.
 * **Where it stops:** it returns early unless `direction eq "up"`.
 * **Class:** A (producer missing).
 * **Impact:** semantic friction. `loop i down from len - 1 through 0:
-  list::at(xs, i)` is rejected.
+  std::list::at(xs, i)` is rejected.
 * **Reproducer:** `l-loop-forms.bot`.
 * **Priority:** **P1**, missing producer.
 * **Smallest repair:** record `0 ≤ i < FORM` for a descending loop whose
@@ -938,8 +938,8 @@ Compile-time notes are estimates.
 * **Where it stops:** `analyzeBlock` returns an Int Range only. range has
   no cardinality.
 * **Class:** A.
-* **Impact:** semantic friction. `list::at(three(), 2)`,
-  `str::substring(text(), 0, 3)` and `holder().index` are rejected.
+* **Impact:** semantic friction. `std::list::at(three(), 2)`,
+  `std::str::substring(text(), 0, 3)` and `holder().index` are rejected.
 * **Reproducer:** `r-return-facts.bot`.
 * **Priority:** **P1**, low frequency. Missing propagation.
 * **Smallest repair:** return an exact List/String (completions'
@@ -1034,8 +1034,8 @@ optimization only. The record below is the census's.
 * **Status: partly repaired.** The relations now use one keying convention,
   Chase's (`hir::completions::RelationKey`): a guard on a computed local
   (`j = i + 1`) is recorded under, and read back by, its defining
-  expression, so `if j < 0 or j >= list::length(xs): return ...` proves
-  `list::at(xs, j)`. Still open: the guard's *narrowing* (the index's
+  expression, so `if j < 0 or j >= std::list::length(xs): return ...` proves
+  `std::list::at(xs, j)`. Still open: the guard's *narrowing* (the index's
   Range, which the relational rule needs >= 0) applies to the binding the
   guard names, so a guard on `i` and a read through `j = i` bound before it
   stays unproven (`guard_i_read_j` of the reproducer).
@@ -1059,7 +1059,7 @@ optimization only. The record below is the census's.
   prover refuses offsets.
 * **Class:** C.
 * **Impact:** semantic friction. The same loop + guard proves
-  `substring(s, i, i + 1)` but not `list::at(xs, i)`.
+  `substring(s, i, i + 1)` but not `std::list::at(xs, i)`.
 * **Reproducer:** `t-relational-prover-pairs.bot`.
 * **Priority:** **P1** (small). Duplicated reasoning.
 * **Smallest repair:** G3 fixes the nonnegativity half; share the offset
@@ -1143,13 +1143,13 @@ optimization only. The record below is the census's.
 | ID | Mechanism | Evidence |
 |---|---|---|
 | W1 | Projected declared domain, in both analyses and into native | journey E |
-| W2 | Closed Int-constant calls (M9 entry + M6 decided branch) | `abi::u8<int>` `retmulti`; `enc_int` `ret %0` |
+| W2 | Closed Int-constant calls (M9 entry + M6 decided branch) | `std::abi::u8<int>` `retmulti`; `enc_int` `ret %0` |
 | W3 | Ascending counted loops, capacities, slice conjuncts, same-level early returns | journeys A–D |
 | W4 | Induction, rangerec, traversal | §F |
 | W5 | Relation scoping (loops, handlers, joins, shadowing) | §I, 8 neighbours |
 | W6 | Open-world per-function legality with call-specific refinement | **WAD**: `string_reverse`/`matmul` friction is the contract, and domain parameters resolve it (`reverse_nat`) |
 | W7 | Method normalization is proof-equivalent | `k-*` |
-| W8 | `str::lowercase` length rule | sound under the simple case mapping (`o-lowercase-length`) |
+| W8 | `std::str::lowercase` length rule | sound under the simple case mapping (`o-lowercase-length`) |
 
 ### Existing optimizer heuristics vs. fact loss (§27)
 
@@ -1162,11 +1162,11 @@ Where a fact is present but the optimization does not happen:
 * **`from_u64`:** *the proof is unavailable* (field loss). It is **not**
   specialization economics: there is one instance, and the key is the
   nominal type by design.
-* **`direct<abi::U8>` materialized:** *the representation heuristic
+* **`direct<std::abi::U8>` materialized:** *the representation heuristic
   declines* (a shared instance with a `handle`-joined caller). This is not a
   proof issue.
 * **emailish? substring allocation per character:** *a representation
-  heuristic.* `immutable_set::contains` is not a `ConsumingNative` for
+  heuristic.* `std::immutable_set::contains` is not a `ConsumingNative` for
   string regions.
 
 ---
@@ -1188,17 +1188,17 @@ fn idx(k):
 
 fn get(k):
     xs = [10, 20]
-    list::at(xs, idx(k))       # proven "in range": the walk saw only `0`
+    std::list::at(xs, idx(k))       # proven "in range": the walk saw only `0`
 
 args = argv():
     on InvalidArgumentEncoding:
         []
-get(list::length(args))        # strict compile: no diagnostics
+get(std::list::length(args))        # strict compile: no diagnostics
 ```
 
 * **Before:** every backend raised `uncaught propagated error: <error
   IndexNotFound>`.
-* **After:** `UNHANDLED-ERROR` at the `list::at`, the same as the if/else
+* **After:** `UNHANDLED-ERROR` at the `std::list::at`, the same as the if/else
   control.
 * **Fix:** `return` joins its value into `ctx.returnRange`, and
   `analyzeBlock` reports the join of the fall-through value and the returned
@@ -1213,7 +1213,7 @@ loop x in [1, 2]:
     if x > 1:
         break
     x
-list::at([1], 5)               # strict compile: no diagnostics
+std::list::at([1], 5)               # strict compile: no diagnostics
 ```
 
 * **Before:** an uncaught `IndexNotFound` on every backend. The `continue`
@@ -1308,7 +1308,7 @@ code: `EvalLoop`, `EvalCountloop`, `EvalLockloop`, `EvalListloop`,
 non-generic instance (reachable only by direct calls); induction now
 requires closedness (S3).
 
-**Cardinality transfer:** `str::lowercase` is length-preserving under
+**Cardinality transfer:** `std::str::lowercase` is length-preserving under
 Botlish's simple case mapping. `İ` and `ẞ` stay one scalar on every backend
 (`o-lowercase-length`).
 
@@ -1464,7 +1464,7 @@ redesign.
 | S1 early `return` missing from call result Range | duplicated rule drifted (fixed) | **soundness** | completions `analyzeBlock` used the fall-through only | join returns (done) |
 | S2 `break`/`continue` in literal-List loop | missing distinction (fixed) | **soundness** + false rejections | `EvalListloop` read `never` as loop non-completion | conservative path (done) |
 | S3 induction locked on open instance | missing closedness guard (fixed) | **miscompile** | `hir/induction.tcl` seeds from known callers only | skip open instances (done) |
-| projected declared domain (`x.value` of `abi::U8`) | working | semantic + optimization | `ConstrainType` at `project`, both analyses | none |
+| projected declared domain (`x.value` of `std::abi::U8`) | working | semantic + optimization | `ConstrainType` at `project`, both analyses | none |
 | closed Int constant through a call | working | optimization | M9 entry join + M6 decided branch | none |
 | exact struct field across a closed call (`from_u64`) | missing producer (field loss) | optimization | struct Range is `unknown`; domain only | per-field entries for virtual params (later) |
 | exact struct field, local (`p.index`) | missing producer | semantic friction | same | local field chase |

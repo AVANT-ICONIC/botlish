@@ -32,9 +32,9 @@
 #
 # Imports: compiler and test are the framework's; str for the String fields
 # of sr-gc-across-call.
-import compiler
-import str
-import test
+import std::compiler
+import std::str
+import std::test
 
 # ---------------------------------------------------------------------------
 # Declarations the tests need (top-level only).
@@ -49,45 +49,45 @@ struct Operands:
 
 fn register_struct_argument_tests():
     # sr-argument-anonymous: a literal argument the callee projects.
-    fn anonymous_argument() errors compiler::CompilerError:
+    fn anonymous_argument() errors std::compiler::CompilerError:
         static compile:
             fn consume(x):
                 x.a + x.b
 
             consume({a: 1, b: 2})
-    test::value("sr-argument-anonymous", 3, anonymous_argument)
+    std::test::value("sr-argument-anonymous", 3, anonymous_argument)
 
     # sr-argument-named: a named struct argument.
-    fn named_argument() errors compiler::CompilerError:
+    fn named_argument() errors std::compiler::CompilerError:
         static compile:
             fn consume(p):
                 p.a * p.b
 
             consume(Operands {a: 3, b: 4})
-    test::value("sr-argument-named", 12, named_argument)
+    std::test::value("sr-argument-named", 12, named_argument)
 
     # sr-argument-four-fields: a four-field argument.
-    fn four_field_argument() errors compiler::CompilerError:
+    fn four_field_argument() errors std::compiler::CompilerError:
         static compile:
             fn consume(x):
                 x.a + x.b + x.c + x.d
 
             consume({a: 1, b: 2, c: 3, d: 4})
-    test::value("sr-argument-four-fields", 10, four_field_argument)
+    std::test::value("sr-argument-four-fields", 10, four_field_argument)
 
     # sr-argument-local-forwarded: a literal and a local handed to the same
     # callee, the local projected after.
-    fn local_forwarded() errors compiler::CompilerError:
+    fn local_forwarded() errors std::compiler::CompilerError:
         static compile:
             fn consume(x):
                 x.a + x.b
 
             y = {a: 10, b: 20}
             consume({a: 1, b: 2}) + consume(y) + y.a
-    test::value("sr-argument-local-forwarded", 43, local_forwarded)
+    std::test::value("sr-argument-local-forwarded", 43, local_forwarded)
 
     # sr-argument-chain: a forwarding chain of callees.
-    fn forwarding_chain() errors compiler::CompilerError:
+    fn forwarding_chain() errors std::compiler::CompilerError:
         static compile:
             fn h(x):
                 x.a
@@ -99,11 +99,11 @@ fn register_struct_argument_tests():
                 g(x)
 
             f({a: 1, b: 2})
-    test::value("sr-argument-chain", 1, forwarding_chain)
+    std::test::value("sr-argument-chain", 1, forwarding_chain)
 
     # sr-branch-join-argument: the joined value of an if whose arms build
     # one shape, handed to a callee.
-    fn join_argument() errors compiler::CompilerError:
+    fn join_argument() errors std::compiler::CompilerError:
         static compile:
             fn consume(x):
                 x.value
@@ -116,11 +116,11 @@ fn register_struct_argument_tests():
                 consume(v)
 
             [f(true), f(false)]
-    test::value("sr-branch-join-argument", ["a", "b"], join_argument)
+    std::test::value("sr-branch-join-argument", ["a", "b"], join_argument)
 
     # sr-argument-self-recursion: a struct argument rebuilt on every step of
     # a self-tail loop and of a non-tail recursion.
-    fn tail_state() errors compiler::CompilerError:
+    fn tail_state() errors std::compiler::CompilerError:
         static compile:
             fn walk(state, i):
                 if i >= 5:
@@ -128,9 +128,9 @@ fn register_struct_argument_tests():
                 walk({total: state.total + i, n: i}, i + 1)
 
             walk({total: 0, n: 0}, 0)
-    test::value("sr-argument-self-recursion/tail", 10, tail_state)
+    std::test::value("sr-argument-self-recursion/tail", 10, tail_state)
 
-    fn non_tail_state() errors compiler::CompilerError:
+    fn non_tail_state() errors std::compiler::CompilerError:
         static compile:
             fn walk(state, i):
                 if i >= 5:
@@ -138,7 +138,7 @@ fn register_struct_argument_tests():
                 1 + walk({total: state.total + i, n: i}, i + 1)
 
             walk({total: 0, n: 0}, 0)
-    test::value("sr-argument-self-recursion/non-tail", 15, non_tail_state)
+    std::test::value("sr-argument-self-recursion/non-tail", 15, non_tail_state)
 
 # ---------------------------------------------------------------------------
 # struct-scalar-replacement.test: struct widths, the argument form (the Tcl
@@ -148,7 +148,7 @@ fn register_struct_argument_tests():
 # returned forms)
 
 fn register_width_argument_tests():
-    fn one_field() errors compiler::CompilerError:
+    fn one_field() errors std::compiler::CompilerError:
         static compile:
             fn use(r):
                 r.f0
@@ -157,9 +157,9 @@ fn register_width_argument_tests():
                 use({f0: i + 0})
 
             f(1)
-    test::value("sr-width-1-values/argument", 1, one_field)
+    std::test::value("sr-width-1-values/argument", 1, one_field)
 
-    fn two_fields() errors compiler::CompilerError:
+    fn two_fields() errors std::compiler::CompilerError:
         static compile:
             fn use(r):
                 r.f0 + r.f1
@@ -168,9 +168,9 @@ fn register_width_argument_tests():
                 use({f0: i + 0, f1: i + 1})
 
             f(1)
-    test::value("sr-width-2-values/argument", 3, two_fields)
+    std::test::value("sr-width-2-values/argument", 3, two_fields)
 
-    fn three_fields() errors compiler::CompilerError:
+    fn three_fields() errors std::compiler::CompilerError:
         static compile:
             fn use(r):
                 r.f0 + r.f1 + r.f2
@@ -179,9 +179,9 @@ fn register_width_argument_tests():
                 use({f0: i + 0, f1: i + 1, f2: i + 2})
 
             f(1)
-    test::value("sr-width-3-values/argument", 6, three_fields)
+    std::test::value("sr-width-3-values/argument", 6, three_fields)
 
-    fn four_fields() errors compiler::CompilerError:
+    fn four_fields() errors std::compiler::CompilerError:
         static compile:
             fn use(r):
                 r.f0 + r.f1 + r.f2 + r.f3
@@ -190,9 +190,9 @@ fn register_width_argument_tests():
                 use({f0: i + 0, f1: i + 1, f2: i + 2, f3: i + 3})
 
             f(1)
-    test::value("sr-width-4-values/argument", 10, four_fields)
+    std::test::value("sr-width-4-values/argument", 10, four_fields)
 
-    fn eight_fields() errors compiler::CompilerError:
+    fn eight_fields() errors std::compiler::CompilerError:
         static compile:
             fn use(r):
                 r.f0 + r.f1 + r.f2 + r.f3 + r.f4 + r.f5 + r.f6 + r.f7
@@ -201,9 +201,9 @@ fn register_width_argument_tests():
                 use({f0: i + 0, f1: i + 1, f2: i + 2, f3: i + 3, f4: i + 4, f5: i + 5, f6: i + 6, f7: i + 7})
 
             f(1)
-    test::value("sr-width-8-values/argument", 36, eight_fields)
+    std::test::value("sr-width-8-values/argument", 36, eight_fields)
 
-    fn sixteen_fields() errors compiler::CompilerError:
+    fn sixteen_fields() errors std::compiler::CompilerError:
         static compile:
             fn use(r):
                 r.f0 + r.f1 + r.f2 + r.f3 + r.f4 + r.f5 + r.f6 + r.f7 + r.f8 + r.f9 + r.f10 + r.f11 + r.f12 + r.f13 + r.f14 + r.f15
@@ -212,7 +212,7 @@ fn register_width_argument_tests():
                 use({f0: i + 0, f1: i + 1, f2: i + 2, f3: i + 3, f4: i + 4, f5: i + 5, f6: i + 6, f7: i + 7, f8: i + 8, f9: i + 9, f10: i + 10, f11: i + 11, f12: i + 12, f13: i + 13, f14: i + 14, f15: i + 15})
 
             f(1)
-    test::value("sr-width-16-values/argument", 136, sixteen_fields)
+    std::test::value("sr-width-16-values/argument", 136, sixteen_fields)
 
 # ---------------------------------------------------------------------------
 # struct-scalar-replacement.test: pointer-bearing fields while the callee
@@ -221,20 +221,20 @@ fn register_width_argument_tests():
 fn register_struct_allocation_tests():
     # sr-gc-across-call: a struct of a String and a List argument, the
     # callee allocating before it reads them.
-    fn across_call() errors compiler::CompilerError:
+    fn across_call() errors std::compiler::CompilerError:
         static compile:
             fn consume(x, y):
-                junk = [str::concat("j", "k"), str::concat("m", "n")]
+                junk = [std::str::concat("j", "k"), std::str::concat("m", "n")]
                 [x.s, x.l, y, junk]
 
-            consume({s: str::concat("a", "b"), l: [str::concat("c", "d")]}, str::concat("e", "f"))
-    test::value("sr-gc-across-call", ["ab", ["cd"], "ef", ["jk", "mn"]], across_call)
+            consume({s: std::str::concat("a", "b"), l: [std::str::concat("c", "d")]}, std::str::concat("e", "f"))
+    std::test::value("sr-gc-across-call", ["ab", ["cd"], "ef", ["jk", "mn"]], across_call)
 
 fn register_struct_representation_instances_tests():
     register_struct_argument_tests()
     register_width_argument_tests()
     register_struct_allocation_tests()
 
-with context test::suite()
+with context std::test::suite()
 register_struct_representation_instances_tests()
-test::report()
+std::test::report()

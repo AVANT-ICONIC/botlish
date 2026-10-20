@@ -1,10 +1,10 @@
 # native-view.test -- read-only native layout views (NATIVE-LAYOUT-VIEWS.md):
-# pointer fields in `layout`, NativeView[L], binary::native::view and
-# binary::load.
+# pointer fields in `layout`, NativeView[L], std::binary::native::view and
+# std::binary::load.
 #
 # One layout describes where the bits are; the backing decides what they may
-# mean. Byte storage is imprinted (binary::parse: LayoutStruct[L]); live
-# native memory is read through a native view (binary::native::view:
+# mean. Byte storage is imprinted (std::binary::parse: LayoutStruct[L]); live
+# native memory is read through a native view (std::binary::native::view:
 # NativeView[L], one load per field read). A pointer field is native-only:
 # native memory may hold one (and a view reads it back exactly), arbitrary
 # bytes never become one.
@@ -42,29 +42,29 @@ set nvBackends {interp compile cranelift-generic cranelift}
 set nvNative {cranelift-generic cranelift}
 
 # The imports and helpers every program below starts with: bytes_of(xs) is
-# the abi::bytes::Bytes of the Ints XS (each 0..255), memory(xs) a native
+# the std::abi::bytes::Bytes of the Ints XS (each 0..255), memory(xs) a native
 # copy of them (the fixture).
-set nvPrelude {import abi
-import abi::bytes
-import binary
-import binary::native
-import byte
-import ffi::c
+set nvPrelude {import std::abi
+import std::abi::bytes
+import std::binary
+import std::binary::native
+import std::byte
+import std::ffi::c
 import ffi_fixture
-import list
+import std::list
 
-fn bytes_of(values: List[int]) -> abi::bytes::Bytes:
+fn bytes_of(values: List[int]) -> std::abi::bytes::Bytes:
     bs = loop v in values:
-        b = byte::from_int(v):
-            on byte::BelowRange:
+        b = std::byte::from_int(v):
+            on std::byte::BelowRange:
                 0
-            on byte::AboveRange:
+            on std::byte::AboveRange:
                 255
         b
-    abi::bytes::from_list(bs)
+    std::abi::bytes::from_list(bs)
 
-fn memory(values: List[int]) -> ffi::c::Ptr[ffi::c::Void]:
-    ffi_fixture::memory[ffi::c::Void](bytes_of(values))
+fn memory(values: List[int]) -> std::ffi::c::Ptr[std::ffi::c::Void]:
+    ffi_fixture::memory[std::ffi::c::Void](bytes_of(values))
 
 }
 
@@ -75,69 +75,69 @@ set nvLayouts {opaque struct Node:
 layout Inner:
     size 4
     align 2
-    field x: binary::I16 at 0
-    field y: binary::U16 at 2
+    field x: std::binary::I16 at 0
+    field y: std::binary::U16 at 2
 
 layout Scalars:
     size 32
     align 8
-    field u8: binary::U8 at 0
-    field i8: binary::I8 at 1
-    field u16: binary::U16 at 2
-    field i32: binary::I32 at 4
-    field u64: binary::U64 at 8
-    field i64: binary::I64 at 16
-    field i16: binary::I16 at 24
-    field u32: binary::U32 at 28
+    field u8: std::binary::U8 at 0
+    field i8: std::binary::I8 at 1
+    field u16: std::binary::U16 at 2
+    field i32: std::binary::I32 at 4
+    field u64: std::binary::U64 at 8
+    field i64: std::binary::I64 at 16
+    field i16: std::binary::I16 at 24
+    field u32: std::binary::U32 at 28
 
 layout Outer:
     size 16
     align 4
-    field count: binary::U32 at 0
+    field count: std::binary::U32 at 0
     field inner: Inner at 4
-    field last: binary::U8 at 12
+    field last: std::binary::U8 at 12
 
 layout Deep:
     size 24
     align 4
-    field head: binary::U8 at 0
+    field head: std::binary::U8 at 0
     field outer: Outer at 4
-    field tail: binary::I8 at 23
+    field tail: std::binary::I8 at 23
 
 layout Packed:
     size 9
     align 1
-    field kind: binary::U8 at 0
+    field kind: std::binary::U8 at 0
     field inner: Inner at 1
-    field word: binary::U32 at 5
+    field word: std::binary::U32 at 5
 
 layout Linked:
     size 32
     align 8
-    field tag: binary::U8 at 0
+    field tag: std::binary::U8 at 0
     field inner: Inner at 4
-    field next: ffi::c::Ptr[Node] at 8
-    field cb: ffi::c::FnPtr[Fn{args: [ffi::c::Int], return: ffi::c::Int}] at 16
-    field data: ffi::c::Ptr[ffi::c::Void] at 24
+    field next: std::ffi::c::Ptr[Node] at 8
+    field cb: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Int], return: std::ffi::c::Int}] at 16
+    field data: std::ffi::c::Ptr[std::ffi::c::Void] at 24
 
 layout LinkedBits:
     size 32
     align 8
-    field tag: binary::U8 at 0
+    field tag: std::binary::U8 at 0
     field inner: Inner at 4
-    field next: binary::U64 at 8
-    field cb: binary::U64 at 16
-    field data: binary::U64 at 24
+    field next: std::binary::U64 at 8
+    field cb: std::binary::U64 at 16
+    field data: std::binary::U64 at 24
 
 layout Holder:
     size 40
     align 8
-    field id: binary::U32 at 0
+    field id: std::binary::U32 at 0
     field link: Linked at 8
 
 }
 
-# A program's value as text: an abi::bytes::Bytes as bytes(HEX ...), a List
+# A program's value as text: a std::abi::bytes::Bytes as bytes(HEX ...), a List
 # element-wise, anything else as core::value::show does.
 proc nvShow {v} {
     switch -- [core::value::kind $v] {
@@ -183,7 +183,7 @@ proc nvOutcome {backend hir} {
 # memory is direct authority, DIRECT-MODULES.md: such a test program is
 # low-level, like the syscall tests' programs).
 proc nvProgram {source} {
-    set marker [expr {[string first binary::native::view( $source] >= 0 ? "direct module\n\n" : ""}]
+    set marker [expr {[string first std::binary::native::view( $source] >= 0 ? "direct module\n\n" : ""}]
     return "$marker$::nvPrelude$::nvLayouts$source"
 }
 
@@ -317,36 +317,36 @@ proc nvRecord {size fill fields} {
 # ---------------------------------------------------------------------------
 # Pointer fields in layouts
 
-test nv-pointer-field-declaration {a layout field may be a C data pointer (ffi::c::Ptr[T]) or function pointer (ffi::c::FnPtr[F]): a field of the target's pointer width, recorded in the registry and the descriptor as kind pointer / ptr, with its declared pointer type; its pointee may be an opaque struct declared anywhere in the unit (resolved after the structs)} -body {
+test nv-pointer-field-declaration {a layout field may be a C data pointer (std::ffi::c::Ptr[T]) or function pointer (std::ffi::c::FnPtr[F]): a field of the target's pointer width, recorded in the registry and the descriptor as kind pointer / ptr, with its declared pointer type; its pointee may be an opaque struct declared anywhere in the unit (resolved after the structs)} -body {
     set hir [surface::compile [nvProgram 0\n] view.bot -warnings off]
     hir::activate $hir
     list [lmap f [dict get [hir::layouts::entry Linked] fields] {
             list [dict get $f name] [dict get $f kind] [dict get $f width] [hir::types::show [dict get $f type]]
         }] [lindex [hir::layouts::descriptor Linked] 3] \
         [lsearch -inline -glob [split [hir::format $hir] \n] {layout Linked *}]
-} -cleanup {unset -nocomplain hir} -result {{{tag scalar 1 {int[binary::U8]}} {inner layout 4 {LayoutStruct[Inner]}} {next pointer 8 {ffi::c::Ptr[Node]}} {cb pointer 8 {ffi::c::FnPtr[Fn{args: [ffi::c::Int], return: ffi::c::Int}]}} {data pointer 8 {ffi::c::Ptr[ffi::c::Void]}}} {{tag 0 u 1 little} {inner 4 layout {{LayoutStruct[Inner]} 4 2 {{x 0 i 2 little} {y 2 u 2 little}}}} {next 8 ptr 8 little} {cb 16 ptr 8 little} {data 24 ptr 8 little}} {layout Linked ns - size 32 align 8 fields tag: binary::U8 at 0, inner: Inner at 4, next: ffi::c::Ptr[Node] at 8, cb: ffi::c::FnPtr[Fn{args: [ffi::c::Int], return: ffi::c::Int}] at 16, data: ffi::c::Ptr[ffi::c::Void] at 24}}
+} -cleanup {unset -nocomplain hir} -result {{{tag scalar 1 {int[std::binary::U8]}} {inner layout 4 {LayoutStruct[Inner]}} {next pointer 8 {std::ffi::c::Ptr[Node]}} {cb pointer 8 {std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Int], return: std::ffi::c::Int}]}} {data pointer 8 {std::ffi::c::Ptr[std::ffi::c::Void]}}} {{tag 0 u 1 little} {inner 4 layout {{LayoutStruct[Inner]} 4 2 {{x 0 i 2 little} {y 2 u 2 little}}}} {next 8 ptr 8 little} {cb 16 ptr 8 little} {data 24 ptr 8 little}} {layout Linked ns - size 32 align 8 fields tag: std::binary::U8 at 0, inner: Inner at 4, next: std::ffi::c::Ptr[Node] at 8, cb: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Int], return: std::ffi::c::Int}] at 16, data: std::ffi::c::Ptr[std::ffi::c::Void] at 24}}
 
 test nv-pointer-field-rules {a pointer field obeys every layout rule at its width (inside the size, never overlapping: LAYOUT-FIELD-BOUNDS, LAYOUT-FIELD-OVERLAP), and its type must be a valid C pointer: a pointee or signature the C ABI types reject is LAYOUT-FIELD-TYPE at the type -- an Int, an ordinary struct, a LayoutStruct, a non-C signature} -body {
-    set head "import binary\nimport ffi::c\n\nstruct Plain:\n    v: int\n\nlayout Two:\n    size 4\n    align 4\n    field a: binary::U8 at 0\n\n"
+    set head "import std::binary\nimport std::ffi::c\n\nstruct Plain:\n    v: int\n\nlayout Two:\n    size 4\n    align 4\n    field a: std::binary::U8 at 0\n\n"
     lmap body [list \
-        "layout X:\n    size 12\n    align 8\n    field p: ffi::c::Ptr\[ffi::c::Void\] at 8\n" \
-        "layout X:\n    size 16\n    align 8\n    field a: binary::U32 at 4\n    field p: ffi::c::Ptr\[ffi::c::Void\] at 0\n" \
-        "layout X:\n    size 8\n    align 8\n    field p: ffi::c::Ptr\[int\] at 0\n" \
-        "layout X:\n    size 8\n    align 8\n    field p: ffi::c::Ptr\[Plain\] at 0\n" \
-        "layout X:\n    size 8\n    align 8\n    field p: ffi::c::Ptr\[LayoutStruct\[Two\]\] at 0\n" \
-        "layout X:\n    size 8\n    align 8\n    field f: ffi::c::FnPtr\[Fn{args: \[int\], return: unit}\] at 0\n" \
-        "layout X:\n    size 8\n    align 8\n    field p: ffi::c::Ptr\[Later\] at 0\n\nopaque struct Later:\n    tag: unit\n"] {
+        "layout X:\n    size 12\n    align 8\n    field p: std::ffi::c::Ptr\[std::ffi::c::Void\] at 8\n" \
+        "layout X:\n    size 16\n    align 8\n    field a: std::binary::U32 at 4\n    field p: std::ffi::c::Ptr\[std::ffi::c::Void\] at 0\n" \
+        "layout X:\n    size 8\n    align 8\n    field p: std::ffi::c::Ptr\[int\] at 0\n" \
+        "layout X:\n    size 8\n    align 8\n    field p: std::ffi::c::Ptr\[Plain\] at 0\n" \
+        "layout X:\n    size 8\n    align 8\n    field p: std::ffi::c::Ptr\[LayoutStruct\[Two\]\] at 0\n" \
+        "layout X:\n    size 8\n    align 8\n    field f: std::ffi::c::FnPtr\[Fn{args: \[int\], return: unit}\] at 0\n" \
+        "layout X:\n    size 8\n    align 8\n    field p: std::ffi::c::Ptr\[Later\] at 0\n\nopaque struct Later:\n    tag: unit\n"] {
         set d [lindex [nvDiagnostics "$head${body}0\n" 1] 0]
         if {$d eq "accepted"} {
             set d
         } else {
-            list [lindex $d 0] [lindex $d 1] [string range [lindex $d 2] 0 89]
+            list [lindex $d 0] [lindex $d 1] [string range [lindex $d 2] 0 99]
         }
     }
-} -cleanup {unset -nocomplain head body d} -result {{LAYOUT-FIELD-BOUNDS 15:43 {field "p" of layout "X" occupies bytes 8..15 (offset 8, width 8), outside the layout's siz}} {LAYOUT-FIELD-OVERLAP 16:43 {field "p" of layout "X" (bytes 0..7) overlaps field "a" (bytes 4..7): the fields of a layo}} {LAYOUT-FIELD-TYPE 15:14 {invalid type ffi::c::Ptr[int] for field "p" of layout "X": invalid pointee in ffi::c::Ptr[}} {LAYOUT-FIELD-TYPE 15:14 {invalid type ffi::c::Ptr[Plain] for field "p" of layout "X": invalid pointee in ffi::c::Pt}} {LAYOUT-FIELD-TYPE 15:14 {invalid type ffi::c::Ptr[LayoutStruct[Two]] for field "p" of layout "X": invalid pointee i}} {LAYOUT-FIELD-TYPE 15:14 {invalid type ffi::c::FnPtr[Fn{args: [int], return: unit, errors: []}] for field "f" of lay}} accepted}
+} -cleanup {unset -nocomplain head body d} -result {{LAYOUT-FIELD-BOUNDS 15:53 {field "p" of layout "X" occupies bytes 8..15 (offset 8, width 8), outside the layout's size 12}} {LAYOUT-FIELD-OVERLAP 16:53 {field "p" of layout "X" (bytes 0..7) overlaps field "a" (bytes 4..7): the fields of a layout never s}} {LAYOUT-FIELD-TYPE 15:14 {invalid type std::ffi::c::Ptr[int] for field "p" of layout "X": invalid pointee in std::ffi::c::Ptr[}} {LAYOUT-FIELD-TYPE 15:14 {invalid type std::ffi::c::Ptr[Plain] for field "p" of layout "X": invalid pointee in std::ffi::c::Pt}} {LAYOUT-FIELD-TYPE 15:14 {invalid type std::ffi::c::Ptr[LayoutStruct[Two]] for field "p" of layout "X": invalid pointee in std}} {LAYOUT-FIELD-TYPE 15:14 {invalid type std::ffi::c::FnPtr[Fn{args: [int], return: unit, errors: []}] for field "f" of layout "}} accepted}
 
-test nv-pointer-width-is-the-targets {a pointer field's width is the compilation's C target's pointer width (core/cabi.tcl's target table, read through the target its ffi::c scalars were declared for), never a constant of the layout code: 8 bytes on every target of the table, a program compiled for another target keeping its own} -body {
-    set source "import binary\nimport ffi::c\n\nlayout P:\n    size 16\n    align 8\n    field a: binary::U8 at 0\n    field p: ffi::c::Ptr\[ffi::c::Void\] at 8\n\n0\n"
+test nv-pointer-width-is-the-targets {a pointer field's width is the compilation's C target's pointer width (core/cabi.tcl's target table, read through the target its std::ffi::c scalars were declared for), never a constant of the layout code: 8 bytes on every target of the table, a program compiled for another target keeping its own} -body {
+    set source "import std::binary\nimport std::ffi::c\n\nlayout P:\n    size 16\n    align 8\n    field a: std::binary::U8 at 0\n    field p: std::ffi::c::Ptr\[std::ffi::c::Void\] at 8\n\n0\n"
     lmap target {linux-x86_64 linux-aarch64 macos-aarch64 windows-x86_64 windows-aarch64} {
         set hir [surface::compile $source view.bot -warnings off -target $target]
         hir::activate $hir
@@ -355,18 +355,18 @@ test nv-pointer-width-is-the-targets {a pointer field's width is the compilation
     }
 } -cleanup {unset -nocomplain source target hir} -result {{linux-x86_64 linux-x86_64 8 8} {linux-aarch64 linux-aarch64 8 8} {macos-aarch64 macos-aarch64 8 8} {windows-x86_64 windows-x86_64 8 8} {windows-aarch64 windows-aarch64 8 8}}
 
-test nv-native-only-layouts {a layout with a pointer field -- directly, or in a nested layout (named by its path) -- is native-only: binary::parse would make a pointer of arbitrary bytes and binary::emit would write one into bytes, both LAYOUT-NATIVE-ONLY at the operand; a pointer-free layout nested in one parses and emits as before} -body {
+test nv-native-only-layouts {a layout with a pointer field -- directly, or in a nested layout (named by its path) -- is native-only: std::binary::parse would make a pointer of arbitrary bytes and std::binary::emit would write one into bytes, both LAYOUT-NATIVE-ONLY at the operand; a pointer-free layout nested in one parses and emits as before} -body {
     list \
-        [nvFirst "fn f(d: abi::bytes::Bytes) -> int errors LayoutLengthMismatch:\n    v = binary::parse(Linked, d)\n    0\n0\n"] \
-        [nvFirst "fn f(d: abi::bytes::Bytes) -> int errors LayoutLengthMismatch:\n    v = binary::parse(Holder, d)\n    0\n0\n"] \
-        [nvFirst "fn f(v: LayoutStruct\[Holder\]) -> abi::bytes::Bytes:\n    binary::emit(v)\n0\n"] \
-        [nvFirst "fn f(v: LayoutStruct\[Linked\]) -> abi::bytes::Bytes:\n    v.emit()\n0\n"] \
-        [nvRun "i = binary::parse(Inner, binary::emit(LayoutStruct\[Inner\] \{x: -2, y: 3\})):\n    on LayoutLengthMismatch:\n        LayoutStruct\[Inner\] \{x: 0, y: 0\}\ni\n" $::nvBackends]
-} -result {{LAYOUT-NATIVE-ONLY {binary::parse cannot imprint layout "Linked" from bytes: its field "next" is a C pointer, and imprinting arbitrary bytes into it would make a pointer no foreign code handed out; a layout with a pointer field is read through a native view of live native memory (binary::native::view, binary::load)}} {LAYOUT-NATIVE-ONLY {binary::parse cannot imprint layout "Holder" from bytes: its field "link.next" is a C pointer, and imprinting arbitrary bytes into it would make a pointer no foreign code handed out; a layout with a pointer field is read through a native view of live native memory (binary::native::view, binary::load)}} {LAYOUT-NATIVE-ONLY {binary::emit cannot emit layout "Holder" into bytes: its field "link.next" is a C pointer, and writing a pointer into bytes is not supported (a layout with a pointer field is read through a native view only)}} {LAYOUT-NATIVE-ONLY {binary::emit cannot emit layout "Linked" into bytes: its field "next" is a C pointer, and writing a pointer into bytes is not supported (a layout with a pointer field is read through a native view only)}} {same: LayoutStruct[Inner] {x: -2, y: 3}}}
+        [nvFirst "fn f(d: std::abi::bytes::Bytes) -> int errors LayoutLengthMismatch:\n    v = std::binary::parse(Linked, d)\n    0\n0\n"] \
+        [nvFirst "fn f(d: std::abi::bytes::Bytes) -> int errors LayoutLengthMismatch:\n    v = std::binary::parse(Holder, d)\n    0\n0\n"] \
+        [nvFirst "fn f(v: LayoutStruct\[Holder\]) -> std::abi::bytes::Bytes:\n    std::binary::emit(v)\n0\n"] \
+        [nvFirst "fn f(v: LayoutStruct\[Linked\]) -> std::abi::bytes::Bytes:\n    v.emit()\n0\n"] \
+        [nvRun "i = std::binary::parse(Inner, std::binary::emit(LayoutStruct\[Inner\] \{x: -2, y: 3\})):\n    on LayoutLengthMismatch:\n        LayoutStruct\[Inner\] \{x: 0, y: 0\}\ni\n" $::nvBackends]
+} -result {{LAYOUT-NATIVE-ONLY {std::binary::parse cannot imprint layout "Linked" from bytes: its field "next" is a C pointer, and imprinting arbitrary bytes into it would make a pointer no foreign code handed out; a layout with a pointer field is read through a native view of live native memory (std::binary::native::view, std::binary::load)}} {LAYOUT-NATIVE-ONLY {std::binary::parse cannot imprint layout "Holder" from bytes: its field "link.next" is a C pointer, and imprinting arbitrary bytes into it would make a pointer no foreign code handed out; a layout with a pointer field is read through a native view of live native memory (std::binary::native::view, std::binary::load)}} {LAYOUT-NATIVE-ONLY {std::binary::emit cannot emit layout "Holder" into bytes: its field "link.next" is a C pointer, and writing a pointer into bytes is not supported (a layout with a pointer field is read through a native view only)}} {LAYOUT-NATIVE-ONLY {std::binary::emit cannot emit layout "Linked" into bytes: its field "next" is a C pointer, and writing a pointer into bytes is not supported (a layout with a pointer field is read through a native view only)}} {same: LayoutStruct[Inner] {x: -2, y: 3}}}
 
 test nv-native-only-struct-view-is-affine {LayoutStruct[L] of a native-only layout is an ordinary struct holding pointers, so affine by the ordinary rule (AFFINE-VALUES.md): built from pointers it already owns (no pointer is made), compared never (AFFINE-EQUALITY-UNSUPPORTED), its pointer moved out only by destructuring} -body {
     list \
-        [nvKinds "fn f(p: ffi::c::Ptr\[Node\], f: ffi::c::FnPtr\[Fn\{args: \[ffi::c::Int\], return: ffi::c::Int\}\], d: ffi::c::Ptr\[ffi::c::Void\]) -> bool:\n    v = LayoutStruct\[Linked\] \{tag: 1, inner: LayoutStruct\[Inner\] \{x: 1, y: 2\}, next: p, cb: f, data: d\}\n    \{next: n\} = v\n    n.null?()\n0\n"] \
+        [nvKinds "fn f(p: std::ffi::c::Ptr\[Node\], f: std::ffi::c::FnPtr\[Fn\{args: \[std::ffi::c::Int\], return: std::ffi::c::Int\}\], d: std::ffi::c::Ptr\[std::ffi::c::Void\]) -> bool:\n    v = LayoutStruct\[Linked\] \{tag: 1, inner: LayoutStruct\[Inner\] \{x: 1, y: 2\}, next: p, cb: f, data: d\}\n    \{next: n\} = v\n    n.null?()\n0\n"] \
         [nvKinds "fn f(a: LayoutStruct\[Linked\], b: LayoutStruct\[Linked\]) -> bool:\n    a == b\n0\n"] \
         [nvKinds "fn f(a: LayoutStruct\[Linked\]) -> bool:\n    a.next.null?()\n0\n"] \
         [hir::types::IsAffine [list nstruct LayoutStruct\[Linked\]]] [hir::types::IsAffine [list nstruct LayoutStruct\[Inner\]]]
@@ -376,49 +376,49 @@ test nv-native-only-struct-view-is-affine {LayoutStruct[L] of a native-only layo
 # NativeView[L]
 
 test nv-type-annotation {NativeView[L] names the native view type of a layout L, exactly as LayoutStruct[L] does its struct view: an argument that is no layout is LAYOUT-STRUCT-PARAMETER (saying what it is), an unknown name UNKNOWN-LAYOUT, an unapplied NativeView the arity error -- each at the annotation} -body {
-    lmap t {{NativeView[Inner]} {NativeView[int]} {NativeView[Node]} {NativeView[binary::U8]} {NativeView[Nope]} NativeView {NativeView[List[int]]}} {
+    lmap t {{NativeView[Inner]} {NativeView[int]} {NativeView[Node]} {NativeView[std::binary::U8]} {NativeView[Nope]} NativeView {NativeView[List[int]]}} {
         nvFirst "fn f(v: $t) -> int:\n    0\n0\n"
     }
-} -result {accepted {LAYOUT-STRUCT-PARAMETER {unknown or invalid type NativeView[int] for parameter "v": NativeView[int]: int is a built-in type, not a layout; the argument of NativeView must name a layout declaration (`layout Name:`), the layout through which the view reads native memory}} {LAYOUT-STRUCT-PARAMETER {unknown or invalid type NativeView[Node] for parameter "v": NativeView[Node]: Node is a struct, not a layout; the argument of NativeView must name a layout declaration (`layout Name:`), the layout through which the view reads native memory}} {LAYOUT-STRUCT-PARAMETER {unknown or invalid type NativeView[binary::U8] for parameter "v": NativeView[binary::U8]: binary::U8 is a type, not a layout; the argument of NativeView must name a layout declaration (`layout Name:`), the layout through which the view reads native memory}} {UNKNOWN-LAYOUT {unknown or invalid type NativeView[Nope] for parameter "v": unknown layout "Nope" in NativeView[Nope]: no "layout Nope:" declaration is visible (the argument of NativeView must name a layout)}} {TYPE {unknown or invalid type NativeView for parameter "v": type constructor "NativeView" requires 1 type argument(s) (e.g. NativeView[...])}} {LAYOUT-STRUCT-PARAMETER {unknown or invalid type NativeView[List[int]] for parameter "v": NativeView[List[int]]: List[int] is an applied or structural type, not a layout; the argument of NativeView must name a layout declaration (`layout Name:`), the layout through which the view reads native memory}}}
+} -result {accepted {LAYOUT-STRUCT-PARAMETER {unknown or invalid type NativeView[int] for parameter "v": NativeView[int]: int is a built-in type, not a layout; the argument of NativeView must name a layout declaration (`layout Name:`), the layout through which the view reads native memory}} {LAYOUT-STRUCT-PARAMETER {unknown or invalid type NativeView[Node] for parameter "v": NativeView[Node]: Node is a struct, not a layout; the argument of NativeView must name a layout declaration (`layout Name:`), the layout through which the view reads native memory}} {LAYOUT-STRUCT-PARAMETER {unknown or invalid type NativeView[std::binary::U8] for parameter "v": NativeView[std::binary::U8]: std::binary::U8 is a type, not a layout; the argument of NativeView must name a layout declaration (`layout Name:`), the layout through which the view reads native memory}} {UNKNOWN-LAYOUT {unknown or invalid type NativeView[Nope] for parameter "v": unknown layout "Nope" in NativeView[Nope]: no "layout Nope:" declaration is visible (the argument of NativeView must name a layout)}} {TYPE {unknown or invalid type NativeView for parameter "v": type constructor "NativeView" requires 1 type argument(s) (e.g. NativeView[...])}} {LAYOUT-STRUCT-PARAMETER {unknown or invalid type NativeView[List[int]] for parameter "v": NativeView[List[int]]: List[int] is an applied or structural type, not a layout; the argument of NativeView must name a layout declaration (`layout Name:`), the layout through which the view reads native memory}}}
 
 test nv-type-distinct {NativeView[L] is categorically distinct: never a LayoutStruct[L] (either direction), never the view of another layout with the same fields (nominal), never constructed from fields (UNKNOWN-STRUCT: no native record is made), and a projection has exactly the field's view type -- a scalar's domain, a nested layout's NativeView[Inner], a pointer's declared type; an absent field is UNKNOWN-FIELD listing the layout's fields} -body {
     list \
         [nvKinds "fn f(v: NativeView\[Inner\]) -> LayoutStruct\[Inner\]:\n    v\n0\n"] \
         [nvKinds "fn f(v: LayoutStruct\[Inner\]) -> NativeView\[Inner\]:\n    v\n0\n"] \
-        [nvKinds "layout Twin:\n    size 4\n    align 2\n    field x: binary::I16 at 0\n    field y: binary::U16 at 2\n\nfn f(v: NativeView\[Inner\]) -> NativeView\[Twin\]:\n    v\n0\n"] \
+        [nvKinds "layout Twin:\n    size 4\n    align 2\n    field x: std::binary::I16 at 0\n    field y: std::binary::U16 at 2\n\nfn f(v: NativeView\[Inner\]) -> NativeView\[Twin\]:\n    v\n0\n"] \
         [nvKinds "fn f() -> int:\n    v = NativeView\[Inner\] \{x: 1, y: 2\}\n    0\n0\n"] \
-        [nvKinds "fn a(v: NativeView\[Linked\]) -> binary::U8:\n    v.tag\nfn b(v: NativeView\[Linked\]) -> NativeView\[Inner\]:\n    v.inner\nfn c(v: NativeView\[Linked\]) -> binary::I16:\n    v.inner.x\nfn d(v: NativeView\[Linked\]) -> ffi::c::Ptr\[Node\]:\n    v.next\nfn e(v: NativeView\[Linked\]) -> ffi::c::FnPtr\[Fn\{args: \[ffi::c::Int\], return: ffi::c::Int\}\]:\n    v.cb\n0\n"] \
+        [nvKinds "fn a(v: NativeView\[Linked\]) -> std::binary::U8:\n    v.tag\nfn b(v: NativeView\[Linked\]) -> NativeView\[Inner\]:\n    v.inner\nfn c(v: NativeView\[Linked\]) -> std::binary::I16:\n    v.inner.x\nfn d(v: NativeView\[Linked\]) -> std::ffi::c::Ptr\[Node\]:\n    v.next\nfn e(v: NativeView\[Linked\]) -> std::ffi::c::FnPtr\[Fn\{args: \[std::ffi::c::Int\], return: std::ffi::c::Int\}\]:\n    v.cb\n0\n"] \
         [nvFirst "fn f(v: NativeView\[Outer\]) -> int:\n    v.padding\n0\n"]
 } -result {TYPE TYPE TYPE UNKNOWN-STRUCT accepted {UNKNOWN-FIELD {native view type NativeView[Outer] has no field "padding" (layout Outer has fields: count, inner, last)}}}
 
-test nv-not-a-pointer {a native view's run-time word is its pointer's, but a view is no pointer and no Int: no pointer operation takes one (ffi::c::null?, clone, erase, a C function's pointer parameter), and no other native either (TYPE) -- there is no way back from a view to a pointer} -body {
+test nv-not-a-pointer {a native view's run-time word is its pointer's, but a view is no pointer and no Int: no pointer operation takes one (std::ffi::c::null?, clone, erase, a C function's pointer parameter), and no other native either (TYPE) -- there is no way back from a view to a pointer} -body {
     list \
         [nvFirst "fn f(v: NativeView\[Inner\]) -> bool:\n    v.null?()\n0\n"] \
-        [nvKinds "fn f(v: NativeView\[Inner\]) -> int:\n    w = ffi::c::clone(v)\n    0\n0\n"] \
-        [nvKinds "fn f(v: NativeView\[Inner\]) -> int:\n    w = ffi::c::erase(v)\n    0\n0\n"] \
+        [nvKinds "fn f(v: NativeView\[Inner\]) -> int:\n    w = std::ffi::c::clone(v)\n    0\n0\n"] \
+        [nvKinds "fn f(v: NativeView\[Inner\]) -> int:\n    w = std::ffi::c::erase(v)\n    0\n0\n"] \
         [nvKinds "fn f(v: NativeView\[Inner\]) -> int:\n    v + 1\n0\n"] \
-        [nvKinds "extern c fn take(p: ffi::c::Ptr\[ffi::c::Void\] read noescape) -> unit\n\nfn f(v: NativeView\[Inner\]) -> unit:\n    take(v)\n0\n"]
-} -result {{TYPE {argument 1 of ffi::c::null? is NativeView[Inner], a native view, where ffi::c::null? requires cptr: a native view is a read-only window onto native memory, read by its fields (or binary::load), never a pointer, an Int or any other value}} TYPE IMPRINT TYPE TYPE}
+        [nvKinds "extern c fn take(p: std::ffi::c::Ptr\[std::ffi::c::Void\] read noescape) -> unit\n\nfn f(v: NativeView\[Inner\]) -> unit:\n    take(v)\n0\n"]
+} -result {{TYPE {argument 1 of std::ffi::c::null? is NativeView[Inner], a native view, where std::ffi::c::null? requires cptr: a native view is a read-only window onto native memory, read by its fields (or std::binary::load), never a pointer, an Int or any other value}} TYPE IMPRINT TYPE TYPE}
 
-test nv-view-operands {binary::native::view(L, p): L is static evidence (UNKNOWN-LAYOUT, LAYOUT-OPERAND at the operand, as for binary::parse); P must be statically a C data pointer ffi::c::Ptr[T] -- an Int, a function pointer, byte storage or another view is BINARY-OPERAND; the view and binary::load are only called, never values (BINARY-OPERAND)} -body {
+test nv-view-operands {std::binary::native::view(L, p): L is static evidence (UNKNOWN-LAYOUT, LAYOUT-OPERAND at the operand, as for std::binary::parse); P must be statically a C data pointer std::ffi::c::Ptr[T] -- an Int, a function pointer, byte storage or another view is BINARY-OPERAND; the view and std::binary::load are only called, never values (BINARY-OPERAND)} -body {
     list \
-        [nvFirst "fn f(p: ffi::c::Ptr\[Node\]) -> int errors NativeViewNull:\n    v = binary::native::view(Node, p)\n    0\n0\n"] \
-        [nvFirst "fn f(p: ffi::c::Ptr\[Node\], l: str) -> int errors NativeViewNull:\n    v = binary::native::view(l, p)\n    0\n0\n"] \
-        [nvFirst "fn f(p: int) -> int errors NativeViewNull:\n    v = binary::native::view(Inner, p)\n    0\n0\n"] \
-        [nvFirst "fn f(p: ffi::c::FnPtr\[Fn\{args: \[\], return: unit\}\]) -> int errors NativeViewNull:\n    v = binary::native::view(Inner, p)\n    0\n0\n"] \
-        [nvKinds "fn f(p: abi::bytes::Bytes) -> int errors NativeViewNull:\n    v = binary::native::view(Inner, p)\n    0\n0\n"] \
-        [nvKinds "fn f(p: NativeView\[Inner\]) -> int errors NativeViewNull:\n    v = binary::native::view(Inner, p)\n    0\n0\n"] \
-        [nvKinds "g = binary::native::view\n0\n"] \
-        [nvKinds "g = binary::load\n0\n"]
-} -result {{UNKNOWN-LAYOUT {unknown layout "Node" (the layout operand of binary::native::view): no "layout Node:" declaration is visible}} {LAYOUT-OPERAND {the layout operand of binary::native::view must be the name of a layout, but "l" is a value here: the layout is static evidence, never a computed value}} {BINARY-OPERAND {binary::native::view reads the live native memory a C data pointer addresses (an ffi::c::Ptr[T], which only foreign code hands out); this argument's type here is int}} {BINARY-OPERAND {binary::native::view reads the live native memory a C data pointer addresses (an ffi::c::Ptr[T], which only foreign code hands out); this argument's type here is a C function pointer, which addresses code, not data}} BINARY-OPERAND BINARY-OPERAND BINARY-OPERAND BINARY-OPERAND}
+        [nvFirst "fn f(p: std::ffi::c::Ptr\[Node\]) -> int errors NativeViewNull:\n    v = std::binary::native::view(Node, p)\n    0\n0\n"] \
+        [nvFirst "fn f(p: std::ffi::c::Ptr\[Node\], l: str) -> int errors NativeViewNull:\n    v = std::binary::native::view(l, p)\n    0\n0\n"] \
+        [nvFirst "fn f(p: int) -> int errors NativeViewNull:\n    v = std::binary::native::view(Inner, p)\n    0\n0\n"] \
+        [nvFirst "fn f(p: std::ffi::c::FnPtr\[Fn\{args: \[\], return: unit\}\]) -> int errors NativeViewNull:\n    v = std::binary::native::view(Inner, p)\n    0\n0\n"] \
+        [nvKinds "fn f(p: std::abi::bytes::Bytes) -> int errors NativeViewNull:\n    v = std::binary::native::view(Inner, p)\n    0\n0\n"] \
+        [nvKinds "fn f(p: NativeView\[Inner\]) -> int errors NativeViewNull:\n    v = std::binary::native::view(Inner, p)\n    0\n0\n"] \
+        [nvKinds "g = std::binary::native::view\n0\n"] \
+        [nvKinds "g = std::binary::load\n0\n"]
+} -result {{UNKNOWN-LAYOUT {unknown layout "Node" (the layout operand of std::binary::native::view): no "layout Node:" declaration is visible}} {LAYOUT-OPERAND {the layout operand of std::binary::native::view must be the name of a layout, but "l" is a value here: the layout is static evidence, never a computed value}} {BINARY-OPERAND {std::binary::native::view reads the live native memory a C data pointer addresses (a std::ffi::c::Ptr[T], which only foreign code hands out); this argument's type here is int}} {BINARY-OPERAND {std::binary::native::view reads the live native memory a C data pointer addresses (a std::ffi::c::Ptr[T], which only foreign code hands out); this argument's type here is a C function pointer, which addresses code, not data}} BINARY-OPERAND BINARY-OPERAND BINARY-OPERAND BINARY-OPERAND}
 
-test nv-load-operand {binary::load(v) reads L from v's static type, which must be NativeView[L] (BINARY-OPERAND otherwise: a LayoutStruct, an Int, an untyped value); its result is then LayoutStruct[L], and nothing else is reported about a call that has none} -body {
+test nv-load-operand {std::binary::load(v) reads L from v's static type, which must be NativeView[L] (BINARY-OPERAND otherwise: a LayoutStruct, an Int, an untyped value); its result is then LayoutStruct[L], and nothing else is reported about a call that has none} -body {
     list \
-        [nvDiagnostics "fn f(v: LayoutStruct\[Inner\]) -> int:\n    binary::load(v).x\n0\n"] \
-        [nvKinds "fn f(v) -> int:\n    s = binary::load(v)\n    0\n0\n"] \
-        [nvKinds "fn f(v: NativeView\[Inner\]) -> LayoutStruct\[Inner\]:\n    binary::load(v)\n0\n"] \
+        [nvDiagnostics "fn f(v: LayoutStruct\[Inner\]) -> int:\n    std::binary::load(v).x\n0\n"] \
+        [nvKinds "fn f(v) -> int:\n    s = std::binary::load(v)\n    0\n0\n"] \
+        [nvKinds "fn f(v: NativeView\[Inner\]) -> LayoutStruct\[Inner\]:\n    std::binary::load(v)\n0\n"] \
         [nvKinds "fn f(v: NativeView\[Inner\]) -> LayoutStruct\[Inner\]:\n    v.load()\n0\n"]
-} -result {{{BINARY-OPERAND 90:18 {binary::load needs a value whose static type is NativeView[L] or NativeEdit[L] for a layout L (a native view or edit, binary::native::view or binary::native::edit, whose layout it reads every field of) or a live fixed array NativeView[array N of E] (v.items); this value's type here is LayoutStruct[Inner]}}} BINARY-OPERAND accepted accepted}
+} -result {{{BINARY-OPERAND 90:23 {std::binary::load needs a value whose static type is NativeView[L] or NativeEdit[L] for a layout L (a native view or edit, std::binary::native::view or std::binary::native::edit, whose layout it reads every field of) or a live fixed array NativeView[array N of E] (v.items); this value's type here is LayoutStruct[Inner]}}} BINARY-OPERAND accepted accepted}
 
 test nv-untyped-receiver {a field is read through a native view at its layout's constant offset, so the receiver must be statically NativeView[L]: an untyped function whose call passes a view and reads its field is invalid for that call (BINARY-OPERAND inside its instance, reported at the call), while a typed one is accepted} -body {
     list \
@@ -428,9 +428,9 @@ test nv-untyped-receiver {a field is read through a native view at its layout's 
 
 test nv-null-is-declared {a view of the null pointer is the builtin declared error NativeViewNull -- an ordinary declared error: UNHANDLED-ERROR unless handled or admitted by an errors clause, through which it propagates; its view, when there is one, is never null, so no field read checks again} -body {
     list \
-        [nvFirst "fn f(p: ffi::c::Ptr\[Node\]) -> int:\n    v = binary::native::view(Inner, p)\n    v.x\n0\n"] \
-        [nvKinds "fn f(p: ffi::c::Ptr\[Node\]) -> int errors NativeViewNull:\n    v = binary::native::view(Inner, p)\n    v.x\n\nfn g(p: ffi::c::Ptr\[Node\]) -> int:\n    f(p):\n        on NativeViewNull:\n            -1\n0\n"]
-} -result {{UNHANDLED-ERROR {this call of "binary::native::view" may produce the declared error "NativeViewNull", which is neither handled here nor admitted by the enclosing function's own "errors" declaration}} accepted}
+        [nvFirst "fn f(p: std::ffi::c::Ptr\[Node\]) -> int:\n    v = std::binary::native::view(Inner, p)\n    v.x\n0\n"] \
+        [nvKinds "fn f(p: std::ffi::c::Ptr\[Node\]) -> int errors NativeViewNull:\n    v = std::binary::native::view(Inner, p)\n    v.x\n\nfn g(p: std::ffi::c::Ptr\[Node\]) -> int:\n    f(p):\n        on NativeViewNull:\n            -1\n0\n"]
+} -result {{UNHANDLED-ERROR {this call of "std::binary::native::view" may produce the declared error "NativeViewNull", which is neither handled here nor admitted by the enclosing function's own "errors" declaration}} accepted}
 
 # ---------------------------------------------------------------------------
 # Reading native memory (the fixture's)
@@ -450,9 +450,9 @@ fn parsed(s: LayoutStruct[Scalars]) -> List[int]:
 
 fn check(xs: List[int]) -> List[any] errors NativeViewNull, LayoutLengthMismatch:
     p = memory(xs)
-    v = binary::native::view(Scalars, p)
-    s = binary::parse(Scalars, bytes_of(xs))
-    [reads(v), parsed(s), binary::load(v) == s]
+    v = std::binary::native::view(Scalars, p)
+    s = std::binary::parse(Scalars, bytes_of(xs))
+    [reads(v), parsed(s), std::binary::load(v) == s]
 
 fn run(xs: List[int]) -> List[any]:
     check(xs):
@@ -463,12 +463,12 @@ fn run(xs: List[int]) -> List[any]:
 
 }
 
-test nv-scalar-reads {every fixed-width encoding read through a native view -- unsigned and two's-complement, 1, 2, 4 and 8 bytes, at its offset, each width's extremes and zero, a u64 above i64::MAX a BigInt -- is the value the bytes hold (the test's own byte model), equal to binary::parse of the same bytes field by field, and binary::load of the view equals the parsed LayoutStruct} -constraints nativeBuilt -body {
+test nv-scalar-reads {every fixed-width encoding read through a native view -- unsigned and two's-complement, 1, 2, 4 and 8 bytes, at its offset, each width's extremes and zero, a u64 above i64::MAX a BigInt -- is the value the bytes hold (the test's own byte model), equal to std::binary::parse of the same bytes field by field, and std::binary::load of the view equals the parsed LayoutStruct} -constraints nativeBuilt -body {
     nvRun "${::nvScalarsProgram}\[run($::nvScalarsA), run($::nvScalarsB), run($::nvScalarsC)\]\n"
 } -result {same: [[[255, -128, 65535, -2147483648, 18446744073709551615, -9223372036854775808, -1, 2147483649], [255, -128, 65535, -2147483648, 18446744073709551615, -9223372036854775808, -1, 2147483649], true], [[0, 127, 0, 2147483647, 0, 9223372036854775807, 0, 4294967295], [0, 127, 0, 2147483647, 0, 9223372036854775807, 0, 4294967295], true], [[1, -1, 258, -2, 72623859790382856, -2, -32768, 16909060], [1, -1, 258, -2, 72623859790382856, -2, -32768, 16909060], true]]}
 
-test nv-scalar-bytes-every-backend {the byte-backed half of nv-scalar-reads on every backend: binary::parse of the same records gives the same fields on the Tcl backends too (they only lack the native memory)} -body {
-    nvRun "fn parsed(xs: List\[int\]) -> List\[int\]:\n    s = binary::parse(Scalars, bytes_of(xs)):\n        on LayoutLengthMismatch:\n            binary::parse(Scalars, bytes_of(\[\])):\n                on LayoutLengthMismatch:\n                    LayoutStruct\[Scalars\] \{u8: 0, i8: 0, u16: 0, i32: 0, u64: 0, i64: 0, i16: 0, u32: 0\}\n    \[s.u8, s.i8, s.u16, s.i32, s.u64, s.i64, s.i16, s.u32\]\n\[parsed($::nvScalarsA), parsed($::nvScalarsB), parsed($::nvScalarsC)\]\n" $::nvBackends
+test nv-scalar-bytes-every-backend {the byte-backed half of nv-scalar-reads on every backend: std::binary::parse of the same records gives the same fields on the Tcl backends too (they only lack the native memory)} -body {
+    nvRun "fn parsed(xs: List\[int\]) -> List\[int\]:\n    s = std::binary::parse(Scalars, bytes_of(xs)):\n        on LayoutLengthMismatch:\n            std::binary::parse(Scalars, bytes_of(\[\])):\n                on LayoutLengthMismatch:\n                    LayoutStruct\[Scalars\] \{u8: 0, i8: 0, u16: 0, i32: 0, u64: 0, i64: 0, i16: 0, u32: 0\}\n    \[s.u8, s.i8, s.u16, s.i32, s.u64, s.i64, s.i16, s.u32\]\n\[parsed($::nvScalarsA), parsed($::nvScalarsB), parsed($::nvScalarsC)\]\n" $::nvBackends
 } -result {same: [[255, -128, 65535, -2147483648, 18446744073709551615, -9223372036854775808, -1, 2147483649], [0, 127, 0, 2147483647, 0, 9223372036854775807, 0, 4294967295], [1, -1, 258, -2, 72623859790382856, -2, -32768, 16909060]]}
 
 # Deep: head 0, outer at 4 (count 4, inner at 8: x 8, y 10; last 16), tail
@@ -477,13 +477,13 @@ test nv-scalar-bytes-every-backend {the byte-backed half of nv-scalar-reads on e
 set nvDeep [nvRecord 24 165 {{0 200 1} {4 4000000000 4} {8 -12345 2} {10 54321 2} {16 7 1} {23 -100 1}}]
 set nvPacked [nvRecord 9 165 {{0 9 1} {1 -2 2} {3 65534 2} {5 3000000000 4}}]
 
-test nv-nested-views {a nested layout's field is a native view of the inner layout at the outer offset plus its own (NativeView[Inner], no load): read in a chain, held in a binding, passed to a function that takes the inner view, two levels deep; every field at its absolute offset, padding never read, and binary::load of the outer view equals its parse} -constraints nativeBuilt -body {
-    nvRun "fn inner_y(o: NativeView\[Outer\]) -> int:\n    o.inner.y\n\nfn deep(xs: List\[int\]) -> List\[any\] errors NativeViewNull, LayoutLengthMismatch:\n    p = memory(xs)\n    v = binary::native::view(Deep, p)\n    o = v.outer\n    i = o.inner\n    \[v.head, v.outer.count, v.outer.inner.x, i.y, o.last, v.tail, inner_y(v.outer), binary::load(v) == binary::parse(Deep, bytes_of(xs)), binary::load(i)\]\n\nfn packed(xs: List\[int\]) -> List\[any\] errors NativeViewNull, LayoutLengthMismatch:\n    p = memory(xs)\n    v = binary::native::view(Packed, p)\n    \[v.kind, v.inner.x, v.inner.y, v.word, binary::load(v) == binary::parse(Packed, bytes_of(xs))\]\n\nfn main() -> List\[any\] errors NativeViewNull, LayoutLengthMismatch:\n    \[deep($::nvDeep), packed($::nvPacked)\]\n\nr = main():\n    on NativeViewNull:\n        \[\]\n    on LayoutLengthMismatch:\n        \[\]\nr\n"
+test nv-nested-views {a nested layout's field is a native view of the inner layout at the outer offset plus its own (NativeView[Inner], no load): read in a chain, held in a binding, passed to a function that takes the inner view, two levels deep; every field at its absolute offset, padding never read, and std::binary::load of the outer view equals its parse} -constraints nativeBuilt -body {
+    nvRun "fn inner_y(o: NativeView\[Outer\]) -> int:\n    o.inner.y\n\nfn deep(xs: List\[int\]) -> List\[any\] errors NativeViewNull, LayoutLengthMismatch:\n    p = memory(xs)\n    v = std::binary::native::view(Deep, p)\n    o = v.outer\n    i = o.inner\n    \[v.head, v.outer.count, v.outer.inner.x, i.y, o.last, v.tail, inner_y(v.outer), std::binary::load(v) == std::binary::parse(Deep, bytes_of(xs)), std::binary::load(i)\]\n\nfn packed(xs: List\[int\]) -> List\[any\] errors NativeViewNull, LayoutLengthMismatch:\n    p = memory(xs)\n    v = std::binary::native::view(Packed, p)\n    \[v.kind, v.inner.x, v.inner.y, v.word, std::binary::load(v) == std::binary::parse(Packed, bytes_of(xs))\]\n\nfn main() -> List\[any\] errors NativeViewNull, LayoutLengthMismatch:\n    \[deep($::nvDeep), packed($::nvPacked)\]\n\nr = main():\n    on NativeViewNull:\n        \[\]\n    on LayoutLengthMismatch:\n        \[\]\nr\n"
 } -result {same: [[200, 4000000000, -12345, 54321, 7, -100, 54321, true, LayoutStruct[Inner] {x: -12345, y: 54321}], [9, -2, 65534, 3000000000, true]]}
 
-test nv-padding-never-read {two native records that differ only in their padding bytes read identically through a view (fields and binary::load alike): a view reads the fields' bytes, never a padding byte} -constraints nativeBuilt -body {
+test nv-padding-never-read {two native records that differ only in their padding bytes read identically through a view (fields and std::binary::load alike): a view reads the fields' bytes, never a padding byte} -constraints nativeBuilt -body {
     set zero [nvRecord 24 0 {{0 200 1} {4 4000000000 4} {8 -12345 2} {10 54321 2} {16 7 1} {23 -100 1}}]
-    nvRun "fn all(xs: List\[int\]) -> List\[any\] errors NativeViewNull:\n    p = memory(xs)\n    v = binary::native::view(Deep, p)\n    \[v.head, v.outer.count, v.outer.inner.x, v.outer.inner.y, v.outer.last, v.tail, binary::load(v)\]\n\nfn same() -> bool errors NativeViewNull:\n    all($::nvDeep) == all($zero)\n\nr = same():\n    on NativeViewNull:\n        false\nr\n"
+    nvRun "fn all(xs: List\[int\]) -> List\[any\] errors NativeViewNull:\n    p = memory(xs)\n    v = std::binary::native::view(Deep, p)\n    \[v.head, v.outer.count, v.outer.inner.x, v.outer.inner.y, v.outer.last, v.tail, std::binary::load(v)\]\n\nfn same() -> bool errors NativeViewNull:\n    all($::nvDeep) == all($zero)\n\nr = same():\n    on NativeViewNull:\n        false\nr\n"
 } -cleanup {unset -nocomplain zero} -result {same: true}
 
 # A Linked record whose `next` holds the address of a native Inner record,
@@ -499,34 +499,34 @@ fn linked(target: int, cb: int) -> List[int]:
 }
 
 test nv-pointer-fields {a pointer field read through a native view is the exact pointer the native memory holds: a data pointer of its declared pointee (the same address bits, readable through a view of its own), a function pointer of its declared signature, and null as null -- each a fresh owned value} -constraints nativeBuilt -body {
-    nvRun "${::nvLinkedProgram}fn run() -> List\[any\] errors NativeViewNull:\n    target = memory(\[146, 16, 9, 3\])\n    a = ffi_fixture::address_of(target)\n    p = memory(linked(a, 4886718345))\n    v = binary::native::view(Linked, p)\n    n = v.next\n    c = v.cb\n    d = v.data\n    w = binary::native::view(Inner, n)\n    \[v.tag, v.inner.x, v.inner.y, ffi_fixture::address_of(n) == a, n.null?(), w.x, w.y, ffi_fixture::address_of(c), c.null?(), d.null?()\]\n\nr = run():\n    on NativeViewNull:\n        \[\]\nr\n"
+    nvRun "${::nvLinkedProgram}fn run() -> List\[any\] errors NativeViewNull:\n    target = memory(\[146, 16, 9, 3\])\n    a = ffi_fixture::address_of(target)\n    p = memory(linked(a, 4886718345))\n    v = std::binary::native::view(Linked, p)\n    n = v.next\n    c = v.cb\n    d = v.data\n    w = std::binary::native::view(Inner, n)\n    \[v.tag, v.inner.x, v.inner.y, ffi_fixture::address_of(n) == a, n.null?(), w.x, w.y, ffi_fixture::address_of(c), c.null?(), d.null?()\]\n\nr = run():\n    on NativeViewNull:\n        \[\]\nr\n"
 } -result {same: [5, -1, 2, true, false, 4242, 777, 4886718345, false, true]}
 
-test nv-pointer-bytes-stay-inert {the asymmetry: the same Linked bytes as byte storage never give a pointer -- binary::parse(Linked, ...) is LAYOUT-NATIVE-ONLY (nv-native-only-layouts) -- while a layout that reads those words as plain U64 integers (LinkedBits) gives exactly the address bits the view's pointers have, inert Ints with no pointer operation} -constraints nativeBuilt -body {
-    nvRun "${::nvLinkedProgram}fn run() -> List\[any\] errors NativeViewNull, LayoutLengthMismatch:\n    target = memory(\[146, 16, 9, 3\])\n    a = ffi_fixture::address_of(target)\n    xs = linked(a, 4886718345)\n    p = memory(xs)\n    v = binary::native::view(Linked, p)\n    n = v.next\n    c = v.cb\n    bits = binary::parse(LinkedBits, bytes_of(xs))\n    \[bits.next == ffi_fixture::address_of(n), bits.cb == ffi_fixture::address_of(c), bits.data, bits.tag, bits.inner\]\n\nr = run():\n    on NativeViewNull:\n        \[\]\n    on LayoutLengthMismatch:\n        \[\]\nr\n"
+test nv-pointer-bytes-stay-inert {the asymmetry: the same Linked bytes as byte storage never give a pointer -- std::binary::parse(Linked, ...) is LAYOUT-NATIVE-ONLY (nv-native-only-layouts) -- while a layout that reads those words as plain U64 integers (LinkedBits) gives exactly the address bits the view's pointers have, inert Ints with no pointer operation} -constraints nativeBuilt -body {
+    nvRun "${::nvLinkedProgram}fn run() -> List\[any\] errors NativeViewNull, LayoutLengthMismatch:\n    target = memory(\[146, 16, 9, 3\])\n    a = ffi_fixture::address_of(target)\n    xs = linked(a, 4886718345)\n    p = memory(xs)\n    v = std::binary::native::view(Linked, p)\n    n = v.next\n    c = v.cb\n    bits = std::binary::parse(LinkedBits, bytes_of(xs))\n    \[bits.next == ffi_fixture::address_of(n), bits.cb == ffi_fixture::address_of(c), bits.data, bits.tag, bits.inner\]\n\nr = run():\n    on NativeViewNull:\n        \[\]\n    on LayoutLengthMismatch:\n        \[\]\nr\n"
 } -result {same: [true, true, 0, 5, LayoutStruct[Inner] {x: -1, y: 2}]}
 
-test nv-load-pointer-layout {binary::load of a view of a native-only layout reads every field once, pointers included: an affine LayoutStruct[L] owning the pointers it read (destructured to move them out), each pointer the exact one memory holds; a nested layout holding pointers too (Holder.link)} -constraints nativeBuilt -body {
-    nvRun "${::nvLinkedProgram}fn run() -> List\[any\] errors NativeViewNull:\n    target = memory(\[146, 16, 9, 3\])\n    a = ffi_fixture::address_of(target)\n    p = memory(linked(a, 4886718345))\n    v = binary::native::view(Linked, p)\n    \{tag: t, inner: i, next: n, cb: c, data: d\} = binary::load(v)\n    \[t, i, ffi_fixture::address_of(n) == a, ffi_fixture::address_of(c), d.null?()\]\n\nr = run():\n    on NativeViewNull:\n        \[\]\nr\n"
+test nv-load-pointer-layout {std::binary::load of a view of a native-only layout reads every field once, pointers included: an affine LayoutStruct[L] owning the pointers it read (destructured to move them out), each pointer the exact one memory holds; a nested layout holding pointers too (Holder.link)} -constraints nativeBuilt -body {
+    nvRun "${::nvLinkedProgram}fn run() -> List\[any\] errors NativeViewNull:\n    target = memory(\[146, 16, 9, 3\])\n    a = ffi_fixture::address_of(target)\n    p = memory(linked(a, 4886718345))\n    v = std::binary::native::view(Linked, p)\n    \{tag: t, inner: i, next: n, cb: c, data: d\} = std::binary::load(v)\n    \[t, i, ffi_fixture::address_of(n) == a, ffi_fixture::address_of(c), d.null?()\]\n\nr = run():\n    on NativeViewNull:\n        \[\]\nr\n"
 } -result {same: [5, LayoutStruct[Inner] {x: -1, y: 2}, true, 4886718345, true]}
 
 test nv-tcl-backends {the Tcl backends have no native memory: a view of the null pointer is NativeViewNull on every backend, and a view of any other pointer is refused on interp and compile (NATIVE-ONLY) -- nothing imitates a memory read -- while the native backends read it} -body {
     list \
-        [nvRun "fn f() -> int errors NativeViewNull:\n    p = ffi::c::null\[Node\]()\n    v = binary::native::view(Inner, p)\n    v.x\nr = f():\n    on NativeViewNull:\n        -1\nr\n" $::nvBackends] \
-        [nvRun "fn f() -> int errors NativeViewNull:\n    p = memory(\[7, 0, 9, 0\])\n    v = binary::native::view(Inner, p)\n    v.x + v.y\nr = f():\n    on NativeViewNull:\n        -1\nr\n" $::nvBackends]
-} -constraints nativeBuilt -result {{same: -1} {interp {error NATIVE-ONLY {binary::native::view reads live native process memory, which only the native backends (cranelift, cranelift-generic, a native executable) have; the Tcl backends (interp, compile) have no native address space and do not imitate one}} / compile {error NATIVE-ONLY {binary::native::view reads live native process memory, which only the native backends (cranelift, cranelift-generic, a native executable) have; the Tcl backends (interp, compile) have no native address space and do not imitate one}} / cranelift-generic {value 16} / cranelift {value 16}}}
+        [nvRun "fn f() -> int errors NativeViewNull:\n    p = std::ffi::c::null\[Node\]()\n    v = std::binary::native::view(Inner, p)\n    v.x\nr = f():\n    on NativeViewNull:\n        -1\nr\n" $::nvBackends] \
+        [nvRun "fn f() -> int errors NativeViewNull:\n    p = memory(\[7, 0, 9, 0\])\n    v = std::binary::native::view(Inner, p)\n    v.x + v.y\nr = f():\n    on NativeViewNull:\n        -1\nr\n" $::nvBackends]
+} -constraints nativeBuilt -result {{same: -1} {interp {error NATIVE-ONLY {std::binary::native::view reads live native process memory, which only the native backends (cranelift, cranelift-generic, a native executable) have; the Tcl backends (interp, compile) have no native address space and do not imitate one}} / compile {error NATIVE-ONLY {std::binary::native::view reads live native process memory, which only the native backends (cranelift, cranelift-generic, a native executable) have; the Tcl backends (interp, compile) have no native address space and do not imitate one}} / cranelift-generic {value 16} / cranelift {value 16}}}
 
 test nv-view-is-a-value {a native view is an unrestricted value (a non-owning window that confers nothing its copy does not): bound twice, passed and returned, a struct field, a List element, captured by a nested function -- read the same everywhere; the pointer it was made from stays its owner's (observed, never moved)} -constraints nativeBuilt -body {
-    nvRun "struct Box:\n    v: NativeView\[Inner\]\n    n: int\n\nfn id(v: NativeView\[Inner\]) -> NativeView\[Inner\]:\n    v\n\nfn f(p: ffi::c::Ptr\[ffi::c::Void\]) -> List\[any\] errors NativeViewNull:\n    v = binary::native::view(Inner, p)\n    w = v\n    b = Box \{v: id(w), n: 1\}\n    vs = \[v, w\]\n    fn k() -> int:\n        v.x + w.y\n    \[b.v.x, list::length(vs), k(), p.null?(), v.y\]\n\np = memory(\[3, 0, 4, 0\])\nr = f(p):\n    on NativeViewNull:\n        \[\]\nr\n"
+    nvRun "struct Box:\n    v: NativeView\[Inner\]\n    n: int\n\nfn id(v: NativeView\[Inner\]) -> NativeView\[Inner\]:\n    v\n\nfn f(p: std::ffi::c::Ptr\[std::ffi::c::Void\]) -> List\[any\] errors NativeViewNull:\n    v = std::binary::native::view(Inner, p)\n    w = v\n    b = Box \{v: id(w), n: 1\}\n    vs = \[v, w\]\n    fn k() -> int:\n        v.x + w.y\n    \[b.v.x, std::list::length(vs), k(), p.null?(), v.y\]\n\np = memory(\[3, 0, 4, 0\])\nr = f(p):\n    on NativeViewNull:\n        \[\]\nr\n"
 } -result {same: [3, 2, 7, false, 4]}
 
 test nv-no-equality {a native view has no equality and no hash, like a callable: comparing two is the run-time EQUALITY error on every native backend (no address identity is observable through one)} -constraints nativeBuilt -body {
-    set hir [surface::compile [nvProgram "fn f() -> bool errors NativeViewNull:\n    p = memory(\[1, 0, 2, 0\])\n    v = binary::native::view(Inner, p)\n    w = binary::native::view(Inner, p)\n    v == w\nr = f():\n    on NativeViewNull:\n        false\nr\n"] view.bot -warnings off]
+    set hir [surface::compile [nvProgram "fn f() -> bool errors NativeViewNull:\n    p = memory(\[1, 0, 2, 0\])\n    v = std::binary::native::view(Inner, p)\n    w = std::binary::native::view(Inner, p)\n    v == w\nr = f():\n    on NativeViewNull:\n        false\nr\n"] view.bot -warnings off]
     lmap backend $::nvNative {lrange [nvOutcome $backend $hir] 0 1}
 } -cleanup {unset -nocomplain hir} -result {{error EQUALITY} {error EQUALITY}}
 
 test nv-nir {native code of a view: the constructor is one null test of the pointer's word (cptrisnull, NativeViewNull on null) and the view is that word -- no load, no allocation; a field read is one nativeload at the field's absolute offset with its encoding word (width, plus 16 when signed), a nested view's field folded to the outer view's address (no cptroffset in a chain), a nested view itself one cptroffset (no load), a pointer field one nativeloadptr of the target's width; nothing copies the record (no structnew, no byte storage)} -constraints nativeBuilt -body {
-    set program "fn f(v: NativeView\[Deep\]) -> int:\n    v.outer.inner.x + v.tail\n\nfn g(v: NativeView\[Linked\]) -> bool:\n    n = v.next\n    n.null?()\n\nfn h(p: ffi::c::Ptr\[ffi::c::Void\]) -> NativeView\[Deep\] errors NativeViewNull:\n    binary::native::view(Deep, p)\n\nfn i(v: NativeView\[Deep\]) -> NativeView\[Inner\]:\n    v.outer.inner\n\nfn main() -> int errors NativeViewNull:\n    p = memory($::nvDeep)\n    q = memory(\[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0\])\n    v = h(p)\n    w = binary::native::view(Linked, q)\n    x = if g(w):\n        1\n    else:\n        0\n    f(v) + i(v).y + x\nr = main():\n    on NativeViewNull:\n        0\nr\n"
+    set program "fn f(v: NativeView\[Deep\]) -> int:\n    v.outer.inner.x + v.tail\n\nfn g(v: NativeView\[Linked\]) -> bool:\n    n = v.next\n    n.null?()\n\nfn h(p: std::ffi::c::Ptr\[std::ffi::c::Void\]) -> NativeView\[Deep\] errors NativeViewNull:\n    std::binary::native::view(Deep, p)\n\nfn i(v: NativeView\[Deep\]) -> NativeView\[Inner\]:\n    v.outer.inner\n\nfn main() -> int errors NativeViewNull:\n    p = memory($::nvDeep)\n    q = memory(\[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0\])\n    v = h(p)\n    w = std::binary::native::view(Linked, q)\n    x = if g(w):\n        1\n    else:\n        0\n    f(v) + i(v).y + x\nr = main():\n    on NativeViewNull:\n        0\nr\n"
     set nir [lmap name {f g h i} {nvNir $program $name}]
     lassign $nir f g h i
     list [regexp -all -inline {op nativeload %[0-9]+ %[0-9]+ %[0-9]+} $f] [regexp -all -inline {= int [0-9]+} $f] \
@@ -534,11 +534,11 @@ test nv-nir {native code of a view: the constructor is one null test of the poin
         [nvRun $program]
 } -cleanup {unset -nocomplain program nir f g h i} -result {{{op nativeload %0 %1 %2} {op nativeload %0 %5 %6}} {{= int 8} {= int 18} {= int 23} {= int 17}} {nativeload runbox nativeload runbox riadd ret} {nativeloadptr cptrisnull ret} {{= int 8} {= int 8}} {cptrisnull br faildeclared ret} {cptroffset ret} {{= int 8}} {same: 41877}}
 
-test nv-allocations {natively, reading the fields of a view allocates nothing per read (an Int field is a tagged word: only a u64 above i64::MAX would be a BigInt), and binary::load allocates exactly its LayoutStruct (one per nested layout); no byte storage is ever made (1000 reads each)} -constraints nativeLinux -body {
+test nv-allocations {natively, reading the fields of a view allocates nothing per read (an Int field is a tagged word: only a u64 above i64::MAX would be a BigInt), and std::binary::load allocates exactly its LayoutStruct (one per nested layout); no byte storage is ever made (1000 reads each)} -constraints nativeLinux -body {
     set reports {}
     foreach program [list \
-        "fn f(v: NativeView\[Deep\]) -> int:\n    v.head + v.outer.count + v.outer.inner.x + v.tail\nfn run(n: int) -> int errors NativeViewNull:\n    p = memory($::nvDeep)\n    v = binary::native::view(Deep, p)\n    k = loop i from 0 to n:\n        f(v)\n    0\nr = run(1000):\n    on NativeViewNull:\n        0\nr\n" \
-        "fn f(v: NativeView\[Deep\]) -> int:\n    s = binary::load(v)\n    s.head\nfn run(n: int) -> int errors NativeViewNull:\n    p = memory($::nvDeep)\n    v = binary::native::view(Deep, p)\n    k = loop i from 0 to n:\n        f(v)\n    0\nr = run(1000):\n    on NativeViewNull:\n        0\nr\n"] {
+        "fn f(v: NativeView\[Deep\]) -> int:\n    v.head + v.outer.count + v.outer.inner.x + v.tail\nfn run(n: int) -> int errors NativeViewNull:\n    p = memory($::nvDeep)\n    v = std::binary::native::view(Deep, p)\n    k = loop i from 0 to n:\n        f(v)\n    0\nr = run(1000):\n    on NativeViewNull:\n        0\nr\n" \
+        "fn f(v: NativeView\[Deep\]) -> int:\n    s = std::binary::load(v)\n    s.head\nfn run(n: int) -> int errors NativeViewNull:\n    p = memory($::nvDeep)\n    v = std::binary::native::view(Deep, p)\n    k = loop i from 0 to n:\n        f(v)\n    0\nr = run(1000):\n    on NativeViewNull:\n        0\nr\n"] {
         set hir [surface::compile [nvProgram $program] view.bot -warnings off]
         set report [native::allocationReport $hir summary]
         lappend reports [list [expr {[dict exists $report byKind Bytes] ? [dict get $report byKind Bytes allocations] : 0}] \
@@ -551,27 +551,27 @@ test nv-allocations {natively, reading the fields of a view allocates nothing pe
 # HIR, interchange, isolation, the front-end cache
 
 test nv-hir-text-roundtrip {HIR text carries a pointer layout (each pointer field with its canonical pointer type, read back after the structs its pointee names), NativeView[L] types and the elaborated field reads (binary#view_field with the field's descriptor entry): formatting, reading back and formatting again gives the same text, and the read HIR runs to the same outcome} -constraints nativeBuilt -body {
-    set source "direct module\n\nimport binary::native\nimport ffi::c\n\ntype I16 = Int in -32768..32767\ntype U16 = Int in 0..65535\n\nopaque struct Node:\n    tag: unit\n\nlayout In:\n    size 4\n    align 2\n    field x: I16 at 0\n    field y: U16 at 2\n\nlayout Out:\n    size 24\n    align 8\n    field a: In at 0\n    field p: ffi::c::Ptr\[Node\] at 8\n    field f: ffi::c::FnPtr\[Fn\{args: \[ffi::c::Ptr\[ffi::c::Void\]\], return: unit\}\] at 16\n\nfn y_of(o: NativeView\[Out\]) -> int:\n    o.a.y\n\nfn run() -> int errors NativeViewNull:\n    p = ffi::c::null\[Node\]()\n    y_of(binary::native::view(Out, p))\n\nr = run():\n    on NativeViewNull:\n        -1\nr\n"
+    set source "direct module\n\nimport std::binary::native\nimport std::ffi::c\n\ntype I16 = Int in -32768..32767\ntype U16 = Int in 0..65535\n\nopaque struct Node:\n    tag: unit\n\nlayout In:\n    size 4\n    align 2\n    field x: I16 at 0\n    field y: U16 at 2\n\nlayout Out:\n    size 24\n    align 8\n    field a: In at 0\n    field p: std::ffi::c::Ptr\[Node\] at 8\n    field f: std::ffi::c::FnPtr\[Fn\{args: \[std::ffi::c::Ptr\[std::ffi::c::Void\]\], return: unit\}\] at 16\n\nfn y_of(o: NativeView\[Out\]) -> int:\n    o.a.y\n\nfn run() -> int errors NativeViewNull:\n    p = std::ffi::c::null\[Node\]()\n    y_of(std::binary::native::view(Out, p))\n\nr = run():\n    on NativeViewNull:\n        -1\nr\n"
     set hir [surface::compile $source view.bot -warnings off]
     set text [hir::format $hir]
     set again [hir::parse $text]
     list [lsearch -all -inline -glob [split $text \n] {layout Out*}] [llength [regexp -all -inline {native\(binary#view_field\)} $text]] \
         [regexp -inline {const str \{a 0 layout [^\n]*\}} $text] [expr {[hir::format $again] eq $text}] \
         [lmap backend {interp cranelift} {nvOutcome $backend $again}]
-} -cleanup {unset -nocomplain source hir text again} -result {{{layout Out ns - size 24 align 8 fields a: In at 0, p: ffi::c::Ptr[Node] at 8, f: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void]], return: unit}] at 16}} 2 {{const str {a 0 layout {{LayoutStruct[In]} 4 2 {{x 0 i 2 little} {y 2 u 2 little}}}}}} 1 {{value -1} {value -1}}}
+} -cleanup {unset -nocomplain source hir text again} -result {{{layout Out ns - size 24 align 8 fields a: In at 0, p: std::ffi::c::Ptr[Node] at 8, f: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Void]], return: unit}] at 16}} 2 {{const str {a 0 layout {{LayoutStruct[In]} 4 2 {{x 0 i 2 little} {y 2 u 2 little}}}}}} 1 {{value -1} {value -1}}}
 
 test nv-interchange {HIR interchange keeps native views: a program written as interchange text and read back after another compilation that declares a same-named layout with other offsets reads its own fields, natively and through the Tcl backends' refusal alike} -constraints nativeBuilt -body {
-    set hir [surface::compile [nvProgram "fn f() -> int errors NativeViewNull:\n    p = memory($::nvDeep)\n    v = binary::native::view(Deep, p)\n    v.outer.inner.y\nr = f():\n    on NativeViewNull:\n        -1\nr\n"] view.bot -warnings off]
+    set hir [surface::compile [nvProgram "fn f() -> int errors NativeViewNull:\n    p = memory($::nvDeep)\n    v = std::binary::native::view(Deep, p)\n    v.outer.inner.y\nr = f():\n    on NativeViewNull:\n        -1\nr\n"] view.bot -warnings off]
     set text [hir::interchange::encode $hir]
-    surface::compile "import binary\nlayout Deep:\n    size 1\n    align 1\n    field head: binary::U8 at 0\n\n0\n" other.bot -warnings off
+    surface::compile "import std::binary\nlayout Deep:\n    size 1\n    align 1\n    field head: std::binary::U8 at 0\n\n0\n" other.bot -warnings off
     set read [hir::interchange::decode $text]
     lmap backend $::nvBackends {lrange [nvOutcome $backend $read] 0 1}
 } -cleanup {unset -nocomplain hir text read} -result {{error NATIVE-ONLY} {error NATIVE-ONLY} {value 54321} {value 54321}}
 
 test nv-isolation {two programs declaring a same-named layout with different offsets, compiled one after the other in one process: the earlier HIR still reads through its own layout (the layout registry is part of a HIR's declarations; a field read carries its offset in the HIR)} -constraints nativeBuilt -body {
-    set swap "layout Swap:\n    size 4\n    align 2\n    field first: binary::U16 at 0\n    field second: binary::U16 at 2\n\n"
-    set swapped "layout Swap:\n    size 4\n    align 2\n    field first: binary::U16 at 2\n    field second: binary::U16 at 0\n\n"
-    set body "fn f() -> int errors NativeViewNull:\n    p = memory(\[1, 0, 2, 0\])\n    v = binary::native::view(Swap, p)\n    v.first * 10 + v.second\nr = f():\n    on NativeViewNull:\n        -1\nr\n"
+    set swap "layout Swap:\n    size 4\n    align 2\n    field first: std::binary::U16 at 0\n    field second: std::binary::U16 at 2\n\n"
+    set swapped "layout Swap:\n    size 4\n    align 2\n    field first: std::binary::U16 at 2\n    field second: std::binary::U16 at 0\n\n"
+    set body "fn f() -> int errors NativeViewNull:\n    p = memory(\[1, 0, 2, 0\])\n    v = std::binary::native::view(Swap, p)\n    v.first * 10 + v.second\nr = f():\n    on NativeViewNull:\n        -1\nr\n"
     set a [surface::compile [nvProgram "$swap$body"] view.bot -warnings off]
     set b [surface::compile [nvProgram "$swapped$body"] view.bot -warnings off]
     list [nvOutcome cranelift $a] [nvOutcome cranelift $b] [nvOutcome cranelift-generic $a]
@@ -582,7 +582,7 @@ test nv-cache {the front-end cache keeps native views: a program file compiled t
     set cache [file join $dir cache]
     set path [file join $dir main.bot]
     set channel [open $path w]
-    puts -nonewline $channel [nvProgram "fn f() -> int errors NativeViewNull:\n    p = memory($::nvDeep)\n    v = binary::native::view(Deep, p)\n    v.outer.count\nr = f():\n    on NativeViewNull:\n        -1\nr\n"]
+    puts -nonewline $channel [nvProgram "fn f() -> int errors NativeViewNull:\n    p = memory($::nvDeep)\n    v = std::binary::native::view(Deep, p)\n    v.outer.count\nr = f():\n    on NativeViewNull:\n        -1\nr\n"]
     close $channel
     set first [surface::readProgramFile $path -warnings off -cache $cache]
     set second [surface::readProgramFile $path -warnings off -cache $cache]
@@ -592,51 +592,51 @@ test nv-cache {the front-end cache keeps native views: a program file compiled t
 # ---------------------------------------------------------------------------
 # Authority, read-only, no new dependency
 
-test nv-direct {making a native view is raw authority: binary::native is an intrinsic namespace designated direct, so a call of binary::native::view is a direct edge of its module (DIRECT unless mediated by the module's own context or acknowledged by `direct module`), while declaring a layout with pointer fields, binary::parse, and reading a view someone else made (its fields, binary::load) are not -- a module that only reads views is ordinary} -body {
-    set layouts "import binary\nimport binary::native\nimport ffi::c\n\nopaque struct Node:\n    tag: unit\n\nlayout L:\n    size 16\n    align 8\n    field a: binary::U32 at 0\n    field p: ffi::c::Ptr\[Node\] at 8\n\n"
+test nv-direct {making a native view is raw authority: std::binary::native is an intrinsic namespace designated direct, so a call of std::binary::native::view is a direct edge of its module (DIRECT unless mediated by the module's own context or acknowledged by `direct module`), while declaring a layout with pointer fields, std::binary::parse, and reading a view someone else made (its fields, std::binary::load) are not -- a module that only reads views is ordinary} -body {
+    set layouts "import std::binary\nimport std::binary::native\nimport std::ffi::c\n\nopaque struct Node:\n    tag: unit\n\nlayout L:\n    size 16\n    align 8\n    field a: std::binary::U32 at 0\n    field p: std::ffi::c::Ptr\[Node\] at 8\n\n"
     list \
-        [nvKinds "${layouts}fn f(p: ffi::c::Ptr\[Node\]) -> int errors NativeViewNull:\n    binary::native::view(L, p).a\n0\n" 1] \
-        [nvKinds "direct module\n\n${layouts}fn f(p: ffi::c::Ptr\[Node\]) -> int errors NativeViewNull:\n    binary::native::view(L, p).a\n0\n" 1] \
-        [nvKinds "${layouts}context struct Mem:\n    ok: bool\n\nfn f(p: ffi::c::Ptr\[Node\], context m: Mem) -> int errors NativeViewNull:\n    binary::native::view(L, p).a\n0\n" 1] \
-        [nvKinds "${layouts}fn f(v: NativeView\[L\]) -> int:\n    s = binary::load(v)\n    \{p: q\} = s\n    v.a + binary::layout_length(L)\n0\n" 1] \
+        [nvKinds "${layouts}fn f(p: std::ffi::c::Ptr\[Node\]) -> int errors NativeViewNull:\n    std::binary::native::view(L, p).a\n0\n" 1] \
+        [nvKinds "direct module\n\n${layouts}fn f(p: std::ffi::c::Ptr\[Node\]) -> int errors NativeViewNull:\n    std::binary::native::view(L, p).a\n0\n" 1] \
+        [nvKinds "${layouts}context struct Mem:\n    ok: bool\n\nfn f(p: std::ffi::c::Ptr\[Node\], context m: Mem) -> int errors NativeViewNull:\n    std::binary::native::view(L, p).a\n0\n" 1] \
+        [nvKinds "${layouts}fn f(v: NativeView\[L\]) -> int:\n    s = std::binary::load(v)\n    \{p: q\} = s\n    v.a + std::binary::layout_length(L)\n0\n" 1] \
         [lmap d [nvDiagnostics "direct module\n\n${layouts}fn f(v: NativeView\[L\]) -> int:\n    v.a\n0\n" 1] {lindex $d 0}] \
-        [lindex [nvDiagnostics "${layouts}fn f(p: ffi::c::Ptr\[Node\]) -> int errors NativeViewNull:\n    binary::native::view(L, p).a\n0\n" 1] 0 2]
-} -cleanup {unset -nocomplain layouts} -result {DIRECT accepted accepted accepted STALE-DIRECT-MODULE {the entry program uses direct authority: function "f" calls binary::native::view, a callable of the direct module "binary::native", without a context defined by the entry program; require one of this module's own contexts ("context NAME: T", T a context struct or context trait declared by the entry program) in "f", the function that makes the direct call, or declare the module direct with `direct module` as its first line}}
+        [lindex [nvDiagnostics "${layouts}fn f(p: std::ffi::c::Ptr\[Node\]) -> int errors NativeViewNull:\n    std::binary::native::view(L, p).a\n0\n" 1] 0 2]
+} -cleanup {unset -nocomplain layouts} -result {DIRECT accepted accepted accepted STALE-DIRECT-MODULE {the entry program uses direct authority: function "f" calls std::binary::native::view, a callable of the direct module "std::binary::native", without a context defined by the entry program; require one of this module's own contexts ("context NAME: T", T a context struct or context trait declared by the entry program) in "f", the function that makes the direct call, or declare the module direct with `direct module` as its first line}}
 
 test nv-direct-modules {across modules: a direct module may make views and hand them out; an ordinary module that takes one as an argument and reads it stays ordinary (a view is the authority, already granted), and the program that calls the direct module mediates that call with its own context like any direct edge} -body {
     withPrivateLibrary {
         set dir [file join $::core::libraryDir nvdemo]
         file mkdir $dir
         set channel [open [file join $dir raw.bot] w]
-        puts $channel "direct module\n\nimport binary\nimport binary::native\nimport ffi::c\n\nopaque struct Node:\n    tag: unit\n\nlayout L:\n    size 4\n    align 4\n    field a: binary::U32 at 0\n\nfn open(p: ffi::c::Ptr\[Node\]) -> NativeView\[L\] errors NativeViewNull:\n    binary::native::view(L, p)"
+        puts $channel "direct module\n\nimport std::binary\nimport std::binary::native\nimport std::ffi::c\n\nopaque struct Node:\n    tag: unit\n\nlayout L:\n    size 4\n    align 4\n    field a: std::binary::U32 at 0\n\nfn open(p: std::ffi::c::Ptr\[Node\]) -> NativeView\[L\] errors NativeViewNull:\n    std::binary::native::view(L, p)"
         close $channel
         set channel [open [file join $dir reader.bot] w]
-        puts $channel "import nvdemo::raw\n\nfn a_of(v: NativeView\[nvdemo::raw::L\]) -> int:\n    v.a"
+        puts $channel "import std::nvdemo::raw\n\nfn a_of(v: NativeView\[std::nvdemo::raw::L\]) -> int:\n    v.a"
         close $channel
-        set hir [surface::compile "import ffi::c\nimport nvdemo::raw\nimport nvdemo::reader\n\ncontext struct App:\n    ok: bool\n\nfn f(p: ffi::c::Ptr\[nvdemo::raw::Node\], context app: App) -> int errors NativeViewNull:\n    nvdemo::reader::a_of(nvdemo::raw::open(p))\n0\n" main.bot -warnings off]
+        set hir [surface::compile "import std::ffi::c\nimport std::nvdemo::raw\nimport std::nvdemo::reader\n\ncontext struct App:\n    ok: bool\n\nfn f(p: std::ffi::c::Ptr\[std::nvdemo::raw::Node\], context app: App) -> int errors NativeViewNull:\n    std::nvdemo::reader::a_of(std::nvdemo::raw::open(p))\n0\n" main.bot -warnings off]
         set result {}
         dict for {unit u} [dict get $hir direct units] {
-            if {$unit in {"" nvdemo::raw nvdemo::reader}} {
+            if {$unit in {"" std::nvdemo::raw std::nvdemo::reader}} {
                 lappend result $unit [dict get $u status]
             }
         }
         set result
     }
-} -cleanup {unset -nocomplain dir channel hir result unit u} -result {nvdemo::raw direct nvdemo::reader ordinary {} contextualized}
+} -cleanup {unset -nocomplain dir channel hir result unit u} -result {std::nvdemo::raw direct std::nvdemo::reader ordinary {} contextualized}
 
-test nv-read-only {native views are read-only: binary::native's operations make a view or, separately, a native edit (NATIVE-LAYOUT-WRITES.md: write authority is never made from a view), a view's only operations read (a field, binary::load), and the one native-memory store a program can reach is binary::store's -- one place in native lowering emits it, and its receiver role is an edit, never a view (no runtime helper writes through a raw reference: runtime/nview.rs has no ptr::write, and copies the fixture's data once)} -body {
+test nv-read-only {native views are read-only: std::binary::native's operations make a view or, separately, a native edit (NATIVE-LAYOUT-WRITES.md: write authority is never made from a view), a view's only operations read (a field, std::binary::load), and the one native-memory store a program can reach is std::binary::store's -- one place in native lowering emits it, and its receiver role is an edit, never a view (no runtime helper writes through a raw reference: runtime/nview.rs has no ptr::write, and copies the fixture's data once)} -body {
     set source [core::ReadFile [file join $::projectRoot native src runtime nview.rs]]
     set lower [core::ReadFile [file join $::projectRoot native lower.tcl]]
-    list [lsort [core::native::qualifiedMembers binary::native]] \
-        [lsort [lmap name [core::native::names] {expr {[string match binary* $name] ? $name : [continue]}}]] \
+    list [lsort [core::native::qualifiedMembers std::binary::native]] \
+        [lsort [lmap name [core::native::names] {expr {([string match binary#* $name] || [string match std::binary::* $name]) ? $name : [continue]}}]] \
         [regexp -all {ptr::write|write_unaligned} $source] [regexp -all {copy_nonoverlapping\(data} $source] \
-        [regexp -all {"op nativestore} $lower] [dict get [core::native::metadata binary::store] layout] \
-        [lmap name {binary::native::view binary::load binary#view_field binary#load} {hir::layouts::RoleOf [hir::layouts::Role $name] edited}]
-} -cleanup {unset -nocomplain source lower} -result {{edit view} {binary#element binary#emit binary#load binary#load_array binary#store_element binary#view_field binary::element binary::emit binary::layout_alignment binary::layout_length binary::load binary::native::edit binary::native::view binary::parse binary::read binary::store binary::store_element binary::write binary::write_foreign} 0 1 1 {edited 0 path 1 value 2 op store} {{} {} {} {}}}
+        [regexp -all {"op nativestore} $lower] [dict get [core::native::metadata std::binary::store] layout] \
+        [lmap name {std::binary::native::view std::binary::load binary#view_field binary#load} {hir::layouts::RoleOf [hir::layouts::Role $name] edited}]
+} -cleanup {unset -nocomplain source lower} -result {{edit view} {binary#element binary#emit binary#load binary#load_array binary#store_element binary#view_field std::binary::element std::binary::emit std::binary::layout_alignment std::binary::layout_length std::binary::load std::binary::native::edit std::binary::native::view std::binary::parse std::binary::read std::binary::store std::binary::store_element std::binary::write std::binary::write_foreign} 0 1 1 {edited 0 path 1 value 2 op store} {{} {} {} {}}}
 
 test nv-no-new-dependency {native views need nothing a program did not need before: a program that reads native memory through a view links no library and calls no C (it runs in the JIT), and a program that does not use views lowers to exactly the NIR ops it always did} -constraints nativeBuilt -body {
-    set view [native::nir [surface::compile [nvProgram "fn f() -> int errors NativeViewNull:\n    p = memory(\[1, 2, 3, 4\])\n    v = binary::native::view(Inner, p)\n    v.y\nr = f():\n    on NativeViewNull:\n        0\nr\n"] view.bot -warnings off]]
-    set plain [native::nir [surface::compile [nvProgram "o = LayoutStruct\[Outer\] \{count: 1, inner: LayoutStruct\[Inner\] \{x: 2, y: 3\}, last: 4\}\nbinary::parse(Outer, binary::emit(o)):\n    on LayoutLengthMismatch:\n        o\n"] view.bot -warnings off]]
+    set view [native::nir [surface::compile [nvProgram "fn f() -> int errors NativeViewNull:\n    p = memory(\[1, 2, 3, 4\])\n    v = std::binary::native::view(Inner, p)\n    v.y\nr = f():\n    on NativeViewNull:\n        0\nr\n"] view.bot -warnings off]]
+    set plain [native::nir [surface::compile [nvProgram "o = LayoutStruct\[Outer\] \{count: 1, inner: LayoutStruct\[Inner\] \{x: 2, y: 3\}, last: 4\}\nstd::binary::parse(Outer, std::binary::emit(o)):\n    on LayoutLengthMismatch:\n        o\n"] view.bot -warnings off]]
     list [regexp -all -line {^(link|foreign) } $view] \
         [regexp -all {nativeload|nativeloadptr|cptroffset|cptrfixturememory} $plain]
 } -cleanup {unset -nocomplain view plain} -result {0 0}
@@ -647,15 +647,15 @@ test nv-no-new-dependency {native views need nothing a program did not need befo
 set nvExecutableDir [makeDirectory native-view-executables-[pid]]
 
 test nv-executable {a standalone executable (whichever linker BOTLISH_NATIVE_LINKER selects) reads native memory through views exactly as the in-process backends do: scalars, a u64 BigInt, nested views and a pointer field} -constraints executableAot -body {
-    set source [nvProgram "${::nvLinkedProgram}fn run() -> List\[any\] errors NativeViewNull:\n    target = memory(\[146, 16, 9, 3\])\n    a = ffi_fixture::address_of(target)\n    p = memory(linked(a, 4886718345))\n    v = binary::native::view(Linked, p)\n    n = v.next\n    w = binary::native::view(Inner, n)\n    q = memory($::nvScalarsA)\n    s = binary::native::view(Scalars, q)\n    c = v.cb\n    \[v.inner.x, w.x, w.y, ffi_fixture::address_of(c), s.u64, s.i64\]\n\nr = run():\n    on NativeViewNull:\n        \[\]\nr\n"]
+    set source [nvProgram "${::nvLinkedProgram}fn run() -> List\[any\] errors NativeViewNull:\n    target = memory(\[146, 16, 9, 3\])\n    a = ffi_fixture::address_of(target)\n    p = memory(linked(a, 4886718345))\n    v = std::binary::native::view(Linked, p)\n    n = v.next\n    w = std::binary::native::view(Inner, n)\n    q = memory($::nvScalarsA)\n    s = std::binary::native::view(Scalars, q)\n    c = v.cb\n    \[v.inner.x, w.x, w.y, ffi_fixture::address_of(c), s.u64, s.i64\]\n\nr = run():\n    on NativeViewNull:\n        \[\]\nr\n"]
     set hir [surface::compile $source view.bot -warnings off]
     set path [file join $::nvExecutableDir views]
     native::executable $hir $path
     list [exec $path] [nvOutcome cranelift $hir]
 } -cleanup {unset -nocomplain source hir path} -result {{[-1, 4242, 777, 4886718345, 18446744073709551615, -9223372036854775808]} {value {[-1, 4242, 777, 4886718345, 18446744073709551615, -9223372036854775808]}}}
 
-test nv-gc-stress {under BOTLISH_NATIVE_GC_STRESS=1 (a collection at every allocation site) view reads stay exact: 64-bit fields that become BigInts, LayoutStructs binary::load builds, many records -- a view is an immediate word, never a root to lose} -constraints nativeLinux -body {
-    set source [nvProgram "${::nvScalarsProgram}fn many(k: int) -> List\[any\] errors NativeViewNull:\n    p = memory($::nvScalarsA)\n    v = binary::native::view(Scalars, p)\n    rs = loop i from 0 to k:\n        \[v.u64, binary::load(v), v.i64\]\n    list::at(rs, k - 1):\n        on IndexNotFound:\n            \[\]\nr = many(50):\n    on NativeViewNull:\n        \[\]\n\[r, run($::nvScalarsA)\]\n"]
+test nv-gc-stress {under BOTLISH_NATIVE_GC_STRESS=1 (a collection at every allocation site) view reads stay exact: 64-bit fields that become BigInts, LayoutStructs std::binary::load builds, many records -- a view is an immediate word, never a root to lose} -constraints nativeLinux -body {
+    set source [nvProgram "${::nvScalarsProgram}fn many(k: int) -> List\[any\] errors NativeViewNull:\n    p = memory($::nvScalarsA)\n    v = std::binary::native::view(Scalars, p)\n    rs = loop i from 0 to k:\n        \[v.u64, std::binary::load(v), v.i64\]\n    std::list::at(rs, k - 1):\n        on IndexNotFound:\n            \[\]\nr = many(50):\n    on NativeViewNull:\n        \[\]\n\[r, run($::nvScalarsA)\]\n"]
     set hir [surface::compile $source view.bot -warnings off]
     set plain [nvOutcome cranelift $hir]
     set saved [expr {[info exists ::env(BOTLISH_NATIVE_GC_STRESS)] ? $::env(BOTLISH_NATIVE_GC_STRESS) : ""}]
@@ -696,9 +696,9 @@ testConstraint nvCFixture [expr {$::nvFixtureDir ne ""}]
 # that state, explicitly, the representation the fixture's static
 # assertions pin: Record (every field) and RecordBits (the same bytes, the
 # pointer words as plain U64 Ints).
-set ::nvBinding {import abi
-import abi::bytes
-import ffi::c
+set ::nvBinding {import std::abi
+import std::abi::bytes
+import std::ffi::c
 
 extern c library "botlish_nview_fixture"
 
@@ -708,58 +708,58 @@ opaque struct Record:
 opaque struct Point:
     tag: unit
 
-extern c fn record named "bnv_record"(which: ffi::c::Int) -> ffi::c::Ptr[Record] independent
-extern c fn copy_record named "bnv_copy_record"(which: ffi::c::Int, out: ffi::c::Ptr[ffi::c::UChar] write noescape, n: ffi::c::ULong) -> unit
-extern c fn is_point named "bnv_is_point"(p: ffi::c::Ptr[Point] noescape) -> ffi::c::Int
-extern c fn is_callback named "bnv_is_callback"(f: ffi::c::FnPtr[Fn{args: [ffi::c::Int], return: ffi::c::Int}] noescape) -> ffi::c::Int
-extern c fn record_size named "bnv_record_size"() -> ffi::c::ULong
+extern c fn record named "bnv_record"(which: std::ffi::c::Int) -> std::ffi::c::Ptr[Record] independent
+extern c fn copy_record named "bnv_copy_record"(which: std::ffi::c::Int, out: std::ffi::c::Ptr[std::ffi::c::UChar] write noescape, n: std::ffi::c::ULong) -> unit
+extern c fn is_point named "bnv_is_point"(p: std::ffi::c::Ptr[Point] noescape) -> std::ffi::c::Int
+extern c fn is_callback named "bnv_is_callback"(f: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Int], return: std::ffi::c::Int}] noescape) -> std::ffi::c::Int
+extern c fn record_size named "bnv_record_size"() -> std::ffi::c::ULong
 
-fn bytes(which: ffi::c::Int) -> abi::bytes::Bytes:
-    written = copy_record(which, abi::bytes::zeroed(abi::usize(80)), 80)
-    abi::bytes::freeze(written.out)
+fn bytes(which: std::ffi::c::Int) -> std::abi::bytes::Bytes:
+    written = copy_record(which, std::abi::bytes::zeroed(std::abi::usize(80)), 80)
+    std::abi::bytes::freeze(written.out)
 }
 
 set ::nvRecordLayouts {layout POINT:
     size 4
     align 2
-    field x: binary::I16 at 0
-    field y: binary::U16 at 2
+    field x: std::binary::I16 at 0
+    field y: std::binary::U16 at 2
 
 layout RECORD:
     size 80
     align 8
-    field u8: binary::U8 at 0
-    field i8: binary::I8 at 1
-    field u16: binary::U16 at 2
-    field i32: binary::I32 at 4
-    field u64: binary::U64 at 8
-    field i64: binary::I64 at 16
-    field i16: binary::I16 at 24
-    field u32: binary::U32 at 28
+    field u8: std::binary::U8 at 0
+    field i8: std::binary::I8 at 1
+    field u16: std::binary::U16 at 2
+    field i32: std::binary::I32 at 4
+    field u64: std::binary::U64 at 8
+    field i64: std::binary::I64 at 16
+    field i16: std::binary::I16 at 24
+    field u32: std::binary::U32 at 28
     field origin: POINT at 32
-    field lng: ffi::c::Long at 40
-    field null_ptr: ffi::c::Ptr[ffi::c::Void] at 48
-    field point_ptr: ffi::c::Ptr[bnv::Point] at 56
-    field callback: ffi::c::FnPtr[Fn{args: [ffi::c::Int], return: ffi::c::Int}] at 64
-    field tail: ffi::c::UChar at 72
+    field lng: std::ffi::c::Long at 40
+    field null_ptr: std::ffi::c::Ptr[std::ffi::c::Void] at 48
+    field point_ptr: std::ffi::c::Ptr[bnv::Point] at 56
+    field callback: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Int], return: std::ffi::c::Int}] at 64
+    field tail: std::ffi::c::UChar at 72
 
 layout RECORD_BITS:
     size 80
     align 8
-    field u8: binary::U8 at 0
-    field i8: binary::I8 at 1
-    field u16: binary::U16 at 2
-    field i32: binary::I32 at 4
-    field u64: binary::U64 at 8
-    field i64: binary::I64 at 16
-    field i16: binary::I16 at 24
-    field u32: binary::U32 at 28
+    field u8: std::binary::U8 at 0
+    field i8: std::binary::I8 at 1
+    field u16: std::binary::U16 at 2
+    field i32: std::binary::I32 at 4
+    field u64: std::binary::U64 at 8
+    field i64: std::binary::I64 at 16
+    field i16: std::binary::I16 at 24
+    field u32: std::binary::U32 at 28
     field origin: POINT at 32
-    field lng: ffi::c::Long at 40
-    field null_ptr: binary::U64 at 48
-    field point_ptr: binary::U64 at 56
-    field callback: binary::U64 at 64
-    field tail: ffi::c::UChar at 72
+    field lng: std::ffi::c::Long at 40
+    field null_ptr: std::binary::U64 at 48
+    field point_ptr: std::binary::U64 at 56
+    field callback: std::binary::U64 at 64
+    field tail: std::ffi::c::UChar at 72
 
 }
 
@@ -771,7 +771,7 @@ proc nvCValues {main {backends ""}} {
         set backends $::nvNative
     }
     set dir [makeDirectory nv-app-[pid]-[incr ::nvAppCounter]]
-    foreach {name text} [list bnv.bot $::nvBinding main.bot "direct module\n\nimport abi\nimport abi::bytes\nimport binary\nimport binary::native\nimport ffi::c\nimport bnv\n\n$::nvRecordLayouts$main"] {
+    foreach {name text} [list bnv.bot $::nvBinding main.bot "direct module\n\nimport std::abi\nimport std::abi::bytes\nimport std::binary\nimport std::binary::native\nimport std::ffi::c\nimport bnv\n\n$::nvRecordLayouts$main"] {
         set channel [open [file join $dir $name] w]
         fconfigure $channel -encoding utf-8 -translation lf
         puts -nonewline $channel $text
@@ -796,16 +796,16 @@ fn bits(s: LayoutStruct[RECORD_BITS]) -> List[int]:
 
 }
 
-test nv-c-oracle-scalars {the C oracle: the record C laid out and initialized, read through a view of the address C returned, holds exactly what C stored (each width's extremes, a C long, a nested struct, padding C filled with 0xA5 never read) -- and the same record copied by C into byte storage imprints the same fields (binary::parse of its pointer-free twin)} -constraints nvCFixture -body {
-    nvCValues "${::nvRecordReads}fn check(which: ffi::c::Int) -> List\[any\] errors NativeViewNull, LayoutLengthMismatch:\n    p = bnv::record(which)\n    v = binary::native::view(RECORD, p)\n    s = binary::parse(RECORD_BITS, bnv::bytes(which))\n    \[reads(v), reads(v) == bits(s), bnv::record_size() == binary::layout_length(RECORD)\]\n\nfn main() -> List\[any\] errors NativeViewNull, LayoutLengthMismatch:\n    \[check(0), check(1)\]\n\nr = main():\n    on NativeViewNull:\n        \[\]\n    on LayoutLengthMismatch:\n        \[\]\nr\n"
+test nv-c-oracle-scalars {the C oracle: the record C laid out and initialized, read through a view of the address C returned, holds exactly what C stored (each width's extremes, a C long, a nested struct, padding C filled with 0xA5 never read) -- and the same record copied by C into byte storage imprints the same fields (std::binary::parse of its pointer-free twin)} -constraints nvCFixture -body {
+    nvCValues "${::nvRecordReads}fn check(which: std::ffi::c::Int) -> List\[any\] errors NativeViewNull, LayoutLengthMismatch:\n    p = bnv::record(which)\n    v = std::binary::native::view(RECORD, p)\n    s = std::binary::parse(RECORD_BITS, bnv::bytes(which))\n    \[reads(v), reads(v) == bits(s), bnv::record_size() == std::binary::layout_length(RECORD)\]\n\nfn main() -> List\[any\] errors NativeViewNull, LayoutLengthMismatch:\n    \[check(0), check(1)\]\n\nr = main():\n    on NativeViewNull:\n        \[\]\n    on LayoutLengthMismatch:\n        \[\]\nr\n"
 } -result {same: value {[[[255, -128, 65535, -2147483648, 18446744073709551615, -9223372036854775808, -1, 2147483649, -32768, 65535, 9223372036854775807, 90], true, true], [[0, 127, 0, 2147483647, 0, 9223372036854775807, 0, 4294967295, 32767, 0, -9223372036854775808, 0], true, true]]}}
 
 test nv-c-oracle-pointers {the C oracle's pointer fields: read through the view, the data pointer is exactly the point record C stored (C compares it), readable through a view of its own (C's 1234, 4321); the function pointer is exactly C's callback (C compares it); C's NULL is null -- and the byte copy of the same record holds the same address bits as inert Ints, never pointers} -constraints nvCFixture -body {
-    nvCValues "fn main() -> List\[any\] errors NativeViewNull, LayoutLengthMismatch:\n    p = bnv::record(0)\n    v = binary::native::view(RECORD, p)\n    q = v.point_ptr\n    f = v.callback\n    z = v.null_ptr\n    w = binary::native::view(POINT, q)\n    s = binary::parse(RECORD_BITS, bnv::bytes(0))\n    e = bnv::record(1)\n    u = binary::native::view(RECORD, e)\n    q1 = u.point_ptr\n    f1 = u.callback\n    \[bnv::is_point(q), bnv::is_callback(f), z.null?(), w.x, w.y, s.null_ptr, s.point_ptr == 0, q1.null?(), f1.null?()\]\n\nr = main():\n    on NativeViewNull:\n        \[\]\n    on LayoutLengthMismatch:\n        \[\]\nr\n"
+    nvCValues "fn main() -> List\[any\] errors NativeViewNull, LayoutLengthMismatch:\n    p = bnv::record(0)\n    v = std::binary::native::view(RECORD, p)\n    q = v.point_ptr\n    f = v.callback\n    z = v.null_ptr\n    w = std::binary::native::view(POINT, q)\n    s = std::binary::parse(RECORD_BITS, bnv::bytes(0))\n    e = bnv::record(1)\n    u = std::binary::native::view(RECORD, e)\n    q1 = u.point_ptr\n    f1 = u.callback\n    \[bnv::is_point(q), bnv::is_callback(f), z.null?(), w.x, w.y, s.null_ptr, s.point_ptr == 0, q1.null?(), f1.null?()\]\n\nr = main():\n    on NativeViewNull:\n        \[\]\n    on LayoutLengthMismatch:\n        \[\]\nr\n"
 } -result {same: value {[1, 1, true, 1234, 4321, 0, false, true, true]}}
 
-test nv-c-oracle-load {the C oracle, whole: binary::load of the view of C's record is the affine LayoutStruct of every field, its pointers C's own (C compares them), its scalars equal to the field reads} -constraints nvCFixture -body {
-    nvCValues "${::nvRecordReads}fn main() -> List\[any\] errors NativeViewNull:\n    p = bnv::record(0)\n    v = binary::native::view(RECORD, p)\n    \{u64: big, origin: o, point_ptr: q, callback: f, null_ptr: z, tail: t\} = binary::load(v)\n    \[big, o, bnv::is_point(q), bnv::is_callback(f), z.null?(), t\]\n\nr = main():\n    on NativeViewNull:\n        \[\]\nr\n"
+test nv-c-oracle-load {the C oracle, whole: std::binary::load of the view of C's record is the affine LayoutStruct of every field, its pointers C's own (C compares them), its scalars equal to the field reads} -constraints nvCFixture -body {
+    nvCValues "${::nvRecordReads}fn main() -> List\[any\] errors NativeViewNull:\n    p = bnv::record(0)\n    v = std::binary::native::view(RECORD, p)\n    \{u64: big, origin: o, point_ptr: q, callback: f, null_ptr: z, tail: t\} = std::binary::load(v)\n    \[big, o, bnv::is_point(q), bnv::is_callback(f), z.null?(), t\]\n\nr = main():\n    on NativeViewNull:\n        \[\]\nr\n"
 } -result {same: value {[18446744073709551615, LayoutStruct[POINT] {x: -32768, y: 65535}, 1, 1, true, 90]}}
 
 test nv-pointer-field-ownership {a pointer read through a view is a fresh affine value like a C call's pointer result, governed by the ordinary affine rules: bound, it is its binding's; observed as a temporary it has no owner (AFFINE-TEMPORARY-UNSUPPORTED); compared, never (AFFINE-EQUALITY-UNSUPPORTED); two reads of one field are two owners of two values (no implicit clone of one)} -body {
@@ -813,12 +813,12 @@ test nv-pointer-field-ownership {a pointer read through a view is a fresh affine
         [nvKinds "fn f(v: NativeView\[Linked\]) -> bool:\n    v.next.null?()\n0\n"] \
         [nvKinds "fn f(v: NativeView\[Linked\]) -> bool:\n    a = v.next\n    a == v.next\n0\n"] \
         [nvKinds "fn f(v: NativeView\[Linked\]) -> bool:\n    a = v.next\n    b = v.next\n    a.null?() and b.null?()\n0\n"] \
-        [nvKinds "fn g(p: ffi::c::Ptr\[Node\]) -> bool:\n    p.null?()\nfn f(v: NativeView\[Linked\]) -> bool:\n    g(v.next)\n0\n"]
+        [nvKinds "fn g(p: std::ffi::c::Ptr\[Node\]) -> bool:\n    p.null?()\nfn f(v: NativeView\[Linked\]) -> bool:\n    g(v.next)\n0\n"]
 } -result {AFFINE-TEMPORARY-UNSUPPORTED {AFFINE-EQUALITY-UNSUPPORTED AFFINE-EQUALITY-UNSUPPORTED} accepted accepted}
 
 test nv-unchecked-replay {a program compiled unchecked (-strict 0) whose view or parse the checks reject replays the diagnostic when the call runs, natively (the runtime knows BINARY-OPERAND and LAYOUT-NATIVE-ONLY) and, for a native-only parse, on the Tcl backends too -- nothing reads memory or imprints a pointer first} -constraints nativeBuilt -body {
-    set view [surface::compile [nvProgram "fn f(x: int) -> int errors NativeViewNull:\n    v = binary::native::view(Inner, x)\n    v.x\nr = f(3):\n    on NativeViewNull:\n        -1\nr\n"] view.bot -warnings off -strict 0]
-    set parse [surface::compile [nvProgram "fn f(d: abi::bytes::Bytes) -> int errors LayoutLengthMismatch:\n    v = binary::parse(Linked, d)\n    v.tag\nr = f(bytes_of(\[1\])):\n    on LayoutLengthMismatch:\n        -1\nr\n"] view.bot -warnings off -strict 0]
+    set view [surface::compile [nvProgram "fn f(x: int) -> int errors NativeViewNull:\n    v = std::binary::native::view(Inner, x)\n    v.x\nr = f(3):\n    on NativeViewNull:\n        -1\nr\n"] view.bot -warnings off -strict 0]
+    set parse [surface::compile [nvProgram "fn f(d: std::abi::bytes::Bytes) -> int errors LayoutLengthMismatch:\n    v = std::binary::parse(Linked, d)\n    v.tag\nr = f(bytes_of(\[1\])):\n    on LayoutLengthMismatch:\n        -1\nr\n"] view.bot -warnings off -strict 0]
     list [lmap backend $::nvNative {lrange [nvOutcome $backend $view] 0 1}] [lmap backend $::nvBackends {lrange [nvOutcome $backend $parse] 0 1}]
 } -cleanup {unset -nocomplain view parse} -result {{{error BINARY-OPERAND} {error BINARY-OPERAND}} {{error LAYOUT-NATIVE-ONLY} {error LAYOUT-NATIVE-ONLY} {error LAYOUT-NATIVE-ONLY} {error LAYOUT-NATIVE-ONLY}}}
 

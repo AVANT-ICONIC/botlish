@@ -12,9 +12,9 @@
 #   * 0 to 14 parameters -- past the six (x86-64 SysV) or eight (AAPCS64)
 #     integer argument registers, so the later ones are on the stack -- each
 #     a C integer scalar (all eleven, plain char at the target's signedness)
-#     or a C _Bool (ffi::c::Bool: a Botlish bool),
+#     or a C _Bool (std::ffi::c::Bool: a Botlish bool),
 #     a raw `unsigned char *` (null, or an address inside the library's own
-#     cells), a read byte pointer (an abi::bytes::Bytes or a MutableBytes,
+#     cells), a read byte pointer (a std::abi::bytes::Bytes or a MutableBytes,
 #     exposed) or a write byte pointer (a MutableBytes, C writing a private
 #     copy), each pointer `noescape` or `proven noescape`;
 #   * a result: a C integer scalar or _Bool computed from one argument (in
@@ -254,29 +254,29 @@ proc cSource {functions} {
 
 # The Botlish binding module of FUNCTIONS.
 proc binding {functions} {
-    set text "import ffi::c\n\nextern c library \"botlish_cffi_fuzz\"\n\n"
-    append text "extern c fn cell named \"fz_cell\"(k: ffi::c::Int) -> ffi::c::Ptr\[ffi::c::UChar\] independent\n"
-    append text "extern c fn offset named \"fz_offset\"(p: ffi::c::Ptr\[ffi::c::UChar\] noescape) -> ffi::c::ULongLong\n"
-    append text "extern c fn seen named \"fz_seen_at\"(i: ffi::c::Int) -> ffi::c::ULongLong\n"
+    set text "import std::ffi::c\n\nextern c library \"botlish_cffi_fuzz\"\n\n"
+    append text "extern c fn cell named \"fz_cell\"(k: std::ffi::c::Int) -> std::ffi::c::Ptr\[std::ffi::c::UChar\] independent\n"
+    append text "extern c fn offset named \"fz_offset\"(p: std::ffi::c::Ptr\[std::ffi::c::UChar\] noescape) -> std::ffi::c::ULongLong\n"
+    append text "extern c fn seen named \"fz_seen_at\"(i: std::ffi::c::Int) -> std::ffi::c::ULongLong\n"
     set i 0
     foreach f $functions {
         set formals {}
         set j 0
         foreach param [dict get $f params] {
             switch [dict get $param kind] {
-                scalar { lappend formals "p$j: ffi::c::[dict get $param type]" }
-                raw { lappend formals "p$j: ffi::c::Ptr\[ffi::c::UChar\] [dict get $param escape]" }
-                in { lappend formals "p$j: ffi::c::Ptr\[ffi::c::UChar\] read [dict get $param escape]" }
-                out { lappend formals "p$j: ffi::c::Ptr\[ffi::c::UChar\] write [dict get $param escape]" }
+                scalar { lappend formals "p$j: std::ffi::c::[dict get $param type]" }
+                raw { lappend formals "p$j: std::ffi::c::Ptr\[std::ffi::c::UChar\] [dict get $param escape]" }
+                in { lappend formals "p$j: std::ffi::c::Ptr\[std::ffi::c::UChar\] read [dict get $param escape]" }
+                out { lappend formals "p$j: std::ffi::c::Ptr\[std::ffi::c::UChar\] write [dict get $param escape]" }
             }
             incr j
         }
         set result [dict get $f result]
         set rtype [switch [dict get $result kind] {
-            scalar { string cat "ffi::c::[dict get $result type]" }
+            scalar { string cat "std::ffi::c::[dict get $result type]" }
             unit { string cat unit }
-            independent { string cat "ffi::c::Ptr\[ffi::c::UChar\] independent" }
-            alias { string cat "ffi::c::Ptr\[ffi::c::UChar\] alias p[dict get $result of]" }
+            independent { string cat "std::ffi::c::Ptr\[std::ffi::c::UChar\] independent" }
+            alias { string cat "std::ffi::c::Ptr\[std::ffi::c::UChar\] alias p[dict get $result of]" }
         }]
         set name [expr {[dict get $f named] ? "f$i named \"[dict get $f symbol]\"" : "f$i"}]
         append text "extern c fn ${name}([join $formals {, }]) -> $rtype\n"
@@ -288,9 +288,9 @@ proc binding {functions} {
 # The entry program calling FUNCTIONS (with their drawn arguments), and the
 # model's value of it.
 proc program {functions} {
-    set text "import abi\nimport abi::bytes\nimport byte\nimport ffi::c\nimport fz\n\n"
-    append text "fn byte_of(n: int) -> byte::Byte:\n    if n >= 0 and n <= 255:\n        return n\n    0\n\n"
-    append text "fn bytes_of(values: List\[int\]) -> abi::bytes::Bytes:\n    bytes = loop v in values:\n        byte_of(v)\n    abi::bytes::from_list(bytes)\n\n"
+    set text "import std::abi\nimport std::abi::bytes\nimport std::byte\nimport std::ffi::c\nimport fz\n\n"
+    append text "fn byte_of(n: int) -> std::byte::Byte:\n    if n >= 0 and n <= 255:\n        return n\n    0\n\n"
+    append text "fn bytes_of(values: List\[int\]) -> std::abi::bytes::Bytes:\n    bytes = loop v in values:\n        byte_of(v)\n    std::abi::bytes::from_list(bytes)\n\n"
     append text "fn bit(b: bool) -> int:\n    if b:\n        return 1\n    0\n\n"
     set observations {}
     set expected {}
@@ -316,7 +316,7 @@ proc program {functions} {
                     set cell [dict get $param cell]
                     # An affine pointer an observing parameter takes needs an
                     # owner: a binding.
-                    append text "r${i}_$j = [expr {$cell < 0 ? "ffi::c::null\[ffi::c::UChar\]()" : "fz::cell($cell)"}]\n"
+                    append text "r${i}_$j = [expr {$cell < 0 ? "std::ffi::c::null\[std::ffi::c::UChar\]()" : "fz::cell($cell)"}]\n"
                     lappend args r${i}_$j
                     lappend seen [expr {$cell < 0 ? 0 : $cell + 1}]
                 }
@@ -326,19 +326,19 @@ proc program {functions} {
                         append text "in${i}_$j = bytes_of([blist $bytes])\n"
                         lappend checks "bit(in${i}_$j == bytes_of([blist $bytes]))"
                     } else {
-                        append text "in${i}_$j = abi::bytes::from_bytes(bytes_of([blist $bytes]))\n"
-                        lappend checks "bit(abi::bytes::freeze(in${i}_$j) == bytes_of([blist $bytes]))"
+                        append text "in${i}_$j = std::abi::bytes::from_bytes(bytes_of([blist $bytes]))\n"
+                        lappend checks "bit(std::abi::bytes::freeze(in${i}_$j) == bytes_of([blist $bytes]))"
                     }
                     lappend args in${i}_$j
                     lappend seen [weighted $bytes]
                 }
                 out {
                     set bytes [dict get $param bytes]
-                    append text "out${i}_$j = abi::bytes::from_bytes(bytes_of([blist $bytes]))\n"
+                    append text "out${i}_$j = std::abi::bytes::from_bytes(bytes_of([blist $bytes]))\n"
                     lappend args out${i}_$j
                     lappend seen [weighted $bytes]
-                    lappend checks "bit(abi::bytes::freeze(c$i.p$j) == bytes_of([blist [pattern [dict get $param seed] [llength $bytes]]]))"
-                    lappend checks "bit(abi::bytes::freeze(out${i}_$j) == bytes_of([blist $bytes]))"
+                    lappend checks "bit(std::abi::bytes::freeze(c$i.p$j) == bytes_of([blist [pattern [dict get $param seed] [llength $bytes]]]))"
+                    lappend checks "bit(std::abi::bytes::freeze(out${i}_$j) == bytes_of([blist $bytes]))"
                 }
             }
             incr j

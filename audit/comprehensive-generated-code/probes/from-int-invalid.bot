@@ -1,6 +1,6 @@
-import byte
+import std::byte
 
-# Probe E: byte::from_int(999) -- statically KNOWN-ERROR, never reaches
+# Probe E: std::byte::from_int(999) -- statically KNOWN-ERROR, never reaches
 # codegen. Verbatim tests/errors.test errors-byte-from-int-known-failure-literal.
-byte::high_nibble(0)
-byte::from_int(999)
+std::byte::high_nibble(0)
+std::byte::from_int(999)

@@ -78,7 +78,7 @@ The brief opened with four calls to flag if wrong.
    would not type-check today (a `str` parameter)". A declared `str` parameter
    does reject the character spelling statically (`TYPE`). The two other
    String-taking context kinds accept it: a native's `str` parameter is
-   checked only at run time (`str::length('a')` compiles and fails with
+   checked only at run time (`std::str::length('a')` compiles and fails with
    `TYPE`), and `==` of a String and a UnicodeChar type-checks and is `false`
    (README §1: values of different kinds are never equal). In the corpus, 56
    of the 97 findings are such comparisons. So the deficiency surface is wider
@@ -214,7 +214,7 @@ milestone-4 precedent. `""` is length 0, `"ab"` length 2: silent
 The pass reads the literal's exact value with `hir::exact::Of` -- the fact
 milestone 1's grouping uses (`{val {str TEXT}}` for a String const) -- and
 measures it with `core::strings::length`, **the reference implementation of
-`str::length` itself**. No helper was added: the language's own length is a
+`std::str::length` itself**. No helper was added: the language's own length is a
 function of a value already, and calling it is the strongest form of
 "consistently with the language's own notion". So:
 
@@ -228,7 +228,7 @@ function of a value already, and calling it is the strongest form of
 * `e` + U+0301 (a grapheme cluster of two code points) is two and is silent;
   the precomposed `é` (U+00E9) warns (`oc-grapheme-of-two-code-points-silent`);
 * `oc-length-is-str-length`: over nine literals, the ones that warn are exactly
-  those whose `str::length` is 1, on all four backends.
+  those whose `std::str::length` is 1, on all four backends.
 
 **No spelling gap.** For every Unicode scalar (U+0000..U+10FFFF without the
 surrogates: 1,112,064), the one-character String spelling and the character
@@ -243,9 +243,9 @@ writes everything else raw).
 
 No value identity beyond the literal's own exact value. The pass never follows
 a binding (`oc-initializer-is-the-site`: `sep` read four times, one warning),
-never evaluates a call (`oc-computed-strings-silent`: `str::concat("ab", "")`
+never evaluates a call (`oc-computed-strings-silent`: `std::str::concat("ab", "")`
 and `"AB".lowercase().substring(0, 1)` are silent, the `"x"` inside
-`str::concat("x", "")` warns as the literal it is), and never looks at what a
+`std::str::concat("x", "")` warns as the literal it is), and never looks at what a
 function returns (`oc-call-results-silent`: functions whose every result is a
 one-character String are silent). The `computed-string-warned` mutant -- which
 evaluates a native call whose arguments are exactly known -- is killed (see
@@ -372,7 +372,7 @@ errors-has-no-warnings`).
 
 **What supplied the proof.** The `const` node kind and each const's exact value
 (`hir::exact::Of`, which predates the milestone), measured by
-`core::strings::length` (the reference `str::length`); and, to recognize the
+`core::strings::length` (the reference `std::str::length`); and, to recognize the
 one synthesized const, `hir::contexts::isLoad`. **Not needed**: a provenance
 marker, annotations, identity (`hir::exact::Identity`/`AliasRoot`), exits, any
 walk (structural reachability or the completion walk), the resolver, types, a
@@ -506,18 +506,18 @@ in a scratch copy with every compile site switched to `-warnings default
 
 | file | result | `ONE-CHAR-STRING-LITERAL` lines | adaptation |
 |---|---|---|---|
-| `tests/str-char-at.test` | 14/14 | 2 (`at("é", -1)`, `at("é", 1)`: one-character test inputs) | none: nothing breaks; the subject is `str::char_at` |
+| `tests/str-char-at.test` | 14/14 | 2 (`at("é", -1)`, `at("é", 1)`: one-character test inputs) | none: nothing breaks; the subject is `std::str::char_at` |
 | `tests/flags.test` | 154/155 | 5 (a scratch module's `"a"`, `"b"`, `"c"`) | none; the one failure, `flags-standalone-executable`, **fails identically without the pass** (its program prints a `FIXED-ARITY-LIST-RETURN` line on `main.tcl`'s stderr, which makes `exec` raise; checked on the same scratch tree with the registry line removed) and is not this milestone's |
 | `tests/refinement-values.test` | 88/88 | 154 | none |
 | `tests/refinement-validators.test` | 48/48 | 15 | none |
-| `tests/emailish-predicate.test` | 20/20 | 547 (`lib/web.bot`'s 26 findings, printed by every compile that loads `web`) | none |
+| `tests/emailish-predicate.test` | 20/20 | 547 (`stdlib/web.bot`'s 26 findings, printed by every compile that loads `web`) | none |
 
 **The fuzzers.** Checked, not assumed:
 
 | fuzzer | with the pass | the literals | adaptation |
 |---|---|---|---|
 | `same-return-value` (milestone 1) | unaffected: identical summary | none: its returns are Ints; `mutable_array` has no finding | none |
-| `method-eligible` (2) | 60 of 60 seeds failed | `s = "s"` in every function, the receiver `"t"`, `str::concat(s, "x")` | the oracle predicts `ONE-CHAR-STRING-LITERAL` at every occurrence of `"s"`, `"t"`, `"x"` (the generator's only one-character literals; nothing else it writes contains them), exactly (missed = failure, unpredicted = EXTRA); `error` mode expects the code of the sort-first *predicted* warning |
+| `method-eligible` (2) | 60 of 60 seeds failed | `s = "s"` in every function, the receiver `"t"`, `std::str::concat(s, "x")` | the oracle predicts `ONE-CHAR-STRING-LITERAL` at every occurrence of `"s"`, `"t"`, `"x"` (the generator's only one-character literals; nothing else it writes contains them), exactly (missed = failure, unpredicted = EXTRA); `error` mode expects the code of the sort-first *predicted* warning |
 | `fixed-arity-list-return` (3) | 32 failed | the element pool's `"s"` (dead and range-unreachable branches included: this warning has no reachability notion) | the same, for `"s"` |
 | `same-failure` (4) | 60 failed | the drivers' `u$f("s", [3])` | the same, the sites recorded at generation |
 | `proves-naming` (5) | 60 failed, 33 rename-law failures | the drivers' `"x"`, `"z"`, the wrong-shape arguments `"x"`, `"y"`, the hygiene twin's `"t"` | the same, over the entry file and the module; the rename law's "no warning of any code" now means no warning but the renamed program's own literal findings, exactly |
@@ -543,7 +543,7 @@ policy explicitly (84/84 on `interp`, `compile`, `cranelift-generic` and
   escapes denoting one character (`\n`, `\t`, `\r`, a quote, a backslash) with
   their code points; the exact value deciding (`"\n"` vs `"\\n"`); an
   apostrophe; two supplementary-plane characters; the two-code-point grapheme
-  silent beside the precomposed character; agreement with `str::length` on four
+  silent beside the precomposed character; agreement with `std::str::length` on four
   backends.
 * **Literals only**: the initializer is the site; aliases; parameters; call
   results (every result one character); computed Strings (concatenation,
@@ -603,7 +603,7 @@ scalar). Each seed builds a program from construction-known pieces:
   return (escapes), `é`, `世` (raw), `😀`, `𝄞` (supplementary plane, raw) -- or
   the grapheme `e` + U+0301 (two code points);
 * **contexts**: `str-param` (a declared `fn take_s(text: str) -> int`),
-  `str-length` (`str::length(LIT)`), `str-concat` (`LIT.concat("ab")`, method
+  `str-length` (`std::str::length(LIT)`), `str-concat` (`LIT.concat("ab")`, method
   syntax: the functional form would be `METHOD-ELIGIBLE`), `str-compare`
   (`sxK == LIT`, `sxK` a computed one-character String), `char-accepting`
   (`is_K(LIT)`, `fn is_K(c): c == 'X' or c == sxK` -- a kind-tolerant matcher:
@@ -641,7 +641,7 @@ generalization here).
 2. **the same code point**: the probe's const has the exact value (`hir::exact::
    Of`) `{val {UnicodeChar CP}}`, CP the code point of the String's one
    character; and a typed character context takes it -- `code(SPELLING)` with
-   `fn code(c: UnicodeChar) -> int: char::scalar_value(c)` evaluates to CP;
+   `fn code(c: UnicodeChar) -> int: std::char::scalar_value(c)` evaluates to CP;
 3. **in a character-accepting context**, the program with that one literal
    rewritten compiles, has exactly the original's warnings minus that site (the
    columns after it on its line shifted by the spelling's change of length),
@@ -723,7 +723,7 @@ literals.
 **The first mutation run surfaced two tool defects, both fixed before the run
 recorded here, and one tool guard.** `character-literal-warned` and
 `computed-string-warned` were "killed" by crashes, not by warnings: the first
-fed a UnicodeChar to `str::length` (a `TYPE` error that aborted every
+fed a UnicodeChar to `std::str::length` (a `TYPE` error that aborted every
 compile), the second wrapped the native's `{value V}` completion as a value.
 Each now does what its name says -- the kind check dropped, a call evaluated --
 and is killed by the warnings it invents. And a mutated tree whose fuzzer prints
@@ -739,29 +739,29 @@ brace they do not close are double-quoted, milestone 5's note.
 `8afa168` (context traits), corpus paths clean -- `examples`, `bench` and `lib`
 are `main`'s, unedited by this milestone. It compiles `examples/stdlib` (9),
 `examples/surface` (14), `examples/refinement` (1), `examples/io` (3, new with
-context traits: the corpus's only loaders of `lib/io.bot`, `lib/io/path.bot` and
-`lib/linux/path.bot`, as `examples/refinement` is of the refinement code),
-`bench/*.bot` (8) and `lib/*.bot` (9) with warnings on. 39 of 44 compile
-standalone: the two deliberate rejections (`09`, `10`), `lib/list.bot` and
-`lib/mutable_array.bot` (which use their own namespace without importing it, as
-milestones 2-5 recorded), and `lib/io.bot` (`CONTEXT-FUNCTION-VALUE`: a module
+context traits: the corpus's only loaders of `stdlib/io.bot`, `stdlib/io/path.bot` and
+`stdlib/linux/path.bot`, as `examples/refinement` is of the refinement code),
+`bench/*.bot` (8) and `stdlib/*.bot` (9) with warnings on. 39 of 44 compile
+standalone: the two deliberate rejections (`09`, `10`), `stdlib/list.bot` and
+`stdlib/mutable_array.bot` (which use their own namespace without importing it, as
+milestones 2-5 recorded), and `stdlib/io.bot` (`CONTEXT-FUNCTION-VALUE`: a module
 of context-trait operations is not a program; `examples/io` loads it).
 
 (Before the merge, at `61f1864`, the same tool over the usual corpus found 92;
-the merge adds exactly the 5 in `lib/io.bot`, `lib/linux/path.bot` and
+the merge adds exactly the 5 in `stdlib/io.bot`, `stdlib/linux/path.bot` and
 `examples/io`, and changes nothing else.)
 
-**97 distinct findings** (a module's finding once: `lib/web.bot`'s 26 are
+**97 distinct findings** (a module's finding once: `stdlib/web.bot`'s 26 are
 reported by every program that loads `web`). Volume is information (milestone
 2): they sit in 13 files, and three shapes repeat --
 
 | file | findings |
 |---|---|
-| `lib/web.bot` | 26 |
+| `stdlib/web.bot` | 26 |
 | `examples/stdlib/ai_text_clean.bot` | 22 |
 | `examples/stdlib/csv.bot`, `csv_chunked.bot`, `csv_geometric.bot`, `csv_records.bot` | 8 each (one scanner, four copies) |
 | `examples/stdlib/string_replace.bot` | 7 |
-| `lib/io.bot`, `lib/linux/path.bot` | 2 each |
+| `stdlib/io.bot`, `stdlib/linux/path.bot` | 2 each |
 | `bench/lex-strategy.bot`, `bench/source-checks.bot` | 2 each |
 | `examples/stdlib/string_reverse.bot`, `examples/io/child-path.bot` | 1 each |
 
@@ -776,7 +776,7 @@ it on the corpus.)
 97 (52 distinct characters: the character spelling lexes, its exact value is
 the UnicodeChar of the same code point, and a `UnicodeChar` parameter takes
 it). Then each literal alone is rewritten to its character spelling in a
-scratch copy, and the rewritten program -- for a `lib/web.bot` finding, each of
+scratch copy, and the rewritten program -- for a `stdlib/web.bot` finding, each of
 the three corpus programs that load `web` (`examples/refinement/refined-
 strings.bot`, `bench/refined-checks.bot`, `bench/uri-steady.bot`) -- is
 compiled and evaluated against the original in a child process under a 60 s
@@ -806,7 +806,7 @@ finding no rule classifies would fail the tool -- none does):
   side of `==` is a UnicodeChar, a parameter declares `UnicodeChar`). No
   corpus consumer of a one-character String literal does: every one of them
   meets a String. The corpus's character code already uses character literals
-  -- `uri_query_value?` in the same `lib/web.bot` reads `str::char_at` and
+  -- `uri_query_value?` in the same `stdlib/web.bot` reads `std::str::char_at` and
   compares with `'%'`, and has no finding -- and everything that warns predates
   that style. A rewrite that merely compiles is never counted: 56 of the 97 are
   `==` comparisons, where it always compiles.
@@ -815,18 +815,18 @@ finding no rule classifies would fail the tool -- none does):
 
 | catalog row | findings | consumers (the tool's keys) | where | rewrite | what the API lacks |
 |---|---|---|---|---|---|
-| `==` against a one-character String sliced by `str::substring` or a `peek`/`char_at` helper | 32 | `== str-substring:peek()`, `:character`, `:delimiter`, `:char_at()`, `:str::substring()` | the four CSV scanners; `lib/web.bot`'s `emailish?` (`domain?`); `lib/linux/path.bot`'s `concat` (`path.substring(n - 1, n) == "/"`, two lines below its own `component.char_at(0) == '/'`) | changed 12, same 19, **diverges 8** | the helper returns a one-character String, or `""` past the end; `str::char_at` returns a UnicodeChar but fails (`IndexNotFound`) outside the String, so a scanner needs an end-of-input form that is not `""` |
-| `==` against an untyped parameter that receives one-character Strings | 21 | `== any-param:param:character`, `:c` | `ai_text_clean`'s `cleaner_emoji` and `clean_char`; `bench/source-checks.bot`'s `is_underscore?`, `is_hyphen?` | same 13, changed 8 | the callers pass `str::substring` slices (`peek`, a first-character slice inside a list of `str` predicates with `str::is_tcl_alpha`/`alnum`); the comparison would hold for a UnicodeChar only if every caller changed too |
-| element of a `List[str]` table indexed (`list::at`) and concatenated (`str::concat`) | 16 | `list-element bind:web::hex_digits` | `lib/web.bot`'s `uri_escape_text` | same 28, runtime `TYPE` 20 | the digits are appended to output text with `str::concat`: there is no append of a UnicodeChar to a String |
-| element of a `List[str]` made an `ImmutableSet[str]`, queried with one-character Strings | 5 | `list-element immutable_set::from_list:arg0` | `lib/web.bot`'s `local_extra_chars` (`emailish?`) | same 15 | `immutable_set::contains` is queried with `char_at` slices; a set of UnicodeChars needs the scanner to read characters (`str::char_at`) |
-| `str::concat` argument | 9 | `call str::concat:arg0`, `:arg1` | the four CSV scanners (`"\""` appended to a field), `lib/web.bot`'s `pct` (`"%"`), `lib/io.bot`'s `print_line` and `write_error_line` (`text.concat("\n")`), `lib/linux/path.bot`'s `concat` (`"/"`), `examples/io/child-path.bot` (`" "`) | same 6, runtime `TYPE` 8 | `str::concat` takes two Strings |
-| `==` against a `str` parameter | 3 | `== str-param:param:c` | `bench/lex-strategy.bot`'s `lenient_ident_char?`; `lib/web.bot`'s `label_char?` | same 3, changed 2 | the parameter is declared or inferred `str`: its callers pass one-character Strings sliced from text |
+| `==` against a one-character String sliced by `std::str::substring` or a `peek`/`char_at` helper | 32 | `== str-substring:peek()`, `:character`, `:delimiter`, `:char_at()`, `:str::substring()` | the four CSV scanners; `stdlib/web.bot`'s `emailish?` (`domain?`); `stdlib/linux/path.bot`'s `concat` (`path.substring(n - 1, n) == "/"`, two lines below its own `component.char_at(0) == '/'`) | changed 12, same 19, **diverges 8** | the helper returns a one-character String, or `""` past the end; `std::str::char_at` returns a UnicodeChar but fails (`IndexNotFound`) outside the String, so a scanner needs an end-of-input form that is not `""` |
+| `==` against an untyped parameter that receives one-character Strings | 21 | `== any-param:param:character`, `:c` | `ai_text_clean`'s `cleaner_emoji` and `clean_char`; `bench/source-checks.bot`'s `is_underscore?`, `is_hyphen?` | same 13, changed 8 | the callers pass `std::str::substring` slices (`peek`, a first-character slice inside a list of `str` predicates with `std::str::is_tcl_alpha`/`alnum`); the comparison would hold for a UnicodeChar only if every caller changed too |
+| element of a `List[str]` table indexed (`std::list::at`) and concatenated (`std::str::concat`) | 16 | `list-element bind:web::hex_digits` | `stdlib/web.bot`'s `uri_escape_text` | same 28, runtime `TYPE` 20 | the digits are appended to output text with `std::str::concat`: there is no append of a UnicodeChar to a String |
+| element of a `List[str]` made an `ImmutableSet[str]`, queried with one-character Strings | 5 | `list-element std::immutable_set::from_list:arg0` | `stdlib/web.bot`'s `local_extra_chars` (`emailish?`) | same 15 | `std::immutable_set::contains` is queried with `char_at` slices; a set of UnicodeChars needs the scanner to read characters (`std::str::char_at`) |
+| `std::str::concat` argument | 9 | `call std::str::concat:arg0`, `:arg1` | the four CSV scanners (`"\""` appended to a field), `stdlib/web.bot`'s `pct` (`"%"`), `stdlib/io.bot`'s `print_line` and `write_error_line` (`text.concat("\n")`), `stdlib/linux/path.bot`'s `concat` (`"/"`), `examples/io/child-path.bot` (`" "`) | same 6, runtime `TYPE` 8 | `std::str::concat` takes two Strings |
+| `==` against a `str` parameter | 3 | `== str-param:param:c` | `bench/lex-strategy.bot`'s `lenient_ident_char?`; `stdlib/web.bot`'s `label_char?` | same 3, changed 2 | the parameter is declared or inferred `str`: its callers pass one-character Strings sliced from text |
 
   Reading the table as an API work list: almost everything reduces to two
-  missing pieces -- **reading characters** (a scanner over `str::char_at` with
+  missing pieces -- **reading characters** (a scanner over `std::str::char_at` with
   a total end-of-input form, replacing every `peek`/`char_at`/first-character
   slice; that unlocks the 32 + 21 + 3 + 5 comparison and set findings) and
-  **appending a character to text** (a String builder or `str::concat` taking a
+  **appending a character to text** (a String builder or `std::str::concat` taking a
   UnicodeChar; that unlocks the 16 + 9 table and concatenation findings).
 * **deliberate String usage: 11**, by hand, with reasons
   (`corpus-audit.txt`, "Deliberate String usage"):
@@ -853,11 +853,11 @@ finding no rule classifies would fail the tool -- none does):
 **The idiom, declared** (README.md §1, "Strings and characters", new): a String
 is a sequence of characters; a character is a UnicodeChar; **a single character
 is written as a character literal**; `""` and every String of two or more
-characters are Strings; characters are counted as `str::length` counts them;
+characters are Strings; characters are counted as `std::str::length` counts them;
 the kinds never convert implicitly. The warning points at that statement (the
 milestone-3 lesson: a warning must not precede its declared idiom). The
 encode-utf8 work (ENCODE-UTF8-ALLOCATION-RESEARCH.md) had made the distinction
-live -- `str::char_at` reads a String's character as a UnicodeChar -- but stated
+live -- `std::str::char_at` reads a String's character as a UnicodeChar -- but stated
 it as an allocation finding, so it is cited, not quoted.
 
 **Why the warning is not autofixable today.** Conversion may require API
@@ -874,7 +874,7 @@ autofixable when the rewrite is total, i.e. when either holds:
 
 1. **the API surface is soundly character-typed**: every catalog row below is
    emptied by an API that takes or yields characters -- a scanner reading
-   `str::char_at` (with an end-of-input form that is not `""`), an append of a
+   `std::str::char_at` (with an end-of-input form that is not `""`), an append of a
    UnicodeChar to a String (or a String builder taking characters), character
    sets and character tables, and comparisons whose other side is a
    UnicodeChar -- so that a re-run of `audit/one-char-string-literal/tools/
@@ -931,7 +931,7 @@ the new file (`git diff e7f715c -- tests/`), so the kickoff base `e7f715c` had
   backend and changes no HIR (pinned).
 * **Second snapshot: the tree merged with `origin/main` `8afa168`** (merge
   `bec19a1`; `main` gained context traits while this milestone ran:
-  CONTEXT-TRAITS.md, `lib/io.bot`, `lib/io/path.bot`, `lib/linux/path.bot`,
+  CONTEXT-TRAITS.md, `stdlib/io.bot`, `stdlib/io/path.bot`, `stdlib/linux/path.bot`,
   `examples/io`, 70 tests). The merge had no conflict. It added a second
   synthesized String const -- a context-trait parameter's load key -- which the
   source audit caught as designed, which `hir::contexts::isLoad` already
@@ -949,7 +949,7 @@ the new file (`git diff e7f715c -- tests/`), so the kickoff base `e7f715c` had
   fuzzer compiles with `-warnings off` and is unaffected by construction.
   CI's example steps are unchanged (native: exit 0, the same 376 stderr lines,
   62 of them this warning's; interp and compile: exit 0, empty stderr). The
-  new library modules carry 4 findings (`lib/io.bot` 2, `lib/linux/path.bot` 2),
+  new library modules carry 4 findings (`stdlib/io.bot` 2, `stdlib/linux/path.bot` 2),
   printed by `examples/io` and any program loading them; `main`'s tests compile
   with `-warnings off`, so none breaks. The corpus audit at `1db647e` is the
   committed one (97 findings; 92 before the merge).
@@ -962,7 +962,7 @@ the new file (`git diff e7f715c -- tests/`), so the kickoff base `e7f715c` had
   too; the source audit `oc-synthesized-string-consts-enumerated` fails the day
   one is added, which forces that decision.
 * **Library findings print for every program that loads the module**, as
-  milestones 2-5 recorded for theirs: `lib/web.bot`'s 26 findings appear in
+  milestones 2-5 recorded for theirs: `stdlib/web.bot`'s 26 findings appear in
   every compile of a program importing `web`.
 * **The value the corpus audit compares is the program's own run.** A rewrite
   that keeps a program's value may still change its meaning on other inputs
@@ -977,13 +977,13 @@ the new file (`git diff e7f715c -- tests/`), so the kickoff base `e7f715c` had
   construction (24), a String-taking classifier (10), the index proof (1)
   and test data whose length 1 is the case's subject (6, hypothesis H2; two
   more closed). Library findings still print for every program that loads
-  the module, now only for `lib/web.bot` (23), `lib/io.bot` (2) and
-  `lib/linux/path.bot` (2); a gate fails on any new one.
-* **Second successor note (S16, 2048-ENGINE-WORKLOAD.md).** `str::append_char`
+  the module, now only for `stdlib/web.bot` (23), `stdlib/io.bot` (2) and
+  `stdlib/linux/path.bot` (2); a gate fails on any new one.
+* **Second successor note (S16, 2048-ENGINE-WORKLOAD.md).** `std::str::append_char`
   (a String followed by one UnicodeChar) is the append of a character to
-  text the catalog's `str::concat` row asked for; `lib/io.bot`'s two findings
-  closed with it (`text.append_char('\n')`), so only `lib/web.bot` (23) and
-  `lib/linux/path.bot` (2) still print for their importers.
+  text the catalog's `std::str::concat` row asked for; `stdlib/io.bot`'s two findings
+  closed with it (`text.append_char('\n')`), so only `stdlib/web.bot` (23) and
+  `stdlib/linux/path.bot` (2) still print for their importers.
 
 ## Future warning candidates
 
@@ -1062,7 +1062,7 @@ checks on character literals or a reverse rule, and any new CLI option or
     binding's written initializer is the site, its reads are not.
 13. *Empty and 2+-character literals?* Silent.
 14. *Length semantics?* Characters (Unicode scalar values), by the reference
-    `str::length` on the exact value: escapes resolved, a supplementary-plane
+    `std::str::length` on the exact value: escapes resolved, a supplementary-plane
     character is one, a two-code-point grapheme is two (silent).
 15. *Context gating?* None: context-blind by design; the String-taking APIs it
     exposes are its purpose.
@@ -1081,7 +1081,7 @@ checks on character literals or a reverse rule, and any new CLI option or
 
 22. *Stage?* `surface::lower::Finish`, unchanged.
 23. *Which facts supply the proof?* The `const` node kind, each const's exact
-    value (`hir::exact::Of`) measured by the reference `str::length`
+    value (`hir::exact::Of`) measured by the reference `std::str::length`
     (`core::strings::length`), and `hir::contexts::isLoad` to recognize the one
     synthesized const. Not needed: a provenance marker, annotations, identity,
     exits, walks, reachability, the resolver, types, a call graph, any new
@@ -1103,17 +1103,17 @@ checks on character literals or a reverse rule, and any new CLI option or
 **Verification**
 
 32. *Corpus findings and the API-deficiency catalog?* 97 distinct findings at
-    `1db647e` (merged with `main`; `lib/web.bot` 26, `ai_text_clean` 22, the
-    four CSV programs 8 each, `string_replace` 7, `lib/io.bot`,
-    `lib/linux/path.bot`, `lex-strategy` and `source-checks` 2 each,
+    `1db647e` (merged with `main`; `stdlib/web.bot` 26, `ai_text_clean` 22, the
+    four CSV programs 8 each, `string_replace` 7, `stdlib/io.bot`,
+    `stdlib/linux/path.bot`, `lex-strategy` and `source-checks` 2 each,
     `string_reverse` and `examples/io/child-path.bot` 1 each; 92 before the
     merge): 0 convert-now, 86 API-deficiency, 11 deliberate. The catalog has six
-    rows -- `==` against a one-character String sliced by `str::substring` or a
+    rows -- `==` against a one-character String sliced by `std::str::substring` or a
     `peek`/`char_at` helper (32), `==` against an untyped parameter fed such
     slices (21), a `List[str]` hex-digit table concatenated into output (16),
-    `str::concat` arguments (9), a `List[str]` made an `ImmutableSet[str]` of
+    `std::str::concat` arguments (9), a `List[str]` made an `ImmutableSet[str]` of
     characters (5), `==` against a `str` parameter (3) -- and reduces to two
-    missing API pieces: reading characters (a `str::char_at` scanner with a
+    missing API pieces: reading characters (a `std::str::char_at` scanner with a
     total end-of-input form) and appending a character to text. The 11
     deliberate are one-character test data of String functions (8) and
     variable-length replacement texts (3).

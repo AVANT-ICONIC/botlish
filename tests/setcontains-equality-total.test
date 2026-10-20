@@ -1,6 +1,6 @@
 # setcontains-equality-total.test -- M3
 # (M3-EQUALITY-TOTAL-SETCONTAINS-EFFECT.md): SetContains's generic form
-# (immutable_set::contains -> op setcontains -> rt_set_contains) is
+# (std::immutable_set::contains -> op setcontains -> rt_set_contains) is
 # unconditionally may_error, because ordinary Botlish equality is undefined
 # for Block/Native/MutableArray operands (MINIMAL-IMMUTABLE-SET.md's own
 # "Membership semantics"). At a particular call site, though, the set's own
@@ -20,13 +20,13 @@
 # here (no syntax change, no new source-level type).
 #
 # The synthetic fixtures below declare their own local "Byte" domain
-# (type Byte = Int in 0..255) rather than importing the real lib/byte.bot
+# (type Byte = Int in 0..255) rather than importing the real stdlib/byte.bot
 # module: surface::compile (unlike surface::readProgramFile) does not
 # resolve module-qualified (mod::name) references, and pulling in the real
 # byte::/web:: modules is unnecessary here -- hir::types::IsEqualityTotal
 # is deliberately not Byte-name-special-cased (spec item 19), so a locally-
 # declared same-shaped domain exercises the identical mechanism. The real
-# Byte/web::is_unreserved acceptance case is covered separately below, by
+# Byte/std::web::is_unreserved acceptance case is covered separately below, by
 # loading the frozen bench/uri-steady.bot itself.
 
 source [file join [file dirname [file normalize [info script]]] helpers.tcl]
@@ -89,8 +89,8 @@ proc effectLineForInstance {text calleeName instanceAttr} {
     return ""
 }
 
-set ::smallDecl "import immutable_set\ntype Small = Int in 0..10\n\nfn one() -> Small:\n    1\n\n"
-set ::byteDecl "import immutable_set\ntype Byte = Int in 0..255\n\nfn byteA() -> Byte:\n    97\n\nfn byteB() -> Byte:\n    122\n\n"
+set ::smallDecl "import std::immutable_set\ntype Small = Int in 0..10\n\nfn one() -> Small:\n    1\n\n"
+set ::byteDecl "import std::immutable_set\ntype Byte = Int in 0..255\n\nfn byteA() -> Byte:\n    97\n\nfn byteB() -> Byte:\n    122\n\n"
 
 # ---------------------------------------------------------------------------
 # Positive fixtures: element type and needle type both proven equality-total
@@ -98,20 +98,20 @@ set ::byteDecl "import immutable_set\ntype Byte = Int in 0..255\n\nfn byteA() ->
 
 test setcontains-total-byte {ImmutableSet[Byte] x Byte: the principal M3 acceptance case -- setcontainstotal, contains_byte becomes may_error=false} -body {
     set text [format {%sfn contains_byte(s: ImmutableSet[Byte], b: Byte) -> Bool:
-    immutable_set::contains(s, b)
+    std::immutable_set::contains(s, b)
 
-contains_byte(immutable_set::from_list([byteA(), byteB()]), byteA())} $::byteDecl]
+contains_byte(std::immutable_set::from_list([byteA(), byteB()]), byteA())} $::byteDecl]
     set nirText [nirOf $text]
     list [regexp {op setcontainstotal} $nirText] [regexp {op setcontains } $nirText] \
         [string match {*may_error=false*} [calleeEffectLine $text contains_byte]]
 } -result {1 0 1}
 
 test setcontains-total-int {ImmutableSet[Int] x Int: Byte is not name-special-cased -- plain Int qualifies the identical way, through hir::types::IsEqualityTotal alone} -body {
-    set text {import immutable_set
+    set text {import std::immutable_set
 fn contains_int(s: ImmutableSet[int], x: int) -> Bool:
-    immutable_set::contains(s, x)
+    std::immutable_set::contains(s, x)
 
-contains_int(immutable_set::from_list([1, 2, 3]), 2)}
+contains_int(std::immutable_set::from_list([1, 2, 3]), 2)}
     set nirText [nirOf $text]
     list [regexp {op setcontainstotal} $nirText] \
         [string match {*may_error=false*} [calleeEffectLine $text contains_int]]
@@ -119,46 +119,46 @@ contains_int(immutable_set::from_list([1, 2, 3]), 2)}
 
 test setcontains-total-source-defined-domain {a source-defined bounded Int domain other than Byte (Small = Int in 0..10) qualifies too -- the proof derives from kindOf collapsing any refined int domain to plain int, never a hard-coded "Byte" name (spec items 8, 22, 59)} -body {
     set text [format {%sfn contains_small(s: ImmutableSet[Small], x: Small) -> Bool:
-    immutable_set::contains(s, x)
+    std::immutable_set::contains(s, x)
 
-contains_small(immutable_set::from_list([one()]), one())} $::smallDecl]
+contains_small(std::immutable_set::from_list([one()]), one())} $::smallDecl]
     set nirText [nirOf $text]
     list [regexp {op setcontainstotal} $nirText] \
         [string match {*may_error=false*} [calleeEffectLine $text contains_small]]
 } -result {1 1}
 
 test setcontains-total-bool {ImmutableSet[Bool] x Bool qualifies (spec item 10)} -body {
-    set text {import immutable_set
+    set text {import std::immutable_set
 fn contains_bool(s: ImmutableSet[bool], x: bool) -> Bool:
-    immutable_set::contains(s, x)
+    std::immutable_set::contains(s, x)
 
-contains_bool(immutable_set::from_list([true, false]), true)}
+contains_bool(std::immutable_set::from_list([true, false]), true)}
     regexp {op setcontainstotal} [nirOf $text]
 } -result 1
 
 test setcontains-total-string {ImmutableSet[String] x String qualifies (spec item 10)} -body {
-    set text {import immutable_set
+    set text {import std::immutable_set
 fn contains_str(s: ImmutableSet[str], x: str) -> Bool:
-    immutable_set::contains(s, x)
+    std::immutable_set::contains(s, x)
 
-contains_str(immutable_set::from_list(["a", "b"]), "a")}
+contains_str(std::immutable_set::from_list(["a", "b"]), "a")}
     regexp {op setcontainstotal} [nirOf $text]
 } -result 1
 
-test setcontains-total-unicodechar {ImmutableSet[UnicodeChar] x UnicodeChar qualifies (spec item 10) -- the real web::is_unreserved shape, in miniature, without Byte} -body {
-    set text {import immutable_set
+test setcontains-total-unicodechar {ImmutableSet[UnicodeChar] x UnicodeChar qualifies (spec item 10) -- the real std::web::is_unreserved shape, in miniature, without Byte} -body {
+    set text {import std::immutable_set
 fn contains_char(s: ImmutableSet[UnicodeChar], x: UnicodeChar) -> Bool:
-    immutable_set::contains(s, x)
+    std::immutable_set::contains(s, x)
 
-contains_char(immutable_set::from_list(['-', '.', '_', '~']), '-')}
+contains_char(std::immutable_set::from_list(['-', '.', '_', '~']), '-')}
     regexp {op setcontainstotal} [nirOf $text]
 } -result 1
 
 test setcontains-total-runtime-present-and-absent {both membership outcomes (present and absent) are equally non-erroring -- the proof is "cannot raise EQUALITY", not "membership succeeds" (spec item 38)} -body {
     set text [format {%sfn contains_byte(s: ImmutableSet[Byte], b: Byte) -> Bool:
-    immutable_set::contains(s, b)
+    std::immutable_set::contains(s, b)
 
-s = immutable_set::from_list([byteA()])
+s = std::immutable_set::from_list([byteA()])
 [contains_byte(s, byteA()), contains_byte(s, byteB())]} $::byteDecl]
     set exprs [sourceIR $text]
     lmap backend {interp compile cranelift-generic cranelift} {
@@ -168,10 +168,10 @@ s = immutable_set::from_list([byteA()])
 
 test setcontains-total-empty-set {an empty ImmutableSet[Byte] is non-erroring through the identical static proof -- no dedicated empty-set effect rule, no inference from dynamic emptiness (spec items 39-40)} -body {
     set text [format {%sfn mk(xs: List[Byte]) -> ImmutableSet[Byte]:
-    immutable_set::from_list(xs)
+    std::immutable_set::from_list(xs)
 
 fn contains_byte(s: ImmutableSet[Byte], b: Byte) -> Bool:
-    immutable_set::contains(s, b)
+    std::immutable_set::contains(s, b)
 
 contains_byte(mk([]), byteA())} $::byteDecl]
     set nirText [nirOf $text]
@@ -201,11 +201,11 @@ test setcontains-broad-needle-stays-erroring {ImmutableSet[Byte] x any (a genuin
     set hir::specialize::limit 1
     try {
         set text [format {%sfn contains_unknown(s: ImmutableSet[Byte], x):
-    immutable_set::contains(s, x)
+    std::immutable_set::contains(s, x)
 
-[contains_unknown(immutable_set::from_list([byteA()]), byteA()),
- contains_unknown(immutable_set::from_list([byteA()]), "z"),
- contains_unknown(immutable_set::from_list([byteA()]), true)]} $::byteDecl]
+[contains_unknown(std::immutable_set::from_list([byteA()]), byteA()),
+ contains_unknown(std::immutable_set::from_list([byteA()]), "z"),
+ contains_unknown(std::immutable_set::from_list([byteA()]), true)]} $::byteDecl]
         set nirText [nirOf $text]
         # limit=1 gives the *first* call's own key its own precise instance
         # (instance="immutableSet, int", setcontainstotal -- correctly, its
@@ -236,15 +236,15 @@ test setcontains-broad-set-stays-erroring {an ImmutableSet erased to the broad k
     x
 
 fn contains_erased(s, x) -> Bool:
-    immutable_set::contains(passthrough(s), x)
+    std::immutable_set::contains(passthrough(s), x)
 
-contains_erased(immutable_set::from_list([byteA()]), byteA())} $::byteDecl]
+contains_erased(std::immutable_set::from_list([byteA()]), byteA())} $::byteDecl]
     set nirText [nirOf $text]
     list [regexp {op setcontains } $nirText] [regexp {op setcontainstotal} $nirText]
 } -result {1 0}
 
 test setcontains-unsupported-kind-runtime-equality {an ImmutableSet of untyped-closure (Block-kind) members, queried with another closure: stays plain setcontains/may_error=true, and genuinely raises the pre-existing EQUALITY error at runtime -- confirming this milestone never weakens the real failure mode it is refining around (spec items 11, 26-28, 35, 61)} -body {
-    set text {import immutable_set
+    set text {import std::immutable_set
 fn g(x):
     x
 
@@ -252,9 +252,9 @@ fn h(x):
     x + 1
 
 fn contains_block(s, needle):
-    immutable_set::contains(s, needle)
+    std::immutable_set::contains(s, needle)
 
-contains_block(immutable_set::from_list([g]), h)}
+contains_block(std::immutable_set::from_list([g]), h)}
     set nirText [nirOf $text]
     list [regexp {op setcontains } $nirText] [regexp {op setcontainstotal} $nirText] \
         [errorCodeOf {*}[sourceIR $text]]
@@ -270,14 +270,14 @@ test setcontains-error-propagation-control {a caller of a genuinely equality-fal
         # would give M7.c's own closed-caller theorem exactly one (sound)
         # fact to resolve x from.
         set text [format {%sfn contains_unknown(s: ImmutableSet[Byte], x):
-    immutable_set::contains(s, x)
+    std::immutable_set::contains(s, x)
 
 fn caller(s, x):
     contains_unknown(s, x)
 
-[caller(immutable_set::from_list([byteA()]), byteA()),
- caller(immutable_set::from_list([byteA()]), "z"),
- caller(immutable_set::from_list([byteA()]), true)]} $::byteDecl]
+[caller(std::immutable_set::from_list([byteA()]), byteA()),
+ caller(std::immutable_set::from_list([byteA()]), "z"),
+ caller(std::immutable_set::from_list([byteA()]), true)]} $::byteDecl]
         set nirText [nirOf $text]
         string match {*may_error=true*} [effectLineForInstance $text contains_unknown generic]
     } finally {
@@ -286,28 +286,28 @@ fn caller(s, x):
 } -result 1
 
 # ---------------------------------------------------------------------------
-# The real URI path: web::is_unreserved's own SetContains, and the M2-
-# identified residual (esc_char -> web::is_unreserved's caller-side
+# The real URI path: std::web::is_unreserved's own SetContains, and the M2-
+# identified residual (esc_char -> std::web::is_unreserved's caller-side
 # completion retest), through the frozen bench/uri-steady.bot itself, not a
 # synthetic stand-in (spec items 32-33, 65-66, 81).
 # ENCODE-UTF8-ALLOCATION-RESEARCH.md: esc_char is gone and esc_from, which
-# classifies each character itself (str::char_at), is is_unreserved's caller
-# now: the edge the tests below follow is esc_from -> web::is_unreserved.
+# classifies each character itself (std::str::char_at), is is_unreserved's caller
+# now: the edge the tests below follow is esc_from -> std::web::is_unreserved.
 
-test setcontains-uri-web-is-unreserved-local-op-total {web::is_unreserved's own body: the immutable_set::contains(additional_unreserved_chars, b) call lowers to setcontainstotal, not setcontains -- additional_unreserved_chars : ImmutableSet[Byte], b : Byte, both statically proven equality-total} -body {
+test setcontains-uri-web-is-unreserved-local-op-total {std::web::is_unreserved's own body: the std::immutable_set::contains(additional_unreserved_chars, b) call lowers to setcontainstotal, not setcontains -- additional_unreserved_chars : ImmutableSet[Byte], b : Byte, both statically proven equality-total} -body {
     set hir [surface::readProgramFile [file join $::projectRoot bench uri-steady.bot]]
     set nirText [dict get [native::lower::program $hir -tiny-leaf-inline-opt 0] text]
-    regexp {func \d+ "web::is_unreserved[^\n]*\n(?:.*\n)*?end} $nirText body
+    regexp {func \d+ "std::web::is_unreserved[^\n]*\n(?:.*\n)*?end} $nirText body
     regexp {op setcontainstotal} $body
 } -result 1
 
-test setcontains-uri-web-is-unreserved-may-error-false {web::is_unreserved's own function-level may_error becomes false: SetContains was its only fallible local op, and it is now proven non-erroring (spec item 32)} -body {
+test setcontains-uri-web-is-unreserved-may-error-false {std::web::is_unreserved's own function-level may_error becomes false: SetContains was its only fallible local op, and it is now proven non-erroring (spec item 32)} -body {
     set hir [surface::readProgramFile [file join $::projectRoot bench uri-steady.bot]]
     set nirText [dict get [native::lower::program $hir -tiny-leaf-inline-opt 0] text]
     set effects [native::Driver calls $nirText]
     set found 0
     foreach line $effects {
-        if {[string match {*callee_name="web::is_unreserved*} $line]} {
+        if {[string match {*callee_name="std::web::is_unreserved*} $line]} {
             set found 1
             if {![string match {*may_error=false*} $line]} {
                 return "not false: $line"
@@ -317,12 +317,12 @@ test setcontains-uri-web-is-unreserved-may-error-false {web::is_unreserved's own
     expr {$found ? "all-false" : "not-found"}
 } -result all-false
 
-test setcontains-uri-esc-from-edge-becomes-non-erroring {esc_from -> web::is_unreserved's edge (esc_char's, M2's own identified residual, before ENCODE-UTF8-ALLOCATION-RESEARCH.md) naturally collapses to may_error=false through existing, unmodified call-effect propagation -- no esc_from-specific or web::is_unreserved-specific code} -body {
+test setcontains-uri-esc-from-edge-becomes-non-erroring {esc_from -> std::web::is_unreserved's edge (esc_char's, M2's own identified residual, before ENCODE-UTF8-ALLOCATION-RESEARCH.md) naturally collapses to may_error=false through existing, unmodified call-effect propagation -- no esc_from-specific or std::web::is_unreserved-specific code} -body {
     set hir [surface::readProgramFile [file join $::projectRoot bench uri-steady.bot]]
     set nirText [dict get [native::lower::program $hir -tiny-leaf-inline-opt 0] text]
     set effects [native::Driver calls $nirText]
     set lines [lmap line $effects {
-        if {![string match {*caller_name="esc_from"*callee_name="web::is_unreserved*} $line]} continue
+        if {![string match {*caller_name="esc_from"*callee_name="std::web::is_unreserved*} $line]} continue
         set line
     }]
     list [llength $lines] [lmap l $lines {string match {*may_error=false*} $l}]
@@ -365,13 +365,13 @@ proc paramViewTypeOf {hir analysis label i} {
     return [hir::types::show [dict get $instance args] $i]
 }
 
-test setcontains-m1-control-is-unreserved-param-view-unchanged {web::is_unreserved's own declared-Byte parameter view (M1's own subject) is unaffected by M3; MODULE-STATIC-RETAINED-VALUES.md changes only which instance carries it -- is_unreserved is envless now (additional_unreserved_chars is a module-static reference, never a capture), so its one used instance is web::is_unreserved<int>, not <generic>} -body {
+test setcontains-m1-control-is-unreserved-param-view-unchanged {std::web::is_unreserved's own declared-Byte parameter view (M1's own subject) is unaffected by M3; MODULE-STATIC-RETAINED-VALUES.md changes only which instance carries it -- is_unreserved is envless now (additional_unreserved_chars is a module-static reference, never a capture), so its one used instance is std::web::is_unreserved<int>, not <generic>} -body {
     set hir [surface::readProgramFile [file join $::projectRoot bench uri-steady.bot]]
     set analysis [hir::specialize::analyze $hir]
-    paramViewTypeOf $hir $analysis {web::is_unreserved<int>} 0
-} -result {int[byte::Byte]}
+    paramViewTypeOf $hir $analysis {std::web::is_unreserved<int>} 0
+} -result {int[std::byte::Byte]}
 
-test setcontains-m2-control-esc-from-edge-still-direct-callenv {esc_from (esc_char before ENCODE-UTF8-ALLOCATION-RESEARCH.md) -> web::is_unreserved is still a direct call (M2's own subject), never callvalue, after M3; MODULE-STATIC-RETAINED-VALUES.md: is_unreserved is envless now, so the call carries no environment (a plain "call", not "callenv") -- still a direct call of a statically known target, never a callvalue, which is the property M2 actually established} -body {
+test setcontains-m2-control-esc-from-edge-still-direct-callenv {esc_from (esc_char before ENCODE-UTF8-ALLOCATION-RESEARCH.md) -> std::web::is_unreserved is still a direct call (M2's own subject), never callvalue, after M3; MODULE-STATIC-RETAINED-VALUES.md: is_unreserved is envless now, so the call carries no environment (a plain "call", not "callenv") -- still a direct call of a statically known target, never a callvalue, which is the property M2 actually established} -body {
     set hir [surface::readProgramFile [file join $::projectRoot bench uri-steady.bot]]
     set nirText [dict get [native::lower::program $hir -tiny-leaf-inline-opt 0] text]
     regexp {func \d+ "esc_from[^\n]*\n(?:.*\n)*?end} $nirText body

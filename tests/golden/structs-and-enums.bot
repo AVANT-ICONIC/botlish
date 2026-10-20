@@ -58,21 +58,21 @@
 #
 # Imports: compiler and test (the framework); coroutine (the evaluation-order
 # probe and enum-coroutine-events); list, mutable_array, mutable_vector,
-# immutable_set and str (the container tests; str::concat builds
+# immutable_set and str (the container tests; std::str::concat builds
 # heap-allocated Strings for the GC-stress programs). The method-sugar calls
 # of the bodies (`.at`, `.length`, `.set`, `.swap`, `.push`, `.pop`) resolve
 # against these imports, which offer them more candidates than each Tcl
 # program's own imports did, and none of them declares an operation that
 # enum-no-intrinsic-mappings calls on a case; no test here is about a missing
 # import or about which methods are visible.
-import compiler
-import coroutine
-import immutable_set
-import list
-import mutable_array
-import mutable_vector
-import str
-import test
+import std::compiler
+import std::coroutine
+import std::immutable_set
+import std::list
+import std::mutable_array
+import std::mutable_vector
+import std::str
+import std::test
 
 # ---------------------------------------------------------------------------
 # Declarations the tests need (top-level only). Each keeps the Tcl test's own
@@ -236,72 +236,72 @@ fn describe(x: Labeled) -> str:
 fn register_anonymous_struct_tests():
     # struct-anon-projection: an anonymous struct needs no declaration; a
     # literal may span lines and end with a comma.
-    fn b_projection() errors compiler::CompilerError:
+    fn b_projection() errors std::compiler::CompilerError:
         static compile:
             x = {
                 left: 1,
                 right: 2,
             }
             x.left
-    test::value("struct-anon-projection", 1, b_projection)
+    std::test::value("struct-anon-projection", 1, b_projection)
 
     # struct-anon-trailing-comma: the trailing comma is optional, and
     # newlines and indentation are free inside the braces: three spellings of
     # one value.
-    fn b_trailing() errors compiler::CompilerError:
+    fn b_trailing() errors std::compiler::CompilerError:
         static compile:
             {a: 1, b: 2,}
-    test::value("struct-anon-trailing-comma/trailing", {a: 1, b: 2}, b_trailing)
-    fn b_plain() errors compiler::CompilerError:
+    std::test::value("struct-anon-trailing-comma/trailing", {a: 1, b: 2}, b_trailing)
+    fn b_plain() errors std::compiler::CompilerError:
         static compile:
             {a: 1, b: 2}
-    test::value("struct-anon-trailing-comma/plain", {a: 1, b: 2}, b_plain)
-    fn b_multiline() errors compiler::CompilerError:
+    std::test::value("struct-anon-trailing-comma/plain", {a: 1, b: 2}, b_plain)
+    fn b_multiline() errors std::compiler::CompilerError:
         static compile:
             {
               a: 1,
               b: 2
             }
-    test::value("struct-anon-trailing-comma/multiline", {a: 1, b: 2}, b_multiline)
+    std::test::value("struct-anon-trailing-comma/multiline", {a: 1, b: 2}, b_multiline)
 
     # struct-anon-empty: the empty struct is a legal value with one shape:
     # equal to itself, unequal to a struct with a field.
-    fn b_empty() errors compiler::CompilerError:
+    fn b_empty() errors std::compiler::CompilerError:
         static compile:
             {}
-    test::value("struct-anon-empty/value", {}, b_empty)
-    fn b_empty_equality() errors compiler::CompilerError:
+    std::test::value("struct-anon-empty/value", {}, b_empty)
+    fn b_empty_equality() errors std::compiler::CompilerError:
         static compile:
             [{} == {}, {} == {a: 1}]
-    test::value("struct-anon-empty/equality", [true, false], b_empty_equality)
+    std::test::value("struct-anon-empty/equality", [true, false], b_empty_equality)
 
     # struct-anon-nested: anonymous structs nest; a chained projection reads
     # the inner value.
-    fn b_nested() errors compiler::CompilerError:
+    fn b_nested() errors std::compiler::CompilerError:
         static compile:
             x = {a: 1, inner: {b: "z", c: [1, 2]}}
             x.inner.c
-    test::value("struct-anon-nested", [1, 2], b_nested)
+    std::test::value("struct-anon-nested", [1, 2], b_nested)
 
     # struct-anon-projection-of-literal: a literal is projected directly, and
     # projections chain.
-    fn b_literal_flat() errors compiler::CompilerError:
+    fn b_literal_flat() errors std::compiler::CompilerError:
         static compile:
             {f: 1}.f
-    test::value("struct-anon-projection-of-literal/flat", 1, b_literal_flat)
-    fn b_literal_chained() errors compiler::CompilerError:
+    std::test::value("struct-anon-projection-of-literal/flat", 1, b_literal_flat)
+    fn b_literal_chained() errors std::compiler::CompilerError:
         static compile:
             {a: {b: 7}}.a.b
-    test::value("struct-anon-projection-of-literal/chained", 7, b_literal_chained)
+    std::test::value("struct-anon-projection-of-literal/chained", 7, b_literal_chained)
 
     # struct-anon-call-then-projection: projection binds tighter than * and
     # +, and chains with calls: 5 + 7 * 2.
-    fn b_call_projection() errors compiler::CompilerError:
+    fn b_call_projection() errors std::compiler::CompilerError:
         static compile:
             fn mk(n):
                 {v: n, w: n + 1}
             mk(5).v + mk(6).w * 2
-    test::value("struct-anon-call-then-projection", 19, b_call_projection)
+    std::test::value("struct-anon-call-then-projection", 19, b_call_projection)
 
 # ---------------------------------------------------------------------------
 # Struct equality and hashing (structs.test)
@@ -309,61 +309,61 @@ fn register_anonymous_struct_tests():
 fn register_struct_equality_tests():
     # struct-eq-order-independent: the same field set and equal values are
     # equal, whatever the written order.
-    fn b_order_independent() errors compiler::CompilerError:
+    fn b_order_independent() errors std::compiler::CompilerError:
         static compile:
             [{x: 1, y: 2} == {y: 2, x: 1}, {x: 1, y: "a"} == {y: "a", x: 1}]
-    test::value("struct-eq-order-independent", [true, true], b_order_independent)
+    std::test::value("struct-eq-order-independent", [true, true], b_order_independent)
 
     # struct-eq-different: a different value, a different field set, a
     # different field name and a different field kind are each unequal.
-    fn b_different() errors compiler::CompilerError:
+    fn b_different() errors std::compiler::CompilerError:
         static compile:
             [{x: 1} == {x: 2}, {x: 1} == {x: 1, y: 2}, {x: 1} == {y: 1}, {x: 1} == {x: "1"}]
-    test::value("struct-eq-different", [false, false, false, false], b_different)
+    std::test::value("struct-eq-different", [false, false, false, false], b_different)
 
     # struct-eq-nested: equality recurses through Lists, Strings and structs.
-    fn b_eq_nested() errors compiler::CompilerError:
+    fn b_eq_nested() errors std::compiler::CompilerError:
         static compile:
             [{a: [1, {b: "z"}]} == {a: [1, {b: "z"}]}, {a: [1, {b: "z"}]} == {a: [1, {b: "y"}]}]
-    test::value("struct-eq-nested", [true, false], b_eq_nested)
+    std::test::value("struct-eq-nested", [true, false], b_eq_nested)
 
     # struct-eq-not-a-list: a struct is never a List, whatever it holds.
-    fn b_not_a_list() errors compiler::CompilerError:
+    fn b_not_a_list() errors std::compiler::CompilerError:
         static compile:
             [{a: 1} == [1], {} == []]
-    test::value("struct-eq-not-a-list", [false, false], b_not_a_list)
+    std::test::value("struct-eq-not-a-list", [false, false], b_not_a_list)
 
     # struct-eq-named: named structs are equal iff of the same declaration
     # with equal fields, whatever the construction order.
-    fn b_eq_named() errors compiler::CompilerError:
+    fn b_eq_named() errors std::compiler::CompilerError:
         static compile:
             [Person {name: "a", age: 1} == Person {age: 1, name: "a"}, Person {name: "a", age: 1} == Person {age: 2, name: "a"}]
-    test::value("struct-eq-named", [true, false], b_eq_named)
+    std::test::value("struct-eq-named", [true, false], b_eq_named)
 
     # struct-eq-nominal: two declarations with identical fields are different
     # types and never equal.
-    fn b_eq_nominal() errors compiler::CompilerError:
+    fn b_eq_nominal() errors std::compiler::CompilerError:
         static compile:
             a = Person {name: "a", age: 1}
             b = Account {name: "a", age: 1}
             a == b
-    test::value("struct-eq-nominal", false, b_eq_nominal)
+    std::test::value("struct-eq-nominal", false, b_eq_nominal)
 
     # struct-eq-named-vs-anonymous: a named struct never equals an anonymous
     # one with the same fields, in either operand order.
-    fn b_named_vs_anonymous() errors compiler::CompilerError:
+    fn b_named_vs_anonymous() errors std::compiler::CompilerError:
         static compile:
             a = Person {name: "a", age: 1}
             b = {name: "a", age: 1}
             [a == b, b == a]
-    test::value("struct-eq-named-vs-anonymous", [false, false], b_named_vs_anonymous)
+    std::test::value("struct-eq-named-vs-anonymous", [false, false], b_named_vs_anonymous)
 
     # struct-eq-hash-consistent: hash agrees with equality across written
     # orders, and these unequal structs hash differently.
-    fn b_hash() errors compiler::CompilerError:
+    fn b_hash() errors std::compiler::CompilerError:
         static compile:
             [hash({x: 1, y: "a"}) == hash({y: "a", x: 1}), hash({x: 1}) == hash({x: 2}), hash({x: 1}) == hash({y: 1})]
-    test::value("struct-eq-hash-consistent", [true, false, false], b_hash)
+    std::test::value("struct-eq-hash-consistent", [true, false, false], b_hash)
 
 # ---------------------------------------------------------------------------
 # Evaluation order, completions, closures (structs.test). The completion
@@ -379,7 +379,7 @@ fn register_struct_evaluation_tests(one: int, two: int, minus_five: int):
     # the trace [FIRST, REST] -- FIRST the first yielded id, REST the later
     # ones and the final struct -- is the order. program declares `-> any`:
     # its yields (Ints) and its result (the struct) share one outward type.
-    fn b_source_order() errors compiler::CompilerError:
+    fn b_source_order() errors std::compiler::CompilerError:
         static compile:
             fn ticket(n: int) -> int:
                 yield n
@@ -388,15 +388,15 @@ fn register_struct_evaluation_tests(one: int, two: int, minus_five: int):
                 {z: ticket(0), a: ticket(1), m: ticket(2)}
             coroutine {step, first} = program()
             rest = loop i from 0 to 10:
-                if coroutine::done?(step):
+                if std::coroutine::done?(step):
                     break
                 step()
             [first, rest]
-    test::value("struct-eval-source-order", [0, [1, 2, {a: 1, m: 2, z: 0}]], b_source_order)
+    std::test::value("struct-eval-source-order", [0, [1, 2, {a: 1, m: 2, z: 0}]], b_source_order)
 
     # struct-eval-error-completion: a failing call completes the struct
     # expression with its error, which the handler replaces.
-    fn b_error_completion() errors compiler::CompilerError:
+    fn b_error_completion() errors std::compiler::CompilerError:
         static compile:
             fn mayfail(n) errors Boom:
                 if n > 1:
@@ -408,11 +408,11 @@ fn register_struct_evaluation_tests(one: int, two: int, minus_five: int):
                         {v: 99}
                 r.v
             [run(one), run(two), run(minus_five)]
-    test::value("struct-eval-error-completion", [1, 99, -5], b_error_completion)
+    std::test::value("struct-eval-error-completion", [1, 99, -5], b_error_completion)
 
     # struct-eval-field-error-propagates: an error inside a field initializer
     # leaves no struct built and reaches the caller's handler.
-    fn b_field_error() errors compiler::CompilerError:
+    fn b_field_error() errors std::compiler::CompilerError:
         static compile:
             fn mayfail(n) errors Boom:
                 if n > 1:
@@ -426,19 +426,19 @@ fn register_struct_evaluation_tests(one: int, two: int, minus_five: int):
                         {first: 0, second: 0, third: 0}
                 r.second
             [run(one), run(two)]
-    test::value("struct-eval-field-error-propagates", [1, 0], b_field_error)
+    std::test::value("struct-eval-field-error-propagates", [1, 0], b_field_error)
 
     # struct-closure-capture: a struct value is captured like any value
     # (/block-local), and returned closures keep their own
     # (/returned-closures).
-    fn b_capture() errors compiler::CompilerError:
+    fn b_capture() errors std::compiler::CompilerError:
         static compile:
             x = {value: "hello"}
             fn get():
                 x.value
             get()
-    test::value("struct-closure-capture/block-local", "hello", b_capture)
-    fn b_returned_closures() errors compiler::CompilerError:
+    std::test::value("struct-closure-capture/block-local", "hello", b_capture)
+    fn b_returned_closures() errors std::compiler::CompilerError:
         static compile:
             fn mk(v):
                 x = {value: v}
@@ -448,38 +448,38 @@ fn register_struct_evaluation_tests(one: int, two: int, minus_five: int):
             g = mk("a")
             h = mk("b")
             [g(), h()]
-    test::value("struct-closure-capture/returned-closures", ["a", "b"], b_returned_closures)
+    std::test::value("struct-closure-capture/returned-closures", ["a", "b"], b_returned_closures)
 
     # struct-field-callable: a function value in a field is called through
     # the projection.
-    fn b_field_callable() errors compiler::CompilerError:
+    fn b_field_callable() errors std::compiler::CompilerError:
         static compile:
             fn inc(n: int) -> int:
                 n + 1
             h = {f: inc, v: 41}
             h.f(h.v)
-    test::value("struct-field-callable", 42, b_field_callable)
+    std::test::value("struct-field-callable", 42, b_field_callable)
 
     # struct-if-value: a struct is an ordinary `if` value; branches with one
     # field set join fieldwise, so the projection compiles. /literal is the
     # Tcl program (a condition the compiler can decide); /dynamic takes the
     # condition's operands as parameters.
-    fn b_if_literal() errors compiler::CompilerError:
+    fn b_if_literal() errors std::compiler::CompilerError:
         static compile:
             v = if 1 == 2:
                 {value: "a"}
             else:
                 {value: "b"}
             v.value
-    test::value("struct-if-value/literal", "b", b_if_literal)
-    fn b_if_dynamic() errors compiler::CompilerError:
+    std::test::value("struct-if-value/literal", "b", b_if_literal)
+    fn b_if_dynamic() errors std::compiler::CompilerError:
         static compile:
             v = if one == two:
                 {value: "a"}
             else:
                 {value: "b"}
             v.value
-    test::value("struct-if-value/dynamic", "b", b_if_dynamic)
+    std::test::value("struct-if-value/dynamic", "b", b_if_dynamic)
 
 # ---------------------------------------------------------------------------
 # Named structs (structs.test)
@@ -487,80 +487,80 @@ fn register_struct_evaluation_tests(one: int, two: int, minus_five: int):
 fn register_named_struct_tests():
     # struct-named-construct: named construction applies the initializer
     # syntax (lines, trailing comma) to the declared schema.
-    fn b_construct() errors compiler::CompilerError:
+    fn b_construct() errors std::compiler::CompilerError:
         static compile:
             p = Person {
                 name: "Ada",
                 age: 36,
             }
             p
-    test::value("struct-named-construct", Person {name: "Ada", age: 36}, b_construct)
+    std::test::value("struct-named-construct", Person {name: "Ada", age: 36}, b_construct)
 
     # struct-named-any-order: fields may be written in any order; each
     # projection reads its own field.
-    fn b_any_order() errors compiler::CompilerError:
+    fn b_any_order() errors std::compiler::CompilerError:
         static compile:
             p = Person {age: 36, name: "Ada"}
             [p, p.name, p.age]
-    test::value("struct-named-any-order", [Person {name: "Ada", age: 36}, "Ada", 36], b_any_order)
+    std::test::value("struct-named-any-order", [Person {name: "Ada", age: 36}, "Ada", 36], b_any_order)
 
     # struct-named-type-not-value: a struct declaration introduces a type,
     # not a value binding: a value named Person coexists with the
     # construction (/binding), and the bare name is unbound (/unbound).
-    fn b_type_binding() errors compiler::CompilerError:
+    fn b_type_binding() errors std::compiler::CompilerError:
         static compile:
             Person = 5
             p = Person {name: "a", age: 2}
             [p, Person]
-    test::value("struct-named-type-not-value/binding", [Person {name: "a", age: 2}, 5], b_type_binding)
-    fn b_type_unbound() errors compiler::CompilerError:
+    std::test::value("struct-named-type-not-value/binding", [Person {name: "a", age: 2}, 5], b_type_binding)
+    fn b_type_unbound() errors std::compiler::CompilerError:
         static compile:
             x = Person
             x
-    test::rejects_at("struct-named-type-not-value/unbound", compiler::DiagnosticCode::Unbound, 518, 17, b_type_unbound)
+    std::test::rejects_at("struct-named-type-not-value/unbound", std::compiler::DiagnosticCode::Unbound, 518, 17, b_type_unbound)
 
     # struct-named-annotations: a named struct is an ordinary parameter type.
-    fn b_birthday() errors compiler::CompilerError:
+    fn b_birthday() errors std::compiler::CompilerError:
         static compile:
             fn birthday(p: Person) -> int:
                 p.age + 1
             birthday(Person {name: "a", age: 1})
-    test::value("struct-named-annotations/birthday", 2, b_birthday)
-    fn b_same_name() errors compiler::CompilerError:
+    std::test::value("struct-named-annotations/birthday", 2, b_birthday)
+    fn b_same_name() errors std::compiler::CompilerError:
         static compile:
             fn same_name(a: Person, b: Person) -> bool:
                 a.name == b.name
             same_name(Person {name: "a", age: 1}, Person {name: "a", age: 2})
-    test::value("struct-named-annotations/same-name", true, b_same_name)
+    std::test::value("struct-named-annotations/same-name", true, b_same_name)
 
     # struct-named-nested: named structs nest in named and anonymous
     # structs; a chained projection reads through them.
-    fn b_named_nested() errors compiler::CompilerError:
+    fn b_named_nested() errors std::compiler::CompilerError:
         static compile:
             t = Team {size: 2, lead: Person {name: "Ada", age: 36}}
             x = {person: Person {name: "B", age: 1}, active: true}
             [t, x, t.lead.age]
-    test::value("struct-named-nested", [Team {lead: Person {name: "Ada", age: 36}, size: 2}, {active: true, person: Person {name: "B", age: 1}}, 36], b_named_nested)
+    std::test::value("struct-named-nested", [Team {lead: Person {name: "Ada", age: 36}, size: 2}, {active: true, person: Person {name: "B", age: 1}}, 36], b_named_nested)
 
     # struct-named-function-field: a named struct field holds a typed
     # callable, called through the projection.
-    fn b_function_field() errors compiler::CompilerError:
+    fn b_function_field() errors std::compiler::CompilerError:
         static compile:
             fn inc(n: int) -> int:
                 n + 1
             o = Op {label: "inc", apply: inc}
             o.apply(41)
-    test::value("struct-named-function-field", 42, b_function_field)
+    std::test::value("struct-named-function-field", 42, b_function_field)
 
 # struct-named-declared-after-use: struct declarations are types, so order in
 # the file does not matter: LatePerson (the Tcl program's Person, renamed) is
 # declared below this function.
 fn register_struct_declaration_order_tests():
-    fn b_declared_after_use() errors compiler::CompilerError:
+    fn b_declared_after_use() errors std::compiler::CompilerError:
         static compile:
             p = LatePerson {name: "a", age: 2}
             p.age
-    test::value("struct-named-declared-after-use", 2, b_declared_after_use)
+    std::test::value("struct-named-declared-after-use", 2, b_declared_after_use)
 
 struct LatePerson:
     name: str
@@ -571,104 +571,104 @@ struct LatePerson:
 
 fn register_struct_diagnostic_tests():
     # struct-error-duplicate-field-named: at the second `age`.
-    fn b_duplicate_named() errors compiler::CompilerError:
+    fn b_duplicate_named() errors std::compiler::CompilerError:
         static compile:
             p = Person {name: "Ada", age: 1, age: 2}
             p
-    test::rejects_at("struct-error-duplicate-field-named", compiler::DiagnosticCode::DuplicateField, 576, 46, b_duplicate_named)
+    std::test::rejects_at("struct-error-duplicate-field-named", std::compiler::DiagnosticCode::DuplicateField, 576, 46, b_duplicate_named)
 
     # struct-error-duplicate-field-anon: at the second `a`.
-    fn b_duplicate_anon() errors compiler::CompilerError:
+    fn b_duplicate_anon() errors std::compiler::CompilerError:
         static compile:
             x = {a: 1, a: 2}
             x
-    test::rejects_at("struct-error-duplicate-field-anon", compiler::DiagnosticCode::DuplicateField, 583, 24, b_duplicate_anon)
+    std::test::rejects_at("struct-error-duplicate-field-anon", std::compiler::DiagnosticCode::DuplicateField, 583, 24, b_duplicate_anon)
 
     # struct-error-wrong-field-type: a value not proven admissible for the
     # declared field type is a static Type error, at the field.
-    fn b_wrong_field_type() errors compiler::CompilerError:
+    fn b_wrong_field_type() errors std::compiler::CompilerError:
         static compile:
             p = Person {name: 5, age: 1}
             p
-    test::rejects_at("struct-error-wrong-field-type", compiler::DiagnosticCode::Type, 591, 25, b_wrong_field_type)
+    std::test::rejects_at("struct-error-wrong-field-type", std::compiler::DiagnosticCode::Type, 591, 25, b_wrong_field_type)
 
     # struct-error-no-implicit-guard: an untyped value is not proven, and no
     # run-time guard is inserted for it: Type at the field inside make.
-    fn b_no_implicit_guard() errors compiler::CompilerError:
+    fn b_no_implicit_guard() errors std::compiler::CompilerError:
         static compile:
             fn make(x):
                 Person {name: x, age: 36}
             make("a")
-    test::rejects_at("struct-error-no-implicit-guard", compiler::DiagnosticCode::Type, 600, 25, b_no_implicit_guard)
+    std::test::rejects_at("struct-error-no-implicit-guard", std::compiler::DiagnosticCode::Type, 600, 25, b_no_implicit_guard)
 
     # struct-error-unknown-struct: a construction of an undeclared struct
     # (/undeclared) or of a type that is not a struct (/builtin), at the
     # name.
-    fn b_unknown_struct() errors compiler::CompilerError:
+    fn b_unknown_struct() errors std::compiler::CompilerError:
         static compile:
             q = Nope {a: 1}
             q
-    test::rejects_at("struct-error-unknown-struct/undeclared", compiler::DiagnosticCode::UnknownStruct, 609, 17, b_unknown_struct)
-    fn b_builtin_struct() errors compiler::CompilerError:
+    std::test::rejects_at("struct-error-unknown-struct/undeclared", std::compiler::DiagnosticCode::UnknownStruct, 609, 17, b_unknown_struct)
+    fn b_builtin_struct() errors std::compiler::CompilerError:
         static compile:
             q = int {a: 1}
             q
-    test::rejects_at("struct-error-unknown-struct/builtin", compiler::DiagnosticCode::UnknownStruct, 614, 17, b_builtin_struct)
+    std::test::rejects_at("struct-error-unknown-struct/builtin", std::compiler::DiagnosticCode::UnknownStruct, 614, 17, b_builtin_struct)
 
     # struct-error-missing-projected-field: a projection of a field the
     # static struct type lacks, named or anonymous, at the field name.
-    fn b_missing_projected_named() errors compiler::CompilerError:
+    fn b_missing_projected_named() errors std::compiler::CompilerError:
         static compile:
             p = Person {name: "a", age: 1}
             p.height
-    test::rejects_at("struct-error-missing-projected-field/named", compiler::DiagnosticCode::UnknownField, 623, 15, b_missing_projected_named)
-    fn b_missing_projected_anon() errors compiler::CompilerError:
+    std::test::rejects_at("struct-error-missing-projected-field/named", std::compiler::DiagnosticCode::UnknownField, 623, 15, b_missing_projected_named)
+    fn b_missing_projected_anon() errors std::compiler::CompilerError:
         static compile:
             x = {a: 1}
             x.b
-    test::rejects_at("struct-error-missing-projected-field/anonymous", compiler::DiagnosticCode::UnknownField, 628, 15, b_missing_projected_anon)
+    std::test::rejects_at("struct-error-missing-projected-field/anonymous", std::compiler::DiagnosticCode::UnknownField, 628, 15, b_missing_projected_anon)
 
     # struct-error-projection-from-non-struct: only a struct has fields.
-    fn b_non_struct() errors compiler::CompilerError:
+    fn b_non_struct() errors std::compiler::CompilerError:
         static compile:
             x = 5
             x.f
-    test::rejects_at("struct-error-projection-from-non-struct", compiler::DiagnosticCode::NotAStruct, 635, 15, b_non_struct)
+    std::test::rejects_at("struct-error-projection-from-non-struct", std::compiler::DiagnosticCode::NotAStruct, 635, 15, b_non_struct)
 
     # struct-error-nominal-mismatch: a struct of another declaration
     # (/named) or an anonymous one (/anonymous) is never a Person: Type at
     # the argument.
-    fn b_nominal_named() errors compiler::CompilerError:
+    fn b_nominal_named() errors std::compiler::CompilerError:
         static compile:
             fn birthday(p: Person) -> int:
                 p.age + 1
             birthday(Account {name: "a", age: 1})
-    test::rejects_at("struct-error-nominal-mismatch/named", compiler::DiagnosticCode::Type, 645, 22, b_nominal_named)
-    fn b_nominal_anon() errors compiler::CompilerError:
+    std::test::rejects_at("struct-error-nominal-mismatch/named", std::compiler::DiagnosticCode::Type, 645, 22, b_nominal_named)
+    fn b_nominal_anon() errors std::compiler::CompilerError:
         static compile:
             fn birthday(p: Person) -> int:
                 p.age + 1
             birthday({name: "a", age: 1})
-    test::rejects_at("struct-error-nominal-mismatch/anonymous", compiler::DiagnosticCode::Type, 651, 22, b_nominal_anon)
+    std::test::rejects_at("struct-error-nominal-mismatch/anonymous", std::compiler::DiagnosticCode::Type, 651, 22, b_nominal_anon)
 
     # struct-error-unknown-projection-in-function: an unknown field is
     # diagnosed inside a function nobody calls.
-    fn b_projection_in_function() errors compiler::CompilerError:
+    fn b_projection_in_function() errors std::compiler::CompilerError:
         static compile:
             fn f(p: Person):
                 p.height
             1
-    test::rejects_at("struct-error-unknown-projection-in-function", compiler::DiagnosticCode::UnknownField, 659, 19, b_projection_in_function)
+    std::test::rejects_at("struct-error-unknown-projection-in-function", std::compiler::DiagnosticCode::UnknownField, 659, 19, b_projection_in_function)
 
     # struct-module-unknown-struct: a qualified struct the module does not
     # declare. The Tcl test's private module geo (declaring Point) is the
     # stock module compiler here (declaring SourceLocation); its message is
     # the property.
-    fn b_module_unknown_struct() errors compiler::CompilerError:
+    fn b_module_unknown_struct() errors std::compiler::CompilerError:
         static compile:
-            p = compiler::Nope {line: 1}
+            p = std::compiler::Nope {line: 1}
             p
-    test::rejects_containing("struct-module-unknown-struct", compiler::DiagnosticCode::UnknownSymbol, "namespace \"compiler\" has no struct \"Nope\" (it declares: SourceLocation)", b_module_unknown_struct)
+    std::test::rejects_containing("struct-module-unknown-struct", std::compiler::DiagnosticCode::UnknownSymbol, "namespace \"std::compiler\" has no struct \"Nope\" (it declares: SourceLocation)", b_module_unknown_struct)
 
 # ---------------------------------------------------------------------------
 # Static projection: never a run-time lookup (structs.test). The accepted
@@ -677,55 +677,55 @@ fn register_struct_diagnostic_tests():
 fn register_static_projection_tests():
     # struct-projection-any-rejected: first's value escapes (it is the
     # block's value), so first may run generically: UnprovenField at value.
-    fn b_any_rejected() errors compiler::CompilerError:
+    fn b_any_rejected() errors std::compiler::CompilerError:
         static compile:
             fn first(x):
                 x.value
             first
-    test::rejects_at("struct-projection-any-rejected", compiler::DiagnosticCode::UnprovenField, 683, 19, b_any_rejected)
+    std::test::rejects_at("struct-projection-any-rejected", std::compiler::DiagnosticCode::UnprovenField, 683, 19, b_any_rejected)
 
     # struct-projection-instance-non-struct-call: the instance for an Int
     # argument cannot project: Type at the call.
-    fn b_non_struct_call() errors compiler::CompilerError:
+    fn b_non_struct_call() errors std::compiler::CompilerError:
         static compile:
             fn first(x):
                 x.value
             first(5)
-    test::rejects_at("struct-projection-instance-non-struct-call", compiler::DiagnosticCode::Type, 693, 13, b_non_struct_call)
+    std::test::rejects_at("struct-projection-instance-non-struct-call", std::compiler::DiagnosticCode::Type, 693, 13, b_non_struct_call)
 
     # struct-projection-escaped-function-rejected: a function whose value
     # escapes may run generically.
-    fn b_escaped() errors compiler::CompilerError:
+    fn b_escaped() errors std::compiler::CompilerError:
         static compile:
             fn first(x):
                 x.value
             f = first
             f({value: 1})
-    test::rejects("struct-projection-escaped-function-rejected", compiler::DiagnosticCode::UnprovenField, b_escaped)
+    std::test::rejects("struct-projection-escaped-function-rejected", std::compiler::DiagnosticCode::UnprovenField, b_escaped)
 
     # struct-projection-unused-function-ok: a function nobody can run cannot
     # execute its projection.
-    fn b_unused() errors compiler::CompilerError:
+    fn b_unused() errors std::compiler::CompilerError:
         static compile:
             fn first(x):
                 x.value
             1
-    test::value("struct-projection-unused-function-ok", 1, b_unused)
+    std::test::value("struct-projection-unused-function-ok", 1, b_unused)
 
     # struct-projection-recursive-bad-call-still-rejected: the recursive
     # function's instance for a non-struct argument is the call's error.
-    fn b_recursive_bad_call() errors compiler::CompilerError:
+    fn b_recursive_bad_call() errors std::compiler::CompilerError:
         static compile:
             fn walk(s, i):
                 if i >= 3:
                     return s.value
                 walk(s, i + 1)
             walk(5, 0)
-    test::rejects_at("struct-projection-recursive-bad-call-still-rejected", compiler::DiagnosticCode::Type, 723, 13, b_recursive_bad_call)
+    std::test::rejects_at("struct-projection-recursive-bad-call-still-rejected", std::compiler::DiagnosticCode::Type, 723, 13, b_recursive_bad_call)
 
     # struct-projection-recursive-escape-rejected: a recursive function whose
     # value escapes can run generically.
-    fn b_recursive_escape() errors compiler::CompilerError:
+    fn b_recursive_escape() errors std::compiler::CompilerError:
         static compile:
             fn walk(s, i):
                 if i >= 3:
@@ -733,81 +733,81 @@ fn register_static_projection_tests():
                 walk(s, i + 1)
             f = walk
             f({value: 1}, 0)
-    test::rejects("struct-projection-recursive-escape-rejected", compiler::DiagnosticCode::UnprovenField, b_recursive_escape)
+    std::test::rejects("struct-projection-recursive-escape-rejected", std::compiler::DiagnosticCode::UnprovenField, b_recursive_escape)
 
 # ---------------------------------------------------------------------------
 # Containers and contracts (structs.test)
 
 fn register_struct_container_tests():
-    # struct-list-of-anonymous-run: list::at of a List of anonymous structs
+    # struct-list-of-anonymous-run: std::list::at of a List of anonymous structs
     # keeps the struct type for an index that is at's parameter.
-    fn b_list_of_anonymous() errors compiler::CompilerError:
+    fn b_list_of_anonymous() errors std::compiler::CompilerError:
         static compile:
             xs = [{name: "a", age: 1}, {age: 2, name: "b"}]
             fn at(i) errors IndexNotFound:
-                list::at(xs, i).name
+                std::list::at(xs, i).name
             [at(0), at(1)]
-    test::value("struct-list-of-anonymous-run", ["a", "b"], b_list_of_anonymous)
+    std::test::value("struct-list-of-anonymous-run", ["a", "b"], b_list_of_anonymous)
 
     # struct-mutarray-of-structs: a MutableArray of structs; its read is
     # typed, so the projection compiles.
-    fn b_mutarray_of_structs() errors compiler::CompilerError:
+    fn b_mutarray_of_structs() errors std::compiler::CompilerError:
         static compile:
-            m = mutable_array::from_list([{x: 1}, {x: 2}])
-            e = mutable_array::at(m, 1).x
+            m = std::mutable_array::from_list([{x: 1}, {x: 2}])
+            e = std::mutable_array::at(m, 1).x
             e
-    test::value("struct-mutarray-of-structs", 2, b_mutarray_of_structs)
+    std::test::value("struct-mutarray-of-structs", 2, b_mutarray_of_structs)
 
     # struct-immutable-set-of-structs: an ImmutableSet of structs
     # deduplicates by struct equality: the two equal {a: 1} are one member.
-    # (The Tcl program only builds s; its value, list::length([1]), does not
+    # (The Tcl program only builds s; its value, std::list::length([1]), does not
     # read it.)
-    fn b_set_of_structs() errors compiler::CompilerError:
+    fn b_set_of_structs() errors std::compiler::CompilerError:
         static compile:
-            s = immutable_set::from_list([{a: 1}, {a: 1}, {a: 2}])
-            s == immutable_set::from_list([{a: 2}, {a: 1}])
-    test::value("struct-immutable-set-of-structs", true, b_set_of_structs)
+            s = std::immutable_set::from_list([{a: 1}, {a: 1}, {a: 2}])
+            s == std::immutable_set::from_list([{a: 2}, {a: 1}])
+    std::test::value("struct-immutable-set-of-structs", true, b_set_of_structs)
 
     # struct-native-gc-stress: named and nested anonymous structs with
     # heap-allocated Strings in a 40-element List keep their fields (the Tcl
     # test also compares the cranelift run under BOTLISH_NATIVE_GC_STRESS=1).
-    fn b_gc_program() errors compiler::CompilerError:
+    fn b_gc_program() errors std::compiler::CompilerError:
         static compile:
             fn build(n):
                 if n < 1:
                     return []
-                p = Person {name: str::concat("n", "x"), age: n}
-                q = {who: p, tags: [str::concat("a", "b"), str::concat("c", "d")], n: {depth: n}}
+                p = Person {name: std::str::concat("n", "x"), age: n}
+                q = {who: p, tags: [std::str::concat("a", "b"), std::str::concat("c", "d")], n: {depth: n}}
                 rest = build(n - 1)
-                list::append(rest, q)
+                std::list::append(rest, q)
             xs = build(40)
-            if list::length(xs) == 40:
-                [list::length(xs), list::at(xs, 0).who.age, list::at(xs, 39).n.depth, list::at(xs, 5).tags]
+            if std::list::length(xs) == 40:
+                [std::list::length(xs), std::list::at(xs, 0).who.age, std::list::at(xs, 39).n.depth, std::list::at(xs, 5).tags]
             else:
                 []
-    test::value("struct-native-gc-stress", [40, 1, 40, ["ab", "cd"]], b_gc_program)
+    std::test::value("struct-native-gc-stress", [40, 1, 40, ["ab", "cd"]], b_gc_program)
 
     # struct-bearing-attacks: a typed callable's contract cannot be erased
     # through an untyped struct boundary -- a struct holding it in a List
     # (/list-element), in an `any` field (/any-field), passed to an `any`
     # parameter (/any-parameter), or in a field of an incompatible callable
     # type (/typed-field). The message names the reason.
-    fn b_bearing_list() errors compiler::CompilerError:
+    fn b_bearing_list() errors std::compiler::CompilerError:
         static compile:
             fn typed(k: int) -> int:
                 k + 1
             s = {handler: typed}
             xs = [s, 5]
             xs
-    test::rejects_containing("struct-bearing-attacks/list-element", compiler::DiagnosticCode::Type, "has typed parameter requirements that cannot be preserved passed as an ordinary call argument", b_bearing_list)
-    fn b_bearing_any_field() errors compiler::CompilerError:
+    std::test::rejects_containing("struct-bearing-attacks/list-element", std::compiler::DiagnosticCode::Type, "has typed parameter requirements that cannot be preserved passed as an ordinary call argument", b_bearing_list)
+    fn b_bearing_any_field() errors std::compiler::CompilerError:
         static compile:
             fn typed(k: int) -> int:
                 k + 1
             b = Box {value: typed}
             b
-    test::rejects_containing("struct-bearing-attacks/any-field", compiler::DiagnosticCode::Type, "\"typed\" has typed parameter requirements that cannot be preserved stored in field \"value\" of a struct", b_bearing_any_field)
-    fn b_bearing_any_parameter() errors compiler::CompilerError:
+    std::test::rejects_containing("struct-bearing-attacks/any-field", std::compiler::DiagnosticCode::Type, "\"typed\" has typed parameter requirements that cannot be preserved stored in field \"value\" of a struct", b_bearing_any_field)
+    fn b_bearing_any_parameter() errors std::compiler::CompilerError:
         static compile:
             fn typed(k: int) -> int:
                 k + 1
@@ -815,14 +815,14 @@ fn register_struct_container_tests():
             fn f(v: any):
                 v
             f(s)
-    test::rejects_containing("struct-bearing-attacks/any-parameter", compiler::DiagnosticCode::Type, "has typed parameter requirements that cannot be preserved passed as an ordinary call argument", b_bearing_any_parameter)
-    fn b_bearing_typed_field() errors compiler::CompilerError:
+    std::test::rejects_containing("struct-bearing-attacks/any-parameter", std::compiler::DiagnosticCode::Type, "has typed parameter requirements that cannot be preserved passed as an ordinary call argument", b_bearing_any_parameter)
+    fn b_bearing_typed_field() errors std::compiler::CompilerError:
         static compile:
             fn typed(k: int) -> int:
                 k + 1
             h = Holder {handler: typed}
             h
-    test::rejects_containing("struct-bearing-attacks/typed-field", compiler::DiagnosticCode::Type, "field \"handler\" of struct Holder cannot be proven to satisfy its declared type Fn{args: [str], return: int, errors: []}", b_bearing_typed_field)
+    std::test::rejects_containing("struct-bearing-attacks/typed-field", std::compiler::DiagnosticCode::Type, "field \"handler\" of struct Holder cannot be proven to satisfy its declared type Fn{args: [str], return: int, errors: []}", b_bearing_typed_field)
 
 # ---------------------------------------------------------------------------
 # The ENUMS.md acceptance program and its rejections (enums.test)
@@ -831,7 +831,7 @@ fn register_enum_acceptance_tests():
     # enum-principal-acceptance: the acceptance program, its functions
     # nested (with the Tcl adaptations: the parenthesized multi-line `or`,
     # example's declared IndexNotFound).
-    fn b_acceptance() errors compiler::CompilerError:
+    fn b_acceptance() errors std::compiler::CompilerError:
         static compile:
             fn same(value):
                 value
@@ -851,8 +851,8 @@ fn register_enum_acceptance_tests():
                     kind: b,
                 }
 
-                array = mutable_array::create(2, vehicle.kind)
-                vector = mutable_vector::from_list([
+                array = std::mutable_array::create(2, vehicle.kind)
+                vector = std::mutable_vector::from_list([
                     array.at(0),
                     VehicleType::Boat,
                 ])
@@ -869,23 +869,23 @@ fn register_enum_acceptance_tests():
             cars = loop x in xs:
                 x == VehicleType::Car
             [xs, cars, is_land_vehicle(VehicleType::Car), is_land_vehicle(VehicleType::Boat), is_land_vehicle(VehicleType::Airplane)]
-    test::value("enum-principal-acceptance", [[VehicleType::Car, VehicleType::Boat, VehicleType::Car], [true, false, true], true, false, false], b_acceptance)
+    std::test::value("enum-principal-acceptance", [[VehicleType::Car, VehicleType::Boat, VehicleType::Car], [true, false, true], true, false, false], b_acceptance)
 
     # enum-principal-rejections: the acceptance program's rejections a block
     # can hold -- another enum's case where A is required (/cross-enum-
     # argument), at the argument, and a case the enum lacks (/unknown-case),
     # at the qualified name.
-    fn b_cross_enum() errors compiler::CompilerError:
+    fn b_cross_enum() errors std::compiler::CompilerError:
         static compile:
             fn wants_a(x: A):
                 x
 
             wants_a(B::Same)
-    test::rejects_at("enum-principal-rejections/cross-enum-argument", compiler::DiagnosticCode::Type, 883, 21, b_cross_enum)
-    fn b_unknown_case() errors compiler::CompilerError:
+    std::test::rejects_at("enum-principal-rejections/cross-enum-argument", std::compiler::DiagnosticCode::Type, 883, 21, b_cross_enum)
+    fn b_unknown_case() errors std::compiler::CompilerError:
         static compile:
             VehicleType::Unknown
-    test::rejects_at("enum-principal-rejections/unknown-case", compiler::DiagnosticCode::UnknownEnumCase, 887, 13, b_unknown_case)
+    std::test::rejects_at("enum-principal-rejections/unknown-case", std::compiler::DiagnosticCode::UnknownEnumCase, 887, 13, b_unknown_case)
 
 # ---------------------------------------------------------------------------
 # Grammar (enums.test)
@@ -894,42 +894,42 @@ fn register_enum_syntax_tests():
     # enum-syntax-comma-list: the cases are one comma-separated list -- no
     # trailing comma, all on one line, a blank line after a comma, a single
     # case without a comma -- each declaring the cases it lists.
-    fn b_no_trailing() errors compiler::CompilerError:
+    fn b_no_trailing() errors std::compiler::CompilerError:
         static compile:
             [NoTrailingComma::A, NoTrailingComma::B]
-    test::value("enum-syntax-comma-list/no-trailing-comma", [NoTrailingComma::A, NoTrailingComma::B], b_no_trailing)
-    fn b_one_line() errors compiler::CompilerError:
+    std::test::value("enum-syntax-comma-list/no-trailing-comma", [NoTrailingComma::A, NoTrailingComma::B], b_no_trailing)
+    fn b_one_line() errors std::compiler::CompilerError:
         static compile:
             [OneLineCases::A, OneLineCases::B, OneLineCases::C]
-    test::value("enum-syntax-comma-list/one-line", [OneLineCases::A, OneLineCases::B, OneLineCases::C], b_one_line)
-    fn b_blank_line() errors compiler::CompilerError:
+    std::test::value("enum-syntax-comma-list/one-line", [OneLineCases::A, OneLineCases::B, OneLineCases::C], b_one_line)
+    fn b_blank_line() errors std::compiler::CompilerError:
         static compile:
             [BlankLineCases::A, BlankLineCases::B]
-    test::value("enum-syntax-comma-list/blank-line", [BlankLineCases::A, BlankLineCases::B], b_blank_line)
-    fn b_single_case() errors compiler::CompilerError:
+    std::test::value("enum-syntax-comma-list/blank-line", [BlankLineCases::A, BlankLineCases::B], b_blank_line)
+    fn b_single_case() errors std::compiler::CompilerError:
         static compile:
             SingleCase::A
-    test::value("enum-syntax-comma-list/single-case", SingleCase::A, b_single_case)
+    std::test::value("enum-syntax-comma-list/single-case", SingleCase::A, b_single_case)
 
     # enum-syntax-bare-kind-not-a-type: the bare word enum is not a type
     # (there are no anonymous enum types): Type at the parameter list.
-    fn b_bare_kind() errors compiler::CompilerError:
+    fn b_bare_kind() errors std::compiler::CompilerError:
         static compile:
             fn f(x: enum):
                 x
             f(1)
-    test::rejects_at("enum-syntax-bare-kind-not-a-type", compiler::DiagnosticCode::Type, 918, 17, b_bare_kind)
+    std::test::rejects_at("enum-syntax-bare-kind-not-a-type", std::compiler::DiagnosticCode::Type, 918, 17, b_bare_kind)
 
     # enum-syntax-contextual-word: enum is an ordinary name everywhere but a
     # declaration's first word: a binding, a parameter, a field.
-    fn b_contextual() errors compiler::CompilerError:
+    fn b_contextual() errors std::compiler::CompilerError:
         static compile:
             enum = 3
             fn f(enum):
                 enum + 1
             x = {enum: 2}
             [f(enum), x.enum]
-    test::value("enum-syntax-contextual-word", [4, 2], b_contextual)
+    std::test::value("enum-syntax-contextual-word", [4, 2], b_contextual)
 
 # ---------------------------------------------------------------------------
 # Case resolution (enums.test)
@@ -938,98 +938,98 @@ fn register_enum_resolution_tests():
     # enum-qualifier-not-an-enum: a case qualified by a type that is not an
     # enum -- a struct, a refined domain, a trait, a built-in type -- is
     # NotAnEnum (a type is not a namespace), at the qualified name.
-    fn b_struct_qualifier() errors compiler::CompilerError:
+    fn b_struct_qualifier() errors std::compiler::CompilerError:
         static compile:
             Plain::Car
-    test::rejects_at("enum-qualifier-not-an-enum/struct", compiler::DiagnosticCode::NotAnEnum, 943, 13, b_struct_qualifier)
-    fn b_type_qualifier() errors compiler::CompilerError:
+    std::test::rejects_at("enum-qualifier-not-an-enum/struct", std::compiler::DiagnosticCode::NotAnEnum, 943, 13, b_struct_qualifier)
+    fn b_type_qualifier() errors std::compiler::CompilerError:
         static compile:
             Small::Car
-    test::rejects_at("enum-qualifier-not-an-enum/type", compiler::DiagnosticCode::NotAnEnum, 947, 13, b_type_qualifier)
-    fn b_trait_qualifier() errors compiler::CompilerError:
+    std::test::rejects_at("enum-qualifier-not-an-enum/type", std::compiler::DiagnosticCode::NotAnEnum, 947, 13, b_type_qualifier)
+    fn b_trait_qualifier() errors std::compiler::CompilerError:
         static compile:
             Measured::Car
-    test::rejects_at("enum-qualifier-not-an-enum/trait", compiler::DiagnosticCode::NotAnEnum, 951, 13, b_trait_qualifier)
-    fn b_int_qualifier() errors compiler::CompilerError:
+    std::test::rejects_at("enum-qualifier-not-an-enum/trait", std::compiler::DiagnosticCode::NotAnEnum, 951, 13, b_trait_qualifier)
+    fn b_int_qualifier() errors std::compiler::CompilerError:
         static compile:
             int::Car
-    test::rejects_at("enum-qualifier-not-an-enum/int", compiler::DiagnosticCode::NotAnEnum, 955, 13, b_int_qualifier)
-    fn b_fn_qualifier() errors compiler::CompilerError:
+    std::test::rejects_at("enum-qualifier-not-an-enum/int", std::compiler::DiagnosticCode::NotAnEnum, 955, 13, b_int_qualifier)
+    fn b_fn_qualifier() errors std::compiler::CompilerError:
         static compile:
             Fn::Car
-    test::rejects_at("enum-qualifier-not-an-enum/fn", compiler::DiagnosticCode::NotAnEnum, 959, 13, b_fn_qualifier)
+    std::test::rejects_at("enum-qualifier-not-an-enum/fn", std::compiler::DiagnosticCode::NotAnEnum, 959, 13, b_fn_qualifier)
 
     # enum-qualifier-unknown: a qualifier that names nothing is an unknown
     # namespace. (The Tcl program's Vehicle is a struct of this suite's
     # acceptance program: the qualifier is spelled Vehicles here.)
-    fn b_unknown_qualifier() errors compiler::CompilerError:
+    fn b_unknown_qualifier() errors std::compiler::CompilerError:
         static compile:
             Vehicles::Car
-    test::rejects_at("enum-qualifier-unknown", compiler::DiagnosticCode::UnknownNamespace, 967, 13, b_unknown_qualifier)
+    std::test::rejects_at("enum-qualifier-unknown", std::compiler::DiagnosticCode::UnknownNamespace, 967, 13, b_unknown_qualifier)
 
     # enum-case-and-function-same-spelling: the top-level function Car and
     # the cases VehicleType::Car and Other::Car are three different lookups.
-    fn b_same_spelling() errors compiler::CompilerError:
+    fn b_same_spelling() errors std::compiler::CompilerError:
         static compile:
             [Car(), VehicleType::Car, Other::Car, VehicleType::Car == Other::Car]
-    test::value("enum-case-and-function-same-spelling", [7, VehicleType::Car, Other::Car, false], b_same_spelling)
+    std::test::value("enum-case-and-function-same-spelling", [7, VehicleType::Car, Other::Car, false], b_same_spelling)
 
     # enum-declaration-order (/type-and-function): an enum type name never
     # collides with a function of that name (both at the top level).
-    fn b_type_and_function() errors compiler::CompilerError:
+    fn b_type_and_function() errors std::compiler::CompilerError:
         static compile:
             [Color(), Color::Red]
-    test::value("enum-declaration-order/type-and-function", [1, Color::Red], b_type_and_function)
+    std::test::value("enum-declaration-order/type-and-function", [1, Color::Red], b_type_and_function)
 
     # enum-case-is-not-a-constructor: a payload-free case takes no braces:
     # NotAStruct at the qualified name.
-    fn b_case_braces() errors compiler::CompilerError:
+    fn b_case_braces() errors std::compiler::CompilerError:
         static compile:
             VehicleType::Car {}
-    test::rejects_at("enum-case-is-not-a-constructor", compiler::DiagnosticCode::NotAStruct, 988, 13, b_case_braces)
+    std::test::rejects_at("enum-case-is-not-a-constructor", std::compiler::DiagnosticCode::NotAStruct, 988, 13, b_case_braces)
 
     # enum-rename-case: renaming a case is an API rename: the old name fails
     # resolution.
-    fn b_renamed_case() errors compiler::CompilerError:
+    fn b_renamed_case() errors std::compiler::CompilerError:
         static compile:
             RenamedVehicle::Car
-    test::rejects_at("enum-rename-case", compiler::DiagnosticCode::UnknownEnumCase, 995, 13, b_renamed_case)
+    std::test::rejects_at("enum-rename-case", std::compiler::DiagnosticCode::UnknownEnumCase, 995, 13, b_renamed_case)
 
     # enum-no-intrinsic-mappings: no ordinal, integer, String or reflection
     # operation exists for an enum: a method call on a case is NotAStruct, an
     # enum namespace is unknown, and a conversion is an unknown case.
-    fn b_ordinal() errors compiler::CompilerError:
+    fn b_ordinal() errors std::compiler::CompilerError:
         static compile:
             VehicleType::Car.ordinal()
-    test::rejects("enum-no-intrinsic-mappings/ordinal", compiler::DiagnosticCode::NotAStruct, b_ordinal)
-    fn b_name() errors compiler::CompilerError:
+    std::test::rejects("enum-no-intrinsic-mappings/ordinal", std::compiler::DiagnosticCode::NotAStruct, b_ordinal)
+    fn b_name() errors std::compiler::CompilerError:
         static compile:
             VehicleType::Car.name()
-    test::rejects("enum-no-intrinsic-mappings/name", compiler::DiagnosticCode::NotAStruct, b_name)
-    fn b_to_string() errors compiler::CompilerError:
+    std::test::rejects("enum-no-intrinsic-mappings/name", std::compiler::DiagnosticCode::NotAStruct, b_name)
+    fn b_to_string() errors std::compiler::CompilerError:
         static compile:
             VehicleType::Car.to_string()
-    test::rejects("enum-no-intrinsic-mappings/to-string", compiler::DiagnosticCode::NotAStruct, b_to_string)
-    fn b_raw_value() errors compiler::CompilerError:
+    std::test::rejects("enum-no-intrinsic-mappings/to-string", std::compiler::DiagnosticCode::NotAStruct, b_to_string)
+    fn b_raw_value() errors std::compiler::CompilerError:
         static compile:
             VehicleType::Car.raw_value()
-    test::rejects("enum-no-intrinsic-mappings/raw-value", compiler::DiagnosticCode::NotAStruct, b_raw_value)
-    fn b_case_name() errors compiler::CompilerError:
+    std::test::rejects("enum-no-intrinsic-mappings/raw-value", std::compiler::DiagnosticCode::NotAStruct, b_raw_value)
+    fn b_case_name() errors std::compiler::CompilerError:
         static compile:
             VehicleType::Car.case_name()
-    test::rejects("enum-no-intrinsic-mappings/case-name", compiler::DiagnosticCode::NotAStruct, b_case_name)
-    fn b_enum_cases() errors compiler::CompilerError:
+    std::test::rejects("enum-no-intrinsic-mappings/case-name", std::compiler::DiagnosticCode::NotAStruct, b_case_name)
+    fn b_enum_cases() errors std::compiler::CompilerError:
         static compile:
             enum::cases(VehicleType)
-    test::rejects("enum-no-intrinsic-mappings/enum-cases", compiler::DiagnosticCode::UnknownNamespace, b_enum_cases)
-    fn b_from_string() errors compiler::CompilerError:
+    std::test::rejects("enum-no-intrinsic-mappings/enum-cases", std::compiler::DiagnosticCode::UnknownNamespace, b_enum_cases)
+    fn b_from_string() errors std::compiler::CompilerError:
         static compile:
             VehicleType::from_string("Car")
-    test::rejects("enum-no-intrinsic-mappings/from-string", compiler::DiagnosticCode::UnknownEnumCase, b_from_string)
-    fn b_from_int() errors compiler::CompilerError:
+    std::test::rejects("enum-no-intrinsic-mappings/from-string", std::compiler::DiagnosticCode::UnknownEnumCase, b_from_string)
+    fn b_from_int() errors std::compiler::CompilerError:
         static compile:
             VehicleType::from_int(1)
-    test::rejects("enum-no-intrinsic-mappings/from-int", compiler::DiagnosticCode::UnknownEnumCase, b_from_int)
+    std::test::rejects("enum-no-intrinsic-mappings/from-int", std::compiler::DiagnosticCode::UnknownEnumCase, b_from_int)
 
     # enum-module-diagnostics: a module's enum follows the import rules of
     # its namespace. The Tcl test's private modules (geo's VehicleType,
@@ -1037,28 +1037,28 @@ fn register_enum_resolution_tests():
     # struct SourceLocation here: a case the module's enum lacks
     # (/unknown-case), the enum's short name without `import type`
     # (/unqualified), and a module's struct as a qualifier (/struct-qualifier).
-    fn b_module_unknown_case() errors compiler::CompilerError:
+    fn b_module_unknown_case() errors std::compiler::CompilerError:
         static compile:
-            compiler::DiagnosticCode::Truck
-    test::rejects("enum-module-diagnostics/unknown-case", compiler::DiagnosticCode::UnknownEnumCase, b_module_unknown_case)
-    fn b_module_unqualified() errors compiler::CompilerError:
+            std::compiler::DiagnosticCode::Truck
+    std::test::rejects("enum-module-diagnostics/unknown-case", std::compiler::DiagnosticCode::UnknownEnumCase, b_module_unknown_case)
+    fn b_module_unqualified() errors std::compiler::CompilerError:
         static compile:
             DiagnosticCode::Type
-    test::rejects("enum-module-diagnostics/unqualified", compiler::DiagnosticCode::UnknownNamespace, b_module_unqualified)
-    fn b_module_struct_qualifier() errors compiler::CompilerError:
+    std::test::rejects("enum-module-diagnostics/unqualified", std::compiler::DiagnosticCode::UnknownNamespace, b_module_unqualified)
+    fn b_module_struct_qualifier() errors std::compiler::CompilerError:
         static compile:
-            compiler::SourceLocation::Car
-    test::rejects("enum-module-diagnostics/struct-qualifier", compiler::DiagnosticCode::NotAnEnum, b_module_struct_qualifier)
+            std::compiler::SourceLocation::Car
+    std::test::rejects("enum-module-diagnostics/struct-qualifier", std::compiler::DiagnosticCode::NotAnEnum, b_module_struct_qualifier)
 
 # enum-declaration-order (/before-declaration): an enum is a type
 # declaration, usable before it is written: LateEnum (the Tcl program's E,
 # renamed) is declared below this function.
 fn register_enum_declaration_order_tests():
-    fn b_before_declaration() errors compiler::CompilerError:
+    fn b_before_declaration() errors std::compiler::CompilerError:
         static compile:
             x = LateEnum::A
             [x, LateEnum::B]
-    test::value("enum-declaration-order/before-declaration", [LateEnum::A, LateEnum::B], b_before_declaration)
+    std::test::value("enum-declaration-order/before-declaration", [LateEnum::A, LateEnum::B], b_before_declaration)
 
 enum LateEnum:
     A,
@@ -1070,16 +1070,16 @@ enum LateEnum:
 fn register_enum_value_tests():
     # enum-copies: a case is an ordinary unrestricted value: every copy stays
     # usable.
-    fn b_copies() errors compiler::CompilerError:
+    fn b_copies() errors std::compiler::CompilerError:
         static compile:
             a = VehicleType::Car
             b = a
             c = b
             [a, b, c, a == c]
-    test::value("enum-copies", [VehicleType::Car, VehicleType::Car, VehicleType::Car, true], b_copies)
+    std::test::value("enum-copies", [VehicleType::Car, VehicleType::Car, VehicleType::Car, true], b_copies)
 
     # enum-calls-returns: enums are ordinary parameter and result types.
-    fn b_calls_returns() errors compiler::CompilerError:
+    fn b_calls_returns() errors std::compiler::CompilerError:
         static compile:
             fn is_car(value: VehicleType) -> bool:
                 value == VehicleType::Car
@@ -1088,11 +1088,11 @@ fn register_enum_value_tests():
                 VehicleType::Truck
 
             [is_car(VehicleType::Car), is_car(default_vehicle()), default_vehicle()]
-    test::value("enum-calls-returns", [true, false, VehicleType::Truck], b_calls_returns)
+    std::test::value("enum-calls-returns", [true, false, VehicleType::Truck], b_calls_returns)
 
     # enum-generic-identity: a generic function passes a case through and
     # keeps its nominal identity.
-    fn b_generic_identity() errors compiler::CompilerError:
+    fn b_generic_identity() errors std::compiler::CompilerError:
         static compile:
             fn same(x):
                 x
@@ -1100,30 +1100,30 @@ fn register_enum_value_tests():
             b = same(a)
             c = same(Other::Car)
             [a, b, c, a == b, b == c]
-    test::value("enum-generic-identity", [VehicleType::Car, VehicleType::Car, Other::Car, true, false], b_generic_identity)
+    std::test::value("enum-generic-identity", [VehicleType::Car, VehicleType::Car, Other::Car, true, false], b_generic_identity)
 
     # enum-erasure: a case enters `any` (an untyped position, a
     # heterogeneous List) and keeps its identity.
-    fn b_erasure() errors compiler::CompilerError:
+    fn b_erasure() errors std::compiler::CompilerError:
         static compile:
             fn erase(x: any) -> any:
                 x
             xs = [VehicleType::Car, 1, "s", Other::Car]
             [erase(VehicleType::Car) == VehicleType::Car, erase(Other::Car) == VehicleType::Car, xs]
-    test::value("enum-erasure", [true, false, [VehicleType::Car, 1, "s", Other::Car]], b_erasure)
+    std::test::value("enum-erasure", [true, false, [VehicleType::Car, 1, "s", Other::Car]], b_erasure)
 
     # enum-struct-fields: an enum is an ordinary struct field; destructuring
     # exposes an ordinary case value.
-    fn b_struct_fields() errors compiler::CompilerError:
+    fn b_struct_fields() errors std::compiler::CompilerError:
         static compile:
             v = Vehicle {kind: VehicleType::Tank, name: "t"}
             {kind: k} = v
             w = Vehicle {name: "t", kind: k}
             [v.kind, k, v == w, k == VehicleType::Tank, {kind: VehicleType::Boat}]
-    test::value("enum-struct-fields", [VehicleType::Tank, VehicleType::Tank, true, true, {kind: VehicleType::Boat}], b_struct_fields)
+    std::test::value("enum-struct-fields", [VehicleType::Tank, VehicleType::Tank, true, true, {kind: VehicleType::Boat}], b_struct_fields)
 
     # enum-closures: a closure captures a case like any other value.
-    fn b_closures() errors compiler::CompilerError:
+    fn b_closures() errors std::compiler::CompilerError:
         static compile:
             fn matcher(target: VehicleType):
                 fn matches(v: VehicleType) -> bool:
@@ -1131,30 +1131,30 @@ fn register_enum_value_tests():
                 matches
             is_tank = matcher(VehicleType::Tank)
             [is_tank(VehicleType::Tank), is_tank(VehicleType::Car)]
-    test::value("enum-closures", [true, false], b_closures)
+    std::test::value("enum-closures", [true, false], b_closures)
 
 # enum-reorder-invariant: reordering or adding cases changes no
 # program-visible behavior: the one program over the enum in each case order
 # (OrderAB, OrderBA, OrderCBDA) has the same value.
 fn register_enum_reorder_tests():
-    fn b_order_ab() errors compiler::CompilerError:
+    fn b_order_ab() errors std::compiler::CompilerError:
         static compile:
             x = OrderAB::B
             y = OrderAB::A
-            [x, y, x == y, x == OrderAB::B, hash(x) == hash(OrderAB::B), immutable_set::contains(immutable_set::from_list([x, y, x]), OrderAB::B)]
-    test::value("enum-reorder-invariant/order-ab", [OrderAB::B, OrderAB::A, false, true, true, true], b_order_ab)
-    fn b_order_ba() errors compiler::CompilerError:
+            [x, y, x == y, x == OrderAB::B, hash(x) == hash(OrderAB::B), std::immutable_set::contains(std::immutable_set::from_list([x, y, x]), OrderAB::B)]
+    std::test::value("enum-reorder-invariant/order-ab", [OrderAB::B, OrderAB::A, false, true, true, true], b_order_ab)
+    fn b_order_ba() errors std::compiler::CompilerError:
         static compile:
             x = OrderBA::B
             y = OrderBA::A
-            [x, y, x == y, x == OrderBA::B, hash(x) == hash(OrderBA::B), immutable_set::contains(immutable_set::from_list([x, y, x]), OrderBA::B)]
-    test::value("enum-reorder-invariant/order-ba", [OrderBA::B, OrderBA::A, false, true, true, true], b_order_ba)
-    fn b_order_cbda() errors compiler::CompilerError:
+            [x, y, x == y, x == OrderBA::B, hash(x) == hash(OrderBA::B), std::immutable_set::contains(std::immutable_set::from_list([x, y, x]), OrderBA::B)]
+    std::test::value("enum-reorder-invariant/order-ba", [OrderBA::B, OrderBA::A, false, true, true, true], b_order_ba)
+    fn b_order_cbda() errors std::compiler::CompilerError:
         static compile:
             x = OrderCBDA::B
             y = OrderCBDA::A
-            [x, y, x == y, x == OrderCBDA::B, hash(x) == hash(OrderCBDA::B), immutable_set::contains(immutable_set::from_list([x, y, x]), OrderCBDA::B)]
-    test::value("enum-reorder-invariant/order-cbda", [OrderCBDA::B, OrderCBDA::A, false, true, true, true], b_order_cbda)
+            [x, y, x == y, x == OrderCBDA::B, hash(x) == hash(OrderCBDA::B), std::immutable_set::contains(std::immutable_set::from_list([x, y, x]), OrderCBDA::B)]
+    std::test::value("enum-reorder-invariant/order-cbda", [OrderCBDA::B, OrderCBDA::A, false, true, true, true], b_order_cbda)
 
 # ---------------------------------------------------------------------------
 # Cases in collections (enums.test)
@@ -1162,7 +1162,7 @@ fn register_enum_reorder_tests():
 fn register_enum_collection_tests():
     # enum-list: List[VehicleType]: construction, iteration, membership by
     # equality.
-    fn b_list() errors compiler::CompilerError:
+    fn b_list() errors std::compiler::CompilerError:
         static compile:
             fn has(xs: List[VehicleType], v: VehicleType) -> bool:
                 loop x in xs:
@@ -1174,12 +1174,12 @@ fn register_enum_collection_tests():
                 if x == VehicleType::Boat:
                     continue
                 x
-            [xs, land, list::length(land), has(xs, VehicleType::Boat), has(xs, VehicleType::Tank)]
-    test::value("enum-list", [[VehicleType::Car, VehicleType::Boat, VehicleType::Car], [VehicleType::Car, VehicleType::Car], 2, true, false], b_list)
+            [xs, land, std::list::length(land), has(xs, VehicleType::Boat), has(xs, VehicleType::Tank)]
+    std::test::value("enum-list", [[VehicleType::Car, VehicleType::Boat, VehicleType::Car], [VehicleType::Car, VehicleType::Car], 2, true, false], b_list)
 
     # enum-mutable-array: MutableArray[VehicleType]: repeated and factory
     # construction, at, set, swap.
-    fn b_mutable_array() errors compiler::CompilerError:
+    fn b_mutable_array() errors std::compiler::CompilerError:
         static compile:
             fn vehicle_for_index(i: int) -> VehicleType:
                 if i == 0:
@@ -1188,8 +1188,8 @@ fn register_enum_collection_tests():
                     VehicleType::Car
 
             fn run() -> List[VehicleType] errors IndexNotFound:
-                a = mutable_array::create(3, VehicleType::Car)
-                g = mutable_array::generate(3, vehicle_for_index)
+                a = std::mutable_array::create(3, VehicleType::Car)
+                g = std::mutable_array::generate(3, vehicle_for_index)
                 a.set(1, VehicleType::Tank)
                 old = g.swap(2, VehicleType::Truck)
                 [a.at(0), a.at(1), a.at(2), g.at(0), g.at(2), old]
@@ -1197,14 +1197,14 @@ fn register_enum_collection_tests():
             run():
                 on IndexNotFound:
                     []
-    test::value("enum-mutable-array", [VehicleType::Car, VehicleType::Tank, VehicleType::Car, VehicleType::Boat, VehicleType::Truck, VehicleType::Car], b_mutable_array)
+    std::test::value("enum-mutable-array", [VehicleType::Car, VehicleType::Tank, VehicleType::Car, VehicleType::Boat, VehicleType::Truck, VehicleType::Car], b_mutable_array)
 
     # enum-mutable-vector: MutableVector[VehicleType]: push, pop, swap, at,
     # iteration.
-    fn b_mutable_vector() errors compiler::CompilerError:
+    fn b_mutable_vector() errors std::compiler::CompilerError:
         static compile:
             fn run() -> List[VehicleType] errors IndexNotFound:
-                v = mutable_vector::from_list([VehicleType::Boat])
+                v = std::mutable_vector::from_list([VehicleType::Boat])
                 v.push(VehicleType::Car)
                 v.push(VehicleType::Tank)
                 top = v.pop()
@@ -1212,30 +1212,30 @@ fn register_enum_collection_tests():
                 seen = loop x in v:
                     x
                 [top, old, v.at(0), v.length() == 2] == [top, old, v.at(0), true]
-                list::append(seen, top)
+                std::list::append(seen, top)
 
             run():
                 on IndexNotFound:
                     []
-    test::value("enum-mutable-vector", [VehicleType::Tractor, VehicleType::Car, VehicleType::Tank], b_mutable_vector)
+    std::test::value("enum-mutable-vector", [VehicleType::Tractor, VehicleType::Car, VehicleType::Tank], b_mutable_vector)
 
     # enum-collections-unrestricted: collections of cases stay unrestricted:
     # create repeats the case, and every copy stays usable.
-    fn b_unrestricted() errors compiler::CompilerError:
+    fn b_unrestricted() errors std::compiler::CompilerError:
         static compile:
-            a = mutable_array::create(2, VehicleType::Car)
+            a = std::mutable_array::create(2, VehicleType::Car)
             b = a
-            v = mutable_vector::from_list([VehicleType::Car])
+            v = std::mutable_vector::from_list([VehicleType::Car])
             w = v
             xs = [VehicleType::Car]
             ys = xs
-            [mutable_array::get(a, 0, VehicleType::Boat), mutable_array::get(b, 1, VehicleType::Boat), xs == ys]
-    test::value("enum-collections-unrestricted", [VehicleType::Car, VehicleType::Car, true], b_unrestricted)
+            [std::mutable_array::get(a, 0, VehicleType::Boat), std::mutable_array::get(b, 1, VehicleType::Boat), xs == ys]
+    std::test::value("enum-collections-unrestricted", [VehicleType::Car, VehicleType::Car, true], b_unrestricted)
 
     # enum-native-gc-stress: cases in 30 structs with heap-allocated Strings
     # keep their identity (the Tcl test also compares the cranelift run under
     # BOTLISH_NATIVE_GC_STRESS=1); the set of kinds compares by ==.
-    fn b_gc_program() errors compiler::CompilerError:
+    fn b_gc_program() errors std::compiler::CompilerError:
         static compile:
             fn build(n: int) -> List[Vehicle]:
                 loop i from 0 to n:
@@ -1243,12 +1243,12 @@ fn register_enum_collection_tests():
                         VehicleType::Boat
                     else:
                         VehicleType::Car
-                    Vehicle {kind: k, name: str::concat("v", "x")}
+                    Vehicle {kind: k, name: std::str::concat("v", "x")}
             xs = build(30)
             kinds = loop v in xs:
                 v.kind
-            [list::length(xs), kinds == kinds, immutable_set::from_list(kinds)]
-    test::value("enum-native-gc-stress", [30, true, immutable_set::from_list([VehicleType::Boat, VehicleType::Car])], b_gc_program)
+            [std::list::length(xs), kinds == kinds, std::immutable_set::from_list(kinds)]
+    std::test::value("enum-native-gc-stress", [30, true, std::immutable_set::from_list([VehicleType::Boat, VehicleType::Car])], b_gc_program)
 
 # ---------------------------------------------------------------------------
 # Enums with traits, contexts, coroutines and native code (enums.test)
@@ -1257,24 +1257,24 @@ fn register_enum_composition_tests():
     # enum-trait-witness: VehicleType witnesses Labeled through the label
     # function of its declaring namespace; describe is the top-level
     # trait-polymorphic function.
-    fn b_trait_witness() errors compiler::CompilerError:
+    fn b_trait_witness() errors std::compiler::CompilerError:
         static compile:
             [describe(VehicleType::Boat), describe(VehicleType::Car)]
-    test::value("enum-trait-witness", ["boat", "other"], b_trait_witness)
+    std::test::value("enum-trait-witness", ["boat", "other"], b_trait_witness)
 
     # enum-context-field: an enum is an ordinary context member. A body
     # cannot need a context, so the registration reads the installed Settings
     # (twice, as the Tcl program does) and the body compares what it read.
     observed = mode()
     observed_is_tank = mode() == VehicleType::Tank
-    fn b_context_field() errors compiler::CompilerError:
+    fn b_context_field() errors std::compiler::CompilerError:
         static compile:
             [observed, observed_is_tank]
-    test::value("enum-context-field", [VehicleType::Tank, true], b_context_field)
+    std::test::value("enum-context-field", [VehicleType::Tank, true], b_context_field)
 
     # enum-coroutine-events: a coroutine yields and returns cases; enums add
     # nothing to coroutine semantics.
-    fn b_coroutine_events() errors compiler::CompilerError:
+    fn b_coroutine_events() errors std::compiler::CompilerError:
         static compile:
             fn events(n: int) -> Event:
                 yield Event::Start
@@ -1285,13 +1285,13 @@ fn register_enum_composition_tests():
             second = s()
             third = s()
             fourth = s()
-            [first, second, third, fourth, coroutine::done?(s)]
-    test::value("enum-coroutine-events", [Event::Start, Event::Tick, Event::Tick, Event::Stop, true], b_coroutine_events)
+            [first, second, third, fourth, std::coroutine::done?(s)]
+    std::test::value("enum-coroutine-events", [Event::Start, Event::Tick, Event::Tick, Event::Stop, true], b_coroutine_events)
 
     # enum-native-no-allocation: ordinary enum operations through an enum
     # struct field, 100 steps deep (the Tcl test also pins zero native
     # allocations and the field's scalar replacement).
-    fn b_no_allocation() errors compiler::CompilerError:
+    fn b_no_allocation() errors std::compiler::CompilerError:
         static compile:
             fn next(k: VehicleType) -> VehicleType:
                 if k == VehicleType::Car:
@@ -1312,9 +1312,9 @@ fn register_enum_composition_tests():
                     run(n - 1, item.kind, acc)
 
             run(100, VehicleType::Car, 0)
-    test::value("enum-native-no-allocation", 50, b_no_allocation)
+    std::test::value("enum-native-no-allocation", 50, b_no_allocation)
 
-with context test::suite()
+with context std::test::suite()
 with context Settings {mode: VehicleType::Tank, verbose: false}
 register_anonymous_struct_tests()
 register_struct_equality_tests()
@@ -1332,4 +1332,4 @@ register_enum_value_tests()
 register_enum_reorder_tests()
 register_enum_collection_tests()
 register_enum_composition_tests()
-test::report()
+std::test::report()

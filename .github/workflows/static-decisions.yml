@@ -14,7 +14,7 @@ name: static-decisions
 # background-task limit. So the comparison runs here, never locally.
 #
 # It runs on every push to main that changes what a front end builds -- the
-# directories the front-end cache fingerprints (core/, hir/, surface/, lib/;
+# directories the front-end cache fingerprints (core/, hir/, surface/, stdlib/;
 # hir/interchange.tcl's Fingerprint) -- or a golden suite or the comparison
 # tool, and on demand on any branch (workflow_dispatch; the `suites` input
 # narrows it to some suites). No program outside tests/golden has a static
@@ -32,7 +32,7 @@ on:
       - "core/**"
       - "hir/**"
       - "surface/**"
-      - "lib/**"
+      - "stdlib/**"
       - "tests/golden/*.bot"
       - "audit/static-decisions/tools/**"
       - ".github/workflows/static-decisions.yml"

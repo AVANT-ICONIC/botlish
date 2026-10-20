@@ -173,8 +173,8 @@ foreach {name arguments message} {
 # ---------------------------------------------------------------------------
 # Help lines under diagnostics and warnings
 
-test cli-help-line-under-diagnostic {a rejected program's diagnostic is followed by a help line naming its topic: here the specific rule (an unproven list::at), not the broad code} -body {
-    set path [makeFile "import list\n\nfn backwards(xs: List\[int\]) -> List\[int\]:\n    loop i down from xs.length() - 1 through 0:\n        xs.at(i)\n\n0\n" cli-bounds.bot]
+test cli-help-line-under-diagnostic {a rejected program's diagnostic is followed by a help line naming its topic: here the specific rule (an unproven std::list::at), not the broad code} -body {
+    set path [makeFile "import std::list\n\nfn backwards(xs: List\[int\]) -> List\[int\]:\n    loop i down from xs.length() - 1 through 0:\n        xs.at(i)\n\n0\n" cli-bounds.bot]
     set r [runMain -warnings off $path]
     set lines [split [dict get $r out] \n]
     list [dict get $r status] [string match "   error: *(CORE SEMANTIC UNHANDLED-ERROR)" [lindex $lines 1]] \
@@ -182,7 +182,7 @@ test cli-help-line-under-diagnostic {a rejected program's diagnostic is followed
 } -cleanup {removeFile cli-bounds.bot; unset -nocomplain path r lines} -result {1 1 proof.list-bounds}
 
 test cli-help-line-once-per-topic {two diagnostics of one rule get one help line} -body {
-    set path [makeFile "import list\n\nfn a(xs: List\[int\], i: int) -> int:\n    xs.at(i + 1)\n\nfn b(xs: List\[int\], i: int) -> int:\n    xs.at(i + 2)\n\n0\n" cli-bounds2.bot]
+    set path [makeFile "import std::list\n\nfn a(xs: List\[int\], i: int) -> int:\n    xs.at(i + 1)\n\nfn b(xs: List\[int\], i: int) -> int:\n    xs.at(i + 2)\n\n0\n" cli-bounds2.bot]
     set out [dict get [runMain -warnings off $path] out]
     list [llength [regexp -all -inline {   error: } $out]] [llength [regexp -all -inline {   help: } $out]]
 } -cleanup {removeFile cli-bounds2.bot; unset -nocomplain path out} -result {2 1}
@@ -194,7 +194,7 @@ test cli-help-line-syntax {a syntax error's help line names the code's topic or 
 } -cleanup {removeFile cli-percent.bot; unset -nocomplain path out} -result capability.integer-division
 
 test cli-help-line-warning {a program's warnings are followed, on stderr, by one help line per distinct warning code; stdout is the program's} -body {
-    set path [makeFile "import list\n\nfn f(xs: List\[int\]) -> int:\n    a = list::at(xs, 0):\n        on IndexNotFound:\n            0\n    b = list::at(xs, 1):\n        on IndexNotFound:\n            0\n    a + b\n\nf(\[1, 2\])\n" cli-warn.bot]
+    set path [makeFile "import std::list\n\nfn f(xs: List\[int\]) -> int:\n    a = std::list::at(xs, 0):\n        on IndexNotFound:\n            0\n    b = std::list::at(xs, 1):\n        on IndexNotFound:\n            0\n    a + b\n\nf(\[1, 2\])\n" cli-warn.bot]
     set r [runMain -warnings default $path]
     list [dict get $r status] [llength [regexp -all -inline {METHOD-ELIGIBLE} [dict get $r err]]] \
         [regexp -all -inline {help: \S+(?: main\.tcl)? -help \S+} [dict get $r err]] \

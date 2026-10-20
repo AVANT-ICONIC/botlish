@@ -158,7 +158,7 @@ test range-analyze-3 {an exact call's Ref argument seeds the callee from the cal
 } -result {{{[3, 3] {3}}} {{[3, 3] {3}}}}
 
 test range-analyze-3b {a parameter with no evidence anywhere -- not even indirectly -- stays unknown: the callee only ever sees a genuinely unbounded expression's Range, never a syntactic "not a literal" restriction} -body {
-    lassign [rangeOf "import list\nfn add1(x):\n    x + 1\n\nfn go(xs):\n    add1(list::at(xs, 0))\n\ngo(\[1, 2\])"] hir spec analysis
+    lassign [rangeOf "import std::list\nfn add1(x):\n    x + 1\n\nfn go(xs):\n    add1(std::list::at(xs, 0))\n\ngo(\[1, 2\])"] hir spec analysis
     paramRanges $analysis [rangeInstance $spec add1]
 } -result {{[-∞, +∞]}}
 
@@ -173,8 +173,8 @@ test range-analyze-5 {a parameter passed unchanged through recursion, seeded by 
     paramRanges $analysis [rangeInstance $spec walk]
 } -result {{[7, 7] {7}} {[0, 3]}}
 
-test range-analyze-6 {a native's -result-range collection-length metadata (length, list::length) proves a String/List length is both non-negative and machine-representable, so str::length(s) is provably small with no relational reasoning} -body {
-    lassign [rangeOf "import str\nfn f(s):\n    str::length(s)\n\nf(\"abc\")"] hir spec analysis
+test range-analyze-6 {a native's -result-range collection-length metadata (length, std::list::length) proves a String/List length is both non-negative and machine-representable, so std::str::length(s) is provably small with no relational reasoning} -body {
+    lassign [rangeOf "import std::str\nfn f(s):\n    std::str::length(s)\n\nf(\"abc\")"] hir spec analysis
     set id [rangeInstance $spec f]
     set r [lindex [dict values [dict get [dict get $analysis instances $id] exprs]] end]
     list [hir::range::show $r] [hir::range::fitsSmall $r]
@@ -188,7 +188,7 @@ test range-analyze-7 {if branches join conservatively: two exact branches bound,
 } -result {[1, 2]}
 
 test range-analyze-8 {only + - * and proven-nonneg natives establish a fact; everything else is unknown} -body {
-    lassign [rangeOf "import list\nfn f(xs):\n    list::at(xs, 0)\n\nf(\[1, 2\])"] hir spec analysis
+    lassign [rangeOf "import std::list\nfn f(xs):\n    std::list::at(xs, 0)\n\nf(\[1, 2\])"] hir spec analysis
     set id [rangeInstance $spec f]
     set r [lindex [dict values [dict get [dict get $analysis instances $id] exprs]] end]
     hir::range::isUnknown $r
@@ -200,14 +200,14 @@ test range-analyze-8 {only + - * and proven-nonneg natives establish a fact; eve
 # the milestone that added them)
 
 test range-induction-1 {an == guard against a stable, immutable-collection-length bound with a +1 step (string_reverse's shape) proves the counter stays within [0, length]} -body {
-    lassign [rangeOf "import str\nfn reverse_from(text, index, reversed):\n    if index == str::length(text):\n        return reversed\n    reverse_from(text, index + 1, reversed)\n\nreverse_from(\"hello\", 0, \"\")"] hir spec analysis
+    lassign [rangeOf "import std::str\nfn reverse_from(text, index, reversed):\n    if index == std::str::length(text):\n        return reversed\n    reverse_from(text, index + 1, reversed)\n\nreverse_from(\"hello\", 0, \"\")"] hir spec analysis
     set id [rangeInstance $spec reverse_from]
     lassign [paramRanges $analysis $id] textRange indexRange
     list $indexRange [hir::range::fitsSmall [lindex [dict get [dict get $analysis instances $id] params] 1]]
 } -result [list "\[0, $hir::range::smallMax\]" 1]
 
-test range-induction-2 {a parameter seeded, at every external call, only by a length/list::length-shaped argument (matmul's "count") is itself proven small (interprocedural, from hir::range::SeedRange, no relational reasoning needed for the bound itself), so the == guard against it proves the counter small too} -body {
-    lassign [rangeOf "import list\nfn dot(a_row, b, column, k, count, total):\n    if k == count:\n        return total\n    dot(a_row, b, column, k + 1, count, total + 1)\n\ndot(\[1, 2\], \[\[1, 2\], \[3, 4\]\], 0, 0, list::length(\[1, 2\]), 0)"] hir spec analysis
+test range-induction-2 {a parameter seeded, at every external call, only by a length/std::list::length-shaped argument (matmul's "count") is itself proven small (interprocedural, from hir::range::SeedRange, no relational reasoning needed for the bound itself), so the == guard against it proves the counter small too} -body {
+    lassign [rangeOf "import std::list\nfn dot(a_row, b, column, k, count, total):\n    if k == count:\n        return total\n    dot(a_row, b, column, k + 1, count, total + 1)\n\ndot(\[1, 2\], \[\[1, 2\], \[3, 4\]\], 0, 0, std::list::length(\[1, 2\]), 0)"] hir spec analysis
     set id [rangeInstance $spec dot]
     set params [dict get [dict get $analysis instances $id] params]
     # k (index 3) is proven small; total (index 5), an unbounded accumulator
@@ -221,8 +221,8 @@ test range-induction-3 {a step of +-2 against an == guard is not proven (it coul
     paramRanges $analysis [rangeInstance $spec count2]
 } -result {{[-∞, 100000]} {[0, +∞]}}
 
-test range-induction-4 {an opaque, call-derived next value (csv's scan_records shape: no i + c pattern at all) is not a step candidate, so hir/induction.tcl itself proves nothing here -- but M9's post-widen narrowing (M9-INSTANCE-ENTRY-INT-FACTS.md), an entirely different, general mechanism, now legitimately recovers a (very loose) upper bound: the branch guard "index >= str::length(text)" already proved next_index's own incoming argument <= smallMax-1 (str::length()'s own collection-length fact), so next_index's body (i + 1) is itself provably <= smallMax, and scan's self-recursive feedback (index <- next_index(index)) carries that back to scan's own entry once narrowing folds self-edges in with external ones -- sound (every reachable index is, trivially, some String's length or less), just far looser than a real trip-count bound; still not fitsSmall (the lower side stays unbounded), so this changes no codegen decision} -body {
-    lassign [rangeOf "import str\nfn next_index(i):\n    i + 1\n\nfn scan(text, index, count):\n    if index >= str::length(text):\n        return count\n    scan(text, next_index(index), count + 1)\n\nscan(\"abcde\", 0, 0)"] hir spec analysis
+test range-induction-4 {an opaque, call-derived next value (csv's scan_records shape: no i + c pattern at all) is not a step candidate, so hir/induction.tcl itself proves nothing here -- but M9's post-widen narrowing (M9-INSTANCE-ENTRY-INT-FACTS.md), an entirely different, general mechanism, now legitimately recovers a (very loose) upper bound: the branch guard "index >= std::str::length(text)" already proved next_index's own incoming argument <= smallMax-1 (std::str::length()'s own collection-length fact), so next_index's body (i + 1) is itself provably <= smallMax, and scan's self-recursive feedback (index <- next_index(index)) carries that back to scan's own entry once narrowing folds self-edges in with external ones -- sound (every reachable index is, trivially, some String's length or less), just far looser than a real trip-count bound; still not fitsSmall (the lower side stays unbounded), so this changes no codegen decision} -body {
+    lassign [rangeOf "import std::str\nfn next_index(i):\n    i + 1\n\nfn scan(text, index, count):\n    if index >= std::str::length(text):\n        return count\n    scan(text, next_index(index), count + 1)\n\nscan(\"abcde\", 0, 0)"] hir spec analysis
     set id [rangeInstance $spec scan]
     lassign [paramRanges $analysis $id] textR indexR countR
     list $indexR [hir::range::fitsSmall [lindex [dict get [dict get $analysis instances $id] params] 1]]
@@ -343,11 +343,11 @@ test range-induction-nontail-self-call-undominated {a non-tail self call before 
 # A native call is a bound only when it has one value for the whole
 # recursion: its native is determined by its argument values
 # (hir::repeatable::Native) and every argument is invariant. With c
-# recomputed each step, i == char::scalar_value(c) compares i against a new
+# recomputed each step, i == std::char::scalar_value(c) compares i against a new
 # value each time, and i steps past all of them.
 test range-induction-varying-native-bound {a native-call bound whose argument changes on the self call is not stable: no induction fact, reason "bound not stable"; with the argument passed unchanged the same bound proves i in [0, 0x10FFFF]} -body {
-    set varying [rangeOf "import char\nfn f(i: int, c: UnicodeChar) -> int:\n    if i == char::scalar_value(c):\n        i\n    else:\n        n = if (i - 1).mod(2) == 0:\n            'a'\n        else:\n            'b'\n        f(i - 1, n)\n\nf(1114111, 'b')"]
-    set fixed [rangeOf "import char\nfn f(i: int, c: UnicodeChar) -> int:\n    if i == char::scalar_value(c):\n        i\n    else:\n        f(i + 1, c)\n\nf(0, 'z')"]
+    set varying [rangeOf "import std::char\nfn f(i: int, c: UnicodeChar) -> int:\n    if i == std::char::scalar_value(c):\n        i\n    else:\n        n = if (i - 1).mod(2) == 0:\n            'a'\n        else:\n            'b'\n        f(i - 1, n)\n\nf(1114111, 'b')"]
+    set fixed [rangeOf "import std::char\nfn f(i: int, c: UnicodeChar) -> int:\n    if i == std::char::scalar_value(c):\n        i\n    else:\n        f(i + 1, c)\n\nf(0, 'z')"]
     set out {}
     foreach result [list $varying $fixed] {
         lassign $result hir spec analysis
@@ -357,13 +357,13 @@ test range-induction-varying-native-bound {a native-call bound whose argument ch
     set out
 } -result {{} {bound not stable} {[0, 1114111]} {}}
 
-test range-induction-invariant-nested-bound {a bound call whose argument is itself a call of a native determined by its arguments, over a parameter passed unchanged, is invariant: str::length(str::concat(s, "ab")) proves i in [0, smallMax]} -body {
-    lassign [rangeOf "import str\nfn g(i: int, s: str) -> int:\n    if i == str::length(str::concat(s, \"ab\")):\n        i\n    else:\n        g(i + 1, s)\n\ng(0, \"hello\")"] hir spec analysis
+test range-induction-invariant-nested-bound {a bound call whose argument is itself a call of a native determined by its arguments, over a parameter passed unchanged, is invariant: std::str::length(std::str::concat(s, "ab")) proves i in [0, smallMax]} -body {
+    lassign [rangeOf "import std::str\nfn g(i: int, s: str) -> int:\n    if i == std::str::length(std::str::concat(s, \"ab\")):\n        i\n    else:\n        g(i + 1, s)\n\ng(0, \"hello\")"] hir spec analysis
     inductionOf $analysis [rangeInstance $spec g] 0
 } -result "\[0, $hir::range::smallMax\]"
 
-test range-induction-mutable-length-bound {a bound read from a MutableVector parameter passed unchanged is not invariant: the vector is a value mutated in place between the calls (v.pop()), so its length is no single B, and mutable_vector::length is no native determined by its argument values; every backend still meets i == 2} -body {
-    set source "import mutable_vector\nfn f(i: int, v: MutableVector\[int\]) -> int:\n    if i == v.length():\n        i\n    else:\n        x = v.pop():\n            on IndexNotFound:\n                0\n        f(i + 1, v)\n\nv = mutable_vector::from_list(\[1, 2, 3, 4\])\nf(0, v)"
+test range-induction-mutable-length-bound {a bound read from a MutableVector parameter passed unchanged is not invariant: the vector is a value mutated in place between the calls (v.pop()), so its length is no single B, and std::mutable_vector::length is no native determined by its argument values; every backend still meets i == 2} -body {
+    set source "import std::mutable_vector\nfn f(i: int, v: MutableVector\[int\]) -> int:\n    if i == v.length():\n        i\n    else:\n        x = v.pop():\n            on IndexNotFound:\n                0\n        f(i + 1, v)\n\nv = std::mutable_vector::from_list(\[1, 2, 3, 4\])\nf(0, v)"
     lassign [rangeOf $source] hir spec analysis
     set id [rangeInstance $spec f]
     set hir [surface::compile $source t.bot -warnings off]
@@ -396,19 +396,19 @@ test range-induction-nontail-self-call-disagree {self calls that step i by diffe
 # function's argument that changes, a function that reads a mutable object
 # (even one passed unchanged), a local bound to a changing parameter, or a
 # function the invocation makes, capturing a changing parameter, is not.
-test range-induction-invariant-bound-shapes {str::length of a field of an unchanged struct parameter (typed and untyped), of a local bound to an invariant value, and of a call of a repeatable function over an unchanged parameter are bounds: i in [0, smallMax]; a rebuilt struct, a changing argument of the function, a function reading a MutableVector, a local of a changing parameter and a nested function capturing one are not ("bound not stable")} -body {
-    set struct "import str\nstruct P:\n    name: str\n    n: int\n\n"
-    set twice "import str\nfn twice(s: str) -> str:\n    str::concat(s, s)\n\n"
+test range-induction-invariant-bound-shapes {std::str::length of a field of an unchanged struct parameter (typed and untyped), of a local bound to an invariant value, and of a call of a repeatable function over an unchanged parameter are bounds: i in [0, smallMax]; a rebuilt struct, a changing argument of the function, a function reading a MutableVector, a local of a changing parameter and a nested function capturing one are not ("bound not stable")} -body {
+    set struct "import std::str\nstruct P:\n    name: str\n    n: int\n\n"
+    set twice "import std::str\nfn twice(s: str) -> str:\n    std::str::concat(s, s)\n\n"
     set sources [list \
-        "${struct}fn f(i: int, p: P, acc: int) -> int:\n    if i == str::length(p.name):\n        acc\n    else:\n        f(i + 1, p, acc + mod(1000, i + 1))\n\nf(0, P{name: \"hello world\", n: 3}, 0)" \
-        "${struct}fn f(i, p, acc):\n    if i == str::length(p.name):\n        acc\n    else:\n        f(i + 1, p, acc + mod(1000, i + 1))\n\nf(0, P{name: \"hello world\", n: 3}, 0)" \
-        "import str\nfn f(i: int, s: str, acc: int) -> int:\n    t = str::concat(s, \"!\")\n    if i == str::length(t):\n        acc\n    else:\n        f(i + 1, s, acc + mod(1000, i + 1))\n\nf(0, \"hello\", 0)" \
-        "${twice}fn f(i: int, s: str, acc: int) -> int:\n    if i == str::length(twice(s)):\n        acc\n    else:\n        f(i + 1, s, acc + mod(1000, i + 1))\n\nf(0, \"hello\", 0)" \
-        "${struct}fn f(i: int, p: P, acc: int) -> int:\n    if i == str::length(p.name):\n        acc\n    else:\n        f(i + 1, P{name: str::concat(p.name, \"\"), n: p.n}, acc + mod(1000, i + 1))\n\nf(0, P{name: \"hello world\", n: 3}, 0)" \
-        "${twice}fn f(i: int, s: str, acc: int) -> int:\n    if i == str::length(twice(s)):\n        acc\n    else:\n        f(i + 1, str::concat(s, \"\"), acc + mod(1000, i + 1))\n\nf(0, \"hello\", 0)" \
-        "import str\nimport mutable_vector\nfn first(v: MutableVector\[str\]) -> str:\n    v.at(0):\n        on IndexNotFound:\n            \"\"\n\nfn f(i: int, v: MutableVector\[str\], acc: int) -> int:\n    if i == str::length(first(v)):\n        acc\n    else:\n        f(i + 1, v, acc + mod(1000, i + 1))\n\nv = mutable_vector::from_list(\[\"hello\"\])\nf(0, v, 0)" \
-        "import char\nfn f(i: int, c: UnicodeChar, acc: int) -> int:\n    d = c\n    if i == char::scalar_value(d):\n        acc\n    else:\n        n = if (i - 1).mod(2) == 0:\n            'a'\n        else:\n            'b'\n        f(i - 1, n, acc + mod(1000, i))\n\nf(1114111, 'b', 0)" \
-        "import char\nfn f(i: int, c: UnicodeChar, acc: int) -> int:\n    fn pick(x: int) -> UnicodeChar:\n        c\n    if i == char::scalar_value(pick(0)):\n        acc\n    else:\n        n = if (i - 1).mod(2) == 0:\n            'a'\n        else:\n            'b'\n        f(i - 1, n, acc + mod(1000, i))\n\nf(1114111, 'b', 0)"]
+        "${struct}fn f(i: int, p: P, acc: int) -> int:\n    if i == std::str::length(p.name):\n        acc\n    else:\n        f(i + 1, p, acc + mod(1000, i + 1))\n\nf(0, P{name: \"hello world\", n: 3}, 0)" \
+        "${struct}fn f(i, p, acc):\n    if i == std::str::length(p.name):\n        acc\n    else:\n        f(i + 1, p, acc + mod(1000, i + 1))\n\nf(0, P{name: \"hello world\", n: 3}, 0)" \
+        "import std::str\nfn f(i: int, s: str, acc: int) -> int:\n    t = std::str::concat(s, \"!\")\n    if i == std::str::length(t):\n        acc\n    else:\n        f(i + 1, s, acc + mod(1000, i + 1))\n\nf(0, \"hello\", 0)" \
+        "${twice}fn f(i: int, s: str, acc: int) -> int:\n    if i == std::str::length(twice(s)):\n        acc\n    else:\n        f(i + 1, s, acc + mod(1000, i + 1))\n\nf(0, \"hello\", 0)" \
+        "${struct}fn f(i: int, p: P, acc: int) -> int:\n    if i == std::str::length(p.name):\n        acc\n    else:\n        f(i + 1, P{name: std::str::concat(p.name, \"\"), n: p.n}, acc + mod(1000, i + 1))\n\nf(0, P{name: \"hello world\", n: 3}, 0)" \
+        "${twice}fn f(i: int, s: str, acc: int) -> int:\n    if i == std::str::length(twice(s)):\n        acc\n    else:\n        f(i + 1, std::str::concat(s, \"\"), acc + mod(1000, i + 1))\n\nf(0, \"hello\", 0)" \
+        "import std::str\nimport std::mutable_vector\nfn first(v: MutableVector\[str\]) -> str:\n    v.at(0):\n        on IndexNotFound:\n            \"\"\n\nfn f(i: int, v: MutableVector\[str\], acc: int) -> int:\n    if i == std::str::length(first(v)):\n        acc\n    else:\n        f(i + 1, v, acc + mod(1000, i + 1))\n\nv = std::mutable_vector::from_list(\[\"hello\"\])\nf(0, v, 0)" \
+        "import std::char\nfn f(i: int, c: UnicodeChar, acc: int) -> int:\n    d = c\n    if i == std::char::scalar_value(d):\n        acc\n    else:\n        n = if (i - 1).mod(2) == 0:\n            'a'\n        else:\n            'b'\n        f(i - 1, n, acc + mod(1000, i))\n\nf(1114111, 'b', 0)" \
+        "import std::char\nfn f(i: int, c: UnicodeChar, acc: int) -> int:\n    fn pick(x: int) -> UnicodeChar:\n        c\n    if i == std::char::scalar_value(pick(0)):\n        acc\n    else:\n        n = if (i - 1).mod(2) == 0:\n            'a'\n        else:\n            'b'\n        f(i - 1, n, acc + mod(1000, i))\n\nf(1114111, 'b', 0)"]
     lmap source $sources {
         lassign [rangeOf $source] hir spec analysis
         set id [rangeInstance $spec f]
@@ -426,11 +426,11 @@ test range-induction-invariant-bound-shapes {str::length of a field of an unchan
 # (SameClosure). A local bound to the function's own binding is that binding;
 # a local bound to the parameter is the parameter.
 test range-induction-outside-binding-bound {a bound over a top-level binding or a captured one is invariant when every self call goes through the function's own binding, directly or through a local alias of it (i in [0, smallMax]); when a self call goes through a parameter holding another closure of the function, or a local alias of that parameter, the captured bound is not ("bound not stable"), and every backend computes 24} -body {
-    set top "import str\ntext = \"hello world\"\n\nfn count(i: int, acc: int) -> int:\n    if i == str::length(text):\n        acc\n    else:\n        count(i + 1, acc + mod(1000, i + 1))\n\ncount(0, 0)"
-    set captured "import str\nfn outer(s: str) -> int:\n    fn count(i: int, acc: int) -> int:\n        if i == str::length(s):\n            acc\n        else:\n            count(i + 1, acc + mod(1000, i + 1))\n    count(0, 0)\n\nouter(\"hello world\")"
-    set alias "import str\nfn outer(s: str) -> int:\n    fn count(i: int, acc: int) -> int:\n        if i == str::length(s):\n            acc\n        else:\n            g = count\n            g(i + 1, acc + mod(1000, i + 1))\n    count(0, 0)\n\nouter(\"hello world\")"
-    set other "import str\nfn mk(s: str):\n    fn count(i, acc, k):\n        if i == str::length(s):\n            acc\n        else:\n            x = if acc == 0:\n                k(i + 1, 1, k)\n            else:\n                0\n            count(i + 1, acc + x + mod(1000, i + 1), k)\n    count\n\na = mk(\"hello world\")\nb = mk(\"abc\")\na(0, 0, b)"
-    set otherAlias "import str\nfn mk(s: str):\n    fn count(i, acc, k):\n        if i == str::length(s):\n            acc\n        else:\n            g = k\n            x = if acc == 0:\n                g(i + 1, 1, g)\n            else:\n                0\n            count(i + 1, acc + x + mod(1000, i + 1), k)\n    count\n\na = mk(\"hello world\")\nb = mk(\"abc\")\na(0, 0, b)"
+    set top "import std::str\ntext = \"hello world\"\n\nfn count(i: int, acc: int) -> int:\n    if i == std::str::length(text):\n        acc\n    else:\n        count(i + 1, acc + mod(1000, i + 1))\n\ncount(0, 0)"
+    set captured "import std::str\nfn outer(s: str) -> int:\n    fn count(i: int, acc: int) -> int:\n        if i == std::str::length(s):\n            acc\n        else:\n            count(i + 1, acc + mod(1000, i + 1))\n    count(0, 0)\n\nouter(\"hello world\")"
+    set alias "import std::str\nfn outer(s: str) -> int:\n    fn count(i: int, acc: int) -> int:\n        if i == std::str::length(s):\n            acc\n        else:\n            g = count\n            g(i + 1, acc + mod(1000, i + 1))\n    count(0, 0)\n\nouter(\"hello world\")"
+    set other "import std::str\nfn mk(s: str):\n    fn count(i, acc, k):\n        if i == std::str::length(s):\n            acc\n        else:\n            x = if acc == 0:\n                k(i + 1, 1, k)\n            else:\n                0\n            count(i + 1, acc + x + mod(1000, i + 1), k)\n    count\n\na = mk(\"hello world\")\nb = mk(\"abc\")\na(0, 0, b)"
+    set otherAlias "import std::str\nfn mk(s: str):\n    fn count(i, acc, k):\n        if i == std::str::length(s):\n            acc\n        else:\n            g = k\n            x = if acc == 0:\n                g(i + 1, 1, g)\n            else:\n                0\n            count(i + 1, acc + x + mod(1000, i + 1), k)\n    count\n\na = mk(\"hello world\")\nb = mk(\"abc\")\na(0, 0, b)"
     # Every used instance of count but the generic Block-value entry (an
     # open instance, which no proof is attempted for).
     set out {}
@@ -458,19 +458,19 @@ test range-induction-outside-binding-bound {a bound over a top-level binding or 
 # whatever is set in it). Each built from a value that changes on the self
 # call is not invariant: the `if` then picks a different branch, the closure
 # captures another value, the array is another array.
-test range-induction-invariant-bound-values {str::length of a field of a struct built from an unchanged parameter, of an `if` value over unchanged parameters, of a call of a closure the invocation makes over an unchanged parameter (also a recursive one, which captures itself), char::scalar_value of a context parameter's field, and mutable_array::capacity of an unchanged array set in every step are bounds (i in [0, smallMax], or [0, 0x10FFFF]); the same shapes over a value the self call changes are not ("bound not stable")} -body {
-    set struct "import str\nstruct P:\n    name: str\n    n: int\n\n"
+test range-induction-invariant-bound-values {std::str::length of a field of a struct built from an unchanged parameter, of an `if` value over unchanged parameters, of a call of a closure the invocation makes over an unchanged parameter (also a recursive one, which captures itself), std::char::scalar_value of a context parameter's field, and std::mutable_array::capacity of an unchanged array set in every step are bounds (i in [0, smallMax], or [0, 0x10FFFF]); the same shapes over a value the self call changes are not ("bound not stable")} -body {
+    set struct "import std::str\nstruct P:\n    name: str\n    n: int\n\n"
     set sources [list \
-        "${struct}fn f(i: int, s: str, acc: int) -> int:\n    if i == str::length(P{name: s, n: 1}.name):\n        acc\n    else:\n        f(i + 1, s, acc + mod(1000, i + 1))\n\nf(0, \"hello\", 0)" \
-        "import str\nfn f(i: int, s: str, u: str, d: bool, acc: int) -> int:\n    t = if d:\n        s\n    else:\n        u\n    if i == str::length(t):\n        acc\n    else:\n        f(i + 1, s, u, d, acc + mod(1000, i + 1))\n\nf(0, \"hello\", \"x\", true, 0)" \
-        "import str\nfn f(i: int, s: str, acc: int) -> int:\n    fn g(x: str) -> str:\n        str::concat(x, s)\n    if i == str::length(g(\"!\")):\n        acc\n    else:\n        f(i + 1, s, acc + mod(1000, i + 1))\n\nf(0, \"hello\", 0)" \
-        "import str\nfn f(i: int, s: str, acc: int) -> int:\n    fn g(x: str, k: int) -> str:\n        if k == 0:\n            str::concat(x, s)\n        else:\n            g(x, k - 1)\n    if i == str::length(g(\"!\", 2)):\n        acc\n    else:\n        f(i + 1, s, acc + mod(1000, i + 1))\n\nf(0, \"hello\", 0)" \
-        "import char\ncontext struct Cfg:\n    c: UnicodeChar\n\nfn f(i: int, acc: int, context cfg: Cfg) -> int:\n    if i == char::scalar_value(cfg.c):\n        acc\n    else:\n        f(i + 1, acc + mod(1000, i + 1))\n\nwith context Cfg {c: 'e'}\nf(0, 0)" \
-        "import mutable_array\nfn f(i: int, a: MutableArray\[int\], acc: int) -> int:\n    if i == mutable_array::capacity(a):\n        acc\n    else:\n        a.set(0, i):\n            on IndexNotFound:\n                unit\n        f(i + 1, a, acc + mod(1000, i + 1))\n\nf(0, mutable_array::create(10, 0), 0)" \
-        "${struct}fn f(i: int, s: str, acc: int) -> int:\n    if i == str::length(P{name: s, n: 1}.name):\n        acc\n    else:\n        f(i + 1, str::concat(s, \"\"), acc + mod(1000, i + 1))\n\nf(0, \"hello\", 0)" \
-        "import str\nfn f(i: int, s: str, u: str, acc: int) -> int:\n    t = if i > 2:\n        s\n    else:\n        u\n    if i == str::length(t):\n        acc\n    else:\n        f(i + 1, s, u, acc + mod(1000, i + 1))\n\nf(0, \"hello\", \"x\", 0)" \
-        "import str\nfn f(i: int, s: str, acc: int) -> int:\n    fn g(x: str) -> str:\n        str::concat(x, s)\n    if i == str::length(g(\"!\")):\n        acc\n    else:\n        f(i + 1, str::concat(s, \"\"), acc + mod(1000, i + 1))\n\nf(0, \"hello\", 0)" \
-        "import mutable_array\nfn f(i: int, a: MutableArray\[int\], acc: int) -> int:\n    if i == mutable_array::capacity(a):\n        acc\n    else:\n        f(i + 1, mutable_array::create(i + 3, 0), acc + mod(1000, i + 1))\n\nf(0, mutable_array::create(10, 0), 0)"]
+        "${struct}fn f(i: int, s: str, acc: int) -> int:\n    if i == std::str::length(P{name: s, n: 1}.name):\n        acc\n    else:\n        f(i + 1, s, acc + mod(1000, i + 1))\n\nf(0, \"hello\", 0)" \
+        "import std::str\nfn f(i: int, s: str, u: str, d: bool, acc: int) -> int:\n    t = if d:\n        s\n    else:\n        u\n    if i == std::str::length(t):\n        acc\n    else:\n        f(i + 1, s, u, d, acc + mod(1000, i + 1))\n\nf(0, \"hello\", \"x\", true, 0)" \
+        "import std::str\nfn f(i: int, s: str, acc: int) -> int:\n    fn g(x: str) -> str:\n        std::str::concat(x, s)\n    if i == std::str::length(g(\"!\")):\n        acc\n    else:\n        f(i + 1, s, acc + mod(1000, i + 1))\n\nf(0, \"hello\", 0)" \
+        "import std::str\nfn f(i: int, s: str, acc: int) -> int:\n    fn g(x: str, k: int) -> str:\n        if k == 0:\n            std::str::concat(x, s)\n        else:\n            g(x, k - 1)\n    if i == std::str::length(g(\"!\", 2)):\n        acc\n    else:\n        f(i + 1, s, acc + mod(1000, i + 1))\n\nf(0, \"hello\", 0)" \
+        "import std::char\ncontext struct Cfg:\n    c: UnicodeChar\n\nfn f(i: int, acc: int, context cfg: Cfg) -> int:\n    if i == std::char::scalar_value(cfg.c):\n        acc\n    else:\n        f(i + 1, acc + mod(1000, i + 1))\n\nwith context Cfg {c: 'e'}\nf(0, 0)" \
+        "import std::mutable_array\nfn f(i: int, a: MutableArray\[int\], acc: int) -> int:\n    if i == std::mutable_array::capacity(a):\n        acc\n    else:\n        a.set(0, i):\n            on IndexNotFound:\n                unit\n        f(i + 1, a, acc + mod(1000, i + 1))\n\nf(0, std::mutable_array::create(10, 0), 0)" \
+        "${struct}fn f(i: int, s: str, acc: int) -> int:\n    if i == std::str::length(P{name: s, n: 1}.name):\n        acc\n    else:\n        f(i + 1, std::str::concat(s, \"\"), acc + mod(1000, i + 1))\n\nf(0, \"hello\", 0)" \
+        "import std::str\nfn f(i: int, s: str, u: str, acc: int) -> int:\n    t = if i > 2:\n        s\n    else:\n        u\n    if i == std::str::length(t):\n        acc\n    else:\n        f(i + 1, s, u, acc + mod(1000, i + 1))\n\nf(0, \"hello\", \"x\", 0)" \
+        "import std::str\nfn f(i: int, s: str, acc: int) -> int:\n    fn g(x: str) -> str:\n        std::str::concat(x, s)\n    if i == std::str::length(g(\"!\")):\n        acc\n    else:\n        f(i + 1, std::str::concat(s, \"\"), acc + mod(1000, i + 1))\n\nf(0, \"hello\", 0)" \
+        "import std::mutable_array\nfn f(i: int, a: MutableArray\[int\], acc: int) -> int:\n    if i == std::mutable_array::capacity(a):\n        acc\n    else:\n        f(i + 1, std::mutable_array::create(i + 3, 0), acc + mod(1000, i + 1))\n\nf(0, std::mutable_array::create(10, 0), 0)"]
     lmap source $sources {
         lassign [rangeOf $source] hir spec analysis
         set id [rangeInstance $spec f]
@@ -484,12 +484,12 @@ test range-induction-invariant-bound-values {str::length of a field of a struct 
 # local, not 3^N (without that, ten locals took 59049 questions and fourteen
 # 85 s). Invariant's depth limit still declines a chain as long as forty.
 proc InvariantChainSource {n} {
-    set source "import str\nfn f(i: int, s: str, acc: int) -> int:\n    t0 = s\n"
+    set source "import std::str\nfn f(i: int, s: str, acc: int) -> int:\n    t0 = s\n"
     for {set k 1} {$k <= $n} {incr k} {
         set j [expr {$k - 1}]
-        append source "    t$k = if str::length(t$j) == 0:\n        t$j\n    else:\n        t$j\n"
+        append source "    t$k = if std::str::length(t$j) == 0:\n        t$j\n    else:\n        t$j\n"
     }
-    append source "    if i == str::length(t$n):\n        acc\n    else:\n        f(i + 1, s, acc + mod(1000, i + 1))\n\nf(0, \"hello\", 0)"
+    append source "    if i == std::str::length(t$n):\n        acc\n    else:\n        f(i + 1, s, acc + mod(1000, i + 1))\n\nf(0, \"hello\", 0)"
     return $source
 }
 proc CountInvariant {args} {
@@ -521,28 +521,28 @@ test range-induction-invariant-shared-bindings {a bound over a chain of locals e
 # bindings, extended to immutable function parameters.
 
 test range-narrow-param-1 {a `<`/`>=` guard narrows a parameter reference in each branch exactly as it already narrows a local, on both sides (spec #6, #34); the caller's own argument (an unbounded list element) is not itself informative, isolating this from Part B's own propagation} -body {
-    lassign [rangeOf "import list\nfn f(n):\n    if n < 2:\n        n\n    else:\n        n\n\nfn use(xs):\n    f(list::at(xs, 0))\n\nuse(\[1, 2\])"] hir spec analysis
+    lassign [rangeOf "import std::list\nfn f(n):\n    if n < 2:\n        n\n    else:\n        n\n\nfn use(xs):\n    f(std::list::at(xs, 0))\n\nuse(\[1, 2\])"] hir spec analysis
     set id [rangeInstance $spec f]
     set b [paramBinding $hir $spec $id n]
     refRanges $hir $analysis $id $b
 } -result {{[-∞, +∞]} {[-∞, 1]} {[2, +∞]}}
 
 test range-narrow-param-2 {branch narrowing on a parameter is not limited to a function's top-level body: it applies wherever it already applies to a local (spec #7)} -body {
-    lassign [rangeOf "import list\nfn f(outer, n):\n    if outer:\n        if n >= 0:\n            n\n\nfn use(xs):\n    f(true, list::at(xs, 0))\n\nuse(\[1, 2\])"] hir spec analysis
+    lassign [rangeOf "import std::list\nfn f(outer, n):\n    if outer:\n        if n >= 0:\n            n\n\nfn use(xs):\n    f(true, std::list::at(xs, 0))\n\nuse(\[1, 2\])"] hir spec analysis
     set id [rangeInstance $spec f]
     set b [paramBinding $hir $spec $id n]
     refRanges $hir $analysis $id $b
 } -result {{[-∞, +∞]} {[0, +∞]}}
 
 test range-narrow-param-3 {two nested comparisons on a parameter narrow it exactly as they would a local (spec #33)} -body {
-    lassign [rangeOf "import list\nfn f(n):\n    if n >= 0:\n        if n < 10:\n            n\n\nfn use(xs):\n    f(list::at(xs, 0))\n\nuse(\[1, 2\])"] hir spec analysis
+    lassign [rangeOf "import std::list\nfn f(n):\n    if n >= 0:\n        if n < 10:\n            n\n\nfn use(xs):\n    f(std::list::at(xs, 0))\n\nuse(\[1, 2\])"] hir spec analysis
     set id [rangeInstance $spec f]
     set b [paramBinding $hir $spec $id n]
     refRanges $hir $analysis $id $b
 } -result {{[-∞, +∞]} {[0, +∞]} {[0, 9]}}
 
 test range-narrow-param-4 {a local binding narrows exactly as it did before this milestone (no regression: spec #38)} -body {
-    lassign [rangeOf "import list\nfn f(n):\n    b = n\n    if b >= 0:\n        b\n\nfn use(xs):\n    f(list::at(xs, 0))\n\nuse(\[1, 2\])"] hir spec analysis
+    lassign [rangeOf "import std::list\nfn f(n):\n    b = n\n    if b >= 0:\n        b\n\nfn use(xs):\n    f(std::list::at(xs, 0))\n\nuse(\[1, 2\])"] hir spec analysis
     set id [rangeInstance $spec f]
     # b is a *local* duplicate-free bind of n, not n's own BindingId.
     set localB ""
@@ -631,8 +631,8 @@ proc ifConditions {hir} {
 proc outcomeOf {text idx name {key ""}} {
     lassign [rangeOf $text] hir spec analysis
     set id [rangeInstance $spec $name $key]
-    # The IDXth `if` of the *program's own file*: `import type byte::Byte`
-    # loads lib/byte.bot, whose functions' `if`s precede the program's.
+    # The IDXth `if` of the *program's own file*: `import type std::byte::Byte`
+    # loads stdlib/byte.bot, whose functions' `if`s precede the program's.
     set file [dict get $hir exprs [lindex [hir::roots $hir] end] origin file]
     set own {}
     foreach e [lsort -dictionary [dict keys [dict get $hir exprs]]] {
@@ -646,7 +646,7 @@ proc outcomeOf {text idx name {key ""}} {
 }
 
 test condition-outcome-1 {a Byte parameter: b < 0 is AlwaysFalse from the declared domain alone, no caller narrowing needed} -body {
-    outcomeOf {import type byte::Byte
+    outcomeOf {import type std::byte::Byte
 fn f(b: Byte) -> int:
     if b < 0:
         1
@@ -656,7 +656,7 @@ f(10)} 0 f
 } -result {0}
 
 test condition-outcome-2 {a Byte parameter: b > 255 is likewise AlwaysFalse} -body {
-    outcomeOf {import type byte::Byte
+    outcomeOf {import type std::byte::Byte
 fn f(b: Byte) -> int:
     if b > 255:
         1
@@ -666,7 +666,7 @@ f(10)} 0 f
 } -result {0}
 
 test condition-outcome-3 {a Byte parameter: b >= 0 is AlwaysTrue (the mirror control, spec #16)} -body {
-    outcomeOf {import type byte::Byte
+    outcomeOf {import type std::byte::Byte
 fn f(b: Byte) -> int:
     if b >= 0:
         1
@@ -676,7 +676,7 @@ f(10)} 0 f
 } -result {1}
 
 test condition-outcome-4 {a Byte parameter: b < 100 is genuinely Unknown -- two callers spanning the threshold join the entry range to [0 or wider, 255], so neither outcome is impossible (spec #17's own non-overoptimization control)} -body {
-    outcomeOf {import type byte::Byte
+    outcomeOf {import type std::byte::Byte
 fn f(b: Byte) -> int:
     if b < 100:
         1
@@ -841,19 +841,19 @@ h(16)}
 # and separately, `caller`'s own declared `-> Byte` result is never proven,
 # since its body is a dynamic `g(v)` call. This replaces it with the audit's
 # own legal twin (S03b): `dyn` is left undeclared (not Bearing) and locally
-# handles byte::from_int's own BelowRange/AboveRange errors itself, so it
+# handles std::byte::from_int's own BelowRange/AboveRange errors itself, so it
 # legally erases through caller's untyped `g` -- reached only through
 # callvalue, exactly like the original intended to exercise, but a real,
 # diagnostic-free program (confirmed directly: 0 diagnostics, asserted
 # below alongside the original two ConditionOutcome assertions).
-test condition-outcome-12 {shared-instance adversarial control (legal twin, S03b): byte::from_int(45) (safe) and a genuinely open/dynamic caller sharing the same byte::from_int<int> instance -- the joined entry range is unknown, so neither comparison is decided, even though one caller alone would decide both} -body {
-    set src {import byte
-byte::from_int(45)
+test condition-outcome-12 {shared-instance adversarial control (legal twin, S03b): std::byte::from_int(45) (safe) and a genuinely open/dynamic caller sharing the same std::byte::from_int<int> instance -- the joined entry range is unknown, so neither comparison is decided, even though one caller alone would decide both} -body {
+    set src {import std::byte
+std::byte::from_int(45)
 fn dyn(m):
-    r = byte::from_int(m + 0):
-        on byte::BelowRange:
+    r = std::byte::from_int(m + 0):
+        on std::byte::BelowRange:
             0
-        on byte::AboveRange:
+        on std::byte::AboveRange:
             255
     r
 fn caller(g, v):
@@ -865,9 +865,9 @@ caller(dyn, 45)}
     removeFile q-m6-shared-adversarial.bot
     set spec [hir::specialize::analyze $hir]
     set analysis [hir::range::analyze $hir $spec]
-    set id [rangeInstance $spec {byte::from_int}]
+    set id [rangeInstance $spec {std::byte::from_int}]
     set conditions [ifConditions $hir]
-    # byte::from_int's own two conditions are lib/byte.bot's (value < 0)
+    # std::byte::from_int's own two conditions are stdlib/byte.bot's (value < 0)
     # and (value > 255); this program adds none of its own `if` nodes with
     # a numeric comparison, so both entries belong to it.
     list $diagnosticCount \
@@ -906,8 +906,8 @@ test range-callee-position-call-reaches-entry {sel is called once as an ordinary
     paramRanges $analysis [rangeInstance $spec sel int]
 } -result {{[1, 10] {1,10}}}
 
-test range-callee-position-call-in-index-reaches-entry {a call inside the index of a list::at in callee position (list::at(fs, pick(10))(0)) is a call site of pick too} -body {
-    lassign [rangeOf {import list
+test range-callee-position-call-in-index-reaches-entry {a call inside the index of a std::list::at in callee position (std::list::at(fs, pick(10))(0)) is a call site of pick too} -body {
+    lassign [rangeOf {import std::list
 fn pick(k):
     if k > 5:
         1
@@ -922,7 +922,7 @@ fn two(y):
 
 fs = [one, two]
 
-[pick(1), list::at(fs, pick(10))(0)]}] hir spec analysis
+[pick(1), std::list::at(fs, pick(10))(0)]}] hir spec analysis
     paramRanges $analysis [rangeInstance $spec pick int]
 } -result {{[1, 10] {1,10}}}
 
@@ -951,7 +951,7 @@ fn apply(g):
     g(0)
 
 [apply(sel(1)), sel(0 - 50)(0)]} {[1, 2]} \
-    list-index {import list
+    list-index {import std::list
 fn pick(k):
     if k > 5:
         1
@@ -966,7 +966,7 @@ fn two(y):
 
 fs = [one, two]
 
-[pick(1), list::at(fs, pick(10))(0)]} {[0, 2]}] {
+[pick(1), std::list::at(fs, pick(10))(0)]} {[0, 2]}] {
     test range-callee-position-parity-$name "callee-position call program $name: interp, compile and cranelift agree" -body {
         set hir [surface::compile $src t.bot -strict 0]
         set outcomes [lsort -unique [lmap backend {interp compile cranelift} {

@@ -1,6 +1,6 @@
 # diagnostic-recovery-imported.bot -- the S13 program of
-# diagnostic-recovery.bot with the import it lacks: `import str` makes
-# s.concat("ab") the call of str::concat, which compiles and runs as it
+# diagnostic-recovery.bot with the import it lacks: `import std::str` makes
+# s.concat("ab") the call of std::str::concat, which compiles and runs as it
 # always did (DIAGNOSTIC-RECOVERY.md: no import is implied, and a valid
 # program is unchanged).
 #
@@ -11,20 +11,20 @@
 # needs str not imported.
 #
 # Imports: compiler and test (the framework); str (the property).
-import compiler
-import str
-import test
+import std::compiler
+import std::str
+import std::test
 
 fn register_imported_tests():
     # dr-method-missing-import-imported: with the import, the method call
-    # applies str::concat.
-    fn b_imported() errors compiler::CompilerError:
+    # applies std::str::concat.
+    fn b_imported() errors std::compiler::CompilerError:
         static compile:
             fn f(s: str) -> str:
                 s.concat("ab")
             f("q")
-    test::value("dr-method-missing-import-imported/value", "qab", b_imported)
+    std::test::value("dr-method-missing-import-imported/value", "qab", b_imported)
 
-with context test::suite()
+with context std::test::suite()
 register_imported_tests()
-test::report()
+std::test::report()

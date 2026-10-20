@@ -10,12 +10,12 @@
   scan_while<int, block(e239)/1 -> bool> -> int valid
   local_char?<str> -> bool valid
   domain?<int> -> bool valid
-  byte::nibble<int[HighNibble]> -> int[Nibble] valid
+  std::byte::nibble<int[HighNibble]> -> int[Nibble] valid
   esc_bytes<list, int, str> -> str valid
   esc_bytes<List[int[Byte]], int, str> -> str valid
   hex_pair<int[Byte]> -> str valid
   high_nibble<int[Byte]> -> int[Nibble] valid
-  byte::high_nibble<int[Byte]> -> int[HighNibble] valid
+  std::byte::high_nibble<int[Byte]> -> int[HighNibble] valid
   esc_char<str> -> str valid
   esc_from<str, int, str> -> str valid
   esc_from<any, int, str> -> str valid

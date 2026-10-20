@@ -1,14 +1,14 @@
 From 263ce8c475a263994ade2c794b2ad50d334a76d1 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sun, 18 Oct 2026 23:27:48 +0000
-Subject: [PATCH] EXPERIMENT (not for main): mutable_array::probe_linear, a
+Subject: [PATCH] EXPERIMENT (not for main): std::mutable_array::probe_linear, a
  probe primitive
 
 The runtime-primitive experiment of the hash-table milestone
 (HASH-TABLE-EXPERIMENT.md, "Runtime experiments";
 HASH-TABLE-COMPILER-PRESSURE.md, RT-1): the whole linear probing walk of
 a table of stored hashes (negative = empty) and keys as one runtime
-operation, mutable_array::probe_linear(hashes, keys, h, key), returning
+operation, std::mutable_array::probe_linear(hashes, keys, h, key), returning
 the slot of KEY or -1 - I for the empty slot I ending its sequence.
 
 * core/mutarray.tcl: the Tcl implementation (interp, compile) and the
@@ -41,7 +41,7 @@ index 76b273b..3c4a3f8 100644
  }
  
 +# EXPERIMENT (HASH-TABLE-EXPERIMENT.md, "Runtime experiments"; not a
-+# shipped intrinsic): (mutable_array::probe_linear HASHES KEYS H KEY) walks
++# shipped intrinsic): (std::mutable_array::probe_linear HASHES KEYS H KEY) walks
 +# the linear probing sequence of hash H over the slot arrays HASHES (a
 +# stored hash, or a negative Int for an empty slot) and KEYS, from slot
 +# H mod capacity(HASHES): the slot I whose stored hash is H and whose key ==
@@ -49,9 +49,9 @@ index 76b273b..3c4a3f8 100644
 +# is occupied by other keys. A slot outside KEYS is IndexNotFound.
 +proc core::mutarray::probeLinear {hashes keys h key} {
 +    variable store
-+    set hs $store([Id $hashes mutable_array::probe_linear])
-+    set ks $store([Id $keys mutable_array::probe_linear])
-+    set hv [core::value::intOf [core::value::expect int $h mutable_array::probe_linear]]
++    set hs $store([Id $hashes std::mutable_array::probe_linear])
++    set ks $store([Id $keys std::mutable_array::probe_linear])
++    set hv [core::value::intOf [core::value::expect int $h std::mutable_array::probe_linear]]
 +    set cap [llength $hs]
 +    if {$cap == 0} {
 +        return [core::value::intFromNumber -1]
@@ -65,7 +65,7 @@ index 76b273b..3c4a3f8 100644
 +        if {$stored == $hv} {
 +            if {$i >= [llength $ks]} {
 +                core::native::failDeclared IndexNotFound \
-+                    "mutable_array::probe_linear: slot $i is outside the keys 0..[expr {[llength $ks] - 1}]"
++                    "std::mutable_array::probe_linear: slot $i is outside the keys 0..[expr {[llength $ks] - 1}]"
 +            }
 +            if {[core::value::equal [lindex $ks $i] $key]} {
 +                return [core::value::intFromNumber $i]
@@ -78,29 +78,29 @@ index 76b273b..3c4a3f8 100644
 +
  proc core::mutarray::capacity {v} {
      variable store
-     return [core::value::intFromNumber [llength $store([Id $v mutable_array::capacity])]]
-@@ -378,6 +414,9 @@ core::native::register mutable_array::generate -arity 2 -impl core::mutarray::ge
+     return [core::value::intFromNumber [llength $store([Id $v std::mutable_array::capacity])]]
+@@ -378,6 +414,9 @@ core::native::register std::mutable_array::generate -arity 2 -impl core::mutarray::ge
      -param-types {int any} -result-type mutarray -runtime mutarray-alloc -completion 1 \
      -result-shape {mutarray-generate 1} -errors-from 1 -result-length {int 0} \
      -drop-form {mutable_array#generate_drop result} -ownership {observe factory}
-+core::native::register mutable_array::probe_linear -arity 4 -impl core::mutarray::probeLinear \
++core::native::register std::mutable_array::probe_linear -arity 4 -impl core::mutarray::probeLinear \
 +    -param-types {mutarray mutarray int any} -result-type int -runtime {range-check structural-equality} \
 +    -errors IndexNotFound -ownership {observe observe observe equality}
- core::native::register mutable_array::capacity -arity 1 -impl core::mutarray::capacity \
+ core::native::register std::mutable_array::capacity -arity 1 -impl core::mutarray::capacity \
      -param-types {mutarray} -result-type int -result-range collection-length -ownership {observe}
- core::native::register mutable_array::at -arity 2 -impl core::mutarray::at \
+ core::native::register std::mutable_array::at -arity 2 -impl core::mutarray::at \
 diff --git a/native/lower.tcl b/native/lower.tcl
 index be733b6..85eb03a 100644
 --- a/native/lower.tcl
 +++ b/native/lower.tcl
 @@ -122,6 +122,7 @@ namespace eval native::lower {
-         immutable_set::contains  {equality-set} \
-         mutable_array::allocate {op mutarrayallocate} \
-         mutable_array::capacity {op mutarraycapacity} \
-+        mutable_array::probe_linear {op mutarrayprobe} \
-         mutable_array::at       {op mutarrayget} \
-         mutable_array::set      {op mutarrayset} \
-         mutable_array::copy     {op mutarraycopy} \
+         std::immutable_set::contains  {equality-set} \
+         std::mutable_array::allocate {op mutarrayallocate} \
+         std::mutable_array::capacity {op mutarraycapacity} \
++        std::mutable_array::probe_linear {op mutarrayprobe} \
+         std::mutable_array::at       {op mutarrayget} \
+         std::mutable_array::set      {op mutarrayset} \
+         std::mutable_array::copy     {op mutarraycopy} \
 diff --git a/native/src/codegen/clif.rs b/native/src/codegen/clif.rs
 index 5c88f3f..a9f3142 100644
 --- a/native/src/codegen/clif.rs
@@ -121,7 +121,7 @@ index b710fc0..c419bf5 100644
      SetContainsTotal,
      MutArrayAllocate,
      MutArrayCapacity,
-+    /// EXPERIMENT: `mutable_array::probe_linear` (HASH-TABLE-EXPERIMENT.md).
++    /// EXPERIMENT: `std::mutable_array::probe_linear` (HASH-TABLE-EXPERIMENT.md).
 +    MutArrayProbe,
      MutArrayGet,
      MutArraySet,
@@ -161,7 +161,7 @@ index 20799bf..1a2f72d 100644
  }
  
 +/// EXPERIMENT (HASH-TABLE-EXPERIMENT.md, "Runtime experiments"):
-+/// `mutable_array::probe_linear(hashes, keys, h, key)`, core/mutarray.tcl's
++/// `std::mutable_array::probe_linear(hashes, keys, h, key)`, core/mutarray.tcl's
 +/// probeLinear: the slot of KEY along hash H's linear probing sequence over
 +/// the stored hashes (negative = empty) and keys, or -1 - the first empty
 +/// slot, or -1 - capacity when no slot is empty.

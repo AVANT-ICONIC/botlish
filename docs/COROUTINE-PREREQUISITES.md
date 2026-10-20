@@ -181,11 +181,11 @@ keyword.
 
 | Tcl | Botlish (illustrative) | Notes |
 |---|---|---|
-| `coroutine NAME CMD ARGS` (runs to the first yield) | `coroutine::start(f, ...)` | Tcl's eager first run versus a separate first `resume` is a decision (§4.1) |
-| `NAME ?v?` (resume) | `coroutine::resume(c, v)` | Tcl cannot tell a yielded value from the final one. Botlish should be able to (§4.1) |
-| `yield ?v?` | `coroutine::yield(v)` | must not be typed `never` (§4.1) |
+| `coroutine NAME CMD ARGS` (runs to the first yield) | `std::coroutine::start(f, ...)` | Tcl's eager first run versus a separate first `resume` is a decision (§4.1) |
+| `NAME ?v?` (resume) | `std::coroutine::resume(c, v)` | Tcl cannot tell a yielded value from the final one. Botlish should be able to (§4.1) |
+| `yield ?v?` | `std::coroutine::yield(v)` | must not be typed `never` (§4.1) |
 | `yieldto CMD ARGS` | internal transfer primitive | needed later by a scheduler (§8), not exposed now |
-| `info coroutine` | `coroutine::current()` | optional |
+| `info coroutine` | `std::coroutine::current()` | optional |
 | resume a finished coroutine: "invalid command name" | declared error, e.g. `CoroutineFinished` | dynamic state, checkable at the resume site |
 | resume a running coroutine: "coroutine … is already running" | declared error, e.g. `CoroutineRunning` | dynamic state |
 | `yield` outside a coroutine: "yield can only be called in a coroutine" | see §4.1 | a placement rule, not an application error |
@@ -215,7 +215,7 @@ keyword.
 * None of them appears on a runtime path. The only `lsort -command` runs at
   type registration (`core/type.tcl:163`).
 * No native calls back into Botlish. The higher-order helpers (`any?`, `all?`,
-  `none?`, `find`) are ordinary Botlish (`lib/list.bot:84-102`), and type
+  `none?`, `find`) are ordinary Botlish (`stdlib/list.bot:84-102`), and type
   validators are pure Tcl.
 * This is the Tcl form of the rule §7 needs for the bytecode interpreter: a
   callback through a C-bound host frame pins the stack.
@@ -438,7 +438,7 @@ The interpreter survey adds:
    a structural `Fn` carries `errors`.
    * Resume's `calleeErrors` = the body's errors ∪ {`CoroutineFinished`,
      `CoroutineRunning`}.
-   * `x = coroutine::resume(c, v): on E: …` then works unchanged, because
+   * `x = std::coroutine::resume(c, v): on E: …` then works unchanged, because
      `handle` wraps a bare call (EXPLICIT-ERROR-COMPLETIONS.md:113-121).
    * Erasing an error-bearing handle to `any` must be rejected by the same
      `Bearing` rule that protects callables.
@@ -479,8 +479,8 @@ The interpreter survey adds:
 * If the effect is ever made static, choose between two meanings for a call
   through `any`:
   * "suspends" as a bearing obligation (erasure rejected, like errors). This
-    colours APIs, and the untyped higher-order helpers (`list::any?`,
-    `list::find`) could no longer take a yielding predicate;
+    colours APIs, and the untyped higher-order helpers (`std::list::any?`,
+    `std::list::find`) could no longer take a yielding predicate;
   * conservatively "may suspend", like NIR's `CallValue`.
 
   For a stackful design only the conservative reading is consistent with C1.
@@ -734,7 +734,7 @@ for little extra work.
 * **Rust `std`.** It links libc on the `-gnu` target and installs its own
   SIGSEGV handler for the main thread's guard. Leaving glibc ultimately means
   a `no_std` runtime or the project's own system-call layer, which
-  `linux::abi::x86_64::syscall` (LINUX-X86-64-SYSCALL.md) already points toward.
+  `std::linux::abi::x86_64::syscall` (LINUX-X86-64-SYSCALL.md) already points toward.
   Appendix B lists, measured on a real executable, every glibc and libgcc
   symbol a produced executable imports, which code needs each one, and what
   replaces it.
@@ -806,7 +806,7 @@ semantics change and no NIR change.
 | R5 | Global per-thread runtime state | medium (blocks actors, not coroutines) | `thread_local PROGRAM`, process-global guard atomics, `Rc`; in Tcl, `ModuleBase`, argv, frame/mutarray stores per interp, and non-re-entrant compile state (`hir/sourcetypes.tcl:24-66`) | §4.2 item 5; §4.3 item 10 |
 | R6 | Frame-store lifetime in the Tcl backends | medium (correctness bug once interleaving exists) | the watermark `releaseSince` (A.2b); `containsBlock` blind to handles; abandonment skips `finally` (A.3) | §4.2 items 3-4 |
 | R7 | A Rust frame below a yield | low | `rt_call_value` can sit between a closure that yields and its caller. It holds only the raw `p: *mut Vm` and forms short-lived `&mut` borrows (`ops.rs:1444-1456`); release builds may compile it to a tail call (CRANELIFT-WASM.md:1947-1949) | keep the rule "helpers never hold a `&mut Vm` across a call into generated code"; audit new helpers against it |
-| R8 | Blocking system calls | low now, central for async | `linux::abi::x86_64::syscall` runs in a helper (`runtime/syscall.rs:73`). A blocking call stops every coroutine of the thread, by design of cooperative scheduling | nothing for coroutines; async I/O is a later design (§8) |
+| R8 | Blocking system calls | low now, central for async | `std::linux::abi::x86_64::syscall` runs in a helper (`runtime/syscall.rs:73`). A blocking call stops every coroutine of the thread, by design of cooperative scheduling | nothing for coroutines; async I/O is a later design (§8) |
 | R9 | Cross-actor heap pointers | future | marking writes `header.marked` into any non-static object it reaches, and only the owning heap's sweep clears it (`heap.rs:121-129, 161-165`). A foreign pointer would leave another heap's object permanently marked. A walk over a stack shared by two actors cannot tell their frames apart | every actor's activations, including its root, run on actor-owned stacks (§6). Sendability forbids sharing mutable or handle values |
 | R10 | Moving a suspended coroutine to another actor or thread | future | suspended native frames hold the `Vm` pointer in callee-saved registers and spill slots no stack map describes. A Rust helper frame holds `p`. Stack maps describe only `Value` roots | §6. Interpreter frames do not have this problem (§7) |
 
@@ -963,7 +963,7 @@ interpreter's coroutine prerequisites:
      `callvalue` on closures itself, by `ClosureObj.func` (`value.rs:265-274`),
      and use the helper path only for natives.
    * Every future higher-order intrinsic must be written in Botlish (as
-     `lib/list.bot`'s already are) or lowered to NIR-level calls, never
+     `stdlib/list.bot`'s already are) or lowered to NIR-level calls, never
      implemented as a Rust helper that calls a closure.
 2. **No instruction exposes a register's or frame's address.** That keeps
    register stacks *relocatable*: the interpreter holds indices, never raw

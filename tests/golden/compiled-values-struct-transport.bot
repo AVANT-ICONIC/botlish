@@ -26,10 +26,10 @@
 # allocation site.)
 #
 # Imports: compiler and test (the framework); str (the vtGc programs'
-# str::concat). No test here is about an import or about method calls.
-import compiler
-import str
-import test
+# std::str::concat). No test here is about an import or about method calls.
+import std::compiler
+import std::str
+import std::test
 
 # ---------------------------------------------------------------------------
 # Distance, width and direction
@@ -38,7 +38,7 @@ fn register_transport_chain_tests():
     # vt-direction-asymmetry-values (argument half): chainArg W=6 E=3 -- a
     # six-field struct literal built by the driver, forwarded down three
     # argument edges, every field summed by the last callee.
-    fn b_chain_arg_6_3() errors compiler::CompilerError:
+    fn b_chain_arg_6_3() errors std::compiler::CompilerError:
         static compile:
             fn fwd0(r, k):
                 r.f0 + r.f1 + r.f2 + r.f3 + r.f4 + r.f5 + k
@@ -51,11 +51,11 @@ fn register_transport_chain_tests():
                     return acc
                 drive(i + 1, n, acc + fwd2({f0: i + 0, f1: i + 1, f2: i + 2, f3: i + 3, f4: i + 4, f5: i + 5}, i))
             drive(0, 10, 0)
-    test::value("vt-direction-asymmetry-values/argument-chain", 465, b_chain_arg_6_3)
+    std::test::value("vt-direction-asymmetry-values/argument-chain", 465, b_chain_arg_6_3)
 
     # vt-width-shrinks-with-a-new-value: a callee that builds a narrower
     # result from a wider argument starts a new value of its own width.
-    fn b_width_shrinks() errors compiler::CompilerError:
+    fn b_width_shrinks() errors std::compiler::CompilerError:
         static compile:
             fn mk4(i):
                 {a: i, b: i + 1, c: i + 2, d: i + 3}
@@ -67,7 +67,7 @@ fn register_transport_chain_tests():
                 s = narrow(mk4(i))
                 drive(i + 1, n, acc + s.a + s.b)
             drive(0, 10, 0)
-    test::value("vt-width-shrinks-with-a-new-value", 120, b_width_shrinks)
+    std::test::value("vt-width-shrinks-with-a-new-value", 120, b_width_shrinks)
 
 # ---------------------------------------------------------------------------
 # Frontiers
@@ -75,7 +75,7 @@ fn register_transport_chain_tests():
 fn register_transport_frontier_tests():
     # vt-late-frontier: lateFrontier W=6 E=5 -- the driver reads two fields
     # locally, then forwards the struct down five argument edges.
-    fn b_late_frontier() errors compiler::CompilerError:
+    fn b_late_frontier() errors std::compiler::CompilerError:
         static compile:
             fn fwd0(r, k):
                 r.f0 + r.f1 + r.f2 + r.f3 + r.f4 + r.f5 + k
@@ -94,12 +94,12 @@ fn register_transport_frontier_tests():
                 local = r.f0 + r.f1
                 drive(i + 1, n, acc + local + fwd4(r, i))
             drive(0, 10, 0)
-    test::value("vt-late-frontier", 565, b_late_frontier)
+    std::test::value("vt-late-frontier", 565, b_late_frontier)
 
     # vt-late-materialized-is-equal-to-eager: a six-field value used locally,
     # then carried down a five-call chain (materialized late, at the
     # frontier) compares and hashes like one built at construction.
-    fn b_late_materialized() errors compiler::CompilerError:
+    fn b_late_materialized() errors std::compiler::CompilerError:
         static compile:
             fn f0(r, k):
                 r.a + r.b + r.c + r.d + r.e + r.f + k
@@ -118,11 +118,11 @@ fn register_transport_frontier_tests():
                 t = f4(r, i)
                 [local, t, r == s, hash(r) == hash(s), r]
             run(3)
-    test::value("vt-late-materialized-is-equal-to-eager", [7, 36, true, true, {a: 3, b: 4, c: 5, d: 6, e: 7, f: 8}], b_late_materialized)
+    std::test::value("vt-late-materialized-is-equal-to-eager", [7, 36, true, true, {a: 3, b: 4, c: 5, d: 6, e: 7, f: 8}], b_late_materialized)
 
     # vt-materialization-is-single: lateTwice W=6 E=5 -- the late-frontier
     # shape with two long forwards of one local.
-    fn b_late_twice() errors compiler::CompilerError:
+    fn b_late_twice() errors std::compiler::CompilerError:
         static compile:
             fn fwd0(r, k):
                 r.f0 + r.f1 + r.f2 + r.f3 + r.f4 + r.f5 + k
@@ -141,11 +141,11 @@ fn register_transport_frontier_tests():
                 local = r.f0 + r.f1
                 drive(i + 1, n, acc + local + fwd4(r, i) + fwd4(r, i + 1))
             drive(0, 10, 0)
-    test::value("vt-materialization-is-single", 1040, b_late_twice)
+    std::test::value("vt-materialization-is-single", 1040, b_late_twice)
 
     # vt-multiple-consumers: twoConsumers W=4 LONG=6 -- one local passed to
     # a cheap consumer and down a six-edge chain.
-    fn b_two_consumers() errors compiler::CompilerError:
+    fn b_two_consumers() errors std::compiler::CompilerError:
         static compile:
             fn cheap(r, k):
                 r.f0 + r.f1 + r.f2 + r.f3 + k
@@ -167,11 +167,11 @@ fn register_transport_frontier_tests():
                 r = {f0: i + 0, f1: i + 1, f2: i + 2, f3: i + 3}
                 drive(i + 1, n, acc + cheap(r, i) + long5(r, i))
             drive(0, 10, 0)
-    test::value("vt-multiple-consumers", 570, b_two_consumers)
+    std::test::value("vt-multiple-consumers", 570, b_two_consumers)
 
     # vt-shared-prefix: sharedPrefix W=4 LONG=6 -- a local passed to a shared
     # first function that splits into a cheap and a long continuation.
-    fn b_shared_prefix() errors compiler::CompilerError:
+    fn b_shared_prefix() errors std::compiler::CompilerError:
         static compile:
             fn cheap(r, k):
                 r.f0 + r.f1 + r.f2 + r.f3 + k
@@ -195,12 +195,12 @@ fn register_transport_frontier_tests():
                 r = {f0: i + 0, f1: i + 1, f2: i + 2, f3: i + 3}
                 drive(i + 1, n, acc + head(r, i))
             drive(0, 10, 0)
-    test::value("vt-shared-prefix", 570, b_shared_prefix)
+    std::test::value("vt-shared-prefix", 570, b_shared_prefix)
 
     # vt-branch-frontier-values: branchy W=8 E=6 over 100 iterations,
     # threshold 90 -- one branch projects locally, the other forwards down
     # six edges.
-    fn b_branchy() errors compiler::CompilerError:
+    fn b_branchy() errors std::compiler::CompilerError:
         static compile:
             fn fwd0(r, k):
                 r.f0 + r.f1 + r.f2 + r.f3 + r.f4 + r.f5 + r.f6 + r.f7 + k
@@ -224,7 +224,7 @@ fn register_transport_frontier_tests():
                     r.f0 + r.f1
                 drive(i + 1, n, acc + v)
             drive(0, 100, 0)
-    test::value("vt-branch-frontier-values", 16885, b_branchy)
+    std::test::value("vt-branch-frontier-values", 16885, b_branchy)
 
 # ---------------------------------------------------------------------------
 # Cyclic transport
@@ -232,34 +232,34 @@ fn register_transport_frontier_tests():
 fn register_transport_cycle_tests():
     # vt-cyclic-values: selfTail W=3 and W=6 -- a struct threaded through a
     # self-tail loop and rebuilt at every step.
-    fn b_self_tail_3() errors compiler::CompilerError:
+    fn b_self_tail_3() errors std::compiler::CompilerError:
         static compile:
             fn spin(s, i, n):
                 if i >= n:
                     return s.f0 + s.f1 + s.f2
                 spin({f0: s.f0 + 1, f1: s.f1 + 1, f2: s.f2 + 1}, i + 1, n)
             spin({f0: 0 + 0, f1: 0 + 1, f2: 0 + 2}, 0, 10)
-    test::value("vt-cyclic-values/3-fields", 33, b_self_tail_3)
+    std::test::value("vt-cyclic-values/3-fields", 33, b_self_tail_3)
 
-    fn b_self_tail_6() errors compiler::CompilerError:
+    fn b_self_tail_6() errors std::compiler::CompilerError:
         static compile:
             fn spin(s, i, n):
                 if i >= n:
                     return s.f0 + s.f1 + s.f2 + s.f3 + s.f4 + s.f5
                 spin({f0: s.f0 + 1, f1: s.f1 + 1, f2: s.f2 + 1, f3: s.f3 + 1, f4: s.f4 + 1, f5: s.f5 + 1}, i + 1, n)
             spin({f0: 0 + 0, f1: 0 + 1, f2: 0 + 2, f3: 0 + 3, f4: 0 + 4, f5: 0 + 5}, 0, 10)
-    test::value("vt-cyclic-values/6-fields", 75, b_self_tail_6)
+    std::test::value("vt-cyclic-values/6-fields", 75, b_self_tail_6)
 
     # vt-cyclic-recursion-non-tail: a struct handed down a non-tail self
     # recursion.
-    fn b_depth() errors compiler::CompilerError:
+    fn b_depth() errors std::compiler::CompilerError:
         static compile:
             fn depth(s, n):
                 if n == 0:
                     return s.a + s.b
                 depth({a: s.a + 1, b: s.b}, n - 1) + 1
             depth({a: 1, b: 2}, 5)
-    test::value("vt-cyclic-recursion-non-tail", 13, b_depth)
+    std::test::value("vt-cyclic-recursion-non-tail", 13, b_depth)
 
 # ---------------------------------------------------------------------------
 # Nested values
@@ -267,7 +267,7 @@ fn register_transport_cycle_tests():
 fn register_transport_nested_tests():
     # vt-nested-long-arg-stays-bundled: nestedChainArg INNERW=4 E=3 -- a
     # wide inner value over a three-edge argument chain.
-    fn b_nested_arg_4_3() errors compiler::CompilerError:
+    fn b_nested_arg_4_3() errors std::compiler::CompilerError:
         static compile:
             fn fwd0(r, k):
                 r.a + r.b + r.inner.c0 + r.inner.c1 + r.inner.c2 + r.inner.c3 + k
@@ -280,11 +280,11 @@ fn register_transport_nested_tests():
                     return acc
                 drive(i + 1, n, acc + fwd2({a: i, b: i + 1, inner: {c0: i + 2, c1: i + 3, c2: i + 4, c3: i + 5}}, i))
             drive(0, 10, 0)
-    test::value("vt-nested-long-arg-stays-bundled", 465, b_nested_arg_4_3)
+    std::test::value("vt-nested-long-arg-stays-bundled", 465, b_nested_arg_4_3)
 
     # vt-nested-long-arg-narrow-opens: nestedChainArg INNERW=2 E=4 -- a
     # narrow inner value across a four-edge argument chain.
-    fn b_nested_arg_2_4() errors compiler::CompilerError:
+    fn b_nested_arg_2_4() errors std::compiler::CompilerError:
         static compile:
             fn fwd0(r, k):
                 r.a + r.b + r.inner.c0 + r.inner.c1 + k
@@ -299,11 +299,11 @@ fn register_transport_nested_tests():
                     return acc
                 drive(i + 1, n, acc + fwd3({a: i, b: i + 1, inner: {c0: i + 2, c1: i + 3}}, i))
             drive(0, 10, 0)
-    test::value("vt-nested-long-arg-narrow-opens", 285, b_nested_arg_2_4)
+    std::test::value("vt-nested-long-arg-narrow-opens", 285, b_nested_arg_2_4)
 
     # vt-nested-independent-lifetime: an inner value that is itself
     # forwarded, next to projections of it.
-    fn b_independent_inner() errors compiler::CompilerError:
+    fn b_independent_inner() errors std::compiler::CompilerError:
         static compile:
             fn take(q):
                 q.c + q.d
@@ -313,11 +313,11 @@ fn register_transport_nested_tests():
                 r = {a: i, b: i + 1, inner: {c: i + 2, d: i + 3}}
                 drive(i + 1, n, acc + r.a + r.inner.c + take(r.inner))
             drive(0, 10, 0)
-    test::value("vt-nested-independent-lifetime", 250, b_independent_inner)
+    std::test::value("vt-nested-independent-lifetime", 250, b_independent_inner)
 
     # vt-one-fields-layout-per-parameter: two call sites of one parameter
     # with different nested literals.
-    fn b_one_layout() errors compiler::CompilerError:
+    fn b_one_layout() errors std::compiler::CompilerError:
         static compile:
             fn leaf(r, k):
                 r.a + r.b + r.inner.c + k
@@ -326,14 +326,14 @@ fn register_transport_nested_tests():
                     return acc
                 drive(i + 1, n, acc + leaf({a: i, b: 1, inner: {c: i, d: 2}}, i) + leaf({a: 1, b: i, inner: {c: 2, d: i}}, i))
             drive(0, 10, 0)
-    test::value("vt-one-fields-layout-per-parameter", 265, b_one_layout)
+    std::test::value("vt-one-fields-layout-per-parameter", 265, b_one_layout)
 
 # ---------------------------------------------------------------------------
 # Pointer-bearing fields (the Tcl vtGc programs, verbatim)
 
 fn register_transport_pointer_tests():
     # vt-gc-branch-specific: a struct of Strings forwarded on one branch.
-    fn b_gc_branch_specific() errors compiler::CompilerError:
+    fn b_gc_branch_specific() errors std::compiler::CompilerError:
         static compile:
             fn f0(r, k):
                 [r.a, r.f, k]
@@ -344,29 +344,29 @@ fn register_transport_pointer_tests():
             fn f3(r, k):
                 f2(r, k)
             fn run(i):
-                r = {a: str::concat("a", "b"), b: i, c: i, d: i, e: i, f: str::concat("t", "u")}
-                junk = [str::concat("j", "k"), str::concat("m", "n")]
+                r = {a: std::str::concat("a", "b"), b: i, c: i, d: i, e: i, f: std::str::concat("t", "u")}
+                junk = [std::str::concat("j", "k"), std::str::concat("m", "n")]
                 v = if i >= 2:
                     f3(r, i)
                 else:
                     [r.a, r.b]
                 [v, junk]
             run(3)
-    test::value("vt-gc-branch-specific", [["ab", "tu", 3], ["jk", "mn"]], b_gc_branch_specific)
+    std::test::value("vt-gc-branch-specific", [["ab", "tu", 3], ["jk", "mn"]], b_gc_branch_specific)
 
     # vt-gc-cyclic: a loop-carried struct of a String and a List.
-    fn b_gc_cyclic() errors compiler::CompilerError:
+    fn b_gc_cyclic() errors std::compiler::CompilerError:
         static compile:
             fn spin(s, i, n):
                 if i >= n:
                     return [s.a, s.b, s.c]
-                spin({a: str::concat(s.a, "x"), b: s.b, c: [i]}, i + 1, n)
-            spin({a: "a", b: str::concat("b", "c"), c: [0]}, 0, 3)
-    test::value("vt-gc-cyclic", ["axxx", "bc", [2]], b_gc_cyclic)
+                spin({a: std::str::concat(s.a, "x"), b: s.b, c: [i]}, i + 1, n)
+            spin({a: "a", b: std::str::concat("b", "c"), c: [0]}, 0, 3)
+    std::test::value("vt-gc-cyclic", ["axxx", "bc", [2]], b_gc_cyclic)
 
     # vt-gc-frontier-after-calls: a struct of Strings and a List forwarded
     # down three edges, its List field read after the calls.
-    fn b_gc_frontier_after_calls() errors compiler::CompilerError:
+    fn b_gc_frontier_after_calls() errors std::compiler::CompilerError:
         static compile:
             fn use(r, k):
                 [r.a, r.f, k]
@@ -377,16 +377,16 @@ fn register_transport_pointer_tests():
             fn f3(r, k):
                 f2(r, k)
             fn run(i):
-                r = {a: str::concat("a", "b"), b: i, c: [str::concat("x", "y")], d: i, e: i, f: str::concat("t", "u")}
-                junk = [str::concat("j", "k"), str::concat("m", "n"), str::concat("o", "p")]
+                r = {a: std::str::concat("a", "b"), b: i, c: [std::str::concat("x", "y")], d: i, e: i, f: std::str::concat("t", "u")}
+                junk = [std::str::concat("j", "k"), std::str::concat("m", "n"), std::str::concat("o", "p")]
                 [f3(r, i), junk, r.c]
             run(2)
-    test::value("vt-gc-frontier-after-calls", [["ab", "tu", 2], ["jk", "mn", "op"], ["xy"]], b_gc_frontier_after_calls)
+    std::test::value("vt-gc-frontier-after-calls", [["ab", "tu", 2], ["jk", "mn", "op"], ["xy"]], b_gc_frontier_after_calls)
 
-with context test::suite()
+with context std::test::suite()
 register_transport_chain_tests()
 register_transport_frontier_tests()
 register_transport_cycle_tests()
 register_transport_nested_tests()
 register_transport_pointer_tests()
-test::report()
+std::test::report()

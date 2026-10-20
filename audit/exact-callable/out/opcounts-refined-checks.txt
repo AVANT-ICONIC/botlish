@@ -14,5 +14,5 @@ scan_while<generic>                          before: tagged=2 raw=0 guards=0 cal
                                              after : -
 tld?<generic>                                before: tagged=3 raw=0 guards=0 callvalue=0 call=1 callenv=0 callmulti=0 substr=0
                                              after : tagged=3 raw=0 guards=0 callvalue=0 call=1 callenv=0 callmulti=0 substr=0
-web::emailish?<str>                          before: tagged=3 raw=0 guards=0 callvalue=0 call=2 callenv=0 callmulti=1 substr=0
+std::web::emailish?<str>                          before: tagged=3 raw=0 guards=0 callvalue=0 call=2 callenv=0 callmulti=1 substr=0
                                              after : tagged=0 raw=3 guards=0 callvalue=0 call=2 callenv=0 callmulti=1 substr=0

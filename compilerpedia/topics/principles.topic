@@ -29,7 +29,7 @@ two equal operands is not a subject; a function that starts with one says
 so at its declaration with `nomethod fn` (declaration of intent).
 
 @example accept
-import str
+import std::str
 
 struct Board:
     size: int
@@ -207,7 +207,7 @@ docs: MULTI-VALUE-RESULTS.md STRUCT-DESTRUCTURING.md
 == THE PRINCIPLE
 `{field, next} = scan(text, i)` says what each part is at every use, is
 checked by name, and survives a reordering. `r = scan(text, i)` followed by
-`list::at(r, 0)` and `list::at(r, 1)` says nothing, must handle
+`std::list::at(r, 0)` and `std::list::at(r, 1)` says nothing, must handle
 IndexNotFound twice, and breaks silently when the order changes. Botlish
 deliberately gives Lists no positional destructuring: a List is a
 sequence.
@@ -285,7 +285,7 @@ summary: Write single characters as character literals ('x') and work with them 
 index: principles
 alias: characters not strings; char vs string
 keywords: UnicodeChar, character, literal, char_at, append_char
-related: concept.strings warning.one-char-string-literal stdlib.str::char_at stdlib.str::append_char
+related: concept.strings warning.one-char-string-literal stdlib.std::str::char_at stdlib.std::str::append_char
 docs: WARNINGS-ONE-CHAR-STRING-LITERAL.md
 
 == THE PRINCIPLE
@@ -343,7 +343,7 @@ related: warning.same-return-value warning.same-failure principle.errors-over-se
 at the top of a function state its preconditions where they are checked
 and keep the main path unindented. A guard is also how the compiler learns
 facts: a guard on a parameter against a list's length proves later
-`list::at` calls in range (proof.list-bounds).
+`std::list::at` calls in range (proof.list-bounds).
 
 == IN PRACTICE
 One condition per guard when the reasons differ (each guard documents one
@@ -373,7 +373,7 @@ bind a computed index to a name once and guard the name (for a slice bound,
 guard a parameter: pass the computed bound to a small helper); iterate
 ascending, or iterate the elements. When the code is clearer as it is,
 handle the error where it can occur, or use the operation's
-explicit-default form (list::get).
+explicit-default form (std::list::get).
 
 @topic principle.bind-before-use
 title: Bind compound values before using them as operands
@@ -403,7 +403,7 @@ A small named helper (`fn yes_no(flag) -> str:`) serves when the choice
 recurs.
 
 @example accept
-import str
+import std::str
 
 fn status(solved: bool) -> str:
     answer = if solved:

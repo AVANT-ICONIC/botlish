@@ -9,8 +9,8 @@ e1 bind b1 services::make_service : block(e2)/0 -> services::Service
             e4 const str db : str
 e5 bind b2 services::name : block(e6)/1 -> str
     e6 block s6 (b3 value:services::Service) captures () declares str : block(e6)/1 -> str
-        e7 call native(str::concat) : str
-            e8 ref b4 str::concat : native str::concat
+        e7 call native(std::str::concat) : str
+            e8 ref b4 std::str::concat : native std::str::concat
             e9 const str svc: : str
             e10 project internal_name : str
                 e11 ref b3 value : services::Service

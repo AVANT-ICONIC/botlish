@@ -98,9 +98,9 @@
 @@ erase-changes-bits-interp the interpreter's erase returns a null pointer
 ## core/cabi.tcl
 <<<<
-core::native::register ffi::c::erase -arity 1 -impl core::cabi::sameImpl \
+core::native::register std::ffi::c::erase -arity 1 -impl core::cabi::sameImpl \
 ====
-core::native::register ffi::c::erase -arity 1 -impl core::cabi::nullOfImpl \
+core::native::register std::ffi::c::erase -arity 1 -impl core::cabi::nullOfImpl \
 >>>>
 ## core/cabi.tcl
 <<<<
@@ -116,9 +116,9 @@ proc core::cabi::nullImpl {} {
 @@ erase-changes-bits-native native erase is the null op on the address word
 ## native/lower.tcl
 <<<<
-        ffi::c::erase     {op cptrsame} \
+        std::ffi::c::erase     {op cptrsame} \
 ====
-        ffi::c::erase     {op cptrfixture} \
+        std::ffi::c::erase     {op cptrfixture} \
 >>>>
 
 @@ retype-accepts-function-pointers retype's argument is not held to Ptr[Void] (a function pointer is retyped to a data pointer)
@@ -135,7 +135,7 @@ proc core::cabi::nullImpl {} {
     set params [hir::imprint::Parameters $hir $e [dict get $sig params]]
 >>>>
 
-@@ void-constructible ffi::c::Void is an ordinary type of values (a parameter, a field, a List element of it)
+@@ void-constructible std::ffi::c::Void is an ordinary type of values (a parameter, a field, a List element of it)
 ## hir/types.tcl
 <<<<
     if {$name eq [hir::cabi::VoidName]} {

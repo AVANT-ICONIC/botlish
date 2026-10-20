@@ -1,9 +1,9 @@
 # contexts.test -- execution-environment contexts (CONTEXTS.md):
 #
 #   opaque context struct LinuxIO: ...           a context type
-#   with context linux::io::create()             install one, entry top level
+#   with context std::linux::io::create()             install one, entry top level
 #   fn write(data, context io: LinuxIO): ...     a direct context dependency
-#   linux::io::write(data)                       an ordinary call
+#   std::linux::io::write(data)                       an ordinary call
 #
 # * grammar: the `context` struct modifier (orthogonal to `opaque`), the
 #   `with context EXPR` declaration, the context parameter section after
@@ -14,7 +14,7 @@
 #   method calls, opacity, the MISSING-CONTEXT chain diagnostic;
 # * the same programs on every backend (interp, compile, cranelift-generic,
 #   cranelift) and the run-time replay of a -strict 0 program;
-# * linux::io: create, write, write_error, read, one LinuxIO;
+# * std::linux::io: create, write, write_error, read, one LinuxIO;
 # * native evidence: the NIR context area and slots, no hidden argument, the
 #   CLIF data symbol, PC-relative machine code against a linker-local .bss
 #   symbol, strace, allocations, eligibility (CONTEXT-NATIVE-LOWERING-
@@ -34,7 +34,7 @@ testConstraint linuxX86_64 [expr {$::tcl_platform(os) eq "Linux" &&
 
 # Linux on x86-64 or AArch64: the native backend's whole runtime (native
 # stack maps, the stack guard, coroutines), and syscalls through the portable
-# wrappers (linux::write, linux::read, linux::io: each architecture's own
+# wrappers (std::linux::write, std::linux::read, std::linux::io: each architecture's own
 # transport, LINUX-SYSCALL-TRANSPORTS.md). linuxX86_64 is for a test that
 # runs the x86-64 transport or reads x86-64 machine code; one that only
 # compiles it (NIR, CLIF) needs no host.
@@ -51,7 +51,7 @@ set programCounter 0
 # Helpers
 
 # The HIR of source TEXT, compiled as a program file (so lib modules load),
-# for a Linux target (linuxTarget: the host's own on Linux): linux::io is
+# for a Linux target (linuxTarget: the host's own on Linux): std::linux::io is
 # the Linux platform's.
 proc ctxHir {text {strict 1}} {
     set path [file join $::scratch p[incr ::programCounter].bot]
@@ -250,14 +250,14 @@ fn read_enabled(context k: Counter):
     k.enabled
 }
 
-set linuxPrelude {import abi
-import abi::bytes
-import linux
-import linux::io
-import str
+set linuxPrelude {import std::abi
+import std::abi::bytes
+import std::linux
+import std::linux::io
+import std::str
 
 fn mk(s: str):
-    abi::bytes::from_list(str::encode_utf8(s))
+    std::abi::bytes::from_list(std::str::encode_utf8(s))
 }
 
 # ---------------------------------------------------------------------------
@@ -314,9 +314,9 @@ test contexts-contextual-run {programs using `context` and `with` as ordinary na
 } -result 7
 
 test contexts-parse-with {`with context EXPR`: a declaration-like statement, its own AST node (form context), any expression} -body {
-    set ast [surface::parse "with context linux::io::create()\nwith context x\nwith context A {v: 1}\nwith context f(g(1), 2)\n"]
+    set ast [surface::parse "with context std::linux::io::create()\nwith context x\nwith context A {v: 1}\nwith context f(g(1), 2)\n"]
     list [lmap s [dict get $ast body] {list [dict get $s kind] [dict get $s form]}] [surface::formatAst $ast]
-} -result {{{with context} {with context} {with context} {with context}} {with context (call (qualname linux::io::create))
+} -result {{{with context} {with context} {with context} {with context}} {with context (call (qualname std::linux::io::create))
 with context (name x)
 with context (struct A (v (int 1)))
 with context (call (name f) (call (name g) (int 1)) (int 2))}}
@@ -430,8 +430,8 @@ test contexts-source-order {a context is available from its `with context` line 
 
 test contexts-duplicate-install {one installed value per type: a second installation of the same type is DUPLICATE-CONTEXT, before anything runs (no last-one-wins)} -body {
     list [strictError "${::synthetic}with context Counter {value: 1, enabled: true}\nwith context Counter {value: 2, enabled: true}\nread_value()\n"] \
-        [strictError "import linux::io\nwith context linux::io::create()\nwith context linux::io::create()\n1\n"]
-} -result {{DUPLICATE-CONTEXT 13:1 {Counter is already installed in this scope}} {DUPLICATE-CONTEXT 3:1 {linux::io::LinuxIO is already installed in this scope}}}
+        [strictError "import std::linux::io\nwith context std::linux::io::create()\nwith context std::linux::io::create()\n1\n"]
+} -result {{DUPLICATE-CONTEXT 13:1 {Counter is already installed in this scope}} {DUPLICATE-CONTEXT 3:1 {std::linux::io::LinuxIO is already installed in this scope}}}
 
 test contexts-constructor-order {consecutive installations run in source order, and a later constructor may use an earlier context; the reverse order is MISSING-CONTEXT (a context is never visible to its own or an earlier constructor)} -body {
     set types "type Small = Int in 0..1000\ntype Big = Int in 0..2000\ncontext struct First:\n    value: Small\ncontext struct Second:\n    value: Big\nfn make_second(context f: First) -> Second:\n    Second {value: f.value + 1}\nfn read_second(context s: Second):\n    s.value\n"
@@ -464,14 +464,14 @@ test contexts-placement-module {an installation in a module's top level is CONTE
     try {
         writeFile [file join $dir ctxmod.bot] "context struct A:\n    v: int\nwith context A {v: 1}\nfn get(context a: A):\n    a.v\n"
         writeFile [file join $dir ctxdefs.bot] "type Small = Int in 0..100\ncontext struct A:\n    v: Small\nfn get(context a: A):\n    a.v\n"
-        list [strictError "import ctxmod\n1\n"] \
-            [agree "import ctxdefs\n7\n"] \
-            [agree "import ctxdefs\nwith context ctxdefs::A {v: 3}\nctxdefs::get()\n"]
+        list [strictError "import std::ctxmod\n1\n"] \
+            [agree "import std::ctxdefs\n7\n"] \
+            [agree "import std::ctxdefs\nwith context std::ctxdefs::A {v: 3}\nstd::ctxdefs::get()\n"]
     } finally {
         set ::core::libraryDir $saved
         tcltest::removeDirectory [file tail $dir]
     }
-} -match glob -result {{CONTEXT-INSTALLATION-UNSUPPORTED 3:1 {context installation is currently supported only in the entry program's top-level scope, as a statement (this one is inside a module: "ctxmod", *ctxmod.bot)}} 7 3}
+} -match glob -result {{CONTEXT-INSTALLATION-UNSUPPORTED 3:1 {context installation is currently supported only in the entry program's top-level scope, as a statement (this one is inside a module: "std::ctxmod", *ctxmod.bot)}} 7 3}
 
 test contexts-module-init-call {a module's own top-level code runs before the entry program installs anything: a module initializer that calls a context consumer is MISSING-CONTEXT} -body {
     set saved $::core::libraryDir
@@ -479,7 +479,7 @@ test contexts-module-init-call {a module's own top-level code runs before the en
     set ::core::libraryDir $dir
     try {
         writeFile [file join $dir ctxinit.bot] "type Small = Int in 0..100\ncontext struct A:\n    v: Small\nfn get(context a: A):\n    a.v\nx = get()\n"
-        lindex [strictError "import ctxinit\nwith context ctxinit::A {v: 3}\n1\n"] 0
+        lindex [strictError "import std::ctxinit\nwith context std::ctxinit::A {v: 3}\n1\n"] 0
     } finally {
         set ::core::libraryDir $saved
         tcltest::removeDirectory [file tail $dir]
@@ -523,8 +523,8 @@ test contexts-method-sugar {a context consumer called with method syntax: the co
         writeFile [file join $dir textual.bot] "fn scaled(x: str):\n    x\n"
         list [agree "${c}with context Scale {k: 3}\n\[7.scaled(), scaled(7)\]\n"] \
             [lindex [strictError "${c}7.scaled()\n"] 0] \
-            [agree "import textual\n${c}with context Scale {k: 3}\n\[7.scaled(), \"a\".scaled()\]\n"] \
-            [lindex [strictError "import textual\n${c}7.scaled()\n"] 0]
+            [agree "import std::textual\n${c}with context Scale {k: 3}\n\[7.scaled(), \"a\".scaled()\]\n"] \
+            [lindex [strictError "import std::textual\n${c}7.scaled()\n"] 0]
     } finally {
         set ::core::libraryDir $saved
         tcltest::removeDirectory [file tail $dir]
@@ -534,15 +534,15 @@ test contexts-method-sugar {a context consumer called with method syntax: the co
 # ---------------------------------------------------------------------------
 # Transitive requirements
 
-set chain {import abi::bytes
-import linux::io
-import str
+set chain {import std::abi::bytes
+import std::linux::io
+import std::str
 
 fn message():
-    abi::bytes::from_list(str::encode_utf8("chain\n"))
+    std::abi::bytes::from_list(std::str::encode_utf8("chain\n"))
 
 fn c():
-    linux::io::write(message())
+    std::linux::io::write(message())
 
 fn b():
     c()
@@ -551,19 +551,19 @@ fn a():
     b()
 
 fn unused():
-    linux::io::write(message())
+    std::linux::io::write(message())
 }
 
 test contexts-transitive-chain {only the direct consumer declares the context; the compiler derives every caller's requirement (write direct, c b a transitive), message and unused-but-defined functions are context-free, and no source changes} -body {
-    requirements "${::chain}with context linux::io::create()\na()\n" {linux::io::write linux::io::write_error linux::io::read c b a message unused hello}
-} -result {{linux::io::write linux::io::LinuxIO linux::io::LinuxIO} {linux::io::write_error linux::io::LinuxIO linux::io::LinuxIO} {linux::io::read linux::io::LinuxIO linux::io::LinuxIO} {c {} linux::io::LinuxIO} {b {} linux::io::LinuxIO} {a {} linux::io::LinuxIO} {message {} {}} {unused {} linux::io::LinuxIO} {hello {} {}}}
+    requirements "${::chain}with context std::linux::io::create()\na()\n" {std::linux::io::write std::linux::io::write_error std::linux::io::read c b a message unused hello}
+} -result {{std::linux::io::write std::linux::io::LinuxIO std::linux::io::LinuxIO} {std::linux::io::write_error std::linux::io::LinuxIO std::linux::io::LinuxIO} {std::linux::io::read std::linux::io::LinuxIO std::linux::io::LinuxIO} {c {} std::linux::io::LinuxIO} {b {} std::linux::io::LinuxIO} {a {} std::linux::io::LinuxIO} {message {} {}} {unused {} std::linux::io::LinuxIO} {hello {} {}}}
 
-test contexts-missing-chain {without the installation the call of a is MISSING-CONTEXT, and the diagnostic shows the deterministic chain a -> b -> c -> linux::io::write and the direct requirement} -body {
+test contexts-missing-chain {without the installation the call of a is MISSING-CONTEXT, and the diagnostic shows the deterministic chain a -> b -> c -> std::linux::io::write and the direct requirement} -body {
     strictError "${::chain}a()\n"
-} -result [list MISSING-CONTEXT 19:1 "linux::io::LinuxIO is required by this call but is not installed here (install it with \"with context EXPR\" before the call):\n    a\n     -> b\n     -> c\n     -> linux::io::write\n        directly requires linux::io::LinuxIO"]
+} -result [list MISSING-CONTEXT 19:1 "std::linux::io::LinuxIO is required by this call but is not installed here (install it with \"with context EXPR\" before the call):\n    a\n     -> b\n     -> c\n     -> std::linux::io::write\n        directly requires std::linux::io::LinuxIO"]
 
 test contexts-unused-consumer {a program that defines (or imports) context consumers but never calls one needs no installation: reachability, not source scanning} -body {
-    list [agree "${::chain}1 + 1\n"] [agree "${::synthetic}2\n"] [agree "import linux::io\n3\n"]
+    list [agree "${::chain}1 + 1\n"] [agree "${::synthetic}2\n"] [agree "import std::linux::io\n3\n"]
 } -result {2 2 3}
 
 test contexts-unreachable-call {a call that cannot run (statically unreachable) requires nothing} -body {
@@ -578,14 +578,14 @@ test contexts-recursion {recursive requirements converge: a self-recursive consu
 } -result {{{countdown Counter Counter} {a {} Counter} {b Counter Counter}} {[3, 3]} MISSING-CONTEXT}
 
 test contexts-explain {the derivation is kept for tooling: hir::contexts::of and ::explain answer "what does f use / require, and why"} -body {
-    set hir [ctxHir "${::chain}with context linux::io::create()\na()\n"]
+    set hir [ctxHir "${::chain}with context std::linux::io::create()\na()\n"]
     set a [blockNamed $hir a]
-    list [hir::contexts::of $hir $a] [hir::contexts::explain $hir $a linux::io::LinuxIO] [hir::contexts::explain $hir [blockNamed $hir message] linux::io::LinuxIO]
-} -result {{direct {} required linux::io::LinuxIO} {    a
+    list [hir::contexts::of $hir $a] [hir::contexts::explain $hir $a std::linux::io::LinuxIO] [hir::contexts::explain $hir [blockNamed $hir message] std::linux::io::LinuxIO]
+} -result {{direct {} required std::linux::io::LinuxIO} {    a
      -> b
      -> c
-     -> linux::io::write
-        directly requires linux::io::LinuxIO} {}}
+     -> std::linux::io::write
+        directly requires std::linux::io::LinuxIO} {}}
 
 test contexts-summary {hir::contexts::summary (main.tcl -contexts): the context structs, installations, context parameters and every function's direct and required contexts} -body {
     set hir [ctxHir "${::synthetic}fn outer():\n    read_value()\nwith context Counter {value: 1, enabled: true}\nouter()\n"]
@@ -630,26 +630,26 @@ test contexts-non-opaque-context {`context` does not imply opacity: outside code
     agree "type Small = Int in 0..100\ncontext struct TestContext:\n    value: Small\nfn get(context t: TestContext):\n    {value} = t\n    value + t.value\nwith context TestContext {value: 4}\nget()\n"
 } -result 8
 
-test contexts-opacity-exact {context authority is not representation authority: outside linux::io a LinuxIO context parameter can be held, passed and compared, but not projected, destructured or constructed} -body {
-    list [lindex [strictError "import linux::io\nfn f(context io: linux::io::LinuxIO):\n    io.stdout\nwith context linux::io::create()\nf()\n"] 0] \
-        [lindex [strictError "import linux::io\nfn f(context io: linux::io::LinuxIO):\n    {stdout} = io\n    1\nwith context linux::io::create()\nf()\n"] 0] \
-        [lindex [strictError "import linux::io\nwith context linux::io::LinuxIO {stdin: 1, stdout: 2, stderr: 3}\n1\n"] 0] \
-        [agree "import linux::io\nfn same(context io: linux::io::LinuxIO):\n    io == linux::io::create()\nwith context linux::io::create()\nsame()\n"]
+test contexts-opacity-exact {context authority is not representation authority: outside std::linux::io a LinuxIO context parameter can be held, passed and compared, but not projected, destructured or constructed} -body {
+    list [lindex [strictError "import std::linux::io\nfn f(context io: std::linux::io::LinuxIO):\n    io.stdout\nwith context std::linux::io::create()\nf()\n"] 0] \
+        [lindex [strictError "import std::linux::io\nfn f(context io: std::linux::io::LinuxIO):\n    {stdout} = io\n    1\nwith context std::linux::io::create()\nf()\n"] 0] \
+        [lindex [strictError "import std::linux::io\nwith context std::linux::io::LinuxIO {stdin: 1, stdout: 2, stderr: 3}\n1\n"] 0] \
+        [agree "import std::linux::io\nfn same(context io: std::linux::io::LinuxIO):\n    io == std::linux::io::create()\nwith context std::linux::io::create()\nsame()\n"]
 } -result {OPAQUE-REPRESENTATION OPAQUE-REPRESENTATION OPAQUE-CONSTRUCTION true}
 
 # ---------------------------------------------------------------------------
-# linux::io
+# std::linux::io
 
 # (CONTEXT-TRAITS.md added write_text and write_error_text, LinuxIO's
-# implementation of the portable io::IO context trait, and their helper
-# write_all, whose FileDescriptor parameter no code outside linux::io can
+# implementation of the portable std::io::IO context trait, and their helper
+# write_all, whose FileDescriptor parameter no code outside std::linux::io can
 # supply: still no descriptor accessor and no context getter.)
-test contexts-linux-io-surface {linux::io exports exactly create, write, write_error and read, plus io::IO's implementation (write_text, write_error_text, write_all over an opaque FileDescriptor) (no descriptor accessors, no current-context getter); FileDescriptor and LinuxIO are opaque, LinuxIO alone is a context} -body {
-    set hir [ctxHir "import linux::io\n1\n"]
-    set names [lsort [lmap b [dict get $hir scopes [dict get $hir modules linux::io] bindings] {dict get $hir bindings $b name}]]
-    list $names [lmap id {linux::io::FileDescriptor linux::io::LinuxIO} {list [hir::structs::isOpaque $id] [hir::structs::isContext $id]}] \
-        [hir::structs::fieldTypes linux::io::LinuxIO] [hir::structs::fieldTypes linux::io::FileDescriptor]
-} -result {{linux::io::create linux::io::read linux::io::write linux::io::write_all linux::io::write_error linux::io::write_error_text linux::io::write_text} {{1 0} {1 1}} {stdin {nstruct linux::io::FileDescriptor} stdout {nstruct linux::io::FileDescriptor} stderr {nstruct linux::io::FileDescriptor}} {raw {nstruct abi::I32}}}
+test contexts-linux-io-surface {std::linux::io exports exactly create, write, write_error and read, plus std::io::IO's implementation (write_text, write_error_text, write_all over an opaque FileDescriptor) (no descriptor accessors, no current-context getter); FileDescriptor and LinuxIO are opaque, LinuxIO alone is a context} -body {
+    set hir [ctxHir "import std::linux::io\n1\n"]
+    set names [lsort [lmap b [dict get $hir scopes [dict get $hir modules std::linux::io] bindings] {dict get $hir bindings $b name}]]
+    list $names [lmap id {std::linux::io::FileDescriptor std::linux::io::LinuxIO} {list [hir::structs::isOpaque $id] [hir::structs::isContext $id]}] \
+        [hir::structs::fieldTypes std::linux::io::LinuxIO] [hir::structs::fieldTypes std::linux::io::FileDescriptor]
+} -result {{std::linux::io::create std::linux::io::read std::linux::io::write std::linux::io::write_all std::linux::io::write_error std::linux::io::write_error_text std::linux::io::write_text} {{1 0} {1 1}} {stdin {nstruct std::linux::io::FileDescriptor} stdout {nstruct std::linux::io::FileDescriptor} stderr {nstruct std::linux::io::FileDescriptor}} {raw {nstruct std::abi::I32}}}
 
 # (context#unreachable, CONTEXT-TRAITS.md, is the placeholder of code no
 # installed context reaches: it looks nothing up and never runs.)
@@ -659,8 +659,8 @@ test contexts-no-context-api {no source-visible context API: the context operati
         [catch {surface::parse "context#load(\"A\")\n"}]
 } -result {{context#install context#load context#unreachable} UNBOUND 0}
 
-test contexts-linux-io-tcl-backends {the Tcl backends verify and run a linux::io program up to the syscall, which they refuse (NATIVE-ONLY); the context itself (create, install, the descriptors) is ordinary Botlish} -body {
-    set hir [ctxHir "${::linuxPrelude}with context linux::io::create()\nlinux::io::write(mk(\"x\"))\n"]
+test contexts-linux-io-tcl-backends {the Tcl backends verify and run a std::linux::io program up to the syscall, which they refuse (NATIVE-ONLY); the context itself (create, install, the descriptors) is ordinary Botlish} -body {
+    set hir [ctxHir "${::linuxPrelude}with context std::linux::io::create()\nstd::linux::io::write(mk(\"x\"))\n"]
     lmap backend {interp compile} {lrange [outcomeUnderHir $backend $hir] 0 1}
 } -result {{error {CORE SEMANTIC NATIVE-ONLY}} {error {CORE SEMANTIC NATIVE-ONLY}}}
 
@@ -668,7 +668,7 @@ test contexts-linux-io-create-descriptors {create mints the three standard descr
     set saved $::core::libraryDir
     set dir [tcltest::makeDirectory contexts-lib3-[pid]]
     try {
-        # A copy of linux::io with one more (test-only) function, so the owner
+        # A copy of std::linux::io with one more (test-only) function, so the owner
         # can show its own representation.
         file mkdir [file join $dir linux]
         foreach f [glob -directory $saved *.bot] { file copy $f $dir }
@@ -677,7 +677,7 @@ test contexts-linux-io-create-descriptors {create mints the three standard descr
         set text [readFile [file join $saved linux io.bot]]
         writeFile [file join $dir linux io.bot] "${text}\nfn probe(context io: LinuxIO):\n    \[io.stdin.raw.value, io.stdout.raw.value, io.stderr.raw.value\]\n"
         set ::core::libraryDir $dir
-        agree "import linux::io\nwith context linux::io::create()\nlinux::io::probe()\n"
+        agree "import std::linux::io\nwith context std::linux::io::create()\nstd::linux::io::probe()\n"
     } finally {
         set ::core::libraryDir $saved
         tcltest::removeDirectory [file tail $dir]
@@ -705,14 +705,14 @@ test contexts-fresh-per-run {the Tcl backends' context environment is per run: a
 
 set helloText [readFile [file join $::projectRoot examples linux context-hello.bot]]
 
-test contexts-native-nir-hello {NIR of the Hello World: one 24-byte context area with one LinuxIO slot of three words; the program stores the three descriptors (no LinuxIO object); hello calls linux::io::write with its one ordinary argument; linux::io::write loads stdout's word (offset 8) and passes it to linux::write's fields variant: no context operand anywhere} -body {
+test contexts-native-nir-hello {NIR of the Hello World: one 24-byte context area with one LinuxIO slot of three words; the program stores the three descriptors (no LinuxIO object); hello calls std::linux::io::write with its one ordinary argument; std::linux::io::write loads stdout's word (offset 8) and passes it to std::linux::write's fields variant: no context operand anywhere} -body {
     set nir [native::nir [ctxHir $::helloText]]
     set header [lrange [split $nir \n] 0 1]
-    set write [nirFunction $nir linux::io::write]
+    set write [nirFunction $nir std::linux::io::write]
     set hello [nirFunction $nir hello]
     list $header [regexp -all {contextstore} $nir] [regexp -all {contextload} $nir] \
         [lindex [split $write \n] 0] [nirBody $write] [nirBody $hello]
-} -result {{{nir 1 call-effects=1 statics=0 contexts=24} {context 0 "linux::io::LinuxIO" offset=0 words=3 fields="stdin.raw.value stdout.raw.value stderr.raw.value"}} 3 1 {func 10 "linux::io::write" params=1 env=0 regs=3 pnames="data.0" captures=0 instance="abi::bytes::Bytes" @e584} {{%1 = contextload 8} {%2 = call 8 %1 %0} {ret %2}} {{%0 = bytes "48656c6c6f2c20776f726c64210a"} {%1 = call 10 %0} {ret %1}}}
+} -result {{{nir 1 call-effects=1 statics=0 contexts=24} {context 0 "std::linux::io::LinuxIO" offset=0 words=3 fields="stdin.raw.value stdout.raw.value stderr.raw.value"}} 3 1 {func 10 "std::linux::io::write" params=1 env=0 regs=3 pnames="data.0" captures=0 instance="std::abi::bytes::Bytes" @e584} {{%1 = contextload 8} {%2 = call 8 %1 %0} {ret %2}} {{%0 = bytes "48656c6c6f2c20776f726c64210a"} {%1 = call 10 %0} {ret %1}}}
 
 test contexts-native-no-hidden-argument {the three-level chain compiles to the calling convention it would have without any context: every function has params=0 env=0, every call passes no operand, and only the consumer does anything about the context -- its own fixed-slot load} -body {
     set nir [native::nir [ctxHir "${::synthetic}fn middle():\n    read_value()\nfn top():\n    middle()\nwith context Counter {value: 3, enabled: true}\ntop()\n"]]
@@ -721,9 +721,9 @@ test contexts-native-no-hidden-argument {the three-level chain compiles to the c
         [nirBody [nirFunction $nir read_value]]
 } -result {{{params=0 env=0} {params=0 env=0} {params=0 env=0}} {{{%0 = call F} {ret %0}} {{%0 = call F} {ret %0}}} {{%0 = contextload 0} {ret %0}}}
 
-test contexts-native-clif {CLIF of linux::io::write: the signature is (vm, data) -> value, the context area is a data global value read at a constant offset; no extra parameter} -constraints nativeLinux -body {
+test contexts-native-clif {CLIF of std::linux::io::write: the signature is (vm, data) -> value, the context area is a data global value read at a constant offset; no extra parameter} -constraints nativeLinux -body {
     set clif [native::clif [ctxHir $::helloText]]
-    set start [string first {"linux::io::write"} $clif]
+    set start [string first {"std::linux::io::write"} $clif]
     set end [string first "; function" $clif [expr {$start + 1}]]
     set f [string range $clif $start $end]
     list [regexp {function u0:[0-9]+\(i64, i64\) -> i64} $f] [regexp {gv[0-9]+ = symbol (colocated )?userextname[0-9]+} $f] \
@@ -743,20 +743,20 @@ test contexts-native-eligibility {a context whose layout cannot live in fixed pr
     lappend r [agree $nested] [lindex [split [native::nir [ctxHir $nested]] \n] 1]
 } -result {{NATIVE UNSUPPORTED CONTEXT-NATIVE-LOWERING-UNSUPPORTED} {CONTEXT-NATIVE-LOWERING-UNSUPPORTED: context Big cannot currently be stored in a fixed native context slot because field "n" is an Int (int) whose declared domain does not fit the small-Int representation, so its value may be a heap-allocated big integer that fixed program data could not keep alive (no GC root)} value {NATIVE UNSUPPORTED CONTEXT-NATIVE-LOWERING-UNSUPPORTED} {CONTEXT-NATIVE-LOWERING-UNSUPPORTED: context Named cannot currently be stored in a fixed native context slot because field "name" has type str, a value that may be (or contain) a GC-managed heap object, and fixed program data holds no GC root} value {[1, true, 2, Inner {a: 1, b: true}]} {context 0 "Outer" offset=0 words=3 fields="inner.a inner.b c"}}
 
-test contexts-native-allocations {allocations: installing a literal context and reading it allocates nothing; the Hello World allocates only linux::io::create's own LinuxIO, FileDescriptors and abi::I32s, once (the existing optimizer materializes a zero-parameter constructor's struct result), and nothing per write} -constraints nativeLinux -body {
+test contexts-native-allocations {allocations: installing a literal context and reading it allocates nothing; the Hello World allocates only std::linux::io::create's own LinuxIO, FileDescriptors and std::abi::I32s, once (the existing optimizer materializes a zero-parameter constructor's struct result), and nothing per write} -constraints nativeLinux -body {
     proc counts {text} {
         set report [native::allocationReport [ctxHir $text] summary]
         list [dict get $report total allocations] [dict get $report byKind Struct allocations]
     }
     list [counts "${::synthetic}fn many(n):\n    if n == 0:\n        0\n    else:\n        read_value() + many(n - 1)\nwith context Counter {value: 2, enabled: true}\nmany(50)\n"] \
         [counts $::helloText] \
-        [counts "${::linuxPrelude}with context linux::io::create()\nm = mk(\"x\\n\")\nloop i from 0 to 1:\n    linux::io::write(m)\n0\n"] \
-        [counts "${::linuxPrelude}with context linux::io::create()\nm = mk(\"x\\n\")\nloop i from 0 to 20:\n    linux::io::write(m)\n0\n"]
+        [counts "${::linuxPrelude}with context std::linux::io::create()\nm = mk(\"x\\n\")\nloop i from 0 to 1:\n    std::linux::io::write(m)\n0\n"] \
+        [counts "${::linuxPrelude}with context std::linux::io::create()\nm = mk(\"x\\n\")\nloop i from 0 to 20:\n    std::linux::io::write(m)\n0\n"]
 } -result {{0 0} {7 7} {9 7} {9 7}}
 
 test contexts-native-gc-stress {context programs under a collection at every allocation site: the context words are never roots and survive every collection} -constraints nativeLinux -body {
     withEnv BOTLISH_NATIVE_GC_STRESS 1 {
-        list [agree "import list\n${::synthetic}fn many(n):\n    xs = \[n, n + 1\]\n    if n == 0:\n        read_value()\n    else:\n        many(n - 1) + list::length(xs) - 2\nwith context Counter {value: 2, enabled: true}\nmany(30)\n" $::nativeBackends] \
+        list [agree "import std::list\n${::synthetic}fn many(n):\n    xs = \[n, n + 1\]\n    if n == 0:\n        read_value()\n    else:\n        many(n - 1) + std::list::length(xs) - 2\nwith context Counter {value: 2, enabled: true}\nmany(30)\n" $::nativeBackends] \
             [agree "type Small = Int in 0..9\nstruct Inner:\n    a: Small\n    b: bool\ncontext struct Outer:\n    inner: Inner\n    c: Small\nfn get(context o: Outer):\n    \[o.inner, o.inner, \[o.c\]\]\nwith context Outer {inner: Inner {a: 1, b: true}, c: 2}\nget()\n" $::nativeBackends]
     }
 } -result {2 {[Inner {a: 1, b: true}, Inner {a: 1, b: true}, [2]]}}
@@ -767,20 +767,20 @@ test contexts-native-executable-hello {examples/linux/context-hello.bot as a sta
 } -result [list "Hello, world!\n14\n" ""]
 
 test contexts-native-executable-descriptors {stdout, stderr and stdin come from the one installed LinuxIO: write goes to descriptor 1 only, write_error to descriptor 2 only, read reads descriptor 0 (one read(2), the caller's buffer unchanged, the result's detached buffer updated)} -constraints {nativeLinux posixShell} -body {
-    set exe [buildExecutable descriptors "${::linuxPrelude}with context linux::io::create()
-n1 = linux::io::write(mk(\"normal\\n\"))
-n2 = linux::io::write_error(mk(\"error\\n\"))
-buffer = abi::bytes::zeroed(abi::usize(8))
-result = linux::io::read(buffer)
-original = abi::bytes::freeze_prefix(buffer, abi::usize(8)):
+    set exe [buildExecutable descriptors "${::linuxPrelude}with context std::linux::io::create()
+n1 = std::linux::io::write(mk(\"normal\\n\"))
+n2 = std::linux::io::write_error(mk(\"error\\n\"))
+buffer = std::abi::bytes::zeroed(std::abi::usize(8))
+result = std::linux::io::read(buffer)
+original = std::abi::bytes::freeze_prefix(buffer, std::abi::usize(8)):
     on UpperOverrun:
-        abi::bytes::from_list(\[\])
-got = abi::bytes::freeze_prefix(result.data, abi::usize(8)):
+        std::abi::bytes::from_list(\[\])
+got = std::abi::bytes::freeze_prefix(result.data, std::abi::usize(8)):
     on UpperOverrun:
-        abi::bytes::from_list(\[\])
-zero = abi::bytes::freeze_prefix(abi::bytes::zeroed(abi::usize(8)), abi::usize(8)):
+        std::abi::bytes::from_list(\[\])
+zero = std::abi::bytes::freeze_prefix(std::abi::bytes::zeroed(std::abi::usize(8)), std::abi::usize(8)):
     on UpperOverrun:
-        abi::bytes::from_list(\[\])
+        std::abi::bytes::from_list(\[\])
 \[n1, n2, result.result, original == zero, got == mk(\"stdin-ok\")\]
 "]
     list [runExecutable $exe "stdin-ok and more"] [runExecutable $exe "stdin-ok" 1]
@@ -790,11 +790,11 @@ proc machineCode {exe function} {
     exec objdump -d --no-show-raw-insn --disassemble=$function $exe
 }
 
-test contexts-native-machine-code {the machine code of linux::io::write in the standalone executable: stdout's descriptor is ONE load from the linker-local context area, addressed RIP-relatively (lea of botlish_context_area, then +8), with no GOT load, no helper call and no other call than linux::write; the area is a local 24-byte object in .bss} -constraints {linuxX86_64 objdump posixShell rustcLinker} -body {
+test contexts-native-machine-code {the machine code of std::linux::io::write in the standalone executable: stdout's descriptor is ONE load from the linker-local context area, addressed RIP-relatively (lea of botlish_context_area, then +8), with no GOT load, no helper call and no other call than std::linux::write; the area is a local 24-byte object in .bss} -constraints {linuxX86_64 objdump posixShell rustcLinker} -body {
     set exe [buildExecutable hello $::helloText]
-    set id [nirFunctionId [native::nir [ctxHir $::helloText]] linux::io::write]
+    set id [nirFunctionId [native::nir [ctxHir $::helloText]] std::linux::io::write]
     set code [machineCode $exe botlish_fn_$id]
-    set write [nirFunctionId [native::nir [ctxHir $::helloText]] linux::write]
+    set write [nirFunctionId [native::nir [ctxHir $::helloText]] std::linux::write]
     set symbols [exec objdump -t $exe]
     list [regexp {lea\s+0x[0-9a-f]+\(%rip\),%(\w+)\s+# [0-9a-f]+ <botlish_context_area>} $code] \
         [regexp {mov\s+0x8\(%r\w+\),%rsi} $code] \
@@ -811,7 +811,7 @@ test contexts-native-object-relocation {the AOT object's reference to the contex
         [llength [regexp -all -inline {R_X86_64_GOTPCREL\s+botlish_context_area} $relocs]]
 } -result {2 0}
 
-test contexts-native-strace {the kernel receives write(1, "Hello, world!\n", 14) from the raw syscall boundary, called by the runtime helper, called by linux::write, called by linux::io::write, called by hello -- no libc write frame in that call's stack} -constraints {linuxX86_64 strace posixShell rustcLinker} -body {
+test contexts-native-strace {the kernel receives write(1, "Hello, world!\n", 14) from the raw syscall boundary, called by the runtime helper, called by std::linux::write, called by std::linux::io::write, called by hello -- no libc write frame in that call's stack} -constraints {linuxX86_64 strace posixShell rustcLinker} -body {
     set exe [buildExecutable hello $::helloText]
     set log [file join $::outputDir strace.hello]
     exec strace -f -qq -k -e trace=write -o $log $exe >/dev/null 2>@1
@@ -831,7 +831,7 @@ test contexts-native-strace {the kernel receives write(1, "Hello, world!\n", 14)
     set ours [lsearch -inline -exact -index 0 $records {write(1, "Hello, world!\n", 14) = 14}]
     set stack [join [lrange $ours 1 end] \n]
     set nir [native::nir [ctxHir $::helloText]]
-    set frames [lmap name {linux::write linux::io::write hello} {
+    set frames [lmap name {std::linux::write std::linux::io::write hello} {
         regexp "botlish_fn_[nirFunctionId $nir $name]\\+" $stack
     }]
     list [lindex $ours 0] [regexp {botlish_linux_x86_64_syscall} $stack] [regexp {rt_linux_x86_64_syscall} $stack] \

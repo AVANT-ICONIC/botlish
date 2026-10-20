@@ -7,8 +7,8 @@
 # A refinement is a nominal fact attached to an existing value: a proof may
 # strengthen the static view, forgetting weakens it, and neither changes the
 # value itself. This file pins the language feature generically, with its own
-# small refinements (Mail, Query, Encoded, ...), and the lib/web.bot corpus
-# (web::Emailish, web::UriQueryValue) where the corpus is the point.
+# small refinements (Mail, Query, Encoded, ...), and the stdlib/web.bot corpus
+# (std::web::Emailish, std::web::UriQueryValue) where the corpus is the point.
 #
 # Every behavioral case runs on interp, compile, cranelift-generic and
 # cranelift (sourceAgree): proof availability, acceptance and rejection,
@@ -72,27 +72,27 @@ proc nirBody {nir name} {
 # The common declarations most cases below use: two sibling refinements of
 # str, a refinement of a refinement, their proof-producing predicates (a
 # second predicate of Mail, and a predicate proving Encoded from a Query).
-set prelude {import list
-import str
+set prelude {import std::list
+import std::str
 
 refined type Mail = str
 refined type Query = str
 refined type Encoded = Query
 
 fn mail?(s: str) -> bool proves s: Mail:
-    str::length(s) > 3
+    std::str::length(s) > 3
 
 fn other_mail?(s: str) -> bool proves s: Mail:
-    str::length(s) > 4
+    std::str::length(s) > 4
 
 fn query?(s: str) -> bool proves s: Query:
-    str::length(s) > 0
+    std::str::length(s) > 0
 
 fn encoded?(q: Query) -> bool proves q: Encoded:
-    str::length(q) > 1
+    std::str::length(q) > 1
 
 fn send(m: Mail) -> int:
-    str::length(m)
+    std::str::length(m)
 
 fn show(s: str) -> str:
     s
@@ -169,26 +169,26 @@ proc withRefinementModules {script} {
     try {
         file mkdir [file join $dir validation]
         foreach {name text} {
-            validation {import str
+            validation {import std::str
 
 refined type Mail = str
 
 fn mail?(s: str) -> bool proves s: Mail:
-    str::length(s) > 3
+    std::str::length(s) > 3
 
 fn send(m: Mail) -> int:
-    str::length(m)
+    std::str::length(m)
 }
-            validation/sub {import validation
+            validation/sub {import std::validation
 
 fn noop():
     1
 }
-            consumer {import validation
-import type validation::Mail
+            consumer {import std::validation
+import type std::validation::Mail
 
 fn deliver(m: Mail) -> int:
-    validation::send(m)
+    std::validation::send(m)
 }
         } {
             set channel [open [file join $dir {*}[split $name /]].bot w]
@@ -206,13 +206,13 @@ set ::refinementLibCounter 0
 
 test refinement-module-identity {a module's refinement has its path-derived identity, usable qualified and through import type} -body {
     withRefinementModules {
-        sourceAgree {import validation
-import consumer
-import type validation::Mail
+        sourceAgree {import std::validation
+import std::consumer
+import type std::validation::Mail
 
 fn ok(s: str) -> int:
-    if validation::mail?(s):
-        consumer::deliver(s) + validation::send(s)
+    if std::validation::mail?(s):
+        std::consumer::deliver(s) + std::validation::send(s)
     else:
         0
 
@@ -226,43 +226,43 @@ fn short(m: Mail) -> Mail:
 
 test refinement-import-grants-no-authority {an importing module or program cannot mint another module's refinement} -body {
     withRefinementModules {
-        list [rejection {import type validation::Mail
+        list [rejection {import type std::validation::Mail
 
 fn fake?(s: str) -> bool proves s: Mail:
     true
 
 1
-}] [rejectionKind {import validation
+}] [rejectionKind {import std::validation
 
-fn fake?(s: str) -> bool proves s: validation::Mail:
+fn fake?(s: str) -> bool proves s: std::validation::Mail:
     true
 
 1
 }]
     }
-} -match glob -result {{REFINEMENT-MINT-AUTHORITY {*the entry program cannot declare a proof of refinement validation::Mail: only its owning module "validation" may mint it*}} REFINEMENT-MINT-AUTHORITY}
+} -match glob -result {{REFINEMENT-MINT-AUTHORITY {*the entry program cannot declare a proof of refinement std::validation::Mail: only its owning module "std::validation" may mint it*}} REFINEMENT-MINT-AUTHORITY}
 
 test refinement-child-namespace-grants-no-authority {a child namespace of the owner cannot mint it either} -body {
     withRefinementModules {
         set channel [open [file join $::core::libraryDir validation sub.bot] w]
-        puts -nonewline $channel "import type validation::Mail\n\nfn fake?(s: str) -> bool proves s: Mail:\n    true\n"
+        puts -nonewline $channel "import type std::validation::Mail\n\nfn fake?(s: str) -> bool proves s: Mail:\n    true\n"
         close $channel
-        rejection "import validation::sub\n1\n"
+        rejection "import std::validation::sub\n1\n"
     }
-} -match glob -result {REFINEMENT-MINT-AUTHORITY {*module "validation::sub" cannot declare a proof of refinement validation::Mail*}}
+} -match glob -result {REFINEMENT-MINT-AUTHORITY {*module "std::validation::sub" cannot declare a proof of refinement std::validation::Mail*}}
 
 test refinement-two-importers-cannot-mint {two modules importing the same refinement: neither may mint it, and the cached declaration keeps its owner} -body {
     withRefinementModules {
         foreach name {first second} {
             set channel [open [file join $::core::libraryDir $name.bot] w]
-            puts -nonewline $channel "import type validation::Mail\n\nfn fake?(s: str) -> bool proves s: Mail:\n    true\n"
+            puts -nonewline $channel "import type std::validation::Mail\n\nfn fake?(s: str) -> bool proves s: Mail:\n    true\n"
             close $channel
         }
-        list [rejectionKind "import first\n1\n"] [rejectionKind "import second\n1\n"] \
-             [rejectionKind "import validation\nimport first\nimport second\n1\n"] \
-             [dict get [core::type::refinementOf validation::Mail] owner]
+        list [rejectionKind "import std::first\n1\n"] [rejectionKind "import std::second\n1\n"] \
+             [rejectionKind "import std::validation\nimport std::first\nimport std::second\n1\n"] \
+             [dict get [core::type::refinementOf std::validation::Mail] owner]
     }
-} -result {REFINEMENT-MINT-AUTHORITY REFINEMENT-MINT-AUTHORITY REFINEMENT-MINT-AUTHORITY validation}
+} -result {REFINEMENT-MINT-AUTHORITY REFINEMENT-MINT-AUTHORITY REFINEMENT-MINT-AUTHORITY std::validation}
 
 test refinement-owner-entry-program {the entry program owns its own refinements} -body {
     sourceAgree "$prelude\nfn f(s: str) -> int:\n    if mail?(s):\n        send(s)\n    else:\n        0\n\[f(\"abcd\"), f(\"ab\")\]\n"
@@ -279,7 +279,7 @@ fn as_query(q: Query) -> str:
 fn f(s: str) -> str:
     if query?(s):
         if encoded?(s):
-            str::concat(as_query(s), show(s))
+            std::str::concat(as_query(s), show(s))
         else:
             \"no\"
     else:
@@ -314,7 +314,7 @@ test refinement-chain-order-independent {a carrier may be declared later in the 
 # 6, 85. Carrier eligibility: a semantic rule, not spelling
 
 test refinement-carrier-eligible {scalar value carriers, integer domains and refinements are eligible} -body {
-    sourceAgree {import type byte::Byte
+    sourceAgree {import type std::byte::Byte
 
 refined type Flag = bool
 refined type Letter = UnicodeChar
@@ -352,8 +352,8 @@ test refinement-carrier-reaching-mutable {a carrier is judged by what it reaches
 
 test refinement-carrier-struct {a struct carrier is not supported yet, whatever its name says} -body {
     list [rejection "struct MutableThing:\n    x: int\nrefined type Good = MutableThing\n1\n"] \
-         [rejectionKind "import abi::bytes\nrefined type B = abi::bytes::Bytes\n1\n"] \
-         [rejectionKind "import abi::bytes\nrefined type B = abi::bytes::MutableBytes\n1\n"]
+         [rejectionKind "import std::abi::bytes\nrefined type B = std::abi::bytes::Bytes\n1\n"] \
+         [rejectionKind "import std::abi::bytes\nrefined type B = std::abi::bytes::MutableBytes\n1\n"]
 } -match glob -result {{REFINEMENT-CARRIER {*MutableThing is a struct type, and refinements of struct values are not supported yet*}} REFINEMENT-CARRIER REFINEMENT-CARRIER}
 
 test refinement-carrier-unknown {an unknown carrier is a TYPE error naming it} -body {
@@ -382,7 +382,7 @@ test refinement-proof-target-missing {a proof clause must name an ordinary param
 
 test refinement-proof-target-not-refinement {the proven type must be a refinement} -body {
     list [rejection "fn p(s: str) -> bool proves s: str:\n    true\n1\n"] \
-         [rejectionKind "import type byte::Byte\nfn p(n: int) -> bool proves n: Byte:\n    true\n1\n"] \
+         [rejectionKind "import type std::byte::Byte\nfn p(n: int) -> bool proves n: Byte:\n    true\n1\n"] \
          [rejectionKind "fn p(s: str) -> bool proves s: Nope:\n    true\n1\n"]
 } -match glob -result {{PROOF-CLAUSE {*is str, which is not a refinement type*}} PROOF-CLAUSE PROOF-CLAUSE}
 
@@ -407,7 +407,7 @@ test refinement-proof-arity-abi {a proof clause changes neither arity nor the ca
 } -result {value {[true, false, false]}}
 
 test refinement-proof-with-errors {a proof clause sits between the result type and an errors clause} -body {
-    sourceAgree {import str
+    sourceAgree {import std::str
 
 refined type M = str
 error Weird
@@ -415,10 +415,10 @@ error Weird
 fn p(s: str) -> bool proves s: M errors Weird:
     if s == "?":
         fail Weird
-    str::length(s) > 1
+    std::str::length(s) > 1
 
 fn take(m: M) -> int:
-    str::length(m)
+    std::str::length(m)
 
 fn f(s: str) -> int:
     ok = p(s):
@@ -440,7 +440,7 @@ test refinement-forgetting {a refined value is usable wherever its carrier is, w
     sourceAgree "$prelude
 fn f(s: str) -> List\[str\]:
     if mail?(s):
-        \[show(s), str::concat(s, \"!\"), str::lowercase(s)\]
+        \[show(s), std::str::concat(s, \"!\"), std::str::lowercase(s)\]
     else:
         \[\]
 
@@ -457,7 +457,7 @@ test refinement-false-edge-no-proof {the false edge proves nothing about the arg
 } -result TYPE
 
 test refinement-param-is-proven {inside a function, a refinement parameter is proven} -body {
-    sourceAgree "$prelude\nfn relay(m: Mail) -> int:\n    send(m) + str::length(m)\nfn f(s: str) -> int:\n    if mail?(s):\n        relay(s)\n    else:\n        0\nf(\"abcde\")\n"
+    sourceAgree "$prelude\nfn relay(m: Mail) -> int:\n    send(m) + std::str::length(m)\nfn f(s: str) -> int:\n    if mail?(s):\n        relay(s)\n    else:\n        0\nf(\"abcde\")\n"
 } -result {value 10}
 
 # ===========================================================================
@@ -524,7 +524,7 @@ fn guard(s: str) -> int errors Bad:
     send(s)
 
 fn both_branches(s: str) -> int:
-    if str::length(s) > 10:
+    if std::str::length(s) > 10:
         if not mail?(s):
             return -1
     else:
@@ -543,7 +543,7 @@ fn g(s: str) -> int:
 } -result {value {[4, -9, 5, -2]}}
 
 test refinement-join-one-path {a fact proven on only one path does not survive the join} -body {
-    rejectionKind "$prelude\nfn f(s: str) -> int:\n    if str::length(s) > 2:\n        if mail?(s):\n            1\n        else:\n            2\n    else:\n        3\n    send(s)\nf(\"abcd\")\n"
+    rejectionKind "$prelude\nfn f(s: str) -> int:\n    if std::str::length(s) > 2:\n        if mail?(s):\n            1\n        else:\n            2\n    else:\n        3\n    send(s)\nf(\"abcd\")\n"
 } -result TYPE
 
 test refinement-rebinding {facts belong to values, not spellings: a shadowing binding is not proven} -body {
@@ -602,7 +602,7 @@ struct Recipient:
 fn make(s: str) -> int:
     if mail?(s):
         r = Recipient {email: s}
-        send(r.email) + str::length(r.email)
+        send(r.email) + std::str::length(r.email)
     else:
         0
 
@@ -614,7 +614,7 @@ fn make(s: str) -> int:
 # 30-33. Method sugar and operators
 
 test refinement-method-sugar-forgets {method sugar of carrier functions applies to a refined value} -body {
-    sourceAgree "$prelude\nfn f(s: str) -> int:\n    if mail?(s):\n        s.length() + str::length(s.show())\n    else:\n        0\nf(\"abcd\")\n"
+    sourceAgree "$prelude\nfn f(s: str) -> int:\n    if mail?(s):\n        s.length() + std::str::length(s.show())\n    else:\n        0\nf(\"abcd\")\n"
 } -result {value 8}
 
 test refinement-method-sugar-one-way {a function requiring the refinement is no method of a plain carrier value} -body {
@@ -629,7 +629,7 @@ test refinement-operators {operators take the carrier: concatenation returns str
     set source "$prelude
 fn f(s: str) -> List\[bool\]:
     if mail?(s):
-        joined = str::concat(s, \"x\")
+        joined = std::str::concat(s, \"x\")
         \[s == \"abcd\", s != \"abce\", joined == \"abcdx\"\]
     else:
         \[\]
@@ -683,7 +683,7 @@ f(\"abcd\")
 fn f(s: str) -> int:
     if mail?(s):
         xs = \[s, 1\]
-        send(list::at(xs, 0))
+        send(std::list::at(xs, 0))
     else:
         0
 f(\"abcd\")
@@ -757,7 +757,7 @@ fn f(s: str) -> int:
     if mail?(s):
         m = identity(s)
         p = identity(\"plain\")
-        send(m) + str::length(p)
+        send(m) + std::str::length(p)
     else:
         0
 
@@ -781,7 +781,7 @@ fn f(s: str) -> int:
     if mail?(s):
         m = identity(s)
         p = identity(\"plain\")
-        send(m) + str::length(p)
+        send(m) + std::str::length(p)
     else:
         0
 
@@ -939,23 +939,23 @@ f(\"abcd\", true)
 } -result {{} {} 1}
 
 test refinement-repeatable-explain {what makes a predicate repeatable, and what does not} -body {
-    set hir [surface::compile {import list
-import mutable_array
-import str
+    set hir [surface::compile {import std::list
+import std::mutable_array
+import std::str
 
 refined type M = str
 
 fn pure?(s: str) -> bool proves s: M:
-    str::length(s) > 2 and list::length([s]) == 1
+    std::str::length(s) > 2 and std::list::length([s]) == 1
 
 fn reads?(s: str, a: MutableArray[int]) -> bool proves s: M:
-    n = mutable_array::at(a, 0):
+    n = std::mutable_array::at(a, 0):
         on IndexNotFound:
             return false
     n > 0
 
 fn writes?(s: str, a: MutableArray[int]) -> bool proves s: M:
-    mutable_array::set(a, 0, 1):
+    std::mutable_array::set(a, 0, 1):
         on IndexNotFound:
             return false
     true
@@ -966,7 +966,7 @@ fn calls_unknown?(s: str, f) -> bool proves s: M:
 fn via_helper?(s: str) -> bool proves s: M:
     fn check(p: Fn{args: [str], return: bool}) -> bool:
         p(s)
-    check(str::is_tcl_alpha)
+    check(std::str::is_tcl_alpha)
 
 1
 } -warnings off]
@@ -975,11 +975,11 @@ fn via_helper?(s: str) -> bool proves s: M:
         set why [hir::repeatable::explain $hir $block]
         regsub {^line [0-9]+:[0-9]+: } $why {}
     }
-} -result {{} {native "mutable_array::at" is not classified as a repeatable value operation} {native "mutable_array::set" is not classified as a repeatable value operation} {a call whose target is not statically known} {}}
+} -result {{} {native "std::mutable_array::at" is not classified as a repeatable value operation} {native "std::mutable_array::set" is not classified as a repeatable value operation} {a call whose target is not statically known} {}}
 
 test refinement-effectful-not-folded {a proof predicate that reads or writes mutable state still proves, but a repeat is never decided} -body {
-    set source {import mutable_array
-import str
+    set source {import std::mutable_array
+import std::str
 
 refined type M = str
 
@@ -987,10 +987,10 @@ context struct Counter:
     a: MutableArray[int]
 
 fn bump?(s: str, context c: Counter) -> bool proves s: M:
-    n = mutable_array::at(c.a, 0):
+    n = std::mutable_array::at(c.a, 0):
         on IndexNotFound:
             return false
-    mutable_array::set(c.a, 0, n + 1):
+    std::mutable_array::set(c.a, 0, n + 1):
         on IndexNotFound:
             return false
     n == 0
@@ -1007,7 +1007,7 @@ fn f(s: str) -> List[str]:
     else:
         []
 
-with context Counter {a: mutable_array::create(1, 0)}
+with context Counter {a: std::mutable_array::create(1, 0)}
 f("x")
 }
     set hir [surface::compile $source -warnings off]
@@ -1017,7 +1017,7 @@ f("x")
 test refinement-not-a-proof-not-folded {a repeatable bool function without a proof clause is never decided by an earlier call} -body {
     set hir [surface::compile "$prelude
 fn long?(s: str) -> bool:
-    str::length(s) > 3
+    std::str::length(s) > 3
 
 fn f(s: str) -> int:
     if long?(s):
@@ -1043,7 +1043,7 @@ proc nirOf {source args} {
 test refinement-nir-proof-passes-register {after a proof, the original carrier register is passed directly: no wrapper, tag, helper or re-check} -body {
     set nir [nirOf "$prelude
 fn consume(m: Mail) -> int:
-    str::length(m)
+    std::str::length(m)
 
 fn example(s: str) -> int:
     if mail?(s):
@@ -1062,7 +1062,7 @@ example(\"abcd\")
 test refinement-nir-forgetting-is-free {forgetting through an ordinary call: a refined parameter passes on unchanged} -body {
     set nir [nirOf "$prelude
 fn consume_string(x: str) -> int:
-    str::length(x)
+    std::str::length(x)
 
 fn consume_email(x: Mail) -> int:
     consume_string(x)
@@ -1081,20 +1081,20 @@ f(\"abcd\")
 test refinement-abi-identical {a function over the refinement and the same function over its carrier compile to identical NIR and the same machine-code size} -body {
     set common "$prelude
 fn over_refined(x: Mail) -> Mail:
-    if str::length(x) > 100:
+    if std::str::length(x) > 100:
         x
     else:
         x
 
 fn over_carrier(x: str) -> str:
-    if str::length(x) > 100:
+    if std::str::length(x) > 100:
         x
     else:
         x
 
 fn f(s: str) -> int:
     if mail?(s):
-        str::length(over_refined(s)) + str::length(over_carrier(s))
+        std::str::length(over_refined(s)) + std::str::length(over_carrier(s))
     else:
         0
 
@@ -1125,7 +1125,7 @@ struct Holder:
 fn build(s: str) -> int:
     if mail?(s):
         h = Holder {value: s}
-        str::length(h.value)
+        std::str::length(h.value)
     else:
         0
 
@@ -1142,7 +1142,7 @@ build(\"abcd\")
 # both -- and the refinement adds none.
 test refinement-allocation-free {proving, passing, forgetting, returning and storing a refinement allocates nothing: the refined program allocates exactly what the carrier program does} -body {
     set reports [lmap variant {refined carrier} {
-        set check [expr {$variant eq "refined" ? "mail?(s)" : "str::length(s) > 3"}]
+        set check [expr {$variant eq "refined" ? "mail?(s)" : "std::str::length(s) > 3"}]
         set type [expr {$variant eq "refined" ? "Mail" : "str"}]
         set hir [surface::compile "$prelude
 struct Holder:
@@ -1152,7 +1152,7 @@ fn ident(x: $type) -> $type:
     x
 
 fn total(x: str) -> int:
-    str::length(x)
+    std::str::length(x)
 
 fn run(s: str, n: int, acc: int) -> int:
     if n == 0:
@@ -1179,22 +1179,22 @@ test refinement-rendering-native-runtime {the native runtime renders a refined v
 # ===========================================================================
 # 62, 77, 89. The motivating corpus program, end to end
 
-test refinement-corpus-refined-checks-nir {bench/refined-checks.bot: check calls web::emailish? once and web::uri_query_value? once; the repeat is a constant} -body {
+test refinement-corpus-refined-checks-nir {bench/refined-checks.bot: check calls std::web::emailish? once and std::web::uri_query_value? once; the repeat is a constant} -body {
     set hir [refinedChecksSourceHir]
     set nir [native::nir $hir]
-    regexp {func ([0-9]+) "web::emailish\?"} $nir -> emailish
-    regexp {func ([0-9]+) "web::uri_query_value\?"} $nir -> query
+    regexp {func ([0-9]+) "std::web::emailish\?"} $nir -> emailish
+    regexp {func ([0-9]+) "std::web::uri_query_value\?"} $nir -> query
     set body [nirBody $nir check]
     list [llength [lsearch -all -regexp $body "= call\[a-z\]* $emailish "]] \
          [llength [lsearch -all -regexp $body "= call\[a-z\]* $query "]] \
          [llength [lsearch -all -regexp $body {= bool true}]] \
-         [knownOf $hir web::emailish?]
+         [knownOf $hir std::web::emailish?]
 } -result {1 1 1 {{} 1}}
 
-test refinement-corpus-refined-checks-machine-code {the Cranelift IR of check makes one call of web::emailish? (and one of web::uri_query_value?)} -body {
+test refinement-corpus-refined-checks-machine-code {the Cranelift IR of check makes one call of std::web::emailish? (and one of std::web::uri_query_value?)} -body {
     set clif [native::clif [refinedChecksSourceHir]]
-    regexp {; u0:([0-9]+) = botlish_fn_[0-9]+ \(web::emailish\?\)} $clif -> emailish
-    regexp {; u0:([0-9]+) = botlish_fn_[0-9]+ \(web::uri_query_value\?\)} $clif -> query
+    regexp {; u0:([0-9]+) = botlish_fn_[0-9]+ \(std::web::emailish\?\)} $clif -> emailish
+    regexp {; u0:([0-9]+) = botlish_fn_[0-9]+ \(std::web::uri_query_value\?\)} $clif -> query
     set check [lindex [regexp -inline {; function [0-9]+ "check":[^\n]*\n(.*?)\n\}} $clif] 1]
     set refs [dict create]
     foreach {- ref target} [regexp -all -inline {(fn[0-9]+) = colocated u0:([0-9]+)} $check] {
@@ -1276,7 +1276,7 @@ test refinement-no-compiler-domain-knowledge {no compiler or runtime code names 
             }
         }
     }
-    lappend hits {*}[glob -nocomplain -directory [file join $::projectRoot lib] *.tcl]
+    lappend hits {*}[glob -nocomplain -directory [file join $::projectRoot stdlib] *.tcl]
     set hits
 } -result {}
 
@@ -1303,14 +1303,14 @@ proc withWebVariant {transform script} {
     }
 }
 
-set redundantWeb {import web
+set redundantWeb {import std::web
 
-fn consume(e: web::Emailish) -> int:
+fn consume(e: std::web::Emailish) -> int:
     1
 
 fn f(s: str) -> int:
-    if web::emailish?(s):
-        if web::emailish?(s):
+    if std::web::emailish?(s):
+        if std::web::emailish?(s):
             consume(s)
         else:
             2
@@ -1323,19 +1323,19 @@ f("a@b.co")
 test refinement-mutant-no-proof-clause {without the proof clause, nothing proves Emailish and nothing decides the repeat} -body {
     withWebVariant {apply {{text} {string map {"-> bool proves v: Emailish:" "-> bool:"} $text}}} {
         list [rejectionKind $redundantWeb] \
-             [knownOf [surface::compile [string map {"consume(s)" "1"} $redundantWeb] -warnings off] web::emailish?]
+             [knownOf [surface::compile [string map {"consume(s)" "1"} $redundantWeb] -warnings off] std::web::emailish?]
     }
 } -result {TYPE {{} {}}}
 
 test refinement-mutant-no-declaration {without the refinement declaration, the proof clause names no type} -body {
     withWebVariant {apply {{text} {string map {"refined type Emailish = str\n" ""} $text}}} {
-        rejection "import web\nweb::emailish?(\"a@b.co\")\n"
+        rejection "import std::web\nstd::web::emailish?(\"a@b.co\")\n"
     }
 } -match glob -result {PROOF-CLAUSE {unknown proven type Emailish in "proves v: Emailish": *}}
 
 test refinement-mutant-unrepeatable-predicate {an emailish? that reads mutable state proves, but is not decided} -body {
-    withWebVariant {apply {{text} {string map {"    n = str::length(v)\n" "    n = str::length(v)\n    probe = mutable_array::at(mutable_array::create(1, 0), 0)\n" "import list\n" "import list\nimport mutable_array\n"} $text}}} {
-        knownOf [surface::compile $redundantWeb -warnings off] web::emailish?
+    withWebVariant {apply {{text} {string map {"    n = std::str::length(v)\n" "    n = std::str::length(v)\n    probe = std::mutable_array::at(std::mutable_array::create(1, 0), 0)\n" "import std::list\n" "import std::list\nimport std::mutable_array\n"} $text}}} {
+        knownOf [surface::compile $redundantWeb -warnings off] std::web::emailish?
     }
 } -result {{} {}}
 

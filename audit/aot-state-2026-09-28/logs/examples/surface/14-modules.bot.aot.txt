@@ -1,10 +1,10 @@
 == 14-modules.bot (interp)
 <program>: closed (transitively guarded)   [program, line 7:1]
-  dispatch: closed -- natives: list; functions: mathish::inc (non-tail)
+  dispatch: closed -- natives: list; functions: std::mathish::inc (non-tail)
   blockers: none
   runtime:  list-alloc
 
-mathish::inc: guarded   [e2, line 8:7]
+std::mathish::inc: guarded   [e2, line 8:7]
   params:   x : any   result: int
   dispatch: closed -- natives: +
   blockers:

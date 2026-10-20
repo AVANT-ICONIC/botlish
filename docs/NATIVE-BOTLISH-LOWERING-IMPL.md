@@ -681,7 +681,7 @@ form: the accumulator decides when to `leave`.
 * **Performance.** A struct accumulator should stay unallocated (kept in
   registers) across the back edge in native code, or every iteration
   allocates.
-* **The planned `list::append` fix** must cover an accumulator carried from
+* **The planned `std::list::append` fix** must cover an accumulator carried from
   one iteration to the next, since that is where most appends will live.
 
 ## 7. DSLs
@@ -689,7 +689,7 @@ form: the accumulator decides when to `leave`.
 * **DFA/DAFSA: medium value.** Two uses here:
   * the lexer for the lowering input (§3);
   * static string tables: the `natives` table (about 50 name → op entries)
-    and the scattered `eq "list::at"`-style comparisons on native names.
+    and the scattered `eq "std::list::at"`-style comparisons on native names.
 
   A DAFSA-backed constant map literal fits the second. Its big payoff would
   be a self-hosted frontend lexer.
@@ -719,10 +719,10 @@ it needs:
 * **A real set.** `ImmutableSet` lookup is a linear scan and building it is
   O(n²) (MINIMAL-IMMUTABLE-SET.md).
 
-**`list::append` copies today.** A fix is planned; see §6.4 for
+**`std::list::append` copies today.** A fix is planned; see §6.4 for
 loop-carried accumulators.
 
-**`str::concat` copies.** This matters for NIR text, unless NIR is emitted
+**`std::str::concat` copies.** This matters for NIR text, unless NIR is emitted
 as structured values and printed once.
 
 **Small natives:** int ↔ string conversion, a stable sort with a key, and
@@ -776,7 +776,7 @@ string join.
 * elif chains are limited to a few hundred clauses.
 
 **Runtime.** Botlish's runtime is not automatically faster than Tcl for this
-workload until the hash table and the `list::append` fix exist. The GC is a
+workload until the hash table and the `std::list::append` fix exist. The GC is a
 plain mark-sweep with a shadow stack (README §20).
 
 ## 10. Open questions

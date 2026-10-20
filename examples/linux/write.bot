@@ -2,11 +2,11 @@
 # through its own raw Linux x86-64 syscall path (ABI-BYTES.md):
 #
 #   String
-#     --str::encode_utf8--------> List of bytes
-#     --abi::bytes::from_list--------------> abi::bytes::Bytes      (owned, contiguous, opaque)
-#     --linux::write------------> address + abi::Usize length
-#     --abi::x86_64::from_*-----> Register64 words (rsi, rdx)
-#     --linux::abi::x86_64::syscall-----> the x86-64 `syscall` instruction (rax = 1)
+#     --std::str::encode_utf8--------> List of bytes
+#     --std::abi::bytes::from_list--------------> std::abi::bytes::Bytes      (owned, contiguous, opaque)
+#     --std::linux::write------------> address + std::abi::Usize length
+#     --std::abi::x86_64::from_*-----> Register64 words (rsi, rdx)
+#     --std::linux::abi::x86_64::syscall-----> the x86-64 `syscall` instruction (rax = 1)
 #     --> the kernel's write(2) --> file descriptor 1
 #
 # No libc `write`, no special runtime implementation of Linux write: the
@@ -16,7 +16,7 @@
 #   rdx = the payload's byte count
 #
 # `data` is an ordinary immutable value: it can be written again, aliased,
-# stored, compared. The result of linux::write is the raw signed result of the
+# stored, compared. The result of std::linux::write is the raw signed result of the
 # kernel's write (the number of bytes written, or a negative -errno).
 #
 # Native backend only (cranelift, or a standalone executable from
@@ -26,16 +26,16 @@
 # stdout (native): Hello from Botlish!
 # value  (native): 20, the 20 bytes written
 
-# A direct module (DIRECT-MODULES.md): the program calls linux::write, a
+# A direct module (DIRECT-MODULES.md): the program calls std::linux::write, a
 # callable of the direct module linux, at its top level -- a deliberately
 # low-level program, which says so (examples/linux/context-hello.bot is the
-# same output through linux::io's LinuxIO context, and is no direct module).
+# same output through std::linux::io's LinuxIO context, and is no direct module).
 direct module
 
-import abi
-import abi::bytes
-import linux
-import str
+import std::abi
+import std::abi::bytes
+import std::linux
+import std::str
 
-data = abi::bytes::from_list(str::encode_utf8("Hello from Botlish!\n"))
-abi::i32(1).write(data)
+data = std::abi::bytes::from_list(std::str::encode_utf8("Hello from Botlish!\n"))
+std::abi::i32(1).write(data)

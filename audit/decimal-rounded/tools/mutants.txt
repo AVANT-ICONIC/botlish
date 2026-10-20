@@ -75,7 +75,7 @@
                 set precision [expr {max([Precision [lindex $types 0]], [Precision [lindex $types 1]])}]
 >>>>
 
-@@ decay-representation float64::from_decimal_rounded returns the representation, hidden digits included
+@@ decay-representation std::float64::from_decimal_rounded returns the representation, hidden digits included
 ## core/decimal.tcl
 <<<<
     set rounded [RatDouble [Rat [RoundAt [DoubleRat [of $v]] $p] [expr {10 ** $p}]]]

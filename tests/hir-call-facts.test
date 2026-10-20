@@ -76,19 +76,13 @@ test call-facts-work-1 {work exposes seven; drive still calls it} -body {
          [expr {[string first { = call } $nir] >= 0}]
 } -result {{[7, 7] {7}} {[7, 7] {7}} 1}
 
-test call-facts-module-1 {closed-call value facts cross a module boundary} -body {
-    set saved $::core::libraryDir
-    set ::core::libraryDir [file join $::projectRoot audit post-native-stack module-cases]
-    try {
-        set hir [surface::readProgramFile [file join $::core::libraryDir main.bot]]
-        set spec [hir::specialize::analyze $hir]
-        set analysis [hir::range::analyze $hir $spec]
-        set id [factId $spec plain::inc]
-        list [hir::range::show [lindex [dict get $analysis instances $id params] 0]] \
-             [factResult $analysis $id]
-    } finally {
-        set ::core::libraryDir $saved
-    }
+test call-facts-module-1 {closed-call value facts cross a module boundary (the fixture's modules are application modules beside its main.bot)} -body {
+    set hir [surface::readProgramFile [file join $::projectRoot audit post-native-stack module-cases main.bot]]
+    set spec [hir::specialize::analyze $hir]
+    set analysis [hir::range::analyze $hir $spec]
+    set id [factId $spec plain::inc]
+    list [hir::range::show [lindex [dict get $analysis instances $id params] 0]] \
+         [factResult $analysis $id]
 } -result {{[1, 1] {1}} {[2, 2] {2}}}
 
 proc factOutcome {hir opt} {

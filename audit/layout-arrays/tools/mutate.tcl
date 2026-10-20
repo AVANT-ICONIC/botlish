@@ -133,7 +133,7 @@ set selected [concat $selected $nativeSelected]
 # the native backend. Its native/target is a real copy when a native mutant
 # is selected (it is rebuilt), else a link to this checkout's.
 set tree [file tempdir botlish-array-mutants]
-foreach dir {compiler core hir surface lib tests examples audit/layout-arrays .cargo} {
+foreach dir {compiler core hir surface stdlib tests examples audit/layout-arrays .cargo} {
     if {![file exists [file join $root $dir]]} continue
     file mkdir [file dirname [file join $tree $dir]]
     file copy [file join $root $dir] [file join $tree $dir]

@@ -9,7 +9,7 @@ exercises one of the previously-identified callable-opacity shapes
 (returned/captured closure, callable-as-List-element, callable-selected-by-
 `if`), written in the idiomatic style this repository's own recent
 milestones established (`loop x in xs:` for transformation/selection,
-`list::any?`/`none?`/`find` for genuine search/reduction, no `map`/`filter`).
+`std::list::any?`/`none?`/`find` for genuine search/reduction, no `map`/`filter`).
 All five pre-existing canonical `bench/*.bot` programs are byte-for-byte
 unchanged (confirmed by hash below). No compiler code was touched — this is
 a corpus/dogfooding milestone, not an optimization milestone, exactly as
@@ -23,13 +23,13 @@ Headline findings:
 - **The corpus grew from 2 to 9 static `callvalue` sites** across the 8
   canonical `bench/*.bot` programs (2 pre-existing, 7 in the 3 new files).
 - **A returned closure called directly resolved to `callenv`, not
-  `callvalue`**: `test-selection.bot`'s `changed_a?("lib/web.bot")` calls an
+  `callvalue`**: `test-selection.bot`'s `changed_a?("stdlib/web.bot")` calls an
   exact, statically-known target Block through its own environment — the
   "uncertain" row of the earlier likelihood table is now answered for at
   least this shape: the compiler already retains exact target identity
   through a factory-return → binding → direct-call chain.
 - **The same closure loses that exactness the instant it crosses an HOF
-  parameter boundary**: passed into `list::any?`/`none?`/`find` as
+  parameter boundary**: passed into `std::list::any?`/`none?`/`find` as
   `predicate`, the very same `changed_a?` value is now `callvalue` inside
   those helpers, because the parameter itself is untyped. Two different,
   adjacent call sites of the *same value* land on opposite sides of the
@@ -45,7 +45,7 @@ Headline findings:
 - **A one-caller/one-target native predicate remains `callvalue`**, matching
   the earlier prediction precisely: `lex-strategy.bot`'s `fully_alnum?`
   passes `is_tcl_alnum` — its only argument anywhere in the corpus — into
-  `list::all?`, and `predicate(x)` is still dynamically dispatched inside
+  `std::list::all?`, and `predicate(x)` is still dynamically dispatched inside
   `all?`.
 - Every ordinary direct/named call in all three new programs (21 distinct
   function definitions between them) resolved to `call`/`callenv`, never
@@ -68,7 +68,7 @@ optimization, no new language features (`leave`, `with intermediate`,
 lockstep `and`, structs, flags, new iterator abstractions), no `map`/
 `filter`, no refactor of the 5 pre-existing canonical programs, no `.ir`
 siblings for the new sources, no special-casing or native-rewriting of
-`list::any?`/`all?`/`none?`/`find`.
+`std::list::any?`/`all?`/`none?`/`find`.
 
 ## Canonical workload additions
 
@@ -92,7 +92,7 @@ repository's own CI might eventually use: given a set of changed files and
 a table of test groups with their own dependencies, which test groups need
 to run? This is a genuine, useful question over genuine, if synthetic-but-
 representative, data (test-group names and dependency paths modeled after
-this repository's own directory layout: `hir/`, `native/`, `lib/`,
+this repository's own directory layout: `hir/`, `native/`, `stdlib/`,
 `compiler/`, `bench/`).
 
 **`source-checks.bot`** models a lint pass over candidate identifier names:
@@ -110,7 +110,7 @@ was chosen uniformly across a batch of tokens.
 
 Botlish has no `Struct`/`Map` yet (confirmed: `core/native.tcl` registers
 no such construct, and no `type Struct`/`Map` declaration exists anywhere
-in `hir/`, `core/`, or `lib/`), so none was added or invented for this
+in `hir/`, `core/`, or `stdlib/`), so none was added or invented for this
 milestone (item 32's own instruction). Representation choices, and their
 compromises:
 
@@ -130,13 +130,13 @@ compromises:
   recursive-accumulator idiom `examples/stdlib/csv_geometric.bot`'s own
   field/record scanning already uses, not a new abstraction invented for
   this milestone.
-- **No `char::codepoint`/`UnicodeChar`-based digit classification was
+- **No `std::char::codepoint`/`UnicodeChar`-based digit classification was
   used**: `char_codepoint` only accepts `UnicodeChar`, and `substring`
   (the only way to pull one character out of a `str` variable) returns
   `str`, not `UnicodeChar` — the two types don't compose the way a naive
   digit-range check would need. All character classification in the new
   corpus therefore uses the same `is_tcl_alpha`/`is_tcl_alnum`/direct `==`
-  idiom `lib/web.bot`'s own `emailish?` already established, not a new
+  idiom `stdlib/web.bot`'s own `emailish?` already established, not a new
   mechanism.
 
 ## Use of returning loops
@@ -189,9 +189,9 @@ closure provenance" below for its structural findings. Full source:
 `bench/test-selection.bot`. Expected result (verified against the
 interpreter and matching hand-computation): `[3, 1, "resolve-tests", true,
 true]` — 3 test groups affected by `changed_a` (`resolve-tests`,
-`types-tests`, `web-tests`, both sharing `hir/hir.tcl` or `lib/web.bot`), 1
+`types-tests`, `web-tests`, both sharing `hir/hir.tcl` or `stdlib/web.bot`), 1
 affected by `changed_b` (`docs-tests`, via `README.md`), `"resolve-tests"`
-the first in declared order, `true` that `changed_a?("lib/web.bot")` holds
+the first in declared order, `true` that `changed_a?("stdlib/web.bot")` holds
 directly, `true` that none of `docs-tests`' own dependencies are in
 `changed_a`.
 
@@ -223,7 +223,7 @@ strategy choice living outside the traversal, exactly the recommended
 idiom. Expected result: `[58, 65, 1, "café"]` — 58 characters accepted
 across the 8-token corpus under strict classification, 65 under relaxed,
 and exactly one token (`"café"`, all Unicode letters, no `_`/`-`) fully
-alnum under `list::all?(chars, is_tcl_alnum)`.
+alnum under `std::list::all?(chars, is_tcl_alnum)`.
 
 ## Same-code/different-environment case
 
@@ -237,7 +237,7 @@ own freshly-built `changed_set`. Both are genuinely exercised, not merely
 constructed: `changed_a?` drives `select_affected(tests, changed_a?)`,
 `first_affected(tests, changed_a?)`, `untouched_by_a?`, and a direct call
 (`probe`); `changed_b?` drives `select_affected(tests, changed_b?)`. Both
-reach `list::any?`'s own `predicate(x)` `callvalue` site from the *same*
+reach `std::list::any?`'s own `predicate(x)` `callvalue` site from the *same*
 static call expression (`e75` in `affected?`) — direct, concrete evidence
 that the compiler is not distinguishing code identity from environment
 identity at that call site (both collapse to the same non-exact `block`
@@ -312,13 +312,13 @@ here either.
 41's "do not speculate beyond what the facts support")**: several used
 instances in all three programs show non-empty `hir::captures` lists whose
 entries are references to *other top-level function bindings* in the same
-program (e.g. `affected?`'s own block captures `[list::any?, test_deps]`;
+program (e.g. `affected?`'s own block captures `[std::list::any?, test_deps]`;
 `chars_of`'s own block captures `[chars_of]`, itself, for its own
 recursion). `hir::staticRefs` — the module-static-value mechanism
 (`MODULE-STATIC-RETAINED-VALUES.md`) that would otherwise keep such a
 reference out of `hir::captures` — is empty everywhere in all three
 programs, because module-static treatment applies only to `namespace`-
-scoped module bindings (`lib/*.bot`), and these three new files are plain
+scoped module bindings (`stdlib/*.bot`), and these three new files are plain
 top-level programs (like `fib.bot`), not `namespace`-scoped modules. Yet
 the measured NIR `closure`/`capture` counts (2/2, 3/3, 0/0 respectively)
 are far lower than "one real heap closure per non-empty-`hir::captures`
@@ -336,27 +336,27 @@ resolved or guessed at further.
 
 | row | prediction | observed | confidence | where exactness was retained/lost |
 |---|---|---|---|---|
-| function argument → parameter called | callvalue | **callvalue**, every instance (5 of 5 new HOF predicate sites) | confirmed | lost at the untyped `predicate` parameter of `list::any?`/`all?`/`none?`/`find` itself (`lib/list.bot`, unchanged, pre-existing) |
-| same, one caller / one target | callvalue | **callvalue** (`lex-strategy.bot`'s `fully_alnum?` → `list::all?(chars, is_tcl_alnum)`, `is_tcl_alnum`'s only argument anywhere in the corpus) | confirmed | same — the helper's own parameter type, not the caller's exactness, decides |
-| same, non-generic HOF instance | probably callvalue | **callvalue** (`list::any?<any, block>` in `test-selection.bot` is a single, not-generic-flagged used instance) | confirmed | same |
+| function argument → parameter called | callvalue | **callvalue**, every instance (5 of 5 new HOF predicate sites) | confirmed | lost at the untyped `predicate` parameter of `std::list::any?`/`all?`/`none?`/`find` itself (`stdlib/list.bot`, unchanged, pre-existing) |
+| same, one caller / one target | callvalue | **callvalue** (`lex-strategy.bot`'s `fully_alnum?` → `std::list::all?(chars, is_tcl_alnum)`, `is_tcl_alnum`'s only argument anywhere in the corpus) | confirmed | same — the helper's own parameter type, not the caller's exactness, decides |
+| same, non-generic HOF instance | probably callvalue | **callvalue** (`std::list::any?<any, block>` in `test-selection.bot` is a single, not-generic-flagged used instance) | confirmed | same |
 | callable fetched from List | probably callvalue | **callvalue** (`source-checks.bot`'s `checks` element call, `classify_leading`'s `check(c)`) | confirmed | lost the moment 2 natives and 2 Blocks are joined into one List element type |
 | callable chosen by if/else | probably callvalue | **callvalue** (`lex-strategy.bot`'s `classifier(c)`) | confirmed | lost **inside `choose_classifier` itself**: its own `if`/`else` expression's HIR type is already `any` before the function returns — not at the `classifier` binding, and not at the call |
-| specific returned closure then called | uncertain: callenv or callvalue | **callenv** (`test-selection.bot`'s `changed_a?("lib/web.bot")`, `probe`) | resolved for this shape | retained: `make_changed?`'s return, `changed_a?`'s binding, and the direct call all carry the exact Block `e55` type; `callenv` (not `call`) because that Block genuinely captures `changed_set` |
+| specific returned closure then called | uncertain: callenv or callvalue | **callenv** (`test-selection.bot`'s `changed_a?("stdlib/web.bot")`, `probe`) | resolved for this shape | retained: `make_changed?`'s return, `changed_a?`'s binding, and the direct call all carry the exact Block `e55` type; `callenv` (not `call`) because that Block genuinely captures `changed_set` |
 | local alias `g = f; g(x)` | likely direct | not exercised — no artificial alias was added (none arose naturally in any of the 3 workloads; item 50 forbids adding one merely as a control) | not tested | — |
 | direct named function | direct | **`call`/`callenv`**, 100% of resolved edges (33 across the 3 programs — see census table) | confirmed | never lost — every ordinary named call resolves |
 
 ## HOF closed-caller provenance
 
-For every `list::any?`/`all?`/`none?`/`find` instance used by the new
-workloads (`lib/list.bot`, unmodified, per item 51-52's non-goal):
+For every `std::list::any?`/`all?`/`none?`/`find` instance used by the new
+workloads (`stdlib/list.bot`, unmodified, per item 51-52's non-goal):
 
 | instance | used from | specializer genericity | callable type visible inside helper | `predicate(x)` form |
 |---|---|---|---|---|
-| `list::any?<any, block>` | `test-selection.bot`'s `affected?` (called with `changed_a?`, `changed_b?`, and, via `is_affected?`, `changed?` again) | non-generic instance (resolved to key `<any, block>`) | bare `block` (non-exact) | `callvalue` |
-| `list::none?<List[str], block>` | `test-selection.bot`'s `untouched_by_a?` | non-generic instance | bare `block` | `callvalue` |
-| `list::find<List[list], block>` | `test-selection.bot`'s `first_affected` (argument `is_affected?`) | non-generic instance | bare `block` | `callvalue` |
-| `list::find<List[str], block>` | `source-checks.bot`'s `first_invalid` (argument `invalid_name?`) | non-generic instance | bare `block` | `callvalue` |
-| `list::all?<List[str], native>` | `lex-strategy.bot`'s `fully_alnum?` (argument `is_tcl_alnum`, direct) | non-generic instance (resolved to key `<List[str], native>`) | bare `native`/`callable` (non-exact — the specialization key collapses to the kind, not the identity) | `callvalue` |
+| `std::list::any?<any, block>` | `test-selection.bot`'s `affected?` (called with `changed_a?`, `changed_b?`, and, via `is_affected?`, `changed?` again) | non-generic instance (resolved to key `<any, block>`) | bare `block` (non-exact) | `callvalue` |
+| `std::list::none?<List[str], block>` | `test-selection.bot`'s `untouched_by_a?` | non-generic instance | bare `block` | `callvalue` |
+| `std::list::find<List[list], block>` | `test-selection.bot`'s `first_affected` (argument `is_affected?`) | non-generic instance | bare `block` | `callvalue` |
+| `std::list::find<List[str], block>` | `source-checks.bot`'s `first_invalid` (argument `invalid_name?`) | non-generic instance | bare `block` | `callvalue` |
+| `std::list::all?<List[str], native>` | `lex-strategy.bot`'s `fully_alnum?` (argument `is_tcl_alnum`, direct) | non-generic instance (resolved to key `<List[str], native>`) | bare `native`/`callable` (non-exact — the specialization key collapses to the kind, not the identity) | `callvalue` |
 
 Every one of the 5 instances is a single used instance (no instance was
 used generically across genuinely different call-site argument shapes
@@ -374,7 +374,7 @@ isn't a property a non-generic, already-resolved instance has. What *is*
 directly confirmed for all 5: the specialization key being resolved (to
 `block`/`native`, i.e. a kind, not an identity) is precisely what still
 leaves `predicate(x)` dynamically dispatched inside every one of them —
-the parameter is untyped in `lib/list.bot`'s own source, independent of
+the parameter is untyped in `stdlib/list.bot`'s own source, independent of
 how exact the caller's own argument was, exactly the reason `RETURNING-
 ITERABLE-LOOPS.md` already established for this pre-existing shape. This
 corpus's own `<generic>`-labeled instances (`changed?`, `is_affected?`,
@@ -453,15 +453,15 @@ rather than forced.
 - **Type the caller binding receives**: the same exact `block e55 1 any`
   — `changed_a?`/`changed_b?` are both typed exactly, not widened at the
   `=` binding.
-- **Direct invocation**: lowers to **`callenv`** (`changed_a?("lib/web
+- **Direct invocation**: lowers to **`callenv`** (`changed_a?("stdlib/web
   .bot")`, the `probe` binding) — not `call` (the target genuinely
   captures `changed_set`, so it needs its own environment threaded) and
   not `callvalue` (the target Block is exactly known).
 - **Passing that same value to a HOF**: yes, loses the exactness —
   `affected?`'s own `changed?` parameter (untyped) receives it as bare
-  `block`, and `list::any?`'s own `predicate` parameter (also untyped)
+  `block`, and `std::list::any?`'s own `predicate` parameter (also untyped)
   receives it the same way; both downstream calls (`affected?`'s own
-  `list::any?(test_deps(test), changed?)`, and transitively `predicate(x)`
+  `std::list::any?(test_deps(test), changed?)`, and transitively `predicate(x)`
   inside `any?`/`none?`/`find`) are `callvalue`.
 - **Two environments of the same Block**: yes — `changed_a?`/`changed_b?`
   (see "Same-code/different-environment case" above). The census
@@ -474,17 +474,17 @@ rather than forced.
 
 - **Identity at factory result**: exact, `block e55 1 any` (see above).
 - **Identity at the HOF call argument**: still exact at the *argument
-  expression itself* — `list::find(tests, is_affected?)`'s own argument
+  expression itself* — `std::list::find(tests, is_affected?)`'s own argument
   `is_affected?` is an exact `block e98` (the nested closure wrapping
   `affected?`/`changed?`); one level further in, `affected?`'s own
-  `changed?` argument to `list::any?` is likewise exact `block e55` *at
+  `changed?` argument to `std::list::any?` is likewise exact `block e55` *at
   the call expression*, per the census's "arg:" line for call `e75`.
 - **Identity inside the helper's own predicate parameter**: lost — bare
   `block` inside `any?`/`find` alike, regardless of how exact the calling
   expression was. **The information loss happens exactly at the
   parameter boundary of the untyped HOF helper, not earlier** — this
   milestone's census shows the same boundary losing exactness twice
-  (once directly at `list::any?`'s `predicate`, once at `list::find`'s
+  (once directly at `std::list::any?`'s `predicate`, once at `std::list::find`'s
   `predicate` via the nested `is_affected?` closure), always at the same
   place: crossing into the helper's own body.
 
@@ -492,7 +492,7 @@ rather than forced.
 
 - **Module/local named direct call**: `test_name`/`test_deps` (local,
   `test-selection.bot`); `web::` is not used by the new corpus (no web
-  workload was natural here), but `list::any?`/`none?`/`find`/`all?`
+  workload was natural here), but `std::list::any?`/`none?`/`find`/`all?`
   themselves are module direct calls, confirmed `call`/`callenv` at every
   one of their own 5 call sites (see "HOF closed-caller provenance" —
   it's specifically the *helpers' own internal* `predicate(x)` that's
@@ -502,7 +502,7 @@ rather than forced.
 - **Native direct call**: `is_tcl_alpha`/`is_tcl_alnum` (`source-checks
   .bot`'s `checks` list — direct references, not wrapped), `is_tcl_alnum`
   (`lex-strategy.bot`'s `choose_classifier`'s strict branch and
-  `fully_alnum?`'s direct `list::all?` argument).
+  `fully_alnum?`'s direct `std::list::all?` argument).
 
 All resolve `call`/`callenv`; none is `callvalue` — direct, corroborating
 evidence that the 7 new `callvalue` sites are caused specifically by
@@ -513,12 +513,12 @@ a general failure to resolve ordinary calls.
 
 | scope | count |
 |---|---|
-| 5 pre-existing canonical `bench/*.bot` (before this milestone) | 2 (both are the *same* source call site — `web::emailish?`'s own `scan_while` predicate call, `lib/web.bot`, unmodified by this or the prior milestone — appearing once each in `refined-checks.bot`'s and `uri-steady.bot`'s own compiled NIR, since both pull in the whole `web` namespace's compiled functions, not only the ones each program actually calls) |
+| 5 pre-existing canonical `bench/*.bot` (before this milestone) | 2 (both are the *same* source call site — `std::web::emailish?`'s own `scan_while` predicate call, `stdlib/web.bot`, unmodified by this or the prior milestone — appearing once each in `refined-checks.bot`'s and `uri-steady.bot`'s own compiled NIR, since both pull in the whole `web` namespace's compiled functions, not only the ones each program actually calls) |
 | 3 new canonical `bench/*.bot` (this milestone) | 7 (`test-selection.bot`: 3; `source-checks.bot`: 2; `lex-strategy.bot`: 2) |
 | **8 canonical `bench/*.bot` total, after this milestone** | **9** |
 
 Of the 7 new sites: **5 are HOF predicate-parameter calls** (reusing
-`lib/list.bot`'s own 4 pre-existing call-site shapes — `any?`×1, `none?`
+`stdlib/list.bot`'s own 4 pre-existing call-site shapes — `any?`×1, `none?`
 ×1, `find`×2, `all?`×1 — now realistically exercised by 3 new programs
 rather than only by `tests/list-stdlib.test`'s synthetic fixtures); **1
 comes from a callable-List element** (`source-checks.bot`'s `check(c)`,
@@ -636,7 +636,7 @@ in between.
    for the exact target per caller, `InstanceClosed` status, visible
    callable type inside the helper, and `predicate(x)` form for every one
    of the 5 instances. One-caller/one-target case: yes
-   (`list::all?<List[str], native>`, argument `is_tcl_alnum`, its only use
+   (`std::list::all?<List[str], native>`, argument `is_tcl_alnum`, its only use
    in the corpus); it remains `callvalue`.
 
 ## Required callable-list questions
@@ -663,7 +663,7 @@ in between.
    HOF" above: exact Block `e55`; captures `changed_set`; factory return
    type exact `block e55 1 any`; caller binding receives the same exact
    type; direct invocation lowers to `callenv`; passing the same value to
-   a HOF (`list::any?`/`find`) does lose additional information, at the
+   a HOF (`std::list::any?`/`find`) does lose additional information, at the
    helper's own untyped parameter; two environments of the same Block
    (`changed_a?`/`changed_b?`) are correctly distinguished by the analysis
    as one code target with two capture/closure instructions, never

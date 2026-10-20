@@ -12,7 +12,7 @@
 #            compiler's own registries and sources -- each native's
 #            signature, errors, method eligibility and backend availability
 #            from core::native's registry; each library declaration and its
-#            comment from lib/*.bot (surface::parse) -- merged with the prose
+#            comment from stdlib/*.bot (surface::parse) -- merged with the prose
 #            of compilerpedia/notes/stdlib.notes (the intrinsics have no
 #            source comment). Deterministic: no time, path or host in it.
 # check      every check a commit must pass (exit 1 on any problem): the
@@ -85,28 +85,39 @@ proc cpt::WriteFile {path text} {
 # ---------------------------------------------------------------------------
 # The standard library, from the registries and the sources
 
-# The library module files, as {NAMESPACE PATH NOTE}: lib/NAME.bot is NAME,
-# lib/a/b.bot a::b; an architecture-specific module (lib/P.ARCH.bot) is
-# documented from its x86_64 file, whose surface the others share
-# (LINUX-SYSCALL-TRANSPORTS.md), so the output is the same on every host.
+# The library module files, as {NAMESPACE PATH NOTE}: stdlib/ is the
+# directory of the namespace std (STD-NAMESPACE.md), so stdlib/NAME.bot is
+# std::NAME and stdlib/a/b.bot std::a::b, at any depth; an
+# architecture-specific module (stdlib/P.ARCH.bot) is documented from its
+# x86_64 file, whose surface the others share (LINUX-SYSCALL-TRANSPORTS.md),
+# so the output is the same on every host.
 proc cpt::LibraryModules {} {
     variable root
-    set lib [file join $root lib]
+    set lib [file join $root stdlib]
     set modules {}
-    foreach path [lsort [concat [glob -directory $lib *.bot] [glob -directory $lib */*.bot]]] {
+    foreach path [lsort [ModuleFilesUnder $lib]] {
         set relative [string range $path [string length $lib]+1 end]
         set note ""
         if {[regexp {^(.*)\.(x86_64|aarch64)\.bot$} $relative -> base arch]} {
             if {$arch ne "x86_64"} {
                 continue
             }
-            set note "architecture-specific: lib/$base.x86_64.bot and lib/$base.aarch64.bot, chosen by the compilation's target, have one surface"
+            set note "architecture-specific: stdlib/$base.x86_64.bot and stdlib/$base.aarch64.bot, chosen by the compilation's target, have one surface"
             set relative $base.bot
         }
-        set ns [string map {/ ::} [file rootname $relative]]
+        set ns std::[string map {/ ::} [file rootname $relative]]
         lappend modules [list $ns $path $note]
     }
     return $modules
+}
+
+# Every .bot file under DIR, at any depth.
+proc cpt::ModuleFilesUnder {dir} {
+    set files [glob -nocomplain -directory $dir -types f *.bot]
+    foreach sub [glob -nocomplain -directory $dir -types d *] {
+        lappend files {*}[ModuleFilesUnder $sub]
+    }
+    return $files
 }
 
 # The leading comment block of TEXT (its "#" lines up to the first other
@@ -168,11 +179,20 @@ proc cpt::CommentAbove {lines line name} {
 
 # The comment LINES with each paragraph of prose (consecutive lines that start
 # with neither a space nor "*") refilled to the topic text width, 76 columns;
-# indented lines (code, tables, continued bullets) stay as written.
+# a bulleted item ("* " and its lines indented two spaces) is refilled the
+# same way, hanging, when one of its lines is wider than that (a longer
+# qualified name, std::abi::I32, can push a written line past it); other
+# indented lines (code, tables) and items that fit stay as written.
 proc cpt::Reflow {lines} {
     set out {}
     set paragraph {}
-    foreach line [concat $lines [list ""]] {
+    set count [llength $lines]
+    for {set i 0} {$i <= $count} {incr i} {
+        if {$i < $count} {
+            set line [lindex $lines $i]
+        } else {
+            set line ""
+        }
         if {$line ne "" && ![string match {[ *]*} $line]} {
             lappend paragraph $line
             continue
@@ -182,9 +202,34 @@ proc cpt::Reflow {lines} {
             lappend out {*}[split $filled \n]
             set paragraph {}
         }
+        if {$i == $count} {
+            break
+        }
+        if {[string match {\* *} $line]} {
+            set item [list $line]
+            for {set j [expr {$i + 1}]} {$j < $count && [regexp {^  \S} [lindex $lines $j]]} {incr j} {
+                lappend item [lindex $lines $j]
+            }
+            set wide 0
+            foreach itemLine $item {
+                if {[string length $itemLine] > 76} {
+                    set wide 1
+                }
+            }
+            if {$wide} {
+                set text [join [lmap itemLine $item {string trim $itemLine}] " "]
+                set filled [split [compilerpedia::Wrap [string range $text 2 end] "  " 76] \n]
+                lset filled 0 "* [string range [lindex $filled 0] 2 end]"
+                lappend out {*}$filled
+            } else {
+                lappend out {*}$item
+            }
+            set i [expr {$j - 1}]
+            continue
+        }
         lappend out $line
     }
-    return [lrange $out 0 end-1]
+    return $out
 }
 
 # The first sentence of the comment LINES, for a one-line listing.
@@ -382,6 +427,16 @@ proc cpt::NativeBackends {meta} {
     return [list "every backend (interp, compile, cranelift-generic, cranelift)"]
 }
 
+# TITLE, or SHORT when TITLE does not fit a title's line (78 characters,
+# compilerpedia::validate): a long qualified name (std::mutable_byte_store::
+# freeze_prefix) leaves no room to repeat its namespace.
+proc cpt::Title {title short} {
+    if {[string length $title] <= 78} {
+        return $title
+    }
+    return $short
+}
+
 # The generated catalogue text: one topic per module (stdlib.module.NS, and
 # stdlib.module.root for the root primitives), one per public native and per
 # library declaration (stdlib.NS::NAME, stdlib.NAME at the root).
@@ -414,7 +469,7 @@ proc cpt::Generate {} {
         set direct 0
         if {[dict exists $modules $ns]} {
             lassign [dict get $modules $ns] path archNote
-            set relativePath lib/[string range $path [string length [file join $::cpt::root lib]]+1 end]
+            set relativePath stdlib/[string range $path [string length [file join $::cpt::root stdlib]]+1 end]
             set text [ReadFile $path]
             set lines [split $text \n]
             lassign [HeaderComment $text] summary description
@@ -439,7 +494,7 @@ proc cpt::Generate {} {
                 set note [expr {[dict exists $notes $id] ? [dict get $notes $id] : ""}]
                 dict set used $id 1
                 lappend topics [TopicText $id [dict create \
-                    title "$qualified -- [string totitle $kind 0 0] of module $ns" \
+                    title [Title "$qualified -- [string totitle $kind 0 0] of module $ns" "$qualified -- [string totitle $kind 0 0]"] \
                     summary [expr {$comment ne "" ? [FirstSentence $comment] : "The $kind $qualified of the standard module $ns."}] \
                     index stdlib symbol [list $qualified] related [list stdlib.module.$ns]] $sections $note]
             }
@@ -467,8 +522,13 @@ proc cpt::Generate {} {
             # A root primitive named like a namespace (`list`, what a list
             # literal calls) leaves the name to the namespace's page.
             set symbols [expr {$ns eq "root" && $name in $namespaces ? {} : [list $name]}]
+            if {$ns eq "root"} {
+                set title "$name -- language primitive"
+            } else {
+                set title [Title "$name -- intrinsic of namespace $ns" "$name -- intrinsic"]
+            }
             lappend topics [TopicText $id [dict create \
-                title "$name -- [expr {$ns eq "root" ? "language primitive" : "intrinsic of namespace $ns"}]" \
+                title $title \
                 summary $derived index stdlib symbol $symbols related [list stdlib.module.$ns]] $sections $note]
         }
         # The module's own page.
@@ -514,7 +574,7 @@ proc cpt::Generate {} {
     # A note for a symbol that no longer exists is stale.
     set stale [lmap id [dict keys $notes] {expr {[dict exists $used $id] ? [continue] : $id}}]
     set header [list "# compilerpedia/generated/stdlib.topic -- GENERATED by tools/compilerpedia.tcl generate" \
-        "# from core::native's registry, lib/*.bot and compilerpedia/notes/stdlib.notes:" \
+        "# from core::native's registry, stdlib/*.bot and compilerpedia/notes/stdlib.notes:" \
         "# do not edit; edit those and regenerate (COMPILERPEDIA.md)." ""]
     return [list "[join $header \n][join $topics \n\n]\n" $stale]
 }
@@ -664,7 +724,7 @@ proc cpt::CheckExample {topic example backends scratch} {
     set path [file join $dir example.bot]
     WriteFile $path "[join [dict get $example lines] \n]\n"
     # An example importing a namespace of another operating system's
-    # platform (linux::io on a Mac) documents that system: it compiles for
+    # platform (std::linux::io on a Mac) documents that system: it compiles for
     # its target, as the golden runner's suites do, and runs where a program
     # of that target runs here, on the Tcl backends.
     set target [surface::modules::PlatformTarget [core::ReadFile $path]]
@@ -787,7 +847,7 @@ proc cpt::Run {hir backend} {
 # ones when the native backend is built on a host that runs them.
 proc cpt::AvailableBackends {} {
     set backends {interp compile}
-    # The native examples print through linux::io, make Linux syscalls or
+    # The native examples print through std::linux::io, make Linux syscalls or
     # call C: the native runtime does that on Linux x86-64 and AArch64 (the
     # tests' nativeLinux), not yet on another host.
     if {![catch {native::binary}] && $::tcl_platform(os) eq "Linux"

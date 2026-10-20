@@ -26,7 +26,7 @@
 #                     describe_person; allocation reports of a trait loop vs
 #                     a concrete loop
 #
-# The library is written into a temporary copy of lib/ (never the real one).
+# The library is written into a temporary copy of stdlib/ (never the real one).
 
 set root [file dirname [file dirname [file dirname [file dirname [file normalize [info script]]]]]]
 source [file join $root compiler compiler.tcl]
@@ -53,7 +53,7 @@ set modules {
 ui/named.bot {trait Named:
     fn name(value: Named) -> str
 }
-services.bot {import str
+services.bot {import std::str
 
 opaque struct Service:
     internal_name: str
@@ -62,7 +62,7 @@ fn make_service() -> Service:
     Service {internal_name: "db"}
 
 fn name(value: Service) -> str:
-    str::concat("svc:", value.internal_name)
+    std::str::concat("svc:", value.internal_name)
 }
 }
 

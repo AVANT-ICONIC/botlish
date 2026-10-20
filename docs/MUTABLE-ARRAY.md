@@ -32,9 +32,9 @@ release).
 ## The principal program
 
 ```botlish
-import coroutine
-import mutable_array
-import mutable_vector
+import std::coroutine
+import std::mutable_array
+import std::mutable_vector
 
 struct Command:
     value: int
@@ -51,24 +51,24 @@ fn make(seed: int) -> Coroutine{args: [Command], return: Event}:
     step
 
 fn f() -> List[List[int]] errors IndexNotFound:
-    a = mutable_array::create(3, 0)
+    a = std::mutable_array::create(3, 0)
     b = a
     old = b.swap(0, 9)
     [a.freeze(3), b.freeze(3), [old]]      # [[0, 0, 0], [9, 0, 0], [0]]
 
 fn run() -> List[int] errors IndexNotFound:
-    workers = mutable_array::generate(2, make)  # MutableArray[Coroutine{...}]: affine
+    workers = std::mutable_array::generate(2, make)  # MutableArray[Coroutine{...}]: affine
     first = workers.swap(0, make(10))           # the replacement moves in, the old one out
     a = first(Command {value: 100})
     moved = workers                             # a whole move
     results = loop w in moved:                  # consumes the array, slot by slot
         w(Command {value: 1}).value
-    list::append(results, a.value)              # [11, 2, 100]
+    std::list::append(results, a.value)              # [11, 2, 100]
 ```
 
-`mutable_array::create(2, make(1))` is `AFFINE-DUPLICATION-UNSUPPORTED` (it
+`std::mutable_array::create(2, make(1))` is `AFFINE-DUPLICATION-UNSUPPORTED` (it
 would place one coroutine in two slots), and
-`mutable_vector::from_list([mutable_array::create(2, 0)])` is a
+`std::mutable_vector::from_list([std::mutable_array::create(2, 0)])` is a
 `MutableVector[MutableArray[int]]` whose extracted arrays are independent
 values. `tests/mutable-array.test`'s `ma-principal-*` tests pin all four on
 every backend: natively the copy is one share, the write one detach of three
@@ -85,7 +85,7 @@ exactly once, none swept, also under GC stress.
 | a context member | an alias | a place every function sharing the context mutates; a read-out is a snapshot |
 | `MutableArray[Coroutine{...}]` | `AFFINE-CONTAINER-UNSUPPORTED` | an affine array |
 | `create(n, affine)` | accepted: one coroutine in N slots | `AFFINE-DUPLICATION-UNSUPPORTED` |
-| one value per slot | -- | `mutable_array::generate(n, factory)` |
+| one value per slot | -- | `std::mutable_array::generate(n, factory)` |
 | `create`, `from_list` | library functions typed by a precomputed container rule | registered intrinsics with ownership roles |
 | variance | invariant; typed -> raw/`any` erasure rejected | covariant like MutableVector; erasure holds a copy |
 | receivers | any array value | places (`MUTABLE-PLACE-RECEIVER`, `MUTABLE-PLACE-CAPTURE`) |
@@ -98,9 +98,9 @@ exactly once, none swept, also under GC stress.
 Reference semantics. A MutableArray value was a handle to one runtime slot
 vector (`core::mutarray::store(ID)`; natively `MutArrayObj { slots }`): every
 binding, parameter, List element, struct field or context member holding
-"the array" held the same object, and `mutable_array::set` through any of
+"the array" held the same object, and `std::mutable_array::set` through any of
 them was seen through all of them. `create` and `from_list` were ordinary
-functions of `lib/mutable_array.bot` whose call sites a precomputed
+functions of `stdlib/mutable_array.bot` whose call sites a precomputed
 container rule typed (`hir/containers.tcl`, `intrinsicBlocks`), with the
 consequence the milestone names: their bodies were never seen by the
 ownership discipline, so `create(2, make_coroutine())` compiled and stored
@@ -236,14 +236,14 @@ parameter's field, each mutated while the struct is read afterwards).
 
 ### 13. List-element semantics
 
-`[a]` holds a copy (a move at `a`'s last use); `list::at(xs, 0)` bound to a
+`[a]` holds a copy (a move at `a`'s last use); `std::list::at(xs, 0)` bound to a
 place is a copy: mutating it changes neither the List nor `a`
 (`ma-cow-routes` route 7). A List of affine arrays is affine (moves whole;
 element-wise reads are rejected as for every affine List).
 
 ### 14. MutableVector-element semantics
 
-`mutable_vector::from_list([a])` holds a copy; `v.at(0)` read into a place
+`std::mutable_vector::from_list([a])` holds a copy; `v.at(0)` read into a place
 is a copy (route 8, `ma-principal-vector-of-arrays`). Affine: `at` is
 `AFFINE-ELEMENT-COPY-OUT`; push/pop/take/swap move whole arrays
 (`ma-nested-affine`, `ma-affine-whole-releases`).
@@ -258,7 +258,7 @@ before, an array member was `CONTEXT-NATIVE-LOWERING-UNSUPPORTED`).
 
 ### 16. Unrestricted indexed read
 
-`mutable_array::at(a, i)` returns the element (a value; a collection element
+`std::mutable_array::at(a, i)` returns the element (a value; a collection element
 read into a place is copied like any read-out). `ma-ops`.
 
 ### 17. Affine indexed-read rejection
@@ -266,7 +266,7 @@ read into a place is copied like any read-out). `ma-ops`.
 `at`, `freeze`, `#to_list` and a `copy`'s source have the `copy-out` role:
 for an affine array they are `AFFINE-ELEMENT-COPY-OUT` (MutableVector's
 `AFFINE-VECTOR-COPY-OUT`, renamed for both), naming swap and consuming
-iteration as the moves. `mutable_array::get` (library) inherits it through
+iteration as the moves. `std::mutable_array::get` (library) inherits it through
 its call of `at`. `ma-affine-at`.
 
 ### 18. Fixed-size replacement/swap semantics
@@ -327,7 +327,7 @@ struct), and the fuzzer's release-group check.
 
 ### 25. Repeated-value constructor
 
-`mutable_array::create(n, x)`: N slots holding X -- one value logically
+`std::mutable_array::create(n, x)`: N slots holding X -- one value logically
 placed N times, still O(n) slot writes and no element copy. For an
 unrestricted X that is itself a collection, the slots are N logical copies:
 mutating one slot's vector changes neither the others nor X
@@ -342,7 +342,7 @@ reaches `create`, also through a user's generic or typed wrapper
 
 ### 27. Factory constructor
 
-`mutable_array::generate(n, factory)`: slot I holds `factory(I)`, I from 0
+`std::mutable_array::generate(n, factory)`: slot I holds `factory(I)`, I from 0
 to N - 1, in order (`ma-ops`: `generate(3, tens)` is `[0, 10, 20]`). The
 factory is an ordinary named function (no lambda syntax was added).
 
@@ -398,7 +398,7 @@ runtime check, flag or dispatch exists.
 The constructors whose bodies the discipline never saw became intrinsics
 with roles (`create` repeat, `from_list` move, `generate` factory); the
 container rules (hir/containers.tcl) are type rules only now. A library
-*function* (`mutable_array::get`) is ordinary Botlish whose body the
+*function* (`std::mutable_array::get`) is ordinary Botlish whose body the
 discipline analyzes like the program's. No check is keyed on a name:
 `mat-id-4` fences `hir/`, `compiler/` and `surface/`, and the roles,
 drop forms and lengths moved into the registrations to satisfy it. The
@@ -765,7 +765,7 @@ previous corpus (the four `bench/` programs, `ai_text_clean`, `csv`,
 `matmul`, `string_replace`, `string_reverse`: `.asm`, `.vcode` and summary
 unchanged). The four that use arrays changed because their sources did
 (`csv_chunked`, `csv_records`, `hashtable` were rewritten to stop relying on
-aliasing; `csv_geometric` lost the generic `mutable_array::create` wrapper
+aliasing; `csv_geometric` lost the generic `std::mutable_array::create` wrapper
 instances): 194 → 177 functions, 83843 → 74702 machine-code bytes in total
 (`csv_chunked` 10219 → 7334, `csv_geometric` 7877 → 6849, `csv_records`
 23429 → 20163, `hashtable` 12845 → 10883). Their scalar helpers (`peek`,
@@ -908,7 +908,7 @@ commit before it, both native builds on the same machine, otherwise idle:
   | presized row tables | 8 026 | 77 955 against 89 004 | 167.3 M against 171.6 M |
 
   The difference is exactly one call per array and one per
-  `mutable_array::copy` between two arrays (3 013, 3 023 and 3 023 of
+  `std::mutable_array::copy` between two arrays (3 013, 3 023 and 3 023 of
   them: the copy no longer gathers the source's words into a scratch
   `Vec` -- once the destination is writable its backing is its own, so
   the source's is read in place). The default row tables now make fewer
@@ -1011,36 +1011,36 @@ whether the result owns a transferred value.
 
 | primitive | parameter | role | affine? | moves | duplicates | result owns |
 |---|---|---|---|---|---|---|
-| `mutable_array::create` | n | observe | -- | no | no | |
+| `std::mutable_array::create` | n | observe | -- | no | no | |
 | | x | repeat | **rejected** (`AFFINE-DUPLICATION-UNSUPPORTED`) | -- | yes (N logical copies) | the array owns the copies |
-| `mutable_array::generate` | n | observe | -- | no | no | |
+| `std::mutable_array::generate` | n | observe | -- | no | no | |
 | | factory | factory | an affine callable rejected | no (only called) | no | each slot owns one result |
-| `mutable_array::from_list` | xs | move | yes | yes | no | the array owns the List's elements |
-| `mutable_array::allocate` | n | observe | -- | no | no | |
-| `mutable_array::at` | a | copy-out | **rejected** (`AFFINE-ELEMENT-COPY-OUT`) | no | would | -- |
+| `std::mutable_array::from_list` | xs | move | yes | yes | no | the array owns the List's elements |
+| `std::mutable_array::allocate` | n | observe | -- | no | no | |
+| `std::mutable_array::at` | a | copy-out | **rejected** (`AFFINE-ELEMENT-COPY-OUT`) | no | would | -- |
 | | i | observe | | | | |
-| `mutable_array::set` | a | place | yes (receiver) | no | no | |
+| `std::mutable_array::set` | a | place | yes (receiver) | no | no | |
 | | x | move | yes | yes | no | the slot (displaced element released: `#set_drop`) |
-| `mutable_array::swap` | a | place | yes | no | no | |
+| `std::mutable_array::swap` | a | place | yes | no | no | |
 | | x | move | yes | yes | no | yes: the displaced element |
-| `mutable_array::copy` | dst | place | | | | |
+| `std::mutable_array::copy` | dst | place | | | | |
 | | src | copy-out | **rejected** | no | would | |
-| `mutable_array::freeze` | a | copy-out | **rejected** | no | would | |
-| `mutable_array::capacity` | a | observe | yes | no | no | |
+| `std::mutable_array::freeze` | a | copy-out | **rejected** | no | would | |
+| `std::mutable_array::capacity` | a | observe | yes | no | no | |
 | `mutable_array#to_list` (snapshot) | a | copy-out | rejected (an affine loop consumes instead) | | | |
 | `mutable_array#consume`, `#take_front` | a | move, place | yes | yes / -- | no | yes: the taken element |
 | `mutable_array#swap_drop`, `#set_drop`, `#generate_drop` | | as swap/set/generate, plus the descriptor | | | | |
-| `mutable_vector::from_list` | xs | move | yes | yes | no | yes |
-| `mutable_vector::push` | v, x | place, move | yes | x moves | no | |
-| `mutable_vector::pop`, `take` | v | place | yes | | no | yes |
-| `mutable_vector::swap` | v, i, x | place, observe, move | yes | x moves | no | yes |
-| `mutable_vector::at` | v | copy-out | **rejected** | | would | |
-| `mutable_vector::length`, `empty?` | v | observe | yes | | | |
-| `mutable_vector::clear` | v | place | yes (elements released: `#clear_drop`) | | | |
+| `std::mutable_vector::from_list` | xs | move | yes | yes | no | yes |
+| `std::mutable_vector::push` | v, x | place, move | yes | x moves | no | |
+| `std::mutable_vector::pop`, `take` | v | place | yes | | no | yes |
+| `std::mutable_vector::swap` | v, i, x | place, observe, move | yes | x moves | no | yes |
+| `std::mutable_vector::at` | v | copy-out | **rejected** | | would | |
+| `std::mutable_vector::length`, `empty?` | v | observe | yes | | | |
+| `std::mutable_vector::clear` | v | place | yes (elements released: `#clear_drop`) | | | |
 | `list` (literal) | elements | element | yes, into an affine List | yes | no | yes |
-| `list::at`, `list::append` | | copy-out | **rejected** for an affine List | | would | |
-| `list::length` | xs | observe | yes | | | |
-| `immutable_set::from_list`, `contains` | | equality | **rejected** (`ImmutableSet[affine]` is not a type) | | | |
+| `std::list::at`, `std::list::append` | | copy-out | **rejected** for an affine List | | would | |
+| `std::list::length` | xs | observe | yes | | | |
+| `std::immutable_set::from_list`, `contains` | | equality | **rejected** (`ImmutableSet[affine]` is not a type) | | | |
 | byte stores (`byte_store::*`, `mutable_byte_store::*`) | | erase (default) | -- (Bytes only) | | | |
 
 Issues the audit found: `create` (fixed: `repeat`), `from_list` and
@@ -1087,7 +1087,7 @@ reference semantics:
   place of the declared type (`MentionsMutable`: arrays now, like vectors).
 * **Run-time argument checks.** `create`/`from_list` are intrinsics: a
   statically wrong argument kind (`from_list(123)`) is the run-time TYPE
-  error every intrinsic gives (`list::length(5)` does the same), no longer a
+  error every intrinsic gives (`std::list::length(5)` does the same), no longer a
   compile-time one.
 * **Rendering.** An array prints its elements (`<mutable-array [unit,
   unit]>`, was `<mutable-array capacity=2>`), and the native backend can
@@ -1100,8 +1100,8 @@ reference semantics:
 * **Measured counts.** Corpus blocker/guard/instance counts and struct
   censuses of hashtable, csv_records, csv_chunked and csv_geometric changed
   with their rewrites and the intrinsics (each test's comment attributes
-  them); `lib/mutable_array.bot` no longer imports `list`, so a program
-  importing only `mutable_array` no longer loads `lib/list.bot`.
+  them); `stdlib/mutable_array.bot` no longer imports `list`, so a program
+  importing only `mutable_array` no longer loads `stdlib/list.bot`.
   `mat-fence-1` (the typed-API fence of TYPED-MUTARRAY-BUILDER-REFACTOR.md)
   admits `hashtable.bot` and `csv_chunked.bot`: their builders became
   structs of typed arrays.
@@ -1116,7 +1116,7 @@ reference semantics:
 | `core/mutarray.tcl` | Tcl runtime: headers over shared Tcl lists, operations, registrations with roles |
 | `core/native.tcl` | `-ownership`, `-errors-from`, `-result-length`, `-keeps-length`, `-drop-form`; the role vocabulary |
 | `core/mutvec.tcl`, `core/affine.tcl` | shares (`h` for arrays, `d` dynamic), the `a` drop, the kind-generic drain |
-| `lib/mutable_array.bot` | `get` only |
+| `stdlib/mutable_array.bot` | `get` only |
 | `hir/types.tcl` | affinity, covariant subtype, lub, narrow, `MentionsMutable` |
 | `hir/range.tcl` | exact parameter admission (`AggregateAdmits`) |
 | `hir/containers.tcl` | type rules of the container natives, `VerifyFactory` |

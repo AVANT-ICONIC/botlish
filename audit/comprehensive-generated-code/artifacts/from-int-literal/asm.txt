@@ -29,7 +29,7 @@ Disassembly of section .text:
   30:	pop    rbp
   31:	ret
 
-0000000000000032 <botlish_fn_1>:  ;; byte::from_int<int>
+0000000000000032 <botlish_fn_1>:  ;; std::byte::from_int<int>
   32:	push   rbp
   33:	mov    rbp,rsp
   36:	mov    rax,rsi
@@ -58,7 +58,7 @@ Disassembly of section .text:
   87:	pop    rbp
   88:	ret
 
-0000000000000089 <botlish_entry_1>:  ;; byte::from_int<int>
+0000000000000089 <botlish_entry_1>:  ;; std::byte::from_int<int>
   89:	push   rbp
   8a:	mov    rbp,rsp
   8d:	mov    rsi,QWORD PTR [rdx]

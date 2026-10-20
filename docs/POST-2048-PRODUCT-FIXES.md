@@ -7,14 +7,14 @@ fixes exactly the three product failures that would make the restricted
 
 | finding | before | after |
 |---|---|---|
-| S4 | `import NAME` named only `lib/NAME.bot`: an application could not have a module of its own (the workload compiled against a private copy of `lib/`; the single executable could not do it at all) | a program's own modules are the files beside its entry file |
+| S4 | `import NAME` named only `stdlib/NAME.bot`: an application could not have a module of its own (the workload compiled against a private copy of `stdlib/`; the single executable could not do it at all) | a program's own modules are the files beside its entry file |
 | S15 | `main.tcl -backend cranelift` showed a printing program's value and nothing it printed | the program writes to main.tcl's own standard output and error, then main.tcl prints the value |
 | S22 | `main.tcl -backend interp` failed a 200-deep recursion (`TCL LIMIT STACK`) | main.tcl runs programs under the golden runner's limit: about 14,000 interpreted calls |
 
-Each is an existing feature made usable -- imports, `io::print_line`,
+Each is an existing feature made usable -- imports, `std::io::print_line`,
 ordinary recursion -- not a new one. No language feature, stdlib operation,
 proof, optimization, warning or diagnostic outside these three was added or
-changed: no file under `hir/`, `compiler/`, `lib/`, `native/lower.tcl` or
+changed: no file under `hir/`, `compiler/`, `stdlib/`, `native/lower.tcl` or
 `native/src/codegen/` differs, and the 2048 engine is byte-for-byte the one
 the workload wrote ([section 6](#6-deliberately-unresolved-findings) lists
 what stays open on purpose).
@@ -37,9 +37,9 @@ what stays open on purpose).
 ## 1. S4: application modules
 
 **Old behavior.** `import game` beside `game.bot` was `UNKNOWN-NAMESPACE: no
-such module file lib/game.bot` -- from the single executable `no such module
+such module file stdlib/game.bot` -- from the single executable `no such module
 file //zipfs:/app/botlish/lib/game.bot`, a path inside the executable. The
-workload compiled its four programs against a temporary copy of `lib/` with
+workload compiled its four programs against a temporary copy of `stdlib/` with
 the engine added (D5), and a single-executable user had to concatenate the
 engine into each program, which lost its opaque-struct authority and
 silently shadowed its functions (S25).
@@ -85,11 +85,11 @@ from a module `CYCLE`). Cycles, self-imports, opaque structs, types, errors,
 method candidates and diagnostics' locations are those of any module: an
 application module is loaded by the same `LoadNamespace`, from a different
 path. The repository has no program beside a file that would collide (checked
-over every `.bot` outside `lib/`, at every nesting depth).
+over every `.bot` outside `stdlib/`, at every nesting depth).
 
 **Smallest fix.** `ResolveModule` decides the path; `CheckImports` and
 `CheckRef` ask it (or `NamespaceExistsFor`) instead of testing
-`lib/NAME.bot`; the loader state carries `root`, `entry` and which loaded
+`stdlib/NAME.bot`; the loader state carries `root`, `entry` and which loaded
 namespaces are the application's. `BuildProgram` takes the root;
 `compileProgramFile` passes its file's directory; program text has none
 unless a caller passes `-root` (bench/2048.tcl, for its edited benchmark
@@ -155,13 +155,13 @@ The order is the one every backend's line follows -- `== FILE (BACKEND)`, the
 program's output as it writes it, then `value:` (or `error:`) -- which is the
 executable's order too (output, then the value). Nothing is buffered or
 decoded: the bytes go from the program to main.tcl's descriptor directly.
-Interp and compile still cannot print (the only `io::IO` context is LinuxIO's
+Interp and compile still cannot print (the only `std::io::IO` context is LinuxIO's
 raw syscalls, `NATIVE-ONLY` on the Tcl backends): that is the STDLIB half of
 S15, a missing capability, not this product failure.
 
 **Tests.** `tests/native-program-output.test`, byte for byte: one line on
 both native backends; several lines and a non-unit value; no output; standard
-error kept separate; raw bytes `ff 00 80 0a 0d 0a` through `linux::io::write`
+error kept separate; raw bytes `ff 00 80 0a 0d 0a` through `std::linux::io::write`
 unchanged; output kept when the program then dies of native stack overflow
 (exit status 1, the `NATIVE LIMIT STACK` error line after the output);
 text that looks like result lines is output; several files in one run; the
@@ -236,7 +236,7 @@ example/
     botlish
     counter.bot     fn count(k) -> int: 1 + count(k - 1), 0 at 0
     value.bot       import counter / counter::count(5000)
-    main.bot        import counter, io, linux::io; io::print_line(...); counter::count(5000)
+    main.bot        import counter, io, std::linux::io; std::io::print_line(...); counter::count(5000)
 ```
 
 | run | before (the same build from the pre-milestone tree) | after |
@@ -272,7 +272,7 @@ compiled: as they are, with the engine as their application module.
 * `tests/workload-2048.test`: 7 of 7 -- the suite (68 tests on the pass's
   backends), warning-clean, strict warnings, the benchmark checksum 2002720,
   the demo executable plain and under GC stress, and two new tests: the
-  engine is the application module beside the programs and not in `lib/`,
+  engine is the application module beside the programs and not in `stdlib/`,
   and `main.tcl -backend cranelift`/`cranelift-generic` print the whole game.
 * `audit/2048/mutate.tcl` (each mutant a private application directory):
   20 of 20 killed, baseline passing.
@@ -281,7 +281,7 @@ compiled: as they are, with the engine as their application module.
 
 The engine keeps every workaround the report recorded: the decimal digits by
 subtraction (no Int-to-String, no division), `no_positions()` (typed empty
-vector), `list::get` defaults (no List length facts), the self-recursive
+vector), `std::list::get` defaults (no List length facts), the self-recursive
 accumulators (no fold), `reversed`/`transposed`/`replaced`/`total`.
 
 ## 6. Deliberately unresolved findings

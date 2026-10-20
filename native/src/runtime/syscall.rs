@@ -202,7 +202,7 @@ pub extern "C" fn rt_linux_x86_64_syscall(
 ) -> Value {
     match register_words(
         p,
-        "linux::abi::x86_64::syscall",
+        "std::linux::abi::x86_64::syscall",
         ["rax", "rdi", "rsi", "rdx", "r10", "r8", "r9"],
         [rax, rdi, rsi, rdx, r10, r8, r9],
     ) {
@@ -230,7 +230,7 @@ pub extern "C" fn rt_linux_aarch64_syscall(
 ) -> Value {
     match register_words(
         p,
-        "linux::abi::aarch64::syscall",
+        "std::linux::abi::aarch64::syscall",
         ["x8", "x0", "x1", "x2", "x3", "x4", "x5"],
         [x8, x0, x1, x2, x3, x4, x5],
     ) {
@@ -251,7 +251,7 @@ fn syscall_words_x86_64(p: *mut Vm, w: [i64; 7]) -> Value {
 fn syscall_words_x86_64(p: *mut Vm, _w: [i64; 7]) -> Value {
     // Any other target: running the transport is unsupported (the op
     // compiles, so a program that only defines a syscall runs).
-    vm(p).fail(RtError::Unsupported("linux::abi::x86_64::syscall needs a Linux x86-64 target".to_string()))
+    vm(p).fail(RtError::Unsupported("std::linux::abi::x86_64::syscall needs a Linux x86-64 target".to_string()))
 }
 
 #[cfg(all(target_arch = "aarch64", target_os = "linux"))]
@@ -266,7 +266,7 @@ fn syscall_words_aarch64(p: *mut Vm, w: [i64; 7]) -> Value {
 fn syscall_words_aarch64(p: *mut Vm, _w: [i64; 7]) -> Value {
     // Any other target: running the transport is unsupported (the op
     // compiles, so a program that only defines a syscall runs).
-    vm(p).fail(RtError::Unsupported("linux::abi::aarch64::syscall needs a Linux AArch64 target".to_string()))
+    vm(p).fail(RtError::Unsupported("std::linux::abi::aarch64::syscall needs a Linux AArch64 target".to_string()))
 }
 
 /// The raw result register word as the Int it denotes under the signed
@@ -308,8 +308,8 @@ mod tests {
         // made, whichever architecture runs the test.
         type Helper = extern "C" fn(*mut Vm, Value, Value, Value, Value, Value, Value, Value) -> Value;
         let helpers: [(Helper, &str, &str); 2] = [
-            (rt_linux_x86_64_syscall, "linux::abi::x86_64::syscall: register rdi", "register rsi"),
-            (rt_linux_aarch64_syscall, "linux::abi::aarch64::syscall: register x0", "register x1"),
+            (rt_linux_x86_64_syscall, "std::linux::abi::x86_64::syscall: register rdi", "register rsi"),
+            (rt_linux_aarch64_syscall, "std::linux::abi::aarch64::syscall: register x0", "register x1"),
         ];
         for (helper, first, second) in helpers {
             let mut vm = new_vm();
@@ -334,10 +334,10 @@ mod tests {
         // with NATIVE UNSUPPORTED, never with this architecture's convention.
         #[cfg(target_arch = "aarch64")]
         let (other, name): (extern "C" fn(*mut Vm, Value, Value, Value, Value, Value, Value, Value) -> Value, _) =
-            (rt_linux_x86_64_syscall, "linux::abi::x86_64::syscall needs a Linux x86-64 target");
+            (rt_linux_x86_64_syscall, "std::linux::abi::x86_64::syscall needs a Linux x86-64 target");
         #[cfg(not(target_arch = "aarch64"))]
         let (other, name): (extern "C" fn(*mut Vm, Value, Value, Value, Value, Value, Value, Value) -> Value, _) =
-            (rt_linux_aarch64_syscall, "linux::abi::aarch64::syscall needs a Linux AArch64 target");
+            (rt_linux_aarch64_syscall, "std::linux::abi::aarch64::syscall needs a Linux AArch64 target");
         let mut vm = new_vm();
         let p = &mut *vm as *mut Vm;
         let zero = make_small(0);

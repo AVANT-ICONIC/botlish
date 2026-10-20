@@ -9,7 +9,7 @@
 # the source release single/build.sh pins (the same version and sha256)
 # into $BOTLISH_TCL_PREFIX (default ~/.cache/botlish/tcl-9.0.1; CI caches
 # it), then first on PATH. Not Homebrew's tcl-tk: it ships a newer 9.0.x
-# whose Unicode 17 case tables make the Tcl backends' str::lowercase and
+# whose Unicode 17 case tables make the Tcl backends' std::str::lowercase and
 # uppercase disagree with Botlish's Unicode 16 semantics, which the native
 # runtime keeps (native/src/runtime/ops.rs, `rt_str_lower`) -- the census
 # found tests/native-tcl-unicode.test failing that way. The build needs the

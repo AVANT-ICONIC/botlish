@@ -12,7 +12,7 @@ its next blocker (`Emailish?`) is identified and deliberately left unfixed.
   and its Rust runtime helper (`rt_str_utf8_bytes`).
 - `native/lower.tcl` -- `encode_utf8` added to the native op whitelist.
 - `core/native.tcl` -- new registry field `-native-body` / `nativeBody`.
-- `lib/web.tcl` -- `uriEscape` gets a `-native-body`: the same algorithm as
+- `stdlib/web.tcl` -- `uriEscape` gets a `-native-body`: the same algorithm as
   its Tcl `-impl`, written in ordinary Botlish over `encode_utf8`.
 - `native/native.tcl` -- `ExpandNativeBodies`, the generic rewrite that lets
   the native backend use a native's `-native-body` instead of an op-whitelist
@@ -32,10 +32,10 @@ $ tclsh9.0 main.tcl -backend cranelift bench/refined-checks.ir
    (NATIVE UNSUPPORTED {native uriEscape})
 ```
 
-- **Registered:** `lib/web.tcl`, `core::native::register uriEscape -arity 1
+- **Registered:** `stdlib/web.tcl`, `core::native::register uriEscape -arity 1
   -impl core::web::uriEscape -param-types {str} -result-type {refined str
   {UriQueryValue}} -runtime {string-alloc evidence}`.
-- **Implemented (before):** `core::web::uriEscape` (Tcl), `lib/web.tcl`.
+- **Implemented (before):** `core::web::uriEscape` (Tcl), `stdlib/web.tcl`.
 - **Argument kind:** `str`. **Result kind:** `{refined str {UriQueryValue}}`
   (an opaque type -- see \167 5).
 - **HIR-known?** No. `e39`'s `call native(uriEscape)` has no `known` field
@@ -236,7 +236,7 @@ Botlish implementation becomes authoritative."* Concretely:
 No part of `uriEscape`'s own escaping algorithm was implemented in Rust
 (spec \167 3/4): the only Rust addition is `encode_utf8`, a primitive with
 no URI-specific residue, exercised by ordinary Botlish source
-(`lib/web.tcl`'s `-native-body`) that a human could have written the same
+(`stdlib/web.tcl`'s `-native-body`) that a human could have written the same
 way by hand.
 
 ## 8. Parity, correctness, allocation, GC
@@ -338,7 +338,7 @@ $ tclsh9.0 main.tcl -backend cranelift bench/refined-checks.ir
   call in `check`'s body, genuinely dynamic (no incoming refinement on
   `s`), exactly as `NATIVE-AUDIT.md` \167 5 (F7) already predicted for this
   file.
-- **Currently implemented:** `lib/web.tcl`, `core::type::register Emailish
+- **Currently implemented:** `stdlib/web.tcl`, `core::type::register Emailish
   -base str -validator ...` / `core::type::definePredicate Emailish`; a
   *structural* (validator-based) type test, unlike `UriQueryValue`'s opaque
   evidence-only design.
@@ -376,9 +376,9 @@ $ tclsh9.0 main.tcl -backend cranelift bench/refined-checks.ir
 | `list_length list_get list_append` | `core/lists.tcl` | bootstrap convenience | native (op-mapped; not in scope) |
 | `mutable_array_*` | `core/mutarray.tcl` | bootstrap convenience | native (op-mapped; not in scope) |
 | `hash` | `core/hashing.tcl` | **performance workaround** (own header: blocked on wrapping/fixed-width Int, which Botlish lacks) | native; explicitly documented as temporary |
-| `Emailish?` | `lib/web.tcl` | bootstrap convenience (validator regex) -- **tentative**, see \167 10 | native; **next milestone's target** |
-| `UriQueryValue?` | `lib/web.tcl` | **platform-adjacent trust boundary** (opaque-type evidence check; needs a runtime evidence representation the native backend doesn't have) | native; likely legitimate, not yet fully investigated |
-| `uriEscape` | `lib/web.tcl` | bootstrap convenience (text transform) + trust boundary (evidence attachment) | **de-natived this milestone**: `-native-body` runs the transform on Cranelift; `-impl` (Tcl) keeps attaching evidence for interp/compile |
+| `Emailish?` | `stdlib/web.tcl` | bootstrap convenience (validator regex) -- **tentative**, see \167 10 | native; **next milestone's target** |
+| `UriQueryValue?` | `stdlib/web.tcl` | **platform-adjacent trust boundary** (opaque-type evidence check; needs a runtime evidence representation the native backend doesn't have) | native; likely legitimate, not yet fully investigated |
+| `uriEscape` | `stdlib/web.tcl` | bootstrap convenience (text transform) + trust boundary (evidence attachment) | **de-natived this milestone**: `-native-body` runs the transform on Cranelift; `-impl` (Tcl) keeps attaching evidence for interp/compile |
 
 This inventory is evidence, not policy (spec \167 39): no rule against
 registering natives was added.
@@ -393,7 +393,7 @@ registering natives was added.
    library-registered natives, plus a genuine language gap (no UTF-8 byte
    access) that made the algorithm itself unwritable in Botlish until now.
 3. **Semantic implementation now in ordinary Botlish?** Yes, for the
-   escaping *transform* -- a `-native-body` in `lib/web.tcl`, compiled and
+   escaping *transform* -- a `-native-body` in `stdlib/web.tcl`, compiled and
    run through the ordinary block/HIR/NIR pipeline. The opaque-type
    *evidence* attachment remains Tcl (deliberately -- \167 3/7).
 4. **New lower-level capability required?** Yes: `encode_utf8` (`str ->

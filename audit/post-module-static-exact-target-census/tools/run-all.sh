@@ -26,12 +26,12 @@ PB=native/target/release/botlish-native
 cargo build --release --quiet --manifest-path native/Cargo.toml
 AB=$(bash $R/build-audit-native.sh "$scratch/auditbuild" | tail -1)
 
-# Scratch counterfactual worktrees (never the tree's own lib/web.bot).
+# Scratch counterfactual worktrees (never the tree's own stdlib/web.bot).
 declare -A diff=([exact]=exact-target [local-only]=local-only [alpha-only]=alpha-only)
 for v in exact local-only alpha-only; do
     wt="$scratch/wt/cf-$v"
     [ -d "$wt" ] || git worktree add -f --detach "$wt" HEAD > /dev/null
-    (cd "$wt" && git checkout -q -- lib/web.bot && git apply "$root/$N/counterfactual/${diff[$v]}.diff")
+    (cd "$wt" && git checkout -q -- stdlib/web.bot && git apply "$root/$N/counterfactual/${diff[$v]}.diff")
     mkdir -p "$wt/native"; ln -sfn "$root/native/target" "$wt/native/target"
 done
 

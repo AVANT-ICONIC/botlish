@@ -1,5 +1,5 @@
-import byte
+import std::byte
 
-# byte::set module-initializer shape, standalone: verbatim
+# std::byte::set module-initializer shape, standalone: verbatim
 # tests/byte-set.test byte-set-canonical.
-byte::set(['-', '.', '_', '~'])
+std::byte::set(['-', '.', '_', '~'])

@@ -8,7 +8,7 @@
 # is silent:
 #
 #   * the empty String and Strings of two or more characters (length counted
-#     in characters, i.e. Unicode scalar values, as str::length counts: escapes
+#     in characters, i.e. Unicode scalar values, as std::str::length counts: escapes
 #     resolved, a supplementary-plane character is one, a base character plus
 #     a combining mark is two);
 #   * character literals ('x', a UnicodeChar);
@@ -199,10 +199,10 @@ test oc-grapheme-of-two-code-points-silent {a base character plus a combining ma
         [string length $decomposed] [string length $precomposed]
 } -result {1:8 2 1}
 
-test oc-length-is-str-length {the length is the language's own: the literals that warn are exactly those whose str::length is 1, on every backend} -body {
+test oc-length-is-str-length {the length is the language's own: the literals that warn are exactly those whose std::str::length is 1, on every backend} -body {
     set strings [list "" a ab "é" "é" "\U1F600" "\U1F600a" "\\\\" "\\n"]
-    set items [lmap s $strings {string cat "str::length(\"" $s "\")"}]
-    set source "import str\n\[[join $items {, }]\]"
+    set items [lmap s $strings {string cat "std::str::length(\"" $s "\")"}]
+    set source "import std::str\n\[[join $items {, }]\]"
     set hir [compileWith $source]
     set lengths [lsort -unique [lmap b $::allBackends {lindex [outcomeUnderHir $b $hir] 1}]]
     set warned [lmap w [literalsOf $hir] {core::value::show [dict get $w data value]}]
@@ -213,7 +213,7 @@ test oc-length-is-str-length {the length is the language's own: the literals tha
 # Literals only: no heroic proving (items 4, 6)
 
 test oc-initializer-is-the-site {a binding's written initializer is the site, once; reads of the binding at use sites are never sites} -body {
-    sites {import str
+    sites {import std::str
 sep = ","
 fn join2(a, b):
     a.concat(sep).concat(b)
@@ -228,16 +228,16 @@ third = second
 } -result 1:9
 
 test oc-parameters-silent {a parameter is never a site, whatever its callers pass: the call's literal is the site} -body {
-    where {import str
+    where {import std::str
 fn twice(c):
     c.concat(c)
 fn width(c: str) -> int:
-    str::length(c)
+    std::str::length(c)
 [twice("x"), width("y"), twice("xy")]}
 } -result {6:8 6:20}
 
 test oc-call-results-silent {a call result is never a site, even when every possible result is one character} -body {
-    set source {import str
+    set source {import std::str
 fn second() -> str:
     "xy".substring(1, 2)
 fn pick(flag) -> str:
@@ -250,13 +250,13 @@ fn pick(flag) -> str:
 } -result {1 {value {["y", "a", "d"]}}}
 
 test oc-computed-strings-silent {a computed String is never a site: concatenations, substrings and lowercase are not evaluated; only the written one-character literal inside is} -body {
-    set hir [compileWith {import str
-a = str::concat("ab", "")
+    set hir [compileWith {import std::str
+a = std::str::concat("ab", "")
 b = "AB".lowercase().substring(0, 1)
-c = str::concat("x", "")
+c = std::str::concat("x", "")
 [a, b, c]}]
     list [lmap w [literalsOf $hir] {loc $hir [dict get $w primary]}] [lindex [outcomeUnderHir interp $hir] 1]
-} -result {4:17 {["ab", "a", "x"]}}
+} -result {4:22 {["ab", "a", "x"]}}
 
 test oc-list-and-struct-elements-are-sites {list elements and struct field values written as literals are sites, nested ones included} -body {
     where {xs = ["a", "bc", "d"]
@@ -266,7 +266,7 @@ p = {left: "(", right: "()", inner: {mark: "!"}}
 } -result {1:7 1:18 2:8 2:21 3:12 3:44}
 
 test oc-nested-positions {sites in every position: a nested function, a closure, a loop body, a handler body, a condition, a method receiver and argument, a return} -body {
-    where {import str
+    where {import std::str
 error Bad
 fn risky(x) errors Bad:
     if x == "!":
@@ -300,11 +300,11 @@ width("a")}
 } -result {3:7 {value 7} rejected {CORE SEMANTIC TYPE}}
 
 test oc-str-native-argument-warns {a one-character literal passed to a native's str parameter warns; its character spelling compiles there and fails at run time (native parameter types are checked at run time)} -body {
-    set original {import str
-str::length("a")}
+    set original {import std::str
+std::str::length("a")}
     set rewritten [string map {{"a"} {'a'}} $original]
     list [where $original] [behavior $original] [behavior $rewritten]
-} -result {2:13 {value 1} {runtime {CORE SEMANTIC TYPE}}}
+} -result {2:18 {value 1} {runtime {CORE SEMANTIC TYPE}}}
 
 test oc-comparison-with-a-string-warns {a one-character literal compared with a String warns; its character spelling compiles there and silently changes the value (== of two kinds is false): the hazard an autofix would hide} -body {
     set original {fn is_quote(text: str) -> bool:
@@ -323,18 +323,18 @@ is_comma(",")}
 } -result {{2:22 3:10} {value true} {value true} 2:22}
 
 test oc-character-typed-parameter {a UnicodeChar parameter takes the character spelling; the String spelling there is a TYPE error, so no program the warning runs on has one} -body {
-    set char {import char
+    set char {import std::char
 fn code(c: UnicodeChar) -> int:
-    char::scalar_value(c)
+    std::char::scalar_value(c)
 code(',')}
     set string [string map {{code(',')} {code(",")}} $char]
     list [where $char] [behavior $char] [lindex [rejection $string default] 0]
 } -result {{} {value 44} {CORE SEMANTIC TYPE}}
 
 test oc-the-message-names-no-context {the message is the literal's own: the same literal in five different consumers yields five identical messages} -body {
-    set hir [compileWith {import str
+    set hir [compileWith {import std::str
 fn width(text: str) -> int:
-    str::length(text)
+    std::str::length(text)
 fn same(c):
     c == c
 x = "."
@@ -455,7 +455,7 @@ x = "T"
         [lmap w [hir::warnings::collect $parsed] {core::value::show [dict get $w data value]}] [lindex [outcomeUnderHir interp $hir] 1]
 } -result {{{str T} {str W}} 10:5 {{"T"}} {[4, "T"]}}
 
-test oc-synthesized-string-consts-enumerated {SOURCE AUDIT: the frontend builds a String const in exactly five places -- the written literal (surface/lower.tcl), the context load key of a context struct and of a context trait (hir/contexts.tcl), the descriptor argument of a MutableVector share, affine clear or affine swap the elaboration writes out (hir/mutvec.tcl, after every warning check), and the message of a rejected `static compile:` block's reified compiler::CompilerError (hir/static.tcl: a compiler diagnostic's text, never one character long; STATIC-COMPILE.md) -- and every const node is built by hir::syntax::constNode or read from core IR (hir::syntax::fromIR); a new synthesized String const fails here} -body {
+test oc-synthesized-string-consts-enumerated {SOURCE AUDIT: the frontend builds a String const in exactly five places -- the written literal (surface/lower.tcl), the context load key of a context struct and of a context trait (hir/contexts.tcl), the descriptor argument of a MutableVector share, affine clear or affine swap the elaboration writes out (hir/mutvec.tcl, after every warning check), and the message of a rejected `static compile:` block's reified std::compiler::CompilerError (hir/static.tcl: a compiler diagnostic's text, never one character long; STATIC-COMPILE.md) -- and every const node is built by hir::syntax::constNode or read from core IR (hir::syntax::fromIR); a new synthesized String const fails here} -body {
     set found {}
     foreach path [lsort [concat [glob [file join $::projectRoot hir *.tcl]] [glob [file join $::projectRoot surface *.tcl]]]] {
         set channel [open $path]
@@ -512,11 +512,11 @@ with context Box {v: 4}
 # ---------------------------------------------------------------------------
 # Structure (items 8, 9, 13): record, data, message, ordering
 
-set ::literalSource {import str
+set ::literalSource {import std::str
 fn quote(text: str) -> str:
     text.concat("\"")
 fn width(text: str) -> int:
-    str::length(text)
+    std::str::length(text)
 [quote("ab"), width(","), width("")]}
 
 test oc-record-shape {the record is {code message primary secondary data}, secondary empty} -body {
@@ -607,8 +607,8 @@ test oc-module-literal-located-in-the-module {a module's literal is located in t
 fn pair():
     "<>"
 }} {
-        set hir [compileWith {import seps
-[seps::comma(), seps::pair(), seps::comma()]}]
+        set hir [compileWith {import std::seps
+[std::seps::comma(), std::seps::pair(), std::seps::comma()]}]
         lmap w [literalsOf $hir] {file tail [hir::originLocation $hir [dict get $w primary]]}
     }
 } -result {seps.bot:2:5}
@@ -637,15 +637,15 @@ fn name(value: A) -> str:
 fn name(value: B) -> str:
     value.t
 }} {
-        set hir [compileWith {import str
-import wa
-import wb
+        set hir [compileWith {import std::str
+import std::wa
+import std::wb
 trait Named:
     fn name(value: Named) -> str
 fn describe(value: Named) -> str:
     sep = "-"
     value.name().concat(sep)
-[describe(wa::A {v: "ab"}), describe(wb::B {t: "cd"})]}]
+[describe(std::wa::A {v: "ab"}), describe(std::wb::B {t: "cd"})]}]
         set clones 0
         dict for {e node} [dict get $hir exprs] {
             if {[dict get $node kind] eq "const" && [dict get $node value] eq {str -}} {
@@ -753,7 +753,7 @@ two(1, 2)} error] 0]
 } -result {{CORE SEMANTIC SAME-RETURN-VALUE} {CORE SEMANTIC ONE-CHAR-STRING-LITERAL}}
 
 test oc-mode-error-clean-program {error mode accepts a program whose String literals are empty or longer than one character and whose characters are character literals} -body {
-    rejection {import str
+    rejection {import std::str
 fn quote(text: str) -> str:
     text.concat("\"\"")
 [quote("ab"), "", ',', '\n', "\n\n"]} error
@@ -864,14 +864,14 @@ test oc-error-stops-before-backend {error mode rejects before any backend lowers
 # ---------------------------------------------------------------------------
 # No semantics change (item 11)
 
-set ::runSource {import str
+set ::runSource {import std::str
 sep = ","
 fn quote(text: str) -> str:
     "\"".concat(text).concat("\"")
 fn joined(a, b):
     a.concat(sep).concat(b)
 fn width(text: str) -> int:
-    str::length(text)
+    std::str::length(text)
 [quote("a"), joined("x", "yz"), width(";"), width(""), [',', "ab"]]}
 
 test oc-hir-identical-across-modes {HIR (minus the side table), hir::format and hir::lower are identical under off and default} -body {
@@ -1060,7 +1060,7 @@ test oc-spelling-law-unit {for a letter, punctuation, both quotes, a backslash, 
             set e
         }]
         set fact [expr {[llength $consts] == 1 ? [hir::exact::Of $probe [lindex $consts 0]] : "consts: $consts"}]
-        set typed [behavior "import char\nfn code(c: UnicodeChar) -> int:\n    char::scalar_value(c)\ncode($spelling)"]
+        set typed [behavior "import std::char\nfn code(c: UnicodeChar) -> int:\n    std::char::scalar_value(c)\ncode($spelling)"]
         lappend results [expr {$fact eq [list val [list UnicodeChar $codepoint]] && $typed eq [list value $codepoint]}]
     }
     list [llength [literalsOf $hir]] [lsort -unique $results]

@@ -7,7 +7,7 @@ fn emailish?(value: str) -> bool proves value: Emailish:
     ...
 
 fn consume(value: Emailish) -> int:
-    str::length(value)
+    std::str::length(value)
 
 fn example(s: str) -> int:
     if emailish?(s):
@@ -41,11 +41,11 @@ carrier's representation, equality, hashing, rendering, storage, GC behavior
 and ABI. The feature is entirely static.
 
 This milestone replaces the previous machinery, in which `Emailish` and
-`UriQueryValue` were Tcl-registered named types (`lib/web.tcl`) with
+`UriQueryValue` were Tcl-registered named types (`stdlib/web.tcl`) with
 compiler-registered type-test natives, runtime *evidence* attached to Strings
 by a trusted native, and a native-to-module-function bridge that made the
-Botlish `web::emailish?` stand in for the Tcl root native. All of that is
-deleted (see "Source audit"). `lib/web.bot` now declares both refinements and
+Botlish `std::web::emailish?` stand in for the Tcl root native. All of that is
+deleted (see "Source audit"). `stdlib/web.bot` now declares both refinements and
 their predicates in ordinary Botlish, and no compiler or runtime file names
 them.
 
@@ -103,11 +103,11 @@ T`), and `hir::syntax::withProofs` carries the clauses onto the HIR syntax
 
 **Type registry** (`core/type.tcl`). A refinement is a named type registered
 with `-refinement {carrier TYPE owner NAMESPACE span SPAN}`: its canonical
-identity (`web::Emailish`, the module's path-derived namespace plus the
+identity (`std::web::Emailish`, the module's path-derived namespace plus the
 declared name, as for every source-defined type), its carrier as a canonical
 type, the exact declaring module (`""` for the entry program) and the
 declaration span. Its base is the carrier's base and its parents are the
-carrier's own named types, so the type `{refined str {web::Emailish}}` sits in
+carrier's own named types, so the type `{refined str {std::web::Emailish}}` sits in
 the existing named-type lattice: subtyping, `lub` and `narrow` need no new
 rule. A refinement has no validator, no integer domain and no runtime
 membership test; `core::type::validate` of a refinement checks only that the
@@ -120,7 +120,7 @@ types, per compilation, and unregistered with them.
 refinement as
 
 ```
-refined type web::Emailish carrier str owner web
+refined type std::web::Emailish carrier str owner web
 ```
 
 (`owner -` for the entry program), and a block with a proof contract as
@@ -135,10 +135,10 @@ from HIR text keeps its proofs and runs the same
 
 ## Namespaces, imports and the owner
 
-A refinement is an ordinary namespace type member: `web::Emailish` is its
+A refinement is an ordinary namespace type member: `std::web::Emailish` is its
 canonical identity, usable qualified anywhere and by its short name after
-`import type web::Emailish`, exactly like `type Byte = Int in 0..255` in
-`lib/byte.bot` (`refinement-module-identity`).
+`import type std::web::Emailish`, exactly like `type Byte = Int in 0..255` in
+`stdlib/byte.bot` (`refinement-module-identity`).
 
 The **owner** is the exact module whose source declares the refinement, as a
 canonical namespace, recorded once in the registry entry. Only a function
@@ -176,12 +176,12 @@ the diagnostic (`REFINEMENT-CARRIER`):
    scalar type -- `str`, `int`, `bool`, `UnicodeChar` (or `unit`) -- or an
    integer domain or a refinement over one. A stable aggregate (`List[str]`)
    is reported as stable but not supported yet; a struct carrier (including
-   `abi::bytes::Bytes` and `abi::bytes::MutableBytes`) is rejected before
+   `std::abi::bytes::Bytes` and `std::abi::bytes::MutableBytes`) is rejected before
    struct types resolve, as "refinements of struct values are not supported
    yet".
 
 `refinement-carrier-eligible` declares and uses refinements of `bool`,
-`UnicodeChar`, `int`, the integer domain `byte::Byte`, `str` and of another
+`UnicodeChar`, `int`, the integer domain `std::byte::Byte`, `str` and of another
 refinement. An unknown carrier is a `TYPE` error naming it.
 
 **Chains.** A refinement may refine a refinement (`refined type Encoded =
@@ -382,7 +382,7 @@ repeatable (`refinement-repeatable-explain`).
 callable types; the walk itself (190 lines) is new, because no existing
 analysis summarized the effects of a source function. Two natives the corpus
 predicate needs were missing the classification they always deserved:
-`str::is_tcl_alpha`/`str::is_tcl_alnum` (`core/tclcompat.tcl`) are now
+`std::str::is_tcl_alpha`/`std::str::is_tcl_alnum` (`core/tclcompat.tcl`) are now
 `-context-free 1`. A proof contract never makes a call removable by itself
 (`refinement-effectful-not-folded`, `refinement-mutant-unrepeatable-predicate`:
 an `emailish?` that reads a `MutableArray` still proves, but a repeat is a
@@ -397,12 +397,12 @@ refined type Emailish = str
 error Invalid
 
 fn validate_emailish(v: str) -> unit proves v: Emailish errors Invalid:
-    if str::length(v) < 3:
+    if std::str::length(v) < 3:
         fail Invalid
     unit
 
 fn consume(v: Emailish) -> int:
-    str::length(v)
+    std::str::length(v)
 
 fn use(s: str) -> int errors Invalid:
     validate_emailish(s)      # completes normally only if s is an Emailish
@@ -604,7 +604,7 @@ interface. Each of the two shapes has one convention:
   fn emailish?(v: str) -> bool proves v: Emailish:
   ```
 
-  (`web::emailish?`, `web::uri_query_value?`);
+  (`std::web::emailish?`, `std::web::uri_query_value?`);
 * a **validator** -- one ordinary parameter, `-> unit`, a proof clause -- is
   named beginning with `validate_`:
 
@@ -640,27 +640,27 @@ the name to use (`validate_f` and the bare `validate` both conform).
 
 ## The corpus
 
-`lib/web.bot`:
+`stdlib/web.bot`:
 
 ```
 refined type Emailish = str
 
-local_extra_chars = immutable_set::from_list([".", "_", "%", "+", "-"])
+local_extra_chars = std::immutable_set::from_list([".", "_", "%", "+", "-"])
 
 fn emailish?(v: str) -> bool proves v: Emailish:
 
-    n = str::length(v)
+    n = std::str::length(v)
 
     fn char_at(i):
         if i < 0 or i >= n:
             return ""
-        str::substring(v, i, i + 1)
+        std::str::substring(v, i, i + 1)
 
     fn local_char?(c: str) -> bool:
-        str::is_tcl_alnum(c) or immutable_set::contains(local_extra_chars, c)
+        std::str::is_tcl_alnum(c) or std::immutable_set::contains(local_extra_chars, c)
 
     fn label_char?(c):
-        str::is_tcl_alnum(c) or c == "-"
+        std::str::is_tcl_alnum(c) or c == "-"
 
     fn scan_while(start, predicate: Fn{args: [str], return: bool}):
         loop i from start to n:
@@ -670,7 +670,7 @@ fn emailish?(v: str) -> bool proves v: Emailish:
         n
 
     fn tld?(i):
-        e = scan_while(i, str::is_tcl_alpha)
+        e = scan_while(i, std::str::is_tcl_alpha)
         if e == n:
             e - i >= 2
         else:
@@ -705,20 +705,20 @@ fn emailish?(v: str) -> bool proves v: Emailish:
 refined type UriQueryValue = str
 
 fn uri_query_value?(value: str) -> bool proves value: UriQueryValue:
-    bytes = str::encode_utf8(value)
+    bytes = std::str::encode_utf8(value)
 
     fn upper_hex?(i):
-        if i < 0 or i >= list::length(bytes):
+        if i < 0 or i >= std::list::length(bytes):
             false
         else:
-            b = list::at(bytes, i)
-            ascii::is_digit(b) or (b >= 65 and b <= 70)
+            b = std::list::at(bytes, i)
+            std::ascii::is_digit(b) or (b >= 65 and b <= 70)
 
     fn valid_from?(i):
-        if i < 0 or i >= list::length(bytes):
+        if i < 0 or i >= std::list::length(bytes):
             true
         else:
-            b = list::at(bytes, i)
+            b = std::list::at(bytes, i)
             if b == 37:
                 if upper_hex?(i + 1) and upper_hex?(i + 2):
                     valid_from?(i + 3)
@@ -735,19 +735,19 @@ fn uri_query_value?(value: str) -> bool proves value: UriQueryValue:
 
 (comments omitted). Names follow the corpus convention: the module's
 predicates are snake_case with a trailing `?`, so `UriQueryValue?` is
-`web::uri_query_value?`.
+`std::web::uri_query_value?`.
 
 * `emailish?` is the module's existing ordinary implementation of the e-mail
   grammar (R2-ORDINARY-EMAILISH-PREDICATE.md), unchanged in behavior; its
   signature gained `v: str`, `-> bool` and the proof clause. It was
   previously reached from programs through the root native `emailish?` of
-  `lib/web.tcl`, bridged to this function; it is now called directly as
-  `web::emailish?`. Two helpers gained types: `local_char?(c: str) -> bool`
+  `stdlib/web.tcl`, bridged to this function; it is now called directly as
+  `std::web::emailish?`. Two helpers gained types: `local_char?(c: str) -> bool`
   and `scan_while`'s `predicate: Fn{args: [str], return: bool}`. Now that the
   module function is part of every program that checks e-mails (no root
   native in front of it), a standalone executable needs `local_char?`'s
   parameter kind statically; the structural type also states the contract
-  both passed predicates (`local_char?`, `str::is_tcl_alpha`) satisfy.
+  both passed predicates (`local_char?`, `std::str::is_tcl_alpha`) satisfy.
   Repeatability follows the exact callables passed for `predicate` into
   `scan_while`.
 * `UriQueryValue` used to be *opaque*: a String was one only when the trusted
@@ -755,23 +755,23 @@ predicates are snake_case with a trailing `?`, so `UriQueryValue?` is
   exactly what the representation theorem forbids, so its proposition is now
   the structural one the evidence stood for: every UTF-8 byte is an RFC 3986
   unreserved character or starts an uppercase `%XX` triplet -- exactly the
-  alphabet `web::uri_escape_text` writes, so every string it produces passes.
+  alphabet `std::web::uri_escape_text` writes, so every string it produces passes.
   `uri_escape_text` returns a plain `str`; a caller that needs a
   `UriQueryValue` proves it with `uri_query_value?`.
 
 `bench/refined-checks.bot` (the principal vertical test, `expect: [400, 0]`):
 
 ```
-import web
+import std::web
 
-q = web::uri_escape_text("a b")
+q = std::web::uri_escape_text("a b")
 
 fn check(n, acc, s, q):
     if n <= 0:
         return acc
-    hit = if web::emailish?(s):
-        if web::emailish?(s):
-            if web::uri_query_value?(q):
+    hit = if std::web::emailish?(s):
+        if std::web::emailish?(s):
+            if std::web::uri_query_value?(q):
                 1
             else:
                 0
@@ -785,7 +785,7 @@ fn check(n, acc, s, q):
 ```
 
 Its Core-IR predecessor `bench/refined-checks.ir` (which required
-`lib/web.tcl`) is deleted, as are `examples/05-refined-strings.ir` and
+`stdlib/web.tcl`) is deleted, as are `examples/05-refined-strings.ir` and
 `examples/hir/06-refined-strings.*`; `examples/refinement/refined-strings.bot`
 is the source example. The cross-language equivalents
 (`bench/equivalents/{python,rust,go}/refined_checks.*`) now perform the same
@@ -802,7 +802,7 @@ all 19 cases.
   ranking was added: a function over `Emailish` and a different one over
   `str`, both applicable, stay ambiguous, and qualified calls disambiguate
   (`refinement-method-sugar-ambiguity`).
-* **Operators** take the carrier: `str::concat` of an `Emailish` and a `str`
+* **Operators** take the carrier: `std::str::concat` of an `Emailish` and a `str`
   is a `str`, `==`, `<` and friends compare as the carrier does; no operation
   preserves a refinement unless its declared result says so
   (`refinement-operators`).
@@ -812,12 +812,12 @@ all 19 cases.
 * **Rendering** is the carrier's at top level and inside containers, on every
   backend including the native runtime (`refinement-rendering-value`,
   `refinement-rendering-native-runtime`). HIR text and diagnostics show the
-  static type (`str[web::Emailish]`).
+  static type (`str[std::web::Emailish]`).
 * **`any` / erasure.** A refinement is a static fact with no runtime trace, so
   a value that passes through a type the compiler no longer tracks precisely
   loses it: `loop x in [s, 1]` binds `x: any` (the List's element type is
   `any`) and `send(x)` is a `TYPE` error; where the compiler still knows the
-  exact value (`xs = [s, 1]` then `send(list::at(xs, 0))`, by exact value
+  exact value (`xs = [s, 1]` then `send(std::list::at(xs, 0))`, by exact value
   facts) it is kept (`refinement-any-erasure`). No tag is added to recover it.
 * **Generics and imprinting.** Semantic instances (OPPORTUNISTIC-SEMANTIC-
   INSTANCES.md) key on the full static type, so `identity(m)` with `m:
@@ -862,8 +862,8 @@ A refined value has exactly its carrier's representation in every backend:
 
 Evidence from `tests/refinement-values.test`:
 
-* **HIR**: the true branch carries `refines BINDING s : str[web::Emailish]`
-  on its scope and the reference inside is typed `str[web::Emailish]`; no
+* **HIR**: the true branch carries `refines BINDING s : str[std::web::Emailish]`
+  on its scope and the reference inside is typed `str[std::web::Emailish]`; no
   node constructs anything.
 * **NIR** (`refinement-nir-proof-passes-register`): after `if mail?(s):`, the
   call `consume(s)` passes the parameter's own register; there is no
@@ -890,10 +890,10 @@ Evidence from `tests/refinement-values.test`:
 |---|---|---|
 | value, interp / compile / cranelift | `[400, 0]` | `[400, 0]` |
 | value, cranelift-generic | fails: `UriQueryValue?` has no native implementation | `[400, 0]` |
-| HIR, inner `emailish?(s)` | `call native(emailish?) = true` (a type test of the Tcl-registered `Emailish`, decided by the bridged native's metadata) | `call block(web::emailish?) = true` (exact result + repeatability) |
+| HIR, inner `emailish?(s)` | `call native(emailish?) = true` (a type test of the Tcl-registered `Emailish`, decided by the bridged native's metadata) | `call block(std::web::emailish?) = true` (exact result + repeatability) |
 | HIR, `q`'s type | `str[UriQueryValue]` (the native's declared result) | `str` |
 | NIR of `check`: calls of the e-mail predicate | 1 | 1 |
-| NIR of `check`: query-value check | none (decided true from `q`'s static type) | 1 call of `web::uri_query_value?` |
+| NIR of `check`: query-value check | none (decided true from `q`'s static type) | 1 call of `std::web::uri_query_value?` |
 | allocations (native) | 6823 objects, 178.3 KB: 6807 Strings, 12 Lists | 7223 objects, 203.9 KB: 6807 Strings, 412 Lists |
 | machine code, all functions | 8187 bytes | 9371 bytes |
 | best run (native, 20 runs) | 359.5 µs | 411.4 µs |
@@ -904,14 +904,14 @@ Tcl-registered type, and now it disappears because of the proof contract and
 the exact-result fact the first call established, with the function proven
 repeatable. `refinement-corpus-refined-checks-nir` and
 `refinement-corpus-refined-checks-machine-code` pin it at the NIR and at the
-Cranelift IR: `check` makes one call of `web::emailish?` and one of
-`web::uri_query_value?`.
+Cranelift IR: `check` makes one call of `std::web::emailish?` and one of
+`std::web::uri_query_value?`.
 
 The query side changed meaning, as the spec asks: the old program never ran
 a query-value check, because `uriEscape`'s declared result type *was* the
 proof. Now `q` is a plain String and the check is a different predicate on a
 different value, so it runs (400 times for the matching input; its
-`str::encode_utf8` is the 400 extra Lists and most of the extra time and
+`std::str::encode_utf8` is the 400 extra Lists and most of the extra time and
 code). Strings are unchanged.
 
 ## Diagnostics
@@ -925,7 +925,7 @@ code). Strings are unchanged.
 | proof parameter missing | `PROOF-CLAUSE` | proof clause "proves t: A" must name one of the function's ordinary parameters: the function has no parameter "t" |
 | carrier mismatch | `PROOF-CLAUSE` | proof carrier mismatch: parameter "s" is declared int, but A refines str |
 | proof function declaring neither `-> bool` nor `-> unit` | `PROOF-CLAUSE` | a proof-producing function must declare "-> bool" (a predicate: its true result is the proof) or "-> unit" (a validator: its normal completion is the proof) |
-| mint outside the owner | `REFINEMENT-MINT-AUTHORITY` | the entry program cannot declare a proof of refinement web::Emailish: only its owning module "web" may mint it |
+| mint outside the owner | `REFINEMENT-MINT-AUTHORITY` | the entry program cannot declare a proof of refinement std::web::Emailish: only its owning module "std::web" may mint it |
 | carrier where a refinement is required | `TYPE` | expected A but found str: a refinement proof is required (... a predicate returned true for it, or a validator completed normally for it ...) |
 | name collides with a built-in or another declaration | `TYPE` | type "str" cannot be declared: the name is already a built-in type |
 | nested declaration, two proof clauses, `refined` before anything but `type` | `SYNTAX` | "refined" only modifies a type declaration ... |
@@ -936,7 +936,7 @@ Removed, with what replaced it:
 
 | removed | replaced by |
 |---|---|
-| `lib/web.tcl`: `Emailish` (validator type over a regex), `UriQueryValue` (opaque type), the type-test natives `Emailish?`/`UriQueryValue?`, the compatibility alias `emailish?`, the evidence-attaching native `uriEscape` | `lib/web.bot`'s `refined type` declarations, `emailish?`/`uri_query_value?` with proof clauses, `uri_escape_text` |
+| `stdlib/web.tcl`: `Emailish` (validator type over a regex), `UriQueryValue` (opaque type), the type-test natives `Emailish?`/`UriQueryValue?`, the compatibility alias `emailish?`, the evidence-attaching native `uriEscape` | `stdlib/web.bot`'s `refined type` declarations, `emailish?`/`uri_query_value?` with proof clauses, `uri_escape_text` |
 | opaque named types (`core::type::register -opaque`), runtime evidence on Strings (`core::value::evidence`/`withEvidence`/`hasEvidence`, the `evidence` runtime tag, evidence in `show`/`==`) | refinement types: static facts only |
 | `core::native::alias` and its resolution in `hir/resolve.tcl` | ordinary module functions |
 | the `-module-fn`/`-native-body` native-implementation bridge (`core/native.tcl`, `core/evaluator.tcl`), `AttachNatives`, the bridged-native lowering, `nativeResultOverride` and `moduleNativeTargets` (`native/`, `hir/aot.tcl`, `hir/contexts.tcl`) | none needed: a module function is called as itself |
@@ -946,7 +946,7 @@ No compatibility fallback remains. `refinement-no-compiler-domain-knowledge`
 searches every compiler and runtime source (`core/`, `hir/`, `surface/`,
 `native/` including its Rust sources, `compiler/`; `main.tcl` has none either)
 for `Emailish`, `UriQueryValue`, `emailish?` and `uri_query_value?` outside
-comments and finds none, and checks that `lib/` holds no Tcl library;
+comments and finds none, and checks that `stdlib/` holds no Tcl library;
 `refinement-old-mechanism-gone` checks that runtime evidence, opaque named
 types, native aliases and the bridge are gone. The corpus fails as it should
 without its declarations: without the proof clause nothing proves `Emailish`
@@ -1180,7 +1180,7 @@ The 8 were `me-list-literal-never-eligible` and
 tests (`warnings.test`), failing identically on the untouched baseline tree
 (`main` has since adapted their pins). The interp and compile runs first
 also failed `ic-scan-while` and `ic-local-char` (`intrinsic-contracts.test`):
-they pinned what intrinsic contracts infer from `lib/web.bot`'s untyped
+they pinned what intrinsic contracts infer from `stdlib/web.bot`'s untyped
 `scan_while` and `local_char?`, which this milestone typed. They now compile
 the original untyped helpers inline, so the inference is still pinned, and
 pass on both backends (the GC stress run already includes the fix). The net
@@ -1196,7 +1196,7 @@ the time of those runs (88 now).
 **Scalar machine code.** `native/generate-scalar-audit.tcl` regenerated the
 committed audit corpus (`audit/native-scalar-asm/`, every `bench/*.bot` and
 `examples/stdlib/*.bot`): only `bench/refined-checks` changed (the
-`web::uri_query_value?` call and its two helpers; `local_char?`'s generic
+`std::web::uri_query_value?` call and its two helpers; `local_char?`'s generic
 instance is 62 bytes smaller now that it declares `c: str`). Every other
 program's disassembly is byte-identical: refinements perturb nothing where
 none occur.

@@ -12,7 +12,7 @@ totals per run: Ir=35,913  Dr=7,718  Dw=5,873  I1mr=29  D1mr=0  D1mw=0  ILmr=0  
 == exclusive cost per function (per run, sorted by Ir; >= 0.1% of Ir)
    22.54%  [runtime] equal                                                        Ir=    8,096.0  Dr=    1,332.0  Dw=      788.0  Bc=    1,806.0  Bcm=       18.1  Bi=      186.0  D1mr=        0.0  D1mw=        0.0
    11.39%  [libc] malloc                                                          Ir=    4,090.8  Dr=    1,082.8  Dw=      602.0  Bc=      683.2  Bcm=       28.6  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
-   11.34%  [botlish] 1 list::any?                                                 Ir=    4,074.0  Dr=      451.0  Dw=      591.0  Bc=      510.0  Bcm=       23.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
+   11.34%  [botlish] 1 std::list::any?                                                 Ir=    4,074.0  Dr=      451.0  Dw=      591.0  Bc=      510.0  Bcm=       23.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
     9.83%  [libc] _int_malloc                                                     Ir=    3,531.2  Dr=      737.4  Dw=      403.1  Bc=      685.8  Bcm=       20.9  Bi=        0.0  D1mr=        0.0  D1mw=        0.1
     6.27%  [runtime] rt_set_contains                                              Ir=    2,250.0  Dr=      580.0  Dw=      470.0  Bc=      225.0  Bcm=       51.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
     4.74%  [botlish] 9 select_affected                                            Ir=    1,702.0  Dr=      218.0  Dw=      236.0  Bc=      262.0  Bcm=        2.2  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
@@ -34,9 +34,9 @@ totals per run: Ir=35,913  Dr=7,718  Dw=5,873  I1mr=29  D1mr=0  D1mw=0  ILmr=0  
     0.77%  [runtime] rt_list_append                                               Ir=      278.0  Dr=       68.0  Dw=       82.0  Bc=       28.0  Bcm=        0.2  Bi=       14.0  D1mr=        0.0  D1mw=        0.0
     0.60%  [botlish] 7 test_deps                                                  Ir=      217.0  Dr=      124.0  Dw=       31.0  Bc=        0.0  Bcm=        0.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
     0.52%  [runtime] rt_set_from_list                                             Ir=      186.0  Dr=       57.0  Dw=       40.0  Bc=       21.0  Bcm=        0.8  Bi=        6.0  D1mr=        0.0  D1mw=        0.0
-    0.52%  [botlish] 3 list::find                                                 Ir=      185.0  Dr=       20.0  Dw=       27.0  Bc=       25.0  Bcm=        0.3  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
+    0.52%  [botlish] 3 std::list::find                                                 Ir=      185.0  Dr=       20.0  Dw=       27.0  Bc=       25.0  Bcm=        0.3  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
     0.48%  [runtime] rt_closure_new                                               Ir=      174.0  Dr=       45.0  Dw=       60.0  Bc=        9.0  Bcm=        0.1  Bi=        9.0  D1mr=        0.0  D1mw=        0.0
-    0.43%  [botlish] 2 list::none?                                                Ir=      154.0  Dr=       16.0  Dw=       21.0  Bc=       20.0  Bcm=        3.1  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
+    0.43%  [botlish] 2 std::list::none?                                                Ir=      154.0  Dr=       16.0  Dw=       21.0  Bc=       20.0  Bcm=        3.1  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
     0.42%  [runtime] <runtime::vm::Vm>::alloc::<runtime::value::ClosureObj>       Ir=      150.0  Dr=       57.0  Dw=       45.0  Bc=       15.0  Bcm=        2.1  Bi=        6.0  D1mr=        0.0  D1mw=        0.0
     0.31%  [runtime] <runtime::vm::Vm>::new_set                                   Ir=      110.0  Dr=       38.0  Dw=       34.0  Bc=       12.0  Bcm=        0.1  Bi=        4.0  D1mr=        0.0  D1mw=        0.0
     0.13%  [botlish] 11 is_affected?                                              Ir=       48.0  Dr=       12.0  Dw=       12.0  Bc=        3.0  Bcm=        0.1  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
@@ -47,14 +47,14 @@ totals per run: Ir=35,913  Dr=7,718  Dw=5,873  I1mr=29  D1mr=0  D1mw=0  ILmr=0  
           56.7  5 changed? (generic entry)               incl  31.55% of Ir  Ir=   11,331.0  Dr=    2,294.0  Dw=    1,446.0  Bc=    2,088.0  Bcm=       74.0  Bi=      180.0  D1mr=        0.0  D1mw=        0.0
           32.5  8 affected?                              incl  49.10% of Ir  Ir=   17,634.0  Dr=    3,406.0  Dw=    2,514.0  Bc=    2,720.0  Bcm=       94.0  Bi=      224.0  D1mr=        0.0  D1mw=        0.0
           32.5  7 test_deps                              incl   0.60% of Ir  Ir=      217.0  Dr=      124.0  Dw=       31.0  Bc=        0.0  Bcm=        0.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
-          32.5  1 list::any?                             incl  46.51% of Ir  Ir=   16,704.0  Dr=    3,158.0  Dw=    2,266.0  Bc=    2,689.0  Bcm=       94.0  Bi=      224.0  D1mr=        0.0  D1mw=        0.0
+          32.5  1 std::list::any?                             incl  46.51% of Ir  Ir=   16,704.0  Dr=    3,158.0  Dw=    2,266.0  Bc=    2,689.0  Bcm=       94.0  Bi=      224.0  D1mr=        0.0  D1mw=        0.0
            3.1  11 is_affected?                          incl   0.00% of Ir  Ir=        0.0  Dr=        0.0  Dw=        0.0  Bc=        0.0  Bcm=        0.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
            3.1  11 is_affected? (generic entry)          incl   6.69% of Ir  Ir=    2,401.0  Dr=      467.0  Dw=      326.0  Bc=      387.0  Bcm=       16.1  Bi=       34.0  D1mr=        0.0  D1mw=        0.0
            2.1  4 make_changed?                          incl   5.32% of Ir  Ir=    1,912.0  Dr=      477.0  Dw=      320.0  Bc=      290.0  Bcm=       10.1  Bi=       31.0  D1mr=        0.0  D1mw=        0.0
            2.1  9 select_affected                        incl  52.22% of Ir  Ir=   18,754.8  Dr=    3,633.0  Dw=    2,785.0  Bc=    2,837.9  Bcm=       90.0  Bi=      228.0  D1mr=        0.0  D1mw=        0.0
-           1.1  2 list::none?                            incl   2.00% of Ir  Ir=      719.0  Dr=      131.0  Dw=       94.0  Bc=      123.0  Bcm=        6.1  Bi=       10.0  D1mr=        0.0  D1mw=        0.0
+           1.1  2 std::list::none?                            incl   2.00% of Ir  Ir=      719.0  Dr=      131.0  Dw=       94.0  Bc=      123.0  Bcm=        6.1  Bi=       10.0  D1mr=        0.0  D1mw=        0.0
            1.1  10 first_affected                        incl   8.27% of Ir  Ir=    2,971.8  Dr=      592.6  Dw=      435.9  Bc=      451.6  Bcm=       17.9  Bi=       44.0  D1mr=        0.0  D1mw=        0.1
-           1.1  3 list::find                             incl   7.47% of Ir  Ir=    2,681.0  Dr=      514.0  Dw=      369.0  Bc=      422.0  Bcm=       16.4  Bi=       37.0  D1mr=        0.0  D1mw=        0.0
+           1.1  3 std::list::find                             incl   7.47% of Ir  Ir=    2,681.0  Dr=      514.0  Dw=      369.0  Bc=      422.0  Bcm=       16.4  Bi=       37.0  D1mr=        0.0  D1mw=        0.0
            1.1  6 test_name                              incl   0.02% of Ir  Ir=        7.0  Dr=        4.0  Dw=        1.0  Bc=        0.0  Bcm=        0.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
            1.0  0 <program>                              incl  99.98% of Ir  Ir=   35,907.4  Dr=    7,717.2  Dw=    5,872.4  Bc=    5,247.4  Bcm=      174.8  Bi=      580.0  D1mr=        0.1  D1mw=        0.1
 
@@ -62,7 +62,7 @@ totals per run: Ir=35,913  Dr=7,718  Dw=5,873  I1mr=29  D1mr=0  D1mw=0  ILmr=0  
           56.7  5 changed? (entry)  ->  5 changed?
           50.4  rt_call_value  ->  5 changed? (generic entry)
           32.5  8 affected?  ->  7 test_deps
-          32.5  8 affected?  ->  1 list::any?
+          32.5  8 affected?  ->  1 std::list::any?
           29.4  9 select_affected  ->  8 affected?
            6.3  rt_call_value'2  ->  5 changed? (generic entry)
            3.1  11 is_affected?  ->  8 affected?
@@ -71,9 +71,9 @@ totals per run: Ir=35,913  Dr=7,718  Dw=5,873  I1mr=29  D1mr=0  D1mw=0  ILmr=0  
            2.1  0 <program>  ->  4 make_changed?
            2.1  0 <program>  ->  9 select_affected
            1.1  0 <program>  ->  5 changed?
-           1.1  0 <program>  ->  2 list::none?
+           1.1  0 <program>  ->  2 std::list::none?
            1.1  0 <program>  ->  10 first_affected
-           1.1  10 first_affected  ->  3 list::find
+           1.1  10 first_affected  ->  3 std::list::find
            1.1  10 first_affected  ->  6 test_name
            1.0  botlish_audit_run  ->  0 <program>
 
@@ -90,22 +90,22 @@ totals per run: Ir=35,913  Dr=7,718  Dw=5,873  I1mr=29  D1mr=0  D1mw=0  ILmr=0  
 
 == Botlish -> helper calls, per calling Botlish function (per run)
           57.8  5 changed?  ->  rt_set_contains
-          48.3  1 list::any?  ->  rt_call_value
-          32.5  1 list::any?  ->  rt_str_len
+          48.3  1 std::list::any?  ->  rt_call_value
+          32.5  1 std::list::any?  ->  rt_str_len
           19.9  0 <program>  ->  rt_list_new
           14.7  0 <program>  ->  rt_struct_new
-           6.3  1 list::any?  ->  rt_call_value'2
+           6.3  1 std::list::any?  ->  rt_call_value'2
            4.2  9 select_affected  ->  rt_list_append
-           3.1  3 list::find  ->  rt_call_value
+           3.1  3 std::list::find  ->  rt_call_value
            2.1  9 select_affected  ->  rt_str_len
            2.1  9 select_affected  ->  rt_list_new
            2.1  4 make_changed?  ->  rt_set_from_list
            2.1  4 make_changed?  ->  rt_closure_new
-           2.1  2 list::none?  ->  rt_call_value
+           2.1  2 std::list::none?  ->  rt_call_value
            2.1  0 <program>  ->  rt_str_len
-           1.1  2 list::none?  ->  rt_str_len
+           1.1  2 std::list::none?  ->  rt_str_len
            1.1  10 first_affected  ->  rt_closure_new
-           1.1  3 list::find  ->  rt_str_len
+           1.1  3 std::list::find  ->  rt_str_len
 
 == calls made outside Botlish code, caller -> callee (per run; top 60)
        1,179.0  __rustc::__rust_alloc  ->  __rustc::__rdl_alloc

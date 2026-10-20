@@ -634,7 +634,7 @@ mod tests {
             info: ProgramInfo {
                 functions: vec![FunctionInfo { arity: 0, pnames: String::new() }, FunctionInfo { arity: 2, pnames: "a b".into() }],
                 natives: vec![
-                    NativeInfo { name: "str::length".into(), arity: Some(1), params: vec![Some(Kind::Str)], op: OpCode::StrLen },
+                    NativeInfo { name: "std::str::length".into(), arity: Some(1), params: vec![Some(Kind::Str)], op: OpCode::StrLen },
                     NativeInfo { name: "list".into(), arity: None, params: vec![None], op: OpCode::ListNew },
                 ],
                 shapes: vec![

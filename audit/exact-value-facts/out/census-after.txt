@@ -88,12 +88,12 @@ examples/stdlib/matmul.bot:38:23 | list_get | sem=any | inst=List[int] {[-∞, +
 examples/stdlib/matmul.bot:42:8 | list_length | sem=int | inst=int {[0, 4611686018427387903]} | idx= list=-
 examples/stdlib/matmul.bot:45:27 | list_length | sem=int | inst=int {[0, 4611686018427387903]} | idx= list=-
 examples/stdlib/matmul.bot:45:39 | list_get | sem=any | inst=List[int] {[-∞, +∞]} | idx=0(lit) list=-
-lib/web.bot:198:16 | list_get | sem=str | inst=str {[-∞, +∞]} | idx=- list=-
-lib/web.bot:198:54 | list_get | sem=str | inst=str {[-∞, +∞]} | idx=- list=-
-lib/web.bot:201:17 | list_length | sem=int | inst=int {[0, 4611686018427387903]} | idx= list=-
-lib/web.bot:204:70 | list_get | sem=any | inst=int {[-∞, +∞]} | idx=- list=-
-lib/web.bot:208:12 | list_length | sem=int | inst=int {[0, 4611686018427387903]} | idx= list=-
-lib/web.bot:209:17 | list_get | sem=int[Byte] | inst=int[Byte] {[0, 255]} | idx=0(lit) list=-
+stdlib/web.bot:198:16 | list_get | sem=str | inst=str {[-∞, +∞]} | idx=- list=-
+stdlib/web.bot:198:54 | list_get | sem=str | inst=str {[-∞, +∞]} | idx=- list=-
+stdlib/web.bot:201:17 | list_length | sem=int | inst=int {[0, 4611686018427387903]} | idx= list=-
+stdlib/web.bot:204:70 | list_get | sem=any | inst=int {[-∞, +∞]} | idx=- list=-
+stdlib/web.bot:208:12 | list_length | sem=int | inst=int {[0, 4611686018427387903]} | idx= list=-
+stdlib/web.bot:209:17 | list_get | sem=int[Byte] | inst=int[Byte] {[0, 255]} | idx=0(lit) list=-
 # sites: 96
 # exact constants tracked (source locations): 803
 # known exact lists tracked (source locations): 130

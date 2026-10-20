@@ -27,22 +27,22 @@ header generic/tclPlatDecls.h c8603094
 header generic/tclTomMathDecls.h 1ebc0288
 shim_library botlish_shim_tclstubs_2627031d
 file layouts-check.c 366 b614b884
-file layouts.tsv 1103 458445ae
-file report.tsv 1499 b18d2c75
-file report.txt 171 3ef1c1ce
+file layouts.tsv 1103 be1dd7f0
+file report.tsv 1499 13246e49
+file report.txt 171 5ce47966
 file shim.c 2795 2627031d
-file tclstubs/ctypes.bot 255 23b72cf2
-file tclstubs/decls.bot 106 ba6822ce
-file tclstubs/layouts.bot 427 7fc06d8c
-file tclstubs/oo.bot 25 0840a4df
-file tclstubs/platdecls.bot 20 9d929de9
-file tclstubs/tcl.bot 250 78d31bd5
-file tclstubs/thunks/decls.bot 3832 ab75a01f
-file tclstubs/thunks/oodecls.bot 236 f975a5a1
-file tclstubs/thunks/platdecls.bot 14 3ea31bb1
-file tclstubs/thunks/tcl.bot 62 e63e3c90
-file tclstubs/thunks/tommathdecls.bot 358 d79fc011
-file tclstubs/tommathdecls.bot 198 6906c0ad
+file tclstubs/ctypes.bot 255 a0fd708d
+file tclstubs/decls.bot 108 bcbfc043
+file tclstubs/layouts.bot 427 9f413a04
+file tclstubs/oo.bot 25 808d3aa4
+file tclstubs/platdecls.bot 22 88ffd6d6
+file tclstubs/tcl.bot 254 060fd98c
+file tclstubs/thunks/decls.bot 3838 06149bf3
+file tclstubs/thunks/oodecls.bot 236 e6dd1951
+file tclstubs/thunks/platdecls.bot 14 0f2ac2d8
+file tclstubs/thunks/tcl.bot 62 ab239a39
+file tclstubs/thunks/tommathdecls.bot 358 efcf2082
+file tclstubs/tommathdecls.bot 198 5717cc5a
 libraries tclstubs/decls.bot tclstub9.0
 libraries tclstubs/oo.bot tclstub9.0
 libraries tclstubs/platdecls.bot tclstub9.0

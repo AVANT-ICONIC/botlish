@@ -6,7 +6,7 @@ The seven compiler warnings (WARNINGS-*.md, milestones 1-7) were verified and
 audited against the corpus, and by standing rule no corpus code was edited.
 This milestone is their consumer. At the pinned post-affine kickoff commit
 **6e3f9f7** the consolidated sweep found **491 findings** in the corpus (every
-program of `examples/`, `bench/` and `lib/`, and a one-line loader of every
+program of `examples/`, `bench/` and `stdlib/`, and a one-line loader of every
 library module). Every one of them now has exactly one closing mechanism, and
 none is "deliberate":
 
@@ -22,13 +22,13 @@ Forty-one of the 42 manifested findings are `ONE-CHAR-STRING-LITERAL`. Their
 obstructions are the design data this refactor was built to produce:
 
 * **24 need character-to-text construction** (`char->text`): a single
-  character that must become text -- an operand of `str::concat`, a String
-  result, a table of text. Botlish has no `str::of_char` and no append of a
+  character that must become text -- an operand of `std::str::concat`, a String
+  result, a table of text. Botlish has no `std::str::of_char` and no append of a
   UnicodeChar to a String; the only literal-free spelling slices the
   character out of a longer literal, which keeps the one-character String at
   run time and only hides it from a literals-only check.
 * **10 are coupled to a String-taking classifier** (`classifier`): the
-  character is also handed to `str::is_tcl_alnum`/`str::is_tcl_alpha`, in the
+  character is also handed to `std::str::is_tcl_alnum`/`std::str::is_tcl_alpha`, in the
   same predicate or through a uniform predicate contract (`Fn{args: [str]}`),
   so it is a one-character String there.
 * **1 is blocked by the index proof** (`index-proof`): the natural
@@ -73,8 +73,8 @@ The two hypotheses:
 
 The honest remainder for the libraries: **11 of 14 library modules are
 warning-clean**, and the other three carry only manifested
-`ONE-CHAR-STRING-LITERAL` findings -- `lib/web.bot` 23, `lib/io.bot` 2,
-`lib/linux/path.bot` 2 -- which print for every program that loads them. The
+`ONE-CHAR-STRING-LITERAL` findings -- `stdlib/web.bot` 23, `stdlib/io.bot` 2,
+`stdlib/linux/path.bot` 2 -- which print for every program that loads them. The
 "no system header" limitation is therefore retired for every module except
 those three; for them the quantified demand is character-to-text
 construction (20 of their 27), character classifiers (6) and the index proof
@@ -134,7 +134,7 @@ All seven warnings' corpus tools were re-run at 6e3f9f7
 (`audit/refactor/kickoff/*.txt`, one file per code), plus the consolidated
 sweep `audit/refactor/tools/sweep.tcl` (new: the union of the seven tools'
 corpora -- `examples/{stdlib,surface,refinement,io,abi,linux}/*.bot`,
-`bench/*.bot`, `lib/*.bot` and `lib/*/*.bot` compiled standalone -- plus
+`bench/*.bot`, `stdlib/*.bot` and `stdlib/*/*.bot` compiled standalone -- plus
 milestone 7's one-line loader `import NS` for each of the 14 library modules,
 every warning of every code deduplicated by code and anchor). Its result,
 `audit/refactor/kickoff/sweep.txt`, **supersedes the per-milestone ledgers**:
@@ -165,17 +165,17 @@ Per file and code at kickoff:
 | `examples/stdlib/string_reverse.bot` | 4 | 1 |  | 1 |  |  |  | 6 |
 | `examples/surface/11-boolean-operators.bot` | 3 |  |  |  |  |  |  | 3 |
 | `examples/surface/13-hygiene.bot` | 1 |  |  | 1 |  |  |  | 2 |
-| `lib/abi/bytes.bot` |  |  |  |  | 1 |  |  | 1 |
-| `lib/byte.bot` | 11 |  |  |  |  |  |  | 11 |
-| `lib/io.bot` |  | 2 |  |  |  |  |  | 2 |
-| `lib/linux/io.bot` | 3 |  |  |  |  |  |  | 3 |
-| `lib/linux/path.bot` |  | 2 |  |  |  |  |  | 2 |
-| `lib/web.bot` | 42 | 26 | 3 |  |  |  |  | 71 |
+| `stdlib/abi/bytes.bot` |  |  |  |  | 1 |  |  | 1 |
+| `stdlib/byte.bot` | 11 |  |  |  |  |  |  | 11 |
+| `stdlib/io.bot` |  | 2 |  |  |  |  |  | 2 |
+| `stdlib/linux/io.bot` | 3 |  |  |  |  |  |  | 3 |
+| `stdlib/linux/path.bot` |  | 2 |  |  |  |  |  | 2 |
+| `stdlib/web.bot` | 42 | 26 | 3 |  |  |  |  | 71 |
 | **total** | **381** | **97** | **6** | **6** | **1** | **0** | **0** | **491** |
 
 | code | per-milestone ledger | kickoff (same corpus) | kickoff, consolidated | what moved it |
 |---|---:|---:|---:|---|
-| `METHOD-ELIGIBLE` | 365 | 373 | **381** | post-M2 code (the rewritten `lib/web.bot`, `examples/linux`, `lib/linux/io.bot`, `examples/refinement`); 8 more in the corpora M2's tool does not compile |
+| `METHOD-ELIGIBLE` | 365 | 373 | **381** | post-M2 code (the rewritten `stdlib/web.bot`, `examples/linux`, `stdlib/linux/io.bot`, `examples/refinement`); 8 more in the corpora M2's tool does not compile |
 | `ONE-CHAR-STRING-LITERAL` | 97 | 97 | **97** | none: the M6 ledger was taken at the post-affine tree's corpus |
 | `SAME-RETURN-VALUE` | 4 | 6 | **6** | `hashtable.bot`'s `ht_delete` (the affine work made it return the table from two exits) and `web.bot`'s `valid_from?` (the refinement work's `uri_query_value?`) |
 | `FIXED-ARITY-LIST-RETURN` | 8 | 6 | **6** | `csv_chunked.bot`'s two builder-state findings closed by the affine work (the builder became the `ChunkedBuilder` struct value); the fixed-arity tool's curated patch for them no longer applies, its one failure at kickoff |
@@ -192,10 +192,10 @@ program (0 failures); the one-character tool's spelling law held 97 of 97.
 
 | module | standalone (entry program) | loader `import NS` | cause |
 |---|---|---|---|
-| `abi`, `abi::x86_64`, `ascii`, `byte`, `linux`, `mathish`, `web`, `abi::bytes`, `linux::path` | compiles | loads | -- |
-| `list`, `mutable_array` | `MISSING-IMPORT` | loads | the module calls its own namespace's intrinsic (`list::at`, `mutable_array::at`) |
-| `io`, `linux::io` | `CONTEXT-FUNCTION-VALUE` | loads | an entry program's value is its last statement; the module's last declaration requires a context |
-| `io::path` | `TRAIT-POLYMORPHIC-FUNCTION-VALUE` | loads | the same, with a trait-polymorphic last declaration |
+| `abi`, `std::abi::x86_64`, `ascii`, `byte`, `linux`, `mathish`, `web`, `std::abi::bytes`, `std::linux::path` | compiles | loads | -- |
+| `list`, `mutable_array` | `MISSING-IMPORT` | loads | the module calls its own namespace's intrinsic (`std::list::at`, `std::mutable_array::at`) |
+| `io`, `std::linux::io` | `CONTEXT-FUNCTION-VALUE` | loads | an entry program's value is its last statement; the module's last declaration requires a context |
+| `std::io::path` | `TRAIT-POLYMORPHIC-FUNCTION-VALUE` | loads | the same, with a trait-polymorphic last declaration |
 
 Nothing the affine work shipped fails for a new reason (`mutable_array`'s
 failure predates it, as milestone 2 recorded). P0 below has the analysis.
@@ -203,18 +203,18 @@ failure predates it, as milestone 2 recorded). P0 below has the analysis.
 ### The nomethod queue, re-derived
 
 The fresh METHOD-ELIGIBLE audit's curated `nomethod` classification lists the
-same four candidates as milestone 2 (`mutable_array::copy` 4 findings,
+same four candidates as milestone 2 (`std::mutable_array::copy` 4 findings,
 `bit_and` 8, `bit_or` 5, `bit_xor` 1). Re-deriving it over the fresh
 callee list (86 callees) found one more, by the same criterion -- a receiver
-reading that misleads: **`mutable_array::create`** (8 findings), which the
+reading that misleads: **`std::mutable_array::create`** (8 findings), which the
 affine work had made an intrinsic, and whose first argument is the new
 array's *length*: the sweep would have written `1.create(0)` and
 `chunk_size().create(...)`. No other callee qualifies: the shifts' first
 argument is the shifted value (`v.shift_right(6)`), `mod`'s the dividend,
 the corpus helpers' their subject (a text, a table, a builder). The callees
-new since milestone 2 (`str::char_at`, `linux::read`/`write`,
-`abi::bytes::freeze_prefix`, `web.bot`'s `cont`) all read naturally as
-receivers. `mutable_array::generate` has the same shape as `create` but no
+new since milestone 2 (`std::str::char_at`, `std::linux::read`/`write`,
+`std::abi::bytes::freeze_prefix`, `web.bot`'s `cont`) all read naturally as
+receivers. `std::mutable_array::generate` has the same shape as `create` but no
 finding, so it is not marked (the fence: only the re-derived queue); it is
 recorded for its author in the design findings.
 
@@ -284,7 +284,7 @@ cannot reach warning-clean today without weakening their tests' subject.*
 
 | finding (post-refactor location) | datum | verdict | why |
 |---|---|---|---|
-| `string_replace.bot:51:20` | needle `"x"`, absent | confirmed | the needle's length drives the scan (`index + str::length(needle)`): a 1-character needle is the one whose absence check visits every position, the last included |
+| `string_replace.bot:51:20` | needle `"x"`, absent | confirmed | the needle's length drives the scan (`index + std::str::length(needle)`): a 1-character needle is the one whose absence check visits every position, the last included |
 | was `49:26` | replacement `"y"` of the absent `"x"` | **falsified** | never inserted; only non-emptiness matters (it makes a wrong insertion visible: `""` would hide one). Now `"yz"`: subject intact, output identical |
 | `51:46` | needle `"b"`, found | confirmed | the single-character substitution, the length-1 boundary of a needle that occurs |
 | `51:51` | replacement `"X"` | confirmed | length-preserving substitution, in the pinned output `"aXc"` |
@@ -295,7 +295,7 @@ cannot reach warning-clean today without weakening their tests' subject.*
 
 For every confirmed datum no spelling on today's surface states "a String of
 length exactly 1, namely `x`" as directly: `'x'` is a UnicodeChar (`replace`
-takes Strings, `str::length('x')` is a `TYPE` error), and
+takes Strings, `std::str::length('x')` is a `TYPE` error), and
 `"xy".substring(0, 1)` is computed, hiding the datum the case is about.
 
 ## 3. The law and how each class is verified
@@ -315,7 +315,7 @@ Observable behavior is identical, verified mechanically per class:
   commit with `git archive`) and the tree after it, with this checkout's
   compiler, runs it on all four backends, and requires identical outcomes
   (value or error code). The probe files (`audit/refactor/tools/probes/*.tcl`)
-  are part of the deliverable: 285 probes over nine programs and modules -- `ai_text_clean` 42 (`clean_char` over its whole documented domain, `clean_ai_text` over texts mixing every class), `csv` 44, `csv_chunked` 43, `csv_geometric` 46 and `csv_records` 54 (each scanner at every boundary: quotes, doubled quotes, delimiters, the end of the text, out-of-range indices; `csv_records` also runs the hash-table probes), `hashtable` 4 (insert, replace, growth, delete and reinsert over tombstones), `web` 49 (`emailish?`, `uri_query_value?` and `uri_escape_text`, Unicode inputs, and 40,000-character inputs that would overflow a non-tail recursion), `linux::path` 2 and `abi::bytes` 1 (`replace` at and past both ends) -- each run before and after on all four backends. A probe whose outcome a
+  are part of the deliverable: 285 probes over nine programs and modules -- `ai_text_clean` 42 (`clean_char` over its whole documented domain, `clean_ai_text` over texts mixing every class), `csv` 44, `csv_chunked` 43, `csv_geometric` 46 and `csv_records` 54 (each scanner at every boundary: quotes, doubled quotes, delimiters, the end of the text, out-of-range indices; `csv_records` also runs the hash-table probes), `hashtable` 4 (insert, replace, growth, delete and reinsert over tombstones), `web` 49 (`emailish?`, `uri_query_value?` and `uri_escape_text`, Unicode inputs, and 40,000-character inputs that would overflow a non-tail recursion), `std::linux::path` 2 and `std::abi::bytes` 1 (`replace` at and past both ends) -- each run before and after on all four backends. A probe whose outcome a
   conversion changes on purpose is declared (`differs`) and must differ: the
   four CSV programs' scanners now fail with `IndexNotFound` where they failed
   with `LowerUnderrun` for a negative index -- an index no caller passes --
@@ -342,14 +342,14 @@ Observable behavior is identical, verified mechanically per class:
 | P0 library repair | -- | 491 | no tree edit: five standalone failures named (section 5) | -- |
 | P1 markings | 3f8c0fc | 465 | 5 natives `nomethod`, 26 findings | covered by P2's run (section 17) |
 | P2 method sweep | 7697789 | 110 | 355 calls respelled, 24 files | interp 6807/6807, compile 6803 + 4 skipped (the kickoff's four), 0 failed |
-| P3 one-character | 316731d | 56 | 54 literals converted in 6 files (`ai_text_clean`, the four CSV programs, `lib/web.bot`) | targeted test files only; five stale pins found later (section 18), covered by the final run |
+| P3 one-character | 316731d | 56 | 54 literals converted in 6 files (`ai_text_clean`, the four CSV programs, `stdlib/web.bot`) | targeted test files only; five stale pins found later (section 18), covered by the final run |
 | P4 structural | 97e13ed | 44 | 5 annotated, 7 merged | targeted run (62 test files naming a touched program): found P3's stale pins and three costly merges |
 | P5 H2 | c412959 | 42 | 2 test data respelled | covered by the final run (the expect line pins the sample) |
 | P6 gate, docs | bad5b8d | 42 = manifest | gate, CI job, tests, documentation | covered by the final run |
 | P4 follow-up | aa4cb40, 47a328d, 991c666 | 42 = manifest | three merges respelled without conjunctions (section 15, finding 12); the pins the refactor moves, updated and attributed | at 47a328d: interp 6808/6813, compile 6804 + 4 skipped, 5 failed on both (five pins P3 had moved, fixed in 991c666); at 991c666: interp 6813/6813, compile 6809 + 4 skipped, 0 failed; native coverage 0 failed |
 
 Every phase's edits were performed and verified on a scratch copy of
-`examples/`, `bench/` and `lib/` first (the consolidated sweep, the expected
+`examples/`, `bench/` and `stdlib/` first (the consolidated sweep, the expected
 outputs and the probes against it), and applied to the tree only after.
 
 ## 5. P0: library repair
@@ -360,25 +360,25 @@ names the obstructions; all fourteen modules load through their loaders, which
 is how the gate verifies them (the manifest lists the five as `fails`, with
 their codes).
 
-* **`list`, `mutable_array`: own-namespace intrinsics.** `lib/list.bot`'s
-  `get` calls `list::at`. As module `list`, the file needs no import for its
+* **`list`, `mutable_array`: own-namespace intrinsics.** `stdlib/list.bot`'s
+  `get` calls `std::list::at`. As module `list`, the file needs no import for its
   own namespace's intrinsic and may not import its own namespace
   (`SELF-IMPORT`); as an entry program it is in no namespace and needs
-  `import list` (`MISSING-IMPORT`). No spelling is valid in both: method
+  `import std::list` (`MISSING-IMPORT`). No spelling is valid in both: method
   syntax `xs.at(index)` compiles in both -- and then, when `get` is
   instantiated with a List, is a field projection (`at` is not a visible
   function inside the module), a `TYPE` error at the first use. `get` cannot
-  avoid the intrinsic (it is `list::at` with `IndexNotFound` handled).
+  avoid the intrinsic (it is `std::list::at` with `IndexNotFound` handled).
   Same for `mutable_array.bot`'s `get`.
-* **`io`, `linux::io`, `io::path`: the entry-program value.** An entry
+* **`io`, `std::linux::io`, `std::io::path`: the entry-program value.** An entry
   program's value is its last statement; a module file's last declaration is
   a function, and these modules' last functions cannot be values
   (`print`/`write_error_line` require the `IO` context;
-  `write_error_text` requires `LinuxIO`; `io::path::text` is
+  `write_error_text` requires `LinuxIO`; `std::io::path::text` is
   trait-polymorphic). The checker admits a context function "bound to another
   name as a statement", but a module may contain no top-level expression
   statement, and moving `error`/`context trait` declarations last changes
-  nothing (they are not value statements). Only `linux::io` could be
+  nothing (they are not value statements). Only `std::linux::io` could be
   reordered (`create()` is context-free); that would make its standalone
   compile depend on an invariant no declaration states ("create stays last"),
   so it was not done.
@@ -398,8 +398,8 @@ Five registry declarations (`core/scalarbits.tcl`, `core/mutarray.tcl`:
 | `bit_and` | symmetric operands: neither is a receiver | 8 | `me-nomethod-shipped-bit-and` |
 | `bit_or` | the same | 5 | `me-nomethod-shipped-bit-or` |
 | `bit_xor` | the same | 1 | `me-nomethod-shipped-bit-xor` |
-| `mutable_array::copy` | its first argument is the copy's *destination* (`dst.copy(at, src, from, n)` reads as copying `dst`) | 4 | `me-nomethod-shipped-mutable-array-copy` |
-| `mutable_array::create` | its first argument is the new array's *length* (`n.create(x)`) | 8 | `me-nomethod-shipped-mutable-array-create` |
+| `std::mutable_array::copy` | its first argument is the copy's *destination* (`dst.copy(at, src, from, n)` reads as copying `dst`) | 4 | `me-nomethod-shipped-mutable-array-copy` |
+| `std::mutable_array::create` | its first argument is the new array's *length* (`n.create(x)`) | 8 | `me-nomethod-shipped-mutable-array-create` |
 
 Each test pins the receiver form's `NOMETHOD-CALL` (message and location),
 that the functional call is never reported, and its value;
@@ -415,7 +415,7 @@ All **355** remaining findings (381 minus the 26 the markings closed), in 24
 files -- 21 example and bench programs (the nine stdlib programs, two surface
 samples, `refined-strings`, two `examples/linux` programs, seven bench
 programs), and
-`lib/byte.bot` (2), `lib/linux/io.bot` (3), `lib/web.bot` (37) -- respelled by
+`stdlib/byte.bot` (2), `stdlib/linux/io.bot` (3), `stdlib/web.bot` (37) -- respelled by
 `method-sweep.tcl`: for each file, through a unit that compiles it (the file
 itself, or a library module's loader), always the **last** finding in source
 order (innermost first: a call is respelled before the calls its receiver
@@ -450,12 +450,12 @@ is not a closing.**
 
 | program | findings | conversion |
 |---|---:|---|
-| `examples/stdlib/csv.bot`, `csv_chunked.bot`, `csv_geometric.bot`, `csv_records.bot` | 4 x 7 | `scan_unquoted` and `scan_record`/`scan_record_rest` read the character with `text.char_at(index)` under an `index < str::length(text)` bound and compare it with `','` and `'\n'`; the quote tests go through a new `quote_at?(text, index)` (`index < str::length(text) and text.char_at(index) == '"'`) |
+| `examples/stdlib/csv.bot`, `csv_chunked.bot`, `csv_geometric.bot`, `csv_records.bot` | 4 x 7 | `scan_unquoted` and `scan_record`/`scan_record_rest` read the character with `text.char_at(index)` under an `index < std::str::length(text)` bound and compare it with `','` and `'\n'`; the quote tests go through a new `quote_at?(text, index)` (`index < std::str::length(text) and text.char_at(index) == '"'`) |
 | the same four | 4 x 1 | `scan_quoted`'s doubled quote appended `"\""`; it now appends `character`, the quote's own text, which the scanner already holds (`peek`'s slice, appended for every other character too): the restructure removes the need for the literal, so it is a closing |
-| `examples/stdlib/ai_text_clean.bot` | 19 | `clean_char` reads the character its one-character text holds, once, under `str::length(character) > 0` (which proves `character.char_at(0)` in range, so no error joins its empty error set); `cleaner_emoji` and every normalization test compare characters (`'😀'`, `'–'`, ...). `clean_char`'s contract is unchanged; `peek` stays, so `clean_from` keeps its traversal plan |
-| `lib/web.bot` (`emailish?`) | 3 | `domain?`'s two `"."` tests and the `"@"` test read the character at a position through a new guarded `char_is?(i, c)` (the guard `i < 0 or i >= n` is `char_at`'s own, and makes `v.char_at(i)` provable, so `emailish?` stays total) |
+| `examples/stdlib/ai_text_clean.bot` | 19 | `clean_char` reads the character its one-character text holds, once, under `std::str::length(character) > 0` (which proves `character.char_at(0)` in range, so no error joins its empty error set); `cleaner_emoji` and every normalization test compare characters (`'😀'`, `'–'`, ...). `clean_char`'s contract is unchanged; `peek` stays, so `clean_from` keeps its traversal plan |
+| `stdlib/web.bot` (`emailish?`) | 3 | `domain?`'s two `"."` tests and the `"@"` test read the character at a position through a new guarded `char_is?(i, c)` (the guard `i < 0 or i >= n` is `char_at`'s own, and makes `v.char_at(i)` provable, so `emailish?` stays total) |
 
-The scanners' error sets gain `IndexNotFound` (`str::char_at`'s error for an
+The scanners' error sets gain `IndexNotFound` (`std::str::char_at`'s error for an
 index outside the String) where `peek`'s `LowerUnderrun` covered the same
 unproven lower bound; the samples handle it. For every index a caller passes
 (0 up) the behavior is identical; for a negative one -- no caller passes one
@@ -481,35 +481,35 @@ in hand). The rest are manifested `char->text`. **The quantified API case**:
 | shape | findings | functions |
 |---|---:|---|
 | a table of characters as text, indexed and appended | 16 | `web.bot`'s `hex_digits`, read by `hex_pair` |
-| a fixed character appended to text | 2 | `io::print_line`, `io::write_error_line` (`"\n"`) |
+| a fixed character appended to text | 2 | `std::io::print_line`, `std::io::write_error_line` (`"\n"`) |
 | a fixed character prepended to text | 1 | `web.bot`'s `pct` (`"%"`) |
-| two texts joined by a fixed character | 2 | `linux::path::concat` (`"/"`), `examples/io/child-path.bot`'s `run` (`" "`) |
+| two texts joined by a fixed character | 2 | `std::linux::path::concat` (`"/"`), `examples/io/child-path.bot`'s `run` (`" "`) |
 | a character-valued result its caller appends as text | 3 | `ai_text_clean.bot`'s `clean_char` (H1) |
 | **total** | **24** | **7 functions, 4 files** |
 
 Twenty-one of the 24 are *appends*: what they need is not a String made from a
-character (`str::of_char('\n')` would be a longer spelling of `"\n"`) but an
-append of a character to text -- a `str::concat` (or a builder) that takes a
+character (`std::str::of_char('\n')` would be a longer spelling of `"\n"`) but an
+append of a character to text -- a `std::str::concat` (or a builder) that takes a
 UnicodeChar, after which `hex_digits` is a `List[UnicodeChar]` and the joins
 and newlines are character literals. The three `clean_char` results are text
 by role (their siblings are `""` and `"..."`): a character-to-text
 construction would let `clean_char` map a character to a character, but its
 natural result stays text. Twenty of the 24 are in libraries (17 in
-`lib/web.bot`, 2 in `lib/io.bot`, 1 in `lib/linux/path.bot`) and print for
+`stdlib/web.bot`, 2 in `stdlib/io.bot`, 1 in `stdlib/linux/path.bot`) and print for
 every program that loads them, so the demand is concrete: **an append of a
 UnicodeChar to a String would make `io` -- and with it every portable I/O
 program -- strict-clean, and close 21 findings in 6 functions.**
 
 *Successor note (S16, 2048-ENGINE-WORKLOAD.md).* The append exists:
-`str::append_char(text, c)`, TEXT followed by the character C as a new flat
-String (`tests/str-append-char.test`). It closed `io::print_line`'s and
-`io::write_error_line`'s newlines (`text.append_char('\n')`, probed by
+`std::str::append_char(text, c)`, TEXT followed by the character C as a new flat
+String (`tests/str-append-char.test`). It closed `std::io::print_line`'s and
+`std::io::write_error_line`'s newlines (`text.append_char('\n')`, probed by
 `audit/refactor/tools/probes/io.tcl`), so `io` and every portable I/O program
 is strict-clean. The other 22 stay manifested: the append is no piece of a
 virtual construction (`hir/construction.tcl`), so the joins and escapes
-`str::concat` builds as one construction would each cost Strings spelled
-with it -- measured on cranelift, a `linux::path::concat` join 7 -> 8
-Strings, `examples/io/child-path.bot` 4 -> 7, `web::uri_escape_text` of an
+`std::str::concat` builds as one construction would each cost Strings spelled
+with it -- measured on cranelift, a `std::linux::path::concat` join 7 -> 8
+Strings, `examples/io/child-path.bot` 4 -> 7, `std::web::uri_escape_text` of an
 11-character text 1 -> 28 -- and `clean_char`'s results stay text by role
 (`audit/refactor/manifest.txt`'s `char->text`).
 
@@ -518,18 +518,18 @@ Strings, `examples/io/child-path.bot` 4 -> 7, `web::uri_escape_text` of an
 Ten consumption-side findings did not convert, for one reason: the character
 is also a String for a String-taking classifier.
 
-* `lib/web.bot`: `local_extra_chars` (5) is queried by
+* `stdlib/web.bot`: `local_extra_chars` (5) is queried by
   `local_char?(c: str) -> bool`, which classifies the same `c` with
-  `str::is_tcl_alnum` and is passed to `scan_while` beside the native
-  `str::is_tcl_alpha` under `Fn{args: [str], return: bool}`; `label_char?`'s
-  `c == "-"` (1) sits beside `str::is_tcl_alnum(c)`.
+  `std::str::is_tcl_alnum` and is passed to `scan_while` beside the native
+  `std::str::is_tcl_alpha` under `Fn{args: [str], return: bool}`; `label_char?`'s
+  `c == "-"` (1) sits beside `std::str::is_tcl_alnum(c)`.
 * `bench/lex-strategy.bot`: `lenient_ident_char?`'s `"_"`, `"-"` (2), joined
-  with `str::is_tcl_alnum` at a callable join (`choose_classifier`).
+  with `std::str::is_tcl_alnum` at a callable join (`choose_classifier`).
 * `bench/source-checks.bot`: `is_underscore?`, `is_hyphen?` (2), members of a
-  List of classifiers with `str::is_tcl_alpha`/`alnum`, applied to one value.
+  List of classifiers with `std::str::is_tcl_alpha`/`alnum`, applied to one value.
 
 Converting them means decoding the String the classifier needs:
-`str::length(c) == 1 and c.char_at(0) == '_'` is the exact equivalent of
+`std::str::length(c) == 1 and c.char_at(0) == '_'` is the exact equivalent of
 `c == "_"` and strictly worse to read; for `emailish?`, the alternative is
 redesigning `scan_while`'s contract around positions, which its proof-pinned
 repeatability and exact-callable design (R2A/REFINEMENT-VALUES) rest on --
@@ -539,12 +539,12 @@ character-typed and close all ten.
 
 ### The index proof: 1 manifested
 
-`linux::path::concat` tests whether PATH ends with `"/"` as
+`std::linux::path::concat` tests whether PATH ends with `"/"` as
 `path.substring(n - 1, n) == "/"`. The character spelling
 `path.char_at(n - 1) == '/'` is not proven in range: the completion proof
 relates an *index* to a String's length only through a guarded name
 (`IndexBounds`), not through the linear form `n - 1 < n` that the *slice*
-proof uses, so `IndexNotFound` would join an errors clause the `io::path::Path`
+proof uses, so `IndexNotFound` would join an errors clause the `std::io::path::Path`
 trait fixes. A bound name with a lower guard (`last = n - 1`, `last >= 0`)
 is not proven either; `path.substring(n - 1, n).char_at(0) == '/'` is, but it
 decodes a slice made only to be decoded, at two allocations a call where the
@@ -557,13 +557,13 @@ finding.
   input (300 rows: csv 8,320, csv_geometric 8,630, csv_chunked 9,254,
   csv_records 8,688); UTF-8 seeking on non-ASCII input 122,207,268 ->
   132,103,099 bytes (+8%): the scanners were already outside the traversal
-  plan (their start index is not the literal 0), and `str::char_at` seeks
+  plan (their start index is not the literal 0), and `std::str::char_at` seeks
   from byte 0 like the slice.
 * **ai_text_clean**: on the 10,000-character punctuation fixture, String
   allocations 19,127 -> 29,182 (+52%); seeking stays 0. The cause is one
-  `shorttostr` per character: `str::char_at` on the one-character slice
+  `shorttostr` per character: `std::str::char_at` on the one-character slice
   materializes it (a slice compared with a literal is a String region and
-  allocates nothing; a slice handed to `str::char_at` becomes a substring and
+  allocates nothing; a slice handed to `std::str::char_at` becomes a substring and
   then a heap String). A design finding for the native backend (section 15),
   measured in the bench table (section 14).
 
@@ -578,11 +578,11 @@ finding.
 | `SAME-RETURN-VALUE` `domain?` | merged | an on-sight rejection (a leading or doubled `"."`, a character that is not a label character) leaves the scan with `break`, so every rejection is the one `false` after the loop; the comment says so |
 | `SAME-RETURN-VALUE` `emailish?` | merged | the three nested tests keep their `if`s, negated (`local_end > 0`, `local_end < n`, `local_end.char_is?('@')`), with `return domain?(local_end + 1)` innermost, and every rejection falls through to one `false`. The conjunction it spells (`local_end > 0 and local_end < n and ... and domain?(local_end + 1)`) was the first merge and was rejected by the tests that pin `refined-checks`' analysis: an `and` operand is not narrowed by the operands before it, so `domain?`'s entry range grew to 2^62 and its parameter lost its raw (untagged) ABI (section 15, finding 12). The nested form keeps every instance and raw-ABI decision of `refined-checks` and `uri-steady`, with four entry ranges one tighter at the bottom (`local_end > 0` narrows where the original `== 0` test's else-branch did not: `char_is?`, `domain?`, `tld?` and a `scan_while` instance each start one higher, `domain?` at 2); `local_end != 0`, the literal negation, lowers as a materialized bool |
 | `SAME-RETURN-VALUE` `valid_from?` (`uri_query_value?`) | merged | a valid escape or character continues by a returned tail call (`return valid_from?(i + 3)` / `(i + 1)`), and everything else falls through to one `false`. An `and` chain was rejected: it would take the self-call out of tail position (the probes include a 40,000-character value, unchanged on every backend) |
-| `SAME-FAILURE` `abi::bytes::replace` | merged | the in-range case returns from inside the two nested tests (`if index >= 0: if index < mutable_byte_store::count(data.storage): return ...`) and the one `fail IndexNotFound` follows them. Milestone 4's verified merge, `if index < 0 or index >= count: fail IndexNotFound`, was the first spelling; its `or` lowers to NIR as a materialized bool and a branch on it (10 -> 13 registers, two extra jumps), where the nested tests branch directly as the unmerged code did (section 15, finding 12) |
+| `SAME-FAILURE` `std::abi::bytes::replace` | merged | the in-range case returns from inside the two nested tests (`if index >= 0: if index < std::mutable_byte_store::count(data.storage): return ...`) and the one `fail IndexNotFound` follows them. Milestone 4's verified merge, `if index < 0 or index >= count: fail IndexNotFound`, was the first spelling; its `or` lowers to NIR as a materialized bool and a branch on it (10 -> 13 registers, two extra jumps), where the nested tests branch directly as the unmerged code did (section 15, finding 12) |
 
 Every restructure carries behavior probes (section 3); none needed a manifest
 entry. The probes ran twice: on P4's first spellings, and on the final ones
-(108 probes over `hashtable`, `abi::bytes`, `web` and `csv_records`,
+(108 probes over `hashtable`, `std::abi::bytes`, `web` and `csv_records`,
 identical on every backend). Each final merge was also compared with the
 unmerged tree below the source: the range analysis of `refined-checks` and
 `uri-steady` (every instance, entry range and raw-ABI decision: P3's, or one
@@ -591,7 +591,7 @@ operations; joins of `false` become joins of `unit` before one final
 `false`), and the machine instructions of each merged function (`emailish?`
 83 against 77, `domain?` 122 against 151, `valid_from?` 187 against 184,
 `ht_find_insert` 213 against 222, `ht_delete` 199 against 206,
-`abi::bytes::replace` 61 against 60).
+`std::abi::bytes::replace` 61 against 60).
 
 ## 10. P5: H2
 
@@ -637,11 +637,11 @@ a one-line obstruction stated per finding:
 
 | file | entries | obstructions |
 |---|---:|---|
-| `lib/web.bot` | 23 | char->text 17 (the hex-digit table, `"%"`), classifier 6 (the local-part set, the label `"-"`) |
+| `stdlib/web.bot` | 23 | char->text 17 (the hex-digit table, `"%"`), classifier 6 (the local-part set, the label `"-"`) |
 | `examples/stdlib/string_replace.bot` | 5 | test-datum, H2 |
 | `examples/stdlib/ai_text_clean.bot` | 3 | char->text, H1 |
-| `lib/io.bot` | 2 | char->text |
-| `lib/linux/path.bot` | 2 | char->text 1, index-proof 1 |
+| `stdlib/io.bot` | 2 | char->text |
+| `stdlib/linux/path.bot` | 2 | char->text 1, index-proof 1 |
 | `bench/lex-strategy.bot` | 2 | classifier |
 | `bench/source-checks.bot` | 2 | classifier |
 | `examples/stdlib/string_reverse.bot` | 1 | test-datum, H2 |
@@ -652,7 +652,7 @@ a one-line obstruction stated per finding:
 
 The brief predicted the manifest from the re-audit's classifications: the 8
 H2 findings, the 3 `clean_char` findings if H1 failed, the concat-shaped
-findings if no today-mechanism existed (the M6 catalog's `str::concat`
+findings if no today-mechanism existed (the M6 catalog's `std::str::concat`
 argument row, 9, and its `hex_digits` row, 16), and possibly nothing else.
 
 | class | predicted | outcome | what the attempt changed |
@@ -692,8 +692,8 @@ compiles under `-warnings error`), in about 20 seconds; CI runs it as the `warni
 needed: warnings are discovered before any backend). `-root DIR` gates another
 tree's corpus with this checkout's compiler, which is how
 `tests/warning-gate.test` tests the ratchet: on a scratch copy it plants a new
-one-character literal in `lib/mathish.bot` (fails: "unexpected warning
-ONE-CHAR-STRING-LITERAL at lib/mathish.bot:..."), closes the manifested
+one-character literal in `stdlib/mathish.bot` (fails: "unexpected warning
+ONE-CHAR-STRING-LITERAL at stdlib/mathish.bot:..."), closes the manifested
 `reverse_chars("a")` datum (fails: "expected warning ... not observed" and
 "manifest entry not observed by any unit"), inserts a line above it (fails:
 drift), adds an unlisted program (fails), and plants a `METHOD-ELIGIBLE`
@@ -738,7 +738,7 @@ deterministic and need no noise floor.
 backend, best of 3): the P2 program 970 ms, the P3 program 1,098 ms; P3 with
 `quote_at?` inlined into `scan_field` 987 ms, P3 with `scan_unquoted`'s test
 spelled `==`/`or` instead of `!=`/`and` 1,028 ms. The character reads are not
-the cost: over 20,000 characters, `str::char_at` and a character comparison
+the cost: over 20,000 characters, `std::str::char_at` and a character comparison
 take 8.3 s on interp and 413 ms on compile, `peek` and a String comparison
 12.5 s and 415 ms. So it is the helper call, which the Tcl backends do not
 inline, and the conjunction (finding 12's shape again); native inlines both
@@ -746,10 +746,10 @@ and got faster. The Tcl backends are the reference implementations, not the
 production path, so the source was not reshaped for them.
 
 **`ai_text_clean` is the one native regression**, and the language offers no
-cheaper spelling: `str::char_at` is the only character reader, and reading
+cheaper spelling: `std::str::char_at` is the only character reader, and reading
 the character from the text itself (`text.char_at(index)`) would leave the
 traversal plan, a quadratic seek (finding 4). The fix is the runtime's:
-`str::char_at` on a short String or a region without materializing it
+`std::str::char_at` on a short String or a region without materializing it
 (finding 3).
 
 An observation that did not survive: `uri-steady`'s lowering time looked
@@ -765,22 +765,22 @@ analysis and backend deficiencies among them, with their measurements and
 what each one forces on code, in one place.
 
 1. **Append a character to text** -- 21 findings in 6 functions (section 8):
-   a `str::concat` (or builder) that takes a UnicodeChar. This, more than
-   `str::of_char`, is what the production side asks for; `str::of_char('\n')`
-   would be a longer spelling of `"\n"`. (Since built as `str::append_char`;
+   a `std::str::concat` (or builder) that takes a UnicodeChar. This, more than
+   `std::str::of_char`, is what the production side asks for; `std::str::of_char('\n')`
+   would be a longer spelling of `"\n"`. (Since built as `std::str::append_char`;
    it closed `io`'s two, and the rest wait for it to join virtual
    construction: section 8's successor note.)
-2. **Character classifiers** -- 10 findings: `str::is_tcl_alnum`/`alpha`
+2. **Character classifiers** -- 10 findings: `std::str::is_tcl_alnum`/`alpha`
    over a UnicodeChar would let `emailish?`'s classes, `lex-strategy`'s and
    `source-checks`' uniform classifier contracts be character-typed.
-3. **`str::char_at` and the String-region / short-string representations**
-   (native): `str::char_at` of a one-character slice materializes it (a
-   substring, then a heap String), where `==` with a literal and `str::length`
+3. **`std::str::char_at` and the String-region / short-string representations**
+   (native): `std::str::char_at` of a one-character slice materializes it (a
+   substring, then a heap String), where `==` with a literal and `std::str::length`
    allocate nothing. The char idiom in `ai_text_clean` costs one String per
    character for that reason alone: +50-54% Strings and +20-54% time at 100K
    characters (section 14); a region form of `char_at` (`decodecharat` exists
    for the traversal) would make it free.
-4. **Traversal plans for `str::char_at` scans** (native): `hir/traversal.tcl`
+4. **Traversal plans for `std::str::char_at` scans** (native): `hir/traversal.tcl`
    recognizes only `peek`-shaped (width-1 substring) accessors at a zero
    start. A `char_at`-indexed scan has no byte cursor: the CSV scanners' UTF-8
    seeking on non-ASCII input is quadratic (it was before too: their start is
@@ -808,14 +808,14 @@ what each one forces on code, in one place.
    intrinsics validly both as a module and as an entry program (`list`,
    `mutable_array`), and an entry program's value is its last declaration, so a
    module of context or trait functions cannot compile as one (`io`,
-   `io::path`, `linux::io`). A "compile as module" mode, or a module file's
+   `std::io::path`, `std::linux::io`). A "compile as module" mode, or a module file's
    value being `unit`, would retire both.
-9. **`mutable_array::generate`** has `create`'s shape (its first argument is
+9. **`std::mutable_array::generate`** has `create`'s shape (its first argument is
    the length) but no corpus finding, so the re-derived queue does not mark
    it; its author may want to.
 10. **Mixed spellings from the ambiguity rule**: where a module defines a
-    member with a native's short name (`linux::path::concat`, `io::path`'s
-    `concat`), the native's calls stay functional (`str::concat(path,
+    member with a native's short name (`std::linux::path::concat`, `std::io::path`'s
+    `concat`), the native's calls stay functional (`std::str::concat(path,
     component)`) beside sugared ones elsewhere -- the warning is correctly
     silent (the sugared form would be ambiguous); the file reads mixed.
 
@@ -827,7 +827,7 @@ what each one forces on code, in one place.
     ```botlish
     marks = "–—‘’“”"
     ...
-    loop i from 0 to str::length(marks):
+    loop i from 0 to std::str::length(marks):
         if marks.char_at(i) == c:
     ```
 
@@ -864,8 +864,8 @@ what each one forces on code, in one place.
     *Census*: the shipped corpus (54 programs, 14 modules) has no such scan.
     Its character sets already use the forms the suggestion points to: an
     `or` chain of character comparisons (`ai_text_clean`'s `cleaner_emoji`),
-    `byte::set(['-', '.', '_', '~'])` (`lib/web.bot`'s unreserved
-    characters), an `ImmutableSet` (`lib/web.bot`'s `local_extra_chars`, of
+    `std::byte::set(['-', '.', '_', '~'])` (`stdlib/web.bot`'s unreserved
+    characters), an `ImmutableSet` (`stdlib/web.bot`'s `local_extra_chars`, of
     one-character Strings because of a String classifier: finding 2). The one
     instance is the H1 attempt, which is not corpus and was rejected.
 
@@ -884,19 +884,19 @@ what each one forces on code, in one place.
     closure and the scan loses its traversal plan (6-7 GB re-decoded). A
     "prefer a List (or set) over an `or` chain" warning, the converse
     candidate, would steer code to the slower spellings for the same reasons,
-    and there is no `list::contains` for it to suggest. If a
+    and there is no `std::list::contains` for it to suggest. If a
     re-audit finds the shape in shipped code, the version that would meet this
     repository's rule for warnings (backed by a compiler proof, no opt-out,
     no fixit unless proven) is narrower than the phrase:
 
     * *Rule*: a String `const` (exact value, `hir::exact::Of`) bound to a name
-      whose every use is `str::char_at(K, i)` with `i` proven in
-      `[0, str::length(K))` (the loop bound, or the index proof).
+      whose every use is `std::str::char_at(K, i)` with `i` proven in
+      `[0, std::str::length(K))` (the loop bound, or the index proof).
     * *Proof*, the round-trip law's analogue: respelled as the List literal of
       K's exact characters, every read yields the same character and neither
       spelling raises; checked by compiling the respelled program to the same
       values and error sets.
-    * *Not covered*: a width-1 slice `str::substring(K, i, i + 1)` consumed as
+    * *Not covered*: a width-1 slice `std::str::substring(K, i, i + 1)` consumed as
       text (the H1 table's `normalized`): no List of characters is equivalent
       there, and a List of one-character Strings is what
       `ONE-CHAR-STRING-LITERAL` reports. That slice is also how the H1 table
@@ -932,7 +932,7 @@ what each one forces on code, in one place.
       and branched on again -- where nested `if`s branch directly.
       `ht_find_insert`'s first merge (`state == ht_empty_state() and ...`,
       `state == ht_empty_state() or (...)`) cost 245 machine instructions
-      and 40 jumps against the unmerged 222 and 31; `abi::bytes::replace`'s
+      and 40 jumps against the unmerged 222 and 31; `std::abi::bytes::replace`'s
       `index < 0 or index >= count` 13 NIR registers against 10.
 
     Every merge in the corpus now keeps nested tests or an `if`/`elif`
@@ -963,7 +963,7 @@ what each one forces on code, in one place.
     (finding 4). Two obstructions remain past that one: the output is text,
     and a character cannot become text (finding 1: the three normalizations,
     the hex digits, `"\n"`, `"/"`, the CSV fields built a character at a
-    time); and `str::is_tcl_alnum`/`is_tcl_alpha` take Strings (finding 2).
+    time); and `std::str::is_tcl_alnum`/`is_tcl_alpha` take Strings (finding 2).
     Possible today and not done, because no finding pointed there:
     `scan_quoted` could build a field from the slices between doubled
     quotes instead of a character at a time.
@@ -971,13 +971,13 @@ what each one forces on code, in one place.
     counts the functions of the name visible to the call, not the ones
     whose parameter types admit the receiver. `hashtable.bot`,
     `csv_records.bot` and `csv_chunked.bot` import `list` (for
-    `list::append`) and `mutable_array`, and both define `at`, so their 28
-    `mutable_array::at(...)` calls stay functional beside sugared
+    `std::list::append`) and `mutable_array`, and both define `at`, so their 28
+    `std::mutable_array::at(...)` calls stay functional beside sugared
     `.set(...)` calls in the same functions. Where the receiver is an
     untyped parameter (`ht_rehash_scan`'s `controls`) that is right:
-    `controls.at(i)` is `AMBIGUOUS-METHOD-CALL (list::at, mutable_array::at)`.
+    `controls.at(i)` is `AMBIGUOUS-METHOD-CALL (std::list::at, std::mutable_array::at)`.
     Where it is typed (`a: MutableArray[int]`), `a.at(i)` compiles and
-    resolves to `mutable_array::at`, and the warning is still silent. Two
+    resolves to `std::mutable_array::at`, and the warning is still silent. Two
     language facts compound it: an import brings in every member of the
     namespace (there is no selective import, by design: IMPORTS.md), and
     the method resolver decides between same-named members only by receiver
@@ -988,7 +988,7 @@ what each one forces on code, in one place.
       character to text (24), String-typed classifiers (10), test data whose
       length is the subject (6), the index proof (1), a `-> list` that core
       IR cannot carry (1). Every program that imports `web`, `io` or
-      `linux::path` inherits their findings, and with one warning policy per
+      `std::linux::path` inherits their findings, and with one warning policy per
       compilation (by design) it can never compile under `-warnings error`
       until they close.
     * *It should fire and structurally cannot*: `METHOD-ELIGIBLE` under name
@@ -1023,8 +1023,8 @@ conversion attempt produced (`SAME-RETURN-VALUE` on the handler form of
 * **The no-system-header limitation** is retired in a successor note in every
   per-warning report's known limitations (WARNINGS-*.md, all seven): retired
   outright for six codes (no library carries one), and for
-  `ONE-CHAR-STRING-LITERAL` except `lib/web.bot`, `lib/io.bot` and
-  `lib/linux/path.bot`, whose findings are manifested.
+  `ONE-CHAR-STRING-LITERAL` except `stdlib/web.bot`, `stdlib/io.bot` and
+  `stdlib/linux/path.bot`, whose findings are manifested.
 * **Where the corpus now exemplifies the idioms**: README §1 ("Strings and
   characters") points at the cleaned scanners as the character idiom's first
   corpus presence, and at the manifest for what still needs a one-character
@@ -1063,7 +1063,7 @@ change only this report.
 
 * **The libraries are not all warning-clean.** The brief's P0 standard
   ("shipped libraries are warning-clean") holds for 11 of 14 modules; `web`,
-  `io` and `linux::path` carry 27 manifested `ONE-CHAR-STRING-LITERAL`
+  `io` and `std::linux::path` carry 27 manifested `ONE-CHAR-STRING-LITERAL`
   findings, each with its obstruction (section 12). The standing rule is
   stated with that remainder, and the no-system-header limitation is retired
   except for those three.
@@ -1087,7 +1087,7 @@ change only this report.
   fixture no longer makes the `peek()` comparisons it measures (it now reads
   the frozen kickoff `csv.bot`; the live one allocates 14 Strings with or
   without the optimization, the kickoff one 97 without it and 14 with). P4's
-  `emailish?`, `ht_find_insert` and `abi::bytes::replace` merges were
+  `emailish?`, `ht_find_insert` and `std::abi::bytes::replace` merges were
   respelled (section 9; section 15, finding 12), which also moved one HIR
   node id a contexts test pins. All of it is in aa4cb40 (the merges) and 47a328d (the pins),
   verified by the probes again. The full regression of 47a328d (and its
@@ -1177,13 +1177,13 @@ change only this report.
    every phase (`expect.tcl`), plus `tests/stdlib.test`'s cases. Probes:
    285 probes over 9 programs and modules
    (`audit/refactor/tools/probes/`: ai_text_clean, the four CSV programs,
-   hashtable, `web`, `linux::path`, `abi::bytes`), before and after on four
+   hashtable, `web`, `std::linux::path`, `std::abi::bytes`), before and after on four
    backends, identical except four declared contract changes (the CSV
    scanners' negative-index error). The sweep law: 355 calls, each verified by
    the round-trip law, then all 68 units again.
 7. *Markings: which, with reasons; any call site found using their sugar?*
-   `bit_and`, `bit_or`, `bit_xor` (symmetric operands), `mutable_array::copy`
-   (the receiver would be the destination), `mutable_array::create` (the
+   `bit_and`, `bit_or`, `bit_xor` (symmetric operands), `std::mutable_array::copy`
+   (the receiver would be the destination), `std::mutable_array::create` (the
    receiver would be the length; new in the re-derived queue). One call site,
    in a test program the affine work added (`tests/mutable-array.test`
    `ma-ops`, `a.copy(1, b, 1, 2)`), now functional; none in the corpus.
@@ -1192,7 +1192,7 @@ change only this report.
    two named obstructions with no today-repair: `list` and `mutable_array`
    (the affine work's module) call their own namespace's intrinsics, valid
    only without an import as a module and only with one as an entry program;
-   `io`, `io::path`, `linux::io` end in a function that cannot be an entry
+   `io`, `std::io::path`, `std::linux::io` end in a function that cannot be an entry
    program's value (context-requiring or trait-polymorphic), and a module has
    no other kind of last statement to give. `io.bot` is warning-clean except
    its two manifested newlines. 11 of 14 modules are warning-clean.
@@ -1209,7 +1209,7 @@ change only this report.
 10. *The quantified API case?* 24 findings in 7 functions need a character as
     text, in five shapes (section 8); 21 of them, in 6 functions, are appends
     -- the demand is an append of a UnicodeChar to a String more than
-    `str::of_char`. 20 are in libraries; `io`'s 2 alone keep every portable I/O
+    `std::str::of_char`. 20 are in libraries; `io`'s 2 alone keep every portable I/O
     program from `-warnings error`. A further 10 need character classifiers.
 11. *Gate: what does CI now assert, and what fails it?* That the corpus
     programs are the manifest's, each unit compiles or fails with its listed
@@ -1231,11 +1231,11 @@ change only this report.
     2713 / 3959 / 69 / 60 / 0. P3 and P4 went in with stale pins that a
     targeted run and then the 47a328d full run found (section 18).
 14. *Design findings for the language?* Section 15: an append of a character
-    to text; character classifiers; `str::char_at` on String regions and short
+    to text; character classifiers; `std::str::char_at` on String regions and short
     strings (native); traversal plans for `char_at` scans; the index proof's
     linear forms and non-negative recursive indices; literal receivers; the
     context-blindness on text by role; compiling a library file as its module;
-    `mutable_array::generate`'s shape; mixed spellings from the ambiguity rule;
+    `std::mutable_array::generate`'s shape; mixed spellings from the ambiguity rule;
     and a candidate warning for constant Strings scanned as character tables
     (finding 11: not to be built yet, with its rule, proof, prerequisites and
     the measurements behind that recommendation); and what an `and`/`or` costs the range

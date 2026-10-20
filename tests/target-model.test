@@ -59,10 +59,10 @@ proc tmError {text target} {
     return [list [lindex [dict get $options -errorcode] end] $location $message]
 }
 
-# The value domain of ffi::c::Char as HIR has it (its own declarations).
+# The value domain of std::ffi::c::Char as HIR has it (its own declarations).
 proc tmCharDomain {hir} {
     hir::activate $hir
-    return [core::cabi::scalarDomain [core::type::cabiOf ffi::c::Char]]
+    return [core::cabi::scalarDomain [core::type::cabiOf std::ffi::c::Char]]
 }
 
 # Runs BODY with ::tcl_platform's os and machine OS and MACHINE.
@@ -86,9 +86,9 @@ proc tmOtherTarget {} {
 
 # Program texts: plain char (a target-dependent C scalar), a program every
 # target compiles the same, a Linux one.
-set tmChar "import ffi::c\nfn f(x: ffi::c::Char) -> int:\n    x\nf(1)\n"
+set tmChar "import std::ffi::c\nfn f(x: std::ffi::c::Char) -> int:\n    x\nf(1)\n"
 set tmPlain "fn f(x: int) -> int:\n    x + 1\nf(1)\n"
-set tmLinux "import linux\n1\n"
+set tmLinux "import std::linux\n1\n"
 
 # ---------------------------------------------------------------------------
 # The target table (core/cabi.tcl)
@@ -104,7 +104,7 @@ test tm-macos-aarch64-identity {macos-aarch64 is macOS on AArch64, LP64, 64-bit 
 test tm-windows-gnu-identity {windows-x86_64-gnu is MinGW-w64's GNU ABI on Windows x86-64 (C-BINDGEN-LAYOUTS.md): it shares the operating system, the architecture, the data model, the pointer width and plain char's signedness with windows-x86_64 (MSVC's), and is still another target -- its triple names the GNU environment, a HIR built for one is refused for the other, and the front-end cache keys them apart} -body {
     set g [core::cabi::target windows-x86_64-gnu]
     set m [core::cabi::target windows-x86_64]
-    set hir [tmHir "import ffi::c\nfn f(x: ffi::c::Long) -> int:\n    x\n\nf(1)\n" windows-x86_64-gnu]
+    set hir [tmHir "import std::ffi::c\nfn f(x: std::ffi::c::Long) -> int:\n    x\n\nf(1)\n" windows-x86_64-gnu]
     set text [hir::interchange::encode $hir]
     list [lmap k {os arch model pointer charSigned triple} {dict get $g $k}] \
         [lmap k {os arch model pointer charSigned} {expr {[dict get $g $k] eq [dict get $m $k]}}] \
@@ -147,14 +147,14 @@ test tm-default-and-explicit-target {a compilation with no -target is the host's
             set hir [tmHir $::tmChar $t]
             list [hir::cabi::targetOf $hir] [tmCharDomain $hir]
         }] \
-        [lmap t {linux-aarch64 macos-aarch64} {lindex [tmError "import ffi::c\nfn f(x: ffi::c::Char) -> int:\n    x\nf(200)\n" $t] 0}] \
-        [lmap t {linux-aarch64 macos-aarch64} {lindex [tmError "import ffi::c\nfn f(x: ffi::c::Char) -> int:\n    x\nf(0 - 1)\n" $t] 0}]
+        [lmap t {linux-aarch64 macos-aarch64} {lindex [tmError "import std::ffi::c\nfn f(x: std::ffi::c::Char) -> int:\n    x\nf(200)\n" $t] 0}] \
+        [lmap t {linux-aarch64 macos-aarch64} {lindex [tmError "import std::ffi::c\nfn f(x: std::ffi::c::Char) -> int:\n    x\nf(0 - 1)\n" $t] 0}]
 } -cleanup {unset -nocomplain default hir t} -result {1 {{linux-aarch64 {interval 0 255}} {macos-aarch64 {interval -128 127}}} {accepted TYPE} {TYPE accepted}}
 
-test tm-unknown-host {on a host that is no known target, a namespace that needs one is UNKNOWN-TARGET at its import, ffi::c included (never a raw core::cabi error), and the Linux platform too; a program needing none compiles} -body {
+test tm-unknown-host {on a host that is no known target, a namespace that needs one is UNKNOWN-TARGET at its import, std::ffi::c included (never a raw core::cabi error), and the Linux platform too; a program needing none compiles} -body {
     tmOnHost Linux riscv64 {
-        list [lrange [tmError "import ffi::c\n1\n" ""] 0 1] [string match {*needs a C ABI target*compile with -target*} [lindex [tmError "import ffi::c\n1\n" ""] 2]] \
-            [lrange [tmError $::tmLinux ""] 0 1] [string match {namespace "linux" belongs to the Linux platform, and this host (Linux riscv64) is none of the known targets; compile with -target*} [lindex [tmError $::tmLinux ""] 2]] \
+        list [lrange [tmError "import std::ffi::c\n1\n" ""] 0 1] [string match {*needs a C ABI target*compile with -target*} [lindex [tmError "import std::ffi::c\n1\n" ""] 2]] \
+            [lrange [tmError $::tmLinux ""] 0 1] [string match {namespace "std::linux" belongs to the Linux platform, and this host (Linux riscv64) is none of the known targets; compile with -target*} [lindex [tmError $::tmLinux ""] 2]] \
             [tmError $::tmPlain ""]
     }
 } -result {{UNKNOWN-TARGET 1:8} 1 {UNKNOWN-TARGET 1:8} 1 accepted}
@@ -195,7 +195,7 @@ proc tmForeignConventions {clif} {
 }
 
 test tm-foreign-signature-convention {a foreign C function's signature, compiled for the host, is in the host target's C calling convention (the driver's reading of its triple: apple_aarch64 on macOS arm64, system_v on Linux), narrow arguments extended by their class; CLIF compiles no C call} -constraints nativeBuilt -body {
-    set hir [tmHir "import ffi::c\n\nextern c fn labs(x: ffi::c::Long) -> ffi::c::Long\nextern c fn abs(x: ffi::c::SChar) -> ffi::c::Int\n\nlabs(0 - 5) + abs(0 - 3)\n" ""]
+    set hir [tmHir "import std::ffi::c\n\nextern c fn labs(x: std::ffi::c::Long) -> std::ffi::c::Long\nextern c fn abs(x: std::ffi::c::SChar) -> std::ffi::c::Int\n\nlabs(0 - 5) + abs(0 - 3)\n" ""]
     set clif [native::clif $hir]
     set expected [dict get [native::targetFacts [dict get [core::cabi::target [core::cabi::hostTarget]] triple]] c-call-conv]
     list [expr {[tmForeignConventions $clif] eq [list labs $expected abs $expected]}] \
@@ -206,16 +206,16 @@ test tm-foreign-signature-convention {a foreign C function's signature, compiled
 # Platform module resolution
 
 set tmLinuxImports {
-    {import linux} 8
-    {import linux::sys} 8
-    {import linux::io} 8
-    {import linux::path} 8
-    {import linux::abi::aarch64} 8
-    {import linux::abi::x86_64} 8
-    {import type linux::path::LinuxPath} 13
+    {import std::linux} 8
+    {import std::linux::sys} 8
+    {import std::linux::io} 8
+    {import std::linux::path} 8
+    {import std::linux::abi::aarch64} 8
+    {import std::linux::abi::x86_64} 8
+    {import type std::linux::path::LinuxPath} 13
 }
 
-test tm-linux-platform-refused {for a target of another operating system every Linux platform namespace is UNSUPPORTED-PLATFORM at the import that names it -- linux, linux::sys (never sys.aarch64.bot for macos-aarch64), linux::io, linux::path, the transports, a type import -- whatever the architecture} -body {
+test tm-linux-platform-refused {for a target of another operating system every Linux platform namespace is UNSUPPORTED-PLATFORM at the import that names it -- std::linux, std::linux::sys (never sys.aarch64.bot for macos-aarch64), std::linux::io, std::linux::path, the transports, a type import -- whatever the architecture} -body {
     set wrong {}
     foreach target {macos-aarch64 macos-x86_64 windows-x86_64 windows-x86_64-gnu windows-aarch64} {
         foreach {import column} $::tmLinuxImports {
@@ -225,10 +225,10 @@ test tm-linux-platform-refused {for a target of another operating system every L
             }
         }
     }
-    list $wrong [lindex [tmError "import linux::sys\n1\n" macos-aarch64] 2]
-} -cleanup {unset -nocomplain wrong target import column got} -result {{} {namespace "linux::sys" belongs to the Linux platform (the standard namespace linux and every namespace under it), which is unavailable for target macos-aarch64 (macOS on aarch64): a Linux module is never chosen for, mapped to or substituted on another operating system, whatever the architecture; compile for a Linux target (-target linux-aarch64) or import no Linux namespace}}
+    list $wrong [lindex [tmError "import std::linux::sys\n1\n" macos-aarch64] 2]
+} -cleanup {unset -nocomplain wrong target import column got} -result {{} {namespace "std::linux::sys" belongs to the Linux platform (the standard namespace std::linux and every namespace under it), which is unavailable for target macos-aarch64 (macOS on aarch64): a Linux module is never chosen for, mapped to or substituted on another operating system, whatever the architecture; compile for a Linux target (-target linux-aarch64) or import no Linux namespace}}
 
-test tm-linux-platform-on-linux {for a Linux target the same imports resolve exactly as before: linux::sys is the target architecture's file} -body {
+test tm-linux-platform-on-linux {for a Linux target the same imports resolve exactly as before: std::linux::sys is the target architecture's file} -body {
     set wrong {}
     foreach target {linux-aarch64 linux-x86_64} {
         foreach {import column} $::tmLinuxImports {
@@ -239,21 +239,21 @@ test tm-linux-platform-on-linux {for a Linux target the same imports resolve exa
         }
     }
     list $wrong [lmap target {linux-aarch64 linux-x86_64} {
-        set hir [tmHir "import linux::sys\n1\n" $target]
+        set hir [tmHir "import std::linux::sys\n1\n" $target]
         lmap {id file} [dict get $hir files] {
             expr {[string match */linux/sys.* [dict get $file path]] ? [file tail [dict get $file path]] : [continue]}
         }
     }]
 } -cleanup {unset -nocomplain wrong target import column got hir} -result {{} {sys.aarch64.bot sys.x86_64.bot}}
 
-test tm-portable-architecture-namespaces {an architecture's portable namespaces are every operating system's: abi::aarch64 and abi::x86_64 compile and run for macos-aarch64 and windows-x86_64 as for Linux, and their HIR is every target's} -body {
+test tm-portable-architecture-namespaces {an architecture's portable namespaces are every operating system's: std::abi::aarch64 and std::abi::x86_64 compile and run for macos-aarch64 and windows-x86_64 as for Linux, and their HIR is every target's} -body {
     lmap target {macos-aarch64 windows-x86_64 linux-aarch64} {
-        set hir [tmHir "import abi\nimport abi::aarch64\nimport abi::x86_64\n\[abi::aarch64::to_int(abi::aarch64::from_u32(abi::u32(7))), abi::x86_64::to_int(abi::x86_64::from_u32(abi::u32(8)))\]\n" $target]
+        set hir [tmHir "import std::abi\nimport std::abi::aarch64\nimport std::abi::x86_64\n\[std::abi::aarch64::to_int(std::abi::aarch64::from_u32(std::abi::u32(7))), std::abi::x86_64::to_int(std::abi::x86_64::from_u32(std::abi::u32(8)))\]\n" $target]
         list $target [hir::cabi::targetOf $hir] [lindex [outcomeUnderHir interp $hir] 1]
     }
 } -cleanup {unset -nocomplain hir target} -result {{macos-aarch64 {} {[7, 8]}} {windows-x86_64 {} {[7, 8]}} {linux-aarch64 {} {[7, 8]}}}
 
-test tm-architecture-specific-module-on-macos {an architecture-specific namespace that is no platform's (a private demo::arch of demo/arch.x86_64.bot and demo/arch.aarch64.bot) gives macos-aarch64 its AArch64 file: the selection is by architecture, the platform by namespace} -body {
+test tm-architecture-specific-module-on-macos {an architecture-specific namespace that is no platform's (a private library's std::demo::arch of demo/arch.x86_64.bot and demo/arch.aarch64.bot) gives macos-aarch64 its AArch64 file: the selection is by architecture, the platform by namespace} -body {
     withPrivateLibrary {
         file mkdir [file join $::core::libraryDir demo]
         foreach {arch name} {x86_64 x86-64 aarch64 AArch64} {
@@ -262,13 +262,13 @@ test tm-architecture-specific-module-on-macos {an architecture-specific namespac
             close $channel
         }
         lmap target {macos-aarch64 macos-x86_64} {
-            set hir [tmHir "import demo::arch\ndemo::arch::name()\n" $target]
+            set hir [tmHir "import std::demo::arch\nstd::demo::arch::name()\n" $target]
             list [hir::cabi::targetOf $hir] [lindex [outcomeUnderHir interp $hir] 1]
         }
     }
 } -cleanup {unset -nocomplain arch name channel target hir} -result {{macos-aarch64 {"AArch64"}} {macos-x86_64 {"x86-64"}}}
 
-test tm-os-named-module-is-no-platform {only designated namespace trees are a platform's (core/cabi.tcl's platforms: linux): a standard module that happens to be named like an operating system (a private library's windows and macos) is no platform's, and compiles for every target} -body {
+test tm-os-named-module-is-no-platform {only designated namespace trees are a platform's (core/cabi.tcl's platforms: std::linux): a standard module that happens to be named like an operating system (a private library's std::windows and std::macos) is no platform's, and compiles for every target} -body {
     withPrivateLibrary {
         foreach name {windows macos} {
             set channel [open [file join $::core::libraryDir $name.bot] w]
@@ -276,13 +276,13 @@ test tm-os-named-module-is-no-platform {only designated namespace trees are a pl
             close $channel
         }
         lmap target {linux-x86_64 macos-aarch64 windows-x86_64} {
-            set hir [tmHir "import windows\nimport macos\n\[windows::name(), macos::name()\]\n" $target]
+            set hir [tmHir "import std::windows\nimport std::macos\n\[std::windows::name(), std::macos::name()\]\n" $target]
             list [hir::cabi::targetOf $hir] [lindex [outcomeUnderHir interp $hir] 1]
         }
     }
 } -cleanup {unset -nocomplain name channel target hir} -result {{{} {["windows", "macos"]}} {{} {["windows", "macos"]}} {{} {["windows", "macos"]}}}
 
-test tm-application-module-named-linux {an application module is the application's whatever its name: an application file linux/tool.bot (namespace linux::tool, no standard one) compiles for macos-aarch64; only standard namespaces are a platform's} -body {
+test tm-application-module-named-linux {an application module is the application's whatever its name: an application file linux/tool.bot (namespace linux::tool, the application's: the platform is the standard std::linux) compiles for macos-aarch64; only standard namespaces are a platform's} -body {
     set main [tmFile main.bot "import linux::tool\nlinux::tool::value()\n"]
     file mkdir [file join [file dirname $main] linux]
     set channel [open [file join [file dirname $main] linux tool.bot] w]
@@ -295,8 +295,8 @@ test tm-application-module-named-linux {an application module is the application
 # ---------------------------------------------------------------------------
 # The HIR's target
 
-test tm-hir-records-its-target {a HIR records the target its build read -- ffi::c's scalars, a platform namespace, an architecture-specific module -- and none when it read none: such a HIR is the same for every target} -body {
-    list [lmap text [list $::tmPlain $::tmChar $::tmLinux "import linux::path\n1\n" "import linux::sys\n1\n" "import abi::aarch64\n1\n"] {
+test tm-hir-records-its-target {a HIR records the target its build read -- std::ffi::c's scalars, a platform namespace, an architecture-specific module -- and none when it read none: such a HIR is the same for every target} -body {
+    list [lmap text [list $::tmPlain $::tmChar $::tmLinux "import std::linux::path\n1\n" "import std::linux::sys\n1\n" "import std::abi::aarch64\n1\n"] {
             hir::cabi::targetOf [tmHir $text linux-aarch64]
         }] \
         [expr {[hir::format [tmHir $::tmPlain linux-aarch64]] eq [hir::format [tmHir $::tmPlain macos-aarch64]]}] \

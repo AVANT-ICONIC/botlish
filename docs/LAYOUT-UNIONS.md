@@ -8,17 +8,17 @@ of the same bytes.
     union layout WORD:
         size 4
         align 4
-        alternative whole: binary::U32
+        alternative whole: std::binary::U32
         alternative halves: HALVES
-        alternative bytes: array 4 of binary::U8
+        alternative bytes: array 4 of std::binary::U8
 
     layout OVERLAPPED:
         size 32
         align 8
-        field Internal: ffi::c::ULongLong at 0
-        field InternalHigh: ffi::c::ULongLong at 8
+        field Internal: std::ffi::c::ULongLong at 0
+        field InternalHigh: std::ffi::c::ULongLong at 8
         field member3: OVERLAPPED_member3 at 16
-        field hEvent: ffi::c::Ptr[ffi::c::Void] at 24
+        field hEvent: std::ffi::c::Ptr[std::ffi::c::Void] at 24
 
 A union is a named representation of an explicit size and alignment whose
 alternatives all begin at its first byte. It nests in records, in arrays and
@@ -73,12 +73,12 @@ Contents:
   fields are still `LAYOUT-FIELD-OVERLAP`.
 * **No copied value.** A union's alternatives are not independent fields,
   so there is no `LayoutStruct` of a union or of anything holding one by
-  value. `binary::parse`, `binary::emit`, `binary::load` and whole-array
+  value. `std::binary::parse`, `std::binary::emit`, `std::binary::load` and whole-array
   writes of such a representation are `LAYOUT-UNION` (one new diagnostic
-  kind, `compiler::DiagnosticCode::LayoutUnion`). Bytes are read one
+  kind, `std::compiler::DiagnosticCode::LayoutUnion`). Bytes are read one
   alternative at a time through a static designator,
-  `binary::read(data, L.u.alt)` (one new operation), and written by
-  `binary::write`/`binary::write_foreign` as before.
+  `std::binary::read(data, L.u.alt)` (one new operation), and written by
+  `std::binary::write`/`std::binary::write_foreign` as before.
 * **Live unions.** A field holding a union read through a native view or
   edit is the live union `NativeView[U]` / `NativeEdit[U]`; an alternative
   is read or stored at the union's address, by the code the same
@@ -128,8 +128,8 @@ array) and explicit overlap (a union).
         ...
 
 `TYPE` is anything a layout field may be: a scalar encoding
-(`binary::U32`), a C scalar (`ffi::c::Int`), a C pointer
-(`ffi::c::Ptr[T]`, `ffi::c::FnPtr[...]`), a layout or union declared in the
+(`std::binary::U32`), a C scalar (`std::ffi::c::Int`), a C pointer
+(`std::ffi::c::Ptr[T]`, `std::ffi::c::FnPtr[...]`), a layout or union declared in the
 program, a fixed array of any of them (`array 4 of WORD`). An alternative
 has no `at`: every alternative is at offset 0, so the declaration states no
 offset that could disagree. `size` and `align` are explicit, as for every
@@ -218,8 +218,8 @@ considered:
   an alternative out of it, and a nested-copy story (a record holding a
   union would copy as a struct whose one field is the blob). Every one of
   those already exists as byte storage plus a designator.
-* **B. No whole copied value** -- `binary::parse`, `binary::emit`,
-  `binary::load` and whole-array writes of anything holding a union are
+* **B. No whole copied value** -- `std::binary::parse`, `std::binary::emit`,
+  `std::binary::load` and whole-array writes of anything holding a union are
   refused, while every alternative remains readable and writable one at a
   time. **This landed.**
 * **C. A struct of every alternative** -- what `LayoutStruct` would give
@@ -231,10 +231,10 @@ type, keeps every existing copy honest (a `LayoutStruct` still means
 "independent fields"), and leaves A open as a later addition if a program
 needs to carry a union's bytes around as one value (it can today: as the
 byte storage the record already is). The one addition B needed is
-`binary::read(data, L.path)`, the byte-side twin of a native view's field
+`std::binary::read(data, L.path)`, the byte-side twin of a native view's field
 read: the representation one static designator names, imprinted from
 exactly L's bytes. It is general -- it reads an ordinary field too
-(`binary::read(b, PLAIN.after)`), and an alternative of a record
+(`std::binary::read(b, PLAIN.after)`), and an alternative of a record
 alternative is a `LayoutStruct` of that record -- and it refuses what has
 no copy: a designator ending in a union (one cannot), one holding a union
 by value (`LAYOUT-UNION`), and a pointer path (`LAYOUT-NATIVE-ONLY`).
@@ -245,12 +245,12 @@ cascade):
 | operation | diagnostic |
 |---|---|
 | `LayoutStruct[U]` | LAYOUT-UNION: LayoutStruct[U] does not exist |
-| `binary::parse(U, d)`, `binary::emit` of a union | LAYOUT-UNION: U is a union layout ... has no copied value |
-| `binary::parse(R, d)` / `binary::emit` of a record holding a union | LAYOUT-UNION: R holds the union layout U by value at R.u ... |
-| `binary::load(v)` of a live union, of a record holding one, of a live array of unions | LAYOUT-UNION: binary::load cannot copy ... |
-| `binary::read(d, R.us)` of an array of unions | LAYOUT-UNION |
-| `binary::write(d, R.us, list)` / `binary::store(e, R.us, list)` | LAYOUT-UNION: cannot write ... whole |
-| `binary::store_element(e.us, k, v)` of a union element | LAYOUT-OPERAND (an element of an array of unions is written through its alternatives: `binary::element(e.us, k)`, then a store) |
+| `std::binary::parse(U, d)`, `std::binary::emit` of a union | LAYOUT-UNION: U is a union layout ... has no copied value |
+| `std::binary::parse(R, d)` / `std::binary::emit` of a record holding a union | LAYOUT-UNION: R holds the union layout U by value at R.u ... |
+| `std::binary::load(v)` of a live union, of a record holding one, of a live array of unions | LAYOUT-UNION: std::binary::load cannot copy ... |
+| `std::binary::read(d, R.us)` of an array of unions | LAYOUT-UNION |
+| `std::binary::write(d, R.us, list)` / `std::binary::store(e, R.us, list)` | LAYOUT-UNION: cannot write ... whole |
+| `std::binary::store_element(e.us, k, v)` of a union element | LAYOUT-OPERAND (an element of an array of unions is written through its alternatives: `std::binary::element(e.us, k)`, then a store) |
 
 A program compiled unchecked (`-strict 0`) replays the same diagnostic
 when the call runs, before anything is read or written: natively, and on
@@ -259,11 +259,11 @@ in a descriptor.
 
 ## 7. Native access
 
-A field holding a union read through `binary::native::view` is the live
+A field holding a union read through `std::binary::native::view` is the live
 union `NativeView[U]` -- the union's address, nothing read -- and its
 alternative is read like any field: `v.u.whole` is one load,
 `v.u.halves` is the live record `NativeView[HALVES]`, `v.u.bytes` the
-live array `NativeView[array 4 of binary::U8]`, `v.u.p` the pointer the
+live array `NativeView[array 4 of std::binary::U8]`, `v.u.p` the pointer the
 memory holds. Natively (`lu-native-nir`):
 
 * an alternative's field through a union inside a record is one
@@ -292,26 +292,26 @@ The Tcl backends have no native memory: a view of a non-null pointer is
 
 ## 8. Writes
 
-`binary::store(e, L.u.alt, value)` through `NativeEdit[L]` writes exactly
+`std::binary::store(e, L.u.alt, value)` through `NativeEdit[L]` writes exactly
 the alternative's bytes: a 2-byte alternative of a 16-byte union changes 2
 bytes, and the union's other 14 bytes and the bytes around it keep
 whatever they held -- never zeroed or normalized
 (`lu-native-stores-touch-only-the-alternative`, checked against sentinel
 bytes and against the C oracle's own image). The byte side is the same:
-`binary::write(d, L.u.alt, v)` returns new storage differing from `d` in
+`std::binary::write(d, L.u.alt, v)` returns new storage differing from `d` in
 the alternative's bytes only, and writes chained through several
 alternatives overlap exactly as the bytes do (`lu-write-touches-only-the-alternative`).
-A record is built in `abi::bytes::MutableBytes` field by field and
+A record is built in `std::abi::bytes::MutableBytes` field by field and
 alternative by alternative, its pointer alternatives by
-`binary::write_foreign` (`lu-caller-constructed-record`, which C reads back
+`std::binary::write_foreign` (`lu-caller-constructed-record`, which C reads back
 with typed member reads).
 
 ## 9. Pointer authority
 
 Recursive through every alternative, as through every field and element:
 
-* bytes never become a pointer through a union: `binary::read` of a
-  pointer alternative and `binary::parse` of a layout holding a
+* bytes never become a pointer through a union: `std::binary::read` of a
+  pointer alternative and `std::binary::parse` of a layout holding a
   pointer-bearing union are `LAYOUT-NATIVE-ONLY` (the latter also
   `LAYOUT-UNION`: there is no copy to make at all);
 * a scalar alternative of the same bytes reads a pointer's bits as an
@@ -321,12 +321,12 @@ Recursive through every alternative, as through every field and element:
   operation for this reason, NATIVE-LAYOUT-WRITES.md), and a pointer
   alternative's read fails `NATIVE ADDRESS` when the bits are no address
   the C pointer word can hold;
-* a pointer stored through an alternative (`binary::store`,
-  `binary::write_foreign`) is observed, never moved: the program's binding
+* a pointer stored through an alternative (`std::binary::store`,
+  `std::binary::write_foreign`) is observed, never moved: the program's binding
   stays usable (`lu-native-pointer-alternatives`);
-* an ordinary `binary::write` of a scalar alternative of a pointer-bearing
+* an ordinary `std::binary::write` of a scalar alternative of a pointer-bearing
   union is allowed -- it encodes no pointer -- while one of the pointer
-  alternative is `LAYOUT-NATIVE-ONLY` (`binary::write_foreign` is the way).
+  alternative is `LAYOUT-NATIVE-ONLY` (`std::binary::write_foreign` is the way).
 
 ## 10. Arrays and unions
 
@@ -335,13 +335,13 @@ They compose with no rule of their own (`lu-native-arrays-of-unions`,
 
 * `array N of U` strides U's declared size (an array of 12-byte unions
   aligned to 16 strides 12: the declared size, not a C rule);
-* a union's alternative may be an array (`array 16 of binary::U8`,
-  `array 4 of binary::U32`): selecting it gives the live array;
+* a union's alternative may be an array (`array 16 of std::binary::U8`,
+  `array 4 of std::binary::U32`): selecting it gives the live array;
 * multidimensional arrays of unions, arrays of records holding unions, and
   records holding arrays of unions are ordinary;
 * a whole-array read or write of an array of unions has no copy:
   `LAYOUT-UNION`. An element's alternative is read and stored one at a
-  time (`binary::element(v.us, k).whole`, `binary::store(e, L.us[2].whole,
+  time (`std::binary::element(v.us, k).whole`, `std::binary::store(e, L.us[2].whole,
   v)`).
 
 ## 11. HIR, isolation, interchange and lowering
@@ -361,10 +361,10 @@ They compose with no rule of their own (`lu-native-arrays-of-unions`,
   `audit/hir-interchange/tools/roundtrip.tcl` includes the golden suite).
 * **Native lowering** (`native/lower.tcl`): `ViewBase` folds a union's
   offset like a nested layout's; a union held by value is a `cptroffset`
-  window; `binary::read` is `LayoutCall`'s `read` case -- the designator
+  window; `std::binary::read` is `LayoutCall`'s `read` case -- the designator
   constant, the length check, one `ReprRead` of the leaf. No NIR
   instruction, runtime operation or value knows unions.
-* **The Tcl compiler** compiles `binary::read` and writes through the
+* **The Tcl compiler** compiles `std::binary::read` and writes through the
   reference implementation (`core/binary.tcl`), whose `DecodeRepr` and
   `EncodeRepr` refuse a union and whose `parse`/`emit` refuse a descriptor
   holding one.
@@ -387,20 +387,20 @@ parentheses (Linux x86-64, 4-core container):
 | view: a U64 alternative of a union held at 8 (v.u.whole) | outer-base | 2.7 ns (40.8 ns) | 2.5 ns (47.6 ns) |
 | view: the same U64 as an ordinary field at 8 (v.whole) | plain-base | 9.4 ns (46.8 ns) | 4.5 ns (51.7 ns) |
 | view: a record alternative's field (v.u.parts.high) | outer-base | 22.0 ns (68.6 ns) | 20.1 ns (64.3 ns) |
-| view: an array alternative's element, dynamic index (binary::element(v.u.words, k - 2)) | outer-base | 17.0 ns (54.5 ns) | 15.0 ns (54.7 ns) |
-| view: a pointer alternative (q = v.u.p, ffi::c::null?(q)) | outer-base | -0.3 ns (39.4 ns) | 6.2 ns (45.2 ns) |
+| view: an array alternative's element, dynamic index (std::binary::element(v.u.words, k - 2)) | outer-base | 17.0 ns (54.5 ns) | 15.0 ns (54.7 ns) |
+| view: a pointer alternative (q = v.u.p, std::ffi::c::null?(q)) | outer-base | -0.3 ns (39.4 ns) | 6.2 ns (45.2 ns) |
 | view: three reads switching interpretations (whole, parts.low, whole) | outer-base | 26.0 ns (67.7 ns) | 33.4 ns (73.1 ns) |
 | view: the first of 64 alternatives (v.a0, a U64) | many-base | 7.2 ns (48.0 ns) | 9.7 ns (45.9 ns) |
 | view: the last of 64 alternatives (v.a63, a U64) | many-base | 5.1 ns (46.3 ns) | 5.3 ns (45.5 ns) |
 | edit: a U64 alternative's store (OUTER.u.whole) | outer-base | 21.6 ns (62.5 ns) | 13.1 ns (47.2 ns) |
 | edit: the same U64 as an ordinary field's store (PLAIN.whole) | plain-base | -10.8 ns (42.7 ns) | 6.1 ns (42.1 ns) |
 | edit: a narrow alternative's store, 2 of the union's 8 bytes (OUTER.u.parts.high) | outer-base | 10.3 ns (49.4 ns) | -3.6 ns (48.7 ns) |
-| view: an element of an array of unions, its alternative (binary::element(v.us, k).whole) | arru-base | 13.4 ns (49.9 ns) | 1.1 ns (40.8 ns) |
-| view: an element of an array of records, the same field (binary::element(v.ps, k).whole) | arrp-base | 7.4 ns (47.6 ns) | -0.3 ns (40.2 ns) |
-| bytes: binary::read through a union (OUTER.u.parts.high) | bytes-base | -0.3 ns (44.3 ns) | 17.2 ns (53.0 ns) |
-| bytes: binary::read of an ordinary field (PLAIN.after) | bytes-base | 28.0 ns (63.6 ns) | 22.9 ns (62.8 ns) |
-| bytes: binary::write through a union (OUTER.u.parts.high), a 24-byte record | bytes-base | 240.0 ns (279.1 ns) | 66.3 ns (105.3 ns) |
-| bytes: binary::write of an ordinary field (PLAIN.after), a 24-byte record | bytes-base | 228.4 ns (271.4 ns) | 65.2 ns (102.8 ns) |
+| view: an element of an array of unions, its alternative (std::binary::element(v.us, k).whole) | arru-base | 13.4 ns (49.9 ns) | 1.1 ns (40.8 ns) |
+| view: an element of an array of records, the same field (std::binary::element(v.ps, k).whole) | arrp-base | 7.4 ns (47.6 ns) | -0.3 ns (40.2 ns) |
+| bytes: std::binary::read through a union (OUTER.u.parts.high) | bytes-base | -0.3 ns (44.3 ns) | 17.2 ns (53.0 ns) |
+| bytes: std::binary::read of an ordinary field (PLAIN.after) | bytes-base | 28.0 ns (63.6 ns) | 22.9 ns (62.8 ns) |
+| bytes: std::binary::write through a union (OUTER.u.parts.high), a 24-byte record | bytes-base | 240.0 ns (279.1 ns) | 66.3 ns (105.3 ns) |
+| bytes: std::binary::write of an ordinary field (PLAIN.after), a 24-byte record | bytes-base | 228.4 ns (271.4 ns) | 65.2 ns (102.8 ns) |
 
 What it shows:
 
@@ -410,7 +410,7 @@ What it shows:
   per-operation deltas vary by about ±15 ns between runs, which is why some
   are negative), on both backends; so are the stores, an element of an
   array of unions against an element of an array of records, and
-  `binary::read`/`binary::write` through a union against an ordinary field.
+  `std::binary::read`/`std::binary::write` through a union against an ordinary field.
 * **Constant in the number of alternatives.** The first and the last of 64
   alternatives cost the same (both U64; the NIR is one load at the same
   offset, `lu-native-nir`). A first version of this row compared a U16
@@ -422,7 +422,7 @@ What it shows:
   read), as it must: nothing is cached.
 * **Nothing allocates.** Every view and edit program allocates exactly its
   baseline's 6 objects (the fixture's memory, the view, the loop's List);
-  `binary::write` allocates its one new `MutableBytes` per write, through a
+  `std::binary::write` allocates its one new `MutableBytes` per write, through a
   union as for an ordinary field (1.0 per operation each).
 
 The front end's compile time of one declaration of K members, read once
@@ -496,9 +496,9 @@ Without clang (a gcc toolchain) an anonymous member would be blocked
 **The manifest** maps every promoted C name to its generated path:
 `promoted` rows of `layouts.tsv`, e.g.
 
-    promoted  struct _OVERLAPPED  -  member3.member1.Offset      -  16  4  -  Offset      ffi::c::ULong  via=union anon@minwinbase.h:22,struct anon@minwinbase.h:23
-    promoted  struct _OVERLAPPED  -  member3.member1.OffsetHigh  -  20  4  -  OffsetHigh  ffi::c::ULong  ...
-    promoted  struct _OVERLAPPED  -  member3.Pointer             -  16  8  -  Pointer     ffi::c::Ptr[ffi::c::Void]  ...
+    promoted  struct _OVERLAPPED  -  member3.member1.Offset      -  16  4  -  Offset      std::ffi::c::ULong  via=union anon@minwinbase.h:22,struct anon@minwinbase.h:23
+    promoted  struct _OVERLAPPED  -  member3.member1.OffsetHigh  -  20  4  -  OffsetHigh  std::ffi::c::ULong  ...
+    promoted  struct _OVERLAPPED  -  member3.Pointer             -  16  8  -  Pointer     std::ffi::c::Ptr[std::ffi::c::Void]  ...
 
 and a synthetic record's row carries its owner, its place
 (`place=OVERLAPPED.member3`) and clang's location of it (`at=`).
@@ -649,7 +649,7 @@ blocked: Tcl 208 → 204, SDL3 44 → 40, BoringSSL 298 → 83, Win32 180 → 71
   its own image (0xA5, then each written leaf's bytes copied in at its
   `offsetof`) and every written leaf with a typed read; Botlish builds a
   third selection in byte storage and C checks that image; a layout holding
-  a union is read back with `binary::read` leaf by leaf (`binary::parse`
+  a union is read back with `std::binary::read` leaf by leaf (`std::binary::parse`
   refuses it). The language suite's own C oracle
   (`tests/cffi/nunion-fixture.c`) does the same for a record with every kind
   of alternative, the OVERLAPPED shape, an array of unions and sentinel
@@ -667,8 +667,8 @@ alignment random; records holding unions at random offsets with gaps;
 arrays of unions -- and checks every outcome against its own byte model
 (little-endian, every alternative at its union's own offset, element i at
 i times the union's declared size), which never reads a descriptor, a
-registry or generated code: `binary::read` of random leaves; chains of
-`binary::write` through overlapping alternatives (a later write changes
+registry or generated code: `std::binary::read` of random leaves; chains of
+`std::binary::write` through overlapping alternatives (a later write changes
 part of an earlier one's bytes; the operand never changes); and, natively,
 every leaf read through a view and stores through an edit, each followed by
 a read of another alternative (one written, another read: nothing cached).
@@ -824,7 +824,7 @@ transitive; a record may wait for several):
 
 | feature | Tcl | SDL3 | BoringSSL | Win32 |
 |---|---:|---:|---:|---:|
-| `ffi::c::Bool` fields | 0 | 14 (13 + 1) | 0 | 0 |
+| `std::ffi::c::Bool` fields | 0 | 14 (13 + 1) | 0 | 0 |
 | `float` fields | 0 | 18 (17 + 1) | 0 | 19 (10 + 9) |
 | `double` fields | 2 (1 + 1) | 0 | 0 | 0 |
 | float and double | 2 | 18 | 0 | 19 |
@@ -894,7 +894,7 @@ the last code change before this report):
 
 The first macOS run on the branch (an earlier head) failed two Tcl files
 the local inventory pass had not reached -- `abi-mutable-bytes.test` (a
-guard against address-reading natives matching `binary::read` by name)
+guard against address-reading natives matching `std::binary::read` by name)
 and `numeric-looking-names.test` (an `expr` ternary selecting a
 designator's text in `core/binary.tcl`) -- and a pinned line in
 `layout-unions.test`; all three were fixed before the runs above.
@@ -905,7 +905,7 @@ Deliberately not added, each a separate decision: tagged unions, sum types,
 active-member tracking, discriminant association or protocol knowledge,
 pattern matching over alternatives, C effective-type or strict-aliasing
 rules, general arbitrary overlap, a copied union value (family A, section 6),
-bitfields, `float`/`double`/`long double` and `ffi::c::Bool` layout fields,
+bitfields, `float`/`double`/`long double` and `std::ffi::c::Bool` layout fields,
 flexible arrays and variable-length representations, native allocation,
 volatile or atomic union access, aggregate-by-value C ABI (`SetFilePointerEx`
 stays unsupported), MSVC layouts, a Windows runtime or backend, scalar

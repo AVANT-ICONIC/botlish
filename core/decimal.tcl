@@ -52,10 +52,10 @@
 #   decimal_rounded#less less_equal greater greater_equal equal
 #                            (DR, DR, int P) -> bool: compares round(a, P)
 #                            with round(b, P)
-#   float64::from_decimal_rounded   (DR) -> Float64, elaborated into
-#   decimal_rounded#to_float64      (DR, int P) -> Float64: the Float64
+#   std::float64::from_decimal_rounded  (DR) -> Float64, elaborated into
+#   decimal_rounded#to_float64          (DR, int P) -> Float64: the Float64
 #                            nearest round(v, P)
-#   decimal_rounded::round[T]       (Float64) -> T, elaborated into
+#   std::decimal_rounded::round[T]  (Float64) -> T, elaborated into
 #   decimal_rounded#round           (Float64, int N) -> DR, errors
 #                            UnrepresentableDecimal: the value whose true
 #                            value is round(x, N), or the error when no
@@ -755,7 +755,7 @@ proc core::decimal::comparisonNative {operator} {
     return [dict getdef $comparisons $operator ""]
 }
 
-# UnrepresentableDecimal: a quantization (decimal_rounded::round) whose
+# UnrepresentableDecimal: a quantization (std::decimal_rounded::round) whose
 # decimal no available representation holds to the requested number of
 # places. A builtin error after the binary ones (core/native.tcl's list of
 # builtin errors), so it is declared here, where this file loads.
@@ -791,13 +791,13 @@ apply {{} {
         core::native::register $name -arity 3 -impl [list core::decimal::CompareNative $name $cmp] \
             -param-types [list $kind $kind int] -result-type bool -runtime bigint -context-free 1
     }
-    core::native::register float64::from_decimal_rounded -arity 1 \
-        -impl [list core::decimal::Unelaborated float64::from_decimal_rounded] \
+    core::native::register std::float64::from_decimal_rounded -arity 1 \
+        -impl [list core::decimal::Unelaborated std::float64::from_decimal_rounded] \
         -param-types [list $kind] -result-type Float64 -context-free 1
     core::native::register decimal_rounded#to_float64 -arity 2 -impl core::decimal::ToFloat64Native \
         -param-types [list $kind int] -result-type Float64 -runtime {bigint float-alloc} -context-free 1
-    core::native::register decimal_rounded::round -arity 1 \
-        -impl [list core::decimal::Unelaborated decimal_rounded::round] \
+    core::native::register std::decimal_rounded::round -arity 1 \
+        -impl [list core::decimal::Unelaborated std::decimal_rounded::round] \
         -param-types {Float64} -result-type $kind -errors UnrepresentableDecimal -context-free 1 \
         -imprint {vars {T} params {Float64} result {imprint T}}
     core::native::register decimal_rounded#round -arity 2 -impl core::decimal::RoundNative \

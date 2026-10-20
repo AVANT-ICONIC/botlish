@@ -2,9 +2,9 @@
 # (M5-CHECKED-DOMAIN-FACT-PROVENANCE.md): does the exact/finite caller fact
 # behind
 #
-#   additional_unreserved_chars = byte::set(['-', '.', '_', '~'])
+#   additional_unreserved_chars = std::byte::set(['-', '.', '_', '~'])
 #
-# survive through byte::set's own `loop c in chars: from_int(char::
+# survive through std::byte::set's own `loop c in chars: from_int(char::
 # codepoint(c))` far enough to reach a *codegen-visible* proof that the
 # inner checked Byte construction cannot fail? Answer, measured directly
 # below and in the report: no -- Outcome B. `hir/completions.tcl` (the
@@ -12,12 +12,12 @@
 # the module-init call's own `effectiveErrors = {}` correctly (a genuine,
 # already-shipped static-legality result), entirely through a private,
 # non-materializing recursive re-walk (`analyzeBlock`) that never touches
-# the HIR node fields of the inner `from_int`/`char::scalar_value` calls
-# inside `byte::set`'s own single, generically-checked function body.
+# the HIR node fields of the inner `from_int`/`std::char::scalar_value` calls
+# inside `std::byte::set`'s own single, generically-checked function body.
 # Those inner nodes -- and every downstream pass that could act on them
 # for *code generation* (`hir/range.tcl`, `hir/specialize.tcl`,
 # `native/lower.tcl`) -- only ever see the generic, unseeded fact
-# (`char::scalar_value(c)` in `[0, 0x10FFFF]`, `from_int`'s own
+# (`std::char::scalar_value(c)` in `[0, 0x10FFFF]`, `from_int`'s own
 # `effectiveErrors = {AboveRange}`), because `hir/completions.tcl` is a
 # separate, deliberately siloed lattice (STATIC-COMPLETION-PROOFS.md's own
 # "Path-sensitive range facts" section) that no backend or lowering pass
@@ -41,7 +41,7 @@
 # Byte(x)/NAME(x) callable-constructor syntax no longer exists in the
 # language (EXPLICIT-ERROR-COMPLETIONS.md removed it): every fixture below
 # uses the real, current shape -- an ordinary typed function with an
-# explicit `if`/`fail` body, exactly `byte::from_int`'s own shape, real or
+# explicit `if`/`fail` body, exactly `std::byte::from_int`'s own shape, real or
 # reproduced generically for a second, non-Byte domain per item 53.
 
 source [file join [file dirname [file normalize [info script]]] helpers.tcl]
@@ -146,12 +146,12 @@ test checked-domain-if-now-consults-range-for-branch-death {M6: native::lower::I
 
 # ---------------------------------------------------------------------------
 # Q1 (decision-tree item 46): a local, statically obvious in-range literal.
-# Real production source: byte::set's own byte::from_int(45) motivating
+# Real production source: std::byte::set's own std::byte::from_int(45) motivating
 # call (BYTE-SET.md/STATIC-COMPLETION-PROOFS.md's own worked example).
 
-test checked-domain-q1-real-byte-from-int-45-effective-errors-empty {byte::from_int(45) at top level: effectiveErrors={} and resultRangeFact=[45,45]{45} -- the HIR-level proof exists} -body {
-    set path [makeFile {import byte
-byte::from_int(45)} q1-byte-from-int-45.bot]
+test checked-domain-q1-real-byte-from-int-45-effective-errors-empty {std::byte::from_int(45) at top level: effectiveErrors={} and resultRangeFact=[45,45]{45} -- the HIR-level proof exists} -body {
+    set path [makeFile {import std::byte
+std::byte::from_int(45)} q1-byte-from-int-45.bot]
     try {
         set hir [surface::readProgramFile $path -strict 0]
         set facts [lindex [callFactsAtLine $hir 2] 0]
@@ -161,22 +161,22 @@ byte::from_int(45)} q1-byte-from-int-45.bot]
     }
 } -result {{} {[45, 45] {45}}}
 
-test checked-domain-q1-real-byte-from-int-still-emits-both-checks {UPDATED BY M6, then LINUX-X86-64-SYSCALL: (name kept for the M5/M6 reports' cross-references: nothing is emitted any more) byte::from_int<int>'s own generated NIR, with this its ONLY (single, all-safe-literal) caller, emits neither fail path, because the instance's own joined entry range for `value` (point 45, this call being its only caller) reaches `native::lower::If` as a consumed theorem -- and, since LINUX-X86-64-SYSCALL.md added M6's missing "condition-expression purity" theorem in its narrowest form (a decided comparison of a parameter register and a constant is not evaluated: native/lower.tcl's PureDecidedCondition), neither dead comparison (`rilt`/`rigt`) is computed any more either. Q1 = yes, for a safe-only-caller instance -- see the report's byte::from_int reassessment} -body {
-    set path [makeFile {import byte
-byte::from_int(45)} q1-byte-from-int-45-nir.bot]
+test checked-domain-q1-real-byte-from-int-still-emits-both-checks {UPDATED BY M6, then LINUX-X86-64-SYSCALL: (name kept for the M5/M6 reports' cross-references: nothing is emitted any more) std::byte::from_int<int>'s own generated NIR, with this its ONLY (single, all-safe-literal) caller, emits neither fail path, because the instance's own joined entry range for `value` (point 45, this call being its only caller) reaches `native::lower::If` as a consumed theorem -- and, since LINUX-X86-64-SYSCALL.md added M6's missing "condition-expression purity" theorem in its narrowest form (a decided comparison of a parameter register and a constant is not evaluated: native/lower.tcl's PureDecidedCondition), neither dead comparison (`rilt`/`rigt`) is computed any more either. Q1 = yes, for a safe-only-caller instance -- see the report's std::byte::from_int reassessment} -body {
+    set path [makeFile {import std::byte
+std::byte::from_int(45)} q1-byte-from-int-45-nir.bot]
     try {
-        set body [nirFuncBody [nirOfFile $path] "byte::from_int"]
+        set body [nirFuncBody [nirOfFile $path] "std::byte::from_int"]
         list [regexp -all {op rilt} $body] [regexp -all {op rigt} $body] \
-                [regexp -all {faildeclared 1 "byte::BelowRange"} $body] \
-                [regexp -all {faildeclared 2 "byte::AboveRange"} $body]
+                [regexp -all {faildeclared 1 "std::byte::BelowRange"} $body] \
+                [regexp -all {faildeclared 2 "std::byte::AboveRange"} $body]
     } finally {
         removeFile q1-byte-from-int-45-nir.bot
     }
 } -result {0 0 0 0}
 
-test checked-domain-q1-out-of-range-literal-still-known-error {byte::from_int(999) remains a compile-time KNOWN-ERROR, not silently accepted -- the other half of the three-way rule is unaffected} -body {
-    set path [makeFile {import byte
-byte::from_int(999)} q1-byte-from-int-999.bot]
+test checked-domain-q1-out-of-range-literal-still-known-error {std::byte::from_int(999) remains a compile-time KNOWN-ERROR, not silently accepted -- the other half of the three-way rule is unaffected} -body {
+    set path [makeFile {import std::byte
+std::byte::from_int(999)} q1-byte-from-int-999.bot]
     try {
         diagKinds [surface::readProgramFile $path -strict 0]
     } finally {
@@ -187,7 +187,7 @@ byte::from_int(999)} q1-byte-from-int-999.bot]
 # Generic, non-Byte control (spec item 53): the same shape, a second
 # source-defined interval domain, proves Q1's answer is not Byte-specific.
 
-set ::smallCheckedSrc {import str
+set ::smallCheckedSrc {import std::str
 error TooSmall
 error TooLarge
 type Small = Int in 10..20
@@ -201,7 +201,7 @@ fn checkedSmall(value: int) -> Small errors TooSmall, TooLarge:
             value
 }
 
-test checked-domain-q1-generic-domain-literal-still-emits-both-checks {UPDATED BY M6, then LINUX-X86-64-SYSCALL: (name kept for the M5/M6 reports' cross-references: nothing is emitted any more) a second, non-Byte bounded domain's own checked constructor, called with a statically safe literal as its only caller, loses both fail paths -- and both dead comparisons (PureDecidedCondition) -- exactly like byte::from_int(45) does, confirming the mechanism is generic (hir::range::ConditionOutcome has no Byte- or type-specific code), not a Byte special case} -body {
+test checked-domain-q1-generic-domain-literal-still-emits-both-checks {UPDATED BY M6, then LINUX-X86-64-SYSCALL: (name kept for the M5/M6 reports' cross-references: nothing is emitted any more) a second, non-Byte bounded domain's own checked constructor, called with a statically safe literal as its only caller, loses both fail paths -- and both dead comparisons (PureDecidedCondition) -- exactly like std::byte::from_int(45) does, confirming the mechanism is generic (hir::range::ConditionOutcome has no Byte- or type-specific code), not a Byte special case} -body {
     set body [nirFuncBody [nirOf "${::smallCheckedSrc}checkedSmall(15)"] "checkedSmall"]
     list [regexp -all {op rilt} $body] [regexp -all {op rigt} $body] \
             [regexp -all {faildeclared 1 "TooSmall"} $body] \
@@ -238,7 +238,7 @@ test checked-domain-q2-still-emits-both-checks {UPDATED BY M6: with that narrowe
 fn g(m) -> int errors TooLarge:
     checkedSmall(nonneg(m))
 fn h(s) -> int errors TooLarge:
-    g(str::length(s))
+    g(std::str::length(s))
 h(\"a long enough string\")"] "checkedSmall"]
     list [regexp -all {faildeclared 1 "TooSmall"} $body] \
             [regexp -all {faildeclared 2 "TooLarge"} $body]
@@ -267,12 +267,12 @@ g(5)"
 } -result {{0 1} {0 0}}
 
 # ---------------------------------------------------------------------------
-# Q3 (decision-tree item 46): the real byte::set path, the actual question
+# Q3 (decision-tree item 46): the real std::byte::set path, the actual question
 # this milestone was asked to answer.
 
-test checked-domain-q3-module-init-effective-errors-empty {the real production shape, additional_unreserved_chars = byte::set(['-', '.', '_', '~']), proves effectiveErrors={} for the outer call -- the HIR-level proof this milestone traces genuinely exists, at the outer call} -body {
-    set path [makeFile {import byte
-additional_unreserved_chars = byte::set(['-', '.', '_', '~'])} q3-module-init.bot]
+test checked-domain-q3-module-init-effective-errors-empty {the real production shape, additional_unreserved_chars = std::byte::set(['-', '.', '_', '~']), proves effectiveErrors={} for the outer call -- the HIR-level proof this milestone traces genuinely exists, at the outer call} -body {
+    set path [makeFile {import std::byte
+additional_unreserved_chars = std::byte::set(['-', '.', '_', '~'])} q3-module-init.bot]
     try {
         set hir [surface::readProgramFile $path -strict 0]
         lindex [lindex [callFactsAtLine $hir 2] 0] 1
@@ -281,16 +281,16 @@ additional_unreserved_chars = byte::set(['-', '.', '_', '~'])} q3-module-init.bo
     }
 } -result {}
 
-test checked-domain-q3-inner-call-keeps-only-the-generic-fact {byte::set's own inner from_int(char::scalar_value(c)) call -- inside the SAME program above -- still carries only the generic, unseeded facts (from_int's own effectiveErrors=byte::AboveRange; char::scalar_value's own result range the full Unicode scalar domain [0, 0x10FFFF]), never the module-init call's own narrower literal-derived proof: the exact first-loss location. Both calls share lib/byte.bot:176 (from_int(char::scalar_value(c)) -- one nested inside the other), so both facts are read together and matched by their own distinct resultRangeFact shape} -body {
-    set path [makeFile {import byte
-additional_unreserved_chars = byte::set(['-', '.', '_', '~'])} q3-inner-call.bot]
+test checked-domain-q3-inner-call-keeps-only-the-generic-fact {std::byte::set's own inner from_int(std::char::scalar_value(c)) call -- inside the SAME program above -- still carries only the generic, unseeded facts (from_int's own effectiveErrors=std::byte::AboveRange; std::char::scalar_value's own result range the full Unicode scalar domain [0, 0x10FFFF]), never the module-init call's own narrower literal-derived proof: the exact first-loss location. Both calls share stdlib/byte.bot:176 (from_int(std::char::scalar_value(c)) -- one nested inside the other), so both facts are read together and matched by their own distinct resultRangeFact shape} -body {
+    set path [makeFile {import std::byte
+additional_unreserved_chars = std::byte::set(['-', '.', '_', '~'])} q3-inner-call.bot]
     try {
         set hir [surface::readProgramFile $path -strict 0]
-        # lib/byte.bot:176 is `from_int(char::scalar_value(c))` inside `set`'s
+        # stdlib/byte.bot:176 is `from_int(std::char::scalar_value(c))` inside `set`'s
         # own body: from_int's own resultRangeFact is [0,255] (a
-        # successful Byte value); char::scalar_value's is the full Unicode
+        # successful Byte value); std::char::scalar_value's is the full Unicode
         # scalar domain [0, 0x10FFFF] -- distinct calls, same source line.
-        # char::scalar_value is a direct native call (no completion facts
+        # std::char::scalar_value is a direct native call (no completion facts
         # are recorded on an infallible native call), so its range is read
         # from the completion pass's own native rule for the argument
         # from_int receives.
@@ -302,23 +302,23 @@ additional_unreserved_chars = byte::set(['-', '.', '_', '~'])} q3-inner-call.bot
                 set fromIntErrs $effErrs
                 set inner [lindex [hir::get $hir $id args] 0]
                 set codepointRange [hir::range::show [hir::completions::NativeResultRange $hir \
-                    [hir::completions::NewCtx] char::scalar_value [hir::get $hir $inner args] [list [hir::range::unknown]]]]
+                    [hir::completions::NewCtx] std::char::scalar_value [hir::get $hir $inner args] [list [hir::range::unknown]]]]
             }
         }
         list $fromIntErrs $codepointRange
     } finally {
         removeFile q3-inner-call.bot
     }
-} -result {byte::AboveRange {[0, 1114111]}}
+} -result {std::byte::AboveRange {[0, 1114111]}}
 
-test checked-domain-q3-real-nir-retains-above-range-check {UPDATED BY M6, then LINUX-X86-64-SYSCALL (the decided `value < 0` comparison is no longer computed either: native/lower.tcl's PureDecidedCondition): byte::set's real generated NIR for its inner byte::from_int<int> instance loses its byte::BelowRange check -- generically, because char::scalar_value's own declared result range floor (core/native.tcl's "-result-range nonneg" metadata for a Unicode scalar value, [0, 1114111]) already proves value>=0 for EVERY caller of this shared instance, independent of the punctuation literal's own four values and independent of hir/completions.tcl's call-specific silo entirely -- but byte::AboveRange remains: char::scalar_value's upper bound (1114111) is nowhere near 255, so value>255 stays genuinely Unknown for this shared instance. This is the real production improvement M6 actually delivers here; it is not M5's own Q3 question (whether the outer call's *literal* facts reach the inner construction) -- that remains Outcome B, confirmed unchanged: no container-content propagation, no completions-proof import, was added} -body {
-    set path [makeFile {import byte
-additional_unreserved_chars = byte::set(['-', '.', '_', '~'])} q3-nir.bot]
+test checked-domain-q3-real-nir-retains-above-range-check {UPDATED BY M6, then LINUX-X86-64-SYSCALL (the decided `value < 0` comparison is no longer computed either: native/lower.tcl's PureDecidedCondition): std::byte::set's real generated NIR for its inner std::byte::from_int<int> instance loses its std::byte::BelowRange check -- generically, because std::char::scalar_value's own declared result range floor (core/native.tcl's "-result-range nonneg" metadata for a Unicode scalar value, [0, 1114111]) already proves value>=0 for EVERY caller of this shared instance, independent of the punctuation literal's own four values and independent of hir/completions.tcl's call-specific silo entirely -- but std::byte::AboveRange remains: std::char::scalar_value's upper bound (1114111) is nowhere near 255, so value>255 stays genuinely Unknown for this shared instance. This is the real production improvement M6 actually delivers here; it is not M5's own Q3 question (whether the outer call's *literal* facts reach the inner construction) -- that remains Outcome B, confirmed unchanged: no container-content propagation, no completions-proof import, was added} -body {
+    set path [makeFile {import std::byte
+additional_unreserved_chars = std::byte::set(['-', '.', '_', '~'])} q3-nir.bot]
     try {
-        set body [nirFuncBody [nirOfFile $path] "byte::from_int"]
+        set body [nirFuncBody [nirOfFile $path] "std::byte::from_int"]
         list [regexp -all {op rilt|op ilt} $body] [regexp -all {op rigt|op igt} $body] \
-                [regexp -all {faildeclared 1 "byte::BelowRange"} $body] \
-                [regexp -all {faildeclared 2 "byte::AboveRange"} $body]
+                [regexp -all {faildeclared 1 "std::byte::BelowRange"} $body] \
+                [regexp -all {faildeclared 2 "std::byte::AboveRange"} $body]
     } finally {
         removeFile q3-nir.bot
     }
@@ -326,15 +326,15 @@ additional_unreserved_chars = byte::set(['-', '.', '_', '~'])} q3-nir.bot]
 
 # ---------------------------------------------------------------------------
 # Shared-instance adversarial control (spec items 8-9, 21-22): the same
-# byte::set<List[UnicodeChar]> instance, and the same byte::from_int<int>
+# std::byte::set<List[UnicodeChar]> instance, and the same std::byte::from_int<int>
 # instance, serve both an all-safe caller and a caller that can dynamically
 # fail -- so no per-instance optimization could soundly mark either
 # instance's own inner construction unconditionally safe without becoming
 # unsound for the other caller.
 
 # M7.a.a repair (EMPTY-COLLECTION-AND-APPLIED-TYPE-SEMANTICS.md): the
-# original fixture's `dyn(chars)` left `chars` UNDECLARED, so `byte::set
-# (chars)` passed a broad/untyped (`any`) argument where byte::set's own
+# original fixture's `dyn(chars)` left `chars` UNDECLARED, so `std::byte::set
+# (chars)` passed a broad/untyped (`any`) argument where std::byte::set's own
 # declared `List[UnicodeChar]` parameter is required -- illegal under
 # STRICT-TYPED-PARAMETERS.md, and only ever compiled here because this
 # file's own `nirOfFile` reads with `-strict 0` (M7A-INSTANCE-SELECTION-
@@ -348,33 +348,33 @@ additional_unreserved_chars = byte::set(['-', '.', '_', '~'])} q3-nir.bot]
 # equality) while keeping the call *dynamically supplied*: `dyn`'s caller
 # passes a value only known through its own declared type, not a literal,
 # so this is the legal caller M7.a's audit asked for -- collection contents
-# genuinely unknown to byte::set's own body, still respecting its contract.
-test checked-domain-shared-instance-byte-set {byte::set(['-', '.', '_', '~']) and a dynamic, handled byte::set(chars) call (chars: List[UnicodeChar], a legal declared-but-dynamic argument) share one NIR instance (one "byte::set" func header), not two} -body {
-    set path [makeFile {import byte
-import type byte::Byte
-additional_unreserved_chars = byte::set(['-', '.', '_', '~'])
+# genuinely unknown to std::byte::set's own body, still respecting its contract.
+test checked-domain-shared-instance-byte-set {std::byte::set(['-', '.', '_', '~']) and a dynamic, handled std::byte::set(chars) call (chars: List[UnicodeChar], a legal declared-but-dynamic argument) share one NIR instance (one "std::byte::set" func header), not two} -body {
+    set path [makeFile {import std::byte
+import type std::byte::Byte
+additional_unreserved_chars = std::byte::set(['-', '.', '_', '~'])
 fn dyn(chars: List[UnicodeChar]) -> ImmutableSet[Byte]:
-    result = byte::set(chars):
-        on byte::AboveRange:
+    result = std::byte::set(chars):
+        on std::byte::AboveRange:
             additional_unreserved_chars
     result
 dyn(['A'])} q-shared-byteset.bot]
     try {
-        funcHeaderCount [nirOfFile $path] {byte::set}
+        funcHeaderCount [nirOfFile $path] {std::byte::set}
     } finally {
         removeFile q-shared-byteset.bot
     }
 } -result {1}
 
-test checked-domain-shared-instance-from-int {byte::from_int(45) (a literal) and byte::from_int(m) (a genuinely dynamic parameter) share one NIR instance (one "byte::from_int" func header), not two} -body {
-    set path [makeFile {import byte
-import type byte::Byte
-byte::from_int(45)
-fn dyn(m: int) -> Byte errors byte::BelowRange, byte::AboveRange:
-    byte::from_int(m)
+test checked-domain-shared-instance-from-int {std::byte::from_int(45) (a literal) and std::byte::from_int(m) (a genuinely dynamic parameter) share one NIR instance (one "std::byte::from_int" func header), not two} -body {
+    set path [makeFile {import std::byte
+import type std::byte::Byte
+std::byte::from_int(45)
+fn dyn(m: int) -> Byte errors std::byte::BelowRange, std::byte::AboveRange:
+    std::byte::from_int(m)
 dyn(45)} q-shared-fromint.bot]
     try {
-        funcHeaderCount [nirOfFile $path] {byte::from_int}
+        funcHeaderCount [nirOfFile $path] {std::byte::from_int}
     } finally {
         removeFile q-shared-fromint.bot
     }
@@ -392,29 +392,29 @@ dyn(45)} q-shared-fromint.bot]
 # today, confirming there is no latent unsoundness for a future milestone
 # to inherit if Outcome A ever becomes available for an exact domain.
 
-test checked-domain-highnibble-membership-exact-not-interval {HighNibble's own membership check: 17 is inside HighNibble's [0,240] interval hull but is not one of its 16 exact members -- core::type::validate (the generic runtime membership check any future checked-construction proof would have to share) correctly rejects it, using the real, unmodified lib/byte.bot registration. A domain has no membership predicate in Botlish source (ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md), so this is exercised at the Tcl/core::type layer directly -- spec item 58's "test at the appropriate analysis layer"} -body {
+test checked-domain-highnibble-membership-exact-not-interval {HighNibble's own membership check: 17 is inside HighNibble's [0,240] interval hull but is not one of its 16 exact members -- core::type::validate (the generic runtime membership check any future checked-construction proof would have to share) correctly rejects it, using the real, unmodified stdlib/byte.bot registration. A domain has no membership predicate in Botlish source (ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md), so this is exercised at the Tcl/core::type layer directly -- spec item 58's "test at the appropriate analysis layer"} -body {
     # Loading any program that references byte:: registers HighNibble in
     # core::type's own registry (SOURCE-DEFINED-INTEGER-DOMAINS.md).
-    set path [makeFile {import byte
-byte::high_nibble(0)} q-highnibble-load.bot]
+    set path [makeFile {import std::byte
+std::byte::high_nibble(0)} q-highnibble-load.bot]
     try {
         surface::readProgramFile $path -strict 0
     } finally {
         removeFile q-highnibble-load.bot
     }
-    list [core::type::validate byte::HighNibble [core::value::int 17]] \
-            [core::type::validate byte::HighNibble [core::value::int 16]] \
-            [core::type::validate byte::HighNibble [core::value::int 240]] \
-            [core::type::validate byte::HighNibble [core::value::int 0]]
+    list [core::type::validate std::byte::HighNibble [core::value::int 17]] \
+            [core::type::validate std::byte::HighNibble [core::value::int 16]] \
+            [core::type::validate std::byte::HighNibble [core::value::int 240]] \
+            [core::type::validate std::byte::HighNibble [core::value::int 0]]
 } -result {0 1 1 1}
 
 # ---------------------------------------------------------------------------
 # Runtime-failure preservation controls (M1-M4 style regression pins,
 # spec items 19-20, 28-29): Outcome B changes no runtime semantics.
 
-test checked-domain-byte-set-astral-still-fails {byte::set(['Ā']) (U+0100) still fails at runtime on every backend when its own compile-time KNOWN-ERROR is bypassed (-strict 0, matching tests/byte-set.test's own moduleErrorKinds technique) -- Outcome B changes no runtime semantics} -body {
-    set path [makeFile {import byte
-byte::set(['Ā'])} q-astral.bot]
+test checked-domain-byte-set-astral-still-fails {std::byte::set(['Ā']) (U+0100) still fails at runtime on every backend when its own compile-time KNOWN-ERROR is bypassed (-strict 0, matching tests/byte-set.test's own moduleErrorKinds technique) -- Outcome B changes no runtime semantics} -body {
+    set path [makeFile {import std::byte
+std::byte::set(['Ā'])} q-astral.bot]
     try {
         set hir [surface::readProgramFile $path -strict 0]
         set exprs [hir::lower $hir]
@@ -424,9 +424,9 @@ byte::set(['Ā'])} q-astral.bot]
     }
 } -result {error}
 
-test checked-domain-byte-set-astral-known-error-at-compile-time {byte::set(['Ā']) is rejected at compile time as a KNOWN-ERROR under ordinary compilation, unaffected by this milestone} -body {
-    set path [makeFile {import byte
-byte::set(['Ā'])} q-astral-known-error.bot]
+test checked-domain-byte-set-astral-known-error-at-compile-time {std::byte::set(['Ā']) is rejected at compile time as a KNOWN-ERROR under ordinary compilation, unaffected by this milestone} -body {
+    set path [makeFile {import std::byte
+std::byte::set(['Ā'])} q-astral-known-error.bot]
     try {
         diagKinds [surface::readProgramFile $path -strict 0]
     } finally {
@@ -439,9 +439,9 @@ byte::set(['Ā'])} q-astral-known-error.bot]
 # traces executes at module-initialization time only, in the whole frozen
 # corpus.
 
-test checked-domain-corpus-census-single-real-call-site {byte::from_int is called from exactly one place in the whole frozen corpus (lib/*.bot): byte::set's own loop body -- module-init-only cost, confirming any future proof-consumption work here would only ever pay rent at startup} -body {
+test checked-domain-corpus-census-single-real-call-site {std::byte::from_int is called from exactly one place in the whole frozen corpus (stdlib/*.bot): std::byte::set's own loop body -- module-init-only cost, confirming any future proof-consumption work here would only ever pay rent at startup} -body {
     set count 0
-    foreach f [glob -directory [file join $::projectRoot lib] *.bot] {
+    foreach f [glob -directory [file join $::projectRoot stdlib] *.bot] {
         foreach line [split [core::ReadFile $f] \n] {
             if {[string match {#*} [string trimleft $line]]} {
                 continue
@@ -460,11 +460,11 @@ test checked-domain-corpus-census-single-real-call-site {byte::from_int is calle
 # SetFromList/SetFromListTotal allocation-site label split
 # (M4-EQUALITY-TOTAL-SETFROMLIST-EFFECT.md) is unaffected -- this milestone
 # makes no production change, so both labels remain exactly as M4 left
-# them, and byte::set's own SetFromList call remains proven equality-total.
+# them, and std::byte::set's own SetFromList call remains proven equality-total.
 
-test checked-domain-m4-control-byte-set-still-setfromlisttotal {byte::set's own immutable_set::from_list(bytes) call still lowers to the equality-total opcode -- M4 unaffected by this milestone} -body {
-    set path [makeFile {import byte
-additional_unreserved_chars = byte::set(['-', '.', '_', '~'])} q-m4-control.bot]
+test checked-domain-m4-control-byte-set-still-setfromlisttotal {std::byte::set's own std::immutable_set::from_list(bytes) call still lowers to the equality-total opcode -- M4 unaffected by this milestone} -body {
+    set path [makeFile {import std::byte
+additional_unreserved_chars = std::byte::set(['-', '.', '_', '~'])} q-m4-control.bot]
     try {
         set nirText [nirOfFile $path]
         list [expr {[string first {op setfromlisttotal} $nirText] >= 0}] \

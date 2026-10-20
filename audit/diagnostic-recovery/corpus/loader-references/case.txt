@@ -1,5 +1,5 @@
 # Two qualified references whose namespaces the file does not import.
 primary 5:5
-fix 1 import str
+fix 1 import std::str
 primary 8:5
-fix 2 import list
+fix 2 import std::list

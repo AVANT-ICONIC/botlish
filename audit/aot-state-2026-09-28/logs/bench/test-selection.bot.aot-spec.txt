@@ -1,11 +1,11 @@
 == test-selection.bot (interp)
 <program>: closed (transitively guarded)   [i0, line 44:1]
-  calls:    changed?<generic>, first_affected<List[list], block>, list::none?<List[str], block>, make_changed?<List[str]>, select_affected<List[list], block>
+  calls:    changed?<generic>, first_affected<List[list], block>, std::list::none?<List[str], block>, make_changed?<List[str]>, select_affected<List[list], block>
   guards:   0
   runtime:  closure-env, list-alloc
 
-list::any? (semantic): open   [UnknownParameterKind 1, UnknownCallResultKind 1, DynamicCall 1]
-list::any?<any, block>: guarded   [i6, line 59:8]
+std::list::any? (semantic): open   [UnknownParameterKind 1, UnknownCallResultKind 1, DynamicCall 1]
+std::list::any?<any, block>: guarded   [i6, line 59:8]
   params:   xs : any, predicate : block
   result:   bool
   guards:   2
@@ -13,16 +13,16 @@ list::any?<any, block>: guarded   [i6, line 59:8]
     line 61:12  e6  UnknownCallResultKind: the condition needs bool; the result of the dynamic call at line 61:12 has no static kind
   runtime:  indirect-call, tagged-values
 
-list::none? (semantic): open   [UnknownParameterKind 1, UnknownCallResultKind 1, DynamicCall 1]
-list::none?<List[str], block>: guarded   [i7, line 71:9]
+std::list::none? (semantic): open   [UnknownParameterKind 1, UnknownCallResultKind 1, DynamicCall 1]
+std::list::none?<List[str], block>: guarded   [i7, line 71:9]
   params:   xs : List[str], predicate : block
   result:   bool
   guards:   1
     line 73:12  e31  UnknownCallResultKind: the condition needs bool; the result of the dynamic call at line 73:12 has no static kind
   runtime:  indirect-call, tagged-values
 
-list::find (semantic): open   [UnknownParameterKind 1, UnknownCallResultKind 1, DynamicCall 1]
-list::find<List[list], block>: guarded   [i9, line 77:8]
+std::list::find (semantic): open   [UnknownParameterKind 1, UnknownCallResultKind 1, DynamicCall 1]
+std::list::find<List[list], block>: guarded   [i9, line 77:8]
   params:   xs : List[list], predicate : block
   result:   list
   guards:   1
@@ -68,14 +68,14 @@ affected? (semantic): closed   [no blockers]
 affected?<list, block>: closed (transitively guarded)   [i4, line 56:13]
   params:   test : list, changed? : block
   result:   bool
-  calls:    list::any?<any, block>, test_deps<list>
+  calls:    std::list::any?<any, block>, test_deps<list>
   guards:   0
   runtime:  none
 
 affected?<any, block>: closed (transitively guarded)   [i12, line 56:13]
   params:   test : any, changed? : block
   result:   bool
-  calls:    list::any?<any, block>, test_deps<generic>
+  calls:    std::list::any?<any, block>, test_deps<generic>
   guards:   0
   runtime:  none
 
@@ -91,7 +91,7 @@ first_affected (semantic): closed   [no blockers]
 first_affected<List[list], block>: closed (transitively guarded)   [i8, line 65:18]
   params:   tests : List[list], changed? : block
   result:   any
-  calls:    list::find<List[list], block>, test_name<list>
+  calls:    std::list::find<List[list], block>, test_name<list>
   guards:   0
   runtime:  closure-env, list-alloc
 

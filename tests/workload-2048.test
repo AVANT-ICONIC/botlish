@@ -5,10 +5,10 @@
 # and without GC stress.
 #
 # The engine is an ordinary module that is not standard library, so it is
-# not in lib/: it is an application module, the file beside its programs
+# not in stdlib/: it is an application module, the file beside its programs
 # (IMPORTS.md, "Application modules"), and every program here is compiled as
 # it is, by the front end main.tcl uses. (Before application modules they
-# were compiled against a private copy of lib/ with the engine added: S4.)
+# were compiled against a private copy of stdlib/ with the engine added: S4.)
 #
 # Backends, as tests/golden.test's: the outer pass's own (CORE_BACKEND
 # interp or compile) plus cranelift in the interp pass and
@@ -29,14 +29,14 @@ if {![info exists ::env(CORE_BACKEND)]} {
 } else {
     set workloadBackends [list $::env(CORE_BACKEND)]
 }
-# lib/test.bot's runner is a coroutine: natively, Linux x86-64 and AArch64
+# stdlib/test.bot's runner is a coroutine: natively, Linux x86-64 and AArch64
 # only (COROUTINES.md), as tests/golden.test.
 set nativeSuite [expr {$::tcl_platform(os) eq "Linux" && $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 set suiteBackends [expr {$nativeSuite ? $workloadBackends : [lsearch -all -inline -not -glob $workloadBackends cranelift*]}]
 testConstraint suiteBackends [expr {[llength $suiteBackends] > 0}]
 # Linux on x86-64 or AArch64: the native backend's whole runtime (native
 # stack maps, the stack guard, coroutines), and syscalls through the portable
-# wrappers (linux::write, linux::read, linux::io: each architecture's own
+# wrappers (std::linux::write, std::linux::read, std::linux::io: each architecture's own
 # transport, LINUX-SYSCALL-TRANSPORTS.md).
 testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
@@ -85,7 +85,7 @@ test workload-2048-golden-suite "golden.bot: compiles once, all 68 tests pass on
 test workload-2048-warning-clean {the engine, the demo, the suite and the benchmark have no warnings of their own (the stdlib's own findings, manifested by the warning gate, are not theirs)} -body {
     set found {}
     foreach name {game2048.bot demo.bot golden.bot bench.bot} {
-        # (For a Linux target: the demo prints through linux::io.)
+        # (For a Linux target: the demo prints through std::linux::io.)
         set hir [surface::readProgramFile [file join $gameDir $name] -warnings default -warning-channel "" -target [linuxTarget]]
         foreach warning [hir::warnings::of $hir] {
             set text [hir::warnings::render $hir $warning]
@@ -98,7 +98,7 @@ test workload-2048-warning-clean {the engine, the demo, the suite and the benchm
     join $found \n
 } -result {}
 
-test workload-2048-strict-warnings {S16: the engine, the demo, the suite and the benchmark compile under -warnings error -- the stdlib modules they load (io, linux::io, test, ...) carry no warning either, so nothing their authors did not write rejects them} -body {
+test workload-2048-strict-warnings {S16: the engine, the demo, the suite and the benchmark compile under -warnings error -- the stdlib modules they load (io, std::linux::io, test, ...) carry no warning either, so nothing their authors did not write rejects them} -body {
     set rejected {}
     foreach name {game2048.bot demo.bot golden.bot bench.bot} {
         if {[catch {surface::readProgramFile [file join $gameDir $name] -warnings error -warning-channel "" -target [linuxTarget]} message]} {
@@ -167,7 +167,7 @@ unit}
 # (native/src/codegen/roots.rs shared a root slot between a call's result
 # and a List live across the call; tests/native-root-liveness.test's
 # root-def-interference-1 is the reduced case). It prints through
-# linux::io, whose syscalls go through the target architecture's own
+# std::linux::io, whose syscalls go through the target architecture's own
 # transport (LINUX-SYSCALL-TRANSPORTS.md), hence nativeLinux.
 test workload-2048-demo-executable {the demo as a standalone executable prints the whole game, identically under GC stress} -constraints {executableAot nativeLinux} -body {
     set dir [makeDirectory workload-2048-demo]

@@ -70,8 +70,8 @@ whose parameters are numbers (`surface::parser::ScalarRefinement`, AST
 an integer literal, a field written twice, two fields on one line without a
 comma -- is a syntax error where it is written.
 
-The library surface is two intrinsics: `float64::from_decimal_rounded(x)`
-(after `import float64`) and `decimal_rounded::round[T](x)` (after `import
+The library surface is two intrinsics: `std::float64::from_decimal_rounded(x)`
+(after `import std::float64`) and `std::decimal_rounded::round[T](x)` (after `import
 decimal_rounded`), and one builtin error, `UnrepresentableDecimal`.
 
 ## 2. Semantic definition
@@ -129,7 +129,7 @@ construction and by test (`dr-rounding-rule`, `dr-boundaries-*`, the
 fuzzer's independent rounding).
 
 It is the same rule as binary64's own round-to-nearest, and the one
-`float64::from_int` already uses; nothing in Botlish gave a reason to
+`std::float64::from_int` already uses; nothing in Botlish gave a reason to
 choose another.
 
 ## 4. The lower bound
@@ -212,7 +212,7 @@ compiler picks for it is the next binary64 up, 0.29500000000000004
 (section 13).
 
 A value computed at run time from Float64 values is made a DecimalRounded
-value only by `decimal_rounded::round[T](x)` (section 11), which quantizes:
+value only by `std::decimal_rounded::round[T](x)` (section 11), which quantizes:
 it never pretends a Float64 already is a decimal.
 
 ## 7. The scalar-refinement infrastructure
@@ -384,7 +384,7 @@ have different guarantees has the weaker one.
 
 **Decay is visible.** Every refined type is a subtype of the base, and a
 value decays to a number of another kind only through
-`float64::from_decimal_rounded(x)`: the Float64 nearest round(x, N), N the
+`std::float64::from_decimal_rounded(x)`: the Float64 nearest round(x, N), N the
 precision x's static type guarantees -- the guaranteed decimal, never the
 representation's hidden digits, so every representation and every backend
 give the same Float64. Its representation need not change, and in fact it
@@ -397,7 +397,7 @@ never gains a stronger type without a proof (TYPE: "a value of
 DecimalRounded{minDecimalsPreserved: 2} is known only to 2 decimal places,
 and a guarantee is never strengthened without a proof"). The two ways to
 get a guarantee are a decimal constant the compiler proves (section 9) and
-`decimal_rounded::round[T](x)`, which establishes it by quantizing: its
+`std::decimal_rounded::round[T](x)`, which establishes it by quantizing: its
 decimal is x's exact binary value rounded half to even to T's places (the
 Float64 1.005 is 1.00499999999999989..., so it is 1.00 at two places), and
 its representation is chosen to satisfy every place up to N; when none
@@ -509,7 +509,7 @@ decided while compiling, by the completion analysis, as KNOWN-ERROR
 rule, unchanged.
 
 Inside a `static compile:` block a proof failure is a recoverable
-diagnostic like any other: the block becomes `compiler::CompilerError` with
+diagnostic like any other: the block becomes `std::compiler::CompilerError` with
 `DiagnosticCode::DecimalPrecision`, `DecimalGuaranteeLost` or
 `RefinementParameter` (`dr-static-compile`; the golden suite's bodies).
 
@@ -603,12 +603,12 @@ The program says where the guarantee is given up and where it is
 established again:
 
 ```botlish
-import float64
-import decimal_rounded
+import std::float64
+import std::decimal_rounded
 
 fn add(a: DecimalRounded{minDecimalsPreserved: 2}, b: DecimalRounded{minDecimalsPreserved: 2}) -> DecimalRounded{minDecimalsPreserved: 2} errors NonFiniteFloat, UnrepresentableDecimal:
-    sum = float64::from_decimal_rounded(a) + float64::from_decimal_rounded(b)
-    decimal_rounded::round[DecimalRounded{minDecimalsPreserved: 2}](sum)
+    sum = std::float64::from_decimal_rounded(a) + std::float64::from_decimal_rounded(b)
+    std::decimal_rounded::round[DecimalRounded{minDecimalsPreserved: 2}](sum)
 
 fn safe(a: DecimalRounded{minDecimalsPreserved: 2}, b: DecimalRounded{minDecimalsPreserved: 2}) -> DecimalRounded{minDecimalsPreserved: 2}:
     a.add(b):
@@ -659,21 +659,21 @@ zero"), though its binary64 quotient, 1.8e16, is finite.
 
 ## 18. Diagnostics
 
-| situation | kind | compiler::DiagnosticCode |
+| situation | kind | std::compiler::DiagnosticCode |
 |---|---|---|
 | malformed parameters, unknown parameter, out of range, `max < min`, a bare `DecimalRounded`, a family that has none (`Float64{...}`) | REFINEMENT-PARAMETER | RefinementParameter |
 | a malformed field (no colon, a non-integer, a repeat, no separator) | syntax error | -- |
 | a constant not proven to the required places; a division by an exactly zero decimal | DECIMAL-PRECISION | DecimalPrecision |
 | arithmetic on values known only by their guarantee | DECIMAL-GUARANTEE-LOST | DecimalGuaranteeLost |
-| a guarantee minted without proof, strengthened, a ceiling dropped or raised, Float64/DecimalRounded mixed (operators and arguments), an observation of a value of unknown precision, aggregate equality, a set of DecimalRounded values, `decimal_rounded::round` not imprinted with a refined type | TYPE | Type |
+| a guarantee minted without proof, strengthened, a ceiling dropped or raised, Float64/DecimalRounded mixed (operators and arguments), an observation of a value of unknown precision, aggregate equality, a set of DecimalRounded values, `std::decimal_rounded::round` not imprinted with a refined type | TYPE | Type |
 | the binary64 computation of a constant is not finite | KNOWN-ERROR | KnownError |
 | type-blind `==` or `hash` of a DecimalRounded value at run time | EQUALITY (run time) | -- |
 | a quantization no representation holds | `UnrepresentableDecimal` (declared builtin error, the tenth: its native id is BUILTIN_ERROR_ID_BASE + 9, after the binary errors, so existing ids are unchanged) | -- |
 
 Each has a Compilerpedia topic: `concept.decimal-rounded`,
 `error.refinement-parameter`, `error.decimal-precision`,
-`error.decimal-guarantee-lost`, `stdlib.float64::from_decimal_rounded`,
-`stdlib.decimal_rounded::round`, `stdlib.module.decimal_rounded`; the TYPE
+`error.decimal-guarantee-lost`, `stdlib.std::float64::from_decimal_rounded`,
+`stdlib.std::decimal_rounded::round`, `stdlib.module.std::decimal_rounded`; the TYPE
 and EQUALITY diagnostics that mention DecimalRounded point to the concept
 page (its `match:` lines). `concept.floats`'s literal rule now names the
 exception.
@@ -750,7 +750,7 @@ exception.
   `golden.test`, `method-eligible.test`, `diagnostic-recovery.test`, and the
   golden framework's mutants (20/20 killed, run with `-suites 0`: the
   framework test file and fuzzer as detectors) after the new
-  `test::code_name` cases. `tools/compilerpedia.tcl check` passes.
+  `std::test::code_name` cases. `tools/compilerpedia.tcl check` passes.
 * **CI** on the branch before it was merged with main (head `aad6a63`):
   `tests.yml` (the whole Tcl suite with duplicates on interp and compile,
   its native coverage, every golden suite beside its Tcl originals, the
@@ -822,7 +822,7 @@ also checks an unrepresentable quantization.
   (`ExactOperation`) and native lowering's d64 operations; HIR,
   interchange and the observations do not change. There is no global
   fast-math flag, by design.
-* **FFI.** A later conversion to `ffi::c::Double` can be the explicit decay
+* **FFI.** A later conversion to `std::ffi::c::Double` can be the explicit decay
   (forget the guarantee) or a proof that a value's representation is the C
   value wanted; DecimalRounded never becomes a C type itself.
 

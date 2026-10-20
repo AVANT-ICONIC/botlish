@@ -177,7 +177,7 @@
 >>>>
 
 @@ linuxpath-validator-reads-environment LinuxPath's predicate consults the process environment (here argv) instead of only the String
-## lib/linux/path.bot
+## stdlib/linux/path.bot
 <<<<
 fn valid?(value: str) -> bool proves value: LinuxPath:
     value.length() > 0 and value.nul_free?()
@@ -190,7 +190,7 @@ fn valid?(value: str) -> bool proves value: LinuxPath:
 >>>>
 
 @@ linuxpath-permits-nul LinuxPath admits U+0000
-## lib/linux/path.bot
+## stdlib/linux/path.bot
 <<<<
         if value.char_at(i).scalar_value() == 0:
 ====
@@ -205,8 +205,8 @@ fn valid?(value: str) -> bool proves value: LinuxPath:
             return [list str builtin]
 >>>>
 
-@@ print-line-two-writes io::print_line writes the text and the newline separately
-## lib/io.bot
+@@ print-line-two-writes std::io::print_line writes the text and the newline separately
+## stdlib/io.bot
 <<<<
 fn print_line(text: str, context io: IO) -> unit errors WriteFailed:
     io.write_text(text.append_char('\n'))
@@ -217,29 +217,29 @@ fn print_line(text: str, context io: IO) -> unit errors WriteFailed:
 >>>>
 
 @@ short-write-not-completed a short write is reported as WriteFailed instead of being completed
-## lib/linux/io.bot
+## stdlib/linux/io.bot
 <<<<
         return fd.write_all(remaining)
 ====
-        fail io::WriteFailed
+        fail std::io::WriteFailed
 >>>>
 
 @@ zero-progress-retried a write that makes no progress is retried instead of failing
-## lib/linux/io.bot
+## stdlib/linux/io.bot
 <<<<
     if written <= 0:
-        fail io::WriteFailed
+        fail std::io::WriteFailed
 ====
     if written < 0:
-        fail io::WriteFailed
+        fail std::io::WriteFailed
     if written == 0:
         return fd.write_all(bytes)
 >>>>
 
 @@ stdout-stderr-swapped the portable error output goes to standard output
-## lib/linux/io.bot
+## stdlib/linux/io.bot
 <<<<
-    io.stderr.write_all(str::encode_utf8(text))
+    io.stderr.write_all(std::str::encode_utf8(text))
 ====
-    io.stdout.write_all(str::encode_utf8(text))
+    io.stdout.write_all(std::str::encode_utf8(text))
 >>>>

@@ -40,12 +40,12 @@ func 0 "<program>" params=0 env=0 regs=36 pnames="" captures=0 instance="generic
     ret %35
 end
 
-func 1 "char::codepoint" params=1 env=0 regs=2 pnames="c" captures=0 instance="UnicodeChar" @e2
+func 1 "std::char::codepoint" params=1 env=0 regs=2 pnames="c" captures=0 instance="UnicodeChar" @e2
     %1 = op charcodepoint %0 @e3
     ret %1
 end
 
-func 2 "byte::from_int" params=1 env=0 regs=8 pnames="value" captures=0 instance="int" rawregs="2 5" @e58
+func 2 "std::byte::from_int" params=1 env=0 regs=8 pnames="value" captures=0 instance="int" rawregs="2 5" @e58
     %1 = int 0 @e63
     %2 = rawint 0
     %3 = op ilt %0 %1 @e60
@@ -62,7 +62,7 @@ func 2 "byte::from_int" params=1 env=0 regs=8 pnames="value" captures=0 instance
     ret %7
 end
 
-func 3 "byte::set" params=1 env=0 regs=17 pnames="chars" captures=0 instance="List[UnicodeChar]" rawregs="3 14" @e73
+func 3 "std::byte::set" params=1 env=0 regs=17 pnames="chars" captures=0 instance="List[UnicodeChar]" rawregs="3 14" @e73
     %1 = op listlen %0 @e75
     %2 = int 0 @e75
     %3 = rawint 0
@@ -94,7 +94,7 @@ func 3 "byte::set" params=1 env=0 regs=17 pnames="chars" captures=0 instance="Li
     ret %16
 end
 
-func 4 "ascii::is_digit" params=1 env=0 regs=13 pnames="b" captures=0 instance="int" rawregs="1 3 7" @e86
+func 4 "std::ascii::is_digit" params=1 env=0 regs=13 pnames="b" captures=0 instance="int" rawregs="1 3 7" @e86
     %1 = op runbox %0
     %2 = int 48 @e91
     %3 = rawint 48
@@ -124,7 +124,7 @@ func 4 "ascii::is_digit" params=1 env=0 regs=13 pnames="b" captures=0 instance="
     ret %5
 end
 
-func 5 "ascii::is_upper" params=1 env=0 regs=13 pnames="b" captures=0 instance="int" rawregs="1 3 7" @e101
+func 5 "std::ascii::is_upper" params=1 env=0 regs=13 pnames="b" captures=0 instance="int" rawregs="1 3 7" @e101
     %1 = op runbox %0
     %2 = int 65 @e106
     %3 = rawint 65
@@ -154,7 +154,7 @@ func 5 "ascii::is_upper" params=1 env=0 regs=13 pnames="b" captures=0 instance="
     ret %5
 end
 
-func 6 "ascii::is_lower" params=1 env=0 regs=13 pnames="b" captures=0 instance="int" rawregs="1 3 7" @e116
+func 6 "std::ascii::is_lower" params=1 env=0 regs=13 pnames="b" captures=0 instance="int" rawregs="1 3 7" @e116
     %1 = op runbox %0
     %2 = int 97 @e121
     %3 = rawint 97
@@ -184,7 +184,7 @@ func 6 "ascii::is_lower" params=1 env=0 regs=13 pnames="b" captures=0 instance="
     ret %5
 end
 
-func 7 "ascii::is_alphabetic" params=1 env=0 regs=8 pnames="b" captures=0 instance="int" @e131
+func 7 "std::ascii::is_alphabetic" params=1 env=0 regs=8 pnames="b" captures=0 instance="int" @e131
     %1 = call 5 %0 @e133
     br %1 L0 L1 @e132
   label L0
@@ -209,7 +209,7 @@ func 7 "ascii::is_alphabetic" params=1 env=0 regs=8 pnames="b" captures=0 instan
     ret %2
 end
 
-func 8 "ascii::is_alphanumeric" params=1 env=0 regs=8 pnames="b" captures=0 instance="int" @e144
+func 8 "std::ascii::is_alphanumeric" params=1 env=0 regs=8 pnames="b" captures=0 instance="int" @e144
     %1 = call 7 %0 @e146
     br %1 L0 L1 @e145
   label L0
@@ -234,7 +234,7 @@ func 8 "ascii::is_alphanumeric" params=1 env=0 regs=8 pnames="b" captures=0 inst
     ret %2
 end
 
-func 9 "web::is_unreserved" params=1 env=1 regs=9 pnames="b" captures=1 instance="generic" @e185
+func 9 "std::web::is_unreserved" params=1 env=1 regs=9 pnames="b" captures=1 instance="generic" @e185
     %1 = call 8 %0 @e187
     br %1 L0 L1 @e186
   label L0
@@ -260,7 +260,7 @@ func 9 "web::is_unreserved" params=1 env=1 regs=9 pnames="b" captures=1 instance
     ret %2
 end
 
-func 10 "web::uri_escape_text" params=3 env=0 regs=7 pnames="s web::hex_digits web::is_unreserved" captures=0 instance="generic" rawregs="4" @e199
+func 10 "std::web::uri_escape_text" params=3 env=0 regs=7 pnames="s std::web::hex_digits std::web::is_unreserved" captures=0 instance="generic" rawregs="4" @e199
     %3 = int 0 @e319
     %4 = rawint 0
     %5 = str "" @e320
@@ -286,7 +286,7 @@ func 11 "high_nibble" params=1 env=0 regs=15 pnames="b" captures=0 instance="gen
     ret %12
 end
 
-func 12 "hex_pair" params=2 env=0 regs=9 pnames="b web::hex_digits" captures=0 instance="generic" rawregs="5" planregs="8" planresult=1 @e208
+func 12 "hex_pair" params=2 env=0 regs=9 pnames="b std::web::hex_digits" captures=0 instance="generic" rawregs="5" planregs="8" planresult=1 @e208
     %2 = call 11 %0 @e214
     %3 = op listget %1 %2 @e211
     %4 = int 16 @e223
@@ -297,7 +297,7 @@ func 12 "hex_pair" params=2 env=0 regs=9 pnames="b web::hex_digits" captures=0 i
     ret %8
 end
 
-func 13 "esc_bytes" params=4 env=0 regs=14 pnames="bytes i acc web::hex_digits" captures=0 instance="generic" rawregs="8" planregs="2 6 12 13" planresult=1 @e225
+func 13 "esc_bytes" params=4 env=0 regs=14 pnames="bytes i acc std::web::hex_digits" captures=0 instance="generic" rawregs="8" planregs="2 6 12 13" planresult=1 @e225
     %4 = op listlen %0 @e230
     %5 = op ige %1 %4 @e227
     br %5 L0 L1 @e226
@@ -317,7 +317,7 @@ func 13 "esc_bytes" params=4 env=0 regs=14 pnames="bytes i acc web::hex_digits" 
     ret %6
 end
 
-func 14 "esc_char" params=3 env=0 regs=23 pnames="c web::is_unreserved web::hex_digits" captures=0 instance="generic" rawregs="5 7 11 16 20" planregs="9 14 18 22" planresult=1 @e254
+func 14 "esc_char" params=3 env=0 regs=23 pnames="c std::web::is_unreserved std::web::hex_digits" captures=0 instance="generic" rawregs="5 7 11 16 20" planregs="9 14 18 22" planresult=1 @e254
     %3 = op strutf8bytes %0 @e256
     %4 = op listlen %3 @e262
     %5 = op runbox %4
@@ -355,7 +355,7 @@ func 14 "esc_char" params=3 env=0 regs=23 pnames="c web::is_unreserved web::hex_
     ret %9
 end
 
-func 15 "esc_from" params=5 env=0 regs=18 pnames="text i acc web::is_unreserved web::hex_digits" captures=0 instance="generic" rawregs="10 13" planregs="2 16 17" @e287
+func 15 "esc_from" params=5 env=0 regs=18 pnames="text i acc std::web::is_unreserved std::web::hex_digits" captures=0 instance="generic" rawregs="10 13" planregs="2 16 17" @e287
     %5 = op strlen %0 @e292
     %6 = op ige %1 %5 @e289
     br %6 L0 L1 @e288
@@ -378,7 +378,7 @@ func 15 "esc_from" params=5 env=0 regs=18 pnames="text i acc web::is_unreserved 
     ret %7
 end
 
-func 16 "repeat_uri" params=6 env=0 regs=18 pnames="i total acc corpus web::hex_digits web::is_unreserved" captures=0 instance="generic" rawregs="14" @e329
+func 16 "repeat_uri" params=6 env=0 regs=18 pnames="i total acc corpus std::web::hex_digits std::web::is_unreserved" captures=0 instance="generic" rawregs="14" @e329
     %6 = op ige %0 %1 @e331
     br %6 L0 L1 @e330
   label L0

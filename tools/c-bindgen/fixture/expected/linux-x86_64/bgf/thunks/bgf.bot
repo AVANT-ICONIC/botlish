@@ -3,25 +3,27 @@
 # The thunked APIs of include/bgf/bgf.h (static inline functions, table-redirected
 # names, macros): externs of the C wrappers in the shim library (C-BINDGEN.md,
 # "Thunks"). Build the shim with `tools/c-bindgen.tcl build`.
-import ffi::c
+import std::ffi::c
 import bgf::ctypes
 
 extern c library "botlish_shim_bgf_143debf5"
 extern c library "bgf"
 
 # C: static inline int bgf_square(int x)
-extern c fn bgf_square named "botlish_bgf_bgf_square"(x: ffi::c::Int) -> ffi::c::Int
+extern c fn bgf_square named "botlish_bgf_bgf_square"(x: std::ffi::c::Int) -> std::ffi::c::Int
 
 # C: static inline int bgf_point_x(const bgf_point *p)
 extern c fn bgf_point_x named "botlish_bgf_bgf_point_x"(
-    p: ffi::c::Ptr[bgf::ctypes::bgf_point] read proven noescape
-) -> ffi::c::Int
+    p: std::ffi::c::Ptr[bgf::ctypes::bgf_point] read proven noescape
+) -> std::ffi::c::Int
 
 # C: int bgf_get(int x) (called through (bgf_table_ptr -> get))
-extern c fn bgf_get named "botlish_bgf_bgf_get"(x: ffi::c::Int) -> ffi::c::Int
+extern c fn bgf_get named "botlish_bgf_bgf_get"(x: std::ffi::c::Int) -> std::ffi::c::Int
 
 # C: int bgf_shadowed(int x), shadowed by a function-like macro of its name
-extern c fn bgf_shadowed named "botlish_bgf_bgf_shadowed"(x: ffi::c::Int) -> ffi::c::Int
+extern c fn bgf_shadowed named "botlish_bgf_bgf_shadowed"(
+    x: std::ffi::c::Int
+) -> std::ffi::c::Int
 
 # C: macro BGF_TWICE, as int BGF_TWICE(int x)
-extern c fn BGF_TWICE named "botlish_bgf_BGF_TWICE"(x: ffi::c::Int) -> ffi::c::Int
+extern c fn BGF_TWICE named "botlish_bgf_BGF_TWICE"(x: std::ffi::c::Int) -> std::ffi::c::Int

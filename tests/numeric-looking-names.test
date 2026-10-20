@@ -313,7 +313,7 @@ destructure "struct P:\n    @1: int\n    @2: int\np = P {@1: 1, @2: 2}\n{@1, @2:
 enum "enum @C1:\n    @C2, @C3\nx = @C1::@C2\n\[x, x == @C1::@C3\]\n" {}
 error "error @C1:\n    @1: int\nfn f(n: int) -> int errors @C1:\n    if n < 0:\n        fail @C1 {@1: n}\n    n\nfn g(n: int) -> int:\n    f(n):\n        on @C1 {@1}:\n            @1\ng(-5)\n" {}
 refined "type @C1 = Int in 0..10\nfn f(x: @C1) -> int:\n    x + 1\nf(3)\n" {}
-method "import list\nfn @1(xs: List\[int\]) -> int:\n    list::length(xs)\nxs = \[1\]\nxs.@1()\n" {}
+method "import std::list\nfn @1(xs: List\[int\]) -> int:\n    std::list::length(xs)\nxs = \[1\]\nxs.@1()\n" {}
 module "import @1\n@1::@2(3)\n" {@1.bot "fn @2(x: int) -> int:\n    x + 1\n"}
 module-types "import @1\nx = @1::@C2 {@3: 4}\ny = @1::@C3::@C1\n\[x.@3, y\]\n" {@1.bot "struct @C2:\n    @3: int\nenum @C3:\n    @C1, Other\n"}
 unbound "fn f(x):\n    @1 + x\nf(1)\n" {}
@@ -323,15 +323,15 @@ duplicate "@1 = 1\n@1 = 2\n@1\n" {}
 arity "fn @1(a, b):\n    a\n@1(1)\n" {}
 same-return "fn @1(x: int) -> int:\n    if x > 0:\n        return 5\n    5\n@1(1)\n" {}
 trait "trait @C1:\n    fn @2(value: @C1) -> str\nstruct @C3:\n    @3: str\nfn @2(value: @C3) -> str:\n    value.@3\nfn describe(value: @C1) -> str:\n    value.@2()\ndescribe(@C3 {@3: \"Alice\"})\n" {}
-refinement "import str\nrefined type @C1 = str\nfn @2?(s: str) -> bool proves s: @C1:\n    str::length(s) > 0\nfn @3(s: @C1) -> str:\n    s.append_char('!')\nfn safe(s: str) -> str:\n    if @2?(s):\n        return @3(s)\n    \"(empty)\"\n\[safe(\"hi\"), safe(\"\")\]\n" {}
-coroutine "import coroutine\nfn @1(@2: int) -> int:\n    loop @3 from 0 to @2:\n        yield @3\n    -1\ncoroutine {step, first} = @1(3)\na = step()\nb = step()\n\[first, a, b, coroutine::done?(step)\]\n" {}
+refinement "import std::str\nrefined type @C1 = str\nfn @2?(s: str) -> bool proves s: @C1:\n    std::str::length(s) > 0\nfn @3(s: @C1) -> str:\n    s.append_char('!')\nfn safe(s: str) -> str:\n    if @2?(s):\n        return @3(s)\n    \"(empty)\"\n\[safe(\"hi\"), safe(\"\")\]\n" {}
+coroutine "import std::coroutine\nfn @1(@2: int) -> int:\n    loop @3 from 0 to @2:\n        yield @3\n    -1\ncoroutine {step, first} = @1(3)\na = step()\nb = step()\n\[first, a, b, std::coroutine::done?(step)\]\n" {}
 flags "fn @1(n: int, flags :@2, :@3) -> str:\n    if @2 and @3:\n        return \"both\"\n    if @2:\n        return \"one\"\n    \"none\"\n\[@1(1), @1(1, :@2), 1.@1(:@2, :@3)\]\n" {}
-static "import compiler\nfn @1() -> int errors compiler::CompilerError:\n    static compile:\n        @2 + 1\nr = @1():\n    on compiler::CompilerError {code, primary}:\n        if code == compiler::DiagnosticCode::Unbound:\n            primary.line\n        else:\n            0\nr\n" {}
-layout "import binary\nimport abi::bytes\nimport byte\nlayout @C1:\n    size 8\n    align 4\n    field @2: binary::U32 at 0\n    field @3: binary::I16 at 4\nbinary::layout_length(@C1)\n" {}
+static "import std::compiler\nfn @1() -> int errors std::compiler::CompilerError:\n    static compile:\n        @2 + 1\nr = @1():\n    on std::compiler::CompilerError {code, primary}:\n        if code == std::compiler::DiagnosticCode::Unbound:\n            primary.line\n        else:\n            0\nr\n" {}
+layout "import std::binary\nimport std::abi::bytes\nimport std::byte\nlayout @C1:\n    size 8\n    align 4\n    field @2: std::binary::U32 at 0\n    field @3: std::binary::I16 at 4\nstd::binary::layout_length(@C1)\n" {}
 opaque "opaque struct @C1:\n    @2: int\nfn make(n: int) -> @C1:\n    @C1 {@2: n}\nfn @3(t: @C1) -> int:\n    t.@2\nmake(4).@3()\n" {}
 payload-rename "error @C1:\n    @2: int\n    @3: str\nfn f(n: int) -> int errors @C1:\n    if n < 0:\n        fail @C1 {@2: n, @3: \"@1\"}\n    n\nfn g(n: int) -> list:\n    f(n):\n        on @C1 {@2: @1, @3}:\n            return \[@1, @3\]\n    \[\]\ng(-2)\n" {}
 float-names "fn @1(@2: Float64) -> Float64 errors NonFiniteFloat:\n    @2 / 2.0\nr = @1(3.0):\n    on NonFiniteFloat {result: @3}:\n        0.0\nr\n" {}
-string-text "import str\n@1 = \"@2\"\n@3 = \" 12 \"\n\[@1, @3, \"0x10\", \"1e3\", \"1_000\", \"+5\", str::concat(@1, @3), str::length(@3), @1 == \"@2\", \"inf\" == \"Infinity\", \"nan\" == \"nan\"\]\n" {}
+string-text "import std::str\n@1 = \"@2\"\n@3 = \" 12 \"\n\[@1, @3, \"0x10\", \"1e3\", \"1_000\", \"+5\", std::str::concat(@1, @3), std::str::length(@3), @1 == \"@2\", \"inf\" == \"Infinity\", \"nan\" == \"nan\"\]\n" {}
 }
 
 test nl-names-front-end {programs that name functions, parameters, locals, fields, structs, enums and cases, errors and payload fields, types, traits, refinements, coroutines, flags, layouts, modules and static blocks nan, inf or infinity (any letter case) compile, warn and are rejected exactly like the same programs with other names} -body {

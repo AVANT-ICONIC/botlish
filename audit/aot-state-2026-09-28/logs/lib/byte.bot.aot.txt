@@ -4,7 +4,7 @@
   blockers: none
   runtime:  none
 
-char::codepoint: closed   [e2, line 21:13]
+std::char::codepoint: closed   [e2, line 21:13]
   params:   c : any   result: int
   dispatch: closed -- natives: char_codepoint
   blockers: none
@@ -61,7 +61,7 @@ from_int: closed   [e58, line 150:12]
 set: closed   [e73, line 174:7]
   params:   chars : any   result: ImmutableSet[int[Byte]]
   captures: from_int (block)
-  dispatch: closed -- natives: immutable_set_from_list; functions: char::codepoint (non-tail), from_int (non-tail)
+  dispatch: closed -- natives: immutable_set_from_list; functions: std::char::codepoint (non-tail), from_int (non-tail)
   blockers: none
   runtime:  set-alloc, structural-equality
    value: <block (chars)>

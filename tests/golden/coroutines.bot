@@ -32,7 +32,7 @@
 # * Results. The root's yields and its return share one outward type
 #   (CoroutineResultMismatch otherwise). A completed handle returns its
 #   cached final result -- the very value -- and runs no body code again;
-#   coroutine::done? is false while the coroutine is suspended and true
+#   std::coroutine::done? is false while the coroutine is suspended and true
 #   after.
 # * Errors. A declared error crosses the construction or the resume that
 #   ran the failing segment: it is handled there or admitted by the
@@ -48,7 +48,7 @@
 #   (AffineEqualityUnsupported). The release at a handle's last use or on an
 #   early exit changes no value.
 # * Contexts and traits are static: a deep context-trait operation runs the
-#   provider selected at construction, after every resume too (io::IO's
+#   provider selected at construction, after every resume too (std::io::IO's
 #   print_line included); a trait-polymorphic yielding function is an
 #   ordinary yielding clone.
 # * Values held only by suspended frames survive the collections other
@@ -69,17 +69,17 @@
 # suite, and their bodies compare what those runs computed.
 #
 # Imports: compiler and test for the framework; coroutine
-# (coroutine::done?), list, mutable_array and str as the Tcl programs import
-# them; io for co-context-portable-io (io::print_line, io::IO,
-# io::WriteFailed). No test here is about a missing import or about which
+# (std::coroutine::done?), list, mutable_array and str as the Tcl programs import
+# them; io for co-context-portable-io (std::io::print_line, std::io::IO,
+# std::io::WriteFailed). No test here is about a missing import or about which
 # methods are visible.
-import compiler
-import coroutine
-import io
-import list
-import mutable_array
-import str
-import test
+import std::compiler
+import std::coroutine
+import std::io
+import std::list
+import std::mutable_array
+import std::str
+import std::test
 
 # ---------------------------------------------------------------------------
 # Declarations the tests need (top-level only). The Tcl programs are
@@ -173,13 +173,13 @@ context struct Log:
     a: MutableArray[int]
 
 fn note(i: int, v: int, context log: Log) -> int:
-    mutable_array::set(log.a, i, v):
+    std::mutable_array::set(log.a, i, v):
         on IndexNotFound:
             unit
     v
 
 fn get(i: int, context log: Log) -> int:
-    mutable_array::at(log.a, i):
+    std::mutable_array::at(log.a, i):
         on IndexNotFound:
             -1
 
@@ -196,16 +196,16 @@ context struct Counter:
     a: MutableArray[int]
 
 fn bump(context c: Counter) -> int:
-    v = mutable_array::at(c.a, 0):
+    v = std::mutable_array::at(c.a, 0):
         on IndexNotFound:
             0
-    mutable_array::set(c.a, 0, v + 1):
+    std::mutable_array::set(c.a, 0, v + 1):
         on IndexNotFound:
             unit
     v + 1
 
 fn count(context c: Counter) -> int:
-    mutable_array::at(c.a, 0):
+    std::mutable_array::at(c.a, 0):
         on IndexNotFound:
             -1
 
@@ -218,7 +218,7 @@ fn counting(k: int) -> V:
 
 # co-context-trait (contextProgram): a context trait (Out, renamed Emitter)
 # implemented by the installed context A (renamed Adder), its error
-# (WriteFailed, renamed EmitFailed: io::WriteFailed is another error here),
+# (WriteFailed, renamed EmitFailed: std::io::WriteFailed is another error here),
 # and a deep consumer yielding between two operations (deep and worker,
 # renamed emitting_deep and emitting_worker).
 error EmitFailed
@@ -243,10 +243,10 @@ fn emitting_worker(n: int) -> Ev errors EmitFailed:
     y = emitting_deep(n)
     return Ev {n: y}
 
-# co-context-portable-io: the substitute io::IO context of the Tcl test's
+# co-context-portable-io: the substitute std::io::IO context of the Tcl test's
 # private module limited.bot, here in the suite's own namespace (an
 # implementation of a context trait is read from its context's owner
-# namespace). Writes succeed up to a limit and fail with io::WriteFailed
+# namespace). Writes succeed up to a limit and fail with std::io::WriteFailed
 # beyond it. The Tcl program installs limited::create(100) and
 # limited::create(5) in two programs; one program installs one Limited, so
 # its limit is a one-slot array set before each run (set_limit) instead of a
@@ -254,42 +254,42 @@ fn emitting_worker(n: int) -> Ev errors EmitFailed:
 context struct Limited:
     max: MutableArray[int]
 
-fn write_text(text: str, context c: Limited) -> unit errors io::WriteFailed:
-    limit = mutable_array::at(c.max, 0):
+fn write_text(text: str, context c: Limited) -> unit errors std::io::WriteFailed:
+    limit = std::mutable_array::at(c.max, 0):
         on IndexNotFound:
             0
-    if str::length(text) > limit:
-        fail io::WriteFailed
+    if std::str::length(text) > limit:
+        fail std::io::WriteFailed
     unit
 
-fn write_error_text(text: str, context c: Limited) -> unit errors io::WriteFailed:
-    fail io::WriteFailed
+fn write_error_text(text: str, context c: Limited) -> unit errors std::io::WriteFailed:
+    fail std::io::WriteFailed
 
 fn set_limit(limit: int, context c: Limited) -> unit:
-    mutable_array::set(c.max, 0, limit):
+    std::mutable_array::set(c.max, 0, limit):
         on IndexNotFound:
             unit
 
 # The Tcl program's say and worker (renamed talker) and its driver.
-fn say(text: str) -> int errors io::WriteFailed:
-    io::print_line(text)
+fn say(text: str) -> int errors std::io::WriteFailed:
+    std::io::print_line(text)
     yield Ev {n: 10}
     1
 
-fn talker() -> Ev errors io::WriteFailed:
+fn talker() -> Ev errors std::io::WriteFailed:
     a = say("hi")
     b = say("a much longer line")
     return Ev {n: a + b}
 
 fn drive_talker() -> List[int]:
     coroutine {step, first} = talker():
-        on io::WriteFailed:
+        on std::io::WriteFailed:
             Ev {n: -1}
     second = step():
-        on io::WriteFailed:
+        on std::io::WriteFailed:
             Ev {n: -2}
     third = step():
-        on io::WriteFailed:
+        on std::io::WriteFailed:
             Ev {n: -3}
     [first.n, second.n, third.n]
 
@@ -310,8 +310,8 @@ struct Line:
     text: str
 
 fn greet(x: Named) -> Line:
-    yield Line {text: str::concat("hello ", x.name())}
-    return Line {text: str::concat("bye ", x.name())}
+    yield Line {text: std::str::concat("hello ", x.name())}
+    return Line {text: std::str::concat("bye ", x.name())}
 
 # ---------------------------------------------------------------------------
 # Grammar: what is source-observable of it (the parse errors and the AST
@@ -321,22 +321,22 @@ fn register_syntax_tests():
     # `coroutine` and `resume` are ordinary names outside their forms: a
     # binding named coroutine (beside the imported coroutine namespace), a
     # function named resume with a parameter named resume.
-    fn b_contextual() errors compiler::CompilerError:
+    fn b_contextual() errors std::compiler::CompilerError:
         static compile:
             coroutine = 3
             fn resume(resume):
                 resume + coroutine
             resume(4)
-    test::value("co-syntax-contextual", 7, b_contextual)
+    std::test::value("co-syntax-contextual", 7, b_contextual)
 
     # A lone `resume` in a parameter list is a parameter, not a resume
     # clause.
-    fn b_resume_parameter() errors compiler::CompilerError:
+    fn b_resume_parameter() errors std::compiler::CompilerError:
         static compile:
             fn f(resume: int) -> int:
                 resume * 2
             f(21)
-    test::value("co-syntax-resume-clause", 42, b_resume_parameter)
+    std::test::value("co-syntax-resume-clause", 42, b_resume_parameter)
 
 # ---------------------------------------------------------------------------
 # Deep yields and the empty loop (COROUTINES.md items 50, 51)
@@ -345,7 +345,7 @@ fn register_deep_yield_tests():
     # A yield three frames deep suspends the whole stack; the message
     # becomes the yield's value; deepest, middle and worker return in turn;
     # the handle is then completed and keeps its final result.
-    fn b_three_levels() errors compiler::CompilerError:
+    fn b_three_levels() errors std::compiler::CompilerError:
         static compile:
             fn consume_message(m: Message) -> int:
                 m.value * 2
@@ -358,17 +358,17 @@ fn register_deep_yield_tests():
                 x = middle()
                 return DeepEvent {kind: "finished", value: x}
             coroutine {step, first} = worker()
-            was = coroutine::done?(step)
+            was = std::coroutine::done?(step)
             final = step(Message {value: 20})
-            now = coroutine::done?(step)
+            now = std::coroutine::done?(step)
             again = step(Message {value: 5})
             [first, was, final, now, again]
-    test::value("co-deep-three-levels", [DeepEvent {kind: "progress", value: 1}, false, DeepEvent {kind: "finished", value: 41}, true, DeepEvent {kind: "finished", value: 41}], b_three_levels)
+    std::test::value("co-deep-three-levels", [DeepEvent {kind: "progress", value: 1}, false, DeepEvent {kind: "finished", value: 41}, true, DeepEvent {kind: "finished", value: 41}], b_three_levels)
 
     # A loop that runs zero times: construction succeeds, first is the final
     # result, the handle is done, and calling it again returns that result
     # -- no exhaustion, no failure. (One item: the ordinary first yield.)
-    fn b_empty_loop() errors compiler::CompilerError:
+    fn b_empty_loop() errors std::compiler::CompilerError:
         static compile:
             fn worker(items: List[Item]) -> Stage:
                 loop item in items:
@@ -376,18 +376,18 @@ fn register_deep_yield_tests():
                 return Stage {kind: "finished"}
             fn run_items(items: List[Item]) -> list:
                 coroutine {step, first} = worker(items)
-                done = coroutine::done?(step)
+                done = std::coroutine::done?(step)
                 again = step()
-                [first.kind, done, again.kind, coroutine::done?(step)]
+                [first.kind, done, again.kind, std::coroutine::done?(step)]
             [run_items([]), run_items([Item {n: 1}])]
-    test::value("co-empty-loop", [["finished", true, "finished", true], ["item", false, "finished", true]], b_empty_loop)
+    std::test::value("co-empty-loop", [["finished", true, "finished", true], ["item", false, "finished", true]], b_empty_loop)
 
 # ---------------------------------------------------------------------------
 # Resume protocols (items 5-10, 33, 34, 52)
 
 fn register_protocol_tests():
     # An explicit struct resume type: each yield evaluates to the message.
-    fn b_explicit() errors compiler::CompilerError:
+    fn b_explicit() errors std::compiler::CompilerError:
         static compile:
             fn w(resume In) -> Out:
                 m = yield Out {v: 1}
@@ -395,11 +395,11 @@ fn register_protocol_tests():
             coroutine {step, first} = w()
             x = step(In {v: 9})
             [first.v, x.v]
-    test::value("co-protocol-explicit", [1, 9], b_explicit)
+    std::test::value("co-protocol-explicit", [1, 9], b_explicit)
 
     # Inferred from a use of the yield's value as a struct-typed argument
     # (consume takes an In); one yield ignores its message, another uses it.
-    fn b_inferred() errors compiler::CompilerError:
+    fn b_inferred() errors std::compiler::CompilerError:
         static compile:
             fn w() -> Out:
                 yield Out {v: 1}
@@ -409,11 +409,11 @@ fn register_protocol_tests():
             a = step(In {v: 100})
             b = step(In {v: 21})
             [first.v, a.v, b.v]
-    test::value("co-protocol-inferred", [1, 2, 42], b_inferred)
+    std::test::value("co-protocol-inferred", [1, 2, 42], b_inferred)
 
     # A function without its own constraint inherits its yielding callee's
     # protocol.
-    fn b_transitive() errors compiler::CompilerError:
+    fn b_transitive() errors std::compiler::CompilerError:
         static compile:
             fn ask(resume In) -> int:
                 m = yield Out {v: 0}
@@ -426,11 +426,11 @@ fn register_protocol_tests():
             a = step(In {v: 3})
             b = step(In {v: 4})
             [first.v, a.v, b.v]
-    test::value("co-protocol-transitive", [0, 0, 7], b_transitive)
+    std::test::value("co-protocol-transitive", [0, 0, 7], b_transitive)
 
     # No constraint: the zero-message protocol -- step() takes no
     # argument ...
-    fn b_zero_message() errors compiler::CompilerError:
+    fn b_zero_message() errors std::compiler::CompilerError:
         static compile:
             fn ticker() -> Tick:
                 x = yield Tick {n: 1}
@@ -440,10 +440,10 @@ fn register_protocol_tests():
             a = step()
             b = step()
             [first.n, a.n, b.n]
-    test::value("co-protocol-zero-message/resumes", [1, 2, 3], b_zero_message)
+    std::test::value("co-protocol-zero-message/resumes", [1, 2, 3], b_zero_message)
 
     # ... and every yield evaluates to unit.
-    fn b_zero_message_unit() errors compiler::CompilerError:
+    fn b_zero_message_unit() errors std::compiler::CompilerError:
         static compile:
             fn ticker() -> Tick:
                 x = yield Tick {n: 1}
@@ -452,87 +452,87 @@ fn register_protocol_tests():
                 Tick {n: 3}
             coroutine {step, first} = ticker()
             step().n
-    test::value("co-protocol-zero-message/unit", 2, b_zero_message_unit)
+    std::test::value("co-protocol-zero-message/unit", 2, b_zero_message_unit)
 
     # A message of another type is an ordinary static Type error, worded
     # for the resume.
-    fn b_wrong_type() errors compiler::CompilerError:
+    fn b_wrong_type() errors std::compiler::CompilerError:
         static compile:
             fn w(resume In) -> Out:
                 m = yield Out {v: 1}
                 return Out {v: m.v}
             coroutine {step} = w()
             step(Out {v: 1})
-    test::rejects_message("co-protocol-wrong-type", compiler::DiagnosticCode::Type, "the resume message of this coroutine must be a In, got Out", b_wrong_type)
+    std::test::rejects_message("co-protocol-wrong-type", std::compiler::DiagnosticCode::Type, "the resume message of this coroutine must be a In, got Out", b_wrong_type)
 
     # A struct-protocol coroutine takes exactly one message ...
-    fn b_arity_missing() errors compiler::CompilerError:
+    fn b_arity_missing() errors std::compiler::CompilerError:
         static compile:
             fn w(resume In) -> Out:
                 m = yield Out {v: 1}
                 return Out {v: m.v}
             coroutine {step} = w()
             step()
-    test::rejects("co-protocol-arity/missing-message", compiler::DiagnosticCode::CoroutineResumeArity, b_arity_missing)
+    std::test::rejects("co-protocol-arity/missing-message", std::compiler::DiagnosticCode::CoroutineResumeArity, b_arity_missing)
 
-    fn b_arity_extra() errors compiler::CompilerError:
+    fn b_arity_extra() errors std::compiler::CompilerError:
         static compile:
             fn w(resume In) -> Out:
                 m = yield Out {v: 1}
                 return Out {v: m.v}
             coroutine {step} = w()
             step(In {v: 1}, In {v: 2})
-    test::rejects("co-protocol-arity/extra-message", compiler::DiagnosticCode::CoroutineResumeArity, b_arity_extra)
+    std::test::rejects("co-protocol-arity/extra-message", std::compiler::DiagnosticCode::CoroutineResumeArity, b_arity_extra)
 
     # ... and a zero-message one none.
-    fn b_arity_zero() errors compiler::CompilerError:
+    fn b_arity_zero() errors std::compiler::CompilerError:
         static compile:
             fn t() -> T:
                 yield T {n: 1}
                 T {n: 2}
             coroutine {step} = t()
             step(T {n: 1})
-    test::rejects("co-protocol-arity/zero-message", compiler::DiagnosticCode::CoroutineResumeArity, b_arity_zero)
+    std::test::rejects("co-protocol-arity/zero-message", std::compiler::DiagnosticCode::CoroutineResumeArity, b_arity_zero)
 
     # A yield's value used as a struct with nothing to determine its type
     # needs a declared protocol.
-    fn b_underconstrained() errors compiler::CompilerError:
+    fn b_underconstrained() errors std::compiler::CompilerError:
         static compile:
             fn w() -> Ev:
                 m = yield Ev {n: 1}
                 return Ev {n: m.n}
             coroutine {step} = w()
-    test::rejects("co-protocol-underconstrained", compiler::DiagnosticCode::CoroutineResumeUnderconstrained, b_underconstrained)
+    std::test::rejects("co-protocol-underconstrained", std::compiler::DiagnosticCode::CoroutineResumeUnderconstrained, b_underconstrained)
 
     # An explicit resume type must be a declared struct type: no Int,
     # String or List protocol (w is never constructed).
-    fn b_struct_only_int() errors compiler::CompilerError:
+    fn b_struct_only_int() errors std::compiler::CompilerError:
         static compile:
             fn w(resume int) -> Ev:
                 yield Ev {n: 1}
                 Ev {n: 2}
             1
-    test::rejects("co-protocol-struct-only/int", compiler::DiagnosticCode::CoroutineResumeType, b_struct_only_int)
+    std::test::rejects("co-protocol-struct-only/int", std::compiler::DiagnosticCode::CoroutineResumeType, b_struct_only_int)
 
-    fn b_struct_only_str() errors compiler::CompilerError:
+    fn b_struct_only_str() errors std::compiler::CompilerError:
         static compile:
             fn w(resume str) -> Ev:
                 yield Ev {n: 1}
                 Ev {n: 2}
             1
-    test::rejects("co-protocol-struct-only/str", compiler::DiagnosticCode::CoroutineResumeType, b_struct_only_str)
+    std::test::rejects("co-protocol-struct-only/str", std::compiler::DiagnosticCode::CoroutineResumeType, b_struct_only_str)
 
-    fn b_struct_only_list() errors compiler::CompilerError:
+    fn b_struct_only_list() errors std::compiler::CompilerError:
         static compile:
             fn w(resume List[int]) -> Ev:
                 yield Ev {n: 1}
                 Ev {n: 2}
             1
-    test::rejects("co-protocol-struct-only/list", compiler::DiagnosticCode::CoroutineResumeType, b_struct_only_list)
+    std::test::rejects("co-protocol-struct-only/list", std::compiler::DiagnosticCode::CoroutineResumeType, b_struct_only_list)
 
     # An unconstrained helper whose yield value is used defaults to the
     # zero-message protocol, which conflicts with a struct-protocol caller.
-    fn b_default_meets_struct() errors compiler::CompilerError:
+    fn b_default_meets_struct() errors std::compiler::CompilerError:
         static compile:
             fn helper() -> int:
                 x = yield Out {v: 0}
@@ -543,11 +543,11 @@ fn register_protocol_tests():
                 m = yield Out {v: helper()}
                 return Out {v: m.v}
             coroutine {step} = w()
-    test::rejects("co-protocol-default-meets-struct", compiler::DiagnosticCode::CoroutineResumeConflict, b_default_meets_struct)
+    std::test::rejects("co-protocol-default-meets-struct", std::compiler::DiagnosticCode::CoroutineResumeConflict, b_default_meets_struct)
 
     # A helper whose yields all discard their value adapts to any protocol:
     # In under w, zero-message under t.
-    fn b_unconstrained_helper() errors compiler::CompilerError:
+    fn b_unconstrained_helper() errors std::compiler::CompilerError:
         static compile:
             fn progress(n: int) -> int:
                 yield Out {v: n}
@@ -566,12 +566,12 @@ fn register_protocol_tests():
             coroutine {step: s2, first: f2} = t()
             last = s2()
             [first.v, x.v, y.v, z.v, f2.v, last.v]
-    test::value("co-protocol-unconstrained-helper", [1, 2, 5, 50, 7, 7], b_unconstrained_helper)
+    std::test::value("co-protocol-unconstrained-helper", [1, 2, 5, 50, 7, 7], b_unconstrained_helper)
 
     # A yield that is the last statement of a collecting loop or of an if
     # whose own value is discarded discards its value too: the helper still
     # adapts.
-    fn b_discarded_collections() errors compiler::CompilerError:
+    fn b_discarded_collections() errors std::compiler::CompilerError:
         static compile:
             fn helper(n: int) -> int:
                 loop i from 0 to 2:
@@ -590,7 +590,7 @@ fn register_protocol_tests():
             c = step(In {v: 0})
             d = step(In {v: 0})
             [first.v, a.v, b.v, c.v, d.v]
-    test::value("co-protocol-discarded-collections", [100, 0, 1, 4, 4], b_discarded_collections)
+    std::test::value("co-protocol-discarded-collections", [100, 0, 1, 4, 4], b_discarded_collections)
 
 # ---------------------------------------------------------------------------
 # Binding forms (items 2, 4, 53)
@@ -598,7 +598,7 @@ fn register_protocol_tests():
 fn register_binding_tests():
     # {step, first}, {step: next}, {first: initial}, {step: s, first: f}:
     # each binds what it names.
-    fn b_forms() errors compiler::CompilerError:
+    fn b_forms() errors std::compiler::CompilerError:
         static compile:
             fn t(k: int) -> T:
                 yield T {n: k}
@@ -609,8 +609,8 @@ fn register_binding_tests():
             coroutine {step: s, first: f} = t(30)
             a = next()
             b = s()
-            [first.n, coroutine::done?(step), a.n, initial.n, f.n, b.n, coroutine::done?(next)]
-    test::value("co-binding-forms", [1, false, 11, 20, 30, 31, true], b_forms)
+            [first.n, std::coroutine::done?(step), a.n, initial.n, f.n, b.n, std::coroutine::done?(next)]
+    std::test::value("co-binding-forms", [1, false, 11, 20, 30, 31, true], b_forms)
 
     # The call's arguments are evaluated before the coroutine exists, in
     # order (a method call's receiver first), and the body has run to its
@@ -621,10 +621,10 @@ fn register_binding_tests():
     coroutine {first: only} = run(note(1, 9))
     x = s()
     eager = [f.n, seen, x.n, only.n, get(2)]
-    fn b_eager_order() errors compiler::CompilerError:
+    fn b_eager_order() errors std::compiler::CompilerError:
         static compile:
             eager
-    test::value("co-binding-eager-order", [14, 70, 7, 9, 79], b_eager_order)
+    std::test::value("co-binding-eager-order", [14, 70, 7, 9, 79], b_eager_order)
 
 # ---------------------------------------------------------------------------
 # The yield effect (items 13-17, 54, 55)
@@ -633,7 +633,7 @@ fn register_effect_tests(high: int, low: int):
     # effectDecls: deepest yields, middle calls it, worker calls middle. A
     # helper calling a yielding function is itself yielding (legal inside a
     # coroutine), and a construction captures its call's effect ...
-    fn b_transitive() errors compiler::CompilerError:
+    fn b_transitive() errors std::compiler::CompilerError:
         static compile:
             fn deepest() -> int:
                 yield Ev {n: 1}
@@ -646,10 +646,10 @@ fn register_effect_tests(high: int, low: int):
             coroutine {step, first} = worker()
             last = step()
             [first.n, last.n]
-    test::value("co-effect-transitive-legal/construction", [1, 4], b_transitive)
+    std::test::value("co-effect-transitive-legal/construction", [1, 4], b_transitive)
 
     # ... and an unused yielding function is legal.
-    fn b_unused() errors compiler::CompilerError:
+    fn b_unused() errors std::compiler::CompilerError:
         static compile:
             fn deepest() -> int:
                 yield Ev {n: 1}
@@ -662,11 +662,11 @@ fn register_effect_tests(high: int, low: int):
             fn unused() -> int:
                 middle()
             5
-    test::value("co-effect-transitive-legal/unused", 5, b_unused)
+    std::test::value("co-effect-transitive-legal/unused", 5, b_unused)
 
     # A function that constructs a coroutine is not yielding itself: it may
     # be called anywhere (here, twice from the block).
-    fn b_nested_isolation() errors compiler::CompilerError:
+    fn b_nested_isolation() errors std::compiler::CompilerError:
         static compile:
             fn deepest() -> int:
                 yield Ev {n: 1}
@@ -681,11 +681,11 @@ fn register_effect_tests(high: int, low: int):
                 last = step()
                 first.n + last.n
             plain() + plain()
-    test::value("co-effect-nested-isolation", 10, b_nested_isolation)
+    std::test::value("co-effect-nested-isolation", 10, b_nested_isolation)
 
     # A coroutine body starts and resumes another coroutine between its own
     # yields.
-    fn b_nested_coroutines() errors compiler::CompilerError:
+    fn b_nested_coroutines() errors std::compiler::CompilerError:
         static compile:
             fn inner(k: int) -> V:
                 yield V {n: k}
@@ -703,11 +703,11 @@ fn register_effect_tests(high: int, low: int):
             b = step()
             c = step()
             [first.n, a.n, b.n, c.n]
-    test::value("co-effect-nested-coroutines", [10, 11, 1200, 1200], b_nested_coroutines)
+    std::test::value("co-effect-nested-coroutines", [10, 11, 1200, 1200], b_nested_coroutines)
 
     # A self-recursive yielding function: each level yields, the stack
     # unwinds level by level.
-    fn b_recursive() errors compiler::CompilerError:
+    fn b_recursive() errors std::compiler::CompilerError:
         static compile:
             fn countdown(n: int) -> V:
                 if n == 0:
@@ -720,10 +720,10 @@ fn register_effect_tests(high: int, low: int):
             c = step()
             d = step()
             [first.n, a.n, b.n, c.n, d.n]
-    test::value("co-effect-recursive", [3, 2, 1, 0, 0], b_recursive)
+    std::test::value("co-effect-recursive", [3, 2, 1, 0, 0], b_recursive)
 
     # Yields in a counted loop and in a branch.
-    fn b_loop_branch() errors compiler::CompilerError:
+    fn b_loop_branch() errors std::compiler::CompilerError:
         static compile:
             fn w(n: int) -> V:
                 loop i from 0 to n:
@@ -737,12 +737,12 @@ fn register_effect_tests(high: int, low: int):
             b = step()
             c = step()
             [first.n, a.n, b.n, c.n]
-    test::value("co-effect-loop-branch", [0, 100, 2, -1], b_loop_branch)
+    std::test::value("co-effect-loop-branch", [0, 100, 2, -1], b_loop_branch)
 
     # A yield inside an on-handler: resuming continues the handler, which
     # then returns. HIGH (5) fails X in something, LOW (1) does not; helper
     # handles X itself, so the constructions need no handler.
-    fn b_handler() errors compiler::CompilerError:
+    fn b_handler() errors std::compiler::CompilerError:
         static compile:
             fn something(n: int) -> int errors X:
                 if n > 2:
@@ -760,11 +760,11 @@ fn register_effect_tests(high: int, low: int):
             coroutine {step: s2, first: f2} = helper(low)
             b = s2()
             [first.n, a.n, f2.n, b.n]
-    test::value("co-effect-handler", [77, 88, 1, -1], b_handler)
+    std::test::value("co-effect-handler", [77, 88, 1, -1], b_handler)
 
     # A yielding call that reachability proves unreachable does not make its
     # caller yielding.
-    fn b_unreachable() errors compiler::CompilerError:
+    fn b_unreachable() errors std::compiler::CompilerError:
         static compile:
             fn deepest() -> int:
                 yield Ev {n: 1}
@@ -779,13 +779,13 @@ fn register_effect_tests(high: int, low: int):
                     worker()
                 7
             plain()
-    test::value("co-effect-unreachable", 7, b_unreachable)
+    std::test::value("co-effect-unreachable", 7, b_unreachable)
 
     # A yielding function cannot become a value (an unknown call could run
     # it outside every coroutine): neither a value that escapes (the Tcl
     # program makes it the program's result; a body must not return a
     # function, so here it escapes into a List) ...
-    fn b_function_value() errors compiler::CompilerError:
+    fn b_function_value() errors std::compiler::CompilerError:
         static compile:
             fn deepest() -> int:
                 yield Ev {n: 1}
@@ -798,10 +798,10 @@ fn register_effect_tests(high: int, low: int):
             f = worker
             held = [f]
             1
-    test::rejects("co-effect-function-value/binding", compiler::DiagnosticCode::UnwrappedYield, b_function_value)
+    std::test::rejects("co-effect-function-value/binding", std::compiler::DiagnosticCode::UnwrappedYield, b_function_value)
 
     # ... nor an argument for a structural Fn parameter.
-    fn b_function_argument() errors compiler::CompilerError:
+    fn b_function_argument() errors std::compiler::CompilerError:
         static compile:
             fn deepest() -> int:
                 yield Ev {n: 1}
@@ -814,19 +814,19 @@ fn register_effect_tests(high: int, low: int):
             fn apply(g: Fn{args: [], return: Ev}) -> Ev:
                 g()
             x = apply(worker)
-    test::rejects("co-effect-function-value/argument", compiler::DiagnosticCode::UnwrappedYield, b_function_argument)
+    std::test::rejects("co-effect-function-value/argument", std::compiler::DiagnosticCode::UnwrappedYield, b_function_argument)
 
     # The right side of a construction is an exact call of a function that
     # may yield: not a call of a plain function ...
-    fn b_rhs_plain() errors compiler::CompilerError:
+    fn b_rhs_plain() errors std::compiler::CompilerError:
         static compile:
             fn plain() -> int:
                 3
             coroutine {step} = plain()
-    test::rejects("co-rhs-not-yielding/plain-call", compiler::DiagnosticCode::CoroutineRhsNotYielding, b_rhs_plain)
+    std::test::rejects("co-rhs-not-yielding/plain-call", std::compiler::DiagnosticCode::CoroutineRhsNotYielding, b_rhs_plain)
 
     # ... nor a value that is no call.
-    fn b_rhs_value() errors compiler::CompilerError:
+    fn b_rhs_value() errors std::compiler::CompilerError:
         static compile:
             fn deepest() -> int:
                 yield Ev {n: 1}
@@ -838,30 +838,30 @@ fn register_effect_tests(high: int, low: int):
                 return Ev {n: x}
             f = 3
             coroutine {step} = f
-    test::rejects("co-rhs-not-yielding/not-a-call", compiler::DiagnosticCode::CoroutineRhsNotYielding, b_rhs_value)
+    std::test::rejects("co-rhs-not-yielding/not-a-call", std::compiler::DiagnosticCode::CoroutineRhsNotYielding, b_rhs_value)
 
     # The root's yields and return need one outward type: its declared
     # result, else one all others fit -- not without a declared result ...
-    fn b_result_undeclared() errors compiler::CompilerError:
+    fn b_result_undeclared() errors std::compiler::CompilerError:
         static compile:
             fn w():
                 yield Ev {n: 1}
                 Res {r: 2}
             coroutine {step} = w()
-    test::rejects("co-result-mismatch/undeclared", compiler::DiagnosticCode::CoroutineResultMismatch, b_result_undeclared)
+    std::test::rejects("co-result-mismatch/undeclared", std::compiler::DiagnosticCode::CoroutineResultMismatch, b_result_undeclared)
 
     # ... nor with a declared result the yields do not fit ...
-    fn b_result_declared() errors compiler::CompilerError:
+    fn b_result_declared() errors std::compiler::CompilerError:
         static compile:
             fn w() -> Res:
                 yield Ev {n: 1}
                 Res {r: 2}
             coroutine {step} = w()
-    test::rejects("co-result-mismatch/declared", compiler::DiagnosticCode::CoroutineResultMismatch, b_result_declared)
+    std::test::rejects("co-result-mismatch/declared", std::compiler::DiagnosticCode::CoroutineResultMismatch, b_result_declared)
 
     # ... while a yielding helper's own result is its business: only the
     # root's outward type counts.
-    fn b_result_helper() errors compiler::CompilerError:
+    fn b_result_helper() errors std::compiler::CompilerError:
         static compile:
             fn helper() -> Res:
                 yield Ev {n: 1}
@@ -872,7 +872,7 @@ fn register_effect_tests(high: int, low: int):
             coroutine {step, first} = w()
             l = step()
             [first.n, l.n]
-    test::value("co-result-mismatch/helper", [1, 5], b_result_helper)
+    std::test::value("co-result-mismatch/helper", [1, 5], b_result_helper)
 
 # ---------------------------------------------------------------------------
 # Errors (items 18-20, 22, 56). errorDecls (deep and worker, failing with
@@ -884,7 +884,7 @@ fn register_effect_tests(high: int, low: int):
 fn register_error_tests(early_input: int, bad_message: int, handled_input: int):
     # An unhandled fail before the first yield crosses the construction:
     # its handler runs, and the handle is failed (done, raising again).
-    fn b_startup() errors compiler::CompilerError:
+    fn b_startup() errors std::compiler::CompilerError:
         static compile:
             fn deep(v: int, resume ErrMsg) -> int errors Broken:
                 if v < 0:
@@ -904,14 +904,14 @@ fn register_error_tests(early_input: int, bad_message: int, handled_input: int):
                 again = step(ErrMsg {v: 1}):
                     on Broken:
                         ErrEv {v: -2}
-                [first.v, coroutine::done?(step), again.v]
+                [first.v, std::coroutine::done?(step), again.v]
             early(early_input)
-    test::value("co-errors-startup", [-1, true, -2], b_startup)
+    std::test::value("co-errors-startup", [-1, true, -2], b_startup)
 
     # A root that always fails after yielding is no statically known
     # failure (the block is accepted): construction yields, the last resume
     # fails, and the failed handle fails again.
-    fn b_last_segment() errors compiler::CompilerError:
+    fn b_last_segment() errors std::compiler::CompilerError:
         static compile:
             fn w() -> ErrEv errors Boom:
                 yield ErrEv {v: 1}
@@ -928,11 +928,11 @@ fn register_error_tests(early_input: int, bad_message: int, handled_input: int):
                         ErrEv {v: -2}
                 [first, last, again]
             g()
-    test::value("co-errors-last-segment-always-fails", [ErrEv {v: 1}, ErrEv {v: -1}, ErrEv {v: -2}], b_last_segment)
+    std::test::value("co-errors-last-segment-always-fails", [ErrEv {v: 1}, ErrEv {v: -1}, ErrEv {v: -2}], b_last_segment)
 
     # An unhandled segment error propagates through a function that
     # declares it, to the handler of its caller ...
-    fn b_propagation() errors compiler::CompilerError:
+    fn b_propagation() errors std::compiler::CompilerError:
         static compile:
             fn deep(v: int, resume ErrMsg) -> int errors Broken:
                 if v < 0:
@@ -954,12 +954,12 @@ fn register_error_tests(early_input: int, bad_message: int, handled_input: int):
                     on Broken:
                         42
             outer()
-    test::value("co-errors-declared-propagation/value", 42, b_propagation)
+    std::test::value("co-errors-declared-propagation/value", 42, b_propagation)
 
     # ... and uncaught it is an ordinary UnhandledError: at a construction
     # (the enclosing function here is the body, which admits only
-    # compiler::CompilerError) ...
-    fn b_unhandled_construction() errors compiler::CompilerError:
+    # std::compiler::CompilerError) ...
+    fn b_unhandled_construction() errors std::compiler::CompilerError:
         static compile:
             fn deep(v: int, resume ErrMsg) -> int errors Broken:
                 if v < 0:
@@ -973,11 +973,11 @@ fn register_error_tests(early_input: int, bad_message: int, handled_input: int):
                 y = deep(x + 1)
                 return ErrEv {v: x + y}
             coroutine {step} = worker(2)
-    test::rejects_message("co-errors-declared-propagation/construction", compiler::DiagnosticCode::UnhandledError, "this coroutine construction may produce the declared error \"Broken\", which is neither handled here nor admitted by the enclosing function's own \"errors\" declaration", b_unhandled_construction)
+    std::test::rejects_message("co-errors-declared-propagation/construction", std::compiler::DiagnosticCode::UnhandledError, "this coroutine construction may produce the declared error \"Broken\", which is neither handled here nor admitted by the enclosing function's own \"errors\" declaration", b_unhandled_construction)
 
     # ... and at a resume: the handled resume before it is no diagnostic,
     # the reported one is the unhandled resume (its location).
-    fn b_unhandled_resume() errors compiler::CompilerError:
+    fn b_unhandled_resume() errors std::compiler::CompilerError:
         static compile:
             fn deep(v: int, resume ErrMsg) -> int errors Broken:
                 if v < 0:
@@ -997,11 +997,11 @@ fn register_error_tests(early_input: int, bad_message: int, handled_input: int):
                 on Broken:
                     ErrEv {v: 0}
             step(ErrMsg {v: 1})
-    test::rejects_message("co-errors-declared-propagation/resume-message", compiler::DiagnosticCode::UnhandledError, "this coroutine resume may produce the declared error \"Broken\", which is neither handled here nor admitted by the enclosing function's own \"errors\" declaration", b_unhandled_resume)
-    test::rejects_at("co-errors-declared-propagation/resume-location", compiler::DiagnosticCode::UnhandledError, 999, 13, b_unhandled_resume)
+    std::test::rejects_message("co-errors-declared-propagation/resume-message", std::compiler::DiagnosticCode::UnhandledError, "this coroutine resume may produce the declared error \"Broken\", which is neither handled here nor admitted by the enclosing function's own \"errors\" declaration", b_unhandled_resume)
+    std::test::rejects_at("co-errors-declared-propagation/resume-location", std::compiler::DiagnosticCode::UnhandledError, 999, 13, b_unhandled_resume)
 
     # A failure handled inside the coroutine never reaches the resume.
-    fn b_internal() errors compiler::CompilerError:
+    fn b_internal() errors std::compiler::CompilerError:
         static compile:
             fn deep(v: int, resume ErrMsg) -> int errors Broken:
                 if v < 0:
@@ -1019,7 +1019,7 @@ fn register_error_tests(early_input: int, bad_message: int, handled_input: int):
             coroutine {step, first} = handled(handled_input)
             second = step(ErrMsg {v: 10})
             [first.v, second.v]
-    test::value("co-errors-internal", [42, 11], b_internal)
+    std::test::value("co-errors-internal", [42, 11], b_internal)
 
 # ---------------------------------------------------------------------------
 # Stable terminal states (items 21-24, 57)
@@ -1027,7 +1027,7 @@ fn register_error_tests(early_input: int, bad_message: int, handled_input: int):
 fn register_terminal_tests():
     # The cached final result is the very value the body returned (a
     # nested aggregate kept whole).
-    fn b_identity() errors compiler::CompilerError:
+    fn b_identity() errors std::compiler::CompilerError:
         static compile:
             fn w() -> ListV:
                 yield ListV {n: []}
@@ -1036,7 +1036,7 @@ fn register_terminal_tests():
             a = step()
             b = step()
             [a == b, a, b]
-    test::value("co-terminal-identity", [true, ListV {n: [1, 2, 3]}, ListV {n: [1, 2, 3]}], b_identity)
+    std::test::value("co-terminal-identity", [true, ListV {n: [1, 2, 3]}, ListV {n: [1, 2, 3]}], b_identity)
 
     # Return before any yield completes at construction; done? is false
     # while suspended and true after; repeated calls return the cached
@@ -1044,21 +1044,21 @@ fn register_terminal_tests():
     # segment's, none after completion). The program needs the Counter
     # context: it runs here.
     coroutine {step: z, first: zf} = counting(0)
-    zd = coroutine::done?(z)
+    zd = std::coroutine::done?(z)
     zagain = z()
     coroutine {step, first} = counting(1)
-    d0 = coroutine::done?(step)
+    d0 = std::coroutine::done?(step)
     x = step()
-    d1 = coroutine::done?(step)
+    d1 = std::coroutine::done?(step)
     y = step()
-    d2 = coroutine::done?(step)
+    d2 = std::coroutine::done?(step)
     r1 = step()
     r2 = step()
     terminal = [zf.n, zd, zagain.n, first.n, d0, x.n, d1, y.n, d2, r1.n, r2.n, count()]
-    fn b_success() errors compiler::CompilerError:
+    fn b_success() errors std::compiler::CompilerError:
         static compile:
             terminal
-    test::value("co-terminal-success", [1, true, 1, 2, false, 3, false, 400, true, 400, 400, 4], b_success)
+    std::test::value("co-terminal-success", [1, true, 1, 2, false, 3, false, 400, true, 400, 400, 4], b_success)
 
 # ---------------------------------------------------------------------------
 # The affine discipline (items 25-30, 49, 58) and the handle's equality
@@ -1068,7 +1068,7 @@ fn register_terminal_tests():
 fn register_affine_tests():
     # A move in one branch leaves the handle not definitely live after the
     # join.
-    fn b_branch_join() errors compiler::CompilerError:
+    fn b_branch_join() errors std::compiler::CompilerError:
         static compile:
             fn deep(base: int, resume Message) -> int:
                 message = yield Event {value: base}
@@ -1084,11 +1084,11 @@ fn register_affine_tests():
                 x = step(Message {value: 1})
                 x.value
             f(true)
-    test::rejects_containing("co-affine-branch-join", compiler::DiagnosticCode::AffineNotDefinitelyLive, "`step` is not definitely live here: its coroutine value was moved on some path reaching this use", b_branch_join)
+    std::test::rejects_containing("co-affine-branch-join", std::compiler::DiagnosticCode::AffineNotDefinitelyLive, "`step` is not definitely live here: its coroutine value was moved on some path reaching this use", b_branch_join)
 
     # A move in a branch that returns leaves the handle live on the
     # remaining path.
-    fn b_terminating_branch() errors compiler::CompilerError:
+    fn b_terminating_branch() errors std::compiler::CompilerError:
         static compile:
             fn deep(base: int, resume Message) -> int:
                 message = yield Event {value: base}
@@ -1106,11 +1106,11 @@ fn register_affine_tests():
                 y = step(Message {value: 6})
                 y.value
             [f(true), f(false)]
-    test::value("co-affine-terminating-branch", [5, 6], b_terminating_branch)
+    std::test::value("co-affine-terminating-branch", [5, 6], b_terminating_branch)
 
     # A move inside a loop body reaches its next iteration: rejected (f is
     # never called) ...
-    fn b_loop_move() errors compiler::CompilerError:
+    fn b_loop_move() errors std::compiler::CompilerError:
         static compile:
             fn deep(base: int, resume Message) -> int:
                 message = yield Event {value: base}
@@ -1126,10 +1126,10 @@ fn register_affine_tests():
                     i
                 1
             0
-    test::rejects("co-affine-loop/move-in-loop", compiler::DiagnosticCode::AffineNotDefinitelyLive, b_loop_move)
+    std::test::rejects("co-affine-loop/move-in-loop", std::compiler::DiagnosticCode::AffineNotDefinitelyLive, b_loop_move)
 
     # ... while resumes in a loop keep ownership, past completion too.
-    fn b_loop_resumes() errors compiler::CompilerError:
+    fn b_loop_resumes() errors std::compiler::CompilerError:
         static compile:
             fn t() -> T:
                 loop i from 0 to 3:
@@ -1139,12 +1139,12 @@ fn register_affine_tests():
             seen = loop i from 0 to 5:
                 x = step()
                 x.n
-            [first.n, seen, coroutine::done?(step)]
-    test::value("co-affine-loop/resumes-in-loop", [0, [1, 2, 99, 99, 99], true], b_loop_resumes)
+            [first.n, seen, std::coroutine::done?(step)]
+    std::test::value("co-affine-loop/resumes-in-loop", [0, [1, 2, 99, 99, 99], true], b_loop_resumes)
 
-    # coroutine::done? observes the handle; sequential resumes keep
+    # std::coroutine::done? observes the handle; sequential resumes keep
     # ownership; dropping a handle is allowed.
-    fn b_done_does_not_move() errors compiler::CompilerError:
+    fn b_done_does_not_move() errors std::compiler::CompilerError:
         static compile:
             fn deep(base: int, resume Message) -> int:
                 message = yield Event {value: base}
@@ -1154,18 +1154,18 @@ fn register_affine_tests():
                 message = yield Event {value: x}
                 return Event {value: message.value}
             coroutine {step, first} = worker(1)
-            a = coroutine::done?(step)
-            b = coroutine::done?(step)
+            a = std::coroutine::done?(step)
+            b = std::coroutine::done?(step)
             x = step(Message {value: 2})
             y = step(Message {value: 3})
             coroutine {step: dropped} = worker(5)
-            [a, b, x.value, y.value, coroutine::done?(step)]
-    test::value("co-affine-done-does-not-move", [false, false, 2, 3, true], b_done_does_not_move)
+            [a, b, x.value, y.value, std::coroutine::done?(step)]
+    std::test::value("co-affine-done-does-not-move", [false, false, 2, 3, true], b_done_does_not_move)
 
     # A moved handle continues the one coroutine: resuming the new owner
     # picks up where the old one stopped, and a second move still has one
     # continuation.
-    fn b_never_forks() errors compiler::CompilerError:
+    fn b_never_forks() errors std::compiler::CompilerError:
         static compile:
             fn t() -> T:
                 yield T {n: 1}
@@ -1180,10 +1180,10 @@ fn register_affine_tests():
             c = third()
             d = third()
             [first.n, a.n, b.n, c.n, d.n]
-    test::value("co-affine-move-never-forks", [1, 2, 3, 4, 4], b_never_forks)
+    std::test::value("co-affine-move-never-forks", [1, 2, 3, 4, 4], b_never_forks)
 
     # Each owner in a move chain is dead after its own move.
-    fn b_chain_use_after() errors compiler::CompilerError:
+    fn b_chain_use_after() errors std::compiler::CompilerError:
         static compile:
             fn t() -> T:
                 yield T {n: 1}
@@ -1192,10 +1192,10 @@ fn register_affine_tests():
             next = step
             third = next
             next()
-    test::rejects("co-affine-move-chain-use-after", compiler::DiagnosticCode::UseAfterMove, b_chain_use_after)
+    std::test::rejects("co-affine-move-chain-use-after", std::compiler::DiagnosticCode::UseAfterMove, b_chain_use_after)
 
     # A handle has no equality (comparing would observe what it owns).
-    fn b_equality() errors compiler::CompilerError:
+    fn b_equality() errors std::compiler::CompilerError:
         static compile:
             fn t() -> T:
                 yield T {n: 1}
@@ -1203,7 +1203,7 @@ fn register_affine_tests():
             coroutine {step: a} = t()
             coroutine {step: b} = t()
             x = a == b
-    test::rejects("co-storage-equality", compiler::DiagnosticCode::AffineEqualityUnsupported, b_equality)
+    std::test::rejects("co-storage-equality", std::compiler::DiagnosticCode::AffineEqualityUnsupported, b_equality)
 
 # ---------------------------------------------------------------------------
 # Contexts and traits (items 37, 38, 60). The context programs run here, in
@@ -1221,40 +1221,40 @@ fn register_context_tests():
         on EmitFailed:
             Ev {n: -2}
     emitted = [first.n, second.n]
-    fn b_context_trait() errors compiler::CompilerError:
+    fn b_context_trait() errors std::compiler::CompilerError:
         static compile:
             emitted
-    test::value("co-context-trait", [15, 20], b_context_trait)
+    std::test::value("co-context-trait", [15, 20], b_context_trait)
 
-    # io::print_line deep inside a coroutine, through the real io::IO
+    # std::io::print_line deep inside a coroutine, through the real std::io::IO
     # context trait and a substitute context: each segment writes through
     # the provider selected at construction. With room for both lines the
     # coroutine completes ...
     set_limit(100)
     roomy = drive_talker()
-    fn b_portable_roomy() errors compiler::CompilerError:
+    fn b_portable_roomy() errors std::compiler::CompilerError:
         static compile:
             roomy
-    test::value("co-context-portable-io/limit-100", [10, 10, 2], b_portable_roomy)
+    std::test::value("co-context-portable-io/limit-100", [10, 10, 2], b_portable_roomy)
 
     # ... and a write failure after a resume crosses that resume and stays
     # the coroutine's terminal error.
     set_limit(5)
     cramped = drive_talker()
-    fn b_portable_cramped() errors compiler::CompilerError:
+    fn b_portable_cramped() errors std::compiler::CompilerError:
         static compile:
             cramped
-    test::value("co-context-portable-io/limit-5", [10, -2, -3], b_portable_cramped)
+    std::test::value("co-context-portable-io/limit-5", [10, -2, -3], b_portable_cramped)
 
 fn register_trait_tests():
     # A trait-polymorphic yielding function is monomorphized into an
     # ordinary yielding clone.
-    fn b_polymorphic() errors compiler::CompilerError:
+    fn b_polymorphic() errors std::compiler::CompilerError:
         static compile:
             coroutine {step, first} = greet(Person {first: "Ada"})
             last = step()
             [first.text, last.text]
-    test::value("co-trait-polymorphic", ["hello Ada", "bye Ada"], b_polymorphic)
+    std::test::value("co-trait-polymorphic", ["hello Ada", "bye Ada"], b_polymorphic)
 
 # ---------------------------------------------------------------------------
 # GC (items 40-43): values held only by suspended frames, and many short
@@ -1264,29 +1264,29 @@ fn register_gc_tests():
     # Values held only by suspended frames at several depths survive the
     # collections run by other coroutines (churn between resumes) and by
     # the main program; a third coroutine is dropped suspended.
-    fn b_suspended_stacks() errors compiler::CompilerError:
+    fn b_suspended_stacks() errors std::compiler::CompilerError:
         static compile:
             fn churn(n: int) -> int:
                 xs = loop i from 0 to n:
-                    str::concat("x", str::concat("y", "z"))
-                list::length(xs)
+                    std::str::concat("x", std::str::concat("y", "z"))
+                std::list::length(xs)
             fn deep(k: int, label: str) -> int:
-                held = [label, str::concat(label, "!"), [k, k + 1]]
+                held = [label, std::str::concat(label, "!"), [k, k + 1]]
                 if k == 0:
-                    yield Line {text: str::concat("bottom:", label)}
+                    yield Line {text: std::str::concat("bottom:", label)}
                     churn(50)
-                    yield Line {text: str::concat("after:", list::at(held, 1))}
+                    yield Line {text: std::str::concat("after:", std::list::at(held, 1))}
                     return 1
-                mine = str::concat(label, "-")
+                mine = std::str::concat(label, "-")
                 r = deep(k - 1, mine)
-                yield Line {text: str::concat(mine, list::at(held, 0))}
+                yield Line {text: std::str::concat(mine, std::list::at(held, 0))}
                 r + 1
             fn worker(k: int, label: str) -> Line:
                 n = deep(k, label)
-                return Line {text: str::concat("done ", label)}
+                return Line {text: std::str::concat("done ", label)}
             fn run_pair(k: int, label: str) -> list:
                 coroutine {step: a, first: fa} = worker(k, label)
-                coroutine {step: b, first: fb} = worker(k + 2, str::concat(label, "B"))
+                coroutine {step: b, first: fb} = worker(k + 2, std::str::concat(label, "B"))
                 coroutine {step: dropped} = worker(3, "dropped")
                 churn(100)
                 out = loop i from 0 to k + 4:
@@ -1296,11 +1296,11 @@ fn register_gc_tests():
                     [x.text, y.text]
                 [fa.text, fb.text, out]
             run_pair(2, "L")
-    test::value("co-gc-suspended-stacks", ["bottom:L--", "bottom:LB----", [["after:L--!", "after:LB----!"], ["L--L-", "LB----LB---"], ["L-L", "LB---LB--"], ["done L", "LB--LB-"], ["done L", "LB-LB"], ["done L", "done LB"]]], b_suspended_stacks)
+    std::test::value("co-gc-suspended-stacks", ["bottom:L--", "bottom:LB----", [["after:L--!", "after:LB----!"], ["L--L-", "LB----LB---"], ["L-L", "LB---LB--"], ["done L", "LB--LB-"], ["done L", "LB-LB"], ["done L", "done LB"]]], b_suspended_stacks)
 
     # Thousands of short coroutines, finished and abandoned: the program
     # stays correct.
-    fn b_many_coroutines() errors compiler::CompilerError:
+    fn b_many_coroutines() errors std::compiler::CompilerError:
         static compile:
             fn w(k: int) -> V:
                 yield V {n: k}
@@ -1312,11 +1312,11 @@ fn register_gc_tests():
                 first.n + last.n
             xs = loop i from 0 to 2000:
                 one(i)
-            last = list::at(xs, 1999):
+            last = std::list::at(xs, 1999):
                 on IndexNotFound:
                     0
-            list::length(xs) + last
-    test::value("co-gc-many-coroutines", 7997, b_many_coroutines)
+            std::list::length(xs) + last
+    std::test::value("co-gc-many-coroutines", 7997, b_many_coroutines)
 
 # ---------------------------------------------------------------------------
 # Releases (COROUTINES.md, "Release at the last use" and "Release on every
@@ -1326,7 +1326,7 @@ fn register_gc_tests():
 fn register_release_tests():
     # A handle moved on one path only: its new owner is released inside the
     # branch, the old binding after it -- the same values on both paths.
-    fn b_branch_move() errors compiler::CompilerError:
+    fn b_branch_move() errors std::compiler::CompilerError:
         static compile:
             fn w(k: int) -> V:
                 yield V {n: k}
@@ -1346,13 +1346,13 @@ fn register_release_tests():
                     0
                 first.n + y
             [pick(true), pick(false), keep(true), keep(false)]
-    test::value("co-release-branch-move", [10, 10, 41, 20], b_branch_move)
+    std::test::value("co-release-branch-move", [10, 10, 41, 20], b_branch_move)
 
     # A release on an exit changes no value: every exit kind (return, fail,
     # a call's error, a handled error whose handler resumes the handle,
     # break and continue leaving the function's own handle live, a self
     # tail call, a moved handle), one row per k.
-    fn b_exit_values() errors compiler::CompilerError:
+    fn b_exit_values() errors std::compiler::CompilerError:
         static compile:
             fn w(k: int) -> V:
                 yield V {n: k}
@@ -1429,7 +1429,7 @@ fn register_release_tests():
             xs = loop k from 0 to 7:
                 row(k)
             xs
-    test::value("co-exit-release-values", [[1, 1, 1, 1, 100, 10, 1, 1], [2, 2, 2, 3, 101, 21, 3, 2], [2, 3, -1, 5, 102, 32, 3, 3], [3, 4, -1, -1, 104, 43, 3, 0], [4, 5, -1, -1, 105, 54, 3, 0], [5, 6, -1, -1, -1, 65, 3, 0], [6, 7, -1, -1, -1, 76, 3, 0]], b_exit_values)
+    std::test::value("co-exit-release-values", [[1, 1, 1, 1, 100, 10, 1, 1], [2, 2, 2, 3, 101, 21, 3, 2], [2, 3, -1, 5, 102, 32, 3, 3], [3, 4, -1, -1, 104, 43, 3, 0], [4, 5, -1, -1, 105, 54, 3, 0], [5, 6, -1, -1, -1, 65, 3, 0], [6, 7, -1, -1, -1, 76, 3, 0]], b_exit_values)
 
 # ---------------------------------------------------------------------------
 
@@ -1447,10 +1447,10 @@ fn register_coroutines_tests():
     register_gc_tests()
     register_release_tests()
 
-with context test::suite()
-with context Log {a: mutable_array::create(4, 0)}
-with context Counter {a: mutable_array::create(1, 0)}
+with context std::test::suite()
+with context Log {a: std::mutable_array::create(4, 0)}
+with context Counter {a: std::mutable_array::create(1, 0)}
 with context Adder {k: 5}
-with context Limited {max: mutable_array::create(1, 0)}
+with context Limited {max: std::mutable_array::create(1, 0)}
 register_coroutines_tests()
-test::report()
+std::test::report()

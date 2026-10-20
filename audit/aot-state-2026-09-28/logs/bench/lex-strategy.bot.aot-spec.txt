@@ -4,8 +4,8 @@
   guards:   0
   runtime:  list-alloc, range-check
 
-list::all? (semantic): open   [UnknownParameterKind 1, UnknownCallResultKind 1, DynamicCall 1]
-list::all?<List[str], native>: guarded   [i10, line 65:8]
+std::list::all? (semantic): open   [UnknownParameterKind 1, UnknownCallResultKind 1, DynamicCall 1]
+std::list::all?<List[str], native>: guarded   [i10, line 65:8]
   params:   xs : List[str], predicate : native
   result:   bool
   guards:   1
@@ -72,7 +72,7 @@ fully_alnum? (semantic): closed   [no blockers]
 fully_alnum?<str>: closed (transitively guarded)   [i9, line 71:16]
   params:   token : str
   result:   bool
-  calls:    chars_of<str, int, List[never]>, list::all?<List[str], native>
+  calls:    chars_of<str, int, List[never]>, std::list::all?<List[str], native>
   guards:   0
   runtime:  list-alloc
 

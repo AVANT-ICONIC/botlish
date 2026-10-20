@@ -10,12 +10,12 @@ func 0 "<program>" params=0 env=0 regs=6 pnames="" captures=0 instance="generic"
     ret %5
 end
 
-func 1 "char::codepoint" params=1 env=0 regs=2 pnames="c" captures=0 instance="UnicodeChar" @e2
+func 1 "std::char::codepoint" params=1 env=0 regs=2 pnames="c" captures=0 instance="UnicodeChar" @e2
     %1 = op charcodepoint %0 @e3
     ret %1
 end
 
-func 2 "byte::from_int" params=1 env=0 regs=9 pnames="value" captures=0 instance="int" rawregs="2 6" @e58
+func 2 "std::byte::from_int" params=1 env=0 regs=9 pnames="value" captures=0 instance="int" rawregs="2 6" @e58
     %1 = int 0 @e63
     %2 = rawint 0
     %3 = op ilt %0 %1 @e60
@@ -39,7 +39,7 @@ func 2 "byte::from_int" params=1 env=0 regs=9 pnames="value" captures=0 instance
     ret %4
 end
 
-func 3 "byte::set" params=1 env=0 regs=17 pnames="chars" captures=0 instance="List[UnicodeChar]" rawregs="3 14" @e73
+func 3 "std::byte::set" params=1 env=0 regs=17 pnames="chars" captures=0 instance="List[UnicodeChar]" rawregs="3 14" @e73
     %1 = op listlen %0 @e75
     %2 = int 0 @e75
     %3 = rawint 0

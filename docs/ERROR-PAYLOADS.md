@@ -50,12 +50,12 @@ payload's shape is known from the error's identity.
 
 The brief's item 78 as Botlish accepts it (`tests/error-payloads.test`'s
 `ep-principal`, `ep-principal-ints`, and `ep-principal-bytes` with the
-stdlib's `abi::bytes::Bytes` as the stream), on the Tcl interpreter, the Tcl
+stdlib's `std::abi::bytes::Bytes` as the stream), on the Tcl interpreter, the Tcl
 compiler and Cranelift without and with specialization:
 
 ```botlish
 struct Response:
-    payloadStream: str          # abi::bytes::Bytes in ep-principal-bytes
+    payloadStream: str          # std::abi::bytes::Bytes in ep-principal-bytes
     length: int
 
 error PageNotFound:
@@ -84,7 +84,7 @@ fn fields(uri: str) -> int:
     page = fetch(uri):
         on PageNotFound {statusCode}:
             return statusCode
-    str::length(page)
+    std::str::length(page)
 
 fn rename(uri: str) -> str:
     fetch(uri):
@@ -99,7 +99,7 @@ fn nested(uri: str) -> int:
                 length,
             }
         }:
-            return length + str::length(payloadStream)
+            return length + std::str::length(payloadStream)
     -1
 ```
 
@@ -165,7 +165,7 @@ nested("")]` is `[404, 0, 4, -1]` on every backend.
 > structure.
 
 ```botlish
-# lib/http.bot                         # lib/cache.bot
+# stdlib/http.bot                         # stdlib/cache.bot
 error NotFound:                        error NotFound:
     key: str                               key: str
 
@@ -199,7 +199,7 @@ struct (the identity is not in it), handlers destructure it the same way,
 ownership, coroutine caching and the native payload transport are the same.
 
 * **Canonical identity** (`hir/errordecls.tcl`): the string `NS::Name` for a
-  module's error (`abi::x86_64::Register64BelowRange` for a nested module),
+  module's error (`std::abi::x86_64::Register64BelowRange` for a nested module),
   the bare `Name` for one the entry program declares (the entry program is no
   namespace), the bare name for the runtime's builtin errors
   (`InvalidArgumentEncoding`, `IndexNotFound`, `LowerUnderrun`,
@@ -222,12 +222,12 @@ ownership, coroutine caching and the native payload transport are the same.
   authorized by `surface::modules::CollectAndLoad` before any body resolves.
   The module AST stays importer-neutral (its declarations keep their short
   names; the loader supplies the namespace).
-* **Migration**: the shipped modules' errors are now `io::WriteFailed`,
-  `byte::BelowRange`, `byte::AboveRange`, `list::NotFound`,
-  `abi::AbiIntegerBelowRange`, `abi::AbiIntegerAboveRange`,
-  `abi::x86_64::Register64BelowRange`, `abi::x86_64::Register64AboveRange`
-  and `io::path::NotAPath`. Their owners are unchanged; external users
-  (`lib/linux/io.bot`, `lib/linux/path.bot`, examples, benchmarks, tests)
+* **Migration**: the shipped modules' errors are now `std::io::WriteFailed`,
+  `std::byte::BelowRange`, `std::byte::AboveRange`, `std::list::NotFound`,
+  `std::abi::AbiIntegerBelowRange`, `std::abi::AbiIntegerAboveRange`,
+  `std::abi::x86_64::Register64BelowRange`, `std::abi::x86_64::Register64AboveRange`
+  and `std::io::path::NotAPath`. Their owners are unchanged; external users
+  (`stdlib/linux/io.bot`, `stdlib/linux/path.bot`, examples, benchmarks, tests)
   spell them qualified. No compatibility alias.
 
 `tests/namespaced-errors.test` pins it on every backend (same-shaped
@@ -1051,7 +1051,7 @@ program are the collecting loop's List):
 |---|---:|---:|---:|---:|
 | every payload-free program, and `ok-small`, `fail-small`, `fail-small-ignored`, `fail-scalars`, `fail-whole-projected`, `fail-partial`, `fail-text`, `fail-small-5` | 3 | 0 | 0 | 1600120 |
 | `fail-whole-value` (`d = [details]`) | 400003 | 200000 | 0 | 19200120 |
-| `fail-built` (`str::concat` per failure) | 200003 | 0 | 200000 | 7400120 |
+| `fail-built` (`std::str::concat` per failure) | 200003 | 0 | 200000 | 7400120 |
 | `fail-nested` (`box: Box {n: x}` per failure) | 200003 | 200000 | 0 | 9600120 |
 
 Natively a scalar payload fails, travels and is destructured, ignored,
@@ -1093,10 +1093,10 @@ directly the two differ by 100-160 ns, inside the spread.)
 ### 63. Compatibility findings
 
 Every error declaration of the shipped corpus stays payload-free and
-unchanged: `lib/io.bot` `WriteFailed`; `lib/byte.bot` `BelowRange`,
-`AboveRange`; `lib/list.bot` `NotFound`; `lib/abi.bot`
-`AbiIntegerBelowRange`, `AbiIntegerAboveRange`; `lib/abi/x86_64.bot`
-`Register64BelowRange`, `Register64AboveRange`; `lib/io/path.bot`
+unchanged: `stdlib/io.bot` `WriteFailed`; `stdlib/byte.bot` `BelowRange`,
+`AboveRange`; `stdlib/list.bot` `NotFound`; `stdlib/abi.bot`
+`AbiIntegerBelowRange`, `AbiIntegerAboveRange`; `stdlib/abi/x86_64.bot`
+`Register64BelowRange`, `Register64AboveRange`; `stdlib/io/path.bot`
 `NotAPath`; and the runtime's builtin `InvalidArgumentEncoding`,
 `IndexNotFound`, `LowerUnderrun`, `UpperOverrun`. None was converted (the
 acceptance cases are the tests' own declarations); no API behavior and no
@@ -1148,9 +1148,9 @@ error CompileError:
 is an ordinary payload error today, and `assert_compiles(n)` handling it with
 `on CompileError {code, primary}:` and an `if code == DiagnosticCode::Unbound`
 runs on every backend (`ep-compile-error-shape`). No new error mechanism is
-needed; `compiler::assert_compiles` itself is not implemented.
+needed; `std::compiler::assert_compiles` itself is not implemented.
 
-### 65. Limitations before `compiler::assert_compiles`
+### 65. Limitations before `std::compiler::assert_compiles`
 
 * (Resolved since: error names are module-qualified, so a `compiler` module
   declaring `CompileError` no longer reserves the name for every program

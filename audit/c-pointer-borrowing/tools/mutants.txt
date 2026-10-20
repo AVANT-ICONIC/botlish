@@ -52,7 +52,7 @@
     if {0} {
 >>>>
 
-@@ borrow-produces-first-class-ptr byte storage is admitted where an ordinary ffi::c::Ptr is declared (a pointer value of it)
+@@ borrow-produces-first-class-ptr byte storage is admitted where an ordinary std::ffi::c::Ptr is declared (a pointer value of it)
 ## hir/range.tcl
 <<<<
         # one of a callable.

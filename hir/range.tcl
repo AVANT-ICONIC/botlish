@@ -46,12 +46,12 @@
 # precision). Every other expression's range is unknown: nothing here infers
 # a bound from an exact call until its successful-result summary is known,
 # from an open call, a list/aggregate read, or from a branch condition (e.g. `i <
-# list::length(xs)` proves nothing about i's range: that needs relational
+# std::list::length(xs)` proves nothing about i's range: that needs relational
 # reasoning intervals cannot express, so it is not attempted; see #19 of the
 # milestone this module was written for).
 #
-# Exact List facts: `list::length` of a List the compiler knows exactly, and
-# `list::at` of one at an exact/ranged index, get the exact length / the join
+# Exact List facts: `std::list::length` of a List the compiler knows exactly, and
+# `std::list::at` of one at an exact/ranged index, get the exact length / the join
 # of the selected elements' Ranges from hir/exactvalue.tcl (a value fact
 # derived from the HIR, not a Range key: a Range describes an integer).
 #
@@ -308,10 +308,10 @@ proc hir::range::nonneg {} {
 # (core/native.tcl): a String/List length. Unlike nonneg this bound is
 # *finite* -- native/src/runtime/vm.rs's MAX_COLLECTION_LENGTH is an actual
 # enforced construction-time limit, not an assumption (see its doc comment),
-# so this alone makes a direct str::length(...)/list::length(...) call small
+# so this alone makes a direct std::str::length(...)/std::list::length(...) call small
 # (fitsSmall below) with no relational reasoning: it is the whole proof for
 # every corpus loop whose bound is a length call appearing in the loop body
-# itself (e.g. reverse's `index == str::length(text)`).
+# itself (e.g. reverse's `index == std::str::length(text)`).
 proc hir::range::collectionLength {} {
     variable smallMax
     return [dict create min 0 max $smallMax]
@@ -818,7 +818,7 @@ proc hir::range::AndMaskExact {r mask} {
 # cases are purely syntactic facts that need no analysis of any callee or
 # binding, so external call sites can be seeded from them without an
 # ordering dependency between instances. The native-call case is what lets a
-# parameter seeded only by e.g. `list::length(row)`-shaped arguments (never a
+# parameter seeded only by e.g. `std::list::length(row)`-shaped arguments (never a
 # literal) still get a genuine finite range (matmul's `count`/`columns`):
 # the same metadata Call (below) reads for an expression already inside the
 # instance being analyzed, read here for an expression outside it.
@@ -1067,7 +1067,7 @@ proc hir::range::Expr {hirVar ctxVar e} {
         listloop {
             # The listloop's own value is a List, never rangeable (always
             # `unknown`); this still visits the iterable and body so any
-            # Int sub-expressions inside them (e.g. char::scalar_value(c),
+            # Int sub-expressions inside them (e.g. std::char::scalar_value(c),
             # Byte(...)) get their own range facts recorded, exactly as a
             # bare loop's body already does. The element binding needs no
             # seed of its own: an unseeded binding's `ref` case already
@@ -1172,7 +1172,7 @@ proc hir::range::Expr {hirVar ctxVar e} {
             # completes normally, so JoinBindings correctly treats this
             # branch as dead and keeps only the surviving branch's own
             # narrowing facts (EXPLICIT-ERROR-COMPLETIONS.md's own
-            # byte::from_int is exactly this shape: "if value < 0: fail ...
+            # std::byte::from_int is exactly this shape: "if value < 0: fail ...
             # else: ... value" must narrow `value` to Byte's domain in the
             # surviving path the same way an ordinary early-return guard
             # already does).
@@ -1268,7 +1268,7 @@ proc hir::range::Call {hirVar ctxVar e node} {
     upvar 1 $hirVar hir $ctxVar ctx
     # The callee is evaluated like any other subexpression (and first, as at
     # run time): an exact call in callee position (`sel(k)(0)`,
-    # `list::at(fs, pick(k))(y)`) or a closure created there is a real call
+    # `std::list::at(fs, pick(k))(y)`) or a closure created there is a real call
     # or creation site, and its argument and capture Ranges must reach the
     # entry facts of what it calls/creates like any other -- skipping it left
     # those entries missing a caller, which is unsound
@@ -1462,7 +1462,7 @@ proc hir::range::ProvesType {range type {held {}}} {
 # violate a declared element contract, so there is nothing for invariance
 # to protect there. "Provably empty" means exactly hir::types::MakeList/
 # MakeSet's own `never`-element fold result (the type a `[]`/an
-# `immutable_set::from_list([])` literal, and nothing else, ever produces --
+# `std::immutable_set::from_list([])` literal, and nothing else, ever produces --
 # see the M7A.A report's producer census): AggregateAdmits below recurses
 # structurally so a *nested* empty aggregate (e.g. the sole element of
 # `[[]]`, statically `List[List[never]]`) is checked the same way one level
@@ -1912,7 +1912,7 @@ proc hir::range::VerifyCall {hirVar ranges e node} {
 
 # Checks call E of the imprinted intrinsic NAME (hir/imprint.tcl;
 # core/native.tcl's -imprint): each argument against its parameter type as
-# this call imprints it -- ffi::c::retype's Ptr[Void], ffi::c::erase's
+# this call imprints it -- std::ffi::c::retype's Ptr[Void], std::ffi::c::erase's
 # Ptr[T] -- by the one admissibility proof (ProvesValueAcceptedBy).
 proc hir::range::VerifyImprintedNative {hirVar ranges e node name} {
     upvar 1 $hirVar hir
@@ -1932,7 +1932,7 @@ proc hir::range::VerifyImprintedNative {hirVar ranges e node name} {
         }
         set hint ""
         if {[hir::types::IsCPtr $declared] && [hir::types::IsCPtr $argType]} {
-            set hint ": a pointer's pointee identity is never converted implicitly (ffi::c::erase makes a Ptr\[ffi::c::Void\], ffi::c::retype\[T\] one back)"
+            set hint ": a pointer's pointee identity is never converted implicitly (std::ffi::c::erase makes a Ptr\[std::ffi::c::Void\], std::ffi::c::retype\[T\] one back)"
         } elseif {[hir::types::IsCPtr $declared] && [hir::types::IsCFnPtr $argType]} {
             set hint ": data and function pointers are distinct, and nothing converts one into the other"
         }
@@ -2038,7 +2038,7 @@ proc hir::range::FactsClause {type declared r} {
 # "": DECLARED is not a structural function type; else "; WHY" naming the
 # part of its contract a value of ARGTYPE fails (hir::types::explainMismatch).
 # Two different named structs get the nominal reason instead: a named struct
-# is a nominal type, so equal field layouts (abi::I64 and abi::Isize, both
+# is a nominal type, so equal field layouts (std::abi::I64 and std::abi::Isize, both
 # one Int field over the same domain) never make one the other.
 proc hir::range::MismatchClause {argType declared} {
     if {[hir::types::IsTrait $argType] && ![hir::types::IsTrait $declared] && $declared ne "any"} {
@@ -2070,7 +2070,7 @@ proc hir::range::MismatchClause {argType declared} {
     if {[hir::types::IsCPtr $declared] && [hir::borrow::IsOwner $argType]} {
         # C-POINTER-BORROWING.md: an exposure is a call's argument
         # transport, never a pointer value.
-        return [format {; byte storage is never a pointer value: an %s is exposed to C only as the argument of a foreign call whose parameter's contract admits it (noescape, a known access, a byte-sized pointee), for that call alone} \
+        return [format {; byte storage is never a pointer value: a %s is exposed to C only as the argument of a foreign call whose parameter's contract admits it (noescape, a known access, a byte-sized pointee), for that call alone} \
             [hir::types::show $argType]]
     }
     if {[hir::types::IsMutArray $declared] && !([hir::types::IsMutArray $argType])} {
@@ -2208,7 +2208,7 @@ proc hir::range::If {hirVar ctxVar e node} {
     }
     # What code textually after this "if" sees (spec #14's whole point: an
     # early-return/break guard -- the corpus's actual shape, e.g. reverse's
-    # `if index == str::length(text): return ...` with no else, the recursive
+    # `if index == std::str::length(text): return ...` with no else, the recursive
     # call a later sibling statement, not nested in an else branch -- must
     # let a narrowed bound reach that sibling code, not just the branch body
     # itself). If one outcome never completes normally, only the other's
@@ -3740,7 +3740,7 @@ proc hir::range::Fixpoint {hir spec callFactsOpt narrowOpt captureOpt pinned} {
     # while the callee's entries were still unknown can leave it an
     # infinite side that no later round removes, so a call expression keeps
     # that side even where the callee's own result under its narrowed
-    # entries is bounded (refined-checks' `e = scan_while(i, str::is_tcl_alpha)`
+    # entries is bounded (refined-checks' `e = scan_while(i, std::str::is_tcl_alpha)`
     # in tld? read [-∞, 2^62-1] for a callee whose result is [0, 2^62-1],
     # so tld?'s `e - i` could not be lowered raw; `fn clamp(x): if x > 100:
     # 100 else: x`, called only as clamp(5), read [-∞, 100]). This second

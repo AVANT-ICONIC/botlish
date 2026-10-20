@@ -7,8 +7,8 @@
 # *known by construction*:
 #
 #   functions       f1 (1 parameter), f2 (2), f3 (3), and `nomethod fn nm` (2),
-#                   plus `import str` for the intrinsic str::concat (2)
-#   eligible        f2(R, 1) / f3(R, 1, 2) / str::concat(s, "x"), R a plain
+#                   plus `import std::str` for the intrinsic std::str::concat (2)
+#   eligible        f2(R, 1) / f3(R, 1, 2) / std::str::concat(s, "x"), R a plain
 #                   name or another postfix/primary form (literal, list
 #                   literal, field, call result, method-call result): predicted
 #                   at the call's own line and column
@@ -93,7 +93,7 @@ proc eligibleStatement {prefix} {
             set sugared "$recv.f3(1, 2)"
         }
         concat {
-            set functional "str::concat(s, \"x\")"
+            set functional "std::str::concat(s, \"x\")"
             set sugared "s.concat(\"x\")"
         }
     }
@@ -179,7 +179,7 @@ proc generate {seed} {
     set ::quietOnly [expr {rand() < 0.3}]
     set lines {}
     foreach line {
-        "import str"
+        "import std::str"
         "fn f1(a):" "    a"
         "fn f2(a, b):" "    a"
         "fn f3(a, b, c):" "    a"

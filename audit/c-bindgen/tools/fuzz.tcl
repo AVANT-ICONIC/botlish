@@ -52,7 +52,7 @@ proc between {lo hi} { return [expr {$lo + int(rand() * ($hi - $lo + 1))}] }
 set target [core::cabi::hostTarget]
 set charSigned [expr {$target ne "linux-aarch64"}]
 
-# The model: C spelling -> {ABI class, bits, signed, the ffi::c scalar} on
+# The model: C spelling -> {ABI class, bits, signed, the std::ffi::c scalar} on
 # LP64 Linux; the stdint/stddef names a header may use -> their C type.
 set ctypes [dict create \
     char [list [expr {$charSigned ? "i8" : "u8"}] 8 $charSigned Char] \
@@ -273,12 +273,12 @@ proc program {prog} {
         foreach q [dict get $d params] { if {[dict get $q kind] eq "handle"} { set direct 1 } }
     }
     set text [expr {$direct ? "direct module\n\n" : ""}]
-    append text "import abi\nimport abi::bytes\nimport byte\nimport ffi::c\nimport fz::fz\n"
+    append text "import std::abi\nimport std::abi::bytes\nimport std::byte\nimport std::ffi::c\nimport fz::fz\n"
     set thunks 0
     foreach d [dict get $prog decls] { if {[dict get $d kind] eq "inline"} { set thunks 1 } }
     if {$thunks} { append text "import fz::thunks::fz\n" }
     append text "\nfn bit(b: bool) -> int:\n    if b:\n        return 1\n    0\n\n"
-    append text "fn byte_of(n: int) -> byte::Byte:\n    if n >= 0 and n <= 255:\n        return n\n    0\n\n"
+    append text "fn byte_of(n: int) -> std::byte::Byte:\n    if n >= 0 and n <= 255:\n        return n\n    0\n\n"
     set elements {}
     set model {}
     set calls [concat [dict get $prog decls] [lmap a [dict get $prog aliases] {
@@ -310,7 +310,7 @@ proc program {prog} {
                 bytes {
                     set a [between 0 255]
                     set b [between 0 255]
-                    append text "b${i}_$j = abi::bytes::from_list(\[byte_of($a), byte_of($b)\])\n"
+                    append text "b${i}_$j = std::abi::bytes::from_list(\[byte_of($a), byte_of($b)\])\n"
                     lappend args b${i}_$j
                     lappend seen [expr {$a + 256 * $b}]
                 }
@@ -407,7 +407,7 @@ proc checkGeneration {prog result hir} {
     }
     foreach c [dict get $prog constants] {
         set row [dict get $rows "macro [dict get $c name]"]
-        set want "ffi::c::[lindex [dict get $::ctypes [dict get $c ctype]] 3]"
+        set want "std::ffi::c::[lindex [dict get $::ctypes [dict get $c ctype]] 3]"
         if {[lindex $row 2] ne "constant" || [lindex $row 4] ne $want || [lindex $row 5] ne "[dict get $c ctype] [dict get $c value]"} {
             lappend problems "[dict get $c name]: expected $want [dict get $c ctype] [dict get $c value], the report says [lrange $row 2 5]"
         }
@@ -457,7 +457,7 @@ for {set p 0} {$p < [dict get $options -n]} {incr p} {
         set app [file join $dir app]
         ::cbind::generate::stage $profile $target "" $app [file join $dir out]
         writeFile [file join $app main.bot] $main
-        set lib [file join $dir lib]
+        set lib [file join $dir stdlib]
         file mkdir $lib
         set tool [dict create includeDirs [list [file join $dir src include]] defines {} undefines {} flags {}]
         lassign [::chdr::toolchain::object $config $tool [file join $dir src fz.c] [file join $lib fz.o] {-O2 -fPIC}] ok stderr

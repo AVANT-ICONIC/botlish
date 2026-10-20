@@ -2,7 +2,7 @@
 # steady-state URI/Byte/ASCII benchmark (M0-MODULE-CLOSURE-AND-URI-
 # BASELINE.md). Complements refined-checks.ir (structural integration,
 # Emailish?-heavy steady state, URI composition at startup only): this
-# deliberately isolates web::uri_escape_text/Byte/ASCII steady-state cost.
+# deliberately isolates std::web::uri_escape_text/Byte/ASCII steady-state cost.
 #
 #   tclsh9.0 bench/uri-steady.tcl [-runs N] [-sessions N]
 #

@@ -73,7 +73,7 @@
         ] list]
 >>>>
 
-@@ string-not-error a rejected block becomes the diagnostic's message as a String value instead of the error compiler::CompilerError
+@@ string-not-error a rejected block becomes the diagnostic's message as a String value instead of the error std::compiler::CompilerError
 ## hir/static.tcl
 <<<<
         return [list [Reified $node [lindex [dict get $decisions $key] 1]]]

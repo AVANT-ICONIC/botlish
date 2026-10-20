@@ -10,8 +10,8 @@
 # an insert or a removal builds a new Table around the same arrays.
 #
 # policy: 7/10
-import list
-import mutable_array
+import std::list
+import std::mutable_array
 
 struct Table:
     hashes: MutableArray[int]
@@ -39,7 +39,7 @@ fn slots_for(expected: int, cap: int) -> int:
     slots_for(expected, cap * 2)
 
 fn empty_table(cap: int) -> Table:
-    Table {hashes: mutable_array::create(cap, -1), keys: mutable_array::allocate(cap), vals: mutable_array::allocate(cap), count: 0}
+    Table {hashes: std::mutable_array::create(cap, -1), keys: std::mutable_array::allocate(cap), vals: std::mutable_array::allocate(cap), count: 0}
 
 fn fresh(expected: int) -> Table:
     empty_table(slots_for(expected, min_slots()))
@@ -71,7 +71,7 @@ fn find(t: Table, h: int, key) -> int errors IndexNotFound:
     cap = hashes.capacity()
     fn walk(i: int) -> int errors IndexNotFound:
         s = hashes.at(i)
-        if s < 0 or s == h and mutable_array::at(keys, i) == key:
+        if s < 0 or s == h and std::mutable_array::at(keys, i) == key:
             return i
         walk(next_slot(i, cap))
     walk(home(h, cap))
@@ -123,7 +123,7 @@ fn moved(hashes: MutableArray[int], keys, vals, i: int, dest: Table) -> Table er
     h = hashes.at(i)
     if h < 0:
         return moved(hashes, keys, vals, i + 1, dest)
-    placed = store(dest, find_empty(dest.hashes, h), h, mutable_array::at(keys, i), mutable_array::at(vals, i))
+    placed = store(dest, find_empty(dest.hashes, h), h, std::mutable_array::at(keys, i), std::mutable_array::at(vals, i))
     moved(hashes, keys, vals, i + 1, placed)
 
 # T at twice the capacity, its entries placed in old slot order.
@@ -182,9 +182,9 @@ fn drop(t: Table, key) -> Table errors IndexNotFound:
 
 # The table of KEYS[i] -> VALS[i], in order (a later duplicate's value wins).
 fn from_lists(keys: list, vals: list) -> Table errors IndexNotFound:
-    n = list::length(keys)
+    n = std::list::length(keys)
     fn fill(t: Table, i: int) -> Table errors IndexNotFound:
         if i >= n:
             return t
-        fill(put(t, list::at(keys, i), list::at(vals, i)), i + 1)
+        fill(put(t, std::list::at(keys, i), std::list::at(vals, i)), i + 1)
     fill(fresh(n), 0)

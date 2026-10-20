@@ -75,7 +75,7 @@ func 0 "<program>" params=0 env=0 regs=45 pnames="" captures=0 instance="generic
     ret %44
 end
 
-func 1 "list::all?" params=2 env=0 regs=21 pnames="xs predicate" captures=0 instance="List[str], native" rawregs="4 17" @e13
+func 1 "std::list::all?" params=2 env=0 regs=21 pnames="xs predicate" captures=0 instance="List[str], native" rawregs="4 17" @e13
     %2 = op listlen %0 @e14
     %3 = int 0 @e14
     %4 = rawint 0

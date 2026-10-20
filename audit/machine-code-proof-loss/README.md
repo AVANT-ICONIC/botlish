@@ -35,7 +35,7 @@ valgrind 3.22, `LANG=C.utf8`.
 | `out/ir-series.txt` | the total Ir/run of every profile |
 | `cases/fib/` | `fib<int>`: pre-M9 (`caf8ca7`), old-good M9 (`0c2dead`) and current (`c251e7c`) machine code, and current NIR |
 | `cases/refined-checks/` | old-good R2 (`844c37e`) vs current (`c251e7c`) scanner machine code; R2 / current / counterfactual scanner NIR; `check` at M9, at R2.a.1 (`check<generic>`) and now |
-| `probes/*.bot` | `hof-single-exact` (one exact callable through an envless top-level parameter), `hof-two-exact` (two exact callables), `hof-capturing` (`scan_while`'s capturing-closure shape, one target), `emailish-local-copy` (`lib/web.bot`'s `emailish?` copied into a main program) |
+| `probes/*.bot` | `hof-single-exact` (one exact callable through an envless top-level parameter), `hof-two-exact` (two exact callables), `hof-capturing` (`scan_while`'s capturing-closure shape, one target), `emailish-local-copy` (`stdlib/web.bot`'s `emailish?` copied into a main program) |
 
 ## Tools
 

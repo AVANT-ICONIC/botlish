@@ -49,12 +49,12 @@ lines = [
     '',
     '| Input | Reason | Follow-up |',
     '|---|---|---|',
-    '| `audit/comprehensive-generated-code/probes/from-int-invalid.bot` | Intentional `byte::from_int(999)` rejection: `CORE SEMANTIC KNOWN-ERROR`, `AboveRange` | Expected negative probe |',
+    '| `audit/comprehensive-generated-code/probes/from-int-invalid.bot` | Intentional `std::byte::from_int(999)` rejection: `CORE SEMANTIC KNOWN-ERROR`, `AboveRange` | Expected negative probe |',
     '| `examples/surface/10-duplicate-binding.bot` | Intentional duplicate binding: `CORE SEMANTIC DUPLICATE` | Expected negative example |',
-    '| `lib/ascii.bot` | `Byte` type is unregistered when launched alone | Loading `lib/byte.bot` first makes both flags succeed; zero guards |',
-    '| `audit/post-native-stack/module-cases/main.bot` | `plain` module is outside the default `lib/` directory | Setting `core::libraryDir` to the fixture directory makes both flags succeed; result `[2, 8, 20]`, guards 3 → 0 |',
+    '| `stdlib/ascii.bot` | `Byte` type is unregistered when launched alone | Loading `stdlib/byte.bot` first makes both flags succeed; zero guards |',
+    '| `audit/post-native-stack/module-cases/main.bot` | `plain` module is outside the default `stdlib/` directory | Setting `core::libraryDir` to the fixture directory makes both flags succeed; result `[2, 8, 20]`, guards 3 → 0 |',
     '',
-    '`lib/ascii.bot` documents its dependency on another compilation unit loading `byte`; existing ASCII consumers in the baseline run also succeed. The context reruns use `context.tcl` without editing any `.bot` source. With these setups and the compiler reruns, all **56 non-negative inputs** produce both reports and execute successfully.',
+    '`stdlib/ascii.bot` documents its dependency on another compilation unit loading `byte`; existing ASCII consumers in the baseline run also succeed. The context reruns use `context.tcl` without editing any `.bot` source. With these setups and the compiler reruns, all **56 non-negative inputs** produce both reports and execute successfully.',
     '',
     '## Readiness reported by the analysis',
     '',
@@ -95,8 +95,8 @@ lines += [
     '|---|---|---|',
     '| `bench/lex-strategy.bot` | `classify<str, bool>` | line 57:9; classifier selected between Native and Block |',
     '| `bench/source-checks.bot` | `classify_leading<generic>` | line 56:9; callable read from the checks list |',
-    '| `lib/list.bot` | `find<generic>` | line 79:12; unconstrained predicate |',
-    '| `lib/web.bot` | `scan_while<generic>` | line 128:16; unconstrained predicate |',
+    '| `stdlib/list.bot` | `find<generic>` | line 79:12; unconstrained predicate |',
+    '| `stdlib/web.bot` | `scan_while<generic>` | line 128:16; unconstrained predicate |',
     '',
     'The library entries are open when analyzed as standalone inputs with generic callable parameters. Concrete callers can close such dispatch: e.g. `bench/uri-steady.bot` is fully closed. A standalone module run does not supply call-site facts for every exported API, and its specialized report only includes instances retained by that run.',
     '',
@@ -130,7 +130,7 @@ for path, pair in by_path.items():
         outcome = 'OK'
     elif any('TCL LIMIT STACK' in e for e in b['errors']):
         outcome = 'stack → compile OK'
-    elif path == 'lib/ascii.bot' or path == 'audit/post-native-stack/module-cases/main.bot':
+    elif path == 'stdlib/ascii.bot' or path == 'audit/post-native-stack/module-cases/main.bot':
         outcome = 'needs context → OK'
     else:
         outcome = 'expected frontend rejection'

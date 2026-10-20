@@ -79,13 +79,13 @@ Botlish:
 
 1. The type is registered in Tcl as a validator type:
    `core::type::register Emailish -base str -validator <Tcl regex>`
-   (`lib/web.tcl`).
+   (`stdlib/web.tcl`).
 2. The predicate is registered in Tcl: `core::type::definePredicate Emailish
    emailish? "" {web emailish?}`. That registration's `-tests-type
    str[Emailish]` is the source of "true means the argument is an
    `Emailish`"; the compiler reads it from the registry, not from Botlish.
-3. The native implementation is ordinary Botlish, `web::emailish?(v)`
-   (`lib/web.bot`), which just returns a Bool. The `-module-fn` bridge
+3. The native implementation is ordinary Botlish, `std::web::emailish?(v)`
+   (`stdlib/web.bot`), which just returns a Bool. The `-module-fn` bridge
    (`native/prepare.tcl`) points cranelift calls at it.
 
 The Tcl regex stays the reference meaning on interp and compile, so the same
@@ -112,7 +112,7 @@ it already works with opaque types. Under strict compilation:
 **Missing: minting a proof.** `fn h(s) -> UriQueryValue: s` is rejected:
 nothing in source can establish `UriQueryValue`. Only a Tcl native can
 (`uriEscape`'s `-impl` attaches the evidence; on cranelift, its registered
-result type is forced onto `web::uri_escape_text`'s result through
+result type is forced onto `std::web::uri_escape_text`'s result through
 `nativeResultOverride`). Source code also cannot declare an opaque type at
 all: the only source type declaration is an integer range (`type Byte = Int
 in 0..255`, `hir/sourcetypes.tcl`).
@@ -138,13 +138,13 @@ because the compiler does not run validators on constants.
 Move it from the opaque kind to the validator kind, exactly as `Emailish`
 is set up. No type-system extension is needed.
 
-- `lib/web.tcl`: `core::type::register UriQueryValue -base str -validator
+- `stdlib/web.tcl`: `core::type::register UriQueryValue -base str -validator
   <regex>` (replacing `-opaque 1`), where the regex accepts a sequence of
   RFC 3986 unreserved characters (`A-Za-z0-9 - . _ ~`) and `%` followed by
   two hex digits. Then `definePredicate UriQueryValue uri_query_value? ""
   {web uri_query_value?}` and `core::native::alias UriQueryValue?
   uri_query_value?`.
-- `lib/web.bot`: `web::uri_query_value?(s)`, a counted loop over the
+- `stdlib/web.bot`: `std::web::uri_query_value?(s)`, a counted loop over the
   characters with `elif` arms for unreserved / `%XX` / anything else.
 - `uriEscape` keeps its registration and its result type `str[UriQueryValue]`.
   Its output now satisfies the type by its text, so its Tcl `-impl` no
@@ -153,7 +153,7 @@ is set up. No type-system extension is needed.
 Effects:
 
 - The section 1 failure and the section 2 gaps go away: a dynamic test
-  becomes an ordinary call of `web::uri_query_value?`, and a test the type
+  becomes an ordinary call of `std::web::uri_query_value?`, and a test the type
   already proves still folds statically.
 - The type's meaning changes from "produced by `uriEscape`" to "well-formed
   percent-encoded text". The safety property ("safe to embed as a query
@@ -184,7 +184,7 @@ testable at run time.
 - **Declaration and minting:** source syntax to declare an opaque type in a
   module, plus a constructor only that module can call (for example,
   `opaque type UriQueryValue = Str` in `web`, minted inside
-  `web::uri_escape`). `uriEscape` then becomes pure Botlish: lowercase name,
+  `std::web::uri_escape`). `uriEscape` then becomes pure Botlish: lowercase name,
   no Tcl `-impl`, no `-module-fn` bridge.
 - **No runtime test for opaque types:** a value is proven to be a
   `UriQueryValue`, never tested. `bench/refined-checks` would annotate

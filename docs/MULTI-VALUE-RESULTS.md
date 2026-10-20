@@ -37,11 +37,11 @@ fn scan_quoted(text, index, field) errors LowerUnderrun:
     character = peek(text, index)
     if character == "\"":
         if peek(text, index + 1) == "\"":
-            return scan_quoted(text, index + 2, str::concat(field, "\""))
+            return scan_quoted(text, index + 2, std::str::concat(field, "\""))
 
         return {field: field, index: index + 1}
 
-    scan_quoted(text, index + 1, str::concat(field, character))
+    scan_quoted(text, index + 1, std::str::concat(field, character))
 ```
 
 and its callers read the parts by name:
@@ -65,7 +65,7 @@ What changes for a caller, in Botlish as it is:
 
 * **A field read is total and checked.** `r.index` cannot fail at run time,
   and a field the result does not have is a compile-time `UNKNOWN-FIELD`. A
-  positional read `list::at(r, 1)` is fallible (`IndexNotFound`, which its
+  positional read `std::list::at(r, 1)` is fallible (`IndexNotFound`, which its
   caller must declare or handle) and checked only at run time.
 * **The parts keep their own types**: a struct type has one type per field; a
   List has one element type, the join of everything in it.

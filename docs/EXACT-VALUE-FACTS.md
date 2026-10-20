@@ -341,10 +341,10 @@ fn test_name(test):
 Inspection of the corpus's own `test_name`/`test_deps` (bench/test-selection.bot):
 `tests` is a 14-element literal at top level -- past the 8-element bound, and
 in any case it reaches `select_affected`/`test_name` through *parameters*
-(`tests`, `test`) and through `list::find`'s result. Exact facts exist only
+(`tests`, `test`) and through `std::list::find`'s result. Exact facts exist only
 at the literal (and its aliases); they are lost at the first parameter. The
 handler's literal `["<none>", []]` is exact where it is written but is joined
-with `list::find`'s `any` result, so `found` has no fact. Their imprecision is
+with `std::list::find`'s `any` result, so `found` has no fact. Their imprecision is
 recorded here as evidence for structs, not repaired.
 
 ## Intrinsic contract interaction
@@ -421,7 +421,7 @@ By the cast the site needs: `as_int` 11, `as_mutarray` 13 (9 primary + the
 **None.** Q26: no strict-corpus workaround site disappears. This is not a
 failure of the mechanism -- each formerly required cast's operand was checked
 individually: it is a `list_get` of a function result, a parameter, a loop
-element or a `list::find` result, never of a locally known literal (below).
+element or a `std::list::find` result, never of a locally known literal (below).
 Where a literal *is* local (the `bench/uri-steady.bot` `corpus`, the
 `["<none>", []]` handler literal) the fact is used but does not feed a
 strict-contract site.
@@ -443,12 +443,12 @@ Not touched (stop condition: no `MutableArray[T]`, no construction typing).
 
 ## Remaining generic-relationship failures
 
-Q33: `list::find` (`source-checks.bot:89:40`, `test-selection.bot:68:31` --
+Q33: `std::list::find` (`source-checks.bot:89:40`, `test-selection.bot:68:31` --
 callable erased into a relational helper; `test-selection.bot:71:15` --
-`found` is `list::find`'s result), `ht_fold` (`hashtable.bot:362:47`), and
+`found` is `std::list::find`'s result), `ht_fold` (`hashtable.bot:362:47`), and
 accumulator-returning recursion (`lex-strategy.bot:57:20` -- `chars_of`
 returns its caller's accumulator; `csv_records.bot:416:46`, `429:28` -- the
-`records` accumulator `csv_parse` returns). `list::any?/all?/none?` do not
+`records` accumulator `csv_parse` returns). `std::list::any?/all?/none?` do not
 reject in this counterfactual (their predicates are relational and left
 untyped), but stay untyped for the same reason. Not touched.
 
@@ -461,7 +461,7 @@ untyped), but stay untyped for the same reason. Not touched.
 | `chars_of` result | `lex-strategy.bot:57:20` | **yes** | `chars_of(s, i, acc)` returns its caller's accumulator: a relational result, not a known value |
 | `total_valid tokens` | `lex-strategy.bot:79:63` | **yes** | `tokens` is an untyped parameter; the 8-element top-level literal of the same name is a different binding, and the index `i` is not exact |
 | `select_affected tests` | `test-selection.bot:61:26` | **yes** | `test` is the loop element of parameter `tests`; the 14-element literal is past the bound and behind a parameter |
-| `esc_bytes bytes` | `lib/web.bot:204:70` | **yes** | `hex_pair(list_get(bytes, i))`: `bytes` is a parameter, `i` is a recursion parameter (not exact) |
+| `esc_bytes bytes` | `stdlib/web.bot:204:70` | **yes** | `hex_pair(list_get(bytes, i))`: `bytes` is a parameter, `i` is a recursion parameter (not exact) |
 
 Plus `matmul.bot:38:23` (`list_get(a, i)`, an untyped matrix parameter --
 homogeneous, not a record). They will be reconsidered after MutableArray and
@@ -493,7 +493,7 @@ recover the field" holds only in the function that builds the pair, "only
 ## Corpus-wide fact census
 
 `audit/exact-value-facts/out/census-{before,after}.txt` (31 canonical
-programs plus the `lib/*.bot` modules they load; each source location once):
+programs plus the `stdlib/*.bot` modules they load; each source location once):
 
 | measure | before | after |
 |---|---:|---:|
@@ -573,7 +573,7 @@ an argument the compiler genuinely does not know (a helper's result):
   support at all (`{{} structural-equality}`, was `{bigint ...}`).
 
 All 31 canonical programs still compile with no diagnostics; `bench/`,
-`lib/` and `examples/` are byte-identical to HEAD (the source fence holds).
+`stdlib/` and `examples/` are byte-identical to HEAD (the source fence holds).
 
 ## Benchmark parity
 

@@ -25,23 +25,23 @@ set ::allBackends {interp compile cranelift-generic cranelift}
 # the log is not an argument (a callee would mutate its own copy): it is a
 # context member, a place every function sharing the context mutates
 # (MUTABLE-ARRAY.md).
-set ::probePreamble {import list
-import mutable_array
+set ::probePreamble {import std::list
+import std::mutable_array
 context struct Log:
     digits: MutableArray[int]
 fn current(context log: Log):
-    mutable_array::get(log.digits, 0, -1)
+    std::mutable_array::get(log.digits, 0, -1)
 fn probe(id, result, context log: Log):
-    mutable_array::set(log.digits, 0, current() * 10 + id):
+    std::mutable_array::set(log.digits, 0, current() * 10 + id):
         on IndexNotFound:
             unit
     result
 fn fresh(context log: Log):
-    mutable_array::set(log.digits, 0, 0):
+    std::mutable_array::set(log.digits, 0, 0):
         on IndexNotFound:
             unit
     unit
-with context Log {digits: mutable_array::create(1, 0)}
+with context Log {digits: std::mutable_array::create(1, 0)}
 }
 
 # Error messages carry source locations, which differ between spellings.
@@ -600,27 +600,27 @@ test elif-fail-unhandled {an elif branch's declared error that nobody handles is
     bothSpellings $::failElifDefs$rest $::failNestedDefs$rest
 } -match glob -result {error {CORE SEMANTIC UNHANDLED-ERROR} {t.bot:L:C: this call may produce the declared error "Boom"*}}
 
-set ::loopPrelude {import mutable_array
+set ::loopPrelude {import std::mutable_array
 fn run():
-    acc = mutable_array::allocate(1)
-    mutable_array::set(acc, 0, 0)
+    acc = std::mutable_array::allocate(1)
+    std::mutable_array::set(acc, 0, 0)
     loop i from 0 to 9:
 }
 set ::loopTail {
-    mutable_array::at(acc, 0)
+    std::mutable_array::at(acc, 0)
 run()}
 
 test elif-continue-and-break {continue and break in elif branches inside a loop behave as in the nested spelling} -body {
     set elif {        if i == 1:
-            mutable_array::set(acc, 0, mutable_array::at(acc, 0) + 100)
+            std::mutable_array::set(acc, 0, std::mutable_array::at(acc, 0) + 100)
         elif i == 3:
             continue
         elif i == 6:
             break
         else:
-            mutable_array::set(acc, 0, mutable_array::at(acc, 0) + i)}
+            std::mutable_array::set(acc, 0, std::mutable_array::at(acc, 0) + i)}
     set nested {        if i == 1:
-            mutable_array::set(acc, 0, mutable_array::at(acc, 0) + 100)
+            std::mutable_array::set(acc, 0, std::mutable_array::at(acc, 0) + 100)
         else:
             if i == 3:
                 continue
@@ -628,7 +628,7 @@ test elif-continue-and-break {continue and break in elif branches inside a loop 
                 if i == 6:
                     break
                 else:
-                    mutable_array::set(acc, 0, mutable_array::at(acc, 0) + i)}
+                    std::mutable_array::set(acc, 0, std::mutable_array::at(acc, 0) + i)}
     bothSpellings $::loopPrelude$elif$::loopTail $::loopPrelude$nested$::loopTail
 } -result {value 111}
 
@@ -855,7 +855,7 @@ f(5)" \
             3
 f(5)" \
     {value 3} \
-    construction "import list
+    construction "import std::list
 fn f(a, b):
     if a:
         \[1, 2\]
@@ -863,8 +863,8 @@ fn f(a, b):
         \[3, 4\]
     else:
         \[5, 6\]
-list::length(f(true, false)) + list::length(f(false, true)) + list::length(f(false, false))" \
-    "import list
+std::list::length(f(true, false)) + std::list::length(f(false, true)) + std::list::length(f(false, false))" \
+    "import std::list
 fn f(a, b):
     if a:
         \[1, 2\]
@@ -873,7 +873,7 @@ fn f(a, b):
             \[3, 4\]
         else:
             \[5, 6\]
-list::length(f(true, false)) + list::length(f(false, true)) + list::length(f(false, false))" \
+std::list::length(f(true, false)) + std::list::length(f(false, true)) + std::list::length(f(false, false))" \
     {value 6} \
 ] {
     test elif-same-nir-$name "$name: elif and nested programs lower to the same NIR and have the same HIR facts" -body {
@@ -905,24 +905,24 @@ proc executableValue {text} {
     }
 }
 
-# Closed AOT needs typed code: a typed log (the untyped mutable_array::get
+# Closed AOT needs typed code: a typed log (the untyped std::mutable_array::get
 # above has no static kind).
-set ::typedPreamble {import mutable_array
+set ::typedPreamble {import std::mutable_array
 context struct Log:
     digits: MutableArray[int]
 fn current(context log: Log) -> int:
-    mutable_array::get(log.digits, 0, -1)
+    std::mutable_array::get(log.digits, 0, -1)
 fn probe(id: int, result: bool, context log: Log) -> bool:
-    mutable_array::set(log.digits, 0, current() * 10 + id):
+    std::mutable_array::set(log.digits, 0, current() * 10 + id):
         on IndexNotFound:
             unit
     result
 fn fresh(context log: Log) -> unit:
-    mutable_array::set(log.digits, 0, 0):
+    std::mutable_array::set(log.digits, 0, 0):
         on IndexNotFound:
             unit
     unit
-with context Log {digits: mutable_array::create(1, 0)}
+with context Log {digits: std::mutable_array::create(1, 0)}
 }
 set ::typedElif {fn pick(a: bool, b: bool, c: bool) -> int:
     return if probe(1, a):

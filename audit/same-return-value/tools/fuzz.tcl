@@ -13,7 +13,7 @@
 #   binding            r = mk(p0) ... return r      key bind:r (the same binding)
 #   alias of binding   s = r ... return s           key bind:r
 #   call               return mk(p0)                no key: each one is unique
-#   mutable            return mutable_array::allocate(1)   no key: unique
+#   mutable            return std::mutable_array::allocate(1)   no key: unique
 #   unreachable        if 1 == 2: return 2          contributes nothing
 #   range-unreachable  if p0 < 0: if p0 > 5: return 2   contributes nothing
 #
@@ -27,7 +27,7 @@
 #   error     rejected with {CORE SEMANTIC SAME-RETURN-VALUE} iff a warning
 #             exists, and compiles otherwise
 #
-# A generated program imports lib/mutable_array.bot, and a program that loads
+# A generated program imports stdlib/mutable_array.bot, and a program that loads
 # a module reports that module's own warnings (WARNINGS-METHOD-ELIGIBLE.md:
 # the frozen library carries a METHOD-ELIGIBLE finding). Those do not depend
 # on the generated function, so they are compared with a baseline (the
@@ -56,7 +56,7 @@ proc pick {list} {
 # groups, each a list of exit line numbers.
 proc generate {seed} {
     expr {srand($seed)}
-    set header {import mutable_array
+    set header {import std::mutable_array
 a1 = 1
 a2 = 2
 a3 = 3
@@ -103,7 +103,7 @@ fn mk(a):
             bind    { set expr [list r bind:r] }
             alias   { set expr [list s bind:r] }
             call    { set expr [list "mk(p0)" unique:$i] }
-            mutable { set expr [list "mutable_array::allocate(1)" unique:$i] }
+            mutable { set expr [list "std::mutable_array::allocate(1)" unique:$i] }
         }
         lassign $expr text key
         if {$last && rand() < 0.5} {
@@ -170,7 +170,7 @@ proc ownWarnings {hir} {
     }]
 }
 
-set baseline [foreignWarnings [compileMode "import mutable_array\nfn f(x):\n    x\n" default]]
+set baseline [foreignWarnings [compileMode "import std::mutable_array\nfn f(x):\n    x\n" default]]
 
 set failures 0
 set extras 0

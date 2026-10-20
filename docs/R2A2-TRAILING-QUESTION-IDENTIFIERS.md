@@ -5,7 +5,7 @@
 **Achieved, and simpler than the milestone spec anticipated.**
 
 - A terminal `?` is now ordinary Botlish identifier spelling. `foo?`,
-  `Emailish?`, `snake_case?`, `web::emailish?(x)` all lex as one `IDENT`
+  `Emailish?`, `snake_case?`, `std::web::emailish?(x)` all lex as one `IDENT`
   token whose semantic text and source span include the `?`. Embedded or
   repeated `?` (`foo?bar`, `foo??`, `foo???`) and a bare `?` not attached to
   any name (`?foo`, `x ? y`) are still rejected, each with a clear
@@ -19,10 +19,10 @@
   `surface/parser.tcl`. There was nothing to preserve, adapt, or
   compatibility-shim at the parser level. `surface/parser.tcl` is
   unchanged by this milestone.
-- `web::is_emailish` (`lib/web.bot`) is renamed to `web::emailish?`, and
-  `lib/web.tcl`'s `-module-fn` bridge target follows it. The root predicate
+- `std::web::is_emailish` (`stdlib/web.bot`) is renamed to `std::web::emailish?`, and
+  `stdlib/web.tcl`'s `-module-fn` bridge target follows it. The root predicate
   binding (`emailish?`) and the module implementation binding
-  (`web::emailish?`) remain distinct bindings that merely share a
+  (`std::web::emailish?`) remain distinct bindings that merely share a
   basename now; the `-module-fn` bridge is what connects them, not name
   equality, and R2.a.1's bridge-reachability fix keeps working across the
   rename unmodified.
@@ -34,7 +34,7 @@
   identifier spelling and one string constant.
 - The regenerated scalar assembly audit corpus (`audit/native-scalar-asm/`)
   differs from before this milestone **only** in the function-9 debug
-  label text (`web::is_emailish<generic>` → `web::emailish?<generic>`),
+  label text (`std::web::is_emailish<generic>` → `std::web::emailish?<generic>`),
   in six lines across `refined-checks.asm`/`.summary.txt`. No instruction
   bytes, register counts, or relocation targets changed.
 - R2.a remains **unfrozen**. R2.a.3 (counted-loop syntax and the
@@ -81,7 +81,7 @@ belief that it was reserved for the callable-type syntax traces to
 position syntax elsewhere in the grammar"), which — verified directly
 against the parser's source rather than repeated — turns out to be
 speculation, not a grammar fact. R2.a itself (`R2A-IDIOMATIC-EMAILISH-
-SOURCE.md` item 34) says as much implicitly: it notes `web::emailish?`
+SOURCE.md` item 34) says as much implicitly: it notes `std::web::emailish?`
 "has nothing to resolve to" only because the lexer rejected `?`, not
 because any type-position grammar needed the character.
 
@@ -107,7 +107,7 @@ Audited directly (grep + read, not inference) across `surface/lexer.tcl`,
   Botlish source, has no interaction with `surface/lexer.tcl`, and is
   completely unaffected by this milestone (still the same `$name?`
   default, still works identically before and after).
-- `lib/web.tcl:53/64`'s `core::type::definePredicate Emailish emailish? ""
+- `stdlib/web.tcl:53/64`'s `core::type::definePredicate Emailish emailish? ""
   {web emailish?}` and `core::native::alias Emailish? emailish?` are the
   same mechanism: Tcl proc calls with Tcl string/list arguments, not
   surface syntax.
@@ -210,7 +210,7 @@ otherwise-ordinary Tcl string key, so:
 - `native/native.tcl`'s `ExpandNativeBodiesIn` (the `-module-fn`/
   `-native-body` substitution pass) checks `$calleeName in
   [core::native::names]` against the **unqualified** native registry only.
-  A qualified reference like `web::emailish?` is never a member of that
+  A qualified reference like `std::web::emailish?` is never a member of that
   set (module-qualified names live in a separate, per-module dict), so
   giving the module implementation the same basename as the root
   predicate creates no resolution recursion: qualification, not spelling,
@@ -229,16 +229,16 @@ otherwise-ordinary Tcl string key, so:
   identifier), so no fix was needed — this pins that fact rather than
   reporting a defect.
 
-## `web::emailish?` rename
+## `std::web::emailish?` rename
 
-`lib/web.bot`: `fn is_emailish(v):` → `fn emailish?(v):`, with the header
+`stdlib/web.bot`: `fn is_emailish(v):` → `fn emailish?(v):`, with the header
 comment updated to explain the rename and point at this report instead of
 claiming the old lexer restriction as the reason for the old name.
 `local_extra_chars` stays at true module scope, untouched (R2.a.1's own
 fix), and `scan_while`/predicate-passing/`domain_loop`'s recursive shape
 are all unchanged (R2.a.3's job, not this one).
 
-`lib/web.tcl`:
+`stdlib/web.tcl`:
 
 ```diff
 -core::type::definePredicate Emailish emailish? "" {web is_emailish}
@@ -261,7 +261,7 @@ territory, is untouched). Confirmed still distinct and correctly wired:
   `BindingId`/`SymbolId`/registry entry (`tests/emailish-predicate.test`'s
   `emailish-predicate-alias-*` tests, unmodified, still passing).
 - The compiled NIR/machine code still shows exactly one function body for
-  the module implementation (`func 9 "web::emailish?"`, `nir-regs=27`,
+  the module implementation (`func 9 "std::web::emailish?"`, `nir-regs=27`,
   identical instruction count to before) and exactly one real dynamic call
   site into it, with the redundant cross-spelling re-check folded away
   statically — same as before the rename, only the label text differs.
@@ -271,14 +271,14 @@ territory, is untouched). Confirmed still distinct and correctly wired:
 Neither `hir/types.tcl` nor `hir/resolve.tcl` changed. The hand-written
 HIR fixtures `examples/hir/06-refined-strings.hir`/`.ir` reference only the
 root predicate (`emailish?`/`Emailish?`), never the module implementation
-name, so they are untouched — HIR dumps never showed `web::is_emailish` in
+name, so they are untouched — HIR dumps never showed `std::web::is_emailish` in
 the first place; that spelling only ever appeared in native/NIR debug text
-(see below), which is now `web::emailish?`.
+(see below), which is now `std::web::emailish?`.
 
 ## NIR before/after
 
-`native::nir`'s function-listing text: `func 9 "web::is_emailish"` →
-`func 9 "web::emailish?"`. This is `f.name` (`native/src/codegen/clif.rs`),
+`native::nir`'s function-listing text: `func 9 "std::web::is_emailish"` →
+`func 9 "std::web::emailish?"`. This is `f.name` (`native/src/codegen/clif.rs`),
 a plain Rust `String` carried only in a debug `HashMap<u32, String>` for
 listing/display (`format!("{name} ({})", f.name)`,
 `format!("; function {} \"{}\": botlish_fn_{}\n", f.id, f.name, f.id)`) —
@@ -295,7 +295,7 @@ No Rust changes were needed or made; see "Rust tests" below.
 `char_at` Strings) are unchanged — they're literal assertions in the same
 test file, still passing verbatim. The regenerated
 `audit/native-scalar-asm/bench/refined-checks.{asm,summary.txt}` diff is
-six lines, every one a `web::is_emailish` → `web::emailish?` text
+six lines, every one a `std::web::is_emailish` → `std::web::emailish?` text
 substitution in a comment/disassembly label or relocation annotation; no
 instruction byte, `nir-regs` count, or `raw regs`/`managed-capable regs`
 value changed. `README.md`'s only diff is the recorded git-commit
@@ -318,8 +318,8 @@ instance exists.
 call, nested caller, capturing caller, returned closure, transitive
 module dependencies, the `uriEscape` reproducer, `emailish?`/`Emailish?`
 user-block calls, refinement + redundant second check) passes with the
-only textual difference being `web::is_emailish` → `web::emailish?` in
-the NIR-shape assertions. `uriEscape`/`web::uri_escape_text` is untouched
+only textual difference being `std::web::is_emailish` → `std::web::emailish?` in
+the NIR-shape assertions. `uriEscape`/`std::web::uri_escape_text` is untouched
 (different function, out of scope for this milestone).
 
 ## Residual module-fn limitation
@@ -339,7 +339,7 @@ identifiers`, `-call`, `-declaration`, `-adjacency`,
 were adapted to the new semantics (`lex-reserved-question-mark` replaced;
 `lex-recover-characters`'s input changed from `c? = 1`, now valid, to
 `c?d = 1`, still an error). Covered: bare identifiers, qualified calls
-(`web::foo?(x)`), function declarations, parameters, adjacency to `:`, `,`,
+(`std::web::foo?(x)`), function declarations, parameters, adjacency to `:`, `,`,
 `)`, `==` without swallowing them, rejection of `?foo`/`foo?bar`/
 `foo??`/`foo???`, `foo`≠`foo?` distinctness, the Tcl-glob-collision check,
 and full source-span coverage including the `?`. All 41 tests in this file
@@ -380,7 +380,7 @@ under stress; nothing here changes its shape.
 ## R2.a source status
 
 Still **unfrozen**. `domain_loop`/`scan_while`'s self-tail recursion and
-the recursive loop-shaped source throughout `lib/web.bot` are unchanged,
+the recursive loop-shaped source throughout `stdlib/web.bot` are unchanged,
 as required (spec item 20) — R2.a.3 introduces counted-loop syntax and
 performs that normalization.
 
@@ -411,12 +411,12 @@ diff; no `cargo test` run was needed since no Rust source changed.
    `Emailish?` compatibility alias) — not surface grammar. 9. No grammar
    production owns it (see census). 10/11. No tokens before or after: it
    never touched the lexer/parser. 12. Trivially: nothing there needed to
-   change. 13. Yes — it's Tcl code (`core/type.tcl`, `lib/web.tcl`)
+   change. 13. Yes — it's Tcl code (`core/type.tcl`, `stdlib/web.tcl`)
    entirely outside the lexer/parser, deletable independently of ordinary
    `foo?` identifiers whenever the later callable-type-removal refactor
    happens. 14. No.
-3. Yes (`fn emailish?(v):` in `lib/web.bot`). 16. Yes
-   (`web::emailish?(v)`, exercised throughout `tests/emailish-
+3. Yes (`fn emailish?(v):` in `stdlib/web.bot`). 16. Yes
+   (`std::web::emailish?(v)`, exercised throughout `tests/emailish-
    predicate.test`, `tests/module-fn-bridge-reachability.test`). 17. Yes
    (exact-string dict keys throughout). 18. Yes (HIR never showed the
    module name to begin with; unaffected). 19. Yes (numeric symbol names
@@ -435,7 +435,7 @@ diff; no `cargo test` run was needed since no Rust source changed.
    (`emailish-predicate-redundant-check-nir-shape`,
    `module-fn-bridge-emailish-refinement-in-user-block` still pass). 32.
    Capture/OpenInstances: unchanged (`check<generic>` capturing
-   `web::emailish?`'s closure is the same shape as before, just renamed).
+   `std::web::emailish?`'s closure is the same shape as before, just renamed).
    33. M9 entry facts: unchanged (same `check<generic>`/no-Int-fact
    situation R2.a.1 already recorded, untouched by this milestone).
 

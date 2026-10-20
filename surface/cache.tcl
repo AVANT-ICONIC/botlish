@@ -23,7 +23,7 @@
 #   the program's path as given (the HIR records it) and its exact text
 #   its application root (the entry file's directory: surface/modules.tcl)
 #   the library directory modules are read from, and the Tcl libraries loaded
-#   -strict, the warning mode, the C target (ffi::c's widths, and the
+#   -strict, the warning mode, the C target (std::ffi::c's widths, and the
 #   architecture that selects an architecture-specific module), and the
 #   static scheduler (BOTLISH_STATIC_SCHEDULER)
 #
@@ -31,7 +31,7 @@
 # a file of the program imports, by `import NS` or `import type NS::Type`
 # (imports are the only thing that loads a module) -- its standard-library
 # path, its architecture-specific file for the target's architecture
-# (lib/linux/sys.x86_64.bot) and its application-module path -- with the
+# (stdlib/linux/sys.x86_64.bot) and its application-module path -- with the
 # exact text the build read there, or none for a path that had no module
 # file (an intrinsics-only namespace's, `str`; an application path a
 # standard namespace does not need), which must still have none. A module's
@@ -90,7 +90,7 @@ proc surface::cache::Usable {dir} {
 proc surface::cache::Key {path source mode strict {target ""} {root ""}} {
     variable version
     # TARGET is the resolved C ABI target (hir::cabi::ResolveTarget): the
-    # widths of ffi::c's integer scalars follow it (C-ABI-TYPES.md), and its
+    # widths of std::ffi::c's integer scalars follow it (C-ABI-TYPES.md), and its
     # architecture picks an architecture-specific module's file
     # (surface/modules.tcl's ModuleFile). ROOT is the application root (the
     # same PATH as given names another directory from another working
@@ -144,6 +144,10 @@ proc surface::cache::Dependencies {hir reads {target ""} {root ""}} {
             lappend imported [join [lrange $segments 0 end-1] ::]
         }
         foreach namespace $imported {
+            # A standard namespace's library files (none outside std), and
+            # its path under the application root: the application's module
+            # or, for std::NAME, the file that would make the import
+            # RESERVED-NAMESPACE (STD-NAMESPACE.md).
             lappend paths [surface::modules::ModulePath $namespace]
             if {$arch ne ""} {
                 lappend paths [surface::modules::ArchModulePath $namespace $arch]
@@ -155,6 +159,9 @@ proc surface::cache::Dependencies {hir reads {target ""} {root ""}} {
     }
     set result {}
     foreach dependency [lsort -unique $paths] {
+        if {$dependency eq ""} {
+            continue
+        }
         if {[dict exists $reads $dependency]} {
             lappend result [list $dependency 1 [dict get $reads $dependency]]
         } else {

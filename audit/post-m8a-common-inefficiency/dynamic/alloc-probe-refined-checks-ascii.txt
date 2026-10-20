@@ -17,9 +17,9 @@
     <program>                    web.bot:67     closure            Block             1       48
     <program>                    web.bot:70     closure            Block             1       56
     <program>                    -              listnew            List              1       40
-    byte::set                    byte.bot:175   listnew            List              1       24
-    byte::set                    byte.bot:175   listappend         List              4      176
-    byte::set                    byte.bot:177   setfromlisttotal   ImmutableSet      1       56
+    std::byte::set                    byte.bot:175   listnew            List              1       24
+    std::byte::set                    byte.bot:175   listappend         List              4      176
+    std::byte::set                    byte.bot:177   setfromlisttotal   ImmutableSet      1       56
     hex_pair                     web.bot:76     construct          StringPlan        1       96
     esc_char                     web.bot:85     strutf8bytes       List              3       96
     esc_from                     web.bot:97     construct          String            1       45

@@ -7,12 +7,12 @@
 #
 # A MutableArray is MutableVector's fixed-length sibling, a mutable VALUE:
 #
-# * Construction. `mutable_array::create(n, x)` repeats one value in n slots
+# * Construction. `std::mutable_array::create(n, x)` repeats one value in n slots
 #   (MutableArray[T] for x : T; capacity 0 still fixes T),
-#   `mutable_array::from_list(xs)` moves a List[T] in (MutableArray[T]; an
+#   `std::mutable_array::from_list(xs)` moves a List[T] in (MutableArray[T]; an
 #   empty or heterogeneous List gives MutableArray[any]; the source List is
-#   never changed), `mutable_array::generate(n, f)` calls the factory f once
-#   per slot with the slot's Int index, and `mutable_array::allocate(n)` is
+#   never changed), `std::mutable_array::generate(n, f)` calls the factory f once
+#   per slot with the slot's Int index, and `std::mutable_array::allocate(n)` is
 #   the raw kind `mutarray` (MutableArray[any]), heterogeneous and writable
 #   with anything. The type is spelled MutableArray[T] and is legal in every
 #   type position, nested either way with List, MutableVector and
@@ -75,14 +75,14 @@
 # all four); immutable_set for mutarray-run-1's set and mat-syn-2's
 # ImmutableSet[int] elements; str for the message checks below (glob_match?).
 # No test here is about a missing import or method visibility.
-import compiler
-import coroutine
-import immutable_set
-import list
-import mutable_array
-import mutable_vector
-import str
-import test
+import std::compiler
+import std::coroutine
+import std::immutable_set
+import std::list
+import std::mutable_array
+import std::mutable_vector
+import std::str
+import std::test
 
 # ---------------------------------------------------------------------------
 # Declarations the tests need (top-level only).
@@ -175,7 +175,7 @@ fn over_continue(a: MutableArray[Coroutine{args: [Command], return: Event}]) -> 
 
 # ma-context-member: a context struct whose array member is a place every
 # function sharing the context mutates in place (installed below, beside
-# test::suite()).
+# std::test::suite()).
 context struct Counts:
     values: MutableArray[int]
 
@@ -198,8 +198,8 @@ error Refused
 
 # ---------------------------------------------------------------------------
 # A custom check: a rejection whose message matches a glob. A message that is
-# the property in full or contains it is checked by test::rejects_message or
-# test::rejects_containing; two Tcl tests compare with a `string match` glob
+# the property in full or contains it is checked by std::test::rejects_message or
+# std::test::rejects_containing; two Tcl tests compare with a `string match` glob
 # of several pieces (ma-generate-contract: a head and a tail around the block
 # id the message shows; mat-atk-17: two phrases in order). A glob, whose only
 # wildcard is `*`, is written here as its literal pieces, a `*` between each
@@ -208,7 +208,7 @@ error Refused
 # The first index at or after FROM where NEEDLE occurs in TEXT, ending at or
 # before LIMIT, or -1.
 fn find_between(text: str, needle: str, from: int, limit: int) -> int:
-    width = str::length(needle)
+    width = std::str::length(needle)
     if from + width > limit:
         return -1
     hits = loop i from from through limit - width:
@@ -220,7 +220,7 @@ fn find_between(text: str, needle: str, from: int, limit: int) -> int:
         if piece != needle:
             continue
         i
-    first = list::at(hits, 0):
+    first = std::list::at(hits, 0):
         on IndexNotFound:
             -1
     first
@@ -229,28 +229,28 @@ fn find_between(text: str, needle: str, from: int, limit: int) -> int:
 fn pieces_between?(text: str, pieces: List[str], k: int, stop: int, from: int, limit: int) -> bool:
     if k >= stop:
         return true
-    piece = list::at(pieces, k):
+    piece = std::list::at(pieces, k):
         on IndexNotFound:
             return false
     at = text.find_between(piece, from, limit)
     if at < 0:
         return false
-    text.pieces_between?(pieces, k + 1, stop, at + str::length(piece), limit)
+    text.pieces_between?(pieces, k + 1, stop, at + std::str::length(piece), limit)
 
 # TEXT matches the glob PIECES (above).
 fn glob_match?(text: str, pieces: List[str]) -> bool:
-    count = list::length(pieces)
-    n = str::length(text)
-    head = list::at(pieces, 0):
+    count = std::list::length(pieces)
+    n = std::str::length(text)
+    head = std::list::at(pieces, 0):
         on IndexNotFound:
             return false
     if count == 1:
         return text == head
-    tail = list::at(pieces, count - 1):
+    tail = std::list::at(pieces, count - 1):
         on IndexNotFound:
             return false
-    h = str::length(head)
-    t = str::length(tail)
+    h = std::str::length(head)
+    t = std::str::length(tail)
     if h + t > n:
         return false
     first = text.substring(0, h):
@@ -267,29 +267,29 @@ fn glob_match?(text: str, pieces: List[str]) -> bool:
 
 # BODY's block must be rejected with diagnostic code EXPECTED and a message
 # matching the glob PATTERN.
-nomethod fn rejects_matching(name: str, expected: compiler::DiagnosticCode, pattern: List[str], body) -> unit:
+nomethod fn rejects_matching(name: str, expected: std::compiler::DiagnosticCode, pattern: List[str], body) -> unit:
     fn fits?(message: str) -> bool:
         message.glob_match?(pattern)
-    wanted = "a message matching the glob pieces ".concat(test::describe(pattern))
-    fn check() -> test::Match:
+    wanted = "a message matching the glob pieces ".concat(std::test::describe(pattern))
+    fn check() -> std::test::Match:
         actual = body():
-            on compiler::CompilerError {code, primary, message}:
-                verdict = test::diagnostic(expected, code, primary, message)
+            on std::compiler::CompilerError {code, primary, message}:
+                verdict = std::test::diagnostic(expected, code, primary, message)
                 if not verdict.matched:
                     return verdict
-                return test::satisfies(message, wanted, fits?)
-        test::mismatch(wanted, "value ".concat(test::describe(actual)), "")
-    test::case(name, check)
+                return std::test::satisfies(message, wanted, fits?)
+        std::test::mismatch(wanted, "value ".concat(std::test::describe(actual)), "")
+    std::test::case(name, check)
 
 # ---------------------------------------------------------------------------
 # The principal theorem (mutable-array.test item 68)
 
 fn register_principal_tests():
     # `b = a` is a logical copy: swapping into b leaves a [0, 0, 0].
-    fn b_copy() errors compiler::CompilerError:
+    fn b_copy() errors std::compiler::CompilerError:
         static compile:
             fn f() -> List[List[int]] errors IndexNotFound:
-                a = mutable_array::create(3, 0)
+                a = std::mutable_array::create(3, 0)
                 b = a
                 old = b.swap(0, 9)
                 [a.freeze(3), b.freeze(3), [old]]
@@ -297,32 +297,32 @@ fn register_principal_tests():
                 on IndexNotFound:
                     []
             r
-    test::value("ma-principal-copy", [[0, 0, 0], [9, 0, 0], [0]], b_copy)
+    std::test::value("ma-principal-copy", [[0, 0, 0], [9, 0, 0], [0]], b_copy)
 
     # generate(2, make) owns two distinct workers (seeds 0 and 1); swap
     # exchanges the first for make(10), the array moves whole, a loop
     # consumes it in index order.
-    fn b_generate() errors compiler::CompilerError:
+    fn b_generate() errors std::compiler::CompilerError:
         static compile:
             fn run() -> List[int] errors IndexNotFound:
-                workers = mutable_array::generate(2, make)
+                workers = std::mutable_array::generate(2, make)
                 first = workers.swap(0, make(10))
                 a = first(Command {value: 100})
                 moved = workers
                 results = loop w in moved:
                     w(Command {value: 1}).value
-                list::append(results, a.value)
+                std::list::append(results, a.value)
             r = run():
                 on IndexNotFound:
                     []
             r
-    test::value("ma-principal-generate", [11, 2, 100], b_generate)
+    std::test::value("ma-principal-generate", [11, 2, 100], b_generate)
 
     # An array in a vector: an array read out of it is an independent value.
-    fn b_vector_of_arrays() errors compiler::CompilerError:
+    fn b_vector_of_arrays() errors std::compiler::CompilerError:
         static compile:
             fn f() -> List[int] errors IndexNotFound:
-                v = mutable_vector::from_list([mutable_array::create(2, 0)])
+                v = std::mutable_vector::from_list([std::mutable_array::create(2, 0)])
                 b = v.at(0)
                 b.set(0, 9)
                 c = v.at(0)
@@ -331,7 +331,7 @@ fn register_principal_tests():
                 on IndexNotFound:
                     []
             r
-    test::value("ma-principal-vector-of-arrays", [9, 0, 1], b_vector_of_arrays)
+    std::test::value("ma-principal-vector-of-arrays", [9, 0, 1], b_vector_of_arrays)
 
 # ---------------------------------------------------------------------------
 # Value semantics: the copy routes (mutable-array.test items 5, 6, 12, 26,
@@ -340,10 +340,10 @@ fn register_principal_tests():
 # and shows both.
 
 fn register_copy_route_tests():
-    fn b_binding() errors compiler::CompilerError:
+    fn b_binding() errors std::compiler::CompilerError:
         static compile:
             fn f() -> List[int] errors IndexNotFound:
-                a = mutable_array::create(2, 0)
+                a = std::mutable_array::create(2, 0)
                 b = a
                 b.swap(0, 9)
                 [a.at(0), b.at(0)]
@@ -351,29 +351,29 @@ fn register_copy_route_tests():
                 on IndexNotFound:
                     []
             r
-    test::value("ma-cow-routes/binding", [0, 9], b_binding)
+    std::test::value("ma-cow-routes/binding", [0, 9], b_binding)
 
-    fn b_parameter() errors compiler::CompilerError:
+    fn b_parameter() errors std::compiler::CompilerError:
         static compile:
             fn modify(x: MutableArray[int]) -> int errors IndexNotFound:
                 x.swap(0, 9)
                 x.at(0)
             fn f() -> List[int] errors IndexNotFound:
-                a = mutable_array::create(2, 0)
+                a = std::mutable_array::create(2, 0)
                 m = modify(a)
                 [a.at(0), m]
             r = f():
                 on IndexNotFound:
                     []
             r
-    test::value("ma-cow-routes/parameter", [0, 9], b_parameter)
+    std::test::value("ma-cow-routes/parameter", [0, 9], b_parameter)
 
-    fn b_result() errors compiler::CompilerError:
+    fn b_result() errors std::compiler::CompilerError:
         static compile:
             fn back(x: MutableArray[int]) -> MutableArray[int]:
                 x
             fn f() -> List[int] errors IndexNotFound:
-                a = mutable_array::create(2, 0)
+                a = std::mutable_array::create(2, 0)
                 b = back(a)
                 b.set(0, 9)
                 [a.at(0), b.at(0)]
@@ -381,14 +381,14 @@ fn register_copy_route_tests():
                 on IndexNotFound:
                     []
             r
-    test::value("ma-cow-routes/result", [0, 9], b_result)
+    std::test::value("ma-cow-routes/result", [0, 9], b_result)
 
-    fn b_generic_identity() errors compiler::CompilerError:
+    fn b_generic_identity() errors std::compiler::CompilerError:
         static compile:
             fn same(x):
                 x
             fn f() -> List[int] errors IndexNotFound:
-                a = mutable_array::create(2, 0)
+                a = std::mutable_array::create(2, 0)
                 b = same(a)
                 b.swap(0, 9)
                 [a.at(0), b.at(0)]
@@ -396,14 +396,14 @@ fn register_copy_route_tests():
                 on IndexNotFound:
                     []
             r
-    test::value("ma-cow-routes/generic-identity", [0, 9], b_generic_identity)
+    std::test::value("ma-cow-routes/generic-identity", [0, 9], b_generic_identity)
 
-    fn b_generic_wrapper() errors compiler::CompilerError:
+    fn b_generic_wrapper() errors std::compiler::CompilerError:
         static compile:
             fn wrap(x):
                 {data: x}
             fn f() -> List[int] errors IndexNotFound:
-                a = mutable_array::create(2, 0)
+                a = std::mutable_array::create(2, 0)
                 s = wrap(a)
                 s.data.swap(0, 9)
                 [a.at(0), s.data.at(0)]
@@ -411,12 +411,12 @@ fn register_copy_route_tests():
                 on IndexNotFound:
                     []
             r
-    test::value("ma-cow-routes/generic-wrapper", [0, 9], b_generic_wrapper)
+    std::test::value("ma-cow-routes/generic-wrapper", [0, 9], b_generic_wrapper)
 
-    fn b_struct_field() errors compiler::CompilerError:
+    fn b_struct_field() errors std::compiler::CompilerError:
         static compile:
             fn f() -> List[int] errors IndexNotFound:
-                a = mutable_array::create(2, 0)
+                a = std::mutable_array::create(2, 0)
                 b = Box {values: a}
                 b.values.swap(0, 9)
                 [a.at(0), b.values.at(0)]
@@ -424,27 +424,27 @@ fn register_copy_route_tests():
                 on IndexNotFound:
                     []
             r
-    test::value("ma-cow-routes/struct-field", [0, 9], b_struct_field)
+    std::test::value("ma-cow-routes/struct-field", [0, 9], b_struct_field)
 
-    fn b_list_element() errors compiler::CompilerError:
+    fn b_list_element() errors std::compiler::CompilerError:
         static compile:
             fn f() -> List[int] errors IndexNotFound:
-                a = mutable_array::create(2, 0)
+                a = std::mutable_array::create(2, 0)
                 xs = [a]
-                b = list::at(xs, 0)
+                b = std::list::at(xs, 0)
                 b.swap(0, 9)
-                [a.at(0), list::at(xs, 0).at(0), b.at(0)]
+                [a.at(0), std::list::at(xs, 0).at(0), b.at(0)]
             r = f():
                 on IndexNotFound:
                     []
             r
-    test::value("ma-cow-routes/list-element", [0, 0, 9], b_list_element)
+    std::test::value("ma-cow-routes/list-element", [0, 0, 9], b_list_element)
 
-    fn b_vector_element() errors compiler::CompilerError:
+    fn b_vector_element() errors std::compiler::CompilerError:
         static compile:
             fn f() -> List[int] errors IndexNotFound:
-                a = mutable_array::create(2, 0)
-                v = mutable_vector::from_list([a])
+                a = std::mutable_array::create(2, 0)
+                v = std::mutable_vector::from_list([a])
                 b = v.at(0)
                 b.swap(0, 9)
                 [a.at(0), v.at(0).at(0), b.at(0)]
@@ -452,25 +452,25 @@ fn register_copy_route_tests():
                 on IndexNotFound:
                     []
             r
-    test::value("ma-cow-routes/vector-element", [0, 0, 9], b_vector_element)
+    std::test::value("ma-cow-routes/vector-element", [0, 0, 9], b_vector_element)
 
-    fn b_nested_aggregate() errors compiler::CompilerError:
+    fn b_nested_aggregate() errors std::compiler::CompilerError:
         static compile:
             fn f() -> List[int] errors IndexNotFound:
-                a = mutable_array::create(2, 0)
+                a = std::mutable_array::create(2, 0)
                 n = {xs: [a]}
-                b = list::at(n.xs, 0)
+                b = std::list::at(n.xs, 0)
                 b.set(1, 7)
                 [a.at(1), b.at(1)]
             r = f():
                 on IndexNotFound:
                     []
             r
-    test::value("ma-cow-routes/nested-aggregate", [0, 7], b_nested_aggregate)
+    std::test::value("ma-cow-routes/nested-aggregate", [0, 7], b_nested_aggregate)
 
     # A function called indirectly (passed as a value): only its own entry
     # copy protects the caller.
-    fn b_indirect_callee() errors compiler::CompilerError:
+    fn b_indirect_callee() errors std::compiler::CompilerError:
         static compile:
             fn poke(x: MutableArray[int]) -> int:
                 x.set(0, 9):
@@ -480,25 +480,25 @@ fn register_copy_route_tests():
             fn apply(g: Fn{args: [MutableArray[int]], return: int}, v: MutableArray[int]) -> int:
                 g(v)
             fn f() -> List[int] errors IndexNotFound:
-                a = mutable_array::create(2, 0)
+                a = std::mutable_array::create(2, 0)
                 m = apply(poke, a)
                 [a.at(0), m]
             r = f():
                 on IndexNotFound:
                     []
             r
-    test::value("ma-cow-routes/indirect-callee", [0, 2], b_indirect_callee)
+    std::test::value("ma-cow-routes/indirect-callee", [0, 2], b_indirect_callee)
 
     # A result returned while another copy survives is independent of it,
     # also when the caller mutates the result first.
-    fn b_surviving_result() errors compiler::CompilerError:
+    fn b_surviving_result() errors std::compiler::CompilerError:
         static compile:
             fn keep_and_return(x: MutableArray[int]) -> MutableArray[int] errors IndexNotFound:
                 y = x
                 y.set(0, 5)
                 x
             fn f() -> List[int] errors IndexNotFound:
-                a = mutable_array::create(2, 0)
+                a = std::mutable_array::create(2, 0)
                 b = keep_and_return(a)
                 b.set(1, 9)
                 [a.at(0), a.at(1), b.at(0), b.at(1)]
@@ -506,36 +506,36 @@ fn register_copy_route_tests():
                 on IndexNotFound:
                     []
             r
-    test::value("ma-cow-surviving-result", [0, 0, 0, 9], b_surviving_result)
+    std::test::value("ma-cow-surviving-result", [0, 0, 0, 9], b_surviving_result)
 
     # A loop over an unrestricted array iterates a snapshot: mutating the
     # array (or another copy) inside the loop changes neither the loop's
     # domain nor the copy.
-    fn b_loop() errors compiler::CompilerError:
+    fn b_loop() errors std::compiler::CompilerError:
         static compile:
             fn f() -> List[int] errors IndexNotFound:
-                a = mutable_array::create(2, 0)
+                a = std::mutable_array::create(2, 0)
                 b = a
                 xs = loop x in a:
                     a.set(1, 5)
                     b.set(0, 7)
                     x
-                list::append(xs, a.at(1))
+                std::list::append(xs, a.at(1))
             r = f():
                 on IndexNotFound:
                     []
             r
-    test::value("ma-cow-loop", [0, 0, 5], b_loop)
+    std::test::value("ma-cow-loop", [0, 0, 5], b_loop)
 
     # create(3, x) of an unrestricted vector places three logical copies:
     # mutating one slot's vector after extracting it changes neither the
     # others nor x.
-    fn b_repeated_copy() errors compiler::CompilerError:
+    fn b_repeated_copy() errors std::compiler::CompilerError:
         static compile:
             fn f() -> List[int] errors IndexNotFound:
-                a = mutable_array::create(2, 0)
-                x = mutable_vector::from_list([1])
-                arr = mutable_array::create(3, x)
+                a = std::mutable_array::create(2, 0)
+                x = std::mutable_vector::from_list([1])
+                arr = std::mutable_array::create(3, x)
                 v = arr.at(1)
                 v.push(2)
                 arr.set(1, v)
@@ -544,17 +544,17 @@ fn register_copy_route_tests():
                 on IndexNotFound:
                     []
             r
-    test::value("ma-cow-repeated-copy", [1, 2, 1, 1, 0], b_repeated_copy)
+    std::test::value("ma-cow-repeated-copy", [1, 2, 1, 1, 0], b_repeated_copy)
 
     # A generic function's untyped parameter is a place its body may mutate
     # (a dynamic copy on entry): the caller's array never changes.
-    fn b_generic_place() errors compiler::CompilerError:
+    fn b_generic_place() errors std::compiler::CompilerError:
         static compile:
             fn fill(x, v) errors IndexNotFound:
-                mutable_array::set(x, 0, v)
+                std::mutable_array::set(x, 0, v)
                 x
             fn f() -> List[int] errors IndexNotFound:
-                a = mutable_array::create(2, 0)
+                a = std::mutable_array::create(2, 0)
                 b = fill(a, 4)
                 c = fill(b, 5)
                 [a.at(0), b.at(0), c.at(0)]
@@ -562,7 +562,7 @@ fn register_copy_route_tests():
                 on IndexNotFound:
                     []
             r
-    test::value("ma-generic-place", [0, 4, 5], b_generic_place)
+    std::test::value("ma-generic-place", [0, 4, 5], b_generic_place)
 
 # A context struct's array member is a place every function sharing the
 # context mutates in place; a snapshot read out of it is independent of
@@ -579,10 +579,10 @@ fn register_context_tests():
     observed = f():
         on IndexNotFound:
             []
-    fn b_context_member() errors compiler::CompilerError:
+    fn b_context_member() errors std::compiler::CompilerError:
         static compile:
             observed
-    test::value("ma-context-member", [1, 0, 2, 1], b_context_member)
+    std::test::value("ma-context-member", [1, 0, 2, 1], b_context_member)
 
 # ---------------------------------------------------------------------------
 # Places (mutable-array.test item 33; mutable-array-type.test mat-atk-18)
@@ -590,89 +590,89 @@ fn register_context_tests():
 fn register_place_tests():
     # A call's result is not a place: the updated array would be lost (the
     # message says so).
-    fn b_call_result() errors compiler::CompilerError:
+    fn b_call_result() errors std::compiler::CompilerError:
         static compile:
             fn mk() -> MutableArray[int]:
-                mutable_array::create(1, 0)
+                std::mutable_array::create(1, 0)
             mk().set(0, 1)
             1
-    test::rejects_message("ma-place-receiver/call-result", compiler::DiagnosticCode::MutablePlaceReceiver, "the receiver of mutable_array::set is not a place: it is a temporary value, so the updated array would be lost (a MutableArray is a value; bind it to a name, mutate the name, and use the name afterwards)", b_call_result)
+    std::test::rejects_message("ma-place-receiver/call-result", std::compiler::DiagnosticCode::MutablePlaceReceiver, "the receiver of std::mutable_array::set is not a place: it is a temporary value, so the updated array would be lost (a MutableArray is a value; bind it to a name, mutate the name, and use the name afterwards)", b_call_result)
 
     # Nor is a List element ...
-    fn b_list_element() errors compiler::CompilerError:
+    fn b_list_element() errors std::compiler::CompilerError:
         static compile:
-            xs = [mutable_array::create(1, 0)]
-            list::at(xs, 0).set(0, 1)
+            xs = [std::mutable_array::create(1, 0)]
+            std::list::at(xs, 0).set(0, 1)
             1
-    test::rejects("ma-place-receiver/list-element", compiler::DiagnosticCode::MutablePlaceReceiver, b_list_element)
+    std::test::rejects("ma-place-receiver/list-element", std::compiler::DiagnosticCode::MutablePlaceReceiver, b_list_element)
 
     # ... or a binding of a known non-array type.
-    fn b_not_an_array() errors compiler::CompilerError:
+    fn b_not_an_array() errors std::compiler::CompilerError:
         static compile:
             fn f(x: str) -> int:
                 y = x
-                mutable_array::set(y, 0, 1)
+                std::mutable_array::set(y, 0, 1)
                 1
             f("s0")
-    test::rejects("ma-place-receiver/not-an-array", compiler::DiagnosticCode::MutablePlaceReceiver, b_not_an_array)
+    std::test::rejects("ma-place-receiver/not-an-array", std::compiler::DiagnosticCode::MutablePlaceReceiver, b_not_an_array)
 
     # A nested function may not mutate an array of its enclosing function ...
-    fn b_mutates_enclosing() errors compiler::CompilerError:
+    fn b_mutates_enclosing() errors std::compiler::CompilerError:
         static compile:
             fn f() -> int:
-                a = mutable_array::create(1, 0)
+                a = std::mutable_array::create(1, 0)
                 fn g() -> int:
                     a.set(0, 3)
                     1
                 g()
             f()
-    test::rejects("ma-place-receiver/mutates-enclosing", compiler::DiagnosticCode::MutablePlaceReceiver, b_mutates_enclosing)
+    std::test::rejects("ma-place-receiver/mutates-enclosing", std::compiler::DiagnosticCode::MutablePlaceReceiver, b_mutates_enclosing)
 
     # ... nor capture one its enclosing function mutates.
-    fn b_captures_mutated() errors compiler::CompilerError:
+    fn b_captures_mutated() errors std::compiler::CompilerError:
         static compile:
             fn f() -> int errors IndexNotFound:
-                a = mutable_array::create(1, 0)
+                a = std::mutable_array::create(1, 0)
                 fn g() -> int:
-                    mutable_array::capacity(a)
+                    std::mutable_array::capacity(a)
                 a.set(0, 2)
                 g()
             r = f():
                 on IndexNotFound:
                     0
             r
-    test::rejects("ma-place-receiver/captures-mutated", compiler::DiagnosticCode::MutablePlaceCapture, b_captures_mutated)
+    std::test::rejects("ma-place-receiver/captures-mutated", std::compiler::DiagnosticCode::MutablePlaceCapture, b_captures_mutated)
 
     # A function cannot mutate an array it captures (its place is the
     # enclosing function's) ...
-    fn b_captured_store() errors compiler::CompilerError:
+    fn b_captured_store() errors std::compiler::CompilerError:
         static compile:
-            m = mutable_array::create(1, "a")
+            m = std::mutable_array::create(1, "a")
             fn poke():
-                mutable_array::set(m, 0, "q")
+                std::mutable_array::set(m, 0, "q")
             poke()
-    test::rejects("mat-atk-18/captured-store", compiler::DiagnosticCode::MutablePlaceReceiver, b_captured_store)
+    std::test::rejects("mat-atk-18/captured-store", std::compiler::DiagnosticCode::MutablePlaceReceiver, b_captured_store)
 
     # ... and a store of the wrong element type is reported first ...
-    fn b_captured_wrong_store() errors compiler::CompilerError:
+    fn b_captured_wrong_store() errors std::compiler::CompilerError:
         static compile:
-            m = mutable_array::create(1, "a")
+            m = std::mutable_array::create(1, "a")
             fn poke():
-                mutable_array::set(m, 0, 5)
+                std::mutable_array::set(m, 0, 5)
             poke()
-    test::rejects("mat-atk-18/captured-wrong-store", compiler::DiagnosticCode::Type, b_captured_wrong_store)
+    std::test::rejects("mat-atk-18/captured-wrong-store", std::compiler::DiagnosticCode::Type, b_captured_wrong_store)
 
     # ... while a typed parameter is the callee's own place: it writes its
     # own copy, and the caller's array is unchanged.
-    fn b_parameter_store() errors compiler::CompilerError:
+    fn b_parameter_store() errors std::compiler::CompilerError:
         static compile:
             fn poke(m: MutableArray[str]):
-                if mutable_array::capacity(m) > 0:
-                    mutable_array::set(m, 0, "q")
-            m = mutable_array::create(1, "a")
+                if std::mutable_array::capacity(m) > 0:
+                    std::mutable_array::set(m, 0, "q")
+            m = std::mutable_array::create(1, "a")
             poke(m)
-            mutable_array::freeze(m, 1)
-    test::value("mat-atk-18/parameter-store", ["a"], b_parameter_store)
+            std::mutable_array::freeze(m, 1)
+    std::test::value("mat-atk-18/parameter-store", ["a"], b_parameter_store)
 
 # ---------------------------------------------------------------------------
 # Operations on unrestricted elements (mutable-array.test items 16, 18, 25,
@@ -685,21 +685,21 @@ fn register_operation_tests(bad: int):
     # create, from_list, generate, capacity, at, set, swap, copy, freeze and
     # get; a bad index is the handleable IndexNotFound and changes nothing,
     # a bad slice UpperOverrun.
-    fn b_ops() errors compiler::CompilerError:
+    fn b_ops() errors std::compiler::CompilerError:
         static compile:
             fn fn_tens(i: int) -> int:
                 i * 10
             fn f() -> List[List[int]] errors IndexNotFound, LowerUnderrun, UpperOverrun:
-                a = mutable_array::from_list([1, 2, 3, 4])
-                b = mutable_array::generate(3, fn_tens)
+                a = std::mutable_array::from_list([1, 2, 3, 4])
+                b = std::mutable_array::generate(3, fn_tens)
                 x = a.at(1)
                 s = a.swap(0, 7)
                 a.set(3, 8)
-                mutable_array::copy(a, 1, b, 1, 2)
-                g = mutable_array::get(a, 9, -5)
+                std::mutable_array::copy(a, 1, b, 1, 2)
+                g = std::mutable_array::get(a, 9, -5)
                 [a.freeze(4), [x, s, g, b.capacity()]]
             fn bad_ops(n: int) -> List[List[int]] errors LowerUnderrun, UpperOverrun:
-                a = mutable_array::create(2, 1)
+                a = std::mutable_array::create(2, 1)
                 x = a.at(n):
                     on IndexNotFound:
                         -1
@@ -726,63 +726,63 @@ fn register_operation_tests(bad: int):
                 on UpperOverrun:
                     []
             [r, s]
-    test::value("ma-ops", [[[7, 10, 20, 8], [2, 1, -5, 3]], [[-3], [-1, -2, 1]]], b_ops)
+    std::test::value("ma-ops", [[[7, 10, 20, 8], [2, 1, -5, 3]], [[-3], [-1, -2, 1]]], b_ops)
 
     # Typed get / set / freeze / copy behave as the raw operations; b = a is
     # independent.
-    fn b_typed_ops() errors compiler::CompilerError:
+    fn b_typed_ops() errors std::compiler::CompilerError:
         static compile:
             fn f() errors IndexNotFound:
-                a = mutable_array::create(4, 0)
+                a = std::mutable_array::create(4, 0)
                 b = a
-                mutable_array::set(b, 1, 10)
-                mutable_array::set(a, 2, 20)
-                c = mutable_array::from_list([7, 8, 9])
-                mutable_array::copy(a, 0, c, 0, 2)
-                [mutable_array::freeze(a, 4), mutable_array::freeze(b, 4), mutable_array::capacity(c)]
+                std::mutable_array::set(b, 1, 10)
+                std::mutable_array::set(a, 2, 20)
+                c = std::mutable_array::from_list([7, 8, 9])
+                std::mutable_array::copy(a, 0, c, 0, 2)
+                [std::mutable_array::freeze(a, 4), std::mutable_array::freeze(b, 4), std::mutable_array::capacity(c)]
             f()
-    test::value("mat-run-6", [[7, 8, 20, 0], [0, 10, 0, 0], 3], b_typed_ops)
+    std::test::value("mat-run-6", [[7, 8, 20, 0], [0, 10, 0, 0], 3], b_typed_ops)
 
     # A typed program and the same program over a raw array agree.
-    fn b_typed_fill() errors compiler::CompilerError:
+    fn b_typed_fill() errors std::compiler::CompilerError:
         static compile:
             fn f() errors IndexNotFound:
-                m = mutable_array::create(3, 0)
+                m = std::mutable_array::create(3, 0)
                 loop i from 0 to 3:
-                    mutable_array::set(m, i, i * i)
-                mutable_array::freeze(m, 3)
+                    std::mutable_array::set(m, i, i * i)
+                std::mutable_array::freeze(m, 3)
             f()
-    test::value("mat-run-10/typed", [0, 1, 4], b_typed_fill)
+    std::test::value("mat-run-10/typed", [0, 1, 4], b_typed_fill)
 
-    fn b_raw_fill() errors compiler::CompilerError:
+    fn b_raw_fill() errors std::compiler::CompilerError:
         static compile:
             fn f() errors IndexNotFound:
-                m = mutable_array::allocate(3)
+                m = std::mutable_array::allocate(3)
                 loop i from 0 to 3:
-                    mutable_array::set(m, i, 0)
+                    std::mutable_array::set(m, i, 0)
                 loop i from 0 to 3:
-                    mutable_array::set(m, i, i * i)
-                mutable_array::freeze(m, 3)
+                    std::mutable_array::set(m, i, i * i)
+                std::mutable_array::freeze(m, 3)
             f()
-    test::value("mat-run-10/raw", [0, 1, 4], b_raw_fill)
+    std::test::value("mat-run-10/raw", [0, 1, 4], b_raw_fill)
 
     # Managed defaults, nested typed arrays, a List of arrays, copies,
     # freeze and copy, together.
-    fn b_mixed() errors compiler::CompilerError:
+    fn b_mixed() errors std::compiler::CompilerError:
         static compile:
             fn f() errors IndexNotFound, LowerUnderrun, UpperOverrun:
-                shared = mutable_array::create(3, ["managed", "list"])
-                inner = mutable_array::from_list(["a", "b"])
-                outer = mutable_array::create(2, inner)
+                shared = std::mutable_array::create(3, ["managed", "list"])
+                inner = std::mutable_array::from_list(["a", "b"])
+                outer = std::mutable_array::create(2, inner)
                 alias = outer
-                rows = [mutable_array::create(2, "r"), mutable_array::create(1, "s")]
-                mutable_array::set(inner, 1, "z")
-                dst = mutable_array::create(2, "d")
-                mutable_array::copy(dst, 0, list::at(rows, 0), 0, 2)
-                slot = mutable_array::at(alias, 1)
-                mutable_array::set(slot, 0, "y")
-                mutable_array::set(alias, 1, slot)
-                [mutable_array::freeze(shared, 3), mutable_array::freeze(mutable_array::at(outer, 1), 2), mutable_array::freeze(mutable_array::at(alias, 1), 2), mutable_array::freeze(inner, 2), mutable_array::freeze(dst, 2), mutable_array::capacity(list::at(rows, 1)), mutable_array::capacity(mutable_array::create(0, inner))]
+                rows = [std::mutable_array::create(2, "r"), std::mutable_array::create(1, "s")]
+                std::mutable_array::set(inner, 1, "z")
+                dst = std::mutable_array::create(2, "d")
+                std::mutable_array::copy(dst, 0, std::list::at(rows, 0), 0, 2)
+                slot = std::mutable_array::at(alias, 1)
+                std::mutable_array::set(slot, 0, "y")
+                std::mutable_array::set(alias, 1, slot)
+                [std::mutable_array::freeze(shared, 3), std::mutable_array::freeze(std::mutable_array::at(outer, 1), 2), std::mutable_array::freeze(std::mutable_array::at(alias, 1), 2), std::mutable_array::freeze(inner, 2), std::mutable_array::freeze(dst, 2), std::mutable_array::capacity(std::list::at(rows, 1)), std::mutable_array::capacity(std::mutable_array::create(0, inner))]
             r = f():
                 on IndexNotFound:
                     []
@@ -791,15 +791,15 @@ fn register_operation_tests(bad: int):
                 on UpperOverrun:
                     []
             r
-    test::value("mat-gc-1", [[["managed", "list"], ["managed", "list"], ["managed", "list"]], ["a", "b"], ["y", "b"], ["a", "z"], ["r", "r"], 1, 0], b_mixed)
+    std::test::value("mat-gc-1", [[["managed", "list"], ["managed", "list"], ["managed", "list"]], ["a", "b"], ["y", "b"], ["a", "z"], ["r", "r"], 1, 0], b_mixed)
 
     # There is no clear: a fixed-size array has no empty state.
-    fn b_no_clear() errors compiler::CompilerError:
+    fn b_no_clear() errors std::compiler::CompilerError:
         static compile:
-            a = mutable_array::create(1, 0)
-            mutable_array::clear(a)
+            a = std::mutable_array::create(1, 0)
+            std::mutable_array::clear(a)
             0
-    test::rejects("ma-drop-order/no-clear", compiler::DiagnosticCode::UnknownSymbol, b_no_clear)
+    std::test::rejects("ma-drop-order/no-clear", std::compiler::DiagnosticCode::UnknownSymbol, b_no_clear)
 
 # ---------------------------------------------------------------------------
 # Construction (mutarray-construction.test, mutable-array-type.test create
@@ -809,148 +809,148 @@ fn register_operation_tests(bad: int):
 # array is then a run-time IndexNotFound, not a KnownError.
 fn register_construction_tests(empty: int):
     # from_list keeps order and values.
-    fn b_order() errors compiler::CompilerError:
+    fn b_order() errors std::compiler::CompilerError:
         static compile:
             fn f() errors IndexNotFound:
-                m = mutable_array::from_list([10, 20, 30])
-                [mutable_array::capacity(m), mutable_array::at(m, 0), mutable_array::at(m, 1), mutable_array::at(m, 2)]
+                m = std::mutable_array::from_list([10, 20, 30])
+                [std::mutable_array::capacity(m), std::mutable_array::at(m, 0), std::mutable_array::at(m, 1), std::mutable_array::at(m, 2)]
             f()
-    test::value("mutarray-sem-1", [3, 10, 20, 30], b_order)
+    std::test::value("mutarray-sem-1", [3, 10, 20, 30], b_order)
 
     # The result is mutable, and a mutation never reaches the source List.
-    fn b_source_unchanged() errors compiler::CompilerError:
+    fn b_source_unchanged() errors std::compiler::CompilerError:
         static compile:
             fn f() errors IndexNotFound:
                 xs = [1, 2, 3]
-                m = mutable_array::from_list(xs)
-                mutable_array::set(m, 0, 99)
-                mutable_array::set(m, 2, 33)
-                [xs, mutable_array::at(m, 0), mutable_array::at(m, 1), mutable_array::at(m, 2)]
+                m = std::mutable_array::from_list(xs)
+                std::mutable_array::set(m, 0, 99)
+                std::mutable_array::set(m, 2, 33)
+                [xs, std::mutable_array::at(m, 0), std::mutable_array::at(m, 1), std::mutable_array::at(m, 2)]
             r = f():
                 on IndexNotFound:
                     []
             r
-    test::value("mutarray-sem-2", [[1, 2, 3], 99, 2, 33], b_source_unchanged)
+    std::test::value("mutarray-sem-2", [[1, 2, 3], 99, 2, 33], b_source_unchanged)
 
     # Two constructions from one List are independent arrays.
-    fn b_two_constructions() errors compiler::CompilerError:
+    fn b_two_constructions() errors std::compiler::CompilerError:
         static compile:
             fn f() errors IndexNotFound:
                 xs = [1, 2]
-                a = mutable_array::from_list(xs)
-                b = mutable_array::from_list(xs)
-                mutable_array::set(a, 0, 7)
-                [mutable_array::at(a, 0), mutable_array::at(b, 0)]
+                a = std::mutable_array::from_list(xs)
+                b = std::mutable_array::from_list(xs)
+                std::mutable_array::set(a, 0, 7)
+                [std::mutable_array::at(a, 0), std::mutable_array::at(b, 0)]
             f()
-    test::value("mutarray-sem-3", [7, 1], b_two_constructions)
+    std::test::value("mutarray-sem-3", [7, 1], b_two_constructions)
 
     # A copy is independent.
-    fn b_copy_independent() errors compiler::CompilerError:
+    fn b_copy_independent() errors std::compiler::CompilerError:
         static compile:
             fn f() errors IndexNotFound:
-                m = mutable_array::from_list([1, 2])
+                m = std::mutable_array::from_list([1, 2])
                 n = m
-                mutable_array::set(m, 1, 5)
-                mutable_array::at(n, 1)
+                std::mutable_array::set(m, 1, 5)
+                std::mutable_array::at(n, 1)
             f()
-    test::value("mutarray-sem-4", 2, b_copy_independent)
+    std::test::value("mutarray-sem-4", 2, b_copy_independent)
 
     # The empty List: capacity 0, and the kind test is true ...
-    fn b_empty() errors compiler::CompilerError:
+    fn b_empty() errors std::compiler::CompilerError:
         static compile:
             fn f():
-                m = mutable_array::from_list([])
-                [mutable_array::capacity(m), mutarray?(m)]
+                m = std::mutable_array::from_list([])
+                [std::mutable_array::capacity(m), mutarray?(m)]
             f()
-    test::value("mutarray-sem-5/empty", [0, true], b_empty)
+    std::test::value("mutarray-sem-5/empty", [0, true], b_empty)
 
     # ... and any index into it is a statically known IndexNotFound.
-    fn b_empty_index() errors compiler::CompilerError:
+    fn b_empty_index() errors std::compiler::CompilerError:
         static compile:
             fn f() errors IndexNotFound:
-                m = mutable_array::from_list([])
-                mutable_array::set(m, 0, 1)
+                m = std::mutable_array::from_list([])
+                std::mutable_array::set(m, 0, 1)
             f()
-    test::rejects("mutarray-sem-5/known-error", compiler::DiagnosticCode::KnownError, b_empty_index)
+    std::test::rejects("mutarray-sem-5/known-error", std::compiler::DiagnosticCode::KnownError, b_empty_index)
 
     # A heterogeneous source List is accepted and kept as is.
-    fn b_heterogeneous() errors compiler::CompilerError:
+    fn b_heterogeneous() errors std::compiler::CompilerError:
         static compile:
             fn f() errors IndexNotFound:
-                m = mutable_array::from_list(["x", 1, true])
-                [mutable_array::at(m, 0), mutable_array::at(m, 1), mutable_array::at(m, 2)]
+                m = std::mutable_array::from_list(["x", 1, true])
+                [std::mutable_array::at(m, 0), std::mutable_array::at(m, 1), std::mutable_array::at(m, 2)]
             f()
-    test::value("mutarray-sem-6", ["x", 1, true], b_heterogeneous)
+    std::test::value("mutarray-sem-6", ["x", 1, true], b_heterogeneous)
 
     # A nested array element is a logical copy: writing the original
     # afterwards does not reach it.
-    fn b_nested_copy() errors compiler::CompilerError:
+    fn b_nested_copy() errors std::compiler::CompilerError:
         static compile:
             fn f() errors IndexNotFound:
-                inner = mutable_array::from_list([1])
-                outer = mutable_array::from_list([inner])
-                mutable_array::set(inner, 0, 42)
-                mutable_array::at(mutable_array::at(outer, 0), 0)
+                inner = std::mutable_array::from_list([1])
+                outer = std::mutable_array::from_list([inner])
+                std::mutable_array::set(inner, 0, 42)
+                std::mutable_array::at(std::mutable_array::at(outer, 0), 0)
             r = f():
                 on IndexNotFound:
                     0
             r
-    test::value("mutarray-sem-7", 1, b_nested_copy)
+    std::test::value("mutarray-sem-7", 1, b_nested_copy)
 
     # Freezing a from_list array gives back an equal List.
-    fn b_freeze_round_trip() errors compiler::CompilerError:
+    fn b_freeze_round_trip() errors std::compiler::CompilerError:
         static compile:
             fn f() errors IndexNotFound:
                 xs = [3, 1, 2]
-                mutable_array::freeze(mutable_array::from_list(xs), 3) == xs
+                std::mutable_array::freeze(std::mutable_array::from_list(xs), 3) == xs
             f()
-    test::value("mutarray-sem-8", true, b_freeze_round_trip)
+    std::test::value("mutarray-sem-8", true, b_freeze_round_trip)
 
     # A larger List round-trips.
-    fn b_large() errors compiler::CompilerError:
+    fn b_large() errors std::compiler::CompilerError:
         static compile:
             fn build(i, n, acc):
                 if i == n:
                     return acc
-                build(i + 1, n, list::append(acc, i * 2))
+                build(i + 1, n, std::list::append(acc, i * 2))
             fn f() errors IndexNotFound:
-                m = mutable_array::from_list(build(0, 1000, []))
-                [mutable_array::capacity(m), mutable_array::at(m, 0), mutable_array::at(m, 999)]
+                m = std::mutable_array::from_list(build(0, 1000, []))
+                [std::mutable_array::capacity(m), std::mutable_array::at(m, 0), std::mutable_array::at(m, 999)]
             r = f():
                 on IndexNotFound:
                     []
             r
-    test::value("mutarray-sem-9", [1000, 0, 1998], b_large)
+    std::test::value("mutarray-sem-9", [1000, 0, 1998], b_large)
 
     # create fills every slot: capacities 0, 1 and larger.
-    fn b_create_fills() errors compiler::CompilerError:
+    fn b_create_fills() errors std::compiler::CompilerError:
         static compile:
             fn f() errors IndexNotFound:
-                [mutable_array::capacity(mutable_array::create(0, 7)), mutable_array::freeze(mutable_array::create(1, 7), 1), mutable_array::freeze(mutable_array::create(5, "s"), 5), mutable_array::capacity(mutable_array::create(1000, 0))]
+                [std::mutable_array::capacity(std::mutable_array::create(0, 7)), std::mutable_array::freeze(std::mutable_array::create(1, 7), 1), std::mutable_array::freeze(std::mutable_array::create(5, "s"), 5), std::mutable_array::capacity(std::mutable_array::create(1000, 0))]
             f()
-    test::value("mat-run-1", [0, [7], ["s", "s", "s", "s", "s"], 1000], b_create_fills)
+    std::test::value("mat-run-1", [0, [7], ["s", "s", "s", "s", "s"], 1000], b_create_fills)
 
     # An index into a capacity-0 array is IndexNotFound, the handler sees it.
-    fn b_capacity_zero() errors compiler::CompilerError:
+    fn b_capacity_zero() errors std::compiler::CompilerError:
         static compile:
             fn f() errors IndexNotFound:
-                m = mutable_array::create(empty, "x")
-                mutable_array::at(m, 0)
+                m = std::mutable_array::create(empty, "x")
+                std::mutable_array::at(m, 0)
             r = f():
                 on IndexNotFound:
                     "IndexNotFound"
             r
-    test::value("mat-run-2", "IndexNotFound", b_capacity_zero)
+    std::test::value("mat-run-2", "IndexNotFound", b_capacity_zero)
 
     # A repeated value is copied logically, never aliased: mutating the
     # source afterwards changes no slot.
-    fn b_repeated() errors compiler::CompilerError:
+    fn b_repeated() errors std::compiler::CompilerError:
         static compile:
             fn f() errors IndexNotFound, LowerUnderrun, UpperOverrun:
-                shared = mutable_array::create(2, "inner")
-                outer = mutable_array::create(3, shared)
-                mutable_array::set(shared, 0, "changed")
-                [mutable_array::at(mutable_array::at(outer, 0), 0), mutable_array::at(mutable_array::at(outer, 2), 0), mutable_array::freeze(mutable_array::at(outer, 1), 2), mutable_array::freeze(shared, 2)]
+                shared = std::mutable_array::create(2, "inner")
+                outer = std::mutable_array::create(3, shared)
+                std::mutable_array::set(shared, 0, "changed")
+                [std::mutable_array::at(std::mutable_array::at(outer, 0), 0), std::mutable_array::at(std::mutable_array::at(outer, 2), 0), std::mutable_array::freeze(std::mutable_array::at(outer, 1), 2), std::mutable_array::freeze(shared, 2)]
             r = f():
                 on IndexNotFound:
                     []
@@ -959,26 +959,26 @@ fn register_construction_tests(empty: int):
                 on UpperOverrun:
                     []
             r
-    test::value("mat-run-4", ["inner", "inner", ["inner", "inner"], ["changed", "inner"]], b_repeated)
+    std::test::value("mat-run-4", ["inner", "inner", ["inner", "inner"], ["changed", "inner"]], b_repeated)
 
     # A List default is one shared immutable value.
-    fn b_list_default() errors compiler::CompilerError:
+    fn b_list_default() errors std::compiler::CompilerError:
         static compile:
             fn f() errors IndexNotFound:
-                m = mutable_array::create(3, [[1], [2, 3]])
-                [mutable_array::at(m, 0), mutable_array::at(m, 2) == mutable_array::at(m, 1)]
+                m = std::mutable_array::create(3, [[1], [2, 3]])
+                [std::mutable_array::at(m, 0), std::mutable_array::at(m, 2) == std::mutable_array::at(m, 1)]
             f()
-    test::value("mat-run-5", [[[1], [2, 3]], true], b_list_default)
+    std::test::value("mat-run-5", [[[1], [2, 3]], true], b_list_default)
 
     # from_list of a typed array holds a copy: the inner array stays
     # writable through its own type, and writing it changes no copy.
-    fn b_nested_typed() errors compiler::CompilerError:
+    fn b_nested_typed() errors std::compiler::CompilerError:
         static compile:
             fn f() errors IndexNotFound, LowerUnderrun, UpperOverrun:
-                inner = mutable_array::from_list(["a"])
-                outer = mutable_array::from_list([inner])
-                mutable_array::set(inner, 0, "z")
-                [mutable_array::at(mutable_array::at(outer, 0), 0), mutable_array::at(inner, 0), list::length(mutable_array::freeze(outer, 1))]
+                inner = std::mutable_array::from_list(["a"])
+                outer = std::mutable_array::from_list([inner])
+                std::mutable_array::set(inner, 0, "z")
+                [std::mutable_array::at(std::mutable_array::at(outer, 0), 0), std::mutable_array::at(inner, 0), std::list::length(std::mutable_array::freeze(outer, 1))]
             r = f():
                 on IndexNotFound:
                     []
@@ -987,105 +987,105 @@ fn register_construction_tests(empty: int):
                 on UpperOverrun:
                     []
             r
-    test::value("mat-run-8", ["a", "z", 1], b_nested_typed)
+    std::test::value("mat-run-8", ["a", "z", 1], b_nested_typed)
 
     # A List of typed arrays read back by index.
-    fn b_list_of_arrays() errors compiler::CompilerError:
+    fn b_list_of_arrays() errors std::compiler::CompilerError:
         static compile:
             fn f(i: int) errors IndexNotFound:
-                a = mutable_array::create(2, 0)
-                b = mutable_array::create(3, 1)
-                m = list::at([a, b], i)
-                mutable_array::capacity(m)
+                a = std::mutable_array::create(2, 0)
+                b = std::mutable_array::create(3, 1)
+                m = std::list::at([a, b], i)
+                std::mutable_array::capacity(m)
             [f(0), f(1)]
-    test::value("mat-run-9", [2, 3], b_list_of_arrays)
+    std::test::value("mat-run-9", [2, 3], b_list_of_arrays)
 
     # create, capacity, at and a legal set.
-    fn b_create_set() errors compiler::CompilerError:
+    fn b_create_set() errors std::compiler::CompilerError:
         static compile:
-            m = mutable_array::create(3, "x")
-            mutable_array::set(m, 1, "y")
-            [mutable_array::capacity(m), mutable_array::at(m, 0), mutable_array::at(m, 1), mutable_array::at(m, 2)]
-    test::value("mat-cr-5", [3, "x", "y", "x"], b_create_set)
+            m = std::mutable_array::create(3, "x")
+            std::mutable_array::set(m, 1, "y")
+            [std::mutable_array::capacity(m), std::mutable_array::at(m, 0), std::mutable_array::at(m, 1), std::mutable_array::at(m, 2)]
+    std::test::value("mat-cr-5", [3, "x", "y", "x"], b_create_set)
 
     # An untyped capacity is not rejected statically.
-    fn b_untyped_capacity() errors compiler::CompilerError:
+    fn b_untyped_capacity() errors std::compiler::CompilerError:
         static compile:
             fn f(n):
-                mutable_array::create(n, 1)
-            mutable_array::capacity(f(2))
-    test::value("mat-cr-4/untyped-capacity", 2, b_untyped_capacity)
+                std::mutable_array::create(n, 1)
+            std::mutable_array::capacity(f(2))
+    std::test::value("mat-cr-4/untyped-capacity", 2, b_untyped_capacity)
 
     # Raw arrays stay heterogeneous and dynamically writable.
-    fn b_raw_heterogeneous() errors compiler::CompilerError:
+    fn b_raw_heterogeneous() errors std::compiler::CompilerError:
         static compile:
-            m = mutable_array::allocate(2)
-            mutable_array::set(m, 0, "x")
-            mutable_array::set(m, 1, 123)
-            mutable_array::freeze(m, 2)
-    test::value("mat-raw-2", ["x", 123], b_raw_heterogeneous)
+            m = std::mutable_array::allocate(2)
+            std::mutable_array::set(m, 0, "x")
+            std::mutable_array::set(m, 1, 123)
+            std::mutable_array::freeze(m, 2)
+    std::test::value("mat-raw-2", ["x", 123], b_raw_heterogeneous)
 
-    # Rows built with from_list read back through list::at.
-    fn b_rows() errors compiler::CompilerError:
+    # Rows built with from_list read back through std::list::at.
+    fn b_rows() errors std::compiler::CompilerError:
         static compile:
             fn rows():
-                [mutable_array::from_list([1, 2]), mutable_array::from_list([3]), mutable_array::from_list([])]
+                [std::mutable_array::from_list([1, 2]), std::mutable_array::from_list([3]), std::mutable_array::from_list([])]
             fn cap(i) errors IndexNotFound:
-                mutable_array::capacity(list::at(rows(), i))
+                std::mutable_array::capacity(std::list::at(rows(), i))
             fn g() errors IndexNotFound:
                 [cap(0), cap(1), cap(2)]
             r = g():
                 on IndexNotFound:
                     []
             r
-    test::value("mutarray-run-5", [2, 1, 0], b_rows)
+    std::test::value("mutarray-run-5", [2, 1, 0], b_rows)
 
-    # A consumer reached through list::at is statically proven.
-    fn b_through_list_at() errors compiler::CompilerError:
+    # A consumer reached through std::list::at is statically proven.
+    fn b_through_list_at() errors std::compiler::CompilerError:
         static compile:
             fn rows():
-                [mutable_array::from_list([1]), mutable_array::from_list([2, 3])]
+                [std::mutable_array::from_list([1]), std::mutable_array::from_list([2, 3])]
             fn cap(i) errors IndexNotFound:
-                mutable_array::capacity(list::at(rows(), i))
+                std::mutable_array::capacity(std::list::at(rows(), i))
             v = cap(1):
                 on IndexNotFound:
                     -1
             v
-    test::value("mutarray-list-5", 2, b_through_list_at)
+    std::test::value("mutarray-list-5", 2, b_through_list_at)
 
     # [storage, length]: the record consumer needs an independent proof.
-    fn b_record() errors compiler::CompilerError:
+    fn b_record() errors std::compiler::CompilerError:
         static compile:
             fn geo_new():
-                [mutable_array::allocate(0), 0]
+                [std::mutable_array::allocate(0), 0]
             fn geo_capacity(builder) errors IndexNotFound:
-                mutable_array::capacity(list::at(builder, 0))
+                std::mutable_array::capacity(std::list::at(builder, 0))
             v = geo_capacity(geo_new()):
                 on IndexNotFound:
                     0
             v
-    test::value("mutarray-neg-3", 0, b_record)
+    std::test::value("mutarray-neg-3", 0, b_record)
 
     # The kind and the typed array mix in one program.
-    fn b_mixed_kinds() errors compiler::CompilerError:
+    fn b_mixed_kinds() errors std::compiler::CompilerError:
         static compile:
             fn mixed(c):
                 if c:
-                    mutable_array::allocate(3)
+                    std::mutable_array::allocate(3)
                 else:
                     [1, 2, 3]
             fn size(x):
                 if mutarray?(x):
-                    mutable_array::capacity(x)
+                    std::mutable_array::capacity(x)
                 else:
                     -1
             fn f() errors IndexNotFound:
-                a = mutable_array::from_list(["a", "b"])
-                e = mutable_array::from_list([])
-                rows = [a, mutable_array::create(1, "z")]
-                [size(mixed(true)), size(mixed(false)), mutable_array::capacity(list::at(rows, 0)), mutable_array::capacity(e), mutarray?(a)]
+                a = std::mutable_array::from_list(["a", "b"])
+                e = std::mutable_array::from_list([])
+                rows = [a, std::mutable_array::create(1, "z")]
+                [size(mixed(true)), size(mixed(false)), std::mutable_array::capacity(std::list::at(rows, 0)), std::mutable_array::capacity(e), mutarray?(a)]
             f()
-    test::value("mutarray-run-6", [3, -1, 2, 0, true], b_mixed_kinds)
+    std::test::value("mutarray-run-6", [3, -1, 2, 0, true], b_mixed_kinds)
 
 # ---------------------------------------------------------------------------
 # The type MutableArray[T] (mutable-array-type.test surface syntax;
@@ -1094,198 +1094,198 @@ fn register_construction_tests(empty: int):
 fn register_type_syntax_tests():
     # Legal in every type position: a parameter, a List element, a result, a
     # function type.
-    fn b_parameter() errors compiler::CompilerError:
+    fn b_parameter() errors std::compiler::CompilerError:
         static compile:
             fn f(xs: MutableArray[str]) -> int:
-                mutable_array::capacity(xs)
-            f(mutable_array::create(1, "a"))
-    test::value("mat-syn-1/parameter", 1, b_parameter)
+                std::mutable_array::capacity(xs)
+            f(std::mutable_array::create(1, "a"))
+    std::test::value("mat-syn-1/parameter", 1, b_parameter)
 
-    fn b_list_element() errors compiler::CompilerError:
+    fn b_list_element() errors std::compiler::CompilerError:
         static compile:
             fn f(xs: List[MutableArray[int]]) -> int:
-                list::length(xs)
-            f([mutable_array::create(1, 0)])
-    test::value("mat-syn-1/list-element", 1, b_list_element)
+                std::list::length(xs)
+            f([std::mutable_array::create(1, 0)])
+    std::test::value("mat-syn-1/list-element", 1, b_list_element)
 
-    fn b_result() errors compiler::CompilerError:
+    fn b_result() errors std::compiler::CompilerError:
         static compile:
             fn f(xs: MutableArray[int]) -> MutableArray[int]:
                 xs
-            mutable_array::capacity(f(mutable_array::create(1, 0)))
-    test::value("mat-syn-1/result", 1, b_result)
+            std::mutable_array::capacity(f(std::mutable_array::create(1, 0)))
+    std::test::value("mat-syn-1/result", 1, b_result)
 
-    fn b_function_type() errors compiler::CompilerError:
+    fn b_function_type() errors std::compiler::CompilerError:
         static compile:
             fn f(g: Fn{args: [MutableArray[str]], return: MutableArray[str], errors: []}, m: MutableArray[str]) -> MutableArray[str]:
                 g(m)
             fn id(x: MutableArray[str]) -> MutableArray[str]:
                 x
-            r = mutable_array::at(f(id, mutable_array::create(1, "a")), 0):
+            r = std::mutable_array::at(f(id, std::mutable_array::create(1, "a")), 0):
                 on IndexNotFound:
                     ""
             r
-    test::value("mat-syn-1/function-type", "a", b_function_type)
+    std::test::value("mat-syn-1/function-type", "a", b_function_type)
 
     # Nested applied types work in every position.
-    fn b_array_of_list() errors compiler::CompilerError:
+    fn b_array_of_list() errors std::compiler::CompilerError:
         static compile:
             fn f(xs: MutableArray[List[str]]) -> int:
-                mutable_array::capacity(xs)
-            f(mutable_array::create(1, ["a"]))
-    test::value("mat-syn-2/array-of-list", 1, b_array_of_list)
+                std::mutable_array::capacity(xs)
+            f(std::mutable_array::create(1, ["a"]))
+    std::test::value("mat-syn-2/array-of-list", 1, b_array_of_list)
 
-    fn b_array_of_array() errors compiler::CompilerError:
+    fn b_array_of_array() errors std::compiler::CompilerError:
         static compile:
             fn f(xs: MutableArray[MutableArray[int]]) -> int:
-                mutable_array::capacity(xs)
-            f(mutable_array::create(1, mutable_array::create(1, 0)))
-    test::value("mat-syn-2/array-of-array", 1, b_array_of_array)
+                std::mutable_array::capacity(xs)
+            f(std::mutable_array::create(1, std::mutable_array::create(1, 0)))
+    std::test::value("mat-syn-2/array-of-array", 1, b_array_of_array)
 
-    fn b_list_of_array_of_list() errors compiler::CompilerError:
+    fn b_list_of_array_of_list() errors std::compiler::CompilerError:
         static compile:
             fn f(xs: List[MutableArray[List[int]]]) -> int:
-                list::length(xs)
-            f([mutable_array::create(1, [1])])
-    test::value("mat-syn-2/list-of-array-of-list", 1, b_list_of_array_of_list)
+                std::list::length(xs)
+            f([std::mutable_array::create(1, [1])])
+    std::test::value("mat-syn-2/list-of-array-of-list", 1, b_list_of_array_of_list)
 
-    fn b_array_of_set() errors compiler::CompilerError:
+    fn b_array_of_set() errors std::compiler::CompilerError:
         static compile:
             fn f(xs: MutableArray[ImmutableSet[int]]) -> int:
-                mutable_array::capacity(xs)
-            f(mutable_array::create(1, immutable_set::from_list([1])))
-    test::value("mat-syn-2/array-of-set", 1, b_array_of_set)
+                std::mutable_array::capacity(xs)
+            f(std::mutable_array::create(1, std::immutable_set::from_list([1])))
+    std::test::value("mat-syn-2/array-of-set", 1, b_array_of_set)
 
     # The type constructor needs its argument; Array is no constructor; there
     # are no type variables.
-    fn b_bare() errors compiler::CompilerError:
+    fn b_bare() errors std::compiler::CompilerError:
         static compile:
             fn f(m: MutableArray):
                 0
             f(1)
-    test::rejects("mat-syn-4/bare", compiler::DiagnosticCode::Type, b_bare)
+    std::test::rejects("mat-syn-4/bare", std::compiler::DiagnosticCode::Type, b_bare)
 
-    fn b_unknown_constructor() errors compiler::CompilerError:
+    fn b_unknown_constructor() errors std::compiler::CompilerError:
         static compile:
             fn f(m: Array[int]):
                 0
             f(1)
-    test::rejects("mat-syn-4/unknown-constructor", compiler::DiagnosticCode::Type, b_unknown_constructor)
+    std::test::rejects("mat-syn-4/unknown-constructor", std::compiler::DiagnosticCode::Type, b_unknown_constructor)
 
-    fn b_type_variable() errors compiler::CompilerError:
+    fn b_type_variable() errors std::compiler::CompilerError:
         static compile:
             fn f(x: T):
                 x
             f(1)
-    test::rejects("mat-syn-5/type-variable", compiler::DiagnosticCode::Type, b_type_variable)
+    std::test::rejects("mat-syn-5/type-variable", std::compiler::DiagnosticCode::Type, b_type_variable)
 
     # mutarray-construction.test's spellings: bare MutableArray, and an Int
     # given to a MutableArray[int] parameter.
-    fn b_bare_parameter() errors compiler::CompilerError:
+    fn b_bare_parameter() errors std::compiler::CompilerError:
         static compile:
             fn f(m: MutableArray):
                 0
             f(1)
-    test::rejects("mutarray-type-8/bare", compiler::DiagnosticCode::Type, b_bare_parameter)
+    std::test::rejects("mutarray-type-8/bare", std::compiler::DiagnosticCode::Type, b_bare_parameter)
 
-    fn b_int_argument() errors compiler::CompilerError:
+    fn b_int_argument() errors std::compiler::CompilerError:
         static compile:
             fn f(m: MutableArray[int]):
                 0
             f(1)
-    test::rejects("mutarray-type-8/int-argument", compiler::DiagnosticCode::Type, b_int_argument)
+    std::test::rejects("mutarray-type-8/int-argument", std::compiler::DiagnosticCode::Type, b_int_argument)
 
     # A mutarray parameter takes the raw constructor's result and a typed
     # array (the raw kind is MutableArray[any]; the parameter holds a copy).
-    fn b_raw_argument() errors compiler::CompilerError:
+    fn b_raw_argument() errors std::compiler::CompilerError:
         static compile:
             fn cap(m: mutarray) -> int:
-                mutable_array::capacity(m)
-            cap(mutable_array::allocate(2))
-    test::value("mutarray-type-9/raw-argument", 2, b_raw_argument)
+                std::mutable_array::capacity(m)
+            cap(std::mutable_array::allocate(2))
+    std::test::value("mutarray-type-9/raw-argument", 2, b_raw_argument)
 
-    fn b_typed_argument() errors compiler::CompilerError:
+    fn b_typed_argument() errors std::compiler::CompilerError:
         static compile:
             fn cap(m: mutarray) -> int:
-                mutable_array::capacity(m)
-            cap(mutable_array::from_list([1, 2]))
-    test::value("mutarray-type-9/typed-argument", 2, b_typed_argument)
+                std::mutable_array::capacity(m)
+            cap(std::mutable_array::from_list([1, 2]))
+    std::test::value("mutarray-type-9/typed-argument", 2, b_typed_argument)
 
     # No run-time element-type predicate exists.
-    fn b_no_type_predicate() errors compiler::CompilerError:
+    fn b_no_type_predicate() errors std::compiler::CompilerError:
         static compile:
-            MutableArrayOf?(mutable_array::allocate(1))
-    test::rejects("mat-raw-5/MutableArrayOf?", compiler::DiagnosticCode::Unbound, b_no_type_predicate)
+            MutableArrayOf?(std::mutable_array::allocate(1))
+    std::test::rejects("mat-raw-5/MutableArrayOf?", std::compiler::DiagnosticCode::Unbound, b_no_type_predicate)
 
-    fn b_no_element_type() errors compiler::CompilerError:
+    fn b_no_element_type() errors std::compiler::CompilerError:
         static compile:
-            mutarray_element_type(mutable_array::allocate(1))
-    test::rejects("mat-raw-5/mutarray_element_type", compiler::DiagnosticCode::Unbound, b_no_element_type)
+            mutarray_element_type(std::mutable_array::allocate(1))
+    std::test::rejects("mat-raw-5/mutarray_element_type", std::compiler::DiagnosticCode::Unbound, b_no_element_type)
 
-    fn b_no_array_element_type() errors compiler::CompilerError:
+    fn b_no_array_element_type() errors std::compiler::CompilerError:
         static compile:
-            mutable_array_element_type(mutable_array::allocate(1))
-    test::rejects("mat-raw-5/mutable_array_element_type", compiler::DiagnosticCode::Unbound, b_no_array_element_type)
+            mutable_array_element_type(std::mutable_array::allocate(1))
+    std::test::rejects("mat-raw-5/mutable_array_element_type", std::compiler::DiagnosticCode::Unbound, b_no_array_element_type)
 
     # No cast or assumption operation exists.
-    fn b_as_mutarray() errors compiler::CompilerError:
+    fn b_as_mutarray() errors std::compiler::CompilerError:
         static compile:
             fn f(x):
                 as_mutarray(x)
-            f(mutable_array::allocate(1))
-    test::rejects("mat-nc-1/as_mutarray", compiler::DiagnosticCode::Unbound, b_as_mutarray)
+            f(std::mutable_array::allocate(1))
+    std::test::rejects("mat-nc-1/as_mutarray", std::compiler::DiagnosticCode::Unbound, b_as_mutarray)
 
-    fn b_cast() errors compiler::CompilerError:
+    fn b_cast() errors std::compiler::CompilerError:
         static compile:
             fn f(x):
                 cast(x)
-            f(mutable_array::allocate(1))
-    test::rejects("mat-nc-1/cast", compiler::DiagnosticCode::Unbound, b_cast)
+            f(std::mutable_array::allocate(1))
+    std::test::rejects("mat-nc-1/cast", std::compiler::DiagnosticCode::Unbound, b_cast)
 
-    fn b_assume() errors compiler::CompilerError:
+    fn b_assume() errors std::compiler::CompilerError:
         static compile:
             fn f(x):
                 assume_element_type(x)
-            f(mutable_array::allocate(1))
-    test::rejects("mat-nc-1/assume_element_type", compiler::DiagnosticCode::Unbound, b_assume)
+            f(std::mutable_array::allocate(1))
+    std::test::rejects("mat-nc-1/assume_element_type", std::compiler::DiagnosticCode::Unbound, b_assume)
 
-    fn b_as_mutable_array() errors compiler::CompilerError:
+    fn b_as_mutable_array() errors std::compiler::CompilerError:
         static compile:
             fn f(x):
                 as_mutable_array(x)
-            f(mutable_array::allocate(1))
-    test::rejects("mat-nc-1/as_mutable_array", compiler::DiagnosticCode::Unbound, b_as_mutable_array)
+            f(std::mutable_array::allocate(1))
+    std::test::rejects("mat-nc-1/as_mutable_array", std::compiler::DiagnosticCode::Unbound, b_as_mutable_array)
 
     # An unknown value is never silently a mutarray (no cast exists).
-    fn b_neg_as_mutarray() errors compiler::CompilerError:
+    fn b_neg_as_mutarray() errors std::compiler::CompilerError:
         static compile:
             fn f(x) errors IndexNotFound:
                 as_mutarray(x)
             f(1)
-    test::rejects("mutarray-neg-7/as_mutarray", compiler::DiagnosticCode::Unbound, b_neg_as_mutarray)
+    std::test::rejects("mutarray-neg-7/as_mutarray", std::compiler::DiagnosticCode::Unbound, b_neg_as_mutarray)
 
-    fn b_neg_as_list() errors compiler::CompilerError:
+    fn b_neg_as_list() errors std::compiler::CompilerError:
         static compile:
             fn f(x) errors IndexNotFound:
                 as_list(x)
             f(1)
-    test::rejects("mutarray-neg-7/as_list", compiler::DiagnosticCode::Unbound, b_neg_as_list)
+    std::test::rejects("mutarray-neg-7/as_list", std::compiler::DiagnosticCode::Unbound, b_neg_as_list)
 
-    fn b_neg_cast() errors compiler::CompilerError:
+    fn b_neg_cast() errors std::compiler::CompilerError:
         static compile:
             fn f(x) errors IndexNotFound:
                 cast(x)
             f(1)
-    test::rejects("mutarray-neg-7/cast", compiler::DiagnosticCode::Unbound, b_neg_cast)
+    std::test::rejects("mutarray-neg-7/cast", std::compiler::DiagnosticCode::Unbound, b_neg_cast)
 
     # An argument that cannot be proven a List is rejected, not coerced.
-    fn b_from_list_unproven() errors compiler::CompilerError:
+    fn b_from_list_unproven() errors std::compiler::CompilerError:
         static compile:
             fn f(x) errors IndexNotFound:
-                mutable_array::from_list(x)
+                std::mutable_array::from_list(x)
             f(5)
             0
-    test::rejects("mutarray-arg-4", compiler::DiagnosticCode::Type, b_from_list_unproven)
+    std::test::rejects("mutarray-arg-4", std::compiler::DiagnosticCode::Type, b_from_list_unproven)
 
 # ---------------------------------------------------------------------------
 # Typed stores: a proof, never a widening (mutable-array-type.test items 21,
@@ -1293,310 +1293,310 @@ fn register_type_syntax_tests():
 
 # INDEX (5) is mat-set-8's index past the capacity, a parameter.
 fn register_store_tests(index: int):
-    fn b_admissible() errors compiler::CompilerError:
+    fn b_admissible() errors std::compiler::CompilerError:
         static compile:
-            m = mutable_array::create(2, "x")
-            mutable_array::set(m, 1, "y")
-            mutable_array::freeze(m, 2)
-    test::value("mat-set-1/admissible", ["x", "y"], b_admissible)
+            m = std::mutable_array::create(2, "x")
+            std::mutable_array::set(m, 1, "y")
+            std::mutable_array::freeze(m, 2)
+    std::test::value("mat-set-1/admissible", ["x", "y"], b_admissible)
 
-    fn b_int_into_str() errors compiler::CompilerError:
+    fn b_int_into_str() errors std::compiler::CompilerError:
         static compile:
-            m = mutable_array::create(2, "x")
-            mutable_array::set(m, 1, 123)
-    test::rejects("mat-set-1/int-into-str", compiler::DiagnosticCode::Type, b_int_into_str)
+            m = std::mutable_array::create(2, "x")
+            std::mutable_array::set(m, 1, 123)
+    std::test::rejects("mat-set-1/int-into-str", std::compiler::DiagnosticCode::Type, b_int_into_str)
 
-    fn b_str_into_int() errors compiler::CompilerError:
+    fn b_str_into_int() errors std::compiler::CompilerError:
         static compile:
-            m = mutable_array::create(2, 0)
-            mutable_array::set(m, 0, "hello")
-    test::rejects("mat-set-1/str-into-int", compiler::DiagnosticCode::Type, b_str_into_int)
+            m = std::mutable_array::create(2, 0)
+            std::mutable_array::set(m, 0, "hello")
+    std::test::rejects("mat-set-1/str-into-int", std::compiler::DiagnosticCode::Type, b_str_into_int)
 
     # The diagnostic names the value type, the element type and the array
     # type.
-    fn b_message() errors compiler::CompilerError:
+    fn b_message() errors std::compiler::CompilerError:
         static compile:
-            m = mutable_array::create(2, "x")
-            mutable_array::set(m, 1, 123)
-    test::rejects_containing("mat-set-2", compiler::DiagnosticCode::Type, "value of type int is not admissible to element type str of MutableArray[str]", b_message)
+            m = std::mutable_array::create(2, "x")
+            std::mutable_array::set(m, 1, 123)
+    std::test::rejects_containing("mat-set-2", std::compiler::DiagnosticCode::Type, "value of type int is not admissible to element type str of MutableArray[str]", b_message)
 
     # A store never widens T.
-    fn b_never_widens() errors compiler::CompilerError:
+    fn b_never_widens() errors std::compiler::CompilerError:
         static compile:
             fn f() errors IndexNotFound:
-                m = mutable_array::create(2, 0)
-                mutable_array::set(m, 0, "s")
+                m = std::mutable_array::create(2, 0)
+                std::mutable_array::set(m, 0, "s")
                 m
             f()
             0
-    test::rejects("mat-set-3", compiler::DiagnosticCode::Type, b_never_widens)
+    std::test::rejects("mat-set-3", std::compiler::DiagnosticCode::Type, b_never_widens)
 
     # An unproven value is rejected, not guarded at run time.
-    fn b_unproven() errors compiler::CompilerError:
+    fn b_unproven() errors std::compiler::CompilerError:
         static compile:
             fn f(v):
-                m = mutable_array::create(2, 0)
-                mutable_array::set(m, 0, v)
+                m = std::mutable_array::create(2, 0)
+                std::mutable_array::set(m, 0, v)
             f(1)
-    test::rejects("mat-set-4", compiler::DiagnosticCode::Type, b_unproven)
+    std::test::rejects("mat-set-4", std::compiler::DiagnosticCode::Type, b_unproven)
 
     # Integer-domain stores use the ordinary range proof.
-    fn b_in_range() errors compiler::CompilerError:
+    fn b_in_range() errors std::compiler::CompilerError:
         static compile:
             fn mk(b: Byte):
-                mutable_array::create(2, b)
+                std::mutable_array::create(2, b)
             m = mk(3)
-            w = mutable_array::set(m, 0, 200):
+            w = std::mutable_array::set(m, 0, 200):
                 on IndexNotFound:
                     unit
-            r = mutable_array::freeze(m, 2):
+            r = std::mutable_array::freeze(m, 2):
                 on LowerUnderrun:
                     []
                 on UpperOverrun:
                     []
             r
-    test::value("mat-set-5/in-range", [200, 3], b_in_range)
+    std::test::value("mat-set-5/in-range", [200, 3], b_in_range)
 
-    fn b_out_of_range() errors compiler::CompilerError:
+    fn b_out_of_range() errors std::compiler::CompilerError:
         static compile:
             fn mk(b: Byte):
-                mutable_array::create(2, b)
+                std::mutable_array::create(2, b)
             m = mk(3)
-            w = mutable_array::set(m, 0, 300):
+            w = std::mutable_array::set(m, 0, 300):
                 on IndexNotFound:
                     unit
             w
-    test::rejects("mat-set-5/out-of-range", compiler::DiagnosticCode::Type, b_out_of_range)
+    std::test::rejects("mat-set-5/out-of-range", std::compiler::DiagnosticCode::Type, b_out_of_range)
 
-    fn b_unproven_int() errors compiler::CompilerError:
+    fn b_unproven_int() errors std::compiler::CompilerError:
         static compile:
             fn mk(b: Byte):
-                mutable_array::create(2, b)
+                std::mutable_array::create(2, b)
             m = mk(3)
             fn put(x: int):
-                w = mutable_array::set(m, 0, x):
+                w = std::mutable_array::set(m, 0, x):
                     on IndexNotFound:
                         unit
                 w
             put(1)
-    test::rejects("mat-set-5/unproven-int", compiler::DiagnosticCode::Type, b_unproven_int)
+    std::test::rejects("mat-set-5/unproven-int", std::compiler::DiagnosticCode::Type, b_unproven_int)
 
     # A store into MutableArray[any] and into a raw array accepts anything.
-    fn b_into_any() errors compiler::CompilerError:
+    fn b_into_any() errors std::compiler::CompilerError:
         static compile:
-            m = mutable_array::from_list([1, "a"])
-            mutable_array::set(m, 0, true)
-            mutable_array::freeze(m, 2)
-    test::value("mat-set-6/typed-any", [true, "a"], b_into_any)
+            m = std::mutable_array::from_list([1, "a"])
+            std::mutable_array::set(m, 0, true)
+            std::mutable_array::freeze(m, 2)
+    std::test::value("mat-set-6/typed-any", [true, "a"], b_into_any)
 
-    fn b_into_raw() errors compiler::CompilerError:
+    fn b_into_raw() errors std::compiler::CompilerError:
         static compile:
-            m = mutable_array::allocate(1)
-            mutable_array::set(m, 0, true)
-            mutable_array::freeze(m, 1)
-    test::value("mat-set-6/raw", [true], b_into_raw)
+            m = std::mutable_array::allocate(1)
+            std::mutable_array::set(m, 0, true)
+            std::mutable_array::freeze(m, 1)
+    std::test::value("mat-set-6/raw", [true], b_into_raw)
 
     # Nested arrays: the inner value must be the inner contract.
-    fn b_inner_same() errors compiler::CompilerError:
+    fn b_inner_same() errors std::compiler::CompilerError:
         static compile:
-            inner = mutable_array::from_list(["a"])
-            outer = mutable_array::create(2, inner)
-            mutable_array::set(outer, 1, mutable_array::from_list(["b"]))
-            r = mutable_array::at(mutable_array::at(outer, 1), 0):
+            inner = std::mutable_array::from_list(["a"])
+            outer = std::mutable_array::create(2, inner)
+            std::mutable_array::set(outer, 1, std::mutable_array::from_list(["b"]))
+            r = std::mutable_array::at(std::mutable_array::at(outer, 1), 0):
                 on IndexNotFound:
                     ""
             r
-    test::value("mat-set-7/same-contract", "b", b_inner_same)
+    std::test::value("mat-set-7/same-contract", "b", b_inner_same)
 
-    fn b_inner_other() errors compiler::CompilerError:
+    fn b_inner_other() errors std::compiler::CompilerError:
         static compile:
-            inner = mutable_array::from_list(["a"])
-            outer = mutable_array::create(2, inner)
-            mutable_array::set(outer, 1, mutable_array::from_list([1]))
-    test::rejects("mat-set-7/other-contract", compiler::DiagnosticCode::Type, b_inner_other)
+            inner = std::mutable_array::from_list(["a"])
+            outer = std::mutable_array::create(2, inner)
+            std::mutable_array::set(outer, 1, std::mutable_array::from_list([1]))
+    std::test::rejects("mat-set-7/other-contract", std::compiler::DiagnosticCode::Type, b_inner_other)
 
-    fn b_inner_raw() errors compiler::CompilerError:
+    fn b_inner_raw() errors std::compiler::CompilerError:
         static compile:
-            inner = mutable_array::from_list(["a"])
-            outer = mutable_array::create(2, inner)
-            mutable_array::set(outer, 1, mutable_array::allocate(1))
-    test::rejects("mat-set-7/raw-inner", compiler::DiagnosticCode::Type, b_inner_raw)
+            inner = std::mutable_array::from_list(["a"])
+            outer = std::mutable_array::create(2, inner)
+            std::mutable_array::set(outer, 1, std::mutable_array::allocate(1))
+    std::test::rejects("mat-set-7/raw-inner", std::compiler::DiagnosticCode::Type, b_inner_raw)
 
     # A typed store is a compile-time check only: an index past the capacity
     # is still IndexNotFound at run time, which the program's handler sees.
-    fn b_bounds() errors compiler::CompilerError:
+    fn b_bounds() errors std::compiler::CompilerError:
         static compile:
             fn f(i: int) errors IndexNotFound:
-                m = mutable_array::create(2, 0)
-                mutable_array::set(m, i, 1)
+                m = std::mutable_array::create(2, 0)
+                std::mutable_array::set(m, i, 1)
                 m
             fn outcome(i: int):
                 m = f(i):
                     on IndexNotFound:
                         return "IndexNotFound"
-                mutable_array::freeze(m, mutable_array::capacity(m))
+                std::mutable_array::freeze(m, std::mutable_array::capacity(m))
             outcome(index)
-    test::value("mat-set-8", "IndexNotFound", b_bounds)
+    std::test::value("mat-set-8", "IndexNotFound", b_bounds)
 
     # Aliases keep the type: a store through one is checked against it.
-    fn b_alias_wrong() errors compiler::CompilerError:
+    fn b_alias_wrong() errors std::compiler::CompilerError:
         static compile:
-            a = mutable_array::create(2, "x")
+            a = std::mutable_array::create(2, "x")
             b = a
-            mutable_array::set(b, 0, 1)
-    test::rejects("mat-inv-7/alias-wrong-store", compiler::DiagnosticCode::Type, b_alias_wrong)
+            std::mutable_array::set(b, 0, 1)
+    std::test::rejects("mat-inv-7/alias-wrong-store", std::compiler::DiagnosticCode::Type, b_alias_wrong)
 
-    fn b_alias_store() errors compiler::CompilerError:
+    fn b_alias_store() errors std::compiler::CompilerError:
         static compile:
-            a = mutable_array::create(2, "x")
+            a = std::mutable_array::create(2, "x")
             b = a
-            mutable_array::set(b, 0, "q")
-            mutable_array::freeze(b, 2)
-    test::value("mat-inv-7/alias-store", ["q", "x"], b_alias_store)
+            std::mutable_array::set(b, 0, "q")
+            std::mutable_array::freeze(b, 2)
+    std::test::value("mat-inv-7/alias-store", ["q", "x"], b_alias_store)
 
     # mutarray? of a typed array keeps the element contract in its true
     # branch.
-    fn b_refined_typed() errors compiler::CompilerError:
+    fn b_refined_typed() errors std::compiler::CompilerError:
         static compile:
-            m = mutable_array::create(1, "a")
+            m = std::mutable_array::create(1, "a")
             if mutarray?(m):
-                mutable_array::set(m, 0, 1)
+                std::mutable_array::set(m, 0, 1)
             else:
                 unit
-    test::rejects("mat-ref-2", compiler::DiagnosticCode::Type, b_refined_typed)
+    std::test::rejects("mat-ref-2", std::compiler::DiagnosticCode::Type, b_refined_typed)
 
 # ---------------------------------------------------------------------------
 # copy (mutable-array-type.test item 25)
 
 fn register_copy_tests():
-    fn b_same_contract() errors compiler::CompilerError:
+    fn b_same_contract() errors std::compiler::CompilerError:
         static compile:
-            a = mutable_array::from_list(["a", "b"])
-            b = mutable_array::create(2, "z")
-            mutable_array::copy(b, 0, a, 0, 2)
-            mutable_array::freeze(b, 2)
-    test::value("mat-cp-1/same-contract", ["a", "b"], b_same_contract)
+            a = std::mutable_array::from_list(["a", "b"])
+            b = std::mutable_array::create(2, "z")
+            std::mutable_array::copy(b, 0, a, 0, 2)
+            std::mutable_array::freeze(b, 2)
+    std::test::value("mat-cp-1/same-contract", ["a", "b"], b_same_contract)
 
-    fn b_equivalent_contract() errors compiler::CompilerError:
+    fn b_equivalent_contract() errors std::compiler::CompilerError:
         static compile:
-            a = mutable_array::create(1, 0)
-            b = mutable_array::create(1, 9)
-            mutable_array::copy(b, 0, a, 0, 1)
-            mutable_array::freeze(b, 1)
-    test::value("mat-cp-1/equivalent-contract", [0], b_equivalent_contract)
+            a = std::mutable_array::create(1, 0)
+            b = std::mutable_array::create(1, 9)
+            std::mutable_array::copy(b, 0, a, 0, 1)
+            std::mutable_array::freeze(b, 1)
+    std::test::value("mat-cp-1/equivalent-contract", [0], b_equivalent_contract)
 
     # A source element type not admissible to the destination is rejected.
-    fn b_int_source() errors compiler::CompilerError:
+    fn b_int_source() errors std::compiler::CompilerError:
         static compile:
-            a = mutable_array::from_list([1, 2])
-            b = mutable_array::create(2, "z")
-            mutable_array::copy(b, 0, a, 0, 2)
-    test::rejects("mat-cp-2/int-source", compiler::DiagnosticCode::Type, b_int_source)
+            a = std::mutable_array::from_list([1, 2])
+            b = std::mutable_array::create(2, "z")
+            std::mutable_array::copy(b, 0, a, 0, 2)
+    std::test::rejects("mat-cp-2/int-source", std::compiler::DiagnosticCode::Type, b_int_source)
 
-    fn b_any_source() errors compiler::CompilerError:
+    fn b_any_source() errors std::compiler::CompilerError:
         static compile:
-            a = mutable_array::from_list(["a", 1])
-            b = mutable_array::create(2, "z")
-            mutable_array::copy(b, 0, a, 0, 2)
-    test::rejects("mat-cp-2/any-source", compiler::DiagnosticCode::Type, b_any_source)
+            a = std::mutable_array::from_list(["a", 1])
+            b = std::mutable_array::create(2, "z")
+            std::mutable_array::copy(b, 0, a, 0, 2)
+    std::test::rejects("mat-cp-2/any-source", std::compiler::DiagnosticCode::Type, b_any_source)
 
     # A raw or unknown source into a typed destination is never accepted.
-    fn b_raw_source() errors compiler::CompilerError:
+    fn b_raw_source() errors std::compiler::CompilerError:
         static compile:
-            a = mutable_array::allocate(2)
-            b = mutable_array::create(2, "z")
-            mutable_array::copy(b, 0, a, 0, 2)
-    test::rejects("mat-cp-3/raw-source", compiler::DiagnosticCode::Type, b_raw_source)
+            a = std::mutable_array::allocate(2)
+            b = std::mutable_array::create(2, "z")
+            std::mutable_array::copy(b, 0, a, 0, 2)
+    std::test::rejects("mat-cp-3/raw-source", std::compiler::DiagnosticCode::Type, b_raw_source)
 
-    fn b_unknown_source() errors compiler::CompilerError:
+    fn b_unknown_source() errors std::compiler::CompilerError:
         static compile:
             fn f(a):
-                b = mutable_array::create(2, "z")
-                mutable_array::copy(b, 0, a, 0, 2)
-            f(mutable_array::allocate(2))
-    test::rejects("mat-cp-3/unknown-source", compiler::DiagnosticCode::Type, b_unknown_source)
+                b = std::mutable_array::create(2, "z")
+                std::mutable_array::copy(b, 0, a, 0, 2)
+            f(std::mutable_array::allocate(2))
+    std::test::rejects("mat-cp-3/unknown-source", std::compiler::DiagnosticCode::Type, b_unknown_source)
 
     # raw -> raw and typed -> raw keep the legacy behavior.
-    fn b_raw_to_raw() errors compiler::CompilerError:
+    fn b_raw_to_raw() errors std::compiler::CompilerError:
         static compile:
-            a = mutable_array::allocate(2)
-            b = mutable_array::allocate(2)
-            mutable_array::copy(b, 0, a, 0, 2)
-            mutable_array::capacity(b)
-    test::value("mat-cp-4/raw-to-raw", 2, b_raw_to_raw)
+            a = std::mutable_array::allocate(2)
+            b = std::mutable_array::allocate(2)
+            std::mutable_array::copy(b, 0, a, 0, 2)
+            std::mutable_array::capacity(b)
+    std::test::value("mat-cp-4/raw-to-raw", 2, b_raw_to_raw)
 
-    fn b_typed_to_raw() errors compiler::CompilerError:
+    fn b_typed_to_raw() errors std::compiler::CompilerError:
         static compile:
-            a = mutable_array::from_list(["a"])
-            b = mutable_array::allocate(2)
-            mutable_array::copy(b, 0, a, 0, 1)
-            mutable_array::at(b, 0)
-    test::value("mat-cp-4/typed-to-raw", "a", b_typed_to_raw)
+            a = std::mutable_array::from_list(["a"])
+            b = std::mutable_array::allocate(2)
+            std::mutable_array::copy(b, 0, a, 0, 1)
+            std::mutable_array::at(b, 0)
+    std::test::value("mat-cp-4/typed-to-raw", "a", b_typed_to_raw)
 
     # Copying typed arrays into untyped storage copies them logically ...
-    fn b_arrays_to_raw() errors compiler::CompilerError:
+    fn b_arrays_to_raw() errors std::compiler::CompilerError:
         static compile:
-            a = mutable_array::from_list([mutable_array::from_list(["a"])])
-            b = mutable_array::allocate(2)
-            mutable_array::copy(b, 0, a, 0, 1)
-            mutable_array::capacity(b)
-    test::value("mat-cp-5/arrays-to-raw", 2, b_arrays_to_raw)
+            a = std::mutable_array::from_list([std::mutable_array::from_list(["a"])])
+            b = std::mutable_array::allocate(2)
+            std::mutable_array::copy(b, 0, a, 0, 1)
+            std::mutable_array::capacity(b)
+    std::test::value("mat-cp-5/arrays-to-raw", 2, b_arrays_to_raw)
 
-    fn b_arrays_to_typed() errors compiler::CompilerError:
+    fn b_arrays_to_typed() errors std::compiler::CompilerError:
         static compile:
-            a = mutable_array::from_list([mutable_array::from_list(["a"])])
-            b = mutable_array::create(2, mutable_array::from_list(["z"]))
-            mutable_array::copy(b, 0, a, 0, 1)
-            r = mutable_array::at(mutable_array::at(b, 0), 0):
+            a = std::mutable_array::from_list([std::mutable_array::from_list(["a"])])
+            b = std::mutable_array::create(2, std::mutable_array::from_list(["z"]))
+            std::mutable_array::copy(b, 0, a, 0, 1)
+            r = std::mutable_array::at(std::mutable_array::at(b, 0), 0):
                 on IndexNotFound:
                     ""
             r
-    test::value("mat-cp-5/arrays-to-typed", "a", b_arrays_to_typed)
+    std::test::value("mat-cp-5/arrays-to-typed", "a", b_arrays_to_typed)
 
     # ... but elements carrying a callable contract of their own would lose
     # it.
-    fn b_callable_elements() errors compiler::CompilerError:
+    fn b_callable_elements() errors std::compiler::CompilerError:
         static compile:
             fn g(x: int) -> int errors Refused:
                 fail Refused
-            a = mutable_array::from_list([g])
-            b = mutable_array::allocate(2)
-            mutable_array::copy(b, 0, a, 0, 1)
-    test::rejects_containing("mat-cp-5/callable-elements", compiler::DiagnosticCode::Type, "cannot erase element contract of MutableArray[Fn", b_callable_elements)
+            a = std::mutable_array::from_list([g])
+            b = std::mutable_array::allocate(2)
+            std::mutable_array::copy(b, 0, a, 0, 1)
+    std::test::rejects_containing("mat-cp-5/callable-elements", std::compiler::DiagnosticCode::Type, "cannot erase element contract of MutableArray[Fn", b_callable_elements)
 
     # A narrower source domain may be copied into a wider destination, never
     # the reverse.
-    fn b_narrow_to_wide() errors compiler::CompilerError:
+    fn b_narrow_to_wide() errors std::compiler::CompilerError:
         static compile:
             fn mkb(b: Byte):
-                mutable_array::create(2, b)
+                std::mutable_array::create(2, b)
             fn mki(i: int):
-                mutable_array::create(2, i)
+                std::mutable_array::create(2, i)
             x = mkb(3)
             y = mki(3)
-            w = mutable_array::copy(y, 0, x, 0, 2):
+            w = std::mutable_array::copy(y, 0, x, 0, 2):
                 on LowerUnderrun:
                     unit
                 on UpperOverrun:
                     unit
-            mutable_array::capacity(y)
-    test::value("mat-cp-6/narrow-to-wide", 2, b_narrow_to_wide)
+            std::mutable_array::capacity(y)
+    std::test::value("mat-cp-6/narrow-to-wide", 2, b_narrow_to_wide)
 
-    fn b_wide_to_narrow() errors compiler::CompilerError:
+    fn b_wide_to_narrow() errors std::compiler::CompilerError:
         static compile:
             fn mkb(b: Byte):
-                mutable_array::create(2, b)
+                std::mutable_array::create(2, b)
             fn mki(i: int):
-                mutable_array::create(2, i)
+                std::mutable_array::create(2, i)
             x = mkb(3)
             y = mki(3)
-            w = mutable_array::copy(x, 0, y, 0, 2):
+            w = std::mutable_array::copy(x, 0, y, 0, 2):
                 on LowerUnderrun:
                     unit
                 on UpperOverrun:
                     unit
             w
-    test::rejects("mat-cp-6/wide-to-narrow", compiler::DiagnosticCode::Type, b_wide_to_narrow)
+    std::test::rejects("mat-cp-6/wide-to-narrow", std::compiler::DiagnosticCode::Type, b_wide_to_narrow)
 
 # ---------------------------------------------------------------------------
 # Admission of typed parameters, variance (mutable-array-type.test items 10,
@@ -1604,273 +1604,273 @@ fn register_copy_tests():
 
 fn register_admission_tests():
     # MutableArray[int] does not admit a MutableArray[Byte] ...
-    fn b_narrower_element() errors compiler::CompilerError:
+    fn b_narrower_element() errors std::compiler::CompilerError:
         static compile:
             fn mk(b: Byte):
-                mutable_array::create(2, b)
+                std::mutable_array::create(2, b)
             fn take(xs: MutableArray[int]) -> int:
-                mutable_array::capacity(xs)
+                std::mutable_array::capacity(xs)
             take(mk(3))
-    test::rejects("mat-inv-1/narrower-element", compiler::DiagnosticCode::Type, b_narrower_element)
+    std::test::rejects("mat-inv-1/narrower-element", std::compiler::DiagnosticCode::Type, b_narrower_element)
 
     # ... but does its own contract.
-    fn b_exact_element() errors compiler::CompilerError:
+    fn b_exact_element() errors std::compiler::CompilerError:
         static compile:
             fn take(xs: MutableArray[int]) -> int:
-                mutable_array::capacity(xs)
-            take(mutable_array::create(2, 1))
-    test::value("mat-inv-1/exact-element", 2, b_exact_element)
+                std::mutable_array::capacity(xs)
+            take(std::mutable_array::create(2, 1))
+    std::test::value("mat-inv-1/exact-element", 2, b_exact_element)
 
-    fn b_any_takes_str() errors compiler::CompilerError:
+    fn b_any_takes_str() errors std::compiler::CompilerError:
         static compile:
             fn f(xs: MutableArray[any]) -> int:
-                mutable_array::capacity(xs)
-            f(mutable_array::create(1, "a"))
-    test::rejects("mat-inv-2/any-parameter", compiler::DiagnosticCode::Type, b_any_takes_str)
+                std::mutable_array::capacity(xs)
+            f(std::mutable_array::create(1, "a"))
+    std::test::rejects("mat-inv-2/any-parameter", std::compiler::DiagnosticCode::Type, b_any_takes_str)
 
-    fn b_str_takes_any() errors compiler::CompilerError:
+    fn b_str_takes_any() errors std::compiler::CompilerError:
         static compile:
             fn f(xs: MutableArray[str]) -> int:
-                mutable_array::capacity(xs)
-            f(mutable_array::from_list(["a", 1]))
-    test::rejects("mat-inv-2/str-parameter", compiler::DiagnosticCode::Type, b_str_takes_any)
+                std::mutable_array::capacity(xs)
+            f(std::mutable_array::from_list(["a", 1]))
+    std::test::rejects("mat-inv-2/str-parameter", std::compiler::DiagnosticCode::Type, b_str_takes_any)
 
     # Admission is exact at depth.
-    fn b_list_depth() errors compiler::CompilerError:
+    fn b_list_depth() errors std::compiler::CompilerError:
         static compile:
             fn f(xs: List[MutableArray[any]]) -> int:
-                list::length(xs)
-            f([mutable_array::create(1, "a")])
-    test::rejects("mat-inv-3/list", compiler::DiagnosticCode::Type, b_list_depth)
+                std::list::length(xs)
+            f([std::mutable_array::create(1, "a")])
+    std::test::rejects("mat-inv-3/list", std::compiler::DiagnosticCode::Type, b_list_depth)
 
-    fn b_array_depth() errors compiler::CompilerError:
+    fn b_array_depth() errors std::compiler::CompilerError:
         static compile:
             fn f(xs: MutableArray[MutableArray[any]]) -> int:
-                mutable_array::capacity(xs)
-            f(mutable_array::create(1, mutable_array::create(1, "a")))
-    test::rejects("mat-inv-3/array", compiler::DiagnosticCode::Type, b_array_depth)
+                std::mutable_array::capacity(xs)
+            f(std::mutable_array::create(1, std::mutable_array::create(1, "a")))
+    std::test::rejects("mat-inv-3/array", std::compiler::DiagnosticCode::Type, b_array_depth)
 
     # A typed parameter admits exactly its contract; the raw and the wrong
     # array are rejected.
-    fn b_first_exact() errors compiler::CompilerError:
+    fn b_first_exact() errors std::compiler::CompilerError:
         static compile:
             fn first(xs: MutableArray[str]) -> str errors IndexNotFound:
-                mutable_array::at(xs, 0)
-            v = first(mutable_array::create(2, "a")):
+                std::mutable_array::at(xs, 0)
+            v = first(std::mutable_array::create(2, "a")):
                 on IndexNotFound:
                     "z"
             v
-    test::value("mat-inv-4/exact", "a", b_first_exact)
+    std::test::value("mat-inv-4/exact", "a", b_first_exact)
 
-    fn b_first_int() errors compiler::CompilerError:
+    fn b_first_int() errors std::compiler::CompilerError:
         static compile:
             fn first(xs: MutableArray[str]) -> str errors IndexNotFound:
-                mutable_array::at(xs, 0)
-            v = first(mutable_array::create(2, 1)):
+                std::mutable_array::at(xs, 0)
+            v = first(std::mutable_array::create(2, 1)):
                 on IndexNotFound:
                     "z"
             v
-    test::rejects("mat-inv-4/int-array", compiler::DiagnosticCode::Type, b_first_int)
+    std::test::rejects("mat-inv-4/int-array", std::compiler::DiagnosticCode::Type, b_first_int)
 
-    fn b_first_raw() errors compiler::CompilerError:
+    fn b_first_raw() errors std::compiler::CompilerError:
         static compile:
             fn first(xs: MutableArray[str]) -> str errors IndexNotFound:
-                mutable_array::at(xs, 0)
-            v = first(mutable_array::allocate(2)):
+                std::mutable_array::at(xs, 0)
+            v = first(std::mutable_array::allocate(2)):
                 on IndexNotFound:
                     "z"
             v
-    test::rejects("mat-inv-4/raw-array", compiler::DiagnosticCode::Type, b_first_raw)
+    std::test::rejects("mat-inv-4/raw-array", std::compiler::DiagnosticCode::Type, b_first_raw)
 
-    fn b_first_any() errors compiler::CompilerError:
+    fn b_first_any() errors std::compiler::CompilerError:
         static compile:
             fn first(xs: MutableArray[str]) -> str errors IndexNotFound:
-                mutable_array::at(xs, 0)
-            v = first(mutable_array::from_list(["a", 1])):
+                std::mutable_array::at(xs, 0)
+            v = first(std::mutable_array::from_list(["a", 1])):
                 on IndexNotFound:
                     "z"
             v
-    test::rejects("mat-inv-4/any-array", compiler::DiagnosticCode::Type, b_first_any)
+    std::test::rejects("mat-inv-4/any-array", std::compiler::DiagnosticCode::Type, b_first_any)
 
     # Structural Fn: a parameter admits exactly its contract, while the raw
     # kind admits every array.
-    fn b_fn_parameters() errors compiler::CompilerError:
+    fn b_fn_parameters() errors std::compiler::CompilerError:
         static compile:
             fn cap_str(m: MutableArray[str]) -> int:
-                mutable_array::capacity(m)
+                std::mutable_array::capacity(m)
             fn cap_raw(m: mutarray) -> int:
-                mutable_array::capacity(m)
+                std::mutable_array::capacity(m)
             fn use(f: Fn{args: [MutableArray[str]], return: int, errors: []}) -> int:
-                f(mutable_array::create(1, "a"))
+                f(std::mutable_array::create(1, "a"))
             [use(cap_str), use(cap_raw)]
-    test::value("mat-inv-5/exact-and-raw", [1, 1], b_fn_parameters)
+    std::test::value("mat-inv-5/exact-and-raw", [1, 1], b_fn_parameters)
 
-    fn b_fn_any_parameter() errors compiler::CompilerError:
+    fn b_fn_any_parameter() errors std::compiler::CompilerError:
         static compile:
             fn cap_any(m: MutableArray[any]) -> int:
-                mutable_array::capacity(m)
+                std::mutable_array::capacity(m)
             fn use(f: Fn{args: [MutableArray[str]], return: int, errors: []}) -> int:
-                f(mutable_array::create(1, "a"))
+                f(std::mutable_array::create(1, "a"))
             use(cap_any)
-    test::rejects("mat-inv-5/any-parameter", compiler::DiagnosticCode::Type, b_fn_any_parameter)
+    std::test::rejects("mat-inv-5/any-parameter", std::compiler::DiagnosticCode::Type, b_fn_any_parameter)
 
     # Structural Fn: an array result is covariant.
-    fn b_result_exact() errors compiler::CompilerError:
+    fn b_result_exact() errors std::compiler::CompilerError:
         static compile:
             fn make_str() -> MutableArray[str]:
-                mutable_array::create(1, "a")
+                std::mutable_array::create(1, "a")
             fn use(f: Fn{args: [], return: MutableArray[str], errors: []}):
                 f()
-            mutable_array::capacity(use(make_str))
-    test::value("mat-inv-6/exact-result", 1, b_result_exact)
+            std::mutable_array::capacity(use(make_str))
+    std::test::value("mat-inv-6/exact-result", 1, b_result_exact)
 
-    fn b_result_any() errors compiler::CompilerError:
+    fn b_result_any() errors std::compiler::CompilerError:
         static compile:
             fn make_str() -> MutableArray[str]:
-                mutable_array::create(1, "a")
+                std::mutable_array::create(1, "a")
             fn use(f: Fn{args: [], return: MutableArray[any], errors: []}):
                 f()
-            mutable_array::capacity(use(make_str))
-    test::value("mat-inv-6/any-result", 1, b_result_any)
+            std::mutable_array::capacity(use(make_str))
+    std::test::value("mat-inv-6/any-result", 1, b_result_any)
 
-    fn b_result_raw() errors compiler::CompilerError:
+    fn b_result_raw() errors std::compiler::CompilerError:
         static compile:
             fn make_str() -> MutableArray[str]:
-                mutable_array::create(1, "a")
+                std::mutable_array::create(1, "a")
             fn use(f: Fn{args: [], return: mutarray, errors: []}):
                 f()
-            mutable_array::capacity(use(make_str))
-    test::value("mat-inv-6/raw-result", 1, b_result_raw)
+            std::mutable_array::capacity(use(make_str))
+    std::test::value("mat-inv-6/raw-result", 1, b_result_raw)
 
     # No program views one array as two element types.
-    fn b_one_view() errors compiler::CompilerError:
+    fn b_one_view() errors std::compiler::CompilerError:
         static compile:
             fn as_str(xs: MutableArray[str]) -> int:
-                mutable_array::capacity(xs)
-            m = mutable_array::create(1, "a")
+                std::mutable_array::capacity(xs)
+            m = std::mutable_array::create(1, "a")
             as_str(m)
-    test::value("mat-inv-8/own-view", 1, b_one_view)
+    std::test::value("mat-inv-8/own-view", 1, b_one_view)
 
-    fn b_second_view() errors compiler::CompilerError:
+    fn b_second_view() errors std::compiler::CompilerError:
         static compile:
             fn as_int(xs: MutableArray[int]) -> int:
-                mutable_array::capacity(xs)
-            m = mutable_array::create(1, "a")
+                std::mutable_array::capacity(xs)
+            m = std::mutable_array::create(1, "a")
             as_int(m)
-    test::rejects("mat-inv-8/second-view", compiler::DiagnosticCode::Type, b_second_view)
+    std::test::rejects("mat-inv-8/second-view", std::compiler::DiagnosticCode::Type, b_second_view)
 
     # A raw array holding a str is not scanned or converted for a typed
     # parameter (no element type is inferred from writes).
-    fn b_raw_not_scanned() errors compiler::CompilerError:
+    fn b_raw_not_scanned() errors std::compiler::CompilerError:
         static compile:
             fn first(xs: MutableArray[str]) -> str errors IndexNotFound:
-                mutable_array::at(xs, 0)
-            m = mutable_array::allocate(1)
-            mutable_array::set(m, 0, "s")
+                std::mutable_array::at(xs, 0)
+            m = std::mutable_array::allocate(1)
+            std::mutable_array::set(m, 0, "s")
             first(m)
-    test::rejects("mat-atk-15", compiler::DiagnosticCode::Type, b_raw_not_scanned)
+    std::test::rejects("mat-atk-15", std::compiler::DiagnosticCode::Type, b_raw_not_scanned)
 
-    fn b_not_inferred_from_writes() errors compiler::CompilerError:
+    fn b_not_inferred_from_writes() errors std::compiler::CompilerError:
         static compile:
             fn first(xs: MutableArray[str]) -> str errors IndexNotFound:
-                mutable_array::at(xs, 0)
-            m = mutable_array::allocate(1)
-            mutable_array::set(m, 0, "s")
+                std::mutable_array::at(xs, 0)
+            m = std::mutable_array::allocate(1)
+            std::mutable_array::set(m, 0, "s")
             first(m)
-    test::rejects("mat-nc-2", compiler::DiagnosticCode::Type, b_not_inferred_from_writes)
+    std::test::rejects("mat-nc-2", std::compiler::DiagnosticCode::Type, b_not_inferred_from_writes)
 
     # An untyped forwarder to a typed function infers the typed contract.
-    fn b_forward_typed() errors compiler::CompilerError:
+    fn b_forward_typed() errors std::compiler::CompilerError:
         static compile:
             fn first(xs: MutableArray[str]) -> str errors IndexNotFound:
-                mutable_array::at(xs, 0)
+                std::mutable_array::at(xs, 0)
             fn fwd(xs) errors IndexNotFound:
                 first(xs)
-            r = fwd(mutable_array::create(1, "a")):
+            r = fwd(std::mutable_array::create(1, "a")):
                 on IndexNotFound:
                     ""
             r
-    test::value("mat-bd-1/typed", "a", b_forward_typed)
+    std::test::value("mat-bd-1/typed", "a", b_forward_typed)
 
-    fn b_forward_wrong() errors compiler::CompilerError:
+    fn b_forward_wrong() errors std::compiler::CompilerError:
         static compile:
             fn first(xs: MutableArray[str]) -> str errors IndexNotFound:
-                mutable_array::at(xs, 0)
+                std::mutable_array::at(xs, 0)
             fn fwd(xs) errors IndexNotFound:
                 first(xs)
-            r = fwd(mutable_array::create(1, 5)):
+            r = fwd(std::mutable_array::create(1, 5)):
                 on IndexNotFound:
                     ""
             r
-    test::rejects("mat-bd-1/wrong-element", compiler::DiagnosticCode::Type, b_forward_wrong)
+    std::test::rejects("mat-bd-1/wrong-element", std::compiler::DiagnosticCode::Type, b_forward_wrong)
 
-    fn b_forward_raw() errors compiler::CompilerError:
+    fn b_forward_raw() errors std::compiler::CompilerError:
         static compile:
             fn first(xs: MutableArray[str]) -> str errors IndexNotFound:
-                mutable_array::at(xs, 0)
+                std::mutable_array::at(xs, 0)
             fn fwd(xs) errors IndexNotFound:
                 first(xs)
-            r = fwd(mutable_array::allocate(1)):
+            r = fwd(std::mutable_array::allocate(1)):
                 on IndexNotFound:
                     ""
             r
-    test::rejects("mat-bd-1/raw", compiler::DiagnosticCode::Type, b_forward_raw)
+    std::test::rejects("mat-bd-1/raw", std::compiler::DiagnosticCode::Type, b_forward_raw)
 
     # A typed array may ride in a positional pair; typed storage plus a
     # separate length works.
-    fn b_pair() errors compiler::CompilerError:
+    fn b_pair() errors std::compiler::CompilerError:
         static compile:
             fn push(storage: MutableArray[int], length: int, v: int) -> MutableArray[int]:
-                if length >= 0 and length < mutable_array::capacity(storage):
-                    mutable_array::set(storage, length, v)
+                if length >= 0 and length < std::mutable_array::capacity(storage):
+                    std::mutable_array::set(storage, length, v)
                 storage
-            pair = [push(mutable_array::create(2, 0), 0, 7), 1]
-            list::length(pair)
-    test::value("mat-bd-2/pair", 2, b_pair)
+            pair = [push(std::mutable_array::create(2, 0), 0, 7), 1]
+            std::list::length(pair)
+    std::test::value("mat-bd-2/pair", 2, b_pair)
 
-    fn b_storage() errors compiler::CompilerError:
+    fn b_storage() errors std::compiler::CompilerError:
         static compile:
             fn push(storage: MutableArray[int], length: int, v: int) -> MutableArray[int]:
-                if length >= 0 and length < mutable_array::capacity(storage):
-                    mutable_array::set(storage, length, v)
+                if length >= 0 and length < std::mutable_array::capacity(storage):
+                    std::mutable_array::set(storage, length, v)
                 storage
-            s = push(mutable_array::create(2, 0), 0, 7)
-            mutable_array::freeze(s, mutable_array::capacity(s))
-    test::value("mat-bd-2/storage", [7, 0], b_storage)
+            s = push(std::mutable_array::create(2, 0), 0, 7)
+            std::mutable_array::freeze(s, std::mutable_array::capacity(s))
+    std::test::value("mat-bd-2/storage", [7, 0], b_storage)
 
     # An untyped wrapper's semantic instance separates a read-only wrapper
     # (valid for every array) from a writer (rejected only when its write is
     # invalid for the element type).
-    fn b_read_typed() errors compiler::CompilerError:
+    fn b_read_typed() errors std::compiler::CompilerError:
         static compile:
             fn cap(m):
-                mutable_array::capacity(m)
-            cap(mutable_array::create(1, "a"))
-    test::value("mat-bd-5/read-typed", 1, b_read_typed)
+                std::mutable_array::capacity(m)
+            cap(std::mutable_array::create(1, "a"))
+    std::test::value("mat-bd-5/read-typed", 1, b_read_typed)
 
-    fn b_read_raw() errors compiler::CompilerError:
+    fn b_read_raw() errors std::compiler::CompilerError:
         static compile:
             fn cap(m):
-                mutable_array::capacity(m)
-            cap(mutable_array::allocate(1))
-    test::value("mat-bd-5/read-raw", 1, b_read_raw)
+                std::mutable_array::capacity(m)
+            cap(std::mutable_array::allocate(1))
+    std::test::value("mat-bd-5/read-raw", 1, b_read_raw)
 
-    fn b_write_invalid() errors compiler::CompilerError:
+    fn b_write_invalid() errors std::compiler::CompilerError:
         static compile:
             fn put(m):
-                if mutable_array::capacity(m) > 0:
-                    mutable_array::set(m, 0, 1)
-            put(mutable_array::create(1, "a"))
-    test::rejects("mat-bd-5/write-invalid", compiler::DiagnosticCode::Type, b_write_invalid)
+                if std::mutable_array::capacity(m) > 0:
+                    std::mutable_array::set(m, 0, 1)
+            put(std::mutable_array::create(1, "a"))
+    std::test::rejects("mat-bd-5/write-invalid", std::compiler::DiagnosticCode::Type, b_write_invalid)
 
-    fn b_write_valid() errors compiler::CompilerError:
+    fn b_write_valid() errors std::compiler::CompilerError:
         static compile:
             fn put(m):
-                if mutable_array::capacity(m) > 0:
-                    mutable_array::set(m, 0, "b")
-            put(mutable_array::create(1, "a"))
+                if std::mutable_array::capacity(m) > 0:
+                    std::mutable_array::set(m, 0, "b")
+            put(std::mutable_array::create(1, "a"))
             1
-    test::value("mat-bd-5/write-valid", 1, b_write_valid)
+    std::test::value("mat-bd-5/write-valid", 1, b_write_valid)
 
 # ---------------------------------------------------------------------------
 # Erasure is a copy (mutable-array-type.test items 11-14, 36-39, 57-59, 71):
@@ -1880,207 +1880,207 @@ fn register_admission_tests():
 
 fn register_erasure_tests():
     # A raw parameter that writes writes the callee's own copy.
-    fn b_raw_parameter() errors compiler::CompilerError:
+    fn b_raw_parameter() errors std::compiler::CompilerError:
         static compile:
             fn smash(x: mutarray) -> mutarray errors IndexNotFound:
-                mutable_array::set(x, 0, 123)
+                std::mutable_array::set(x, 0, 123)
                 x
             fn f() -> list errors IndexNotFound:
-                m = mutable_array::from_list(["hello"])
+                m = std::mutable_array::from_list(["hello"])
                 s = smash(m)
-                [mutable_array::at(m, 0), mutable_array::at(s, 0)]
+                [std::mutable_array::at(m, 0), std::mutable_array::at(s, 0)]
             r = f():
                 on IndexNotFound:
                     []
             r
-    test::value("mat-atk-1", ["hello", 123], b_raw_parameter)
+    std::test::value("mat-atk-1", ["hello", 123], b_raw_parameter)
 
     # An untyped parameter is analyzed at its argument's type: a write of
     # another element type into it is still rejected, kind test or not.
-    fn b_untyped_write() errors compiler::CompilerError:
+    fn b_untyped_write() errors std::compiler::CompilerError:
         static compile:
             fn f(x):
                 if mutarray?(x):
-                    mutable_array::set(x, 0, 123)
+                    std::mutable_array::set(x, 0, 123)
                 else:
                     unit
-            m = mutable_array::from_list(["a"])
+            m = std::mutable_array::from_list(["a"])
             f(m)
-            r = mutable_array::at(m, 0):
+            r = std::mutable_array::at(m, 0):
                 on IndexNotFound:
                     ""
             r
-    test::rejects_containing("mat-atk-2", compiler::DiagnosticCode::Type, "call to f with x : MutableArray[str] is invalid: value of type int is not admissible to element type str", b_untyped_write)
+    std::test::rejects_containing("mat-atk-2", std::compiler::DiagnosticCode::Type, "call to f with x : MutableArray[str] is invalid: value of type int is not admissible to element type str", b_untyped_write)
 
     # An any parameter, an any or raw result hold a copy.
-    fn b_any_parameter() errors compiler::CompilerError:
+    fn b_any_parameter() errors std::compiler::CompilerError:
         static compile:
             fn f(x: any):
                 x
-            mutarray?(f(mutable_array::create(1, "a")))
-    test::value("mat-atk-3", true, b_any_parameter)
+            mutarray?(f(std::mutable_array::create(1, "a")))
+    std::test::value("mat-atk-3", true, b_any_parameter)
 
-    fn b_any_result() errors compiler::CompilerError:
+    fn b_any_result() errors std::compiler::CompilerError:
         static compile:
             fn f() -> any:
-                mutable_array::create(1, "a")
+                std::mutable_array::create(1, "a")
             mutarray?(f())
-    test::value("mat-atk-4/any-result", true, b_any_result)
+    std::test::value("mat-atk-4/any-result", true, b_any_result)
 
-    fn b_raw_result() errors compiler::CompilerError:
+    fn b_raw_result() errors std::compiler::CompilerError:
         static compile:
             fn f() -> mutarray:
-                mutable_array::create(1, "a")
-            mutable_array::capacity(f())
-    test::value("mat-atk-4/raw-result", 1, b_raw_result)
+                std::mutable_array::create(1, "a")
+            std::mutable_array::capacity(f())
+    std::test::value("mat-atk-4/raw-result", 1, b_raw_result)
 
     # Aggregate erasure is a copy: a List of typed arrays into an untyped, a
-    # list or an any parameter, and list::append of anything.
-    fn b_list_untyped() errors compiler::CompilerError:
+    # list or an any parameter, and std::list::append of anything.
+    fn b_list_untyped() errors std::compiler::CompilerError:
         static compile:
             fn f(x):
                 x
-            xs = [mutable_array::from_list(["a"])]
-            list::length(f(xs))
-    test::value("mat-atk-8/untyped-parameter", 1, b_list_untyped)
+            xs = [std::mutable_array::from_list(["a"])]
+            std::list::length(f(xs))
+    std::test::value("mat-atk-8/untyped-parameter", 1, b_list_untyped)
 
-    fn b_list_list() errors compiler::CompilerError:
+    fn b_list_list() errors std::compiler::CompilerError:
         static compile:
             fn f(x: list):
-                list::length(x)
-            xs = [mutable_array::from_list(["a"])]
+                std::list::length(x)
+            xs = [std::mutable_array::from_list(["a"])]
             f(xs)
-    test::value("mat-atk-8/list-parameter", 1, b_list_list)
+    std::test::value("mat-atk-8/list-parameter", 1, b_list_list)
 
-    fn b_list_any() errors compiler::CompilerError:
+    fn b_list_any() errors std::compiler::CompilerError:
         static compile:
             fn f(x: any):
                 x
-            xs = [mutable_array::from_list(["a"])]
+            xs = [std::mutable_array::from_list(["a"])]
             list?(f(xs))
-    test::value("mat-atk-8/any-parameter", true, b_list_any)
+    std::test::value("mat-atk-8/any-parameter", true, b_list_any)
 
-    fn b_append_int() errors compiler::CompilerError:
+    fn b_append_int() errors std::compiler::CompilerError:
         static compile:
-            xs = [mutable_array::from_list(["a"])]
-            list::length(list::append(xs, 5))
-    test::value("mat-atk-8/append-int", 2, b_append_int)
+            xs = [std::mutable_array::from_list(["a"])]
+            std::list::length(std::list::append(xs, 5))
+    std::test::value("mat-atk-8/append-int", 2, b_append_int)
 
-    fn b_append_other() errors compiler::CompilerError:
+    fn b_append_other() errors std::compiler::CompilerError:
         static compile:
-            xs = [mutable_array::from_list(["a"])]
-            list::length(list::append(xs, mutable_array::from_list([1])))
-    test::value("mat-atk-8/append-other-contract", 2, b_append_other)
+            xs = [std::mutable_array::from_list(["a"])]
+            std::list::length(std::list::append(xs, std::mutable_array::from_list([1])))
+    std::test::value("mat-atk-8/append-other-contract", 2, b_append_other)
 
-    fn b_append_same() errors compiler::CompilerError:
+    fn b_append_same() errors std::compiler::CompilerError:
         static compile:
-            xs = [mutable_array::from_list(["a"])]
-            list::length(list::append(xs, mutable_array::from_list(["b"])))
-    test::value("mat-atk-8/append-same-contract", 2, b_append_same)
+            xs = [std::mutable_array::from_list(["a"])]
+            std::list::length(std::list::append(xs, std::mutable_array::from_list(["b"])))
+    std::test::value("mat-atk-8/append-same-contract", 2, b_append_same)
 
     # Nested arrays: an untyped or raw parameter takes them; a
     # MutableArray[any] parameter admits exactly its contract.
-    fn b_nested_untyped() errors compiler::CompilerError:
+    fn b_nested_untyped() errors std::compiler::CompilerError:
         static compile:
             fn f(x):
                 x
-            b = mutable_array::from_list([mutable_array::from_list([mutable_array::from_list(["a"])])])
-            mutable_array::capacity(f(b))
-    test::value("mat-atk-9/untyped", 1, b_nested_untyped)
+            b = std::mutable_array::from_list([std::mutable_array::from_list([std::mutable_array::from_list(["a"])])])
+            std::mutable_array::capacity(f(b))
+    std::test::value("mat-atk-9/untyped", 1, b_nested_untyped)
 
-    fn b_nested_raw() errors compiler::CompilerError:
+    fn b_nested_raw() errors std::compiler::CompilerError:
         static compile:
             fn f(x: mutarray):
                 x
-            b = mutable_array::from_list([mutable_array::from_list([mutable_array::from_list(["a"])])])
-            mutable_array::capacity(f(b))
-    test::value("mat-atk-9/raw", 1, b_nested_raw)
+            b = std::mutable_array::from_list([std::mutable_array::from_list([std::mutable_array::from_list(["a"])])])
+            std::mutable_array::capacity(f(b))
+    std::test::value("mat-atk-9/raw", 1, b_nested_raw)
 
-    fn b_nested_any() errors compiler::CompilerError:
+    fn b_nested_any() errors std::compiler::CompilerError:
         static compile:
             fn f(x: MutableArray[any]):
                 x
-            b = mutable_array::from_list([mutable_array::from_list([mutable_array::from_list(["a"])])])
+            b = std::mutable_array::from_list([std::mutable_array::from_list([std::mutable_array::from_list(["a"])])])
             f(b)
             1
-    test::rejects("mat-atk-9/any-array", compiler::DiagnosticCode::Type, b_nested_any)
+    std::test::rejects("mat-atk-9/any-array", std::compiler::DiagnosticCode::Type, b_nested_any)
 
     # Storing a typed array into a raw array (or a MutableArray[any]) stores
     # a logical copy ...
-    fn b_store_raw() errors compiler::CompilerError:
+    fn b_store_raw() errors std::compiler::CompilerError:
         static compile:
-            inner = mutable_array::from_list(["a"])
-            raw = mutable_array::allocate(1)
-            mutable_array::set(raw, 0, inner)
-            mutable_array::capacity(raw)
-    test::value("mat-atk-10/into-raw", 1, b_store_raw)
+            inner = std::mutable_array::from_list(["a"])
+            raw = std::mutable_array::allocate(1)
+            std::mutable_array::set(raw, 0, inner)
+            std::mutable_array::capacity(raw)
+    std::test::value("mat-atk-10/into-raw", 1, b_store_raw)
 
-    fn b_store_any() errors compiler::CompilerError:
+    fn b_store_any() errors std::compiler::CompilerError:
         static compile:
-            inner = mutable_array::from_list(["a"])
-            holder = mutable_array::from_list([1, "x"])
-            mutable_array::set(holder, 0, inner)
-            mutable_array::capacity(holder)
-    test::value("mat-atk-10/into-any", 2, b_store_any)
+            inner = std::mutable_array::from_list(["a"])
+            holder = std::mutable_array::from_list([1, "x"])
+            std::mutable_array::set(holder, 0, inner)
+            std::mutable_array::capacity(holder)
+    std::test::value("mat-atk-10/into-any", 2, b_store_any)
 
-    fn b_store_same() errors compiler::CompilerError:
+    fn b_store_same() errors std::compiler::CompilerError:
         static compile:
-            inner = mutable_array::from_list(["a"])
-            holder = mutable_array::create(1, inner)
-            mutable_array::set(holder, 0, inner)
-            mutable_array::capacity(holder)
-    test::value("mat-atk-10/into-same-contract", 1, b_store_same)
+            inner = std::mutable_array::from_list(["a"])
+            holder = std::mutable_array::create(1, inner)
+            std::mutable_array::set(holder, 0, inner)
+            std::mutable_array::capacity(holder)
+    std::test::value("mat-atk-10/into-same-contract", 1, b_store_same)
 
     # ... and writing the stored copy leaves the original unchanged.
-    fn b_store_copy() errors compiler::CompilerError:
+    fn b_store_copy() errors std::compiler::CompilerError:
         static compile:
             fn f() -> list errors IndexNotFound:
-                inner = mutable_array::from_list(["a"])
-                raw = mutable_array::allocate(1)
-                mutable_array::set(raw, 0, inner)
-                copy = mutable_array::at(raw, 0)
-                mutable_array::set(copy, 0, 7)
-                [mutable_array::at(inner, 0), mutable_array::at(copy, 0)]
+                inner = std::mutable_array::from_list(["a"])
+                raw = std::mutable_array::allocate(1)
+                std::mutable_array::set(raw, 0, inner)
+                copy = std::mutable_array::at(raw, 0)
+                std::mutable_array::set(copy, 0, 7)
+                [std::mutable_array::at(inner, 0), std::mutable_array::at(copy, 0)]
             r = f():
                 on IndexNotFound:
                     []
             r
-    test::value("mat-atk-10/stored-copy", ["a", 7], b_store_copy)
+    std::test::value("mat-atk-10/stored-copy", ["a", 7], b_store_copy)
 
     # A callable value or a stored callable may take the array, known
     # exactly or not: what it receives is a copy.
-    fn b_apply_native() errors compiler::CompilerError:
+    fn b_apply_native() errors std::compiler::CompilerError:
         static compile:
             fn apply(f, x):
                 f(x)
-            apply(mutable_array::capacity, mutable_array::create(1, "a"))
-    test::value("mat-atk-11/apply-native", 1, b_apply_native)
+            apply(std::mutable_array::capacity, std::mutable_array::create(1, "a"))
+    std::test::value("mat-atk-11/apply-native", 1, b_apply_native)
 
-    fn b_stored_callable() errors compiler::CompilerError:
+    fn b_stored_callable() errors std::compiler::CompilerError:
         static compile:
             fn keep(x):
                 x
             fs = [keep]
-            mutable_array::capacity(list::at(fs, 0)(mutable_array::create(1, "a")))
-    test::value("mat-atk-11/stored-callable", 1, b_stored_callable)
+            std::mutable_array::capacity(std::list::at(fs, 0)(std::mutable_array::create(1, "a")))
+    std::test::value("mat-atk-11/stored-callable", 1, b_stored_callable)
 
-    fn b_picked_callable() errors compiler::CompilerError:
+    fn b_picked_callable() errors std::compiler::CompilerError:
         static compile:
             fn keep(x):
                 x
             fn keep2(x):
                 unit
             fn pick(fs, i) errors IndexNotFound:
-                list::at(fs, i)
+                std::list::at(fs, i)
             fs = [keep, keep2]
             g = pick(fs, 0):
                 on IndexNotFound:
                     keep
-            g(mutable_array::create(1, "a"))
+            g(std::mutable_array::create(1, "a"))
             0
-    test::value("mat-atk-11/picked-callable", 0, b_picked_callable)
+    std::test::value("mat-atk-11/picked-callable", 0, b_picked_callable)
 
-    fn b_apply_picked() errors compiler::CompilerError:
+    fn b_apply_picked() errors std::compiler::CompilerError:
         static compile:
             fn apply(f, x):
                 f(x)
@@ -2089,69 +2089,69 @@ fn register_erasure_tests():
             fn keep2(x):
                 unit
             fn pick(fs, i) errors IndexNotFound:
-                list::at(fs, i)
+                std::list::at(fs, i)
             fs = [keep, keep2]
             g = pick(fs, 0):
                 on IndexNotFound:
                     keep
-            apply(g, mutable_array::create(1, "a"))
+            apply(g, std::mutable_array::create(1, "a"))
             0
-    test::value("mat-atk-11/apply-picked", 0, b_apply_picked)
+    std::test::value("mat-atk-11/apply-picked", 0, b_apply_picked)
 
     # The untyped function boundary is crossed by semantic instances.
-    fn b_identity() errors compiler::CompilerError:
+    fn b_identity() errors std::compiler::CompilerError:
         static compile:
             fn identity(x):
                 x
-            mutable_array::capacity(identity(mutable_array::create(1, "a")))
-    test::value("mat-atk-12/identity", 1, b_identity)
+            std::mutable_array::capacity(identity(std::mutable_array::create(1, "a")))
+    std::test::value("mat-atk-12/identity", 1, b_identity)
 
-    fn b_read_only() errors compiler::CompilerError:
+    fn b_read_only() errors std::compiler::CompilerError:
         static compile:
             fn cap(m):
-                mutable_array::capacity(m)
-            cap(mutable_array::create(1, "a"))
-    test::value("mat-atk-12/read-only", 1, b_read_only)
+                std::mutable_array::capacity(m)
+            cap(std::mutable_array::create(1, "a"))
+    std::test::value("mat-atk-12/read-only", 1, b_read_only)
 
-    fn b_erase() errors compiler::CompilerError:
+    fn b_erase() errors std::compiler::CompilerError:
         static compile:
             fn erase(x) errors IndexNotFound:
-                raw = mutable_array::allocate(1)
-                mutable_array::set(raw, 0, x)
+                raw = std::mutable_array::allocate(1)
+                std::mutable_array::set(raw, 0, x)
                 raw
-            r = erase(mutable_array::create(1, "a")):
+            r = erase(std::mutable_array::create(1, "a")):
                 on IndexNotFound:
-                    mutable_array::allocate(0)
-            mutable_array::capacity(r)
-    test::value("mat-atk-12/store-into-raw", 1, b_erase)
+                    std::mutable_array::allocate(0)
+            std::mutable_array::capacity(r)
+    std::test::value("mat-atk-12/store-into-raw", 1, b_erase)
 
     # A vacuous MutableArray[any] and raw arrays are interchangeable.
-    fn b_any_to_raw() errors compiler::CompilerError:
+    fn b_any_to_raw() errors std::compiler::CompilerError:
         static compile:
             fn f(x: mutarray) -> int:
-                mutable_array::capacity(x)
-            f(mutable_array::from_list([1, "a"]))
-    test::value("mat-atk-13/any-to-raw", 2, b_any_to_raw)
+                std::mutable_array::capacity(x)
+            f(std::mutable_array::from_list([1, "a"]))
+    std::test::value("mat-atk-13/any-to-raw", 2, b_any_to_raw)
 
-    fn b_raw_to_any() errors compiler::CompilerError:
+    fn b_raw_to_any() errors std::compiler::CompilerError:
         static compile:
             fn f(x: MutableArray[any]) -> int:
-                mutable_array::capacity(x)
-            f(mutable_array::allocate(1))
-    test::value("mat-atk-13/raw-to-any", 1, b_raw_to_any)
+                std::mutable_array::capacity(x)
+            f(std::mutable_array::allocate(1))
+    std::test::value("mat-atk-13/raw-to-any", 1, b_raw_to_any)
 
-    fn b_any_to_untyped() errors compiler::CompilerError:
+    fn b_any_to_untyped() errors std::compiler::CompilerError:
         static compile:
             fn f(x):
                 x
-            mutable_array::capacity(f(mutable_array::from_list([1, "a"])))
-    test::value("mat-atk-13/any-to-untyped", 2, b_any_to_untyped)
+            std::mutable_array::capacity(f(std::mutable_array::from_list([1, "a"])))
+    std::test::value("mat-atk-13/any-to-untyped", 2, b_any_to_untyped)
 
     # A kind test proves the kind only: it cannot satisfy a typed parameter.
-    fn b_kind_test_typed() errors compiler::CompilerError:
+    fn b_kind_test_typed() errors std::compiler::CompilerError:
         static compile:
             fn first(xs: MutableArray[str]) -> str errors IndexNotFound:
-                mutable_array::at(xs, 0)
+                std::mutable_array::at(xs, 0)
             fn g(x) errors IndexNotFound:
                 if mutarray?(x):
                     first(x)
@@ -2161,68 +2161,68 @@ fn register_erasure_tests():
                 on IndexNotFound:
                     ""
             v
-    test::rejects_containing("mat-atk-14", compiler::DiagnosticCode::Type, "a kind test proves the kind, never the element type", b_kind_test_typed)
+    std::test::rejects_containing("mat-atk-14", std::compiler::DiagnosticCode::Type, "a kind test proves the kind, never the element type", b_kind_test_typed)
 
     # freeze/get results are safe uses.
-    fn b_frozen_rows() errors compiler::CompilerError:
+    fn b_frozen_rows() errors std::compiler::CompilerError:
         static compile:
             fn first(xs) errors IndexNotFound:
-                mutable_array::at(list::at(xs, 0), 0)
-            m = mutable_array::from_list([mutable_array::create(1, "a")])
-            xs = mutable_array::freeze(m, 1)
+                std::mutable_array::at(std::list::at(xs, 0), 0)
+            m = std::mutable_array::from_list([std::mutable_array::create(1, "a")])
+            xs = std::mutable_array::freeze(m, 1)
             v = first(xs):
                 on IndexNotFound:
                     "z"
             v
-    test::value("mat-atk-16/frozen", "a", b_frozen_rows)
+    std::test::value("mat-atk-16/frozen", "a", b_frozen_rows)
 
-    fn b_list_api() errors compiler::CompilerError:
+    fn b_list_api() errors std::compiler::CompilerError:
         static compile:
-            xs = [mutable_array::create(1, "a")]
-            [list::length(xs), list?(xs), mutarray?(list::at(xs, 0))]
-    test::value("mat-atk-16/list-api", [1, true, true], b_list_api)
+            xs = [std::mutable_array::create(1, "a")]
+            [std::list::length(xs), list?(xs), mutarray?(std::list::at(xs, 0))]
+    std::test::value("mat-atk-16/list-api", [1, true, true], b_list_api)
 
     # A function that returns a typed array, passed to an untyped parameter.
-    fn b_pass_maker() errors compiler::CompilerError:
+    fn b_pass_maker() errors std::compiler::CompilerError:
         static compile:
             fn make_str():
-                mutable_array::create(1, "a")
+                std::mutable_array::create(1, "a")
             fn apply(f):
                 f()
-            mutable_array::capacity(apply(make_str))
-    test::value("mat-atk-20", 1, b_pass_maker)
+            std::mutable_array::capacity(apply(make_str))
+    std::test::value("mat-atk-20", 1, b_pass_maker)
 
     # Viewed through a structural Fn whose target is unknown, the relation
     # is lost (the raw kind holds the result: a store of 5 is legal) ...
-    fn b_unknown_target() errors compiler::CompilerError:
+    fn b_unknown_target() errors std::compiler::CompilerError:
         static compile:
             fn apply(f: Fn{args: [int, any], return: mutarray, errors: []}) -> mutarray:
                 f(2, "x")
             fn other(n: int, d) -> mutarray:
-                mutable_array::allocate(n)
+                std::mutable_array::allocate(n)
             fn pick(fs, i) errors IndexNotFound:
-                list::at(fs, i)
-            g = pick([mutable_array::create, other], 1):
+                std::list::at(fs, i)
+            g = pick([std::mutable_array::create, other], 1):
                 on IndexNotFound:
                     other
             m = apply(g)
-            w = mutable_array::set(m, 0, 5):
+            w = std::mutable_array::set(m, 0, 5):
                 on IndexNotFound:
                     unit
-            r = mutable_array::at(m, 0):
+            r = std::mutable_array::at(m, 0):
                 on IndexNotFound:
                     0
             r
-    test::value("mat-id-3/unknown-target", 5, b_unknown_target)
+    std::test::value("mat-id-3/unknown-target", 5, b_unknown_target)
 
     # ... and a declared raw result holds an exact target's typed result as
     # a copy.
-    fn b_declared_raw() errors compiler::CompilerError:
+    fn b_declared_raw() errors std::compiler::CompilerError:
         static compile:
             fn apply(f: Fn{args: [int, any], return: mutarray, errors: []}) -> mutarray:
                 f(2, "x")
-            mutable_array::capacity(apply(mutable_array::create))
-    test::value("mat-id-3/declared-raw", 2, b_declared_raw)
+            std::mutable_array::capacity(apply(std::mutable_array::create))
+    std::test::value("mat-id-3/declared-raw", 2, b_declared_raw)
 
 # ---------------------------------------------------------------------------
 # The kind test mutarray? (mutarray-construction.test; mutable-array-type.test
@@ -2230,107 +2230,107 @@ fn register_erasure_tests():
 
 fn register_kind_test_tests():
     # Inside the true branch the capacity call is proven.
-    fn b_guarded() errors compiler::CompilerError:
+    fn b_guarded() errors std::compiler::CompilerError:
         static compile:
             fn f(x) errors IndexNotFound:
                 if mutarray?(x):
-                    mutable_array::capacity(x)
+                    std::mutable_array::capacity(x)
                 else:
                     0
-            [f(1), f("s"), f([1]), f(mutable_array::allocate(2))]
-    test::value("mutarray-pred-4", [0, 0, 0, 2], b_guarded)
+            [f(1), f("s"), f([1]), f(std::mutable_array::allocate(2))]
+    std::test::value("mutarray-pred-4", [0, 0, 0, 2], b_guarded)
 
     # A second alias inside the branch is still proven.
-    fn b_nested_alias() errors compiler::CompilerError:
+    fn b_nested_alias() errors std::compiler::CompilerError:
         static compile:
             fn f(x) errors IndexNotFound:
                 if mutarray?(x):
                     y = x
                     z = y
-                    mutable_array::capacity(z)
+                    std::mutable_array::capacity(z)
                 else:
                     0
             f(1)
-    test::value("mutarray-pred-8", 0, b_nested_alias)
+    std::test::value("mutarray-pred-8", 0, b_nested_alias)
 
     # A branch-local test does not narrow the value after the branch.
-    fn b_branch_local() errors compiler::CompilerError:
+    fn b_branch_local() errors std::compiler::CompilerError:
         static compile:
             fn f(x) errors IndexNotFound:
                 if mutarray?(x):
                     0
-                mutable_array::capacity(x)
+                std::mutable_array::capacity(x)
             f(1)
-    test::rejects("mutarray-pred-12", compiler::DiagnosticCode::Type, b_branch_local)
+    std::test::rejects("mutarray-pred-12", std::compiler::DiagnosticCode::Type, b_branch_local)
 
     # The predicate is true only for an array, and never raises.
-    fn b_predicate() errors compiler::CompilerError:
+    fn b_predicate() errors std::compiler::CompilerError:
         static compile:
-            [mutarray?(mutable_array::allocate(1)), mutarray?(mutable_array::from_list([1])), mutarray?([1]), mutarray?(1), mutarray?("s"), mutarray?(true), mutarray?(unit), mutarray?([]), mutarray?(mutarray?), mutarray?(immutable_set::from_list([1]))]
-    test::value("mutarray-run-1", [true, true, false, false, false, false, false, false, false, false], b_predicate)
+            [mutarray?(std::mutable_array::allocate(1)), mutarray?(std::mutable_array::from_list([1])), mutarray?([1]), mutarray?(1), mutarray?("s"), mutarray?(true), mutarray?(unit), mutarray?([]), mutarray?(mutarray?), mutarray?(std::immutable_set::from_list([1]))]
+    std::test::value("mutarray-run-1", [true, true, false, false, false, false, false, false, false, false], b_predicate)
 
     # A guarded capacity is correct on an array and on everything else.
-    fn b_guarded_values() errors compiler::CompilerError:
+    fn b_guarded_values() errors std::compiler::CompilerError:
         static compile:
             fn f(x) errors IndexNotFound:
                 if mutarray?(x):
-                    mutable_array::capacity(x)
+                    std::mutable_array::capacity(x)
                 else:
                     0
             fn g() errors IndexNotFound:
-                [f(mutable_array::from_list([1, 2, 3])), f([1, 2, 3]), f(5), f("abc"), f(true)]
+                [f(std::mutable_array::from_list([1, 2, 3])), f([1, 2, 3]), f(5), f("abc"), f(true)]
             g()
-    test::value("mutarray-run-2", [3, 0, 0, 0, 0], b_guarded_values)
+    std::test::value("mutarray-run-2", [3, 0, 0, 0, 0], b_guarded_values)
 
     # The refined value is usable through an alias.
-    fn b_refined_alias() errors compiler::CompilerError:
+    fn b_refined_alias() errors std::compiler::CompilerError:
         static compile:
             fn f(x) errors IndexNotFound:
                 if mutarray?(x):
                     y = x
-                    mutable_array::set(y, 0, 8)
-                    mutable_array::at(y, 0)
+                    std::mutable_array::set(y, 0, 8)
+                    std::mutable_array::at(y, 0)
                 else:
                     -1
             fn g() errors IndexNotFound:
-                [f(mutable_array::from_list([1])), f(1)]
+                [f(std::mutable_array::from_list([1])), f(1)]
             v = g():
                 on IndexNotFound:
                     []
             v
-    test::value("mutarray-run-3", [8, -1], b_refined_alias)
+    std::test::value("mutarray-run-3", [8, -1], b_refined_alias)
 
     # mutarray? as a first-class callable value.
-    fn b_predicate_value() errors compiler::CompilerError:
+    fn b_predicate_value() errors std::compiler::CompilerError:
         static compile:
             fn apply(p, v):
                 p(v)
             fn f() errors IndexNotFound:
-                [apply(mutarray?, mutable_array::from_list([1])), apply(mutarray?, [1]), apply(mutarray?, 7)]
+                [apply(mutarray?, std::mutable_array::from_list([1])), apply(mutarray?, [1]), apply(mutarray?, 7)]
             f()
-    test::value("mutarray-run-8", [true, false, false], b_predicate_value)
+    std::test::value("mutarray-run-8", [true, false, false], b_predicate_value)
 
     # A refined unknown value is a raw array that can be written with
     # anything.
-    fn b_refined_raw() errors compiler::CompilerError:
+    fn b_refined_raw() errors std::compiler::CompilerError:
         static compile:
             fn f(x):
                 if mutarray?(x):
-                    if mutable_array::capacity(x) > 0:
-                        mutable_array::set(x, 0, 123)
+                    if std::mutable_array::capacity(x) > 0:
+                        std::mutable_array::set(x, 0, 123)
                 else:
                     unit
-            f(mutable_array::allocate(1))
+            f(std::mutable_array::allocate(1))
             0
-    test::value("mat-ref-3", 0, b_refined_raw)
+    std::test::value("mat-ref-3", 0, b_refined_raw)
 
     # mutarray? is true for a typed and a raw array.
-    fn b_typed_and_raw() errors compiler::CompilerError:
+    fn b_typed_and_raw() errors std::compiler::CompilerError:
         static compile:
             fn f() errors IndexNotFound:
-                [mutarray?(mutable_array::create(1, "a")), mutarray?(mutable_array::allocate(1)), mutarray?([1]), mutarray?(1)]
+                [mutarray?(std::mutable_array::create(1, "a")), mutarray?(std::mutable_array::allocate(1)), mutarray?([1]), mutarray?(1)]
             f()
-    test::value("mat-ref-4", [true, true, false, false], b_typed_and_raw)
+    std::test::value("mat-ref-4", [true, true, false, false], b_typed_and_raw)
 
 # ---------------------------------------------------------------------------
 # No forward references (mutable-array-type.test mat-atk-17, mat-atk-19,
@@ -2338,104 +2338,104 @@ fn register_kind_test_tests():
 # r, later, b) are bound nowhere outside the blocks.
 
 fn register_forward_tests():
-    fn b_peek() errors compiler::CompilerError:
+    fn b_peek() errors std::compiler::CompilerError:
         static compile:
             fn peek():
                 m
-            m = mutable_array::create(1, "a")
+            m = std::mutable_array::create(1, "a")
             x = peek()
             if mutarray?(x):
-                mutable_array::set(x, 0, 5)
+                std::mutable_array::set(x, 0, 5)
             else:
                 unit
-    rejects_matching("mat-atk-17/peek", compiler::DiagnosticCode::Unbound, ["", "unbound name", "declared later", ""], b_peek)
+    rejects_matching("mat-atk-17/peek", std::compiler::DiagnosticCode::Unbound, ["", "unbound name", "declared later", ""], b_peek)
 
-    fn b_poke() errors compiler::CompilerError:
+    fn b_poke() errors std::compiler::CompilerError:
         static compile:
             fn poke():
-                mutable_array::set(m, 0, 5)
-            m = mutable_array::create(1, "a")
+                std::mutable_array::set(m, 0, 5)
+            m = std::mutable_array::create(1, "a")
             poke()
-    test::rejects("mat-atk-17/poke", compiler::DiagnosticCode::Unbound, b_poke)
+    std::test::rejects("mat-atk-17/poke", std::compiler::DiagnosticCode::Unbound, b_poke)
 
-    fn b_peek_list() errors compiler::CompilerError:
+    fn b_peek_list() errors std::compiler::CompilerError:
         static compile:
             fn peek():
                 xs
-            xs = [mutable_array::create(1, "a")]
+            xs = [std::mutable_array::create(1, "a")]
             peek()
             0
-    test::rejects("mat-atk-17/peek-list", compiler::DiagnosticCode::Unbound, b_peek_list)
+    std::test::rejects("mat-atk-17/peek-list", std::compiler::DiagnosticCode::Unbound, b_peek_list)
 
-    fn b_peek_raw() errors compiler::CompilerError:
+    fn b_peek_raw() errors std::compiler::CompilerError:
         static compile:
             fn peek():
                 r
-            r = mutable_array::allocate(1)
+            r = std::mutable_array::allocate(1)
             peek()
             0
-    test::rejects("mat-atk-17/peek-raw", compiler::DiagnosticCode::Unbound, b_peek_raw)
+    std::test::rejects("mat-atk-17/peek-raw", std::compiler::DiagnosticCode::Unbound, b_peek_raw)
 
-    fn b_call_later() errors compiler::CompilerError:
+    fn b_call_later() errors std::compiler::CompilerError:
         static compile:
             fn caller():
                 later()
             fn later():
-                mutable_array::create(1, "a")
+                std::mutable_array::create(1, "a")
             caller()
             0
-    test::rejects("mat-atk-19/call-later", compiler::DiagnosticCode::Unbound, b_call_later)
+    std::test::rejects("mat-atk-19/call-later", std::compiler::DiagnosticCode::Unbound, b_call_later)
 
-    fn b_pass_later() errors compiler::CompilerError:
+    fn b_pass_later() errors std::compiler::CompilerError:
         static compile:
             fn apply(f):
                 f()
             fn go():
                 apply(later)
             fn later():
-                mutable_array::create(1, "a")
+                std::mutable_array::create(1, "a")
             go()
             0
-    test::rejects("mat-atk-19/pass-later", compiler::DiagnosticCode::Unbound, b_pass_later)
+    std::test::rejects("mat-atk-19/pass-later", std::compiler::DiagnosticCode::Unbound, b_pass_later)
 
-    fn b_defined_first() errors compiler::CompilerError:
+    fn b_defined_first() errors std::compiler::CompilerError:
         static compile:
             fn later():
-                mutable_array::create(1, "a")
+                std::mutable_array::create(1, "a")
             fn caller():
                 later()
-            mutable_array::capacity(caller())
-    test::value("mat-atk-19/defined-first", 1, b_defined_first)
+            std::mutable_array::capacity(caller())
+    std::test::value("mat-atk-19/defined-first", 1, b_defined_first)
 
-    fn b_call_later_int() errors compiler::CompilerError:
+    fn b_call_later_int() errors std::compiler::CompilerError:
         static compile:
             fn caller():
                 later()
             fn later():
                 5
             caller()
-    test::rejects("mat-atk-19/call-later-int", compiler::DiagnosticCode::Unbound, b_call_later_int)
+    std::test::rejects("mat-atk-19/call-later-int", std::compiler::DiagnosticCode::Unbound, b_call_later_int)
 
-    fn b_mutual() errors compiler::CompilerError:
+    fn b_mutual() errors std::compiler::CompilerError:
         static compile:
             fn a(n: int):
                 if n == 0:
-                    return mutable_array::create(1, 0)
+                    return std::mutable_array::create(1, 0)
                 b(n - 1)
             fn b(n: int):
                 a(n)
             a(2)
             0
-    test::rejects("mat-bd-4/mutual-recursion", compiler::DiagnosticCode::Unbound, b_mutual)
+    std::test::rejects("mat-bd-4/mutual-recursion", std::compiler::DiagnosticCode::Unbound, b_mutual)
 
-    fn b_direct() errors compiler::CompilerError:
+    fn b_direct() errors std::compiler::CompilerError:
         static compile:
             fn make_str(n: int):
                 if n == 0:
-                    return mutable_array::create(1, "a")
+                    return std::mutable_array::create(1, "a")
                 make_str(n - 1)
-            mutable_array::capacity(make_str(3))
-    test::value("mat-bd-4/direct-recursion", 1, b_direct)
+            std::mutable_array::capacity(make_str(3))
+    std::test::value("mat-bd-4/direct-recursion", 1, b_direct)
 
 # ---------------------------------------------------------------------------
 # Affine elements (mutable-array.test items 2, 4, 7-24, 27, 30, 38, 39, 41,
@@ -2444,203 +2444,203 @@ fn register_forward_tests():
 fn register_affine_type_tests():
     # MutableArray[T] of an affine T is a legal type, and so are nestings of
     # the two mutable collections, either way round ...
-    fn b_affine_element() errors compiler::CompilerError:
+    fn b_affine_element() errors std::compiler::CompilerError:
         static compile:
             fn f(a: MutableArray[Coroutine{args: [Command], return: Event}]) -> int:
-                mutable_array::capacity(a)
+                std::mutable_array::capacity(a)
             1
-    test::value("ma-type-syntax/affine-element", 1, b_affine_element)
+    std::test::value("ma-type-syntax/affine-element", 1, b_affine_element)
 
-    fn b_vector_of_arrays() errors compiler::CompilerError:
+    fn b_vector_of_arrays() errors std::compiler::CompilerError:
         static compile:
             fn f(v: MutableVector[MutableArray[int]]) -> int:
                 v.length()
             1
-    test::value("ma-type-syntax/vector-of-arrays", 1, b_vector_of_arrays)
+    std::test::value("ma-type-syntax/vector-of-arrays", 1, b_vector_of_arrays)
 
-    fn b_array_of_vectors() errors compiler::CompilerError:
+    fn b_array_of_vectors() errors std::compiler::CompilerError:
         static compile:
             fn f(a: MutableArray[MutableVector[int]]) -> int:
-                mutable_array::capacity(a)
+                std::mutable_array::capacity(a)
             1
-    test::value("ma-type-syntax/array-of-vectors", 1, b_array_of_vectors)
+    std::test::value("ma-type-syntax/array-of-vectors", 1, b_array_of_vectors)
 
-    fn b_vector_of_affine_arrays() errors compiler::CompilerError:
+    fn b_vector_of_affine_arrays() errors std::compiler::CompilerError:
         static compile:
             fn f(v: MutableVector[MutableArray[Coroutine{args: [Command], return: Event}]]) -> int:
                 v.length()
             1
-    test::value("ma-type-syntax/vector-of-affine-arrays", 1, b_vector_of_affine_arrays)
+    std::test::value("ma-type-syntax/vector-of-affine-arrays", 1, b_vector_of_affine_arrays)
 
     # ... while an ImmutableSet of affine members is not (it compares and
     # hashes them).
-    fn b_set_of_affine() errors compiler::CompilerError:
+    fn b_set_of_affine() errors std::compiler::CompilerError:
         static compile:
             fn f(s: ImmutableSet[Coroutine{args: [Command], return: Event}]) -> int:
                 1
             1
-    test::rejects("ma-type-syntax/set-of-affine", compiler::DiagnosticCode::AffineContainerUnsupported, b_set_of_affine)
+    std::test::rejects("ma-type-syntax/set-of-affine", std::compiler::DiagnosticCode::AffineContainerUnsupported, b_set_of_affine)
 
 fn register_affine_move_tests():
     # An affine array moves whole -- through a binding, an argument, a struct
     # field, a List element, a vector element -- and a later use of the
     # source is UseAfterMove. (f is never called, as in the Tcl programs.)
-    fn b_binding() errors compiler::CompilerError:
+    fn b_binding() errors std::compiler::CompilerError:
         static compile:
             fn f(c: bool) -> int errors IndexNotFound:
-                a = mutable_array::generate(2, make)
+                a = std::mutable_array::generate(2, make)
                 b = a
-                mutable_array::capacity(a)
+                std::mutable_array::capacity(a)
             0
-    test::rejects("ma-affine-whole-moves/binding", compiler::DiagnosticCode::UseAfterMove, b_binding)
+    std::test::rejects("ma-affine-whole-moves/binding", std::compiler::DiagnosticCode::UseAfterMove, b_binding)
 
-    fn b_argument() errors compiler::CompilerError:
+    fn b_argument() errors std::compiler::CompilerError:
         static compile:
             fn take_all(a: MutableArray[Coroutine{args: [Command], return: Event}]) -> int:
-                mutable_array::capacity(a)
+                std::mutable_array::capacity(a)
             fn f(c: bool) -> int errors IndexNotFound:
-                a = mutable_array::generate(2, make)
+                a = std::mutable_array::generate(2, make)
                 n = take_all(a)
-                mutable_array::capacity(a)
+                std::mutable_array::capacity(a)
             0
-    test::rejects("ma-affine-whole-moves/argument", compiler::DiagnosticCode::UseAfterMove, b_argument)
+    std::test::rejects("ma-affine-whole-moves/argument", std::compiler::DiagnosticCode::UseAfterMove, b_argument)
 
-    fn b_struct_field() errors compiler::CompilerError:
+    fn b_struct_field() errors std::compiler::CompilerError:
         static compile:
             fn f(c: bool) -> int errors IndexNotFound:
-                a = mutable_array::generate(2, make)
+                a = std::mutable_array::generate(2, make)
                 p = Pool {workers: a}
-                mutable_array::capacity(a)
+                std::mutable_array::capacity(a)
             0
-    test::rejects("ma-affine-whole-moves/struct-field", compiler::DiagnosticCode::UseAfterMove, b_struct_field)
+    std::test::rejects("ma-affine-whole-moves/struct-field", std::compiler::DiagnosticCode::UseAfterMove, b_struct_field)
 
-    fn b_list_element() errors compiler::CompilerError:
+    fn b_list_element() errors std::compiler::CompilerError:
         static compile:
             fn f(c: bool) -> int errors IndexNotFound:
-                a = mutable_array::generate(2, make)
+                a = std::mutable_array::generate(2, make)
                 xs = [a]
-                mutable_array::capacity(a)
+                std::mutable_array::capacity(a)
             0
-    test::rejects("ma-affine-whole-moves/list-element", compiler::DiagnosticCode::UseAfterMove, b_list_element)
+    std::test::rejects("ma-affine-whole-moves/list-element", std::compiler::DiagnosticCode::UseAfterMove, b_list_element)
 
-    fn b_vector_element() errors compiler::CompilerError:
+    fn b_vector_element() errors std::compiler::CompilerError:
         static compile:
             fn f(c: bool) -> int errors IndexNotFound:
-                a = mutable_array::generate(2, make)
-                v = mutable_vector::from_list([a])
-                mutable_array::capacity(a)
+                a = std::mutable_array::generate(2, make)
+                v = std::mutable_vector::from_list([a])
+                std::mutable_array::capacity(a)
             0
-    test::rejects("ma-affine-whole-moves/vector-element", compiler::DiagnosticCode::UseAfterMove, b_vector_element)
+    std::test::rejects("ma-affine-whole-moves/vector-element", std::compiler::DiagnosticCode::UseAfterMove, b_vector_element)
 
     # Moved on one branch of a join only: not definitely live after it.
-    fn b_branch_join() errors compiler::CompilerError:
+    fn b_branch_join() errors std::compiler::CompilerError:
         static compile:
             fn f(c: bool) -> int errors IndexNotFound:
-                a = mutable_array::generate(2, make)
+                a = std::mutable_array::generate(2, make)
                 b = if c:
                     a
                 else:
-                    mutable_array::generate(1, make)
-                mutable_array::capacity(a)
+                    std::mutable_array::generate(1, make)
+                std::mutable_array::capacity(a)
             0
-    test::rejects("ma-affine-whole-moves/branch-join", compiler::DiagnosticCode::AffineNotDefinitelyLive, b_branch_join)
+    std::test::rejects("ma-affine-whole-moves/branch-join", std::compiler::DiagnosticCode::AffineNotDefinitelyLive, b_branch_join)
 
     # A struct's affine array moves out through a destructuring.
-    fn b_destructure() errors compiler::CompilerError:
+    fn b_destructure() errors std::compiler::CompilerError:
         static compile:
             fn f(c: bool) -> int errors IndexNotFound:
-                a = mutable_array::generate(2, make)
+                a = std::mutable_array::generate(2, make)
                 p = Pool {workers: a}
                 {workers} = p
-                mutable_array::capacity(workers)
+                std::mutable_array::capacity(workers)
             n = f(true):
                 on IndexNotFound:
                     -1
             n
-    test::value("ma-affine-whole-moves/destructure", 2, b_destructure)
+    std::test::value("ma-affine-whole-moves/destructure", 2, b_destructure)
 
     # Moved through a call, a result, a struct, a List and a vector, the
     # array arrives whole (its last owner holds the 1-slot array).
-    fn b_releases() errors compiler::CompilerError:
+    fn b_releases() errors std::compiler::CompilerError:
         static compile:
             fn pass(a: MutableArray[Coroutine{args: [Command], return: Event}]) -> MutableArray[Coroutine{args: [Command], return: Event}]:
                 a
             fn f() -> int errors IndexNotFound:
-                a = mutable_array::generate(2, make)
+                a = std::mutable_array::generate(2, make)
                 b = pass(a)
                 p = Pool {workers: b}
                 {workers} = p
-                xs = [workers, mutable_array::generate(1, make)]
-                v = mutable_vector::from_list(xs)
+                xs = [workers, std::mutable_array::generate(1, make)]
+                v = std::mutable_vector::from_list(xs)
                 last = v.pop()
-                mutable_array::capacity(last)
+                std::mutable_array::capacity(last)
             r = f():
                 on IndexNotFound:
                     0
             r
-    test::value("ma-affine-whole-releases", 1, b_releases)
+    std::test::value("ma-affine-whole-releases", 1, b_releases)
 
     # == of two affine arrays is rejected statically.
-    fn b_equality() errors compiler::CompilerError:
+    fn b_equality() errors std::compiler::CompilerError:
         static compile:
             fn f() -> bool:
-                a = mutable_array::generate(1, make)
-                b = mutable_array::generate(1, make)
+                a = std::mutable_array::generate(1, make)
+                b = std::mutable_array::generate(1, make)
                 a == b
             f()
-    test::rejects("ma-equality/affine", compiler::DiagnosticCode::AffineEqualityUnsupported, b_equality)
+    std::test::rejects("ma-equality/affine", std::compiler::DiagnosticCode::AffineEqualityUnsupported, b_equality)
 
 fn register_affine_read_tests():
     # An indexed read that would leave the array owning the same affine
     # element is AffineElementCopyOut (the message says how to move it out
     # instead) -- also through a struct field path, and through freeze, a
     # copy's source and the library's get. (f is never called.)
-    fn b_at() errors compiler::CompilerError:
+    fn b_at() errors std::compiler::CompilerError:
         static compile:
             fn f() -> int errors IndexNotFound, LowerUnderrun, UpperOverrun:
-                a = mutable_array::generate(2, make)
-                c = mutable_array::at(a, 0)
+                a = std::mutable_array::generate(2, make)
+                c = std::mutable_array::at(a, 0)
                 1
             0
-    test::rejects_message("ma-affine-at/at", compiler::DiagnosticCode::AffineElementCopyOut, "mutable_array::at would copy an affine element out of `a` (MutableArray[Coroutine{args: [Command], return: Event, errors: []}]) while the array still owns it, making a second owner: move it out instead -- `swap(i, replacement)` exchanges it for another, and a loop over the array consumes it, moving each element out in order (there are no references to elements)", b_at)
+    std::test::rejects_message("ma-affine-at/at", std::compiler::DiagnosticCode::AffineElementCopyOut, "std::mutable_array::at would copy an affine element out of `a` (MutableArray[Coroutine{args: [Command], return: Event, errors: []}]) while the array still owns it, making a second owner: move it out instead -- `swap(i, replacement)` exchanges it for another, and a loop over the array consumes it, moving each element out in order (there are no references to elements)", b_at)
 
-    fn b_field_path() errors compiler::CompilerError:
+    fn b_field_path() errors std::compiler::CompilerError:
         static compile:
             fn f() -> int errors IndexNotFound, LowerUnderrun, UpperOverrun:
-                a = mutable_array::generate(2, make)
+                a = std::mutable_array::generate(2, make)
                 p = Pool {workers: a}
-                c = mutable_array::at(p.workers, 0)
+                c = std::mutable_array::at(p.workers, 0)
                 1
             0
-    test::rejects("ma-affine-at/field-path", compiler::DiagnosticCode::AffineElementCopyOut, b_field_path)
+    std::test::rejects("ma-affine-at/field-path", std::compiler::DiagnosticCode::AffineElementCopyOut, b_field_path)
 
-    fn b_freeze() errors compiler::CompilerError:
+    fn b_freeze() errors std::compiler::CompilerError:
         static compile:
             fn f() -> int errors IndexNotFound, LowerUnderrun, UpperOverrun:
-                a = mutable_array::generate(2, make)
-                xs = mutable_array::freeze(a, 1)
+                a = std::mutable_array::generate(2, make)
+                xs = std::mutable_array::freeze(a, 1)
                 1
             0
-    test::rejects("ma-affine-at/freeze", compiler::DiagnosticCode::AffineElementCopyOut, b_freeze)
+    std::test::rejects("ma-affine-at/freeze", std::compiler::DiagnosticCode::AffineElementCopyOut, b_freeze)
 
-    fn b_copy_source() errors compiler::CompilerError:
+    fn b_copy_source() errors std::compiler::CompilerError:
         static compile:
             fn f() -> int errors IndexNotFound, LowerUnderrun, UpperOverrun:
-                a = mutable_array::generate(2, make)
-                b = mutable_array::generate(2, make)
-                mutable_array::copy(a, 0, b, 0, 1)
+                a = std::mutable_array::generate(2, make)
+                b = std::mutable_array::generate(2, make)
+                std::mutable_array::copy(a, 0, b, 0, 1)
                 1
             0
-    test::rejects("ma-affine-at/copy-source", compiler::DiagnosticCode::AffineElementCopyOut, b_copy_source)
+    std::test::rejects("ma-affine-at/copy-source", std::compiler::DiagnosticCode::AffineElementCopyOut, b_copy_source)
 
-    fn b_get() errors compiler::CompilerError:
+    fn b_get() errors std::compiler::CompilerError:
         static compile:
             fn f() -> int errors IndexNotFound, LowerUnderrun, UpperOverrun:
-                a = mutable_array::generate(2, make)
-                c = mutable_array::get(a, 0, make(9))
+                a = std::mutable_array::generate(2, make)
+                c = std::mutable_array::get(a, 0, make(9))
                 1
             0
-    test::rejects("ma-affine-at/get", compiler::DiagnosticCode::AffineElementCopyOut, b_get)
+    std::test::rejects("ma-affine-at/get", std::compiler::DiagnosticCode::AffineElementCopyOut, b_get)
 
 # ZERO (0) reaches ma-affine-swap-failure's f(zero) as a parameter: the
 # swap at 5 + zero then fails at run time, never as a KnownError.
@@ -2648,10 +2648,10 @@ fn register_affine_swap_tests(zero: int):
     # swap moves the replacement in and the displaced element out; a
     # discarded result is dropped right after its statement; a loop
     # consumes the rest.
-    fn b_swap() errors compiler::CompilerError:
+    fn b_swap() errors std::compiler::CompilerError:
         static compile:
             fn f() -> List[int] errors IndexNotFound:
-                a = mutable_array::generate(2, make)
+                a = std::mutable_array::generate(2, make)
                 c = make(10)
                 old = a.swap(1, c)
                 e = old(Command {value: 1})
@@ -2660,35 +2660,35 @@ fn register_affine_swap_tests(zero: int):
                         make(30)
                 xs = loop w in a:
                     w(Command {value: 100}).value
-                list::append(xs, e.value)
+                std::list::append(xs, e.value)
             r = f():
                 on IndexNotFound:
                     []
             r
-    test::value("ma-affine-swap", [120, 110, 2], b_swap)
+    std::test::value("ma-affine-swap", [120, 110, 2], b_swap)
 
     # An out-of-range swap of an affine replacement propagates
     # IndexNotFound ...
-    fn b_swap_failure() errors compiler::CompilerError:
+    fn b_swap_failure() errors std::compiler::CompilerError:
         static compile:
             fn put(a: MutableArray[Coroutine{args: [Command], return: Event}], i: int, c: Coroutine{args: [Command], return: Event}) -> int errors IndexNotFound:
                 old = a.swap(i, c)
                 old(Command {value: 1}).value
             fn f(zero: int) -> List[int]:
-                a = mutable_array::generate(2, make)
+                a = std::mutable_array::generate(2, make)
                 c = make(10)
                 x = put(a, 5 + zero, c):
                     on IndexNotFound:
                         -1
                 [x]
             f(zero)
-    test::value("ma-affine-swap-failure/value", [-1], b_swap_failure)
+    std::test::value("ma-affine-swap-failure/value", [-1], b_swap_failure)
 
     # ... and the replacement's source binding stays moved.
-    fn b_swap_failure_moved() errors compiler::CompilerError:
+    fn b_swap_failure_moved() errors std::compiler::CompilerError:
         static compile:
             fn f(zero: int) -> int:
-                a = mutable_array::generate(2, make)
+                a = std::mutable_array::generate(2, make)
                 c = make(10)
                 old = a.swap(5 + zero, c):
                     on IndexNotFound:
@@ -2696,90 +2696,90 @@ fn register_affine_swap_tests(zero: int):
                 e = c(Command {value: 1})
                 e.value
             f(0)
-    test::rejects("ma-affine-swap-failure/use-after-move", compiler::DiagnosticCode::UseAfterMove, b_swap_failure_moved)
+    std::test::rejects("ma-affine-swap-failure/use-after-move", std::compiler::DiagnosticCode::UseAfterMove, b_swap_failure_moved)
 
     # A loop over an affine array consumes it in index order; leaving it by
     # return, fail, a propagated declared error, break or continue.
-    fn b_exit_return() errors compiler::CompilerError:
+    fn b_exit_return() errors std::compiler::CompilerError:
         static compile:
-            over_return(mutable_array::generate(4, make))
-    test::value("ma-consuming-exits/return", 2, b_exit_return)
+            over_return(std::mutable_array::generate(4, make))
+    std::test::value("ma-consuming-exits/return", 2, b_exit_return)
 
-    fn b_exit_fail() errors compiler::CompilerError:
+    fn b_exit_fail() errors std::compiler::CompilerError:
         static compile:
-            r = over_fail(mutable_array::generate(4, make)):
+            r = over_fail(std::mutable_array::generate(4, make)):
                 on Boom:
                     -1
             r
-    test::value("ma-consuming-exits/fail", -1, b_exit_fail)
+    std::test::value("ma-consuming-exits/fail", -1, b_exit_fail)
 
-    fn b_exit_propagate() errors compiler::CompilerError:
+    fn b_exit_propagate() errors std::compiler::CompilerError:
         static compile:
-            r = over_propagate(mutable_array::generate(4, make)):
+            r = over_propagate(std::mutable_array::generate(4, make)):
                 on Boom:
                     -1
             r
-    test::value("ma-consuming-exits/propagate", -1, b_exit_propagate)
+    std::test::value("ma-consuming-exits/propagate", -1, b_exit_propagate)
 
-    fn b_exit_break() errors compiler::CompilerError:
+    fn b_exit_break() errors std::compiler::CompilerError:
         static compile:
-            over_break(mutable_array::generate(4, make))
-    test::value("ma-consuming-exits/break", [1], b_exit_break)
+            over_break(std::mutable_array::generate(4, make))
+    std::test::value("ma-consuming-exits/break", [1], b_exit_break)
 
-    fn b_exit_continue() errors compiler::CompilerError:
+    fn b_exit_continue() errors std::compiler::CompilerError:
         static compile:
-            over_continue(mutable_array::generate(4, make))
-    test::value("ma-consuming-exits/continue", [1, 3, 4], b_exit_continue)
+            over_continue(std::mutable_array::generate(4, make))
+    std::test::value("ma-consuming-exits/continue", [1, 3, 4], b_exit_continue)
 
     # An affine array dies with its owner, also inside a struct.
-    fn b_drop() errors compiler::CompilerError:
+    fn b_drop() errors std::compiler::CompilerError:
         static compile:
             fn f() -> int:
-                a = mutable_array::generate(3, make)
-                p = TaggedPool {tag: 1, workers: mutable_array::generate(2, make)}
+                a = std::mutable_array::generate(3, make)
+                p = TaggedPool {tag: 1, workers: std::mutable_array::generate(2, make)}
                 1
             f()
-    test::value("ma-drop-order/value", 1, b_drop)
+    std::test::value("ma-drop-order/value", 1, b_drop)
 
     # Arrays of vectors and vectors of arrays of coroutines: factories,
     # pops, swaps and consuming loops move whole collections.
-    fn b_nested() errors compiler::CompilerError:
+    fn b_nested() errors std::compiler::CompilerError:
         static compile:
             fn pair(i: int) -> MutableVector[Coroutine{args: [Command], return: Event}]:
-                mutable_vector::from_list([make(i), make(i + 10)])
+                std::mutable_vector::from_list([make(i), make(i + 10)])
             fn f() -> List[int] errors IndexNotFound:
-                a = mutable_array::generate(2, pair)
-                v = mutable_vector::from_list([mutable_array::generate(2, make)])
+                a = std::mutable_array::generate(2, pair)
+                v = std::mutable_vector::from_list([std::mutable_array::generate(2, make)])
                 w = v.pop()
-                old = a.swap(0, mutable_vector::from_list([make(50)]))
+                old = a.swap(0, std::mutable_vector::from_list([make(50)]))
                 xs = loop q in old:
                     q(Command {value: 1}).value
                 ys = loop q in w:
                     q(Command {value: 2}).value
-                list::append(xs, list::length(ys))
+                std::list::append(xs, std::list::length(ys))
             r = f():
                 on IndexNotFound:
                     []
             r
-    test::value("ma-nested-affine", [1, 11, 2], b_nested)
+    std::test::value("ma-nested-affine", [1, 11, 2], b_nested)
 
     # An affine generate, swap and consuming loop beside an unrestricted
     # copy and a vector element read.
-    fn b_evidence() errors compiler::CompilerError:
+    fn b_evidence() errors std::compiler::CompilerError:
         static compile:
             fn affine() -> int errors IndexNotFound:
-                a = mutable_array::generate(2, make)
+                a = std::mutable_array::generate(2, make)
                 old = a.swap(0, make(5))
                 n = a.capacity()
                 xs = loop w in a:
                     w(Command {value: 1}).value
                 n
             fn copies() -> int errors IndexNotFound:
-                a = mutable_array::create(3, 0)
+                a = std::mutable_array::create(3, 0)
                 b = a
                 b.set(0, 9)
                 b.set(1, 8)
-                v = mutable_vector::from_list([a])
+                v = std::mutable_vector::from_list([a])
                 c = v.at(0)
                 c.at(0) + b.at(0)
             a = affine():
@@ -2789,110 +2789,110 @@ fn register_affine_swap_tests(zero: int):
                 on IndexNotFound:
                     0
             [a, c]
-    test::value("ma-native-evidence", [2, 9], b_evidence)
+    std::test::value("ma-native-evidence", [2, 9], b_evidence)
 
 # Factories (mutable-array.test items 14-20, 22, 27-30, 64)
 fn register_factory_tests():
     # A factory failing at slot 2 leaves no array; its declared error
     # propagates to the caller's handler ...
-    fn b_failure() errors compiler::CompilerError:
+    fn b_failure() errors std::compiler::CompilerError:
         static compile:
             fn make_until(i: int) -> Coroutine{args: [Command], return: Event} errors Boom:
                 if i == 2:
                     fail Boom
                 make(i)
             fn f() -> int errors Boom:
-                a = mutable_array::generate(4, make_until)
-                mutable_array::capacity(a)
+                a = std::mutable_array::generate(4, make_until)
+                std::mutable_array::capacity(a)
             r = f():
                 on Boom:
                     -1
             r
-    test::value("ma-generate-failure/value", -1, b_failure)
+    std::test::value("ma-generate-failure/value", -1, b_failure)
 
     # ... and is the caller's UnhandledError when it does not declare it.
-    fn b_unhandled() errors compiler::CompilerError:
+    fn b_unhandled() errors std::compiler::CompilerError:
         static compile:
             fn make_until(i: int) -> Coroutine{args: [Command], return: Event} errors Boom:
                 if i == 2:
                     fail Boom
                 make(i)
             fn f() -> int:
-                a = mutable_array::generate(4, make_until)
-                mutable_array::capacity(a)
+                a = std::mutable_array::generate(4, make_until)
+                std::mutable_array::capacity(a)
             f()
-    test::rejects("ma-generate-failure/unhandled", compiler::DiagnosticCode::UnhandledError, b_unhandled)
+    std::test::rejects("ma-generate-failure/unhandled", std::compiler::DiagnosticCode::UnhandledError, b_unhandled)
 
     # A factory is called with each slot's Int index: a narrower parameter
     # (the message shows its contract), a second parameter or a coroutine
     # handle is TYPE.
-    fn b_narrower() errors compiler::CompilerError:
+    fn b_narrower() errors std::compiler::CompilerError:
         static compile:
             fn mk(i: Small) -> int:
                 i
-            a = mutable_array::generate(5, mk)
+            a = std::mutable_array::generate(5, mk)
             0
-    rejects_matching("ma-generate-contract/narrower-parameter", compiler::DiagnosticCode::Type, ["the factory of mutable_array::generate is called with one Int argument (each slot's index, 0 to the count - 1), but its contract is block(e", ")/1 -> int (contract Fn{args: [int[Small]], return: int, errors: []})"], b_narrower)
+    rejects_matching("ma-generate-contract/narrower-parameter", std::compiler::DiagnosticCode::Type, ["the factory of std::mutable_array::generate is called with one Int argument (each slot's index, 0 to the count - 1), but its contract is block(e", ")/1 -> int (contract Fn{args: [int[Small]], return: int, errors: []})"], b_narrower)
 
-    fn b_two_parameters() errors compiler::CompilerError:
+    fn b_two_parameters() errors std::compiler::CompilerError:
         static compile:
             fn mk(i: int, j: int) -> int:
                 i
-            a = mutable_array::generate(5, mk)
+            a = std::mutable_array::generate(5, mk)
             0
-    test::rejects("ma-generate-contract/two-parameters", compiler::DiagnosticCode::Type, b_two_parameters)
+    std::test::rejects("ma-generate-contract/two-parameters", std::compiler::DiagnosticCode::Type, b_two_parameters)
 
-    fn b_coroutine_handle() errors compiler::CompilerError:
+    fn b_coroutine_handle() errors std::compiler::CompilerError:
         static compile:
             fn f() -> int:
                 c = make(1)
-                a = mutable_array::generate(2, c)
+                a = std::mutable_array::generate(2, c)
                 1
             f()
-    test::rejects("ma-generate-contract/coroutine-handle", compiler::DiagnosticCode::Type, b_coroutine_handle)
+    std::test::rejects("ma-generate-contract/coroutine-handle", std::compiler::DiagnosticCode::Type, b_coroutine_handle)
 
     # create repeats its value, so an affine value is rejected wherever it
     # reaches create: an affine struct, a vector of coroutines, through a
     # generic or a typed wrapper ...
-    fn b_affine_struct() errors compiler::CompilerError:
+    fn b_affine_struct() errors std::compiler::CompilerError:
         static compile:
             fn f() -> int:
-                a = mutable_array::create(2, Job {step: make(1)})
+                a = std::mutable_array::create(2, Job {step: make(1)})
                 1
             f()
-    test::rejects("ma-duplication-generic/affine-struct", compiler::DiagnosticCode::AffineDuplicationUnsupported, b_affine_struct)
+    std::test::rejects("ma-duplication-generic/affine-struct", std::compiler::DiagnosticCode::AffineDuplicationUnsupported, b_affine_struct)
 
-    fn b_affine_vector() errors compiler::CompilerError:
+    fn b_affine_vector() errors std::compiler::CompilerError:
         static compile:
             fn f() -> int:
-                a = mutable_array::create(2, mutable_vector::from_list([make(1)]))
+                a = std::mutable_array::create(2, std::mutable_vector::from_list([make(1)]))
                 1
             f()
-    test::rejects("ma-duplication-generic/affine-vector", compiler::DiagnosticCode::AffineDuplicationUnsupported, b_affine_vector)
+    std::test::rejects("ma-duplication-generic/affine-vector", std::compiler::DiagnosticCode::AffineDuplicationUnsupported, b_affine_vector)
 
-    fn b_generic_wrapper() errors compiler::CompilerError:
+    fn b_generic_wrapper() errors std::compiler::CompilerError:
         static compile:
             fn dup(x):
-                mutable_array::create(2, x)
+                std::mutable_array::create(2, x)
             fn f() -> int:
                 a = dup(make(1))
                 1
             f()
-    test::rejects("ma-duplication-generic/generic-wrapper", compiler::DiagnosticCode::AffineDuplicationUnsupported, b_generic_wrapper)
+    std::test::rejects("ma-duplication-generic/generic-wrapper", std::compiler::DiagnosticCode::AffineDuplicationUnsupported, b_generic_wrapper)
 
-    fn b_typed_wrapper() errors compiler::CompilerError:
+    fn b_typed_wrapper() errors std::compiler::CompilerError:
         static compile:
             fn dup(x: Coroutine{args: [Command], return: Event}) -> MutableArray[Coroutine{args: [Command], return: Event}]:
-                mutable_array::create(2, x)
+                std::mutable_array::create(2, x)
             1
-    test::rejects("ma-duplication-generic/typed-wrapper", compiler::DiagnosticCode::AffineDuplicationUnsupported, b_typed_wrapper)
+    std::test::rejects("ma-duplication-generic/typed-wrapper", std::compiler::DiagnosticCode::AffineDuplicationUnsupported, b_typed_wrapper)
 
     # ... never by name: the same generic wrapper repeats an unrestricted
     # value.
-    fn b_unrestricted() errors compiler::CompilerError:
+    fn b_unrestricted() errors std::compiler::CompilerError:
         static compile:
             fn dup(x):
-                mutable_array::create(2, x)
+                std::mutable_array::create(2, x)
             fn f() -> int errors IndexNotFound:
                 a = dup(5)
                 a.at(1)
@@ -2900,7 +2900,7 @@ fn register_factory_tests():
                 on IndexNotFound:
                     0
             r
-    test::value("ma-duplication-generic/unrestricted", 5, b_unrestricted)
+    std::test::value("ma-duplication-generic/unrestricted", 5, b_unrestricted)
 
 # ---------------------------------------------------------------------------
 
@@ -2924,7 +2924,7 @@ fn register_mutable_array_tests():
     register_affine_swap_tests(0)
     register_factory_tests()
 
-with context test::suite()
-with context Counts {values: mutable_array::create(2, 0)}
+with context std::test::suite()
+with context Counts {values: std::mutable_array::create(2, 0)}
 register_mutable_array_tests()
-test::report()
+std::test::report()

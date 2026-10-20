@@ -8,7 +8,7 @@
 #
 #   # requires: web
 #
-# names optional libraries (lib/NAME.tcl) the program needs; see
+# names optional libraries (stdlib/NAME.tcl) the program needs; see
 # core::programFileRequires and core::loadLibrary.
 
 namespace eval core {}

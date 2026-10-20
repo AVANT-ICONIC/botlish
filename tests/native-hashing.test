@@ -96,10 +96,10 @@ f()
 
 test hash-consistent-with-eq-1 {distinct String objects with equal content hash equal} -body {
     native {
-import str
+import std::str
 fn f():
-    a = str::concat("hel", "lo")
-    b = str::concat("hel", "lo")
+    a = std::str::concat("hel", "lo")
+    b = std::str::concat("hel", "lo")
     hash(a) == hash(b)
 f()
     }
@@ -144,8 +144,8 @@ hash(f)
 } -result same
 
 test hash-mutarray-1 {hash is undefined for MutableArray, every backend} -body {
-    parity {import mutable_array
-hash(mutable_array::allocate(1))}
+    parity {import std::mutable_array
+hash(std::mutable_array::allocate(1))}
 } -result same
 
 test hash-range-1 {hash never needs a bit beyond 61: nonneg and below 2^61} -body {
@@ -169,7 +169,7 @@ test hash-parity-astral-1 {hash of a String with a supplementary-plane character
 } -result same
 
 test hash-consistent-with-eq-astral-1 {distinct String objects with equal supplementary-plane content hash equal} -body {
-    native "import str\nfn f():\n    a = str::concat(\"x\", \"\U0001F642\")\n    b = str::concat(\"x\", \"\U0001F642\")\n    hash(a) == hash(b)\nf()\n"
+    native "import std::str\nfn f():\n    a = std::str::concat(\"x\", \"\U0001F642\")\n    b = std::str::concat(\"x\", \"\U0001F642\")\n    hash(a) == hash(b)\nf()\n"
 } -result {value true}
 
 test hash-parity-int-1 {hash of an Int matches across every backend (bit-identical)} -body {
@@ -192,10 +192,10 @@ test hash-parity-nested-1 {hash of nested aggregates matches across every backen
 # and folds a struct's borrowed shape (ops.rs's decimal_text, rt_hash), and
 # must still fold core/hashing.tcl's bytes, bit for bit, on every backend.
 test hash-parity-kinds-1 {hash of values of every kind and representation edge matches across every backend} -body {
-    set program {import abi
-import abi::bytes
-import str
-import immutable_set
+    set program {import std::abi
+import std::abi::bytes
+import std::str
+import std::immutable_set
 
 struct P:
     x: int
@@ -211,7 +211,7 @@ struct Q:
     c: Color
 
 fn mk(s: str):
-    abi::bytes::from_list(str::encode_utf8(s))
+    std::abi::bytes::from_list(std::str::encode_utf8(s))
 
 fn hashes(xs):
     loop x in xs:
@@ -223,7 +223,7 @@ computed = [shift_left(1, 61) - 1, shift_left(1, 62) - 1, shift_left(1, 62), 0 -
 chars = ['a', 'Z', '0', ' ', 'é', '☃', '🙂', '􏿿']
 others = ["", "a", "1", "héllo ☃", "🙂 quick brown fox", true, false, unit, [], [1, 2], [2, 1], [[1], ["a", 'b']], [-7, 'x', 4611686018427387904]]
 structs = [P {x: 1, y: 2}, P {x: -1, y: 4611686018427387903}, P {x: 4611686018427387904, y: 0}, Q {a: P {x: 3, y: 4}, b: "s", c: Color::Green}, {x: 1, y: "a"}, {y: "a", x: 1}, {}, {p: P {x: 1, y: 2}, e: Color::Red}, {q: Q {a: P {x: 0, y: 0}, b: "", c: Color::Red}, l: [P {x: 5, y: 6}, 'c']}, [P {x: 1, y: 2}, Color::Red], Color::Red, Color::Green]
-stores = [mk(""), mk("AB"), mk("héllo"), abi::bytes::from_bytes(mk("k1")), immutable_set::from_list([1, 2, 3]), immutable_set::from_list([P {x: 1, y: 2}, 'q', "s", 4611686018427387904])]
+stores = [mk(""), mk("AB"), mk("héllo"), std::abi::bytes::from_bytes(mk("k1")), std::immutable_set::from_list([1, 2, 3]), std::immutable_set::from_list([P {x: 1, y: 2}, 'q', "s", 4611686018427387904])]
 
 [hashes(small), hashes(big), hashes(computed), hashes(chars), hashes(others), hashes(structs), hashes(stores)]
 }

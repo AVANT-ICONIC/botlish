@@ -56,15 +56,15 @@ A struct's representation owner is the **source module that declares it**,
 identified by the compiler's canonical, path-derived namespace:
 
 ```
-lib/foo.bot         owns the opaque structs it declares: foo::Name
-lib/abi/x86_64.bot  owns abi::x86_64::Name; it is a different module from abi
+stdlib/foo.bot         owns the opaque structs it declares: foo::Name
+stdlib/abi/x86_64.bot  owns std::abi::x86_64::Name; it is a different module from abi
 ```
 
 There is no `namespace` declaration, so there is nothing to spell differently.
 Authority is **exact**: the declaring module only. No friend declaration,
 package visibility, access list or namespace inheritance exists, and none was
 invented. A parent module has none over its child's opaque structs, a child none
-over its parent's, `import abi` grants nothing over `abi::bytes::Bytes`, a transitive
+over its parent's, `import std::abi` grants nothing over `std::abi::bytes::Bytes`, a transitive
 dependency grants nothing, and a struct that merely *holds* an opaque value (in a
 field, a list) grants nothing over it. Imports authorize naming cross-module
 symbols; they never grant representation authority.
@@ -380,12 +380,12 @@ opaque resource context struct Something:   contextual authority / lifetime = th
 
 `context struct`, `resource struct`, `with`, RAII, destructors, drop semantics,
 borrow checking, lifetime parameters, affine/linear types, move semantics,
-actor/thread transfer restrictions, `abi::bytes::Bytes`, `MutableBytes`, `CString`, raw
+actor/thread transfer restrictions, `std::abi::bytes::Bytes`, `MutableBytes`, `CString`, raw
 pointers, FFI pointer retention, friend modules, per-field visibility, protected
 fields, inheritance, visibility levels, reflection, generated getters/setters,
 namespace aliases, new struct equality semantics, custom hash semantics. No
 existing library struct was migrated to `opaque`: the harmless candidates
-(`abi::U8` and its relatives) are consumed with `.value` throughout the corpus,
+(`std::abi::U8` and its relatives) are consumed with `.value` throughout the corpus,
 so migrating one would be an API redesign, which the milestone excludes.
 
 ## Tests and fuzzing
@@ -438,7 +438,7 @@ so migrating one would be an API redesign, which the milestone excludes.
    `project` nodes and on the method-call record and `opaqueDenied` on a rejected
    construction, read only by the checks.
 5. **Owner.** The canonical, path-derived namespace the loader passes to
-   `StructDeclOf` (`"abi::x86_64"` for `lib/abi/x86_64.bot`), exact match only.
+   `StructDeclOf` (`"std::abi::x86_64"` for `stdlib/abi/x86_64.bot`), exact match only.
 6. **Entry programs.** The entry program owns the opaque structs it declares
    (namespace `""`) and may construct, project and destructure them; no module can
    (not even through a generic function).

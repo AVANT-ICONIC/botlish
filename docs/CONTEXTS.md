@@ -1,17 +1,17 @@
 # Contexts: static execution-environment dependencies (first milestone)
 
 ```
-import abi::bytes
-import linux::io
-import str
+import std::abi::bytes
+import std::linux::io
+import std::str
 
 fn hello():
-    message = abi::bytes::from_list(
-        str::encode_utf8("Hello, world!\n")
+    message = std::abi::bytes::from_list(
+        std::str::encode_utf8("Hello, world!\n")
     )
-    linux::io::write(message)
+    std::linux::io::write(message)
 
-with context linux::io::create()
+with context std::linux::io::create()
 
 hello()
 ```
@@ -43,7 +43,7 @@ dedicated diagnostic rather than handled by a more general mechanism.
 3. HIR
 4. The Tcl backends
 5. Native lowering
-6. `linux::io`
+6. `std::linux::io`
 7. Evidence (Hello World: NIR, CLIF, machine code, strace, allocations)
 8. Tests, fuzzing, mutation testing, regression
 9. Limitations and what remains
@@ -88,7 +88,7 @@ more table entry and one more boolean.
 ### `with context EXPR`
 
 ```
-with context linux::io::create()
+with context std::linux::io::create()
 with context clock::create()
 with context application::create()
 
@@ -108,7 +108,7 @@ context` exists.
 
 ```
 fn now(context clock: Clock):
-fn write(data: abi::bytes::Bytes, context io: LinuxIO):
+fn write(data: std::abi::bytes::Bytes, context io: LinuxIO):
 fn render(request, flags :verbose, context io: LinuxIO, clock: Clock, random: Random):
 ```
 
@@ -137,14 +137,14 @@ named `context`, `fn f(context)`, `fn f(context: int)`, `with = 2`,
 ### Identity
 
 A context is identified by the canonical identity of its context-struct type
--- the struct declaration identity (`linux::io::LinuxIO`, `Clock` for an
+-- the struct declaration identity (`std::linux::io::LinuxIO`, `Clock` for an
 entry program's own) -- and by nothing else. There is at most one installed
 value of a type. There are no named instances, qualifiers, string keys or
 registration ids, and the local parameter name is not part of identity:
 
 ```
-fn a(context io: linux::io::LinuxIO): ...
-fn b(context system_io: linux::io::LinuxIO): ...      the same context
+fn a(context io: std::linux::io::LinuxIO): ...
+fn b(context system_io: std::linux::io::LinuxIO): ...      the same context
 ```
 
 Matching is exact and nominal: no traits, structural matching, covariance or
@@ -193,7 +193,7 @@ infers any expression; it must be exactly one context struct:
 | `CONTEXT-INSTALLATION-UNSUPPORTED` | anywhere but the entry program's top-level scope, as a statement: in a function, a loop, an `if` branch, an error handler, a closure, a module (the module loader's own check), an expression |
 
 Installation is not construction: the context mechanism knows nothing about
-how the value was made (`x = linux::io::create()` then `with context x` is the
+how the value was made (`x = std::linux::io::create()` then `with context x` is the
 same installation).
 
 ### Order
@@ -236,13 +236,13 @@ the same set.
 Every top-level call must find `required(callee)` installed. Otherwise:
 
 ```
-MISSING-CONTEXT: linux::io::LinuxIO is required by this call but is not installed here
+MISSING-CONTEXT: std::linux::io::LinuxIO is required by this call but is not installed here
 (install it with "with context EXPR" before the call):
     a
      -> b
      -> c
-     -> linux::io::write
-        directly requires linux::io::LinuxIO
+     -> std::linux::io::write
+        directly requires std::linux::io::LinuxIO
 ```
 
 For each (function, type) the analysis records *why* -- `direct`, or the first
@@ -289,10 +289,10 @@ around.
 
 ### Opacity is independent
 
-Context authority is not representation authority. Outside `linux::io`, a
-function with `context io: linux::io::LinuxIO` holds an ordinary opaque value:
+Context authority is not representation authority. Outside `std::linux::io`, a
+function with `context io: std::linux::io::LinuxIO` holds an ordinary opaque value:
 it can pass and compare it, and `io.stdout`, `{stdout} = io` and
-`linux::io::LinuxIO {...}` are `OPAQUE-REPRESENTATION` /
+`std::linux::io::LinuxIO {...}` are `OPAQUE-REPRESENTATION` /
 `OPAQUE-CONSTRUCTION` exactly as for any opaque struct. A non-opaque context
 struct is constructed and inspected by anyone.
 
@@ -321,7 +321,7 @@ decided), so no analysis treats them as anything they are not.
 What HIR keeps after `hir::check` (`hir::contexts::verify`):
 
 ```
-block expr   contextParams     {{name io context linux::io::LinuxIO} ...}
+block expr   contextParams     {{name io context std::linux::io::LinuxIO} ...}
              directContexts    sorted identities (its region's loads)
              requiredContexts  sorted identities (transitive)
 call expr    context ID        on a verified installation
@@ -337,32 +337,32 @@ and the loads' literal keys, never the `contexts` table -- so a HIR read back
 from text compiles to the same slots:
 
 ```
-struct linux::io::LinuxIO name LinuxIO ns linux::io opaque context fields stdin: ..., stdout: ..., stderr: ...
-e509 block s110 (b119 data:abi::bytes::Bytes) captures () ... contexts (linux::io::LinuxIO) requires (linux::io::LinuxIO) ...
-    e510 bind b121 io : linux::io::LinuxIO
-        e511 call native(context#load) : linux::io::LinuxIO
+struct std::linux::io::LinuxIO name LinuxIO ns std::linux::io opaque context fields stdin: ..., stdout: ..., stderr: ...
+e509 block s110 (b119 data:abi::bytes::Bytes) captures () ... contexts (std::linux::io::LinuxIO) requires (std::linux::io::LinuxIO) ...
+    e510 bind b121 io : std::linux::io::LinuxIO
+        e511 call native(context#load) : std::linux::io::LinuxIO
             e512 ref b120 context#load : native context#load
-            e513 const str linux::io::LinuxIO : str
-e545 block s113 () captures () ... contexts () requires (linux::io::LinuxIO) ...
-e555 bind b131 context#1628 : linux::io::LinuxIO
-e558 call native(context#install) installs linux::io::LinuxIO : unit
+            e513 const str std::linux::io::LinuxIO : str
+e545 block s113 () captures () ... contexts () requires (std::linux::io::LinuxIO) ...
+e555 bind b131 context#1628 : std::linux::io::LinuxIO
+e558 call native(context#install) installs std::linux::io::LinuxIO : unit
 ```
 
 and `main.tcl -contexts` prints the summary:
 
 ```
-contextstruct linux::io::LinuxIO opaque
-contextinstall e558 linux::io::LinuxIO
-contextparam e509 io linux::io::LinuxIO
-contextparam e521 io linux::io::LinuxIO
-contextparam e533 io linux::io::LinuxIO
-function linux::io::write e509 direct-contexts (linux::io::LinuxIO) required-contexts (linux::io::LinuxIO)
+contextstruct std::linux::io::LinuxIO opaque
+contextinstall e558 std::linux::io::LinuxIO
+contextparam e509 io std::linux::io::LinuxIO
+contextparam e521 io std::linux::io::LinuxIO
+contextparam e533 io std::linux::io::LinuxIO
+function std::linux::io::write e509 direct-contexts (std::linux::io::LinuxIO) required-contexts (std::linux::io::LinuxIO)
 ...
-function hello e545 direct-contexts () required-contexts (linux::io::LinuxIO)
-why hello requires linux::io::LinuxIO:
+function hello e545 direct-contexts () required-contexts (std::linux::io::LinuxIO)
+why hello requires std::linux::io::LinuxIO:
     hello
-     -> linux::io::write
-        directly requires linux::io::LinuxIO
+     -> std::linux::io::write
+        directly requires std::linux::io::LinuxIO
 ```
 
 Core IR (the Tcl backends' input) is the same two calls; nothing in core IR's
@@ -399,7 +399,7 @@ it in its header:
 
 ```
 nir 1 call-effects=1 statics=0 contexts=24
-context 0 "linux::io::LinuxIO" offset=0 words=3 fields="stdin.raw.value stdout.raw.value stderr.raw.value"
+context 0 "std::linux::io::LinuxIO" offset=0 words=3 fields="stdin.raw.value stdout.raw.value stderr.raw.value"
 ```
 
 | offset | word |
@@ -419,14 +419,14 @@ A context type can live in a fixed slot when every leaf of its flattened
 layout is a value whose tagged word is never a heap pointer:
 
 * an Int whose declared domain fits the small-Int representation
-  (`hir::range::fitsSmall` of the field type's interval: `abi::I32Value`,
-  `Int in 0..1000`, `byte::Byte`, ...);
+  (`hir::range::fitsSmall` of the field type's interval: `std::abi::I32Value`,
+  `Int in 0..1000`, `std::byte::Byte`, ...);
 * a Bool, Unit, or UnicodeChar (immediates);
 * a nested named struct whose leaves are all eligible (flattened; a
   recursive layout is not).
 
 Anything else -- an unbounded Int (possibly a BigInt), a String, a List, a
-Block, a `MutableArray`, `abi::bytes::Bytes` (its storage is a heap object),
+Block, a `MutableArray`, `std::abi::bytes::Bytes` (its storage is a heap object),
 `any` -- would put a GC-managed reference in program data, which nothing roots
 or traces. Native compilation of a program that installs such a context fails
 with
@@ -461,7 +461,7 @@ exactly the words it needs:
 * a projection chain that ends at a leaf -- `io.stdout.raw.value` -- is one
   `contextload OFFSET` (`Project`, `ContextPath`, `ContextAt`);
 * a sub-struct passed to a callee that receives it as fields -- `io.stdout.raw`
-  to `linux::write`'s `fd` -- is its leaves' loads (`TryFields`,
+  to `std::linux::write`'s `fd` -- is its leaves' loads (`TryFields`,
   `ContextFields`; hir/escape.tcl's `ContextArgShape` gives such an argument
   the shape of its static type, so the callee's parameter can be
   virtualized);
@@ -509,13 +509,13 @@ failed context verification raises its first context diagnostic when it
 starts (`native::lower::ContextDiagnostic`); no code whose loads were not
 proven runs.
 
-## 6. `linux::io`
+## 6. `std::linux::io`
 
-`lib/linux/io.bot`, namespace `linux::io`:
+`stdlib/linux/io.bot`, namespace `std::linux::io`:
 
 ```
 opaque struct FileDescriptor:
-    raw: abi::I32
+    raw: std::abi::I32
 
 opaque context struct LinuxIO:
     stdin: FileDescriptor
@@ -524,48 +524,48 @@ opaque context struct LinuxIO:
 
 fn create() -> LinuxIO:
     LinuxIO {
-        stdin: FileDescriptor {raw: abi::i32(0)},
-        stdout: FileDescriptor {raw: abi::i32(1)},
-        stderr: FileDescriptor {raw: abi::i32(2)},
+        stdin: FileDescriptor {raw: std::abi::i32(0)},
+        stdout: FileDescriptor {raw: std::abi::i32(1)},
+        stderr: FileDescriptor {raw: std::abi::i32(2)},
     }
 
-fn write(data: abi::bytes::Bytes, context io: LinuxIO) -> int:
-    linux::write(io.stdout.raw, data)
+fn write(data: std::abi::bytes::Bytes, context io: LinuxIO) -> int:
+    std::linux::write(io.stdout.raw, data)
 
-fn write_error(data: abi::bytes::Bytes, context io: LinuxIO) -> int:
-    linux::write(io.stderr.raw, data)
+fn write_error(data: std::abi::bytes::Bytes, context io: LinuxIO) -> int:
+    std::linux::write(io.stderr.raw, data)
 
-fn read(data: abi::bytes::MutableBytes, context io: LinuxIO) -> linux::ReadResult:
-    linux::read(io.stdin.raw, data)
+fn read(data: std::abi::bytes::MutableBytes, context io: LinuxIO) -> std::linux::ReadResult:
+    std::linux::read(io.stdin.raw, data)
 ```
 
 * `LinuxIO` is one context -- the process I/O environment -- holding the three
   standard descriptors; there is no StdinContext/StdoutContext/StderrContext.
 * `FileDescriptor` is a proof-bearing token: "this value is a Linux
   file-descriptor token minted by the owning Linux I/O abstraction", its
-  machine token an `abi::I32`. It does not claim the descriptor is open or
-  stays open. Both structs are opaque: outside `linux::io` nobody can
+  machine token an `std::abi::I32`. It does not claim the descriptor is open or
+  stays open. Both structs are opaque: outside `std::linux::io` nobody can
   construct, project or destructure them, and there are no accessors (`.raw`,
   integer conversion, `stdout(io)`, `current()`).
 * **Minting needs no new mechanism.** `opaque struct` already makes
-  `linux::io` the only code that can build a `FileDescriptor`, so `create`
-  legitimately mints the tokens 0, 1, 2. The constants are in `abi::I32`'s
+  `std::linux::io` the only code that can build a `FileDescriptor`, so `create`
+  legitimately mints the tokens 0, 1, 2. The constants are in `std::abi::I32`'s
   domain, so the existing call-specific completion proofs need no handler
   and emit no range branch; nothing in the compiler knows these integers.
   Future `socket`/`openat` results may motivate a broader proof-minting
   design; not now.
 * The consumers project `io.stdout.raw` directly -- they are in the owning
-  module -- and every external effect still flows `linux::io::write ->
-  linux::write -> linux::abi::x86_64::syscall -> syscall`. No libc, no errno mapping
+  module -- and every external effect still flows `std::linux::io::write ->
+  std::linux::write -> std::linux::abi::x86_64::syscall -> syscall`. No libc, no errno mapping
   (results are the kernel's raw signed values), no compiler knowledge of
-  write(2) or read(2), no new syscall code. `linux::write(fd, data)` and
-  `linux::read(fd, data)` are unchanged: the explicit low-level layer.
-* `read` reuses `linux::read` exactly: one syscall, the caller's buffer
+  write(2) or read(2), no new syscall code. `std::linux::write(fd, data)` and
+  `std::linux::read(fd, data)` are unchanged: the explicit low-level layer.
+* `read` reuses `std::linux::read` exactly: one syscall, the caller's buffer
   unchanged, the detached updated buffer in the result.
 * Not here: `resource`, close/ownership, RAII, buffering, short-write
   completion, mutable contexts, substitutable (trait) contexts, `direct`
   policy. (Since DIRECT-MODULES.md: `linux` is a direct module, and
-  linux::io is the ordinary module that contextualizes it through LinuxIO.)
+  std::linux::io is the ordinary module that contextualizes it through LinuxIO.)
 
 ## 7. Evidence: the Hello World
 
@@ -591,8 +591,8 @@ $ strace -f -k -e trace=write ./context-hello > /dev/null
 write(1, "Hello, world!\n", 14)   = 14
  > context-hello(botlish_linux_x86_64_syscall+0x1f)
  > context-hello(rt_linux_x86_64_syscall+0x493)
- > context-hello(botlish_fn_7+0xd1)          linux::write
- > context-hello(botlish_fn_9+0x24)          linux::io::write
+ > context-hello(botlish_fn_7+0xd1)          std::linux::write
+ > context-hello(botlish_fn_9+0x24)          std::linux::io::write
  > context-hello(botlish_fn_10+0x19)         hello
  > context-hello(botlish_fn_0+0x6a)          <program>
  ...
@@ -601,17 +601,17 @@ write(1, "14\n", 3)               = 3
 ```
 
 The program's write comes from the raw syscall boundary, called by the runtime
-helper, called by `linux::write`, called by `linux::io::write`, called by
+helper, called by `std::linux::write`, called by `std::linux::io::write`, called by
 `hello`: no libc write frame in that stack (`contexts-native-strace`).
 
 ### NIR
 
 ```
 nir 1 call-effects=1 statics=0 contexts=24
-context 0 "linux::io::LinuxIO" offset=0 words=3 fields="stdin.raw.value stdout.raw.value stderr.raw.value"
+context 0 "std::linux::io::LinuxIO" offset=0 words=3 fields="stdin.raw.value stdout.raw.value stderr.raw.value"
 
 func 0 "<program>" params=0 ...
-    %0 = call 8                          linux::io::create()
+    %0 = call 8                          std::linux::io::create()
     %1 = structget 0 %0  ...             its three leaves
     contextstore 0 %3
     contextstore 8 %6
@@ -619,28 +619,28 @@ func 0 "<program>" params=0 ...
     %11 = call 10                        hello(): no operand
     ret %11
 
-func 9 "linux::io::write" params=1 ... pnames="data.0" instance="abi::bytes::Bytes"
+func 9 "std::linux::io::write" params=1 ... pnames="data.0" instance="std::abi::bytes::Bytes"
     %1 = contextload 8                   stdout's descriptor word
-    %2 = call 7 %1 %0                    linux::write(fd.0, data.0)
+    %2 = call 7 %1 %0                    std::linux::write(fd.0, data.0)
     ret %2
 
 func 10 "hello" params=0 ...
     %0 = bytes "48656c6c6f2c20776f726c64210a"
-    %1 = call 9 %0                       linux::io::write(message): one operand
+    %1 = call 9 %0                       std::linux::io::write(message): one operand
     ret %1
 ```
 
-`linux::write`'s instance takes `fd` as fields (`pnames="fd.0 data.0"`): the
-argument `io.stdout.raw` is supplied straight from the slot, so no `abi::I32`
+`std::linux::write`'s instance takes `fd` as fields (`pnames="fd.0 data.0"`): the
+argument `io.stdout.raw` is supplied straight from the slot, so no `std::abi::I32`
 object exists either (`contexts-native-nir-hello`).
 
 ### CLIF
 
 ```
-; function 9 "linux::io::write": botlish_fn_9
+; function 9 "std::linux::io::write": botlish_fn_9
 function u0:98(i64, i64) -> i64 system_v {         (vm, data): no context parameter
     gv0 = symbol userextname0                        the context area
-    fn0 = colocated u0:94 sig0                       linux::write
+    fn0 = colocated u0:94 sig0                       std::linux::write
 block0:
     v4 = symbol_value.i64 gv0
     v5 = load.i64 notrap aligned v4+8                stdout, offset 8
@@ -648,7 +648,7 @@ block0:
 
 ; function 10 "hello": botlish_fn_10
 function u0:100(i64) -> i64 system_v {             (vm)
-    v5 = call fn0(v0, v4)                            linux::io::write(vm, message)
+    v5 = call fn0(v0, v4)                            std::linux::io::write(vm, message)
 ```
 
 (`-emit-clif` shows the JIT's CLIF, where `gv0` is an absolute symbol; the
@@ -659,7 +659,7 @@ has without any context (`contexts-native-clif`,
 ### Machine code and relocation
 
 ```
-botlish_fn_9 (linux::io::write):
+botlish_fn_9 (std::linux::io::write):
    push   %rbp
    mov    %rsp,%rbp
    sub    $0x10,%rsp
@@ -667,7 +667,7 @@ botlish_fn_9 (linux::io::write):
    mov    %rsi,%rdx
    lea    0x6655(%rip),%r9               # <botlish_context_area>   PC-relative
    mov    0x8(%r9),%rsi                  stdout's descriptor
-   call   <botlish_fn_7>                 linux::write
+   call   <botlish_fn_7>                 std::linux::write
    ...
 $ objdump -t context-hello | grep botlish_context_area
 00000000000893b8 l     O .bss  0000000000000018 botlish_context_area
@@ -685,7 +685,7 @@ mov %rcx,0x10(%rsi)`.
 
 Exactly the required load: `lea` of the area and one `mov` of the stdout word.
 The other two fields are never read, no `LinuxIO`, `FileDescriptor` or
-`abi::I32` is materialized, and the loaded word is not stored to a root slot.
+`std::abi::I32` is materialized, and the loaded word is not stored to a root slot.
 
 ### Allocations
 
@@ -695,17 +695,17 @@ Measured with `native::allocationReport` (`contexts-native-allocations`):
 |---|---|
 | a literal installation and any number of reads (`with context Counter {...}`, 50 recursive reads) | **0** |
 | a three-level chain to a consumer of a literal installation | **0** |
-| the Hello World | **7**, all `Struct`: `linux::io::create`'s own LinuxIO, three FileDescriptors and three `abi::I32`s, once |
-| `linux::io::write`, per call (1 call vs 20 calls of the same program) | **0** (9 = 9) |
+| the Hello World | **7**, all `Struct`: `std::linux::io::create`'s own LinuxIO, three FileDescriptors and three `std::abi::I32`s, once |
+| `std::linux::io::write`, per call (1 call vs 20 calls of the same program) | **0** (9 = 9) |
 | context installation itself, context load | **0** |
 
 The 7 are the constructor's, not the context mechanism's: the existing
 optimizer never returns a zero-parameter function's struct result as fields
 (hir/escape.tcl's `generic` rule for the one instance such a function has),
-so `create()` returns a physical `LinuxIO` (and builds the `abi::I32`s inside
+so `create()` returns a physical `LinuxIO` (and builds the `std::abi::I32`s inside
 it), which the installation then reads. A literal installation allocates
 nothing. The unspecialized baseline (`cranelift-generic`) carries no struct as
-fields across a call, so there `linux::io::write` materializes the `abi::I32`
+fields across a call, so there `std::linux::io::write` materializes the `std::abi::I32`
 it passes (one object per call) -- the baseline's documented limitation.
 
 ## 8. Tests, fuzzing, mutation testing
@@ -723,7 +723,7 @@ it passes (one object per call) -- the baseline's documented limitation.
   unreachable consumers, recursion and a cycle through a nested function,
   tooling (`of`, `explain`, `summary`), function values (passing, returning,
   storing, `if`-chosen, aliases), non-opaque contexts, opacity exactness,
-  the `linux::io` surface, no context API, the Tcl backends' `NATIVE-ONLY`
+  the `std::linux::io` surface, no context API, the Tcl backends' `NATIVE-ONLY`
   syscall, the descriptors 0/1/2 inside the owner, `-strict 0` replay on all
   four backends, the per-run environment, and the native evidence of §7
   (NIR, no hidden argument, CLIF, eligibility, allocations, GC stress, the
@@ -792,7 +792,7 @@ context area, no header line and no different instruction.
   String, a List, a Bytes, or an unbounded Int is native-unsupported.
 * PC-relative access is `lea` + displaced load (Cranelift does not fold a
   symbol into a load); the JIT uses absolute addresses.
-* `linux::io::create()` allocates its 7 objects once (§7).
+* `std::linux::io::create()` allocates its 7 objects once (§7).
 * The native area is process-wide for the main execution domain; there is no
   TLS or actor-local base.
 
@@ -828,7 +828,7 @@ context area, no header line and no different instruction.
 10. **Duplicate installation.** `DUPLICATE-CONTEXT: T is already installed in
     this scope`, statically; at run time too under `-strict 0`.
 11. **Context key.** The canonical struct declaration identity
-    (`linux::io::LinuxIO`); nothing else.
+    (`std::linux::io::LinuxIO`); nothing else.
 12. **Entry-top-level restriction.** `CONTEXT-INSTALLATION-UNSUPPORTED` in a
     function, loop, branch, handler, closure, module or expression.
 13. **Source-order scoping.** Available from the `with context` line onward;
@@ -853,7 +853,7 @@ context area, no header line and no different instruction.
     types.
 20. **Missing-context diagnostic.** `MISSING-CONTEXT: T is required by this
     call but is not installed here ...` followed by the chain `a -> b -> c ->
-    linux::io::write` and `directly requires T`, at the top-level call.
+    std::linux::io::write` and `directly requires T`, at the top-level call.
 21. **Interpreter.** A per-run dict keyed by identity behind the two internal
     natives (§4).
 22. **Tcl compiler.** The same natives, the same per-run environment; no
@@ -870,32 +870,32 @@ context area, no header line and no different instruction.
     stored in a fixed native context slot because field "f" ...`.
 27. **No hidden argument.** NIR `params=`/operands, CLIF signatures and
     machine code of every function and call are those of the ordinary
-    parameters; hello calls `linux::io::write` with one operand; `top`/`middle`
+    parameters; hello calls `std::linux::io::write` with one operand; `top`/`middle`
     calls have none (§7).
 28. **No reserved register.** The area address is a per-use temporary
     (`lea ...(%rip),%r9` here, `%rsi` in the program function).
 29. **Lowering.** `contextload OFF` / `contextstore OFF %v` -> `symbol_value`
     of the area + `load`/`store` at OFF; AOT: `lea sym(%rip)` after the
     linker relaxes `R_X86_64_REX_GOTPCRELX`; JIT: absolute address.
-30. **FileDescriptor.** `opaque struct FileDescriptor: raw: abi::I32`.
+30. **FileDescriptor.** `opaque struct FileDescriptor: raw: std::abi::I32`.
 31. **LinuxIO.** `opaque context struct LinuxIO: stdin/stdout/stderr:
     FileDescriptor`.
 32. **create.** §6: the three literal tokens, no handler, no range check.
-33. **Why opaque construction suffices.** Only `linux::io` can build a
+33. **Why opaque construction suffices.** Only `std::linux::io` can build a
     FileDescriptor, so the module's own constructor is the minting authority;
     no generic proof-minting feature was needed.
-34. **write.** `fn write(data: abi::bytes::Bytes, context io: LinuxIO) -> int:
-    linux::write(io.stdout.raw, data)`.
+34. **write.** `fn write(data: std::abi::bytes::Bytes, context io: LinuxIO) -> int:
+    std::linux::write(io.stdout.raw, data)`.
 35. **Stderr.** `write_error`, the same over `io.stderr.raw`.
-36. **Stdin.** `fn read(data: abi::bytes::MutableBytes, context io: LinuxIO)
-    -> linux::ReadResult: linux::read(io.stdin.raw, data)`.
-37. **No descriptor accessors.** `linux::io` exports exactly `create`, `read`,
+36. **Stdin.** `fn read(data: std::abi::bytes::MutableBytes, context io: LinuxIO)
+    -> std::linux::ReadResult: std::linux::read(io.stdin.raw, data)`.
+37. **No descriptor accessors.** `std::linux::io` exports exactly `create`, `read`,
     `write`, `write_error` (`contexts-linux-io-surface`).
 38. **Hello World.** `examples/linux/context-hello.bot` (top of this file).
 39. **Output.** `Hello, world!\n` on descriptor 1, then the runner's `14\n`.
 40. **strace.** `write(1, "Hello, world!\n", 14) = 14` from
     `botlish_linux_x86_64_syscall` <- `rt_linux_x86_64_syscall` <-
-    `linux::write` <- `linux::io::write` <- `hello`; no libc frame.
+    `std::linux::write` <- `std::linux::io::write` <- `hello`; no libc frame.
 41. **NIR.** §7.
 42. **CLIF.** §7.
 43. **Assembly/relocation.** §7: `lea 0x6655(%rip),%r9 #
@@ -940,5 +940,5 @@ context area, no header line and no different instruction.
     form is ready), cleanup at scope exit and ownership; descriptors from
     `openat`/`socket` as resources.
 59. **Before `direct` restrictions.** A policy layer that lets application
-    code prefer contextual APIs (`linux::io`) and restricts raw operations
-    (`linux::write`, `linux::abi::x86_64::syscall`) to designated modules.
+    code prefer contextual APIs (`std::linux::io`) and restricts raw operations
+    (`std::linux::write`, `std::linux::abi::x86_64::syscall`) to designated modules.

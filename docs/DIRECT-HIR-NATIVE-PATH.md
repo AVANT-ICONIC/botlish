@@ -166,7 +166,7 @@ Contract:
   `hir::build` for a program written as core IR text) -- resolved, typed,
   contracts inferred, semantic instances computed, checks run.
 * **Step 1, `native::prepareHir`**: attach the native implementations the
-  program calls (module functions such as `uriEscape -> web::uri_escape_text`;
+  program calls (module functions such as `uriEscape -> std::web::uri_escape_text`;
   validator bodies such as `emailish?`/`NonEmpty?`) by resolved binding
   identity, and recover statically-violated declared parameter contracts
   (below). No work and no re-analysis when nothing applies; otherwise one
@@ -372,7 +372,7 @@ it never embedded core IR or Tcl. Tests run the produced binaries with an empty
 (`hir::specialize::analyze` + `regions`) reads the same HIR. Executables built
 and run in this milestone (all match the interpreter and in-process native):
 scalar and Unicode program; `fact`/`fib` self recursion; closure
-(`make_adder`); module call (`mathish::inc`), module native bridge
+(`make_adder`); module call (`std::mathish::inc`), module native bridge
 (`uriEscape`, `emailish?`); MutableArray (`mutarray::create`,
 `from_list`, freeze); shadowing (both probes); declared-error handling; the CSV
 corpus program (`csv.bot`) and `string_reverse`, `string_replace`; plus the
@@ -465,7 +465,7 @@ bug; every one is relift information loss or a numbering artifact):
 
 | program | difference (relift -> direct) | class |
 |---|---|---|
-| `uri-steady` | 26 -> 19 codegen instances, 24 -> 17 functions, guards 5 -> 0, bytes 11,353 -> 5,674, AOT 19/5/2 -> 19/0/0; `web::` functions specialized (`int`, `str`) instead of generic | module information loss: declared/refined module-function signatures (`web::is_unreserved(b: Byte)`, ...) are not in core IR |
+| `uri-steady` | 26 -> 19 codegen instances, 24 -> 17 functions, guards 5 -> 0, bytes 11,353 -> 5,674, AOT 19/5/2 -> 19/0/0; `web::` functions specialized (`int`, `str`) instead of generic | module information loss: declared/refined module-function signatures (`std::web::is_unreserved(b: Byte)`, ...) are not in core IR |
 | `csv_records` | 66 -> 60 codegen, 63 -> 57 functions, guards 28 -> 26, bytes 24,333 -> 23,650, AOT 49/17/0 -> 45/15/0; `ht_*` instances keyed `mutarray` instead of `any`, generic `ht_*` gone | module/container identity loss: `mutarray::create/from_list` typed by resolved identity |
 | `csv_geometric` | guards 0 -> 2 (`guard mutarray` before `mutable_array_set` in `geo_append`, two instances), bytes 7,424 -> 7,578, AOT 19/0/0 -> 17/2/0 | relift loses the applied `MutableArray[T]`; direct exposes the documented `join(mutarray, MutableArray[T])` gap (not fixed, item 22) |
 | `refined-checks`, `module-web` | `faildeclared`/`declarederroreq` ids and `@e` tags | different but equivalent normalization / unstable ids (`errorDecls` lost by the relift); canonical NIR equal once ids are named |

@@ -16,7 +16,7 @@
 #
 #   * a *validator* type is structural: a command prefix, called with the
 #     value, decides membership (1/0). The integer domains Botlish source
-#     declares ("type Byte = Int in 0..255", lib/byte.bot) are validator
+#     declares ("type Byte = Int in 0..255", stdlib/byte.bot) are validator
 #     types (-integer-domain, which supplies the validator; see
 #     SOURCE-DEFINED-INTEGER-DOMAINS.md); so are the Result tags
 #     (core/predicates.tcl). -source marks a source-declared entry, purely so
@@ -88,7 +88,7 @@ namespace eval core::type {
     # (hir::types::resolveNamed rejects it).
     #
     # cptr is the kind of a raw C address (C-ABI-TYPES.md): a data pointer
-    # ffi::c::Ptr[T] ({cptr T}) or a function pointer ffi::c::FnPtr[F]
+    # std::ffi::c::Ptr[T] ({cptr T}) or a function pointer std::ffi::c::FnPtr[F]
     # ({cfnptr F}), hir/types.tcl. Never source-spellable bare: there is no
     # pointer without a pointee identity.
     #
@@ -103,14 +103,14 @@ namespace eval core::type {
     # NAME -> {width BITS precision P minExponent EMIN maxExponent EMAX
     # namespace NS}: an IEEE 754 binary format of BITS bits, P significand
     # bits (the leading one included), normal exponents EMIN..EMAX; NS is the
-    # flat namespace of its standard intrinsics (float64::from_int). This is
+    # flat namespace of its standard intrinsics (std::float64::from_int). This is
     # the *semantic* description of the type only. Which backends can
     # represent or compute it, and how, is theirs to say (core/float.tcl's
     # Tcl arithmetic, native/lower.tcl and native/src/runtime/value.rs's
     # FloatType): a type in this table is never assumed to have a machine
     # representation on every target.
     variable floats [dict create \
-        Float64 {width 64 precision 53 minExponent -1022 maxExponent 1023 namespace float64}]
+        Float64 {width 64 precision 53 minExponent -1022 maxExponent 1023 namespace std::float64}]
     # DecimalRounded is the runtime kind of the decimal-rounded numbers
     # (DECIMAL-ROUNDED-MILESTONE-1.md, core/decimal.tcl), spelled like its
     # runtime kind tag as Float64 is. Bare, it is "a decimal-rounded number
@@ -126,7 +126,7 @@ namespace eval core::type {
     # integerDomain DOMAIN source 0|1 refinement {} | {carrier TYPE owner NS
     # span SPAN} cabi {} | {c SPELLING target TARGET bits N signed 0|1}}
     #
-    # cabi (-c-abi) marks a C integer scalar of namespace ffi::c
+    # cabi (-c-abi) marks a C integer scalar of namespace std::ffi::c
     # (C-ABI-TYPES.md, core/cabi.tcl): an integer domain like any other --
     # its domain is the target's exact range for the C type -- that also
     # records which C type it is on which target, the width and the

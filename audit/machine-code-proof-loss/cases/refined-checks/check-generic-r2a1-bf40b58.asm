@@ -45,7 +45,7 @@
     23c8:	mov    rsi,rbx
     23cb:	mov    rdi,r14
     23ce:	call   23d3 <botlish_fn_24+0xc3>
-			23cf: R_X86_64_PLT32	botlish_fn_9-0x4 ; web::is_emailish<generic>
+			23cf: R_X86_64_PLT32	botlish_fn_9-0x4 ; std::web::is_emailish<generic>
     23d3:	test   rax,rax
     23d6:	jne    2404 <botlish_fn_24+0xf4>
     23dc:	xor    rax,rax

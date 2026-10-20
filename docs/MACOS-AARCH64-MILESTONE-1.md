@@ -106,7 +106,7 @@ and tcltest 2.5.
 The first runs used Homebrew's `tcl-tk`, which is **Tcl 9.0.4** (tcltest
 2.5.11; 15 seconds from bottles). That was a mistake the census caught:
 Tcl 9.0.4 has Unicode 17 case tables, so on the Tcl backends
-`str::lowercase` maps the Unicode 17 capitals (U+A7CE, U+A7D2, U+A7D4,
+`std::str::lowercase` maps the Unicode 17 capitals (U+A7CE, U+A7D2, U+A7D4,
 Beria Erfe U+16EA0..U+16EB8) that Botlish's Unicode 16 semantics -- which
 the native runtime keeps on purpose (`rt_str_lower`) -- leave alone. The
 interpreter and the Tcl compiler then disagreed with native code in
@@ -289,7 +289,7 @@ program that recurses deeply on macOS dies today instead of failing with
 - **A latent GC-stress test bug** (an unrooted Rust local in
   `bytes_from_list_copies_every_byte_exactly_including_nul_and_high_bytes`)
   shows on macOS only because Apple's allocator reuses the freed block.
-- **`linux::sys` resolves on a macOS target** (to `sys.aarch64.bot`):
+- **`std::linux::sys` resolves on a macOS target** (to `sys.aarch64.bot`):
   module selection is by architecture only, by design.
 - **A step's default shell on macOS is `/bin/bash -e`**, bash 3.2 and
   without pipefail, so `| tee` would hide a failure: the workflow sets

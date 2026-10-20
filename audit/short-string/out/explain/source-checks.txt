@@ -10,7 +10,7 @@ instance <program>
       uses:
         list
 
-instance list::find<List[str], block(e114)>
+instance std::list::find<List[str], block(e114)>
   closed: yes
   params:
     xs:

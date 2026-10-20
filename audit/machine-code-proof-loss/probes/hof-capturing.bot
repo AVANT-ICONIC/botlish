@@ -5,20 +5,20 @@
 #
 # expect: 3
 
-import str
+import std::str
 
 fn run(v):
-    n = str::length(v)
+    n = std::str::length(v)
     fn char_at(i):
         if i < 0 or i >= n:
             return ""
-        str::substring(v, i, i + 1)
+        std::str::substring(v, i, i + 1)
     fn scan_while(start, predicate):
         loop i from start to n:
             if predicate(char_at(i)):
                 continue
             return i
         n
-    scan_while(0, str::is_tcl_alpha)
+    scan_while(0, std::str::is_tcl_alpha)
 
 run("abc1")

@@ -2,25 +2,25 @@
 # that namespace's functions method candidates (STDLIB-NAMESPACES.md), as a
 # source-level specification: in a file that imports str but not list,
 # [1, 2].at(0) finds no function named at (str has none): it is the missing
-# import of list, whose list::at it would apply (MissingImport,
+# import of list, whose std::list::at it would apply (MissingImport,
 # DIAGNOSTIC-RECOVERY.md).
 #
 # Ported from tests/stdlib-namespaces.test (ns-method-requires-an-import, its
-# `import str` program), which stays authoritative:
+# `import std::str` program), which stays authoritative:
 # audit/golden/migration/fragments/stdlib-namespaces-str-only.tsv. A suite of
 # its own because its subject is the import set: compiler and test (the
 # framework, neither defining a member named at) and str (the other
 # namespace).
-import compiler
-import str
-import test
+import std::compiler
+import std::str
+import std::test
 
 fn register_str_only_tests():
-    fn b_other_namespace_imported() errors compiler::CompilerError:
+    fn b_other_namespace_imported() errors std::compiler::CompilerError:
         static compile:
             [1, 2].at(0)
-    test::rejects("ns-method-requires-an-import/other-namespace-imported", compiler::DiagnosticCode::MissingImport, b_other_namespace_imported)
+    std::test::rejects("ns-method-requires-an-import/other-namespace-imported", std::compiler::DiagnosticCode::MissingImport, b_other_namespace_imported)
 
-with context test::suite()
+with context std::test::suite()
 register_str_only_tests()
-test::report()
+std::test::report()

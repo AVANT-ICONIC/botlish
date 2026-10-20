@@ -22,14 +22,14 @@ doc reads, source searches, probes, HIR/NIR/CLIF dumps.
 ### S1 No Int-to-String conversion in the stdlib
 
 * Context: planning the demo's board printer (`   2    .    4`).
-* Expected: some `str::of_int`/`int::text` or a `show` for Ints.
+* Expected: some `std::str::of_int`/`int::text` or a `show` for Ints.
 * Actual: none. `core/native.tcl`'s registrations (grepped) have no
-  formatter; `lib/test.bot` carries a private `int_text` built from
+  formatter; `stdlib/test.bot` carries a private `int_text` built from
   `digit_value` by repeated subtraction, with the comment "Botlish has
   no Int-to-String conversion ... (LANGUAGE-LIBRARY-DEFICIENCIES.md 3
   and 11)".
 * Research: docs/README.md section 8 (native table), grep of
-  `core::native::register` names, read lib/test.bot. 1 doc read,
+  `core::native::register` names, read stdlib/test.bot. 1 doc read,
   1 source grep, 1 stdlib read.
 * Explanation: known, documented gap (LANGUAGE-LIBRARY-DEFICIENCIES.md
   item 11). It is documented only in a deficiency report, not in the
@@ -44,7 +44,7 @@ doc reads, source searches, probes, HIR/NIR/CLIF dumps.
 
 ### S2 There is no integer division
 
-* Context: same read of lib/test.bot (`digit_value`: "by subtraction:
+* Context: same read of stdlib/test.bot (`digit_value`: "by subtraction:
   Botlish has no division").
 * Expected: `/` or `div` for Ints (needed by an index layout
   `row = i div 4`).
@@ -72,7 +72,7 @@ doc reads, source searches, probes, HIR/NIR/CLIF dumps.
 * Research: read tests/golden/README.md, tests/golden.test (lines
   1-140), audit/golden/migration/merge.tcl (90-272), grep of
   tests/local.tcl and check.tcl. 4 file reads, 2 greps.
-* Classification: TEST-FRAMEWORK (tooling, not lib/test.bot),
+* Classification: TEST-FRAMEWORK (tooling, not stdlib/test.bot),
   DOCUMENTATION (README says "tests/golden/*.bot are ported Tcl tests"
   but not what a new, original suite should do).
 * Resolution: see D5 (placement decision).
@@ -86,10 +86,10 @@ doc reads, source searches, probes, HIR/NIR/CLIF dumps.
 * Actual: `import NAME` maps to exactly `$::core::libraryDir/NAME.bot`
   (surface/modules.tcl `ModulePath`; docs/README.md section 17
   "Modules": "no search path"). main.tcl has no library option;
-  tests/golden/run.tcl's `-lib DIR` *replaces* lib/ (for mutated
+  tests/golden/run.tcl's `-lib DIR` *replaces* stdlib/ (for mutated
   copies), it does not add to it. So every importable module is, by
   location, part of the standard library: packed into the single
-  executable (single/package.tcl packs lib/), and subject to the
+  executable (single/package.tcl packs stdlib/), and subject to the
   warning gate's per-module loader.
 * Research: docs/README.md section 17, surface/modules.tcl lines 1-60
   and 150-170, main.tcl header, tests/golden/run.tcl. 2 doc reads,
@@ -104,9 +104,9 @@ doc reads, source searches, probes, HIR/NIR/CLIF dumps.
 ### S5 A descending loop does not prove its own index in range
 
 * Context: `reversed(xs)` for the "right = reverse, left, reverse" plan.
-* Expected: `loop i down from n - 1 through 0: list::at(xs, i)` with
-  `n = list::length(xs)` needs no handler (the ascending
-  `loop i from 0 to list::length(xs)` form is documented as proven).
+* Expected: `loop i down from n - 1 through 0: std::list::at(xs, i)` with
+  `n = std::list::length(xs)` needs no handler (the ascending
+  `loop i from 0 to std::list::length(xs)` form is documented as proven).
 * Actual: UNHANDLED-ERROR IndexNotFound at the `at`. So are
   `loop i from 0 to n: at(xs, n - 1 - i)`, `down from n to 0: at(xs,
   i - 1)` and the lockstep `x in xs and i from 0 to n` with the
@@ -120,13 +120,13 @@ doc reads, source searches, probes, HIR/NIR/CLIF dumps.
   name-level guards only; a descending loop's `i <= n - 1` is a
   linear form.
 * Classification: COMPILER-PRECISION (proof hole), STDLIB (no
-  `list::reverse`). The diagnostic was accurate and well located but
+  `std::list::reverse`). The diagnostic was accurate and well located but
   says nothing about which shapes *are* provable.
 * Workaround: decided later (D2/D3).
   (addendum) The single executable is the same: single/main.tcl
-  runs main.tcl with lib/ inside the zipfs archive, so a single-exe
+  runs main.tcl with stdlib/ inside the zipfs archive, so a single-exe
   user cannot import any module of their own at all. For iteration I
-  had to copy lib/ to a scratch directory, link the engine into it and
+  had to copy stdlib/ to a scratch directory, link the engine into it and
   run a copy of main.tcl patched to set `::core::libraryDir` (main.tcl
   re-sources core.tcl, which resets the variable, so a wrapper cannot
   set it first). 1 more source read (core/core.tcl, single/main.tcl).
@@ -136,16 +136,16 @@ doc reads, source searches, probes, HIR/NIR/CLIF dumps.
 * Context: collecting the empty positions of a board (nested collecting
   loops give a List of Lists and there is no concat/flatten, so the
   probe pushes into a MutableVector and reads it out).
-* Expected: `found = mutable_vector::from_list([])` then
+* Expected: `found = std::mutable_vector::from_list([])` then
   `found.push(Position {...})` infers `MutableVector[Position]`.
 * Actual: `function result does not prove declared type
   List[probe4::Position] (CORE SEMANTIC TYPE)`, located at the `fn`
   line, without saying what type was inferred instead.
 * Hypothesis: element type of `[]` stays unknown/any; pushes do not
-  refine it. Remembered lib/test.bot's `fn no_texts() ->
-  MutableVector[str]: mutable_vector::from_list([])`: a function whose
+  refine it. Remembered stdlib/test.bot's `fn no_texts() ->
+  MutableVector[str]: std::mutable_vector::from_list([])`: a function whose
   only purpose is the annotation. Copying that idiom fixed it (1 retry).
-* Research: 1 probe, recall of lib/test.bot.
+* Research: 1 probe, recall of stdlib/test.bot.
 * Classification: LANGUAGE (no local type annotation on a binding:
   `found: MutableVector[Position] = ...` does not exist, so a typed
   helper is the only spelling), DIAGNOSTIC (does not show the inferred
@@ -154,10 +154,10 @@ doc reads, source searches, probes, HIR/NIR/CLIF dumps.
   inferred type (`... inferred List[any] because the vector's element
   type is unknown`).
 
-### S7 A loop bounded by `list::length(rows)` cannot prove a Coordinate; a 4x4 size the types cannot carry
+### S7 A loop bounded by `std::list::length(rows)` cannot prove a Coordinate; a 4x4 size the types cannot carry
 
 * Context: same probe, `loop row in b.rows and r from 0 to
-  list::length(b.rows): ... Position {row: r, ...}`.
+  std::list::length(b.rows): ... Position {row: r, ...}`.
 * Actual: `field "row" of struct probe4::Position cannot be proven to
   satisfy its declared type int[probe4::Coordinate] (value type: int,
   facts: [0, 4611686018427387902])`. Excellent diagnostic: the facts
@@ -197,7 +197,7 @@ try on all four backends.
   is what the central algorithm consumes; (c) `opaque` gives the module
   sole construction authority, so the 4x4/valid-tile invariant is
   validated once at the API boundary (`board(rows)`) and kept by
-  construction afterwards; (d) `test::equal` can print Lists of Ints
+  construction afterwards; (d) `std::test::equal` can print Lists of Ints
   but not structs ("a value with no text form"), so tests compare
   `rows(board)`.
 * Botlish influence: strong (division, concat, describe).
@@ -206,7 +206,7 @@ try on all four backends.
 
 * Alternatives: an enum `Cell` (Empty / Tile) -- impossible, enums are
   payload-free; a struct {occupied, value}; 0.
-* Chosen: 0, named `empty` at module level. `list::get(xs, i, empty)`
+* Chosen: 0, named `empty` at module level. `std::list::get(xs, i, empty)`
   then reads "the cell at i, or empty past the end", which makes
   padding a line one loop (`loop i from 0 to size: tiles.get(i,
   empty)`).
@@ -291,9 +291,9 @@ try on all four backends.
 ### S9 Lockstep over a field projection is unproven; the message says "(expression)"
 
 * Context: `spawn`: `loop row in game.board.rows and r from 0 to
-  list::length(game.board.rows):`.
+  std::list::length(game.board.rows):`.
 * Expected: the same lockstep idiom as `loop x in xs and i from 0 to
-  list::length(xs)`.
+  std::list::length(xs)`.
 * Actual: `lockstep loop requires equal iteration counts; could not
   prove length((expression)) == length((expression)) (clause 1 vs
   clause 2) (CORE SEMANTIC LOCKSTEP-UNPROVEN)`.
@@ -316,7 +316,7 @@ try on all four backends.
   rule and that `nomethod` is the declared response.
 * `SAME-RETURN-VALUE` on the board validator's three `return false`
   exits. Answer: the validator became three one-line predicates over
-  `list::all?` (`cell?`, `board_row?`, `board_rows?`) -- clearer than
+  `std::list::all?` (`cell?`, `board_row?`, `board_rows?`) -- clearer than
   the loop it replaced. Read WARNINGS-SAME-RETURN.md's outcome (1 doc).
 * Classification: DIAGNOSTIC (both accurate, well located, with notes
   at the other exits). The SAME-RETURN-VALUE rewrite improved the code;
@@ -330,7 +330,7 @@ Seven merge-once cases, all four directions, a double move, a spawn,
 game over on a full checkerboard, empty positions: every value equal to
 a hand calculation, identical on interp, compile, cranelift and
 cranelift-generic. Value equality made `changed` one expression
-(`moved != rows`), and `list::get`'s default made padding and reversal
+(`moved != rows`), and `std::list::get`'s default made padding and reversal
 total without a single handler.
 
 ### D5 Placement: everything under examples/games/2048/, run through a private library directory
@@ -338,12 +338,12 @@ total without a single handler.
 Forced by S3 and S4. The engine module, the demo, the golden suite and
 the benchmark program live together in examples/games/2048/; a small
 driver there (`run.tcl`) builds a private library directory (a
-`file tempdir` copy of lib/ plus game2048.bot, the same composition
+`file tempdir` copy of stdlib/ plus game2048.bot, the same composition
 tests/helpers.tcl's `withPrivateLibrary` uses), points
 `::core::libraryDir` at it and compiles/runs with the golden runner's
 procs. tests/workload-2048.test runs the suite, the demo and a small
 benchmark through it in the ordinary Tcl suite (so CI and
-tests/local.tcl see it). Rejected: lib/game2048.bot (it would become
+tests/local.tcl see it). Rejected: stdlib/game2048.bot (it would become
 stdlib by location, ship inside the single executable and be visible to
 the paired run's agent); tests/golden/2048.bot (needs Tcl originals for
 the manifest); one file with the engine copied into each consumer.
@@ -352,7 +352,7 @@ the manifest); one file with the engine copied into each consumer.
 
 * audit/refactor/tools/sweep.tcl enumerates a fixed list of directories
   (examples/{stdlib,surface,...}, bench, lib) and compiles each program
-  against lib/. A bench/2048.bot importing game2048 would fail the gate
+  against stdlib/. A bench/2048.bot importing game2048 would fail the gate
   with a missing module; examples/games/ is not enumerated at all.
 * Consequence: the 2048 programs are outside the gate; the workload
   test compiles each of them with `-warnings error` itself.
@@ -419,20 +419,20 @@ mention `list`), DOCUMENTATION. MINOR. 1 retry.
 
 ### S15 A program's output is discarded under `-backend cranelift`; the Tcl backends cannot print at all
 
-* Context: first run of the demo (io::print_line under `with context
-  linux::io::create()`).
+* Context: first run of the demo (std::io::print_line under `with context
+  std::linux::io::create()`).
 * Expected: the board printed, then the value.
 * Actual: only `unit`. The repository's own examples/io/hello.bot does
   the same under `main.tcl -backend cranelift` (`value: unit`, no
   "Hello, world!"); on interp it is `CORE SEMANTIC NATIVE-ONLY`
-  (abi::x86_64::from_bytes).
+  (std::abi::x86_64::from_bytes).
 * Research: tried hello.bot on two backends (2 runs); read
   native/native.tcl `native::Driver`/`Outcome` (lines 150-240): the JIT
   driver runs botlish-native with stdout+stderr in one pipe, reads it,
   keeps the last `value`/`error` protocol line and drops every other
   line. 1 source read.
 * Explanation: by design of the driver protocol; the README only shows
-  hello as an executable. The only io::IO implementation is LinuxIO
+  hello as an executable. The only std::io::IO implementation is LinuxIO
   (raw syscalls), so no Tcl backend can print.
 * Workaround: `run.tcl -hirx demo.hirx demo.bot`, then `main.tcl
   -emit-native-executable demo.hirx` and run the executable (works:
@@ -444,7 +444,7 @@ mention `list`), DOCUMENTATION. MINOR. 1 retry.
 * **Resolved**, the CLI part (POST-2048-PRODUCT-FIXES.md): main.tcl runs a
   native program with its own standard output and error and reads the
   driver's result from a file (`botlish-native --result`); the Tcl backends
-  still cannot print (no `io::IO` context but LinuxIO's syscalls).
+  still cannot print (no `std::io::IO` context but LinuxIO's syscalls).
 
 ### S16 Every program that imports io gets two warnings about the stdlib's own source
 
@@ -456,11 +456,11 @@ loads them"), but a user cannot act on them and they appear in their
 build output (here with a temporary path, because of D5).
 DIAGNOSTIC/STDLIB. MODERATE (noise that trains users to ignore warnings).
 
-**Resolved** (b94e3d0): `lib/io.bot`'s `print_line` and `write_error_line`
+**Resolved** (b94e3d0): `stdlib/io.bot`'s `print_line` and `write_error_line`
 append the newline as a character, `text.append_char('\n')`, through the
-new intrinsic `str::append_char` (a String followed by one UnicodeChar,
+new intrinsic `std::str::append_char` (a String followed by one UnicodeChar,
 the append of a character to text the warning manifest's `char->text`
-obstruction lacked), so `lib/io.bot` carries no warning. Regressions:
+obstruction lacked), so `stdlib/io.bot` carries no warning. Regressions:
 `tests/portable-io.test` (`io-warning-clean`, `io-line-text-exact`,
 `io-line-newline-is-a-character`), `tests/workload-2048.test`
 (`workload-2048-strict-warnings`) and `tests/str-append-char.test`.
@@ -469,7 +469,7 @@ obstruction lacked), so `lib/io.bot` carries no warning. Regressions:
 
 `fits(n, p)`, `digits(n, next)`, `show(title, board)`, `play(start, 3)`,
 `spawned(game, seed, moves)`, ... Each is accurate. The engine (written
-with method syntax by imitation of lib/) got one; the demo, written in
+with method syntax by imitation of stdlib/) got one; the demo, written in
 functional style first, got twelve. Converting is mechanical except where
 the first parameter is not a natural receiver (`show(title, board)`:
 swapped the parameters to `board.show(title)`). DIAGNOSTIC (accurate,
@@ -510,7 +510,7 @@ oracle. All four backends agree on every suite report and checksum.
   * `empty` (module constant 0) is a `staticget` and a boxed `ieq`
     against it, never a raw compare with 0 (S8's lost fact, now as code
     quality).
-  * `list::get` is an out-of-line call with a pushed error exit per
+  * `std::list::get` is an out-of-line call with a pushed error exit per
     read (`pusherrorexit`/`declarederroreq`), never inlined.
   * empty_positions' inner `loop c from 0 to 4:` is the body value of a
     loop in statement position, so its List is never read, yet it is
@@ -641,7 +641,7 @@ MB; 742 GC cycles, 628 ms of GC in a ~1,330 ms run. The engine's working
 set is tiny; it is the allocation rate (~169 objects, 7.7 KB per move)
 that costs. CLIF of equal_neighbours? (main.tcl -emit-clif on a .hirx):
 calls rt_list_len, rt_list_get, rt_list_new + rt_construct (the discarded
-inner loop's List), out-of-line list::get twice per comparison, and
+inner loop's List), out-of-line std::list::get twice per comparison, and
 rt_int_cmp / rt_int_add on the slow path of the boxed `loop line in
 lines` position (the fast path is inline: tag test, compare, select):
 the List loop's position register stays tagged while a numeric loop's is
@@ -672,7 +672,7 @@ workload is a self-recursive helper: the merge pass (`merged`'s `from`),
 the sum of four line scores (`total`), the suite's `sum`, the demo's
 `fits`/`digits`/`joined`/`play`, the benchmark's `played`, and the
 suite's `play`. The alternative the stdlib itself uses is a
-MutableVector as a one-cell accumulator (lib/test.bot's `joined`); the
+MutableVector as a one-cell accumulator (stdlib/test.bot's `joined`); the
 engine uses a MutableVector only to flatten (empty_positions). Natively
 self tail calls are loops; on interp they are Tcl recursion (S22).
 LANGUAGE (or STDLIB: a sum/fold), recurring, MODERATE.
@@ -760,7 +760,7 @@ run: its agent can only write single files.
 
 ### S16 addendum `-warnings error` cannot compile any program that imports io
 
-The stdlib's own ONE-CHAR-STRING-LITERAL findings in lib/io.bot are the
+The stdlib's own ONE-CHAR-STRING-LITERAL findings in stdlib/io.bot are the
 first warning of every program that imports io, so `-warnings error`
 rejects such a program for code its author did not write (found
 rebuilding the demo with `run.tcl -warnings error`: `the String literal
@@ -835,9 +835,9 @@ the repository, run with `env -i` (no PATH):
 ### S27 A named character constant is no exact element where its literal is
 
 * Context: the non-Int side of S8's fix (0db2443), probed.
-* Actual: `byte::set(['-', '.'])` needs no handler, but with `d = '-'`
+* Actual: `std::byte::set(['-', '.'])` needs no handler, but with `d = '-'`
   -- in the same function, or a program-level constant read inside
-  one -- `byte::set([d, '.'])` may raise `byte::AboveRange`
+  one -- `std::byte::set([d, '.'])` may raise `std::byte::AboveRange`
   (UNHANDLED-ERROR): the completion walk's literal-List proof
   (`hir::completions::ExactValueOf`) reads a `ref`'s exact non-Int
   value only from what its own walk binds (a literal List's loop

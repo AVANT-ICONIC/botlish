@@ -5,89 +5,89 @@
 # as this target's C compiler gives them (C-BINDGEN-LAYOUTS.md). A layout
 # describes where a record's bytes are; the record's pointee identity is
 # bgf::ctypes'.
-import ffi::c
+import std::ffi::c
 import bgf::ctypes
 
 # struct bgf_point, typedef bgf_point (include/bgf/bgf.h:51): sizeof 8, _Alignof 4
 layout bgf_point:
     size 8
     align 4
-    field x: ffi::c::Int at 0  # int x
-    field y: ffi::c::Int at 4  # int y
+    field x: std::ffi::c::Int at 0  # int x
+    field y: std::ffi::c::Int at 4  # int y
 
 # struct bgf_pair, typedef bgf_pair (include/bgf/bgf.h:56): sizeof 8, _Alignof 4
 layout bgf_pair:
     size 8
     align 4
-    field a: ffi::c::Int at 0  # int a
-    field b: ffi::c::Int at 4  # int b
+    field a: std::ffi::c::Int at 0  # int a
+    field b: std::ffi::c::Int at 4  # int b
 
 # struct bgf_table, typedef bgf_table (include/bgf/bgf.h:121): sizeof 8, _Alignof 8
 layout bgf_table:
     size 8
     align 8
-    field get: ffi::c::FnPtr[Fn{args: [ffi::c::Int], return: ffi::c::Int}] at 0  # int (*get)(int)
+    field get: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Int], return: std::ffi::c::Int}] at 0  # int (*get)(int)
 
 # struct bgf_scalars, typedef bgf_scalars (include/bgf/bgf_records.h:17): sizeof 40, _Alignof 8
 layout bgf_scalars:
     size 40
     align 8
-    field c: ffi::c::Char at 0          # char c
-    field i: ffi::c::Int at 4           # int i
-    field us: ffi::c::UShort at 8       # unsigned short us
-    field ll: ffi::c::LongLong at 16    # long long ll
-    field sc: ffi::c::SChar at 24       # signed char sc
-    field uc: ffi::c::UChar at 25       # unsigned char uc
-    field s: ffi::c::Short at 26        # short s
-    field ui: ffi::c::UInt at 28        # unsigned int ui
-    field ull: ffi::c::ULongLong at 32  # unsigned long long ull
+    field c: std::ffi::c::Char at 0          # char c
+    field i: std::ffi::c::Int at 4           # int i
+    field us: std::ffi::c::UShort at 8       # unsigned short us
+    field ll: std::ffi::c::LongLong at 16    # long long ll
+    field sc: std::ffi::c::SChar at 24       # signed char sc
+    field uc: std::ffi::c::UChar at 25       # unsigned char uc
+    field s: std::ffi::c::Short at 26        # short s
+    field ui: std::ffi::c::UInt at 28        # unsigned int ui
+    field ull: std::ffi::c::ULongLong at 32  # unsigned long long ull
 
 # struct bgf_longs, typedef bgf_longs (include/bgf/bgf_records.h:31): sizeof 56, _Alignof 8
 layout bgf_longs:
     size 56
     align 8
-    field c: ffi::c::Char at 0                # char c
-    field l: ffi::c::Long at 8                # long l
-    field ul: ffi::c::ULong at 16             # unsigned long ul
-    field ll: ffi::c::LongLong at 24          # long long ll
-    field p: ffi::c::Ptr[ffi::c::Void] at 32  # void *p
-    field i: ffi::c::Int at 40                # int i
-    field ull: ffi::c::ULongLong at 48        # unsigned long long ull
+    field c: std::ffi::c::Char at 0                     # char c
+    field l: std::ffi::c::Long at 8                     # long l
+    field ul: std::ffi::c::ULong at 16                  # unsigned long ul
+    field ll: std::ffi::c::LongLong at 24               # long long ll
+    field p: std::ffi::c::Ptr[std::ffi::c::Void] at 32  # void *p
+    field i: std::ffi::c::Int at 40                     # int i
+    field ull: std::ffi::c::ULongLong at 48             # unsigned long long ull
 
 # struct bgf_long_pair, typedef bgf_long_pair (include/bgf/bgf_records.h:41): sizeof 72, _Alignof 8
 layout bgf_long_pair:
     size 72
     align 8
-    field a: ffi::c::Long at 0    # long a
-    field inner: bgf_longs at 8   # bgf_longs inner
-    field b: ffi::c::ULong at 64  # unsigned long b
+    field a: std::ffi::c::Long at 0    # long a
+    field inner: bgf_longs at 8        # bgf_longs inner
+    field b: std::ffi::c::ULong at 64  # unsigned long b
 
 # struct bgf_typed, typedef bgf_typed (include/bgf/bgf_records.h:49): sizeof 40, _Alignof 8
 layout bgf_typed:
     size 40
     align 8
-    field a: ffi::c::UChar at 0      # bgf_u8 a
-    field b: ffi::c::Short at 2      # bgf_i16 b
-    field c: ffi::c::UInt at 4       # bgf_u32 c
-    field d: ffi::c::ULongLong at 8  # bgf_u64 d
-    field e: ffi::c::Long at 16      # bgf_size e
-    field color: ffi::c::UInt at 24  # bgf_color color
-    field mode: ffi::c::UInt at 28   # bgf_mode mode
-    field flags: ffi::c::UInt at 32  # bgf_flags flags
+    field a: std::ffi::c::UChar at 0      # bgf_u8 a
+    field b: std::ffi::c::Short at 2      # bgf_i16 b
+    field c: std::ffi::c::UInt at 4       # bgf_u32 c
+    field d: std::ffi::c::ULongLong at 8  # bgf_u64 d
+    field e: std::ffi::c::Long at 16      # bgf_size e
+    field color: std::ffi::c::UInt at 24  # bgf_color color
+    field mode: std::ffi::c::UInt at 28   # bgf_mode mode
+    field flags: std::ffi::c::UInt at 32  # bgf_flags flags
 
 # struct bgf_node, typedef bgf_node (include/bgf/bgf_records.h:65): sizeof 72, _Alignof 8
 layout bgf_node:
     size 72
     align 8
-    field next: ffi::c::Ptr[bgf::ctypes::bgf_node] at 0                   # struct bgf_node *next
-    field handle: ffi::c::Ptr[bgf::ctypes::bgf_handle] at 8               # bgf_handle *handle
-    field data: ffi::c::Ptr[ffi::c::Void] at 16                           # void *data
-    field name: ffi::c::Ptr[ffi::c::Char] at 24                           # const char *name
-    field slot: ffi::c::Ptr[ffi::c::Ptr[bgf::ctypes::bgf_node]] at 32     # struct bgf_node **slot
-    field visit: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[bgf::ctypes::bgf_handle], ffi::c::Int], return: ffi::c::Int}] at 40  # bgf_visit visit
-    field compare: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[bgf::ctypes::bgf_node], ffi::c::Ptr[bgf::ctypes::bgf_node]], return: ffi::c::Int}] at 48  # int (*compare)(const struct bgf_node *a, const struct bgf_node *b)
-    field label: ffi::c::Ptr[bgf::ctypes::bgf_chars] at 56                # struct bgf_chars *label
-    field id: ffi::c::UInt at 64                                          # uint32_t id
+    field next: std::ffi::c::Ptr[bgf::ctypes::bgf_node] at 0              # struct bgf_node *next
+    field handle: std::ffi::c::Ptr[bgf::ctypes::bgf_handle] at 8          # bgf_handle *handle
+    field data: std::ffi::c::Ptr[std::ffi::c::Void] at 16                 # void *data
+    field name: std::ffi::c::Ptr[std::ffi::c::Char] at 24                 # const char *name
+    field slot: std::ffi::c::Ptr[std::ffi::c::Ptr[bgf::ctypes::bgf_node]] at 32  # struct bgf_node **slot
+    field visit: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[std::ffi::c::Void], std::ffi::c::Ptr[bgf::ctypes::bgf_handle], std::ffi::c::Int], return: std::ffi::c::Int}] at 40  # bgf_visit visit
+    field compare: std::ffi::c::FnPtr[Fn{args: [std::ffi::c::Ptr[bgf::ctypes::bgf_node], std::ffi::c::Ptr[bgf::ctypes::bgf_node]], return: std::ffi::c::Int}] at 48  # int (*compare)(const struct bgf_node *a, const struct bgf_node *b)
+    field label: std::ffi::c::Ptr[bgf::ctypes::bgf_chars] at 56           # struct bgf_chars *label
+    field id: std::ffi::c::UInt at 64                                     # uint32_t id
 
 # struct bgf_rect, typedef bgf_rect (include/bgf/bgf_records.h:78): sizeof 16, _Alignof 4
 layout bgf_rect:
@@ -100,148 +100,148 @@ layout bgf_rect:
 layout bgf_frame:
     size 48
     align 8
-    field id: ffi::c::Int at 0                             # int id
-    field bounds: bgf_rect at 4                            # bgf_rect bounds
-    field clip: bgf_rect at 20                             # bgf_rect clip
-    field owner: ffi::c::Ptr[bgf::ctypes::bgf_node] at 40  # bgf_node *owner
+    field id: std::ffi::c::Int at 0                             # int id
+    field bounds: bgf_rect at 4                                 # bgf_rect bounds
+    field clip: bgf_rect at 20                                  # bgf_rect clip
+    field owner: std::ffi::c::Ptr[bgf::ctypes::bgf_node] at 40  # bgf_node *owner
 
 # struct bgf_packed1, typedef bgf_packed1 (include/bgf/bgf_records.h:92): sizeof 7, _Alignof 1
 layout bgf_packed1:
     size 7
     align 1
-    field kind: ffi::c::UChar at 0   # uint8_t kind
-    field length: ffi::c::UInt at 1  # uint32_t length
-    field crc: ffi::c::UShort at 5   # uint16_t crc
+    field kind: std::ffi::c::UChar at 0   # uint8_t kind
+    field length: std::ffi::c::UInt at 1  # uint32_t length
+    field crc: std::ffi::c::UShort at 5   # uint16_t crc
 
 # struct bgf_packed2, typedef bgf_packed2 (include/bgf/bgf_records.h:100): sizeof 14, _Alignof 2
 layout bgf_packed2:
     size 14
     align 2
-    field kind: ffi::c::UChar at 0       # uint8_t kind
-    field length: ffi::c::UInt at 2      # uint32_t length
-    field stamp: ffi::c::ULongLong at 6  # uint64_t stamp
+    field kind: std::ffi::c::UChar at 0       # uint8_t kind
+    field length: std::ffi::c::UInt at 2      # uint32_t length
+    field stamp: std::ffi::c::ULongLong at 6  # uint64_t stamp
 
 # struct bgf_packed_attr, typedef bgf_packed_attr (include/bgf/bgf_records.h:107): sizeof 11, _Alignof 1
 layout bgf_packed_attr:
     size 11
     align 1
-    field tag: ffi::c::Char at 0        # char tag
-    field value: ffi::c::LongLong at 1  # long long value
-    field code: ffi::c::Short at 9      # short code
+    field tag: std::ffi::c::Char at 0        # char tag
+    field value: std::ffi::c::LongLong at 1  # long long value
+    field code: std::ffi::c::Short at 9      # short code
 
 # struct bgf_aligned, typedef bgf_aligned (include/bgf/bgf_records.h:113): sizeof 16, _Alignof 16
 layout bgf_aligned:
     size 16
     align 16
-    field x: ffi::c::Int at 0  # int x
+    field x: std::ffi::c::Int at 0  # int x
 
 # struct bgf_aligned_field, typedef bgf_aligned_field (include/bgf/bgf_records.h:117): sizeof 32, _Alignof 16
 layout bgf_aligned_field:
     size 32
     align 16
-    field c: ffi::c::Char at 0     # char c
-    field v: ffi::c::Int at 8      # int v
-    field over: bgf_aligned at 16  # bgf_aligned over
+    field c: std::ffi::c::Char at 0  # char c
+    field v: std::ffi::c::Int at 8   # int v
+    field over: bgf_aligned at 16    # bgf_aligned over
 
 # struct bgf_nested_packed, typedef bgf_nested_packed (include/bgf/bgf_records.h:125): sizeof 12, _Alignof 4
 layout bgf_nested_packed:
     size 12
     align 4
-    field lead: ffi::c::Char at 0  # char lead
-    field inner: bgf_packed1 at 1  # bgf_packed1 inner
-    field tail: ffi::c::Int at 8   # int tail
+    field lead: std::ffi::c::Char at 0  # char lead
+    field inner: bgf_packed1 at 1       # bgf_packed1 inner
+    field tail: std::ffi::c::Int at 8   # int tail
 
 # struct bgf_packed_outer, typedef bgf_packed_outer (include/bgf/bgf_records.h:132): sizeof 11, _Alignof 1
 layout bgf_packed_outer:
     size 11
     align 1
-    field lead: ffi::c::Char at 0   # char lead
-    field inner: bgf_point at 1     # bgf_point inner
-    field tail: ffi::c::Short at 9  # short tail
+    field lead: std::ffi::c::Char at 0   # char lead
+    field inner: bgf_point at 1          # bgf_point inner
+    field tail: std::ffi::c::Short at 9  # short tail
 
 # struct bgf_late, typedef bgf_late (include/bgf/bgf_records.h:142): sizeof 8, _Alignof 4
 layout bgf_late:
     size 8
     align 4
-    field code: ffi::c::Int at 0        # int code
-    field late_value: ffi::c::Int at 4  # int late_value
+    field code: std::ffi::c::Int at 0        # int code
+    field late_value: std::ffi::c::Int at 4  # int late_value
 
 # an anonymous struct, typedef bgf_anon_point (include/bgf/bgf_records.h:148): sizeof 8, _Alignof 4
 layout bgf_anon_point:
     size 8
     align 4
-    field x: ffi::c::Int at 0  # int x
-    field y: ffi::c::Int at 4  # int y
+    field x: std::ffi::c::Int at 0  # int x
+    field y: std::ffi::c::Int at 4  # int y
 
 # an anonymous struct (include/bgf/bgf_records.h:155): sizeof 4, _Alignof 2
 layout bgf_member_anon_range:
     size 4
     align 2
-    field lo: ffi::c::Short at 0  # short lo
-    field hi: ffi::c::Short at 2  # short hi
+    field lo: std::ffi::c::Short at 0  # short lo
+    field hi: std::ffi::c::Short at 2  # short hi
 
 # struct bgf_member_anon, typedef bgf_member_anon (include/bgf/bgf_records.h:153): sizeof 8, _Alignof 4
 layout bgf_member_anon:
     size 8
     align 4
-    field n: ffi::c::Int at 0                # int n
+    field n: std::ffi::c::Int at 0           # int n
     field range: bgf_member_anon_range at 4  # struct {...} range
 
 # struct bgf_promoted, typedef bgf_promoted (include/bgf/bgf_records.h:161): sizeof 16, _Alignof 4
 layout bgf_promoted:
     size 16
     align 4
-    field kind: ffi::c::Int at 0   # int kind
-    field left: ffi::c::Int at 4   # int left
-    field right: ffi::c::Int at 8  # int right
-    field tail: ffi::c::Int at 12  # int tail
+    field kind: std::ffi::c::Int at 0   # int kind
+    field left: std::ffi::c::Int at 4   # int left
+    field right: std::ffi::c::Int at 8  # int right
+    field tail: std::ffi::c::Int at 12  # int tail
 
 # struct bgf_coll_a, typedef bgf_coll (include/bgf/bgf_records.h:173): sizeof 4, _Alignof 4
 layout bgf_coll:
     size 4
     align 4
-    field a: ffi::c::Int at 0  # int a
+    field a: std::ffi::c::Int at 0  # int a
 
 # struct bgf_coll (include/bgf/bgf_records.h:174): sizeof 4, _Alignof 4
 layout bgf_coll_struct:
     size 4
     align 4
-    field b: ffi::c::Int at 0  # int b
+    field b: std::ffi::c::Int at 0  # int b
 
 # struct bgf_kw, typedef loop (include/bgf/bgf_records.h:175): sizeof 12, _Alignof 4
 layout loop_:
     size 12
     align 4
-    field fn_: ffi::c::Int at 0    # int fn
-    field type_: ffi::c::Int at 4  # int type
-    field loop_: ffi::c::Int at 8  # int loop
+    field fn_: std::ffi::c::Int at 0    # int fn
+    field type_: std::ffi::c::Int at 4  # int type
+    field loop_: std::ffi::c::Int at 8  # int loop
 
 # struct List (include/bgf/bgf_records.h:176): sizeof 8, _Alignof 4
 layout List_:
     size 8
     align 4
-    field size: ffi::c::Int at 0   # int size
-    field align: ffi::c::Int at 4  # int align
+    field size: std::ffi::c::Int at 0   # int size
+    field align: std::ffi::c::Int at 4  # int align
 
 # struct bgf_multi, typedef bgf_multi, bgf_multi_alias, bgf_multi2 (include/bgf/bgf_records.h:177): sizeof 4, _Alignof 4
 layout bgf_multi:
     size 4
     align 4
-    field v: ffi::c::Int at 0  # int v
+    field v: std::ffi::c::Int at 0  # int v
 
 # struct bgf_chars, typedef bgf_chars (include/bgf/bgf_records.h:181): sizeof 20, _Alignof 4
 layout bgf_chars:
     size 20
     align 4
-    field len: ffi::c::Int at 0                # int len
-    field name: array 16 of ffi::c::Char at 4  # char name[16]
+    field len: std::ffi::c::Int at 0                # int len
+    field name: array 16 of std::ffi::c::Char at 4  # char name[16]
 
 # struct bgf_wide_text, typedef bgf_wide_text (include/bgf/bgf_records.h:182): sizeof 36, _Alignof 4
 layout bgf_wide_text:
     size 36
     align 4
-    field len: ffi::c::Int at 0              # int len
-    field text: array 8 of ffi::c::Int at 4  # wchar_t text[8]
+    field len: std::ffi::c::Int at 0              # int len
+    field text: array 8 of std::ffi::c::Int at 4  # wchar_t text[8]
 
 # struct bgf_points4, typedef bgf_points4 (include/bgf/bgf_records.h:183): sizeof 32, _Alignof 4
 layout bgf_points4:
@@ -253,92 +253,92 @@ layout bgf_points4:
 layout bgf_ptrs3:
     size 24
     align 8
-    field slots: array 3 of ffi::c::Ptr[ffi::c::Void] at 0  # void *slots[3]
+    field slots: array 3 of std::ffi::c::Ptr[std::ffi::c::Void] at 0  # void *slots[3]
 
 # struct bgf_matrix, typedef bgf_matrix (include/bgf/bgf_records.h:185): sizeof 24, _Alignof 4
 layout bgf_matrix:
     size 24
     align 4
-    field m: array 2 of array 3 of ffi::c::Int at 0  # int m[2][3]
+    field m: array 2 of array 3 of std::ffi::c::Int at 0  # int m[2][3]
 
 # union bgf_value, typedef bgf_value (include/bgf/bgf_records.h:187): sizeof 8, _Alignof 8
 union layout bgf_value:
     size 8
     align 8
-    alternative i: ffi::c::Int                # int i
-    alternative u: ffi::c::UInt               # unsigned int u
-    alternative p: ffi::c::Ptr[ffi::c::Void]  # void *p
+    alternative i: std::ffi::c::Int                     # int i
+    alternative u: std::ffi::c::UInt                    # unsigned int u
+    alternative p: std::ffi::c::Ptr[std::ffi::c::Void]  # void *p
 
 # struct bgf_tagged, typedef bgf_tagged (include/bgf/bgf_records.h:188): sizeof 16, _Alignof 8
 layout bgf_tagged:
     size 16
     align 8
-    field kind: ffi::c::Int at 0  # int kind
-    field value: bgf_value at 8   # bgf_value value
+    field kind: std::ffi::c::Int at 0  # int kind
+    field value: bgf_value at 8        # bgf_value value
 
 # the anonymous union member bgf_overlay.member2 (struct bgf_overlay) (include/bgf/bgf_records.h:189): sizeof 8, _Alignof 8
 union layout bgf_overlay_member2:
     size 8
     align 8
-    alternative i: ffi::c::Int                # int i
-    alternative p: ffi::c::Ptr[ffi::c::Void]  # void *p
+    alternative i: std::ffi::c::Int                     # int i
+    alternative p: std::ffi::c::Ptr[std::ffi::c::Void]  # void *p
 
 # struct bgf_overlay, typedef bgf_overlay (include/bgf/bgf_records.h:189): sizeof 16, _Alignof 8
 layout bgf_overlay:
     size 16
     align 8
-    field kind: ffi::c::Int at 0             # int kind
+    field kind: std::ffi::c::Int at 0        # int kind
     field member2: bgf_overlay_member2 at 8  # union {...}
 
 # struct bgf_outer_blocked, typedef bgf_outer_blocked (include/bgf/bgf_records.h:202): sizeof 24, _Alignof 4
 layout bgf_outer_blocked:
     size 24
     align 4
-    field n: ffi::c::Int at 0    # int n
-    field chars: bgf_chars at 4  # bgf_chars chars
+    field n: std::ffi::c::Int at 0  # int n
+    field chars: bgf_chars at 4     # bgf_chars chars
 
 # struct bgf_chain2, typedef bgf_chain2 (include/bgf/bgf_records.h:203): sizeof 32, _Alignof 8
 layout bgf_chain2:
     size 32
     align 8
     field inner: bgf_outer_blocked at 0  # bgf_outer_blocked inner
-    field tail: ffi::c::Long at 24       # long tail
+    field tail: std::ffi::c::Long at 24  # long tail
 
 # struct bgf_points_ref, typedef bgf_points_ref (include/bgf/bgf_records.h:204): sizeof 16, _Alignof 8
 layout bgf_points_ref:
     size 16
     align 8
-    field points: ffi::c::Ptr[bgf::ctypes::bgf_points4] at 0  # bgf_points4 *points
-    field n: ffi::c::Int at 8                                 # int n
+    field points: std::ffi::c::Ptr[bgf::ctypes::bgf_points4] at 0  # bgf_points4 *points
+    field n: std::ffi::c::Int at 8                                 # int n
 
 # struct bgf_mixed, typedef bgf_mixed (include/bgf/bgf_records.h:205): sizeof 16, _Alignof 8
 layout bgf_mixed:
     size 16
     align 8
-    field u: bgf_value at 0                   # bgf_value u
-    field name: array 4 of ffi::c::Char at 8  # char name[4]
+    field u: bgf_value at 0                        # bgf_value u
+    field name: array 4 of std::ffi::c::Char at 8  # char name[4]
 
 # union bgf_word, typedef bgf_word (include/bgf/bgf_records.h:231): sizeof 4, _Alignof 4
 union layout bgf_word:
     size 4
     align 4
-    alternative whole: ffi::c::UInt                # uint32_t whole
-    alternative halves: array 2 of ffi::c::UShort  # uint16_t halves[2]
-    alternative bytes: array 4 of ffi::c::UChar    # uint8_t bytes[4]
+    alternative whole: std::ffi::c::UInt                # uint32_t whole
+    alternative halves: array 2 of std::ffi::c::UShort  # uint16_t halves[2]
+    alternative bytes: array 4 of std::ffi::c::UChar    # uint8_t bytes[4]
 
 # union bgf_shape, typedef bgf_shape (include/bgf/bgf_records.h:232): sizeof 8, _Alignof 8
 union layout bgf_shape:
     size 8
     align 8
-    alternative pt: bgf_point                  # bgf_point pt
-    alternative bits: ffi::c::LongLong         # long long bits
-    alternative raw: array 3 of ffi::c::UChar  # unsigned char raw[3]
+    alternative pt: bgf_point                       # bgf_point pt
+    alternative bits: std::ffi::c::LongLong         # long long bits
+    alternative raw: array 3 of std::ffi::c::UChar  # unsigned char raw[3]
 
 # struct bgf_words3, typedef bgf_words3 (include/bgf/bgf_records.h:233): sizeof 16, _Alignof 4
 layout bgf_words3:
     size 16
     align 4
-    field n: ffi::c::Int at 0              # int n
+    field n: std::ffi::c::Int at 0         # int n
     field words: array 3 of bgf_word at 4  # bgf_word words[3]
 
 # struct bgf_word_grid, typedef bgf_word_grid (include/bgf/bgf_records.h:234): sizeof 20, _Alignof 4
@@ -346,86 +346,86 @@ layout bgf_word_grid:
     size 20
     align 4
     field grid: array 2 of array 2 of bgf_word at 0  # bgf_word grid[2][2]
-    field tail: ffi::c::Short at 16                  # short tail
+    field tail: std::ffi::c::Short at 16             # short tail
 
 # union bgf_packed_u, typedef bgf_packed_u (include/bgf/bgf_records.h:235): sizeof 7, _Alignof 1
 union layout bgf_packed_u:
     size 7
     align 1
-    alternative p: bgf_packed1                 # bgf_packed1 p
-    alternative raw: array 7 of ffi::c::UChar  # uint8_t raw[7]
+    alternative p: bgf_packed1                      # bgf_packed1 p
+    alternative raw: array 7 of std::ffi::c::UChar  # uint8_t raw[7]
 
 # the anonymous struct member bgf_overlapped.member3.member1 (struct bgf_overlapped) (include/bgf/bgf_records.h:240): sizeof 8, _Alignof 4
 layout bgf_overlapped_member3_member1:
     size 8
     align 4
-    field offset: ffi::c::UInt at 0       # uint32_t offset
-    field offset_high: ffi::c::UInt at 4  # uint32_t offset_high
+    field offset: std::ffi::c::UInt at 0       # uint32_t offset
+    field offset_high: std::ffi::c::UInt at 4  # uint32_t offset_high
 
 # the anonymous union member bgf_overlapped.member3 (struct bgf_overlapped) (include/bgf/bgf_records.h:239): sizeof 8, _Alignof 8
 union layout bgf_overlapped_member3_union:
     size 8
     align 8
-    alternative member1: bgf_overlapped_member3_member1  # struct {...}
-    alternative pointer: ffi::c::Ptr[ffi::c::Void]       # void *pointer
+    alternative member1: bgf_overlapped_member3_member1       # struct {...}
+    alternative pointer: std::ffi::c::Ptr[std::ffi::c::Void]  # void *pointer
 
 # struct bgf_overlapped, typedef bgf_overlapped (include/bgf/bgf_records.h:236): sizeof 32, _Alignof 8
 layout bgf_overlapped:
     size 32
     align 8
-    field internal: ffi::c::ULong at 0                 # uintptr_t internal
-    field internal_high: ffi::c::ULong at 8            # uintptr_t internal_high
-    field member3: bgf_overlapped_member3_union at 16  # union {...}
-    field event: ffi::c::Ptr[ffi::c::Void] at 24       # void *event
+    field internal: std::ffi::c::ULong at 0                 # uintptr_t internal
+    field internal_high: std::ffi::c::ULong at 8            # uintptr_t internal_high
+    field member3: bgf_overlapped_member3_union at 16       # union {...}
+    field event: std::ffi::c::Ptr[std::ffi::c::Void] at 24  # void *event
 
 # struct bgf_overlapped_member3 (include/bgf/bgf_records.h:248): sizeof 4, _Alignof 4
 layout bgf_overlapped_member3:
     size 4
     align 4
-    field z: ffi::c::Int at 0  # int z
+    field z: std::ffi::c::Int at 0  # int z
 
 # the anonymous struct member bgf_large.member1 (union bgf_large) (include/bgf/bgf_records.h:250): sizeof 8, _Alignof 4
 layout bgf_large_member1:
     size 8
     align 4
-    field low: ffi::c::UInt at 0  # uint32_t low
-    field high: ffi::c::Int at 4  # int32_t high
+    field low: std::ffi::c::UInt at 0  # uint32_t low
+    field high: std::ffi::c::Int at 4  # int32_t high
 
 # an anonymous struct (include/bgf/bgf_records.h:251): sizeof 8, _Alignof 4
 layout bgf_large_u:
     size 8
     align 4
-    field low: ffi::c::UInt at 0  # uint32_t low
-    field high: ffi::c::Int at 4  # int32_t high
+    field low: std::ffi::c::UInt at 0  # uint32_t low
+    field high: std::ffi::c::Int at 4  # int32_t high
 
 # union bgf_large, typedef bgf_large (include/bgf/bgf_records.h:249): sizeof 8, _Alignof 8
 union layout bgf_large:
     size 8
     align 8
-    alternative member1: bgf_large_member1  # struct {...}
-    alternative u: bgf_large_u              # struct {...} u
-    alternative quad: ffi::c::LongLong      # long long quad
+    alternative member1: bgf_large_member1   # struct {...}
+    alternative u: bgf_large_u               # struct {...} u
+    alternative quad: std::ffi::c::LongLong  # long long quad
 
 # the anonymous union member bgf_deep.member2_member2 (struct bgf_deep) (include/bgf/bgf_records.h:258): sizeof 4, _Alignof 4
 union layout bgf_deep_member2_member2:
     size 4
     align 4
-    alternative b: ffi::c::Int              # int b
-    alternative c: array 3 of ffi::c::Char  # char c[3]
+    alternative b: std::ffi::c::Int              # int b
+    alternative c: array 3 of std::ffi::c::Char  # char c[3]
 
 # the anonymous union member bgf_deep.member3.member1.member3 (struct bgf_deep) (include/bgf/bgf_records.h:262): sizeof 2, _Alignof 2
 union layout bgf_deep_member3_member1_member3:
     size 2
     align 2
-    alternative z: ffi::c::UChar    # uint8_t z
-    alternative zz: ffi::c::UShort  # uint16_t zz
+    alternative z: std::ffi::c::UChar    # uint8_t z
+    alternative zz: std::ffi::c::UShort  # uint16_t zz
 
 # the anonymous struct member bgf_deep.member3.member1 (struct bgf_deep) (include/bgf/bgf_records.h:262): sizeof 6, _Alignof 2
 layout bgf_deep_member3_member1:
     size 6
     align 2
-    field x: ffi::c::UShort at 0                          # uint16_t x
-    field y: ffi::c::UShort at 2                          # uint16_t y
+    field x: std::ffi::c::UShort at 0                     # uint16_t x
+    field y: std::ffi::c::UShort at 2                     # uint16_t y
     field member3: bgf_deep_member3_member1_member3 at 4  # union {...}
 
 # the anonymous union member bgf_deep.member3 (struct bgf_deep) (include/bgf/bgf_records.h:260): sizeof 8, _Alignof 4
@@ -439,8 +439,8 @@ union layout bgf_deep_member3:
 layout bgf_deep:
     size 20
     align 4
-    field tag: ffi::c::Char at 0                          # char tag
-    field a: ffi::c::Short at 4                           # short a
+    field tag: std::ffi::c::Char at 0                     # char tag
+    field a: std::ffi::c::Short at 4                      # short a
     field member2_member2: bgf_deep_member2_member2 at 8  # union {...}
     field member3: bgf_deep_member3 at 12                 # union {...}
 
@@ -448,51 +448,51 @@ layout bgf_deep:
 union layout bgf_kwu:
     size 4
     align 4
-    alternative fn_: ffi::c::Int     # int fn
-    alternative type_: ffi::c::UInt  # unsigned int type
+    alternative fn_: std::ffi::c::Int     # int fn
+    alternative type_: std::ffi::c::UInt  # unsigned int type
 
 # union bgf_tail_u, typedef bgf_tail_u (include/bgf/bgf_records.h:267): sizeof 8, _Alignof 4
 union layout bgf_tail_u:
     size 8
     align 4
-    alternative c: array 5 of ffi::c::Char  # char c[5]
-    alternative i: ffi::c::Int              # int i
+    alternative c: array 5 of std::ffi::c::Char  # char c[5]
+    alternative i: std::ffi::c::Int              # int i
 
 # union bgf_aligned_u, typedef bgf_aligned_u (include/bgf/bgf_records.h:268): sizeof 16, _Alignof 16
 union layout bgf_aligned_u:
     size 16
     align 16
-    alternative i: ffi::c::Int   # int i
-    alternative c: ffi::c::Char  # char c
+    alternative i: std::ffi::c::Int   # int i
+    alternative c: std::ffi::c::Char  # char c
 
 # the anonymous union member bgf_anon_tail.member2 (struct bgf_anon_tail) (include/bgf/bgf_records.h:269): sizeof 8, _Alignof 4
 union layout bgf_anon_tail_member2:
     size 8
     align 4
-    alternative c: array 5 of ffi::c::Char  # char c[5]
-    alternative i: ffi::c::Int              # int i
+    alternative c: array 5 of std::ffi::c::Char  # char c[5]
+    alternative i: std::ffi::c::Int              # int i
 
 # struct bgf_anon_tail, typedef bgf_anon_tail (include/bgf/bgf_records.h:269): sizeof 16, _Alignof 4
 layout bgf_anon_tail:
     size 16
     align 4
-    field k: ffi::c::Char at 0                 # char k
+    field k: std::ffi::c::Char at 0            # char k
     field member2: bgf_anon_tail_member2 at 4  # union {...}
-    field after: ffi::c::Char at 12            # char after
+    field after: std::ffi::c::Char at 12       # char after
 
 # the anonymous union member bgf_two_anon.member1 (struct bgf_two_anon) (include/bgf/bgf_records.h:270): sizeof 4, _Alignof 4
 union layout bgf_two_anon_member1:
     size 4
     align 4
-    alternative a: ffi::c::Char  # char a
-    alternative b: ffi::c::Int   # int b
+    alternative a: std::ffi::c::Char  # char a
+    alternative b: std::ffi::c::Int   # int b
 
 # the anonymous union member bgf_two_anon.member2 (struct bgf_two_anon) (include/bgf/bgf_records.h:270): sizeof 8, _Alignof 8
 union layout bgf_two_anon_member2:
     size 8
     align 8
-    alternative c: ffi::c::Short     # short c
-    alternative d: ffi::c::LongLong  # long long d
+    alternative c: std::ffi::c::Short     # short c
+    alternative d: std::ffi::c::LongLong  # long long d
 
 # struct bgf_two_anon, typedef bgf_two_anon (include/bgf/bgf_records.h:270): sizeof 16, _Alignof 8
 layout bgf_two_anon:

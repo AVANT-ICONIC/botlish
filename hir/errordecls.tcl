@@ -14,8 +14,8 @@
 # --------------------------------------------------------------------------
 # A source-defined error is nominally identified by its declaring module and
 # its declared name: the canonical identity of `error NotFound` in module
-# `http` (lib/http.bot) is the string `http::NotFound`, of one in
-# `abi::x86_64` `abi::x86_64::NotFound`, and of one the entry program
+# `http` (stdlib/http.bot) is the string `http::NotFound`, of one in
+# `std::abi::x86_64` `std::abi::x86_64::NotFound`, and of one the entry program
 # declares the bare `NotFound` (the entry program is no namespace). A
 # builtin error of the runtime keeps its bare name (core::native::
 # declareError). Two modules may declare the same short name: two

@@ -101,7 +101,7 @@ executed Botlish-code instructions per run: 34,781 (11.1% of all Ir)
   setcc/cmov (other)           66.0    3.0%
   jmp                          12.0    0.6%
 
-== 1 list::all?: 1,977.0 executed instructions per run (5.7% of JIT)
+== 1 std::list::all?: 1,977.0 executed instructions per run (5.7% of JIT)
   mov reg-reg                 495.0   25.0%
   bool test                   230.0   11.6%
   tag test                    216.0   10.9%

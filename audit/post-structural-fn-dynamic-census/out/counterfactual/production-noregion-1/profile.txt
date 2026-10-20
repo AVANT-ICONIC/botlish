@@ -40,7 +40,7 @@ totals per run: Ir=10,209,898  Dr=2,195,182  Dw=1,669,776  I1mr=199  D1mr=13,357
     0.76%  [libc] __memcpy_avx_unaligned_erms                                     Ir=   77,613.0  Dr=    9,792.0  Dw=    4,954.0  Bc=   28,952.0  Bcm=       23.0  Bi=        0.0  D1mr=        4.0  D1mw=       12.0
     0.67%  [libc] __memcmp_avx2_movbe                                             Ir=   68,100.0  Dr=   20,430.0  Dw=        0.0  Bc=   20,430.0  Bcm=        3.0  Bi=        0.0  D1mr=        6.0  D1mw=        0.0
     0.59%  [runtime] apply_op                                                     Ir=   60,000.0  Dr=   16,800.0  Dw=   10,800.0  Bc=    6,000.0  Bcm=        0.0  Bi=    1,200.0  D1mr=        2.0  D1mw=        0.0
-    0.54%  [botlish] 9 web::emailish?                                             Ir=   55,200.0  Dr=    8,800.0  Dw=   11,600.0  Bc=    6,000.0  Bcm=        0.0  Bi=        0.0  D1mr=        1.0  D1mw=        0.0
+    0.54%  [botlish] 9 std::web::emailish?                                             Ir=   55,200.0  Dr=    8,800.0  Dw=   11,600.0  Bc=    6,000.0  Bcm=        0.0  Bi=        0.0  D1mr=        1.0  D1mw=        0.0
     0.47%  [botlish] 11 local_char? (generic entry)                               Ir=   47,600.0  Dr=   20,400.0  Dw=   13,600.0  Bc=        0.0  Bcm=        0.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
     0.25%  [botlish] 23 check                                                     Ir=   25,258.0  Dr=       14.0  Dw=    4,020.0  Bc=    4,002.0  Bcm=        2.0  Bi=        0.0  D1mr=        2.0  D1mw=        0.0
     0.24%  [botlish] 14 tld?                                                      Ir=   24,800.0  Dr=    4,000.0  Dw=    4,400.0  Bc=    2,400.0  Bcm=        0.0  Bi=        0.0  D1mr=        1.0  D1mw=        0.0
@@ -53,26 +53,26 @@ totals per run: Ir=10,209,898  Dr=2,195,182  Dw=1,669,776  I1mr=199  D1mr=13,357
       13,600.0  11 local_char? (generic entry)           incl  13.49% of Ir  Ir=1,377,200.0  Dr=  302,000.0  Dw=  184,400.0  Bc=  233,600.0  Bcm=    4,402.0  Bi=   18,000.0  D1mr=        4.0  D1mw=        0.0
       13,600.0  11 local_char?                           incl   0.00% of Ir  Ir=        0.0  Dr=        0.0  Dw=        0.0  Bc=        0.0  Bcm=        0.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
        2,400.0  13 scan_while                            incl  71.25% of Ir  Ir=7,274,589.0  Dr=1,588,353.0  Dw=1,206,916.0  Bc=1,086,717.0  Bcm=   32,075.0  Bi=  100,400.0  D1mr=    9,910.0  D1mw=    1,034.0
-       1,600.0  9 web::emailish?                         incl  99.62% of Ir  Ir=10,171,439.0  Dr=2,192,053.0  Dw=1,663,416.0  Bc=1,500,217.0  Bcm=   52,778.0  Bi=  131,200.0  D1mr=   13,296.0  D1mw=    1,385.0
+       1,600.0  9 std::web::emailish?                         incl  99.62% of Ir  Ir=10,171,439.0  Dr=2,192,053.0  Dw=1,663,416.0  Bc=1,500,217.0  Bcm=   52,778.0  Bi=  131,200.0  D1mr=   13,296.0  D1mw=    1,385.0
        1,600.0  12 label_char?                           incl   0.71% of Ir  Ir=   72,800.0  Dr=   16,800.0  Dw=   11,200.0  Bc=    8,800.0  Bcm=        0.0  Bi=        0.0  D1mr=        3.0  D1mw=        0.0
          800.0  15 domain?                               incl  39.29% of Ir  Ir=4,011,550.0  Dr=  825,900.0  Dw=  615,900.0  Bc=  584,100.0  Bcm=   28,407.0  Bi=   43,200.0  D1mr=    4,365.0  D1mw=      450.0
          800.0  14 tld?                                  incl  15.26% of Ir  Ir=1,557,850.0  Dr=  317,700.0  Dw=  235,300.0  Bc=  230,300.0  Bcm=   10,705.0  Bi=   16,800.0  D1mr=    1,467.0  D1mw=      150.0
-           8.0  1 char::codepoint                        incl   0.00% of Ir  Ir=       60.0  Dr=       16.0  Dw=       12.0  Bc=        0.0  Bcm=        0.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
-           8.0  2 byte::from_int                         incl   0.00% of Ir  Ir=      108.0  Dr=       24.0  Dw=       12.0  Bc=       12.0  Bcm=        2.0  Bi=        0.0  D1mr=        1.0  D1mw=        0.0
-           6.0  5 ascii::is_upper                        incl   0.00% of Ir  Ir=       34.0  Dr=        6.0  Dw=        3.0  Bc=        5.0  Bcm=        3.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
-           6.0  6 ascii::is_lower                        incl   0.00% of Ir  Ir=       32.0  Dr=        6.0  Dw=        3.0  Bc=        5.0  Bcm=        1.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
-           6.0  16 web::is_unreserved                    incl   0.01% of Ir  Ir=      536.0  Dr=       97.0  Dw=       91.0  Bc=       62.0  Bcm=        9.0  Bi=        4.0  D1mr=        0.0  D1mw=        0.0
-           6.0  7 ascii::is_alphabetic                   incl   0.00% of Ir  Ir=      141.0  Dr=       24.0  Dw=       21.0  Bc=       16.0  Bcm=        4.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
+           8.0  1 std::char::codepoint                        incl   0.00% of Ir  Ir=       60.0  Dr=       16.0  Dw=       12.0  Bc=        0.0  Bcm=        0.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
+           8.0  2 std::byte::from_int                         incl   0.00% of Ir  Ir=      108.0  Dr=       24.0  Dw=       12.0  Bc=       12.0  Bcm=        2.0  Bi=        0.0  D1mr=        1.0  D1mw=        0.0
+           6.0  5 std::ascii::is_upper                        incl   0.00% of Ir  Ir=       34.0  Dr=        6.0  Dw=        3.0  Bc=        5.0  Bcm=        3.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
+           6.0  6 std::ascii::is_lower                        incl   0.00% of Ir  Ir=       32.0  Dr=        6.0  Dw=        3.0  Bc=        5.0  Bcm=        1.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
+           6.0  16 std::web::is_unreserved                    incl   0.01% of Ir  Ir=      536.0  Dr=       97.0  Dw=       91.0  Bc=       62.0  Bcm=        9.0  Bi=        4.0  D1mr=        0.0  D1mw=        0.0
+           6.0  7 std::ascii::is_alphabetic                   incl   0.00% of Ir  Ir=      141.0  Dr=       24.0  Dw=       21.0  Bc=       16.0  Bcm=        4.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
            6.0  21 esc_char                              incl   0.03% of Ir  Ir=    3,462.0  Dr=      791.0  Dw=      596.0  Bc=      485.0  Bcm=       57.0  Bi=       37.0  D1mr=        5.0  D1mw=        8.0
-           6.0  8 ascii::is_alphanumeric                 incl   0.00% of Ir  Ir=      214.0  Dr=       38.0  Dw=       35.0  Bc=       21.0  Bcm=        4.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
+           6.0  8 std::ascii::is_alphanumeric                 incl   0.00% of Ir  Ir=      214.0  Dr=       38.0  Dw=       35.0  Bc=       21.0  Bcm=        4.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
            4.0  23 check                                 incl  99.87% of Ir  Ir=10,196,697.0  Dr=2,192,067.0  Dw=1,667,436.0  Bc=1,504,219.0  Bcm=   52,780.0  Bi=  131,200.0  D1mr=   13,298.0  D1mw=    1,385.0
            2.0  18 high_nibble                           incl   0.00% of Ir  Ir=       16.0  Dr=        2.0  Dw=        3.0  Bc=        1.0  Bcm=        1.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
            2.0  20 esc_bytes                             incl   0.02% of Ir  Ir=    1,593.0  Dr=      378.0  Dw=      276.0  Bc=      233.0  Bcm=       33.0  Bi=       12.0  D1mr=        5.0  D1mw=        7.0
-           2.0  4 ascii::is_digit                        incl   0.00% of Ir  Ir=       10.0  Dr=        2.0  Dw=        1.0  Bc=        1.0  Bcm=        0.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
+           2.0  4 std::ascii::is_digit                        incl   0.00% of Ir  Ir=       10.0  Dr=        2.0  Dw=        1.0  Bc=        1.0  Bcm=        0.0  Bi=        0.0  D1mr=        0.0  D1mw=        0.0
            2.0  19 hex_pair                              incl   0.01% of Ir  Ir=      950.0  Dr=      226.0  Dw=      167.0  Bc=      138.0  Bcm=       15.0  Bi=        9.0  D1mr=        5.0  D1mw=        7.0
            2.0  22 esc_from                              incl   0.07% of Ir  Ir=    7,356.0  Dr=    1,740.0  Dw=    1,336.0  Bc=    1,044.0  Bcm=      131.0  Bi=       87.0  D1mr=       13.0  D1mw=       25.0
-           2.0  3 byte::set                              incl   0.03% of Ir  Ir=    2,717.0  Dr=      630.0  Dw=      493.0  Bc=      363.0  Bcm=       37.0  Bi=       48.0  D1mr=        7.0  D1mw=        3.0
-           2.0  17 web::uri_escape_text                  incl   0.07% of Ir  Ir=    7,372.0  Dr=    1,744.0  Dw=    1,341.0  Bc=    1,045.0  Bcm=      132.0  Bi=       87.0  D1mr=       14.0  D1mw=       25.0
+           2.0  3 std::byte::set                              incl   0.03% of Ir  Ir=    2,717.0  Dr=      630.0  Dw=      493.0  Bc=      363.0  Bcm=       37.0  Bi=       48.0  D1mr=        7.0  D1mw=        3.0
+           2.0  17 std::web::uri_escape_text                  incl   0.07% of Ir  Ir=    7,372.0  Dr=    1,744.0  Dw=    1,341.0  Bc=    1,045.0  Bcm=      132.0  Bi=       87.0  D1mr=       14.0  D1mw=       25.0
            1.0  0 <program>                              incl 100.00% of Ir  Ir=10,209,892.0  Dr=2,195,181.0  Dw=1,669,775.0  Bc=1,506,114.0  Bcm=   52,995.0  Bi=  131,404.0  D1mr=   13,357.0  D1mw=    1,428.0
 
 == Botlish -> Botlish calls, per caller -> callee (per run)
@@ -80,29 +80,29 @@ totals per run: Ir=10,209,898  Dr=2,195,182  Dw=1,669,776  I1mr=199  D1mr=13,357
       13,600.0  rt_call_value  ->  11 local_char? (generic entry)
       13,600.0  11 local_char? (entry)  ->  11 local_char?
        4,800.0  15 domain?  ->  10 char_at
-       1,600.0  23 check  ->  9 web::emailish?
-       1,600.0  9 web::emailish?  ->  13 scan_while
+       1,600.0  23 check  ->  9 std::web::emailish?
+       1,600.0  9 std::web::emailish?  ->  13 scan_while
        1,600.0  15 domain?  ->  12 label_char?
-         800.0  9 web::emailish?  ->  10 char_at
-         800.0  9 web::emailish?  ->  15 domain?
+         800.0  9 std::web::emailish?  ->  10 char_at
+         800.0  9 std::web::emailish?  ->  15 domain?
          800.0  14 tld?  ->  13 scan_while
          800.0  15 domain?  ->  14 tld?
-           8.0  3 byte::set  ->  1 char::codepoint
-           8.0  3 byte::set  ->  2 byte::from_int
-           6.0  7 ascii::is_alphabetic  ->  5 ascii::is_upper
-           6.0  7 ascii::is_alphabetic  ->  6 ascii::is_lower
-           6.0  21 esc_char  ->  16 web::is_unreserved
-           6.0  8 ascii::is_alphanumeric  ->  7 ascii::is_alphabetic
+           8.0  3 std::byte::set  ->  1 std::char::codepoint
+           8.0  3 std::byte::set  ->  2 std::byte::from_int
+           6.0  7 std::ascii::is_alphabetic  ->  5 std::ascii::is_upper
+           6.0  7 std::ascii::is_alphabetic  ->  6 std::ascii::is_lower
+           6.0  21 esc_char  ->  16 std::web::is_unreserved
+           6.0  8 std::ascii::is_alphanumeric  ->  7 std::ascii::is_alphabetic
            6.0  22 esc_from  ->  21 esc_char
-           6.0  16 web::is_unreserved  ->  8 ascii::is_alphanumeric
+           6.0  16 std::web::is_unreserved  ->  8 std::ascii::is_alphanumeric
            4.0  0 <program>  ->  23 check
            2.0  19 hex_pair  ->  18 high_nibble
            2.0  21 esc_char  ->  20 esc_bytes
-           2.0  8 ascii::is_alphanumeric  ->  4 ascii::is_digit
+           2.0  8 std::ascii::is_alphanumeric  ->  4 std::ascii::is_digit
            2.0  20 esc_bytes  ->  19 hex_pair
-           2.0  17 web::uri_escape_text  ->  22 esc_from
-           2.0  0 <program>  ->  3 byte::set
-           2.0  0 <program>  ->  17 web::uri_escape_text
+           2.0  17 std::web::uri_escape_text  ->  22 esc_from
+           2.0  0 <program>  ->  3 std::byte::set
+           2.0  0 <program>  ->  17 std::web::uri_escape_text
            1.0  botlish_audit_run  ->  0 <program>
 
 == Botlish -> runtime/libc calls, per helper: count and INCLUSIVE cost (per run)
@@ -126,11 +126,11 @@ totals per run: Ir=10,209,898  Dr=2,195,182  Dw=1,669,776  I1mr=199  D1mr=13,357
       13,600.0  11 local_char?  ->  rt_is_tcl_alnum
        3,200.0  15 domain?  ->  rt_str_eq
        2,400.0  11 local_char?  ->  rt_set_contains
-       1,600.0  9 web::emailish?  ->  rt_str_len
+       1,600.0  9 std::web::emailish?  ->  rt_str_len
        1,600.0  12 label_char?  ->  rt_is_tcl_alnum
-         800.0  9 web::emailish?  ->  rt_str_eq
-           8.0  3 byte::set  ->  rt_list_append
-           8.0  1 char::codepoint  ->  rt_char_codepoint
+         800.0  9 std::web::emailish?  ->  rt_str_eq
+           8.0  3 std::byte::set  ->  rt_list_append
+           8.0  1 std::char::codepoint  ->  rt_char_codepoint
            8.0  22 esc_from  ->  rt_str_len
            8.0  22 esc_from  ->  rt_construct
            8.0  0 <program>  ->  rt_list_new
@@ -140,11 +140,11 @@ totals per run: Ir=10,209,898  Dr=2,195,182  Dw=1,669,776  I1mr=199  D1mr=13,357
            4.0  20 esc_bytes  ->  rt_str_len
            2.0  19 hex_pair  ->  rt_int_mod
            2.0  19 hex_pair  ->  rt_construct
-           2.0  3 byte::set  ->  rt_str_len
-           2.0  3 byte::set  ->  rt_list_new
-           2.0  3 byte::set  ->  rt_set_from_list
+           2.0  3 std::byte::set  ->  rt_str_len
+           2.0  3 std::byte::set  ->  rt_list_new
+           2.0  3 std::byte::set  ->  rt_set_from_list
            2.0  20 esc_bytes  ->  rt_construct
-           2.0  16 web::is_unreserved  ->  rt_set_contains
+           2.0  16 std::web::is_unreserved  ->  rt_set_contains
            2.0  0 <program>  ->  rt_set_from_list
 
 == calls made outside Botlish code, caller -> callee (per run; top 60)

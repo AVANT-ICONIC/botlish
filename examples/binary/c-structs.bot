@@ -6,13 +6,13 @@
 # domain of that target's width, and prints `layout` declarations; Botlish
 # knows none of the C rules that produced the numbers.
 #
-#   bytes --binary::parse--> LayoutStruct[RAWINPUTDEVICE] --ordinary code--> RawInputDevice
-#   RawInputDevice --ordinary code--> LayoutStruct[RAWINPUTDEVICE] --binary::emit--> bytes
+#   bytes --std::binary::parse--> LayoutStruct[RAWINPUTDEVICE] --ordinary code--> RawInputDevice
+#   RawInputDevice --ordinary code--> LayoutStruct[RAWINPUTDEVICE] --std::binary::emit--> bytes
 #
 # expect: [RawInputDevice {usage_page: 1, usage: 6, sink: true, no_legacy: false, target: WindowHandle {bits: 4660}}, true, LayoutStruct[POINTS] {first: LayoutStruct[POINT] {x: -5, y: 7}, second: LayoutStruct[POINT] {x: 2147483647, y: -2147483648}}, [16, 8, 12, 4, 16, 4, 7, 1, 32, 32], "UnknownDeviceFlags"]
-import abi::bytes
-import binary
-import byte
+import std::abi::bytes
+import std::binary
+import std::byte
 
 # ---------------------------------------------------------------------------
 # The target's C scalar types, resolved to fixed-width domains (what the
@@ -147,31 +147,31 @@ fn to_raw(d: RawInputDevice) -> LayoutStruct[RAWINPUTDEVICE] errors UsageOutOfRa
     flags = sink + legacy
     LayoutStruct[RAWINPUTDEVICE] {usUsagePage: page, usUsage: usage, dwFlags: flags, hwndTarget: d.target.bits}
 
-fn bytes_of(values: List[int]) -> abi::bytes::Bytes:
+fn bytes_of(values: List[int]) -> std::abi::bytes::Bytes:
     bs = loop v in values:
-        b = byte::from_int(v):
-            on byte::BelowRange:
+        b = std::byte::from_int(v):
+            on std::byte::BelowRange:
                 0
-            on byte::AboveRange:
+            on std::byte::AboveRange:
                 255
         b
-    abi::bytes::from_list(bs)
+    std::abi::bytes::from_list(bs)
 
 # Bytes as the C side would have written them.
-fn device_bytes() -> abi::bytes::Bytes:
+fn device_bytes() -> std::abi::bytes::Bytes:
     bytes_of([1, 0, 6, 0, 0, 1, 0, 0, 52, 18, 0, 0, 0, 0, 0, 0])
 
 fn demo() -> List[any] errors LayoutLengthMismatch, UnknownDeviceFlags, UsageOutOfRange:
-    raw = binary::parse(RAWINPUTDEVICE, device_bytes())
+    raw = std::binary::parse(RAWINPUTDEVICE, device_bytes())
     device = raw_input_device(raw)
-    back = binary::emit(to_raw(device))
-    points = binary::parse(POINTS, bytes_of([251, 255, 255, 255, 7, 0, 0, 0, 255, 255, 255, 127, 0, 0, 0, 128]))
+    back = std::binary::emit(to_raw(device))
+    points = std::binary::parse(POINTS, bytes_of([251, 255, 255, 255, 7, 0, 0, 0, 255, 255, 255, 127, 0, 0, 0, 128]))
     sizes = [
-        binary::layout_length(RAWINPUTDEVICE), binary::layout_alignment(RAWINPUTDEVICE),
-        binary::layout_length(SAMPLE), binary::layout_alignment(SAMPLE),
-        binary::layout_length(POINTS), binary::layout_alignment(POINTS),
-        binary::layout_length(PACKED_HEADER), binary::layout_alignment(PACKED_HEADER),
-        binary::layout_length(ALIGNED), binary::layout_alignment(ALIGNED),
+        std::binary::layout_length(RAWINPUTDEVICE), std::binary::layout_alignment(RAWINPUTDEVICE),
+        std::binary::layout_length(SAMPLE), std::binary::layout_alignment(SAMPLE),
+        std::binary::layout_length(POINTS), std::binary::layout_alignment(POINTS),
+        std::binary::layout_length(PACKED_HEADER), std::binary::layout_alignment(PACKED_HEADER),
+        std::binary::layout_length(ALIGNED), std::binary::layout_alignment(ALIGNED),
     ]
     unknown = raw_input_device(LayoutStruct[RAWINPUTDEVICE] {usUsagePage: 1, usUsage: 2, dwFlags: 1, hwndTarget: 0}):
         on UnknownDeviceFlags:

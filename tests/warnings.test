@@ -47,7 +47,7 @@ proc codes {source} {
 }
 
 # The SAME-RETURN-VALUE warnings only, as `shown` / `codes` give them. A
-# program that imports lib/mutable_array.bot also compiles that module, whose
+# program that imports stdlib/mutable_array.bot also compiles that module, whose
 # own source carries a METHOD-ELIGIBLE finding (WARNINGS-METHOD-ELIGIBLE.md:
 # library warnings are shown for any program that loads the module); the
 # tests that import it are about SAME-RETURN-VALUE, not about that finding.
@@ -408,36 +408,36 @@ test warn-repeated-arithmetic-on-unknown {x + 1 returned twice is not an exact v
 } -result {}
 
 test warn-separate-mutable-construction {two separately allocated mutable values are two values} -body {
-    sameReturnCodes {import mutable_array
+    sameReturnCodes {import std::mutable_array
 fn f(x):
     if x:
-        return mutable_array::allocate(1)
+        return std::mutable_array::allocate(1)
     if x == 3:
-        return mutable_array::allocate(1)
-    mutable_array::allocate(2)}
+        return std::mutable_array::allocate(1)
+    std::mutable_array::allocate(2)}
 } -result {}
 
 test warn-same-mutable-binding {the exact same mutable binding returned twice IS one value identity} -body {
-    sameReturnShown {import mutable_array
+    sameReturnShown {import std::mutable_array
 fn f(x):
-    m = mutable_array::allocate(1)
+    m = std::mutable_array::allocate(1)
     if x:
         return m
     if x == 3:
         return m
-    mutable_array::allocate(2)}
+    std::mutable_array::allocate(2)}
 } -result {{the value of `m` is returned from 2 distinct exits @ 5:9 7:9}}
 
 test warn-alias-of-mutable-binding {an alias of a mutable binding is the same mutable value} -body {
-    sameReturnShown {import mutable_array
+    sameReturnShown {import std::mutable_array
 fn f(x):
-    m = mutable_array::allocate(1)
+    m = std::mutable_array::allocate(1)
     n = m
     if x:
         return m
     if x == 3:
         return n
-    mutable_array::allocate(2)}
+    std::mutable_array::allocate(2)}
 } -result {{the value of `m` is returned from 2 distinct exits @ 6:9 8:9}}
 
 # ---------------------------------------------------------------------------
@@ -1059,9 +1059,8 @@ test warn-fuzz-smoke {60 generated functions: predicted groups warn, off is sile
 # Modules: locations point into the module's own file
 
 test warn-module-location {a warning in a module function located inside a loop points at the module file} -body {
-    set saved $::core::libraryDir
+    # wmod is an application module: the file beside the entry program.
     set dir [makeDirectory warn-scratch-[pid]]
-    set ::core::libraryDir $dir
     try {
         set channel [open [file join $dir wmod.bot] w]
         puts -nonewline $channel {fn scan(n):
@@ -1086,7 +1085,6 @@ wmod::scan(10)
             }
         }
     } finally {
-        set ::core::libraryDir $saved
         removeDirectory warn-scratch-[pid]
     }
 } -result {{wmod.bot:4:13 wmod.bot:6:13 wmod.bot:7:5}}

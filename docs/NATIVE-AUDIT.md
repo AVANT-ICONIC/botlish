@@ -238,7 +238,7 @@ benchmark, per the milestone's rule against benchmark-specific findings):**
 `native/lower.tcl`'s `natives` dict is a fixed, hardcoded whitelist of
 built-in operators (`+ - * < <= ... integer? string? list? ok? error? ...`).
 Any native registered by a *library* via `core::type::definePredicate` /
-`core::native::register` (`lib/web.tcl`'s `Emailish?`, `UriQueryValue?`,
+`core::native::register` (`stdlib/web.tcl`'s `Emailish?`, `UriQueryValue?`,
 `uriEscape`) is entirely absent from that whitelist. `NativeCall`
 (`native/lower.tcl:2183`) checks `![dict exists $natives $name]` and raises
 `NATIVE UNSUPPORTED` **before** it ever checks whether HIR already proved

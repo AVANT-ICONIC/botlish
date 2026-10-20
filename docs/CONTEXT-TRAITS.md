@@ -1,19 +1,19 @@
 # Context traits: trait-aware contexts, portable I/O and textual paths
 
 ```botlish
-import io
-import linux::io
-import linux::path
-import str
+import std::io
+import std::linux::io
+import std::linux::path
+import std::str
 
 fn run(value: str) -> unit errors WriteFailed:
-    linux::path::validate(value):
+    std::linux::path::validate(value):
         on NotAPath:
-            io::write_error_line(str::concat(value, " was not a valid path"))
+            std::io::write_error_line(std::str::concat(value, " was not a valid path"))
             return unit
-    io::print_line(str::concat("Reading config at ", value))   # value: a LinuxPath, still a str
+    std::io::print_line(std::str::concat("Reading config at ", value))   # value: a LinuxPath, still a str
 
-with context linux::io::create()
+with context std::linux::io::create()
 
 run("config/tool.json"):
     on WriteFailed:
@@ -28,22 +28,22 @@ This milestone adds one declaration form and three library modules:
 
 * **`context trait`** (`context trait IO: fn write_text(text: str) -> unit
   errors WriteFailed`): an environment abstraction. A function declares
-  `context io: IO`; a concrete installed context (`linux::io::LinuxIO`)
+  `context io: IO`; a concrete installed context (`std::linux::io::LinuxIO`)
   satisfies `IO` structurally, through its owner's own functions
-  (`linux::io::write_text(text: str, context io: LinuxIO)`); a top-level call
+  (`std::linux::io::write_text(text: str, context io: LinuxIO)`); a top-level call
   that needs `IO` selects, statically, the one installed context that
   implements it; the compiler clones every function that needs `IO` for that
   selection and turns `io.write_text(text)` into the direct call
-  `linux::io::write_text(text)`. Nothing exists at run time: no slot, tag,
+  `std::linux::io::write_text(text)`. Nothing exists at run time: no slot, tag,
   provider table, dictionary, hidden argument or dispatch.
-* **`io`** (lib/io.bot): the portable text-output surface -- `io::print`,
-  `io::print_line`, `io::write_error`, `io::write_error_line` -- over the
-  context trait `io::IO`, with the one error `WriteFailed`.
-* **`io::path`** (lib/io/path.bot): the portable textual path trait
-  `io::path::Path` (`concat`, `text`) and the error `NotAPath`.
-* **`linux::path`** (lib/linux/path.bot): `refined type LinuxPath = str`,
+* **`io`** (stdlib/io.bot): the portable text-output surface -- `std::io::print`,
+  `std::io::print_line`, `std::io::write_error`, `std::io::write_error_line` -- over the
+  context trait `std::io::IO`, with the one error `WriteFailed`.
+* **`std::io::path`** (stdlib/io/path.bot): the portable textual path trait
+  `std::io::path::Path` (`concat`, `text`) and the error `NotAPath`.
+* **`std::linux::path`** (stdlib/linux/path.bot): `refined type LinuxPath = str`,
   its predicate `valid?`, its validator `validate`, and `concat`/`text`, which
-  make `LinuxPath` satisfy `io::path::Path`.
+  make `LinuxPath` satisfy `std::io::path::Path`.
 
 Validators -- `-> unit proves x: R`, proof by normal completion -- already
 existed (REFINEMENT-VALUES.md, "Validators", merged before this milestone);
@@ -112,8 +112,8 @@ contextDecl      = IDENT ":" typeExpr        (a context struct or a context trai
 | `TRAIT-NESTED` | a declaration nested in a function |
 | `UNDECLARED-ERROR` | an unknown error in `errors` |
 
-**Identity and imports** are an ordinary trait's: `io::IO` for lib/io.bot's,
-the bare name for the entry program's; `import type io::IO` binds the short
+**Identity and imports** are an ordinary trait's: `std::io::IO` for stdlib/io.bot's,
+the bare name for the entry program's; `import type std::io::IO` binds the short
 name; context traits share the type namespace.
 
 **Context parameters** (`fn f(text: str, context io: IO)`) are unchanged in
@@ -312,17 +312,17 @@ again from the same syntax under a plan (build 2, `hir::traits::Plan`):
 * **Context-trait-dependent functions.** Every top-level function whose
   requirement includes a context trait -- one that declares `context io: IO`,
   and every function that calls one, in any module -- is replaced by one
-  **clone per selection**, `io::print_line<io::IO=linux::io::LinuxIO>`, keyed
+  **clone per selection**, `std::io::print_line<std::io::IO=std::linux::io::LinuxIO>`, keyed
   `{function, ordinary-trait witnesses, {TRAIT WITNESS ...}}` (one function
   can be polymorphic in an ordinary trait and a context trait at once:
   `both<ct::named::P,ct::out::Out=ct::a::A>`). Since there is one selection
   per trait, there is one clone per function.
 * **Placement.** A clone is bound in the entry program immediately before the
   first top-level statement that needs it (directly or through other clones).
-  This is what makes the rewrite possible across modules: lib/io.bot is
-  loaded before lib/linux/io.bot (which imports it), and a library module
-  calling `io::print_line` may be loaded before the provider too, so neither
-  can call `linux::io::write_text` in place; the entry program sees every
+  This is what makes the rewrite possible across modules: stdlib/io.bot is
+  loaded before stdlib/linux/io.bot (which imports it), and a library module
+  calling `std::io::print_line` may be loaded before the provider too, so neither
+  can call `std::linux::io::write_text` in place; the entry program sees every
   module. An implementation declared after the first code that needs it is
   `TRAIT-IMPL-ORDER` (`ct-implementation-order`).
 * **Operations.** In a clone, `io.write_text(args)` becomes the direct call
@@ -365,7 +365,7 @@ ordinary slot; a context trait never gets a slot, tag, presence word or table
 
 **No plumbing.** The portable call chain has no hidden argument, dictionary,
 vtable, reserved register or runtime trait id. The selected implementation
-(`linux::io::write_text`, `context io: LinuxIO`) loads its own descriptor
+(`std::linux::io::write_text`, `context io: LinuxIO`) loads its own descriptor
 from its own slot through the existing exact-context machinery; everything
 between the top-level call and it is an ordinary call with its ordinary
 operands.
@@ -376,14 +376,14 @@ HIR text (hir/format.tcl, read back by hir/read.tcl; `ct-hir-text`: a one-file
 program reads back to the same text and runs the same on every backend):
 
 ```
-trait io::IO context owner io requires write_text(text: str) -> unit errors WriteFailed ; write_error_text(text: str) -> unit errors WriteFailed
-traitfn io::print_line (text: str) -> unit clones (io::print_line<io::IO=linux::io::LinuxIO>)
-e680 block s.. (b.. text:str) captures (...) clone () contextclone (io::IO=linux::io::LinuxIO) contexts () requires (linux::io::LinuxIO) declares unit errors WriteFailed ...
-    e681 call block(e648) contexttrait io::IO.write_text witness linux::io::LinuxIO : unit
+trait std::io::IO context owner io requires write_text(text: str) -> unit errors WriteFailed ; write_error_text(text: str) -> unit errors WriteFailed
+traitfn std::io::print_line (text: str) -> unit clones (std::io::print_line<std::io::IO=std::linux::io::LinuxIO>)
+e680 block s.. (b.. text:str) captures (...) clone () contextclone (std::io::IO=std::linux::io::LinuxIO) contexts () requires (std::linux::io::LinuxIO) declares unit errors WriteFailed ...
+    e681 call block(e648) contexttrait std::io::IO.write_text witness std::linux::io::LinuxIO : unit
 ```
 
 The checked source program (`traitSource`) keeps the context-trait
-declarations, `contextParams {name io context io::IO trait 1}`, the
+declarations, `contextParams {name io context std::io::IO trait 1}`, the
 operations (`traitCall {... context 1}`), the requirements and the
 selections.
 
@@ -391,28 +391,28 @@ selections.
 with context traits:
 
 ```
-contexttrait io::IO
+contexttrait std::io::IO
     write_text(text: str) -> unit errors WriteFailed
     write_error_text(text: str) -> unit errors WriteFailed
-contexttraitparam e12 io io::IO
-source-function io::print_line e12 direct-contexts (io::IO) required-contexts (io::IO)
-source-function hello e720 direct-contexts () required-contexts (io::IO)
-contextselect e731 io::IO linux::io::LinuxIO
-    write_text -> linux::io::write_text
-    write_error_text -> linux::io::write_error_text
-contextclone io::print_line<io::IO=linux::io::LinuxIO> io::IO=linux::io::LinuxIO
-contextclone hello<io::IO=linux::io::LinuxIO> io::IO=linux::io::LinuxIO
-why hello requires io::IO:
+contexttraitparam e12 io std::io::IO
+source-function std::io::print_line e12 direct-contexts (std::io::IO) required-contexts (std::io::IO)
+source-function hello e720 direct-contexts () required-contexts (std::io::IO)
+contextselect e731 std::io::IO std::linux::io::LinuxIO
+    write_text -> std::linux::io::write_text
+    write_error_text -> std::linux::io::write_error_text
+contextclone std::io::print_line<std::io::IO=std::linux::io::LinuxIO> std::io::IO=std::linux::io::LinuxIO
+contextclone hello<std::io::IO=std::linux::io::LinuxIO> std::io::IO=std::linux::io::LinuxIO
+why hello requires std::io::IO:
     hello
-     -> io::print_line
-        directly requires io::IO
+     -> std::io::print_line
+        directly requires std::io::IO
 ```
 
 **`-traits`** lists context traits and, for every declared context struct and
-context trait, `context linux::io::LinuxIO implements io::IO (write_text ->
-linux::io::write_text, ...)` or why it does not; and for ordinary traits,
-e.g. `str[linux::path::LinuxPath] satisfies io::path::Path (concat ->
-linux::path::concat, text -> linux::path::text)`.
+context trait, `context std::linux::io::LinuxIO implements std::io::IO (write_text ->
+std::linux::io::write_text, ...)` or why it does not; and for ordinary traits,
+e.g. `str[std::linux::path::LinuxPath] satisfies std::io::path::Path (concat ->
+std::linux::path::concat, text -> std::linux::path::text)`.
 
 **APIs**: `hir::contexts::satisfiesTrait`, `explainTrait`, `isTrait`;
 `hir::traits::isContext`, `IsContextTraitType`, `ContextTraitsOf`,
@@ -420,7 +420,7 @@ linux::path::concat, text -> linux::path::text)`.
 
 ## 8. The `io` library
 
-lib/io.bot, namespace `io`:
+stdlib/io.bot, namespace `io`:
 
 ```botlish
 error WriteFailed
@@ -441,23 +441,23 @@ buffer, byte count, raw syscall result or errno reaches a portable caller
 request. Buffering, batching and scratch storage can later live behind these
 operations without any caller changing.
 
-**Linux** (lib/linux/io.bot, which imports `io`): `LinuxIO` implements `IO`
+**Linux** (stdlib/linux/io.bot, which imports `io`): `LinuxIO` implements `IO`
 with
 
 ```botlish
 fn write_text(text: str, context io: LinuxIO) -> unit errors WriteFailed:
-    io.stdout.write_all(str::encode_utf8(text))
+    io.stdout.write_all(std::str::encode_utf8(text))
 
 fn write_error_text(text: str, context io: LinuxIO) -> unit errors WriteFailed:
-    io.stderr.write_all(str::encode_utf8(text))
+    io.stderr.write_all(std::str::encode_utf8(text))
 ```
 
 over the existing `LinuxIO` context, `FileDescriptor` tokens,
-`linux::write`, `abi::bytes` and `str::encode_utf8`; the raw `write`,
-`write_error` and `read` stay unchanged (`linux::` and `linux::abi::` remain
+`std::linux::write`, `std::abi::bytes` and `std::str::encode_utf8`; the raw `write`,
+`write_error` and `read` stay unchanged (`linux::` and `std::linux::abi::` remain
 the syscall-shaped layer for callers that want it).
 
-`write_all(fd, bytes)` (in linux::io, over an opaque `FileDescriptor` no code
+`write_all(fd, bytes)` (in std::linux::io, over an opaque `FileDescriptor` no code
 outside the module can supply):
 
 * **Short writes are completed**: a positive count below the length writes
@@ -480,8 +480,8 @@ write(1, "Hello, world!\n", 14) = 0 (INJECTED)          -> WriteFailed ("failed"
 
 **The Tcl backends** verify every portable program and run it up to the
 write(2) boundary, which they refuse (`NATIVE-ONLY`), as for every
-linux::io program (`io-tcl-backends`). A substitute context implementing
-`io::IO` without Linux runs the portable API on every backend
+std::linux::io program (`io-tcl-backends`). A substitute context implementing
+`std::io::IO` without Linux runs the portable API on every backend
 (`io-substitute-context`).
 
 **`write_file_text` is deliberately not here.** Its implementation would have
@@ -494,7 +494,7 @@ the likely next I/O extension (multi-witness applicability).
 
 ## 9. Paths
 
-**`linux::path::LinuxPath`** (lib/linux/path.bot) is an ordinary source
+**`std::linux::path::LinuxPath`** (stdlib/linux/path.bot) is an ordinary source
 refinement:
 
 ```botlish
@@ -548,7 +548,7 @@ fn concat(path: LinuxPath, component: str) -> LinuxPath errors NotAPath
 | `/a` | `./b` | `/a/./b` |
 | `/a` | `""`, `/b`, `b\0` | `NotAPath` |
 
-**`io::path::Path`** (lib/io/path.bot):
+**`std::io::path::Path`** (stdlib/io/path.bot):
 
 ```botlish
 error NotAPath
@@ -561,22 +561,22 @@ fn concat(path: Path, component: str) -> Path errors NotAPath    # path.concat(c
 fn text(path: Path) -> str                                       # path.text()
 ```
 
-`LinuxPath` satisfies `Path` through `linux::path::concat` and
-`linux::path::text` -- its owner's declarations; `str` itself does not
+`LinuxPath` satisfies `Path` through `std::linux::path::concat` and
+`std::linux::path::text` -- its owner's declarations; `str` itself does not
 (`path-trait-conformance`). Path-polymorphic code specializes per witness:
 
 ```botlish
-fn add_config(path: io::path::Path) -> io::path::Path errors NotAPath:
+fn add_config(path: std::io::path::Path) -> std::io::path::Path errors NotAPath:
     path.concat(".config").concat("awesome_tool")
 ```
 
-is `add_config<linux::path::LinuxPath>`, two direct calls of
-`linux::path::concat` (`path-generic-specialization`), whose NIR equals a
+is `add_config<std::linux::path::LinuxPath>`, two direct calls of
+`std::linux::path::concat` (`path-generic-specialization`), whose NIR equals a
 hand-written concrete function's and allocates the same
 (`path-specialization-code-quality`). A generic result is source-visible as
 `Path` only (`path-generic-result-one-way`). A test-only second witness
 (`winpath::WinPath`, joining with `\`) proves the specialization is per
-witness: `child<linux::path::LinuxPath>` gives `/home/child`,
+witness: `child<std::linux::path::LinuxPath>` gives `/home/child`,
 `child<winpath::WinPath>` gives `C:\Users\child`
 (`path-windows-shaped-witness`). There is no production Windows path.
 
@@ -591,7 +591,7 @@ Validators were designed and merged before this milestone
 the generic proof contract `{outcome normal param INDEX fact TYPE}` beside the
 predicate's `{outcome 1 ...}`, completion facts applied after the call, the
 handled-call join, no repeat elimination. This milestone uses them for
-`linux::path::validate` and pins, on the path library
+`std::linux::path::validate` and pins, on the path library
 (tests/linux-path.test):
 
 | fact | test |
@@ -611,37 +611,37 @@ and the `emailish?` corpus, below).
 ### Portable Hello World (examples/io/hello.bot)
 
 ```botlish
-import io
-import linux::io
+import std::io
+import std::linux::io
 
 fn hello() errors WriteFailed:
-    io::print_line("Hello, world!")
+    std::io::print_line("Hello, world!")
 
-with context linux::io::create()
+with context std::linux::io::create()
 
 hello():
     on WriteFailed:
         unit
 ```
 
-`hello` has no context parameter; it requires `io::IO` through
-`io::print_line` (`io-transitive`); the one top-level call selects
-`linux::io::LinuxIO`; the executable writes `Hello, world!\n` to descriptor 1
+`hello` has no context parameter; it requires `std::io::IO` through
+`std::io::print_line` (`io-transitive`); the one top-level call selects
+`std::linux::io::LinuxIO`; the executable writes `Hello, world!\n` to descriptor 1
 (`io-hello-executable`, also under GC stress).
 
 **NIR** (`io-nir-direct`):
 
 ```
 nir 1 call-effects=1 statics=0 contexts=24
-context 0 "linux::io::LinuxIO" offset=0 words=3 fields="stdin.raw.value stdout.raw.value stderr.raw.value"
+context 0 "std::linux::io::LinuxIO" offset=0 words=3 fields="stdin.raw.value stdout.raw.value stderr.raw.value"
 
-func 11 "linux::io::write_text" params=1 ...
+func 11 "std::linux::io::write_text" params=1 ...
     %1 = contextload 8                      stdout's descriptor, from the fixed slot
     ...
-    %4 = call 10 %2 %3                      linux::io::write_all(fd, bytes)
-func 12 "io::print_line<io::IO=linux::io::LinuxIO>" params=1 ...
-    %3 = call 11 %2                         linux::io::write_text(line): one operand
-func 13 "hello<io::IO=linux::io::LinuxIO>" params=0 ...
+    %4 = call 10 %2 %3                      std::linux::io::write_all(fd, bytes)
+func 12 "std::io::print_line<std::io::IO=std::linux::io::LinuxIO>" params=1 ...
+    %3 = call 11 %2                         std::linux::io::write_text(line): one operand
+func 13 "hello<std::io::IO=std::linux::io::LinuxIO>" params=0 ...
     %1 = call 12 %0                         print_line's clone: one operand
 ```
 
@@ -649,13 +649,13 @@ func 13 "hello<io::IO=linux::io::LinuxIO>" params=0 ...
 symbol):
 
 ```
-; function 12 "io::print_line<io::IO=linux::io::LinuxIO>": botlish_fn_12
+; function 12 "std::io::print_line<std::io::IO=std::linux::io::LinuxIO>": botlish_fn_12
 function u0:106(i64, i64) -> i64 system_v {            (vm, text): no context parameter
-    fn1 = colocated u0:104 sig1                          linux::io::write_text
+    fn1 = colocated u0:104 sig1                          std::linux::io::write_text
     ...
-    v7 = call fn0(v0, v6, v5)                            str::concat(text, "\n")
+    v7 = call fn0(v0, v6, v5)                            std::str::concat(text, "\n")
     v8 = call fn1(v0, v7)                                write_text(vm, line): direct
-; function 11 "linux::io::write_text": botlish_fn_11
+; function 11 "std::linux::io::write_text": botlish_fn_11
 function u0:104(i64, i64) -> i64 system_v {            (vm, text)
     gv0 = symbol userextname0                            the context area
     v5 = symbol_value.i64 gv0
@@ -668,11 +668,11 @@ function u0:104(i64, i64) -> i64 system_v {            (vm, text)
 write(1, "Hello, world!\n", 14) = 14
  > botlish_linux_x86_64_syscall
  > rt_linux_x86_64_syscall
- > linux::write
- > linux::io::write_all
- > linux::io::write_text
- > io::print_line<io::IO=linux::io::LinuxIO>
- > hello<io::IO=linux::io::LinuxIO>
+ > std::linux::write
+ > std::linux::io::write_all
+ > std::linux::io::write_text
+ > std::io::print_line<std::io::IO=std::linux::io::LinuxIO>
+ > hello<std::io::IO=std::linux::io::LinuxIO>
  > <program>
 ```
 
@@ -706,17 +706,17 @@ exactly the hand-written function's size.
 |---|---|
 | 100 context-trait operations (`sum(50, 0)` over `twice<Out=A>`) | **0** |
 | the same through the hand-written concrete function | **0** |
-| `io::print_line("Hello, world!")`, whole program | 11 (541 bytes): String 1, List 1, Bytes 1, Struct 8 |
-| `linux::io::write_text(str::concat("Hello, world!", "\n"))`, whole program | 11 (541 bytes): the same |
-| 1 / 2 / 4 `io::print_line` calls | 11 / 15 / 23: 7 once + 4 per call |
+| `std::io::print_line("Hello, world!")`, whole program | 11 (541 bytes): String 1, List 1, Bytes 1, Struct 8 |
+| `std::linux::io::write_text(std::str::concat("Hello, world!", "\n"))`, whole program | 11 (541 bytes): the same |
+| 1 / 2 / 4 `std::io::print_line` calls | 11 / 15 / 23: 7 once + 4 per call |
 | `child<LinuxPath>` vs hand-written `child_l(LinuxPath)` | equal |
 
 Context-trait adaptation and path refinement adaptation allocate nothing. The
 output operation's own allocations, per call, are the line String
-(`concat`), the UTF-8 byte List (`str::encode_utf8`), the `Bytes`
-(`abi::bytes::from_list`) and one `abi::I32`: `write_text` materializes the
+(`concat`), the UTF-8 byte List (`std::str::encode_utf8`), the `Bytes`
+(`std::abi::bytes::from_list`) and one `std::abi::I32`: `write_text` materializes the
 descriptor token it passes to `write_all` (NIR `structnew 2 %1` after the
-`contextload 8`). The 7 others are `linux::io::create`'s, once (CONTEXTS.md
+`contextload 8`). The 7 others are `std::linux::io::create`'s, once (CONTEXTS.md
 §7).
 
 ## 12. Tests, fuzzing, mutation testing
@@ -743,8 +743,8 @@ descriptor token it passes to `write_all` (NIR `structnew 2 %1` after the
   compiler knowledge of it), validity, no filesystem, the validator facts of
   §10, concat and text, conformance, generic specialization, the Windows-shaped
   witness, code quality and allocations, the path + I/O executable.
-* Updated pins: tests/contexts.test (linux::io's surface now includes the
-  `io::IO` implementation; the root-native list includes `context#unreachable`;
+* Updated pins: tests/contexts.test (std::linux::io's surface now includes the
+  `std::io::IO` implementation; the root-native list includes `context#unreachable`;
   one ExprId), tests/stdlib-namespaces.test (the root-native inventory).
 
 **Fuzzer** (`audit/context-traits/tools/fuzz.tcl`): 1-3 context traits over
@@ -776,10 +776,10 @@ See §16 items 56-60.
 * **Context-dependent functions are moved to the entry program** (cloned and
   bound before their first top-level use). Their code is unchanged; their
   names in NIR, symbols and diagnostics of the compiled program carry the
-  selection (`hello<io::IO=linux::io::LinuxIO>`).
+  selection (`hello<std::io::IO=std::linux::io::LinuxIO>`).
 * **Programs that load a trait or context trait are built twice** (TRAITS.md):
-  every program importing `io` -- and, since lib/linux/io.bot imports `io`,
-  every program importing `linux::io` -- now pays build 2. See item 60.
+  every program importing `io` -- and, since stdlib/linux/io.bot imports `io`,
+  every program importing `std::linux::io` -- now pays build 2. See item 60.
 * **Requirements take no ordinary trait parameters and return no trait**
   (multi-witness dispatch: `write_file_text(path: Path, text: str)`).
 * **Implementations**: exactly one context parameter (their own context), no
@@ -789,11 +789,11 @@ See §16 items 56-60.
 * **Dead code** is compiled to the `context#unreachable` placeholder (a trap)
   rather than removed.
 * **No format strings**: `$"..."` does not exist in Botlish; examples use
-  `str::concat`. A refined String is a String wherever one is accepted.
+  `std::str::concat`. A refined String is a String wherever one is accepted.
 * **The Tcl backends cannot run Linux output** (NATIVE-ONLY), as before.
-* **Pre-existing METHOD-ELIGIBLE warnings** of lib/linux/io.bot's original
+* **Pre-existing METHOD-ELIGIBLE warnings** of stdlib/linux/io.bot's original
   `write`, `write_error` and `read` (frozen corpus) still print for programs
-  loading `linux::io`; the new library code is warning-free.
+  loading `std::linux::io`; the new library code is warning-free.
 
 ## 15. Context maturity
 
@@ -801,7 +801,7 @@ The criterion, item by item:
 
 | criterion | status |
 |---|---|
-| portable library code can declare an abstract environment requirement | `context io: IO` in lib/io.bot |
+| portable library code can declare an abstract environment requirement | `context io: IO` in stdlib/io.bot |
 | concrete installed contexts satisfy it structurally | `satisfiesTrait`, owner-only, no declaration of conformance |
 | exactly one provider is selected statically | `Obligations`, `ct-select-matrix` |
 | ambiguity is diagnosed | `AMBIGUOUS-CONTEXT-IMPLEMENTATION` |
@@ -828,12 +828,12 @@ added because they are imaginable.
 3. **AST/HIR representation.** One `traitdecl` node with `context 0|1`,
    `contextSpan`; the trait registry and HIR's `traits` entries carry `context
    1`; requirements `{name params {{name type self 0}} result errors}`;
-   context parameters `{name io context io::IO trait 1}`; the binding is
-   `bind io (call ^context#load "io::IO")` typed `{trait io::IO}`; operations
+   context parameters `{name io context std::io::IO trait 1}`; the binding is
+   `bind io (call ^context#load "std::io::IO")` typed `{trait std::io::IO}`; operations
    are calls marked `traitCall {trait requirement receiver args shape context
    1}` (build 1). HIR text: `trait ID context owner NS requires ...` (§7).
-4. **Identity/imports.** A namespace member's (`io::IO`), the type namespace
-   shared with structs, types and traits; `import type io::IO`; imports never
+4. **Identity/imports.** A namespace member's (`std::io::IO`), the type namespace
+   shared with structs, types and traits; `import type std::io::IO`; imports never
    affect satisfaction.
 5. **Requirement restrictions.** No receiver; ordinary (or untyped)
    parameters, ordinary concrete results, declared errors; no ordinary trait
@@ -883,7 +883,7 @@ added because they are imaginable.
     program before its first use; the body is checked once against the trait
     (§6).
 22. **Direct operation lowering.** `io.write_text(t)` -> `call
-    block(linux::io::write_text) t` in the clone (no receiver).
+    block(std::linux::io::write_text) t` in the clone (no receiver).
 23. **Exact-context interaction.** Exact contexts unchanged; the selected
     implementation's own `context io: LinuxIO` is an ordinary exact context
     load; both kinds may appear in one function.
@@ -895,12 +895,12 @@ added because they are imaginable.
 27. **Tcl compiler.** Compiles the same; no change.
 28. **Native.** Lowers the monomorphized HIR; one change: the dead-code
     placeholder `context#unreachable` lowers to `unreachable`.
-29. **HIR evidence.** `contextclone (io::IO=linux::io::LinuxIO)`, `call
-    block(e648) contexttrait io::IO.write_text witness linux::io::LinuxIO`;
+29. **HIR evidence.** `contextclone (std::io::IO=std::linux::io::LinuxIO)`, `call
+    block(e648) contexttrait std::io::IO.write_text witness std::linux::io::LinuxIO`;
     `ct-mono-hir` (no context-trait operation, binding, load or type remains),
     `ct-hir-text` (round trip).
-30. **NIR evidence.** `io::print_line<...>`: `%3 = call 11 %2` (one operand),
-    `linux::io::write_text`: `%1 = contextload 8`; the evidence clone's body
+30. **NIR evidence.** `std::io::print_line<...>`: `%3 = call 11 %2` (one operand),
+    `std::linux::io::write_text`: `%1 = contextload 8`; the evidence clone's body
     equals the hand-written function's (§11).
 31. **CLIF/assembly evidence.** `fn1 = colocated u0:104`, `call fn1(v0, v7)`;
     machine code: two direct `call <botlish_fn_1>`, no indirect call, 89
@@ -908,7 +908,7 @@ added because they are imaginable.
 32. **ABI evidence.** `params=` and CLIF signatures are the ordinary
     parameters (`(vm, text)`); no context operand on any call.
 33. **Allocation evidence.** Context-trait adaptation 0, path adaptation 0;
-    output: 4 objects per `print_line` (String, List, Bytes, `abi::I32`), 7
+    output: 4 objects per `print_line` (String, List, Bytes, `std::abi::I32`), 7
     once for `create` (§11).
 34. **Validator proof grammar.** The existing `-> unit proves PARAM: R errors
     ...` (REFINEMENT-VALUES.md): the same `proves` clause, outcome `normal`.
@@ -921,39 +921,39 @@ added because they are imaginable.
 37. **Predicate regression.** Unchanged: `path-predicate-proof`, the
     refinement tests and fuzzer, the `emailish?` corpus (items 56-58).
 38. **LinuxPath definition.** `refined type LinuxPath = str` in
-    lib/linux/path.bot; owner `linux::path`; no compiler knowledge
+    stdlib/linux/path.bot; owner `std::linux::path`; no compiler knowledge
     (`path-declaration`).
 39. **Validity rules.** Non-empty, no U+0000; nothing else; no normalization
     (§9).
 40. **`valid?`.** `value.length() > 0 and value.nul_free?()`, `nul_free?` a
     counted scan of `char_at(i).scalar_value()`; repeatable.
 41. **`validate`.** `if valid?(value): unit else: fail NotAPath`.
-42. **`io::path::Path`.** `trait Path: fn concat(path: Path, component: str)
+42. **`std::io::path::Path`.** `trait Path: fn concat(path: Path, component: str)
     -> Path errors NotAPath; fn text(path: Path) -> str`, plus the helpers
-    `io::path::concat`/`text` (§9).
-43. **Conformance mapping.** `concat -> linux::path::concat`, `text ->
-    linux::path::text` (owner's declarations; `str` does not satisfy Path).
+    `std::io::path::concat`/`text` (§9).
+43. **Conformance mapping.** `concat -> std::linux::path::concat`, `text ->
+    std::linux::path::text` (owner's declarations; `str` does not satisfy Path).
 44. **`concat` semantics.** Join with one `/` unless the path ends with one;
     the component non-empty, NUL-free, not absolute; `.`, `..`, `//` kept; the
     result validated (§9 table).
 45. **`text` semantics.** The carrier String itself: lossless, not escaped,
     not display-only.
-46. **Generic Path specialization.** `child<linux::path::LinuxPath>`,
-    `add_config<...>`: direct calls of `linux::path::concat`; the same
+46. **Generic Path specialization.** `child<std::linux::path::LinuxPath>`,
+    `add_config<...>`: direct calls of `std::linux::path::concat`; the same
     witness returned; no wrapper; per-witness with a second (test) witness.
-47. **Portable IO context trait.** `context trait io::IO: write_text,
+47. **Portable IO context trait.** `context trait std::io::IO: write_text,
     write_error_text (str) -> unit errors WriteFailed`.
 48. **Portable `io::` functions.** `print`, `print_line`, `write_error`,
     `write_error_line` (§8).
-49. **Linux implementations.** `linux::io::write_text`, `write_error_text`
-    over `write_all`, `linux::write`, `abi::bytes`, `str::encode_utf8`.
+49. **Linux implementations.** `std::linux::io::write_text`, `write_error_text`
+    over `write_all`, `std::linux::write`, `std::abi::bytes`, `std::str::encode_utf8`.
 50. **Short-write policy.** Completed by writing the remaining suffix until
     done; zero progress is `WriteFailed` (strace-injected evidence, §8).
 51. **Error translation.** Negative result or no progress -> `WriteFailed`;
     no errno, count or descriptor reaches the portable caller.
 52. **Portable Hello World.** examples/io/hello.bot: no context parameter,
-    `io::IO` inferred transitively, LinuxIO selected, direct call of
-    `linux::io::write_text`, one raw write(2), no libc in the path (§11).
+    `std::io::IO` inferred transitively, LinuxIO selected, direct call of
+    `std::linux::io::write_text`, one raw write(2), no libc in the path (§11).
 53. **Path + IO vertical.** examples/io/show-path.bot (`path-io-vertical`),
     examples/io/child-path.bot (`path-child-example`).
 54. **Fuzz results.** `audit/context-traits/tools/fuzz.tcl`, four seeds ×
@@ -1030,8 +1030,8 @@ added because they are imaginable.
     completions, ABI numerics, Bytes/MutableBytes, Linux I/O, range/completion
     proofs, HIR round trips and the native backend's own files. Exact-context
     behavior is unchanged: tests/contexts.test passes with three pins updated
-    for additions only (linux::io's new functions, the new internal native,
-    one ExprId shifted by lib/linux/io.bot's new imports).
+    for additions only (std::linux::io's new functions, the new internal native,
+    one ExprId shifted by stdlib/linux/io.bot's new imports).
 
     After merging `main` (ten commits: qualified module source types, the
     source-type registry reset, the traits fuzzer's widened import traps),
@@ -1074,7 +1074,7 @@ added because they are imaginable.
     this milestone every program was already built twice (the method-call
     decision's final rebuild, TEST-SUITE-COST.md); a program declaring or
     loading a trait or context trait is built a third time, monomorphized.
-    Since lib/linux/io.bot now imports `io`, existing `linux::io` programs
+    Since stdlib/linux/io.bot now imports `io`, existing `std::linux::io` programs
     pay it too, and each build is larger (the `io` module and the new
     implementation): examples/linux/context-hello.bot ~240 ms -> ~505-630
     ms (warm, averaged). Programs without traits are unchanged
@@ -1093,10 +1093,10 @@ added because they are imaginable.
 64. **Before MutableVector.** Nothing context-specific: a growable mutable
     container needs its own ownership/mutation design (MUTABLEARRAY and
     MUTABLE-BYTES precedents); for I/O it would carry buffered output, which
-    can then live behind `io::IO`'s operations in a mutable context without
+    can then live behind `std::io::IO`'s operations in a mutable context without
     any caller change.
 65. **Before the Botlish-native test framework.** Substitutable environments
-    now exist: a test installs a fake context implementing `io::IO` (or any
+    now exist: a test installs a fake context implementing `std::io::IO` (or any
     context trait) instead of LinuxIO, selected statically like the real one
     (`io-substitute-context`). Still missing for the framework: mutable
     contexts (a capturing fake that records output), scoped/nested

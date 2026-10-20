@@ -42,11 +42,11 @@ proc aotParity {text {options {}}} {
 
 test native-executable-values {constants, Unicode, native values, nested aggregates and big integers match every mode} -constraints executableAot -body {
     aotParity {
-        import immutable_set
-        import str
+        import std::immutable_set
+        import std::str
         big = 9223372036854775808
         [big * big, "a@NUL@é🙂\n\t\\\"", '🙂', true, unit, [1, [2, 3]],
-         immutable_set::from_list([3, 2, 3]), str::length]
+         std::immutable_set::from_list([3, 2, 3]), std::str::length]
     }
 } -match glob -result {\[85070591730234615865843651857942052864, *\]}
 
@@ -59,12 +59,12 @@ test native-executable-empty-shape {a shape with no fields (the empty anonymous 
 
 test native-executable-roots {relocated stack maps keep allocating ancestor frames alive under GC stress} -constraints executableAot -body {
     aotParity {
-        import str
+        import std::str
         fn build(n):
             if n < 1:
                 return ""
-            prefix = str::concat("x", "y")
-            str::concat(prefix, build(n - 1))
+            prefix = std::str::concat("x", "y")
+            std::str::concat(prefix, build(n - 1))
         build(100)
     }
 } -result "\"[string repeat xy 100]\""
@@ -82,11 +82,11 @@ test native-executable-closure {escaping closures initialize generic function ad
 
 test native-executable-modules {module statics, sets, strings and specialized companion entries survive GC} -constraints executableAot -body {
     aotParity {
-        import web
-        import type byte::Byte
+        import std::web
+        import type std::byte::Byte
         fn check(b: Byte) -> bool:
-            web::is_unreserved(b)
-        [check(45), check(32), web::uri_escape_text("a b/é🙂")]
+            std::web::is_unreserved(b)
+        [check(45), check(32), std::web::uri_escape_text("a b/é🙂")]
     }
 } -result {[true, false, "a%20b%2F%C3%A9%F0%9F%99%82"]}
 
@@ -95,18 +95,18 @@ test native-executable-modules {module statics, sets, strings and specialized co
 # enters a generic trampoline, which is what this test exists to cover.
 test native-executable-generic-entry {known callable kinds can call through generic trampolines under GC} -constraints executableAot -body {
     aotParity {
-        import str
+        import std::str
         fn build():
-            str::concat("x", "y")
+            std::str::concat("x", "y")
         fn other():
-            str::concat("z", "w")
+            std::str::concat("z", "w")
         fn pick(flag: bool):
             if flag:
                 build
             else:
                 other
         fn apply(f):
-            prefix = str::concat("a", "b")
+            prefix = std::str::concat("a", "b")
             [prefix, f()]
         [apply(pick(true)), apply(pick(false))]
     } {-block-escape-opt 0 -tiny-leaf-inline-opt 0}
@@ -114,20 +114,20 @@ test native-executable-generic-entry {known callable kinds can call through gene
 
 test native-executable-source-refinements {source refinements and their proof-producing predicates share existing modules and preserve declared contracts in an executable} -constraints executableAot -body {
     aotParity {
-        import byte
-        import str
-        import web
-        q = web::uri_escape_text("a b")
+        import std::byte
+        import std::str
+        import std::web
+        q = std::web::uri_escape_text("a b")
         fn check(s: str) -> bool:
-            web::emailish?(s)
-        [web::uri_query_value?(q), str::length(q), check("a@b.co"), byte::high_nibble(171)]
+            std::web::emailish?(s)
+        [std::web::uri_query_value?(q), std::str::length(q), check("a@b.co"), std::byte::high_nibble(171)]
     }
 } -result {[true, 5, true, 160]}
 
 test native-executable-native-shadow {native preparation respects local binding identity} -constraints executableAot -body {
     set dir [makeDirectory {aot shadow test}]
     try {
-        set hir [surface::compile "import str\nfn integer?(s):\n    str::length(s)\ninteger?(\"abc\")" shadow.bot]
+        set hir [surface::compile "import std::str\nfn integer?(s):\n    std::str::length(s)\ninteger?(\"abc\")" shadow.bot]
         set prepared [native::prepareHir $hir]
         set binary [native::executable $hir [file join $dir program]]
         list [expr {$hir eq $prepared}] [exec $binary]
@@ -141,7 +141,7 @@ test native-executable-output-kinds {standalone rendering supports blocks, mutab
     try {
         set hir [hir::build {
             {call {ref list} {ok {const 5}} {error-value {const str bad}}
-                {block {x} {ref x}} {call {ref mutable_array::allocate} {const 2}}}
+                {block {x} {ref x}} {call {ref std::mutable_array::allocate} {const 2}}}
         }]
         set binary [native::executable $hir [file join $dir program]]
         exec env BOTLISH_NATIVE_GC_STRESS=1 $binary
@@ -172,7 +172,7 @@ test native-executable-reject {guarded and open workloads fail before writing an
     set ch [open $output w]; puts -nonewline $ch previous; close $ch
     try {
         set results {}
-        foreach input {examples/surface/03-closure.bot lib/mathish.bot} {
+        foreach input {examples/surface/03-closure.bot stdlib/mathish.bot} {
             set hir [surface::readProgramFile [file join $::projectRoot $input]]
             lappend results [catch {native::executable $hir $output} message options]
             lappend results [dict get $options -errorcode]
@@ -201,8 +201,8 @@ test native-executable-no-evaluation {compilation terminates even when running t
 test native-executable-runtime-error {runtime errors exit unsuccessfully and go to stderr} -constraints executableAot -body {
     set dir [makeDirectory {aot error test}]
     try {
-        set hir [surface::compile {import mutable_array
-mutable_array::allocate(0 - 1)} error.bot]
+        set hir [surface::compile {import std::mutable_array
+std::mutable_array::allocate(0 - 1)} error.bot]
         set binary [native::executable $hir [file join $dir program]]
         set failed [catch {exec $binary 2> [file join $dir stderr]} stdout options]
         set ch [open [file join $dir stderr] r]; set stderr [read $ch]; close $ch
@@ -289,8 +289,8 @@ test native-executable-format {a program object and a standalone executable are 
 # backend computes, under GC stress too (aotParity).
 test native-executable-coroutines {coroutines -- nested suspension, messages, values held across yields, a coroutine driving another, an error out of a resume, many short ones -- run in an executable as in every in-process backend, under GC stress too} -constraints executableAot -body {
     aotParity {
-        import list
-        import str
+        import std::list
+        import std::str
         struct Message:
             value: int
         struct Event:
@@ -342,14 +342,14 @@ test native-executable-coroutines {coroutines -- nested suspension, messages, va
         churned = loop i from 0 to 300:
             churn(i)
         [first.text, first.value, second.text, second.value, third.text, third.value,
-         of.text, ol.text, ol.value, failed, list::length(churned), churned.get(299, 0)]
+         of.text, ol.text, ol.value, failed, std::list::length(churned), churned.get(299, 0)]
     }
 } -result {["deep", 1, "p-held", 41, "p-held!", 7, "inner", "inner-done", 6, ["before", "caught"], 300, 302]}
 
 # main.tcl -emit-native-executable as a person types it: the input named by
 # a relative path from another directory or by an absolute one, directories
 # with spaces, the host's default target or the host's own named with
-# -target (one HIR records it: it imports ffi::c), either native backend's
+# -target (one HIR records it: it imports std::ffi::c), either native backend's
 # command line (one executable: closed and specialized either way). The
 # executable is the input's path without its extension; another operating
 # system's target of the host's architecture is refused (NATIVE TARGET)
@@ -360,7 +360,7 @@ test native-executable-cli-paths {main.tcl writes the executable beside its inpu
         set app [file join $dir {app dir}]
         set elsewhere [file join $dir {else where}]
         file mkdir $app $elsewhere
-        set source "import ffi::c\n\nfn twice(x: ffi::c::Int) -> int:\n    x * 2\n\ntwice(21)\n"
+        set source "import std::ffi::c\n\nfn twice(x: std::ffi::c::Int) -> int:\n    x * 2\n\ntwice(21)\n"
         foreach name {relative absolute explicit generic other} {
             set channel [open [file join $app $name.bot] w]
             puts -nonewline $channel $source

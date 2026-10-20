@@ -20,7 +20,7 @@ KILLED read-borrow-allows-write -- the Tcl exposure model lets an operation writ
 KILLED immutable-bytes-satisfy-write -- an immutable Bytes is admitted for a write parameter
     tests:  killed (4 failed: cb-mixed-parameters, cb-refuse-bytes-write, cb-refuse-order, cb-strict0-replay)
     fuzz:   killed (24 disagreements in 15 programs)
-KILLED borrow-produces-first-class-ptr -- byte storage is admitted where an ordinary ffi::c::Ptr is declared (a pointer value of it)
+KILLED borrow-produces-first-class-ptr -- byte storage is admitted where an ordinary std::ffi::c::Ptr is declared (a pointer value of it)
     tests:  killed (1 failed: cb-no-pointer-value)
     fuzz:   survived
 KILLED borrow-address-can-clone -- clone (or null?) accepts byte storage, as if it were a pointer to copy

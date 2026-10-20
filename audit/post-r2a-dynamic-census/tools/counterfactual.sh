@@ -5,7 +5,7 @@
 #
 #   exact-target       a scratch worktree of HEAD with
 #                      counterfactual/exact-target.diff applied to ITS OWN
-#                      lib/web.bot (never the tree's): scan_while(start,
+#                      stdlib/web.bot (never the tree's): scan_while(start,
 #                      predicate) hand-split into the two per-target loops an
 #                      exact-target specialization would produce
 #                      (scan_local -> local_char?, scan_alpha ->
@@ -26,7 +26,7 @@ root=$(pwd)
 tools="$root/audit/post-r2a-dynamic-census/tools"
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 [ -d "$wt/cf-exact" ] || git worktree add -f --detach "$wt/cf-exact" HEAD > /dev/null
-(cd "$wt/cf-exact" && git checkout -q -- lib/web.bot && git apply "$root/audit/post-r2a-dynamic-census/counterfactual/exact-target.diff")
+(cd "$wt/cf-exact" && git checkout -q -- stdlib/web.bot && git apply "$root/audit/post-r2a-dynamic-census/counterfactual/exact-target.diff")
 mkdir -p "$wt/cf-exact/native"; ln -sfn "$root/native/target" "$wt/cf-exact/native/target"
 (cd "$wt/cf-exact" && tclsh9.0 "$tools/emit-nir.tcl" bench/refined-checks.ir) > "$tmp/cf-exact.nir"
 mkdir -p "$out/exact-target"

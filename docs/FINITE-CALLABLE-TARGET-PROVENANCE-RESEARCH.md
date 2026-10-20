@@ -2,7 +2,7 @@
 
 **Status: research only. No production code was changed.** This milestone
 was paused before any `hir/`, `native/`, or `core/` edit, on the premise
-that module-retained immutable bindings (e.g. `web::local_extra_chars`)
+that module-retained immutable bindings (e.g. `std::web::local_extra_chars`)
 should first be re-modeled as static-slot/static-data values rather than
 lexical closure captures -- a change (module-static values) that shifts
 which functions in the frozen `refined-checks.ir` workload are envless,
@@ -39,16 +39,16 @@ disappeared" -- **does not match what M7C-CLOSED-CLOSURE-ENTRY-FACTS.md
 actually says** (grepped for "800", "local_char", "capture flatten",
 "counterfactual": no hits; M7C's own fixtures are `uri-steady.bot`'s and
 `refined-checks.ir`'s `esc_bytes`/`esc_char`/`char_at`/`scan_local`/
-`scan_label`/`domain_loop`/`tld_ok` family, never `lib/web.bot`'s
+`scan_label`/`domain_loop`/`tld_ok` family, never `stdlib/web.bot`'s
 `emailish?`/`scan_while`). Direct source reading (`hir/resolve.tcl:46`,
-`hir/aot.tcl`'s `envless`/`StaticBlocks`) shows `local_char?` (`lib/
+`hir/aot.tcl`'s `envless`/`StaticBlocks`) shows `local_char?` (`stdlib/
 web.bot:99-100`) references only its own parameter `c` and the *module-root*
 binding `local_extra_chars` -- a root reference is not a capture -- so
 `local_char?` has an **empty** `captures` list and is already `envless`
 today, lowered as a zero-allocation `fnvalue` constant, not a heap closure.
 
 This means the 800 `Block`/closure allocations the census attributes to
-`local_char?` are a **different** function's allocations: `web::emailish?`
+`local_char?` are a **different** function's allocations: `std::web::emailish?`
 itself captures `char_at` (which captures `v`) and possibly other
 region-local state to build `local_char?`'s... no -- re-reading the
 census's own allocation table (`web.bot:99 closure`, 800 count, "captures
@@ -59,14 +59,14 @@ current tree, `local_extra_chars` is NOT a plain root/native-like binding
 but a module-level `bind` whose value must be threaded as a capture -- this
 is exactly the R2.a.1 "module retention" mechanism the census's own
 "Generic-keying / lost-M9-fact cost" section describes: *"Since R2.a.1,
-`local_extra_chars` is module-retained, so `web::emailish?` captures it and
+`local_extra_chars` is module-retained, so `std::web::emailish?` captures it and
 becomes a closure."* So in the **current, real tree**, `local_extra_chars`
 is not an ordinary native-registry root value like `is_tcl_alpha` -- it is
 itself a *module-scope closure-captured* value, and that capture propagates:
 `local_char?` (which reads it) captures it too, `emailish?` (which defines
 `local_char?`) captures whatever `local_char?` needs, and so on up the
 chain, exactly the mechanism `POST-R2A-DYNAMIC-CENSUS.md`'s own "B: static
-module-retained values" candidate (`local_extra_chars`, `web::emailish?`)
+module-retained values" candidate (`local_extra_chars`, `std::web::emailish?`)
 already names as a *separate*, independently measured candidate (ceiling
 3.6%, of which 3.3% overlaps the exact-target counterfactual).
 
@@ -77,7 +77,7 @@ immutable value," implemented today as an ordinary HIR/runtime closure
 capture purely because no dedicated static-value representation exists yet.
 Fixing that representation (module-static values: a stable static slot, or
 directly embedded static data, instead of a lexical capture) is exactly
-what changes `local_char?`, and very likely `web::emailish?` itself, from
+what changes `local_char?`, and very likely `std::web::emailish?` itself, from
 "generic value-capturing closure" to "envless/static function" -- which in
 turn changes:
 
@@ -359,7 +359,7 @@ opaque parameter of a value-capturing `scan_while<generic>`, or whether
 ## What should happen instead, before this milestone resumes
 
 Per the interrupting instruction: implement module-static values first
-(`web::local_extra_chars`, and whatever else the module-retention
+(`std::web::local_extra_chars`, and whatever else the module-retention
 mechanism currently forces into lexical captures), reusing the frozen
 R2.a baseline as the starting point rather than the current
 `refined-checks.ir`-tuned tree, then re-run the dynamic census against the
@@ -372,6 +372,6 @@ shift).
 
 ## Source-fence confirmation
 
-No file under `lib/`, `hir/`, `native/`, or `core/` was changed by this
+No file under `stdlib/`, `hir/`, `native/`, or `core/` was changed by this
 session. `git status`/`git diff` show no changes outside this new
 research-notes file.

@@ -5,7 +5,7 @@
 #   error Invalid
 #
 #   fn validate_mail(s: str) -> unit proves s: Mail errors Invalid:
-#       if str::length(s) < 4:
+#       if std::str::length(s) < 4:
 #           fail Invalid
 #       unit
 #
@@ -79,8 +79,8 @@ proc nirBody {nir name} {
 # Strict = Mail, two validators of Mail (different thresholds), a validator
 # of Strict from a Mail, an infallible one, a predicate of Mail, and
 # functions requiring Mail and Strict.
-set prelude {import list
-import str
+set prelude {import std::list
+import std::str
 
 refined type Mail = str
 refined type Strict = Mail
@@ -88,17 +88,17 @@ error Invalid
 error Other
 
 fn validate_mail(s: str) -> unit proves s: Mail errors Invalid:
-    if str::length(s) < 4:
+    if std::str::length(s) < 4:
         fail Invalid
     unit
 
 fn validate_long_mail(s: str) -> unit proves s: Mail errors Invalid:
-    if str::length(s) < 6:
+    if std::str::length(s) < 6:
         fail Invalid
     unit
 
 fn validate_strict(m: Mail) -> unit proves m: Strict errors Invalid:
-    if str::length(m) < 5:
+    if std::str::length(m) < 5:
         fail Invalid
     unit
 
@@ -106,13 +106,13 @@ fn validate_any_mail(s: str) -> unit proves s: Mail:
     unit
 
 fn mail?(s: str) -> bool proves s: Mail:
-    str::length(s) > 3
+    std::str::length(s) > 3
 
 fn send(m: Mail) -> int:
-    str::length(m)
+    std::str::length(m)
 
 fn send_strict(m: Strict) -> int:
-    100 * str::length(m)
+    100 * std::str::length(m)
 
 fn pair(u: unit, n: int) -> int:
     n
@@ -319,7 +319,7 @@ fn use(s: str) -> int errors Invalid:
 
 test validator-inside-branch {a fact established in a branch holds in that branch} -body {
     sourceAgree [withTop "fn use(s: str) -> int errors Invalid:
-    if str::length(s) > 1:
+    if std::str::length(s) > 1:
         validate_mail(s)
         send(s)
     else:
@@ -334,14 +334,14 @@ test validator-join-one-branch {a fact established in one branch only does not s
 
 test validator-join-all-branches {a fact survives the join when every branch that completes normally proves it (by any validator or predicate)} -body {
     sourceAgree [withTop "fn use(s: str) -> int errors Invalid:
-    if str::length(s) > 5:
+    if std::str::length(s) > 5:
         validate_long_mail(s)
     else:
         validate_mail(s)
     send(s)
 
 fn both(s: str) -> int:
-    if str::length(s) > 5:
+    if std::str::length(s) > 5:
         validate_any_mail(s)
     else:
         if not mail?(s):
@@ -352,14 +352,14 @@ fn both(s: str) -> int:
 
 test validator-join-other-branch-leaves {a branch that returns, fails or breaks contributes nothing to the join} -body {
     sourceAgree [withTop "fn use(s: str) -> int errors Invalid:
-    if str::length(s) > 2:
+    if std::str::length(s) > 2:
         validate_mail(s)
     else:
         return 0
     send(s)
 
 fn fails(s: str) -> int errors Invalid:
-    if str::length(s) > 2:
+    if std::str::length(s) > 2:
         validate_mail(s)
     else:
         fail Invalid
@@ -368,12 +368,12 @@ fn fails(s: str) -> int errors Invalid:
 fn breaks(xs: List\[str\]) -> int:
     n = 0
     total = loop x in xs:
-        if str::length(x) > 3:
+        if std::str::length(x) > 3:
             validate_any_mail(x)
         else:
             break
         send(x)
-    list::length(total)
+    std::list::length(total)
 " {[top("abcd"), top("ab"), top("abc"), breaks(["abcd", "ab", "abcde"])]}]
 } -result {value {[4, 0, -1, 1]}}
 
@@ -382,10 +382,10 @@ fn breaks(xs: List\[str\]) -> int:
 
 test validator-loop-body {in a loop body the fact holds for the rest of that iteration's body; not before the call, and not after the loop} -body {
     list [sourceAgree [withTop "fn use(s: str) -> int errors Invalid:
-    sizes = loop x in \[s, str::concat(s, \"!\")\]:
+    sizes = loop x in \[s, std::str::concat(s, \"!\")\]:
         validate_mail(x)
         send(x)
-    list::length(sizes)
+    std::list::length(sizes)
 " {[top("abcd"), top("abc"), top("a")]}]] \
          [rejectionKind "$prelude\nfn use(s: str) -> int errors Invalid:\n    loop i from 0 to 2:\n        validate_mail(s)\n    send(s)\n1\n"] \
          [rejectionKind "$prelude\nfn use(xs: List\[str\]) -> int errors Invalid:\n    sizes = loop x in xs:\n        n = send(x)\n        validate_mail(x)\n        n\n    1\n1\n"] \
@@ -493,9 +493,9 @@ test validator-handled-argument-failure {a handler also runs when a validator ar
 test validator-handled-several-handlers {with several handlers, the fact survives when each handler that completes proves it} -body {
     list [sourceAgree "$prelude
 fn validate_both(s: str) -> unit proves s: Mail errors Invalid, Other:
-    if str::length(s) < 4:
+    if std::str::length(s) < 4:
         fail Invalid
-    if str::length(s) > 8:
+    if std::str::length(s) > 8:
         fail Other
     unit
 
@@ -510,7 +510,7 @@ fn use(s: str) -> int:
 \[use(\"abcd\"), use(\"ab\"), use(\"abcdefghij\")\]
 "] [rejectionKind "$prelude
 fn validate_both(s: str) -> unit proves s: Mail errors Invalid, Other:
-    if str::length(s) < 4:
+    if std::str::length(s) < 4:
         fail Invalid
     unit
 
@@ -551,7 +551,7 @@ test validator-shadowing {facts belong to values, not spellings: a later binding
 
 test validator-non-reference-argument {an argument that is not a plain reference proves nothing} -body {
     list [rejectionKind "$prelude\nfn id(x: str) -> str:\n    x\nfn use(s: str) -> int errors Invalid:\n    validate_mail(id(s))\n    send(s)\n1\n"] \
-         [rejectionKind "$prelude\nfn use(s: str) -> int errors Invalid:\n    validate_mail(str::concat(s, \"\"))\n    send(s)\n1\n"]
+         [rejectionKind "$prelude\nfn use(s: str) -> int errors Invalid:\n    validate_mail(std::str::concat(s, \"\"))\n    send(s)\n1\n"]
 } -result {TYPE TYPE}
 
 test validator-through-callables {a call through an Fn-typed value proves nothing; a call through an immutable alias of the function itself is a call of that function, as for predicates} -body {
@@ -595,34 +595,34 @@ fn use(s: str) -> int errors Invalid:
 # Modules: the owner, qualified calls, method sugar
 
 # Runs SCRIPT with $::core::libraryDir pointed at a private library holding
-# module `path` (a refinement Path and its validator `validate`) and module
-# `client` (which imports path).
+# module `std::path` (a refinement Path and its validator `validate`) and
+# module `std::client` (which imports std::path).
 proc withPathModule {script} {
     set saved $::core::libraryDir
     set dir [tcltest::makeDirectory refinement-validators-lib-[pid]-[incr ::validatorLibCounter]]
     set ::core::libraryDir $dir
     try {
         foreach {name text} {
-            path {import str
+            path {import std::str
 
 refined type Path = str
 error ContainsReservedCharacters
 error TooLong
 
 fn validate(v: str) -> unit proves v: Path errors ContainsReservedCharacters, TooLong:
-    n = str::length(v)
+    n = std::str::length(v)
     if n > 12:
         fail TooLong
     loop i from 0 to n:
-        if str::substring(v, i, i + 1) == ":":
+        if std::str::substring(v, i, i + 1) == ":":
             fail ContainsReservedCharacters
     unit
 
 fn open(p: Path) -> int:
-    str::length(p)
+    std::str::length(p)
 }
-            client {import path
-import type path::Path
+            client {import std::path
+import type std::path::Path
 
 fn validate_fake(v: str) -> unit proves v: Path:
     unit
@@ -641,28 +641,28 @@ fn validate_fake(v: str) -> unit proves v: Path:
 }
 set ::validatorLibCounter 0
 
-test validator-module-qualified {a module's validator called qualified (path::validate(p)) proves the module's refinement for the caller; method sugar too} -body {
+test validator-module-qualified {a module's validator called qualified (std::path::validate(p)) proves the module's refinement for the caller; method sugar too} -body {
     withPathModule {
-        sourceAgree {import path
-import type path::Path
-import str
+        sourceAgree {import std::path
+import type std::path::Path
+import std::str
 
 fn measure(p: Path) -> int:
-    str::length(p)
+    std::str::length(p)
 
 fn use(p: str) -> int:
-    path::validate(p):
-        on path::ContainsReservedCharacters:
+    std::path::validate(p):
+        on std::path::ContainsReservedCharacters:
             return -1
-        on path::TooLong:
+        on std::path::TooLong:
             return -2
-    measure(p) + path::open(p)
+    measure(p) + std::path::open(p)
 
 fn sugar(p: str) -> int:
     p.validate():
-        on path::ContainsReservedCharacters:
+        on std::path::ContainsReservedCharacters:
             return -1
-        on path::TooLong:
+        on std::path::TooLong:
             return -2
     measure(p)
 
@@ -673,10 +673,10 @@ fn sugar(p: str) -> int:
 
 test validator-mint-authority {only the refinement's owner may declare a validator of it: neither an importing module nor the entry program} -body {
     withPathModule {
-        list [rejection "import client\n1\n"] \
-             [rejectionKind "import path\nimport type path::Path\nfn validate_fake(v: str) -> unit proves v: Path:\n    unit\n1\n"]
+        list [rejection "import std::client\n1\n"] \
+             [rejectionKind "import std::path\nimport type std::path::Path\nfn validate_fake(v: str) -> unit proves v: Path:\n    unit\n1\n"]
     }
-} -match glob -result {{REFINEMENT-MINT-AUTHORITY {module "client" cannot declare a proof of refinement path::Path: only its owning module "path" may mint it*}} REFINEMENT-MINT-AUTHORITY}
+} -match glob -result {{REFINEMENT-MINT-AUTHORITY {module "std::client" cannot declare a proof of refinement std::path::Path: only its owning module "std::path" may mint it*}} REFINEMENT-MINT-AUTHORITY}
 
 # ===========================================================================
 # HIR text and representation
@@ -724,12 +724,12 @@ proc representationPair {} {
         set type [expr {$variant eq "refined" ? "Mail" : "str"}]
         string cat $::prelude "
 fn check_mail(s: str) -> unit errors Invalid:
-    if str::length(s) < 4:
+    if std::str::length(s) < 4:
         fail Invalid
     unit
 
 fn consume(m: $type) -> int:
-    str::length(m)
+    std::str::length(m)
 
 fn example(s: str) -> int errors Invalid:
     ${check}(s)

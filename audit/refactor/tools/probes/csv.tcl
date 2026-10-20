@@ -1,9 +1,9 @@
 # The four CSV programs (P3): the unquoted, field and record scanners read
-# characters with str::char_at under a str::length bound; the quoted scanner
+# characters with std::str::char_at under a std::str::length bound; the quoted scanner
 # tests for a quote the same way and appends the quote's own text (the
 # input's slice it already holds) for a doubled quote. Probed per scanner on
 # boundary, empty, ordinary and quoted inputs, and end to end. The
-# scanners' error contract gains IndexNotFound (str::char_at's own error for
+# scanners' error contract gains IndexNotFound (std::str::char_at's own error for
 # an index outside the String) where peek's LowerUnderrun was: identical for
 # every index the scan reaches (0 up), different only for a negative one,
 # which no caller passes -- shown by the one `differs` probe per program.
@@ -18,7 +18,7 @@ scan_unquoted("x", 0, 5 + dyn)}}
     each scan_field {{scan_field("", 0)} {scan_field("abc", 0)} {scan_field("\"a,b\",c", 0)} {scan_field("a,\"b\"", 2)} {scan_field("\"\"", 0)} {scan_field("\"\"\"\"", 0)}}
     each end-to-end {{csv_parse("")} {csv_parse("x")} {csv_parse("a,b,c")} {csv_parse("a,b\nc,d\n")} {csv_parse("a,,c")} {csv_parse(",")} {csv_parse("a,")} {csv_parse(",a")} {csv_parse("a\n\nb")} {csv_parse("name,note\nAlice,\"hello, world\"\nBob,\"said \"\"hello\"\"\"")} {csv_parse("\"\"\"\",x\"\"y")} {csv_parse("\"\"")} {csv_parse("a,\"\",b")} {csv_parse("\"line 1\nline 2\",x\ny,z")} {csv_parse("a\r\nb")} {csv_parse("ä,\"ö,ü\"")} {csv_parse("🙂,x\ny,🙃")}}
     differs negative-index {dyn = hash("probe") - hash("probe")
-scan_unquoted("a,b", 0, dyn - 1)} {the out-of-String index error is str::char_at's IndexNotFound, no longer peek's LowerUnderrun}
+scan_unquoted("a,b", 0, dyn - 1)} {the out-of-String index error is std::str::char_at's IndexNotFound, no longer peek's LowerUnderrun}
 }
 
 program examples/stdlib/csv.bot
@@ -30,7 +30,7 @@ foreach program {examples/stdlib/csv_geometric.bot examples/stdlib/csv_records.b
 }
 
 program examples/stdlib/csv_records.bot
-each csv_records {{list::length(csv_records(""))} {list::length(csv_records("name,age\n"))} {ht_get(list::at(csv_records("name,age,city\nAlice,31,Berlin\n"), 0), "city")} {ht_get(list::at(csv_records("name,note\nAlice,\"hello, world\"\nBob,\"said \"\"hi\"\"\"\n"), 1), "note")} {ht_size(list::at(csv_records("a,b,c\nx,y\n"), 0))} {ht_get(list::at(csv_records_presized("é,city\nvalue1,München\n"), 0), "é")}}
+each csv_records {{std::list::length(csv_records(""))} {std::list::length(csv_records("name,age\n"))} {ht_get(std::list::at(csv_records("name,age,city\nAlice,31,Berlin\n"), 0), "city")} {ht_get(std::list::at(csv_records("name,note\nAlice,\"hello, world\"\nBob,\"said \"\"hi\"\"\"\n"), 1), "note")} {ht_size(std::list::at(csv_records("a,b,c\nx,y\n"), 0))} {ht_get(std::list::at(csv_records_presized("é,city\nvalue1,München\n"), 0), "é")}}
 
 program examples/stdlib/csv_chunked.bot
 each scan_record {{r = scan_record("", 0, chunked_new())

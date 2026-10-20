@@ -9,20 +9,20 @@
 #   intrinsics qualified root natives. Every historical root spelling
 #   (list_get, concat, length, char_codepoint, mutable_array_set,
 #   immutable_set_contains, ...) is an ordinary unbound name.
-#   char::scalar_value is the one spelling of a character's scalar value (no
-#   char::codepoint); a call with an Int is accepted statically. The
+#   std::char::scalar_value is the one spelling of a character's scalar value (no
+#   std::char::codepoint); a call with an Int is accepted statically. The
 #   mutarray module is mutable_array now. Local names called list or str
 #   shadow nothing qualified. A static diagnostic names the qualified
-#   callable. lib/list.bot's own members (get, find, any?) sit beside the
+#   callable. stdlib/list.bot's own members (get, find, any?) sit beside the
 #   intrinsics at, append and length. An unknown member is reported against
 #   what the namespace has: its intrinsics, or its module's definitions and
 #   intrinsics together.
-# Indexed access. list::at and mutable_array::at return the element for
+# Indexed access. std::list::at and std::mutable_array::at return the element for
 #   0 <= i < length (capacity) and fail with the builtin declared error
 #   IndexNotFound for every other Int: past the end, negative, a BigInt, an
-#   empty container. mutable_array::set fails the same way and writes its
+#   empty container. std::mutable_array::set fails the same way and writes its
 #   own copy: the caller's array is unchanged (value semantics).
-# Slices. mutable_array::freeze is the slice 0..COUNT; mutable_array::copy
+# Slices. std::mutable_array::freeze is the slice 0..COUNT; std::mutable_array::copy
 #   checks its destination slice, then its source slice (a move within one
 #   array). START is checked against 0..N first, then END against START..N:
 #   below its interval is LowerUnderrun, above it UpperOverrun.
@@ -33,7 +33,7 @@
 #   returns, a library's own body. Each unsound neighbour keeps its
 #   obligation (UnhandledError), and a call the compiler proves always
 #   fails is KnownError.
-# get. list::get and mutable_array::get are ordinary Botlish over at: the
+# get. std::list::get and std::mutable_array::get are ordinary Botlish over at: the
 #   element when present, the default otherwise. A get call never needs a
 #   handler. Its default is an ordinary argument, evaluated before the call
 #   whether the index is present or not. get equals at with an explicit
@@ -41,11 +41,11 @@
 #   type includes a handler's type its semantic instance cannot admit.
 # Method spelling. xs.at(i), s.concat(t), set.contains(x),
 #   c.scalar_value(), a.set(i, v) ... are the qualified free calls, through
-#   the same callable. An alias of an imported member (at = list::at) is the
+#   the same callable. An alias of an imported member (at = std::list::at) is the
 #   same one candidate, not a second one. (A namespace's functions are
 #   method candidates only where the file imports that namespace:
 #   stdlib-namespaces-unimported.bot, stdlib-namespaces-str-only.bot.)
-# Module statics. lib/web.bot's emailish? reads its module's retained
+# Module statics. stdlib/web.bot's emailish? reads its module's retained
 #   immutable bindings; its value is the same on every backend.
 #
 # Ported from tests/stdlib-namespaces.test (the tests collections.bot does
@@ -74,7 +74,7 @@
 # registration function, given as literals at the call site, so that no
 # check is decided at compile time.
 #
-# Imports: char (char::scalar_value and its method spelling), compiler (the
+# Imports: char (std::char::scalar_value and its method spelling), compiler (the
 # CompilerError a body completes with, and DiagnosticCode), immutable_set
 # (contains, from_list), list, mutable_array and str (the namespaces under
 # test), test (the framework) and web (module-static-emailish-parity). The
@@ -82,14 +82,14 @@
 # candidates of every namespace imported here and still resolves to the one
 # its Tcl program's import gives (an ambiguity would be its rejection, a
 # wrong candidate a wrong value or an abort).
-import char
-import compiler
-import immutable_set
-import list
-import mutable_array
-import str
-import test
-import web
+import std::char
+import std::compiler
+import std::immutable_set
+import std::list
+import std::mutable_array
+import std::str
+import std::test
+import std::web
 
 # ---------------------------------------------------------------------------
 # Declarations (top-level only)
@@ -112,10 +112,10 @@ context struct EvaluationLog:
     marks: MutableArray[int]
 
 fn evaluations(context log: EvaluationLog):
-    mutable_array::get(log.marks, 0, -1)
+    std::mutable_array::get(log.marks, 0, -1)
 
 fn evaluated(v, context log: EvaluationLog):
-    mutable_array::set(log.marks, 0, evaluations() + 1):
+    std::mutable_array::set(log.marks, 0, evaluations() + 1):
         on IndexNotFound:
             unit
     v
@@ -125,17 +125,17 @@ fn evaluated(v, context log: EvaluationLog):
 
 fn register_equality_tests(abc: str, abd: str, empty: str, ten_text: str, ten: int, e_acute: str):
     # ns-eq-call-is-an-unknown-name
-    fn b_eq_call() errors compiler::CompilerError:
+    fn b_eq_call() errors std::compiler::CompilerError:
         static compile:
             eq("a", "a")
-    test::rejects("ns-eq-call-is-an-unknown-name", compiler::DiagnosticCode::Unbound, b_eq_call)
+    std::test::rejects("ns-eq-call-is-an-unknown-name", std::compiler::DiagnosticCode::Unbound, b_eq_call)
 
     # ns-string-equality-is-double-equals: exact characters; a String is
     # never equal to an Int.
-    fn b_double_equals() errors compiler::CompilerError:
+    fn b_double_equals() errors std::compiler::CompilerError:
         static compile:
             [abc == "abc", abc == abd, empty == "", ten_text == ten, e_acute == "é"]
-    test::value("ns-string-equality-is-double-equals", [true, false, true, false, true], b_double_equals)
+    std::test::value("ns-string-equality-is-double-equals", [true, false, true, false, true], b_double_equals)
 
 # ---------------------------------------------------------------------------
 # The root namespace and the qualified intrinsics
@@ -143,158 +143,158 @@ fn register_equality_tests(abc: str, abd: str, empty: str, ten_text: str, ten: i
 # ns-historical-names-are-unknown: every historical root spelling is an
 # ordinary unbound name.
 fn register_historical_name_tests():
-    fn b_list_get() errors compiler::CompilerError:
+    fn b_list_get() errors std::compiler::CompilerError:
         static compile:
             list_get([1], 0)
-    test::rejects("ns-historical-names-are-unknown/list_get", compiler::DiagnosticCode::Unbound, b_list_get)
-    fn b_list_append() errors compiler::CompilerError:
+    std::test::rejects("ns-historical-names-are-unknown/list_get", std::compiler::DiagnosticCode::Unbound, b_list_get)
+    fn b_list_append() errors std::compiler::CompilerError:
         static compile:
             list_append([1], 2)
-    test::rejects("ns-historical-names-are-unknown/list_append", compiler::DiagnosticCode::Unbound, b_list_append)
-    fn b_list_length() errors compiler::CompilerError:
+    std::test::rejects("ns-historical-names-are-unknown/list_append", std::compiler::DiagnosticCode::Unbound, b_list_append)
+    fn b_list_length() errors std::compiler::CompilerError:
         static compile:
             list_length([1])
-    test::rejects("ns-historical-names-are-unknown/list_length", compiler::DiagnosticCode::Unbound, b_list_length)
-    fn b_concat() errors compiler::CompilerError:
+    std::test::rejects("ns-historical-names-are-unknown/list_length", std::compiler::DiagnosticCode::Unbound, b_list_length)
+    fn b_concat() errors std::compiler::CompilerError:
         static compile:
             concat("a", "b")
-    test::rejects("ns-historical-names-are-unknown/concat", compiler::DiagnosticCode::Unbound, b_concat)
-    fn b_length() errors compiler::CompilerError:
+    std::test::rejects("ns-historical-names-are-unknown/concat", std::compiler::DiagnosticCode::Unbound, b_concat)
+    fn b_length() errors std::compiler::CompilerError:
         static compile:
             length("a")
-    test::rejects("ns-historical-names-are-unknown/length", compiler::DiagnosticCode::Unbound, b_length)
-    fn b_substring() errors compiler::CompilerError:
+    std::test::rejects("ns-historical-names-are-unknown/length", std::compiler::DiagnosticCode::Unbound, b_length)
+    fn b_substring() errors std::compiler::CompilerError:
         static compile:
             substring("ab", 0, 1)
-    test::rejects("ns-historical-names-are-unknown/substring", compiler::DiagnosticCode::Unbound, b_substring)
-    fn b_lowercase() errors compiler::CompilerError:
+    std::test::rejects("ns-historical-names-are-unknown/substring", std::compiler::DiagnosticCode::Unbound, b_substring)
+    fn b_lowercase() errors std::compiler::CompilerError:
         static compile:
             lowercase("A")
-    test::rejects("ns-historical-names-are-unknown/lowercase", compiler::DiagnosticCode::Unbound, b_lowercase)
-    fn b_encode_utf8() errors compiler::CompilerError:
+    std::test::rejects("ns-historical-names-are-unknown/lowercase", std::compiler::DiagnosticCode::Unbound, b_lowercase)
+    fn b_encode_utf8() errors std::compiler::CompilerError:
         static compile:
             encode_utf8("a")
-    test::rejects("ns-historical-names-are-unknown/encode_utf8", compiler::DiagnosticCode::Unbound, b_encode_utf8)
-    fn b_is_tcl_alpha() errors compiler::CompilerError:
+    std::test::rejects("ns-historical-names-are-unknown/encode_utf8", std::compiler::DiagnosticCode::Unbound, b_encode_utf8)
+    fn b_is_tcl_alpha() errors std::compiler::CompilerError:
         static compile:
             is_tcl_alpha("a")
-    test::rejects("ns-historical-names-are-unknown/is_tcl_alpha", compiler::DiagnosticCode::Unbound, b_is_tcl_alpha)
-    fn b_is_tcl_alnum() errors compiler::CompilerError:
+    std::test::rejects("ns-historical-names-are-unknown/is_tcl_alpha", std::compiler::DiagnosticCode::Unbound, b_is_tcl_alpha)
+    fn b_is_tcl_alnum() errors std::compiler::CompilerError:
         static compile:
             is_tcl_alnum("a")
-    test::rejects("ns-historical-names-are-unknown/is_tcl_alnum", compiler::DiagnosticCode::Unbound, b_is_tcl_alnum)
-    fn b_char_codepoint() errors compiler::CompilerError:
+    std::test::rejects("ns-historical-names-are-unknown/is_tcl_alnum", std::compiler::DiagnosticCode::Unbound, b_is_tcl_alnum)
+    fn b_char_codepoint() errors std::compiler::CompilerError:
         static compile:
             char_codepoint('a')
-    test::rejects("ns-historical-names-are-unknown/char_codepoint", compiler::DiagnosticCode::Unbound, b_char_codepoint)
-    fn b_mutable_array_allocate() errors compiler::CompilerError:
+    std::test::rejects("ns-historical-names-are-unknown/char_codepoint", std::compiler::DiagnosticCode::Unbound, b_char_codepoint)
+    fn b_mutable_array_allocate() errors std::compiler::CompilerError:
         static compile:
             mutable_array_allocate(1)
-    test::rejects("ns-historical-names-are-unknown/mutable_array_allocate", compiler::DiagnosticCode::Unbound, b_mutable_array_allocate)
-    fn b_mutable_array_capacity() errors compiler::CompilerError:
+    std::test::rejects("ns-historical-names-are-unknown/mutable_array_allocate", std::compiler::DiagnosticCode::Unbound, b_mutable_array_allocate)
+    fn b_mutable_array_capacity() errors std::compiler::CompilerError:
         static compile:
-            mutable_array_capacity(mutable_array::allocate(1))
-    test::rejects("ns-historical-names-are-unknown/mutable_array_capacity", compiler::DiagnosticCode::Unbound, b_mutable_array_capacity)
-    fn b_mutable_array_get() errors compiler::CompilerError:
+            mutable_array_capacity(std::mutable_array::allocate(1))
+    std::test::rejects("ns-historical-names-are-unknown/mutable_array_capacity", std::compiler::DiagnosticCode::Unbound, b_mutable_array_capacity)
+    fn b_mutable_array_get() errors std::compiler::CompilerError:
         static compile:
-            mutable_array_get(mutable_array::allocate(1), 0)
-    test::rejects("ns-historical-names-are-unknown/mutable_array_get", compiler::DiagnosticCode::Unbound, b_mutable_array_get)
-    fn b_mutable_array_set() errors compiler::CompilerError:
+            mutable_array_get(std::mutable_array::allocate(1), 0)
+    std::test::rejects("ns-historical-names-are-unknown/mutable_array_get", std::compiler::DiagnosticCode::Unbound, b_mutable_array_get)
+    fn b_mutable_array_set() errors std::compiler::CompilerError:
         static compile:
-            mutable_array_set(mutable_array::allocate(1), 0, 1)
-    test::rejects("ns-historical-names-are-unknown/mutable_array_set", compiler::DiagnosticCode::Unbound, b_mutable_array_set)
-    fn b_mutable_array_copy() errors compiler::CompilerError:
+            mutable_array_set(std::mutable_array::allocate(1), 0, 1)
+    std::test::rejects("ns-historical-names-are-unknown/mutable_array_set", std::compiler::DiagnosticCode::Unbound, b_mutable_array_set)
+    fn b_mutable_array_copy() errors std::compiler::CompilerError:
         static compile:
-            mutable_array_copy(mutable_array::allocate(1), 0, mutable_array::allocate(1), 0, 1)
-    test::rejects("ns-historical-names-are-unknown/mutable_array_copy", compiler::DiagnosticCode::Unbound, b_mutable_array_copy)
-    fn b_mutable_array_freeze() errors compiler::CompilerError:
+            mutable_array_copy(std::mutable_array::allocate(1), 0, std::mutable_array::allocate(1), 0, 1)
+    std::test::rejects("ns-historical-names-are-unknown/mutable_array_copy", std::compiler::DiagnosticCode::Unbound, b_mutable_array_copy)
+    fn b_mutable_array_freeze() errors std::compiler::CompilerError:
         static compile:
-            mutable_array_freeze(mutable_array::allocate(1), 1)
-    test::rejects("ns-historical-names-are-unknown/mutable_array_freeze", compiler::DiagnosticCode::Unbound, b_mutable_array_freeze)
-    fn b_immutable_set_from_list() errors compiler::CompilerError:
+            mutable_array_freeze(std::mutable_array::allocate(1), 1)
+    std::test::rejects("ns-historical-names-are-unknown/mutable_array_freeze", std::compiler::DiagnosticCode::Unbound, b_mutable_array_freeze)
+    fn b_immutable_set_from_list() errors std::compiler::CompilerError:
         static compile:
             immutable_set_from_list([1])
-    test::rejects("ns-historical-names-are-unknown/immutable_set_from_list", compiler::DiagnosticCode::Unbound, b_immutable_set_from_list)
-    fn b_immutable_set_contains() errors compiler::CompilerError:
+    std::test::rejects("ns-historical-names-are-unknown/immutable_set_from_list", std::compiler::DiagnosticCode::Unbound, b_immutable_set_from_list)
+    fn b_immutable_set_contains() errors std::compiler::CompilerError:
         static compile:
-            immutable_set_contains(immutable_set::from_list([1]), 1)
-    test::rejects("ns-historical-names-are-unknown/immutable_set_contains", compiler::DiagnosticCode::Unbound, b_immutable_set_contains)
+            immutable_set_contains(std::immutable_set::from_list([1]), 1)
+    std::test::rejects("ns-historical-names-are-unknown/immutable_set_contains", std::compiler::DiagnosticCode::Unbound, b_immutable_set_contains)
 
-# ns-char-scalar-value-is-canonical: char::scalar_value is the one spelling.
+# ns-char-scalar-value-is-canonical: std::char::scalar_value is the one spelling.
 # RUN_IT is false: the call with an Int is statically accepted (it is
 # reachable and checked) but never runs -- running it is the run-time TYPE
 # error every intrinsic raises for the wrong kind of value, which no handler
 # catches. A, E_ACUTE and GRINNING are the characters U+0041, U+00E9 and
 # U+1F600.
 fn register_char_tests(run_it: bool, a: UnicodeChar, e_acute: UnicodeChar, grinning: UnicodeChar):
-    fn b_no_codepoint() errors compiler::CompilerError:
+    fn b_no_codepoint() errors std::compiler::CompilerError:
         static compile:
-            char::codepoint('A')
-    test::rejects_message("ns-char-scalar-value-is-canonical/no-codepoint", compiler::DiagnosticCode::UnknownSymbol, "namespace \"char\" has no definition \"codepoint\" (its members are the intrinsics: scalar_value)", b_no_codepoint)
+            std::char::codepoint('A')
+    std::test::rejects_message("ns-char-scalar-value-is-canonical/no-codepoint", std::compiler::DiagnosticCode::UnknownSymbol, "namespace \"std::char\" has no definition \"codepoint\" (its members are the intrinsics: scalar_value)", b_no_codepoint)
 
-    fn b_int_argument_accepted() errors compiler::CompilerError:
+    fn b_int_argument_accepted() errors std::compiler::CompilerError:
         static compile:
             if run_it:
-                char::scalar_value(65)
+                std::char::scalar_value(65)
             else:
                 "accepted"
-    test::value("ns-char-scalar-value-is-canonical/int-argument-accepted", "accepted", b_int_argument_accepted)
+    std::test::value("ns-char-scalar-value-is-canonical/int-argument-accepted", "accepted", b_int_argument_accepted)
 
-    fn b_scalar_values() errors compiler::CompilerError:
+    fn b_scalar_values() errors std::compiler::CompilerError:
         static compile:
-            [char::scalar_value(a), char::scalar_value(e_acute), char::scalar_value(grinning)]
-    test::value("ns-char-scalar-value-is-canonical/scalar-values", [65, 233, 128512], b_scalar_values)
+            [std::char::scalar_value(a), std::char::scalar_value(e_acute), std::char::scalar_value(grinning)]
+    std::test::value("ns-char-scalar-value-is-canonical/scalar-values", [65, 233, 128512], b_scalar_values)
 
 fn register_qualified_intrinsic_tests():
     # ns-historical-module-is-gone: the mutarray module is mutable_array.
-    fn b_mutable_array_module() errors compiler::CompilerError:
+    fn b_mutable_array_module() errors std::compiler::CompilerError:
         static compile:
-            mutable_array::freeze(mutable_array::create(2, 7), 2)
-    test::value("ns-historical-module-is-gone", [7, 7], b_mutable_array_module)
+            std::mutable_array::freeze(std::mutable_array::create(2, 7), 2)
+    std::test::value("ns-historical-module-is-gone", [7, 7], b_mutable_array_module)
 
     # ns-intrinsics-are-root-natives: parameters named list and str shadow
     # nothing qualified.
-    fn b_root_natives() errors compiler::CompilerError:
+    fn b_root_natives() errors std::compiler::CompilerError:
         static compile:
             fn f(list, str):
-                [list::at([1, 2], 1), str::concat("a", "b")]
+                [std::list::at([1, 2], 1), std::str::concat("a", "b")]
             f(0, 0)
-    test::value("ns-intrinsics-are-root-natives", [2, "ab"], b_root_natives)
+    std::test::value("ns-intrinsics-are-root-natives", [2, "ab"], b_root_natives)
 
     # ns-diagnostics-name-the-qualified-callable: the static diagnostic
     # spells the intrinsic's qualified name.
-    fn b_qualified_in_diagnostic() errors compiler::CompilerError:
+    fn b_qualified_in_diagnostic() errors std::compiler::CompilerError:
         static compile:
             fn f(xs, i):
-                list::at(xs, i)
+                std::list::at(xs, i)
             f([1], 0)
-    test::rejects_containing("ns-diagnostics-name-the-qualified-callable", compiler::DiagnosticCode::UnhandledError, "this call of \"list::at\" may produce the declared error \"IndexNotFound\"", b_qualified_in_diagnostic)
+    std::test::rejects_containing("ns-diagnostics-name-the-qualified-callable", std::compiler::DiagnosticCode::UnhandledError, "this call of \"std::list::at\" may produce the declared error \"IndexNotFound\"", b_qualified_in_diagnostic)
 
-    # ns-list-module-beside-intrinsics: lib/list.bot's get, find and any?
+    # ns-list-module-beside-intrinsics: stdlib/list.bot's get, find and any?
     # beside the intrinsics length and append.
-    fn b_module_beside_intrinsics() errors compiler::CompilerError:
+    fn b_module_beside_intrinsics() errors std::compiler::CompilerError:
         static compile:
             fn odd(x):
                 mod(x, 2) == 1
-            f = list::find([2, 3], odd):
-                on list::NotFound:
+            f = std::list::find([2, 3], odd):
+                on std::list::NotFound:
                     0
-            [list::get([1], 0, 9), f, list::any?([2], odd), list::length(list::append([], 1))]
-    test::value("ns-list-module-beside-intrinsics", [1, 3, false, 1], b_module_beside_intrinsics)
+            [std::list::get([1], 0, 9), f, std::list::any?([2], odd), std::list::length(std::list::append([], 1))]
+    std::test::value("ns-list-module-beside-intrinsics", [1, 3, false, 1], b_module_beside_intrinsics)
 
     # ns-unknown-member-of-intrinsic-namespace: a namespace with only
     # intrinsics lists them.
-    fn b_unknown_str_member() errors compiler::CompilerError:
+    fn b_unknown_str_member() errors std::compiler::CompilerError:
         static compile:
-            str::nope("a")
-    test::rejects_message("ns-unknown-member-of-intrinsic-namespace", compiler::DiagnosticCode::UnknownSymbol, "namespace \"str\" has no definition \"nope\" (its members are the intrinsics: append_char, char_at, concat, encode_utf8, is_tcl_alnum, is_tcl_alpha, length, lowercase, substring)", b_unknown_str_member)
+            std::str::nope("a")
+    std::test::rejects_message("ns-unknown-member-of-intrinsic-namespace", std::compiler::DiagnosticCode::UnknownSymbol, "namespace \"std::str\" has no definition \"nope\" (its members are the intrinsics: append_char, char_at, concat, encode_utf8, is_tcl_alnum, is_tcl_alpha, length, lowercase, substring)", b_unknown_str_member)
 
     # ns-unknown-member-lists-intrinsics-too: a namespace with a module lists
     # the module's definitions and the intrinsics together.
-    fn b_unknown_list_member() errors compiler::CompilerError:
+    fn b_unknown_list_member() errors std::compiler::CompilerError:
         static compile:
-            list::nope([1])
-    test::rejects_message("ns-unknown-member-lists-intrinsics-too", compiler::DiagnosticCode::UnknownSymbol, "namespace \"list\" has no definition \"nope\" (it defines: all?, any?, append, at, find, get, length, none?)", b_unknown_list_member)
+            std::list::nope([1])
+    std::test::rejects_message("ns-unknown-member-lists-intrinsics-too", std::compiler::DiagnosticCode::UnknownSymbol, "namespace \"std::list\" has no definition \"nope\" (it defines: all?, any?, append, at, find, get, length, none?)", b_unknown_list_member)
 
 # ---------------------------------------------------------------------------
 # at and set: required indexed access, IndexNotFound otherwise. The indices
@@ -304,48 +304,48 @@ fn register_indexed_access_tests(zero: int, one: int, two: int, three: int, minu
     # ns-at-present-and-missing: the element for 0 <= i < length; past the
     # end, negative (no negative indexing), a BigInt and an empty List are
     # IndexNotFound.
-    fn b_list_at() errors compiler::CompilerError:
+    fn b_list_at() errors std::compiler::CompilerError:
         static compile:
             fn pick(xs, i) errors IndexNotFound:
-                list::at(xs, i)
+                std::list::at(xs, i)
             fn safe(xs, i):
                 r = pick(xs, i):
                     on IndexNotFound:
                         "missing"
                 r
             [safe([10, 20, 30], zero), safe([10, 20, 30], two), safe([10, 20, 30], three), safe([10, 20, 30], minus_one), safe([10], huge), safe([], zero)]
-    test::value("ns-at-present-and-missing", [10, 30, "missing", "missing", "missing", "missing"], b_list_at)
+    std::test::value("ns-at-present-and-missing", [10, 30, "missing", "missing", "missing", "missing"], b_list_at)
 
     # ns-mutable-array-at: the same contract over a MutableArray's capacity.
-    fn b_mutable_array_at() errors compiler::CompilerError:
+    fn b_mutable_array_at() errors std::compiler::CompilerError:
         static compile:
             fn pick(a, i) errors IndexNotFound:
-                mutable_array::at(a, i)
+                std::mutable_array::at(a, i)
             fn safe(a, i):
                 r = pick(a, i):
                     on IndexNotFound:
                         -1
                 r
-            a = mutable_array::from_list([5, 6])
-            [safe(a, zero), safe(a, one), safe(a, two), safe(a, minus_one), safe(mutable_array::allocate(0), zero)]
-    test::value("ns-mutable-array-at", [5, 6, -1, -1, -1], b_mutable_array_at)
+            a = std::mutable_array::from_list([5, 6])
+            [safe(a, zero), safe(a, one), safe(a, two), safe(a, minus_one), safe(std::mutable_array::allocate(0), zero)]
+    std::test::value("ns-mutable-array-at", [5, 6, -1, -1, -1], b_mutable_array_at)
 
     # ns-mutable-array-set-is-index-not-found: set at an index that
     # designates no slot fails with IndexNotFound; each call writes its own
     # copy, never the caller's array (the last element).
-    fn b_mutable_array_set() errors compiler::CompilerError:
+    fn b_mutable_array_set() errors std::compiler::CompilerError:
         static compile:
             fn put(a, i, v) errors IndexNotFound:
-                mutable_array::set(a, i, v)
+                std::mutable_array::set(a, i, v)
                 a
             fn safe(a, i, v):
                 r = put(a, i, v):
                     on IndexNotFound:
                         return "missing"
-                mutable_array::freeze(r, mutable_array::capacity(r))
-            a = mutable_array::from_list([5, 6])
-            [safe(a, one, 9), safe(a, two, 9), safe(a, minus_one, 9), safe(a, huge, 9), safe(mutable_array::allocate(0), zero, 1), mutable_array::freeze(a, 2)]
-    test::value("ns-mutable-array-set-is-index-not-found", [[5, 9], "missing", "missing", "missing", "missing", [5, 6]], b_mutable_array_set)
+                std::mutable_array::freeze(r, std::mutable_array::capacity(r))
+            a = std::mutable_array::from_list([5, 6])
+            [safe(a, one, 9), safe(a, two, 9), safe(a, minus_one, 9), safe(a, huge, 9), safe(std::mutable_array::allocate(0), zero, 1), std::mutable_array::freeze(a, 2)]
+    std::test::value("ns-mutable-array-set-is-index-not-found", [[5, 9], "missing", "missing", "missing", "missing", [5, 6]], b_mutable_array_set)
 
 # ---------------------------------------------------------------------------
 # Slices: freeze and copy (the bounds are parameters)
@@ -353,26 +353,26 @@ fn register_indexed_access_tests(zero: int, one: int, two: int, three: int, minu
 fn register_slice_tests(minus_one: int, zero: int, one: int, two: int, three: int, nine: int):
     # ns-slice-rule-freeze-and-copy: freeze is the slice 0..COUNT; copy
     # checks its destination slice, then its source slice, within one array.
-    fn b_freeze_and_copy() errors compiler::CompilerError:
+    fn b_freeze_and_copy() errors std::compiler::CompilerError:
         static compile:
             fn freeze_of(xs, n):
-                a = mutable_array::from_list(xs)
-                v = mutable_array::freeze(a, n):
+                a = std::mutable_array::from_list(xs)
+                v = std::mutable_array::freeze(a, n):
                     on LowerUnderrun:
                         return "lower"
                     on UpperOverrun:
                         return "upper"
                 v
             fn copy_within(xs, ds, ss, n):
-                a = mutable_array::from_list(xs)
-                done = mutable_array::copy(a, ds, a, ss, n):
+                a = std::mutable_array::from_list(xs)
+                done = std::mutable_array::copy(a, ds, a, ss, n):
                     on LowerUnderrun:
                         return "lower"
                     on UpperOverrun:
                         return "upper"
-                mutable_array::freeze(a, mutable_array::capacity(a))
+                std::mutable_array::freeze(a, std::mutable_array::capacity(a))
             [freeze_of([1, 2], minus_one), freeze_of([1, 2], three), freeze_of([1, 2], one), copy_within([1, 2, 3], minus_one, nine, one), copy_within([1, 2, 3], zero, nine, one), copy_within([1, 2, 3], zero, zero, minus_one), copy_within([1, 2, 3], one, zero, three), copy_within([1, 2, 3], zero, two, two), copy_within([1, 2, 3], one, zero, two)]
-    test::value("ns-slice-rule-freeze-and-copy", ["lower", "upper", [1], "lower", "upper", "lower", "upper", "upper", [1, 1, 2]], b_freeze_and_copy)
+    std::test::value("ns-slice-rule-freeze-and-copy", ["lower", "upper", [1], "lower", "upper", "lower", "upper", "upper", [1, 1, 2]], b_freeze_and_copy)
 
 # ---------------------------------------------------------------------------
 # Static completion proofs (hir/completions.tcl): an accepted block needs
@@ -382,349 +382,349 @@ fn register_slice_tests(minus_one: int, zero: int, one: int, two: int, three: in
 # capacity equal to that binding -- exactly, never more. An accepted
 # program's value is f(3)'s array as a List.
 fn register_binding_minimum_tests():
-    fn b_above_0_sets_0() errors compiler::CompilerError:
+    fn b_above_0_sets_0() errors std::compiler::CompilerError:
         static compile:
             fn f(n):
-                m = mutable_array::create(n, 0)
+                m = std::mutable_array::create(n, 0)
                 if n > 0:
-                    mutable_array::set(m, 0, 5)
+                    std::mutable_array::set(m, 0, 5)
                 m
             m = f(3)
-            mutable_array::freeze(m, mutable_array::capacity(m))
-    test::value("ns-proof-binding-minimum/above-0-sets-0", [5, 0, 0], b_above_0_sets_0)
-    fn b_above_1_sets_1() errors compiler::CompilerError:
+            std::mutable_array::freeze(m, std::mutable_array::capacity(m))
+    std::test::value("ns-proof-binding-minimum/above-0-sets-0", [5, 0, 0], b_above_0_sets_0)
+    fn b_above_1_sets_1() errors std::compiler::CompilerError:
         static compile:
             fn f(n):
-                m = mutable_array::create(n, 0)
+                m = std::mutable_array::create(n, 0)
                 if n > 1:
-                    mutable_array::set(m, 1, 5)
+                    std::mutable_array::set(m, 1, 5)
                 m
             m = f(3)
-            mutable_array::freeze(m, mutable_array::capacity(m))
-    test::value("ns-proof-binding-minimum/above-1-sets-1", [0, 5, 0], b_above_1_sets_1)
-    fn b_at_least_1_sets_0() errors compiler::CompilerError:
+            std::mutable_array::freeze(m, std::mutable_array::capacity(m))
+    std::test::value("ns-proof-binding-minimum/above-1-sets-1", [0, 5, 0], b_above_1_sets_1)
+    fn b_at_least_1_sets_0() errors std::compiler::CompilerError:
         static compile:
             fn f(n):
-                m = mutable_array::create(n, 0)
+                m = std::mutable_array::create(n, 0)
                 if n >= 1:
-                    mutable_array::set(m, 0, 5)
+                    std::mutable_array::set(m, 0, 5)
                 m
             m = f(3)
-            mutable_array::freeze(m, mutable_array::capacity(m))
-    test::value("ns-proof-binding-minimum/at-least-1-sets-0", [5, 0, 0], b_at_least_1_sets_0)
-    fn b_above_0_sets_1() errors compiler::CompilerError:
+            std::mutable_array::freeze(m, std::mutable_array::capacity(m))
+    std::test::value("ns-proof-binding-minimum/at-least-1-sets-0", [5, 0, 0], b_at_least_1_sets_0)
+    fn b_above_0_sets_1() errors std::compiler::CompilerError:
         static compile:
             fn f(n):
-                m = mutable_array::create(n, 0)
+                m = std::mutable_array::create(n, 0)
                 if n > 0:
-                    mutable_array::set(m, 1, 5)
+                    std::mutable_array::set(m, 1, 5)
                 m
             f(3)
-    test::rejects("ns-proof-binding-minimum/above-0-sets-1", compiler::DiagnosticCode::UnhandledError, b_above_0_sets_1)
-    fn b_at_least_0_sets_0() errors compiler::CompilerError:
+    std::test::rejects("ns-proof-binding-minimum/above-0-sets-1", std::compiler::DiagnosticCode::UnhandledError, b_above_0_sets_1)
+    fn b_at_least_0_sets_0() errors std::compiler::CompilerError:
         static compile:
             fn f(n):
-                m = mutable_array::create(n, 0)
+                m = std::mutable_array::create(n, 0)
                 if n >= 0:
-                    mutable_array::set(m, 0, 5)
+                    std::mutable_array::set(m, 0, 5)
                 m
             f(3)
-    test::rejects("ns-proof-binding-minimum/at-least-0-sets-0", compiler::DiagnosticCode::UnhandledError, b_at_least_0_sets_0)
-    fn b_after_early_return() errors compiler::CompilerError:
+    std::test::rejects("ns-proof-binding-minimum/at-least-0-sets-0", std::compiler::DiagnosticCode::UnhandledError, b_at_least_0_sets_0)
+    fn b_after_early_return() errors std::compiler::CompilerError:
         static compile:
             fn f(n):
-                m = mutable_array::create(n, 0)
+                m = std::mutable_array::create(n, 0)
                 if n > 0:
                     return m
-                mutable_array::set(m, 0, 5)
+                std::mutable_array::set(m, 0, 5)
                 m
             f(3)
-    test::rejects("ns-proof-binding-minimum/after-early-return", compiler::DiagnosticCode::UnhandledError, b_after_early_return)
+    std::test::rejects("ns-proof-binding-minimum/after-early-return", std::compiler::DiagnosticCode::UnhandledError, b_after_early_return)
 
 # ns-slice-proofs: literals, an index guard, a counted loop, a minimum
 # length, String lengths through concat, capacities; the unsound neighbours
 # keep their obligation.
 fn register_slice_proof_tests():
-    fn b_literal_in_range() errors compiler::CompilerError:
+    fn b_literal_in_range() errors std::compiler::CompilerError:
         static compile:
-            str::substring("hello", 1, 3)
-    test::value("ns-slice-proofs/literal-in-range", "el", b_literal_in_range)
-    fn b_literal_reversed() errors compiler::CompilerError:
+            std::str::substring("hello", 1, 3)
+    std::test::value("ns-slice-proofs/literal-in-range", "el", b_literal_in_range)
+    fn b_literal_reversed() errors std::compiler::CompilerError:
         static compile:
-            str::substring("hello", 3, 1)
-    test::rejects("ns-slice-proofs/literal-reversed", compiler::DiagnosticCode::KnownError, b_literal_reversed)
-    fn b_index_guard() errors compiler::CompilerError:
-        static compile:
-            fn f(t, i):
-                if i < 0 or i >= str::length(t):
-                    return ""
-                str::substring(t, i, i + 1)
-            f("ab", 1)
-    test::value("ns-slice-proofs/index-guard", "b", b_index_guard)
-    fn b_upper_guard_only() errors compiler::CompilerError:
+            std::str::substring("hello", 3, 1)
+    std::test::rejects("ns-slice-proofs/literal-reversed", std::compiler::DiagnosticCode::KnownError, b_literal_reversed)
+    fn b_index_guard() errors std::compiler::CompilerError:
         static compile:
             fn f(t, i):
-                if i >= str::length(t):
+                if i < 0 or i >= std::str::length(t):
                     return ""
-                str::substring(t, i, i + 1)
+                std::str::substring(t, i, i + 1)
             f("ab", 1)
-    test::rejects("ns-slice-proofs/upper-guard-only", compiler::DiagnosticCode::UnhandledError, b_upper_guard_only)
-    fn b_counted_loop() errors compiler::CompilerError:
+    std::test::value("ns-slice-proofs/index-guard", "b", b_index_guard)
+    fn b_upper_guard_only() errors std::compiler::CompilerError:
+        static compile:
+            fn f(t, i):
+                if i >= std::str::length(t):
+                    return ""
+                std::str::substring(t, i, i + 1)
+            f("ab", 1)
+    std::test::rejects("ns-slice-proofs/upper-guard-only", std::compiler::DiagnosticCode::UnhandledError, b_upper_guard_only)
+    fn b_counted_loop() errors std::compiler::CompilerError:
         static compile:
             fn f(t):
-                loop i from 0 to str::length(t):
-                    str::substring(t, i, i + 1)
+                loop i from 0 to std::str::length(t):
+                    std::str::substring(t, i, i + 1)
             f("ab")
-    test::value("ns-slice-proofs/counted-loop", ["a", "b"], b_counted_loop)
-    fn b_minimum_length() errors compiler::CompilerError:
+    std::test::value("ns-slice-proofs/counted-loop", ["a", "b"], b_counted_loop)
+    fn b_minimum_length() errors std::compiler::CompilerError:
         static compile:
             fn f(t):
-                if str::length(t) > 0:
-                    return str::substring(t, 0, 1)
+                if std::str::length(t) > 0:
+                    return std::str::substring(t, 0, 1)
                 ""
             f("ab")
-    test::value("ns-slice-proofs/minimum-length", "a", b_minimum_length)
-    fn b_concat_length() errors compiler::CompilerError:
+    std::test::value("ns-slice-proofs/minimum-length", "a", b_minimum_length)
+    fn b_concat_length() errors std::compiler::CompilerError:
         static compile:
             fn f(t):
-                str::substring(str::concat(t, "x"), 0, 1)
+                std::str::substring(std::str::concat(t, "x"), 0, 1)
             f("ab")
-    test::value("ns-slice-proofs/concat-length", "a", b_concat_length)
-    fn b_concat_length_exceeded() errors compiler::CompilerError:
+    std::test::value("ns-slice-proofs/concat-length", "a", b_concat_length)
+    fn b_concat_length_exceeded() errors std::compiler::CompilerError:
         static compile:
             fn f(t):
-                str::substring(str::concat(t, "x"), 0, 2)
+                std::str::substring(std::str::concat(t, "x"), 0, 2)
             f("ab")
-    test::rejects("ns-slice-proofs/concat-length-exceeded", compiler::DiagnosticCode::UnhandledError, b_concat_length_exceeded)
-    fn b_capacity_loop() errors compiler::CompilerError:
+    std::test::rejects("ns-slice-proofs/concat-length-exceeded", std::compiler::DiagnosticCode::UnhandledError, b_concat_length_exceeded)
+    fn b_capacity_loop() errors std::compiler::CompilerError:
         static compile:
             fn f(n):
-                a = mutable_array::allocate(n)
+                a = std::mutable_array::allocate(n)
                 loop i from 0 to n:
-                    mutable_array::set(a, i, i)
-                mutable_array::freeze(a, mutable_array::capacity(a))
+                    std::mutable_array::set(a, i, i)
+                std::mutable_array::freeze(a, std::mutable_array::capacity(a))
             f(3)
-    test::value("ns-slice-proofs/capacity-loop", [0, 1, 2], b_capacity_loop)
-    fn b_unproven_count() errors compiler::CompilerError:
+    std::test::value("ns-slice-proofs/capacity-loop", [0, 1, 2], b_capacity_loop)
+    fn b_unproven_count() errors std::compiler::CompilerError:
         static compile:
             fn f(a, n):
-                mutable_array::freeze(a, n)
-            f(mutable_array::allocate(2), 1)
-    test::rejects("ns-slice-proofs/unproven-count", compiler::DiagnosticCode::UnhandledError, b_unproven_count)
-    fn b_copy_within_capacities() errors compiler::CompilerError:
+                std::mutable_array::freeze(a, n)
+            f(std::mutable_array::allocate(2), 1)
+    std::test::rejects("ns-slice-proofs/unproven-count", std::compiler::DiagnosticCode::UnhandledError, b_unproven_count)
+    fn b_copy_within_capacities() errors std::compiler::CompilerError:
         static compile:
-            a = mutable_array::allocate(3)
-            b = mutable_array::allocate(5)
-            mutable_array::copy(a, 0, b, 2, 3)
-    test::value("ns-slice-proofs/copy-within-capacities", unit, b_copy_within_capacities)
-    fn b_set_past_capacity() errors compiler::CompilerError:
+            a = std::mutable_array::allocate(3)
+            b = std::mutable_array::allocate(5)
+            std::mutable_array::copy(a, 0, b, 2, 3)
+    std::test::value("ns-slice-proofs/copy-within-capacities", unit, b_copy_within_capacities)
+    fn b_set_past_capacity() errors std::compiler::CompilerError:
         static compile:
-            a = mutable_array::allocate(3)
-            mutable_array::set(a, 3, 0)
-    test::rejects("ns-slice-proofs/set-past-capacity", compiler::DiagnosticCode::KnownError, b_set_past_capacity)
+            a = std::mutable_array::allocate(3)
+            std::mutable_array::set(a, 3, 0)
+    std::test::rejects("ns-slice-proofs/set-past-capacity", std::compiler::DiagnosticCode::KnownError, b_set_past_capacity)
 
 fn register_index_proof_tests():
-    # ns-index-proof-minimum-size: an enclosing `list::length(xs) > 0` (or
+    # ns-index-proof-minimum-size: an enclosing `std::list::length(xs) > 0` (or
     # `== 0` false) proves the reads below the minimum it states.
-    fn b_length_above_0() errors compiler::CompilerError:
+    fn b_length_above_0() errors std::compiler::CompilerError:
         static compile:
             fn f(xs):
-                if list::length(xs) > 0:
-                    return list::at(xs, 0)
+                if std::list::length(xs) > 0:
+                    return std::list::at(xs, 0)
                 0
             f([1])
-    test::value("ns-index-proof-minimum-size/length-above-0", 1, b_length_above_0)
-    fn b_length_not_0() errors compiler::CompilerError:
+    std::test::value("ns-index-proof-minimum-size/length-above-0", 1, b_length_above_0)
+    fn b_length_not_0() errors std::compiler::CompilerError:
         static compile:
             fn f(xs):
-                if list::length(xs) == 0:
+                if std::list::length(xs) == 0:
                     return 0
-                list::at(xs, 0)
+                std::list::at(xs, 0)
             f([1])
-    test::value("ns-index-proof-minimum-size/length-not-0", 1, b_length_not_0)
-    fn b_past_the_minimum() errors compiler::CompilerError:
+    std::test::value("ns-index-proof-minimum-size/length-not-0", 1, b_length_not_0)
+    fn b_past_the_minimum() errors std::compiler::CompilerError:
         static compile:
             fn f(xs):
-                if list::length(xs) > 0:
-                    return list::at(xs, 1)
+                if std::list::length(xs) > 0:
+                    return std::list::at(xs, 1)
                 0
             f([1])
-    test::rejects("ns-index-proof-minimum-size/past-the-minimum", compiler::DiagnosticCode::UnhandledError, b_past_the_minimum)
+    std::test::rejects("ns-index-proof-minimum-size/past-the-minimum", std::compiler::DiagnosticCode::UnhandledError, b_past_the_minimum)
 
     # ns-proof-literal-in-range: a List of statically known length read at a
     # provably valid index needs no handler.
-    fn b_literal() errors compiler::CompilerError:
+    fn b_literal() errors std::compiler::CompilerError:
         static compile:
-            list::at([1, 2, 3], 2)
-    test::value("ns-proof-literal-in-range/literal", 3, b_literal)
-    fn b_bindings() errors compiler::CompilerError:
+            std::list::at([1, 2, 3], 2)
+    std::test::value("ns-proof-literal-in-range/literal", 3, b_literal)
+    fn b_bindings() errors std::compiler::CompilerError:
         static compile:
             xs = [1, 2, 3]
             i = 1
-            [list::at(xs, i), list::at(xs, 0 + 2)]
-    test::value("ns-proof-literal-in-range/bindings", [2, 3], b_bindings)
+            [std::list::at(xs, i), std::list::at(xs, 0 + 2)]
+    std::test::value("ns-proof-literal-in-range/bindings", [2, 3], b_bindings)
 
-    # ns-proof-counted-loop: loop i from 0 to list::length(xs) (or through
-    # length - 1, or in lockstep with the elements) reads list::at(xs, i)
+    # ns-proof-counted-loop: loop i from 0 to std::list::length(xs) (or through
+    # length - 1, or in lockstep with the elements) reads std::list::at(xs, i)
     # with no obligation.
-    fn b_to_length() errors compiler::CompilerError:
+    fn b_to_length() errors std::compiler::CompilerError:
         static compile:
             fn f(xs):
-                loop i from 0 to list::length(xs):
-                    list::at(xs, i)
+                loop i from 0 to std::list::length(xs):
+                    std::list::at(xs, i)
             f([1])
-    test::value("ns-proof-counted-loop/to-length", [1], b_to_length)
-    fn b_through_length_minus_1() errors compiler::CompilerError:
+    std::test::value("ns-proof-counted-loop/to-length", [1], b_to_length)
+    fn b_through_length_minus_1() errors std::compiler::CompilerError:
         static compile:
             fn f(xs):
-                n = list::length(xs)
+                n = std::list::length(xs)
                 loop i from 0 through n - 1:
-                    list::at(xs, i)
+                    std::list::at(xs, i)
             f([1])
-    test::value("ns-proof-counted-loop/through-length-minus-1", [1], b_through_length_minus_1)
-    fn b_lockstep() errors compiler::CompilerError:
+    std::test::value("ns-proof-counted-loop/through-length-minus-1", [1], b_through_length_minus_1)
+    fn b_lockstep() errors std::compiler::CompilerError:
         static compile:
             fn f(xs):
-                loop x in xs and i from 0 to list::length(xs):
-                    list::at(xs, i) == x
+                loop x in xs and i from 0 to std::list::length(xs):
+                    std::list::at(xs, i) == x
             f([1])
-    test::value("ns-proof-counted-loop/lockstep", [true], b_lockstep)
-    fn b_doubled() errors compiler::CompilerError:
+    std::test::value("ns-proof-counted-loop/lockstep", [true], b_lockstep)
+    fn b_doubled() errors std::compiler::CompilerError:
         static compile:
             fn f(xs):
-                loop i from 0 to list::length(xs):
-                    list::at(xs, i) * 2
+                loop i from 0 to std::list::length(xs):
+                    std::list::at(xs, i) * 2
             f([1, 2, 3])
-    test::value("ns-proof-counted-loop/doubled", [2, 4, 6], b_doubled)
+    std::test::value("ns-proof-counted-loop/doubled", [2, 4, 6], b_doubled)
 
     # ns-proof-counted-loop-negatives: the loop proof is exact.
-    fn b_start_below_0() errors compiler::CompilerError:
+    fn b_start_below_0() errors std::compiler::CompilerError:
         static compile:
             fn f(xs):
-                loop i from -1 to list::length(xs):
-                    list::at(xs, i)
+                loop i from -1 to std::list::length(xs):
+                    std::list::at(xs, i)
             f([1])
-    test::rejects("ns-proof-counted-loop-negatives/start-below-0", compiler::DiagnosticCode::UnhandledError, b_start_below_0)
-    fn b_end_past_length() errors compiler::CompilerError:
+    std::test::rejects("ns-proof-counted-loop-negatives/start-below-0", std::compiler::DiagnosticCode::UnhandledError, b_start_below_0)
+    fn b_end_past_length() errors std::compiler::CompilerError:
         static compile:
             fn f(xs):
-                loop i from 0 to list::length(xs) + 1:
-                    list::at(xs, i)
+                loop i from 0 to std::list::length(xs) + 1:
+                    std::list::at(xs, i)
             f([1])
-    test::rejects("ns-proof-counted-loop-negatives/end-past-length", compiler::DiagnosticCode::UnhandledError, b_end_past_length)
-    fn b_other_list() errors compiler::CompilerError:
+    std::test::rejects("ns-proof-counted-loop-negatives/end-past-length", std::compiler::DiagnosticCode::UnhandledError, b_end_past_length)
+    fn b_other_list() errors std::compiler::CompilerError:
         static compile:
             fn f(xs, ys):
-                loop i from 0 to list::length(ys):
-                    list::at(xs, i)
+                loop i from 0 to std::list::length(ys):
+                    std::list::at(xs, i)
             f([1], [2])
-    test::rejects("ns-proof-counted-loop-negatives/other-list", compiler::DiagnosticCode::UnhandledError, b_other_list)
-    fn b_down_from_length() errors compiler::CompilerError:
+    std::test::rejects("ns-proof-counted-loop-negatives/other-list", std::compiler::DiagnosticCode::UnhandledError, b_other_list)
+    fn b_down_from_length() errors std::compiler::CompilerError:
         static compile:
             fn f(xs):
-                loop i down from list::length(xs) to 0:
-                    list::at(xs, i)
+                loop i down from std::list::length(xs) to 0:
+                    std::list::at(xs, i)
             f([1])
-    test::rejects("ns-proof-counted-loop-negatives/down-from-length", compiler::DiagnosticCode::UnhandledError, b_down_from_length)
+    std::test::rejects("ns-proof-counted-loop-negatives/down-from-length", std::compiler::DiagnosticCode::UnhandledError, b_down_from_length)
 
     # ns-proof-capacity: a MutableArray's capacity is fixed at allocation;
     # its unset slots read as unit.
-    fn b_allocation_size() errors compiler::CompilerError:
+    fn b_allocation_size() errors std::compiler::CompilerError:
         static compile:
             fn f(n):
-                a = mutable_array::allocate(n)
+                a = std::mutable_array::allocate(n)
                 loop i from 0 to n:
-                    mutable_array::at(a, i)
+                    std::mutable_array::at(a, i)
             f(2)
-    test::value("ns-proof-capacity/allocation-size", [unit, unit], b_allocation_size)
-    fn b_capacity() errors compiler::CompilerError:
+    std::test::value("ns-proof-capacity/allocation-size", [unit, unit], b_allocation_size)
+    fn b_capacity() errors std::compiler::CompilerError:
         static compile:
             fn f(a):
-                loop i from 0 to mutable_array::capacity(a):
-                    mutable_array::at(a, i)
-            f(mutable_array::allocate(1))
-    test::value("ns-proof-capacity/capacity", [unit], b_capacity)
-    fn b_literal_in_capacity() errors compiler::CompilerError:
+                loop i from 0 to std::mutable_array::capacity(a):
+                    std::mutable_array::at(a, i)
+            f(std::mutable_array::allocate(1))
+    std::test::value("ns-proof-capacity/capacity", [unit], b_capacity)
+    fn b_literal_in_capacity() errors std::compiler::CompilerError:
         static compile:
-            a = mutable_array::allocate(3)
-            mutable_array::at(a, 2)
-    test::value("ns-proof-capacity/literal-in-capacity", unit, b_literal_in_capacity)
-    fn b_literal_past_capacity() errors compiler::CompilerError:
+            a = std::mutable_array::allocate(3)
+            std::mutable_array::at(a, 2)
+    std::test::value("ns-proof-capacity/literal-in-capacity", unit, b_literal_in_capacity)
+    fn b_literal_past_capacity() errors std::compiler::CompilerError:
         static compile:
-            a = mutable_array::allocate(3)
-            mutable_array::at(a, 3)
-    test::rejects("ns-proof-capacity/literal-past-capacity", compiler::DiagnosticCode::KnownError, b_literal_past_capacity)
+            a = std::mutable_array::allocate(3)
+            std::mutable_array::at(a, 3)
+    std::test::rejects("ns-proof-capacity/literal-past-capacity", std::compiler::DiagnosticCode::KnownError, b_literal_past_capacity)
 
 fn register_relation_proof_tests():
     # ns-proof-branch-relations: an enclosing comparison with the length
     # (and a nonnegative index), or an equality of the length with a
     # constant, proves the read.
-    fn b_both_guards() errors compiler::CompilerError:
+    fn b_both_guards() errors std::compiler::CompilerError:
         static compile:
             fn f(xs, i):
                 if i < 0:
                     return 0
-                if i >= list::length(xs):
+                if i >= std::list::length(xs):
                     return 1
-                list::at(xs, i)
+                std::list::at(xs, i)
             f([1], 0)
-    test::value("ns-proof-branch-relations/both-guards", 1, b_both_guards)
-    fn b_length_equals_constant() errors compiler::CompilerError:
+    std::test::value("ns-proof-branch-relations/both-guards", 1, b_both_guards)
+    fn b_length_equals_constant() errors std::compiler::CompilerError:
         static compile:
             fn f(b):
-                if list::length(b) == 2:
-                    list::at(b, 1)
+                if std::list::length(b) == 2:
+                    std::list::at(b, 1)
                 else:
                     0
             f([1])
-    test::value("ns-proof-branch-relations/length-equals-constant", 0, b_length_equals_constant)
-    fn b_upper_guard_only() errors compiler::CompilerError:
+    std::test::value("ns-proof-branch-relations/length-equals-constant", 0, b_length_equals_constant)
+    fn b_upper_guard_only() errors std::compiler::CompilerError:
         static compile:
             fn f(xs, i):
-                if i >= list::length(xs):
+                if i >= std::list::length(xs):
                     return 1
-                list::at(xs, i)
+                std::list::at(xs, i)
             f([1], 0)
-    test::rejects("ns-proof-branch-relations/upper-guard-only", compiler::DiagnosticCode::UnhandledError, b_upper_guard_only)
+    std::test::rejects("ns-proof-branch-relations/upper-guard-only", std::compiler::DiagnosticCode::UnhandledError, b_upper_guard_only)
 
     # ns-proof-and-or-conditions: `i < 0 or i >= length` false and
     # `i >= 0 and i < length` true prove the read; the unsound mixes do not.
-    fn b_or_false() errors compiler::CompilerError:
+    fn b_or_false() errors std::compiler::CompilerError:
         static compile:
             fn f(xs, i):
-                if i < 0 or i >= list::length(xs):
+                if i < 0 or i >= std::list::length(xs):
                     0
                 else:
-                    list::at(xs, i)
+                    std::list::at(xs, i)
             f([1], 0)
-    test::value("ns-proof-and-or-conditions/or-false", 1, b_or_false)
-    fn b_and_true() errors compiler::CompilerError:
+    std::test::value("ns-proof-and-or-conditions/or-false", 1, b_or_false)
+    fn b_and_true() errors std::compiler::CompilerError:
         static compile:
             fn f(xs, i):
-                if i >= 0 and i < list::length(xs):
-                    list::at(xs, i)
-                else:
-                    0
-            f([1], 0)
-    test::value("ns-proof-and-or-conditions/and-true", 1, b_and_true)
-    fn b_or_true() errors compiler::CompilerError:
-        static compile:
-            fn f(xs, i):
-                if i >= 0 or i < list::length(xs):
-                    list::at(xs, i)
+                if i >= 0 and i < std::list::length(xs):
+                    std::list::at(xs, i)
                 else:
                     0
             f([1], 0)
-    test::rejects("ns-proof-and-or-conditions/or-true-unsound", compiler::DiagnosticCode::UnhandledError, b_or_true)
-    fn b_and_false() errors compiler::CompilerError:
+    std::test::value("ns-proof-and-or-conditions/and-true", 1, b_and_true)
+    fn b_or_true() errors std::compiler::CompilerError:
         static compile:
             fn f(xs, i):
-                if i < 0 and i >= list::length(xs):
+                if i >= 0 or i < std::list::length(xs):
+                    std::list::at(xs, i)
+                else:
+                    0
+            f([1], 0)
+    std::test::rejects("ns-proof-and-or-conditions/or-true-unsound", std::compiler::DiagnosticCode::UnhandledError, b_or_true)
+    fn b_and_false() errors std::compiler::CompilerError:
+        static compile:
+            fn f(xs, i):
+                if i < 0 and i >= std::list::length(xs):
                     0
                 else:
-                    list::at(xs, i)
+                    std::list::at(xs, i)
             f([1], 0)
-    test::rejects("ns-proof-and-or-conditions/and-false-unsound", compiler::DiagnosticCode::UnhandledError, b_and_false)
+    std::test::rejects("ns-proof-and-or-conditions/and-false-unsound", std::compiler::DiagnosticCode::UnhandledError, b_and_false)
 
     # ns-proof-relations-do-not-outlive-their-scope: a guard inside a loop
     # body or a handler (which may not run) proves nothing after it; an
@@ -733,96 +733,96 @@ fn register_relation_proof_tests():
     # over the empty List never runs, so the read always fails), and f's own
     # read after the loop keeps its obligation. A block reifies its first
     # diagnostic, the call's; the read's is the same f without the call.
-    fn b_loop_guard() errors compiler::CompilerError:
+    fn b_loop_guard() errors std::compiler::CompilerError:
         static compile:
             fn f(xs, ys, j: SmallIndex):
                 loop x in xs:
-                    if j >= list::length(ys):
+                    if j >= std::list::length(ys):
                         return 0
-                list::at(ys, j)
+                std::list::at(ys, j)
             f([], [1], 5)
-    test::rejects("ns-proof-relations-do-not-outlive-their-scope/loop-guard-call", compiler::DiagnosticCode::KnownError, b_loop_guard)
-    fn b_loop_guard_read() errors compiler::CompilerError:
+    std::test::rejects("ns-proof-relations-do-not-outlive-their-scope/loop-guard-call", std::compiler::DiagnosticCode::KnownError, b_loop_guard)
+    fn b_loop_guard_read() errors std::compiler::CompilerError:
         static compile:
             fn f(xs, ys, j: SmallIndex):
                 loop x in xs:
-                    if j >= list::length(ys):
+                    if j >= std::list::length(ys):
                         return 0
-                list::at(ys, j)
+                std::list::at(ys, j)
             0
-    test::rejects_at("ns-proof-relations-do-not-outlive-their-scope/loop-guard-read", compiler::DiagnosticCode::UnhandledError, 751, 17, b_loop_guard_read)
-    fn b_handler_guard() errors compiler::CompilerError:
+    std::test::rejects_at("ns-proof-relations-do-not-outlive-their-scope/loop-guard-read", std::compiler::DiagnosticCode::UnhandledError, 751, 17, b_loop_guard_read)
+    fn b_handler_guard() errors std::compiler::CompilerError:
         static compile:
             fn f(xs, ys, j: SmallIndex):
-                v = list::at(xs, 0):
+                v = std::list::at(xs, 0):
                     on IndexNotFound:
-                        if j >= list::length(ys):
+                        if j >= std::list::length(ys):
                             return 0
                         1
-                v + list::at(ys, j)
+                v + std::list::at(ys, j)
             f([1], [1], 5)
-    test::rejects("ns-proof-relations-do-not-outlive-their-scope/handler-guard", compiler::DiagnosticCode::UnhandledError, b_handler_guard)
-    fn b_function_level_guard() errors compiler::CompilerError:
+    std::test::rejects("ns-proof-relations-do-not-outlive-their-scope/handler-guard", std::compiler::DiagnosticCode::UnhandledError, b_handler_guard)
+    fn b_function_level_guard() errors std::compiler::CompilerError:
         static compile:
             fn f(ys, j: SmallIndex):
-                if j >= list::length(ys):
+                if j >= std::list::length(ys):
                     return 0
-                list::at(ys, j)
+                std::list::at(ys, j)
             f([1], 5)
-    test::value("ns-proof-relations-do-not-outlive-their-scope/function-level-guard", 0, b_function_level_guard)
+    std::test::value("ns-proof-relations-do-not-outlive-their-scope/function-level-guard", 0, b_function_level_guard)
 
     # ns-proof-relations-before-call-ranges: a read the branch relations
     # prove stays proven in a call whose exact arguments put the index out of
     # range: that call never reaches the read.
-    fn b_before_call_ranges() errors compiler::CompilerError:
+    fn b_before_call_ranges() errors std::compiler::CompilerError:
         static compile:
             fn at_or(xs: List[int], i: int, d: int) -> int:
-                if i >= 0 and i < list::length(xs):
-                    list::at(xs, i)
+                if i >= 0 and i < std::list::length(xs):
+                    std::list::at(xs, i)
                 else:
                     d
             [at_or([1, 2, 3], 2, 0), at_or([1], 5, 9), at_or([], 0, 7)]
-    test::value("ns-proof-relations-before-call-ranges", [3, 9, 7], b_before_call_ranges)
+    std::test::value("ns-proof-relations-before-call-ranges", [3, 9, 7], b_before_call_ranges)
 
     # ns-proof-early-return-result: a callee's early return value is part of
     # the result Range the call-specific walk proves.
-    fn b_may_return_5() errors compiler::CompilerError:
+    fn b_may_return_5() errors std::compiler::CompilerError:
         static compile:
             fn idx(k):
                 if k > 0:
                     return 5
                 0
             fn get(k):
-                list::at([10, 20], idx(k))
+                std::list::at([10, 20], idx(k))
             loop i from 0 to 3:
                 get(i)
-    test::rejects("ns-proof-early-return-result/may-return-5", compiler::DiagnosticCode::UnhandledError, b_may_return_5)
-    fn b_every_return_in_range() errors compiler::CompilerError:
+    std::test::rejects("ns-proof-early-return-result/may-return-5", std::compiler::DiagnosticCode::UnhandledError, b_may_return_5)
+    fn b_every_return_in_range() errors std::compiler::CompilerError:
         static compile:
             fn idx(k):
                 if k > 0:
                     return 1
                 0
             fn get(k):
-                list::at([10, 20], idx(k))
+                std::list::at([10, 20], idx(k))
             loop i from 0 to 3:
                 get(i)
-    test::value("ns-proof-early-return-result/every-return-in-range", [10, 20, 20], b_every_return_in_range)
+    std::test::value("ns-proof-early-return-result/every-return-in-range", [10, 20, 20], b_every_return_in_range)
 
     # ns-proof-literal-loop-exits: a loop over a small literal List whose
     # body can break or continue is not cut short by the per-element walk;
     # a body that returns still stops it.
-    fn b_after_break() errors compiler::CompilerError:
+    fn b_after_break() errors std::compiler::CompilerError:
         static compile:
             loop x in [1, 2]:
                 if x > 1:
                     break
                 x
             fn f(xs, i):
-                list::at(xs, i)
+                std::list::at(xs, i)
             f([1], 0)
-    test::rejects("ns-proof-literal-loop-exits/after-break", compiler::DiagnosticCode::UnhandledError, b_after_break)
-    fn b_continue() errors compiler::CompilerError:
+    std::test::rejects("ns-proof-literal-loop-exits/after-break", std::compiler::DiagnosticCode::UnhandledError, b_after_break)
+    fn b_continue() errors std::compiler::CompilerError:
         static compile:
             fn f(k) errors PositiveArgument:
                 loop x in [1, 2]:
@@ -833,24 +833,24 @@ fn register_relation_proof_tests():
                     fail PositiveArgument
                 7
             f(0)
-    test::value("ns-proof-literal-loop-exits/continue", 7, b_continue)
-    fn b_return() errors compiler::CompilerError:
+    std::test::value("ns-proof-literal-loop-exits/continue", 7, b_continue)
+    fn b_return() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 loop x in [1, 2]:
                     if x > 0:
                         return x
                     x
-                list::at([], 0)
+                std::list::at([], 0)
             f()
-    test::value("ns-proof-literal-loop-exits/return", 1, b_return)
+    std::test::value("ns-proof-literal-loop-exits/return", 1, b_return)
 
-    # ns-proof-lib-mutable-array-from-list: from_list's own list::at needs no
-    # handler (its loop counts to list::length(xs)).
-    fn b_lib_from_list() errors compiler::CompilerError:
+    # ns-proof-lib-mutable-array-from-list: from_list's own std::list::at needs no
+    # handler (its loop counts to std::list::length(xs)).
+    fn b_lib_from_list() errors std::compiler::CompilerError:
         static compile:
-            mutable_array::freeze(mutable_array::from_list([1, 2]), 2)
-    test::value("ns-proof-lib-mutable-array-from-list", [1, 2], b_lib_from_list)
+            std::mutable_array::freeze(std::mutable_array::from_list([1, 2]), 2)
+    std::test::value("ns-proof-lib-mutable-array-from-list", [1, 2], b_lib_from_list)
 
 # ---------------------------------------------------------------------------
 # get: ordinary Botlish over at, with an explicit, eager default
@@ -858,24 +858,24 @@ fn register_relation_proof_tests():
 fn register_get_tests(zero: int, one: int, two: int, three: int, minus_one: int, huge: int):
     # ns-get-values: the element when present, the default for every
     # missing index.
-    fn b_get_values() errors compiler::CompilerError:
+    fn b_get_values() errors std::compiler::CompilerError:
         static compile:
-            a = mutable_array::from_list(["x", "y"])
-            [list::get([10, 20, 30], one, 0), list::get([10, 20, 30], three, 0), list::get([10, 20, 30], minus_one, 0), list::get([], zero, "none"), list::get([1], huge, 7), mutable_array::get(a, one, ""), mutable_array::get(a, two, "?")]
-    test::value("ns-get-values", [20, 0, 0, "none", 7, "y", "?"], b_get_values)
+            a = std::mutable_array::from_list(["x", "y"])
+            [std::list::get([10, 20, 30], one, 0), std::list::get([10, 20, 30], three, 0), std::list::get([10, 20, 30], minus_one, 0), std::list::get([], zero, "none"), std::list::get([1], huge, 7), std::mutable_array::get(a, one, ""), std::mutable_array::get(a, two, "?")]
+    std::test::value("ns-get-values", [20, 0, 0, "none", 7, "y", "?"], b_get_values)
 
     # ns-get-has-no-obligation: get handles IndexNotFound itself.
-    fn b_no_obligation() errors compiler::CompilerError:
+    fn b_no_obligation() errors std::compiler::CompilerError:
         static compile:
             fn f(xs, i):
-                list::get(xs, i, 0)
+                std::list::get(xs, i, 0)
             f([1], 9)
-    test::value("ns-get-has-no-obligation", 0, b_no_obligation)
+    std::test::value("ns-get-has-no-obligation", 0, b_no_obligation)
 
     # ns-handle-type-in-an-instance: a handled call's type includes a handler
     # whose type the semantic instance cannot admit as the call's own (an
     # int call, a str handler); no Int equality is applied to the String.
-    fn b_declared_error_instance() errors compiler::CompilerError:
+    fn b_declared_error_instance() errors std::compiler::CompilerError:
         static compile:
             fn f(x, n) errors NegativeCount:
                 if n < 0:
@@ -889,48 +889,48 @@ fn register_get_tests(zero: int, one: int, two: int, three: int, minus_one: int,
             b = explicit(1, 0 - 2, "dd")
             c = explicit(1, 0 - 3, "dd")
             [b == c, b, explicit(1, 5, "dd")]
-    test::value("ns-handle-type-in-an-instance/declared-error", [true, "dd", 1], b_declared_error_instance)
-    fn b_list_get_instance() errors compiler::CompilerError:
+    std::test::value("ns-handle-type-in-an-instance/declared-error", [true, "dd", 1], b_declared_error_instance)
+    fn b_list_get_instance() errors std::compiler::CompilerError:
         static compile:
-            a = list::get([7], -2, "dd")
-            b = list::get([7], -3, "dd")
-            [a == b, list::get([7], 0, "dd") == 7]
-    test::value("ns-handle-type-in-an-instance/list-get", [true, true], b_list_get_instance)
+            a = std::list::get([7], -2, "dd")
+            b = std::list::get([7], -3, "dd")
+            [a == b, std::list::get([7], 0, "dd") == 7]
+    std::test::value("ns-handle-type-in-an-instance/list-get", [true, true], b_list_get_instance)
 
 # ns-get-default-is-eager: the default is an ordinary argument, evaluated
 # before the call, present index or not. The calls need the installed
 # EvaluationLog, so they run here (a body cannot need a context) and the
 # body compares what they computed: three evaluations.
 fn register_get_default_tests():
-    a = list::get([10, 20], 0, evaluated(-1))
-    b = list::get([10, 20], 5, evaluated(-2))
-    c = mutable_array::get(mutable_array::create(1, 7), 0, evaluated(-3))
+    a = std::list::get([10, 20], 0, evaluated(-1))
+    b = std::list::get([10, 20], 5, evaluated(-2))
+    c = std::mutable_array::get(std::mutable_array::create(1, 7), 0, evaluated(-3))
     n = evaluations()
-    fn b_default_is_eager() errors compiler::CompilerError:
+    fn b_default_is_eager() errors std::compiler::CompilerError:
         static compile:
             [a, b, c, n]
-    test::value("ns-get-default-is-eager", [10, -2, 7, 3], b_default_is_eager)
+    std::test::value("ns-get-default-is-eager", [10, -2, 7, 3], b_default_is_eager)
 
 # ns-get-differential: for one container ITEMS and every index of INDICES,
-# list::get equals at with an explicit IndexNotFound handler, and
-# mutable_array::get likewise. Each element of the value is [list::get ==
-# explicit, the get's value, mutable_array::get == explicit_array].
+# std::list::get equals at with an explicit IndexNotFound handler, and
+# std::mutable_array::get likewise. Each element of the value is [std::list::get ==
+# explicit, the get's value, std::mutable_array::get == explicit_array].
 fn register_get_differential(name: str, items, indices: List[int], expected):
-    fn b_get_differential() errors compiler::CompilerError:
+    fn b_get_differential() errors std::compiler::CompilerError:
         static compile:
             fn explicit(xs, i, d):
-                v = list::at(xs, i):
+                v = std::list::at(xs, i):
                     on IndexNotFound:
                         d
                 v
             fn explicit_array(a, i, d):
-                v = mutable_array::at(a, i):
+                v = std::mutable_array::at(a, i):
                     on IndexNotFound:
                         d
                 v
             loop i in indices:
-                [list::get(items, i, "d") == explicit(items, i, "d"), list::get(items, i, "d"), mutable_array::get(mutable_array::from_list(items), i, "d") == explicit_array(mutable_array::from_list(items), i, "d")]
-    test::value(name, expected, b_get_differential)
+                [std::list::get(items, i, "d") == explicit(items, i, "d"), std::list::get(items, i, "d"), std::mutable_array::get(std::mutable_array::from_list(items), i, "d") == explicit_array(std::mutable_array::from_list(items), i, "d")]
+    std::test::value(name, expected, b_get_differential)
 
 fn register_get_differential_tests():
     indices = [-2, -1, 0, 1, 2, 3, 100000000000000000000]
@@ -945,91 +945,91 @@ fn register_get_differential_tests():
 
 fn register_method_tests():
     # ns-method-NAME: the namespace is imported, nothing is bound.
-    fn b_list_at() errors compiler::CompilerError:
+    fn b_list_at() errors std::compiler::CompilerError:
         static compile:
-            [[10, 20, 30].at(1), list::at([10, 20, 30], 1)]
-    test::value("ns-method-list-at", [20, 20], b_list_at)
-    fn b_list_get() errors compiler::CompilerError:
+            [[10, 20, 30].at(1), std::list::at([10, 20, 30], 1)]
+    std::test::value("ns-method-list-at", [20, 20], b_list_at)
+    fn b_list_get() errors std::compiler::CompilerError:
         static compile:
-            [[10, 20].get(5, 0), list::get([10, 20], 5, 0)]
-    test::value("ns-method-list-get", [0, 0], b_list_get)
-    fn b_list_append() errors compiler::CompilerError:
+            [[10, 20].get(5, 0), std::list::get([10, 20], 5, 0)]
+    std::test::value("ns-method-list-get", [0, 0], b_list_get)
+    fn b_list_append() errors std::compiler::CompilerError:
         static compile:
-            [[1].append(2), list::append([1], 2)]
-    test::value("ns-method-list-append", [[1, 2], [1, 2]], b_list_append)
-    fn b_list_length() errors compiler::CompilerError:
+            [[1].append(2), std::list::append([1], 2)]
+    std::test::value("ns-method-list-append", [[1, 2], [1, 2]], b_list_append)
+    fn b_list_length() errors std::compiler::CompilerError:
         static compile:
-            [[1, 2].length(), list::length([1, 2])]
-    test::value("ns-method-list-length", [2, 2], b_list_length)
-    fn b_str_concat() errors compiler::CompilerError:
+            [[1, 2].length(), std::list::length([1, 2])]
+    std::test::value("ns-method-list-length", [2, 2], b_list_length)
+    fn b_str_concat() errors std::compiler::CompilerError:
         static compile:
-            ["ab".concat("cd"), str::concat("ab", "cd")]
-    test::value("ns-method-str-concat", ["abcd", "abcd"], b_str_concat)
-    fn b_str_length() errors compiler::CompilerError:
+            ["ab".concat("cd"), std::str::concat("ab", "cd")]
+    std::test::value("ns-method-str-concat", ["abcd", "abcd"], b_str_concat)
+    fn b_str_length() errors std::compiler::CompilerError:
         static compile:
-            ["abc".length(), str::length("abc")]
-    test::value("ns-method-str-length", [3, 3], b_str_length)
-    fn b_str_substring() errors compiler::CompilerError:
+            ["abc".length(), std::str::length("abc")]
+    std::test::value("ns-method-str-length", [3, 3], b_str_length)
+    fn b_str_substring() errors std::compiler::CompilerError:
         static compile:
-            ["hello".substring(1, 3), str::substring("hello", 1, 3)]
-    test::value("ns-method-str-substring", ["el", "el"], b_str_substring)
-    fn b_set_contains() errors compiler::CompilerError:
+            ["hello".substring(1, 3), std::str::substring("hello", 1, 3)]
+    std::test::value("ns-method-str-substring", ["el", "el"], b_str_substring)
+    fn b_set_contains() errors std::compiler::CompilerError:
         static compile:
-            [immutable_set::from_list([1]).contains(1), immutable_set::contains(immutable_set::from_list([1]), 1)]
-    test::value("ns-method-set-contains", [true, true], b_set_contains)
-    fn b_char_scalar_value() errors compiler::CompilerError:
+            [std::immutable_set::from_list([1]).contains(1), std::immutable_set::contains(std::immutable_set::from_list([1]), 1)]
+    std::test::value("ns-method-set-contains", [true, true], b_set_contains)
+    fn b_char_scalar_value() errors std::compiler::CompilerError:
         static compile:
-            ['A'.scalar_value(), char::scalar_value('A')]
-    test::value("ns-method-char-scalar-value", [65, 65], b_char_scalar_value)
+            ['A'.scalar_value(), std::char::scalar_value('A')]
+    std::test::value("ns-method-char-scalar-value", [65, 65], b_char_scalar_value)
 
     # ns-method-alias-NAME: an alias of an imported member is the same one
     # candidate as the member (a local binding is a method candidate: an
     # alias of another function would make the call ambiguous).
-    fn b_alias_list_at() errors compiler::CompilerError:
+    fn b_alias_list_at() errors std::compiler::CompilerError:
         static compile:
-            at = list::at
-            [[10, 20, 30].at(1), list::at([10, 20, 30], 1)]
-    test::value("ns-method-alias-list-at", [20, 20], b_alias_list_at)
-    fn b_alias_list_length() errors compiler::CompilerError:
+            at = std::list::at
+            [[10, 20, 30].at(1), std::list::at([10, 20, 30], 1)]
+    std::test::value("ns-method-alias-list-at", [20, 20], b_alias_list_at)
+    fn b_alias_list_length() errors std::compiler::CompilerError:
         static compile:
-            length = list::length
-            [[1, 2].length(), list::length([1, 2])]
-    test::value("ns-method-alias-list-length", [2, 2], b_alias_list_length)
-    fn b_alias_str_concat() errors compiler::CompilerError:
+            length = std::list::length
+            [[1, 2].length(), std::list::length([1, 2])]
+    std::test::value("ns-method-alias-list-length", [2, 2], b_alias_list_length)
+    fn b_alias_str_concat() errors std::compiler::CompilerError:
         static compile:
-            concat = str::concat
-            ["ab".concat("cd"), str::concat("ab", "cd")]
-    test::value("ns-method-alias-str-concat", ["abcd", "abcd"], b_alias_str_concat)
-    fn b_alias_list_get() errors compiler::CompilerError:
+            concat = std::str::concat
+            ["ab".concat("cd"), std::str::concat("ab", "cd")]
+    std::test::value("ns-method-alias-str-concat", ["abcd", "abcd"], b_alias_str_concat)
+    fn b_alias_list_get() errors std::compiler::CompilerError:
         static compile:
-            get = list::get
-            [[10, 20].get(5, 0), list::get([10, 20], 5, 0)]
-    test::value("ns-method-alias-list-get", [0, 0], b_alias_list_get)
+            get = std::list::get
+            [[10, 20].get(5, 0), std::list::get([10, 20], 5, 0)]
+    std::test::value("ns-method-alias-list-get", [0, 0], b_alias_list_get)
 
     # ns-method-mutable-array: at/set/get by method spelling make the same
     # reads and writes as the free calls (A is a place: the block's local).
-    fn b_mutable_array_methods() errors compiler::CompilerError:
+    fn b_mutable_array_methods() errors std::compiler::CompilerError:
         static compile:
-            a = mutable_array::allocate(2)
+            a = std::mutable_array::allocate(2)
             a.set(0, 5)
             a.set(1, 6)
             [a.at(0), a.at(1), a.get(2, -1)]
-    test::value("ns-method-mutable-array/method", [5, 6, -1], b_mutable_array_methods)
-    fn b_mutable_array_free() errors compiler::CompilerError:
+    std::test::value("ns-method-mutable-array/method", [5, 6, -1], b_mutable_array_methods)
+    fn b_mutable_array_free() errors std::compiler::CompilerError:
         static compile:
-            a = mutable_array::allocate(2)
-            mutable_array::set(a, 0, 5)
-            mutable_array::set(a, 1, 6)
-            [mutable_array::at(a, 0), mutable_array::at(a, 1), mutable_array::get(a, 2, -1)]
-    test::value("ns-method-mutable-array/free", [5, 6, -1], b_mutable_array_free)
+            a = std::mutable_array::allocate(2)
+            std::mutable_array::set(a, 0, 5)
+            std::mutable_array::set(a, 1, 6)
+            [std::mutable_array::at(a, 0), std::mutable_array::at(a, 1), std::mutable_array::get(a, 2, -1)]
+    std::test::value("ns-method-mutable-array/free", [5, 6, -1], b_mutable_array_free)
 
     # ns-method-requires-an-import: where the file imports list, `.at` is
-    # list::at (the files without that import:
+    # std::list::at (the files without that import:
     # stdlib-namespaces-unimported.bot, stdlib-namespaces-str-only.bot).
-    fn b_list_imported() errors compiler::CompilerError:
+    fn b_list_imported() errors std::compiler::CompilerError:
         static compile:
             [1, 2].at(0)
-    test::value("ns-method-requires-an-import/list-imported", 1, b_list_imported)
+    std::test::value("ns-method-requires-an-import/list-imported", 1, b_list_imported)
 
 # ---------------------------------------------------------------------------
 # The Tcl files
@@ -1050,16 +1050,16 @@ fn register_stdlib_namespaces_tests():
     register_get_differential_tests()
     register_method_tests()
 
-# module-static-emailish-parity: web::emailish? (its module's retained
+# module-static-emailish-parity: std::web::emailish? (its module's retained
 # statics) gives one value on every backend; ADDRESS is "a@b.co".
 fn register_module_static_values_tests(address: str):
-    fn b_emailish() errors compiler::CompilerError:
+    fn b_emailish() errors std::compiler::CompilerError:
         static compile:
-            web::emailish?(address)
-    test::value("module-static-emailish-parity", true, b_emailish)
+            std::web::emailish?(address)
+    std::test::value("module-static-emailish-parity", true, b_emailish)
 
-with context test::suite()
-with context EvaluationLog {marks: mutable_array::create(1, 0)}
+with context std::test::suite()
+with context EvaluationLog {marks: std::mutable_array::create(1, 0)}
 register_stdlib_namespaces_tests()
 register_module_static_values_tests("a@b.co")
-test::report()
+std::test::report()

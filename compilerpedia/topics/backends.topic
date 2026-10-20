@@ -194,14 +194,15 @@ related: backend.io backend.overview concept.c-ffi concept.direct-modules concep
 docs: LINUX-X86-64-SYSCALL.md ABI-BYTES.md C-FFI.md CONTEXT-TRAITS.md
 
 == WHAT THEY ARE
-  * the address bridges abi::x86_64::from_bytes / from_mutable_bytes (and
-    the aarch64 ones): a byte buffer's machine address;
-  * the system-call transports linux::abi::x86_64::syscall and
-    linux::abi::aarch64::syscall;
+  * the address bridges std::abi::x86_64::from_bytes / from_mutable_bytes
+    (and the aarch64 ones): a byte buffer's machine address;
+  * the system-call transports std::linux::abi::x86_64::syscall and
+    std::linux::abi::aarch64::syscall;
   * calls of C functions (`extern c fn`, C-FFI.md);
-and so everything built on them: lib/linux.bot, linux::io, and therefore
-io's printing through linux::io::LinuxIO. Each such standard-library entry
-says so in its BACKENDS section (-help linux::abi::x86_64::syscall).
+and so everything built on them: stdlib/linux.bot, std::linux::io, and
+therefore io's printing through std::linux::io::LinuxIO. Each such
+standard-library entry says so in its BACKENDS section (-help
+std::linux::abi::x86_64::syscall).
 
 == WHY
 The Tcl backends have no machine addresses and do not imitate the kernel:
@@ -218,29 +219,29 @@ every backend prints (backend.io).
 
 @topic backend.io
 title: Which forms of I/O work on which backend
-summary: The program's value is printed on every backend; printing (io::print_line) and reading stdin (linux::io::read) need a native backend or an executable; there is no file or exit-status API.
+summary: The program's value is printed on every backend; printing (std::io::print_line) and reading stdin (std::linux::io::read) need a native backend or an executable; there is no file or exit-status API.
 index: backends stdlib
 alias: input output; io backends; printing on interp; output on every backend
 keywords: io, print, print_line, stdout, stderr, value, native, interp
-related: task.print-output backend.native-only stdlib.module.io stdlib.io::print_line capability.input capability.files capability.process-exit-status concept.program-value concept.context-traits
+related: task.print-output backend.native-only stdlib.module.std::io stdlib.std::io::print_line capability.input capability.files capability.process-exit-status concept.program-value concept.context-traits
 docs: CONTEXT-TRAITS.md POST-2048-PRODUCT-FIXES.md
 
 == OUTPUT, BY BACKEND
     the program's value          every backend: the compiler prints it
                                  after "value:"; an executable prints it last
-    io::print, print_line,       cranelift, cranelift-generic and native
+    std::io::print, print_line,       cranelift, cranelift-generic and native
     write_error(_line)           executables; interp and compile refuse the
                                  underlying system call (NATIVE-ONLY)
-    linux::write, linux::io      the same: native only
+    std::linux::write, std::linux::io      the same: native only
 
-io's operations need an installed context implementing io::IO; the one the
-standard library provides is linux::io::LinuxIO (`with context
-linux::io::create()`), which makes raw Linux system calls -- hence native
-only, on Linux.
+io's operations need an installed context implementing std::io::IO; the one
+the standard library provides is std::linux::io::LinuxIO (`with context
+std::linux::io::create()`), which makes raw Linux system calls -- hence
+native only, on Linux.
 
 == INPUT
     argv()                       every backend (concept.argv)
-    linux::io::read(buffer)      standard input, raw bytes: cranelift,
+    std::linux::io::read(buffer)      standard input, raw bytes: cranelift,
                                  cranelift-generic and native executables
                                  (capability.input)
 
@@ -282,9 +283,9 @@ about other platforms.
                              and a coroutine's, on Linux x86-64 and
                              AArch64 and macOS AArch64
                              (error.native-limit-stack)
-    Linux system calls, io   Linux; x86-64 through linux::abi::x86_64,
-                             AArch64 through linux::abi::aarch64 (one
-                             portable surface: linux, linux::io, io);
+    Linux system calls, io   Linux; x86-64 through std::linux::abi::x86_64,
+                             AArch64 through std::linux::abi::aarch64 (one
+                             portable surface: linux, std::linux::io, io);
                              the linux namespaces compile for Linux
                              targets only (error.unsupported-platform)
     executables              Linux, glibc, ELF: rustc linker on x86-64
@@ -301,7 +302,7 @@ title: -target: the compilation target, an operating system and an architecture
 summary: -target NAME picks the operating system and architecture a program is built for (C type sizes, modules, platforms); native code runs only for the host's own target.
 index: backends
 alias: target; -target; cross compile; C ABI target
-keywords: target, linux-x86_64, linux-aarch64, macos, macos-aarch64, windows, windows-x86_64-gnu, mingw, ffi, linux::sys, architecture, operating system, triple
+keywords: target, linux-x86_64, linux-aarch64, macos, macos-aarch64, windows, windows-x86_64-gnu, mingw, ffi, std::linux::sys, architecture, operating system, triple
 related: backend.platforms concept.c-ffi cli.options error.unsupported-platform error.native-target error.hir-interchange-target
 docs: C-ABI-TYPES.md LINUX-SYSCALL-TRANSPORTS.md MACOS-AARCH64-MILESTONE-2.md
 
@@ -316,11 +317,11 @@ windows-x86_64 is MSVC's (x86_64-pc-windows-msvc), windows-x86_64-gnu
 MinGW-w64's (x86_64-pc-windows-gnu), the target of the generated Win32
 bindings (concept.c-bindgen-layouts).
 The target decides:
-  * the widths and signedness of ffi::c's C integer types (ffi::c::Long
-    is 64 bits on Linux and macOS, 32 on Windows; plain ffi::c::Char is
-    unsigned on Linux AArch64 only);
-  * which file an architecture-specific module comes from (linux::sys is
-    lib/linux/sys.x86_64.bot or lib/linux/sys.aarch64.bot);
+  * the widths and signedness of std::ffi::c's C integer types
+    (std::ffi::c::Long is 64 bits on Linux and macOS, 32 on Windows; plain
+    std::ffi::c::Char is unsigned on Linux AArch64 only);
+  * which file an architecture-specific module comes from (std::linux::sys
+    is stdlib/linux/sys.x86_64.bot or stdlib/linux/sys.aarch64.bot);
   * whether a platform namespace is available: linux and everything
     under it exist for Linux targets only (error.unsupported-platform);
   * the C calling convention of foreign calls (Apple's on macOS AArch64).

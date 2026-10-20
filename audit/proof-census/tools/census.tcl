@@ -103,7 +103,7 @@ proc Census {path} {
         }
     }
     # The prepared HIR: native::prepareHir attaches the bodies of
-    # module-backed natives (lib/web.bot's emailish?, ...) that native
+    # module-backed natives (stdlib/web.bot's emailish?, ...) that native
     # lowering compiles, so their calls are listed too.
     set hir $prepared
     foreach e [lsort -dictionary [dict keys [dict get $hir exprs]]] {

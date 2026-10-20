@@ -20,8 +20,8 @@
 # which erase nothing.
 #
 # Imports: compiler and test (every suite).
-import compiler
-import test
+import std::compiler
+import std::test
 
 error E1
 
@@ -59,16 +59,16 @@ fn register_hoc_fallback_tests():
     # hoc-fallback-declared-contract: under k = 5 E1 is no longer proven
     # absent: a handler for E3 alone is UnhandledError; with E1 handled too
     # the program is accepted and runs (the value is raise3's 5).
-    fn declared_contract_unhandled() errors compiler::CompilerError:
+    fn declared_contract_unhandled() errors std::compiler::CompilerError:
         static compile:
             fn use():
                 wrapper(5):
                     on E3 d:
                         d.code
             use()
-    test::rejects("hoc-fallback-declared-contract/unhandled", compiler::DiagnosticCode::UnhandledError, declared_contract_unhandled)
+    std::test::rejects("hoc-fallback-declared-contract/unhandled", std::compiler::DiagnosticCode::UnhandledError, declared_contract_unhandled)
 
-    fn declared_contract_handled() errors compiler::CompilerError:
+    fn declared_contract_handled() errors std::compiler::CompilerError:
         static compile:
             fn use():
                 wrapper(5):
@@ -77,24 +77,24 @@ fn register_hoc_fallback_tests():
                     on E3 d:
                         d.code
             use()
-    test::value("hoc-fallback-declared-contract/handled", 5, declared_contract_handled)
+    std::test::value("hoc-fallback-declared-contract/handled", 5, declared_contract_handled)
 
     # hoc-fallback-declared-contract-handled: the same through a handled
     # call in the callee (wrapper2's h(k) is handled and E3 failed again):
     # incompleteness propagates through it, and E3 alone is UnhandledError.
-    fn through_handled_call() errors compiler::CompilerError:
+    fn through_handled_call() errors std::compiler::CompilerError:
         static compile:
             fn use():
                 wrapper2(5):
                     on E3 d:
                         d.code
             use()
-    test::rejects("hoc-fallback-declared-contract-handled", compiler::DiagnosticCode::UnhandledError, through_handled_call)
+    std::test::rejects("hoc-fallback-declared-contract-handled", std::compiler::DiagnosticCode::UnhandledError, through_handled_call)
 
     # hoc-fallback-not-without-loss: wrapper3 calls raise3 directly (no lost
     # call): under k = 5 its fail E1 is unreachable, so E3 alone is handled,
     # and the program runs.
-    fn not_without_loss() errors compiler::CompilerError:
+    fn not_without_loss() errors std::compiler::CompilerError:
         static compile:
             fn wrapper3(k: int) -> int errors E1, E3:
                 if k < 0:
@@ -105,8 +105,8 @@ fn register_hoc_fallback_tests():
                     on E3 d:
                         d.code
             use()
-    test::value("hoc-fallback-not-without-loss", 5, not_without_loss)
+    std::test::value("hoc-fallback-not-without-loss", 5, not_without_loss)
 
-with context test::suite()
+with context std::test::suite()
 register_hoc_fallback_tests()
-test::report()
+std::test::report()

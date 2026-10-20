@@ -9,9 +9,9 @@
 # The corpus is the union of the seven warning milestones' audit corpora:
 #
 #   examples/{stdlib,surface,refinement,io,abi,linux}/*.bot, bench/*.bot,
-#   lib/*.bot and lib/*/*.bot, each compiled as an entry program
+#   stdlib/*.bot and stdlib/*/*.bot, each compiled as an entry program
 #   ("standalone"), and a one-line loader program `import NS` / `0` for
-#   every library module NS (lib/**/*.bot), the subdirectory modules
+#   every library module NS (stdlib/**/*.bot), the subdirectory modules
 #   included -- milestone 7's loader sweep.
 #
 # Sourced by gate.tcl (which defines ::refactorSweepLibrary first), it only
@@ -19,7 +19,7 @@
 #
 # -root audits another checkout (a worktree of an earlier commit: swept with
 # its own compiler) or a corpus-only tree (a scratch copy of examples/,
-# bench/ and lib/: swept with this checkout's compiler).
+# bench/ and stdlib/: swept with this checkout's compiler).
 
 namespace eval refactor::sweep {
     # Entry programs that are deliberate rejections: compiled, they must
@@ -50,25 +50,26 @@ proc refactor::sweep::writeText {path text} {
 proc refactor::sweep::programs {root} {
     set programs {}
     foreach dir {examples/stdlib examples/surface examples/refinement examples/io
-            examples/abi examples/binary examples/linux bench lib} {
+            examples/abi examples/binary examples/linux bench stdlib} {
         foreach path [lsort [glob -nocomplain -directory [file join $root $dir] *.bot]] {
             lappend programs [Rel $root $path]
         }
     }
-    foreach path [lsort [glob -nocomplain -directory [file join $root lib] */*.bot]] {
+    foreach path [lsort [glob -nocomplain -directory [file join $root stdlib] */*.bot]] {
         lappend programs [Rel $root $path]
     }
     return $programs
 }
 
-# The library modules of ROOT as namespaces (lib/abi/bytes.bot -> abi::bytes).
+# The library modules of ROOT as namespaces (stdlib/abi/bytes.bot -> std::abi::bytes).
 proc refactor::sweep::modules {root} {
     set modules {}
-    foreach path [lsort [concat [glob -nocomplain -directory [file join $root lib] *.bot] \
-            [glob -nocomplain -directory [file join $root lib] */*.bot]]] {
-        set module [string range [file rootname [Rel $root $path]] 4 end]
+    foreach path [lsort [concat [glob -nocomplain -directory [file join $root stdlib] *.bot] \
+            [glob -nocomplain -directory [file join $root stdlib] */*.bot]]] {
+        # stdlib/NAME.bot is the standard namespace std::NAME (STD-NAMESPACE.md).
+        set module std/[string range [file rootname [Rel $root $path]] 7 end]
         if {[regexp {^(.*)\.([A-Za-z0-9_]+)$} $module -> base arch]} {
-            # An architecture-specific module's file (lib/linux/sys.x86_64.bot,
+            # An architecture-specific module's file (stdlib/linux/sys.x86_64.bot,
             # surface/modules.tcl's ModuleFile): loaded by its namespace
             # under a Linux target of its architecture, NS@TARGET.
             lappend modules "[string map {/ ::} $base]@linux-$arch"
@@ -190,7 +191,7 @@ proc refactor::sweep::Commit {root} {
         return unknown
     }
     set dirty ""
-    catch {set dirty [exec git -C $root status --porcelain -- examples bench lib]}
+    catch {set dirty [exec git -C $root status --porcelain -- examples bench stdlib]}
     return [list $commit [expr {$dirty eq "" ? "clean" : "MODIFIED"}]]
 }
 
@@ -270,12 +271,12 @@ if {![info exists ::refactorSweepLibrary]} {
         }
     }
     # A full checkout is swept with its own compiler; a corpus-only tree
-    # (examples/, bench/, lib/: a scratch copy) with this checkout's.
+    # (examples/, bench/, stdlib/: a scratch copy) with this checkout's.
     if {[file exists [file join $root surface surface.tcl]]} {
         source [file join $root surface surface.tcl]
     } else {
         source [file join [file dirname [file dirname [file dirname $here]]] surface surface.tcl]
-        set ::core::libraryDir [file join $root lib]
+        set ::core::libraryDir [file join $root stdlib]
     }
     refactor::sweep::report $root
 }

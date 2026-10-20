@@ -71,30 +71,30 @@ set mutations {
     {byte-masked-to-7-bits rust native/src/runtime/ops.rs
         {bytes.push(byte);}
         {bytes.push(byte & 0x7f);}}
-    {count-truncated tcl lib/linux/sys.x86_64.bot
-        {fn write(fd: abi::I32, data: abi::bytes::Bytes) -> int:
-    abi::x86_64::to_int(
-        linux::abi::x86_64::syscall({
-            rax: abi::x86_64::register64(1),
-            rdi: abi::x86_64::from_i32(fd),
-            rsi: abi::x86_64::from_bytes(data),
-            rdx: abi::x86_64::from_usize(abi::bytes::length(data)),
+    {count-truncated tcl stdlib/linux/sys.x86_64.bot
+        {fn write(fd: std::abi::I32, data: std::abi::bytes::Bytes) -> int:
+    std::abi::x86_64::to_int(
+        std::linux::abi::x86_64::syscall({
+            rax: std::abi::x86_64::register64(1),
+            rdi: std::abi::x86_64::from_i32(fd),
+            rsi: std::abi::x86_64::from_bytes(data),
+            rdx: std::abi::x86_64::from_usize(std::abi::bytes::length(data)),
         })
     )}
-        {fn trunc16(n: abi::Usize) -> abi::Usize:
+        {fn trunc16(n: std::abi::Usize) -> std::abi::Usize:
     v = mod(n.value, 65536)
     if v > 65535:
-        abi::Usize {value: 0}
+        std::abi::Usize {value: 0}
     else:
-        abi::Usize {value: v}
+        std::abi::Usize {value: v}
 
-fn write(fd: abi::I32, data: abi::bytes::Bytes) -> int:
-    abi::x86_64::to_int(
-        linux::abi::x86_64::syscall({
-            rax: abi::x86_64::register64(1),
-            rdi: abi::x86_64::from_i32(fd),
-            rsi: abi::x86_64::from_bytes(data),
-            rdx: abi::x86_64::from_usize(trunc16(abi::bytes::length(data))),
+fn write(fd: std::abi::I32, data: std::abi::bytes::Bytes) -> int:
+    std::abi::x86_64::to_int(
+        std::linux::abi::x86_64::syscall({
+            rax: std::abi::x86_64::register64(1),
+            rdi: std::abi::x86_64::from_i32(fd),
+            rsi: std::abi::x86_64::from_bytes(data),
+            rdx: std::abi::x86_64::from_usize(trunc16(std::abi::bytes::length(data))),
         })
     )}}
     {no-keepalive tcl native/lower.tcl
@@ -103,11 +103,11 @@ fn write(fd: abi::I32, data: abi::bytes::Bytes) -> int:
     }}
         {    foreach storage $kept {
     }}}
-    {address-in-rdx tcl lib/linux/sys.x86_64.bot
-        {            rsi: abi::x86_64::from_bytes(data),
-            rdx: abi::x86_64::from_usize(abi::bytes::length(data)),}
-        {            rdx: abi::x86_64::from_bytes(data),
-            rsi: abi::x86_64::from_usize(abi::bytes::length(data)),}}
+    {address-in-rdx tcl stdlib/linux/sys.x86_64.bot
+        {            rsi: std::abi::x86_64::from_bytes(data),
+            rdx: std::abi::x86_64::from_usize(std::abi::bytes::length(data)),}
+        {            rdx: std::abi::x86_64::from_bytes(data),
+            rsi: std::abi::x86_64::from_usize(std::abi::bytes::length(data)),}}
     {libc-write rust native/src/runtime/syscall.rs
         {    let result: i64;
     // SAFETY: the caller's contract (above). The operand constraints are
@@ -119,19 +119,19 @@ fn write(fd: abi::I32, data: abi::bytes::Bytes) -> int:
     let result: i64;
     // SAFETY: the caller's contract (above). The operand constraints are
     // exactly the Linux x86-64 syscall register convention; rcx and r11 are}}
-    {write-twice tcl lib/linux/sys.x86_64.bot
-        {fn write(fd: abi::I32, data: abi::bytes::Bytes) -> int:
-    abi::x86_64::to_int(}
-        {fn write(fd: abi::I32, data: abi::bytes::Bytes) -> int:
-    abi::x86_64::to_int(
-        linux::abi::x86_64::syscall({
-            rax: abi::x86_64::register64(1),
-            rdi: abi::x86_64::from_i32(fd),
-            rsi: abi::x86_64::from_bytes(data),
-            rdx: abi::x86_64::from_usize(abi::bytes::length(data)),
+    {write-twice tcl stdlib/linux/sys.x86_64.bot
+        {fn write(fd: std::abi::I32, data: std::abi::bytes::Bytes) -> int:
+    std::abi::x86_64::to_int(}
+        {fn write(fd: std::abi::I32, data: std::abi::bytes::Bytes) -> int:
+    std::abi::x86_64::to_int(
+        std::linux::abi::x86_64::syscall({
+            rax: std::abi::x86_64::register64(1),
+            rdi: std::abi::x86_64::from_i32(fd),
+            rsi: std::abi::x86_64::from_bytes(data),
+            rdx: std::abi::x86_64::from_usize(std::abi::bytes::length(data)),
         })
     )
-    abi::x86_64::to_int(}}
+    std::abi::x86_64::to_int(}}
     {equality-by-identity rust native/src/runtime/ops.rs
         {Kind::ByteStore => bytes_of(a) == bytes_of(b),}
         {Kind::ByteStore => a == b,}}
@@ -161,7 +161,7 @@ set ran 0
 # for a Tcl-only one (it is only read).
 proc copyTree {destination copyTarget} {
     file mkdir $destination
-    foreach entry {core hir surface compiler lib native tests examples main.tcl audit .cargo} {
+    foreach entry {core hir surface compiler stdlib native tests examples main.tcl audit .cargo} {
         set source [file join $::root $entry]
         if {$entry eq "native"} {
             file mkdir [file join $destination native]

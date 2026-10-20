@@ -25,7 +25,7 @@ executed Botlish-code instructions per run: 8,780 (24.4% of all Ir)
   frame: root-slot zero         12.0    0.1%  Dw=12.0
   lea                           3.0    0.0%
 
-== 1 list::any?: 4,074.0 executed instructions per run (46.4% of JIT)
+== 1 std::list::any?: 4,074.0 executed instructions per run (46.4% of JIT)
   mov reg-reg               1,066.0   26.2%
   bool test                   364.0    8.9%
   tag test                    354.0    8.7%
@@ -110,7 +110,7 @@ executed Botlish-code instructions per run: 8,780 (24.4% of all Ir)
   frame: prologue              62.0   28.6%
   heap/vm load                 62.0   28.6%
 
-== 3 list::find: 185.0 executed instructions per run (2.1% of JIT)
+== 3 std::list::find: 185.0 executed instructions per run (2.1% of JIT)
   mov reg-reg                  48.0   25.9%
   bool test                    18.0    9.7%
   stack store                  17.0    9.2%
@@ -132,7 +132,7 @@ executed Botlish-code instructions per run: 8,780 (24.4% of all Ir)
   arith                         2.0    1.1%
   stack load                    1.0    0.5%
 
-== 2 list::none?: 154.0 executed instructions per run (1.8% of JIT)
+== 2 std::list::none?: 154.0 executed instructions per run (1.8% of JIT)
   mov reg-reg                  41.0   26.6%
   tag test                     14.0    9.1%
   bool test                    14.0    9.1%

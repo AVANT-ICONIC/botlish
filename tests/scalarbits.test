@@ -5,7 +5,7 @@
 # Byte/Nibble/LowNibble/HighNibble checked construction and predicates used
 # to be tested here directly against raw core IR ({ref Byte}, ...), because
 # core/scalarbits.tcl registered them as root natives at Tcl-source-load
-# time. They are ordinary Botlish source declarations in lib/byte.bot now
+# time. They are ordinary Botlish source declarations in stdlib/byte.bot now
 # (see SOURCE-DEFINED-INTEGER-DOMAINS.md): a raw core-IR program that never
 # loads byte.bot has no "Byte" at all any more (item 87's own documented
 # limitation -- byte.bot is not a prelude). Those tests moved to

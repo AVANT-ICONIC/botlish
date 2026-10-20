@@ -1,17 +1,17 @@
 # Symbolic native result-type identity: hardening `{typed NAME}`
 
 > **Update (IMPORTS.md).** Source-declared `type`s are now members of their
-> namespace: the standard library's Byte is `byte::Byte`, and
-> `str::encode_utf8`'s shape is `{typed byte::Byte 0 255}`. A program's own
+> namespace: the standard library's Byte is `std::byte::Byte`, and
+> `std::str::encode_utf8`'s shape is `{typed std::byte::Byte 0 255}`. A program's own
 > `type Byte = Int in 0..15` is the type `Byte`, a different identity that
 > the native's name never matches, so the *same-spelled narrower type*
 > hazard this milestone guards against can no longer arise from an entry
 > program's declaration; only a different `byte` module (the tests use a
 > scratch library whose `byte.bot` declares `Byte` narrower, wider, or not at
-> all) can make `byte::Byte` mean something else, and the admissibility
+> all) can make `std::byte::Byte` mean something else, and the admissibility
 > proof described below still decides whether the result narrows. The
 > text below keeps the milestone's original wording (`Byte`) where it
-> describes the mechanism; read it as `byte::Byte` for the standard
+> describes the mechanism; read it as `std::byte::Byte` for the standard
 > library's type.
 
 ## Outcome
@@ -37,8 +37,8 @@ currently resolves to. Failing that proof -- an unknown name, an
 incompatible kind, or a domain too narrow -- falls back to the native's own
 plain declared `-result-type`, exactly as before whenever `NAME` was
 unresolved. The canonical standard-library declaration (`type Byte = Int in
-0..255`, `lib/byte.bot`) still proves membership trivially, so
-`encode_utf8` is still typed `List[Byte]` and `lib/web.bot`'s clean,
+0..255`, `stdlib/byte.bot`) still proves membership trivially, so
+`encode_utf8` is still typed `List[Byte]` and `stdlib/web.bot`'s clean,
 conversion-free path is unaffected. No runtime representation, error
 semantics, completion-proof semantics, or range-analysis precision changed;
 `encode_utf8` is confirmed to be the only current use of this metadata kind.
@@ -50,7 +50,7 @@ semantics, completion-proof semantics, or range-analysis precision changed;
 A native like `encode_utf8` is registered once, at Tcl-process bootstrap
 (`core.tcl` sources `core/strings.tcl` unconditionally), long before a
 compiling program's own `type Byte = Int in 0..255` declaration
-(`lib/byte.bot`, parsed per-compilation) exists in `core::type`'s registry.
+(`stdlib/byte.bot`, parsed per-compilation) exists in `core::type`'s registry.
 `-result-shape {typed Byte}` therefore stored `Byte` as a bare symbolic
 name, resolved only later, lazily, at ordinary whole-program type-inference
 time (`hir/types.tcl`'s `ShapeResult`), against whatever the compiling
@@ -78,7 +78,7 @@ narrower (`type Byte = Int in 0..15`), or (hypothetically; see "Incompatible
 same-name kind" below) an unrelated kind entirely -- would have been
 credited with UTF-8's real `0..255` guarantee purely by name match. Nothing
 in this codebase's standard library actually declares such a `Byte`
-(`lib/byte.bot`'s is canonical), so this was latent, not yet triggered in
+(`stdlib/byte.bot`'s is canonical), so this was latent, not yet triggered in
 practice -- but the compiler's own soundness argument for `{typed NAME}`
 depended on an assumption ("whatever the program calls Byte is close enough
 to what encode_utf8 means") the metadata itself never stated or checked.
@@ -121,7 +121,7 @@ Audited alongside `core/type.tcl`'s existing source-defined-type machinery
 guaranteed value domain?" -- i.e. **any currently-resolved type named NAME
 whose domain the native's result provably satisfies**, not "one canonical
 nominal declaration" (there is no canonical `Byte` at the compiler level;
-`lib/byte.bot`'s is canonical only by *library convention*, not by anything
+`stdlib/byte.bot`'s is canonical only by *library convention*, not by anything
 the compiler enforces or could enforce under the existing compilation-
 isolation design). This is consistent with the pre-existing lazy-resolution
 architecture (item 4/SOURCE-DEFINED-INTEGER-DOMAINS.md): the compiler
@@ -172,10 +172,10 @@ hardcoded for any name; `NAME`'s domain always comes from the registry.
 
 ## Canonical Byte case
 
-`lib/byte.bot`'s `type Byte = Int in 0..255`: `core::type::integerFacts`
+`stdlib/byte.bot`'s `type Byte = Int in 0..255`: `core::type::integerFacts`
 gives `{min 0 max 255}`; encode_utf8's own `{min 0 max 255}` is a subset ⟹
 `ProvesType` succeeds ⟹ `encode_utf8(...) : List[Byte]`, unchanged from
-before this milestone. No `lib/byte.bot`, `lib/ascii.bot`, or `lib/web.bot`
+before this milestone. No `stdlib/byte.bot`, `stdlib/ascii.bot`, or `stdlib/web.bot`
 source changes were needed.
 
 ## Narrow incompatible Byte case
@@ -257,7 +257,7 @@ before this milestone.
 
 ## Web regression
 
-`lib/web.bot` is unchanged (confirmed: `git diff` shows no change to this
+`stdlib/web.bot` is unchanged (confirmed: `git diff` shows no change to this
 file across the whole milestone). Its clean path --
 
 ```botlish
@@ -277,17 +277,17 @@ fn esc_char(c):
 `Byte` type still statically satisfies `is_unreserved(b: Byte)`'s declared
 parameter with no conversion, handler, or fallback reintroduced. Verified
 both by `tests/symbolic-type-identity.test`'s own direct compile-and-run of
-`web::uri_escape_text` over ASCII/multi-byte/astral text (zero diagnostics,
+`std::web::uri_escape_text` over ASCII/multi-byte/astral text (zero diagnostics,
 correct percent-encoded output) and by `tests/native-uri-escape.test`'s
 pre-existing, unmodified four-backend text-parity table (part of the full
 suite below).
 
 ## URI punctuation regression
 
-`lib/web.bot`'s module initializer remains exactly
+`stdlib/web.bot`'s module initializer remains exactly
 
 ```botlish
-additional_unreserved_chars = byte::set(['-', '.', '_', '~'])
+additional_unreserved_chars = std::byte::set(['-', '.', '_', '~'])
 ```
 
 -- unchanged source, and (since the file is untouched) unchanged behavior;
@@ -297,7 +297,7 @@ passing unmodified as part of the full suite.
 
 ## Error/completion regressions
 
-`byte::from_int`, `byte::set`, ASCII predicates, and `hir/completions.tcl`
+`std::byte::from_int`, `std::byte::set`, ASCII predicates, and `hir/completions.tcl`
 are all untouched source and untouched logic; `tests/byte-set.test`,
 `tests/native-byte.test`, `tests/errors.test`, `tests/source-types.test`,
 and every completion-proof test in the full suite (below) pass unmodified,
@@ -317,8 +317,8 @@ exactly as it was.
   acceptance-matrix tests below.
 - `SYMBOLIC-TYPE-IDENTITY.md` -- this report.
 
-No `native/`, `hir/completions.tcl`, `hir/range.tcl`, `lib/byte.bot`,
-`lib/ascii.bot`, or `lib/web.bot` changes.
+No `native/`, `hir/completions.tcl`, `hir/range.tcl`, `stdlib/byte.bot`,
+`stdlib/ascii.bot`, or `stdlib/web.bot` changes.
 
 ## Tests
 
@@ -339,7 +339,7 @@ No `native/`, `hir/completions.tcl`, `hir/range.tcl`, `lib/byte.bot`,
 - `symbolic-type-identity-list-get-{ascii,two-byte,astral}` --
   `list_get(encode_utf8(text), 0) : Byte` for `"A"`, `"é"`, `"😀"`.
 - `symbolic-type-identity-web-regression-clean-compile` --
-  `web::uri_escape_text` over mixed ASCII/multi-byte/astral text: zero
+  `std::web::uri_escape_text` over mixed ASCII/multi-byte/astral text: zero
   diagnostics, correct output.
 
 ## Acceptance matrix
@@ -422,18 +422,18 @@ count between the ordinary and GC-stress runs.)
 16. **Was UTF-8 runtime representation changed?** No.
 17. **Was Byte representation changed?** No.
 18. **Was web source changed?** No.
-19. **Was `byte::set` source changed?** No.
+19. **Was `std::byte::set` source changed?** No.
 20. **Was broad `.bot` modernization performed?** No.
 
 ## Final semantic source fence
 
 After this fix, freezing exactly as instructed:
 
-- `byte::from_int`
-- `byte::set`
+- `std::byte::from_int`
+- `std::byte::set`
 - ASCII predicates
 - UTF-8 producer typing
-- `web::is_unreserved`
+- `std::web::is_unreserved`
 - URI escaping
 - `error`/`errors`/`fail`/`handle`
 - completion proof semantics

@@ -1,4 +1,4 @@
-# mutate.tcl -- mutation testing of the golden test framework, lib/test.bot
+# mutate.tcl -- mutation testing of the golden test framework, stdlib/test.bot
 # (GOLDEN-TEST-FRAMEWORK.md, "Framework mutation results").
 #
 #   tclsh9.0 audit/golden/tools/mutate.tcl ?-only NAME,...? ?-mutants FILE?

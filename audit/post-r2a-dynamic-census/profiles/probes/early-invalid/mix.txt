@@ -27,7 +27,7 @@ executed Botlish-code instructions per run: 112,485 (15.7% of all Ir)
   frame: root-slot zero         13.0    0.0%  Dw=13.0  D1mw=2.0
   retag                         2.0    0.0%
 
-== 9 web::emailish?: 28,400.0 executed instructions per run (25.2% of JIT)
+== 9 std::web::emailish?: 28,400.0 executed instructions per run (25.2% of JIT)
   mov reg-reg               6,800.0   23.9%
   frame: epilogue           3,600.0   12.7%
   frame: prologue           3,200.0   11.3%
@@ -135,7 +135,7 @@ executed Botlish-code instructions per run: 112,485 (15.7% of all Ir)
   call botlish                  3.0    1.0%
   jmp                           3.0    1.0%
 
-== 3 byte::set: 276.0 executed instructions per run (0.2% of JIT)
+== 3 std::byte::set: 276.0 executed instructions per run (0.2% of JIT)
   mov reg-reg                  85.0   30.8%
   tag test                     26.0    9.4%
   stack store                  24.0    8.7%

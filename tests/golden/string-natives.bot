@@ -5,23 +5,23 @@
 # building a String, a program observes exactly the values below, on every
 # backend.
 #
-# UTF-8 bytes (str::encode_utf8): the List of the UTF-8 bytes of a String,
+# UTF-8 bytes (std::str::encode_utf8): the List of the UTF-8 bytes of a String,
 #   one Int per byte -- none for "", one for an ASCII scalar, two for U+00E9,
 #   four for an astral scalar (U+1F600).
-# Percent-encoding (web::uri_escape_text, lib/web.bot): every UTF-8 byte of
+# Percent-encoding (std::web::uri_escape_text, stdlib/web.bot): every UTF-8 byte of
 #   the text except the RFC 3986 unreserved characters A-Z a-z 0-9 - . _ ~
 #   is written as "%XX" with two uppercase hexadecimal digits; "%" itself is
 #   escaped ("%25"), so text that already looks escaped is escaped again.
-# Query values (web::uri_query_value?): true exactly for a text made of
+# Query values (std::web::uri_query_value?): true exactly for a text made of
 #   unreserved characters and "%XX" triplets of uppercase hexadecimal digits
 #   ("" included); a raw space, a raw or truncated "%", lowercase or
 #   non-hexadecimal digits, a raw non-ASCII or astral character and a
 #   reserved character each make it false; the escaping of any text is a
 #   query value.
-# Temporary substrings (str::substring(s, a, b), indices in Unicode scalars):
+# Temporary substrings (std::str::substring(s, a, b), indices in Unicode scalars):
 #   a slice compared with `==` (one character or several, equal, unequal or
 #   of another length, a literal or another slice on the other side, the
-#   same binding on both sides) compares contents; str::length of a slice is
+#   same binding on both sides) compares contents; std::str::length of a slice is
 #   b - a scalars (an astral scalar is one); a slice that is returned, stored
 #   in a List, or both compared and concatenated keeps its contents, also
 #   when its source is large. Bounds: a < 0, or b < a, fails with the
@@ -29,13 +29,13 @@
 #   also when the slice is reached only inside a called function; a == b is
 #   "" and b == the length is the tail, not failures; each failure is
 #   handled by name wherever the slice is.
-# Classification of one character: str::is_tcl_alnum / str::is_tcl_alpha of
+# Classification of one character: std::str::is_tcl_alnum / std::str::is_tcl_alpha of
 #   a one-character slice classify ASCII letters and digits, U+00E9 is a
 #   letter, U+1F600 is not; a one-parameter predicate built from them and
 #   from `==` against literals classifies like its body says, whether the
 #   slice is bound first or passed inline, and a predicate of another shape
 #   (one that concatenates, one of two parameters) is an ordinary function;
-#   web::emailish? accepts "café@例え.テスト" and rejects "not-an-email".
+#   std::web::emailish? accepts "café@例え.テスト" and rejects "not-an-email".
 # Forward scans: a self-recursive scan that reads one character per step
 #   and concatenates them reassembles its text exactly over 1-, 2-, 3- and
 #   4-byte and mixed-width scalars, a single character and "", stops early
@@ -60,7 +60,7 @@
 # with -strict 0, where a slice the compiler cannot prove in range simply
 # propagates its declared error at run time. Here every block is strict:
 # each function a possible slice failure passes through (the one that calls
-# str::substring with bounds not proven in range, and every caller up to
+# std::str::substring with bounds not proven in range, and every caller up to
 # the program's top level) declares `errors LowerUnderrun, UpperOverrun`,
 # and the program's outermost call handles both. (A function whose slices
 # are proven in range -- peek at a constant, non-negative index -- needs no
@@ -81,18 +81,18 @@
 # keeps the Tcl program's literals in its block.
 #
 # Imports: compiler and test are the framework's (bodies declare
-# compiler::CompilerError); str for the operations under test
-# (str::encode_utf8, ::substring, ::length, ::concat, ::is_tcl_alpha,
+# std::compiler::CompilerError); str for the operations under test
+# (std::str::encode_utf8, ::substring, ::length, ::concat, ::is_tcl_alpha,
 # ::is_tcl_alnum, and concat as a method for the registration-time texts);
-# web for web::uri_escape_text, web::uri_query_value? and web::emailish?.
+# web for std::web::uri_escape_text, std::web::uri_query_value? and std::web::emailish?.
 #
 # Shared declarations: none (the errors under test are the builtin
 # LowerUnderrun and UpperOverrun); `repeated` below builds the long
 # registration-time texts.
-import compiler
-import str
-import test
-import web
+import std::compiler
+import std::str
+import std::test
+import std::web
 
 # ---------------------------------------------------------------------------
 # Registration-time texts
@@ -107,12 +107,12 @@ fn repeated(piece: str, times: int) -> str:
 # ---------------------------------------------------------------------------
 # native-uri-escape.test: UTF-8 bytes, percent-encoding, query values
 
-# native-uri-escape-utf8-*: str::encode_utf8(TEXT) is BYTES.
+# native-uri-escape-utf8-*: std::str::encode_utf8(TEXT) is BYTES.
 fn register_utf8_case(name: str, text: str, bytes):
-    fn b_bytes() errors compiler::CompilerError:
+    fn b_bytes() errors std::compiler::CompilerError:
         static compile:
-            str::encode_utf8(text)
-    test::value(name, bytes, b_bytes)
+            std::str::encode_utf8(text)
+    std::test::value(name, bytes, b_bytes)
 
 fn register_utf8_tests():
     register_utf8_case("native-uri-escape-utf8-empty", "", [])
@@ -122,12 +122,12 @@ fn register_utf8_tests():
     register_utf8_case("native-uri-escape-utf8-astral", "😀", [240, 159, 152, 128])
     register_utf8_case("native-uri-escape-utf8-mixed", "a b", [97, 32, 98])
 
-# native-uri-escape-text-*: web::uri_escape_text(TEXT) is ESCAPED.
+# native-uri-escape-text-*: std::web::uri_escape_text(TEXT) is ESCAPED.
 fn register_escape_case(name: str, text: str, escaped: str):
-    fn b_escaped() errors compiler::CompilerError:
+    fn b_escaped() errors std::compiler::CompilerError:
         static compile:
-            web::uri_escape_text(text)
-    test::value(name, escaped, b_escaped)
+            std::web::uri_escape_text(text)
+    std::test::value(name, escaped, b_escaped)
 
 fn register_escape_tests():
     register_escape_case("native-uri-escape-text-empty", "", "")
@@ -141,12 +141,12 @@ fn register_escape_tests():
     register_escape_case("native-uri-escape-text-three-byte", "世界", "%E4%B8%96%E7%95%8C")
     register_escape_case("native-uri-escape-text-escape-like", "%41%4a", "%2541%254a")
 
-# native-uri-escape-query-value-*: web::uri_query_value?(TEXT) is VERDICT.
+# native-uri-escape-query-value-*: std::web::uri_query_value?(TEXT) is VERDICT.
 fn register_query_value_case(name: str, text: str, verdict: bool):
-    fn b_verdict() errors compiler::CompilerError:
+    fn b_verdict() errors std::compiler::CompilerError:
         static compile:
-            web::uri_query_value?(text)
-    test::value(name, verdict, b_verdict)
+            std::web::uri_query_value?(text)
+    std::test::value(name, verdict, b_verdict)
 
 fn register_query_value_tests():
     register_query_value_case("native-uri-escape-query-value-escaped-space", "a%20b", true)
@@ -165,21 +165,21 @@ fn register_query_value_tests():
     register_query_value_case("native-uri-escape-query-value-hex-at-end", "a%4", false)
     register_query_value_case("native-uri-escape-query-value-escaped-percent", "%25", true)
 
-    # native-uri-escape-escaped-is-query-value: what web::uri_escape_text
+    # native-uri-escape-escaped-is-query-value: what std::web::uri_escape_text
     # writes is always a query value.
-    fn b_escaped_is_query_value() errors compiler::CompilerError:
+    fn b_escaped_is_query_value() errors std::compiler::CompilerError:
         static compile:
             texts = ["", "a b", "someone@example.com", "é", "😀", "50%", "a&b=c", "déjà vu"]
             loop t in texts:
-                web::uri_query_value?(web::uri_escape_text(t))
-    test::value("native-uri-escape-escaped-is-query-value", [true, true, true, true, true, true, true, true], b_escaped_is_query_value)
+                std::web::uri_query_value?(std::web::uri_escape_text(t))
+    std::test::value("native-uri-escape-escaped-is-query-value", [true, true, true, true, true, true, true, true], b_escaped_is_query_value)
 
     # native-uri-escape-gc-stress's program: the escaping of a longer text
     # mixing spaces, two-byte and astral scalars is a query value.
-    fn b_escaped_mixed_text() errors compiler::CompilerError:
+    fn b_escaped_mixed_text() errors std::compiler::CompilerError:
         static compile:
-            web::uri_query_value?(web::uri_escape_text("a b c déjà vu 😀"))
-    test::value("native-uri-escape-escaped-mixed-text-is-query-value", true, b_escaped_mixed_text)
+            std::web::uri_query_value?(std::web::uri_escape_text("a b c déjà vu 😀"))
+    std::test::value("native-uri-escape-escaped-mixed-text-is-query-value", true, b_escaped_mixed_text)
 
 fn register_uri_escape_tests():
     register_utf8_tests()
@@ -193,15 +193,15 @@ fn register_uri_escape_tests():
 # idiom) and compared with literals.
 fn register_region_char_tests():
     # region-char-ascii-1: counting the vowels of an ASCII text.
-    fn b_char_ascii() errors compiler::CompilerError:
+    fn b_char_ascii() errors std::compiler::CompilerError:
         static compile:
             fn peek(text, index) errors LowerUnderrun, UpperOverrun:
-                if index >= str::length(text):
+                if index >= std::str::length(text):
                     return ""
 
-                str::substring(text, index, index + 1)
+                std::str::substring(text, index, index + 1)
             fn scan(text, index, count) errors LowerUnderrun, UpperOverrun:
-                if index >= str::length(text):
+                if index >= std::str::length(text):
                     return count
                 c = peek(text, index)
                 if c == "a" or c == "e" or c == "i" or c == "o" or c == "u":
@@ -217,18 +217,18 @@ fn register_region_char_tests():
                         return "UpperOverrun"
                 result
             outcome()
-    test::value("region-char-ascii-1", 5, b_char_ascii)
+    std::test::value("region-char-ascii-1", 5, b_char_ascii)
 
     # region-char-bmp-1: two-byte scalars compared with two-byte literals.
-    fn b_char_bmp() errors compiler::CompilerError:
+    fn b_char_bmp() errors std::compiler::CompilerError:
         static compile:
             fn peek(text, index) errors LowerUnderrun, UpperOverrun:
-                if index >= str::length(text):
+                if index >= std::str::length(text):
                     return ""
 
-                str::substring(text, index, index + 1)
+                std::str::substring(text, index, index + 1)
             fn scan(text, index, count) errors LowerUnderrun, UpperOverrun:
-                if index >= str::length(text):
+                if index >= std::str::length(text):
                     return count
                 c = peek(text, index)
                 if c == "é" or c == "è":
@@ -244,19 +244,19 @@ fn register_region_char_tests():
                         return "UpperOverrun"
                 result
             outcome()
-    test::value("region-char-bmp-1", 2, b_char_bmp)
+    std::test::value("region-char-bmp-1", 2, b_char_bmp)
 
     # region-char-astral-1: an astral scalar is one character, the one at
     # its index.
-    fn b_char_astral() errors compiler::CompilerError:
+    fn b_char_astral() errors std::compiler::CompilerError:
         static compile:
             fn peek(text, index) errors LowerUnderrun, UpperOverrun:
-                if index >= str::length(text):
+                if index >= std::str::length(text):
                     return ""
 
-                str::substring(text, index, index + 1)
+                std::str::substring(text, index, index + 1)
             fn f(text):
-                [peek(text, 0) == "a", peek(text, 1) == "😀", peek(text, 2) == "b", str::length(text)]
+                [peek(text, 0) == "a", peek(text, 1) == "😀", peek(text, 2) == "b", std::str::length(text)]
             fn outcome():
                 result = f("a😀b"):
                     on LowerUnderrun:
@@ -265,19 +265,19 @@ fn register_region_char_tests():
                         return "UpperOverrun"
                 result
             outcome()
-    test::value("region-char-astral-1", [true, true, true, 3], b_char_astral)
+    std::test::value("region-char-astral-1", [true, true, true, 3], b_char_astral)
 
     # region-gc-stress-1's program: counting the separators of three CSV
     # rows.
-    fn b_char_separators() errors compiler::CompilerError:
+    fn b_char_separators() errors std::compiler::CompilerError:
         static compile:
             fn peek(text, index) errors LowerUnderrun, UpperOverrun:
-                if index >= str::length(text):
+                if index >= std::str::length(text):
                     return ""
 
-                str::substring(text, index, index + 1)
+                std::str::substring(text, index, index + 1)
             fn scan(text, index, count) errors LowerUnderrun, UpperOverrun:
-                if index >= str::length(text):
+                if index >= std::str::length(text):
                     return count
                 c = peek(text, index)
                 if c == "," or c == "\n":
@@ -293,16 +293,16 @@ fn register_region_char_tests():
                         return "UpperOverrun"
                 result
             outcome()
-    test::value("region-char-separators-of-rows", 9, b_char_separators)
+    std::test::value("region-char-separators-of-rows", 9, b_char_separators)
 
-# Multi-character slices compared with a literal, and str::length of a
+# Multi-character slices compared with a literal, and std::str::length of a
 # slice. ROWS is the text of region-gc-stress-2.
 fn register_region_compare_tests(rows: str):
     # region-compare-equal-1
-    fn b_compare_equal() errors compiler::CompilerError:
+    fn b_compare_equal() errors std::compiler::CompilerError:
         static compile:
             fn f(text) errors LowerUnderrun, UpperOverrun:
-                str::substring(text, 0, 5) == "hello"
+                std::str::substring(text, 0, 5) == "hello"
             fn outcome():
                 result = f("hello world"):
                     on LowerUnderrun:
@@ -311,13 +311,13 @@ fn register_region_compare_tests(rows: str):
                         return "UpperOverrun"
                 result
             outcome()
-    test::value("region-compare-equal-1", true, b_compare_equal)
+    std::test::value("region-compare-equal-1", true, b_compare_equal)
 
     # region-compare-unequal-1: same length, other contents.
-    fn b_compare_unequal() errors compiler::CompilerError:
+    fn b_compare_unequal() errors std::compiler::CompilerError:
         static compile:
             fn f(text) errors LowerUnderrun, UpperOverrun:
-                str::substring(text, 0, 5) == "howdy"
+                std::str::substring(text, 0, 5) == "howdy"
             fn outcome():
                 result = f("hello world"):
                     on LowerUnderrun:
@@ -326,13 +326,13 @@ fn register_region_compare_tests(rows: str):
                         return "UpperOverrun"
                 result
             outcome()
-    test::value("region-compare-unequal-1", false, b_compare_unequal)
+    std::test::value("region-compare-unequal-1", false, b_compare_unequal)
 
     # region-compare-unequal-length-1: a literal of another length.
-    fn b_compare_unequal_length() errors compiler::CompilerError:
+    fn b_compare_unequal_length() errors std::compiler::CompilerError:
         static compile:
             fn f(text) errors LowerUnderrun, UpperOverrun:
-                str::substring(text, 0, 5) == "hi"
+                std::str::substring(text, 0, 5) == "hi"
             fn outcome():
                 result = f("hello world"):
                     on LowerUnderrun:
@@ -341,16 +341,16 @@ fn register_region_compare_tests(rows: str):
                         return "UpperOverrun"
                 result
             outcome()
-    test::value("region-compare-unequal-length-1", false, b_compare_unequal_length)
+    std::test::value("region-compare-unequal-length-1", false, b_compare_unequal_length)
 
     # region-gc-stress-2's program: a two-character slice compared at every
     # index of 40 rows.
-    fn b_compare_rows() errors compiler::CompilerError:
+    fn b_compare_rows() errors std::compiler::CompilerError:
         static compile:
             fn count(text, index, hits) errors LowerUnderrun, UpperOverrun:
-                if index + 2 > str::length(text):
+                if index + 2 > std::str::length(text):
                     return hits
-                if str::substring(text, index, index + 2) == "ok":
+                if std::str::substring(text, index, index + 2) == "ok":
                     return count(text, index + 1, hits + 1)
                 count(text, index + 1, hits)
             fn f() errors LowerUnderrun, UpperOverrun:
@@ -363,13 +363,13 @@ fn register_region_compare_tests(rows: str):
                         return "UpperOverrun"
                 result
             outcome()
-    test::value("region-compare-slices-of-rows", 40, b_compare_rows)
+    std::test::value("region-compare-slices-of-rows", 40, b_compare_rows)
 
     # region-length-1: the length of a slice is its width.
-    fn b_length() errors compiler::CompilerError:
+    fn b_length() errors std::compiler::CompilerError:
         static compile:
             fn f(text) errors LowerUnderrun, UpperOverrun:
-                str::length(str::substring(text, 2, 9))
+                std::str::length(std::str::substring(text, 2, 9))
             fn outcome():
                 result = f("hello wonderful world"):
                     on LowerUnderrun:
@@ -378,13 +378,13 @@ fn register_region_compare_tests(rows: str):
                         return "UpperOverrun"
                 result
             outcome()
-    test::value("region-length-1", 7, b_length)
+    std::test::value("region-length-1", 7, b_length)
 
     # region-length-astral-1: in scalars, not code units.
-    fn b_length_astral() errors compiler::CompilerError:
+    fn b_length_astral() errors std::compiler::CompilerError:
         static compile:
             fn f(text) errors LowerUnderrun, UpperOverrun:
-                str::length(str::substring(text, 1, 3))
+                std::str::length(std::str::substring(text, 1, 3))
             fn outcome():
                 result = f("a😀b"):
                     on LowerUnderrun:
@@ -393,29 +393,29 @@ fn register_region_compare_tests(rows: str):
                         return "UpperOverrun"
                 result
             outcome()
-    test::value("region-length-astral-1", 2, b_length_astral)
+    std::test::value("region-length-astral-1", 2, b_length_astral)
 
 # Slices that escape (returned, stored, both compared and concatenated) keep
 # their contents.
 fn register_region_escape_tests():
     # region-escape-1: a returned slice.
-    fn b_escape_returned() errors compiler::CompilerError:
+    fn b_escape_returned() errors std::compiler::CompilerError:
         static compile:
             fn f(text) errors LowerUnderrun, UpperOverrun:
-                str::substring(text, 6, 11)
+                std::str::substring(text, 6, 11)
             result = f("hello world"):
                 on LowerUnderrun:
                     "LowerUnderrun"
                 on UpperOverrun:
                     "UpperOverrun"
             result
-    test::value("region-escape-1", "world", b_escape_returned)
+    std::test::value("region-escape-1", "world", b_escape_returned)
 
     # region-escape-2: slices stored in a List.
-    fn b_escape_stored() errors compiler::CompilerError:
+    fn b_escape_stored() errors std::compiler::CompilerError:
         static compile:
             fn f(text) errors LowerUnderrun, UpperOverrun:
-                [str::substring(text, 0, 5), str::substring(text, 6, 11)]
+                [std::str::substring(text, 0, 5), std::str::substring(text, 6, 11)]
             fn outcome():
                 result = f("hello world"):
                     on LowerUnderrun:
@@ -424,40 +424,40 @@ fn register_region_escape_tests():
                         return "UpperOverrun"
                 result
             outcome()
-    test::value("region-escape-2", ["hello", "world"], b_escape_stored)
+    std::test::value("region-escape-2", ["hello", "world"], b_escape_stored)
 
     # region-escape-large-source-1: a three-character slice of a
     # 100000-character source (built here by concatenation, where Tcl writes
     # one literal), with the source's length as the fixture's check.
-    fn b_escape_large_source() errors compiler::CompilerError:
+    fn b_escape_large_source() errors std::compiler::CompilerError:
         static compile:
             fn tenfold(s):
-                two = str::concat(s, s)
-                four = str::concat(two, two)
-                eight = str::concat(four, four)
-                str::concat(eight, two)
+                two = std::str::concat(s, s)
+                four = std::str::concat(two, two)
+                eight = std::str::concat(four, four)
+                std::str::concat(eight, two)
             fn f(text) errors LowerUnderrun, UpperOverrun:
-                str::substring(text, 0, 3)
+                std::str::substring(text, 0, 3)
             big = tenfold(tenfold(tenfold(tenfold(tenfold("x")))))
             result = f(big):
                 on LowerUnderrun:
                     "LowerUnderrun"
                 on UpperOverrun:
                     "UpperOverrun"
-            [result, str::length(big)]
-    test::value("region-escape-large-source-1", ["xxx", 100000], b_escape_large_source)
+            [result, std::str::length(big)]
+    std::test::value("region-escape-large-source-1", ["xxx", 100000], b_escape_large_source)
 
     # region-mixed-1: one slice both concatenated and compared.
-    fn b_mixed() errors compiler::CompilerError:
+    fn b_mixed() errors std::compiler::CompilerError:
         static compile:
             fn peek(text, index) errors LowerUnderrun, UpperOverrun:
-                if index >= str::length(text):
+                if index >= std::str::length(text):
                     return ""
 
-                str::substring(text, index, index + 1)
+                std::str::substring(text, index, index + 1)
             fn f(text):
                 c = peek(text, 0)
-                r = str::concat(c, "!")
+                r = std::str::concat(c, "!")
                 if c == "h":
                     r
                 else:
@@ -468,16 +468,16 @@ fn register_region_escape_tests():
                 on UpperOverrun:
                     "UpperOverrun"
             result
-    test::value("region-mixed-1", "h!", b_mixed)
+    std::test::value("region-mixed-1", "h!", b_mixed)
 
 # `==` with a slice on both sides: the same binding twice, two bindings, a
 # binding and a slice call in either order.
 fn register_region_eq_tests():
     # region-eq-same-binding-1
-    fn b_same_binding() errors compiler::CompilerError:
+    fn b_same_binding() errors std::compiler::CompilerError:
         static compile:
             fn run(s) errors LowerUnderrun, UpperOverrun:
-                v = str::substring(s, 0, 1)
+                v = std::str::substring(s, 0, 1)
                 [v == v]
             fn outcome():
                 result = run("éa"):
@@ -487,16 +487,16 @@ fn register_region_eq_tests():
                         return "UpperOverrun"
                 result
             outcome()
-    test::value("region-eq-same-binding-1", [true], b_same_binding)
+    std::test::value("region-eq-same-binding-1", [true], b_same_binding)
 
     # region-eq-two-bindings-1, its first program: equal contents at
     # different indices.
-    fn b_two_bindings_equal() errors compiler::CompilerError:
+    fn b_two_bindings_equal() errors std::compiler::CompilerError:
         static compile:
             fn run(s) errors LowerUnderrun, UpperOverrun:
-                v = str::substring(s, 0, 1)
-                w = str::substring(s, 3, 4)
-                [v == w, v == v, str::length(v) == str::length(w)]
+                v = std::str::substring(s, 0, 1)
+                w = std::str::substring(s, 3, 4)
+                [v == w, v == v, std::str::length(v) == std::str::length(w)]
             fn outcome():
                 result = run("éa é"):
                     on LowerUnderrun:
@@ -505,15 +505,15 @@ fn register_region_eq_tests():
                         return "UpperOverrun"
                 result
             outcome()
-    test::value("region-eq-two-bindings-1/equal-contents", [true, true, true], b_two_bindings_equal)
+    std::test::value("region-eq-two-bindings-1/equal-contents", [true, true, true], b_two_bindings_equal)
 
     # region-eq-two-bindings-1, its second program: unequal contents, in
     # both orders.
-    fn b_two_bindings_unequal() errors compiler::CompilerError:
+    fn b_two_bindings_unequal() errors std::compiler::CompilerError:
         static compile:
             fn run(s) errors LowerUnderrun, UpperOverrun:
-                v = str::substring(s, 0, 1)
-                w = str::substring(s, 1, 2)
+                v = std::str::substring(s, 0, 1)
+                w = std::str::substring(s, 1, 2)
                 [v == w, w == v]
             fn outcome():
                 result = run("éa"):
@@ -523,14 +523,14 @@ fn register_region_eq_tests():
                         return "UpperOverrun"
                 result
             outcome()
-    test::value("region-eq-two-bindings-1/unequal-contents", [false, false], b_two_bindings_unequal)
+    std::test::value("region-eq-two-bindings-1/unequal-contents", [false, false], b_two_bindings_unequal)
 
     # region-eq-binding-vs-call-1
-    fn b_binding_vs_call() errors compiler::CompilerError:
+    fn b_binding_vs_call() errors std::compiler::CompilerError:
         static compile:
             fn run(s) errors LowerUnderrun, UpperOverrun:
-                v = str::substring(s, 0, 1)
-                [str::substring(s, 0, 1) == v, v == str::substring(s, 0, 1), str::substring(s, 1, 2) == v]
+                v = std::str::substring(s, 0, 1)
+                [std::str::substring(s, 0, 1) == v, v == std::str::substring(s, 0, 1), std::str::substring(s, 1, 2) == v]
             fn outcome():
                 result = run("éa"):
                     on LowerUnderrun:
@@ -539,15 +539,15 @@ fn register_region_eq_tests():
                         return "UpperOverrun"
                 result
             outcome()
-    test::value("region-eq-binding-vs-call-1", [true, true, false], b_binding_vs_call)
+    std::test::value("region-eq-binding-vs-call-1", [true, true, false], b_binding_vs_call)
 
     # region-eq-same-binding-length-1: a binding both compared with itself
     # and measured.
-    fn b_same_binding_length() errors compiler::CompilerError:
+    fn b_same_binding_length() errors std::compiler::CompilerError:
         static compile:
             fn run(s) errors LowerUnderrun, UpperOverrun:
-                v = str::substring(s, 0, 2)
-                [v == v, str::length(v)]
+                v = std::str::substring(s, 0, 2)
+                [v == v, std::str::length(v)]
             fn outcome():
                 result = run("a😀b"):
                     on LowerUnderrun:
@@ -556,32 +556,32 @@ fn register_region_eq_tests():
                         return "UpperOverrun"
                 result
             outcome()
-    test::value("region-eq-same-binding-length-1", [true, 2], b_same_binding_length)
+    std::test::value("region-eq-same-binding-length-1", [true, 2], b_same_binding_length)
 
-# region-bounds-*: str::substring("hello", START, END) out of range fails
+# region-bounds-*: std::str::substring("hello", START, END) out of range fails
 # with the declared error EXPECTED, here handled by name (the Tcl program
 # handles nothing and ends with it uncaught).
 fn register_region_bounds_case(name: str, start: int, end: int, expected: str):
-    fn b_bounds() errors compiler::CompilerError:
+    fn b_bounds() errors std::compiler::CompilerError:
         static compile:
-            result = str::substring("hello", start, end):
+            result = std::str::substring("hello", start, end):
                 on LowerUnderrun:
                     "LowerUnderrun"
                 on UpperOverrun:
                     "UpperOverrun"
             result
-    test::value(name, expected, b_bounds)
+    std::test::value(name, expected, b_bounds)
 
 # region-bounds-through-peek-1: the failure of a slice reached only inside
 # peek, at the negative index START.
 fn register_region_bounds_through_peek(start: int):
-    fn b_through_peek() errors compiler::CompilerError:
+    fn b_through_peek() errors std::compiler::CompilerError:
         static compile:
             fn peek(text, index) errors LowerUnderrun, UpperOverrun:
-                if index >= str::length(text):
+                if index >= std::str::length(text):
                     return ""
 
-                str::substring(text, index, index + 1)
+                std::str::substring(text, index, index + 1)
             fn f(text, index) errors LowerUnderrun, UpperOverrun:
                 peek(text, index) == "z"
             fn outcome():
@@ -592,7 +592,7 @@ fn register_region_bounds_through_peek(start: int):
                         return "UpperOverrun"
                 result
             outcome()
-    test::value("region-bounds-through-peek-1", "LowerUnderrun", b_through_peek)
+    std::test::value("region-bounds-through-peek-1", "LowerUnderrun", b_through_peek)
 
 fn register_region_bounds_tests():
     register_region_bounds_case("region-bounds-negative-1", -1, 3, "LowerUnderrun")
@@ -601,23 +601,23 @@ fn register_region_bounds_tests():
     register_region_bounds_through_peek(-1)
 
     # region-bounds-empty-1: start == end is the empty String.
-    fn b_bounds_empty() errors compiler::CompilerError:
+    fn b_bounds_empty() errors std::compiler::CompilerError:
         static compile:
-            str::substring("hello", 2, 2)
-    test::value("region-bounds-empty-1", "", b_bounds_empty)
+            std::str::substring("hello", 2, 2)
+    std::test::value("region-bounds-empty-1", "", b_bounds_empty)
 
     # region-bounds-end-of-string-1: end == the length is the tail.
-    fn b_bounds_end_of_string() errors compiler::CompilerError:
+    fn b_bounds_end_of_string() errors std::compiler::CompilerError:
         static compile:
-            str::substring("hello", 2, 5)
-    test::value("region-bounds-end-of-string-1", "llo", b_bounds_end_of_string)
+            std::str::substring("hello", 2, 5)
+    std::test::value("region-bounds-end-of-string-1", "llo", b_bounds_end_of_string)
 
     # region-bounds-handled-1: each failure handled by name where the slice
     # is bound and then compared (the Tcl program as written).
-    fn b_bounds_handled() errors compiler::CompilerError:
+    fn b_bounds_handled() errors std::compiler::CompilerError:
         static compile:
             fn first_is_z(text, a, b):
-                v = str::substring(text, a, b):
+                v = std::str::substring(text, a, b):
                     on LowerUnderrun:
                         return "lower"
                     on UpperOverrun:
@@ -627,7 +627,7 @@ fn register_region_bounds_tests():
                 else:
                     "other"
             [first_is_z("hello", -1, 3), first_is_z("hello", 0, 10), first_is_z("hello", 3, 1), first_is_z("hello", 6, 6), first_is_z("zebra", 0, 1), first_is_z("hello", 5, 5)]
-    test::value("region-bounds-handled-1", ["lower", "upper", "lower", "upper", "z", "other"], b_bounds_handled)
+    std::test::value("region-bounds-handled-1", ["lower", "upper", "lower", "upper", "z", "other"], b_bounds_handled)
 
 fn register_native_string_region_tests():
     register_region_char_tests()
@@ -644,20 +644,20 @@ fn register_native_string_region_tests():
 # ---------------------------------------------------------------------------
 # native-string-view.test: one-character classification
 
-# str::is_tcl_alnum / str::is_tcl_alpha of a peek()'d character.
+# std::str::is_tcl_alnum / std::str::is_tcl_alpha of a peek()'d character.
 fn register_view_classify_tests():
     # view-classify-alnum-1: the letters and digits of an ASCII text.
-    fn b_classify_alnum() errors compiler::CompilerError:
+    fn b_classify_alnum() errors std::compiler::CompilerError:
         static compile:
             fn peek(text, index) errors LowerUnderrun, UpperOverrun:
-                if index >= str::length(text):
+                if index >= std::str::length(text):
                     return ""
 
-                str::substring(text, index, index + 1)
+                std::str::substring(text, index, index + 1)
             fn scan(text, index, count) errors LowerUnderrun, UpperOverrun:
-                if index >= str::length(text):
+                if index >= std::str::length(text):
                     return count
-                if str::is_tcl_alnum(peek(text, index)):
+                if std::str::is_tcl_alnum(peek(text, index)):
                     return scan(text, index + 1, count + 1)
                 scan(text, index + 1, count)
             fn f() errors LowerUnderrun, UpperOverrun:
@@ -670,18 +670,18 @@ fn register_view_classify_tests():
                         return "UpperOverrun"
                 result
             outcome()
-    test::value("view-classify-alnum-1", 5, b_classify_alnum)
+    std::test::value("view-classify-alnum-1", 5, b_classify_alnum)
 
     # view-classify-alpha-non-ascii-1: U+00E9 is a letter, a digit is not.
-    fn b_classify_alpha_non_ascii() errors compiler::CompilerError:
+    fn b_classify_alpha_non_ascii() errors std::compiler::CompilerError:
         static compile:
             fn peek(text, index) errors LowerUnderrun, UpperOverrun:
-                if index >= str::length(text):
+                if index >= std::str::length(text):
                     return ""
 
-                str::substring(text, index, index + 1)
+                std::str::substring(text, index, index + 1)
             fn f(text):
-                [str::is_tcl_alpha(peek(text, 0)), str::is_tcl_alpha(peek(text, 3)), str::is_tcl_alpha(peek(text, 4))]
+                [std::str::is_tcl_alpha(peek(text, 0)), std::str::is_tcl_alpha(peek(text, 3)), std::str::is_tcl_alpha(peek(text, 4))]
             fn outcome():
                 result = f("café1"):
                     on LowerUnderrun:
@@ -690,18 +690,18 @@ fn register_view_classify_tests():
                         return "UpperOverrun"
                 result
             outcome()
-    test::value("view-classify-alpha-non-ascii-1", [true, true, false], b_classify_alpha_non_ascii)
+    std::test::value("view-classify-alpha-non-ascii-1", [true, true, false], b_classify_alpha_non_ascii)
 
     # view-classify-astral-1: U+1F600 is not a letter.
-    fn b_classify_astral() errors compiler::CompilerError:
+    fn b_classify_astral() errors std::compiler::CompilerError:
         static compile:
             fn peek(text, index) errors LowerUnderrun, UpperOverrun:
-                if index >= str::length(text):
+                if index >= std::str::length(text):
                     return ""
 
-                str::substring(text, index, index + 1)
+                std::str::substring(text, index, index + 1)
             fn f(text):
-                [str::is_tcl_alpha(peek(text, 0)), str::is_tcl_alpha(peek(text, 1))]
+                [std::str::is_tcl_alpha(peek(text, 0)), std::str::is_tcl_alpha(peek(text, 1))]
             fn outcome():
                 result = f("a😀"):
                     on LowerUnderrun:
@@ -710,23 +710,23 @@ fn register_view_classify_tests():
                         return "UpperOverrun"
                 result
             outcome()
-    test::value("view-classify-astral-1", [true, false], b_classify_astral)
+    std::test::value("view-classify-astral-1", [true, false], b_classify_astral)
 
-# A one-parameter predicate built from str::is_tcl_alnum and `==` against
-# literals (lib/web.bot's local-part character shape), applied to a
+# A one-parameter predicate built from std::str::is_tcl_alnum and `==` against
+# literals (stdlib/web.bot's local-part character shape), applied to a
 # peek()'d character, or to an inline slice. LONG_TEXT is "ab.c_d-e@f"
 # written 20 times (view-gc-stress-1).
 fn register_view_predicate_tests(long_text: str):
     # view-predicate-1
-    fn b_predicate() errors compiler::CompilerError:
+    fn b_predicate() errors std::compiler::CompilerError:
         static compile:
             fn peek(text, index) errors LowerUnderrun, UpperOverrun:
-                if index >= str::length(text):
+                if index >= std::str::length(text):
                     return ""
 
-                str::substring(text, index, index + 1)
+                std::str::substring(text, index, index + 1)
             fn is_local_char(c):
-                if str::is_tcl_alnum(c):
+                if std::str::is_tcl_alnum(c):
                     true
                 else:
                     if c == ".":
@@ -737,7 +737,7 @@ fn register_view_predicate_tests(long_text: str):
                         else:
                             c == "-"
             fn scan(text, index, count) errors LowerUnderrun, UpperOverrun:
-                if index >= str::length(text):
+                if index >= std::str::length(text):
                     return count
                 if is_local_char(peek(text, index)):
                     return scan(text, index + 1, count + 1)
@@ -752,18 +752,18 @@ fn register_view_predicate_tests(long_text: str):
                         return "UpperOverrun"
                 result
             outcome()
-    test::value("view-predicate-1", 9, b_predicate)
+    std::test::value("view-predicate-1", 9, b_predicate)
 
     # view-gc-stress-1's program: the same scan over LONG_TEXT.
-    fn b_predicate_repeated() errors compiler::CompilerError:
+    fn b_predicate_repeated() errors std::compiler::CompilerError:
         static compile:
             fn peek(text, index) errors LowerUnderrun, UpperOverrun:
-                if index >= str::length(text):
+                if index >= std::str::length(text):
                     return ""
 
-                str::substring(text, index, index + 1)
+                std::str::substring(text, index, index + 1)
             fn is_local_char(c):
-                if str::is_tcl_alnum(c):
+                if std::str::is_tcl_alnum(c):
                     true
                 else:
                     if c == ".":
@@ -774,7 +774,7 @@ fn register_view_predicate_tests(long_text: str):
                         else:
                             c == "-"
             fn scan(text, index, count) errors LowerUnderrun, UpperOverrun:
-                if index >= str::length(text):
+                if index >= std::str::length(text):
                     return count
                 if is_local_char(peek(text, index)):
                     return scan(text, index + 1, count + 1)
@@ -789,19 +789,19 @@ fn register_view_predicate_tests(long_text: str):
                         return "UpperOverrun"
                 result
             outcome()
-    test::value("view-predicate-repeated-text", 180, b_predicate_repeated)
+    std::test::value("view-predicate-repeated-text", 180, b_predicate_repeated)
 
     # view-predicate-non-ascii-1: U+00E9 is alphanumeric, "@" is no local
     # character.
-    fn b_predicate_non_ascii() errors compiler::CompilerError:
+    fn b_predicate_non_ascii() errors std::compiler::CompilerError:
         static compile:
             fn peek(text, index) errors LowerUnderrun, UpperOverrun:
-                if index >= str::length(text):
+                if index >= std::str::length(text):
                     return ""
 
-                str::substring(text, index, index + 1)
+                std::str::substring(text, index, index + 1)
             fn is_local_char(c):
-                if str::is_tcl_alnum(c):
+                if std::str::is_tcl_alnum(c):
                     true
                 else:
                     if c == ".":
@@ -821,13 +821,13 @@ fn register_view_predicate_tests(long_text: str):
                         return "UpperOverrun"
                 result
             outcome()
-    test::value("view-predicate-non-ascii-1", [true, true, false], b_predicate_non_ascii)
+    std::test::value("view-predicate-non-ascii-1", [true, true, false], b_predicate_non_ascii)
 
     # view-predicate-inline-1: the predicate applied to a slice directly.
-    fn b_predicate_inline() errors compiler::CompilerError:
+    fn b_predicate_inline() errors std::compiler::CompilerError:
         static compile:
             fn is_local_char(c):
-                if str::is_tcl_alnum(c):
+                if std::str::is_tcl_alnum(c):
                     true
                 else:
                     if c == ".":
@@ -838,7 +838,7 @@ fn register_view_predicate_tests(long_text: str):
                         else:
                             c == "-"
             fn f(text, i) errors LowerUnderrun, UpperOverrun:
-                is_local_char(str::substring(text, i, i + 1))
+                is_local_char(std::str::substring(text, i, i + 1))
             fn outcome():
                 result = f("a.b", 1):
                     on LowerUnderrun:
@@ -847,21 +847,21 @@ fn register_view_predicate_tests(long_text: str):
                         return "UpperOverrun"
                 result
             outcome()
-    test::value("view-predicate-inline-1", true, b_predicate_inline)
+    std::test::value("view-predicate-inline-1", true, b_predicate_inline)
 
 # A classified character that is also returned or stored keeps its value; a
 # predicate of another shape is an ordinary function.
 fn register_view_escape_tests():
     # view-escape-1: classified, then returned.
-    fn b_view_escape_returned() errors compiler::CompilerError:
+    fn b_view_escape_returned() errors std::compiler::CompilerError:
         static compile:
             fn peek(text, index) errors LowerUnderrun, UpperOverrun:
-                if index >= str::length(text):
+                if index >= std::str::length(text):
                     return ""
 
-                str::substring(text, index, index + 1)
+                std::str::substring(text, index, index + 1)
             fn is_local_char(c):
-                if str::is_tcl_alnum(c):
+                if std::str::is_tcl_alnum(c):
                     true
                 else:
                     if c == ".":
@@ -881,19 +881,19 @@ fn register_view_escape_tests():
                 on UpperOverrun:
                     "UpperOverrun"
             result
-    test::value("view-escape-1", "a", b_view_escape_returned)
+    std::test::value("view-escape-1", "a", b_view_escape_returned)
 
     # view-escape-container-1: classified, and stored in a List beside its
     # class.
-    fn b_view_escape_container() errors compiler::CompilerError:
+    fn b_view_escape_container() errors std::compiler::CompilerError:
         static compile:
             fn peek(text, index) errors LowerUnderrun, UpperOverrun:
-                if index >= str::length(text):
+                if index >= std::str::length(text):
                     return ""
 
-                str::substring(text, index, index + 1)
+                std::str::substring(text, index, index + 1)
             fn is_local_char(c):
-                if str::is_tcl_alnum(c):
+                if std::str::is_tcl_alnum(c):
                     true
                 else:
                     if c == ".":
@@ -914,18 +914,18 @@ fn register_view_escape_tests():
                         return "UpperOverrun"
                 result
             outcome()
-    test::value("view-escape-container-1", [true, "a"], b_view_escape_container)
+    std::test::value("view-escape-container-1", [true, "a"], b_view_escape_container)
 
     # view-unsupported-shape-1: a predicate that concatenates its parameter.
-    fn b_unsupported_concat() errors compiler::CompilerError:
+    fn b_unsupported_concat() errors std::compiler::CompilerError:
         static compile:
             fn peek(text, index) errors LowerUnderrun, UpperOverrun:
-                if index >= str::length(text):
+                if index >= std::str::length(text):
                     return ""
 
-                str::substring(text, index, index + 1)
+                std::str::substring(text, index, index + 1)
             fn noisy(c):
-                str::length(str::concat(c, "!")) == 2
+                std::str::length(std::str::concat(c, "!")) == 2
             fn f(text):
                 noisy(peek(text, 0))
             fn outcome():
@@ -936,16 +936,16 @@ fn register_view_escape_tests():
                         return "UpperOverrun"
                 result
             outcome()
-    test::value("view-unsupported-shape-1", true, b_unsupported_concat)
+    std::test::value("view-unsupported-shape-1", true, b_unsupported_concat)
 
     # view-unsupported-shape-2: a predicate of two parameters.
-    fn b_unsupported_two_parameters() errors compiler::CompilerError:
+    fn b_unsupported_two_parameters() errors std::compiler::CompilerError:
         static compile:
             fn peek(text, index) errors LowerUnderrun, UpperOverrun:
-                if index >= str::length(text):
+                if index >= std::str::length(text):
                     return ""
 
-                str::substring(text, index, index + 1)
+                std::str::substring(text, index, index + 1)
             fn eq2(a, b):
                 a == b
             fn f(text):
@@ -958,21 +958,21 @@ fn register_view_escape_tests():
                         return "UpperOverrun"
                 result
             outcome()
-    test::value("view-unsupported-shape-2", true, b_unsupported_two_parameters)
+    std::test::value("view-unsupported-shape-2", true, b_unsupported_two_parameters)
 
-# web::emailish? on the two addresses of the view-emailish-corpus tests.
+# std::web::emailish? on the two addresses of the view-emailish-corpus tests.
 fn register_view_emailish_tests():
     # view-emailish-corpus-1
-    fn b_emailish_unicode() errors compiler::CompilerError:
+    fn b_emailish_unicode() errors std::compiler::CompilerError:
         static compile:
-            web::emailish?("café@例え.テスト")
-    test::value("view-emailish-unicode-address", true, b_emailish_unicode)
+            std::web::emailish?("café@例え.テスト")
+    std::test::value("view-emailish-unicode-address", true, b_emailish_unicode)
 
     # view-emailish-corpus-2
-    fn b_emailish_no_at() errors compiler::CompilerError:
+    fn b_emailish_no_at() errors std::compiler::CompilerError:
         static compile:
-            web::emailish?("not-an-email")
-    test::value("view-emailish-no-at", false, b_emailish_no_at)
+            std::web::emailish?("not-an-email")
+    std::test::value("view-emailish-no-at", false, b_emailish_no_at)
 
 fn register_native_string_view_tests():
     register_view_classify_tests()
@@ -986,18 +986,18 @@ fn register_native_string_view_tests():
 # A forward scan from index 0 reassembles SCANNED as EXPECTED (the scanned
 # text itself): each step binds the character it reads and concatenates it.
 fn register_traversal_case(name: str, scanned: str, expected: str):
-    fn b_scan_collect() errors compiler::CompilerError:
+    fn b_scan_collect() errors std::compiler::CompilerError:
         static compile:
             fn peek(text, index) errors LowerUnderrun, UpperOverrun:
-                if index >= str::length(text):
+                if index >= std::str::length(text):
                     return ""
 
-                str::substring(text, index, index + 1)
+                std::str::substring(text, index, index + 1)
             fn scan_collect(text, index, done) errors LowerUnderrun, UpperOverrun:
-                if index >= str::length(text):
+                if index >= std::str::length(text):
                     return done
                 character = peek(text, index)
-                scan_collect(text, index + 1, str::concat(done, character))
+                scan_collect(text, index + 1, std::str::concat(done, character))
             fn f() errors LowerUnderrun, UpperOverrun:
                 scan_collect(scanned, 0, "")
             result = f():
@@ -1006,7 +1006,7 @@ fn register_traversal_case(name: str, scanned: str, expected: str):
                 on UpperOverrun:
                     "UpperOverrun"
             result
-    test::value(name, expected, b_scan_collect)
+    std::test::value(name, expected, b_scan_collect)
 
 fn register_native_string_traversal_tests():
     register_traversal_case("traversal-ascii-1", "the quick brown fox jumps", "the quick brown fox jumps")
@@ -1021,20 +1021,20 @@ fn register_native_string_traversal_tests():
     register_traversal_case("traversal-mixed-repeated-text", long_text, long_text)
 
     # traversal-early-exit-1: a scan that stops at a separator.
-    fn b_early_exit() errors compiler::CompilerError:
+    fn b_early_exit() errors std::compiler::CompilerError:
         static compile:
             fn peek(text, index) errors LowerUnderrun, UpperOverrun:
-                if index >= str::length(text):
+                if index >= std::str::length(text):
                     return ""
 
-                str::substring(text, index, index + 1)
+                std::str::substring(text, index, index + 1)
             fn stop_at_comma(text, index, done) errors LowerUnderrun, UpperOverrun:
-                if index >= str::length(text):
+                if index >= std::str::length(text):
                     return done
                 c = peek(text, index)
                 if c == ",":
                     return done
-                stop_at_comma(text, index + 1, str::concat(done, c))
+                stop_at_comma(text, index + 1, std::str::concat(done, c))
             fn f() errors LowerUnderrun, UpperOverrun:
                 stop_at_comma("éè,not read", 0, "")
             result = f():
@@ -1043,22 +1043,22 @@ fn register_native_string_traversal_tests():
                 on UpperOverrun:
                     "UpperOverrun"
             result
-    test::value("traversal-early-exit-1", "éè", b_early_exit)
+    std::test::value("traversal-early-exit-1", "éè", b_early_exit)
 
     # traversal-nonzero-start-1: a scan started at index 4 collects the
     # tail.
-    fn b_nonzero_start() errors compiler::CompilerError:
+    fn b_nonzero_start() errors std::compiler::CompilerError:
         static compile:
             fn peek(text, index) errors LowerUnderrun, UpperOverrun:
-                if index >= str::length(text):
+                if index >= std::str::length(text):
                     return ""
 
-                str::substring(text, index, index + 1)
+                std::str::substring(text, index, index + 1)
             fn scan_collect(text, index, done) errors LowerUnderrun, UpperOverrun:
-                if index >= str::length(text):
+                if index >= std::str::length(text):
                     return done
                 character = peek(text, index)
-                scan_collect(text, index + 1, str::concat(done, character))
+                scan_collect(text, index + 1, std::str::concat(done, character))
             fn f() errors LowerUnderrun, UpperOverrun:
                 scan_collect("the quick brown fox", 4, "")
             result = f():
@@ -1067,11 +1067,11 @@ fn register_native_string_traversal_tests():
                 on UpperOverrun:
                     "UpperOverrun"
             result
-    test::value("traversal-nonzero-start-1", "quick brown fox", b_nonzero_start)
+    std::test::value("traversal-nonzero-start-1", "quick brown fox", b_nonzero_start)
 
-with context test::suite()
+with context std::test::suite()
 register_uri_escape_tests()
 register_native_string_region_tests()
 register_native_string_view_tests()
 register_native_string_traversal_tests()
-test::report()
+std::test::report()

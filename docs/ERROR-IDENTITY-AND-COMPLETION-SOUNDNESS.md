@@ -108,7 +108,7 @@ Every branch of `hir/completions.tcl`'s walker (and the one outside it):
 | `EvalHandle`, the `else` branch (an untyped handled call) | `normal 1`, **no errors** | `IndirectFacts`, as `EvalCall` |
 | `EvalHandle`, structural callee | the contract | as `EvalCall` |
 | `EvalCall`/`EvalHandle` natives | only natives with declared `-errors` analyzed | also `-errors-from` natives (a factory callable) |
-| `NativeCallFacts`, `-errors-from` (`mutable_array::generate`) | the factory's type-level contract | plus its callable fact (a transparent closure factory) |
+| `NativeCallFacts`, `-errors-from` (`std::mutable_array::generate`) | the factory's type-level contract | plus its callable fact (a transparent closure factory) |
 | `NativeCallFacts`, coroutine segments | the thunk's summary | the thunk's summary, its incompleteness propagated |
 | `EffectiveFacts` recursion guard / budget / arity | the declared contract | the declared contract, plus what a transparent callee's callable inputs carry (`Fallback`) |
 | `EffectiveFacts` after `analyzeBlock` | the walk's errors | the walk's errors; incomplete -> plus the declared contract |
@@ -267,7 +267,7 @@ ERROR-PAYLOADS.md workaround note is gone.
 
 ### 10. Canonical error-identity representation
 
-A string: `NS::Name` for a module's error (`abi::x86_64::Register64BelowRange`
+A string: `NS::Name` for a module's error (`std::abi::x86_64::Register64BelowRange`
 for a nested module), the bare `Name` for the entry program's and for the
 runtime's builtin errors. `hir::errordecls::canonical NS NAME`,
 `shortName ID`, `namespaceOf ID` convert; the owner is recovered from the
@@ -329,11 +329,11 @@ names (`nerr-builtin-root`). They keep their fixed native ids.
 
 ### 17. Migrated stdlib identities
 
-`io::WriteFailed`, `io::path::NotAPath`, `byte::BelowRange`,
-`byte::AboveRange`, `list::NotFound`, `abi::AbiIntegerBelowRange`,
-`abi::AbiIntegerAboveRange`, `abi::x86_64::Register64BelowRange`,
-`abi::x86_64::Register64AboveRange` (`nerr-stdlib-identities`). Their owners
-are unchanged; `lib/linux/io.bot`, `lib/linux/path.bot`, the examples,
+`std::io::WriteFailed`, `std::io::path::NotAPath`, `std::byte::BelowRange`,
+`std::byte::AboveRange`, `std::list::NotFound`, `std::abi::AbiIntegerBelowRange`,
+`std::abi::AbiIntegerAboveRange`, `std::abi::x86_64::Register64BelowRange`,
+`std::abi::x86_64::Register64AboveRange` (`nerr-stdlib-identities`). Their owners
+are unchanged; `stdlib/linux/io.bot`, `stdlib/linux/path.bot`, the examples,
 benchmarks, audit probes and fuzzers, and the tests spell them qualified
 (`nerr-stdlib-qualified-use`). No alias.
 
@@ -472,8 +472,8 @@ fuzzers (`contexts`, `elif`, `fixed-arity-list-return`, `method-sugar`,
 ### 30. Mutation results
 
 Every catalog's mutants still apply exactly once -- the context-traits
-catalog needed two of its texts qualified (`lib/linux/io.bot` now fails
-`io::WriteFailed`, and a replacement failing the bare name would have died
+catalog needed two of its texts qualified (`stdlib/linux/io.bot` now fails
+`std::io::WriteFailed`, and a replacement failing the bare name would have died
 of an unknown error instead of the bug it stands for) -- and every one is
 killed, on the final tree:
 
@@ -552,7 +552,7 @@ the HIR text round-trip suites (`hir-syntax`, `hir-samples`,
 exactly its manifest: `audit/refactor/tools/gate.tcl` passes). The 93 new
 tests are point 32's. Existing tests changed only where they named a
 module's error from outside the module -- now qualified, with diagnostics
-quoting the canonical name (`abi::AbiIntegerBelowRange`, `model::Bad`) --
+quoting the canonical name (`std::abi::AbiIntegerBelowRange`, `model::Bad`) --
 and `ep-cross-module`, which now also declares the program's own
 `NotThere` beside `eppage::NotThere`. `cargo test --release --manifest-path
 native/Cargo.toml`: 219 + 31 passed, 0 failed (unchanged: no native code
@@ -611,7 +611,7 @@ every `.asm` and summary is byte-identical to the committed
 differ), so nothing is recommitted. The NIR of all 41 example and benchmark
 programs is identical to the tree before except the rendered string of the
 migrated stdlib errors' `faildeclared` (`"AboveRange"` ->
-`"byte::AboveRange"`); the ids are the same.
+`"std::byte::AboveRange"`); the ids are the same.
 
 ### 35. Performance
 
@@ -621,7 +621,7 @@ string, and the scalar machine code is byte-identical (point 34). Native
 ids stay dense small integers, one per canonical identity (two
 same-short-name errors take two ids, where the flat namespace could not
 compile the program at all). The Tcl runtimes compare `errorId` strings
-that are longer only for the migrated stdlib errors (`byte::AboveRange`).
+that are longer only for the migrated stdlib errors (`std::byte::AboveRange`).
 
 **Compile time.** Measured with each tree's own compiler on an otherwise
 idle machine, the two trees interleaved, twice:
@@ -666,7 +666,7 @@ properties passes (point 31), and every pre-existing mutant is still killed
 | `hir/resolve.tcl`, `hir/traits.tcl` | resolution of every error spelling |
 | `surface/parser.tcl` | `ErrorName` |
 | `surface/modules.tcl` | qualified error references: collection and authorization |
-| `lib/linux/io.bot`, `lib/linux/path.bot`, `lib/abi/x86_64.bot` | qualified external uses; a comment |
+| `stdlib/linux/io.bot`, `stdlib/linux/path.bot`, `stdlib/abi/x86_64.bot` | qualified external uses; a comment |
 | `examples/`, `bench/`, `audit/*/probes/` | qualified external uses |
 | `tests/higher-order-completions.test` | Part A |
 | `tests/namespaced-errors.test` | Part B and Part C |

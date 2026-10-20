@@ -18,22 +18,22 @@
 # itself, little-endian and two's complement, element i of an array at its
 # offset plus i times its element's width:
 #
-#   emit      binary::emit(v) is the model's bytes of v (padding zero)
-#   parse     binary::parse(L, input) is the model's value of the input
-#   round     binary::parse(L, binary::emit(v)) == v
-#   write     binary::write(input, L.F, xs) of a random array field F (a whole
+#   emit      std::binary::emit(v) is the model's bytes of v (padding zero)
+#   parse     std::binary::parse(L, input) is the model's value of the input
+#   round     std::binary::parse(L, std::binary::emit(v)) == v
+#   write     std::binary::write(input, L.F, xs) of a random array field F (a whole
 #             List), and of one random scalar element named by a static
 #             designator (L.F[i][j].g), are the model's bytes; the operand's
 #             bytes are unchanged
 #   extent    v with the first field's List one element short, and one long,
 #             fails with LayoutExtentMismatch (nothing emitted)
 #   live      (the native backends) the input copied into native memory (the
-#             test fixture's) and viewed: binary::load(v) is the model's
+#             test fixture's) and viewed: std::binary::load(v) is the model's
 #             value; a random scalar element, reached through every array
-#             and record on its path at dynamic indices (binary::element),
-#             is the model's; then through an edit binary::store_element
-#             (or binary::store of a record element's field) writes a random
-#             value there and binary::store writes the random array field
+#             and record on its path at dynamic indices (std::binary::element),
+#             is the model's; then through an edit std::binary::store_element
+#             (or std::binary::store of a record element's field) writes a random
+#             value there and std::binary::store writes the random array field
 #             whole -- native memory afterwards is the model's bytes
 #             exactly, and an index one past the element's array is
 #             IndexNotFound with nothing written
@@ -58,7 +58,7 @@ foreach {option value} $argv {
 source [file join $root compiler compiler.tcl]
 source [file join $root native native.tcl]
 source [file join $root surface surface.tcl]
-set ::core::libraryDir [file join $root lib]
+set ::core::libraryDir [file join $root stdlib]
 core::cabi::installTestFixture
 if {[dict get $options -gc-stress]} {
     set ::env(BOTLISH_NATIVE_GC_STRESS) 1
@@ -77,7 +77,7 @@ proc pick {list} {
 
 # The domain type, range and helper suffix of a scalar of WIDTH bytes, SIGNED.
 proc scalarType {width signed} {
-    return binary::[scalarName $width $signed]
+    return std::binary::[scalarName $width $signed]
 }
 proc scalarName {width signed} {
     return [expr {$signed ? "I" : "U"}][expr {8 * $width}]
@@ -355,30 +355,30 @@ proc designator {top steps} {
 # ---------------------------------------------------------------------------
 # Programs
 
-set prelude {import abi
-import abi::bytes
-import binary
-import binary::native
-import byte
-import ffi::c
+set prelude {import std::abi
+import std::abi::bytes
+import std::binary
+import std::binary::native
+import std::byte
+import std::ffi::c
 import ffi_fixture
 
-fn bytes_of(values: List[int]) -> abi::bytes::Bytes:
+fn bytes_of(values: List[int]) -> std::abi::bytes::Bytes:
     bs = loop v in values:
-        b = byte::from_int(v):
-            on byte::BelowRange:
+        b = std::byte::from_int(v):
+            on std::byte::BelowRange:
                 0
-            on byte::AboveRange:
+            on std::byte::AboveRange:
                 255
         b
-    abi::bytes::from_list(bs)
+    std::abi::bytes::from_list(bs)
 
 }
 foreach width {1 2 4 8} {
     foreach signed {0 1} {
         lassign [scalarRange $width $signed] lo hi
         set n [scalarName $width $signed]
-        append prelude "fn c$n\(v: int) -> binary::$n:\n    if v < $lo or v > $hi:\n        0\n    else:\n        v\n\nfn l$n\(xs: List\[int\]) -> List\[binary::$n\]:\n    loop x in xs:\n        c$n\(x)\n\n"
+        append prelude "fn c$n\(v: int) -> std::binary::$n:\n    if v < $lo or v > $hi:\n        0\n    else:\n        v\n\nfn l$n\(xs: List\[int\]) -> List\[std::binary::$n\]:\n    loop x in xs:\n        c$n\(x)\n\n"
     }
 }
 
@@ -433,13 +433,13 @@ proc program {index} {
     set text "$::prelude$decls"
     append text "fn check() -> List\[any\] errors LayoutLengthMismatch, LayoutExtentMismatch:\n"
     append text "    v = [valueText $topRepr $value]\n"
-    append text "    p = binary::parse($name, [bytesText $input])\n"
-    append text "    d = abi::bytes::from_bytes([bytesText $input])\n"
-    append text "    w = binary::write(d, $name.$arrayName, [valueText $arrayRepr $arrayValue])\n"
-    append text "    x = binary::write(d, [designator $name $steps], [valueText $leaf $leafValue])\n"
-    append text "    \[binary::emit(v) == [bytesText $encoded], p == [valueText $topRepr $decoded], binary::parse($name, binary::emit(v)) == v, abi::bytes::freeze(w) == [bytesText $written], abi::bytes::freeze(x) == [bytesText $leafWritten], abi::bytes::freeze(d) == [bytesText $input]\]\n"
+    append text "    p = std::binary::parse($name, [bytesText $input])\n"
+    append text "    d = std::abi::bytes::from_bytes([bytesText $input])\n"
+    append text "    w = std::binary::write(d, $name.$arrayName, [valueText $arrayRepr $arrayValue])\n"
+    append text "    x = std::binary::write(d, [designator $name $steps], [valueText $leaf $leafValue])\n"
+    append text "    \[std::binary::emit(v) == [bytesText $encoded], p == [valueText $topRepr $decoded], std::binary::parse($name, std::binary::emit(v)) == v, std::abi::bytes::freeze(w) == [bytesText $written], std::abi::bytes::freeze(x) == [bytesText $leafWritten], std::abi::bytes::freeze(d) == [bytesText $input]\]\n"
     append text "fn extent(v: LayoutStruct\[$name\]) -> str:\n"
-    append text "    b = binary::emit(v):\n"
+    append text "    b = std::binary::emit(v):\n"
     append text "        on LayoutExtentMismatch:\n"
     append text "            return \"extent\"\n"
     append text "    \"emitted\"\n"
@@ -463,24 +463,24 @@ proc program {index} {
         } else {
             lappend params "i$k: int"
             lappend args [lindex $step 1]
-            set read "binary::element($read, i$k)"
-            set edit "binary::element($edit, i$k)"
+            set read "std::binary::element($read, i$k)"
+            set edit "std::binary::element($edit, i$k)"
             set lastIndex [list $k [lindex $step 2]]
             incr k
         }
     }
-    # The store: binary::store_element when the leaf is an array's element,
-    # binary::store of the record's field otherwise (at the top level, by
+    # The store: std::binary::store_element when the leaf is an array's element,
+    # std::binary::store of the record's field otherwise (at the top level, by
     # its designator).
     set last [lindex $steps end]
     if {[lindex $last 0] eq "index"} {
-        set prefix [string range $edit [string length "binary::element("] end-[string length ", i[expr {$k - 1}])"]]
-        set store "binary::store_element($prefix, i[expr {$k - 1}], [valueText $leaf $leafValue])"
+        set prefix [string range $edit [string length "std::binary::element("] end-[string length ", i[expr {$k - 1}])"]]
+        set store "std::binary::store_element($prefix, i[expr {$k - 1}], [valueText $leaf $leafValue])"
     } elseif {[llength $steps] == 1} {
-        set store "binary::store(e, $name.[lindex $last 1], [valueText $leaf $leafValue])"
+        set store "std::binary::store(e, $name.[lindex $last 1], [valueText $leaf $leafValue])"
     } else {
         set prefix [string range $edit 0 end-[string length ".[lindex $last 1]"]]
-        set store "binary::store($prefix, [lindex $last 2].[lindex $last 1], [valueText $leaf $leafValue])"
+        set store "std::binary::store($prefix, [lindex $last 2].[lindex $last 1], [valueText $leaf $leafValue])"
     }
     set storedAll $leafWritten
     modelEncode $arrayRepr $arrayValue storedAll $arrayOffset
@@ -498,23 +498,23 @@ proc program {index} {
         append live "fn attempt([join [concat [list "e: NativeEdit\[$name\]"] $params] {, }]) -> str:\n"
         append live "    put([join [concat e $names] {, }]):\n        on IndexNotFound:\n            return \"refused\"\n    \"stored\"\n"
         append live "fn past() -> str errors NativeEditNull:\n"
-        append live "    m = ffi_fixture::memory\[ffi::c::Void\]([bytesText $input])\n"
-        append live "    e = binary::native::edit($name, m)\n"
+        append live "    m = ffi_fixture::memory\[std::ffi::c::Void\]([bytesText $input])\n"
+        append live "    e = std::binary::native::edit($name, m)\n"
         append live "    outcome = attempt([join [concat e $past] {, }])\n"
         append live "    if ffi_fixture::memory_bytes(m, $size) == \[[join $input {, }]\]:\n        outcome\n    else:\n        \"written\"\n"
         set outside "\"refused\""
     }
     append live "fn live([join $params {, }]) -> List\[any\] errors NativeViewNull, NativeEditNull, IndexNotFound, LayoutExtentMismatch, LayoutLengthMismatch:\n"
-    append live "    p = ffi_fixture::memory\[ffi::c::Void\]([bytesText $input])\n"
-    append live "    v = binary::native::view($name, p)\n"
-    append live "    e = binary::native::edit($name, p)\n"
-    append live "    loaded = binary::load(v) == binary::parse($name, [bytesText $input])\n"
+    append live "    p = ffi_fixture::memory\[std::ffi::c::Void\]([bytesText $input])\n"
+    append live "    v = std::binary::native::view($name, p)\n"
+    append live "    e = std::binary::native::edit($name, p)\n"
+    append live "    loaded = std::binary::load(v) == std::binary::parse($name, [bytesText $input])\n"
     append live "    leaf = read([join [concat v $names] {, }])\n"
     append live "    refused = [expr {$lastIndex ne "" ? "past()" : "\"none\""}]\n"
-    append live "    q = ffi::c::clone(p)\n"
+    append live "    q = std::ffi::c::clone(p)\n"
     append live "    before = ffi_fixture::memory_bytes(q, $size)\n"
     append live "    put([join [concat e $names] {, }])\n"
-    append live "    binary::store(e, $name.$arrayName, [valueText $arrayRepr $arrayValue])\n"
+    append live "    std::binary::store(e, $name.$arrayName, [valueText $arrayRepr $arrayValue])\n"
     append live "    \[loaded, leaf, refused, before == \[[join $input {, }]\], ffi_fixture::memory_bytes(p, $size)\]\n"
     append live "r = live([join $args {, }]):\n    on NativeViewNull:\n        \[\]\n    on NativeEditNull:\n        \[\]\n    on IndexNotFound:\n        \[\]\n    on LayoutExtentMismatch:\n        \[\]\n    on LayoutLengthMismatch:\n        \[\]\nr\n"
     set liveExpected "\[true, [leafOf $decoded $steps], $outside, true, \[[join $storedAll {, }]\]\]"

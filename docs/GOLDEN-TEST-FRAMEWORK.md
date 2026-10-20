@@ -1,6 +1,6 @@
 # GOLDEN-TEST-FRAMEWORK.md
 
-A golden test framework for Botlish, written in Botlish: `lib/test.bot`, an
+A golden test framework for Botlish, written in Botlish: `stdlib/test.bot`, an
 ordinary library, and a validation sample of the Tcl suite ported to it.
 
 > Can an ordinary Botlish library, using the language's existing functions,
@@ -8,7 +8,7 @@ ordinary library, and a validation sample of the Tcl suite ported to it.
 > `static compile:`, express a practical golden-testing workflow for real
 > Botlish tests without adding test-specific language syntax?
 
-**Yes, with limits the language sets, not the library.** `lib/test.bot` is
+**Yes, with limits the language sets, not the library.** `stdlib/test.bot` is
 an ordinary library -- a context struct holding a `MutableVector` of
 deferred function values, a coroutine runner, structs for results, and
 `static compile:` at each test -- with no test syntax, no test-only native,
@@ -41,7 +41,7 @@ of the three lines every test repeats ([Recommendations](#recommendations)).
 > fixed.** A call through a value of a checked structural callable type is
 > now bounded by that type's contract, whatever callable it holds, and the
 > erased-callable contract is charged only to calls no contract bounds. The
-> runner's `(c.run)()` through `Fn{args: [], return: test::Match}` is
+> runner's `(c.run)()` through `Fn{args: [], return: std::test::Match}` is
 > charged nothing, so a test that passes an error-declaring callable through
 > an untyped parameter no longer stops a suite from compiling ("runner
 > poisoning" below is history). `hoc-original-payload-free-both-handled` is
@@ -94,51 +94,51 @@ of the three lines every test repeats ([Recommendations](#recommendations)).
 ## The library
 
 ```botlish
-import compiler
-import test
+import std::compiler
+import std::test
 
 fn register_arithmetic_tests():
-    fn adds() errors compiler::CompilerError:
+    fn adds() errors std::compiler::CompilerError:
         static compile:
             20 + 22
-    test::value("adds", 42, adds)
-    fn unbound() errors compiler::CompilerError:
+    std::test::value("adds", 42, adds)
+    fn unbound() errors std::compiler::CompilerError:
         static compile:
             missing + 1
-    test::rejects("unbound", compiler::DiagnosticCode::Unbound, unbound)
+    std::test::rejects("unbound", std::compiler::DiagnosticCode::Unbound, unbound)
 
-with context test::suite()
+with context std::test::suite()
 register_arithmetic_tests()
-test::report()          # ["PASS adds", "PASS unbound", "2 passed, 0 failed"]
+std::test::report()          # ["PASS adds", "PASS unbound", "2 passed, 0 failed"]
 ```
 
-The API (`lib/test.bot`; a module has no visibility control, so the
+The API (`stdlib/test.bot`; a module has no visibility control, so the
 library's other top-level helpers -- `joined`, `quoted`, `text_lines`, ... --
 are reachable too, but are not part of it):
 
 | name | what |
 |---|---|
-| `test::Suite` | `context struct Suite: cases: MutableVector[TestCase]` -- the suite context |
-| `test::suite()` | a new, empty Suite, for `with context test::suite()` |
-| `test::TestCase` | `{name, run}`: one registered case, the element of `Suite.cases` and of `registered()` |
-| `test::case(name, run)` | registers a case whose check is `run: Fn{args: [], return: test::Match}` (stored, not called): the low-level form and the escape hatch |
-| `test::value(name, expected, body)` | registers: `body()`'s value must `== expected` |
-| `test::holds(name, description, predicate, body)` | registers: `predicate(body())` must be true |
-| `test::rejects(name, code, body)` | registers: the body's block must be rejected with `code` (a `compiler::DiagnosticCode`) |
-| `test::rejects_at(name, code, line, column, body)` | registers: ... at that primary location |
-| `test::rejects_any(name, body)` | registers: the body's block must be rejected |
-| `test::rejects_message(name, code, message, body)`, `test::rejects_containing(name, code, fragment, body)` | registers: ... with that code and exactly that message, or a message containing the fragment (added by the large-scale migration, LARGE-SCALE-GOLDEN-MIGRATION.md) |
-| `test::Match` | `{matched, expected, actual, detail}`: one comparison's verdict, as data |
-| `test::equal(expected, actual)`, `test::satisfies(actual, description, predicate)`, `test::diagnostic(expected, code, primary, message)` | matchers: a Match |
-| `test::passed()`, `test::mismatch(expected, actual, detail)` | Match constructors for a custom check |
-| `test::run()` | the runner coroutine: one case per segment, each sending `[TestResult]`, the last sending `[]` |
-| `test::TestResult` | `{name, passed, expected, actual, detail}` |
-| `test::results()` | runs the suite once: every case's result, in registration order |
-| `test::Summary`, `test::summarize(results)` | `{total, passed, failed}` |
-| `test::report()` | runs the suite once: its deterministic report, a `List[str]` |
-| `test::result_lines(result)`, `test::summary_line(summary)` | the report's formatting, for a driver of its own |
-| `test::registered()`, `test::count()` | the registered cases (a snapshot List), how many |
-| `test::describe(v)`, `test::int_text(n)`, `test::code_name(code)`, `test::diagnostic_text(code, primary)` | the texts a report shows |
+| `std::test::Suite` | `context struct Suite: cases: MutableVector[TestCase]` -- the suite context |
+| `std::test::suite()` | a new, empty Suite, for `with context std::test::suite()` |
+| `std::test::TestCase` | `{name, run}`: one registered case, the element of `Suite.cases` and of `registered()` |
+| `std::test::case(name, run)` | registers a case whose check is `run: Fn{args: [], return: std::test::Match}` (stored, not called): the low-level form and the escape hatch |
+| `std::test::value(name, expected, body)` | registers: `body()`'s value must `== expected` |
+| `std::test::holds(name, description, predicate, body)` | registers: `predicate(body())` must be true |
+| `std::test::rejects(name, code, body)` | registers: the body's block must be rejected with `code` (a `std::compiler::DiagnosticCode`) |
+| `std::test::rejects_at(name, code, line, column, body)` | registers: ... at that primary location |
+| `std::test::rejects_any(name, body)` | registers: the body's block must be rejected |
+| `std::test::rejects_message(name, code, message, body)`, `std::test::rejects_containing(name, code, fragment, body)` | registers: ... with that code and exactly that message, or a message containing the fragment (added by the large-scale migration, LARGE-SCALE-GOLDEN-MIGRATION.md) |
+| `std::test::Match` | `{matched, expected, actual, detail}`: one comparison's verdict, as data |
+| `std::test::equal(expected, actual)`, `std::test::satisfies(actual, description, predicate)`, `std::test::diagnostic(expected, code, primary, message)` | matchers: a Match |
+| `std::test::passed()`, `std::test::mismatch(expected, actual, detail)` | Match constructors for a custom check |
+| `std::test::run()` | the runner coroutine: one case per segment, each sending `[TestResult]`, the last sending `[]` |
+| `std::test::TestResult` | `{name, passed, expected, actual, detail}` |
+| `std::test::results()` | runs the suite once: every case's result, in registration order |
+| `std::test::Summary`, `std::test::summarize(results)` | `{total, passed, failed}` |
+| `std::test::report()` | runs the suite once: its deterministic report, a `List[str]` |
+| `std::test::result_lines(result)`, `std::test::summary_line(summary)` | the report's formatting, for a driver of its own |
+| `std::test::registered()`, `std::test::count()` | the registered cases (a snapshot List), how many |
+| `std::test::describe(v)`, `std::test::int_text(n)`, `std::test::code_name(code)`, `std::test::diagnostic_text(code, primary)` | the texts a report shows |
 
 The registration helpers and `case`/`mismatch` are `nomethod`: their first
 argument is a name, not a receiver (`"adds".value(42, adds)` would read
@@ -198,7 +198,7 @@ context struct Suite:
     cases: MutableVector[TestCase]
 ```
 
-`with context test::suite()` installs one Suite (an ordinary immutable
+`with context std::test::suite()` installs one Suite (an ordinary immutable
 struct value, installed once, at the entry program's top level: CONTEXTS.md).
 Registration mutates the vector the context holds -- `suite.cases.push(...)`
 through the registration function's context parameter, a *place* in
@@ -230,17 +230,17 @@ graph. A call outside a suite is the ordinary MISSING-CONTEXT, with the call
 chain that explains it, at the top-level call (`gf-context-required`):
 
 ```
-suite.bot:7:1: test::Suite is required by this call but is not installed here (install it with "with context EXPR" before the call):
-    test::value
-     -> test::case
-        directly requires test::Suite (CORE SEMANTIC MISSING-CONTEXT)
+suite.bot:7:1: std::test::Suite is required by this call but is not installed here (install it with "with context EXPR" before the call):
+    std::test::value
+     -> std::test::case
+        directly requires std::test::Suite (CORE SEMANTIC MISSING-CONTEXT)
 ```
 
 Why only two: a context implements, structurally, every context trait whose
 operations its owner namespace's functions with that context parameter
 spell (CONTEXT-TRAITS.md). The first library declared the context on every
 helper, and a porter found an application trait `context trait Counted: fn
-count() -> int` satisfied by the suite through `test::count` -- the suite
+count() -> int` satisfied by the suite through `std::test::count` -- the suite
 "interfered" through an ordinary rule, not a special one. With the context
 declared by `case` and `registered` only, an application trait is satisfied
 by the suite only if it is spelled exactly like one of those two
@@ -272,7 +272,7 @@ runs at registration, the coroutine's body runs once when the case runs).
 Why `Fn{args: [], return: Match}` and nothing richer:
 
 * **Uniform.** The vector holds one element type. A body's own result type
-  varies (Int, List, String, struct), so the helpers wrap it: `test::value`
+  varies (Int, List, String, struct), so the helpers wrap it: `std::test::value`
   defines a nested `check()` that calls the body, compares while the
   concrete type is still known, and returns a Match -- the one shape every
   case has. Nothing heterogeneous is stored, and no `any`-typed value
@@ -283,7 +283,7 @@ Why `Fn{args: [], return: Match}` and nothing richer:
   `empty?` and at the context installation itself ("has typed parameter
   requirements that cannot be preserved"). So the stored check completes
   normally, always -- which is exactly what a golden check should do: the
-  one error a body may complete with, `compiler::CompilerError`, is turned
+  one error a body may complete with, `std::compiler::CompilerError`, is turned
   into a mismatch inside `check()`.
 * **No parameters, no context.** A function value cannot require a context
   (`CONTEXT-FUNCTION-VALUE`): a check cannot reach the suite while it runs
@@ -291,7 +291,7 @@ Why `Fn{args: [], return: Match}` and nothing richer:
   observe the registry.
 
 Alternatives rejected: storing started coroutines (eager: runs at
-registration); storing `Fn{..., errors: [compiler::CompilerError]}` bodies
+registration); storing `Fn{..., errors: [std::compiler::CompilerError]}` bodies
 directly (bearing elements: the vector cannot be read); one vector per body
 result type (no uniform registry, and no ordering across vectors);
 `test(name, body, matcher)` with a matcher value (the matcher would need the
@@ -316,7 +316,7 @@ fn run() -> List[TestResult]:
 (`registered()` is the List snapshot of `suite.cases`; the runner's own
 requirement of the Suite is derived from that call.)
 
-`coroutine {step, first} = test::run()` runs the first case (eager start)
+`coroutine {step, first} = std::test::run()` runs the first case (eager start)
 and sends its result; each `step()` runs the next; the last segment sends
 `[]` and completes. A coroutine's yields and its final return share one
 outward type (`COROUTINE-RESULT-MISMATCH` otherwise) and Botlish has no sum
@@ -329,14 +329,14 @@ finished. The empty suite needs no special case: its construction completes
 at once with `first == []` and `done?` true (`gf-empty-suite`).
 
 The loop iterates a snapshot of the vector taken when it starts (a vector is
-a value), so nothing a check does can change the run. `test::results()`
-drains a run into a List; `test::report()` formats it. A driver may stop
+a value), so nothing a check does can change the run. `std::test::results()`
+drains a run into a List; `std::test::report()` formats it. A driver may stop
 early: the runner is an ordinary coroutine, released when its handle dies,
 and the cases after the stop never run (`gf-runner-abandoned`).
 
 The runner is a coroutine because the protocol is the natural one for
 streaming, parameterized and generated cases later, not because a
-coroutine does anything a loop could not do today: `test::results()` is a
+coroutine does anything a loop could not do today: `std::test::results()` is a
 plain function that drains it.
 
 ### Test coroutines
@@ -378,11 +378,11 @@ there is no reflection), so a result never holds an arbitrary value and no
 run continues (`gf-failures-continue`: pass, value mismatch, pass,
 diagnostic mismatch, pass are five results).
 
-The compiler-error matchers compare `compiler::DiagnosticCode` -- never the
+The compiler-error matchers compare `std::compiler::DiagnosticCode` -- never the
 message, which a report shows as `detail` -- and, for `rejects_at`, the
 primary line and column in the suite's own file. An enum has no String
-form, so `test::code_name` spells all 87 cases; `gf-code-name-complete`
-fails when `lib/compiler.bot` gains a case the table lacks.
+form, so `std::test::code_name` spells all 87 cases; `gf-code-name-complete`
+fails when `stdlib/compiler.bot` gains a case the table lacks.
 
 ### Framework errors versus test failures
 
@@ -397,7 +397,7 @@ failed test (`gf-runtime-only-failure-aborts`).
 
 ### Exit status
 
-Botlish has no exit-status facility (`linux::abi::x86_64::syscall` can make
+Botlish has no exit-status facility (`std::linux::abi::x86_64::syscall` can make
 `exit_group` natively, in a standalone executable only; there is no library
 function, and the Tcl backends cannot). A suite's value is its report, and
 `tests/golden/run.tcl` interprets it: exit 1 when a test failed, a suite did
@@ -412,7 +412,7 @@ were tried out, on all three backends (the probes are summarized here;
 | a test body may... | ordinary Botlish can... |
 |---|---|
 | return a value | compare it generically: `==` in a generic helper, specialized per call site; a text of it for Ints, Strings, Bools and Lists (type tests); nothing else has a text without reflection |
-| fail `compiler::CompilerError` | handle it generically: one nominal error with a structured payload (`code`, `primary`, `related`, `message`), handled by every helper |
+| fail `std::compiler::CompilerError` | handle it generically: one nominal error with a structured payload (`code`, `primary`, `related`, `message`), handled by every helper |
 | fail a declared application error | handle it only by name, inside the body (`on Boom {code}:`) -- or have the registration rejected at compile time |
 | fail at run time without a declared error | nothing: the program aborts |
 
@@ -424,12 +424,12 @@ must name an error to handle it, or declare it to propagate it. What the
 compiler does instead is check: an untyped body parameter called as
 `body()` gets an inferred, trusted contract (INTRINSIC-FUNCTION-CONTRACT-
 INFERENCE.md) whose errors are the handlers around the call plus the
-enclosing function's declared errors -- for `test::value`,
-`Fn{args: [], return: any, errors: [compiler::CompilerError]}` -- and every
+enclosing function's declared errors -- for `std::test::value`,
+`Fn{args: [], return: any, errors: [std::compiler::CompilerError]}` -- and every
 registration is checked against it (`gf-body-error-contract`):
 
 ```
-suite.bot:14:30: argument for parameter "body" cannot be proven to satisfy Fn{args: [], return: any, errors: [compiler::CompilerError]}, the parameter type inferred from the function body (argument type: .../0 -> int); error set incompatible: the callable may raise Boom, but the function type allows only [compiler::CompilerError]; ... (CORE SEMANTIC TYPE)
+suite.bot:14:30: argument for parameter "body" cannot be proven to satisfy Fn{args: [], return: any, errors: [std::compiler::CompilerError]}, the parameter type inferred from the function body (argument type: .../0 -> int); error set incompatible: the callable may raise Boom, but the function type allows only [std::compiler::CompilerError]; ... (CORE SEMANTIC TYPE)
 ```
 
 -- at the registration's argument, naming the error: a precise compile-time
@@ -439,7 +439,7 @@ answer, but a whole-suite one (the suite does not build).
 the error? No.** An unhandled error of a segment crosses the construction
 or resume that ran it, as the ordinary error; the coroutine is then
 terminally failed and every later resume raises the same cached error again
-(COROUTINES.md 26-28). `coroutine::done?` is true for a completed and a
+(COROUTINES.md 26-28). `std::coroutine::done?` is true for a completed and a
 failed coroutine alike, and is the only query (`coroutine` has no other
 member). There is no non-raising "completed or failed?" and no result
 query; statically, every segment is charged with all of the root's declared
@@ -471,7 +471,7 @@ the whole run.
 
 **5. What can be normalized without a second error system?**
 
-* `compiler::CompilerError`, generically, by every helper: it is the one
+* `std::compiler::CompilerError`, generically, by every helper: it is the one
   error a body may declare, and its payload is the structured diagnostic.
 * Every declared error the test's author names, inside the body, with an
   ordinary handler that turns it into the value the test compares
@@ -512,17 +512,17 @@ fn call(f, x):
     f(x)
 
 fn register_poison(n: int):
-    fn body() errors compiler::CompilerError:
+    fn body() errors std::compiler::CompilerError:
         static compile:
             r = call(raise_e, n):
                 on E:
                     7
             r
-    test::value("poison", 7, body)
+    std::test::value("poison", 7, body)
 ```
 
 ```
-lib/test.bot:N:14: this call through a callable value the completion analysis cannot identify may produce the declared error "E" (this program passes a callable that declares it through an untyped parameter, and such a callable may reach this call), which is neither handled here nor admitted by the enclosing function's own "errors" declaration (CORE SEMANTIC UNHANDLED-ERROR)
+stdlib/test.bot:N:14: this call through a callable value the completion analysis cannot identify may produce the declared error "E" (this program passes a callable that declares it through an untyped parameter, and such a callable may reach this call), which is neither handled here nor admitted by the enclosing function's own "errors" declaration (CORE SEMANTIC UNHANDLED-ERROR)
 ```
 
 The test's own block is accepted (its use of `call` is fully handled); the
@@ -550,17 +550,17 @@ captured or receives -- so the program above compiles and its suite reports
 
 A migrated test's body is a function of no arguments -- at the suite's top
 level when it captures nothing, nested in its registration function when it
-captures an input -- that declares `errors compiler::CompilerError` and
+captures an input -- that declares `errors std::compiler::CompilerError` and
 whose whole body is one `static compile:` block around the code under test
 (`tests/golden/collections.bot`):
 
 ```botlish
-fn b_unknown_field() errors compiler::CompilerError:
+fn b_unknown_field() errors std::compiler::CompilerError:
     static compile:
         p = Person {name: "Ada", age: 1, height: 3}
 ...
 fn register_structs_tests():
-    test::rejects_at("struct-error-unknown-field", compiler::DiagnosticCode::UnknownField, 216, 42, b_unknown_field)
+    std::test::rejects_at("struct-error-unknown-field", std::compiler::DiagnosticCode::UnknownField, 216, 42, b_unknown_field)
 ```
 
 Of the 218 body functions, 152 are top-level and 66 nested.
@@ -574,7 +574,7 @@ Of the 218 body functions, 152 are top-level and 66 nested.
   handled, a coroutine protocol), function by function, NIR and native
   allocations alike: equal once program-wide numbers (callees, shapes,
   declared errors) are read as what they number.
-* **Rejected**, the block is `fail compiler::CompilerError {...}`: the
+* **Rejected**, the block is `fail std::compiler::CompilerError {...}`: the
   helper turns it into the expected outcome or into a mismatch naming code,
   location and message. A refactoring mistake in one test is one failing
   test, not a suite that does not build -- the TDD property.
@@ -586,11 +586,11 @@ Of the 218 body functions, 152 are top-level and 66 nested.
 
 **Why the boundary stays explicit.** `static compile:` consumes syntax, not
 values: by the time a library function receives a body it is a function
-value whose code has been compiled with the program, so `test::value` cannot
+value whose code has been compiled with the program, so `std::test::value` cannot
 put a boundary around it -- a rejected body would already have failed the
 whole compilation. The only way to have the boundary is to write it where
 the syntax is. The milestone records its cost rather than hiding it (the
-boundary is two lines per test: the `errors compiler::CompilerError` clause
+boundary is two lines per test: the `errors std::compiler::CompilerError` clause
 and the `static compile:` line; [Recurring boilerplate](#recurring-boilerplate)).
 
 What it does not do: parse errors stay the program's (a malformed body
@@ -622,7 +622,7 @@ CONTEXT-TRAIT-MISUSE 8, OPAQUE-REPRESENTATION 8, KNOWN-ERROR 7,
 UNHANDLED-ERROR 7, USE-AFTER-MOVE 5, CONTEXT-INSTALLATION-UNSUPPORTED 5,
 AFFINE-LIST-OPERATION-UNSUPPORTED 4, and 30 more with 1-3 each). Every one is
 an expected outcome of its test: no golden test passes because a block it
-expected to be accepted was rejected (`test::value` and `test::holds` report
+expected to be accepted was rejected (`std::test::value` and `std::test::holds` report
 an unexpected rejection as a FAIL with the diagnostic). A decision round is
 one whole-program build with the blocks decided so far in place; after the
 layout rule of `tests/golden/README.md` (bodies in separate top-level units;
@@ -706,7 +706,7 @@ runtime's release counters and the native coroutine census.
 
 ### Framework mutants
 
-`audit/golden/tools/mutants.txt` holds 20 deliberate bugs in `lib/test.bot`,
+`audit/golden/tools/mutants.txt` holds 20 deliberate bugs in `stdlib/test.bot`,
 one per property the framework claims; `audit/golden/tools/mutate.tcl`
 applies each to a private copy of the checkout and runs the framework's
 tests, the model-based fuzzer (4 programs, seed 11, interp, compile and
@@ -752,7 +752,7 @@ and a mutant that changes no verdict (`registration-executes`,
 pinned by the framework tests' probes and allocation counts.
 
 **"Coroutine not released"** (the brief's item 54 list) has no mutant in
-`lib/test.bot`: the library contains no release -- a coroutine is released
+`stdlib/test.bot`: the library contains no release -- a coroutine is released
 by the language, at its handle's last use or on an exit that leaves its
 scope (COROUTINES.md) -- so there is no library code to break. The
 property is the framework's all the same (its runner is a coroutine, and
@@ -786,7 +786,7 @@ calls them in order), each case a random helper over
 a valid body (an Int sum, a List, a String) or a deliberate fault (an
 unbound name, a TYPE argument, a KNOWN-ERROR call, a USE-AFTER-MOVE, an
 unknown field), with an expectation that matches or deliberately does not.
-An independent model -- sharing no code with `lib/test.bot` or the compiler
+An independent model -- sharing no code with `stdlib/test.bot` or the compiler
 -- predicts the whole report: registration order, every verdict, the
 expected and actual texts (values, codes, the fault's line and column, the
 first line of the message for the faults whose message it knows) and the
@@ -923,7 +923,7 @@ reproducer):
 | what Botlish cannot observe: HIR or Core IR text, allocation counts, release order or live frames, display text, warnings, bytes on a descriptor | 9 |
 | a parser, loader-header, declaration or top-level-only error (no block holds one) | 6 |
 | several programs or installations (installation variants, argv injection, hash stability across two declarations), or a diagnostic anchored outside any block (MISSING-CONTEXT, DUPLICATE-CONTEXT) | 6 |
-| a private module the test writes (a suite imports only `lib/`) | 3 |
+| a private module the test writes (a suite imports only `stdlib/`) | 3 |
 | a Core IR program with no surface spelling (Result values, `break VALUE`, unchecked IR) | 3 |
 | a body is a function value and a nested scope: it cannot yield, and a trait-polymorphic function inside it is TRAIT-NESTED-POLYMORPHIC | 2 |
 | no source spelling for the datum (a String holding U+0000) | 1 |
@@ -934,7 +934,7 @@ reproducer):
 | question (item 75) | answer |
 |---|---|
 | used only the simple public API | 109 of 133 Tcl tests (82%) |
-| needed a custom matcher | 24 (2 direct `test::case` checks, the rest through 9 suite-local helpers built on it, in 6 suites: message matchers in collections, diagnostics, errors, modules, ownership and representation, and related-location and call-chain matchers in ownership) |
+| needed a custom matcher | 24 (2 direct `std::test::case` checks, the rest through 9 suite-local helpers built on it, in 6 suites: message matchers in collections, diagnostics, errors, modules, ownership and representation, and related-location and call-chain matchers in ownership) |
 | needed explicit run-time-error handling | 30 |
 | needed explicit `static compile:` | all 133 use it (the convention); 61 need it to express the test |
 | could not be expressed | 41 examined (40 NOT-EXPRESSIBLE, 1 NEW-FRAMEWORK-LIMITATION), beside the 133 ported |
@@ -1047,7 +1047,7 @@ does not compile gives its tests no verdict.
   `static compile:`, so a bug in the boundary reaches all of them. The
   framework's own transport is ordinary Botlish too -- the runner is a
   coroutine, a rejection travels as the payload error
-  `compiler::CompilerError` -- so coroutine and payload mutants also make
+  `std::compiler::CompilerError` -- so coroutine and payload mutants also make
   suites disagree across backends (`first-yield-discarded`,
   `whole-binding-loses-field-native`): a broader net than the Tcl tests',
   with less precise attribution.
@@ -1084,7 +1084,7 @@ the suites in place, on the final tree: `CORE_BACKEND=interp` 7169 tests,
 `coreScoping` constraint), 0 failed; both include `tests/golden.test` (8
 tests: every suite, against the manifest) and
 `tests/golden-framework.test` (41). `cargo test --release --manifest-path native/Cargo.toml`: 219 library and 31 binary tests passed (nothing native was changed). The warning gate passes
-(`lib/test.bot` has one entry, as `lib/io.bot`: its last declaration needs
+(`stdlib/test.bot` has one entry, as `stdlib/io.bot`: its last declaration needs
 a context, so it cannot be a value). The feature harnesses AGENTS.md
 assigns to compiler changes (static-compile, error-payload, affine,
 coroutine, context, trait fuzzers and mutants) were not run as such:
@@ -1140,11 +1140,11 @@ magnitude.
 | kind | Tcl interpreter | Tcl compiler | Cranelift |
 |---|---|---|---|
 | registration only (none run) | 385 us | 111 us | 0.26 us |
-| passing value case, run (`test::results`) | 1.2 ms | 271 us | 0.59 us |
+| passing value case, run (`std::test::results`) | 1.2 ms | 271 us | 0.59 us |
 | passing value case, with the report | 1.8 ms | 269 us | 2.79 us |
 | value mismatch, with the report | 11.1 ms | 522 us | 3.50 us |
-| compiler-error expectation met (`test::rejects`), with the report | 2.0 ms | 276 us | 3.58 us |
-| compiler-error mismatch (`test::rejects`, another code), with the report | 43.1 ms | 1.2 ms | 7.23 us |
+| compiler-error expectation met (`std::test::rejects`), with the report | 2.0 ms | 276 us | 3.58 us |
+| compiler-error mismatch (`std::test::rejects`, another code), with the report | 43.1 ms | 1.2 ms | 7.23 us |
 | unexpected rejection of a value case (code, location, message in the report) | 29.4 ms | 990 us | 5.75 us |
 | custom run-time-error case (`on IndexNotFound` in the body) | 1.9 ms | 336 us | 1.69 us |
 | baseline: no framework | 287 us | 47 us | 0.05 us |
@@ -1160,7 +1160,7 @@ costs is text: a mismatch formats the expected and actual values, a
 compiler-error mismatch names two codes (each a lookup over two 87-element
 lists), the location and the message. On the Tcl interpreter that
 formatting dominates (11 ms, 29 ms and 43 ms a case), because Botlish has
-neither integer division nor an Int-to-String conversion: `test::int_text`
+neither integer division nor an Int-to-String conversion: `std::test::int_text`
 builds the decimal digits by repeated subtraction and one-character
 `substring`s. Failing cases are few in a healthy suite, so this costs only
 when a suite is red.
@@ -1170,10 +1170,10 @@ when a suite is red.
 | | allocations | bytes | what |
 |---|---|---|---|
 | one-time, registration only | 8 | 208 | Struct 2, MutableVector 2, List 4: the Suite and its installed copy, their vector headers, empty Lists |
-| one-time, with a run (`test::results`) | 14 | 416 | + Coroutine 1 (the runner), the result vector, Lists: the runner coroutine and its collection cost 6 allocations, 208 bytes; its stack is mapped memory outside the heap (1 stack mapped, released when the run completes, none swept) |
+| one-time, with a run (`std::test::results`) | 14 | 416 | + Coroutine 1 (the runner), the result vector, Lists: the runner coroutine and its collection cost 6 allocations, 208 bytes; its stack is mapped memory outside the heap (1 stack mapped, released when the run completes, none swept) |
 | one-time, with a run and its report | 26 | 783 | + the line vector, Lists and a plan, 3 Strings (the summary line) |
 | one-time, program constants | 99 | 4225 | static data (String and List constants of the library and suite) |
-| per case, registration | 3 | 176 | the TestCase struct (`case`), the check closure (`test::value`), the body closure (the registration function) |
+| per case, registration | 3 | 176 | the TestCase struct (`case`), the check closure (`std::test::value`), the body closure (the registration function) |
 | per case, run, no report | 6 | 360 | + the Match, the TestResult and its one-element batch List (`run`) |
 | per case, passing, with report | 16 | 759 | + the report line, `result_lines`' vector, Lists and plan, the report's Lists |
 | per case, compiler-error expectation met, with report | 17 | 783 | as passing, + the reified diagnostic's payload |
@@ -1189,7 +1189,7 @@ swept). The deferred representation costs two closures per case.
 
 General improvements the census points at -- none of them test-specific:
 
-* **Constant List literals re-materialized per call.** `test::code_name`'s
+* **Constant List literals re-materialized per call.** `std::test::code_name`'s
   two 87-element literal Lists are built again at every call (4 List
   allocations and a plan per unexpected rejection). Hoisting a literal
   List of constants to static data would help every Botlish lookup table.
@@ -1334,7 +1334,7 @@ and from the porters' reports:
 | pattern | occurrences | lines each | what it is |
 |---|---|---|---|
 | the static boundary: `static compile:` | 221 (every golden test) | 1, plus one indentation level for the code | the convention; necessary in 61 Tcl tests' ports, conventional in the rest |
-| the body's error clause: `fn NAME() errors compiler::CompilerError:` | 218 bodies | 1 | a body must admit the one error a rejected block completes with |
+| the body's error clause: `fn NAME() errors std::compiler::CompilerError:` | 218 bodies | 1 | a body must admit the one error a rejected block completes with |
 | a named body per test, and its registration line | 218 bodies, 200 library registrations + 28 suite-helper registrations (24 calls of suite matchers, 4 of a parameterized registration function) | 2 | Botlish has no anonymous function expression: every deferred body is a named function, named again in the registration |
 | registration functions | 83 | 2+ | 74 one per Tcl file ported, 8 suite drivers, 1 per-test helper (the composition mechanism) |
 | run-time error normalization: an `on E:` handler inside a body | 90 handlers | 2-3 each | a body may complete only normally or with CompilerError |
@@ -1342,7 +1342,7 @@ and from the porters' reports:
 | top-level declarations, renamed per suite (`Dg*`, `Md*`, ...) | 74 | 3-15 | declarations are top-level only; one suite holds many tests' declarations |
 | suite-local helper functions | 56 (message matchers in 6 suites, String search, a coroutine log driver, shared code under test) | 5-40 | what the library does not provide |
 | absolute suite-file locations in `rejects_at` and custom checks | 36 `rejects_at` + 14 custom | 0 (but re-derived after every edit above them) | a diagnostic's primary location is in the suite's coordinates |
-| the suite context: `with context test::suite()` and the driver | 8 (one per suite) | 3 | entry program top level |
+| the suite context: `with context std::test::suite()` and the driver | 8 (one per suite) | 3 | entry program top level |
 | hoisting bodies to the top level, ordering a "global" body first | 152 of the 218 bodies, in every suite with more than one rejection (representation.bot's single rejected body stays nested) | 0 lines, but a layout rule | the static decision rounds' cost model ([Performance](#performance)); *no longer needed since STATIC-DECISION-ECONOMICS.md* -- existing suites keep their layout, new tests may nest bodies freely |
 | a coroutine-log driver replacing `test-log` effects | 5 bodies (values), 2 (harness) | 7 | evaluation order observed through a yielding log |
 | setup or cleanup (brief item 81) | none | 0 | no test needed either: a body can reach no shared state (not the suite, not another body's values), so each is self-contained; the nearest things are the coroutine-log drivers above and the context tests' registration functions, which compute the context-dependent value before registering |
@@ -1368,7 +1368,7 @@ own milestone.
    A test that passes an error-declaring callable through an untyped
    parameter -- even a coroutine, which is always specialized and never
    actually erased (ownership's `af-generic-errors`) -- makes the whole
-   suite fail to compile, at the runner's `(c.run)()` in lib/test.bot. One
+   suite fail to compile, at the runner's `(c.run)()` in stdlib/test.bot. One
    Tcl test is not ported for it; two ports moved the poisoning helpers
    inside their block. Every deferred registry shares it; only executing
    bodies at registration avoids it. *(Fixed: VERIFIED-CALLABLE-CONTRACT-
@@ -1379,7 +1379,7 @@ own milestone.
    arity, `==` of callables or a stack overflow ends the whole run with no
    report; `run.tcl` reports the suite ABORTED. Correct, honest, and without
    per-test attribution.
-3. **`test::describe` is partial.** Botlish's `==` is partial (functions,
+3. **`std::test::describe` is partial.** Botlish's `==` is partial (functions,
    MutableVectors and MutableArrays raise EQUALITY at run time) and there is
    no `bool?` or `callable?` kind test, so describing a function value
    aborts the run (describe recognizes a Bool by `v == true`). It happens
@@ -1407,7 +1407,7 @@ own milestone.
    is gone (collections 7 builds, ownership 11, in their current layouts).
 6. **No message, related-location or substring matcher.** Six suites
    (collections, diagnostics, errors, modules, ownership, representation)
-   wrote their own on `test::case` (24 Tcl tests needed one). Candidates
+   wrote their own on `std::test::case` (24 Tcl tests needed one). Candidates
    for the library: `rejects_message`, `rejects_related`, and a String
    `contains`.
 7. **Bodies are called through parameters, never directly**, so a property
@@ -1425,13 +1425,13 @@ own milestone.
    (UNWRAPPED-YIELD at the registration), an untyped helper given an affine
    argument inside it is AFFINE-GENERIC-NESTED-UNSUPPORTED (such helpers live
    at the suite's top level), and a body whose *value* is affine cannot be
-   registered: `test::value` compares it with `==`
+   registered: `std::test::value` compares it with `==`
    (AFFINE-EQUALITY-UNSUPPORTED) and the helpers that describe it pass it
    through an `any` field (AFFINE-ERASURE-UNSUPPORTED), both at the
    registration.
 10. **Suite-wide imports shape every body.** A body's method calls resolve
-    against the suite's imports: `import str` (for a message matcher) adds
-    `str::length` as a candidate of `queue.length()`, turning a block's
+    against the suite's imports: `import std::str` (for a message matcher) adds
+    `std::str::length` as a candidate of `queue.length()`, turning a block's
     USE-AFTER-MOVE into NO-APPLICABLE-METHOD; a MissingImport message
     mentions the suite's other imports.
 
@@ -1452,12 +1452,12 @@ candidates) and in an 87-branch `elif` chain (4.4 s per build, now 0.9 s).
 
 | # | finding | reproducer | effect here |
 |---|---|---|---|
-| C1 | A semantic instance's checks run on a branch a type test decides dead, with the binding un-narrowed: `hir::refine::branchFacts` gives the impossible outcome no facts, and `hir/range.tcl`'s call verification still checks calls there | `fn g(text: str) -> int: text.length()` / `fn f(v): if string?(v): g(v) else: 0` / `[f(3), f("abc")]` is TYPE ("call to f with v : int is invalid ... (in the body of f, at 6:11)"); with a native (`v.length()`) instead of `g` it runs | `test::describe` passes its argument through an `any` struct field first |
-| C2 | Chained method sugar on Strings fails when a trait-polymorphic function of the same name is visible | `import io::path` / `import str` / `"x".concat("y").concat("z")` is NO-APPLICABLE-METHOD naming `str::concat: argument for parameter "path" does not satisfy trait io::path::Path` (str::concat has no such parameter); without `import io::path`, `"xyz"` | a suite helper wrote `str::concat(str::concat(a, b), c)` |
+| C1 | A semantic instance's checks run on a branch a type test decides dead, with the binding un-narrowed: `hir::refine::branchFacts` gives the impossible outcome no facts, and `hir/range.tcl`'s call verification still checks calls there | `fn g(text: str) -> int: text.length()` / `fn f(v): if string?(v): g(v) else: 0` / `[f(3), f("abc")]` is TYPE ("call to f with v : int is invalid ... (in the body of f, at 6:11)"); with a native (`v.length()`) instead of `g` it runs | `std::test::describe` passes its argument through an `any` struct field first |
+| C2 | Chained method sugar on Strings fails when a trait-polymorphic function of the same name is visible | `import std::io::path` / `import std::str` / `"x".concat("y").concat("z")` is NO-APPLICABLE-METHOD naming `std::str::concat: argument for parameter "path" does not satisfy trait std::io::path::Path` (std::str::concat has no such parameter); without `import std::io::path`, `"xyz"` | a suite helper wrote `std::str::concat(std::str::concat(a, b), c)` |
 | C3 | The erased-callable contract is charged to calls whose static type is a checked structural contract (`Fn{..., errors: []}`), and includes the declared errors of coroutines, which are always specialized and never reach an erased call | [Runner poisoning](#runner-poisoning-the-one-thing-the-census-found-that-breaks-a-deferred-registry); ownership's `poison2.bot` (a coroutine given to `invoke(c, m): c(m)` poisons `(b.run)()` of an unrelated `Fn{args: [], return: int}` field) | framework limitation 1. **Fixed** (VERIFIED-CALLABLE-CONTRACT-BOUNDARY.md): a checked structural contract bounds every call through it; `poison2.bot`'s shape is `scc-coroutine-poison` |
 | C4 | Untyped parameter contract inference is path-insensitive: a result requirement is charged to the parameter although every path returning it is guarded | `type Small = Int in 0..10` / `fn check(n) -> Small errors TooBig: if n > 10: fail TooBig elif n < 0: fail TooBig else: n` called with an `int` is TYPE (with `n: int` it is proven) | one port types the parameter |
 | C5 | COROUTINE-RESUME-CONFLICT (and COROUTINE-RESUME-UNDERCONSTRAINED, the call form of UNWRAPPED-YIELD) name further locations only in their message text; their reified `related` is `[]` -- the convention AGENTS.md states for diagnostics with further locations | a block whose function reaches two yielding helpers declaring different `resume` types: `related` is `[]`, the two call locations are in `message` | a custom check parses the message |
-| C6 | `mutable_vector::length` accepts a List statically (with only `import mutable_vector`, `[1, 2].length()` compiles) and fails at run time | `import mutable_vector` / `[1, 2].length()`: run-time TYPE `mutable_vector::length: expected mutvec` | porters import `list` everywhere |
+| C6 | `std::mutable_vector::length` accepts a List statically (with only `import std::mutable_vector`, `[1, 2].length()` compiles) and fails at run time | `import std::mutable_vector` / `[1, 2].length()`: run-time TYPE `std::mutable_vector::length: expected mutvec` | porters import `list` everywhere |
 | C7 | The Tcl compiler compiling HIR itself (`core::compiler::evalHir`, `main.tcl -backend compile`) keeps a program's installed contexts after the program ends: a second run in the same process of any program that installs a context fails at run time with DUPLICATE-CONTEXT. The core-IR paths (the interpreter, the Tcl compiler compiling core IR) reset them | `context struct Box: n: int` / `fn read(context b: Box) -> int: b.n` / `with context Box {n: 7}` / `read()`, run twice with `core::compiler::evalHir` in one process: `7`, then "Box is already installed in this scope" | `main.tcl` runs one program per process and never sees it; every golden suite after the first aborts on this path in one process, so `run.tcl`'s opt-in `compile-hir` backend needs one suite per process. **Fixed** (DIRECT-HIR-NATIVE-PATH.md, "The Tcl compiler compiles HIR"): `core::compiler::evalUnit` starts every run with an empty context set, as `core::evalProgram` does (`direct-hir-compile-runs-repeat-in-one-process`); the Tcl compiler now always compiles HIR, so `run.tcl`'s `compile` is this path and `compile-hir` is gone |
 
 Smaller inconsistencies: EQUALITY's run-time message says "callables" for
@@ -1470,7 +1470,7 @@ documented as run-time-only, STATIC-COMPILE.md's census, but asymmetric); a
 closure capturing a context parameter observes the context's later
 mutations (a snapshot needs an explicit `snap = suite.cases`); the stale
 mutant `stdout-stderr-swapped` of `audit/contexts/tools/mutate.tcl` no
-longer applies (lib/linux/io.bot changed); `native::allocationText` omits
+longer applies (stdlib/linux/io.bot changed); `native::allocationText` omits
 Struct, Coroutine and ListPlan from its "by kind" line.
 
 ### Old tests
@@ -1546,7 +1546,7 @@ the sample shows would otherwise be multiplied by thousands:
    ([Back ends](#back-ends-code-generation-against-execution)).
 2. **Block-relative diagnostic locations.** `rejects_at` pins absolute
    coordinates of the suite file; 36 `rejects_at` and 14 custom locations
-   were re-derived by script after edits. `compiler::CompilerError` carrying
+   were re-derived by script after edits. `std::compiler::CompilerError` carrying
    its primary location relative to the block's own origin (or the block's
    origin beside it) would make a location test as stable as the Tcl test's
    tiny program. A data change, not syntax.
@@ -1596,8 +1596,8 @@ syntax at all:
 
 | demonstrated friction | per test | what removes it |
 |---|---|---|
-| a named body, its `errors compiler::CompilerError` clause and a registration line | 2 lines (+ the name twice) | a **general anonymous function expression whose error contract is inferred from its body**, as the intrinsic-contract inference already does for untyped parameters: `test::value("adds", 42, fn(): static compile: 20 + 22)`. Not test syntax: every higher-order Botlish program writes the same named-nested-function ceremony today (the errors clause is required: a nested body without it is UNHANDLED-ERROR at its block) |
-| the `static compile:` line | 1 line, one indentation level | nothing yet. It is the honest cost of the boundary; an implicit wrapping, or a *syntactic parameter* that lets `test::value` wrap its argument, would hide where the boundary is and is the one place where a language feature would be test-motivated. Revisit only if the anonymous-function form is adopted and the line still dominates |
+| a named body, its `errors std::compiler::CompilerError` clause and a registration line | 2 lines (+ the name twice) | a **general anonymous function expression whose error contract is inferred from its body**, as the intrinsic-contract inference already does for untyped parameters: `std::test::value("adds", 42, fn(): static compile: 20 + 22)`. Not test syntax: every higher-order Botlish program writes the same named-nested-function ceremony today (the errors clause is required: a nested body without it is UNHANDLED-ERROR at its block) |
+| the `static compile:` line | 1 line, one indentation level | nothing yet. It is the honest cost of the boundary; an implicit wrapping, or a *syntactic parameter* that lets `std::test::value` wrap its argument, would hide where the boundary is and is the one place where a language feature would be test-motivated. Revisit only if the anonymous-function form is adopted and the line still dominates |
 | absolute locations | re-derivation after edits | block-relative locations (above) |
 | run-time error normalization (`on E: ...` in 30 Tcl tests' bodies) | 2-3 lines a handler | nothing: naming the error is the test's content; a catch-all would be the "second error system" the brief excludes |
 | run-time-only failures abort the suite | -- | a language decision (should ARITHMETIC, NOT-BOOLEAN, a native TYPE be declared errors?) for its own milestone, not for testing |
@@ -1622,7 +1622,7 @@ points to the section that has the evidence.
    `results`, `report`, `TestResult`, `Summary`, `summarize`,
    `result_lines`, `summary_line`, `registered`, `count`; `describe`,
    `int_text`, `code_name`, `diagnostic_text`. Names that felt awkward
-   across the ports: `test::value` reads as a noun (`expect_value` or
+   across the ports: `std::test::value` reads as a noun (`expect_value` or
    `equals` would say what it checks); `holds` needs a description String
    only because a predicate has no text; `rejects_at` takes absolute suite
    coordinates (the name is fine, the arguments are the friction);
@@ -1651,7 +1651,7 @@ points to the section that has the evidence.
    (Tcl probe), `-native` (no allocation at the body's line),
    `gf-registration-would-abort`, `gf-coroutine-body-deferred`; the mutant
    `registration-executes` is killed by 11 tests.
-9. **Runner representation.** `test::run()`, a coroutine over a snapshot of
+9. **Runner representation.** `std::test::run()`, a coroutine over a snapshot of
    the cases, one case per segment.
 10. **Is the runner a coroutine?** Yes; `results()` and `report()` are plain
     functions that drain it ([The runner is a coroutine](#the-runner-is-a-coroutine)).
@@ -1674,20 +1674,20 @@ points to the section that has the evidence.
     `Summary {total, passed, failed}` ([Results and matchers](#results-and-matchers)).
 17. **Matcher model.** A matcher is a function returning
     `Match {matched, expected, actual, detail}`: data, never an error.
-18. **Value matcher.** `test::value` / `test::equal`: `==` while the
+18. **Value matcher.** `std::test::value` / `std::test::equal`: `==` while the
     concrete type is known, `describe` for the texts.
 19. **CompilerError matcher.** `rejects_any`; `value` and `holds` report an
     unexpected rejection's code, location and message.
 20. **Exact DiagnosticCode matcher.** `rejects` (code), `rejects_at` (code,
-    line, column), `test::diagnostic`.
-21. **Custom escape hatch.** `test::case(name, check)` with any
+    line, column), `std::test::diagnostic`.
+21. **Custom escape hatch.** `std::test::case(name, check)` with any
     `Fn{args: [], return: Match}`; 24 Tcl tests' ports used it.
 22. **Generic-completion census.** [Generic completion capture](#generic-completion-capture-what-ordinary-botlish-can-observe).
 23. **Arbitrary nominal run-time error capture.** Not expressible: handlers
     are nominal, there is no catch-all; the compiler instead checks each
     body against the helper's inferred contract at the registration.
 24. **Coroutine failure observation.** None without re-raising:
-    `coroutine::done?` is true for completed and failed alike, a failed
+    `std::coroutine::done?` is true for completed and failed alike, a failed
     coroutine re-raises its cached error at every resume.
 25. **Run-time-only failures.** Abort the whole program; `run.tcl` reports
     the suite ABORTED (`gf-runtime-only-failure-aborts`).
@@ -1699,7 +1699,7 @@ points to the section that has the evidence.
     `actual: compiler diagnostic CODE at line L, column C` and the message as
     `detail` (multi-line messages indented).
 28. **Static-compile convention.** [The static-compile convention](#the-static-compile-convention):
-    every body is a function `fn NAME() errors compiler::CompilerError:`
+    every body is a function `fn NAME() errors std::compiler::CompilerError:`
     (top-level, or nested when it captures an input) whose whole body is
     one `static compile:` block. The suites hold 221 static blocks: 107 accepted, 114 rejected, across 39 diagnostic kinds; 61 of the 133 ported Tcl tests need the boundary to express the test, 72 use it by convention.
 29. **Why the wrapping stays explicit.** `static compile:` consumes syntax; a
@@ -1775,7 +1775,7 @@ points to the section that has the evidence.
 
 | file | what |
 |---|---|
-| `lib/test.bot` | the library |
+| `stdlib/test.bot` | the library |
 | `tests/golden-framework.test` | the framework's tests (41) |
 | `tests/golden/*.bot` | the golden suites: the ported tests |
 | `tests/golden/manifest.tsv` | the migration manifest |
@@ -1789,17 +1789,17 @@ points to the section that has the evidence.
 | `audit/golden/tools/tree.tcl` | the private-tree machinery the tools share |
 | `audit/golden/out/` | the logs behind every number in this report: regression, mutants (the framework's, the release mutants), fuzz, side by side, spot-check, GC stress, native coverage, static decisions, benchmarks, suite timings |
 | `bench/golden-framework.tcl` | the performance report |
-| `audit/refactor/manifest.txt` | `lib/test.bot`'s gate entry (as `lib/io.bot`'s: its last declaration needs a context) |
+| `audit/refactor/manifest.txt` | `stdlib/test.bot`'s gate entry (as `stdlib/io.bot`'s: its last declaration needs a context) |
 | `.github/workflows/tests.yml` | the `golden` job |
 
 ## What to run when changing this
 
-If you change `lib/test.bot`: `tests/golden-framework.test`,
+If you change `stdlib/test.bot`: `tests/golden-framework.test`,
 `tests/golden.test`, `tclsh9.0 tests/golden/run.tcl`,
 `audit/golden/tools/fuzz.tcl` (several seeds, once with `-gc-stress 1`),
 `audit/golden/tools/mutate.tcl` (every mutant must still apply and be
 killed), and the warning gate. If you change a diagnostic, the
-`compiler::DiagnosticCode` enum (`gf-code-name-complete` holds
-`test::code_name` to it) or the completion analysis: `tests/golden.test`
+`std::compiler::DiagnosticCode` enum (`gf-code-name-complete` holds
+`std::test::code_name` to it) or the completion analysis: `tests/golden.test`
 and `audit/golden/tools/check.tcl`. A golden suite's `rejects_at` pins a
 line of its own file: a line added above it moves the location.

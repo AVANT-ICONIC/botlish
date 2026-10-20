@@ -123,13 +123,13 @@ test direct-hir-native-namespace-static-scan {no proc of ::native reaches hir::l
 # predicates, and watch the procs that would betray a round trip.
 test direct-hir-native-entry-points-never-call-core-ir {native::nir, evalHir, object, executable, codeSize, measure and prepareHir never call hir::lower, hir::build or core::evalProgram} -constraints executableAot -body {
     set hir [srcHir {
-        import mutable_array
-        import web
+        import std::mutable_array
+        import std::web
         fn check(s: str) -> bool:
-            web::emailish?(s)
-        q = web::uri_escape_text("a b")
-        a = mutable_array::create(2, 0)
-        [check("a@b.co"), web::uri_query_value?(q), mutable_array::capacity(a)]
+            std::web::emailish?(s)
+        q = std::web::uri_escape_text("a b")
+        a = std::mutable_array::create(2, 0)
+        [check("a@b.co"), std::web::uri_query_value?(q), std::mutable_array::capacity(a)]
     }]
     set ::trips {}
     proc ::Trip {command args} { lappend ::trips [lindex $command 0] }
@@ -239,13 +239,13 @@ proc compileTrips {script} {
 
 test direct-hir-compile-entry-points-never-rebuild {evalHir, compileHir, evalUnit and runUnit, and the harness's compile backend for a program hir::lower produced, compile the HIR given: no HIR is built, no core IR made or read} -body {
     set hir [srcHir {
-        import mutable_array
-        import web
+        import std::mutable_array
+        import std::web
         fn check(s: str) -> bool:
-            web::emailish?(s)
-        q = web::uri_escape_text("a b")
-        a = mutable_array::create(2, 0)
-        [check("a@b.co"), web::uri_query_value?(q), mutable_array::capacity(a)]
+            std::web::emailish?(s)
+        q = std::web::uri_escape_text("a b")
+        a = std::mutable_array::create(2, 0)
+        [check("a@b.co"), std::web::uri_query_value?(q), std::mutable_array::capacity(a)]
     }]
     set values {}
     set direct [compileTrips {
@@ -286,7 +286,7 @@ test direct-hir-compile-runs-repeat-in-one-process {a program that installs a co
 } -result {7 7 7 7}
 
 test direct-hir-compile-main-code-is-the-code-that-runs {main.tcl -backend compile compiles a .bot program's HIR once: -code prints compileHir's code (here one argument check, where a HIR rebuilt from the lowered core IR, which has lost the declared parameter type, needs two) and the printed types are that compilation's} -body {
-    set text "import str\nfn size(s: str) -> int:\n    str::length(s)\nlength = size(\"abc\")\nlength\n"
+    set text "import std::str\nfn size(s: str) -> int:\n    std::str::length(s)\nlength = size(\"abc\")\nlength\n"
     set path [makeFile $text direct-hir-compile-main.bot]
     try {
         set out [exec [info nameofexecutable] [file join $::projectRoot main.tcl] -backend compile -code -warnings off $path]
@@ -392,10 +392,10 @@ test direct-hir-native-independent-of-hygiene {native lowering of HIR with every
 
 test direct-hir-shadowed-native-name {a local binding named like a native is not the native: lowering follows binding identity} -constraints executableAot -body {
     set hir [srcHir {
-        import str
+        import std::str
         fn integer?(s):
-            str::length(s)
-        [integer?("abc"), str::length("xy")]
+            std::str::length(s)
+        [integer?("abc"), std::str::length("xy")]
     }]
     list [referenceValue $hir] [nativeValue $hir] [executableValue $hir]
 } -result {{[3, 2]} {[3, 2]} {[3, 2]}}
@@ -416,7 +416,7 @@ proc lenientHir {text} {
 }
 
 test direct-hir-unproven-declared-contract-checked-at-run-time {a declared parameter type the program cannot prove is checked by the native callee: a violating argument raises the reference TYPE error, a valid one runs} -body {
-    set body "import list\nfn take(xs: List\[int\]):\n    list::length(xs)\nfn mixed(c):\n    if c:\n        1\n    else:\n        \[\]\n"
+    set body "import std::list\nfn take(xs: List\[int\]):\n    std::list::length(xs)\nfn mixed(c):\n    if c:\n        1\n    else:\n        \[\]\n"
     set results {}
     foreach call {take(mixed(true)) take(mixed(false))} {
         set hir [lenientHir "${body}${call}"]
@@ -430,9 +430,9 @@ test direct-hir-unproven-declared-contract-checked-at-run-time {a declared param
 
 test direct-hir-lowering-state-per-compilation {native lowering starts each compilation clean: a program's NIR (module-static slot table, header) does not depend on what the process compiled before} -body {
     set plain [srcHir {[1, 2]}]
-    set withModule [srcHir {import mathish
-import web
-[web::uri_escape_text("a b"), mathish::inc(1)]}]
+    set withModule [srcHir {import std::mathish
+import std::web
+[std::web::uri_escape_text("a b"), std::mathish::inc(1)]}]
     set before [native::nir $plain]
     set module [native::nir $withModule]
     set after [native::nir $plain]
@@ -444,11 +444,11 @@ import web
 
 test direct-hir-module-identity-in-native-hir {a module-qualified call keeps its module identity in the HIR native lowers, and the container intrinsics are registered natives} -body {
     set hir [srcHir {
-        import mathish
-        import mutable_array
-        a = mutable_array::create(3, 0)
-        mutable_array::set(a, 1, 7)
-        [mathish::inc(41), mutable_array::at(a, 1)]
+        import std::mathish
+        import std::mutable_array
+        a = std::mutable_array::create(3, 0)
+        std::mutable_array::set(a, 1, 7)
+        [std::mathish::inc(41), std::mutable_array::at(a, 1)]
     }]
     set prepared [native::prepareHir $hir]
     set moduleBindings 0
@@ -461,10 +461,10 @@ test direct-hir-module-identity-in-native-hir {a module-qualified call keeps its
         [nativeValue $hir]
 } -result {1 1 {[42, 7]}}
 
-test direct-hir-container-call-result-is-semantic-type {the typed result of mutable_array::create comes from HIR's semantic analysis: MutableArray[int], not a rediscovered spelling} -body {
+test direct-hir-container-call-result-is-semantic-type {the typed result of std::mutable_array::create comes from HIR's semantic analysis: MutableArray[int], not a rediscovered spelling} -body {
     set hir [srcHir {
-        import mutable_array
-        a = mutable_array::create(3, 0)
+        import std::mutable_array
+        a = std::mutable_array::create(3, 0)
         a
     }]
     hir::types::show [hir::typeOf $hir [lindex [hir::roots $hir] end]]
@@ -486,8 +486,8 @@ test direct-hir-semantic-instances-not-recomputed {native lowering does not re-r
 
 test direct-hir-prepare-is-idempotent-and-noop-without-natives {prepareHir returns a strict HIR unchanged (no native needs an attached implementation any more, REFINEMENT-VALUES.md), and is idempotent} -body {
     set plain [srcHir {[1, 2]}]
-    set withModule [srcHir {import web
-web::uri_escape_text("a b")}]
+    set withModule [srcHir {import std::web
+std::web::uri_escape_text("a b")}]
     set once [native::prepareHir $withModule]
     list [expr {[native::prepareHir $plain] eq $plain}] [expr {$once eq $withModule}] \
         [expr {[native::prepareHir $once] eq $once}]
@@ -516,8 +516,8 @@ set differentialPrograms {
         s2 = counter_from(20)
         [s1(1)(2), s2(1)(2), s1(3)(4)]
     }
-    {module-call} {import mathish
-[mathish::inc(41), mathish::inc(1)]}
+    {module-call} {import std::mathish
+[std::mathish::inc(41), std::mathish::inc(1)]}
     {errors} {
         error TooSmall
         error TooBig
@@ -554,35 +554,35 @@ set differentialPrograms {
         [first_over([1, 5, 9, 12], 8), first_over([1], 8), sum_to(20)]
     }
     {mutable-array} {
-        import mutable_array
+        import std::mutable_array
         fn fill(n):
-            a = mutable_array::create(n, 0)
+            a = std::mutable_array::create(n, 0)
             loop i from 0 to n:
-                mutable_array::set(a, i, i * i)
+                std::mutable_array::set(a, i, i * i)
             a
         a = fill(6)
-        [mutable_array::get(a, 5, -1), mutable_array::freeze(a, mutable_array::capacity(a))]
+        [std::mutable_array::get(a, 5, -1), std::mutable_array::freeze(a, std::mutable_array::capacity(a))]
     }
     {semantic-instances} {
-        import list
+        import std::list
         fn identity(v):
             v
         fn is_big(n):
             n > 10
         fn find_big(xs):
-            r = list::find(xs, is_big):
-                on list::NotFound:
+            r = std::list::find(xs, is_big):
+                on std::list::NotFound:
                     0
             r
         [identity(3), identity("s"), find_big([1, 20, 3]), find_big([5])]
     }
     {exact-callables} {
-        import str
+        import std::str
         fn apply(f, v):
             f(v)
         fn inc(n):
             n + 1
-        [apply(inc, 1), apply(str::length, "abcd")]
+        [apply(inc, 1), apply(std::str::length, "abcd")]
     }
     {argument-cycle} {
         fn ping(next, n):
@@ -642,13 +642,13 @@ test direct-hir-executable-parity-closure-module-mutarray {closure, module call 
     add
 add10 = make_adder(10)
 [add10(32), add10(1)]}
-        {import mathish
-[mathish::inc(41), mathish::inc(1)]}
-        {import mutable_array
-a = mutable_array::create(3, 0)
-mutable_array::set(a, 1, 7)
-b = mutable_array::from_list([4, 5, 6])
-[mutable_array::at(a, 1), mutable_array::at(b, 2), mutable_array::freeze(a, 3)]}
+        {import std::mathish
+[std::mathish::inc(41), std::mathish::inc(1)]}
+        {import std::mutable_array
+a = std::mutable_array::create(3, 0)
+std::mutable_array::set(a, 1, 7)
+b = std::mutable_array::from_list([4, 5, 6])
+[std::mutable_array::at(a, 1), std::mutable_array::at(b, 2), std::mutable_array::freeze(a, 3)]}
     } {
         set hir [srcHir $text]
         set values [list [referenceValue $hir] [nativeValue $hir] [executableValue $hir]]
@@ -688,12 +688,12 @@ test direct-hir-executable-corpus-csv-and-strings {a larger corpus program (CSV 
     set results
 } -result {1 1 1}
 
-test direct-hir-executable-source-refinements {source refinements and their proof-producing predicates (lib/web.bot) compile into an executable from HIR} -constraints executableAot -body {
+test direct-hir-executable-source-refinements {source refinements and their proof-producing predicates (stdlib/web.bot) compile into an executable from HIR} -constraints executableAot -body {
     set hir [srcHir {
-        import web
+        import std::web
         fn check(s: str) -> bool:
-            web::emailish?(s)
-        [web::uri_escape_text("a b/c"), check("a@b.co"), check("nope")]
+            std::web::emailish?(s)
+        [std::web::uri_escape_text("a b/c"), check("a@b.co"), check("nope")]
     }]
     list [nativeValue $hir] [executableValue $hir]
 } -result {{["a%20b%2Fc", true, false]} {["a%20b%2Fc", true, false]}}

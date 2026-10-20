@@ -10,7 +10,7 @@ KILLED result-aliases-surviving -- every array read-out a function returns moves
 KILLED generic-identity-aliases -- a dynamic copy (`d`, made inside a generic body) of an array is the array itself (Tcl runtimes)
     tests: killed (1 failed: ma-cow-extraction)
     fuzz:  killed (1 of 25 programs disagree)
-KILLED list-extraction-aliases -- an array a binding takes out of a List (list::at) is not copied: the binding's mutations reach the List's element
+KILLED list-extraction-aliases -- an array a binding takes out of a List (std::list::at) is not copied: the binding's mutations reach the List's element
     tests: killed (1 failed: ma-cow-routes)
     fuzz:  survived
 KILLED struct-extraction-aliases -- an array a binding takes out of a struct field (or a destructure) is not copied: the binding's mutations reach the struct's field

@@ -1,5 +1,5 @@
 #!/usr/bin/env tclsh9.0
-# fuzz.tcl -- randomized differential check of abi::bytes::Bytes and linux::write
+# fuzz.tcl -- randomized differential check of std::abi::bytes::Bytes and std::linux::write
 # (ABI-BYTES.md).
 #
 #   tclsh9.0 audit/abi-bytes/tools/fuzz.tcl ?-mode pure|write|both? ?-n N?
@@ -15,7 +15,7 @@
 #   8-bit data, repeated patterns, and larger buffers up to a few thousand
 #   bytes -- builds each as a List[Byte], and checks against an independent Tcl
 #   byte-sequence oracle:
-#       length          abi::bytes::length(abi::bytes::from_list(L)).value == |L|
+#       length          std::abi::bytes::length(std::abi::bytes::from_list(L)).value == |L|
 #       contents        the explicit internal reveal of the Bytes itself shows
 #                       exactly the oracle's hex (every byte, in order)
 #       construction    two Bytes built separately from equal Lists are equal
@@ -27,9 +27,9 @@
 #
 # write  (native only, Linux x86-64; the only syscall made is write(2) to a
 #         temp file and to a pipe the harness reads, never a fuzzed number)
-#   Each program writes its K generated payloads (as separate abi::bytes::Bytes, plus
+#   Each program writes its K generated payloads (as separate std::abi::bytes::Bytes, plus
 #   one aliased value written twice) to descriptor 3 (a file) and descriptor 4
-#   (a pipe whose other end this process reads), one linux::write each, and
+#   (a pipe whose other end this process reads), one std::linux::write each, and
 #   checks that the bytes the kernel received are exactly the concatenation
 #   the oracle expects and that every returned count is the payload's length --
 #   in a normal run and under GC stress.
@@ -138,7 +138,7 @@ proc renderSpec {spec} {
 # The Botlish expression (a List[Byte]) of SPEC.
 proc specSource {spec} {
     if {[lindex $spec 0] eq "utf8"} {
-        return "str::encode_utf8([textLiteral [lindex $spec 1]])"
+        return "std::str::encode_utf8([textLiteral [lindex $spec 1]])"
     }
     lassign $spec - kind n t a b c k d
     return "gen_${kind}([join [list $n $t $a $b $c $k $d] {, }])"
@@ -260,41 +260,41 @@ fn bump(i: int, k: int, d: int) -> int:
 fn gen_full(n: int, t: int, a: int, b: int, c: int, k: int, d: int):
     loop i from 0 to n + t:
         if i >= n:
-            byte::from_int(0)
+            std::byte::from_int(0)
         else:
-            byte::from_int(mod(a * i * i + b * i + c + bump(i, k, d), 256))
+            std::byte::from_int(mod(a * i * i + b * i + c + bump(i, k, d), 256))
 
 fn gen_ascii(n: int, t: int, a: int, b: int, c: int, k: int, d: int):
     loop i from 0 to n + t:
         if i >= n:
-            byte::from_int(0)
+            std::byte::from_int(0)
         else:
-            byte::from_int(32 + mod(a * i * i + b * i + c + bump(i, k, d), 95))
+            std::byte::from_int(32 + mod(a * i * i + b * i + c + bump(i, k, d), 95))
 
 fn gen_high(n: int, t: int, a: int, b: int, c: int, k: int, d: int):
     loop i from 0 to n + t:
         if i >= n:
-            byte::from_int(0)
+            std::byte::from_int(0)
         else:
-            byte::from_int(128 + mod(a * i * i + b * i + c + bump(i, k, d), 128))
+            std::byte::from_int(128 + mod(a * i * i + b * i + c + bump(i, k, d), 128))
 
 fn gen_zeros(n: int, t: int, a: int, b: int, c: int, k: int, d: int):
     loop i from 0 to n + t:
         if i >= n:
-            byte::from_int(0)
+            std::byte::from_int(0)
         elif mod(a * i * i + b * i + c + bump(i, k, d), 3) == 0:
-            byte::from_int(0)
+            std::byte::from_int(0)
         else:
-            byte::from_int(mod(a * i * i + b * i + c + bump(i, k, d), 256))
+            std::byte::from_int(mod(a * i * i + b * i + c + bump(i, k, d), 256))
 
 fn gen_ffs(n: int, t: int, a: int, b: int, c: int, k: int, d: int):
     loop i from 0 to n + t:
         if i >= n:
-            byte::from_int(0)
+            std::byte::from_int(0)
         elif mod(a * i * i + b * i + c + bump(i, k, d), 3) == 0:
-            byte::from_int(255)
+            std::byte::from_int(255)
         else:
-            byte::from_int(mod(a * i * i + b * i + c + bump(i, k, d), 256))
+            std::byte::from_int(mod(a * i * i + b * i + c + bump(i, k, d), 256))
 
 }
 
@@ -304,24 +304,24 @@ proc pureProgram {specs} {
     set i 0
     foreach spec $specs {
         set source [specSource $spec]
-        append lets "a$i = abi::bytes::from_list($source)\n"
-        append lets "c$i = abi::bytes::from_list($source)\n"
+        append lets "a$i = std::abi::bytes::from_list($source)\n"
+        append lets "c$i = std::abi::bytes::from_list($source)\n"
         append lets "b$i = a$i\n"
         set diffs {}
         set j 0
         foreach m [mutantSpecs $spec] {
-            append lets "m${i}_$j = abi::bytes::from_list([specSource $m])\n"
+            append lets "m${i}_$j = std::abi::bytes::from_list([specSource $m])\n"
             lappend diffs "a$i == m${i}_$j"
             incr j
         }
-        lappend results "abi::bytes::length(a$i).value" "a$i" "a$i == c$i" "hash(a$i) == hash(c$i)" \
+        lappend results "std::abi::bytes::length(a$i).value" "a$i" "a$i == c$i" "hash(a$i) == hash(c$i)" \
             "a$i == b$i" "\[a$i, b$i\] == \[b$i, a$i\]" {*}$diffs
         if {$i > 0} {
             lappend results "a$i == a[expr {$i - 1}]" "(hash(a$i) == hash(a[expr {$i - 1}]))"
         }
         incr i
     }
-    return "import abi\nimport abi::bytes\nimport byte\nimport str\n\n$::genFunctions\n${lets}\[[join $results {, }]\]\n"
+    return "import std::abi\nimport std::abi::bytes\nimport std::byte\nimport std::str\n\n$::genFunctions\n${lets}\[[join $results {, }]\]\n"
 }
 
 proc boolWord {v} { return [expr {$v ? "true" : "false"}] }
@@ -332,7 +332,7 @@ proc pureExpected {specs} {
     set i 0
     foreach spec $specs {
         set bytes [renderSpec $spec]
-        lappend results [llength $bytes] "abi::bytes::Bytes {storage: <bytes [llength $bytes]: [hexOf $bytes]>}" true true true true
+        lappend results [llength $bytes] "std::abi::bytes::Bytes {storage: <bytes [llength $bytes]: [hexOf $bytes]>}" true true true true
         foreach m [mutantSpecs $spec] {
             # The mutant is unequal by construction unless the rendered bytes
             # happen to coincide: the oracle compares them.
@@ -359,24 +359,24 @@ proc writeProgram {specs} {
     set results {}
     set i 0
     foreach spec $specs {
-        append lets "d$i = abi::bytes::from_list([specSource $spec])\n"
+        append lets "d$i = std::abi::bytes::from_list([specSource $spec])\n"
         lappend results "out([expr {3 + $i % 2}], d$i)"
         incr i
     }
     # an aliased value written twice, to both descriptors
     append lets "alias = d0\n"
     lappend results "out(3, alias)" "out(4, alias)"
-    # A direct module (DIRECT-MODULES.md): out calls linux::write with no
+    # A direct module (DIRECT-MODULES.md): out calls std::linux::write with no
     # context of the program's own.
     return "direct module
-import abi
-import byte
-import linux
-import str
+import std::abi
+import std::byte
+import std::linux
+import std::str
 
 $::genFunctions
-fn out(fd: int, data: abi::bytes::Bytes) -> int errors abi::AbiIntegerBelowRange, abi::AbiIntegerAboveRange:
-    linux::write(abi::i32(fd), data)
+fn out(fd: int, data: std::abi::bytes::Bytes) -> int errors std::abi::AbiIntegerBelowRange, std::abi::AbiIntegerAboveRange:
+    std::linux::write(std::abi::i32(fd), data)
 
 ${lets}\[[join $results {, }]\]\n"
 }

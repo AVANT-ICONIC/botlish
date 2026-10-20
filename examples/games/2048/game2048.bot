@@ -12,8 +12,8 @@
 #
 # Nothing here is random. A caller playing the usual game picks one of the
 # board's `empty_positions` and a `SpawnTile` itself, and `spawn` places it.
-import list
-import mutable_vector
+import std::list
+import std::mutable_vector
 
 # The value of an empty cell.
 empty = 0
@@ -95,7 +95,7 @@ fn merged(tiles: List[int]) -> Slide:
     # The tiles from position I on, merged, after DONE. (nomethod: I is a
     # position, not a receiver.)
     nomethod fn from(i: int, done: Slide) -> Slide:
-        if i >= list::length(tiles):
+        if i >= std::list::length(tiles):
             return done
         tile = tiles.get(i, empty)
         if tiles.get(i + 1, empty) == tile:
@@ -112,13 +112,13 @@ fn slide(cells: List[int]) -> Slide:
             continue
         cell
     merge = tiles.merged()
-    padded = loop i from 0 to list::length(cells):
+    padded = loop i from 0 to std::list::length(cells):
         merge.cells.get(i, empty)
     Slide {cells: padded, score: merge.score}
 
 # LINE backwards.
 fn reversed(line: List[int]) -> List[int]:
-    n = list::length(line)
+    n = std::list::length(line)
     loop i from 0 to n:
         line.get(n - 1 - i, empty)
 
@@ -158,7 +158,7 @@ fn rows_from(lines: List[List[int]], direction: Direction) -> List[List[int]]:
 
 # LINE with the cell at INDEX replaced by VALUE.
 fn replaced(line: List[int], index: int, value: int) -> List[int]:
-    loop cell in line and i from 0 to list::length(line):
+    loop cell in line and i from 0 to std::list::length(line):
         if i == index:
             value
         else:
@@ -167,7 +167,7 @@ fn replaced(line: List[int], index: int, value: int) -> List[int]:
 # The sum of SCORES.
 fn total(scores: List[int]) -> int:
     fn from(i: int) -> int:
-        if i >= list::length(scores):
+        if i >= std::list::length(scores):
             return 0
         scores.get(i, 0) + from(i + 1)
     from(0)
@@ -185,11 +185,11 @@ fn cell?(value: int) -> bool:
     value == empty or value.tile?()
 
 fn board_row?(row: List[int]) -> bool:
-    list::length(row) == size and row.all?(cell?)
+    std::list::length(row) == size and row.all?(cell?)
 
 # Whether ROWS are four rows of four cells, each empty or a tile.
 fn board_rows?(rows: List[List[int]]) -> bool:
-    list::length(rows) == size and rows.all?(board_row?)
+    std::list::length(rows) == size and rows.all?(board_row?)
 
 # The board whose rows are ROWS, top to bottom, each left to right.
 fn board(rows: List[List[int]]) -> Board errors InvalidBoard:
@@ -206,7 +206,7 @@ fn cell(board: Board, at: Position) -> int:
     board.rows.get(at.row, []).get(at.column, empty)
 
 fn no_positions() -> MutableVector[Position]:
-    mutable_vector::from_list([])
+    std::mutable_vector::from_list([])
 
 # The positions of BOARD's empty cells, row by row.
 fn empty_positions(board: Board) -> List[Position]:
@@ -251,7 +251,7 @@ fn spawn(game: Game, at: Position, tile: SpawnTile) -> Game errors CellOccupied:
     if game.board.cell(at) != empty:
         fail CellOccupied
     old = game.board.rows
-    rows = loop row in old and r from 0 to list::length(old):
+    rows = loop row in old and r from 0 to std::list::length(old):
         if r == at.row:
             row.replaced(at.column, tile.value())
         else:
@@ -269,7 +269,7 @@ fn has_empty?(rows: List[List[int]]) -> bool:
 # Whether two neighbouring cells of some line of LINES are equal.
 fn equal_neighbours?(lines: List[List[int]]) -> bool:
     loop line in lines:
-        loop i from 1 to list::length(line):
+        loop i from 1 to std::list::length(line):
             if line.get(i - 1, empty) == line.get(i, empty):
                 return true
     false

@@ -295,7 +295,7 @@ byte-identical for the milestone's own sample payload, and
 
 ## Byte integration microscope
 
-Using the real, source-defined `Byte`/`Nibble` (`lib/byte.bot`, from the
+Using the real, source-defined `Byte`/`Nibble` (`stdlib/byte.bot`, from the
 prior milestone), with no library changes:
 
 ```botlish
@@ -543,12 +543,12 @@ no parameter-specific peephole added to make that happen.
 Typed locals, generic/parameterized parameter syntax, `List[UnicodeChar]`,
 variance rules, overloading, variadics, predicate flow refinement (`if
 Byte?(x): ...` narrowing `x`), ASCII, character literals, `ImmutableSet`,
-`byte::set`, and representation specialization were not touched. `lib/
+`std::byte::set`, and representation specialization were not touched. `stdlib/
 byte.bot`'s own function signatures are unmodified except for the two
 throwaway microscope functions used only inside `tests/typed-parameters.
 test` (never added to the library itself). Searching every file this
 milestone changed for `Byte`/`Nibble`/`Small`/`Tiny` finds only test/doc
-occurrences and the pre-existing, unrelated source in `lib/byte.bot` --
+occurrences and the pre-existing, unrelated source in `stdlib/byte.bot` --
 confirmed by `git diff` against this branch's parent touching no
 Byte-specific production logic.
 
@@ -568,5 +568,5 @@ admits `x` where a `Byte` is required.) That predicate
 flow refinement is the most immediately useful next step this milestone's
 own restrictions expose; minimal parameterized container typing
 (`List[UnicodeChar]` → `ImmutableSet[Byte]`) remains the other, independent
-next-concrete-blocker path the original motivation (`byte::set`) will
+next-concrete-blocker path the original motivation (`std::byte::set`) will
 eventually need.

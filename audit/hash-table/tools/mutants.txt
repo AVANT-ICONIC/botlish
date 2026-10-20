@@ -47,11 +47,11 @@
 @@ lp-probe-stops-early a lookup that meets another key at its home stops there (probe terminates too early)
 ## impl/lp.bot
 <<<<
-        if s < 0 or s == h and mutable_array::at(keys, i) == key:
+        if s < 0 or s == h and std::mutable_array::at(keys, i) == key:
             return i
         walk(next_slot(i, cap))
 ====
-        if s < 0 or s == h and mutable_array::at(keys, i) == key:
+        if s < 0 or s == h and std::mutable_array::at(keys, i) == key:
             return i
         i
 >>>>
@@ -114,9 +114,9 @@ fn next_slot(i: int, cap: int) -> int:
 @@ lp-grow-ignores-collisions growth stores each entry at its home slot, overwriting an entry already there
 ## impl/lp.bot
 <<<<
-    placed = store(dest, find_empty(dest.hashes, h), h, mutable_array::at(keys, i), mutable_array::at(vals, i))
+    placed = store(dest, find_empty(dest.hashes, h), h, std::mutable_array::at(keys, i), std::mutable_array::at(vals, i))
 ====
-    placed = store(dest, home(h, slots(dest)), h, mutable_array::at(keys, i), mutable_array::at(vals, i))
+    placed = store(dest, home(h, slots(dest)), h, std::mutable_array::at(keys, i), std::mutable_array::at(vals, i))
 >>>>
 
 @@ lp-drop-no-shift removal empties the slot without shifting later entries back (breaks probe chains)
@@ -305,7 +305,7 @@ fn next_slot(i: int, cap: int) -> int:
 @@ ht0-collision-not-checked a lookup accepts any occupied slot of the probe sequence without comparing the key (collision not checked; ht0 stores no hashes)
 ## impl/ht0.bot
 <<<<
-    if state == ht_occupied_state() and mutable_array::at(table.keys, index) == key:
+    if state == ht_occupied_state() and std::mutable_array::at(table.keys, index) == key:
         return index
 
     table.ht_find_get(key, table.ht_probe_next(index))
@@ -319,17 +319,17 @@ fn next_slot(i: int, cap: int) -> int:
 @@ ht0-tombstone-ends-lookup a lookup stops at a tombstone as if the slot were empty
 ## impl/ht0.bot
 <<<<
-    state = mutable_array::at(table.controls, index)
+    state = std::mutable_array::at(table.controls, index)
     if state == ht_empty_state():
         return -1
 
-    if state == ht_occupied_state() and mutable_array::at(table.keys, index) == key:
+    if state == ht_occupied_state() and std::mutable_array::at(table.keys, index) == key:
 ====
-    state = mutable_array::at(table.controls, index)
+    state = std::mutable_array::at(table.controls, index)
     if state != ht_occupied_state():
         return -1
 
-    if state == ht_occupied_state() and mutable_array::at(table.keys, index) == key:
+    if state == ht_occupied_state() and std::mutable_array::at(table.keys, index) == key:
 >>>>
 
 # ---------------------------------------------------------------------------

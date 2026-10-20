@@ -1,5 +1,5 @@
-#import str
-#import list
+#import std::str
+#import std::list
 
 fn place(name: str, cells: int, n: int) -> int:
     cells + n

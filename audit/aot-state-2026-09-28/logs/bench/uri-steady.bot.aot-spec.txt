@@ -1,92 +1,92 @@
 == uri-steady.bot (interp)
 <program>: closed   [i0, line 30:1]
-  calls:    byte::set<List[UnicodeChar]>, repeat_uri<generic>
+  calls:    std::byte::set<List[UnicodeChar]>, repeat_uri<generic>
   guards:   0
   runtime:  closure-env, list-alloc, set-alloc, structural-equality
 
-char::codepoint (semantic): closed   [no blockers]
-char::codepoint<UnicodeChar>: closed   [i2, line 21:13]
+std::char::codepoint (semantic): closed   [no blockers]
+std::char::codepoint<UnicodeChar>: closed   [i2, line 21:13]
   params:   c : UnicodeChar
   result:   int
   guards:   0
   runtime:  none
 
-byte::high_nibble (semantic): guarded   [UnknownParameterKind 1]
-byte::high_nibble<int>: closed   [i17, line 112:15]
+std::byte::high_nibble (semantic): guarded   [UnknownParameterKind 1]
+std::byte::high_nibble<int>: closed   [i17, line 112:15]
   params:   b : int
   result:   int[HighNibble]
   guards:   0
   runtime:  bigint
 
-byte::nibble (semantic): guarded   [UnknownParameterKind 1]
-byte::nibble<int>: closed   [i18, line 118:10]
+std::byte::nibble (semantic): guarded   [UnknownParameterKind 1]
+std::byte::nibble<int>: closed   [i18, line 118:10]
   params:   x : int
   result:   int[Nibble]
   guards:   0
   runtime:  bigint
 
-byte::from_int (semantic): closed   [no blockers]
-byte::from_int<int>: closed   [i3, line 150:12]
+std::byte::from_int (semantic): closed   [no blockers]
+std::byte::from_int<int>: closed   [i3, line 150:12]
   params:   value : int
   result:   int[Byte]
   guards:   0
   runtime:  bigint
 
-byte::set (semantic): closed   [no blockers]
-byte::set<List[UnicodeChar]>: closed   [i1, line 174:7]
+std::byte::set (semantic): closed   [no blockers]
+std::byte::set<List[UnicodeChar]>: closed   [i1, line 174:7]
   params:   chars : List[UnicodeChar]
   result:   ImmutableSet[int[Byte]]
-  calls:    byte::from_int<int>, char::codepoint<UnicodeChar>
+  calls:    std::byte::from_int<int>, std::char::codepoint<UnicodeChar>
   guards:   0
   runtime:  set-alloc, structural-equality
 
-ascii::is_digit (semantic): closed   [no blockers]
-ascii::is_digit<int>: closed   [i13, line 53:12]
+std::ascii::is_digit (semantic): closed   [no blockers]
+std::ascii::is_digit<int>: closed   [i13, line 53:12]
   params:   b : int
   result:   bool
   guards:   0
   runtime:  bigint
 
-ascii::is_upper (semantic): closed   [no blockers]
-ascii::is_upper<int>: closed   [i11, line 56:12]
+std::ascii::is_upper (semantic): closed   [no blockers]
+std::ascii::is_upper<int>: closed   [i11, line 56:12]
   params:   b : int
   result:   bool
   guards:   0
   runtime:  bigint
 
-ascii::is_lower (semantic): closed   [no blockers]
-ascii::is_lower<int>: closed   [i12, line 59:12]
+std::ascii::is_lower (semantic): closed   [no blockers]
+std::ascii::is_lower<int>: closed   [i12, line 59:12]
   params:   b : int
   result:   bool
   guards:   0
   runtime:  bigint
 
-ascii::is_alphabetic (semantic): closed   [no blockers]
-ascii::is_alphabetic<int>: closed   [i10, line 62:17]
+std::ascii::is_alphabetic (semantic): closed   [no blockers]
+std::ascii::is_alphabetic<int>: closed   [i10, line 62:17]
   params:   b : int
   result:   bool
-  calls:    ascii::is_lower<int>, ascii::is_upper<int>
+  calls:    std::ascii::is_lower<int>, std::ascii::is_upper<int>
   guards:   0
   runtime:  none
 
-ascii::is_alphanumeric (semantic): closed   [no blockers]
-ascii::is_alphanumeric<int>: closed   [i9, line 65:19]
+std::ascii::is_alphanumeric (semantic): closed   [no blockers]
+std::ascii::is_alphanumeric<int>: closed   [i9, line 65:19]
   params:   b : int
   result:   bool
-  calls:    ascii::is_alphabetic<int>, ascii::is_digit<int>
+  calls:    std::ascii::is_alphabetic<int>, std::ascii::is_digit<int>
   guards:   0
   runtime:  none
 
-web::is_unreserved (semantic): closed   [no blockers]
-web::is_unreserved<int>: closed   [i8, line 189:17]
+std::web::is_unreserved (semantic): closed   [no blockers]
+std::web::is_unreserved<int>: closed   [i8, line 189:17]
   params:   b : int
   result:   bool
-  calls:    ascii::is_alphanumeric<int>
+  calls:    std::ascii::is_alphanumeric<int>
   guards:   0
   runtime:  structural-equality
 
-web::uri_escape_text (semantic): closed   [no blockers]
-web::uri_escape_text<str>: closed   [i5, line 192:19]
+std::web::uri_escape_text (semantic): closed   [no blockers]
+std::web::uri_escape_text<str>: closed   [i5, line 192:19]
   params:   s : str
   result:   str
   calls:    esc_from<str, int, str>
@@ -97,7 +97,7 @@ high_nibble (semantic): closed   [no blockers]
 high_nibble<int>: closed   [i16, line 194:19]
   params:   b : int
   result:   int[Nibble]
-  calls:    byte::high_nibble<int>, byte::nibble<int>
+  calls:    std::byte::high_nibble<int>, std::byte::nibble<int>
   guards:   0
   runtime:  none
 
@@ -121,7 +121,7 @@ esc_char (semantic): guarded   [UnknownParameterKind 1]
 esc_char<str>: closed   [i7, line 206:16]
   params:   c : str
   result:   str
-  calls:    esc_bytes<List[int], int, str>, web::is_unreserved<int>
+  calls:    esc_bytes<List[int], int, str>, std::web::is_unreserved<int>
   guards:   0
   runtime:  bigint, list-alloc, range-check
 
@@ -137,7 +137,7 @@ repeat_uri (semantic): guarded   [UnknownParameterKind 3, UnknownCallResultKind 
 repeat_uri<generic>: closed   [i4, line 32:14]
   params:   i : any, total : any, acc : any
   result:   int
-  calls:    repeat_uri<generic>, web::uri_escape_text<str>
+  calls:    repeat_uri<generic>, std::web::uri_escape_text<str>
   guards:   0
   runtime:  bigint, char-index, closure-env, range-check
 

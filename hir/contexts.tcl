@@ -11,7 +11,7 @@
 # semantics or privilege.
 #
 # A context is identified by the canonical identity of its context-struct type
-# (the struct declaration identity, e.g. "linux::io::LinuxIO"), and nothing
+# (the struct declaration identity, e.g. "std::linux::io::LinuxIO"), and nothing
 # else: no name, qualifier, string key or registration id. There is at most one
 # installed value per type.
 #
@@ -306,7 +306,7 @@ proc hir::contexts::TraitImplementation {req w owner} {
         binding [dict get $info binding] block [dict get $info block]]]
 }
 
-# "fn linux::io::write_text(str, context linux::io::LinuxIO) -> unit errors
+# "fn std::linux::io::write_text(str, context std::linux::io::LinuxIO) -> unit errors
 # WriteFailed": an implementation candidate's declared signature, its context
 # section included.
 proc hir::contexts::ShowImplementation {qualified info} {
@@ -326,11 +326,11 @@ proc hir::contexts::ShowImplementation {qualified info} {
 
 # "" if context CONTEXT satisfies context trait TRAIT, else the explanation:
 #
-#   linux::io::BrokenIO does not satisfy io::IO
+#   std::linux::io::BrokenIO does not satisfy std::io::IO
 #   required:
-#       fn write_text(str) -> unit errors io::WriteFailed   (declared at io.bot:4:8)
+#       fn write_text(str) -> unit errors std::io::WriteFailed   (declared at io.bot:4:8)
 #   found:
-#       fn linux::io::write_text(int, context linux::io::BrokenIO) -> unit   (at io.bot:30:4)
+#       fn std::linux::io::write_text(int, context std::linux::io::BrokenIO) -> unit   (at io.bot:30:4)
 #   parameter 1 requires int, which does not admit the required str
 proc hir::contexts::explainTrait {context trait {hir ""}} {
     set s [satisfiesTrait $context $trait]
@@ -1019,8 +1019,8 @@ proc hir::contexts::Missing {hirVar c target id reasons} {
 #
 #     a
 #      -> b
-#      -> linux::io::write
-#         directly requires linux::io::LinuxIO
+#      -> std::linux::io::write
+#         directly requires std::linux::io::LinuxIO
 proc hir::contexts::Chain {hir b id reasons} {
     return [join [ChainLines $hir $b $id $reasons] \n]
 }

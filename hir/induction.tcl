@@ -154,8 +154,8 @@ proc hir::induction::IsRefTo {hir ref b} {
 # How self-tail call argument ARGEXPR treats candidate parameter binding P:
 # "identity" (P unchanged), {step C} (P + C, C a literal, possibly
 # negative), or "other" (anything else -- including a non-literal step, e.g.
-# replace's `index + str::length(needle)`, or an opaque one, e.g. csv's
-# `list::at(scanned, 1)`: both correctly fall back here).
+# replace's `index + std::str::length(needle)`, or an opaque one, e.g. csv's
+# `std::list::at(scanned, 1)`: both correctly fall back here).
 proc hir::induction::ClassifyArg {hir argExpr p} {
     if {[IsRefTo $hir $argExpr $p]} {
         return identity
@@ -251,7 +251,7 @@ proc hir::induction::Advance {hir calls index p} {
 
 # The Range of expression E when used as a stable upper/lower bound: a
 # literal, a direct native call with a registered result Range
-# (hir::range::SeedRange: a str::length(...)/list::length(...)-shaped call)
+# (hir::range::SeedRange: a std::str::length(...)/std::list::length(...)-shaped call)
 # whose value is the same in every invocation (Invariant), or, if E refers
 # to one of this instance's own parameters, that parameter's *external* seed
 # (spec #20-21's stability requirement: CTX's classifications must show it
@@ -262,7 +262,7 @@ proc hir::induction::Advance {hir calls index p} {
 # and sameClosure (SameClosure of its self calls).
 #
 # A registered Range bounds every result of the native, but the proof needs
-# one value B that P meets: `i == char::scalar_value(c)` with a C that
+# one value B that P meets: `i == std::char::scalar_value(c)` with a C that
 # changes every step is a different B each time, and P can step past all of
 # them. So a call is a bound only when Invariant holds of it.
 proc hir::induction::BoundRange {hir e ctx seeds} {

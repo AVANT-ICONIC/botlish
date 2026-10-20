@@ -762,7 +762,7 @@ fixed in `hir/staticdeps.tcl`:
   `never` (`CanCarry`'s premise). So a request erasing nothing now never
   will, and rejecting the site it is in removes nothing: it is no
   contributor. `opaque.bot`'s sites each pass a function that raises nothing
-  to the untyped `list::any?` (an erasure site of the contract and a caller
+  to the untyped `std::list::any?` (an erasure site of the contract and a caller
   of its consumer); compiled-values, callables and range-and-contract-values
   have the same shape. The reproducer (five such sites, each rejected with
   OPAQUE-REPRESENTATION, and `run(body)` over them): 6 rounds before, 2
@@ -817,8 +817,8 @@ The **semantic-instance budget** (`C:budget:B`) was a third route into
 function bodies: it depended on every fact of every call requesting one of
 B's instances. An instance's key keeps an argument function's identity and
 erases its result (`hir::specialize::KeyType`), so of an argument naming a
-function only its place is read now (`FunctionRef`): `test::case`'s and
-`test::value`'s checks no longer reach the bodies they wrap.
+function only its place is read now (`FunctionRef`): `std::test::case`'s and
+`std::test::value`'s checks no longer reach the bodies they wrap.
 
 What is real, and stays (each a reproducer the tests pin): a contributor
 whose errors no other contribution erases, ahead of a consumer that handles
@@ -855,7 +855,7 @@ order; after it, every one batched = sequential exactly):
 |---|---|---|---|
 | 3 sibling nested sites (the work item's reproducer) | 4 rounds | 2 rounds | 4 rounds |
 | 6 sibling nested sites (`se-builds-nested-siblings`) | 7 rounds | 2 rounds | 7 rounds |
-| 5 sites passing `peek` (raising nothing) to `list::any?`, and `run(b1..b5)` (the work item's reproducer) | 6 rounds | 2 rounds | 6 rounds |
+| 5 sites passing `peek` (raising nothing) to `std::list::any?`, and `run(b1..b5)` (the work item's reproducer) | 6 rounds | 2 rounds | 6 rounds |
 | 3 / 6 such sites, their functions declaring an error `run` does not handle (`se-builds-erased-empty`) | 4 / 7 rounds | 2 / 2 rounds | 4 / 7 rounds |
 | 3 / 6 such sites, `peek` declaring the same error in each | 4 / 7 rounds | 2 / 2 rounds | 4 / 7 rounds |
 | 3 / 6 sites passing `raise` through `make` into a structural `Fn` (`se-builds-possible-witness`) | 4 / 7 rounds | 2 / 2 rounds | 4 / 7 rounds |
@@ -1130,7 +1130,7 @@ facts, and resolution numbers them alike for any candidate (the candidate
 is one callee `ref`). Without it a method call's cone, which reaches site
 forms only, saw no contract-boundary check at all (and before the forms,
 only a site's own positions at the chosen candidate's parameter types):
-`se-equal-method-trial`'s `n.apply(mutable_array::generate)` -- a lexical
+`se-equal-method-trial`'s `n.apply(std::mutable_array::generate)` -- a lexical
 `apply` typing its callable `Fn{args: [int, any], ...}` (generate calls its
 second argument, uncontracted there, so it may raise whatever the program
 erases) beside `pick::apply` leaving it untyped -- has only `pick::apply`
@@ -1151,11 +1151,11 @@ framework-semantics.bot 5/9 -> 3/7, linux-io.bot 4/4 -> 3/3 and affinity.bot
 itself.)
 
 Tests: `se-equal-subsume-gate` (a report that vanishes with the
-contributor: mutable_array::generate given `Fn{args: [int, any], ...}`, and a
+contributor: std::mutable_array::generate given `Fn{args: [int, any], ...}`, and a
 handle leaving its construction in a function used as a value -- judged
 after the contributor), `se-equal-method-trial`, `se-builds-subsume-gate`
 (three blocks failing first with a checker TYPE, each also passing
-mutable_array::generate into such a `Fn`, rejected with the contributor: 2
+std::mutable_array::generate into such a `Fn`, rejected with the contributor: 2
 rounds, 3 without the gate), `se-property-subsume-positions`. Mutants:
 `subsume-gate-every-failing`, `method-trial-ignored` (semantic),
 `subsume-gate-ignored` (economic). The gate also covers the block of
@@ -1305,13 +1305,13 @@ reproducer takes 2 rounds and 2 builds in both orders, as before. On the 88
 golden suites (batched, against the tree before the rule): 84 take exactly
 the rounds and builds they took, and three take one or two more, each a
 stratum the rule adds, never a chain -- `compiled-values.bot` 4/4 to 5/5
-(a failing contributor to `list::find`'s instance budget, under pressure,
+(a failing contributor to `std::list::find`'s instance budget, under pressure,
 is rejected before the three failing blocks that consume it),
 `contexts.bot` 3/4 to 4/5 (a TRAIT-UNKNOWN-OPERATION reported after the
 completion walk waits for an erasing block: its function defines one that
 calls through an uncontracted value), `opaque.bot` 6/10 to 8/12 (every
-block is linked through the golden framework's `test::value` erasure and
-`test::equal`'s instance budget, and the contributors among them now go
+block is linked through the golden framework's `std::test::value` erasure and
+`std::test::equal`'s instance budget, and the contributors among them now go
 first). Without the early refinement six more suites took one to three more
 rounds (`static-compile.bot` 7 to 10); with the closure under what
 contributors read, `methods.bot` 4 to 7, `ownership.bot` 3 to 5.
@@ -1408,7 +1408,7 @@ decisions, every undecided call at its t-th candidate (its last, when it
 has fewer). A call is decided in a pass only if exactly one candidate is
 valid *and* its receiver had one type in every trial of the pass -- and a
 candidate narrows its receiver's binding for the statements after the call
-(`list::at(arr, i)` leaves `arr` a List afterwards: `never`, for a
+(`std::list::at(arr, i)` leaves `arr` a List afterwards: `never`, for a
 MutableArray). So consecutive calls on one binding, or on one another's
 results, are a chain decided one link per pass. mutable-array.bot's first
 checked round decides its 76 calls in five passes (49, 17, 7, 2 and 1
@@ -1429,8 +1429,8 @@ configuration an earlier build had is read from that record; the record is
 read in the same order, and gives the same values, as the build it was made
 from. A pass whose newly decided calls all chose their t-th candidate leaves
 the next pass's trial t the configuration the pass already built. Every
-link of a chain of `at` calls on an array chooses `mutable_array::at`, the
-second of `list::at`, `mutable_array::at`, `mutable_vector::at`: in
+link of a chain of `at` calls on an array chooses `std::mutable_array::at`, the
+second of `std::list::at`, `std::mutable_array::at`, `std::mutable_vector::at`: in
 mutable-array.bot, passes 4 and 5 read their trial 1 from pass 3's build.
 
 **The final build** is not made when the last build made has its

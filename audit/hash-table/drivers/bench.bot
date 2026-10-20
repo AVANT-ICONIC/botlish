@@ -14,9 +14,9 @@
 # Key kinds are keys.bot's (0..6, SPEC.md section 5); kind 9 takes the keys
 # from POOL, argv's arguments after REPS: N keys, then N absent keys (the
 # M absent queries cycle through them).
-import list
-import str
-import char
+import std::list
+import std::str
+import std::char
 import table
 import keys
 
@@ -26,7 +26,7 @@ fn int_of(text: str) -> int errors IndexNotFound:
     fn digits(i: int, acc: int) -> int errors IndexNotFound:
         if i >= n:
             return acc
-        digits(i + 1, acc * 10 + char::scalar_value(text.char_at(i)) - 48)
+        digits(i + 1, acc * 10 + std::char::scalar_value(text.char_at(i)) - 48)
     digits(0, 0)
 
 fn query(j: int, n: int) -> int:
@@ -66,16 +66,16 @@ fn miss_list(kind: int, n: int, m: int, args: List[str]) errors IndexNotFound:
     pool = loop j from 0 to min(m, max(n, 4096)):
         keys::miss(kind, j)
     loop j from 0 to m:
-        list::at(pool, mod(j, list::length(pool)))
+        std::list::at(pool, mod(j, std::list::length(pool)))
 
 # ---------------------------------------------------------------------------
 # The operations
 
 # T with KS's keys from I on inserted, key I mapped to I.
 fn inserted(t, ks, i: int) errors IndexNotFound:
-    if i >= list::length(ks):
+    if i >= std::list::length(ks):
         return t
-    inserted(table::put(t, list::at(ks, i), i), ks, i + 1)
+    inserted(table::put(t, std::list::at(ks, i), i), ks, i + 1)
 
 fn built(ks, expected: int) errors IndexNotFound:
     inserted(table::fresh(expected), ks, 0)
@@ -88,9 +88,9 @@ fn builds(ks, reps: int, expected: int, acc: int) errors IndexNotFound:
     builds(ks, reps - 1, expected, acc + table::size(built(ks, expected)))
 
 fn gets(t, qs, j: int, default: int, acc: int) errors IndexNotFound:
-    if j >= list::length(qs):
+    if j >= std::list::length(qs):
         return acc
-    gets(t, qs, j + 1, default, acc + table::get(t, list::at(qs, j), default))
+    gets(t, qs, j + 1, default, acc + table::get(t, std::list::at(qs, j), default))
 
 # REPS passes of lookups of QS in one table T: tools/bench.tcl's -passes
 # subtracts a one-pass run, which leaves the lookups alone.
@@ -100,14 +100,14 @@ fn get_passes(t, qs, reps: int, default: int, acc: int) errors IndexNotFound:
     get_passes(t, qs, reps - 1, default, gets(t, qs, 0, default, acc))
 
 fn members(t, qs, ms, j: int, acc: int) errors IndexNotFound:
-    if j >= list::length(qs):
+    if j >= std::list::length(qs):
         return acc
-    members(t, qs, ms, j + 1, acc + bit(table::has?(t, list::at(qs, j))) + bit(table::has?(t, list::at(ms, j))))
+    members(t, qs, ms, j + 1, acc + bit(table::has?(t, std::list::at(qs, j))) + bit(table::has?(t, std::list::at(ms, j))))
 
 fn replaced(t, qs, j: int) errors IndexNotFound:
-    if j >= list::length(qs):
+    if j >= std::list::length(qs):
         return t
-    replaced(table::put(t, list::at(qs, j), j), qs, j + 1)
+    replaced(table::put(t, std::list::at(qs, j), j), qs, j + 1)
 
 fn member_passes(t, qs, ms, reps: int, acc: int) errors IndexNotFound:
     if reps <= 0:
@@ -120,9 +120,9 @@ fn replace_passes(t, qs, reps: int) errors IndexNotFound:
     replace_passes(replaced(t, qs, 0), qs, reps - 1)
 
 fn dropped(t, ks, i: int) errors IndexNotFound:
-    if i >= list::length(ks):
+    if i >= std::list::length(ks):
         return t
-    dropped(table::drop(t, list::at(ks, i)), ks, i + 1)
+    dropped(table::drop(t, std::list::at(ks, i)), ks, i + 1)
 
 # REPS times: build KS, then remove every key in insertion order.
 fn drops(ks, reps: int, acc: int) errors IndexNotFound:
@@ -145,9 +145,9 @@ fn lives(ks, qs, reps: int, acc: int) errors IndexNotFound:
 # The sum of probes(t, k) over QS and MS (the diagnostic tools/bench.tcl
 # compares with the Rust reference's statistics).
 fn probe_sum(t, qs, j: int, acc: int) errors IndexNotFound:
-    if j >= list::length(qs):
+    if j >= std::list::length(qs):
         return acc
-    probe_sum(t, qs, j + 1, acc + table::probes(t, list::at(qs, j)))
+    probe_sum(t, qs, j + 1, acc + table::probes(t, std::list::at(qs, j)))
 
 fn run(mode: str, ks, vs, qs, ms, reps: int) errors IndexNotFound:
     if mode == "bulk":
@@ -155,7 +155,7 @@ fn run(mode: str, ks, vs, qs, ms, reps: int) errors IndexNotFound:
     if mode == "build":
         return builds(ks, reps, 0, 0)
     if mode == "presized":
-        return builds(ks, reps, list::length(ks), 0)
+        return builds(ks, reps, std::list::length(ks), 0)
     if mode == "hit":
         return get_passes(built(ks, 0), qs, reps, -1, 0)
     if mode == "miss":
@@ -171,7 +171,7 @@ fn run(mode: str, ks, vs, qs, ms, reps: int) errors IndexNotFound:
     if mode == "probes":
         t = built(ks, 0)
         return probe_sum(t, qs, 0, 0) * 1000000000 + probe_sum(t, ms, 0, 0)
-    list::length(ks) + list::length(qs) + list::length(ms)
+    std::list::length(ks) + std::list::length(qs) + std::list::length(ms)
 
 fn main(args: List[str]) errors IndexNotFound:
     mode = args.get(1, "keys")
@@ -182,7 +182,7 @@ fn main(args: List[str]) errors IndexNotFound:
     ks = key_list(kind, n, args)
     ms = miss_list(kind, n, m, args)
     qs = loop j from 0 to m:
-        list::at(ks, query(j, n))
+        std::list::at(ks, query(j, n))
     vs = loop i from 0 to n:
         i
     run(mode, ks, vs, qs, ms, reps)

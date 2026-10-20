@@ -21,7 +21,7 @@ function count (NIR functions emitted):
 NIR op counts (whole-program):
   closure:        5 (before) vs   1 (after)   -- -4 (char_at's own two
                   specialize instances' closures gone; the one remaining
-                  is web::uri_escape_text's own unrelated module closure)
+                  is std::web::uri_escape_text's own unrelated module closure)
   callenv:        1 (before) vs   1 (after)   -- unchanged (unrelated call)
   callenvmulti:  12 (before) vs   0 (after)   -- -12 (char_at's own region
                   companion calls, now callmulti instead)

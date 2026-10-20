@@ -12,12 +12,12 @@ fn f(k):
     v = g(k):
         on Boom:
             0
-    list::at([10, 20], v)
+    std::list::at([10, 20], v)
 
 fn f_body(k):
     v = g(k):
         on Boom:
-            list::at([10, 20], 1)
+            std::list::at([10, 20], 1)
     v
 
 [f(0), f(1), f_body(1)]

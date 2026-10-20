@@ -1,5 +1,5 @@
 # asm.txt without botlish_fn_0/botlish_entry_0 (<program>); regenerate with tools/probe.tcl
-0000000000002906 <botlish_fn_1>:  ;; char::codepoint<UnicodeChar>
+0000000000002906 <botlish_fn_1>:  ;; std::char::codepoint<UnicodeChar>
     2906:	push   rbp
     2907:	mov    rbp,rsp
     290a:	call   290f <botlish_fn_1+0x9>
@@ -8,7 +8,7 @@
     2912:	pop    rbp
     2913:	ret
 
-0000000000002914 <botlish_entry_1>:  ;; char::codepoint<UnicodeChar>
+0000000000002914 <botlish_entry_1>:  ;; std::char::codepoint<UnicodeChar>
     2914:	push   rbp
     2915:	mov    rbp,rsp
     2918:	mov    rsi,QWORD PTR [rdx]
@@ -20,7 +20,7 @@
     2925:	add    BYTE PTR [rax],al
 	...
 
-0000000000002928 <botlish_fn_2>:  ;; byte::from_int<int>
+0000000000002928 <botlish_fn_2>:  ;; std::byte::from_int<int>
     2928:	push   rbp
     2929:	mov    rbp,rsp
     292c:	sub    rsp,0x10
@@ -98,7 +98,7 @@
     2a4d:	add    BYTE PTR [rax],al
 	...
 
-0000000000002a50 <botlish_entry_2>:  ;; byte::from_int<int>
+0000000000002a50 <botlish_entry_2>:  ;; std::byte::from_int<int>
     2a50:	push   rbp
     2a51:	mov    rbp,rsp
     2a54:	mov    rsi,QWORD PTR [rdx]
@@ -112,7 +112,7 @@
     2a65:	add    BYTE PTR [rax],al
 	...
 
-0000000000002a68 <botlish_fn_3>:  ;; byte::set<List[UnicodeChar]>
+0000000000002a68 <botlish_fn_3>:  ;; std::byte::set<List[UnicodeChar]>
     2a68:	push   rbp
     2a69:	mov    rbp,rsp
     2a6c:	sub    rsp,0x60
@@ -261,7 +261,7 @@
     2c9d:	add    BYTE PTR [rax],al
 	...
 
-0000000000002ca0 <botlish_entry_3>:  ;; byte::set<List[UnicodeChar]>
+0000000000002ca0 <botlish_entry_3>:  ;; std::byte::set<List[UnicodeChar]>
     2ca0:	push   rbp
     2ca1:	mov    rbp,rsp
     2ca4:	mov    rsi,QWORD PTR [rdx]
@@ -275,7 +275,7 @@
     2cb5:	add    BYTE PTR [rax],al
 	...
 
-0000000000002cb8 <botlish_fn_4>:  ;; ascii::is_digit<generic>
+0000000000002cb8 <botlish_fn_4>:  ;; std::ascii::is_digit<generic>
     2cb8:	push   rbp
     2cb9:	mov    rbp,rsp
     2cbc:	sub    rsp,0x10
@@ -363,7 +363,7 @@
     2e0d:	add    BYTE PTR [rax],al
 	...
 
-0000000000002e10 <botlish_entry_4>:  ;; ascii::is_digit<generic>
+0000000000002e10 <botlish_entry_4>:  ;; std::ascii::is_digit<generic>
     2e10:	push   rbp
     2e11:	mov    rbp,rsp
     2e14:	mov    rsi,QWORD PTR [rdx]
@@ -377,7 +377,7 @@
     2e25:	add    BYTE PTR [rax],al
 	...
 
-0000000000002e28 <botlish_fn_5>:  ;; ascii::is_upper<generic>
+0000000000002e28 <botlish_fn_5>:  ;; std::ascii::is_upper<generic>
     2e28:	push   rbp
     2e29:	mov    rbp,rsp
     2e2c:	sub    rsp,0x10
@@ -462,7 +462,7 @@
     2f7d:	add    BYTE PTR [rax],al
 	...
 
-0000000000002f80 <botlish_entry_5>:  ;; ascii::is_upper<generic>
+0000000000002f80 <botlish_entry_5>:  ;; std::ascii::is_upper<generic>
     2f80:	push   rbp
     2f81:	mov    rbp,rsp
     2f84:	mov    rsi,QWORD PTR [rdx]
@@ -476,7 +476,7 @@
     2f95:	add    BYTE PTR [rax],al
 	...
 
-0000000000002f98 <botlish_fn_6>:  ;; ascii::is_lower<generic>
+0000000000002f98 <botlish_fn_6>:  ;; std::ascii::is_lower<generic>
     2f98:	push   rbp
     2f99:	mov    rbp,rsp
     2f9c:	sub    rsp,0x10
@@ -561,7 +561,7 @@
     30ed:	add    BYTE PTR [rax],al
 	...
 
-00000000000030f0 <botlish_entry_6>:  ;; ascii::is_lower<generic>
+00000000000030f0 <botlish_entry_6>:  ;; std::ascii::is_lower<generic>
     30f0:	push   rbp
     30f1:	mov    rbp,rsp
     30f4:	mov    rsi,QWORD PTR [rdx]
@@ -571,7 +571,7 @@
     30ff:	pop    rbp
     3100:	ret
 
-0000000000003101 <botlish_fn_7>:  ;; ascii::is_alphabetic<generic>
+0000000000003101 <botlish_fn_7>:  ;; std::ascii::is_alphabetic<generic>
     3101:	push   rbp
     3102:	mov    rbp,rsp
     3105:	sub    rsp,0x10
@@ -614,7 +614,7 @@
     3192:	pop    rbp
     3193:	ret
 
-0000000000003194 <botlish_entry_7>:  ;; ascii::is_alphabetic<generic>
+0000000000003194 <botlish_entry_7>:  ;; std::ascii::is_alphabetic<generic>
     3194:	push   rbp
     3195:	mov    rbp,rsp
     3198:	mov    rsi,QWORD PTR [rdx]
@@ -624,7 +624,7 @@
     31a3:	pop    rbp
     31a4:	ret
 
-00000000000031a5 <botlish_fn_8>:  ;; ascii::is_alphanumeric<generic>
+00000000000031a5 <botlish_fn_8>:  ;; std::ascii::is_alphanumeric<generic>
     31a5:	push   rbp
     31a6:	mov    rbp,rsp
     31a9:	sub    rsp,0x10
@@ -667,7 +667,7 @@
     3236:	pop    rbp
     3237:	ret
 
-0000000000003238 <botlish_entry_8>:  ;; ascii::is_alphanumeric<generic>
+0000000000003238 <botlish_entry_8>:  ;; std::ascii::is_alphanumeric<generic>
     3238:	push   rbp
     3239:	mov    rbp,rsp
     323c:	mov    rsi,QWORD PTR [rdx]
@@ -677,7 +677,7 @@
     3247:	pop    rbp
     3248:	ret
 
-0000000000003249 <botlish_fn_9>:  ;; web::is_unreserved<generic>
+0000000000003249 <botlish_fn_9>:  ;; std::web::is_unreserved<generic>
     3249:	push   rbp
     324a:	mov    rbp,rsp
     324d:	sub    rsp,0x20
@@ -727,7 +727,7 @@
     32f6:	pop    rbp
     32f7:	ret
 
-00000000000032f8 <botlish_entry_9>:  ;; web::is_unreserved<generic>
+00000000000032f8 <botlish_entry_9>:  ;; std::web::is_unreserved<generic>
     32f8:	push   rbp
     32f9:	mov    rbp,rsp
     32fc:	mov    rdx,QWORD PTR [rdx]
@@ -737,7 +737,7 @@
     3307:	pop    rbp
     3308:	ret
 
-0000000000003309 <botlish_fn_10>:  ;; web::uri_escape_text<generic>
+0000000000003309 <botlish_fn_10>:  ;; std::web::uri_escape_text<generic>
     3309:	push   rbp
     330a:	mov    rbp,rsp
     330d:	sub    rsp,0x30
@@ -769,7 +769,7 @@
     3373:	pop    rbp
     3374:	ret
 
-0000000000003375 <botlish_entry_10>:  ;; web::uri_escape_text<generic>
+0000000000003375 <botlish_entry_10>:  ;; std::web::uri_escape_text<generic>
     3375:	push   rbp
     3376:	mov    rbp,rsp
     3379:	mov    rdx,QWORD PTR [rdx]

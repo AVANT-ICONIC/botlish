@@ -43,8 +43,8 @@
 # -target NAME selects the C ABI target of a .bot compilation (C-ABI-TYPES.md;
 # core/cabi.tcl lists linux-x86_64, linux-aarch64, macos-x86_64,
 # macos-aarch64, windows-x86_64, windows-x86_64-gnu, windows-aarch64): the
-# widths and signedness of ffi::c's integer scalars follow its data model, and
-# its architecture picks the file of an architecture-specific module (linux::sys: the Linux
+# widths and signedness of std::ffi::c's integer scalars follow its data model, and
+# its architecture picks the file of an architecture-specific module (std::linux::sys: the Linux
 # syscall numbers and registers, LINUX-SYSCALL-TRANSPORTS.md), and its
 # operating system which platform namespaces it may import (linux::* only
 # for a Linux target: UNSUPPORTED-PLATFORM otherwise). The default is the
@@ -56,7 +56,7 @@
 # it was built for, and a matching architecture is not a matching target).
 #
 # Runs the given program files and prints each program's value, with runtime evidence shown as "text"#{Type}. On the
-# native backends what a program prints (io::print_line) goes to this
+# native backends what a program prints (std::io::print_line) goes to this
 # process's standard output and error as it writes it, between its "== FILE"
 # line and its value, as a standalone executable writes it; the Tcl backends
 # cannot print (io's only context makes raw syscalls). With
@@ -114,7 +114,7 @@
 # a .hirx file (HIR interchange) with hir::interchange::readFile;
 # a .bot file (Botlish source, e.g. examples/surface/*.bot) is parsed and
 # lowered to HIR with surface::readProgramFile -- its `import`s name standard
-# namespaces (lib/) and, otherwise, the program's own modules: the .bot files
+# namespaces (stdlib/) and, otherwise, the program's own modules: the .bot files
 # beside it, in its directory (IMPORTS.md, "Application modules"), whatever
 # the working directory. From that HIR, the interpreter
 # runs the core IR it lowers to (the Tcl reference branch), the compiler

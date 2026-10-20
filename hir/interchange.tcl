@@ -37,7 +37,7 @@
 # ({HIR INTERCHANGE COMPILER}). The backends may differ: they read a HIR.
 #
 # A HIR is also its target's (hir::cabi::targetOf: the compilation target,
-# when the build depended on it -- ffi::c's scalars, a platform or an
+# when the build depended on it -- std::ffi::c's scalars, a platform or an
 # architecture-specific module). The text carries it inside the HIR, and a
 # decoded HIR keeps it, and its target's facts, whoever reads it: nothing is
 # reinterpreted for the reader's target. decode -target T is a compilation
@@ -69,14 +69,14 @@ proc hir::interchange::fingerprint {} {
 # The identity of the front end in the tree ROOT: a checksum of every Tcl
 # source file that can change the HIR it builds -- core (the registered types
 # and natives, the evaluator the front end shares), hir, surface, and any Tcl
-# library in lib -- with their names and sizes, and the Tcl version. The
+# library in stdlib (core::loadLibrary) -- with their names and sizes, and the Tcl version. The
 # backends (compiler, native) are not in it: they read a HIR, never shape it,
 # and a HIR built by an unchanged front end is the HIR they would see from a
 # fresh build (HIR-INTERCHANGE.md, "Validity").
 proc hir::interchange::Fingerprint {root} {
     set lines [list [list tcl [info patchlevel]]]
     set total 0
-    foreach dir {core hir surface lib} {
+    foreach dir {core hir surface stdlib} {
         foreach path [lsort [glob -nocomplain -directory [file join $root $dir] -types f *.tcl]] {
             set f [open $path rb]
             set bytes [read $f]

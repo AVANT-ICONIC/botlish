@@ -126,7 +126,7 @@ foreach {name description edits} [readMutants [file join [file dirname [file nor
 }
 
 set tree [file tempdir botlish-static-decisions-mutants]
-foreach dir {compiler core hir surface lib tests examples audit/static-decisions .cargo} {
+foreach dir {compiler core hir surface stdlib tests examples audit/static-decisions .cargo} {
     if {![file exists [file join $root $dir]]} continue
     file mkdir [file dirname [file join $tree $dir]]
     file copy [file join $root $dir] [file join $tree $dir]

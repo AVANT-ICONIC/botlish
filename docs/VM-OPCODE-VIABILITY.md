@@ -1041,8 +1041,8 @@ boundary needs:
   status word, unnecessary inside the VM, reappears exactly at this boundary.
 * **Both root sources.** `Vm::collect_with` already combines several; the VM's
   register stacks join the native stack maps.
-* **Callbacks.** A higher-order stdlib function such as `list::any?` or
-  `list::find` that calls a Botlish closure would re-enter the interpreter on
+* **Callbacks.** A higher-order stdlib function such as `std::list::any?` or
+  `std::list::find` that calls a Botlish closure would re-enter the interpreter on
   the host stack. COROUTINE-PREREQUISITES.md section 7 ("Mixed execution with
   the JIT") already notes that a coroutine cannot suspend across such a frame
   without native coroutine stacks. So higher-order stdlib functions either

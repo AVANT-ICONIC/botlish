@@ -51,7 +51,7 @@ proc hcValue {hir} {
     return [core::formatValue [core::compiler::evalHir $hir]]
 }
 
-set ::hcProgram {import str
+set ::hcProgram {import std::str
 
 type Small = Int in 0..10
 
@@ -62,7 +62,7 @@ struct Pair:
 fn twice(n: Small) -> int:
     n * 2
 
-p = Pair {left: twice(3), right: str::length("abc")}
+p = Pair {left: twice(3), right: std::str::length("abc")}
 [p.left, p.right]
 }
 
@@ -132,7 +132,7 @@ test hc-program-edited {an edited program is another key: it builds and is kept 
 
 test hc-module-edited {an edited module the program imports makes the entry stale: the program builds again, against the edited module, and the new HIR replaces the old} -setup {
     set dir [makeDirectory hc-module]
-    set path [hcWrite [file join $dir program.bot] "import hcmod\n\nhcmod::f(1)\n"]
+    set path [hcWrite [file join $dir program.bot] "import std::hcmod\n\nstd::hcmod::f(1)\n"]
     set cache [file join $dir cache]
 } -body {
     withPrivateLibrary {
@@ -150,7 +150,7 @@ test hc-module-edited {an edited module the program imports makes the entry stal
 
 test hc-type-import-edited {a module the program reads only through `import type NS::Type` is a dependency too: editing it makes the entry stale} -setup {
     set dir [makeDirectory hc-type-import]
-    set path [hcWrite [file join $dir program.bot] "import type hcbox::Small\n\nfn twice(n: Small) -> int:\n    n * 2\n\ntwice(3)\n"]
+    set path [hcWrite [file join $dir program.bot] "import type std::hcbox::Small\n\nfn twice(n: Small) -> int:\n    n * 2\n\ntwice(3)\n"]
     set cache [file join $dir cache]
 } -body {
     withPrivateLibrary {
@@ -167,7 +167,7 @@ test hc-type-import-edited {a module the program reads only through `import type
 
 test hc-module-edited-during-build {a module edited after the build read it but before its HIR is kept: the entry records the text the build read, so the next compilation misses and builds against the edit (it never hits with the HIR of the old text)} -setup {
     set dir [makeDirectory hc-during]
-    set path [hcWrite [file join $dir program.bot] "import hcmod\n\nhcmod::f(1)\n"]
+    set path [hcWrite [file join $dir program.bot] "import std::hcmod\n\nstd::hcmod::f(1)\n"]
     set cache [file join $dir cache]
     rename surface::cache::store surface::cache::hcStore
     proc surface::cache::store {args} {
@@ -193,7 +193,7 @@ test hc-module-edited-during-build {a module edited after the build read it but 
 
 test hc-namespace-gains-file {a namespace the program imported with no module file (an intrinsics-only namespace) that has one now makes the entry stale: the module file would be read} -setup {
     set dir [makeDirectory hc-gains]
-    set path [hcWrite [file join $dir program.bot] "import str\n\nstr::length(\"abc\")\n"]
+    set path [hcWrite [file join $dir program.bot] "import std::str\n\nstd::str::length(\"abc\")\n"]
     set cache [file join $dir cache]
 } -body {
     withPrivateLibrary {
@@ -387,9 +387,9 @@ test hc-application-root {the key holds the application root (the entry file's d
     removeDirectory hc-app-cache
 } -result {1 {misses 1 stores 1} 2 {misses 1 stores 1} 1 {hits 1}}
 
-test hc-application-module-edited {an application module is a dependency of its importer's entry: an edit to it is stale, and so is a new application file that would collide with a standard import (the build now fails, MODULE-COLLISION)} -setup {
+test hc-application-module-edited {an application module is a dependency of its importer's entry: an edit to it is stale; a list.bot beside the program, the application namespace list, is no input of `import std::list` (a hit); and a new application file that would be the standard namespace, std/list.bot, makes it stale (the build now fails, RESERVED-NAMESPACE: STD-NAMESPACE.md)} -setup {
     set dir [makeDirectory hc-app-module]
-    set path [hcWrite [file join $dir program.bot] "import counter\nimport list\n\nlist::length(\[counter::which()\]) + counter::which()\n"]
+    set path [hcWrite [file join $dir program.bot] "import counter\nimport std::list\n\nstd::list::length(\[counter::which()\]) + counter::which()\n"]
     hcWrite [file join $dir counter.bot] "fn which() -> int:\n    1\n"
     set cache [file join $dir cache]
 } -body {
@@ -398,11 +398,14 @@ test hc-application-module-edited {an application module is a dependency of its 
     hcWrite [file join $dir counter.bot] "fn which() -> int:\n    5\n"
     lassign [hcCompile $path $cache -warnings off] third builds3 stats3
     hcWrite [file join $dir list.bot] "fn length(xs) -> int:\n    0\n"
+    lassign [hcCompile $path $cache -warnings off] fourth builds4 stats4
+    hcWrite [file join $dir std list.bot] "fn length(xs) -> int:\n    0\n"
     set failed [catch {hcCompile $path $cache -warnings off} message options]
     list [hcValue $first] $stats1 $stats2 $builds2 [hcValue $third] $stats3 \
+        [hcValue $fourth] $stats4 $builds4 \
         $failed [lindex [dict get $options -errorcode] end] [dict get [surface::cache::stats] stale]
 } -cleanup {
     removeDirectory hc-app-module
-} -result {2 {misses 1 stores 1} {hits 1} 0 6 {misses 1 stores 1 stale 1} 1 MODULE-COLLISION 1}
+} -result {2 {misses 1 stores 1} {hits 1} 0 6 {misses 1 stores 1 stale 1} 6 {hits 1} 0 1 RESERVED-NAMESPACE 1}
 
 cleanupTests

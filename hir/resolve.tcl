@@ -293,7 +293,7 @@ proc hir::resolve::RootNative {hir binding} {
 }
 
 # The binding identity binding B denotes for the purpose of telling method
-# candidates apart: an alias (`at = list::at`) is the function it aliases, a
+# candidates apart: an alias (`at = std::list::at`) is the function it aliases, a
 # root native is the native, anything else is itself. Two candidates with one
 # identity are one function, however many names reach it.
 proc hir::resolve::CandidateIdentity {hirVar b} {
@@ -389,7 +389,7 @@ proc hir::resolve::NoMethodIdentity {hirVar identity} {
 #     binding of the file, a parameter, a root native), and
 #   * for every namespace the file directly imports (hir/imports.tcl), the
 #     member NAME of that exact namespace: a module function or an
-#     intrinsic (`list::at`). Imports are not transitive and not
+#     intrinsic (`std::list::at`). Imports are not transitive and not
 #     hierarchical: only the namespaces the file itself names.
 #
 # A list of {display D kind lexical|module|native ns NS identity I} dicts
@@ -662,8 +662,8 @@ proc hir::resolve::ResolveTypeExpr {typeExpr {ns ""} {imprints 0}} {
         return [hir::layouts::ResolveNativeEdit $arg $ns]
     }
     if {$name eq [hir::cabi::PtrName]} {
-        # ffi::c::Ptr[T] (C-ABI-TYPES.md): T is a pointee identity
-        # (ffi::c::Void among them), never a value type.
+        # std::ffi::c::Ptr[T] (C-ABI-TYPES.md): T is a pointee identity
+        # (std::ffi::c::Void among them), never a value type.
         return [hir::cabi::ResolvePtr $arg $ns $imprints]
     }
     if {$name eq [hir::cabi::FnPtrName]} {
@@ -1085,7 +1085,7 @@ proc hir::resolve::Expr {hirVar node ctx} {
             }
             if {[hir::layouts::RoleOf $layoutRole query] ne ""} {
                 # A compile-time fact of a layout (BINARY-LAYOUT.md):
-                # binary::layout_length(L) is L's size, a constant.
+                # std::binary::layout_length(L) is L's size, a constant.
                 ResolveLayoutQuery hir $e $node $layoutNative $layoutRole $ctx
                 return $e
             }
@@ -1113,8 +1113,8 @@ proc hir::resolve::Expr {hirVar node ctx} {
                 # one is visible from here -- under ordinary lexical
                 # resolution (the same walk a reference to `name` makes, so a
                 # shadowing local is what the sugar sees) or as a member of a
-                # directly imported namespace (`import list` makes
-                # `list::at` a candidate for `xs.at(i)`, IMPORTS.md). The ref
+                # directly imported namespace (`import std::list` makes
+                # `std::list::at` a candidate for `xs.at(i)`, IMPORTS.md). The ref
                 # is a real use (capture, call target, call graph). The
                 # receiver is the first argument and is resolved (and later
                 # evaluated) once, in that position. Nothing below this
@@ -1186,7 +1186,7 @@ proc hir::resolve::Expr {hirVar node ctx} {
             }
             if {[dict exists $node imprint]} {
                 # Explicit imprints `f[T, ...](...)` (hir/imprint.tcl): each
-                # a type, or a pointee identity (ffi::c::Void), bound to the
+                # a type, or a pointee identity (std::ffi::c::Void), bound to the
                 # callee's variables by its typing (hir::types::Call).
                 set imprint {}
                 set valid 1
@@ -1380,7 +1380,7 @@ proc hir::resolve::Expr {hirVar node ctx} {
                 # `x.name[3]` outside a layout field designator
                 # (FIXED-LAYOUT-ARRAYS.md): there is no index expression.
                 set index [lindex [dict get $node indices] 0]
-                hir::DiagnoseAt hir LAYOUT-OPERAND [::format {an element index (%s[%s]) is written only in a layout field designator, binary::store(e, L.items[3], v) or binary::write(d, L.items[3], v): Botlish has no index expression (an element of a live array is binary::element(a, i), of a List list::at(xs, i))} \
+                hir::DiagnoseAt hir LAYOUT-OPERAND [::format {an element index (%s[%s]) is written only in a layout field designator, std::binary::store(e, L.items[3], v) or std::binary::write(d, L.items[3], v): Botlish has no index expression (an element of a live array is std::binary::element(a, i), of a List std::list::at(xs, i))} \
                     [dict get $node name] [lindex $index 0]] $e [lindex $index 1]
             }
         }
@@ -2013,7 +2013,7 @@ proc hir::resolve::ResolveQualifiedRef {hirVar e pair ctx} {
 # carries a -layout role (hir/layouts.tcl) -- where it is the static evidence
 # imprinting reads: the operand is resolved here, by name, to the layout's
 # descriptor constant (no runtime layout object exists), and a query
-# (binary::layout_length(L)) is replaced by the fact it asks for.
+# (std::binary::layout_length(L)) is replaced by the fact it asks for.
 #
 #   UNKNOWN-LAYOUT       the operand names no visible layout
 #   LAYOUT-OPERAND       the operand is not a layout name (an expression, a
@@ -2036,7 +2036,7 @@ proc hir::resolve::LayoutNative {written} {
 }
 
 proc hir::resolve::LayoutNotAValueMessage {name} {
-    return "\"$name\" is a layout, not a value: a layout is named in a type (LayoutStruct\[$name\]) or as the layout operand of a binary operation (binary::parse($name, data), binary::layout_length($name)), and no runtime layout object exists"
+    return "\"$name\" is a layout, not a value: a layout is named in a type (LayoutStruct\[$name\]) or as the layout operand of a binary operation (std::binary::parse($name, data), std::binary::layout_length($name)), and no runtime layout object exists"
 }
 
 # If the qualified reference syntax NODE (resolved as E) names a layout and
@@ -2076,7 +2076,7 @@ proc hir::resolve::LayoutOperandId {hirVar e arg native ctx {operand "the layout
     }
     if {$name eq ""} {
         hir::DiagnoseAt hir LAYOUT-OPERAND \
-            "$operand of $native must be the name of a layout (binary::parse(Pair, data)): the layout is static evidence, never a computed value" $e $origin
+            "$operand of $native must be the name of a layout (std::binary::parse(Pair, data)): the layout is static evidence, never a computed value" $e $origin
         return ""
     }
     set id [hir::layouts::lookup $name $ns]
@@ -2122,7 +2122,7 @@ proc hir::resolve::LayoutOperand {hirVar arg native ctx} {
 #
 #   LAYOUT-OPERAND   not a LAYOUT.FIELD chain; or the path ends at a nested
 #                    layout (a write names a scalar or pointer field; a
-#                    read, binary::read, may name one) or at a union (a
+#                    read, std::binary::read, may name one) or at a union (a
 #                    designator names one of its alternatives:
 #                    LAYOUT-UNIONS.md)
 #   UNKNOWN-LAYOUT   its root names no visible layout (LayoutOperandId)
@@ -2148,7 +2148,7 @@ proc hir::resolve::FieldPathOperand {hirVar arg native ctx} {
     }
     if {$names eq ""} {
         hir::DiagnoseAt hir LAYOUT-OPERAND \
-            "the field operand of $native must name one field of a layout, written LAYOUT.FIELD (binary::write(data, Header.count, 7)): the field is static evidence, never a computed value" \
+            "the field operand of $native must name one field of a layout, written LAYOUT.FIELD (std::binary::write(data, Header.count, 7)): the field is static evidence, never a computed value" \
             $placeholder [dict get $arg origin]
         return $placeholder
     }
@@ -2157,7 +2157,7 @@ proc hir::resolve::FieldPathOperand {hirVar arg native ctx} {
     if {$id eq ""} {
         return $placeholder
     }
-    # A read (binary::read, LAYOUT-UNIONS.md) may also name a nested
+    # A read (std::binary::read, LAYOUT-UNIONS.md) may also name a nested
     # layout: it copies the whole record.
     set records [expr {[hir::layouts::RoleOf [hir::layouts::Role $native] op] eq "read"}]
     set result [hir::layouts::FieldPath $id $names [lmap step $indices {lmap index $step {lindex $index 0}}] $records]

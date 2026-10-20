@@ -3,8 +3,8 @@
   guards:   0
   runtime:  none
 
-char::codepoint (semantic): closed   [no blockers]
-char::codepoint<UnicodeChar>: closed   [i2, line 21:13]
+std::char::codepoint (semantic): closed   [no blockers]
+std::char::codepoint<UnicodeChar>: closed   [i2, line 21:13]
   params:   c : UnicodeChar
   result:   int
   guards:   0
@@ -21,7 +21,7 @@ set (semantic): closed   [no blockers]
 set<generic>: closed   [i1, line 174:7]
   params:   chars : any
   result:   ImmutableSet[int[Byte]]
-  calls:    char::codepoint<UnicodeChar>, from_int<int>
+  calls:    std::char::codepoint<UnicodeChar>, from_int<int>
   guards:   0
   runtime:  set-alloc, structural-equality
 

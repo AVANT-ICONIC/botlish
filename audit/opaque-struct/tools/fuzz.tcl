@@ -100,17 +100,15 @@ while {[lindex $args 0] in {-n -seed -dump -backends}} {
 proc pick {list} { return [lindex $list [expr {int(rand() * [llength $list])}]] }
 proc rnd {lo hi} { return [expr {$lo + int(rand() * ($hi - $lo + 1))}] }
 
-# A scratch library: a copy of lib/ plus the modules generated below.
+# A scratch directory: the programs, and beside them (their application root,
+# IMPORTS.md "Application modules") the modules generated below.
 set scratch [file join [file tempdir opaque-struct-fuzz]]
-file copy -force [file join $root lib] [file join $scratch lib]
-set ::libraryDir [file join $scratch lib]
-set ::core::libraryDir $::libraryDir
 set programDir [file join $scratch programs]
 file mkdir $programDir
 set counter 0
 
 proc writeModule {name content} {
-    set path [file join $::libraryDir {*}[split $name /]].bot
+    set path [file join $::programDir {*}[split $name /]].bot
     file mkdir [file dirname $path]
     set channel [open $path w]
     fconfigure $channel -encoding utf-8
@@ -277,7 +275,7 @@ proc genChecks {M opaque} {
             list-length {
                 set k [rnd 1 3]
                 set items [lrepeat $k "${M}::make_Pt($a, $b)"]
-                lappend checks [list "list::length(\[[join $items {, }]\])" "\[[join $items {, }]\].length()" $k]
+                lappend checks [list "std::list::length(\[[join $items {, }]\])" "\[[join $items {, }]\].length()" $k]
             }
             eq {
                 lappend checks [list "${M}::make_Pt($a, $b) == ${M}::make_Pt($c, $d)" "${M}::make_Pt($a, $b) == ${M}::make_Pt($c, $d)" \
@@ -339,7 +337,7 @@ proc genValid {k} {
     set M fzo$k
     writeModule $M [moduleSource $opaque]
     set checks [genChecks $M $opaque]
-    set head "import $M\nimport list\n"
+    set head "import $M\nimport std::list\n"
     set defs [consumerDefinitions $M $opaque]
     set free [lmap c $checks {lindex $c 0}]
     set method [lmap c $checks {lindex $c 1}]

@@ -5,7 +5,7 @@
 #   (cd TREE && tclsh9.0 .../parity.tcl CORPUS.txt OUTFILE)
 #
 # Runs from the CURRENT DIRECTORY's tree (production, or a scratch
-# counterfactual worktree whose own lib/web.bot was rewritten), so the SAME
+# counterfactual worktree whose own stdlib/web.bot was rewritten), so the SAME
 # script's output can be diffed across trees: identical files mean
 # identical observable behavior on every address and every backend.
 #
@@ -17,14 +17,14 @@
 # Two programs, because a module-qualified name resolves only through the
 # surface path and the root predicate's native -module-fn bridge only
 # through the IR path:
-#   module  a .bot program calling web::emailish?(s) directly -- the
+#   module  a .bot program calling std::web::emailish?(s) directly -- the
 #           module's own Botlish source, the code the counterfactual
 #           rewrites -- run exactly the way main.tcl runs a .bot file on each
-#           backend (interp and compile evaluate lib/web.bot's own source;
+#           backend (interp and compile evaluate stdlib/web.bot's own source;
 #           cranelift-generic / cranelift compile it);
 #   root    a .ir program calling emailish?(s) -- the path
 #           bench/refined-checks.ir itself takes: the -module-fn bridge to
-#           web::emailish? on the native backends, and the independent Tcl
+#           std::web::emailish? on the native backends, and the independent Tcl
 #           validator (emailRegex) on interp/compile, which serves as the
 #           oracle for the Botlish source.
 set root [pwd]
@@ -60,15 +60,15 @@ proc parseBools {shown} {
 set dir [file dirname [file normalize $out]]
 set bot [file join $dir parity-module.bot]
 writeFile $bot "# requires: web
-import list
-import web
+import std::list
+import std::web
 
 corpus = \[[join [lmap s $corpus {botString $s}] {, }]\]
 
 fn go(i, acc):
-    if i >= list::length(corpus):
+    if i >= std::list::length(corpus):
         return acc
-    go(i + 1, list::append(acc, web::emailish?(list::at(corpus, i))))
+    go(i + 1, std::list::append(acc, std::web::emailish?(std::list::at(corpus, i))))
 
 go(0, \[\])
 "
@@ -76,10 +76,10 @@ set ir [file join $dir parity-root.ir]
 writeFile $ir "# requires: web
 [list [list bind corpus [list call {ref list} {*}[lmap s $corpus {list const str $s}]]]]
 {bind go {block {i acc}
-  {if {call {ref >=} {ref i} {call {ref list::length} {ref corpus}}}
+  {if {call {ref >=} {ref i} {call {ref std::list::length} {ref corpus}}}
     {block {} {ref acc}}
     {block {} {call {ref go} {call {ref +} {ref i} {const 1}}
-                 {call {ref list::append} {ref acc} {call {ref emailish?} {call {ref list::at} {ref corpus} {ref i}}}}}}}}}
+                 {call {ref std::list::append} {ref acc} {call {ref emailish?} {call {ref std::list::at} {ref corpus} {ref i}}}}}}}}}
 {call {ref go} {const 0} {call {ref list}}}
 "
 
@@ -110,8 +110,8 @@ foreach backend $backends {
 core::useBackend interp
 
 set L {}
-lappend L "tree: [exec git -C $root rev-parse HEAD] (lib/web.bot diff lines: [llength [split [exec git -C $root diff -- lib/web.bot] \n]])"
-lappend L "columns: module = web::emailish?(s) via .bot, root = emailish?(s) via .ir; each on $backends"
+lappend L "tree: [exec git -C $root rev-parse HEAD] (stdlib/web.bot diff lines: [llength [split [exec git -C $root diff -- stdlib/web.bot] \n]])"
+lappend L "columns: module = std::web::emailish?(s) via .bot, root = emailish?(s) via .ir; each on $backends"
 set crossBackend 0
 set oracle 0
 set trueCount 0

@@ -1,15 +1,15 @@
 # cabi.tcl -- the C ABI type universe in the front end (C-ABI-TYPES.md):
-# the target-resolved C integer scalars, ffi::c::Void, ffi::c::Ptr[T] and
-# ffi::c::FnPtr[F].
+# the target-resolved C integer scalars, std::ffi::c::Void, std::ffi::c::Ptr[T] and
+# std::ffi::c::FnPtr[F].
 #
-#   ffi::c::Char ... ffi::c::ULongLong   C integer scalars: integer domains
+#   std::ffi::c::Char ... ULongLong      C integer scalars: integer domains
 #                                        (Int in exactly the target's range
 #                                        of the C type) carrying C ABI
 #                                        metadata (core::type's -c-abi)
-#   ffi::c::Bool                         C _Bool: Botlish's own bool (the
+#   std::ffi::c::Bool                    C _Bool: Botlish's own bool (the
 #                                        same type, the C ABI's spelling of
 #                                        it), carried as the one byte 0 or 1
-#   ffi::c::Double                       C double: Botlish's own Float64 (the
+#   std::ffi::c::Double                  C double: Botlish's own Float64 (the
 #                                        same type, the C ABI's spelling of
 #                                        it), carried as the target's IEEE
 #                                        754 binary64 in its floating-point
@@ -20,23 +20,23 @@
 #                                        (NaN and the infinities are the
 #                                        call's NonFiniteFloat, negative
 #                                        zero is zero: FLOAT64-MILESTONE-1.md)
-#   ffi::c::Void                         the C void: a permanently
+#   std::ffi::c::Void                    the C void: a permanently
 #                                        incomplete pointee, never a type of
 #                                        a value
-#   ffi::c::Ptr[T]      {cptr T}         a C data pointer with pointee T
-#   ffi::c::FnPtr[F]    {cfnptr F}       a C function pointer of signature
+#   std::ffi::c::Ptr[T]    {cptr T}      a C data pointer with pointee T
+#   std::ffi::c::FnPtr[F]  {cfnptr F}    a C function pointer of signature
 #                                        F, a Fn{args: [...], return: R}
 #
 # The scalars
 # -----------
-# They are ordinary source-defined integer domains of namespace ffi::c whose
-# declarations no file spells: when a file imports ffi::c, the loader
+# They are ordinary source-defined integer domains of namespace std::ffi::c whose
+# declarations no file spells: when a file imports std::ffi::c, the loader
 # (surface/modules.tcl's LoadNamespace) adds NamespaceTypeDecls's
 # declarations for the compilation's C target to the module's own, so they
 # are registered, captured, activated, printed and read back exactly as
 # every module's `type` is (hir/sourcetypes.tcl, hir/declarations.tcl): a
 # HIR keeps the target's widths whatever is compiled after it, and HIR text
-# and interchange carry them (`type ffi::c::Long parent Int domain interval
+# and interchange carry them (`type std::ffi::c::Long parent Int domain interval
 # LO HI cabi {long} TARGET`). Values are ordinary Ints: arithmetic on them
 # is Botlish arithmetic, and a value is admitted into one only by a proof
 # that it lies in the range (hir/range.tcl), as into any domain.
@@ -45,8 +45,8 @@
 # ------------------
 # A pointer's T is an identity, not the type of any value:
 #
-#   void                     ffi::c::Void
-#   bool                     ffi::c::Bool, C _Bool
+#   void                     std::ffi::c::Void
+#   bool                     std::ffi::c::Bool, C _Bool
 #   {refined int {NAME}}     a C integer scalar (NAME has -c-abi metadata)
 #   {nstruct ID}             an *opaque* struct: a module-owned nominal
 #                            identity (OPAQUE-STRUCTS.md), what a binding
@@ -63,7 +63,7 @@
 # them or unit (C's void result); it declares no errors.
 
 namespace eval hir::cabi {
-    # The intrinsic type names of namespace ffi::c besides its scalars: the
+    # The intrinsic type names of namespace std::ffi::c besides its scalars: the
     # incomplete pointee and the two pointer constructors.
     variable intrinsicTypes {Void Ptr FnPtr Bool Double}
 }
@@ -81,14 +81,14 @@ proc hir::cabi::ResolveTarget {target} {
 }
 
 # 1 if namespace NS has target-dependent intrinsic type declarations
-# (NamespaceTypeDecls): ffi::c, whose scalars are the target's.
+# (NamespaceTypeDecls): std::ffi::c, whose scalars are the target's.
 proc hir::cabi::HasNamespaceTypes {ns} {
     return [expr {$ns eq $::core::cabi::namespace}]
 }
 
 # The target HIR was built for (surface/modules.tcl, "Target dependence"):
 # the compilation target when the build read it (an architecture-specific
-# module, a platform namespace, ffi::c's scalars), "" for a HIR that is
+# module, a platform namespace, std::ffi::c's scalars), "" for a HIR that is
 # every target's. A HIR from HIR text records the target its C integer
 # scalars name (hir::read); one from core IR text none.
 proc hir::cabi::targetOf {hir} {
@@ -113,7 +113,7 @@ proc hir::cabi::TargetMismatch {hir target} {
 }
 
 # The intrinsic type declarations of namespace NS on C TARGET, located at
-# SPAN (the module file's): the C integer scalars for ffi::c, nothing for any
+# SPAN (the module file's): the C integer scalars for std::ffi::c, nothing for any
 # other namespace. Shaped like surface/lower.tcl's TypeDeclOf dicts plus
 # their `cabi` metadata.
 proc hir::cabi::NamespaceTypeDecls {ns target span} {
@@ -133,7 +133,7 @@ proc hir::cabi::NamespaceTypeDecls {ns target span} {
 }
 
 # The intrinsic non-scalar type names of namespace NS (Void, Ptr, FnPtr of
-# ffi::c), which the loader authorizes like a module's own types.
+# std::ffi::c), which the loader authorizes like a module's own types.
 proc hir::cabi::IntrinsicTypeNames {ns} {
     variable intrinsicTypes
     if {$ns eq $::core::cabi::namespace} {
@@ -143,8 +143,8 @@ proc hir::cabi::IntrinsicTypeNames {ns} {
 }
 
 # The C target of the compilation whose declarations are installed: the one
-# its ffi::c scalars were declared for (NamespaceTypeDecls, re-derived by
-# hir/read.tcl from HIR text), or "" when no file of it imports ffi::c.
+# its std::ffi::c scalars were declared for (NamespaceTypeDecls, re-derived by
+# hir/read.tcl from HIR text), or "" when no file of it imports std::ffi::c.
 proc hir::cabi::CompilationTarget {} {
     set info [core::type::cabiOf "$::core::cabi::namespace\::[lindex [core::cabi::scalarNames] 0]"]
     if {$info eq ""} {
@@ -163,12 +163,12 @@ proc hir::cabi::FnPtrName {} { return "$::core::cabi::namespace\::FnPtr" }
 # ---------------------------------------------------------------------------
 # Pointers
 
-# The message for ffi::c::Void written where a type of values is needed.
+# The message for std::ffi::c::Void written where a type of values is needed.
 proc hir::cabi::VoidMessage {} {
     return "[VoidName] is C's void: an incomplete type with no values, written only as a pointee ([PtrName]\[[VoidName]\], C's void *); a C function returning void returns unit"
 }
 
-# The resolved type of ffi::c::Ptr[ARG] (ARG a surface::parser::TypeExpr) in
+# The resolved type of std::ffi::c::Ptr[ARG] (ARG a surface::parser::TypeExpr) in
 # the code of namespace NS; IMPRINTS as hir::resolve::ResolveTypeExpr's (an
 # imprint variable may be the pointee). Raises a TYPE error for an invalid
 # pointee (PointeeProblem).
@@ -185,7 +185,7 @@ proc hir::cabi::ResolvePtr {arg ns {imprints 0}} {
     return [list cptr $pointee]
 }
 
-# The resolved type of ffi::c::FnPtr[ARG]: ARG must be a structural function
+# The resolved type of std::ffi::c::FnPtr[ARG]: ARG must be a structural function
 # type Fn{args: [...], return: R} whose arguments are C ABI value types and
 # whose result is one or unit, declaring no errors (C reports none).
 proc hir::cabi::ResolveFnPtr {arg ns {imprints 0}} {
@@ -273,7 +273,7 @@ proc hir::cabi::PointeeProblem {pointee} {
     return "$shown has no C representation: a pointee is [VoidName], a C integer scalar, [BoolName], an opaque struct or another pointer"
 }
 
-# The display of pointee identity POINTEE (show's ffi::c::Ptr[...] argument).
+# The display of pointee identity POINTEE (show's std::ffi::c::Ptr[...] argument).
 proc hir::cabi::ShowPointee {pointee} {
     if {$pointee eq "void"} {
         return [VoidName]
@@ -281,7 +281,7 @@ proc hir::cabi::ShowPointee {pointee} {
     return [hir::types::show $pointee]
 }
 
-# The display of a C signature FN (show's ffi::c::FnPtr[...] argument): the
+# The display of a C signature FN (show's std::ffi::c::FnPtr[...] argument): the
 # source spelling, without the always-empty errors.
 proc hir::cabi::ShowSignature {fn} {
     if {![hir::types::IsFn $fn]} {
@@ -307,7 +307,7 @@ proc hir::cabi::ParsePointee {text number} {
 # Diagnoses the uses of C addresses no operation has (C-ABI-TYPES.md, "A
 # pointer is not an Int"): a data or function pointer given to a native whose
 # parameter requires another kind -- `p + 1`, `p < q`, `bit_and(p, 1)`,
-# `str::length(p)` -- is TYPE at compile time, not the run-time kind error
+# `std::str::length(p)` -- is TYPE at compile time, not the run-time kind error
 # such a call would otherwise reach. (`==` and `hash` of one are
 # AFFINE-EQUALITY-UNSUPPORTED, hir/affine.tcl: a pointer is affine.)
 proc hir::cabi::verify {hirVar} {
@@ -356,9 +356,9 @@ proc hir::cabi::verify {hirVar} {
                 # operation (null?, clone, ...) and no other native takes one.
                 if {[hir::types::IsNativeEdit $argType]} {
                     # (A native edit, NATIVE-LAYOUT-WRITES.md, likewise.)
-                    set what "a native edit, where %s requires %s: a native edit is a window onto native memory, read by its fields (or binary::load) and written by binary::store, never a pointer, an Int or any other value"
+                    set what "a native edit, where %s requires %s: a native edit is a window onto native memory, read by its fields (or std::binary::load) and written by std::binary::store, never a pointer, an Int or any other value"
                 } else {
-                    set what "a native view, where %s requires %s: a native view is a read-only window onto native memory, read by its fields (or binary::load), never a pointer, an Int or any other value"
+                    set what "a native view, where %s requires %s: a native view is a read-only window onto native memory, read by its fields (or std::binary::load), never a pointer, an Int or any other value"
                 }
                 hir::Diagnose hir TYPE [format "argument %d of %s is %s, $what" \
                     $index $name [hir::types::show $argType] $name [core::type::show $paramType]] $arg
@@ -377,7 +377,7 @@ proc hir::cabi::verify {hirVar} {
 
 # The type a call's explicit imprint TYPEEXPR denotes in the code of
 # namespace NS (hir/imprint.tcl): an ordinary type, or the pointee identity
-# ffi::c::Void (whether a variable may be bound to it is the callee's
+# std::ffi::c::Void (whether a variable may be bound to it is the callee's
 # signature's business, hir::imprint::BindingProblem).
 #
 # VARIABLES are the imprint variables of the functions the call is written

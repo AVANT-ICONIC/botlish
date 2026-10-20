@@ -1,8 +1,8 @@
-import mathish
+import std::mathish
 
 # An ordinary module function, a module-qualified call inside a closure, and a
 # module value used through a local of the same spelling.
 fn twice(v):
-    mathish::inc(mathish::inc(v))
+    std::mathish::inc(std::mathish::inc(v))
 inc = 5
-[twice(40), mathish::inc(1), inc]
+[twice(40), std::mathish::inc(1), inc]

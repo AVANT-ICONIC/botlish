@@ -18,7 +18,7 @@
 #             expected linear in S
 #   write+r   the same with the write-back result used (its struct and the
 #             copy's wrapper)
-#   linux     linux::read(-1, m) of an S-byte MutableBytes (EBADF: the
+#   linux     std::linux::read(-1, m) of an S-byte MutableBytes (EBADF: the
 #             kernel returns at once): the syscall path's own detach and
 #             exposure, for comparison (Linux x86-64 and AArch64)
 #
@@ -46,18 +46,18 @@ foreach {option value} $args {
         default { error "unknown option $option" }
     }
 }
-# linux::read's syscall: Linux x86-64 and AArch64 (each architecture's own
+# std::linux::read's syscall: Linux x86-64 and AArch64 (each architecture's own
 # transport, LINUX-SYSCALL-TRANSPORTS.md).
 set linux [expr {$::tcl_platform(os) eq "Linux" && $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 
-set prelude "import abi\nimport abi::bytes\nimport ffi::c\nimport byte\nimport list\nimport ffi_fixture\n[expr {$linux ? "import linux\n" : ""}]
+set prelude "import std::abi\nimport std::abi::bytes\nimport std::ffi::c\nimport std::byte\nimport std::list\nimport ffi_fixture\n[expr {$linux ? "import std::linux\n" : ""}]
 fn pattern(n: int):
     loop i from 0 to n:
-        byte::from_int(mod(i, 256))
+        std::byte::from_int(mod(i, 256))
 
 "
 
-# The program text of BODY. One calling linux::read is a direct module
+# The program text of BODY. One calling std::linux::read is a direct module
 # (DIRECT-MODULES.md): it calls the direct module linux from a function with
 # no context of its own; any other is not.
 proc programText {body} {
@@ -82,20 +82,20 @@ proc allocations {body} {
 # NAME -> {SETUP CALL [DISCARDED]}: SETUP binds the owner (S its size), CALL
 # is the foreign call; DISCARDED 1 makes it a statement.
 set shapes [dict create \
-    raw     {{p = ffi::c::null[ffi::c::UChar]()} {ffi_fixture::read(p, 0)} 0} \
-    read    {{data = abi::bytes::from_list(pattern(S))} {ffi_fixture::read[ffi::c::UChar](data, 0)} 0} \
-    {read m} {{m = abi::bytes::from_bytes(abi::bytes::from_list(pattern(S)))} {ffi_fixture::read[ffi::c::UChar](m, 0)} 0} \
-    write   {{m = abi::bytes::from_bytes(abi::bytes::from_list(pattern(S)))} {ffi_fixture::fill[ffi::c::UChar](m, 0, 0)} 1} \
-    write+r {{m = abi::bytes::from_bytes(abi::bytes::from_list(pattern(S)))} {abi::bytes::mutable_length(ffi_fixture::fill[ffi::c::UChar](m, 0, 0).out).value} 0}]
+    raw     {{p = std::ffi::c::null[std::ffi::c::UChar]()} {ffi_fixture::read(p, 0)} 0} \
+    read    {{data = std::abi::bytes::from_list(pattern(S))} {ffi_fixture::read[std::ffi::c::UChar](data, 0)} 0} \
+    {read m} {{m = std::abi::bytes::from_bytes(std::abi::bytes::from_list(pattern(S)))} {ffi_fixture::read[std::ffi::c::UChar](m, 0)} 0} \
+    write   {{m = std::abi::bytes::from_bytes(std::abi::bytes::from_list(pattern(S)))} {ffi_fixture::fill[std::ffi::c::UChar](m, 0, 0)} 1} \
+    write+r {{m = std::abi::bytes::from_bytes(std::abi::bytes::from_list(pattern(S)))} {std::abi::bytes::mutable_length(ffi_fixture::fill[std::ffi::c::UChar](m, 0, 0).out).value} 0}]
 if {$linux} {
-    dict set shapes linux {{m = abi::bytes::from_bytes(abi::bytes::from_list(pattern(S)))} {linux::read(abi::i32(-1), m).result} 0}
+    dict set shapes linux {{m = std::abi::bytes::from_bytes(std::abi::bytes::from_list(pattern(S)))} {std::linux::read(std::abi::i32(-1), m).result} 0}
 }
 
 # The program of SETUP and a loop of N iterations whose body is BODY (or
 # BODY then 0, when DISCARDED).
 proc program {setup body discarded n} {
     set inner [expr {$discarded ? "$body\n        0" : $body}]
-    return "fn f() -> int:\n    $setup\n    xs = loop i from 0 to $n:\n        $inner\n    list::length(xs)\n\nf()"
+    return "fn f() -> int:\n    $setup\n    xs = loop i from 0 to $n:\n        $inner\n    std::list::length(xs)\n\nf()"
 }
 
 puts "per call, ns (best of $runs runs of $n calls, minus the empty loop):"

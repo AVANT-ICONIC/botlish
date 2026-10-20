@@ -10,9 +10,9 @@
 #
 # An ordinary module: every pointer it hands C is noescape, so no call here
 # is direct (a foreign call is not direct by being foreign).
-import abi
-import abi::bytes
-import ffi::c
+import std::abi
+import std::abi::bytes
+import std::ffi::c
 
 extern c library "tcl9.0"
 
@@ -20,16 +20,16 @@ extern c library "tcl9.0"
 opaque struct Interp:
     tag: unit
 
-extern c fn Tcl_CreateInterp() -> ffi::c::Ptr[Interp] independent
+extern c fn Tcl_CreateInterp() -> std::ffi::c::Ptr[Interp] independent
 
 extern c fn Tcl_EvalEx(
-    interp: ffi::c::Ptr[Interp] noescape,
-    script: ffi::c::Ptr[ffi::c::Char] read noescape,
-    numBytes: ffi::c::Long,
-    flags: ffi::c::Int
-) -> ffi::c::Int
+    interp: std::ffi::c::Ptr[Interp] noescape,
+    script: std::ffi::c::Ptr[std::ffi::c::Char] read noescape,
+    numBytes: std::ffi::c::Long,
+    flags: std::ffi::c::Int
+) -> std::ffi::c::Int
 
-extern c fn Tcl_DeleteInterp(interp: ffi::c::Ptr[Interp] noescape) -> unit
+extern c fn Tcl_DeleteInterp(interp: std::ffi::c::Ptr[Interp] noescape) -> unit
 
 # TCL_OK, the status of a script that completed normally.
 fn ok() -> int:
@@ -37,5 +37,5 @@ fn ok() -> int:
 
 # Evaluates SCRIPT, the bytes of a NUL-terminated Tcl script (the C API's
 # `const char *`: Botlish adds no terminator), in INTERP: its Tcl status.
-fn eval(interp: ffi::c::Ptr[Interp], script: abi::bytes::Bytes) -> int:
+fn eval(interp: std::ffi::c::Ptr[Interp], script: std::abi::bytes::Bytes) -> int:
     interp.Tcl_EvalEx(script, -1, 0)

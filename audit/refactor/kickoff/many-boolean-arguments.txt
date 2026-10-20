@@ -6,9 +6,9 @@
 49 corpus programs, 44 compiled with warnings on; 14 library modules loaded by a one-line program, 14 loaded.
   did not compile: examples/surface/09-mutual-recursion.bot: deliberate rejection (UNBOUND)
   did not compile: examples/surface/10-duplicate-binding.bot: deliberate rejection (DUPLICATE)
-  did not compile: lib/io.bot: CONTEXT-FUNCTION-VALUE
-  did not compile: lib/list.bot: MISSING-IMPORT
-  did not compile: lib/mutable_array.bot: MISSING-IMPORT
+  did not compile: stdlib/io.bot: CONTEXT-FUNCTION-VALUE
+  did not compile: stdlib/list.bot: MISSING-IMPORT
+  did not compile: stdlib/mutable_array.bot: MISSING-IMPORT
 
 ## Census: functions with two or more ordinary parameters the checker proves bool (declared or trusted inferred)
 

@@ -20,7 +20,7 @@
 # (HASH-TABLE-EXPERIMENT.md, "Value semantics"; SPEC.md section 7;
 # impl/lpa.bot):
 #
-#   * the vectors grow in place (mutable_vector::push through the field
+#   * the vectors grow in place (std::mutable_vector::push through the field
 #     places `t.entries.ehash` ...), so an insert never builds a new Table;
 #   * every mutating helper takes the table as its last use and returns it;
 #     readers only read;
@@ -32,7 +32,7 @@
 #     three fields of Table only the last one read could move, and the
 #     other two would be shared, then copied by their next push (measured:
 #     2 vector shares and detaches per growth, building 1024 Int keys);
-#   * the empty vectors are `mutable_vector::from_list([])` inline in the
+#   * the empty vectors are `std::mutable_vector::from_list([])` inline in the
 #     literal: a constructor call is fresh, and the fields' declared types
 #     type the empty Lists' vectors.
 #
@@ -42,9 +42,9 @@
 #
 # policy: 7/10
 # drop: no
-import list
-import mutable_array
-import mutable_vector
+import std::list
+import std::mutable_array
+import std::mutable_vector
 
 struct Entries:
     ehash: MutableVector[int]
@@ -75,7 +75,7 @@ fn slots_for(expected: int, cap: int) -> int:
     slots_for(expected, cap * 2)
 
 fn empty_table(cap: int) -> Table:
-    Table {index: mutable_array::create(cap, -1), entries: Entries {ehash: mutable_vector::from_list([]), ekey: mutable_vector::from_list([]), eval: mutable_vector::from_list([])}}
+    Table {index: std::mutable_array::create(cap, -1), entries: Entries {ehash: std::mutable_vector::from_list([]), ekey: std::mutable_vector::from_list([]), eval: std::mutable_vector::from_list([])}}
 
 fn fresh(expected: int) -> Table:
     empty_table(slots_for(expected, min_slots()))
@@ -175,7 +175,7 @@ fn put(t: Table, key, value) -> Table errors IndexNotFound:
         t.entries.eval.swap(e, value)
         return t
     if full?(t):
-        return placed(Table {index: indexed(mutable_array::create(2 * slots(t), -1), t.entries.ehash, 0), entries: t.entries}, h, key, value)
+        return placed(Table {index: indexed(std::mutable_array::create(2 * slots(t), -1), t.entries.ehash, 0), entries: t.entries}, h, key, value)
     appended(t, i, h, key, value)
 
 # Removal is not part of the algorithm (SPEC.md section 3): T unchanged.
@@ -187,9 +187,9 @@ fn drop(t: Table, key) -> Table:
 
 # The table of KEYS[i] -> VALS[i], in order (a later duplicate's value wins).
 fn from_lists(keys: list, vals: list) -> Table errors IndexNotFound:
-    n = list::length(keys)
+    n = std::list::length(keys)
     fn fill(t: Table, i: int) -> Table errors IndexNotFound:
         if i >= n:
             return t
-        fill(put(t, list::at(keys, i), list::at(vals, i)), i + 1)
+        fill(put(t, std::list::at(keys, i), std::list::at(vals, i)), i + 1)
     fill(fresh(n), 0)

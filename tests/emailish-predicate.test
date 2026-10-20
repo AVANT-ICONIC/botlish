@@ -1,12 +1,12 @@
-# emailish-predicate.test -- web::emailish?, the source-defined proof-producing
-# predicate of the source-defined refinement web::Emailish (lib/web.bot,
+# emailish-predicate.test -- std::web::emailish?, the source-defined proof-producing
+# predicate of the source-defined refinement std::web::Emailish (stdlib/web.bot,
 # REFINEMENT-VALUES.md):
 #
 #   refined type Emailish = str
 #   fn emailish?(v: str) -> bool proves v: Emailish:
 #
 # History: the predicate was a Tcl-registered native type test of a
-# Tcl-registered named type (lib/web.tcl), first with a per-call-site
+# Tcl-registered named type (stdlib/web.tcl), first with a per-call-site
 # -native-body, then (R2, R2-ORDINARY-EMAILISH-PREDICATE.md) bridged to this
 # same Botlish function through -module-fn, with an Emailish? compatibility
 # alias. Its redundant re-check was folded because the compiler knew the
@@ -21,7 +21,7 @@
 source [file join [file dirname [file normalize [info script]]] helpers.tcl]
 
 proc emailishCall {address} {
-    return "import web\nweb::emailish?([Quote $address])\n"
+    return "import std::web\nstd::web::emailish?([Quote $address])\n"
 }
 
 # ADDRESS as a Botlish string literal.
@@ -45,39 +45,39 @@ foreach {label address expect} {
     empty-string                   ""                            false
     at-only                        @                             false
 } {
-    test emailish-predicate-parity-$label "web::emailish? on \"$address\" is $expect, on every backend" -body {
+    test emailish-predicate-parity-$label "std::web::emailish? on \"$address\" is $expect, on every backend" -body {
         sourceAgree [emailishCall $address]
     } -result [list value $expect]
 }
 
 # ---------------------------------------------------------------------------
-# The proof: a true result refines the argument to web::Emailish in the true
+# The proof: a true result refines the argument to std::web::Emailish in the true
 # branch only; the predicate is still an ordinary bool function.
 
-test emailish-predicate-refines {a successful web::emailish?(s) call refines s to Emailish in the true branch only} -body {
-    set hir [surface::compile {import web
+test emailish-predicate-refines {a successful std::web::emailish?(s) call refines s to Emailish in the true branch only} -body {
+    set hir [surface::compile {import std::web
 
 fn f(s: str):
-    if web::emailish?(s):
+    if std::web::emailish?(s):
         s
     else:
         s
 } -warnings off]
     lrange [hirRefTypes $hir s] end-2 end
-} -result {str {str[web::Emailish]} str}
+} -result {str {str[std::web::Emailish]} str}
 
 test emailish-predicate-ordinary-bool {the predicate's result is an ordinary bool value} -body {
-    sourceAgree {import web
+    sourceAgree {import std::web
 
-x = web::emailish?("a@b.io")
+x = std::web::emailish?("a@b.io")
 [x, not x]
 }
 } -result {value {[true, false]}}
 
 test emailish-predicate-signature {the HIR shows the proof contract on the function itself} -body {
-    set hir [surface::compile "import web\nweb::emailish?(\"a@b.io\")\n" -warnings off]
-    regexp -inline {block s[0-9]+ \(b[0-9]+ v:str\)[^\n]* declares bool proves b[0-9]+ v: str\[web::Emailish\]} [hir::format $hir]
-} -match glob -result {*proves b* v: str\[web::Emailish\]*}
+    set hir [surface::compile "import std::web\nstd::web::emailish?(\"a@b.io\")\n" -warnings off]
+    regexp -inline {block s[0-9]+ \(b[0-9]+ v:str\)[^\n]* declares bool proves b[0-9]+ v: str\[std::web::Emailish\]} [hir::format $hir]
+} -match glob -result {*proves b* v: str\[std::web::Emailish\]*}
 
 # ---------------------------------------------------------------------------
 # The redundant second check disappears through generic machinery: an exact
@@ -86,11 +86,11 @@ test emailish-predicate-signature {the HIR shows the proof contract on the funct
 # name, never the refinement fact alone. Pinned at the HIR level (`known`)
 # and in NIR (one call of the shared validator, not two).
 
-set redundant {import web
+set redundant {import std::web
 
 fn f(s: str) -> str:
-    if web::emailish?(s):
-        if web::emailish?(s):
+    if std::web::emailish?(s):
+        if std::web::emailish?(s):
             "yes"
         else:
             "no"
@@ -100,9 +100,9 @@ fn f(s: str) -> str:
 [f("someone@example.com"), f("nope")]
 }
 
-test emailish-predicate-repeatable {web::emailish? is proven repeatable} -body {
+test emailish-predicate-repeatable {std::web::emailish? is proven repeatable} -body {
     set hir [surface::compile $redundant -warnings off]
-    set block [hir::get $hir [lindex [hirFind $hir ref web::emailish?] 0] binding]
+    set block [hir::get $hir [lindex [hirFind $hir ref std::web::emailish?] 0] binding]
     set value [hir::get $hir [dict get [hir::binding $hir $block] declaredBy] value]
     hir::repeatable::explain $hir $value
 } -result {}
@@ -111,7 +111,7 @@ test emailish-predicate-redundant-check-known-hir {a redundant re-check inside i
     set hir [surface::compile $redundant -warnings off]
     set calls [lmap e [hirFind $hir call] {
         if {[hir::kind $hir [hir::get $hir $e callee]] ne "ref"
-                || [hir::get $hir [hir::get $hir $e callee] name] ne "web::emailish?"} continue
+                || [hir::get $hir [hir::get $hir $e callee] name] ne "std::web::emailish?"} continue
         hir::get $hir $e known
     }]
     set calls
@@ -120,8 +120,8 @@ test emailish-predicate-redundant-check-known-hir {a redundant re-check inside i
 test emailish-predicate-redundant-check-nir-shape {the redundant check compiles to exactly one call to the shared validator on cranelift, not two} -body {
     set hir [surface::compile $redundant -warnings off]
     set text [native::nir $hir]
-    regexp {func (\d+) "web::emailish\?"} $text -> isEmailishId
-    list [regexp -all {func \d+ "web::emailish\?"} $text] \
+    regexp {func (\d+) "std::web::emailish\?"} $text -> isEmailishId
+    list [regexp -all {func \d+ "std::web::emailish\?"} $text] \
          [regexp -all "= call(?:env)? $isEmailishId %" $text] \
          [sourceAgree $redundant]
 } -result {1 1 {value {["yes", "no"]}}}
@@ -136,7 +136,7 @@ proc refinedChecksHir {} {
     return [surface::readProgramFile [file join $::projectRoot bench refined-checks.bot] -warnings off]
 }
 
-test emailish-predicate-no-anonymous-callee-instance {no anonymous (unnamed) callee-position block instance exists for web::emailish?} -body {
+test emailish-predicate-no-anonymous-callee-instance {no anonymous (unnamed) callee-position block instance exists for std::web::emailish?} -body {
     set hir [refinedChecksHir]
     set spec [hir::specialize::analyze $hir]
     set anonymous 0
@@ -149,19 +149,19 @@ test emailish-predicate-no-anonymous-callee-instance {no anonymous (unnamed) cal
     set anonymous
 } -result 0
 
-test emailish-predicate-check-scanner-instance-count {every scanner helper (and web::emailish? itself) is one emitted instance plus, for the Int-keyed closures, the never-entered generic entry} -body {
+test emailish-predicate-check-scanner-instance-count {every scanner helper (and std::web::emailish? itself) is one emitted instance plus, for the Int-keyed closures, the never-entered generic entry} -body {
     set hir [refinedChecksHir]
     set spec [hir::specialize::analyze $hir]
     set counts [dict create]
     dict for {id instance} [dict get $spec instances] {
         if {$id ni [dict get $spec used]} continue
         set name [dict get $instance name]
-        if {$name in {web::emailish? char_at scan_while local_char? label_char? tld? domain?}} {
+        if {$name in {std::web::emailish? char_at scan_while local_char? label_char? tld? domain?}} {
             dict incr counts $name
         }
     }
     lmap name [lsort [dict keys $counts]] {list $name [dict get $counts $name]}
-} -result {{char_at 2} {domain? 2} {label_char? 1} {local_char? 2} {scan_while 4} {tld? 2} {web::emailish? 1}}
+} -result {{char_at 2} {domain? 2} {label_char? 1} {local_char? 2} {scan_while 4} {std::web::emailish? 1} {tld? 2}}
 
 test emailish-predicate-check-n-control {check's own n parameter range is [0,400]: check is check<int, int, str, str>} -body {
     set hir [refinedChecksHir]
@@ -186,7 +186,7 @@ test emailish-predicate-check-n-control {check's own n parameter range is [0,400
 
 test emailish-predicate-set-retained-once {refined-checks.bot: local_extra_chars' List and ImmutableSet are each constructed exactly once (module init), none per emailish? call} -body {
     set hir [refinedChecksHir]
-    set webPath [file normalize [file join $::projectRoot lib web.bot]]
+    set webPath [file normalize [file join $::projectRoot stdlib web.bot]]
     set line [lsearch -regexp [split [core::ReadFile $webPath] \n] {^local_extra_chars = }]
     incr line
     set sites {}
@@ -198,15 +198,15 @@ test emailish-predicate-set-retained-once {refined-checks.bot: local_extra_chars
         }
     }
     set text [native::nir $hir]
-    set body [lindex [regexp -inline {func \d+ "web::emailish\?"[^\n]*\n(.*?)\nend} $text] 1]
+    set body [lindex [regexp -inline {func \d+ "std::web::emailish\?"[^\n]*\n(.*?)\nend} $text] 1]
     list [lsort $sites] [regexp -all {op setfromlist} $body] [regexp -all {op listnew} $body]
 } -result {{{listnew 1} {setfromlisttotal 1}} 0 0}
 
-test emailish-predicate-user-block {a user-defined block calling web::emailish?, refining and re-checking, on every backend} -body {
-    sourceAgree {import web
+test emailish-predicate-user-block {a user-defined block calling std::web::emailish?, refining and re-checking, on every backend} -body {
+    sourceAgree {import std::web
 
 fn check(s: str):
-    if web::emailish?(s):
+    if std::web::emailish?(s):
         if s.emailish?():
             s
         else:

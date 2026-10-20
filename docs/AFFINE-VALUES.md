@@ -317,8 +317,8 @@ Every reachable affine-typed expression has exactly one consumer
   thunk that runs once), and a destructuring's read of an affine field out of
   its temporary;
 * **use** -- the handle of a resume (consume-and-replace behind the same
-  owner), of `coroutine::done?`, of a coroutine's start; a read of an
-  unrestricted field; `list::length`; a bare reference statement;
+  owner), of `std::coroutine::done?`, of a coroutine's start; a read of an
+  unrestricted field; `std::list::length`; a bare reference statement;
 * **discard** -- a statement whose value nobody receives (a fresh value is
   released right after it);
 * **rejected** -- everything that would duplicate, alias or hide ownership
@@ -474,7 +474,7 @@ A List literal's affine elements move into the List (`af-principal-list`:
 ### 29. List whole-value movement
 
 A List of affine values moves whole: bound to another name, passed as an
-argument, returned (`af-list-ownership`). `list::length` reads it without
+argument, returned (`af-list-ownership`). `std::list::length` reads it without
 moving it.
 
 ### 30. List recursive cleanup
@@ -489,8 +489,8 @@ coroutines in the order 2, 1, 4, 3). The same on an early exit
 ### 31. Unsupported affine List operations
 
 Every List operation that would copy an affine element out of a List that
-still owns it is `AFFINE-LIST-OPERATION-UNSUPPORTED`: `list::at`,
-`list::append`, iterating a List of affine values (`loop s in xs`: the loop
+still owns it is `AFFINE-LIST-OPERATION-UNSUPPORTED`: `std::list::at`,
+`std::list::append`, iterating a List of affine values (`loop s in xs`: the loop
 variable would be a second owner), and a collecting loop whose body
 produces affine values (its List would own them across abrupt exits)
 (`af-list-operations`). No List move-out API was added.
@@ -512,7 +512,7 @@ path that still owns it, at the end of that path inside the statement: an
 to hold it), a handler body's last statement, an infinite `loop`'s
 `break` (`hir::affine::PathReleases`). It is never released after the
 join: there a path that moved it may have given it to an owner that lives
-on -- a vector (`if not coroutine::done?(step): queue.push(step)`), or the
+on -- a vector (`if not std::coroutine::done?(step): queue.push(step)`), or the
 join's own value (`x = if c: step else: make(2)` -- which the earlier
 after-the-join release got wrong: it released the coroutine `x` owned). A
 path no statement ends cannot hold a release: a handled call completing
@@ -576,7 +576,7 @@ Releases are idempotent (a released handle's second release returns at
 once), so a maybe-moved binding and its new owner may both release, and they
 never change a value.
 
-### 36. `coroutine::done?` integration
+### 36. `std::coroutine::done?` integration
 
 `done?` is a use (`{use observe}`) of a handle however ownership reached it:
 a parameter, a destructured binding, a function's result, a generic HOF's
@@ -604,7 +604,7 @@ coroutine type is never cut to `any` by the aggregate type bound.
 
 ### 39. Equality/hash interaction
 
-`==`, `hash`, `immutable_set::from_list` and `immutable_set::contains` of an
+`==`, `hash`, `std::immutable_set::from_list` and `std::immutable_set::contains` of an
 affine value -- a handle, an affine struct, an affine List -- are
 `AFFINE-EQUALITY-UNSUPPORTED`: comparing or hashing would observe the
 identity of what it owns (`af-restrictions`; the coroutine fuzzer's
@@ -1121,7 +1121,7 @@ What this shows:
 What a growable vector of affine elements will need, and does not have yet:
 
 * **Move-out and replace operations.** Every element access today copies
-  (`list::at`) and is rejected for affine elements; a vector needs
+  (`std::list::at`) and is rejected for affine elements; a vector needs
   ownership-moving `take(i)`/`swap(i, v)`/`pop()` whose result is the one
   owner, and the analysis has no *partial-move* state for a container (the
   only partial move is a destructuring temporary's, which source cannot

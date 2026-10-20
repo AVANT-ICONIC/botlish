@@ -1,10 +1,10 @@
-# Eliminating `str::encode_utf8`'s read-only Lists
+# Eliminating `std::str::encode_utf8`'s read-only Lists
 
 Research report; its recommendation is now implemented (see
 "Implemented" below). Question:
-`web::uri_query_value?` (REFINEMENT-VALUES.md) materializes
-`str::encode_utf8(value)` as a fresh `List[Byte]` on every call and only ever
-reads it back with `list::length`/`list::at`. In `bench/refined-checks.bot`
+`std::web::uri_query_value?` (REFINEMENT-VALUES.md) materializes
+`std::str::encode_utf8(value)` as a fresh `List[Byte]` on every call and only ever
+reads it back with `std::list::length`/`std::list::at`. In `bench/refined-checks.bot`
 that alone is 400 of the 412 Lists. How do we get rid of such allocations,
 here and wherever the corpus has the same shape?
 
@@ -17,7 +17,7 @@ allocation-free way to *classify* one character: you can compare a slice
 with `==`, but not get a value you can do arithmetic or set membership on.
 Char literals (`'%'`) already exist. What is missing is one operation that
 produces a `UnicodeChar` from a String position:
-`str::char_at(s, i) -> UnicodeChar errors IndexNotFound`. With it,
+`std::str::char_at(s, i) -> UnicodeChar errors IndexNotFound`. With it,
 plus inline Cranelift fast paths for it and three neighboring ops, both
 corpus sites become allocation-free. Both get faster on native, are still
 proven repeatable, and give identical results on all four backends. I
@@ -30,7 +30,7 @@ recommend that, not a byte-level native and not a compiler-side elision.
 | `query-value-steady.bot` (`uri_query_value?` × 2000) | 2009 → 9 | 2011 → 11 | 356 → 238 µs (−33%) | 4509 → 4811 B |
 | `examples/refinement/refined-strings.bot` | 15 → 9 | 37 → 26 | 2.4 → 1.9 µs | 9393 → 11245 B |
 
-(The 9 remaining Lists are module-level literals and `byte::set`'s
+(The 9 remaining Lists are module-level literals and `std::byte::set`'s
 construction, built once.)
 
 ## Implemented
@@ -45,12 +45,12 @@ equality, never fails) when both operands of `==` are statically
 
 What changed:
 
-* **`core/strings.tcl`**: `str::char_at` (reference implementation and
+* **`core/strings.tcl`**: `std::str::char_at` (reference implementation and
   registration, `-bounds {index str 0 1}`).
 * **`hir/completions.tcl`**: `IndexBounds`' `str` family is now measured
   against the String's scalar length.
 * **`native/lower.tcl`**:
-  * `str::char_at` → `strcharat`, with `strcharatproven` as its proven
+  * `std::str::char_at` → `strcharat`, with `strcharatproven` as its proven
     sibling;
   * `chareq`.
 * **`native/src/nir.rs`**: the ops `StrCharAt`, `StrCharAtProven`, `CharEq`.
@@ -60,8 +60,8 @@ What changed:
   `StrCharAtProven` (ASCII byte load, helper otherwise) and `CharEq`. The
   now-unreachable helper-table entries for `StrLen`/`CharCodepoint` are
   removed.
-* **`lib/web.bot`**: `uri_query_value?` and `uri_escape_text` read
-  characters with `str::char_at`. `esc_char`/`esc_bytes` are replaced by
+* **`stdlib/web.bot`**: `uri_query_value?` and `uri_escape_text` read
+  characters with `std::str::char_at`. `esc_char`/`esc_bytes` are replaced by
   `pct`/`cont`/`esc_scalar`, and `esc_from` makes three tail calls.
 * **Docs**: README's intrinsics table, STDLIB-NAMESPACES.md's `str`
   inventory.
@@ -76,7 +76,7 @@ runs; same tools as everywhere else here):
 | `bench/refined-checks.bot` | 412 → 9 | 7223 → 6817 | 475 → 462 µs (noise) | 9371 → 11086 B |
 | `examples/refinement/refined-strings.bot` | 15 → 9 | 37 → 26 | 2.4 → 2.1 µs | 9393 → 11095 B |
 
-The inline `str::length` also shortens unrelated programs a little. In the
+The inline `std::str::length` also shortens unrelated programs a little. In the
 regenerated `audit/native-scalar-asm` corpus:
 * `examples/stdlib/csv.bot` goes 5968 → 5958 B with 4 fewer helper calls;
 * `ai_text_clean.bot` goes 2611 → 2547 B.
@@ -86,12 +86,12 @@ Tests:
 * **`tests/str-char-at.test` (new, 14 tests)**: the native's contract,
   four-way:
   * values over 1-, 2-, 3- and 4-byte scalars;
-  * equality with char literals, and agreement with `str::substring`;
+  * equality with char literals, and agreement with `std::str::substring`;
   * `IndexNotFound` for -1, the length, past the end, `""` and a BigInt;
   * the unhandled-obligation compile error;
   * the proven op under a guard, the checked op otherwise, and `chareq`
     instead of `veq`;
-  * a call through a first-class `str::char_at` value;
+  * a call through a first-class `std::str::char_at` value;
   * repeatability of a predicate over it;
   * zero allocations for a non-ASCII scan.
 * **`tests/native-uri-escape.test` (+12 tests and cases)**:
@@ -103,7 +103,7 @@ Tests:
   * an NIR pin: `valid_from?`, `upper_hex?` and `esc_from` read with
     `strcharatproven`, and none has `strutf8bytes`/`listlen`/`listget*`.
 
-  The three new allocation/NIR pins fail against the old `lib/web.bot` and
+  The three new allocation/NIR pins fail against the old `stdlib/web.bot` and
   pass against the new one.
 * **Updated structural pins.** These named the removed
   `esc_char`/`esc_bytes` or counted the old allocations; each keeps the
@@ -111,7 +111,7 @@ Tests:
   * `native-block-escape`: the refined-checks allocation pin
     (7220/6804/412 → 6814/6801/9) and the tail-call count (5 → 6);
   * `hir-callable-target` and `setcontains-equality-total`: the caller of
-    `web::is_unreserved` is now `esc_from`, still a direct call, and the
+    `std::web::is_unreserved` is now `esc_from`, still a direct call, and the
     edge is still `may_error=false`;
   * `virtual-construction`: the URI helper family, and Strings 47500/16000 →
     39500/2000;
@@ -161,15 +161,15 @@ Validation:
 
 I ran a site-level allocation report on every `bench/*.bot`,
 `examples/{stdlib,surface,linux,abi,refinement}/*.bot`. `09-mutual-recursion`
-is a deliberate compile error. I also grepped `lib/**/*.bot` for producers.
+is a deliberate compile error. I also grepped `stdlib/**/*.bot` for producers.
 
-**`str::encode_utf8` call sites in the corpus: four, two dynamic.**
+**`std::str::encode_utf8` call sites in the corpus: four, two dynamic.**
 
 | site | input | consumers | escapes? | allocations (native) |
 |---|---|---|---|---|
-| `lib/web.bot` `uri_query_value?`: `bytes = str::encode_utf8(value)` | whole argument | `list::length`, `list::at` in the lifted locals `valid_from?`/`upper_hex?` (it is passed to them as a trailing capture parameter) | no | one List per call: 400 in refined-checks (25.6 KB), 2009 in query-value-steady |
-| `lib/web.bot` `esc_char`: `bytes = str::encode_utf8(c)` | a one-character String `esc_from` just sliced out with `str::substring(text, i, i + 1)` | `list::length`, `list::at(bytes, 0)`, and forwarded to `esc_bytes` (again only length/at) | no | one List per *character*: 14000 in uri-steady (468 KB, 27% of its bytes), plus the 14000 one-character Strings it encodes (366 KB) |
-| `examples/linux/write.bot`, `context-hello.bot` | literal | `abi::bytes::from_list` | — | none: already a static constant (`native/lower.tcl` `StaticBytesCall`/`ConstantBytesOf`) |
+| `stdlib/web.bot` `uri_query_value?`: `bytes = std::str::encode_utf8(value)` | whole argument | `std::list::length`, `std::list::at` in the lifted locals `valid_from?`/`upper_hex?` (it is passed to them as a trailing capture parameter) | no | one List per call: 400 in refined-checks (25.6 KB), 2009 in query-value-steady |
+| `stdlib/web.bot` `esc_char`: `bytes = std::str::encode_utf8(c)` | a one-character String `esc_from` just sliced out with `std::str::substring(text, i, i + 1)` | `std::list::length`, `std::list::at(bytes, 0)`, and forwarded to `esc_bytes` (again only length/at) | no | one List per *character*: 14000 in uri-steady (468 KB, 27% of its bytes), plus the 14000 one-character Strings it encodes (366 KB) |
+| `examples/linux/write.bot`, `context-hello.bot` | literal | `std::abi::bytes::from_list` | — | none: already a static constant (`native/lower.tcl` `StaticBytesCall`/`ConstantBytesOf`) |
 
 `uri-steady`'s allocations are dominated by this: 14000 Lists from
 `esc_char`, 14000 Strings from the `substring` feeding it, of 38511 objects.
@@ -179,15 +179,15 @@ producers):
 
 | site | what is built | read by | allocations |
 |---|---|---|---|
-| `bench/lex-strategy.bot` `chars_of` | a List of one-character Strings, by `list::append` recursion | `loop c in` once, and `list::all?` | 164 Lists (132 appends + 32 news) |
-| `bench/source-checks.bot` `classify_leading` | a List of 4 Bools, by a collecting loop over a List of predicates | `list::get(flags, 0/2, ...)` | 105 Lists |
+| `bench/lex-strategy.bot` `chars_of` | a List of one-character Strings, by `std::list::append` recursion | `loop c in` once, and `std::list::all?` | 164 Lists (132 appends + 32 news) |
+| `bench/source-checks.bot` `classify_leading` | a List of 4 Bools, by a collecting loop over a List of predicates | `std::list::get(flags, 0/2, ...)` | 105 Lists |
 
 Both are deliberately higher-order list benchmarks. A List built by
 append-recursion or a collecting loop is a deforestation/fusion problem,
 not an `encode_utf8` one. `hir/escape.tcl` handles fixed-shape aggregates
 with constant indices only and explicitly not these (§2.4). They are out
 of scope here. `chars_of` is the same "characters of a String" shape,
-though, and a `str::char_at` loop would express it directly. Nothing else
+though, and a `std::str::char_at` loop would express it directly. Nothing else
 in `examples/stdlib` allocates per element in this shape. The remaining
 List allocations there are once-only literals.
 
@@ -198,14 +198,14 @@ summary:
 
 1. **String regions** (`hir/stringregion.tcl`, STRING-VIEW-ALLOCATIONS.md).
    * A `(base, start, end)` character range kept in registers. It is
-     produced by `str::substring` and literals.
-   * Consumers: `==` (`regioneq`), `str::length`, and
+     produced by `std::str::substring` and literals.
+   * Consumers: `==` (`regioneq`), `std::str::length`, and
      `is_tcl_alpha`/`is_tcl_alnum`.
    * It crosses calls only as a result, never as a parameter. It indexes by
      scalar, not byte.
    * STRING-VIEW-ALLOCATIONS.md lists "E. UTF-8 encode, `esc_char`'s
      `encode_utf8(c)`" as explicitly unchanged.
-   * It is why a `c = str::substring(value, i, i + 1); c == "%"` costs no
+   * It is why a `c = std::str::substring(value, i, i + 1); c == "%"` costs no
      allocation (§3a).
 2. **Short strings** (SHORT-STRING*.md, `native/shortstring.tcl`).
    * Packed-ASCII and one-scalar register tiers.
@@ -221,11 +221,11 @@ summary:
      missing.
    * That judgment predates `uri_query_value?` running 400–2000 times per
      program.
-   * The static-Bytes path covers only `abi::bytes::from_list` of a
+   * The static-Bytes path covers only `std::abi::bytes::from_list` of a
      statically known String.
 4. **Scalar replacement / parameter aggregates / virtual construction**
    (`hir/escape.tcl`, NATIVE-PARAM-AGGREGATE.md, M8A).
-   * Lists qualify only when fixed-shape, with every use `list::at` at a
+   * Lists qualify only when fixed-shape, with every use `std::list::at` at a
      constant index. Unknown-length Lists are excluded by design.
    * A captured binding is never virtual.
    * M8A plans must be flattened before any read, and its doc names
@@ -235,7 +235,7 @@ summary:
    * `hir/blockescape.tcl` covers closures only. It is what lambda-lifts
      `valid_from?`/`upper_hex?` and turns `bytes` into a trailing tagged
      parameter (`native/lower.tcl` `InternalFunction`).
-   * **No analysis proves "this List only flows to `list::length`/`list::at`
+   * **No analysis proves "this List only flows to `std::list::length`/`std::list::at`
      (dynamic index)/forwarding."** That is the missing piece for any
      compiler-side elision (§3c).
 6. **Exact value facts** (`hir/exactvalue.tcl`): bounded to 8 elements and
@@ -264,8 +264,8 @@ summary:
      capture parameter.
 
 **Unicode char literals** exist (UNICODE-CHAR-LITERALS.md: `'%'`,
-`byte::set(['-', '.', '_', '~'])`). But the only operation on a
-`UnicodeChar` is `char::scalar_value`. Nothing produces a `UnicodeChar`
+`std::byte::set(['-', '.', '_', '~'])`). But the only operation on a
+`UnicodeChar` is `std::char::scalar_value`. Nothing produces a `UnicodeChar`
 from a String: no char-at, no character iteration of a String, and no
 String→UnicodeChar conversion (that doc's "Deferred" list).
 
@@ -297,7 +297,7 @@ Partly, and that is the useful way to see it:
   scalar is unreserved or starts an uppercase `%XX`*.
 
 So yes: with a way to read a String position as a `UnicodeChar`, char
-literals (`c == '%'`) plus `char::scalar_value` arithmetic express both
+literals (`c == '%'`) plus `std::char::scalar_value` arithmetic express both
 sites with no List and no one-character String. That missing operation is
 the whole story. Using only today's natives, the one-character Strings
 can't be classified cheaply (§3a).
@@ -310,11 +310,11 @@ of this. Code sizes are `native::codeSize`.
 
 ### (a) Source-only rewrite with existing natives
 
-Two exact rewrites over `str::substring(value, i, i + 1)` per character,
+Two exact rewrites over `std::str::substring(value, i, i + 1)` per character,
 relying on the ASCII equivalence above. Patches:
 `prototype/source-only-sets.patch`, `source-only-equality.patch`.
 
-| `query-value-steady` | current | A1: `immutable_set::contains` of one-character Strings | A2: `c == "A" or c == "B" or …` (66/16-way `==` chains) |
+| `query-value-steady` | current | A1: `std::immutable_set::contains` of one-character Strings | A2: `c == "A" or c == "B" or …` (66/16-way `==` chains) |
 |---|---|---|---|
 | Lists / Strings | 2009 / 0 | 11 / 17667 | 9 / 0 |
 | best run | 358 µs | 4224 µs | 3070 µs |
@@ -322,7 +322,7 @@ relying on the ASCII equivalence above. Patches:
 | all four backends agree, repeatable | yes | yes | yes |
 
 * **A1** removes the List but allocates one String per classified character.
-  `immutable_set::contains` is not a region consumer, so the slice
+  `std::immutable_set::contains` is not a region consumer, so the slice
   materializes (`shorttostr`/`substr` sites). The set is also a linear
   `equal` scan of 66 elements (`rt_set_contains`). It is 12× slower.
 * **A2** is allocation-free, which confirms `==` on a slice is a region
@@ -333,17 +333,17 @@ Verdict: not viable. The List version is already fast on ASCII: an inline
 `listgetproven` plus a raw compare per byte. Any replacement has to beat
 that, not merely allocate less.
 
-### (b) A library/native addition: `str::char_at`
+### (b) A library/native addition: `std::str::char_at`
 
-**Semantics.** `str::char_at(s: str, i: int) -> UnicodeChar errors
+**Semantics.** `std::str::char_at(s: str, i: int) -> UnicodeChar errors
 IndexNotFound`: the Unicode scalar at character index `i` (the index space
-of `str::length`/`str::substring`), for `0 <= i < str::length(s)`. Any other
+of `std::str::length`/`std::str::substring`), for `0 <= i < std::str::length(s)`. Any other
 Int fails with the declared builtin `IndexNotFound`, exactly like
-`list::at`. It is total over its domain, context-free, and never allocates
+`std::list::at`. It is total over its domain, context-free, and never allocates
 (a `UnicodeChar` is an immediate). Registration:
 
 ```tcl
-core::native::register str::char_at -arity 2 -impl core::strings::charAt \
+core::native::register std::str::char_at -arity 2 -impl core::strings::charAt \
     -param-types {str int} -result-type UnicodeChar -runtime {char-index range-check} \
     -context-free 1 -errors IndexNotFound -bounds {index str 0 1}
 ```
@@ -363,8 +363,8 @@ core::native::register str::char_at -arity 2 -impl core::strings::charAt \
     load; otherwise a forward decode from byte 0, the same seek `rt_substr`
     already pays and records in `utf8SeekBytes`.
   * Index-bounds proofs: one line in `hir::completions::IndexBounds`
-    (the `str` family gap above), so `i >= str::length(value)` guards prove
-    the read exactly as `list::length` guards prove `list::at` today.
+    (the `str` family gap above), so `i >= std::str::length(value)` guards prove
+    the read exactly as `std::list::length` guards prove `std::list::at` today.
 * **Inline Cranelift fast paths** (`native/src/codegen/clif.rs`). These turn
   out to be what decides it. A first version without them was
   allocation-free but *slower* than the List (451 vs 358 µs). The NIR
@@ -384,34 +384,34 @@ core::native::register str::char_at -arity 2 -impl core::strings::charAt \
 
 **Library source after the change** (the `uri_query_value?` half; the
 predicate keeps `is_unreserved(b: Byte)`; `v` is proven 0..127 by the `v >
-127` guard plus `char::scalar_value`'s `nonneg` range, so it passes as a
+127` guard plus `std::char::scalar_value`'s `nonneg` range, so it passes as a
 `Byte`):
 
 ```botlish
 fn uri_query_value?(value: str) -> bool proves value: UriQueryValue:
 
     fn upper_hex?(i):
-        if i < 0 or i >= str::length(value):
+        if i < 0 or i >= std::str::length(value):
             false
         else:
-            v = char::scalar_value(str::char_at(value, i))
+            v = std::char::scalar_value(std::str::char_at(value, i))
             if v > 127:
                 false
             else:
-                ascii::is_digit(v) or (v >= 65 and v <= 70)
+                std::ascii::is_digit(v) or (v >= 65 and v <= 70)
 
     fn valid_from?(i):
-        if i < 0 or i >= str::length(value):
+        if i < 0 or i >= std::str::length(value):
             true
         else:
-            c = str::char_at(value, i)
+            c = std::str::char_at(value, i)
             if c == '%':
                 if upper_hex?(i + 1) and upper_hex?(i + 2):
                     valid_from?(i + 3)
                 else:
                     false
             else:
-                v = char::scalar_value(c)
+                v = std::char::scalar_value(c)
                 if v > 127:
                     false
                 else:
@@ -428,18 +428,18 @@ For `uri_escape_text`, `esc_char`/`esc_bytes` are replaced:
 * the non-ASCII case computes the UTF-8 bytes arithmetically (`bit_or(192,
   shift_right(v, 6))`, continuation bytes `bit_or(128, bit_and(shift_right(v,
   k), 63))`, 2/3/4-byte forms by the 0x800/0x10000 thresholds);
-* an unreserved ASCII character appends `str::substring(text, i, i + 1)`;
+* an unreserved ASCII character appends `std::str::substring(text, i, i + 1)`;
 * anything else appends `pct(v)`.
 
 The three outcomes must be three tail calls, not one `piece = if …` joined
-before a single `str::concat(acc, piece)`. The joined form produced 16500
+before a single `std::str::concat(acc, piece)`. The joined form produced 16500
 StringPlan nodes instead of 8500 and was 50% slower (3276 vs 2188 µs): the
 `if` value forces every branch's piece into a plan node. That cost is M8A's,
 not this design's, but it is a trap a reviewer should know about.
 
 **Results** (`results/final-batch.txt`, best of 10 × 20 runs):
 
-| | current | `str::char_at` + inline paths |
+| | current | `std::str::char_at` + inline paths |
 |---|---|---|
 | query-value-steady: Lists, objects | 2009, 2011 | 9, 11 |
 | query-value-steady: best | 355.5 µs | 237.5 µs |
@@ -455,8 +455,8 @@ not this design's, but it is a trap a reviewer should know about.
 The remaining 2000 Strings in uri-steady are the results themselves.
 
 **Repeatability.** `hir::repeatable::explain` is `""` (proven) for both
-`web::uri_query_value?` and `web::uri_escape_text` before and after.
-`str::char_at` is `-context-free 1`; `char::scalar_value` already is. The
+`std::web::uri_query_value?` and `std::web::uri_escape_text` before and after.
+`std::str::char_at` is `-context-free 1`; `std::char::scalar_value` already is. The
 refined-checks inner `emailish?` stays decided.
 
 **Parity.** `programs/escape-parity.bot` covers:
@@ -496,8 +496,8 @@ gain `char_at`. They would be updated with the change.
   arithmetic UTF-8 encoder (`esc_scalar`), which `esc_char` used to get for
   free from the List.
 
-A **byte-level native instead** (`str::utf8_byte_at(s, i) -> Byte` plus
-`str::utf8_byte_count(s)`) would keep the source byte-shaped and give O(1)
+A **byte-level native instead** (`std::str::utf8_byte_at(s, i) -> Byte` plus
+`std::str::utf8_byte_count(s)`) would keep the source byte-shaped and give O(1)
 non-ASCII indexing. But it needs:
 * a new size form (`blen`) in `hir/cardinality.tcl` and `IndexBounds` to
   prove its reads;
@@ -517,12 +517,12 @@ Not prototyped. What it would take:
 1. **A non-escape proof for a dynamically indexed List.** No such analysis
    exists. `hir/escape.tcl`'s use classifier (`UseTag`/`NativeUseTag`) and
    `Eligible` fixpoint are the closest scaffold. They would need to accept
-   `list::at` at a *dynamic* index, `list::length`, and forwarding into an
+   `std::list::at` at a *dynamic* index, `std::list::length`, and forwarding into an
    exact callee's parameter *including a lifted capture* (today a capture is
    never virtual). Soundness rests on Lists being immutable values with no
    identity: if every use of `bytes` is a length or element read (or a
    forward to a parameter all of whose uses are such reads), no code can
-   observe whether a List object exists. `list::at`'s `IndexNotFound`
+   observe whether a List object exists. `std::list::at`'s `IndexNotFound`
    completion must be preserved: the proven/unproven split stays, measured
    against the byte length.
 2. **A representation change for the forwarded parameter.** The String
@@ -533,7 +533,7 @@ Not prototyped. What it would take:
 3. **Two new NIR ops**: `strbytelen` (exists, but as a helper call: needs an
    inline path) and an inline `strbyteat`. Plus the rewrite `listlen(bytes)
    → strbytelen(s)`, `listget[proven](bytes, i) → strbyteat(s, i)`, keyed on
-   `str::encode_utf8`'s resolved identity, as `ConstantBytesOf` already
+   `std::str::encode_utf8`'s resolved identity, as `ConstantBytesOf` already
    matches it.
 
 It would fix `uri_query_value?` without a source change, with O(1)
@@ -551,18 +551,18 @@ non-ASCII seek.
 
 ## 4. Recommendation
 
-1. **Add `str::char_at`** as specified in (b), with:
+1. **Add `std::str::char_at`** as specified in (b), with:
    * the one-line `hir::completions::IndexBounds` `str`-family fix;
    * the four inline Cranelift paths (`StrLen`, `CharCodepoint`,
      `StrCharAtProven`, `UnicodeChar` `VEq`).
 
    The inline paths are not optional: without them the change is a
    regression on time.
-2. **Rewrite `lib/web.bot`'s `uri_query_value?` and `uri_escape_text`**
+2. **Rewrite `stdlib/web.bot`'s `uri_query_value?` and `uri_escape_text`**
    over it, as above. Keep three tail calls in `esc_from`, delete
-   `esc_char`/`esc_bytes`, and update `lib/web.bot`'s header comment
-   (which describes `esc_char`'s `List[Byte]` typing). `str::encode_utf8`
-   stays for genuinely byte-oriented consumers (`abi::bytes::from_list`).
+   `esc_char`/`esc_bytes`, and update `stdlib/web.bot`'s header comment
+   (which describes `esc_char`'s `List[Byte]` typing). `std::str::encode_utf8`
+   stays for genuinely byte-oriented consumers (`std::abi::bytes::from_list`).
 3. **Pins:**
    * a `tests/native-uri-escape.test`-style parity test over
      `programs/escape-parity.bot`'s inputs, on all four backends;
@@ -572,7 +572,7 @@ non-ASCII seek.
      (proves the bound and the absence of the List);
    * `hir::repeatable::explain` = `""` for both functions (already pinned
      for `uri_query_value?`; add `uri_escape_text`);
-   * `str::char_at` contract tests: out-of-range and negative index →
+   * `std::str::char_at` contract tests: out-of-range and negative index →
      `IndexNotFound` on all backends, astral scalars, empty String;
    * `ops.rs` unit tests for the ASCII and non-ASCII helper paths;
    * a GC-stress run of the escape tests;

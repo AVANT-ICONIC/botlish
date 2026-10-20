@@ -1,7 +1,7 @@
 # COUNTERFACTUAL (POST-MODULE-STATIC-EXACT-TARGET-CENSUS.md) -- audit-only,
-# NEVER applied to the tree's own lib/web.bot and never a proposed source
+# NEVER applied to the tree's own stdlib/web.bot and never a proposed source
 # change. The hunks are byte-identical to the post-R2.a census's
-# audit/post-r2a-dynamic-census/counterfactual/exact-target.diff (lib/web.bot
+# audit/post-r2a-dynamic-census/counterfactual/exact-target.diff (stdlib/web.bot
 # is unchanged since that census): scan_while(start, predicate) hand-split
 # into the two per-target loops an exact-target lowering would produce
 # (scan_local -> local_char?, scan_alpha -> is_tcl_alpha), applied only in a
@@ -9,8 +9,8 @@
 # compiler's response to syntactically exact predicate targets can be
 # measured. Nothing else changes: same module statics, same traversal, same
 # domain algorithm, same char_at.
---- a/lib/web.bot
-+++ b/lib/web.bot
+--- a/stdlib/web.bot
++++ b/stdlib/web.bot
 @@ -123,15 +123,22 @@
      # are an untyped-parameter Botlish function and a native, neither of
      # which is a "typed callable" that rule would block from flowing

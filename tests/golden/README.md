@@ -1,7 +1,7 @@
 # Golden suites: Botlish-native tests
 
 `tests/golden/*.bot` are test suites written in Botlish itself, with the
-ordinary library `lib/test.bot` (namespace `test`). They are the validation
+ordinary library `stdlib/test.bot` (namespace `test`). They are the validation
 sample of GOLDEN-TEST-FRAMEWORK.md: about a hundred tests of the Tcl suite,
 ported deliberately, each one recorded in `manifest.tsv` beside the Tcl test
 it comes from. The Tcl tests stay authoritative: nothing here replaces,
@@ -38,27 +38,27 @@ A suite is an ordinary entry program:
 
 ```botlish
 # values.bot -- ordinary successful value tests (manifest: category values).
-import compiler
-import test
+import std::compiler
+import std::test
 
 # Declarations the tests need: struct, enum, error, refined type, trait and
 # context struct declarations are top-level only (a `static compile:` block
 # cannot hold one), so they live here, named after their test.
 
 fn register_calls_tests():
-    fn calls_basic() errors compiler::CompilerError:
+    fn calls_basic() errors std::compiler::CompilerError:
         static compile:
             fn add(a, b):
                 a + b
             add(20, 22)
-    test::value("calls-basic", 42, calls_basic)
+    std::test::value("calls-basic", 42, calls_basic)
 
 fn register_values_tests():
     register_calls_tests()
 
-with context test::suite()
+with context std::test::suite()
 register_values_tests()
-test::report()
+std::test::report()
 ```
 
 * One registration function per Tcl test file a suite ports from
@@ -68,14 +68,14 @@ test::report()
 * A test's name is the Tcl test's name (`calls-basic`), with a suffix when
   one Tcl test becomes several golden tests (`calls-basic/negative`).
 * A body is a nested function of no arguments declaring
-  `errors compiler::CompilerError` whose whole body is a `static compile:`
+  `errors std::compiler::CompilerError` whose whole body is a `static compile:`
   block around the code under test. If the compiler accepts the block, the
   body is the plain code (the boundary leaves nothing at run time); if it
-  rejects it, the body completes with `compiler::CompilerError`, which the
+  rejects it, the body completes with `std::compiler::CompilerError`, which the
   helper turns into a reported mismatch (or the expected outcome, for
-  `test::rejects`). A mistake in one test's code is then that test's
+  `std::test::rejects`). A mistake in one test's code is then that test's
   failure, not a suite that does not build.
-* The suite ends with `test::report()`: the program's value is the report.
+* The suite ends with `std::test::report()`: the program's value is the report.
 * **Layout is free.** Write a body where it reads best: nested in its
   registration function (it may capture the function's inputs), or at the
   top level. The compiler decides independent blocks together whatever their
@@ -90,18 +90,18 @@ test::report()
 
 | helper | the test passes when |
 |---|---|
-| `test::value(name, expected, body)` | the body's value `== expected` |
-| `test::holds(name, description, predicate, body)` | `predicate(value)` is true |
-| `test::rejects(name, code, body)` | the block is rejected with that `compiler::DiagnosticCode` |
-| `test::rejects_at(name, code, line, column, body)` | ... reported at that line and column of the suite file |
-| `test::rejects_any(name, body)` | the block is rejected |
-| `test::rejects_message(name, code, message, body)` | ... with exactly that message (when the wording is the property) |
-| `test::rejects_containing(name, code, fragment, body)` | ... with a message containing the fragment |
-| `test::case(name, check)` | `check()`, a `Fn{args: [], return: test::Match}`, returns a match (`test::passed()`, or `test::mismatch(expected, actual, detail)`; `test::equal`, `test::satisfies` and `test::diagnostic` compute one) |
+| `std::test::value(name, expected, body)` | the body's value `== expected` |
+| `std::test::holds(name, description, predicate, body)` | `predicate(value)` is true |
+| `std::test::rejects(name, code, body)` | the block is rejected with that `std::compiler::DiagnosticCode` |
+| `std::test::rejects_at(name, code, line, column, body)` | ... reported at that line and column of the suite file |
+| `std::test::rejects_any(name, body)` | the block is rejected |
+| `std::test::rejects_message(name, code, message, body)` | ... with exactly that message (when the wording is the property) |
+| `std::test::rejects_containing(name, code, fragment, body)` | ... with a message containing the fragment |
+| `std::test::case(name, check)` | `check()`, a `Fn{args: [], return: std::test::Match}`, returns a match (`std::test::passed()`, or `std::test::mismatch(expected, actual, detail)`; `std::test::equal`, `std::test::satisfies` and `std::test::diagnostic` compute one) |
 
 Compare a diagnostic's `code` (and `primary` location, when the Tcl test pins
 it), never its message, unless the Tcl test is about the wording: then use
-`test::rejects_message` (or `test::rejects_containing` for a fragment).
+`std::test::rejects_message` (or `std::test::rejects_containing` for a fragment).
 
 ## Writing the code under test
 
@@ -116,7 +116,7 @@ it), never its message, unless the Tcl test is about the wording: then use
   expressible (`MissingImport`) only when the suite does not import that
   namespace.
 * **Run-time errors.** A body may complete only normally or with
-  `compiler::CompilerError`: every other error it may raise must be handled
+  `std::compiler::CompilerError`: every other error it may raise must be handled
   inside the block, converting the outcome to a value the test compares
   (`on IndexNotFound: "IndexNotFound"`, `on Failed {code}: code`). An error
   that escapes the block anyway is the block's own rejection
@@ -189,11 +189,11 @@ of their own, so that the main suite keeps its full backend matrix (run.tcl
 used to stand cranelift in for a whole suite's cranelift-generic run when one
 program reported `NATIVE UNSUPPORTED struct-shape`; it now reports it). A
 suite whose tests make live syscalls through one architecture's own
-transport (`linux::abi::x86_64::syscall`) says
+transport (`std::linux::abi::x86_64::syscall`) says
 `# golden-host: linux-x86_64 -- REASON` (`linux-aarch64` for the AArch64
 transport): on another host it is compiled but not run (status
 `host-excluded`). A suite whose syscalls go through the portable wrappers
-(`linux::write`, `linux::read`, `linux::io`) needs no host: they use the
+(`std::linux::write`, `std::linux::read`, `std::linux::io`) needs no host: they use the
 target architecture's transport (LINUX-SYSCALL-TRANSPORTS.md), and its Tcl
 originals carry `nativeLinux`. A suite that imports a Linux namespace is a
 Linux program: on a host of another operating system (macOS arm64) run.tcl
@@ -219,7 +219,7 @@ The columns, tab-separated, with a header row:
 | `also` | further classes, comma-separated, or `-` |
 | `static` | yes if the body needs its `static compile:` boundary to express the test (a rejection, or an escaping error), else `convention` |
 | `handler` | yes if the body handles a run-time error explicitly |
-| `api` | simple (a library helper), helper (a suite-local registration helper) or custom (`test::case`) |
+| `api` | simple (a library helper), helper (a suite-local registration helper) or custom (`std::test::case`) |
 | `verbosity` | clearer, similar or more-verbose than the Tcl test |
 | `strength` | equal, weaker (say why in notes), stronger, or split (the Tcl test also observes what only Tcl can) |
 | `old_lines`, `new_lines` | approximate sizes |
@@ -235,7 +235,7 @@ The columns, tab-separated, with a header row:
 Classes: DIRECT (the Tcl program, as a body, with a simple helper),
 STATIC-COMPILE-ADAPTATION (a separate rejected program became a rejected
 block in the suite), EXPLICIT-ERROR-HANDLER (a run-time error expectation
-written as a handler in the body), CUSTOM-MATCHER (`test::case`),
+written as a handler in the body), CUSTOM-MATCHER (`std::test::case`),
 HARNESS-DIFFERENCE (the property is observed differently: a location in the
 suite file, a value computed at registration, ...), NOT-EXPRESSIBLE,
 OLD-TEST-OVERSPECIFIED (the Tcl test pins an incidental detail the port

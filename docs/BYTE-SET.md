@@ -1,14 +1,14 @@
-# byte::set: UnicodeChar -> checked Byte -> ImmutableSet[Byte]
+# std::byte::set: UnicodeChar -> checked Byte -> ImmutableSet[Byte]
 
 ## Outcome
 
-`byte::set(chars: List[UnicodeChar]) -> ImmutableSet[Byte]` is implemented
-in `lib/byte.bot`, as ordinary Botlish library code:
+`std::byte::set(chars: List[UnicodeChar]) -> ImmutableSet[Byte]` is implemented
+in `stdlib/byte.bot`, as ordinary Botlish library code:
 
 ```botlish
 fn set(chars: List[UnicodeChar]) -> ImmutableSet[Byte]:
     bytes = loop c in chars:
-        Byte(char::codepoint(c))
+        Byte(std::char::codepoint(c))
     immutable_set_from_list(bytes)
 ```
 
@@ -22,30 +22,30 @@ collects each iteration's own body value into the result, composing
 unchanged with `break`/`continue`/`return`/error propagation — was added to
 the existing loop family (not a second control-flow subsystem), lowered
 directly to existing HIR/core-IR/NIR primitives with no new runtime object
-model. This closed a real gap: without it, `byte::set` would have needed
+model. This closed a real gap: without it, `std::byte::set` would have needed
 either recursion or hand-rolled index/accumulator plumbing, both explicitly
 forbidden by the brief.
 
-Everything else — `char::codepoint`, checked `Byte(...)` construction,
+Everything else — `std::char::codepoint`, checked `Byte(...)` construction,
 `immutable_set_from_list` — is pre-existing, unmodified machinery, reused
 exactly as documented. The one real gap the milestone's own audit uncovered
 and closed was **native (Cranelift) support for checked construction of a
 source-defined *interval*-domain integer type over a genuinely dynamic
 value** — previously `NATIVE UNSUPPORTED` for every such type, Byte
 included (SOURCE-DEFINED-INTEGER-DOMAINS.md's own documented, pre-existing
-limitation). `byte::set` needs exactly this (`char::codepoint(c)` is never a
+limitation). `std::byte::set` needs exactly this (`std::char::codepoint(c)` is never a
 compile-time constant), so it was implemented generically, with no
 Byte-specific native path.
 
 Full regression, native/Cranelift parity, and GC stress are reported below
 under "Full regression / GC stress".
 
-## `byte::set`'s own source, reviewed against item 65's question
+## `std::byte::set`'s own source, reviewed against item 65's question
 
 > Would we want ordinary Botlish programmers to write this algorithm this
 > way?
 
-Yes. `bytes = loop c in chars: Byte(char::codepoint(c))` reads exactly like
+Yes. `bytes = loop c in chars: Byte(std::char::codepoint(c))` reads exactly like
 the algorithm it implements — for every char, observe its codepoint,
 checked-construct a Byte — with no recursion, no manual index, no repeated
 domain-range checks, and no branch ladder. `immutable_set_from_list(bytes)`
@@ -60,7 +60,7 @@ For every input `UnicodeChar` `c`:
 
 ```
 c
-    |  char::codepoint(c)         -- total, never fails (core/unicodechar.tcl)
+    |  std::char::codepoint(c)         -- total, never fails (core/unicodechar.tcl)
     v
 n : Int                            -- the ordinary Unicode scalar value
     |  Byte(n)                    -- explicit checked construction
@@ -79,12 +79,12 @@ value unchanged (now refined `Byte`) or raises; there is no third outcome.
 ## Existing checked-constructor mechanism (item 5, architecture Q1)
 
 **Byte's own checked constructor already existed** (`type Byte = Int in
-0..255`, `lib/byte.bot`, from SOURCE-DEFINED-INTEGER-DOMAINS.md): every
+0..255`, `stdlib/byte.bot`, from SOURCE-DEFINED-INTEGER-DOMAINS.md): every
 source-declared integer-domain type automatically gets a native constructor
 `NAME(x)` via `core::type::declareIntConstructor` -> `core::type::
 CheckedConstruct`, the one generic implementation every such type shares
-(never a per-type native). `byte::set` calls this exact, pre-existing
-mechanism (`Byte(char::codepoint(c))`) — no new checked-constructor
+(never a per-type native). `std::byte::set` calls this exact, pre-existing
+mechanism (`Byte(std::char::codepoint(c))`) — no new checked-constructor
 machinery, no second spelling, no Byte-specific conversion helper was
 added anywhere in this milestone.
 
@@ -96,10 +96,10 @@ Cranelift/cranelift-generic for *any* value, even a value trivially in
 range like `Byte(0)` — the constructor had no native lowering at all
 (SOURCE-DEFINED-INTEGER-DOMAINS.md's own documented limitation: "Cranelift's
 pre-existing limitation — checked constructors have no native lowering —
-carries over unchanged"). `byte::set`'s own `Byte(char::codepoint(c))` is
-exactly the case that limitation would have blocked: `char::codepoint(c)`
+carries over unchanged"). `std::byte::set`'s own `Byte(std::char::codepoint(c))` is
+exactly the case that limitation would have blocked: `std::char::codepoint(c)`
 is a genuinely dynamic value (never a compile-time constant for a runtime
-`List[UnicodeChar]` argument), so `byte::set` could not have compiled
+`List[UnicodeChar]` argument), so `std::byte::set` could not have compiled
 natively at all without fixing this.
 
 **The fix** (`native/lower.tcl`'s new `CheckedIntDomainConstruct`, ~45
@@ -141,7 +141,7 @@ comparisons against two ordinary Int constants, expressible with zero new
 machinery. An exact-domain check (`HighNibble`'s 16-value finite set)
 would need either a chain of equality comparisons or an embedded constant
 table — a real, separate piece of engineering this milestone's own
-motivating consumer (`byte::set`) never needs, since it only ever
+motivating consumer (`std::byte::set`) never needs, since it only ever
 constructs `Byte`. `HighNibble(...)` (and any other exact-domain type)
 therefore remains exactly as unsupported on Cranelift/cranelift-generic
 as it always was — confirmed directly, not merely asserted:
@@ -151,26 +151,26 @@ still raising `{NATIVE UNSUPPORTED {native HighNibble}}`.
 
 ## Failure/completion semantics (item 8, architecture Q4)
 
-`byte::set` is not total. Any input `UnicodeChar` whose scalar value falls
+`std::byte::set` is not total. Any input `UnicodeChar` whose scalar value falls
 outside `0..255` propagates the *ordinary*, pre-existing checked-constructor
 failure — `{CORE SEMANTIC RANGE}` — the exact same completion `Byte(256)`
-already raised before this milestone, with no `byte::set`-specific error
+already raised before this milestone, with no `std::byte::set`-specific error
 kind, wrapper, or `Result` type invented. On interp/compile the message
 names the actual out-of-range value (`"Byte: 256 is not a valid Byte"`); on
 Cranelift/cranelift-generic the message is necessarily generic (`"Byte:
 value is not a valid Byte"`, since the value cannot be rendered into a
 compile-time-fixed NIR `raise` message) — the *kind* (`RANGE`) is identical
 on every backend; only the interp/compile message additionally names the
-value. `byte::set(['A', 'Ā', 'B'])` fails at `'Ā'`, the first invalid
+value. `std::byte::set(['A', 'Ā', 'B'])` fails at `'Ā'`, the first invalid
 element in left-to-right order, with no partial result ever constructed or
 observable (the failing checked construction aborts the whole `loop`
 before `immutable_set_from_list` is ever reached).
 
 ## Why this is not UTF-8
 
-`byte::set(['é'])` builds `ImmutableSet[Byte]{233}` — one Byte, the Unicode
+`std::byte::set(['é'])` builds `ImmutableSet[Byte]{233}` — one Byte, the Unicode
 *scalar* value of `'é'` (U+00E9) — never the two UTF-8 encoding bytes
-`0xC3 0xA9` (195, 169). The whole pipeline (`char::codepoint` ->
+`0xC3 0xA9` (195, 169). The whole pipeline (`std::char::codepoint` ->
 `core/unicodechar.tcl`'s own scalar-value accessor; `Byte(...)` -> a plain
 range check against `0..255`) never touches UTF-8 encoding at any point;
 `encode_utf8`/`strutf8bytes` (the actual UTF-8 byte-list operation,
@@ -179,11 +179,11 @@ range check against `0..255`) never touches UTF-8 encoding at any point;
 
 ## Iteration audit (items 16-27)
 
-**8. Could `byte::set` be written idiomatically using the pre-existing
+**8. Could `std::byte::set` be written idiomatically using the pre-existing
 loop syntax?** No — audited directly (see "Outcome" above): the
 pre-existing `loop:` has no per-element binding and no way to carry a
 value out of the loop body except via an explicit, single, unconditional
-`break`. Writing `byte::set` with it would have required either recursion
+`break`. Writing `std::byte::set` with it would have required either recursion
 (forbidden by item 17) or a hand-maintained index/accumulator pair built
 from `list_get`/`list_length` plus a `MutableArray`-based mutable box —
 exactly the "manual index plumbing merely because the surface language
@@ -236,7 +236,7 @@ verified directly for `listloop` too:
 `loop-in-break-outside-callable-boundary`,
 `loop-in-continue-outside-callable-boundary`.
 
-**15. Was recursion used?** No — neither in `byte::set` itself nor in any
+**15. Was recursion used?** No — neither in `std::byte::set` itself nor in any
 part of the `listloop` implementation across any backend (interp: an
 ordinary `foreach` over the already-evaluated items; compile: a generated
 Tcl `foreach`; native: an index/accumulator register pair with a loop
@@ -250,12 +250,12 @@ this diff. `ImmutableSet`/`String` remain non-iterable, exactly as before
 
 **17. Were old `.bot` files globally refactored to use the new
 construct?** No. The *only* `.bot` source-fence exception (item 62's
-"required for semantic integration") is `byte::set` itself, which could
-not exist without it. `byte::high_nibble`/`byte::low_nibble`/`byte::
-nibble`/`byte::complement`/`byte::position_low`/`byte::position_high`,
-`lib/web.bot`, `lib/char.bot`, `lib/mathish.bot`, and every other existing
+"required for semantic integration") is `std::byte::set` itself, which could
+not exist without it. `std::byte::high_nibble`/`std::byte::low_nibble`/`byte::
+nibble`/`std::byte::complement`/`std::byte::position_low`/`std::byte::position_high`,
+`stdlib/web.bot`, `stdlib/char.bot`, `stdlib/mathish.bot`, and every other existing
 `.bot` file are byte-for-byte unchanged (confirmed by `git diff --stat`:
-`lib/byte.bot` is the only `.bot` file in this diff, and its own existing
+`stdlib/byte.bot` is the only `.bot` file in this diff, and its own existing
 six functions are untouched — only new content was appended). The obvious
 future refactor candidate this exposes: any existing recursive List-
 traversal helper elsewhere in the corpus could now be rewritten with `loop
@@ -275,7 +275,7 @@ machinery unchanged.
 ## Accumulation strategy (items 26-29, questions 18-20)
 
 **18. How are converted Byte values accumulated?** `bytes = loop c in
-chars: Byte(char::codepoint(c))` — the loop's own value *is* the
+chars: Byte(std::char::codepoint(c))` — the loop's own value *is* the
 accumulated `List[Byte]`, built by the `listloop` construct itself (one
 List contribution per iteration, in order), never by the Botlish source
 manually calling `list_append` in a loop. Internally (interp: an ordinary
@@ -283,7 +283,7 @@ Tcl list; compile: a generated Tcl `lappend`; native: `op listappend`
 against a loop-carried accumulator register, per item 27's own explicit
 preference for the pre-existing canonical persistent List-append
 operation) each backend's own accumulation strategy is free to differ —
-none of it is visible to, or influenced by, `byte::set`'s own source text.
+none of it is visible to, or influenced by, `std::byte::set`'s own source text.
 
 **19. Does a temporary `List[Byte]` exist?** Yes, explicitly bound to
 `bytes` — exactly the idiomatic shape items 12/14 ask for
@@ -313,7 +313,7 @@ away.
 
 ## Module retained-value behavior (items 39-42, questions 24-27)
 
-**24. Can `additional_unreserved_chars = byte::set(['-', '.', '_', '~'])`
+**24. Can `additional_unreserved_chars = std::byte::set(['-', '.', '_', '~'])`
 be retained at module scope?** Yes — pinned directly:
 `byte-set-module-retained-value` (`tests/byte-set.test`), with zero
 diagnostics and a `setfromlist` allocation count of exactly 1 across two
@@ -341,7 +341,7 @@ listloop {
 # ImmutableExpr: the iterable's own List[T] proof already gives one
 # structural proof per item; run the body's own structural proof once per
 # item, seeding the element binding with that item's proof each time --
-# exactly the generic mechanism item 40 asks for, with no byte::set (or
+# exactly the generic mechanism item 40 asks for, with no std::byte::set (or
 # even listloop) special-casing beyond "this loop's own shape."
 listloop {
     set iterProof [ImmutableExpr $hir [dict get $node iterable] facts active]
@@ -367,14 +367,14 @@ immutable"}` (a pre-existing, still-unchanged conservative stub for the
 bare form, whose result is an arbitrary `break` payload with no generic
 proof strategy). `listloop`'s own result is structurally *known* — exactly
 the List of each iteration's own proven-immutable contribution — which is
-what makes this rule sound and general, not specific to `byte::set` or to
+what makes this rule sound and general, not specific to `std::byte::set` or to
 `Byte`: it works for any `loop x in EXPR: BODY` whose iterable and body
 are themselves immutable/context-free, independent of element type or
 body shape.
 
-**26. Was `byte::set` special-cased by name in modulebinding?** No —
+**26. Was `std::byte::set` special-cased by name in modulebinding?** No —
 grep-confirmed: neither `hir/modulebinding.tcl` nor any other file in this
-diff mentions the string `"byte::set"` or `"set"` as a distinguished
+diff mentions the string `"std::byte::set"` or `"set"` as a distinguished
 native/function name anywhere in this integration. The rule added is
 purely about `listloop`'s own generic shape.
 
@@ -386,20 +386,20 @@ SET.md's own `set-module-retained-value` test used.
 
 ## Source fence decision (items 62-63, question 17 restated)
 
-Held exactly as instructed: `byte::set` (and the minimal `listloop`
+Held exactly as instructed: `std::byte::set` (and the minimal `listloop`
 extension it needed) are the *only* new/changed `.bot`-visible surface;
-every other existing `.bot` file, including `lib/byte.bot`'s own six
+every other existing `.bot` file, including `stdlib/byte.bot`'s own six
 pre-existing functions, is untouched. This preserves the A->B (compiler
 improvement, source frozen) vs B->C (source refactor) separation the
 later audit needs.
 
 ## Generated-code baseline (items 74-75, question — not optimized)
 
-For `byte::set(['-', '.', '_', '~'])`, native lowering (Cranelift):
+For `std::byte::set(['-', '.', '_', '~'])`, native lowering (Cranelift):
 
-- **HIR shape**: one `listloop` expression inside `byte::set`'s own
+- **HIR shape**: one `listloop` expression inside `std::byte::set`'s own
   function body, wrapping one `call Byte(...)` and one `call
-  char::codepoint(...)`; the module-level `bind` calls
+  std::char::codepoint(...)`; the module-level `bind` calls
   `immutable_set_from_list` once on the loop's own result.
 - **NIR shape** (`native::lower.tcl`'s `ListLoop`): `listlen`, an
   index/accumulator register pair rebound at the loop's own back edge
@@ -443,7 +443,7 @@ Cranelift's own `raise` cannot render the actual dynamic value — the mixed
 first-failure case, duplicates, and the module-retained set), pinned in
 `tests/byte-set.test`'s own `moduleParity`/`moduleErrorKinds` helpers, and
 separately for the `listloop` construct on its own (independent of
-`byte::set`) in `tests/loop-in.test`.
+`std::byte::set`) in `tests/loop-in.test`.
 
 ## Tests
 
@@ -525,7 +525,7 @@ BOTLISH_NATIVE_GC_STRESS=1 tclsh9.0 tests/all.tcl
 - One pre-existing test's pinned expectation needed updating, unrelated to
   semantics: `refined-signature-cross-module-1`
   (`tests/refined-signatures.test`) asserts an exact `block(eN)` expr-id
-  string from `lib/byte.bot`'s own resolved HIR; adding `byte::set` to the
+  string from `stdlib/byte.bot`'s own resolved HIR; adding `std::byte::set` to the
   end of that file shifted that id (`e2` -> `e7`) the same way any content
   addition to a `.bot` file shifts later expr-id numbering. The asserted
   type (`int[HighNibble]`) and range facts
@@ -534,32 +534,32 @@ BOTLISH_NATIVE_GC_STRESS=1 tclsh9.0 tests/all.tcl
 
 ## Deferred (unchanged scope)
 
-ASCII classification, `web::is_unreserved`, and any URI-logic rewrite were
-**not** started — `additional_unreserved_chars = byte::set(['-', '.', '_',
-'~'])` is retainable and correct, but nothing in `lib/web.bot` was changed
+ASCII classification, `std::web::is_unreserved`, and any URI-logic rewrite were
+**not** started — `additional_unreserved_chars = std::byte::set(['-', '.', '_',
+'~'])` is retainable and correct, but nothing in `stdlib/web.bot` was changed
 to consume it. No Byte-specific set representation (bitmap, comparison
 chain, static lookup table, perfect hash) was added — `ImmutableSet`'s
 generic vector representation is untouched. No exact-domain (`HighNibble`)
 native checked-construction support was added — that remains a distinct,
 separately-scoped limitation. No generic iterator protocol, no `String`/
 `ImmutableSet` iteration, and no `var`/general mutable-reassignment feature
-were added. No existing `.bot` file besides `lib/byte.bot` was refactored.
+were added. No existing `.bot` file besides `stdlib/byte.bot` was refactored.
 
 ## Acceptance table
 
 | INPUT / CALL | RESULT |
 |---|---|
-| `byte::set(['A'])` | `ImmutableSet[Byte]{65}` |
-| `byte::set(['é'])` | `ImmutableSet[Byte]{233}` |
-| `byte::set(['ÿ'])` | `ImmutableSet[Byte]{255}` |
-| `byte::set(['Ā'])` | checked Byte range failure (`{CORE SEMANTIC RANGE}`) |
-| `byte::set(['😀'])` | checked Byte range failure (`{CORE SEMANTIC RANGE}`) |
-| `byte::set(['A','Ā','B'])` | failure at `'Ā'`, no partial successful result |
-| `byte::set(['A','A'])` | same set as `byte::set(['A'])` |
-| `byte::set(["A"])` | compile error: `List[str]` (`{CORE SEMANTIC TYPE}`) |
-| `byte::set([65])` | compile error: `List[int]` (`{CORE SEMANTIC TYPE}`) |
-| `byte::set(['é'])` | `{233}`, NOT the UTF-8 bytes 195/169 |
-| `additional_unreserved_chars = byte::set(['-','.','_','~'])` | retained `ImmutableSet[Byte]{45,46,95,126}`, built once |
+| `std::byte::set(['A'])` | `ImmutableSet[Byte]{65}` |
+| `std::byte::set(['é'])` | `ImmutableSet[Byte]{233}` |
+| `std::byte::set(['ÿ'])` | `ImmutableSet[Byte]{255}` |
+| `std::byte::set(['Ā'])` | checked Byte range failure (`{CORE SEMANTIC RANGE}`) |
+| `std::byte::set(['😀'])` | checked Byte range failure (`{CORE SEMANTIC RANGE}`) |
+| `std::byte::set(['A','Ā','B'])` | failure at `'Ā'`, no partial successful result |
+| `std::byte::set(['A','A'])` | same set as `std::byte::set(['A'])` |
+| `std::byte::set(["A"])` | compile error: `List[str]` (`{CORE SEMANTIC TYPE}`) |
+| `std::byte::set([65])` | compile error: `List[int]` (`{CORE SEMANTIC TYPE}`) |
+| `std::byte::set(['é'])` | `{233}`, NOT the UTF-8 bytes 195/169 |
+| `additional_unreserved_chars = std::byte::set(['-','.','_','~'])` | retained `ImmutableSet[Byte]{45,46,95,126}`, built once |
 
 ## Required architecture questions
 
@@ -602,7 +602,7 @@ above.
 ## Required scope questions
 
 28. Was ASCII added? No.
-29. Was `web::is_unreserved` changed? No.
+29. Was `std::web::is_unreserved` changed? No.
 30. Was URI logic changed? No.
 31. Was a Byte bitmap added? No.
 32. Was hashing/perfect hashing added? No.
@@ -610,17 +610,17 @@ above.
 34. Was List representation changed? No.
 35. Was ImmutableSet representation changed? No.
 36. Was Byte representation specialized? No.
-37. Were existing `.bot` files broadly modernized? No — only `lib/byte.bot`
+37. Were existing `.bot` files broadly modernized? No — only `stdlib/byte.bot`
     gained new content; its own pre-existing functions, and every other
     `.bot` file in the repository, are byte-for-byte unchanged.
 
 ## Stop condition
 
-1. `byte::set` is ordinary, idiomatic Botlish library code — reviewed
+1. `std::byte::set` is ordinary, idiomatic Botlish library code — reviewed
    against item 65's own question above: yes.
 2. Its input contract is `List[UnicodeChar]` — enforced statically, no
    dynamic element scanning.
-3. Each `UnicodeChar` is explicitly observed through `char::codepoint`.
+3. Each `UnicodeChar` is explicitly observed through `std::char::codepoint`.
 4. Each resulting `Int` is explicitly checked/refined into `Byte` using the
    existing generic source-defined-type construction semantics.
 5. Values 0..255 succeed; larger Unicode scalars fail strictly (no
@@ -635,6 +635,6 @@ above.
     ladder.
 11. Existing loop syntax could not express the algorithm naturally
     (audited directly); the smallest general extension — `loop x in
-    EXPR:` — was added and tested on its own, independent of `byte::set`.
+    EXPR:` — was added and tested on its own, independent of `std::byte::set`.
 12. Existing `.bot` files were **not** globally refactored to use the new
-    syntax — only `lib/byte.bot` gained new content.
+    syntax — only `stdlib/byte.bot` gained new content.

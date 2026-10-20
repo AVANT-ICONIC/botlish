@@ -10,7 +10,7 @@ reproduction steps:
 **Exact predicate targets still buy −17.2% foreground Ir on the
 module-static tree**: 8,191,901 → 6,786,030 per steady-state run of
 `bench/refined-checks.ir` (`[400, 0]`). Measured the way the old −19.7% was:
-the *unmodified* compiler, fed a scratch `lib/web.bot` whose two `scan_while`
+the *unmodified* compiler, fed a scratch `stdlib/web.bot` whose two `scan_while`
 call sites are syntactically exact.
 
 | | Ir/run | vs production | share of the ceiling |
@@ -75,7 +75,7 @@ exact targets. See
 | | |
 |---|---|
 | tree | `924482b9774589a55612ffcec5f394e11b3d6db4`: the module-static milestone `f037c7d` plus one audit-corpus regeneration touching no compiler, runtime or library file. Clean working tree |
-| `lib/web.bot` | blob `0d038f0`. **Algorithmically unchanged**: identical to the post-R2.a census (`2b82c5b`), and comment-only different from the R2.a.3 freeze (`4ef02f4`) |
+| `stdlib/web.bot` | blob `0d038f0`. **Algorithmically unchanged**: identical to the post-R2.a census (`2b82c5b`), and comment-only different from the R2.a.3 freeze (`4ef02f4`) |
 | benchmark | `bench/refined-checks.ir`, unmodified. `[400, 0]` (`value {list {{int 400} {int 0}}}`) from production, audit binary and every counterfactual |
 | native build | `cargo build --release` (`[profile.release] debug = 1`), unmodified `native/` (tree `1c9efed`) |
 | audit patch | the post-R2.a census's `audit-native.patch`, **unchanged** (sha256 `f956e9e4…`). It applies to the module-static `native/src` with a 9-line offset, and touches only `main.rs` and `codegen/mod.rs` |
@@ -94,8 +94,8 @@ As landed in `f037c7d`, verified here from HIR and NIR, not assumed:
 * Every module function is envless and reached as a constant-pool
   `fnvalue`.
 * On this benchmark:
-  * `local_char?`: `env=0 captures=0`, `staticRefs={web::local_extra_chars}`;
-  * `web::emailish?<str>`: envless;
+  * `local_char?`: `env=0 captures=0`, `staticRefs={std::web::local_extra_chars}`;
+  * `std::web::emailish?<str>`: envless;
   * `check<int, int, str, str>`, with `check.n = [0, 400]`;
   * **0 Block allocations per run** (was 803).
 * Two report-table figures of the module-static report do not reproduce.
@@ -148,16 +148,16 @@ uses **same-binary** figures only.
 scan_while: 1 semantic block (e211), 1 used instance: scan_while<generic>
   generic: 1   InstanceClosed: 1   range OPEN: 1   blockescape-flattened captures=[n, v]
   closedCallerTheorem (KeyType join per parameter): int any
-  call site e298 in web::emailish?<str>
+  call site e298 in std::web::emailish?<str>
       start     <- const                        : int
       predicate <- ref local_char? (local)      : block e183 1 any
-                   -> Block e183: ENVLESS captures=[] staticRefs=[web::local_extra_chars]
+                   -> Block e183: ENVLESS captures=[] staticRefs=[std::web::local_extra_chars]
   call site e228 in tld?<generic>
       start     <- ref i (param)                : int
       predicate <- ref is_tcl_alpha (root)      : native is_tcl_alpha
                    -> Native is_tcl_alpha
 NIR
-  in web::emailish?: %4 = fnvalue 12          (constant-pool Block, no closure)
+  in std::web::emailish?: %4 = fnvalue 12          (constant-pool Block, no closure)
   func 13 "scan_while" params=4 env=0 pnames="start predicate n v" instance="generic"
     %8 = callvalue %1 %7
   in tld?:           %3 = native "is_tcl_alpha"
@@ -204,14 +204,14 @@ Reproduced fresh on the module-static tree. No pre-static number is reused.
 | guard / guardbool / staticget / staticset | 1 / 1 / 4 / 3 |
 | `check` self Ir | 25,258 (R2's figure: `check` is fixed) |
 | `scan_while` self / inclusive | 423,200 / 7,217,665 |
-| `web::emailish?` self / inclusive | 56,400 / 8,153,665 |
+| `std::web::emailish?` self / inclusive | 56,400 / 8,153,665 |
 | UTF-8 seek Ir (bytes walked) | 503,600 (46,000) |
 
 ## Counterfactual construction
 
 `counterfactual/exact-target.diff`, applied only in a scratch worktree. Its
 hunks are byte-identical to the post-R2.a census's counterfactual, since
-`lib/web.bot` has not changed since. `scan_while(start, predicate)` is
+`stdlib/web.bot` has not changed since. `scan_while(start, predicate)` is
 hand-split into:
 
 ```
@@ -273,7 +273,7 @@ target set.
 * 36 accepted, 59 rejected.
 * Each address runs on 4 backends (interp, compile, cranelift-generic,
   cranelift), through 2 paths:
-  * `web::emailish?` called directly from a `.bot` program: the rewritten
+  * `std::web::emailish?` called directly from a `.bot` program: the rewritten
     source itself, on every backend;
   * root `emailish?` from a `.ir` program: the benchmark's own `-module-fn`
     path natively, and the Tcl validator on interp/compile.
@@ -288,7 +288,7 @@ target set.
 | `cf-alpha-only` | 0 | 0 | **yes, every row** |
 
 The counterfactual worktrees really ran their rewritten source: their
-`lib/web.bot` diffs are 39, 27 and 21 lines.
+`stdlib/web.bot` diffs are 39, 27 and 21 lines.
 
 **Structural comparison** (`baseline/prod.txt` vs `baseline/cf-exact.txt`;
 `dynamic/alloc-sites-*.txt`):
@@ -425,7 +425,7 @@ split of `scan_while`'s two caller arcs.
 | `char_at` `web.bot:97` `substr`, TLD (`tld?` → scan → `is_tcl_alpha`) | String | 1,200 | **0** | **−1,200** | −51,600 (43 B each) | −1,248,800 gross (1,041 each; −1,208,254 net of the allocator interaction) | −356,400 |
 | `char_at` `web.bot:97` `substr`, local part (→ `local_char?`) | String | 6,800 | 6,800 | 0 | 279,200 | 3,761,652 → 3,802,190 | 2,021,640 (unchanged) |
 | `esc_from` `substr` / `construct` (startup) | String | 4 | 4 | 0 | 168 | ~1K | ~1K |
-| module init + `byte::set` + `uriEscape` (List, ImmutableSet, StringPlan) | | 16 | 16 | 0 | 920 | ~7K | ~5K |
+| module init + `std::byte::set` + `uriEscape` (List, ImmutableSet, StringPlan) | | 16 | 16 | 0 | 920 | ~7K | ~5K |
 | **Block (any site)** | Block | **0** | **0** | 0 | | | |
 | **total** | | **8,020** | **6,820** | **−1,200** | 331,888 → 280,288 | | 2,384,313 → 2,027,913 |
 
@@ -581,7 +581,7 @@ by StringRegion.
 | scanner(s): `scan_while` → `scan_local` + `scan_alpha` | 528 | 436 + 452 = 888 | **+360** |
 | `local_char?` (`guard` gone; generic entry kept) | 238 | 176 | −62 |
 | `tld?` (`native` value load gone) | 468 | 452 | −16 |
-| `web::emailish?` (`fnvalue` gone) | 601 | 593 | −8 |
+| `std::web::emailish?` (`fnvalue` gone) | 601 | 593 | −8 |
 
 Partial variants: `local-only` 9,309 B, `alpha-only` 9,379 B. Each keeps
 the generic `scan_while` and adds one exact scanner.
@@ -628,7 +628,7 @@ Invocations are exact entry-instruction counts per run.
 | `rt_call_value` | 8,000 | 360,000 | 1,784,000 | **0** | 0 | 0 |
 | `rt_substr` | 8,003 | 837,439 | 4,739,388 | 6,803 | 589,039 | 3,571,913 |
 | `rt_set_contains` | 1,201 | 86,463 | 758,659 | 1,201 | 86,463 | 758,659 |
-| `web::emailish?` | 800 | 56,400 | 8,153,665 | 800 | 54,800 | 6,747,790 |
+| `std::web::emailish?` | 800 | 56,400 | 8,153,665 | 800 | 54,800 | 6,747,790 |
 | `domain?` | 400 | 103,200 | 2,302,400 | 400 | 103,200 | 1,221,200 |
 | `tld?` | 400 | 24,800 | 1,550,400 | 400 | 23,600 | 469,200 |
 | `check` | 2 (802 self-tail iterations) | 25,258 | 8,178,923 | 2 | 25,258 | 6,773,048 |
@@ -723,7 +723,7 @@ counterfactual delta − new counterfactual delta), by function/helper:
 | component | old CF Δ | new CF Δ | absorbed by module statics |
 |---|---:|---:|---:|
 | per-call `local_char?` closure allocation (`rt_closure_new`, 800/run, incl. `Vm::alloc<ClosureObj>` and the capture-array malloc) | −271,918 | 0 | **−271,918** |
-| closure-creation site in `web::emailish?` | −10,000 | −1,600 | −8,400 |
+| closure-creation site in `std::web::emailish?` | −10,000 | −1,600 | −8,400 |
 | closure-environment access inside `local_char?` | −97,600 | −88,400 | −9,200 |
 | old counterfactual's own flattened-closure parameter traffic in `scan_local` (it had to pass the closure) | +288,000 self | +278,000 self | +10,000 |
 | **net absorbed** | **−1,685,620** | **−1,405,871** | **−279,749** (≈ −279,518 itemized; 231 Ir allocator residual) |
@@ -849,7 +849,7 @@ milestone's brief does not ask for it.
 
 1. **`MODULE-STATIC-RETAINED-VALUES.md`, NIR table: `guard` 3 → 6** does
    not reproduce. The tree has `guard` 3 → **1** (`local_char?`'s `guard
-   str` remains; `web::emailish?`'s and `esc_from`'s `guard str … "length"`
+   str` remains; `std::web::emailish?`'s and `esc_from`'s `guard str … "length"`
    are gone, since both were generic before and are now `<str>` and
    `<str, int, str>`), with `guardbool` 1 → 1. The same report's explanation ("guard
    count rose because envless functions … need their own operand-kind
@@ -873,7 +873,7 @@ milestone's brief does not ask for it.
 * **No production file changed.** `git status` shows only the new
   `audit/post-module-static-exact-target-census/` directory and this
   report. `hir/`, `native/`, `core/`, `compiler/`, `surface/`,
-  `lib/web.bot`, `bench/` and `tests/` are untouched. The audit patch was
+  `stdlib/web.bot`, `bench/` and `tests/` are untouched. The audit patch was
   applied only to a scratch copy of `native/`, and every counterfactual
   lived only in scratch git worktrees.
 * **Semantic parity:** 95 addresses × 4 backends × 2 paths. Production and
@@ -904,12 +904,12 @@ milestone's brief does not ask for it.
 1. **Module-static tree measured:**
    `924482b9774589a55612ffcec5f394e11b3d6db4`, i.e. `f037c7d` plus one
    audit-corpus regeneration. Clean working tree.
-2. **Is `lib/web.bot` algorithmically unchanged?** **Yes.** It is
+2. **Is `stdlib/web.bot` algorithmically unchanged?** **Yes.** It is
    byte-identical to the post-R2.a census tree, and comment-only different
    from the R2.a.3 freeze.
 3. **Is `local_char?` envless?** **Yes**: `env=0 captures=0`,
-   `staticRefs={web::local_extra_chars}`.
-4. **Is `web::emailish?` envless?** **Yes**: `web::emailish?<str>`,
+   `staticRefs={std::web::local_extra_chars}`.
+4. **Is `std::web::emailish?` envless?** **Yes**: `std::web::emailish?<str>`,
    `env=0 captures=0`.
 5. **Is `check` specialized again?** **Yes**: `check<int, int, str, str>`.
 6. **`check.n`:** `[0, 400]`.

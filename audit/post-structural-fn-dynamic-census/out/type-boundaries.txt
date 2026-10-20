@@ -78,11 +78,11 @@ tree: a8a306f986809c0a8b54f4763013070f209c248c (plus any uncommitted working-tre
 
 == static callvalue census (relifted pipeline, as bench/bench.tcl compiles)
   fib.bot                0  
-  lex-strategy.bot       2  list::all?@e18, classify@e119
+  lex-strategy.bot       2  std::list::all?@e18, classify@e119
   loop-count.bot         0  
   refined-checks.bot     1  scan_while@e216
-  source-checks.bot      2  list::find@e42, classify_leading@e91
+  source-checks.bot      2  std::list::find@e42, classify_leading@e91
   sum-refined.bot        0  
-  test-selection.bot     3  list::any?@e6, list::none?@e31, list::find@e42
+  test-selection.bot     3  std::list::any?@e6, std::list::none?@e31, std::list::find@e42
   uri-steady.bot         1  scan_while@e216
   total                  9

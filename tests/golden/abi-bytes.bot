@@ -1,83 +1,83 @@
-# abi-bytes.bot -- abi::bytes, the owned byte buffers of the ABI layer
+# abi-bytes.bot -- std::abi::bytes, the owned byte buffers of the ABI layer
 # (ABI-BYTES.md, MUTABLE-BYTES.md), as a source-level specification:
 #
-#   abi::bytes::from_list(values: List[Byte]) -> abi::bytes::Bytes
-#   abi::bytes::length(data: Bytes) -> abi::Usize
-#   abi::bytes::zeroed(n: abi::Usize) -> abi::bytes::MutableBytes
-#   abi::bytes::from_bytes(data: Bytes) -> MutableBytes
-#   abi::bytes::mutable_length(data: MutableBytes) -> abi::Usize
-#   abi::bytes::replace(data: MutableBytes, index: int, value: Byte) -> MutableBytes errors IndexNotFound
-#   abi::bytes::freeze(data: MutableBytes) -> Bytes
-#   abi::bytes::freeze_prefix(data: MutableBytes, n: abi::Usize) -> Bytes errors UpperOverrun
-#   abi::x86_64::from_bytes(Bytes), abi::x86_64::from_mutable_bytes(MutableBytes)
-#                                 -> abi::x86_64::Register64 (the address bridges)
+#   std::abi::bytes::from_list(values: List[Byte]) -> std::abi::bytes::Bytes
+#   std::abi::bytes::length(data: Bytes) -> std::abi::Usize
+#   std::abi::bytes::zeroed(n: std::abi::Usize) -> std::abi::bytes::MutableBytes
+#   std::abi::bytes::from_bytes(data: Bytes) -> MutableBytes
+#   std::abi::bytes::mutable_length(data: MutableBytes) -> std::abi::Usize
+#   std::abi::bytes::replace(data: MutableBytes, index: int, value: Byte) -> MutableBytes errors IndexNotFound
+#   std::abi::bytes::freeze(data: MutableBytes) -> Bytes
+#   std::abi::bytes::freeze_prefix(data: MutableBytes, n: std::abi::Usize) -> Bytes errors UpperOverrun
+#   std::abi::x86_64::from_bytes(Bytes), std::abi::x86_64::from_mutable_bytes(MutableBytes)
+#                                 -> std::abi::x86_64::Register64 (the address bridges)
 #
 # * Bytes. A Bytes is an eager, owned, immutable byte sequence: its length is
-#   the exact byte count (an abi::Usize, not an abi::U64), a NUL anywhere is a
+#   the exact byte count (a std::abi::Usize, not a std::abi::U64), a NUL anywhere is a
 #   byte like any other, a String's Bytes is its UTF-8 encoding (the existing
-#   str::encode_utf8, longer than the scalar count). == and hash are by the
+#   std::str::encode_utf8, longer than the scalar count). == and hash are by the
 #   bytes, however the value was built; a Bytes never equals a List, a String
 #   or an Int; binding, Lists and ImmutableSets are ordinary value use; the
 #   source List is irrelevant once the Bytes is built.
 # * Typing. from_list takes exactly a List[Byte]: a List of Strings,
 #   characters, out-of-range or negative Ints, an Int-typed or untyped List,
 #   a String or an Int is a static TYPE error (never truncated or coerced),
-#   and byte::from_int(256) is the conversion's own KnownError.
+#   and std::byte::from_int(256) is the conversion's own KnownError.
 # * MutableBytes is the writable counterpart and a VALUE: zeroed(n) is n zero
 #   bytes, replace returns a NEW value and leaves its argument unchanged (an
 #   index that designates no byte is IndexNotFound; the value is a Byte,
 #   statically), and logical copies are independent through every route a
 #   value can take -- binding, parameter, result, List element, struct field,
 #   generic and `any` parameters, closure capture, ImmutableSet member, loop,
-#   branch join, a linux::ReadResult. freeze and freeze_prefix are immutable
+#   branch join, a std::linux::ReadResult. freeze and freeze_prefix are immutable
 #   snapshots (a prefix count beyond the length is UpperOverrun). == and hash
 #   are by current contents; a MutableBytes is not a Bytes (neither equal nor
 #   admitted where the other is required).
-# * Opacity. Both are opaque structs owned by module abi::bytes: a
+# * Opacity. Both are opaque structs owned by module std::abi::bytes: a
 #   projection or destructuring elsewhere is OpaqueRepresentation (whether the
 #   field exists or not), a construction OpaqueConstruction (even from the
 #   storage natives' own results).
 # * The address bridges take exactly one Bytes (from_bytes) or one
 #   MutableBytes (from_mutable_bytes): any other argument is TYPE, a wrong
 #   count Arity, a bridge is never a function value (TYPE), and the result is
-#   a Register64, not an Int. Running a bridge, linux::write or linux::read is
+#   a Register64, not an Int. Running a bridge, std::linux::write or std::linux::read is
 #   native only, so here they appear in functions that are never called (a
 #   program that only defines them runs on every backend); the native writes
 #   themselves are abi-bytes-native.bot's.
 #
 # Ported from tests/abi-bytes.test and tests/abi-mutable-bytes.test, which
 # stay authoritative and unchanged. They also pin what no program observes:
-# the native registry, lib/abi/bytes.bot's source text, rendering and the
+# the native registry, stdlib/abi/bytes.bot's source text, rendering and the
 # internal reveal, NIR/CLIF/machine code, allocation counts, -strict 0
 # replays, the Tcl backends' NATIVE-ONLY refusals, GC-stress reruns and
 # standalone executables whose redirected descriptors are read back.
 #
-# Imports: compiler and test (the framework); abi, abi::bytes, byte, str and
-# `type byte::Byte` are the Tcl programs' prelude; immutable_set and list are
-# the collection tests' (and the mutable prelude's); abi::x86_64, byte_store,
+# Imports: compiler and test (the framework); abi, std::abi::bytes, byte, str and
+# `type std::byte::Byte` are the Tcl programs' prelude; immutable_set and list are
+# the collection tests' (and the mutable prelude's); std::abi::x86_64, byte_store,
 # mutable_byte_store and linux are what the bridge, construction and
 # never-called syscall programs import. Every call is written qualified (no
 # method syntax), so the suite-wide imports change no call's meaning, and no
 # test is about a missing import.
 #
 # A direct module (DIRECT-MODULES.md): two of its programs define functions
-# calling linux::write and linux::read, callables of the direct module linux,
+# calling std::linux::write and std::linux::read, callables of the direct module linux,
 # with no context of their own (and never call them).
 direct module
 
-import abi
-import abi::bytes
-import abi::x86_64
-import byte
-import byte_store
-import compiler
-import immutable_set
-import linux
-import list
-import mutable_byte_store
-import str
-import test
-import type byte::Byte
+import std::abi
+import std::abi::bytes
+import std::abi::x86_64
+import std::byte
+import std::byte_store
+import std::compiler
+import std::immutable_set
+import std::linux
+import std::list
+import std::mutable_byte_store
+import std::str
+import std::test
+import type std::byte::Byte
 
 # ---------------------------------------------------------------------------
 # Shared declarations and the Tcl preludes' helpers (top level, as in the Tcl
@@ -87,53 +87,53 @@ import type byte::Byte
 # program declare (`struct Holder`), renamed: one declaration serves the
 # three.
 struct MutableBytesHolder:
-    data: abi::bytes::MutableBytes
+    data: std::abi::bytes::MutableBytes
 
 # abi-bytes.test's `mk`: the Bytes of a String's UTF-8 encoding.
 fn mk(s: str):
-    abi::bytes::from_list(str::encode_utf8(s))
+    std::abi::bytes::from_list(std::str::encode_utf8(s))
 
 # abi-mutable-bytes.test's $pure prelude: mb (a MutableBytes of a String's
 # encoding), put (replace, or the value itself for a bad index), is (the
 # contents equal a String's encoding), get (a List element, or the empty
 # value), zeros and pattern (Lists of Bytes). Its programs write X and Z as
-# byte::from_int(88) and byte::from_int(90).
+# std::byte::from_int(88) and std::byte::from_int(90).
 fn mb(s: str):
-    abi::bytes::from_bytes(abi::bytes::from_list(str::encode_utf8(s)))
+    std::abi::bytes::from_bytes(std::abi::bytes::from_list(std::str::encode_utf8(s)))
 
-fn put(m: abi::bytes::MutableBytes, i: int, v: Byte) -> abi::bytes::MutableBytes:
-    abi::bytes::replace(m, i, v):
+fn put(m: std::abi::bytes::MutableBytes, i: int, v: Byte) -> std::abi::bytes::MutableBytes:
+    std::abi::bytes::replace(m, i, v):
         on IndexNotFound:
             m
 
-fn is(m: abi::bytes::MutableBytes, s: str) -> bool:
-    abi::bytes::freeze(m) == abi::bytes::from_list(str::encode_utf8(s))
+fn is(m: std::abi::bytes::MutableBytes, s: str) -> bool:
+    std::abi::bytes::freeze(m) == std::abi::bytes::from_list(std::str::encode_utf8(s))
 
-fn get(xs: List[abi::bytes::MutableBytes], i: int) -> abi::bytes::MutableBytes:
-    list::at(xs, i):
+fn get(xs: List[std::abi::bytes::MutableBytes], i: int) -> std::abi::bytes::MutableBytes:
+    std::list::at(xs, i):
         on IndexNotFound:
             mb("")
 
 fn zeros(n: int):
     loop i from 0 to n:
-        byte::from_int(0)
+        std::byte::from_int(0)
 
 fn pattern(n: int):
     loop i from 0 to n:
-        byte::from_int(mod(i, 256))
+        std::byte::from_int(mod(i, 256))
 
 # abi-mutable-bytes.test's $preludePrefix: B (a String's Bytes) and pre (the
 # frozen prefix of N bytes, or B("OVER") when N exceeds the length).
-fn B(s: str) -> abi::bytes::Bytes:
-    abi::bytes::from_list(str::encode_utf8(s))
+fn B(s: str) -> std::abi::bytes::Bytes:
+    std::abi::bytes::from_list(std::str::encode_utf8(s))
 
-fn pre(m: abi::bytes::MutableBytes, n: int) -> abi::bytes::Bytes:
-    c = abi::usize(n):
-        on abi::AbiIntegerBelowRange:
-            abi::usize(0)
-        on abi::AbiIntegerAboveRange:
-            abi::usize(0)
-    abi::bytes::freeze_prefix(m, c):
+fn pre(m: std::abi::bytes::MutableBytes, n: int) -> std::abi::bytes::Bytes:
+    c = std::abi::usize(n):
+        on std::abi::AbiIntegerBelowRange:
+            std::abi::usize(0)
+        on std::abi::AbiIntegerAboveRange:
+            std::abi::usize(0)
+    std::abi::bytes::freeze_prefix(m, c):
         on UpperOverrun:
             B("OVER")
 
@@ -141,453 +141,453 @@ fn pre(m: abi::bytes::MutableBytes, n: int) -> abi::bytes::Bytes:
 # Bytes: construction and length
 
 fn register_bytes_length_tests():
-    fn length_empty_and_nonempty() errors compiler::CompilerError:
+    fn length_empty_and_nonempty() errors std::compiler::CompilerError:
         static compile:
             [
-                abi::bytes::length(abi::bytes::from_list([])).value,
-                abi::bytes::length(abi::bytes::from_list([byte::from_int(7)])).value,
-                abi::bytes::length(abi::bytes::from_list([byte::from_int(65), byte::from_int(0), byte::from_int(66)])).value,
-                abi::bytes::length(abi::bytes::from_list([byte::from_int(0)])).value,
-                abi::bytes::length(abi::bytes::from_list([byte::from_int(0), byte::from_int(0), byte::from_int(0), byte::from_int(0), byte::from_int(0)])).value,
-                abi::bytes::length(abi::bytes::from_list([byte::from_int(255), byte::from_int(0)])).value
+                std::abi::bytes::length(std::abi::bytes::from_list([])).value,
+                std::abi::bytes::length(std::abi::bytes::from_list([std::byte::from_int(7)])).value,
+                std::abi::bytes::length(std::abi::bytes::from_list([std::byte::from_int(65), std::byte::from_int(0), std::byte::from_int(66)])).value,
+                std::abi::bytes::length(std::abi::bytes::from_list([std::byte::from_int(0)])).value,
+                std::abi::bytes::length(std::abi::bytes::from_list([std::byte::from_int(0), std::byte::from_int(0), std::byte::from_int(0), std::byte::from_int(0), std::byte::from_int(0)])).value,
+                std::abi::bytes::length(std::abi::bytes::from_list([std::byte::from_int(255), std::byte::from_int(0)])).value
             ]
-    test::value("abi-bytes-length-empty-and-nonempty", [0, 1, 3, 1, 5, 2], length_empty_and_nonempty)
+    std::test::value("abi-bytes-length-empty-and-nonempty", [0, 1, 3, 1, 5, 2], length_empty_and_nonempty)
 
-    # The length is accepted where an abi::Usize is required, and is not an
-    # abi::U64.
-    fn length_is_a_usize() errors compiler::CompilerError:
+    # The length is accepted where a std::abi::Usize is required, and is not an
+    # std::abi::U64.
+    fn length_is_a_usize() errors std::compiler::CompilerError:
         static compile:
-            fn takes(n: abi::Usize) -> int:
+            fn takes(n: std::abi::Usize) -> int:
                 n.value
-            takes(abi::bytes::length(abi::bytes::from_list([byte::from_int(1), byte::from_int(2)])))
-    test::value("abi-bytes-length-is-an-abi-usize/usize", 2, length_is_a_usize)
+            takes(std::abi::bytes::length(std::abi::bytes::from_list([std::byte::from_int(1), std::byte::from_int(2)])))
+    std::test::value("abi-bytes-length-is-an-abi-usize/usize", 2, length_is_a_usize)
 
-    fn length_is_not_a_u64() errors compiler::CompilerError:
+    fn length_is_not_a_u64() errors std::compiler::CompilerError:
         static compile:
-            fn takes(n: abi::U64) -> int:
+            fn takes(n: std::abi::U64) -> int:
                 n.value
-            takes(abi::bytes::length(abi::bytes::from_list([byte::from_int(1), byte::from_int(2)])))
-    test::rejects("abi-bytes-length-is-an-abi-usize/u64", compiler::DiagnosticCode::Type, length_is_not_a_u64)
+            takes(std::abi::bytes::length(std::abi::bytes::from_list([std::byte::from_int(1), std::byte::from_int(2)])))
+    std::test::rejects("abi-bytes-length-is-an-abi-usize/u64", std::compiler::DiagnosticCode::Type, length_is_not_a_u64)
 
     # e-acute (2 bytes), the snowman (3) and U+1F600 (4): 9 scalars, 15 bytes.
-    fn length_is_bytes_not_scalars() errors compiler::CompilerError:
+    fn length_is_bytes_not_scalars() errors std::compiler::CompilerError:
         static compile:
             s = "héllo ☃ 😀"
-            d = abi::bytes::from_list(str::encode_utf8(s))
-            [str::length(s), abi::bytes::length(d).value]
-    test::value("abi-bytes-length-is-bytes-not-scalars", [9, 15], length_is_bytes_not_scalars)
+            d = std::abi::bytes::from_list(std::str::encode_utf8(s))
+            [std::str::length(s), std::abi::bytes::length(d).value]
+    std::test::value("abi-bytes-length-is-bytes-not-scalars", [9, 15], length_is_bytes_not_scalars)
 
-    fn utf8_reuses_the_existing_encoder() errors compiler::CompilerError:
+    fn utf8_reuses_the_existing_encoder() errors std::compiler::CompilerError:
         static compile:
-            d = abi::bytes::from_list(str::encode_utf8("abc"))
-            d == abi::bytes::from_list([byte::from_int(97), byte::from_int(98), byte::from_int(99)])
-    test::value("abi-bytes-utf8-reuses-the-existing-encoder", true, utf8_reuses_the_existing_encoder)
+            d = std::abi::bytes::from_list(std::str::encode_utf8("abc"))
+            d == std::abi::bytes::from_list([std::byte::from_int(97), std::byte::from_int(98), std::byte::from_int(99)])
+    std::test::value("abi-bytes-utf8-reuses-the-existing-encoder", true, utf8_reuses_the_existing_encoder)
 
     # Many Bytes built from one source List (or from a temporary) are
     # independent, equal values.
-    fn eager_construction() errors compiler::CompilerError:
+    fn eager_construction() errors std::compiler::CompilerError:
         static compile:
             fn make(n: int):
-                xs = [byte::from_int(1), byte::from_int(2)]
-                abi::bytes::from_list(xs)
+                xs = [std::byte::from_int(1), std::byte::from_int(2)]
+                std::abi::bytes::from_list(xs)
             a = make(0)
             b = make(1)
-            xs2 = [byte::from_int(9)]
-            c = abi::bytes::from_list(xs2)
-            d = abi::bytes::from_list(xs2)
-            [a == b, c == d, abi::bytes::length(c).value]
-    test::value("abi-bytes-eager-construction-is-independent-of-the-source", [true, true, 1], eager_construction)
+            xs2 = [std::byte::from_int(9)]
+            c = std::abi::bytes::from_list(xs2)
+            d = std::abi::bytes::from_list(xs2)
+            [a == b, c == d, std::abi::bytes::length(c).value]
+    std::test::value("abi-bytes-eager-construction-is-independent-of-the-source", [true, true, 1], eager_construction)
 
     # Every byte value, many times over.
-    fn large_values() errors compiler::CompilerError:
+    fn large_values() errors std::compiler::CompilerError:
         static compile:
-            a = abi::bytes::from_list(pattern(3000))
-            b = abi::bytes::from_list(pattern(3000))
-            c = abi::bytes::from_list(pattern(2999))
-            [abi::bytes::length(a).value, a == b, a == c, hash(a) == hash(b), hash(a) == hash(c)]
-    test::value("abi-bytes-large-values", [3000, true, false, true, false], large_values)
+            a = std::abi::bytes::from_list(pattern(3000))
+            b = std::abi::bytes::from_list(pattern(3000))
+            c = std::abi::bytes::from_list(pattern(2999))
+            [std::abi::bytes::length(a).value, a == b, a == c, hash(a) == hash(b), hash(a) == hash(c)]
+    std::test::value("abi-bytes-large-values", [3000, true, false, true, false], large_values)
 
     # A List[Byte] a loop produces (every element proven a byte) is accepted
     # and holds exactly its values, in order.
-    fn accepts_a_typed_dynamic_list() errors compiler::CompilerError:
+    fn accepts_a_typed_dynamic_list() errors std::compiler::CompilerError:
         static compile:
             fn upto(n: int):
                 loop i from 0 to n:
-                    byte::from_int(mod(i, 256))
-            abi::bytes::from_list(upto(5)) == abi::bytes::from_list([byte::from_int(0), byte::from_int(1), byte::from_int(2), byte::from_int(3), byte::from_int(4)])
-    test::value("abi-bytes-accepts-a-typed-dynamic-list", true, accepts_a_typed_dynamic_list)
+                    std::byte::from_int(mod(i, 256))
+            std::abi::bytes::from_list(upto(5)) == std::abi::bytes::from_list([std::byte::from_int(0), std::byte::from_int(1), std::byte::from_int(2), std::byte::from_int(3), std::byte::from_int(4)])
+    std::test::value("abi-bytes-accepts-a-typed-dynamic-list", true, accepts_a_typed_dynamic_list)
 
 # ---------------------------------------------------------------------------
 # Bytes: equality, hash and value use
 
 fn register_bytes_equality_tests():
-    fn equality_is_by_bytes() errors compiler::CompilerError:
+    fn equality_is_by_bytes() errors std::compiler::CompilerError:
         static compile:
-            ab = abi::bytes::from_list([byte::from_int(65), byte::from_int(66)])
+            ab = std::abi::bytes::from_list([std::byte::from_int(65), std::byte::from_int(66)])
             [
-                ab == abi::bytes::from_list([byte::from_int(65), byte::from_int(66)]),
-                ab == abi::bytes::from_list([byte::from_int(65), byte::from_int(67)]),
-                ab == abi::bytes::from_list([byte::from_int(65)]),
-                ab == abi::bytes::from_list([byte::from_int(65), byte::from_int(66), byte::from_int(0)]),
-                abi::bytes::from_list([]) == abi::bytes::from_list([]),
-                abi::bytes::from_list([]) == abi::bytes::from_list([byte::from_int(0)]),
+                ab == std::abi::bytes::from_list([std::byte::from_int(65), std::byte::from_int(66)]),
+                ab == std::abi::bytes::from_list([std::byte::from_int(65), std::byte::from_int(67)]),
+                ab == std::abi::bytes::from_list([std::byte::from_int(65)]),
+                ab == std::abi::bytes::from_list([std::byte::from_int(65), std::byte::from_int(66), std::byte::from_int(0)]),
+                std::abi::bytes::from_list([]) == std::abi::bytes::from_list([]),
+                std::abi::bytes::from_list([]) == std::abi::bytes::from_list([std::byte::from_int(0)]),
                 ab == mk("AB"),
                 mk("AB") == mk("AB"),
-                abi::bytes::from_list([byte::from_int(0)]) == abi::bytes::from_list([byte::from_int(0), byte::from_int(0)])
+                std::abi::bytes::from_list([std::byte::from_int(0)]) == std::abi::bytes::from_list([std::byte::from_int(0), std::byte::from_int(0)])
             ]
-    test::value("abi-bytes-equality-is-by-bytes", [true, false, false, false, true, false, true, true, false], equality_is_by_bytes)
+    std::test::value("abi-bytes-equality-is-by-bytes", [true, false, false, false, true, false, true, true, false], equality_is_by_bytes)
 
-    fn hash_agrees_with_equality() errors compiler::CompilerError:
+    fn hash_agrees_with_equality() errors std::compiler::CompilerError:
         static compile:
             [
-                hash(mk("AB")) == hash(abi::bytes::from_list([byte::from_int(65), byte::from_int(66)])),
+                hash(mk("AB")) == hash(std::abi::bytes::from_list([std::byte::from_int(65), std::byte::from_int(66)])),
                 hash(mk("AB")) == hash(mk("AC")),
-                hash(abi::bytes::from_list([])) == hash(abi::bytes::from_list([byte::from_int(0)])),
-                hash(abi::bytes::from_list([byte::from_int(0)])) == hash(abi::bytes::from_list([byte::from_int(0), byte::from_int(0)])),
-                hash(abi::bytes::from_list([byte::from_int(1), byte::from_int(2), byte::from_int(3)])) >= 0
+                hash(std::abi::bytes::from_list([])) == hash(std::abi::bytes::from_list([std::byte::from_int(0)])),
+                hash(std::abi::bytes::from_list([std::byte::from_int(0)])) == hash(std::abi::bytes::from_list([std::byte::from_int(0), std::byte::from_int(0)])),
+                hash(std::abi::bytes::from_list([std::byte::from_int(1), std::byte::from_int(2), std::byte::from_int(3)])) >= 0
             ]
-    test::value("abi-bytes-hash-agrees-with-equality", [true, false, false, false, true], hash_agrees_with_equality)
+    std::test::value("abi-bytes-hash-agrees-with-equality", [true, false, false, false, true], hash_agrees_with_equality)
 
     # The hash VALUES are the same function on every backend (the byte count,
     # then the bytes): pinned, so every backend is compared with the same
     # numbers.
-    fn hash_values() errors compiler::CompilerError:
+    fn hash_values() errors std::compiler::CompilerError:
         static compile:
             [
-                hash(abi::bytes::from_list([])),
-                hash(abi::bytes::from_list([byte::from_int(0)])),
-                hash(abi::bytes::from_list([byte::from_int(255), byte::from_int(0), byte::from_int(1)])),
+                hash(std::abi::bytes::from_list([])),
+                hash(std::abi::bytes::from_list([std::byte::from_int(0)])),
+                hash(std::abi::bytes::from_list([std::byte::from_int(255), std::byte::from_int(0), std::byte::from_int(1)])),
                 hash(mk("héllo ☃")),
-                hash(abi::bytes::from_list([])) == hash(abi::bytes::from_list([]))
+                hash(std::abi::bytes::from_list([])) == hash(std::abi::bytes::from_list([]))
             ]
-    test::value("abi-bytes-hash-values-agree-across-backends", [1190028771226210786, 475681586390198479, 1904842274017069022, 1381582720304191340, true], hash_values)
+    std::test::value("abi-bytes-hash-values-agree-across-backends", [143021005025162013, 1078237891227824244, 848188101923584629, 1254706686638817755, true], hash_values)
 
     # A Bytes and a List of the same numbers are different kinds; a Bytes is
     # not a String or an Int either.
-    fn never_collide_with_lists() errors compiler::CompilerError:
+    fn never_collide_with_lists() errors std::compiler::CompilerError:
         static compile:
-            b = abi::bytes::from_list([byte::from_int(65)])
-            [b == [65], b == "A", b == 65, [b] == [abi::bytes::from_list([byte::from_int(65)])]]
-    test::value("abi-bytes-byte-sequences-never-collide-with-lists", [false, false, false, true], never_collide_with_lists)
+            b = std::abi::bytes::from_list([std::byte::from_int(65)])
+            [b == [65], b == "A", b == 65, [b] == [std::abi::bytes::from_list([std::byte::from_int(65)])]]
+    std::test::value("abi-bytes-byte-sequences-never-collide-with-lists", [false, false, false, true], never_collide_with_lists)
 
-    fn aliasing_is_ordinary_value_use() errors compiler::CompilerError:
+    fn aliasing_is_ordinary_value_use() errors std::compiler::CompilerError:
         static compile:
             a = mk("alias")
             b = a
             xs = [a, a, b]
             [
                 a == b,
-                abi::bytes::length(b).value,
+                std::abi::bytes::length(b).value,
                 xs == [a, b, a],
                 xs == [a, a, mk("other")],
                 xs == [mk("alias"), mk("alias"), mk("alias")]
             ]
-    test::value("abi-bytes-aliasing-is-ordinary-value-use", [true, 5, true, false, true], aliasing_is_ordinary_value_use)
+    std::test::value("abi-bytes-aliasing-is-ordinary-value-use", [true, 5, true, false, true], aliasing_is_ordinary_value_use)
 
     # A set deduplicates equal Bytes.
-    fn in_collections() errors compiler::CompilerError:
+    fn in_collections() errors std::compiler::CompilerError:
         static compile:
-            s = immutable_set::from_list([mk("a"), mk("b"), mk("a")])
+            s = std::immutable_set::from_list([mk("a"), mk("b"), mk("a")])
             [
-                list::length([mk("a"), mk("a")]),
-                immutable_set::contains(s, mk("a")),
-                immutable_set::contains(s, mk("c")),
-                s == immutable_set::from_list([mk("b"), mk("a")])
+                std::list::length([mk("a"), mk("a")]),
+                std::immutable_set::contains(s, mk("a")),
+                std::immutable_set::contains(s, mk("c")),
+                s == std::immutable_set::from_list([mk("b"), mk("a")])
             ]
-    test::value("abi-bytes-in-collections", [2, true, false, true], in_collections)
+    std::test::value("abi-bytes-in-collections", [2, true, false, true], in_collections)
 
 # ---------------------------------------------------------------------------
 # Bytes: from_list takes exactly a List[Byte]
 
 fn register_bytes_typing_tests():
-    fn of_strings() errors compiler::CompilerError:
+    fn of_strings() errors std::compiler::CompilerError:
         static compile:
-            abi::bytes::from_list(["a", "b"])
-    test::rejects("abi-bytes-rejects-non-byte-lists-statically/strings", compiler::DiagnosticCode::Type, of_strings)
+            std::abi::bytes::from_list(["a", "b"])
+    std::test::rejects("abi-bytes-rejects-non-byte-lists-statically/strings", std::compiler::DiagnosticCode::Type, of_strings)
 
-    fn of_a_char() errors compiler::CompilerError:
+    fn of_a_char() errors std::compiler::CompilerError:
         static compile:
-            abi::bytes::from_list(['a'])
-    test::rejects("abi-bytes-rejects-non-byte-lists-statically/char", compiler::DiagnosticCode::Type, of_a_char)
+            std::abi::bytes::from_list(['a'])
+    std::test::rejects("abi-bytes-rejects-non-byte-lists-statically/char", std::compiler::DiagnosticCode::Type, of_a_char)
 
-    fn of_256() errors compiler::CompilerError:
+    fn of_256() errors std::compiler::CompilerError:
         static compile:
-            abi::bytes::from_list([256])
-    test::rejects("abi-bytes-rejects-non-byte-lists-statically/256", compiler::DiagnosticCode::Type, of_256)
+            std::abi::bytes::from_list([256])
+    std::test::rejects("abi-bytes-rejects-non-byte-lists-statically/256", std::compiler::DiagnosticCode::Type, of_256)
 
-    fn of_a_negative() errors compiler::CompilerError:
+    fn of_a_negative() errors std::compiler::CompilerError:
         static compile:
-            abi::bytes::from_list([0 - 1])
-    test::rejects("abi-bytes-rejects-non-byte-lists-statically/negative", compiler::DiagnosticCode::Type, of_a_negative)
+            std::abi::bytes::from_list([0 - 1])
+    std::test::rejects("abi-bytes-rejects-non-byte-lists-statically/negative", std::compiler::DiagnosticCode::Type, of_a_negative)
 
-    fn of_ints() errors compiler::CompilerError:
+    fn of_ints() errors std::compiler::CompilerError:
         static compile:
-            abi::bytes::from_list([1, 2, 3])
-    test::rejects("abi-bytes-rejects-non-byte-lists-statically/ints", compiler::DiagnosticCode::Type, of_ints)
+            std::abi::bytes::from_list([1, 2, 3])
+    std::test::rejects("abi-bytes-rejects-non-byte-lists-statically/ints", std::compiler::DiagnosticCode::Type, of_ints)
 
-    fn of_a_mixed_list() errors compiler::CompilerError:
+    fn of_a_mixed_list() errors std::compiler::CompilerError:
         static compile:
-            abi::bytes::from_list([byte::from_int(1), 300])
-    test::rejects("abi-bytes-rejects-non-byte-lists-statically/mixed", compiler::DiagnosticCode::Type, of_a_mixed_list)
+            std::abi::bytes::from_list([std::byte::from_int(1), 300])
+    std::test::rejects("abi-bytes-rejects-non-byte-lists-statically/mixed", std::compiler::DiagnosticCode::Type, of_a_mixed_list)
 
-    fn of_a_string() errors compiler::CompilerError:
+    fn of_a_string() errors std::compiler::CompilerError:
         static compile:
-            abi::bytes::from_list("text")
-    test::rejects("abi-bytes-rejects-non-byte-lists-statically/string", compiler::DiagnosticCode::Type, of_a_string)
+            std::abi::bytes::from_list("text")
+    std::test::rejects("abi-bytes-rejects-non-byte-lists-statically/string", std::compiler::DiagnosticCode::Type, of_a_string)
 
-    fn of_an_int() errors compiler::CompilerError:
+    fn of_an_int() errors std::compiler::CompilerError:
         static compile:
-            abi::bytes::from_list(7)
-    test::rejects("abi-bytes-rejects-non-byte-lists-statically/int", compiler::DiagnosticCode::Type, of_an_int)
+            std::abi::bytes::from_list(7)
+    std::test::rejects("abi-bytes-rejects-non-byte-lists-statically/int", std::compiler::DiagnosticCode::Type, of_an_int)
 
-    # byte::from_int(256) is the checked conversion's own KnownError: the
+    # std::byte::from_int(256) is the checked conversion's own KnownError: the
     # element never reaches from_list.
-    fn out_of_range_from_int() errors compiler::CompilerError:
+    fn out_of_range_from_int() errors std::compiler::CompilerError:
         static compile:
-            abi::bytes::from_list([byte::from_int(256)])
-    test::rejects("abi-bytes-out-of-range-from-int-is-not-a-byte", compiler::DiagnosticCode::KnownError, out_of_range_from_int)
+            std::abi::bytes::from_list([std::byte::from_int(256)])
+    std::test::rejects("abi-bytes-out-of-range-from-int-is-not-a-byte", std::compiler::DiagnosticCode::KnownError, out_of_range_from_int)
 
     # The contract is the parameter's List[Byte] type: an argument whose
     # element type is not proven a Byte cannot reach it.
-    fn untyped_list_parameter() errors compiler::CompilerError:
+    fn untyped_list_parameter() errors std::compiler::CompilerError:
         static compile:
             fn f(xs):
-                abi::bytes::from_list(xs)
+                std::abi::bytes::from_list(xs)
             f([1])
-    test::rejects("abi-bytes-an-untyped-list-parameter-is-not-accepted/untyped", compiler::DiagnosticCode::Type, untyped_list_parameter)
+    std::test::rejects("abi-bytes-an-untyped-list-parameter-is-not-accepted/untyped", std::compiler::DiagnosticCode::Type, untyped_list_parameter)
 
-    fn int_list_parameter() errors compiler::CompilerError:
+    fn int_list_parameter() errors std::compiler::CompilerError:
         static compile:
             fn f(xs: List[int]):
-                abi::bytes::from_list(xs)
+                std::abi::bytes::from_list(xs)
             f([1])
-    test::rejects("abi-bytes-an-untyped-list-parameter-is-not-accepted/int-list", compiler::DiagnosticCode::Type, int_list_parameter)
+    std::test::rejects("abi-bytes-an-untyped-list-parameter-is-not-accepted/int-list", std::compiler::DiagnosticCode::Type, int_list_parameter)
 
     # empty-caller-collecting-loop-typed-consumer: the loop of bytes_of([])'s
     # instance runs over an empty domain, so it is the empty List (List[never]),
-    # whatever its body's type: the handled byte::from_int of an element that
+    # whatever its body's type: the handled std::byte::from_int of an element that
     # cannot exist is typed by its handlers' join, an Int.
-    fn empty_caller_collecting_loop() errors compiler::CompilerError:
+    fn empty_caller_collecting_loop() errors std::compiler::CompilerError:
         static compile:
-            fn bytes_of(values: List[int]) -> abi::bytes::Bytes:
+            fn bytes_of(values: List[int]) -> std::abi::bytes::Bytes:
                 bs = loop v in values:
-                    b = byte::from_int(v):
-                        on byte::BelowRange:
+                    b = std::byte::from_int(v):
+                        on std::byte::BelowRange:
                             0
-                        on byte::AboveRange:
+                        on std::byte::AboveRange:
                             255
                     b
-                abi::bytes::from_list(bs)
-            [abi::bytes::length(bytes_of([])).value, abi::bytes::length(bytes_of([1, 300, -4])).value]
-    test::value("empty-caller-collecting-loop-typed-consumer", [0, 3], empty_caller_collecting_loop)
+                std::abi::bytes::from_list(bs)
+            [std::abi::bytes::length(bytes_of([])).value, std::abi::bytes::length(bytes_of([1, 300, -4])).value]
+    std::test::value("empty-caller-collecting-loop-typed-consumer", [0, 3], empty_caller_collecting_loop)
 
 # ---------------------------------------------------------------------------
 # Bytes: the opacity boundary (existing and guessed fields alike)
 
 fn register_bytes_opacity_tests():
-    fn project_storage() errors compiler::CompilerError:
+    fn project_storage() errors std::compiler::CompilerError:
         static compile:
-            d = abi::bytes::from_list([])
+            d = std::abi::bytes::from_list([])
             d.storage
-    test::rejects("abi-bytes-no-projection-outside-the-owner/storage", compiler::DiagnosticCode::OpaqueRepresentation, project_storage)
+    std::test::rejects("abi-bytes-no-projection-outside-the-owner/storage", std::compiler::DiagnosticCode::OpaqueRepresentation, project_storage)
 
-    fn project_pointer() errors compiler::CompilerError:
+    fn project_pointer() errors std::compiler::CompilerError:
         static compile:
-            d = abi::bytes::from_list([])
+            d = std::abi::bytes::from_list([])
             d.pointer
-    test::rejects("abi-bytes-no-projection-outside-the-owner/pointer", compiler::DiagnosticCode::OpaqueRepresentation, project_pointer)
+    std::test::rejects("abi-bytes-no-projection-outside-the-owner/pointer", std::compiler::DiagnosticCode::OpaqueRepresentation, project_pointer)
 
-    fn project_address() errors compiler::CompilerError:
+    fn project_address() errors std::compiler::CompilerError:
         static compile:
-            d = abi::bytes::from_list([])
+            d = std::abi::bytes::from_list([])
             d.address
-    test::rejects("abi-bytes-no-projection-outside-the-owner/address", compiler::DiagnosticCode::OpaqueRepresentation, project_address)
+    std::test::rejects("abi-bytes-no-projection-outside-the-owner/address", std::compiler::DiagnosticCode::OpaqueRepresentation, project_address)
 
-    fn project_length() errors compiler::CompilerError:
+    fn project_length() errors std::compiler::CompilerError:
         static compile:
-            d = abi::bytes::from_list([])
+            d = std::abi::bytes::from_list([])
             d.length
-    test::rejects("abi-bytes-no-projection-outside-the-owner/length", compiler::DiagnosticCode::OpaqueRepresentation, project_length)
+    std::test::rejects("abi-bytes-no-projection-outside-the-owner/length", std::compiler::DiagnosticCode::OpaqueRepresentation, project_length)
 
-    fn project_capacity() errors compiler::CompilerError:
+    fn project_capacity() errors std::compiler::CompilerError:
         static compile:
-            d = abi::bytes::from_list([])
+            d = std::abi::bytes::from_list([])
             d.capacity
-    test::rejects("abi-bytes-no-projection-outside-the-owner/capacity", compiler::DiagnosticCode::OpaqueRepresentation, project_capacity)
+    std::test::rejects("abi-bytes-no-projection-outside-the-owner/capacity", std::compiler::DiagnosticCode::OpaqueRepresentation, project_capacity)
 
-    fn project_is_heap() errors compiler::CompilerError:
+    fn project_is_heap() errors std::compiler::CompilerError:
         static compile:
-            d = abi::bytes::from_list([])
+            d = std::abi::bytes::from_list([])
             d.is_heap
-    test::rejects("abi-bytes-no-projection-outside-the-owner/is_heap", compiler::DiagnosticCode::OpaqueRepresentation, project_is_heap)
+    std::test::rejects("abi-bytes-no-projection-outside-the-owner/is_heap", std::compiler::DiagnosticCode::OpaqueRepresentation, project_is_heap)
 
-    fn destructure() errors compiler::CompilerError:
+    fn destructure() errors std::compiler::CompilerError:
         static compile:
-            d = abi::bytes::from_list([])
+            d = std::abi::bytes::from_list([])
             {storage} = d
             storage
-    test::rejects("abi-bytes-no-destructuring-outside-the-owner", compiler::DiagnosticCode::OpaqueRepresentation, destructure)
+    std::test::rejects("abi-bytes-no-destructuring-outside-the-owner", std::compiler::DiagnosticCode::OpaqueRepresentation, destructure)
 
-    fn construct_from_an_int() errors compiler::CompilerError:
+    fn construct_from_an_int() errors std::compiler::CompilerError:
         static compile:
-            abi::bytes::Bytes {storage: 1}
-    test::rejects("abi-bytes-no-construction-outside-the-owner/int", compiler::DiagnosticCode::OpaqueConstruction, construct_from_an_int)
+            std::abi::bytes::Bytes {storage: 1}
+    std::test::rejects("abi-bytes-no-construction-outside-the-owner/int", std::compiler::DiagnosticCode::OpaqueConstruction, construct_from_an_int)
 
     # Even the storage native's own result cannot manufacture a Bytes.
-    fn construct_from_a_storage() errors compiler::CompilerError:
+    fn construct_from_a_storage() errors std::compiler::CompilerError:
         static compile:
-            abi::bytes::Bytes {storage: byte_store::from_list([])}
-    test::rejects("abi-bytes-no-construction-outside-the-owner/storage", compiler::DiagnosticCode::OpaqueConstruction, construct_from_a_storage)
+            std::abi::bytes::Bytes {storage: std::byte_store::from_list([])}
+    std::test::rejects("abi-bytes-no-construction-outside-the-owner/storage", std::compiler::DiagnosticCode::OpaqueConstruction, construct_from_a_storage)
 
-    fn construct_empty() errors compiler::CompilerError:
+    fn construct_empty() errors std::compiler::CompilerError:
         static compile:
-            abi::bytes::Bytes {}
-    test::rejects("abi-bytes-no-construction-outside-the-owner/empty", compiler::DiagnosticCode::OpaqueConstruction, construct_empty)
+            std::abi::bytes::Bytes {}
+    std::test::rejects("abi-bytes-no-construction-outside-the-owner/empty", std::compiler::DiagnosticCode::OpaqueConstruction, construct_empty)
 
 # ---------------------------------------------------------------------------
-# The readable address bridge: abi::x86_64::from_bytes
+# The readable address bridge: std::abi::x86_64::from_bytes
 
 fn register_readable_bridge_tests():
     # A byte storage alone (or any non-Bytes value) yields no address.
-    fn address_of_a_storage() errors compiler::CompilerError:
+    fn address_of_a_storage() errors std::compiler::CompilerError:
         static compile:
-            abi::x86_64::from_bytes(byte_store::from_list([]))
-    test::rejects("abi-bytes-byte-store-gives-no-address/storage", compiler::DiagnosticCode::Type, address_of_a_storage)
+            std::abi::x86_64::from_bytes(std::byte_store::from_list([]))
+    std::test::rejects("abi-bytes-byte-store-gives-no-address/storage", std::compiler::DiagnosticCode::Type, address_of_a_storage)
 
-    fn address_of_an_int() errors compiler::CompilerError:
+    fn address_of_an_int() errors std::compiler::CompilerError:
         static compile:
-            abi::x86_64::from_bytes(1)
-    test::rejects("abi-bytes-byte-store-gives-no-address/int", compiler::DiagnosticCode::Type, address_of_an_int)
+            std::abi::x86_64::from_bytes(1)
+    std::test::rejects("abi-bytes-byte-store-gives-no-address/int", std::compiler::DiagnosticCode::Type, address_of_an_int)
 
-    fn address_of_a_string() errors compiler::CompilerError:
+    fn address_of_a_string() errors std::compiler::CompilerError:
         static compile:
-            abi::x86_64::from_bytes("text")
-    test::rejects("abi-bytes-byte-store-gives-no-address/string", compiler::DiagnosticCode::Type, address_of_a_string)
+            std::abi::x86_64::from_bytes("text")
+    std::test::rejects("abi-bytes-byte-store-gives-no-address/string", std::compiler::DiagnosticCode::Type, address_of_a_string)
 
-    fn address_of_an_abi_u8() errors compiler::CompilerError:
+    fn address_of_an_abi_u8() errors std::compiler::CompilerError:
         static compile:
-            abi::x86_64::from_bytes(abi::u8(1))
-    test::rejects("abi-bytes-byte-store-gives-no-address/abi-u8", compiler::DiagnosticCode::Type, address_of_an_abi_u8)
+            std::abi::x86_64::from_bytes(std::abi::u8(1))
+    std::test::rejects("abi-bytes-byte-store-gives-no-address/abi-u8", std::compiler::DiagnosticCode::Type, address_of_an_abi_u8)
 
-    fn bridge_without_arguments() errors compiler::CompilerError:
+    fn bridge_without_arguments() errors std::compiler::CompilerError:
         static compile:
-            abi::x86_64::from_bytes()
-    test::rejects("abi-bytes-bridge-contract/no-args", compiler::DiagnosticCode::Arity, bridge_without_arguments)
+            std::abi::x86_64::from_bytes()
+    std::test::rejects("abi-bytes-bridge-contract/no-args", std::compiler::DiagnosticCode::Arity, bridge_without_arguments)
 
-    fn bridge_with_two_arguments() errors compiler::CompilerError:
+    fn bridge_with_two_arguments() errors std::compiler::CompilerError:
         static compile:
-            d = abi::bytes::from_list([])
-            abi::x86_64::from_bytes(d, d)
-    test::rejects("abi-bytes-bridge-contract/two-args", compiler::DiagnosticCode::Arity, bridge_with_two_arguments)
+            d = std::abi::bytes::from_list([])
+            std::abi::x86_64::from_bytes(d, d)
+    std::test::rejects("abi-bytes-bridge-contract/two-args", std::compiler::DiagnosticCode::Arity, bridge_with_two_arguments)
 
-    fn bridge_as_a_value() errors compiler::CompilerError:
+    fn bridge_as_a_value() errors std::compiler::CompilerError:
         static compile:
-            f = abi::x86_64::from_bytes
+            f = std::abi::x86_64::from_bytes
             1
-    test::rejects("abi-bytes-bridge-contract/function-value", compiler::DiagnosticCode::Type, bridge_as_a_value)
+    std::test::rejects("abi-bytes-bridge-contract/function-value", std::compiler::DiagnosticCode::Type, bridge_as_a_value)
 
-    fn bridge_in_a_list() errors compiler::CompilerError:
+    fn bridge_in_a_list() errors std::compiler::CompilerError:
         static compile:
-            d = abi::bytes::from_list([])
-            xs = [abi::x86_64::from_bytes]
+            d = std::abi::bytes::from_list([])
+            xs = [std::abi::x86_64::from_bytes]
             xs
-    test::rejects("abi-bytes-bridge-contract/in-list", compiler::DiagnosticCode::Type, bridge_in_a_list)
+    std::test::rejects("abi-bytes-bridge-contract/in-list", std::compiler::DiagnosticCode::Type, bridge_in_a_list)
 
     # A direct call of one Bytes is accepted (in a function never called:
     # running the bridge is native only).
-    fn bridge_called_directly() errors compiler::CompilerError:
+    fn bridge_called_directly() errors std::compiler::CompilerError:
         static compile:
-            d = abi::bytes::from_list([])
+            d = std::abi::bytes::from_list([])
             fn address() -> int:
-                abi::x86_64::to_int(abi::x86_64::from_bytes(d)) + 0
+                std::abi::x86_64::to_int(std::abi::x86_64::from_bytes(d)) + 0
             7
-    test::value("abi-bytes-bridge-contract/direct", 7, bridge_called_directly)
+    std::test::value("abi-bytes-bridge-contract/direct", 7, bridge_called_directly)
 
     # The result is the raw machine transport, a Register64, not an Int.
-    fn bridge_result_is_a_register() errors compiler::CompilerError:
+    fn bridge_result_is_a_register() errors std::compiler::CompilerError:
         static compile:
-            fn g(d: abi::bytes::Bytes) -> abi::x86_64::Register64:
-                abi::x86_64::from_bytes(d)
+            fn g(d: std::abi::bytes::Bytes) -> std::abi::x86_64::Register64:
+                std::abi::x86_64::from_bytes(d)
             1
-    test::value("abi-bytes-bridge-result-is-a-register-not-an-integer/register", 1, bridge_result_is_a_register)
+    std::test::value("abi-bytes-bridge-result-is-a-register-not-an-integer/register", 1, bridge_result_is_a_register)
 
-    fn bridge_result_is_not_an_int() errors compiler::CompilerError:
+    fn bridge_result_is_not_an_int() errors std::compiler::CompilerError:
         static compile:
-            fn g(d: abi::bytes::Bytes) -> int:
-                abi::x86_64::from_bytes(d)
+            fn g(d: std::abi::bytes::Bytes) -> int:
+                std::abi::x86_64::from_bytes(d)
             1
-    test::rejects("abi-bytes-bridge-result-is-a-register-not-an-integer/not-int", compiler::DiagnosticCode::Type, bridge_result_is_not_an_int)
+    std::test::rejects("abi-bytes-bridge-result-is-a-register-not-an-integer/not-int", std::compiler::DiagnosticCode::Type, bridge_result_is_not_an_int)
 
     # A program that defines a write but never calls it runs on every backend.
-    fn defines_a_write() errors compiler::CompilerError:
+    fn defines_a_write() errors std::compiler::CompilerError:
         static compile:
             fn emit():
-                linux::write(abi::i32(1), abi::bytes::from_list([]))
+                std::linux::write(std::abi::i32(1), std::abi::bytes::from_list([]))
             7
-    test::value("abi-bytes-tcl-backends-refuse-the-address/defined-never-called", 7, defines_a_write)
+    std::test::value("abi-bytes-tcl-backends-refuse-the-address/defined-never-called", 7, defines_a_write)
 
 # ---------------------------------------------------------------------------
 # MutableBytes: allocation, length and replace
 
 fn register_mutable_bytes_tests():
-    fn zero_filled_and_fixed_length() errors compiler::CompilerError:
+    fn zero_filled_and_fixed_length() errors std::compiler::CompilerError:
         static compile:
-            z = abi::bytes::zeroed(abi::usize(5))
-            big = abi::bytes::zeroed(abi::usize(4096))
+            z = std::abi::bytes::zeroed(std::abi::usize(5))
+            big = std::abi::bytes::zeroed(std::abi::usize(4096))
             [
-                abi::bytes::mutable_length(abi::bytes::zeroed(abi::usize(0))).value,
-                abi::bytes::mutable_length(z).value,
-                abi::bytes::mutable_length(big).value,
-                abi::bytes::freeze(z) == abi::bytes::from_list(zeros(5)),
-                abi::bytes::freeze(big) == abi::bytes::from_list(zeros(4096)),
-                abi::bytes::freeze(abi::bytes::zeroed(abi::usize(0))) == abi::bytes::from_list([])
+                std::abi::bytes::mutable_length(std::abi::bytes::zeroed(std::abi::usize(0))).value,
+                std::abi::bytes::mutable_length(z).value,
+                std::abi::bytes::mutable_length(big).value,
+                std::abi::bytes::freeze(z) == std::abi::bytes::from_list(zeros(5)),
+                std::abi::bytes::freeze(big) == std::abi::bytes::from_list(zeros(4096)),
+                std::abi::bytes::freeze(std::abi::bytes::zeroed(std::abi::usize(0))) == std::abi::bytes::from_list([])
             ]
-    test::value("abi-mutable-bytes-zero-filled-and-fixed-length", [0, 5, 4096, true, true, true], zero_filled_and_fixed_length)
+    std::test::value("abi-mutable-bytes-zero-filled-and-fixed-length", [0, 5, 4096, true, true, true], zero_filled_and_fixed_length)
 
-    fn mutable_length_is_a_usize() errors compiler::CompilerError:
+    fn mutable_length_is_a_usize() errors std::compiler::CompilerError:
         static compile:
-            fn takes(n: abi::Usize) -> int:
+            fn takes(n: std::abi::Usize) -> int:
                 n.value
-            takes(abi::bytes::mutable_length(mb("ab")))
-    test::value("abi-mutable-bytes-length-is-an-abi-usize/usize", 2, mutable_length_is_a_usize)
+            takes(std::abi::bytes::mutable_length(mb("ab")))
+    std::test::value("abi-mutable-bytes-length-is-an-abi-usize/usize", 2, mutable_length_is_a_usize)
 
-    fn mutable_length_is_not_a_u64() errors compiler::CompilerError:
+    fn mutable_length_is_not_a_u64() errors std::compiler::CompilerError:
         static compile:
-            fn takes(n: abi::U64) -> int:
+            fn takes(n: std::abi::U64) -> int:
                 n.value
-            takes(abi::bytes::mutable_length(mb("ab")))
-    test::rejects("abi-mutable-bytes-length-is-an-abi-usize/u64", compiler::DiagnosticCode::Type, mutable_length_is_not_a_u64)
+            takes(std::abi::bytes::mutable_length(mb("ab")))
+    std::test::rejects("abi-mutable-bytes-length-is-an-abi-usize/u64", std::compiler::DiagnosticCode::Type, mutable_length_is_not_a_u64)
 
-    fn mutable_length_is_bytes_not_scalars() errors compiler::CompilerError:
+    fn mutable_length_is_bytes_not_scalars() errors std::compiler::CompilerError:
         static compile:
             s = "héllo ☃ 😀"
             m = mb(s)
-            [str::length(s), abi::bytes::mutable_length(m).value, is(m, s)]
-    test::value("abi-mutable-bytes-length-is-bytes-not-scalars", [9, 15, true], mutable_length_is_bytes_not_scalars)
+            [std::str::length(s), std::abi::bytes::mutable_length(m).value, is(m, s)]
+    std::test::value("abi-mutable-bytes-length-is-bytes-not-scalars", [9, 15, true], mutable_length_is_bytes_not_scalars)
 
     # replace returns a NEW value: its argument is unchanged.
-    fn set_returns_a_new_value() errors compiler::CompilerError:
+    fn set_returns_a_new_value() errors std::compiler::CompilerError:
         static compile:
             a = mb("hello")
-            b = put(a, 0, byte::from_int(88))
-            c = put(b, 4, byte::from_int(90))
+            b = put(a, 0, std::byte::from_int(88))
+            c = put(b, 4, std::byte::from_int(90))
             [
                 is(a, "hello"),
                 is(b, "Xello"),
                 is(c, "XelloZ") == false,
                 is(c, "XellZ"),
-                abi::bytes::mutable_length(c).value
+                std::abi::bytes::mutable_length(c).value
             ]
-    test::value("abi-mutable-bytes-set-returns-a-new-value", [true, true, true, true, 5], set_returns_a_new_value)
+    std::test::value("abi-mutable-bytes-set-returns-a-new-value", [true, true, true, true, 5], set_returns_a_new_value)
 
     # An index that designates no byte (below 0, the length, beyond it, any
     # index of the empty value) is IndexNotFound, and changes nothing.
-    fn set_index_error() errors compiler::CompilerError:
+    fn set_index_error() errors std::compiler::CompilerError:
         static compile:
-            fn tryset(m: abi::bytes::MutableBytes, i: int) -> int errors IndexNotFound:
-                r = abi::bytes::replace(m, i, byte::from_int(88))
-                abi::bytes::mutable_length(r).value
-            fn at(m: abi::bytes::MutableBytes, i: int):
+            fn tryset(m: std::abi::bytes::MutableBytes, i: int) -> int errors IndexNotFound:
+                r = std::abi::bytes::replace(m, i, std::byte::from_int(88))
+                std::abi::bytes::mutable_length(r).value
+            fn at(m: std::abi::bytes::MutableBytes, i: int):
                 tryset(m, i):
                     on IndexNotFound:
                         0 - 1
@@ -598,113 +598,113 @@ fn register_mutable_bytes_tests():
                 at(m, 2),
                 at(m, 3),
                 at(m, 1000),
-                at(abi::bytes::zeroed(abi::usize(0)), 0),
+                at(std::abi::bytes::zeroed(std::abi::usize(0)), 0),
                 is(m, "abc")
             ]
-    test::value("abi-mutable-bytes-set-index-error", [0 - 1, 3, 3, 0 - 1, 0 - 1, 0 - 1, true], set_index_error)
+    std::test::value("abi-mutable-bytes-set-index-error", [0 - 1, 3, 3, 0 - 1, 0 - 1, 0 - 1, true], set_index_error)
 
-    # The value is a byte::Byte, statically: never truncated.
-    fn set_a_string() errors compiler::CompilerError:
+    # The value is a std::byte::Byte, statically: never truncated.
+    fn set_a_string() errors std::compiler::CompilerError:
         static compile:
-            abi::bytes::replace(mb("a"), 0, "a"):
+            std::abi::bytes::replace(mb("a"), 0, "a"):
                 on IndexNotFound:
                     mb("a")
-    test::rejects("abi-mutable-bytes-set-needs-a-byte-statically/string", compiler::DiagnosticCode::Type, set_a_string)
+    std::test::rejects("abi-mutable-bytes-set-needs-a-byte-statically/string", std::compiler::DiagnosticCode::Type, set_a_string)
 
-    fn set_from_int_256() errors compiler::CompilerError:
+    fn set_from_int_256() errors std::compiler::CompilerError:
         static compile:
-            abi::bytes::replace(mb("a"), 0, byte::from_int(256)):
+            std::abi::bytes::replace(mb("a"), 0, std::byte::from_int(256)):
                 on IndexNotFound:
                     mb("a")
-    test::rejects("abi-mutable-bytes-set-needs-a-byte-statically/from-int-256", compiler::DiagnosticCode::KnownError, set_from_int_256)
+    std::test::rejects("abi-mutable-bytes-set-needs-a-byte-statically/from-int-256", std::compiler::DiagnosticCode::KnownError, set_from_int_256)
 
-    fn set_300() errors compiler::CompilerError:
+    fn set_300() errors std::compiler::CompilerError:
         static compile:
-            abi::bytes::replace(mb("a"), 0, 300):
+            std::abi::bytes::replace(mb("a"), 0, 300):
                 on IndexNotFound:
                     mb("a")
-    test::rejects("abi-mutable-bytes-set-needs-a-byte-statically/int-300", compiler::DiagnosticCode::Type, set_300)
+    std::test::rejects("abi-mutable-bytes-set-needs-a-byte-statically/int-300", std::compiler::DiagnosticCode::Type, set_300)
 
-    fn set_a_negative() errors compiler::CompilerError:
+    fn set_a_negative() errors std::compiler::CompilerError:
         static compile:
-            abi::bytes::replace(mb("a"), 0, 0 - 1):
+            std::abi::bytes::replace(mb("a"), 0, 0 - 1):
                 on IndexNotFound:
                     mb("a")
-    test::rejects("abi-mutable-bytes-set-needs-a-byte-statically/negative", compiler::DiagnosticCode::Type, set_a_negative)
+    std::test::rejects("abi-mutable-bytes-set-needs-a-byte-statically/negative", std::compiler::DiagnosticCode::Type, set_a_negative)
 
 # ---------------------------------------------------------------------------
 # MutableBytes: a logical copy is independent, through every route
 
 fn register_copy_route_tests():
-    fn binding() errors compiler::CompilerError:
+    fn binding() errors std::compiler::CompilerError:
         static compile:
             a = mb("hello")
             b = a
-            a2 = put(a, 0, byte::from_int(88))
+            a2 = put(a, 0, std::byte::from_int(88))
             [is(b, "hello"), is(a, "hello"), is(a2, "Xello")]
-    test::value("abi-mutable-bytes-copies-are-independent-binding", [true, true, true], binding)
+    std::test::value("abi-mutable-bytes-copies-are-independent-binding", [true, true, true], binding)
 
-    fn parameter() errors compiler::CompilerError:
+    fn parameter() errors std::compiler::CompilerError:
         static compile:
-            fn mutate(m: abi::bytes::MutableBytes) -> abi::bytes::MutableBytes:
-                put(m, 1, byte::from_int(88))
+            fn mutate(m: std::abi::bytes::MutableBytes) -> std::abi::bytes::MutableBytes:
+                put(m, 1, std::byte::from_int(88))
             a = mb("hello")
             b = a
             a2 = mutate(a)
             b2 = mutate(b)
             [is(a, "hello"), is(b, "hello"), is(a2, "hXllo"), is(b2, "hXllo")]
-    test::value("abi-mutable-bytes-copies-are-independent-parameter", [true, true, true, true], parameter)
+    std::test::value("abi-mutable-bytes-copies-are-independent-parameter", [true, true, true, true], parameter)
 
-    fn identity() errors compiler::CompilerError:
+    fn identity() errors std::compiler::CompilerError:
         static compile:
-            fn id(m: abi::bytes::MutableBytes) -> abi::bytes::MutableBytes:
+            fn id(m: std::abi::bytes::MutableBytes) -> std::abi::bytes::MutableBytes:
                 m
             a = mb("hello")
             b = id(a)
-            b2 = put(b, 0, byte::from_int(88))
-            a2 = put(a, 4, byte::from_int(90))
+            b2 = put(b, 0, std::byte::from_int(88))
+            a2 = put(a, 4, std::byte::from_int(90))
             [is(a, "hello"), is(b, "hello"), is(b2, "Xello"), is(a2, "hellZ")]
-    test::value("abi-mutable-bytes-copies-are-independent-identity", [true, true, true, true], identity)
+    std::test::value("abi-mutable-bytes-copies-are-independent-identity", [true, true, true, true], identity)
 
-    fn result_with_another_copy() errors compiler::CompilerError:
+    fn result_with_another_copy() errors std::compiler::CompilerError:
         static compile:
-            fn edit(m: abi::bytes::MutableBytes) -> abi::bytes::MutableBytes:
-                put(m, 0, byte::from_int(88))
+            fn edit(m: std::abi::bytes::MutableBytes) -> std::abi::bytes::MutableBytes:
+                put(m, 0, std::byte::from_int(88))
             a = mb("hello")
             keep = a
             r = edit(a)
             r2 = edit(r)
             [is(a, "hello"), is(keep, "hello"), is(r, "Xello"), is(r2, "Xello")]
-    test::value("abi-mutable-bytes-copies-are-independent-result-with-another-copy", [true, true, true, true], result_with_another_copy)
+    std::test::value("abi-mutable-bytes-copies-are-independent-result-with-another-copy", [true, true, true, true], result_with_another_copy)
 
-    fn list_element() errors compiler::CompilerError:
+    fn list_element() errors std::compiler::CompilerError:
         static compile:
             a = mb("hello")
             xs = [a]
-            a2 = put(a, 0, byte::from_int(88))
+            a2 = put(a, 0, std::byte::from_int(88))
             b = get(xs, 0)
             [is(b, "hello"), is(a, "hello"), is(a2, "Xello"), is(get(xs, 0), "hello")]
-    test::value("abi-mutable-bytes-copies-are-independent-list", [true, true, true, true], list_element)
+    std::test::value("abi-mutable-bytes-copies-are-independent-list", [true, true, true, true], list_element)
 
-    fn struct_field() errors compiler::CompilerError:
+    fn struct_field() errors std::compiler::CompilerError:
         static compile:
             a = mb("hello")
             h = MutableBytesHolder {data: a}
-            a2 = put(a, 0, byte::from_int(88))
-            h2 = MutableBytesHolder {data: put(h.data, 4, byte::from_int(90))}
+            a2 = put(a, 0, std::byte::from_int(88))
+            h2 = MutableBytesHolder {data: put(h.data, 4, std::byte::from_int(90))}
             [is(h.data, "hello"), is(a, "hello"), is(a2, "Xello"), is(h2.data, "hellZ")]
-    test::value("abi-mutable-bytes-copies-are-independent-struct", [true, true, true, true], struct_field)
+    std::test::value("abi-mutable-bytes-copies-are-independent-struct", [true, true, true, true], struct_field)
 
-    fn struct_copy() errors compiler::CompilerError:
+    fn struct_copy() errors std::compiler::CompilerError:
         static compile:
             a = mb("hello")
             h1 = MutableBytesHolder {data: a}
             h2 = h1
-            h3 = MutableBytesHolder {data: put(h2.data, 0, byte::from_int(88))}
+            h3 = MutableBytesHolder {data: put(h2.data, 0, std::byte::from_int(88))}
             [is(h1.data, "hello"), is(h2.data, "hello"), is(h3.data, "Xello")]
-    test::value("abi-mutable-bytes-copies-are-independent-struct-copy", [true, true, true], struct_copy)
+    std::test::value("abi-mutable-bytes-copies-are-independent-struct-copy", [true, true, true], struct_copy)
 
-    fn generic() errors compiler::CompilerError:
+    fn generic() errors std::compiler::CompilerError:
         static compile:
             fn same(x):
                 x
@@ -712,13 +712,13 @@ fn register_copy_route_tests():
                 [x, y]
             a = mb("hello")
             b = same(a)
-            b2 = put(b, 0, byte::from_int(88))
+            b2 = put(b, 0, std::byte::from_int(88))
             pair = twice(a, b)
-            a2 = put(a, 4, byte::from_int(90))
+            a2 = put(a, 4, std::byte::from_int(90))
             [is(a, "hello"), is(b, "hello"), is(b2, "Xello"), is(a2, "hellZ"), pair == [a, b]]
-    test::value("abi-mutable-bytes-copies-are-independent-generic", [true, true, true, true, true], generic)
+    std::test::value("abi-mutable-bytes-copies-are-independent-generic", [true, true, true, true, true], generic)
 
-    fn through_any() errors compiler::CompilerError:
+    fn through_any() errors std::compiler::CompilerError:
         static compile:
             fn through(x: any):
                 x
@@ -726,68 +726,68 @@ fn register_copy_route_tests():
                 through(x)
             a = mb("hello")
             b = back(a)
-            b2 = put(b, 0, byte::from_int(88))
+            b2 = put(b, 0, std::byte::from_int(88))
             [is(a, "hello"), is(b, "hello"), is(b2, "Xello"), b == a]
-    test::value("abi-mutable-bytes-copies-are-independent-any", [true, true, true, true], through_any)
+    std::test::value("abi-mutable-bytes-copies-are-independent-any", [true, true, true, true], through_any)
 
-    fn closure() errors compiler::CompilerError:
+    fn closure() errors std::compiler::CompilerError:
         static compile:
             a = mb("hello")
             fn peek() -> bool:
                 is(a, "hello")
-            fn bump() -> abi::bytes::MutableBytes:
-                put(a, 0, byte::from_int(88))
+            fn bump() -> std::abi::bytes::MutableBytes:
+                put(a, 0, std::byte::from_int(88))
             a2 = bump()
             a3 = bump()
             [peek(), is(a, "hello"), is(a2, "Xello"), a2 == a3]
-    test::value("abi-mutable-bytes-copies-are-independent-closure", [true, true, true, true], closure)
+    std::test::value("abi-mutable-bytes-copies-are-independent-closure", [true, true, true, true], closure)
 
-    fn immutable_set_member() errors compiler::CompilerError:
+    fn immutable_set_member() errors std::compiler::CompilerError:
         static compile:
             a = mb("hello")
-            s = immutable_set::from_list([a, mb("other")])
-            a2 = put(a, 0, byte::from_int(88))
+            s = std::immutable_set::from_list([a, mb("other")])
+            a2 = put(a, 0, std::byte::from_int(88))
             [
-                immutable_set::contains(s, mb("hello")),
-                immutable_set::contains(s, a2),
-                immutable_set::contains(s, a),
+                std::immutable_set::contains(s, mb("hello")),
+                std::immutable_set::contains(s, a2),
+                std::immutable_set::contains(s, a),
                 is(a, "hello")
             ]
-    test::value("abi-mutable-bytes-copies-are-independent-immutable-set", [true, false, true, true], immutable_set_member)
+    std::test::value("abi-mutable-bytes-copies-are-independent-immutable-set", [true, false, true, true], immutable_set_member)
 
-    fn loop_body() errors compiler::CompilerError:
+    fn loop_body() errors std::compiler::CompilerError:
         static compile:
             a = mb("aaaa")
             acc = [a]
             steps = loop i from 0 to 4:
-                put(a, i, byte::from_int(88))
+                put(a, i, std::byte::from_int(88))
             [
                 is(a, "aaaa"),
                 is(get(steps, 0), "Xaaa"),
                 is(get(steps, 3), "aaaX"),
-                list::length(steps)
+                std::list::length(steps)
             ]
-    test::value("abi-mutable-bytes-copies-are-independent-loop", [true, true, true, 4], loop_body)
+    std::test::value("abi-mutable-bytes-copies-are-independent-loop", [true, true, true, 4], loop_body)
 
-    fn branch_join() errors compiler::CompilerError:
+    fn branch_join() errors std::compiler::CompilerError:
         static compile:
             a = mb("hello")
-            b = if abi::bytes::mutable_length(a).value > 3:
+            b = if std::abi::bytes::mutable_length(a).value > 3:
                 a
             else:
                 mb("zzzzz")
-            b2 = put(b, 0, byte::from_int(88))
+            b2 = put(b, 0, std::byte::from_int(88))
             [is(a, "hello"), is(b, "hello"), is(b2, "Xello")]
-    test::value("abi-mutable-bytes-copies-are-independent-branch-join", [true, true, true], branch_join)
+    std::test::value("abi-mutable-bytes-copies-are-independent-branch-join", [true, true, true], branch_join)
 
-    # A linux::ReadResult holds a MutableBytes: copying the result (a binding,
+    # A std::linux::ReadResult holds a MutableBytes: copying the result (a binding,
     # a List element, a parameter) copies the value. (The Tcl test fills it
     # by a real read(2); here it is constructed.)
-    fn read_result() errors compiler::CompilerError:
+    fn read_result() errors std::compiler::CompilerError:
         static compile:
-            fn bump(r: linux::ReadResult) -> linux::ReadResult:
-                linux::ReadResult {result: r.result, data: put(r.data, 0, byte::from_int(90))}
-            r1 = linux::ReadResult {result: 6, data: mb("abcdef")}
+            fn bump(r: std::linux::ReadResult) -> std::linux::ReadResult:
+                std::linux::ReadResult {result: r.result, data: put(r.data, 0, std::byte::from_int(90))}
+            r1 = std::linux::ReadResult {result: 6, data: mb("abcdef")}
             r2 = r1
             r3 = bump(r1)
             xs = [r1, r3]
@@ -801,50 +801,50 @@ fn register_copy_route_tests():
                 r1.data == r2.data,
                 r3.data == r4.data,
                 r1.data == r3.data,
-                list::length(xs)
+                std::list::length(xs)
             ]
-    test::value("abi-mutable-bytes-read-result-copies-are-independent", [6, true, true, true, true, true, true, false, 2], read_result)
+    std::test::value("abi-mutable-bytes-read-result-copies-are-independent", [6, true, true, true, true, true, true, false, 2], read_result)
 
     # Updates, freezes, equality and hashes of MutableBytes held in Lists and
     # structs (the CI gc-stress job runs this suite under stress).
-    fn pure_values() errors compiler::CompilerError:
+    fn pure_values() errors std::compiler::CompilerError:
         static compile:
             a = mb("alias")
-            xs = [a, put(a, 0, byte::from_int(88)), a, abi::bytes::from_bytes(abi::bytes::from_list(pattern(100)))]
-            h = MutableBytesHolder {data: put(a, 4, byte::from_int(90))}
+            xs = [a, put(a, 0, std::byte::from_int(88)), a, std::abi::bytes::from_bytes(std::abi::bytes::from_list(pattern(100)))]
+            h = MutableBytesHolder {data: put(a, 4, std::byte::from_int(90))}
             [
-                abi::bytes::freeze(a) == abi::bytes::from_list(str::encode_utf8("alias")),
-                xs == [a, put(a, 0, byte::from_int(88)), a, abi::bytes::from_bytes(abi::bytes::from_list(pattern(100)))],
+                std::abi::bytes::freeze(a) == std::abi::bytes::from_list(std::str::encode_utf8("alias")),
+                xs == [a, put(a, 0, std::byte::from_int(88)), a, std::abi::bytes::from_bytes(std::abi::bytes::from_list(pattern(100)))],
                 hash(a) == hash(mb("alias")),
                 is(h.data, "aliaZ"),
                 is(a, "alias"),
-                list::length(xs)
+                std::list::length(xs)
             ]
-    test::value("abi-mutable-bytes-gc-stress-pure-values", [true, true, true, true, true, 4], pure_values)
+    std::test::value("abi-mutable-bytes-gc-stress-pure-values", [true, true, true, true, true, 4], pure_values)
 
 # ---------------------------------------------------------------------------
 # MutableBytes: freeze, freeze_prefix and from_bytes
 
 fn register_snapshot_tests():
-    fn freeze_is_a_snapshot() errors compiler::CompilerError:
+    fn freeze_is_a_snapshot() errors std::compiler::CompilerError:
         static compile:
             m = mb("hello")
-            f = abi::bytes::freeze(m)
-            m2 = put(m, 0, byte::from_int(88))
-            f2 = abi::bytes::freeze(m2)
+            f = std::abi::bytes::freeze(m)
+            m2 = put(m, 0, std::byte::from_int(88))
+            f2 = std::abi::bytes::freeze(m2)
             [
-                f == abi::bytes::from_list(str::encode_utf8("hello")),
-                f2 == abi::bytes::from_list(str::encode_utf8("Xello")),
-                f == abi::bytes::freeze(m),
-                abi::bytes::freeze(m) == abi::bytes::freeze(m),
+                f == std::abi::bytes::from_list(std::str::encode_utf8("hello")),
+                f2 == std::abi::bytes::from_list(std::str::encode_utf8("Xello")),
+                f == std::abi::bytes::freeze(m),
+                std::abi::bytes::freeze(m) == std::abi::bytes::freeze(m),
                 f == f2,
-                abi::bytes::length(f).value
+                std::abi::bytes::length(f).value
             ]
-    test::value("abi-mutable-bytes-freeze-is-a-snapshot", [true, true, true, true, false, 5], freeze_is_a_snapshot)
+    std::test::value("abi-mutable-bytes-freeze-is-a-snapshot", [true, true, true, true, false, 5], freeze_is_a_snapshot)
 
     # Exactly the first n bytes; a count beyond the length is UpperOverrun
     # (pre's B("OVER")).
-    fn freeze_prefix() errors compiler::CompilerError:
+    fn freeze_prefix() errors std::compiler::CompilerError:
         static compile:
             m = mb("hello")
             [
@@ -853,41 +853,41 @@ fn register_snapshot_tests():
                 pre(m, 5) == B("hello"),
                 pre(m, 6) == B("OVER"),
                 pre(m, 100000) == B("OVER"),
-                pre(abi::bytes::zeroed(abi::usize(0)), 0) == B(""),
-                pre(abi::bytes::zeroed(abi::usize(0)), 1) == B("OVER"),
+                pre(std::abi::bytes::zeroed(std::abi::usize(0)), 0) == B(""),
+                pre(std::abi::bytes::zeroed(std::abi::usize(0)), 1) == B("OVER"),
                 is(m, "hello")
             ]
-    test::value("abi-mutable-bytes-freeze-prefix", [true, true, true, true, true, true, true, true], freeze_prefix)
+    std::test::value("abi-mutable-bytes-freeze-prefix", [true, true, true, true, true, true, true, true], freeze_prefix)
 
-    fn freeze_prefix_after_update() errors compiler::CompilerError:
+    fn freeze_prefix_after_update() errors std::compiler::CompilerError:
         static compile:
-            m = put(mb("hello"), 3, byte::from_int(90))
+            m = put(mb("hello"), 3, std::byte::from_int(90))
             [pre(m, 3) == B("hel"), pre(m, 4) == B("helZ"), pre(m, 5) == B("helZo")]
-    test::value("abi-mutable-bytes-freeze-prefix-after-update", [true, true, true], freeze_prefix_after_update)
+    std::test::value("abi-mutable-bytes-freeze-prefix-after-update", [true, true, true], freeze_prefix_after_update)
 
-    fn frozen_bytes_never_change() errors compiler::CompilerError:
+    fn frozen_bytes_never_change() errors std::compiler::CompilerError:
         static compile:
             m = mb("abcde")
-            f = abi::bytes::freeze(m)
+            f = std::abi::bytes::freeze(m)
             p = pre(m, 3)
-            m2 = put(m, 0, byte::from_int(88))
-            m3 = put(m2, 1, byte::from_int(90))
-            f3 = abi::bytes::freeze(m3)
+            m2 = put(m, 0, std::byte::from_int(88))
+            m3 = put(m2, 1, std::byte::from_int(90))
+            f3 = std::abi::bytes::freeze(m3)
             [
                 f == B("abcde"),
                 p == B("abc"),
                 f3 == B("XZcde"),
-                abi::bytes::freeze(m2) == B("Xbcde"),
-                f == abi::bytes::freeze(m)
+                std::abi::bytes::freeze(m2) == B("Xbcde"),
+                f == std::abi::bytes::freeze(m)
             ]
-    test::value("abi-mutable-bytes-frozen-bytes-never-change", [true, true, true, true, true], frozen_bytes_never_change)
+    std::test::value("abi-mutable-bytes-frozen-bytes-never-change", [true, true, true, true, true], frozen_bytes_never_change)
 
-    fn from_bytes_is_independent() errors compiler::CompilerError:
+    fn from_bytes_is_independent() errors std::compiler::CompilerError:
         static compile:
             d = B("data")
-            a = abi::bytes::from_bytes(d)
-            b = abi::bytes::from_bytes(d)
-            a2 = put(a, 0, byte::from_int(88))
+            a = std::abi::bytes::from_bytes(d)
+            b = std::abi::bytes::from_bytes(d)
+            a2 = put(a, 0, std::byte::from_int(88))
             [
                 d == B("data"),
                 is(a, "data"),
@@ -895,15 +895,15 @@ fn register_snapshot_tests():
                 is(a2, "Xata"),
                 a == b,
                 a2 == b,
-                abi::bytes::freeze(b) == d
+                std::abi::bytes::freeze(b) == d
             ]
-    test::value("abi-mutable-bytes-from-bytes-is-independent", [true, true, true, true, true, false, true], from_bytes_is_independent)
+    std::test::value("abi-mutable-bytes-from-bytes-is-independent", [true, true, true, true, true, false, true], from_bytes_is_independent)
 
 # ---------------------------------------------------------------------------
 # MutableBytes: equality, hash, collections
 
 fn register_mutable_equality_tests():
-    fn equality_is_by_contents() errors compiler::CompilerError:
+    fn equality_is_by_contents() errors std::compiler::CompilerError:
         static compile:
             a = mb("AB")
             [
@@ -911,197 +911,197 @@ fn register_mutable_equality_tests():
                 a == mb("AC"),
                 a == mb("A"),
                 a == mb("ABC"),
-                abi::bytes::zeroed(abi::usize(2)) == abi::bytes::zeroed(abi::usize(2)),
-                abi::bytes::zeroed(abi::usize(0)) == abi::bytes::zeroed(abi::usize(1)),
-                put(a, 1, byte::from_int(67)) == mb("AC"),
-                put(a, 1, byte::from_int(66)) == a,
+                std::abi::bytes::zeroed(std::abi::usize(2)) == std::abi::bytes::zeroed(std::abi::usize(2)),
+                std::abi::bytes::zeroed(std::abi::usize(0)) == std::abi::bytes::zeroed(std::abi::usize(1)),
+                put(a, 1, std::byte::from_int(67)) == mb("AC"),
+                put(a, 1, std::byte::from_int(66)) == a,
                 a == a
             ]
-    test::value("abi-mutable-bytes-equality-is-by-contents", [true, false, false, false, true, false, true, true, true], equality_is_by_contents)
+    std::test::value("abi-mutable-bytes-equality-is-by-contents", [true, false, false, false, true, false, true, true, true], equality_is_by_contents)
 
     # A MutableBytes and a Bytes with the same contents are different kinds
     # and different types.
-    fn not_equal_to_a_bytes() errors compiler::CompilerError:
+    fn not_equal_to_a_bytes() errors std::compiler::CompilerError:
         static compile:
             [
-                mb("A") == abi::bytes::from_list([byte::from_int(65)]),
+                mb("A") == std::abi::bytes::from_list([std::byte::from_int(65)]),
                 mb("A") == [65],
                 mb("A") == "A"
             ]
-    test::value("abi-mutable-bytes-is-not-a-bytes/equality", [false, false, false], not_equal_to_a_bytes)
+    std::test::value("abi-mutable-bytes-is-not-a-bytes/equality", [false, false, false], not_equal_to_a_bytes)
 
-    fn not_admitted_as_a_bytes() errors compiler::CompilerError:
+    fn not_admitted_as_a_bytes() errors std::compiler::CompilerError:
         static compile:
-            fn f(d: abi::bytes::Bytes) -> int:
+            fn f(d: std::abi::bytes::Bytes) -> int:
                 1
             f(mb("A"))
-    test::rejects("abi-mutable-bytes-is-not-a-bytes/bytes-param", compiler::DiagnosticCode::Type, not_admitted_as_a_bytes)
+    std::test::rejects("abi-mutable-bytes-is-not-a-bytes/bytes-param", std::compiler::DiagnosticCode::Type, not_admitted_as_a_bytes)
 
-    fn bytes_not_admitted_as_mutable() errors compiler::CompilerError:
+    fn bytes_not_admitted_as_mutable() errors std::compiler::CompilerError:
         static compile:
-            fn f(d: abi::bytes::MutableBytes) -> int:
+            fn f(d: std::abi::bytes::MutableBytes) -> int:
                 1
-            f(abi::bytes::from_list([]))
-    test::rejects("abi-mutable-bytes-is-not-a-bytes/mutable-param", compiler::DiagnosticCode::Type, bytes_not_admitted_as_mutable)
+            f(std::abi::bytes::from_list([]))
+    std::test::rejects("abi-mutable-bytes-is-not-a-bytes/mutable-param", std::compiler::DiagnosticCode::Type, bytes_not_admitted_as_mutable)
 
     # Hash by current contents, consistent with ==, a kind tag of its own;
     # the hash VALUES are pinned, so every backend is compared with the same
     # numbers.
-    fn mutable_hash() errors compiler::CompilerError:
+    fn mutable_hash() errors std::compiler::CompilerError:
         static compile:
             a = mb("AB")
             [
                 hash(a) == hash(mb("AB")),
-                hash(a) == hash(put(a, 1, byte::from_int(67))),
-                hash(abi::bytes::zeroed(abi::usize(0))) == hash(abi::bytes::zeroed(abi::usize(1))),
-                hash(a) == hash(abi::bytes::from_list([byte::from_int(65), byte::from_int(66)])),
-                hash(abi::bytes::zeroed(abi::usize(0))),
-                hash(abi::bytes::zeroed(abi::usize(3))),
+                hash(a) == hash(put(a, 1, std::byte::from_int(67))),
+                hash(std::abi::bytes::zeroed(std::abi::usize(0))) == hash(std::abi::bytes::zeroed(std::abi::usize(1))),
+                hash(a) == hash(std::abi::bytes::from_list([std::byte::from_int(65), std::byte::from_int(66)])),
+                hash(std::abi::bytes::zeroed(std::abi::usize(0))),
+                hash(std::abi::bytes::zeroed(std::abi::usize(3))),
                 hash(mb("héllo ☃")),
-                hash(put(a, 0, byte::from_int(0)))
+                hash(put(a, 0, std::byte::from_int(0)))
             ]
-    test::value("abi-mutable-bytes-hash-agrees-with-equality", [true, false, false, false, 1326307785488716896, 2233955353718004115, 1836749565742573503, 1597906913156830035], mutable_hash)
+    std::test::value("abi-mutable-bytes-hash-agrees-with-equality", [true, false, false, false, 896328911396601317, 1324377306295612266, 1517341586630974446, 890893889467989938], mutable_hash)
 
-    fn in_immutable_collections() errors compiler::CompilerError:
+    fn in_immutable_collections() errors std::compiler::CompilerError:
         static compile:
             a = mb("k1")
             b = a
-            s = immutable_set::from_list([a, mb("k2"), b])
-            c = put(a, 0, byte::from_int(75))
-            s2 = immutable_set::from_list([c, a])
+            s = std::immutable_set::from_list([a, mb("k2"), b])
+            c = put(a, 0, std::byte::from_int(75))
+            s2 = std::immutable_set::from_list([c, a])
             [
-                list::length([a, b]),
-                immutable_set::contains(s, mb("k1")),
-                immutable_set::contains(s, c),
-                immutable_set::contains(s2, mb("K1")),
-                immutable_set::contains(s2, mb("k1")),
-                s == immutable_set::from_list([mb("k2"), mb("k1")]),
+                std::list::length([a, b]),
+                std::immutable_set::contains(s, mb("k1")),
+                std::immutable_set::contains(s, c),
+                std::immutable_set::contains(s2, mb("K1")),
+                std::immutable_set::contains(s2, mb("k1")),
+                s == std::immutable_set::from_list([mb("k2"), mb("k1")]),
                 hash(b) == hash(mb("k1"))
             ]
-    test::value("abi-mutable-bytes-in-immutable-collections-stay-correct", [2, true, false, true, true, true, true], in_immutable_collections)
+    std::test::value("abi-mutable-bytes-in-immutable-collections-stay-correct", [2, true, false, true, true, true, true], in_immutable_collections)
 
 # ---------------------------------------------------------------------------
 # MutableBytes: the opacity boundary and the writable bridge
 
 fn register_mutable_boundary_tests():
-    fn project_mutable_storage() errors compiler::CompilerError:
+    fn project_mutable_storage() errors std::compiler::CompilerError:
         static compile:
             d = mb("a")
             d.storage
-    test::rejects("abi-mutable-bytes-no-projection-or-construction-outside-the-owner/storage", compiler::DiagnosticCode::OpaqueRepresentation, project_mutable_storage)
+    std::test::rejects("abi-mutable-bytes-no-projection-or-construction-outside-the-owner/storage", std::compiler::DiagnosticCode::OpaqueRepresentation, project_mutable_storage)
 
-    fn project_mutable_pointer() errors compiler::CompilerError:
+    fn project_mutable_pointer() errors std::compiler::CompilerError:
         static compile:
             d = mb("a")
             d.pointer
-    test::rejects("abi-mutable-bytes-no-projection-or-construction-outside-the-owner/pointer", compiler::DiagnosticCode::OpaqueRepresentation, project_mutable_pointer)
+    std::test::rejects("abi-mutable-bytes-no-projection-or-construction-outside-the-owner/pointer", std::compiler::DiagnosticCode::OpaqueRepresentation, project_mutable_pointer)
 
-    fn project_mutable_address() errors compiler::CompilerError:
+    fn project_mutable_address() errors std::compiler::CompilerError:
         static compile:
             d = mb("a")
             d.address
-    test::rejects("abi-mutable-bytes-no-projection-or-construction-outside-the-owner/address", compiler::DiagnosticCode::OpaqueRepresentation, project_mutable_address)
+    std::test::rejects("abi-mutable-bytes-no-projection-or-construction-outside-the-owner/address", std::compiler::DiagnosticCode::OpaqueRepresentation, project_mutable_address)
 
-    fn project_mutable_length() errors compiler::CompilerError:
+    fn project_mutable_length() errors std::compiler::CompilerError:
         static compile:
             d = mb("a")
             d.length
-    test::rejects("abi-mutable-bytes-no-projection-or-construction-outside-the-owner/length", compiler::DiagnosticCode::OpaqueRepresentation, project_mutable_length)
+    std::test::rejects("abi-mutable-bytes-no-projection-or-construction-outside-the-owner/length", std::compiler::DiagnosticCode::OpaqueRepresentation, project_mutable_length)
 
-    fn project_mutable_capacity() errors compiler::CompilerError:
+    fn project_mutable_capacity() errors std::compiler::CompilerError:
         static compile:
             d = mb("a")
             d.capacity
-    test::rejects("abi-mutable-bytes-no-projection-or-construction-outside-the-owner/capacity", compiler::DiagnosticCode::OpaqueRepresentation, project_mutable_capacity)
+    std::test::rejects("abi-mutable-bytes-no-projection-or-construction-outside-the-owner/capacity", std::compiler::DiagnosticCode::OpaqueRepresentation, project_mutable_capacity)
 
-    fn destructure_mutable() errors compiler::CompilerError:
+    fn destructure_mutable() errors std::compiler::CompilerError:
         static compile:
             d = mb("a")
             {storage} = d
             storage
-    test::rejects("abi-mutable-bytes-no-projection-or-construction-outside-the-owner/destructure", compiler::DiagnosticCode::OpaqueRepresentation, destructure_mutable)
+    std::test::rejects("abi-mutable-bytes-no-projection-or-construction-outside-the-owner/destructure", std::compiler::DiagnosticCode::OpaqueRepresentation, destructure_mutable)
 
-    fn construct_mutable_from_an_int() errors compiler::CompilerError:
+    fn construct_mutable_from_an_int() errors std::compiler::CompilerError:
         static compile:
-            abi::bytes::MutableBytes {storage: 1}
-    test::rejects("abi-mutable-bytes-no-projection-or-construction-outside-the-owner/construct-int", compiler::DiagnosticCode::OpaqueConstruction, construct_mutable_from_an_int)
+            std::abi::bytes::MutableBytes {storage: 1}
+    std::test::rejects("abi-mutable-bytes-no-projection-or-construction-outside-the-owner/construct-int", std::compiler::DiagnosticCode::OpaqueConstruction, construct_mutable_from_an_int)
 
-    fn construct_mutable_from_a_storage() errors compiler::CompilerError:
+    fn construct_mutable_from_a_storage() errors std::compiler::CompilerError:
         static compile:
-            abi::bytes::MutableBytes {storage: mutable_byte_store::zeroed(1)}
-    test::rejects("abi-mutable-bytes-no-projection-or-construction-outside-the-owner/construct-native", compiler::DiagnosticCode::OpaqueConstruction, construct_mutable_from_a_storage)
+            std::abi::bytes::MutableBytes {storage: std::mutable_byte_store::zeroed(1)}
+    std::test::rejects("abi-mutable-bytes-no-projection-or-construction-outside-the-owner/construct-native", std::compiler::DiagnosticCode::OpaqueConstruction, construct_mutable_from_a_storage)
 
     # The bridges never mix: readable memory from a Bytes, writable memory
     # from a MutableBytes, nothing else.
-    fn readable_bridge_of_mutable() errors compiler::CompilerError:
+    fn readable_bridge_of_mutable() errors std::compiler::CompilerError:
         static compile:
-            abi::x86_64::from_bytes(abi::bytes::zeroed(abi::usize(1)))
-    test::rejects("abi-mutable-bytes-bridges-never-mix/from-bytes-of-mutable", compiler::DiagnosticCode::Type, readable_bridge_of_mutable)
+            std::abi::x86_64::from_bytes(std::abi::bytes::zeroed(std::abi::usize(1)))
+    std::test::rejects("abi-mutable-bytes-bridges-never-mix/from-bytes-of-mutable", std::compiler::DiagnosticCode::Type, readable_bridge_of_mutable)
 
-    fn writable_bridge_of_bytes() errors compiler::CompilerError:
+    fn writable_bridge_of_bytes() errors std::compiler::CompilerError:
         static compile:
-            abi::x86_64::from_mutable_bytes(abi::bytes::from_list([]))
-    test::rejects("abi-mutable-bytes-bridges-never-mix/from-mutable-of-bytes", compiler::DiagnosticCode::Type, writable_bridge_of_bytes)
+            std::abi::x86_64::from_mutable_bytes(std::abi::bytes::from_list([]))
+    std::test::rejects("abi-mutable-bytes-bridges-never-mix/from-mutable-of-bytes", std::compiler::DiagnosticCode::Type, writable_bridge_of_bytes)
 
-    fn writable_bridge_of_an_int() errors compiler::CompilerError:
+    fn writable_bridge_of_an_int() errors std::compiler::CompilerError:
         static compile:
-            abi::x86_64::from_mutable_bytes(1)
-    test::rejects("abi-mutable-bytes-bridges-never-mix/int", compiler::DiagnosticCode::Type, writable_bridge_of_an_int)
+            std::abi::x86_64::from_mutable_bytes(1)
+    std::test::rejects("abi-mutable-bytes-bridges-never-mix/int", std::compiler::DiagnosticCode::Type, writable_bridge_of_an_int)
 
-    fn writable_bridge_of_a_string() errors compiler::CompilerError:
+    fn writable_bridge_of_a_string() errors std::compiler::CompilerError:
         static compile:
-            abi::x86_64::from_mutable_bytes("text")
-    test::rejects("abi-mutable-bytes-bridges-never-mix/string", compiler::DiagnosticCode::Type, writable_bridge_of_a_string)
+            std::abi::x86_64::from_mutable_bytes("text")
+    std::test::rejects("abi-mutable-bytes-bridges-never-mix/string", std::compiler::DiagnosticCode::Type, writable_bridge_of_a_string)
 
-    fn writable_bridge_of_a_mutable_storage() errors compiler::CompilerError:
+    fn writable_bridge_of_a_mutable_storage() errors std::compiler::CompilerError:
         static compile:
-            abi::x86_64::from_mutable_bytes(mutable_byte_store::zeroed(1))
-    test::rejects("abi-mutable-bytes-bridges-never-mix/mutable-storage", compiler::DiagnosticCode::Type, writable_bridge_of_a_mutable_storage)
+            std::abi::x86_64::from_mutable_bytes(std::mutable_byte_store::zeroed(1))
+    std::test::rejects("abi-mutable-bytes-bridges-never-mix/mutable-storage", std::compiler::DiagnosticCode::Type, writable_bridge_of_a_mutable_storage)
 
-    fn writable_bridge_of_a_storage() errors compiler::CompilerError:
+    fn writable_bridge_of_a_storage() errors std::compiler::CompilerError:
         static compile:
-            abi::x86_64::from_mutable_bytes(byte_store::from_list([]))
-    test::rejects("abi-mutable-bytes-bridges-never-mix/storage", compiler::DiagnosticCode::Type, writable_bridge_of_a_storage)
+            std::abi::x86_64::from_mutable_bytes(std::byte_store::from_list([]))
+    std::test::rejects("abi-mutable-bytes-bridges-never-mix/storage", std::compiler::DiagnosticCode::Type, writable_bridge_of_a_storage)
 
-    fn writable_bridge_of_an_abi_u8() errors compiler::CompilerError:
+    fn writable_bridge_of_an_abi_u8() errors std::compiler::CompilerError:
         static compile:
-            abi::x86_64::from_mutable_bytes(abi::u8(1))
-    test::rejects("abi-mutable-bytes-bridges-never-mix/abi-u8", compiler::DiagnosticCode::Type, writable_bridge_of_an_abi_u8)
+            std::abi::x86_64::from_mutable_bytes(std::abi::u8(1))
+    std::test::rejects("abi-mutable-bytes-bridges-never-mix/abi-u8", std::compiler::DiagnosticCode::Type, writable_bridge_of_an_abi_u8)
 
-    fn writable_bridge_without_arguments() errors compiler::CompilerError:
+    fn writable_bridge_without_arguments() errors std::compiler::CompilerError:
         static compile:
-            abi::x86_64::from_mutable_bytes()
-    test::rejects("abi-mutable-bytes-bridges-never-mix/no-args", compiler::DiagnosticCode::Arity, writable_bridge_without_arguments)
+            std::abi::x86_64::from_mutable_bytes()
+    std::test::rejects("abi-mutable-bytes-bridges-never-mix/no-args", std::compiler::DiagnosticCode::Arity, writable_bridge_without_arguments)
 
     # A direct call of one MutableBytes is accepted (in a function never
     # called: running the bridge is native only).
-    fn writable_bridge_called_directly() errors compiler::CompilerError:
+    fn writable_bridge_called_directly() errors std::compiler::CompilerError:
         static compile:
             fn address() -> int:
-                abi::x86_64::to_int(abi::x86_64::from_mutable_bytes(abi::bytes::zeroed(abi::usize(1)))) + 0
+                std::abi::x86_64::to_int(std::abi::x86_64::from_mutable_bytes(std::abi::bytes::zeroed(std::abi::usize(1)))) + 0
             7
-    test::value("abi-mutable-bytes-bridges-never-mix/direct", 7, writable_bridge_called_directly)
+    std::test::value("abi-mutable-bytes-bridges-never-mix/direct", 7, writable_bridge_called_directly)
 
     # The writable bridge is a call, never a function value.
-    fn writable_bridge_as_a_value() errors compiler::CompilerError:
+    fn writable_bridge_as_a_value() errors std::compiler::CompilerError:
         static compile:
-            f = abi::x86_64::from_mutable_bytes
+            f = std::abi::x86_64::from_mutable_bytes
             1
-    test::rejects("abi-mutable-bytes-bridge-is-only-called/binding", compiler::DiagnosticCode::Type, writable_bridge_as_a_value)
+    std::test::rejects("abi-mutable-bytes-bridge-is-only-called/binding", std::compiler::DiagnosticCode::Type, writable_bridge_as_a_value)
 
-    fn writable_bridge_in_a_list() errors compiler::CompilerError:
+    fn writable_bridge_in_a_list() errors std::compiler::CompilerError:
         static compile:
-            xs = [abi::x86_64::from_mutable_bytes]
+            xs = [std::abi::x86_64::from_mutable_bytes]
             xs
-    test::rejects("abi-mutable-bytes-bridge-is-only-called/list", compiler::DiagnosticCode::Type, writable_bridge_in_a_list)
+    std::test::rejects("abi-mutable-bytes-bridge-is-only-called/list", std::compiler::DiagnosticCode::Type, writable_bridge_in_a_list)
 
     # A program that defines a read but never calls it runs on every backend.
-    fn defines_a_read() errors compiler::CompilerError:
+    fn defines_a_read() errors std::compiler::CompilerError:
         static compile:
             fn emit():
-                linux::read(abi::i32(0), abi::bytes::zeroed(abi::usize(1)))
+                std::linux::read(std::abi::i32(0), std::abi::bytes::zeroed(std::abi::usize(1)))
             7
-    test::value("abi-mutable-bytes-tcl-backends-refuse-the-address/defined-never-called", 7, defines_a_read)
+    std::test::value("abi-mutable-bytes-tcl-backends-refuse-the-address/defined-never-called", 7, defines_a_read)
 
 # ---------------------------------------------------------------------------
 
@@ -1117,6 +1117,6 @@ fn register_abi_bytes_tests():
     register_mutable_equality_tests()
     register_mutable_boundary_tests()
 
-with context test::suite()
+with context std::test::suite()
 register_abi_bytes_tests()
-test::report()
+std::test::report()

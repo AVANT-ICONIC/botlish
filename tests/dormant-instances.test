@@ -38,7 +38,7 @@ proc withDormant {opt script} {
 }
 
 # {HIR SPEC ANALYSIS} of program TEXT (.bot source), prepared for native
-# (lib/web.bot's emailish? is reached through a native body).
+# (stdlib/web.bot's emailish? is reached through a native body).
 proc dormantOf {text} {
     set hir [native::prepareHir [surface::compile [dedent $text] t.bot -strict 0]]
     set spec [hir::specialize::analyze $hir]
@@ -97,11 +97,11 @@ proc nirOpsOf {nir name} {
 # The emailish? scanner shape: scan's generic instance is the Block-value
 # entry of a closure blockescape de-closures through scan<any, native(...)>.
 set scanShape {
-    import str
+    import std::str
     fn outer(v, start0):
-        n = str::length(v)
+        n = std::str::length(v)
         fn get(i):
-            c = str::substring(v, i, i + 1):
+            c = std::str::substring(v, i, i + 1):
                 on LowerUnderrun:
                     ""
                 on UpperOverrun:
@@ -113,16 +113,16 @@ set scanShape {
                     continue
                 return i
             n
-        scan(start0, str::is_tcl_alpha)
+        scan(start0, std::str::is_tcl_alpha)
     [outer("abc1", 0), outer("x", 0), outer("", 0)]
 }
 
 # The same, with an instance reachable ONLY through the dormant entry:
 # scan<generic> calls apply<any, str, int> (its `pred` is any there), which
 # alone reaches idx<int> with an unbounded argument; the live
-# apply<native(str::is_tcl_alpha), str, int> reaches idx<int> too.
+# apply<native(std::str::is_tcl_alpha), str, int> reaches idx<int> too.
 set transitiveShape {
-    import str
+    import std::str
     fn idx(x):
         x * 2
     fn apply(p, c, i):
@@ -131,9 +131,9 @@ set transitiveShape {
         else:
             0 - 1
     fn outer(v, start0):
-        n = str::length(v)
+        n = std::str::length(v)
         fn get(i):
-            c = str::substring(v, i, i + 1):
+            c = std::str::substring(v, i, i + 1):
                 on LowerUnderrun:
                     ""
                 on UpperOverrun:
@@ -145,7 +145,7 @@ set transitiveShape {
                     continue
                 return i
             n
-        scan(start0, str::is_tcl_alpha)
+        scan(start0, std::str::is_tcl_alpha)
     [outer("abc1", 0), outer("x", 1), outer("ab", 2)]
 }
 
@@ -153,18 +153,18 @@ set transitiveShape {
 # whose String position stays generic (ok captures v): `tag` is Str in the
 # live scan instance and `any` in the dormant scan<generic>.
 set theoremShape {
-    import str
+    import std::str
     fn outer(v, start0):
-        n = str::length(v)
+        n = std::str::length(v)
         fn get(i):
-            c = str::substring(v, i, i + 1):
+            c = std::str::substring(v, i, i + 1):
                 on LowerUnderrun:
                     ""
                 on UpperOverrun:
                     ""
             c
         fn ok(t):
-            str::length(t) + str::length(v)
+            std::str::length(t) + std::str::length(v)
         fn scan(start, pred, tag):
             first = ok(tag)
             loop i from start to n:
@@ -172,7 +172,7 @@ set theoremShape {
                     continue
                 return i
             n
-        scan(start0, str::is_tcl_alpha, "t")
+        scan(start0, std::str::is_tcl_alpha, "t")
     [outer("abc1", 0), outer("x", 0)]
 }
 
@@ -208,11 +208,11 @@ set escapeShape {
 # Which instances are dormant
 
 # emailish?'s char_is? (REFACTOR-WARNINGS-CLEAN.md: its character tests read
-# str::char_at behind char_at's own guard) is one more such closure.
+# std::str::char_at behind char_at's own guard) is one more such closure.
 test dormant-refined-checks-set {refined-checks: the dormant instances are the generic Block-value entries of the de-closured closures whose calls are Int-keyed (emailish?'s char_at, char_is?, scan_while, tld?, domain?; uri_query_value?'s upper_hex?, valid_from?) and the scan_while instance only tld?<generic> calls} -body {
     lassign [refinedChecks] hir spec analysis
     dormantLabels $spec
-} -result {char_at<generic> char_is?<generic> domain?<generic> {scan_while<any, native(str::is_tcl_alpha)>} scan_while<generic> tld?<generic> upper_hex?<generic> valid_from?<generic>}
+} -result {char_at<generic> char_is?<generic> domain?<generic> {scan_while<any, native(std::str::is_tcl_alpha)>} scan_while<generic> tld?<generic> upper_hex?<generic> valid_from?<generic>}
 
 test dormant-transitive {an instance reachable only through a dormant entry is dormant too (apply<any, str, int>); the live, exact apply instance is not; get's generic entry is dormant (its calls are Int-keyed)} -body {
     lassign [dormantOf $transitiveShape] hir spec analysis
@@ -271,7 +271,7 @@ test dormant-refined-checks-char-at-entry {refined-checks: char_at.i loses the -
     list $off [entryOf $analysis $spec char_at<int>]
 } -result {{{[-∞, 4611686018427387902]}} {{[0, 4611686018427387902]}}}
 
-# char_at (lib/web.bot) guards its slice (`if i < 0 or i >= n: return ""`,
+# char_at (stdlib/web.bot) guards its slice (`if i < 0 or i >= n: return ""`,
 # which proves the substring's bounds): with dormant instances on, i's entry
 # Range [0, ...] also decides the `i < 0` test statically (no ilt). With them
 # off, the guard's own false edge narrows i to [0, n - 1] (an `or` narrows
@@ -337,7 +337,7 @@ test dormant-closed-caller-theorem-skips-dormant-callers {the closed-caller theo
         list [lsort $callers] [hir::specialize::closedCallerTheorem $hir $spec $id] [dict get $region status]
     }
     list [withDormant 0 {theoremRow}] [theoremRow]
-} -result {{{{scan<generic> 0} {{scan<int, native(str::is_tcl_alpha), any>} 0}} any guarded} {{{scan<generic> 1} {{scan<int, native(str::is_tcl_alpha), any>} 0}} str closed}}
+} -result {{{{scan<generic> 0} {{scan<int, native(std::str::is_tcl_alpha), any>} 0}} any guarded} {{{scan<generic> 1} {{scan<int, native(std::str::is_tcl_alpha), any>} 0}} str closed}}
 
 # ---------------------------------------------------------------------------
 # Every backend agrees, with and without block escape (where lowering
@@ -391,8 +391,8 @@ test dormant-aot-readiness {AOT readiness ignores a dormant instance's guards: t
 # garbage with -block-escape-opt 0.
 
 set nestedValueShape {
-    import list
-    import str
+    import std::list
+    import std::str
     fn h(x):
         x + 1
     fn other(a, p):
@@ -406,10 +406,10 @@ set nestedValueShape {
         fn c(m, p):
             fn d(z):
                 fs = [other, f]
-                g = list::at(fs, k)
+                g = std::list::at(fs, k)
                 g(z * 10000000000000000000000, p)
             f(m, p) + d(m)
-        c(7, str::is_tcl_alpha)
+        c(7, std::str::is_tcl_alpha)
     outer(1)
 }
 

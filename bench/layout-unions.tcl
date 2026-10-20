@@ -23,8 +23,8 @@
 #     alternative, three reads switching interpretations, the first and
 #     the last of a union of 64 alternatives, a wide and a
 #     narrow alternative's store, an element of an array of unions against
-#     an element of an array of records; in byte storage, binary::read and
-#     binary::write through an alternative against an ordinary field.
+#     an element of an array of records; in byte storage, std::binary::read and
+#     std::binary::write through an alternative against an ordinary field.
 #   * The heap allocations of each program (Cranelift's counters) and per
 #     operation over its baseline: no alternative read or store allocates.
 #
@@ -56,57 +56,57 @@ foreach {option value} $args {
 # OUTER holds the union WORD at 8; PLAIN is the ordinary record with WORD's
 # widest alternative at the same place. ARRU is an array of seven unions,
 # ARRP the same array of ordinary 8-byte records.
-set prelude {import abi
-import abi::bytes
-import binary
-import binary::native
-import ffi::c
+set prelude {import std::abi
+import std::abi::bytes
+import std::binary
+import std::binary::native
+import std::ffi::c
 import ffi_fixture
-import list
+import std::list
 
 layout PAIR16:
     size 4
     align 2
-    field low: binary::U16 at 0
-    field high: binary::U16 at 2
+    field low: std::binary::U16 at 0
+    field high: std::binary::U16 at 2
 
 union layout WORD:
     size 8
     align 8
-    alternative whole: binary::U64
+    alternative whole: std::binary::U64
     alternative parts: PAIR16
-    alternative words: array 2 of binary::U32
-    alternative p: ffi::c::Ptr[ffi::c::Void]
+    alternative words: array 2 of std::binary::U32
+    alternative p: std::ffi::c::Ptr[std::ffi::c::Void]
 
 layout OUTER:
     size 24
     align 8
-    field tag: binary::U32 at 0
+    field tag: std::binary::U32 at 0
     field u: WORD at 8
-    field after: binary::U32 at 16
+    field after: std::binary::U32 at 16
 
 layout PLAIN:
     size 24
     align 8
-    field tag: binary::U32 at 0
-    field whole: binary::U64 at 8
-    field after: binary::U32 at 16
+    field tag: std::binary::U32 at 0
+    field whole: std::binary::U64 at 8
+    field after: std::binary::U32 at 16
 
 layout CELL:
     size 8
     align 8
-    field whole: binary::U64 at 0
+    field whole: std::binary::U64 at 0
 
 layout ARRU:
     size 64
     align 8
-    field n: binary::U32 at 0
+    field n: std::binary::U32 at 0
     field us: array 7 of WORD at 8
 
 layout ARRP:
     size 64
     align 8
-    field n: binary::U32 at 0
+    field n: std::binary::U32 at 0
     field ps: array 7 of CELL at 8
 
 MANY_UNION
@@ -117,7 +117,7 @@ MANY_UNION
 # load costs differently, in a union or out of one).
 set many "union layout MANY:\n    size 8\n    align 8\n"
 for {set i 0} {$i < 64} {incr i} {
-    append many "    alternative a$i: [lindex {binary::U64 binary::U8 binary::U32} [expr {$i % 3}]]\n"
+    append many "    alternative a$i: [lindex {std::binary::U64 std::binary::U8 std::binary::U32} [expr {$i % 3}]]\n"
 }
 set prelude [string map [list MANY_UNION $many] $prelude]
 
@@ -135,15 +135,15 @@ proc Fn {n body} {
 # SETUP lines, then BODY lines as a collecting loop `i from 0 to n`, then
 # the List's length.
 proc Each {setup lines} {
-    return [concat $setup [list "xs = loop i from 0 to n:"] [lmap line $lines {string cat "    " $line}] [list "list::length(xs)"]]
+    return [concat $setup [list "xs = loop i from 0 to n:"] [lmap line $lines {string cat "    " $line}] [list "std::list::length(xs)"]]
 }
 
-set outerSetup {"p = ffi_fixture::memory\[ffi::c::Void\](abi::bytes::freeze(abi::bytes::zeroed(abi::usize(24))))" "v = binary::native::view(OUTER, p)" "e = binary::native::edit(OUTER, p)"}
-set plainSetup {"p = ffi_fixture::memory\[ffi::c::Void\](abi::bytes::freeze(abi::bytes::zeroed(abi::usize(24))))" "v = binary::native::view(PLAIN, p)" "e = binary::native::edit(PLAIN, p)"}
-set arruSetup {"p = ffi_fixture::memory\[ffi::c::Void\](abi::bytes::freeze(abi::bytes::zeroed(abi::usize(64))))" "v = binary::native::view(ARRU, p)"}
-set arrpSetup {"p = ffi_fixture::memory\[ffi::c::Void\](abi::bytes::freeze(abi::bytes::zeroed(abi::usize(64))))" "v = binary::native::view(ARRP, p)"}
-set bytesSetup {"d = abi::bytes::zeroed(abi::usize(24))" "b = abi::bytes::freeze(d)"}
-set manySetup {"p = ffi_fixture::memory\[ffi::c::Void\](abi::bytes::freeze(abi::bytes::zeroed(abi::usize(8))))" "v = binary::native::view(MANY, p)"}
+set outerSetup {"p = ffi_fixture::memory\[std::ffi::c::Void\](std::abi::bytes::freeze(std::abi::bytes::zeroed(std::abi::usize(24))))" "v = std::binary::native::view(OUTER, p)" "e = std::binary::native::edit(OUTER, p)"}
+set plainSetup {"p = ffi_fixture::memory\[std::ffi::c::Void\](std::abi::bytes::freeze(std::abi::bytes::zeroed(std::abi::usize(24))))" "v = std::binary::native::view(PLAIN, p)" "e = std::binary::native::edit(PLAIN, p)"}
+set arruSetup {"p = ffi_fixture::memory\[std::ffi::c::Void\](std::abi::bytes::freeze(std::abi::bytes::zeroed(std::abi::usize(64))))" "v = std::binary::native::view(ARRU, p)"}
+set arrpSetup {"p = ffi_fixture::memory\[std::ffi::c::Void\](std::abi::bytes::freeze(std::abi::bytes::zeroed(std::abi::usize(64))))" "v = std::binary::native::view(ARRP, p)"}
+set bytesSetup {"d = std::abi::bytes::zeroed(std::abi::usize(24))" "b = std::abi::bytes::freeze(d)"}
+set manySetup {"p = ffi_fixture::memory\[std::ffi::c::Void\](std::abi::bytes::freeze(std::abi::bytes::zeroed(std::abi::usize(8))))" "v = std::binary::native::view(MANY, p)"}
 
 proc programText {kind n} {
     # A program that makes a view or an edit is low-level (DIRECT-MODULES.md).
@@ -152,26 +152,26 @@ proc programText {kind n} {
         outer-base      { append p [Fn $n [Each $::outerSetup {i}]] }
         outer-whole     { append p [Fn $n [Each $::outerSetup {"v.u.whole"}]] }
         outer-high      { append p [Fn $n [Each $::outerSetup {"v.u.parts.high"}]] }
-        outer-word      { append p [Fn $n [Each $::outerSetup {"binary::element(v.u.words, k - 2)"}]] }
-        outer-pointer   { append p [Fn $n [Each $::outerSetup {"q = v.u.p" "ffi::c::null?(q)"}]] }
+        outer-word      { append p [Fn $n [Each $::outerSetup {"std::binary::element(v.u.words, k - 2)"}]] }
+        outer-pointer   { append p [Fn $n [Each $::outerSetup {"q = v.u.p" "std::ffi::c::null?(q)"}]] }
         outer-switch    { append p [Fn $n [Each $::outerSetup {"v.u.whole + v.u.parts.low + v.u.whole"}]] }
-        outer-store     { append p [Fn $n [Each $::outerSetup {"binary::store(e, OUTER.u.whole, 7)" i}]] }
-        outer-narrow    { append p [Fn $n [Each $::outerSetup {"binary::store(e, OUTER.u.parts.high, 7)" i}]] }
+        outer-store     { append p [Fn $n [Each $::outerSetup {"std::binary::store(e, OUTER.u.whole, 7)" i}]] }
+        outer-narrow    { append p [Fn $n [Each $::outerSetup {"std::binary::store(e, OUTER.u.parts.high, 7)" i}]] }
         plain-base      { append p [Fn $n [Each $::plainSetup {i}]] }
         plain-whole     { append p [Fn $n [Each $::plainSetup {"v.whole"}]] }
-        plain-store     { append p [Fn $n [Each $::plainSetup {"binary::store(e, PLAIN.whole, 7)" i}]] }
+        plain-store     { append p [Fn $n [Each $::plainSetup {"std::binary::store(e, PLAIN.whole, 7)" i}]] }
         arru-base       { append p [Fn $n [Each $::arruSetup {i}]] }
-        arru-element    { append p [Fn $n [Each $::arruSetup {"binary::element(v.us, k).whole"}]] }
+        arru-element    { append p [Fn $n [Each $::arruSetup {"std::binary::element(v.us, k).whole"}]] }
         arrp-base       { append p [Fn $n [Each $::arrpSetup {i}]] }
-        arrp-element    { append p [Fn $n [Each $::arrpSetup {"binary::element(v.ps, k).whole"}]] }
+        arrp-element    { append p [Fn $n [Each $::arrpSetup {"std::binary::element(v.ps, k).whole"}]] }
         many-base       { append p [Fn $n [Each $::manySetup {i}]] }
         many-first      { append p [Fn $n [Each $::manySetup {"v.a0"}]] }
         many-last       { append p [Fn $n [Each $::manySetup {"v.a63"}]] }
         bytes-base      { append p [Fn $n [Each $::bytesSetup {i}]] }
-        bytes-read-alt  { append p [Fn $n [Each $::bytesSetup {"binary::read(b, OUTER.u.parts.high)"}]] }
-        bytes-read-plain { append p [Fn $n [Each $::bytesSetup {"binary::read(b, PLAIN.after)"}]] }
-        bytes-write-alt { append p [Fn $n [Each $::bytesSetup {"w = binary::write(d, OUTER.u.parts.high, 7)" "abi::bytes::mutable_length(w).value"}]] }
-        bytes-write-plain { append p [Fn $n [Each $::bytesSetup {"w = binary::write(d, PLAIN.after, 7)" "abi::bytes::mutable_length(w).value"}]] }
+        bytes-read-alt  { append p [Fn $n [Each $::bytesSetup {"std::binary::read(b, OUTER.u.parts.high)"}]] }
+        bytes-read-plain { append p [Fn $n [Each $::bytesSetup {"std::binary::read(b, PLAIN.after)"}]] }
+        bytes-write-alt { append p [Fn $n [Each $::bytesSetup {"w = std::binary::write(d, OUTER.u.parts.high, 7)" "std::abi::bytes::mutable_length(w).value"}]] }
+        bytes-write-plain { append p [Fn $n [Each $::bytesSetup {"w = std::binary::write(d, PLAIN.after, 7)" "std::abi::bytes::mutable_length(w).value"}]] }
         default { error "unknown program $kind" }
     }
     return $p
@@ -210,20 +210,20 @@ set operations {
     "view: a U64 alternative of a union held at 8 (v.u.whole)" outer-whole outer-base
     "view: the same U64 as an ordinary field at 8 (v.whole)" plain-whole plain-base
     "view: a record alternative's field (v.u.parts.high)" outer-high outer-base
-    "view: an array alternative's element, dynamic index (binary::element(v.u.words, k - 2))" outer-word outer-base
-    "view: a pointer alternative (q = v.u.p, ffi::c::null?(q))" outer-pointer outer-base
+    "view: an array alternative's element, dynamic index (std::binary::element(v.u.words, k - 2))" outer-word outer-base
+    "view: a pointer alternative (q = v.u.p, std::ffi::c::null?(q))" outer-pointer outer-base
     "view: three reads switching interpretations (whole, parts.low, whole)" outer-switch outer-base
     "view: the first of 64 alternatives (v.a0, a U64)" many-first many-base
     "view: the last of 64 alternatives (v.a63, a U64)" many-last many-base
     "edit: a U64 alternative's store (OUTER.u.whole)" outer-store outer-base
     "edit: the same U64 as an ordinary field's store (PLAIN.whole)" plain-store plain-base
     "edit: a narrow alternative's store, 2 of the union's 8 bytes (OUTER.u.parts.high)" outer-narrow outer-base
-    "view: an element of an array of unions, its alternative (binary::element(v.us, k).whole)" arru-element arru-base
-    "view: an element of an array of records, the same field (binary::element(v.ps, k).whole)" arrp-element arrp-base
-    "bytes: binary::read through a union (OUTER.u.parts.high)" bytes-read-alt bytes-base
-    "bytes: binary::read of an ordinary field (PLAIN.after)" bytes-read-plain bytes-base
-    "bytes: binary::write through a union (OUTER.u.parts.high), a 24-byte record" bytes-write-alt bytes-base
-    "bytes: binary::write of an ordinary field (PLAIN.after), a 24-byte record" bytes-write-plain bytes-base
+    "view: an element of an array of unions, its alternative (std::binary::element(v.us, k).whole)" arru-element arru-base
+    "view: an element of an array of records, the same field (std::binary::element(v.ps, k).whole)" arrp-element arrp-base
+    "bytes: std::binary::read through a union (OUTER.u.parts.high)" bytes-read-alt bytes-base
+    "bytes: std::binary::read of an ordinary field (PLAIN.after)" bytes-read-plain bytes-base
+    "bytes: std::binary::write through a union (OUTER.u.parts.high), a 24-byte record" bytes-write-alt bytes-base
+    "bytes: std::binary::write of an ordinary field (PLAIN.after), a 24-byte record" bytes-write-plain bytes-base
 }
 
 puts "Union layouts: performance (n = $n operations per program; best of $runs runs)\n"
@@ -270,9 +270,9 @@ foreach {label kind base} $operations {
 # registration, validation (no overlap check: there is no overlap rule to
 # apply) and designator resolution are seen to cost what a record's do.
 proc compileText {kind k} {
-    set text "direct module\n\nimport abi\nimport abi::bytes\nimport binary\nimport binary::native\nimport ffi::c\nimport ffi_fixture\n\n"
+    set text "direct module\n\nimport std::abi\nimport std::abi::bytes\nimport std::binary\nimport std::binary::native\nimport std::ffi::c\nimport ffi_fixture\n\n"
     set widths {1 2 4 8}
-    set types {binary::U8 binary::U16 binary::U32 binary::U64}
+    set types {std::binary::U8 std::binary::U16 std::binary::U32 std::binary::U64}
     if {$kind eq "union"} {
         append text "union layout BIG:\n    size 8\n    align 8\n"
         for {set i 0} {$i < $k} {incr i} { append text "    alternative a$i: [lindex $types [expr {$i % 4}]]\n" }
@@ -288,7 +288,7 @@ proc compileText {kind k} {
         append text "layout BIG:\n    size $at\n    align 1\n$fields"
         set size $at
     }
-    append text "\nfn f() -> int errors NativeViewNull:\n    p = ffi_fixture::memory\[ffi::c::Void\](abi::bytes::freeze(abi::bytes::zeroed(abi::usize($size))))\n    v = binary::native::view(BIG, p)\n    v.a[expr {$k - 1}]\n\nr = f():\n    on NativeViewNull:\n        -1\nr\n"
+    append text "\nfn f() -> int errors NativeViewNull:\n    p = ffi_fixture::memory\[std::ffi::c::Void\](std::abi::bytes::freeze(std::abi::bytes::zeroed(std::abi::usize($size))))\n    v = std::binary::native::view(BIG, p)\n    v.a[expr {$k - 1}]\n\nr = f():\n    on NativeViewNull:\n        -1\nr\n"
     return $text
 }
 

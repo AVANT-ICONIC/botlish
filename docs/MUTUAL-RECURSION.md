@@ -140,7 +140,7 @@ rule"):
     environment record. Either is a new runtime and NIR representation.
   * Deferred (see "Later").
 * **The cost for programs is small.** The mutually recursive core of a
-  program lives in a module (`lib/NAME.bot`), which is where reusable code
+  program lives in a module (`stdlib/NAME.bot`), which is where reusable code
   lives anyway.
 
 ## Why every member declares its result type

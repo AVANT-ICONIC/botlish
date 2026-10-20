@@ -1,7 +1,7 @@
 # source-types.test -- source-defined bounded integer refinement types
 # ("type Child = Parent in Domain", surface/parser.tcl's TypeDecl,
 # hir/sourcetypes.tcl): the *generic* language feature, independent of
-# Byte/Nibble/LowNibble/HighNibble (whose own migration to lib/byte.bot is
+# Byte/Nibble/LowNibble/HighNibble (whose own migration to stdlib/byte.bot is
 # covered by tests/native-byte.test and tests/refined-signatures.test's
 # domain-1/domain-2/narrow-1/cross-module-1). See
 # SOURCE-DEFINED-INTEGER-DOMAINS.md for the full design writeup.
@@ -225,7 +225,7 @@ fn h(x) -> Sparse:
 # tests pin -- a runtime range check for a source-declared domain, success
 # and failure alike, dense and sparse, agreeing between backends -- is now
 # demonstrated through an explicit `errors`/`fail`/`handle` function
-# instead, the same shape byte::from_int itself uses.
+# instead, the same shape std::byte::from_int itself uses.
 
 test source-type-constructor-success {check(0)/check(10), a source-declared type's own explicit fallible conversion, succeed at both ends of the domain} -body {
     set h [surface::compile {type Small = Int in 0..10
@@ -492,7 +492,7 @@ r
     list $v1 $e2 $v3
 } -result {10 {CORE SEMANTIC UNCAUGHT-ERROR} 105}
 
-test source-type-struct-only-compilation-reclaims-registry {a compilation whose only source types are structs still reclaims the registry: after a program whose module w1 declares "refined type Item = int", rewriting w1.bot to declare "struct Item:" compiles and runs in the same process (instead of failing "\"Item\" cannot be declared as a struct"), and w1::Item is no longer a registered core type} -body {
+test source-type-struct-only-compilation-reclaims-registry {a compilation whose only source types are structs still reclaims the registry: after a program whose module w1 declares "refined type Item = int", rewriting w1.bot to declare "struct Item:" compiles and runs in the same process (instead of failing "\"Item\" cannot be declared as a struct"), and std::w1::Item is no longer a registered core type} -body {
     withPrivateLibrary {
         set module [file join $::core::libraryDir w1.bot]
         set ch [open $module w]
@@ -502,8 +502,8 @@ fn one() -> int:
     1
 }
         close $ch
-        set mainPath [makeFile {import w1
-w1::one()
+        set mainPath [makeFile {import std::w1
+std::w1::one()
 } sourcetype-reclaim-main.bot]
         try {
             set h1 [surface::readProgramFile $mainPath]
@@ -516,17 +516,17 @@ fn make() -> Item:
     Item { count: 3 }
 }
             close $ch
-            makeFile {import w1
-w1::make().count
+            makeFile {import std::w1
+std::w1::make().count
 } sourcetype-reclaim-main.bot
             set h2 [surface::readProgramFile $mainPath]
-            list $first [hir::sourceTypes $h2] [core::type::valid w1::Item] \
+            list $first [hir::sourceTypes $h2] [core::type::valid std::w1::Item] \
                 [core::formatValue [core::evalProgram [hir::lower $h2]]]
         } finally {
             removeFile sourcetype-reclaim-main.bot
         }
     }
-} -result {{{{kind refined name w1::Item carrier int owner w1}} 1} {{kind struct name Item id w1::Item namespace w1 opaque 0 fields {count int}}} 0 3}
+} -result {{{{kind refined name std::w1::Item carrier int owner std::w1}} 1} {{kind struct name Item id std::w1::Item namespace std::w1 opaque 0 fields {count int}}} 0 3}
 
 test source-type-struct-only-hir-text-reclaims-registry {reading HIR text whose only source types are structs reclaims the registry the same way: the refinement "Item" an earlier compile registered is gone, and the text's own struct Item round-trips and runs} -body {
     set text [hir::format [surface::compile {struct Item:
@@ -621,7 +621,7 @@ type Nibble = Byte in 0..15
     list [core::type::subtype Nibble Byte] [hir::sourceTypes $h]
 } -result {1 {{name Byte parent Int domain {interval 0 255}} {name Nibble parent Byte domain {interval 0 15}}}}
 
-test source-type-cross-module {a type declared in a namespace module is a member of its namespace (canonical name srctypeslib::Widget) and is usable, as a result type, by code that imports that module (surface/modules.tcl maps a namespace to exactly one file under core::libraryDir -- the byte:: vertical is exactly this, tests/native-byte.test; here with a throwaway synthetic module)} -body {
+test source-type-cross-module {a type declared in a namespace module is a member of its namespace (canonical name std::srctypeslib::Widget) and is usable, as a result type, by code that imports that module (surface/modules.tcl maps a standard namespace std::NAME to exactly one file under core::libraryDir -- the std::byte vertical is exactly this, tests/native-byte.test; here with a throwaway synthetic module)} -body {
     withPrivateLibrary {
         set ch [open [file join $::core::libraryDir srctypeslib.bot] w]
         puts $ch {type Widget = Int in 0..100
@@ -630,8 +630,8 @@ fn make() -> Widget:
     50
 }
         close $ch
-        set mainPath [makeFile {import srctypeslib
-srctypeslib::make()
+        set mainPath [makeFile {import std::srctypeslib
+std::srctypeslib::make()
 } srctypeslib-main.bot]
         try {
             set h [surface::readProgramFile $mainPath -strict 0]
@@ -640,7 +640,7 @@ srctypeslib::make()
             removeFile srctypeslib-main.bot
         }
     }
-} -result {0 {int[srctypeslib::Widget]}}
+} -result {0 {int[std::srctypeslib::Widget]}}
 
 test source-type-unused-declaration-no-runtime-code {an unused type declaration adds no NIR/runtime value} -body {
     set h [surface::compile {type Small = Int in 0..10

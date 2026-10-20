@@ -280,7 +280,7 @@
             return [list move arg $p $index]
 >>>>
 
-@@ done-consumes coroutine::done? consumes the handle: its owner is moved by the query (its ownership role, core/native.tcl's -ownership, is `move` instead of `observe`)
+@@ done-consumes std::coroutine::done? consumes the handle: its owner is moved by the query (its ownership role, core/native.tcl's -ownership, is `move` instead of `observe`)
 ## core/coroutines.tcl
 <<<<
     -param-types {coroutine} -result-type bool -ownership {observe}

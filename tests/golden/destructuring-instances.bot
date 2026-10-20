@@ -20,13 +20,13 @@
 # audit/golden/migration/fragments/destructuring-instances.tsv, maps their
 # Tcl tests to these golden tests.
 #
-# Imports: compiler and test (the framework); list for list::at
+# Imports: compiler and test (the framework); list for std::list::at
 # (destructure-capture-two-closures). No test here is about an import or
 # about method calls, and no declaration is needed: every source is an
 # anonymous struct value.
-import compiler
-import list
-import test
+import std::compiler
+import std::list
+import std::test
 
 # ---------------------------------------------------------------------------
 # The statement's value where it is observable
@@ -35,14 +35,14 @@ fn register_statement_value_tests():
     # destructure-source-statement-value: where the statement's value is
     # observable (the last statement of a function body) it is unit, not
     # the value of the last binding it makes.
-    fn statement_value() errors compiler::CompilerError:
+    fn statement_value() errors std::compiler::CompilerError:
         static compile:
             fn f(r):
                 {a, b} = r
             f({a: 1, b: 2})
-    test::value("destructure-source-statement-value/destructured", unit, statement_value)
+    std::test::value("destructure-source-statement-value/destructured", unit, statement_value)
 
-    fn statement_value_explicit() errors compiler::CompilerError:
+    fn statement_value_explicit() errors std::compiler::CompilerError:
         static compile:
             fn f(r):
                 tmp = r
@@ -50,7 +50,7 @@ fn register_statement_value_tests():
                 b = tmp.b
                 unit
             f({a: 1, b: 2})
-    test::value("destructure-source-statement-value/explicit", unit, statement_value_explicit)
+    std::test::value("destructure-source-statement-value/explicit", unit, statement_value_explicit)
 
 # ---------------------------------------------------------------------------
 # Shadowing: the ordinary scope rule inside a function
@@ -58,16 +58,16 @@ fn register_statement_value_tests():
 fn register_shadowing_tests():
     # destructure-same-name-in-inner-scope: a destructured name may shadow an
     # outer one in an inner scope.
-    fn inner_scope() errors compiler::CompilerError:
+    fn inner_scope() errors std::compiler::CompilerError:
         static compile:
             x = 1
             fn f(r):
                 {a: x} = r
                 x
             [f({a: 5}), x]
-    test::value("destructure-same-name-in-inner-scope/destructured", [5, 1], inner_scope)
+    std::test::value("destructure-same-name-in-inner-scope/destructured", [5, 1], inner_scope)
 
-    fn inner_scope_explicit() errors compiler::CompilerError:
+    fn inner_scope_explicit() errors std::compiler::CompilerError:
         static compile:
             x = 1
             fn f(r):
@@ -75,11 +75,11 @@ fn register_shadowing_tests():
                 x = tmp.a
                 x
             [f({a: 5}), x]
-    test::value("destructure-same-name-in-inner-scope/explicit", [5, 1], inner_scope_explicit)
+    std::test::value("destructure-same-name-in-inner-scope/explicit", [5, 1], inner_scope_explicit)
 
     # destructure-shadowing-reference-before: a reference before a shadowing
     # destructure still sees the outer binding.
-    fn reference_before() errors compiler::CompilerError:
+    fn reference_before() errors std::compiler::CompilerError:
         static compile:
             x = 1
             fn f(r):
@@ -87,9 +87,9 @@ fn register_shadowing_tests():
                 {a: x} = r
                 [before, x]
             f({a: 5})
-    test::value("destructure-shadowing-reference-before/destructured", [1, 5], reference_before)
+    std::test::value("destructure-shadowing-reference-before/destructured", [1, 5], reference_before)
 
-    fn reference_before_explicit() errors compiler::CompilerError:
+    fn reference_before_explicit() errors std::compiler::CompilerError:
         static compile:
             x = 1
             fn f(r):
@@ -98,7 +98,7 @@ fn register_shadowing_tests():
                 x = tmp.a
                 [before, x]
             f({a: 5})
-    test::value("destructure-shadowing-reference-before/explicit", [1, 5], reference_before_explicit)
+    std::test::value("destructure-shadowing-reference-before/explicit", [1, 5], reference_before_explicit)
 
 # ---------------------------------------------------------------------------
 # Scopes: a branch inside a loop body inside a function
@@ -106,7 +106,7 @@ fn register_shadowing_tests():
 fn register_scope_tests():
     # destructure-scope-in-nested-in-loop-in-fn: in a branch inside a loop
     # body inside a function.
-    fn in_nested_in_loop() errors compiler::CompilerError:
+    fn in_nested_in_loop() errors std::compiler::CompilerError:
         static compile:
             fn run(rows):
                 total = 0
@@ -119,9 +119,9 @@ fn register_scope_tests():
                         0
                 r
             run([{n: 1, m: 10}, {n: 2, m: 20}])
-    test::value("destructure-scope-in-nested-in-loop-in-fn/destructured", [0, 20], in_nested_in_loop)
+    std::test::value("destructure-scope-in-nested-in-loop-in-fn/destructured", [0, 20], in_nested_in_loop)
 
-    fn in_nested_in_loop_explicit() errors compiler::CompilerError:
+    fn in_nested_in_loop_explicit() errors std::compiler::CompilerError:
         static compile:
             fn run(rows):
                 total = 0
@@ -136,14 +136,14 @@ fn register_scope_tests():
                         0
                 r
             run([{n: 1, m: 10}, {n: 2, m: 20}])
-    test::value("destructure-scope-in-nested-in-loop-in-fn/explicit", [0, 20], in_nested_in_loop_explicit)
+    std::test::value("destructure-scope-in-nested-in-loop-in-fn/explicit", [0, 20], in_nested_in_loop_explicit)
 
 # ---------------------------------------------------------------------------
 # Closures capture destructured bindings as ordinary bindings
 
 fn register_capture_tests():
     # destructure-capture-short: shorthand bindings captured by a closure.
-    fn capture_short() errors compiler::CompilerError:
+    fn capture_short() errors std::compiler::CompilerError:
         static compile:
             fn make(r):
                 {n, step} = r
@@ -151,9 +151,9 @@ fn register_capture_tests():
                     x + n * step
                 next
             make({n: 3, step: 10})(1)
-    test::value("destructure-capture-short/destructured", 31, capture_short)
+    std::test::value("destructure-capture-short/destructured", 31, capture_short)
 
-    fn capture_short_explicit() errors compiler::CompilerError:
+    fn capture_short_explicit() errors std::compiler::CompilerError:
         static compile:
             fn make(r):
                 t = r
@@ -163,10 +163,10 @@ fn register_capture_tests():
                     x + n * step
                 next
             make({n: 3, step: 10})(1)
-    test::value("destructure-capture-short/explicit", 31, capture_short_explicit)
+    std::test::value("destructure-capture-short/explicit", 31, capture_short_explicit)
 
     # destructure-capture-renamed: renamed bindings captured.
-    fn capture_renamed() errors compiler::CompilerError:
+    fn capture_renamed() errors std::compiler::CompilerError:
         static compile:
             fn make(r):
                 {n: count, step: by} = r
@@ -174,9 +174,9 @@ fn register_capture_tests():
                     x + count * by
                 next
             make({n: 3, step: 10})(1)
-    test::value("destructure-capture-renamed/destructured", 31, capture_renamed)
+    std::test::value("destructure-capture-renamed/destructured", 31, capture_renamed)
 
-    fn capture_renamed_explicit() errors compiler::CompilerError:
+    fn capture_renamed_explicit() errors std::compiler::CompilerError:
         static compile:
             fn make(r):
                 t = r
@@ -186,10 +186,10 @@ fn register_capture_tests():
                     x + count * by
                 next
             make({n: 3, step: 10})(1)
-    test::value("destructure-capture-renamed/explicit", 31, capture_renamed_explicit)
+    std::test::value("destructure-capture-renamed/explicit", 31, capture_renamed_explicit)
 
     # destructure-capture-in-list: a destructured binding passed on to calls.
-    fn capture_in_list() errors compiler::CompilerError:
+    fn capture_in_list() errors std::compiler::CompilerError:
         static compile:
             fn fn_a(n):
                 n
@@ -200,9 +200,9 @@ fn register_capture_tests():
                 fs = [fn_a(n), fn_b(n)]
                 fs
             run({n: 4})
-    test::value("destructure-capture-in-list/destructured", [4, 5], capture_in_list)
+    std::test::value("destructure-capture-in-list/destructured", [4, 5], capture_in_list)
 
-    fn capture_in_list_explicit() errors compiler::CompilerError:
+    fn capture_in_list_explicit() errors std::compiler::CompilerError:
         static compile:
             fn fn_a(n):
                 n
@@ -214,10 +214,10 @@ fn register_capture_tests():
                 fs = [fn_a(n), fn_b(n)]
                 fs
             run({n: 4})
-    test::value("destructure-capture-in-list/explicit", [4, 5], capture_in_list_explicit)
+    std::test::value("destructure-capture-in-list/explicit", [4, 5], capture_in_list_explicit)
 
     # destructure-capture-two-closures: two closures capturing one binding.
-    fn two_closures() errors compiler::CompilerError:
+    fn two_closures() errors std::compiler::CompilerError:
         static compile:
             fn make(r):
                 {n} = r
@@ -227,10 +227,10 @@ fn register_capture_tests():
                     n + k
                 [get, bump]
             fs = make({n: 7})
-            [list::at(fs, 0)(), list::at(fs, 1)(1)]
-    test::value("destructure-capture-two-closures/destructured", [7, 8], two_closures)
+            [std::list::at(fs, 0)(), std::list::at(fs, 1)(1)]
+    std::test::value("destructure-capture-two-closures/destructured", [7, 8], two_closures)
 
-    fn two_closures_explicit() errors compiler::CompilerError:
+    fn two_closures_explicit() errors std::compiler::CompilerError:
         static compile:
             fn make(r):
                 t = r
@@ -241,11 +241,11 @@ fn register_capture_tests():
                     n + k
                 [get, bump]
             fs = make({n: 7})
-            [list::at(fs, 0)(), list::at(fs, 1)(1)]
-    test::value("destructure-capture-two-closures/explicit", [7, 8], two_closures_explicit)
+            [std::list::at(fs, 0)(), std::list::at(fs, 1)(1)]
+    std::test::value("destructure-capture-two-closures/explicit", [7, 8], two_closures_explicit)
 
     # destructure-capture-nested: leaves of a nested pattern captured.
-    fn capture_nested() errors compiler::CompilerError:
+    fn capture_nested() errors std::compiler::CompilerError:
         static compile:
             fn make(r):
                 {u: {a, b}} = r
@@ -253,9 +253,9 @@ fn register_capture_tests():
                     a * b
                 f
             make({u: {a: 6, b: 7}})()
-    test::value("destructure-capture-nested/destructured", 42, capture_nested)
+    std::test::value("destructure-capture-nested/destructured", 42, capture_nested)
 
-    fn capture_nested_explicit() errors compiler::CompilerError:
+    fn capture_nested_explicit() errors std::compiler::CompilerError:
         static compile:
             fn make(r):
                 t = r
@@ -266,14 +266,14 @@ fn register_capture_tests():
                     a * b
                 f
             make({u: {a: 6, b: 7}})()
-    test::value("destructure-capture-nested/explicit", 42, capture_nested_explicit)
+    std::test::value("destructure-capture-nested/explicit", 42, capture_nested_explicit)
 
 # ---------------------------------------------------------------------------
 # Destructures in elif chains
 
 fn register_elif_tests():
     # destructure-elif-chains: destructures in every clause of an elif chain.
-    fn elif_chains() errors compiler::CompilerError:
+    fn elif_chains() errors std::compiler::CompilerError:
         static compile:
             fn pick(k, r):
                 if k == 0:
@@ -286,9 +286,9 @@ fn register_elif_tests():
                     {a, b} = r
                     a + b
             [pick(0, {a: 1, b: 2}), pick(1, {a: 1, b: 2}), pick(2, {a: 1, b: 2})]
-    test::value("destructure-elif-chains/destructured", [1, 2, 3], elif_chains)
+    std::test::value("destructure-elif-chains/destructured", [1, 2, 3], elif_chains)
 
-    fn elif_chains_explicit() errors compiler::CompilerError:
+    fn elif_chains_explicit() errors std::compiler::CompilerError:
         static compile:
             fn pick(k, r):
                 if k == 0:
@@ -305,11 +305,11 @@ fn register_elif_tests():
                     b = t.b
                     a + b
             [pick(0, {a: 1, b: 2}), pick(1, {a: 1, b: 2}), pick(2, {a: 1, b: 2})]
-    test::value("destructure-elif-chains/explicit", [1, 2, 3], elif_chains_explicit)
+    std::test::value("destructure-elif-chains/explicit", [1, 2, 3], elif_chains_explicit)
 
     # destructure-elif-condition-uses-bindings: a destructured binding in the
     # conditions of an elif chain.
-    fn elif_conditions() errors compiler::CompilerError:
+    fn elif_conditions() errors std::compiler::CompilerError:
         static compile:
             fn f(r):
                 {n} = r
@@ -320,9 +320,9 @@ fn register_elif_tests():
                 else:
                     30
             [f({n: 0}), f({n: 1}), f({n: 5})]
-    test::value("destructure-elif-condition-uses-bindings/destructured", [10, 20, 30], elif_conditions)
+    std::test::value("destructure-elif-condition-uses-bindings/destructured", [10, 20, 30], elif_conditions)
 
-    fn elif_conditions_explicit() errors compiler::CompilerError:
+    fn elif_conditions_explicit() errors std::compiler::CompilerError:
         static compile:
             fn f(r):
                 t = r
@@ -334,7 +334,7 @@ fn register_elif_tests():
                 else:
                     30
             [f({n: 0}), f({n: 1}), f({n: 5})]
-    test::value("destructure-elif-condition-uses-bindings/explicit", [10, 20, 30], elif_conditions_explicit)
+    std::test::value("destructure-elif-condition-uses-bindings/explicit", [10, 20, 30], elif_conditions_explicit)
 
 # ---------------------------------------------------------------------------
 # The statement's value is unit (the "explicit" spelling is the expansion
@@ -343,39 +343,39 @@ fn register_elif_tests():
 fn register_unit_value_tests():
     # destructure-value-field-order-irrelevant: {a, b} and {b, a} read and
     # bind in different orders but have the same statement value.
-    fn order_ab() errors compiler::CompilerError:
+    fn order_ab() errors std::compiler::CompilerError:
         static compile:
             fn f(v):
                 {a, b} = v
             f({a: 1, b: 2})
-    test::value("destructure-value-field-order-irrelevant/ab", unit, order_ab)
+    std::test::value("destructure-value-field-order-irrelevant/ab", unit, order_ab)
 
-    fn order_ba() errors compiler::CompilerError:
+    fn order_ba() errors std::compiler::CompilerError:
         static compile:
             fn g(v):
                 {b, a} = v
             g({a: 1, b: 2})
-    test::value("destructure-value-field-order-irrelevant/ba", unit, order_ba)
+    std::test::value("destructure-value-field-order-irrelevant/ba", unit, order_ba)
 
-    fn order_both() errors compiler::CompilerError:
+    fn order_both() errors std::compiler::CompilerError:
         static compile:
             fn f(v):
                 {a, b} = v
             fn g(v):
                 {b, a} = v
             [f({a: 1, b: 2}), g({a: 1, b: 2})]
-    test::value("destructure-value-field-order-irrelevant/both", [unit, unit], order_both)
+    std::test::value("destructure-value-field-order-irrelevant/both", [unit, unit], order_both)
 
     # destructure-value-nested: a nested destructure is one statement: unit,
     # not id, expires, user or the nested struct, whatever its order.
-    fn nested_last() errors compiler::CompilerError:
+    fn nested_last() errors std::compiler::CompilerError:
         static compile:
             fn f(r):
                 {user: {name, id}, expires} = r
             f({user: {name: "ada", id: 7, admin: true}, expires: 99})
-    test::value("destructure-value-nested/destructured", unit, nested_last)
+    std::test::value("destructure-value-nested/destructured", unit, nested_last)
 
-    fn nested_last_explicit() errors compiler::CompilerError:
+    fn nested_last_explicit() errors std::compiler::CompilerError:
         static compile:
             fn f(r):
                 tmp = r
@@ -385,41 +385,41 @@ fn register_unit_value_tests():
                 expires = tmp.expires
                 unit
             f({user: {name: "ada", id: 7, admin: true}, expires: 99})
-    test::value("destructure-value-nested/explicit", unit, nested_last_explicit)
+    std::test::value("destructure-value-nested/explicit", unit, nested_last_explicit)
 
-    fn nested_bound() errors compiler::CompilerError:
+    fn nested_bound() errors std::compiler::CompilerError:
         static compile:
             fn f(r):
                 {user: {name, id}, expires} = r
                 [name, id, expires]
             f({user: {name: "ada", id: 7, admin: true}, expires: 99})
-    test::value("destructure-value-nested/bound", ["ada", 7, 99], nested_bound)
+    std::test::value("destructure-value-nested/bound", ["ada", 7, 99], nested_bound)
 
-    fn nested_reordered() errors compiler::CompilerError:
+    fn nested_reordered() errors std::compiler::CompilerError:
         static compile:
             fn f(r):
                 {expires, user: {id, name}} = r
             f({user: {name: "ada", id: 7, admin: true}, expires: 99})
-    test::value("destructure-value-nested/reordered", unit, nested_reordered)
+    std::test::value("destructure-value-nested/reordered", unit, nested_reordered)
 
-    fn nested_partial() errors compiler::CompilerError:
+    fn nested_partial() errors std::compiler::CompilerError:
         static compile:
             fn f(r):
                 {user: {name}} = r
             f({user: {name: "ada", id: 7, admin: true}, expires: 99})
-    test::value("destructure-value-nested/partial", unit, nested_partial)
+    std::test::value("destructure-value-nested/partial", unit, nested_partial)
 
     # destructure-value-bindings-still-work: statements after a destructure
     # see its bindings; the unit does not disturb them.
-    fn still_work() errors compiler::CompilerError:
+    fn still_work() errors std::compiler::CompilerError:
         static compile:
             fn f(v):
                 {a, b} = v
                 a + b
             f({a: 1, b: 2})
-    test::value("destructure-value-bindings-still-work/destructured", 3, still_work)
+    std::test::value("destructure-value-bindings-still-work/destructured", 3, still_work)
 
-    fn still_work_explicit() errors compiler::CompilerError:
+    fn still_work_explicit() errors std::compiler::CompilerError:
         static compile:
             fn f(v):
                 tmp = v
@@ -428,64 +428,64 @@ fn register_unit_value_tests():
                 unit
                 a + b
             f({a: 1, b: 2})
-    test::value("destructure-value-bindings-still-work/explicit", 3, still_work_explicit)
+    std::test::value("destructure-value-bindings-still-work/explicit", 3, still_work_explicit)
 
     # destructure-value-ordinary-binding-unchanged: an ordinary binding ending
     # a body still yields its value: unit is the destructure's alone. Here
     # the bindings of a projection from an untyped parameter (/plain, a
     # constant, is in destructuring.bot).
-    fn projection_binding() errors compiler::CompilerError:
+    fn projection_binding() errors std::compiler::CompilerError:
         static compile:
             fn f(v):
                 a = v.a
             f({a: 1, b: 2})
-    test::value("destructure-value-ordinary-binding-unchanged/projection", 1, projection_binding)
+    std::test::value("destructure-value-ordinary-binding-unchanged/projection", 1, projection_binding)
 
-    fn hoisted_binding() errors compiler::CompilerError:
+    fn hoisted_binding() errors std::compiler::CompilerError:
         static compile:
             fn f(v):
                 t = v
                 b = t.b
             f({a: 1, b: 2})
-    test::value("destructure-value-ordinary-binding-unchanged/hoisted", 2, hoisted_binding)
+    std::test::value("destructure-value-ordinary-binding-unchanged/hoisted", 2, hoisted_binding)
 
     # destructure-value-not-source-narrowing-or-remainder: the value is not
     # the source, a narrowed struct, the omitted fields or a List of the
     # bound values: for every pattern it is unit.
-    fn pattern_ab() errors compiler::CompilerError:
+    fn pattern_ab() errors std::compiler::CompilerError:
         static compile:
             fn f(r):
                 {a, b} = r
             f({a: 1, b: 2, c: 3})
-    test::value("destructure-value-not-source-narrowing-or-remainder/ab", unit, pattern_ab)
+    std::test::value("destructure-value-not-source-narrowing-or-remainder/ab", unit, pattern_ab)
 
-    fn pattern_ba() errors compiler::CompilerError:
+    fn pattern_ba() errors std::compiler::CompilerError:
         static compile:
             fn f(r):
                 {b, a} = r
             f({a: 1, b: 2, c: 3})
-    test::value("destructure-value-not-source-narrowing-or-remainder/ba", unit, pattern_ba)
+    std::test::value("destructure-value-not-source-narrowing-or-remainder/ba", unit, pattern_ba)
 
-    fn pattern_a() errors compiler::CompilerError:
+    fn pattern_a() errors std::compiler::CompilerError:
         static compile:
             fn f(r):
                 {a} = r
             f({a: 1, b: 2, c: 3})
-    test::value("destructure-value-not-source-narrowing-or-remainder/a", unit, pattern_a)
+    std::test::value("destructure-value-not-source-narrowing-or-remainder/a", unit, pattern_a)
 
-    fn pattern_abc() errors compiler::CompilerError:
+    fn pattern_abc() errors std::compiler::CompilerError:
         static compile:
             fn f(r):
                 {a, b, c} = r
             f({a: 1, b: 2, c: 3})
-    test::value("destructure-value-not-source-narrowing-or-remainder/abc", unit, pattern_abc)
+    std::test::value("destructure-value-not-source-narrowing-or-remainder/abc", unit, pattern_abc)
 
-    fn pattern_renamed() errors compiler::CompilerError:
+    fn pattern_renamed() errors std::compiler::CompilerError:
         static compile:
             fn f(r):
                 {c: z} = r
             f({a: 1, b: 2, c: 3})
-    test::value("destructure-value-not-source-narrowing-or-remainder/renamed", unit, pattern_renamed)
+    std::test::value("destructure-value-not-source-narrowing-or-remainder/renamed", unit, pattern_renamed)
 
 # ---------------------------------------------------------------------------
 # Branches and loops: no destructuring-specific rule; the ordinary join and
@@ -494,7 +494,7 @@ fn register_unit_value_tests():
 fn register_unit_branch_and_loop_tests():
     # destructure-value-branch: a branch ending in a destructure produces
     # unit and joins with the other branches by the ordinary rules.
-    fn else_unit() errors compiler::CompilerError:
+    fn else_unit() errors std::compiler::CompilerError:
         static compile:
             fn run(c, v):
                 if c:
@@ -502,9 +502,9 @@ fn register_unit_branch_and_loop_tests():
                 else:
                     unit
             [run(true, {a: 1}), run(false, {a: 1})]
-    test::value("destructure-value-branch/else-unit", [unit, unit], else_unit)
+    std::test::value("destructure-value-branch/else-unit", [unit, unit], else_unit)
 
-    fn both_branches() errors compiler::CompilerError:
+    fn both_branches() errors std::compiler::CompilerError:
         static compile:
             fn run(c, v):
                 r = if c:
@@ -513,9 +513,9 @@ fn register_unit_branch_and_loop_tests():
                     {b} = v
                 r
             [run(true, {a: 1, b: 2}), run(false, {a: 1, b: 2})]
-    test::value("destructure-value-branch/both-branches", [unit, unit], both_branches)
+    std::test::value("destructure-value-branch/both-branches", [unit, unit], both_branches)
 
-    fn else_int() errors compiler::CompilerError:
+    fn else_int() errors std::compiler::CompilerError:
         static compile:
             fn run(c, v):
                 if c:
@@ -523,9 +523,9 @@ fn register_unit_branch_and_loop_tests():
                 else:
                     7
             [run(true, {a: 1}), run(false, {a: 1})]
-    test::value("destructure-value-branch/else-int", [unit, 7], else_int)
+    std::test::value("destructure-value-branch/else-int", [unit, 7], else_int)
 
-    fn elif_branches() errors compiler::CompilerError:
+    fn elif_branches() errors std::compiler::CompilerError:
         static compile:
             fn run(k, v):
                 if k == 0:
@@ -535,11 +535,11 @@ fn register_unit_branch_and_loop_tests():
                 else:
                     unit
             [run(0, {a: 1, b: 2}), run(1, {a: 1, b: 2}), run(2, {a: 1, b: 2})]
-    test::value("destructure-value-branch/elif", [unit, unit, unit], elif_branches)
+    std::test::value("destructure-value-branch/elif", [unit, unit, unit], elif_branches)
 
     # destructure-value-branch-type-join: a destructure in one branch and an
     # Int in the other do not join to an Int: the ordinary join sees unit.
-    fn type_join() errors compiler::CompilerError:
+    fn type_join() errors std::compiler::CompilerError:
         static compile:
             fn run(c, v):
                 r = if c:
@@ -548,9 +548,9 @@ fn register_unit_branch_and_loop_tests():
                     7
                 r
             run(false, {a: 1})
-    test::value("destructure-value-branch-type-join/destructured", 7, type_join)
+    std::test::value("destructure-value-branch-type-join/destructured", 7, type_join)
 
-    fn type_join_explicit() errors compiler::CompilerError:
+    fn type_join_explicit() errors std::compiler::CompilerError:
         static compile:
             fn run(c, v):
                 r = if c:
@@ -561,59 +561,59 @@ fn register_unit_branch_and_loop_tests():
                     7
                 r
             run(false, {a: 1})
-    test::value("destructure-value-branch-type-join/explicit", 7, type_join_explicit)
+    std::test::value("destructure-value-branch-type-join/explicit", 7, type_join_explicit)
 
     # destructure-value-collecting-loop: a collecting loop whose body ends in
     # a destructure collects unit for each normal iteration. Here the loops
     # over an untyped parameter's elements (/counted and /lockstep, over
     # literals, are in destructuring.bot).
-    fn loop_in() errors compiler::CompilerError:
+    fn loop_in() errors std::compiler::CompilerError:
         static compile:
             fn run(xs):
                 loop x in xs:
                     {a} = x
             run([{a: 1}, {a: 2}, {a: 3}])
-    test::value("destructure-value-collecting-loop/in", [unit, unit, unit], loop_in)
+    std::test::value("destructure-value-collecting-loop/in", [unit, unit, unit], loop_in)
 
-    fn loop_two_fields() errors compiler::CompilerError:
+    fn loop_two_fields() errors std::compiler::CompilerError:
         static compile:
             fn run(xs):
                 loop x in xs:
                     {a, b} = x
             run([{a: 1, b: 5}, {a: 2, b: 6}])
-    test::value("destructure-value-collecting-loop/two-fields", [unit, unit], loop_two_fields)
+    std::test::value("destructure-value-collecting-loop/two-fields", [unit, unit], loop_two_fields)
 
-    fn loop_empty() errors compiler::CompilerError:
+    fn loop_empty() errors std::compiler::CompilerError:
         static compile:
             fn run(xs):
                 loop x in xs:
                     {a} = x
             run([])
-    test::value("destructure-value-collecting-loop/empty", [], loop_empty)
+    std::test::value("destructure-value-collecting-loop/empty", [], loop_empty)
 
     # destructure-value-loop-old-collection-gone: the expansion without the
     # unit collected each element's last field; the destructure collects
     # unit.
-    fn old_collection() errors compiler::CompilerError:
+    fn old_collection() errors std::compiler::CompilerError:
         static compile:
             fn run(xs):
                 loop x in xs:
                     tmp = x
                     a = tmp.a
             run([{a: 1}, {a: 2}])
-    test::value("destructure-value-loop-old-collection-gone/old-expansion", [1, 2], old_collection)
+    std::test::value("destructure-value-loop-old-collection-gone/old-expansion", [1, 2], old_collection)
 
-    fn new_collection() errors compiler::CompilerError:
+    fn new_collection() errors std::compiler::CompilerError:
         static compile:
             fn run(xs):
                 loop x in xs:
                     {a} = x
             run([{a: 1}, {a: 2}])
-    test::value("destructure-value-loop-old-collection-gone/destructure", [unit, unit], new_collection)
+    std::test::value("destructure-value-loop-old-collection-gone/destructure", [unit, unit], new_collection)
 
     # destructure-value-continue: continue and break after a destructure run
     # normally: the unit is never collected before the later statements.
-    fn continue_after() errors compiler::CompilerError:
+    fn continue_after() errors std::compiler::CompilerError:
         static compile:
             fn run(xs):
                 loop x in xs:
@@ -622,9 +622,9 @@ fn register_unit_branch_and_loop_tests():
                         continue
                     a
             run([{a: 1}, {a: 2}, {a: 3}])
-    test::value("destructure-value-continue/destructured", [1, 3], continue_after)
+    std::test::value("destructure-value-continue/destructured", [1, 3], continue_after)
 
-    fn continue_after_explicit() errors compiler::CompilerError:
+    fn continue_after_explicit() errors std::compiler::CompilerError:
         static compile:
             fn run(xs):
                 loop x in xs:
@@ -635,9 +635,9 @@ fn register_unit_branch_and_loop_tests():
                         continue
                     a
             run([{a: 1}, {a: 2}, {a: 3}])
-    test::value("destructure-value-continue/explicit", [1, 3], continue_after_explicit)
+    std::test::value("destructure-value-continue/explicit", [1, 3], continue_after_explicit)
 
-    fn continue_then_destructure() errors compiler::CompilerError:
+    fn continue_then_destructure() errors std::compiler::CompilerError:
         static compile:
             fn run(xs):
                 loop x in xs:
@@ -646,9 +646,9 @@ fn register_unit_branch_and_loop_tests():
                         continue
                     {b} = x
             run([{a: 1, b: 9}, {a: 2, b: 8}, {a: 3, b: 7}])
-    test::value("destructure-value-continue/destructure-last", [unit, unit], continue_then_destructure)
+    std::test::value("destructure-value-continue/destructure-last", [unit, unit], continue_then_destructure)
 
-    fn break_after() errors compiler::CompilerError:
+    fn break_after() errors std::compiler::CompilerError:
         static compile:
             fn run(xs):
                 loop x in xs:
@@ -657,11 +657,11 @@ fn register_unit_branch_and_loop_tests():
                         break
                     a
             run([{a: 1}, {a: 2}, {a: 3}])
-    test::value("destructure-value-continue/break", [1], break_after)
+    std::test::value("destructure-value-continue/break", [1], break_after)
 
     # destructure-value-loop-body-nested: a destructure ending a branch inside
     # a loop body is the iteration's value when that branch is taken.
-    fn loop_body_nested() errors compiler::CompilerError:
+    fn loop_body_nested() errors std::compiler::CompilerError:
         static compile:
             fn run(xs):
                 loop x in xs:
@@ -671,11 +671,11 @@ fn register_unit_branch_and_loop_tests():
                     else:
                         0
             run([{n: 1, m: 10}, {n: 2, m: 20}])
-    test::value("destructure-value-loop-body-nested", [0, unit], loop_body_nested)
+    std::test::value("destructure-value-loop-body-nested", [0, unit], loop_body_nested)
 
 # ---------------------------------------------------------------------------
 
-with context test::suite()
+with context std::test::suite()
 register_statement_value_tests()
 register_shadowing_tests()
 register_scope_tests()
@@ -683,4 +683,4 @@ register_capture_tests()
 register_elif_tests()
 register_unit_value_tests()
 register_unit_branch_and_loop_tests()
-test::report()
+std::test::report()

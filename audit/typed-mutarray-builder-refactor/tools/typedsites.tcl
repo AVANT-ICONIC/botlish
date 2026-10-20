@@ -12,7 +12,7 @@ source [file join $root surface surface.tcl]
 source [file join $root native native.tcl]
 interp recursionlimit {} 20000
 lassign $argv outfile
-set prims {mutable_array::allocate mutable_array::at mutable_array::set mutable_array::copy mutable_array::freeze mutable_array::capacity list::at list::length}
+set prims {std::mutable_array::allocate std::mutable_array::at std::mutable_array::set std::mutable_array::copy std::mutable_array::freeze std::mutable_array::capacity std::list::at std::list::length}
 # The enclosing function is the leading "NAME()" segment of the origin's node
 # path (surface lowering names every function's subtree that way); a path
 # without one is a module-level expression.

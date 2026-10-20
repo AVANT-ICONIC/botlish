@@ -23,7 +23,7 @@ call targets the resolved Block ExprId. Arity comes from block parameters.
 Specialization keys Block ExprId plus argument types into an InstanceId.
 
 The loss was in ordinary block inference, not qualification. The body of
-`byte::high_nibble` called `bit_and`, whose signature returns plain `int`.
+`std::byte::high_nibble` called `bit_and`, whose signature returns plain `int`.
 `hir::types::Block` stored that as `resultType`, the binding became
 `{block E 1 int}`, callers read the same type, and specialization initialized
 from that plain result.
@@ -32,9 +32,9 @@ Before this change:
 
 | expression | caller type | range | exact | HIR signature |
 |---|---|---|---|---|
-| `byte::high_nibble(b)` | `int` | `[0,240]` | `{0,16,...,240}` when body call facts converged | direct block returning `int` |
-| `byte::nibble(h)` | `int` | `[0,15]` | omitted as dense | direct block returning `int` |
-| local `web::high_nibble(b)` | `int` | `[0,15]` | omitted | inferred from plain-int calls |
+| `std::byte::high_nibble(b)` | `int` | `[0,240]` | `{0,16,...,240}` when body call facts converged | direct block returning `int` |
+| `std::byte::nibble(h)` | `int` | `[0,15]` | omitted as dense | direct block returning `int` |
+| local `std::web::high_nibble(b)` | `int` | `[0,15]` | omitted | inferred from plain-int calls |
 
 The old range precision was body-derived and did not establish semantic
 identity.
@@ -116,7 +116,7 @@ Joins and immutable bindings use the same existing lattice paths.
 
 ## After: real byte/web chain
 
-The six declarations in `lib/byte.bot` are result-only and verified:
+The six declarations in `stdlib/byte.bot` are result-only and verified:
 
 | function | public result | status |
 |---|---|---|
@@ -134,14 +134,14 @@ argument rather than assuming an unchecked input type.
 The real `web.bot` call facts are now:
 
 ```text
-byte::high_nibble(...)
-  target: byte::high_nibble<generic>
+std::byte::high_nibble(...)
+  target: std::byte::high_nibble<generic>
   type: int[HighNibble]
   range: [0,240]
   exact: {0,16,32,48,64,80,96,112,128,144,160,176,192,208,224,240}
 
-byte::nibble(h)
-  target: byte::nibble<int>
+std::byte::nibble(h)
+  target: std::byte::nibble<int>
   argument type: int[HighNibble]
   type: int[Nibble]
   range: [0,15]
@@ -168,13 +168,13 @@ no ListGet optimization was added.
 The refined-checks microscope reports ordinary HIR bindings:
 
 ```text
-byte::high_nibble : block(e2)/1 -> int[HighNibble]
-byte::nibble      : block(e14)/1 -> int[Nibble]
+std::byte::high_nibble : block(e2)/1 -> int[HighNibble]
+std::byte::nibble      : block(e14)/1 -> int[Nibble]
 local high_nibble: block(e74)/1 -> int[Nibble]
 ```
 
 NIR remains call-based and is not inlined. Most importantly, the intended
-next-milestone problem remains visible in `byte::nibble`:
+next-milestone problem remains visible in `std::byte::nibble`:
 
 ```text
 %6 = op ishr %0 %4
@@ -192,8 +192,8 @@ claim.
 No shift lowering or helper removal, inlining, ASCII work, `is_unreserved`
 rewrite, `join`, Bytes/Utf8Bytes, String construction, checked-constructor
 native support, known-bits analysis, finite-set budget change, or
-bottom/unreachable representation was added. `lib/web.bot` still uses the
-compact `byte::nibble(byte::high_nibble(b))` source and `is_unreserved` is
+bottom/unreachable representation was added. `stdlib/web.bot` still uses the
+compact `std::byte::nibble(std::byte::high_nibble(b))` source and `is_unreserved` is
 untouched.
 
 The new domain metadata should make future checked constructor lowering
@@ -237,10 +237,10 @@ input. No general refined-parameter runtime checking was introduced.
 29. Dynamic calls are precise only while their block value type remains
    specific.
 30. Calls through `any` remain imprecise.
-31. `byte::high_nibble` in web is HighNibble.
+31. `std::byte::high_nibble` in web is HighNibble.
 32. Its range is `[0,240]`.
 33. Its exact set has the 16 multiples of 16.
-34. `byte::nibble` returns Nibble.
+34. `std::byte::nibble` returns Nibble.
 35. The web helper infers Nibble.
 36. `hex_digits` receives a Nibble.
 37. Existing bounds lowering does not remove `listget`.
@@ -263,7 +263,7 @@ input. No general refined-parameter runtime checking was introduced.
 - `hir/specialize.tcl`, `hir/range.tcl`, `hir/hir.tcl`
 - `hir/format.tcl`, `hir/read.tcl`
 - `core/type.tcl`, `core/scalarbits.tcl`
-- `lib/byte.bot`
+- `stdlib/byte.bot`
 - `tests/refined-signatures.test`
 - this report
 

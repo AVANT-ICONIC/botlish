@@ -51,8 +51,8 @@ title: RANGE: an argument outside the range an operation accepts
 summary: CORE SEMANTIC RANGE stops a run when an intrinsic receives an argument outside the range it accepts: a shift amount, a capacity or length, a one-character string, a field too wide for its encoding.
 index: errors
 alias: shift amount out of range; capacity out of range; argument out of range
-keywords: shift_left, shift_right, capacity, mutable_array, is_tcl_alpha, binary::emit, length, ceiling, run time
-related: stdlib.shift_left stdlib.shift_right stdlib.mutable_array::create proof.list-bounds error.arithmetic concept.integers
+keywords: shift_left, shift_right, capacity, mutable_array, is_tcl_alpha, std::binary::emit, length, ceiling, run time
+related: stdlib.shift_left stdlib.shift_right stdlib.std::mutable_array::create proof.list-bounds error.arithmetic concept.integers
 docs: README.md MUTABLE-ARRAY.md BINARY-LAYOUT.md
 code: CORE SEMANTIC RANGE
 
@@ -61,21 +61,21 @@ Run time, on every backend; normally an error of the program. Some
 intrinsics accept only part of their parameter type and check the rest as
 they run:
   * shift_left, shift_right: the shift amount must be in 0..1048576;
-  * mutable_array::create, allocate and generate: the capacity must be in
-    0..4611686018427387903 (2^62 - 1);
-  * str::is_tcl_alpha, str::is_tcl_alnum: the string must hold exactly
-    one character;
-  * mutable_byte_store::zeroed, replace, freeze_prefix: lengths, counts
+  * std::mutable_array::create, allocate and generate: the capacity must be
+    in 0..4611686018427387903 (2^62 - 1);
+  * std::str::is_tcl_alpha, std::str::is_tcl_alnum: the string must hold
+    exactly one character;
+  * std::mutable_byte_store::zeroed, replace, freeze_prefix: lengths, counts
     and indices within the store;
-  * binary::emit: each field's value must fit its encoding;
+  * std::binary::emit: each field's value must fit its encoding;
   * the native runtime's ceiling: a String, List or byte store longer
     than 2^62 - 1, or a byte store it cannot allocate (out of memory).
 
 RANGE is not a declared error: no handler catches it. It is not what an
-index past the end produces: list::at, mutable_array::at and str::char_at
-fail with the declared error IndexNotFound, and str::substring with
-LowerUnderrun or UpperOverrun, which a program handles or the compiler
-proves impossible (proof.list-bounds).
+index past the end produces: std::list::at, std::mutable_array::at and
+std::str::char_at fail with the declared error IndexNotFound, and
+std::str::substring with LowerUnderrun or UpperOverrun, which a program
+handles or the compiler proves impossible (proof.list-bounds).
 
 == EXAMPLE
     fn shifted(x: int, k: int) -> int:
@@ -89,7 +89,7 @@ compiles, and stops on every backend with
 
 A negative capacity:
 
-    error: mutable_array::create: capacity must be 0..4611686018427387903,
+    error: std::mutable_array::create: capacity must be 0..4611686018427387903,
     got -1 (CORE SEMANTIC RANGE)
 
 == HOW TO INVESTIGATE
@@ -119,9 +119,9 @@ element by element, values of different kinds as unequal. Some values have
 no equality at all, because the only equality they could have is identity,
 which Botlish does not expose: functions and natives (callables),
 MutableArray and MutableVector headers, coroutine handles and C pointers.
-`==`, `hash` and the operations built on them (immutable_set::from_list,
-immutable_set::contains) stop with EQUALITY when they reach one, also
-inside a List or a struct being compared.
+`==`, `hash` and the operations built on them
+(std::immutable_set::from_list, std::immutable_set::contains) stop with
+EQUALITY when they reach one, also inside a List or a struct being compared.
 
 The message says "callables" for all of them, MutableArray included:
 
@@ -151,7 +151,7 @@ Two MutableArrays with equal elements fail the same way.
 == WHAT TO DO
 Compare what the values mean, not the values themselves: for functions, a
 name, an enum case or an Int that identifies them; for a MutableArray or
-MutableVector, its contents as a List (mutable_array::freeze). Keep
+MutableVector, its contents as a List (std::mutable_array::freeze). Keep
 functions out of Lists that are compared or put in a set.
 
 @topic error.native-only
@@ -160,7 +160,7 @@ summary: CORE SEMANTIC NATIVE-ONLY stops a run on interp or compile when the pro
 index: errors backends
 alias: native-only error; refused on the Tcl backends; print on interp
 keywords: interp, compile, syscall, address, from_bytes, extern c, io, print_line, LinuxIO
-related: backend.native-only backend.io task.print-output backend.cranelift concept.c-ffi stdlib.module.io
+related: backend.native-only backend.io task.print-output backend.cranelift concept.c-ffi stdlib.module.std::io
 docs: CONTEXT-TRAITS.md LINUX-X86-64-SYSCALL.md ABI-BYTES.md C-FFI.md
 code: CORE SEMANTIC NATIVE-ONLY
 
@@ -169,33 +169,33 @@ Run time, on interp and compile only; not an error of the program, but of
 the backend chosen for it. The Tcl backends have no machine memory and do
 not imitate the kernel or a C library, so they compile such a program like
 any other and refuse the operation when it runs:
-  * the address bridges abi::x86_64::from_bytes and from_mutable_bytes
+  * the address bridges std::abi::x86_64::from_bytes and from_mutable_bytes
     (and the aarch64 ones);
-  * the system-call transports linux::abi::x86_64::syscall and
-    linux::abi::aarch64::syscall;
+  * the system-call transports std::linux::abi::x86_64::syscall and
+    std::linux::abi::aarch64::syscall;
   * a call of an `extern c fn`;
   * reading or writing bytes through a raw C address.
-Everything built on them is native-only too: lib/linux.bot, linux::io,
-and so io::print_line and the rest of io's printing through
-linux::io::LinuxIO.
+Everything built on them is native-only too: stdlib/linux.bot,
+std::linux::io, and so std::io::print_line and the rest of io's printing
+through std::linux::io::LinuxIO.
 
 == EXAMPLE
-    import io
-    import linux::io
+    import std::io
+    import std::linux::io
 
-    fn hello() errors io::WriteFailed:
-        io::print_line("Hello, world!")
+    fn hello() errors std::io::WriteFailed:
+        std::io::print_line("Hello, world!")
 
-    with context linux::io::create()
+    with context std::linux::io::create()
 
     hello():
-        on io::WriteFailed:
+        on std::io::WriteFailed:
             unit
 
 prints "Hello, world!" on cranelift; on interp and compile it stops with
 (one line, wrapped here)
 
-    error: abi::x86_64::from_bytes produces the machine address of a byte
+    error: std::abi::x86_64::from_bytes produces the machine address of a byte
     buffer, which exists only in the native backend (cranelift, or a
     standalone executable) on Linux x86-64; the Tcl backends (interp,
     compile) have no machine addresses and do not imitate one (CORE
@@ -338,7 +338,7 @@ error: <error NAME>". It is reached only by:
 == EXAMPLE
 The core IR file
 
-    {call {ref list::at} {const list {1 2}} {const 5}}
+    {call {ref std::list::at} {const list {1 2}} {const 5}}
 
 stops on interp and compile with
 
@@ -408,7 +408,7 @@ summary: CORE SEMANTIC COROUTINE-STATE reports a coroutine started twice, resume
 index: errors
 alias: coroutine already started; resume a released coroutine
 keywords: coroutine, start, resume, release, done?, handle, state, affine
-related: concept.coroutines concept.affine error.coroutine-running stdlib.coroutine::done?
+related: concept.coroutines concept.affine error.coroutine-running stdlib.std::coroutine::done?
 docs: COROUTINES.md AFFINE-VALUES.md
 code: CORE SEMANTIC COROUTINE-STATE
 
@@ -664,7 +664,7 @@ code: HIR INTERCHANGE TARGET
 
 == MEANING
 When a .hirx file is read; not an error of the program. A HIR whose
-build depended on the target (it imports ffi::c, an
+build depended on the target (it imports std::ffi::c, an
 architecture-specific module or a platform namespace) records that
 target, and is valid for it alone: its C integer types have that
 target's sizes, and its modules are that target's. Reading it for
@@ -771,18 +771,18 @@ title: NATIVE ADDRESS: a C function returned an address Botlish cannot hold
 summary: NATIVE ADDRESS stops a run when a C function's pointer result does not fit Botlish's C pointer word (a sign-extended 60-bit address): the pointer is never truncated or masked.
 index: errors backends
 alias: C pointer too wide; tagged pointer result
-keywords: extern c fn, pointer, address, ffi::c::Ptr, top byte, tagged pointer, aarch64
+keywords: extern c fn, pointer, address, std::ffi::c::Ptr, top byte, tagged pointer, aarch64
 related: concept.c-ffi backend.native-only error.native-bool error.native-contract-violation
 docs: C-FFI.md C-ABI-TYPES.md
 code: NATIVE ADDRESS
 
 == MEANING
 Run time, native backends only (a C call runs nowhere else). An
-ffi::c::Ptr is a tagged word holding a sign-extended 60-bit address. Every
-canonical x86-64 address and every untagged AArch64 address fits; a
+std::ffi::c::Ptr is a tagged word holding a sign-extended 60-bit address.
+Every canonical x86-64 address and every untagged AArch64 address fits; a
 top-byte-tagged AArch64 pointer, or a garbage value returned as a pointer,
-does not, and the call fails with "the C function NAME returned the
-address 0x..., which a Botlish C pointer cannot hold ...".
+does not, and the call fails with "the C function NAME returned the address
+0x..., which a Botlish C pointer cannot hold ...".
 
 == WHAT TO DO
 Check the declaration against the C header: a function declared to return
@@ -885,7 +885,7 @@ declaration does not describe it". The byte is never read as one bit.
 
 == WHAT TO DO
 Correct the `extern c fn` declaration's result type to the C function's
-real one (an ffi::c integer type), and compare it with 0 in Botlish.
+real one (a std::ffi::c integer type), and compare it with 0 in Botlish.
 
 @topic error.native-bug
 title: NATIVE BUG: an internal failure of the native backend
@@ -1032,8 +1032,8 @@ environment, not an error of the program. The forms:
 
     No space left on device (os error 28) (NATIVE IO)
 
-The program's own printing (io::print_line) reports failures as the
-declared error io::WriteFailed instead.
+The program's own printing (std::io::print_line) reports failures as the
+declared error std::io::WriteFailed instead.
 
 == WHAT TO DO
 Check the temporary directory (TMPDIR), free disk space and where the
@@ -1208,7 +1208,7 @@ code: NATIVE TARGET
 
 == MEANING
 Before native code runs or is emitted; not an error of the program. A
-program whose build depended on the target (ffi::c, an
+program whose build depended on the target (std::ffi::c, an
 architecture-specific module, a platform namespace) carries that target
 to the native backend. Native code is made for the host's target only:
 the native backends refuse to run another target's program, and

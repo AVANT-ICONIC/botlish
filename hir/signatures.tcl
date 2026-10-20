@@ -48,7 +48,7 @@
 # the use-site type, excluding the parameter's own seed, admits it), when
 # it is statically unreachable (hir::types' own reachability), or when it
 # lies in a branch of an `if` whose condition refines the parameter
-# (control-flow-dependent: `if integer?(x): x + 1 else: str::length(x)` accepts
+# (control-flow-dependent: `if integer?(x): x + 1 else: std::str::length(x)` accepts
 # both kinds; no union type exists to say so, so neither branch constrains
 # the parameter).
 #
@@ -79,7 +79,7 @@
 # md) and an argument whose static type is `any` still reaches the
 # native's own check. That last point is the non-generic boundary: `any`
 # today conflates "any possible value" with "a relational type the
-# language cannot yet express" (list::find's result, the element of a List
+# language cannot yet express" (std::list::find's result, the element of a List
 # built by a helper whose element type depends on its caller), and
 # rejecting it would reject canonical programs whose only fault is the
 # missing type variable -- see the report's "Known limitations".

@@ -30,7 +30,7 @@ if {![info exists ::env(CORE_BACKEND)]} {
     set goldenBackends [list $::env(CORE_BACKEND)]
 }
 # Native coroutines exist on Linux x86-64 and AArch64 only (COROUTINES.md),
-# and lib/test.bot's runner is a coroutine: elsewhere the suites run on the
+# and stdlib/test.bot's runner is a coroutine: elsewhere the suites run on the
 # Tcl backends of this pass only (and not at all in a native-only pass).
 testConstraint goldenBackends [expr {$::tcl_platform(os) eq "Linux" && $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 if {![testConstraint goldenBackends]} {

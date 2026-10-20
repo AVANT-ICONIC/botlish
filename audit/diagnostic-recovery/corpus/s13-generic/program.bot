@@ -1,4 +1,4 @@
-#import str
+#import std::str
 
 fn shout(s):
     s.concat("!")

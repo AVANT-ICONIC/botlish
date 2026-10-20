@@ -81,8 +81,8 @@ proc literal {type} {
         ints { return "\[[join [lmap i [lrepeat [expr {1 + int(rand() * 4)}] x] {expr {int(rand() * 9)}}] {, }]\]" }
         strs { return "\[\"x\", \"yy\", \"zzz\"\]" }
         nested { return "\[\[1, 2\], \[3\], \[4, 5, 6\]\]" }
-        marr { return "mutable_array::create(3, [expr {int(rand() * 9)}])" }
-        mvec { return "mutable_vector::from_list(\[1, 2, 3\])" }
+        marr { return "std::mutable_array::create(3, [expr {int(rand() * 9)}])" }
+        mvec { return "std::mutable_vector::from_list(\[1, 2, 3\])" }
     }
 }
 
@@ -176,8 +176,8 @@ proc chainText {name} {
         set params ""
         set recv a
         switch -- $kind {
-            marr { lappend body "    a = mutable_array::create(4, 1)" }
-            mvec { lappend body "    a = mutable_vector::from_list(\[1, 2, 3, 4\])" }
+            marr { lappend body "    a = std::mutable_array::create(4, 1)" }
+            mvec { lappend body "    a = std::mutable_vector::from_list(\[1, 2, 3, 4\])" }
             ints { lappend body "    a = \[1, 2, 3, 4\]" }
         }
         set callArgs ""
@@ -213,9 +213,9 @@ proc untypedText {form} {
         narrowed {
             set k [pick {list str}]
             if {$k eq "list"} {
-                return [list "fn u(x) -> int errors IndexNotFound:\n    n = list::length(x)\n    a = x.at(0)\n    b = x.length()\n    n + b + a\n" "\[5, 6, 7\]" 1]
+                return [list "fn u(x) -> int errors IndexNotFound:\n    n = std::list::length(x)\n    a = x.at(0)\n    b = x.length()\n    n + b + a\n" "\[5, 6, 7\]" 1]
             }
-            return [list "fn u(x) -> int:\n    n = str::length(x)\n    b = x.length()\n    n + b\n" "\"abc\"" 0]
+            return [list "fn u(x) -> int:\n    n = std::str::length(x)\n    b = x.length()\n    n + b\n" "\"abc\"" 0]
         }
         ambiguous {
             return [list "fn u(x) -> int:\n    x.length()\n" "\[1, 2\]" 0]
@@ -273,7 +273,7 @@ proc program {} {
         lappend lines [entryLine c1 "ch($cargs)" $chandled]
         lappend sum c1
     }
-    set head "import list\nimport str\nimport mutable_array\nimport mutable_vector\n\n"
+    set head "import std::list\nimport std::str\nimport std::mutable_array\nimport std::mutable_vector\n\n"
     return "$head[join $fns \n]\n[join $lines \n]\n[join $sum { + }]\n"
 }
 

@@ -209,17 +209,17 @@ proc WriteLayouts {name api facts path} {
             lassign [dict get $offset "$key.$fname"] o fs
             lassign [dict get $scalar $spelled] ss sg
             set bitsN [expr {8 * $fs}]
-            set dom [expr {$sg ? "binary::I$bitsN" : "binary::U$bitsN"}]
+            set dom [expr {$sg ? "std::binary::I$bitsN" : "std::binary::U$bitsN"}]
             lappend lines "    field $fname: $dom at $o"
         }
         if {!$ok} continue
         incr n
-        lappend lengths "binary::layout_length($lname)"
+        lappend lengths "std::binary::layout_length($lname)"
         lappend sizes $s
         append text "# [dict get [lindex $r 2] text]\nlayout $lname:\n    size $s\n    align $a\n[join $lines \n]\n\n"
     }
     append text "\[[join $lengths {, }]\]\n"
-    set text [string map [list "structs, sizes and offsets as the C compiler resolved them on this host.\n" "structs, sizes and offsets as the C compiler resolved them on this host.\n# expect: \[[join $sizes {, }]\]\nimport binary\n\n"] $text]
+    set text [string map [list "structs, sizes and offsets as the C compiler resolved them on this host.\n" "structs, sizes and offsets as the C compiler resolved them on this host.\n# expect: \[[join $sizes {, }]\]\nimport std::binary\n\n"] $text]
     ::chdr::writeFile $path $text
     puts "$name: $n layouts in $path"
 }

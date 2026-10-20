@@ -19,8 +19,8 @@
 # raise) and the four tests, which erase raise again through make.
 #
 # Imports: compiler and test (every suite).
-import compiler
-import test
+import std::compiler
+import std::test
 
 # hocDecls: a payload-free error and two payload-bearing twins.
 error E1
@@ -85,7 +85,7 @@ fn rec(f, n: int, x):
 # compare -- and every error handled, in the order E3, E1, E2. The driver's
 # selectors are the registration's inputs (run time).
 fn register_hoc_returned_tests(k0: int, k1: int, k2: int, k3: int):
-    fn wrong_handler() errors compiler::CompilerError:
+    fn wrong_handler() errors std::compiler::CompilerError:
         static compile:
             fn observe(k: int):
                 h = make(raise)
@@ -96,9 +96,9 @@ fn register_hoc_returned_tests(k0: int, k1: int, k2: int, k3: int):
                         return ["E3", d.code]
                 [r]
             [observe(k0), observe(k1), observe(k2), observe(k3)]
-    test::rejects("hoc-wrong-handler-returned", compiler::DiagnosticCode::UnhandledError, wrong_handler)
+    std::test::rejects("hoc-wrong-handler-returned", std::compiler::DiagnosticCode::UnhandledError, wrong_handler)
 
-    fn wrong_twin() errors compiler::CompilerError:
+    fn wrong_twin() errors std::compiler::CompilerError:
         static compile:
             fn observe(k: int):
                 h = make(raise)
@@ -109,9 +109,9 @@ fn register_hoc_returned_tests(k0: int, k1: int, k2: int, k3: int):
                         return ["E2", code]
                 [r]
             [observe(k0), observe(k1), observe(k2), observe(k3)]
-    test::rejects("hoc-wrong-twin-returned", compiler::DiagnosticCode::UnhandledError, wrong_twin)
+    std::test::rejects("hoc-wrong-twin-returned", std::compiler::DiagnosticCode::UnhandledError, wrong_twin)
 
-    fn wrong_twin_reverse() errors compiler::CompilerError:
+    fn wrong_twin_reverse() errors std::compiler::CompilerError:
         static compile:
             fn observe(k: int):
                 h = make(raise)
@@ -122,7 +122,7 @@ fn register_hoc_returned_tests(k0: int, k1: int, k2: int, k3: int):
                         return ["E3", d.code]
                 [r]
             [observe(k0), observe(k1), observe(k2), observe(k3)]
-    test::rejects("hoc-wrong-twin-reverse-returned", compiler::DiagnosticCode::UnhandledError, wrong_twin_reverse)
+    std::test::rejects("hoc-wrong-twin-reverse-returned", std::compiler::DiagnosticCode::UnhandledError, wrong_twin_reverse)
 
     # hoc-all-handled-returned: accepted, and the value shows each identity
     # raised and caught on every backend. It is also the observable half of
@@ -130,7 +130,7 @@ fn register_hoc_returned_tests(k0: int, k1: int, k2: int, k3: int):
     # effective errors: Tcl only) and the whole of
     # hoc-known-error-fallback-not-definite (the incomplete summary never
     # becomes KnownError, and the success path runs).
-    fn all_handled() errors compiler::CompilerError:
+    fn all_handled() errors std::compiler::CompilerError:
         static compile:
             fn observe(k: int):
                 h = make(raise)
@@ -143,8 +143,8 @@ fn register_hoc_returned_tests(k0: int, k1: int, k2: int, k3: int):
                         return ["E2", code]
                 [r]
             [observe(k0), observe(k1), observe(k2), observe(k3)]
-    test::value("hoc-all-handled-returned", [[0], ["E1"], ["E2", 20], ["E3", 30]], all_handled)
+    std::test::value("hoc-all-handled-returned", [[0], ["E1"], ["E2", 20], ["E3", 30]], all_handled)
 
-with context test::suite()
+with context std::test::suite()
 register_hoc_returned_tests(0, 1, 2, 3)
-test::report()
+std::test::report()

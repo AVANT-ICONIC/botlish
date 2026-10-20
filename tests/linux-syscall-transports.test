@@ -2,14 +2,14 @@
 # architecture and the architecture-specific module that selects one
 # (LINUX-SYSCALL-TRANSPORTS.md):
 #
-#   linux::abi::x86_64::syscall({rax: R, rdi: R, ...})    R: abi::x86_64::Register64
-#   linux::abi::aarch64::syscall({x8: R, x0: R, ...})     R: abi::aarch64::Register64
-#   linux::sys (lib/linux/sys.x86_64.bot, lib/linux/sys.aarch64.bot)
+#   std::linux::abi::x86_64::syscall({rax: R, rdi: R, ...})    R: std::abi::x86_64::Register64
+#   std::linux::abi::aarch64::syscall({x8: R, x0: R, ...})     R: std::abi::aarch64::Register64
+#   std::linux::sys (stdlib/linux/sys.x86_64.bot, stdlib/linux/sys.aarch64.bot)
 #
 # tests/linux-syscall.test covers the x86-64 transport itself; this file
 # covers the AArch64 one, what the two share (one table, never mixed), and
-# how the compilation target picks linux::sys's file, so that linux::write,
-# linux::read and linux::io are one source on both architectures. The only
+# how the compilation target picks std::linux::sys's file, so that std::linux::write,
+# std::linux::read and std::linux::io are one source on both architectures. The only
 # live syscalls it makes are getpid and write(2) to a descriptor known to be
 # invalid (1000), through the portable wrappers or the host's own transport.
 
@@ -26,8 +26,8 @@ set nativeBackends {cranelift-generic cranelift}
 testConstraint linuxAarch64 [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {aarch64 arm64}}]
 # Linux on x86-64 or AArch64: the native backend's whole runtime, and
-# syscalls through the portable wrappers (linux::write, linux::read,
-# linux::io: each architecture's own transport).
+# syscalls through the portable wrappers (std::linux::write, std::linux::read,
+# std::linux::io: each architecture's own transport).
 testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
     $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 testConstraint objdump [expr {[auto_execok objdump] ne ""}]
@@ -115,12 +115,12 @@ proc libraryFiles {hir} {
 }
 
 set rawGetpid {direct module
-import abi::aarch64
-import linux::abi::aarch64
+import std::abi::aarch64
+import std::linux::abi::aarch64
 fn raw_getpid():
-    abi::aarch64::to_int(
-        linux::abi::aarch64::syscall({
-            x8: abi::aarch64::register64(172),
+    std::abi::aarch64::to_int(
+        std::linux::abi::aarch64::syscall({
+            x8: std::abi::aarch64::register64(172),
         })
     )
 }
@@ -134,52 +134,52 @@ test lst-transport-table {the transports are one table (core/linuxabi.tcl), one 
             [core::linuxabi::transport $arch abi] [core::linuxabi::transport $arch registerType] \
             [core::linuxabi::transport $arch op] [core::linuxabi::transport $arch instruction]
     }
-} -result {{x86_64 linux::abi::x86_64::syscall {rax rdi rsi rdx r10 r8 r9} abi::x86_64 abi::x86_64::Register64 syscall_linux_x86_64 syscall} {aarch64 linux::abi::aarch64::syscall {x8 x0 x1 x2 x3 x4 x5} abi::aarch64 abi::aarch64::Register64 syscall_linux_aarch64 {svc #0}}}
+} -result {{x86_64 std::linux::abi::x86_64::syscall {rax rdi rsi rdx r10 r8 r9} std::abi::x86_64 std::abi::x86_64::Register64 syscall_linux_x86_64 syscall} {aarch64 std::linux::abi::aarch64::syscall {x8 x0 x1 x2 x3 x4 x5} std::abi::aarch64 std::abi::aarch64::Register64 syscall_linux_aarch64 {svc #0}}}
 
-test lst-aarch64-native-registered {linux::abi::aarch64::syscall is one root native under its qualified name, registered exactly like the x86-64 one but over abi::aarch64::Register64; its address bridges are abi::aarch64::from_bytes and from_mutable_bytes} -body {
-    set meta [core::native::metadata linux::abi::aarch64::syscall]
+test lst-aarch64-native-registered {std::linux::abi::aarch64::syscall is one root native under its qualified name, registered exactly like the x86-64 one but over std::abi::aarch64::Register64; its address bridges are std::abi::aarch64::from_bytes and from_mutable_bytes} -body {
+    set meta [core::native::metadata std::linux::abi::aarch64::syscall]
     list [dict get $meta arity] [dict get $meta paramTypes] [dict get $meta resultType] \
         [dict get $meta resultShape] [dict get $meta errors] [dict get $meta contextFree] \
-        [dict get $meta runtime] [core::native::isQualifiedNative linux::abi::aarch64::syscall] \
+        [dict get $meta runtime] [core::native::isQualifiedNative std::linux::abi::aarch64::syscall] \
         [lmap bridge [core::bytestore::bridges] {lindex $bridge 0}] \
-        [lmap name {abi::aarch64::from_bytes abi::aarch64::from_mutable_bytes} {dict get [core::native::metadata $name] resultShape}]
-} -cleanup {unset -nocomplain meta} -result {1 struct struct {named-struct abi::aarch64::Register64} {} 0 raw-syscall 1 {abi::x86_64::from_bytes abi::x86_64::from_mutable_bytes abi::aarch64::from_bytes abi::aarch64::from_mutable_bytes} {{named-struct abi::aarch64::Register64} {named-struct abi::aarch64::Register64}}}
+        [lmap name {std::abi::aarch64::from_bytes std::abi::aarch64::from_mutable_bytes} {dict get [core::native::metadata $name] resultShape}]
+} -cleanup {unset -nocomplain meta} -result {1 struct struct {named-struct std::abi::aarch64::Register64} {} 0 raw-syscall 1 {std::abi::x86_64::from_bytes std::abi::x86_64::from_mutable_bytes std::abi::aarch64::from_bytes std::abi::aarch64::from_mutable_bytes} {{named-struct std::abi::aarch64::Register64} {named-struct std::abi::aarch64::Register64}}}
 
-test lst-aarch64-conversions-every-backend {abi::aarch64 (lib/abi/aarch64.bot) is ordinary Botlish on every backend, bit for bit the encoding of abi::x86_64: the checked creator and its inverse, sign- and zero-extension, the upper half of U64 as a negative word, and the declared errors of an out-of-range Int} -body {
-    agree "import abi\nimport abi::aarch64\nfn r(n: int) -> int:\n    w = abi::aarch64::register64(n):\n        on abi::aarch64::Register64BelowRange:\n            return 1\n        on abi::aarch64::Register64AboveRange:\n            return 2\n    abi::aarch64::to_int(w)\n\[abi::aarch64::to_int(abi::aarch64::register64(0 - 1)), abi::aarch64::to_int(abi::aarch64::from_i8(abi::i8(0 - 128))), abi::aarch64::to_int(abi::aarch64::from_u32(abi::u32(4294967295))), abi::aarch64::to_int(abi::aarch64::from_u64(abi::u64(18446744073709551615))), r(9223372036854775807), r(9223372036854775808), r(0 - 9223372036854775809)\]"
+test lst-aarch64-conversions-every-backend {std::abi::aarch64 (stdlib/abi/aarch64.bot) is ordinary Botlish on every backend, bit for bit the encoding of std::abi::x86_64: the checked creator and its inverse, sign- and zero-extension, the upper half of U64 as a negative word, and the declared errors of an out-of-range Int} -body {
+    agree "import std::abi\nimport std::abi::aarch64\nfn r(n: int) -> int:\n    w = std::abi::aarch64::register64(n):\n        on std::abi::aarch64::Register64BelowRange:\n            return 1\n        on std::abi::aarch64::Register64AboveRange:\n            return 2\n    std::abi::aarch64::to_int(w)\n\[std::abi::aarch64::to_int(std::abi::aarch64::register64(0 - 1)), std::abi::aarch64::to_int(std::abi::aarch64::from_i8(std::abi::i8(0 - 128))), std::abi::aarch64::to_int(std::abi::aarch64::from_u32(std::abi::u32(4294967295))), std::abi::aarch64::to_int(std::abi::aarch64::from_u64(std::abi::u64(18446744073709551615))), r(9223372036854775807), r(9223372036854775808), r(0 - 9223372036854775809)\]"
 } -result {[-1, -128, 4294967295, -1, 9223372036854775807, 2, 1]}
 
 test lst-aarch64-unknown-register {the AArch64 transport's argument may name only x8 and x0..x5: rax (another architecture's register), x6, x30 and sp are UNKNOWN-FIELD at the field, with the AArch64 register list} -body {
-    list [strictError "direct module\nimport abi::aarch64\nimport linux::abi::aarch64\nlinux::abi::aarch64::syscall({x8: abi::aarch64::register64(172), rax: abi::aarch64::register64(1)})"] \
-        {*}[lmap r {x6 x30 sp} {diagKinds "direct module\nimport abi::aarch64\nimport linux::abi::aarch64\nlinux::abi::aarch64::syscall({x8: abi::aarch64::register64(172), $r: abi::aarch64::register64(1)})"}]
-} -result {{UNKNOWN-FIELD 4:66 {"rax" is not a syscall register: linux::abi::aarch64::syscall's argument may name only x8, x0, x1, x2, x3, x4, x5 (the Linux AArch64 syscall number and its six argument registers; an omitted argument register is zero)}} UNKNOWN-FIELD UNKNOWN-FIELD UNKNOWN-FIELD}
+    list [strictError "direct module\nimport std::abi::aarch64\nimport std::linux::abi::aarch64\nstd::linux::abi::aarch64::syscall({x8: std::abi::aarch64::register64(172), rax: std::abi::aarch64::register64(1)})"] \
+        {*}[lmap r {x6 x30 sp} {diagKinds "direct module\nimport std::abi::aarch64\nimport std::linux::abi::aarch64\nstd::linux::abi::aarch64::syscall({x8: std::abi::aarch64::register64(172), $r: std::abi::aarch64::register64(1)})"}]
+} -result {{UNKNOWN-FIELD 4:76 {"rax" is not a syscall register: std::linux::abi::aarch64::syscall's argument may name only x8, x0, x1, x2, x3, x4, x5 (the Linux AArch64 syscall number and its six argument registers; an omitted argument register is zero)}} UNKNOWN-FIELD UNKNOWN-FIELD UNKNOWN-FIELD}
 
 test lst-aarch64-number-required {x8, the syscall number, is required; only x0..x5 may be omitted} -body {
-    strictError "direct module\nimport abi::aarch64\nimport linux::abi::aarch64\nlinux::abi::aarch64::syscall({x0: abi::aarch64::register64(1)})"
-} -result {MISSING-FIELD 4:30 {linux::abi::aarch64::syscall's argument has no field "x8": x8 carries the syscall number and is required (only the argument registers x0, x1, x2, x3, x4, x5 may be omitted, as zero)}}
+    strictError "direct module\nimport std::abi::aarch64\nimport std::linux::abi::aarch64\nstd::linux::abi::aarch64::syscall({x0: std::abi::aarch64::register64(1)})"
+} -result {MISSING-FIELD 4:35 {std::linux::abi::aarch64::syscall's argument has no field "x8": x8 carries the syscall number and is required (only the argument registers x0, x1, x2, x3, x4, x5 may be omitted, as zero)}}
 
-test lst-architectures-never-mixed {a register word of one architecture never reaches the other's transport: an abi::x86_64::Register64 (a creator's or an address bridge's) in the AArch64 transport, and an abi::aarch64::Register64 in the x86-64 one, are TYPE -- statically, with no run-time check} -body {
-    list [lrange [strictError "direct module\nimport abi::x86_64\nimport linux::abi::aarch64\nlinux::abi::aarch64::syscall({x8: abi::x86_64::register64(172)})"] 0 0] \
-        [string match {*must be an abi::aarch64::Register64 (abi::aarch64::register64(...), lib/abi/aarch64.bot)*its type here is abi::x86_64::Register64} \
-            [lindex [strictError "direct module\nimport abi::x86_64\nimport linux::abi::aarch64\nlinux::abi::aarch64::syscall({x8: abi::x86_64::register64(172)})"] 2]] \
-        [diagKinds "direct module\nimport abi::aarch64\nimport linux::abi::x86_64\nlinux::abi::x86_64::syscall({rax: abi::aarch64::register64(39)})"] \
-        [diagKinds "direct module\nimport abi\nimport abi::bytes\nimport abi::aarch64\nimport abi::x86_64\nimport linux::abi::aarch64\nfn w(d: abi::bytes::Bytes):\n    linux::abi::aarch64::syscall({x8: abi::aarch64::register64(64), x1: abi::x86_64::from_bytes(d)})\n1"]
+test lst-architectures-never-mixed {a register word of one architecture never reaches the other's transport: a std::abi::x86_64::Register64 (a creator's or an address bridge's) in the AArch64 transport, and a std::abi::aarch64::Register64 in the x86-64 one, are TYPE -- statically, with no run-time check} -body {
+    list [lrange [strictError "direct module\nimport std::abi::x86_64\nimport std::linux::abi::aarch64\nstd::linux::abi::aarch64::syscall({x8: std::abi::x86_64::register64(172)})"] 0 0] \
+        [string match {*must be a std::abi::aarch64::Register64 (std::abi::aarch64::register64(...), stdlib/abi/aarch64.bot)*its type here is std::abi::x86_64::Register64} \
+            [lindex [strictError "direct module\nimport std::abi::x86_64\nimport std::linux::abi::aarch64\nstd::linux::abi::aarch64::syscall({x8: std::abi::x86_64::register64(172)})"] 2]] \
+        [diagKinds "direct module\nimport std::abi::aarch64\nimport std::linux::abi::x86_64\nstd::linux::abi::x86_64::syscall({rax: std::abi::aarch64::register64(39)})"] \
+        [diagKinds "direct module\nimport std::abi\nimport std::abi::bytes\nimport std::abi::aarch64\nimport std::abi::x86_64\nimport std::linux::abi::aarch64\nfn w(d: std::abi::bytes::Bytes):\n    std::linux::abi::aarch64::syscall({x8: std::abi::aarch64::register64(64), x1: std::abi::x86_64::from_bytes(d)})\n1"]
 } -result {TYPE 1 TYPE TYPE}
 
 test lst-aarch64-not-a-value {the AArch64 transport, like the x86-64 one, can only be called directly} -body {
-    lrange [strictError "import linux::abi::aarch64\nf = linux::abi::aarch64::syscall\nf"] 0 0
+    lrange [strictError "import std::linux::abi::aarch64\nf = std::linux::abi::aarch64::syscall\nf"] 0 0
 } -result {TYPE}
 
 test lst-aarch64-tcl-backends-refuse {the Tcl backends refuse the AArch64 transport and its address bridge with NATIVE-ONLY, naming the instruction and the architecture: nothing imitates a syscall or an address} -body {
     set call [outcomesOf "${::rawGetpid}raw_getpid()" {interp compile}]
-    set bridge [outcomesOf "import abi\nimport abi::bytes\nimport abi::aarch64\nabi::aarch64::to_int(abi::aarch64::from_bytes(abi::bytes::from_list(\[\])))" {interp compile}]
+    set bridge [outcomesOf "import std::abi\nimport std::abi::bytes\nimport std::abi::aarch64\nstd::abi::aarch64::to_int(std::abi::aarch64::from_bytes(std::abi::bytes::from_list(\[\])))" {interp compile}]
     list [lsort -unique [lmap o $call {lrange $o 0 1}]] [lsort -unique [lmap o $bridge {lrange $o 0 1}]] \
-        [string match {linux::abi::aarch64::syscall executes the AArch64 "svc #0" instruction*on Linux AArch64;*} [lindex $call 0 2]] \
-        [string match {abi::aarch64::from_bytes produces the machine address of a byte buffer*on Linux AArch64;*} [lindex $bridge 0 2]]
+        [string match {std::linux::abi::aarch64::syscall executes the AArch64 "svc #0" instruction*on Linux AArch64;*} [lindex $call 0 2]] \
+        [string match {std::abi::aarch64::from_bytes produces the machine address of a byte buffer*on Linux AArch64;*} [lindex $bridge 0 2]]
 } -cleanup {unset -nocomplain call bridge} -result {{{error {CORE SEMANTIC NATIVE-ONLY}}} {{error {CORE SEMANTIC NATIVE-ONLY}}} 1 1}
 
 test lst-aarch64-nir {NIR: the AArch64 transport is one generic op over seven register words in register order (x8, then x0..x5), whatever the literal's written order -- {x2, x0, x8} becomes x8 x0 0 x2 0 0 0 -- the omitted registers one shared zero constant; and, as for the x86-64 transport, the register struct and both Register64s stay virtual (no structnew anywhere)} -body {
-    set nir [native::nir [transportHir "${::rawGetpid}fn f():\n    abi::aarch64::to_int(linux::abi::aarch64::syscall({x2: abi::aarch64::register64(2), x0: abi::aarch64::register64(1), x8: abi::aarch64::register64(172)}))\nf()"]]
+    set nir [native::nir [transportHir "${::rawGetpid}fn f():\n    std::abi::aarch64::to_int(std::linux::abi::aarch64::syscall({x2: std::abi::aarch64::register64(2), x0: std::abi::aarch64::register64(1), x8: std::abi::aarch64::register64(172)}))\nf()"]]
     set f [nirFunction $nir f]
     regexp {op syscall_linux_aarch64 (%[0-9]+) (%[0-9]+) (%[0-9]+) (%[0-9]+) (%[0-9]+) (%[0-9]+) (%[0-9]+)} $f -> x8 x0 x1 x2 x3 x4 x5
     regexp {(%[0-9]+) = int 0 } $f -> zero
@@ -202,11 +202,11 @@ test lst-aarch64-nir {NIR: the AArch64 transport is one generic op over seven re
 test lst-other-architecture-is-unsupported {natively a transport runs only on its own architecture: the other one compiles, and running it is NATIVE UNSUPPORTED (never another architecture's convention); a program that only defines it runs} -constraints nativeLinux -body {
     set other [expr {[testConstraint linuxAarch64] ? "x86_64" : "aarch64"}]
     set label [expr {$other eq "x86_64" ? "x86-64" : "AArch64"}]
-    set number [expr {$other eq "x86_64" ? "rax: abi::x86_64::register64(39)" : "x8: abi::aarch64::register64(172)"}]
-    set text "direct module\nimport abi::$other\nimport linux::abi::$other\nfn pid():\n    abi::${other}::to_int(linux::abi::${other}::syscall({$number}))\npid()"
-    set defined "direct module\nimport abi::$other\nimport linux::abi::$other\nfn pid():\n    abi::${other}::to_int(linux::abi::${other}::syscall({$number}))\n1"
+    set number [expr {$other eq "x86_64" ? "rax: std::abi::x86_64::register64(39)" : "x8: std::abi::aarch64::register64(172)"}]
+    set text "direct module\nimport std::abi::$other\nimport std::linux::abi::$other\nfn pid():\n    std::abi::${other}::to_int(std::linux::abi::${other}::syscall({$number}))\npid()"
+    set defined "direct module\nimport std::abi::$other\nimport std::linux::abi::$other\nfn pid():\n    std::abi::${other}::to_int(std::linux::abi::${other}::syscall({$number}))\n1"
     list [lsort -unique [lmap o [outcomesOf $text $::nativeBackends] {lrange $o 0 2}]] [agree $defined $::nativeBackends] $label
-} -cleanup {unset -nocomplain other label number text defined} -match glob -result {{{error {NATIVE UNSUPPORTED value} {linux::abi::*::syscall needs a Linux * target}}} 1 *}
+} -cleanup {unset -nocomplain other label number text defined} -match glob -result {{{error {NATIVE UNSUPPORTED value} {std::linux::abi::*::syscall needs a Linux * target}}} 1 *}
 
 test lst-aarch64-getpid-is-the-process-pid {Linux AArch64, in process: the AArch64 transport's getpid (number 172) is positive, stable over three calls on both native backends, and exactly the pid of the driver running the program} -constraints {linuxAarch64 posixShell} -body {
     set stable [agree "${::rawGetpid}a = raw_getpid()\nb = raw_getpid()\nc = raw_getpid()\n\[a > 0, a == b, b == c\]" $::nativeBackends]
@@ -279,23 +279,23 @@ test lst-aarch64-machine-code-routes-registers {Linux AArch64, a standalone exec
 } -cleanup {removeDirectory linux-syscall-transports-executables} -result {{{x8 P0} {x0 P1} {x1 P2} {x2 P3} {x3 P4} {x4 P5} {x5 P6}} 1 0}
 
 # ---------------------------------------------------------------------------
-# linux::sys: the architecture-specific module the target selects
+# std::linux::sys: the architecture-specific module the target selects
 
-test lst-linux-sys-selected-by-target {the compilation target's architecture picks linux::sys's one file, whatever the host: linux-x86_64 reads lib/linux/sys.x86_64.bot, linux-aarch64 lib/linux/sys.aarch64.bot, nothing else of the library differing; for a target of another operating system the Linux platform is unavailable (UNSUPPORTED-PLATFORM at the import of linux), whatever its architecture: macos-aarch64 never gets sys.aarch64.bot, windows-x86_64 never sys.x86_64.bot} -body {
-    set text "direct module\nimport abi\nimport abi::bytes\nimport linux\nfn w(d: abi::bytes::Bytes) -> int:\n    linux::write(abi::i32(1), d)\n1"
+test lst-linux-sys-selected-by-target {the compilation target's architecture picks std::linux::sys's one file, whatever the host: linux-x86_64 reads stdlib/linux/sys.x86_64.bot, linux-aarch64 stdlib/linux/sys.aarch64.bot, nothing else of the library differing; for a target of another operating system the Linux platform is unavailable (UNSUPPORTED-PLATFORM at the import of linux), whatever its architecture: macos-aarch64 never gets sys.aarch64.bot, windows-x86_64 never sys.x86_64.bot} -body {
+    set text "direct module\nimport std::abi\nimport std::abi::bytes\nimport std::linux\nfn w(d: std::abi::bytes::Bytes) -> int:\n    std::linux::write(std::abi::i32(1), d)\n1"
     list {*}[lmap target {linux-x86_64 linux-aarch64} {
         set files [libraryFiles [transportHir $text 1 $target]]
         list $target [lsearch -all -inline $files linux/*] [expr {[llength $files] - [llength [lsearch -all $files linux/*]]}]
     }] {*}[lmap target {macos-aarch64 windows-x86_64} {
         set error [strictError $text $target]
-        list $target [lrange $error 0 1] [string match "namespace \"linux\" belongs to the Linux platform *unavailable for target $target *" [lindex $error 2]]
+        list $target [lrange $error 0 1] [string match "namespace \"std::linux\" belongs to the Linux platform *unavailable for target $target *" [lindex $error 2]]
     }]
 } -cleanup {unset -nocomplain text files error} -result {{linux-x86_64 linux/sys.x86_64.bot 5} {linux-aarch64 linux/sys.aarch64.bot 5} {macos-aarch64 {UNSUPPORTED-PLATFORM 4:8} 1} {windows-x86_64 {UNSUPPORTED-PLATFORM 4:8} 1}}
 
-test lst-linux-sys-uses-the-targets-transport {linux::write lowers to the target's own transport: syscall_linux_x86_64 with write's x86-64 number 1 for linux-x86_64, syscall_linux_aarch64 with its AArch64 number 64 for linux-aarch64 -- one op either way, in linux::sys::write} -body {
+test lst-linux-sys-uses-the-targets-transport {std::linux::write lowers to the target's own transport: syscall_linux_x86_64 with write's x86-64 number 1 for linux-x86_64, syscall_linux_aarch64 with its AArch64 number 64 for linux-aarch64 -- one op either way, in std::linux::sys::write} -body {
     lmap target {linux-x86_64 linux-aarch64} {
-        set nir [native::nir [transportHir "direct module\nimport abi\nimport abi::bytes\nimport linux\nimport str\nlinux::write(abi::i32(1000), abi::bytes::from_list(str::encode_utf8(\"x\")))" 1 $target]]
-        set write [nirFunction $nir linux::sys::write]
+        set nir [native::nir [transportHir "direct module\nimport std::abi\nimport std::abi::bytes\nimport std::linux\nimport std::str\nstd::linux::write(std::abi::i32(1000), std::abi::bytes::from_list(std::str::encode_utf8(\"x\")))" 1 $target]]
+        set write [nirFunction $nir std::linux::sys::write]
         regexp {op (syscall_linux_\S+) (%[0-9]+) } $write -> op number
         regexp -line "^\\s+$number = callmulti \[0-9\]+ (%\[0-9\]+)" $write -> argument
         regexp -line "^\\s+$argument = int (\[0-9\]+)" $write -> n
@@ -317,53 +317,53 @@ proc moduleSurface {path} {
     return $surface
 }
 
-test lst-linux-sys-same-surface {the two files of linux::sys declare the same functions with the same parameters, types and results, in the same order, and import the same namespaces but for their own architecture's two (abi::ARCH, linux::abi::ARCH): code above linux::sys is one source on both architectures} -body {
-    set x86 [file join $::projectRoot lib linux sys.x86_64.bot]
-    set arm [file join $::projectRoot lib linux sys.aarch64.bot]
+test lst-linux-sys-same-surface {the two files of std::linux::sys declare the same functions with the same parameters, types and results, in the same order, and import the same namespaces but for their own architecture's two (std::abi::ARCH, std::linux::abi::ARCH): code above std::linux::sys is one source on both architectures} -body {
+    set x86 [file join $::projectRoot stdlib linux sys.x86_64.bot]
+    set arm [file join $::projectRoot stdlib linux sys.aarch64.bot]
     set imports [lmap path [list $x86 $arm] {
         lmap import [dict get [surface::parse [core::ReadFile $path] $path] imports] {dict get $import namespace}
     }]
     list [expr {[moduleSurface $x86] eq [moduleSurface $arm]}] [lmap s [moduleSurface $x86] {lindex $s 0}] $imports
-} -cleanup {unset -nocomplain x86 arm imports} -result {1 {write read} {{abi abi::bytes abi::x86_64 linux::abi::x86_64} {abi abi::bytes abi::aarch64 linux::abi::aarch64}}}
+} -cleanup {unset -nocomplain x86 arm imports} -result {1 {write read} {{std::abi std::abi::bytes std::abi::x86_64 std::linux::abi::x86_64} {std::abi std::abi::bytes std::abi::aarch64 std::linux::abi::aarch64}}}
 
-test lst-linux-is-one-source {lib/linux.bot names no architecture, register or transport: everything above linux::sys (linux, linux::io, io) is the same source on both architectures, and only the two linux::sys files spell a transport} -body {
+test lst-linux-is-one-source {stdlib/linux.bot names no architecture, register or transport: everything above std::linux::sys (linux, std::linux::io, io) is the same source on both architectures, and only the two std::linux::sys files spell a transport} -body {
     set hits {}
-    foreach path [concat [list [file join $::projectRoot lib linux.bot] [file join $::projectRoot lib linux io.bot] [file join $::projectRoot lib io.bot]]] {
+    foreach path [concat [list [file join $::projectRoot stdlib linux.bot] [file join $::projectRoot stdlib linux io.bot] [file join $::projectRoot stdlib io.bot]]] {
         set n 0
         foreach line [split [core::ReadFile $path] \n] {
             incr n
             if {[regexp {^\s*#} $line]} continue
-            if {[regexp {abi::x86_64|abi::aarch64|linux::abi|\m(rax|rdi|rsi|rdx|x8|x0|x1|x2)\M} $line]} {
+            if {[regexp {std::abi::x86_64|std::abi::aarch64|std::linux::abi|\m(rax|rdi|rsi|rdx|x8|x0|x1|x2)\M} $line]} {
                 lappend hits [file tail $path]:$n
             }
         }
     }
     set transports {}
-    foreach path [glob -directory [file join $::projectRoot lib] -tails {*}{*.bot */*.bot */*/*.bot}] {
-        if {[regexp {linux::abi::(x86_64|aarch64)::syscall\(} [core::ReadFile [file join $::projectRoot lib $path]]]} {
+    foreach path [glob -directory [file join $::projectRoot stdlib] -tails {*}{*.bot */*.bot */*/*.bot}] {
+        if {[regexp {std::linux::abi::(x86_64|aarch64)::syscall\(} [core::ReadFile [file join $::projectRoot stdlib $path]]]} {
             lappend transports $path
         }
     }
     list $hits [lsort $transports]
 } -cleanup {unset -nocomplain hits n transports} -result {{} {linux/sys.aarch64.bot linux/sys.x86_64.bot}}
 
-test lst-portable-write-runs-natively {linux::write through the host's linux::sys: an invalid descriptor is the kernel's raw -9 (EBADF, the generic errno table, the same on both architectures) on both native backends, a zero-length write included} -constraints nativeLinux -body {
-    agree "direct module\nimport abi\nimport abi::bytes\nimport linux\nimport str\n\[linux::write(abi::i32(1000), abi::bytes::from_list(str::encode_utf8(\"x\"))), linux::write(abi::i32(1000), abi::bytes::from_list(\[\])), linux::read(abi::i32(1000), abi::bytes::zeroed(abi::usize(4))).result\]" $::nativeBackends
+test lst-portable-write-runs-natively {std::linux::write through the host's std::linux::sys: an invalid descriptor is the kernel's raw -9 (EBADF, the generic errno table, the same on both architectures) on both native backends, a zero-length write included} -constraints nativeLinux -body {
+    agree "direct module\nimport std::abi\nimport std::abi::bytes\nimport std::linux\nimport std::str\n\[std::linux::write(std::abi::i32(1000), std::abi::bytes::from_list(std::str::encode_utf8(\"x\"))), std::linux::write(std::abi::i32(1000), std::abi::bytes::from_list(\[\])), std::linux::read(std::abi::i32(1000), std::abi::bytes::zeroed(std::abi::usize(4))).result\]" $::nativeBackends
 } -result {[-9, -9, -9]}
 
-test lst-portable-write-other-target {a program compiled for the other architecture's target runs its syscalls through that architecture's transport -- NATIVE-ONLY (naming that architecture's bridge) on the Tcl backends -- and the native backends refuse to run it on this host at all (NATIVE TARGET: it was built for another target): the target, never the host, selects linux::sys} -constraints nativeLinux -body {
+test lst-portable-write-other-target {a program compiled for the other architecture's target runs its syscalls through that architecture's transport -- NATIVE-ONLY (naming that architecture's bridge) on the Tcl backends -- and the native backends refuse to run it on this host at all (NATIVE TARGET: it was built for another target): the target, never the host, selects std::linux::sys} -constraints nativeLinux -body {
     set other [expr {[testConstraint linuxAarch64] ? "linux-x86_64" : "linux-aarch64"}]
-    set text "direct module\nimport abi\nimport abi::bytes\nimport linux\nimport str\nlinux::write(abi::i32(1000), abi::bytes::from_list(str::encode_utf8(\"x\")))"
+    set text "direct module\nimport std::abi\nimport std::abi::bytes\nimport std::linux\nimport std::str\nstd::linux::write(std::abi::i32(1000), std::abi::bytes::from_list(std::str::encode_utf8(\"x\")))"
     set outcomes [outcomesOf $text $::allBackends $other]
     list [lsort -unique [lmap o [lrange $outcomes 0 1] {lrange $o 0 1}]] \
-        [string match "abi::[string range $other 6 end]::from_bytes produces*" [lindex $outcomes 0 2]] \
+        [string match "std::abi::[string range $other 6 end]::from_bytes produces*" [lindex $outcomes 0 2]] \
         [lsort -unique [lmap o [lrange $outcomes 2 3] {lrange $o 0 1}]]
 } -cleanup {unset -nocomplain other text outcomes} -result {{{error {CORE SEMANTIC NATIVE-ONLY}}} 1 {{error {NATIVE TARGET}}}}
 
 # ---------------------------------------------------------------------------
 # Architecture-specific modules, in a private library
 
-# Runs BODY with the library directory a fresh private copy of lib/ plus the
+# Runs BODY with the library directory a fresh private copy of stdlib/ plus the
 # module files FILES ({RELATIVE-PATH TEXT ...}).
 proc withModules {files body} {
     set saved $::core::libraryDir
@@ -386,36 +386,36 @@ proc withModules {files body} {
     }
 }
 
-test lst-arch-module-value-by-target {any namespace can be architecture-specific: a private demo::arch with only demo/arch.x86_64.bot and demo/arch.aarch64.bot has the target's members -- on every backend that runs a program built for that target here -- one file per namespace per compilation, still no search; and a portable architecture-specific namespace is no platform's: macos-aarch64 and windows-x86_64 get their architecture's file too} -body {
+test lst-arch-module-value-by-target {any standard namespace can be architecture-specific: a private std::demo::arch with only demo/arch.x86_64.bot and demo/arch.aarch64.bot has the target's members -- on every backend that runs a program built for that target here -- one file per namespace per compilation, still no search; and a portable architecture-specific namespace is no platform's: macos-aarch64 and windows-x86_64 get their architecture's file too} -body {
     withModules [list demo/arch.x86_64.bot "fn name() -> str:\n    \"x86-64\"\n" demo/arch.aarch64.bot "fn name() -> str:\n    \"AArch64\"\n"] {
         lmap target {linux-x86_64 linux-aarch64 macos-aarch64 windows-x86_64} {
-            agree "import demo::arch\ndemo::arch::name()" [backendsFor $target] $target
+            agree "import std::demo::arch\nstd::demo::arch::name()" [backendsFor $target] $target
         }
     }
 } -result {{"x86-64"} {"AArch64"} {"AArch64"} {"x86-64"}}
 
 test lst-arch-module-errors {the selection's diagnostics, at the import: a namespace with both a module file and architecture-specific files is AMBIGUOUS-MODULE; one without a file for the target's architecture is UNSUPPORTED-ARCHITECTURE, naming the files it has; a host that is no known target needs -target (UNKNOWN-TARGET); none at all is UNKNOWN-NAMESPACE} -body {
     withModules [list demo/both.bot "fn f():\n    1\n" demo/both.x86_64.bot "fn f():\n    2\n" demo/armonly.aarch64.bot "fn f():\n    3\n"] {
-        set ambiguous [strictError "import demo::both\ndemo::both::f()" linux-x86_64]
-        set unsupported [strictError "import demo::armonly\ndemo::armonly::f()" linux-x86_64]
-        set supported [agree "import demo::armonly\ndemo::armonly::f()" {interp} linux-aarch64]
+        set ambiguous [strictError "import std::demo::both\nstd::demo::both::f()" linux-x86_64]
+        set unsupported [strictError "import std::demo::armonly\nstd::demo::armonly::f()" linux-x86_64]
+        set supported [agree "import std::demo::armonly\nstd::demo::armonly::f()" {interp} linux-aarch64]
         set machine $::tcl_platform(machine)
         set ::tcl_platform(machine) riscv64
         try {
-            set unknown [strictError "import demo::armonly\ndemo::armonly::f()"]
+            set unknown [strictError "import std::demo::armonly\nstd::demo::armonly::f()"]
         } finally {
             set ::tcl_platform(machine) $machine
         }
-        set missing [strictError "import demo::nothing\n1" linux-x86_64]
+        set missing [strictError "import std::demo::nothing\n1" linux-x86_64]
         list [lrange $ambiguous 0 1] [string match {*demo/both.bot* and architecture-specific module files (*demo/both.x86_64.bot)*} [lindex $ambiguous 2]] \
-            [lrange $unsupported 0 1] [string match {namespace "demo::armonly" has no module for the x86_64 architecture of target linux-x86_64: it is architecture-specific, and its files are *demo/armonly.aarch64.bot (no *demo/armonly.x86_64.bot)} [lindex $unsupported 2]] \
+            [lrange $unsupported 0 1] [string match {namespace "std::demo::armonly" has no module for the x86_64 architecture of target linux-x86_64: it is architecture-specific, and its files are *demo/armonly.aarch64.bot (no *demo/armonly.x86_64.bot)} [lindex $unsupported 2]] \
             $supported [lrange $unknown 0 1] [string match {*compile with -target*} [lindex $unknown 2]] [lrange $missing 0 1]
     }
 } -cleanup {unset -nocomplain ambiguous unsupported supported machine unknown missing} -result {{AMBIGUOUS-MODULE 1:8} 1 {UNSUPPORTED-ARCHITECTURE 1:8} 1 3 {UNKNOWN-TARGET 1:8} 1 {UNKNOWN-NAMESPACE 1:8}}
 
-test lst-cache-dependencies {the front-end cache's dependencies of a build that imports linux hold both candidate files of linux::sys -- the missing portable lib/linux/sys.bot and the target architecture's lib/linux/sys.ARCH.bot with the text the build read -- so a file appearing at either changes the key's validity (surface/cache.tcl)} -body {
+test lst-cache-dependencies {the front-end cache's dependencies of a build that imports linux hold both candidate files of std::linux::sys -- the missing portable stdlib/linux/sys.bot and the target architecture's stdlib/linux/sys.ARCH.bot with the text the build read -- so a file appearing at either changes the key's validity (surface/cache.tcl)} -body {
     lmap target {linux-x86_64 linux-aarch64} {
-        set hir [transportHir "import linux\n1" 1 $target]
+        set hir [transportHir "import std::linux\n1" 1 $target]
         set deps [surface::cache::Dependencies $hir {} $target]
         set root [file normalize $::core::libraryDir]
         lmap dependency $deps {
@@ -427,23 +427,28 @@ test lst-cache-dependencies {the front-end cache's dependencies of a build that 
     }
 } -cleanup {unset -nocomplain hir deps root} -result {{{linux/sys.bot 0} {linux/sys.x86_64.bot 1}} {{linux/sys.aarch64.bot 1} {linux/sys.bot 0}}}
 
-test lst-application-arch-namespace {application modules (IMPORTS.md) and architecture-specific namespaces: an application's own linux/sys.bot never replaces the standard linux::sys -- importing it is MODULE-COLLISION naming the standard library's architecture files -- while an application module importing linux gets the target's linux::sys from the standard library, and the cache records the target's file and the application path as dependencies} -body {
+test lst-application-arch-namespace {application modules (IMPORTS.md, STD-NAMESPACE.md) and architecture-specific namespaces: an application's own linux/sys.bot is its own namespace linux::sys and never replaces the standard std::linux::sys -- a program imports both, each from its own file, the standard one the target's architecture file -- an application file std/linux/sys.bot is RESERVED-NAMESPACE naming the standard library's architecture files, and an application module importing std::linux gets the target's std::linux::sys from the standard library, the cache recording the target's file and the application's std/linux/sys.bot (whose appearance would make the build RESERVED-NAMESPACE) as dependencies} -body {
     set app [file join $::scratch app[incr ::programCounter]]
-    file mkdir [file join $app linux] [file join $app other]
+    file mkdir [file join $app linux] [file join $app other] [file join $app reserved std linux]
     foreach {relative text} {
-        main.bot "import linux::sys\n1\n"
+        main.bot "import std::linux::sys\nimport linux::sys\nlinux::sys::write()\n"
         linux/sys.bot "fn write():\n    1\n"
+        reserved/main.bot "import std::linux::sys\n1\n"
+        reserved/std/linux/sys.bot "fn write():\n    1\n"
         other/main.bot "import game\ngame::size()\n"
-        other/game.bot "import linux\nfn size():\n    3\n"
+        other/game.bot "import std::linux\nfn size():\n    3\n"
     } {
         set channel [open [file join $app {*}[file split $relative]] w]
         puts -nonewline $channel $text
         close $channel
     }
-    catch {surface::readProgramFile [file join $app main.bot] -target linux-aarch64 -cache ""} message options
-    set collision [list [lindex [dict get $options -errorcode] end] [string match "*application module [file join $app linux sys.bot] has the name of the standard namespace \"linux::sys\" (the standard library's *linux/sys.aarch64.bot, *linux/sys.x86_64.bot)*" $message]]
+    set hir [surface::readProgramFile [file join $app main.bot] -target linux-aarch64 -cache ""]
+    set both [list [lindex [outcomeUnderHir interp $hir] 1] [lsearch -all -inline [libraryFiles $hir] linux/sys*] \
+        [expr {[file join $app linux sys.bot] in [lmap {id file} [dict get $hir files] {file normalize [dict get $file path]}]}]]
+    catch {surface::readProgramFile [file join $app reserved main.bot] -target linux-aarch64 -cache ""} message options
+    set reserved [list [lindex [dict get $options -errorcode] end] [string match "*application file [file join $app reserved std linux sys.bot] would be the namespace \"std::linux::sys\"*(it names the standard library's *linux/sys.aarch64.bot, *linux/sys.x86_64.bot)*" $message]]
     set other [file join $app other]
-    set result [list $collision]
+    set result [list $both $reserved]
     foreach target {linux-x86_64 linux-aarch64} {
         set hir [surface::readProgramFile [file join $other main.bot] -target $target -cache ""]
         set arch [dict get [core::cabi::target $target] arch]
@@ -456,7 +461,7 @@ test lst-application-arch-namespace {application modules (IMPORTS.md) and archit
             [lindex [outcomeUnderHir interp $hir] 1]
     }
     set result
-} -cleanup {unset -nocomplain app relative text channel message options collision other result target hir arch deps} -result {{MODULE-COLLISION 1} linux/sys.x86_64.bot {{linux/sys.bot 0} {linux/sys.bot 0} {linux/sys.x86_64.bot 1}} 3 linux/sys.aarch64.bot {{linux/sys.aarch64.bot 1} {linux/sys.bot 0} {linux/sys.bot 0}} 3}
+} -cleanup {unset -nocomplain app relative text channel hir both message options reserved other result target arch deps} -result {{1 linux/sys.aarch64.bot 1} {RESERVED-NAMESPACE 1} linux/sys.x86_64.bot {{linux/sys.bot 0} {linux/sys.bot 0} {linux/sys.x86_64.bot 1}} 3 linux/sys.aarch64.bot {{linux/sys.aarch64.bot 1} {linux/sys.bot 0} {linux/sys.bot 0}} 3}
 
 removeDirectory linux-syscall-transports-scratch
 cleanupTests

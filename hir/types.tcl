@@ -121,10 +121,10 @@
 #                                   so neither is a subtype of the other.
 #                                   Affine (Affinity, below): ordinary
 #                                   operations never duplicate one.
-#   {cptr POINTEE}                  a C data pointer ffi::c::Ptr[T] (C-ABI-
+#   {cptr POINTEE}                  a C data pointer std::ffi::c::Ptr[T] (C-ABI-
 #                                   TYPES.md, hir/cabi.tcl): a raw C address
 #                                   whose static pointee identity is
-#                                   POINTEE -- `void` (ffi::c::Void), a C
+#                                   POINTEE -- `void` (std::ffi::c::Void), a C
 #                                   integer scalar, an opaque struct
 #                                   {nstruct ID}, another pointer, or an
 #                                   imprint variable. Invariant: Ptr[A] is a
@@ -132,7 +132,7 @@
 #                                   are the explicit bridges). Not an Int.
 #                                   Affine (an AffineRoot that drops
 #                                   nothing): moved, cloned explicitly.
-#   {cfnptr FN}                     a C function pointer ffi::c::FnPtr[F]:
+#   {cfnptr FN}                     a C function pointer std::ffi::c::FnPtr[F]:
 #                                   FN the canonical {fn {args .. return ..
 #                                   errors {}}} signature, every argument
 #                                   and the result C ABI types. Of the same
@@ -163,7 +163,7 @@
 #                                   L, the address word of the pointer it
 #                                   was made from (runtime kind cptr). Its
 #                                   reads are a view's (a nested layout's
-#                                   a NativeEdit[INNER]); binary::store
+#                                   a NativeEdit[INNER]); std::binary::store
 #                                   writes through it. Nominal and distinct
 #                                   from NativeView[L] in both directions
 #                                   (write authority is never implied by
@@ -202,8 +202,8 @@
 # bounded (see MakeList/MakeSet), so analyses over them terminate.
 #
 # Exact value facts (EXACT-VALUE-FACTS.md, hir/exactvalue.tcl) are a
-# separate, ephemeral channel and never a type: `list::at` of a List the
-# compiler knows exactly (a literal, an immutable alias of one, list::append
+# separate, ephemeral channel and never a type: `std::list::at` of a List the
+# compiler knows exactly (a literal, an immutable alias of one, std::list::append
 # of one, bounded by shapeLength/aggregateDepth) at an exactly known index
 # gets the selected element's own type in *ordinary* inference too, and a
 # comparison of two exactly known operands is decided (`known`). The List's
@@ -273,14 +273,14 @@ namespace eval hir::types {
     # hir::resolve::ResolveTypeExpr resolves it (hir::layouts::
     # ResolveLayoutStruct) before any argument is resolved as a type.
     #
-    # ffi::c::Ptr and ffi::c::FnPtr (C-ABI-TYPES.md) are registered for their
+    # std::ffi::c::Ptr and std::ffi::c::FnPtr (C-ABI-TYPES.md) are registered for their
     # names and arity the same way: their argument is a pointee or a C
     # signature, resolved by hir::cabi (hir::resolve::ResolveTypeExpr).
     #
     # NativeView (NATIVE-LAYOUT-VIEWS.md) likewise: its argument is a layout
     # (hir::layouts::ResolveNativeView).
     variable constructors [dict create List 1 ImmutableSet 1 MutableArray 1 MutableVector 1 LayoutStruct 1 \
-        NativeView 1 NativeEdit 1 ffi::c::Ptr 1 ffi::c::FnPtr 1]
+        NativeView 1 NativeEdit 1 std::ffi::c::Ptr 1 std::ffi::c::FnPtr 1]
 }
 
 # The canonical resolved type for a bare (unapplied) type name NAME -- an
@@ -334,7 +334,7 @@ proc hir::types::resolveNamed {name {ns ""}} {
     }
     if {$name eq "cptr"} {
         return -code error -errorcode {BOTLISH TYPE} \
-            "\"cptr\" is not a type: a C pointer always has a pointee identity (ffi::c::Ptr\[ffi::c::Void\] is C's void *)"
+            "\"cptr\" is not a type: a C pointer always has a pointee identity (std::ffi::c::Ptr\[std::ffi::c::Void\] is C's void *)"
     }
     if {$name eq "enum"} {
         # The broad kind of every enum value would be an anonymous enum
@@ -436,7 +436,7 @@ proc hir::types::resolveApplication {ctor argTypes} {
             # digits its type does not guarantee (hir/decimal.tcl,
             # "Observations"; core::hashing refuses one at run time).
             return -code error -errorcode {BOTLISH TYPE} \
-                "$ctor\[[show $t]\] would hash DecimalRounded values: a set compares and hashes its members by value, which knows no precision, so it cannot hold them (a List can; decay the members with float64::from_decimal_rounded to build a set of Float64)"
+                "$ctor\[[show $t]\] would hash DecimalRounded values: a set compares and hashes its members by value, which knows no precision, so it cannot hold them (a List can; decay the members with std::float64::from_decimal_rounded to build a set of Float64)"
         }
         if {[MentionsTrait $t]} {
             # A container of trait values would have to carry arbitrary
@@ -447,7 +447,7 @@ proc hir::types::resolveApplication {ctor argTypes} {
         }
     }
     switch -- $ctor {
-        ffi::c::Ptr - ffi::c::FnPtr {
+        std::ffi::c::Ptr - std::ffi::c::FnPtr {
             # Only from a pointee or a signature (hir::cabi::ResolvePtr,
             # ResolveFnPtr), never from a resolved argument type.
             error "internal compiler error: $ctor is resolved by hir::cabi"
@@ -2098,8 +2098,8 @@ proc hir::types::show {type} {
             }
             cptr {
                 # A C data pointer, by its source spelling (C-ABI-TYPES.md):
-                # ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[ffi::c::Int],
-                # ffi::c::Ptr[ssl::SSL].
+                # std::ffi::c::Ptr[std::ffi::c::Void], std::ffi::c::Ptr[std::ffi::c::Int],
+                # std::ffi::c::Ptr[ssl::SSL].
                 return "[hir::cabi::PtrName]\[[hir::cabi::ShowPointee [lindex $type 1]]\]"
             }
             cfnptr {
@@ -2129,8 +2129,8 @@ proc hir::types::show {type} {
     }
     set cabi [core::type::cabiScalar $type]
     if {$cabi ne ""} {
-        # A C integer scalar, by its own name (C-ABI-TYPES.md): ffi::c::ULong,
-        # not int[ffi::c::ULong]. It reads back as that registered name.
+        # A C integer scalar, by its own name (C-ABI-TYPES.md): std::ffi::c::ULong,
+        # not int[std::ffi::c::ULong]. It reads back as that registered name.
         return [lindex $type 2 0]
     }
     return [core::type::show $type]
@@ -2357,7 +2357,7 @@ proc hir::types::AggregateOfValue {v} {
     return [ofValue $v]
 }
 
-# 1 if the binary::parse call whose arguments are ARGEXPRS (result shape
+# 1 if the std::binary::parse call whose arguments are ARGEXPRS (result shape
 # SHAPE, {layout-struct I}) makes no LayoutStruct: its layout is native-only
 # (a pointer field: LAYOUT-NATIVE-ONLY) or holds a union (LAYOUT-UNION,
 # LAYOUT-UNIONS.md), or is a union.
@@ -2373,7 +2373,7 @@ proc hir::types::LayoutParseRefused {hir argExprs shape} {
     return [expr {[hir::layouts::NativeOnly $id] || [hir::layouts::HoldsUnion $id]}]
 }
 
-# 1 if the binary::read call whose arguments are ARGEXPRS (result shape
+# 1 if the std::binary::read call whose arguments are ARGEXPRS (result shape
 # SHAPE, {layout-read I}) reads nothing: its designated representation holds
 # a C pointer (LAYOUT-NATIVE-ONLY) or a union (LAYOUT-UNION), or the
 # designator was rejected (its constant holds none).
@@ -2424,7 +2424,7 @@ proc hir::types::ShapeResult {hir shape argExprs argTypes result} {
             return $result
         }
         layout-struct {
-            # binary::parse(L, data) (core/binary.tcl, BINARY-LAYOUT.md): a
+            # std::binary::parse(L, data) (core/binary.tcl, BINARY-LAYOUT.md): a
             # LayoutStruct[L], L the layout argument I's descriptor
             # constant describes (hir/resolve.tcl's LayoutOperand).
             set arg [lindex $argExprs [lindex $shape 1]]
@@ -2439,7 +2439,7 @@ proc hir::types::ShapeResult {hir shape argExprs argTypes result} {
             return $result
         }
         native-view {
-            # binary::native::view(L, p) (core/binary.tcl,
+            # std::binary::native::view(L, p) (core/binary.tcl,
             # NATIVE-LAYOUT-VIEWS.md): a NativeView[L], L the layout argument
             # I's descriptor constant describes.
             set arg [lindex $argExprs [lindex $shape 1]]
@@ -2452,7 +2452,7 @@ proc hir::types::ShapeResult {hir shape argExprs argTypes result} {
             return $result
         }
         native-edit {
-            # binary::native::edit(L, p) (NATIVE-LAYOUT-WRITES.md): a
+            # std::binary::native::edit(L, p) (NATIVE-LAYOUT-WRITES.md): a
             # NativeEdit[L], L the layout argument I's descriptor constant
             # describes.
             set arg [lindex $argExprs [lindex $shape 1]]
@@ -2483,7 +2483,7 @@ proc hir::types::ShapeResult {hir shape argExprs argTypes result} {
             return $result
         }
         view-struct {
-            # binary::load(v): the LayoutStruct[L] of argument I's static
+            # std::binary::load(v): the LayoutStruct[L] of argument I's static
             # NativeView[L] (or NativeEdit[L]) type -- or, of a live fixed
             # array NativeView[array N of E], the List its copy is
             # (FIXED-LAYOUT-ARRAYS.md).
@@ -2503,7 +2503,7 @@ proc hir::types::ShapeResult {hir shape argExprs argTypes result} {
             return $result
         }
         layout-read {
-            # binary::read(data, L.path) (LAYOUT-UNIONS.md): the copied type
+            # std::binary::read(data, L.path) (LAYOUT-UNIONS.md): the copied type
             # of the representation the designator constant argument I
             # names -- a scalar's domain, LayoutStruct[R], a List.
             set arg [lindex $argExprs [lindex $shape 1]]
@@ -2516,7 +2516,7 @@ proc hir::types::ShapeResult {hir shape argExprs argTypes result} {
             return $result
         }
         native-element {
-            # binary::element(a, i) (FIXED-LAYOUT-ARRAYS.md): the element of
+            # std::binary::element(a, i) (FIXED-LAYOUT-ARRAYS.md): the element of
             # argument I's static live array type, read in place (a scalar,
             # a pointer, or a nested layout's or array's live view or edit).
             set t [hir::layouts::ElementType [lindex $argTypes [lindex $shape 1]]]
@@ -2527,7 +2527,7 @@ proc hir::types::ShapeResult {hir shape argExprs argTypes result} {
         }
         named-struct {
             # A struct of one named declaration (core/native.tcl's
-            # {named-struct ID}: linux::abi::x86_64::syscall's abi::x86_64::
+            # {named-struct ID}: std::linux::abi::x86_64::syscall's std::abi::x86_64::
             # Register64), when the compiling program declares it; the
             # native's declared result (the bare `struct` kind) otherwise.
             set id [lindex $shape 1]
@@ -2593,7 +2593,7 @@ proc hir::types::ShapeResult {hir shape argExprs argTypes result} {
         }
         immutable-set {
             # List[T] -> ImmutableSet[T] (MINIMAL-IMMUTABLE-SET.md item 24):
-            # immutable_set::from_list's own -result-shape. Generic over T
+            # std::immutable_set::from_list's own -result-shape. Generic over T
             # exactly the way `element`/`append` above are generic over a
             # List's own element type -- no ImmutableSet-specific inference
             # code beyond this one shape case, reusing the same elementOf
@@ -2712,7 +2712,7 @@ proc hir::types::ShapeResult {hir shape argExprs argTypes result} {
             # {typed NAME LO HI}: this native's result is a List whose
             # every element is an Int in LO..HI -- a fixed, argument-
             # independent semantic fact about the native itself (e.g.
-            # str::encode_utf8's every UTF-8 code unit is definitionally in
+            # std::str::encode_utf8's every UTF-8 code unit is definitionally in
             # 0..255, STATIC-COMPLETION-PROOFS.md), not something derived
             # from this call's own arguments the way `element`/`append`/
             # `immutable-set` above are. NAME is resolved here, lazily,
@@ -2728,7 +2728,7 @@ proc hir::types::ShapeResult {hir shape argExprs argTypes result} {
             # denote an unrelated or narrower domain in a different
             # compiling program (SYMBOLIC-TYPE-IDENTITY.md's own
             # motivating example: a program-local `type Byte = Int in
-            # 0..15` must not make str::encode_utf8's result List[Byte] just
+            # 0..15` must not make std::str::encode_utf8's result List[Byte] just
             # because "Byte" happens to resolve). So NAME's resolved type
             # is validated against the native's own LO..HI guarantee with
             # hir::range::ProvesType -- the same admissibility check a
@@ -2762,7 +2762,7 @@ proc hir::types::ShapeResult {hir shape argExprs argTypes result} {
             # values directly (never display text), so the mismatch
             # silently rejected every call passing this native's result to a
             # declared List[NAME] parameter (M7A-INSTANCE-SELECTION-THEOREM-
-            # AUDIT.md's str::encode_utf8/List[Byte] finding).
+            # AUDIT.md's std::str::encode_utf8/List[Byte] finding).
             return [MakeList $resolved]
         }
     }
@@ -2949,7 +2949,7 @@ proc hir::types::Expr {hirVar ctxVar e} {
                 # loop is exactly the empty List, whatever the body's type:
                 # that type describes an iteration whose element would be a
                 # `never`, a value that cannot exist (a handled call of it is
-                # typed by its handlers' join, Handle: `b = byte::from_int(v):
+                # typed by its handlers' join, Handle: `b = std::byte::from_int(v):
                 # on ...: 0` an Int, so `[b]` a List[int], not a List[Byte]).
                 dict set ctx reachable 0
             }
@@ -3318,8 +3318,8 @@ proc hir::types::Handle {hirVar ctxVar e} {
         # handler to CALLTYPE in the generic analysis, which is what makes
         # CALLTYPE alone the construct's type there. A semantic instance can
         # type the call more precisely than its handlers, though: in
-        # `fn explicit(xs, i, d): v = list::at(xs, i): on IndexNotFound: d`
-        # (lib/list.bot's list::get), the generic call is `any` and `d` is
+        # `fn explicit(xs, i, d): v = std::list::at(xs, i): on IndexNotFound: d`
+        # (stdlib/list.bot's std::list::get), the generic call is `any` and `d` is
         # admissible, but the instance for (List[int], int, str) types the
         # call int while `d` is a str. Claiming int there is unsound (native
         # code compared two such results with an Int equality and crashed),
@@ -3607,7 +3607,7 @@ proc hir::types::Call {hirVar ctxVar e} {
                 # inference; it now also runs here, in ordinary whole-
                 # program semantic inference, which is exactly what lets an
                 # ordinary List construction/element-read
-                # (list/list::at/list::append, core/lists.tcl,
+                # (list/std::list::at/std::list::append, core/lists.tcl,
                 # core/primitives.tcl) carry or recover a concrete List[T]
                 # applied type with no List-specific inference code of its
                 # own (MINIMAL-APPLIED-LIST-TYPES.md).
@@ -3621,12 +3621,12 @@ proc hir::types::Call {hirVar ctxVar e} {
                             || ($shapeKind eq "layout-struct" && [hir::layouts::RoleOf [dict get $meta layout] op] eq "parse"
                                 && [LayoutParseRefused $hir $argExprs [dict get $meta resultShape]])
                             || ($shapeKind eq "layout-read" && [LayoutReadRefused $hir $argExprs [dict get $meta resultShape]]))} {
-                    # binary::load of a value not statically a NativeView[L]
-                    # (BINARY-OPERAND), or binary::parse of a native-only
+                    # std::binary::load of a value not statically a NativeView[L]
+                    # (BINARY-OPERAND), or std::binary::parse of a native-only
                     # layout (LAYOUT-NATIVE-ONLY: hir::layouts::verify): no
                     # LayoutStruct is ever produced (NATIVE-LAYOUT-VIEWS.md).
                     # Nor of a union, or of anything holding one by value
-                    # (LAYOUT-UNION), and binary::read never makes a pointer
+                    # (LAYOUT-UNION), and std::binary::read never makes a pointer
                     # or a union (LAYOUT-UNIONS.md).
                     set result [Poison hir $e]
                 }
@@ -3646,7 +3646,7 @@ proc hir::types::Call {hirVar ctxVar e} {
             set foreign [dict get $meta foreign]
             if {[dict get $meta imprint] ne ""} {
                 # An intrinsic's imprint signature (hir/imprint.tcl): its
-                # result imprinted for this call (ffi::c::null[T]()). A byte
+                # result imprinted for this call (std::ffi::c::null[T]()). A byte
                 # owner exposed to a foreign pointer parameter establishes
                 # no pointee (hir/borrow.tcl).
                 set result [hir::imprint::Call hir $e $calleeType \
@@ -3804,7 +3804,7 @@ proc hir::types::Call {hirVar ctxVar e} {
         }
         if {[dict get $meta errorsFrom] ne ""} {
             # A native that calls a callable argument (-errors-from:
-            # mutable_array::generate's factory) completes with whatever
+            # std::mutable_array::generate's factory) completes with whatever
             # declared error that callable's contract permits.
             set calleeErrors [lsort -unique [concat $calleeErrors \
                 [CallableErrors $hir [lindex $argTypes [dict get $meta errorsFrom]]]]]

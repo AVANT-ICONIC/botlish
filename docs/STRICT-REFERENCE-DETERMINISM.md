@@ -264,7 +264,7 @@ Before (pre-change compiler; `audit/strict-reference-determinism/out/`):
 
 | source area | accepted forward references |
 |---|---|
-| stdlib (`lib/`) | 0 |
+| stdlib (`stdlib/`) | 0 |
 | canonical corpus (`examples/stdlib/`, 9 programs) | 0 |
 | benchmarks (`bench/*.bot`, `bench/*.ir`) | 0 |
 | language demonstrations (`examples/surface/`) | 1 (`09-mutual-recursion.bot`, mutual recursion) |

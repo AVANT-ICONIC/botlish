@@ -2,7 +2,7 @@ instance <program>
   closed: yes
   entry: runtime (tagged)
 
-instance char::codepoint<UnicodeChar>
+instance std::char::codepoint<UnicodeChar>
   closed: yes
   params:
     c:
@@ -12,7 +12,7 @@ instance char::codepoint<UnicodeChar>
     semantic type: int
     ABI tagged (not-string)
 
-instance byte::high_nibble<int>
+instance std::byte::high_nibble<int>
   closed: yes
   params:
     b:
@@ -22,7 +22,7 @@ instance byte::high_nibble<int>
     semantic type: int[HighNibble]
     ABI tagged (not-string)
 
-instance byte::nibble<int>
+instance std::byte::nibble<int>
   closed: yes
   params:
     x:
@@ -32,7 +32,7 @@ instance byte::nibble<int>
     semantic type: int[Nibble]
     ABI tagged (not-string)
 
-instance byte::from_int<int>
+instance std::byte::from_int<int>
   closed: yes
   params:
     value:
@@ -42,7 +42,7 @@ instance byte::from_int<int>
     semantic type: int[Byte]
     ABI tagged (not-string)
 
-instance byte::set<List[UnicodeChar]>
+instance std::byte::set<List[UnicodeChar]>
   closed: yes
   params:
     chars:
@@ -52,7 +52,7 @@ instance byte::set<List[UnicodeChar]>
     semantic type: ImmutableSet[int[Byte]]
     ABI tagged (not-string)
 
-instance ascii::is_digit<int>
+instance std::ascii::is_digit<int>
   closed: yes
   params:
     b:
@@ -62,7 +62,7 @@ instance ascii::is_digit<int>
     semantic type: bool
     ABI tagged (not-string)
 
-instance ascii::is_upper<int>
+instance std::ascii::is_upper<int>
   closed: yes
   params:
     b:
@@ -72,7 +72,7 @@ instance ascii::is_upper<int>
     semantic type: bool
     ABI tagged (not-string)
 
-instance ascii::is_lower<int>
+instance std::ascii::is_lower<int>
   closed: yes
   params:
     b:
@@ -82,7 +82,7 @@ instance ascii::is_lower<int>
     semantic type: bool
     ABI tagged (not-string)
 
-instance ascii::is_alphabetic<int>
+instance std::ascii::is_alphabetic<int>
   closed: yes
   params:
     b:
@@ -92,7 +92,7 @@ instance ascii::is_alphabetic<int>
     semantic type: bool
     ABI tagged (not-string)
 
-instance ascii::is_alphanumeric<int>
+instance std::ascii::is_alphanumeric<int>
   closed: yes
   params:
     b:
@@ -102,7 +102,7 @@ instance ascii::is_alphanumeric<int>
     semantic type: bool
     ABI tagged (not-string)
 
-instance web::is_unreserved<int>
+instance std::web::is_unreserved<int>
   closed: yes
   params:
     b:
@@ -112,7 +112,7 @@ instance web::is_unreserved<int>
     semantic type: bool
     ABI tagged (not-string)
 
-instance web::uri_escape_text<str>
+instance std::web::uri_escape_text<str>
   closed: yes
   params:
     s:
@@ -241,7 +241,7 @@ instance repeat_uri<generic>
       ShortString1 eligible: no (unknown length)
       physical representation: tagged String (unknown-length)
       uses:
-        argument 0 of web::uri_escape_text<str>
+        argument 0 of std::web::uri_escape_text<str>
     escaped (e519):
       semantic type: String
       proven character length: unproven (unknown length)

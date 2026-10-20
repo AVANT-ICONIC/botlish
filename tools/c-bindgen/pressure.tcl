@@ -23,7 +23,7 @@ namespace eval ::cbind::pressure {
     # unions and anonymous members none since LAYOUT-UNIONS.md: a union of
     # representable alternatives is a union layout.)
     variable features {
-        {ffi::c::Bool fields} {c-bool}
+        {std::ffi::c::Bool fields} {c-bool}
         {float fields} {float}
         {double fields} {double}
         {float and double fields} {float double}

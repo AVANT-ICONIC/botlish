@@ -22,14 +22,14 @@ natives) and on the existing typed-callable escape audit
 (`hir/callables.tcl`), which is generalized from "callable contract bearing"
 to "non-erasable contract bearing". Two typed constructors
 (`mutarray::from_list`, and the new `mutarray::create(capacity, default)` in
-`lib/mutarray.bot`), typed `mutable_array_get` / `_freeze` / `_set` /
+`stdlib/mutarray.bot`), typed `mutable_array_get` / `_freeze` / `_set` /
 `_copy`, invariance, and a transitive non-erasure rule.
 
 **Unchanged, as required:** the runtime object (`MutArrayObj`, `KIND_MUTARRAY`,
 `{mutarray ID}`, GC layout, slots, capacity), `mutable_array_allocate`
 (still returns the bare `mutarray`), every raw operation on a bare `mutarray`,
 `hir::exact`, the frozen source corpus (every `.bot` file except
-`lib/mutarray.bot`), and the generated code of the whole canonical corpus
+`stdlib/mutarray.bot`), and the generated code of the whole canonical corpus
 (byte-identical).
 
 **Measured, and different from what one might hope:** because the frozen
@@ -389,9 +389,9 @@ their exact legacy behavior, raw arrays stay heterogeneous and writable
 
 ## Source-fence result
 
-The only canonical `.bot` file changed is `lib/mutarray.bot` (`create` added,
+The only canonical `.bot` file changed is `stdlib/mutarray.bot` (`create` added,
 header updated). `mat-fence-1` scans `bench/`, `examples/surface`,
-`examples/stdlib` and `lib/` for uses of `mutarray::create` / `MutableArray[`
+`examples/stdlib` and `stdlib/` for uses of `mutarray::create` / `MutableArray[`
 outside comments.
 
 ## Central rule registry (identity, not spelling)
@@ -499,7 +499,7 @@ current buckets are *raw builder*, *generic value -> storage relation*,
 
 ## Remaining generic boundaries
 
-Unchanged (7): `list::find`, `chars_of`, `records` accumulators, `ht_fold`, and
+Unchanged (7): `std::list::find`, `chars_of`, `records` accumulators, `ht_fold`, and
 now also every use where an untyped function carries a typed array through
 (`fn identity(x): x` rejects a typed array; `mat-sp-5`). Also inferred
 contracts: an untyped function that merely reads or takes the capacity of an
@@ -638,7 +638,7 @@ untyped function that only forwards or reads an array
 relation `value : T -> MutableArray[T]` used by `geo_append` for three element
 types. The pair (struct) boundary is orthogonal. Recommended order: struct/
 product typing for the `[storage, length]` shape, then generic function
-relations, whose first users are `list::find`/accumulators and the shared
+relations, whose first users are `std::list::find`/accumulators and the shared
 builder.
 
 ## Answers to the required questions
@@ -741,6 +741,6 @@ Modified: `hir/types.tcl` (representation, algebra, shapes, call rule),
 `hir/callables.tcl` (bearing generalization, contexts, reference check,
 diagnostics), `hir/range.tcl` (admissibility, native hook, clauses),
 `hir/signatures.tcl` (meet), `hir/read.tcl`, `hir/hir.tcl`, `core/mutarray.tcl`
-and `core/native.tcl` (two result shapes), `lib/mutarray.bot` (`create`),
+and `core/native.tcl` (two result shapes), `stdlib/mutarray.bot` (`create`),
 `tests/mutarray-construction.test` (expectations updated for typed
 constructors), `README.md` (one row).

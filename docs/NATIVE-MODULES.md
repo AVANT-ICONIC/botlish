@@ -5,7 +5,7 @@ algorithm out of `-native-body` (a copied-per-call-site core IR literal,
 NATIVE-URI-ESCAPE.md) and identified the real gap it stood in for: Botlish
 had no ordinary way for one source file to define something another file
 could use. This milestone adds the smallest such mechanism and uses it for
-its acceptance target: `web::uri_escape_text` (`lib/web.bot`) is now an
+its acceptance target: `std::web::uri_escape_text` (`stdlib/web.bot`) is now an
 ordinary cross-file Botlish function, compiled once, and `uriEscape`'s
 native (Cranelift) execution calls it directly instead of pasting its body
 into every call site.
@@ -16,11 +16,11 @@ New:
 
 - `surface/modules.tcl` -- the module loader: namespace &lt;-&gt; file
   mapping, dependency discovery/loading, cycle detection, diagnostics.
-- `lib/web.bot` -- `namespace web`, `uri_escape_text` (the migrated
+- `stdlib/web.bot` -- `namespace web`, `uri_escape_text` (the migrated
   algorithm).
-- `lib/mathish.bot` -- `namespace mathish`, `inc` -- the minimal
+- `stdlib/mathish.bot` -- `namespace mathish`, `inc` -- the minimal
   demonstration module (spec's own suggested example).
-- `examples/surface/14-modules.bot` -- `mathish::inc`, called twice.
+- `examples/surface/14-modules.bot` -- `std::mathish::inc`, called twice.
 - `tests/surface-modules.test` -- 21 tests: parity, structural (one
   definition/direct calls), namespace identity, transitive dependencies,
   shadowing immunity, all diagnostics, cycles, `uriEscape`'s bridge.
@@ -54,7 +54,7 @@ Changed:
 - `native/native.tcl` -- the module-native bridge (`ModuleNativeBridge`,
   `ExpandNativeBodies`'s traversal now also collects `moduleNativeCalls`);
   `buildProgramHir` prepends the modules it needs.
-- `lib/web.tcl` -- `uriEscape` registration: `-native-body` (the 34-line
+- `stdlib/web.tcl` -- `uriEscape` registration: `-native-body` (the 34-line
   literal) replaced by `-module-fn {web uri_escape_text}`.
 - `native/generate-scalar-audit.tcl` -- doc comment only (still calls
   `native::buildProgramHir` unchanged).
@@ -64,7 +64,7 @@ Changed:
 ## 2. Module syntax
 
 ```
-# lib/web.bot -- the file's path is its namespace: `web`
+# stdlib/web.bot -- the file's path is its namespace: `web`
 
 fn uri_escape_text(s):
     ...
@@ -81,7 +81,7 @@ milestone -- every existing `examples/surface/*.bot`
 file is unaffected. Reference syntax is `mod::name`, a primary expression
 (`IDENT "::" IDENT`). (Originally only one level; LINUX-X86-64-SYSCALL.md
 added nested namespaces: `a::b::c` is member `c` of namespace `a::b`, which
-lives in `lib/a/b.bot` -- one directory per leading segment -- and is a
+lives in `stdlib/a/b.bot` -- one directory per leading segment -- and is a
 module unrelated to `a`.)
 
 No import statement of any kind exists. §5 of the milestone asked whether
@@ -96,7 +96,7 @@ actually references.
 
 `ModulePath`: namespace `NAME` maps to exactly one path,
 `$::core::libraryDir/NAME.bot` (the same directory the existing Tcl
-library convention, `lib/NAME.tcl`, already uses -- `core/core.tcl`).
+library convention, `stdlib/NAME.tcl`, already uses -- `core/core.tcl`).
 There is no search path, so "two files define namespace `NAME`" cannot
 arise -- `NAME` names one candidate file, period. A missing
 file is a distinct, clear diagnostic (`Error` in `surface/modules.tcl`; `{SURFACE MODULE KIND}`
@@ -160,7 +160,7 @@ never from a sibling top-level statement that runs after the call
 returns. Blocks only ever let a *value* escape their own invocation
 (through capture, or their own return value), never a binding by name.
 `tests/surface-modules.test`, run against this attempt, failed every
-cross-file call with `unbound name "mathish::inc"` on interp -- the
+cross-file call with `unbound name "std::mathish::inc"` on interp -- the
 wrapper's own `inc` binding was correctly resolved by HIR, and just as
 correctly unreachable at run time.
 
@@ -215,7 +215,7 @@ reference from a same-named local shadow). `RenameTo` gained a
 local that happened to shadow a root name), but `qualifyModules`'
 renames do not -- the qualified spelling *is* the meaningful identity
 here (spec §66), so it is what diagnostics and native symbol names should
-show, and now do (`func 1 "mathish::inc"`, not `func 1 "inc"`).
+show, and now do (`func 1 "std::mathish::inc"`, not `func 1 "inc"`).
 
 The Tcl compiler backend (`compiler/compiler.tcl`) needed one matching
 change: `GenerateUnit` seeds its own scope-tracking `ctx` with only
@@ -289,14 +289,14 @@ inlined body.
   a `-native-body` to substitute, so the old body (which called
   `native::ExpandNativeBodies` + `hir::build` directly) no longer
   exercises that path at all. Rewritten to the genuinely analogous
-  control for the new mechanism: `web::uri_escape_text`, referenced
+  control for the new mechanism: `std::web::uri_escape_text`, referenced
   directly (no native, no override), types as plain `any` -- confirming
   the opaque type is never forged by the module mechanism itself, only
   ever supplied by the native's own registered contract.
 
 ## 9. `-native-body` status
 
-Still used -- by `Emailish?`'s predicate (`lib/web.tcl`,
+Still used -- by `Emailish?`'s predicate (`stdlib/web.tcl`,
 `core::type::definePredicate`'s third argument) and by
 `tests/helpers.tcl`'s `NonEmpty?` fixture. Neither this milestone's
 `uriEscape` migration nor anything else here touches `ExpandNativeBodies`'
@@ -313,28 +313,28 @@ own.
 
 ## 10. Representative cross-file call
 
-Source (`examples/surface/14-modules.bot`, referencing `lib/mathish.bot`):
+Source (`examples/surface/14-modules.bot`, referencing `stdlib/mathish.bot`):
 
 ```
 namespace mathish            fn inc(x):
                                   x + 1
-[mathish::inc(41), mathish::inc(1)]
+[std::mathish::inc(41), std::mathish::inc(1)]
 ```
 
 Resolved HIR (`-hir -origins`; trimmed):
 
 ```
-e1 bind b1 mathish::inc : block(e2)/1 -> int @file f2 node inc() ...
+e1 bind b1 std::mathish::inc : block(e2)/1 -> int @file f2 node inc() ...
     e2 block s4 (b2 x) captures () : block(e2)/1 -> int @file f2 ...
         e3 call native(+) : int @file f2 ...
 e7 call native(list) : list @file f1 node list ...
     e9  call block(e2) : int @file f1 node list/item1 ...
-        e10 ref b1 mathish::inc : block(e2)/1 -> int @file f1 ...
+        e10 ref b1 std::mathish::inc : block(e2)/1 -> int @file f1 ...
     e12 call block(e2) : int @file f1 node list/item2 ...
-        e13 ref b1 mathish::inc : block(e2)/1 -> int @file f1 ...
+        e13 ref b1 std::mathish::inc : block(e2)/1 -> int @file f1 ...
 ```
 
-`e1` (the definition) is attributed to `f2` = `lib/mathish.bot`; both call
+`e1` (the definition) is attributed to `f2` = `stdlib/mathish.bot`; both call
 sites (`e9`/`e12`) and their callee references (`e10`/`e13`) are
 attributed to `f1` = the referencing file -- `hir::sourceFile $hir f2`
 resolves to the real path. Both references resolve to the identical
@@ -347,7 +347,7 @@ func 0 "<program>" ...
     %2 = call 1 %0 @e9
     %5 = call 1 %3 @e12
     ...
-func 1 "mathish::inc" params=1 ... @e2
+func 1 "std::mathish::inc" params=1 ... @e2
     ...
 ```
 
@@ -362,11 +362,11 @@ x86-64 (`native::object`, `objdump -dr`):
 ```
 
 Both call sites: a direct `call` with a `R_X86_64_PLT32` relocation to
-`botlish_fn_1` (`mathish::inc`'s own compiled function) -- no function
+`botlish_fn_1` (`std::mathish::inc`'s own compiled function) -- no function
 table, no registry lookup, no string lookup, no indirect call. (Object-
 level symbol names are the pre-existing `botlish_fn_N` scheme for *every*
 function, module or not; the readable, provenance-carrying name
-`mathish::inc` is what the NIR/CLIF *text* dumps show, exactly as an
+`std::mathish::inc` is what the NIR/CLIF *text* dumps show, exactly as an
 ordinary same-file function's name already was before this milestone --
 modules changed nothing about that scheme, for better or worse.)
 
@@ -390,7 +390,7 @@ After:
 -module-fn {web uri_escape_text}
 ```
 
-`web::uri_escape_text` (`lib/web.bot`) is an ordinary module function,
+`std::web::uri_escape_text` (`stdlib/web.bot`) is an ordinary module function,
 resolved through the regular semantic resolver (§6 above), compiled once,
 and referenced by its stable `BindingId`/`ExprId` -- never pasted.
 
@@ -411,8 +411,8 @@ too.
 ## 12. Runtime allocation/lookup accounting
 
 The later immutable-module-binding extension is documented in
-MODULE-BINDINGS.md. `mathish::inc` remains envless and uses the existing
-direct-call path. `web::uri_escape_text` now captures `web::hex_digits`,
+MODULE-BINDINGS.md. `std::mathish::inc` remains envless and uses the existing
+direct-call path. `std::web::uri_escape_text` now captures `std::web::hex_digits`,
 so its one closure is created at program startup and its statically known
 `callenv` calls carry the existing hidden environment field. There is no
 runtime namespace/name lookup or dynamic dispatch; CLIF calls its compiled
@@ -456,7 +456,7 @@ Tcl's own recursion limit at this `n`, a pre-existing, unrelated fact
 
 2. **Can namespaces be aliased?** No. No syntax exists for it (`import
    X as Y`/`from X import y`/`using`/`open` are simply not part of the
-   grammar -- `"import web as w"` and a stray `namespace` declaration are
+   grammar -- `"import std::web as w"` and a stray `namespace` declaration are
    both ordinary syntax errors, tested). The qualified spelling is the
    only spelling a reference can ever have.
 
@@ -510,13 +510,13 @@ Tcl's own recursion limit at this `n`, a pre-existing, unrelated fact
    uri_escape_text}` and no `-native-body` at all.
 
 10. **What remaining uses of `-native-body` exist?** `Emailish?`'s
-    predicate (`lib/web.tcl`) and a test fixture, `NonEmpty?`
+    predicate (`stdlib/web.tcl`) and a test fixture, `NonEmpty?`
     (`tests/helpers.tcl`) -- both type predicates, not migrated by this
     milestone (§9 above).
 
 11. **Is opaque evidence handling unchanged?** Yes. `core::web::uriEscape`
     (the Tcl `-impl`) is untouched and stays authoritative for evidence on
-    every backend but native; `web::uri_escape_text` is ordinary,
+    every backend but native; `std::web::uri_escape_text` is ordinary,
     unprivileged Botlish that only ever computes the escaped *text* and
     could not attach `UriQueryValue` evidence even if it tried (confirmed
     directly: referenced without the native's override, it types as plain
@@ -538,4 +538,4 @@ Tcl's own recursion limit at this `n`, a pre-existing, unrelated fact
     `hir/modulebinding.tcl` requires a context-free initializer and a
     transitively immutable retained result; it uses resolved call targets
     and native metadata, not source spelling. See MODULE-BINDINGS.md for
-    the complete rule, diagnostics, and `web::hex_digits` evidence.
+    the complete rule, diagnostics, and `std::web::hex_digits` evidence.

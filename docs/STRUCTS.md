@@ -592,7 +592,7 @@ field contracts. `tests : List[Test]`, not an anonymous struct list.
 **The two declared contracts** (`is_affected?(test: Test)` and
 `first_affected(tests: List[Test], changed?)`, both needed, verified by
 removal one at a time; `select_affected` needs none): `is_affected?` is passed
-to `list::find` as a *value*, so its body can run generically and
+to `std::list::find` as a *value*, so its body can run generically and
 `test.dependencies` must be proven there. This is the struct analogue of the
 boundary `select_affected`'s old contract pressure pointed at: it did **not**
 disappear, it moved. The strict counterfactual for `test-selection.bot` fell
@@ -633,7 +633,7 @@ strict-table.py`; classified by `audit/structs/tools/strict-diff.py`
 **Disappeared (15):** the scan pairs' `index`/`stop needs int (arg any)` (12:
 `csv` 2, `csv_chunked` 2, `csv_geometric` 4, `csv_records` 4) and three
 test-selection sites (`select_affected` `test needs list`, `first_affected`
-`test needs list` and the `list::find` invalid call).
+`test needs list` and the `std::list::find` invalid call).
 
 **Moved:** none moved in place. The typed builders' element contracts now show
 up one level higher (in the scan functions instead of only `build_rows`).
@@ -1060,7 +1060,7 @@ cross it, is the definition-level obstruction described above.
 `dependencies : List[str]`). (77) Partly: `select_affected` needs no contract
 and returns `List[Test]`; the strict site `affected? xs` remains. (78) The
 definition's own analysis still sees `test_deps(test) : any`; only instances
-see `List[str]`, and a function value passed to `list::find` runs generically,
+see `List[str]`, and a function value passed to `std::list::find` runs generically,
 which is what the two declared contracts pay for.
 
 **Strict counterfactual.** (79) 38. (80) 55. (81) The 12 scan `index`/`stop`

@@ -57,7 +57,7 @@ This milestone builds only the `List[T]` half of that signature's
 plumbing: generic applied-type syntax/resolution, and the fact that a List
 parameter's element type is real, usable, compositional static
 information (not a runtime check). `UnicodeChar`, character literals,
-`ImmutableSet[T]`, and `byte::set` itself remain entirely unimplemented,
+`ImmutableSet[T]`, and `std::byte::set` itself remain entirely unimplemented,
 exactly as scoped.
 
 ## Type-expression syntax
@@ -584,7 +584,7 @@ construction changes.
 
 ## Deferred (unchanged from the brief)
 
-`UnicodeChar`, character literals, `ImmutableSet[T]`, `byte::set`, ASCII
+`UnicodeChar`, character literals, `ImmutableSet[T]`, `std::byte::set`, ASCII
 work, predicate/flow refinement (`if List::all(xs, Small?): ...`; there is
 no `Small?` any more, ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md),
 variance (covariant or contravariant), user-defined generic type
@@ -702,7 +702,7 @@ questions below is "no."
 37. Were character literals added? No.
 38. Was `ImmutableList` added? No.
 39. Was `ImmutableSet` added? No.
-40. Was `byte::set` added? No.
+40. Was `std::byte::set` added? No.
 41. Was ASCII added? No.
 42. Was representation specialization added? No.
 

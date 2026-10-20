@@ -457,7 +457,7 @@ Dynamic check (callgrind, profile-nir.sh, 21 runs, 20 collected; programs whose 
 bench/refined-checks: total Ir/run 5,509,798 -> 5,346,724 (-163,074, -2.96%)
   value knob0: value {list {{int 400} {int 0}}}
   value knob1: value {list {{int 400} {int 0}}}  [same]
-  9 web::emailish?: invocations 800 -> 800; self Ir/run 47,200 -> 46,800 (59.0 -> 58.5 Ir/call); inclusive 5,471,118 -> 5,308,045
+  9 std::web::emailish?: invocations 800 -> 800; self Ir/run 47,200 -> 46,800 (59.0 -> 58.5 Ir/call); inclusive 5,471,118 -> 5,308,045
   14 scan_while: invocations 800 -> 800; self Ir/run 278,000 -> 164,400 (347.5 -> 205.5 Ir/call); inclusive 4,160,318 -> 4,046,445
   15 scan_while: invocations 400 -> 400; self Ir/run 64,800 -> 39,600 (162.0 -> 99.0 Ir/call); inclusive 432,000 -> 406,800
   16 tld?: invocations 400 -> 400; self Ir/run 14,000 -> 12,400 (35.0 -> 31.0 Ir/call); inclusive 446,000 -> 419,200

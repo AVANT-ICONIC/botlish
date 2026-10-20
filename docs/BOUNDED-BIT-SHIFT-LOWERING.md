@@ -2,8 +2,8 @@
 
 This milestone continues directly from `BYTE-NIBBLE-BIT-ARITHMETIC.md` and
 `CLOSED-CALL-PARAMETER-FACTS.md`. Those established that inside the real
-compiled `byte::nibble<int>` instance (`bench/refined-checks.ir`'s
-`web::high_nibble` chain), the parameter `x` already carries
+compiled `std::byte::nibble<int>` instance (`bench/refined-checks.ir`'s
+`std::web::high_nibble` chain), the parameter `x` already carries
 
 ```
 x:
@@ -22,7 +22,7 @@ from raw eligibility altogether, so `ishr` always called the generic
 `rt_int_shr` helper even when analysis already proved every precondition
 that helper exists to check. This milestone fixes both layers, in that
 order, with no code anywhere that mentions `Byte`/`Nibble`/`HighNibble`/
-`byte::nibble`/`byte::high_nibble` by name.
+`std::byte::nibble`/`std::byte::high_nibble` by name.
 
 ## 1. Files changed
 
@@ -63,7 +63,7 @@ order, with no code anywhere that mentions `Byte`/`Nibble`/`HighNibble`/
   results, shift-right/shift-left interval and exact transfer, the
   `maxShiftLeftAmount` safety bound.
 - `tests/native-bitshift.test` (new, 20 tests) -- Phase B/C: the real
-  `byte::nibble` closed instance's own facts/NIR/CLIF, `byte::high_nibble`
+  `std::byte::nibble` closed instance's own facts/NIR/CLIF, `std::byte::high_nibble`
   staying on its existing tagged fast path, synthetic raw-eligible/
   raw-rejected cases (negative operand, BigInt operand, non-constant shift
   count, shift count >= the raw width, shift-left result overflow, a
@@ -75,7 +75,7 @@ order, with no code anywhere that mentions `Byte`/`Nibble`/`HighNibble`/
 - `tests/refined-signatures.test` -- one test's example changed, one new
   test added, both explained in § 8.
 
-No change to `core/scalarbits.tcl`, `lib/byte.bot`, `lib/web.bot`,
+No change to `core/scalarbits.tcl`, `stdlib/byte.bot`, `stdlib/web.bot`,
 `hir/specialize.tcl`, `hir/types.tcl`, `hir/refine.tcl`, `core/type.tcl`, or
 any other file. No new Byte/Nibble-specific code, opcode, or peephole
 anywhere in this diff.
@@ -424,9 +424,9 @@ already raw (host i64) by the time this runs -- `RIShr`/`RIShl` join
   `ishr` (with `ishl` symmetric where the same proof discipline already
   covers it cleanly -- it does, so both landed together).
 
-## 5. The real `byte::nibble` microscope
+## 5. The real `std::byte::nibble` microscope
 
-`lib/byte.bot`'s actual body (not the milestone brief's simplified
+`stdlib/byte.bot`'s actual body (not the milestone brief's simplified
 sketch) is
 
 ```
@@ -462,7 +462,7 @@ x >> 4         :  [0, 240]       -- ignores the shift amount entirely
 NIR (`native::nir`):
 
 ```
-func 2 "byte::nibble" params=1 ... instance="int" rawregs="2 5 9" @e14
+func 2 "std::byte::nibble" params=1 ... instance="int" rawregs="2 5 9" @e14
     %1 = int 15 @e22
     %2 = rawint 15
     %3 = op iand %0 %1 @e19
@@ -478,12 +478,12 @@ end
 ```
 
 `ishr` here is the plain helper form: Cranelift lowering calls
-`rt_int_shr` unconditionally (§ 4.1). `byte::nibble`'s own machine code:
+`rt_int_shr` unconditionally (§ 4.1). `std::byte::nibble`'s own machine code:
 **329 bytes**. Whole-program (`refined-checks.ir`) machine code: **16713
 bytes**, **27** functions. `count("op ishr")` across the whole program: **1**
-(the only shift in the program, `byte::nibble`'s own, on the generic
-helper path). `count("op iand")`: **3** (`byte::high_nibble`'s own mask,
-`byte::nibble`'s inner `x&15`, and its outer final mask). `count("op ior")`:
+(the only shift in the program, `std::byte::nibble`'s own, on the generic
+helper path). `count("op iand")`: **3** (`std::byte::high_nibble`'s own mask,
+`std::byte::nibble`'s inner `x&15`, and its outer final mask). `count("op ior")`:
 **1**.
 
 ### 5.2 After (this milestone)
@@ -501,7 +501,7 @@ x >> 4         :  [0, 15]        -- Phase A's shift-amount-aware transfer
 NIR:
 
 ```
-func 2 "byte::nibble" params=1 env=0 regs=12 pnames="x" captures=0 instance="int" rawregs="2 4 5 7 8 11" @e14
+func 2 "std::byte::nibble" params=1 env=0 regs=12 pnames="x" captures=0 instance="int" rawregs="2 4 5 7 8 11" @e14
     %1 = int 15 @e22
     %2 = rawint 15
     %3 = int 0 @e19
@@ -522,11 +522,11 @@ now-elided calls' own literal operands (Call evaluates every argument
 unconditionally before the containing call decides whether to keep it --
 § 3's own note); no `iand`, no `ior`, no `guard`, no `raise`, survives on
 this path. `count("op iand")` for the whole program: **1** (only
-`byte::high_nibble`'s own, unchanged, § 4.5's own scope decision).
+`std::byte::high_nibble`'s own, unchanged, § 4.5's own scope decision).
 `count("op ior")`: **0**. `count("op ishr")`/`rt_int_shr` call sites for
 the whole program: **0**. `count("op rishr")`: **1**.
 
-True Cranelift IR (`native::clif`, `function u0:52`, `byte::nibble`'s own
+True Cranelift IR (`native::clif`, `function u0:52`, `std::byte::nibble`'s own
 compiled body verbatim):
 
 ```
@@ -550,7 +550,7 @@ pins exactly this: no `call ` substring in this function's own CLIF text,
 and an `sshr` present).
 
 Actual x86-64 machine code (`objdump -d`, `native::object`'s own AOT
-output, `botlish_fn_2` == `byte::nibble`):
+output, `botlish_fn_2` == `std::byte::nibble`):
 
 ```
 0000000000000450 <botlish_fn_2>:
@@ -571,8 +571,8 @@ instructions in the IR above (untag-by-1, then the raw shift-by-4) into
 instructions: one combined arithmetic shift, one retag (`shl`+`or`), no
 branch, no call, no guard, exactly matching the milestone's own stop
 condition (§ 102) at the actual machine-code level, not merely NIR.
-`byte::nibble`'s own machine code: **40 bytes** (was 329 -- an 88%
-reduction for this one function). `byte::high_nibble`'s own machine code:
+`std::byte::nibble`'s own machine code: **40 bytes** (was 329 -- an 88%
+reduction for this one function). `std::byte::high_nibble`'s own machine code:
 **203 bytes**, byte-for-byte unchanged (§ 4.5).
 
 ### 5.3 Why the outer `bit_and(..., 15)` disappears too
@@ -587,9 +587,9 @@ result) has range `[0,15]`, its mask operand `B` is the proven constant
 range facts, with the constant `15` never appearing in
 `native/lower.tcl`'s own source.
 
-## 6. Composition: `web::high_nibble` end to end
+## 6. Composition: `std::web::high_nibble` end to end
 
-`web.bot`'s `high_nibble(b) = byte::nibble(byte::high_nibble(b))` still
+`web.bot`'s `high_nibble(b) = std::byte::nibble(std::byte::high_nibble(b))` still
 compiles to two calls (`high_nibble`'s own NIR: `%1 = call 1 %0; %2 = call
 2 %1; ret %2`) -- this milestone adds no inlining. `high_nibble`'s own
 machine code: **96 bytes** (was 109 -- both callee functions shrank; the
@@ -603,8 +603,8 @@ call sequence itself is unchanged).
 | `compile`/`cranelift` agreement | `[400, 0]` / `[400, 0]` | `[400, 0]` / `[400, 0]` |
 | Machine code, total | 16713 bytes | **16411 bytes** (-302, -1.8%) |
 | Function count | 27 | 27 (unchanged) |
-| `byte::nibble` code size | 329 bytes | **40 bytes** (-88%) |
-| `byte::high_nibble` code size | 203 bytes | 203 bytes (unchanged) |
+| `std::byte::nibble` code size | 329 bytes | **40 bytes** (-88%) |
+| `std::byte::high_nibble` code size | 203 bytes | 203 bytes (unchanged) |
 | `high_nibble` (web.bot wrapper) code size | 109 bytes | 96 bytes |
 | `op ishr` (generic, helper) sites, whole program | 1 | **0** |
 | `op rishr` (raw) sites, whole program | 0 | **1** |
@@ -669,7 +669,7 @@ No other pre-existing assertion changed.
   which this milestone's changes do not touch.
 - `hir::range.tcl`'s new exact/shift transfer, and native lowering's new
   raw-shift/pure-bitwise-fold paths, are exercised on every corpus program
-  `tests/all.tcl` already runs (`bench/*.ir`, `lib/*.bot`, every `.test`
+  `tests/all.tcl` already runs (`bench/*.ir`, `stdlib/*.bot`, every `.test`
   file's own programs) with no other regression.
 - Cross-call/type-to-fact stability (spec § 55-56): the prior milestone's
   own `tests/hir-closed-call-params.test` and
@@ -679,14 +679,14 @@ No other pre-existing assertion changed.
 
 ## 10. Remaining abstraction cost, and the inlining question
 
-After this milestone, `web::high_nibble(b)` still compiles to:
+After this milestone, `std::web::high_nibble(b)` still compiles to:
 
 ```
-call byte::high_nibble(b)   -- one iand (tagged fast path, still correct/cheap)
-call byte::nibble(...)      -- one raw sar + one retag (this milestone's own result)
+call std::byte::high_nibble(b)   -- one iand (tagged fast path, still correct/cheap)
+call std::byte::nibble(...)      -- one raw sar + one retag (this milestone's own result)
 ```
 
-i.e. two real function calls plus, inside `byte::nibble`, one tag
+i.e. two real function calls plus, inside `std::byte::nibble`, one tag
 transition pair (`runbox`/`rbox`) that a caller *already holding* a raw
 value for `x` could not avoid either way (the function boundary itself
 requires a tagged ABI value in and out -- spec § 15/§ 27/§ 76's own
@@ -695,26 +695,26 @@ to remove the call boundary itself (spec § 29's own explicit
 prohibition).
 
 **Are the remaining costs predominantly function calls?** Yes, at this
-point essentially entirely: both `byte::high_nibble` and `byte::nibble`
+point essentially entirely: both `std::byte::high_nibble` and `std::byte::nibble`
 are now minimal (one branch-free ALU instruction sequence each, no
-runtime helper, no guard in `byte::nibble`'s own case), so the two `call`
+runtime helper, no guard in `std::byte::nibble`'s own case), so the two `call`
 instructions and their own prologue/epilogue overhead are what remains,
 not any further-optimizable arithmetic.
 
 **Are any tagged/raw transitions still unnecessarily repeated?** No new
-ones from this milestone: `byte::nibble`'s own `runbox`/`rbox` pair is
+ones from this milestone: `std::byte::nibble`'s own `runbox`/`rbox` pair is
 exactly one of each, required once by the function's own tagged ABI in and
 tagged ABI out; nothing repeats it.
 
 **Is a tiny closed leaf-inliner now clearly justified by the evidence?**
 Recommend **yes, narrowly**, based on what this milestone's own evidence
-now shows and could not show before it: both `byte::high_nibble` and
-`byte::nibble` are now provably minimal, single-basic-block, call-free (or
+now shows and could not show before it: both `std::byte::high_nibble` and
+`std::byte::nibble` are now provably minimal, single-basic-block, call-free (or
 call-free but for their own runtime-independent ALU ops), branch-free
-leaves with a single call site each in the corpus (`web::high_nibble`'s
+leaves with a single call site each in the corpus (`std::web::high_nibble`'s
 own two calls) -- exactly the shape a *narrowly scoped, exact-leaf-only*
 inliner (never a general call-graph inliner) would need to recognize
-safely. Before this milestone, `byte::nibble` still contained a genuine
+safely. Before this milestone, `std::byte::nibble` still contained a genuine
 helper call (`rt_int_shr`) and a `iand`/`ior` sequence, so inlining it
 would have inlined real runtime-boundary complexity, not just arithmetic;
 after it, inlining is now purely a matter of eliminating two call/return
@@ -812,7 +812,7 @@ recommendation, not an implementation: no inlining was added here (spec
 
 ## 13. Required real-case questions
 
-21. **What fact does `x` have inside `byte::nibble`?**
+21. **What fact does `x` have inside `std::byte::nibble`?**
     `[0, 240] {0,16,32,...,240}` (unchanged by this milestone; established
     by the prior closed-call-parameter-facts work).
 22. **What fact does `x & 15` have now?** `[0, 0] {0}` -- a genuine point.
@@ -829,7 +829,7 @@ recommendation, not an implementation: no inlining was added here (spec
     (§ 5.2).
 27. **Does `rt_int_shr` remain on this path?** No -- confirmed both by NIR
     text (no `op ishr` for this call) and by the Cranelift IR/machine code
-    (no `call` instruction in `byte::nibble`'s own compiled body at all).
+    (no `call` instruction in `std::byte::nibble`'s own compiled body at all).
 28. **What actual machine shift instruction appears?** `sar rsi, 0x5` (one
     x86-64 arithmetic shift, Cranelift having fused the untag shift and
     the raw `>>4` shift into one instruction -- § 5.2).
@@ -844,7 +844,7 @@ recommendation, not an implementation: no inlining was added here (spec
 31. **Does any new logic mention Byte/Nibble/HighNibble names?** No --
     verified by direct inspection of every changed proc in `hir/range.tcl`
     and `native/lower.tcl`; the only files that ever mention those names
-    (`core/scalarbits.tcl`, `lib/byte.bot`, their own tests) are unchanged
+    (`core/scalarbits.tcl`, `stdlib/byte.bot`, their own tests) are unchanged
     by this diff.
 32. **Would a future source-defined sparse integer domain gain the same
     optimization?** Yes: everything here consumes `hir::range` facts
@@ -868,16 +868,16 @@ recommendation, not an implementation: no inlining was added here (spec
 
 ## 15. Required remaining-cost questions
 
-36. **After this milestone, what prevents `byte::nibble(byte::high_nibble(b))`
+36. **After this milestone, what prevents `std::byte::nibble(std::byte::high_nibble(b))`
     from becoming one logical right shift end to end?** Two real,
     separate function-call boundaries (each with its own tagged-ABI
-    prologue/epilogue and, for `byte::nibble`, one tag-transition pair);
+    prologue/epilogue and, for `std::byte::nibble`, one tag-transition pair);
     no interprocedural expression simplification exists to look through a
     call and continue folding across it.
 37. **Are the remaining costs predominantly function calls?** Yes (§ 10).
 38. **Are any tagged/raw transitions still unnecessarily repeated?** No
     (§ 10) -- exactly one unbox/rebox pair, required once by the ABI,
-    inside `byte::nibble` itself; none inside `byte::high_nibble` (its
+    inside `std::byte::nibble` itself; none inside `std::byte::high_nibble` (its
     own AND never leaves the tagged representation).
 39. **Is a tiny closed leaf-inliner now clearly justified by
     measured/generated evidence?** Yes, narrowly (§ 10).
@@ -899,12 +899,12 @@ recommendation, not an implementation: no inlining was added here (spec
 
 ## 17. Stop condition, met
 
-Inside `byte::nibble`'s real closed instance: `x: [0,240] {0,16,...,240}`;
+Inside `std::byte::nibble`'s real closed instance: `x: [0,240] {0,16,...,240}`;
 `x & 15: [0,0] {0}`; `x >> 4: [0,15]`; the successful computation lowers to
 `shift_right(x,4)` equivalent (the `iand`/`ior`/outer `iand` all elided at
 lowering time, generically); native representation is raw-safe; machine
 lowering is one fused `sar` with no `rt_int_shr` call anywhere on this
-path. No inlining of `byte::nibble` into its caller was added.
+path. No inlining of `std::byte::nibble` into its caller was added.
 
 Per § 10/§ 39-40: the evidence now points at function-call/ABI-boundary
 overhead, on two now-minimal, single-block, effectively call-free leaves,

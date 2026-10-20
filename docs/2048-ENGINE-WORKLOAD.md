@@ -56,7 +56,7 @@ P1-P3, D1-D6): each entry was written when it happened.
 |---|---|
 | 2048 implementation | `examples/games/2048/`: `game2048.bot` (engine module), `demo.bot`, `golden.bot` (suite), `bench.bot`, `run.tcl` (the private-library driver, D5); `bench/2048.tcl`; `tests/workload-2048.test`; `audit/2048/` (`oracle.py`, `mutants.txt`, `mutate.tcl`, `surprise-log.md`) |
 | stdlib | none |
-| test framework (`lib/test.bot`) | none |
+| test framework (`stdlib/test.bot`) | none |
 | test tooling | `audit/golden/tools/perturb.tcl`: `-lib DIR` (perturb a suite against a library directory that holds a non-stdlib module); census rows for the new Tcl tests (`audit/golden/migration/census/workload-2048.tsv`, `native-root-liveness.tsv`) and the regenerated `tests/golden/manifest.tsv` |
 | compiler correctness | `native/src/codegen/roots.rs`: a definition interferes with every managed register live after it; Rust test `definition_does_not_overwrite_a_live_root`; `tests/native-root-liveness.test` `root-def-interference-1`. `native/lower.tcl`: the internal scalar companion (`internalcompanion`: `InternalCompanionRef`, `InternalCompanionFunction`, `FlattenedVirtualScalarCall`) and `Call`'s flattened dispatch for a call whose result is wanted as fields; `tests/native-block-escape.test` `blockescape-scalar-companion-1..3` |
 | compiler precision / optimization | none (findings only: S5, S7, S8, S9, S18) |
@@ -69,8 +69,8 @@ P1-P3, D1-D6): each entry was written when it happened.
 One module, `game2048` (one file, one namespace: IMPORTS.md), and three
 programs that import it: the demo, the golden suite and the benchmark
 program, all in `examples/games/2048/`. Because `import NAME` resolved only
-to `lib/NAME.bot` (S4), the programs were compiled against a private library
-directory -- a temporary copy of `lib/` with `game2048.bot` added -- that
+to `stdlib/NAME.bot` (S4), the programs were compiled against a private library
+directory -- a temporary copy of `stdlib/` with `game2048.bot` added -- that
 `examples/games/2048/run.tcl` built; `tests/workload-2048.test` and
 `bench/2048.tcl` used it too (D5). `run.tcl -hirx OUT FILE.bot` writes the
 analyzed HIR, which `main.tcl` then runs with every option it has
@@ -93,8 +93,8 @@ tclsh9.0 bench/2048.tcl                                      # the performance r
 | concept | representation | why |
 |---|---|---|
 | board | `opaque struct Board: rows: List[List[int]]` | rows make a line a first-class List, which is what the algorithm consumes; no integer division (S2) rules out a flat 16-cell layout with `i div 4`; `opaque` gives the module sole construction authority, so the invariant is validated once and kept by construction (D1) |
-| cell | `int`: `empty` (0) or a tile, a power of two >= 2 | enums are payload-free, so there is no Empty/Tile(n) sum; with 0, `list::get(xs, i, empty)` reads "the cell at i, or empty past the end", which makes padding and reversal total (D2) |
-| board invariant | four rows of four cells, each empty or a tile | checked at the one public constructor, `board(rows) errors InvalidBoard` (`board_rows?`: three one-line predicates over `list::all?`); kept by construction everywhere else; not representable as a type (no fixed-length List, S7; a power of two is not a range) |
+| cell | `int`: `empty` (0) or a tile, a power of two >= 2 | enums are payload-free, so there is no Empty/Tile(n) sum; with 0, `std::list::get(xs, i, empty)` reads "the cell at i, or empty past the end", which makes padding and reversal total (D2) |
+| board invariant | four rows of four cells, each empty or a tile | checked at the one public constructor, `board(rows) errors InvalidBoard` (`board_rows?`: three one-line predicates over `std::list::all?`); kept by construction everywhere else; not representable as a type (no fixed-length List, S7; a power of two is not a range) |
 | game state | `struct Game: board: Board, score: int` | plain value; a move or a spawn returns a new one |
 | direction | `enum Direction: Left, Right, Up, Down` | nominal, compared with `==` |
 | position | `struct Position: row: Coordinate, column: Coordinate`, `type Coordinate = Int in 0..3` | an out-of-range position does not compile (P1) |
@@ -107,7 +107,7 @@ tclsh9.0 bench/2048.tcl                                      # the performance r
 ```botlish
 fn merged(tiles: List[int]) -> Slide:
     nomethod fn from(i: int, done: Slide) -> Slide:
-        if i >= list::length(tiles):
+        if i >= std::list::length(tiles):
             return done
         tile = tiles.get(i, empty)
         if tiles.get(i + 1, empty) == tile:
@@ -122,7 +122,7 @@ fn slide(cells: List[int]) -> Slide:
             continue
         cell
     merge = tiles.merged()
-    padded = loop i from 0 to list::length(cells):
+    padded = loop i from 0 to std::list::length(cells):
         merge.cells.get(i, empty)
     Slide {cells: padded, score: merge.score}
 ```
@@ -190,7 +190,7 @@ up; take the first move that changes the board), spawning from a small
 linear congruential generator with a fixed seed -- randomness lives in the
 caller. It prints the first five boards, the final board, the score and the
 largest tile: 316 moves, score 3888, largest tile 256. It prints through
-`io::print_line`, so it runs only natively (S15: under `-backend cranelift`
+`std::io::print_line`, so it runs only natively (S15: under `-backend cranelift`
 main.tcl showed only its value until S15's fix); as an executable it takes
 10 ms.
 
@@ -213,11 +213,11 @@ main.tcl showed only its value until S15's fix); as an executable it takes
 The engine declares 5 structs (one opaque), 2 enums, 1 integer domain, 2
 errors and 27 top-level functions (12 intended API, 15 helpers), plus 2
 nested functions (the merge and sum recursions) and one `nomethod`. It has
-no `proves` clause, no manual bounds check and no `list::at`: every
-indexed read is one of 10 `list::get`s with a default. Collection
-operations, by count: `list::get` 10, `list::length` 9, `loop x in xs` 12
+no `proves` clause, no manual bounds check and no `std::list::at`: every
+indexed read is one of 10 `std::list::get`s with a default. Collection
+operations, by count: `std::list::get` 10, `std::list::length` 9, `loop x in xs` 12
 (filter 1, map 6, search 5), counted `loop i from` 8, lockstep 2,
-`list::append` 2 (the merge's accumulator), `list::all?` 2, MutableVector
+`std::list::append` 2 (the merge's accumulator), `std::list::all?` 2, MutableVector
 `push` 1 and read-out 1. Reimplemented general operations: reverse,
 transpose, replace-at, sum, flatten (each once in the engine; reverse,
 transpose and sum again in the suite).
@@ -251,9 +251,10 @@ move does not change the result" -- `[2,2,2,2]` goes to `[4,4,0,0]` and then
 `[8,0,0,0]`. The suite pins that counterexample and tests the true property
 (a move that scored nothing is idempotent).
 
-**Non-vacuity** (`audit/golden/tools/perturb.tcl -lib DIR`): with every
+**Non-vacuity** (`audit/golden/tools/perturb.tcl`, then with `-lib DIR`; it now copies a suite's
+application modules beside every perturbed copy, STD-NAMESPACE.md): with every
 verdict inverted, 68 of 68 tests fail; with each alterable expectation
-altered, 60 of 60 fail (8 have no literal to alter: 3 `test::holds`, 4
+altered, 60 of 60 fail (8 have no literal to alter: 3 `std::test::holds`, 4
 computed expectations, 1 empty List; invert covers them).
 
 **Mutation** (`audit/2048/mutate.tcl`, 20 mutants of the engine): every
@@ -293,14 +294,14 @@ code, S10). The front end proves:
 
 * every `Position {row: r, column: c}` from `loop r from 0 to 4` and from
   `if r >= 0 and r <= 3 and ...` (through `and`, P1);
-* `spawn`'s lockstep `loop row in old and r from 0 to list::length(old)`;
+* `spawn`'s lockstep `loop row in old and r from 0 to std::list::length(old)`;
 * the `CellOccupied` call sites a test handles are uncertain and need their
   handlers; an Int tile or a row 4 is a `Type` error at the call.
 
 It does not prove: a descending loop's index (S5), anything from a named
 constant (S8; resolved since, `0db2443`), anything about a List's length
 through a parameter or a struct field (S7), or lockstep over a field
-projection (S9). The engine therefore reads cells with `list::get` and a
+projection (S9). The engine therefore reads cells with `std::list::get` and a
 default that never happens (10 calls), and spelled the board size as the
 literal 4 (until S8's fix).
 
@@ -324,7 +325,7 @@ construction plan, one allocation per loop rather than per element.
 
 * `empty`, a module constant 0, is a `staticget` and a tagged `ieq` at
   every comparison, never a raw compare with 0 (S8).
-* `list::get` is an out-of-line call with a pushed error exit
+* `std::list::get` is an out-of-line call with a pushed error exit
   (`pusherrorexit`/`declarederroreq`) per cell read: never inlined.
 * A `loop x in xs` keeps its position register tagged (`ilt`/`iadd`, an
   inline small-Int fast path with `rt_int_cmp`/`rt_int_add` behind it),
@@ -342,16 +343,16 @@ construction plan, one allocation per loop rather than per element.
   then a second, element-by-element List build.
 
 **Retained bounds checks.** All of them, by construction: the engine reads
-through `list::get`, whose `listget` checks the index and whose handler
+through `std::list::get`, whose `listget` checks the index and whose handler
 turns `IndexNotFound` into the default; no read is proven, because no List
 length is known where it is read (S7). The proofs the engine relies on are
 about Positions and lockstep counts, not indexes.
 
 **Codegen (CLIF).** `equal_neighbours?` calls `rt_list_len`,
 `rt_list_get`, `rt_list_new`, `rt_construct` and two out-of-line
-`list::get`s; its stack maps show four to six live root slots at each
+`std::list::get`s; its stack maps show four to six live root slots at each
 call. No categorical pathology (nothing quadratic, no dynamic dispatch: the
-one higher-order call, `list::all?`, is in validation only); the cost is
+one higher-order call, `std::list::all?`, is in validation only); the cost is
 allocation.
 
 **Allocations** (`native::allocationReport ... sites`, 1,000 moves): ~169
@@ -416,7 +417,7 @@ before the paired run (a grid program names its size).
 ## 4. Performance
 
 `bench.bot`'s `benchmark(moves, seed)` makes exactly MOVES moves: direction
-and spawn from a generator seeded with `2048 + list::length(argv())`, a game
+and spawn from a generator seeded with `2048 + std::list::length(argv())`, a game
 that is over scored and replaced, the result a checksum of every score,
 gain and changed move. Nothing about the sequence is known at compile time.
 `bench/2048.tcl` reports (best of 3, compilation excluded):
@@ -462,7 +463,7 @@ No stdlib change was made. What the engine and its programs needed:
 
 | operation | where | classification |
 |---|---|---|
-| Int to decimal String | demo's `decimal` (lib/test.bot has its own private `int_text`: two copies of one primitive) | missing essential general primitive (S1) |
+| Int to decimal String | demo's `decimal` (stdlib/test.bot has its own private `int_text`: two copies of one primitive) | missing essential general primitive (S1) |
 | integer division | demo's digits; a flat board layout | missing primitive (S2) |
 | `reverse` | engine `reversed`, suite `mirrored` | convenience, but the natural spelling (`down from`) is not index-proven (S5) |
 | concat / flatten | empty_positions (MutableVector), demo's `joined` | missing general primitive |
@@ -471,25 +472,25 @@ No stdlib change was made. What the engine and its programs needed:
 | transpose | engine `transposed`, suite `flipped` | game-adjacent; two rectangular helpers are not evidence for a matrix |
 | a typed empty MutableVector | `no_positions()` | language (S6) |
 
-Used and sufficient: `list::length`, `list::get` (10 calls: its default is
-what makes fixed-size access total), `list::append`, `list::all?`, collecting
+Used and sufficient: `std::list::length`, `std::list::get` (10 calls: its default is
+what makes fixed-size access total), `std::list::append`, `std::list::all?`, collecting
 loops (filter, map, counted, lockstep), MutableVector `push` and read-out.
-Awkward: `list::at` (never used: every use needed a handler or a guard),
-`list::get` for an invariant the program keeps (a default that never
+Awkward: `std::list::at` (never used: every use needed a handler or a guard),
+`std::list::get` for an invariant the program keeps (a default that never
 happens). Suspected missing but unnecessary: random numbers (the caller's
 generator is two lines), a grid type, `max` (the demo asks
 `reached?(board, p)` for descending powers).
 
 ## 6. Test framework
 
-Used: `test::suite`, `test::value` (61), `test::holds` (3),
-`test::rejects` (4), `test::report`. No custom matcher was needed; values
+Used: `std::test::suite`, `std::test::value` (61), `std::test::holds` (3),
+`std::test::rejects` (4), `std::test::report`. No custom matcher was needed; values
 are compared as Lists of Ints because `describe` prints Lists but not
 structs (D1). Suite-local helpers: `board_of`, `game_of`, `moved`, `slid`,
 `at`, `with_tile`, `mirrored`, `flipped`, `sum`, `tile_sum`, `tile_count`,
 `samples`, `directions`, `all_true?`, and the scenario's `cycle`,
 `spawned`, `play`, `scenario`. Recurring ceremony: one nested function per
-test (`fn name() -> T:` then `test::value("name", expected, name)`), a
+test (`fn name() -> T:` then `std::test::value("name", expected, name)`), a
 fallback for every fallible constructor in a body (`board_of` falls back to
 the empty board so a mistyped expectation fails visibly), and expectations
 as nested List literals.
@@ -542,7 +543,7 @@ BLOCKER 2, MAJOR 4, MODERATE 11, MINOR 5, ONE-TIME-NOVELTY 3.
 COMPILER-PRECISION, MINOR): S26, a collecting loop's elements' Ranges
 never admit it as a declared `List[Coordinate]` (with a literal bound
 too: S8's entry-program example); S27, a character bound to a name is
-no exact element for `byte::set`'s literal-List proof.
+no exact element for `std::byte::set`'s literal-List proof.
 
 **Wrong hypotheses** (S8, S12, S19): "module bindings are opaque to the
 analyses" (it is any program-level binding); "a declared List parameter is
@@ -595,7 +596,7 @@ saved:
    candidate?* (S12).
 4. *Where does a module named N come from, and how do I add one?* (S4).
 5. *Why is this bounds check / handler still needed?* -- the index proof's
-   view of `list::at(xs, i)` (S5, S7).
+   view of `std::list::at(xs, i)` (S5, S7).
 6. *Which function is botlish_fn_28?* (S19: a NIR dump answered it).
 7. *Why did this function not specialize better?* -- instance keys and what
    they drop (`int, any`).
@@ -641,7 +642,7 @@ discover by failing):
 * there is no division and no Int-to-String;
 * `x.f(a)` is `f(x, a)` for any visible `f` -- including a local binding
   named `f`, whatever its type;
-* `list::get(xs, i, default)` is the total read; `list::at` needs a proof
+* `std::list::get(xs, i, default)` is the total read; `std::list::at` needs a proof
   or a handler, and only ascending counted loops and guards prove;
 * a List's length is not part of its type; `type T = Int in a..b` is, and
   comparisons and counted loops prove it;
@@ -654,7 +655,7 @@ diagnostic), what an expression's facts are (a query), allocation causes,
 the golden-suite mechanics, warning answers (the warning documents, linked
 from the warning).
 
-**Terminology an agent will misread**: "module" (only `lib/`), "stdlib"
+**Terminology an agent will misread**: "module" (only `stdlib/`), "stdlib"
 vs "library" (the same directory), `list` vs `List[T]`, "discarded"
 (statement position only), `get` vs `at`, "context" (an installed
 capability, not a parameter).
@@ -669,7 +670,7 @@ native-only.
 value comparison; the direction-as-viewpoint pair `lines_toward` /
 `rows_from`; opaque struct construction authority; domain-typed positions;
 enums for direction and spawn tile; `static compile:` tests for "this must
-not compile"; validation as three predicates over `list::all?`.
+not compile"; validation as three predicates over `std::list::all?`.
 
 **Least natural**: anything that accumulates (recursion with a `nomethod`
 helper and an accumulator struct, S23); flattening nested loops through a
@@ -703,7 +704,7 @@ set is 1 MB and the cost is allocation, not copying); a matrix module (two
 rectangular helpers are not evidence).
 
 **No anonymous functions**: did not hurt; the one higher-order use
-(`list::all?(cell?)`) reads better with a named predicate. **Value-oriented
+(`std::list::all?(cell?)`) reads better with a named predicate. **Value-oriented
 state transitions** felt natural: `move` and `spawn` return new games, and
 tests compare values. **Loop constructs** were sufficient for traversal and
 insufficient for accumulation. **No overloading**: no friction (one
@@ -742,9 +743,9 @@ experiment with a tooling failure rather than ordinary unfamiliarity):
    method candidates, or make the diagnostic name the reason.
 7. S16: the stdlib's own warnings should not reach a program that imports
    it -- today `-warnings error` rejects every program that imports `io`
-   for two literals in `lib/io.bot`. **Resolved** (b94e3d0): `lib/io.bot`
+   for two literals in `stdlib/io.bot`. **Resolved** (b94e3d0): `stdlib/io.bot`
    appends the newline as a character, `text.append_char('\n')`, with the
-   new `str::append_char`; regressions in `tests/portable-io.test`,
+   new `std::str::append_char`; regressions in `tests/portable-io.test`,
    `tests/workload-2048.test` (`workload-2048-strict-warnings`: the
    engine, demo, suite and benchmark compile under `-warnings error`) and
    `tests/str-append-char.test`.
@@ -772,7 +773,7 @@ that would change the representation question, Minesweeper adds flood fill
 **Expected traps for the restricted agent**: a module of its own (S4), and
 with it silent shadowing between its helpers and its tests and no opaque
 encapsulation (S25); printing (S15); deep recursion on interp (S22); method
-ambiguity from a local name (S12); a typed empty vector (S6); `list::at`
+ambiguity from a local name (S12); a typed empty vector (S6); `std::list::at`
 proofs and a named size (S5, S8); Int-to-String (S1). A tooling failure is a trap whose fix
 needs information only compiler source holds today (S4, S8, S12, S15, S22);
 ordinary unfamiliarity is one the diagnostic or the reference answers

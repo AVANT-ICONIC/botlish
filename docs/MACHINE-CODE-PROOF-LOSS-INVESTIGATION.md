@@ -40,7 +40,7 @@ as a sanity check. It is too noisy on this host to rank anything.
    runtime-side (Case 6, "runtime").
 3. **`refined-checks` really did lose ground: +136.8% against R2.** The loss
    arrived in one commit, R2.a (`63b2199`). That commit rewrote
-   `lib/web.bot`'s `emailish?` from three hand-specialized scanners into one
+   `stdlib/web.bot`'s `emailish?` from three hand-specialized scanners into one
    higher-order `scan_while(start, predicate)` plus a set-membership
    `local_char?`. The source still says, at each call site, exactly which
    predicate is passed. The compiler's **semantic layer still knows it**
@@ -68,8 +68,8 @@ as a sanity check. It is too noisy on this host to rank anything.
    `check<generic>` window, now closed. The same erasure turns every exact
    callable argument in the corpus into `callvalue` (6 of the 8 `callvalue`
    sites have an exact callable in their semantic instance), for example
-   `list::any?<List[str], block>` in `test-selection`, whose semantic instance
-   is `list::any?<List[str], block(e55)/1 -> bool>`. `fib`'s residuals are
+   `std::list::any?<List[str], block>` in `test-selection`, whose semantic instance
+   is `std::list::any?<List[str], block(e55)/1 -> bool>`. `fib`'s residuals are
    independent of it (C, A, D).
 
 **Recommended first fix:** carry exact callable identity through codegen
@@ -81,9 +81,9 @@ See [Recommended fix order](#recommended-fix-order).
 
 * **Frozen:** struct virtualization, transport scoring, nesting cuts,
   materialization frontiers, `callmulti`/`retmulti` transport, fields
-  variants. Nothing in `hir/`, `native/`, `core/`, `lib/` or `bench/` was
+  variants. Nothing in `hir/`, `native/`, `core/`, `stdlib/` or `bench/` was
   edited.
-* **No source changes:** canonical `.bot` programs and `lib/web.bot` are
+* **No source changes:** canonical `.bot` programs and `stdlib/web.bot` are
   untouched. The one library rewrite measured here lives only in a scratch
   worktree, and it measures a ceiling.
 * **No fixes:** every repair below is listed, ranked and scoped, and none is
@@ -290,7 +290,7 @@ Not implemented in this milestone.
 ## Case 2: `refined-checks` / `scan_while<generic>` (indirect predicate call)
 
 ```
-CASE: bench/refined-checks.bot / lib/web.bot emailish?'s scan_while
+CASE: bench/refined-checks.bot / stdlib/web.bot emailish?'s scan_while
 
 Observed benchmark direction:
     3,461,692 -> 8,196,144 Ir/run vs R2 (+136.8%); scan_while's two call
@@ -465,7 +465,7 @@ Not implemented in this milestone.
 ## Case 4: `refined-checks` / `local_char?<generic>` (trampoline and kind guard)
 
 ```
-CASE: lib/web.bot emailish?'s local_char?
+CASE: stdlib/web.bot emailish?'s local_char?
 
 Observed benchmark direction:
     6,800 calls/run, every one through the generic entry: entry self 47,600
@@ -824,9 +824,9 @@ Semantic instances are precise wherever native code is broad:
 | refined-checks | `scan_while<int, block(e239)/1 -> bool>`, `scan_while<int, native is_tcl_alpha>` | `scan_while<generic>` |
 | refined-checks | `local_char?<str>` | `local_char?<generic>` |
 | refined-checks | `char_at<int>`, `tld?<int>`, `domain?<int>` | `…<generic>` + theorem `int` |
-| test-selection | `list::any?<List[str], block(e55)/1 -> bool>` | `list::any?<List[str], block>` + `callvalue` |
-| lex-strategy | `list::all?<List[str], native is_tcl_alnum>` | `list::all?<List[str], native>` + `callvalue` |
-| source-checks | `list::find<List[str], block(e114)/1 -> bool>` | `list::find<List[str], block>` + `callvalue` |
+| test-selection | `std::list::any?<List[str], block(e55)/1 -> bool>` | `std::list::any?<List[str], block>` + `callvalue` |
+| lex-strategy | `std::list::all?<List[str], native is_tcl_alnum>` | `std::list::all?<List[str], native>` + `callvalue` |
+| source-checks | `std::list::find<List[str], block(e114)/1 -> bool>` | `std::list::find<List[str], block>` + `callvalue` |
 | probe `hof-single-exact` | `apply_loop<block(e2)/1 -> int, int, int>` | `apply_loop<block, int, int>` + `callvalue` |
 | probe `hof-capturing` | `scan_while<int, native is_tcl_alpha>` | `scan_while<generic>`, theorem `int native` |
 
@@ -874,10 +874,10 @@ predicate.
   `lex-strategy` 2, `source-checks` 2). 6 of them have an exact callable in
   their semantic instance:
   * `refined-checks`' `scan_while`;
-  * `test-selection`'s `list::any?`, `list::none?` and `list::find`
+  * `test-selection`'s `std::list::any?`, `std::list::none?` and `std::list::find`
     (`block(e55)`, `block(e94)`);
-  * `lex-strategy`'s `list::all?<List[str], native is_tcl_alnum>`;
-  * `source-checks`' `list::find<List[str], block(e114)>`.
+  * `lex-strategy`'s `std::list::all?<List[str], native is_tcl_alnum>`;
+  * `source-checks`' `std::list::find<List[str], block(e114)>`.
 
   The other two (`source-checks`' List-held checks, `lex-strategy`'s
   `classify`) are genuinely dynamic.
@@ -914,7 +914,7 @@ exact Botlish predicate and an exact native.
 
 ## `native::prepareHir` (§36)
 
-`prepareHir` attaches `web::emailish?` (and `uri_escape_text`) and re-checks
+`prepareHir` attaches `std::web::emailish?` (and `uri_escape_text`) and re-checks
 the HIR. It is **exonerated** for every traced case.
 
 * Its re-check *creates* the precise semantic instances of the email
@@ -925,7 +925,7 @@ the HIR. It is **exonerated** for every traced case.
 It broadens one semantic instance. `check`'s generic-body self-call goes
 from `check<int, int, str, any>` to `check<int, int, any, any>`. The native
 `emailish?` declares its parameter `str`, while the attached
-`web::emailish?` has no parameter contract (`hir::signatures::entryTypes`
+`std::web::emailish?` has no parameter contract (`hir::signatures::entryTypes`
 is empty). So after the call, the generic body no longer has `s : str`.
 This has no codegen effect: the codegen instance is
 `check<int, int, str, str>`, keyed by the program's own call sites, with no
@@ -1028,7 +1028,7 @@ erased fact.
 
 | regression | last known good | first known bad | between | status |
 |---|---|---|---|---|
-| `refined-checks` predicate dispatch + materialization (+216.9% at first) | R2 `e7d53b6` (asm `844c37e`; 3,461,692 Ir) | R2.a `63b2199` (asm `f508532`; 10,968,983 Ir) | one commit: the `lib/web.bot` rewrite (`scan_while(start, predicate)`, `immutable_set_contains`) | partially recovered by R2.a.2, R2.a.3, module statics and intrinsic contracts; still +136.8% |
+| `refined-checks` predicate dispatch + materialization (+216.9% at first) | R2 `e7d53b6` (asm `844c37e`; 3,461,692 Ir) | R2.a `63b2199` (asm `f508532`; 10,968,983 Ir) | one commit: the `stdlib/web.bot` rewrite (`scan_while(start, predicate)`, `immutable_set_contains`) | partially recovered by R2.a.2, R2.a.3, module statics and intrinsic contracts; still +136.8% |
 | `check<generic>` (lost `n ∈ [0, 400]`; +21,622 Ir) | R2.a `63b2199` | R2.a.1 `d20a69a`, merged as `569ca4e` (asm `bf40b58`) | R2.a.1's module-fn bridge reachability (`local_extra_chars` reached by capture) | **closed** at module statics `f037c7d` (asm `924482b`) |
 | struct-era CSV scanner / HashTable rehash growth | `84f4d68` | structs `bee7c03` (asm `46d658d`) | source refactor to structs | **closed** at struct scalar replacement `90e9e97` (asm `b370d52`): per-function sizes equal `84f4d68`'s |
 | runtime allocation path +0.54% on identical NIR | module statics' census binary (`native/src` as of `924482b`) | current | `native/src` changes in `da45034`, `47e7a29`, `80ed8ec`, `fe9d6e8`/`5ddf3a8`/`8f651e5` | open, E, not bisected (below threshold) |

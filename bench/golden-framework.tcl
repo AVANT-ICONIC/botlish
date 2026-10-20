@@ -1,5 +1,5 @@
 # golden-framework.tcl -- the performance report of the golden test
-# framework, lib/test.bot (GOLDEN-TEST-FRAMEWORK.md, "Performance").
+# framework, stdlib/test.bot (GOLDEN-TEST-FRAMEWORK.md, "Performance").
 #
 #   tclsh9.0 bench/golden-framework.tcl ?-runs N? ?-n N? ?-native-n N?
 #                                       ?-sizes LIST? ?-backends LIST?
@@ -10,8 +10,8 @@
 # text and its compile cost do not grow with N -- of one kind:
 #
 #   registration  N value cases registered, none run (the value is the count)
-#   pass          N passing value cases, run (test::results), no report text
-#   pass+report   the same, with the report (test::report)
+#   pass          N passing value cases, run (std::test::results), no report text
+#   pass+report   the same, with the report (std::test::report)
 #   mismatch      N value cases whose value differs, with the report
 #   rejects       N rejects cases whose block is rejected (the expected
 #                 diagnostic), with the report
@@ -36,7 +36,7 @@
 # Compile time (best of RUNS, surface::compile, warnings off): suites of K
 # distinct cases (K from -sizes), each its own nested function and static
 # block, all passing value cases and mixed (two thirds value cases, one
-# third rejected blocks expected by test::rejects) -- the mixed suite twice,
+# third rejected blocks expected by std::test::rejects) -- the mixed suite twice,
 # its bodies nested in the registration function and at the top level --
 # beside the same bodies written as plain functions without the framework;
 # with the number of whole builds the static decisions took.
@@ -69,41 +69,41 @@ foreach {option value} $args {
 # The body each kind's case runs and the registration it makes, in a loop
 # over i (captured by the body, so nothing is decided statically).
 set kinds {
-    registration {test::value("t", i * 2, body)} {i + i} count
-    pass {test::value("t", i * 2, body)} {i + i} results
-    pass+report {test::value("t", i * 2, body)} {i + i} report
-    mismatch {test::value("t", i * 2 + 1, body)} {i + i} report
-    rejects {test::rejects("t", compiler::DiagnosticCode::Unbound, body)} {missing + i} report
-    rejects-wrong-code {test::rejects("t", compiler::DiagnosticCode::Type, body)} {missing + i} report
-    rejected {test::value("t", 0, body)} {missing + i} report
-    runtime-error {test::value("t", -1, body)} {r = list::at(xs, i + 5):
+    registration {std::test::value("t", i * 2, body)} {i + i} count
+    pass {std::test::value("t", i * 2, body)} {i + i} results
+    pass+report {std::test::value("t", i * 2, body)} {i + i} report
+    mismatch {std::test::value("t", i * 2 + 1, body)} {i + i} report
+    rejects {std::test::rejects("t", std::compiler::DiagnosticCode::Unbound, body)} {missing + i} report
+    rejects-wrong-code {std::test::rejects("t", std::compiler::DiagnosticCode::Type, body)} {missing + i} report
+    rejected {std::test::value("t", 0, body)} {missing + i} report
+    runtime-error {std::test::value("t", -1, body)} {r = std::list::at(xs, i + 5):
     on IndexNotFound:
         -1
 r} report
 }
 
 proc suiteProgram {registration body end count} {
-    set final [dict get {count {test::count()} results {list::length(test::results())} report {list::length(test::report())}} $end]
+    set final [dict get {count {std::test::count()} results {std::list::length(std::test::results())} report {std::list::length(std::test::report())}} $end]
     set body [string map [list \n "\n                "] $body]
-    return [string map [list @REG@ $registration @BODY@ $body @FINAL@ $final @N@ $count] {import compiler
-import list
-import test
+    return [string map [list @REG@ $registration @BODY@ $body @FINAL@ $final @N@ $count] {import std::compiler
+import std::list
+import std::test
 
 fn register_bench(xs: List[int], count: int):
     loop i from 0 to count:
-        fn body() errors compiler::CompilerError:
+        fn body() errors std::compiler::CompilerError:
             static compile:
                 @BODY@
         @REG@
 
-with context test::suite()
+with context std::test::suite()
 register_bench([1, 2], @N@)
 @FINAL@
 }]
 }
 
 proc baselineProgram {count} {
-    return [string map [list @N@ $count] {import list
+    return [string map [list @N@ $count] {import std::list
 
 fn run_bench(count: int) -> int:
     passed = loop i from 0 to count:
@@ -112,7 +112,7 @@ fn run_bench(count: int) -> int:
         if body() != i * 2:
             continue
         i
-    list::length(passed)
+    std::list::length(passed)
 
 run_bench(@N@)
 }]
@@ -163,7 +163,7 @@ puts "|---|[string repeat ---| [llength $backends]]"
 set empty [dict create]
 foreach backend $backends {
     set count [expr {$backend eq "native" ? $nativeN : $n}]
-    dict set empty $backend [runUs [compileHir [suiteProgram {test::value("t", i * 2, body)} {i + i} report 0]] $backend]
+    dict set empty $backend [runUs [compileHir [suiteProgram {std::test::value("t", i * 2, body)} {i + i} report 0]] $backend]
 }
 foreach {kind registration body end} $kinds {
     set cells {}
@@ -265,43 +265,43 @@ proc rejectedBody {rejection i indent} {
 # A suite of K distinct cases; REJECTION (none, unbound or type): every
 # third is a rejected block of that kind.
 proc distinctSuite {k rejection} {
-    set lines {"import compiler" "import test" "" "fn register_bench(n: int):"}
+    set lines {"import std::compiler" "import std::test" "" "fn register_bench(n: int):"}
     if {$k == 0} {
         lappend lines "    return"
     }
     for {set i 0} {$i < $k} {incr i} {
-        lappend lines "    fn body_${i}() errors compiler::CompilerError:" "        static compile:"
+        lappend lines "    fn body_${i}() errors std::compiler::CompilerError:" "        static compile:"
         if {$rejection ne "none" && $i % 3 == 2} {
             lassign [rejectedBody $rejection $i 12] body code
-            lappend lines {*}$body "    test::rejects(\"t$i\", compiler::DiagnosticCode::$code, body_${i})"
+            lappend lines {*}$body "    std::test::rejects(\"t$i\", std::compiler::DiagnosticCode::$code, body_${i})"
         } else {
-            lappend lines "            n * $i + $i" "    test::value(\"t$i\", 7 * $i + $i, body_${i})"
+            lappend lines "            n * $i + $i" "    std::test::value(\"t$i\", 7 * $i + $i, body_${i})"
         }
     }
-    lappend lines "" "with context test::suite()" "register_bench(7)" "test::report()" ""
+    lappend lines "" "with context std::test::suite()" "register_bench(7)" "std::test::report()" ""
     return [join $lines \n]
 }
 # The same suite with every body a top-level function (the layout
 # tests/golden/README.md recommends: rejected blocks in separate top-level
 # units are decided together); the registrations stay in one function.
 proc hoistedSuite {k rejection} {
-    set lines {"import compiler" "import test" ""}
+    set lines {"import std::compiler" "import std::test" ""}
     set registrations {}
     for {set i 0} {$i < $k} {incr i} {
-        lappend lines "fn body_${i}() errors compiler::CompilerError:" "    static compile:"
+        lappend lines "fn body_${i}() errors std::compiler::CompilerError:" "    static compile:"
         if {$rejection ne "none" && $i % 3 == 2} {
             lassign [rejectedBody $rejection $i 8] body code
             lappend lines {*}$body ""
-            lappend registrations "    test::rejects(\"t$i\", compiler::DiagnosticCode::$code, body_${i})"
+            lappend registrations "    std::test::rejects(\"t$i\", std::compiler::DiagnosticCode::$code, body_${i})"
         } else {
             lappend lines "        7 * $i + $i" ""
-            lappend registrations "    test::value(\"t$i\", 7 * $i + $i, body_${i})"
+            lappend registrations "    std::test::value(\"t$i\", 7 * $i + $i, body_${i})"
         }
     }
     if {$k == 0} {
         lappend registrations "    return"
     }
-    lappend lines "fn register_bench():" {*}$registrations "" "with context test::suite()" "register_bench()" "test::report()" ""
+    lappend lines "fn register_bench():" {*}$registrations "" "with context std::test::suite()" "register_bench()" "std::test::report()" ""
     return [join $lines \n]
 }
 proc plainProgram {k} {

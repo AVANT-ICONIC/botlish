@@ -5,7 +5,7 @@
 #   tclsh9.0 measure.tcl ?-root TREE? ?-runs N? ?-repeat K? ?-fn NAME ...? PROGRAM.bot
 #
 # TREE (default: this checkout) supplies compiler/, surface/, native/ and
-# lib/, so a prototype in a scratch copy of the tree is measured by pointing
+# stdlib/, so a prototype in a scratch copy of the tree is measured by pointing
 # -root at it. PROGRAM is read relative to the current directory. Prints:
 #   value BACKEND OUTCOME            on interp, compile, cranelift-generic, cranelift
 #   alloc OBJECTS BYTES KIND N/BYTES ...   native::allocationReport summary (1 run),

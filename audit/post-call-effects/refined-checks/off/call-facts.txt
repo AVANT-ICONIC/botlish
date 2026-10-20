@@ -1,4 +1,4 @@
-<program> e772 -> web::uri_escape_text<generic>
+<program> e772 -> std::web::uri_escape_text<generic>
   arg0: str, range [-∞, +∞]
   successful result: str[UriQueryValue], range [-∞, +∞]
 <program> e777 -> check<int, int, str, str>
@@ -13,7 +13,7 @@
   arg2: str, range [-∞, +∞]
   arg3: str[UriQueryValue], range [-∞, +∞]
   successful result: int, range [-∞, +∞]
-web::uri_escape_text<generic> e297 -> esc_from<generic>
+std::web::uri_escape_text<generic> e297 -> esc_from<generic>
   arg0: any, range [-∞, +∞]
   arg1: int, range [0, 0]
   arg2: str, range [-∞, +∞]

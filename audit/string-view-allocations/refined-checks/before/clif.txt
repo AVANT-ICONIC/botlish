@@ -43,7 +43,7 @@
 ; u0:42 = rt_call_value
 ; u0:43 = botlish_fn_0 (<program>)
 ; u0:44 = botlish_entry_0
-; u0:45 = botlish_fn_1 (web::uri_escape_text)
+; u0:45 = botlish_fn_1 (std::web::uri_escape_text)
 ; u0:46 = botlish_entry_1
 ; u0:47 = botlish_fn_2 (high_nibble)
 ; u0:48 = botlish_entry_2
@@ -276,7 +276,7 @@ block7:
     return v83
 }
 
-; function 1 "web::uri_escape_text": botlish_fn_1
+; function 1 "std::web::uri_escape_text": botlish_fn_1
 function u0:45(i64, i64, i64) -> i64 system_v {
     ss0 = explicit_slot 32, align = 8
     ss1 = explicit_slot 8, align = 8

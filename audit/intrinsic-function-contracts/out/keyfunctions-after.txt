@@ -35,11 +35,11 @@ tree: 67380f41d56fc62986485999057e3976d4f01273 (plus any uncommitted working-tre
         i <- checked: argument 1 of native + requires int (at 97:25)
     exact Block type: block(e173)/1 -> str; structuralOf: Fn{args: [any], return: str, errors: []}
     instance char_at<generic>: closed (transitively closed); params: i : any; result: str
-  web::emailish? (e167)
+  std::web::emailish? (e167)
     intrinsic signature: (v: str (inferred, checked)) -> bool errors []
         v <- checked: argument 1 of native length requires str (at 94:16)
     exact Block type: block(e167)/1 -> bool; structuralOf: Fn{args: [any], return: bool, errors: []}
-    instance web::emailish?<str>: closed (transitively closed); params: v : str; result: bool
+    instance std::web::emailish?<str>: closed (transitively closed); params: v : str; result: bool
 
 == bench/uri-steady.bot
   scan_while (e211)

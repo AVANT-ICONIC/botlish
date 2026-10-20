@@ -5,7 +5,7 @@
 # (rilt/rile/rigt/rige, riadd/risub), and the loop variable is boxed only
 # where a tagged consumer reads it (native::lower::RawCountDomain). The
 # RawInt demand rule counts such a loop's bounds as raw consumers
-# (native::rawabi::CountBounds), so lib/web.bot's scan_while.start,
+# (native::rawabi::CountBounds), so stdlib/web.bot's scan_while.start,
 # tld?.i and domain?.start are planned RawInt.
 #
 # Knob (test/audit-only namespace variable, native/lower.tcl):
@@ -133,14 +133,14 @@ test raw-count-loops-refined-checks-plan {the RawInt demand rule: a raw loop's b
             foreach id [dict get $spec used] {
                 # the block's expression id depends on the imported library code
                 set label [regsub {block\(e\d+\)} [hir::specialize::label $spec $id] {block(eN)}]
-                if {$label ni {tld?<int> domain?<int> {scan_while<int, native(str::is_tcl_alpha)>} {scan_while<int, block(eN)>}}} continue
+                if {$label ni {tld?<int> domain?<int> {scan_while<int, native(std::str::is_tcl_alpha)>} {scan_while<int, block(eN)>}}} continue
                 lappend rows [list $label [lindex [dict get $plan $id params] 0] \
                     [lindex [dict get $plan $id paramReasons] 0]]
             }
             lsort $rows
         }
     }
-} -result {{{domain?<int> rawint {}} {tld?<int> rawint {}} {{scan_while<int, block(eN)>} rawint {}} {{scan_while<int, native(str::is_tcl_alpha)>} rawint {}}} {{domain?<int> value suppressed-mixed-tagged-use} {tld?<int> value suppressed-mixed-tagged-use} {{scan_while<int, block(eN)>} value suppressed-no-raw-demand} {{scan_while<int, native(str::is_tcl_alpha)>} value suppressed-no-raw-demand}}}
+} -result {{{domain?<int> rawint {}} {tld?<int> rawint {}} {{scan_while<int, block(eN)>} rawint {}} {{scan_while<int, native(std::str::is_tcl_alpha)>} rawint {}}} {{domain?<int> value suppressed-mixed-tagged-use} {tld?<int> value suppressed-mixed-tagged-use} {{scan_while<int, block(eN)>} value suppressed-no-raw-demand} {{scan_while<int, native(std::str::is_tcl_alpha)>} value suppressed-no-raw-demand}}}
 
 test raw-count-loops-refined-checks-parity {refined-checks still returns [400, 0] natively, with block escape on and off} -body {
     set hir [surface::readProgramFile [file join $::projectRoot bench refined-checks.bot]]
@@ -200,7 +200,7 @@ test raw-count-loops-unproven-stays-tagged {a bound beyond the small-Int domain 
 # Early exits, tagged readers of the loop variable, lockstep loops
 
 set ::exitsShape {
-    import list
+    import std::list
     fn find(a, b, t):
         loop i from a to b:
             if i == t:
@@ -224,9 +224,9 @@ set ::exitsShape {
             loop j down from i through 0:
                 if j == 1:
                     continue
-                add(j) * 10 + list::length([i, j])
+                add(j) * 10 + std::list::length([i, j])
     fn pairs(xs):
-        loop x in xs and i from 0 to list::length(xs) and k down from 10 to 10 - list::length(xs):
+        loop x in xs and i from 0 to std::list::length(xs) and k down from 10 to 10 - std::list::length(xs):
             x * i + k
     [find(0, 10, 4), find(0, 10, 20), find(5, 9, 6), find(3, 3, 3), down(10, 0, 4), down(10, 6, 2), nest(4), pairs([7, 8, 9]), pairs([])]
 }
@@ -264,11 +264,11 @@ test raw-count-loops-rejected-lockstep {the adversarial review's program: a -str
 # A scanner closure (the emailish? shape), and GC stress
 
 set ::scannerShape {
-    import str
+    import std::str
     fn first_space(s):
-        n = str::length(s)
+        n = std::str::length(s)
         fn at(i):
-            str::substring(s, i, i + 1)
+            std::str::substring(s, i, i + 1)
         fn scan(start):
             loop i from start to n:
                 if at(i) == " ":
@@ -287,28 +287,28 @@ test raw-count-loops-scanner-parity {the de-closured scanner shape: interp, comp
 } -result {{[[3, 2, 0], [6, 5, 0], [0, -1, 0]]} {rilt riadd}}
 
 set ::gcShape {
-    import list
-    import str
+    import std::list
+    import std::str
     fn mk(k):
-        [k, k + 1, str::concat("x", "y")]
+        [k, k + 1, std::str::concat("x", "y")]
     fn work(n):
         loop i from 0 to n:
             ys = mk(i)
             zs = mk(i * 2)
             fn g(x):
                 [x, i]
-            y = list::at(ys, 1):
+            y = std::list::at(ys, 1):
                 on IndexNotFound:
                     0
-            z = list::at(zs, 0):
+            z = std::list::at(zs, 0):
                 on IndexNotFound:
                     0
-            w = list::at(g(i), 1):
+            w = std::list::at(g(i), 1):
                 on IndexNotFound:
                     0
             y + z + w + i
     fn total(xs):
-        loop x in xs and k down from list::length(xs) to 0:
+        loop x in xs and k down from std::list::length(xs) to 0:
             x * k
     total(work(10))
 }

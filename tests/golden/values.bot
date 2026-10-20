@@ -9,11 +9,11 @@
 # log instead: a probe `yield`s its id, and the body drives the coroutine,
 # collecting [FIRST, REST] -- FIRST the first yielded id, REST every later
 # yield followed by the coroutine's final result.
-import compiler
-import coroutine
-import list
-import str
-import test
+import std::compiler
+import std::coroutine
+import std::list
+import std::str
+import std::test
 
 # ---------------------------------------------------------------------------
 # Declarations the tests need (top-level only).
@@ -44,7 +44,7 @@ type Small = Int in 0..10
 fn register_surface_samples_tests():
     # 03-closure: a nested function is a real closure; add10 keeps
     # make_adder's x after the call returned.
-    fn b_03_closure() errors compiler::CompilerError:
+    fn b_03_closure() errors std::compiler::CompilerError:
         static compile:
             fn make_adder(x):
                 fn add(y):
@@ -54,30 +54,30 @@ fn register_surface_samples_tests():
 
             add10 = make_adder(10)
             add10(32)
-    test::value("03-closure", 42, b_03_closure)
+    std::test::value("03-closure", 42, b_03_closure)
 
     # 07-loop-break: break never carries a value; a bare loop's value is
     # unit.
-    fn b_07_loop_break() errors compiler::CompilerError:
+    fn b_07_loop_break() errors std::compiler::CompilerError:
         static compile:
             loop:
                 break
-    test::value("07-loop-break", unit, b_07_loop_break)
+    std::test::value("07-loop-break", unit, b_07_loop_break)
 
     # 13-hygiene: binding `list` (the native list literals call) does not
     # change what list-literal syntax means.
-    fn b_13_hygiene() errors compiler::CompilerError:
+    fn b_13_hygiene() errors std::compiler::CompilerError:
         static compile:
             fn pair(list, x):
                 [list, x]
 
             list = 3
             [1.pair(2), list]
-    test::value("13-hygiene", [[1, 2], 3], b_13_hygiene)
+    std::test::value("13-hygiene", [[1, 2], 3], b_13_hygiene)
 
     # 15-enums: enum cases are nominal; Light::Red and Signal::Red are
     # unequal even through a generic identity function.
-    fn b_15_enums() errors compiler::CompilerError:
+    fn b_15_enums() errors std::compiler::CompilerError:
         static compile:
             fn next(light: Light) -> Light:
                 if light == Light::Red:
@@ -92,10 +92,10 @@ fn register_surface_samples_tests():
 
             start = Light::Red
             [next(start), next(next(start)), next(Light::Yellow) == start, same(Light::Red) == same(Signal::Red), Light::Red == Light::Green]
-    test::value("15-enums", [Light::Green, Light::Yellow, true, false, false], b_15_enums)
+    std::test::value("15-enums", [Light::Green, Light::Yellow, true, false, false], b_15_enums)
 
     # surface-run-factorial: recursion with arbitrary-precision results.
-    fn b_factorial() errors compiler::CompilerError:
+    fn b_factorial() errors std::compiler::CompilerError:
         static compile:
             fn factorial(n):
                 if n <= 1:
@@ -104,12 +104,12 @@ fn register_surface_samples_tests():
                 n * factorial(n - 1)
 
             factorial(30)
-    test::value("surface-run-factorial", 265252859812191058636308480000000, b_factorial)
+    std::test::value("surface-run-factorial", 265252859812191058636308480000000, b_factorial)
 
     # surface-run-evaluation-order: arguments evaluate left to right, each
     # once (the Tcl test's test_log(1), (2), (3) are probes here; the value
     # is the last argument, 3).
-    fn b_evaluation_order() errors compiler::CompilerError:
+    fn b_evaluation_order() errors std::compiler::CompilerError:
         static compile:
             fn log(n: int) -> int:
                 yield n
@@ -120,11 +120,11 @@ fn register_surface_samples_tests():
                 pick(log(1), log(2), log(3))
             coroutine {step, first} = program()
             rest = loop i from 0 to 10:
-                if coroutine::done?(step):
+                if std::coroutine::done?(step):
                     break
                 step()
             [first, rest]
-    test::value("surface-run-evaluation-order", [1, [2, 3, 3]], b_evaluation_order)
+    std::test::value("surface-run-evaluation-order", [1, [2, 3, 3]], b_evaluation_order)
 
 # ---------------------------------------------------------------------------
 # calls.test (Core IR there; the operands arrive as parameters X, Y and MAX
@@ -134,24 +134,24 @@ fn register_calls_tests(x: int, y: int, max: int):
     # call-5: natives are first-class values. The Tcl test passes the
     # native `*`, which source cannot name as a value (an operator is not
     # an expression); `mod` is a native of the same int x int -> int shape.
-    fn b_call_5() errors compiler::CompilerError:
+    fn b_call_5() errors std::compiler::CompilerError:
         static compile:
             fn apply(f, a, b):
                 f(a, b)
             apply(mod, 47, 5)
-    test::value("call-5", 2, b_call_5)
+    std::test::value("call-5", 2, b_call_5)
 
     # arith-2: a 30-digit by 30-digit product is exact.
-    fn b_arith_2() errors compiler::CompilerError:
+    fn b_arith_2() errors std::compiler::CompilerError:
         static compile:
             x * y
-    test::value("arith-2", 121932631137021795226185032733622923332237463801111263526900, b_arith_2)
+    std::test::value("arith-2", 121932631137021795226185032733622923332237463801111263526900, b_arith_2)
 
     # arith-3: i64::MAX + 1 promotes; no fixed-width overflow.
-    fn b_arith_3() errors compiler::CompilerError:
+    fn b_arith_3() errors std::compiler::CompilerError:
         static compile:
             max + 1
-    test::value("arith-3", 9223372036854775808, b_arith_3)
+    std::test::value("arith-3", 9223372036854775808, b_arith_3)
 
 # ---------------------------------------------------------------------------
 # blocks.test
@@ -159,7 +159,7 @@ fn register_calls_tests(x: int, y: int, max: int):
 fn register_blocks_tests():
     # closure-2: a closure reads the x where it was defined (10), not the
     # caller's x (20).
-    fn b_closure_2() errors compiler::CompilerError:
+    fn b_closure_2() errors std::compiler::CompilerError:
         static compile:
             x = 10
             fn f():
@@ -168,7 +168,7 @@ fn register_blocks_tests():
                 x = 20
                 f()
             g()
-    test::value("closure-2", 10, b_closure_2)
+    std::test::value("closure-2", 10, b_closure_2)
 
 # ---------------------------------------------------------------------------
 # control.test
@@ -177,7 +177,7 @@ fn register_control_tests():
     # return-2: code after return is not evaluated. The Tcl test logs
     # "before" and "after" around `return 10`; here log(1) and log(2), so
     # an evaluated log(2) would appear in the trace before the result 10.
-    fn b_return_2() errors compiler::CompilerError:
+    fn b_return_2() errors std::compiler::CompilerError:
         static compile:
             fn log(n: int) -> int:
                 yield n
@@ -188,11 +188,11 @@ fn register_control_tests():
                 log(2)
             coroutine {step, first} = body()
             rest = loop i from 0 to 10:
-                if coroutine::done?(step):
+                if std::coroutine::done?(step):
                     break
                 step()
             [first, rest]
-    test::value("return-2", [1, [10]], b_return_2)
+    std::test::value("return-2", [1, [10]], b_return_2)
 
 # ---------------------------------------------------------------------------
 # inference.test (a differential there: interp and compile must agree; here
@@ -201,7 +201,7 @@ fn register_control_tests():
 fn register_inference_tests():
     # inference-recursive-mixed-result-type: f's result is an Int on one
     # path and a String on the other; integer? sees each result's own kind.
-    fn b_recursive_mixed() errors compiler::CompilerError:
+    fn b_recursive_mixed() errors std::compiler::CompilerError:
         static compile:
             fn f(n):
                 if n < 1:
@@ -210,7 +210,7 @@ fn register_inference_tests():
                     r = f(n - 1)
                     "seven"
             [integer?(f(0)), integer?(f(2))]
-    test::value("inference-recursive-mixed-result-type", [true, false], b_recursive_mixed)
+    std::test::value("inference-recursive-mixed-result-type", [true, false], b_recursive_mixed)
 
 # ---------------------------------------------------------------------------
 # elif.test (every program there runs in its elif spelling and its nested
@@ -222,7 +222,7 @@ fn register_inference_tests():
 # value [V, DIGITS] (DIGITS the probe ids in order) is the trace
 # [FIRST, [REST..., V]] here: [10, 15] is [1, [5, 10]].
 fn register_elif_order_test(name: str, a: bool, b: bool, c: bool, expected):
-    fn b_elif() errors compiler::CompilerError:
+    fn b_elif() errors std::compiler::CompilerError:
         static compile:
             fn probe(id: int, result: bool) -> bool:
                 yield id
@@ -242,12 +242,12 @@ fn register_elif_order_test(name: str, a: bool, b: bool, c: bool, expected):
                     40
             coroutine {step, first} = pick(a, b, c)
             rest = loop i from 0 to 10:
-                if coroutine::done?(step):
+                if std::coroutine::done?(step):
                     break
                 step()
             [first, rest]
-    test::value(name.concat("/elif"), expected, b_elif)
-    fn b_nested() errors compiler::CompilerError:
+    std::test::value(name.concat("/elif"), expected, b_elif)
+    fn b_nested() errors std::compiler::CompilerError:
         static compile:
             fn probe(id: int, result: bool) -> bool:
                 yield id
@@ -269,11 +269,11 @@ fn register_elif_order_test(name: str, a: bool, b: bool, c: bool, expected):
                             40
             coroutine {step, first} = pick(a, b, c)
             rest = loop i from 0 to 10:
-                if coroutine::done?(step):
+                if std::coroutine::done?(step):
                     break
                 step()
             [first, rest]
-    test::value(name.concat("/nested"), expected, b_nested)
+    std::test::value(name.concat("/nested"), expected, b_nested)
 
 fn register_elif_tests():
     register_elif_order_test("elif-order-first", true, true, true, [1, [5, 10]])
@@ -283,7 +283,7 @@ fn register_elif_tests():
 
     # elif-fail: a fail in an elif branch raises Boom; the caller's handler
     # turns it into a value.
-    fn b_fail_elif() errors compiler::CompilerError:
+    fn b_fail_elif() errors std::compiler::CompilerError:
         static compile:
             fn f(a, b) errors Boom:
                 if a:
@@ -298,8 +298,8 @@ fn register_elif_tests():
                         -7
                 v
             [run(true, false), run(false, true), run(false, false)]
-    test::value("elif-fail/elif", [1, -7, 3], b_fail_elif)
-    fn b_fail_nested() errors compiler::CompilerError:
+    std::test::value("elif-fail/elif", [1, -7, 3], b_fail_elif)
+    fn b_fail_nested() errors std::compiler::CompilerError:
         static compile:
             fn f(a, b) errors Boom:
                 if a:
@@ -315,11 +315,11 @@ fn register_elif_tests():
                         -7
                 v
             [run(true, false), run(false, true), run(false, false)]
-    test::value("elif-fail/nested", [1, -7, 3], b_fail_nested)
+    std::test::value("elif-fail/nested", [1, -7, 3], b_fail_nested)
 
     # elif-branch-values-error-capable: branches calling an error-capable
     # check; the n < 5 branch's unhandled call is proven not to fail.
-    fn b_error_capable_elif() errors compiler::CompilerError:
+    fn b_error_capable_elif() errors std::compiler::CompilerError:
         static compile:
             fn check(n) errors TooBig:
                 if n > 10:
@@ -339,8 +339,8 @@ fn register_elif_tests():
                     100
                 v
             [classify(-4), classify(3), classify(7), classify(20), classify(60)]
-    test::value("elif-branch-values-error-capable/elif", [0, 3, 7, -1, 100], b_error_capable_elif)
-    fn b_error_capable_nested() errors compiler::CompilerError:
+    std::test::value("elif-branch-values-error-capable/elif", [0, 3, 7, -1, 100], b_error_capable_elif)
+    fn b_error_capable_nested() errors std::compiler::CompilerError:
         static compile:
             fn check(n) errors TooBig:
                 if n > 10:
@@ -362,12 +362,12 @@ fn register_elif_tests():
                             100
                 v
             [classify(-4), classify(3), classify(7), classify(20), classify(60)]
-    test::value("elif-branch-values-error-capable/nested", [0, 3, 7, -1, 100], b_error_capable_nested)
+    std::test::value("elif-branch-values-error-capable/nested", [0, 3, 7, -1, 100], b_error_capable_nested)
 
     # elif-long-chain: a hundred clauses select the right branch at both
     # ends and in the middle. The Tcl test generates both spellings; they
     # are written out here (the nested one is a hundred levels deep).
-    fn b_long_chain_elif() errors compiler::CompilerError:
+    fn b_long_chain_elif() errors std::compiler::CompilerError:
         static compile:
             fn f(x):
                 if x == 0:
@@ -573,8 +573,8 @@ fn register_elif_tests():
                 else:
                     -1
             [f(0), f(1), f(57), f(99), f(100)]
-    test::value("elif-long-chain/elif", [0, 1, 57, 99, -1], b_long_chain_elif)
-    fn b_long_chain_nested() errors compiler::CompilerError:
+    std::test::value("elif-long-chain/elif", [0, 1, 57, 99, -1], b_long_chain_elif)
+    fn b_long_chain_nested() errors std::compiler::CompilerError:
         static compile:
             fn f(x):
                 if x == 0:
@@ -879,7 +879,7 @@ fn register_elif_tests():
                                                                                                                                                                                                                                                                                                                                                                                                                             else:
                                                                                                                                                                                                                                                                                                                                                                                                                                 -1
             [f(0), f(1), f(57), f(99), f(100)]
-    test::value("elif-long-chain/nested", [0, 1, 57, 99, -1], b_long_chain_nested)
+    std::test::value("elif-long-chain/nested", [0, 1, 57, 99, -1], b_long_chain_nested)
 
 # ---------------------------------------------------------------------------
 # loop-counted.test
@@ -887,7 +887,7 @@ fn register_elif_tests():
 fn register_loop_counted_tests():
     # loop-counted-large-int-sum: bounds far beyond i64 sum exactly (no
     # native i64 wraparound).
-    fn b_large_int_sum() errors compiler::CompilerError:
+    fn b_large_int_sum() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 fn go(i, n, acc):
@@ -896,13 +896,13 @@ fn register_loop_counted_tests():
                     acc
                 go(9223372036854775806, 9223372036854775810, 0)
             f()
-    test::value("loop-counted-large-int-sum", 36893488147419103230, b_large_int_sum)
+    std::test::value("loop-counted-large-int-sum", 36893488147419103230, b_large_int_sum)
 
     # loop-counted-bounds-evaluated-once: START and END are evaluated once
     # each, START first, not once per iteration. Each bound is a probe that
     # yields [its value]; the loop runs three times and its value [0, 1, 2]
     # is the coroutine's result.
-    fn b_bounds_once() errors compiler::CompilerError:
+    fn b_bounds_once() errors std::compiler::CompilerError:
         static compile:
             fn log(n: int) -> int:
                 yield [n]
@@ -913,11 +913,11 @@ fn register_loop_counted_tests():
                 v
             coroutine {step, first} = program()
             rest = loop k from 0 to 10:
-                if coroutine::done?(step):
+                if std::coroutine::done?(step):
                     break
                 step()
             [first, rest]
-    test::value("loop-counted-bounds-evaluated-once", [[0], [[3], [0, 1, 2]]], b_bounds_once)
+    std::test::value("loop-counted-bounds-evaluated-once", [[0], [[3], [0, 1, 2]]], b_bounds_once)
 
 # ---------------------------------------------------------------------------
 # loop-collecting.test
@@ -925,23 +925,23 @@ fn register_loop_counted_tests():
 fn register_loop_collecting_tests():
     # loop-collecting-big-down-through-past-i64min: a descending inclusive
     # loop is exact past i64::MIN.
-    fn b_big_down_through() errors compiler::CompilerError:
+    fn b_big_down_through() errors std::compiler::CompilerError:
         static compile:
             fn f():
                 loop i down from -9223372036854775807 through -9223372036854775810:
                     i
             f()
-    test::value("loop-collecting-big-down-through-past-i64min", [-9223372036854775807, -9223372036854775808, -9223372036854775809, -9223372036854775810], b_big_down_through)
+    std::test::value("loop-collecting-big-down-through-past-i64min", [-9223372036854775807, -9223372036854775808, -9223372036854775809, -9223372036854775810], b_big_down_through)
 
     # loop-collecting-lockstep-three-way: three clauses with one proven
     # common cardinality advance together.
-    fn b_lockstep_three_way() errors compiler::CompilerError:
+    fn b_lockstep_three_way() errors std::compiler::CompilerError:
         static compile:
             fn f(xs):
-                loop x in xs and i from 0 to list::length(xs) and j down from list::length(xs) through 1:
+                loop x in xs and i from 0 to std::list::length(xs) and j down from std::list::length(xs) through 1:
                     [x, i, j]
             f([7, 8, 9])
-    test::value("loop-collecting-lockstep-three-way", [[7, 0, 3], [8, 1, 2], [9, 2, 1]], b_lockstep_three_way)
+    std::test::value("loop-collecting-lockstep-three-way", [[7, 0, 3], [8, 1, 2], [9, 2, 1]], b_lockstep_three_way)
 
 # ---------------------------------------------------------------------------
 # loop-in.test
@@ -949,7 +949,7 @@ fn register_loop_collecting_tests():
 fn register_loop_in_tests():
     # loop-in-closure-per-iteration: closures made in different iterations
     # capture that iteration's own x.
-    fn b_closure_per_iteration() errors compiler::CompilerError:
+    fn b_closure_per_iteration() errors std::compiler::CompilerError:
         static compile:
             fs = loop x in [1, 2, 3]:
                 fn f():
@@ -958,7 +958,7 @@ fn register_loop_in_tests():
             results = loop g in fs:
                 g()
             results
-    test::value("loop-in-closure-per-iteration", [1, 2, 3], b_closure_per_iteration)
+    std::test::value("loop-in-closure-per-iteration", [1, 2, 3], b_closure_per_iteration)
 
     # loop-in-error-propagates: a failing checked construction in the body
     # propagates its error out of the whole loop, with no partial result.
@@ -967,7 +967,7 @@ fn register_loop_in_tests():
     # program boundary (UNCAUGHT-ERROR); here check is typed and guarded so
     # that its result proves Small, and the escaping error is handled by
     # the loop's caller ("TooBig": nothing of the loop's List survives).
-    fn b_error_propagates() errors compiler::CompilerError:
+    fn b_error_propagates() errors std::compiler::CompilerError:
         static compile:
             fn check(n: int) -> Small errors TooBig:
                 if n > 10:
@@ -985,7 +985,7 @@ fn register_loop_in_tests():
                         return "TooBig"
                 v
             [outcome([1, 20, 2]), outcome([1, 2])]
-    test::value("loop-in-error-propagates", ["TooBig", [1, 2]], b_error_propagates)
+    std::test::value("loop-in-error-propagates", ["TooBig", [1, 2]], b_error_propagates)
 
 # ---------------------------------------------------------------------------
 
@@ -1000,6 +1000,6 @@ fn register_values_tests():
     register_loop_collecting_tests()
     register_loop_in_tests()
 
-with context test::suite()
+with context std::test::suite()
 register_values_tests()
-test::report()
+std::test::report()

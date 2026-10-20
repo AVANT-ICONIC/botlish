@@ -50,7 +50,7 @@ lappend corpus \
     refined {
         {bind f {block {s}
             {if {call {ref non_empty?} {ref s}}
-                {block {} {call {ref list} {ref s} {call {ref str::lowercase} {ref s}}}}
+                {block {} {call {ref list} {ref s} {call {ref std::str::lowercase} {ref s}}}}
                 {block {} {const str {}}}}}}
         {call {ref list} {call {ref f} {const str AB}} {call {ref f} {const str {}}}}
     } \

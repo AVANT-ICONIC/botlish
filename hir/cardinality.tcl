@@ -134,8 +134,8 @@ proc hir::cardinality::of_loop {hir e} {
 #
 # Facts reused rather than reinvented: hir/exactvalue.tcl (exact Ints and
 # exact List literals, followed through immutable bindings), the `+ - *`,
-# `list::length` and `mutable_array::capacity` natives (and
-# `mutable_array::allocate`'s capacity operand), and this file's own exact/max output-length
+# `std::list::length` and `std::mutable_array::capacity` natives (and
+# `std::mutable_array::allocate`'s capacity operand), and this file's own exact/max output-length
 # fact for collecting loops (a `ys = loop x in xs: ...` without
 # break/continue has exactly length(xs) elements). No relational List-length
 # inference is added.
@@ -324,13 +324,13 @@ proc hir::cardinality::IntForm {hir e stepsVar} {
             return [FormScale $x [lindex $y 0]]
         }
     }
-    if {$name eq "list::length" && [llength $args] == 1} {
+    if {$name eq "std::list::length" && [llength $args] == 1} {
         return [ListLength $hir [lindex $args 0] steps]
     }
-    if {$name eq "mutable_array::capacity" && [llength $args] == 1} {
+    if {$name eq "std::mutable_array::capacity" && [llength $args] == 1} {
         return [Capacity $hir [lindex $args 0] steps]
     }
-    if {$name eq "str::length" && [llength $args] == 1} {
+    if {$name eq "std::str::length" && [llength $args] == 1} {
         return [StrLength $hir [lindex $args 0] steps]
     }
     return [FormAtom [list e $id]]
@@ -339,9 +339,9 @@ proc hir::cardinality::IntForm {hir e stepsVar} {
 # The length, in Unicode scalar values, of the String value of expression
 # E, as a (nonnegative) form: the exact length of an exactly known String
 # (hir/exactvalue.tcl: a literal, followed through immutable bindings); the
-# sum of the operands' lengths for `str::concat`; the operand's length for
-# `str::lowercase` (a simple, one-to-one case mapping); END - START for a
-# `str::substring(s, START, END)` that returned; else the atom {slen KEY},
+# sum of the operands' lengths for `std::str::concat`; the operand's length for
+# `std::str::lowercase` (a simple, one-to-one case mapping); END - START for a
+# `std::str::substring(s, START, END)` that returned; else the atom {slen KEY},
 # keyed like `len` (ValueKey) -- a String is immutable, so equal keys are
 # equal lengths.
 proc hir::cardinality::StrLength {hir e stepsVar} {
@@ -362,13 +362,13 @@ proc hir::cardinality::StrLength {hir e stepsVar} {
         set args [dict get $node args]
     }
     switch -- $name/[llength $args] {
-        str::concat/2 {
+        std::str::concat/2 {
             return [FormAdd [StrLength $hir [lindex $args 0] steps] [StrLength $hir [lindex $args 1] steps]]
         }
-        str::lowercase/1 {
+        std::str::lowercase/1 {
             return [StrLength $hir [lindex $args 0] steps]
         }
-        str::substring/3 {
+        std::str::substring/3 {
             return [FormAdd [IntForm $hir [lindex $args 2] steps] [IntForm $hir [lindex $args 1] steps] -1]
         }
     }
@@ -377,7 +377,7 @@ proc hir::cardinality::StrLength {hir e stepsVar} {
 
 # The capacity of the MutableArray value of expression E, as a (nonnegative)
 # form: the allocation's own capacity operand when E is (an alias of) a
-# `mutable_array::allocate` call -- an allocation that returns has exactly
+# `std::mutable_array::allocate` call -- an allocation that returns has exactly
 # that capacity -- or of one of the library's intrinsic container
 # operations hir/containers.tcl registers (its `create` rule: the capacity
 # operand; its `from-list` rule: the List's length), else the atom
@@ -414,7 +414,7 @@ proc hir::cardinality::Capacity {hir e stepsVar} {
 
 # The length of the List value of expression E, as a (nonnegative) form.
 # E's value is a List wherever its length is read -- an operand a List
-# native takes (list::length, list::at, a slice, an array's construction
+# native takes (std::list::length, std::list::at, a slice, an array's construction
 # from a List), which fails on anything else, or the iterable of a loop
 # that requires one -- or a MutableArray a loop walks, whose length is
 # fixed too, or a MutableVector nothing can change (IterationLength), so
@@ -443,7 +443,7 @@ proc hir::cardinality::ListLength {hir e stepsVar} {
         return [FormConst [llength [dict get $node args]]]
     }
     # A List copied from a live fixed array has the array's extent, which
-    # its static type states (-result-length {extent K}: binary::load of a
+    # its static type states (-result-length {extent K}: std::binary::load of a
     # NativeView[array N of E], FIXED-LAYOUT-ARRAYS.md).
     if {$name ne ""} {
         set length [dict get [core::native::metadata $name] resultLength]
@@ -455,7 +455,7 @@ proc hir::cardinality::ListLength {hir e stepsVar} {
             }
         }
         # A List read from bytes through a designator of a fixed array has
-        # its extent (-result-length {path K}: binary::read, LAYOUT-UNIONS.md).
+        # its extent (-result-length {path K}: std::binary::read, LAYOUT-UNIONS.md).
         if {[lindex $length 0] eq "path" && [lindex $length 1] < [llength $args]} {
             set repr [hir::layouts::PathField [hir::layouts::ConstText $hir [lindex $args [lindex $length 1]]]]
             if {$repr ne "" && [dict get $repr kind] eq "array"} {
@@ -1172,7 +1172,7 @@ proc hir::cardinality::ShowAtom {hir atom} {
         max { return "max([show $hir $what], 0)" }
         len { return "length([ShowKey $hir $what])" }
         cap { return "capacity([ShowKey $hir $what])" }
-        slen { return "str::length([ShowKey $hir $what])" }
+        slen { return "std::str::length([ShowKey $hir $what])" }
         e { return [ShowExpr $hir $what] }
     }
     return $atom

@@ -71,7 +71,7 @@ release binaries, argv-vector harness (`fuzz/harness/argv-file.c`), no
 compiler or runtime changes. What changed is what the instrumentation
 now sees: the input reaches `rt_argv`'s strict UTF-8 validation (or the
 documented `InvalidArgumentEncoding` completion), canonical String and
-List construction, `list::get`, and the programs' real logic -- the CSV
+List construction, `std::list::get`, and the programs' real logic -- the CSV
 scan state machine (quoting, `""` escapes, embedded newlines), the
 character classifier and cleaner, the reverse loop, and the replace
 matcher.
@@ -217,7 +217,7 @@ None that are product bugs. Two contract facts were learned while
 building the targets, both recorded in-tree and neither a compiler
 defect:
 
-* `list::get` takes three arguments today (`get(xs, index, default)`);
+* `std::list::get` takes three arguments today (`get(xs, index, default)`);
   the two-argument form is a runtime arity error, not an optional-default
   form. The drivers use the 3-argument form explicitly.
 * The argv[0]-pinning requirement of §3 (initially missed; it made the

@@ -47,7 +47,7 @@ was added. No general inlining was added.
   full suite still passes with the feature off, confirming the flag remains
   fully functional as a diagnostic/standalone-lowering escape hatch.
 - The real acceptance case (`bench/refined-checks.ir`'s
-  `web::high_nibble` -> `byte::high_nibble`/`byte::nibble` chain) now
+  `std::web::high_nibble` -> `std::byte::high_nibble`/`std::byte::nibble` chain) now
   inlines under the **default** configuration -- no flag needed (§ 9).
 - A new synthetic call-site-count pressure audit
   (`bench/tiny-leaf-pressure.tcl`, `tests/native-tiny-leaf-pressure.test`)
@@ -67,7 +67,7 @@ was added. No general inlining was added.
 - `tests/native-bitshift.test` -- local `nirOf` helper now passes
   `-tiny-leaf-inline-opt 0` (every use in this file inspects a function's
   own standalone raw-shift lowering, the file's entire subject); the four
-  real `byte::nibble`/`byte::high_nibble` tests get the same flag
+  real `std::byte::nibble`/`std::byte::high_nibble` tests get the same flag
   individually at their own `refinedChecksHir` call sites.
 - `tests/native.test` -- `-tiny-leaf-inline-opt 0` added at each of 13
   individual failing call sites (`native-guard-1`, `native-spec-1/2/3/12`,
@@ -89,7 +89,7 @@ was added. No general inlining was added.
   to point here, rather than leaving stale default-off rationale in place.
 - This report.
 
-No change to `lib/byte.bot`, `lib/web.bot`, any other stdlib source, any
+No change to `stdlib/byte.bot`, `stdlib/web.bot`, any other stdlib source, any
 `hir/**` file, or any Rust source (`native/src/**`). No inliner eligibility
 rule, budget constant, or safe-op allowlist changed.
 
@@ -119,7 +119,7 @@ required record:
 - **test file, test name**: the table in § 4/§ 5 below.
 - **source fixture**: every one of the 24 is a plain top-level `fn f(x):
   ...`-shaped function (`inc`, `add1`, `f`, `small`, `same`, `helper`, or
-  the real `byte::nibble`/`byte::high_nibble`/`mathish::inc`), each with
+  the real `std::byte::nibble`/`std::byte::high_nibble`/`std::mathish::inc`), each with
   either exactly one caller or several callers all resolving to the same
   instance -- exactly `LeafInlineEligible`'s own eligible shape.
 - **what assertion failed**: in every case, a lookup of that function's own
@@ -226,7 +226,7 @@ change was made or was needed.
 
 This file's own header states its subject precisely:
 "`BOUNDED-BIT-SHIFT-LOWERING.md`'s Phase C: raw (untagged) machine-integer
-lowering... plus the real `byte::nibble` closed instance's own
+lowering... plus the real `std::byte::nibble` closed instance's own
 fact-to-machine-code chain." Every failing test here inspects a function's
 own standalone-compiled body via `FunctionBody`/`nirOf`
 (`native::nir`/`native::clif` on `surface::compile`'d or
@@ -244,10 +244,10 @@ caller or compiled standalone.
 | `bitshift-raw-rejected-shift-left-result-overflow` | `fn f(x): shift_left(x, 60)` | raw eligibility declines when the *result* could overflow small-Int |
 | `bitshift-raw-rejected-still-needs-guard` | `fn f(x): shift_right(x, 4)`, argument from an unproven-type function | a still-needed kind guard blocks raw eligibility |
 | `bitshift-raw-chain-no-redundant-boxing` | `fn f(x): shift_right(x + 1, 4)` | a raw-eligible chain stays raw with no redundant box/unbox |
-| `bitshift-real-byte-nibble-nir-raw-shift-no-mask-no-helper` | real `byte::nibble` | the real function's own body: raw shift, no surviving mask/helper |
-| `bitshift-real-byte-nibble-no-guard` | real `byte::nibble` | no runtime guard survives in its own body |
-| `bitshift-real-byte-nibble-clif-no-helper-call` | real `byte::nibble` | its own true Cranelift IR has no `call` at all |
-| `bitshift-real-byte-high-nibble-unchanged` | real `byte::high_nibble` | its own body stays on the tagged AND fast path, not raw |
+| `bitshift-real-byte-nibble-nir-raw-shift-no-mask-no-helper` | real `std::byte::nibble` | the real function's own body: raw shift, no surviving mask/helper |
+| `bitshift-real-byte-nibble-no-guard` | real `std::byte::nibble` | no runtime guard survives in its own body |
+| `bitshift-real-byte-nibble-clif-no-helper-call` | real `std::byte::nibble` | its own true Cranelift IR has no `call` at all |
+| `bitshift-real-byte-high-nibble-unchanged` | real `std::byte::high_nibble` | its own body stays on the tagged AND fast path, not raw |
 
 (Three synthetic tests in this same file -- `bitshift-raw-rejected-
 negative-operand`, `-nonconstant-count`, `-count-too-wide` -- did **not**
@@ -310,13 +310,13 @@ not globally disable... for a whole test file").
 ## 6. `tests/surface-modules.test`: the 1 failure
 
 `surface-modules-one-definition` compiles `examples/surface/14-modules.bot`
-(`[mathish::inc(41), mathish::inc(1)]`, `lib/mathish.bot`'s
-`mathish::inc(x): x + 1`) and checks `mathish::inc` is compiled exactly
+(`[std::mathish::inc(41), std::mathish::inc(1)]`, `stdlib/mathish.bot`'s
+`std::mathish::inc(x): x + 1`) and checks `std::mathish::inc` is compiled exactly
 once and called directly from both of its own two call sites -- a
 **cross-module compilation-identity** test (its own comment: "compiled
 once, called directly from both call sites"), verifying `hir::specialize`
 never accidentally *duplicates* a cross-file function per call site. With
-tiny-leaf inlining on, `mathish::inc`'s own trivial body inlines at both
+tiny-leaf inlining on, `std::mathish::inc`'s own trivial body inlines at both
 sites, correctly, and its own separate function -- and the "call"
 instructions the test was counting -- disappear entirely, which is not
 what "compiled once" was ever asking about. Fixed with
@@ -393,10 +393,10 @@ default in at least one test so it cannot silently regress").
 Freshly captured this session, **with no flag passed at all**:
 
 ```
-web::high_nibble:
+std::web::high_nibble:
     (default configuration -- no -tiny-leaf-inline-opt given)
-    zero calls to byte::high_nibble
-    zero calls to byte::nibble
+    zero calls to std::byte::high_nibble
+    zero calls to std::byte::nibble
 ```
 
 | | default (no flag) | explicit `-tiny-leaf-inline-opt 1` | explicit `-tiny-leaf-inline-opt 0` |
@@ -763,8 +763,8 @@ increasingly unsafe to assume by accident. Going forward:
     milestone's fixes follow that same convention.
 12. No test was weakened or deleted (§ 3, every table in § 4-6 shows an
     explicit-flag fix, never a loosened `-result`).
-13. No (§ 1's own file list, and this report throughout: `lib/byte.bot`,
-    `lib/web.bot`, and every other stdlib source file are untouched).
+13. No (§ 1's own file list, and this report throughout: `stdlib/byte.bot`,
+    `stdlib/web.bot`, and every other stdlib source file are untouched).
 
 **Pressure-audit (14-20)**
 
@@ -863,7 +863,7 @@ increasingly unsafe to assume by accident. Going forward:
     structural eligibility rule are byte-for-byte unchanged.
 12. No general inliner added -- unchanged from the previous milestone;
     nothing in this one touches `LeafInlineEligible`'s own decision logic.
-13. The real `web::high_nibble` case inlines under default configuration
+13. The real `std::web::high_nibble` case inlines under default configuration
     -- § 10.
 14. The explicit-off version still preserves its two-call baseline -- §
     10's own table.

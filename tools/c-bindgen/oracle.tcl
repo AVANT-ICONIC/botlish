@@ -18,14 +18,14 @@
 #   orc.bot        the Botlish declarations of those functions (an ordinary
 #                  module beside the program);
 #   main.bot       a Botlish program that, for every layout, compares
-#                  binary::layout_length and binary::layout_alignment with
+#                  std::binary::layout_length and std::binary::layout_alignment with
 #                  C's sizeof and _Alignof, reads every leaf of the record C
-#                  initialized through binary::native::view, writes every
-#                  leaf through binary::native::edit (binary::store) and has C
+#                  initialized through std::binary::native::view, writes every
+#                  leaf through std::binary::native::edit (std::binary::store) and has C
 #                  check them and the padding, builds the record in
-#                  abi::bytes::MutableBytes with binary::write and
-#                  binary::write_foreign and has C check that image (and, for
-#                  a layout without pointers, binary::parse reads it back);
+#                  std::abi::bytes::MutableBytes with std::binary::write and
+#                  std::binary::write_foreign and has C check that image (and, for
+#                  a layout without pointers, std::binary::parse reads it back);
 #
 # and the value the program must produce: a list per layout of zeros (each
 # check returns 0 when C and Botlish agree, a nonzero code otherwise), with
@@ -48,8 +48,8 @@
 # offsetof), byte by byte, and every written leaf with a typed read: a
 # write that strays outside its alternative, or loses one written earlier
 # that it does not overlap, is caught. A layout holding a union has no
-# whole copy (binary::parse refuses it): its selected scalar leaves are
-# read back from the bytes with binary::read instead.
+# whole copy (std::binary::parse refuses it): its selected scalar leaves are
+# read back from the bytes with std::binary::read instead.
 
 namespace eval ::cbind::oracle {}
 
@@ -59,8 +59,8 @@ namespace eval ::cbind::oracle {}
 # by element (FIXED-LAYOUT-ARRAYS.md): BOTPATH a static designator
 # (a.items[2].x), CPATH the C designator (an anonymous member's members are
 # its record's: C11), READ the Botlish expression reading the leaf through
-# the view `v` (binary::element(v.a.items, 2).x), PARSE the one reading it
-# from the LayoutStruct `s` (list::at(s.a.items, 2).x) and CHOICES the
+# the view `v` (std::binary::element(v.a.items, 2).x), PARSE the one reading it
+# from the LayoutStruct `s` (std::list::at(s.a.items, 2).x) and CHOICES the
 # alternatives it lies in: {UNION K N} each, the K-th of the N alternatives
 # of the union at UNION (its BOTPATH: one occurrence of a union). An array
 # of more than four elements in a dimension is sampled there -- its first
@@ -90,7 +90,7 @@ proc ::cbind::oracle::Elements {layouts members type bot c read parse choices} {
         set out {}
         foreach i $indices {
             lappend out {*}[Elements $layouts $members $element "$bot\[$i\]" "$c\[$i\]" \
-                "binary::element($read, $i)" "list::at($parse, $i)" $choices]
+                "std::binary::element($read, $i)" "std::list::at($parse, $i)" $choices]
         }
         return $out
     }
@@ -155,8 +155,8 @@ proc ::cbind::oracle::build {ns dir names {seed 1} {target ""}} {
     append c "#define ORC_ANCHOR(T, k) ((T)(__UINTPTR_TYPE__)&orc_anchor\[(k)\])\n"
     # (A binding whose layouts name no pointee identity has no ctypes module.)
     set ctypes [expr {[file exists [file join $dir $ns ctypes.bot]] ? "import ${ns}::ctypes\n" : ""}]
-    set ext "# The C oracle's functions (tools/c-bindgen/oracle.tcl): test tooling.\nimport ffi::c\n$ctypes\nextern c library \"botlish_layout_oracle\"\n"
-    set bot "direct module\n\nimport abi\nimport abi::bytes\nimport binary\nimport binary::native\nimport ffi::c\nimport list\nimport ${ns}::layouts\nimport orc\n"
+    set ext "# The C oracle's functions (tools/c-bindgen/oracle.tcl): test tooling.\nimport std::ffi::c\n$ctypes\nextern c library \"botlish_layout_oracle\"\n"
+    set bot "direct module\n\nimport std::abi\nimport std::abi::bytes\nimport std::binary\nimport std::binary::native\nimport std::ffi::c\nimport std::list\nimport ${ns}::layouts\nimport orc\n"
     set calls {}
     set n 0
     foreach name $names {
@@ -170,7 +170,7 @@ proc ::cbind::oracle::build {ns dir names {seed 1} {target ""}} {
         set pointerFree 1
         set unionFree 1
         foreach leaf $leaves {
-            if {[regexp {^ffi::c::(Ptr|FnPtr)\[} [lindex $leaf 2]]} { set pointerFree 0 }
+            if {[regexp {^std::ffi::c::(Ptr|FnPtr)\[} [lindex $leaf 2]]} { set pointerFree 0 }
             if {[llength [lindex $leaf 5]]} { set unionFree 0 }
         }
         # C.
@@ -197,14 +197,14 @@ proc ::cbind::oracle::build {ns dir names {seed 1} {target ""}} {
             set on0 [Selected $choices 0 $seed]
             set on1 [Selected $choices 1 $seed]
             set on2 [Selected $choices 2 $seed]
-            if {[regexp {^ffi::c::(Ptr|FnPtr)\[} $type]} {
+            if {[regexp {^std::ffi::c::(Ptr|FnPtr)\[} $type]} {
                 set ka [expr {($n * 7 + $i) % 200}]
                 set kb [expr {$ka + 17}]
                 set kc [expr {$ka + 33}]
                 append c "$ct orc_${id}_anchor_$i\(int k) { return ORC_ANCHOR($ct, k); }\n"
                 append c "int orc_${id}_is_$i\($ct q, int k) { return q == ORC_ANCHOR($ct, k) ? 0 : 1; }\n"
-                append ext "extern c fn orc_${id}_anchor_$i\(k: ffi::c::Int) -> $type\n"
-                append ext "extern c fn orc_${id}_is_$i\(q: $type, k: ffi::c::Int) -> ffi::c::Int\n"
+                append ext "extern c fn orc_${id}_anchor_$i\(k: std::ffi::c::Int) -> $type\n"
+                append ext "extern c fn orc_${id}_is_$i\(q: $type, k: std::ffi::c::Int) -> std::ffi::c::Int\n"
                 if {$on0} {
                     append init "    { $ct t = ORC_ANCHOR($ct, $ka); __builtin_memcpy((void *)&r->$cp, &t, sizeof t); }\n"
                     append image0 "    { $ct t = ORC_ANCHOR($ct, $ka); __builtin_memcpy(img + $at, &t, sizeof t); }\n"
@@ -216,16 +216,16 @@ proc ::cbind::oracle::build {ns dir names {seed 1} {target ""}} {
                 if {$on1} {
                     append image1 "    { $ct t = ORC_ANCHOR($ct, $kb); __builtin_memcpy(img + $at, &t, sizeof t); }\n"
                     append checkEdit "    if (r->$cp != ORC_ANCHOR($ct, $kb)) return [expr {$i + 1}];\n"
-                    append botStore "    a$i = orc::orc_${id}_anchor_$i\($kb)\n    binary::store(e, $L.$bp, a$i)\n"
+                    append botStore "    a$i = orc::orc_${id}_anchor_$i\($kb)\n    std::binary::store(e, $L.$bp, a$i)\n"
                 }
                 if {$on2} {
                     append image2 "    { $ct t = ORC_ANCHOR($ct, $kc); __builtin_memcpy(img + $at, &t, sizeof t); }\n"
                     append checkBytes "    if (r.$cp != ORC_ANCHOR($ct, $kc)) return [expr {$i + 1}];\n"
-                    append botWrite "    b$i = orc::orc_${id}_anchor_$i\($kc)\n    d[expr {$written + 1}] = binary::write_foreign(d$written, $L.$bp, b$i)\n"
+                    append botWrite "    b$i = orc::orc_${id}_anchor_$i\($kc)\n    d[expr {$written + 1}] = std::binary::write_foreign(d$written, $L.$bp, b$i)\n"
                     incr written
                 }
             } else {
-                regexp {^ffi::c::([A-Za-z]+)$} $type -> scalar
+                regexp {^std::ffi::c::([A-Za-z]+)$} $type -> scalar
                 set info [core::cabi::scalarInfo $scalar $target]
                 set bits [dict get $info bits]
                 set signed [dict get $info signed]
@@ -247,18 +247,18 @@ proc ::cbind::oracle::build {ns dir names {seed 1} {target ""}} {
                 if {$on1} {
                     append image1 "    { $ct t = ($ct)${pb}ULL; __builtin_memcpy(img + $at, &t, sizeof t); }\n"
                     append checkEdit "    if (r->$cp != ($ct)${pb}ULL) return [expr {$i + 1}];\n"
-                    append botStore "    binary::store(e, $L.$bp, $vb)\n"
+                    append botStore "    std::binary::store(e, $L.$bp, $vb)\n"
                 }
                 if {$on2} {
                     append image2 "    { $ct t = ($ct)${pc}ULL; __builtin_memcpy(img + $at, &t, sizeof t); }\n"
                     append checkBytes "    if (r.$cp != ($ct)${pc}ULL) return [expr {$i + 1}];\n"
-                    append botWrite "    d[expr {$written + 1}] = binary::write(d$written, $L.$bp, $vc)\n"
+                    append botWrite "    d[expr {$written + 1}] = std::binary::write(d$written, $L.$bp, $vc)\n"
                     incr written
                     if {$pointerFree && $unionFree} {
                         append botParse "    s$i = if $parse == $vc:\n        0\n    else:\n        1\n"
                         lappend parses s$i
                     } elseif {!$unionFree} {
-                        append botParse "    s$i = if binary::read(frozen, $L.$bp) == $vc:\n        0\n    else:\n        1\n"
+                        append botParse "    s$i = if std::binary::read(frozen, $L.$bp) == $vc:\n        0\n    else:\n        1\n"
                         lappend parses s$i
                     }
                 }
@@ -270,23 +270,23 @@ proc ::cbind::oracle::build {ns dir names {seed 1} {target ""}} {
         append c "    for (unsigned long i = 0; i < sizeof($T); i++)\n        if (((const unsigned char *)p)\[i\] != img\[i\]) return 1000 + (int)i;\n    return 0;\n}\n"
         append c "int orc_${id}_check_bytes(const unsigned char *b, unsigned long n) {\n    $T r;\n    unsigned char img\[sizeof($T)\];\n    if (n != sizeof($T)) return -1;\n    __builtin_memset(img, 0, sizeof img);\n$image2    __builtin_memcpy(&r, b, sizeof r);\n$checkBytes"
         append c "    for (unsigned long i = 0; i < sizeof($T); i++)\n        if (b\[i\] != img\[i\]) return 1000 + (int)i;\n    return 0;\n}\n"
-        append ext "extern c fn orc_${id}_size() -> ffi::c::ULong\n"
-        append ext "extern c fn orc_${id}_align() -> ffi::c::ULong\n"
-        append ext "extern c fn orc_${id}_init() -> ffi::c::Ptr\[ffi::c::Void\]\n"
-        append ext "extern c fn orc_${id}_check_edit(p: ffi::c::Ptr\[ffi::c::Void\]) -> ffi::c::Int\n"
-        append ext "extern c fn orc_${id}_check_bytes(\n    b: ffi::c::Ptr\[ffi::c::UChar\] read noescape,\n    n: ffi::c::ULong\n) -> ffi::c::Int\n"
+        append ext "extern c fn orc_${id}_size() -> std::ffi::c::ULong\n"
+        append ext "extern c fn orc_${id}_align() -> std::ffi::c::ULong\n"
+        append ext "extern c fn orc_${id}_init() -> std::ffi::c::Ptr\[std::ffi::c::Void\]\n"
+        append ext "extern c fn orc_${id}_check_edit(p: std::ffi::c::Ptr\[std::ffi::c::Void\]) -> std::ffi::c::Int\n"
+        append ext "extern c fn orc_${id}_check_bytes(\n    b: std::ffi::c::Ptr\[std::ffi::c::UChar\] read noescape,\n    n: std::ffi::c::ULong\n) -> std::ffi::c::Int\n"
         # Botlish.
         set fn "\n# $name ($T)\nfn check_$id\() -> List\[int\] errors NativeViewNull, NativeEditNull, LayoutLengthMismatch, IndexNotFound:\n"
-        append fn "    size = if orc::orc_${id}_size() == binary::layout_length($L):\n        0\n    else:\n        1\n"
-        append fn "    align = if orc::orc_${id}_align() == binary::layout_alignment($L):\n        0\n    else:\n        1\n"
-        append fn "    p = orc::orc_${id}_init()\n    v = binary::native::view($L, p)\n$botRead"
-        append fn "    e = binary::native::edit($L, p)\n$botStore    edited = orc::orc_${id}_check_edit(p)\n"
-        append fn "    d0 = abi::bytes::zeroed(abi::usize(binary::layout_length($L)))\n$botWrite"
+        append fn "    size = if orc::orc_${id}_size() == std::binary::layout_length($L):\n        0\n    else:\n        1\n"
+        append fn "    align = if orc::orc_${id}_align() == std::binary::layout_alignment($L):\n        0\n    else:\n        1\n"
+        append fn "    p = orc::orc_${id}_init()\n    v = std::binary::native::view($L, p)\n$botRead"
+        append fn "    e = std::binary::native::edit($L, p)\n$botStore    edited = orc::orc_${id}_check_edit(p)\n"
+        append fn "    d0 = std::abi::bytes::zeroed(std::abi::usize(std::binary::layout_length($L)))\n$botWrite"
         set dn d$written
         if {$pointerFree && $unionFree} {
-            append fn "    s = binary::parse($L, abi::bytes::freeze($dn))\n$botParse"
+            append fn "    s = std::binary::parse($L, std::abi::bytes::freeze($dn))\n$botParse"
         } elseif {!$unionFree && $botParse ne ""} {
-            append fn "    frozen = abi::bytes::freeze($dn)\n$botParse"
+            append fn "    frozen = std::abi::bytes::freeze($dn)\n$botParse"
         }
         append fn "    built = orc::orc_${id}_check_bytes($dn, [lindex [dict get $layouts $name] 0])\n"
         set all [concat size align $reads edited built $parses]
@@ -299,12 +299,12 @@ proc ::cbind::oracle::build {ns dir names {seed 1} {target ""}} {
         set i 0
         foreach leaf $leaves {
             lassign $leaf bp cp type read parse choices
-            set pointer [regexp {^ffi::c::(Ptr|FnPtr)\[} $type]
+            set pointer [regexp {^std::ffi::c::(Ptr|FnPtr)\[} $type]
             if {!$pointer || [Selected $choices 0 $seed]} {
                 lappend readLabels [string cat $name "." $bp [expr {[Selected $choices 0 $seed] ? ": view read of C's store" : ": view read of another interpretation of C's bytes"}]]
             }
             if {!$pointer && [Selected $choices 2 $seed] && (($pointerFree && $unionFree) || !$unionFree)} {
-                lappend parseLabels [string cat $name "." $bp [expr {$unionFree ? ": binary::parse of the bytes" : ": binary::read of the bytes"}]]
+                lappend parseLabels [string cat $name "." $bp [expr {$unionFree ? ": std::binary::parse of the bytes" : ": std::binary::read of the bytes"}]]
             }
             incr i
         }

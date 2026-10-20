@@ -43,7 +43,7 @@ proc tpBoundType {hir name} {
 }
 
 # The registered natives spelled like a type predicate: a capitalized last
-# name segment ending in `?` (`Small?`, `abi::U8Value?`).
+# name segment ending in `?` (`Small?`, `std::abi::U8Value?`).
 proc tpTypePredicateNatives {} {
     return [lsearch -all -inline -regexp [core::native::names] {(^|::)[A-Z][A-Za-z0-9_]*\?$}]
 }
@@ -78,7 +78,7 @@ proc tpModule {name content} {
 }
 
 # A domain, its converter and a consumer: the shapes every case below uses.
-set tpPrelude {import list
+set tpPrelude {import std::list
 
 type Small = Int in 0..9
 error OutOfRange
@@ -96,11 +96,11 @@ fn use_small(s: Small) -> int:
 # ---------------------------------------------------------------------------
 # No type predicate exists
 
-test tp-no-native-registered {a type declaration registers a type and no native: no `Small?` after compiling a program declaring it, and none for any type of the standard library's modules (byte's Byte..HighNibble, abi's ten *Value domains, abi::x86_64's Register64Word)} -body {
+test tp-no-native-registered {a type declaration registers a type and no native: no `Small?` after compiling a program declaring it, and none for any type of the standard library's modules (byte's Byte..HighNibble, abi's ten *Value domains, std::abi::x86_64's Register64Word)} -body {
     surface::compile "type Small = Int in 0..9\n\n1\n" -warnings off
     set own [list [core::type::valid Small] [core::native::exists Small?]]
-    surface::compile [withImports "import abi::x86_64\nimport byte\nimport web\n\[byte::from_int(3), abi::u8(4).value\]\n"] -warnings off
-    list $own [core::type::valid abi::U8Value] [core::type::valid byte::Byte] [tpTypePredicateNatives]
+    surface::compile [withImports "import std::abi::x86_64\nimport std::byte\nimport std::web\n\[std::byte::from_int(3), std::abi::u8(4).value\]\n"] -warnings off
+    list $own [core::type::valid std::abi::U8Value] [core::type::valid std::byte::Byte] [tpTypePredicateNatives]
 } -result {{1 0} 1 1 {}}
 
 test tp-type-name-not-a-value {a type's name is not a value: the type, a call of it, its `?` spelling, a call, an alias and method sugar are all unbound names (UNBOUND, or NOT-A-STRUCT naming the missing function for method sugar) -- for an integer domain, a refinement, a struct and an enum alike} -body {
@@ -127,19 +127,19 @@ test tp-namespaced {a module's type brings no predicate: `m::Small?` is no membe
     withPrivateLibrary {
         tpModule tpm "type Small = Int in 0..9\n\nfn one() -> int:\n    1\n"
         tpModule tpinside "type Small = Int in 0..9\n\nfn small?(x):\n    Small?(x)\n"
-        list [tpRejection "import tpm\ntpm::Small?(3)\n"] \
-            [tpKind "import type tpm::Small\nSmall?(3)\n"] \
-            [tpKind "import tpinside\ntpinside::small?(3)\n"] \
-            [tpKind "import tpm\nimport type tpm::Small\nfn f(x: Small) -> int:\n    x + tpm::one()\nf(3)\n"]
+        list [tpRejection "import std::tpm\nstd::tpm::Small?(3)\n"] \
+            [tpKind "import type std::tpm::Small\nSmall?(3)\n"] \
+            [tpKind "import std::tpinside\nstd::tpinside::small?(3)\n"] \
+            [tpKind "import std::tpm\nimport type std::tpm::Small\nfn f(x: Small) -> int:\n    x + std::tpm::one()\nf(3)\n"]
     }
-} -result {{UNKNOWN-SYMBOL {namespace "tpm" has no definition "Small?" (it defines: one)}} UNBOUND UNBOUND accepted}
+} -result {{UNKNOWN-SYMBOL {namespace "std::tpm" has no definition "Small?" (it defines: one)}} UNBOUND UNBOUND accepted}
 
 test tp-method-candidates {method sugar sees exactly the functions a namespace declares: an ordinary `small?` of a module is a candidate, the type beside it adds none} -body {
     withPrivateLibrary {
         tpModule tpm "type Small = Int in 0..9\n\nfn small?(x: int) -> bool:\n    x >= 0 and x <= 9\n"
-        set hir [surface::compile "import tpm\nx = 3\ny = 12\n\[x.small?(), y.small?()\]\n" -warnings off]
+        set hir [surface::compile "import std::tpm\nx = 3\ny = 12\n\[x.small?(), y.small?()\]\n" -warnings off]
         list [lrange [outcomeUnderHir cranelift $hir] 0 1] \
-            [tpKind "import tpm\nx = 3\nx.Small?()\n"]
+            [tpKind "import std::tpm\nx = 3\nx.Small?()\n"]
     }
 } -result {{value {[true, false]}} NOT-A-STRUCT}
 
@@ -211,7 +211,7 @@ test tp-converter-unproven-rejected {a converter is no cast: a body returning an
 test tp-converter-module {a module's converter is an ordinary member: called qualified, by method sugar, through `import type` for the result; its error is the module's, handled by its qualified name} -body {
     withPrivateLibrary {
         tpModule tpconv "type Small = Int in 0..9\nerror OutOfRange\n\nfn small(x: int) -> Small errors OutOfRange:\n    if x < 0 or x > 9:\n        fail OutOfRange\n    x\n"
-        set source "import tpconv\nimport type tpconv::Small\n\nfn use(s: Small) -> int:\n    s * 2\n\nfn g(x: int) -> int:\n    s = x.small():\n        on tpconv::OutOfRange:\n            return -1\n    use(s)\n\nfn h(x: int) -> int:\n    s = tpconv::small(x):\n        on tpconv::OutOfRange:\n            return -1\n    use(s)\n\nxs = \[4, 40\]\n\[g(list::at(xs, 0)), g(list::at(xs, 1)), h(list::at(xs, 0))\]\n"
+        set source "import std::tpconv\nimport type std::tpconv::Small\n\nfn use(s: Small) -> int:\n    s * 2\n\nfn g(x: int) -> int:\n    s = x.small():\n        on std::tpconv::OutOfRange:\n            return -1\n    use(s)\n\nfn h(x: int) -> int:\n    s = std::tpconv::small(x):\n        on std::tpconv::OutOfRange:\n            return -1\n    use(s)\n\nxs = \[4, 40\]\n\[g(std::list::at(xs, 0)), g(std::list::at(xs, 1)), h(std::list::at(xs, 0))\]\n"
         sourceAgree [withImports $source]
     }
 } -result {value {[8, -1, 8]}}
@@ -265,7 +265,7 @@ test tp-paths-shapes {hir::range::Paths, the decomposition both analyses share: 
 # ---------------------------------------------------------------------------
 # The proof forms of refinements are unchanged
 
-set tpRefined {import list
+set tpRefined {import std::list
 
 type Small = Int in 0..9
 refined type Even = Small
@@ -340,24 +340,24 @@ test tp-converter-nir-ordinary {a converter lowers to ordinary comparisons, bran
         [lsearch -all -inline -regexp $body {native|Small|call}]
 } -result {1 1 1 {}}
 
-test tp-library-converter-is-ordinary {a library converter (byte::from_int, abi::u8) is an ordinary module function: a HIR block with a declared domain result, an NIR function of its own built from comparisons, called like any function} -body {
-    set hir [surface::compile [withImports "fn f(x: int) -> int:\n    b = byte::from_int(x):\n        on byte::BelowRange:\n            return -1\n        on byte::AboveRange:\n            return -2\n    u = abi::u8(x):\n        on abi::AbiIntegerBelowRange:\n            return -3\n        on abi::AbiIntegerAboveRange:\n            return -4\n    b + u.value\n\nxs = \[7, 300\]\nys = loop x in xs:\n    f(x)\nys\n"] -warnings off]
+test tp-library-converter-is-ordinary {a library converter (std::byte::from_int, std::abi::u8) is an ordinary module function: a HIR block with a declared domain result, an NIR function of its own built from comparisons, called like any function} -body {
+    set hir [surface::compile [withImports "fn f(x: int) -> int:\n    b = std::byte::from_int(x):\n        on std::byte::BelowRange:\n            return -1\n        on std::byte::AboveRange:\n            return -2\n    u = std::abi::u8(x):\n        on std::abi::AbiIntegerBelowRange:\n            return -3\n        on std::abi::AbiIntegerAboveRange:\n            return -4\n    b + u.value\n\nxs = \[7, 300\]\nys = loop x in xs:\n    f(x)\nys\n"] -warnings off]
     set nir [native::nir $hir]
     list [lrange [outcomeUnderHir cranelift $hir] 0 1] \
-        [expr {[lsearch -regexp [tpNirBody $nir byte::from_int] {op r?i(lt|gt) }] >= 0}] \
-        [lsearch -all -inline -regexp [concat [tpNirBody $nir byte::from_int] [tpNirBody $nir abi::u8]] {native|Byte\?|U8Value\?}]
+        [expr {[lsearch -regexp [tpNirBody $nir std::byte::from_int] {op r?i(lt|gt) }] >= 0}] \
+        [lsearch -all -inline -regexp [concat [tpNirBody $nir std::byte::from_int] [tpNirBody $nir std::abi::u8]] {native|Byte\?|U8Value\?}]
 } -result {{value {[14, -2]}} 1 {}}
 
 test tp-converter-source-equivalent {a converter declared by a module and the same converter written in the program lower to the same NIR function body: nothing below HIR knows where a converter came from} -body {
     withPrivateLibrary {
         tpModule tpconv "type Small = Int in 0..9\nerror OutOfRange\n\nfn small(x: int) -> Small errors OutOfRange:\n    if x < 0 or x > 9:\n        fail OutOfRange\n    x\n"
         set use "xs = \[3, 12\]\nys = loop x in xs:\n    CALL\nys\n"
-        set own [surface::compile "import list\ntype Small = Int in 0..9\nerror OutOfRange\n\nfn small(x: int) -> Small errors OutOfRange:\n    if x < 0 or x > 9:\n        fail OutOfRange\n    x\n\nfn g(x: int) -> int:\n    s = small(x):\n        on OutOfRange:\n            return -1\n    s + 0\n\n[string map {CALL g(x)} $use]" -warnings off]
-        set lib [surface::compile "import list\nimport tpconv\n\nfn g(x: int) -> int:\n    s = tpconv::small(x):\n        on tpconv::OutOfRange:\n            return -1\n    s + 0\n\n[string map {CALL g(x)} $use]" -warnings off]
+        set own [surface::compile "import std::list\ntype Small = Int in 0..9\nerror OutOfRange\n\nfn small(x: int) -> Small errors OutOfRange:\n    if x < 0 or x > 9:\n        fail OutOfRange\n    x\n\nfn g(x: int) -> int:\n    s = small(x):\n        on OutOfRange:\n            return -1\n    s + 0\n\n[string map {CALL g(x)} $use]" -warnings off]
+        set lib [surface::compile "import std::list\nimport std::tpconv\n\nfn g(x: int) -> int:\n    s = std::tpconv::small(x):\n        on std::tpconv::OutOfRange:\n            return -1\n    s + 0\n\n[string map {CALL g(x)} $use]" -warnings off]
         # The error's canonical identity is the module-qualified one
         # (ERROR-PAYLOADS.md): a name, not a shape.
         set a [tpNirBody [native::nir $own] small]
-        set b [string map {tpconv::OutOfRange OutOfRange} [tpNirBody [native::nir $lib] tpconv::small]]
+        set b [string map {std::tpconv::OutOfRange OutOfRange} [tpNirBody [native::nir $lib] std::tpconv::small]]
         list [expr {[llength $a] > 0}] [expr {$a eq $b}] \
             [lrange [outcomeUnderHir cranelift $own] 0 1] [lrange [outcomeUnderHir cranelift $lib] 0 1]
     }

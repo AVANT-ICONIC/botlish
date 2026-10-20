@@ -2,7 +2,7 @@
 primary 8:17
 fix 8     place(label, xs.length(), "three")
 primary 8:32
-fix 2 import list
+fix 2 import std::list
 primary 8:42
 fix 4 fn place(name: str, cells: int, n: str) -> int:
 fix 5     cells

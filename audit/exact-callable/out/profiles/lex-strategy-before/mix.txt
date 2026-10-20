@@ -87,7 +87,7 @@ executed Botlish-code instructions per run: 35,193 (11.2% of all Ir)
   frame: epilogue             128.0    2.4%
   frame: prologue             112.0    2.1%
 
-== 1 list::all?: 2,389.0 executed instructions per run (6.8% of JIT)
+== 1 std::list::all?: 2,389.0 executed instructions per run (6.8% of JIT)
   mov reg-reg                 617.0   25.8%
   bool test                   306.0   12.8%
   tag test                    216.0    9.0%

@@ -37,7 +37,7 @@ interp recursionlimit {} 200000
 
 # The registry program of K handlers.
 proc registry {k} {
-    set text "import mutable_vector\n\n"
+    set text "import std::mutable_vector\n\n"
     foreach e {Disk Net Parse Auth} {
         append text "error $e\n\n"
     }
@@ -56,7 +56,7 @@ proc registry {k} {
             append text "fn handler_$j\() -> int:\n    $j\n\n"
         }
     }
-    append text "fn no_handlers() -> MutableVector\[Handler\]:\n    mutable_vector::from_list(\[\])\n\n"
+    append text "fn no_handlers() -> MutableVector\[Handler\]:\n    std::mutable_vector::from_list(\[\])\n\n"
     append text "fn registered() -> MutableVector\[Handler\]:\n    v = no_handlers()\n"
     for {set j 0} {$j < $k} {incr j} {
         if {$j % 2 == 0} {

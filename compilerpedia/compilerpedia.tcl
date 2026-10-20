@@ -578,7 +578,7 @@ proc compilerpedia::lookup {query} {
         }
     }
     set catalogue [Load]
-    # The key as written first (abi::I8 the type, abi::i8 the function), then
+    # The key as written first (std::abi::I8 the type, std::abi::i8 the function), then
     # case-insensitively, then loosely.
     foreach table {cased exact loose} key [list $query $lower [Loose $query]] {
         if {[dict exists $catalogue $table $key]} {
@@ -1023,7 +1023,7 @@ proc compilerpedia::renderOverview {} {
     lappend out "LOOKING THINGS UP"
     set examples {
         KNOWN-ERROR               "a code (error or warning)"
-        list::at                  "a standard-library symbol"
+        std::list::at                  "a standard-library symbol"
         concept.method-sugar      "a topic ID"
         {"bounds proof"}          "an alias, or a word search"
         {"handle several errors"} "a task"

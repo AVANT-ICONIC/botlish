@@ -3,356 +3,356 @@
 # The thunked APIs of generic/tclTomMathDecls.h (static inline functions, table-redirected
 # names, macros): externs of the C wrappers in the shim library (C-BINDGEN.md,
 # "Thunks"). Build the shim with `tools/c-bindgen.tcl build`.
-import ffi::c
+import std::ffi::c
 import tclstubs::ctypes
 
 extern c library "botlish_shim_tclstubs_2627031d"
 extern c library "tclstub9.0"
 
 # C: int TclBN_epoch(void) (called through (tclTomMathStubsPtr -> tclBN_epoch))
-extern c fn TclBN_epoch named "botlish_tclstubs_TclBN_epoch"() -> ffi::c::Int
+extern c fn TclBN_epoch named "botlish_tclstubs_TclBN_epoch"() -> std::ffi::c::Int
 
 # C: int TclBN_revision(void) (called through (tclTomMathStubsPtr -> tclBN_revision))
-extern c fn TclBN_revision named "botlish_tclstubs_TclBN_revision"() -> ffi::c::Int
+extern c fn TclBN_revision named "botlish_tclstubs_TclBN_revision"() -> std::ffi::c::Int
 
 # C: mp_err TclBN_mp_add(const mp_int *a, const mp_int *b, mp_int *c) (called through (tclTomMathStubsPtr -> tclBN_mp_add))
 extern c fn TclBN_mp_add named "botlish_tclstubs_TclBN_mp_add"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    b: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    c: ffi::c::Ptr[tclstubs::ctypes::mp_int]
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    b: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    c: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
+) -> std::ffi::c::Int
 
 # C: mp_err TclBN_mp_add_d(const mp_int *a, mp_digit b, mp_int *c) (called through (tclTomMathStubsPtr -> tclBN_mp_add_d))
 extern c fn TclBN_mp_add_d named "botlish_tclstubs_TclBN_mp_add_d"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    b: ffi::c::ULong,
-    c: ffi::c::Ptr[tclstubs::ctypes::mp_int]
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    b: std::ffi::c::ULong,
+    c: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
+) -> std::ffi::c::Int
 
 # C: mp_err TclBN_mp_and(const mp_int *a, const mp_int *b, mp_int *c) (called through (tclTomMathStubsPtr -> tclBN_mp_and))
 extern c fn TclBN_mp_and named "botlish_tclstubs_TclBN_mp_and"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    b: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    c: ffi::c::Ptr[tclstubs::ctypes::mp_int]
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    b: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    c: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
+) -> std::ffi::c::Int
 
 # C: void TclBN_mp_clamp(mp_int *a) (called through (tclTomMathStubsPtr -> tclBN_mp_clamp))
 extern c fn TclBN_mp_clamp named "botlish_tclstubs_TclBN_mp_clamp"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int]
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
 ) -> unit
 
 # C: void TclBN_mp_clear(mp_int *a) (called through (tclTomMathStubsPtr -> tclBN_mp_clear))
 extern c fn TclBN_mp_clear named "botlish_tclstubs_TclBN_mp_clear"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int]
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
 ) -> unit
 
 # C: mp_ord TclBN_mp_cmp(const mp_int *a, const mp_int *b) (called through (tclTomMathStubsPtr -> tclBN_mp_cmp))
 extern c fn TclBN_mp_cmp named "botlish_tclstubs_TclBN_mp_cmp"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    b: ffi::c::Ptr[tclstubs::ctypes::mp_int]
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    b: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
+) -> std::ffi::c::Int
 
 # C: mp_ord TclBN_mp_cmp_d(const mp_int *a, mp_digit b) (called through (tclTomMathStubsPtr -> tclBN_mp_cmp_d))
 extern c fn TclBN_mp_cmp_d named "botlish_tclstubs_TclBN_mp_cmp_d"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    b: ffi::c::ULong
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    b: std::ffi::c::ULong
+) -> std::ffi::c::Int
 
 # C: mp_ord TclBN_mp_cmp_mag(const mp_int *a, const mp_int *b) (called through (tclTomMathStubsPtr -> tclBN_mp_cmp_mag))
 extern c fn TclBN_mp_cmp_mag named "botlish_tclstubs_TclBN_mp_cmp_mag"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    b: ffi::c::Ptr[tclstubs::ctypes::mp_int]
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    b: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
+) -> std::ffi::c::Int
 
 # C: mp_err TclBN_mp_copy(const mp_int *a, mp_int *b) (called through (tclTomMathStubsPtr -> tclBN_mp_copy))
 extern c fn TclBN_mp_copy named "botlish_tclstubs_TclBN_mp_copy"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    b: ffi::c::Ptr[tclstubs::ctypes::mp_int]
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    b: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
+) -> std::ffi::c::Int
 
 # C: int TclBN_mp_count_bits(const mp_int *a) (called through (tclTomMathStubsPtr -> tclBN_mp_count_bits))
 extern c fn TclBN_mp_count_bits named "botlish_tclstubs_TclBN_mp_count_bits"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int]
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
+) -> std::ffi::c::Int
 
 # C: mp_err TclBN_mp_div(const mp_int *a, const mp_int *b, mp_int *q, mp_int *r) (called through (tclTomMathStubsPtr -> tclBN_mp_div))
 extern c fn TclBN_mp_div named "botlish_tclstubs_TclBN_mp_div"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    b: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    q: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    r: ffi::c::Ptr[tclstubs::ctypes::mp_int]
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    b: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    q: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    r: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
+) -> std::ffi::c::Int
 
 # C: mp_err TclBN_mp_div_d(const mp_int *a, mp_digit b, mp_int *q, mp_digit *r) (called through (tclTomMathStubsPtr -> tclBN_mp_div_d))
 extern c fn TclBN_mp_div_d named "botlish_tclstubs_TclBN_mp_div_d"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    b: ffi::c::ULong,
-    q: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    r: ffi::c::Ptr[ffi::c::ULong]
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    b: std::ffi::c::ULong,
+    q: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    r: std::ffi::c::Ptr[std::ffi::c::ULong]
+) -> std::ffi::c::Int
 
 # C: mp_err TclBN_mp_div_2(const mp_int *a, mp_int *q) (called through (tclTomMathStubsPtr -> tclBN_mp_div_2))
 extern c fn TclBN_mp_div_2 named "botlish_tclstubs_TclBN_mp_div_2"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    q: ffi::c::Ptr[tclstubs::ctypes::mp_int]
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    q: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
+) -> std::ffi::c::Int
 
 # C: mp_err TclBN_mp_div_2d(const mp_int *a, int b, mp_int *q, mp_int *r) (called through (tclTomMathStubsPtr -> tclBN_mp_div_2d))
 extern c fn TclBN_mp_div_2d named "botlish_tclstubs_TclBN_mp_div_2d"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    b: ffi::c::Int,
-    q: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    r: ffi::c::Ptr[tclstubs::ctypes::mp_int]
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    b: std::ffi::c::Int,
+    q: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    r: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
+) -> std::ffi::c::Int
 
 # C: void TclBN_mp_exch(mp_int *a, mp_int *b) (called through (tclTomMathStubsPtr -> tclBN_mp_exch))
 extern c fn TclBN_mp_exch named "botlish_tclstubs_TclBN_mp_exch"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    b: ffi::c::Ptr[tclstubs::ctypes::mp_int]
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    b: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
 ) -> unit
 
 # C: mp_err TclBN_mp_expt_n(const mp_int *a, int b, mp_int *c) (called through (tclTomMathStubsPtr -> tclBN_mp_expt_n))
 extern c fn TclBN_mp_expt_n named "botlish_tclstubs_TclBN_mp_expt_n"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    b: ffi::c::Int,
-    c: ffi::c::Ptr[tclstubs::ctypes::mp_int]
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    b: std::ffi::c::Int,
+    c: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
+) -> std::ffi::c::Int
 
 # C: mp_err TclBN_mp_grow(mp_int *a, int size) (called through (tclTomMathStubsPtr -> tclBN_mp_grow))
 extern c fn TclBN_mp_grow named "botlish_tclstubs_TclBN_mp_grow"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    size: ffi::c::Int
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    size: std::ffi::c::Int
+) -> std::ffi::c::Int
 
 # C: mp_err TclBN_mp_init(mp_int *a) (called through (tclTomMathStubsPtr -> tclBN_mp_init))
 extern c fn TclBN_mp_init named "botlish_tclstubs_TclBN_mp_init"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int]
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
+) -> std::ffi::c::Int
 
 # C: mp_err TclBN_mp_init_copy(mp_int *a, const mp_int *b) (called through (tclTomMathStubsPtr -> tclBN_mp_init_copy))
 extern c fn TclBN_mp_init_copy named "botlish_tclstubs_TclBN_mp_init_copy"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    b: ffi::c::Ptr[tclstubs::ctypes::mp_int]
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    b: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
+) -> std::ffi::c::Int
 
 # C: mp_err TclBN_mp_init_set(mp_int *a, mp_digit b) (called through (tclTomMathStubsPtr -> tclBN_mp_init_set))
 extern c fn TclBN_mp_init_set named "botlish_tclstubs_TclBN_mp_init_set"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    b: ffi::c::ULong
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    b: std::ffi::c::ULong
+) -> std::ffi::c::Int
 
 # C: mp_err TclBN_mp_init_size(mp_int *a, int size) (called through (tclTomMathStubsPtr -> tclBN_mp_init_size))
 extern c fn TclBN_mp_init_size named "botlish_tclstubs_TclBN_mp_init_size"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    size: ffi::c::Int
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    size: std::ffi::c::Int
+) -> std::ffi::c::Int
 
 # C: mp_err TclBN_mp_lshd(mp_int *a, int shift) (called through (tclTomMathStubsPtr -> tclBN_mp_lshd))
 extern c fn TclBN_mp_lshd named "botlish_tclstubs_TclBN_mp_lshd"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    shift: ffi::c::Int
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    shift: std::ffi::c::Int
+) -> std::ffi::c::Int
 
 # C: mp_err TclBN_mp_mod(const mp_int *a, const mp_int *b, mp_int *r) (called through (tclTomMathStubsPtr -> tclBN_mp_mod))
 extern c fn TclBN_mp_mod named "botlish_tclstubs_TclBN_mp_mod"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    b: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    r: ffi::c::Ptr[tclstubs::ctypes::mp_int]
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    b: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    r: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
+) -> std::ffi::c::Int
 
 # C: mp_err TclBN_mp_mod_2d(const mp_int *a, int b, mp_int *r) (called through (tclTomMathStubsPtr -> tclBN_mp_mod_2d))
 extern c fn TclBN_mp_mod_2d named "botlish_tclstubs_TclBN_mp_mod_2d"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    b: ffi::c::Int,
-    r: ffi::c::Ptr[tclstubs::ctypes::mp_int]
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    b: std::ffi::c::Int,
+    r: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
+) -> std::ffi::c::Int
 
 # C: mp_err TclBN_mp_mul(const mp_int *a, const mp_int *b, mp_int *p) (called through (tclTomMathStubsPtr -> tclBN_mp_mul))
 extern c fn TclBN_mp_mul named "botlish_tclstubs_TclBN_mp_mul"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    b: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    p: ffi::c::Ptr[tclstubs::ctypes::mp_int]
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    b: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    p: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
+) -> std::ffi::c::Int
 
 # C: mp_err TclBN_mp_mul_d(const mp_int *a, mp_digit b, mp_int *p) (called through (tclTomMathStubsPtr -> tclBN_mp_mul_d))
 extern c fn TclBN_mp_mul_d named "botlish_tclstubs_TclBN_mp_mul_d"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    b: ffi::c::ULong,
-    p: ffi::c::Ptr[tclstubs::ctypes::mp_int]
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    b: std::ffi::c::ULong,
+    p: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
+) -> std::ffi::c::Int
 
 # C: mp_err TclBN_mp_mul_2(const mp_int *a, mp_int *p) (called through (tclTomMathStubsPtr -> tclBN_mp_mul_2))
 extern c fn TclBN_mp_mul_2 named "botlish_tclstubs_TclBN_mp_mul_2"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    p: ffi::c::Ptr[tclstubs::ctypes::mp_int]
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    p: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
+) -> std::ffi::c::Int
 
 # C: mp_err TclBN_mp_mul_2d(const mp_int *a, int d, mp_int *p) (called through (tclTomMathStubsPtr -> tclBN_mp_mul_2d))
 extern c fn TclBN_mp_mul_2d named "botlish_tclstubs_TclBN_mp_mul_2d"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    d: ffi::c::Int,
-    p: ffi::c::Ptr[tclstubs::ctypes::mp_int]
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    d: std::ffi::c::Int,
+    p: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
+) -> std::ffi::c::Int
 
 # C: mp_err TclBN_mp_neg(const mp_int *a, mp_int *b) (called through (tclTomMathStubsPtr -> tclBN_mp_neg))
 extern c fn TclBN_mp_neg named "botlish_tclstubs_TclBN_mp_neg"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    b: ffi::c::Ptr[tclstubs::ctypes::mp_int]
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    b: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
+) -> std::ffi::c::Int
 
 # C: mp_err TclBN_mp_or(const mp_int *a, const mp_int *b, mp_int *c) (called through (tclTomMathStubsPtr -> tclBN_mp_or))
 extern c fn TclBN_mp_or named "botlish_tclstubs_TclBN_mp_or"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    b: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    c: ffi::c::Ptr[tclstubs::ctypes::mp_int]
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    b: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    c: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
+) -> std::ffi::c::Int
 
 # C: mp_err TclBN_mp_radix_size(const mp_int *a, int radix, int *size) (called through (tclTomMathStubsPtr -> tclBN_mp_radix_size))
 extern c fn TclBN_mp_radix_size named "botlish_tclstubs_TclBN_mp_radix_size"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    radix: ffi::c::Int,
-    size: ffi::c::Ptr[ffi::c::Int]
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    radix: std::ffi::c::Int,
+    size: std::ffi::c::Ptr[std::ffi::c::Int]
+) -> std::ffi::c::Int
 
 # C: mp_err TclBN_mp_read_radix(mp_int *a, const char *str, int radix) (called through (tclTomMathStubsPtr -> tclBN_mp_read_radix))
 extern c fn TclBN_mp_read_radix named "botlish_tclstubs_TclBN_mp_read_radix"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    str: ffi::c::Ptr[ffi::c::Char],
-    radix: ffi::c::Int
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    str: std::ffi::c::Ptr[std::ffi::c::Char],
+    radix: std::ffi::c::Int
+) -> std::ffi::c::Int
 
 # C: void TclBN_mp_rshd(mp_int *a, int shift) (called through (tclTomMathStubsPtr -> tclBN_mp_rshd))
 extern c fn TclBN_mp_rshd named "botlish_tclstubs_TclBN_mp_rshd"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    shift: ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    shift: std::ffi::c::Int
 ) -> unit
 
 # C: mp_err TclBN_mp_shrink(mp_int *a) (called through (tclTomMathStubsPtr -> tclBN_mp_shrink))
 extern c fn TclBN_mp_shrink named "botlish_tclstubs_TclBN_mp_shrink"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int]
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
+) -> std::ffi::c::Int
 
 # C: mp_err TclBN_mp_sqrt(const mp_int *a, mp_int *b) (called through (tclTomMathStubsPtr -> tclBN_mp_sqrt))
 extern c fn TclBN_mp_sqrt named "botlish_tclstubs_TclBN_mp_sqrt"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    b: ffi::c::Ptr[tclstubs::ctypes::mp_int]
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    b: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
+) -> std::ffi::c::Int
 
 # C: mp_err TclBN_mp_sub(const mp_int *a, const mp_int *b, mp_int *c) (called through (tclTomMathStubsPtr -> tclBN_mp_sub))
 extern c fn TclBN_mp_sub named "botlish_tclstubs_TclBN_mp_sub"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    b: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    c: ffi::c::Ptr[tclstubs::ctypes::mp_int]
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    b: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    c: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
+) -> std::ffi::c::Int
 
 # C: mp_err TclBN_mp_sub_d(const mp_int *a, mp_digit b, mp_int *c) (called through (tclTomMathStubsPtr -> tclBN_mp_sub_d))
 extern c fn TclBN_mp_sub_d named "botlish_tclstubs_TclBN_mp_sub_d"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    b: ffi::c::ULong,
-    c: ffi::c::Ptr[tclstubs::ctypes::mp_int]
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    b: std::ffi::c::ULong,
+    c: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
+) -> std::ffi::c::Int
 
 # C: size_t TclBN_mp_ubin_size(const mp_int *a) (called through (tclTomMathStubsPtr -> tclBN_mp_ubin_size))
 extern c fn TclBN_mp_ubin_size named "botlish_tclstubs_TclBN_mp_ubin_size"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int]
-) -> ffi::c::ULong
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
+) -> std::ffi::c::ULong
 
 # C: mp_err TclBN_mp_xor(const mp_int *a, const mp_int *b, mp_int *c) (called through (tclTomMathStubsPtr -> tclBN_mp_xor))
 extern c fn TclBN_mp_xor named "botlish_tclstubs_TclBN_mp_xor"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    b: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    c: ffi::c::Ptr[tclstubs::ctypes::mp_int]
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    b: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    c: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
+) -> std::ffi::c::Int
 
 # C: void TclBN_mp_zero(mp_int *a) (called through (tclTomMathStubsPtr -> tclBN_mp_zero))
 extern c fn TclBN_mp_zero named "botlish_tclstubs_TclBN_mp_zero"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int]
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
 ) -> unit
 
 # C: int TclBN_mp_cnt_lsb(const mp_int *a) (called through (tclTomMathStubsPtr -> tclBN_mp_cnt_lsb))
 extern c fn TclBN_mp_cnt_lsb named "botlish_tclstubs_TclBN_mp_cnt_lsb"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int]
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
+) -> std::ffi::c::Int
 
 # C: int TclBN_mp_init_i64(mp_int *bignum, int64_t initVal) (called through (tclTomMathStubsPtr -> tclBN_mp_init_i64))
 extern c fn TclBN_mp_init_i64 named "botlish_tclstubs_TclBN_mp_init_i64"(
-    bignum: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    initVal: ffi::c::Long
-) -> ffi::c::Int
+    bignum: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    initVal: std::ffi::c::Long
+) -> std::ffi::c::Int
 
 # C: int TclBN_mp_init_u64(mp_int *bignum, uint64_t initVal) (called through (tclTomMathStubsPtr -> tclBN_mp_init_u64))
 extern c fn TclBN_mp_init_u64 named "botlish_tclstubs_TclBN_mp_init_u64"(
-    bignum: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    initVal: ffi::c::ULong
-) -> ffi::c::Int
+    bignum: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    initVal: std::ffi::c::ULong
+) -> std::ffi::c::Int
 
 # C: void TclBN_mp_set_u64(mp_int *a, uint64_t i) (called through (tclTomMathStubsPtr -> tclBN_mp_set_u64))
 extern c fn TclBN_mp_set_u64 named "botlish_tclstubs_TclBN_mp_set_u64"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    i: ffi::c::ULong
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    i: std::ffi::c::ULong
 ) -> unit
 
 # C: uint64_t TclBN_mp_get_mag_u64(const mp_int *a) (called through (tclTomMathStubsPtr -> tclBN_mp_get_mag_u64))
 extern c fn TclBN_mp_get_mag_u64 named "botlish_tclstubs_TclBN_mp_get_mag_u64"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int]
-) -> ffi::c::ULong
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
+) -> std::ffi::c::ULong
 
 # C: void TclBN_mp_set_i64(mp_int *a, int64_t i) (called through (tclTomMathStubsPtr -> tclBN_mp_set_i64))
 extern c fn TclBN_mp_set_i64 named "botlish_tclstubs_TclBN_mp_set_i64"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    i: ffi::c::Long
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    i: std::ffi::c::Long
 ) -> unit
 
 # C: mp_err TclBN_mp_unpack(mp_int *rop, size_t count, mp_order order, size_t size, mp_endian endian, size_t nails, const void *op) (called through (tclTomMathStubsPtr -> tclBN_mp_unpack))
 extern c fn TclBN_mp_unpack named "botlish_tclstubs_TclBN_mp_unpack"(
-    rop: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    count: ffi::c::ULong,
-    order: ffi::c::Int,
-    size: ffi::c::ULong,
-    endian: ffi::c::Int,
-    nails: ffi::c::ULong,
-    op: ffi::c::Ptr[ffi::c::Void]
-) -> ffi::c::Int
+    rop: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    count: std::ffi::c::ULong,
+    order: std::ffi::c::Int,
+    size: std::ffi::c::ULong,
+    endian: std::ffi::c::Int,
+    nails: std::ffi::c::ULong,
+    op: std::ffi::c::Ptr[std::ffi::c::Void]
+) -> std::ffi::c::Int
 
 # C: mp_err TclBN_mp_pack(void *rop, size_t maxcount, size_t *written, mp_order order, size_t size, mp_endian endian, size_t nails, const mp_int *op) (called through (tclTomMathStubsPtr -> tclBN_mp_pack))
 extern c fn TclBN_mp_pack named "botlish_tclstubs_TclBN_mp_pack"(
-    rop: ffi::c::Ptr[ffi::c::Void],
-    maxcount: ffi::c::ULong,
-    written: ffi::c::Ptr[ffi::c::ULong],
-    order: ffi::c::Int,
-    size: ffi::c::ULong,
-    endian: ffi::c::Int,
-    nails: ffi::c::ULong,
-    op: ffi::c::Ptr[tclstubs::ctypes::mp_int]
-) -> ffi::c::Int
+    rop: std::ffi::c::Ptr[std::ffi::c::Void],
+    maxcount: std::ffi::c::ULong,
+    written: std::ffi::c::Ptr[std::ffi::c::ULong],
+    order: std::ffi::c::Int,
+    size: std::ffi::c::ULong,
+    endian: std::ffi::c::Int,
+    nails: std::ffi::c::ULong,
+    op: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
+) -> std::ffi::c::Int
 
 # C: mp_err TclBN_mp_signed_rsh(const mp_int *a, int b, mp_int *c) (called through (tclTomMathStubsPtr -> tclBN_mp_signed_rsh))
 extern c fn TclBN_mp_signed_rsh named "botlish_tclstubs_TclBN_mp_signed_rsh"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    b: ffi::c::Int,
-    c: ffi::c::Ptr[tclstubs::ctypes::mp_int]
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    b: std::ffi::c::Int,
+    c: std::ffi::c::Ptr[tclstubs::ctypes::mp_int]
+) -> std::ffi::c::Int
 
 # C: size_t TclBN_mp_pack_count(const mp_int *a, size_t nails, size_t size) (called through (tclTomMathStubsPtr -> tclBN_mp_pack_count))
 extern c fn TclBN_mp_pack_count named "botlish_tclstubs_TclBN_mp_pack_count"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    nails: ffi::c::ULong,
-    size: ffi::c::ULong
-) -> ffi::c::ULong
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    nails: std::ffi::c::ULong,
+    size: std::ffi::c::ULong
+) -> std::ffi::c::ULong
 
 # C: int TclBN_mp_to_ubin(const mp_int *a, unsigned char *buf, size_t maxlen, size_t *written) (called through (tclTomMathStubsPtr -> tclBN_mp_to_ubin))
 extern c fn TclBN_mp_to_ubin named "botlish_tclstubs_TclBN_mp_to_ubin"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    buf: ffi::c::Ptr[ffi::c::UChar],
-    maxlen: ffi::c::ULong,
-    written: ffi::c::Ptr[ffi::c::ULong]
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    buf: std::ffi::c::Ptr[std::ffi::c::UChar],
+    maxlen: std::ffi::c::ULong,
+    written: std::ffi::c::Ptr[std::ffi::c::ULong]
+) -> std::ffi::c::Int
 
 # C: int TclBN_mp_to_radix(const mp_int *a, char *str, size_t maxlen, size_t *written, int radix) (called through (tclTomMathStubsPtr -> tclBN_mp_to_radix))
 extern c fn TclBN_mp_to_radix named "botlish_tclstubs_TclBN_mp_to_radix"(
-    a: ffi::c::Ptr[tclstubs::ctypes::mp_int],
-    str: ffi::c::Ptr[ffi::c::Char],
-    maxlen: ffi::c::ULong,
-    written: ffi::c::Ptr[ffi::c::ULong],
-    radix: ffi::c::Int
-) -> ffi::c::Int
+    a: std::ffi::c::Ptr[tclstubs::ctypes::mp_int],
+    str: std::ffi::c::Ptr[std::ffi::c::Char],
+    maxlen: std::ffi::c::ULong,
+    written: std::ffi::c::Ptr[std::ffi::c::ULong],
+    radix: std::ffi::c::Int
+) -> std::ffi::c::Int

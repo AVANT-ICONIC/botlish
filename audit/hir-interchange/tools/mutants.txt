@@ -57,9 +57,9 @@
 @@ fingerprint-misses-hir the fingerprint leaves out hir/: a changed analysis keeps every text valid
 ## hir/interchange.tcl
 <<<<
-    foreach dir {core hir surface lib} {
+    foreach dir {core hir surface stdlib} {
 ====
-    foreach dir {core surface lib} {
+    foreach dir {core surface stdlib} {
 >>>>
 
 @@ fingerprint-names-only the fingerprint reads the front end's file names and sizes, not their contents
@@ -161,7 +161,7 @@
 ====
 >>>>
 
-@@ deps-ignore-application-paths an entry's dependencies leave out the application-module paths of its imports: an edited application module, or a new application file that collides with a standard import, hits the old HIR
+@@ deps-ignore-application-paths an entry's dependencies leave out the application-module paths of its imports: an edited application module, or a new application file std/NAME.bot that would be the standard namespace an import names (RESERVED-NAMESPACE), hits the old HIR
 ## surface/cache.tcl
 <<<<
             if {$root ne ""} {

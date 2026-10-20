@@ -22,9 +22,9 @@ set ::hashtableSource [regsub {\nsample\(\)\n$} [corpus::text hashtable] "\n"]
 
 # TEXT appended after the HashTable implementation, compiled to HIR.
 proc sourceHir {text} {
-    # The test drivers use str::concat/str::length; the implementation's own
-    # header (import list, import mutable_array) follows this line.
-    return [surface::compile "import str\n$::hashtableSource\n$text\n" t.bot -strict 0]
+    # The test drivers use std::str::concat/std::str::length; the implementation's own
+    # header (import std::list, import std::mutable_array) follows this line.
+    return [surface::compile "import std::str\n$::hashtableSource\n$text\n" t.bot -strict 0]
 }
 
 proc sourceIR {text} {
@@ -116,8 +116,8 @@ test ht-equal-key-1 {two separately allocated but equal String keys are the same
     native {
 fn f():
     t0 = ht_new()
-    t1 = ht_set(t0, str::concat("a", "b"), 1)
-    t2 = ht_set(t1, str::concat("a", "b"), 2)
+    t1 = ht_set(t0, std::str::concat("a", "b"), 1)
+    t2 = ht_set(t1, std::str::concat("a", "b"), 2)
     [ht_get(t2, "ab"), ht_size(t2)]
 f()
     }
@@ -125,14 +125,14 @@ f()
 
 # A supplementary-plane character (outside the Basic Multilingual Plane) is
 # one Unicode scalar value, so hash(), ==, ht_get and ht_contains agree on a
-# key built from one across every backend, and str::length() sees one character,
+# key built from one across every backend, and std::str::length() sees one character,
 # never a surrogate pair (core/core.tcl requires Tcl 9 for exactly this).
-test ht-astral-key-1 {a supplementary-plane character key: hash/==/get/contains agree, and str::length() is one scalar value} -body {
-    parity "fn f():\n    t0 = ht_new()\n    t1 = ht_set(t0, str::concat(\"x\", \"\U0001F642\"), 1)\n    \[ht_get(t1, \"x\U0001F642\"), ht_contains(t1, \"x\U0001F642\"), ht_contains(t1, \"x\U0001F643\"), str::length(\"\U0001F642\")\]\nf()\n"
+test ht-astral-key-1 {a supplementary-plane character key: hash/==/get/contains agree, and std::str::length() is one scalar value} -body {
+    parity "fn f():\n    t0 = ht_new()\n    t1 = ht_set(t0, std::str::concat(\"x\", \"\U0001F642\"), 1)\n    \[ht_get(t1, \"x\U0001F642\"), ht_contains(t1, \"x\U0001F642\"), ht_contains(t1, \"x\U0001F643\"), std::str::length(\"\U0001F642\")\]\nf()\n"
 } -result same
 
 test ht-astral-key-2 {a supplementary-plane character key: the exact value on the native backend} -body {
-    native "fn f():\n    t0 = ht_new()\n    t1 = ht_set(t0, str::concat(\"x\", \"\U0001F642\"), 1)\n    \[ht_get(t1, \"x\U0001F642\"), ht_contains(t1, \"x\U0001F642\"), ht_contains(t1, \"x\U0001F643\"), str::length(\"\U0001F642\")\]\nf()\n"
+    native "fn f():\n    t0 = ht_new()\n    t1 = ht_set(t0, std::str::concat(\"x\", \"\U0001F642\"), 1)\n    \[ht_get(t1, \"x\U0001F642\"), ht_contains(t1, \"x\U0001F642\"), ht_contains(t1, \"x\U0001F643\"), std::str::length(\"\U0001F642\")\]\nf()\n"
 } -result {value {[1, true, false, 1]}}
 
 test ht-int-keys-1 {Int keys work, distinct from String keys of the same text} -body {
@@ -458,7 +458,7 @@ f()
     dict get $report byKind MutableArray allocations
 } -result 4
 
-test ht-alloc-resize-2 {a resize causes no mutable_array::copy: every entry is rehashed, not bulk-copied (req #23)} -body {
+test ht-alloc-resize-2 {a resize causes no std::mutable_array::copy: every entry is rehashed, not bulk-copied (req #23)} -body {
     set text {
 fn build(t, i, n):
     if i >= n:
@@ -529,7 +529,7 @@ test ht-gc-stress-1 {heap String keys and values survive GC while live in the ta
 fn label(prefix, i):
     if i == 0:
         return prefix
-    str::concat(label(prefix, i - 1), "x")
+    std::str::concat(label(prefix, i - 1), "x")
 
 fn build(t, i, n):
     if i >= n:
@@ -551,7 +551,7 @@ test ht-gc-stress-2 {a deleted entry's value is not kept artificially live, and 
 fn build(t, i, n):
     if i >= n:
         return t
-    build(ht_set(t, i, str::concat("val", "ue")), i + 1, n)
+    build(ht_set(t, i, std::str::concat("val", "ue")), i + 1, n)
 
 fn deleteEvens(t, i, n):
     if i >= n:

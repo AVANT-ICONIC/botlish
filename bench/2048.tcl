@@ -9,7 +9,7 @@
 # on every backend, with a move count per backend (defaults: interp 300,
 # compile 3000, both native backends 100000). The program is compiled once
 # per move count, with the engine beside it as its application module (the
-# engine is not in lib/).
+# engine is not in stdlib/).
 #
 # Reported per backend: the best of RUNS in-process executions (compilation
 # excluded: the Tcl backends run in this process; native::measure times the

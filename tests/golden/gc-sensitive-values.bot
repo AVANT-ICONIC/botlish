@@ -6,7 +6,7 @@
 #
 #   * a String is a sequence of Unicode scalar values whatever its width
 #     (ASCII, Latin-1, BMP, astral, a base letter plus a combining mark is
-#     two): str::length, str::concat, str::substring and `==` agree on it,
+#     two): std::str::length, std::str::concat, std::str::substring and `==` agree on it,
 #     at every substring boundary, through concat chains and at megabyte
 #     scale; an out-of-range substring is the declared UpperOverrun its
 #     handler sees;
@@ -51,14 +51,14 @@
 # exact-value fact of a literal stands in for the run-time work.
 #
 # Imports: compiler and test are the framework's; str for the String
-# operations under test (str::length, ::concat, ::substring, the concat and
-# char_at methods); list for list::length; mutable_array for the
+# operations under test (std::str::length, ::concat, ::substring, the concat and
+# char_at methods); list for std::list::length; mutable_array for the
 # MutableArray slots of strings-live-across-allocation-and-storage.
-import compiler
-import list
-import mutable_array
-import str
-import test
+import std::compiler
+import std::list
+import std::mutable_array
+import std::str
+import std::test
 
 # ---------------------------------------------------------------------------
 # Declarations the tests need (top-level only).
@@ -73,7 +73,7 @@ struct StringPair:
 # tests' build(n) is "xy" repeated n times exactly when its length is 2n
 # and this is []. (Read with char_at, never with the concat under test.)
 fn xy_misplacements(s: str) -> List[int]:
-    loop i from 0 to str::length(s):
+    loop i from 0 to std::str::length(s):
         c = s.char_at(i):
             on IndexNotFound:
                 '?'
@@ -94,38 +94,38 @@ fn register_string_parity_tests():
     # empty, and a computed astral-ellipsis String, through length,
     # equality with "", concat and a one-character substring. (The Tcl
     # test's NUL probe stays in Tcl: see the header.)
-    fn unicode_classes() errors compiler::CompilerError:
+    fn unicode_classes() errors std::compiler::CompilerError:
         static compile:
             fn probe(s):
-                [str::length(s), s == "", str::concat(s, "!"), str::substring(str::concat(s, "x"), 0, 1)]
+                [std::str::length(s), s == "", std::str::concat(s, "!"), std::str::substring(std::str::concat(s, "x"), 0, 1)]
 
-            [probe("a"), probe("é"), probe("…"), probe("猫"), probe("😀"), probe("é"), probe(""), probe(str::concat("😀", "…"))]
-    test::value("strings-parity-unicode-classes", [[1, false, "a!", "a"], [1, false, "é!", "é"], [1, false, "…!", "…"], [1, false, "猫!", "猫"], [1, false, "😀!", "😀"], [2, false, "é!", "e"], [0, true, "!", "x"], [2, false, "😀…!", "😀"]], unicode_classes)
+            [probe("a"), probe("é"), probe("…"), probe("猫"), probe("😀"), probe("é"), probe(""), probe(std::str::concat("😀", "…"))]
+    std::test::value("strings-parity-unicode-classes", [[1, false, "a!", "a"], [1, false, "é!", "é"], [1, false, "…!", "…"], [1, false, "猫!", "猫"], [1, false, "😀!", "😀"], [2, false, "é!", "e"], [0, true, "!", "x"], [2, false, "😀…!", "😀"]], unicode_classes)
 
     # strings-parity-substring-boundaries: slices at 0, at the end, empty
     # and full, over ASCII and non-ASCII bases (multi-byte slices).
-    fn substring_boundaries() errors compiler::CompilerError:
+    fn substring_boundaries() errors std::compiler::CompilerError:
         static compile:
             fn cuts(s) errors LowerUnderrun, UpperOverrun:
-                n = str::length(s)
-                [str::substring(s, 0, 0), str::substring(s, 0, n), str::substring(s, n, n), str::substring(s, 1, n), str::substring(s, 0, n - 1)]
+                n = std::str::length(s)
+                [std::str::substring(s, 0, 0), std::str::substring(s, 0, n), std::str::substring(s, n, n), std::str::substring(s, 1, n), std::str::substring(s, 0, n - 1)]
 
             [cuts("hello"), cuts("a😀…é"), cuts("é")]
-    test::value("strings-parity-substring-boundaries", [["", "hello", "", "ello", "hell"], ["", "a😀…é", "", "😀…é", "a😀…"], ["", "é", "", "", ""]], substring_boundaries)
+    std::test::value("strings-parity-substring-boundaries", [["", "hello", "", "ello", "hell"], ["", "a😀…é", "", "😀…é", "a😀…"], ["", "é", "", "", ""]], substring_boundaries)
 
     # strings-parity-concat-shapes: concat chains of every width
     # accumulating a 60-character String over 20 recursive steps; its ends
     # and its equality with a second build.
-    fn concat_shapes() errors compiler::CompilerError:
+    fn concat_shapes() errors std::compiler::CompilerError:
         static compile:
             fn build(n, acc):
                 if n == 0:
                     acc
                 else:
-                    build(n - 1, str::concat(str::concat("😀", acc), str::concat("é", "…")))
+                    build(n - 1, std::str::concat(std::str::concat("😀", acc), std::str::concat("é", "…")))
 
             fn shapes(s) errors LowerUnderrun, UpperOverrun:
-                [str::length(s), str::substring(s, 0, 4), str::substring(s, 56, 60), s == build(20, "")]
+                [std::str::length(s), std::str::substring(s, 0, 4), std::str::substring(s, 56, 60), s == build(20, "")]
 
             r = shapes(build(20, "")):
                 on LowerUnderrun:
@@ -133,35 +133,35 @@ fn register_string_parity_tests():
                 on UpperOverrun:
                     []
             r
-    test::value("strings-parity-concat-shapes", [60, "😀😀😀😀", "é…é…", true], concat_shapes)
+    std::test::value("strings-parity-concat-shapes", [60, "😀😀😀😀", "é…é…", true], concat_shapes)
 
     # strings-parity-errors-keep-their-messages (renamed: no message is
     # compared, in Tcl either): a substring past the end of a computed
     # two-character String fails with the declared UpperOverrun, and its
     # handler sees it.
-    fn substring_error_handled() errors compiler::CompilerError:
+    fn substring_error_handled() errors std::compiler::CompilerError:
         static compile:
             fn cut(s) errors UpperOverrun:
-                str::substring(str::concat(s, "é"), 0, 9)
+                std::str::substring(std::str::concat(s, "é"), 0, 9)
 
             r = cut("😀"):
                 on UpperOverrun:
                     "UpperOverrun"
             r
-    test::value("strings-parity-substring-error-handled", "UpperOverrun", substring_error_handled)
+    std::test::value("strings-parity-substring-error-handled", "UpperOverrun", substring_error_handled)
 
     # strings-parity-large: a String of 2097152 characters built by 20
     # doublings has the right length and ends.
-    fn large() errors compiler::CompilerError:
+    fn large() errors std::compiler::CompilerError:
         static compile:
             fn dbl(n, s):
                 if n == 0:
                     s
                 else:
-                    dbl(n - 1, str::concat(s, s))
+                    dbl(n - 1, std::str::concat(s, s))
 
             fn ends(s) errors LowerUnderrun, UpperOverrun:
-                [str::length(s), str::substring(s, 0, 3), str::substring(s, str::length(s) - 2, str::length(s))]
+                [std::str::length(s), std::str::substring(s, 0, 3), std::str::substring(s, std::str::length(s) - 2, std::str::length(s))]
 
             r = ends(dbl(20, "é…")):
                 on LowerUnderrun:
@@ -169,7 +169,7 @@ fn register_string_parity_tests():
                 on UpperOverrun:
                     []
             r
-    test::value("strings-parity-large", [2097152, "é…é", "é…"], large)
+    std::test::value("strings-parity-large", [2097152, "é…é", "é…"], large)
 
 # ---------------------------------------------------------------------------
 # string-allocation.test, (3) Strings live across allocation
@@ -178,13 +178,13 @@ fn register_string_gc_tests():
     # strings-gc-live-across-allocation-and-storage: Strings of every width
     # held in a List, a struct (StringPair), a MutableArray and a captured
     # local while 30 recursive steps allocate garbage.
-    fn live_across_allocation_and_storage() errors compiler::CompilerError:
+    fn live_across_allocation_and_storage() errors std::compiler::CompilerError:
         static compile:
             fn churn(n):
                 if n == 0:
                     0
                 else:
-                    str::length(str::concat(str::concat("x", "y"), "z")) + churn(n - 1)
+                    std::str::length(std::str::concat(std::str::concat("x", "y"), "z")) + churn(n - 1)
 
             fn make_getter(s):
                 fn get(unused):
@@ -193,14 +193,14 @@ fn register_string_gc_tests():
                 get
 
             fn work(a, b) errors UpperOverrun:
-                xs = [a, b, str::concat(a, b)]
-                p = StringPair {left: str::concat(b, a), right: "k"}
-                m = mutable_array::allocate(2)
-                mutable_array::set(m, 0, str::concat(a, "!"))
-                mutable_array::set(m, 1, str::substring(str::concat(a, b), 0, 1))
-                g = make_getter(str::concat(b, b))
+                xs = [a, b, std::str::concat(a, b)]
+                p = StringPair {left: std::str::concat(b, a), right: "k"}
+                m = std::mutable_array::allocate(2)
+                std::mutable_array::set(m, 0, std::str::concat(a, "!"))
+                std::mutable_array::set(m, 1, std::str::substring(std::str::concat(a, b), 0, 1))
+                g = make_getter(std::str::concat(b, b))
                 c = churn(30)
-                [xs, p.left, p.right, mutable_array::at(m, 0), mutable_array::at(m, 1), g(0), c]
+                [xs, p.left, p.right, std::mutable_array::at(m, 0), std::mutable_array::at(m, 1), g(0), c]
 
             fn all() errors UpperOverrun:
                 [work("é", "…"), work("😀", "a"), work("", "bc")]
@@ -209,23 +209,23 @@ fn register_string_gc_tests():
                 on UpperOverrun:
                     []
             r
-    test::value("strings-live-across-allocation-and-storage", [[["é", "…", "é…"], "…é", "k", "é!", "é", "……", 90], [["😀", "a", "😀a"], "a😀", "k", "😀!", "😀", "aa", 90], [["", "bc", "bc"], "bc", "k", "!", "b", "bcbc", 90]], live_across_allocation_and_storage)
+    std::test::value("strings-live-across-allocation-and-storage", [[["é", "…", "é…"], "…é", "k", "é!", "é", "……", 90], [["😀", "a", "😀a"], "a😀", "k", "😀!", "😀", "aa", 90], [["", "bc", "bc"], "bc", "k", "!", "b", "bcbc", 90]], live_across_allocation_and_storage)
 
     # strings-gc-recursive-allocating-frames: a String parameter and result
     # across 150 recursive frames, each allocating before and after its
     # recursive call.
-    fn recursive_allocating_frames() errors compiler::CompilerError:
+    fn recursive_allocating_frames() errors std::compiler::CompilerError:
         static compile:
             fn rec(n, s) errors LowerUnderrun, UpperOverrun:
                 if n == 0:
                     s
                 else:
-                    t = str::concat(s, "…")
+                    t = std::str::concat(s, "…")
                     u = rec(n - 1, t)
-                    str::concat(str::substring(u, 0, 1), str::substring(u, str::length(u) - 1, str::length(u)))
+                    std::str::concat(std::str::substring(u, 0, 1), std::str::substring(u, std::str::length(u) - 1, std::str::length(u)))
 
             fn both() errors LowerUnderrun, UpperOverrun:
-                [rec(150, "😀"), str::length(rec(150, "ab"))]
+                [rec(150, "😀"), std::str::length(rec(150, "ab"))]
 
             r = both():
                 on LowerUnderrun:
@@ -233,27 +233,27 @@ fn register_string_gc_tests():
                 on UpperOverrun:
                     []
             r
-    test::value("strings-recursive-allocating-frames", ["😀…", 2], recursive_allocating_frames)
+    std::test::value("strings-recursive-allocating-frames", ["😀…", 2], recursive_allocating_frames)
 
     # strings-gc-large-string-survives-collections: a String of 131072
     # characters stays intact across the collections its own doubling and a
     # 2000-deep recursion of garbage trigger (unforced, in Tcl too).
-    fn large_string_survives_collections() errors compiler::CompilerError:
+    fn large_string_survives_collections() errors std::compiler::CompilerError:
         static compile:
             fn dbl(n, s):
                 if n == 0:
                     s
                 else:
-                    dbl(n - 1, str::concat(s, s))
+                    dbl(n - 1, std::str::concat(s, s))
 
             fn churn(n):
                 if n == 0:
                     0
                 else:
-                    str::length(str::concat("a", "b")) + churn(n - 1)
+                    std::str::length(std::str::concat("a", "b")) + churn(n - 1)
 
             fn ends(big, c) errors LowerUnderrun, UpperOverrun:
-                [str::length(big), str::substring(big, 0, 4), str::substring(big, str::length(big) - 2, str::length(big)), c]
+                [std::str::length(big), std::str::substring(big, 0, 4), std::str::substring(big, std::str::length(big) - 2, std::str::length(big)), c]
 
             r = ends(dbl(16, "é…"), churn(2000)):
                 on LowerUnderrun:
@@ -261,7 +261,7 @@ fn register_string_gc_tests():
                 on UpperOverrun:
                     []
             r
-    test::value("strings-gc-large-string-survives-collections", [131072, "é…é…", "é…", 4000], large_string_survives_collections)
+    std::test::value("strings-gc-large-string-survives-collections", [131072, "é…é…", "é…", 4000], large_string_survives_collections)
 
 # ---------------------------------------------------------------------------
 # string-allocation.test, (4) the programs of its standalone executables
@@ -271,7 +271,7 @@ fn register_string_executable_tests():
     # built with -short-string-opt 0 stays in Tcl): the empty String and an
     # astral one, chosen by a flag and forwarded through a call, keep their
     # lengths, concat and a one-character slice.
-    fn forwarded_empty_and_astral() errors compiler::CompilerError:
+    fn forwarded_empty_and_astral() errors std::compiler::CompilerError:
         static compile:
             fn pick(flag):
                 if flag:
@@ -282,11 +282,11 @@ fn register_string_executable_tests():
             fn fwd(s):
                 s
 
-            tail = str::substring(str::concat("a", fwd(pick(false))), 1, 2):
+            tail = std::str::substring(std::str::concat("a", fwd(pick(false))), 1, 2):
                 on UpperOverrun:
                     "none"
-            [str::length(fwd(pick(true))), str::length(fwd(pick(false))), str::concat(fwd(pick(false)), "…"), tail]
-    test::value("strings-forwarded-empty-and-astral", [0, 1, "😀…", "😀"], forwarded_empty_and_astral)
+            [std::str::length(fwd(pick(true))), std::str::length(fwd(pick(false))), std::str::concat(fwd(pick(false)), "…"), tail]
+    std::test::value("strings-forwarded-empty-and-astral", [0, 1, "😀…", "😀"], forwarded_empty_and_astral)
 
 fn register_string_allocation_tests():
     register_string_parity_tests()
@@ -302,7 +302,7 @@ fn register_string_allocation_tests():
 fn register_native_stack_map_tests(choose_build: bool):
     # stack-map-fib-3 and -4 (the same program, the second under GC stress):
     # fib's naive double recursion, every recursive call a safepoint.
-    fn fib() errors compiler::CompilerError:
+    fn fib() errors std::compiler::CompilerError:
         static compile:
             fn fib(n):
                 if n < 2:
@@ -310,45 +310,45 @@ fn register_native_stack_map_tests(choose_build: bool):
                 fib(n - 1) + fib(n - 2)
 
             fib(15)
-    test::value("stack-map-fib", 610, fib)
+    std::test::value("stack-map-fib", 610, fib)
 
     # stack-map-deep-1 and -2 (the same program, the second under GC
     # stress), and -3 at depth 200: a non-tail recursion whose every frame
     # holds its own freshly allocated "xy" while deeper frames recurse. The
     # value is "xy" repeated n times: [its length, its misplaced positions].
-    fn deep_40() errors compiler::CompilerError:
+    fn deep_40() errors std::compiler::CompilerError:
         static compile:
             fn build(n):
                 if n < 1:
                     return ""
-                prefix = str::concat("x", "y")
-                str::concat(prefix, build(n - 1))
+                prefix = std::str::concat("x", "y")
+                std::str::concat(prefix, build(n - 1))
 
             s = build(40)
-            [str::length(s), xy_misplacements(s)]
-    test::value("stack-map-deep-recursion/depth-40", [80, []], deep_40)
+            [std::str::length(s), xy_misplacements(s)]
+    std::test::value("stack-map-deep-recursion/depth-40", [80, []], deep_40)
 
-    fn deep_200() errors compiler::CompilerError:
+    fn deep_200() errors std::compiler::CompilerError:
         static compile:
             fn build(n):
                 if n < 1:
                     return ""
-                prefix = str::concat("x", "y")
-                str::concat(prefix, build(n - 1))
+                prefix = std::str::concat("x", "y")
+                std::str::concat(prefix, build(n - 1))
 
             s = build(200)
-            [str::length(s), xy_misplacements(s)]
-    test::value("stack-map-deep-recursion/depth-200", [400, []], deep_200)
+            [std::str::length(s), xy_misplacements(s)]
+    std::test::value("stack-map-deep-recursion/depth-200", [400, []], deep_200)
 
     # stack-map-callvalue-boundary-1: the same build(40), reached through a
     # function value chosen at run time (pick) and called by apply.
-    fn callvalue_dynamic_callee() errors compiler::CompilerError:
+    fn callvalue_dynamic_callee() errors std::compiler::CompilerError:
         static compile:
             fn build(n):
                 if n < 1:
                     return ""
-                prefix = str::concat("x", "y")
-                str::concat(prefix, build(n - 1))
+                prefix = std::str::concat("x", "y")
+                std::str::concat(prefix, build(n - 1))
 
             fn other(n):
                 "z"
@@ -363,42 +363,42 @@ fn register_native_stack_map_tests(choose_build: bool):
                 f(x)
 
             s = apply(pick(choose_build), 40)
-            [str::length(s), xy_misplacements(s)]
-    test::value("stack-map-callvalue-boundary/dynamic-callee", [80, []], callvalue_dynamic_callee)
+            [std::str::length(s), xy_misplacements(s)]
+    std::test::value("stack-map-callvalue-boundary/dynamic-callee", [80, []], callvalue_dynamic_callee)
 
     # stack-map-callvalue-boundary-3: ... and through the exact function
     # value build.
-    fn callvalue_exact_callee() errors compiler::CompilerError:
+    fn callvalue_exact_callee() errors std::compiler::CompilerError:
         static compile:
             fn build(n):
                 if n < 1:
                     return ""
-                prefix = str::concat("x", "y")
-                str::concat(prefix, build(n - 1))
+                prefix = std::str::concat("x", "y")
+                std::str::concat(prefix, build(n - 1))
 
             fn apply(f, x):
                 f(x)
 
             s = apply(build, 40)
-            [str::length(s), xy_misplacements(s)]
-    test::value("stack-map-callvalue-boundary/exact-callee", [80, []], callvalue_exact_callee)
+            [std::str::length(s), xy_misplacements(s)]
+    std::test::value("stack-map-callvalue-boundary/exact-callee", [80, []], callvalue_exact_callee)
 
     # stack-map-slot-reuse-1: two sequential values, each live across its
     # own call, both intact.
-    fn slot_reuse() errors compiler::CompilerError:
+    fn slot_reuse() errors std::compiler::CompilerError:
         static compile:
             fn id(x):
                 x
 
             fn f(n):
-                a = str::concat("phase-one-", "value")
+                a = std::str::concat("phase-one-", "value")
                 b = id(a)
-                c = str::concat("phase-two-", "value")
+                c = std::str::concat("phase-two-", "value")
                 d = id(c)
-                str::concat(b, d)
+                std::str::concat(b, d)
 
             f(0)
-    test::value("stack-map-slot-reuse", "phase-one-valuephase-two-value", slot_reuse)
+    std::test::value("stack-map-slot-reuse", "phase-one-valuephase-two-value", slot_reuse)
 
 # ---------------------------------------------------------------------------
 # native-root-liveness.test (-strict 0 HIR on native::evalHir there)
@@ -410,7 +410,7 @@ fn register_native_root_liveness_tests(big: int):
     # root-imod-plan-1: a String under construction, returned by a recursive
     # call, stays live across a mod with a BigInt result before it is
     # extended.
-    fn imod_plan() errors compiler::CompilerError:
+    fn imod_plan() errors std::compiler::CompilerError:
         static compile:
             fn g(n: int) -> str:
                 "y"
@@ -422,51 +422,51 @@ fn register_native_root_liveness_tests(big: int):
                     f(n, k - 1).concat(g(n.mod(1000000000000000000000)))
 
             f(big, 3)
-    test::value("root-imod-plan", "xyyy", imod_plan)
+    std::test::value("root-imod-plan", "xyyy", imod_plan)
 
     # root-loop-carried-counted-1: a String bound before a counted loop,
     # read by every iteration while each allocates garbage, is intact after
     # it.
-    fn loop_carried_counted() errors compiler::CompilerError:
+    fn loop_carried_counted() errors std::compiler::CompilerError:
         static compile:
             fn f(s):
                 loop i from 0 to 20:
-                    junk = str::concat(s, "pad")
+                    junk = std::str::concat(s, "pad")
                 s
 
             f("the managed base string")
-    test::value("root-loop-carried-counted", "the managed base string", loop_carried_counted)
+    std::test::value("root-loop-carried-counted", "the managed base string", loop_carried_counted)
 
     # root-loop-carried-collecting-1: a descending inclusive collecting
     # loop's accumulator and a carried String, each iteration allocating.
-    fn loop_carried_collecting() errors compiler::CompilerError:
+    fn loop_carried_collecting() errors std::compiler::CompilerError:
         static compile:
             fn f(s):
                 ys = loop i down from 20 through 1:
-                    junk = str::concat(s, "pad")
-                    str::concat(s, junk)
-                list::length(ys)
+                    junk = std::str::concat(s, "pad")
+                    std::str::concat(s, junk)
+                std::list::length(ys)
 
             f("the managed base string")
-    test::value("root-loop-carried-collecting", 20, loop_carried_collecting)
+    std::test::value("root-loop-carried-collecting", 20, loop_carried_collecting)
 
     # root-loop-carried-lockstep-1: a lockstep loop's List, position,
     # counters and accumulator, each iteration allocating. (Tcl checks only
     # that the result is a List: here, every element.)
-    fn loop_carried_lockstep() errors compiler::CompilerError:
+    fn loop_carried_lockstep() errors std::compiler::CompilerError:
         static compile:
             fn f(xs, s):
-                ys = loop x in xs and i from 0 to list::length(xs) and j down from list::length(xs) through 1:
-                    junk = str::concat(s, "pad")
-                    str::concat(x, junk)
+                ys = loop x in xs and i from 0 to std::list::length(xs) and j down from std::list::length(xs) through 1:
+                    junk = std::str::concat(s, "pad")
+                    std::str::concat(x, junk)
                 ys
 
             f(["a", "b", "c", "d", "e", "f"], "the managed base string")
-    test::value("root-loop-carried-lockstep", ["athe managed base stringpad", "bthe managed base stringpad", "cthe managed base stringpad", "dthe managed base stringpad", "ethe managed base stringpad", "fthe managed base stringpad"], loop_carried_lockstep)
+    std::test::value("root-loop-carried-lockstep", ["athe managed base stringpad", "bthe managed base stringpad", "cthe managed base stringpad", "dthe managed base stringpad", "ethe managed base stringpad", "fthe managed base stringpad"], loop_carried_lockstep)
 
     # root-block-capture-1: a nested function called directly reads its
     # enclosing function's parameter.
-    fn block_capture() errors compiler::CompilerError:
+    fn block_capture() errors std::compiler::CompilerError:
         static compile:
             fn f(n):
                 fn step(x):
@@ -475,24 +475,24 @@ fn register_native_root_liveness_tests(big: int):
                 step(10)
 
             f(5)
-    test::value("root-block-capture", 15, block_capture)
+    std::test::value("root-block-capture", 15, block_capture)
 
     # root-string-region-1: a substring of a parameter stays intact while a
     # concat allocates before it is used. Strict: the slice of an untyped
     # String may overrun, so f declares UpperOverrun and its caller handles
     # it (the Tcl program, -strict 0, does neither).
-    fn string_region() errors compiler::CompilerError:
+    fn string_region() errors std::compiler::CompilerError:
         static compile:
             fn f(s) errors UpperOverrun:
-                r = str::substring(s, 1, 4)
-                junk = str::concat("pad", "ding")
-                str::concat(r, junk)
+                r = std::str::substring(s, 1, 4)
+                junk = std::str::concat("pad", "ding")
+                std::str::concat(r, junk)
 
             v = f("abcdef"):
                 on UpperOverrun:
                     "none"
             v
-    test::value("root-string-region", "bcdpadding", string_region)
+    std::test::value("root-string-region", "bcdpadding", string_region)
 
 # ---------------------------------------------------------------------------
 # native-alloc.test
@@ -501,10 +501,10 @@ fn register_native_alloc_tests():
     # alloc-off-1: without an allocation report, a concat's value is the
     # concatenation (the Tcl test's two runs, default and -specialize 0, are
     # cranelift and cranelift-generic here).
-    fn concat_without_report() errors compiler::CompilerError:
+    fn concat_without_report() errors std::compiler::CompilerError:
         static compile:
-            str::concat("hello ", "world")
-    test::value("alloc-off-concat", "hello world", concat_without_report)
+            std::str::concat("hello ", "world")
+    std::test::value("alloc-off-concat", "hello world", concat_without_report)
 
 # ---------------------------------------------------------------------------
 
@@ -514,6 +514,6 @@ fn register_gc_sensitive_value_tests():
     register_native_root_liveness_tests(12345678901234567890123)
     register_native_alloc_tests()
 
-with context test::suite()
+with context std::test::suite()
 register_gc_sensitive_value_tests()
-test::report()
+std::test::report()

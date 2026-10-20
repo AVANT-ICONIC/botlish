@@ -6,11 +6,11 @@
 # `digest` exposes DATA to C for reading, with no copy, and a fresh 32-byte
 # MutableBytes for writing: C writes a private copy of it, which the call
 # returns as its `out`.
-import abi
-import abi::bytes
+import std::abi
+import std::abi::bytes
 import boringssl::sha2
 
 # The SHA-256 digest of DATA: 32 bytes.
-fn digest(data: abi::bytes::Bytes) -> abi::bytes::Bytes:
-    written = data.SHA256(abi::bytes::length(data).value, abi::bytes::zeroed(abi::usize(32)))
-    abi::bytes::freeze(written.out)
+fn digest(data: std::abi::bytes::Bytes) -> std::abi::bytes::Bytes:
+    written = data.SHA256(std::abi::bytes::length(data).value, std::abi::bytes::zeroed(std::abi::usize(32)))
+    std::abi::bytes::freeze(written.out)

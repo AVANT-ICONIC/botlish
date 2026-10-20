@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # Python equivalent of bench/refined-checks.bot: repeated refinement
 # predicates. emailish is a structural check (regex membership test);
-# uri_query_value is the structural check of lib/web.bot's
-# web::uri_query_value? (unreserved characters and "%XX" uppercase-hex
+# uri_query_value is the structural check of stdlib/web.bot's
+# std::web::uri_query_value? (unreserved characters and "%XX" uppercase-hex
 # triplets only), run on the escaped query each time, as the Botlish program
 # does (REFINEMENT-VALUES.md).
 #
@@ -57,7 +57,7 @@ def is_label_char(c):
 
 
 # Same two-pointer scan as bench/equivalents/rust/refined_checks.rs's
-# `emailish` (and lib/web.bot's web::emailish?): the domain/local
+# `emailish` (and stdlib/web.bot's std::web::emailish?): the domain/local
 # structure is ordinary control flow, not a regex -- only the leaf
 # character-class tests above are Unicode-classification-dependent. A
 # regex-based version was deliberately not kept: Python's stdlib `re` has

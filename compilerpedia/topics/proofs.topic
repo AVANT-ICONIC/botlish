@@ -26,10 +26,10 @@ the program must say what happens.
 
 == THREE KINDS OF STATEMENT
     LANGUAGE GUARANTEE   what the semantics promise on every backend: for
-                         example, list::at(xs, i) returns the element at i
+                         example, std::list::at(xs, i) returns the element at i
                          or fails with IndexNotFound, never anything else.
     RECOGNIZED PATTERNS  what this compiler proves, and the program forms
-                         it recognizes: for example, list::at(xs, i) inside
+                         it recognizes: for example, std::list::at(xs, i) inside
                          `loop i from 0 to xs.length():` cannot fail.
     LIMITATIONS          what may be true but is not proven today: for
                          example, an index computed into a local binding
@@ -49,9 +49,9 @@ admit it in the function's `errors` clause and let the caller decide.
 == THE ANALYSES
     proof.types               type inference and declared types
     proof.completions         which errors a call can raise; KNOWN-ERROR
-    proof.list-bounds         indexed access: list::at, mutable_array::at/set,
-                              str::char_at
-    proof.slices              str::substring, mutable_array::freeze/copy
+    proof.list-bounds         indexed access: std::list::at, std::mutable_array::at/set,
+                              std::str::char_at
+    proof.slices              std::str::substring, std::mutable_array::freeze/copy
     proof.ranges              integer ranges and integer domains
     proof.refinements         refinement types: predicates and validators
     proof.lockstep            equal iteration counts of lockstep loops
@@ -61,28 +61,29 @@ admit it in the function's `errors` clause and let the caller decide.
     proof.reachability        dead code and decided branches
 
 @topic proof.list-bounds
-title: Indexed access: when list::at cannot fail
-summary: list::at, mutable_array::at, mutable_array::set and str::char_at fail with IndexNotFound unless the compiler proves the index in range; it proves a handful of recognized forms and nothing else.
+title: Indexed access: when std::list::at cannot fail
+summary: std::list::at, std::mutable_array::at and set, and std::str::char_at fail with IndexNotFound unless the compiler proves the index in range, by a handful of recognized forms.
 index: proofs stdlib
 alias: bounds proof; bounds; bounds check; IndexNotFound; index proof; range proof; indexed access; list index; index out of range; out of bounds; IndexNotFound proof; array index
-keywords: list::at, at, index, length, guard, loop, descending, field, local binding, mod, bit_and, mask, hash, capacity
-related: proof.slices proof.completions proof.ranges concept.lists concept.errors rule.unhandled-errors rule.known-error stdlib.list::at stdlib.list::get principle.restate-in-proven-form
+keywords: std::list::at, at, index, length, guard, loop, descending, field, local binding, mod, bit_and, mask, hash, capacity
+related: proof.slices proof.completions proof.ranges concept.lists concept.errors rule.unhandled-errors rule.known-error stdlib.std::list::at stdlib.std::list::get principle.restate-in-proven-form
 docs: STDLIB-NAMESPACES.md STATIC-COMPLETION-PROOFS.md REFACTOR-WARNINGS-CLEAN.md
-match: CORE SEMANTIC UNHANDLED-ERROR | this call of "list::at" may produce*
-match: CORE SEMANTIC UNHANDLED-ERROR | this call of "mutable_array::at" may produce*
-match: CORE SEMANTIC UNHANDLED-ERROR | this call of "mutable_array::set" may produce*
-match: CORE SEMANTIC UNHANDLED-ERROR | this call of "mutable_vector::at" may produce*
-match: CORE SEMANTIC UNHANDLED-ERROR | this call of "str::char_at" may produce*
+match: CORE SEMANTIC UNHANDLED-ERROR | this call of "std::list::at" may produce*
+match: CORE SEMANTIC UNHANDLED-ERROR | this call of "std::mutable_array::at" may produce*
+match: CORE SEMANTIC UNHANDLED-ERROR | this call of "std::mutable_array::set" may produce*
+match: CORE SEMANTIC UNHANDLED-ERROR | this call of "std::mutable_vector::at" may produce*
+match: CORE SEMANTIC UNHANDLED-ERROR | this call of "std::str::char_at" may produce*
 
 
 == LANGUAGE GUARANTEE
-list::at(xs, i) (written xs.at(i) after `import list`) returns the element
-of xs at i when 0 <= i < list::length(xs), and otherwise completes with the
-builtin declared error IndexNotFound -- an ordinary, handleable error, never
-a crash, a default or a wrapped index. There is no negative indexing: -1 is
-a missing index like any other. mutable_array::at, mutable_array::set,
-mutable_vector::at and str::char_at (character index) have the same
-contract against their own length or capacity.
+std::list::at(xs, i) (written xs.at(i) after `import std::list`) returns the
+element of xs at i when 0 <= i < std::list::length(xs), and otherwise
+completes with the builtin declared error IndexNotFound -- an ordinary,
+handleable error, never a crash, a default or a wrapped index. There is no
+negative indexing: -1 is a missing index like any other.
+std::mutable_array::at, std::mutable_array::set, std::mutable_vector::at and
+std::str::char_at (character index) have the same contract against their own
+length or capacity.
 
 Because IndexNotFound is a declared error, every call must do one of three
 things (rule.unhandled-errors): handle it (`on IndexNotFound:`), admit it in
@@ -91,7 +92,7 @@ A call proven to *always* raise it (a literal index past a literal list) is
 rejected as KNOWN-ERROR, even with a handler (rule.known-error).
 
 The code generators use the proof: natively a proven call has no
-IndexNotFound path (a proven list::at is a bare element load, and a
+IndexNotFound path (a proven std::list::at is a bare element load, and a
 function whose only fallible operations are proven ones stops being
 fallible), and the Tcl compiler calls the native directly instead of
 through the error-handling call path. The interpreter, the reference,
@@ -144,7 +145,7 @@ forms:
     built with pushes, then walked twice, has one length.
 
 @example accept
-import list
+import std::list
 
 fn total(xs: List[int]) -> int:
     sums = loop i from 0 to xs.length():
@@ -157,7 +158,7 @@ total([4, 5, 6])
 @end
 
 @example accept
-import list
+import std::list
 
 fn pick(xs: List[int], t: int) -> int:
     if t < 0 or t >= xs.length():
@@ -170,7 +171,7 @@ fn pick(xs: List[int], t: int) -> int:
 @end
 
 @example accept
-import list
+import std::list
 
 fn after(xs: List[int], i: int) -> int:
     t = i + 1
@@ -184,7 +185,7 @@ fn after(xs: List[int], i: int) -> int:
 @end
 
 @example accept
-import list
+import std::list
 
 struct Board:
     cells: List[int]
@@ -200,18 +201,18 @@ doubled(Board {cells: [1, 2, 3]})
 @end
 
 @example accept
-import mutable_array
+import std::mutable_array
 
 fn slot(a: MutableArray[int], h: int) -> int:
     a.at(h.mod(a.capacity()))
 
-mutable_array::from_list([10, 20, 30]).slot(-4)
+std::mutable_array::from_list([10, 20, 30]).slot(-4)
 @caption An index reduced mod the array's own capacity
 @value 30
 @end
 
 @example accept
-import mutable_array
+import std::mutable_array
 
 struct Table:
     slots: MutableArray[int]
@@ -220,7 +221,7 @@ fn store(t: Table, h: int) -> Table:
     t.slots.set(h.mod(t.slots.capacity()), h)
     t
 
-t = Table {slots: mutable_array::create(4, 0)}.store(7)
+t = Table {slots: std::mutable_array::create(4, 0)}.store(7)
 loop i from 0 to t.slots.capacity():
     t.slots.at(i)
 @caption A write and a loop through a field path, written each time
@@ -228,11 +229,11 @@ loop i from 0 to t.slots.capacity():
 @end
 
 @example accept
-import list
-import mutable_vector
+import std::list
+import std::mutable_vector
 
 fn scaled(h: int) -> int:
-    v = mutable_vector::from_list([1, 2, 3])
+    v = std::mutable_vector::from_list([1, 2, 3])
     ys = loop x in v:
         x * 10
     zs = loop x in v:
@@ -245,11 +246,11 @@ scaled(4)
 @end
 
 @example accept
-import list
-import mutable_vector
+import std::list
+import std::mutable_vector
 
 fn built(h: int) -> int:
-    v = mutable_vector::from_list([1])
+    v = std::mutable_vector::from_list([1])
     loop i from 2 to 5:
         v.push(i)
     ys = loop x in v:
@@ -264,11 +265,11 @@ built(6)
 @end
 
 @example accept
-import list
-import mutable_vector
+import std::list
+import std::mutable_vector
 
 fn branched(h: int) -> int:
-    v = mutable_vector::from_list([1, 2, 3])
+    v = std::mutable_vector::from_list([1, 2, 3])
     ys = loop x in v:
         x * 10
     if h > 0:
@@ -302,8 +303,8 @@ to the length, so the call must handle or admit IndexNotFound:
   * an index reduced by another container's size, even one of equal size:
     `keys.at(h.mod(slots.capacity()))` (equal capacities of two arrays are
     not recorded), an offset of a reduced index (`h.mod(n) + 1`), or a mask
-    with nothing proving the size is not 0 (the mask of an empty array is -1,
-    and bit_and(h, -1) is h).
+    with nothing proving the size is not 0 (the mask of an empty array is
+    -1, and bit_and(h, -1) is h).
   * the List of a loop over a MutableVector, against the length of
     another loop over the same vector with something between the two
     loops that may change its length: a push, pop or clear on it (also in
@@ -316,11 +317,11 @@ to the length, so the call must handle or admit IndexNotFound:
     it: lengths are related by equality only.
 
 @example reject
-import list
-import mutable_vector
+import std::list
+import std::mutable_vector
 
 fn grown(h: int) -> int:
-    v = mutable_vector::from_list([1, 2, 3])
+    v = std::mutable_vector::from_list([1, 2, 3])
     ys = loop x in v:
         x * 10
     v.push(4)
@@ -335,7 +336,7 @@ fn grown(h: int) -> int:
 @end
 
 @example reject
-import list
+import std::list
 
 fn after(xs: List[int], i: int) -> int:
     if i + 1 < 0 or i + 1 >= xs.length():
@@ -349,7 +350,7 @@ fn after(xs: List[int], i: int) -> int:
 @end
 
 @example reject
-import list
+import std::list
 
 fn backwards(xs: List[int]) -> List[int]:
     loop i down from xs.length() - 1 through 0:
@@ -362,7 +363,7 @@ fn backwards(xs: List[int]) -> List[int]:
 @end
 
 @example reject
-import mutable_array
+import std::mutable_array
 
 fn masked(a: MutableArray[int], h: int) -> int:
     a.at(bit_and(h, a.capacity() - 1))
@@ -374,19 +375,18 @@ fn masked(a: MutableArray[int], h: int) -> int:
 @end
 
 == WHAT TO DO WHEN THE PROOF FAILS
-Restate the access in a recognized form when the code allows it: write
-the container the same way in the guard and the access; bind a computed
-index to a name once and guard that name; iterate ascending (or iterate
-the elements, `loop x in xs:`, when the index is not needed); use lockstep
-(`loop x in xs and i from 0 to xs.length():`) for an element and its
-index.
-Otherwise make the outcome explicit: handle IndexNotFound where the read is
-(`xs.at(t): on IndexNotFound: fallback`), or use list::get(xs, i, default),
-which is that handler written once (stdlib.list::get). Admitting the error
-in the function's `errors` clause passes the decision to the callers.
+Restate the access in a recognized form when the code allows it: write the
+container the same way in the guard and the access; bind a computed index to
+a name once and guard that name; iterate ascending (or iterate the elements,
+`loop x in xs:`, when the index is not needed); use lockstep (`loop x in xs
+and i from 0 to xs.length():`) for an element and its index. Otherwise make
+the outcome explicit: handle IndexNotFound where the read is (`xs.at(t): on
+IndexNotFound: fallback`), or use std::list::get(xs, i, default), which is
+that handler written once (stdlib.std::list::get). Admitting the error in
+the function's `errors` clause passes the decision to the callers.
 
 @example accept
-import list
+import std::list
 
 fn at_or(xs: List[int], t: int, fallback: int) -> int:
     xs.at(t):
@@ -403,25 +403,25 @@ fn after(xs: List[int], i: int) -> int:
 @end
 
 @topic proof.slices
-title: Slices: when str::substring cannot fail
-summary: str::substring, mutable_array::freeze and copy fail with LowerUnderrun or UpperOverrun unless the slice is proven valid: by literal lengths, length guards or counted loops over the same String.
+title: Slices: when std::str::substring cannot fail
+summary: std::str::substring, std::mutable_array::freeze and copy fail with LowerUnderrun or UpperOverrun unless the slice is proven valid: literal lengths, length guards, counted loops.
 index: proofs stdlib
 alias: slice proof; substring proof; LowerUnderrun; UpperOverrun; substring bounds
 keywords: substring, slice, freeze, copy, start, end, length
-related: proof.list-bounds proof.completions concept.strings stdlib.str::substring rule.unhandled-errors
+related: proof.list-bounds proof.completions concept.strings stdlib.std::str::substring rule.unhandled-errors
 docs: STDLIB-NAMESPACES.md
-match: CORE SEMANTIC UNHANDLED-ERROR | this call of "str::substring" may produce*
-match: CORE SEMANTIC UNHANDLED-ERROR | this call of "mutable_array::freeze" may produce*
-match: CORE SEMANTIC UNHANDLED-ERROR | this call of "mutable_array::copy" may produce*
+match: CORE SEMANTIC UNHANDLED-ERROR | this call of "std::str::substring" may produce*
+match: CORE SEMANTIC UNHANDLED-ERROR | this call of "std::mutable_array::freeze" may produce*
+match: CORE SEMANTIC UNHANDLED-ERROR | this call of "std::mutable_array::copy" may produce*
 
 == LANGUAGE GUARANTEE
-A slice START..END of a sequence of N elements is valid iff
-0 <= START <= END <= N. START is checked first, against 0..N, then END
-against START..N: a bound below its interval fails with LowerUnderrun, one
-above it with UpperOverrun (so an inverted slice is LowerUnderrun). Both are
-builtin declared errors: handle them, admit them, or be proven unable to
-raise them. str::substring counts characters (Unicode scalar values), the
-index space of str::length and str::char_at.
+A slice START..END of a sequence of N elements is valid iff 0 <= START <=
+END <= N. START is checked first, against 0..N, then END against START..N: a
+bound below its interval fails with LowerUnderrun, one above it with
+UpperOverrun (so an inverted slice is LowerUnderrun). Both are builtin
+declared errors: handle them, admit them, or be proven unable to raise them.
+std::str::substring counts characters (Unicode scalar values), the index
+space of std::str::length and std::str::char_at.
 
 == RECOGNIZED PATTERNS (PROVEN TODAY)
   * a literal String (or an immutable binding of one) and constant bounds;
@@ -430,14 +430,14 @@ index space of str::length and str::char_at.
     `if n < 0 or n > s.length(): return ""` then `s.substring(0, n)`;
   * a counted loop over the String's length: `loop i from 0 to s.length():
     s.substring(i, i + 1)`;
-  * lengths of str::concat results (the sum of the parts' lengths), and a
-    MutableArray's capacity for freeze and copy;
+  * lengths of std::str::concat results (the sum of the parts' lengths), and
+    a MutableArray's capacity for freeze and copy;
   * a String or MutableArray reached through a field path, written the same
     way in the guard and in the slice (`p.name.length()` ...
     `p.name.substring(n, p.name.length())`).
 
 @example accept
-import str
+import std::str
 
 fn prefix(s: str, n: int) -> str:
     if n < 0 or n > s.length():
@@ -457,7 +457,7 @@ relate to the length. A slice whose start is an unconstrained parameter
 cannot be proven:
 
 @example reject
-import str
+import std::str
 
 fn tail(s: str, n: int) -> str:
     s.substring(n, s.length())
@@ -712,7 +712,7 @@ bounds. Equal counts are proven when they are the same length form
 (`xs` and `0 to xs.length()`), constants, or lists of known length.
 
 @example accept
-import list
+import std::list
 
 fn indexed(xs: List[int]) -> List[int]:
     loop x in xs and i from 0 to xs.length():
@@ -747,10 +747,10 @@ clauses are evaluated -- the vector and the List have one length, as do
 two clauses naming the same vector (`loop a in v and b in v`).
 
 @example reject
-import mutable_vector
+import std::mutable_vector
 
 fn widened() -> List[int]:
-    v = mutable_vector::from_list([1, 2, 3])
+    v = std::mutable_vector::from_list([1, 2, 3])
     ys = loop x in v:
         x * 10
     v.push(4)
@@ -783,16 +783,16 @@ MISSING-CONTEXT names the call and the chain of calls that explains the
 requirement; -contexts prints every function's requirements and why.
 
 @example reject
-import io
-import linux::io
+import std::io
+import std::linux::io
 
-fn hello() errors io::WriteFailed:
-    io::print_line("hi")
+fn hello() errors std::io::WriteFailed:
+    std::io::print_line("hi")
 
 hello():
-    on io::WriteFailed:
+    on std::io::WriteFailed:
         unit
-with context linux::io::create()
+with context std::linux::io::create()
 0
 @caption The call comes before the installation
 @error CORE SEMANTIC MISSING-CONTEXT

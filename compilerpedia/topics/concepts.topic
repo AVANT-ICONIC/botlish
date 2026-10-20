@@ -85,7 +85,7 @@ The value kinds are Int, String, UnicodeChar, Bool, unit, List, struct
 (named and anonymous), enum case, function (a closure), coroutine handle,
 ImmutableSet, MutableVector and MutableArray (plus the byte and C ABI
 values of the systems layer). Operations never modify their operands:
-`list::append(xs, x)` returns a new List and leaves `xs` as it was.
+`std::list::append(xs, x)` returns a new List and leaves `xs` as it was.
 
 == RULES
   * No assignment exists: a name is bound once per scope (concept.bindings).
@@ -106,7 +106,7 @@ analyzed, specialized and run on any backend without aliasing questions.
 
 == EXAMPLES
 @example accept
-import list
+import std::list
 
 xs = [1, 2]
 ys = xs.append(3)
@@ -116,9 +116,9 @@ ys = xs.append(3)
 @end
 
 @example accept
-import mutable_vector
+import std::mutable_vector
 
-v = mutable_vector::from_list([1, 2])
+v = std::mutable_vector::from_list([1, 2])
 w = v
 w.push(3)
 [v.length(), w.length()]
@@ -318,7 +318,7 @@ summary: Int is an arbitrary-precision integer with + - *, comparisons, mod (Euc
 index: concepts
 alias: integers; arbitrary precision integers; bigint; bit operations; Int type
 keywords: int, integer, arithmetic, overflow, mod, remainder, bit_and, bit_or, bit_xor, shift_left, shift_right, ARITHMETIC, decimal
-related: concept.integer-domains concept.floats concept.types capability.integer-division capability.int-to-string stdlib.mod stdlib.bit_and stdlib.shift_right stdlib.test::int_text proof.ranges error.arithmetic
+related: concept.integer-domains concept.floats concept.types capability.integer-division capability.int-to-string stdlib.mod stdlib.bit_and stdlib.shift_right stdlib.std::test::int_text proof.ranges error.arithmetic
 docs: README.md BYTE-NIBBLE-BIT-ARITHMETIC.md LANGUAGE-LIBRARY-DEFICIENCIES.md
 
 == WHAT IT IS
@@ -338,10 +338,10 @@ value leaves the machine word). Literals are decimal.
     there is no `%` and no integer division function
     (capability.integer-division). `mod` gives the remainder, shift_right
     divides by a power of two.
-  * An Int never mixes with a Float64 (concept.floats): float64::from_int
-    and float64::truncate convert explicitly.
+  * An Int never mixes with a Float64 (concept.floats):
+    std::float64::from_int and std::float64::truncate convert explicitly.
   * There is no Int-to-String conversion in the standard namespaces;
-    lib/test.bot's test::int_text(n) is the available one
+    stdlib/test.bot's std::test::int_text(n) is the available one
     (capability.int-to-string).
   * bit_and, bit_or and bit_xor are `nomethod`: their operands are
     symmetric, so `a.bit_and(b)` is rejected.
@@ -376,7 +376,7 @@ summary: Float64 is a finite IEEE 754 binary64 number: literals such as 1.5, + -
 index: concepts
 alias: float; floats; double; floating point; decimal number; real number; Float64; NonFiniteFloat; NaN; infinity; float division by zero
 keywords: float, double, decimal, fraction, real, divide, NaN, infinity, finite, NonFiniteFloat, from_int, truncate
-related: concept.integers stdlib./ stdlib.float64::from_int stdlib.float64::truncate stdlib.module.float64 capability.integer-division error.known-error error.unhandled-error concept.errors concept.decimal-rounded
+related: concept.integers stdlib./ stdlib.std::float64::from_int stdlib.std::float64::truncate stdlib.module.std::float64 capability.integer-division error.known-error error.unhandled-error concept.errors concept.decimal-rounded
 docs: FLOAT64-MILESTONE-1.md README.md
 
 == WHAT IT IS
@@ -390,8 +390,8 @@ with the declared error NonFiniteFloat. There is no negative zero either:
     + - * /             Float64, Float64 -> Float64 (may fail: NonFiniteFloat)
     -x                  negation
     < <= > >= == !=     comparisons
-    float64::from_int(n)    Int -> nearest Float64 (import float64)
-    float64::truncate(x)    Float64 -> Int, toward zero
+    std::float64::from_int(n)    Int -> nearest Float64 (import std::float64)
+    std::float64::truncate(x)    Float64 -> Int, toward zero
 
 == RULES
   * A literal with a decimal point is a Float64, except where a
@@ -399,9 +399,9 @@ with the declared error NonFiniteFloat. There is no negative zero either:
     a DecimalRounded constant of its exact decimal; a literal without one
     is an Int. A binding never decides a literal's type.
   * An operator's operands are both Float64 or both Int: the compiler
-    chooses the Float64 operation by the operands' static types, and an
-    Int and a Float64 together are rejected (TYPE). Nothing converts
-    implicitly; convert with float64::from_int or float64::truncate.
+    chooses the Float64 operation by the operands' static types, and an Int
+    and a Float64 together are rejected (TYPE). Nothing converts implicitly;
+    convert with std::float64::from_int or std::float64::truncate.
   * `/` divides Float64 values only (capability.integer-division).
   * A result that is not finite -- an overflow, any division by zero --
     fails with NonFiniteFloat, an ordinary declared error: a function
@@ -420,8 +420,8 @@ with the declared error NonFiniteFloat. There is no negative zero either:
   * A Float64 prints as the shortest decimal that reads back to the same
     number, always with a point (3.0, 0.1, 1.0e100).
   * extern c fn declarations pass Float64 as C `double`
-    (ffi::c::Double); a NaN or an infinity coming back from C fails with
-    NonFiniteFloat.
+    (std::ffi::c::Double); a NaN or an infinity coming back from C fails
+    with NonFiniteFloat.
 
 == WHY
 Finite values keep == an equivalence (no NaN that differs from itself)
@@ -479,7 +479,7 @@ summary: DecimalRounded{minDecimalsPreserved: N}: a number whose type guarantees
 index: concepts
 alias: decimal rounded; DecimalRounded; minDecimalsPreserved; maxDecimalsPreserved; decimal places; money; currency; cents; precision guarantee; rounding guarantee; banker's rounding; round half to even; UnrepresentableDecimal; scalar refinement
 keywords: decimal, rounding, round, half even, precision, places, guarantee, refinement, money, Float64, from_decimal_rounded, quantize, exact, ExactDecimal, observation, ceiling
-related: concept.floats stdlib.float64::from_decimal_rounded stdlib.decimal_rounded::round stdlib.module.decimal_rounded error.decimal-precision error.decimal-guarantee-lost error.refinement-parameter error.equality error.known-error concept.static-compile
+related: concept.floats stdlib.std::float64::from_decimal_rounded stdlib.std::decimal_rounded::round stdlib.module.std::decimal_rounded error.decimal-precision error.decimal-guarantee-lost error.refinement-parameter error.equality error.known-error concept.static-compile
 docs: DECIMAL-ROUNDED-MILESTONE-1.md FLOAT64-MILESTONE-1.md
 match: CORE SEMANTIC EQUALITY | *of a DecimalRounded value needs the precision of its type*
 match: CORE SEMANTIC TYPE | *DecimalRounded*
@@ -556,8 +556,8 @@ DecimalRounded is not.
   * Weakening is subtyping: a value guaranteed to 4 places stands where 2
     are required, and a value without a ceiling where a ceiling is, never
     the reverse. Nothing converts from or to Float64 implicitly.
-  * float64::from_decimal_rounded(x) decays to the Float64 nearest
-    round(x, N). decimal_rounded::round[T](f) mints T from a Float64 by
+  * std::float64::from_decimal_rounded(x) decays to the Float64 nearest
+    round(x, N). std::decimal_rounded::round[T](f) mints T from a Float64 by
     rounding f's exact value to T's places; it fails with
     UnrepresentableDecimal when no representation holds that decimal.
   * A program's printed result shows a DecimalRounded value as round(v, N)
@@ -591,15 +591,15 @@ fn cheaper(a: DecimalRounded{minDecimalsPreserved: 2}, b: DecimalRounded{minDeci
 @end
 
 @example accept
-import float64
-import decimal_rounded
+import std::float64
+import std::decimal_rounded
 
 fn price() -> DecimalRounded{minDecimalsPreserved: 2}:
     19.99
 
 fn with_tax(p: DecimalRounded{minDecimalsPreserved: 2}) -> DecimalRounded{minDecimalsPreserved: 2} errors NonFiniteFloat, UnrepresentableDecimal:
-    gross = float64::from_decimal_rounded(p) * 1.19
-    decimal_rounded::round[DecimalRounded{minDecimalsPreserved: 2}](gross)
+    gross = std::float64::from_decimal_rounded(p) * 1.19
+    std::decimal_rounded::round[DecimalRounded{minDecimalsPreserved: 2}](gross)
 
 price().with_tax():
     on NonFiniteFloat:
@@ -645,7 +645,7 @@ docs: SOURCE-DEFINED-INTEGER-DOMAINS.md ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md B
 
 A top-level declaration of a program or module. A Digit value is an
 ordinary Int at run time; the type is a statically proven fact about it.
-lib/byte.bot declares byte::Byte this way.
+stdlib/byte.bot declares std::byte::Byte this way.
 
 == RULES
   * A value is admitted where a Digit is required only if its range is
@@ -702,15 +702,15 @@ compiler derives.
 
 @topic concept.strings
 title: Strings and characters
-summary: str is an immutable sequence of Unicode scalar values; 'a' is a UnicodeChar, a distinct type; str:: operations need `import str`, and there is no string formatting or Int-to-String conversion.
+summary: str is an immutable sequence of Unicode scalar values; 'a' is a UnicodeChar, a distinct type; str:: operations need `import std::str`, and there is no string formatting or Int-to-String conversion.
 index: concepts
 alias: str type; UnicodeChar; character literal; char literal; text values
 keywords: string, str, char, character, unicode, scalar, concat, append_char, char_at, substring, length, encode_utf8, escape
-related: concept.integers concept.types principle.characters-not-strings warning.one-char-string-literal capability.string-formatting capability.int-to-string stdlib.module.str stdlib.str::concat stdlib.str::char_at stdlib.str::substring
+related: concept.integers concept.types principle.characters-not-strings warning.one-char-string-literal capability.string-formatting capability.int-to-string stdlib.module.std::str stdlib.std::str::concat stdlib.std::str::char_at stdlib.std::str::substring
 docs: README.md UNICODE-CHAR-LITERALS.md STDLIB-NAMESPACES.md
 
 == WHAT IT IS
-A `str` value is a sequence of Unicode scalar values: `str::length`
+A `str` value is a sequence of Unicode scalar values: `std::str::length`
 counts characters, not bytes. A character literal 'a' (escapes '\n',
 '\'', '\\') is a `UnicodeChar`: one scalar value, neither an Int nor a
 one-character String.
@@ -728,14 +728,14 @@ A UnicodeChar is not a user-perceived character or a grapheme cluster
 is comparable to a Go rune, except that it is a type of its own. A String
 is not iterable by `loop`; a List of UnicodeChars is.
 
-After `import str`: length, concat, append_char, char_at, substring,
-lowercase, encode_utf8 (to a List of bytes). `char::scalar_value(c)`
-(`import char`) gives a character's number.
+After `import std::str`: length, concat, append_char, char_at, substring,
+lowercase, encode_utf8 (to a List of bytes). `std::char::scalar_value(c)`
+(`import std::char`) gives a character's number.
 
 == RULES
   * `==` compares strings; `+` does not concatenate (a run-time TYPE error):
     use `a.concat(b)`, or `a.append_char('!')` for one character.
-  * str::char_at and str::substring fail with declared errors
+  * std::str::char_at and std::str::substring fail with declared errors
     (IndexNotFound; LowerUnderrun/UpperOverrun) unless the compiler proves
     the index or slice valid.
   * A one-character String literal draws ONE-CHAR-STRING-LITERAL: a single
@@ -750,7 +750,7 @@ a character is never silently used as a number or as text.
 
 == EXAMPLES
 @example accept
-import str
+import std::str
 
 s = "héllo"
 [s.length(), s.append_char('!'), s.char_at(1) == 'é']
@@ -759,15 +759,15 @@ s = "héllo"
 @end
 
 @example accept
-import char
+import std::char
 
-[char::scalar_value('A'), 'a' == 'a']
+[std::char::scalar_value('A'), 'a' == 'a']
 @caption A UnicodeChar's scalar value
 @value [65, true]
 @end
 
 == MORE
-UNICODE-CHAR-LITERALS.md; stdlib.module.str lists every operation.
+UNICODE-CHAR-LITERALS.md; stdlib.module.std::str lists every operation.
 
 @topic concept.booleans
 title: Booleans and conditions
@@ -807,7 +807,7 @@ fn in_range?(n: int) -> bool:
 @end
 
 @example accept
-import list
+import std::list
 
 fn first_positive?(xs: List[int]) -> bool:
     xs.length() > 0 and xs.at(0) > 0
@@ -869,17 +869,17 @@ docs/README.md section 17.
 
 @topic concept.lists
 title: Lists: immutable sequences
-summary: List[T] is an immutable sequence written [a, b]; its operations need `import list`, collecting loops transform it, and it is never destructured positionally.
+summary: List[T] is an immutable sequence written [a, b]; its operations need `import std::list`, collecting loops transform it, and it is never destructured positionally.
 index: concepts
 alias: List type; list literal; immutable list; sequence
 keywords: list, List, at, get, append, length, find, any?, all?, IndexNotFound, element, index, empty list
-related: concept.loops concept.values concept.destructuring proof.list-bounds rule.no-list-destructuring principle.name-the-parts capability.map-filter task.list-element stdlib.module.list stdlib.list::at stdlib.list::get
+related: concept.loops concept.values concept.destructuring proof.list-bounds rule.no-list-destructuring principle.name-the-parts capability.map-filter task.list-element stdlib.module.std::list stdlib.std::list::at stdlib.std::list::get
 docs: README.md STDLIB-NAMESPACES.md RETURNING-ITERABLE-LOOPS.md MINIMAL-APPLIED-LIST-TYPES.md
 
 == WHAT IT IS
-`[1, 2, 3]` is a `List[int]`; `[]` is the empty List. After `import list`:
-length, at, append (a new List with one more element), get (with a
-default), find, any?, all?, none?. Element types are inferred; a parameter
+`[1, 2, 3]` is a `List[int]`; `[]` is the empty List. After `import
+std::list`: length, at, append (a new List with one more element), get (with
+a default), find, any?, all?, none?. Element types are inferred; a parameter
 or result may declare `List[T]`.
 
 == RULES
@@ -900,7 +900,7 @@ the language steers such data to structs.
 
 == EXAMPLES
 @example accept
-import list
+import std::list
 
 xs = [3, 1, 4]
 evens = loop x in xs:
@@ -1009,10 +1009,10 @@ docs: OPAQUE-STRUCTS.md
     opaque struct Token:
         value: int
 
-The declaring module (the file) is the only code that may write
-`Token {value: ...}`, read `t.value` or destructure a Token. Other code
-holds Tokens as values and uses the module's functions. abi::bytes::Bytes
-and linux::io::LinuxIO are opaque structs.
+The declaring module (the file) is the only code that may write `Token
+{value: ...}`, read `t.value` or destructure a Token. Other code holds
+Tokens as values and uses the module's functions. std::abi::bytes::Bytes and
+std::linux::io::LinuxIO are opaque structs.
 
 == RULES
   * Outside the owner, construction is OPAQUE-CONSTRUCTION and projection
@@ -1034,21 +1034,21 @@ compiler still sees the fields, so opacity costs nothing at run time.
 
 == EXAMPLES
 @example accept
-import abi::bytes
-import str
+import std::abi::bytes
+import std::str
 
-a = abi::bytes::from_list(str::encode_utf8("hi"))
-b = abi::bytes::from_list(str::encode_utf8("hi"))
-[a == b, abi::bytes::length(a).value]
+a = std::abi::bytes::from_list(std::str::encode_utf8("hi"))
+b = std::abi::bytes::from_list(std::str::encode_utf8("hi"))
+[a == b, std::abi::bytes::length(a).value]
 @caption Bytes values are compared whole and used through their module
 @value [true, 2]
 @end
 
 @example reject
-import abi::bytes
-import str
+import std::abi::bytes
+import std::str
 
-b = abi::bytes::from_list(str::encode_utf8("hi"))
+b = std::abi::bytes::from_list(std::str::encode_utf8("hi"))
 b.storage
 @caption Another module's opaque fields cannot be read
 @error CORE SEMANTIC OPAQUE-REPRESENTATION
@@ -1231,12 +1231,12 @@ cannot be called with an unchecked string.
 
 == EXAMPLES
 @example accept
-import str
+import std::str
 
 refined type NonEmpty = str
 
 fn non_empty?(s: str) -> bool proves s: NonEmpty:
-    str::length(s) > 0
+    std::str::length(s) > 0
 
 fn shout(s: NonEmpty) -> str:
     s.append_char('!')
@@ -1252,7 +1252,7 @@ fn safe(s: str) -> str:
 @end
 
 @example reject
-import str
+import std::str
 
 refined type NonEmpty = str
 
@@ -1394,7 +1394,7 @@ add10(32)
 @end
 
 @example accept
-import list
+import std::list
 
 fn has_above?(xs: List[int], limit: int) -> bool:
     fn above?(x: int) -> bool:
@@ -1402,7 +1402,7 @@ fn has_above?(xs: List[int], limit: int) -> bool:
     xs.any?(above?)
 
 [[3, 12].has_above?(10), [3].has_above?(10)]
-@caption A nested predicate passed to list::any?
+@caption A nested predicate passed to std::list::any?
 @value [true, false]
 @end
 
@@ -1500,13 +1500,13 @@ no method declarations, method tables or receiver types. Calls chain:
 `n.inc().twice()` is `twice(inc(n))`.
 
 == RULES
-  * Visible means: a function or binding in scope at the call (the
-    file's, a parameter, a local), a root native (mod, hash, ...), or a
-    member of a namespace the file directly imports. Writing
-    `list::at(xs, 0)` never makes `xs.at(0)` work without `import list`
-    (MISSING-IMPORT names the import to add).
+  * Visible means: a function or binding in scope at the call (the file's, a
+    parameter, a local), a root native (mod, hash, ...), or a member of a
+    namespace the file directly imports. Writing `std::list::at(xs, 0)`
+    never makes `xs.at(0)` work without `import std::list` (MISSING-IMPORT
+    names the import to add).
   * When several distinct visible functions have the name (a local `at`
-    and `list::at`), each is tried as the ordinary call and exactly one
+    and `std::list::at`), each is tried as the ordinary call and exactly one
     must fit: none is NO-APPLICABLE-METHOD, several AMBIGUOUS-METHOD-CALL.
     There is no precedence: write the one you mean as an ordinary call.
   * `x.f` without a call is a field projection, and `(x.f)(a)` calls a
@@ -1525,11 +1525,11 @@ that could use it.
 
 == EXAMPLES
 @example accept
-import list
-import mutable_array
+import std::list
+import std::mutable_array
 
 xs = [1, 2, 3]
-a = mutable_array::from_list([4, 5])
+a = std::mutable_array::from_list([4, 5])
 [xs.at(0), a.at(1), xs.length()]
 @caption Each call resolves to the one candidate whose call is valid
 @value [1, 5, 3]
@@ -1538,13 +1538,13 @@ a = mutable_array::from_list([4, 5])
 @example reject
 xs = [1, 2, 3]
 xs.at(0)
-@caption Without `import list`, list::at is not visible
+@caption Without `import std::list`, std::list::at is not visible
 @error CORE SEMANTIC MISSING-IMPORT
 @at 2:4
 @end
 
 @example reject
-import list
+import std::list
 
 fn at(xs: List[int], i: int) -> int:
     0
@@ -1582,9 +1582,9 @@ the author's statement that receiver syntax would misread the function:
   * Called functionally it is an ordinary function: same type, errors,
     code. Aliases and imports keep the property.
   * Shipped examples: bit_and, bit_or and bit_xor (symmetric operands),
-    mutable_array::create (the first argument is a length),
-    mutable_array::copy (the first argument is the destination), and
-    lib/test.bot's registration helpers (the first argument is a name).
+    std::mutable_array::create (the first argument is a length),
+    std::mutable_array::copy (the first argument is the destination), and
+    stdlib/test.bot's registration helpers (the first argument is a name).
 
 == WHY
 It is not a warning suppression: it changes which call forms are legal,
@@ -1767,22 +1767,29 @@ related: concept.modules concept.method-sugar concept.enums rule.imports-not-tra
 docs: IMPORTS.md METHOD-SUGAR.md STDLIB-NAMESPACES.md
 
 == WHAT IT IS
-    import list                  this file depends on namespace list
-    import abi::bytes            a nested namespace (lib/abi/bytes.bot)
-    import type byte::Byte       one type's short name: Byte
+    import std::list            this file depends on namespace std::list
+    import std::abi::bytes      a nested namespace (stdlib/abi/bytes.bot)
+    import type std::byte::Byte one type's short name: Byte
+    import ::std::str           a rooted path: the same as import std::str
+    import game                 the application module game.bot
 
-After `import list`, `list::length(xs)` is allowed and list's functions are
-candidates for method syntax (`xs.length()`). An import injects no
-unqualified name: `length(xs)` is still unbound.
+After `import std::list`, `std::list::length(xs)` (or, rooted,
+`::std::list::length(xs)`) is allowed and the namespace's functions are
+candidates for method syntax (`xs.length()`). An import injects no shorter
+name: `length(xs)` is still unbound, and `list::length(xs)` would name an
+application namespace list, never std::list.
 
 == RULES
   * Imports come first in the file (after an optional `direct module`
     line); an import elsewhere is a syntax error.
-  * Exact: `import abi` does not import `abi::bytes`, and the reverse.
+  * Exact: `import std::abi` does not import `std::abi::bytes`, and the
+    reverse.
   * Not transitive: if A imports B and B imports C, A writes `import C` to
     use C's names, methods or types.
   * Using `NS::x` without `import NS` is MISSING-IMPORT, which names the
     line to add.
+  * Every path is resolved from the root; a leading `::` says so
+    explicitly and changes nothing else (concept.standard-library).
   * No aliases, wildcards, `from ... import` or re-exports.
   * `import type` imports a `type` declaration (integer domain,
     refinement) or an enum by its short name, not a struct
@@ -1797,19 +1804,19 @@ other files; nothing a dependency imports leaks into the file.
 
 == EXAMPLES
 @example accept
-import str
-import type byte::Byte
+import std::str
+import type std::byte::Byte
 
 fn low(b: Byte) -> int:
     b
 
-[str::length("abc"), "abc".length(), low(7)]
+[std::str::length("abc"), "abc".length(), low(7)]
 @caption A qualified call, a method call, a short type name
 @value [3, 3, 7]
 @end
 
 @example reject
-list::length([1, 2])
+std::list::length([1, 2])
 @caption A namespace must be imported before it is named
 @error SURFACE MODULE MISSING-IMPORT
 @at 1:1
@@ -1823,24 +1830,26 @@ title: Modules: one file, one namespace
 summary: A module is a source file loaded by `import`, its namespace its path; it holds declarations and immutable values, and a program's own modules are the files beside its entry file.
 index: concepts
 alias: module; modules; namespace; module binding; application module; global constant
-keywords: module, namespace, file, lib, application root, module binding, MODULE-CONTEXT, MODULE-IMMUTABLE, MODULE-COLLISION, SELF-IMPORT, global, constant
-related: concept.imports concept.opaque-structs concept.direct-modules concept.contexts rule.module-bindings rule.application-modules principle.explicit-dependencies error.module-context error.module-collision error.unknown-namespace
+keywords: module, namespace, file, stdlib, application root, module binding, MODULE-CONTEXT, MODULE-IMMUTABLE, RESERVED-NAMESPACE, SELF-IMPORT, global, constant
+related: concept.imports concept.standard-library concept.opaque-structs concept.direct-modules concept.contexts rule.module-bindings rule.application-modules principle.explicit-dependencies error.module-context error.module-collision error.unknown-namespace
 docs: IMPORTS.md MODULE-BINDINGS.md NATIVE-MODULES.md POST-2048-PRODUCT-FIXES.md
 
 == WHAT IT IS
-One file is one namespace: `lib/abi/bytes.bot` is `abi::bytes`, a file
-`game.bot` beside the entry file `main.bot` is the application module
-`game`. There is no `namespace` declaration; the entry program is in no
-namespace. A module contains function, type, struct, enum, error, trait
-and context declarations and immutable value bindings, each named outside
-as `game::member`.
+One file is one namespace: `stdlib/abi/bytes.bot` is `std::abi::bytes` (the
+standard library's directory is the namespace std), a file `game.bot` beside
+the entry file `main.bot` is the application module `game`. There is no
+`namespace` declaration; the entry program is in no namespace. A module
+contains function, type, struct, enum, error, trait and context declarations
+and immutable value bindings, each named outside as `game::member`.
 
 == RULES
-  * Resolution of `import NAME`: a standard namespace first (lib/), then
-    `NAME.bot` in the entry file's directory (the application root);
-    nothing else (no working directory, path variable or parent). An
-    application file that would shadow an imported standard namespace is
-    MODULE-COLLISION; importing the entry file is SELF-IMPORT.
+  * Resolution of `import NAME` (rule.application-modules): `std::NAME`
+    is stdlib/NAME.bot beside the compiler, any other NAME is `NAME.bot`
+    in the entry file's directory (the application root); nothing else
+    (no working directory, path variable, parent or fallback). A local
+    `list.bot` and `std::list` are two modules; an application file
+    under std/ is RESERVED-NAMESPACE; importing the entry file is
+    SELF-IMPORT.
   * A module has no top-level statements other than bindings and
     declarations. A value binding runs once, before the entry program,
     and must be context-free (MODULE-CONTEXT) and transitively immutable
@@ -1859,9 +1868,9 @@ startup without any hidden initialization order or shared mutable state.
 
 == EXAMPLES
 @example accept
-import list
+import std::list
 
-list::length([1, 2, 3])
+std::list::length([1, 2, 3])
 @caption A standard module's member, qualified
 @value 3
 @end
@@ -1877,6 +1886,63 @@ import geometry
 
 == MORE
 IMPORTS.md ("Application modules"); MODULE-BINDINGS.md.
+
+@topic concept.standard-library
+title: The standard library: the namespace std, and rooted names
+summary: Every standard namespace is under std (std::list, std::str, std::linux::io), read from stdlib/ beside the compiler; a leading :: roots any namespace path explicitly.
+index: concepts
+alias: std; standard library; stdlib; ::std; absolute namespace; rooted name; root namespace; where is the standard library
+keywords: std, stdlib, standard library, ::, rooted, absolute, root, namespace, reserved, local module, list.bot
+related: concept.imports concept.modules rule.application-modules error.reserved-namespace error.rooted-name error.unknown-namespace
+docs: STD-NAMESPACE.md IMPORTS.md
+
+== WHAT IT IS
+The standard library is one namespace tree with the compiler-owned root
+`std`: `std::list`, `std::str`, `std::abi::bytes`, `std::linux::io`, ...
+Its source is the directory stdlib/ that ships with the compiler (the
+checkout's, or the one packed in the single executable), so it never
+depends on the working directory, the application or the environment, and
+a compiled executable needs no source beside it. Some standard namespaces
+are compiler intrinsics only (`std::str`, `std::char`).
+
+    import std::list                   the standard list
+    import ::std::list                 the same, rooted explicitly
+    import list                        the application's own list.bot
+
+== RULES
+  * Each standard symbol has one name: `std::list::at` (or its method
+    spelling, `xs.at(i)`); there is no flat `list::at`, no alias and no
+    implicit import.
+  * `std` is reserved: no application file is ever a standard namespace,
+    and std itself is no namespace (`import std` names nothing).
+  * A leading `::` roots a path: every path is resolved from the root
+    already, so `::std::list` and `std::list` are one namespace and one
+    identity; a rooted reference names a namespace member
+    (`::std::list::at`, `::game::Color::Red`), never a bare name.
+  * `std::` says who owns a namespace, not where it runs: std::linux::*
+    is Linux's (UNSUPPORTED-PLATFORM elsewhere).
+
+== EXAMPLES
+@example accept
+import ::std::str
+import std::list
+
+[::std::str::length("abc"), std::list::length([1])]
+@caption Rooted and unrooted names of standard namespaces
+@value [3, 1]
+@end
+
+@example reject
+import std::list
+
+list::length([1])
+@caption The standard list is spelled std::list
+@error SURFACE MODULE UNKNOWN-NAMESPACE
+@at 3:1
+@end
+
+== MORE
+STD-NAMESPACE.md; `-help stdlib` lists the standard namespaces.
 
 @topic concept.if-expressions
 title: `if`, `elif`, `else` and `if` as a value
@@ -2005,14 +2071,14 @@ evens = loop x in [1, 2, 3, 4, 5, 6]:
 @end
 
 @example reject
-import list
+import std::list
 
-n = list::length(loop i from 0 to 3:
+n = std::list::length(loop i from 0 to 3:
     i)
 n
 @caption A loop cannot be a call argument: bind it first
 @error SURFACE SYNTAX
-@at 3:18
+@at 3:23
 @end
 
 == MORE
@@ -2053,7 +2119,7 @@ makes "one position per element" a compile-time fact.
 
 == EXAMPLES
 @example accept
-import list
+import std::list
 
 fn numbered(names: List[str]) -> List[str]:
     loop name in names and i from 0 to names.length():
@@ -2291,7 +2357,7 @@ error handling for outcomes that depend on the input.
 
 == EXAMPLES
 @example accept
-import list
+import std::list
 
 xs = [10, 20, 30]
 xs.at(1)
@@ -2300,7 +2366,7 @@ xs.at(1)
 @end
 
 @example reject
-import list
+import std::list
 
 x = [1, 2, 3].at(5):
     on IndexNotFound:
@@ -2350,7 +2416,7 @@ it: every caller's requirement is derived from the call graph.
   * A function needing a context can be called or aliased but not passed
     or stored as a value (CONTEXT-FUNCTION-VALUE).
   * The context value is immutable; a MutableVector field inside it is a
-    place the functions may mutate (lib/test.bot's suite does this).
+    place the functions may mutate (stdlib/test.bot's suite does this).
 
 == WHY
 Contexts replace global variables and hidden singletons: dependencies on
@@ -2360,7 +2426,7 @@ a context lives in a fixed data slot: no hidden argument and no lookup.
 
 == EXAMPLES
 @example accept
-import str
+import std::str
 
 context struct Config:
     verbose: bool
@@ -2399,12 +2465,12 @@ x
 CONTEXTS.md; concept.context-traits for contexts named by what they do.
 
 @topic concept.context-traits
-title: Context traits: environments named by their operations (io::IO)
-summary: A `context trait` lists operations an installed context must provide; a function requiring it (`context io: io::IO`) works with whichever installed context implements it, selected statically.
+title: Context traits: environments named by their operations (std::io::IO)
+summary: A `context trait` lists operations an installed context must provide; a function requiring it (`context io: std::io::IO`) works with whichever installed context implements it, selected statically.
 index: concepts
-alias: context trait; portable io; io::IO trait
+alias: context trait; portable io; std::io::IO trait
 keywords: context trait, io, IO, print_line, LinuxIO, portable, implementation, selection, AMBIGUOUS-CONTEXT-IMPLEMENTATION, MISSING-CONTEXT, write_text
-related: concept.contexts concept.traits task.print-output backend.io stdlib.module.io error.missing-context error.ambiguous-context-implementation
+related: concept.contexts concept.traits task.print-output backend.io stdlib.module.std::io error.missing-context error.ambiguous-context-implementation
 docs: CONTEXT-TRAITS.md CONTEXTS.md TRAITS.md
 
 == WHAT IT IS
@@ -2412,12 +2478,12 @@ docs: CONTEXT-TRAITS.md CONTEXTS.md TRAITS.md
         fn now() -> int
 
 A context struct implements it structurally: its own module declares a
-function of each operation's name taking the context
-(`fn now(context clock: FixedClock) -> int`). A function declaring
-`context clock: Clock` calls `clock.now()`; the compiler selects the one
-installed context implementing Clock and compiles the call as a direct
-call of that implementation. lib/io.bot's `io::IO` is the standard one:
-`io::print_line` works with `linux::io::create()` installed.
+function of each operation's name taking the context (`fn now(context clock:
+FixedClock) -> int`). A function declaring `context clock: Clock` calls
+`clock.now()`; the compiler selects the one installed context implementing
+Clock and compiles the call as a direct call of that implementation.
+stdlib/io.bot's `std::io::IO` is the standard one: `std::io::print_line`
+works with `std::linux::io::create()` installed.
 
 == RULES
   * Exactly one installed context may implement the trait at a call
@@ -2432,9 +2498,9 @@ call of that implementation. lib/io.bot's `io::IO` is the standard one:
     compile; backend.io).
 
 == WHY
-Code written against `io::IO` is portable: the entry program decides the
-environment once, and every function needing it compiles to direct calls,
-with no dispatch, hidden argument or provider table at run time.
+Code written against `std::io::IO` is portable: the entry program decides
+the environment once, and every function needing it compiles to direct
+calls, with no dispatch, hidden argument or provider table at run time.
 
 == EXAMPLES
 @example accept
@@ -2457,18 +2523,18 @@ elapsed(40)
 @end
 
 @example accept
-import io
-import linux::io
+import std::io
+import std::linux::io
 
-fn hello() errors io::WriteFailed:
-    io::print_line("Hello, world!")
+fn hello() errors std::io::WriteFailed:
+    std::io::print_line("Hello, world!")
 
-with context linux::io::create()
+with context std::linux::io::create()
 hello():
-    on io::WriteFailed:
+    on std::io::WriteFailed:
         unit
 0
-@caption Portable output through io::IO (native backends)
+@caption Portable output through std::io::IO (native backends)
 @backends cranelift-generic cranelift
 @output Hello, world!
 @value 0
@@ -2635,7 +2701,7 @@ summary: `coroutine {step, first} = f(x)` starts f(x) and runs it to its first `
 index: concepts
 alias: coroutines; yield; generator; resume a coroutine
 keywords: coroutine, yield, resume, step, first, done?, handle, generator, iterator, UNWRAPPED-YIELD, suspend, message, scheduler
-related: concept.affine concept.function-types concept.mutable-vector concept.testing stdlib.module.coroutine error.unwrapped-yield error.use-after-move
+related: concept.affine concept.function-types concept.mutable-vector concept.testing stdlib.module.std::coroutine error.unwrapped-yield error.use-after-move
 docs: COROUTINES.md AFFINE-VALUES.md
 
 == WHAT IT IS
@@ -2655,7 +2721,7 @@ protocol.
     started as one): UNWRAPPED-YIELD otherwise; it cannot become a
     function value.
   * After completion the handle keeps returning the final result; a failed
-    coroutine raises its error again. `coroutine::done?(step)` (`import
+    coroutine raises its error again. `std::coroutine::done?(step)` (`import
     coroutine`) is true once it has done either.
   * The handle is affine (concept.affine): moved, never copied, released
     after its last use.
@@ -2669,7 +2735,7 @@ x86-64 and AArch64; the Tcl backends run them everywhere.
 
 == EXAMPLES
 @example accept
-import coroutine
+import std::coroutine
 
 fn counter(limit: int) -> int:
     loop i from 0 to limit:
@@ -2681,7 +2747,7 @@ a = step()
 b = step()
 c = step()
 d = step()
-[first, a, b, c, d, coroutine::done?(step)]
+[first, a, b, c, d, std::coroutine::done?(step)]
 @caption Yields 0, 1, 2, then the final result, repeated
 @value [0, 1, 2, -1, -1, true]
 @end
@@ -2716,7 +2782,7 @@ x
 @end
 
 == MORE
-COROUTINES.md; lib/test.bot's runner is an ordinary coroutine.
+COROUTINES.md; stdlib/test.bot's runner is an ordinary coroutine.
 
 @topic concept.mutable-vector
 title: MutableVector[T]: a growable mutable value
@@ -2724,15 +2790,15 @@ summary: MutableVector[T] grows and shrinks in place (push, pop, take, swap); it
 index: concepts
 alias: MutableVector; growable list; dynamic array; vector type
 keywords: mutable_vector, push, pop, take, swap, clear, at, length, place, copy-on-write, MUTABLE-PLACE-RECEIVER, MUTABLE-PLACE-CAPTURE, affine
-related: concept.mutable-array concept.values concept.affine concept.lists stdlib.module.mutable_vector capability.assignment error.mutable-place-receiver
+related: concept.mutable-array concept.values concept.affine concept.lists stdlib.module.std::mutable_vector capability.assignment error.mutable-place-receiver
 docs: MUTABLE-VECTOR.md MUTABLE-ARRAY.md
 
 == WHAT IT IS
-    v = mutable_vector::from_list([1, 2])
+    v = std::mutable_vector::from_list([1, 2])
     v.push(3)                      v now holds [1, 2, 3]
     last = v.pop()                 errors IndexNotFound when empty
 
-After `import mutable_vector`: from_list, push, pop, take(i), swap, at,
+After `import std::mutable_vector`: from_list, push, pop, take(i), swap, at,
 length, empty?, clear; `loop x in v:` iterates it. Copies share their
 elements copy-on-write, so copying is cheap.
 
@@ -2758,13 +2824,13 @@ some other binding holds -- so value semantics still hold everywhere.
 
 == EXAMPLES
 @example accept
-import mutable_vector
+import std::mutable_vector
 
 fn with_extra(v: MutableVector[int]) -> MutableVector[int]:
     v.push(9)
     v
 
-v = mutable_vector::from_list([1, 2])
+v = std::mutable_vector::from_list([1, 2])
 w = with_extra(v)
 last = v.pop():
     on IndexNotFound:
@@ -2775,10 +2841,10 @@ last = v.pop():
 @end
 
 @example reject
-import mutable_vector
+import std::mutable_vector
 
 fn fresh() -> MutableVector[int]:
-    mutable_vector::from_list([])
+    std::mutable_vector::from_list([])
 
 fresh().push(1)
 0
@@ -2796,15 +2862,15 @@ summary: MutableArray[T] has a fixed capacity and indexed reads and writes (at, 
 index: concepts
 alias: MutableArray; mutable array; fixed-size array
 keywords: mutable_array, create, from_list, generate, at, set, swap, copy, freeze, capacity, place, IndexNotFound, nomethod
-related: concept.mutable-vector concept.values concept.lists concept.nomethod proof.list-bounds proof.slices stdlib.module.mutable_array error.mutable-place-receiver
+related: concept.mutable-vector concept.values concept.lists concept.nomethod proof.list-bounds proof.slices stdlib.module.std::mutable_array error.mutable-place-receiver
 docs: MUTABLE-ARRAY.md MUTABLE-VECTOR.md PARAMETERIZED-MUTABLEARRAY.md
 
 == WHAT IT IS
-    a = mutable_array::create(3, 0)          [0, 0, 0]
+    a = std::mutable_array::create(3, 0)          [0, 0, 0]
     a.set(1, 7)                              in place
     xs = a.freeze(3)                         a List copy of slots 0..3
 
-After `import mutable_array`: create(n, value), from_list, generate(n,
+After `import std::mutable_array`: create(n, value), from_list, generate(n,
 f), at, set, swap, capacity, copy, freeze, get. It used to have
 reference semantics; it is now a value like MutableVector.
 
@@ -2825,9 +2891,9 @@ programming without giving up value semantics.
 
 == EXAMPLES
 @example accept
-import mutable_array
+import std::mutable_array
 
-a = mutable_array::from_list([1, 2, 3])
+a = std::mutable_array::from_list([1, 2, 3])
 a.set(0, 10)
 b = a
 b.set(1, 20)
@@ -2837,9 +2903,9 @@ b.set(1, 20)
 @end
 
 @example reject
-import mutable_array
+import std::mutable_array
 
-a = mutable_array::create(3, 0)
+a = std::mutable_array::create(3, 0)
 a.set(5, 1):
     on IndexNotFound:
         unit
@@ -2854,16 +2920,16 @@ MUTABLE-ARRAY.md.
 
 @topic concept.immutable-set
 title: ImmutableSet[T]: membership tests
-summary: ImmutableSet[T] is an immutable set built from a List with immutable_set::from_list and queried with contains; it deduplicates by value equality and has no iteration or update operations.
+summary: ImmutableSet[T] is an immutable set built from a List with std::immutable_set::from_list and queried with contains; it deduplicates by value equality and has no iteration or update operations.
 index: concepts
 alias: ImmutableSet; hash set; set membership; set type
-keywords: immutable_set, set, contains, from_list, membership, deduplicate, byte::set, equality
-related: concept.lists concept.values stdlib.module.immutable_set stdlib.immutable_set::contains
+keywords: immutable_set, set, contains, from_list, membership, deduplicate, std::byte::set, equality
+related: concept.lists concept.values stdlib.module.std::immutable_set stdlib.std::immutable_set::contains
 docs: MINIMAL-IMMUTABLE-SET.md BYTE-SET.md
 
 == WHAT IT IS
-After `import immutable_set`: `immutable_set::from_list(xs)` builds an
-`ImmutableSet[T]` from a `List[T]`, and `s.contains(x)` answers
+After `import std::immutable_set`: `std::immutable_set::from_list(xs)`
+builds an `ImmutableSet[T]` from a `List[T]`, and `s.contains(x)` answers
 membership (false for absence; never an error for comparable values).
 
 == RULES
@@ -2876,15 +2942,15 @@ membership (false for absence; never an error for comparable values).
 
 == WHY
 The set commits only to semantics (membership by value equality), not to
-a representation, so the runtime may choose one later; byte::set builds
+a representation, so the runtime may choose one later; std::byte::set builds
 the common `ImmutableSet[Byte]` of characters.
 
 == EXAMPLES
 @example accept
-import immutable_set
+import std::immutable_set
 
-a = immutable_set::from_list([1, 2, 2])
-b = immutable_set::from_list([2, 1])
+a = std::immutable_set::from_list([1, 2, 2])
+b = std::immutable_set::from_list([2, 1])
 [a == b, a.contains(2), a.contains(9)]
 @value [true, true, false]
 @end
@@ -2894,28 +2960,29 @@ MINIMAL-IMMUTABLE-SET.md.
 
 @topic concept.static-compile
 title: `static compile:`: compiler diagnostics as values
-summary: A `static compile:` block that the compiler accepts runs as written; one it rejects fails with compiler::CompilerError, carrying the diagnostic's code and location, and the program still compiles.
+summary: A `static compile:` block the compiler accepts runs as written; one it rejects fails with std::compiler::CompilerError, carrying the diagnostic's code and location.
 index: concepts
 alias: static compile; static compile block; compile-time rejection test; CompilerError
-keywords: static, compile, CompilerError, DiagnosticCode, compiler, rejects, diagnostic, test, compile-time, import compiler, STATIC-UNKNOWN-OPERATION
-related: concept.testing concept.negative-tests concept.errors concept.error-payloads stdlib.module.compiler stdlib.test::rejects error.static-unknown-operation
+keywords: static, compile, CompilerError, DiagnosticCode, compiler, rejects, diagnostic, test, compile-time, import std::compiler, STATIC-UNKNOWN-OPERATION
+related: concept.testing concept.negative-tests concept.errors concept.error-payloads stdlib.module.std::compiler stdlib.std::test::rejects error.static-unknown-operation
 docs: STATIC-COMPILE.md STATIC-DECISION-ECONOMICS.md GOLDEN-TEST-FRAMEWORK.md
 
 == WHAT IT IS
-    fn probe() -> int errors compiler::CompilerError:
+    fn probe() -> int errors std::compiler::CompilerError:
         static compile:
             missing + 1
 
-The block is decided at compile time by the ordinary compiler with its
-body where it stands. Accepted, the boundary disappears: the body runs
-with its ordinary value and errors, compiled exactly as if written there.
-Rejected, none of it runs and it completes with the payload error
-`compiler::CompilerError {code, primary, related, message}`: `code` is a
-`compiler::DiagnosticCode` case (Unbound, Type, KnownError, ...), and
-`primary` a `compiler::SourceLocation` {line, column}.
+The block is decided at compile time by the ordinary compiler with its body
+where it stands. Accepted, the boundary disappears: the body runs with its
+ordinary value and errors, compiled exactly as if written there. Rejected,
+none of it runs and it completes with the payload error
+`std::compiler::CompilerError {code, primary, related, message}`: `code` is
+a `std::compiler::DiagnosticCode` case (Unbound, Type, KnownError, ...), and
+`primary` a `std::compiler::SourceLocation` {line, column}.
 
 == RULES
-  * A file using it writes `import compiler` (MISSING-IMPORT otherwise).
+  * A file using it writes `import std::compiler` (MISSING-IMPORT
+    otherwise).
   * A rejected block's CompilerError is handled or admitted like any
     declared error; compare `code`, not the message text.
   * A syntax error inside the block is the program's, not the block's:
@@ -2932,15 +2999,15 @@ accepted block costs nothing: it is the same code as the body.
 
 == EXAMPLES
 @example accept
-import compiler
+import std::compiler
 
-fn probe() -> int errors compiler::CompilerError:
+fn probe() -> int errors std::compiler::CompilerError:
     static compile:
         missing + 1
 
 r = probe():
-    on compiler::CompilerError {code, primary}:
-        if code == compiler::DiagnosticCode::Unbound:
+    on std::compiler::CompilerError {code, primary}:
+        if code == std::compiler::DiagnosticCode::Unbound:
             primary.line
         else:
             0
@@ -2950,7 +3017,7 @@ r
 @end
 
 @example accept
-import compiler
+import std::compiler
 
 fn adds() -> int:
     static compile:
@@ -2962,56 +3029,56 @@ adds()
 @end
 
 == MORE
-STATIC-COMPILE.md; lib/compiler.bot lists every DiagnosticCode case.
+STATIC-COMPILE.md; stdlib/compiler.bot lists every DiagnosticCode case.
 
 @topic concept.testing
-title: Testing with lib/test.bot: suites, cases, report
-summary: lib/test.bot is ordinary Botlish: install `test::suite()` as a context, register cases with test::value, test::holds or test::rejects, and test::report() returns PASS/FAIL lines.
+title: Testing with stdlib/test.bot: suites, cases, report
+summary: stdlib/test.bot (std::test) is ordinary Botlish: install `std::test::suite()` as a context, register cases with value, holds or rejects, and report() returns PASS/FAIL lines.
 index: concepts stdlib
 alias: testing; unit test; test framework; golden test; test suite; assert; assertion
 keywords: test, suite, case, value, holds, rejects, rejects_at, report, PASS, FAIL, golden, assertion, expect, Match, run
-related: concept.negative-tests concept.static-compile concept.contexts concept.coroutines capability.test-timeout capability.process-exit-status stdlib.module.test stdlib.test::value stdlib.test::holds stdlib.test::rejects stdlib.test::case stdlib.test::report stdlib.test::int_text
+related: concept.negative-tests concept.static-compile concept.contexts concept.coroutines capability.test-timeout capability.process-exit-status stdlib.module.std::test stdlib.std::test::value stdlib.std::test::holds stdlib.std::test::rejects stdlib.std::test::case stdlib.std::test::report stdlib.std::test::int_text
 docs: GOLDEN-TEST-FRAMEWORK.md STATIC-COMPILE.md
 
 == WHAT IT IS
-    import test
+    import std::test
 
     fn register_tests():
         fn adds():
             20 + 22
-        test::value("adds", 42, adds)
+        std::test::value("adds", 42, adds)
 
-    with context test::suite()
+    with context std::test::suite()
     register_tests()
-    test::report()        ["PASS adds", "1 passed, 0 failed"]
+    std::test::report()        ["PASS adds", "1 passed, 0 failed"]
 
-A suite is a context (`test::Suite`) holding a MutableVector of cases.
-Registration stores a deferred check (a function of no arguments) and
-never calls it; test::report() runs every case once, in registration
-order, through an ordinary coroutine (test::run), and returns the report
-as a List of Strings: "PASS name", or "FAIL name" with indented
+A suite is a context (`std::test::Suite`) holding a MutableVector of cases.
+Registration stores a deferred check (a function of no arguments) and never
+calls it; std::test::report() runs every case once, in registration order,
+through an ordinary coroutine (std::test::run), and returns the report as a
+List of Strings: "PASS name", or "FAIL name" with indented
 expected/actual/detail lines, then "P passed, F failed".
 
-    test::value(name, expected, body)            body() == expected
-    test::holds(name, description, pred, body)   pred(body()) is true
-    test::rejects(name, code, body)              body's `static compile:`
+    std::test::value(name, expected, body)            body() == expected
+    std::test::holds(name, description, pred, body)   pred(body()) is true
+    std::test::rejects(name, code, body)              body's `static compile:`
                                                  block is rejected with code
-    test::rejects_at / rejects_message / rejects_containing / rejects_any
-    test::case(name, check)                      a custom check (a Match)
+    std::test::rejects_at / rejects_message / rejects_containing / rejects_any
+    std::test::case(name, check)                      a custom check (a Match)
 
 == RULES
   * There is no assertion statement or test syntax: a failing comparison
     is a value (a Match), so one failing case never stops the run.
-  * A body's only allowed declared error is compiler::CompilerError; any
-    other error it may raise must be handled inside it.
-  * Registration must run after `with context test::suite()`
+  * A body's only allowed declared error is std::compiler::CompilerError;
+    any other error it may raise must be handled inside it.
+  * Registration must run after `with context std::test::suite()`
     (MISSING-CONTEXT otherwise). The registration helpers are `nomethod`.
   * No per-test timeout: a non-terminating case hangs the suite
     (capability.test-timeout).
   * The report is a value: make it the program's value (as below) or
     print its lines. A FAIL line does not make the program itself fail
     (capability.process-exit-status).
-  * test::int_text(n) is the available Int-to-String conversion.
+  * std::test::int_text(n) is the available Int-to-String conversion.
 
 == WHY
 Tests written in the language they test exercise the real compiler and
@@ -3020,7 +3087,7 @@ to build the framework, so it needs no compiler support of its own.
 
 == EXAMPLES
 @example accept
-import test
+import std::test
 
 fn double(n: int) -> int:
     n * 2
@@ -3031,19 +3098,19 @@ fn even?(n: int) -> bool:
 fn register_tests():
     fn doubles():
         double(21)
-    test::value("double 21", 42, doubles)
-    test::holds("double is even", "an even number", even?, doubles)
+    std::test::value("double 21", 42, doubles)
+    std::test::holds("double is even", "an even number", even?, doubles)
 
-with context test::suite()
+with context std::test::suite()
 register_tests()
-test::report()
+std::test::report()
 @caption Two cases and the report
 @value ["PASS double 21", "PASS double is even", "2 passed, 0 failed"]
 @end
 
 == MORE
-GOLDEN-TEST-FRAMEWORK.md; lib/test.bot's header; concept.negative-tests for
-testing failures and rejections.
+GOLDEN-TEST-FRAMEWORK.md; stdlib/test.bot's header; concept.negative-tests
+for testing failures and rejections.
 
 @topic concept.negative-tests
 title: Testing failing calls and compiler rejections
@@ -3051,7 +3118,7 @@ summary: A tested failing call must not be statically known to fail (KNOWN-ERROR
 index: concepts
 alias: negative tests; negative test; testing failing calls; test an error; test a failure; test a failing call; expected failure test
 keywords: test, failure, error, handler, KNOWN-ERROR, rejects, static compile, parameter, negative, expect error, value, registration
-related: concept.testing concept.known-errors concept.static-compile concept.errors rule.known-error error.known-error stdlib.test::value stdlib.test::rejects
+related: concept.testing concept.known-errors concept.static-compile concept.errors rule.known-error error.known-error stdlib.std::test::value stdlib.std::test::rejects
 docs: GOLDEN-TEST-FRAMEWORK.md STATIC-COMPLETION-PROOFS.md STATIC-COMPILE.md
 
 == WHAT IT IS
@@ -3069,10 +3136,10 @@ Two supported patterns:
     failing input through a parameter of a registration function. Inside,
     the call depends on the parameter, so it is not statically known to
     fail; handle the error and assert the handled outcome with
-    test::value. Call the registration function with the failing input.
+    std::test::value. Call the registration function with the failing input.
   * To test that the compiler rejects something (including a KNOWN-ERROR
-    itself): put the code in a `static compile:` block and register it
-    with test::rejects(name, compiler::DiagnosticCode::CASE, body) (or
+    itself): put the code in a `static compile:` block and register it with
+    std::test::rejects(name, std::compiler::DiagnosticCode::CASE, body) (or
     rejects_at to pin the location). The file imports compiler.
 
 Choose a handler value the success path cannot produce (below, -1:
@@ -3088,7 +3155,7 @@ compile-time fact as a compile-time test.
 
 == EXAMPLES
 @example accept
-import test
+import std::test
 
 error Negative
 
@@ -3102,18 +3169,18 @@ fn register_failure(input: int):
         checked(input):
             on Negative:
                 -1
-    test::value("a negative input fails with Negative", -1, run)
+    std::test::value("a negative input fails with Negative", -1, run)
 
-with context test::suite()
+with context std::test::suite()
 register_failure(-1)
-test::report()
+std::test::report()
 @caption The failing input is a parameter, so the call is not decided
 @value ["PASS a negative input fails with Negative", "1 passed, 0 failed"]
 @end
 
 @example accept
-import compiler
-import test
+import std::compiler
+import std::test
 
 error Negative
 
@@ -3123,23 +3190,23 @@ fn checked(n: int) -> int errors Negative:
     n
 
 fn register_tests():
-    fn literal_failure() errors compiler::CompilerError:
+    fn literal_failure() errors std::compiler::CompilerError:
         static compile:
             checked(-1):
                 on Negative:
                     -1
-    test::rejects("checked(-1) is a known error",
-        compiler::DiagnosticCode::KnownError, literal_failure)
+    std::test::rejects("checked(-1) is a known error",
+        std::compiler::DiagnosticCode::KnownError, literal_failure)
 
-with context test::suite()
+with context std::test::suite()
 register_tests()
-test::report()
-@caption The rejection itself, tested with static compile and test::rejects
+std::test::report()
+@caption The rejection itself, tested with static compile and std::test::rejects
 @value ["PASS checked(-1) is a known error", "1 passed, 0 failed"]
 @end
 
 @example reject
-import test
+import std::test
 
 error Negative
 
@@ -3153,11 +3220,11 @@ fn register_tests():
         checked(-1):
             on Negative:
                 -1
-    test::value("a negative input fails", -1, negative_fails)
+    std::test::value("a negative input fails", -1, negative_fails)
 
-with context test::suite()
+with context std::test::suite()
 register_tests()
-test::report()
+std::test::report()
 @caption A literal failing call in a test body is KNOWN-ERROR
 @error CORE SEMANTIC KNOWN-ERROR
 @at 12:9
@@ -3178,11 +3245,11 @@ docs: DIRECT-MODULES.md CONTEXTS.md LINUX-SYSCALL-TRANSPORTS.md
 == WHAT IT IS
 Direct means raw, ambient authority not yet converted into a context: a
 syscall, a raw file descriptor, a machine address, a retaining C call. The
-syscall transports are direct by declaration, and lib/linux.bot is
-declared `direct module`. A module stops directness by mediating every
-such call through a function that requires a context the module declares
-itself; linux::io does this with its LinuxIO context, so linux::io, io
-and everything above them are ordinary.
+syscall transports are direct by declaration, and stdlib/linux.bot is
+declared `direct module`. A module stops directness by mediating every such
+call through a function that requires a context the module declares itself;
+std::linux::io does this with its LinuxIO context, so std::linux::io, io and
+everything above them are ordinary.
 
 == RULES
   * A call into another direct module from a function that requires no
@@ -3206,14 +3273,14 @@ those whose raw calls all go through their own contexts.
 == EXAMPLES
 @example accept
 direct module
-import abi
-import abi::bytes
-import linux
-import str
+import std::abi
+import std::abi::bytes
+import std::linux
+import std::str
 
 fn say(text: str) -> int:
-    stdout = abi::i32(1)
-    stdout.write(abi::bytes::from_list(text.encode_utf8()))
+    stdout = std::abi::i32(1)
+    stdout.write(std::abi::bytes::from_list(text.encode_utf8()))
 
 say("hi\n")
 @caption A raw write(2) of 3 bytes (native backends only)
@@ -3223,14 +3290,14 @@ say("hi\n")
 @end
 
 @example reject
-import abi
-import abi::bytes
-import linux
-import str
+import std::abi
+import std::abi::bytes
+import std::linux
+import std::str
 
 fn say(text: str) -> int:
-    stdout = abi::i32(1)
-    stdout.write(abi::bytes::from_list(text.encode_utf8()))
+    stdout = std::abi::i32(1)
+    stdout.write(std::abi::bytes::from_list(text.encode_utf8()))
 
 0
 @caption The entry program uses direct authority without declaring it
@@ -3247,21 +3314,21 @@ title: Calling C: `extern c fn` and `extern c library`
 summary: `extern c fn` declares a C function by its ABI signature and pointer contracts, `extern c library` a library to link; C calls run only on the native backends.
 index: concepts
 alias: C FFI; extern c; foreign function interface; call C function
-keywords: extern, c, ffi, foreign, library, link, ffi::c, Ptr, Int, noescape, borrow, NATIVE-ONLY, bindgen
+keywords: extern, c, ffi, foreign, library, link, std::ffi::c, Ptr, Int, noescape, borrow, NATIVE-ONLY, bindgen
 related: concept.direct-modules concept.binary-layouts concept.c-bindgen-layouts backend.native-only backend.native-executable error.native-only
 docs: C-FFI.md C-ABI-TYPES.md C-POINTER-BORROWING.md C-BINDGEN.md
 
 == WHAT IT IS
-    import ffi::c
+    import std::ffi::c
     extern c library "crypto"
-    extern c fn abs(n: ffi::c::Int) -> ffi::c::Int
+    extern c fn abs(n: std::ffi::c::Int) -> std::ffi::c::Int
 
-A truthful C declaration with no body. Types come from `ffi::c`: the C
-integer scalars (`ffi::c::Int`, `ffi::c::ULong`, ... -- integer domains
-whose ranges are the compilation target's), `ffi::c::Void`, pointers
-`ffi::c::Ptr[T]` and `ffi::c::FnPtr[...]`. A pointer parameter may borrow
-existing Bytes or MutableBytes storage for the one call when its contract
-says `read noescape` or `write noescape`.
+A truthful C declaration with no body. Types come from `std::ffi::c`: the C
+integer scalars (`std::ffi::c::Int`, `std::ffi::c::ULong`, ... -- integer
+domains whose ranges are the compilation target's), `std::ffi::c::Void`,
+pointers `std::ffi::c::Ptr[T]` and `std::ffi::c::FnPtr[...]`. A pointer
+parameter may borrow existing Bytes or MutableBytes storage for the one call
+when its contract says `read noescape` or `write noescape`.
 
 == RULES
   * The Tcl backends refuse a C call at run time (NATIVE-ONLY): run with
@@ -3269,13 +3336,13 @@ says `read noescape` or `write noescape`.
     by the system linker at link time, never at run time.
   * No fact comes from a name or a C type: an absent escape or access fact
     is unknown, which never admits a byte exposure.
-  * Pointers are affine C ABI values: no arithmetic, dereference or
-    integer conversion. The memory a data pointer addresses is read only
-    through a layout's native view (binary::native::view, concept.binary-layouts)
-    and written only through its native edit (binary::native::edit,
-    binary::store). A record C expects a pointer to is built in byte
-    storage (binary::write; binary::write_foreign for its pointer fields)
-    and passed by the borrowing contract.
+  * Pointers are affine C ABI values: no arithmetic, dereference or integer
+    conversion. The memory a data pointer addresses is read only through a
+    layout's native view (std::binary::native::view, concept.binary-layouts)
+    and written only through its native edit (std::binary::native::edit,
+    std::binary::store). A record C expects a pointer to is built in byte
+    storage (std::binary::write; std::binary::write_foreign for its pointer
+    fields) and passed by the borrowing contract.
   * A retaining call (a pointer that may escape) is direct authority
     (concept.direct-modules).
   * tools/c-bindgen.tcl generates such declarations from real headers,
@@ -3289,9 +3356,9 @@ problem, instead of building a second C ecosystem inside the compiler.
 
 == EXAMPLES
 @example accept
-import ffi::c
+import std::ffi::c
 
-extern c fn abs(n: ffi::c::Int) -> ffi::c::Int
+extern c fn abs(n: std::ffi::c::Int) -> std::ffi::c::Int
 
 abs(-5)
 @caption libc's abs, linked and called natively
@@ -3321,22 +3388,23 @@ generated layout, e.g. Win32's
     layout FILETIME:
         size 8
         align 4
-        field dwLowDateTime: ffi::c::ULong at 0   # DWORD dwLowDateTime
-        field dwHighDateTime: ffi::c::ULong at 4  # DWORD dwHighDateTime
+        field dwLowDateTime: std::ffi::c::ULong at 0   # DWORD dwLowDateTime
+        field dwHighDateTime: std::ffi::c::ULong at 4  # DWORD dwHighDateTime
 
 Every number is the C compiler's answer for the binding's target (sizeof,
 _Alignof, __builtin_offsetof, a member's type), never a rule the generator
 or the compiler applies; a generated C file of _Static_asserts
 (layouts-check.c) checks them against the compiler again. The layout reads
-and writes C memory through the ordinary operations (binary::native::view,
-binary::native::edit, binary::write); the record's pointee identity stays
-NS::ctypes' opaque type, and a pointer field keeps its pointee's identity.
+and writes C memory through the ordinary operations
+(std::binary::native::view, std::binary::native::edit, std::binary::write);
+the record's pointee identity stays NS::ctypes' opaque type, and a pointer
+field keeps its pointee's identity.
 
 == RULES
-  * A generated layout is its target's: the widths of ffi::c's scalars are
-    the compilation's target's, so a layout generated for Windows (LLP64:
-    a 32-bit long) does not describe, or even compile as, a Linux one.
-    Compile a binding for the target it was generated for (-target).
+  * A generated layout is its target's: the widths of std::ffi::c's scalars
+    are the compilation's target's, so a layout generated for Windows
+    (LLP64: a 32-bit long) does not describe, or even compile as, a Linux
+    one. Compile a binding for the target it was generated for (-target).
   * It is also its toolchain's. The Win32 binding is generated with
     MinGW-w64's headers and compiler for windows-x86_64-gnu (Windows x86-64,
     the GNU ABI), never for MSVC's windows-x86_64: MSVC's headers and
@@ -3361,19 +3429,19 @@ as the compiler that answered, and only for the target it answered for.
 
 == EXAMPLES
 @example reject
-import binary
-import ffi::c
+import std::binary
+import std::ffi::c
 
 layout FILETIME:
     size 8
     align 4
-    field dwLowDateTime: ffi::c::ULong at 0
-    field dwHighDateTime: ffi::c::ULong at 4
+    field dwLowDateTime: std::ffi::c::ULong at 0
+    field dwHighDateTime: std::ffi::c::ULong at 4
 
-binary::layout_length(FILETIME)
+std::binary::layout_length(FILETIME)
 @caption Win32's FILETIME, generated for windows-x86_64-gnu, compiled for this host (a 64-bit unsigned long)
 @error CORE SEMANTIC LAYOUT-FIELD-BOUNDS
-@at 8:44
+@at 8:49
 @end
 
 == MORE
@@ -3381,61 +3449,61 @@ C-BINDGEN-LAYOUTS.md; C-BINDGEN.md; `tclsh9.0 tools/c-bindgen.tcl report
 PROFILE -target TARGET -why NAME` explains one record's layout or blockers.
 
 @topic concept.binary-layouts
-title: Binary layouts: `layout`, binary::parse and binary::emit
-summary: A `layout` declares a fixed-size byte format with explicit size, alignment and field offsets; binary::parse imprints bytes into an immutable LayoutStruct[L] and binary::emit writes it back.
+title: Binary layouts: `layout`, std::binary::parse and std::binary::emit
+summary: A `layout` declares a fixed-size byte format with explicit size, alignment and field offsets; std::binary::parse imprints bytes into an immutable LayoutStruct[L] and std::binary::emit writes it back.
 index: concepts
 alias: binary layout; layout declaration; parse bytes; byte format
 keywords: layout, binary, parse, emit, LayoutStruct, size, align, field, offset, bytes, LayoutLengthMismatch, little-endian, U32, LAYOUT-FIELD-BOUNDS, array, fixed array, LayoutExtentMismatch, union, union layout
-related: concept.structs concept.integer-domains concept.c-ffi stdlib.module.binary error.layout-field-bounds concept.layout-unions
+related: concept.structs concept.integer-domains concept.c-ffi stdlib.module.std::binary error.layout-field-bounds concept.layout-unions
 docs: BINARY-LAYOUT.md ABI-BYTES.md NATIVE-LAYOUT-VIEWS.md FIXED-LAYOUT-ARRAYS.md LAYOUT-UNIONS.md
 
 == WHAT IT IS
     layout Header:
         size 8
         align 4
-        field magic: binary::U32 at 0
-        field count: binary::I16 at 4
+        field magic: std::binary::U32 at 0
+        field count: std::binary::I16 at 4
 
-`binary::parse(Header, data)` turns an abi::bytes::Bytes of exactly 8
-bytes into a `LayoutStruct[Header]`, an ordinary immutable struct with
-fields magic and count; `binary::emit(h)` produces the 8 bytes (padding
-zero); `binary::layout_length(Header)` is the constant 8. A value can also
-be built directly: `LayoutStruct[Header] {magic: 7, count: -2}`.
+`std::binary::parse(Header, data)` turns a std::abi::bytes::Bytes of exactly
+8 bytes into a `LayoutStruct[Header]`, an ordinary immutable struct with
+fields magic and count; `std::binary::emit(h)` produces the 8 bytes (padding
+zero); `std::binary::layout_length(Header)` is the constant 8. A value can
+also be built directly: `LayoutStruct[Header] {magic: 7, count: -2}`.
 
 == RULES
   * Everything is explicit: size, a power-of-two alignment and every
     field's offset; padding is the bytes no field covers. Fields must fit
     inside the size (LAYOUT-FIELD-BOUNDS) and may not overlap.
-  * A scalar field's type is an integer domain whose values are exactly
-    one fixed-width encoding's (binary::U8 .. U64, I8 .. I64, or your own
+  * A scalar field's type is an integer domain whose values are exactly one
+    fixed-width encoding's (std::binary::U8 .. U64, I8 .. I64, or your own
     `Int in 0..65535`); nested layouts are allowed by value. Byte order is
     the target's (little-endian).
-  * binary::parse fails with LayoutLengthMismatch unless the input has
+  * std::binary::parse fails with LayoutLengthMismatch unless the input has
     exactly the layout's size; emit cannot fail.
   * A layout is not a value or a type: it is named only as the static
     operand of the binary operations, in LayoutStruct[L], NativeView[L]
     and NativeEdit[L], and as the root of a field designator (L.field).
-  * The same layout reads live native memory: binary::native::view(L, p)
-    is a read-only NativeView[L] whose fields are read when projected, and
-    binary::load(v) its LayoutStruct[L]. A field may be a C pointer; such a
-    layout is native-only (LAYOUT-NATIVE-ONLY): bytes never become a
-    pointer (NATIVE-LAYOUT-VIEWS.md).
+  * The same layout reads live native memory: std::binary::native::view(L,
+    p) is a read-only NativeView[L] whose fields are read when projected,
+    and std::binary::load(v) its LayoutStruct[L]. A field may be a C
+    pointer; such a layout is native-only (LAYOUT-NATIVE-ONLY): bytes never
+    become a pointer (NATIVE-LAYOUT-VIEWS.md).
   * Writes name one field statically (L.field, L.inner.x):
-    binary::write(data, L.f, v) is a new MutableBytes with the field
-    written; binary::write_foreign encodes an existing pointer into a
-    pointer field; binary::native::edit(L, p) is a NativeEdit[L] -- live
-    native memory read like a view and written by binary::store -- write
-    authority, never ownership (NATIVE-LAYOUT-WRITES.md).
-  * A field may be a fixed array, `field name: array 16 of ffi::c::Char
+    std::binary::write(data, L.f, v) is a new MutableBytes with the field
+    written; std::binary::write_foreign encodes an existing pointer into a
+    pointer field; std::binary::native::edit(L, p) is a NativeEdit[L] --
+    live native memory read like a view and written by std::binary::store --
+    write authority, never ownership (NATIVE-LAYOUT-WRITES.md).
+  * A field may be a fixed array, `field name: array 16 of std::ffi::c::Char
     at 8`, of any element representation (rows: `array 2 of array 3 of
-    binary::U16`; records: `array 4 of Point`), element i at the offset
-    plus i times the element's width. Its copied value is a List of
-    exactly that many elements (LayoutExtentMismatch otherwise, when
-    emitted or written); an array of characters is integers, never a
-    String. Through a view it is a live array, NativeView[array N of E]:
-    binary::element(a, i), binary::store_element(e.items, i, v) and
-    binary::load(a); a designator names an element statically (L.items[3])
-    (FIXED-LAYOUT-ARRAYS.md).
+    std::binary::U16`; records: `array 4 of Point`), element i at the offset
+    plus i times the element's width. Its copied value is a List of exactly
+    that many elements (LayoutExtentMismatch otherwise, when emitted or
+    written); an array of characters is integers, never a String. Through a
+    view it is a live array, NativeView[array N of E]:
+    std::binary::element(a, i), std::binary::store_element(e.items, i, v)
+    and std::binary::load(a); a designator names an element statically
+    (L.items[3]) (FIXED-LAYOUT-ARRAYS.md).
   * Fields never overlap. Overlap is declared only by a union layout,
     `union layout U:`, several interpretations of the same bytes (every
     alternative at its first byte) held by value in one field; it has no
@@ -3449,37 +3517,37 @@ parsed one way and written another.
 
 == EXAMPLES
 @example accept
-import abi::bytes
-import binary
+import std::abi::bytes
+import std::binary
 
 layout Header:
     size 8
     align 4
-    field magic: binary::U32 at 0
-    field count: binary::I16 at 4
+    field magic: std::binary::U32 at 0
+    field count: std::binary::I16 at 4
 
 h = LayoutStruct[Header] {magic: 7, count: -2}
-data = binary::emit(h)
-back = binary::parse(Header, data):
+data = std::binary::emit(h)
+back = std::binary::parse(Header, data):
     on LayoutLengthMismatch:
         h
-[back.magic, back.count, back == h, binary::layout_length(Header)]
+[back.magic, back.count, back == h, std::binary::layout_length(Header)]
 @caption Emit and parse round-trip
 @value [7, -2, true, 8]
 @end
 
 @example reject
-import binary
+import std::binary
 
 layout Header:
     size 8
     align 4
-    field magic: binary::U32 at 6
+    field magic: std::binary::U32 at 6
 
-binary::layout_length(Header)
+std::binary::layout_length(Header)
 @caption A 4-byte field at offset 6 does not fit in 8 bytes
 @error CORE SEMANTIC LAYOUT-FIELD-BOUNDS
-@at 6:33
+@at 6:38
 @end
 
 == MORE
@@ -3490,23 +3558,23 @@ title: Union layouts: several interpretations of the same bytes
 summary: `union layout U:` declares alternatives that all start at its first byte: explicit overlap with no tag, active alternative or copied value, so each alternative is read and written alone.
 index: concepts
 alias: union; union layout; overlay; overlapping fields; alternative; C union; anonymous union
-keywords: union, alternative, overlap, overlay, interpretation, punning, NativeView, NativeEdit, binary::read, LAYOUT-UNION, OVERLAPPED, LARGE_INTEGER, tagged union, sum type, active member
-related: concept.binary-layouts stdlib.binary::read error.layout-union concept.c-bindgen-layouts concept.enums concept.c-ffi
+keywords: union, alternative, overlap, overlay, interpretation, punning, NativeView, NativeEdit, std::binary::read, LAYOUT-UNION, OVERLAPPED, LARGE_INTEGER, tagged union, sum type, active member
+related: concept.binary-layouts stdlib.std::binary::read error.layout-union concept.c-bindgen-layouts concept.enums concept.c-ffi
 docs: LAYOUT-UNIONS.md BINARY-LAYOUT.md FIXED-LAYOUT-ARRAYS.md NATIVE-LAYOUT-VIEWS.md NATIVE-LAYOUT-WRITES.md
 
 == WHAT IT IS
     union layout WORD:
         size 4
         align 4
-        alternative whole: binary::U32
+        alternative whole: std::binary::U32
         alternative halves: HALVES
-        alternative bytes: array 4 of binary::U8
+        alternative bytes: array 4 of std::binary::U8
 
 Arrays repeat representation; unions overlap it. Each alternative is a
 representation of the union's bytes from its first byte: a scalar, a C
 pointer, a nested layout, a fixed array or another union. Choosing one is
-interpretation, never conversion: `binary::read(data, WORD.halves)` reads
-the four bytes as two U16s, `v.whole` through a native view the same
+interpretation, never conversion: `std::binary::read(data, WORD.halves)`
+reads the four bytes as two U16s, `v.whole` through a native view the same
 bytes as a U32.
 
 == RULES
@@ -3522,16 +3590,16 @@ bytes as a U32.
     records what was written. A union is not a sum type (concept.enums):
     no case, discriminant, exhaustiveness or pattern match.
   * No copied value: there is no LayoutStruct of a union or of anything
-    holding one, so binary::parse, binary::emit, binary::load and whole-
-    array writes of one are LAYOUT-UNION. Each alternative is read and
-    written alone, through a designator (L.u.alt.field) or a native view
-    or edit.
+    holding one, so std::binary::parse, std::binary::emit, std::binary::load
+    and whole- array writes of one are LAYOUT-UNION. Each alternative is
+    read and written alone, through a designator (L.u.alt.field) or a native
+    view or edit.
   * Through a view or an edit a union is the live union, NativeView[U] /
     NativeEdit[U]: an alternative read is one load at its address, a store
     writes exactly the alternative's bytes (the rest of the union keeps
     its bytes), and nothing is cached between reads.
   * Pointer authority is recursive: bytes never become a pointer through
-    any alternative (binary::read of a pointer alternative is
+    any alternative (std::binary::read of a pointer alternative is
     LAYOUT-NATIVE-ONLY). Native memory is raw: a holder of write authority
     may store an integer alternative and read the pointer alternative of
     the same bytes, as C does -- which is why making an edit is direct.
@@ -3548,27 +3616,27 @@ that knows the protocol reads the matching alternative.
 
 == EXAMPLES
 @example accept
-import abi
-import abi::bytes
-import binary
+import std::abi
+import std::abi::bytes
+import std::binary
 
 layout HALVES:
     size 4
     align 2
-    field low: binary::U16 at 0
-    field high: binary::I16 at 2
+    field low: std::binary::U16 at 0
+    field high: std::binary::I16 at 2
 
 union layout WORD:
     size 4
     align 4
-    alternative whole: binary::U32
+    alternative whole: std::binary::U32
     alternative halves: HALVES
 
-fn f(d: abi::bytes::MutableBytes) -> list errors LayoutLengthMismatch:
-    e = abi::bytes::freeze(binary::write(d, WORD.halves.high, -1))
-    [binary::read(e, WORD.whole), binary::read(e, WORD.halves)]
+fn f(d: std::abi::bytes::MutableBytes) -> list errors LayoutLengthMismatch:
+    e = std::abi::bytes::freeze(std::binary::write(d, WORD.halves.high, -1))
+    [std::binary::read(e, WORD.whole), std::binary::read(e, WORD.halves)]
 
-r = f(abi::bytes::zeroed(abi::usize(4))):
+r = f(std::abi::bytes::zeroed(std::abi::usize(4))):
     on LayoutLengthMismatch:
         []
 r
@@ -3577,12 +3645,12 @@ r
 @end
 
 @example reject
-import binary
+import std::binary
 
 union layout WORD:
     size 4
     align 4
-    alternative whole: binary::U32
+    alternative whole: std::binary::U32
 
 fn f(w: LayoutStruct[WORD]) -> int:
     0
@@ -3635,8 +3703,8 @@ semantics stay those of the generic function.
 
 == EXAMPLES
 @example accept
-import list
-import str
+import std::list
+import std::str
 
 fn first_or(xs, fallback):
     xs.get(0, fallback)
@@ -3652,7 +3720,7 @@ b = ["ab", "cd"].first_or("none").shout()
 @end
 
 @example reject
-import list
+import std::list
 
 fn first_or(xs, fallback):
     xs.get(0, fallback)
@@ -3742,12 +3810,12 @@ arguments.
 
 == EXAMPLES
 @example accept
-import list
+import std::list
 
 args = argv():
     on InvalidArgumentEncoding:
         []
-list::length(args)
+std::list::length(args)
 @caption Argument zero only, by default
 @value 1
 @end

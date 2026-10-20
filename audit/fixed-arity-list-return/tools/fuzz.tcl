@@ -73,7 +73,7 @@
 #             diagnostics) with no FIXED-ARITY-LIST-RETURN warning left, and
 #             every driver run must give the same value as the original's,
 #             except a run in which the original raised IndexNotFound (an
-#             out-of-range positional read: list::at is fallible, r.pk is
+#             out-of-range positional read: std::list::at is fallible, r.pk is
 #             total, so a converted program may legally complete there). Every
 #             generated read has a constant index below N, so that excluded
 #             set is empty by construction; it is counted, and the summary
@@ -450,14 +450,14 @@ proc render {items convert arity} {
 proc generate {seed} {
     expr {srand($seed)}
     set quiet [expr {rand() < 0.33}]
-    set header [list "import list" "error Bad" "fn helper(p, q):" [expr {$quiet ? "    \[p\]" : "    \[p, q\]"}]]
+    set header [list "import std::list" "error Bad" "fn helper(p, q):" [expr {$quiet ? "    \[p\]" : "    \[p, q\]"}]]
     set predicted {}
     set failures {}
     if {!$quiet} {
         lappend predicted [list 4 5 {}]
     }
     set original $header
-    set converted [list "import list" "error Bad" "fn helper(p, q):" [expr {$quiet ? "    \[p\]" : "    \{p0: p, p1: q\}"}]]
+    set converted [list "import std::list" "error Bad" "fn helper(p, q):" [expr {$quiet ? "    \[p\]" : "    \{p0: p, p1: q\}"}]]
     set drivers {}
     set callers {}
     set convertedCallers {}

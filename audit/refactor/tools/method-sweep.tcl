@@ -9,7 +9,7 @@
 # rewrite.tcl, me::sugarCall: the call is located by its warning's span and
 # its receiver cut out by the parser's own AST spans) and its fingerprint
 # (the program's HIR text, core IR and NIR, specialized and generic), and
-# works on a scratch copy of lib/, examples/ and bench/:
+# works on a scratch copy of stdlib/, examples/ and bench/:
 #
 #   for every file F with a METHOD-ELIGIBLE finding, through a unit U that
 #   compiles it (F itself for an entry program, the one-line loader
@@ -51,7 +51,7 @@ set ::refactorSweepLibrary 1
 source [file join $here sweep.tcl]
 
 set scratch [file tempdir refactor-method-sweep]
-foreach dir {lib examples bench} {
+foreach dir {stdlib examples bench} {
     file copy [file join $root $dir] [file join $scratch $dir]
 }
 set realLib $::core::libraryDir
@@ -72,9 +72,9 @@ proc unitPath {tree unit} {
     return [file join $tree $unit]
 }
 
-# HIR of UNIT compiled from TREE (its modules from TREE's lib/).
+# HIR of UNIT compiled from TREE (its modules from TREE's stdlib/).
 proc compileUnit {tree unit} {
-    set ::core::libraryDir [file join $tree lib]
+    set ::core::libraryDir [file join $tree stdlib]
     try {
         set target [expr {[string match "import *" $unit] ? [lindex [refactor::sweep::moduleTarget [lindex $unit 1]] 1] : ""}]
         return [surface::readProgramFile [unitPath $tree $unit] -warnings default -warning-channel "" -target $target]
@@ -164,8 +164,8 @@ foreach unit $units {
         if {$code ne "METHOD-ELIGIBLE" || ![string match $only $file]} continue
         # A module's findings are taken through its own loader; an entry
         # program's through itself.
-        set preferred [expr {[string match lib/* $file]
-            ? "import [string map {/ ::} [string range [file rootname $file] 4 end]]" : $file}]
+        set preferred [expr {[string match stdlib/* $file]
+            ? "import std::[string map {/ ::} [string range [file rootname $file] 7 end]]" : $file}]
         if {$unit eq $preferred || ![dict exists $fileUnit $file]} {
             dict set fileUnit $file $unit
         }

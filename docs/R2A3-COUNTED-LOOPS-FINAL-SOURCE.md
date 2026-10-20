@@ -36,7 +36,7 @@ exclusive-end, over arbitrary-precision `Int` — is a new counted-loop
 construct, implemented as a genuine semantic control-flow node through
 every stage of the pipeline (surface parser → HIR → core IR → interpreter
 / Tcl compiler / native NIR+Cranelift), never as a synthetic recursive
-function. `web::emailish?`'s `scan_while` and `domain_loop` — the last two
+function. `std::web::emailish?`'s `scan_while` and `domain_loop` — the last two
 self-tail-recursive helpers left over from before this construct
 existed — are rewritten around it: `scan_while` directly, `domain?`
 (replacing `domain_loop`, which no longer exists) from the domain
@@ -50,7 +50,7 @@ against the pre-R2.a.3 implementation. Full regression:
 `tests/loop-counted.test`), no skips, on `interp`+`compile`. A focused
 native GC-stress test for the new construct's own CFG backedge
 (`tests/native-root-liveness.test`'s `root-loop-carried-counted-1`) passes
-under `BOTLISH_NATIVE_GC_STRESS=1`. `web::emailish?`'s own source is now
+under `BOTLISH_NATIVE_GC_STRESS=1`. `std::web::emailish?`'s own source is now
 **frozen** (see "Final source freeze" below).
 
 No compiler-optimization code was written or modified to make this source
@@ -330,7 +330,7 @@ end
 (labels renumbered for legibility; the real dump is in the report's own
 generation logs). No `call`/`tail`/`callenv` represents the backedge
 anywhere — confirmed directly against the compiled `bench/refined-checks.ir`
-NIR text: `web::emailish?`'s own `scan_while`/`domain?` bodies contain
+NIR text: `std::web::emailish?`'s own `scan_while`/`domain?` bodies contain
 `jump`/`label`/`br` for their counted loops and zero `tail`/`tailenv`
 lines (down from 2 self-tail `tail` sites before this milestone — see
 "Machine/NIR census").
@@ -343,7 +343,7 @@ explicitly permitted to extend) seeds the induction binding directly from
 unknown), `max` = `end`'s own Range maximum minus one (`+inf` if
 unknown) — ordinary interval arithmetic on an already-computed Range,
 intersected with `TypeFact int`, never a new relational solver. Confirmed
-non-trivial on real source: in `web::emailish?`, both `scan_while`'s `i`
+non-trivial on real source: in `std::web::emailish?`, both `scan_while`'s `i`
 and `domain?`'s `j` get `max` bounded by `length(v)`'s own
 `collectionLength` fact (`smallMax`, i.e. `4611686018427387902` = that
 bound minus one) — a real, useful fact the old recursive `scan_while` had
@@ -368,7 +368,7 @@ including native. Native lowering never bakes in machine-`i64` overflow
 semantics: `op ilt`/`op iadd` are the same general ops ordinary `+`/`<`
 already use, so the raw-vs-BigInt representation choice is made per
 callsite by the *existing* `RawEligibleCall`/range-proof machinery,
-unmodified by this milestone — for `web::emailish?`'s own induction
+unmodified by this milestone — for `std::web::emailish?`'s own induction
 variables specifically, the unbounded-`min` finding above means they do
 *not* qualify for raw-`i64` lowering at these generic instances and fall
 back to tagged/BigInt-capable operations, which is semantically exactly
@@ -381,7 +381,7 @@ Confirmed via `native::allocationReport` on a standalone fixture
 (`fn f(n): loop i from 0 to n: unit`, `native::allocationReport`'s `total
 allocations`): **0** — no List/Range/iterator/Block allocation for a
 scalar counted loop, matching a bare `loop:`'s own allocation profile
-exactly. (`web::emailish?`'s own allocation numbers, driven by
+exactly. (`std::web::emailish?`'s own allocation numbers, driven by
 `String`/`Block`/`List`/`ImmutableSet` construction inside the loop
 bodies and elsewhere in the function, are reported separately below —
 those are the *program's* allocations, not the loop construct's own.)
@@ -439,14 +439,14 @@ this milestone touched no existing `switch` arm for `if`/`call`/`loop`/
 `listloop` anywhere in the pipeline, only added new ones, so no existing
 lowering path's *output* could have changed by construction.
 
-## `web::emailish?` source before
+## `std::web::emailish?` source before
 
 See git history at commit `b472022` (R2.a.2's own final state) for the
-verbatim pre-R2.a.3 `lib/web.bot` — `scan_while` and `domain_loop` both
+verbatim pre-R2.a.3 `stdlib/web.bot` — `scan_while` and `domain_loop` both
 self-tail-recursive, helpers named `is_local_char`/`is_label_char`/
 `tld_ok`.
 
-## Final `web::emailish?` source
+## Final `std::web::emailish?` source
 
 ```botlish
 namespace web
@@ -506,7 +506,7 @@ fn emailish?(v):
             else:
                 false
 ```
-(full file, with commentary, is `lib/web.bot`; `hex_digits`,
+(full file, with commentary, is `stdlib/web.bot`; `hex_digits`,
 `additional_unreserved_chars`, `is_unreserved`, `uri_escape_text` are
 unchanged and omitted here.)
 
@@ -586,7 +586,7 @@ Verified two ways. (1) The existing corpus
 `tests/module-fn-bridge-reachability.test`'s parallel corpus) passes
 unmodified — every test in both files still passes verbatim after the
 rewrite. (2) A fresh domain-edge corpus (spec item 52) was run through
-both the *old* (pre-R2.a.3, via `git show b472022:lib/web.bot`) and *new*
+both the *old* (pre-R2.a.3, via `git show b472022:stdlib/web.bot`) and *new*
 implementations side by side, as a standalone differential script, before
 this rewrite was committed:
 
@@ -621,7 +621,7 @@ exactly as accepted.
 ## Closure/OpenInstances before/after
 
 Unchanged in structure, changed only in the numbers a differently-shaped
-source produces. `web::emailish?<generic>` remains a closure (captures
+source produces. `std::web::emailish?<generic>` remains a closure (captures
 `local_extra_chars`, R2.a.1's own finding, untouched — spec item 89
 confirms this explicitly, not investigated further per item 61).
 `local_char?` (renamed from `is_local_char`) remains its own nested
@@ -641,7 +641,7 @@ renamed and one — `domain_loop`/`domain?` — behaviorally simplified).
 ## Range facts before/after
 
 `check.n`: unchanged, still unbounded (`[-∞, +∞]`) — `check<generic>`
-still captures the `web::emailish?` closure, R2.a.1's own finding, not
+still captures the `std::web::emailish?` closure, R2.a.1's own finding, not
 revisited (`emailish-predicate-check-n-control`, unmodified, still
 passes). New: `scan_while`'s `i` and `domain?`'s `j` induction bindings
 (countloop-local bindings, distinct from the functions' own `start`
@@ -741,15 +741,15 @@ anywhere in the regenerated `audit/native-scalar-asm/bench/refined-
 checks.{asm,vcode,summary.txt}`.
 
 **Per-function machine-code bytes** (`native::roots`'s own per-function
-breakdown, matched by position — `web::emailish?`'s own helpers only,
+breakdown, matched by position — `std::web::emailish?`'s own helpers only,
 everything before/after this range in the array is byte-for-byte
-identical, confirming `char::codepoint`/`byte::*`/`ascii::*` and
-`web::is_unreserved`/`uri_escape_text`'s own helpers/`check` are
+identical, confirming `std::char::codepoint`/`byte::*`/`ascii::*` and
+`std::web::is_unreserved`/`uri_escape_text`'s own helpers/`check` are
 untouched by this milestone):
 
 | function | R2.a.2 | R2.a.3 |
 |---|---|---|
-| `web::emailish?` | 833 | 753 |
+| `std::web::emailish?` | 833 | 753 |
 | `char_at` (×2, unchanged) | 262 / 222 | 262 / 222 |
 | `local_char?` (was `is_local_char`) | 272 | 272 |
 | `label_char?` (was `is_label_char`) | 249 | *(inlined into `domain?`)* |
@@ -759,7 +759,7 @@ untouched by this milestone):
 
 `char_at`/`local_char?`/`tld?` are byte-for-byte identical — their own
 bodies genuinely did not change (only `tld_ok`→`tld?`'s name did).
-`web::emailish?`'s own body shrinks (833 → 753): its call sites into
+`std::web::emailish?`'s own body shrinks (833 → 753): its call sites into
 `scan_while`/`domain?` are unchanged in kind, so this is `scan_while`'s
 own modest shrink (552 → 528, the counted loop's backedge is leaner than
 the old base-case-plus-self-tail-call shape) reflected through. `domain?`
@@ -799,7 +799,7 @@ anything else these three programs' own compiled shape could reach.
 
 ## Final source freeze
 
-`web::emailish?`'s Botlish source (`lib/web.bot`) is frozen as of this
+`std::web::emailish?`'s Botlish source (`stdlib/web.bot`) is frozen as of this
 milestone's own commit. Future optimizer work (higher-order target
 propagation, module-static retained-value representation, range↔
 blockescape integration, R3 inlining, relational bounds, StringRegion/
@@ -809,7 +809,7 @@ optimization easier, absent a new explicit source-design reason.
 
 ## Post-freeze compiler findings
 
-- `web::emailish?`'s own predicate-callvalue count: unchanged from
+- `std::web::emailish?`'s own predicate-callvalue count: unchanged from
   R2.a.2 (`callvalue: 1` in the machine/NIR census above) —
   `scan_while(i, predicate)`'s own `predicate(char_at(i))` call remains
   the one genuinely dynamic higher-order call site in this module.
@@ -836,7 +836,7 @@ optimization easier, absent a new explicit source-design reason.
   calls `char_at` directly rather than through `scan_while`, one call per
   domain character it actually inspects — no redundant re-scan).
 - Module-retained closure structure (R2.a.1's own finding: module-
-  retained set → `web::emailish?` closure → callers capture the closure →
+  retained set → `std::web::emailish?` closure → callers capture the closure →
   generic-keyed caller) is confirmed still present, unchanged, and not
   investigated further, exactly as spec item 89 anticipates.
 - **StringRegion regains real visibility** (spec item 88's own question,
@@ -911,14 +911,14 @@ belonged to a self-tail-eliminated helper's now-gone recursive
 structure). 37. `callvalue` unchanged at 1 (`scan_while`'s own
 `predicate(...)` call). 38. `local_char?`, `is_tcl_alpha` (via
 `scan_while`'s own `predicate` parameter). 39/40. Unchanged from R2.a.1:
-`web::emailish?<generic>` remains the one closure-capturing instance in
+`std::web::emailish?<generic>` remains the one closure-capturing instance in
 this region; no new `OpenInstances`/`blockescape` entry was created or
 removed. 41. See "Range facts before/after": `scan_while`'s `i` and
 `domain?`'s `j` induction bindings (not the `start` parameters) now get
 `max` bounded by
 `length(v)`'s `collectionLength` fact; `min` stays unbounded (multi-call-
 site join). 42. Unchanged, still `[-∞, +∞]` (`check<generic>`, still
-capturing the `web::emailish?` closure). 43. Unchanged from R2.a.1/2:
+capturing the `std::web::emailish?` closure). 43. Unchanged from R2.a.1/2:
 module-retained set → closure → generic-keyed caller. 44/45. Machine
 bytes 10027 → 10258 (+231, +2.3% — `label_char?`'s own 249 bytes landing
 inline in `domain?` rather than in its own function, see "Machine/NIR

@@ -46,8 +46,8 @@
 # of the three structures.
 #
 # policy: none
-import list
-import mutable_array
+import std::list
+import std::mutable_array
 
 struct Table:
     hs: List[int]
@@ -55,10 +55,10 @@ struct Table:
     vs: mutarray
 
 fn fresh(expected: int) -> Table:
-    Table {hs: [], ks: [], vs: mutable_array::from_list([])}
+    Table {hs: [], ks: [], vs: std::mutable_array::from_list([])}
 
 fn size(t: Table) -> int:
-    list::length(t.hs)
+    std::list::length(t.hs)
 
 fn slots(t: Table) -> int:
     size(t)
@@ -73,14 +73,14 @@ fn lower_bound(hs: List[int], h: int, lo: int, hi: int) -> int errors IndexNotFo
     if lo >= hi:
         return lo
     mid = shift_right(lo + hi, 1)
-    if list::at(hs, mid) < h:
+    if std::list::at(hs, mid) < h:
         return lower_bound(hs, h, mid + 1, hi)
     lower_bound(hs, h, lo, mid)
 
 # The position of KEY in the run of hash H that continues at I, or the end
 # of the run (the first position after it) when KEY is not in it.
 fn scan(hs: List[int], ks: list, h: int, key, i: int) -> int errors IndexNotFound:
-    if i >= list::length(hs) or list::at(hs, i) != h or list::at(ks, i) == key:
+    if i >= std::list::length(hs) or std::list::at(hs, i) != h or std::list::at(ks, i) == key:
         return i
     scan(hs, ks, h, key, i + 1)
 
@@ -91,7 +91,7 @@ fn find(t: Table, h: int, key) -> int errors IndexNotFound:
 
 # Whether position I, find's answer for a key of hash H, holds the key.
 fn present?(t: Table, i: int, h: int) -> bool errors IndexNotFound:
-    i < size(t) and list::at(t.hs, i) == h
+    i < size(t) and std::list::at(t.hs, i) == h
 
 # ---------------------------------------------------------------------------
 # Lookup
@@ -113,7 +113,7 @@ fn steps(hs: List[int], h: int, lo: int, hi: int, acc: int) -> int errors IndexN
     if lo >= hi:
         return acc
     mid = shift_right(lo + hi, 1)
-    if list::at(hs, mid) < h:
+    if std::list::at(hs, mid) < h:
         return steps(hs, h, mid + 1, hi, acc + 1)
     steps(hs, h, lo, mid, acc + 1)
 
@@ -144,24 +144,24 @@ fn probes(t: Table, key) -> int errors IndexNotFound:
 # its capacity), so none of them can fail and the empty array is never
 # made.
 fn spliced_in(old: mutarray, p: int, x) -> mutarray:
-    n = mutable_array::capacity(old)
+    n = std::mutable_array::capacity(old)
     if p < 0 or p > n:
-        return mutable_array::allocate(0)
-    a = mutable_array::allocate(n + 1)
-    mutable_array::copy(a, 0, old, 0, p)
+        return std::mutable_array::allocate(0)
+    a = std::mutable_array::allocate(n + 1)
+    std::mutable_array::copy(a, 0, old, 0, p)
     a.set(p, x)
-    mutable_array::copy(a, p + 1, old, p, n - p)
+    std::mutable_array::copy(a, p + 1, old, p, n - p)
     a
 
 # OLD's values without the one at position P (a position of OLD), proven
 # the same way.
 fn spliced_out(old: mutarray, p: int) -> mutarray:
-    n = mutable_array::capacity(old)
+    n = std::mutable_array::capacity(old)
     if p < 0 or p >= n:
-        return mutable_array::allocate(0)
-    a = mutable_array::allocate(n - 1)
-    mutable_array::copy(a, 0, old, 0, p)
-    mutable_array::copy(a, p, old, p + 1, n - 1 - p)
+        return std::mutable_array::allocate(0)
+    a = std::mutable_array::allocate(n - 1)
+    std::mutable_array::copy(a, 0, old, 0, p)
+    std::mutable_array::copy(a, p, old, p + 1, n - 1 - p)
     a
 
 # T's entries with (H, KEY, VALUE) inserted at position P. Lists have no
@@ -170,18 +170,18 @@ fn inserted(t: Table, p: int, h: int, key, value) -> Table errors IndexNotFound:
     n = size(t)
     hs = loop j from 0 through n:
         if j < p:
-            list::at(t.hs, j)
+            std::list::at(t.hs, j)
         elif j == p:
             h
         else:
-            list::at(t.hs, j - 1)
+            std::list::at(t.hs, j - 1)
     ks = loop j from 0 through n:
         if j < p:
-            list::at(t.ks, j)
+            std::list::at(t.ks, j)
         elif j == p:
             key
         else:
-            list::at(t.ks, j - 1)
+            std::list::at(t.ks, j - 1)
     Table {hs: hs, ks: ks, vs: spliced_in(t.vs, p, value)}
 
 # T's entries without the one at position P.
@@ -190,11 +190,11 @@ fn removed(t: Table, p: int) -> Table errors IndexNotFound:
     hs = loop j from 0 to n:
         if j == p:
             continue
-        list::at(t.hs, j)
+        std::list::at(t.hs, j)
     ks = loop j from 0 to n:
         if j == p:
             continue
-        list::at(t.ks, j)
+        std::list::at(t.ks, j)
     Table {hs: hs, ks: ks, vs: spliced_out(t.vs, p)}
 
 fn put(t: Table, key, value) -> Table errors IndexNotFound:
@@ -240,7 +240,7 @@ fn merged(hs: List[int], src: MutableArray[int], dst: MutableArray[int], i: int,
         return merged(hs, src, dst, i + 1, mid, j, hi, k + 1)
     x = src.at(i)
     y = src.at(j)
-    if list::at(hs, y) < list::at(hs, x):
+    if std::list::at(hs, y) < std::list::at(hs, x):
         dst.set(k, y)
         return merged(hs, src, dst, i, mid, j + 1, hi, k + 1)
     dst.set(k, x)
@@ -267,9 +267,9 @@ fn sorted_from(hs: List[int], n: int, src: MutableArray[int], dst: MutableArray[
 # The positions of HS ordered by their hashes, stably (the positions of
 # equal hashes in increasing order).
 fn order(hs: List[int]) -> List[int] errors IndexNotFound:
-    n = list::length(hs)
-    a = sorted_from(hs, n, mutable_array::generate(n, identity), mutable_array::create(n, 0), 1)
-    loop p from 0 to mutable_array::capacity(a):
+    n = std::list::length(hs)
+    a = sorted_from(hs, n, std::mutable_array::generate(n, identity), std::mutable_array::create(n, 0), 1)
+    loop p from 0 to std::mutable_array::capacity(a):
         a.at(p)
 
 # The input being built from: its keys, values and hashes, and the order
@@ -286,10 +286,10 @@ struct Input:
 fn first?(s: Input, h: int, key, q: int) -> bool errors IndexNotFound:
     if q < 0:
         return true
-    i = list::at(s.order, q)
-    if list::at(s.hs, i) != h:
+    i = std::list::at(s.order, q)
+    if std::list::at(s.hs, i) != h:
         return true
-    if list::at(s.keys, i) == key:
+    if std::list::at(s.keys, i) == key:
         return false
     first?(s, h, key, q - 1)
 
@@ -297,32 +297,32 @@ fn first?(s: Input, h: int, key, q: int) -> bool errors IndexNotFound:
 # keeps: the last position holding KEY in its hash's run from sorted
 # position Q on, or LAST_I, the last one before Q.
 fn last(s: Input, h: int, key, q: int, last_i: int) -> int errors IndexNotFound:
-    if q >= list::length(s.order):
+    if q >= std::list::length(s.order):
         return last_i
-    i = list::at(s.order, q)
-    if list::at(s.hs, i) != h:
+    i = std::list::at(s.order, q)
+    if std::list::at(s.hs, i) != h:
         return last_i
-    if list::at(s.keys, i) == key:
+    if std::list::at(s.keys, i) == key:
         return last(s, h, key, q + 1, i)
     last(s, h, key, q + 1, last_i)
 
 # The table of KEYS[i] -> VALS[i], in order (a later duplicate's value wins).
 fn from_lists(keys: list, vals: list) -> Table errors IndexNotFound:
-    n = list::length(keys)
+    n = std::list::length(keys)
     hs = loop k in keys:
         hash(k)
     s = Input {keys: keys, vals: vals, hs: hs, order: order(hs)}
     # The sorted positions of first occurrences: one per entry.
     kept = loop p from 0 to n:
-        i = list::at(s.order, p)
-        if not first?(s, list::at(hs, i), list::at(keys, i), p - 1):
+        i = std::list::at(s.order, p)
+        if not first?(s, std::list::at(hs, i), std::list::at(keys, i), p - 1):
             continue
         p
     khs = loop p in kept:
-        list::at(hs, list::at(s.order, p))
+        std::list::at(hs, std::list::at(s.order, p))
     kks = loop p in kept:
-        list::at(keys, list::at(s.order, p))
+        std::list::at(keys, std::list::at(s.order, p))
     kvs = loop p in kept:
-        i = list::at(s.order, p)
-        list::at(vals, last(s, list::at(hs, i), list::at(keys, i), p + 1, i))
-    Table {hs: khs, ks: kks, vs: mutable_array::from_list(kvs)}
+        i = std::list::at(s.order, p)
+        std::list::at(vals, last(s, std::list::at(hs, i), std::list::at(keys, i), p + 1, i))
+    Table {hs: khs, ks: kks, vs: std::mutable_array::from_list(kvs)}

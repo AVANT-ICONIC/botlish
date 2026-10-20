@@ -161,8 +161,8 @@ fn small(x: int) -> Small errors OutOfRange:
 * **Source equivalence.** The same converter declared in a module lowers to
   the same NIR function body, apart from the error's module-qualified
   identity (`tp-converter-source-equivalent`). Nothing below HIR knows where
-  a converter comes from. The standard library's converters (`byte::from_int`,
-  `abi::u8`, ...) are ordinary module functions in the same way
+  a converter comes from. The standard library's converters (`std::byte::from_int`,
+  `std::abi::u8`, ...) are ordinary module functions in the same way
   (`tp-library-converter-is-ordinary`).
 
 ## 4. Converter, validator, predicate
@@ -189,16 +189,16 @@ existing modes and every refinement, validator and predicate test pass
 
 ## 5. Standard library
 
-No standard-library API changed. Nothing in `lib/`, `examples/` or `bench/`
+No standard-library API changed. Nothing in `stdlib/`, `examples/` or `bench/`
 called an automatic predicate. The census found real calls only in tests,
 all migrated. The predicates that disappeared were registered as an
 unused side effect:
 
 | module | natives no longer registered | ordinary API that remains |
 |---|---|---|
-| `byte` | `byte::Byte?`, `byte::Nibble?`, `byte::LowNibble?`, `byte::HighNibble?` | `byte::from_int` (converter), the domain-typed operations |
-| `abi` | `abi::I8Value?` ... `abi::UsizeValue?` (ten) | `abi::i8` ... `abi::usize` (converters to the nominal structs) |
-| `abi::x86_64` | `abi::x86_64::Register64Word?` | `register64`, `to_int` |
+| `byte` | `std::byte::Byte?`, `std::byte::Nibble?`, `std::byte::LowNibble?`, `std::byte::HighNibble?` | `std::byte::from_int` (converter), the domain-typed operations |
+| `abi` | `std::abi::I8Value?` ... `std::abi::UsizeValue?` (ten) | `std::abi::i8` ... `std::abi::usize` (converters to the nominal structs) |
+| `std::abi::x86_64` | `std::abi::x86_64::Register64Word?` | `register64`, `to_int` |
 
 The source compatibility impact is a clean break. Code that called `T?`
 now gets the ordinary `UNBOUND` (or `UNKNOWN-SYMBOL` for `ns::T?`, or
@@ -220,15 +220,15 @@ Elaboration synthesizes no function. The milestone did not need one.
 
 | mechanism | spelling / example | type/domain-generated? | compiler special case? | status | justification |
 |---|---|---:|---:|---|---|
-| domain membership predicate | `Small?`, `byte::Byte?`, `abi::U8Value?` | yes | yes (resolver, loader, registry, declarations, compile inline test; native unsupported) | **removed** | — |
+| domain membership predicate | `Small?`, `std::byte::Byte?`, `std::abi::U8Value?` | yes | yes (resolver, loader, registry, declarations, compile inline test; native unsupported) | **removed** | — |
 | `definePredicate` API | `core::type::definePredicate T` → `T?` | yes (name derived from the type) | — | **removed** | test fixtures register their type tests explicitly (`non_empty?`, `lower_ascii?`) |
 | checked domain constructor | `Byte(x)`, `CheckedConstruct`, `CheckedIntDomainConstruct` | yes | yes (dead) | **removed** (the dead remainder) | — |
 | kind tests | `integer?`, `string?`, `list?`, `mutarray?` | no: four explicit registrations (core/predicates.tcl), names chosen, not derived | inline in the compiler (`InlineTypeTest`) and NIR ops `isint`/`isstr`/`islist`/`ismutarray` | **kept** | a core primitive: the one way to branch on the run-time kind of an `any` value (untyped parameters, heterogeneous lists). Its answer is the value's kind, a run-time fact; no proof stands in for it. |
 | Result tag tests | `ok?`, `error?` | no: explicit registrations over the `Result.ok`/`Result.error` validator types | compiler intrinsics, NIR `isok`/`iserror` | **kept** | a core primitive of the Result value's tag |
-| `coroutine::done?`, `mutable_vector::empty?` | `?`-named natives | no | no | **kept** | state queries of a value, not type membership |
-| user predicates | `web::emailish?`, `web::uri_query_value?` | no: source functions with `proves` | no | **kept** | the established predicate form |
-| user validators | `linux::path::validate`, `io::path::validate` | no | no | **kept** | the established validator form |
-| user converters | `byte::from_int`, `abi::u8` ... | no | no | **kept** | ordinary functions returning the domain |
+| `std::coroutine::done?`, `std::mutable_vector::empty?` | `?`-named natives | no | no | **kept** | state queries of a value, not type membership |
+| user predicates | `std::web::emailish?`, `std::web::uri_query_value?` | no: source functions with `proves` | no | **kept** | the established predicate form |
+| user validators | `std::linux::path::validate`, `std::io::path::validate` | no | no | **kept** | the established validator form |
+| user converters | `std::byte::from_int`, `std::abi::u8` ... | no | no | **kept** | ordinary functions returning the domain |
 | `-tests-type` facility | `core::native::register NAME -tests-type T` | no: a registration names its type | `hir::refine::decideTypeTest`, `InlineTypeTest` | **kept**, now refusing a refinement `T` | the generic mechanism of the kind and tag tests; refinements never have a run-time test |
 | nominal construction | `Point {x: 1}`, `Light::Red` | — | yes (construction syntax, case resolution) | **kept** | compiler-owned construction syntax, not a call; a type name is never a callee (`Point(1)`, `Point?` are unbound) |
 | PROVES-NAMING | `?` / `validate_` convention | no | a warning reads the written name | **kept** | names of user proof functions; carries no semantics |
@@ -300,8 +300,8 @@ It reports `Small?(3)` as `unbound name "Small?"`. Its diagnostics are
 the ones above, so an agent that writes `Small?(x)` gets `unbound name
 "Small?"`, and `x.Small?()` explains that no function of that name is
 visible. Neither suggests the converter for a program's own domain. For a
-module's type, the qualified spelling does better: `abi::U8Value?(3)`
-reports `namespace "abi" has no definition "U8Value?" (it defines: i16,
+module's type, the qualified spelling does better: `std::abi::U8Value?(3)`
+reports `namespace "std::abi" has no definition "U8Value?" (it defines: i16,
 i32, i64, i8, isize, u16, u32, u64, u8, usize)`, which lists the
 converters. There is no agent harness for the single executable to record
 more. The docs that taught `T?` (IMPORTS.md, ABI-NUMERIC-DOMAINS.md,
@@ -325,7 +325,7 @@ teach converters and comparisons.
   `hir::range::Paths`; NIR of converters and comparisons; the source audit.
 * **tests/golden/type-predicates.bot** (49 golden tests, every backend):
   the source-observable part of the above through `static compile:` and
-  `compiler::DiagnosticCode` (`Unbound`, `NotAStruct`, `UnknownSymbol`,
+  `std::compiler::DiagnosticCode` (`Unbound`, `NotAStruct`, `UnknownSymbol`,
   `ProofClause`, `Type`, `KnownError`, `UnhandledError`). Census and
   fragment rows map it to the Tcl tests.
 * **Fuzzing.** `audit/refinement-values/tools/fuzz.tcl -domains 1`

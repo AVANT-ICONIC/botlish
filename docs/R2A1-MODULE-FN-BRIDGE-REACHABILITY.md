@@ -24,7 +24,7 @@ reported below, not forced.**
   two measured reasons that the spec's premise did not account for:
   1. **800 `is_local_char` closures per run remain.** `is_local_char` is
      nested in `is_emailish` and now captures the *module* binding
-     `web::local_extra_chars`. In this compiler a module value is reached
+     `std::web::local_extra_chars`. In this compiler a module value is reached
      by capture, so this is still a closure (see "`is_local_char`
      representation").
   2. **9,200 of R2.a's 11,600 extra allocations were never the
@@ -36,8 +36,8 @@ reported below, not forced.**
 - **One structural consequence, reported and not "fixed":** `check` in
   `refined-checks` becomes `check<generic>`, where it was
   `check<int, int, str, str>`, and loses M9's `n ∈ [0, 400]` entry fact.
-  - Cause: `check` must now reach `web::is_emailish`'s closure. It does so
-    by capturing it, exactly as an ordinary `web::is_emailish(s)` call
+  - Cause: `check` must now reach `std::web::is_emailish`'s closure. It does so
+    by capturing it, exactly as an ordinary `std::web::is_emailish(s)` call
     would. `hir::specialize` keys every closure with a non-Int capture
     generically.
   - This is shown to be identical for ordinary qualified module calls. It
@@ -62,18 +62,18 @@ bench/refined-checks.ir: native lowering: binding b45 is not reachable from e501
 
 The IDs, identified freshly rather than remembered:
 
-- `b45` is `web::is_emailish` (kind `local`, scope `s45` = web's module
+- `b45` is `std::web::is_emailish` (kind `local`, scope `s45` = web's module
   section).
 - `e501` is the block bound to `check` (captures: none, pre-fix).
 
 The same failure with the unmodified R2.a source, via `uriEscape` in a user
 block: `binding b48 is not reachable from e501` (`b48` =
-`web::uri_escape_text`). On the pre-R2 tree (`0c2dead`) it is `binding b47
+`std::web::uri_escape_text`). On the pre-R2 tree (`0c2dead`) it is `binding b47
 is not reachable from e322`, so it predates R2.
 
 ## Minimal reproducer
 
-This reproducer is independent of `lib/web.bot`. It uses a scratch module
+This reproducer is independent of `stdlib/web.bot`. It uses a scratch module
 and a test-only native (`tests/module-fn-bridge-reachability.test`):
 
 ```
@@ -269,7 +269,7 @@ re-deriving `M` from registry metadata.
 **Diff footprint:**
 
 - Production: `hir/hir.tcl` +55 lines; `native/lower.tcl` −14 lines net;
-  `lib/web.bot` (source restoration).
+  `stdlib/web.bot` (source restoration).
 - **No** runtime, Rust, parser or lexer changes.
 - **No** changes to `hir/range.tcl`, `hir/blockescape.tcl`,
   `hir/stringregion.tcl`, `hir/traversal.tcl`, `hir/specialize.tcl`,
@@ -288,7 +288,7 @@ Things this fix does **not** do:
 
 **About the trailing parameter.** The caller-side capture of `M` is later
 flattened into a trailing parameter by the existing blockescape
-de-closure pass (`check`'s `pnames="n acc s q web::is_emailish"`). That is
+de-closure pass (`check`'s `pnames="n acc s q std::web::is_emailish"`). That is
 not a bridge-specific synthesized argument. It is blockescape's general
 treatment of any captured binding of a directly-called closure, and an
 ordinary qualified call produces exactly the same shape
@@ -318,10 +318,10 @@ The fixture is `check(s) = if Emailish?(s) ...`, with the module-scope set:
 
 | | before (pre-fix) | after |
 |---|---|---|
-| `check` (`e501`) captures | `{}` | `{web::is_emailish}` |
-| `web::is_emailish` captures | `{web::local_extra_chars}` | `{web::local_extra_chars}` (unchanged) |
+| `check` (`e501`) captures | `{}` | `{std::web::is_emailish}` |
+| `std::web::is_emailish` captures | `{std::web::local_extra_chars}` | `{std::web::local_extra_chars}` (unchanged) |
 | callee ref binding | root `emailish?` | root `emailish?` (unchanged) |
-| callee ref `bridge` | — | `b45` (`web::is_emailish`) |
+| callee ref `bridge` | — | `b45` (`std::web::is_emailish`) |
 | callee ref type | `{block e167 1 any}` | unchanged |
 
 For interp/compile (plain `hir::build`, no bridge), the HIR is unchanged:
@@ -329,7 +329,7 @@ no capture and no `bridge` field (pinned).
 
 ## Emailish module-set restoration
 
-`lib/web.bot` now holds the set at module scope:
+`stdlib/web.bot` now holds the set at module scope:
 
 ```
 local_extra_chars = immutable_set_from_list([".", "_", "%", "+", "-"])
@@ -349,7 +349,7 @@ Unchanged, as items 21–24 require: the `is_emailish` name, the recursive
 NIR excerpt for `refined-checks`, cranelift. Before (R2.a):
 
 ```
-func 9 "web::is_emailish" params=1 env=0 ... instance="str"
+func 9 "std::web::is_emailish" params=1 env=0 ... instance="str"
     %1 = op strlen %0
     %2 = str "." ... %6 = str "-"
     %7 = op listnew %2 %3 %4 %5 %6
@@ -363,8 +363,8 @@ After (R2.a.1):
 func 0 "<program>" ...                 ; module init, once
     %5 = op listnew %0 %1 %2 %3 %4
     %6 = op setfromlisttotal %5
-    %7 = closure 9 %6                  ; web::is_emailish's own closure
-func 9 "web::is_emailish" params=1 env=1 ... instance="generic"
+    %7 = closure 9 %6                  ; std::web::is_emailish's own closure
+func 9 "std::web::is_emailish" params=1 env=1 ... instance="generic"
     guard str %0 "length"
     %1 = op strlen %0
     %2 = capture 0                     ; the retained set
@@ -374,7 +374,7 @@ func 9 "web::is_emailish" params=1 env=1 ... instance="generic"
 ## `is_local_char` representation before/after
 
 It is **still a closure** (`env=1`), for one exact reason: it captures
-`web::local_extra_chars`.
+`std::web::local_extra_chars`.
 
 - In the native backend a module *value* binding is a local of the program
   function. A function nested in `is_emailish` reaches it only by capture.
@@ -415,7 +415,7 @@ worktrees at `e7d53b6` (R2) and `63b2199` (R2.a):
 | GC cycles | 0 | 0 | 0 |
 | list elements copied | 35 | 8035 | 45 |
 
-Site-level (`probe.tcl` `summary.txt`) in the R2.a.1 `lib/web.bot` line
+Site-level (`probe.tcl` `summary.txt`) in the R2.a.1 `stdlib/web.bot` line
 numbers:
 
 | site | R2.a | R2.a.1 | meaning |
@@ -425,7 +425,7 @@ numbers:
 | `is_emailish` `closure` | — | x1 (web.bot:89) | module init (it now captures the set) |
 | `is_local_char` `closure` | x800 (web.bot:105) | x800 (web.bot:96) | per `is_emailish` call; env = retained set |
 | `char_at` `substr` | x9200 | x9200 | per scanned char; predicate passing (item 27) |
-| other startup (hex_digits, byte::set, uri closures, program list) | unchanged | unchanged | |
+| other startup (hex_digits, std::byte::set, uri closures, program list) | unchanged | unchanged | |
 
 These are the answers to the §63 questions.
 
@@ -460,20 +460,20 @@ Startup vs. hot, for the §40 accounting:
 |---|---|---|
 | used instances | 26 | 26 |
 | compiled functions | 25 | 25 |
-| `web::is_emailish` | `<str>`, envless, closed | `<generic>` (captures an ImmutableSet), open |
-| `is_local_char` | `<generic>`, captures `local_extra_chars` (local) | `<generic>`, captures `web::local_extra_chars` (module) |
+| `std::web::is_emailish` | `<str>`, envless, closed | `<generic>` (captures an ImmutableSet), open |
+| `is_local_char` | `<generic>`, captures `local_extra_chars` (local) | `<generic>`, captures `std::web::local_extra_chars` (module) |
 | `scan_while`/`tld_ok`/`domain_loop`/`char_at` | one generic instance each, blockescape-virtualized, flat `{n v}`/`{v}` | identical |
-| `check` | `<int, int, str, str>`, envless, closed | `<generic>`, open, blockescape-virtualized, flat `{web::is_emailish}` |
-| program `materializedBlocks` | `is_unreserved`, `uri_escape_text` | + `web::is_emailish`, `check` |
+| `check` | `<int, int, str, str>`, envless, closed | `<generic>`, open, blockescape-virtualized, flat `{std::web::is_emailish}` |
+| program `materializedBlocks` | `is_unreserved`, `uri_escape_text` | + `std::web::is_emailish`, `check` |
 | anonymous instances | 0 | 0 |
 
 These are the answers to §35 and §64.
 
 - **29. Used instances:** 26 → 26; no identity proliferation.
-- **34. materializedBlocks:** program +2 (`web::is_emailish`, `check`).
+- **34. materializedBlocks:** program +2 (`std::web::is_emailish`, `check`).
   `check`'s Block is virtualized away by blockescape, so it adds no
   allocation. `is_emailish` materializes the same five helpers.
-- **35. OpenInstances:** `web::is_emailish` and `check` become open, both
+- **35. OpenInstances:** `std::web::is_emailish` and `check` become open, both
   because they are now generic and materialized. Every scanner's state is
   unchanged.
 - **36. Scanner Range facts:** unchanged. `params.txt`/`callfacts.txt` for
@@ -487,11 +487,11 @@ Why `check` became generic:
 
 - `hir::specialize::Handle` keys a non-static closure with a non-Int
   capture generically ("bound code growth for value-capturing closures").
-- `check` now captures a Block (`web::is_emailish`'s closure). That is
+- `check` now captures a Block (`std::web::is_emailish`'s closure). That is
   required for it to reach the closure, and it is what an ordinary
   qualified call does.
-- This is the same rule that already makes `web::uri_escape_text` and
-  `web::is_unreserved` generic.
+- This is the same rule that already makes `std::web::uri_escape_text` and
+  `std::web::is_unreserved` generic.
 - Demonstrated directly: for `check(s) = bridgefix::two_deps(s)` written as
   an ordinary surface-module call, the unmodified R2.a tree yields
   `bridgefix::two_deps<generic>`, `bridgefix::two_deps<int>` and
@@ -562,7 +562,7 @@ All pinned, on all four backends where applicable:
   caller, module-retained set, first spelling `emailish?`, redundant second
   spelling `Emailish?`), `s` is `str[Emailish]` in the true branch.
 - **21.** The redundant second call stays folded (`known 1`). NIR has
-  exactly one real `callenv` to `web::is_emailish`
+  exactly one real `callenv` to `std::web::is_emailish`
   (`module-fn-bridge-emailish-refinement-in-user-block`, plus the two
   updated `*-nir-shape` tests).
 - Alias identity is unchanged: one Binding, one Symbol, one instance
@@ -571,8 +571,8 @@ All pinned, on all four backends where applicable:
 ## uriEscape bug comparison
 
 - **37. Same root cause?** **Yes.**
-  - `web::uri_escape_text` captures `web::hex_digits` and
-    `web::is_unreserved`, so it is a closure.
+  - `std::web::uri_escape_text` captures `std::web::hex_digits` and
+    `std::web::is_unreserved`, so it is a closure.
   - Called through `uriEscape` from any user-defined block, it hit the
     identical `binding bNN is not reachable from eNN`. `bNN` was
     `uri_escape_text`'s binding, reproduced on R2.a and on pre-R2
@@ -628,7 +628,7 @@ It also pins:
 - the Emailish corpus through a user block, both spellings;
 - refinement plus folding combined in a user block;
 - module retention: list and set sites x1 each, and no `listnew` or
-  `setfromlist` in `web::is_emailish`.
+  `setfromlist` in `std::web::is_emailish`.
 
 Updated tests. Each pinned R2.a's workaround structure, and each is
 replaced with an assertion of the module-retained form, not loosened:
@@ -674,7 +674,7 @@ allocations throughout.
 tests/all.tcl`: **interp 2473/2473, compile 2473/2473, 0 failed, 0
 skipped** (exit 0). Native tests run a GC attempt at every allocation site
 throughout, including the new module-closure captures and the flattened
-`check` -> `web::is_emailish` trailing parameter.
+`check` -> `std::web::is_emailish` trailing parameter.
 
 Rust sources are **unchanged**. `native/src`, `Cargo.*` and the runtime are
 not in the diff, so no Rust suite rerun is required. The release binary was
@@ -721,7 +721,7 @@ is the one remaining known failure of `-module-fn` bridging.
 **Not frozen.** R2.a.1 removed only the bridge workaround. The next steps
 are:
 
-- **R2.a.2:** ordinary trailing-`?` identifiers (`web::emailish?`).
+- **R2.a.2:** ordinary trailing-`?` identifiers (`std::web::emailish?`).
 - **R2.a.3:** counted-loop syntax and the `domain_loop` rewrite.
 
 The name `is_emailish`, the recursive `domain_loop`,
@@ -730,7 +730,7 @@ deliberately unchanged here.
 
 ## Next step: R2.a.2
 
-Rename `web::is_emailish` to an ordinary trailing-`?` identifier. This
+Rename `std::web::is_emailish` to an ordinary trailing-`?` identifier. This
 needs the lexer to admit `?` in ordinary identifiers, which is a parser
 change deliberately kept out of R2.a.1.
 

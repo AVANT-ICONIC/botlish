@@ -1,10 +1,10 @@
 <program>: closed (transitively guarded)   [i0, ir {}]
-  calls:    check<int, int, str, str>, web::uri_escape_text<generic>
+  calls:    check<int, int, str, str>, std::web::uri_escape_text<generic>
   guards:   0
   runtime:  closure-env, list-alloc
 
-web::uri_escape_text (semantic): closed   [no blockers]
-web::uri_escape_text<generic>: closed (transitively guarded)   [i1, line 33:19]
+std::web::uri_escape_text (semantic): closed   [no blockers]
+std::web::uri_escape_text<generic>: closed (transitively guarded)   [i1, line 33:19]
   params:   s : any
   result:   any
   calls:    esc_from<generic>

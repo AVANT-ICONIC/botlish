@@ -20,7 +20,7 @@ for line in oc.split('\n'):
     if m:
         ocrec[m.group(1)] = (m.group(2), m.group(3), m.group(4))
 
-MARKED = {'bit_and', 'bit_or', 'bit_xor', 'mutable_array::copy', 'mutable_array::create'}
+MARKED = {'bit_and', 'bit_or', 'bit_xor', 'std::mutable_array::copy', 'std::mutable_array::create'}
 rows = []
 def add(loc, code, mech, phase, why):
     rows.append((loc, code, mech, phase, why))
@@ -45,9 +45,9 @@ for f, l, c, code, msg in findings:
             'examples/stdlib/csv_records.bot': 'ht_find_insert: the two slots that end the search (empty with no earlier tombstone, the key\'s own) fall through an if/elif chain over the slot\'s state to one `index`, the original conditions verbatim; probes hashtable.tcl',
             'examples/stdlib/hashtable.bot:170': 'ht_find_insert: as in csv_records.bot; probes hashtable.tcl',
             'examples/stdlib/hashtable.bot:301': 'ht_delete: the early `return table` is the guard inverted around the deletion; probes hashtable.tcl',
-            'lib/web.bot:190': 'domain?: an on-sight rejection leaves the scan (`break`), so every rejection is the one `false` after it; probes web.tcl',
-            'lib/web.bot:202': 'emailish?: the nested tests keep their `if`s and fall through to one `false` (an `and` chain would lose the range narrowing domain?\'s raw parameter needs); probes web.tcl',
-            'lib/web.bot:251': 'uri_query_value?\'s valid_from?: a valid escape or character continues by a returned tail call, everything else falls through to one `false`; probes web.tcl (a 40,000-character value included)',
+            'stdlib/web.bot:190': 'domain?: an on-sight rejection leaves the scan (`break`), so every rejection is the one `false` after it; probes web.tcl',
+            'stdlib/web.bot:202': 'emailish?: the nested tests keep their `if`s and fall through to one `false` (an `and` chain would lose the range narrowing domain?\'s raw parameter needs); probes web.tcl',
+            'stdlib/web.bot:251': 'uri_query_value?\'s valid_from?: a valid escape or character continues by a returned tail call, everything else falls through to one `false`; probes web.tcl (a 40,000-character value included)',
         }
         key = f if f == 'examples/stdlib/csv_records.bot' else '%s:%d' % (f, l)
         add(loc, code, 'merged', 'P4', why[key])
@@ -57,12 +57,12 @@ for f, l, c, code, msg in findings:
             if consumer.startswith('return'):
                 add(loc, code, 'manifested', 'P3', 'H1 -- char->text: clean_char returns %s as text; the table form (audit/refactor/h1-attempt) only hides it' % value)
             else:
-                add(loc, code, 'converted', 'P3', '%s compares the character it reads (str::char_at of its one-character text) with the character literal; probes ai_text_clean.tcl' % fn)
+                add(loc, code, 'converted', 'P3', '%s compares the character it reads (std::str::char_at of its one-character text) with the character literal; probes ai_text_clean.tcl' % fn)
         elif f.startswith('examples/stdlib/csv'):
-            if consumer.startswith('call str::concat'):
+            if consumer.startswith('call std::str::concat'):
                 add(loc, code, 'converted', 'P3', 'scan_quoted: a doubled quote appends the first quote\'s own text (the slice it holds) instead of the literal; probes csv.tcl')
             else:
-                add(loc, code, 'converted', 'P3', '%s reads the character with str::char_at under a str::length bound (quote_at? for the quote tests); probes csv.tcl' % fn)
+                add(loc, code, 'converted', 'P3', '%s reads the character with std::str::char_at under a std::str::length bound (quote_at? for the quote tests); probes csv.tcl' % fn)
         elif f == 'examples/stdlib/string_replace.bot':
             if loc in ('examples/stdlib/string_replace.bot:49:26', 'examples/stdlib/string_replace.bot:49:133'):
                 add(loc, code, 'converted', 'P5', 'H2 falsified: the replacement of an absent needle is never inserted, only its non-emptiness matters; respelled "yz" (expect line identical)')
@@ -70,26 +70,26 @@ for f, l, c, code, msg in findings:
                 add(loc, code, 'manifested', 'P5', 'H2 -- test-datum: the length-1 %s is the case\'s subject' % value)
         elif f == 'examples/stdlib/string_reverse.bot':
             add(loc, code, 'manifested', 'P5', 'H2 -- test-datum: "a" is the length-1 boundary of reversal')
-        elif f == 'lib/web.bot':
+        elif f == 'stdlib/web.bot':
             if fn == 'top' and consumer.startswith('list-element immutable_set'):
-                add(loc, code, 'manifested', 'P3', 'classifier: local_extra_chars is queried with the one-character String local_char? also hands str::is_tcl_alnum')
+                add(loc, code, 'manifested', 'P3', 'classifier: local_extra_chars is queried with the one-character String local_char? also hands std::str::is_tcl_alnum')
             elif fn == 'label_char?':
-                add(loc, code, 'manifested', 'P3', 'classifier: label_char? is str::is_tcl_alnum(c) or c == "-"')
+                add(loc, code, 'manifested', 'P3', 'classifier: label_char? is std::str::is_tcl_alnum(c) or c == "-"')
             elif fn in ('domain?', 'emailish?'):
-                add(loc, code, 'converted', 'P3', '%s tests the character at a position through the guarded char_is? (str::char_at); probes web.tcl' % fn)
+                add(loc, code, 'converted', 'P3', '%s tests the character at a position through the guarded char_is? (std::str::char_at); probes web.tcl' % fn)
             elif fn == 'top':
                 add(loc, code, 'manifested', 'P3', 'char->text: hex_digits is the table of hexadecimal digits as text')
             else:
                 add(loc, code, 'manifested', 'P3', 'char->text: pct\'s "%" begins every escape as text')
-        elif f == 'lib/linux/path.bot':
+        elif f == 'stdlib/linux/path.bot':
             if consumer.startswith('=='):
-                add(loc, code, 'manifested', 'P3', 'index-proof: path.char_at(n - 1) is not proven in range; concat\'s errors are fixed by io::path::Path')
+                add(loc, code, 'manifested', 'P3', 'index-proof: path.char_at(n - 1) is not proven in range; concat\'s errors are fixed by std::io::path::Path')
             else:
                 add(loc, code, 'manifested', 'P3', 'char->text: the joining "/" is appended as text')
-        elif f in ('lib/io.bot', 'examples/io/child-path.bot'):
+        elif f in ('stdlib/io.bot', 'examples/io/child-path.bot'):
             add(loc, code, 'manifested', 'P3', 'char->text: %s appended as text' % value)
         elif f in ('bench/lex-strategy.bot', 'bench/source-checks.bot'):
-            add(loc, code, 'manifested', 'P3', 'classifier: the character is a one-character String for str::is_tcl_alnum/alpha in a uniform predicate contract')
+            add(loc, code, 'manifested', 'P3', 'classifier: the character is a one-character String for std::str::is_tcl_alnum/alpha in a uniform predicate contract')
         else:
             raise SystemExit('unclassified ' + loc)
     else:

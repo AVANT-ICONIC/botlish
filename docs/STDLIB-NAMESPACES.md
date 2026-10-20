@@ -1,14 +1,20 @@
 # Standard namespaces: `eq` removed, intrinsics namespaced, `at`/`get`
 
-> **Note (MUTABLE-ARRAY.md).** `mutable_array::create` and `from_list` are
+> **Note (STD-NAMESPACE.md).** Every standard namespace is now under the
+> compiler-owned root `std`, and this document's names were migrated to their
+> canonical spellings (`std::list::at`). Where it calls a family's namespace
+> "flat", that namespace is `std::FAMILY` now; an application module of the
+> family's short name is the application's own, never the standard one.
+
+> **Note (MUTABLE-ARRAY.md).** `std::mutable_array::create` and `from_list` are
 > registered intrinsics now (with the new `generate` and `swap`), each with
-> ownership roles; `lib/mutable_array.bot` keeps only `get`.
+> ownership roles; `stdlib/mutable_array.bot` keeps only `get`.
 
 A language/library cleanup milestone with four parts:
 
 1. the obsolete `eq` string-equality native is gone (String equality is `==`);
 2. every standard intrinsic that belongs to one value family lives in that
-   family's flat namespace (`list::at`, `str::concat`, `mutable_array::set`,
+   family's flat namespace (`std::list::at`, `std::str::concat`, `std::mutable_array::set`,
    ...); the root keeps only language primitives;
 3. the indexed `*_get` reads are split into `at` (fails with the declared
    error `IndexNotFound`) and `get` (an ordinary Botlish library function:
@@ -19,10 +25,10 @@ A language/library cleanup milestone with four parts:
    open.
 
 A follow-up (§11) gave the writes and slices declared errors too
-(`mutable_array::set`: `IndexNotFound`; `str::substring`,
-`mutable_array::freeze`, `mutable_array::copy`: `LowerUnderrun` /
-`UpperOverrun`), made `char::scalar_value` the one name of the UnicodeChar
-to Int operation (`lib/char.bot` and `char::codepoint` are gone), and
+(`std::mutable_array::set`: `IndexNotFound`; `std::str::substring`,
+`std::mutable_array::freeze`, `std::mutable_array::copy`: `LowerUnderrun` /
+`UpperOverrun`), made `std::char::scalar_value` the one name of the UnicodeChar
+to Int operation (`stdlib/char.bot` and `std::char::codepoint` are gone), and
 removed the test-only index-obligation waiver. Where the sections below
 describe the state before that follow-up, they say so.
 
@@ -77,20 +83,20 @@ and `ns-qualified-inventory` pin the after-state in a fresh process):
 | `argv` | platform/process primitive (ARGV.md) | root, unchanged |
 | `eq` | historical leftover | **removed** (§1) |
 | `length substring lowercase concat encode_utf8 char_at is_tcl_alpha is_tcl_alnum` | standard type op (String) | `str::*` |
-| `list_length list_get list_append` | standard type op (List) | `list::length`, `list::at`, `list::append` |
-| `mutable_array_allocate _capacity _get _set _copy _freeze` | standard type op (MutableArray) | `mutable_array::allocate/capacity/at/set/copy/freeze` |
-| `immutable_set_from_list immutable_set_contains` | standard type op (ImmutableSet) | `immutable_set::from_list/contains` |
-| `char_codepoint` | standard type op (UnicodeChar; the primitive behind `lib/char.bot`'s existing `char::codepoint`) | `char::scalar_value` (the follow-up removed the `char::codepoint` wrapper, §11) |
-| `linux::abi::x86_64::syscall` | platform-ABI, already qualified | unchanged |
-| (added later, ABI-BYTES.md) `byte_store::from_list`, `byte_store::byte_count` | standard type ops of the byte-storage value kind behind `abi::bytes::Bytes` (like `immutable_set::*` for `ImmutableSet`) | `byte_store::*` |
-| (added later, ABI-BYTES.md) `abi::x86_64::from_bytes` | platform-ABI raw address bridge, already qualified | `abi::x86_64::from_bytes` |
-| (added later, MUTABLE-BYTES.md) `mutable_byte_store::zeroed/_from/_count/_set/_copy`, `mutable_byte_store::freeze`, `mutable_byte_store::freeze_prefix` | standard type ops of the writable byte-storage value kind behind `abi::bytes::MutableBytes` | `byte_store::*` |
-| (added later, MUTABLE-BYTES.md) `abi::x86_64::from_mutable_bytes` | platform-ABI writable raw address bridge, already qualified | `abi::x86_64::from_mutable_bytes` |
-| (added later, S16 of 2048-ENGINE-WORKLOAD.md) `str::append_char` | standard type op (String): a String followed by one UnicodeChar, the append of a character to text REFACTOR-WARNINGS-CLEAN.md's design finding 1 asks for | `str::append_char` |
-| (added later, BINARY-LAYOUT.md) `binary::parse`, `binary::emit`, `binary::layout_length`, `binary::layout_alignment`, and the internal `binary#emit` | the binary operations of fixed layouts, members of `lib/binary.bot`'s namespace (static layout operands, so never function values) | `binary::*` |
+| `list_length list_get list_append` | standard type op (List) | `std::list::length`, `std::list::at`, `std::list::append` |
+| `mutable_array_allocate _capacity _get _set _copy _freeze` | standard type op (MutableArray) | `std::mutable_array::allocate/capacity/at/set/copy/freeze` |
+| `immutable_set_from_list immutable_set_contains` | standard type op (ImmutableSet) | `std::immutable_set::from_list/contains` |
+| `char_codepoint` | standard type op (UnicodeChar; the primitive behind `stdlib/char.bot`'s existing `std::char::codepoint`) | `std::char::scalar_value` (the follow-up removed the `std::char::codepoint` wrapper, §11) |
+| `std::linux::abi::x86_64::syscall` | platform-ABI, already qualified | unchanged |
+| (added later, ABI-BYTES.md) `std::byte_store::from_list`, `std::byte_store::byte_count` | standard type ops of the byte-storage value kind behind `std::abi::bytes::Bytes` (like `immutable_set::*` for `ImmutableSet`) | `byte_store::*` |
+| (added later, ABI-BYTES.md) `std::abi::x86_64::from_bytes` | platform-ABI raw address bridge, already qualified | `std::abi::x86_64::from_bytes` |
+| (added later, MUTABLE-BYTES.md) `std::mutable_byte_store::zeroed/_from/_count/_set/_copy`, `std::mutable_byte_store::freeze`, `std::mutable_byte_store::freeze_prefix` | standard type ops of the writable byte-storage value kind behind `std::abi::bytes::MutableBytes` | `byte_store::*` |
+| (added later, MUTABLE-BYTES.md) `std::abi::x86_64::from_mutable_bytes` | platform-ABI writable raw address bridge, already qualified | `std::abi::x86_64::from_mutable_bytes` |
+| (added later, S16 of 2048-ENGINE-WORKLOAD.md) `std::str::append_char` | standard type op (String): a String followed by one UnicodeChar, the append of a character to text REFACTOR-WARNINGS-CLEAN.md's design finding 1 asks for | `std::str::append_char` |
+| (added later, BINARY-LAYOUT.md) `std::binary::parse`, `std::binary::emit`, `std::binary::layout_length`, `std::binary::layout_alignment`, and the internal `binary#emit` | the binary operations of fixed layouts, members of `stdlib/binary.bot`'s namespace (static layout operands, so never function values) | `binary::*` |
 | (added later, FLOAT64-MILESTONE-1.md) `/` | language primitive (the operator spelling; it has no Int meaning, so a `/` no Float64 operand selects is a compile-time TYPE error) | root |
 | (added later, FLOAT64-MILESTONE-1.md) `Float64#+ #- #* #/ #neg #< #<= #> #>=` | the Float64 operations source operators resolve to (internal: `#` cannot be spelled), registered from the float family's table | root, internal |
-| (added later, FLOAT64-MILESTONE-1.md) `float64::from_int`, `float64::truncate` | standard type ops (Float64): the explicit conversions between Int and Float64 | `float64::*` |
+| (added later, FLOAT64-MILESTONE-1.md) `std::float64::from_int`, `std::float64::truncate` | standard type ops (Float64): the explicit conversions between Int and Float64 | `float64::*` |
 
 Source-declared types register no natives at all: a type declaration
 registers a type, never a callable (their constructor natives went with
@@ -112,59 +118,59 @@ not invent one.
 Flat and named after the value family, no `std::`/`stdlib::`/`core::`
 hierarchy (`ns-no-nested-stdlib`):
 
-| Namespace | Intrinsics (qualified root natives) | Library members (`lib/*.bot`) |
+| Namespace | Intrinsics (qualified root natives) | Library members (`stdlib/*.bot`) |
 |-----------|-------------------------------------|-------------------------------|
 | `str` | `length substring lowercase concat append_char encode_utf8 char_at is_tcl_alpha is_tcl_alnum` | none (no module file) |
-| `list` | `length at append` | `get` (new), `find any? all? none?` ... (existing `lib/list.bot`) |
+| `list` | `length at append` | `get` (new), `find any? all? none?` ... (existing `stdlib/list.bot`) |
 | `mutable_array` | `allocate capacity at set copy freeze` | `from_list create` (moved from the old `mutarray` module), `get` (new) |
 | `immutable_set` | `from_list contains` | none |
 | `char` | `scalar_value` | none (no module file since §11) |
 | `float64` (FLOAT64-MILESTONE-1.md) | `from_int truncate` | none (no module file) |
-| `linux::abi::x86_64` (was `linux::abi`), `linux::abi::aarch64` (LINUX-SYSCALL-TRANSPORTS.md) | `syscall` | (unchanged) |
-| `binary::native` (NATIVE-LAYOUT-VIEWS.md) | `view` | none (lib/binary.bot's comment) |
+| `std::linux::abi::x86_64` (was `std::linux::abi`), `std::linux::abi::aarch64` (LINUX-SYSCALL-TRANSPORTS.md) | `syscall` | (unchanged) |
+| `std::binary::native` (NATIVE-LAYOUT-VIEWS.md) | `view` | none (stdlib/binary.bot's comment) |
 | `coroutine` | `done?` (COROUTINES.md; its other operations are internal `coroutine#...` root natives no source spells) | none (no module file) |
 
-`lib/mutarray.bot` was renamed to `lib/mutable_array.bot` (its namespace
+`stdlib/mutarray.bot` was renamed to `stdlib/mutable_array.bot` (its namespace
 `mutable_array` is its path): one family, one namespace. `mutarray::create`/`from_list`
-are now `mutable_array::create`/`from_list`; `mutarray::` names nothing
+are now `std::mutable_array::create`/`from_list`; `mutarray::` names nothing
 (`ns-historical-module-is-gone`).
 
 ### Old name to new name
 
 ```
 eq                       (removed: use ==)
-length                   str::length
-substring                str::substring
-lowercase                str::lowercase
-concat                   str::concat
-encode_utf8              str::encode_utf8
-is_tcl_alpha             str::is_tcl_alpha
-is_tcl_alnum             str::is_tcl_alnum
-list_length              list::length
-list_get                 list::at            (+ list::get with a default)
-list_append              list::append
-mutable_array_allocate   mutable_array::allocate
-mutable_array_capacity   mutable_array::capacity
-mutable_array_get        mutable_array::at   (+ mutable_array::get with a default)
-mutable_array_set        mutable_array::set
-mutable_array_copy       mutable_array::copy
-mutable_array_freeze     mutable_array::freeze
-mutarray::from_list      mutable_array::from_list
-mutarray::create         mutable_array::create
-immutable_set_from_list  immutable_set::from_list
-immutable_set_contains   immutable_set::contains
-char_codepoint           char::scalar_value
-char::codepoint          char::scalar_value  (§11; the lib/char.bot wrapper is gone)
+length                   std::str::length
+substring                std::str::substring
+lowercase                std::str::lowercase
+concat                   std::str::concat
+encode_utf8              std::str::encode_utf8
+is_tcl_alpha             std::str::is_tcl_alpha
+is_tcl_alnum             std::str::is_tcl_alnum
+list_length              std::list::length
+list_get                 std::list::at            (+ std::list::get with a default)
+list_append              std::list::append
+mutable_array_allocate   std::mutable_array::allocate
+mutable_array_capacity   std::mutable_array::capacity
+mutable_array_get        std::mutable_array::at   (+ std::mutable_array::get with a default)
+mutable_array_set        std::mutable_array::set
+mutable_array_copy       std::mutable_array::copy
+mutable_array_freeze     std::mutable_array::freeze
+mutarray::from_list      std::mutable_array::from_list
+mutarray::create         std::mutable_array::create
+immutable_set_from_list  std::immutable_set::from_list
+immutable_set_contains   std::immutable_set::contains
+char_codepoint           std::char::scalar_value
+std::char::codepoint          std::char::scalar_value  (§11; the stdlib/char.bot wrapper is gone)
 ```
 
 ### How a qualified intrinsic resolves
 
-The mechanism is the one `linux::abi::x86_64::syscall` already used: a *qualified
+The mechanism is the one `std::linux::abi::x86_64::syscall` already used: a *qualified
 root native*, registered under its qualified name
 (`core::native::isQualifiedNative`). `surface/lower.tcl` lowers a reference
-`str::concat` to a root reference to that native (`hir::syntax::rootRef`);
+`std::str::concat` to a root reference to that native (`hir::syntax::rootRef`);
 the module loader does not look for a module member of that name. From HIR
-on, a call's target is `native str::concat` -- the same resolved identity
+on, a call's target is `native std::str::concat` -- the same resolved identity
 every analysis keys on (hir/containers.tcl rules, hir/cardinality.tcl,
 hir/exactvalue.tcl, hir/stringregion.tcl, native/lower.tcl's natives
 table, the Tcl compiler's intrinsics table). Every one of those keyed sites
@@ -175,17 +181,17 @@ names).
 
 A namespace with intrinsics but no module file (`str`, `immutable_set`) is
 loadable for its intrinsics; an unknown member is reported against them:
-`namespace "str" has no definition "reverse" (its members are the
+`namespace "std::str" has no definition "reverse" (its members are the
 intrinsics: concat, encode_utf8, ...)`, and for a namespace with both, the
 list names module definitions and intrinsics together
 (`ns-unknown-member-*`).
 
 Canonical printing and diagnostics use the qualified names everywhere:
-runtime messages (`str::substring: slice start 5 is above the length 2`,
-`list::length: expected list, got "abc"`), contract inference (`argument 1
-of native str::length requires str`), completion diagnostics (`this call
-of "list::at" may produce the declared error "IndexNotFound"`), AOT
-explanations (`natives: ==, *, list::at x3`), NIR comments
+runtime messages (`std::str::substring: slice start 5 is above the length 2`,
+`std::list::length: expected list, got "abc"`), contract inference (`argument 1
+of native std::str::length requires str`), completion diagnostics (`this call
+of "std::list::at" may produce the declared error "IndexNotFound"`), AOT
+explanations (`natives: ==, *, std::list::at x3`), NIR comments
 (`ns-diagnostics-name-the-qualified-callable` checks a run-time and a
 static one).
 
@@ -197,29 +203,29 @@ Indexed `*_get` reads before the milestone: `list_get` and
 `mutable_array_get`. Both are converted:
 
 ```
-list::at(xs: List[T], index: Int) -> T                errors IndexNotFound
-list::get(xs: List[T], index: Int, default: T) -> T
-mutable_array::at(a: MutableArray[T], index: Int) -> T errors IndexNotFound
-mutable_array::get(a: MutableArray[T], index: Int, default: T) -> T
+std::list::at(xs: List[T], index: Int) -> T                errors IndexNotFound
+std::list::get(xs: List[T], index: Int, default: T) -> T
+std::mutable_array::at(a: MutableArray[T], index: Int) -> T errors IndexNotFound
+std::mutable_array::get(a: MutableArray[T], index: Int, default: T) -> T
 ```
 
 Botlish has no type variables to write those signatures down; they are what
 the compiler infers. `at`'s result is the element type the container
 carries (`ns-at-element-type`: `List[int]` gives `int`); `get`'s is the
 element type joined with the default's (`ns-get-element-type`:
-`list::get([1, 2], 5, 0)` is `int`, `list::get([[1], [2, 3]], 1, [])` is
+`std::list::get([1, 2], 5, 0)` is `int`, `std::list::get([[1], [2, 3]], 1, [])` is
 `List[int]`). Neither is an optional or null type.
 
 Not indexed `*_get`s, reported and left alone:
 
-* `immutable_set::contains` -- membership, a total Boolean, not a read;
-* `list::find` (`lib/list.bot`) -- a predicate search failing with
+* `std::immutable_set::contains` -- membership, a total Boolean, not a read;
+* `std::list::find` (`stdlib/list.bot`) -- a predicate search failing with
   `NotFound`, not an index;
 * `result-value`/`result-error` -- Result accessors (core IR only);
 * struct field projection `.f` -- static, checked at compile time;
-* `str::substring` -- a range slice, not a lookup (its failures became
+* `std::str::substring` -- a range slice, not a lookup (its failures became
   `LowerUnderrun`/`UpperOverrun` in §11); there was never a `string_get`,
-  and no `str::at` was added (non-goal: new collection semantics);
+  and no `std::str::at` was added (non-goal: new collection semantics);
 * the corpus program's `ht_get`/`ht_find_get` (`examples/stdlib/hashtable.bot`,
   `csv_records.bot`) -- a user program's key lookup returning `unit` for
   absence, not a standard API.
@@ -240,23 +246,23 @@ still the ordinary `TYPE` error, never `IndexNotFound`
 (`ns-at-other-failures-are-not-index-not-found`). Unhandled at run time
 (only reachable in a `-strict 0` build) it is the ordinary uncaught
 declared error, `UNCAUGHT-ERROR: uncaught propagated error: <error
-IndexNotFound>`, identical on every backend. (`mutable_array::set` now
+IndexNotFound>`, identical on every backend. (`std::mutable_array::set` now
 fails with the same `IndexNotFound`, and the slices with `LowerUnderrun`/
 `UpperOverrun`: §11.)
 
 ### `get` is ordinary Botlish
 
-`lib/list.bot` and `lib/mutable_array.bot`:
+`stdlib/list.bot` and `stdlib/mutable_array.bot`:
 
 ```
 fn get(xs, index, default):
-    value = list::at(xs, index):
+    value = std::list::at(xs, index):
         on IndexNotFound:
             default
     value
 ```
 
-(`mutable_array::get` is the same over `mutable_array::at`.) It is not a
+(`std::mutable_array::get` is the same over `std::mutable_array::at`.) It is not a
 native, not an intrinsic and has no op of its own: its HIR is a `handle`
 node around the native `at` call, its NIR an ordinary call
 (`ns-get-is-ordinary-botlish`, `ns-get-nir-is-an-ordinary-call`).
@@ -269,7 +275,7 @@ node around the native `at` call, its NIR an ordinary call
   default (`ns-get-default-is-eager` counts the evaluations of a
   side-effecting default; the fuzzer checks the same per generated call).
 * **`get` is `at` plus a handler, exactly.** `ns-get-differential` runs
-  `list::get(xs, i, d)` and the explicit program `v = list::at(xs, i): on
+  `std::list::get(xs, i, d)` and the explicit program `v = std::list::at(xs, i): on
   IndexNotFound: d` on the interpreter, the Tcl compiler and native
   (generic and specialized) for present, missing, negative and BigInt
   indices; the fuzzer repeats that on random inputs.
@@ -277,7 +283,7 @@ node around the native `at` call, its NIR an ordinary call
   call never needs a handler (`ns-get-has-no-obligation`).
 
 Bootstrap: `get` lives in the namespace whose intrinsic it calls. Inside
-`lib/list.bot`, `list::at` is the qualified intrinsic -- the module cannot
+`stdlib/list.bot`, `std::list::at` is the qualified intrinsic -- the module cannot
 define a member named `at` (§4), so nothing can shadow it, and `get` cannot
 recurse into itself through it (`ns-list-module-beside-intrinsics`).
 
@@ -288,7 +294,7 @@ like to any error-declaring function: a call must be handled, admitted by
 the enclosing function's `errors` clause, or proven unable to fail;
 otherwise `UNHANDLED-ERROR` at compile time. A call that can *never*
 succeed under the facts proven for its arguments is `KNOWN-ERROR` ("this
-call of "list::at" can never complete normally ... a handler does not make
+call of "std::list::at" can never complete normally ... a handler does not make
 a statically known failure legal"). Top level declares no errors.
 
 The completion walk (`hir/completions.tcl`, `NativeEffectiveFacts` /
@@ -297,16 +303,16 @@ has, nothing speculative:
 
 * a container of statically known size (a literal, an exact value through
   immutable bindings, an exact List argument in a call-specific walk, a
-  `MutableArray` from `mutable_array::allocate(n)`, `create(n, d)` or
+  `MutableArray` from `std::mutable_array::allocate(n)`, `create(n, d)` or
   `from_list(xs)` -- `hir/cardinality.tcl`'s new `Capacity` and `cap`
   atom) and an index whose range lies in `0..N-1`;
-* a counted loop `loop i from 0 to list::length(xs):` (or `to
-  mutable_array::capacity(a)`, or a lockstep/inclusive form) reading
-  `list::at(xs, i)` -- the loop variable is bounded by exactly the
+* a counted loop `loop i from 0 to std::list::length(xs):` (or `to
+  std::mutable_array::capacity(a)`, or a lockstep/inclusive form) reading
+  `std::list::at(xs, i)` -- the loop variable is bounded by exactly the
   container's size form;
-* an enclosing branch: `if i < 0 or i >= list::length(xs): ... else:
-  list::at(xs, i)`, the `and` form's then branch, early returns, and
-  `if list::length(b) == 2: list::at(b, 1)`. `and`/`or` conditions (lowered
+* an enclosing branch: `if i < 0 or i >= std::list::length(xs): ... else:
+  std::list::at(xs, i)`, the `and` form's then branch, early returns, and
+  `if std::list::length(b) == 2: std::list::at(b, 1)`. `and`/`or` conditions (lowered
   to nested `if`s) are decomposed into their conjuncts for both the range
   narrowing and the relational facts (`Conjuncts`). When the relational
   proof holds, a call-specific walk whose exact ranges would put the index
@@ -326,7 +332,7 @@ then branch, a missing `i >= 0`) that must stay rejected.
 ### Handled-call typing fix
 
 Typing a handled call whose handler yields a different type than the call
-(`v = list::at(xs, i): on IndexNotFound: "missing"` over a `List[int]`)
+(`v = std::list::at(xs, i): on IndexNotFound: "missing"` over a `List[int]`)
 used the call's type for the whole expression inside semantic instances, so
 native code could compare a String as an Int (a crash reproducible on the
 pre-milestone tree with any user-declared error). `hir::types::Handle` now
@@ -341,19 +347,19 @@ root native; protection is the membership test
 `CheckNativeMembers` rejects a function or immutable binding named MEMBER in
 any module file of namespace NS (`LoadNamespace`); the entry program is in no
 namespace and is not checked. This generalizes the check
-that already protected `linux::abi::x86_64::syscall`. The diagnostic:
+that already protected `std::linux::abi::x86_64::syscall`. The diagnostic:
 
 ```
-SURFACE MODULE DUPLICATE-NATIVE: module "list" (.../list.bot) cannot define
-"at": list::at is a compiler-provided intrinsic (a root native registered
+SURFACE MODULE DUPLICATE-NATIVE: module "std::list" (.../list.bot) cannot define
+"at": std::list::at is a compiler-provided intrinsic (a root native registered
 under that qualified name), which every reference of that spelling
 denotes; it cannot be redefined or overloaded (other members of namespace
 "list" are unaffected)
 ```
 
-Protection is per member, not per namespace: `lib/list.bot` defines
-`list::get` beside the intrinsic `list::at`; a user library directory's
-`str.bot` may define `str::reverse` but not `str::length`
+Protection is per member, not per namespace: `stdlib/list.bot` defines
+`std::list::get` beside the intrinsic `std::list::at`; a user library directory's
+`str.bot` may define `std::str::reverse` but not `std::str::length`
 (`ns-protect-module-member`, `-binding`, `ns-unrelated-member-is-legal`,
 `ns-protect-entry-program`). A local name `at`, `length` or `concat` in an
 ordinary program is unrelated to the intrinsic (`ns-local-names-are-unrelated`):
@@ -366,11 +372,11 @@ definition with a different arity is rejected the same way
 Nothing method-specific was added to the intrinsics. The rule
 (METHOD-SUGAR.md) applies to them as to any namespaced function: `x.f(a)` is
 `f(x, a)` when `f` is visible, and a namespaced function is visible as a
-method when its namespace is **imported** (IMPORTS.md): after `import list`,
-`xs.at(i)` is `list::at(xs, i)`; after `import str`, `s.concat(t)` is
-`str::concat(s, t)`; `import mutable_array` for `a.set(i, v)`. (Before
+method when its namespace is **imported** (IMPORTS.md): after `import std::list`,
+`xs.at(i)` is `std::list::at(xs, i)`; after `import std::str`, `s.concat(t)` is
+`std::str::concat(s, t)`; `import std::mutable_array` for `a.set(i, v)`. (Before
 IMPORTS.md the way to make an intrinsic a method candidate was to bind it to
-a name, `at = list::at`; that still works, and is the same candidate.)
+a name, `at = std::list::at`; that still works, and is the same candidate.)
 `ns-method-*` check that `xs.at(i)`, `xs.get(i, d)`, `xs.append(v)`,
 `xs.length()`, `s.concat(t)`, `s.length()`, `s.substring(i, j)`,
 `set.contains(v)`, `c.scalar_value()` and their fully qualified free
@@ -387,7 +393,7 @@ No backend changes were made for methods.
 
 * Interpreter (`core/`): the natives are registered under their new names
   (`core/lists.tcl`, `strings.tcl`, `tclcompat.tcl`, `mutarray.tcl`,
-  `immutableset.tcl`, `unicodechar.tcl`); `list::at`/`mutable_array::at`
+  `immutableset.tcl`, `unicodechar.tcl`); `std::list::at`/`std::mutable_array::at`
   fail through `core::native::failDeclared IndexNotFound`.
 * Tcl compiler (`compiler/compiler.tcl`): its intrinsics table is keyed by
   the qualified names; `eq` removed.
@@ -401,9 +407,9 @@ No backend changes were made for methods.
 
 ## 7. Migration
 
-* `lib/`: `list.bot` (+`get`), `mutable_array.bot` (renamed module, +`get`),
+* `stdlib/`: `list.bot` (+`get`), `mutable_array.bot` (renamed module, +`get`),
   `char.bot` (removed in §11), `byte.bot`, `web.bot` (renamed calls; `esc_bytes` guards
-  its index with `i < 0 or i >= list::length(bytes)`, which proves its
+  its index with `i < 0 or i >= std::list::length(bytes)`, which proves its
   read).
 * Corpus (`examples/stdlib`): renamed throughout. Programs whose functions
   index records positionally without a proof declare `errors IndexNotFound`
@@ -435,7 +441,7 @@ No backend changes were made for methods.
 
 Accounting changes caused by the migration (measured, documented at each
 test): `csv_geometric`/`csv_records` gain two generic representation
-blockers from the unused library function `mutable_array::get` in the
+blockers from the unused library function `std::mutable_array::get` in the
 module they load; `csv_records`/`hashtable` gain one generic-only instance
 (`sample_checks`); hir-aot's matmul driver runs inside `corpus::handled`
 (one more region); matmul's blocker lines moved by three; every program
@@ -449,14 +455,14 @@ calling `uriEscape` gains one generic blocker and its kind guard
 BigInt indices and random defaults, as programs whose expected values an
 independent Tcl oracle computes, on every backend: `get` free and method
 spelling; `get` versus the explicit handler program; `at` through handled
-calls; the same for `mutable_array::from_list` with `at`/`get`/`set`;
+calls; the same for `std::mutable_array::from_list` with `at`/`get`/`set`;
 eager-default counting; `str::`/`list::` operations free and by method.
 Each program is followed by a rotating negative that must be rejected:
 `a eq b` (syntax), `eq(a, b)` and a historical name (unbound), an entry
 program of an intrinsic's namespace defining that member with arity 1
 (`DUPLICATE-NATIVE`, whatever the intrinsic's own arity), a literal
-out-of-range `list::at` (`KNOWN-ERROR`), an unprovable unhandled one
-(`UNHANDLED-ERROR`), an unbound method spelling, and `list::get` on a
+out-of-range `std::list::at` (`KNOWN-ERROR`), an unprovable unhandled one
+(`UNHANDLED-ERROR`), an unbound method spelling, and `std::list::get` on a
 String (its `TYPE` error propagates through `get` at run time). `tests/stdlib-namespaces.test`
 `ns-fuzz-smoke` runs a bounded instance in the suite.
 
@@ -487,7 +493,7 @@ String (its `TYPE` error propagates through `get` at run time). `tests/stdlib-na
   pre-milestone tree (75 programs compared).
 * Fuzzer: `fuzz.tcl -n 200 -seed 1`: 200 programs, 200 values, 200
   negatives, 0 oracle disagreements, 0 negative escapes, 0 backend
-  disagreements. The fuzzer was checked to fail: with `list::get` broken to
+  disagreements. The fuzzer was checked to fail: with `std::list::get` broken to
   ignore index 0 it reports oracle disagreements; with the member
   protection disabled it reports a negative escape. (Its first 200-program
   run found a generator bug -- a stored value of another kind than the
@@ -499,9 +505,9 @@ String (its `TYPE` error propagates through `get` at run time). `tests/stdlib-na
 
 ## 10. Remaining debt
 
-* `mutable_array::allocate` keeps its `RANGE` for a negative or impossible
+* `std::mutable_array::allocate` keeps its `RANGE` for a negative or impossible
   capacity (it is neither a lookup, a write nor a slice), as do the other
-  remaining `RANGE` sources: `str::is_tcl_alpha`/`is_tcl_alnum`'s
+  remaining `RANGE` sources: `std::str::is_tcl_alpha`/`is_tcl_alnum`'s
   one-scalar requirement, shift amounts, refined-type constructors and the
   native backend's collection-size ceiling (§11).
 * `argv` and `hash` stay root primitives (process boundary; any-value
@@ -522,11 +528,11 @@ String (its `TYPE` error propagates through `get` at run time). `tests/stdlib-na
 * Historical audit instruments were renamed but not re-run; earlier
   milestone reports keep the old names.
 
-## 11. Follow-up: write and slice errors, `char::scalar_value`, no test waiver
+## 11. Follow-up: write and slice errors, `std::char::scalar_value`, no test waiver
 
 ### Writes: `IndexNotFound`
 
-`mutable_array::set(a, i, v)` declares `IndexNotFound`, with exactly
+`std::mutable_array::set(a, i, v)` declares `IndexNotFound`, with exactly
 `at`'s rule: it stores at `0 <= i < capacity` and fails for every other Int
 (past the end, negative, BigInt). A write is not a lookup, but an index
 that designates no slot is the same fact for both, so they share the error
@@ -541,9 +547,9 @@ Two more builtin declared errors, after `IndexNotFound` in
 The slicing intrinsics declare exactly those two:
 
 ```
-str::substring(s: Str, start: Int, end: Int) -> Str  errors LowerUnderrun, UpperOverrun
-mutable_array::freeze(a, count: Int) -> List[T]       errors LowerUnderrun, UpperOverrun
-mutable_array::copy(dst, ds: Int, src, ss: Int, count: Int) errors LowerUnderrun, UpperOverrun
+std::str::substring(s: Str, start: Int, end: Int) -> Str  errors LowerUnderrun, UpperOverrun
+std::mutable_array::freeze(a, count: Int) -> List[T]       errors LowerUnderrun, UpperOverrun
+std::mutable_array::copy(dst, ds: Int, src, ss: Int, count: Int) errors LowerUnderrun, UpperOverrun
 ```
 
 The one slice rule (`core::native::checkSlice`; native `check_slice` in
@@ -577,9 +583,9 @@ The slices get the same three-way completion proof as `at`
 out on its own, so a call may need only one of its two errors handled; a
 check that provably fails is `KNOWN-ERROR`. Sizes come from
 `hir/cardinality.tcl`, which gained a String length atom (`slen`) and
-`StrLength`: an exact String, `str::concat` (the sum of its operands'
-lengths), `str::lowercase` (length-preserving) and a `substring` (`end -
-start`). Branch facts gained minimum sizes (`if str::length(s) > 0:`, `==
+`StrLength`: an exact String, `std::str::concat` (the sum of its operands'
+lengths), `std::str::lowercase` (length-preserving) and a `substring` (`end -
+start`). Branch facts gained minimum sizes (`if std::str::length(s) > 0:`, `==
 0` false), which also apply to a plain Int binding (`if n > 0:` over an
 array created with capacity `n`). `ns-slice-proofs` covers literals, an
 index guard, a counted loop, a minimum length, lengths through `concat`,
@@ -587,27 +593,27 @@ capacities and the unsound neighbours.
 
 The shape of each native's check is registered with the native, not keyed
 by name in the pass: `core::native::register`'s new `-bounds` option
-(`index FAMILY C I` for `list::at`, `mutable_array::at`,
-`mutable_array::set`; `slices {FAMILY C START END}...` for the three
+(`index FAMILY C I` for `std::list::at`, `std::mutable_array::at`,
+`std::mutable_array::set`; `slices {FAMILY C START END}...` for the three
 slicing natives, with `{const K}` and `{sum A B}` operands), validated
 against the native's `-errors`. `hir/completions.tcl` reads it from the
 registration, which keeps the PARAMETERIZED-MUTABLEARRAY.md fence
 (`mat-id-4`: no name-keyed rules in `hir/`) intact.
 
-### `char::scalar_value` is the one name
+### `std::char::scalar_value` is the one name
 
-`char::codepoint` (`lib/char.bot`, a typed wrapper) is removed and
-`lib/char.bot` with it; `char::scalar_value` is the operation's only name.
+`std::char::codepoint` (`stdlib/char.bot`, a typed wrapper) is removed and
+`stdlib/char.bot` with it; `std::char::scalar_value` is the operation's only name.
 A "code point" also names surrogates and, colloquially, the numbers of
 other encodings (Latin-1); a Unicode scalar value is exactly what a
-UnicodeChar holds. `char::codepoint` is now an unknown member of `char`
-(`ns-char-scalar-value-is-canonical`), `lib/byte.bot` calls
-`char::scalar_value`, and the method spelling is `c.scalar_value()`.
+UnicodeChar holds. `std::char::codepoint` is now an unknown member of `char`
+(`ns-char-scalar-value-is-canonical`), `stdlib/byte.bot` calls
+`std::char::scalar_value`, and the method spelling is `c.scalar_value()`.
 Behavior change: the wrapper's parameter was statically typed, so
-`char::codepoint(65)` was a compile-time contract error; like every
-native's parameter types, `char::scalar_value`'s `UnicodeChar` is checked
-when the call runs, so `char::scalar_value(65)` is the run-time `TYPE`
-error (`str::length(5)` behaves the same way). An untyped Botlish
+`std::char::codepoint(65)` was a compile-time contract error; like every
+native's parameter types, `std::char::scalar_value`'s `UnicodeChar` is checked
+when the call runs, so `std::char::scalar_value(65)` is the run-time `TYPE`
+error (`std::str::length(5)` behaves the same way). An untyped Botlish
 parameter forwarded to it is still inferred `UnicodeChar` and checked
 statically at its own call sites.
 
@@ -627,16 +633,16 @@ impossible allocation, which is still a run-time `RANGE`.
 
 ### Where `RANGE` remains
 
-`mutable_array::allocate` (negative or too large capacity),
-`str::is_tcl_alpha`/`is_tcl_alnum` (an argument that is not one scalar),
+`std::mutable_array::allocate` (negative or too large capacity),
+`std::str::is_tcl_alpha`/`is_tcl_alnum` (an argument that is not one scalar),
 `shift_left`/`shift_right` amounts, refined-type constructors
 (`core/type.tcl`), and the native backend's collection-size ceiling. None is
 a lookup, a write or a slice.
 
 ### Migration
 
-* `lib/web.bot`: `char_at` guards its slice with `if i < 0 or i >= n:
-  return ""` and `esc_from` with `if i < 0 or i >= str::length(text):` --
+* `stdlib/web.bot`: `char_at` guards its slice with `if i < 0 or i >= n:
+  return ""` and `esc_from` with `if i < 0 or i >= std::str::length(text):` --
   the early-return form, which keeps the string-region companion (an
   if/else form lost it and materialized every character as a String,
   about 10K more String allocations in the allocation tests).
@@ -648,7 +654,7 @@ a lookup, a write or a slice.
   length test.
 * `bench/lex-strategy.bot` and the audit probes (`adv1`, `adv2`,
   `emailish-local-copy`, `hof-capturing`, `hof-two-exact`) guard their
-  slices; `mutarray-typed` freezes by `mutable_array::capacity(a)` (same
+  slices; `mutarray-typed` freezes by `std::mutable_array::capacity(a)` (same
   value).
 * Tests: as above; expectations that named `RANGE` for a slice or a write
   now name the declared error, and accounting tests record the measured
@@ -680,7 +686,7 @@ a lookup, a write or a slice.
   surface, bench and audit-probe programs are identical to the
   pre-milestone tree, and so are their diagnostics.
 * After merging `main`'s ABI numeric domains (ABI-NUMERIC-DOMAINS.md; its
-  `tests/abi-numeric.test` migrated to `list::length`/`list::at`, the
+  `tests/abi-numeric.test` migrated to `std::list::length`/`std::list::at`, the
   latter with `IndexNotFound` handled so the run-time `TYPE` error it
   asserts is still what is reached): `interp` 5151 tests, 0 failures;
   `compile` 5151, 0 failures (4 skipped); `cranelift` the same 60 failing
@@ -733,14 +739,14 @@ Nothing after the obligation check reads the proof (its result,
 completion diagnostics). So:
 
 * a proven `at` still compiles to the checked op. For `loop i from 0 to
-  list::length(xs): list::at(xs, i)` the NIR is `op listget`, whose
+  std::list::length(xs): std::list::at(xs, i)` the NIR is `op listget`, whose
   Cranelift lowering (`native/src/codegen/clif.rs` `list_get`) is an inline
   unsigned bounds compare with a slow path into `rt_list_get`, which can
   raise `IndexNotFound`. The same holds for `set` and the slices;
 * the Tcl compiler sends every native with declared errors through its
   generic call (`core::runtime::callValue`), proven or not;
-* `get` gets nothing: `list::get(xs, i, 0)` in the same loop is a `call` to
-  the `list::get` instance, which pushes an error exit, runs the checked
+* `get` gets nothing: `std::list::get(xs, i, 0)` in the same loop is a `call` to
+  the `std::list::get` instance, which pushes an error exit, runs the checked
   `listget`, and keeps its handler path (`declarederroreq` / `reraise`).
 
 This gap dates from the first commit of this milestone: the proof for `at`
@@ -766,8 +772,8 @@ never removed the check either.
 * **`get` with a provably missing index.** Recommended: fold it to the
   default (still evaluated eagerly), not a compile error -- `get` is the
   total lookup, so a static miss is a legitimate use.
-* **The remaining `RANGE` sources** (`mutable_array::allocate`'s capacity,
-  shift amounts, `str::is_tcl_*`'s one-scalar requirement, refined-type
+* **The remaining `RANGE` sources** (`std::mutable_array::allocate`'s capacity,
+  shift amounts, `std::str::is_tcl_*`'s one-scalar requirement, refined-type
   constructors, the native collection-size ceiling; §11): the same
   treatment now (static where provable, a declared error otherwise), or
   indexing and slicing only.
@@ -783,11 +789,11 @@ corpus programs as committed before §11 (8bb8b47) are rejected:
 
 | Program | Rejection |
 |---------|-----------|
-| `ai_text_clean` | `str::substring` may produce `LowerUnderrun` |
+| `ai_text_clean` | `std::str::substring` may produce `LowerUnderrun` |
 | `csv`, `csv_chunked`, `csv_records` | `LowerUnderrun` |
 | `csv_geometric` | `IndexNotFound` |
-| `hashtable` | `mutable_array::set` may produce `IndexNotFound` |
-| `string_replace` | `str::substring` may produce `LowerUnderrun` |
+| `hashtable` | `std::mutable_array::set` may produce `IndexNotFound` |
+| `string_replace` | `std::str::substring` may produce `LowerUnderrun` |
 | `string_reverse` | `UpperOverrun` |
 | `matmul` | compiles: it already carried the first commit's edits for `at` |
 
@@ -804,7 +810,7 @@ The proof fails for two different reasons:
   across calls, so it cannot see `index >= 0`. The CSV programs' record
   lengths are established by one function and read in another.
 * **The guard genuinely does not cover every case.** `string_reverse` stops
-  on `if index == str::length(text):`; called with an index past the end it
+  on `if index == std::str::length(text):`; called with an index past the end it
   would slice out of range, so the program as written can fail for some
   inputs. Only `>=` would make it provable.
 

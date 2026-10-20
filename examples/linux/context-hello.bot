@@ -1,19 +1,19 @@
 # context-hello.bot -- the first context-based Hello World (CONTEXTS.md):
 #
-#   with context linux::io::create()     installs the process's standard I/O
-#                                        environment, one linux::io::LinuxIO
+#   with context std::linux::io::create()     installs the process's standard I/O
+#                                        environment, one std::linux::io::LinuxIO
 #   hello()                              an ordinary call: no context argument
-#     linux::io::write(message)          declares `context io: LinuxIO`; reads
+#     std::linux::io::write(message)          declares `context io: LinuxIO`; reads
 #                                        stdout from the installed context
-#       linux::write(fd, message)        the raw-thin write(2) wrapper
-#         linux::abi::x86_64::syscall            the x86-64 `syscall` instruction
+#       std::linux::write(fd, message)        the raw-thin write(2) wrapper
+#         std::linux::abi::x86_64::syscall            the x86-64 `syscall` instruction
 #
 # `hello` says nothing about contexts: the compiler derives that it requires
-# LinuxIO (through linux::io::write) and proves that the call below runs after
+# LinuxIO (through std::linux::io::write) and proves that the call below runs after
 # the installation. Moving `hello()` above the `with context` line is a
 # compile-time MISSING-CONTEXT error that names the chain hello ->
-# linux::io::write. No libc, no compiler knowledge of write(2), no context
-# argument, no lookup: natively, linux::io::write loads descriptor 1 from the
+# std::linux::io::write. No libc, no compiler knowledge of write(2), no context
+# argument, no lookup: natively, std::linux::io::write loads descriptor 1 from the
 # fixed context slot of the program's data.
 #
 # Native backend only for the write itself (cranelift, or a standalone
@@ -24,16 +24,16 @@
 # stdout (native): Hello, world!
 # value  (native): 14, the bytes written
 
-import abi::bytes
-import linux::io
-import str
+import std::abi::bytes
+import std::linux::io
+import std::str
 
 fn hello():
-    message = abi::bytes::from_list(
-        str::encode_utf8("Hello, world!\n")
+    message = std::abi::bytes::from_list(
+        std::str::encode_utf8("Hello, world!\n")
     )
-    linux::io::write(message)
+    std::linux::io::write(message)
 
-with context linux::io::create()
+with context std::linux::io::create()
 
 hello()

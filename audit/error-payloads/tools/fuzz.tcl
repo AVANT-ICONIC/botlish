@@ -60,11 +60,12 @@
 #
 # Every third program is *namespaced* (ERROR-PAYLOADS.md, "Module-qualified
 # error identity"): modules alpha, beta and gamma -- written to a private copy
-# of the library -- and the entry program each declare an error of the same
-# short name E: alpha's and beta's often with identical payloads, others with
-# different fields or none, and in every other such program gamma's payload
-# owns a coroutine. The identities are alpha::E, beta::E, gamma::E and the
-# entry program's bare E. Operations reach one of them directly, through a
+# of the library, so the namespaces std::alpha, std::beta and std::gamma --
+# and the entry program each declare an error of the same short name E:
+# alpha's and beta's often with identical payloads, others with different
+# fields or none, and in every other such program gamma's payload owns a
+# coroutine. The identities are std::alpha::E, std::beta::E, std::gamma::E
+# and the entry program's bare E. Operations reach one of them directly, through a
 # declaring function, through the generic `call` (an untyped callable
 # parameter), or through the combined path -- a typed declaring function
 # passed through `call` into another declaring function -- and handle it with
@@ -91,7 +92,7 @@ set argv {}
 source [file join $root tests helpers.tcl]
 
 # A private copy of the library for the namespaced programs' modules (never
-# the real lib/), removed at exit.
+# the real stdlib/), removed at exit.
 set ::fuzzLib [file tempdir botlish-ep-fuzz-lib]
 foreach entry [glob -directory $::core::libraryDir *] {
     file copy $entry $::fuzzLib
@@ -270,13 +271,13 @@ proc NsModules {affine} {
 
 # The canonical identity of namespace NS's E.
 proc NsId {ns} {
-    return [expr {$ns eq "" ? "E" : "${ns}::E"}]
+    return [expr {$ns eq "" ? "E" : "std::${ns}::E"}]
 }
 
 # The module file text of namespace NS (FIELDS its E's fields or "affine").
 proc ModuleText {ns fields} {
     if {$fields eq "affine"} {
-        return "import coroutine\n\nstruct Message:\n    value: int\n\nstruct Event:\n    value: int\n\nerror E:\n    stream: Coroutine{args: \[Message\], return: Event}\n    bytesRead: int\n\nfn worker(seed: int, resume Message) -> Event:\n    message = yield Event {value: seed}\n    Event {value: message.value}\n\nfn make(seed: int) -> Coroutine{args: \[Message\], return: Event}:\n    coroutine {step} = worker(seed)\n    step\n\nfn use(s: Coroutine{args: \[Message\], return: Event}) -> int:\n    e = s(Message {value: 2})\n    e.value\n\nfn raise(k: int, v: int) -> int errors E:\n    s = make(v)\n    if k == 1:\n        fail E {stream: s, bytesRead: v}\n    e = s(Message {value: v})\n    e.value\n"
+        return "import std::coroutine\n\nstruct Message:\n    value: int\n\nstruct Event:\n    value: int\n\nerror E:\n    stream: Coroutine{args: \[Message\], return: Event}\n    bytesRead: int\n\nfn worker(seed: int, resume Message) -> Event:\n    message = yield Event {value: seed}\n    Event {value: message.value}\n\nfn make(seed: int) -> Coroutine{args: \[Message\], return: Event}:\n    coroutine {step} = worker(seed)\n    step\n\nfn use(s: Coroutine{args: \[Message\], return: Event}) -> int:\n    e = s(Message {value: 2})\n    e.value\n\nfn raise(k: int, v: int) -> int errors E:\n    s = make(v)\n    if k == 1:\n        fail E {stream: s, bytesRead: v}\n    e = s(Message {value: v})\n    e.value\n"
     }
     set text [ErrorDecl E $fields]
     append text "fn raise(k: int, v: int) -> int errors E:\n    if k == 1:\n        [Construction E $fields [Shuffle $fields]]\n    v\n"
@@ -292,7 +293,7 @@ proc NsDeclarations {state} {
     set fields [dict get $modules ""]
     append text "fn raise_own(k: int, v: int) -> int errors E:\n    if k == 1:\n        [Construction E $fields [Shuffle $fields]]\n    v\n\n"
     foreach ns [dict keys $modules] {
-        set raiser [expr {$ns eq "" ? "raise_own" : "${ns}::raise"}]
+        set raiser [expr {$ns eq "" ? "raise_own" : "std::${ns}::raise"}]
         set id [NsId $ns]
         set tag [expr {$ns eq "" ? "own" : $ns}]
         append text "fn via_$tag\(k: int, v: int) -> int errors $id:\n    $raiser\(k, v)\n\n"
@@ -313,7 +314,7 @@ proc NsOperation {stateVar name v} {
     set k [Rand 2]
     set path [Pick {direct declaring generic combined}]
     set callee [switch -- $path {
-        direct { expr {$ns eq "" ? "raise_own" : "${ns}::raise"} }
+        direct { expr {$ns eq "" ? "raise_own" : "std::${ns}::raise"} }
         declaring { string cat via_ $tag }
         generic { string cat gen_ $tag }
         combined { string cat rejoin_ $tag }
@@ -347,7 +348,7 @@ proc NsOperation {stateVar name v} {
                     set model [list list [list $t [list int $v]]]
                 }
                 2 {
-                    append text "        on $id {stream, bytesRead: b}:\n            return \[\"$id\", ${h}::use(stream) + b\]\n"
+                    append text "        on $id {stream, bytesRead: b}:\n            return \[\"$id\", std::${h}::use(stream) + b\]\n"
                     set model [list list [list $t [list int [expr {2 + $v}]]]]
                 }
             }
@@ -373,12 +374,12 @@ proc Declarations {stateVar} {
     upvar 1 $stateVar state
     set errors [dict get $state errors]
     set names [dict keys $errors]
-    set text "import list\nimport str\n"
+    set text "import std::list\nimport std::str\n"
     if {[dict get $state affine]} {
-        append text "import coroutine\n"
+        append text "import std::coroutine\n"
     }
     if {[dict get $state ns]} {
-        append text "import alpha\nimport beta\nimport gamma\n"
+        append text "import std::alpha\nimport std::beta\nimport std::gamma\n"
     }
     append text "\nenum Kind:\n    A,\n    B,\n\nstruct Box:\n    n: int\n\nstruct Pair:\n    a: int\n    b: Box\n\n"
     foreach name [Shuffle $names] {
@@ -830,7 +831,7 @@ proc Run {} {
     }
     puts "accepted $accepted rejected $rejected ([join [lmap {c n} [lsort -stride 2 [dict get $codes]] {string cat "$c $n"}] {, }])"
     puts "handler faults by path: [join [lmap {c n} [lsort -stride 2 $faultPaths] {string cat "$c $n"}] {, }]"
-    puts "namespaced programs: [expr {$namespaced / 3}] (modules alpha, beta, gamma)"
+    puts "namespaced programs: [expr {$namespaced / 3}] (modules std::alpha, std::beta, std::gamma)"
     puts "programs [dict get $options -n] disagreements $disagreements"
     return $disagreements
 }

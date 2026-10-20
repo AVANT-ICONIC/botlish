@@ -244,7 +244,7 @@ pub extern "C" fn rt_native_store(p: *mut Vm, edit: Value, offset: Value, code: 
         Ok(encoding) => encoding,
         Err(failed) => return failed,
     };
-    let bytes = match super::ops::bin_encode(p, value, width, signed, big, "binary::store") {
+    let bytes = match super::ops::bin_encode(p, value, width, signed, big, "std::binary::store") {
         Ok(bytes) => bytes,
         Err(failed) => return failed,
     };
@@ -260,7 +260,7 @@ pub extern "C" fn rt_native_store_ptr(p: *mut Vm, edit: Value, offset: Value, wi
         Ok(address) => address,
         Err(failed) => return failed,
     };
-    let (bits, width) = match pointer_bits(p, pointer, width, "binary::store") {
+    let (bits, width) = match pointer_bits(p, pointer, width, "std::binary::store") {
         Ok(bits) => bits,
         Err(failed) => return failed,
     };
@@ -299,7 +299,7 @@ fn mbytes_written(p: *mut Vm, m: Value, offset: Value, encoded: &[u8], context: 
 /// the Int V written at O in encoding C.
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_mbytes_write(p: *mut Vm, m: Value, offset: Value, code: Value, value: Value) -> Value {
-    const CONTEXT: &str = "binary::write";
+    const CONTEXT: &str = "std::binary::write";
     let (width, signed, big) = match write_encoding(p, code, CONTEXT) {
         Ok(encoding) => encoding,
         Err(failed) => return failed,
@@ -317,7 +317,7 @@ pub extern "C" fn rt_mbytes_write(p: *mut Vm, m: Value, offset: Value, code: Val
 /// the W-byte address bits of the C address word Q written at O.
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_mbytes_write_ptr(p: *mut Vm, m: Value, offset: Value, width: Value, pointer: Value) -> Value {
-    const CONTEXT: &str = "binary::write_foreign";
+    const CONTEXT: &str = "std::binary::write_foreign";
     let (bits, width) = match pointer_bits(p, pointer, width, CONTEXT) {
         Ok(bits) => bits,
         Err(failed) => return failed,
@@ -383,7 +383,7 @@ fn decoded_row(p: *mut Vm, bytes: &[u8], width: usize, signed: bool, big: bool) 
 /// offset O of the byte storage S (a row of a fixed array, imprinted).
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_bin_load_array(p: *mut Vm, storage: Value, offset: Value, code: Value, n: Value) -> Value {
-    const CONTEXT: &str = "binary::parse";
+    const CONTEXT: &str = "std::binary::parse";
     if heap_kind(storage) != KIND_BYTES {
         return vm(p).fail(RtError::Type { context: CONTEXT.to_string(), expected: Kind::ByteStore, got: storage });
     }
@@ -459,7 +459,7 @@ fn fresh_storage(p: *mut Vm, storage: Value, context: &str) -> Result<usize, Val
 /// written.
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_bin_store_array(p: *mut Vm, storage: Value, offset: Value, code: Value, l: Value) -> Value {
-    const CONTEXT: &str = "binary::write";
+    const CONTEXT: &str = "std::binary::write";
     let size = match fresh_storage(p, storage, CONTEXT) {
         Ok(size) => size,
         Err(failed) => return failed,
@@ -484,7 +484,7 @@ pub extern "C" fn rt_bin_store_array(p: *mut Vm, storage: Value, offset: Value, 
 /// pointers encoded by binary::write_foreign; Q observed).
 #[unsafe(no_mangle)]
 pub extern "C" fn rt_bin_store_ptr(p: *mut Vm, storage: Value, offset: Value, width: Value, pointer: Value) -> Value {
-    const CONTEXT: &str = "binary::write_foreign";
+    const CONTEXT: &str = "std::binary::write_foreign";
     let size = match fresh_storage(p, storage, CONTEXT) {
         Ok(size) => size,
         Err(failed) => return failed,
@@ -517,7 +517,7 @@ pub extern "C" fn rt_native_store_array(p: *mut Vm, edit: Value, offset: Value, 
         Ok(encoding) => encoding,
         Err(failed) => return failed,
     };
-    let bytes = match encoded_row(p, l, width, signed, big, "binary::store") {
+    let bytes = match encoded_row(p, l, width, signed, big, "std::binary::store") {
         Ok(bytes) => bytes,
         Err(failed) => return failed,
     };

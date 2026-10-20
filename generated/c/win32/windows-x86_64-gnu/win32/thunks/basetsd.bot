@@ -3,87 +3,91 @@
 # The thunked APIs of basetsd.h (static inline functions, table-redirected
 # names, macros): externs of the C wrappers in the shim library (C-BINDGEN.md,
 # "Thunks"). Build the shim with `tools/c-bindgen.tcl build`.
-import ffi::c
+import std::ffi::c
 
 extern c library "botlish_shim_win32_e3f8535c"
 
 # C: static inline unsigned long HandleToULong(const void *h)
 extern c fn HandleToULong named "botlish_win32_HandleToULong"(
-    h: ffi::c::Ptr[ffi::c::Void]
-) -> ffi::c::ULong
+    h: std::ffi::c::Ptr[std::ffi::c::Void]
+) -> std::ffi::c::ULong
 
 # C: static inline long HandleToLong(const void *h)
 extern c fn HandleToLong named "botlish_win32_HandleToLong"(
-    h: ffi::c::Ptr[ffi::c::Void]
-) -> ffi::c::Long
+    h: std::ffi::c::Ptr[std::ffi::c::Void]
+) -> std::ffi::c::Long
 
 # C: static inline void *ULongToHandle(const unsigned long h)
 extern c fn ULongToHandle named "botlish_win32_ULongToHandle"(
-    h: ffi::c::ULong
-) -> ffi::c::Ptr[ffi::c::Void]
+    h: std::ffi::c::ULong
+) -> std::ffi::c::Ptr[std::ffi::c::Void]
 
 # C: static inline void *LongToHandle(const long h)
 extern c fn LongToHandle named "botlish_win32_LongToHandle"(
-    h: ffi::c::Long
-) -> ffi::c::Ptr[ffi::c::Void]
+    h: std::ffi::c::Long
+) -> std::ffi::c::Ptr[std::ffi::c::Void]
 
 # C: static inline unsigned long PtrToUlong(const void *p)
 extern c fn PtrToUlong named "botlish_win32_PtrToUlong"(
-    p: ffi::c::Ptr[ffi::c::Void]
-) -> ffi::c::ULong
+    p: std::ffi::c::Ptr[std::ffi::c::Void]
+) -> std::ffi::c::ULong
 
 # C: static inline unsigned int PtrToUint(const void *p)
 extern c fn PtrToUint named "botlish_win32_PtrToUint"(
-    p: ffi::c::Ptr[ffi::c::Void]
-) -> ffi::c::UInt
+    p: std::ffi::c::Ptr[std::ffi::c::Void]
+) -> std::ffi::c::UInt
 
 # C: static inline unsigned short PtrToUshort(const void *p)
 extern c fn PtrToUshort named "botlish_win32_PtrToUshort"(
-    p: ffi::c::Ptr[ffi::c::Void]
-) -> ffi::c::UShort
+    p: std::ffi::c::Ptr[std::ffi::c::Void]
+) -> std::ffi::c::UShort
 
 # C: static inline long PtrToLong(const void *p)
 extern c fn PtrToLong named "botlish_win32_PtrToLong"(
-    p: ffi::c::Ptr[ffi::c::Void]
-) -> ffi::c::Long
+    p: std::ffi::c::Ptr[std::ffi::c::Void]
+) -> std::ffi::c::Long
 
 # C: static inline int PtrToInt(const void *p)
-extern c fn PtrToInt named "botlish_win32_PtrToInt"(p: ffi::c::Ptr[ffi::c::Void]) -> ffi::c::Int
+extern c fn PtrToInt named "botlish_win32_PtrToInt"(
+    p: std::ffi::c::Ptr[std::ffi::c::Void]
+) -> std::ffi::c::Int
 
 # C: static inline short PtrToShort(const void *p)
 extern c fn PtrToShort named "botlish_win32_PtrToShort"(
-    p: ffi::c::Ptr[ffi::c::Void]
-) -> ffi::c::Short
+    p: std::ffi::c::Ptr[std::ffi::c::Void]
+) -> std::ffi::c::Short
 
 # C: static inline void *IntToPtr(const int i)
-extern c fn IntToPtr named "botlish_win32_IntToPtr"(i: ffi::c::Int) -> ffi::c::Ptr[ffi::c::Void]
+extern c fn IntToPtr named "botlish_win32_IntToPtr"(
+    i: std::ffi::c::Int
+) -> std::ffi::c::Ptr[std::ffi::c::Void]
 
 # C: static inline void *UIntToPtr(const unsigned int ui)
 extern c fn UIntToPtr named "botlish_win32_UIntToPtr"(
-    ui: ffi::c::UInt
-) -> ffi::c::Ptr[ffi::c::Void]
+    ui: std::ffi::c::UInt
+) -> std::ffi::c::Ptr[std::ffi::c::Void]
 
 # C: static inline void *LongToPtr(const long l)
 extern c fn LongToPtr named "botlish_win32_LongToPtr"(
-    l: ffi::c::Long
-) -> ffi::c::Ptr[ffi::c::Void]
+    l: std::ffi::c::Long
+) -> std::ffi::c::Ptr[std::ffi::c::Void]
 
 # C: static inline void *ULongToPtr(const unsigned long ul)
 extern c fn ULongToPtr named "botlish_win32_ULongToPtr"(
-    ul: ffi::c::ULong
-) -> ffi::c::Ptr[ffi::c::Void]
+    ul: std::ffi::c::ULong
+) -> std::ffi::c::Ptr[std::ffi::c::Void]
 
 # C: static inline void *Ptr32ToPtr(const void *p)
 extern c fn Ptr32ToPtr named "botlish_win32_Ptr32ToPtr"(
-    p: ffi::c::Ptr[ffi::c::Void]
-) -> ffi::c::Ptr[ffi::c::Void]
+    p: std::ffi::c::Ptr[std::ffi::c::Void]
+) -> std::ffi::c::Ptr[std::ffi::c::Void]
 
 # C: static inline void *Handle32ToHandle(const void *h)
 extern c fn Handle32ToHandle named "botlish_win32_Handle32ToHandle"(
-    h: ffi::c::Ptr[ffi::c::Void]
-) -> ffi::c::Ptr[ffi::c::Void]
+    h: std::ffi::c::Ptr[std::ffi::c::Void]
+) -> std::ffi::c::Ptr[std::ffi::c::Void]
 
 # C: static inline void *PtrToPtr32(const void *p)
 extern c fn PtrToPtr32 named "botlish_win32_PtrToPtr32"(
-    p: ffi::c::Ptr[ffi::c::Void]
-) -> ffi::c::Ptr[ffi::c::Void]
+    p: std::ffi::c::Ptr[std::ffi::c::Void]
+) -> std::ffi::c::Ptr[std::ffi::c::Void]

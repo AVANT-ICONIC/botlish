@@ -28,7 +28,7 @@
 #                             coroutine) as the value of the suspended yield
 #   coroutine#yield(V)        suspends the running coroutine with outward
 #                             value V; evaluates to the resume message
-#   coroutine::done?(H)       true once H is terminal (completed or failed);
+#   std::coroutine::done?(H)  true once H is terminal (completed or failed);
 #                             observes H without moving it
 #   coroutine#release(H)      H's handle is dead (the affine analysis placed
 #                             this call right after its last use,
@@ -85,12 +85,12 @@ proc core::coroutines::createNative {} { return coroutine#create }
 proc core::coroutines::startNative {} { return coroutine#start }
 proc core::coroutines::resumeNative {} { return coroutine#resume }
 proc core::coroutines::yieldNative {} { return coroutine#yield }
-proc core::coroutines::doneNative {} { return coroutine::done? }
+proc core::coroutines::doneNative {} { return std::coroutine::done? }
 proc core::coroutines::releaseNative {} { return coroutine#release }
 
 # The coroutine natives, for the analyses that recognize them by identity.
 proc core::coroutines::natives {} {
-    return [list coroutine#create coroutine#start coroutine#resume coroutine#yield coroutine::done? \
+    return [list coroutine#create coroutine#start coroutine#resume coroutine#yield std::coroutine::done? \
         coroutine#release]
 }
 
@@ -329,7 +329,7 @@ core::native::register coroutine#resume -arity * -impl core::coroutines::resumeI
     -completion 1 -result-shape {coroutine-outward} -ownership {resume message}
 core::native::register coroutine#yield -arity 1 -impl core::coroutines::yieldImpl \
     -result-shape {coroutine-yield}
-core::native::register coroutine::done? -arity 1 -impl core::coroutines::doneImpl \
+core::native::register std::coroutine::done? -arity 1 -impl core::coroutines::doneImpl \
     -param-types {coroutine} -result-type bool -ownership {observe}
 core::native::register coroutine#release -arity 1 -impl core::coroutines::releaseImpl \
     -param-types {coroutine} -result-type unit -ownership {release}

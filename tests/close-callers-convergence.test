@@ -124,10 +124,10 @@ proc instanceDump {analysis} {
 # with no separate construction needed.
 
 set ::primaryFixture {
-import str
+import std::str
 fn outer(tag):
     fn inner(x):
-        x + str::length(tag)
+        x + std::str::length(tag)
     inner(1) + inner(2)
 outer("v")
 }
@@ -145,10 +145,10 @@ outer("v")
 # asks for, not merely the round-1-reset artifact primaryFixture exercises.
 
 set ::cascadeFixture {
-import str
+import std::str
 fn outer(tag):
     fn inner(x):
-        x + str::length(tag)
+        x + std::str::length(tag)
     fn middle(y):
         inner(y)
     middle(1) + middle(2)
@@ -165,13 +165,13 @@ outer("v")
 # any narrower-than-baseline result.
 
 set ::recursiveResultFixture {
-import str
+import std::str
 fn outer(tag):
     fn inner(x, n):
         if n <= 0:
-            [x, str::length(tag)]
+            [x, std::str::length(tag)]
         else:
-            str::concat([x], inner(x, n - 1))
+            std::str::concat([x], inner(x, n - 1))
     inner(1, 3)
 outer("v")
 }
@@ -185,11 +185,11 @@ outer("v")
 # budget of 0 must not roll back anything -- there is nothing to roll back.
 
 set ::noOptimizableClosureFixture {
-import str
+import std::str
 fn outer(tag):
     fn inner(x):
         x + 1
-    inner(1) + str::length(tag)
+    inner(1) + std::str::length(tag)
 outer("v")
 }
 

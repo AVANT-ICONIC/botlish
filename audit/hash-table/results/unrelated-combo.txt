@@ -62,7 +62,7 @@ K = 200 copies of an S-element array (or vector) per program; per copy.
 
 ## Scheduler-shaped construction
 
-N workers from mutable_array::generate(n, worker), 8 rounds over the array (swap a slot out, resume it, swap it back), then a consuming loop; time per resume.
+N workers from std::mutable_array::generate(n, worker), 8 rounds over the array (swap a slot out, resume it, swap it back), then a consuming loop; time per resume.
 
 | program | baseline | cranelift |
 |---|---|---:|

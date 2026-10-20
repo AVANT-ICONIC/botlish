@@ -5,7 +5,7 @@
 **Outcome B.** The exact/finite caller fact behind
 
 ```botlish
-additional_unreserved_chars = byte::set(['-', '.', '_', '~'])
+additional_unreserved_chars = std::byte::set(['-', '.', '_', '~'])
 ```
 
 does reach a real, already-shipped static proof (`hir::completions.tcl`,
@@ -14,11 +14,11 @@ STATIC-COMPLETION-PROOFS.md): the module-init call's own
 tree, not merely asserted from an earlier report. But that proof is
 computed and consumed entirely *within* `hir/completions.tcl`'s own
 private, non-materializing recursive re-walk (`analyzeBlock`), which never
-writes back into the HIR node fields of `byte::set`'s own inner
-`from_int(char::codepoint(c))` call. Those inner nodes -- and every
+writes back into the HIR node fields of `std::byte::set`'s own inner
+`from_int(std::char::codepoint(c))` call. Those inner nodes -- and every
 downstream pass that could act on them for *code generation*
 (`hir/range.tcl`, `hir/specialize.tcl`, `native/lower.tcl`) -- see only the
-generic, unseeded fact from `byte::set`'s own single, one-time,
+generic, unseeded fact from `std::byte::set`'s own single, one-time,
 non-call-specific body check. No downstream pass ever reads
 `effectiveErrors`/`resultRangeFact`/`mayReturnNormally` at all (confirmed
 by direct grep: only `hir/completions.tcl` itself and its own consumer
@@ -54,7 +54,7 @@ passes unchanged. The FINAL SEMANTIC SOURCE FENCE remains intact.
 ## A note on stale brief text
 
 This milestone's own brief is written in terms of a callable
-`Byte(char::codepoint(c))` construction and a generic
+`Byte(std::char::codepoint(c))` construction and a generic
 `core::type::CheckedConstruct`/`ProvesValueAcceptedBy` checked-constructor
 mechanism reachable from Botlish source. That mechanism **no longer exists
 as source syntax**: `EXPLICIT-ERROR-COMPLETIONS.md` (commit `90cfe54`,
@@ -70,14 +70,14 @@ by ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md), never a callable native. `native::lo
 now confirmed **dead code**: no native is registered anywhere with `-impl
 {core::type::CheckedConstruct NAME}` any more (grepped directly; the
 proc is referenced only by its own doc comment and itself), and no test
-file exercises it. `lib/byte.bot`'s own current source
+file exercises it. `stdlib/byte.bot`'s own current source
 (`fn from_int(value: int) -> Byte errors BelowRange, AboveRange: if value <
 0: fail BelowRange else: if value > 255: fail AboveRange else: value`) is
 ordinary, ordinary-if/fail user code, not a "checked construction" HIR/NIR
 form at all -- this is exactly the point of EXPLICIT-ERROR-COMPLETIONS.md
 (spec item 19-20 of that milestone: "a type name is not a magical
 value-level function"). Every fixture in this report and its test file
-therefore uses the real, current shape -- `byte::from_int`'s own real body,
+therefore uses the real, current shape -- `std::byte::from_int`'s own real body,
 or an equivalent user-defined `if`/`fail` function over a second,
 non-Byte domain -- never the removed syntax. This does not change the
 audit's own conclusion: the underlying question ("does a caller-specific
@@ -102,7 +102,7 @@ the NIR opcode's own match arm (`"setfromlist"` / `"setfromlisttotal"`),
 so the label is not a separate, driftable instrumentation artifact --
 splitting it from the opcode name would be a larger, riskier change than
 this preflight step justifies, and the *only* real `SetFromList`-family
-call site in the whole frozen corpus (`byte::set`'s own
+call site in the whole frozen corpus (`std::byte::set`'s own
 `immutable_set_from_list(bytes)`) means no double-counting is even
 possible today. No code change made; recorded as already resolved, per the
 spec's own explicit escape hatch ("If the current tree has already
@@ -110,16 +110,16 @@ resolved this, record that and do nothing").
 
 ## Current checked-domain-construction semantics (current architecture)
 
-- `type Byte = Int in 0..255` (`lib/byte.bot`, `SOURCE-DEFINED-INTEGER-DOMAINS.md`):
+- `type Byte = Int in 0..255` (`stdlib/byte.bot`, `SOURCE-DEFINED-INTEGER-DOMAINS.md`):
   a source-declared bounded-integer type. `core::type::CheckedConstruct`
   (`core/type.tcl:276-283`) is the generic, still-present Tcl-level
   membership-check-and-raise implementation, but it is **only ever called
   from Tcl-trusted code** now (nothing registers it as a Botlish-callable
   native) -- confirmed dead from source (see above).
 - The one real, reachable "checked construction" in the current language is
-  ordinary user code: `byte::from_int(value: int) -> Byte errors
+  ordinary user code: `std::byte::from_int(value: int) -> Byte errors
   BelowRange, AboveRange: if value < 0: fail BelowRange else: if value >
-  255: fail AboveRange else: value` (`lib/byte.bot:150-157`).
+  255: fail AboveRange else: value` (`stdlib/byte.bot:150-157`).
 - `hir/completions.tcl` (`STATIC-COMPLETION-PROOFS.md`) computes, for every
   call whose target is an exact statically-known function,
   `effectiveErrors(call)` (a subset of the callee's declared errors, never
@@ -145,7 +145,7 @@ resolved this, record that and do nothing").
   (read-only audit tooling) -- **nowhere** in `hir/range.tcl`,
   `hir/specialize.tcl`, or `native/lower.tcl`.
 
-## Real byte::set source path (frozen `lib/byte.bot`, unchanged)
+## Real std::byte::set source path (frozen `stdlib/byte.bot`, unchanged)
 
 ```botlish
 fn from_int(value: int) -> Byte errors BelowRange, AboveRange:
@@ -159,7 +159,7 @@ fn from_int(value: int) -> Byte errors BelowRange, AboveRange:
 
 fn set(chars: List[UnicodeChar]) -> ImmutableSet[Byte] errors AboveRange:
     bytes = loop c in chars:
-        from_int(char::codepoint(c))
+        from_int(std::char::codepoint(c))
     immutable_set_from_list(bytes)
 ```
 
@@ -174,10 +174,10 @@ get) -- the exact contents are a *separate* fact, tracked (only) by
 this one call's own literal-list argument, confirmed by that pass's own
 documented mechanism, not inferred by us.
 
-## byte::set call-site fact (module-init call)
+## std::byte::set call-site fact (module-init call)
 
 Measured directly, against a fresh, real
-`additional_unreserved_chars = byte::set(['-', '.', '_', '~'])` program:
+`additional_unreserved_chars = std::byte::set(['-', '.', '_', '~'])` program:
 
 ```
 outer call node (top-level bind's RHS): effectiveErrors = {}
@@ -189,27 +189,27 @@ existing compiler result (STATIC-COMPLETION-PROOFS.md's own worked
 example, re-verified here fresh) -- **not** something this milestone had to
 add.
 
-## byte::set parameter-instance fact / listloop element fact / char::codepoint fact
+## std::byte::set parameter-instance fact / listloop element fact / std::char::codepoint fact
 
-Measured on the *same* program, at `byte::set`'s own inner call
-`from_int(char::codepoint(c))` (`lib/byte.bot:176`, and the nested
-`char::codepoint(c)` at the same line):
+Measured on the *same* program, at `std::byte::set`'s own inner call
+`from_int(std::char::codepoint(c))` (`stdlib/byte.bot:176`, and the nested
+`std::char::codepoint(c)` at the same line):
 
 ```
 inner from_int call node:        effectiveErrors = {AboveRange}   (BelowRange already
-                                   pruned, generically, from char::codepoint's own
+                                   pruned, generically, from std::char::codepoint's own
                                    nonneg fact -- unrelated to the literal-list question)
-nested char::codepoint(c) node:  resultRangeFact = [0, 1114111]   (the full Unicode
+nested std::char::codepoint(c) node:  resultRangeFact = [0, 1114111]   (the full Unicode
                                    scalar domain -- NOT narrowed to {45,46,95,126}
                                    or even to [45,126])
 ```
 
-This is the **exact same pair of facts** `byte::set`'s own body carries
+This is the **exact same pair of facts** `std::byte::set`'s own body carries
 when checked completely generically (e.g. from a program that only calls
-`byte::from_int(45)` and never mentions `byte::set`'s own literal call at
+`std::byte::from_int(45)` and never mentions `std::byte::set`'s own literal call at
 all) -- confirmed by comparing the two probes byte-for-byte. **This is the
 exact first-loss location, precisely characterized**: `hir::completions::
-checkBlock` walks `byte::set`'s own function *body* exactly once, under
+checkBlock` walks `std::byte::set`'s own function *body* exactly once, under
 `chars` unseeded/generic, and stamps that single walk's own facts onto the
 inner HIR nodes (`e77`/`e79` in this probe). The *separate*, call-specific
 recursive proof (`analyzeBlock`, seeded with the four literal values) that
@@ -233,23 +233,23 @@ See tables above; summarized as the spec's own required trace:
 | stage | semantic type | nominal/refined type | numeric interval | exact finite set | resultRangeFact | effectiveErrors |
 |---|---|---|---|---|---|---|
 | `['-','.','_','~']` (caller) | `List[UnicodeChar]` | same | -- | not in the *type*; tracked only in `hir/completions.tcl`'s own `ctx.exactList` | n/a | n/a |
-| `chars` (byte::set's own parameter, generic body check) | `List[UnicodeChar]` | same | -- | none (unseeded) | n/a | n/a |
+| `chars` (std::byte::set's own parameter, generic body check) | `List[UnicodeChar]` | same | -- | none (unseeded) | n/a | n/a |
 | `c` (listloop element, generic body check) | `UnicodeChar` | same | -- | none (unseeded) | n/a | n/a |
-| `char::codepoint(c)` (generic body check) | `int` | same | `[0, 1114111]` | none | `[0, 1114111]` | (native, no declared errors) |
-| `from_int(char::codepoint(c))` (generic body check) | `Byte` | same | `[0,255]` on success | none | `{min 0 max 255}` (success value) | `{AboveRange}` |
-| `byte::set(['-','.','_','~'])` (the one real call that matters) | `ImmutableSet[Byte]` | same | n/a | n/a | n/a (non-Int result) | `{}` |
+| `std::char::codepoint(c)` (generic body check) | `int` | same | `[0, 1114111]` | none | `[0, 1114111]` | (native, no declared errors) |
+| `from_int(std::char::codepoint(c))` (generic body check) | `Byte` | same | `[0,255]` on success | none | `{min 0 max 255}` (success value) | `{AboveRange}` |
+| `std::byte::set(['-','.','_','~'])` (the one real call that matters) | `ImmutableSet[Byte]` | same | n/a | n/a | n/a (non-Int result) | `{}` |
 
 ## Q1: local literal checked construction control
 
-Fresh, direct measurement against the real, unmodified `lib/byte.bot`
+Fresh, direct measurement against the real, unmodified `stdlib/byte.bot`
 (`tests/checked-domain-proof-provenance.test`,
 `checked-domain-q1-real-byte-from-int-45-effective-errors-empty`/
 `-still-emits-both-checks`):
 
-- `byte::from_int(45)`'s own call node: `effectiveErrors = {}`,
+- `std::byte::from_int(45)`'s own call node: `effectiveErrors = {}`,
   `resultRangeFact = [45, 45] {45}` -- the HIR-level proof genuinely
   exists, and is exact (a singleton).
-- `byte::from_int<int>`'s own generated NIR (real production body, via
+- `std::byte::from_int<int>`'s own generated NIR (real production body, via
   `native::lower::program` on a real `.bot` file), regardless: still
   contains **both** `op rilt`/`op rigt` comparisons and **both**
   `faildeclared "BelowRange"`/`faildeclared "AboveRange"` blocks,
@@ -257,7 +257,7 @@ Fresh, direct measurement against the real, unmodified `lib/byte.bot`
 
 Answer: **no**, a locally obvious literal does not eliminate/falsify the
 generated-code range check today -- confirmed against the real production
-`byte::from_int`, not a synthetic look-alike, and reconfirmed generically
+`std::byte::from_int`, not a synthetic look-alike, and reconfirmed generically
 (non-Byte) via `checked-domain-q1-generic-domain-literal-still-emits-both-checks`
 (a second bounded domain, `Small = Int in 10..20`, same result). This
 exactly reproduces `COMPREHENSIVE-GENERATED-CODE-AUDIT.md`'s own probe D
@@ -273,37 +273,37 @@ constructor proof consumption locally first" -- done, directly, below.
 `-still-emits-both-checks`: a value statically known `>= 10` (but not
 upper-bounded) needs only a `TooLarge` declaration (HIR-level proof
 narrows correctly, mirroring `STATIC-COMPLETION-PROOFS.md`'s own
-`nonneg`/`byte::from_int` shape generically). The generated NIR for the
+`nonneg`/`std::byte::from_int` shape generically). The generated NIR for the
 shared `checkedSmall<int>` instance, regardless, still contains **both**
 `faildeclared "TooSmall"` and `faildeclared "TooLarge"` blocks.
 
 Answer: **no** -- the same RC2 gap. There is exactly **one** shared NIR
 instance per `{block, argument-kind}` (confirmed by
-`checked-domain-shared-instance-from-int`: `byte::from_int(45)` and a
-genuinely dynamic `byte::from_int(m: int)` caller produce exactly one
-`func ... "byte::from_int"` header, not two), so even where
+`checked-domain-shared-instance-from-int`: `std::byte::from_int(45)` and a
+genuinely dynamic `std::byte::from_int(m: int)` caller produce exactly one
+`func ... "std::byte::from_int"` header, not two), so even where
 `hir::range`'s own *instance-level* joined entry range is informative
 (e.g. `[0,+∞]`, a real, retained fact), no mechanism ever asks it whether
 a specific comparison is decided.
 
-## Q3: real byte::set result
+## Q3: real std::byte::set result
 
-**Does the real `byte::set` inner constructor receive a fact strong enough
+**Does the real `std::byte::set` inner constructor receive a fact strong enough
 to eliminate the check? No.** Measured three ways, all on the real,
-current, unmodified `lib/byte.bot`, via the actual production module
+current, unmodified `stdlib/byte.bot`, via the actual production module
 initializer shape:
 
-1. HIR fact trace (above): the inner `from_int`/`char::codepoint` nodes
+1. HIR fact trace (above): the inner `from_int`/`std::char::codepoint` nodes
    carry only the generic `[0, 1114111]`/`{AboveRange}` facts, never the
    caller's own narrower literal-derived proof.
 2. Real generated NIR (`checked-domain-q3-real-nir-retains-both-checks`):
-   `byte::from_int<int>`'s own body, lowered from the real
-   `additional_unreserved_chars = byte::set(['-','.','_','~'])` program,
+   `std::byte::from_int<int>`'s own body, lowered from the real
+   `additional_unreserved_chars = std::byte::set(['-','.','_','~'])` program,
    still contains both compares and both fail paths.
 3. Shared-instance adversarial control
    (`checked-domain-shared-instance-byte-set`): the all-safe module-init
-   call and a genuinely dynamic, handled `byte::set(chars)` call share
-   **one** `byte::set` NIR instance (one `func ... "byte::set"` header),
+   call and a genuinely dynamic, handled `std::byte::set(chars)` call share
+   **one** `std::byte::set` NIR instance (one `func ... "std::byte::set"` header),
    confirming that even a hypothetical future per-instance optimization
    could not soundly special-case this shared instance's own inner
    construction without becoming unsound for the dynamic caller.
@@ -340,7 +340,7 @@ feed them into codegen). It is not "the smallest existing mechanism," it
 has no existing narrow analogue (M1/M3/M4's own opcode-selection-by-
 static-type-predicate shape does not generalize to a *value*-dependent
 branch), and its blast radius is every `if` in the compiler, not
-`byte::set`. Per this milestone's own scope (forbidding "general constant
+`std::byte::set`. Per this milestone's own scope (forbidding "general constant
 propagation," and by the same principle, general branch-elimination
 machinery introduced as a side effect of a four-character audit), this was
 correctly left alone.
@@ -354,7 +354,7 @@ one of the 16 exact members. `core::type::validate` (the one generic
 runtime membership check every `NAME?` predicate -- and any future
 checked-construction proof consumer -- would have to share) correctly
 rejects `17` and accepts `16`/`240`/`0`, confirmed directly against the
-real, unmodified `lib/byte.bot` registration. (Note, superseded:
+real, unmodified `stdlib/byte.bot` registration. (Note, superseded:
 R2A2-TRAILING-QUESTION-IDENTIFIERS.md made `NAME?` spellable, and
 ELIMINATE-AUTOMATIC-TYPE-PREDICATES.md removed the predicates. As written
 at the time: `NAME?` predicates
@@ -371,10 +371,10 @@ construction, the *existing* exact-vs-interval membership machinery
 underneath it is already sound and would not need to be built from
 scratch.
 
-## byte::set runtime failure preservation
+## std::byte::set runtime failure preservation
 
 - `checked-domain-byte-set-astral-known-error-at-compile-time`:
-  `byte::set(['Ā'])` remains a compile-time `KNOWN-ERROR` under ordinary
+  `std::byte::set(['Ā'])` remains a compile-time `KNOWN-ERROR` under ordinary
   compilation.
 - `checked-domain-byte-set-astral-still-fails`: with that compile-time
   proof bypassed (`-strict 0`, matching `tests/byte-set.test`'s own
@@ -389,24 +389,24 @@ scratch.
 **No change.** `uri-steady`: 17 NIR functions, 7103 machine-code bytes
 (re-measured fresh against the current tree; byte-for-byte identical to
 M4's own post-M4 number). `web-unreserved-256`: 16 NIR functions, 15433
-bytes (identical to M4's own post-M4 number). `byte::from_int`'s own body,
+bytes (identical to M4's own post-M4 number). `std::byte::from_int`'s own body,
 in both the real production shape and every synthetic control, retains
 both `rilt`/`rigt` compares and both `faildeclared` blocks.
 
 ## Effects before/after
 
-No change. `byte::set`'s own `SetFromList` call remains `setfromlisttotal`
+No change. `std::byte::set`'s own `SetFromList` call remains `setfromlisttotal`
 (`checked-domain-m4-control-byte-set-still-setfromlisttotal`), `may_error`
-unaffected. `byte::set` as a whole and `<program> -> byte::set` remain
-`may_error=true` (via `byte::from_int`'s genuinely-necessary `AboveRange`
+unaffected. `std::byte::set` as a whole and `<program> -> std::byte::set` remain
+`may_error=true` (via `std::byte::from_int`'s genuinely-necessary `AboveRange`
 check), exactly as M4 left them.
 
 ## Allocation / GC / roots consequences
 
 No change (no production code touched). Corpus census
 (`checked-domain-corpus-census-single-real-call-site`): `from_int(` occurs
-as a real call exactly once in the whole frozen corpus (`lib/byte.bot:176`,
-inside `byte::set`'s own loop) -- module-initialization-only, confirming
+as a real call exactly once in the whole frozen corpus (`stdlib/byte.bot:176`,
+inside `std::byte::set`'s own loop) -- module-initialization-only, confirming
 any future proof-consumption work here would only ever pay rent at
 startup, never in the request-serving path.
 
@@ -417,10 +417,10 @@ startup, never in the request-serving path.
 - M2: `tests/hir-callable-target.test` 8/8, `tests/typed-callable-escape.test`
   35/35 -- unchanged.
 - M3: `tests/setcontains-equality-total.test` 17/17 -- unchanged;
-  `web::is_unreserved`'s own `SetContains` call still `setcontainstotal`.
+  `std::web::is_unreserved`'s own `SetContains` call still `setcontainstotal`.
 - M4: `tests/setfromlist-equality-total.test` 14/14 -- unchanged;
-  `byte::set`'s own `SetFromList` call still `setfromlisttotal`
-  (re-confirmed above); `byte::set(['Ā'])` still fails.
+  `std::byte::set`'s own `SetFromList` call still `setfromlisttotal`
+  (re-confirmed above); `std::byte::set(['Ā'])` still fails.
 
 ## Full regression
 
@@ -456,13 +456,13 @@ SEMANTIC SOURCE FENCE remains intact.
 
 | fact | before M5 | after M5 |
 |---|---|---|
-| `byte::set(['-','.','_','~'])`'s own outer-call `effectiveErrors` | `{}` (already proven, STATIC-COMPLETION-PROOFS.md) | unchanged, `{}` |
-| `byte::set`'s own inner `from_int`/`char::codepoint` node facts | generic, unseeded (`[0,1114111]`/`{AboveRange}`) | unchanged |
+| `std::byte::set(['-','.','_','~'])`'s own outer-call `effectiveErrors` | `{}` (already proven, STATIC-COMPLETION-PROOFS.md) | unchanged, `{}` |
+| `std::byte::set`'s own inner `from_int`/`std::char::codepoint` node facts | generic, unseeded (`[0,1114111]`/`{AboveRange}`) | unchanged |
 | `hir/completions.tcl` -> `hir/range.tcl`/`native/lower.tcl` fact flow | none (siloed by design) | unchanged |
 | `native::lower::If` branch-reachability source | `hir::types::KnownOutcome` only, never `hir::range` | unchanged (RC2) |
-| `byte::from_int<int>`'s own generated NIR (real corpus and every synthetic control) | both compares, both fail paths, unconditionally | unchanged |
-| `byte::set`/`byte::from_int` aggregate `may_error` | `true` (via `AboveRange`) | unchanged |
-| `byte::set(['Ā'])` | `KNOWN-ERROR` at compile time; runtime `AboveRange` if bypassed | unchanged |
+| `std::byte::from_int<int>`'s own generated NIR (real corpus and every synthetic control) | both compares, both fail paths, unconditionally | unchanged |
+| `std::byte::set`/`std::byte::from_int` aggregate `may_error` | `true` (via `AboveRange`) | unchanged |
+| `std::byte::set(['Ā'])` | `KNOWN-ERROR` at compile time; runtime `AboveRange` if bypassed | unchanged |
 | Machine-code size (`uri-steady`/`web-unreserved-256`) | 7103B/17 funcs, 15433B/16 funcs | unchanged |
 | Family 1b (`StringRegion` scanner-index guards) | unaddressed | unaddressed, carried forward |
 
@@ -481,13 +481,13 @@ M4's own "Recommended next milestone" section, since neither has moved):
    scoping (soundness for non-contiguous/exact domains, interaction with
    the tiny-leaf inliner, interaction with `hir::range`'s own 32-value
    exact-set budget) before it could be attempted safely. Closing it would
-   make `byte::from_int(45)`'s own callee body branch-free, and, via
+   make `std::byte::from_int(45)`'s own callee body branch-free, and, via
    ordinary existing effect propagation (the M1-M4 arc's own established
-   pattern), would very likely make `byte::set`'s own aggregate
+   pattern), would very likely make `std::byte::set`'s own aggregate
    `may_error` `false` for the one real corpus call, *without* ever
    needing to feed `hir/completions.tcl`'s own literal-list facts into
    codegen at all -- the caller-specific literal values are not actually
-   necessary for this: `char::codepoint`'s own registered `nonneg`
+   necessary for this: `std::char::codepoint`'s own registered `nonneg`
    `hir::range` fact plus a `[0,255]`-provable *result* type would already
    be enough for `native::lower::If` to decide `value > 255` is undecided
    in general but that a smaller closed corpus of individually-analyzed
@@ -502,7 +502,7 @@ Per the milestone's own explicit instruction (spec item 81), this report
 does **not** propose a general constant-container/literal-propagation
 framework merely to optimize away four retained URI punctuation
 characters' worth of module-init-only range checks -- the measured cost
-(one function, `byte::from_int<int>`, 118-337 bytes depending on
+(one function, `std::byte::from_int<int>`, 118-337 bytes depending on
 representation, executed once at module load in the real corpus) does not
 justify inventing new interprocedural machinery, and candidate 1 above,
 if ever pursued, would benefit every checked-domain construction and every
@@ -530,17 +530,17 @@ its actual consumer, not merely to where it is first established.
    literal `UnicodeChar` values -- the *type* encodes only
    `List[UnicodeChar]`; the four values are a separate fact, tracked only
    by `hir/completions.tcl`'s own `ctx.exactList`.
-2. **Does the specialization key for `byte::set` contain those values?**
+2. **Does the specialization key for `std::byte::set` contain those values?**
    No -- confirmed: `hir/specialize.tcl` has zero diff, and the shared-
-   instance control shows one `byte::set` NIR instance regardless of
+   instance control shows one `std::byte::set` NIR instance regardless of
    caller literal contents.
-3. **What is `chars`'s type/fact inside the selected `byte::set`
+3. **What is `chars`'s type/fact inside the selected `std::byte::set`
    instance?** `List[UnicodeChar]`, generic, unseeded by caller contents.
 4. **What is `c`'s type/fact inside the listloop?** `UnicodeChar`, no
    finite-value fact (confirmed: the generic body-check's own facts for
    the inner calls are the same with or without a literal caller).
-5. **What exact fact does `char::codepoint(c)` produce?** `resultRangeFact
-   = [0, 1114111]` (the Unicode scalar domain), inside `byte::set`'s own
+5. **What exact fact does `std::char::codepoint(c)` produce?** `resultRangeFact
+   = [0, 1114111]` (the Unicode scalar domain), inside `std::byte::set`'s own
    generic body check -- not narrowed to the caller's four values.
 6. **What exact fact reaches `Byte`/`from_int`'s construction?**
    `effectiveErrors = {AboveRange}` (BelowRange already pruned
@@ -548,7 +548,7 @@ its actual consumer, not merely to where it is first established.
    real call.
 7. **Does that fact prove membership in Byte's domain?** No -- it proves
    only that `BelowRange` is impossible, not that `AboveRange` is.
-8. **Can the same `byte::set` instance receive `'Ā'`?** Yes -- confirmed
+8. **Can the same `std::byte::set` instance receive `'Ā'`?** Yes -- confirmed
    directly (`checked-domain-shared-instance-byte-set`): the all-safe
    literal call and a dynamic, handled call share one instance.
 9. **If yes, how could marking its inner construction globally safe
@@ -564,14 +564,14 @@ its actual consumer, not merely to where it is first established.
 
 ## Required local-proof questions (spec section 75)
 
-11. **Does `byte::from_int(65)`-shape emit a runtime range check before
-    this milestone?** Yes (confirmed against the real `byte::from_int(45)`).
+11. **Does `std::byte::from_int(65)`-shape emit a runtime range check before
+    this milestone?** Yes (confirmed against the real `std::byte::from_int(45)`).
 12. **Does it after?** Yes -- unchanged; no production code changed.
 13. **Does a nonliteral value with an existing proven range still emit a
     check?** Yes (`checked-domain-q2-still-emits-both-checks`).
 14. **Does a broad Int still emit a check?** Yes.
 15. **Does an out-of-range literal preserve current failure/rejection
-    behavior?** Yes -- `byte::from_int(999)` remains a compile-time
+    behavior?** Yes -- `std::byte::from_int(999)` remains a compile-time
     `KNOWN-ERROR` (`checked-domain-q1-out-of-range-literal-still-known-error`).
 16. **Is the (absent) proof generic over source-defined integer domains?**
     N/A -- no proof-consumption change was made; the *existing*
@@ -597,19 +597,19 @@ its actual consumer, not merely to where it is first established.
 22. **Are runtime RANGE failures still observable?** Yes, confirmed
     (`checked-domain-byte-set-astral-still-fails`).
 
-## Required real byte::set questions (spec section 77)
+## Required real std::byte::set questions (spec section 77)
 
 23. **Does the real punctuation initializer's inner construction become
     non-erroring?** No.
 24. **If yes, what pre-existing proof justified it?** N/A.
 25. **If no, what is the exact missing fact?** A codegen-visible
-    (`hir::range`-level, or better) proof that `char::codepoint(c) <= 255`
+    (`hir::range`-level, or better) proof that `std::char::codepoint(c) <= 255`
     for this exact call, *and* a branch-reachability mechanism in
     `native/lower.tcl::If` capable of consuming it -- neither exists.
-26. **Does `byte::set` as a whole become `may_error=false`?** No.
-27. **Does `<program> -> byte::set` lose a completion retest?** No.
-28. **Does `byte::set(['Ā'])` still fail?** Yes.
-29. **Does `byte::set(['A','Ā'])` still fail left-to-right?** Yes
+26. **Does `std::byte::set` as a whole become `may_error=false`?** No.
+27. **Does `<program> -> std::byte::set` lose a completion retest?** No.
+28. **Does `std::byte::set(['Ā'])` still fail?** Yes.
+29. **Does `std::byte::set(['A','Ā'])` still fail left-to-right?** Yes
     (unaffected; `tests/byte-set.test`'s own pre-existing
     `byte-set-mixed-failure`, re-run, unchanged).
 30. **Are allocations unchanged?** Yes (7103B/17 funcs, 15433B/16 funcs,
@@ -619,11 +619,11 @@ its actual consumer, not merely to where it is first established.
 
 31. **Was `KeyType` changed?** No.
 32. **Was listloop changed to propagate container contents?** No.
-33. **Was `byte::set` source changed?** No.
-34. **Was `char::codepoint` semantics changed?** No.
+33. **Was `std::byte::set` source changed?** No.
+34. **Was `std::char::codepoint` semantics changed?** No.
 35. **Was checked construction globally weakened?** No -- none exists to
     weaken (removed by EXPLICIT-ERROR-COMPLETIONS.md); the one reachable
-    checked-domain function, `byte::from_int`, is untouched.
+    checked-domain function, `std::byte::from_int`, is untouched.
 36. **Was a new constant-container abstraction introduced?** No.
 37. **Was inlining changed?** No.
 38. **Was closure specialization changed?** No.
@@ -635,13 +635,13 @@ its actual consumer, not merely to where it is first established.
 1. The real punctuation caller has locally obvious constant values --
    confirmed.
 2. Those values are not represented as a usable fact at the inner
-   `from_int`/`char::codepoint` calls -- confirmed directly (HIR node
+   `from_int`/`std::char::codepoint` calls -- confirmed directly (HIR node
    inspection).
 3. The exact boundary where that information stops being usable is
    documented above: between `hir/completions.tcl`'s own private,
    call-specific proof and every codegen-facing pass, which never reads
    it -- a deliberate, documented architectural silo, not an oversight.
-4. The same `byte::set` instance can legally process out-of-range
+4. The same `std::byte::set` instance can legally process out-of-range
    `UnicodeChar` values -- confirmed (shared-instance control).
 5. The inner checked construction remains genuinely fallible for that
    instance -- confirmed (real NIR still checks and can fail at runtime).
