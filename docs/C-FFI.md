@@ -471,9 +471,10 @@ import (`Linkage::Import`) declared with the target's C calling convention
 (`codegen::target::c_call_conv`: `system_v` on Linux x86-64 and AArch64,
 `apple_aarch64` on macOS AArch64, section 13) and its C signature: each
 integer parameter at its exact width, the narrow ones `sext`/`uext` by
-their class -- under Apple's convention only the eight passed in registers
-(`c_extended_parameters`: Apple gives a stack argument a slot of its natural
-size, which Cranelift 0.135.2 would overrun storing it extended) --
+their class -- under Apple's convention only the eight passed in integer
+registers, counted apart from the doubles, which take the floating-point
+ones (`c_extended_parameters`: Apple gives a stack argument a slot of its
+natural size, which Cranelift 0.135.2 would overrun storing it extended) --
 pointers 64-bit words, the result at its width with no extension (the
 caller extends it, section 8).
 A `foreigncall` is one direct `call` of the import, with the transport
@@ -630,11 +631,14 @@ x86-64's signed plain `char` (now the target's).
 
 **macOS AArch64** (MACOS-AARCH64-MILESTONE-6.md): the same code path, with
 Apple's arm64 C ABI and Apple's linker. Cranelift's `apple_aarch64`
-convention places the arguments -- eight in x0-x7, the rest on the stack at
+convention places the arguments -- eight integers in x0-x7 and eight
+doubles in v0-v7, each kind counted on its own, the rest on the stack at
 their natural size and alignment, packed (a `char` one byte, a `short` at
 the next even offset) -- and extends a narrow register argument to 32
 bits, the caller's duty there; Botlish declares a stack-passed narrow
-argument without the extension attribute (section 10). Plain `char` is
+argument without the extension attribute (section 10), and counts the
+integer registers apart from the doubles (`cf-abi-doubles-before-integers`).
+float64.test's C double tests run there too. Plain `char` is
 signed. Every C FFI test runs on GitHub's macos-15 arm64 runners against
 the fixture compiled by Apple clang, and the machine state each call
 arrives in matches Apple clang's own calls of the same prototypes

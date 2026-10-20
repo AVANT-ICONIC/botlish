@@ -39,10 +39,11 @@ pub fn c_call_conv(triple: &Triple) -> CallConv {
     CallConv::triple_default(triple)
 }
 
-/// How many leading parameters of a foreign C signature in convention CONV
-/// carry their narrow integer's extension attribute (`sext`/`uext`,
-/// `clif::c_signature`): every one, except under AppleAarch64, where only
-/// the eight passed in registers do.
+/// How many of a foreign C signature's integer-register parameters -- every
+/// class but a double, counted in order -- carry their narrow integer's
+/// extension attribute (`sext`/`uext`, `clif::c_signature`) in convention
+/// CONV: every one, except under AppleAarch64, where only the eight passed
+/// in registers do.
 ///
 /// Apple's arm64 ABI ("Writing ARM64 code for Apple platforms") makes the
 /// caller sign- or zero-extend an argument narrower than 32 bits to 32 bits
@@ -54,9 +55,10 @@ pub fn c_call_conv(triple: &Triple) -> CallConv {
 /// at a 1-, 2- or 4-byte slot's offset). Stored in parameter order, each
 /// such store spills over into the next argument's slots before that
 /// argument is stored, but the last one can write up to seven bytes past
-/// the argument area, into the calling function's own frame -- the
-/// explicit stack slot that holds its GC roots (MACOS-AARCH64-MILESTONE-6.md,
-/// "Cranelift's narrow stack arguments"). A parameter without an attribute
+/// the argument area, into the calling function's own frame -- in the
+/// reduced case, the explicit stack slot right above it, the kind Botlish
+/// keeps roots and call scratch in (MACOS-AARCH64-MILESTONE-6.md, section
+/// 9). A parameter without an attribute
 /// is stored at its natural width, which is exactly Apple's contract for a
 /// stack argument, so the attribute is left off the stack-passed ones.
 /// Cranelift 0.136.0 fixed the store the same way (its `get_ext_mode` takes
@@ -65,12 +67,15 @@ pub fn c_call_conv(triple: &Triple) -> CallConv {
 /// `clif::apple_tests::ffi_apple_extended_stack_argument_defect_still_present`
 /// will say by failing.
 ///
-/// Every C ABI class a foreign call passes is one general-purpose register
-/// (an integer, a `_Bool`, a pointer: no floating point, aggregate or
-/// 128-bit value), so under AAPCS64's register assignment, which Apple
-/// keeps, the first eight parameters are x0-x7 and every later one is on
-/// the stack. Botlish places nothing: the slots and registers stay
-/// Cranelift's. Elsewhere every narrow parameter keeps its attribute (SysV
+/// Every C ABI class a foreign call passes but a double is one
+/// general-purpose register (an integer, a `_Bool`, a pointer: no
+/// aggregate or 128-bit value), and a double takes a floating-point one
+/// (FLOAT64-MILESTONE-1.md). AAPCS64's register assignment, which Apple
+/// keeps, counts the two kinds separately: the first eight integer-register
+/// parameters are x0-x7 however many doubles come before or between them
+/// (v0-v7), and every later one is on the stack -- so the count is of those
+/// parameters, never of a parameter's position. Botlish places nothing: the
+/// slots and registers stay Cranelift's. Elsewhere every narrow parameter keeps its attribute (SysV
 /// x86-64's stack slots are eight bytes, and Cranelift ignores the attribute
 /// for Linux AArch64's AAPCS64, whose callee extends).
 pub fn c_extended_parameters(conv: CallConv) -> usize {

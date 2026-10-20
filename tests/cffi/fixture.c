@@ -304,6 +304,21 @@ int bcf_reference_narrow8(void) {
     return r;
 }
 
+/* Eight doubles, then the eight narrow integers of bcf_reference_narrow8:
+ * the doubles take the floating-point registers (v0-v7, xmm0-xmm7), so
+ * the integers arrive exactly where they do without them -- the integer
+ * registers are counted apart from the doubles. */
+typedef int (*bcf_d8n8_fn)(double, double, double, double, double, double, double, double,
+                           signed char, unsigned char, short, unsigned short, int, unsigned int, bool, char);
+
+int bcf_reference_d8n8(void) {
+    volatile bcf_d8n8_fn f = (bcf_d8n8_fn)bcf_capture;
+    int r = f(0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5,
+              -2, 253, -1234, 65244, -123456789, 4275878552u, true, (char)-3);
+    bcf_keep_reference();
+    return r;
+}
+
 /* Twenty parameters: a selector, seven narrow register arguments and
  * twelve stack arguments of mixed width and signedness -- adjacent narrow
  * ones, a 64-bit one after narrow ones, narrow ones after it. Apple packs

@@ -472,11 +472,16 @@ exactly Apple's layout, nothing past it.
 is that the caller extends an argument narrower than 32 bits *in its
 register*; a stack argument has a slot of its natural size and nothing to
 extend into. So `codegen::target::c_extended_parameters` says how many
-leading parameters keep their attribute -- the eight register ones under
-`AppleAarch64` (every Botlish C class is one general-purpose register: an
-integer, a `_Bool`, a pointer; AAPCS64's register assignment, which Apple
-keeps, puts the first eight in x0-x7), every one elsewhere -- and
-`c_signature` leaves it off the rest. Botlish still places nothing: the
+integer-register parameters keep their attribute -- the eight in x0-x7
+under `AppleAarch64`, every one elsewhere -- and `c_signature` leaves it off
+the rest. The count is of integer-register parameters, not positions:
+AAPCS64's register assignment, which Apple keeps, counts integers and
+doubles separately (x0-x7, v0-v7). When this milestone was written every
+Botlish C class was an integer register; the Float64 milestone, merged into
+it before it reached main, added `ffi::c::Double`, and the merge made
+`c_signature` skip the doubles in the count
+(`ffi_apple_doubles_leave_the_integer_registers`; the mutant
+`doubles-counted-as-integer-registers`; section 33). Botlish still places nothing: the
 registers and offsets are Cranelift's. Linux is unchanged: x86-64's stack
 slots are eight bytes (an extended store is the slot), and Cranelift ignores
 the attribute for Linux AArch64.
@@ -1170,8 +1175,9 @@ this x86-64 container under qemu-user (the driver cross-built for
 
 On macOS, as on Linux, by design of this milestone (none is a regression):
 
-* **No floating point, aggregates by value, variadic calls, callbacks
-  into Botlish, C++ or Objective-C**: unchanged from C-FFI.md section 26.
+* **No `float`, `long double`, aggregates by value, variadic calls,
+  callbacks into Botlish, C++ or Objective-C**: unchanged from C-FFI.md
+  section 26 (C `double` arrived with FLOAT64-MILESTONE-1.md; section 33).
   Variadic calls deserve a warning specific to Apple: Apple's arm64 ABI
   passes *every* anonymous argument of a variadic call on the stack, in
   8-byte slots, unlike AAPCS64 -- so declaring a variadic C function such
@@ -1258,3 +1264,32 @@ What Darwin IO still needs:
    directness from its retaining calls if any (C-FFI.md section 9).
 5. **Its tests**: portable-io.test on macOS, a macOS twin of
    examples/io/hello.bot, golden suites declaring their host.
+
+## 33. The merge with Float64
+
+The Float64 milestone (FLOAT64-MILESTONE-1.md) reached main while this one
+was on its branch, and added C `double` (`ffi::c::Double`, ABI class
+`f64`) to the C FFI. On main, macOS refused every C call, so its double
+tests ran on Linux only. Merging the two opened C calls with doubles on
+macOS, and needed two changes beyond the textual merge:
+
+* **The count of extended parameters.** `c_signature` gave the extension
+  attribute to the first eight *parameters* under Apple's convention, true
+  only while every C class used an integer register. With doubles before
+  them, narrow integers in x0-x7 can be the ninth parameter or later and
+  would lose the extension Apple's callee relies on. `c_signature` now
+  counts integer-register parameters and skips the doubles. Checked three
+  ways:
+  - `ffi_apple_doubles_leave_the_integer_registers`, the disassembly of
+    eight doubles then the eight narrow classes (`sxtb x0, w0` ... `sxtb x7,
+    w7`), run under qemu-user for the merge and in every macOS smoke job;
+  - `cf-abi-doubles-before-integers`, the same prototype through
+    `bcf_capture`, against the C compiler's own call of it on every host;
+  - the mutant `doubles-counted-as-integer-registers` (the old count back),
+    which the unit test kills under qemu-user.
+* **Doubles on macOS, validated.** float64.test's C double tests (round
+  trips in v0-v7 and on the stack, mixed with integer parameters, NaN, the
+  infinities and negative zero coming back) build their fixture wherever C
+  calls run (`nativeCCalls`), so they run in the macOS acceptance tier.
+
+CI for the merged branch is in section 34.

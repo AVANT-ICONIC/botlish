@@ -223,9 +223,18 @@ fn c_signature<M: Module>(module: &M, decl: &nir::ForeignDecl) -> Signature {
     let mut sig = module.make_signature();
     sig.call_conv = super::target::c_call_conv(module.isa().triple());
     let extended = super::target::c_extended_parameters(sig.call_conv);
-    for (i, c) in decl.params.iter().enumerate() {
+    let mut integers = 0;
+    for c in &decl.params {
         let param = AbiParam::new(c_type(*c));
-        sig.params.push(match (c.bits() < 64 && i < extended, c.signed()) {
+        if *c == nir::CAbi::F64 {
+            // A double takes a floating-point register: it has no extension
+            // and leaves the integer registers' count alone.
+            sig.params.push(param);
+            continue;
+        }
+        let in_register = integers < extended;
+        integers += 1;
+        sig.params.push(match (c.bits() < 64 && in_register, c.signed()) {
             (true, true) => param.sext(),
             (true, false) => param.uext(),
             _ => param,
@@ -2789,8 +2798,14 @@ mod apple_tests {
         let sentinel = b.ins().iconst(types::I64, 0x1111_2222_3333_4444);
         b.ins().stack_store(types::I64, sentinel, slot, 0);
         let callee = module.declare_func_in_func(callee, b.func);
-        let args: Vec<ir::Value> =
-            params.iter().enumerate().map(|(i, c)| b.ins().iconst(c_type(*c), -(i as i64) - 2)).collect();
+        let args: Vec<ir::Value> = params
+            .iter()
+            .enumerate()
+            .map(|(i, c)| match c {
+                nir::CAbi::F64 => b.ins().f64const(i as f64 + 0.5),
+                _ => b.ins().iconst(c_type(*c), -(i as i64) - 2),
+            })
+            .collect();
         let call = b.ins().call(callee, &args);
         let result = b.inst_results(call)[0];
         let kept = b.ins().stack_load(types::I64, types::I64, slot, 0);
@@ -2832,6 +2847,21 @@ mod apple_tests {
         let narrow = call_disassembly("aarch64-apple-darwin", &[I8, U8, I16, U16, I32, U32, Bool, I8], c_signature);
         for extension in ["sxtb x0, w0", "uxtb w1, w1", "sxth x2, w2", "uxth w3, w3", "sxtw x4, w4", "mov w5, w5", "uxtb w6, w6", "sxtb x7, w7"] {
             assert!(narrow.contains(extension), "no {extension:?} in\n{narrow}");
+        }
+    }
+
+    /// Doubles take floating-point registers (v0-v7) and leave the integer
+    /// registers' count alone: after eight doubles, eight narrow integers
+    /// are still x0-x7, each extended by the caller as Apple requires -- the
+    /// count `target::c_extended_parameters` bounds is of integer-register
+    /// parameters, never of positions.
+    #[test]
+    fn ffi_apple_doubles_leave_the_integer_registers() {
+        use nir::CAbi::*;
+        let params = [F64, F64, F64, F64, F64, F64, F64, F64, I8, U8, I16, U16, I32, U32, Bool, I8];
+        let code = call_disassembly("aarch64-apple-darwin", &params, c_signature);
+        for extension in ["sxtb x0, w0", "uxtb w1, w1", "sxth x2, w2", "uxth w3, w3", "sxtw x4, w4", "mov w5, w5", "uxtb w6, w6", "sxtb x7, w7"] {
+            assert!(code.contains(extension), "no {extension:?} in\n{code}");
         }
     }
 

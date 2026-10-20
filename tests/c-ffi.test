@@ -331,6 +331,8 @@ extern c fn captured_stack_byte named "bcf_captured_stack_byte"(i: ffi::c::Int) 
 extern c fn reference_register32 named "bcf_reference_register32"(i: ffi::c::Int) -> ffi::c::UInt
 extern c fn reference_stack_byte named "bcf_reference_stack_byte"(i: ffi::c::Int) -> ffi::c::UChar
 extern c fn reference_narrow8 named "bcf_reference_narrow8"() -> ffi::c::Int
+extern c fn capture_d8n8 named "bcf_capture"(x0: ffi::c::Double, x1: ffi::c::Double, x2: ffi::c::Double, x3: ffi::c::Double, x4: ffi::c::Double, x5: ffi::c::Double, x6: ffi::c::Double, x7: ffi::c::Double, a: ffi::c::SChar, b: ffi::c::UChar, c: ffi::c::Short, d: ffi::c::UShort, e: ffi::c::Int, f: ffi::c::UInt, g: ffi::c::Bool, h: ffi::c::Char) -> ffi::c::Int
+extern c fn reference_d8n8 named "bcf_reference_d8n8"() -> ffi::c::Int
 extern c fn reference_pick named "bcf_reference_pick"() -> ffi::c::Int
 extern c fn ninth named "bcf_ninth"(a: ffi::c::Long, b: ffi::c::Long, c: ffi::c::Long, d: ffi::c::Long, e: ffi::c::Long, f: ffi::c::Long, g: ffi::c::Long, h: ffi::c::Long, i: ffi::c::SChar) -> ffi::c::Int
 extern c fn stack_tail named "bcf_stack_tail"(a: ffi::c::Long, b: ffi::c::Long, c: ffi::c::Long, d: ffi::c::Long, e: ffi::c::Long, f: ffi::c::Long, g: ffi::c::Long, h: ffi::c::Long, i: ffi::c::Long, j: ffi::c::Int, k: ffi::c::Short, l: ffi::c::SChar) -> ffi::c::LongLong
@@ -967,6 +969,15 @@ test cf-abi-register-extension {narrow arguments in registers -- one of every na
     set call "capture8([join [lreplace $::narrowValues 6 6 true] {, }])"
     lmap backend {cranelift cranelift-generic} {
         lassign [captureOf $call reference_narrow8 $backend] regs stack rregs rstack
+        concat [abiMismatches botlish $::narrowTypes $::narrowValues $regs $stack] \
+            [abiMismatches reference $::narrowTypes $::narrowValues $rregs $rstack]
+    }
+} -cleanup removeApps -result {{} {}}
+
+test cf-abi-doubles-before-integers {eight doubles, then the narrow integers of cf-abi-register-extension: the doubles take the floating-point registers, so the integers arrive exactly where and as they do without them (x0-x7, extended, on Apple AArch64), as the C compiler's own call of the same prototype puts them -- the integer registers are counted apart from the doubles, never by a parameter's position} -constraints cfFixture -body {
+    set call "capture_d8n8(0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, [join [lreplace $::narrowValues 6 6 true] {, }])"
+    lmap backend {cranelift cranelift-generic} {
+        lassign [captureOf $call reference_d8n8 $backend] regs stack rregs rstack
         concat [abiMismatches botlish $::narrowTypes $::narrowValues $regs $stack] \
             [abiMismatches reference $::narrowTypes $::narrowValues $rregs $rstack]
     }

@@ -1009,7 +1009,9 @@ C-BINDGEN-LAYOUTS.md) have equal rows and are two targets. Keep it so:
   cranelift-codegen 0.135.2 stores an extended stack argument at register
   width, past its slot; fixed in 0.136.0, where
   `ffi_apple_extended_stack_argument_defect_still_present` fails and the
-  exception goes).
+  exception goes). The registers are counted per kind, as AAPCS64 does:
+  the eight that keep it are integer-register parameters, never the first
+  eight positions (doubles take v0-v7; `cf-abi-doubles-before-integers`).
 * A test that compiles a Linux program (one importing `linux::*`) compiles
   it for `linuxTarget` (tests/helpers.tcl: the host's own on Linux) and runs
   it on `backendsFor` its HIR's target; the golden runner, the warning

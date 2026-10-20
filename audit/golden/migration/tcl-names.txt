@@ -8060,6 +8060,7 @@ tests/c-ffi.test cf-bool-lowering pass
 tests/c-ffi.test cf-fixture-built pass
 tests/c-ffi.test cf-clif-stack-parameters pass
 tests/c-ffi.test cf-abi-register-extension pass
+tests/c-ffi.test cf-abi-doubles-before-integers pass
 tests/c-ffi.test cf-abi-stack-layout pass
 tests/c-ffi.test cf-abi-stack-layout-model pass
 tests/c-ffi.test cf-abi-pick pass

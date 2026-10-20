@@ -412,6 +412,22 @@ const LINKER: LinkerFlavor = LinkerFlavor::Gnu;
         CallConv::AppleAarch64 => 7,
 >>>>
 
+@@ doubles-counted-as-integer-registers a double counts against the eight integer registers under Apple's convention: a narrow integer after doubles, in x0-x7, loses its extension
+%% macos-aarch64 linux-aarch64
+## native/src/codegen/clif.rs
+<<<<
+            sig.params.push(param);
+            continue;
+        }
+        let in_register = integers < extended;
+====
+            sig.params.push(param);
+            integers += 1;
+            continue;
+        }
+        let in_register = integers < extended;
+>>>>
+
 @@ apple-convention-is-linuxs a foreign call on macOS is compiled with the generic AArch64 convention (SystemV): no caller extension, an 8-byte slot per stack argument
 %% macos-aarch64
 ## native/src/codegen/target.rs
