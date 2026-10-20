@@ -407,7 +407,7 @@ test ca-affine-payload {an error payload may carry a pointer: the handler destru
     caAgree "import ffi::c\nimport ffi_fixture\n${::caOpaque}error Failed:\n    handle: ffi::c::Ptr\[SSL\]\n\nfn open(n: int) -> int errors Failed:\n    if n > 0:\n        fail Failed {handle: ffi_fixture::address\[SSL\](n)}\n    1\n\nfn f(n: int) -> int:\n    r = open(n):\n        on Failed {handle}:\n            ffi_fixture::address_of(handle)\n    r\n\nf(7)\n"
 } -result {value 7}
 
-test ca-affine-coroutines {a coroutine may own a pointer it was given, but no coroutine segment ends with one (a completed coroutine returns its cached result again)} -body {
+test ca-affine-coroutines {a coroutine may own a pointer it was given, but no coroutine segment ends with one (a completed coroutine returns its cached result again)} -constraints nativeCoroutines -body {
     list [caAgree "import ffi::c\n${::caOpaque}fn work(p: ffi::c::Ptr\[SSL\]) -> int:\n    yield 1\n    if p.null?():\n        2\n    else:\n        3\n\nfn f() -> int:\n    coroutine {step} = work(ffi::c::null\[SSL\]())\n    a = step()\n    b = step()\n    a + b\n\nf()\n"] \
         [lindex [caError "import ffi::c\n${::caOpaque}fn gen() -> ffi::c::Ptr\[SSL\]:\n    yield ffi::c::null\[SSL\]()\n    ffi::c::null\[SSL\]()\n\nfn f() -> bool:\n    coroutine {step} = gen()\n    true\n\nf()\n"] 0]
 } -result {{value 4} COROUTINE-CONTRACT}
