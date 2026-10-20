@@ -532,13 +532,27 @@ Linux x86-64 (this container):
 Linux AArch64: the Rust boundary tests (`--lib c_float`, 5 passed) and the
 AArch64 lowering tests (`c_float_aapcs64_stack_slots`,
 `c_float_apple_floats_packed`, and the existing `ffi_apple_*`) passed under
-qemu-aarch64 from an aarch64-unknown-linux-gnu build; the Tcl suites on
-AArch64 are CI's (tests-arm64.yml): pending.
+qemu-aarch64 from an aarch64-unknown-linux-gnu build. CI's tests-arm64.yml
+on ubuntu-24.04-arm (run 39481296400, commit a5ea3c3): the Tcl suite on
+interp and compile, its cranelift and cranelift-generic coverage, the golden
+suites (four shards, beside their Tcl originals) and the native Rust unit
+tests, plain and under GC stress, all passed -- c-float-ffi.test's C fixture,
+register exhaustion and lowering tests among them, natively; the suite under
+GC stress was still running when this was written.
+
+Linux x86-64 CI (tests.yml, run 39481292379, commit a5ea3c3): every job
+passed -- the Tcl suite on interp and compile, cranelift and
+cranelift-generic coverage, the golden shards, the stub-linked executables,
+the native Rust unit tests, the method-call filter audit, the warning gate
+(its GC-stress job runs on main only). c-bindgen.yml (run 39478477382) and
+static-decisions.yml (run 39478481243, the batched and the sequential
+scheduler on every golden suite; commit 5ff1b02, whose front end a5ea3c3
+leaves unchanged) passed.
 
 macOS AArch64: C calls run there (MACOS-AARCH64-MILESTONE-6.md); the macOS
 workflow runs on every push (smoke: the native build, its Rust tests, the
 platform facts; acceptance: every test file not in `notYet`, c-float-ffi.test
-included): pending.
+included): run 39481243115 on commit a5ea3c3 passed.
 
 Windows x86-64: compile and lowering only (section 11; the MinGW-w64
 binding generated and verified as before); no run.
