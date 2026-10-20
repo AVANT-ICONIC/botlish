@@ -202,15 +202,23 @@ test workload-2048-bench-executable {bench.bot and game2048.bot, copied out of t
         fconfigure $channel -encoding utf-8 -translation lf
         puts -nonewline $channel $text
         close $channel
-        set built [exec /bin/sh -c {cd "$1" && shift && exec "$@"} sh $elsewhere [info nameofexecutable] \
-            [file join $::projectRoot main.tcl] -warnings off -emit-native-executable "../application copy/bench.bot"]
-        file rename [file join $app bench] [file join $run bench]
+        # From another directory, with no shell (Tcl's own working
+        # directory, restored), so on any host.
+        set here [pwd]
+        cd $elsewhere
+        try {
+            set built [exec [info nameofexecutable] [file join $::projectRoot main.tcl] -warnings off \
+                -emit-native-executable "../application copy/bench.bot"]
+        } finally {
+            cd $here
+        }
+        file rename [native::executableFile [file join $app bench]] [native::executableFile [file join $run bench]]
         file delete -force $app
         list $built [runStandalone [file join $run bench]] [runStandalone [file join $run bench] BOTLISH_NATIVE_GC_STRESS 1]
     } finally {
         removeDirectory {workload-2048 bench executable}
     }
-} -result {{executable: ../application copy/bench} 2002720 2002720}
+} -result [list "executable: [native::executableFile {../application copy/bench}]" 2002720 2002720]
 
 # S4 and S15 together: `main.tcl -backend cranelift demo.bot` used to need the
 # private library to compile, and then showed only `value: unit`. Now it

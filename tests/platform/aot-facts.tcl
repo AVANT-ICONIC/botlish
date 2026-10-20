@@ -625,7 +625,11 @@ proc checks {} {
         [format "a trivial executable's whole process: median %.1f ms of five (%s)" $median [join [lmap w $walls {format %.1f $w}] {, }]]
 }
 
-# The checks on Windows (this file's header).
+# The checks on Windows (this file's header). The system directory, read
+# once (System32 of the Windows directory).
+if {$::tcl_platform(platform) eq "windows"} {
+    set systemDir [file join [if {[info exists ::env(SystemRoot)]} {set ::env(SystemRoot)} else {set ::env(WINDIR)}] System32]
+}
 proc windowsChecks {} {
     global work facts program programValue coroutineProgram downProgram errorProgram overflowLine root
     set sourceDir [file join $work "source dir"]
@@ -684,7 +688,7 @@ proc windowsChecks {} {
     # runtime's (vcruntime, msvcp, concrt) or the UCRT's (ucrtbase,
     # api-ms-win-crt-*): the C runtime is linked statically (codegen/aot.rs's
     # crt_args).
-    set system [file join $::env(SystemRoot) System32]
+    set system $::systemDir
     set imports [lsort -unique -nocase [dict get $pe imports]]
     set crt [lsearch -all -inline -regexp -nocase $imports {^(vcruntime|msvcp|concrt|ucrtbase|api-ms-win-crt-)}]
     set foreign [lmap dll $imports {
@@ -763,17 +767,21 @@ proc windowsChecks {} {
 # run's {STATUS STDOUT STDERR}. (Windows: no `env -i`; the C runtime and the
 # loader need SystemRoot, which stays.)
 proc windowsRun {cwd path environment} {
-    set saved [array get ::env]
+    set names [concat PATH [dict keys $environment]]
+    set saved [dict create]
+    foreach name $names {
+        if {[info exists ::env($name)]} { dict set saved $name $::env($name) }
+    }
     set here [pwd]
     try {
-        set ::env(PATH) [file nativename [file join $::env(SystemRoot) System32]]
+        set ::env(PATH) [file nativename $::systemDir]
         foreach {name value} $environment { set ::env($name) $value }
         cd $cwd
         return [run $path]
     } finally {
         cd $here
-        array unset ::env
-        array set ::env $saved
+        foreach name $names { unset -nocomplain ::env($name) }
+        dict for {name value} $saved { set ::env($name) $value }
     }
 }
 

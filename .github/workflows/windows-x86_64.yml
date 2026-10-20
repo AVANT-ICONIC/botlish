@@ -81,6 +81,10 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: windows-2025
     timeout-minutes: 75
+    env:
+      # The C compiler of core::cabi's windows-x86_64 row: clang for MSVC's
+      # target (the runner's `cc` is a MinGW gcc, another row's).
+      CC: clang
     steps:
       - name: Keep the repository's bytes
         run: git config --global core.autocrlf false
@@ -129,8 +133,6 @@ jobs:
 
       - name: C ABI facts against core::cabi's windows-x86_64 row (clang, MSVC target)
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        env:
-          CC: clang
         run: tclsh9.0 tests/platform/cabi-facts.tcl
 
       # Each native capability works or is refused exactly as recorded for
@@ -138,6 +140,20 @@ jobs:
       # stress, objects, executables, the target boundary (another
       # operating system, the other Windows environment), C calls and
       # coroutines refused, the stack without its guard.
+      - name: "Debug (temporary): ca-native-code's CLIF"
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          cat > ca-debug.tcl <<'EOF'
+          source native/native.tcl
+          set src "import ffi::c\nopaque struct SSL:\n    tag: unit\n\nopaque struct Ctx:\n    tag: unit\n\nfn f() -> bool:\n    p = ffi::c::null\[SSL\]()\n    q = p.clone()\n    v = ffi::c::erase(q)\n    r = ffi::c::retype\[SSL\](v)\n    r.null?()\n\nf()\n"
+          set hir [surface::compile $src -warnings off]
+          puts [native::nir $hir]
+          set clif [native::clif $hir]
+          puts [string range $clif [string first {; function 1 "f"} $clif] end]
+          puts [native::roots $hir]
+          EOF
+          tclsh9.0 ca-debug.tcl
+
       - name: Native status
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: tclsh9.0 tests/platform/native-status.tcl -verbose 1 2>&1 | tee native-status.log

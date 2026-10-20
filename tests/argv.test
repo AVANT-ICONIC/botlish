@@ -700,7 +700,9 @@ done
 exec -a "$argv0" "$prog" "${args[@]}"
 }
 close $channel
-file attributes $launcher -permissions 0755
+if {$::tcl_platform(platform) eq "unix"} {
+    file attributes $launcher -permissions 0755
+}
 
 proc hexArgs {vec} {
     return [lmap a $vec {expr {$a eq "" ? "-" : [binary encode hex $a]}}]
