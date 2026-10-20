@@ -1,0 +1,60 @@
+# Hash-table experiment: measured data
+
+The tables of [HASH-TABLE-EXPERIMENT.md](../../../docs/HASH-TABLE-EXPERIMENT.md)
+are made from these files with `tools/summarize.tcl`. The plans that
+wrote them are `tools/plan.sh` .. `tools/plan5.sh`, and `logs/` keeps
+their progress lines.
+
+## Tags
+
+A row's first column (or a file's suffix) names the compiler tree it was
+measured on:
+
+| tag | tree |
+|---|---|
+| `baseline`, `base` | commit `2aa20d6`, before the prototypes |
+| `hash`, `inline`, `mod`, `bounds`, `vs` | the baseline plus one prototype (RO-1, CG-1, CG-2, CP-1..3, VS-1/VS-2) |
+| `combo` | the branch with all five prototypes merged (the report's "merged tree"), before the review fixes |
+| `fixed` | the merged tree after the review fixes (`plan5.sh`): deterministic counts only |
+| `probe`, `comboprobe` | the baseline, and the merged tree, plus the probe primitive (branch `exp-probe-primitive`) |
+| `rust` | the Rust reference |
+
+## Methods
+
+* **Passes.** Lookups (hit, miss, member, replace) are timed as passes:
+  four passes minus one, divided by three times the queries (`bench.tcl
+  -passes 4`). Builds, bulk construction and removals are timed the same
+  way with `-build-passes 3`.
+* **The first method.** Files from the first sweeps timed against a
+  separately timed key run. Their lookup and build columns are
+  superseded, as marked below.
+* **Deterministic files.** Instruction counts, profiles, allocations,
+  copies, memory and NIR do not depend on the machine's load.
+
+## Files
+
+| file | what | method |
+|---|---|---|
+| `sizes-baseline.tsv` | every table, Int and String keys, 1..16,384 entries, every mode | first method: use `lookups/` and `builds/` instead |
+| `sizes-combo.tsv` | the same on the merged tree | lookups as passes; builds first method (use `builds/`) |
+| `lookups/sizes-baseline.tsv`, `lookups/keys-baseline.tsv`, `lookups/typed-baseline.tsv` | the baseline's lookups again, as passes | passes |
+| `builds/sizes-baseline.tsv`, `builds/sizes-combo.tsv` | every table's builds, both trees alternating | build passes |
+| `keys-baseline.tsv`, `keys-combo.tsv` | sparse, big, collide, medium-String and Point keys | baseline: first method (use `lookups/keys-baseline.tsv`); combo: lookups as passes |
+| `typed-baseline.tsv`, `typed-combo.tsv` | `lpint`, `lpstr` against `lpa` | as for keys |
+| `life-*.tsv` | short-lived tables: build N, then L lookups | whole lifetimes |
+| `policy-baseline.tsv` | the load-policy matrix | first method: use `lookups/policy-*.tsv` |
+| `lookups/policy-baseline.tsv`, `lookups/policy-combo.tsv` | the load-policy matrix | passes |
+| `mixed-*.tsv` | BFS, word frequency, memo (natural and restructured) | whole workloads |
+| `backends-baseline.tsv` | interp, compile, cranelift-generic at small sizes | first method |
+| `membership-*.tsv` | constant membership: every strategy, domain and K | ns per query, code, data, compile times |
+| `ladder-a.tsv`, `ladder-c.tsv` | the prototype ladders, first round | lookups as passes, builds first method (superseded) |
+| `ladder-a2.tsv`, `ladder-c2.tsv` | the prototype ladders and the probe primitive, three alternating rounds | passes |
+| `rust-*.tsv` | the Rust reference: sweep, mixed, probe statistics, hash cost, insert spikes | its own timings and counts |
+| `instructions.tsv` | instructions per operation (callgrind) | deterministic |
+| `profiles.txt` | instructions per operation and per function | deterministic |
+| `allocs.tsv` | managed-heap allocations per lookup | deterministic |
+| `copies-*.txt`, `attribution.txt` | MutableArray copies (shares, detaches, elements copied) | deterministic |
+| `memory-*.tsv` | bytes allocated and peak live bytes per entry | deterministic |
+| `nir-*.txt` | each table's specialized functions: machine-code size, operations, facts | deterministic |
+| `unrelated-*.txt`, `corpus-again.txt` | workloads unrelated to tables, both trees | timings |
+| `fuzz-fixed.txt` | every table fuzzed on four backends after the review fixes | correctness |
