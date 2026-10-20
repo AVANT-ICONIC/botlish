@@ -558,12 +558,14 @@ unsigned long long bcf_vaddress_bits(void) { return (unsigned long long)(uintptr
  * r9, then two zeros), %rax (x86-64, where a variadic call's %al states how
  * many vector registers it uses; 0 on AArch64), the low 64 bits of the
  * eight floating-point argument registers (v0-v7, xmm0-xmm7) and the first
- * 128 bytes of the caller's stack arguments. Assembly saves them before any
- * compiled code can touch them; declared with any prototype, it returns 0. */
+ * 256 bytes of the caller's stack arguments (Apple's convention puts every
+ * trailing argument there: the mixed scenario's eighteen take 144). Assembly
+ * saves them before any compiled code can touch them; declared with any
+ * prototype, it returns 0. */
 static unsigned long long bcf_vregs[8], bcf_vfregs[8], bcf_vrax;
-static unsigned char bcf_vstack[128];
+static unsigned char bcf_vstack[256];
 static unsigned long long bcf_vref_regs[8], bcf_vref_fregs[8], bcf_vref_rax;
-static unsigned char bcf_vref_stack[128];
+static unsigned char bcf_vref_stack[256];
 
 /* REGS: eight integer registers, %rax, eight floating-point registers. */
 int bcf_vcapture_record(const unsigned long long *regs, const unsigned char *stack) {
@@ -614,11 +616,11 @@ __asm__(
 unsigned long long bcf_vcaptured_register(int i) { return bcf_vregs[i & 7]; }
 unsigned int bcf_vcaptured_al(void) { return (unsigned int)(bcf_vrax & 0xff); }
 unsigned long long bcf_vcaptured_float(int i) { return bcf_vfregs[i & 7]; }
-unsigned char bcf_vcaptured_stack_byte(int i) { return bcf_vstack[i & 127]; }
+unsigned char bcf_vcaptured_stack_byte(int i) { return bcf_vstack[i & 255]; }
 unsigned long long bcf_vreference_register(int i) { return bcf_vref_regs[i & 7]; }
 unsigned int bcf_vreference_al(void) { return (unsigned int)(bcf_vref_rax & 0xff); }
 unsigned long long bcf_vreference_float(int i) { return bcf_vref_fregs[i & 7]; }
-unsigned char bcf_vreference_stack_byte(int i) { return bcf_vref_stack[i & 127]; }
+unsigned char bcf_vreference_stack_byte(int i) { return bcf_vref_stack[i & 255]; }
 
 static void bcf_vkeep_reference(void) {
     memcpy(bcf_vref_regs, bcf_vregs, sizeof bcf_vregs);
