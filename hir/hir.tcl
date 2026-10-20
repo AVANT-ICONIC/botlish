@@ -1067,7 +1067,11 @@ proc hir::DecideMethodCallsExact {nodes options given hir {seeds {}}} {
         } else {
             set reasons {}
             dict for {candidate problems} [dict get $problemsOf $key] {
-                set reason [expr {$problems eq "" ? "no problem found" : [lindex [lindex $problems 0] 1]}]
+                if {$problems eq ""} {
+                    set reason "no problem found"
+                } else {
+                    set reason [lindex [lindex $problems 0] 1]
+                }
                 lappend reasons "$candidate: $reason"
             }
             set message [::format {method-style call "%s": none of the visible functions of that name accepts the receiver (%s)} \
@@ -1325,6 +1329,7 @@ proc hir::CheckOnce {hirVar demote {roundsVar ""}} {
     hir::imprint::verify hir
     hir::cabi::verify hir
     hir::range::verifyDeclaredParams hir
+    hir::operators::verify hir
     hir::callables::verify hir
     hir::lockstep::verify hir
     hir::structs::verify hir
@@ -1373,14 +1378,14 @@ proc hir::diagnostics {hir} { return [dict get $hir diagnostics] }
 # (hir::sourcetypes::apply's return value): a list of {name .. parent ..
 # domain ..}, in dependency order. Empty for a program that declared none.
 proc hir::sourceTypes {hir} {
-    return [expr {[dict exists $hir sourceTypes] ? [dict get $hir sourceTypes] : {}}]
+    return [dict getdef $hir sourceTypes {}]
 }
 
 # The source-defined error declarations this HIR's own build registered
 # (hir::errordecls::apply's return value): an ordered list of names. Empty
 # for a program that declared none.
 proc hir::errorDecls {hir} {
-    return [expr {[dict exists $hir errorDecls] ? [dict get $hir errorDecls] : {}}]
+    return [dict getdef $hir errorDecls {}]
 }
 
 proc hir::node {hir e} {
@@ -1476,7 +1481,10 @@ proc hir::children {hir e} {
         const - ref - continue { return {} }
         bind - return - ok - error { return [list [dict get $node value]] }
         break {
-            return [expr {[dict get $node value] eq "" ? {} : [list [dict get $node value]]}]
+            if {[dict get $node value] eq ""} {
+                return {}
+            }
+            return [list [dict get $node value]]
         }
         block { return [dict get $node body] }
         call  { return [concat [list [dict get $node callee]] [dict get $node args]] }
@@ -1497,7 +1505,10 @@ proc hir::children {hir e} {
         struct  { return [dict get $node fields] }
         project { return [list [dict get $node receiver]] }
         fail  {
-            return [expr {[dict exists $node value] && [dict get $node value] ne "" ? [list [dict get $node value]] : {}}]
+            if {[dict exists $node value] && [dict get $node value] ne ""} {
+                return [list [dict get $node value]]
+            }
+            return {}
         }
         handle {
             set result [list [dict get $node call]]
@@ -1652,7 +1663,7 @@ proc hir::exprsAt {hir origin} {
 }
 
 apply {{dir} {
-    foreach file {syntax static staticdeps imports resolve flags contexts direct coroutines affine mutvec refcheck hygiene sourcetypes structs enums layouts cabi imprint traits syscall borrow foreign errordecls types exactvalue signatures modulebinding refine repeatable lower condition format read aot specialize range rangerec callables containers semantic completions errorsets induction transport escape blockescape stringregion traversal construction cardinality lockstep warnings recovery methodfilter declarations interchange} {
+    foreach file {syntax static staticdeps imports resolve flags contexts direct coroutines affine mutvec refcheck hygiene sourcetypes structs enums layouts cabi imprint traits syscall borrow foreign errordecls types operators exactvalue signatures modulebinding refine repeatable lower condition format read aot specialize range rangerec callables containers semantic completions errorsets induction transport escape blockescape stringregion traversal construction cardinality lockstep warnings recovery methodfilter declarations interchange} {
         uplevel #0 [list source [file join $dir $file.tcl]]
     }
 }} $hir::home

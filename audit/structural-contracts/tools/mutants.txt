@@ -45,7 +45,7 @@
                 set errors [Within [lindex $fact 1] $contract]
             }
         }
-        return [list structural [expr {$contract eq {} ? $errors : [lsort -unique [concat $errors $erased]]}]]
+        return [list structural [if {$contract eq {}} {set errors} else {lsort -unique [concat $errors $erased]}]]
 >>>>
 
 @@ structural-short-name the boundary compares error identities by short name: a callable raising b::Failed fits a contract of a::Failed
@@ -175,10 +175,18 @@ proc hir::completions::Subsume {hirVar ctxVar diagnose guard value final} {
 @@ boundary-trusts-clean-captures the boundary takes a clean capture as carrying nothing (the deferral of an error charge applied to a contract, which is never charged again)
 ## hir/completions.tcl
 <<<<
-        set fact [expr {$here ? [BindingFact $hir $ctx $c] : "unknown"}]
+        if {$here} {
+            set fact [BindingFact $hir $ctx $c]
+        } else {
+            set fact "unknown"
+        }
         if {$fact in {clean unknown} && [CleanInput $hir $c]} {
 ====
-        set fact [expr {$here ? [BindingFact $hir $ctx $c] : "unknown"}]
+        if {$here} {
+            set fact [BindingFact $hir $ctx $c]
+        } else {
+            set fact "unknown"
+        }
         if {$fact eq "unknown" && [CleanInput $hir $c]} {
 >>>>
 

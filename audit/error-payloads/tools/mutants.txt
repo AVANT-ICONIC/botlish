@@ -100,7 +100,7 @@
 <<<<
                     lappend fieldRegs [Assign fn "declaredpayload $k" $e]
 ====
-                    lappend fieldRegs [Assign fn "declaredpayload [expr {$k == [llength $layout] - 1 ? 0 : $k}]" $e]
+                    lappend fieldRegs [Assign fn "declaredpayload [if {$k == [llength $layout] - 1} {string cat 0} else {set k}]" $e]
 >>>>
 
 @@ partial-destructuring-drops-bound-affine-field a destructured affine field is not recorded as moved out: the payload's release drops it too
@@ -190,7 +190,11 @@
                 [list fail $name [list ref $raised]]]
 ====
             set d [hir::affine::Descriptor $hir [hir::errordecls::payloadType $name]]
-            set drop [expr {$d eq "" ? {} : [list [list call [list ref [hir::affine::DropNative]] [list ref $raised] [list const str $d]]]}]
+            if {$d eq ""} {
+                set drop {}
+            } else {
+                set drop [list [list call [list ref [hir::affine::DropNative]] [list ref $raised] [list const str $d]]]
+            }
             lappend lowered $name [list block [list $raised] {*}[Releases $hir $items] {*}$drop \
                 [list fail $name [list ref $raised]]]
 >>>>
@@ -217,10 +221,10 @@
 @@ contract-loses-payload-metadata a module's error declaration loses its payload descriptor
 ## hir/errordecls.tcl
 <<<<
-        set fields [expr {[dict exists $decl fields] ? [dict get $decl fields] : {}}]
+        set fields [dict getdef $decl fields {}]
         if {$fields eq {}} continue
 ====
-        set fields [expr {[dict exists $decl fields] ? [dict get $decl fields] : {}}]
+        set fields [dict getdef $decl fields {}]
         if {$fields eq {} || ([dict exists $decl namespace] && [dict get $decl namespace] ne "")} continue
 >>>>
 
@@ -304,10 +308,10 @@
 @@ precision-flag-dropped-on-return a summary never reports that its walk lost precision (the flag is discarded on return)
 ## hir/completions.tcl
 <<<<
-        result [expr {$result eq {never} ? [hir::range::unknown] : $result}] \
+        result [if {$result eq {never}} {hir::range::unknown} else {set result}] \
         incomplete [dict get $ctx incomplete]]
 ====
-        result [expr {$result eq {never} ? [hir::range::unknown] : $result}] \
+        result [if {$result eq {never}} {hir::range::unknown} else {set result}] \
         incomplete 0]
 >>>>
 

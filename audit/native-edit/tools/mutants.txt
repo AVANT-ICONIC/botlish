@@ -73,7 +73,7 @@ proc core::binary::writeForeign {data path pointer} {
         set code [Assign fn "int [LayoutEncoding $kind $width $endian]" $e]
         set suffix ""
 ====
-        set code [Assign fn "int [LayoutEncoding $kind [expr {$width == 2 ? 1 : $width}] $endian]" $e]
+        set code [Assign fn "int [LayoutEncoding $kind [if {$width == 2} {string cat 1} else {set width}] $endian]" $e]
         set suffix ""
 >>>>
 

@@ -376,11 +376,11 @@ test ci-activation-switches {activating the HIR whose declarations are active sw
         [core::type::valid Small] [core::native::exists Small?] [hir::structs::declared Point] [hir::enums::declared Light]
 } -cleanup {unset -nocomplain h1 h2 start same first alternating} -result {0 {1 0 1 0} 2 0 0 0 0 1}
 
-test ci-declarations-recorded {every HIR records the declaration state its build left behind, the registries' own values: the struct and enum registries, the source types (and no native: a type registers no predicate), the errors, the layouts (BINARY-LAYOUT.md), the extern c fn natives and link plan (C-FFI.md)} -body {
+test ci-declarations-recorded {every HIR records the declaration state its build left behind, the registries' own values: the struct and enum registries (every enum registry also holds the runtime's builtin NonFiniteResult, FLOAT64-MILESTONE-1.md), the source types (and no native: a type registers no predicate), the errors, the layouts (BINARY-LAYOUT.md), the extern c fn natives and link plan (C-FFI.md)} -body {
     set h [ciCompile "type Small = Int in 0..10\nerror Boom\nstruct S:\n    v: int\nenum E:\n    A, B\n\n1\n"]
     set d [dict get $h declarations]
     list [lsort [dict keys $d]] [dict keys [dict get $d structs]] [dict keys [dict get $d enums]] \
         [dict keys [dict get $d types]] [dict get $d errors] [core::native::exists Small?]
-} -cleanup {unset -nocomplain h d} -result {{enums errors foreign generation impls imports layouts payloads structs traits types unitNames} S E Small Boom 0}
+} -cleanup {unset -nocomplain h d} -result {{enums errors foreign generation impls imports layouts payloads structs traits types unitNames} S {NonFiniteResult E} Small Boom 0}
 
 cleanupTests

@@ -130,8 +130,7 @@
 @@ key-ignores-scheduler the cache key leaves out the static scheduler
 ## surface/cache.tcl
 <<<<
-        scheduler [expr {[info exists ::env(BOTLISH_STATIC_SCHEDULER)]
-            ? $::env(BOTLISH_STATIC_SCHEDULER) : ""}]]
+        scheduler [if {[info exists ::env(BOTLISH_STATIC_SCHEDULER)]} {set ::env(BOTLISH_STATIC_SCHEDULER)} else {string cat ""}]]
 ====
         scheduler {}]
 >>>>

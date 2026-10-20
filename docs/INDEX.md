@@ -23,6 +23,7 @@ at its top ("Superseded by ...", "Partially superseded by ...").
 - [ENUMS.md](ENUMS.md) -- enums: named, closed, nominal sums of payload-free cases
 - [OPAQUE-STRUCTS.md](OPAQUE-STRUCTS.md) -- `opaque struct`: module-owned representation and construction authority
 - [UNICODE-CHAR-LITERALS.md](UNICODE-CHAR-LITERALS.md) -- `UnicodeChar`: a scalar type distinct from Int and String
+- [FLOAT64-MILESTONE-1.md](FLOAT64-MILESTONE-1.md) -- `Float64`: finite binary64 numbers, decimal literals, `/`, `NonFiniteFloat`, C `double` (completion report)
 - [ELIF.md](ELIF.md) -- `elif`
 - [METHOD-SUGAR.md](METHOD-SUGAR.md) -- method-call sugar
 - [FLAGS.md](FLAGS.md) -- flag parameters

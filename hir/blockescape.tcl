@@ -220,7 +220,10 @@ proc hir::blockescape::RelevantInstances {spec block} {
         }
         return $nonGeneric
     }
-    return [expr {[llength $found] == 1 ? $found : {}}]
+    if {[llength $found] == 1} {
+        return $found
+    }
+    return {}
 }
 
 # The flattened, deduplicated capture list (BindingId list, first-occurrence
@@ -338,10 +341,18 @@ proc hir::blockescape::Round {hir spec declined} {
     foreach id [dict get $spec used] {
         set instance [dict get $spec instances $id]
         set block [dict get $instance block]
-        set region [expr {$block eq "program" ? "program" : $block}]
+        if {$block eq "program"} {
+            set region "program"
+        } else {
+            set region $block
+        }
         set view [hir::specialize::view $hir $spec $id]
         set exprs [dict get $context exprs $region]
-        set topBody [expr {$region eq "program" ? [hir::roots $view] : [hir::get $view $region body]}]
+        if {$region eq "program"} {
+            set topBody [hir::roots $view]
+        } else {
+            set topBody [hir::get $view $region body]
+        }
         # A bind at a trailing position is itself an implicit "return" of
         # its value out of that scope: a Block escaping that way must
         # materialize (reused verbatim from hir::escape.tcl).

@@ -272,7 +272,7 @@ proc surface::lower::LayoutDeclOf {node namespace} {
 proc surface::lower::TraitDeclOf {node namespace} {
     return [dict create name [dict get $node name] nameSpan [dict get $node nameSpan] \
         namespace $namespace requirements [dict get $node requirements] span [dict get $node span] \
-        context [expr {[dict exists $node context] ? [dict get $node context] : 0}]]
+        context [dict getdef $node context 0]]
 }
 
 # The declaration dict of a `structdecl` node declared in module NAMESPACE (""
@@ -283,8 +283,8 @@ proc surface::lower::TraitDeclOf {node namespace} {
 proc surface::lower::StructDeclOf {node namespace} {
     return [dict create name [dict get $node name] nameSpan [dict get $node nameSpan] \
         namespace $namespace fields [dict get $node fields] span [dict get $node span] \
-        opaque [expr {[dict exists $node opaque] ? [dict get $node opaque] : 0}] \
-        context [expr {[dict exists $node context] ? [dict get $node context] : 0}]]
+        opaque [dict getdef $node opaque 0] \
+        context [dict getdef $node context 0]]
 }
 
 # The declaration dict of a `typedecl` node declared in module NAMESPACE (""
@@ -329,7 +329,7 @@ proc surface::lower::TypeDeclOf {node {namespace ""}} {
 proc surface::lower::ErrorDeclOf {node {namespace ""}} {
     return [dict create name [dict get $node name] nameSpan [dict get $node nameSpan] \
         namespace $namespace span [dict get $node span] \
-        fields [expr {[dict exists $node fields] ? [dict get $node fields] : {}}]]
+        fields [dict getdef $node fields {}]]
 }
 
 # The tail both surface::lowerToHir and surface::modules::compileProgramFile
@@ -623,6 +623,26 @@ proc surface::lower::Bool {origin value} {
     return [hir::syntax::rootRef $origin $value]
 }
 
+# Literal typing (FLOAT64-MILESTONE-1.md): the `const` literal {TYPE TEXT} a
+# decimal literal spelling the exact decimal number DECIMAL (the lexer's
+# DECIMAL token value) denotes, or a Tcl error (BOTLISH LITERAL) saying why it
+# denotes no value. The one place the type of a decimal literal is decided --
+# the parser asks it too, to reject a literal where it is written -- so a
+# later rule (a decimal type, a type taken from context) changes this
+# procedure, not the lexer, the parser or the syntax tree, which keep the
+# exact decimal. Today's rule: a decimal literal is the Float64 nearest its
+# decimal number (ties to even); one whose magnitude rounds beyond Float64's
+# largest finite number is no value (a number too small to be distinguished
+# from zero rounds to zero, like any result).
+proc surface::lower::DecimalConstant {decimal} {
+    set made [core::float::Parse Float64 $decimal]
+    if {[lindex $made 0] ne "ok"} {
+        return -code error -errorcode {BOTLISH LITERAL} \
+            "the decimal literal $decimal is outside the range of Float64 (its largest finite number is [core::float::text [core::float::largest Float64]])"
+    }
+    return [list Float64 [core::float::text [lindex $made 1]]]
+}
+
 # The syntax node of AST NODE.
 proc surface::lower::Node {node} {
     set origin [OriginOf $node]
@@ -635,6 +655,9 @@ proc surface::lower::Node {node} {
         }
         char {
             return [hir::syntax::constNode $origin UnicodeChar [dict get $node text]]
+        }
+        decimal {
+            return [hir::syntax::constNode $origin {*}[DecimalConstant [dict get $node text]]]
         }
         bool {
             return [hir::syntax::rootRef $origin [dict get $node value]]
@@ -722,13 +745,22 @@ proc surface::lower::Node {node} {
                     [Node [dict get $node left]] [Node [dict get $node right]]] operator]
                 return [Branch $origin $equal [list [Bool $opOrigin false]] [list [Bool $opOrigin true]]]
             }
-            return [hir::syntax::withWritten [hir::syntax::callNode $origin [hir::syntax::rootRef $opOrigin $op] \
+            set call [hir::syntax::withWritten [hir::syntax::callNode $origin [hir::syntax::rootRef $opOrigin $op] \
                 [Node [dict get $node left]] [Node [dict get $node right]]] operator]
+            if {$op ni {== !=}} {
+                # An arithmetic or comparison operator: its operands' static
+                # types select the operation (hir/operators.tcl).
+                set call [hir::syntax::withOperator $call $op]
+            }
+            return $call
         }
         unary {
+            # -X is 0 - X for an Int; a floating-point operand selects its
+            # type's negation instead (hir/operators.tcl), and the 0 goes.
             set opOrigin [Origin [dict get $node opSpan] [dict get $node id]/op]
-            return [hir::syntax::withWritten [hir::syntax::callNode $origin [hir::syntax::rootRef $opOrigin -] \
-                [hir::syntax::constNode $opOrigin 0] [Node [dict get $node operand]]] operator]
+            return [hir::syntax::withOperator [hir::syntax::withWritten [hir::syntax::callNode $origin \
+                [hir::syntax::rootRef $opOrigin -] \
+                [hir::syntax::constNode $opOrigin 0] [Node [dict get $node operand]]] operator] neg]
         }
         not {
             set opOrigin [Origin [dict get $node opSpan] [dict get $node id]/op]

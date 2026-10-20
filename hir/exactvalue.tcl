@@ -28,7 +28,8 @@
 # -----
 #   {int N}        the expression is exactly the Int N
 #   {val V}        exactly the scalar core value V (str, bool, unit, UnicodeChar,
-#                  an enum case: ENUMS.md)
+#                  an enum case: ENUMS.md, a floating-point number:
+#                  FLOAT64-MILESTONE-1.md)
 #   {list LEVEL SRC...}
 #                  exactly an immutable List with these elements, in order.
 #                  LEVEL is how deep this List sits inside the outermost
@@ -49,7 +50,8 @@
 # analysis) or to a scalar root constant (true/false/unit); a call of
 # `list` (a List literal), `list::append` of an exactly known List, `list::at`
 # of an exactly known List at an exactly known index (nested projection),
-# `list::length` of an exactly known List, and `+ - *` of two exact Ints.
+# `list::length` of an exactly known List, `+ - *` of two exact Ints, and a
+# native with a fold (-fold: a floating-point operation) of exact arguments.
 # A `if` is exact when its condition is statically decided, or when both
 # branches provably produce the same exact value (never a per-position
 # join: "same value" or nothing).
@@ -87,7 +89,9 @@ namespace eval hir::exact {
     variable maxDepth 3
     variable maxSteps 64
     variable maxMagnitude [expr {1 << 63}]
-    variable scalarKinds {str bool unit UnicodeChar enum}
+    # The scalar kinds a {val V} fact holds (core::type::scalarKinds: Int's
+    # fact is {int N}).
+    variable scalarKinds [lsearch -all -inline -not -exact [core::type::scalarKinds] int]
 }
 
 # The exact-value fact of expression E (one of the forms above), or "".
@@ -101,7 +105,10 @@ proc hir::exact::Of {hir e {level 0}} {
 # The exact Int E is, or "".
 proc hir::exact::IntOf {hir e} {
     set fact [Of $hir $e]
-    return [expr {[lindex $fact 0] eq "int" ? [lindex $fact 1] : ""}]
+    if {[lindex $fact 0] eq "int"} {
+        return [lindex $fact 1]
+    }
+    return ""
 }
 
 # The exact Int the immutable local binding B is bound to, or "": the
@@ -123,7 +130,10 @@ proc hir::exact::BindingIntOf {hir b} {
 # E's exact List fact ({list SRC...}), or "".
 proc hir::exact::ListOf {hir e {level 0}} {
     set fact [Of $hir $e $level]
-    return [expr {[lindex $fact 0] eq "list" ? $fact : ""}]
+    if {[lindex $fact 0] eq "list"} {
+        return $fact
+    }
+    return ""
 }
 
 # The number of elements of List fact FACT.
@@ -296,6 +306,26 @@ proc hir::exact::CallFact {hir e node level stepsVar} {
         }
         return [FoldInt $name [lindex $x 1] [lindex $y 1]]
     }
+    set fold [dict get [core::native::metadata $name] fold]
+    if {$fold ne "" && $args ne ""} {
+        # A native with a fold (core/native.tcl's -fold: the floating-point
+        # operations) of exactly known scalar arguments is the value its
+        # fold computes -- the run's own computation. A call that always
+        # fails has no value (hir/completions.tcl reports it).
+        set values {}
+        foreach a $args {
+            set fact [Eval $hir $a 0 steps]
+            switch -- [lindex $fact 0] {
+                int { lappend values [core::value::int [lindex $fact 1]] }
+                val { lappend values [lindex $fact 1] }
+                default { return "" }
+            }
+        }
+        set decided [{*}$fold {*}$values]
+        if {[lindex $decided 0] eq "value"} {
+            return [ValueFact [lindex $decided 1] $level]
+        }
+    }
     return ""
 }
 
@@ -343,8 +373,15 @@ proc hir::exact::IfFact {hir node level stepsVar} {
     set thenTail [lindex [dict get $node thenBody] end]
     set elseTail [lindex [dict get $node elseBody] end]
     if {$known ne ""} {
-        set tail [expr {$known ? $thenTail : $elseTail}]
-        return [expr {$tail eq "" ? "" : [Eval $hir $tail $level steps]}]
+        if {$known} {
+            set tail $thenTail
+        } else {
+            set tail $elseTail
+        }
+        if {$tail eq ""} {
+            return ""
+        }
+        return [Eval $hir $tail $level steps]
     }
     if {$thenTail eq "" || $elseTail eq ""} {
         return ""
@@ -437,7 +474,10 @@ proc hir::exact::Identity {hir e} {
         }
     }
     set root [AliasRoot $hir $e]
-    return [expr {$root eq "" ? "" : [list binding $root]}]
+    if {$root eq ""} {
+        return ""
+    }
+    return [list binding $root]
 }
 
 # The BindingId E's value is the value of, following immutable aliases, or "".
@@ -532,7 +572,7 @@ proc hir::exact::Describe {hir fact level stepsVar} {
                     lappend parts [Describe $hir $f [expr {[Level $fact] + 1}] steps]
                 } else {
                     set t [ElementType $hir $src]
-                    lappend parts [expr {$t eq "" ? "?" : "[hir::types::show $t]?"}]
+                    lappend parts [if {$t eq ""} {string cat "?"} else {string cat "[hir::types::show $t]?"}]
                 }
             }
             return "exact-list\[[join $parts {, }]\]"
@@ -551,7 +591,10 @@ proc hir::exact::ElementType {hir src} {
         return [hir::types::ofValue $what]
     }
     set t [hir::typeOf $hir $what]
-    return [expr {$t eq "never" ? "" : $t}]
+    if {$t eq "never"} {
+        return ""
+    }
+    return $t
 }
 
 # The Range of element SRC: the range EXPRRANGES (the analysis's ExprId ->
@@ -572,7 +615,10 @@ proc hir::exact::ElementRange {hir src exprRanges} {
         }
     }
     set n [IntOf $hir $what]
-    return [expr {$n eq "" ? [hir::range::unknown] : [hir::range::point $n]}]
+    if {$n eq ""} {
+        return [hir::range::unknown]
+    }
+    return [hir::range::point $n]
 }
 
 # The static type of `list::at(LISTEXPR, INDEXEXPR)` from exact facts, or ""
@@ -613,9 +659,16 @@ proc hir::exact::ProjectRange {hir listExpr indexRange exprRanges} {
     set result never
     foreach i $indices {
         set r [ElementRange $hir [Element $fact $i] $exprRanges]
-        set result [expr {$result eq "never" ? $r : [hir::range::join $result $r]}]
+        if {$result eq "never"} {
+            set result $r
+        } else {
+            set result [hir::range::join $result $r]
+        }
     }
-    return [expr {$result eq "never" ? "" : $result}]
+    if {$result eq "never"} {
+        return ""
+    }
+    return $result
 }
 
 # The indices of List fact FACT a read at a value in INDEXRANGE can reach
@@ -633,19 +686,33 @@ proc hir::exact::CandidateIndices {fact indexRange} {
     } else {
         set lo [dict get $indexRange min]
         set hi [dict get $indexRange max]
-        set lo [expr {$lo eq "-inf" || $lo < 0 ? 0 : $lo}]
-        set hi [expr {$hi eq "+inf" || $hi > $n - 1 ? $n - 1 : $hi}]
+        if {$lo eq "-inf" || $lo < 0} {
+            set lo 0
+        } else {
+            set lo $lo
+        }
+        if {$hi eq "+inf" || $hi > $n - 1} {
+            set hi [expr {$n - 1}]
+        } else {
+            set hi $hi
+        }
         for {set i $lo} {$i <= $hi} {incr i} {
             lappend candidates $i
         }
     }
-    return [expr {$candidates eq "" ? "none" : $candidates}]
+    if {$candidates eq ""} {
+        return "none"
+    }
+    return $candidates
 }
 
 # The exact length Range of LISTEXPR, or "" if it is not an exactly known List.
 proc hir::exact::LengthRange {hir listExpr} {
     set fact [ListOf $hir $listExpr]
-    return [expr {$fact eq "" ? "" : [hir::range::point [Length $fact]]}]
+    if {$fact eq ""} {
+        return ""
+    }
+    return [hir::range::point [Length $fact]]
 }
 
 # Whether `list::at(LISTEXPR, i)` for i in INDEXRANGE stays inside an exactly
@@ -669,7 +736,7 @@ proc hir::exact::BoundsOf {hir listExpr indexRange} {
     }
     set exact [hir::range::ExactOf $indexRange]
     if {$exact ne ""} {
-        set inside [lmap i $exact {expr {$i >= 0 && $i < $n ? $i : [continue]}}]
+        set inside [lmap i $exact {if {$i >= 0 && $i < $n} {set i} else {continue}}]
         if {[llength $inside] == [llength $exact]} {
             return in
         }

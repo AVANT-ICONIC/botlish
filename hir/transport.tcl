@@ -210,7 +210,7 @@ proc hir::transport::Scc {nodes succMap} {
                 lappend stack $v
                 dict set onStack $v 1
             }
-            set succ [expr {[dict exists $succMap $v] ? [dict get $succMap $v] : {}}]
+            set succ [dict getdef $succMap $v {}]
             set descended 0
             while {$pos < [llength $succ]} {
                 set w [lindex $succ $pos]

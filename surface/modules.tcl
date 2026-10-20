@@ -265,7 +265,10 @@ proc surface::modules::ResolveModule {stateVar key name span} {
         if {$isStandard} {
             PlatformCheck state $name $span
         }
-        return [expr {$hasStandard ? [ModuleFile $name [dict get $state target] $span] : ""}]
+        if {$hasStandard} {
+            return [ModuleFile $name [dict get $state target] $span]
+        }
+        return ""
     }
     set application [ApplicationFile $state $name]
     if {$application ne "" && [file normalize $application] eq [dict get $state entry]} {
@@ -349,7 +352,11 @@ proc surface::modules::PlatformCheck {stateVar name span} {
 # this. Text that does not parse is the host's (its compilation reports why).
 proc surface::modules::PlatformTarget {source} {
     set host [core::cabi::hostTarget]
-    set hostOs [expr {$host eq "" ? "" : [dict get [core::cabi::target $host] os]}]
+    if {$host eq ""} {
+        set hostOs ""
+    } else {
+        set hostOs [dict get [core::cabi::target $host] os]
+    }
     if {[lsort -unique [concat [dict values $::core::cabi::platforms] [list $hostOs]]] eq [list $hostOs]} {
         # Every platform is the host's own: nothing to read.
         return ""
@@ -668,7 +675,7 @@ proc surface::modules::RemapFile {node fileId} {
                 lappend params [list $name [RemapOrigin $origin $fileId]]
             }
             dict set node params $params
-            dict set node flags [RemapFlags [expr {[dict exists $node flags] ? [dict get $node flags] : {}}] $fileId]
+            dict set node flags [RemapFlags [dict getdef $node flags {}] $fileId]
             dict set node body [lmap child [dict get $node body] {RemapFile $child $fileId}]
             # The clauses that carry origins: context parameters (their
             # loads are nodes at the parameter's origin), proof clauses and
@@ -694,7 +701,7 @@ proc surface::modules::RemapFile {node fileId} {
             # strings, resolved later by hir/resolve.tcl): nothing to remap.
         }
         call {
-            dict set node flags [RemapFlags [expr {[dict exists $node flags] ? [dict get $node flags] : {}}] $fileId]
+            dict set node flags [RemapFlags [dict getdef $node flags {}] $fileId]
             dict set node callee [RemapFile [dict get $node callee] $fileId]
             dict set node args [lmap child [dict get $node args] {RemapFile $child $fileId}]
             if {[dict exists $node imprintOrigins]} {
@@ -937,7 +944,7 @@ proc surface::modules::LoadNamespace {stateVar name usedAtSpan {path ""}} {
 # otherwise. A namespace's directness is its declaration's: never its name,
 # path or library.
 proc surface::modules::ModuleDecl {ast fileId} {
-    set span [expr {[dict exists $ast direct] ? [dict get $ast direct] : ""}]
+    set span [dict getdef $ast direct ""]
     if {$span eq ""} {
         return [dict create direct 0 origin ""]
     }
@@ -991,7 +998,7 @@ proc surface::modules::NamespaceExists {ns} {
 # its type imports must never silently shadow, or be shadowed by, one.
 proc surface::modules::IsBuiltinTypeName {short} {
     return [expr {$short in {Int any never Fn} || [dict exists $::hir::types::constructors $short]
-        || [core::type::isBuiltinName $short]}]
+        || [core::type::isBuiltinName $short] || [core::native::isBuiltinEnum $short]}]
 }
 
 # The namespaces a file imports, spelled for the "not imported" hint: a
@@ -1080,11 +1087,27 @@ proc surface::modules::CheckImports {stateVar ast own} {
         if {$hasFile} {
             LoadNamespace state $ns $span $path
         }
-        set typeNames [expr {$hasFile ? [concat [dict get $state loadedTypes $ns] [dict get $state loadedTraits $ns] [dict get $state loadedEnums $ns]] : {}}]
+        if {$hasFile} {
+            set typeNames [concat [dict get $state loadedTypes $ns] [dict get $state loadedTraits $ns] [dict get $state loadedEnums $ns]]
+        } else {
+            set typeNames {}
+        }
         if {$name ni $typeNames} {
-            set functions [expr {$hasFile ? [dict get $state loaded $ns] : {}}]
-            set structs [expr {$hasFile ? [dict get $state loadedStructs $ns] : {}}]
-            set errors [expr {$hasFile ? [dict get $state loadedErrors $ns] : {}}]
+            if {$hasFile} {
+                set functions [dict get $state loaded $ns]
+            } else {
+                set functions {}
+            }
+            if {$hasFile} {
+                set structs [dict get $state loadedStructs $ns]
+            } else {
+                set structs {}
+            }
+            if {$hasFile} {
+                set errors [dict get $state loadedErrors $ns]
+            } else {
+                set errors {}
+            }
             if {$name in [hir::cabi::IntrinsicTypeNames $ns]} {
                 Error NOT-A-TYPE $nameSpan "\"$canonical\" is an intrinsic type of namespace \"$ns\", not a source-defined `type`: spell it $canonical after `import $ns`"
             }
@@ -1100,7 +1123,7 @@ proc surface::modules::CheckImports {stateVar ast own} {
             if {$name in $errors} {
                 Error NOT-A-TYPE $nameSpan "\"$canonical\" is an error declaration, not a type"
             }
-            Error UNKNOWN-SYMBOL $nameSpan "namespace \"$ns\" has no type \"$name\" (its types: [expr {$typeNames eq "" ? "none" : [join [lsort $typeNames] {, }]}])"
+            Error UNKNOWN-SYMBOL $nameSpan "namespace \"$ns\" has no type \"$name\" (its types: [if {$typeNames eq ""} {string cat "none"} else {join [lsort $typeNames] {, }}])"
         }
         if {[dict exists $local $name]} {
             Error TYPE-IMPORT-COLLISION $nameSpan "`import type $canonical` binds the type name \"$name\", which this file also declares itself (at [surface::ast::location [dict get $local $name]]); an imported type never shadows or is shadowed by a local one: drop the import and spell the imported type $canonical (after `import $ns`)"
@@ -1174,7 +1197,7 @@ proc surface::modules::CollectAndLoad {stateVar ast {key ""}} {
                 set message [string range $message [string length $prefix] end]
             }
             set path [list staticDeferred $key [dict get $site id]]
-            set deferred [expr {[dict exists $state {*}$path] ? [dict get $state {*}$path] : {}}]
+            set deferred [dict getdef $state {*}$path {}]
             lappend deferred [dict create kind [lindex [dict get $options -errorcode] 2] \
                 message $message span $span]
             dict set state {*}$path $deferred
@@ -1275,7 +1298,7 @@ proc surface::modules::CheckRef {stateVar ast own key env imported ref} {
         set errorNames [dict get $state loadedErrors $namespaceName]
         if {$symbolName ni $errorNames} {
             Error UNKNOWN-SYMBOL $span \
-                "namespace \"$namespaceName\" has no error \"$symbolName\" (it declares: [expr {$errorNames eq "" ? "no errors" : [join [lsort $errorNames] {, }]}])"
+                "namespace \"$namespaceName\" has no error \"$symbolName\" (it declares: [if {$errorNames eq ""} {string cat "no errors"} else {join [lsort $errorNames] {, }}])"
         }
         return
     }
@@ -1301,11 +1324,15 @@ proc surface::modules::CheckRef {stateVar ast own key env imported ref} {
     }
     if {$refKind in {struct type}} {
         set structNames [dict get $state loadedStructs $namespaceName]
-        set typeNames [expr {$refKind eq "type" ? [concat [dict get $state loadedTypes $namespaceName] [dict get $state loadedTraits $namespaceName] [dict get $state loadedEnums $namespaceName] [dict get $state loadedLayouts $namespaceName]] : {}}]
+        if {$refKind eq "type"} {
+            set typeNames [concat [dict get $state loadedTypes $namespaceName] [dict get $state loadedTraits $namespaceName] [dict get $state loadedEnums $namespaceName] [dict get $state loadedLayouts $namespaceName]]
+        } else {
+            set typeNames {}
+        }
         if {$symbolName ni $structNames && $symbolName ni $typeNames} {
             set declared [lsort [concat $structNames $typeNames]]
             Error UNKNOWN-SYMBOL $span \
-                "namespace \"$namespaceName\" has no [expr {$refKind eq "type" ? "type" : "struct"}] \"$symbolName\" (it declares: [expr {$declared eq "" ? "no types" : [join $declared {, }]}])"
+                "namespace \"$namespaceName\" has no [expr {$refKind eq "type" ? "type" : "struct"}] \"$symbolName\" (it declares: [if {$declared eq ""} {string cat "no types"} else {join $declared {, }}])"
         }
         return
     }
@@ -1391,7 +1418,10 @@ proc surface::modules::EnumQualifier {stateVar ast own env qualifier} {
     if {[string first :: $qualifier] < 0} {
         foreach statement [dict get $ast body] {
             if {[dict get $statement kind] eq "enumdecl" && [dict get $statement name] eq $qualifier} {
-                return [expr {$own eq "" ? $qualifier : "${own}::$qualifier"}]
+                if {$own eq ""} {
+                    return $qualifier
+                }
+                return "${own}::$qualifier"
             }
         }
         set types [dict get $env types]
@@ -1403,6 +1433,11 @@ proc surface::modules::EnumQualifier {stateVar ast own env qualifier} {
             if {[dict exists $state loadedEnums $ns] && $name in [dict get $state loadedEnums $ns]} {
                 return $canonical
             }
+        }
+        if {[core::native::isBuiltinEnum $qualifier]} {
+            # A builtin enum of the runtime (NonFiniteResult), visible in
+            # every file like the builtin errors.
+            return $qualifier
         }
         return ""
     }
@@ -1567,7 +1602,7 @@ proc surface::modules::BuildProgram {ast strict {target ""} {root ""}} {
         -link-decls [concat [dict get $state linkDecls] $ownLinkDecls]]
     # The target the HIR was built for, when the build read it (header,
     # "Target dependence"); "" when the HIR is every target's.
-    dict set hir target [expr {[dict get $state targetRead] ? [dict get $state target] : ""}]
+    dict set hir target [if {[dict get $state targetRead]} {dict get $state target} else {string cat ""}]
     return $hir
 }
 

@@ -166,7 +166,10 @@ proc hir::affine::BindingType {hir b} {
             # A loop variable: its iterable's element type (a consuming
             # loop's over an affine MutableVector, MUTABLE-VECTOR.md).
             set t [hir::types::IterationElementOf [hir::typeOf $hir [dict get $hir exprs $block iterable]]]
-            return [expr {$t eq "" ? "any" : $t}]
+            if {$t eq ""} {
+                return "any"
+            }
+            return $t
         }
         if {$block ne "" && [dict exists $hir exprs $block] && [dict get $hir exprs $block kind] eq "block"} {
             set index [lsearch -exact [dict get $hir exprs $block params] $b]
@@ -276,7 +279,7 @@ proc hir::affine::Consumer {hir parent e} {
                 # A field type mismatch (TYPE, hir::range::VerifyStruct).
                 return [list move field $p $name]
             }
-            return [Erasure $hir $e "the value of field \"$name\" of type [hir::types::show [expr {$fieldType eq "" ? "any" : $fieldType}]]"]
+            return [Erasure $hir $e "the value of field \"$name\" of type [hir::types::show [if {$fieldType eq ""} {string cat "any"} else {set fieldType}]]"]
         }
         project {
             if {[hir::mutvec::InReceiverPath $hir $parent $p]} {
@@ -296,7 +299,11 @@ proc hir::affine::Consumer {hir parent e} {
                 return {use field}
             }
             if {$affineField} {
-                set shown [expr {$kind eq "ref" ? [hir::semantic::RefName $hir $e] : "value"}]
+                if {$kind eq "ref"} {
+                    set shown [hir::semantic::RefName $hir $e]
+                } else {
+                    set shown "value"
+                }
                 return [list reject AFFINE-FIELD-MOVE-REQUIRES-DESTRUCTURE \
                     "field \"$name\" of [Named $hir $e] is affine ([hir::types::show $fieldType]): reading it would make a second owner of what [Named $hir $e] owns, and a field cannot be moved out of a struct that stays usable (consume the struct with a destructuring instead: \"{$name} = $shown\")"]
             }
@@ -325,7 +332,11 @@ proc hir::affine::Consumer {hir parent e} {
         }
         break {
             set loop [dict get $node target]
-            set dest [expr {$loop eq "" ? "any" : [hir::typeOf $hir $loop]}]
+            if {$loop eq ""} {
+                set dest "any"
+            } else {
+                set dest [hir::typeOf $hir $loop]
+            }
             return [Into $hir $e [list move break $p] $dest "the value of a loop of type"]
         }
         fail {
@@ -519,7 +530,7 @@ proc hir::affine::Unanalyzed {hir p} {
     if {![hir::semantic::Enabled] || ![dict exists $hir semantic declined]} {
         return 0
     }
-    set ctx [expr {[dict exists $hir semanticContext] ? [dict get $hir semanticContext] : "generic"}]
+    set ctx [dict getdef $hir semanticContext "generic"]
     return [expr {[dict exists $hir semantic declined [list $ctx $p]] && [hir::semantic::InstanceOf $hir $p] eq ""}]
 }
 
@@ -549,7 +560,10 @@ proc hir::affine::BlockResult {hir e} {
         return $declared
     }
     set t [dict get $hir exprs $e resultType]
-    return [expr {$t eq "" ? "any" : [hir::type $hir $t]}]
+    if {$t eq ""} {
+        return "any"
+    }
+    return [hir::type $hir $t]
 }
 
 # ---------------------------------------------------------------------------
@@ -576,7 +590,11 @@ proc hir::affine::verify {hirVar} {
     # that still runs, -strict 0, keeps every value until collected), and
     # never twice: HIR built from core IR text that spells them (what
     # hir/lower.tcl lowered, read back) already has every release written out.
-    set scopes [expr {!$accepted || [WrittenReleases $hir $parentMap] ? {} : [Scopes $hir $parentMap]}]
+    if {!$accepted || [WrittenReleases $hir $parentMap]} {
+        set scopes {}
+    } else {
+        set scopes [Scopes $hir $parentMap]
+    }
     variable consumed
     dict set hir affine consumed $consumed
     dict set hir affine releases [Releases hir $parentMap $scopes $accepted]
@@ -776,7 +794,11 @@ proc hir::affine::verifyInstance {viewVar block exprs} {
             }
         }
         set fn [dict get $view scopes [dict get $node scope] invocation]
-        set enclosing [expr {$fn eq "" ? {} : [dict get $view exprs $fn declaredErrors]}]
+        if {$fn eq ""} {
+            set enclosing {}
+        } else {
+            set enclosing [dict get $view exprs $fn declaredErrors]
+        }
         set unhandled [hir::completions::Unhandled [hir::types::CoroutineErrors $calleeType] $handled $enclosing]
         if {$unhandled ne ""} {
             hir::Diagnose view UNHANDLED-ERROR [format \
@@ -930,7 +952,11 @@ proc hir::affine::Flow {hirVar e state} {
             set head $state
             # A consuming loop's variable (MUTABLE-VECTOR.md) owns one
             # element per iteration, freshly.
-            set element [expr {[dict get $node kind] eq "listloop" ? [dict get $node elementBinding] : ""}]
+            if {[dict get $node kind] eq "listloop"} {
+                set element [dict get $node elementBinding]
+            } else {
+                set element ""
+            }
             if {$element ne "" && ![IsAffineBinding $hir $element]} {
                 set element ""
             }
@@ -950,7 +976,11 @@ proc hir::affine::Flow {hirVar e state} {
                 if {$next eq $head} break
                 set head $next
             }
-            set after [expr {[dict get $node kind] eq "loop" ? "dead" : $head}]
+            if {[dict get $node kind] eq "loop"} {
+                set after "dead"
+            } else {
+                set after $head
+            }
             set paths [list $after]
             foreach b [dict get $exits breaks] {
                 set after [Join $after [Restrict $b $entry]]
@@ -993,10 +1023,14 @@ proc hir::affine::Flow {hirVar e state} {
         handle {
             set before $state
             set state [Flow hir [dict get $node call] $state]
-            set entry [expr {$state eq "dead" ? $before : $state}]
+            if {$state eq "dead"} {
+                set entry $before
+            } else {
+                set entry $state
+            }
             set result $state
             set paths [list $state]
-            set payloads [expr {[dict exists $node handlerPayloads] ? [dict get $node handlerPayloads] : {}}]
+            set payloads [dict getdef $node handlerPayloads {}]
             set index 0
             foreach body [dict get $node handlerBodies] {
                 # A handler's payload binding (ERROR-PAYLOADS.md) owns the
@@ -1055,7 +1089,7 @@ proc hir::affine::Use {hirVar e b state} {
         # some path (Releases) -- never a use to check.
         return $state
     }
-    set status [expr {[dict exists $state $b] ? [dict get $state $b] : "live"}]
+    set status [dict getdef $state $b "live"]
     set what [expr {[hir::types::IsCoroutine [BindingType $hir $b]] ? "coroutine" : "affine"}]
     if {![dict exists $diagnostics $e] || [lindex [dict get $diagnostics $e] 0] in {USE-AFTER-MOVE AFFINE-NOT-DEFINITELY-LIVE}} {
         switch -- [lindex $status 0] {
@@ -1078,7 +1112,11 @@ proc hir::affine::Use {hirVar e b state} {
             }
         }
     }
-    set consumer [expr {[dict exists $consumers $e] ? [dict get $consumers $e] : {use}}]
+    if {[dict exists $consumers $e]} {
+        set consumer [dict get $consumers $e]
+    } else {
+        set consumer {use}
+    }
     if {[lindex $consumer 0] eq "move"} {
         if {[lindex $consumer 1] eq "out"} {
             # A destructuring reads an affine field out of its temporary:
@@ -1117,7 +1155,7 @@ proc hir::affine::MoveText {hir move} {
             return "captured by a coroutine construction  ([Where $hir $move])"
         }
     }
-    set consumer [expr {[dict exists $consumers $move] ? [dict get $consumers $move] : {}}]
+    set consumer [dict getdef $consumers $move {}]
     lassign $consumer _ where at
     set source [hir::semantic::RefName $hir $move]
     switch -- $where {
@@ -1126,7 +1164,11 @@ proc hir::affine::MoveText {hir move} {
         }
         arg {
             set callee [dict get $hir exprs $at callee]
-            set fn [expr {[dict get $hir exprs $callee kind] eq "ref" ? [hir::semantic::RefName $hir $callee] : "a function"}]
+            if {[dict get $hir exprs $callee kind] eq "ref"} {
+                set fn [hir::semantic::RefName $hir $callee]
+            } else {
+                set fn "a function"
+            }
             return "$source passed to $fn  ([Where $hir $move])"
         }
         message {
@@ -1231,7 +1273,7 @@ proc hir::affine::Scopes {hir parent} {
         }
         set last $index
         set found 1
-        foreach r [expr {[dict exists $refs $b] ? [dict get $refs $b] : {}}] {
+        foreach r [dict getdef $refs $b {}] {
             # The statement of SEQUENCE the reference is in.
             set x $r
             set at -1
@@ -1365,12 +1407,18 @@ proc hir::affine::PathPoint {hirVar x i b} {
                 dict set hir exprs $x $field $body
             }
             set at [lindex $body end]
-            return [expr {[Shadowed $hir $at $b] ? "" : [list after $at]}]
+            if {[Shadowed $hir $at $b]} {
+                return ""
+            }
+            return [list after $at]
         }
         handle {
             if {$i > 0} {
                 set at [lindex [lindex [dict get $node handlerBodies] [expr {$i - 1}]] end]
-                return [expr {[Shadowed $hir $at $b] ? "" : [list after $at]}]
+                if {[Shadowed $hir $at $b]} {
+                    return ""
+                }
+                return [list after $at]
             }
             hir::Diagnose hir AFFINE-PATH-RELEASE-UNSUPPORTED \
                 "`$name` is moved by a handler of this call but still owned when the call completes normally: no statement ends that path to release it there (move it on every path, or on none -- e.g. bind the call's result first and move `$name` in an if)" $x
@@ -1379,7 +1427,10 @@ proc hir::affine::PathPoint {hirVar x i b} {
         default {
             if {$i > 0 && [dict exists $loopBreaks $x]} {
                 set at [lindex [dict get $loopBreaks $x] [expr {$i - 1}]]
-                return [expr {[Shadowed $hir $at $b] ? "" : [list exit $at]}]
+                if {[Shadowed $hir $at $b]} {
+                    return ""
+                }
+                return [list exit $at]
             }
             hir::Diagnose hir AFFINE-PATH-RELEASE-UNSUPPORTED \
                 "`$name` is moved on a path that breaks out of this loop but still owned when the loop runs to its end: no statement ends that path to release it there (move it on every path, or on none -- e.g. use an infinite `loop:` whose every exit is a `break`)" $x
@@ -1505,7 +1556,11 @@ proc hir::affine::LoopDomain {hir p} {
 proc hir::affine::PendingBefore {hir p x} {
     variable consumers
     set node [dict get $hir exprs $p]
-    set operands [expr {[dict get $node kind] eq "struct" ? [dict get $node fields] : [dict get $node args]}]
+    if {[dict get $node kind] eq "struct"} {
+        set operands [dict get $node fields]
+    } else {
+        set operands [dict get $node args]
+    }
     set result {}
     foreach a $operands {
         if {$a eq $x} break
@@ -1527,7 +1582,7 @@ proc hir::affine::PendingItems {hir pending x} {
     foreach item $pending {
         if {[lindex $item 0] eq "ref"} {
             lassign $item _ a b
-            lappend result [expr {[Shadowed $hir $x $b] ? $a : $b}]
+            lappend result [if {[Shadowed $hir $x $b]} {set a} else {set b}]
         } else {
             lappend result [lindex $item 1]
         }
@@ -1613,20 +1668,28 @@ proc hir::affine::ExitReleases {hir parent scopes} {
         switch -- [dict get $node kind] {
             return - fail - break - continue {
                 if {![dict exists $parent $x]} continue
-                set loop [expr {[dict get $node kind] in {break continue} ? [dict get $node target] : ""}]
+                if {[dict get $node kind] in {break continue}} {
+                    set loop [dict get $node target]
+                } else {
+                    set loop ""
+                }
                 set names {}
                 if {[dict get $node kind] eq "fail"} {
                     set names [list [dict get $node name]]
                 }
-                set keep [expr {[dict get $node kind] eq "continue" ? $loop : ""}]
+                if {[dict get $node kind] eq "continue"} {
+                    set keep $loop
+                } else {
+                    set keep ""
+                }
                 set crossed [Crossed $hir $parent $x $loop $names $keep]
-                lassign [expr {$names eq {} ? $crossed : [dict get $crossed [lindex $names 0]]}] pairs pending
+                lassign [if {$names eq {}} {set crossed} else {dict get $crossed [lindex $names 0]}] pairs pending
                 set released [concat [Leaving $hir $scopes $byKey $pairs $state $x] [PendingItems $hir $pending $x]]
                 if {$released eq {}} continue
                 dict set exits $x $released
                 if {[dict exists $node value] && [dict get $node value] ne ""} {
                     set used [RefsIn $hir [dict get $node value]]
-                    set before [lmap b $released {expr {$b in $used ? [continue] : $b}}]
+                    set before [lmap b $released {if {$b in $used} {continue} else {set b}}]
                     foreach c [CallsIn $hir [dict get $node value]] {
                         dict lappend already $c {*}$before
                     }
@@ -1640,7 +1703,7 @@ proc hir::affine::ExitReleases {hir parent scopes} {
                     continue
                 }
                 set at $x
-                set names [expr {[dict exists $node calleeErrors] ? [dict get $node calleeErrors] : {}}]
+                set names [dict getdef $node calleeErrors {}]
                 if {$erased ne {} && [hir::completions::mayLetErasedThrough $hir $x $transparent]} {
                     set names [lsort -unique [concat $names $erased]]
                 }
@@ -1656,11 +1719,11 @@ proc hir::affine::ExitReleases {hir parent scopes} {
                 }
                 if {$names eq {}} continue
                 set byName [dict create]
-                set done [expr {[dict exists $already $x] ? [dict get $already $x] : {}}]
+                set done [dict getdef $already $x {}]
                 dict for {name crossed} [Crossed $hir $parent $at "" [lsort -unique $names]] {
                     lassign $crossed pairs pending
                     set released [lmap b [concat [Leaving $hir $scopes $byKey $pairs $state $x] [PendingItems $hir $pending $x]] {
-                        expr {$b in $done ? [continue] : $b}
+                        if {$b in $done} {continue} else {set b}
                     }]
                     if {$released ne {}} {
                         dict set byName $name $released
@@ -1739,8 +1802,12 @@ proc hir::affine::releasesOnExit {hir e} {
     } else {
         return {{} {}}
     }
-    set value [expr {[dict exists $hir exprs $e value] ? [dict get $hir exprs $e value] : ""}]
-    set used [expr {$value eq "" ? {} : [RefsIn $hir $value]}]
+    set value [dict getdef $hir exprs $e value ""]
+    if {$value eq ""} {
+        set used {}
+    } else {
+        set used [RefsIn $hir $value]
+    }
     set before {}
     set after {}
     foreach item $items {
@@ -1893,7 +1960,11 @@ proc hir::affine::Descriptor {hir type {exclude {}}} {
         # (hir::structs::OwnedRecursion): its values nest to any depth, past
         # every finite descriptor.
         variable descriptorVisiting
-        set id [expr {[hir::types::IsNamedStruct $type] ? [lindex $type 1] : ""}]
+        if {[hir::types::IsNamedStruct $type]} {
+            set id [lindex $type 1]
+        } else {
+            set id ""
+        }
         if {$id ne ""} {
             if {$id in $descriptorVisiting} {
                 if {[hir::types::IsAffine $type] && [hir::structs::OwnedRecursion $id] ne ""} {

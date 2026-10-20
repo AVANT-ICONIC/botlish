@@ -142,14 +142,18 @@ signedness is the target's: signed on x86-64 (Linux, macOS, Windows) and on
 Apple and Windows AArch64, unsigned on Linux AArch64. It is never Botlish's
 Byte and never `unsigned char` silently.
 
-**No `size_t`, no floating types.** The binding generator knows
+**No `size_t`; one floating type.** The binding generator knows
 from its ABI probe which C type `size_t` (`ptrdiff_t`, `wchar_t`, `int64_t`,
 ...) is on a profile, and emits an alias of it (`size_t` -> `ffi::c::ULong`
 on LP64); the archaeology found numeric typedef identity not worth making
 nominal (C-HEADER-ARCHAEOLOGY.md item 63). `double` appears in 1 + 7
-functions of the subject libraries: floats are their own language milestone.
-The registry has room for them (a floating category would be another `-c-abi`
-shape, beside the integer ones, without touching pointers).
+functions of the subject libraries: floats were their own language milestone
+(FLOAT64-MILESTONE-1.md), which added `ffi::c::Double`, C `double` as
+Botlish's Float64 under its C name, for `extern c fn` parameters and results
+(passed in the target's floating-point registers; a NaN or an infinity
+returned by C fails the call with `NonFiniteFloat`). It is a value type, not
+a pointee: `Ptr[ffi::c::Double]` is not admitted yet. C `float` and `long
+double` have no Botlish type.
 
 **`_Bool` came later.** Neither subject library uses it in its public API,
 so it was left out here; SDL3 uses it in 506 of its 1,405 API names, and the
@@ -662,7 +666,8 @@ For **`extern c fn`**:
    metadata records (sign/zero extension into registers), pointers as raw
    machine words (unboxing the tagged word, and checking the 60-bit payload
    of a returned address), SysV/AAPCS64 register assignment for integers
-   and pointers only (no aggregates, no floats, no varargs);
+   and pointers only (no aggregates, no varargs; `double` since
+   FLOAT64-MILESTONE-1.md);
 3. the C boundary's restrictions: no Botlish error or `yield` crosses a C
    frame; a stack-walk/GC story for C frames between Botlish frames;
 4. rejecting a HIR whose C target is not the host for native code.

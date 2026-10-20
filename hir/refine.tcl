@@ -172,10 +172,14 @@ proc hir::refine::HandleImplication {hir ctx node depth} {
             if {$facts eq "never"} {
                 continue
             }
-            set joined [expr {$any ? [Meet $joined $facts] : $facts}]
+            if {$any} {
+                set joined [Meet $joined $facts]
+            } else {
+                set joined $facts
+            }
             set any 1
         }
-        dict set result $outcome [expr {$any ? $joined : "never"}]
+        dict set result $outcome [if {$any} {set joined} else {string cat "never"}]
     }
     return $result
 }
@@ -284,10 +288,14 @@ proc hir::refine::IfImplication {hir ctx e node depth} {
                 continue
             }
             set path [Conjoin $entry $value]
-            set joined [expr {$any ? [Meet $joined $path] : $path}]
+            if {$any} {
+                set joined [Meet $joined $path]
+            } else {
+                set joined $path
+            }
             set any 1
         }
-        dict set result $outcome [expr {$any ? $joined : "never"}]
+        dict set result $outcome [if {$any} {set joined} else {string cat "never"}]
     }
     return $result
 }

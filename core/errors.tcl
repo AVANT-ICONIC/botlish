@@ -70,5 +70,5 @@ proc core::raiseDiagnostics {diagnostics} {
 
 # How the code of one entry of core::raiseDiagnostics is shown.
 proc core::ShownCode {diagnostic} {
-    return [expr {[dict exists $diagnostic shown] ? [dict get $diagnostic shown] : [dict get $diagnostic errorcode]}]
+    return [dict getdef $diagnostic shown [dict get $diagnostic errorcode]]
 }

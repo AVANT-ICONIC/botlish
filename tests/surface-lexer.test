@@ -145,8 +145,8 @@ test lex-question-mark-span {a trailing "?" is included in the identifier token'
 } -result {IDENT emailish? {file prog.bot start 0 end 9 line 1 column 1 endLine 1 endColumn 10}}
 
 test lex-unsupported-characters {characters of deferred syntax} -body {
-    list [lexError "a ! b"] [lexError "a / b"] [lexError "a.b"] [lexError "a; b"] [lexError "a::b"]
-} -result {{1:3 unexpected character "!"} {1:3 unexpected character "/"} {no error} {1:2 unexpected character ";"} {no error}}
+    list [lexError "a ! b"] [lexError "a % b"] [lexError "a.b"] [lexError "a; b"] [lexError "a::b"]
+} -result {{1:3 unexpected character "!"} {1:3 unexpected character "%"} {no error} {1:2 unexpected character ";"} {no error}}
 
 test lex-dot-is-field-projection {a single "." is the field projection token (STRUCTS.md); ".." stays the range token} -body {
     list [tokens "a.b"] [tokens "a.b.c"] [tokens "a . b"] [tokens "f(x).y"] [tokens "1..2"] [tokens "a..b.c"]

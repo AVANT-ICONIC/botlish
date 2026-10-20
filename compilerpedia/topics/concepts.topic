@@ -313,12 +313,12 @@ twice("ten")
 docs/README.md sections 13 and 14; STRICT-TYPED-PARAMETERS.md.
 
 @topic concept.integers
-title: Integers: arbitrary precision, no division
-summary: Int is an arbitrary-precision integer with + - *, comparisons, mod (Euclidean) and bit operations; there is no division operator and no Int-to-String conversion in the standard namespaces.
+title: Integers: arbitrary precision, no integer division
+summary: Int is an arbitrary-precision integer with + - *, comparisons, mod (Euclidean) and bit operations; there is no integer division and no Int-to-String conversion in the standard namespaces.
 index: concepts
 alias: integers; arbitrary precision integers; bigint; bit operations; Int type
 keywords: int, integer, arithmetic, overflow, mod, remainder, bit_and, bit_or, bit_xor, shift_left, shift_right, ARITHMETIC, decimal
-related: concept.integer-domains concept.types capability.integer-division capability.int-to-string stdlib.mod stdlib.bit_and stdlib.shift_right stdlib.test::int_text proof.ranges error.arithmetic
+related: concept.integer-domains concept.floats concept.types capability.integer-division capability.int-to-string stdlib.mod stdlib.bit_and stdlib.shift_right stdlib.test::int_text proof.ranges error.arithmetic
 docs: README.md BYTE-NIBBLE-BIT-ARITHMETIC.md LANGUAGE-LIBRARY-DEFICIENCIES.md
 
 == WHAT IT IS
@@ -334,9 +334,12 @@ value leaves the machine word). Literals are decimal.
 == RULES
   * `mod(a, 0)` fails at run time with the ARITHMETIC error; it is not a
     declared error and cannot be handled, so guard the divisor.
-  * There is no `/`, no `%` and no integer division function
-    (capability.integer-division): `mod` gives the remainder, shift_right
+  * There is no integer division: `/` divides Float64 values only, and
+    there is no `%` and no integer division function
+    (capability.integer-division). `mod` gives the remainder, shift_right
     divides by a power of two.
+  * An Int never mixes with a Float64 (concept.floats): float64::from_int
+    and float64::truncate convert explicitly.
   * There is no Int-to-String conversion in the standard namespaces;
     lib/test.bot's test::int_text(n) is the available one
     (capability.int-to-string).
@@ -359,13 +362,115 @@ big = 9223372036854775807 * 9223372036854775807
 @example reject
 x = 7 / 2
 x
-@caption There is no division operator
-@error SURFACE SYNTAX
-@at 1:7
+@caption There is no integer division
+@error CORE SEMANTIC TYPE
+@at 1:5
 @end
 
 == MORE
 BYTE-NIBBLE-BIT-ARITHMETIC.md for the bit operations and byte domains.
+
+@topic concept.floats
+title: Float64: finite binary64 floating-point numbers
+summary: Float64 is a finite IEEE 754 binary64 number: literals such as 1.5, + - * / and comparisons; a result that is not finite (NaN or an infinity) fails with the declared error NonFiniteFloat.
+index: concepts
+alias: float; floats; double; floating point; decimal number; real number; Float64; NonFiniteFloat; NaN; infinity; float division by zero
+keywords: float, double, decimal, fraction, real, divide, NaN, infinity, finite, NonFiniteFloat, from_int, truncate
+related: concept.integers stdlib./ stdlib.float64::from_int stdlib.float64::truncate stdlib.module.float64 capability.integer-division error.known-error error.unhandled-error concept.errors
+docs: FLOAT64-MILESTONE-1.md README.md
+
+== WHAT IT IS
+A Float64 is a finite IEEE 754 binary64 number. NaN and the infinities
+are never values: every operation that would produce one fails instead,
+with the declared error NonFiniteFloat. There is no negative zero either:
+-0.0 and 0.0 are the one value 0.0.
+
+    1.5  0.0  -3.25  10.0  6.02e23   literals: digits, a point, digits,
+                                     an optional exponent
+    + - * /             Float64, Float64 -> Float64 (may fail: NonFiniteFloat)
+    -x                  negation
+    < <= > >= == !=     comparisons
+    float64::from_int(n)    Int -> nearest Float64 (import float64)
+    float64::truncate(x)    Float64 -> Int, toward zero
+
+== RULES
+  * A literal with a decimal point is a Float64; a literal without one is
+    an Int. Nothing else decides a literal's type: the binding or the
+    parameter it reaches does not.
+  * An operator's operands are both Float64 or both Int: the compiler
+    chooses the Float64 operation by the operands' static types, and an
+    Int and a Float64 together are rejected (TYPE). Nothing converts
+    implicitly; convert with float64::from_int or float64::truncate.
+  * `/` divides Float64 values only (capability.integer-division).
+  * A result that is not finite -- an overflow, any division by zero --
+    fails with NonFiniteFloat, an ordinary declared error: a function
+    whose + - * / the compiler cannot prove finite handles it or declares
+    `errors NonFiniteFloat` (concept.errors). When the compiler knows the
+    operands it computes the operation while compiling, with the same
+    rule: a decided failure is the KNOWN-ERROR diagnostic. Negation and
+    the comparisons never fail.
+  * NonFiniteFloat's payload is {result: NonFiniteResult}, which
+    non-finite result the operation had: PositiveInfinity,
+    NegativeInfinity or NotANumber (only 0.0 / 0.0). NonFiniteResult is a
+    builtin enum, visible everywhere without an import. It describes the
+    failure to the handler where it happened; no value is ever an
+    infinity or NaN.
+  * 1.0 == 1 is false: values of different kinds are never equal.
+  * A Float64 prints as the shortest decimal that reads back to the same
+    number, always with a point (3.0, 0.1, 1.0e100).
+  * extern c fn declarations pass Float64 as C `double`
+    (ffi::c::Double); a NaN or an infinity coming back from C fails with
+    NonFiniteFloat.
+
+== WHY
+Finite values keep == an equivalence (no NaN that differs from itself)
+and make every failure a declared, typed completion the compiler tracks,
+instead of a special value that spreads silently through later
+arithmetic.
+
+== EXAMPLES
+@example accept
+fn average(a: Float64, b: Float64) -> Float64 errors NonFiniteFloat:
+    (a + b) / 2.0
+
+x = 1.5
+mean = x.average(2.5):
+    on NonFiniteFloat:
+        0.0
+[x * 4.0, -x, x < 2.0, 1.0e100 * 1.0e100, mean, 0.1 + 0.2]
+@caption Arithmetic, comparisons, a declared NonFiniteFloat and printing
+@value [6.0, -1.5, true, 1.0e200, 2.0, 0.30000000000000004]
+@end
+
+@example accept
+fn kind(a: Float64, b: Float64) -> NonFiniteResult:
+    a / b:
+        on NonFiniteFloat {result}:
+            return result
+    NonFiniteResult::NotANumber
+
+one = 1.0
+zero = 0.0
+[one.kind(zero), zero.kind(zero), one.kind(-1.0e-320)]
+@caption Which non-finite result each division had
+@value [NonFiniteResult::PositiveInfinity, NonFiniteResult::NotANumber, NonFiniteResult::NegativeInfinity]
+@end
+
+@example reject
+x = 1.5
+x + 1
+@caption No implicit conversion
+@error CORE SEMANTIC TYPE
+@at 2:1
+@end
+
+@example reject
+x = 1.0e300
+x * 1.0e300
+@caption A failure decided while compiling
+@error CORE SEMANTIC KNOWN-ERROR
+@at 2:1
+@end
 
 @topic concept.integer-domains
 title: Integer domains: `type Name = Int in LO..HI`

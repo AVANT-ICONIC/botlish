@@ -242,7 +242,9 @@
 # be the callee of method syntax), decided by its author; it is not a
 # directive to the compiler about a particular call.
 #
-# A handled call (EXPLICIT-ERROR-COMPLETIONS.md) is a bare call expression
+# A handled call (EXPLICIT-ERROR-COMPLETIONS.md) is a bare call expression --
+# or an arithmetic operator expression `a OP b` (OP one of + - * /), which is
+# a call of the operation its operands select (FLOAT64-MILESTONE-1.md) --
 # immediately followed by ":" and an indented block of "on NAME:" handlers,
 # in exactly the same "statement value" position an if/loop value is (the
 # right side of "=", or the value of "return"; not "break", which is never
@@ -286,14 +288,18 @@
 #   inversion    = "not" inversion | comparison
 #   comparison   = additive [ ( "==" | "!=" | "<" | "<=" | ">" | ">=" ) additive ]
 #   additive     = multiplicative { ( "+" | "-" ) multiplicative }
-#   multiplicative = unary { "*" unary }
+#   multiplicative = unary { ( "*" | "/" ) unary }
+#                  -- "/" divides floating-point values only (FLOAT64-
+#                  MILESTONE-1.md): Botlish has no integer division
 #   unary        = "-" unary | postfix
 #   postfix      = primary { "(" [ callArgs ] ")" | "." IDENT [ "(" [ callArgs ] ")" ] }
 #   callArgs     = [ expression { "," expression } ] [ "," flag { "," flag } ] [ "," ]
 #                  -- a flag (":" IDENT, glued) is only valid in this position
 #                  and only after every ordinary argument (FLAGS.md)
 #   arguments    = expression { "," expression } [ "," ]       -- list literals
-#   primary      = INT | STRING | CHAR | "true" | "false" | "unit"
+#   primary      = INT | DECIMAL | STRING | CHAR | "true" | "false" | "unit"
+#                  -- DECIMAL: DIGITS "." DIGITS [ ("e"|"E") ["+"|"-"]
+#                  DIGITS ], a decimal number (FLOAT64-MILESTONE-1.md)
 #                | IDENT { "::" IDENT } [ fieldInits ]
 #                  -- "a::b::c": member c of namespace a::b (every segment
 #                     but the last is the namespace path)
@@ -529,6 +535,7 @@ proc surface::parser::Describe {token} {
         EOF     { return "end of file" }
         IDENT   { return "name \"[dict get $token text]\"" }
         INT     { return "integer [dict get $token text]" }
+        DECIMAL { return "decimal number [dict get $token text]" }
         STRING  { return "string [dict get $token text]" }
         CHAR    { return "character [dict get $token text]" }
         default { return "\"[dict get $token text]\"" }
@@ -590,7 +597,7 @@ proc surface::parser::Program {pVar} {
         if {![dict get $p recover] || [lrange [dict get $options -errorcode] 0 1] ne {SURFACE SYNTAX}} {
             return -options $options $direct
         }
-        set direct [expr {[dict exists $p directSpan] ? [dict get $p directSpan] : ""}]
+        set direct [dict getdef $p directSpan ""]
         Synchronize p
         Failed p $first [lindex [dict get $options -errorcode] 2]
     }
@@ -1497,7 +1504,11 @@ proc surface::parser::ExternParam {pVar fn} {
                     "unknown fact \"$text\" of parameter \"$pname\" of extern c fn \"$fn\": a pointer parameter states its access (read, write) and its escape (noescape, proven noescape, captures); an unstated fact is unknown"
             }
         }
-        set factsSpan [expr {$factsSpan eq "" ? $span : [surface::ast::cover $factsSpan $span]}]
+        if {$factsSpan eq ""} {
+            set factsSpan $span
+        } else {
+            set factsSpan [surface::ast::cover $factsSpan $span]
+        }
     }
     if {[Kind p] in {.. .}} {
         FailCode [dict get [Peek p] span] EXTERN-SYNTAX \
@@ -1564,8 +1575,7 @@ proc surface::parser::Statements {pVar stop} {
             Synchronize p
         }
         Failed p $token [lindex [dict get $options -errorcode] 2]
-        set end [expr {[dict get $p last start] >= [dict get $token span start]
-            ? [dict get $p last] : [dict get $token span]}]
+        set end [if {[dict get $p last start] >= [dict get $token span start]} {dict get $p last} else {dict get $token span}]
         lappend body [surface::ast::node error [surface::ast::cover [dict get $token span] $end]]
     }
     return $body
@@ -1871,7 +1881,10 @@ proc surface::parser::ValueOrHandled {pVar} {
         StaticWithoutOperationError p
     }
     set expr [Expression p]
-    if {[Kind p] eq ":" && [dict get $expr kind] in {call methodcall}} {
+    if {[Kind p] eq ":" && ([dict get $expr kind] in {call methodcall}
+            || ([dict get $expr kind] eq "binary" && [dict get $expr op] in {+ - * /}))} {
+        # (An arithmetic operator is a call too: a floating-point one may
+        # complete with NonFiniteFloat, FLOAT64-MILESTONE-1.md.)
         return [HandledCall p $expr]
     }
     return $expr
@@ -2184,7 +2197,11 @@ proc surface::parser::FnType {pVar fn {kind fn}} {
         set token [Peek p]
         switch -- [dict get $token kind] {
             IDENT - return - errors {
-                set field [expr {[dict get $token kind] eq "IDENT" ? [dict get $token value] : [dict get $token kind]}]
+                if {[dict get $token kind] eq "IDENT"} {
+                    set field [dict get $token value]
+                } else {
+                    set field [dict get $token kind]
+                }
             }
             default {
                 Fail $token "expected a field name (args, return or errors) in the $what, found [Describe $token]"
@@ -2313,7 +2330,7 @@ proc surface::parser::Function {pVar} {
         params $params flags $flags contexts $contexts paramsSpan [SpanFrom p [dict get $open span]] \
         resultType [dict get $body resultType] resultTypeSpan [dict get $body resultTypeSpan] \
         errors [dict get $body errors] proves [dict get $body proves] body $body \
-        nomethod $nomethod nomethodSpan [expr {$nomethod ? [dict get $modifiers nomethod] : ""}] \
+        nomethod $nomethod nomethodSpan [if {$nomethod} {dict get $modifiers nomethod} else {string cat ""}] \
         resume $resume]
 }
 
@@ -2900,7 +2917,11 @@ proc surface::parser::LoopClause {pVar} {
     set name [dict get $nameToken value]
     set nameSpan [dict get $nameToken span]
     set dispatch [Peek p]
-    set dispatchWord [expr {[dict get $dispatch kind] eq "IDENT" ? [dict get $dispatch value] : ""}]
+    if {[dict get $dispatch kind] eq "IDENT"} {
+        set dispatchWord [dict get $dispatch value]
+    } else {
+        set dispatchWord ""
+    }
     switch -- $dispatchWord {
         in {
             Advance p
@@ -2939,7 +2960,11 @@ proc surface::parser::LoopCount {pVar name nameSpan direction} {
     }
     set first [LoopOperand p]
     set keywordToken [Peek p]
-    set word [expr {[dict get $keywordToken kind] eq "IDENT" ? [dict get $keywordToken value] : ""}]
+    if {[dict get $keywordToken kind] eq "IDENT"} {
+        set word [dict get $keywordToken value]
+    } else {
+        set word ""
+    }
     switch -- $word {
         to { set endKind exclusive }
         through { set endKind inclusive }
@@ -3130,7 +3155,7 @@ proc surface::parser::Additive {pVar} {
 proc surface::parser::Multiplicative {pVar} {
     upvar 1 $pVar p
     set left [Unary p]
-    while {[Kind p] eq "*"} {
+    while {[Kind p] in {* /}} {
         set op [Advance p]
         set left [Binary $op $left [Unary p]]
     }
@@ -3313,6 +3338,17 @@ proc surface::parser::Primary {pVar} {
             Advance p
             return [surface::ast::node int $span text [dict get $token value]]
         }
+        DECIMAL {
+            # A decimal literal (FLOAT64-MILESTONE-1.md): the decimal
+            # number it spells, exactly; its type is decided by lowering
+            # (surface::lower::DecimalConstant), which also says when it
+            # denotes no value -- an error where it is written.
+            if {[catch {surface::lower::DecimalConstant [dict get $token value]} message]} {
+                Fail $token $message
+            }
+            Advance p
+            return [surface::ast::node decimal $span text [dict get $token value]]
+        }
         STRING {
             Advance p
             return [surface::ast::node string $span value [dict get $token value]]
@@ -3477,7 +3513,10 @@ proc surface::parser::PatternEnd {pVar {from 0}} {
             \} - ] - ) {
                 incr depth -1
                 if {$depth == 0} {
-                    return [expr {[Kind p [expr {$i + 1}]] eq "=" ? $i : -1}]
+                    if {[Kind p [expr {$i + 1}]] eq "="} {
+                        return $i
+                    }
+                    return -1
                 }
             }
             NEWLINE - INDENT - DEDENT - EOF {
@@ -3630,7 +3669,7 @@ proc surface::parser::Pattern {pVar} {
                     }
                     [ {
                         ListDestructuringError [surface::ast::cover [dict get $target span] \
-                            [expr {[PatternEnd p] >= 0 ? [dict get [Peek p [PatternEnd p]] span] : [dict get $target span]}]]
+                            [if {[PatternEnd p] >= 0} {dict get [Peek p [PatternEnd p]] span} else {dict get $target span}]]
                     }
                     default {
                         Fail $target "expected a binding name or a nested \"\{...\}\" pattern after \"[dict get $token value]:\", found [Describe $target]"
@@ -3786,6 +3825,6 @@ proc surface::parser::StructDecl {pVar} {
     set context [dict exists $modifiers context]
     return [surface::ast::node structdecl [SpanFrom p $start] \
         name [dict get $name value] nameSpan [dict get $name span] fields $fields \
-        opaque $opaque opaqueSpan [expr {$opaque ? [dict get $modifiers opaque] : ""}] \
-        context $context contextSpan [expr {$context ? [dict get $modifiers context] : ""}]]
+        opaque $opaque opaqueSpan [if {$opaque} {dict get $modifiers opaque} else {string cat ""}] \
+        context $context contextSpan [if {$context} {dict get $modifiers context} else {string cat ""}]]
 }

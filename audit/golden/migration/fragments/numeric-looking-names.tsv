@@ -1,0 +1,2 @@
+old_file	old_test	suite	new_test	category	outcome	old_backends	new_backends	class	also	static	handler	api	verbosity	strength	old_lines	new_lines	mutants	notes	subsystem	status	tcl_retained	tcl_layer	freeze	tags
+tests/numeric-looking-names.test	nl-the-reported-program	numeric-looking-names.bot	nl-the-reported-program	names	value	interp, compile, cranelift-generic, cranelift (sourceAgree: all must agree)	interp, compile, cranelift-generic, cranelift	DIRECT	-	convention	no	simple	similar	equal	2	8	-	The Tcl program verbatim.	names	MIGRATED	-	-	-	MULTI-BACKEND

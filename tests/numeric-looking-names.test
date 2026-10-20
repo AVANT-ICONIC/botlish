@@ -1,0 +1,349 @@
+# numeric-looking-names.test -- names Tcl would read as numbers.
+#
+# Tcl's `expr` converts its result to a number when the result is a string
+# that looks like one: `expr {$c ? $name : ""}` gives `Inf` for the name `inf`
+# or `infinity` and raises a domain error for `nan` (in any letter case, and
+# so for a one-element list of such a name). Botlish names are strings in
+# the compiler, so a function, binding, field, type, enum case, error or
+# module named `nan`, `inf` or `infinity` crashed the compiler or was
+# silently renamed wherever a ternary selected it (FLOAT64-MILESTONE-1.md,
+# "Remaining limitations"). The compiler therefore never selects a
+# non-numeric value with `expr ?:`: it writes `if` (whose result is never
+# converted) or `dict getdef`. This file checks that rule on the sources and
+# checks programs that use such names, against the same programs with other
+# names of the same length and letter case.
+
+source [file join [file dirname [file normalize [info script]]] helpers.tcl]
+source [file join $::projectRoot surface surface.tcl]
+source [file join $::projectRoot native native.tcl]
+
+testConstraint nativeBuilt [expr {![catch {native::binary}]}]
+
+# ---------------------------------------------------------------------------
+# The rule on the sources: no `expr` ternary may select a value that can be
+# a non-numeric string.
+
+namespace eval nl {}
+
+# The index of the "}" matching the "{" at START of TEXT, or -1.
+proc nl::Matching {text start} {
+    set depth 0
+    set n [string length $text]
+    for {set i $start} {$i < $n} {incr i} {
+        set c [string index $text $i]
+        if {$c eq "\\"} {
+            incr i
+            continue
+        }
+        if {$c eq "\{"} {
+            incr depth
+        } elseif {$c eq "\}"} {
+            incr depth -1
+            if {$depth == 0} {
+                return $i
+            }
+        }
+    }
+    return -1
+}
+
+# The values a top-level ternary chain of the expression BODY can select
+# (every branch after a "?" or a ":"), or {} if BODY is no ternary.
+proc nl::Values {body} {
+    set parts {}
+    set depth 0
+    set quoted 0
+    set current ""
+    set n [string length $body]
+    for {set i 0} {$i < $n} {incr i} {
+        set c [string index $body $i]
+        if {$c eq "\\"} {
+            append current $c [string index $body [incr i]]
+            continue
+        }
+        if {$quoted} {
+            append current $c
+            if {$c eq "\""} {
+                set quoted 0
+            }
+            continue
+        }
+        if {$c eq "\""} {
+            set quoted 1
+        } elseif {$c in {( \[ \{}} {
+            incr depth
+        } elseif {$c in {) \] \}}} {
+            incr depth -1
+        } elseif {$c in {? :} && $depth == 0
+                && !($c eq ":" && ([string index $body [expr {$i + 1}]] eq ":" || [string index $current end] eq ":"))} {
+            lappend parts [string trim $current]
+            set current ""
+            continue
+        }
+        append current $c
+    }
+    lappend parts [string trim $current]
+    if {[llength $parts] < 3} {
+        return {}
+    }
+    # C1 ? V1 : C2 ? V2 : ... : ELSE -- a value after each "?", and the last.
+    set values {}
+    for {set k 1} {$k < [llength $parts] - 1} {incr k 2} {
+        lappend values [lindex $parts $k]
+    }
+    lappend values [lindex $parts end]
+    return $values
+}
+
+# 1 if the expression VALUE (one branch of a ternary) may be a string that is
+# not numeric by construction: a variable, a command result (but a count's),
+# an interpolation with no non-numeric constant part, or a constant that
+# reads as a number.
+proc nl::MayBeString {value} {
+    set v [string trim $value]
+    while {[string index $v 0] eq "(" && [string index $v end] eq ")"} {
+        set v [string trim [string range $v 1 end-1]]
+    }
+    if {$v eq "" || [string is double -strict $v] || $v in {true false yes no}} {
+        return 0
+    }
+    if {[regexp {^"[^$\[\\]*"$} $v] || [regexp {^\{[^$\[]*\}$} $v]} {
+        return [string is double -strict [string range $v 1 end-1]]
+    }
+    if {$v in {{[continue]} {[break]}}} {
+        return 0
+    }
+    if {[regexp {^\[(llength|expr|incr|string (length|first|last|is|compare|equal|match)|dict (size|exists)|info exists|regexp)\M} $v]
+            || ([regexp {^\[lsearch\M} $v] && ![regexp {\-inline} $v])} {
+        return 0
+    }
+    set nested [Values $v]
+    if {$nested ne {}} {
+        # A ternary of its own: what it may select.
+        foreach value $nested {
+            if {[MayBeString $value]} {
+                return 1
+            }
+        }
+        return 0
+    }
+    if {[regexp {^\$(\{[^\{\}]+\}|(::)?[A-Za-z0-9_]+(::[A-Za-z0-9_]+)*(\([^()]*\))?)$} $v]} {
+        return 1
+    }
+    if {[string index $v 0] eq "\[" && [WholeBracket $v]} {
+        return 1
+    }
+    if {[string index $v 0] eq "\"" && [string index $v end] eq "\""} {
+        set constant [regsub -all {\$\{[^\}]*\}|\$[A-Za-z0-9_:]+(\([^)]*\))?|\[[^\]]*\]} [string range $v 1 end-1] ""]
+        return [expr {![regexp {[g-zG-Z_:/]} $constant]}]
+    }
+    # An expression: arithmetic, comparisons, functions -- a number.
+    return 0
+}
+
+# 1 if TEXT is one [...] command substitution, nothing after it.
+proc nl::WholeBracket {text} {
+    set depth 0
+    set n [string length $text]
+    for {set i 0} {$i < $n} {incr i} {
+        set c [string index $text $i]
+        if {$c eq "\\"} {
+            incr i
+            continue
+        }
+        if {$c eq "\["} {
+            incr depth
+        } elseif {$c eq "\]"} {
+            incr depth -1
+            if {$depth == 0} {
+                return [expr {$i == $n - 1}]
+            }
+        }
+    }
+    return 0
+}
+
+# "FILE:LINE: TEXT" of every `expr` ternary of the compiler's sources that
+# may select a string (MayBeString), skipping comments and the Tcl code the
+# Tcl compiler emits as text.
+proc nl::StringTernaries {} {
+    set found {}
+    set files [concat [glob -directory [file join $::projectRoot core] *.tcl] \
+        [glob -directory [file join $::projectRoot hir] *.tcl] \
+        [glob -directory [file join $::projectRoot surface] *.tcl] \
+        [glob -directory [file join $::projectRoot compiler] *.tcl] \
+        [glob -directory [file join $::projectRoot native] *.tcl] \
+        [list [file join $::projectRoot compilerpedia compilerpedia.tcl] [file join $::projectRoot main.tcl]]]
+    foreach path [lsort $files] {
+        set channel [open $path]
+        set text [read $channel]
+        close $channel
+        set start 0
+        while {[regexp -indices -start $start {expr \{} $text match]} {
+            set open [lindex $match 1]
+            set close [Matching $text $open]
+            set start [expr {$open + 1}]
+            if {$close < 0} {
+                continue
+            }
+            set lineStart [expr {[string last \n $text $open] + 1}]
+            set line [string range $text $lineStart [expr {[string first \n $text $open] - 1}]]
+            if {[string match {#*} [string trimleft $line]] || [string match {*Emit *} $line]
+                    || [string index $text [expr {[lindex $match 0] - 1}]] eq "\\"
+                    || [string range $text [expr {[lindex $match 0] - 2}] [expr {[lindex $match 0] - 1}]] eq "\\\["} {
+                continue
+            }
+            foreach value [Values [regsub -all {\\\n\s*} [string range $text [expr {$open + 1}] [expr {$close - 1}]] " "]] {
+                if {[MayBeString $value]} {
+                    set number [expr {[regexp -all \n [string range $text 0 $open]] + 1}]
+                    lappend found "[file tail [file dirname $path]]/[file tail $path]:$number: [string trim $line]"
+                    break
+                }
+            }
+        }
+    }
+    return $found
+}
+
+test nl-no-string-ternary {the compiler never selects a value that may be a string with expr's ?:, which would read a name such as inf or nan as a number: it writes if or dict getdef} -body {
+    nl::StringTernaries
+} -result {}
+
+test nl-the-hazard {the Tcl behavior the rule avoids: expr's result is converted to a number when it looks like one, if's is not} -body {
+    list [expr {1 ? "inf" : ""}] [catch {expr {1 ? "nan" : ""}}] [if {1} {string cat inf} else {string cat ""}] \
+        [nl::MayBeString {$name}] [nl::MayBeString {"${ns}::$name"}] [nl::MayBeString {$n + 1}] [nl::MayBeString {"inf"}]
+} -result {Inf 1 inf 1 0 0 1}
+
+# ---------------------------------------------------------------------------
+# Programs with such names. Each program is a template: @1 @2 @3 are three
+# names, @C1 @C2 @C3 their title-case forms. It is compiled with the
+# numeric-looking names and with other names of the same lengths and letter
+# case; its outcome, those names mapped back, must be the same.
+
+# The outcome of program TEXT (with module files FILES, NAME BODY ...) in the
+# tcltest temporary directory: {rejected {CODE MESSAGE ...}} or the warnings,
+# the value on each of BACKENDS and the value of the HIR read back from HIR
+# interchange.
+proc nl::Outcome {text files backends} {
+    set dir [makeDirectory nl-program]
+    foreach {name body} $files {
+        makeFile $body $name $dir
+    }
+    set main [makeFile $text main.bot $dir]
+    set failed [catch {surface::readProgramFile $main -warnings default -warning-channel "" -cache ""} hir options]
+    file delete -force $dir
+    if {$failed} {
+        if {![dict exists $options -diagnostics]} {
+            return [list crash [dict get $options -errorcode] [lindex [split $hir \n] 0]]
+        }
+        return [list rejected [lmap d [dict get $options -diagnostics] {
+            list [dict get $d errorcode] [regsub {^\S*main\.bot:} [dict get $d message] main.bot:]
+        }]]
+    }
+    set result [list warnings [lmap w [hir::warnings::of $hir] {list [dict get $w code] [dict get $w message]}]]
+    foreach backend $backends {
+        lappend result $backend [lrange [outcomeUnderHir $backend $hir] 0 1]
+    }
+    set back [hir::interchange::decode [hir::interchange::encode $hir]]
+    lappend result interchange [lrange [outcomeUnderHir interp $back] 0 1]
+    return $result
+}
+
+# The template TEMPLATE with the names NAMES.
+proc nl::Fill {template names} {
+    set map {}
+    foreach placeholder {1 2 3} name $names {
+        lappend map @C$placeholder [string totitle $name] @$placeholder $name
+    }
+    return [string map $map $template]
+}
+
+# Names of the lengths and letter case of NAMES, no number to Tcl.
+proc nl::Safe {names} {
+    return [lmap name $names tag {a b c} {
+        set base [string range "qx${tag}qx${tag}qx${tag}" 0 [expr {[string length $name] - 1}]]
+        set safe ""
+        foreach c [split $name ""] b [split $base ""] {
+            if {[string is upper $c]} {
+                append safe [string toupper $b]
+            } else {
+                append safe $b
+            }
+        }
+        set safe
+    }]
+}
+
+# The programs of PROGRAMS (LABEL TEMPLATE FILES ...) whose outcome with the
+# numeric-looking names differs from theirs with safe names, or crashes, on
+# BACKENDS: {LABEL NAMES GOT WANTED} each.
+proc nl::Differences {programs backends} {
+    set differences {}
+    foreach {label template files} $programs {
+        foreach names {{nan inf infinity} {NaN Inf Infinity} {INFINITY NAN INF}} {
+            set safe [Safe $names]
+            set fill {apply {{files names} {
+                set out {}
+                foreach {name body} $files {
+                    lappend out [nl::Fill $name $names] [nl::Fill $body $names]
+                }
+                return $out
+            }}}
+            set got [Outcome [Fill $template $names] [{*}$fill $files $names] $backends]
+            set wanted [Outcome [Fill $template $safe] [{*}$fill $files $safe] $backends]
+            set map {}
+            foreach s $safe n $names {
+                lappend map [string totitle $s] [string totitle $n] $s $n
+            }
+            set wanted [string map $map $wanted]
+            if {$got ne $wanted || [lindex $got 0] eq "crash"} {
+                lappend differences [list $label $names $got $wanted]
+            }
+        }
+    }
+    return $differences
+}
+
+set ::nlPrograms {
+functions "fn @1(x):\n    x + 1\nfn @2(@3: int) -> int:\n    @1(@3) * 2\n@2(3)\n" {}
+nested "fn mk(@2):\n    fn @1(x):\n        x + @2\n    @1\nf = mk(2)\nf(3)\n" {}
+locals "@1 = 1\n@2 = @1 + 1\n@3 = \[@1, @2\]\n@3\n" {}
+struct "struct @C1:\n    @1: int\n    @2: str\nx = @C1 {@1: 1, @2: \"a\"}\n\[x.@1, x.@2\]\n" {}
+destructure "struct P:\n    @1: int\n    @2: int\np = P {@1: 1, @2: 2}\n{@1, @2: @3} = p\n\[@1, @3\]\n" {}
+enum "enum @C1:\n    @C2, @C3\nx = @C1::@C2\n\[x, x == @C1::@C3\]\n" {}
+error "error @C1:\n    @1: int\nfn f(n: int) -> int errors @C1:\n    if n < 0:\n        fail @C1 {@1: n}\n    n\nfn g(n: int) -> int:\n    f(n):\n        on @C1 {@1}:\n            @1\ng(-5)\n" {}
+refined "type @C1 = Int in 0..10\nfn f(x: @C1) -> int:\n    x + 1\nf(3)\n" {}
+method "import list\nfn @1(xs: List\[int\]) -> int:\n    list::length(xs)\nxs = \[1\]\nxs.@1()\n" {}
+module "import @1\n@1::@2(3)\n" {@1.bot "fn @2(x: int) -> int:\n    x + 1\n"}
+module-types "import @1\nx = @1::@C2 {@3: 4}\ny = @1::@C3::@C1\n\[x.@3, y\]\n" {@1.bot "struct @C2:\n    @3: int\nenum @C3:\n    @C1, Other\n"}
+unbound "fn f(x):\n    @1 + x\nf(1)\n" {}
+unhandled "error @C1\nfn @2(n: int) -> int errors @C1:\n    fail @C1\nfn @3(n: int) -> int:\n    @2(n)\n@3(1)\n" {}
+type-error "fn @1(@2: int) -> int:\n    @2\n@1(\"x\")\n" {}
+duplicate "@1 = 1\n@1 = 2\n@1\n" {}
+arity "fn @1(a, b):\n    a\n@1(1)\n" {}
+same-return "fn @1(x: int) -> int:\n    if x > 0:\n        return 5\n    5\n@1(1)\n" {}
+trait "trait @C1:\n    fn @2(value: @C1) -> str\nstruct @C3:\n    @3: str\nfn @2(value: @C3) -> str:\n    value.@3\nfn describe(value: @C1) -> str:\n    value.@2()\ndescribe(@C3 {@3: \"Alice\"})\n" {}
+refinement "import str\nrefined type @C1 = str\nfn @2?(s: str) -> bool proves s: @C1:\n    str::length(s) > 0\nfn @3(s: @C1) -> str:\n    s.append_char('!')\nfn safe(s: str) -> str:\n    if @2?(s):\n        return @3(s)\n    \"(empty)\"\n\[safe(\"hi\"), safe(\"\")\]\n" {}
+coroutine "import coroutine\nfn @1(@2: int) -> int:\n    loop @3 from 0 to @2:\n        yield @3\n    -1\ncoroutine {step, first} = @1(3)\na = step()\nb = step()\n\[first, a, b, coroutine::done?(step)\]\n" {}
+flags "fn @1(n: int, flags :@2, :@3) -> str:\n    if @2 and @3:\n        return \"both\"\n    if @2:\n        return \"one\"\n    \"none\"\n\[@1(1), @1(1, :@2), 1.@1(:@2, :@3)\]\n" {}
+static "import compiler\nfn @1() -> int errors compiler::CompilerError:\n    static compile:\n        @2 + 1\nr = @1():\n    on compiler::CompilerError {code, primary}:\n        if code == compiler::DiagnosticCode::Unbound:\n            primary.line\n        else:\n            0\nr\n" {}
+layout "import binary\nimport abi::bytes\nimport byte\nlayout @C1:\n    size 8\n    align 4\n    field @2: binary::U32 at 0\n    field @3: binary::I16 at 4\nbinary::layout_length(@C1)\n" {}
+opaque "opaque struct @C1:\n    @2: int\nfn make(n: int) -> @C1:\n    @C1 {@2: n}\nfn @3(t: @C1) -> int:\n    t.@2\nmake(4).@3()\n" {}
+payload-rename "error @C1:\n    @2: int\n    @3: str\nfn f(n: int) -> int errors @C1:\n    if n < 0:\n        fail @C1 {@2: n, @3: \"@1\"}\n    n\nfn g(n: int) -> list:\n    f(n):\n        on @C1 {@2: @1, @3}:\n            return \[@1, @3\]\n    \[\]\ng(-2)\n" {}
+float-names "fn @1(@2: Float64) -> Float64 errors NonFiniteFloat:\n    @2 / 2.0\nr = @1(3.0):\n    on NonFiniteFloat {result: @3}:\n        0.0\nr\n" {}
+string-text "import str\n@1 = \"@2\"\n@3 = \" 12 \"\n\[@1, @3, \"0x10\", \"1e3\", \"1_000\", \"+5\", str::concat(@1, @3), str::length(@3), @1 == \"@2\", \"inf\" == \"Infinity\", \"nan\" == \"nan\"\]\n" {}
+}
+
+test nl-names-front-end {programs that name functions, parameters, locals, fields, structs, enums and cases, errors and payload fields, types, traits, refinements, coroutines, flags, layouts, modules and static blocks nan, inf or infinity (any letter case) compile, warn and are rejected exactly like the same programs with other names} -body {
+    nl::Differences $::nlPrograms interp
+} -result {}
+
+test nl-names-backends {the same programs run alike on every backend, and through HIR interchange} -constraints nativeBuilt -body {
+    nl::Differences $::nlPrograms {compile cranelift-generic cranelift}
+} -result {}
+
+test nl-the-reported-program {a function named nan, the program that used to crash the compiler} -body {
+    sourceAgree "fn nan(x):\n    x + 1\nnan(1)\n"
+} -result {value 2}
+
+cleanupTests

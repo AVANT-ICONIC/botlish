@@ -29,6 +29,9 @@
 #              exactly one short type name
 #   suite      body (statements)                 an indented block
 #   int        text (canonical decimal digits)
+#   decimal    text (the decimal number a decimal literal spells, exactly as
+#              written but with a lowercase exponent marker: `1.50`, `2.5e-3`;
+#              its type is decided by lowering, FLOAT64-MILESTONE-1.md)
 #   string     value (the decoded text)
 #   char       text (canonical decimal codepoint of the one Unicode scalar
 #              value the literal decoded to -- UnicodeChar, never String;
@@ -224,7 +227,8 @@
 #              HIR's COROUTINE-RHS-NOT-YIELDING). Only the parser and the
 #              printer know it by this name: lowering turns it into the
 #              construction and the eager start (surface/lower.tcl)
-#   handledcall  call (a `call` or `methodcall` node), handlers (a list of {name nameSpan
+#   handledcall  call (a `call` or `methodcall` node, or a `binary` node of an
+#              arithmetic operator + - * /), handlers (a list of {name nameSpan
 #              body binding bindingSpan pattern} dicts, one per "on NAME:"
 #              clause in written order; body a suite; binding the name the
 #              whole payload is bound to in "on NAME details:", else "";
@@ -327,7 +331,10 @@ proc surface::ast::assignIds {program} {
 }
 
 proc surface::ast::Child {parent role} {
-    return [expr {$parent eq "" ? $role : "$parent/$role"}]
+    if {$parent eq ""} {
+        return $role
+    }
+    return "$parent/$role"
 }
 
 proc surface::ast::Statements {statements parent} {
@@ -538,7 +545,10 @@ proc surface::ast::Children {node} {
         methodcall         { return [concat [list [dict get $node receiver]] [dict get $node args]] }
         binary - logical   { return [list [dict get $node left] [dict get $node right]] }
         bind - return - break - destructure - coroutinebind {
-            return [expr {[dict get $node value] eq "" ? {} : [list [dict get $node value]]}]
+            if {[dict get $node value] eq ""} {
+                return {}
+            }
+            return [list [dict get $node value]]
         }
         with - yield       { return [list [dict get $node value]] }
         function - static  { return [list [dict get $node body]] }
@@ -664,6 +674,7 @@ proc surface::ast::Expr {node show} {
     set at [At $node $show]
     switch -- [dict get $node kind] {
         int     { return "(int [dict get $node text])$at" }
+        decimal { return "(decimal [dict get $node text])$at" }
         char    { return "(char [dict get $node text])$at" }
         string  { return "(str [Quote [dict get $node value]])$at" }
         bool    { return "(bool [dict get $node value])$at" }
@@ -875,7 +886,7 @@ proc surface::ast::Statement {node indent show linesVar} {
             foreach r [dict get $node requirements] {
                 set params [lmap pair [dict get $r params] {
                     lassign $pair name _ type
-                    expr {$type eq "" ? $name : "$name:[showType $type]"}
+                    if {$type eq ""} {set name} else {string cat "$name:[showType $type]"}
                 }]
                 set line "${pad}    fn [dict get $r name] ([join $params { }])"
                 if {[dict get $r resultType] ne ""} {
@@ -939,7 +950,7 @@ proc surface::ast::Statement {node indent show linesVar} {
         function {
             set params [lmap pair [dict get $node params] {
                 lassign $pair name _ type
-                expr {$type eq "" ? $name : "$name:[showType $type]"}
+                if {$type eq ""} {set name} else {string cat "$name:[showType $type]"}
             }]
             # Explicit join, not a bare "($params)" interpolation: a typed
             # parameter's label can now contain "[" "]" (an applied type,

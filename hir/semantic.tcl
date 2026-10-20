@@ -248,7 +248,7 @@ proc hir::semantic::RecordEnv {hir outer e self selfType} {
     }
     set env [dict create]
     foreach b [dict get $hir exprs $e captures] {
-        dict set env $b [expr {$b eq $self ? $selfType : [hir::types::BindingType $hir $outer $b]}]
+        dict set env $b [if {$b eq $self} {set selfType} else {hir::types::BindingType $hir $outer $b}]
     }
     if {[dict exists $state envs $e] && [dict get $state envs $e] ne $env && [dict exists $state instsOf $e]} {
         # The creation environment changed (a later attempt of an enclosing
@@ -305,7 +305,11 @@ proc hir::semantic::Call {hir ctx e block argTypes blockResult} {
             set x [hir::traits::EntryView $t $d]
             set generic [hir::traits::AbstractView $d $block $index]
         } elseif {$d ne {}} {
-            set x [expr {[hir::types::subtype $t $d] && ![hir::types::MentionsMutable $d] ? $t : $d}]
+            if {[hir::types::subtype $t $d] && ![hir::types::MentionsMutable $d]} {
+                set x $t
+            } else {
+                set x $d
+            }
             if {[hir::signatures::inferredTrusted $hir $block $index]
                     && [hir::signatures::CallableAdmits $t $d]} {
                 # A coroutine handle supplied for an untyped parameter the
@@ -319,7 +323,11 @@ proc hir::semantic::Call {hir ctx e block argTypes blockResult} {
             # A view passed where nothing is declared is only its concrete
             # value: no trait view crosses an untyped boundary (TRAITS.md,
             # "any").
-            set x [expr {[hir::types::IsTrait $t] ? "any" : $t}]
+            if {[hir::types::IsTrait $t]} {
+                set x "any"
+            } else {
+                set x $t
+            }
             set generic any
         }
         incr index
@@ -334,7 +342,7 @@ proc hir::semantic::Call {hir ctx e block argTypes blockResult} {
         return $blockResult
     }
     set key [list $block $entry]
-    set caller [expr {[dict exists $ctx inst] ? [dict get $ctx inst] : "generic"}]
+    set caller [dict getdef $ctx inst "generic"]
     if {$caller eq "generic" && [dict get $state queue] ne {} && [dict get $state stack] eq {}} {
         # Instances whose environment changed since the last request are
         # settled before this walk reads any answer.
@@ -378,7 +386,7 @@ proc hir::semantic::Call {hir ctx e block argTypes blockResult} {
             # that gives an affine argument (AFFINE-VALUES.md), keyed by its
             # affine entry types.
             set entry [lmap x $entry g $generics {
-                expr {[hir::types::IsView $x] || [hir::types::IsAffine $x] ? $x : $g}
+                if {[hir::types::IsView $x] || [hir::types::IsAffine $x]} {set x} else {set g}
             }]
             set key [list $block $entry]
             set reason ""
@@ -436,7 +444,7 @@ proc hir::semantic::PoisonedCall {ctx e} {
     if {$state eq ""} {
         return 0
     }
-    set callKey [list [expr {[dict exists $ctx inst] ? [dict get $ctx inst] : "generic"}] $e]
+    set callKey [list [dict getdef $ctx inst "generic"] $e]
     if {![dict exists $state calls $callKey]} {
         return 0
     }
@@ -667,7 +675,11 @@ proc hir::semantic::Snapshot {scratch id} {
             }
             set v [dict get $node $f]
             if {$f in $typeFields} {
-                set v [expr {$v eq "" ? "" : [dict get $scratch types $v]}]
+                if {$v eq ""} {
+                    set v ""
+                } else {
+                    set v [dict get $scratch types $v]
+                }
             }
             dict set rec $f $v
         }
@@ -691,7 +703,7 @@ proc hir::semantic::View {hir id} {
     dict for {e rec} [dict get $snapshot exprs] {
         dict for {f v} $rec {
             if {$f in $typeFields} {
-                dict set hir exprs $e $f [expr {$v eq "" ? "" : [hir::types::intern hir $v]}]
+                dict set hir exprs $e $f [if {$v eq ""} {string cat ""} else {hir::types::intern hir $v}]
             } else {
                 dict set hir exprs $e $f $v
             }
@@ -717,7 +729,7 @@ proc hir::semantic::InstanceOf {hir e} {
     if {![dict exists $hir semantic]} {
         return ""
     }
-    set ctx [expr {[dict exists $hir semanticContext] ? [dict get $hir semanticContext] : "generic"}]
+    set ctx [dict getdef $hir semanticContext "generic"]
     set key [list $ctx $e]
     if {[dict exists $hir semantic calls $key]} {
         return [dict get $hir semantic calls $key]
@@ -889,7 +901,10 @@ proc hir::semantic::Derived {hir id e own} {
 # The source name of the function of instance ID.
 proc hir::semantic::Label {hir id} {
     set name [CallableName $hir [dict get $hir semantic instances $id block]]
-    return [expr {$name eq "" ? "this function" : $name}]
+    if {$name eq ""} {
+        return "this function"
+    }
+    return $name
 }
 
 # "x : MutableArray[str], y : int": the concrete environment of instance ID.
@@ -982,7 +997,7 @@ proc hir::semantic::census {hir} {
         return {}
     }
     set s [dict get $hir semantic]
-    set status [expr {[dict exists $s status] ? [dict get $s status] : {}}]
+    set status [dict getdef $s status {}]
     set rows {}
     foreach id [dict get $s used] {
         set inst [dict get $s instances $id]

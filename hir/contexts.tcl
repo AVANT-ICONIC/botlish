@@ -277,9 +277,9 @@ proc hir::contexts::TraitImplementation {req w owner} {
     if {[dict get $info kind] ne "block"} {
         return [dict create ok 0 reason "$qualified is not a function declaration (a value binding cannot implement a requirement)" found ""]
     }
-    set params [lmap t [dict get $info params] {expr {$t eq {} ? "any" : $t}}]
+    set params [lmap t [dict get $info params] {if {$t eq {}} {string cat "any"} else {set t}}]
     set declared [dict get $info result]
-    set actual [hir::types::MakeFn $params [expr {$declared eq {} ? "any" : $declared}] [dict get $info errors]]
+    set actual [hir::types::MakeFn $params [if {$declared eq {}} {string cat "any"} else {set declared}] [dict get $info errors]]
     set found [ShowImplementation $qualified $info]
     if {[dict get $info flags] ne {}} {
         return [dict create ok 0 reason "$qualified declares flags ([join [lmap f [dict get $info flags] {string cat : $f}] {, }]): implementations with flags are not supported yet" found $found]
@@ -310,7 +310,7 @@ proc hir::contexts::TraitImplementation {req w owner} {
 # WriteFailed": an implementation candidate's declared signature, its context
 # section included.
 proc hir::contexts::ShowImplementation {qualified info} {
-    set parts [lmap t [dict get $info params] {expr {$t eq {} ? "any" : [hir::types::show $t]}}]
+    set parts [lmap t [dict get $info params] {if {$t eq {}} {string cat "any"} else {hir::types::show $t}}]
     if {[dict get $info contexts] ne {}} {
         lappend parts "context [join [lmap c [dict get $info contexts] {dict get $c context}] {, }]"
     }
@@ -719,7 +719,7 @@ proc hir::contexts::verify {hirVar} {
     # program-wide TRAIT -> WITNESS those selections agree on.
     set selections [dict create]
     set selected [dict create]
-    set topCalls [expr {[dict exists $calls ""] ? [dict get $calls ""] : {}}]
+    set topCalls [dict getdef $calls "" {}]
     # The calls of each root's region, in pre-order.
     set callsOfRoot [dict create]
     foreach c $topCalls {
@@ -1033,7 +1033,7 @@ proc hir::contexts::ChainLines {hir b id reasons {continued 0}} {
     set first [expr {!$continued}]
     while {$b ne "" && $b ni $seen} {
         lappend seen $b
-        lappend lines [expr {$first ? "    [BlockName $hir $b]" : "     -> [BlockName $hir $b]"}]
+        lappend lines [if {$first} {string cat "    [BlockName $hir $b]"} else {string cat "     -> [BlockName $hir $b]"}]
         set first 0
         if {![dict exists $reasons $b $id]} {
             break
@@ -1120,7 +1120,7 @@ proc hir::contexts::summary {hir} {
 #
 # "" when the program declares no context trait.
 proc hir::contexts::TraitSummary {hir} {
-    set source [expr {[dict exists $hir traitSource] ? [dict get $hir traitSource] : $hir}]
+    set source [dict getdef $hir traitSource $hir]
     if {![dict exists $source traits]} {
         return ""
     }
@@ -1151,7 +1151,7 @@ proc hir::contexts::TraitSummary {hir} {
         }
     }
     foreach b [dict get $source contexts blocks] {
-        set ids [lmap id [required $source $b] {expr {[isTrait $id] ? $id : [continue]}}]
+        set ids [lmap id [required $source $b] {if {[isTrait $id]} {set id} else {continue}}]
         if {$ids eq {}} continue
         lappend lines "source-function [BlockName $source $b] $b direct-contexts ([join [direct $source $b] {, }]) required-contexts ([join [required $source $b] {, }])"
     }

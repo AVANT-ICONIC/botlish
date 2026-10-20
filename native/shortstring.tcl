@@ -190,7 +190,11 @@ proc native::shortstr::Join {a b} {
     if {$a eq $b} { return $a }
     lassign $a alo ahi aasc aknown
     lassign $b blo bhi basc bknown
-    set known [expr {$aknown ne "" && $aknown eq $bknown ? $aknown : ""}]
+    if {$aknown ne "" && $aknown eq $bknown} {
+        set known $aknown
+    } else {
+        set known ""
+    }
     return [Mk [expr {min($alo, $blo)}] [expr {max($ahi, $bhi)}] [expr {$aasc && $basc}] $known]
 }
 
@@ -471,10 +475,14 @@ proc native::shortstr::plan {hir spec ranges enabled {blockEscape 1} {constructi
 # trailing parameter) are tagged.
 proc native::shortstr::params {plan id n} {
     set out {}
-    set kinds [expr {[dict exists $plan $id] ? [dict get $plan $id params] : {}}]
+    if {[dict exists $plan $id]} {
+        set kinds [dict get $plan $id params]
+    } else {
+        set kinds {}
+    }
     for {set i 0} {$i < $n} {incr i} {
         set k [lindex $kinds $i]
-        lappend out [expr {$k in {ascii short} ? $k : ""}]
+        lappend out [if {$k in {ascii short}} {set k} else {string cat ""}]
     }
     return $out
 }
@@ -485,7 +493,10 @@ proc native::shortstr::result {plan id} {
         return ""
     }
     set k [dict get $plan $id result]
-    return [expr {$k in {ascii short} ? $k : ""}]
+    if {$k in {ascii short}} {
+        return $k
+    }
+    return ""
 }
 
 # 1 if instance ID's canonical function has any short-String position.
@@ -561,7 +572,11 @@ proc native::shortstr::ApplyDemand {plan} {
         set instance [dict get $Spec instances $id]
         set block [dict get $instance block]
         set h [View $id]
-        set body [expr {$block eq "program" ? [hir::roots $h] : [hir::get $h $block body]}]
+        if {$block eq "program"} {
+            set body [hir::roots $h]
+        } else {
+            set body [hir::get $h $block body]
+        }
         set tail [expr {$block eq "program" ? "tagged" : [info exists SlotCand(R:$id)] ? "slot R:$id" : "tagged"}]
         DemandBody $id $body $tail
     }
@@ -622,7 +637,7 @@ proc native::shortstr::DemandBody {id body tail} {
     set i 0
     foreach e $body {
         incr i
-        DemandWalk $id $e [expr {$i < $n ? "discard" : $tail}]
+        DemandWalk $id $e [if {$i < $n} {string cat "discard"} else {set tail}]
     }
 }
 
@@ -733,7 +748,7 @@ proc native::shortstr::DemandWalk {id e ctx} {
                 }
             } else {
                 set calls [dict get $Spec instances $id calls]
-                set callee [expr {[dict exists $calls $e] ? [dict get $calls $e] : ""}]
+                set callee [dict getdef $calls $e ""]
                 # A call lowering turns into a companion (a String region)
                 # passes tagged arguments and yields no scalar result.
                 variable CallTagged
@@ -1215,7 +1230,7 @@ proc native::shortstr::Production {id e} {
             if {$b ne "" && [dict get [hir::binding $h $b] kind] eq "param"} {
                 return "parameter [dict get [hir::binding $h $b] name]"
             }
-            return "alias of [expr {$b eq "" ? "?" : [dict get [hir::binding $h $b] name]}]"
+            return "alias of [if {$b eq ""} {string cat "?"} else {dict get [hir::binding $h $b] name}]"
         }
         bind { return [Production $id [hir::get $h $e value]] }
         if { return "branch join" }
@@ -1285,14 +1300,14 @@ proc native::shortstr::UseWalk {id e ctx usesVar} {
                 }
             } else {
                 set calls [dict get $Spec instances $id calls]
-                set callee [expr {[dict exists $calls $e] ? [dict get $calls $e] : ""}]
+                set callee [dict getdef $calls $e ""]
                 set k 0
                 foreach a $args {
                     if {$callee ne "" && [dict exists $Plan $callee]
                             && [lindex [dict get $Plan $callee params] $k] in {short ascii}} {
                         UseWalk $id $a "argument $k of [Label $callee] -> scalar" uses
                     } else {
-                        UseWalk $id $a "argument $k of [expr {$callee eq "" ? "a dynamic call" : [Label $callee]}] -> materialize" uses
+                        UseWalk $id $a "argument $k of [if {$callee eq ""} {string cat "a dynamic call"} else {Label $callee}] -> materialize" uses
                     }
                     incr k
                 }
@@ -1338,7 +1353,11 @@ proc native::shortstr::UsesOf {id} {
     set block [dict get $instance block]
     set uses [dict create]
     set short [expr {[dict exists $Plan $id] && [dict get $Plan $id result] in {short ascii}}]
-    set body [expr {$block eq "program" ? [hir::roots $h] : [hir::get $h $block body]}]
+    if {$block eq "program"} {
+        set body [hir::roots $h]
+    } else {
+        set body [hir::get $h $block body]
+    }
     set n [llength $body]
     set i 0
     foreach e $body {
@@ -1370,13 +1389,13 @@ proc native::shortstr::explain {id} {
                 reason [dict get $p paramReasons] fact [dict get $p paramFacts] {
             set name [dict get [hir::binding $h $b] name]
             append out "    $name:\n"
-            append out "      semantic type: [expr {$key eq "str" ? "String" : [hir::specialize::ShowKey $key]}]\n"
+            append out "      semantic type: [if {$key eq "str"} {string cat "String"} else {hir::specialize::ShowKey $key}]\n"
             if {$key eq "str"} {
                 append out "      proven character length: [FactRange $fact]\n"
                 append out "      proven ASCII: [FactAscii $fact]\n"
                 append out "      eligible representation: [TierName [Tier $fact]]\n"
             }
-            append out "      ABI [expr {$kind in {short ascii} ? [TierName $kind] : "tagged ($reason)"}]\n"
+            append out "      ABI [if {$kind in {short ascii}} {TierName $kind} else {string cat "tagged ($reason)"}]\n"
             if {$key eq "str" && [dict exists $uses $b]} {
                 append out "      uses:\n"
                 foreach u [lsort -unique [dict get $uses $b]] {
@@ -1386,13 +1405,13 @@ proc native::shortstr::explain {id} {
         }
         append out "  result:\n"
         set fact [dict get $p resultFact]
-        append out "    semantic type: [expr {[hir::types::kindOf [dict get $instance result]] eq "str" ? "String" : [hir::types::show [dict get $instance result]]}]\n"
+        append out "    semantic type: [if {[hir::types::kindOf [dict get $instance result]] eq "str"} {string cat "String"} else {hir::types::show [dict get $instance result]}]\n"
         if {[hir::types::kindOf [dict get $instance result]] eq "str"} {
             append out "    proven character length: [FactRange $fact]\n"
             append out "    proven ASCII: [FactAscii $fact]\n"
             append out "    eligible representation: [TierName [Tier $fact]]\n"
         }
-        append out "    ABI [expr {[dict get $p result] in {short ascii} ? [TierName [dict get $p result]] : "tagged ([dict get $p resultReason])"}]\n"
+        append out "    ABI [if {[dict get $p result] in {short ascii}} {TierName [dict get $p result]} else {string cat "tagged ([dict get $p resultReason])"}]\n"
     }
     set binds [StringBinds $id]
     if {$binds ne ""} {
@@ -1406,14 +1425,14 @@ proc native::shortstr::explain {id} {
             append out "      semantic type: String\n"
             append out "      proven character length: [FactRange $f]\n"
             append out "      proven ASCII: [FactAscii $f]\n"
-            append out "      eligible representation: [expr {[Ok $f] ? [TierName [Tier $f]] : "tagged ([Describe $f])"}]\n"
+            append out "      eligible representation: [if {[Ok $f]} {TierName [Tier $f]} else {string cat "tagged ([Describe $f])"}]\n"
             if {[Ok $f]} {
                 append out "      physical representation: [TierName [Tier $f]] (local)\n"
                 append out "      production: [Production $id [hir::get $h $e value]]\n"
             } else {
                 append out "      physical representation: tagged String ([Reason $f])\n"
             }
-            set ulist [expr {[dict exists $uses $b] ? [dict get $uses $b] : {}}]
+            set ulist [dict getdef $uses $b {}]
             if {$ulist ne ""} {
                 append out "      uses:\n"
                 foreach u [lsort -unique $ulist] {

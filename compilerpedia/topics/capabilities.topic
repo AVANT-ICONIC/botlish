@@ -9,7 +9,7 @@ summary: Every facility other languages offer that Botlish lacks or offers only 
 index: concepts
 alias: capabilities; missing features; absent features; unsupported features; does it exist; what is missing; limitations of the language
 keywords: capability, absent, missing, unsupported, limitation, feature, exist, alternative
-related: capability.integer-division capability.int-to-string capability.string-formatting capability.floats capability.input capability.files capability.process-exit-status capability.test-timeout capability.concurrency capability.exceptions capability.multi-error-handler capability.lambdas capability.match capability.map-filter capability.null capability.assignment capability.visibility capability.struct-type-import
+related: capability.integer-division capability.int-to-string capability.string-formatting capability.input capability.files capability.process-exit-status capability.test-timeout capability.concurrency capability.exceptions capability.multi-error-handler capability.lambdas capability.match capability.map-filter capability.null capability.assignment capability.visibility capability.struct-type-import
 
 == HOW TO FIND OUT WHETHER SOMETHING EXISTS
 Ask for it as you would name it elsewhere: `-help division`, `-help "exit
@@ -22,19 +22,21 @@ example `-help str`) does not exist.
 
 @topic capability.integer-division
 title: Integer division: absent (mod exists)
-summary: Botlish has no division operator and no integer division function; `mod` (Euclidean remainder) exists, and bit shifts divide by powers of two.
+summary: Botlish has no integer division: `/` divides Float64 values only, and there is no `%` or integer division function; `mod` (Euclidean remainder) exists, and bit shifts divide by powers of two.
 index: concepts stdlib
 alias: division; divide; integer division; quotient; div; / operator; % operator; remainder; modulo operator
 keywords: divide, quotient, remainder, mod, shift_right, slash, percent
-related: concept.integers stdlib.mod stdlib.shift_right capability.int-to-string
-docs: LANGUAGE-LIBRARY-DEFICIENCIES.md BYTE-NIBBLE-BIT-ARITHMETIC.md
-match: SURFACE SYNTAX | unexpected character "/"*
+related: concept.integers concept.floats stdlib./ stdlib.mod stdlib.shift_right capability.int-to-string
+docs: LANGUAGE-LIBRARY-DEFICIENCIES.md BYTE-NIBBLE-BIT-ARITHMETIC.md FLOAT64-MILESTONE-1.md
+match: CORE SEMANTIC TYPE | *Botlish has no integer division*
 match: SURFACE SYNTAX | unexpected character "%"*
 
 == STATUS
-There is no `/` operator, no `%` operator and no `div` function: `7 / 2`
-is a syntax error (unexpected character "/"). Int is arbitrary precision,
-with + - * and the comparisons.
+`/` divides Float64 values (stdlib./) and nothing else: `7 / 2` is
+rejected at compile time ("/" divides floating-point numbers, and neither
+operand here is one ... Botlish has no integer division). There is no `%`
+operator and no `div` function. Int is arbitrary precision, with + - *
+and the comparisons.
 
 == WHAT EXISTS
   * mod(a, b): the Euclidean remainder, 0 <= r < abs(b); mod(-7, 3) is 2.
@@ -44,6 +46,9 @@ with + - * and the comparisons.
     example).
   * Division by any other divisor: repeated subtraction, as lib/test.bot's
     digit_value does for decimal digits (a recursive helper).
+  * An approximate quotient through Float64: float64::truncate of
+    float64::from_int(a) / float64::from_int(b) is exact only while both
+    Ints and the quotient fit in 53 bits.
 
 @example accept
 [mod(17, 5), mod(-7, 3), shift_right(17, 2), bit_and(17, 3)]
@@ -54,9 +59,9 @@ with + - * and the comparisons.
 @example reject
 x = 7 / 2
 x
-@caption There is no division operator
-@error SURFACE SYNTAX
-@at 1:7
+@caption There is no integer division
+@error CORE SEMANTIC TYPE
+@at 1:5
 @end
 
 @topic capability.int-to-string
@@ -215,30 +220,6 @@ related: capability.input backend.io stdlib.module.io::path stdlib.module.linux
 No open/read/write of named files. io::path and linux::path are textual
 path utilities. On the native backends, lib/linux.bot's raw system calls
 are the only route, and they are low-level.
-
-@topic capability.floats
-title: Floating-point numbers: absent
-summary: Botlish's only number type is the arbitrary-precision Int: there are no floating-point literals, types or operations.
-index: concepts
-alias: float; floats; double; decimal number; real number; floating point
-keywords: float, double, decimal, fraction, real
-related: concept.integers capability.integer-division
-match: SURFACE SYNTAX | expected a field name after ".", found integer*
-
-== STATUS
-`1.5` is not a number: it reads as a field access of the integer 1 and is
-rejected (expected a field name after ".", found integer 5).
-
-== NEAREST ALTERNATIVE
-Fixed-point arithmetic on Int: keep values scaled by a power of ten (cents,
-thousandths) and convert only for display.
-
-@example reject
-price = 1.5
-price
-@error SURFACE SYNTAX
-@at 1:11
-@end
 
 @topic capability.string-formatting
 title: String formatting and interpolation: absent

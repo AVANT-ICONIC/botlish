@@ -82,7 +82,10 @@ proc hir::traits::Fail {span kind message} {
 }
 
 proc hir::traits::identity {name namespace} {
-    return [expr {$namespace eq "" ? $name : "${namespace}::$name"}]
+    if {$namespace eq ""} {
+        return $name
+    }
+    return "${namespace}::$name"
 }
 
 proc hir::traits::declared {id} {
@@ -126,7 +129,10 @@ proc hir::traits::lookup {name {ns ""}} {
         return ""
     }
     if {[string first :: $name] >= 0} {
-        return [expr {[dict exists $registry $name] ? $name : ""}]
+        if {[dict exists $registry $name]} {
+            return $name
+        }
+        return ""
     }
     set own [identity $name $ns]
     if {[dict exists $registry $own]} {
@@ -155,7 +161,7 @@ proc hir::traits::declare {decls} {
         dict set registry $id [dict create id $id name [dict get $decl name] \
             namespace [dict get $decl namespace] nameSpan [dict get $decl nameSpan] \
             span [dict get $decl span] decl $decl requirements [dict create] order {} \
-            context [expr {[dict exists $decl context] ? [dict get $decl context] : 0}]]
+            context [dict getdef $decl context 0]]
     }
 }
 
@@ -183,7 +189,7 @@ proc hir::traits::resolve {{sourceTypes {}}} {
     # registry keeps a previous compilation's until the next one that
     # declares types: hir/sourcetypes.tcl, "Compilation isolation").
     set types [lmap t $sourceTypes {
-        expr {[dict exists $t kind] && [dict get $t kind] in {struct enum} ? [dict get $t id] : [dict get $t name]}
+        if {[dict exists $t kind] && [dict get $t kind] in {struct enum}} {dict get $t id} else {dict get $t name}
     }]
     foreach id [dict keys $registry] {
         set entry [dict get $registry $id]
@@ -191,7 +197,7 @@ proc hir::traits::resolve {{sourceTypes {}}} {
         set ns [dict get $entry namespace]
         set span [dict get $entry nameSpan]
         if {$name in {Int any never Fn} || [core::type::isBuiltinName $name]
-                || [dict exists $::hir::types::constructors $name]} {
+                || [dict exists $::hir::types::constructors $name] || [core::native::isBuiltinEnum $name]} {
             Fail $span TRAIT-NAME-COLLISION "trait \"$name\" cannot be declared: the name is already a built-in type"
         }
         if {[hir::structs::declared $id] || $id in $types} {
@@ -243,7 +249,7 @@ proc hir::traits::applyEntries {entries} {
         dict set registry [dict get $entry id] [dict create id [dict get $entry id] \
             name [dict get $entry name] namespace [dict get $entry namespace] nameSpan "" span "" \
             requirements $requirements order [dict keys $requirements] \
-            context [expr {[dict exists $entry context] ? [dict get $entry context] : 0}]]
+            context [dict getdef $entry context 0]]
     }
 }
 
@@ -269,7 +275,11 @@ proc hir::traits::ResolveRequirement {id ns r} {
     set index 0
     foreach param $params {
         lassign $param pname pspan ptype ptypeSpan
-        set where [expr {$ptypeSpan eq "" ? $pspan : $ptypeSpan}]
+        if {$ptypeSpan eq ""} {
+            set where $pspan
+        } else {
+            set where $ptypeSpan
+        }
         if {$ptype eq ""} {
             if {$index == 0} {
                 Fail $pspan TRAIT-REQUIREMENT-RECEIVER \
@@ -354,7 +364,11 @@ proc hir::traits::ResolveContextRequirement {id ns r} {
     set resolved {}
     foreach param [dict get $r params] {
         lassign $param pname pspan ptype ptypeSpan
-        set where [expr {$ptypeSpan eq "" ? $pspan : $ptypeSpan}]
+        if {$ptypeSpan eq ""} {
+            set where $pspan
+        } else {
+            set where $ptypeSpan
+        }
         if {$ptype eq ""} {
             lappend resolved [dict create name $pname type any self 0]
             continue
@@ -444,12 +458,12 @@ proc hir::traits::index {hir} {
                 set value [dict get $hir exprs $d value]
                 if {[dict get $hir exprs $value kind] eq "block"} {
                     set node [dict get $hir exprs $value]
-                    set flags [expr {[dict exists $node flags] ? [dict get $node flags] : {}}]
+                    set flags [dict getdef $node flags {}]
                     set arity [expr {[llength [dict get $node params]] - [llength $flags]}]
                     set info [dict create kind block binding $b block $value origin [dict get $binding origin] \
                         params [lrange [dict get $node declaredParamTypes] 0 [expr {$arity - 1}]] \
                         result [dict get $node declaredResult] errors [dict get $node declaredErrors] \
-                        flags $flags contexts [expr {[dict exists $node contextParams] ? [dict get $node contextParams] : {}}]]
+                        flags $flags contexts [dict getdef $node contextParams {}]]
                 }
             }
             dict set impls $unit $name $info
@@ -505,7 +519,7 @@ proc hir::traits::WitnessOwner {type} {
         }
         if {[core::type::isSource $name]} {
             set cut [string last :: $name]
-            return [list [expr {$cut < 0 ? "" : [string range $name 0 [expr {$cut - 1}]]}] module]
+            return [list [if {$cut < 0} {string cat ""} else {string range $name 0 [expr {$cut - 1}]}] module]
         }
         return [list "" none "$name is a compiler-registered type with no source owner"]
     }
@@ -525,7 +539,10 @@ proc hir::traits::OwnerPhrase {owner kind} {
 }
 
 proc hir::traits::QualifiedName {owner name} {
-    return [expr {$owner eq "" ? $name : "${owner}::$name"}]
+    if {$owner eq ""} {
+        return $name
+    }
+    return "${owner}::$name"
 }
 
 # ---------------------------------------------------------------------------
@@ -537,10 +554,18 @@ proc hir::traits::QualifiedName {owner name} {
 # returns any).
 proc hir::traits::RequiredFn {req witness} {
     set args [lmap p [dict get $req params] {
-        expr {[dict get $p self] ? $witness : [dict get $p type]}
+        if {[dict get $p self]} {set witness} else {dict get $p type}
     }]
     set result [dict get $req result]
-    set ret [expr {$result eq "" ? "any" : ([dict get $result self] ? $witness : [dict get $result type])}]
+    if {$result eq ""} {
+        set ret "any"
+    } else {
+        if {[dict get $result self]} {
+            set ret $witness
+        } else {
+            set ret [dict get $result type]
+        }
+    }
     return [hir::types::MakeFn $args $ret [dict get $req errors]]
 }
 
@@ -594,9 +619,9 @@ proc hir::traits::Implementation {req witness owner kind} {
             return [dict create ok 1 impl [dict create kind native name $qualified] found $found]
         }
         block {
-            set params [lmap t [dict get $info params] {expr {$t eq {} ? "any" : $t}}]
+            set params [lmap t [dict get $info params] {if {$t eq {}} {string cat "any"} else {set t}}]
             set declared [dict get $info result]
-            set actual [hir::types::MakeFn $params [expr {$declared eq {} ? "any" : $declared}] [dict get $info errors]]
+            set actual [hir::types::MakeFn $params [if {$declared eq {}} {string cat "any"} else {set declared}] [dict get $info errors]]
             set found [ShowFound $qualified $info]
             if {[dict get $info flags] ne {}} {
                 return [dict create ok 0 reason "$qualified declares flags ([join [lmap f [dict get $info flags] {string cat : $f}] {, }]): implementations with flags are not supported yet" found $found]
@@ -620,7 +645,7 @@ proc hir::traits::Implementation {req witness owner kind} {
 # "fn model::name(model::Person) -> str errors E": an implementation
 # candidate's declared signature.
 proc hir::traits::ShowFound {qualified info} {
-    set text "fn ${qualified}([join [lmap t [dict get $info params] {expr {$t eq {} ? "any" : [hir::types::show $t]}}] {, }])"
+    set text "fn ${qualified}([join [lmap t [dict get $info params] {if {$t eq {}} {string cat "any"} else {hir::types::show $t}}] {, }])"
     if {[dict get $info result] ne {}} {
         append text " -> [hir::types::show [dict get $info result]]"
     }
@@ -882,7 +907,11 @@ proc hir::traits::TypeCall {hirVar e node} {
     if {$result eq ""} {
         set type any
     } elseif {[dict get $result self]} {
-        set type [expr {[hir::types::IsView $receiverType] ? $receiverType : [list trait $id]}]
+        if {[hir::types::IsView $receiverType]} {
+            set type $receiverType
+        } else {
+            set type [list trait $id]
+        }
     } else {
         set type [dict get $result type]
     }
@@ -946,7 +975,10 @@ proc hir::traits::SubstituteResult {type block argTypes} {
         return $type
     }
     set view [EntryView [lindex $argTypes [lindex $w 2]] [list trait [hir::types::ViewTrait $type]]]
-    return [expr {[hir::types::IsView $view] ? $view : [list trait [hir::types::ViewTrait $type]]}]
+    if {[hir::types::IsView $view]} {
+        return $view
+    }
+    return [list trait [hir::types::ViewTrait $type]]
 }
 
 # The TRAIT-NOT-SATISFIED message for an argument of static type ARGTYPE
@@ -1005,7 +1037,7 @@ proc hir::traits::verify {hirVar} {
                 }
             }
             project {
-                set parent [expr {[dict exists $parents $e] ? [dict get $parents $e] : ""}]
+                set parent [dict getdef $parents $e ""]
                 set traitCallee [expr {$parent ne "" && [dict exists $hir exprs $parent traitCall]
                     && [dict get $hir exprs $parent callee] eq $e}]
                 if {!$traitCallee} {
@@ -1049,7 +1081,7 @@ proc hir::traits::verify {hirVar} {
         if {[dict get $node kind] ne "block" || ![IsPolymorphic $hir $e]} {
             continue
         }
-        set parent [expr {[dict exists $parents $e] ? [dict get $parents $e] : ""}]
+        set parent [dict getdef $parents $e ""]
         if {$parent eq "" || [dict get $hir exprs $parent kind] ne "bind" || $parent ni $roots} {
             hir::Diagnose hir TRAIT-NESTED-POLYMORPHIC "a function with a trait-typed parameter must be declared at the top level of a module or the entry program: a nested trait-polymorphic function is not supported yet (its specializations would have to be made per activation of the enclosing function)" $e
         }
@@ -1108,8 +1140,7 @@ proc hir::traits::VerifyCallUse {hirVar e node} {
         set record [dict get $node traitCall]
         if {[dict exists $record unknown]} {
             set id [dict get $record trait]
-            set origin [expr {[dict exists $node method] ? [dict get $node method nameOrigin]
-                : [dict get $hir exprs [dict get $node callee] nameOrigin]}]
+            set origin [if {[dict exists $node method]} {dict get $node method nameOrigin} else {dict get $hir exprs [dict get $node callee] nameOrigin}]
             if {[isContext $id]} {
                 hir::DiagnoseAt hir TRAIT-UNKNOWN-OPERATION [format {context trait %s has no operation "%s" (its operations: %s): a context-trait binding exposes exactly its trait's requirements, whatever installed context provides them} \
                     $id [dict get $record requirement] [join [requirementNames $id] {, }]] $e $origin
@@ -1188,7 +1219,11 @@ proc hir::traits::VerifyTraitResult {hirVar e constraint {joined 0}} {
             hir::Diagnose hir TRAIT-NOT-SATISFIED $message $site
             continue
         }
-        set w [expr {[hir::types::IsView $t] ? [hir::types::ViewWitness $t] : [hir::types::canonical $t]}]
+        if {[hir::types::IsView $t]} {
+            set w [hir::types::ViewWitness $t]
+        } else {
+            set w [hir::types::canonical $t]
+        }
         if {$w ni $witnesses} {
             lappend witnesses $w
         }
@@ -1225,7 +1260,10 @@ proc hir::traits::FunctionOf {hir b} {
         set value [dict get $hir exprs $d value]
         switch -- [dict get $hir exprs $value kind] {
             block {
-                return [expr {[IsTraitFunction $hir $value] ? $value : ""}]
+                if {[IsTraitFunction $hir $value]} {
+                    return $value
+                }
+                return ""
             }
             ref {
                 set b [dict get $hir exprs $value binding]
@@ -1285,7 +1323,7 @@ proc hir::traits::VerifyFunctionValues {hirVar parents} {
         if {$fn eq ""} {
             continue
         }
-        set parent [expr {[dict exists $parents $e] ? [dict get $parents $e] : ""}]
+        set parent [dict getdef $parents $e ""]
         if {$parent ne ""} {
             set pnode [dict get $hir exprs $parent]
             if {[dict get $pnode kind] eq "call" && [dict get $pnode callee] eq $e} {
@@ -1390,7 +1428,7 @@ proc hir::traits::CloneBinding {key} {
 }
 
 proc hir::traits::ContextKey {ctx} {
-    return [expr {[dict exists $ctx traitContext] ? [dict get $ctx traitContext] : "live"}]
+    return [dict getdef $ctx traitContext "live"]
 }
 
 # The identity syntax ref NODE resolves to in a clone's body (CTX inside one),
@@ -1668,7 +1706,10 @@ proc hir::traits::IdentOf {hir b} {
     }
     if {[dict exists $unitNames $b]} {
         lassign [dict get $unitNames $b] unit name
-        return [expr {$unit eq "" ? [list entry $name] : [list module $unit $name]}]
+        if {$unit eq ""} {
+            return [list entry $name]
+        }
+        return [list module $unit $name]
     }
     return ""
 }
@@ -1678,7 +1719,10 @@ proc hir::traits::ImplIdent {impl} {
         return [list native [dict get $impl name]]
     }
     set unit [dict get $impl unit]
-    return [expr {$unit eq "" ? [list entry [dict get $impl name]] : [list module $unit [dict get $impl name]]}]
+    if {$unit eq ""} {
+        return [list entry [dict get $impl name]]
+    }
+    return [list module $unit [dict get $impl name]]
 }
 
 # A short, symbol-safe spelling of witness type W for clone names.
@@ -1756,14 +1800,26 @@ proc hir::traits::Plan {hir syntax} {
         set stack [lrange $stack 0 end-1]
         dict set home $e $h
         dict lappend byHome $h $e
-        set inner [expr {[dict exists $polys $e] ? $e : $h}]
+        if {[dict exists $polys $e]} {
+            set inner $e
+        } else {
+            set inner $h
+        }
         foreach c [lreverse [hir::children $hir $e]] {
             lappend stack [list $c $inner]
         }
     }
-    set sem [expr {[dict exists $hir semantic] ? [dict get $hir semantic] : {}}]
-    set calls [expr {$sem ne {} ? [dict get $sem calls] : {}}]
-    set instances [expr {$sem ne {} ? [dict get $sem instances] : {}}]
+    set sem [dict getdef $hir semantic {}]
+    if {$sem ne {}} {
+        set calls [dict get $sem calls]
+    } else {
+        set calls {}
+    }
+    if {$sem ne {}} {
+        set instances [dict get $sem instances]
+    } else {
+        set instances {}
+    }
     set actions [dict create]
     set clones [dict create]
     set livePos [dict create]
@@ -1787,7 +1843,11 @@ proc hir::traits::Plan {hir syntax} {
                 set view $hir
                 set caller generic
                 set params {}
-                set rt [expr {[dict get $hir exprs $h resultType] eq "" ? "any" : [hir::type $hir [dict get $hir exprs $h resultType]]}]
+                if {[dict get $hir exprs $h resultType] eq ""} {
+                    set rt "any"
+                } else {
+                    set rt [hir::type $hir [dict get $hir exprs $h resultType]]
+                }
             } else {
                 set inst [dict get $instances $context]
                 set view [hir::semantic::View $hir $context]
@@ -1825,8 +1885,12 @@ proc hir::traits::Plan {hir syntax} {
         # The context traits this context's code has a provider for: the
         # clone's selection (live code has none: a context-trait operation or
         # a context-trait-dependent call there is never executed).
-        set provided [expr {$ckey eq "live" ? {} : [lindex $ckey 2]}]
-        foreach e [expr {[dict exists $byHome $h] ? [dict get $byHome $h] : {}}] {
+        if {$ckey eq "live"} {
+            set provided {}
+        } else {
+            set provided [lindex $ckey 2]
+        }
+        foreach e [dict getdef $byHome $h {}] {
             set node [dict get $view exprs $e]
             if {![dict exists $node sid]} {
                 continue
@@ -1895,7 +1959,7 @@ proc hir::traits::Plan {hir syntax} {
                         set impl [dict get [dict get $s impls] $req]
                         set action [list trait [dict create trait $id requirement $req witness $w \
                             impl [ImplIdent $impl] contract [RequiredFn [requirement $id $req] $w] \
-                            implementation [expr {[dict get $impl kind] eq "native" ? [dict get $impl name] : [QualifiedName [dict get $impl unit] [dict get $impl name]]}]]]
+                            implementation [if {[dict get $impl kind] eq "native"} {dict get $impl name} else {QualifiedName [dict get $impl unit] [dict get $impl name]}]]]
                         SetAction actions diagnostics $ckey $sid $action $e
                         lappend implUses [list $ckey $impl $e]
                     } else {
@@ -2015,7 +2079,11 @@ proc hir::traits::Plan {hir syntax} {
                     if {![hir::types::IsTraitConstraint $declared]} {
                         continue
                     }
-                    set rt [expr {[dict get $node resultType] eq "" ? "any" : [hir::type $view [dict get $node resultType]]}]
+                    if {[dict get $node resultType] eq ""} {
+                        set rt "any"
+                    } else {
+                        set rt [hir::type $view [dict get $node resultType]]
+                    }
                     if {$rt eq "never"} {
                         SetAction actions diagnostics $ckey $sid [list result -] $e
                     } elseif {[hir::types::IsView $rt] && [IsConcreteWitness [hir::types::ViewWitness $rt]]} {
@@ -2151,13 +2219,13 @@ proc hir::traits::Plan {hir syntax} {
                     }
                     if {[dict exists $node method]} {
                         set callee [dict get $hir exprs [dict get $node callee]]
-                        set b [expr {[dict exists $callee binding] ? [dict get $callee binding] : ""}]
+                        set b [dict getdef $callee binding ""]
                         if {$b eq ""} {
                             continue
                         }
                         if {[hir::scopeWithin $hir [dict get $hir bindings $b scope] $bodyScope]} {
                             set binding [dict get $hir bindings $b]
-                            set ident [list local [expr {[dict exists $binding spelling] ? [dict get $binding spelling] : [dict get $binding name]}]]
+                            set ident [list local [dict getdef $binding spelling [dict get $binding name]]]
                         } else {
                             set ident [IdentOf $hir $b]
                         }
@@ -2250,7 +2318,11 @@ proc hir::traits::TopoOrder {nodes edges cycleVar} {
         dict set state $n 1
         while {$stack ne {}} {
             lassign [lindex $stack end] x i
-            set targets [expr {[dict exists $edges $x] ? [dict keys [dict get $edges $x]] : {}}]
+            if {[dict exists $edges $x]} {
+                set targets [dict keys [dict get $edges $x]]
+            } else {
+                set targets {}
+            }
             set targets [lsearch -all -inline -exact -not $targets $x]
             if {$i < [llength $targets]} {
                 lset stack end [list $x [expr {$i + 1}]]
@@ -2332,7 +2404,7 @@ proc hir::traits::FunctionsSummary {hir p} {
         set node [dict get $hir exprs $block]
         set params {}
         foreach b [dict get $node params] t [dict get $node declaredParamTypes] {
-            lappend params [dict get $hir bindings $b name] [expr {$t eq {} ? "any" : $t}]
+            lappend params [dict get $hir bindings $b name] [if {$t eq {}} {string cat "any"} else {set t}]
         }
         set clones {}
         dict for {k clone} [dict get $p clones] {
@@ -2345,7 +2417,7 @@ proc hir::traits::FunctionsSummary {hir p} {
         }
         set result [dict get $node declaredResult]
         dict set summary [QualifiedName [dict get $fn namespace] [dict get $fn name]] \
-            [dict create params $params result [expr {$result eq {} ? "" : $result}] clones $clones]
+            [dict create params $params result [if {$result eq {}} {string cat ""} else {set result}] clones $clones]
     }
     return $summary
 }
@@ -2367,7 +2439,7 @@ proc hir::traits::report {hir} {
     foreach entry [dict get $hir traits] {
         set owner [dict get $entry namespace]
         set kind [expr {[dict exists $entry context] && [dict get $entry context] ? "context trait" : "trait"}]
-        lappend lines "$kind [dict get $entry id] (owner: [expr {$owner eq "" ? "entry program" : $owner}])"
+        lappend lines "$kind [dict get $entry id] (owner: [if {$owner eq ""} {string cat "entry program"} else {set owner}])"
         foreach r [dict get $entry requirements] {
             set text "    fn [dict get $r name]([join [lmap p [dict get $r params] {format {%s: %s} [dict get $p name] [hir::types::show [dict get $p type]]}] {, }])"
             if {[dict get $r result] ne ""} {
@@ -2402,8 +2474,7 @@ proc hir::traits::report {hir} {
             }
             lappend lines "    [hir::types::show $witness] satisfies $id"
             foreach {name impl} [dict get $s impls] {
-                set target [expr {[dict get $impl kind] eq "native" ? "[dict get $impl name] (intrinsic)"
-                    : [QualifiedName [dict get $impl unit] [dict get $impl name]]}]
+                set target [if {[dict get $impl kind] eq "native"} {string cat "[dict get $impl name] (intrinsic)"} else {QualifiedName [dict get $impl unit] [dict get $impl name]}]
                 lappend lines "        $name -> $target"
             }
         }
@@ -2447,8 +2518,7 @@ proc hir::traits::report {hir} {
                 set s [satisfies $type $id]
                 if {[dict get $s ok]} {
                     lappend lines "    [hir::types::show $type] satisfies $id ([join [lmap {name impl} [dict get $s impls] {
-                        format {%s -> %s} $name [expr {[dict get $impl kind] eq "native" ? [dict get $impl name]
-                            : [QualifiedName [dict get $impl unit] [dict get $impl name]]}]
+                        format {%s -> %s} $name [if {[dict get $impl kind] eq "native"} {dict get $impl name} else {QualifiedName [dict get $impl unit] [dict get $impl name]}]
                     }] {, }])"
                 } else {
                     lappend lines "    [hir::types::show $type] does not satisfy $id: [dict get $s reason]"
@@ -2459,10 +2529,14 @@ proc hir::traits::report {hir} {
     if {[dict exists $hir traitFunctions]} {
         lappend lines "trait-polymorphic functions:"
         dict for {name fn} [dict get $hir traitFunctions] {
-            set result [expr {[dict get $fn result] eq "" ? "" : " -> [hir::types::show [dict get $fn result]]"}]
+            if {[dict get $fn result] eq ""} {
+                set result ""
+            } else {
+                set result " -> [hir::types::show [dict get $fn result]]"
+            }
             lappend lines "    $name ([join [lmap {p t} [dict get $fn params] {format {%s: %s} $p [hir::types::show $t]}] {, }])$result"
             foreach {clone witnesses} [dict get $fn clones] {
-                lappend lines "        $clone[expr {$witnesses eq {} ? "" : "   [join [lmap {p w} $witnesses {format {%s = %s} $p [hir::types::show $w]}] {, }]"}]"
+                lappend lines "        $clone[if {$witnesses eq {}} {string cat ""} else {string cat "   [join [lmap {p w} $witnesses {format {%s = %s} $p [hir::types::show $w]}] {, }]"}]"
             }
         }
     }

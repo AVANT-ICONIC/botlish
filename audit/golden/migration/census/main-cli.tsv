@@ -17,6 +17,6 @@ tests/main-cli.test	cli-version-spelling	harness	KEEP-MULTI-PROGRAM	high	--versi
 tests/main-cli.test	cli-malformed-*	harness	KEEP-MULTI-PROGRAM	high	malformed invocations: stderr, exit 2	-	none	main.tcl's command line	MAIN-TCL,STDOUT,STDERR	main.tcl run as its own process
 tests/main-cli.test	cli-help-line-under-diagnostic	harness	KEEP-MULTI-PROGRAM	high	a help line under a diagnostic names its specific rule	-	none	main.tcl's command line	MAIN-TCL,STDOUT,STDERR	main.tcl run as its own process
 tests/main-cli.test	cli-help-line-once-per-topic	harness	KEEP-MULTI-PROGRAM	high	one help line per topic per file	-	none	main.tcl's command line	MAIN-TCL,STDOUT,STDERR	main.tcl run as its own process
-tests/main-cli.test	cli-help-line-syntax	harness	KEEP-MULTI-PROGRAM	high	a syntax error help line (capability.floats)	-	none	main.tcl's command line	MAIN-TCL,STDOUT,STDERR	main.tcl run as its own process
+tests/main-cli.test	cli-help-line-syntax	harness	KEEP-MULTI-PROGRAM	high	a syntax error help line (capability.integer-division)	-	none	main.tcl's command line	MAIN-TCL,STDOUT,STDERR	main.tcl run as its own process
 tests/main-cli.test	cli-help-line-warning	harness	KEEP-MULTI-PROGRAM	high	one stderr help line per distinct warning code	-	none	main.tcl's command line	MAIN-TCL,STDOUT,STDERR	main.tcl run as its own process
 tests/main-cli.test	cli-help-lines-do-not-change-diagnostics	harness	KEEP-MULTI-PROGRAM	high	the printed error lines are the -diagnostics list	-	none	main.tcl's command line	MAIN-TCL,STDOUT,STDERR	main.tcl run as its own process

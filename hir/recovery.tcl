@@ -64,13 +64,13 @@ proc hir::recovery::reported {hir} {
     set resolution [dict get $hir resolutionDiagnostics]
     set tainted [Tainted $hir $resolution]
     if {[dict exists $tainted *]} {
-        return [lmap d $diagnostics {expr {$d in $resolution ? $d : [continue]}}]
+        return [lmap d $diagnostics {if {$d in $resolution} {set d} else {continue}}]
     }
     set unitOf [dict get $tainted unitOf]
     set result {}
     foreach d $diagnostics {
         if {$d ni $resolution} {
-            set e [expr {[dict exists $d expr] ? [dict get $d expr] : ""}]
+            set e [dict getdef $d expr ""]
             if {![dict exists $unitOf $e] || [dict exists $tainted units [dict get $unitOf $e]]} {
                 continue
             }
@@ -98,7 +98,7 @@ proc hir::recovery::OwnedPositions {hir diagnostics} {
     set rejected [dict create]
     set result {}
     foreach d $diagnostics {
-        set e [expr {[dict exists $d expr] ? [dict get $d expr] : ""}]
+        set e [dict getdef $d expr ""]
         if {[dict get $d kind] eq "AFFINE-ERASURE-UNSUPPORTED" && [dict exists $callOf $e]
                 && ([dict exists $rejected $e] || [dict exists $rejected [dict get $callOf $e]])} {
             continue
@@ -143,7 +143,7 @@ proc hir::recovery::Tainted {hir resolution} {
     }
     set units [dict create]
     foreach d $resolution {
-        set e [expr {[dict exists $d expr] ? [dict get $d expr] : ""}]
+        set e [dict getdef $d expr ""]
         if {![dict exists $unitOf $e]} {
             return [dict create * 1]
         }
@@ -198,8 +198,7 @@ proc hir::recovery::raise {hir reported locate} {
     foreach diagnostic $reported {
         set message [dict get $diagnostic message]
         if {$locate} {
-            set origin [expr {[dict exists $diagnostic origin] ? [dict get $diagnostic origin]
-                : [hir::get $hir [dict get $diagnostic expr] origin]}]
+            set origin [if {[dict exists $diagnostic origin]} {dict get $diagnostic origin} else {hir::get $hir [dict get $diagnostic expr] origin}]
             set message "[hir::originLocation $hir $origin]: $message"
         }
         lappend entries [dict create errorcode [list CORE SEMANTIC [dict get $diagnostic kind]] message $message]

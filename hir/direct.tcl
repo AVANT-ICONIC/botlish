@@ -182,7 +182,7 @@ proc hir::direct::Targets {hir c node unit memoVar sections} {
             if {$d eq $unit || ![Designated $hir $d]} continue
             set info [hir::traits::ImplInfo $d $requirement]
             if {$info ne "" && [dict get $info kind] eq "block"} {
-                lappend found [list $d [list text "[expr {$d eq "" ? $requirement : "${d}::$requirement"}] (an implementation of $trait's $requirement)"] trait]
+                lappend found [list $d [list text "[if {$d eq ""} {set requirement} else {string cat "${d}::$requirement"}] (an implementation of $trait's $requirement)"] trait]
             }
         }
         return $found
@@ -253,7 +253,11 @@ proc hir::direct::Discharge {hir b unit} {
     foreach record [dict get $hir exprs $b contextParams] {
         set id [dict get $record context]
         if {$id eq ""} continue
-        set owner [expr {[dict exists $record trait] ? [hir::traits::owner $id] : [hir::structs::owner $id]}]
+        if {[dict exists $record trait]} {
+            set owner [hir::traits::owner $id]
+        } else {
+            set owner [hir::structs::owner $id]
+        }
         if {$owner ne $unit} {
             lappend foreign [list $id $owner]
         } elseif {$discharged eq ""} {
@@ -318,7 +322,11 @@ proc hir::direct::verify {hirVar} {
                 dict set intrinsic $d 1
             }
             lassign $callee how what
-            set callee [expr {$how eq "block" ? [FunctionName $hir names $what] : $what}]
+            if {$how eq "block"} {
+                set callee [FunctionName $hir names $what]
+            } else {
+                set callee $what
+            }
             dict lappend edges $unit [dict create call $c block $b \
                 function [FunctionName $hir names $b] origin [hir::get $hir $c origin] \
                 target $d callee $callee via $via discharged $discharged foreign $foreign]
@@ -326,8 +334,8 @@ proc hir::direct::verify {hirVar} {
     }
     set units [dict create]
     dict for {unit decl} $decls {
-        set list [expr {[dict exists $edges $unit] ? [dict get $edges $unit] : {}}]
-        set undischarged [lmap edge $list {expr {[dict get $edge discharged] eq "" ? $edge : [continue]}}]
+        set list [dict getdef $edges $unit {}]
+        set undischarged [lmap edge $list {if {[dict get $edge discharged] eq ""} {set edge} else {continue}}]
         set provided [core::native::isDirectNamespace $unit]
         set marker [dict get $decl direct]
         set inferred [expr {$undischarged ne {} || $provided}]
@@ -383,14 +391,18 @@ proc hir::direct::Unacknowledged {hirVar unit undischarged} {
 proc hir::direct::SourceOrder {a b} {
     set x [dict get $a origin]
     set y [dict get $b origin]
-    set i [expr {[dict exists $x start] ? [dict get $x start] : 0}]
-    set j [expr {[dict exists $y start] ? [dict get $y start] : 0}]
+    set i [dict getdef $x start 0]
+    set j [dict getdef $y start 0]
     return [expr {$i < $j ? -1 : ($i > $j ? 1 : 0)}]
 }
 
 proc hir::direct::UnacknowledgedMessage {unit edge more} {
     set who [UnitPhrase $unit]
-    set owner [expr {$unit eq "" ? "the entry program" : "\"$unit\""}]
+    if {$unit eq ""} {
+        set owner "the entry program"
+    } else {
+        set owner "\"$unit\""
+    }
     set d [dict get $edge target]
     switch -- [dict get $edge via] {
         trait { set via "a trait operation that may run [dict get $edge callee], a callable of the direct module \"$d\"" }
@@ -420,7 +432,11 @@ proc hir::direct::UnacknowledgedMessage {unit edge more} {
 
 proc hir::direct::StaleMessage {unit edges} {
     set who [UnitPhrase $unit]
-    set owner [expr {$unit eq "" ? "the entry program" : "\"$unit\""}]
+    if {$unit eq ""} {
+        set owner "the entry program"
+    } else {
+        set owner "\"$unit\""
+    }
     if {$edges eq {}} {
         return "`direct module` is unnecessary: $who makes no call into a direct module, so it exposes no direct authority; remove the declaration (it must state exactly what the compiler infers)"
     }
@@ -449,7 +465,10 @@ proc hir::direct::DenotedUnit {hir b memoVar sections} {
         }
         set d [UnitOfScope $hir [hir::get $hir $target scope] memo $sections]
     }
-    return [expr {[Designated $hir $d] ? $d : "-"}]
+    if {[Designated $hir $d]} {
+        return $d
+    }
+    return "-"
 }
 
 # DIRECT-CALLABLE-VALUE: every reference, in a unit not declared direct, to a
@@ -500,7 +519,11 @@ proc hir::direct::explain {hir ns} {
     set u [dict get $hir direct units $ns]
     set lines [list "[expr {$ns eq "" ? "entry program" : "module $ns"}]: [dict get $u status] (declared [expr {[dict get $u declared] ? "direct" : "ordinary"}][expr {[dict get $u provided] ? " by the compiler" : ""}], inferred [expr {[dict get $u inferred] ? "direct" : "ordinary"}])"]
     foreach edge [dict get $u edges] {
-        set fn [expr {[dict get $edge function] eq "" ? "top-level code" : [dict get $edge function]}]
+        if {[dict get $edge function] eq ""} {
+            set fn "top-level code"
+        } else {
+            set fn [dict get $edge function]
+        }
         set how [expr {[dict get $edge discharged] ne "" ? "mediated by [dict get $edge discharged]" : "undischarged"}]
         set what [expr {[dict get $edge via] eq "foreign" ? "a retaining C call" : "direct module [dict get $edge target]"}]
         lappend lines "    $fn -> [dict get $edge callee] ($what, [hir::originLocation $hir [dict get $edge origin]]): $how"
