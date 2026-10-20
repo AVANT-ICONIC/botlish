@@ -372,9 +372,14 @@ proc bcfApp {main {extra {}}} {
     return [app [concat [list main.bot $main bcf.bot $::bcfModule] $extra]]
 }
 
-test cf-fixture-built {the C fixture builds with the host's C compiler wherever C calls run: a fixture that does not build would leave every test that needs it skipped, never failed} -constraints {cCompiler nativeCCalls nativeBuilt rustcLinker} -body {
-    list [expr {$::fixtureDir ne ""}] [binaryHeader [file join $::fixtureDir fixture.o]]
-} -result [list 1 [hostBinaryHeader object]]
+test cf-fixture-built {the C fixture builds with the host's C compiler wherever C calls run -- a fixture that does not build would leave every test that needs it skipped, never failed -- as an object of the host's format and architecture, its archive defining the fixture's functions under their C names in the object format's spelling (Mach-O's `_` user label prefix on macOS)} -constraints {cCompiler nativeCCalls nativeBuilt rustcLinker} -body {
+    set prefix [expr {$::tcl_platform(os) eq "Darwin" ? "_" : ""}]
+    set defined [lmap line [split [exec nm -g [file join $::fixtureDir libbotlish_cffi_fixture.a]] \n] {
+        expr {[regexp {^[0-9a-fA-F]+ T (\S+)$} $line -> symbol] ? $symbol : [continue]}
+    }]
+    list [expr {$::fixtureDir ne ""}] [binaryHeader [file join $::fixtureDir fixture.o]] \
+        [lmap name {bcf_add bcf_capture bcf_dirty_short bcf_pick bcf_deep} {expr {"$prefix$name" in $defined}}]
+} -result [list 1 [hostBinaryHeader object] {1 1 1 1 1}]
 
 # ---------------------------------------------------------------------------
 # Syntax

@@ -59,6 +59,11 @@ pub fn c_call_conv(triple: &Triple) -> CallConv {
 /// "Cranelift's narrow stack arguments"). A parameter without an attribute
 /// is stored at its natural width, which is exactly Apple's contract for a
 /// stack argument, so the attribute is left off the stack-passed ones.
+/// Cranelift 0.136.0 fixed the store the same way (its `get_ext_mode` takes
+/// the argument's location and extends only register arguments under
+/// AppleAarch64): with that upgrade this exception goes, which
+/// `clif::apple_tests::ffi_apple_extended_stack_argument_defect_still_present`
+/// will say by failing.
 ///
 /// Every C ABI class a foreign call passes is one general-purpose register
 /// (an integer, a `_Bool`, a pointer: no floating point, aggregate or

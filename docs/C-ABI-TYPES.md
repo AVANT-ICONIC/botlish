@@ -195,7 +195,10 @@ table can still compile everything but `import ffi::c`, which then needs
 every target's): the Tcl backends run a program compiled for any target,
 and the native backends only one compiled for the host's own target
 (`NATIVE TARGET` otherwise, MACOS-AARCH64-MILESTONE-2.md). Linux x86-64 and
-AArch64 reach machine code with C calls today, macOS AArch64 without them;
+AArch64 and macOS AArch64 reach machine code with C calls -- macOS since
+MACOS-AARCH64-MILESTONE-6.md, where a real callee compiled by Apple clang
+sees plain `char` signed, every scalar at its width and signedness and every
+stack argument at Apple's packed offset (tests/c-ffi.test's `cf-abi-*`);
 the other rows are metadata, tested as such (`ca-lp64-llp64`,
 `ca-char-signedness`, `ca-scalar-matrix-llp64`, tests/target-model.test).
 

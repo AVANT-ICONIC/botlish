@@ -175,7 +175,7 @@ nothing else:
 
 | C | Botlish | ABI class |
 |---|---|---|
-| `signed char`, `unsigned char`, `char` | `ffi::c::SChar`, `ffi::c::UChar`, `ffi::c::Char` | `i8`, `u8`; `char` by the target (`i8` on x86-64, `u8` on Linux AArch64) |
+| `signed char`, `unsigned char`, `char` | `ffi::c::SChar`, `ffi::c::UChar`, `ffi::c::Char` | `i8`, `u8`; `char` by the target (`i8` on x86-64 and Apple AArch64, `u8` on Linux AArch64) |
 | `short`, `unsigned short` | `ffi::c::Short`, `ffi::c::UShort` | `i16`, `u16` |
 | `int`, `unsigned int` | `ffi::c::Int`, `ffi::c::UInt` | `i32`, `u32` |
 | `long`, `unsigned long` | `ffi::c::Long`, `ffi::c::ULong` | `i64`, `u64` on LP64 (`i32`, `u32` on LLP64) |
@@ -348,6 +348,20 @@ hand-written `bcf_dirty_*` return 0x80 in a register of 0x5555...80);
 arguments past the argument registers go on the stack
 (`cf-stack-arguments`, ten mixed arguments).
 
+What a call arrives in is checked against the target's C ABI itself
+(MACOS-AARCH64-MILESTONE-6.md): the fixture's `bcf_capture`, assembly,
+records the argument registers, all 64 bits each, and the bytes at the
+stack pointer at its entry, before any compiled code can extend or move
+them, and `bcf_reference_*` make the same calls from C. A model of the
+host target's ABI written from its documents (six or eight argument
+registers; Apple's packed stack slots or one 8-byte slot each; the caller
+extending a narrow register argument to 32 bits on Apple AArch64 and
+x86-64, only its own width defined on Linux AArch64) predicts both
+(`cf-abi-register-extension`, `cf-abi-stack-layout`), and `bcf_pick`, C
+compiled for a twenty-parameter prototype, reads each argument back
+(`cf-abi-pick`): a callee that trusts its caller's extension, as Apple
+clang's does, turns a wrongly extended register into a wrong value.
+
 ## 9. direct
 
 A foreign call is not direct by being foreign (`cf-direct-noescape-
@@ -446,11 +460,15 @@ declaration, the ABI signature (the table entry), the borrow plan
 then unit). The parser validates every operand count and index.
 
 **Code** (native/src/codegen/clif.rs). Each table entry is a Cranelift
-import (`Linkage::Import`) declared with the module's default calling
-convention -- the platform C convention, `system_v` on Linux x86-64 and
-AArch64 -- and its C signature: each integer parameter at its exact width,
-the narrow ones `sext`/`uext` by their class, pointers 64-bit words, the
-result at its width with no extension (the caller extends it, section 8).
+import (`Linkage::Import`) declared with the target's C calling convention
+(`codegen::target::c_call_conv`: `system_v` on Linux x86-64 and AArch64,
+`apple_aarch64` on macOS AArch64, section 13) and its C signature: each
+integer parameter at its exact width, the narrow ones `sext`/`uext` by
+their class -- under Apple's convention only the eight passed in registers
+(`c_extended_parameters`: Apple gives a stack argument a slot of its natural
+size, which Cranelift 0.135.2 would overrun storing it extended) --
+pointers 64-bit words, the result at its width with no extension (the
+caller extends it, section 8).
 A `foreigncall` is one direct `call` of the import, with the transport
 inline around it (`cf-clif`). It is a safepoint of the native stack maps
 (conservatively: no C function can reach the collector today).
@@ -458,7 +476,13 @@ inline around it (`cf-clif`). It is a safepoint of the native stack maps
 ## 11. Linking
 
 A program whose NIR has a `foreign` or `link` entry is linked by the system
-linker; every other program is linked exactly as before.
+linker; every other program is linked exactly as before. The plan reaches
+the linker in its own terms (codegen/aot.rs's `LinkerFlavor`): GNU ld's on
+Linux, below, and Apple's ld's on macOS, which takes the same `-L` and `-l`
+arguments without the group (it rejects `--start-group`, and keeps
+searching every static archive while anything it could define is
+undefined, so the order never decides a link there either: `cf-link-order`
+runs on macOS too).
 
 **The invocation.** The rustc linker (`BOTLISH_NATIVE_LINKER=rustc`, the
 default, which links every standalone executable) builds the executable
@@ -490,8 +514,18 @@ references the loader, so it cannot show there).
 The libraries are one linker group, so their order never decides a static
 link: an archive declared before the archive that needs it still resolves
 it (`cf-link-order`). Shared or static is the linker's choice by its own
-search rules (`-lNAME` finds `libNAME.so` before `libNAME.a` in a
-directory); Botlish adds no rpath, no `-Bstatic`, no pkg-config.
+search rules (`-lNAME` finds `libNAME.so` -- `libNAME.dylib` or `.tbd` on
+macOS -- before `libNAME.a` in a directory); Botlish adds no rpath, no
+`-Bstatic`, no pkg-config. A shared library is then loaded at run time from
+wherever the platform's loader looks: the directories `LD_LIBRARY_PATH`
+names on Linux, the install name the library records on macOS
+(`cf-shared-library`).
+
+On macOS, `default-linker-libraries=yes` gives the link Apple clang's own
+default libraries, libSystem and its compiler runtime (`libclang_rt.osx.a`),
+which rustc's `-nodefaultlibs` link leaves out: C compiled by clang calls the
+runtime for helpers such as `__isPlatformVersionAtLeast`
+(`__builtin_available`, `cf-default-libraries`).
 
 **Library search.** `main.tcl -L DIR` (repeatable) adds DIR to the linker's
 search path for both native backends and `-emit-native-executable`
@@ -510,9 +544,15 @@ no library defines, compiles through the whole front end and fails at the
 native link as `{NATIVE LINK}`: "native link failed: the system linker could
 not link this program with the C functions and libraries it declares
 (symbols botlish_bssl_SHA256; libraries -lcrypto -lstdc++):" followed by
-the linker's own lines (`cf-missing-library`, `cf-undefined-symbol`). Never a
-front-end error: a missing library is not an `UNKNOWN-NAMESPACE`, an
-undefined symbol not a `TYPE`. A declaration no call reaches needs no
+the linker's own lines (`cf-missing-library`, `cf-undefined-symbol`) --
+GNU ld's, lld's or collect2's on Linux; Apple ld's on macOS (`ld: library
+'NAME' not found`, `Undefined symbols for architecture arm64:` with a
+`"_SYMBOL", referenced from:` line per symbol, a wrong-architecture
+library's `found architecture 'x86_64', required architecture 'arm64'`,
+`cf-wrong-architecture`). Never a front-end error: a missing library is not
+an `UNKNOWN-NAMESPACE`, an undefined symbol not a `TYPE`. A failed link
+publishes nothing: an executable linked earlier at its destination is left
+as it was (`cf-link-failure-keeps-executable`). A declaration no call reaches needs no
 definition: only the functions a program calls enter the table.
 
 **The native backends' runs.** `-backend cranelift` and `cranelift-generic`
@@ -577,8 +617,22 @@ first arm64 run found the one AArch64-specific bug, the BoringSSL link's
 as-needed loader (section 11, fixed), and two tests that had assumed
 x86-64's signed plain `char` (now the target's).
 
+**macOS AArch64** (MACOS-AARCH64-MILESTONE-6.md): the same code path, with
+Apple's arm64 C ABI and Apple's linker. Cranelift's `apple_aarch64`
+convention places the arguments -- eight in x0-x7, the rest on the stack at
+their natural size and alignment, packed (a `char` one byte, a `short` at
+the next even offset) -- and extends a narrow register argument to 32
+bits, the caller's duty there; Botlish declares a stack-passed narrow
+argument without the extension attribute (section 10). Plain `char` is
+signed. Every C FFI test runs on GitHub's macos-15 arm64 runners against
+the fixture compiled by Apple clang, and the machine state each call
+arrives in matches Apple clang's own calls of the same prototypes
+(`cf-abi-*`). Symbols are their C names: the object crate writes Mach-O's
+`_` user label prefix, for a C function's symbol as for Botlish's own.
+
 Elsewhere the native backends already refuse executables (Linux glibc
-only), so they refuse a program that calls C the same way. A `-target`
+and macOS AArch64 only), so they refuse a program that calls C the same
+way. A `-target`
 other than the host's chooses the ABI classes of a compilation (its HIR),
 never a cross-link: linking is for the host, and the driver refuses to run
 or link a program built for another target at all (`NATIVE TARGET`,
@@ -591,7 +645,10 @@ convention, selected where its signature is built
 `c_signature`): `system_v` on Linux, `apple_aarch64` on macOS AArch64 --
 never the generic AArch64 one there -- and Cranelift lowers it (registers,
 stack placement, narrow-argument extension). Botlish-to-Botlish calls and
-runtime helper calls keep the ISA's default convention.
+runtime helper calls keep the ISA's default convention. The one exception
+Botlish makes to Cranelift's lowering is what it asks of it: no extension
+of an Apple stack argument (section 10), whose slot has nothing to extend
+into.
 
 ## 14. Static compile, interchange, cache, isolation
 
@@ -906,16 +963,23 @@ What this shows:
 
 ## 22. Tests, fuzzing, mutants
 
-**`tests/c-ffi.test`** (55 tests) covers the grammar and its
+**`tests/c-ffi.test`** (84 tests) covers the grammar and its
 errors, declarations, the HIR table, ABI classes per target, the link plan,
 call typing, borrowing through real C, pointer results and the contract
 check, the transport, NIR and CLIF, the backend matrix, linking and its
 failures, executables, the stub linker, main.tcl, direct, static compile,
 interchange, the cache, isolation, the Tcl and BoringSSL acceptance and GC
-stress. Its C side is `tests/cffi/fixture.c`, compiled with the host C
-compiler into a static archive in a private directory (test infrastructure
-only); the Tcl tests need a linkable `libtcl9.0`, the BoringSSL ones the
-package-owned build (skipped when it is not built).
+stress -- and, since MACOS-AARCH64-MILESTONE-6.md, the target's C ABI
+itself (`cf-abi-*`: register extension and stack layout against the C
+compiler's own calls, every argument of a twenty-parameter prototype read
+back), the scalar matrix, plain char, pointer width, system and shared
+libraries, `-L` directories, a wrong-architecture library, a failed link,
+and GC stress, coroutines and the stack guard around C calls. Its C side is
+`tests/cffi/fixture.c`, compiled with the host C compiler into a static
+archive in a private directory (test infrastructure only); it runs wherever
+C calls do (`nativeCCalls`: Linux x86-64 and AArch64, macOS AArch64); the
+Tcl tests need a linkable `libtcl9.0`, the BoringSSL ones the package-owned
+build (skipped when it is not built).
 
 **The fuzzer** (`audit/c-ffi/tools/fuzz.tcl`) generates programs of random C
 signatures -- 0 to 14 parameters of every scalar class, raw pointers (null
@@ -1084,8 +1148,10 @@ If you change the grammar (surface/parser.tcl's `ExternDecl`), hir/foreign.tcl,
 the extern cases of hir/resolve.tcl, hir/hygiene.tcl, hir/borrow.tcl or
 hir/direct.tcl, core/cabi.tcl's contract or `ExternImpl`, native/lower.tcl's
 foreign table or `BorrowCall`, `Inst::ForeignCall` (native/src/nir.rs),
-`foreign_call`/`c_signature` (codegen/clif.rs), runtime/ffi.rs, the link
-step (codegen/aot.rs's `link_plan_args`, `emit_executable`) or the linked
+`foreign_call`/`c_signature` (codegen/clif.rs), `c_call_conv`/
+`c_extended_parameters` (codegen/target.rs), runtime/ffi.rs, the link step
+(codegen/aot.rs's `link_plan_args_for`, `linker_diagnostics`,
+`emit_executable`) or the linked
 run (main.rs's `run_linked`, runtime/aot.rs's `driver_protocol`), run
 `tests/c-ffi.test` (also under `BOTLISH_NATIVE_GC_STRESS=1`),
 `audit/c-ffi/tools/fuzz.tcl` (several seeds, once with `-gc-stress 1`) and
@@ -1111,9 +1177,11 @@ acceptance tests run. `bench/c-ffi.tcl` regenerates section 21.
 | core/native.tcl, core/cabi.tcl | `-extern` metadata, `isExtern`, `displayName`; the provenance in the contract, `ExternImpl` (NATIVE-ONLY) |
 | native/lower.tcl, native/native.tcl, main.tcl | the foreign table, `foreigncall`, link directories, `-L` |
 | native/src/nir.rs, codegen/clif.rs, codegen/roots.rs, codegen/mod.rs | the NIR, the C call and its transport, the safepoint, the JIT's unlinked symbols |
-| native/src/codegen/aot.rs, native/src/main.rs, native/src/runtime/aot.rs | the link plan's arguments, linker failures, the stub's refusal, the linked run and its driver protocol |
+| native/src/codegen/target.rs | the target's C convention, and which parameters carry an extension attribute (Apple's stack-passed ones do not) |
+| native/src/codegen/aot.rs, native/src/main.rs, native/src/runtime/aot.rs | the link plan's arguments (per `LinkerFlavor`), linker failures, the stub's refusal, the linked run and its driver protocol |
 | native/src/runtime/ffi.rs, runtime/error.rs | the slow paths and the two failures |
 | examples/ffi/ | the Tcl and BoringSSL bindings and demos |
-| tests/c-ffi.test, tests/cffi/fixture.c, tests/cffi/boringssl.tcl | the tests, the C fixture, the package-owned BoringSSL |
+| tests/c-ffi.test, tests/cffi/fixture.c, tests/cffi/boringssl.tcl | the tests, the C fixture (its assembly in ELF or Mach-O spelling), the package-owned BoringSSL |
+| tests/platform/aot-facts.tcl, tests/platform/native-status.tcl | a C library and a C call as the host's tools see them, the linker's command line and words; the `c-call` probe |
 | audit/c-ffi/tools/, audit/c-ffi/*-result.txt | the fuzzer, the mutation tool and its mutants; their recorded runs |
 | bench/c-ffi.tcl | the performance report |

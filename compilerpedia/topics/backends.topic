@@ -155,8 +155,10 @@ are built from .bot, .hir or .hirx. Linking: in a checkout the default
 linker uses rustc and the system C linker (BOTLISH_NATIVE_LINKER=rustc),
 on Linux x86-64 and AArch64 and on macOS AArch64; the `stub` linker
 (BOTLISH_NATIVE_LINKER=stub, what the single executable uses) needs no
-toolchain and is Linux x86-64 only. A program that calls C links on Linux
-only (macOS refuses it: NATIVE LINK). The executable's machine code uses
+toolchain and is Linux x86-64 only. A program that calls C links with the
+rustc linker on every one of those hosts, its declared libraries passed to
+the platform linker (the stub linker refuses it: NATIVE LINK). The
+executable's machine code uses
 the target's baseline instruction set, whichever native backend the
 command line names: it is always the closed, specialized program.
 
@@ -251,7 +253,7 @@ A program cannot set its process exit status
 
 @topic backend.platforms
 title: Platforms and what runs where
-summary: The Tcl backends need only Tcl 9; the native backend runs on Linux x86-64 and AArch64 and macOS AArch64; syscalls and C calls are Linux-only; stub linking is Linux x86-64 only.
+summary: The Tcl backends need only Tcl 9; the native backend runs on Linux x86-64 and AArch64 and macOS AArch64, C calls included; syscalls are Linux-only; stub linking is Linux x86-64 only.
 index: backends
 alias: platforms; operating systems; aarch64; arm64; x86-64; supported platforms
 keywords: Linux, x86-64, AArch64, arm64, macOS, Windows, Tcl 9, coroutines, stub
@@ -262,9 +264,9 @@ docs: README.md LINUX-SYSCALL-TRANSPORTS.md COROUTINES.md
 The repository's continuous integration runs every test on Linux x86-64 and
 Linux AArch64 (the Tcl backends, the native backends, the golden suites)
 and builds the single executable on Linux x86-64. A separate workflow runs
-the native JIT, native coroutines, the native stack guard and standalone
-executables on Apple Silicon macOS. Nothing here is a promise about other
-platforms.
+the native JIT, native coroutines, the native stack guard, standalone
+executables and C calls on Apple Silicon macOS. Nothing here is a promise
+about other platforms.
 
 == PER COMPONENT
     interp, compile          Tcl 9.0 or newer (Unicode-correct strings);
@@ -288,8 +290,10 @@ platforms.
     executables              Linux, glibc, ELF: rustc linker on x86-64
                              and AArch64, stub linker x86-64 only; macOS
                              AArch64, Mach-O: rustc linker
-    C calls (extern c fn)    Linux, glibc; macOS refuses them (NATIVE
-                             LINK) until they are validated there
+    C calls (extern c fn)    Linux, glibc (GNU ld's link plan, the SysV
+                             and AAPCS64 C ABIs) and macOS AArch64
+                             (Apple's ld, Apple's arm64 C ABI); never
+                             with the stub linker
     single executable        Linux x86-64
 
 @topic backend.targets

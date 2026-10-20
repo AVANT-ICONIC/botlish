@@ -2699,8 +2699,10 @@ mod apple_tests {
     /// an extended narrow stack argument with a full 8-byte `str` at its
     /// packed offset under AppleAarch64, so the last one here writes bytes
     /// 14 to 21, past the 16-byte argument area into the stack slot above
-    /// it. When this fails after a Cranelift upgrade, the defect is fixed:
-    /// check the stores above and drop the exception.
+    /// it. When this fails after a Cranelift upgrade, the defect is fixed
+    /// (it is in 0.136.0, whose `get_ext_mode` extends only register
+    /// arguments under AppleAarch64): check the stores above and drop the
+    /// exception.
     #[test]
     fn ffi_apple_extended_stack_argument_defect_still_present() {
         let every_parameter_extended = |module: &cranelift_object::ObjectModule, decl: &nir::ForeignDecl| {
