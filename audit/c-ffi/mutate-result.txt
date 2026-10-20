@@ -96,3 +96,51 @@ KILLED stub-links-c -- the stub linker accepts a program that calls C, linking n
     fuzz:   survived
     rust:   survived
 2 mutants, 2 killed, 0 survived
+
+# tclsh9.0 audit/c-ffi/tools/mutate.tcl -only apple-plan-has-group,...,macos-link-plan-is-gnus
+# (2026-10-20, Linux x86-64, rustc 1.97.0: MACOS-AARCH64-MILESTONE-6.md's
+# mutants that run on this host; the macOS-only ones are SKIPPED here)
+
+SKIPPED macos-link-plan-is-gnus: not compiled differently for linux-x86_64
+KILLED apple-plan-has-group -- Apple's link plan keeps GNU ld's archive group
+    tests:  survived
+    fuzz:   survived
+    rust:   killed (1 failed: codegen::aot::tests::ffi_link_plan_apple_has_no_gnu_flags)
+KILLED apple-default-libraries-dropped -- Apple's link plan keeps rustc's -nodefaultlibs: no compiler runtime after the plan's libraries
+    tests:  survived
+    fuzz:   survived
+    rust:   killed (1 failed: codegen::aot::tests::ffi_link_plan_apple_has_no_gnu_flags)
+KILLED link-dirs-dropped -- the -L search directories never reach the linker
+    tests:  killed (51 failed: cf-abi-pick, cf-abi-register-boundary, cf-abi-register-extension, cf-abi-stack-layout, cf-abi-stack-tail-frame, cf-argv, ...)
+    fuzz:   killed (6 disagreements in 6 programs)
+    rust:   killed (2 failed: codegen::aot::tests::ffi_link_plan_is_one_linker_group, codegen::aot::tests::ffi_link_plan_apple_has_no_gnu_flags)
+KILLED apple-linker-diagnostics-dropped -- a failed link's Apple ld lines (undefined symbols, the linker's failure) are filtered out of its message
+    tests:  survived
+    fuzz:   survived
+    rust:   killed (1 failed: codegen::aot::tests::ffi_linker_diagnostics_keep_the_linkers_words)
+SKIPPED apple-stack-parameters-extended: not compiled differently for linux-x86_64
+KILLED signed-argument-zero-extended -- a signed narrow argument is zero-extended by the caller
+    tests:  killed (5 failed: cf-abi-register-extension, cf-abi-stack-layout, cf-bool-lowering, cf-clif, cf-clif-stack-parameters)
+    fuzz:   survived
+    rust:   survived
+KILLED unsigned-argument-sign-extended -- an unsigned narrow argument is sign-extended by the caller
+    tests:  killed (4 failed: cf-abi-register-extension, cf-abi-stack-layout, cf-bool-lowering, cf-clif)
+    fuzz:   survived
+    rust:   survived
+KILLED short-class-is-int -- a 16-bit C class is given a 32-bit machine type: a short result read from 32 bits, a short stack argument given an int's slot
+    tests:  killed (3 failed: cf-clif, cf-clif-stack-parameters, cf-scalar-extension)
+    fuzz:   killed (1 disagreements in 6 programs)
+    rust:   survived
+KILLED pointer-argument-truncated -- a pointer argument is passed with its low 32 bits only
+    tests:  killed (13 failed: cf-borrow-read, cf-borrow-sha256-shape, cf-borrow-write, cf-contract-violation, cf-executable, cf-function-pointers, ...)
+    fuzz:   killed (6 disagreements in 6 programs)
+    rust:   survived
+KILLED pointer-result-truncated -- a pointer result keeps its low 32 bits only
+    tests:  killed (6 failed: cf-function-pointers, cf-gc-stress, cf-pointer-mix, cf-pointer-width, cf-tcl-acceptance, cf-wild-address)
+    fuzz:   killed (6 disagreements in 6 programs)
+    rust:   survived
+KILLED link-failure-removes-earlier -- a link removes the executable already at its destination before it knows whether it succeeds
+    tests:  killed (1 failed: cf-link-failure-keeps-executable)
+    fuzz:   survived
+    rust:   survived
+12 mutants, 10 killed, 0 survived, 2 skipped (another host's)

@@ -1199,10 +1199,11 @@ proc foreignArchive {} {
 set ::foreignArchiveDir [expr {[testConstraint cfFixture] ? [foreignArchive] : ""}]
 testConstraint foreignArchive [expr {$::foreignArchiveDir ne ""}]
 
-test cf-wrong-architecture {a library of another architecture is the linker's to refuse: NATIVE LINK with the linker's own words about it (an incompatible file, the architecture it found), never a run of anything} -constraints {cfFixture foreignArchive} -body {
+test cf-wrong-architecture {a library of another architecture is the linker's to refuse: NATIVE LINK with the linker's own words about it -- a line naming the library's file and what is wrong with it (lld's "is incompatible with", GNU ld's "skipping incompatible" or "Relocations in generic ELF", Apple ld's architecture it found) -- never a run of anything} -constraints {cfFixture foreignArchive} -body {
     set dir [app [list main.bot "import ffi::c\n\nextern c library \"botlish_cffi_foreign\"\n\nextern c fn add named \"bcfx_add\"(a: ffi::c::Int, b: ffi::c::Int) -> ffi::c::Int\n\nadd(40, 2)\n"]]
     lassign [native::withLinkDirs [list $::foreignArchiveDir] {outcomeUnderHir cranelift [appHir $dir]}] tag code message
-    list $tag $code [regexp -nocase {incompatible|architecture|wrong format|file format not recognized|Relocations in generic ELF} $message] \
+    set named [lsearch -inline -regexp [split $message \n] {libbotlish_cffi_foreign\.a}]
+    list $tag $code [regexp -nocase {incompatible|architecture|wrong format|file format not recognized|Relocations in generic ELF} $named] \
         [string match "native link failed: the system linker could not link this program*" $message]
 } -cleanup removeApps -result {error {NATIVE LINK} 1 1}
 

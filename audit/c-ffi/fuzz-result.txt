@@ -11,3 +11,22 @@ tclsh9.0 audit/c-ffi/tools/fuzz.tcl -n 20 -seed 4
 programs 20 functions 240 disagreements 0
 tclsh9.0 audit/c-ffi/tools/fuzz.tcl -n 10 -seed 9 -gc-stress 1
 programs 10 functions 120 disagreements 0
+
+# macOS arm64 (GitHub's macos-15 runner, run 39377475266, Tier C job
+# 118479111772, 2026-10-20; tests/platform/tier.tcl c-ffi-fuzz with
+# BOTLISH_NATIVE_GC_STRESS=1 for every run; Apple clang compiles the C)
+
+tclsh9.0 audit/c-ffi/tools/fuzz.tcl -n 10 -seed 1 -gc-stress 0
+programs 10 functions 120 disagreements 0
+tclsh9.0 audit/c-ffi/tools/fuzz.tcl -n 10 -seed 2 -gc-stress 0
+programs 10 functions 120 disagreements 0
+tclsh9.0 audit/c-ffi/tools/fuzz.tcl -n 10 -seed 9 -gc-stress 1
+programs 10 functions 120 disagreements 0
+
+# Linux x86-64 (this container, 2026-10-20, after MACOS-AARCH64-MILESTONE-6.md's
+# changes)
+
+tclsh9.0 audit/c-ffi/tools/fuzz.tcl -n 20 -seed 11
+programs 20 functions 240 disagreements 0
+tclsh9.0 audit/c-ffi/tools/fuzz.tcl -n 10 -seed 12 -gc-stress 1
+programs 10 functions 120 disagreements 0

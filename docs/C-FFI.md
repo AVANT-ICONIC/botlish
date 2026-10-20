@@ -996,6 +996,7 @@ every program must be `NATIVE-ONLY`.
 | `-seed 1`, `-seed 2`, `-seed 3` (`-n 20`, 12 functions each) | 60 | 720 | 0 |
 | `-seed 4 -n 20` | 20 | 240 | 0 |
 | `-seed 9 -n 10 -gc-stress 1` | 10 | 120 | 0 |
+| macOS arm64, under `BOTLISH_NATIVE_GC_STRESS=1` (tier.tcl's `c-ffi-fuzz`: `-seed 1`, `-seed 2`, `-seed 9 -gc-stress 1`, `-n 10` each; MACOS-AARCH64-MILESTONE-6.md) | 30 | 360 | 0 |
 
 The fuzzer's model is independent of the compiler's (its own table of C
 widths and signedness, its own conversion rule, its own byte arithmetic),
