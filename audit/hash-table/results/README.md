@@ -61,3 +61,4 @@ measured on:
 | `nir-*.txt` | each table's specialized functions: machine-code size, operations, facts; all three trees with the same driver, `combo` and `fixed` identical | deterministic |
 | `unrelated-*.txt`, `corpus-again.txt` | workloads unrelated to tables, both trees | timings |
 | `fuzz-fixed.txt` | every table fuzzed after the review fixes: four backends, `ht0` three (CG-3) | correctness |
+| `fuzz-large.txt`, `fuzz-policy.txt` | after the review fixes: the `large` profile on the native backends, and the 1/2 and 17/20 load-policy variants of `lpa` and `rh` | correctness |
