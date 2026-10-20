@@ -788,36 +788,54 @@ or the fuzzer, never only by the pinned comparison:
 ## 24. Performance
 
 `bench/variadics.tcl` (ordinary calls) and `bench/c-ffi.tcl`'s `va` rows (C
-calls). Single runs on a 4-core Linux x86-64 container, best of N.
-Differences of a few ns are within the loop's noise.
+calls), run with their defaults (best of 5 runs of 1,000,000 iterations) on a
+4-core Linux x86-64 container, 2026-10-20, with nothing else running.
+Differences of about 10 ns are within the loop's noise: the same loop alone
+measured 37 to 51 ns across the C rows.
 
-*(final measurements: see the end of this section)*
-
-**Ordinary variadics** (cranelift, ns per call over the loop alone):
+**Ordinary variadics** (cranelift, specialized; ns per call over the loop
+alone, 48.4 ns per iteration):
 
 | call | variadic | explicit List | fixed |
 |---|---:|---:|---:|
-| 0 trailing (length) | PENDING | PENDING | -- |
-| 1 trailing (length) | PENDING | PENDING | -- |
-| 3 trailing (sum) | PENDING | PENDING | PENDING |
-| 8 trailing (sum) | PENDING | PENDING | -- |
+| 0 trailing (`first()` / `first_list([])`, a length) | 61.7 | 51.3 | -- |
+| 1 trailing (a length) | 90.0 | 103.1 | -- |
+| 3 trailing (`sum(i, 1, 2)` / `sum_list([i, 1, 2])`) | 106.6 | 104.2 | -2.7 (`add3`) |
+| 8 trailing (a sum) | 152.9 | 143.1 | -- |
 
-A variadic call costs what the same call given the List literal costs.
-The List construction is the whole overhead, and it is the List the body
-receives. The Tcl backends show the same equality. Compile cost is the
-explicit List program's within noise: the collection is one node per call.
+The Tcl backends, us per iteration of the 3-trailing call:
+
+| backend | variadic | explicit List |
+|---|---:|---:|
+| interp | 1,291 | 1,324 |
+| compile | 54.5 | 52.8 |
+
+200 call sites, ms: front end 561.6 (variadic) vs 582.7 (explicit List);
+native lowering 246.2 vs 273.1.
+
+A variadic call costs what the same call given the List literal costs,
+within noise in both directions, because it is that call. The List
+construction is the whole overhead over a fixed-arity function (`add3` is
+lost in the loop), and it is the List the body receives. The collection is
+one node per call, so compile cost is the explicit List program's.
 
 **C variadic calls** (ns per call over the loop alone):
 
 | call | ns |
 |---|---:|
-| `add(a, b)`, fixed | PENDING |
-| `vsum(2, a, a)`, variadic (+ the %al stub) | PENDING |
-| `stack_tail(12 args)`, fixed | PENDING |
-| `vsum(11, ...)`, 11 trailing, stack spill | PENDING |
-| `vscale(1.0, 4, 4 doubles)` (%al = 5, a Float64 result allocated) | PENDING |
+| `add(a, b)`, fixed, two ints | 4.9 |
+| `vsum(2, a, a)`, variadic, two trailing ints (+ the %al stub, + C's `va_arg` loop) | 9.7 |
+| `stack_tail(12 args)`, fixed, six on the stack | 5.2 |
+| `vsum(11, ...)`, 11 trailing ints, six on the stack | 10.8 |
+| `vscale(1.0, 4, 4 doubles)`, %al = 5, a Float64 result allocated | 40.1 |
+| (for comparison: `big`, a fixed call whose u64 result is boxed) | 41.9 |
 
-The stub costs a `mov` and a direct `jmp`. The numbers are measured in one
+A variadic C call costs about 5 ns more than a fixed one of the same
+arguments. That is the stub's `mov` and direct `jmp`, plus the callee's own
+`va_arg` loop, which the fixed callee does not run. A stack spill adds
+nothing measurable. The double row is dominated by allocating its Float64
+result, as `big`'s boxed result is: the call itself is in the same few
+nanoseconds. The numbers are measured in one
 linked executable per program (`native::measure`), compilation and linking
 excluded. Apple's padding costs one register move per padded register;
 tier.tcl's `c-ffi-bench` measures it on macOS (section 25).
