@@ -690,6 +690,15 @@ proc hir::read::ParseType {text number} {
         }
         return [hir::types::MakeFn $argTypes [ParseType $returnText $number] $errors]
     }
+    if {[hir::refinements::isFamily [lindex [split $text "\{"] 0]] && [string index $text end] eq "\}"} {
+        # A scalar refinement (hir/refinements.tcl, DECIMAL-ROUNDED-
+        # MILESTONE-1.md): hir::types::show's source spelling.
+        set type [hir::refinements::Parse $text]
+        if {$type eq ""} {
+            Fail $number "bad scalar refinement \"$text\""
+        }
+        return $type
+    }
     if {[regexp {^Coroutine\{(.*)\}$} $text -> inner]} {
         # hir::types::show's coroutine handle type notation (AFFINE-
         # VALUES.md): the callable contract, the three fields of Fn{...}.

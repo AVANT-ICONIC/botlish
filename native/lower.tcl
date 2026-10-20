@@ -217,6 +217,21 @@ namespace eval native::lower {
     dict for {name op} [FloatNatives] {
         dict set natives $name [list op $op]
     }
+    # DecimalRounded (core/decimal.tcl; DECIMAL-ROUNDED-MILESTONE-1.md): its
+    # arithmetic is the binary64 operation on the representations (d64add
+    # ..., codegen's float_op), its elaborated observations the exact
+    # decimal rounding of runtime::decimal. The comparisons' and the
+    # conversions' check forms never reach a backend (hir::decimal::
+    # Elaborate).
+    foreach {name op} {
+        DecimalRounded#+ d64add DecimalRounded#- d64sub DecimalRounded#* d64mul DecimalRounded#/ d64div
+        DecimalRounded#neg d64neg
+        decimal_rounded#less d64lt decimal_rounded#less_equal d64le decimal_rounded#greater d64gt
+        decimal_rounded#greater_equal d64ge decimal_rounded#equal d64eq
+        decimal_rounded#to_float64 d64tof64 decimal_rounded#round d64round
+    } {
+        dict set natives $name [list op $op]
+    }
     # The borrow test fixture's synthetic foreign operations (core/cabi.tcl's
     # installBorrowFixture; runtime/ffifixture.rs), one op per behavior.
     foreach {name behavior} [core::cabi::borrowFixture] {
@@ -6083,8 +6098,14 @@ proc native::lower::ProjectChain {fnVar e node} {
 }
 
 # The NIR constant instruction text of the floating-point value V
-# (`float Float64 0x3ff8000000000000`: its type and bits).
+# (`float Float64 0x3ff8000000000000`: its type and bits), or of the
+# DecimalRounded value V (`float DecimalRounded 0x...`: the binary64 that
+# core::decimal::constant chose to represent it -- representation is this
+# backend's, decided here, never in HIR: DECIMAL-ROUNDED-MILESTONE-1.md).
 proc native::lower::FloatConstText {v} {
+    if {[core::value::kind $v] eq $::core::decimal::kind} {
+        return [format {float %s 0x%016llx} $::core::decimal::kind [core::decimal::Bits [core::decimal::of $v]]]
+    }
     return [format {float %s 0x%016llx} [core::value::kind $v] [core::float::bits64 $v]]
 }
 
@@ -6100,7 +6121,7 @@ proc native::lower::Const {fnVar e node} {
         }
         UnicodeChar { return [Assign fn "char [core::value::charOf $value]" $e] }
         enum { return [EnumConst fn $value $e] }
-        Float64 { return [Assign fn [FloatConstText $value] $e] }
+        Float64 - DecimalRounded { return [Assign fn [FloatConstText $value] $e] }
         list {
             # (const list {...}): a list of literal elements.
             set items [lmap item [core::value::items $value] {

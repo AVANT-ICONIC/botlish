@@ -63,6 +63,11 @@ pub const ERR_UPPER_OVERRUN: u32 = BUILTIN_ERROR_ID_BASE + 3;
 /// FLOAT64-MILESTONE-1.md), or a C double that is not one entering Botlish
 /// (codegen::clif's foreign-call results).
 pub const ERR_NON_FINITE_FLOAT: u32 = BUILTIN_ERROR_ID_BASE + 4;
+/// `UnrepresentableDecimal` (builtin error 5): a quantization to a
+/// DecimalRounded value whose decimal no binary64 holds to the requested
+/// number of places (runtime::decimal's rt_decimal_round,
+/// DECIMAL-ROUNDED-MILESTONE-1.md).
+pub const ERR_UNREPRESENTABLE_DECIMAL: u32 = BUILTIN_ERROR_ID_BASE + 5;
 
 /// Semantic error kinds of core/errors.tcl that NIR may raise.
 pub const SEMANTIC_KINDS: &[&str] = &[
