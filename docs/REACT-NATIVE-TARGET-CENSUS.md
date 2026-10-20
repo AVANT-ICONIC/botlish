@@ -61,11 +61,13 @@ Native ones.
     (`isPureCxxDependency: true`), with no Gradle module, Java or Kotlin.
   * The app's iOS Codegen registers its `RCTModuleProvider`.
   * Metro bundles its TypeScript for both platforms.
-* **Botlish code ran in that stock app on the iOS simulator** (CI runs 4
-  and 5): every probe call, with the results the host predicted, about
-  1.5 to 1.9 µs a call. The one change to Mac-made machine code was its
-  Mach-O platform tag, which target-triple code generation sets by itself.
-  @@SUMMARYANDROID@@
+* **Botlish code ran in that stock app on both platforms** (section 9):
+  * every probe call, with the results the host predicted;
+  * on the Android x86_64 emulator, from the template's own release build,
+    with the library built on a Linux host and no runtime patch;
+  * on the iOS simulator, where the one change to Mac-made machine code
+    was its Mach-O platform tag, which target-triple code generation sets
+    by itself.
 * **Botlish has no library mode.** It emits only whole-program executables,
   and its functions are not callable from C:
   * Its symbols are `botlish_fn_N` with an internal calling convention
@@ -92,9 +94,8 @@ Native ones.
     (`audit/react-native/patches/runtime-aarch64-cfg.patch`) and code
     generation for the target's triple. Today the ISA is always the host's,
     and on a Mac that tags every Mach-O object as macOS.
-  * Android is still the closer of the two in compiler work: its x86_64
-    library needs nothing, and its objects carry no platform tag. iOS ran
-    first only because the CI emulator took several runs to start.
+  * Android is the closer of the two in compiler work: its x86_64 library
+    needed nothing, and its objects carry no platform tag.
 
 ## 2. Recommended architecture
 
@@ -193,7 +194,7 @@ missing piece), **blocked** (needs a named milestone), **absent**.
 | Plugin loading / subcommands | | | none; main.tcl not sourceable (`main.tcl:328-341,686`) | absent | section 7 | plugin facility |
 | Machine-readable diagnostics | | | text only (`main.tcl:353-384`) | absent | | `-diagnostics json` or a Tcl API |
 | Cross-compile toolchain discovery | NDK not used by Botlish | Xcode not used | rustc picks the host linker (`aot.rs:304`) | absent | | not needed for static libraries |
-| React Native packaging and calls from JS | release build links Botlish into both 64-bit ABIs (CI); emulator run: see section 9 | runs in a stock app on the simulator (CI), with the program object's platform retagged | | works | section 9 | productize the generator; ISA from the triple |
+| React Native packaging and calls from JS | runs in a stock app's release build on the x86_64 emulator (CI); arm64-v8a links, not run | runs in a stock app on the simulator (CI), with the program object's platform retagged | | works | section 9 | productize the generator; ISA from the triple; an arm64 device run |
 
 ## 4. Type mapping matrix
 
@@ -733,9 +734,10 @@ The probe library (`rnprobe_*`) and a second one from a different module
 Runs on the census branch:
 [run 1](https://github.com/mwagner-webdev/botlish/actions/runs/39455138158),
 [run 2](https://github.com/mwagner-webdev/botlish/actions/runs/39457386646),
-[run 4](https://github.com/mwagner-webdev/botlish/actions/runs/39460827625)
-and [run 5](https://github.com/mwagner-webdev/botlish/actions/runs/39464674965).
-Run 3 was cancelled; run 4 replaced it.
+[run 4](https://github.com/mwagner-webdev/botlish/actions/runs/39460827625),
+[run 5](https://github.com/mwagner-webdev/botlish/actions/runs/39464674965)
+and [run 6](https://github.com/mwagner-webdev/botlish/actions/runs/39470250205)
+(Android only). Run 3 was cancelled; run 4 replaced it.
 
 **Android arm64-v8a library** (ubuntu-24.04-arm, run 1):
 
@@ -780,7 +782,48 @@ Run 2 rebuilt the same package with the two new exports:
   The runner image lacks PulseAudio's and some X libraries. Run 4 installs
   them.
 
-@@RUN4ANDROID@@
+Runs 4 to 6 got the emulator running:
+
+* Run 4's emulator never reached `adb`, and the script's timeout ended the
+  step before it printed the emulator's log.
+* [Run 5](https://github.com/mwagner-webdev/botlish/actions/runs/39464674965)
+  printed it: the emulator exited at once, `Unknown AVD name [probe] ...
+  there is no file probe.ini in $HOME/.android/avd`. The current
+  command-line tools' `avdmanager` and emulator 37.2.12 disagree on the
+  default AVD directory. Run 4's ten silent minutes fit the same failure.
+* [Run 6](https://github.com/mwagner-webdev/botlish/actions/runs/39470250205)
+  sets `ANDROID_AVD_HOME` for both. **Botlish code ran inside the stock
+  React Native app on the Android emulator.**
+  * The emulator (API 34, `google_apis`, x86_64, KVM) booted in about 30 s.
+  * The release APK installed, and `MainActivity` started cold in 1.6 s.
+  * Every probe line reached logcat, all as the host spike predicted:
+
+    ```
+    I ReactNativeJS: BOTLISH_PROBE add(2, 3) => 5
+    I ReactNativeJS: BOTLISH_PROBE add(2**53 - 1, 1) threw RangeError BOTLISH_INT_RANGE "add: the result is not a safe integer"
+    I ReactNativeJS: BOTLISH_PROBE add(1.5, 1) threw TypeError BOTLISH_ARGUMENT "add: argument 0 must be a safe integer"
+    I ReactNativeJS: BOTLISH_PROBE reverse("héllo, wörld") => "dlröw ,olléh"
+    I ReactNativeJS: BOTLISH_PROBE reverse("a😀b") => "b😀a"
+    I ReactNativeJS: BOTLISH_PROBE requirePositive(5) => 5
+    I ReactNativeJS: BOTLISH_PROBE requirePositive(-1) threw Error NotPositive "requirePositive: uncaught propagated error: <error NotPositive>"
+    I ReactNativeJS: BOTLISH_PROBE depth(1000) => 1000
+    I ReactNativeJS: BOTLISH_PROBE same("añb", "añb") => true
+    I ReactNativeJS: BOTLISH_PROBE pick(false, "left", "right") => "right"
+    I ReactNativeJS: BOTLISH_PROBE 100000 reverse calls => "y99999x" in 316 ms
+    I ReactNativeJS: BOTLISH_PROBE done
+    ```
+
+* What ran was the x86_64 `libappmodules.so` of the template's unmodified
+  release build:
+  * the runtime built for `x86_64-linux-android`, without the `cfg` patch
+    (frame pointers forced, as section 5 says);
+  * the probe's program object exactly as the Linux host's native backend
+    emits it, which the NDK's linker took as it is (Apple's refused the
+    Mac's, below).
+* A call cost about 3.2 µs, including JS's loop and string building, on an
+  emulated device inside a CI runner.
+* The same APK carried the arm64-v8a library, built on the arm64 runner.
+  No arm64 device or emulator ran it in this census.
 
 **iOS library** (macos-15, run 1):
 
@@ -989,8 +1032,9 @@ right after library mode, before any mobile target exists.
   * Botlish never needs to implement `NativeFooCxxSpec<T>`.
 * **Which platform is closer to viable today, Android or iOS?**
   * Android. Its x86_64 runtime builds unchanged, its objects need no
-    platform tag, its packaging needs no Gradle module, and an x86_64
-    emulator runs the very code a Linux host compiles.
+    platform tag, and its packaging needs no Gradle module. An x86_64
+    emulator ran the very code a Linux host compiled, in the template's
+    own release build.
   * iOS needs the `cfg` fix, target-triple code generation for the Mach-O
     platform, an `.xcframework`, and (soon) SwiftPM.
   * The simulator runs show how short that iOS list is. With only the
@@ -1003,8 +1047,9 @@ right after library mode, before any mobile target exists.
     deleted: the generated React Native package, Codegen's spec and React
     Native's own TurboModule code, calling compiler-produced exports on
     Hermes, under GC stress, with two libraries in one process.
-  * The Android x86_64 emulator run of section 9 is the first device target
-    after it.
+  * The first device target after it is the Android x86_64 emulator run of
+    section 9. CI already runs it with the stand-in, so the test is that run
+    with compiler-produced exports in the stand-in's place.
 
 ## 13. The React Native contract, as found
 
