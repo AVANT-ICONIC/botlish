@@ -23,7 +23,8 @@
 # a loop) and pushed, popped or cleared after it, or mutated nowhere (a
 # snapshot's size is the vector's length at its loop) -- with, maybe, a
 # second loop q over it beside p's, before or after it, nothing between
-# them (the later loop's own body may push), giving p's size too -- at an
+# them but maybe a swap, which keeps the length (the later loop's own body
+# may push), giving p's size too -- at an
 # index made sound by one theorem:
 #
 #   mod       mod(X, SIZE): inline, method syntax, a local of the size, a
@@ -62,8 +63,9 @@
 # push, pop or clear between the two loops, or over two copies of it taken
 # around a push (c1 = v, v pushed, c2 = v), or over it and a copy pushed
 # (c1 = v, c1 pushed), or with a push in a loop body, a branch or a handler
-# between them, in a loop body after the later loop in it, or in the
-# earlier loop's own body. Each must be rejected
+# between them, in a loop body after the later loop in it, in the
+# earlier loop's own body, or in a branch or a handler body before the
+# later loop in it. Each must be rejected
 # strictly (UNHANDLED-ERROR), and each names a witness input at which the
 # same program, declaring the error and handling it, does fail with
 # IndexNotFound on the interpreter: the rejection is necessary, not only
@@ -75,11 +77,14 @@
 # mutates and a List collected over it (a local, a field path) or a copy
 # of it, or over a vector and a List collected over it with nothing that
 # can mutate it between them (pushes before both, the lockstep's own body
-# pushing), is accepted and agrees on every backend. A read of a List
+# pushing, a swap), or over a vector and a copy of it while a third copy is
+# pushed, is accepted and agrees on every backend. A read of a List
 # collected over a vector, at an index proven against another loop over it
 # or over a copy of it (mod, a counted loop, a guard) with nothing between
-# the two that can mutate it, is accepted and the proven opcode, and every
-# backend agrees. Three
+# the two that can mutate it -- a push only after the later loop in the
+# branch or handler body it is in, or in the other branch, a swap, a third
+# copy pushed -- is accepted and the proven opcode, and every backend
+# agrees. Three
 # CONSERVATIVE shapes (the index written twice inline, a guard in a loop
 # that runs once with the read after it, the field of one call result
 # written twice) are safe but outside every theorem: they must stay
@@ -180,10 +185,13 @@ proc kindInfo {kind} {
                 set after [pick [list "" "$v.push(h)\n    " "$v.pop():\n        on IndexNotFound:\n            0\n    " "$v.clear()\n    "]]
             }
             if {[chance 0.6]} {
+                # Maybe a swap between the two loops: it replaces an
+                # element, never changes the length (-keeps-length).
+                set between [expr {[chance 0.3] ? "$v.swap(0, h):\n        on IndexNotFound:\n            0\n    " : ""}]
                 if {[chance 0.5]} {
-                    set loop "$loop$twin"
+                    set loop "$loop$between$twin"
                 } elseif {[chance 0.5]} {
-                    set loop "$twin$loop"
+                    set loop "$twin$between$loop"
                 } else {
                     # The later loop's body pushes after its domain ran.
                     set loop "${twin}p = loop x in $v:\n        $v.push(x)\n        x + 1\n    "
@@ -626,6 +634,25 @@ set unsound {
     q = loop x in bx.v:
         x
     list::at(p, mod(h, list::length(q)))} {2 3 2}
+    vector-branch-push-first {v = mutable_vector::from_list(xs)
+    p = loop x in v:
+        x
+    if h > 0:
+        v.push(h)
+        q = loop x in v:
+            x
+        return list::at(p, mod(h, list::length(q)))
+    0} {2 3 2}
+    vector-handler-push-first {v = mutable_vector::from_list(xs)
+    p = loop x in v:
+        x
+    n = mutable_vector::at(v, 99):
+        on IndexNotFound:
+            v.push(h)
+            q = loop x in v:
+                x
+            list::at(p, mod(h, list::length(q)))
+    n} {2 3 2}
 }
 # Lockstep clauses over a vector and a List an earlier loop collected over
 # it, the vector grown between them: LOCKSTEP-UNPROVEN, and the witness
@@ -722,6 +749,22 @@ set lockstepSound {
         bx.v.push(a)
         a + y
     [list::length(r), mutable_vector::length(bx.v)]}
+    swap-collected {v = vec(xs)
+    p = loop x in v:
+        x * 10
+    old = v.swap(0, h):
+        on IndexNotFound:
+            0
+    r = loop a in v and y in p:
+        a + y + old
+    list::length(r)}
+    third-copy {v = vec(xs)
+    c1 = v
+    c2 = v
+    c2.push(h)
+    r = loop a in v and c in c1:
+        a + c
+    [list::length(r), mutable_vector::length(c2)]}
 }
 # Reads of a List collected over a vector, at an index proven against
 # another loop over it (or over a copy of it) with nothing between the two
@@ -792,6 +835,55 @@ set vectorProven {
     r = loop k from 0 to list::length(q):
         list::at(p, k)
     [list::length(r), mutable_vector::length(bx.v)]}
+    branch-read-then-push {v = vec(xs)
+    p = loop x in v:
+        x
+    if h > 0:
+        q = loop x in v:
+            x * 3
+        r = list::at(p, mod(h, list::length(q)))
+        v.push(r)
+        return r
+    mutable_vector::length(v)}
+    else-pushes {bx = V {v: vec(xs)}
+    p = loop x in bx.v:
+        x
+    if h > 0:
+        q = loop x in bx.v:
+            x * 3
+        return list::at(p, mod(h, list::length(q)))
+    else:
+        bx.v.push(h)
+    mutable_vector::length(bx.v)}
+    handler-read-then-push {v = vec(xs)
+    p = loop x in v:
+        x
+    n = mutable_vector::at(v, 99):
+        on IndexNotFound:
+            q = loop x in v:
+                x * 3
+            k = list::at(p, mod(h, list::length(q)))
+            v.push(k)
+            k
+    n + mutable_vector::length(v)}
+    swap-between {v = vec(xs)
+    p = loop x in v:
+        x
+    old = v.swap(0, h):
+        on IndexNotFound:
+            0
+    q = loop x in v:
+        x * 3
+    list::at(p, mod(h, list::length(q))) + old}
+    third-copy-pushed {v = vec(xs)
+    c1 = v
+    p = loop x in v:
+        x
+    q = loop x in c1:
+        x * 3
+    c2 = v
+    c2.push(h)
+    list::at(p, mod(h, list::length(q))) + mutable_vector::length(c2)}
 }
 set conservative {
     inline-twice     {if h + 1 < 0 or h + 1 >= mutable_array::capacity(a):
