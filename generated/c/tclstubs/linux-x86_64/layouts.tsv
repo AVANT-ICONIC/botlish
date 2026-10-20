@@ -31,7 +31,7 @@ field	struct anon@tcl.h:727	1	value	scalar	8	8	-	unsigned long value	ffi::c::ULo
 record	struct anon@tcl.h:731	-	Tcl_ObjInternalRep_ptrAndSize	layout-direct	-	16	8	__typeof__(((union Tcl_ObjInternalRep *)0)->ptrAndSize)	-	identity=-; header=generic/tcl.h:731
 field	struct anon@tcl.h:731	0	ptr	pointer	0	8	-	void *ptr	ffi::c::Ptr[ffi::c::Void]	c=ptr
 field	struct anon@tcl.h:731	1	size	scalar	8	8	-	Tcl_Size size	ffi::c::Long	c=size
-record	union Tcl_ObjInternalRep	-	-	layout-blocked	-	16	8	union Tcl_ObjInternalRep	-	typedefs=Tcl_ObjInternalRep; identity=tclstubs::ctypes::Tcl_ObjInternalRep; header=generic/tcl.h:717; blockers=union: a union: its members overlap | double: field doubleValue: double (double); roots=double,union; deps=struct anon@tcl.h:723,struct anon@tcl.h:727,struct anon@tcl.h:731; pointed-by=2
+record	union Tcl_ObjInternalRep	-	-	layout-blocked	-	16	8	union Tcl_ObjInternalRep	-	typedefs=Tcl_ObjInternalRep; identity=tclstubs::ctypes::Tcl_ObjInternalRep; header=generic/tcl.h:717; blockers=double: field doubleValue: double (double); roots=double; deps=struct anon@tcl.h:723,struct anon@tcl.h:727,struct anon@tcl.h:731; pointed-by=2
 field	union Tcl_ObjInternalRep	0	longValue	scalar	0	8	-	long longValue	ffi::c::Long	c=longValue
 field	union Tcl_ObjInternalRep	1	doubleValue	double	0	8	-	double doubleValue	-	c=doubleValue; blockers=double: double (double)
 field	union Tcl_ObjInternalRep	2	otherValuePtr	pointer	0	8	-	void *otherValuePtr	ffi::c::Ptr[ffi::c::Void]	c=otherValuePtr
@@ -39,7 +39,7 @@ field	union Tcl_ObjInternalRep	3	wideValue	scalar	0	8	-	Tcl_WideInt wideValue	ff
 field	union Tcl_ObjInternalRep	4	twoPtrValue	nested	0	16	-	struct anon@tcl.h:723 twoPtrValue	Tcl_ObjInternalRep_twoPtrValue	c=twoPtrValue
 field	union Tcl_ObjInternalRep	5	ptrAndLongRep	nested	0	16	-	struct anon@tcl.h:727 ptrAndLongRep	Tcl_ObjInternalRep_ptrAndLongRep	c=ptrAndLongRep
 field	union Tcl_ObjInternalRep	6	ptrAndSize	nested	0	16	-	struct anon@tcl.h:731 ptrAndSize	Tcl_ObjInternalRep_ptrAndSize	c=ptrAndSize
-record	struct Tcl_Obj	-	-	layout-blocked	-	48	8	struct Tcl_Obj	-	typedefs=Tcl_Obj; identity=tclstubs::ctypes::Tcl_Obj; header=generic/tcl.h:743; nested=field internalRep (union Tcl_ObjInternalRep, field) -> union; roots=double,union; deps=union Tcl_ObjInternalRep; pointed-by=204
+record	struct Tcl_Obj	-	-	layout-blocked	-	48	8	struct Tcl_Obj	-	typedefs=Tcl_Obj; identity=tclstubs::ctypes::Tcl_Obj; header=generic/tcl.h:743; nested=field internalRep (union Tcl_ObjInternalRep, field) -> double; roots=double; deps=union Tcl_ObjInternalRep; pointed-by=204
 field	struct Tcl_Obj	0	refCount	scalar	0	8	-	Tcl_Size refCount	ffi::c::Long	c=refCount
 field	struct Tcl_Obj	1	bytes	pointer	8	8	-	char *bytes	ffi::c::Ptr[ffi::c::Char]	c=bytes
 field	struct Tcl_Obj	2	length	scalar	16	8	-	Tcl_Size length	ffi::c::Long	c=length
@@ -82,12 +82,12 @@ field	struct Tcl_DString	0	string	pointer	0	8	-	char *string	ffi::c::Ptr[ffi::c:
 field	struct Tcl_DString	1	length	scalar	8	8	-	Tcl_Size length	ffi::c::Long	c=length
 field	struct Tcl_DString	2	spaceAvl	scalar	16	8	-	Tcl_Size spaceAvl	ffi::c::Long	c=spaceAvl
 field	struct Tcl_DString	3	staticSpace	array	24	200	-	char staticSpace[200]	array 200 of ffi::c::Char	c=staticSpace; element=char char; bounds=200; extent=200
-record	union anon@tcl.h:1092	-	-	layout-blocked	-	8	8	__typeof__(((struct Tcl_HashEntry *)0)->key)	-	identity=-; header=generic/tcl.h:1092; blockers=union: a union: its members overlap; roots=union
+record	union anon@tcl.h:1092	-	Tcl_HashEntry_key	layout-direct	-	8	8	__typeof__(((struct Tcl_HashEntry *)0)->key)	-	identity=-; header=generic/tcl.h:1092
 field	union anon@tcl.h:1092	0	oneWordValue	pointer	0	8	-	char *oneWordValue	ffi::c::Ptr[ffi::c::Char]	c=oneWordValue
 field	union anon@tcl.h:1092	1	objPtr	pointer	0	8	-	Tcl_Obj *objPtr	ffi::c::Ptr[Tcl_Obj]	c=objPtr
 field	union anon@tcl.h:1092	2	words	array	0	4	-	int words[1]	array 1 of ffi::c::Int	c=words; element=scalar int; bounds=1; extent=1
 field	union anon@tcl.h:1092	3	string	array	0	1	-	char string[1]	array 1 of ffi::c::Char	c=string; element=char char; bounds=1; extent=1
-record	struct Tcl_HashEntry	-	-	layout-blocked	-	40	8	struct Tcl_HashEntry	-	typedefs=Tcl_HashEntry; identity=tclstubs::ctypes::Tcl_HashEntry; header=generic/tcl.h:1085; nested=field key (union anon@tcl.h:1092, field) -> union; roots=union; deps=union anon@tcl.h:1092; pointed-by=3
+record	struct Tcl_HashEntry	-	Tcl_HashEntry	layout-direct	-	40	8	struct Tcl_HashEntry	-	typedefs=Tcl_HashEntry; identity=tclstubs::ctypes::Tcl_HashEntry; header=generic/tcl.h:1085; deps=union anon@tcl.h:1092; pointed-by=3
 field	struct Tcl_HashEntry	0	nextPtr	pointer	0	8	-	Tcl_HashEntry *nextPtr	ffi::c::Ptr[Tcl_HashEntry]	c=nextPtr
 field	struct Tcl_HashEntry	1	tablePtr	pointer	8	8	-	Tcl_HashTable *tablePtr	ffi::c::Ptr[Tcl_HashTable]	c=tablePtr
 field	struct Tcl_HashEntry	2	hash	scalar	16	8	-	size_t hash	ffi::c::ULong	c=hash

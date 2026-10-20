@@ -7,13 +7,21 @@
 # Shapes (all of them by default):
 #
 #   mixed          every record holding the previous one by value, every
-#                  fourth with a fixed array, every fourth an anonymous union
-#                  instead: almost every record blocked, most transitively;
+#                  fourth with a fixed array, every fourth a union with a
+#                  float alternative instead: almost every record blocked,
+#                  most transitively;
 #   chain-blocked  one chain of N records by value whose first is blocked: the
 #                  longest transitive chains there can be;
 #   chain-emitted  one chain of N records by value, all emitted: N nested
 #                  layouts, each one's verification naming the previous one;
-#   flat           N independent records of scalars and pointers.
+#   flat           N independent records of scalars and pointers;
+#   unions         N unions, each holding the previous one by value beside
+#                  a scalar, an array and a pointer alternative
+#                  (LAYOUT-UNIONS.md): N nested union layouts;
+#   anonymous      N records of the OVERLAPPED shape, each an anonymous union
+#                  of an anonymous struct and a pointer: 3N layouts, 2N of
+#                  them synthetic, every one placed by clang's record
+#                  layouts (one dump for all of them) and the offsetof probe.
 #
 # The times must grow linearly in N (the pass is one dependency-ordered walk;
 # a quadratic step shows as a ratio of about 4 between N and 2N). Scratch
@@ -21,7 +29,7 @@
 
 source [file join [file dirname [file dirname [file dirname [file dirname [file normalize [info script]]]]]] tools c-bindgen lib.tcl]
 
-set shapes {mixed chain-blocked chain-emitted flat}
+set shapes {mixed chain-blocked chain-emitted flat unions anonymous}
 set sizes {}
 for {set i 0} {$i < [llength $argv]} {incr i} {
     set a [lindex $argv $i]
@@ -42,7 +50,7 @@ proc header {shape n} {
                 switch -- [expr {$i % 4}] {
                     0 - 1 { append h "struct s$i { $prev uint32_t a$i; void *p$i; };\n" }
                     2 { append h "struct s$i { $prev char name$i\[8\]; struct s$i *self; };\n" }
-                    3 { append h "struct s$i { int k; union { int x; long y; } u$i; };\n" }
+                    3 { append h "struct s$i { int k; union { int x; float y; } u$i; };\n" }
                 }
             }
             chain-blocked {
@@ -54,6 +62,13 @@ proc header {shape n} {
             }
             chain-emitted { append h "struct s$i { $prev uint32_t a$i; void *p$i; };\n" }
             flat { append h "struct s$i { int16_t k$i; uint64_t a$i; struct s$i *next; const char *name; };\n" }
+            unions {
+                set prev [expr {$i > 0 ? "union s[expr {$i - 1}] prev;" : "int first;"}]
+                append h "union s$i { $prev uint32_t a$i; uint16_t h$i\[3\]; void *p$i; };\n"
+            }
+            anonymous {
+                append h "struct s$i { uint64_t k$i; union { struct { uint32_t lo$i; uint32_t hi$i; }; void *p$i; }; void *e$i; };\n"
+            }
         }
     }
     return $h

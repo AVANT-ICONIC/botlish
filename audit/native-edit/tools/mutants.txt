@@ -265,10 +265,14 @@ proc core::binary::writeForeign {data path pointer} {
 @@ edit-nested-is-a-view a nested layout read through an edit is a NativeView: the subrecord cannot be written
 ## hir/layouts.tcl
 <<<<
-        if {[dict get $field kind] eq "layout"} {
+        if {[dict get $field kind] in {layout union}} {
+            # A nested layout, or a union held by value (the live union:
+            # LAYOUT-UNIONS.md): its window, nothing read.
             if {$edit} {
 ====
-        if {[dict get $field kind] eq "layout"} {
+        if {[dict get $field kind] in {layout union}} {
+            # A nested layout, or a union held by value (the live union:
+            # LAYOUT-UNIONS.md): its window, nothing read.
             if {0} {
 >>>>
 
@@ -286,9 +290,11 @@ core::native::declareDirectNamespace binary::native
 @@ foreign-write-takes-an-int a foreign write's value is not checked: an Int is encoded into a pointer field
 ## hir/layouts.tcl
 <<<<
-    if {($op eq "write" && [ReprPointerPath $field] ne "none") || ($op eq "write_foreign" && !$pointer)} {
+    if {($op eq "write" && [ReprPointerPath $field] ne "none") || ($op eq "write_foreign" && !$pointer)
+            || [ReprUnionPath $field] ne "none" || $op eq "read"} {
 ====
-    if {$op eq "write_foreign" || ($op eq "write" && [ReprPointerPath $field] ne "none")} {
+    if {$op eq "write_foreign" || ($op eq "write" && [ReprPointerPath $field] ne "none")
+            || [ReprUnionPath $field] ne "none" || $op eq "read"} {
 >>>>
 
 @@ ordinary-write-of-pointer an ordinary binary::write accepts a pointer field: byte serialization encodes pointers
@@ -316,11 +322,11 @@ core::native::declareDirectNamespace binary::native
 @@ written-pointer-bytes-parse binary::parse of a pointer layout is accepted, so bytes holding a written pointer decode into one
 ## hir/layouts.tcl
 <<<<
-        if {$id ne "" && [declared $id] && [NativeOnly $id]} {
+        } elseif {$id ne "" && [declared $id] && [NativeOnly $id]} {
             set path [PointerField $id]
             if {$op eq "parse"} {
 ====
-        if {$id ne "" && [declared $id] && [NativeOnly $id] && $op ne "parse"} {
+        } elseif {$id ne "" && [declared $id] && [NativeOnly $id] && $op ne "parse"} {
             set path [PointerField $id]
             if {$op eq "parse"} {
 >>>>
@@ -371,11 +377,11 @@ core::native::declareDirectNamespace binary::native
 <<<<
     if {$length != $size} {
         core::native::failDeclared LayoutLengthMismatch \
-            "$operation: $length bytes given, but the layout [string range $structId 13 end-1] has size $size"
+            "$operation: $length bytes given, but the layout [LayoutName $structId] has size $size"
 ====
     if {$length < $size} {
         core::native::failDeclared LayoutLengthMismatch \
-            "$operation: $length bytes given, but the layout [string range $structId 13 end-1] has size $size"
+            "$operation: $length bytes given, but the layout [LayoutName $structId] has size $size"
 >>>>
 
 # --- a store copies the whole record ------------------------------------------

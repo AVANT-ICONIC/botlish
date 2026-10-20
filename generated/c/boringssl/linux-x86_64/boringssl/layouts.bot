@@ -8,6 +8,21 @@
 import ffi::c
 import boringssl::ctypes
 
+# union evp_aead_ctx_st_state (include/openssl/aead.h:222): sizeof 560, _Alignof 8
+union layout evp_aead_ctx_st_state:
+    size 560
+    align 8
+    alternative opaque: array 560 of ffi::c::UChar  # uint8_t opaque[560]
+    alternative alignment: ffi::c::ULong            # uint64_t alignment
+
+# struct evp_aead_ctx_st, typedef EVP_AEAD_CTX (include/openssl/aead.h:229): sizeof 576, _Alignof 8
+layout EVP_AEAD_CTX:
+    size 576
+    align 8
+    field aead: ffi::c::Ptr[boringssl::ctypes::EVP_AEAD] at 0  # const EVP_AEAD *aead
+    field state: evp_aead_ctx_st_state at 8                    # union evp_aead_ctx_st_state state
+    field tag_len: ffi::c::UChar at 568                        # uint8_t tag_len
+
 # struct crypto_ivec_st, typedef CRYPTO_IVEC (include/openssl/aead.h:402): sizeof 16, _Alignof 8
 layout CRYPTO_IVEC:
     size 16
@@ -63,6 +78,39 @@ layout ASN1_BIT_STRING:
     field type_: ffi::c::Int at 4                # int type
     field data: ffi::c::Ptr[ffi::c::UChar] at 8  # unsigned char *data
     field flags: ffi::c::Long at 16              # long flags
+
+# an anonymous union (include/openssl/asn1.h:1449): sizeof 8, _Alignof 8
+union layout ASN1_TYPE_value:
+    size 8
+    align 8
+    alternative ptr: ffi::c::Ptr[ffi::c::Char]                            # char *ptr
+    alternative boolean: ffi::c::Int                                      # ASN1_BOOLEAN boolean
+    alternative asn1_string: ffi::c::Ptr[boringssl::ctypes::ASN1_BIT_STRING]  # ASN1_STRING *asn1_string
+    alternative object: ffi::c::Ptr[boringssl::ctypes::ASN1_OBJECT]       # ASN1_OBJECT *object
+    alternative integer: ffi::c::Ptr[boringssl::ctypes::ASN1_BIT_STRING]  # ASN1_INTEGER *integer
+    alternative enumerated: ffi::c::Ptr[boringssl::ctypes::ASN1_BIT_STRING]  # ASN1_ENUMERATED *enumerated
+    alternative bit_string: ffi::c::Ptr[boringssl::ctypes::ASN1_BIT_STRING]  # ASN1_BIT_STRING *bit_string
+    alternative octet_string: ffi::c::Ptr[boringssl::ctypes::ASN1_BIT_STRING]  # ASN1_OCTET_STRING *octet_string
+    alternative printablestring: ffi::c::Ptr[boringssl::ctypes::ASN1_BIT_STRING]  # ASN1_PRINTABLESTRING *printablestring
+    alternative t61string: ffi::c::Ptr[boringssl::ctypes::ASN1_BIT_STRING]  # ASN1_T61STRING *t61string
+    alternative ia5string: ffi::c::Ptr[boringssl::ctypes::ASN1_BIT_STRING]  # ASN1_IA5STRING *ia5string
+    alternative generalstring: ffi::c::Ptr[boringssl::ctypes::ASN1_BIT_STRING]  # ASN1_GENERALSTRING *generalstring
+    alternative bmpstring: ffi::c::Ptr[boringssl::ctypes::ASN1_BIT_STRING]  # ASN1_BMPSTRING *bmpstring
+    alternative universalstring: ffi::c::Ptr[boringssl::ctypes::ASN1_BIT_STRING]  # ASN1_UNIVERSALSTRING *universalstring
+    alternative utctime: ffi::c::Ptr[boringssl::ctypes::ASN1_BIT_STRING]  # ASN1_UTCTIME *utctime
+    alternative generalizedtime: ffi::c::Ptr[boringssl::ctypes::ASN1_BIT_STRING]  # ASN1_GENERALIZEDTIME *generalizedtime
+    alternative visiblestring: ffi::c::Ptr[boringssl::ctypes::ASN1_BIT_STRING]  # ASN1_VISIBLESTRING *visiblestring
+    alternative utf8string: ffi::c::Ptr[boringssl::ctypes::ASN1_BIT_STRING]  # ASN1_UTF8STRING *utf8string
+    alternative set: ffi::c::Ptr[boringssl::ctypes::ASN1_BIT_STRING]      # ASN1_STRING *set
+    alternative sequence: ffi::c::Ptr[boringssl::ctypes::ASN1_BIT_STRING]  # ASN1_STRING *sequence
+    alternative asn1_value: ffi::c::Ptr[boringssl::ctypes::ASN1_VALUE]    # ASN1_VALUE *asn1_value
+
+# struct asn1_type_st, typedef ASN1_TYPE (include/openssl/asn1.h:1447): sizeof 16, _Alignof 8
+layout ASN1_TYPE:
+    size 16
+    align 8
+    field type_: ffi::c::Int at 0      # int type
+    field value: ASN1_TYPE_value at 8  # union {...} value
 
 # struct ASN1_TEMPLATE_st, typedef ASN1_TEMPLATE (include/openssl/asn1t.h:277): sizeof 32, _Alignof 8
 layout ASN1_TEMPLATE:
@@ -210,6 +258,33 @@ layout SHA512_CTX:
     field bytes_so_far_low: ffi::c::ULong at 72  # uint64_t bytes_so_far_low
     field p: array 128 of ffi::c::UChar at 80    # uint8_t p[128]
 
+# the anonymous struct member SHA_CTX.member1.member2 (struct sha_state_st) (include/openssl/sha.h:73): sizeof 20, _Alignof 4
+layout SHA_CTX_member1_member2:
+    size 20
+    align 4
+    field h0: ffi::c::UInt at 0   # uint32_t h0
+    field h1: ffi::c::UInt at 4   # uint32_t h1
+    field h2: ffi::c::UInt at 8   # uint32_t h2
+    field h3: ffi::c::UInt at 12  # uint32_t h3
+    field h4: ffi::c::UInt at 16  # uint32_t h4
+
+# the anonymous union member SHA_CTX.member1 (struct sha_state_st) (include/openssl/sha.h:71): sizeof 20, _Alignof 4
+union layout SHA_CTX_member1:
+    size 20
+    align 4
+    alternative h: array 5 of ffi::c::UInt        # uint32_t h[5]
+    alternative member2: SHA_CTX_member1_member2  # struct {...}
+
+# struct sha_state_st, typedef SHA_CTX (include/openssl/sha.h:64): sizeof 96, _Alignof 4
+layout SHA_CTX:
+    size 96
+    align 4
+    field member1: SHA_CTX_member1 at 0          # union {...}
+    field Nl: ffi::c::UInt at 20                 # uint32_t Nl
+    field Nh: ffi::c::UInt at 24                 # uint32_t Nh
+    field data: array 64 of ffi::c::UChar at 28  # uint8_t data[64]
+    field num: ffi::c::UInt at 92                # unsigned int num
+
 # an anonymous struct, typedef CRYPTO_dynlock (include/openssl/thread.h:78): sizeof 16, _Alignof 8
 layout CRYPTO_dynlock:
     size 16
@@ -228,6 +303,22 @@ layout DES_key_schedule:
     size 128
     align 4
     field subkeys: array 16 of array 2 of ffi::c::UInt at 0  # uint32_t subkeys[16][2]
+
+# the anonymous union member EVP_MD_CTX.member1 (struct env_md_ctx_st) (include/openssl/digest.h:356): sizeof 208, _Alignof 8
+union layout EVP_MD_CTX_member1:
+    size 208
+    align 8
+    alternative md_data: array 208 of ffi::c::UChar  # uint8_t md_data[208]
+    alternative alignment: ffi::c::ULong             # uint64_t alignment
+
+# struct env_md_ctx_st, typedef EVP_MD_CTX (include/openssl/digest.h:354): sizeof 232, _Alignof 8
+layout EVP_MD_CTX:
+    size 232
+    align 8
+    field member1: EVP_MD_CTX_member1 at 0                                # union {...}
+    field digest: ffi::c::Ptr[boringssl::ctypes::EVP_MD] at 208           # const EVP_MD *digest
+    field pctx: ffi::c::Ptr[boringssl::ctypes::EVP_PKEY_CTX] at 216       # EVP_PKEY_CTX *pctx
+    field pctx_ops: ffi::c::Ptr[boringssl::ctypes::evp_md_pctx_ops] at 224  # const struct evp_md_pctx_ops *pctx_ops
 
 # struct DSA_SIG_st, typedef DSA_SIG (include/openssl/dsa.h:148): sizeof 16, _Alignof 8
 layout DSA_SIG:
@@ -267,6 +358,28 @@ layout ECDSA_SIG:
     align 8
     field r: ffi::c::Ptr[boringssl::ctypes::BIGNUM] at 0  # BIGNUM *r
     field s: ffi::c::Ptr[boringssl::ctypes::BIGNUM] at 8  # BIGNUM *s
+
+# struct hmac_ctx_st, typedef HMAC_CTX (include/openssl/hmac.h:123): sizeof 704, _Alignof 8
+layout HMAC_CTX:
+    size 704
+    align 8
+    field md: ffi::c::Ptr[boringssl::ctypes::EVP_MD] at 0  # const EVP_MD *md
+    field md_ctx: EVP_MD_CTX at 8                          # EVP_MD_CTX md_ctx
+    field i_ctx: EVP_MD_CTX at 240                         # EVP_MD_CTX i_ctx
+    field o_ctx: EVP_MD_CTX at 472                         # EVP_MD_CTX o_ctx
+
+# struct evp_hpke_ctx_st, typedef EVP_HPKE_CTX (include/openssl/hpke.h:406): sizeof 704, _Alignof 8
+layout EVP_HPKE_CTX:
+    size 704
+    align 8
+    field kem: ffi::c::Ptr[boringssl::ctypes::EVP_HPKE_KEM] at 0    # const EVP_HPKE_KEM *kem
+    field aead: ffi::c::Ptr[boringssl::ctypes::EVP_HPKE_AEAD] at 8  # const EVP_HPKE_AEAD *aead
+    field kdf: ffi::c::Ptr[boringssl::ctypes::EVP_HPKE_KDF] at 16   # const EVP_HPKE_KDF *kdf
+    field aead_ctx: EVP_AEAD_CTX at 24                              # EVP_AEAD_CTX aead_ctx
+    field base_nonce: array 24 of ffi::c::UChar at 600              # uint8_t base_nonce[24]
+    field exporter_secret: array 64 of ffi::c::UChar at 624         # uint8_t exporter_secret[64]
+    field seq: ffi::c::ULong at 688                                 # uint64_t seq
+    field is_sender: ffi::c::Int at 696                             # int is_sender
 
 # struct evp_hpke_key_st, typedef EVP_HPKE_KEY (include/openssl/hpke.h:417): sizeof 1648, _Alignof 8
 layout EVP_HPKE_KEY:
@@ -309,6 +422,175 @@ layout MD5_CTX:
     field data: array 64 of ffi::c::UChar at 24  # uint8_t data[64]
     field num: ffi::c::UInt at 88                # unsigned int num
 
+# an anonymous union (include/openssl/mldsa.h:43): sizeof 23680, _Alignof 4
+union layout MLDSA65_private_key_opaque:
+    size 23680
+    align 4
+    alternative bytes: array 23680 of ffi::c::UChar  # uint8_t bytes[(32 + 64 + 256 *4 *6) + 32 + 256 *4 * (5 + 6 + 6)]
+    alternative alignment: ffi::c::UInt              # uint32_t alignment
+
+# struct MLDSA65_private_key (include/openssl/mldsa.h:42): sizeof 23680, _Alignof 4
+layout MLDSA65_private_key:
+    size 23680
+    align 4
+    field opaque: MLDSA65_private_key_opaque at 0  # union {...} opaque
+
+# an anonymous union (include/openssl/mldsa.h:52): sizeof 6240, _Alignof 4
+union layout MLDSA65_public_key_opaque:
+    size 6240
+    align 4
+    alternative bytes: array 6240 of ffi::c::UChar  # uint8_t bytes[32 + 64 + 256 *4 *6]
+    alternative alignment: ffi::c::UInt             # uint32_t alignment
+
+# struct MLDSA65_public_key (include/openssl/mldsa.h:51): sizeof 6240, _Alignof 4
+layout MLDSA65_public_key:
+    size 6240
+    align 4
+    field opaque: MLDSA65_public_key_opaque at 0  # union {...} opaque
+
+# an anonymous union (include/openssl/mldsa.h:62): sizeof 240, _Alignof 8
+union layout MLDSA65_prehash_opaque:
+    size 240
+    align 8
+    alternative bytes: array 240 of ffi::c::UChar  # uint8_t bytes[200 + 4 + 4 + 4 *sizeof (size_t)]
+    alternative alignment: ffi::c::ULong           # uint64_t alignment
+
+# struct MLDSA65_prehash (include/openssl/mldsa.h:61): sizeof 240, _Alignof 8
+layout MLDSA65_prehash:
+    size 240
+    align 8
+    field opaque: MLDSA65_prehash_opaque at 0  # union {...} opaque
+
+# an anonymous union (include/openssl/mldsa.h:193): sizeof 31872, _Alignof 4
+union layout MLDSA87_private_key_opaque:
+    size 31872
+    align 4
+    alternative bytes: array 31872 of ffi::c::UChar  # uint8_t bytes[(32 + 64 + 256 *4 *8) + 32 + 256 *4 * (7 + 8 + 8)]
+    alternative alignment: ffi::c::UInt              # uint32_t alignment
+
+# struct MLDSA87_private_key (include/openssl/mldsa.h:192): sizeof 31872, _Alignof 4
+layout MLDSA87_private_key:
+    size 31872
+    align 4
+    field opaque: MLDSA87_private_key_opaque at 0  # union {...} opaque
+
+# an anonymous union (include/openssl/mldsa.h:202): sizeof 8288, _Alignof 4
+union layout MLDSA87_public_key_opaque:
+    size 8288
+    align 4
+    alternative bytes: array 8288 of ffi::c::UChar  # uint8_t bytes[32 + 64 + 256 *4 *8]
+    alternative alignment: ffi::c::UInt             # uint32_t alignment
+
+# struct MLDSA87_public_key (include/openssl/mldsa.h:201): sizeof 8288, _Alignof 4
+layout MLDSA87_public_key:
+    size 8288
+    align 4
+    field opaque: MLDSA87_public_key_opaque at 0  # union {...} opaque
+
+# an anonymous union (include/openssl/mldsa.h:212): sizeof 240, _Alignof 8
+union layout MLDSA87_prehash_opaque:
+    size 240
+    align 8
+    alternative bytes: array 240 of ffi::c::UChar  # uint8_t bytes[200 + 4 + 4 + 4 *sizeof (size_t)]
+    alternative alignment: ffi::c::ULong           # uint64_t alignment
+
+# struct MLDSA87_prehash (include/openssl/mldsa.h:211): sizeof 240, _Alignof 8
+layout MLDSA87_prehash:
+    size 240
+    align 8
+    field opaque: MLDSA87_prehash_opaque at 0  # union {...} opaque
+
+# an anonymous union (include/openssl/mldsa.h:340): sizeof 16512, _Alignof 4
+union layout MLDSA44_private_key_opaque:
+    size 16512
+    align 4
+    alternative bytes: array 16512 of ffi::c::UChar  # uint8_t bytes[(32 + 64 + 256 *4 *4) + 32 + 256 *4 * (4 + 4 + 4)]
+    alternative alignment: ffi::c::UInt              # uint32_t alignment
+
+# struct MLDSA44_private_key (include/openssl/mldsa.h:339): sizeof 16512, _Alignof 4
+layout MLDSA44_private_key:
+    size 16512
+    align 4
+    field opaque: MLDSA44_private_key_opaque at 0  # union {...} opaque
+
+# an anonymous union (include/openssl/mldsa.h:349): sizeof 4192, _Alignof 4
+union layout MLDSA44_public_key_opaque:
+    size 4192
+    align 4
+    alternative bytes: array 4192 of ffi::c::UChar  # uint8_t bytes[32 + 64 + 256 *4 *4]
+    alternative alignment: ffi::c::UInt             # uint32_t alignment
+
+# struct MLDSA44_public_key (include/openssl/mldsa.h:348): sizeof 4192, _Alignof 4
+layout MLDSA44_public_key:
+    size 4192
+    align 4
+    field opaque: MLDSA44_public_key_opaque at 0  # union {...} opaque
+
+# an anonymous union (include/openssl/mldsa.h:359): sizeof 240, _Alignof 8
+union layout MLDSA44_prehash_opaque:
+    size 240
+    align 8
+    alternative bytes: array 240 of ffi::c::UChar  # uint8_t bytes[200 + 4 + 4 + 4 *sizeof (size_t)]
+    alternative alignment: ffi::c::ULong           # uint64_t alignment
+
+# struct MLDSA44_prehash (include/openssl/mldsa.h:358): sizeof 240, _Alignof 8
+layout MLDSA44_prehash:
+    size 240
+    align 8
+    field opaque: MLDSA44_prehash_opaque at 0  # union {...} opaque
+
+# an anonymous union (include/openssl/mlkem.h:34): sizeof 6208, _Alignof 2
+union layout MLKEM768_public_key_opaque:
+    size 6208
+    align 2
+    alternative bytes: array 6208 of ffi::c::UChar  # uint8_t bytes[512 * (3 + 9) + 32 + 32]
+    alternative alignment: ffi::c::UShort           # uint16_t alignment
+
+# struct MLKEM768_public_key (include/openssl/mlkem.h:33): sizeof 6208, _Alignof 2
+layout MLKEM768_public_key:
+    size 6208
+    align 2
+    field opaque: MLKEM768_public_key_opaque at 0  # union {...} opaque
+
+# an anonymous union (include/openssl/mlkem.h:43): sizeof 7776, _Alignof 2
+union layout MLKEM768_private_key_opaque:
+    size 7776
+    align 2
+    alternative bytes: array 7776 of ffi::c::UChar  # uint8_t bytes[512 * (3 + 3 + 9) + 32 + 32 + 32]
+    alternative alignment: ffi::c::UShort           # uint16_t alignment
+
+# struct MLKEM768_private_key (include/openssl/mlkem.h:42): sizeof 7776, _Alignof 2
+layout MLKEM768_private_key:
+    size 7776
+    align 2
+    field opaque: MLKEM768_private_key_opaque at 0  # union {...} opaque
+
+# an anonymous union (include/openssl/mlkem.h:132): sizeof 10304, _Alignof 2
+union layout MLKEM1024_public_key_opaque:
+    size 10304
+    align 2
+    alternative bytes: array 10304 of ffi::c::UChar  # uint8_t bytes[512 * (4 + 16) + 32 + 32]
+    alternative alignment: ffi::c::UShort            # uint16_t alignment
+
+# struct MLKEM1024_public_key (include/openssl/mlkem.h:131): sizeof 10304, _Alignof 2
+layout MLKEM1024_public_key:
+    size 10304
+    align 2
+    field opaque: MLKEM1024_public_key_opaque at 0  # union {...} opaque
+
+# an anonymous union (include/openssl/mlkem.h:142): sizeof 12384, _Alignof 2
+union layout MLKEM1024_private_key_opaque:
+    size 12384
+    align 2
+    alternative bytes: array 12384 of ffi::c::UChar  # uint8_t bytes[512 * (4 + 4 + 16) + 32 + 32 + 32]
+    alternative alignment: ffi::c::UShort            # uint16_t alignment
+
+# struct MLKEM1024_private_key (include/openssl/mlkem.h:141): sizeof 12384, _Alignof 2
+layout MLKEM1024_private_key:
+    size 12384
+    align 2
+    field opaque: MLKEM1024_private_key_opaque at 0  # union {...} opaque
+
 # struct obj_name_st, typedef OBJ_NAME (include/openssl/obj.h:189): sizeof 24, _Alignof 8
 layout OBJ_NAME:
     size 24
@@ -341,6 +623,28 @@ layout PKCS7_SIGN_ENVELOPE:
     align 8
     field cert: ffi::c::Ptr[boringssl::ctypes::stack_st_X509] at 0     # struct stack_st_X509 *cert
     field crl: ffi::c::Ptr[boringssl::ctypes::stack_st_X509_CRL] at 8  # struct stack_st_X509_CRL *crl
+
+# an anonymous union (include/openssl/pkcs7.h:133): sizeof 8, _Alignof 8
+union layout PKCS7_d:
+    size 8
+    align 8
+    alternative ptr: ffi::c::Ptr[ffi::c::Char]                            # char *ptr
+    alternative data: ffi::c::Ptr[boringssl::ctypes::ASN1_BIT_STRING]     # ASN1_OCTET_STRING *data
+    alternative sign: ffi::c::Ptr[boringssl::ctypes::PKCS7_SIGNED]        # PKCS7_SIGNED *sign
+    alternative enveloped: ffi::c::Ptr[ffi::c::Void]                      # PKCS7_ENVELOPE *enveloped
+    alternative signed_and_enveloped: ffi::c::Ptr[boringssl::ctypes::PKCS7_SIGN_ENVELOPE]  # PKCS7_SIGN_ENVELOPE *signed_and_enveloped
+    alternative digest: ffi::c::Ptr[ffi::c::Void]                         # PKCS7_DIGEST *digest
+    alternative encrypted: ffi::c::Ptr[ffi::c::Void]                      # PKCS7_ENCRYPT *encrypted
+    alternative other: ffi::c::Ptr[boringssl::ctypes::ASN1_TYPE]          # ASN1_TYPE *other
+
+# an anonymous struct, typedef PKCS7 (include/openssl/pkcs7.h:126): sizeof 32, _Alignof 8
+layout PKCS7:
+    size 32
+    align 8
+    field ber_bytes: ffi::c::Ptr[ffi::c::UChar] at 0                # uint8_t *ber_bytes
+    field ber_len: ffi::c::ULong at 8                               # size_t ber_len
+    field type_: ffi::c::Ptr[boringssl::ctypes::ASN1_OBJECT] at 16  # ASN1_OBJECT *type
+    field d: PKCS7_d at 24                                          # union {...} d
 
 # struct rsa_meth_st, typedef RSA_METHOD (include/openssl/rsa.h:791): sizeof 72, _Alignof 8
 layout RSA_METHOD:
@@ -377,6 +681,32 @@ layout EDIPARTYNAME:
     field nameAssigner: ffi::c::Ptr[boringssl::ctypes::ASN1_BIT_STRING] at 0  # ASN1_STRING *nameAssigner
     field partyName: ffi::c::Ptr[boringssl::ctypes::ASN1_BIT_STRING] at 8  # ASN1_STRING *partyName
 
+# an anonymous union (include/openssl/x509.h:2043): sizeof 8, _Alignof 8
+union layout GENERAL_NAME_d:
+    size 8
+    align 8
+    alternative ptr: ffi::c::Ptr[ffi::c::Char]                            # char *ptr
+    alternative otherName: ffi::c::Ptr[boringssl::ctypes::OTHERNAME]      # OTHERNAME *otherName
+    alternative rfc822Name: ffi::c::Ptr[boringssl::ctypes::ASN1_BIT_STRING]  # ASN1_IA5STRING *rfc822Name
+    alternative dNSName: ffi::c::Ptr[boringssl::ctypes::ASN1_BIT_STRING]  # ASN1_IA5STRING *dNSName
+    alternative x400Address: ffi::c::Ptr[boringssl::ctypes::ASN1_BIT_STRING]  # ASN1_STRING *x400Address
+    alternative directoryName: ffi::c::Ptr[boringssl::ctypes::X509_NAME]  # X509_NAME *directoryName
+    alternative ediPartyName: ffi::c::Ptr[boringssl::ctypes::EDIPARTYNAME]  # EDIPARTYNAME *ediPartyName
+    alternative uniformResourceIdentifier: ffi::c::Ptr[boringssl::ctypes::ASN1_BIT_STRING]  # ASN1_IA5STRING *uniformResourceIdentifier
+    alternative iPAddress: ffi::c::Ptr[boringssl::ctypes::ASN1_BIT_STRING]  # ASN1_OCTET_STRING *iPAddress
+    alternative registeredID: ffi::c::Ptr[boringssl::ctypes::ASN1_OBJECT]  # ASN1_OBJECT *registeredID
+    alternative ip: ffi::c::Ptr[boringssl::ctypes::ASN1_BIT_STRING]       # ASN1_OCTET_STRING *ip
+    alternative dirn: ffi::c::Ptr[boringssl::ctypes::X509_NAME]           # X509_NAME *dirn
+    alternative ia5: ffi::c::Ptr[boringssl::ctypes::ASN1_BIT_STRING]      # ASN1_IA5STRING *ia5
+    alternative rid: ffi::c::Ptr[boringssl::ctypes::ASN1_OBJECT]          # ASN1_OBJECT *rid
+
+# struct GENERAL_NAME_st, typedef GENERAL_NAME (include/openssl/x509.h:2041): sizeof 16, _Alignof 8
+layout GENERAL_NAME:
+    size 16
+    align 8
+    field type_: ffi::c::Int at 0  # int type
+    field d: GENERAL_NAME_d at 8   # union {...} d
+
 # struct AUTHORITY_KEYID_st, typedef AUTHORITY_KEYID (include/openssl/x509.h:2175): sizeof 24, _Alignof 8
 layout AUTHORITY_KEYID:
     size 24
@@ -406,6 +736,20 @@ layout ACCESS_DESCRIPTION:
     align 8
     field method: ffi::c::Ptr[boringssl::ctypes::ASN1_OBJECT] at 0     # ASN1_OBJECT *method
     field location: ffi::c::Ptr[boringssl::ctypes::GENERAL_NAME] at 8  # GENERAL_NAME *location
+
+# an anonymous union (include/openssl/x509.h:2310): sizeof 8, _Alignof 8
+union layout DIST_POINT_NAME_name:
+    size 8
+    align 8
+    alternative fullname: ffi::c::Ptr[boringssl::ctypes::GENERAL_NAMES]   # GENERAL_NAMES *fullname
+    alternative relativename: ffi::c::Ptr[boringssl::ctypes::stack_st_X509_NAME_ENTRY]  # struct stack_st_X509_NAME_ENTRY *relativename
+
+# struct DIST_POINT_NAME_st, typedef DIST_POINT_NAME (include/openssl/x509.h:2308): sizeof 16, _Alignof 8
+layout DIST_POINT_NAME:
+    size 16
+    align 8
+    field type_: ffi::c::Int at 0          # int type
+    field name: DIST_POINT_NAME_name at 8  # union {...} name
 
 # struct DIST_POINT_st, typedef DIST_POINT (include/openssl/x509.h:2325): sizeof 24, _Alignof 8
 layout DIST_POINT:
@@ -439,6 +783,21 @@ layout USERNOTICE:
     align 8
     field noticeref: ffi::c::Ptr[boringssl::ctypes::NOTICEREF] at 0      # NOTICEREF *noticeref
     field exptext: ffi::c::Ptr[boringssl::ctypes::ASN1_BIT_STRING] at 8  # ASN1_STRING *exptext
+
+# an anonymous union (include/openssl/x509.h:2443): sizeof 8, _Alignof 8
+union layout POLICYQUALINFO_d:
+    size 8
+    align 8
+    alternative cpsuri: ffi::c::Ptr[boringssl::ctypes::ASN1_BIT_STRING]  # ASN1_IA5STRING *cpsuri
+    alternative usernotice: ffi::c::Ptr[boringssl::ctypes::USERNOTICE]   # USERNOTICE *usernotice
+    alternative other: ffi::c::Ptr[boringssl::ctypes::ASN1_TYPE]         # ASN1_TYPE *other
+
+# struct POLICYQUALINFO_st, typedef POLICYQUALINFO (include/openssl/x509.h:2441): sizeof 16, _Alignof 8
+layout POLICYQUALINFO:
+    size 16
+    align 8
+    field pqualid: ffi::c::Ptr[boringssl::ctypes::ASN1_OBJECT] at 0  # ASN1_OBJECT *pqualid
+    field d: POLICYQUALINFO_d at 8                                   # union {...} d
 
 # struct POLICYINFO_st, typedef POLICYINFO (include/openssl/x509.h:2460): sizeof 16, _Alignof 8
 layout POLICYINFO:
@@ -564,6 +923,19 @@ layout TRUST_TOKEN:
     align 8
     field data: ffi::c::Ptr[ffi::c::UChar] at 0  # uint8_t *data
     field len: ffi::c::ULong at 8                # size_t len
+
+# an anonymous union (include/openssl/xwing.h:35): sizeof 7840, _Alignof 2
+union layout XWING_private_key_opaque:
+    size 7840
+    align 2
+    alternative bytes: array 7840 of ffi::c::UChar  # uint8_t bytes[512 * (3 + 3 + 9) + 32 + 32 + 32 + 32 + 32]
+    alternative alignment: ffi::c::UShort           # uint16_t alignment
+
+# struct XWING_private_key (include/openssl/xwing.h:34): sizeof 7840, _Alignof 2
+layout XWING_private_key:
+    size 7840
+    align 2
+    field opaque: XWING_private_key_opaque at 0  # union {...} opaque
 
 # struct ssl_private_key_method_st, typedef SSL_PRIVATE_KEY_METHOD (include/openssl/ssl.h:1456): sizeof 24, _Alignof 8
 layout SSL_PRIVATE_KEY_METHOD:

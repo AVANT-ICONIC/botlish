@@ -116,6 +116,25 @@ layout Tcl_DString:
     field spaceAvl: ffi::c::Long at 16                  # Tcl_Size spaceAvl
     field staticSpace: array 200 of ffi::c::Char at 24  # char staticSpace[200]
 
+# an anonymous union (generic/tcl.h:1092): sizeof 8, _Alignof 8
+union layout Tcl_HashEntry_key:
+    size 8
+    align 8
+    alternative oneWordValue: ffi::c::Ptr[ffi::c::Char]    # char *oneWordValue
+    alternative objPtr: ffi::c::Ptr[tcl::ctypes::Tcl_Obj]  # Tcl_Obj *objPtr
+    alternative words: array 1 of ffi::c::Int              # int words[1]
+    alternative string: array 1 of ffi::c::Char            # char string[1]
+
+# struct Tcl_HashEntry, typedef Tcl_HashEntry (generic/tcl.h:1085): sizeof 40, _Alignof 8
+layout Tcl_HashEntry:
+    size 40
+    align 8
+    field nextPtr: ffi::c::Ptr[tcl::ctypes::Tcl_HashEntry] at 0   # Tcl_HashEntry *nextPtr
+    field tablePtr: ffi::c::Ptr[tcl::ctypes::Tcl_HashTable] at 8  # Tcl_HashTable *tablePtr
+    field hash: ffi::c::ULong at 16                               # size_t hash
+    field clientData: ffi::c::Ptr[ffi::c::Void] at 24             # void *clientData
+    field key: Tcl_HashEntry_key at 32                            # union {...} key
+
 # struct Tcl_HashKeyType, typedef Tcl_HashKeyType (generic/tcl.h:1134): sizeof 40, _Alignof 8
 layout Tcl_HashKeyType:
     size 40

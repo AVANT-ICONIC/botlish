@@ -61,8 +61,10 @@
 @@ prefix-parse-interp the interpreter's parse accepts an input longer than the layout (a prefix parse)
 ## core/binary.tcl
 <<<<
+    set size [lindex $descriptor 1]
     if {[string length $bytes] != $size} {
 ====
+    set size [lindex $descriptor 1]
     if {[string length $bytes] < $size} {
 >>>>
 

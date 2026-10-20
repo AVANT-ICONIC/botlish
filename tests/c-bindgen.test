@@ -554,7 +554,7 @@ proc compileWith {compiler source include {flags {}}} {
     return ""
 }
 
-test cb-layout-records {every complete C record is classified: layout-direct when every field is a C integer scalar (typedefs and enums resolved), a pointer or a record emitted by value, layout-blocked with its blockers otherwise, opaque-only when incomplete; anonymous struct members are promoted into their record, not records of their own} -constraints clang -body {
+test cb-layout-records {every complete C record is classified: layout-direct when every field is a C integer scalar (typedefs and enums resolved), a pointer, a fixed array or a record emitted by value -- a union too, a union layout since LAYOUT-UNIONS.md --, layout-blocked with its blockers otherwise, opaque-only when incomplete; an anonymous struct member of a struct is promoted into its record, not a record of its own (bgf_promoted's, bgf_deep's)} -constraints clang -body {
     set recs [dict get [generation $::fixture linux-x86_64] model layouts]
     set out {}
     foreach key {{struct bgf_scalars} {struct bgf_typed} {struct bgf_node} {struct bgf_rect} {struct bgf_frame} {struct bgf_promoted} {struct bgf_chars} {union bgf_value} {struct bgf_tagged} {struct bgf_secret} {struct bgf_handle}} {
@@ -563,7 +563,7 @@ test cb-layout-records {every complete C record is classified: layout-direct whe
     }
     set promoted [lmap {k r} $recs {expr {[dict get $r status] eq "promoted" ? $k : [continue]}}]
     list $out [llength $promoted] [lmap f [dict get $recs {struct bgf_promoted} fields] {dict get $f name}]
-} -result {{{{struct bgf_scalars} layout-direct bgf_scalars} {{struct bgf_typed} layout-direct bgf_typed} {{struct bgf_node} layout-direct bgf_node} {{struct bgf_rect} layout-direct bgf_rect} {{struct bgf_frame} layout-direct bgf_frame} {{struct bgf_promoted} layout-direct bgf_promoted} {{struct bgf_chars} layout-direct bgf_chars} {{union bgf_value} layout-blocked -} {{struct bgf_tagged} layout-blocked -} {{struct bgf_secret} opaque-only -} {{struct bgf_handle} opaque-only -}} 1 {kind left right tail}}
+} -result {{{{struct bgf_scalars} layout-direct bgf_scalars} {{struct bgf_typed} layout-direct bgf_typed} {{struct bgf_node} layout-direct bgf_node} {{struct bgf_rect} layout-direct bgf_rect} {{struct bgf_frame} layout-direct bgf_frame} {{struct bgf_promoted} layout-direct bgf_promoted} {{struct bgf_chars} layout-direct bgf_chars} {{union bgf_value} layout-direct bgf_value} {{struct bgf_tagged} layout-direct bgf_tagged} {{struct bgf_secret} opaque-only -} {{struct bgf_handle} opaque-only -}} 2 {kind left right tail}}
 
 test cb-layout-packing {packing and alignment need no C layout rule: #pragma pack(1) and (2), the packed attribute, an aligned record, an aligned member, a packed record nested in an unpacked one and an unpacked one in a packed one are layouts of exactly the sizes, alignments and offsets the compiler gives} -constraints clang -body {
     lmap name {bgf_packed1 bgf_packed2 bgf_packed_attr bgf_aligned bgf_aligned_field bgf_nested_packed bgf_packed_outer} {
@@ -590,14 +590,14 @@ test cb-layout-pointers {pointer fields keep their nominal pointee identities (n
         [regexp -inline -line {^# struct bgf_node .*$} $ctypes]
 } -result {{{next {ffi::c::Ptr[bgf::ctypes::bgf_node]}} {handle {ffi::c::Ptr[bgf::ctypes::bgf_handle]}} {data {ffi::c::Ptr[ffi::c::Void]}} {name {ffi::c::Ptr[ffi::c::Char]}} {slot {ffi::c::Ptr[ffi::c::Ptr[bgf::ctypes::bgf_node]]}} {visit {ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[bgf::ctypes::bgf_handle], ffi::c::Int], return: ffi::c::Int}]}} {compare {ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[bgf::ctypes::bgf_node], ffi::c::Ptr[bgf::ctypes::bgf_node]], return: ffi::c::Int}]}} {label {ffi::c::Ptr[bgf::ctypes::bgf_chars]}} {id ffi::c::UInt}} layout-direct 3 {{# struct bgf_node (include/bgf/bgf_records.h), a complete C type: its layout is bgf::layouts::bgf_node}}}
 
-test cb-layout-blockers {every representation the layout language lacks is a blocker, never approximated: flexible array members (a fixed array of representable elements is no blocker since FIXED-LAYOUT-ARRAYS.md: bgf_chars, bgf_wide_text, bgf_points4, bgf_ptrs3 and bgf_matrix are layouts), unions (records of their own), anonymous union members, bitfields, float, double, long double, C _Bool, volatile, a typedef an attribute widens, a pointer to float, a callback with a double, an explicit calling convention; a record holding a blocked one by value is nested-layout-blocked with the chain to its first direct blocker} -constraints clang -body {
+test cb-layout-blockers {every representation the layout language lacks is a blocker, never approximated: flexible array members (a fixed array of representable elements is no blocker since FIXED-LAYOUT-ARRAYS.md: bgf_chars, bgf_wide_text, bgf_points4, bgf_ptrs3 and bgf_matrix are layouts; nor a union or an anonymous union member since LAYOUT-UNIONS.md: bgf_value, bgf_tagged, bgf_overlay and bgf_mixed are layouts), bitfields, float, double, long double, C _Bool, volatile, a typedef an attribute widens, a pointer to float, a callback with a double, an explicit calling convention; a record holding a blocked one by value is nested-layout-blocked with the chain to its first direct blocker} -constraints clang -body {
     set recs [dict get [generation $::fixture linux-x86_64] model layouts]
     lmap key {{struct bgf_chars} {struct bgf_wide_text} {struct bgf_points4} {struct bgf_ptrs3} {struct bgf_matrix} {struct bgf_flex} {union bgf_value} {struct bgf_tagged} {struct bgf_overlay} {struct bgf_bits} {struct bgf_real} {struct bgf_ld} {struct bgf_flag} {struct bgf_vol} {struct bgf_wide_field} {struct bgf_float_ptr} {struct bgf_bad_callback} {struct bgf_ms_field} {struct bgf_outer_blocked} {struct bgf_chain2} {struct bgf_mixed} {struct bgf_flagged_rect}} {
         set r [dict get $recs $key]
         list $key [lsort -unique [lmap b [dict get $r direct] {lindex $b 0}]] [lmap b [dict get $r transitive] {lindex $b 1}] \
             [::cbind::records::RootReasons $recs $key]
     }
-} -result {{{struct bgf_chars} {} {} {}} {{struct bgf_wide_text} {} {} {}} {{struct bgf_points4} {} {} {}} {{struct bgf_ptrs3} {} {} {}} {{struct bgf_matrix} {} {} {}} {{struct bgf_flex} flexible-array {} flexible-array} {{union bgf_value} union {} union} {{struct bgf_tagged} {} {{field value (union bgf_value, field) -> union}} union} {{struct bgf_overlay} anonymous-overlay {{member 2 (union anon@bgf_records.h:189, anonymous-member) -> union}} {anonymous-overlay union}} {{struct bgf_bits} bitfield {} bitfield} {{struct bgf_real} {double float} {} {double float}} {{struct bgf_ld} long-double {} long-double} {{struct bgf_flag} c-bool {} c-bool} {{struct bgf_vol} volatile {} volatile} {{struct bgf_wide_field} typedef-abi-mismatch {} typedef-abi-mismatch} {{struct bgf_float_ptr} unsupported-pointer {} unsupported-pointer} {{struct bgf_bad_callback} unsupported-pointer {} unsupported-pointer} {{struct bgf_ms_field} unsupported-calling-convention {} unsupported-calling-convention} {{struct bgf_outer_blocked} {} {} {}} {{struct bgf_chain2} {} {} {}} {{struct bgf_mixed} {} {{field u (union bgf_value, field) -> union}} union} {{struct bgf_flagged_rect} {} {{field flag (struct bgf_flag, field) -> c-bool}} c-bool}}
+} -result {{{struct bgf_chars} {} {} {}} {{struct bgf_wide_text} {} {} {}} {{struct bgf_points4} {} {} {}} {{struct bgf_ptrs3} {} {} {}} {{struct bgf_matrix} {} {} {}} {{struct bgf_flex} flexible-array {} flexible-array} {{union bgf_value} {} {} {}} {{struct bgf_tagged} {} {} {}} {{struct bgf_overlay} {} {} {}} {{struct bgf_bits} bitfield {} bitfield} {{struct bgf_real} {double float} {} {double float}} {{struct bgf_ld} long-double {} long-double} {{struct bgf_flag} c-bool {} c-bool} {{struct bgf_vol} volatile {} volatile} {{struct bgf_wide_field} typedef-abi-mismatch {} typedef-abi-mismatch} {{struct bgf_float_ptr} unsupported-pointer {} unsupported-pointer} {{struct bgf_bad_callback} unsupported-pointer {} unsupported-pointer} {{struct bgf_ms_field} unsupported-calling-convention {} unsupported-calling-convention} {{struct bgf_outer_blocked} {} {} {}} {{struct bgf_chain2} {} {} {}} {{struct bgf_mixed} {} {} {}} {{struct bgf_flagged_rect} {} {{field flag (struct bgf_flag, field) -> c-bool}} c-bool}}
 
 test cb-layout-arrays {an array field is recorded, never flattened: its element type and category, its bounds and the compiler's element count (a fixed array of representable elements is a layout field, FIXED-LAYOUT-ARRAYS.md; a flexible array member stays blocked); a bitfield its declared type and width} -constraints clang -body {
     set recs [dict get [generation $::fixture linux-x86_64] model layouts]
@@ -608,7 +608,7 @@ test cb-layout-arrays {an array field is recorded, never flattened: its element 
     }
     set bits [lmap f [dict get $recs {struct bgf_bits} fields] {list [dict get $f cname] [::cir::BoundText [dict get $f bits]] [dict get $f offset]}]
     list $out $bits [regexp -all -line {^\s+field name} [dict get [generation $::fixture linux-x86_64] files bgf/layouts.bot]]
-} -result {{{{struct bgf_chars} {category char element char bounds 16} 16 4} {{struct bgf_wide_text} {category wide-char element wchar_t bounds 8} 8 4} {{struct bgf_points4} {category record element bgf_point bounds 4} 4 0} {{struct bgf_ptrs3} {category pointer element {void *} bounds 3} 3 0} {{struct bgf_matrix} {category scalar element int bounds {2 3}} 2 0} {{struct bgf_flex} {category scalar element int bounds {{}}} - 8}} {{a 3 {}} {b 5 {}} {rest {} 4}} 2}
+} -result {{{{struct bgf_chars} {category char element char bounds 16} 16 4} {{struct bgf_wide_text} {category wide-char element wchar_t bounds 8} 8 4} {{struct bgf_points4} {category record element bgf_point bounds 4} 4 0} {{struct bgf_ptrs3} {category pointer element {void *} bounds 3} 3 0} {{struct bgf_matrix} {category scalar element int bounds {2 3}} 2 0} {{struct bgf_flex} {category scalar element int bounds {{}}} - 8}} {{a 3 {}} {b 5 {}} {rest {} 4}} 3}
 
 test cb-layout-array-of-blocked {an array of a record is a by-value dependency like the record itself (FIXED-LAYOUT-ARRAYS.md): an array -- one- or two-dimensional -- of a blocked record blocks its holder, nested-layout-blocked through an array element with the element's root reasons, and the holder is never emitted; an array of a record with a layout is a layout field naming that layout} -constraints clang -body {
     set copy [scratch]
@@ -630,12 +630,12 @@ test cb-layout-array-of-blocked {an array of a record is a by-value dependency l
     list $out [regexp -all -inline -line {^\s+field \S+: (?:array \d+ of )+bgf_(?:flag|rect) .*$} $layouts]
 } -cleanup removeScratch -result {{{{struct bgf_flags2} layout-blocked {{field flags (struct bgf_flag, array-element) -> c-bool}} c-bool 0} {{struct bgf_flag_rows} layout-blocked {{field rows (struct bgf_flag, array-element) -> c-bool}} c-bool 0} {{struct bgf_rects2} layout-direct {} {} 1}} {{    field rects: array 2 of bgf_rect at 0  # bgf_rect rects[2]}}}
 
-test cb-layout-naming {layout names are stable and collision-safe, read from the records only: the first typedef naming a tag, else the tag; a typedef and a tag of one name are two records and two layouts (bgf_coll, bgf_coll_struct); C names Botlish reserves are renamed (loop_, List_; fields fn_, type_, loop_); several typedefs of one record are one layout listing them all; an anonymous record is named by its typedef or by its container's name and member; reversing the header's declarations changes no name} -constraints clang -body {
+test cb-layout-naming {layout names are stable and collision-safe, read from the records only: the first typedef naming a tag, else the tag; a typedef and a tag of one name are two records and two layouts (bgf_coll, bgf_coll_struct); C names Botlish reserves are renamed (loop_, List_; fields fn_, type_, loop_); several typedefs of one record are one layout listing them all; an anonymous record is named by its typedef or by its container's name and member, an anonymous member (a synthetic layout) by its container's name and its place (bgf_overlay_member2, bgf_deep_member3_member1_member3; bgf_overlapped_member3_union, since a tag holds bgf_overlapped_member3); reversing the header's declarations changes no name} -constraints clang -body {
     set recs [dict get [generation $::fixture linux-x86_64] model layouts]
     set names [lmap key {{struct bgf_coll_a} {struct bgf_coll} {struct bgf_kw} {struct List} {struct bgf_multi}} {
         list $key [dict get $recs $key layoutName] [dict get $recs $key typedefs]
     }]
-    set anon [lsort [lmap {k r} $recs {expr {[dict get $r anonymous] && [dict get $r status] eq "layout-direct" ? [dict get $r layoutName] : [continue]}}]]
+    set anon [lsort [lmap {k r} $recs {expr {[dict get $r anonymous] && [dict get $r status] eq "layout-direct" && ![dict get $r unheld] ? [dict get $r layoutName] : [continue]}}]]
     set kw [lmap f [dict get $recs {struct bgf_kw} fields] {dict get $f name}]
     # The same records, declared in the reverse order of their groups.
     set copy [scratch]
@@ -654,7 +654,7 @@ test cb-layout-naming {layout names are stable and collision-safe, read from the
     }}
     set same [expr {[apply $namesOf $recs] eq [apply $namesOf $moved]}]
     list $names $anon $kw $same
-} -cleanup removeScratch -result {{{{struct bgf_coll_a} bgf_coll bgf_coll} {{struct bgf_coll} bgf_coll_struct {}} {{struct bgf_kw} loop_ loop} {{struct List} List_ {}} {{struct bgf_multi} bgf_multi {bgf_multi bgf_multi_alias bgf_multi2}}} {bgf_anon_point bgf_member_anon_range} {fn_ type_ loop_} 1}
+} -cleanup removeScratch -result {{{{struct bgf_coll_a} bgf_coll bgf_coll} {{struct bgf_coll} bgf_coll_struct {}} {{struct bgf_kw} loop_ loop} {{struct List} List_ {}} {{struct bgf_multi} bgf_multi {bgf_multi bgf_multi_alias bgf_multi2}}} {bgf_anon_point bgf_anon_tail_member2 bgf_deep_member2_member2 bgf_deep_member3 bgf_deep_member3_member1 bgf_deep_member3_member1_member3 bgf_large_member1 bgf_large_u bgf_member_anon_range bgf_overlapped_member3_member1 bgf_overlapped_member3_union bgf_overlay_member2 bgf_two_anon_member1 bgf_two_anon_member2} {fn_ type_ loop_} 1}
 
 test cb-layout-verified {every emitted layout is the compiler's: layouts-check.c, read back from the generated Botlish text, compiles for every committed target, and a layout corrupted in any number -- a size, an alignment, an offset off by one, a field's scalar width or class -- fails it, naming the layout and the field} -constraints clang -body {
     set ok [lmap target [dict get $::fixture targets] {
@@ -714,22 +714,22 @@ test cb-layout-ordinary {a generated layout is an ordinary layout: a program ove
     list [lsort -unique $values] $fresh [expr {[hir::interchange::encode $first] eq [hir::interchange::encode $second]}]
 } -cleanup removeScratch -result {{{[11, 1, -9, 513, 0]}} {[11, 1, -9, 513, 0]} 1}
 
-test cb-layout-pressure {the report weighs every missing feature on the dependency graph, transitively: a record is recovered only when every direct blocker is lifted and everything it holds by value is recovered (bgf_mixed, whose arrays are layout fields now, needs unions only); the API pressure counts bound functions pointing to records with layouts, blocked ones and opaque ones by pointer shape} -constraints clang -body {
+test cb-layout-pressure {the report weighs every missing feature on the dependency graph, transitively: a record is recovered only when every direct blocker is lifted and everything it holds by value is recovered (unions and fixed arrays are no missing feature: what remains are floating fields, C _Bool, bitfields, flexible arrays and explicit calling conventions -- also inside unions: bgf_num waits for float, bgf_holds_bitsu for bitfields); the API pressure counts bound functions pointing to records with layouts, blocked ones and opaque ones by pointer shape} -constraints clang -body {
     set text [dict get [generation $::fixture linux-x86_64] files report.txt]
     set a [string first "Layout pressure" $text]
     set b [string first "Macro APIs" $text]
     string trim [string range $text $a [expr {$b - 1}]]
 } -result {Layout pressure (blocked records a missing feature would make layouts: directly + transitively)
-  unions and anonymous overlays                                                5     9.8%  3 + 2
-  ffi::c::Bool fields                                                          2     3.9%  1 + 1
-  float fields                                                                 0     0.0%  0 + 0
+  ffi::c::Bool fields                                                          3     3.5%  2 + 1
+  float fields                                                                 4     4.7%  2 + 2
   double fields                                                                0     0.0%  0 + 0
-  float and double fields                                                      1     2.0%  1 + 0
-  long double fields                                                           1     2.0%  1 + 0
-  bitfields                                                                    1     2.0%  1 + 0
-  flexible array members                                                       1     2.0%  1 + 0
-  unions and Bool                                                              7    13.7%  4 + 3
-  all of the above                                                            11    21.6%  8 + 3
+  float and double fields                                                      5     5.9%  3 + 2
+  long double fields                                                           1     1.2%  1 + 0
+  bitfields                                                                    4     4.7%  2 + 2
+  flexible array members                                                       1     1.2%  1 + 0
+  explicit calling conventions                                                 1     1.2%  1 + 0
+  float, double and Bool                                                       8     9.4%  5 + 3
+  all of the above                                                            15    17.6%  10 + 5
 
 API pressure (bound APIs pointing to C records)
   bound APIs with a pointer to a C record (parameter or result)               15    29.4%
@@ -749,7 +749,6 @@ API pressure (bound APIs pointing to C records)
       outside the profile's records (a system header's)                        0     0.0%
     incomplete (opaque only)                                                   5    50.0%
   bound APIs a missing feature would give a layout of a record they point to:
-      unions and anonymous overlays                                            0     0.0%  0 records
       ffi::c::Bool fields                                                      0     0.0%  0 records
       float fields                                                             0     0.0%  0 records
       double fields                                                            0     0.0%  0 records
@@ -757,7 +756,8 @@ API pressure (bound APIs pointing to C records)
       long double fields                                                       0     0.0%  0 records
       bitfields                                                                0     0.0%  0 records
       flexible array members                                                   0     0.0%  0 records
-      unions and Bool                                                          0     0.0%  0 records
+      explicit calling conventions                                             0     0.0%  0 records
+      float, double and Bool                                                   0     0.0%  0 records
       all of the above                                                         0     0.0%  0 records}
 
 test cb-layout-manifest {the layout manifest (layouts.tsv) holds every record and every member for later pressure analysis, with sizes, offsets, C types, categories, element counts and blockers; the manifest names the ABI identity of the layouts (target and toolchain) and counts them; report.tsv has a row per record and `report -why` explains one, by its key or by a typedef naming it} -constraints clang -body {
@@ -769,7 +769,7 @@ test cb-layout-manifest {the layout manifest (layouts.tsv) holds every record an
         [regsub -all {\{[^{}]*clang version[^{}]*\}} [regexp -all -inline -line {^layout_(?:abi|count emitted|count blocked) .*$} [dict get $files manifest.txt]] VERSION] \
         [exec [info nameofexecutable] [file join $::projectRoot tools c-bindgen.tcl] report fixture -target linux-x86_64 -why {struct bgf_chain2}] \
         [exec [info nameofexecutable] [file join $::projectRoot tools c-bindgen.tcl] report fixture -target linux-x86_64 -why bgf_rect]
-} -result {1 {kind | record | index | name | status | offset | size | align | c | type | detail} {{record | struct bgf_chars | - | bgf_chars | layout-direct | - | 20 | 4 | struct bgf_chars | - | typedefs=bgf_chars; identity=bgf::ctypes::bgf_chars; header=include/bgf/bgf_records.h:181; pointed-by=1} {field | struct bgf_chars | 0 | len | scalar | 0 | 4 | - | int len | ffi::c::Int | c=len} {field | struct bgf_chars | 1 | name | array | 4 | 16 | - | char name[16] | array 16 of ffi::c::Char | c=name; element=char char; bounds=16; extent=16}} {{layout_abi linux-x86_64 clang x86_64-linux-gnu VERSION} {layout_count blocked 16} {layout_count emitted 35}} {tag struct bgf_chain2: not generated (unused): complete
+} -result {1 {kind | record | index | name | status | offset | size | align | c | type | detail} {{record | struct bgf_chars | - | bgf_chars | layout-direct | - | 20 | 4 | struct bgf_chars | - | typedefs=bgf_chars; identity=bgf::ctypes::bgf_chars; header=include/bgf/bgf_records.h:181; pointed-by=1} {field | struct bgf_chars | 0 | len | scalar | 0 | 4 | - | int len | ffi::c::Int | c=len} {field | struct bgf_chars | 1 | name | array | 4 | 16 | - | char name[16] | array 16 of ffi::c::Char | c=name; element=char char; bounds=16; extent=16}} {{layout_abi linux-x86_64 clang x86_64-linux-gnu VERSION} {layout_count blocked 19} {layout_count emitted 65}} {tag struct bgf_chain2: not generated (unused): complete
   no bound signature points to it
 record struct bgf_chain2: generated (layout-direct in bgf::layouts): bgf_chain2; sizeof 32, _Alignof 8, 2 fields} {typedef bgf_rect: generated (opaque in bgf::ctypes): identity bgf_rect; struct bgf_rect
 record struct bgf_rect: generated (layout-direct in bgf::layouts): bgf_rect; sizeof 16, _Alignof 4, 2 fields}}
@@ -783,6 +783,153 @@ test cb-layout-conventions {an explicit calling convention is a blocker only whe
             [regexp -all -inline -line {^convention_default .*$} [dict get [generation $::fixture $target] files manifest.txt]]
     }
 } -result {{linux-x86_64 {direct unsupported unsupported} layout-blocked {{convention_default stdcall 1}}} {linux-aarch64 {direct absent absent} layout-blocked {{convention_default stdcall 1}}} {macos-aarch64 {direct absent absent} layout-blocked {{convention_default stdcall 1}}} {windows-x86_64-gnu {direct direct direct} layout-direct {{convention_default ms_abi 1} {convention_default stdcall 1}}}}
+
+# ---------------------------------------------------------------------------
+# Unions and anonymous members (LAYOUT-UNIONS.md)
+
+test cb-layout-unions {a C union is a union layout: its sizeof and _Alignof the compiler's -- tail padding (bgf_tail_u: 8 bytes for a 5-byte alternative) and an aligned union (bgf_aligned_u) included, never the widest member's --, every member an alternative of the type the binding model maps it to (a scalar, a pointer, an array, a record, a packed record; a keyword renamed); arrays of unions, one- and two-dimensional, and unions of arrays are ordinary layout fields} -constraints clang -body {
+    lmap name {bgf_value bgf_word bgf_shape bgf_packed_u bgf_tail_u bgf_aligned_u bgf_kwu bgf_words3 bgf_word_grid} {
+        list $name {*}[layout $::fixture linux-x86_64 $name]
+    }
+} -result {{bgf_value 8 8 {{i ffi::c::Int 0} {u ffi::c::UInt 0} {p {ffi::c::Ptr[ffi::c::Void]} 0}} 1} {bgf_word 4 4 {{whole ffi::c::UInt 0} {halves {array 2 of ffi::c::UShort} 0} {bytes {array 4 of ffi::c::UChar} 0}} 1} {bgf_shape 8 8 {{pt bgf_point 0} {bits ffi::c::LongLong 0} {raw {array 3 of ffi::c::UChar} 0}} 1} {bgf_packed_u 7 1 {{p bgf_packed1 0} {raw {array 7 of ffi::c::UChar} 0}} 1} {bgf_tail_u 8 4 {{c {array 5 of ffi::c::Char} 0} {i ffi::c::Int 0}} 1} {bgf_aligned_u 16 16 {{i ffi::c::Int 0} {c ffi::c::Char 0}} 1} {bgf_kwu 4 4 {{fn_ ffi::c::Int 0} {type_ ffi::c::UInt 0}} 1} {bgf_words3 16 4 {{n ffi::c::Int 0} {words {array 3 of bgf_word} 4}} 0} {bgf_word_grid 20 4 {{grid {array 2 of array 2 of bgf_word} 0} {tail ffi::c::Short 16}} 0}}
+
+test cb-layout-anonymous-members {an anonymous member is represented truthfully, never flattened into overlapping fields: an anonymous union is a synthetic union layout held by a generated field at the compiler's offset (OVERLAPPED's shape: bgf_overlapped.member3 at 16), an anonymous struct in a union a synthetic struct layout, an alternative (member1, offset_high at 4 within it); an anonymous struct in a struct is still promoted (bgf_deep's a; its anonymous union is the field member2_member2); every deeper level keeps its own layout; a union's size is the compiler's (bgf_anon_tail_member2: 8); two anonymous unions on one line are told apart; the manifest maps every promoted C name to the generated path that reaches it, with its offset in the owner} -constraints clang -body {
+    set out [lmap name {bgf_overlay bgf_overlay_member2 bgf_overlapped bgf_overlapped_member3_union bgf_overlapped_member3_member1 bgf_large bgf_large_member1 bgf_deep bgf_deep_member2_member2 bgf_deep_member3 bgf_deep_member3_member1 bgf_deep_member3_member1_member3 bgf_anon_tail bgf_anon_tail_member2 bgf_two_anon bgf_two_anon_member1 bgf_two_anon_member2} {
+        list $name {*}[layout $::fixture linux-x86_64 $name]
+    }]
+    set promoted {}
+    foreach line [split [dict get [generation $::fixture linux-x86_64] files layouts.tsv] \n] {
+        set row [split $line \t]
+        if {[lindex $row 0] eq "promoted" && [lindex $row 1] in {{struct bgf_overlapped} {struct bgf_deep}}} {
+            lappend promoted [list [lindex $row 1] [lindex $row 8] [lindex $row 3] [lindex $row 5] [lindex $row 6]]
+        }
+    }
+    list $out $promoted
+} -result {{{bgf_overlay 16 8 {{kind ffi::c::Int 0} {member2 bgf_overlay_member2 8}} 0} {bgf_overlay_member2 8 8 {{i ffi::c::Int 0} {p {ffi::c::Ptr[ffi::c::Void]} 0}} 1} {bgf_overlapped 32 8 {{internal ffi::c::ULong 0} {internal_high ffi::c::ULong 8} {member3 bgf_overlapped_member3_union 16} {event {ffi::c::Ptr[ffi::c::Void]} 24}} 0} {bgf_overlapped_member3_union 8 8 {{member1 bgf_overlapped_member3_member1 0} {pointer {ffi::c::Ptr[ffi::c::Void]} 0}} 1} {bgf_overlapped_member3_member1 8 4 {{offset ffi::c::UInt 0} {offset_high ffi::c::UInt 4}} 0} {bgf_large 8 8 {{member1 bgf_large_member1 0} {u bgf_large_u 0} {quad ffi::c::LongLong 0}} 1} {bgf_large_member1 8 4 {{low ffi::c::UInt 0} {high ffi::c::Int 4}} 0} {bgf_deep 20 4 {{tag ffi::c::Char 0} {a ffi::c::Short 4} {member2_member2 bgf_deep_member2_member2 8} {member3 bgf_deep_member3 12}} 0} {bgf_deep_member2_member2 4 4 {{b ffi::c::Int 0} {c {array 3 of ffi::c::Char} 0}} 1} {bgf_deep_member3 8 4 {{member1 bgf_deep_member3_member1 0} {w bgf_word 0}} 1} {bgf_deep_member3_member1 6 2 {{x ffi::c::UShort 0} {y ffi::c::UShort 2} {member3 bgf_deep_member3_member1_member3 4}} 0} {bgf_deep_member3_member1_member3 2 2 {{z ffi::c::UChar 0} {zz ffi::c::UShort 0}} 1} {bgf_anon_tail 16 4 {{k ffi::c::Char 0} {member2 bgf_anon_tail_member2 4} {after ffi::c::Char 12}} 0} {bgf_anon_tail_member2 8 4 {{c {array 5 of ffi::c::Char} 0} {i ffi::c::Int 0}} 1} {bgf_two_anon 16 8 {{member1 bgf_two_anon_member1 0} {member2 bgf_two_anon_member2 8}} 0} {bgf_two_anon_member1 4 4 {{a ffi::c::Char 0} {b ffi::c::Int 0}} 1} {bgf_two_anon_member2 8 8 {{c ffi::c::Short 0} {d ffi::c::LongLong 0}} 1}} {{{struct bgf_overlapped} pointer member3.pointer 16 8} {{struct bgf_overlapped} offset member3.member1.offset 16 4} {{struct bgf_overlapped} offset_high member3.member1.offset_high 20 4} {{struct bgf_deep} b member2_member2.b 8 4} {{struct bgf_deep} c member2_member2.c 8 3} {{struct bgf_deep} w member3.w 12 4} {{struct bgf_deep} x member3.member1.x 12 2} {{struct bgf_deep} y member3.member1.y 14 2} {{struct bgf_deep} z member3.member1.member3.z 16 1} {{struct bgf_deep} zz member3.member1.member3.zz 16 2}}}
+
+test cb-layout-union-blockers {a union is blocked only by what an alternative cannot represent, and that root reason is what the report and the pressure analysis see -- never "union" or "anonymous-overlay": a float (bgf_num), a C _Bool (bgf_flagu), a bitfield record (bgf_bitsu, nested-layout-blocked through its alternative), held by a record (bgf_holds_bitsu), as an array element (bgf_nums2), as an anonymous member (bgf_anon_float, through its synthetic union); a representable anonymous union held by a record a bitfield blocks (bgf_bits_overlay) is no layout either: nothing reaches it, nothing C checks verifies it (unheld)} -constraints clang -body {
+    set recs [dict get [generation $::fixture linux-x86_64] model layouts]
+    set anon [lmap {k r} $recs {expr {[dict exists $r owner] && [dict get $r owner] eq "struct bgf_anon_float" ? $k : [continue]}}]
+    set out [lmap key [concat {{union bgf_num} {union bgf_flagu} {union bgf_bitsu} {struct bgf_holds_bitsu} {struct bgf_nums2} {struct bgf_anon_float}} $anon] {
+        set r [dict get $recs $key]
+        list $key [dict get $r status] [lsort -unique [lmap b [dict get $r direct] {lindex $b 0}]] \
+            [lmap b [dict get $r transitive] {lindex $b 1}] [::cbind::records::RootReasons $recs $key]
+    }]
+    set stale [lmap {k r} $recs {
+        set reasons [concat [lmap b [dict get $r direct] {lindex $b 0}] [dict get $r roots]]
+        expr {"union" in $reasons || "anonymous-overlay" in $reasons ? $k : [continue]}
+    }]
+    set unheld [lmap {k r} $recs {expr {[dict exists $r owner] && [dict get $r owner] eq "struct bgf_bits_overlay" ? [list [dict get $r status] [dict get $r unheld] [dict get $r layoutName] [string match "*\nunion layout [dict get $r layoutName]:*" [dict get [generation $::fixture linux-x86_64] files bgf/layouts.bot]]] : [continue]}}]
+    list $out $stale [dict get $recs {struct bgf_bits_overlay} status] $unheld
+} -result {{{{union bgf_num} layout-blocked float {} float} {{union bgf_flagu} layout-blocked c-bool {} c-bool} {{union bgf_bitsu} layout-blocked {} {{field bits (struct bgf_bits, union-member) -> bitfield}} bitfield} {{struct bgf_holds_bitsu} layout-blocked {} {{field u (union bgf_bitsu, field) -> struct bgf_bits -> bitfield}} bitfield} {{struct bgf_nums2} layout-blocked {} {{field nums (union bgf_num, array-element) -> float}} float} {{struct bgf_anon_float} layout-blocked {} {{member2 (union anon@bgf_records.h:281, anonymous-member) -> float}} float} {{union anon@bgf_records.h:281} layout-blocked float {} float}} {} layout-blocked {{layout-direct 1 bgf_bits_overlay_member2 0}}}
+
+test cb-layout-union-member-offset {a member is an alternative only where the compiler places it, at the union's start: the generator never assumes offset 0 -- were the compiler's offsetof of bgf_word's halves 2, bgf_word would be blocked (union-member-offset) and everything holding it with it, never moved or approximated} -constraints clang -body {
+    rename ::cbind::probe::values ::cbind::probe::values.real
+    proc ::cbind::probe::values {args} {
+        set out [::cbind::probe::values.real {*}$args]
+        if {[dict exists $out {fld:union bgf_word:1}]} {
+            lassign [dict get $out {fld:union bgf_word:1}] st data
+            dict set out {fld:union bgf_word:1} [list $st [lreplace $data 0 0 2]]
+        }
+        return $out
+    }
+    try {
+        set recs [dict get [::cbind::generate::run $::fixture linux-x86_64] model layouts]
+    } finally {
+        rename ::cbind::probe::values {}
+        rename ::cbind::probe::values.real ::cbind::probe::values
+    }
+    list [dict get $recs {union bgf_word} status] [dict get $recs {union bgf_word} direct] \
+        [dict get $recs {struct bgf_words3} status] [::cbind::records::RootReasons $recs {struct bgf_words3}]
+} -result {layout-blocked {{union-member-offset {field halves: the compiler places this member of a union at offset 2: a union layout's alternatives all begin at its start}}} layout-blocked union-member-offset}
+
+test cb-layout-anonymous-unprobed {an anonymous member's own size, alignment and member offsets are clang's record layout's (no C expression asks them): without it -- a compiler that dumps none -- every anonymous member is blocked (anonymous-record) and its record with it (bgf_overlapped; bgf_large, whose anonymous struct is an alternative), never guessed; a union without one needs no dump (bgf_word)} -constraints clang -body {
+    rename ::cbind::probe::anonymous ::cbind::probe::anonymous.real
+    proc ::cbind::probe::anonymous {args} { return [list 0 {} "toolchain: a record layout dump needs a clang-family compiler (gcc is gcc)"] }
+    try {
+        set recs [dict get [::cbind::generate::run $::fixture linux-x86_64] model layouts]
+    } finally {
+        rename ::cbind::probe::anonymous {}
+        rename ::cbind::probe::anonymous.real ::cbind::probe::anonymous
+    }
+    set anon [lmap {k r} $recs {expr {[dict exists $r owner] && [dict get $r owner] eq "struct bgf_overlapped" ? $k : [continue]}}]
+    list [lsort -unique [lmap k $anon {dict get $recs $k status}]] [lsort -unique [concat {*}[lmap k $anon {lmap b [dict get $recs $k direct] {lindex $b 0}}]]] \
+        [dict get $recs {struct bgf_overlapped} status] [::cbind::records::RootReasons $recs {struct bgf_overlapped}] \
+        [dict get $recs {union bgf_word} status] [dict get $recs {union bgf_large} status]
+} -result {layout-blocked anonymous-record layout-blocked anonymous-record layout-direct layout-blocked}
+
+test cb-layout-union-verified {layouts-check.c holds every union layout to the compiler: its size and alignment, every alternative -- the last and the smallest as much as the first -- by offset, width, extent and class; a synthetic layout's members through the record holding it, at the offset the generated text gives them there; and a synthetic layout's own size and alignment, which no C expression asks, are compared with clang's record layouts after generation (verify.tcl's anonymous)} -constraints clang -body {
+    set files [dict get [generation $::fixture linux-x86_64] files]
+    set undefs [dict get [generation $::fixture linux-x86_64] model layoutUndefs]
+    set config [::chdr::toolchain::configFor linux-x86_64]
+    set tool [::cbind::generate::ToolProfile [::cbind::profile::headersFor $::fixture linux-x86_64] $::fixtureDir]
+    set clean [list [lindex [::chdr::toolchain::compile $config $tool [dict get $files layouts-check.c] {-w}] 0] \
+        [::cbind::verify::anonymous $files bgf $config $tool]]
+    set caught {}
+    foreach {old new} {
+        "union layout bgf_tail_u:\n    size 8" "union layout bgf_tail_u:\n    size 5"
+        "union layout bgf_aligned_u:\n    size 16\n    align 16" "union layout bgf_aligned_u:\n    size 16\n    align 8"
+        "    alternative i: ffi::c::Int              # int i\n\n# union bgf_aligned_u" "    alternative i: ffi::c::Short            # int i\n\n# union bgf_aligned_u"
+        "    alternative bytes: array 4 of ffi::c::UChar    # uint8_t bytes\[4\]" "    alternative bytes: array 3 of ffi::c::UChar    # uint8_t bytes\[4\]"
+        "    field offset_high: ffi::c::UInt at 4" "    field offset_high: ffi::c::UInt at 8"
+        "    field member3: bgf_overlapped_member3_union at 16" "    field member3: bgf_overlapped_member3_union at 8"
+    } {
+        set text [dict get $files bgf/layouts.bot]
+        if {[string first $old $text] < 0} { lappend caught "no such text: $old"; continue }
+        set bad [dict replace $files bgf/layouts.bot [string map [list $old $new] $text]]
+        set check [::cbind::verify::source $bad $::fixture linux-x86_64 $undefs]
+        lassign [::chdr::toolchain::compile $config $tool $check {-w}] good stderr
+        lappend caught [expr {$good ? "missed" : [lindex [regexp -inline {static assertion failed[^"]*"([^"]*)"} $stderr] 1]}]
+    }
+    # The synthetic sizes C cannot name: the text against clang.
+    set anonymous {}
+    foreach {old new} {
+        "union layout bgf_anon_tail_member2:\n    size 8" "union layout bgf_anon_tail_member2:\n    size 5"
+        "union layout bgf_deep_member3:\n    size 8\n    align 4" "union layout bgf_deep_member3:\n    size 8\n    align 2"
+    } {
+        set bad [dict replace $files bgf/layouts.bot [string map [list $old $new] [dict get $files bgf/layouts.bot]]]
+        set check [::cbind::verify::source $bad $::fixture linux-x86_64 $undefs]
+        lappend anonymous [lindex [::chdr::toolchain::compile $config $tool $check {-w}] 0] \
+            [::cbind::verify::anonymous [dict replace $bad layouts-check.c $check] bgf $config $tool]
+    }
+    list $clean $caught $anonymous
+} -result {{1 {}} {bgf_tail_u bgf_aligned_u bgf_tail_u.i bgf_word.bytes bgf_overlapped_member3_member1.offset_high bgf_overlapped_member3_member1.offset} {1 {{bgf_anon_tail_member2: size 5, align 4; clang's record layout of the anonymous member at bgf_records.h:269:40: sizeof 8, align 4}} 1 {{bgf_deep_member3: size 8, align 2; clang's record layout of the anonymous member at bgf_records.h:260:5: sizeof 8, align 4}}}}
+
+test cb-layout-union-program {a generated union layout is an ordinary one: a program writes bgf_large's two 32-bit halves through its anonymous struct and reads its 64-bit quad and its named struct's high half from the same bytes, writes bgf_overlapped's offset_high through its anonymous union and struct and reads it back, writes one interpretation of an element of an array of unions (bgf_words3) and reads two others, and reaches bgf_deep's deepest anonymous level through overlapping alternatives -- on all four backends} -constraints clang -body {
+    set dir [scratch]
+    ::cbind::generate::stage $::fixture $::hostTarget "" $dir [generatedDir $::fixture $::hostTarget]
+    writeText [file join $dir main.bot] [join {
+        "import abi"
+        "import abi::bytes"
+        "import binary"
+        "import bgf::layouts"
+        ""
+        "fn run() -> List\[int\] errors LayoutLengthMismatch:"
+        "    l0 = abi::bytes::zeroed(abi::usize(binary::layout_length(bgf::layouts::bgf_large)))"
+        "    l1 = binary::write(l0, bgf::layouts::bgf_large.member1.low, 1)"
+        "    l2 = binary::write(l1, bgf::layouts::bgf_large.member1.high, -2)"
+        "    lb = abi::bytes::freeze(l2)"
+        "    o0 = abi::bytes::zeroed(abi::usize(binary::layout_length(bgf::layouts::bgf_overlapped)))"
+        "    o1 = binary::write(o0, bgf::layouts::bgf_overlapped.member3.member1.offset_high, 7)"
+        "    ob = abi::bytes::freeze(o1)"
+        "    w0 = abi::bytes::zeroed(abi::usize(binary::layout_length(bgf::layouts::bgf_words3)))"
+        "    w1 = binary::write(w0, bgf::layouts::bgf_words3.words\[1\].whole, 16909060)"
+        "    wb = abi::bytes::freeze(w1)"
+        "    d0 = abi::bytes::zeroed(abi::usize(binary::layout_length(bgf::layouts::bgf_deep)))"
+        "    d1 = binary::write(d0, bgf::layouts::bgf_deep.member3.w.whole, 196610)"
+        "    d2 = binary::write(d1, bgf::layouts::bgf_deep.member3.member1.member3.zz, 513)"
+        "    db = abi::bytes::freeze(d2)"
+        "    \[binary::read(lb, bgf::layouts::bgf_large.quad), binary::read(lb, bgf::layouts::bgf_large.u.high), binary::read(ob, bgf::layouts::bgf_overlapped.member3.member1.offset_high), binary::read(ob, bgf::layouts::bgf_overlapped.member3.member1.offset), binary::read(wb, bgf::layouts::bgf_words3.words\[1\].bytes\[0\]), binary::read(wb, bgf::layouts::bgf_words3.words\[1\].halves\[1\]), binary::read(wb, bgf::layouts::bgf_words3.words\[2\].whole), binary::read(db, bgf::layouts::bgf_deep.member3.member1.x), binary::read(db, bgf::layouts::bgf_deep.member3.member1.y), binary::read(db, bgf::layouts::bgf_deep.member3.member1.member3.z)\]"
+        ""
+        "r = run():"
+        "    on LayoutLengthMismatch:"
+        "        \[\]"
+        "r"
+        ""
+    } \n]
+    set hir [stagedHir $dir main.bot]
+    lsort -unique [lmap backend [backendsFor $::hostTarget] {lindex [outcomeUnderHir $backend $hir] 1}]
+} -cleanup removeScratch -result {{[-8589934591, -2, 7, 0, 4, 258, 0, 2, 3, 1]}}
 
 test cb-policy-libraries {a library rule names its libraries by header or by symbol, never both; a symbol rule applies to every header; a library the target toolchain has no file for is the profile's error} -constraints clang -body {
     set out {}
@@ -1014,32 +1161,32 @@ int main(void) {
     list [expr {$botlish eq [cCaller $profile $c]}] $botlish
 } -cleanup removeScratch -result {1 {[-1, false, 0, true, 1, true, 1, false, 5, true, 10, true, 10, false, 31, true, 31, false]}}
 
-test cb-tcl-layouts {every layout the Tcl binding emits agrees with C at run time on both native backends (the runtime oracle: view reads of C's stores, native edit stores and byte-storage writes C reads back, padding, sizes and alignments): Tcl_Time, Tcl_ObjType, Tcl_Token, the channel and filesystem type tables of function pointers, ...; Tcl_Obj stays blocked by its internalRep union; Tcl_DString, whose static buffer is a fixed array, is a layout (FIXED-LAYOUT-ARRAYS.md)} -constraints {tclSources nativeRun} -body {
+test cb-tcl-layouts {every layout the Tcl binding emits agrees with C at run time on both native backends (the runtime oracle: view reads of C's stores, native edit stores and byte-storage writes C reads back, padding, sizes and alignments): Tcl_Time, Tcl_ObjType, Tcl_Token, the channel and filesystem type tables of function pointers, ...; Tcl_Obj stays blocked, by its internalRep union's double alternative alone now that a union is a layout (LAYOUT-UNIONS.md); Tcl_DString, whose static buffer is a fixed array, is a layout (FIXED-LAYOUT-ARRAYS.md)} -constraints {tclSources nativeRun} -body {
     set profile [::cbind::profile::load tcl]
     set recs [dict get [generation $profile $::hostTarget] model layouts]
     lassign [layoutOracle $profile all] checks a b
     list [expr {$checks > 300}] $a $b [lmap key {{struct Tcl_Time} {struct Tcl_ObjType} {struct Tcl_Token} {struct Tcl_ChannelType} {struct Tcl_Obj} {struct Tcl_DString}} {
         list $key [dict get $recs $key status] [::cbind::records::RootReasons $recs $key]
     }]
-} -cleanup removeScratch -result {1 {} {} {{{struct Tcl_Time} layout-direct {}} {{struct Tcl_ObjType} layout-direct {}} {{struct Tcl_Token} layout-direct {}} {{struct Tcl_ChannelType} layout-direct {}} {{struct Tcl_Obj} layout-blocked {double union}} {{struct Tcl_DString} layout-direct {}}}}
+} -cleanup removeScratch -result {1 {} {} {{{struct Tcl_Time} layout-direct {}} {{struct Tcl_ObjType} layout-direct {}} {{struct Tcl_Token} layout-direct {}} {{struct Tcl_ChannelType} layout-direct {}} {{struct Tcl_Obj} layout-blocked double} {{struct Tcl_DString} layout-direct {}}}}
 
-test cb-boringssl-layouts {every layout the BoringSSL binding emits agrees with C at run time on both native backends (the runtime oracle); CBS and the method tables are layouts, CBB is blocked through a union holding a bitfield record, SHA256_CTX is a layout of fixed arrays (FIXED-LAYOUT-ARRAYS.md)} -constraints {boringsslSources nativeRun} -body {
+test cb-boringssl-layouts {every layout the BoringSSL binding emits agrees with C at run time on both native backends (the runtime oracle); CBS and the method tables are layouts, CBB is blocked through a union's bitfield record alternative (the bitfield its root, LAYOUT-UNIONS.md), SHA256_CTX is a layout of fixed arrays (FIXED-LAYOUT-ARRAYS.md); the records arrays and unions held -- SHA_CTX, GENERAL_NAME, ASN1_TYPE, EVP_MD_CTX, HMAC_CTX, EVP_AEAD_CTX -- are layouts} -constraints {boringsslSources nativeRun} -body {
     set profile [::cbind::profile::load boringssl]
     set recs [dict get [generation $profile $::hostTarget] model layouts]
     lassign [layoutOracle $profile all] checks a b
-    list [expr {$checks > 300}] $a $b [lmap key {{struct cbs_st} {struct ssl_quic_method_st} {struct cbb_st} {struct sha256_state_st}} {
+    list [expr {$checks > 300}] $a $b [lmap key {{struct cbs_st} {struct ssl_quic_method_st} {struct cbb_st} {struct sha256_state_st} {struct sha_state_st} {struct GENERAL_NAME_st} {struct asn1_type_st} {struct env_md_ctx_st} {struct hmac_ctx_st} {struct evp_aead_ctx_st}} {
         list $key [dict get $recs $key status] [::cbind::records::RootReasons $recs $key]
     }]
-} -cleanup removeScratch -result {1 {} {} {{{struct cbs_st} layout-direct {}} {{struct ssl_quic_method_st} layout-direct {}} {{struct cbb_st} layout-blocked {bitfield union}} {{struct sha256_state_st} layout-direct {}}}}
+} -cleanup removeScratch -result {1 {} {} {{{struct cbs_st} layout-direct {}} {{struct ssl_quic_method_st} layout-direct {}} {{struct cbb_st} layout-blocked bitfield} {{struct sha256_state_st} layout-direct {}} {{struct sha_state_st} layout-direct {}} {{struct GENERAL_NAME_st} layout-direct {}} {{struct asn1_type_st} layout-direct {}} {{struct env_md_ctx_st} layout-direct {}} {{struct hmac_ctx_st} layout-direct {}} {{struct evp_aead_ctx_st} layout-direct {}}}}
 
-test cb-sdl3-layouts {every layout the SDL3 binding emits agrees with C at run time on both native backends (the runtime oracle): SDL_Rect, SDL_Point, SDL_Color, SDL_Surface, SDL_AudioSpec, the SDL_IOStreamInterface table, ...; SDL_FRect waits for floats, SDL_Event (a union) for unions, floats and Bool fields (its arrays are layout fields: FIXED-LAYOUT-ARRAYS.md)} -constraints {sdl3Sources nativeRun} -body {
+test cb-sdl3-layouts {every layout the SDL3 binding emits agrees with C at run time on both native backends (the runtime oracle): SDL_Rect, SDL_Point, SDL_Color, SDL_Surface, SDL_AudioSpec, the SDL_IOStreamInterface table, ...; SDL_FRect waits for floats; SDL_Event, a union whose alternatives hold floats and Bool fields, for those alone (its arrays are layout fields: FIXED-LAYOUT-ARRAYS.md; unions are layouts: LAYOUT-UNIONS.md); SDL_HapticEffect, a union, and SDL_GamepadBinding, with two anonymous unions, are layouts} -constraints {sdl3Sources nativeRun} -body {
     set profile [::cbind::profile::load sdl3]
     set recs [dict get [generation $profile $::hostTarget] model layouts]
     lassign [layoutOracle $profile all] checks a b
-    list [expr {$checks > 700}] $a $b [lmap key {{struct SDL_Rect} {struct SDL_Surface} {struct SDL_IOStreamInterface} {struct SDL_FRect} {union SDL_Event} {struct SDL_KeyboardEvent}} {
+    list [expr {$checks > 700}] $a $b [lmap key {{struct SDL_Rect} {struct SDL_Surface} {struct SDL_IOStreamInterface} {struct SDL_FRect} {union SDL_Event} {struct SDL_KeyboardEvent} {union SDL_HapticEffect} {struct SDL_GamepadBinding}} {
         list $key [dict get $recs $key status] [::cbind::records::RootReasons $recs $key]
     }]
-} -cleanup removeScratch -result {1 {} {} {{{struct SDL_Rect} layout-direct {}} {{struct SDL_Surface} layout-direct {}} {{struct SDL_IOStreamInterface} layout-direct {}} {{struct SDL_FRect} layout-blocked float} {{union SDL_Event} layout-blocked {c-bool float union}} {{struct SDL_KeyboardEvent} layout-blocked c-bool}}}
+} -cleanup removeScratch -result {1 {} {} {{{struct SDL_Rect} layout-direct {}} {{struct SDL_Surface} layout-direct {}} {{struct SDL_IOStreamInterface} layout-direct {}} {{struct SDL_FRect} layout-blocked float} {{union SDL_Event} layout-blocked {c-bool float}} {{struct SDL_KeyboardEvent} layout-blocked c-bool} {{union SDL_HapticEffect} layout-direct {}} {{struct SDL_GamepadBinding} layout-direct {}}}}
 
 test cb-layout-gcc-bindings {GCC agrees with clang on every layout of the Tcl, Tcl stubs, SDL3 and BoringSSL bindings for the host: each committed layouts-check.c compiles with the host's cc, the profile's include directories, defines and flags} -constraints {tclSources sdl3Sources boringsslSources linuxNative} -body {
     lmap p {tcl tclstubs sdl3 boringssl} {
@@ -1094,15 +1241,24 @@ test cb-win32-version-pinned {the Win32 profile pins MinGW-w64's headers by thei
     list $wrong $unpinned
 } -result {{c-bindgen: the toolchain's headers are another version: __MINGW64_VERSION_MAJOR is 11, the profile win32 pins 12} {c-bindgen: profile win32: a toolchain source pins its headers by version {MACRO VALUE ...}}}
 
-test cb-win32-sentinels {the familiar Win32 records are the compiler's: POINT, RECT, FILETIME, SYSTEMTIME, SECURITY_ATTRIBUTES, PROCESS_INFORMATION, STARTUPINFOW, BY_HANDLE_FILE_INFORMATION and OVERLAPPED_ENTRY are layouts of MinGW-w64's sizes; OVERLAPPED is blocked by its anonymous union (union pressure); WIN32_FIND_DATAW, its WCHAR arrays fixed arrays, is a layout of 592 bytes (FIXED-LAYOUT-ARRAYS.md)} -constraints mingw -body {
-    set recs [dict get [generation $::win32 windows-x86_64-gnu] model layouts]
+test cb-win32-sentinels {the familiar Win32 records are the compiler's: POINT, RECT, FILETIME, SYSTEMTIME, SECURITY_ATTRIBUTES, PROCESS_INFORMATION, STARTUPINFOW, BY_HANDLE_FILE_INFORMATION and OVERLAPPED_ENTRY are layouts of MinGW-w64's sizes; WIN32_FIND_DATAW, its WCHAR arrays fixed arrays, is a layout of 592 bytes (FIXED-LAYOUT-ARRAYS.md); LARGE_INTEGER and ULARGE_INTEGER are union layouts and OVERLAPPED an ordinary layout holding a synthetic union (LAYOUT-UNIONS.md), whose C names the manifest maps to generated paths at MinGW-w64's offsets: Offset and OffsetHigh through the anonymous struct, Pointer an alternative of the anonymous union} -constraints mingw -body {
+    set result [generation $::win32 windows-x86_64-gnu]
+    set recs [dict get $result model layouts]
     set byTypedef [dict create]
     dict for {k r} $recs { foreach t [dict get $r typedefs] { dict set byTypedef $t $k } }
-    lmap name {POINT RECT FILETIME SYSTEMTIME SECURITY_ATTRIBUTES PROCESS_INFORMATION STARTUPINFOW BY_HANDLE_FILE_INFORMATION OVERLAPPED_ENTRY OVERLAPPED WIN32_FIND_DATAW} {
+    set out [lmap name {POINT RECT FILETIME SYSTEMTIME SECURITY_ATTRIBUTES PROCESS_INFORMATION STARTUPINFOW BY_HANDLE_FILE_INFORMATION OVERLAPPED_ENTRY OVERLAPPED WIN32_FIND_DATAW LARGE_INTEGER ULARGE_INTEGER} {
         set r [dict get $recs [dict get $byTypedef $name]]
         list $name [dict get $r status] [dict get $r size] [dict get $r align] [::cbind::records::RootReasons $recs [dict get $byTypedef $name]]
+    }]
+    set promoted {}
+    foreach line [split [dict get $result files layouts.tsv] \n] {
+        set row [split $line \t]
+        if {[lindex $row 0] eq "promoted" && [lindex $row 1] in {{struct _OVERLAPPED} {union _LARGE_INTEGER}}} {
+            lappend promoted [list [lindex $row 8] [lindex $row 3] [lindex $row 5] [lindex $row 6]]
+        }
     }
-} -result {{POINT layout-direct 8 4 {}} {RECT layout-direct 16 4 {}} {FILETIME layout-direct 8 4 {}} {SYSTEMTIME layout-direct 16 2 {}} {SECURITY_ATTRIBUTES layout-direct 24 8 {}} {PROCESS_INFORMATION layout-direct 24 8 {}} {STARTUPINFOW layout-direct 104 8 {}} {BY_HANDLE_FILE_INFORMATION layout-direct 52 4 {}} {OVERLAPPED_ENTRY layout-direct 32 8 {}} {OVERLAPPED layout-blocked 32 8 {anonymous-overlay union}} {WIN32_FIND_DATAW layout-direct 592 4 {}}}
+    list $out $promoted
+} -result {{{POINT layout-direct 8 4 {}} {RECT layout-direct 16 4 {}} {FILETIME layout-direct 8 4 {}} {SYSTEMTIME layout-direct 16 2 {}} {SECURITY_ATTRIBUTES layout-direct 24 8 {}} {PROCESS_INFORMATION layout-direct 24 8 {}} {STARTUPINFOW layout-direct 104 8 {}} {BY_HANDLE_FILE_INFORMATION layout-direct 52 4 {}} {OVERLAPPED_ENTRY layout-direct 32 8 {}} {OVERLAPPED layout-direct 32 8 {}} {WIN32_FIND_DATAW layout-direct 592 4 {}} {LARGE_INTEGER layout-direct 8 8 {}} {ULARGE_INTEGER layout-direct 8 8 {}}} {{LowPart member1.LowPart 0 4} {HighPart member1.HighPart 4 4} {Pointer member3.Pointer 16 8} {Offset member3.member1.Offset 16 4} {OffsetHigh member3.member1.OffsetHigh 20 4}}}
 
 test cb-win32-layouts-compile {the Win32 layouts are ordinary Botlish for windows-x86_64-gnu: a program over them compiles warning-free, its HIR records the GNU target, the native driver refuses to run it on this host (NATIVE TARGET), and the Tcl backends run it} -constraints mingw -body {
     set dir [scratch]
@@ -1116,7 +1272,7 @@ test cb-win32-verified-gcc {MinGW-w64's GCC agrees with clang on every Win32 lay
     set files [dict get [generation $::win32 windows-x86_64-gnu] files]
     list [regexp -all -line {^BOTLISH_RECORD\(} [dict get $files layouts-check.c]] \
         [compileWith x86_64-w64-mingw32-gcc [dict get $files layouts-check.c] [::cbind::profile::sourceRoot $::win32 0 windows-x86_64-gnu]]
-} -cleanup removeScratch -match glob -result {8* {}}
+} -cleanup removeScratch -match glob -result {9* {}}
 
 test cb-win32-libraries {each Win32 function's import library is the toolchain's answer -- the first of the profile's libraries whose MinGW-w64 import library defines its symbol: CreateFileW kernel32, MessageBoxW user32, RegOpenKeyExW advapi32, GetFileVersionInfoW version, wglCreateContext opengl32; a module declares the libraries of its functions; a symbol several define takes the first (Sleep: kernel32, also synchronization); WinMain, which no library defines, is unsupported} -constraints mingw -body {
     set result [generation $::win32 windows-x86_64-gnu]

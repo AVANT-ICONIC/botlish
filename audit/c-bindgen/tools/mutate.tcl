@@ -2,6 +2,7 @@
 # "Mutation testing").
 #
 #   tclsh9.0 audit/c-bindgen/tools/mutate.tcl ?-only NAME,...? ?-tests FILES?
+#                                             ?-match PATTERNS?
 #                                             ?-fuzz-count N? ?-fuzz-seed N?
 #                                             ?-layout-fuzz-count N?
 #                                             ?-layout-fuzz-seed N?
@@ -14,7 +15,10 @@
 # replacements, and the detectors run against it:
 #
 #   * the test files FILES (default tests/c-bindgen.test; each with a private
-#     -tmpdir): killed if any test fails or a file does not complete. The
+#     -tmpdir; with -match, only the tests PATTERNS matches -- tcltest's
+#     -match, e.g. "cb-layout-* cb-fixture-*" for a mutant of the layout
+#     pass, which the real libraries' tests need not repeat): killed if any
+#     test fails or a file does not complete. The
 #     tests that compile, link and run a binding run what the mutated
 #     generator produces, not the committed files; the *-current tests
 #     compare that with the committed files byte for byte. A mutant only
@@ -35,7 +39,7 @@
 
 set root [file dirname [file dirname [file dirname [file dirname [file normalize [info script]]]]]]
 
-set options [dict create -only "" -tests tests/c-bindgen.test -fuzz-count 3 -fuzz-seed 11 \
+set options [dict create -only "" -tests tests/c-bindgen.test -match "" -fuzz-count 3 -fuzz-seed 11 \
     -layout-fuzz-count 2 -layout-fuzz-seed 11 -timeout 1800]
 foreach {option value} $argv {
     if {![dict exists $options $option]} { error "unknown option $option" }
@@ -190,7 +194,8 @@ try {
         set incomplete ""
         foreach testFile [dict get $options -tests] {
             set tmp [file tempdir botlish-cbindgen-mutant-run]
-            lassign [run [dict get $options -timeout] tclsh9.0 [file join $tree $testFile] -tmpdir $tmp] status output
+            set match [expr {[dict get $options -match] eq "" ? {} : [list -match [dict get $options -match]]}]
+            lassign [run [dict get $options -timeout] tclsh9.0 [file join $tree $testFile] -tmpdir $tmp {*}$match] status output
             file delete -force $tmp
             lappend failedTests {*}[lmap {- n} [regexp -all -inline -line {^==== (\S+) .*FAILED$} $output] {set n}]
             if {$incomplete eq "" && ![regexp {Total\s+\d+\s+Passed\s+\d+\s+Skipped\s+\d+\s+Failed\s+(\d+)} $output]} {

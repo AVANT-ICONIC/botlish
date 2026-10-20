@@ -130,15 +130,15 @@
 @@ bytes-make-pointers binary::parse and binary::emit of a native-only layout are accepted
 ## hir/layouts.tcl
 <<<<
-        if {$id ne "" && [declared $id] && [NativeOnly $id]} {
+        } elseif {$id ne "" && [declared $id] && [NativeOnly $id]} {
 ====
-        if {0 && $id ne "" && [declared $id] && [NativeOnly $id]} {
+        } elseif {0 && $id ne "" && [declared $id] && [NativeOnly $id]} {
 >>>>
 
 @@ nested-pointer-not-native-only a pointer field inside a nested layout does not make the outer layout native-only
 ## hir/layouts.tcl
 <<<<
-        layout {
+        layout - union {
             set inner [PointerField [dict get $repr layout]]
             if {$inner eq ""} {
                 return none
@@ -146,7 +146,7 @@
             return ".$inner"
         }
 ====
-        layout {
+        layout - union {
             return none
         }
 >>>>

@@ -14,6 +14,10 @@
 #                         for any target: nothing runs)
 #   llvm SOURCE           the optimized LLVM IR of a translation unit (the
 #                         generator's semantic evidence, clang only)
+#   recordLayouts SOURCE  the record layouts the compiler computes for a
+#                         translation unit, as it dumps them (clang only:
+#                         the size and alignment of an anonymous member,
+#                         which no C expression names)
 #   object SOURCE OUT     compile to an object file
 #   archive OBJECTS OUT   a static library of objects
 #   searchDirs            the directories the compiler searches for
@@ -61,6 +65,7 @@ namespace eval ::chdr::toolchain {
             version --version
             assemble {-S}
             llvm {-S -emit-llvm}
+            recordLayouts {-fsyntax-only -Xclang -fdump-record-layouts}
             sysroot --sysroot=
             appleSysroot -isysroot
             verbose -v
@@ -309,6 +314,26 @@ proc ::chdr::toolchain::llvm {config profile source {extra {}}} {
         return [list 0 "" "toolchain: LLVM IR needs a clang-family compiler ([dict get $config cc] is [dict get $config family])" {}]
     }
     return [Emit $config $profile $source llvm .ll $extra]
+}
+
+# The record layouts clang computes for SOURCE (C text), as it dumps them
+# (clang only); {OK TEXT STDERR COMMAND}, TEXT every "*** Dumping AST Record
+# Layout" block of the records SOURCE lays out.
+proc ::chdr::toolchain::recordLayouts {config profile source} {
+    if {[dict get $config family] ne "clang"} {
+        return [list 0 "" "toolchain: a record layout dump needs a clang-family compiler ([dict get $config cc] is [dict get $config family])" {}]
+    }
+    set dir [file tempdir]
+    set c [file join $dir probe.c]
+    set f [open $c w]
+    fconfigure $f -encoding utf-8 -translation lf
+    puts -nonewline $f $source
+    close $f
+    set command [concat [dict get $config cc] [Flag $config language] [CommonWords $config $profile] \
+        [list -w] [Flag $config recordLayouts] [list $c]]
+    lassign [Exec $command] ok out stderr
+    file delete -force $dir
+    return [list $ok $out [string map [list $c probe.c] $stderr] $command]
 }
 
 proc ::chdr::toolchain::Emit {config profile source flag suffix extra} {

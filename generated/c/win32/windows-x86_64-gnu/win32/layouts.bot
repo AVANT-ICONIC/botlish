@@ -23,6 +23,13 @@ layout FLOAT128:
     field LowPart: ffi::c::LongLong at 0   # long long LowPart
     field HighPart: ffi::c::LongLong at 8  # long long HighPart
 
+# the anonymous struct member LARGE_INTEGER.member1 (union _LARGE_INTEGER) (winnt.h:516): sizeof 8, _Alignof 4
+layout LARGE_INTEGER_member1:
+    size 8
+    align 4
+    field LowPart: ffi::c::ULong at 0  # DWORD LowPart
+    field HighPart: ffi::c::Long at 4  # LONG HighPart
+
 # an anonymous struct (winnt.h:520): sizeof 8, _Alignof 4
 layout LARGE_INTEGER_u:
     size 8
@@ -30,12 +37,35 @@ layout LARGE_INTEGER_u:
     field LowPart: ffi::c::ULong at 0  # DWORD LowPart
     field HighPart: ffi::c::Long at 4  # LONG HighPart
 
+# union _LARGE_INTEGER, typedef LARGE_INTEGER (winnt.h:515): sizeof 8, _Alignof 8
+union layout LARGE_INTEGER:
+    size 8
+    align 8
+    alternative member1: LARGE_INTEGER_member1  # struct {...}
+    alternative u: LARGE_INTEGER_u              # struct {...} u
+    alternative QuadPart: ffi::c::LongLong      # LONGLONG QuadPart
+
+# the anonymous struct member ULARGE_INTEGER.member1 (union _ULARGE_INTEGER) (winnt.h:534): sizeof 8, _Alignof 4
+layout ULARGE_INTEGER_member1:
+    size 8
+    align 4
+    field LowPart: ffi::c::ULong at 0   # DWORD LowPart
+    field HighPart: ffi::c::ULong at 4  # DWORD HighPart
+
 # an anonymous struct (winnt.h:538): sizeof 8, _Alignof 4
 layout ULARGE_INTEGER_u:
     size 8
     align 4
     field LowPart: ffi::c::ULong at 0   # DWORD LowPart
     field HighPart: ffi::c::ULong at 4  # DWORD HighPart
+
+# union _ULARGE_INTEGER, typedef ULARGE_INTEGER (winnt.h:533): sizeof 8, _Alignof 8
+union layout ULARGE_INTEGER:
+    size 8
+    align 8
+    alternative member1: ULARGE_INTEGER_member1  # struct {...}
+    alternative u: ULARGE_INTEGER_u              # struct {...} u
+    alternative QuadPart: ffi::c::ULongLong      # ULONGLONG QuadPart
 
 # struct _LUID, typedef LUID (winnt.h:551): sizeof 8, _Alignof 4
 layout LUID:
@@ -182,6 +212,88 @@ layout XMM_SAVE_AREA32:
     field FloatRegisters: array 8 of M128A at 32       # M128A FloatRegisters[8]
     field XmmRegisters: array 16 of M128A at 160       # M128A XmmRegisters[16]
     field Reserved4: array 96 of ffi::c::UChar at 416  # BYTE Reserved4[96]
+
+# the anonymous struct member CONTEXT.member39.member3 (struct _CONTEXT) (winnt.h:1850): sizeof 416, _Alignof 16
+layout CONTEXT_member39_member3:
+    size 416
+    align 16
+    field Header: array 2 of M128A at 0   # M128A Header[2]
+    field Legacy: array 8 of M128A at 32  # M128A Legacy[8]
+    field Xmm0: M128A at 160              # M128A Xmm0
+    field Xmm1: M128A at 176              # M128A Xmm1
+    field Xmm2: M128A at 192              # M128A Xmm2
+    field Xmm3: M128A at 208              # M128A Xmm3
+    field Xmm4: M128A at 224              # M128A Xmm4
+    field Xmm5: M128A at 240              # M128A Xmm5
+    field Xmm6: M128A at 256              # M128A Xmm6
+    field Xmm7: M128A at 272              # M128A Xmm7
+    field Xmm8: M128A at 288              # M128A Xmm8
+    field Xmm9: M128A at 304              # M128A Xmm9
+    field Xmm10: M128A at 320             # M128A Xmm10
+    field Xmm11: M128A at 336             # M128A Xmm11
+    field Xmm12: M128A at 352             # M128A Xmm12
+    field Xmm13: M128A at 368             # M128A Xmm13
+    field Xmm14: M128A at 384             # M128A Xmm14
+    field Xmm15: M128A at 400             # M128A Xmm15
+
+# the anonymous union member CONTEXT.member39 (struct _CONTEXT) (winnt.h:1847): sizeof 512, _Alignof 16
+union layout CONTEXT_member39:
+    size 512
+    align 16
+    alternative FltSave: XMM_SAVE_AREA32           # XMM_SAVE_AREA32 FltSave
+    alternative FloatSave: XMM_SAVE_AREA32         # XMM_SAVE_AREA32 FloatSave
+    alternative member3: CONTEXT_member39_member3  # struct {...}
+
+# struct _CONTEXT, typedef CONTEXT (winnt.h:1808): sizeof 1232, _Alignof 16
+layout CONTEXT:
+    size 1232
+    align 16
+    field P1Home: ffi::c::ULongLong at 0                   # DWORD64 P1Home
+    field P2Home: ffi::c::ULongLong at 8                   # DWORD64 P2Home
+    field P3Home: ffi::c::ULongLong at 16                  # DWORD64 P3Home
+    field P4Home: ffi::c::ULongLong at 24                  # DWORD64 P4Home
+    field P5Home: ffi::c::ULongLong at 32                  # DWORD64 P5Home
+    field P6Home: ffi::c::ULongLong at 40                  # DWORD64 P6Home
+    field ContextFlags: ffi::c::ULong at 48                # DWORD ContextFlags
+    field MxCsr: ffi::c::ULong at 52                       # DWORD MxCsr
+    field SegCs: ffi::c::UShort at 56                      # WORD SegCs
+    field SegDs: ffi::c::UShort at 58                      # WORD SegDs
+    field SegEs: ffi::c::UShort at 60                      # WORD SegEs
+    field SegFs: ffi::c::UShort at 62                      # WORD SegFs
+    field SegGs: ffi::c::UShort at 64                      # WORD SegGs
+    field SegSs: ffi::c::UShort at 66                      # WORD SegSs
+    field EFlags: ffi::c::ULong at 68                      # DWORD EFlags
+    field Dr0: ffi::c::ULongLong at 72                     # DWORD64 Dr0
+    field Dr1: ffi::c::ULongLong at 80                     # DWORD64 Dr1
+    field Dr2: ffi::c::ULongLong at 88                     # DWORD64 Dr2
+    field Dr3: ffi::c::ULongLong at 96                     # DWORD64 Dr3
+    field Dr6: ffi::c::ULongLong at 104                    # DWORD64 Dr6
+    field Dr7: ffi::c::ULongLong at 112                    # DWORD64 Dr7
+    field Rax: ffi::c::ULongLong at 120                    # DWORD64 Rax
+    field Rcx: ffi::c::ULongLong at 128                    # DWORD64 Rcx
+    field Rdx: ffi::c::ULongLong at 136                    # DWORD64 Rdx
+    field Rbx: ffi::c::ULongLong at 144                    # DWORD64 Rbx
+    field Rsp: ffi::c::ULongLong at 152                    # DWORD64 Rsp
+    field Rbp: ffi::c::ULongLong at 160                    # DWORD64 Rbp
+    field Rsi: ffi::c::ULongLong at 168                    # DWORD64 Rsi
+    field Rdi: ffi::c::ULongLong at 176                    # DWORD64 Rdi
+    field R8: ffi::c::ULongLong at 184                     # DWORD64 R8
+    field R9: ffi::c::ULongLong at 192                     # DWORD64 R9
+    field R10: ffi::c::ULongLong at 200                    # DWORD64 R10
+    field R11: ffi::c::ULongLong at 208                    # DWORD64 R11
+    field R12: ffi::c::ULongLong at 216                    # DWORD64 R12
+    field R13: ffi::c::ULongLong at 224                    # DWORD64 R13
+    field R14: ffi::c::ULongLong at 232                    # DWORD64 R14
+    field R15: ffi::c::ULongLong at 240                    # DWORD64 R15
+    field Rip: ffi::c::ULongLong at 248                    # DWORD64 Rip
+    field member39: CONTEXT_member39 at 256                # union {...}
+    field VectorRegister: array 26 of M128A at 768         # M128A VectorRegister[26]
+    field VectorControl: ffi::c::ULongLong at 1184         # DWORD64 VectorControl
+    field DebugControl: ffi::c::ULongLong at 1192          # DWORD64 DebugControl
+    field LastBranchToRip: ffi::c::ULongLong at 1200       # DWORD64 LastBranchToRip
+    field LastBranchFromRip: ffi::c::ULongLong at 1208     # DWORD64 LastBranchFromRip
+    field LastExceptionToRip: ffi::c::ULongLong at 1216    # DWORD64 LastExceptionToRip
+    field LastExceptionFromRip: ffi::c::ULongLong at 1224  # DWORD64 LastExceptionFromRip
 
 # struct _RUNTIME_FUNCTION, typedef RUNTIME_FUNCTION (winnt.h:1882): sizeof 12, _Alignof 4
 layout RUNTIME_FUNCTION:
@@ -645,6 +757,27 @@ layout TOKEN_USER:
     align 8
     field User: SID_AND_ATTRIBUTES at 0  # SID_AND_ATTRIBUTES User
 
+# the anonymous union member SE_TOKEN_USER.member1 (struct _SE_TOKEN_USER) (winnt.h:4022): sizeof 16, _Alignof 8
+union layout SE_TOKEN_USER_member1:
+    size 16
+    align 8
+    alternative TokenUser: TOKEN_USER     # TOKEN_USER TokenUser
+    alternative User: SID_AND_ATTRIBUTES  # SID_AND_ATTRIBUTES User
+
+# the anonymous union member SE_TOKEN_USER.member2 (struct _SE_TOKEN_USER) (winnt.h:4026): sizeof 68, _Alignof 4
+union layout SE_TOKEN_USER_member2:
+    size 68
+    align 4
+    alternative Sid: SID                           # SID Sid
+    alternative Buffer: array 68 of ffi::c::UChar  # BYTE Buffer[(sizeof (SID) - sizeof (DWORD) + ((15) *sizeof (DWORD)))]
+
+# struct _SE_TOKEN_USER, typedef SE_TOKEN_USER (winnt.h:4021): sizeof 88, _Alignof 8
+layout SE_TOKEN_USER:
+    size 88
+    align 8
+    field member1: SE_TOKEN_USER_member1 at 0   # union {...}
+    field member2: SE_TOKEN_USER_member2 at 16  # union {...}
+
 # struct _TOKEN_GROUPS, typedef TOKEN_GROUPS (winnt.h:4036): sizeof 24, _Alignof 8
 layout TOKEN_GROUPS:
     size 24
@@ -757,6 +890,21 @@ layout TOKEN_SOURCE:
     field SourceName: array 8 of ffi::c::Char at 0  # CHAR SourceName[8]
     field SourceIdentifier: LUID at 8               # LUID SourceIdentifier
 
+# struct _TOKEN_STATISTICS, typedef TOKEN_STATISTICS (winnt.h:4142): sizeof 56, _Alignof 8
+layout TOKEN_STATISTICS:
+    size 56
+    align 8
+    field TokenId: LUID at 0                      # LUID TokenId
+    field AuthenticationId: LUID at 8             # LUID AuthenticationId
+    field ExpirationTime: LARGE_INTEGER at 16     # LARGE_INTEGER ExpirationTime
+    field TokenType: ffi::c::UInt at 24           # TOKEN_TYPE TokenType
+    field ImpersonationLevel: ffi::c::UInt at 28  # SECURITY_IMPERSONATION_LEVEL ImpersonationLevel
+    field DynamicCharged: ffi::c::ULong at 32     # DWORD DynamicCharged
+    field DynamicAvailable: ffi::c::ULong at 36   # DWORD DynamicAvailable
+    field GroupCount: ffi::c::ULong at 40         # DWORD GroupCount
+    field PrivilegeCount: ffi::c::ULong at 44     # DWORD PrivilegeCount
+    field ModifiedId: LUID at 48                  # LUID ModifiedId
+
 # struct _TOKEN_CONTROL, typedef TOKEN_CONTROL (winnt.h:4155): sizeof 40, _Alignof 4
 layout TOKEN_CONTROL:
     size 40
@@ -805,6 +953,63 @@ layout CLAIM_SECURITY_ATTRIBUTE_OCTET_STRING_VALUE:
     field pValue: ffi::c::Ptr[ffi::c::Void] at 0  # PVOID pValue
     field ValueLength: ffi::c::ULong at 8         # DWORD ValueLength
 
+# an anonymous union (winnt.h:4228): sizeof 8, _Alignof 8
+union layout CLAIM_SECURITY_ATTRIBUTE_V1_Values:
+    size 8
+    align 8
+    alternative pInt64: ffi::c::Ptr[ffi::c::LongLong]                     # PLONG64 pInt64
+    alternative pUint64: ffi::c::Ptr[ffi::c::ULongLong]                   # PDWORD64 pUint64
+    alternative ppString: ffi::c::Ptr[ffi::c::Ptr[ffi::c::UShort]]        # PWSTR *ppString
+    alternative pFqbn: ffi::c::Ptr[win32::ctypes::CLAIM_SECURITY_ATTRIBUTE_FQBN_VALUE]  # PCLAIM_SECURITY_ATTRIBUTE_FQBN_VALUE pFqbn
+    alternative pOctetString: ffi::c::Ptr[win32::ctypes::CLAIM_SECURITY_ATTRIBUTE_OCTET_STRING_VALUE]  # PCLAIM_SECURITY_ATTRIBUTE_OCTET_STRING_VALUE pOctetString
+
+# struct _CLAIM_SECURITY_ATTRIBUTE_V1, typedef CLAIM_SECURITY_ATTRIBUTE_V1 (winnt.h:4222): sizeof 32, _Alignof 8
+layout CLAIM_SECURITY_ATTRIBUTE_V1:
+    size 32
+    align 8
+    field Name: ffi::c::Ptr[ffi::c::UShort] at 0            # PWSTR Name
+    field ValueType: ffi::c::UShort at 8                    # WORD ValueType
+    field Reserved: ffi::c::UShort at 10                    # WORD Reserved
+    field Flags: ffi::c::ULong at 12                        # DWORD Flags
+    field ValueCount: ffi::c::ULong at 16                   # DWORD ValueCount
+    field Values: CLAIM_SECURITY_ATTRIBUTE_V1_Values at 24  # union {...} Values
+
+# an anonymous union (winnt.h:4243): sizeof 4, _Alignof 4
+union layout CLAIM_SECURITY_ATTRIBUTE_RELATIVE_V1_Values:
+    size 4
+    align 4
+    alternative pInt64: array 1 of ffi::c::ULong        # DWORD pInt64[1]
+    alternative pUint64: array 1 of ffi::c::ULong       # DWORD pUint64[1]
+    alternative ppString: array 1 of ffi::c::ULong      # DWORD ppString[1]
+    alternative pFqbn: array 1 of ffi::c::ULong         # DWORD pFqbn[1]
+    alternative pOctetString: array 1 of ffi::c::ULong  # DWORD pOctetString[1]
+
+# struct _CLAIM_SECURITY_ATTRIBUTE_RELATIVE_V1, typedef CLAIM_SECURITY_ATTRIBUTE_RELATIVE_V1 (winnt.h:4237): sizeof 20, _Alignof 4
+layout CLAIM_SECURITY_ATTRIBUTE_RELATIVE_V1:
+    size 20
+    align 4
+    field Name: ffi::c::ULong at 0                                   # DWORD Name
+    field ValueType: ffi::c::UShort at 4                             # WORD ValueType
+    field Reserved: ffi::c::UShort at 6                              # WORD Reserved
+    field Flags: ffi::c::ULong at 8                                  # DWORD Flags
+    field ValueCount: ffi::c::ULong at 12                            # DWORD ValueCount
+    field Values: CLAIM_SECURITY_ATTRIBUTE_RELATIVE_V1_Values at 16  # union {...} Values
+
+# an anonymous union (winnt.h:4260): sizeof 8, _Alignof 8
+union layout CLAIM_SECURITY_ATTRIBUTES_INFORMATION_Attribute:
+    size 8
+    align 8
+    alternative pAttributeV1: ffi::c::Ptr[win32::ctypes::CLAIM_SECURITY_ATTRIBUTE_V1]  # PCLAIM_SECURITY_ATTRIBUTE_V1 pAttributeV1
+
+# struct _CLAIM_SECURITY_ATTRIBUTES_INFORMATION, typedef CLAIM_SECURITY_ATTRIBUTES_INFORMATION (winnt.h:4256): sizeof 16, _Alignof 8
+layout CLAIM_SECURITY_ATTRIBUTES_INFORMATION:
+    size 16
+    align 8
+    field Version: ffi::c::UShort at 0                                    # WORD Version
+    field Reserved: ffi::c::UShort at 2                                   # WORD Reserved
+    field AttributeCount: ffi::c::ULong at 4                              # DWORD AttributeCount
+    field Attribute: CLAIM_SECURITY_ATTRIBUTES_INFORMATION_Attribute at 8  # union {...} Attribute
+
 # struct _SECURITY_QUALITY_OF_SERVICE, typedef SECURITY_QUALITY_OF_SERVICE (winnt.h:4270): sizeof 12, _Alignof 4
 layout SECURITY_QUALITY_OF_SERVICE:
     size 12
@@ -839,6 +1044,84 @@ layout JOB_SET_ARRAY:
     field JobHandle: ffi::c::Ptr[ffi::c::Void] at 0  # HANDLE JobHandle
     field MemberLevel: ffi::c::ULong at 8            # DWORD MemberLevel
     field Flags: ffi::c::ULong at 12                 # DWORD Flags
+
+# the anonymous union member EXCEPTION_REGISTRATION_RECORD.member1 (struct _EXCEPTION_REGISTRATION_RECORD) (winnt.h:4421): sizeof 8, _Alignof 8
+union layout EXCEPTION_REGISTRATION_RECORD_member1:
+    size 8
+    align 8
+    alternative Next: ffi::c::Ptr[win32::ctypes::EXCEPTION_REGISTRATION_RECORD]  # struct _EXCEPTION_REGISTRATION_RECORD *Next
+    alternative prev: ffi::c::Ptr[win32::ctypes::EXCEPTION_REGISTRATION_RECORD]  # struct _EXCEPTION_REGISTRATION_RECORD *prev
+
+# the anonymous union member EXCEPTION_REGISTRATION_RECORD.member2 (struct _EXCEPTION_REGISTRATION_RECORD) (winnt.h:4425): sizeof 8, _Alignof 8
+union layout EXCEPTION_REGISTRATION_RECORD_member2:
+    size 8
+    align 8
+    alternative Handler: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[win32::ctypes::EXCEPTION_RECORD], ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[win32::ctypes::CONTEXT], ffi::c::Ptr[ffi::c::Void]], return: ffi::c::Int}]  # PEXCEPTION_ROUTINE Handler
+    alternative handler: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[win32::ctypes::EXCEPTION_RECORD], ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[win32::ctypes::CONTEXT], ffi::c::Ptr[ffi::c::Void]], return: ffi::c::Int}]  # PEXCEPTION_ROUTINE handler
+
+# struct _EXCEPTION_REGISTRATION_RECORD, typedef EXCEPTION_REGISTRATION_RECORD, EXCEPTION_REGISTRATION (winnt.h:4420): sizeof 16, _Alignof 8
+layout EXCEPTION_REGISTRATION_RECORD:
+    size 16
+    align 8
+    field member1: EXCEPTION_REGISTRATION_RECORD_member1 at 0  # union {...}
+    field member2: EXCEPTION_REGISTRATION_RECORD_member2 at 8  # union {...}
+
+# the anonymous union member NT_TIB.member5 (struct _NT_TIB) (winnt.h:4444): sizeof 8, _Alignof 8
+union layout NT_TIB_member5:
+    size 8
+    align 8
+    alternative FiberData: ffi::c::Ptr[ffi::c::Void]  # PVOID FiberData
+    alternative Version: ffi::c::ULong                # DWORD Version
+
+# struct _NT_TIB, typedef NT_TIB (winnt.h:4439): sizeof 56, _Alignof 8
+layout NT_TIB:
+    size 56
+    align 8
+    field ExceptionList: ffi::c::Ptr[win32::ctypes::EXCEPTION_REGISTRATION_RECORD] at 0  # struct _EXCEPTION_REGISTRATION_RECORD *ExceptionList
+    field StackBase: ffi::c::Ptr[ffi::c::Void] at 8                       # PVOID StackBase
+    field StackLimit: ffi::c::Ptr[ffi::c::Void] at 16                     # PVOID StackLimit
+    field SubSystemTib: ffi::c::Ptr[ffi::c::Void] at 24                   # PVOID SubSystemTib
+    field member5: NT_TIB_member5 at 32                                   # union {...}
+    field ArbitraryUserPointer: ffi::c::Ptr[ffi::c::Void] at 40           # PVOID ArbitraryUserPointer
+    field Self: ffi::c::Ptr[win32::ctypes::NT_TIB] at 48                  # struct _NT_TIB *Self
+
+# the anonymous union member NT_TIB32.member5 (struct _NT_TIB32) (winnt.h:4459): sizeof 4, _Alignof 4
+union layout NT_TIB32_member5:
+    size 4
+    align 4
+    alternative FiberData: ffi::c::ULong  # DWORD FiberData
+    alternative Version: ffi::c::ULong    # DWORD Version
+
+# struct _NT_TIB32, typedef NT_TIB32 (winnt.h:4454): sizeof 28, _Alignof 4
+layout NT_TIB32:
+    size 28
+    align 4
+    field ExceptionList: ffi::c::ULong at 0          # DWORD ExceptionList
+    field StackBase: ffi::c::ULong at 4              # DWORD StackBase
+    field StackLimit: ffi::c::ULong at 8             # DWORD StackLimit
+    field SubSystemTib: ffi::c::ULong at 12          # DWORD SubSystemTib
+    field member5: NT_TIB32_member5 at 16            # union {...}
+    field ArbitraryUserPointer: ffi::c::ULong at 20  # DWORD ArbitraryUserPointer
+    field Self: ffi::c::ULong at 24                  # DWORD Self
+
+# the anonymous union member NT_TIB64.member5 (struct _NT_TIB64) (winnt.h:4472): sizeof 8, _Alignof 8
+union layout NT_TIB64_member5:
+    size 8
+    align 8
+    alternative FiberData: ffi::c::ULongLong  # DWORD64 FiberData
+    alternative Version: ffi::c::ULong        # DWORD Version
+
+# struct _NT_TIB64, typedef NT_TIB64 (winnt.h:4467): sizeof 56, _Alignof 8
+layout NT_TIB64:
+    size 56
+    align 8
+    field ExceptionList: ffi::c::ULongLong at 0          # DWORD64 ExceptionList
+    field StackBase: ffi::c::ULongLong at 8              # DWORD64 StackBase
+    field StackLimit: ffi::c::ULongLong at 16            # DWORD64 StackLimit
+    field SubSystemTib: ffi::c::ULongLong at 24          # DWORD64 SubSystemTib
+    field member5: NT_TIB64_member5 at 32                # union {...}
+    field ArbitraryUserPointer: ffi::c::ULongLong at 40  # DWORD64 ArbitraryUserPointer
+    field Self: ffi::c::ULongLong at 48                  # DWORD64 Self
 
 # struct _UMS_CREATE_THREAD_ATTRIBUTES, typedef UMS_CREATE_THREAD_ATTRIBUTES (winnt.h:4491): sizeof 24, _Alignof 8
 layout UMS_CREATE_THREAD_ATTRIBUTES:
@@ -887,6 +1170,17 @@ layout PROCESS_DYNAMIC_ENFORCED_ADDRESS_RANGES_INFORMATION:
     field Reserved2: ffi::c::ULong at 4                                   # DWORD Reserved2
     field Ranges: ffi::c::Ptr[win32::ctypes::PROCESS_DYNAMIC_ENFORCED_ADDRESS_RANGE] at 8  # PPROCESS_DYNAMIC_ENFORCED_ADDRESS_RANGE Ranges
 
+# struct _QUOTA_LIMITS, typedef QUOTA_LIMITS (winnt.h:4535): sizeof 48, _Alignof 8
+layout QUOTA_LIMITS:
+    size 48
+    align 8
+    field PagedPoolLimit: ffi::c::ULongLong at 0          # SIZE_T PagedPoolLimit
+    field NonPagedPoolLimit: ffi::c::ULongLong at 8       # SIZE_T NonPagedPoolLimit
+    field MinimumWorkingSetSize: ffi::c::ULongLong at 16  # SIZE_T MinimumWorkingSetSize
+    field MaximumWorkingSetSize: ffi::c::ULongLong at 24  # SIZE_T MaximumWorkingSetSize
+    field PagefileLimit: ffi::c::ULongLong at 32          # SIZE_T PagefileLimit
+    field TimeLimit: LARGE_INTEGER at 40                  # LARGE_INTEGER TimeLimit
+
 # struct _IO_COUNTERS, typedef IO_COUNTERS (winnt.h:4573): sizeof 48, _Alignof 8
 layout IO_COUNTERS:
     size 48
@@ -897,6 +1191,44 @@ layout IO_COUNTERS:
     field ReadTransferCount: ffi::c::ULongLong at 24    # ULONGLONG ReadTransferCount
     field WriteTransferCount: ffi::c::ULongLong at 32   # ULONGLONG WriteTransferCount
     field OtherTransferCount: ffi::c::ULongLong at 40   # ULONGLONG OtherTransferCount
+
+# struct _JOBOBJECT_BASIC_ACCOUNTING_INFORMATION, typedef JOBOBJECT_BASIC_ACCOUNTING_INFORMATION (winnt.h:4836): sizeof 48, _Alignof 8
+layout JOBOBJECT_BASIC_ACCOUNTING_INFORMATION:
+    size 48
+    align 8
+    field TotalUserTime: LARGE_INTEGER at 0               # LARGE_INTEGER TotalUserTime
+    field TotalKernelTime: LARGE_INTEGER at 8             # LARGE_INTEGER TotalKernelTime
+    field ThisPeriodTotalUserTime: LARGE_INTEGER at 16    # LARGE_INTEGER ThisPeriodTotalUserTime
+    field ThisPeriodTotalKernelTime: LARGE_INTEGER at 24  # LARGE_INTEGER ThisPeriodTotalKernelTime
+    field TotalPageFaultCount: ffi::c::ULong at 32        # DWORD TotalPageFaultCount
+    field TotalProcesses: ffi::c::ULong at 36             # DWORD TotalProcesses
+    field ActiveProcesses: ffi::c::ULong at 40            # DWORD ActiveProcesses
+    field TotalTerminatedProcesses: ffi::c::ULong at 44   # DWORD TotalTerminatedProcesses
+
+# struct _JOBOBJECT_BASIC_LIMIT_INFORMATION, typedef JOBOBJECT_BASIC_LIMIT_INFORMATION (winnt.h:4847): sizeof 64, _Alignof 8
+layout JOBOBJECT_BASIC_LIMIT_INFORMATION:
+    size 64
+    align 8
+    field PerProcessUserTimeLimit: LARGE_INTEGER at 0     # LARGE_INTEGER PerProcessUserTimeLimit
+    field PerJobUserTimeLimit: LARGE_INTEGER at 8         # LARGE_INTEGER PerJobUserTimeLimit
+    field LimitFlags: ffi::c::ULong at 16                 # DWORD LimitFlags
+    field MinimumWorkingSetSize: ffi::c::ULongLong at 24  # SIZE_T MinimumWorkingSetSize
+    field MaximumWorkingSetSize: ffi::c::ULongLong at 32  # SIZE_T MaximumWorkingSetSize
+    field ActiveProcessLimit: ffi::c::ULong at 40         # DWORD ActiveProcessLimit
+    field Affinity: ffi::c::ULongLong at 48               # ULONG_PTR Affinity
+    field PriorityClass: ffi::c::ULong at 56              # DWORD PriorityClass
+    field SchedulingClass: ffi::c::ULong at 60            # DWORD SchedulingClass
+
+# struct _JOBOBJECT_EXTENDED_LIMIT_INFORMATION, typedef JOBOBJECT_EXTENDED_LIMIT_INFORMATION (winnt.h:4859): sizeof 144, _Alignof 8
+layout JOBOBJECT_EXTENDED_LIMIT_INFORMATION:
+    size 144
+    align 8
+    field BasicLimitInformation: JOBOBJECT_BASIC_LIMIT_INFORMATION at 0  # JOBOBJECT_BASIC_LIMIT_INFORMATION BasicLimitInformation
+    field IoInfo: IO_COUNTERS at 64                                      # IO_COUNTERS IoInfo
+    field ProcessMemoryLimit: ffi::c::ULongLong at 112                   # SIZE_T ProcessMemoryLimit
+    field JobMemoryLimit: ffi::c::ULongLong at 120                       # SIZE_T JobMemoryLimit
+    field PeakProcessMemoryUsed: ffi::c::ULongLong at 128                # SIZE_T PeakProcessMemoryUsed
+    field PeakJobMemoryUsed: ffi::c::ULongLong at 136                    # SIZE_T PeakJobMemoryUsed
 
 # struct _JOBOBJECT_BASIC_PROCESS_ID_LIST, typedef JOBOBJECT_BASIC_PROCESS_ID_LIST (winnt.h:4868): sizeof 16, _Alignof 8
 layout JOBOBJECT_BASIC_PROCESS_ID_LIST:
@@ -935,11 +1267,142 @@ layout JOBOBJECT_ASSOCIATE_COMPLETION_PORT:
     field CompletionKey: ffi::c::Ptr[ffi::c::Void] at 0   # PVOID CompletionKey
     field CompletionPort: ffi::c::Ptr[ffi::c::Void] at 8  # HANDLE CompletionPort
 
+# struct _JOBOBJECT_BASIC_AND_IO_ACCOUNTING_INFORMATION, typedef JOBOBJECT_BASIC_AND_IO_ACCOUNTING_INFORMATION (winnt.h:4895): sizeof 96, _Alignof 8
+layout JOBOBJECT_BASIC_AND_IO_ACCOUNTING_INFORMATION:
+    size 96
+    align 8
+    field BasicInfo: JOBOBJECT_BASIC_ACCOUNTING_INFORMATION at 0  # JOBOBJECT_BASIC_ACCOUNTING_INFORMATION BasicInfo
+    field IoInfo: IO_COUNTERS at 48                               # IO_COUNTERS IoInfo
+
 # struct _JOBOBJECT_JOBSET_INFORMATION, typedef JOBOBJECT_JOBSET_INFORMATION (winnt.h:4900): sizeof 4, _Alignof 4
 layout JOBOBJECT_JOBSET_INFORMATION:
     size 4
     align 4
     field MemberLevel: ffi::c::ULong at 0  # DWORD MemberLevel
+
+# struct _JOBOBJECT_NOTIFICATION_LIMIT_INFORMATION, typedef JOBOBJECT_NOTIFICATION_LIMIT_INFORMATION (winnt.h:4916): sizeof 48, _Alignof 8
+layout JOBOBJECT_NOTIFICATION_LIMIT_INFORMATION:
+    size 48
+    align 8
+    field IoReadBytesLimit: ffi::c::ULongLong at 0          # DWORD64 IoReadBytesLimit
+    field IoWriteBytesLimit: ffi::c::ULongLong at 8         # DWORD64 IoWriteBytesLimit
+    field PerJobUserTimeLimit: LARGE_INTEGER at 16          # LARGE_INTEGER PerJobUserTimeLimit
+    field JobMemoryLimit: ffi::c::ULongLong at 24           # DWORD64 JobMemoryLimit
+    field RateControlTolerance: ffi::c::UInt at 32          # JOBOBJECT_RATE_CONTROL_TOLERANCE RateControlTolerance
+    field RateControlToleranceInterval: ffi::c::UInt at 36  # JOBOBJECT_RATE_CONTROL_TOLERANCE_INTERVAL RateControlToleranceInterval
+    field LimitFlags: ffi::c::ULong at 40                   # DWORD LimitFlags
+
+# the anonymous union member JOBOBJECT_NOTIFICATION_LIMIT_INFORMATION_2.member4 (struct JOBOBJECT_NOTIFICATION_LIMIT_INFORMATION_2) (winnt.h:4930): sizeof 8, _Alignof 8
+union layout JOBOBJECT_NOTIFICATION_LIMIT_INFORMATION_2_member4:
+    size 8
+    align 8
+    alternative JobHighMemoryLimit: ffi::c::ULongLong  # DWORD64 JobHighMemoryLimit
+    alternative JobMemoryLimit: ffi::c::ULongLong      # DWORD64 JobMemoryLimit
+
+# the anonymous union member JOBOBJECT_NOTIFICATION_LIMIT_INFORMATION_2.member5 (struct JOBOBJECT_NOTIFICATION_LIMIT_INFORMATION_2) (winnt.h:4934): sizeof 4, _Alignof 4
+union layout JOBOBJECT_NOTIFICATION_LIMIT_INFORMATION_2_member5:
+    size 4
+    align 4
+    alternative RateControlTolerance: ffi::c::UInt     # JOBOBJECT_RATE_CONTROL_TOLERANCE RateControlTolerance
+    alternative CpuRateControlTolerance: ffi::c::UInt  # JOBOBJECT_RATE_CONTROL_TOLERANCE CpuRateControlTolerance
+
+# the anonymous union member JOBOBJECT_NOTIFICATION_LIMIT_INFORMATION_2.member6 (struct JOBOBJECT_NOTIFICATION_LIMIT_INFORMATION_2) (winnt.h:4938): sizeof 4, _Alignof 4
+union layout JOBOBJECT_NOTIFICATION_LIMIT_INFORMATION_2_member6:
+    size 4
+    align 4
+    alternative RateControlToleranceInterval: ffi::c::UInt     # JOBOBJECT_RATE_CONTROL_TOLERANCE_INTERVAL RateControlToleranceInterval
+    alternative CpuRateControlToleranceInterval: ffi::c::UInt  # JOBOBJECT_RATE_CONTROL_TOLERANCE_INTERVAL CpuRateControlToleranceInterval
+
+# struct JOBOBJECT_NOTIFICATION_LIMIT_INFORMATION_2, typedef JOBOBJECT_NOTIFICATION_LIMIT_INFORMATION_2 (winnt.h:4926): sizeof 72, _Alignof 8
+layout JOBOBJECT_NOTIFICATION_LIMIT_INFORMATION_2:
+    size 72
+    align 8
+    field IoReadBytesLimit: ffi::c::ULongLong at 0                        # DWORD64 IoReadBytesLimit
+    field IoWriteBytesLimit: ffi::c::ULongLong at 8                       # DWORD64 IoWriteBytesLimit
+    field PerJobUserTimeLimit: LARGE_INTEGER at 16                        # LARGE_INTEGER PerJobUserTimeLimit
+    field member4: JOBOBJECT_NOTIFICATION_LIMIT_INFORMATION_2_member4 at 24  # union {...}
+    field member5: JOBOBJECT_NOTIFICATION_LIMIT_INFORMATION_2_member5 at 32  # union {...}
+    field member6: JOBOBJECT_NOTIFICATION_LIMIT_INFORMATION_2_member6 at 36  # union {...}
+    field LimitFlags: ffi::c::ULong at 40                                 # DWORD LimitFlags
+    field IoRateControlTolerance: ffi::c::UInt at 44                      # JOBOBJECT_RATE_CONTROL_TOLERANCE IoRateControlTolerance
+    field JobLowMemoryLimit: ffi::c::ULongLong at 48                      # DWORD64 JobLowMemoryLimit
+    field IoRateControlToleranceInterval: ffi::c::UInt at 56              # JOBOBJECT_RATE_CONTROL_TOLERANCE_INTERVAL IoRateControlToleranceInterval
+    field NetRateControlTolerance: ffi::c::UInt at 60                     # JOBOBJECT_RATE_CONTROL_TOLERANCE NetRateControlTolerance
+    field NetRateControlToleranceInterval: ffi::c::UInt at 64             # JOBOBJECT_RATE_CONTROL_TOLERANCE_INTERVAL NetRateControlToleranceInterval
+
+# struct _JOBOBJECT_LIMIT_VIOLATION_INFORMATION, typedef JOBOBJECT_LIMIT_VIOLATION_INFORMATION (winnt.h:4950): sizeof 80, _Alignof 8
+layout JOBOBJECT_LIMIT_VIOLATION_INFORMATION:
+    size 80
+    align 8
+    field LimitFlags: ffi::c::ULong at 0                 # DWORD LimitFlags
+    field ViolationLimitFlags: ffi::c::ULong at 4        # DWORD ViolationLimitFlags
+    field IoReadBytes: ffi::c::ULongLong at 8            # DWORD64 IoReadBytes
+    field IoReadBytesLimit: ffi::c::ULongLong at 16      # DWORD64 IoReadBytesLimit
+    field IoWriteBytes: ffi::c::ULongLong at 24          # DWORD64 IoWriteBytes
+    field IoWriteBytesLimit: ffi::c::ULongLong at 32     # DWORD64 IoWriteBytesLimit
+    field PerJobUserTime: LARGE_INTEGER at 40            # LARGE_INTEGER PerJobUserTime
+    field PerJobUserTimeLimit: LARGE_INTEGER at 48       # LARGE_INTEGER PerJobUserTimeLimit
+    field JobMemory: ffi::c::ULongLong at 56             # DWORD64 JobMemory
+    field JobMemoryLimit: ffi::c::ULongLong at 64        # DWORD64 JobMemoryLimit
+    field RateControlTolerance: ffi::c::UInt at 72       # JOBOBJECT_RATE_CONTROL_TOLERANCE RateControlTolerance
+    field RateControlToleranceLimit: ffi::c::UInt at 76  # JOBOBJECT_RATE_CONTROL_TOLERANCE_INTERVAL RateControlToleranceLimit
+
+# the anonymous union member JOBOBJECT_LIMIT_VIOLATION_INFORMATION_2.member10 (struct JOBOBJECT_LIMIT_VIOLATION_INFORMATION_2) (winnt.h:4975): sizeof 8, _Alignof 8
+union layout JOBOBJECT_LIMIT_VIOLATION_INFORMATION_2_member10:
+    size 8
+    align 8
+    alternative JobHighMemoryLimit: ffi::c::ULongLong  # DWORD64 JobHighMemoryLimit
+    alternative JobMemoryLimit: ffi::c::ULongLong      # DWORD64 JobMemoryLimit
+
+# the anonymous union member JOBOBJECT_LIMIT_VIOLATION_INFORMATION_2.member11 (struct JOBOBJECT_LIMIT_VIOLATION_INFORMATION_2) (winnt.h:4979): sizeof 4, _Alignof 4
+union layout JOBOBJECT_LIMIT_VIOLATION_INFORMATION_2_member11:
+    size 4
+    align 4
+    alternative RateControlTolerance: ffi::c::UInt     # JOBOBJECT_RATE_CONTROL_TOLERANCE RateControlTolerance
+    alternative CpuRateControlTolerance: ffi::c::UInt  # JOBOBJECT_RATE_CONTROL_TOLERANCE CpuRateControlTolerance
+
+# the anonymous union member JOBOBJECT_LIMIT_VIOLATION_INFORMATION_2.member12 (struct JOBOBJECT_LIMIT_VIOLATION_INFORMATION_2) (winnt.h:4983): sizeof 4, _Alignof 4
+union layout JOBOBJECT_LIMIT_VIOLATION_INFORMATION_2_member12:
+    size 4
+    align 4
+    alternative RateControlToleranceLimit: ffi::c::UInt     # JOBOBJECT_RATE_CONTROL_TOLERANCE RateControlToleranceLimit
+    alternative CpuRateControlToleranceLimit: ffi::c::UInt  # JOBOBJECT_RATE_CONTROL_TOLERANCE CpuRateControlToleranceLimit
+
+# struct JOBOBJECT_LIMIT_VIOLATION_INFORMATION_2, typedef JOBOBJECT_LIMIT_VIOLATION_INFORMATION_2 (winnt.h:4965): sizeof 104, _Alignof 8
+layout JOBOBJECT_LIMIT_VIOLATION_INFORMATION_2:
+    size 104
+    align 8
+    field LimitFlags: ffi::c::ULong at 0                                  # DWORD LimitFlags
+    field ViolationLimitFlags: ffi::c::ULong at 4                         # DWORD ViolationLimitFlags
+    field IoReadBytes: ffi::c::ULongLong at 8                             # DWORD64 IoReadBytes
+    field IoReadBytesLimit: ffi::c::ULongLong at 16                       # DWORD64 IoReadBytesLimit
+    field IoWriteBytes: ffi::c::ULongLong at 24                           # DWORD64 IoWriteBytes
+    field IoWriteBytesLimit: ffi::c::ULongLong at 32                      # DWORD64 IoWriteBytesLimit
+    field PerJobUserTime: LARGE_INTEGER at 40                             # LARGE_INTEGER PerJobUserTime
+    field PerJobUserTimeLimit: LARGE_INTEGER at 48                        # LARGE_INTEGER PerJobUserTimeLimit
+    field JobMemory: ffi::c::ULongLong at 56                              # DWORD64 JobMemory
+    field member10: JOBOBJECT_LIMIT_VIOLATION_INFORMATION_2_member10 at 64  # union {...}
+    field member11: JOBOBJECT_LIMIT_VIOLATION_INFORMATION_2_member11 at 72  # union {...}
+    field member12: JOBOBJECT_LIMIT_VIOLATION_INFORMATION_2_member12 at 76  # union {...}
+    field JobLowMemoryLimit: ffi::c::ULongLong at 80                      # DWORD64 JobLowMemoryLimit
+    field IoRateControlTolerance: ffi::c::UInt at 88                      # JOBOBJECT_RATE_CONTROL_TOLERANCE IoRateControlTolerance
+    field IoRateControlToleranceLimit: ffi::c::UInt at 92                 # JOBOBJECT_RATE_CONTROL_TOLERANCE IoRateControlToleranceLimit
+    field NetRateControlTolerance: ffi::c::UInt at 96                     # JOBOBJECT_RATE_CONTROL_TOLERANCE NetRateControlTolerance
+    field NetRateControlToleranceLimit: ffi::c::UInt at 100               # JOBOBJECT_RATE_CONTROL_TOLERANCE NetRateControlToleranceLimit
+
+# the anonymous union member JOBOBJECT_CPU_RATE_CONTROL_INFORMATION.member2 (struct _JOBOBJECT_CPU_RATE_CONTROL_INFORMATION) (winnt.h:4996): sizeof 4, _Alignof 4
+union layout JOBOBJECT_CPU_RATE_CONTROL_INFORMATION_member2:
+    size 4
+    align 4
+    alternative CpuRate: ffi::c::ULong  # DWORD CpuRate
+    alternative Weight: ffi::c::ULong   # DWORD Weight
+
+# struct _JOBOBJECT_CPU_RATE_CONTROL_INFORMATION, typedef JOBOBJECT_CPU_RATE_CONTROL_INFORMATION (winnt.h:4994): sizeof 8, _Alignof 4
+layout JOBOBJECT_CPU_RATE_CONTROL_INFORMATION:
+    size 8
+    align 4
+    field ControlFlags: ffi::c::ULong at 0                              # DWORD ControlFlags
+    field member2: JOBOBJECT_CPU_RATE_CONTROL_INFORMATION_member2 at 4  # union {...}
 
 # struct JOBOBJECT_NET_RATE_CONTROL_INFORMATION, typedef JOBOBJECT_NET_RATE_CONTROL_INFORMATION (winnt.h:5016): sizeof 16, _Alignof 8
 layout JOBOBJECT_NET_RATE_CONTROL_INFORMATION:
@@ -1063,6 +1526,23 @@ layout SYSTEM_LOGICAL_PROCESSOR_INFORMATION_NumaNode:
     align 4
     field NodeNumber: ffi::c::ULong at 0  # DWORD NodeNumber
 
+# the anonymous union member SYSTEM_LOGICAL_PROCESSOR_INFORMATION.member3 (struct _SYSTEM_LOGICAL_PROCESSOR_INFORMATION) (winnt.h:5326): sizeof 16, _Alignof 8
+union layout SYSTEM_LOGICAL_PROCESSOR_INFORMATION_member3:
+    size 16
+    align 8
+    alternative ProcessorCore: SYSTEM_LOGICAL_PROCESSOR_INFORMATION_ProcessorCore  # struct {...} ProcessorCore
+    alternative NumaNode: SYSTEM_LOGICAL_PROCESSOR_INFORMATION_NumaNode   # struct {...} NumaNode
+    alternative Cache: CACHE_DESCRIPTOR                                   # CACHE_DESCRIPTOR Cache
+    alternative Reserved: array 2 of ffi::c::ULongLong                    # ULONGLONG Reserved[2]
+
+# struct _SYSTEM_LOGICAL_PROCESSOR_INFORMATION, typedef SYSTEM_LOGICAL_PROCESSOR_INFORMATION (winnt.h:5323): sizeof 32, _Alignof 8
+layout SYSTEM_LOGICAL_PROCESSOR_INFORMATION:
+    size 32
+    align 8
+    field ProcessorMask: ffi::c::ULongLong at 0                        # ULONG_PTR ProcessorMask
+    field Relationship: ffi::c::UInt at 8                              # LOGICAL_PROCESSOR_RELATIONSHIP Relationship
+    field member3: SYSTEM_LOGICAL_PROCESSOR_INFORMATION_member3 at 16  # union {...}
+
 # struct _PROCESSOR_RELATIONSHIP, typedef PROCESSOR_RELATIONSHIP (winnt.h:5338): sizeof 40, _Alignof 8
 layout PROCESSOR_RELATIONSHIP:
     size 40
@@ -1109,6 +1589,23 @@ layout GROUP_RELATIONSHIP:
     field ActiveGroupCount: ffi::c::UShort at 2             # WORD ActiveGroupCount
     field Reserved: array 20 of ffi::c::UChar at 4          # BYTE Reserved[20]
     field GroupInfo: array 1 of PROCESSOR_GROUP_INFO at 24  # PROCESSOR_GROUP_INFO GroupInfo[1]
+
+# the anonymous union member SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX.member3 (struct _SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX) (winnt.h:5378): sizeof 72, _Alignof 8
+union layout SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX_member3:
+    size 72
+    align 8
+    alternative Processor: PROCESSOR_RELATIONSHIP  # PROCESSOR_RELATIONSHIP Processor
+    alternative NumaNode: NUMA_NODE_RELATIONSHIP   # NUMA_NODE_RELATIONSHIP NumaNode
+    alternative Cache: CACHE_RELATIONSHIP          # CACHE_RELATIONSHIP Cache
+    alternative Group: GROUP_RELATIONSHIP          # GROUP_RELATIONSHIP Group
+
+# struct _SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX, typedef SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX (winnt.h:5375): sizeof 80, _Alignof 8
+layout SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX:
+    size 80
+    align 8
+    field Relationship: ffi::c::UInt at 0                                # LOGICAL_PROCESSOR_RELATIONSHIP Relationship
+    field Size: ffi::c::ULong at 4                                       # DWORD Size
+    field member3: SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX_member3 at 8  # union {...}
 
 # struct _SYSTEM_POOL_ZEROING_INFORMATION, typedef SYSTEM_POOL_ZEROING_INFORMATION (winnt.h:5430): sizeof 1, _Alignof 1
 layout SYSTEM_POOL_ZEROING_INFORMATION:
@@ -1218,6 +1715,24 @@ layout ENCLAVE_LOAD_DATA_VBS_BASIC:
     align 4
     field PageType: ffi::c::ULong at 0  # DWORD PageType
 
+# the anonymous union member ENCLAVE_INIT_INFO_VBS_BASIC.member6 (struct _ENCLAVE_INIT_INFO_VBS_BASIC) (winnt.h:5858): sizeof 8, _Alignof 8
+union layout ENCLAVE_INIT_INFO_VBS_BASIC_member6:
+    size 8
+    align 8
+    alternative SignatureInfoHandle: ffi::c::Ptr[ffi::c::Void]  # HANDLE SignatureInfoHandle
+    alternative Unused: ffi::c::ULongLong                       # ULONGLONG Unused
+
+# struct _ENCLAVE_INIT_INFO_VBS_BASIC, typedef ENCLAVE_INIT_INFO_VBS_BASIC (winnt.h:5852): sizeof 56, _Alignof 8
+layout ENCLAVE_INIT_INFO_VBS_BASIC:
+    size 56
+    align 8
+    field FamilyId: array 16 of ffi::c::UChar at 0            # BYTE FamilyId[16]
+    field ImageId: array 16 of ffi::c::UChar at 16            # BYTE ImageId[16]
+    field EnclaveSize: ffi::c::ULongLong at 32                # ULONGLONG EnclaveSize
+    field EnclaveSvn: ffi::c::ULong at 40                     # DWORD EnclaveSvn
+    field Reserved: ffi::c::ULong at 44                       # DWORD Reserved
+    field member6: ENCLAVE_INIT_INFO_VBS_BASIC_member6 at 48  # union {...}
+
 # struct _ENCLAVE_INIT_INFO_VBS, typedef ENCLAVE_INIT_INFO_VBS (winnt.h:5864): sizeof 8, _Alignof 4
 layout ENCLAVE_INIT_INFO_VBS:
     size 8
@@ -1259,6 +1774,67 @@ layout FILE_NOTIFY_INFORMATION:
     field Action: ffi::c::ULong at 4                 # DWORD Action
     field FileNameLength: ffi::c::ULong at 8         # DWORD FileNameLength
     field FileName: array 1 of ffi::c::UShort at 12  # WCHAR FileName[1]
+
+# the anonymous union member FILE_NOTIFY_EXTENDED_INFORMATION.member10 (struct _FILE_NOTIFY_EXTENDED_INFORMATION) (winnt.h:6050): sizeof 4, _Alignof 4
+union layout FILE_NOTIFY_EXTENDED_INFORMATION_member10:
+    size 4
+    align 4
+    alternative ReparsePointTag: ffi::c::ULong  # DWORD ReparsePointTag
+    alternative EaSize: ffi::c::ULong           # DWORD EaSize
+
+# struct _FILE_NOTIFY_EXTENDED_INFORMATION, typedef FILE_NOTIFY_EXTENDED_INFORMATION (winnt.h:6040): sizeof 88, _Alignof 8
+layout FILE_NOTIFY_EXTENDED_INFORMATION:
+    size 88
+    align 8
+    field NextEntryOffset: ffi::c::ULong at 0                        # DWORD NextEntryOffset
+    field Action: ffi::c::ULong at 4                                 # DWORD Action
+    field CreationTime: LARGE_INTEGER at 8                           # LARGE_INTEGER CreationTime
+    field LastModificationTime: LARGE_INTEGER at 16                  # LARGE_INTEGER LastModificationTime
+    field LastChangeTime: LARGE_INTEGER at 24                        # LARGE_INTEGER LastChangeTime
+    field LastAccessTime: LARGE_INTEGER at 32                        # LARGE_INTEGER LastAccessTime
+    field AllocatedLength: LARGE_INTEGER at 40                       # LARGE_INTEGER AllocatedLength
+    field FileSize: LARGE_INTEGER at 48                              # LARGE_INTEGER FileSize
+    field FileAttributes: ffi::c::ULong at 56                        # DWORD FileAttributes
+    field member10: FILE_NOTIFY_EXTENDED_INFORMATION_member10 at 60  # union {...}
+    field FileId: LARGE_INTEGER at 64                                # LARGE_INTEGER FileId
+    field ParentFileId: LARGE_INTEGER at 72                          # LARGE_INTEGER ParentFileId
+    field FileNameLength: ffi::c::ULong at 80                        # DWORD FileNameLength
+    field FileName: array 1 of ffi::c::UShort at 84                  # WCHAR FileName[1]
+
+# the anonymous union member FILE_NOTIFY_FULL_INFORMATION.member10 (struct _FILE_NOTIFY_FULL_INFORMATION) (winnt.h:6078): sizeof 4, _Alignof 4
+union layout FILE_NOTIFY_FULL_INFORMATION_member10:
+    size 4
+    align 4
+    alternative ReparsePointTag: ffi::c::ULong  # DWORD ReparsePointTag
+    alternative EaSize: ffi::c::ULong           # DWORD EaSize
+
+# struct _FILE_NOTIFY_FULL_INFORMATION, typedef FILE_NOTIFY_FULL_INFORMATION (winnt.h:6068): sizeof 88, _Alignof 8
+layout FILE_NOTIFY_FULL_INFORMATION:
+    size 88
+    align 8
+    field NextEntryOffset: ffi::c::ULong at 0                    # DWORD NextEntryOffset
+    field Action: ffi::c::ULong at 4                             # DWORD Action
+    field CreationTime: LARGE_INTEGER at 8                       # LARGE_INTEGER CreationTime
+    field LastModificationTime: LARGE_INTEGER at 16              # LARGE_INTEGER LastModificationTime
+    field LastChangeTime: LARGE_INTEGER at 24                    # LARGE_INTEGER LastChangeTime
+    field LastAccessTime: LARGE_INTEGER at 32                    # LARGE_INTEGER LastAccessTime
+    field AllocatedLength: LARGE_INTEGER at 40                   # LARGE_INTEGER AllocatedLength
+    field FileSize: LARGE_INTEGER at 48                          # LARGE_INTEGER FileSize
+    field FileAttributes: ffi::c::ULong at 56                    # DWORD FileAttributes
+    field member10: FILE_NOTIFY_FULL_INFORMATION_member10 at 60  # union {...}
+    field FileId: LARGE_INTEGER at 64                            # LARGE_INTEGER FileId
+    field ParentFileId: LARGE_INTEGER at 72                      # LARGE_INTEGER ParentFileId
+    field FileNameLength: ffi::c::UShort at 80                   # WORD FileNameLength
+    field FileNameFlags: ffi::c::UChar at 82                     # BYTE FileNameFlags
+    field Reserved: ffi::c::UChar at 83                          # BYTE Reserved
+    field FileName: array 1 of ffi::c::UShort at 84              # WCHAR FileName[1]
+
+# union _FILE_SEGMENT_ELEMENT, typedef FILE_SEGMENT_ELEMENT (winnt.h:6093): sizeof 8, _Alignof 8
+union layout FILE_SEGMENT_ELEMENT:
+    size 8
+    align 8
+    alternative Buffer: ffi::c::Ptr[ffi::c::Void]  # PVOID64 Buffer
+    alternative Alignment: ffi::c::ULongLong       # ULONGLONG Alignment
 
 # an anonymous struct (winnt.h:6111): sizeof 1, _Alignof 1
 layout REPARSE_GUID_DATA_BUFFER_GenericReparseBuffer:
@@ -1419,6 +1995,14 @@ layout NOTIFY_USER_POWER_SETTING:
     size 16
     align 4
     field Guid: GUID at 0  # GUID Guid
+
+# struct _APPLICATIONLAUNCH_SETTING_VALUE, typedef APPLICATIONLAUNCH_SETTING_VALUE (winnt.h:6676): sizeof 16, _Alignof 8
+layout APPLICATIONLAUNCH_SETTING_VALUE:
+    size 16
+    align 8
+    field ActivationTime: LARGE_INTEGER at 0     # LARGE_INTEGER ActivationTime
+    field Flags: ffi::c::ULong at 8              # DWORD Flags
+    field ButtonInstanceID: ffi::c::ULong at 12  # DWORD ButtonInstanceID
 
 # struct _POWER_PLATFORM_INFORMATION, typedef POWER_PLATFORM_INFORMATION (winnt.h:6695): sizeof 1, _Alignof 1
 layout POWER_PLATFORM_INFORMATION:
@@ -2056,6 +2640,28 @@ layout ANON_OBJECT_HEADER_BIGOBJ:
     field PointerToSymbolTable: ffi::c::ULong at 48  # DWORD PointerToSymbolTable
     field NumberOfSymbols: ffi::c::ULong at 52       # DWORD NumberOfSymbols
 
+# an anonymous union (winnt.h:7552): sizeof 4, _Alignof 4
+union layout IMAGE_SECTION_HEADER_Misc:
+    size 4
+    align 4
+    alternative PhysicalAddress: ffi::c::ULong  # DWORD PhysicalAddress
+    alternative VirtualSize: ffi::c::ULong      # DWORD VirtualSize
+
+# struct _IMAGE_SECTION_HEADER, typedef IMAGE_SECTION_HEADER (winnt.h:7550): sizeof 40, _Alignof 4
+layout IMAGE_SECTION_HEADER:
+    size 40
+    align 4
+    field Name: array 8 of ffi::c::UChar at 0        # BYTE Name[8]
+    field Misc: IMAGE_SECTION_HEADER_Misc at 8       # union {...} Misc
+    field VirtualAddress: ffi::c::ULong at 12        # DWORD VirtualAddress
+    field SizeOfRawData: ffi::c::ULong at 16         # DWORD SizeOfRawData
+    field PointerToRawData: ffi::c::ULong at 20      # DWORD PointerToRawData
+    field PointerToRelocations: ffi::c::ULong at 24  # DWORD PointerToRelocations
+    field PointerToLinenumbers: ffi::c::ULong at 28  # DWORD PointerToLinenumbers
+    field NumberOfRelocations: ffi::c::UShort at 32  # WORD NumberOfRelocations
+    field NumberOfLinenumbers: ffi::c::UShort at 34  # WORD NumberOfLinenumbers
+    field Characteristics: ffi::c::ULong at 36       # DWORD Characteristics
+
 # an anonymous struct (winnt.h:7617): sizeof 8, _Alignof 2
 layout IMAGE_SYMBOL_N_Name:
     size 8
@@ -2063,12 +2669,50 @@ layout IMAGE_SYMBOL_N_Name:
     field Short: ffi::c::ULong at 0  # DWORD Short
     field Long: ffi::c::ULong at 4   # DWORD Long
 
+# an anonymous union (winnt.h:7615): sizeof 8, _Alignof 2
+union layout IMAGE_SYMBOL_N:
+    size 8
+    align 2
+    alternative ShortName: array 8 of ffi::c::UChar  # BYTE ShortName[8]
+    alternative Name: IMAGE_SYMBOL_N_Name            # struct {...} Name
+    alternative LongName: array 2 of ffi::c::ULong   # DWORD LongName[2]
+
+# struct _IMAGE_SYMBOL, typedef IMAGE_SYMBOL (winnt.h:7614): sizeof 18, _Alignof 2
+layout IMAGE_SYMBOL:
+    size 18
+    align 2
+    field N: IMAGE_SYMBOL_N at 0                   # union {...} N
+    field Value: ffi::c::ULong at 8                # DWORD Value
+    field SectionNumber: ffi::c::Short at 12       # SHORT SectionNumber
+    field Type: ffi::c::UShort at 14               # WORD Type
+    field StorageClass: ffi::c::UChar at 16        # BYTE StorageClass
+    field NumberOfAuxSymbols: ffi::c::UChar at 17  # BYTE NumberOfAuxSymbols
+
 # an anonymous struct (winnt.h:7636): sizeof 8, _Alignof 2
 layout IMAGE_SYMBOL_EX_N_Name:
     size 8
     align 2
     field Short: ffi::c::ULong at 0  # DWORD Short
     field Long: ffi::c::ULong at 4   # DWORD Long
+
+# an anonymous union (winnt.h:7634): sizeof 8, _Alignof 2
+union layout IMAGE_SYMBOL_EX_N:
+    size 8
+    align 2
+    alternative ShortName: array 8 of ffi::c::UChar  # BYTE ShortName[8]
+    alternative Name: IMAGE_SYMBOL_EX_N_Name         # struct {...} Name
+    alternative LongName: array 2 of ffi::c::ULong   # DWORD LongName[2]
+
+# struct _IMAGE_SYMBOL_EX, typedef IMAGE_SYMBOL_EX (winnt.h:7633): sizeof 20, _Alignof 2
+layout IMAGE_SYMBOL_EX:
+    size 20
+    align 2
+    field N: IMAGE_SYMBOL_EX_N at 0                # union {...} N
+    field Value: ffi::c::ULong at 8                # DWORD Value
+    field SectionNumber: ffi::c::Long at 12        # LONG SectionNumber
+    field Type: ffi::c::UShort at 16               # WORD Type
+    field StorageClass: ffi::c::UChar at 18        # BYTE StorageClass
+    field NumberOfAuxSymbols: ffi::c::UChar at 19  # BYTE NumberOfAuxSymbols
 
 # struct IMAGE_AUX_SYMBOL_TOKEN_DEF, typedef IMAGE_AUX_SYMBOL_TOKEN_DEF (winnt.h:7740): sizeof 18, _Alignof 2
 layout IMAGE_AUX_SYMBOL_TOKEN_DEF:
@@ -2086,6 +2730,13 @@ layout IMAGE_AUX_SYMBOL_Sym_Misc_LnSz:
     field Linenumber: ffi::c::UShort at 0  # WORD Linenumber
     field Size: ffi::c::UShort at 2        # WORD Size
 
+# an anonymous union (winnt.h:7751): sizeof 4, _Alignof 2
+union layout IMAGE_AUX_SYMBOL_Sym_Misc:
+    size 4
+    align 2
+    alternative LnSz: IMAGE_AUX_SYMBOL_Sym_Misc_LnSz  # struct {...} LnSz
+    alternative TotalSize: ffi::c::ULong              # DWORD TotalSize
+
 # an anonymous struct (winnt.h:7759): sizeof 8, _Alignof 2
 layout IMAGE_AUX_SYMBOL_Sym_FcnAry_Function:
     size 8
@@ -2098,6 +2749,22 @@ layout IMAGE_AUX_SYMBOL_Sym_FcnAry_Array:
     size 8
     align 2
     field Dimension: array 4 of ffi::c::UShort at 0  # WORD Dimension[4]
+
+# an anonymous union (winnt.h:7758): sizeof 8, _Alignof 2
+union layout IMAGE_AUX_SYMBOL_Sym_FcnAry:
+    size 8
+    align 2
+    alternative Function: IMAGE_AUX_SYMBOL_Sym_FcnAry_Function  # struct {...} Function
+    alternative Array: IMAGE_AUX_SYMBOL_Sym_FcnAry_Array        # struct {...} Array
+
+# an anonymous struct (winnt.h:7749): sizeof 18, _Alignof 2
+layout IMAGE_AUX_SYMBOL_Sym:
+    size 18
+    align 2
+    field TagIndex: ffi::c::ULong at 0              # DWORD TagIndex
+    field Misc: IMAGE_AUX_SYMBOL_Sym_Misc at 4      # union {...} Misc
+    field FcnAry: IMAGE_AUX_SYMBOL_Sym_FcnAry at 8  # union {...} FcnAry
+    field TvIndex: ffi::c::UShort at 16             # WORD TvIndex
 
 # an anonymous struct (winnt.h:7769): sizeof 18, _Alignof 1
 layout IMAGE_AUX_SYMBOL_File:
@@ -2122,6 +2789,16 @@ layout IMAGE_AUX_SYMBOL_CRC:
     align 2
     field crc: ffi::c::ULong at 0                      # DWORD crc
     field rgbReserved: array 14 of ffi::c::UChar at 4  # BYTE rgbReserved[14]
+
+# union _IMAGE_AUX_SYMBOL, typedef IMAGE_AUX_SYMBOL (winnt.h:7748): sizeof 18, _Alignof 2
+union layout IMAGE_AUX_SYMBOL:
+    size 18
+    align 2
+    alternative Sym: IMAGE_AUX_SYMBOL_Sym             # struct {...} Sym
+    alternative File: IMAGE_AUX_SYMBOL_File           # struct {...} File
+    alternative Section: IMAGE_AUX_SYMBOL_Section     # struct {...} Section
+    alternative TokenDef: IMAGE_AUX_SYMBOL_TOKEN_DEF  # IMAGE_AUX_SYMBOL_TOKEN_DEF TokenDef
+    alternative CRC: IMAGE_AUX_SYMBOL_CRC             # struct {...} CRC
 
 # an anonymous struct (winnt.h:7788): sizeof 20, _Alignof 2
 layout IMAGE_AUX_SYMBOL_EX_Sym:
@@ -2151,12 +2828,58 @@ layout IMAGE_AUX_SYMBOL_EX_Section:
     field HighNumber: ffi::c::Short at 16              # SHORT HighNumber
     field rgbReserved: array 2 of ffi::c::UChar at 18  # BYTE rgbReserved[2]
 
+# the anonymous struct member IMAGE_AUX_SYMBOL_EX.member4 (union _IMAGE_AUX_SYMBOL_EX) (winnt.h:7807): sizeof 20, _Alignof 2
+layout IMAGE_AUX_SYMBOL_EX_member4:
+    size 20
+    align 2
+    field TokenDef: IMAGE_AUX_SYMBOL_TOKEN_DEF at 0    # IMAGE_AUX_SYMBOL_TOKEN_DEF TokenDef
+    field rgbReserved: array 2 of ffi::c::UChar at 18  # BYTE rgbReserved[2]
+
 # an anonymous struct (winnt.h:7811): sizeof 20, _Alignof 2
 layout IMAGE_AUX_SYMBOL_EX_CRC:
     size 20
     align 2
     field crc: ffi::c::ULong at 0                      # DWORD crc
     field rgbReserved: array 16 of ffi::c::UChar at 4  # BYTE rgbReserved[16]
+
+# union _IMAGE_AUX_SYMBOL_EX, typedef IMAGE_AUX_SYMBOL_EX (winnt.h:7787): sizeof 20, _Alignof 2
+union layout IMAGE_AUX_SYMBOL_EX:
+    size 20
+    align 2
+    alternative Sym: IMAGE_AUX_SYMBOL_EX_Sym          # struct {...} Sym
+    alternative File: IMAGE_AUX_SYMBOL_EX_File        # struct {...} File
+    alternative Section: IMAGE_AUX_SYMBOL_EX_Section  # struct {...} Section
+    alternative member4: IMAGE_AUX_SYMBOL_EX_member4  # struct {...}
+    alternative CRC: IMAGE_AUX_SYMBOL_EX_CRC          # struct {...} CRC
+
+# the anonymous union member IMAGE_RELOCATION.member1 (struct _IMAGE_RELOCATION) (winnt.h:7836): sizeof 4, _Alignof 2
+union layout IMAGE_RELOCATION_member1:
+    size 4
+    align 2
+    alternative VirtualAddress: ffi::c::ULong  # DWORD VirtualAddress
+    alternative RelocCount: ffi::c::ULong      # DWORD RelocCount
+
+# struct _IMAGE_RELOCATION, typedef IMAGE_RELOCATION (winnt.h:7835): sizeof 10, _Alignof 2
+layout IMAGE_RELOCATION:
+    size 10
+    align 2
+    field member1: IMAGE_RELOCATION_member1 at 0  # union {...}
+    field SymbolTableIndex: ffi::c::ULong at 4    # DWORD SymbolTableIndex
+    field Type: ffi::c::UShort at 8               # WORD Type
+
+# an anonymous union (winnt.h:8174): sizeof 4, _Alignof 2
+union layout IMAGE_LINENUMBER_Type:
+    size 4
+    align 2
+    alternative SymbolTableIndex: ffi::c::ULong  # DWORD SymbolTableIndex
+    alternative VirtualAddress: ffi::c::ULong    # DWORD VirtualAddress
+
+# struct _IMAGE_LINENUMBER, typedef IMAGE_LINENUMBER (winnt.h:8173): sizeof 6, _Alignof 2
+layout IMAGE_LINENUMBER:
+    size 6
+    align 2
+    field Type: IMAGE_LINENUMBER_Type at 0  # union {...} Type
+    field Linenumber: ffi::c::UShort at 4   # WORD Linenumber
 
 # struct _IMAGE_BASE_RELOCATION, typedef IMAGE_BASE_RELOCATION (winnt.h:8186): sizeof 8, _Alignof 4
 layout IMAGE_BASE_RELOCATION:
@@ -2200,6 +2923,36 @@ layout IMAGE_IMPORT_BY_NAME:
     field Hint: ffi::c::UShort at 0           # WORD Hint
     field Name: array 1 of ffi::c::Char at 2  # CHAR Name[1]
 
+# an anonymous union (winnt.h:8247): sizeof 8, _Alignof 8
+union layout IMAGE_THUNK_DATA64_u1:
+    size 8
+    align 8
+    alternative ForwarderString: ffi::c::ULongLong  # ULONGLONG ForwarderString
+    alternative Function: ffi::c::ULongLong         # ULONGLONG Function
+    alternative Ordinal: ffi::c::ULongLong          # ULONGLONG Ordinal
+    alternative AddressOfData: ffi::c::ULongLong    # ULONGLONG AddressOfData
+
+# struct _IMAGE_THUNK_DATA64, typedef IMAGE_THUNK_DATA64, IMAGE_THUNK_DATA (winnt.h:8246): sizeof 8, _Alignof 8
+layout IMAGE_THUNK_DATA64:
+    size 8
+    align 8
+    field u1: IMAGE_THUNK_DATA64_u1 at 0  # union {...} u1
+
+# an anonymous union (winnt.h:8259): sizeof 4, _Alignof 4
+union layout IMAGE_THUNK_DATA32_u1:
+    size 4
+    align 4
+    alternative ForwarderString: ffi::c::ULong  # DWORD ForwarderString
+    alternative Function: ffi::c::ULong         # DWORD Function
+    alternative Ordinal: ffi::c::ULong          # DWORD Ordinal
+    alternative AddressOfData: ffi::c::ULong    # DWORD AddressOfData
+
+# struct _IMAGE_THUNK_DATA32, typedef IMAGE_THUNK_DATA32 (winnt.h:8258): sizeof 4, _Alignof 4
+layout IMAGE_THUNK_DATA32:
+    size 4
+    align 4
+    field u1: IMAGE_THUNK_DATA32_u1 at 0  # union {...} u1
+
 # struct _IMAGE_TLS_DIRECTORY64, typedef IMAGE_TLS_DIRECTORY64, IMAGE_TLS_DIRECTORY (winnt.h:8277): sizeof 40, _Alignof 4
 layout IMAGE_TLS_DIRECTORY64:
     size 40
@@ -2221,6 +2974,23 @@ layout IMAGE_TLS_DIRECTORY32:
     field AddressOfCallBacks: ffi::c::ULong at 12    # DWORD AddressOfCallBacks
     field SizeOfZeroFill: ffi::c::ULong at 16        # DWORD SizeOfZeroFill
     field Characteristics: ffi::c::ULong at 20       # DWORD Characteristics
+
+# the anonymous union member IMAGE_IMPORT_DESCRIPTOR.member1 (struct _IMAGE_IMPORT_DESCRIPTOR) (winnt.h:8316): sizeof 4, _Alignof 4
+union layout IMAGE_IMPORT_DESCRIPTOR_member1:
+    size 4
+    align 4
+    alternative Characteristics: ffi::c::ULong     # DWORD Characteristics
+    alternative OriginalFirstThunk: ffi::c::ULong  # DWORD OriginalFirstThunk
+
+# struct _IMAGE_IMPORT_DESCRIPTOR, typedef IMAGE_IMPORT_DESCRIPTOR (winnt.h:8315): sizeof 20, _Alignof 4
+layout IMAGE_IMPORT_DESCRIPTOR:
+    size 20
+    align 4
+    field member1: IMAGE_IMPORT_DESCRIPTOR_member1 at 0  # union {...}
+    field TimeDateStamp: ffi::c::ULong at 4              # DWORD TimeDateStamp
+    field ForwarderChain: ffi::c::ULong at 8             # DWORD ForwarderChain
+    field Name: ffi::c::ULong at 12                      # DWORD Name
+    field FirstThunk: ffi::c::ULong at 16                # DWORD FirstThunk
 
 # struct _IMAGE_BOUND_IMPORT_DESCRIPTOR, typedef IMAGE_BOUND_IMPORT_DESCRIPTOR (winnt.h:8328): sizeof 8, _Alignof 4
 layout IMAGE_BOUND_IMPORT_DESCRIPTOR:
@@ -2342,6 +3112,21 @@ layout IMAGE_ALPHA_RUNTIME_FUNCTION_ENTRY:
     field HandlerData: ffi::c::ULong at 12       # DWORD HandlerData
     field PrologEndAddress: ffi::c::ULong at 16  # DWORD PrologEndAddress
 
+# the anonymous union member _IMAGE_RUNTIME_FUNCTION_ENTRY.member3 (struct _IMAGE_RUNTIME_FUNCTION_ENTRY) (winnt.h:8545): sizeof 4, _Alignof 4
+union layout _IMAGE_RUNTIME_FUNCTION_ENTRY_member3:
+    size 4
+    align 4
+    alternative UnwindInfoAddress: ffi::c::ULong  # DWORD UnwindInfoAddress
+    alternative UnwindData: ffi::c::ULong         # DWORD UnwindData
+
+# struct _IMAGE_RUNTIME_FUNCTION_ENTRY, typedef _IMAGE_RUNTIME_FUNCTION_ENTRY, IMAGE_IA64_RUNTIME_FUNCTION_ENTRY, IMAGE_RUNTIME_FUNCTION_ENTRY (winnt.h:8542): sizeof 12, _Alignof 4
+layout _IMAGE_RUNTIME_FUNCTION_ENTRY:
+    size 12
+    align 4
+    field BeginAddress: ffi::c::ULong at 0                     # DWORD BeginAddress
+    field EndAddress: ffi::c::ULong at 4                       # DWORD EndAddress
+    field member3: _IMAGE_RUNTIME_FUNCTION_ENTRY_member3 at 8  # union {...}
+
 # struct _IMAGE_DEBUG_DIRECTORY, typedef IMAGE_DEBUG_DIRECTORY (winnt.h:8573): sizeof 28, _Alignof 4
 layout IMAGE_DEBUG_DIRECTORY:
     size 28
@@ -2386,6 +3171,21 @@ layout IMAGE_FUNCTION_ENTRY:
     field EndingAddress: ffi::c::ULong at 4    # DWORD EndingAddress
     field EndOfPrologue: ffi::c::ULong at 8    # DWORD EndOfPrologue
 
+# the anonymous union member IMAGE_FUNCTION_ENTRY64.member3 (struct _IMAGE_FUNCTION_ENTRY64) (winnt.h:8646): sizeof 8, _Alignof 4
+union layout IMAGE_FUNCTION_ENTRY64_member3:
+    size 8
+    align 4
+    alternative EndOfPrologue: ffi::c::ULongLong      # ULONGLONG EndOfPrologue
+    alternative UnwindInfoAddress: ffi::c::ULongLong  # ULONGLONG UnwindInfoAddress
+
+# struct _IMAGE_FUNCTION_ENTRY64, typedef IMAGE_FUNCTION_ENTRY64 (winnt.h:8643): sizeof 24, _Alignof 4
+layout IMAGE_FUNCTION_ENTRY64:
+    size 24
+    align 4
+    field StartingAddress: ffi::c::ULongLong at 0        # ULONGLONG StartingAddress
+    field EndingAddress: ffi::c::ULongLong at 8          # ULONGLONG EndingAddress
+    field member3: IMAGE_FUNCTION_ENTRY64_member3 at 16  # union {...}
+
 # struct _IMAGE_SEPARATE_DEBUG_HEADER, typedef IMAGE_SEPARATE_DEBUG_HEADER (winnt.h:8652): sizeof 48, _Alignof 4
 layout IMAGE_SEPARATE_DEBUG_HEADER:
     size 48
@@ -2424,6 +3224,30 @@ layout IMAGE_ARCHITECTURE_ENTRY:
     align 4
     field FixupInstRVA: ffi::c::ULong at 0  # DWORD FixupInstRVA
     field NewInst: ffi::c::ULong at 4       # DWORD NewInst
+
+# the anonymous union member IMAGE_COR20_HEADER.member6 (struct IMAGE_COR20_HEADER) (winnt.h:8743): sizeof 4, _Alignof 4
+union layout IMAGE_COR20_HEADER_member6:
+    size 4
+    align 4
+    alternative EntryPointToken: ffi::c::ULong  # DWORD EntryPointToken
+    alternative EntryPointRVA: ffi::c::ULong    # DWORD EntryPointRVA
+
+# struct IMAGE_COR20_HEADER, typedef IMAGE_COR20_HEADER (winnt.h:8737): sizeof 72, _Alignof 4
+layout IMAGE_COR20_HEADER:
+    size 72
+    align 4
+    field cb: ffi::c::ULong at 0                               # DWORD cb
+    field MajorRuntimeVersion: ffi::c::UShort at 4             # WORD MajorRuntimeVersion
+    field MinorRuntimeVersion: ffi::c::UShort at 6             # WORD MinorRuntimeVersion
+    field MetaData: IMAGE_DATA_DIRECTORY at 8                  # IMAGE_DATA_DIRECTORY MetaData
+    field Flags: ffi::c::ULong at 16                           # DWORD Flags
+    field member6: IMAGE_COR20_HEADER_member6 at 20            # union {...}
+    field Resources: IMAGE_DATA_DIRECTORY at 24                # IMAGE_DATA_DIRECTORY Resources
+    field StrongNameSignature: IMAGE_DATA_DIRECTORY at 32      # IMAGE_DATA_DIRECTORY StrongNameSignature
+    field CodeManagerTable: IMAGE_DATA_DIRECTORY at 40         # IMAGE_DATA_DIRECTORY CodeManagerTable
+    field VTableFixups: IMAGE_DATA_DIRECTORY at 48             # IMAGE_DATA_DIRECTORY VTableFixups
+    field ExportAddressTableJumps: IMAGE_DATA_DIRECTORY at 56  # IMAGE_DATA_DIRECTORY ExportAddressTableJumps
+    field ManagedNativeHeader: IMAGE_DATA_DIRECTORY at 64      # IMAGE_DATA_DIRECTORY ManagedNativeHeader
 
 # struct _SLIST_ENTRY, typedef SLIST_ENTRY (winnt.h:8833): sizeof 16, _Alignof 16
 layout SLIST_ENTRY:
@@ -2578,6 +3402,30 @@ layout ASSEMBLY_FILE_DETAILED_INFORMATION:
     field lpFileName: ffi::c::Ptr[ffi::c::UShort] at 16  # PCWSTR lpFileName
     field lpFilePath: ffi::c::Ptr[ffi::c::UShort] at 24  # PCWSTR lpFilePath
 
+# struct _ACTIVATION_CONTEXT_ASSEMBLY_DETAILED_INFORMATION, typedef ACTIVATION_CONTEXT_ASSEMBLY_DETAILED_INFORMATION (winnt.h:9286): sizeof 104, _Alignof 8
+layout ACTIVATION_CONTEXT_ASSEMBLY_DETAILED_INFORMATION:
+    size 104
+    align 8
+    field ulFlags: ffi::c::ULong at 0                                     # DWORD ulFlags
+    field ulEncodedAssemblyIdentityLength: ffi::c::ULong at 4             # DWORD ulEncodedAssemblyIdentityLength
+    field ulManifestPathType: ffi::c::ULong at 8                          # DWORD ulManifestPathType
+    field ulManifestPathLength: ffi::c::ULong at 12                       # DWORD ulManifestPathLength
+    field liManifestLastWriteTime: LARGE_INTEGER at 16                    # LARGE_INTEGER liManifestLastWriteTime
+    field ulPolicyPathType: ffi::c::ULong at 24                           # DWORD ulPolicyPathType
+    field ulPolicyPathLength: ffi::c::ULong at 28                         # DWORD ulPolicyPathLength
+    field liPolicyLastWriteTime: LARGE_INTEGER at 32                      # LARGE_INTEGER liPolicyLastWriteTime
+    field ulMetadataSatelliteRosterIndex: ffi::c::ULong at 40             # DWORD ulMetadataSatelliteRosterIndex
+    field ulManifestVersionMajor: ffi::c::ULong at 44                     # DWORD ulManifestVersionMajor
+    field ulManifestVersionMinor: ffi::c::ULong at 48                     # DWORD ulManifestVersionMinor
+    field ulPolicyVersionMajor: ffi::c::ULong at 52                       # DWORD ulPolicyVersionMajor
+    field ulPolicyVersionMinor: ffi::c::ULong at 56                       # DWORD ulPolicyVersionMinor
+    field ulAssemblyDirectoryNameLength: ffi::c::ULong at 60              # DWORD ulAssemblyDirectoryNameLength
+    field lpAssemblyEncodedAssemblyIdentity: ffi::c::Ptr[ffi::c::UShort] at 64  # PCWSTR lpAssemblyEncodedAssemblyIdentity
+    field lpAssemblyManifestPath: ffi::c::Ptr[ffi::c::UShort] at 72       # PCWSTR lpAssemblyManifestPath
+    field lpAssemblyPolicyPath: ffi::c::Ptr[ffi::c::UShort] at 80         # PCWSTR lpAssemblyPolicyPath
+    field lpAssemblyDirectoryName: ffi::c::Ptr[ffi::c::UShort] at 88      # PCWSTR lpAssemblyDirectoryName
+    field ulFileCount: ffi::c::ULong at 96                                # DWORD ulFileCount
+
 # struct _ACTIVATION_CONTEXT_RUN_LEVEL_INFORMATION, typedef ACTIVATION_CONTEXT_RUN_LEVEL_INFORMATION (winnt.h:9308): sizeof 12, _Alignof 4
 layout ACTIVATION_CONTEXT_RUN_LEVEL_INFORMATION:
     size 12
@@ -2716,6 +3564,23 @@ layout TAPE_WRITE_MARKS:
     field Count: ffi::c::ULong at 4      # DWORD Count
     field Immediate: ffi::c::UChar at 8  # BOOLEAN Immediate
 
+# struct _TAPE_GET_POSITION, typedef TAPE_GET_POSITION (winnt.h:9751): sizeof 16, _Alignof 8
+layout TAPE_GET_POSITION:
+    size 16
+    align 8
+    field Type: ffi::c::ULong at 0       # DWORD Type
+    field Partition: ffi::c::ULong at 4  # DWORD Partition
+    field Offset: LARGE_INTEGER at 8     # LARGE_INTEGER Offset
+
+# struct _TAPE_SET_POSITION, typedef TAPE_SET_POSITION (winnt.h:9768): sizeof 24, _Alignof 8
+layout TAPE_SET_POSITION:
+    size 24
+    align 8
+    field Method: ffi::c::ULong at 0      # DWORD Method
+    field Partition: ffi::c::ULong at 4   # DWORD Partition
+    field Offset: LARGE_INTEGER at 8      # LARGE_INTEGER Offset
+    field Immediate: ffi::c::UChar at 16  # BOOLEAN Immediate
+
 # struct _TAPE_GET_DRIVE_PARAMETERS, typedef TAPE_GET_DRIVE_PARAMETERS (winnt.h:9842): sizeof 32, _Alignof 4
 layout TAPE_GET_DRIVE_PARAMETERS:
     size 32
@@ -2741,6 +3606,16 @@ layout TAPE_SET_DRIVE_PARAMETERS:
     field DataPadding: ffi::c::UChar at 2         # BOOLEAN DataPadding
     field ReportSetmarks: ffi::c::UChar at 3      # BOOLEAN ReportSetmarks
     field EOTWarningZoneSize: ffi::c::ULong at 4  # DWORD EOTWarningZoneSize
+
+# struct _TAPE_GET_MEDIA_PARAMETERS, typedef TAPE_GET_MEDIA_PARAMETERS (winnt.h:9864): sizeof 32, _Alignof 8
+layout TAPE_GET_MEDIA_PARAMETERS:
+    size 32
+    align 8
+    field Capacity: LARGE_INTEGER at 0         # LARGE_INTEGER Capacity
+    field Remaining: LARGE_INTEGER at 8        # LARGE_INTEGER Remaining
+    field BlockSize: ffi::c::ULong at 16       # DWORD BlockSize
+    field PartitionCount: ffi::c::ULong at 20  # DWORD PartitionCount
+    field WriteProtected: ffi::c::UChar at 24  # BOOLEAN WriteProtected
 
 # struct _TAPE_SET_MEDIA_PARAMETERS, typedef TAPE_SET_MEDIA_PARAMETERS (winnt.h:9872): sizeof 4, _Alignof 4
 layout TAPE_SET_MEDIA_PARAMETERS:
@@ -2770,6 +3645,15 @@ layout TP_POOL_STACK_INFORMATION:
     align 8
     field StackReserve: ffi::c::ULongLong at 0  # SIZE_T StackReserve
     field StackCommit: ffi::c::ULongLong at 8   # SIZE_T StackCommit
+
+# struct _TRANSACTION_NOTIFICATION, typedef TRANSACTION_NOTIFICATION (ktmtypes.h:78): sizeof 32, _Alignof 8
+layout TRANSACTION_NOTIFICATION:
+    size 32
+    align 8
+    field TransactionKey: ffi::c::Ptr[ffi::c::Void] at 0  # PVOID TransactionKey
+    field TransactionNotification: ffi::c::ULong at 8     # ULONG TransactionNotification
+    field TmVirtualClock: LARGE_INTEGER at 16             # LARGE_INTEGER TmVirtualClock
+    field ArgumentLength: ffi::c::ULong at 24             # ULONG ArgumentLength
 
 # struct _TRANSACTION_NOTIFICATION_RECOVERY_ARGUMENT, typedef TRANSACTION_NOTIFICATION_RECOVERY_ARGUMENT (ktmtypes.h:85): sizeof 32, _Alignof 4
 layout TRANSACTION_NOTIFICATION_RECOVERY_ARGUMENT:
@@ -2845,6 +3729,13 @@ layout TRANSACTION_BASIC_INFORMATION:
     field State: ffi::c::ULong at 16    # DWORD State
     field Outcome: ffi::c::ULong at 20  # DWORD Outcome
 
+# struct _TRANSACTIONMANAGER_BASIC_INFORMATION, typedef TRANSACTIONMANAGER_BASIC_INFORMATION (winnt.h:10119): sizeof 24, _Alignof 8
+layout TRANSACTIONMANAGER_BASIC_INFORMATION:
+    size 24
+    align 8
+    field TmIdentity: GUID at 0              # GUID TmIdentity
+    field VirtualClock: LARGE_INTEGER at 16  # LARGE_INTEGER VirtualClock
+
 # struct _TRANSACTIONMANAGER_LOG_INFORMATION, typedef TRANSACTIONMANAGER_LOG_INFORMATION (winnt.h:10124): sizeof 16, _Alignof 4
 layout TRANSACTIONMANAGER_LOG_INFORMATION:
     size 16
@@ -2869,6 +3760,17 @@ layout TRANSACTIONMANAGER_OLDEST_INFORMATION:
     size 16
     align 4
     field OldestTransactionGuid: GUID at 0  # GUID OldestTransactionGuid
+
+# struct _TRANSACTION_PROPERTIES_INFORMATION, typedef TRANSACTION_PROPERTIES_INFORMATION (winnt.h:10141): sizeof 32, _Alignof 8
+layout TRANSACTION_PROPERTIES_INFORMATION:
+    size 32
+    align 8
+    field IsolationLevel: ffi::c::ULong at 0            # DWORD IsolationLevel
+    field IsolationFlags: ffi::c::ULong at 4            # DWORD IsolationFlags
+    field Timeout: LARGE_INTEGER at 8                   # LARGE_INTEGER Timeout
+    field Outcome: ffi::c::ULong at 16                  # DWORD Outcome
+    field DescriptionLength: ffi::c::ULong at 20        # DWORD DescriptionLength
+    field Description: array 1 of ffi::c::UShort at 24  # WCHAR Description[1]
 
 # struct _TRANSACTION_BIND_INFORMATION, typedef TRANSACTION_BIND_INFORMATION (winnt.h:10150): sizeof 8, _Alignof 8
 layout TRANSACTION_BIND_INFORMATION:
@@ -3256,6 +4158,29 @@ layout SECURITY_ATTRIBUTES:
     field lpSecurityDescriptor: ffi::c::Ptr[ffi::c::Void] at 8  # LPVOID lpSecurityDescriptor
     field bInheritHandle: ffi::c::Int at 16                     # WINBOOL bInheritHandle
 
+# the anonymous struct member OVERLAPPED.member3.member1 (struct _OVERLAPPED) (minwinbase.h:23): sizeof 8, _Alignof 4
+layout OVERLAPPED_member3_member1:
+    size 8
+    align 4
+    field Offset: ffi::c::ULong at 0      # DWORD Offset
+    field OffsetHigh: ffi::c::ULong at 4  # DWORD OffsetHigh
+
+# the anonymous union member OVERLAPPED.member3 (struct _OVERLAPPED) (minwinbase.h:22): sizeof 8, _Alignof 8
+union layout OVERLAPPED_member3:
+    size 8
+    align 8
+    alternative member1: OVERLAPPED_member3_member1  # struct {...}
+    alternative Pointer: ffi::c::Ptr[ffi::c::Void]   # PVOID Pointer
+
+# struct _OVERLAPPED, typedef OVERLAPPED (minwinbase.h:19): sizeof 32, _Alignof 8
+layout OVERLAPPED:
+    size 32
+    align 8
+    field Internal: ffi::c::ULongLong at 0         # ULONG_PTR Internal
+    field InternalHigh: ffi::c::ULongLong at 8     # ULONG_PTR InternalHigh
+    field member3: OVERLAPPED_member3 at 16        # union {...}
+    field hEvent: ffi::c::Ptr[ffi::c::Void] at 24  # HANDLE hEvent
+
 # struct _OVERLAPPED_ENTRY, typedef OVERLAPPED_ENTRY (minwinbase.h:32): sizeof 32, _Alignof 8
 layout OVERLAPPED_ENTRY:
     size 32
@@ -3324,6 +4249,24 @@ layout PROCESS_HEAP_ENTRY_Region:
     field lpFirstBlock: ffi::c::Ptr[ffi::c::Void] at 8  # LPVOID lpFirstBlock
     field lpLastBlock: ffi::c::Ptr[ffi::c::Void] at 16  # LPVOID lpLastBlock
 
+# the anonymous union member PROCESS_HEAP_ENTRY.member6 (struct _PROCESS_HEAP_ENTRY) (minwinbase.h:189): sizeof 24, _Alignof 8
+union layout PROCESS_HEAP_ENTRY_member6:
+    size 24
+    align 8
+    alternative Block: PROCESS_HEAP_ENTRY_Block    # struct {...} Block
+    alternative Region: PROCESS_HEAP_ENTRY_Region  # struct {...} Region
+
+# struct _PROCESS_HEAP_ENTRY, typedef PROCESS_HEAP_ENTRY (minwinbase.h:183): sizeof 40, _Alignof 8
+layout PROCESS_HEAP_ENTRY:
+    size 40
+    align 8
+    field lpData: ffi::c::Ptr[ffi::c::Void] at 0     # PVOID lpData
+    field cbData: ffi::c::ULong at 8                 # DWORD cbData
+    field cbOverhead: ffi::c::UChar at 12            # BYTE cbOverhead
+    field iRegionIndex: ffi::c::UChar at 13          # BYTE iRegionIndex
+    field wFlags: ffi::c::UShort at 14               # WORD wFlags
+    field member6: PROCESS_HEAP_ENTRY_member6 at 16  # union {...}
+
 # an anonymous struct (minwinbase.h:214): sizeof 24, _Alignof 8
 layout REASON_CONTEXT_Reason_Detailed:
     size 24
@@ -3332,6 +4275,21 @@ layout REASON_CONTEXT_Reason_Detailed:
     field LocalizedReasonId: ffi::c::ULong at 8                           # ULONG LocalizedReasonId
     field ReasonStringCount: ffi::c::ULong at 12                          # ULONG ReasonStringCount
     field ReasonStrings: ffi::c::Ptr[ffi::c::Ptr[ffi::c::UShort]] at 16   # LPWSTR *ReasonStrings
+
+# an anonymous union (minwinbase.h:213): sizeof 24, _Alignof 8
+union layout REASON_CONTEXT_Reason:
+    size 24
+    align 8
+    alternative Detailed: REASON_CONTEXT_Reason_Detailed         # struct {...} Detailed
+    alternative SimpleReasonString: ffi::c::Ptr[ffi::c::UShort]  # LPWSTR SimpleReasonString
+
+# struct _REASON_CONTEXT, typedef REASON_CONTEXT, POWER_REQUEST_CONTEXT (minwinbase.h:210): sizeof 32, _Alignof 8
+layout REASON_CONTEXT:
+    size 32
+    align 8
+    field Version: ffi::c::ULong at 0         # ULONG Version
+    field Flags: ffi::c::ULong at 4           # DWORD Flags
+    field Reason: REASON_CONTEXT_Reason at 8  # union {...} Reason
 
 # struct _EXCEPTION_DEBUG_INFO, typedef EXCEPTION_DEBUG_INFO (minwinbase.h:240): sizeof 160, _Alignof 8
 layout EXCEPTION_DEBUG_INFO:
@@ -3406,6 +4364,29 @@ layout RIP_INFO:
     align 4
     field dwError: ffi::c::ULong at 0  # DWORD dwError
     field dwType: ffi::c::ULong at 4   # DWORD dwType
+
+# an anonymous union (minwinbase.h:300): sizeof 160, _Alignof 8
+union layout DEBUG_EVENT_u:
+    size 160
+    align 8
+    alternative Exception: EXCEPTION_DEBUG_INFO               # EXCEPTION_DEBUG_INFO Exception
+    alternative CreateThread: CREATE_THREAD_DEBUG_INFO        # CREATE_THREAD_DEBUG_INFO CreateThread
+    alternative CreateProcessInfo: CREATE_PROCESS_DEBUG_INFO  # CREATE_PROCESS_DEBUG_INFO CreateProcessInfo
+    alternative ExitThread: EXIT_THREAD_DEBUG_INFO            # EXIT_THREAD_DEBUG_INFO ExitThread
+    alternative ExitProcess: EXIT_PROCESS_DEBUG_INFO          # EXIT_PROCESS_DEBUG_INFO ExitProcess
+    alternative LoadDll: LOAD_DLL_DEBUG_INFO                  # LOAD_DLL_DEBUG_INFO LoadDll
+    alternative UnloadDll: UNLOAD_DLL_DEBUG_INFO              # UNLOAD_DLL_DEBUG_INFO UnloadDll
+    alternative DebugString: OUTPUT_DEBUG_STRING_INFO         # OUTPUT_DEBUG_STRING_INFO DebugString
+    alternative RipInfo: RIP_INFO                             # RIP_INFO RipInfo
+
+# struct _DEBUG_EVENT, typedef DEBUG_EVENT (minwinbase.h:296): sizeof 176, _Alignof 8
+layout DEBUG_EVENT:
+    size 176
+    align 8
+    field dwDebugEventCode: ffi::c::ULong at 0  # DWORD dwDebugEventCode
+    field dwProcessId: ffi::c::ULong at 4       # DWORD dwProcessId
+    field dwThreadId: ffi::c::ULong at 8        # DWORD dwThreadId
+    field u: DEBUG_EVENT_u at 16                # union {...} u
 
 # struct _BY_HANDLE_FILE_INFORMATION, typedef BY_HANDLE_FILE_INFORMATION (fileapi.h:36): sizeof 52, _Alignof 4
 layout BY_HANDLE_FILE_INFORMATION:
@@ -3593,6 +4574,35 @@ layout MEMORY_PRIORITY_INFORMATION:
     align 4
     field MemoryPriority: ffi::c::ULong at 0  # ULONG MemoryPriority
 
+# the anonymous struct member SYSTEM_INFO.member1.member2 (struct _SYSTEM_INFO) (sysinfoapi.h:21): sizeof 4, _Alignof 2
+layout SYSTEM_INFO_member1_member2:
+    size 4
+    align 2
+    field wProcessorArchitecture: ffi::c::UShort at 0  # WORD wProcessorArchitecture
+    field wReserved: ffi::c::UShort at 2               # WORD wReserved
+
+# the anonymous union member SYSTEM_INFO.member1 (struct _SYSTEM_INFO) (sysinfoapi.h:19): sizeof 4, _Alignof 4
+union layout SYSTEM_INFO_member1:
+    size 4
+    align 4
+    alternative dwOemId: ffi::c::ULong                # DWORD dwOemId
+    alternative member2: SYSTEM_INFO_member1_member2  # struct {...}
+
+# struct _SYSTEM_INFO, typedef SYSTEM_INFO (sysinfoapi.h:18): sizeof 48, _Alignof 8
+layout SYSTEM_INFO:
+    size 48
+    align 8
+    field member1: SYSTEM_INFO_member1 at 0                             # union {...}
+    field dwPageSize: ffi::c::ULong at 4                                # DWORD dwPageSize
+    field lpMinimumApplicationAddress: ffi::c::Ptr[ffi::c::Void] at 8   # LPVOID lpMinimumApplicationAddress
+    field lpMaximumApplicationAddress: ffi::c::Ptr[ffi::c::Void] at 16  # LPVOID lpMaximumApplicationAddress
+    field dwActiveProcessorMask: ffi::c::ULongLong at 24                # DWORD_PTR dwActiveProcessorMask
+    field dwNumberOfProcessors: ffi::c::ULong at 32                     # DWORD dwNumberOfProcessors
+    field dwProcessorType: ffi::c::ULong at 36                          # DWORD dwProcessorType
+    field dwAllocationGranularity: ffi::c::ULong at 40                  # DWORD dwAllocationGranularity
+    field wProcessorLevel: ffi::c::UShort at 44                         # WORD wProcessorLevel
+    field wProcessorRevision: ffi::c::UShort at 46                      # WORD wProcessorRevision
+
 # struct _MEMORYSTATUSEX, typedef MEMORYSTATUSEX (sysinfoapi.h:48): sizeof 64, _Alignof 8
 layout MEMORYSTATUSEX:
     size 64
@@ -3685,6 +4695,16 @@ layout UMS_SCHEDULER_STARTUP_INFO:
     field SchedulerProc: ffi::c::FnPtr[Fn{args: [ffi::c::UInt, ffi::c::ULongLong, ffi::c::Ptr[ffi::c::Void]], return: unit}] at 16  # PUMS_SCHEDULER_ENTRY_POINT SchedulerProc
     field SchedulerParam: ffi::c::Ptr[ffi::c::Void] at 24                 # PVOID SchedulerParam
 
+# struct _WIN32_STREAM_ID, typedef WIN32_STREAM_ID (winbase.h:1534): sizeof 24, _Alignof 8
+layout WIN32_STREAM_ID:
+    size 24
+    align 8
+    field dwStreamId: ffi::c::ULong at 0                # DWORD dwStreamId
+    field dwStreamAttributes: ffi::c::ULong at 4        # DWORD dwStreamAttributes
+    field Size: LARGE_INTEGER at 8                      # LARGE_INTEGER Size
+    field dwStreamNameSize: ffi::c::ULong at 16         # DWORD dwStreamNameSize
+    field cStreamName: array 1 of ffi::c::UShort at 20  # WCHAR cStreamName[1]
+
 # struct _STARTUPINFOEXA, typedef STARTUPINFOEXA (winbase.h:1585): sizeof 112, _Alignof 8
 layout STARTUPINFOEXA:
     size 112
@@ -3699,11 +4719,96 @@ layout STARTUPINFOEXW:
     field StartupInfo: STARTUPINFOW at 0                                  # STARTUPINFOW StartupInfo
     field lpAttributeList: ffi::c::Ptr[win32::ctypes::_PROC_THREAD_ATTRIBUTE_LIST] at 104  # LPPROC_THREAD_ATTRIBUTE_LIST lpAttributeList
 
+# an anonymous struct (winbase.h:2312): sizeof 56, _Alignof 8
+layout COPYFILE2_MESSAGE_Info_ChunkStarted:
+    size 56
+    align 8
+    field dwStreamNumber: ffi::c::ULong at 0                 # DWORD dwStreamNumber
+    field dwReserved: ffi::c::ULong at 4                     # DWORD dwReserved
+    field hSourceFile: ffi::c::Ptr[ffi::c::Void] at 8        # HANDLE hSourceFile
+    field hDestinationFile: ffi::c::Ptr[ffi::c::Void] at 16  # HANDLE hDestinationFile
+    field uliChunkNumber: ULARGE_INTEGER at 24               # ULARGE_INTEGER uliChunkNumber
+    field uliChunkSize: ULARGE_INTEGER at 32                 # ULARGE_INTEGER uliChunkSize
+    field uliStreamSize: ULARGE_INTEGER at 40                # ULARGE_INTEGER uliStreamSize
+    field uliTotalFileSize: ULARGE_INTEGER at 48             # ULARGE_INTEGER uliTotalFileSize
+
+# an anonymous struct (winbase.h:2322): sizeof 72, _Alignof 8
+layout COPYFILE2_MESSAGE_Info_ChunkFinished:
+    size 72
+    align 8
+    field dwStreamNumber: ffi::c::ULong at 0                 # DWORD dwStreamNumber
+    field dwFlags: ffi::c::ULong at 4                        # DWORD dwFlags
+    field hSourceFile: ffi::c::Ptr[ffi::c::Void] at 8        # HANDLE hSourceFile
+    field hDestinationFile: ffi::c::Ptr[ffi::c::Void] at 16  # HANDLE hDestinationFile
+    field uliChunkNumber: ULARGE_INTEGER at 24               # ULARGE_INTEGER uliChunkNumber
+    field uliChunkSize: ULARGE_INTEGER at 32                 # ULARGE_INTEGER uliChunkSize
+    field uliStreamSize: ULARGE_INTEGER at 40                # ULARGE_INTEGER uliStreamSize
+    field uliStreamBytesTransferred: ULARGE_INTEGER at 48    # ULARGE_INTEGER uliStreamBytesTransferred
+    field uliTotalFileSize: ULARGE_INTEGER at 56             # ULARGE_INTEGER uliTotalFileSize
+    field uliTotalBytesTransferred: ULARGE_INTEGER at 64     # ULARGE_INTEGER uliTotalBytesTransferred
+
+# an anonymous struct (winbase.h:2334): sizeof 40, _Alignof 8
+layout COPYFILE2_MESSAGE_Info_StreamStarted:
+    size 40
+    align 8
+    field dwStreamNumber: ffi::c::ULong at 0                 # DWORD dwStreamNumber
+    field dwReserved: ffi::c::ULong at 4                     # DWORD dwReserved
+    field hSourceFile: ffi::c::Ptr[ffi::c::Void] at 8        # HANDLE hSourceFile
+    field hDestinationFile: ffi::c::Ptr[ffi::c::Void] at 16  # HANDLE hDestinationFile
+    field uliStreamSize: ULARGE_INTEGER at 24                # ULARGE_INTEGER uliStreamSize
+    field uliTotalFileSize: ULARGE_INTEGER at 32             # ULARGE_INTEGER uliTotalFileSize
+
+# an anonymous struct (winbase.h:2342): sizeof 56, _Alignof 8
+layout COPYFILE2_MESSAGE_Info_StreamFinished:
+    size 56
+    align 8
+    field dwStreamNumber: ffi::c::ULong at 0                 # DWORD dwStreamNumber
+    field dwReserved: ffi::c::ULong at 4                     # DWORD dwReserved
+    field hSourceFile: ffi::c::Ptr[ffi::c::Void] at 8        # HANDLE hSourceFile
+    field hDestinationFile: ffi::c::Ptr[ffi::c::Void] at 16  # HANDLE hDestinationFile
+    field uliStreamSize: ULARGE_INTEGER at 24                # ULARGE_INTEGER uliStreamSize
+    field uliStreamBytesTransferred: ULARGE_INTEGER at 32    # ULARGE_INTEGER uliStreamBytesTransferred
+    field uliTotalFileSize: ULARGE_INTEGER at 40             # ULARGE_INTEGER uliTotalFileSize
+    field uliTotalBytesTransferred: ULARGE_INTEGER at 48     # ULARGE_INTEGER uliTotalBytesTransferred
+
 # an anonymous struct (winbase.h:2352): sizeof 4, _Alignof 4
 layout COPYFILE2_MESSAGE_Info_PollContinue:
     size 4
     align 4
     field dwReserved: ffi::c::ULong at 0  # DWORD dwReserved
+
+# an anonymous struct (winbase.h:2355): sizeof 56, _Alignof 8
+layout COPYFILE2_MESSAGE_Info_Error:
+    size 56
+    align 8
+    field CopyPhase: ffi::c::UInt at 0                     # COPYFILE2_COPY_PHASE CopyPhase
+    field dwStreamNumber: ffi::c::ULong at 4               # DWORD dwStreamNumber
+    field hrFailure: ffi::c::Long at 8                     # HRESULT hrFailure
+    field dwReserved: ffi::c::ULong at 12                  # DWORD dwReserved
+    field uliChunkNumber: ULARGE_INTEGER at 16             # ULARGE_INTEGER uliChunkNumber
+    field uliStreamSize: ULARGE_INTEGER at 24              # ULARGE_INTEGER uliStreamSize
+    field uliStreamBytesTransferred: ULARGE_INTEGER at 32  # ULARGE_INTEGER uliStreamBytesTransferred
+    field uliTotalFileSize: ULARGE_INTEGER at 40           # ULARGE_INTEGER uliTotalFileSize
+    field uliTotalBytesTransferred: ULARGE_INTEGER at 48   # ULARGE_INTEGER uliTotalBytesTransferred
+
+# an anonymous union (winbase.h:2311): sizeof 72, _Alignof 8
+union layout COPYFILE2_MESSAGE_Info:
+    size 72
+    align 8
+    alternative ChunkStarted: COPYFILE2_MESSAGE_Info_ChunkStarted      # struct {...} ChunkStarted
+    alternative ChunkFinished: COPYFILE2_MESSAGE_Info_ChunkFinished    # struct {...} ChunkFinished
+    alternative StreamStarted: COPYFILE2_MESSAGE_Info_StreamStarted    # struct {...} StreamStarted
+    alternative StreamFinished: COPYFILE2_MESSAGE_Info_StreamFinished  # struct {...} StreamFinished
+    alternative PollContinue: COPYFILE2_MESSAGE_Info_PollContinue      # struct {...} PollContinue
+    alternative Error: COPYFILE2_MESSAGE_Info_Error                    # struct {...} Error
+
+# struct COPYFILE2_MESSAGE, typedef COPYFILE2_MESSAGE (winbase.h:2308): sizeof 80, _Alignof 8
+layout COPYFILE2_MESSAGE:
+    size 80
+    align 8
+    field Type: ffi::c::UInt at 0            # COPYFILE2_MESSAGE_TYPE Type
+    field dwPadding: ffi::c::ULong at 4      # DWORD dwPadding
+    field Info: COPYFILE2_MESSAGE_Info at 8  # union {...} Info
 
 # struct COPYFILE2_EXTENDED_PARAMETERS, typedef COPYFILE2_EXTENDED_PARAMETERS (winbase.h:2371): sizeof 32, _Alignof 8
 layout COPYFILE2_EXTENDED_PARAMETERS:
@@ -3714,6 +4819,13 @@ layout COPYFILE2_EXTENDED_PARAMETERS:
     field pfCancel: ffi::c::Ptr[ffi::c::Int] at 8                         # WINBOOL *pfCancel
     field pProgressRoutine: ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[win32::ctypes::COPYFILE2_MESSAGE], ffi::c::Ptr[ffi::c::Void]], return: ffi::c::UInt}] at 16  # PCOPYFILE2_PROGRESS_ROUTINE pProgressRoutine
     field pvCallbackContext: ffi::c::Ptr[ffi::c::Void] at 24              # PVOID pvCallbackContext
+
+# struct _WIN32_FIND_STREAM_DATA, typedef WIN32_FIND_STREAM_DATA (winbase.h:2486): sizeof 600, _Alignof 8
+layout WIN32_FIND_STREAM_DATA:
+    size 600
+    align 8
+    field StreamSize: LARGE_INTEGER at 0                 # LARGE_INTEGER StreamSize
+    field cStreamName: array 296 of ffi::c::UShort at 8  # WCHAR cStreamName[260 + 36]
 
 # struct _EVENTLOG_FULL_INFORMATION, typedef EVENTLOG_FULL_INFORMATION (winbase.h:2547): sizeof 4, _Alignof 4
 layout EVENTLOG_FULL_INFORMATION:
@@ -3867,6 +4979,26 @@ layout ACTIVATION_CONTEXT_BASIC_INFORMATION:
     field hActCtx: ffi::c::Ptr[ffi::c::Void] at 0  # HANDLE hActCtx
     field dwFlags: ffi::c::ULong at 8              # DWORD dwFlags
 
+# struct _FILE_BASIC_INFO, typedef FILE_BASIC_INFO (winbase.h:3091): sizeof 40, _Alignof 8
+layout FILE_BASIC_INFO:
+    size 40
+    align 8
+    field CreationTime: LARGE_INTEGER at 0     # LARGE_INTEGER CreationTime
+    field LastAccessTime: LARGE_INTEGER at 8   # LARGE_INTEGER LastAccessTime
+    field LastWriteTime: LARGE_INTEGER at 16   # LARGE_INTEGER LastWriteTime
+    field ChangeTime: LARGE_INTEGER at 24      # LARGE_INTEGER ChangeTime
+    field FileAttributes: ffi::c::ULong at 32  # DWORD FileAttributes
+
+# struct _FILE_STANDARD_INFO, typedef FILE_STANDARD_INFO (winbase.h:3099): sizeof 24, _Alignof 8
+layout FILE_STANDARD_INFO:
+    size 24
+    align 8
+    field AllocationSize: LARGE_INTEGER at 0  # LARGE_INTEGER AllocationSize
+    field EndOfFile: LARGE_INTEGER at 8       # LARGE_INTEGER EndOfFile
+    field NumberOfLinks: ffi::c::ULong at 16  # DWORD NumberOfLinks
+    field DeletePending: ffi::c::UChar at 20  # BOOLEAN DeletePending
+    field Directory: ffi::c::UChar at 21      # BOOLEAN Directory
+
 # struct _FILE_NAME_INFO, typedef FILE_NAME_INFO (winbase.h:3107): sizeof 8, _Alignof 4
 layout FILE_NAME_INFO:
     size 8
@@ -3879,6 +5011,55 @@ layout FILE_CASE_SENSITIVE_INFO:
     size 4
     align 4
     field Flags: ffi::c::ULong at 0  # ULONG Flags
+
+# the anonymous union member FILE_RENAME_INFO.member1 (struct _FILE_RENAME_INFO) (winbase.h:3127): sizeof 4, _Alignof 4
+union layout FILE_RENAME_INFO_member1:
+    size 4
+    align 4
+    alternative ReplaceIfExists: ffi::c::UChar  # BOOLEAN ReplaceIfExists
+    alternative Flags: ffi::c::ULong            # DWORD Flags
+
+# struct _FILE_RENAME_INFO, typedef FILE_RENAME_INFO (winbase.h:3125): sizeof 24, _Alignof 8
+layout FILE_RENAME_INFO:
+    size 24
+    align 8
+    field member1: FILE_RENAME_INFO_member1 at 0         # union {...}
+    field RootDirectory: ffi::c::Ptr[ffi::c::Void] at 8  # HANDLE RootDirectory
+    field FileNameLength: ffi::c::ULong at 16            # DWORD FileNameLength
+    field FileName: array 1 of ffi::c::UShort at 20      # WCHAR FileName[1]
+
+# struct _FILE_ALLOCATION_INFO, typedef FILE_ALLOCATION_INFO (winbase.h:3139): sizeof 8, _Alignof 8
+layout FILE_ALLOCATION_INFO:
+    size 8
+    align 8
+    field AllocationSize: LARGE_INTEGER at 0  # LARGE_INTEGER AllocationSize
+
+# struct _FILE_END_OF_FILE_INFO, typedef FILE_END_OF_FILE_INFO (winbase.h:3143): sizeof 8, _Alignof 8
+layout FILE_END_OF_FILE_INFO:
+    size 8
+    align 8
+    field EndOfFile: LARGE_INTEGER at 0  # LARGE_INTEGER EndOfFile
+
+# struct _FILE_STREAM_INFO, typedef FILE_STREAM_INFO (winbase.h:3147): sizeof 32, _Alignof 8
+layout FILE_STREAM_INFO:
+    size 32
+    align 8
+    field NextEntryOffset: ffi::c::ULong at 0          # DWORD NextEntryOffset
+    field StreamNameLength: ffi::c::ULong at 4         # DWORD StreamNameLength
+    field StreamSize: LARGE_INTEGER at 8               # LARGE_INTEGER StreamSize
+    field StreamAllocationSize: LARGE_INTEGER at 16    # LARGE_INTEGER StreamAllocationSize
+    field StreamName: array 1 of ffi::c::UShort at 24  # WCHAR StreamName[1]
+
+# struct _FILE_COMPRESSION_INFO, typedef FILE_COMPRESSION_INFO (winbase.h:3155): sizeof 16, _Alignof 8
+layout FILE_COMPRESSION_INFO:
+    size 16
+    align 8
+    field CompressedFileSize: LARGE_INTEGER at 0     # LARGE_INTEGER CompressedFileSize
+    field CompressionFormat: ffi::c::UShort at 8     # WORD CompressionFormat
+    field CompressionUnitShift: ffi::c::UChar at 10  # UCHAR CompressionUnitShift
+    field ChunkShift: ffi::c::UChar at 11            # UCHAR ChunkShift
+    field ClusterShift: ffi::c::UChar at 12          # UCHAR ClusterShift
+    field Reserved: array 3 of ffi::c::UChar at 13   # UCHAR Reserved[3]
 
 # struct _FILE_ATTRIBUTE_TAG_INFO, typedef FILE_ATTRIBUTE_TAG_INFO (winbase.h:3164): sizeof 8, _Alignof 4
 layout FILE_ATTRIBUTE_TAG_INFO:
@@ -3898,6 +5079,43 @@ layout FILE_DISPOSITION_INFO_EX:
     size 4
     align 4
     field Flags: ffi::c::ULong at 0  # DWORD Flags
+
+# struct _FILE_ID_BOTH_DIR_INFO, typedef FILE_ID_BOTH_DIR_INFO (winbase.h:3188): sizeof 112, _Alignof 8
+layout FILE_ID_BOTH_DIR_INFO:
+    size 112
+    align 8
+    field NextEntryOffset: ffi::c::ULong at 0          # DWORD NextEntryOffset
+    field FileIndex: ffi::c::ULong at 4                # DWORD FileIndex
+    field CreationTime: LARGE_INTEGER at 8             # LARGE_INTEGER CreationTime
+    field LastAccessTime: LARGE_INTEGER at 16          # LARGE_INTEGER LastAccessTime
+    field LastWriteTime: LARGE_INTEGER at 24           # LARGE_INTEGER LastWriteTime
+    field ChangeTime: LARGE_INTEGER at 32              # LARGE_INTEGER ChangeTime
+    field EndOfFile: LARGE_INTEGER at 40               # LARGE_INTEGER EndOfFile
+    field AllocationSize: LARGE_INTEGER at 48          # LARGE_INTEGER AllocationSize
+    field FileAttributes: ffi::c::ULong at 56          # DWORD FileAttributes
+    field FileNameLength: ffi::c::ULong at 60          # DWORD FileNameLength
+    field EaSize: ffi::c::ULong at 64                  # DWORD EaSize
+    field ShortNameLength: ffi::c::Char at 68          # CCHAR ShortNameLength
+    field ShortName: array 12 of ffi::c::UShort at 70  # WCHAR ShortName[12]
+    field FileId: LARGE_INTEGER at 96                  # LARGE_INTEGER FileId
+    field FileName: array 1 of ffi::c::UShort at 104   # WCHAR FileName[1]
+
+# struct _FILE_FULL_DIR_INFO, typedef FILE_FULL_DIR_INFO (winbase.h:3206): sizeof 72, _Alignof 8
+layout FILE_FULL_DIR_INFO:
+    size 72
+    align 8
+    field NextEntryOffset: ffi::c::ULong at 0        # ULONG NextEntryOffset
+    field FileIndex: ffi::c::ULong at 4              # ULONG FileIndex
+    field CreationTime: LARGE_INTEGER at 8           # LARGE_INTEGER CreationTime
+    field LastAccessTime: LARGE_INTEGER at 16        # LARGE_INTEGER LastAccessTime
+    field LastWriteTime: LARGE_INTEGER at 24         # LARGE_INTEGER LastWriteTime
+    field ChangeTime: LARGE_INTEGER at 32            # LARGE_INTEGER ChangeTime
+    field EndOfFile: LARGE_INTEGER at 40             # LARGE_INTEGER EndOfFile
+    field AllocationSize: LARGE_INTEGER at 48        # LARGE_INTEGER AllocationSize
+    field FileAttributes: ffi::c::ULong at 56        # ULONG FileAttributes
+    field FileNameLength: ffi::c::ULong at 60        # ULONG FileNameLength
+    field EaSize: ffi::c::ULong at 64                # ULONG EaSize
+    field FileName: array 1 of ffi::c::UShort at 68  # WCHAR FileName[1]
 
 # struct _FILE_IO_PRIORITY_HINT_INFO, typedef FILE_IO_PRIORITY_HINT_INFO (winbase.h:3228): sizeof 4, _Alignof 4
 layout FILE_IO_PRIORITY_HINT_INFO:
@@ -3930,6 +5148,25 @@ layout FILE_ID_INFO:
     field VolumeSerialNumber: ffi::c::ULongLong at 0  # ULONGLONG VolumeSerialNumber
     field FileId: FILE_ID_128 at 8                    # FILE_ID_128 FileId
 
+# struct _FILE_ID_EXTD_DIR_INFO, typedef FILE_ID_EXTD_DIR_INFO (winbase.h:3257): sizeof 96, _Alignof 8
+layout FILE_ID_EXTD_DIR_INFO:
+    size 96
+    align 8
+    field NextEntryOffset: ffi::c::ULong at 0        # ULONG NextEntryOffset
+    field FileIndex: ffi::c::ULong at 4              # ULONG FileIndex
+    field CreationTime: LARGE_INTEGER at 8           # LARGE_INTEGER CreationTime
+    field LastAccessTime: LARGE_INTEGER at 16        # LARGE_INTEGER LastAccessTime
+    field LastWriteTime: LARGE_INTEGER at 24         # LARGE_INTEGER LastWriteTime
+    field ChangeTime: LARGE_INTEGER at 32            # LARGE_INTEGER ChangeTime
+    field EndOfFile: LARGE_INTEGER at 40             # LARGE_INTEGER EndOfFile
+    field AllocationSize: LARGE_INTEGER at 48        # LARGE_INTEGER AllocationSize
+    field FileAttributes: ffi::c::ULong at 56        # ULONG FileAttributes
+    field FileNameLength: ffi::c::ULong at 60        # ULONG FileNameLength
+    field EaSize: ffi::c::ULong at 64                # ULONG EaSize
+    field ReparsePointTag: ffi::c::ULong at 68       # ULONG ReparsePointTag
+    field FileId: FILE_ID_128 at 72                  # FILE_ID_128 FileId
+    field FileName: array 1 of ffi::c::UShort at 88  # WCHAR FileName[1]
+
 # an anonymous struct (winbase.h:3307): sizeof 32, _Alignof 4
 layout FILE_REMOTE_PROTOCOL_INFO_GenericReserved:
     size 32
@@ -3955,6 +5192,44 @@ layout FILE_REMOTE_PROTOCOL_INFO_ProtocolSpecific_Smb2:
     align 4
     field Server: FILE_REMOTE_PROTOCOL_INFO_ProtocolSpecific_Smb2_Server at 0  # struct {...} Server
     field Share: FILE_REMOTE_PROTOCOL_INFO_ProtocolSpecific_Smb2_Share at 4  # struct {...} Share
+
+# an anonymous union (winbase.h:3315): sizeof 64, _Alignof 4
+union layout FILE_REMOTE_PROTOCOL_INFO_ProtocolSpecific:
+    size 64
+    align 4
+    alternative Smb2: FILE_REMOTE_PROTOCOL_INFO_ProtocolSpecific_Smb2  # struct {...} Smb2
+    alternative Reserved: array 16 of ffi::c::ULong                    # ULONG Reserved[16]
+
+# struct _FILE_REMOTE_PROTOCOL_INFO, typedef FILE_REMOTE_PROTOCOL_INFO (winbase.h:3298): sizeof 116, _Alignof 4
+layout FILE_REMOTE_PROTOCOL_INFO:
+    size 116
+    align 4
+    field StructureVersion: ffi::c::UShort at 0                           # USHORT StructureVersion
+    field StructureSize: ffi::c::UShort at 2                              # USHORT StructureSize
+    field Protocol: ffi::c::ULong at 4                                    # ULONG Protocol
+    field ProtocolMajorVersion: ffi::c::UShort at 8                       # USHORT ProtocolMajorVersion
+    field ProtocolMinorVersion: ffi::c::UShort at 10                      # USHORT ProtocolMinorVersion
+    field ProtocolRevision: ffi::c::UShort at 12                          # USHORT ProtocolRevision
+    field Reserved: ffi::c::UShort at 14                                  # USHORT Reserved
+    field Flags: ffi::c::ULong at 16                                      # ULONG Flags
+    field GenericReserved: FILE_REMOTE_PROTOCOL_INFO_GenericReserved at 20  # struct {...} GenericReserved
+    field ProtocolSpecific: FILE_REMOTE_PROTOCOL_INFO_ProtocolSpecific at 52  # union {...} ProtocolSpecific
+
+# the anonymous union member FILE_ID_DESCRIPTOR.member3 (struct FILE_ID_DESCRIPTOR) (winbase.h:3348): sizeof 16, _Alignof 8
+union layout FILE_ID_DESCRIPTOR_member3:
+    size 16
+    align 8
+    alternative FileId: LARGE_INTEGER        # LARGE_INTEGER FileId
+    alternative ObjectId: GUID               # GUID ObjectId
+    alternative ExtendedFileId: FILE_ID_128  # FILE_ID_128 ExtendedFileId
+
+# struct FILE_ID_DESCRIPTOR, typedef FILE_ID_DESCRIPTOR (winbase.h:3345): sizeof 24, _Alignof 8
+layout FILE_ID_DESCRIPTOR:
+    size 24
+    align 8
+    field dwSize: ffi::c::ULong at 0                # DWORD dwSize
+    field Type: ffi::c::UInt at 4                   # FILE_ID_TYPE Type
+    field member3: FILE_ID_DESCRIPTOR_member3 at 8  # union {...}
 
 # struct _DRAWPATRECT, typedef DRAWPATRECT (wingdi.h:224): sizeof 20, _Alignof 4
 layout DRAWPATRECT:
@@ -4572,6 +5847,140 @@ layout EXTLOGFONTW:
     field elfVendorId: array 4 of ffi::c::UChar at 300   # BYTE elfVendorId[4]
     field elfCulture: ffi::c::ULong at 304               # DWORD elfCulture
     field elfPanose: PANOSE at 308                       # PANOSE elfPanose
+
+# the anonymous struct member DEVMODEA.member7.member1 (struct _devicemodeA) (wingdi.h:1679): sizeof 16, _Alignof 2
+layout DEVMODEA_member7_member1:
+    size 16
+    align 2
+    field dmOrientation: ffi::c::Short at 0     # short dmOrientation
+    field dmPaperSize: ffi::c::Short at 2       # short dmPaperSize
+    field dmPaperLength: ffi::c::Short at 4     # short dmPaperLength
+    field dmPaperWidth: ffi::c::Short at 6      # short dmPaperWidth
+    field dmScale: ffi::c::Short at 8           # short dmScale
+    field dmCopies: ffi::c::Short at 10         # short dmCopies
+    field dmDefaultSource: ffi::c::Short at 12  # short dmDefaultSource
+    field dmPrintQuality: ffi::c::Short at 14   # short dmPrintQuality
+
+# the anonymous struct member DEVMODEA.member7.member2 (struct _devicemodeA) (wingdi.h:1689): sizeof 16, _Alignof 4
+layout DEVMODEA_member7_member2:
+    size 16
+    align 4
+    field dmPosition: POINTL at 0                    # POINTL dmPosition
+    field dmDisplayOrientation: ffi::c::ULong at 8   # DWORD dmDisplayOrientation
+    field dmDisplayFixedOutput: ffi::c::ULong at 12  # DWORD dmDisplayFixedOutput
+
+# the anonymous union member DEVMODEA.member7 (struct _devicemodeA) (wingdi.h:1678): sizeof 16, _Alignof 4
+union layout DEVMODEA_member7:
+    size 16
+    align 4
+    alternative member1: DEVMODEA_member7_member1  # struct {...}
+    alternative member2: DEVMODEA_member7_member2  # struct {...}
+
+# the anonymous union member DEVMODEA.member18 (struct _devicemodeA) (wingdi.h:1705): sizeof 4, _Alignof 4
+union layout DEVMODEA_member18:
+    size 4
+    align 4
+    alternative dmDisplayFlags: ffi::c::ULong  # DWORD dmDisplayFlags
+    alternative dmNup: ffi::c::ULong           # DWORD dmNup
+
+# struct _devicemodeA, typedef DEVMODEA (wingdi.h:1671): sizeof 156, _Alignof 4
+layout DEVMODEA:
+    size 156
+    align 4
+    field dmDeviceName: array 32 of ffi::c::UChar at 0  # BYTE dmDeviceName[32]
+    field dmSpecVersion: ffi::c::UShort at 32           # WORD dmSpecVersion
+    field dmDriverVersion: ffi::c::UShort at 34         # WORD dmDriverVersion
+    field dmSize: ffi::c::UShort at 36                  # WORD dmSize
+    field dmDriverExtra: ffi::c::UShort at 38           # WORD dmDriverExtra
+    field dmFields: ffi::c::ULong at 40                 # DWORD dmFields
+    field member7: DEVMODEA_member7 at 44               # union {...}
+    field dmColor: ffi::c::Short at 60                  # short dmColor
+    field dmDuplex: ffi::c::Short at 62                 # short dmDuplex
+    field dmYResolution: ffi::c::Short at 64            # short dmYResolution
+    field dmTTOption: ffi::c::Short at 66               # short dmTTOption
+    field dmCollate: ffi::c::Short at 68                # short dmCollate
+    field dmFormName: array 32 of ffi::c::UChar at 70   # BYTE dmFormName[32]
+    field dmLogPixels: ffi::c::UShort at 102            # WORD dmLogPixels
+    field dmBitsPerPel: ffi::c::ULong at 104            # DWORD dmBitsPerPel
+    field dmPelsWidth: ffi::c::ULong at 108             # DWORD dmPelsWidth
+    field dmPelsHeight: ffi::c::ULong at 112            # DWORD dmPelsHeight
+    field member18: DEVMODEA_member18 at 116            # union {...}
+    field dmDisplayFrequency: ffi::c::ULong at 120      # DWORD dmDisplayFrequency
+    field dmICMMethod: ffi::c::ULong at 124             # DWORD dmICMMethod
+    field dmICMIntent: ffi::c::ULong at 128             # DWORD dmICMIntent
+    field dmMediaType: ffi::c::ULong at 132             # DWORD dmMediaType
+    field dmDitherType: ffi::c::ULong at 136            # DWORD dmDitherType
+    field dmReserved1: ffi::c::ULong at 140             # DWORD dmReserved1
+    field dmReserved2: ffi::c::ULong at 144             # DWORD dmReserved2
+    field dmPanningWidth: ffi::c::ULong at 148          # DWORD dmPanningWidth
+    field dmPanningHeight: ffi::c::ULong at 152         # DWORD dmPanningHeight
+
+# the anonymous struct member DEVMODEW.member7.member1 (struct _devicemodeW) (wingdi.h:1728): sizeof 16, _Alignof 2
+layout DEVMODEW_member7_member1:
+    size 16
+    align 2
+    field dmOrientation: ffi::c::Short at 0     # short dmOrientation
+    field dmPaperSize: ffi::c::Short at 2       # short dmPaperSize
+    field dmPaperLength: ffi::c::Short at 4     # short dmPaperLength
+    field dmPaperWidth: ffi::c::Short at 6      # short dmPaperWidth
+    field dmScale: ffi::c::Short at 8           # short dmScale
+    field dmCopies: ffi::c::Short at 10         # short dmCopies
+    field dmDefaultSource: ffi::c::Short at 12  # short dmDefaultSource
+    field dmPrintQuality: ffi::c::Short at 14   # short dmPrintQuality
+
+# the anonymous struct member DEVMODEW.member7.member2 (struct _devicemodeW) (wingdi.h:1738): sizeof 16, _Alignof 4
+layout DEVMODEW_member7_member2:
+    size 16
+    align 4
+    field dmPosition: POINTL at 0                    # POINTL dmPosition
+    field dmDisplayOrientation: ffi::c::ULong at 8   # DWORD dmDisplayOrientation
+    field dmDisplayFixedOutput: ffi::c::ULong at 12  # DWORD dmDisplayFixedOutput
+
+# the anonymous union member DEVMODEW.member7 (struct _devicemodeW) (wingdi.h:1727): sizeof 16, _Alignof 4
+union layout DEVMODEW_member7:
+    size 16
+    align 4
+    alternative member1: DEVMODEW_member7_member1  # struct {...}
+    alternative member2: DEVMODEW_member7_member2  # struct {...}
+
+# the anonymous union member DEVMODEW.member18 (struct _devicemodeW) (wingdi.h:1754): sizeof 4, _Alignof 4
+union layout DEVMODEW_member18:
+    size 4
+    align 4
+    alternative dmDisplayFlags: ffi::c::ULong  # DWORD dmDisplayFlags
+    alternative dmNup: ffi::c::ULong           # DWORD dmNup
+
+# struct _devicemodeW, typedef DEVMODEW, DEVMODE (wingdi.h:1720): sizeof 220, _Alignof 4
+layout DEVMODEW:
+    size 220
+    align 4
+    field dmDeviceName: array 32 of ffi::c::UShort at 0  # WCHAR dmDeviceName[32]
+    field dmSpecVersion: ffi::c::UShort at 64            # WORD dmSpecVersion
+    field dmDriverVersion: ffi::c::UShort at 66          # WORD dmDriverVersion
+    field dmSize: ffi::c::UShort at 68                   # WORD dmSize
+    field dmDriverExtra: ffi::c::UShort at 70            # WORD dmDriverExtra
+    field dmFields: ffi::c::ULong at 72                  # DWORD dmFields
+    field member7: DEVMODEW_member7 at 76                # union {...}
+    field dmColor: ffi::c::Short at 92                   # short dmColor
+    field dmDuplex: ffi::c::Short at 94                  # short dmDuplex
+    field dmYResolution: ffi::c::Short at 96             # short dmYResolution
+    field dmTTOption: ffi::c::Short at 98                # short dmTTOption
+    field dmCollate: ffi::c::Short at 100                # short dmCollate
+    field dmFormName: array 32 of ffi::c::UShort at 102  # WCHAR dmFormName[32]
+    field dmLogPixels: ffi::c::UShort at 166             # WORD dmLogPixels
+    field dmBitsPerPel: ffi::c::ULong at 168             # DWORD dmBitsPerPel
+    field dmPelsWidth: ffi::c::ULong at 172              # DWORD dmPelsWidth
+    field dmPelsHeight: ffi::c::ULong at 176             # DWORD dmPelsHeight
+    field member18: DEVMODEW_member18 at 180             # union {...}
+    field dmDisplayFrequency: ffi::c::ULong at 184       # DWORD dmDisplayFrequency
+    field dmICMMethod: ffi::c::ULong at 188              # DWORD dmICMMethod
+    field dmICMIntent: ffi::c::ULong at 192              # DWORD dmICMIntent
+    field dmMediaType: ffi::c::ULong at 196              # DWORD dmMediaType
+    field dmDitherType: ffi::c::ULong at 200             # DWORD dmDitherType
+    field dmReserved1: ffi::c::ULong at 204              # DWORD dmReserved1
+    field dmReserved2: ffi::c::ULong at 208              # DWORD dmReserved2
+    field dmPanningWidth: ffi::c::ULong at 212           # DWORD dmPanningWidth
+    field dmPanningHeight: ffi::c::ULong at 216          # DWORD dmPanningHeight
 
 # struct _DISPLAY_DEVICEA, typedef DISPLAY_DEVICEA (wingdi.h:2023): sizeof 424, _Alignof 4
 layout DISPLAY_DEVICEA:
@@ -6136,6 +7545,21 @@ layout HARDWAREINPUT:
     field wParamL: ffi::c::UShort at 4  # WORD wParamL
     field wParamH: ffi::c::UShort at 6  # WORD wParamH
 
+# the anonymous union member INPUT.member2 (struct tagINPUT) (winuser.h:2761): sizeof 32, _Alignof 8
+union layout INPUT_member2:
+    size 32
+    align 8
+    alternative mi: MOUSEINPUT     # MOUSEINPUT mi
+    alternative ki: KEYBDINPUT     # KEYBDINPUT ki
+    alternative hi: HARDWAREINPUT  # HARDWAREINPUT hi
+
+# struct tagINPUT, typedef INPUT (winuser.h:2759): sizeof 40, _Alignof 8
+layout INPUT:
+    size 40
+    align 8
+    field type_: ffi::c::ULong at 0    # DWORD type
+    field member2: INPUT_member2 at 8  # union {...}
+
 # struct HTOUCHINPUT__ (winuser.h:2771): sizeof 4, _Alignof 4
 layout HTOUCHINPUT__:
     size 4
@@ -6216,6 +7640,20 @@ layout USAGE_PROPERTIES:
     field count: ffi::c::UChar at 20          # BYTE count
     field physicalMinimum: ffi::c::Int at 24  # INT32 physicalMinimum
     field physicalMaximum: ffi::c::Int at 28  # INT32 physicalMaximum
+
+# the anonymous union member POINTER_TYPE_INFO.member2 (struct tagPOINTER_TYPE_INFO) (winuser.h:2902): sizeof 144, _Alignof 8
+union layout POINTER_TYPE_INFO_member2:
+    size 144
+    align 8
+    alternative touchInfo: POINTER_TOUCH_INFO  # POINTER_TOUCH_INFO touchInfo
+    alternative penInfo: POINTER_PEN_INFO      # POINTER_PEN_INFO penInfo
+
+# struct tagPOINTER_TYPE_INFO, typedef POINTER_TYPE_INFO (winuser.h:2900): sizeof 152, _Alignof 8
+layout POINTER_TYPE_INFO:
+    size 152
+    align 8
+    field type_: ffi::c::ULong at 0                # POINTER_INPUT_TYPE type
+    field member2: POINTER_TYPE_INFO_member2 at 8  # union {...}
 
 # struct tagINPUT_INJECTION_VALUE, typedef INPUT_INJECTION_VALUE (winuser.h:2908): sizeof 12, _Alignof 4
 layout INPUT_INJECTION_VALUE:
@@ -6907,6 +8345,31 @@ layout RAWINPUTHEADER:
     field hDevice: ffi::c::Ptr[ffi::c::Void] at 8  # HANDLE hDevice
     field wParam: ffi::c::ULongLong at 16          # WPARAM wParam
 
+# the anonymous struct member RAWMOUSE.member2.member2 (struct tagRAWMOUSE) (winuser.h:6317): sizeof 4, _Alignof 2
+layout RAWMOUSE_member2_member2:
+    size 4
+    align 2
+    field usButtonFlags: ffi::c::UShort at 0  # USHORT usButtonFlags
+    field usButtonData: ffi::c::UShort at 2   # USHORT usButtonData
+
+# the anonymous union member RAWMOUSE.member2 (struct tagRAWMOUSE) (winuser.h:6315): sizeof 4, _Alignof 4
+union layout RAWMOUSE_member2:
+    size 4
+    align 4
+    alternative ulButtons: ffi::c::ULong           # ULONG ulButtons
+    alternative member2: RAWMOUSE_member2_member2  # struct {...}
+
+# struct tagRAWMOUSE, typedef RAWMOUSE (winuser.h:6313): sizeof 24, _Alignof 4
+layout RAWMOUSE:
+    size 24
+    align 4
+    field usFlags: ffi::c::UShort at 0             # USHORT usFlags
+    field member2: RAWMOUSE_member2 at 4           # union {...}
+    field ulRawButtons: ffi::c::ULong at 8         # ULONG ulRawButtons
+    field lLastX: ffi::c::Long at 12               # LONG lLastX
+    field lLastY: ffi::c::Long at 16               # LONG lLastY
+    field ulExtraInformation: ffi::c::ULong at 20  # ULONG ulExtraInformation
+
 # struct tagRAWKEYBOARD, typedef RAWKEYBOARD (winuser.h:6360): sizeof 16, _Alignof 4
 layout RAWKEYBOARD:
     size 16
@@ -6925,6 +8388,21 @@ layout RAWHID:
     field dwSizeHid: ffi::c::ULong at 0            # DWORD dwSizeHid
     field dwCount: ffi::c::ULong at 4              # DWORD dwCount
     field bRawData: array 1 of ffi::c::UChar at 8  # BYTE bRawData[1]
+
+# an anonymous union (winuser.h:6388): sizeof 24, _Alignof 4
+union layout RAWINPUT_data:
+    size 24
+    align 4
+    alternative mouse: RAWMOUSE        # RAWMOUSE mouse
+    alternative keyboard: RAWKEYBOARD  # RAWKEYBOARD keyboard
+    alternative hid: RAWHID            # RAWHID hid
+
+# struct tagRAWINPUT, typedef RAWINPUT (winuser.h:6386): sizeof 48, _Alignof 8
+layout RAWINPUT:
+    size 48
+    align 8
+    field header: RAWINPUTHEADER at 0  # RAWINPUTHEADER header
+    field data: RAWINPUT_data at 24    # union {...} data
 
 # struct tagRID_DEVICE_INFO_MOUSE, typedef RID_DEVICE_INFO_MOUSE (winuser.h:6416): sizeof 16, _Alignof 4
 layout RID_DEVICE_INFO_MOUSE:
@@ -6955,6 +8433,22 @@ layout RID_DEVICE_INFO_HID:
     field dwVersionNumber: ffi::c::ULong at 8  # DWORD dwVersionNumber
     field usUsagePage: ffi::c::UShort at 12    # USHORT usUsagePage
     field usUsage: ffi::c::UShort at 14        # USHORT usUsage
+
+# the anonymous union member RID_DEVICE_INFO.member3 (struct tagRID_DEVICE_INFO) (winuser.h:6443): sizeof 24, _Alignof 4
+union layout RID_DEVICE_INFO_member3:
+    size 24
+    align 4
+    alternative mouse: RID_DEVICE_INFO_MOUSE        # RID_DEVICE_INFO_MOUSE mouse
+    alternative keyboard: RID_DEVICE_INFO_KEYBOARD  # RID_DEVICE_INFO_KEYBOARD keyboard
+    alternative hid: RID_DEVICE_INFO_HID            # RID_DEVICE_INFO_HID hid
+
+# struct tagRID_DEVICE_INFO, typedef RID_DEVICE_INFO (winuser.h:6440): sizeof 32, _Alignof 4
+layout RID_DEVICE_INFO:
+    size 32
+    align 4
+    field cbSize: ffi::c::ULong at 0             # DWORD cbSize
+    field dwType: ffi::c::ULong at 4             # DWORD dwType
+    field member3: RID_DEVICE_INFO_member3 at 8  # union {...}
 
 # struct tagRAWINPUTDEVICE, typedef RAWINPUTDEVICE (winuser.h:6456): sizeof 16, _Alignof 8
 layout RAWINPUTDEVICE:
@@ -7188,6 +8682,24 @@ layout SMALL_RECT:
     field Right: ffi::c::Short at 4   # SHORT Right
     field Bottom: ffi::c::Short at 6  # SHORT Bottom
 
+# an anonymous union (wincon.h:37): sizeof 2, _Alignof 2
+union layout KEY_EVENT_RECORD_uChar:
+    size 2
+    align 2
+    alternative UnicodeChar: ffi::c::UShort  # WCHAR UnicodeChar
+    alternative AsciiChar: ffi::c::Char      # CHAR AsciiChar
+
+# struct _KEY_EVENT_RECORD, typedef KEY_EVENT_RECORD (wincon.h:32): sizeof 16, _Alignof 4
+layout KEY_EVENT_RECORD:
+    size 16
+    align 4
+    field bKeyDown: ffi::c::Int at 0              # WINBOOL bKeyDown
+    field wRepeatCount: ffi::c::UShort at 4       # WORD wRepeatCount
+    field wVirtualKeyCode: ffi::c::UShort at 6    # WORD wVirtualKeyCode
+    field wVirtualScanCode: ffi::c::UShort at 8   # WORD wVirtualScanCode
+    field uChar: KEY_EVENT_RECORD_uChar at 10     # union {...} uChar
+    field dwControlKeyState: ffi::c::ULong at 12  # DWORD dwControlKeyState
+
 # struct _MOUSE_EVENT_RECORD, typedef MOUSE_EVENT_RECORD (wincon.h:62): sizeof 16, _Alignof 4
 layout MOUSE_EVENT_RECORD:
     size 16
@@ -7214,6 +8726,37 @@ layout FOCUS_EVENT_RECORD:
     size 4
     align 4
     field bSetFocus: ffi::c::Int at 0  # WINBOOL bSetFocus
+
+# an anonymous union (wincon.h:96): sizeof 16, _Alignof 4
+union layout INPUT_RECORD_Event:
+    size 16
+    align 4
+    alternative KeyEvent: KEY_EVENT_RECORD                        # KEY_EVENT_RECORD KeyEvent
+    alternative MouseEvent: MOUSE_EVENT_RECORD                    # MOUSE_EVENT_RECORD MouseEvent
+    alternative WindowBufferSizeEvent: WINDOW_BUFFER_SIZE_RECORD  # WINDOW_BUFFER_SIZE_RECORD WindowBufferSizeEvent
+    alternative MenuEvent: MENU_EVENT_RECORD                      # MENU_EVENT_RECORD MenuEvent
+    alternative FocusEvent: FOCUS_EVENT_RECORD                    # FOCUS_EVENT_RECORD FocusEvent
+
+# struct _INPUT_RECORD, typedef INPUT_RECORD (wincon.h:94): sizeof 20, _Alignof 4
+layout INPUT_RECORD:
+    size 20
+    align 4
+    field EventType: ffi::c::UShort at 0  # WORD EventType
+    field Event: INPUT_RECORD_Event at 4  # union {...} Event
+
+# an anonymous union (wincon.h:112): sizeof 2, _Alignof 2
+union layout CHAR_INFO_Char:
+    size 2
+    align 2
+    alternative UnicodeChar: ffi::c::UShort  # WCHAR UnicodeChar
+    alternative AsciiChar: ffi::c::Char      # CHAR AsciiChar
+
+# struct _CHAR_INFO, typedef CHAR_INFO (wincon.h:111): sizeof 4, _Alignof 2
+layout CHAR_INFO:
+    size 4
+    align 2
+    field Char: CHAR_INFO_Char at 0        # union {...} Char
+    field Attributes: ffi::c::UShort at 2  # WORD Attributes
 
 # struct _CONSOLE_SCREEN_BUFFER_INFO, typedef CONSOLE_SCREEN_BUFFER_INFO (wincon.h:137): sizeof 22, _Alignof 2
 layout CONSOLE_SCREEN_BUFFER_INFO:
@@ -7493,11 +9036,37 @@ layout ATTACH_VIRTUAL_DISK_PARAMETERS_Version1:
     align 4
     field Reserved: ffi::c::ULong at 0  # ULONG Reserved
 
+# the anonymous union member ATTACH_VIRTUAL_DISK_PARAMETERS.member2 (struct _ATTACH_VIRTUAL_DISK_PARAMETERS) (virtdisk.h:278): sizeof 4, _Alignof 4
+union layout ATTACH_VIRTUAL_DISK_PARAMETERS_member2:
+    size 4
+    align 4
+    alternative Version1: ATTACH_VIRTUAL_DISK_PARAMETERS_Version1  # struct {...} Version1
+
+# struct _ATTACH_VIRTUAL_DISK_PARAMETERS, typedef ATTACH_VIRTUAL_DISK_PARAMETERS (virtdisk.h:276): sizeof 8, _Alignof 4
+layout ATTACH_VIRTUAL_DISK_PARAMETERS:
+    size 8
+    align 4
+    field Version: ffi::c::UInt at 0                            # ATTACH_VIRTUAL_DISK_VERSION Version
+    field member2: ATTACH_VIRTUAL_DISK_PARAMETERS_member2 at 4  # union {...}
+
 # an anonymous struct (virtdisk.h:288): sizeof 4, _Alignof 4
 layout COMPACT_VIRTUAL_DISK_PARAMETERS_Version1:
     size 4
     align 4
     field Reserved: ffi::c::ULong at 0  # ULONG Reserved
+
+# the anonymous union member COMPACT_VIRTUAL_DISK_PARAMETERS.member2 (struct _COMPACT_VIRTUAL_DISK_PARAMETERS) (virtdisk.h:287): sizeof 4, _Alignof 4
+union layout COMPACT_VIRTUAL_DISK_PARAMETERS_member2:
+    size 4
+    align 4
+    alternative Version1: COMPACT_VIRTUAL_DISK_PARAMETERS_Version1  # struct {...} Version1
+
+# struct _COMPACT_VIRTUAL_DISK_PARAMETERS, typedef COMPACT_VIRTUAL_DISK_PARAMETERS (virtdisk.h:285): sizeof 8, _Alignof 4
+layout COMPACT_VIRTUAL_DISK_PARAMETERS:
+    size 8
+    align 4
+    field Version: ffi::c::UInt at 0                             # COMPACT_VIRTUAL_DISK_VERSION Version
+    field member2: COMPACT_VIRTUAL_DISK_PARAMETERS_member2 at 4  # union {...}
 
 # an anonymous struct (virtdisk.h:297): sizeof 48, _Alignof 8
 layout CREATE_VIRTUAL_DISK_PARAMETERS_Version1:
@@ -7525,11 +9094,38 @@ layout CREATE_VIRTUAL_DISK_PARAMETERS_Version2:
     field SourceVirtualStorageType: VIRTUAL_STORAGE_TYPE at 72  # VIRTUAL_STORAGE_TYPE SourceVirtualStorageType
     field ResiliencyGuid: GUID at 92                            # GUID ResiliencyGuid
 
+# the anonymous union member CREATE_VIRTUAL_DISK_PARAMETERS.member2 (struct _CREATE_VIRTUAL_DISK_PARAMETERS) (virtdisk.h:296): sizeof 112, _Alignof 8
+union layout CREATE_VIRTUAL_DISK_PARAMETERS_member2:
+    size 112
+    align 8
+    alternative Version1: CREATE_VIRTUAL_DISK_PARAMETERS_Version1  # struct {...} Version1
+    alternative Version2: CREATE_VIRTUAL_DISK_PARAMETERS_Version2  # struct {...} Version2
+
+# struct _CREATE_VIRTUAL_DISK_PARAMETERS, typedef CREATE_VIRTUAL_DISK_PARAMETERS (virtdisk.h:294): sizeof 120, _Alignof 8
+layout CREATE_VIRTUAL_DISK_PARAMETERS:
+    size 120
+    align 8
+    field Version: ffi::c::UInt at 0                            # CREATE_VIRTUAL_DISK_VERSION Version
+    field member2: CREATE_VIRTUAL_DISK_PARAMETERS_member2 at 8  # union {...}
+
 # an anonymous struct (virtdisk.h:325): sizeof 8, _Alignof 8
 layout EXPAND_VIRTUAL_DISK_PARAMETERS_Version1:
     size 8
     align 8
     field NewSize: ffi::c::ULongLong at 0  # ULONGLONG NewSize
+
+# the anonymous union member EXPAND_VIRTUAL_DISK_PARAMETERS.member2 (struct _EXPAND_VIRTUAL_DISK_PARAMETERS) (virtdisk.h:324): sizeof 8, _Alignof 8
+union layout EXPAND_VIRTUAL_DISK_PARAMETERS_member2:
+    size 8
+    align 8
+    alternative Version1: EXPAND_VIRTUAL_DISK_PARAMETERS_Version1  # struct {...} Version1
+
+# struct _EXPAND_VIRTUAL_DISK_PARAMETERS, typedef EXPAND_VIRTUAL_DISK_PARAMETERS (virtdisk.h:322): sizeof 16, _Alignof 8
+layout EXPAND_VIRTUAL_DISK_PARAMETERS:
+    size 16
+    align 8
+    field Version: ffi::c::UInt at 0                            # EXPAND_VIRTUAL_DISK_VERSION Version
+    field member2: EXPAND_VIRTUAL_DISK_PARAMETERS_member2 at 8  # union {...}
 
 # an anonymous struct (virtdisk.h:334): sizeof 24, _Alignof 8
 layout GET_VIRTUAL_DISK_INFO_Size:
@@ -7563,6 +9159,33 @@ layout GET_VIRTUAL_DISK_INFO_ChangeTrackingState:
     field NewerChanges: ffi::c::Int at 4                # WINBOOL NewerChanges
     field MostRecentId: array 1 of ffi::c::UShort at 8  # WCHAR MostRecentId[1]
 
+# the anonymous union member GET_VIRTUAL_DISK_INFO.member2 (struct _GET_VIRTUAL_DISK_INFO) (virtdisk.h:333): sizeof 24, _Alignof 8
+union layout GET_VIRTUAL_DISK_INFO_member2:
+    size 24
+    align 8
+    alternative Size: GET_VIRTUAL_DISK_INFO_Size                          # struct {...} Size
+    alternative Identifier: GUID                                          # GUID Identifier
+    alternative ParentLocation: GET_VIRTUAL_DISK_INFO_ParentLocation      # struct {...} ParentLocation
+    alternative ParentIdentifier: GUID                                    # GUID ParentIdentifier
+    alternative ParentTimestamp: ffi::c::ULong                            # ULONG ParentTimestamp
+    alternative VirtualStorageType: VIRTUAL_STORAGE_TYPE                  # VIRTUAL_STORAGE_TYPE VirtualStorageType
+    alternative ProviderSubtype: ffi::c::ULong                            # ULONG ProviderSubtype
+    alternative Is4kAligned: ffi::c::Int                                  # WINBOOL Is4kAligned
+    alternative IsLoaded: ffi::c::Int                                     # WINBOOL IsLoaded
+    alternative PhysicalDisk: GET_VIRTUAL_DISK_INFO_PhysicalDisk          # struct {...} PhysicalDisk
+    alternative VhdPhysicalSectorSize: ffi::c::ULong                      # ULONG VhdPhysicalSectorSize
+    alternative SmallestSafeVirtualSize: ffi::c::ULongLong                # ULONGLONG SmallestSafeVirtualSize
+    alternative FragmentationPercentage: ffi::c::ULong                    # ULONG FragmentationPercentage
+    alternative VirtualDiskId: GUID                                       # GUID VirtualDiskId
+    alternative ChangeTrackingState: GET_VIRTUAL_DISK_INFO_ChangeTrackingState  # struct {...} ChangeTrackingState
+
+# struct _GET_VIRTUAL_DISK_INFO, typedef GET_VIRTUAL_DISK_INFO (virtdisk.h:331): sizeof 32, _Alignof 8
+layout GET_VIRTUAL_DISK_INFO:
+    size 32
+    align 8
+    field Version: ffi::c::UInt at 0                   # GET_VIRTUAL_DISK_INFO_VERSION Version
+    field member2: GET_VIRTUAL_DISK_INFO_member2 at 8  # union {...}
+
 # an anonymous struct (virtdisk.h:375): sizeof 4, _Alignof 4
 layout MERGE_VIRTUAL_DISK_PARAMETERS_Version1:
     size 4
@@ -7575,6 +9198,20 @@ layout MERGE_VIRTUAL_DISK_PARAMETERS_Version2:
     align 4
     field MergeSourceDepth: ffi::c::ULong at 0  # ULONG MergeSourceDepth
     field MergeTargetDepth: ffi::c::ULong at 4  # ULONG MergeTargetDepth
+
+# the anonymous union member MERGE_VIRTUAL_DISK_PARAMETERS.member2 (struct _MERGE_VIRTUAL_DISK_PARAMETERS) (virtdisk.h:374): sizeof 8, _Alignof 4
+union layout MERGE_VIRTUAL_DISK_PARAMETERS_member2:
+    size 8
+    align 4
+    alternative Version1: MERGE_VIRTUAL_DISK_PARAMETERS_Version1  # struct {...} Version1
+    alternative Version2: MERGE_VIRTUAL_DISK_PARAMETERS_Version2  # struct {...} Version2
+
+# struct _MERGE_VIRTUAL_DISK_PARAMETERS, typedef MERGE_VIRTUAL_DISK_PARAMETERS (virtdisk.h:372): sizeof 12, _Alignof 4
+layout MERGE_VIRTUAL_DISK_PARAMETERS:
+    size 12
+    align 4
+    field Version: ffi::c::UInt at 0                           # MERGE_VIRTUAL_DISK_VERSION Version
+    field member2: MERGE_VIRTUAL_DISK_PARAMETERS_member2 at 4  # union {...}
 
 # an anonymous struct (virtdisk.h:390): sizeof 4, _Alignof 4
 layout OPEN_VIRTUAL_DISK_PARAMETERS_Version1:
@@ -7590,6 +9227,20 @@ layout OPEN_VIRTUAL_DISK_PARAMETERS_Version2:
     field ReadOnly: ffi::c::Int at 4     # WINBOOL ReadOnly
     field ResiliencyGuid: GUID at 8      # GUID ResiliencyGuid
 
+# the anonymous union member OPEN_VIRTUAL_DISK_PARAMETERS.member2 (struct _OPEN_VIRTUAL_DISK_PARAMETERS) (virtdisk.h:389): sizeof 24, _Alignof 4
+union layout OPEN_VIRTUAL_DISK_PARAMETERS_member2:
+    size 24
+    align 4
+    alternative Version1: OPEN_VIRTUAL_DISK_PARAMETERS_Version1  # struct {...} Version1
+    alternative Version2: OPEN_VIRTUAL_DISK_PARAMETERS_Version2  # struct {...} Version2
+
+# struct _OPEN_VIRTUAL_DISK_PARAMETERS, typedef OPEN_VIRTUAL_DISK_PARAMETERS (virtdisk.h:387): sizeof 28, _Alignof 4
+layout OPEN_VIRTUAL_DISK_PARAMETERS:
+    size 28
+    align 4
+    field Version: ffi::c::UInt at 0                          # OPEN_VIRTUAL_DISK_VERSION Version
+    field member2: OPEN_VIRTUAL_DISK_PARAMETERS_member2 at 4  # union {...}
+
 # an anonymous struct (virtdisk.h:409): sizeof 16, _Alignof 8
 layout SET_VIRTUAL_DISK_INFO_ParentPathWithDepthInfo:
     size 16
@@ -7603,6 +9254,25 @@ layout SET_VIRTUAL_DISK_INFO_ParentLocator:
     align 8
     field LinkageId: GUID at 0                               # GUID LinkageId
     field ParentFilePath: ffi::c::Ptr[ffi::c::UShort] at 16  # PCWSTR ParentFilePath
+
+# the anonymous union member SET_VIRTUAL_DISK_INFO.member2 (struct _SET_VIRTUAL_DISK_INFO) (virtdisk.h:405): sizeof 24, _Alignof 8
+union layout SET_VIRTUAL_DISK_INFO_member2:
+    size 24
+    align 8
+    alternative ParentFilePath: ffi::c::Ptr[ffi::c::UShort]               # PCWSTR ParentFilePath
+    alternative UniqueIdentifier: GUID                                    # GUID UniqueIdentifier
+    alternative ParentPathWithDepthInfo: SET_VIRTUAL_DISK_INFO_ParentPathWithDepthInfo  # struct {...} ParentPathWithDepthInfo
+    alternative VhdPhysicalSectorSize: ffi::c::ULong                      # ULONG VhdPhysicalSectorSize
+    alternative VirtualDiskId: GUID                                       # GUID VirtualDiskId
+    alternative ChangeTrackingEnabled: ffi::c::Int                        # WINBOOL ChangeTrackingEnabled
+    alternative ParentLocator: SET_VIRTUAL_DISK_INFO_ParentLocator        # struct {...} ParentLocator
+
+# struct _SET_VIRTUAL_DISK_INFO, typedef SET_VIRTUAL_DISK_INFO (virtdisk.h:403): sizeof 32, _Alignof 8
+layout SET_VIRTUAL_DISK_INFO:
+    size 32
+    align 8
+    field Version: ffi::c::UInt at 0                   # SET_VIRTUAL_DISK_INFO_VERSION Version
+    field member2: SET_VIRTUAL_DISK_INFO_member2 at 8  # union {...}
 
 # struct _STORAGE_DEPENDENCY_INFO_TYPE_1, typedef STORAGE_DEPENDENCY_INFO_TYPE_1 (virtdisk.h:426): sizeof 28, _Alignof 4
 layout STORAGE_DEPENDENCY_INFO_TYPE_1:
@@ -7625,6 +9295,21 @@ layout STORAGE_DEPENDENCY_INFO_TYPE_2:
     field DependentVolumeName: ffi::c::Ptr[ffi::c::UShort] at 48          # PWSTR DependentVolumeName
     field DependentVolumeRelativePath: ffi::c::Ptr[ffi::c::UShort] at 56  # PWSTR DependentVolumeRelativePath
 
+# the anonymous union member STORAGE_DEPENDENCY_INFO.member3 (struct _STORAGE_DEPENDENCY_INFO) (virtdisk.h:448): sizeof 64, _Alignof 8
+union layout STORAGE_DEPENDENCY_INFO_member3:
+    size 64
+    align 8
+    alternative Version1Entries: array 1 of STORAGE_DEPENDENCY_INFO_TYPE_1  # STORAGE_DEPENDENCY_INFO_TYPE_1 Version1Entries[1]
+    alternative Version2Entries: array 1 of STORAGE_DEPENDENCY_INFO_TYPE_2  # STORAGE_DEPENDENCY_INFO_TYPE_2 Version2Entries[1]
+
+# struct _STORAGE_DEPENDENCY_INFO, typedef STORAGE_DEPENDENCY_INFO (virtdisk.h:445): sizeof 72, _Alignof 8
+layout STORAGE_DEPENDENCY_INFO:
+    size 72
+    align 8
+    field Version: ffi::c::UInt at 0                     # STORAGE_DEPENDENCY_INFO_VERSION Version
+    field NumberEntries: ffi::c::ULong at 4              # ULONG NumberEntries
+    field member3: STORAGE_DEPENDENCY_INFO_member3 at 8  # union {...}
+
 # struct _VIRTUAL_DISK_PROGRESS, typedef VIRTUAL_DISK_PROGRESS (virtdisk.h:454): sizeof 24, _Alignof 8
 layout VIRTUAL_DISK_PROGRESS:
     size 24
@@ -7639,11 +9324,37 @@ layout MIRROR_VIRTUAL_DISK_PARAMETERS_Version1:
     align 8
     field MirrorVirtualDiskPath: ffi::c::Ptr[ffi::c::UShort] at 0  # PCWSTR MirrorVirtualDiskPath
 
+# the anonymous union member MIRROR_VIRTUAL_DISK_PARAMETERS.member2 (struct _MIRROR_VIRTUAL_DISK_PARAMETERS) (virtdisk.h:464): sizeof 8, _Alignof 8
+union layout MIRROR_VIRTUAL_DISK_PARAMETERS_member2:
+    size 8
+    align 8
+    alternative Version1: MIRROR_VIRTUAL_DISK_PARAMETERS_Version1  # struct {...} Version1
+
+# struct _MIRROR_VIRTUAL_DISK_PARAMETERS, typedef MIRROR_VIRTUAL_DISK_PARAMETERS (virtdisk.h:462): sizeof 16, _Alignof 8
+layout MIRROR_VIRTUAL_DISK_PARAMETERS:
+    size 16
+    align 8
+    field Version: ffi::c::UInt at 0                            # MIRROR_VIRTUAL_DISK_VERSION Version
+    field member2: MIRROR_VIRTUAL_DISK_PARAMETERS_member2 at 8  # union {...}
+
 # an anonymous struct (virtdisk.h:474): sizeof 8, _Alignof 8
 layout RESIZE_VIRTUAL_DISK_PARAMETERS_Version1:
     size 8
     align 8
     field NewSize: ffi::c::ULongLong at 0  # ULONGLONG NewSize
+
+# the anonymous union member RESIZE_VIRTUAL_DISK_PARAMETERS.member2 (struct _RESIZE_VIRTUAL_DISK_PARAMETERS) (virtdisk.h:473): sizeof 8, _Alignof 8
+union layout RESIZE_VIRTUAL_DISK_PARAMETERS_member2:
+    size 8
+    align 8
+    alternative Version1: RESIZE_VIRTUAL_DISK_PARAMETERS_Version1  # struct {...} Version1
+
+# struct _RESIZE_VIRTUAL_DISK_PARAMETERS, typedef RESIZE_VIRTUAL_DISK_PARAMETERS (virtdisk.h:471): sizeof 16, _Alignof 8
+layout RESIZE_VIRTUAL_DISK_PARAMETERS:
+    size 16
+    align 8
+    field Version: ffi::c::UInt at 0                            # RESIZE_VIRTUAL_DISK_VERSION Version
+    field member2: RESIZE_VIRTUAL_DISK_PARAMETERS_member2 at 8  # union {...}
 
 # an anonymous struct (virtdisk.h:487): sizeof 32, _Alignof 4
 layout APPLY_SNAPSHOT_VHDSET_PARAMETERS_Version1:
@@ -7652,11 +9363,37 @@ layout APPLY_SNAPSHOT_VHDSET_PARAMETERS_Version1:
     field SnapshotId: GUID at 0       # GUID SnapshotId
     field LeafSnapshotId: GUID at 16  # GUID LeafSnapshotId
 
+# the anonymous union member APPLY_SNAPSHOT_VHDSET_PARAMETERS.member2 (struct _APPLY_SNAPSHOT_VHDSET_PARAMETERS) (virtdisk.h:486): sizeof 32, _Alignof 4
+union layout APPLY_SNAPSHOT_VHDSET_PARAMETERS_member2:
+    size 32
+    align 4
+    alternative Version1: APPLY_SNAPSHOT_VHDSET_PARAMETERS_Version1  # struct {...} Version1
+
+# struct _APPLY_SNAPSHOT_VHDSET_PARAMETERS, typedef APPLY_SNAPSHOT_VHDSET_PARAMETERS (virtdisk.h:484): sizeof 36, _Alignof 4
+layout APPLY_SNAPSHOT_VHDSET_PARAMETERS:
+    size 36
+    align 4
+    field Version: ffi::c::UInt at 0                              # APPLY_SNAPSHOT_VHDSET_VERSION Version
+    field member2: APPLY_SNAPSHOT_VHDSET_PARAMETERS_member2 at 4  # union {...}
+
 # an anonymous struct (virtdisk.h:497): sizeof 16, _Alignof 4
 layout DELETE_SNAPSHOT_VHDSET_PARAMETERS_Version1:
     size 16
     align 4
     field SnapshotId: GUID at 0  # GUID SnapshotId
+
+# the anonymous union member DELETE_SNAPSHOT_VHDSET_PARAMETERS.member2 (struct _DELETE_SNAPSHOT_VHDSET_PARAMETERS) (virtdisk.h:496): sizeof 16, _Alignof 4
+union layout DELETE_SNAPSHOT_VHDSET_PARAMETERS_member2:
+    size 16
+    align 4
+    alternative Version1: DELETE_SNAPSHOT_VHDSET_PARAMETERS_Version1  # struct {...} Version1
+
+# struct _DELETE_SNAPSHOT_VHDSET_PARAMETERS, typedef DELETE_SNAPSHOT_VHDSET_PARAMETERS (virtdisk.h:494): sizeof 20, _Alignof 4
+layout DELETE_SNAPSHOT_VHDSET_PARAMETERS:
+    size 20
+    align 4
+    field Version: ffi::c::UInt at 0                               # DELETE_SNAPSHOT_VHDSET_VERSION Version
+    field member2: DELETE_SNAPSHOT_VHDSET_PARAMETERS_member2 at 4  # union {...}
 
 # an anonymous struct (virtdisk.h:506): sizeof 24, _Alignof 8
 layout MODIFY_VHDSET_PARAMETERS_SnapshotPath:
@@ -7664,6 +9401,21 @@ layout MODIFY_VHDSET_PARAMETERS_SnapshotPath:
     align 8
     field SnapshotId: GUID at 0                                # GUID SnapshotId
     field SnapshotFilePath: ffi::c::Ptr[ffi::c::UShort] at 16  # PCWSTR SnapshotFilePath
+
+# the anonymous union member MODIFY_VHDSET_PARAMETERS.member2 (struct _MODIFY_VHDSET_PARAMETERS) (virtdisk.h:505): sizeof 24, _Alignof 8
+union layout MODIFY_VHDSET_PARAMETERS_member2:
+    size 24
+    align 8
+    alternative SnapshotPath: MODIFY_VHDSET_PARAMETERS_SnapshotPath  # struct {...} SnapshotPath
+    alternative SnapshotId: GUID                                     # GUID SnapshotId
+    alternative DefaultFilePath: ffi::c::Ptr[ffi::c::UShort]         # PCWSTR DefaultFilePath
+
+# struct _MODIFY_VHDSET_PARAMETERS, typedef MODIFY_VHDSET_PARAMETERS (virtdisk.h:503): sizeof 32, _Alignof 8
+layout MODIFY_VHDSET_PARAMETERS:
+    size 32
+    align 8
+    field Version: ffi::c::UInt at 0                      # MODIFY_VHDSET_VERSION Version
+    field member2: MODIFY_VHDSET_PARAMETERS_member2 at 8  # union {...}
 
 # struct _QUERY_CHANGES_VIRTUAL_DISK_RANGE, typedef QUERY_CHANGES_VIRTUAL_DISK_RANGE (virtdisk.h:515): sizeof 24, _Alignof 8
 layout QUERY_CHANGES_VIRTUAL_DISK_RANGE:
@@ -7678,6 +9430,19 @@ layout TAKE_SNAPSHOT_VHDSET_PARAMETERS_Version1:
     size 16
     align 4
     field SnapshotId: GUID at 0  # GUID SnapshotId
+
+# the anonymous union member TAKE_SNAPSHOT_VHDSET_PARAMETERS.member2 (struct _TAKE_SNAPSHOT_VHDSET_PARAMETERS) (virtdisk.h:523): sizeof 16, _Alignof 4
+union layout TAKE_SNAPSHOT_VHDSET_PARAMETERS_member2:
+    size 16
+    align 4
+    alternative Version1: TAKE_SNAPSHOT_VHDSET_PARAMETERS_Version1  # struct {...} Version1
+
+# struct _TAKE_SNAPSHOT_VHDSET_PARAMETERS, typedef TAKE_SNAPSHOT_VHDSET_PARAMETERS (virtdisk.h:521): sizeof 20, _Alignof 4
+layout TAKE_SNAPSHOT_VHDSET_PARAMETERS:
+    size 20
+    align 4
+    field Version: ffi::c::UInt at 0                             # TAKE_SNAPSHOT_VHDSET_VERSION Version
+    field member2: TAKE_SNAPSHOT_VHDSET_PARAMETERS_member2 at 4  # union {...}
 
 # struct _SERVICE_DESCRIPTIONA, typedef SERVICE_DESCRIPTIONA (winsvc.h:208): sizeof 8, _Alignof 8
 layout SERVICE_DESCRIPTIONA:

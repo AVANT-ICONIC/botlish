@@ -61,64 +61,66 @@ Records and layouts (complete C records of the public headers and every record t
   complete unions                                                              2
     of them in a system header (held by value by a public record)              0
     of them anonymous                                                          9
+    of them anonymous members laid out as records of their own                 0
   incomplete struct and union tags (pointee identities only)                  27
   anonymous struct members promoted into their record                          0
-  layouts emitted                                                             32    84.2%
-  records whose layout is blocked                                              6    15.8%
-    structs                                                                    4    10.5%
-    unions                                                                     2     5.3%
-    with a direct blocker of their own                                         4    10.5%
-    only through a record they hold by value                                   2     5.3%
+  layouts emitted                                                             34    89.5%
+    union layouts                                                              1     2.6%
+    synthetic layouts of anonymous members                                     0     0.0%
+  anonymous members representable but held by a blocked record (not emitted)       0     0.0%
+  records whose layout is blocked                                              4    10.5%
+    structs                                                                    3     7.9%
+    unions                                                                     1     2.6%
+    with a direct blocker of their own                                         3     7.9%
+    only through a record they hold by value                                   1     2.6%
 
 Layout blockers (records blocked; a record may have several)
-  nested-layout-blocked                                                        2     5.3%
-  union                                                                        2     5.3%
   unsupported-pointer                                                          2     5.3%
   double                                                                       1     2.6%
+  nested-layout-blocked                                                        1     2.6%
   records blocked only transitively, by the direct reasons below them:
-      union                                                                    2     5.3%
       double                                                                   1     2.6%
 
 Layout pressure (blocked records a missing feature would make layouts: directly + transitively)
-  unions and anonymous overlays                                                2     5.3%  1 + 1
   ffi::c::Bool fields                                                          0     0.0%  0 + 0
   float fields                                                                 0     0.0%  0 + 0
-  double fields                                                                0     0.0%  0 + 0
-  float and double fields                                                      0     0.0%  0 + 0
+  double fields                                                                2     5.3%  1 + 1
+  float and double fields                                                      2     5.3%  1 + 1
   long double fields                                                           0     0.0%  0 + 0
   bitfields                                                                    0     0.0%  0 + 0
   flexible array members                                                       0     0.0%  0 + 0
-  unions and Bool                                                              2     5.3%  1 + 1
-  all of the above                                                             4    10.5%  2 + 2
+  explicit calling conventions                                                 0     0.0%  0 + 0
+  float, double and Bool                                                       2     5.3%  1 + 1
+  all of the above                                                             2     5.3%  1 + 1
 
 API pressure (bound APIs pointing to C records)
   bound APIs with a pointer to a C record (parameter or result)              623    73.6%
-    to a record with an emitted layout                                       118    18.9%
-    to a complete record whose layout is blocked                             207    33.2%
+    to a record with an emitted layout                                       119    19.1%
+    to a complete record whose layout is blocked                             204    32.7%
     only to incomplete records (or complete ones outside the headers)        319    51.2%
   pointers by shape and record (layout / blocked / incomplete / outside):
-    param T *                63 / 181 / 425 / 69
+    param T *                64 / 180 / 425 / 69
     param const T *          49 / 1 / 13 / 84
     param T **               1 / 30 / 20 / 0
-    result T *               8 / 52 / 57 / 0
+    result T *               10 / 50 / 57 / 0
     result T **              0 / 0 / 1 / 0
   records bound signatures point to                                           51
     complete                                                                  27    52.9%
-      with an emitted layout                                                  23    45.1%
-      whose layout is blocked                                                  3     5.9%
+      with an emitted layout                                                  24    47.1%
+      whose layout is blocked                                                  2     3.9%
       outside the profile's records (a system header's)                        1     2.0%
     incomplete (opaque only)                                                  24    47.1%
   bound APIs a missing feature would give a layout of a record they point to:
-      unions and anonymous overlays                                            3     0.5%  1 record
       ffi::c::Bool fields                                                      0     0.0%  0 records
       float fields                                                             0     0.0%  0 records
-      double fields                                                            0     0.0%  0 records
-      float and double fields                                                  0     0.0%  0 records
+      double fields                                                          204    32.7%  2 records
+      float and double fields                                                204    32.7%  2 records
       long double fields                                                       0     0.0%  0 records
       bitfields                                                                0     0.0%  0 records
       flexible array members                                                   0     0.0%  0 records
-      unions and Bool                                                          3     0.5%  1 record
-      all of the above                                                       207    33.2%  3 records
+      explicit calling conventions                                             0     0.0%  0 records
+      float, double and Bool                                                 204    32.7%  2 records
+      all of the above                                                       204    32.7%  2 records
 
 Macro APIs (apparent callables that are macros, and what each became)
   declared functions a function-like macro shadows (thunked: the macro)       22
@@ -161,9 +163,9 @@ Macros
 
 Generated source
   Botlish files                                                               12
-  lines                                                                     5764
+  lines                                                                     5783
   extern c fn declarations                                                   747
   opaque types                                                                59
   constants                                                                  221
-  layouts                                                                     32
+  layouts                                                                     33
   shim thunks                                                                696

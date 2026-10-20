@@ -24,6 +24,12 @@
     BOTLISH_OFFSET(T, m, offset, L); \
     _Static_assert(__builtin_classify_type(BOTLISH_M(T, m)) == 12, L ": a struct"); \
     _Static_assert(sizeof(BOTLISH_M(T, m)) == (size), L ": the nested layout's size")
+#define BOTLISH_NESTED_UNION(T, m, offset, size, L) \
+    BOTLISH_OFFSET(T, m, offset, L); \
+    _Static_assert(__builtin_classify_type(BOTLISH_M(T, m)) == 13, L ": a union"); \
+    _Static_assert(sizeof(BOTLISH_M(T, m)) == (size), L ": the nested layout's size")
+#define BOTLISH_INSIDE(T, offset, size, L) \
+    _Static_assert((offset) + (size) <= sizeof(T), L ": inside its record")
 #define BOTLISH_ARRAY(T, m, n, L) \
     _Static_assert(!__builtin_types_compatible_p(__typeof__(BOTLISH_M(T, m)), __typeof__(&BOTLISH_M(T, m)[0])), L ": an array"); \
     _Static_assert(sizeof(BOTLISH_M(T, m)) / sizeof(BOTLISH_M(T, m)[0]) == (n), L ": extent")
@@ -181,10 +187,25 @@ BOTLISH_RECORD(__typeof__(((__typeof__(((struct SDL_GamepadBinding *)0)->input) 
 BOTLISH_SCALAR(__typeof__(((__typeof__(((struct SDL_GamepadBinding *)0)->input) *)0)->hat), hat, 0, 4, 1, "SDL_GamepadBinding_input_hat.hat");
 BOTLISH_SCALAR(__typeof__(((__typeof__(((struct SDL_GamepadBinding *)0)->input) *)0)->hat), hat_mask, 4, 4, 1, "SDL_GamepadBinding_input_hat.hat_mask");
 
+BOTLISH_RECORD(__typeof__(((struct SDL_GamepadBinding *)0)->input), 12, 4, "SDL_GamepadBinding_input");
+BOTLISH_SCALAR(__typeof__(((struct SDL_GamepadBinding *)0)->input), button, 0, 4, 1, "SDL_GamepadBinding_input.button");
+BOTLISH_NESTED(__typeof__(((struct SDL_GamepadBinding *)0)->input), axis, 0, 12, "SDL_GamepadBinding_input.axis");
+BOTLISH_NESTED(__typeof__(((struct SDL_GamepadBinding *)0)->input), hat, 0, 8, "SDL_GamepadBinding_input.hat");
+
 BOTLISH_RECORD(__typeof__(((__typeof__(((struct SDL_GamepadBinding *)0)->output) *)0)->axis), 12, 4, "SDL_GamepadBinding_output_axis");
 BOTLISH_SCALAR(__typeof__(((__typeof__(((struct SDL_GamepadBinding *)0)->output) *)0)->axis), axis, 0, 4, 1, "SDL_GamepadBinding_output_axis.axis");
 BOTLISH_SCALAR(__typeof__(((__typeof__(((struct SDL_GamepadBinding *)0)->output) *)0)->axis), axis_min, 4, 4, 1, "SDL_GamepadBinding_output_axis.axis_min");
 BOTLISH_SCALAR(__typeof__(((__typeof__(((struct SDL_GamepadBinding *)0)->output) *)0)->axis), axis_max, 8, 4, 1, "SDL_GamepadBinding_output_axis.axis_max");
+
+BOTLISH_RECORD(__typeof__(((struct SDL_GamepadBinding *)0)->output), 12, 4, "SDL_GamepadBinding_output");
+BOTLISH_SCALAR(__typeof__(((struct SDL_GamepadBinding *)0)->output), button, 0, 4, 1, "SDL_GamepadBinding_output.button");
+BOTLISH_NESTED(__typeof__(((struct SDL_GamepadBinding *)0)->output), axis, 0, 12, "SDL_GamepadBinding_output.axis");
+
+BOTLISH_RECORD(struct SDL_GamepadBinding, 32, 4, "SDL_GamepadBinding");
+BOTLISH_SCALAR(struct SDL_GamepadBinding, input_type, 0, 4, 0, "SDL_GamepadBinding.input_type");
+BOTLISH_NESTED_UNION(struct SDL_GamepadBinding, input, 4, 12, "SDL_GamepadBinding.input");
+BOTLISH_SCALAR(struct SDL_GamepadBinding, output_type, 16, 4, 0, "SDL_GamepadBinding.output_type");
+BOTLISH_NESTED_UNION(struct SDL_GamepadBinding, output, 20, 12, "SDL_GamepadBinding.output");
 
 BOTLISH_RECORD(struct SDL_CursorFrameInfo, 16, 8, "SDL_CursorFrameInfo");
 BOTLISH_POINTER(struct SDL_CursorFrameInfo, surface, 0, 8, "SDL_CursorFrameInfo.surface");
@@ -598,6 +619,15 @@ BOTLISH_SCALAR(struct SDL_HapticCustom, attack_length, 48, 2, 0, "SDL_HapticCust
 BOTLISH_SCALAR(struct SDL_HapticCustom, attack_level, 50, 2, 0, "SDL_HapticCustom.attack_level");
 BOTLISH_SCALAR(struct SDL_HapticCustom, fade_length, 52, 2, 0, "SDL_HapticCustom.fade_length");
 BOTLISH_SCALAR(struct SDL_HapticCustom, fade_level, 54, 2, 0, "SDL_HapticCustom.fade_level");
+
+BOTLISH_RECORD(union SDL_HapticEffect, 72, 8, "SDL_HapticEffect");
+BOTLISH_SCALAR(union SDL_HapticEffect, type, 0, 2, 0, "SDL_HapticEffect.type_");
+BOTLISH_NESTED(union SDL_HapticEffect, constant, 0, 40, "SDL_HapticEffect.constant");
+BOTLISH_NESTED(union SDL_HapticEffect, periodic, 0, 48, "SDL_HapticEffect.periodic");
+BOTLISH_NESTED(union SDL_HapticEffect, condition, 0, 68, "SDL_HapticEffect.condition");
+BOTLISH_NESTED(union SDL_HapticEffect, ramp, 0, 44, "SDL_HapticEffect.ramp");
+BOTLISH_NESTED(union SDL_HapticEffect, leftright, 0, 12, "SDL_HapticEffect.leftright");
+BOTLISH_NESTED(union SDL_HapticEffect, custom, 0, 56, "SDL_HapticEffect.custom");
 
 BOTLISH_RECORD(struct SDL_hid_device_info, 80, 8, "SDL_hid_device_info");
 BOTLISH_POINTER(struct SDL_hid_device_info, path, 0, 8, "SDL_hid_device_info.path");

@@ -10,7 +10,7 @@ import ffi::c
 opaque struct timeval:
     tag: unit
 
-# struct evp_aead_ctx_st (include/openssl/aead.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct evp_aead_ctx_st (include/openssl/aead.h), a complete C type: its layout is boringssl::layouts::EVP_AEAD_CTX
 opaque struct EVP_AEAD_CTX:
     tag: unit
 
@@ -70,7 +70,7 @@ opaque struct stack_st_ASN1_INTEGER:
 opaque struct EXTENDED_KEY_USAGE:
     tag: unit
 
-# struct asn1_type_st (include/openssl/asn1.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct asn1_type_st (include/openssl/asn1.h), a complete C type: its layout is boringssl::layouts::ASN1_TYPE
 opaque struct ASN1_TYPE:
     tag: unit
 
@@ -142,7 +142,7 @@ opaque struct SHA256_CTX:
 opaque struct SHA512_CTX:
     tag: unit
 
-# struct sha_state_st (include/openssl/sha.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct sha_state_st (include/openssl/sha.h), a complete C type: its layout is boringssl::layouts::SHA_CTX
 opaque struct SHA_CTX:
     tag: unit
 
@@ -154,7 +154,11 @@ opaque struct DES_cblock:
 opaque struct DES_key_schedule:
     tag: unit
 
-# struct env_md_ctx_st (include/openssl/digest.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct evp_md_pctx_ops (include/openssl/digest.h)
+opaque struct evp_md_pctx_ops:
+    tag: unit
+
+# struct env_md_ctx_st (include/openssl/digest.h), a complete C type: its layout is boringssl::layouts::EVP_MD_CTX
 opaque struct EVP_MD_CTX:
     tag: unit
 
@@ -174,11 +178,11 @@ opaque struct ECDSA_METHOD:
 opaque struct ECDSA_SIG:
     tag: unit
 
-# struct hmac_ctx_st (include/openssl/hmac.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct hmac_ctx_st (include/openssl/hmac.h), a complete C type: its layout is boringssl::layouts::HMAC_CTX
 opaque struct HMAC_CTX:
     tag: unit
 
-# struct evp_hpke_ctx_st (include/openssl/hpke.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct evp_hpke_ctx_st (include/openssl/hpke.h), a complete C type: its layout is boringssl::layouts::EVP_HPKE_CTX
 opaque struct EVP_HPKE_CTX:
     tag: unit
 
@@ -202,55 +206,55 @@ opaque struct MD4_CTX:
 opaque struct MD5_CTX:
     tag: unit
 
-# struct MLDSA65_private_key (include/openssl/mldsa.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct MLDSA65_private_key (include/openssl/mldsa.h), a complete C type: its layout is boringssl::layouts::MLDSA65_private_key
 opaque struct MLDSA65_private_key:
     tag: unit
 
-# struct MLDSA65_public_key (include/openssl/mldsa.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct MLDSA65_public_key (include/openssl/mldsa.h), a complete C type: its layout is boringssl::layouts::MLDSA65_public_key
 opaque struct MLDSA65_public_key:
     tag: unit
 
-# struct MLDSA65_prehash (include/openssl/mldsa.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct MLDSA65_prehash (include/openssl/mldsa.h), a complete C type: its layout is boringssl::layouts::MLDSA65_prehash
 opaque struct MLDSA65_prehash:
     tag: unit
 
-# struct MLDSA87_private_key (include/openssl/mldsa.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct MLDSA87_private_key (include/openssl/mldsa.h), a complete C type: its layout is boringssl::layouts::MLDSA87_private_key
 opaque struct MLDSA87_private_key:
     tag: unit
 
-# struct MLDSA87_public_key (include/openssl/mldsa.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct MLDSA87_public_key (include/openssl/mldsa.h), a complete C type: its layout is boringssl::layouts::MLDSA87_public_key
 opaque struct MLDSA87_public_key:
     tag: unit
 
-# struct MLDSA87_prehash (include/openssl/mldsa.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct MLDSA87_prehash (include/openssl/mldsa.h), a complete C type: its layout is boringssl::layouts::MLDSA87_prehash
 opaque struct MLDSA87_prehash:
     tag: unit
 
-# struct MLDSA44_private_key (include/openssl/mldsa.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct MLDSA44_private_key (include/openssl/mldsa.h), a complete C type: its layout is boringssl::layouts::MLDSA44_private_key
 opaque struct MLDSA44_private_key:
     tag: unit
 
-# struct MLDSA44_public_key (include/openssl/mldsa.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct MLDSA44_public_key (include/openssl/mldsa.h), a complete C type: its layout is boringssl::layouts::MLDSA44_public_key
 opaque struct MLDSA44_public_key:
     tag: unit
 
-# struct MLDSA44_prehash (include/openssl/mldsa.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct MLDSA44_prehash (include/openssl/mldsa.h), a complete C type: its layout is boringssl::layouts::MLDSA44_prehash
 opaque struct MLDSA44_prehash:
     tag: unit
 
-# struct MLKEM768_public_key (include/openssl/mlkem.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct MLKEM768_public_key (include/openssl/mlkem.h), a complete C type: its layout is boringssl::layouts::MLKEM768_public_key
 opaque struct MLKEM768_public_key:
     tag: unit
 
-# struct MLKEM768_private_key (include/openssl/mlkem.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct MLKEM768_private_key (include/openssl/mlkem.h), a complete C type: its layout is boringssl::layouts::MLKEM768_private_key
 opaque struct MLKEM768_private_key:
     tag: unit
 
-# struct MLKEM1024_public_key (include/openssl/mlkem.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct MLKEM1024_public_key (include/openssl/mlkem.h), a complete C type: its layout is boringssl::layouts::MLKEM1024_public_key
 opaque struct MLKEM1024_public_key:
     tag: unit
 
-# struct MLKEM1024_private_key (include/openssl/mlkem.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct MLKEM1024_private_key (include/openssl/mlkem.h), a complete C type: its layout is boringssl::layouts::MLKEM1024_private_key
 opaque struct MLKEM1024_private_key:
     tag: unit
 
@@ -270,7 +274,15 @@ opaque struct stack_st_CRYPTO_BUFFER:
 opaque struct stack_st_X509_CRL:
     tag: unit
 
-# struct anon@pkcs7.h:126 (include/openssl/pkcs7.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct anon@pkcs7.h:111 (include/openssl/pkcs7.h), a complete C type: its layout is boringssl::layouts::PKCS7_SIGNED
+opaque struct PKCS7_SIGNED:
+    tag: unit
+
+# struct anon@pkcs7.h:116 (include/openssl/pkcs7.h), a complete C type: its layout is boringssl::layouts::PKCS7_SIGN_ENVELOPE
+opaque struct PKCS7_SIGN_ENVELOPE:
+    tag: unit
+
+# struct anon@pkcs7.h:126 (include/openssl/pkcs7.h), a complete C type: its layout is boringssl::layouts::PKCS7
 opaque struct PKCS7:
     tag: unit
 
@@ -310,7 +322,7 @@ opaque struct OTHERNAME:
 opaque struct EDIPARTYNAME:
     tag: unit
 
-# struct GENERAL_NAME_st (include/openssl/x509.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct GENERAL_NAME_st (include/openssl/x509.h), a complete C type: its layout is boringssl::layouts::GENERAL_NAME
 opaque struct GENERAL_NAME:
     tag: unit
 
@@ -338,7 +350,7 @@ opaque struct ACCESS_DESCRIPTION:
 opaque struct AUTHORITY_INFO_ACCESS:
     tag: unit
 
-# struct DIST_POINT_NAME_st (include/openssl/x509.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct DIST_POINT_NAME_st (include/openssl/x509.h), a complete C type: its layout is boringssl::layouts::DIST_POINT_NAME
 opaque struct DIST_POINT_NAME:
     tag: unit
 
@@ -362,7 +374,7 @@ opaque struct NOTICEREF:
 opaque struct USERNOTICE:
     tag: unit
 
-# struct POLICYQUALINFO_st (include/openssl/x509.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct POLICYQUALINFO_st (include/openssl/x509.h), a complete C type: its layout is boringssl::layouts::POLICYQUALINFO
 opaque struct POLICYQUALINFO:
     tag: unit
 
@@ -458,7 +470,7 @@ opaque struct TRUST_TOKEN:
 opaque struct stack_st_TRUST_TOKEN:
     tag: unit
 
-# struct XWING_private_key (include/openssl/xwing.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct XWING_private_key (include/openssl/xwing.h), a complete C type: its layout is boringssl::layouts::XWING_private_key
 opaque struct XWING_private_key:
     tag: unit
 

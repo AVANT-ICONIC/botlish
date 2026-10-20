@@ -26,14 +26,14 @@ header generic/tclOODecls.h 112ed1e0
 header generic/tclPlatDecls.h c8603094
 header generic/tclTomMathDecls.h 1ebc0288
 shim_library botlish_shim_tclstubs_2627031d
-file layouts-check.c 343 1969c73d
-file layouts.tsv 1103 4f157656
-file report.tsv 1499 5892ba99
-file report.txt 169 ccff2ace
+file layouts-check.c 366 b614b884
+file layouts.tsv 1103 458445ae
+file report.tsv 1499 b18d2c75
+file report.txt 171 3ef1c1ce
 file shim.c 2795 2627031d
-file tclstubs/ctypes.bot 255 19fbdd79
+file tclstubs/ctypes.bot 255 23b72cf2
 file tclstubs/decls.bot 106 ba6822ce
-file tclstubs/layouts.bot 408 aaa083a6
+file tclstubs/layouts.bot 427 7fc06d8c
 file tclstubs/oo.bot 25 0840a4df
 file tclstubs/platdecls.bot 20 9d929de9
 file tclstubs/tcl.bot 250 78d31bd5
@@ -90,19 +90,22 @@ blocked unsupported-macro 7
 blocked variadic 9
 layout_abi linux-x86_64 clang x86_64-linux-gnu {Ubuntu clang version 18.1.3 (1ubuntu1)}
 layout_count anonymous 9
-layout_count blocked 6
-layout_count blockedDirect 4
-layout_count blockedStructs 4
-layout_count blockedTransitive 2
-layout_count blockedUnions 2
-layout_count emitted 32
+layout_count blocked 4
+layout_count blockedDirect 3
+layout_count blockedStructs 3
+layout_count blockedTransitive 1
+layout_count blockedUnions 1
+layout_count emitted 34
+layout_count emittedSynthetic 0
+layout_count emittedUnions 1
 layout_count incomplete 27
 layout_count promoted 0
 layout_count public 38
 layout_count structs 36
+layout_count synthetic 0
 layout_count system 0
+layout_count unheld 0
 layout_count unions 2
 layout_blocked double 1
-layout_blocked nested-layout-blocked 2
-layout_blocked union 2
+layout_blocked nested-layout-blocked 1
 layout_blocked unsupported-pointer 2

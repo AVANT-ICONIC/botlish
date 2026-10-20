@@ -14,7 +14,7 @@ opaque struct EXCEPTION_POINTERS:
 opaque struct EXCEPTION_RECORD:
     tag: unit
 
-# struct _CONTEXT (winnt.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _CONTEXT (winnt.h), a complete C type: its layout is win32::layouts::CONTEXT
 opaque struct CONTEXT:
     tag: unit
 
@@ -22,11 +22,11 @@ opaque struct CONTEXT:
 opaque struct GROUP_AFFINITY:
     tag: unit
 
-# union _LARGE_INTEGER (winnt.h), a complete C type whose layout is blocked (layouts.tsv)
+# union _LARGE_INTEGER (winnt.h), a complete C type: its layout is win32::layouts::LARGE_INTEGER
 opaque struct LARGE_INTEGER:
     tag: unit
 
-# union _ULARGE_INTEGER (winnt.h), a complete C type whose layout is blocked (layouts.tsv)
+# union _ULARGE_INTEGER (winnt.h), a complete C type: its layout is win32::layouts::ULARGE_INTEGER
 opaque struct ULARGE_INTEGER:
     tag: unit
 
@@ -114,12 +114,32 @@ opaque struct TOKEN_GROUPS:
 opaque struct TOKEN_PRIVILEGES:
     tag: unit
 
-# struct _CLAIM_SECURITY_ATTRIBUTES_INFORMATION (winnt.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _CLAIM_SECURITY_ATTRIBUTE_FQBN_VALUE (winnt.h), a complete C type: its layout is win32::layouts::CLAIM_SECURITY_ATTRIBUTE_FQBN_VALUE
+opaque struct CLAIM_SECURITY_ATTRIBUTE_FQBN_VALUE:
+    tag: unit
+
+# struct _CLAIM_SECURITY_ATTRIBUTE_OCTET_STRING_VALUE (winnt.h), a complete C type: its layout is win32::layouts::CLAIM_SECURITY_ATTRIBUTE_OCTET_STRING_VALUE
+opaque struct CLAIM_SECURITY_ATTRIBUTE_OCTET_STRING_VALUE:
+    tag: unit
+
+# struct _CLAIM_SECURITY_ATTRIBUTE_V1 (winnt.h), a complete C type: its layout is win32::layouts::CLAIM_SECURITY_ATTRIBUTE_V1
+opaque struct CLAIM_SECURITY_ATTRIBUTE_V1:
+    tag: unit
+
+# struct _CLAIM_SECURITY_ATTRIBUTES_INFORMATION (winnt.h), a complete C type: its layout is win32::layouts::CLAIM_SECURITY_ATTRIBUTES_INFORMATION
 opaque struct CLAIM_SECURITY_ATTRIBUTES_INFORMATION:
     tag: unit
 
 # struct _JOB_SET_ARRAY (winnt.h), a complete C type: its layout is win32::layouts::JOB_SET_ARRAY
 opaque struct JOB_SET_ARRAY:
+    tag: unit
+
+# struct _EXCEPTION_REGISTRATION_RECORD (winnt.h), a complete C type: its layout is win32::layouts::EXCEPTION_REGISTRATION_RECORD
+opaque struct EXCEPTION_REGISTRATION_RECORD:
+    tag: unit
+
+# struct _NT_TIB (winnt.h), a complete C type: its layout is win32::layouts::NT_TIB
+opaque struct NT_TIB:
     tag: unit
 
 # struct _PROCESS_DYNAMIC_EH_CONTINUATION_TARGET (winnt.h), a complete C type: its layout is win32::layouts::PROCESS_DYNAMIC_EH_CONTINUATION_TARGET
@@ -130,7 +150,7 @@ opaque struct PROCESS_DYNAMIC_EH_CONTINUATION_TARGET:
 opaque struct PROCESS_DYNAMIC_ENFORCED_ADDRESS_RANGE:
     tag: unit
 
-# struct _QUOTA_LIMITS (winnt.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _QUOTA_LIMITS (winnt.h), a complete C type: its layout is win32::layouts::QUOTA_LIMITS
 opaque struct QUOTA_LIMITS:
     tag: unit
 
@@ -138,11 +158,11 @@ opaque struct QUOTA_LIMITS:
 opaque struct IO_COUNTERS:
     tag: unit
 
-# struct _SYSTEM_LOGICAL_PROCESSOR_INFORMATION (winnt.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _SYSTEM_LOGICAL_PROCESSOR_INFORMATION (winnt.h), a complete C type: its layout is win32::layouts::SYSTEM_LOGICAL_PROCESSOR_INFORMATION
 opaque struct SYSTEM_LOGICAL_PROCESSOR_INFORMATION:
     tag: unit
 
-# struct _SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX (winnt.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX (winnt.h), a complete C type: its layout is win32::layouts::SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX
 opaque struct SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX:
     tag: unit
 
@@ -154,7 +174,7 @@ opaque struct SYSTEM_PROCESSOR_CYCLE_TIME_INFORMATION:
 opaque struct MEMORY_BASIC_INFORMATION:
     tag: unit
 
-# union _FILE_SEGMENT_ELEMENT (winnt.h), a complete C type whose layout is blocked (layouts.tsv)
+# union _FILE_SEGMENT_ELEMENT (winnt.h), a complete C type: its layout is win32::layouts::FILE_SEGMENT_ELEMENT
 opaque struct FILE_SEGMENT_ELEMENT:
     tag: unit
 
@@ -358,7 +378,7 @@ opaque struct DPI_AWARENESS_CONTEXT__:
 opaque struct SECURITY_ATTRIBUTES:
     tag: unit
 
-# struct _OVERLAPPED (minwinbase.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _OVERLAPPED (minwinbase.h), a complete C type: its layout is win32::layouts::OVERLAPPED
 opaque struct OVERLAPPED:
     tag: unit
 
@@ -378,15 +398,15 @@ opaque struct WIN32_FIND_DATAA:
 opaque struct WIN32_FIND_DATAW:
     tag: unit
 
-# struct _PROCESS_HEAP_ENTRY (minwinbase.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _PROCESS_HEAP_ENTRY (minwinbase.h), a complete C type: its layout is win32::layouts::PROCESS_HEAP_ENTRY
 opaque struct PROCESS_HEAP_ENTRY:
     tag: unit
 
-# struct _REASON_CONTEXT (minwinbase.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _REASON_CONTEXT (minwinbase.h), a complete C type: its layout is win32::layouts::REASON_CONTEXT
 opaque struct REASON_CONTEXT:
     tag: unit
 
-# struct _DEBUG_EVENT (minwinbase.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _DEBUG_EVENT (minwinbase.h), a complete C type: its layout is win32::layouts::DEBUG_EVENT
 opaque struct DEBUG_EVENT:
     tag: unit
 
@@ -422,7 +442,7 @@ opaque struct STARTUPINFOW:
 opaque struct PROCESS_INFORMATION:
     tag: unit
 
-# struct _SYSTEM_INFO (sysinfoapi.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _SYSTEM_INFO (sysinfoapi.h), a complete C type: its layout is win32::layouts::SYSTEM_INFO
 opaque struct SYSTEM_INFO:
     tag: unit
 
@@ -466,7 +486,7 @@ opaque struct UMS_SCHEDULER_STARTUP_INFO:
 opaque struct UMS_SYSTEM_THREAD_INFORMATION:
     tag: unit
 
-# struct COPYFILE2_MESSAGE (winbase.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct COPYFILE2_MESSAGE (winbase.h), a complete C type: its layout is win32::layouts::COPYFILE2_MESSAGE
 opaque struct COPYFILE2_MESSAGE:
     tag: unit
 
@@ -514,7 +534,7 @@ opaque struct ACTCTXW:
 opaque struct ACTCTX_SECTION_KEYED_DATA:
     tag: unit
 
-# struct FILE_ID_DESCRIPTOR (winbase.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct FILE_ID_DESCRIPTOR (winbase.h), a complete C type: its layout is win32::layouts::FILE_ID_DESCRIPTOR
 opaque struct FILE_ID_DESCRIPTOR:
     tag: unit
 
@@ -606,11 +626,11 @@ opaque struct LOGFONTA:
 opaque struct LOGFONTW:
     tag: unit
 
-# struct _devicemodeA (wingdi.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _devicemodeA (wingdi.h), a complete C type: its layout is win32::layouts::DEVMODEA
 opaque struct DEVMODEA:
     tag: unit
 
-# struct _devicemodeW (wingdi.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _devicemodeW (wingdi.h), a complete C type: its layout is win32::layouts::DEVMODEW
 opaque struct DEVMODEW:
     tag: unit
 
@@ -798,7 +818,7 @@ opaque struct FLASHWINFO:
 opaque struct DLGTEMPLATE:
     tag: unit
 
-# struct tagINPUT (winuser.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct tagINPUT (winuser.h), a complete C type: its layout is win32::layouts::INPUT
 opaque struct INPUT:
     tag: unit
 
@@ -922,7 +942,7 @@ opaque struct ALTTABINFO:
 opaque struct HRAWINPUT__:
     tag: unit
 
-# struct tagRAWINPUT (winuser.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct tagRAWINPUT (winuser.h), a complete C type: its layout is win32::layouts::RAWINPUT
 opaque struct RAWINPUT:
     tag: unit
 
@@ -1014,7 +1034,7 @@ opaque struct COORD:
 opaque struct SMALL_RECT:
     tag: unit
 
-# struct _INPUT_RECORD (wincon.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _INPUT_RECORD (wincon.h), a complete C type: its layout is win32::layouts::INPUT_RECORD
 opaque struct INPUT_RECORD:
     tag: unit
 
@@ -1094,39 +1114,39 @@ opaque struct NETCONNECTINFOSTRUCT:
 opaque struct VIRTUAL_STORAGE_TYPE:
     tag: unit
 
-# struct _ATTACH_VIRTUAL_DISK_PARAMETERS (virtdisk.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _ATTACH_VIRTUAL_DISK_PARAMETERS (virtdisk.h), a complete C type: its layout is win32::layouts::ATTACH_VIRTUAL_DISK_PARAMETERS
 opaque struct ATTACH_VIRTUAL_DISK_PARAMETERS:
     tag: unit
 
-# struct _COMPACT_VIRTUAL_DISK_PARAMETERS (virtdisk.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _COMPACT_VIRTUAL_DISK_PARAMETERS (virtdisk.h), a complete C type: its layout is win32::layouts::COMPACT_VIRTUAL_DISK_PARAMETERS
 opaque struct COMPACT_VIRTUAL_DISK_PARAMETERS:
     tag: unit
 
-# struct _CREATE_VIRTUAL_DISK_PARAMETERS (virtdisk.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _CREATE_VIRTUAL_DISK_PARAMETERS (virtdisk.h), a complete C type: its layout is win32::layouts::CREATE_VIRTUAL_DISK_PARAMETERS
 opaque struct CREATE_VIRTUAL_DISK_PARAMETERS:
     tag: unit
 
-# struct _EXPAND_VIRTUAL_DISK_PARAMETERS (virtdisk.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _EXPAND_VIRTUAL_DISK_PARAMETERS (virtdisk.h), a complete C type: its layout is win32::layouts::EXPAND_VIRTUAL_DISK_PARAMETERS
 opaque struct EXPAND_VIRTUAL_DISK_PARAMETERS:
     tag: unit
 
-# struct _GET_VIRTUAL_DISK_INFO (virtdisk.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _GET_VIRTUAL_DISK_INFO (virtdisk.h), a complete C type: its layout is win32::layouts::GET_VIRTUAL_DISK_INFO
 opaque struct GET_VIRTUAL_DISK_INFO:
     tag: unit
 
-# struct _MERGE_VIRTUAL_DISK_PARAMETERS (virtdisk.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _MERGE_VIRTUAL_DISK_PARAMETERS (virtdisk.h), a complete C type: its layout is win32::layouts::MERGE_VIRTUAL_DISK_PARAMETERS
 opaque struct MERGE_VIRTUAL_DISK_PARAMETERS:
     tag: unit
 
-# struct _OPEN_VIRTUAL_DISK_PARAMETERS (virtdisk.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _OPEN_VIRTUAL_DISK_PARAMETERS (virtdisk.h), a complete C type: its layout is win32::layouts::OPEN_VIRTUAL_DISK_PARAMETERS
 opaque struct OPEN_VIRTUAL_DISK_PARAMETERS:
     tag: unit
 
-# struct _SET_VIRTUAL_DISK_INFO (virtdisk.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _SET_VIRTUAL_DISK_INFO (virtdisk.h), a complete C type: its layout is win32::layouts::SET_VIRTUAL_DISK_INFO
 opaque struct SET_VIRTUAL_DISK_INFO:
     tag: unit
 
-# struct _STORAGE_DEPENDENCY_INFO (virtdisk.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _STORAGE_DEPENDENCY_INFO (virtdisk.h), a complete C type: its layout is win32::layouts::STORAGE_DEPENDENCY_INFO
 opaque struct STORAGE_DEPENDENCY_INFO:
     tag: unit
 
@@ -1134,23 +1154,23 @@ opaque struct STORAGE_DEPENDENCY_INFO:
 opaque struct VIRTUAL_DISK_PROGRESS:
     tag: unit
 
-# struct _MIRROR_VIRTUAL_DISK_PARAMETERS (virtdisk.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _MIRROR_VIRTUAL_DISK_PARAMETERS (virtdisk.h), a complete C type: its layout is win32::layouts::MIRROR_VIRTUAL_DISK_PARAMETERS
 opaque struct MIRROR_VIRTUAL_DISK_PARAMETERS:
     tag: unit
 
-# struct _RESIZE_VIRTUAL_DISK_PARAMETERS (virtdisk.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _RESIZE_VIRTUAL_DISK_PARAMETERS (virtdisk.h), a complete C type: its layout is win32::layouts::RESIZE_VIRTUAL_DISK_PARAMETERS
 opaque struct RESIZE_VIRTUAL_DISK_PARAMETERS:
     tag: unit
 
-# struct _APPLY_SNAPSHOT_VHDSET_PARAMETERS (virtdisk.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _APPLY_SNAPSHOT_VHDSET_PARAMETERS (virtdisk.h), a complete C type: its layout is win32::layouts::APPLY_SNAPSHOT_VHDSET_PARAMETERS
 opaque struct APPLY_SNAPSHOT_VHDSET_PARAMETERS:
     tag: unit
 
-# struct _DELETE_SNAPSHOT_VHDSET_PARAMETERS (virtdisk.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _DELETE_SNAPSHOT_VHDSET_PARAMETERS (virtdisk.h), a complete C type: its layout is win32::layouts::DELETE_SNAPSHOT_VHDSET_PARAMETERS
 opaque struct DELETE_SNAPSHOT_VHDSET_PARAMETERS:
     tag: unit
 
-# struct _MODIFY_VHDSET_PARAMETERS (virtdisk.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _MODIFY_VHDSET_PARAMETERS (virtdisk.h), a complete C type: its layout is win32::layouts::MODIFY_VHDSET_PARAMETERS
 opaque struct MODIFY_VHDSET_PARAMETERS:
     tag: unit
 
@@ -1158,7 +1178,7 @@ opaque struct MODIFY_VHDSET_PARAMETERS:
 opaque struct QUERY_CHANGES_VIRTUAL_DISK_RANGE:
     tag: unit
 
-# struct _TAKE_SNAPSHOT_VHDSET_PARAMETERS (virtdisk.h), a complete C type whose layout is blocked (layouts.tsv)
+# struct _TAKE_SNAPSHOT_VHDSET_PARAMETERS (virtdisk.h), a complete C type: its layout is win32::layouts::TAKE_SNAPSHOT_VHDSET_PARAMETERS
 opaque struct TAKE_SNAPSHOT_VHDSET_PARAMETERS:
     tag: unit
 
