@@ -3000,6 +3000,10 @@ proc hir::completions::ExtentsVerdict {hir ctx name argExprs v} {
             return in
         }
         set pointer [expr {[dict get $field kind] eq "pointer" || [hir::layouts::PointerArray $field]}]
+        if {[hir::layouts::ReprUnionPath $field] ne "none"} {
+            # (LAYOUT-UNION: an array of unions is never written whole.)
+            return in
+        }
         switch -- [hir::layouts::RoleOf $role op] {
             write {
                 if {[hir::layouts::ReprPointerPath $field] ne "none"} {
@@ -3103,6 +3107,7 @@ proc hir::completions::ReprValueVerdict {hir ctx repr e} {
             return [AllVerdicts $verdicts]
         }
     }
+    # (A scalar or a pointer; a union is never written whole: LAYOUT-UNION.)
     return in
 }
 
@@ -3151,14 +3156,23 @@ proc hir::completions::ExactCopy {hir e} {
                 if {$term ne ""} {
                     return [hir::layouts::ReprOfTerm $term]
                 }
-                if {[hir::types::IsNativeMemory $type] && [hir::layouts::declared [lindex $type 1]]} {
+                if {[hir::types::IsNativeMemory $type] && [hir::layouts::declared [lindex $type 1]]
+                        && ![hir::layouts::IsUnion [lindex $type 1]]} {
                     return [dict create kind layout layout [lindex $type 1]]
                 }
             } elseif {[hir::layouts::RoleOf $role op] eq "parse"} {
                 set operand [lindex $args [hir::layouts::RoleOf $role operand]]
                 set layout [hir::layouts::DescriptorLayout [hir::layouts::ConstText $hir $operand]]
-                if {$layout ne "" && [hir::layouts::declared $layout]} {
+                if {$layout ne "" && [hir::layouts::declared $layout] && ![hir::layouts::IsUnion $layout]} {
                     return [dict create kind layout layout $layout]
+                }
+            } elseif {[hir::layouts::RoleOf $role op] eq "read"} {
+                # One designated representation copied out of bytes
+                # (binary::read, LAYOUT-UNIONS.md): exactly its arrays'
+                # extents, as a parse makes them.
+                set repr [hir::layouts::PathField [hir::layouts::ConstText $hir [lindex $args [hir::layouts::RoleOf $role path]]]]
+                if {$repr ne ""} {
+                    return $repr
                 }
             }
         }

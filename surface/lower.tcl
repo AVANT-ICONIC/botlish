@@ -258,10 +258,16 @@ proc surface::lower::EnumDeclOf {node namespace} {
 # never read from the (cached, importer-neutral) AST: it makes the layout's
 # identity `NAMESPACE::Name`.
 proc surface::lower::LayoutDeclOf {node namespace} {
-    return [dict create kind layout name [dict get $node name] nameSpan [dict get $node nameSpan] \
+    set decl [dict create kind layout name [dict get $node name] nameSpan [dict get $node nameSpan] \
         namespace $namespace size [dict get $node size] sizeSpan [dict get $node sizeSpan] \
         align [dict get $node align] alignSpan [dict get $node alignSpan] \
         fields [dict get $node fields] span [dict get $node span]]
+    if {[dict exists $node union] && [dict get $node union]} {
+        # A union layout (LAYOUT-UNIONS.md): its fields are its
+        # alternatives, each at offset 0.
+        dict set decl union 1
+    }
+    return $decl
 }
 
 # The declaration dict of a `traitdecl` node declared in module NAMESPACE (""

@@ -5240,6 +5240,39 @@ proc native::lower::LayoutCall {fnVar e node wantVirtual} {
             return [list [ArrayRead fn $e native $view [lindex [hir::get $hir $constant literal] end] $base] tagged]
         }
     }
+    if {[hir::layouts::RoleOf $role op] eq "read"} {
+        # binary::read(data, L.path) (LAYOUT-UNIONS.md): the length check a
+        # parse makes, then the one designated representation imprinted at
+        # its absolute offset (ReprRead from bytes: one `binload` for a
+        # scalar, a record's fields and its object, an array's List).
+        set path [lindex $args [hir::layouts::RoleOf $role path]]
+        if {[hir::kind $hir $path] ne "const"} {
+            throw {NATIVE BUG} "native lowering: the field operand of $name ($e) is not its designator constant"
+        }
+        set constant [lindex [hir::get $hir $path literal] end]
+        if {[hir::layouts::PathLayout $constant] eq ""} {
+            throw {NATIVE BUG} "native lowering: the field operand of $name ($e) is not a field designator"
+        }
+        if {$wantVirtual ne ""} {
+            throw {NATIVE BUG} "native lowering: binary::read $e asked for virtual fields (hir::escape never classifies one)"
+        }
+        lassign $constant structId size text field
+        set storage [StorageOf fn [lindex $args [hir::layouts::RoleOf $role input]]]
+        if {$storage eq "never"} {
+            return {never tagged}
+        }
+        dict lappend fn calls [list native $name]
+        set length [Assign fn "op byteslen $storage" $e]
+        set expected [Assign fn "int $size" $e]
+        set fits [Assign fn "op ieq $length $expected" $e]
+        set good [NewLabel fn]
+        set bad [NewLabel fn]
+        Emit fn "br $fits $good $bad" $e
+        EmitLabel fn $bad
+        Emit fn "faildeclared [ErrorId LayoutLengthMismatch] [Quote LayoutLengthMismatch]" $e
+        EmitLabel fn $good
+        return [list [ReprRead fn $e bytes $storage [lrange $field 2 end] [lindex $field 1]] tagged]
+    }
     if {[hir::layouts::RoleOf $role op] eq "field"} {
         # One field read through a native view (NATIVE-LAYOUT-VIEWS.md): the
         # elaborated projection binary#view_field(VIEW, FIELD), FIELD the
@@ -5522,7 +5555,7 @@ proc native::lower::ViewBase {fnVar arg} {
             lassign [hir::get $hir $arg args] receiver field
             if {[hir::kind $hir $field] eq "const"} {
                 set entry [lindex [hir::get $hir $field literal] end]
-                if {[lindex $entry 2] in {layout array}} {
+                if {[lindex $entry 2] in {layout array union}} {
                     lassign [ViewBase fn $receiver] view base
                     if {$view eq "never"} {
                         return [list never 0]
@@ -5535,7 +5568,7 @@ proc native::lower::ViewBase {fnVar arg} {
         if {[hir::layouts::RoleOf $role op] eq "element" && [hir::layouts::RoleOf $role array] ne ""} {
             set constant [lindex [hir::get $hir $arg args] [hir::layouts::RoleOf $role array]]
             if {[hir::kind $hir $constant] eq "const"
-                    && [lindex [lindex [hir::get $hir $constant literal] end] 3 0] in {layout array}
+                    && [lindex [lindex [hir::get $hir $constant literal] end] 3 0] in {layout array union}
                     && [hir::layouts::Problems $hir $arg $name $role] eq ""} {
                 dict lappend fn calls [list native $name]
                 lassign [ElementAccess fn $arg] view base
@@ -5660,13 +5693,15 @@ proc native::lower::ElementAccess {fnVar e {valueExpr ""}} {
 # words after its name and offset) read through the native view VIEW (a
 # register holding a C address word) at BASE (ViewBase): a scalar's Int (one
 # `nativeload`), a pointer's C address word (`nativeloadptr`), a nested
-# layout's or a fixed array's live window (`cptroffset`: no memory read) --
-# NATIVE-LAYOUT-VIEWS.md, FIXED-LAYOUT-ARRAYS.md.
+# layout's, a fixed array's or a union's live window (`cptroffset`: no
+# memory read) -- NATIVE-LAYOUT-VIEWS.md, FIXED-LAYOUT-ARRAYS.md,
+# LAYOUT-UNIONS.md. A union's alternative is read exactly as a field at the
+# union's own address: nothing knows it is one.
 proc native::lower::NativeRepr {fnVar e view repr base} {
     upvar 1 $fnVar fn
     set at [At fn $e $base 0]
     switch -- [lindex $repr 0] {
-        layout - array {
+        layout - array - union {
             return [Assign fn "op cptroffset $view $at" $e]
         }
         ptr {
@@ -5696,6 +5731,11 @@ proc native::lower::ReprRead {fnVar e mode source repr base} {
     switch -- [lindex $repr 0] {
         layout {
             return [DecodeAt fn $e $mode $source [lindex $repr 1] $base]
+        }
+        union {
+            # (A union has no copied value: every copy of one is LAYOUT-UNION
+            # before lowering, LAYOUT-UNIONS.md.)
+            throw {NATIVE BUG} "native lowering: a copy of a union ($e)"
         }
         array {
             return [ArrayRead fn $e $mode $source $repr $base]
@@ -5879,6 +5919,9 @@ proc native::lower::ReprHasArrays {repr} {
 proc native::lower::ReprWrite {fnVar e mode target repr base value} {
     upvar 1 $fnVar fn
     switch -- [lindex $repr 0] {
+        union {
+            throw {NATIVE BUG} "native lowering: a whole union written ($e)"
+        }
         layout {
             lassign [lindex $repr 1] structId size align fields
             set slot 0

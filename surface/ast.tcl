@@ -159,6 +159,8 @@
 #              path-neutral): the loader supplies the module's namespace when
 #              it lowers the declaration (surface/lower.tcl's StructDeclOf).
 #   layoutdecl name, nameSpan, size, sizeSpan, align, alignSpan, fields
+#              (and `union 1` for a union layout, LAYOUT-UNIONS.md: its
+#              fields are its alternatives, each at offset 0)
 #              ({name nameSpan type typeSpan offset offsetSpan} dicts in
 #              written order; TYPE as surface::parser::TypeExpr returns it,
 #              SIZE/ALIGN/OFFSET decimal text) -- a top-level fixed binary
@@ -872,11 +874,16 @@ proc surface::ast::Statement {node indent show linesVar} {
             return
         }
         layoutdecl {
-            lappend lines "${pad}layout [dict get $node name]$at"
+            set union [expr {[dict exists $node union] && [dict get $node union]}]
+            lappend lines "${pad}[expr {$union ? "union layout" : "layout"}] [dict get $node name]$at"
             lappend lines "${pad}    size [dict get $node size]"
             lappend lines "${pad}    align [dict get $node align]"
             foreach field [dict get $node fields] {
-                lappend lines "${pad}    field [dict get $field name]: [showType [dict get $field type]] at [dict get $field offset]"
+                if {$union} {
+                    lappend lines "${pad}    alternative [dict get $field name]: [showType [dict get $field type]]"
+                } else {
+                    lappend lines "${pad}    field [dict get $field name]: [showType [dict get $field type]] at [dict get $field offset]"
+                }
             }
             return
         }

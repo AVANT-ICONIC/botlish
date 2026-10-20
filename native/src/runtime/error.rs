@@ -87,6 +87,8 @@ pub const SEMANTIC_KINDS: &[&str] = &[
     // NATIVE-LAYOUT-WRITES.md), replayed at run time
     // (native::lower::LayoutCall).
     "BINARY-OPERAND", "LAYOUT-NATIVE-ONLY", "LAYOUT-FOREIGN-WRITE", "LAYOUT-OPERAND",
+    // ... and a copy of a union (LAYOUT-UNIONS.md: no copied value).
+    "LAYOUT-UNION",
 ];
 
 pub fn semantic_kind(name: &str) -> Option<&'static str> {
