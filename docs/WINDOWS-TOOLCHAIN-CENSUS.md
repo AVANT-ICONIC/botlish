@@ -436,7 +436,9 @@ coreutils one, so every MSVC link below is rustc finding Microsoft's
 linker and the SDK by itself. Three runs: 39453878297 (E13a, E14a),
 39456406045 (E13b, E14b: the probe patch names its link work files
 `.exe`, and adds the all-shadow root plan and the static CRT) and
-39459243510 (E13c, E14c: the fallback plan without the frame walk).
+39459243510 (E13c, E14c: the fallback plan without the frame walk); run
+39461151550 repeated E13c and E14c with the patch as committed, with the
+same results.
 
 **Both jobs, identically:**
 
