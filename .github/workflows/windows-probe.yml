@@ -27,8 +27,8 @@ name: windows probe
 # link.exe and the Windows SDK itself (msvc) or uses MSYS2's gcc on PATH
 # (gnu). Only the C library and dumpbin steps enter vcvars64.bat.
 #
-# It runs on pushes that change it or audit/windows-toolchain/, and on
-# demand (workflow_dispatch).
+# It runs on pushes that change it or audit/windows-toolchain/, and, once
+# it is on the default branch, on demand (workflow_dispatch) for any branch.
 
 on:
   push:

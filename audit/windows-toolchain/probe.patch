@@ -1,6 +1,6 @@
 diff -ruN clean-a/native/src/codegen/aot.rs clean-b/native/src/codegen/aot.rs
 --- a/native/src/codegen/aot.rs	2026-10-20 15:50:08.798939188 +0000
-+++ b/native/src/codegen/aot.rs	2026-10-20 16:38:28.749038684 +0000
++++ b/native/src/codegen/aot.rs	2026-10-20 16:47:42.833875513 +0000
 @@ -87,8 +87,7 @@
          "}\nextern \"C\" fn entry(vm: *mut Vm) -> Value {\n\
          let f: aot::ProgramEntry = unsafe { std::mem::transmute(botlish_fn_0 as *const ()) };\n\
@@ -27,7 +27,7 @@ diff -ruN clean-a/native/src/codegen/aot.rs clean-b/native/src/codegen/aot.rs
      all(target_os = "linux", target_env = "gnu", any(target_arch = "x86_64", target_arch = "aarch64")),
      all(target_os = "macos", target_arch = "aarch64")
  ));
-@@ -298,7 +299,8 @@
+@@ -298,9 +299,20 @@
      let object = emit_object(program).map_err(|e| e.message().to_string())?;
      let object_path = work.0.join("program.o");
      let source_path = work.0.join("startup.rs");
@@ -36,8 +36,20 @@ diff -ruN clean-a/native/src/codegen/aot.rs clean-b/native/src/codegen/aot.rs
 +    let executable = work.0.join(if cfg!(windows) { "executable.exe" } else { "executable" });
      std::fs::write(&object_path, &object.bytes).map_err(|e| e.to_string())?;
      std::fs::write(&source_path, startup(program, &object)).map_err(|e| e.to_string())?;
++    // WINDOWS PROBE: BOTLISH_PROBE_KEEP_LINK=DIR keeps the link inputs in DIR
++    // and stops before rustc (Wine cannot wait for a Linux rustc).
++    if let Some(keep) = std::env::var_os("BOTLISH_PROBE_KEEP_LINK") {
++        let keep = PathBuf::from(keep);
++        std::fs::copy(&object_path, keep.join("program.obj")).map_err(|e| e.to_string())?;
++        std::fs::copy(&source_path, keep.join("startup.rs")).map_err(|e| e.to_string())?;
++        std::fs::write(keep.join("link-plan.txt"), link_plan_args(program, link_dirs).join("\n"))
++            .map_err(|e| e.to_string())?;
++        return Ok(());
++    }
      let output = Command::new(std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into()))
-@@ -319,6 +321,12 @@
+         .arg("--edition=2024")
+         .arg("--crate-name=botlish_program")
+@@ -319,6 +331,12 @@
          .arg("-C")
          .arg(format!("link-arg={}", object_path.display()))
          .args(link_plan_args(program, link_dirs))
@@ -50,7 +62,7 @@ diff -ruN clean-a/native/src/codegen/aot.rs clean-b/native/src/codegen/aot.rs
          .arg(&source_path)
          .arg("-o")
          .arg(&executable)
-@@ -349,10 +357,18 @@
+@@ -349,10 +367,18 @@
      Gnu,
      /// Apple's ld through Apple clang: macOS.
      Apple,
@@ -70,7 +82,7 @@ diff -ruN clean-a/native/src/codegen/aot.rs clean-b/native/src/codegen/aot.rs
  
  /// rustc's arguments passing PROGRAM's link plan to this host's system
  /// linker (`link_plan_args_for`).
-@@ -400,6 +416,17 @@
+@@ -400,6 +426,17 @@
          return args;
      }
      args.extend(["-C".to_string(), "default-linker-libraries=yes".to_string()]);
@@ -88,7 +100,7 @@ diff -ruN clean-a/native/src/codegen/aot.rs clean-b/native/src/codegen/aot.rs
      for dir in link_dirs {
          args.extend(["-C".to_string(), format!("link-arg=-L{dir}")]);
      }
-@@ -451,6 +478,7 @@
+@@ -451,6 +488,7 @@
      let work = WorkDir::beside(destination)?;
      let executable = work.0.join("executable");
      std::fs::write(&executable, &bytes).map_err(|e| e.to_string())?;
@@ -98,7 +110,7 @@ diff -ruN clean-a/native/src/codegen/aot.rs clean-b/native/src/codegen/aot.rs
          std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o755)).map_err(|e| e.to_string())?;
 diff -ruN clean-a/native/src/codegen/clif.rs clean-b/native/src/codegen/clif.rs
 --- a/native/src/codegen/clif.rs	2026-10-20 15:50:08.798978081 +0000
-+++ b/native/src/codegen/clif.rs	2026-10-20 16:38:28.748489186 +0000
++++ b/native/src/codegen/clif.rs	2026-10-20 16:47:42.832861618 +0000
 @@ -646,7 +646,12 @@
          // original, narrower RootStorage::NativeFrame rule (roots::plan's
          // own doc). Must agree with roots::report's
@@ -115,7 +127,7 @@ diff -ruN clean-a/native/src/codegen/clif.rs clean-b/native/src/codegen/clif.rs
          let root_init_opt = std::env::var("BOTLISH_NATIVE_ROOT_INIT_OPT").ok().as_deref() != Some("0");
 diff -ruN clean-a/native/src/codegen/mod.rs clean-b/native/src/codegen/mod.rs
 --- a/native/src/codegen/mod.rs	2026-10-20 15:50:08.799054199 +0000
-+++ b/native/src/codegen/mod.rs	2026-10-20 16:38:28.745826293 +0000
++++ b/native/src/codegen/mod.rs	2026-10-20 16:47:42.831165198 +0000
 @@ -155,7 +155,10 @@
      set(&mut flags, "is_pic", if pic { "true" } else { "false" })?;
      // Probe only large frames (default spacing: one 4 KiB page). Without
@@ -130,7 +142,7 @@ diff -ruN clean-a/native/src/codegen/mod.rs clean-b/native/src/codegen/mod.rs
      }
 diff -ruN clean-a/native/src/codegen/roots.rs clean-b/native/src/codegen/roots.rs
 --- a/native/src/codegen/roots.rs	2026-10-20 15:50:08.799079553 +0000
-+++ b/native/src/codegen/roots.rs	2026-10-20 16:38:28.747769096 +0000
++++ b/native/src/codegen/roots.rs	2026-10-20 16:47:42.832326780 +0000
 @@ -792,7 +792,10 @@
      // nested native frames, so a Botlish call no longer disqualifies it --
      // this milestone's own goal). On the fallback path, unchanged: only a
@@ -145,7 +157,7 @@ diff -ruN clean-a/native/src/codegen/roots.rs clean-b/native/src/codegen/roots.r
          RootStorage::RuntimeStack
 diff -ruN clean-a/native/src/main.rs clean-b/native/src/main.rs
 --- a/native/src/main.rs	2026-10-20 15:50:08.799161943 +0000
-+++ b/native/src/main.rs	2026-10-20 16:38:28.747435686 +0000
++++ b/native/src/main.rs	2026-10-20 16:47:42.832125722 +0000
 @@ -423,7 +423,7 @@
          }
      }
@@ -185,7 +197,7 @@ diff -ruN clean-a/native/src/main.rs clean-b/native/src/main.rs
      if command == "bench" {
 diff -ruN clean-a/native/src/runtime/framewalk.rs clean-b/native/src/runtime/framewalk.rs
 --- a/native/src/runtime/framewalk.rs	2026-10-20 15:50:08.799774891 +0000
-+++ b/native/src/runtime/framewalk.rs	2026-10-20 16:38:28.749487413 +0000
++++ b/native/src/runtime/framewalk.rs	2026-10-20 16:47:42.833694564 +0000
 @@ -184,6 +184,13 @@
  /// frame record holds a zero frame pointer).
  #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]

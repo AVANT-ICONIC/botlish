@@ -28,11 +28,11 @@
 # program on interp, compile and cranelift; two allocation-heavy programs on
 # cranelift, also under BOTLISH_NATIVE_GC_STRESS=1 (on Windows also with
 # the probe patch's root plans: BOTLISH_PROBE_SHADOW=1, with
-# BOTLISH_PROBE_NO_WALK=1, and BOTLISH_PROBE_ALL_SHADOW=1); a program object and a standalone executable
-# of the pure program (on Windows also with the C runtime linked
-# statically, BOTLISH_PROBE_CRT_STATIC=1); the C ABI program
-# (programs/ffi-probe.bot) through every -lib, JIT-run and as an
-# executable; the Win32 program (programs/win32.bot) on Windows.
+# BOTLISH_PROBE_NO_WALK=1, and BOTLISH_PROBE_ALL_SHADOW=1); a program
+# object and a standalone executable of the pure program (on Windows also
+# with the C runtime linked statically, BOTLISH_PROBE_CRT_STATIC=1); the C
+# ABI program (programs/ffi-probe.bot) through every -lib, JIT-run and as
+# an executable; the Win32 program (programs/win32.bot) on Windows.
 
 set here [file dirname [file normalize [info script]]]
 set root [file dirname [file dirname [file dirname $here]]]
