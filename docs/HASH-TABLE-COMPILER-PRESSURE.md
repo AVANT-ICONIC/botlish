@@ -1196,7 +1196,9 @@ merged prototypes had made:
 * a pop's shorter length is not known to bound the longer earlier one: a
   size form states equalities, not order.
 
-None of these was proven on the baseline either. The induction fix
+The old keying proved them unsoundly in general; soundness does not
+require losing them, but keeping them needs a finer analysis than the
+fix's. The induction fix
 recovers every sound fact the verifiers tried, except bounds over
 `hash(s)` and relational bounds. The `mod` lowering still trusts Ranges
 without a runtime check. That is by design, so an unsound Range anywhere
