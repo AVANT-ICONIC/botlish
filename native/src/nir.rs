@@ -1357,6 +1357,30 @@ impl Function {
         }
     }
 
+    /// Whether this function contains a Botlish call (`Call`/`CallEnv`/
+    /// `CallMulti`/`CallEnvMulti`/`CallValue` -- a dynamically dispatched
+    /// call is folded into `CallValue`). `Tail`/`TailEnv` (a self back-edge,
+    /// codegen::clif's own doc) is deliberately not one of these: it is a
+    /// CFG jump to this same frame's entry block, never a machine `call`, so
+    /// it neither grows the native call stack nor creates a second frame.
+    ///
+    /// It decides codegen::roots's fallback RuntimeStack storage and, where
+    /// the shadow stack bounds recursion (`runtime::native_stack::
+    /// depth_checked`), the depth reservation -- and so whether the function
+    /// can fail (`summarize_call_effects`).
+    pub fn has_botlish_call(&self) -> bool {
+        self.body.iter().any(|inst| {
+            matches!(
+                inst,
+                Inst::Call { .. }
+                    | Inst::CallEnv { .. }
+                    | Inst::CallMulti { .. }
+                    | Inst::CallEnvMulti { .. }
+                    | Inst::CallValue { .. }
+            )
+        })
+    }
+
     /// Whether this function uses the packed-ASCII ABI anywhere.
     pub fn has_ascii_abi(&self) -> bool {
         self.ascii_result || self.ascii_params.iter().any(|b| *b)
@@ -1843,7 +1867,13 @@ pub fn parse(text: &str) -> Result<Program, NirError> {
 fn summarize_call_effects(program: &mut Program, enabled: bool) {
     let n = program.functions.len();
     let mut local = vec![(false, false); n];
+    // Where the shadow stack's depth check bounds recursion (Windows), a
+    // function making a Botlish call fails with NATIVE LIMIT STACK from its
+    // own prologue (codegen::roots's `depth_reservation`), so its callers
+    // must check: elsewhere the stack guard ends an exhausted run instead.
+    let depth_checked = crate::runtime::native_stack::depth_checked(crate::runtime::framewalk::NATIVE_FRAME_ROOTS);
     for (i, f) in program.functions.iter().enumerate() {
+        local[i].0 = depth_checked && f.has_botlish_call();
         for inst in &f.body {
             match inst {
                 Inst::Guard { .. } | Inst::GuardBool { .. }
@@ -3255,7 +3285,40 @@ mod effect_tests {
         );
         let p = parse(text).unwrap();
         assert!(p.functions.iter().all(|f| f.may_gc));
-        assert!(p.functions.iter().all(|f| !f.may_error));
+        // Every function here makes a Botlish call, so it fails exactly
+        // where the shadow stack's depth check bounds recursion.
+        let depth_checked = crate::runtime::native_stack::depth_checked(crate::runtime::framewalk::NATIVE_FRAME_ROOTS);
+        assert!(p.functions.iter().all(|f| f.may_error == depth_checked));
+    }
+
+    /// WINDOWS-X86-64-MILESTONE-1.md, section 3: where the depth check
+    /// bounds recursion, a function that cannot otherwise fail still fails
+    /// with NATIVE LIMIT STACK from its prologue once it makes a Botlish
+    /// call, so its raw result carries a status word and its callers check
+    /// it (a caller that did not added the error sentinel as an Int). A
+    /// function without one has no reservation and stays infallible.
+    #[test]
+    fn a_botlish_call_fails_exactly_where_depth_is_checked() {
+        let text = concat!(
+            "nir 1 call-effects=1\n\n",
+            "func 0 \"<program>\" params=0 env=0 regs=2 pnames=\"\" captures=0 rawregs=\"\"\n",
+            "    %0 = int 3\n    %1 = call 1 %0\n    ret %1\nend\n",
+            "func 1 \"down\" params=1 env=0 regs=4 pnames=\"n\" captures=0 rawregs=\"\"\n",
+            "    %1 = int 1\n    %2 = call 2 %0\n    %3 = call 1 %2\n    ret %3\nend\n",
+            "func 2 \"leaf\" params=1 env=0 regs=1 pnames=\"n\" captures=0 rawregs=\"\"\n",
+            "    ret %0\nend\n"
+        );
+        let p = parse(text).unwrap();
+        let depth_checked = crate::runtime::native_stack::depth_checked(crate::runtime::framewalk::NATIVE_FRAME_ROOTS);
+        let effects: Vec<bool> = p.functions.iter().map(|f| f.may_error).collect();
+        assert_eq!(effects, vec![depth_checked, depth_checked, false]);
+        let checked: Vec<bool> = p.functions[1]
+            .body
+            .iter()
+            .filter_map(|inst| if let Inst::Call { may_error, .. } = inst { Some(*may_error) } else { None })
+            .collect();
+        assert_eq!(checked, vec![false, depth_checked]);
+        assert_eq!(depth_checked, cfg!(any(target_os = "windows", feature = "fallback-roots")));
     }
 
     #[test]

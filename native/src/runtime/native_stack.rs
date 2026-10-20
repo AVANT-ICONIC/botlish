@@ -43,6 +43,16 @@ pub const fn native_stack_overflow_supported() -> bool {
     cfg!(any(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")), all(target_os = "macos", target_arch = "aarch64")))
 }
 
+/// Whether the shadow stack's depth check bounds Botlish recursion
+/// (codegen::roots's `depth_reservation`) for code whose roots are in
+/// native frames exactly when NATIVE_FRAME_ROOTS says so: unless they are
+/// and the stack guard reports an exhausted stack, every function that
+/// makes a Botlish call checks its depth in its prologue and fails with
+/// NATIVE LIMIT STACK, an error its callers see (nir's call effects).
+pub const fn depth_checked(native_frame_roots: bool) -> bool {
+    !(native_frame_roots && native_stack_overflow_supported())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

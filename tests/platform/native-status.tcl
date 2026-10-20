@@ -66,6 +66,14 @@ fib(20)
     gc-frame-walk [list driver build400.nir {BOTLISH_NATIVE_GC_STRESS 1}] \
     stack-overflow [list driver stack_overflow.ir {BOTLISH_NATIVE_STACK_BYTES 4194304}] \
     stack-depth-limit [list driver stack_overflow.ir {}] \
+    recursion-limit [list program {fn down(n: int) -> int:
+    if n == 0:
+        return 0
+
+    1 + down(n - 1)
+
+down(100000000)
+} {}] \
     coroutine-stack-overflow [list program {struct Event:
     value: int
 
@@ -176,6 +184,10 @@ f(1)
 # check fires kills the driver (Rust's own stack overflow report, recorded
 # as the probe's NATIVE BUG), while the default 1 GiB stack outlasts the
 # depth check, whose NATIVE LIMIT STACK is the stack-depth-limit probe's.
+# The recursion-limit probe is the same limit reached by a compiled program
+# whose functions cannot otherwise fail: the depth check's failure is a
+# call's error there (nir's call effects), and until this milestone a
+# caller that did not check for it crashed in rt_int_add.
 #
 # Since milestone 2 (MACOS-AARCH64-MILESTONE-2.md) a program importing a
 # Linux namespace does not compile for macos-aarch64 at all
@@ -186,6 +198,7 @@ set linux [dict create \
     jit {value 6765} \
     gc-frame-walk [list value [list str [string repeat xy 400]]] \
     stack-overflow {error {NATIVE LIMIT STACK} {native stack exhausted: too many nested calls}} \
+    recursion-limit {error {NATIVE LIMIT STACK} {native stack exhausted: too many nested calls}} \
     coroutine-stack-overflow {error {NATIVE LIMIT STACK} {native stack exhausted: too many nested calls}} \
     coroutine {value {[10, 7]}} \
     linux-syscall {value 0} \
@@ -206,6 +219,7 @@ set expected [dict create \
         jit {value 6765} \
         gc-frame-walk [list value [list str [string repeat xy 400]]] \
         stack-overflow {error {NATIVE LIMIT STACK} {native stack exhausted: too many nested calls}} \
+        recursion-limit {error {NATIVE LIMIT STACK} {native stack exhausted: too many nested calls}} \
         coroutine-stack-overflow {error {NATIVE LIMIT STACK} {native stack exhausted: too many nested calls}} \
         coroutine {value {[10, 7]}} \
         linux-syscall {error {SURFACE MODULE UNSUPPORTED-PLATFORM} {*namespace "linux" belongs to the Linux platform*unavailable for target macos-aarch64 (macOS on aarch64)*}} \
@@ -220,6 +234,7 @@ set expected [dict create \
         gc-frame-walk [list value [list str [string repeat xy 400]]] \
         stack-overflow {error {NATIVE BUG} {native backend failed:*has overflowed its stack*}} \
         stack-depth-limit {error {NATIVE LIMIT STACK} {native stack exhausted: too many nested calls}} \
+        recursion-limit {error {NATIVE LIMIT STACK} {native stack exhausted: too many nested calls}} \
         coroutine-stack-overflow {error {NATIVE UNSUPPORTED value} {native coroutines need stack switching, implemented for Linux x86-64 and AArch64 and macOS AArch64 only*}} \
         coroutine {error {NATIVE UNSUPPORTED value} {native coroutines need stack switching, implemented for Linux x86-64 and AArch64 and macOS AArch64 only*}} \
         linux-syscall {error {SURFACE MODULE UNSUPPORTED-PLATFORM} {*namespace "linux" belongs to the Linux platform*unavailable for target windows-x86_64 (Windows on x86_64)*}} \
