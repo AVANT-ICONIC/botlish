@@ -14,6 +14,10 @@
 #      add       bcf_add(i, 1): two int arguments, an int result
 #      big       bcf_echo_ulonglong(2^64 - 1): a 64-bit argument and result
 #                beyond the small Int range (rt_ffi_int_word, rt_ffi_box_u64)
+#      stack 12  bcf_stack_tail(...): twelve arguments, the last four on the
+#                stack on AArch64 (six on x86-64), a long long result
+#      stack 20  bcf_pick(19, ...): twenty narrow and wide arguments, twelve
+#                on the stack on AArch64 (fourteen on x86-64)
 #      read S    bcf_sum(data, 0) of an S-byte Bytes: one read exposure
 #                (bytesaddr, keepalive), C touching no byte -- expected flat
 #                in S (the storage is never copied)
@@ -82,6 +86,8 @@ extern c library "botlish_cffi_fixture"
 extern c fn count named "bcf_count"() -> ffi::c::ULong
 extern c fn add named "bcf_add"(a: ffi::c::Int, b: ffi::c::Int) -> ffi::c::Int
 extern c fn echo_ulonglong named "bcf_echo_ulonglong"(x: ffi::c::ULongLong) -> ffi::c::ULongLong
+extern c fn stack_tail named "bcf_stack_tail"(a: ffi::c::Long, b: ffi::c::Long, c: ffi::c::Long, d: ffi::c::Long, e: ffi::c::Long, f: ffi::c::Long, g: ffi::c::Long, h: ffi::c::Long, i: ffi::c::Long, j: ffi::c::Int, k: ffi::c::Short, l: ffi::c::SChar) -> ffi::c::LongLong
+extern c fn pick named "bcf_pick"(which: ffi::c::Int, a1: ffi::c::SChar, a2: ffi::c::UChar, a3: ffi::c::Short, a4: ffi::c::UShort, a5: ffi::c::Int, a6: ffi::c::UInt, a7: ffi::c::Char, s8: ffi::c::SChar, s9: ffi::c::UChar, s10: ffi::c::Short, s11: ffi::c::SChar, s12: ffi::c::UShort, s13: ffi::c::Int, s14: ffi::c::SChar, s15: ffi::c::Long, s16: ffi::c::UChar, s17: ffi::c::Short, s18: ffi::c::UInt, s19: ffi::c::SChar) -> ffi::c::LongLong
 extern c fn sum named "bcf_sum"(data: ffi::c::Ptr[ffi::c::UChar] read noescape, count: ffi::c::ULong) -> ffi::c::ULong
 extern c fn fill named "bcf_fill"(out: ffi::c::Ptr[ffi::c::UChar] write noescape, count: ffi::c::ULong, seed: ffi::c::UChar) -> unit
 }
@@ -136,6 +142,8 @@ try {
     puts [format "  %-14s %s" count [perCall {x = 0} {bcf::count()} 0]]
     puts [format "  %-14s %s" add [perCall {x = 0} {bcf::add(i, 1)} 0]]
     puts [format "  %-14s %s" big [perCall {x = 0} {bcf::echo_ulonglong(18446744073709551615)} 0]]
+    puts [format "  %-14s %s" "stack 12" [perCall {x = 0} {bcf::stack_tail(1, 2, 3, 4, 5, 6, 7, 8, 9, -10, -11, -12)} 0]]
+    puts [format "  %-14s %s" "stack 20" [perCall {x = 0} {bcf::pick(19, -2, 253, -1234, 65244, -123456789, 4275878552, 1, -4, 247, -30000, -128, 48879, -2000000000, 127, -81985529216486895, 128, -2, 2147483649, -1)} 0]]
     foreach s $sizes {
         puts [format "  %-14s %s" "read $s" [perCall "data = abi::bytes::from_list(pattern($s))" {bcf::sum(data, 0)} 0]]
     }

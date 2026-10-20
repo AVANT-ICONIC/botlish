@@ -25,6 +25,12 @@
 #               checkout's or toolchain's; and the platform linker's command
 #               line as rustc runs it (`rustc --print link-args`, through a
 #               RUSTC wrapper: printed with -verbose 1)
+#   C calls     a static C library compiled here, a program calling it and
+#               the system C library linked by the platform linker's link
+#               plan (its command line), run standalone; labs imported from
+#               the system C library (`nm`); the linker's words for a
+#               missing library and an undefined symbol (MACOS-AARCH64-
+#               MILESTONE-6.md)
 #   standalone  the executable moved out of its build directory, its source
 #               deleted, run with an empty environment from another
 #               directory: its value, also under BOTLISH_NATIVE_GC_STRESS=1;
@@ -288,6 +294,105 @@ proc standalone {name text environment} {
     return [run env -i PATH=/nonexistent {*}$environment /bin/sh -c {cd "$1" && exec "$2"} sh $cwdDir $path]
 }
 
+# {FAILED MESSAGE COMMAND NAMED} of linking HIR into PATH while rustc prints
+# the platform linker's command line (`--print link-args`, through a wrapper
+# given as RUSTC: the link itself is native::executable's): whether the
+# link failed and its message, the command, and the command with this run's
+# temporary paths named (BUILD, RELEASE, WORK, SYSROOT, LINKDIR).
+proc linkCommand {hir path} {
+    global work
+    set wrapper [file join $work rustc-print-link-args]
+    set printed [file join $work link-args.txt]
+    file delete -force $printed
+    writeText $wrapper "#!/bin/sh\nexec \"\$REAL_RUSTC\" --print link-args \"\$@\" > \"$printed\"\n"
+    file attributes $wrapper -permissions 0755
+    set saved [array get ::env RUSTC]
+    set ::env(REAL_RUSTC) [expr {$saved ne {} ? [lindex $saved 1] : "rustc"}]
+    set ::env(RUSTC) $wrapper
+    try {
+        set relinked [catch {native::executable $hir $path} message]
+    } finally {
+        unset ::env(RUSTC) ::env(REAL_RUSTC)
+        if {$saved ne {}} { set ::env(RUSTC) [lindex $saved 1] }
+    }
+    set command [expr {[file exists $printed] ? [string trim [readText $printed]] : ""}]
+    set release [file dirname [native::binary]]
+    # rustc prints the linker's environment first: on macOS `env -u NAME
+    # ...`, then NAME="VALUE" assignments.
+    regsub {^env(\s+-u\s+\S+)*\s+} $command {} command
+    regsub {^(\w+="[^"]*"\s+)*} $command {} command
+    set sysroot [string trim [lindex [run rustc --print sysroot] 1]]
+    # A -L directory reaches the linker normalized (native::withLinkDirs):
+    # on macOS the temporary directory's /var is /private/var.
+    set named [string map [list [file join $work "build dir"] BUILD $release RELEASE [file normalize $work] WORK $work WORK] $command]
+    if {$sysroot ne ""} { set named [string map [list $sysroot SYSROOT] $named] }
+    regsub -all {"[^"]*/\.botlish-aot-[^/"]*/} $named {"LINKDIR/} named
+    return [list $relinked $message $command $named]
+}
+
+# C calls (MACOS-AARCH64-MILESTONE-6.md): a static C library compiled here
+# by the host's C compiler, its symbol as the object format spells it; a
+# program calling it (narrow signed and unsigned arguments, a `named` link
+# symbol) and the system C library's labs, linked with the platform
+# linker's link plan -- its command line printed -- and run standalone; the
+# system function imported from the system's C library; and the platform
+# linker's own words for a missing library and an undefined symbol.
+proc cCalls {} {
+    global work runDir prefix macos
+    set lib [file join $work "c lib"]
+    file mkdir $lib
+    writeText [file join $lib facts.c] "long bcfx_widen(signed char c, unsigned short s, long l) { return c * 100000L + s + l; }\n"
+    lassign [run cc -c -O2 -fPIC [file join $lib facts.c] -o [file join $lib facts.o]] status stdout stderr
+    if {$status eq "0"} {
+        lassign [run ar rcs [file join $lib libbotlish_aot_facts.a] [file join $lib facts.o]] status stdout stderr
+    }
+    set symbols [tool nm -g [file join $lib libbotlish_aot_facts.a]]
+    set header [expr {[file exists [file join $lib facts.o]] ? [binaryHeader [file join $lib facts.o]] : ""}]
+    if {![check c-library [expr {$status eq "0" && $header eq [hostBinaryHeader object] && [regexp -line "T ${prefix}bcfx_widen\$" $symbols]}] \
+            "libbotlish_aot_facts.a: $header, defines ${prefix}bcfx_widen: [regexp -line "T ${prefix}bcfx_widen\$" $symbols]" "$stderr$symbols"]} {
+        return
+    }
+    set decls "import ffi::c\n\nextern c library \"botlish_aot_facts\"\n\nextern c fn labs(x: ffi::c::Long) -> ffi::c::Long\nextern c fn widen named \"bcfx_widen\"(c: ffi::c::SChar, s: ffi::c::UShort, l: ffi::c::Long) -> ffi::c::Long\n"
+    set text "$decls\n\[labs(-42), widen(-1, 65535, 7)\]\n"
+    set started [clock microseconds]
+    if {[catch {native::withLinkDirs [list $lib] {standalone c-call $text {}}} outcome options]} {
+        check c-call-run 0 "the link failed: [lrange [dict get $options -errorcode] 0 1]" $outcome
+        return
+    }
+    set ms [expr {([clock microseconds] - $started) / 1000}]
+    check c-call-run [expr {$outcome eq [list 0 "\[42, -34458\]\n" ""]}] "[shown $outcome] ($ms ms, link included)"
+
+    set exe [file join $runDir c-call]
+    if {$macos} {
+        set imports [tool nm -m $exe]
+        set from [lindex [regexp -inline -line "\\(undefined\\) external _labs \\(from (\\S+)\\)" $imports] 1]
+        check c-call-import [expr {$from eq "libSystem"}] "_labs imported from [expr {$from eq "" ? "nothing" : $from}]" $::toolError
+    } else {
+        set imports [tool nm -D $exe]
+        set from [lindex [regexp -inline -line {^\s+U labs@(\S+)$} $imports] 1]
+        check c-call-import [string match GLIBC_* $from] "labs imported, version [expr {$from eq "" ? "none" : $from}]" $::toolError
+    }
+
+    lassign [native::withLinkDirs [list $lib] {linkCommand [surface::compile $text c-call.bot -warnings off] [file join $work c-relinked]}] failed message command named
+    set group [expr {[string first --start-group $command] >= 0}]
+    set nodefault [expr {[string first -nodefaultlibs $command] >= 0}]
+    check c-link-command [expr {!$failed && [string first -lbotlish_aot_facts $command] >= 0 && [string first "-L[file normalize $lib]" $command] >= 0
+            && $group == !$macos && !$nodefault}] \
+        "-lbotlish_aot_facts and -L its directory passed; GNU archive group: $group; -nodefaultlibs: $nodefault" \
+        [expr {$failed ? $message : $named}]
+
+    set missing [surface::compile "import ffi::c\n\nextern c library \"botlish_aot_facts_missing\"\n\n1 + 1\n" missing.bot -warnings off]
+    set failed [catch {native::executable $missing [file join $work missing]} message options]
+    check c-link-missing-library [expr {$failed && [lrange [dict get $options -errorcode] 0 1] eq {NATIVE LINK}
+            && [regexp {botlish_aot_facts_missing} [join [lrange [split $message \n] 1 end] \n]]}] \
+        "[expr {$failed ? [lrange [dict get $options -errorcode] 0 1] : "linked"}]: the linker names the library" $message
+    set undefined [surface::compile "$decls\nextern c fn nope named \"botlish_aot_facts_nope\"(x: ffi::c::Int) -> ffi::c::Int\n\nnope(1)\n" undefined.bot -warnings off]
+    set failed [native::withLinkDirs [list $lib] {catch {native::executable $undefined [file join $work undefined]} message options}]
+    check c-link-undefined-symbol [expr {$failed && [lrange [dict get $options -errorcode] 0 1] eq {NATIVE LINK}
+            && [regexp {botlish_aot_facts_nope} [join [lrange [split $message \n] 1 end] \n]]}] \
+        "[expr {$failed ? [lrange [dict get $options -errorcode] 0 1] : "linked"}]: the linker names the symbol" $message
+}
+
 proc checks {} {
     global work facts prefix macos root program programValue coroutineProgram downProgram
     global coroutineOverflowProgram errorProgram overflowLine runDir cwdDir
@@ -432,29 +537,7 @@ proc checks {} {
     # (`--print link-args`, through a wrapper given as RUSTC: the link
     # itself is native::executable's): the linker program and its options,
     # with this run's temporary paths named.
-    set wrapper [file join $work rustc-print-link-args]
-    set printed [file join $work link-args.txt]
-    writeText $wrapper "#!/bin/sh\nexec \"\$REAL_RUSTC\" --print link-args \"\$@\" > \"$printed\"\n"
-    file attributes $wrapper -permissions 0755
-    set saved [array get ::env RUSTC]
-    set ::env(REAL_RUSTC) [expr {$saved ne {} ? [lindex $saved 1] : "rustc"}]
-    set ::env(RUSTC) $wrapper
-    try {
-        set relinked [catch {native::executable $hir [file join $buildDir relinked]} message]
-    } finally {
-        unset ::env(RUSTC) ::env(REAL_RUSTC)
-        if {$saved ne {}} { set ::env(RUSTC) [lindex $saved 1] }
-    }
-    set command [expr {[file exists $printed] ? [string trim [readText $printed]] : ""}]
-    set release [file dirname [native::binary]]
-    # rustc prints the linker's environment first: on macOS `env -u NAME
-    # ...`, then NAME="VALUE" assignments.
-    regsub {^env(\s+-u\s+\S+)*\s+} $command {} command
-    regsub {^(\w+="[^"]*"\s+)*} $command {} command
-    set sysroot [string trim [lindex [run rustc --print sysroot] 1]]
-    set named [string map [list $buildDir BUILD $release RELEASE $work WORK] $command]
-    if {$sysroot ne ""} { set named [string map [list $sysroot SYSROOT] $named] }
-    regsub -all {"[^"]*/\.botlish-aot-[^/"]*/} $named {"LINKDIR/} named
+    lassign [linkCommand $hir [file join $buildDir relinked]] relinked message command named
     set linker [lindex [regexp -inline {^"?([^" ]+)} $named] 1]
     check executable-link-command [expr {!$relinked && $command ne "" && [string first program.o $command] >= 0
         && [string first libbotlish_native.rlib $command] >= 0}] \
@@ -491,6 +574,8 @@ proc checks {} {
     check standalone-overflow-default [expr {$outcome eq [list 1 "" "$overflowLine\n"]}] "1 GiB stack: [shown $outcome]"
     set outcome [standalone co-overflow $coroutineOverflowProgram {}]
     check standalone-co-overflow [expr {$outcome eq [list 1 "" "$overflowLine\n"]}] [shown $outcome]
+
+    cCalls
 
     # ---- Observations, not limits: the same program's best run in the JIT
     # (native::measure) and inside its executable (the driver protocol's

@@ -35,36 +35,50 @@
 <<<<
     all(target_os = "macos", target_arch = "aarch64")
 ));
+
+/// Whether this host links a program that calls C
 ====
     all(target_os = "macos", target_arch = "aarch64", target_env = "gnu")
 ));
+
+/// Whether this host links a program that calls C
 >>>>
 
 @@ linux-aot-rejected Linux left out of the hosts that link executables
 %% linux-x86_64 linux-aarch64
 ## native/src/codegen/aot.rs
 <<<<
+const EXECUTABLES: bool = cfg!(any(
     all(target_os = "linux", target_env = "gnu", any(target_arch = "x86_64", target_arch = "aarch64")),
 ====
+const EXECUTABLES: bool = cfg!(any(
     all(target_os = "linux", target_env = "musl", any(target_arch = "x86_64", target_arch = "aarch64")),
 >>>>
 
-@@ c-calls-on-macos C calls linked on macOS before they are validated there
+@@ c-calls-refused-on-macos C calls refused on macOS, where they link since milestone 6 (MACOS-AARCH64-MILESTONE-6.md)
 %% macos-aarch64
 ## native/src/codegen/aot.rs
 <<<<
-const C_CALLS: bool = cfg!(target_os = "linux");
+    all(target_os = "macos", target_arch = "aarch64")
+));
+
+pub fn emit_executable
 ====
-const C_CALLS: bool = cfg!(any(target_os = "linux", target_os = "macos"));
+    all(target_os = "macos", target_arch = "aarch64", target_env = "gnu")
+));
+
+pub fn emit_executable
 >>>>
 
 @@ c-calls-refused-on-linux C calls refused on Linux, where they link
 %% linux-x86_64 linux-aarch64
 ## native/src/codegen/aot.rs
 <<<<
-const C_CALLS: bool = cfg!(target_os = "linux");
+const C_CALLS: bool = cfg!(any(
+    all(target_os = "linux", target_env = "gnu", any(target_arch = "x86_64", target_arch = "aarch64")),
 ====
-const C_CALLS: bool = cfg!(target_os = "macos");
+const C_CALLS: bool = cfg!(any(
+    all(target_os = "linux", target_env = "musl", any(target_arch = "x86_64", target_arch = "aarch64")),
 >>>>
 
 # ---------------------------------------------------------------------------

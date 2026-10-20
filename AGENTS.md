@@ -260,8 +260,10 @@ the test suite, still install the `.deb`s.
   executables are Mach-O, linked by rustc through Apple's ld
   (MACOS-AARCH64-MILESTONE-5.md): never extend the stub, or write a linker,
   loader or signing step, for Mach-O. A program that calls C is linked on
-  Linux only (`codegen/aot.rs`'s `C_CALLS`) until macOS C calls are
-  validated. If you change which hosts link (`EXECUTABLES`, `C_CALLS`), the
+  the same hosts (`codegen/aot.rs`'s `C_CALLS`), with the platform linker's
+  own link plan (`LinkerFlavor`: GNU ld's archive group on Linux, never on
+  macOS, whose ld rejects it; MACOS-AARCH64-MILESTONE-6.md). If you change
+  which hosts link (`EXECUTABLES`, `C_CALLS`), the
   rustc link, the generated startup or `runtime::aot::run`, also run
   `tests/native-executable.test`, `tests/platform/aot-facts.tcl` and
   `audit/native-aot/tools/mutate.tcl` (every mutant in its `mutants.txt`
@@ -1001,7 +1003,15 @@ C-BINDGEN-LAYOUTS.md) have equal rows and are two targets. Keep it so:
 * Foreign C signatures use `codegen::target::c_call_conv` (the triple's C
   convention: AppleAarch64 on Apple AArch64); Botlish-internal and runtime
   helper calls the ISA's default. Never hard-code a convention, a register
-  or a stack placement: Cranelift owns them.
+  or a stack placement: Cranelift owns them. Botlish decides only what it
+  asks of them: a narrow parameter's extension attribute, which Apple's
+  stack-passed parameters do not carry (`c_extended_parameters`:
+  cranelift-codegen 0.135.2 stores an extended stack argument at register
+  width, past its slot; fixed in 0.136.0, where
+  `ffi_apple_extended_stack_argument_defect_still_present` fails and the
+  exception goes). The registers are counted per kind, as AAPCS64 does:
+  the eight that keep it are integer-register parameters, never the first
+  eight positions (doubles take v0-v7; `cf-abi-doubles-before-integers`).
 * A test that compiles a Linux program (one importing `linux::*`) compiles
   it for `linuxTarget` (tests/helpers.tcl: the host's own on Linux) and runs
   it on `backendsFor` its HIR's target; the golden runner, the warning
@@ -1735,6 +1745,16 @@ so:
   declaration designates nothing.
 * The registry is a declaration registry (`hir::foreign::capture`/`Install`):
   compilation isolation and HIR interchange carry it.
+* C calls run on Linux x86-64 and AArch64 and on macOS AArch64
+  (MACOS-AARCH64-MILESTONE-6.md). The link plan is the platform linker's
+  (codegen/aot.rs's `LinkerFlavor`): GNU ld's archive group on Linux,
+  byte for byte, the bare `-L`/`-l` list on macOS, whose ld rejects the
+  group; never a GNU-only flag in Apple's plan, an rpath, an SDK path or a
+  decorated (`_`) symbol of ours. The target's C ABI is checked against
+  real callees and the C compiler's own calls (c-ffi.test's `cf-abi-*`,
+  `bcf_capture`): a change to a foreign signature's types or extension
+  attributes needs them on macOS (the acceptance tier) and Linux AArch64
+  (tests-arm64.yml), not only here.
 
 If you change any of that (C-FFI.md, "What to run when changing this", lists
 the files), run `tests/c-ffi.test` (also under `BOTLISH_NATIVE_GC_STRESS=1`),

@@ -1113,8 +1113,11 @@ NATIVE LINK:
     program that calls nothing from it.
   * the stub linker (BOTLISH_NATIVE_LINKER=stub, the single executable's)
     refuses any program that calls C or declares a library.
-  * on macOS, "... C calls are linked on Linux glibc only": a program that
-    calls C is not linked there yet (an ordinary program is).
+  The linker's own lines are GNU ld's or lld's on Linux ("undefined
+  reference to", "cannot find -lNAME", "unable to find library"), Apple
+  ld's on macOS ("Undefined symbols for architecture arm64:" and a
+  `"_SYMBOL", referenced from:` line per symbol, "ld: library 'NAME' not
+  found", "found architecture 'x86_64', required architecture 'arm64'").
 NATIVE AOT:
   * "executable link failed (STATUS): ..." with rustc's output, the system
     linker's own lines among it;
@@ -1125,9 +1128,10 @@ NATIVE AOT:
     other host).
 
 == WHAT TO DO
-For C: install the library, pass its directory with -L DIR, and check
-each `named` symbol against the library. On macOS no backend calls C yet
-(the Tcl backends never do): run such a program on Linux. For NATIVE AOT:
+For C: install the library (for the host's architecture), pass its
+directory with -L DIR, and check each `named` symbol against the library:
+a symbol is its C name, never Mach-O's `_`-prefixed spelling, which the
+toolchain adds. The Tcl backends never call C. For NATIVE AOT:
 the default (rustc) linker needs rustc and a built native backend in the
 checkout, and on macOS the Xcode command line tools (the system linker);
 the stub linker needs neither but is Linux x86-64 only and links no C.

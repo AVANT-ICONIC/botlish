@@ -966,7 +966,7 @@ test ne-gc-stress {under BOTLISH_NATIVE_GC_STRESS=1 (a collection at every alloc
 # exposed to C for one noescape call: the caller-constructed native record.
 
 set ::neFixtureDir ""
-if {[testConstraint cCompiler] && [testConstraint nativeLinux] && [testConstraint rustcLinker]} {
+if {[testConstraint cCompiler] && [testConstraint nativeCCalls] && [testConstraint nativeBuilt] && [testConstraint rustcLinker]} {
     set ::neFixtureDir [makeDirectory nedit-fixture-[pid]]
     if {[catch {
         exec cc -c -O2 -fPIC [file join $::projectRoot tests cffi nedit-fixture.c] -o [file join $::neFixtureDir fixture.o]

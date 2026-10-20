@@ -145,9 +145,11 @@ f(1)
 # prints its value: on macos-aarch64 a Mach-O executable since milestone 5
 # (MACOS-AARCH64-MILESTONE-5.md), where until then emission was refused
 # (`executable emission requires Linux glibc on x86_64 or aarch64 (NATIVE
-# AOT)`). A C call is linked on Linux only: on macos-aarch64 it is still
-# refused before the linker runs (NATIVE LINK), now with its own reason
-# rather than the executable refusal. A native stack overflow is NATIVE LIMIT STACK on
+# AOT)`). A C call (libc's labs, through the platform linker) is linked and
+# runs, returning 5, on every host: on macos-aarch64 since milestone 6
+# (MACOS-AARCH64-MILESTONE-6.md), where until then it was refused before the
+# linker ran (NATIVE LINK, "C calls are linked on Linux glibc only"). A
+# native stack overflow is NATIVE LIMIT STACK on
 # every host, the thread's stack and a coroutine's alike: on macos-aarch64
 # since milestone 4 (MACOS-AARCH64-MILESTONE-4.md), where until then the
 # driver died in Rust's stack-overflow abort (the thread's stack) or of
@@ -185,7 +187,7 @@ set expected [dict create \
         coroutine-stack-overflow {error {NATIVE LIMIT STACK} {native stack exhausted: too many nested calls}} \
         coroutine {value {[10, 7]}} \
         linux-syscall {error {SURFACE MODULE UNSUPPORTED-PLATFORM} {*namespace "linux" belongs to the Linux platform*unavailable for target macos-aarch64 (macOS on aarch64)*}} \
-        c-call {error {NATIVE LINK} {*this program calls C or declares a C library*C calls are linked on Linux glibc only*}} \
+        c-call {value 5} \
         object {value {macho arm64 object}} \
         executable {value {{macho arm64 execute} 6765}} \
         target {value {format macho c-call-conv apple_aarch64 runs 1}} \

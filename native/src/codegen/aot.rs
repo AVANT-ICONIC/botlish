@@ -24,17 +24,20 @@
 //! A program that calls C (C-FFI.md: `foreign` functions, `link` libraries)
 //! needs the system linker to resolve its foreign symbols: the `rustc`
 //! linker passes the program's link plan to it -- `-lNAME` for every
-//! library, inside one `--start-group`/`--end-group`, so the order of the
-//! declarations never decides a static link, and `-LDIR` for every
-//! `--link-dir` search directory -- after the program object. The `stub`
-//! linker links no native library and refuses such a program, and so does
-//! macOS for now (`C_CALLS`). An ordinary program's link is unchanged.
+//! library, in the plan's order, and `-LDIR` for every `--link-dir` search
+//! directory -- after the program object, in the platform linker's own
+//! terms (`LinkerFlavor`): GNU ld's archive group on Linux, so the order of
+//! the declarations never decides a static link; nothing of the kind on
+//! macOS, whose ld searches every archive until nothing more resolves
+//! (MACOS-AARCH64-MILESTONE-6.md). The `stub` linker links no native library
+//! and refuses such a program. An ordinary program's link is unchanged.
 //!
 //! On macOS nothing in the link is Mach-O-specific code of ours: rustc drives
 //! the platform linker (the C compiler driver, Apple's ld) with the same
-//! arguments, the object's symbols carry Mach-O's `_` prefix because the
-//! object crate writes it, and the linker signs the executable ad hoc, as it
-//! signs every arm64 executable it links.
+//! arguments, the object's symbols -- a C function's link symbol among them
+//! -- carry Mach-O's `_` prefix because the object crate writes it, and the
+//! linker signs the executable ad hoc, as it signs every arm64 executable it
+//! links.
 use super::{Const, ObjectProgram, emit_object};
 use crate::nir::Program;
 use botlish_native::runtime::aotimage::{self, Fixup, FunctionCode, Image, Target};
@@ -203,14 +206,16 @@ const EXECUTABLES: bool = cfg!(any(
     all(target_os = "macos", target_arch = "aarch64")
 ));
 
-/// Whether this host links a program that calls C (C-FFI.md): Linux glibc
-/// only. macOS links ordinary programs, whose only native libraries are the
-/// ones rustc links for the runtime; a C call there -- the Apple C ABI
-/// against real callees, a link plan for Apple's ld -- is not validated yet
-/// (the C FFI milestone of MACOS-AARCH64-PORT-AUDIT.md's roadmap), so its
-/// link is refused before the linker runs, as it was before macOS linked
-/// anything.
-const C_CALLS: bool = cfg!(target_os = "linux");
+/// Whether this host links a program that calls C (C-FFI.md): Linux glibc on
+/// x86-64 and AArch64, with GNU ld's link plan, and macOS on AArch64, with
+/// Apple's (`LinkerFlavor`), where the Apple C ABI was validated against real
+/// callees compiled by Apple clang (MACOS-AARCH64-MILESTONE-6.md). A host
+/// that links executables but whose C ABI is not validated would refuse a C
+/// call here, before the linker runs; there is none today.
+const C_CALLS: bool = cfg!(any(
+    all(target_os = "linux", target_env = "gnu", any(target_arch = "x86_64", target_arch = "aarch64")),
+    all(target_os = "macos", target_arch = "aarch64")
+));
 
 pub fn emit_executable(program: &Program, destination: &Path, link_dirs: &[String]) -> Result<(), String> {
     if !EXECUTABLES {
@@ -218,7 +223,7 @@ pub fn emit_executable(program: &Program, destination: &Path, link_dirs: &[Strin
     }
     if calls_c(program) && !C_CALLS {
         return Err(format!(
-            "native link failed: this program calls C or declares a C library ({}), and C calls are linked on Linux glibc only: on this host executables of programs that call no C are supported, C calls not yet (MACOS-AARCH64-PORT-AUDIT.md, C FFI)",
+            "native link failed: this program calls C or declares a C library ({}), and C calls are linked on Linux glibc (x86_64, aarch64) and macOS (aarch64) only: on this host executables of programs that call no C are supported, C calls not yet (C-FFI.md)",
             describe_link_plan(program)
         ));
     }
@@ -235,8 +240,6 @@ pub fn emit_executable(program: &Program, destination: &Path, link_dirs: &[Strin
     }
 }
 
-/// The `rustc` linker: a generated startup crate, compiled and linked
-/// against this build's runtime library.
 /// The C functions and libraries PROGRAM names, for messages.
 fn describe_link_plan(program: &Program) -> String {
     let mut parts = Vec::new();
@@ -253,7 +256,12 @@ fn describe_link_plan(program: &Program) -> String {
 
 /// The linker's own account of a failed link of a program that calls C:
 /// the lines of rustc's STDERR the system linker wrote (its diagnostics,
-/// never rustc's echo of the whole command line), else all of it.
+/// never rustc's echo of the whole command line), else all of it. GNU ld,
+/// lld and collect2 on Linux (`undefined reference to`, `cannot find -lNAME`,
+/// `ld:` lines); Apple's ld and clang on macOS (`Undefined symbols for
+/// architecture arm64:` and the `"_SYMBOL", referenced from:` line of each
+/// symbol, `ld: library 'NAME' not found`, `ld: warning: ignoring file ...,
+/// found architecture ...`, `clang: error: linker command failed`).
 fn linker_diagnostics(stderr: &str) -> String {
     let lines: Vec<&str> = stderr
         .lines()
@@ -265,12 +273,17 @@ fn linker_diagnostics(stderr: &str) -> String {
                 || line.contains("ld.lld:")
                 || line.starts_with("collect2")
                 || line.contains("error: linking with")
+                || line.contains("Undefined symbols for architecture")
+                || line.contains("\", referenced from:")
+                || line.contains("linker command failed")
         })
         .filter(|line| !line.starts_with("= note: \"") && line.len() < 2000)
         .collect();
     if lines.is_empty() { stderr.to_string() } else { lines.join("\n") }
 }
 
+/// The `rustc` linker: a generated startup crate, compiled and linked
+/// against this build's runtime library.
 fn link_rustc(program: &Program, destination: &Path, link_dirs: &[String]) -> Result<(), String> {
     let driver = std::env::current_exe().map_err(|e| e.to_string())?;
     let release = driver.parent().ok_or("cannot locate native runtime")?;
@@ -328,21 +341,60 @@ fn link_rustc(program: &Program, destination: &Path, link_dirs: &[String]) -> Re
     Ok(())
 }
 
-/// rustc's arguments passing PROGRAM's link plan to the system linker: the
-/// search directories LINK_DIRS (`-LDIR`), then every library `-lNAME`, in
-/// the plan's order, inside one linker group. Nothing for a program that
-/// names none.
+/// The system linker a link plan is written for: the platform's, which
+/// rustc drives through the C compiler driver (`cc`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum LinkerFlavor {
+    /// GNU ld, gold or lld through gcc or clang: Linux.
+    Gnu,
+    /// Apple's ld through Apple clang: macOS.
+    Apple,
+}
+
+/// This host's linker flavor.
+const LINKER: LinkerFlavor = if cfg!(target_vendor = "apple") { LinkerFlavor::Apple } else { LinkerFlavor::Gnu };
+
+/// rustc's arguments passing PROGRAM's link plan to this host's system
+/// linker (`link_plan_args_for`).
+fn link_plan_args(program: &Program, link_dirs: &[String]) -> Vec<String> {
+    link_plan_args_for(LINKER, program, link_dirs)
+}
+
+/// rustc's arguments passing PROGRAM's link plan to a FLAVOR system linker:
+/// the search directories LINK_DIRS (`-LDIR`), then every library
+/// `-lNAME`, in the plan's order -- for GNU ld inside one linker group,
+/// for Apple's ld as they are. Nothing for a program that names none.
+///
+/// The group is GNU ld's (and gold's) way of resolving archives whatever
+/// their order: they search an archive only for what is undefined when they
+/// reach it, so without the group an archive declared before the archive
+/// that needs it would leave its symbols undefined. Apple's ld needs none --
+/// it keeps searching every static library while anything it could define
+/// is undefined ("there is no need to specify a static library multiple
+/// times", ld(1)) -- and rejects `--start-group` as an unknown option, so
+/// its plan is the bare list (c-ffi.test's cf-link-order shows the order
+/// does not matter there either).
 ///
 /// A program that calls C is also linked with the C compiler driver's
 /// default libraries (`-C default-linker-libraries=yes`: rustc passes no
 /// `-nodefaultlibs`), which the driver appends after every argument, so the
-/// libraries are followed by libc, its as-needed dynamic loader and libgcc
-/// exactly as in a C program's link. rustc's own system libraries come before
-/// its link arguments, and GNU ld drops an as-needed library nothing has
-/// referenced yet: a static archive needing a symbol only the loader defines
-/// (AArch64 glibc's `__stack_chk_guard`, which BoringSSL's stack protector
-/// reads) or a libgcc helper would otherwise fail to link.
-fn link_plan_args(program: &Program, link_dirs: &[String]) -> Vec<String> {
+/// libraries are followed by what a C program's link has after its own:
+///
+///   * GNU: libc, its as-needed dynamic loader and libgcc. rustc's own
+///     system libraries come before its link arguments, and GNU ld drops an
+///     as-needed library nothing has referenced yet: a static archive
+///     needing a symbol only the loader defines (AArch64 glibc's
+///     `__stack_chk_guard`, which BoringSSL's stack protector reads) or a
+///     libgcc helper would otherwise fail to link.
+///   * Apple: libSystem and clang's compiler runtime (`libclang_rt.osx.a`),
+///     which rustc's `-nodefaultlibs` link leaves out, so C compiled by
+///     clang finds the runtime helpers it may call as in a C program's
+///     link. No test can see the runtime missing today: the one helper the
+///     tests' C calls, `__isPlatformVersionAtLeast` (`__builtin_available`,
+///     c-ffi.test's cf-availability-check), Rust's standard library defines
+///     too, and it comes first. `ffi_link_plan_apple_has_no_gnu_flags`
+///     pins the argument.
+fn link_plan_args_for(flavor: LinkerFlavor, program: &Program, link_dirs: &[String]) -> Vec<String> {
     let mut args = Vec::new();
     if !calls_c(program) {
         return args;
@@ -352,11 +404,16 @@ fn link_plan_args(program: &Program, link_dirs: &[String]) -> Vec<String> {
         args.extend(["-C".to_string(), format!("link-arg=-L{dir}")]);
     }
     if !program.links.is_empty() {
-        args.extend(["-C".to_string(), "link-arg=-Wl,--start-group".to_string()]);
+        let group = flavor == LinkerFlavor::Gnu;
+        if group {
+            args.extend(["-C".to_string(), "link-arg=-Wl,--start-group".to_string()]);
+        }
         for library in &program.links {
             args.extend(["-C".to_string(), format!("link-arg=-l{library}")]);
         }
-        args.extend(["-C".to_string(), "link-arg=-Wl,--end-group".to_string()]);
+        if group {
+            args.extend(["-C".to_string(), "link-arg=-Wl,--end-group".to_string()]);
+        }
     }
     args
 }
@@ -714,18 +771,18 @@ mod tests {
         "    %0 = int 40\n    %1 = int 2\n    %2 = foreigncall 0 %0 %1\n    ret %2\nend\n",
     );
 
-    /// The link plan reaches the system linker as one group, in the plan's
-    /// order, after the search directories: GNU ld and gold resolve a static
-    /// archive only against what precedes it, so without the group an
-    /// archive declared before the archive that needs it would leave its
+    /// GNU ld's link plan reaches the system linker as one group, in the
+    /// plan's order, after the search directories: GNU ld and gold resolve a
+    /// static archive only against what precedes it, so without the group
+    /// an archive declared before the archive that needs it would leave its
     /// symbols undefined (lld, rustc's own x86-64 linker, does not care:
     /// tests/c-ffi.test's cf-link-order shows the group's effect where the
-    /// linker is GNU ld).
+    /// linker is GNU ld). Linux's plan, byte for byte.
     #[test]
     fn ffi_link_plan_is_one_linker_group() {
         let program = crate::nir::parse(FFI_PROGRAM).unwrap_or_else(|e| panic!("{}", e.message));
         assert!(calls_c(&program));
-        let args = link_plan_args(&program, &["/opt/lib".to_string()]);
+        let args = link_plan_args_for(LinkerFlavor::Gnu, &program, &["/opt/lib".to_string()]);
         let links: Vec<&str> = args.iter().filter(|a| *a != "-C").map(String::as_str).collect();
         assert_eq!(
             links,
@@ -739,6 +796,81 @@ mod tests {
             ]
         );
         assert_eq!(describe_link_plan(&program), "symbols c_add; libraries -lfirst -lsecond");
+    }
+
+    /// Apple's ld gets the same plan without GNU's group, which it rejects
+    /// as an unknown option and does not need (it searches every archive
+    /// until nothing more resolves): the C driver's default libraries, the
+    /// search directories (a path with a space is one argument), the
+    /// libraries in the plan's order. No GNU flag at all.
+    #[test]
+    fn ffi_link_plan_apple_has_no_gnu_flags() {
+        let program = crate::nir::parse(FFI_PROGRAM).unwrap_or_else(|e| panic!("{}", e.message));
+        let args = link_plan_args_for(LinkerFlavor::Apple, &program, &["/opt/lib".to_string(), "rel dir".to_string()]);
+        let links: Vec<&str> = args.iter().filter(|a| *a != "-C").map(String::as_str).collect();
+        assert_eq!(
+            links,
+            vec![
+                "default-linker-libraries=yes",
+                "link-arg=-L/opt/lib",
+                "link-arg=-Lrel dir",
+                "link-arg=-lfirst",
+                "link-arg=-lsecond"
+            ]
+        );
+        assert!(args.iter().all(|a| !a.contains("--start-group") && !a.contains("--end-group") && !a.contains("-Wl,")));
+    }
+
+    /// The host's flavor is its platform linker's: Apple's on macOS, GNU's
+    /// on Linux.
+    #[test]
+    fn ffi_link_plan_flavor_is_the_hosts() {
+        let expected = if cfg!(target_os = "macos") { LinkerFlavor::Apple } else { LinkerFlavor::Gnu };
+        assert_eq!(LINKER, expected);
+        let program = crate::nir::parse(FFI_PROGRAM).unwrap_or_else(|e| panic!("{}", e.message));
+        assert_eq!(link_plan_args(&program, &[]), link_plan_args_for(expected, &program, &[]));
+    }
+
+    /// A failed link's message keeps the system linker's own lines --
+    /// GNU ld's and lld's, Apple ld's undefined-symbol block and missing
+    /// library -- and never rustc's echo of the command line.
+    #[test]
+    fn ffi_linker_diagnostics_keep_the_linkers_words() {
+        let apple = concat!(
+            "error: linking with `cc` failed: exit status: 1\n",
+            "  |\n",
+            "  = note: \"cc\" \"/w/symbols.o\" \"-lbotlish_cffi_fixture\" \"-o\" \"/w/executable\" \"-Wl,-dead_strip\"\n",
+            "  = note: some arguments are omitted. use `--verbose` to show all linker arguments\n",
+            "  = note: ld: library 'botlish_missing' not found\n",
+            "          Undefined symbols for architecture arm64:\n",
+            "            \"_botlish_no_such_symbol\", referenced from:\n",
+            "                _botlish_fn_0 in program.o\n",
+            "          ld: symbol(s) not found for architecture arm64\n",
+            "          clang: error: linker command failed with exit code 1 (use -v to see invocation)\n",
+        );
+        let kept = linker_diagnostics(apple);
+        for line in [
+            "ld: library 'botlish_missing' not found",
+            "Undefined symbols for architecture arm64:",
+            "\"_botlish_no_such_symbol\", referenced from:",
+            "ld: symbol(s) not found for architecture arm64",
+            "clang: error: linker command failed with exit code 1 (use -v to see invocation)",
+        ] {
+            assert!(kept.lines().any(|l| l.ends_with(line)), "{line:?} not in {kept:?}");
+        }
+        assert!(!kept.contains("-dead_strip"), "{kept:?}");
+        let gnu = concat!(
+            "error: linking with `cc` failed: exit status: 1\n",
+            "  = note: \"cc\" \"-m64\" \"-lmissing\"\n",
+            "  = note: rust-lld: error: unable to find library -lmissing\n",
+            "          /usr/bin/ld: program.o: in function `botlish_fn_0':\n",
+            "          program.o:(.text+0x10): undefined reference to `botlish_no_such_symbol'\n",
+            "          collect2: error: ld returned 1 exit status\n",
+        );
+        let kept = linker_diagnostics(gnu);
+        assert!(kept.contains("undefined reference to `botlish_no_such_symbol'"), "{kept:?}");
+        assert!(kept.contains("collect2: error: ld returned 1 exit status"), "{kept:?}");
+        assert!(!kept.contains("\"-m64\""), "{kept:?}");
     }
 
     /// An ordinary program passes the linker nothing.

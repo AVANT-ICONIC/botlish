@@ -2462,8 +2462,9 @@ an executable (SINGLE-EXECUTABLE.md):
   links this way. Its executables have no ELF symbols for Botlish functions.
   It is Linux x86-64's only: macOS executables are the system linker's.
 
-A program that calls C (C-FFI.md) is linked on Linux only: on macOS its
-link is refused (`NATIVE LINK`) until C calls are validated there.
+A program that calls C (C-FFI.md) is linked with its declared libraries by
+the platform linker on both: GNU ld's link plan on Linux, Apple's ld's on
+macOS (MACOS-AARCH64-MILESTONE-6.md). The stub linker refuses it.
 
 The executable uses the target's baseline instructions and the system's own
 libraries (glibc, libm and libgcc on Linux; libSystem on macOS); it needs no

@@ -557,8 +557,11 @@ test float-native-executable {a standalone executable computes, decides and prin
 # ---------------------------------------------------------------------------
 # C double (ffi::c::Double)
 
+# The fixture builds wherever C calls run (nativeCCalls: Linux x86-64 and
+# AArch64, macOS AArch64, MACOS-AARCH64-MILESTONE-6.md), so the double tests
+# run under each target's C ABI.
 set ::floatFixtureDir ""
-if {[testConstraint cCompiler] && [testConstraint nativeLinux] && [testConstraint nativeBuilt]} {
+if {[testConstraint cCompiler] && [testConstraint nativeCCalls] && [testConstraint nativeBuilt]} {
     set ::floatFixtureDir [makeDirectory float-cffi-[pid]]
     if {[catch {
         exec cc -c -O2 -fPIC [file join $::projectRoot tests cffi float-fixture.c] -o [file join $::floatFixtureDir fixture.o]

@@ -357,9 +357,10 @@ value test of `tests/float64.test` and the golden suite, and must agree.
   backends, the native Rust tests (also under GC stress) and the whole
   suite under `BOTLISH_NATIVE_GC_STRESS=1`.
 * macOS AArch64: `macos-arm64.yml`'s Tier A smoke and Tier B acceptance
-  (Apple AArch64). C calls are refused there before linking, as for every
+  (Apple AArch64). C calls were refused there before linking, as for every
   C call (the C-call port belongs to the macOS roadmap), so the C double
-  tests are Linux-only by constraint.
+  tests were Linux-only by constraint. Since MACOS-AARCH64-MILESTONE-6.md
+  they run wherever C calls do (`nativeCCalls`), macOS included.
 * `static-decisions.yml`: every golden suite, `float64.bot` included,
   decided alike by the batched and the sequential scheduler.
 

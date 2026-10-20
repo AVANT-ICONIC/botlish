@@ -680,7 +680,7 @@ test nv-gc-stress {under BOTLISH_NATIVE_GC_STRESS=1 (a collection at every alloc
 # copied by C into a MutableBytes, are the same record as byte storage.
 
 set ::nvFixtureDir ""
-if {[testConstraint cCompiler] && [testConstraint nativeLinux] && [testConstraint rustcLinker]} {
+if {[testConstraint cCompiler] && [testConstraint nativeCCalls] && [testConstraint nativeBuilt] && [testConstraint rustcLinker]} {
     set ::nvFixtureDir [makeDirectory nview-fixture-[pid]]
     if {[catch {
         exec cc -c -O2 -fPIC [file join $::projectRoot tests cffi nview-fixture.c] -o [file join $::nvFixtureDir fixture.o]

@@ -107,6 +107,10 @@ ordinary `cargo build --release --manifest-path native/Cargo.toml`):
   milestone 5** (MACOS-AARCH64-MILESTONE-5.md) it is not: an ordinary
   program becomes a Mach-O arm64 executable through the rustc linker and
   runs standalone; a program that calls C is still refused (NATIVE LINK).
+  **Since milestone 6** (MACOS-AARCH64-MILESTONE-6.md) that is not refused
+  either: it links through Apple's ld with the C libraries it declares
+  (static and dynamic, `-L` directories, libSystem) and calls them with
+  Apple's arm64 C ABI, checked against Apple clang's own calls.
 
 The census (section 15) has the rest: every test file and golden suite on
 this host.
@@ -208,11 +212,11 @@ object format from the ISA. The macOS run confirms the JIT half.
 
 | Where | Linux assumption | Class | macOS adaptation | Risk | M | Check |
 |---|---|---|---|---|---|---|
-| codegen/aot.rs `emit_executable` (:188-203) | `cfg!(all(target_os = "linux", target_env = "gnu", ...))`, else "executable emission requires Linux glibc on x86_64 or aarch64" | linux | **resolved (milestone 5)**: `EXECUTABLES` admits `macos` + `aarch64`; the rustc linker only (the stub refuses: Linux x86-64); a program that calls C is refused on macOS before the linker runs (`C_CALLS`, NATIVE LINK) | medium | 6 (done) | M (done) |
+| codegen/aot.rs `emit_executable` (:188-203) | `cfg!(all(target_os = "linux", target_env = "gnu", ...))`, else "executable emission requires Linux glibc on x86_64 or aarch64" | linux | **resolved (milestone 5)**: `EXECUTABLES` admits `macos` + `aarch64`; the rustc linker only (the stub refuses: Linux x86-64); **since milestone 6** `C_CALLS` admits macOS AArch64 too (MACOS-AARCH64-MILESTONE-6.md) | medium | 6, 7 (done) | M (done) |
 | codegen/aot.rs `link_rustc` (:241-296), startup crate (:63-180) | rustc links the program object with `-C link-arg=OBJ`, `-C force-frame-pointers=yes`, `-C relocation-model=pic`, no `--target`; the rlib beside the driver | owned | **verified unchanged (milestone 5)**: the same arguments; rustc runs `cc` (Apple clang), which runs Apple's ld; the startup crate's `extern "C"` names resolve to the object's `_`-prefixed symbols; the executable is `Mach-O 64-bit executable arm64`, PIE, linker-signed (ad hoc), loading only `/usr/lib/libSystem.B.dylib` and `/usr/lib/libiconv.2.dylib` (Rust's standard library's) | medium | 6 (done) | M (done) |
-| codegen/aot.rs `link_plan_args` (:312-330), rationale :303-311, test :690-708 | `-Wl,--start-group`/`--end-group` and `-C default-linker-libraries=yes`, justified by GNU ld and glibc | linux | Apple ld resolves archives without groups and may reject the flags: a per-OS link plan, Linux's unchanged | medium | 7 | M |
-| codegen/aot.rs `linker_diagnostics` (:224-239) | filters GNU ld/lld/collect2 wording ("undefined reference", "cannot find") | linux | add Apple ld's ("Undefined symbols for architecture arm64", "library not found for -l") | low | 7 | M |
-| main.rs `run_linked` (:352-432) | a program that calls C runs as a linked executable in a temp directory | posix | none beyond `emit_executable`, which refuses the link on macOS until milestone 7 (NATIVE LINK) | low | 7 | M |
+| codegen/aot.rs `link_plan_args` (:312-330), rationale :303-311, test :690-708 | `-Wl,--start-group`/`--end-group` and `-C default-linker-libraries=yes`, justified by GNU ld and glibc | linux | **resolved (milestone 6)**: `LinkerFlavor`, GNU ld's plan byte for byte on Linux, the bare `-L`/`-l` list on macOS (Apple's ld rejects the group and searches every archive anyway); the C driver's default libraries on both (on macOS: clang's compiler runtime) | medium | 7 (done) | M (done) |
+| codegen/aot.rs `linker_diagnostics` (:224-239) | filters GNU ld/lld/collect2 wording ("undefined reference", "cannot find") | linux | **resolved (milestone 6)**: Apple ld's `Undefined symbols for architecture arm64:` and each symbol's `referenced from:` line, `ld: library 'NAME' not found`, the wrong-architecture warning, clang's `linker command failed` | low | 7 (done) | M (done) |
+| main.rs `run_linked` (:352-432) | a program that calls C runs as a linked executable in a temp directory | posix | **verified (milestone 6)**: unchanged; a program that calls C runs this way on macOS on both native backends | low | 7 (done) | M (done) |
 | codegen/aot.rs `link_stub` (:333-370), runtime/aotimage.rs `Image::load`/`map_near`/`main` (:477-612), codegen/aot.rs `image`/`read_object` (:372-667), bin/botlish-aot-stub.rs | the toolchain-free stub linker: an ELF64 x86-64 reader, x86 trampolines, 4 KiB pages, `MAP_FIXED_NOREPLACE`, `/proc/self/exe` | elf + arch + linux | none: macOS executables use the rustc linker (milestone 5), and the stub's refusal names Linux x86-64. A Mach-O arm64 stub would need a Mach-O reader, arm64 branch relocations and veneers, an icache flush, 16 KiB pages and code signing -- a Darwin toolchain inside Botlish, which the doctrine rules out | -- | -- | -- |
 | single/build.sh, single/main.tcl :101-103, single/package.tcl | one Linux x86-64 glibc executable; forces the stub linker; static zipfs tclsh from source | linux + elf | out of scope (no macOS single executable in this port); package.tcl itself is portable Tcl | -- | 10 | -- |
 | main.rs :99-103, runtime/aot.rs :38-45 | Botlish runs on a spawned thread with a 1 GiB stack (`BOTLISH_NATIVE_STACK_BYTES`, at least 1 MiB) | posix | accepted on macOS; **its bounds and guard are found since milestone 4** (libpthread's bounds, the guard confirmed below them) | low | 4 (done) | M (done) |
@@ -285,17 +289,17 @@ FFI), behind the same portable `io::IO` context trait.
 | Where | Linux assumption | Class | macOS adaptation | Risk | M | Check |
 |---|---|---|---|---|---|---|
 | core/cabi.tcl `macos-aarch64` row; hir/cabi.tcl `NamespaceTypeDecls` | plain char signed, LP64 | -- | none: verified per scalar (section 1); a HIR built with it records `macos-aarch64` and keeps its facts through interchange and the cache (milestone 2) | low | 2 (done) | M (done) |
-| native/lower.tcl :1608-1619 (NIR `foreign N "symbol"`), clif.rs `foreign_call` | a bare C symbol name | owned | none: the object crate adds Mach-O's `_` (C-HEADER-ARCHAEOLOGY.md's "user label prefix"); verify a link | low | 7 | M |
-| value.rs :32-43, :430-452 (`cptr`), ffi.rs `rt_ffi_bad_address` | a C address is a sign-extended 60-bit word; a top-byte-tagged pointer fails `NATIVE ADDRESS` | arch | holds for arm64 user space (no TBI/PAC tags on data pointers expected): verify with real libSystem pointers | medium | 7 | M |
-| codegen/clif.rs `c_signature`; nir.rs `ForeignDecl` (no parameter-count limit) | stack-passed C arguments follow the platform ABI | owned | Cranelift implements Apple's natural-size packing of stack arguments: verify `bcf_many`/`bcf_tenth` (tests/cffi/fixture.c :45-55) | high | 7 | M |
+| native/lower.tcl :1608-1619 (NIR `foreign N "symbol"`), clif.rs `foreign_call` | a bare C symbol name | owned | **verified (milestone 6)**: the object crate adds Mach-O's `_`; `named` symbols, libSystem's `labs` (imported "from libSystem", `nm -m`) and the fixture's resolve (`cf-named-symbol`, `cf-system-symbol-resolved`) | low | 7 (done) | M (done) |
+| value.rs :32-43, :430-452 (`cptr`), ffi.rs `rt_ffi_bad_address` | a C address is a sign-extended 60-bit word; a top-byte-tagged pointer fails `NATIVE ADDRESS` | arch | **verified (milestone 6)**: C's static addresses (above 4 GiB), the top of user space and an all-high-bits address round-trip; `0xf000000000000010` is `NATIVE ADDRESS` (`cf-pointer-width`, `cf-pointer-mix`, `cf-wild-address`) | medium | 7 (done) | M (done) |
+| codegen/clif.rs `c_signature`; nir.rs `ForeignDecl` (no parameter-count limit) | stack-passed C arguments follow the platform ABI | owned | **resolved (milestone 6)**: Cranelift packs Apple's stack arguments at their natural size, but 0.135.2 stores an *extended* narrow stack argument at register width, past its slot; `c_signature` declares Apple's stack-passed narrow parameters unextended (`target::c_extended_parameters`; fixed upstream in 0.136.0). Checked against Apple clang's own calls (`cf-abi-*`) | high | 7 (done) | M (done) |
 | native/lower.tcl `BorrowCall` (:4885-4960), `ExposeStorage`/`KeepExposedAlive` | byte exposure, private write copies, keepalive | posix | none | low | 8 | M |
-| tests/cffi/fixture.c :124-154, :180-202 (`bcf_dirty_*` and the other assembly) | inline assembly with ELF directives and bare labels | elf + test | a Mach-O variant of the AArch64 functions (`_` labels, no `.type`) | low | 7 | M |
-| tests/c-ffi.test :25-26 `linuxNative`, :36-50 (fixture build: `cc -c -O2 -fPIC`, `ar rcs`) | the fixture is built on Linux only | test | build it on macOS too (static archives work, section 1) | low | 7 | M |
-| tests/c-ffi.test `cf-scalar-transport`; audit/c-ffi/tools/fuzz.tcl | plain char unsigned when `tcl_platform(machine)` is `aarch64` *or* `arm64` | test | **resolved (milestone 2)**: unsigned on Linux AArch64 only, read from the OS and the architecture (the fuzzer keeps its own model, independent of the registry, as its design requires); both run on macOS only once C calls do (milestone 7) | low | 2 (done) | L (done) |
+| tests/cffi/fixture.c :124-154, :180-202 (`bcf_dirty_*` and the other assembly) | inline assembly with ELF directives and bare labels | elf + test | **resolved (milestone 6)**: one AArch64 text, `BCF_FUNCTION` spelling its header for ELF or Mach-O | low | 7 (done) | M (done) |
+| tests/c-ffi.test :25-26 `linuxNative`, :36-50 (fixture build: `cc -c -O2 -fPIC`, `ar rcs`) | the fixture is built on Linux only | test | **resolved (milestone 6)**: `nativeCCalls` (tests/helpers.tcl); the fixture builds with Apple clang (`cf-fixture-built`) | low | 7 (done) | M (done) |
+| tests/c-ffi.test `cf-scalar-transport`; audit/c-ffi/tools/fuzz.tcl | plain char unsigned when `tcl_platform(machine)` is `aarch64` *or* `arm64` | test | **resolved (milestone 2)**: unsigned on Linux AArch64 only, read from the OS and the architecture (the fuzzer keeps its own model, independent of the registry, as its design requires); both run on macOS since C calls do (milestone 6) | low | 2 (done) | L (done) |
 | tests/c-ffi.test `tclLinkable` (:55), examples/ffi/tcl/tcl.bot :17 | `-ltcl9.0` (Debian's library name, on the default library path) | test | the CI's Tcl 9.0.1 build installs `libtcl9.0.dylib` under `~/.cache/botlish/tcl-9.0.1/lib`: link it with `-L`, verify | low | 10 | M |
 | examples/ffi/sha256/boringssl.bot :23 | `extern c library "stdc++"` (GNU libstdc++) | linux | macOS links `c++` (libc++): a per-OS library list is a language question (C-FFI.md has no conditional `extern c library`) | medium | 10 | M |
-| tests/c-ffi.test `cf-missing-library` (:529), `cf-sha256-executable` (:732-739, `ldd`) | GNU ld wording; `ldd` | test | Apple ld wording; `otool -L` | low | 7 | M |
-| tests/c-bindgen.test, tools/c-bindgen (new on main during this milestone) | the fixture's committed manifests, checked byte for byte, record the clang that generated them (`toolchain_version {Ubuntu clang version 18.1.3 (1ubuntu1)}`) | test | under Apple clang the fixture's modules, shim and reports are identical and only its manifests differ (section 15): decide whether the check compares the toolchain lines, or record Apple clang's manifests beside Ubuntu's | low | 7 | M |
+| tests/c-ffi.test `cf-missing-library` (:529), `cf-sha256-executable` (:732-739, `ldd`) | GNU ld wording; `ldd` | test | **resolved (milestone 6)**: either linker's wording; `otool -L` on macOS | low | 7 (done) | M (done) |
+| tests/c-bindgen.test, tools/c-bindgen (new on main during this milestone) | the fixture's committed manifests, checked byte for byte, record the clang that generated them (`toolchain_version {Ubuntu clang version 18.1.3 (1ubuntu1)}`) | test | **resolved (milestone 6)**: `cb-fixture-current` compares a generation by another clang with the recorded provenance (version string, token count) put back, every other byte still compared; the committed Linux manifests stay Ubuntu clang's. The generator's `check` command stays byte for byte | low | 7 (done) | M (done) |
 
 ## 11. Tests and the test harness
 
@@ -305,7 +309,7 @@ native tests carry no host constraint at all.
 
 | Where | Linux assumption | Class | macOS adaptation | Risk | M | Check |
 |---|---|---|---|---|---|---|
-| per-file constraints `nativeLinux`, `executableAot`, `nativeStackGuard` (`os eq "Linux" && machine in {x86_64 amd64 aarch64}`; 22, 36 and 1 files) | false on macOS (os, and machine `arm64` is not in the list): 117 + 131 + 4 tests skip there (the census) | test | as each capability lands, widen its constraint by capability, not by OS name; keep the definitions in step (they are copied per file). `nativeCoroutines` (milestone 3), `nativeStackGuard` (milestone 4) and `executableAot` (milestone 5: 38 files' copies replaced by one definition) are now capabilities defined once in tests/helpers.tcl | medium | 3-9 | L |
+| per-file constraints `nativeLinux`, `executableAot`, `nativeStackGuard` (`os eq "Linux" && machine in {x86_64 amd64 aarch64}`; 22, 36 and 1 files) | false on macOS (os, and machine `arm64` is not in the list): 117 + 131 + 4 tests skip there (the census) | test | as each capability lands, widen its constraint by capability, not by OS name; keep the definitions in step (they are copied per file). `nativeCoroutines` (milestone 3), `nativeStackGuard` (milestone 4), `executableAot` (milestone 5: 38 files' copies replaced by one definition) and `nativeCCalls` (milestone 6: c-ffi.test's `linuxNative`, c-bindgen.test's `nativeRun`, the C oracles of native-view, native-edit and layout-arrays) are now capabilities defined once in tests/helpers.tcl | medium | 3-9 | L |
 | `linuxX86_64` (7 files), `linuxAarch64`, `stubLinker` (3 files), `x86_64Host` (native.test :779, no OS check) | instruction-set/syscall-ABI and ELF tests | test | none: correct to skip on macOS; `x86_64Host` should also require Linux (it reads ELF with `readelf`) | low | 3 | L |
 | tests/helpers.tcl `outcomeUnder`/`outcomeUnderHir` (:234-278), `sourceAgree` (:293-302); 97 files with four-backend lists | a differential test runs every backend, cranelift included, unconditionally | test | on macOS these tests run natively and pass or fail on real behavior (section 15): the right signal | -- | 3 | M |
 | tests/helpers.tcl `linuxTarget`, `backendsFor`; 13 test files' compile helpers | (milestone 2) a test that compiles a Linux program used the host's default target | test | such a test compiles for `linuxTarget` (the host's own on Linux, so Linux runs exactly as before; `linux-aarch64` on macOS) and runs it on `backendsFor` its HIR's target (the Tcl backends on macOS); a native leg that needs the Linux runtime carries `nativeLinux` | -- | 2 (done) | M (done) |
@@ -404,6 +408,15 @@ native-status records the Mach-O executable's header and value and a
 program object's header (MACOS-AARCH64-MILESTONE-5.md). A C call is still
 refused, now with its own reason (NATIVE LINK, "C calls are linked on Linux
 glibc only"), and c-ffi.test stays in `notYet`.
+
+**Update (milestone 6).** C calls are no longer refused on macOS:
+c-ffi.test and c-bindgen.test run in the acceptance tier, so `notYet` is
+empty and the acceptance tier is every Tcl test file and every golden
+suite. Inside the two files, what still skips on the runner is what skips
+on any host without it: the Tcl, BoringSSL, SDL3 and MinGW libraries and
+sources, the committed Linux bindings' checks, and x86-64's
+`cf-bool-register` (MACOS-AARCH64-MILESTONE-6.md, sections 21 and 30).
+native-status records the `c-call` probe as its value, `5`.
 
 **Update (milestone 4).** The native stack overflow rows below are history:
 since milestone 4 a native overflow of the worker thread's stack or of a
@@ -637,9 +650,11 @@ share.
 
 **Tier C, exhaustive, opt-in.** The default payload is the acceptance tier
 on both Tcl backends under `BOTLISH_NATIVE_GC_STRESS=1`, in three shards.
-Named items replace it; `all` is the census (every file, every suite on
-every backend, the Rust tests), which fails on macOS as section 15 says
-until the port is done.
+Named items replace it -- test files, golden suites and tier.tcl's check
+items (since milestone 6 also `c-ffi-fuzz`, `c-ffi-mutants[=NAMES]` and
+`c-ffi-bench`); `all` is the census (every file, every suite on every
+backend, the Rust tests). Since milestone 6 `notYet` is empty; the census
+itself has not been rerun since milestone 3 (section 15).
 
 ### Requesting Tier C from a feature branch
 
@@ -872,6 +887,19 @@ carried out from; the report is numbered 5.
   stub-linker job.
 
 ### 7. C scalar/pointer ABI, symbol resolution and linking
+
+**Done (milestone 6, MACOS-AARCH64-MILESTONE-6.md)**: a program that calls
+C links through Apple's toolchain on macOS AArch64 (`C_CALLS` admits it; a
+link plan per `LinkerFlavor`, no GNU group; Apple ld's words kept in NATIVE
+LINK) and calls its C functions with Apple's arm64 ABI on both native
+backends and in executables; native-status's `c-call` expectation is its
+value (`5`); c-ffi.test and c-bindgen.test run in the acceptance tier
+(`notYet` is empty). The ABI is checked against Apple clang's own calls
+(`cf-abi-*`), which found Cranelift 0.135.2's extended narrow stack
+arguments stored at register width past their slot: Apple's stack-passed
+narrow parameters are declared unextended (fixed upstream in 0.136.0).
+Not here: byte borrowing's own acceptance on macOS (8), Darwin IO (9). The
+entry below is the plan it was carried out from; the report is numbered 6.
 
 - **Files:** codegen/aot.rs (`link_plan_args`, `linker_diagnostics`),
   codegen/clif.rs (`c_signature`, `foreign_call`), tests/cffi/fixture.c

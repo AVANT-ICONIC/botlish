@@ -214,16 +214,27 @@ fn c_type(c: nir::CAbi) -> ir::Type {
 /// on Apple AArch64, SystemV on Linux -- selected here explicitly, never the
 /// Botlish-internal default by accident): each integer parameter of its
 /// exact width, sign- or zero-extended by its class as the platform ABI
-/// expects of a caller (the narrow ones), a pointer a 64-bit word. The
+/// expects of a caller (the narrow ones, except Apple's stack-passed ones:
+/// `target::c_extended_parameters`), a pointer a 64-bit word. The
 /// result is declared without an extension attribute: the bits beyond a
 /// narrow C result's width are unspecified by the ABI (GCC leaves them), so
 /// the caller extends it itself (`ForeignCall`).
 fn c_signature<M: Module>(module: &M, decl: &nir::ForeignDecl) -> Signature {
     let mut sig = module.make_signature();
     sig.call_conv = super::target::c_call_conv(module.isa().triple());
+    let extended = super::target::c_extended_parameters(sig.call_conv);
+    let mut integers = 0;
     for c in &decl.params {
         let param = AbiParam::new(c_type(*c));
-        sig.params.push(match (c.bits() < 64, c.signed()) {
+        if *c == nir::CAbi::F64 {
+            // A double takes a floating-point register: it has no extension
+            // and leaves the integer registers' count alone.
+            sig.params.push(param);
+            continue;
+        }
+        let in_register = integers < extended;
+        integers += 1;
+        sig.params.push(match (c.bits() < 64 && in_register, c.signed()) {
             (true, true) => param.sext(),
             (true, false) => param.uext(),
             _ => param,
@@ -2742,4 +2753,141 @@ pub fn legend(symbols: &Symbols) -> String {
     let mut ids: Vec<_> = symbols.names.iter().collect();
     ids.sort();
     ids.iter().map(|(id, name)| format!("; u0:{id} = {name}\n")).collect()
+}
+
+/// The foreign C signature compiled for Apple AArch64, read from Cranelift's
+/// own disassembly of a call. Runs on an AArch64 host, whose Cranelift has
+/// the AArch64 backend (the macOS smoke job's and Linux arm64 CI's driver
+/// tests); an x86-64 build has no AArch64 backend to ask.
+#[cfg(all(test, target_arch = "aarch64"))]
+mod apple_tests {
+    use super::*;
+    use cranelift_codegen::settings::{self, Configurable};
+    use std::str::FromStr;
+
+    /// The disassembly of a function calling, with literal arguments, the
+    /// foreign function `callee` of ABI classes PARAMS through the signature
+    /// SIGNATURE makes for it, compiled for TRIPLE; a 16-byte explicit stack
+    /// slot written before the call and read after it sits right above the
+    /// outgoing argument area.
+    fn call_disassembly(triple: &str, params: &[nir::CAbi], signature: impl Fn(&cranelift_object::ObjectModule, &nir::ForeignDecl) -> Signature) -> String {
+        let triple = target_lexicon::Triple::from_str(triple).unwrap();
+        let mut flags = settings::builder();
+        flags.set("opt_level", "speed").unwrap();
+        flags.set("is_pic", "true").unwrap();
+        let isa = cranelift_codegen::isa::lookup(triple).unwrap().finish(settings::Flags::new(flags)).unwrap();
+        let mut module = cranelift_object::ObjectModule::new(
+            cranelift_object::ObjectBuilder::new(isa, "probe", cranelift_module::default_libcall_names()).unwrap(),
+        );
+        let decl = nir::ForeignDecl {
+            symbol: "callee".into(),
+            name: "callee".into(),
+            params: params.to_vec(),
+            result: nir::CAbi::I64,
+            alias: None,
+        };
+        let callee = module.declare_function("callee", Linkage::Import, &signature(&module, &decl)).unwrap();
+        let mut sig = module.make_signature();
+        sig.returns.push(AbiParam::new(types::I64));
+        let mut func = ir::Function::with_name_signature(ir::UserFuncName::user(0, 0), sig);
+        let mut context = FunctionBuilderContext::new();
+        let mut b = FunctionBuilder::new(&mut func, &mut context);
+        let block = b.create_block();
+        b.switch_to_block(block);
+        let slot = b.create_sized_stack_slot(StackSlotData::new(StackSlotKind::ExplicitSlot, 16, 3));
+        let sentinel = b.ins().iconst(types::I64, 0x1111_2222_3333_4444);
+        b.ins().stack_store(types::I64, sentinel, slot, 0);
+        let callee = module.declare_func_in_func(callee, b.func);
+        let args: Vec<ir::Value> = params
+            .iter()
+            .enumerate()
+            .map(|(i, c)| match c {
+                nir::CAbi::F64 => b.ins().f64const(i as f64 + 0.5),
+                _ => b.ins().iconst(c_type(*c), -(i as i64) - 2),
+            })
+            .collect();
+        let call = b.ins().call(callee, &args);
+        let result = b.inst_results(call)[0];
+        let kept = b.ins().stack_load(types::I64, types::I64, slot, 0);
+        let sum = b.ins().iadd(result, kept);
+        b.ins().return_(&[sum]);
+        b.seal_all_blocks();
+        b.finalize(module.isa().frontend_config());
+        let mut ctx = cranelift_codegen::Context::for_function(func);
+        ctx.set_disasm(true);
+        ctx.compile(module.isa(), &mut Default::default()).unwrap().vcode.clone().unwrap()
+    }
+
+    /// Eight 64-bit register arguments, then stack arguments that Apple
+    /// packs at their natural size and alignment -- a 64-bit one at 0, an
+    /// int at 8, a short at 12, a signed char at 14 -- ending two bytes
+    /// short of the 16-byte argument area.
+    const STACK_TAIL: [nir::CAbi; 12] = {
+        use nir::CAbi::*;
+        [I64, I64, I64, I64, I64, I64, I64, I64, I64, I32, I16, I8]
+    };
+
+    /// Botlish's Apple signature stores each stack argument at its natural
+    /// width at its packed offset -- `str w` at 8, `strh` at 12, `strb` at
+    /// 14 -- so nothing is written past the argument area; and the narrow
+    /// register arguments are extended by the caller, as Apple requires.
+    #[test]
+    fn ffi_apple_stack_arguments_stored_at_their_width() {
+        let code = call_disassembly("aarch64-apple-darwin", &STACK_TAIL, c_signature);
+        for store in [", [sp, #8]", ", [sp, #12]", ", [sp, #14]"] {
+            let line = code.lines().find(|l| l.contains(store)).unwrap_or_else(|| panic!("no store {store} in\n{code}"));
+            let expected = match store {
+                ", [sp, #8]" => "str w",
+                ", [sp, #12]" => "strh w",
+                _ => "strb w",
+            };
+            assert!(line.trim_start().starts_with(expected), "{line:?}, not {expected}, in\n{code}");
+        }
+        use nir::CAbi::*;
+        let narrow = call_disassembly("aarch64-apple-darwin", &[I8, U8, I16, U16, I32, U32, Bool, I8], c_signature);
+        for extension in ["sxtb x0, w0", "uxtb w1, w1", "sxth x2, w2", "uxth w3, w3", "sxtw x4, w4", "mov w5, w5", "uxtb w6, w6", "sxtb x7, w7"] {
+            assert!(narrow.contains(extension), "no {extension:?} in\n{narrow}");
+        }
+    }
+
+    /// Doubles take floating-point registers (v0-v7) and leave the integer
+    /// registers' count alone: after eight doubles, eight narrow integers
+    /// are still x0-x7, each extended by the caller as Apple requires -- the
+    /// count `target::c_extended_parameters` bounds is of integer-register
+    /// parameters, never of positions.
+    #[test]
+    fn ffi_apple_doubles_leave_the_integer_registers() {
+        use nir::CAbi::*;
+        let params = [F64, F64, F64, F64, F64, F64, F64, F64, I8, U8, I16, U16, I32, U32, Bool, I8];
+        let code = call_disassembly("aarch64-apple-darwin", &params, c_signature);
+        for extension in ["sxtb x0, w0", "uxtb w1, w1", "sxth x2, w2", "uxth w3, w3", "sxtw x4, w4", "mov w5, w5", "uxtb w6, w6", "sxtb x7, w7"] {
+            assert!(code.contains(extension), "no {extension:?} in\n{code}");
+        }
+    }
+
+    /// Why `target::c_extended_parameters` exists: Cranelift 0.135.2 stores
+    /// an extended narrow stack argument with a full 8-byte `str` at its
+    /// packed offset under AppleAarch64, so the last one here writes bytes
+    /// 14 to 21, past the 16-byte argument area into the stack slot above
+    /// it. When this fails after a Cranelift upgrade, the defect is fixed
+    /// (it is in 0.136.0, whose `get_ext_mode` extends only register
+    /// arguments under AppleAarch64): check the stores above and drop the
+    /// exception.
+    #[test]
+    fn ffi_apple_extended_stack_argument_defect_still_present() {
+        let every_parameter_extended = |module: &cranelift_object::ObjectModule, decl: &nir::ForeignDecl| {
+            let mut sig = c_signature(module, decl);
+            for (param, c) in sig.params.iter_mut().zip(&decl.params) {
+                if c.bits() < 64 {
+                    *param = if c.signed() { param.sext() } else { param.uext() };
+                }
+            }
+            sig
+        };
+        let code = call_disassembly("aarch64-apple-darwin", &STACK_TAIL, every_parameter_extended);
+        assert!(
+            code.lines().any(|l| l.trim_start().starts_with("str x") && l.contains(", [sp, #14]")),
+            "Cranelift no longer stores an extended narrow stack argument at full width:\n{code}"
+        );
+    }
 }
