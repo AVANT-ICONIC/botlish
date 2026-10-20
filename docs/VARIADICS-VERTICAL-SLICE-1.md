@@ -896,14 +896,27 @@ clang's own call) and the Rust `apple_tests`:
 | `va-apple-trailing-in-registers` | 13 failed (`cf-va-abi-fixedd`, `-ints`, `-mixed`, `-small`, `cf-va-arities`, ...) | killed | 2 failed |
 | `va-apple-integer-padding-skipped` | 7 failed (`cf-va-abi-ints`, `cf-va-arities`, `cf-va-executable-gc-coroutine`, ...) | killed | 1 failed |
 | `va-apple-narrow-slots` | 7 failed (`cf-va-abi-ints`, `cf-va-arities`, `cf-va-clif`, ...) | killed | 1 failed |
-| `va-apple-doubles-counted-as-integers` | 1 failed (`cf-va-abi-fixedd`) | survived | 1 failed |
-| `va-apple-double-registers-miscounted` | 3 failed (`cf-va-abi-fixedd`, `cf-va-doubles`, `cf-va-interchange`) | survived | 1 failed |
+| `va-apple-doubles-counted-as-integers` | 1 failed (`cf-va-abi-fixedd`) | survived, then killed | 1 failed |
+| `va-apple-double-registers-miscounted` | 3 failed (`cf-va-abi-fixedd`, `cf-va-doubles`, `cf-va-interchange`) | survived, then killed | 1 failed |
 
-The fuzzer missed the two mutants that miscount fixed doubles because it
-drew no fixed C double parameter. Only the `fixedd` capture scenario and
-`ffi_apple_variadic_padding_per_kind` held that rule, the thinnest
-coverage in this slice. The fuzzer now draws fixed doubles (section 15),
-and the next run reruns those two mutants against it (below).
+In that run, the fuzzer missed the two mutants that miscount fixed doubles
+because it drew no fixed C double parameter. Only the `fixedd` capture
+scenario and `ffi_apple_variadic_padding_per_kind` held that rule, the
+thinnest coverage in this slice. The fuzzer now draws fixed doubles
+(section 15), and the next run killed both with it:
+
+* [Run 39502715587](https://github.com/mwagner-webdev/botlish/actions/runs/39502715587) (`aa4356c`, the fuzzer with fixed doubles):
+  * Tier C ran the C FFI fuzzer, seeds 1 and 2 and seed 9 under GC
+    stress: 108 variadic functions, 461 trailing arguments, no
+    disagreement;
+  * it then ran the five Apple mutants against the tests, the extended
+    fuzzer and the Rust tests: 5 killed. The fuzzer now kills every one,
+    `va-apple-doubles-counted-as-integers` and
+    `va-apple-double-registers-miscounted` included (1 disagreement in
+    6 programs each). The other three kill counts are as before or higher
+    (`va-apple-narrow-slots` 5 programs, before 4);
+  * smoke and acceptance shard 1 passed; shard 2 was still running when
+    this was written.
 
 **The Apple benchmark** (`bench/c-ffi.tcl`, macos-15, ns: the loop alone,
 the loop with the call, and the call over the loop):
@@ -947,6 +960,8 @@ measures slower than Linux's here, `big`'s boxed result as well).
   * the method-filter audit.
 
   The GC-stress job runs on pushes to main only.
+* **[tests.yml, run 39493572184](https://github.com/mwagner-webdev/botlish/actions/runs/39493572184)** (`3781794`, the final
+  code) succeeded, the same jobs.
 * **[static-decisions, run 39464864287](https://github.com/mwagner-webdev/botlish/actions/runs/39464864287)** (`93c6fb8`)
   succeeded: every golden suite's static decisions agree under the batched
   and the sequential scheduler.
@@ -967,6 +982,12 @@ ubuntu-24.04-arm) succeeded, every job:
   `ffi_linux_aarch64_variadic_arguments_in_registers` and the Apple
   placement tests;
 * the whole suite under GC stress.
+
+**[tests-arm64.yml, run 39493576392](https://github.com/mwagner-webdev/botlish/actions/runs/39493576392)** (`3781794`, the final
+code): every job passed (the Tcl suite on interp and compile, both native
+coverages, the four golden shards, the Rust unit tests natively and under
+GC stress), except the whole suite under GC stress, which was still
+running when this was written.
 
 ## 28. Remaining limitations
 
