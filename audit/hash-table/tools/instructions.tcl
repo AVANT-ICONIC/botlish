@@ -2,11 +2,15 @@
 # callgrind (HASH-TABLE-EXPERIMENT.md, "Compiler experiments"): the same
 # runs and formulas as tools/bench.tcl (SPEC.md section 6), each a native
 # run of drivers/bench.bot under valgrind's callgrind, counting the
-# process's instructions. Counts are deterministic and independent of the
-# machine's load, so they compare compiler trees exactly where timings
-# need an idle machine; they do not see cache misses or branch costs. One
-# run per (implementation, keys, size, mode) and its baseline: compilation
-# and start-up are the same in both and cancel.
+# process's instructions. Counts are independent of the machine's load, so
+# they compare compiler trees where timings need an idle machine; they do
+# not see cache misses or branch costs. One run per (implementation, keys,
+# size, mode) and its baseline, two processes whose compilation and
+# start-up nearly cancel. What does not (the native process's randomly
+# seeded internal maps, allocation addresses) leaves repeated runs within
+# about 5 % per operation at -ops 20000, and within 20 % for chaining's
+# String misses (results/instructions-repeat.tsv), so a smaller
+# difference is not a difference.
 #
 #   BOTLISH_HT_ROOT=TREE tclsh9.0 audit/hash-table/tools/instructions.tcl
 #       ?-impls LIST? ?-keys LIST? ?-sizes LIST? ?-modes LIST? ?-ops M?
