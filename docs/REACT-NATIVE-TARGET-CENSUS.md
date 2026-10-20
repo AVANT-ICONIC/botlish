@@ -761,7 +761,15 @@ Runs on the census branch:
   archive"; it also warned that it cannot read SDK XML version 4). Run 2
   installs the current command-line tools first (`ci/android-emulator.sh`).
 
-@@RUN2@@
+Run 2 rebuilt the same package with the two new exports:
+
+* The release build succeeded again, in 4 min 34 s.
+* The emulator binary installed, then would not start:
+  `qemu-system-x86_64: error while loading shared libraries: libpulse.so.0`.
+  The runner image lacks PulseAudio's and some X libraries. Run 4 installs
+  them.
+
+@@RUN4ANDROID@@
 
 **iOS library** (macos-15, run 1):
 
@@ -775,7 +783,36 @@ Runs on the census branch:
   `installation_root`. macOS has no `C.utf8` locale, which the repository's
   workflows set for Tcl. Run 2 runs the iOS job under `en_US.UTF-8`.
 
-@@IOS2@@
+**iOS app** (macos-15, Xcode 16.4, iPhoneSimulator 18.5 SDK, CocoaPods
+1.15.2 from the template's Gemfile, run 2):
+
+* `pod install` under `en_US.UTF-8` succeeded. React Native's own messages
+  include the deprecation notice (section 6) and `[ReactNativeCore]
+  Configuring xcconfig for prebuilt React Native Core`. The app's Podfile
+  was not touched.
+* **Build A**, the program object as the Mac makes it, failed at the link:
+
+  ```
+  ld: building for 'iOS-simulator', but linking in object file (.../ios/lib/librnprobe_botlish.a[424](program.o)) built for 'macOS'
+  ```
+
+* **Build B**, the same object with its `LC_BUILD_VERSION` rewritten to
+  platform 7 (iOS simulator), minimum 15.1, by `tools/macho-platform.tcl`:
+  **BUILD SUCCEEDED**.
+  * The platform tag was the only thing between Mac-made Botlish code and
+    an iOS app. The code, relocations and calling convention were already
+    right, and the runtime built for `aarch64-apple-ios-sim` linked as it
+    is.
+  * Code generation for the iOS triple sets that tag by itself (section 6).
+* The simulator (an iPhone 17 Pro device type) booted after 1 min 39 s, and
+  the app installed and launched (`org.botlish.probeapp: 18896`).
+* No `BOTLISH_PROBE` line reached the log stream within three minutes, and
+  no crash report naming the app was found. A missing log line and a
+  failure inside the app cannot be told apart from that alone. Run 4
+  records the app's own log and process state, and runs the C stand-in as
+  a control.
+
+@@RUN4IOS@@
 
 ## 10. Proposed implementation slices
 
