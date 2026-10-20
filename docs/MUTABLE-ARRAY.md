@@ -221,7 +221,9 @@ fresh source half the time.
 
 ### 12. Struct-field semantics
 
-A struct literal holds a copy of the array put in (descriptor `s`N...); a
+A struct literal holds a copy of the array put in (descriptor `s`N...; an
+`any` slot beside a typed one by `d`, whatever it holds at run time:
+`ma-any-slot-copies`); a
 field path (`b.values`) is a place; a projection read out of it is a copy
 unless it is the last use of its own path (MUTABLE-VECTOR.md, "Last uses per
 path": a struct rebuilt from its own fields after mutating them copies

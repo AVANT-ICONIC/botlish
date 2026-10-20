@@ -802,6 +802,129 @@ r
     }
 } -cleanup {unset -nocomplain case text} -result {{{value 23} 1} {{value 9} 1} {{value 22} 1} {{value 9} 1} {{value {[1, 12]}} 0} {{value -1} 2} {{value {[1, 2, 3, 33, 3]}} 0}}
 
+# A yield in a later argument suspends the coroutine, and its resumer runs
+# until it resumes it: it may mutate the installed context in place, as a
+# called function may (hir/mutvec.tcl's MayRunCode).
+set mvYieldDecls {import mutable_vector
+
+struct Ev:
+    n: int
+
+struct Msg:
+    i: int
+
+context struct Counts:
+    values: MutableVector[int]
+
+fn replace(x: int, context c: Counts) -> int:
+    old = c.values.pop():
+        on IndexNotFound:
+            -1
+    c.values.push(x)
+    old
+
+fn id(x: int) -> int:
+    x
+
+}
+
+test mv-cow-by-reference-yield {a context member handed over by reference to a native is read as it was when evaluated although a later argument yields and the resumer replaces the member meanwhile -- the yield bare or inside a call; a local vector, which no resumer can reach, is still handed over uncopied -- on every backend, with the copies the elaboration wrote} -body {
+    lmap case {
+        {fn w(context c: Counts, resume Msg) -> Ev:
+    x = mutable_vector::at(c.values, (yield Ev {n: c.values.length()}).i):
+        on IndexNotFound:
+            -1
+    Ev {n: x}
+with context Counts {values: mutable_vector::from_list([5])}
+coroutine {step, first} = w()
+old = replace(9)
+r = step(Msg {i: 0})
+[first.n, old, r.n]
+}
+        {fn w(context c: Counts, resume Msg) -> Ev:
+    x = mutable_vector::at(c.values, id((yield Ev {n: c.values.length()}).i)):
+        on IndexNotFound:
+            -1
+    Ev {n: x}
+with context Counts {values: mutable_vector::from_list([5])}
+coroutine {step, first} = w()
+old = replace(9)
+r = step(Msg {i: 0})
+[first.n, old, r.n]
+}
+        {fn w(resume Msg) -> Ev:
+    v = mutable_vector::from_list([5])
+    x = mutable_vector::at(v, (yield Ev {n: v.length()}).i):
+        on IndexNotFound:
+            -1
+    Ev {n: x}
+coroutine {step, first} = w()
+r = step(Msg {i: 0})
+[first.n, r.n]
+}
+    } {
+        set text "${::mvYieldDecls}${case}"
+        list [mvAgree $text] [mvShares $text]
+    }
+} -cleanup {unset -nocomplain case text} -result {{{value {[1, 5, 5]}} 2} {{value {[1, 5, 5]}} 2} {{value {[1, 5]}} 0}}
+
+# A handler's payload binding (`on E details:`) is a parameter of the
+# handler's branch: a place root among them is entered by a logical copy
+# of the payload (hir/mutvec.tcl's EntryRename), like a function's
+# parameter -- the payload may hold a header its raiser's caller still owns.
+set mvPayloadDecls {import mutable_vector
+
+error Full:
+    items: MutableVector[int]
+
+fn g(v: MutableVector[int], n: int) -> int errors Full:
+    if n > 0:
+        fail Full {items: v}
+    0
+
+}
+
+test mv-payload-entry-copy {a handler that mutates its payload binding's vector mutates its own copy: the vector the raiser put in the payload, still its caller's, never changes -- named (`on Full details:`) as destructured (`on Full {items}:`), also when the caller's vector is a place itself; a handler that only reads its payload copies nothing; the HIR text with the entry reads back -- on every backend} -body {
+    set cases {
+        {fn f():
+    p = mutable_vector::from_list([1])
+    r = g(p, p.length()):
+        on Full details:
+            details.items.push(9)
+            details.items.length()
+    q = mutable_vector::from_list([1])
+    s = g(q, q.length()):
+        on Full {items}:
+            items.push(9)
+            items.length()
+    [r, p.length(), s, q.length()]
+}
+        {fn f():
+    p = mutable_vector::from_list([1])
+    p.push(5)
+    r = g(p, p.length()):
+        on Full details:
+            details.items.push(9)
+            details.items.push(10)
+            details.items.length()
+    [r, p.length()]
+}
+        {fn f():
+    p = mutable_vector::from_list([1])
+    r = g(p, p.length()):
+        on Full details:
+            details.items.length()
+    [r, p.length()]
+}
+    }
+    set results [lmap case $cases {
+        set text "${::mvPayloadDecls}${case}f()\n"
+        list [mvAgree $text] [mvShares $text]
+    }]
+    set formatted [hir::format [surface::compile "${mvPayloadDecls}[lindex $cases 0]f()\n" -warnings off]]
+    lappend results [expr {[hir::format [hir::parse $formatted]] eq $formatted}]
+} -cleanup {unset -nocomplain cases case text results formatted} -result {{{value {[2, 1, 2, 1]}} 2} {{value {[4, 2]}} 2} {{value {[1, 1]}} 0} 1}
+
 # Last uses per path (hir/mutvec.tcl's NoLaterUse and ReadsPath): a read-out
 # of a place path moves its header on when no later use may read a header
 # at that path -- the path itself, a prefix of it (the binding, an
@@ -1025,6 +1148,90 @@ fn f():
     }
 } -cleanup {unset -nocomplain case text mv} -result {{{value {[20, 21, 21]}} 0 0 0} {{value {[21021]}} 0 0 0} {{value {[190, 21, 21]}} 0 0 0} {{value {[20, 21]}} 0 0 0}}
 
+# A `break` or `continue` never completes, yet the function goes on (after
+# the loop, or with its next iteration): a read-out followed by one is its
+# path's last use only when nothing there reads the path (hir/mutvec.tcl's
+# NoLaterUse, LaterIn, Leaves). Only a `return` or a `fail` ends the walk.
+test mv-break-continue-last-use {a read-out followed by `break` is copied when its path is read after the loop, and one followed by `continue` when the next iteration (or what follows the loop) may read it -- a binding moved into a mutating callee, a struct handed to one, both directly in the loop body and in a branch -- so the caller's vector never changes; it moves (no copy) when nothing after the loop reads it, when the binding belongs to the iteration (before `break` and `continue`), and before a `return` -- on every backend, with the copies the elaboration wrote} -body {
+    lmap case {
+        {fn f():
+    t = mutable_vector::from_list([1])
+    loop i from 0 to 3:
+        x = grow1(t, 10)
+        break
+    [t.length()]
+}
+        {fn f():
+    t = mutable_vector::from_list([1])
+    xs = loop i from 0 to 3:
+        x = grow1(t, 10)
+        continue
+    [t.length()]
+}
+        {fn f():
+    t = mutable_vector::from_list([1])
+    loop i from 0 to 3:
+        if i == 0:
+            x = grow1(t, 10)
+            continue
+        t.length()
+}
+        {fn f():
+    t = mutable_vector::from_list([1])
+    loop i from 0 to 3:
+        if i == 1:
+            x = grow1(t, 10)
+            break
+    t.push(5)
+    [t.length()]
+}
+        {fn f():
+    t = table()
+    t.vals.push(3)
+    found = loop i from 0 to 5:
+        if i == 2:
+            r = bump_all(t, 9)
+            break
+        i
+    [t.keys.length(), t.vals.length(), t.count]
+}
+        {fn f():
+    t = mutable_vector::from_list([1])
+    loop i from 0 to 3:
+        if i == 1:
+            x = grow1(t, 10)
+            break
+    [7]
+}
+        {fn f():
+    loop i from 0 to 3:
+        u = mutable_vector::from_list([i])
+        if i == 1:
+            x = grow1(u, 10)
+            break
+        u.length()
+}
+        {fn f():
+    loop i from 0 to 3:
+        u = mutable_vector::from_list([i])
+        if i == 1:
+            x = grow1(u, 10)
+            continue
+        u.length()
+}
+        {fn f():
+    t = mutable_vector::from_list([1])
+    loop i from 0 to 3:
+        if i == 1:
+            return [grow1(t, 10)]
+    [t.length()]
+}
+    } {
+        set text "${::mvPathDecls}${case}f()\n"
+        list [mvAgree $text] [mvShares $text]
+    }
+} -cleanup {unset -nocomplain case text} -result {{{value {[1]}} 1} {{value {[1]}} 1} {{value {[1, 1]}} 1} {{value {[2]}} 1} {{value {[1, 2, 0]}} 1} {{value {[7]}} 0} {{value {[1]}} 0} {{value {[1, 1]}} 0} {{value {[2]}} 0}}
+
 # Demand through struct literals (hir/mutvec.tcl's ExclusivePositions): a
 # struct literal in a position that needs an exclusive header -- a place's
 # entry, a consumed parameter's argument, a demanded function's result --
@@ -1164,6 +1371,151 @@ test mv-literal-demand-copies {a memo-shaped recursion -- a step only observes i
         list [mvAgree $text] [mvShares $text] [dict get $mv shares] [dict get $mv detaches]
     }
 } -cleanup {unset -nocomplain case text mv} -result {{{value {[45, 465]}} 0 0 0} {{value {[1, 4]}} 0 0 0} {{value {[2, 1]}} 1 1 1}}
+
+# A struct slot of a type too imprecise to say (`any`, a generic position)
+# beside a typed collection slot (hir/mutvec.tcl's ShareDescriptor): a copy
+# of the struct copies what the slot holds at run time (`d`), like a whole
+# value of such a type, so every slot of a held binding owns its headers --
+# which the last uses per path rely on (a sibling path read later shares no
+# header with a moved one).
+set mvAnySlotDecls {import mutable_vector
+
+struct W:
+    a: MutableVector[int]
+    d: any
+
+struct W2:
+    a: MutableVector[int]
+    d1: any
+    d2: any
+
+struct V:
+    n: int
+    d: any
+
+struct Typed:
+    a: MutableVector[int]
+    n: int
+
+type Small = Int in 0..9
+
+struct Dom:
+    a: MutableVector[int]
+    n: Small
+
+context struct C:
+    a: MutableVector[int]
+    d: any
+
+context struct D:
+    d: any
+
+context struct Lim:
+    n: Small
+
+fn bump(context c: C) -> int:
+    c.d.push(9)
+    1
+
+fn bumpd(context c: D) -> int:
+    c.d.push(9)
+    1
+
+}
+
+# The descriptors of the logical copies (mutable_vector#share calls) the
+# elaboration wrote into TEXT's HIR, sorted.
+proc mvShareDescriptors {text} {
+    set hir [surface::compile $text -warnings off]
+    set ds {}
+    dict for {e node} [dict get $hir exprs] {
+        if {[dict get $node kind] eq "call" && [hir::affine::NativeName $hir $e] eq "mutable_vector#share"} {
+            lappend ds [core::value::strOf [dict get $hir exprs [lindex [dict get $node args] 1] value]]
+        }
+    }
+    return [lsort $ds]
+}
+
+test mv-any-slot-copies {a struct whose `any` slots sit beside a typed vector slot is copied slot by slot, each `any` slot by what it holds at run time (`d`): a place's entry through which the `any` slot is mutated, a read-out of one `any` slot moved at its path's last use while its sibling, which held the same vector, is read later (a named struct, and a generic function's anonymous struct), and a context installation and a context member's read-out (on the Tcl backends: natively an `any` context member is unsupported) -- the source vector never changes; a struct of `any` slots only is still copied whole by `d`, and one of typed slots only -- an integer domain among them, whose values hold no header -- by its static descriptor, and a context of integer domains not at all} -body {
+    set results [lmap case {
+        {fn f():
+    p = mutable_vector::from_list([1])
+    w = W {a: mutable_vector::from_list([7]), d: p}
+    w.d.push(5)
+    [mutable_vector::length(w.d), p.length()]
+}
+        {fn f():
+    v = mutable_vector::from_list([1])
+    fn peek() -> int:
+        v.length()
+    w = W2 {a: mutable_vector::from_list([7]), d1: v, d2: v}
+    w.a.push(3)
+    k = w.d1
+    k.push(5)
+    [mutable_vector::length(w.d2), k.length(), peek(), w.a.length()]
+}
+        {fn g(x, n: int):
+    w = {a: mutable_vector::from_list([n]), d1: x, d2: x}
+    w.a.push(3)
+    k = w.d1
+    k.push(5)
+    [mutable_vector::length(w.d2), mutable_vector::length(k), mutable_vector::length(x)]
+fn f():
+    p = mutable_vector::from_list([1])
+    r = g(p, 7)
+    [r, [p.length()]]
+}
+        {fn f():
+    p = mutable_vector::from_list([1])
+    w = V {n: 1, d: p}
+    w.d.push(5)
+    [mutable_vector::length(w.d), p.length()]
+}
+        {fn f():
+    p = mutable_vector::from_list([1])
+    w = Typed {a: p, n: 1}
+    w.a.push(5)
+    [w.a.length(), p.length()]
+}
+        {fn f():
+    p = mutable_vector::from_list([1])
+    w = Dom {a: p, n: 3}
+    w.a.push(5)
+    [w.a.length(), p.length(), w.n]
+}
+        {fn f(context c: Lim) -> int:
+    x = c.n
+    x + 1
+with context Lim {n: 4}
+}
+    } {
+        set text "${::mvAnySlotDecls}${case}f()\n"
+        list [mvAgree $text] [mvShareDescriptors $text]
+    }]
+    foreach case {
+        {fn f(context c: C) -> List[int]:
+    x = c.d
+    n = bump()
+    [mutable_vector::length(x), n, mutable_vector::length(c.d)]
+p = mutable_vector::from_list([1])
+with context C {a: mutable_vector::from_list([3]), d: p}
+r = f()
+[r, [p.length()]]
+}
+        {fn f(context c: D) -> List[int]:
+    x = c.d
+    n = bumpd()
+    [mutable_vector::length(x), n, mutable_vector::length(c.d)]
+p = mutable_vector::from_list([1])
+with context D {d: p}
+r = f()
+[r, [p.length()]]
+}
+    } {
+        lappend results [sourceAgree "${::mvAnySlotDecls}${case}" {interp compile}]
+    }
+    set results
+} -cleanup {unset -nocomplain case text results} -result {{{value {[2, 1]}} s2.0.h1.d} {{value {[1, 2, 1, 2]}} s3.0.h1.d2.d} {{value {[[1, 2, 1], [1]]}} s3.0.h1.d2.d} {{value {[2, 1]}} d} {{value {[2, 1]}} s1.0.h} {{value {[2, 1, 3]}} s1.0.h} {{value 5} {}} {value {[[1, 1, 2], [1]]}} {value {[[1, 1, 2], [1]]}}}
 
 test mv-cow-gc-stress {items 64, 67, 94: heap values reachable only through vector elements survive collections at every allocation; copies stay valid and independent while either is mutated, collected and read} -constraints nativeLinux -body {
     set text "import mutable_vector\nimport str\nfn f() -> List\[str\] errors IndexNotFound:\n    a = mutable_vector::from_list(\[str::concat(\"x\", \"1\"), str::concat(\"y\", \"2\")\])\n    b = a\n    a.push(str::concat(\"z\", \"3\"))\n    junk = loop i from 0 to 50:\n        str::concat(\"j\", \"k\")\n    s = b.swap(0, str::concat(\"w\", \"4\"))\n    t = a.take(0)\n    \[a.at(0), a.at(1), b.at(0), b.at(1), s, t\]\nr = f():\n    on IndexNotFound:\n        \[\]\nr\n"
