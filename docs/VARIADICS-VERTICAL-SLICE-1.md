@@ -915,8 +915,9 @@ thinnest coverage in this slice. The fuzzer now draws fixed doubles
     `va-apple-double-registers-miscounted` included (1 disagreement in
     6 programs each). The other three kill counts are as before or higher
     (`va-apple-narrow-slots` 5 programs, before 4);
-  * smoke and acceptance shard 1 passed; shard 2 was still running when
-    this was written.
+  * smoke and acceptance shards 1 and 2 passed (shard 2: 100 Tcl test
+    files on interp and 49 golden suites, `variadics.bot` among them, on
+    four backends).
 
 **The Apple benchmark** (`bench/c-ffi.tcl`, macos-15, ns: the loop alone,
 the loop with the call, and the call over the loop):
@@ -984,10 +985,10 @@ ubuntu-24.04-arm) succeeded, every job:
 * the whole suite under GC stress.
 
 **[tests-arm64.yml, run 39493576392](https://github.com/mwagner-webdev/botlish/actions/runs/39493576392)** (`3781794`, the final
-code): every job passed (the Tcl suite on interp and compile, both native
-coverages, the four golden shards, the Rust unit tests natively and under
-GC stress), except the whole suite under GC stress, which was still
-running when this was written.
+code) succeeded, every job: the Tcl suite on interp and compile, both
+native coverages, the four golden shards, the Rust unit tests natively and
+under GC stress, and the whole suite under GC stress (8,533 tests: 8,437
+passed, 96 skipped by host constraints, 0 failed).
 
 ## 28. Remaining limitations
 
