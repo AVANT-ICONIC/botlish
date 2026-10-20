@@ -17,12 +17,17 @@ yes | "$sm" --licenses > /dev/null || true
 for _ in 1 2 3; do "$sm" --install emulator platform-tools "$image" > /dev/null && break || sleep 15; done
 "$sdk/emulator/emulator" -version | head -1
 "$sdk/emulator/emulator" -accel-check || true
-# A shared library the runner lacks stops qemu before adb ever sees it.
-for q in "$sdk"/emulator/qemu/linux-x86_64/qemu-system-x86_64*; do
-  ldd "$q" | grep "not found" && echo "($q)" || true
-done
+# The current avdmanager and the emulator do not agree on a default AVD
+# directory (run 5: "Unknown AVD name [probe]"): name it for both.
+export ANDROID_AVD_HOME=$HOME/.android/avd
+mkdir -p "$ANDROID_AVD_HOME"
 echo no | "$(dirname "$sm")/avdmanager" create avd --force -n probe -k "$image"
 echo
+if ! "$sdk/emulator/emulator" -list-avds | grep -qx probe; then
+  echo "the emulator does not see the AVD; avdmanager wrote:"
+  find "$HOME" /usr/local/lib/android -name 'probe.ini' -o -name 'probe.avd' 2> /dev/null || true
+  exit 1
+fi
 log=${RUNNER_TEMP:-/tmp}/emulator.log
 nohup "$sdk/emulator/emulator" -avd probe -no-window -gpu swiftshader_indirect -no-snapshot \
   -noaudio -no-boot-anim -accel on > "$log" 2>&1 &
