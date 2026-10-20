@@ -61,7 +61,11 @@ Native ones.
     (`isPureCxxDependency: true`), with no Gradle module, Java or Kotlin.
   * The app's iOS Codegen registers its `RCTModuleProvider`.
   * Metro bundles its TypeScript for both platforms.
-  * See section 9 for the device results.
+* **Botlish code ran in that stock app on the iOS simulator** (CI runs 4
+  and 5): every probe call, with the results the host predicted, about
+  1.5 to 1.9 µs a call. The one change to Mac-made machine code was its
+  Mach-O platform tag, which target-triple code generation sets by itself.
+  @@SUMMARYANDROID@@
 * **Botlish has no library mode.** It emits only whole-program executables,
   and its functions are not callable from C:
   * Its symbols are `botlish_fn_N` with an internal calling convention
@@ -88,7 +92,9 @@ Native ones.
     (`audit/react-native/patches/runtime-aarch64-cfg.patch`) and code
     generation for the target's triple. Today the ISA is always the host's,
     and on a Mac that tags every Mach-O object as macOS.
-  * Android is closer to viable than iOS.
+  * Android is still the closer of the two in compiler work: its x86_64
+    library needs nothing, and its objects carry no platform tag. iOS ran
+    first only because the CI emulator took several runs to start.
 
 ## 2. Recommended architecture
 
@@ -343,7 +349,9 @@ Numbers deserve their own summary:
   * Botlish's ISA is the host's, so CI measured `platform 1 minos 0.0.0`
     (macOS) on the iOS-simulator library's program object.
   * Building the ISA for `aarch64-apple-ios-sim` or `aarch64-apple-ios` sets
-    platform 7 or 2. Section 9 records what Apple's linker did with each.
+    platform 7 or 2. Section 9 records what Apple's linker did with platform
+    1 (refused) and platform 7 (linked, and the app ran). No device build,
+    platform 2, was attempted: it needs signing, and CI has no device.
 * **The runtime.**
   * It needs the `cfg` patch and, like Android, forced frame pointers.
     Apple's ABI keeps frame records in calling functions; the config states
@@ -985,6 +993,9 @@ right after library mode, before any mobile target exists.
     emulator runs the very code a Linux host compiles.
   * iOS needs the `cfg` fix, target-triple code generation for the Mach-O
     platform, an `.xcframework`, and (soon) SwiftPM.
+  * The simulator runs show how short that iOS list is. With only the
+    platform tag rewritten, Mac-made Botlish code ran unchanged in a stock
+    app.
 * **What is the smallest credible vertical slice to implement next?**
   * Slices 1 and 2: the runtime portability fixes, then library mode on the
     existing Linux and macOS hosts.
@@ -1199,6 +1210,12 @@ tclsh9.0 audit/react-native/tools/host-spike.tcl -work "/tmp/rn spike" \
   -folly folly -stack-kib 512 ?-gc-stress 1?
 ```
 
-The mobile probes: push a change under `audit/react-native/` or dispatch
-`react-native-probe.yml`. Each job's log has the APK or app contents, the
-object inspection and the `BOTLISH_PROBE` lines the app logged.
+The mobile probes: push a change under `audit/react-native/` (or dispatch
+`react-native-probe.yml`, once the workflow is on the default branch).
+* A head commit with the trailer `RN-Probe: android` skips the iOS job.
+* Each job's log has:
+  * the APK or app contents;
+  * the object inspection;
+  * the `BOTLISH_PROBE` lines the app logged.
+* A failed simulator or emulator run also prints its diagnostics: the
+  app's own log, crash reports, or the emulator's log.
