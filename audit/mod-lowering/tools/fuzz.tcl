@@ -18,6 +18,24 @@
 # optimization, tiny-leaf inlining and the raw Int ABI each turned off; all
 # outcomes (value, or error code and message) must agree.
 #
+# The raw and mask forms trust the divisor's Range with no runtime check, so
+# two forms aim at the facts behind those Ranges, hir/induction.tcl's
+# equality-termination proof among them:
+#   * nontail: an `==`-terminated recursion with a second, non-tail self
+#     call that jumps i by another step (or the same: the sound shape, whose
+#     fact must still select the raw and mask forms), its divisor derived
+#     from i so that a Range read from the tail calls alone would be one
+#     power of two or would exclude 0 where the jumped chain meets other
+#     values, 0 among them. A fuel parameter bounds every chain.
+#   * a deep program (about one seed in four), its own: an `==` bound that is
+#     a native call with a registered Range, char::scalar_value(c), with c
+#     recomputed every step (varying: the bound is no single value, and i may
+#     step past it) or passed unchanged (invariant: the fact fires). The
+#     proof needs i to start at the bound's largest value, 1114111, so the
+#     recursion is 1114112 calls deep: too deep for interp's recursion limit
+#     and slow on compile, so its reference is a Tcl model of the program
+#     (DeepModel), and only the native outcomes are compared with it.
+#
 #   tclsh9.0 audit/mod-lowering/tools/fuzz.tcl ?-n N? ?-seed S? ?-gc-stress 0|1?
 #
 # -gc-stress 1 runs the native outcomes again under BOTLISH_NATIVE_GC_STRESS=1.
@@ -82,7 +100,7 @@ proc program {} {
         set typed [expr {rand() < 0.7}]
         set p [expr {$typed ? "x: int" : "x"}]
         set q [expr {$typed ? "d: int" : "d"}]
-        switch [pick {const const var var narrow loop hash leaf}] {
+        switch [pick {const const var var narrow loop hash leaf nontail nontail}] {
             const {
                 set k [pick $constDivisors]
                 set form [pick [list "x.mod([lit $k])" "mod(x, [lit $k])"]]
@@ -129,6 +147,37 @@ proc program {} {
                 lappend fns "fn f$i\($p\):\n    f${i}leaf(x, [lit $k]) + f${i}leaf(x + 1, [lit $k])\n"
                 foreach x [sample $pool 3] { lappend items "f$i\([lit $x])" }
             }
+            nontail {
+                # i steps by DIR toward END on the tail call; the non-tail
+                # call jumps it by JUMP (the same step, another, backwards
+                # or past END, where only fuel stops the chain). Nested, it
+                # is made by the first invocation only (fuel == FUEL); as a
+                # statement, by every one.
+                set dir [pick {1 -1}]
+                set end [pick {0 10 -7 100}]
+                set dist [pick {1 1 2 3}]
+                set start [expr {$end - $dir * $dist}]
+                set jump [expr {$dir * [pick [list 1 1 2 3 -1 [expr {$dist + 1}]]]}]
+                set fuel [pick {4 6 9}]
+                set x [pick {100 1000 -1000 7 1023 999999}]
+                # The divisor: a power of two at i = START (a mask, were i
+                # pinned there), or 0 at a K in the jumped chain, or 0 at a
+                # K just before START.
+                switch [pick {mask zero zero shift}] {
+                    mask { set div "i + [lit [expr {[pick {2 4 8 16}] - $start}]]" }
+                    zero { set div "[lit [expr {$start + $jump + $dir * [pick {0 1 2}]}]] - i" }
+                    shift { set div "i - [lit [expr {$start - $dir * [pick {1 2 5}]}]]" }
+                }
+                set stepText [expr {$dir > 0 ? "i + 1" : "i - 1"}]
+                set jumpText [expr {$jump > 0 ? "i + $jump" : "i - [expr {-$jump}]"}]
+                if {rand() < 0.75} {
+                    set rest "        x = if fuel == $fuel:\n            f$i\($jumpText, fuel - 1, 0)\n        else:\n            0\n        f$i\($stepText, fuel - 1, acc + x + mod([lit $x], $div))\n"
+                } else {
+                    set rest "        f$i\($jumpText, fuel - 1, 0)\n        f$i\($stepText, fuel - 1, acc + mod([lit $x], $div))\n"
+                }
+                lappend fns "fn f$i\(i: int, fuel: int, acc: int) -> int:\n    if i == [lit $end]:\n        acc\n    else:\n        if fuel == 0:\n            return acc\n$rest"
+                lappend items "f$i\([lit $start], $fuel, 0)"
+            }
         }
     }
     set result "\[[join $items {, }]\]"
@@ -137,6 +186,67 @@ proc program {} {
         set result "\[[join [concat $items [list $errorCall]] {, }]\]"
     }
     return "[join $fns \n]\n$result\n"
+}
+
+# The deep program (the header): an `==` bound char::scalar_value(c) with
+# the next c chosen by NEXT -- `parity`, never the next i's value (an 'a',
+# 97, before an even i, a 'b', 98, before an odd one: i steps past every
+# bound and the run ends at the zero divisor), `threshold`, 'z' (122) where
+# i - 1 is T and 'a' elsewhere (it may stop at 97 or 122, or never), or
+# `same`, c passed unchanged (the invariant bound) -- and a mod of i + OFF,
+# direct or through an inlined leaf. Returns {TEXT {DeepModel arguments}}.
+proc deepProgram {} {
+    set next [pick {parity parity threshold same}]
+    set c0 [pick {97 98 122}]
+    set t [pick {97 122 5000}]
+    set x [pick {1000 7 -1000 123456789}]
+    set off [pick {0 1 -50 -200}]
+    switch $next {
+        parity { set nextText "if (i - 1).mod(2) == 0:\n            'a'\n        else:\n            'b'" }
+        threshold { set nextText "if i - 1 == $t:\n            'z'\n        else:\n            'a'" }
+        same { set nextText c }
+    }
+    set divText [expr {$off == 0 ? "i" : ($off > 0 ? "i + $off" : "i - [expr {-$off}]")}]
+    set text ""
+    if {rand() < 0.4} {
+        append text "fn bleaf(h, d):\n    h.mod(d)\n\n"
+        set term "bleaf([lit $x], $divText)"
+    } else {
+        set term "mod([lit $x], $divText)"
+    }
+    append text "fn b(i: int, c: UnicodeChar, acc: int) -> int:\n    if i == char::scalar_value(c):\n        acc\n    else:\n        n = $nextText\n        b(i - 1, n, acc + $term)\n\n"
+    append text "b(1114111, '[format %c $c0]', 0)\n"
+    return [list $text [list $next $c0 $t $x $off]]
+}
+
+# The outcome of deepProgram's program, computed the way it runs: from
+# i = 1114111 down, stop when i is c's scalar value, else add
+# mod(X, i + OFF) (core::primitives::modulo: X % |d| in Tcl, whose result
+# takes the divisor's sign) or fail with ARITHMETIC when i + OFF is 0.
+proc DeepModel {next c0 t x off} {
+    set i 1114111
+    set c $c0
+    set acc 0
+    while 1 {
+        if {$i == $c} {
+            return [list value $acc]
+        }
+        switch $next {
+            parity { set n [expr {($i - 1) % 2 == 0 ? 97 : 98}] }
+            threshold { set n [expr {$i - 1 == $t ? 122 : 97}] }
+            same { set n $c }
+        }
+        set d [expr {$i + $off}]
+        if {$d == 0} {
+            return [list error {CORE SEMANTIC ARITHMETIC} {mod: division by zero}]
+        }
+        set acc [expr {$acc + $x % abs($d)}]
+        set i [expr {$i - 1}]
+        set c $n
+        if {$i < -1000} {
+            error "DeepModel: no outcome by i = $i"
+        }
+    }
 }
 
 proc outcome {kind hir args} {
@@ -164,25 +274,36 @@ set nativeConfigs {
 set bad 0
 set census [dict create]
 set kinds [dict create]
+set deep 0
 set scratch [file tempdir mod-lowering-fuzz]
 set seed0 [dict get $options -seed]
 set n [dict get $options -n]
-for {set s $seed0} {$s < $seed0 + $n} {incr s} {
-    expr {srand($s)}
-    set text [program]
-    set path [file join $scratch p$s.bot]
+
+# Checks program TEXT (NAME in a report, FILE its file name): against
+# interp, with compile and every native configuration, when EXPECTED is "",
+# else every native configuration against the outcome EXPECTED. Counts a
+# disagreement or a compile failure in ::bad, the reference's outcome kind
+# in ::kinds and the mod-family NIR ops in ::census.
+proc Check {name file text expected} {
+    global scratch nativeConfigs options bad census kinds
+    set path [file join $scratch $file.bot]
     set ch [open $path w]
     puts $ch [surface::modules::ImportHeader $text]$text
     close $ch
     if {[catch {set hir [surface::readProgramFile $path -warnings off]} err]} {
         incr bad
-        puts "DOES NOT COMPILE seed $s: $err\n$text"
+        puts "DOES NOT COMPILE $name: $err\n$text"
         file delete $path
-        continue
+        return
     }
     file delete $path
-    set reference [outcome interp $hir]
-    set outcomes [list [list interp $reference] [list compile [outcome compile $hir]]]
+    if {$expected eq ""} {
+        set reference [outcome interp $hir]
+        set outcomes [list [list interp $reference] [list compile [outcome compile $hir]]]
+    } else {
+        set reference $expected
+        set outcomes [list [list model $reference]]
+    }
     set prepared [native::prepareHir $hir]
     foreach config $nativeConfigs {
         lappend outcomes [list "native $config" [outcome native $prepared {*}$config]]
@@ -206,10 +327,20 @@ for {set s $seed0} {$s < $seed0 + $n} {incr s} {
     set distinct [lsort -unique [lmap o $outcomes {lindex $o 1}]]
     if {[llength $distinct] != 1} {
         incr bad
-        puts "DISAGREEMENT seed $s:\n$text"
+        puts "DISAGREEMENT $name:\n$text"
         foreach o $outcomes { puts "  [lindex $o 0]: [lindex $o 1]" }
     }
 }
+
+for {set s $seed0} {$s < $seed0 + $n} {incr s} {
+    expr {srand($s)}
+    Check "seed $s" p$s [program] ""
+    if {rand() < 0.25} {
+        lassign [deepProgram] text model
+        incr deep
+        Check "seed $s (deep)" d$s $text [DeepModel {*}$model]
+    }
+}
 file delete -force $scratch
-puts "programs $n (seeds $seed0..[expr {$seed0 + $n - 1}]; outcomes: $kinds; NIR ops: $census); disagreements $bad"
+puts "programs $n (seeds $seed0..[expr {$seed0 + $n - 1}]; deep programs $deep; outcomes: $kinds; NIR ops: $census); disagreements $bad"
 exit [expr {$bad ? 1 : 0}]
