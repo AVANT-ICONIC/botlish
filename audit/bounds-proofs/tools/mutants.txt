@@ -133,27 +133,28 @@
 
 # A loop over a MutableVector the program mutates has the length the
 # vector has at its evaluation (hir::cardinality::IterationLength): a key
-# names one vector, not one length. Two evaluations of one place share it
-# when no site -- a mutation keyed like it, and for a context member a call
-# that runs Botlish code or a yield -- can come between them (Evaluation,
-# Sites, RunsCode, Epoch). A vector nothing mutates -- no mutating
+# names one vector, not one length. A vector nothing mutates -- no mutating
 # operation's receiver has its key, and its key is not rooted at a context
-# parameter -- keeps its key's length.
+# parameter -- keeps its key's length; a place no mutation has as its
+# receiver keeps one length. Two evaluations of any other place share one
+# when no site -- a mutation of the place, and for a context member a call
+# that runs Botlish code or a yield -- can come between them (Evaluation,
+# RunsCode, Epoch).
 
 @@ vector-length-keyed a loop over a MutableVector has its binding's, path's or definition's length, like a List's, so two loops around a push, pop or clear (or a callee's push to a context member) are one size
 ## hir/cardinality.tcl
 <<<<
-    if {$key ne "" && ![ContextRooted $hir $key] && ![Mutated $hir $key]} {
+    if {!$context && ![dict exists [Mutations $hir] keys $key] && ![dict exists [Mutations $hir] keys ""]} {
 ====
     if {$key ne ""} {
 >>>>
 
-@@ vector-context-unrooted a context member keeps its key's length when no mutation in the program is keyed like it, so a callee's push through its own context parameter between two loops goes unseen
+@@ vector-context-unrooted a context member is taken for an ordinary place, so a callee's push through its own context parameter between two loops goes unseen
 ## hir/cardinality.tcl
 <<<<
-    if {$key ne "" && ![ContextRooted $hir $key] && ![Mutated $hir $key]} {
+    set context [expr {$key eq "" || [ContextRooted $hir $key]}]
 ====
-    if {$key ne "" && ![Mutated $hir $key]} {
+    set context [expr {$key eq ""}]
 >>>>
 
 @@ vector-callee-runs-no-code a call of a function is no site of a context member, so a callee's push through its own context parameter between two loops goes unseen
@@ -176,12 +177,44 @@
     return 0
 >>>>
 
-@@ vector-sites-unkeyed only a mutation whose receiver's key was cut short is a site, so two loops over a local, a parameter or a field around a push, pop or clear are one size
+@@ vector-place-unmutated-unchecked a place is taken to keep one length whether or not a mutation has it as its receiver, so two loops over a local, a parameter or a field around a push, pop or clear are one size
 ## hir/cardinality.tcl
 <<<<
-                if {$mutated eq "" || $mutated eq $key} {
+    if {!$context && ![dict exists [Mutations $hir] places $place]} {
 ====
-                if {$mutated eq ""} {
+    if {!$context} {
+>>>>
+
+@@ vector-place-unmutated-unused a place no mutation has as its receiver has the length of each evaluation's class, not one length (precision: a vector read twice, once in a nested function, while only a copy of it is pushed, is unrelated)
+## hir/cardinality.tcl
+<<<<
+    if {!$context && ![dict exists [Mutations $hir] places $place]} {
+====
+    if {0} {
+>>>>
+
+@@ vector-sites-ignored a mutation of the place is no site, so two loops over a local, a parameter or a field around a push, pop or clear are one class
+## hir/cardinality.tcl
+<<<<
+                if {$receiver ne "" && [hir::mutvec::Path $hir $receiver] eq $place} {
+====
+                if {0} {
+>>>>
+
+@@ vector-sites-by-key a mutation of any place keyed like the vector is a site (precision: the original read twice around a copy's push, w = v then w pushed, is unrelated)
+## hir/cardinality.tcl
+<<<<
+                if {$receiver ne "" && [hir::mutvec::Path $hir $receiver] eq $place} {
+====
+                if {$receiver ne "" && [CompleteKey $hir $receiver] eq [CompleteKey $hir $e]} {
+>>>>
+
+@@ vector-classes-by-key the evaluations of every place keyed like the vector are one class's candidates, so two copies of a vector taken around a push (c1 = v, v pushed, c2 = v) are one length
+## hir/cardinality.tcl
+<<<<
+            if {[hir::types::kindOf [hir::typeOf $hir $o]] ne "mutvec" || [hir::mutvec::Path $hir $o] ne $place} continue
+====
+            if {[hir::types::kindOf [hir::typeOf $hir $o]] ne "mutvec" || [CompleteKey $hir $o] ne [CompleteKey $hir $e]} continue
 >>>>
 
 @@ vector-runs-uncounted a statement holding a site does not end the quiet run it is in, so the loops before and after a push are one run
@@ -236,18 +269,10 @@
             }
 >>>>
 
-@@ vector-class-by-key two places keyed alike are one class, so two copies of a vector taken around a push (c1 = v, v pushed, c2 = v) are one length
-## hir/cardinality.tcl
-<<<<
-            set class [list $place $epoch]
-====
-            set class $epoch
->>>>
-
 @@ vector-always-per-occurrence a loop over a MutableVector the program mutates has the length of its own evaluation (precision: two loops over a vector built by pushes, then walked, or a lockstep over it and a List collected over it after the pushes, are unrelated)
 ## hir/cardinality.tcl
 <<<<
-    set first [expr {$key eq "" ? "" : [Evaluation $hir $e $key]}]
+    set first [Evaluation $hir $e $place $context]
 ====
     set first ""
 >>>>
@@ -255,12 +280,13 @@
 @@ vector-unmutated-per-occurrence a loop over any MutableVector has the length of its own evaluation, mutated or not (precision: two loops over a vector nothing mutates, or a lockstep over it and a List collected over it, are unrelated)
 ## hir/cardinality.tcl
 <<<<
-    if {$key ne "" && ![ContextRooted $hir $key] && ![Mutated $hir $key]} {
+    if {!$context && ![dict exists [Mutations $hir] keys $key] && ![dict exists [Mutations $hir] keys ""]} {
         return [FormAtom [list len $key]]
     }
-    set first [expr {$key eq "" ? "" : [Evaluation $hir $e $key]}]
 ====
-    set first ""
+    if {0} {
+        return [FormAtom [list len $key]]
+    }
 >>>>
 
 @@ vector-occurrence-keyed-by-value a loop over a MutableVector is keyed by the vector's value key rather than by its class of evaluations, so every loop over one binding or field path shares a length

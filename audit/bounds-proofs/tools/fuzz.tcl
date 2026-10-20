@@ -715,8 +715,9 @@ set lockstepSound {
 # Reads of a List collected over a vector, at an index proven against
 # another loop over it (or over a copy of it) with nothing between the two
 # loops that can mutate it -- the vector mutated nowhere, or only before or
-# after both loops, or in the later loop's own body: accepted, the read the
-# proven opcode, every backend agreeing with the interpreter.
+# after both loops, or in the later loop's own body, or only a copy of it
+# pushed between them: accepted, the read the proven opcode, every backend
+# agreeing with the interpreter.
 set vectorProven {
     twice-mod {v = mutable_vector::from_list(xs)
     p = loop x in v:
@@ -741,6 +742,14 @@ set vectorProven {
     if h < 0 or h >= list::length(q):
         return -1
     list::at(p, h)}
+    copy-pushed {v = vec(xs)
+    p = loop x in v:
+        x
+    c1 = v
+    c1.push(h)
+    q = loop x in v:
+        x * 3
+    list::at(p, mod(h, list::length(q)))}
     built-mod {v = vec(xs)
     loop i from 0 to 3:
         v.push(i * h)

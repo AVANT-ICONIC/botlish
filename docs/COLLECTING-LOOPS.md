@@ -150,10 +150,14 @@ vocabulary; `hir/lockstep.tcl` is its one consumer.
   otherwise a value, which an alias, a struct field or a callee holds as a
   logical copy, a nested function cannot mutate a place it captured, and an
   operation that mutates is only ever called, never a value
-  (`MUTABLE-PLACE-RECEIVER`). A domain `x in v` over any other vector has
-  the length `v` has at that evaluation, which it shares with every
+  (`MUTABLE-PLACE-RECEIVER`). Any other vector is measured by its *place*
+  (its binding and field path), which no mutation of another place -- a copy
+  included -- changes: a place no mutating operation has as its receiver
+  keeps one length wherever it is evaluated (unless it is a context member,
+  which another function may grow). A domain `x in v` over any other place
+  has the length `v` has at that evaluation, which it shares with every
   evaluation of the same place that no *site* can come between
-  (`hir::cardinality::Evaluation`): a mutation keyed like `v` in the same
+  (`hir::cardinality::Evaluation`): a mutation of the place in the same
   function body, and, for a context member, also every call that runs
   Botlish code (a callee may grow the member through its own context
   parameter) and every yield (the resumer runs before the body goes on).

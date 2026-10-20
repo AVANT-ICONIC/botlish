@@ -457,30 +457,44 @@ proc hir::cardinality::ListLength {hir e stepsVar} {
 # So a vector keeps its key's length (ListLength) when its key is not
 # rooted at a context parameter and no mutating operation anywhere in the
 # program has a receiver with that key (Mutations) -- a copy `w = v` is
-# keyed like `v`, so a push on either counts for both. Otherwise the domain
-# has the length the vector has at this evaluation, which it shares with
-# every evaluation of the same place no mutation can come between
-# (Evaluation): the atom {len {o R}}, R the first of those evaluations in
-# evaluation order, equal to no other's. Two loops over such a vector with
-# a push between them have unrelated lengths, as do the vector and a List
-# an earlier loop collected over it; two with nothing that can mutate it
-# between them -- built with pushes, then walked twice -- have one. An
-# evaluation with no such class (no place, or a mutation before it in its
-# own statement) has its own atom, {len {o E}}. (Two clauses of one lockstep
-# loop over one place, `loop a in v and c in v`, are one class unless a
-# site runs before or between them: a lockstep loop evaluates its domains
-# once, in written order, before its first iteration, and the sites of its
-# body run after them.)
+# keyed like `v`, so a push on either counts for both. Otherwise it is
+# measured by its place (hir::mutvec::Path: a binding and a field path from
+# it), which no mutation of another place changes: a place no mutating
+# operation anywhere has as its receiver keeps one length, the atom {len
+# {pl B FIELD...}}, wherever it is evaluated -- unless it is rooted at a
+# context parameter, whose member another function may grow. The
+# evaluations of any other place have the length the vector has at that
+# evaluation, which each shares with every evaluation of the same place no
+# mutation can come between (Evaluation): the atom {len {o R}}, R the first
+# of those evaluations in evaluation order, equal to no other's. Two loops
+# over such a vector with a push between them have unrelated lengths, as
+# do the vector and a List an earlier loop collected over it; two with
+# nothing that can mutate it between them -- built with pushes, then
+# walked twice -- have one. An evaluation with no such class (no place, or
+# a mutation before it in its own statement) has its own atom, {len {o
+# E}}. (Two clauses of one lockstep loop over one place, `loop a in v and c
+# in v`, are one class unless a site runs before or between them: a
+# lockstep loop evaluates its domains once, in written order, before its
+# first iteration, and the sites of its body run after them.)
 proc hir::cardinality::IterationLength {hir e stepsVar} {
     upvar 1 $stepsVar steps
     if {[hir::types::kindOf [hir::typeOf $hir $e]] ne "mutvec"} {
         return [ListLength $hir $e steps]
     }
     set key [CompleteKey $hir $e]
-    if {$key ne "" && ![ContextRooted $hir $key] && ![Mutated $hir $key]} {
+    # A key cut short may be rooted at a context parameter.
+    set context [expr {$key eq "" || [ContextRooted $hir $key]}]
+    if {!$context && ![dict exists [Mutations $hir] keys $key] && ![dict exists [Mutations $hir] keys ""]} {
         return [FormAtom [list len $key]]
     }
-    set first [expr {$key eq "" ? "" : [Evaluation $hir $e $key]}]
+    set place [hir::mutvec::Path $hir $e]
+    if {$place eq ""} {
+        return [FormAtom [list len [list o $e]]]
+    }
+    if {!$context && ![dict exists [Mutations $hir] places $place]} {
+        return [FormAtom [list len [list pl {*}$place]]]
+    }
+    set first [Evaluation $hir $e $place $context]
     if {$first eq ""} {
         set first $e
     }
@@ -514,113 +528,96 @@ proc hir::cardinality::ContextRooted {hir key} {
         && [hir::contexts::isLoad $hir [dict get $hir exprs $by value]]}]
 }
 
-# 1 if a mutating operation of HIR has a receiver keyed KEY, or one whose
-# key was cut short (CompleteKey), which may be KEY.
-proc hir::cardinality::Mutated {hir key} {
-    set mutations [Mutations $hir]
-    return [expr {[dict exists $mutations $key] || [dict exists $mutations ""]}]
-}
-
 # The mutating operations of HIR (hir::mutvec::OpKind), grouped by their
-# receiver's key (CompleteKey, "" for one cut short): {KEY {CALL ...} ...}.
-# Reachable or not: a mutation counts wherever it is written.
+# receiver: {keys {KEY {CALL ...} ...} places {PLACE {CALL ...} ...}}, KEY
+# the receiver's key (CompleteKey, "" for one cut short, which may be any)
+# and PLACE its place (hir::mutvec::Path; a receiver that is no place, a
+# temporary, mutates no place). Reachable or not: a mutation counts
+# wherever it is written.
 proc hir::cardinality::Mutations {hir} {
     variable cache
     Memo $hir
     if {![dict exists $cache mutations]} {
-        set mutations [dict create]
+        set mutations [dict create keys {} places {}]
         dict for {c node} [dict get $hir exprs] {
             if {[dict get $node kind] ne "call" || [hir::mutvec::OpKind $hir $c] ne "mutate"} continue
             set receiver [lindex [dict get $node args] 0]
             if {$receiver eq ""} continue
-            dict lappend mutations [CompleteKey $hir $receiver] $c
+            dict update mutations keys keys places places {
+                dict lappend keys [CompleteKey $hir $receiver] $c
+                set place [hir::mutvec::Path $hir $receiver]
+                if {$place ne ""} {
+                    dict lappend places $place $c
+                }
+            }
         }
         dict set cache mutations $mutations
     }
     return [dict get $cache mutations]
 }
 
-# The first evaluation (an iterable expression) of the MutableVector value
-# key KEY that reads the same place as the evaluation E with no mutation of
-# it between them, or "" when E has no such class: E is no place (a call's
-# result), or no quiet run holds it (Epoch).
-#
-# A place, not a key: the copies `c1 = v` and `c2 = v` taken around a push
-# of v are keyed like v, but each holds the value v had when it was bound,
-# and a copy's own push changes only it -- so evaluations of two places
-# are never one class, whatever lies between them (two places keyed like
-# a vector nothing mutates do have one length: IterationLength).
+# The first evaluation (an iterable expression) of the MutableVector place
+# PLACE that no site can separate from the evaluation E, or "" when E has
+# no such class: no quiet run holds it (Epoch). CONTEXT says whether the
+# place may be a context member.
 #
 # The evaluations of one invocation (a function body, or the top-level
 # code) run in a statically known order: a body is a sequence of
 # statements, each run once per run of the body. A *site* is what can
 # change the vector between two evaluations: a mutating operation of the
-# same invocation whose receiver is keyed KEY (or cut short); for a key
-# rooted at a context parameter, also every call that runs Botlish code a
-# callee could mutate the context member in (RunsCode), and every yield,
-# after which the resumer runs before the body goes on. A site in a nested
-# function is no site of this invocation: the nested function mutates a
-# copy of its own (it cannot mutate a place it captured), and running it is
-# a call here. An evaluation of KEY sees the vector its invocation last
-# left: one length from one site to the next. So two evaluations in one
-# *quiet run* of a body -- consecutive statements none of which holds a
-# site -- see one length, however deep each sits in its statement (a loop
-# body, a branch), as long as both run in that one run of the body: each
-# statement of the run runs once in it, and a value of an evaluation in a
-# statement's own sub-sequence (a loop or branch body, a handler) never
-# outlives the run of that sub-sequence it was made in. An
-# evaluation in a statement that holds a site lies in that statement's
-# sub-sequence (its classes are the sub-sequence's) or in its operands --
-# a loop's domains, a call's arguments -- which run once, in evaluation
-# order: before every site of the statement, it belongs to the quiet run
-# before the statement, else to none.
-proc hir::cardinality::Evaluation {hir e key} {
+# same invocation whose receiver is PLACE -- one of another place, a copy
+# keyed like it included, changes only that place -- and, for a context
+# member, also every call that runs Botlish code a callee could mutate the
+# member in (RunsCode), and every yield, after which the resumer runs
+# before the body goes on. A nested function cannot mutate a place it
+# captured, and running it is a call here. An evaluation of PLACE sees the
+# vector its invocation last left: one length from one site to the next.
+# So two evaluations in one *quiet run* of a body -- consecutive statements
+# none of which holds a site -- see one length, however deep each sits in
+# its statement (a loop body, a branch), as long as both run in that one
+# run of the body: each statement of the run runs once in it, and a value
+# of an evaluation in a statement's own sub-sequence (a loop or branch
+# body, a handler) never outlives the run of that sub-sequence it was made
+# in. An evaluation in a statement that holds a site lies in that
+# statement's sub-sequence (its classes are the sub-sequence's) or in its
+# operands -- a loop's domains, a call's arguments -- which run once, in
+# evaluation order: before every site of the statement, it belongs to the
+# quiet run before the statement, else to none.
+proc hir::cardinality::Evaluation {hir e place context} {
     variable cache
     Memo $hir
     set inv [dict get $hir scopes [dict get $hir exprs $e scope] invocation]
-    if {![dict exists $cache evaluations $inv $key]} {
+    set id [list $inv $place $context]
+    if {![dict exists $cache evaluations $id]} {
         set layout [Layout $hir $inv]
-        set sites [Sites $hir $layout $key]
-        set first [dict create]
-        set classes [dict create]
-        foreach o [dict get $layout iterables] {
-            if {[hir::types::kindOf [hir::typeOf $hir $o]] ne "mutvec" || [CompleteKey $hir $o] ne $key} continue
-            set place [hir::mutvec::Path $hir $o]
-            set epoch [Epoch $layout $sites $o]
-            if {$place eq "" || $epoch eq ""} continue
-            set class [list $place $epoch]
-            if {![dict exists $first $class]} {
-                dict set first $class $o
-            }
-            dict set classes $o [dict get $first $class]
-        }
-        dict set cache evaluations $inv $key $classes
-    }
-    set classes [dict get $cache evaluations $inv $key]
-    return [expr {[dict exists $classes $e] ? [dict get $classes $e] : ""}]
-}
-
-# The sites (Evaluation) of value key KEY among the calls of LAYOUT's
-# invocation.
-proc hir::cardinality::Sites {hir layout key} {
-    set context [ContextRooted $hir $key]
-    set sites {}
-    foreach c [dict get $layout calls] {
-        if {[hir::mutvec::OpKind $hir $c] eq "mutate"} {
-            set receiver [lindex [dict get $hir exprs $c args] 0]
-            if {$receiver ne ""} {
-                set mutated [CompleteKey $hir $receiver]
-                if {$mutated eq "" || $mutated eq $key} {
+        set sites {}
+        foreach c [dict get $layout calls] {
+            if {[hir::mutvec::OpKind $hir $c] eq "mutate"} {
+                set receiver [lindex [dict get $hir exprs $c args] 0]
+                if {$receiver ne "" && [hir::mutvec::Path $hir $receiver] eq $place} {
                     lappend sites $c
                     continue
                 }
             }
+            if {$context && [RunsCode $hir $c]} {
+                lappend sites $c
+            }
         }
-        if {$context && [RunsCode $hir $c]} {
-            lappend sites $c
+        set first [dict create]
+        set classes [dict create]
+        foreach o [dict get $layout iterables] {
+            if {[hir::types::kindOf [hir::typeOf $hir $o]] ne "mutvec" || [hir::mutvec::Path $hir $o] ne $place} continue
+            set epoch [Epoch $layout $sites $o]
+            if {$epoch eq ""} continue
+            if {![dict exists $first $epoch]} {
+                dict set first $epoch $o
+            }
+            dict set classes $o [dict get $first $epoch]
         }
+        dict set cache evaluations $id $classes
     }
-    return $sites
+    set classes [dict get $cache evaluations $id]
+    return [expr {[dict exists $classes $e] ? [dict get $classes $e] : ""}]
 }
 
 # 1 if call C may run Botlish code besides its own operands: a call of
@@ -913,6 +910,10 @@ proc hir::cardinality::ShowKey {hir key} {
     switch -- $how {
         b { return [hir::semantic::SourceName $hir $what] }
         p { return "[ShowKey $hir $what].$field" }
+        pl {
+            # A place: its binding and field path.
+            return [join [concat [list [hir::semantic::SourceName $hir $what]] $field] .]
+        }
         o {
             # One evaluation of an iterable: its path and where it is
             # written, so that two loops over one vector read apart.

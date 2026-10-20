@@ -516,12 +516,14 @@ proven sets are `counts.set(0|1, 0)` on a capacity-2 allocation.
   before both changes. The fix keys a vector's length only when nothing
   can change it: no mutating operation anywhere in the program has a
   receiver with its key (a copy is keyed like its source, so a push on
-  either counts) and the key is not rooted at a context parameter. A loop
-  over any other `MutableVector` has the length the vector has at that
+  either counts) and the key is not rooted at a context parameter. Any
+  other vector is measured by its place (binding and field path), which a
+  copy's push does not change: a place nothing mutates keeps one length,
+  and a loop over any other has the length the vector has at that
   evaluation, shared with the evaluations of the same place that no
-  mutation -- for a context member, also no call that runs Botlish code
-  and no yield -- can come between: consecutive statements of one body
-  holding none (`hir::cardinality::Evaluation`). A vector built with
+  mutation of it -- for a context member, also no call that runs Botlish
+  code and no yield -- can come between: consecutive statements of one
+  body holding none (`hir::cardinality::Evaluation`). A vector built with
   pushes and then walked twice keeps the proof; two loops with a push
   between them do not. The review's second round found one route no size
   form saw: a mutating operation taken as a value (`p =
@@ -531,9 +533,9 @@ proven sets are `counts.set(0|1, 0)` on a capacity-2 allocation.
   (`c = v` then changed, on the baseline too). Such an operation is now
   only ever called (`MUTABLE-PLACE-RECEIVER` at the reference). List and
   MutableArray lengths keep their keys (`lpmask`'s NIR is unchanged). The
-  cost: two loops over a vector with a mutation between them, a copy pushed
-  between them (`w = v; w.push(x)`, conservatively), or, for a context's
-  vector, any function call between them are unrelated, and an operation
+  cost: two loops over a vector with a mutation of it between them, or,
+  for a context's vector, any function call between them are unrelated
+  (whether or not the callee can reach the member), and an operation
   that mutates can no longer be a function value (none was, in the corpus
   or the tests); the analysis is computed once per function body and pass,
   so the front end costs what it did before the fix. A second hole of the

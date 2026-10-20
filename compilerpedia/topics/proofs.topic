@@ -133,11 +133,12 @@ forms:
     has that container's length, so any of the forms above may use the
     length of another loop's List over the same List or MutableArray -- or
     the same MutableVector, when nothing can change the vector between the
-    two loops: no push, pop, take, swap or clear on it (or on a copy of it)
-    in the statements from the one loop to the other, and, for a context's
-    vector, no call of a function and no yield there either. Pushes before
-    both loops or after both, or in the later loop's own body, are fine:
-    a vector built with pushes, then walked twice, has one length.
+    two loops: no push, pop, take, swap or clear on it in the statements
+    from the one loop to the other, and, for a context's vector, no call of
+    a function and no yield there either. Pushes before both loops or after
+    both, in the later loop's own body, or on a copy of the vector (another
+    value) are fine: a vector built with pushes, then walked twice, has one
+    length.
 
 @example accept
 import list
@@ -281,11 +282,11 @@ to the length, so the call must handle or admit IndexNotFound:
     and bit_and(h, -1) is h).
   * the List of a loop over a MutableVector, against the length of
     another loop over the same vector with something between the two
-    loops that may change it: a push, pop or clear on it or on a copy of
-    it (also in a branch, a handler or a loop body), or -- for a context's
-    vector -- any call of a function (it may grow the vector through its
-    own context parameter) or a yield. A copy is another vector: two
-    copies taken around a push have unrelated lengths.
+    loops that may change it: a push, pop or clear on it (also in a
+    branch, a handler or a loop body), or -- for a context's vector -- any
+    call of a function (it may grow the vector through its own context
+    parameter) or a yield. A copy is another vector: two copies taken
+    around a push have unrelated lengths.
 
 @example reject
 import list
@@ -708,8 +709,8 @@ fn pairs(xs: List[int], ys: List[int]) -> List[int]:
 == LIMITATIONS
 Two different lists are unrelated even when the caller passes lists of the
 same length. So are two loops over one MutableVector with something
-between them that may change it (a push, pop or clear on it or on a copy
-of it; for a context's vector, also a call of a function or a yield), or
+between them that may change it (a push, pop or clear on it; for a
+context's vector, also a call of a function or a yield), or
 such a vector and the List an earlier loop over it collected: the
 vector's length changes in place, so each walk counts the vector as it is
 then. With nothing of the kind between them -- the pushes all before both,
