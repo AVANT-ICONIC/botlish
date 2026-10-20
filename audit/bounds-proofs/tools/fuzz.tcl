@@ -855,6 +855,16 @@ set vectorProven {
     else:
         bx.v.push(h)
     mutable_vector::length(bx.v)}
+    then-pushes {v = vec(xs)
+    p = loop x in v:
+        x
+    if h < 0:
+        v.push(h)
+    else:
+        q = loop x in v:
+            x * 3
+        return list::at(p, mod(h, list::length(q)))
+    mutable_vector::length(v)}
     handler-read-then-push {v = vec(xs)
     p = loop x in v:
         x
