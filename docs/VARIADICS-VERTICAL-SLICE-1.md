@@ -842,15 +842,71 @@ tier.tcl's `c-ffi-bench` measures it on macOS (section 25).
 
 ## 25. macOS GitHub Actions runs
 
-PENDING (filled in after the runs)
+`.github/workflows/macos-arm64.yml` on macos-15 (Apple Silicon), Apple
+clang 17. The shared development Mac was not used.
+
+* [Run 39470112845](https://github.com/mwagner-webdev/botlish/actions/runs/39470112845) (`6b291a9`) ran the push's Tier C:
+  `variadics.test`, `c-ffi.test`, `c-bindgen.test`, the golden suite on all
+  four backends and the C FFI fuzzer, all under GC stress.
+  * Everything passed except `cf-va-abi-mixed`:
+    * every `cf-va-*` value test;
+    * the Apple CLIF signature, `cf-va-clif`;
+    * the other four capture scenarios;
+    * the fuzzer, 111 variadic functions with 545 trailing arguments, no
+      disagreement.
+  * `cf-va-abi-mixed` failed in the harness, not in the ABI. Apple put its
+    eighteen trailing arguments, 144 bytes, on the stack as the model
+    says, and the fixture captured only 128.
+  * The capture now keeps 256 bytes (`3781794`).
+  * Its smoke job (Tier A, with the native Rust unit tests: the Apple
+    placement tests on a real Apple host) and acceptance shard 1 passed.
+    Shard 2 was cancelled by the next push.
+* [Run 39482548143](https://github.com/mwagner-webdev/botlish/actions/runs/39482548143) (`3781794`), the final code:
+  * smoke passed;
+  * acceptance shards 1 and 2 passed: every Tcl test file on interp and
+    compile, `c-ffi.test` with all five capture scenarios against Apple
+    clang's own calls included, and every golden suite on four backends;
+  * Tier C ran the C FFI's `va-*` mutants for this host and
+    `bench/c-ffi.tcl`, results below.
 
 ## 26. Linux x86-64 regression
 
-PENDING (filled in after the runs)
+* **Local** (a 4-core container), `tclsh9.0 tests/local.tcl` on `93c6fb8`:
+  * Tcl tests: 6,374 passed on interp and 6,369 on compile;
+  * golden suites: 99 of 99 on all four backends (4,924 tests on interp);
+  * one failure, `sc-census-exhaustive`, fixed in `6b291a9`.
+* **Local GC stress:** `variadics.test` and `c-ffi.test` under
+  `BOTLISH_NATIVE_GC_STRESS=1`, 167 passed, 0 failed.
+* **[tests.yml, run 39470122809](https://github.com/mwagner-webdev/botlish/actions/runs/39470122809)** (`6b291a9`) succeeded:
+  * the Tcl suite on interp and compile;
+  * cranelift and cranelift-generic coverage;
+  * the four golden shards beside their Tcl originals;
+  * the native Rust unit tests;
+  * the stub-linked executables;
+  * the warning gate;
+  * the method-filter audit.
+
+  The GC-stress job runs on pushes to main only.
+* **[static-decisions, run 39464864287](https://github.com/mwagner-webdev/botlish/actions/runs/39464864287)** (`93c6fb8`)
+  succeeded: every golden suite's static decisions agree under the batched
+  and the sequential scheduler.
+* **[c-bindgen, run 39464912909](https://github.com/mwagner-webdev/botlish/actions/runs/39464912909)** (`93c6fb8`) succeeded:
+  generation, every profile's check, and the acceptance tests.
 
 ## 27. Linux AArch64 regression
 
-PENDING (filled in after the runs)
+**[tests-arm64.yml, run 39470126646](https://github.com/mwagner-webdev/botlish/actions/runs/39470126646)** (`6b291a9`, on
+ubuntu-24.04-arm) succeeded, every job:
+
+* the Tcl suite on interp and compile, which includes `c-ffi.test`'s
+  `cf-va-*`: the AArch64 capture of every scenario against GCC's own calls
+  and AAPCS64's model;
+* cranelift and cranelift-generic coverage;
+* the four golden shards;
+* the native Rust unit tests, natively and under GC stress, with
+  `ffi_linux_aarch64_variadic_arguments_in_registers` and the Apple
+  placement tests;
+* the whole suite under GC stress.
 
 ## 28. Remaining limitations
 
