@@ -32,25 +32,52 @@ proc ht::dropsOf {impl} {
     return drop
 }
 
+# The path of a copy of implementation IMPL whose load policy is POLICY
+# (NUM/DEN): its "# policy:" header and its load_num/load_den functions
+# rewritten, the rest unchanged. An implementation without both has no
+# policy to vary.
+proc ht::policyVariant {impl policy} {
+    lassign [split $policy /] num den
+    set path [ht::implPath $impl]
+    set text [ht::readFile $path]
+    foreach {pattern replacement} [list {(?n)^# policy: \S+$} "# policy: $num/$den" \
+            {fn load_num\(\) -> int:\n    \d+} "fn load_num() -> int:\n    $num" \
+            {fn load_den\(\) -> int:\n    \d+} "fn load_den() -> int:\n    $den"] {
+        if {[regsub $pattern $text $replacement text] != 1} {
+            error "$impl has no load policy to vary ($pattern)"
+        }
+    }
+    set dir [file join [ht::workDir] policy-$num-$den]
+    file mkdir $dir
+    set variant [file join $dir [file rootname [file tail $path]].bot]
+    ht::writeFile $variant $text
+    return $variant
+}
+
 # Runs the fuzzer: OPTIONS is a dict of -impls -keys -profiles -seeds -seed
-# -backends -quiet -edits (fuzz.tcl's options). Prints every failure (with
-# the command that reproduces it) and returns {CHECKS FAILURES}. With
-# -stop 1 it returns at the first failure.
+# -backends -quiet -edits -policy (fuzz.tcl's options; -policy NUM/DEN
+# fuzzes each implementation's variant with that load policy instead,
+# ht::policyVariant). Prints every failure (with the command that
+# reproduces it) and returns {CHECKS FAILURES}. With -stop 1 it returns at
+# the first failure.
 proc ht::fuzz {options} {
     set failures 0
     set checks 0
     set stop [expr {[dict exists $options -stop] && [dict get $options -stop]}]
-    foreach impl [dict get $options -impls] {
+    set policy [expr {[dict exists $options -policy] ? [dict get $options -policy] : ""}]
+    set rerunPolicy [expr {$policy eq "" ? "" : " -policy $policy"}]
+    foreach name [dict get $options -impls] {
+        set impl [expr {$policy eq "" ? $name : [ht::policyVariant $name $policy]}]
         foreach kind [dict get $options -keys] {
             # A typed implementation (header line "# key-type: T") takes one
             # key kind only.
             set implPath [ht::implPath $impl]
             if {[regexp -line {^# key-type: (\S+)$} [ht::readFile $implPath] -> keyType]
                 && [dict get {int int str str point keys::Point} $kind] ne $keyType} continue
-            set path [ht::app $impl-$kind trace.bot $impl $kind [dict get $options -edits]]
+            set path [ht::app [file rootname [file tail $implPath]]-$kind trace.bot $impl $kind [dict get $options -edits]]
             if {[catch {ht::compile $path} hir copts]} {
                 incr failures
-                puts "FAIL $impl $kind: does not compile: [string range $hir 0 400]"
+                puts "FAIL $name$rerunPolicy $kind: does not compile: [string range $hir 0 400]"
                 if {$stop} { return [list $checks $failures] }
                 continue
             }
@@ -72,16 +99,16 @@ proc ht::fuzz {options} {
                     incr checks
                     if {$got ne $expected} {
                         incr failures
-                        puts "FAIL $impl $kind $backend seed $s $profile ([llength $ops] ops)"
+                        puts "FAIL $name$rerunPolicy $kind $backend seed $s $profile ([llength $ops] ops)"
                         puts "  expected $expected"
                         puts "  got      [string range $got 0 600]"
-                        puts "  rerun: tclsh9.0 audit/hash-table/tools/fuzz.tcl -impls $impl -keys $kind -profiles $profile -seed $s -seeds 1 -backends $backend"
+                        puts "  rerun: tclsh9.0 audit/hash-table/tools/fuzz.tcl -impls $name$rerunPolicy -keys $kind -profiles $profile -seed $s -seeds 1 -backends $backend"
                         if {$stop} { return [list $checks $failures] }
                     }
                 }
             }
             if {![dict get $options -quiet]} {
-                puts "$impl $kind: [llength $cases] traces x [llength [dict get $options -backends]] backends"
+                puts "$name$rerunPolicy $kind: [llength $cases] traces x [llength [dict get $options -backends]] backends"
             }
         }
     }

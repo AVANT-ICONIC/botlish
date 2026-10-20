@@ -11,7 +11,7 @@
 #   HASH INLINE MOD BOUNDS VS
 #               one prototype each (RO-1, CG-1, CG-2, CP-1..3, VS-1/VS-2/BUG-1)
 #   COMBO       all of them merged
-#   PROBE       BASE plus the probe primitive (RT-1, branch exp-probe-primitive)
+#   PROBE       BASE plus the probe primitive (RT-1, patches/probe-primitive.patch)
 #   COMBOPROBE  COMBO plus the probe primitive
 #
 # Writes RESULTS-DIR/*.tsv and *.txt; tools/summarize.tcl makes the tables.

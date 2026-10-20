@@ -105,12 +105,15 @@ def universe(kind, profile, rng):
 
     small     a handful of keys (many replaces and drops of the same keys)
     grow      enough keys to cross several growth thresholds
+    large     1,000 or 3,000 keys: long sequences, growth to thousands of
+              slots, long removal histories
     collide   keys whose hashes share their low bits (long probe runs and
               wraparound at every capacity up to the modulus)
     edge      boundary values: 0, negatives, BigInts, empty-ish and
               non-ASCII Strings, astral characters
     """
-    size = {"small": 6, "grow": rng.choice([7, 12, 23, 47, 90, 200]), "collide": rng.choice([10, 30, 60]), "edge": 20}[profile]
+    size = {"small": 6, "grow": rng.choice([7, 12, 23, 47, 90, 200]), "collide": rng.choice([10, 30, 60]), "edge": 20,
+            "large": rng.choice([1000, 3000])}[profile]
     if kind == "int":
         if profile == "collide":
             modulus = rng.choice([8, 16, 64])
@@ -150,7 +153,8 @@ def universe(kind, profile, rng):
         if profile == "edge":
             base = [(0, 0), (0, 1), (1, 0), (-1, -1), (2**62, 0), (0, -(2**62))]
             return base + [(rng.randrange(-5, 5), rng.randrange(-5, 5)) for _ in range(size - len(base))]
-        return list({(rng.randrange(40), rng.randrange(40)) for _ in range(size)})
+        side = 40 if profile != "large" else 200
+        return list({(rng.randrange(side), rng.randrange(side)) for _ in range(size)})
     raise ValueError(kind)
 
 
@@ -177,7 +181,7 @@ def trace(seed, kind, profile, policy="none", drops_allowed=True):
         expected_size = rng.randrange(0, 60)
         ops.append(f"f {expected_size}")
     cap = slots_for(expected_size, num, den) if num else 0
-    length = rng.choice([10, 40, 120, 400]) if profile != "grow" else 3 * len(keys) + 20
+    length = rng.choice([10, 40, 120, 400]) if profile not in ("grow", "large") else 3 * len(keys) + 20
     drops = drops_allowed and rng.random() < 0.7
     for _ in range(length):
         k = rng.choice(keys)

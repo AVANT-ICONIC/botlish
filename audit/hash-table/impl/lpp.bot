@@ -9,9 +9,9 @@
 # keeps the policy in Botlish against the compiler improvements that would
 # make lpa's own probe loop as cheap.
 #
-# It compiles only against the branch exp-probe-primitive, which adds the
-# primitive (tools/lib.tcl's BOTLISH_HT_ROOT points the tools at that
-# checkout); this checkout's compiler rejects it.
+# It compiles only against a checkout with patches/probe-primitive.patch
+# applied, which adds the primitive (tools/lib.tcl's BOTLISH_HT_ROOT points
+# the tools at that checkout); this checkout's compiler rejects it.
 #
 # policy: 7/10
 import list

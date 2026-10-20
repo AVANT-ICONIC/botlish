@@ -16,7 +16,7 @@ measured on:
 | `hash`, `inline`, `mod`, `bounds`, `vs` | the baseline plus one prototype (RO-1, CG-1, CG-2, CP-1..3, VS-1/VS-2) |
 | `combo` | the branch with all five prototypes merged (the report's "merged tree"), before the review fixes (commit `340e966`) |
 | `fixed` | the merged tree after the review fixes (merges `cd7ba76`, `a71467d`, `1198a1d`; `plan5.sh`): counts only, no timings |
-| `probe`, `comboprobe` | the baseline, and the merged tree, plus the probe primitive (branch `exp-probe-primitive`) |
+| `probe`, `comboprobe` | the baseline, and the merged tree, plus the probe primitive (`../patches/probe-primitive.patch`) |
 | `rust` | the Rust reference |
 
 ## Methods
