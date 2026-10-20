@@ -31,7 +31,9 @@
 #     a native call with a registered Range, char::scalar_value(c), with c
 #     recomputed every step (varying: the bound is no single value, and i may
 #     step past it) or passed unchanged (invariant: the fact fires), read
-#     directly, through a local, a struct field or a function returning it;
+#     directly, through a local, a struct field or a function returning it,
+#     a struct or an `if` value the invocation builds from it, or a context
+#     parameter (invariant only: a context is installed once);
 #     or c captured by a closure whose non-tail self call goes through a
 #     parameter holding another closure of the same function, with another
 #     c. The proof needs i to start at the bound's largest value, 1114111,
@@ -200,8 +202,12 @@ proc program {} {
 # `same`, c passed unchanged (the invariant bound) -- the bound reading c as
 # FORM says: `direct`, through a local (`d = c`), a struct field (`q.c`, the
 # struct rebuilt when c changes), a top-level function returning it
-# (`same(c)`) or a nested one capturing it (`pick(0)`) -- and a mod of
-# i + OFF, direct or through an inlined leaf. NEXT `closure` is the other
+# (`same(c)`), a nested one capturing it (`pick(0)`), a field of a struct
+# the invocation builds (`Box{c: c}.c`), an `if` value whose condition reads
+# c (`d = if char::scalar_value(c) > 100: c else: c`), or -- with NEXT
+# `same` only, since a context is installed once -- a context parameter's
+# field (`cfg.c`) -- and a mod of i + OFF, direct or through an inlined
+# leaf. NEXT `closure` is the other
 # shape: c captured by the closure mk(C0) returns, which at i == HOP makes a
 # non-tail self call through its parameter k, holding mk(C1), from i - 1:
 # HOP just above C1 (that chain meets C1) or at or below it (it runs past
@@ -209,7 +215,7 @@ proc program {} {
 # {DeepModel arguments}}.
 proc deepProgram {} {
     set next [pick {parity parity threshold same same closure closure}]
-    set form [pick {direct local field call nested}]
+    set form [pick {direct local field call nested built choice context}]
     set c0 [pick {97 98 122}]
     set c1 [pick {97 98 122}]
     set t [pick {97 122 5000}]
@@ -243,6 +249,9 @@ proc deepProgram {} {
         append text "first = mk($char0)\nother = mk('[format %c $c1]')\nfirst(1114111, 0, other)\n"
         return [list $text [list $next $c0 $t $x $off $c1 $hop]]
     }
+    if {$form eq "context" && $next ne "same"} {
+        set form direct
+    }
     switch $next {
         parity { set nextText "if (i - 1).mod(2) == 0:\n            'a'\n        else:\n            'b'" }
         threshold { set nextText "if i - 1 == $t:\n            'z'\n        else:\n            'a'" }
@@ -273,10 +282,30 @@ proc deepProgram {} {
             set bound q.c
             set arg [expr {$next eq "same" ? "q" : "Box{c: n}"}]
         }
+        built {
+            append text "struct Box:\n    c: UnicodeChar\n\n"
+            set bound "Box{c: c}.c"
+        }
+        choice {
+            set prelude "    d = if char::scalar_value(c) > 100:\n        c\n    else:\n        c\n"
+            set bound d
+        }
+        context {
+            append text "context struct Cfg:\n    c: UnicodeChar\n\n"
+            set param "context cfg: Cfg"
+            set bound cfg.c
+        }
     }
     set step [expr {$nextText eq "" ? "" : "        n = $nextText\n"}]
-    append text "fn b(i: int, $param, acc: int) -> int:\n${prelude}    if i == char::scalar_value($bound):\n        acc\n    else:\n${step}        b(i - 1, $arg, acc + $term)\n\n"
-    append text "b(1114111, $start, 0)\n"
+    if {$form eq "context"} {
+        # The context parameter follows the ordinary ones; the call passes
+        # none, and the program installs the one value first.
+        append text "fn b(i: int, acc: int, $param) -> int:\n${prelude}    if i == char::scalar_value($bound):\n        acc\n    else:\n        b(i - 1, acc + $term)\n\n"
+        append text "with context Cfg {c: $start}\nb(1114111, 0)\n"
+    } else {
+        append text "fn b(i: int, $param, acc: int) -> int:\n${prelude}    if i == char::scalar_value($bound):\n        acc\n    else:\n${step}        b(i - 1, $arg, acc + $term)\n\n"
+        append text "b(1114111, $start, 0)\n"
+    }
     return [list $text [list $next $c0 $t $x $off $c1 $hop]]
 }
 
