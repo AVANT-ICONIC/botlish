@@ -371,6 +371,85 @@ test range-induction-mutable-length-bound {a bound read from a MutableVector par
         [lmap backend {interp compile cranelift cranelift-generic} {lindex [outcomeUnderHir $backend $hir] 1}]
 } -result {{} {bound not stable} {2 2 2 2}}
 
+# A self call that passes i unchanged is no step: on the guard's continuing
+# side it starts an invocation at an i the squeeze already covers, so it
+# does not stop the proof (Advance). f(0, 10, 1) calls f(0, 10, 2) once,
+# not as a tail call, and the tail call steps i by 1.
+test range-induction-nontail-identity-call {a non-tail self call passing i unchanged, inside the guard's continuing side, beside a tail call stepping it by 1, keeps the induction fact [0, 10], and every backend computes 27} -body {
+    set source "fn f(i: int, n: int, d: int) -> int:\n    if i == n:\n        d\n    else:\n        x = if d == 1:\n            f(i, n, 2)\n        else:\n            0\n        f(i + 1, n, d + x + mod(1000, i + 1))\n\nf(0, 10, 1)"
+    lassign [rangeOf $source] hir spec analysis
+    set hir [surface::compile $source t.bot -warnings off]
+    list [inductionOf $analysis [rangeInstance $spec f] 0] \
+        [lmap backend {interp compile cranelift cranelift-generic} {lindex [outcomeUnderHir $backend $hir] 1}]
+} -result {{[0, 10]} {27 27 27 27}}
+
+test range-induction-nontail-self-call-disagree {self calls that step i by different amounts -- i + 1 first, i - 1 after it, i + 1 at the tail -- are no common step, whichever comes first: no induction fact for i, and no attempt} -body {
+    lassign [rangeOf "fn h(i: int, n: int, fuel: int, acc: int) -> int:\n    if i == n:\n        return acc\n    if fuel == 0:\n        return acc\n    x = h(i + 1, n, fuel - 1, 0)\n    y = h(i - 1, n, fuel - 1, 0)\n    h(i + 1, n, fuel - 1, acc + x + y + mod(1000, i + 1))\n\nh(0, 6, 4, 0)"] hir spec analysis
+    set id [rangeInstance $spec h]
+    list [inductionOf $analysis $id 0] [hir::induction::reason [dict get $analysis induction] $id 0]
+} -result {{} {}}
+
+# A bound is invariant when every invocation reads the same values: a field
+# of a parameter passed unchanged (a struct never changes), typed or not, a
+# local bound to an invariant value, a call of a function whose body is
+# determined by its arguments. A struct rebuilt on the self call, a
+# function's argument that changes, a function that reads a mutable object
+# (even one passed unchanged), a local bound to a changing parameter, or a
+# function the invocation makes, capturing a changing parameter, is not.
+test range-induction-invariant-bound-shapes {str::length of a field of an unchanged struct parameter (typed and untyped), of a local bound to an invariant value, and of a call of a repeatable function over an unchanged parameter are bounds: i in [0, smallMax]; a rebuilt struct, a changing argument of the function, a function reading a MutableVector, a local of a changing parameter and a nested function capturing one are not ("bound not stable")} -body {
+    set struct "import str\nstruct P:\n    name: str\n    n: int\n\n"
+    set twice "import str\nfn twice(s: str) -> str:\n    str::concat(s, s)\n\n"
+    set sources [list \
+        "${struct}fn f(i: int, p: P, acc: int) -> int:\n    if i == str::length(p.name):\n        acc\n    else:\n        f(i + 1, p, acc + mod(1000, i + 1))\n\nf(0, P{name: \"hello world\", n: 3}, 0)" \
+        "${struct}fn f(i, p, acc):\n    if i == str::length(p.name):\n        acc\n    else:\n        f(i + 1, p, acc + mod(1000, i + 1))\n\nf(0, P{name: \"hello world\", n: 3}, 0)" \
+        "import str\nfn f(i: int, s: str, acc: int) -> int:\n    t = str::concat(s, \"!\")\n    if i == str::length(t):\n        acc\n    else:\n        f(i + 1, s, acc + mod(1000, i + 1))\n\nf(0, \"hello\", 0)" \
+        "${twice}fn f(i: int, s: str, acc: int) -> int:\n    if i == str::length(twice(s)):\n        acc\n    else:\n        f(i + 1, s, acc + mod(1000, i + 1))\n\nf(0, \"hello\", 0)" \
+        "${struct}fn f(i: int, p: P, acc: int) -> int:\n    if i == str::length(p.name):\n        acc\n    else:\n        f(i + 1, P{name: str::concat(p.name, \"\"), n: p.n}, acc + mod(1000, i + 1))\n\nf(0, P{name: \"hello world\", n: 3}, 0)" \
+        "${twice}fn f(i: int, s: str, acc: int) -> int:\n    if i == str::length(twice(s)):\n        acc\n    else:\n        f(i + 1, str::concat(s, \"\"), acc + mod(1000, i + 1))\n\nf(0, \"hello\", 0)" \
+        "import str\nimport mutable_vector\nfn first(v: MutableVector\[str\]) -> str:\n    v.at(0):\n        on IndexNotFound:\n            \"\"\n\nfn f(i: int, v: MutableVector\[str\], acc: int) -> int:\n    if i == str::length(first(v)):\n        acc\n    else:\n        f(i + 1, v, acc + mod(1000, i + 1))\n\nv = mutable_vector::from_list(\[\"hello\"\])\nf(0, v, 0)" \
+        "import char\nfn f(i: int, c: UnicodeChar, acc: int) -> int:\n    d = c\n    if i == char::scalar_value(d):\n        acc\n    else:\n        n = if (i - 1).mod(2) == 0:\n            'a'\n        else:\n            'b'\n        f(i - 1, n, acc + mod(1000, i))\n\nf(1114111, 'b', 0)" \
+        "import char\nfn f(i: int, c: UnicodeChar, acc: int) -> int:\n    fn pick(x: int) -> UnicodeChar:\n        c\n    if i == char::scalar_value(pick(0)):\n        acc\n    else:\n        n = if (i - 1).mod(2) == 0:\n            'a'\n        else:\n            'b'\n        f(i - 1, n, acc + mod(1000, i))\n\nf(1114111, 'b', 0)"]
+    lmap source $sources {
+        lassign [rangeOf $source] hir spec analysis
+        set id [rangeInstance $spec f]
+        set r [inductionOf $analysis $id 0]
+        expr {$r ne "" ? $r : [hir::induction::reason [dict get $analysis induction] $id 0]}
+    }
+} -result [list "\[0, $hir::range::smallMax\]" "\[0, $hir::range::smallMax\]" "\[0, $hir::range::smallMax\]" "\[0, $hir::range::smallMax\]" {bound not stable} {bound not stable} {bound not stable} {bound not stable} {bound not stable}]
+
+# A binding from outside the function -- a top-level one, or one a nested
+# function captures -- is the same in every invocation a chain of self calls
+# through the function's own binding makes: each runs the one closure. A
+# self call through a parameter may reach another closure of the same
+# function, with another captured value: mk("abc")'s count, entered from
+# mk("hello world")'s, stops at 3, not 11, so that bound is not stable
+# (SameClosure). A local bound to the function's own binding is that binding;
+# a local bound to the parameter is the parameter.
+test range-induction-outside-binding-bound {a bound over a top-level binding or a captured one is invariant when every self call goes through the function's own binding, directly or through a local alias of it (i in [0, smallMax]); when a self call goes through a parameter holding another closure of the function, or a local alias of that parameter, the captured bound is not ("bound not stable"), and every backend computes 24} -body {
+    set top "import str\ntext = \"hello world\"\n\nfn count(i: int, acc: int) -> int:\n    if i == str::length(text):\n        acc\n    else:\n        count(i + 1, acc + mod(1000, i + 1))\n\ncount(0, 0)"
+    set captured "import str\nfn outer(s: str) -> int:\n    fn count(i: int, acc: int) -> int:\n        if i == str::length(s):\n            acc\n        else:\n            count(i + 1, acc + mod(1000, i + 1))\n    count(0, 0)\n\nouter(\"hello world\")"
+    set alias "import str\nfn outer(s: str) -> int:\n    fn count(i: int, acc: int) -> int:\n        if i == str::length(s):\n            acc\n        else:\n            g = count\n            g(i + 1, acc + mod(1000, i + 1))\n    count(0, 0)\n\nouter(\"hello world\")"
+    set other "import str\nfn mk(s: str):\n    fn count(i, acc, k):\n        if i == str::length(s):\n            acc\n        else:\n            x = if acc == 0:\n                k(i + 1, 1, k)\n            else:\n                0\n            count(i + 1, acc + x + mod(1000, i + 1), k)\n    count\n\na = mk(\"hello world\")\nb = mk(\"abc\")\na(0, 0, b)"
+    set otherAlias "import str\nfn mk(s: str):\n    fn count(i, acc, k):\n        if i == str::length(s):\n            acc\n        else:\n            g = k\n            x = if acc == 0:\n                g(i + 1, 1, g)\n            else:\n                0\n            count(i + 1, acc + x + mod(1000, i + 1), k)\n    count\n\na = mk(\"hello world\")\nb = mk(\"abc\")\na(0, 0, b)"
+    # Every used instance of count but the generic Block-value entry (an
+    # open instance, which no proof is attempted for).
+    set out {}
+    foreach source [list $top $captured $alias $other $otherAlias] {
+        lassign [rangeOf $source] hir spec analysis
+        set induction [dict get $analysis induction]
+        foreach id [dict get $spec used] {
+            if {[dict get $spec instances $id name] ne "count"
+                    || [hir::induction::reason $induction $id 0] eq "open instance"} {
+                continue
+            }
+            set r [inductionOf $analysis $id 0]
+            lappend out [expr {$r ne "" ? $r : [hir::induction::reason $induction $id 0]}]
+        }
+    }
+    set hir [surface::compile $other t.bot -warnings off]
+    lappend out [lmap backend {interp compile cranelift cranelift-generic} {lindex [outcomeUnderHir $backend $hir] 1}]
+} -result [list "\[0, $hir::range::smallMax\]" "\[0, $hir::range::smallMax\]" "\[0, $hir::range::smallMax\]" {bound not stable} {bound not stable} {24 24 24 24}]
+
 # ---------------------------------------------------------------------------
 # Parameter branch narrowing (this milestone's Part A): the same
 # ComparisonNarrowing machinery hir/range.tcl already had for `local`

@@ -656,24 +656,34 @@ legality side, which has none by design.
   `p ∈ [init.min, B.max]` (or the mirror for a decreasing step). It also
   records `monotone`, so the continuing `p != B` branch narrows to `p < B`.
 * **How it is established:**
-  * Every self call, tail or not, passes `p ± c` with the same literal `c`
-    (`ClassifyParam`, `183`). A non-tail self call enters the instance like
-    a tail one, and `ExternalSeeds` counts no self call. The proof once read
-    the tail calls only, and `x = f(i + 3, ...)` then left a lock the
-    program broke: a mask computed a wrong value and a `rimodtotal` divided
-    by zero (`range-induction-nontail-self-call`,
-    `mod-lowering-nontail-self-call`).
+  * Every self call, tail or not, passes `p` unchanged or `p ± c`, with
+    one literal `c` for all of them (`Advance`). A non-tail self call enters
+    the instance like a tail one, and `ExternalSeeds` counts no self call.
+    The proof once read the tail calls only, and `x = f(i + 3, ...)` then
+    left a lock the program broke: a mask computed a wrong value and a
+    `rimodtotal` divided by zero (`range-induction-nontail-self-call`,
+    `mod-lowering-nontail-self-call`). A call passing `p` unchanged starts
+    an invocation at a `p` the squeeze already covers
+    (`range-induction-nontail-identity-call`).
   * An `if p == B` guard dominates every self call, either at the top
     level or under "harmless wrapper" `if`s (`Guard`, `327`): a tail call
     is a statement of the guard's continuing side, any other self call is
     inside it (`CoversAll`).
   * `|c| = 1`.
   * B is stable, one value for the whole recursion: a literal, a parameter
-    passed through unchanged, or a call of a native determined by its
-    argument values (`hir::repeatable::Native`) whose arguments are such
-    values in turn (`BoundRange`, `Invariant`). A registered result Range
-    alone is not enough: `i == char::scalar_value(c)` with `c` recomputed
-    every step can be stepped past.
+    passed through unchanged, or a call with a registered result Range
+    whose value is the same in every invocation (`BoundRange`,
+    `Invariant`). That is a call determined by its argument values (a
+    native classified so, `hir::repeatable::Native`, or a function whose
+    body is, `hir::repeatable::Block`) over invariant arguments: literals,
+    unchanged parameters, root bindings, locals bound to invariant values,
+    fields of invariant values, and bindings from outside the function
+    (captured, top-level, module-static) when every self call invokes the
+    running closure (`SameClosure`: through the function's own binding).
+    A registered result Range alone is not enough: `i == char::scalar_value(c)`
+    with `c` recomputed every step can be stepped past, and so can a
+    captured `c` when a self call reaches another closure of the same
+    function (`mod-lowering-other-closure-bound`).
   * The initial value starts on the correct side of B. It is read from
     `ExternalSeeds`, the literal arguments of known direct callers.
 * **How recursive calls are analyzed:** the proven override is *locked* (it
@@ -686,6 +696,9 @@ legality side, which has none by design.
   * recursion with no self tail call (not attempted);
   * a non-tail self call with another step, or outside the guard's
     continuing side (it is counted, and the proof declines);
+  * a bound read through a native that reads a mutable object, even an
+    unchanged one (`mutable_array::capacity`: the registry does not say
+    which observations no mutation changes);
   * steps of 2 or more ("step may skip equality terminator",
     `range-induction-3`);
   * caller-propagated (non-literal) seeds.

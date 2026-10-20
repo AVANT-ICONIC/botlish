@@ -306,6 +306,93 @@ fn scalar(i: int, c: UnicodeChar, acc: int) -> int:
         [sourceAgree $text]
 } -result {{riand rimodtotal} rimodtotal rimodtotal {value {[41, 4, 3620]}}}
 
+# A bound captured from outside the function is one value only along self
+# calls that run the same closure. Here the self call through k reaches the
+# other closure of `down`, whose bound is 'z' (122): entered at i = 99 it
+# counts down past 122 to i = -1, where mod(1000, i + 1) divides by zero.
+# Locked to [0, 1114111] against a's 'a', that mod was rimodtotal, and the
+# process died with SIGFPE. 1114112 calls deep, past the interpreter's
+# recursion limit, so the native outcomes are compared with that error.
+test mod-lowering-other-closure-bound {a captured == bound is not stable when a self call goes through a parameter holding another closure of the function: no rimodtotal for mod(1000, i + 1), and both native backends raise ARITHMETIC at i = -1 instead of dying with SIGFPE} -body {
+    set text {import char
+
+fn mk(c: UnicodeChar):
+    fn down(i, acc, k):
+        if i == char::scalar_value(c):
+            acc
+        else:
+            x = if i == 100:
+                k(i - 1, acc, k)
+            else:
+                0
+            down(i - 1, acc + x + mod(1000, i + 1), k)
+    down
+
+a = mk('a')
+z = mk('z')
+a(1114111, 0, z)}
+    set hir [sourceHir $text]
+    set out [list [ModOps [nirOf $text]]]
+    foreach backend {cranelift cranelift-generic} {
+        lappend out [lrange [outcomeUnderHir $backend $hir] 0 end-1]
+    }
+    set out
+} -result {imod {error {CORE SEMANTIC ARITHMETIC} {mod: division by zero}} {error {CORE SEMANTIC ARITHMETIC} {mod: division by zero}}}
+
+test mod-lowering-invariant-bounds-kept {the induction facts of bounds every invocation reads alike still select rimodtotal: a field of an unchanged struct parameter, a top-level binding, a captured binding with self calls through the function's own name, a local bound to a repeatable function's result, and a non-tail self call passing i unchanged} -body {
+    set text {import str
+
+struct P:
+    name: str
+
+text = "hello world"
+
+fn twice(s: str) -> str:
+    str::concat(s, s)
+
+fn field(i: int, p: P, acc: int) -> int:
+    if i == str::length(p.name):
+        acc
+    else:
+        field(i + 1, p, acc + mod(1000, i + 1))
+
+fn top(i: int, acc: int) -> int:
+    if i == str::length(text):
+        acc
+    else:
+        top(i + 1, acc + mod(1000, i + 1))
+
+fn outer(s: str) -> int:
+    fn captured(i: int, acc: int) -> int:
+        if i == str::length(s):
+            acc
+        else:
+            captured(i + 1, acc + mod(1000, i + 1))
+    captured(0, 0)
+
+fn local(i: int, s: str, acc: int) -> int:
+    t = twice(s)
+    if i == str::length(t):
+        acc
+    else:
+        local(i + 1, s, acc + mod(1000, i + 1))
+
+fn same(i: int, n: int, d: int) -> int:
+    if i == n:
+        d
+    else:
+        x = if d == 1:
+            same(i, n, 2)
+        else:
+            0
+        same(i + 1, n, d + x + mod(1000, i + 1))
+
+[field(0, P{name: "hello"}, 0), top(0, 0), outer("abc"), local(0, "ab", 0), same(0, 10, 1)]}
+    set nir [nirOf $text]
+    concat [lmap name {field top captured local same} {ModOps [FunctionBody $nir $name]}] \
+        [list [sourceAgree $text]]
+} -result {rimodtotal rimodtotal rimodtotal rimodtotal rimodtotal {value {[1, 22, 1, 1, 27]}}}
+
 test mod-lowering-loop-gc-stress {mod in a self-tail loop that allocates every iteration, with a fresh String live across a call of a function whose only op is the raw rimod (so the call is no safepoint), computes the same values under GC stress, collecting at every allocation} -body {
     set text {import str
 fn reduce(x: int, d: int) -> int:
