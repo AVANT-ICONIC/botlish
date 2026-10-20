@@ -98,6 +98,7 @@ use super::syscall::{rt_linux_aarch64_syscall, rt_linux_x86_64_syscall};
 use super::value::*;
 use super::vm::{current_program, Vm, NativeInfo};
 use crate::nir::OpCode;
+use super::decimal::{rt_decimal_cmp, rt_decimal_round, rt_decimal_to_f64};
 use num_bigint::BigInt;
 use num_traits::Signed;
 use std::cmp::Ordering;
@@ -124,6 +125,9 @@ pub fn op_may_allocate(op: OpCode) -> bool {
         // A floating-point result is a heap object (KIND_FLOAT); truncation
         // may make a BigInt. The comparisons allocate nothing.
         F64Add | F64Sub | F64Mul | F64Div | F64Neg | F64FromInt | F64Trunc |
+        // A DecimalRounded result is one too (KIND_DECIMAL), its decay a
+        // Float64; its comparisons allocate nothing.
+        D64Add | D64Sub | D64Mul | D64Div | D64Neg | D64ToF64 | D64Round |
         IAdd | ISub | IMul | IMod | IAnd | IOr | IXor | IShl | IShr | Substr | DecodeCharAt | ShortToStr | AsciiToStr | StrLower | StrCat | StrAppendChar
             | StrUtf8Bytes | Argv | ListNew | ListAppend | MutArrayAllocate | MutArrayFreeze | MkOk
             // The owned byte storage is one allocation (a collection may run
@@ -190,7 +194,10 @@ pub fn op_may_error(op: OpCode) -> bool {
     use OpCode::*;
     matches!(op, IMod | IShl | IShr | VEq | Hash | Substr
         // The declared NonFiniteFloat (FLOAT64-MILESTONE-1.md).
-        | F64Add | F64Sub | F64Mul | F64Div | F64FromInt | StrCat | StrAppendChar | StrUtf8Bytes | StrCharAt | Argv | StrIsTclAlpha | StrIsTclAlnum
+        | F64Add | F64Sub | F64Mul | F64Div | F64FromInt
+        // DecimalRounded's arithmetic (NonFiniteFloat) and quantization
+        // (UnrepresentableDecimal: DECIMAL-ROUNDED-MILESTONE-1.md).
+        | D64Add | D64Sub | D64Mul | D64Div | D64Round | StrCat | StrAppendChar | StrUtf8Bytes | StrCharAt | Argv | StrIsTclAlpha | StrIsTclAlnum
         // The raw mod's zero divisor (ARITHMETIC, IMod's own error).
         // RIModTotal is not here: native/lower.tcl emits it only where the
         // divisor's Range excludes 0 (see OpCode::RIMod).
@@ -543,6 +550,11 @@ pub extern "C" fn rt_int_cmp(_p: *mut Vm, a: Value, b: Value) -> i64 {
 // ---------------------------------------------------------------------------
 // Equality (core::value::equal)
 
+/// core::value::equal's and core::hashing::Mix's refusals of a
+/// DecimalRounded value, word for word.
+pub const DECIMAL_EQUALITY_MESSAGE: &str = "== of a DecimalRounded value needs the precision of its type, which this equality does not know (compare DecimalRounded values directly)";
+pub const DECIMAL_HASH_MESSAGE: &str = "hash of a DecimalRounded value needs the precision of its type, which a hash does not know";
+
 fn equal(p: *mut Vm, a: Value, b: Value) -> Result<bool, ()> {
     let (ka, kb) = (kind_of(a), kind_of(b));
     // MutableArray, like Block/Native, has no structural equality (req #31:
@@ -551,6 +563,13 @@ fn equal(p: *mut Vm, a: Value, b: Value) -> Result<bool, ()> {
         || matches!(kb, Kind::Block | Kind::Native | Kind::MutArray | Kind::Coroutine | Kind::MutVec | Kind::CPtr)
     {
         vm(p).fail(RtError::Equality { a, b });
+        return Err(());
+    }
+    if ka == Kind::DecimalRounded || kb == Kind::DecimalRounded {
+        // core::value::equal's DecimalRounded case: equality at the
+        // precision of a static type, which a type-blind `==` does not know
+        // (DECIMAL-ROUNDED-MILESTONE-1.md).
+        vm(p).fail(RtError::Semantic { kind: "EQUALITY", message: DECIMAL_EQUALITY_MESSAGE.to_string() });
         return Err(());
     }
     if ka != kb {
@@ -573,6 +592,9 @@ fn equal(p: *mut Vm, a: Value, b: Value) -> Result<bool, ()> {
         // A finite number with one representation (no NaN, no negative
         // zero: FloatType::admit), so equal numbers have equal bits.
         Kind::Float64 => float_bits(a) == float_bits(b),
+        // (Refused above: a DecimalRounded value has no type-blind
+        // equality.)
+        Kind::DecimalRounded => unreachable!(),
         // Exact byte-sequence equality (core::value::equal's bytestore
         // case): length and every byte, never the storage's identity or
         // address -- a static constant, a heap buffer and a copy of either
@@ -757,6 +779,10 @@ fn hash_mix(p: *mut Vm, h: u64, v: Value) -> Result<u64, ()> {
         vm(p).fail(RtError::Unhashable { value: v });
         return Err(());
     }
+    if kind == Kind::DecimalRounded {
+        vm(p).fail(RtError::Semantic { kind: "EQUALITY", message: DECIMAL_HASH_MESSAGE.to_string() });
+        return Err(());
+    }
     // Kind tags matching core/hashing.tcl's KindTag dict exactly (int str
     // bool unit list result UnicodeChar immutableSet -> 0 1 2 3 4 5 6 7), so
     // e.g. Int 1 and Str "1" never collide by coincidence of payload bytes
@@ -775,7 +801,8 @@ fn hash_mix(p: *mut Vm, h: u64, v: Value) -> Result<u64, ()> {
         Kind::MutByteStore => 10,
         Kind::Enum => 11,
         Kind::Float64 => 12,
-        Kind::Block | Kind::Native | Kind::MutArray | Kind::Coroutine | Kind::MutVec | Kind::CPtr => unreachable!(),
+        Kind::Block | Kind::Native | Kind::MutArray | Kind::Coroutine | Kind::MutVec | Kind::CPtr
+        | Kind::DecimalRounded => unreachable!(),
     };
     let h = fnv1a(h, &[tag]);
     Ok(match kind {
@@ -822,6 +849,7 @@ fn hash_mix(p: *mut Vm, h: u64, v: Value) -> Result<u64, ()> {
         // The bits, 8 bytes little-endian (core/hashing.tcl's Float64 case):
         // consistent with the bit equality above.
         Kind::Float64 => fnv1a(h, &float_bits(v).to_le_bytes()),
+        Kind::DecimalRounded => unreachable!(),
         // core/hashing.tcl's enum case, byte for byte (ENUMS.md): the enum's
         // declaration identity text, a 0xFF separator, the case's declared
         // name -- never the numbers the word carries.
@@ -2649,6 +2677,23 @@ pub(crate) fn float_apply(p: *mut Vm, ty: FloatType, op: crate::nir::FloatOp, a:
                 }
             }
         },
+        // DecimalRounded's arithmetic: the binary64 operation on the
+        // representations, exactly Float64's (core::decimal::apply); its
+        // result is a DecimalRounded value. Its comparisons and conversions
+        // are runtime::decimal's.
+        FloatType::DecimalRounded => match op {
+            Neg => float_value(p, ty, 0.0 - float64_of(a)),
+            Add | Sub | Mul | Div => {
+                let (x, y) = (float64_of(a), float64_of(b));
+                float_value(p, ty, match op {
+                    Add => x + y,
+                    Sub => x - y,
+                    Mul => x * y,
+                    _ => x / y,
+                })
+            }
+            Lt | Le | Gt | Ge | Eq | FromInt | Trunc => unreachable!("no DecimalRounded operation"),
+        },
     }
 }
 
@@ -2844,10 +2889,23 @@ pub fn apply_op(p: *mut Vm, op: OpCode, a: &[Value]) -> Value {
         ResultValue => rt_result_payload(p, a[0], 1),
         ResultError => rt_result_payload(p, a[0], 0),
         CharCodepoint => rt_char_codepoint(p, a[0]),
-        F64Add | F64Sub | F64Mul | F64Div | F64Neg | F64Lt | F64Le | F64Gt | F64Ge | F64Eq | F64FromInt | F64Trunc => {
+        F64Add | F64Sub | F64Mul | F64Div | F64Neg | F64Lt | F64Le | F64Gt | F64Ge | F64Eq | F64FromInt | F64Trunc
+        | D64Add | D64Sub | D64Mul | D64Div | D64Neg => {
             let (ty, fop) = op.float().expect("a floating-point operation");
             float_apply(p, ty, fop, a[0], a.get(1).copied().unwrap_or(NO_VALUE))
         }
+        D64Lt | D64Le | D64Gt | D64Ge | D64Eq => {
+            let order = super::decimal::rt_decimal_cmp(p, a[0], a[1], a[2]);
+            bool_value(match op {
+                D64Lt => order < 0,
+                D64Le => order <= 0,
+                D64Gt => order > 0,
+                D64Ge => order >= 0,
+                _ => order == 0,
+            })
+        }
+        D64ToF64 => super::decimal::rt_decimal_to_f64(p, a[0], a[1]),
+        D64Round => super::decimal::rt_decimal_round(p, a[0], a[1]),
         MkOk => rt_result_new(p, 1, a[0]),
         MkError => rt_result_new(p, 0, a[0]),
         Hash => rt_hash(p, a[0]),
@@ -2920,6 +2978,9 @@ pub fn helpers() -> Vec<(&'static str, usize, *const u8)> {
     vec![
         h!(rt_type_error, 4),
         h!(rt_float_new, 3),
+        h!(rt_decimal_cmp, 4),
+        h!(rt_decimal_to_f64, 3),
+        h!(rt_decimal_round, 3),
         h!(rt_float_nonfinite, 2),
         h!(rt_f64_from_int, 2),
         h!(rt_f64_trunc, 2),

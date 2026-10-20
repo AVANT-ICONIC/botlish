@@ -411,6 +411,17 @@ proc probeValues {value} {
     }
 }
 
+# The display of the program value VALUE: core::value::show's, with every
+# DecimalRounded value it holds rounded to the precision its static type
+# guarantees (hir::decimal::Display), the type of HIR's final expression,
+# when HIR ("" for core IR text) says one.
+proc ShowResult {hir value} {
+    if {$hir eq "" || [hir::roots $hir] eq ""} {
+        return [core::value::show $value 1]
+    }
+    return [hir::decimal::Display $value [hir::typeOf $hir [lindex [hir::roots $hir] end]]]
+}
+
 proc runFile {path showCode showHir showAst showAot showNative} {
     global backend nativeBackends warnings target showContexts showDirect showTraits hintsShown
     set hintsShown {}
@@ -536,7 +547,7 @@ proc runFile {path showCode showHir showAst showAot showNative} {
         printError stdout "   error: " $value $options
         return 1
     }
-    puts "   value: [core::value::show $value 1]"
+    puts "   value: [ShowResult $hir $value]"
     if {$backend eq "compile"} {
         dict for {name type} [if {$compiled} {dict get $unit types} else {core::compiler::programTypes $program}] {
             puts "   type:  $name : [hir::types::show $type]"

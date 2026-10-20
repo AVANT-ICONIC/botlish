@@ -63,6 +63,9 @@ fn show_into(v: Value, out: &mut String) {
         Kind::Bool => out.push_str(if v == TRUE { "true" } else { "false" }),
         Kind::Unit => out.push_str("unit"),
         Kind::Float64 => out.push_str(&float_text(float64_of(v))),
+        // No digits (core::value::show's DecimalRounded case): a type-blind
+        // rendering does not know the precision the value's type guarantees.
+        Kind::DecimalRounded => out.push_str("<DecimalRounded>"),
         Kind::UnicodeChar => {
             // Matches core::value::show's UnicodeChar rendering exactly
             // (core/value.tcl): single-quoted, the same escape vocabulary
@@ -287,6 +290,11 @@ pub fn tcl_value(v: Value) -> Result<String, RtError> {
         // X the canonical decimal text, which reads back as exactly this
         // number.
         Kind::Float64 => tcl_list(&["Float64".to_string(), float_text(float64_of(v))]),
+        // core::decimal::value's representation ({DecimalRounded X},
+        // core/decimal.tcl): the binary64 representing it, as the canonical
+        // text that reads back as exactly that number (a transport, never a
+        // display).
+        Kind::DecimalRounded => tcl_list(&["DecimalRounded".to_string(), float_text(float64_of(v))]),
         // Matches core::value::enumValue's own representation exactly
         // ({enum ID CASE}, core/value.tcl): the names, never the numbers.
         Kind::Enum => {

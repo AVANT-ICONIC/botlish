@@ -159,6 +159,28 @@ pub enum OpCode {
     F64Eq,
     F64FromInt,
     F64Trunc,
+    /// DecimalRounded (DECIMAL-ROUNDED-MILESTONE-1.md; core/decimal.tcl):
+    /// `d64add` .. `d64div` and `d64neg`, the binary64 operations on the
+    /// representations (FloatType::DecimalRounded; native/lower.tcl emits
+    /// them only for a proven decimal constant expression, and for the
+    /// negation of any DecimalRounded value), with Float64's finiteness
+    /// check; the comparisons `d64lt` .. `d64eq` of round(a, P) with
+    /// round(b, P), P the third operand (runtime::decimal's
+    /// rt_decimal_cmp: never fail or allocate); `d64tof64` the Float64
+    /// nearest round(a, P); `d64round` the quantization of a Float64 at N
+    /// places (UnrepresentableDecimal).
+    D64Add,
+    D64Sub,
+    D64Mul,
+    D64Div,
+    D64Neg,
+    D64Lt,
+    D64Le,
+    D64Gt,
+    D64Ge,
+    D64Eq,
+    D64ToF64,
+    D64Round,
     MkOk,
     MkError,
     /// Structural hash (core/hashing.tcl's hash): consistent with VEq,
@@ -754,6 +776,18 @@ op_spellings! {
     "f64eq" => F64Eq,
     "f64fromint" => F64FromInt,
     "f64trunc" => F64Trunc,
+    "d64add" => D64Add,
+    "d64sub" => D64Sub,
+    "d64mul" => D64Mul,
+    "d64div" => D64Div,
+    "d64neg" => D64Neg,
+    "d64lt" => D64Lt,
+    "d64le" => D64Le,
+    "d64gt" => D64Gt,
+    "d64ge" => D64Ge,
+    "d64eq" => D64Eq,
+    "d64tof64" => D64ToF64,
+    "d64round" => D64Round,
     "mkok" => MkOk,
     "mkerror" => MkError,
     "hash" => Hash,
@@ -900,6 +934,14 @@ impl OpCode {
             F64Eq => (ty, FloatOp::Eq),
             F64FromInt => (ty, FloatOp::FromInt),
             F64Trunc => (ty, FloatOp::Trunc),
+            // DecimalRounded's arithmetic: the binary64 operations on its
+            // representation (its comparisons and conversions are not
+            // computed in floating-point registers: runtime::decimal).
+            D64Add => (FloatType::DecimalRounded, FloatOp::Add),
+            D64Sub => (FloatType::DecimalRounded, FloatOp::Sub),
+            D64Mul => (FloatType::DecimalRounded, FloatOp::Mul),
+            D64Div => (FloatType::DecimalRounded, FloatOp::Div),
+            D64Neg => (FloatType::DecimalRounded, FloatOp::Neg),
             _ => return None,
         })
     }
@@ -914,12 +956,13 @@ impl OpCode {
             StrLen | StrLower | ListLen | MutArrayAllocate | MutArrayCapacity | IsInt | IsStr | IsList | IsMutArray
             | IsOk | IsError | ResultValue | ResultError | MkOk | MkError | Hash | RBox | RUnbox
             | StrByteLen | StrUtf8Bytes | StrIsTclAlpha | StrIsTclAlnum | CharCodepoint | SetFromList
-            | F64Neg | F64FromInt | F64Trunc
+            | F64Neg | F64FromInt | F64Trunc | D64Neg
             | SetFromListTotal | StrToShort | ShortToStr | ShortLen | StrToAscii | AsciiToStr | AsciiLen
             | AsciiToShort | BytesFromList | BytesLen | BytesAddr | KeepAlive | BytesZeroed | MBytesNew | MBytesFrom | MBytesLen
             | MBytesClone | MBytesFreeze | MBytesAddr | CoCreate | CoStart | CoResume0 | CoYield | CoDone
             | CoRelease | CPtrIsNull | CPtrSame | CPtrFixture | CPtrFixtureAddress | CPtrFixtureMemory | MvFromList | MvLen | MvEmpty | MvPop | MvClear | MvToList | MvTakeFront | CtxRoot
             | MutArrayFromList | MutArrayToList | MutArrayEmpty | MutArrayTakeFront => Some(1),
+            D64Lt | D64Le | D64Gt | D64Ge | D64Eq => Some(3),
             Substr | SubstrProven | MutArraySet | MutArraySetProven | MBytesSet | BinLoad | NativeLoad | NativeLoadPtr | RegionCheck | StrRegionIsTclAlpha | StrRegionIsTclAlnum | StrSliceShort
             | MvSwap | MutArraySwap | MutArrayGenerateDrop | FfiFixtureFill | FfiFixtureFillChecked | FfiFixtureCopy => Some(3),
             RegionEq | MvSwapDrop | MutArraySwapDrop | MutArraySetDrop | BinStore | FfiFixtureMixed

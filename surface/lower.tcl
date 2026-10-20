@@ -639,7 +639,13 @@ proc surface::lower::Bool {origin value} {
 # exact decimal. Today's rule: a decimal literal is the Float64 nearest its
 # decimal number (ties to even); one whose magnitude rounds beyond Float64's
 # largest finite number is no value (a number too small to be distinguished
-# from zero rounds to zero, like any result).
+# from zero rounds to zero, like any result). The const node keeps the exact
+# decimal (Node's `decimal` case): a decimal constant expression where a
+# DecimalRounded type is expected is made a DecimalRounded one from it
+# during type inference, the one later decision (hir/decimal.tcl,
+# DECIMAL-ROUNDED-MILESTONE-1.md). The range check applies to such a literal
+# too: no available representation of either type holds a number beyond
+# binary64's range.
 proc surface::lower::DecimalConstant {decimal} {
     set made [core::float::Parse Float64 $decimal]
     if {[lindex $made 0] ne "ok"} {
@@ -663,7 +669,13 @@ proc surface::lower::Node {node} {
             return [hir::syntax::constNode $origin UnicodeChar [dict get $node text]]
         }
         decimal {
-            return [hir::syntax::constNode $origin {*}[DecimalConstant [dict get $node text]]]
+            # The Float64 DecimalConstant decides, carrying the exact decimal
+            # the literal spells: where a DecimalRounded type is expected,
+            # the front end makes the literal that decimal instead
+            # (hir/decimal.tcl, DECIMAL-ROUNDED-MILESTONE-1.md).
+            return [hir::syntax::withDecimal \
+                [hir::syntax::constNode $origin {*}[DecimalConstant [dict get $node text]]] \
+                [dict get $node text]]
         }
         bool {
             return [hir::syntax::rootRef $origin [dict get $node value]]
@@ -746,19 +758,18 @@ proc surface::lower::Node {node} {
             set op [dict get $node op]
             set opOrigin [Origin [dict get $node opSpan] [dict get $node id]/op]
             if {$op eq "!="} {
-                set equal [hir::syntax::withWritten [hir::syntax::callNode $origin \
+                set equal [hir::syntax::withOperator [hir::syntax::withWritten [hir::syntax::callNode $origin \
                     [hir::syntax::rootRef $opOrigin ==] \
-                    [Node [dict get $node left]] [Node [dict get $node right]]] operator]
+                    [Node [dict get $node left]] [Node [dict get $node right]]] operator] ==]
                 return [Branch $origin $equal [list [Bool $opOrigin false]] [list [Bool $opOrigin true]]]
             }
             set call [hir::syntax::withWritten [hir::syntax::callNode $origin [hir::syntax::rootRef $opOrigin $op] \
                 [Node [dict get $node left]] [Node [dict get $node right]]] operator]
-            if {$op ni {== !=}} {
-                # An arithmetic or comparison operator: its operands' static
-                # types select the operation (hir/operators.tcl).
-                set call [hir::syntax::withOperator $call $op]
-            }
-            return $call
+            # An operator: its operands' static types select the operation
+            # (hir/operators.tcl). `==` is the language's one equality
+            # unless a DecimalRounded operand selects DecimalRounded's
+            # (hir/decimal.tcl).
+            return [hir::syntax::withOperator $call $op]
         }
         unary {
             # -X is 0 - X for an Int; a floating-point operand selects its
