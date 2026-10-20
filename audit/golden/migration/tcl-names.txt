@@ -6027,6 +6027,7 @@ tests/static-economics.test se-equal-ownership-verdict pass
 tests/static-economics.test se-equal-plan-gate pass
 tests/static-economics.test se-equal-sequence pass
 tests/static-economics.test se-equal-untyped-capture pass
+tests/static-economics.test se-equal-vector-context-callee pass
 tests/static-economics.test se-method-invalidated pass
 tests/static-economics.test se-method-reuse pass
 tests/static-economics.test se-no-misprediction pass
