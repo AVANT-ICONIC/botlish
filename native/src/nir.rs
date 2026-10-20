@@ -1469,8 +1469,16 @@ pub struct EnumDecl {
 
 /// The C ABI transport class of a C function's parameter or result
 /// (C-FFI.md; hir/foreign.tcl's AbiClass): an integer of its exact width and
-/// signedness, C `_Bool` (a Botlish bool: one byte holding 0 or 1), a data
-/// or function pointer, or void (a result only).
+/// signedness, C `_Bool` (a Botlish bool: one byte holding 0 or 1), an IEEE
+/// 754 binary32 or binary64 in the target's floating-point register class,
+/// a data or function pointer, or void (a result only).
+///
+/// The floating classes are representations, not Botlish types
+/// (C-FLOAT-FFI-MILESTONE-1.md): both carry a Float64 value on the Botlish
+/// side, and they differ in width, register use and conversion -- an F32
+/// argument is the Float64 narrowed (checked: an overflow is NonFiniteFloat
+/// before the call), an F32 result is widened exactly, and either result is
+/// admitted only when finite.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CAbi {
     I8,
@@ -1482,8 +1490,9 @@ pub enum CAbi {
     I64,
     U64,
     Bool,
-    /// C double, an IEEE 754 binary64 in the target's floating-point
-    /// register class: a Float64 value's number (FLOAT64-MILESTONE-1.md).
+    /// C float, an IEEE 754 binary32 (C-FLOAT-FFI-MILESTONE-1.md).
+    F32,
+    /// C double, an IEEE 754 binary64 (FLOAT64-MILESTONE-1.md).
     F64,
     Ptr,
     Void,
@@ -1501,6 +1510,7 @@ impl CAbi {
             "i64" => CAbi::I64,
             "u64" => CAbi::U64,
             "bool" => CAbi::Bool,
+            "f32" => CAbi::F32,
             "f64" => CAbi::F64,
             "ptr" => CAbi::Ptr,
             "void" => CAbi::Void,
@@ -1508,12 +1518,12 @@ impl CAbi {
         })
     }
 
-    /// The width in bits of an integer class (64 for a pointer), 0 for void.
+    /// The width in bits of the class (64 for a pointer), 0 for void.
     pub fn bits(self) -> u32 {
         match self {
             CAbi::I8 | CAbi::U8 | CAbi::Bool => 8,
             CAbi::I16 | CAbi::U16 => 16,
-            CAbi::I32 | CAbi::U32 => 32,
+            CAbi::I32 | CAbi::U32 | CAbi::F32 => 32,
             CAbi::I64 | CAbi::U64 | CAbi::Ptr | CAbi::F64 => 64,
             CAbi::Void => 0,
         }
@@ -1521,6 +1531,12 @@ impl CAbi {
 
     pub fn signed(self) -> bool {
         matches!(self, CAbi::I8 | CAbi::I16 | CAbi::I32 | CAbi::I64)
+    }
+
+    /// 1 for a floating-point class (F32, F64): it travels in the
+    /// floating-point registers, never extended.
+    pub fn floating(self) -> bool {
+        matches!(self, CAbi::F32 | CAbi::F64)
     }
 }
 
@@ -1858,11 +1874,14 @@ fn summarize_call_effects(program: &mut Program, enabled: bool) {
                 Inst::CallValue { .. } => local[i] = (true, true),
                 // A C call (C-FFI.md) is a safepoint; it fails only on a
                 // result it cannot represent (an address, a _Bool byte, a
-                // double that is no finite number) or a violated alias
-                // contract.
+                // floating value that is no finite number), an argument it
+                // cannot pass (a Float64 no finite C float holds) or a
+                // violated alias contract.
                 Inst::ForeignCall { foreign, .. } => {
                     let decl = &program.foreigns[*foreign as usize];
-                    local[i].0 |= matches!(decl.result, CAbi::Ptr | CAbi::Bool | CAbi::F64) || decl.alias.is_some();
+                    local[i].0 |= matches!(decl.result, CAbi::Ptr | CAbi::Bool | CAbi::F32 | CAbi::F64)
+                        || decl.params.contains(&CAbi::F32)
+                        || decl.alias.is_some();
                     local[i].1 = true;
                 }
                 _ => {}

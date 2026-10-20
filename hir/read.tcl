@@ -771,6 +771,12 @@ proc hir::read::ParseType {text number} {
         # A native edit (NATIVE-LAYOUT-WRITES.md), likewise.
         return [hir::layouts::editType $layout]
     }
+    set floating [hir::cabi::FloatingOfExpr $text]
+    if {$floating ne ""} {
+        # A C floating type (C-FLOAT-FFI-MILESTONE-1.md): hir::types::show
+        # prints {cfloat NAME} by its C spelling, and never a Float64 so.
+        return $floating
+    }
     if {[regexp {^ffi::c::Ptr\[(.+)\]$} $text -> inner]} {
         # A C data pointer (C-ABI-TYPES.md): its pointee identity, as
         # hir::cabi::ShowPointee wrote it.

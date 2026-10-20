@@ -1,5 +1,10 @@
 # NATIVE-LAYOUT-WRITES.md
 
+> Partially superseded by C-FLOAT-FFI-MILESTONE-1.md: a store or a write
+> of a C float field rounds the Float64 to nearest, ties to even, and an
+> overflow is `NonFiniteFloat` before a byte is written; a C double field is
+> stored exactly (the "Botlish has no float" item of section 22).
+
 > Partially superseded by FIXED-LAYOUT-ARRAYS.md: designators name array
 > elements statically (`L.pts[2].x`), `binary::store_element` writes one
 > element of a live array at a dynamic index, and a whole array is written

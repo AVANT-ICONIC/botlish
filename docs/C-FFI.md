@@ -1,5 +1,12 @@
 # C-FFI.md
 
+> Partially superseded by C-FLOAT-FFI-MILESTONE-1.md: C `float` is
+> `ffi::c::Float` (binary32, its values Float64s: a Float64 passed to one is
+> rounded to nearest, ties to even, and an overflow is `NonFiniteFloat`
+> before C runs), and `ffi::c::Float` and `ffi::c::Double` are C types of
+> pointees, function pointer signatures and layout fields too; `long double`
+> stays out (sections 3 and 26).
+
 `extern c library` and `extern c fn`: Botlish's first real C calls. A
 program declares the C functions it calls, by their C signatures and the
 contract of each pointer parameter, and the libraries it links; the native

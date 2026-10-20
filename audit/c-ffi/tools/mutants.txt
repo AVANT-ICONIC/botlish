@@ -316,11 +316,11 @@
 ## core/cabi.tcl
 <<<<
 proc core::cabi::ExternImpl {display args} {
-    core::semanticError NATIVE-ONLY \
+    set meta [core::native::metadata extern#$display]
 ====
 proc core::cabi::ExternImpl {display args} {
     return 0
-    core::semanticError NATIVE-ONLY \
+    set meta [core::native::metadata extern#$display]
 >>>>
 
 @@ unknown-provenance-exposed an exposure is admitted where the pointer result's provenance is unknown (it may point into the exposed storage)
@@ -501,9 +501,9 @@ pub fn c_call_conv(triple: &Triple) -> CallConv {
 %% macos-aarch64
 ## core/cabi.tcl
 <<<<
-        macos-aarch64   {os macos arch aarch64 model LP64 charSigned 1 triple aarch64-apple-darwin} \
+        macos-aarch64   {os macos arch aarch64 model LP64 charSigned 1 triple aarch64-apple-darwin floating IEEE} \
 ====
-        macos-aarch64   {os macos arch aarch64 model LP64 charSigned 0 triple aarch64-apple-darwin} \
+        macos-aarch64   {os macos arch aarch64 model LP64 charSigned 0 triple aarch64-apple-darwin floating IEEE} \
 >>>>
 
 @@ mach-o-symbol-double-prefixed on macOS a C function's link symbol is declared with Mach-O's `_` already on it, so the object crate's prefix makes it `__NAME`
