@@ -8,6 +8,15 @@
 > `AFFINE-ELEMENT-COPY-OUT`. This report keeps the names it was written
 > with.
 
+> **Mutating operations are only ever called (HASH-TABLE-COMPILER-PRESSURE.md,
+> CP-3).** An operation that mutates its receiver in place (push, pop, take,
+> swap, clear; an array's set, swap, copy) used as a value -- `p =
+> mutable_vector::push`, an argument, a field -- is `MUTABLE-PLACE-RECEIVER`
+> at the reference: a call through the value names no place, so it mutated
+> whatever header its caller passed, behind the copies the elaboration
+> writes only for places it sees mutated (`c = v; p(v, 4)` changed `c`).
+> The operations that only read (length, at) may be values.
+
 `MutableVector[T]`: a growable mutable value, affine exactly when its
 elements are.
 

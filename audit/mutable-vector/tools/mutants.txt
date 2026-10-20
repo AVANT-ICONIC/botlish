@@ -125,6 +125,16 @@
 >>>>
 
 
+@@ operation-value-allowed a mutating operation may be used as a value: `p = mutable_vector::push; p(v, 4)` mutates v's header behind the copies (`c = v`) that were never written out for it, and a callee's parameter given it
+## hir/mutvec.tcl
+<<<<
+        set problem [OperationValueProblem $hir $e]
+        if {$problem ne ""} {
+====
+        set problem [OperationValueProblem $hir $e]
+        if {0} {
+>>>>
+
 @@ callee-mutation-leaks a function's mutation of its unrestricted vector parameter changes the caller's vector (no entry copy)
 ## hir/mutvec.tcl
 <<<<

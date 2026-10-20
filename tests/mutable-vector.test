@@ -585,6 +585,33 @@ test mv-receiver-captured {items 14, 76: a nested function may neither mutate a 
         [mvAgree "import mutable_vector\nfn f() -> int:\n    v = mutable_vector::from_list(\[1\])\n    fn g() -> int:\n        v.length()\n    g()\nf()\n"]
 } -result {MUTABLE-PLACE-RECEIVER MUTABLE-PLACE-CAPTURE {value 1}}
 
+# {LINE:COLUMN CODE} of the first diagnostic of TEXT, or "ok".
+proc mvAt {text} {
+    if {[catch {surface::compile $text -warnings off} message options]} {
+        set first [lindex [dict get $options -diagnostics] 0]
+        regexp {^[^:]*:([0-9]+:[0-9]+): } [dict get $first message] -> at
+        return [list $at [lindex [dict get $first errorcode] end]]
+    }
+    return ok
+}
+
+test mv-operation-not-a-value {an operation that mutates its receiver in place (push, pop, take, swap, clear; set, swap, copy) is only ever called, never a value -- bound to a name, passed as an argument or stored in a field, a call through it would mutate whatever its caller passes, a header no place check sees: MUTABLE-PLACE-RECEIVER at the reference. Called (method syntax or not), or an operation that only reads (length, at) used as a value, it is accepted, and a function of one's own that mutates its parameter is a value with value semantics: through a value, it changes its own copy only} -body {
+    set fn "fn apply(g: Fn{args: \[MutableVector\[int\], int\], return: unit}, w: MutableVector\[int\], x: int) -> int:\n    g(w, x)\n    w.length()\n"
+    list [mvAt "import mutable_vector\nfn f() -> int:\n    v = mutable_vector::from_list(\[1, 2, 3\])\n    p = mutable_vector::push\n    p(v, 4)\n    v.length()\nf()\n"] \
+        [mvMessage "import mutable_vector\nfn f() -> int:\n    v = mutable_vector::from_list(\[1, 2, 3\])\n    p = mutable_vector::push\n    p(v, 4)\n    v.length()\nf()\n"] \
+        [mvAt "import mutable_vector\n${fn}fn f() -> int:\n    v = mutable_vector::from_list(\[1, 2, 3\])\n    c = v\n    apply(mutable_vector::push, v, 5)\nf()\n"] \
+        [mvAt "import mutable_vector\nstruct Ops:\n    grow: Fn{args: \[MutableVector\[int\], int\], return: unit}\nfn f() -> int:\n    ops = Ops {grow: mutable_vector::push}\n    v = mutable_vector::from_list(\[1\])\n    ops.grow(v, 4)\n    v.length()\nf()\n"] \
+        [lmap op {pop clear take swap} {
+            lindex [mvAt "import mutable_vector\nfn f() -> int:\n    g = mutable_vector::$op\n    1\nf()\n"] 1
+        }] \
+        [lmap op {set swap copy} {
+            lindex [mvAt "import mutable_array\nfn f() -> int:\n    g = mutable_array::$op\n    1\nf()\n"] 1
+        }] \
+        [mvMessage "import mutable_array\nfn f() -> int:\n    g = mutable_array::set\n    1\nf()\n"] \
+        [mvAgree "import mutable_vector\nimport mutable_array\nfn f() -> List\[int\]:\n    v = mutable_vector::from_list(\[1, 2, 3\])\n    n = mutable_vector::length\n    a = mutable_array::at\n    w = mutable_array::from_list(\[7, 8\])\n    v.push(4)\n    mutable_vector::push(v, 5)\n    x = a(w, 1):\n        on IndexNotFound:\n            0\n    \[n(v), x\]\nf()\n"] \
+        [mvAgree "import mutable_vector\nfn grow(w: MutableVector\[int\], x: int):\n    w.push(x)\n${fn}fn f() -> List\[int\]:\n    v = mutable_vector::from_list(\[1, 2, 3\])\n    c = v\n    v.push(4)\n    n = apply(grow, v, 5)\n    \[v.length(), c.length(), n\]\nf()\n"]
+} -result {{4:9 MUTABLE-PLACE-RECEIVER} {mutable_vector::push mutates its receiver in place, so it can only be called, never used as a value: a call through a function value has no receiver this check can see, and would update whatever MutableVector its caller passes -- a copy, whose update is lost, or a place's own header (call it on a place, `v.push(...)`, or wrap it in a function of your own that takes the vector and returns it)} {8:11 MUTABLE-PLACE-RECEIVER} {5:22 MUTABLE-PLACE-RECEIVER} {MUTABLE-PLACE-RECEIVER MUTABLE-PLACE-RECEIVER MUTABLE-PLACE-RECEIVER MUTABLE-PLACE-RECEIVER} {MUTABLE-PLACE-RECEIVER MUTABLE-PLACE-RECEIVER MUTABLE-PLACE-RECEIVER} {mutable_array::set mutates its receiver in place, so it can only be called, never used as a value: a call through a function value has no receiver this check can see, and would update whatever MutableArray its caller passes -- a copy, whose update is lost, or a place's own header (call it on a place, `v.set(...)`, or wrap it in a function of your own that takes the array and returns it)} {value {[5, 8]}} {value {[4, 3, 4]}}}
+
 test mv-path-release {an affine binding moved on some paths only is released on each path that still owns it -- never after the join, where a moved path's new owner (a vector place, a join's value) lives on; a path no statement ends is AFFINE-PATH-RELEASE-UNSUPPORTED} -body {
     list [mvReleases "${mvDecls}fn f(c: bool) -> int:\n    queue = empty_queue()\n    coroutine {step} = worker(1)\n    if c:\n        queue.push(step)\n    queue.length()\n\[f(true), f(false)\]\n"] \
         [mvReleases "${mvDecls}fn f(c: bool) -> int:\n    coroutine {step} = worker(1)\n    x = if c:\n        step\n    else:\n        make(2)\n    e = x(Command {value: 5})\n    e.value\n\[f(true), f(false)\]\n"] \

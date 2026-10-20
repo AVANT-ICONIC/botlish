@@ -3836,6 +3836,7 @@ tests/mutable-vector.test mv-loop-error-propagation pass
 tests/mutable-vector.test mv-loop-exits pass
 tests/mutable-vector.test mv-loop-native pass
 tests/mutable-vector.test mv-native-evidence pass
+tests/mutable-vector.test mv-operation-not-a-value pass
 tests/mutable-vector.test mv-ops pass
 tests/mutable-vector.test mv-path-last-use-copies pass
 tests/mutable-vector.test mv-path-last-use-semantics pass
