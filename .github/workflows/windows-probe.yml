@@ -65,8 +65,12 @@ jobs:
         run: |
           $urls = @("https://downloads.sourceforge.net/project/tcl/Tcl/$env:TCL_VERSION/tcl$env:TCL_VERSION-src.tar.gz",
                     "https://prdownloads.sourceforge.net/tcl/tcl$env:TCL_VERSION-src.tar.gz")
+          # curl.exe (Windows' own): SourceForge answers a browser-like client
+          # with an HTML mirror page, which Invoke-WebRequest saves.
           foreach ($url in $urls) {
-            try { Invoke-WebRequest -Uri $url -OutFile tcl-src.tar.gz -MaximumRetryCount 3 -RetryIntervalSec 5; break } catch { Write-Host "failed: $url" }
+            curl.exe -fsSL --retry 3 -o tcl-src.tar.gz $url
+            if ($LASTEXITCODE -eq 0) { break }
+            Write-Host "failed: $url"
           }
           $hash = (Get-FileHash tcl-src.tar.gz -Algorithm SHA256).Hash.ToLower()
           if ($hash -ne $env:TCL_SHA256) { throw "sha256 mismatch: $hash" }
