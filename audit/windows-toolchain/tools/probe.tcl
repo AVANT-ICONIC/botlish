@@ -27,8 +27,8 @@
 # The checks: the host and the driver's view of the Windows triples; a pure
 # program on interp, compile and cranelift; two allocation-heavy programs on
 # cranelift, also under BOTLISH_NATIVE_GC_STRESS=1 (on Windows also with
-# the probe patch's root plans, BOTLISH_PROBE_SHADOW=1 and
-# BOTLISH_PROBE_ALL_SHADOW=1); a program object and a standalone executable
+# the probe patch's root plans: BOTLISH_PROBE_SHADOW=1, with
+# BOTLISH_PROBE_NO_WALK=1, and BOTLISH_PROBE_ALL_SHADOW=1); a program object and a standalone executable
 # of the pure program (on Windows also with the C runtime linked
 # statically, BOTLISH_PROBE_CRT_STATIC=1); the C ABI program
 # (programs/ffi-probe.bot) through every -lib, JIT-run and as an
@@ -171,11 +171,14 @@ foreach {name path expected} $heavy {
     report $name-gcstress [run [main.tcl -backend cranelift -warnings off $path] {BOTLISH_NATIVE_GC_STRESS 1}] [list $expected]
     if {$windows} {
         # The probe patch's root plans (probe.patch, clif.rs, roots.rs): the
-        # fallback plan, and every root on the shadow stack with no frame walk.
+        # fallback plan, every root on the shadow stack with no frame walk,
+        # and the fallback plan with no frame walk.
         report $name-gcstress-shadow [run [main.tcl -backend cranelift -warnings off $path] \
             {BOTLISH_NATIVE_GC_STRESS 1 BOTLISH_PROBE_SHADOW 1}] [list $expected]
         report $name-gcstress-allshadow [run [main.tcl -backend cranelift -warnings off $path] \
             {BOTLISH_NATIVE_GC_STRESS 1 BOTLISH_PROBE_ALL_SHADOW 1}] [list $expected]
+        report $name-gcstress-shadow-nowalk [run [main.tcl -backend cranelift -warnings off $path] \
+            {BOTLISH_NATIVE_GC_STRESS 1 BOTLISH_PROBE_SHADOW 1 BOTLISH_PROBE_NO_WALK 1}] [list $expected]
     }
 }
 

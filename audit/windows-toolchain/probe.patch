@@ -1,6 +1,6 @@
 diff -ruN clean-a/native/src/codegen/aot.rs clean-b/native/src/codegen/aot.rs
 --- a/native/src/codegen/aot.rs	2026-10-20 15:50:08.798939188 +0000
-+++ b/native/src/codegen/aot.rs	2026-10-20 16:17:10.920361442 +0000
++++ b/native/src/codegen/aot.rs	2026-10-20 16:38:28.749038684 +0000
 @@ -87,8 +87,7 @@
          "}\nextern \"C\" fn entry(vm: *mut Vm) -> Value {\n\
          let f: aot::ProgramEntry = unsafe { std::mem::transmute(botlish_fn_0 as *const ()) };\n\
@@ -98,7 +98,7 @@ diff -ruN clean-a/native/src/codegen/aot.rs clean-b/native/src/codegen/aot.rs
          std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o755)).map_err(|e| e.to_string())?;
 diff -ruN clean-a/native/src/codegen/clif.rs clean-b/native/src/codegen/clif.rs
 --- a/native/src/codegen/clif.rs	2026-10-20 15:50:08.798978081 +0000
-+++ b/native/src/codegen/clif.rs	2026-10-20 16:17:10.919966715 +0000
++++ b/native/src/codegen/clif.rs	2026-10-20 16:38:28.748489186 +0000
 @@ -646,7 +646,12 @@
          // original, narrower RootStorage::NativeFrame rule (roots::plan's
          // own doc). Must agree with roots::report's
@@ -115,7 +115,7 @@ diff -ruN clean-a/native/src/codegen/clif.rs clean-b/native/src/codegen/clif.rs
          let root_init_opt = std::env::var("BOTLISH_NATIVE_ROOT_INIT_OPT").ok().as_deref() != Some("0");
 diff -ruN clean-a/native/src/codegen/mod.rs clean-b/native/src/codegen/mod.rs
 --- a/native/src/codegen/mod.rs	2026-10-20 15:50:08.799054199 +0000
-+++ b/native/src/codegen/mod.rs	2026-10-20 16:17:10.918170524 +0000
++++ b/native/src/codegen/mod.rs	2026-10-20 16:38:28.745826293 +0000
 @@ -155,7 +155,10 @@
      set(&mut flags, "is_pic", if pic { "true" } else { "false" })?;
      // Probe only large frames (default spacing: one 4 KiB page). Without
@@ -130,7 +130,7 @@ diff -ruN clean-a/native/src/codegen/mod.rs clean-b/native/src/codegen/mod.rs
      }
 diff -ruN clean-a/native/src/codegen/roots.rs clean-b/native/src/codegen/roots.rs
 --- a/native/src/codegen/roots.rs	2026-10-20 15:50:08.799079553 +0000
-+++ b/native/src/codegen/roots.rs	2026-10-20 16:17:10.919391245 +0000
++++ b/native/src/codegen/roots.rs	2026-10-20 16:38:28.747769096 +0000
 @@ -792,7 +792,10 @@
      // nested native frames, so a Botlish call no longer disqualifies it --
      // this milestone's own goal). On the fallback path, unchanged: only a
@@ -145,7 +145,7 @@ diff -ruN clean-a/native/src/codegen/roots.rs clean-b/native/src/codegen/roots.r
          RootStorage::RuntimeStack
 diff -ruN clean-a/native/src/main.rs clean-b/native/src/main.rs
 --- a/native/src/main.rs	2026-10-20 15:50:08.799161943 +0000
-+++ b/native/src/main.rs	2026-10-20 16:17:10.919127002 +0000
++++ b/native/src/main.rs	2026-10-20 16:38:28.747435686 +0000
 @@ -423,7 +423,7 @@
          }
      }
@@ -185,13 +185,16 @@ diff -ruN clean-a/native/src/main.rs clean-b/native/src/main.rs
      if command == "bench" {
 diff -ruN clean-a/native/src/runtime/framewalk.rs clean-b/native/src/runtime/framewalk.rs
 --- a/native/src/runtime/framewalk.rs	2026-10-20 15:50:08.799774891 +0000
-+++ b/native/src/runtime/framewalk.rs	2026-10-20 16:17:10.920137877 +0000
-@@ -184,6 +184,10 @@
++++ b/native/src/runtime/framewalk.rs	2026-10-20 16:38:28.749487413 +0000
+@@ -184,6 +184,13 @@
  /// frame record holds a zero frame pointer).
  #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
  pub fn walk_from(map: &ProgramMap, start: usize, stack: Option<&NativeStack>, mut visit: impl FnMut(*mut Value)) {
-+    // WINDOWS PROBE: no frame walk under BOTLISH_PROBE_ALL_SHADOW=1.
-+    if cfg!(windows) && std::env::var_os("BOTLISH_PROBE_ALL_SHADOW").is_some() {
++    // WINDOWS PROBE: no frame walk under BOTLISH_PROBE_ALL_SHADOW=1 or
++    // BOTLISH_PROBE_NO_WALK=1.
++    if cfg!(windows)
++        && (std::env::var_os("BOTLISH_PROBE_ALL_SHADOW").is_some() || std::env::var_os("BOTLISH_PROBE_NO_WALK").is_some())
++    {
 +        return;
 +    }
      let mut record = start;
