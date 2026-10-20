@@ -2,7 +2,8 @@
 # kill list of hir/completions.tcl's IndexBounds and its theorems --
 # reduced indices (ReducedIndex: mod by the size, bit_and with the size
 # minus one), guards on computed locals (RelationKey), the field-path size
-# keys (hir/cardinality.tcl's ValueKey) -- and of the rules they stand
+# keys (hir/cardinality.tcl's ValueKey) and the length of a loop over a
+# MutableVector (IterationLength) -- and of the rules they stand
 # beside: the relational and range rules of IndexBounds, the size atoms, the
 # per-check verdict (BoundsProven) and native lowering's use of it. Each is
 # a deliberate bug that proves an index it may not, or stops proving one it
@@ -128,6 +129,340 @@
         return [FormAtom [list cap [list b $id]]]
 ====
         return [FormAtom [list cap [list b]]]
+>>>>
+
+# A loop over a MutableVector the program resizes has the length the
+# vector has at its evaluation (hir::cardinality::IterationLength): a key
+# names one vector, not one length. A vector nothing resizes along its
+# copies -- no place its value was copied through on the way from its key's
+# definition is the receiver of an operation that may change a length
+# (KeyPlaces, Mutations, Resizes: a swap keeps it), and its key is not
+# rooted at a context parameter -- keeps its key's length; a place nothing
+# resizes keeps one length unless its root is a context parameter. Two
+# evaluations of any other place share one when no site -- a resize of the
+# place, and for a context member a call that may reach the installed
+# context (ContextSite, CallReach, Reaching) or a yield -- can come between
+# them (Evaluation, Epoch: a branch or handler body entered with no site
+# before it continues the run before its statement).
+
+@@ vector-length-keyed a loop over a MutableVector has its binding's, path's or definition's length, like a List's, so two loops around a push, pop or clear (or a callee's push to a context member) are one size
+## hir/cardinality.tcl
+<<<<
+    if {$key ne "" && ![ContextRooted $hir $key] && [KeyPlaces $hir $e chain]} {
+====
+    if {$key ne ""} {
+        return [FormAtom [list len $key]]
+    }
+    if {0} {
+>>>>
+
+@@ vector-chain-unchecked a vector keeps its key's length whatever resizes the places its value was copied through, so two loops over a local around its push are one size
+## hir/cardinality.tcl
+<<<<
+        if {!$resized} {
+            return [FormAtom [list len $key]]
+        }
+====
+        if {1} {
+            return [FormAtom [list len $key]]
+        }
+>>>>
+
+@@ vector-chain-own-place only the evaluation's own place is checked for resizes, not the places its value was copied through, so two copies taken around a push of the original (c1 = v, v pushed, c2 = v) keep one key's length
+## hir/cardinality.tcl
+<<<<
+        foreach place $chain {
+====
+        foreach place [lrange $chain 0 0] {
+>>>>
+
+@@ vector-context-key-unrooted a context member keeps its key's length when nothing in its own function resizes it, so a callee's push through its own context parameter between two loops goes unseen
+## hir/cardinality.tcl
+<<<<
+    if {$key ne "" && ![ContextRooted $hir $key] && [KeyPlaces $hir $e chain]} {
+====
+    if {$key ne "" && [KeyPlaces $hir $e chain]} {
+>>>>
+
+@@ vector-context-place-unrooted a place rooted at a context parameter is taken for a place of the function's own, so a callee's push through its own context parameter between two loops goes unseen
+## hir/cardinality.tcl
+<<<<
+    set context [ContextRooted $hir [list b $root]]
+====
+    set context 0
+>>>>
+
+@@ vector-context-from-key a place is a context member when its key is rooted at a context parameter, not its root (precision: a local copy of a member, items = log.items, read twice around a callee's push to the member, is unrelated)
+## hir/cardinality.tcl
+<<<<
+    set context [ContextRooted $hir [list b $root]]
+====
+    set context [expr {$key eq "" || [ContextRooted $hir $key]}]
+>>>>
+
+@@ vector-callee-runs-no-code a call of a function is no site of a context member, so a callee's push through its own context parameter between two loops goes unseen
+## hir/cardinality.tcl
+<<<<
+        return [dict exists [Reaching $hir $id] [lindex $reach 1]]
+====
+        return 0
+>>>>
+
+@@ vector-callee-every-call every call of a function is a site of a context member (precision: two loops over a member around a call of a function that requires no context are unrelated)
+## hir/cardinality.tcl
+<<<<
+        return [dict exists [Reaching $hir $id] [lindex $reach 1]]
+====
+        return 1
+>>>>
+
+@@ vector-reach-not-transitive a function reaches the installed context only when it loads it itself, not when a function it calls does, so a callee's callee's push through its context parameter between two loops goes unseen
+## hir/cardinality.tcl
+<<<<
+                if {![dict exists $reaching $caller]} {
+                    dict set reaching $caller 1
+                    lappend work $caller
+                }
+====
+                if {0} {
+                    dict set reaching $caller 1
+                    lappend work $caller
+                }
+>>>>
+
+@@ vector-reach-loads-ignored a function that loads the installed context -- requires it -- is not taken to reach it, so a callee's push through its own context parameter between two loops goes unseen
+## hir/cardinality.tcl
+<<<<
+        if {$loads && [hir::contexts::isLoad $hir $c]} {
+====
+        if {0 && [hir::contexts::isLoad $hir $c]} {
+>>>>
+
+@@ vector-resume-unseen a call of a coroutine handle is no site, so a callee resuming a coroutine body that pushes to the context member between two loops goes unseen
+## hir/cardinality.tcl
+<<<<
+    foreach operand [concat [list [dict get $node callee]] [dict get $node args]] {
+====
+    foreach operand [dict get $node args] {
+>>>>
+
+@@ vector-affine-argument-unseen a call through a function value given a coroutine handle is no site, so the function's resuming a coroutine body that pushes to the context member between two loops goes unseen
+## hir/cardinality.tcl
+<<<<
+    foreach operand [concat [list [dict get $node callee]] [dict get $node args]] {
+====
+    foreach operand [list [dict get $node callee]] {
+>>>>
+
+@@ vector-yield-unseen a yield is no site of a context member, so the resumer's push to it while a coroutine is suspended between two loops goes unseen
+## hir/cardinality.tcl
+<<<<
+                || [dict get $meta completion] || [dict exists $hir coroutines yields $c]} {
+====
+                || [dict get $meta completion]} {
+>>>>
+
+@@ vector-place-unmutated-unchecked a place is taken to keep one length whether or not a mutation has it as its receiver, so two loops over a local, a parameter or a field around a push, pop or clear are one size
+## hir/cardinality.tcl
+<<<<
+    if {!$context && ![dict exists [Mutations $hir] $place]} {
+====
+    if {!$context} {
+>>>>
+
+@@ vector-place-unmutated-unused a place no mutation has as its receiver has the length of each evaluation's class, not one length (precision: a vector read twice, once in a nested function, while only a copy of it is pushed, is unrelated)
+## hir/cardinality.tcl
+<<<<
+    if {!$context && ![dict exists [Mutations $hir] $place]} {
+====
+    if {0} {
+>>>>
+
+@@ vector-swap-resizes every mutating operation may change a length, a swap too (precision: two loops over a vector around a swap are unrelated)
+## hir/cardinality.tcl
+<<<<
+    return [expr {![dict get [core::native::metadata [hir::affine::NativeName $hir $c]] keepsLength]}]
+====
+    return 1
+>>>>
+
+@@ vector-push-keeps-length push is registered -keeps-length, so two loops over a vector around a push are one size: the analysis reads the registration, so a false one is a false proof
+## core/mutvec.tcl
+<<<<
+    -param-types {mutvec any} -result-type unit -runtime mutvec-mutate -ownership {place move}
+====
+    -param-types {mutvec any} -result-type unit -runtime mutvec-mutate -ownership {place move} -keeps-length 1
+>>>>
+
+@@ vector-sites-ignored a mutation of the place is no site, so two loops over a local, a parameter or a field around a push, pop or clear are one class
+## hir/cardinality.tcl
+<<<<
+                if {$receiver ne "" && [hir::mutvec::Path $hir $receiver] eq $place} {
+====
+                if {0} {
+>>>>
+
+@@ vector-sites-by-key a mutation of any place keyed like the vector is a site (precision: the original read twice around a copy's push, w = v then w pushed, is unrelated)
+## hir/cardinality.tcl
+<<<<
+                if {$receiver ne "" && [hir::mutvec::Path $hir $receiver] eq $place} {
+====
+                if {$receiver ne "" && [CompleteKey $hir $receiver] eq [CompleteKey $hir $e]} {
+>>>>
+
+@@ vector-classes-by-key the evaluations of every place keyed like the vector are one class's candidates, so two copies of a vector taken around a push (c1 = v, v pushed, c2 = v) are one length
+## hir/cardinality.tcl
+<<<<
+            if {[hir::types::kindOf [hir::typeOf $hir $o]] ne "mutvec" || [hir::mutvec::Path $hir $o] ne $place} continue
+====
+            if {[hir::types::kindOf [hir::typeOf $hir $o]] ne "mutvec" || [CompleteKey $hir $o] ne [CompleteKey $hir $e]} continue
+>>>>
+
+@@ vector-runs-uncounted a statement holding a site does not end the quiet run it is in, so the loops before and after a push are one run
+## hir/cardinality.tcl
+<<<<
+                dict set noisy $i 1
+====
+                set noisy [dict create]
+>>>>
+
+@@ vector-site-statement-quiet a statement holding a site is taken for a quiet one, so a loop in its body is in the run of the loops before it, though the body's push runs between two of its iterations
+## hir/cardinality.tcl
+<<<<
+        if {$here eq {}} {
+            return $class
+        }
+====
+        if {1} {
+            return $class
+        }
+>>>>
+
+@@ vector-loop-body-continues every body continues the run before its statement, a loop's too, so a loop over the vector in a loop body that pushes after it is in the run of a loop before that loop
+## hir/cardinality.tcl
+<<<<
+            set continued ""
+            if {[OnceBody $body]} {
+====
+            set continued $class
+            if {0} {
+>>>>
+
+@@ vector-once-body-sites-unchecked a branch or handler body continues the run before its statement even when a site of the statement runs before it, so a loop in a branch after a pop in the branch's condition is the length of a List collected before
+## hir/cardinality.tcl
+<<<<
+                    if {![RunsAfter $layout $s $pre $post]} {
+                        set continued ""
+====
+                    if {0} {
+                        set continued ""
+>>>>
+
+@@ vector-once-body-later-runs a branch or handler body's every run continues the run before its statement, not only its first, so a loop in a branch after the branch's own push is the length of a List collected before the if
+## hir/cardinality.tcl
+<<<<
+        set class [expr {$run == 0 && $continued ne "" ? $continued : [list $sequence $run]}]
+====
+        set class [expr {$continued ne "" ? $continued : [list $sequence $run]}]
+>>>>
+
+@@ vector-alternatives-ignored a site in the other branch (or another handler) runs before the body (precision: a loop in a branch whose other branch pushes is unrelated to the loops before the if)
+## hir/cardinality.tcl
+<<<<
+                        if {$other eq $body || [Alternatives $body $other]} continue
+====
+                        if {$other eq $body} continue
+>>>>
+
+@@ vector-once-body-none no body continues the run before its statement (precision: a loop in a branch before the branch's own push is unrelated to the loops before the if)
+## hir/cardinality.tcl
+<<<<
+            if {[OnceBody $body]} {
+====
+            if {0} {
+>>>>
+
+@@ vector-handler-not-once a handler body is not taken to run at most once (precision: a loop in a handler before the handler's own push is unrelated to the loops before the handled call)
+## hir/cardinality.tcl
+<<<<
+    return [expr {$part in {then else} || [string match handler* $part]}]
+====
+    return [expr {$part in {then else}}]
+>>>>
+
+@@ vector-operand-after-site an operand of a statement holding a site takes the quiet run before the statement even when a site of the statement runs before it, so a lockstep domain over a vector after another domain's pop is the length of a List collected before
+## hir/cardinality.tcl
+<<<<
+            if {![RunsAfter $layout $s $pre $post]} {
+                return ""
+            }
+====
+            if {![RunsAfter $layout $s $pre $post]} {
+                continue
+            }
+>>>>
+
+@@ vector-always-per-occurrence a loop over a MutableVector the program mutates has the length of its own evaluation (precision: two loops over a vector built by pushes, then walked, or a lockstep over it and a List collected over it after the pushes, are unrelated)
+## hir/cardinality.tcl
+<<<<
+    set first [Evaluation $hir $e $place [expr {$context ? [list [ContextIdOf $hir $root]] : {}}]]
+====
+    set first ""
+>>>>
+
+@@ vector-unmutated-per-occurrence a loop over any MutableVector has the length of its own evaluation, mutated or not (precision: two loops over a vector nothing mutates, or a lockstep over it and a List collected over it, are unrelated)
+## hir/cardinality.tcl
+<<<<
+        if {!$resized} {
+            return [FormAtom [list len $key]]
+        }
+====
+        if {0} {
+            return [FormAtom [list len $key]]
+        }
+>>>>
+
+@@ vector-occurrence-keyed-by-value a loop over a MutableVector is keyed by the vector's value key rather than by its class of evaluations, so every loop over one binding or field path shares a length
+## hir/cardinality.tcl
+<<<<
+    return [FormAtom [list len [list o $first]]]
+====
+    return [FormAtom [list len [list o [ValueKey $hir $e steps]]]]
+>>>>
+
+@@ lockstep-related-dropped a lockstep diagnostic records none of the evaluations its message locates as related origins (they would exist only in the message text)
+## hir/lockstep.tcl
+<<<<
+                [concat [hir::cardinality::related $hir $first] [hir::cardinality::related $hir $other]]
+====
+                {}
+>>>>
+
+@@ every-domain-per-occurrence a loop over any collection has the length of its own evaluation (precision: two loops over one List or MutableArray, or a lockstep over one and a List collected over it, are unrelated)
+## hir/cardinality.tcl
+<<<<
+    if {[hir::types::kindOf [hir::typeOf $hir $e]] ne "mutvec"} {
+        return [ListLength $hir $e steps]
+    }
+====
+    if {1} {
+        return [FormAtom [list len [list o $e]]]
+    }
+>>>>
+
+@@ untyped-domain-per-occurrence a loop over a value of no collection type (an untyped parameter, which the loop requires to be a List) has the length of its own evaluation (precision: a lockstep over it and a List collected over it is unproven)
+## hir/cardinality.tcl
+<<<<
+    if {[hir::types::kindOf [hir::typeOf $hir $e]] ne "mutvec"} {
+        return [ListLength $hir $e steps]
+    }
+====
+    if {[hir::types::kindOf [hir::typeOf $hir $e]] ni {list mutarray mutvec}} {
+        return [FormAtom [list len [list o $e]]]
+    }
+    if {[hir::types::kindOf [hir::typeOf $hir $e]] ne "mutvec"} {
+        return [ListLength $hir $e steps]
+    }
 >>>>
 
 # ---------------------------------------------------------------------------

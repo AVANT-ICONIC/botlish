@@ -8,6 +8,19 @@
 > `AFFINE-ELEMENT-COPY-OUT`. This report keeps the names it was written
 > with.
 
+> **Mutating operations are only ever called (HASH-TABLE-COMPILER-PRESSURE.md,
+> CP-3).** An operation that mutates its receiver in place (push, pop, take,
+> swap, clear; an array's set, swap, copy) used as a value -- `p =
+> mutable_vector::push`, an argument, a field -- is `MUTABLE-PLACE-RECEIVER`
+> at the reference: a call through the value names no place, so it mutated
+> whatever header its caller passed, behind the copies the elaboration
+> writes only for places it sees mutated (`c = v; p(v, 4)` changed `c`).
+> The operations that only read (length, at) may be values. A loop's length
+> over a vector (COLLECTING-LOOPS.md, "Iteration domains and cardinality")
+> counts only the operations that may resize it: `swap` is registered
+> `-keeps-length` (core/native.tcl), so two loops around a swap have one
+> length.
+
 `MutableVector[T]`: a growable mutable value, affine exactly when its
 elements are.
 
@@ -670,8 +683,11 @@ Core IR -- which keeps no element types -- still says the loop consumes
 `core/mutvec.tcl`: headers `{mutvec ID}` over `core::mutvec::store(ID)` (a
 Tcl list); `core::value` knows the kind (`show` `<mutable-vector [1, 2]>`,
 equality is `CORE SEMANTIC EQUALITY` like MutableArray's -- vector equality
-is a non-goal). The interpreter's `listloop` over a vector value drains it
-(`core::forms::ConsumeVector`).
+is a non-goal). The interpreter's `listloop` whose iterable is the consume
+mark drains the vector (`core::forms::ConsumeVector`); any other `listloop`
+requires a List, like the Tcl compiler's and native code's, so a vector
+reaching one through a value of no collection type is the loop's TYPE error,
+never drained (`mv-untyped-loop`).
 
 ### 57. Tcl compiler lowering
 

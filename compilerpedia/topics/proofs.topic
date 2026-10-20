@@ -129,6 +129,19 @@ forms:
     0 <= h.mod(n) < n. A mask m keeps bit_and(h, m) in 0..m when m >= 0, so
     the mask needs m >= 0 proven (a guard that the size is not 0, or m's own
     range) but no power of two.
+  * the List a loop collected (with no break or continue) over a container
+    has that container's length, so any of the forms above may use the
+    length of another loop's List over the same List or MutableArray -- or
+    the same MutableVector, when nothing can change the vector's length
+    between the two loops: no push, pop, take or clear on it on the way
+    from the one loop to the other (a swap only replaces an element), and,
+    for a context's vector, no yield and no call that may reach the
+    installed context -- of a function that requires it (directly or
+    through a function it calls), or that runs or resumes a coroutine.
+    Pushes before both loops or after both, in the later loop's own body,
+    after the later loop in the branch or handler it is in, in the other
+    branch, or on a copy of the vector (another value) are fine: a vector
+    built with pushes, then walked twice, has one length.
 
 @example accept
 import list
@@ -214,6 +227,63 @@ loop i from 0 to t.slots.capacity():
 @value [0, 0, 0, 7]
 @end
 
+@example accept
+import list
+import mutable_vector
+
+fn scaled(h: int) -> int:
+    v = mutable_vector::from_list([1, 2, 3])
+    ys = loop x in v:
+        x * 10
+    zs = loop x in v:
+        x
+    ys.at(h.mod(zs.length()))
+
+scaled(4)
+@caption Two loops over a vector nothing mutates have one length
+@value 20
+@end
+
+@example accept
+import list
+import mutable_vector
+
+fn built(h: int) -> int:
+    v = mutable_vector::from_list([1])
+    loop i from 2 to 5:
+        v.push(i)
+    ys = loop x in v:
+        x * 10
+    zs = loop x in v:
+        x
+    ys.at(h.mod(zs.length()))
+
+built(6)
+@caption Built with pushes, then walked twice: nothing between the loops
+@value 30
+@end
+
+@example accept
+import list
+import mutable_vector
+
+fn branched(h: int) -> int:
+    v = mutable_vector::from_list([1, 2, 3])
+    ys = loop x in v:
+        x * 10
+    if h > 0:
+        zs = loop x in v:
+            x
+        r = ys.at(h.mod(zs.length()))
+        v.push(r)
+        return r
+    v.length()
+
+branched(4)
+@caption A branch's loop before the branch's own push sees the vector of the loops before it
+@value 20
+@end
+
 == LIMITATIONS (NOT PROVEN TODAY)
 These forms are often correct, but the compiler does not relate the index
 to the length, so the call must handle or admit IndexNotFound:
@@ -234,6 +304,35 @@ to the length, so the call must handle or admit IndexNotFound:
     not recorded), an offset of a reduced index (`h.mod(n) + 1`), or a mask
     with nothing proving the size is not 0 (the mask of an empty array is -1,
     and bit_and(h, -1) is h).
+  * the List of a loop over a MutableVector, against the length of
+    another loop over the same vector with something between the two
+    loops that may change its length: a push, pop or clear on it (also in
+    a branch, a handler or a loop body on the way), or -- for a context's
+    vector -- a call that may reach the installed context (a function that
+    requires it may grow the vector through its own context parameter; a
+    coroutine body may too) or a yield. A copy is another vector: two
+    copies taken around a push have unrelated lengths. Nor does a shorter
+    length after a pop prove an index of the longer List collected before
+    it: lengths are related by equality only.
+
+@example reject
+import list
+import mutable_vector
+
+fn grown(h: int) -> int:
+    v = mutable_vector::from_list([1, 2, 3])
+    ys = loop x in v:
+        x * 10
+    v.push(4)
+    zs = loop x in v:
+        x
+    ys.at(h.mod(zs.length()))
+
+0
+@caption Two loops over one vector, a push between them
+@error CORE SEMANTIC UNHANDLED-ERROR
+@at 11:5
+@end
 
 @example reject
 import list
@@ -636,7 +735,33 @@ fn pairs(xs: List[int], ys: List[int]) -> List[int]:
 
 == LIMITATIONS
 Two different lists are unrelated even when the caller passes lists of the
-same length.
+same length. So are two loops over one MutableVector with something
+between them that may change its length (a push, pop or clear on it; for
+a context's vector, also a call that may reach the installed context, or a
+yield), or
+such a vector and the List an earlier loop over it collected: the
+vector's length changes in place, so each walk counts the vector as it is
+then. With nothing of the kind between them -- the pushes all before both,
+or after both, or in the lockstep loop's own body, which runs after its
+clauses are evaluated -- the vector and the List have one length, as do
+two clauses naming the same vector (`loop a in v and b in v`).
+
+@example reject
+import mutable_vector
+
+fn widened() -> List[int]:
+    v = mutable_vector::from_list([1, 2, 3])
+    ys = loop x in v:
+        x * 10
+    v.push(4)
+    loop a in v and y in ys:
+        a + y
+
+0
+@caption A vector grown after the List was collected from it
+@error CORE SEMANTIC LOCKSTEP-UNPROVEN
+@at 8:5
+@end
 
 @topic proof.contexts
 title: Context requirements

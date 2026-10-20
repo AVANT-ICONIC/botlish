@@ -12,12 +12,20 @@
 #   fn f(a, b: MutableArray[int], xs, ys: List[int], s, w: str,
 #        t, u: T, o: O, h: int)
 #
-# (T {s, r: MutableArray[int]}, O {inner: T}) with no `errors` clause, whose
-# body makes one indexed access -- a read (mutable_array::at, list::at,
-# str::char_at) or a write (mutable_array::set, then the array frozen and
-# returned) -- of a container that is a parameter, a local array derived
-# from one (`c = create(capacity(a) + K, 3)`), a field path (t.s) or a
-# nested one (o.inner.s), at an index made sound by one theorem:
+# (T {s, r: MutableArray[int]}, O {inner: T}, V {v: MutableVector[int]})
+# with no `errors` clause, whose body makes one indexed access -- a read
+# (mutable_array::at, list::at, str::char_at) or a write
+# (mutable_array::set, then the array frozen and returned) -- of a
+# container that is a parameter, a local array derived from one (`c =
+# create(capacity(a) + K, 3)`), a field path (t.s) or a nested one
+# (o.inner.s), or the List p a loop collects over a vector (a local or a
+# local struct's field built from xs), pushed to before the loop (also in
+# a loop) and pushed, popped or cleared after it, or mutated nowhere (a
+# snapshot's size is the vector's length at its loop) -- with, maybe, a
+# second loop q over it beside p's, before or after it, nothing between
+# them but maybe a swap, which keeps the length (the later loop's own body
+# may push), giving p's size too -- at an
+# index made sound by one theorem:
 #
 #   mod       mod(X, SIZE): inline, method syntax, a local of the size, a
 #             local of the index, or the size spelled as an equal form
@@ -49,14 +57,38 @@
 # fields of two call results, a one-sided guard on a local that may be
 # negative, a guard against another size, a guard on one local and a read
 # of another, a guard inside a loop that may run zero times with the read
-# after it, a write guarded by another field. Each must be rejected
+# after it, a write guarded by another field, and a List collected over a
+# vector read at an index proven against a later loop over the same vector
+# (a counted loop, mod, a mask, a guard; a local or a field path) with a
+# push, pop or clear between the two loops, or over two copies of it taken
+# around a push (c1 = v, v pushed, c2 = v), or over it and a copy pushed
+# (c1 = v, c1 pushed), or with a push in a loop body, a branch or a handler
+# between them, in a loop body after the later loop in it, in the
+# earlier loop's own body, or in a branch or a handler body before the
+# later loop in it. Each must be rejected
 # strictly (UNHANDLED-ERROR), and each names a witness input at which the
 # same program, declaring the error and handling it, does fail with
 # IndexNotFound on the interpreter: the rejection is necessary, not only
-# conservative. Three CONSERVATIVE shapes (the index written twice inline,
-# a guard in a loop that runs once with the read after it, the field of
-# one call result written twice) are safe but outside every theorem: they
-# must stay rejected, which pins the theorems' scope.
+# conservative. A lockstep loop over a vector and a List collected over it
+# before a push, over a vector and a copy of it (cv = v, v then pushed), or
+# over two copies taken around a push, must be LOCKSTEP-UNPROVEN, its
+# witness showing the two counts differ; one whose two clauses name the
+# same vector place (a local, a field path), or over a vector nothing
+# mutates and a List collected over it (a local, a field path) or a copy
+# of it, or over a vector and a List collected over it with nothing that
+# can mutate it between them (pushes before both, the lockstep's own body
+# pushing, a swap), or over a vector and a copy of it while a third copy is
+# pushed, is accepted and agrees on every backend. A read of a List
+# collected over a vector, at an index proven against another loop over it
+# or over a copy of it (mod, a counted loop, a guard) with nothing between
+# the two that can mutate it -- a push only after the later loop in the
+# branch or handler body it is in, or in the other branch, a swap, a third
+# copy pushed -- is accepted and the proven opcode, and every backend
+# agrees. Three
+# CONSERVATIVE shapes (the index written twice inline, a guard in a loop
+# that runs once with the read after it, the field of one call result
+# written twice) are safe but outside every theorem: they must stay
+# rejected, which pins the theorems' scope.
 #
 # The fuzzer reads the compiler of the checkout it is in (the mutation
 # harness runs it from a private copy). Exit status 1 on any failure.
@@ -126,6 +158,49 @@ proc kindInfo {kind} {
                 family array nonzero [expr {$K > 0}] \
                 sizes [list "mutable_array::capacity(%s)" "(mutable_array::capacity(a) + $K)"]]
         }
+        snapshot {
+            # p, the List a loop collects over a vector built from xs (a
+            # local, or a local struct's field), the vector changed before
+            # and after it -- or not at all -- and then, maybe, also the
+            # length of a second loop q over it beside p's, nothing between
+            # them: p's size is the one the vector has at its loop, which
+            # q's loop sees too (hir::cardinality::IterationLength,
+            # Evaluation), whatever happens to the vector before or after
+            # both -- also when the later loop's own body pushes (its
+            # domain is evaluated first). A push before the loop makes p
+            # nonempty at run time (no capacity-0 mod failure), though no
+            # form says so (a mask still needs a guard).
+            set v [pick {v bx.v}]
+            # (vec: a MutableVector[int] even of the empty xs, which a
+            # specialization types List[never].)
+            set make [expr {$v eq "v" ? "v = vec(xs)" : "bx = V {v: vec(xs)}"}]
+            set loop "p = loop x in $v:\n        x + 1\n    "
+            set sizes {"list::length(%s)"}
+            set twin "q = loop x in $v:\n        x * 2\n    "
+            if {[chance 0.3]} {
+                set before ""
+                set after ""
+            } else {
+                set before [pick [list "" "$v.push(h)\n    " "$v.push(7)\n    $v.push(8)\n    " "loop i from 0 to 3:\n        $v.push(i)\n    "]]
+                set after [pick [list "" "$v.push(h)\n    " "$v.pop():\n        on IndexNotFound:\n            0\n    " "$v.clear()\n    "]]
+            }
+            if {[chance 0.6]} {
+                # Maybe a swap between the two loops: it replaces an
+                # element, never changes the length (-keeps-length).
+                set between [expr {[chance 0.3] ? "$v.swap(0, h):\n        on IndexNotFound:\n            0\n    " : ""}]
+                if {[chance 0.5]} {
+                    set loop "$loop$between$twin"
+                } elseif {[chance 0.5]} {
+                    set loop "$twin$between$loop"
+                } else {
+                    # The later loop's body pushes after its domain ran.
+                    set loop "${twin}p = loop x in $v:\n        $v.push(x)\n        x + 1\n    "
+                }
+                lappend sizes "list::length(q)"
+            }
+            return [dict create c p other ys family list nonzero 0 nonempty [expr {$before ne ""}] \
+                prelude "$make\n    ${before}${loop}$after" sizes $sizes]
+        }
     }
 }
 
@@ -164,7 +239,7 @@ proc indexSource {} {
 # One SOUND body: {body op zero}, zero `arith` when an empty container
 # reaches an unguarded mod, else `value`.
 proc soundBody {} {
-    set kind [pick {array array list str field field nested derived}]
+    set kind [pick {array array list str field field nested derived snapshot snapshot}]
     set info [kindInfo $kind]
     set prelude [dict get $info prelude]
     set write [expr {[dict get $info family] eq "array" && [chance 0.35]}]
@@ -173,7 +248,7 @@ proc soundBody {} {
     set access [expr {$write ? "writeOf" : "readOf"}]
     switch -- $theorem {
         mod {
-            set zero [expr {[dict get $info nonzero] ? "value" : "arith"}]
+            set zero [expr {[dict get $info nonzero] || ([dict exists $info nonempty] && [dict get $info nonempty]) ? "value" : "arith"}]
             switch -- [pick {inline method sizelocal indexlocal}] {
                 inline { return [list "$prelude[$access $info "mod($x, [sizeOf $info])"]" [opOf $info $write] $zero $kind/$theorem] }
                 method { return [list "$prelude[$access $info "($x).mod([sizeOf $info])"]" [opOf $info $write] $zero $kind/$theorem] }
@@ -221,7 +296,7 @@ proc soundBody {} {
 # ---------------------------------------------------------------------------
 # Programs
 
-set header "import list\nimport mutable_array\nimport str\n\nstruct T:\n    s: MutableArray\[int\]\n    r: MutableArray\[int\]\n\nstruct O:\n    inner: T\n\nfn mk(t: T) -> T:\n    t\n\n"
+set header "import list\nimport mutable_array\nimport mutable_vector\nimport str\n\nstruct T:\n    s: MutableArray\[int\]\n    r: MutableArray\[int\]\n\nstruct O:\n    inner: T\n\nstruct V:\n    v: MutableVector\[int\]\n\nfn mk(t: T) -> T:\n    t\n\nfn vec(xs: List\[int\]) -> MutableVector\[int\]:\n    mutable_vector::from_list(xs)\n\n"
 set signature "fn f(a: MutableArray\[int\], b: MutableArray\[int\], xs: List\[int\], ys: List\[int\], s: str, w: str, t: T, u: T, o: O, h: int)"
 set alphabet [split "aé😀bcdefghijklmnopq" ""]
 
@@ -296,6 +371,24 @@ proc outcome {hir backend} {
 
 proc opCount {text op} { return [llength [regexp -all -inline "op $op\[ \n\]" $text]] }
 
+# The `op OP` lines of NIR TEXT a program's indexed access makes: every one
+# but a collecting loop's own element read (a loop over a List reads its
+# elements with listget, annotated with the loop's expression).
+proc accessOpCount {hir text op} {
+    set n 0
+    foreach line [split $text \n] {
+        if {![regexp "op $op\[ \n\]" "$line\n"]} {
+            continue
+        }
+        if {[regexp {@(e\d+)\s*$} $line -> id] && [dict exists $hir exprs $id]
+                && [hir::kind $hir $id] in {listloop lockloop}} {
+            continue
+        }
+        incr n
+    }
+    return $n
+}
+
 set capsAll {1 2 3 5 7 8 16}
 set hsAll {0 1 2 3 4 7 -1 -2 -8 15 16 12345 -99999 4611686018427387903 -4611686018427387904 9223372036854775808 1180591620717411303424 -1180591620717411303424}
 
@@ -323,8 +416,8 @@ for {set n 1} {$n <= [dict get $options -count]} {incr n} {
     }
     incr sound
     set nir [native::nir $hir]
-    if {[opCount $nir ${op}proven] < 1 || [opCount $nir $op] > 0} {
-        fail "$name ($label): the access is not the proven opcode ($op [opCount $nir $op], ${op}proven [opCount $nir ${op}proven])\n    $body"
+    if {[opCount $nir ${op}proven] < 1 || [accessOpCount $hir $nir $op] > 0} {
+        fail "$name ($label): the access is not the proven opcode ($op [accessOpCount $hir $nir $op], ${op}proven [opCount $nir ${op}proven])\n    $body"
     }
     set reference ""
     foreach backend $backends {
@@ -412,6 +505,395 @@ set unsound {
             return k
     mutable_array::at(a, j)} {3 3 500}
     call-receivers   {mutable_array::at(mk(t).s, mod(h, mutable_array::capacity(mk(u).s)))} {2 5 4}
+    vector-counted   {v = mutable_vector::from_list(xs)
+    p = loop x in v:
+        x
+    v.push(h)
+    q = loop x in v:
+        x
+    r = loop k from 0 to list::length(q):
+        list::at(p, k)
+    list::length(r)} {2 3 1}
+    vector-mod       {v = mutable_vector::from_list(xs)
+    p = loop x in v:
+        x
+    v.push(h)
+    v.push(h)
+    q = loop x in v:
+        x
+    list::at(p, mod(h, list::length(q)))} {2 3 3}
+    vector-mask      {v = mutable_vector::from_list(xs)
+    p = loop x in v:
+        x
+    v.push(h)
+    v.push(h)
+    q = loop x in v:
+        x
+    if list::length(q) == 0:
+        return -1
+    list::at(p, bit_and(h, list::length(q) - 1))} {2 3 3}
+    vector-guard     {v = mutable_vector::from_list(xs)
+    p = loop x in v:
+        x
+    v.push(h)
+    q = loop x in v:
+        x
+    if h < 0 or h >= list::length(q):
+        return -1
+    list::at(p, h)} {2 3 2}
+    vector-pop       {v = mutable_vector::from_list(xs)
+    p = loop x in v:
+        x
+    v.pop():
+        on IndexNotFound:
+            0
+    q = loop x in v:
+        x
+    list::at(q, mod(h, list::length(p)))} {3 3 2}
+    vector-clear     {v = mutable_vector::from_list(xs)
+    p = loop x in v:
+        x
+    v.clear()
+    q = loop x in v:
+        x
+    list::at(q, mod(h, list::length(p)))} {2 3 1}
+    vector-field     {bx = V {v: mutable_vector::from_list(xs)}
+    p = loop x in bx.v:
+        x
+    bx.v.push(h)
+    q = loop x in bx.v:
+        x
+    list::at(p, mod(h, list::length(q)))} {2 3 2}
+    vector-copies    {v = mutable_vector::from_list(xs)
+    c1 = v
+    v.push(h)
+    c2 = v
+    p = loop x in c1:
+        x
+    q = loop x in c2:
+        x
+    list::at(p, mod(h, list::length(q)))} {2 3 2}
+    vector-through-copy {v = mutable_vector::from_list(xs)
+    c1 = v
+    c1.push(h)
+    p = loop x in v:
+        x
+    q = loop x in c1:
+        x
+    list::at(p, mod(h, list::length(q)))} {2 3 2}
+    vector-loop-body {v = mutable_vector::from_list(xs)
+    p = loop x in v:
+        x
+    loop i from 0 to 2:
+        v.push(i)
+    q = loop x in v:
+        x
+    list::at(p, mod(h, list::length(q)))} {2 3 3}
+    vector-copies-each-pushed {v = mutable_vector::from_list(xs)
+    c1 = v
+    c1.push(h)
+    c2 = v
+    c2.push(h)
+    c2.push(h)
+    p = loop x in c1:
+        x
+    q = loop x in c2:
+        x
+    list::at(p, mod(h, list::length(q)))} {2 3 3}
+    vector-branch    {v = mutable_vector::from_list(xs)
+    p = loop x in v:
+        x
+    if h > 0:
+        v.push(h)
+    q = loop x in v:
+        x
+    list::at(p, mod(h, list::length(q)))} {2 3 2}
+    vector-loop-encloses {v = mutable_vector::from_list(xs)
+    p = loop x in v:
+        x
+    r = loop t from 0 to 3:
+        q = loop x in v:
+            x
+        v.push(t)
+        list::at(p, mod(h, list::length(q)))
+    list::length(r)} {2 3 2}
+    vector-own-body  {v = mutable_vector::from_list(xs)
+    p = loop x in v:
+        v.push(x)
+        x
+    q = loop x in v:
+        x
+    list::at(p, mod(h, list::length(q)))} {2 3 3}
+    vector-field-handler {bx = V {v: mutable_vector::from_list(xs)}
+    p = loop x in bx.v:
+        x
+    n = list::at(p, 9):
+        on IndexNotFound:
+            bx.v.push(h)
+            0
+    q = loop x in bx.v:
+        x
+    list::at(p, mod(h, list::length(q)))} {2 3 2}
+    vector-branch-push-first {v = mutable_vector::from_list(xs)
+    p = loop x in v:
+        x
+    if h > 0:
+        v.push(h)
+        q = loop x in v:
+            x
+        return list::at(p, mod(h, list::length(q)))
+    0} {2 3 2}
+    vector-handler-push-first {v = mutable_vector::from_list(xs)
+    p = loop x in v:
+        x
+    n = mutable_vector::at(v, 99):
+        on IndexNotFound:
+            v.push(h)
+            q = loop x in v:
+                x
+            list::at(p, mod(h, list::length(q)))
+    n} {2 3 2}
+}
+# Lockstep clauses over a vector and a List an earlier loop collected over
+# it, the vector grown between them: LOCKSTEP-UNPROVEN, and the witness
+# program (the two clauses' counts) shows they differ there.
+set lockstepUnsound {
+    vector-lockstep {v = mutable_vector::from_list(xs)
+    p = loop x in v:
+        x
+    v.push(h)
+    r = loop a in v and y in p:
+        a + y
+    list::length(r)} {v = mutable_vector::from_list(xs)
+    p = loop x in v:
+        x
+    v.push(h)
+    [mutable_vector::length(v), list::length(p)]} {2 3 1}
+    field-lockstep {bx = V {v: mutable_vector::from_list(xs)}
+    p = loop x in bx.v:
+        x
+    bx.v.push(h)
+    r = loop a in bx.v and y in p:
+        a + y
+    list::length(r)} {bx = V {v: mutable_vector::from_list(xs)}
+    p = loop x in bx.v:
+        x
+    bx.v.push(h)
+    [mutable_vector::length(bx.v), list::length(p)]} {2 3 1}
+    copy-lockstep {v = mutable_vector::from_list(xs)
+    cv = v
+    v.push(h)
+    r = loop a in v and c in cv:
+        a + c
+    list::length(r)} {v = mutable_vector::from_list(xs)
+    cv = v
+    v.push(h)
+    [mutable_vector::length(v), mutable_vector::length(cv)]} {2 3 1}
+    copies-lockstep {v = mutable_vector::from_list(xs)
+    c1 = v
+    v.push(h)
+    c2 = v
+    r = loop a in c1 and c in c2:
+        a + c
+    list::length(r)} {v = mutable_vector::from_list(xs)
+    c1 = v
+    v.push(h)
+    c2 = v
+    [mutable_vector::length(c1), mutable_vector::length(c2)]} {2 3 1}
+}
+# Two clauses of one lockstep loop over the same vector place, nothing but
+# places and constants between them, walk one vector; a clause over a
+# vector and one over a List collected over it with nothing between that
+# can mutate it (pushes before both, the lockstep's own body pushing) have
+# one count: accepted, and every backend agrees with the interpreter.
+set lockstepSound {
+    same-local {v = vec(xs)
+    v.push(h)
+    r = loop a in v and c in v:
+        a + c
+    list::length(r)}
+    same-field {bx = V {v: vec(xs)}
+    bx.v.push(h)
+    r = loop a in bx.v and c in bx.v:
+        a + c
+    list::length(r)}
+    unmutated-collected {v = vec(xs)
+    p = loop x in v:
+        x * 10
+    r = loop a in v and y in p:
+        a + y
+    list::length(r)}
+    unmutated-copy {v = vec(xs)
+    c1 = v
+    r = loop a in v and c in c1:
+        a + c
+    list::length(r)}
+    unmutated-field {bx = V {v: vec(xs)}
+    p = loop x in bx.v:
+        x * 10
+    r = loop a in bx.v and y in p:
+        a + y
+    list::length(r)}
+    built-collected {v = vec(xs)
+    loop i from 0 to 3:
+        v.push(i)
+    p = loop x in v:
+        x * 10
+    r = loop a in v and y in p:
+        a + y
+    list::length(r)}
+    own-body-field {bx = V {v: vec(xs)}
+    p = loop x in bx.v:
+        x * 10
+    r = loop a in bx.v and y in p:
+        bx.v.push(a)
+        a + y
+    [list::length(r), mutable_vector::length(bx.v)]}
+    swap-collected {v = vec(xs)
+    p = loop x in v:
+        x * 10
+    old = v.swap(0, h):
+        on IndexNotFound:
+            0
+    r = loop a in v and y in p:
+        a + y + old
+    list::length(r)}
+    third-copy {v = vec(xs)
+    c1 = v
+    c2 = v
+    c2.push(h)
+    r = loop a in v and c in c1:
+        a + c
+    [list::length(r), mutable_vector::length(c2)]}
+}
+# Reads of a List collected over a vector, at an index proven against
+# another loop over it (or over a copy of it) with nothing between the two
+# loops that can mutate it -- the vector mutated nowhere, or only before or
+# after both loops, or in the later loop's own body, or only a copy of it
+# pushed between them: accepted, the read the proven opcode, every backend
+# agreeing with the interpreter.
+set vectorProven {
+    twice-mod {v = mutable_vector::from_list(xs)
+    p = loop x in v:
+        x
+    q = loop x in v:
+        x
+    list::at(p, mod(h, list::length(q)))}
+    twice-field-counted {bx = V {v: vec(xs)}
+    p = loop x in bx.v:
+        x
+    q = loop x in bx.v:
+        x * 3
+    r = loop k from 0 to list::length(q):
+        list::at(p, k)
+    list::length(r)}
+    copy-guard {v = vec(xs)
+    c1 = v
+    p = loop x in v:
+        x
+    q = loop x in c1:
+        x
+    if h < 0 or h >= list::length(q):
+        return -1
+    list::at(p, h)}
+    copy-pushed {v = vec(xs)
+    p = loop x in v:
+        x
+    c1 = v
+    c1.push(h)
+    q = loop x in v:
+        x * 3
+    list::at(p, mod(h, list::length(q)))}
+    copy-pushed-mutated {v = vec(xs)
+    v.push(h)
+    p = loop x in v:
+        x
+    c1 = v
+    c1.push(h)
+    q = loop x in v:
+        x * 3
+    v.pop():
+        on IndexNotFound:
+            0
+    list::at(p, mod(h, list::length(q)))}
+    built-mod {v = vec(xs)
+    loop i from 0 to 3:
+        v.push(i * h)
+    p = loop x in v:
+        x
+    q = loop x in v:
+        x * 3
+    v.clear()
+    list::at(p, mod(h, list::length(q)))}
+    own-body-counted {bx = V {v: vec(xs)}
+    bx.v.push(h)
+    q = loop x in bx.v:
+        x
+    p = loop x in bx.v:
+        bx.v.push(x)
+        x * 2
+    r = loop k from 0 to list::length(q):
+        list::at(p, k)
+    [list::length(r), mutable_vector::length(bx.v)]}
+    branch-read-then-push {v = vec(xs)
+    p = loop x in v:
+        x
+    if h > 0:
+        q = loop x in v:
+            x * 3
+        r = list::at(p, mod(h, list::length(q)))
+        v.push(r)
+        return r
+    mutable_vector::length(v)}
+    else-pushes {bx = V {v: vec(xs)}
+    p = loop x in bx.v:
+        x
+    if h > 0:
+        q = loop x in bx.v:
+            x * 3
+        return list::at(p, mod(h, list::length(q)))
+    else:
+        bx.v.push(h)
+    mutable_vector::length(bx.v)}
+    then-pushes {v = vec(xs)
+    p = loop x in v:
+        x
+    if h < 0:
+        v.push(h)
+    else:
+        q = loop x in v:
+            x * 3
+        return list::at(p, mod(h, list::length(q)))
+    mutable_vector::length(v)}
+    handler-read-then-push {v = vec(xs)
+    p = loop x in v:
+        x
+    n = mutable_vector::at(v, 99):
+        on IndexNotFound:
+            q = loop x in v:
+                x * 3
+            k = list::at(p, mod(h, list::length(q)))
+            v.push(k)
+            k
+    n + mutable_vector::length(v)}
+    swap-between {v = vec(xs)
+    p = loop x in v:
+        x
+    old = v.swap(0, h):
+        on IndexNotFound:
+            0
+    q = loop x in v:
+        x * 3
+    list::at(p, mod(h, list::length(q))) + old}
+    third-copy-pushed {v = vec(xs)
+    c1 = v
+    p = loop x in v:
+        x
+    q = loop x in c1:
+        x * 3
+    c2 = v
+    c2.push(h)
+    list::at(p, mod(h, list::length(q))) + mutable_vector::length(c2)}
 }
 set conservative {
     inline-twice     {if h + 1 < 0 or h + 1 >= mutable_array::capacity(a):
@@ -459,6 +941,72 @@ if {[dict get $options -unsound]} {
         }
         incr rejected
         puts "ok   conservative $name: rejected"
+    }
+    foreach {name body counts witness} $lockstepUnsound {
+        set path [writeProgram l-$name "$header$signature:\n    $body\n\n[callOf f 2 3 1]\n"]
+        set kind [strict $path hir]
+        if {$kind ne "LOCKSTEP-UNPROVEN"} {
+            fail "lockstep $name: expected LOCKSTEP-UNPROVEN, got [expr {$kind eq "" ? "accepted" : $kind}]"
+            continue
+        }
+        incr rejected
+        lassign $witness ca cb h
+        set wpath [writeProgram lw-$name "$header$signature:\n    $counts\n\n[callOf f $ca $cb $h]\n"]
+        if {[catch {surface::readProgramFile $wpath -warnings off} whir]} {
+            fail "lockstep $name: the witness program does not compile: [string range $whir 0 200]"
+            continue
+        }
+        set got [outcome $whir interp]
+        set numbers [regexp -all -inline {\d+} [lindex $got 1]]
+        if {[lindex $got 0] ne "value" || [llength $numbers] != 2 || [llength [lsort -unique -integer $numbers]] != 2} {
+            fail "lockstep $name: the witness ($ca $cb $h) does not give two different counts: $got"
+            continue
+        }
+        incr witnessed
+        puts "ok   lockstep $name: rejected; witness capacities $ca/$cb, h = $h counts [lindex $got 1]"
+    }
+    foreach {name body} $lockstepSound {
+        set path [writeProgram ls-$name "$header$signature:\n    $body\n\n\[[callOf f 2 3 1], [callOf f 0 3 7]\]\n"]
+        set kind [strict $path hir]
+        if {$kind ne ""} {
+            fail "lockstep $name: a lockstep over one vector place rejected: $kind"
+            continue
+        }
+        set reference ""
+        foreach backend $backends {
+            set got [outcome $hir $backend]
+            if {$backend eq "interp"} {
+                set reference $got
+            }
+            if {[lindex $got 0] ne "value" || $got ne $reference} {
+                fail "lockstep $name on $backend: $got (interp: $reference)"
+            }
+        }
+        puts "ok   lockstep $name: accepted, [lindex $reference 1] on [join $backends {, }]"
+    }
+    foreach {name body} $vectorProven {
+        set calls [lmap {ca h} {1 0 2 1 3 2 3 7 5 -1 5 12345} {callOf f $ca 3 $h}]
+        set path [writeProgram vp-$name "$header$signature:\n    $body\n\n\[[join $calls ",\n "]\]\n"]
+        set kind [strict $path hir]
+        if {$kind ne ""} {
+            fail "vector $name: a read proven by another loop over the vector, nothing mutating it between them, rejected: $kind"
+            continue
+        }
+        set nir [native::nir $hir]
+        if {[opCount $nir listgetproven] < 1 || [accessOpCount $hir $nir listget] > 0} {
+            fail "vector $name: the read is not the proven opcode (listget [accessOpCount $hir $nir listget], listgetproven [opCount $nir listgetproven])"
+        }
+        set reference ""
+        foreach backend $backends {
+            set got [outcome $hir $backend]
+            if {$backend eq "interp"} {
+                set reference $got
+            }
+            if {[lindex $got 0] ne "value" || $got ne $reference} {
+                fail "vector $name on $backend: $got (interp: $reference)"
+            }
+        }
+        puts "ok   vector $name: proven, [string range [lindex $reference 1] 0 60] on [join $backends {, }]"
     }
 }
 

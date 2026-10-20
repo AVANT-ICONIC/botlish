@@ -3842,6 +3842,7 @@ tests/mutable-vector.test mv-loop-error-propagation pass
 tests/mutable-vector.test mv-loop-exits pass
 tests/mutable-vector.test mv-loop-native pass
 tests/mutable-vector.test mv-native-evidence pass
+tests/mutable-vector.test mv-operation-not-a-value pass
 tests/mutable-vector.test mv-ops pass
 tests/mutable-vector.test mv-path-last-use-copies pass
 tests/mutable-vector.test mv-path-last-use-semantics pass
@@ -3861,6 +3862,7 @@ tests/mutable-vector.test mv-show pass
 tests/mutable-vector.test mv-take-order pass
 tests/mutable-vector.test mv-type-affinity pass
 tests/mutable-vector.test mv-type-syntax pass
+tests/mutable-vector.test mv-untyped-loop pass
 tests/mutarray-construction.test mutarray-arch-1 pass
 tests/mutarray-construction.test mutarray-arg-1 pass
 tests/mutarray-construction.test mutarray-arg-2 pass
@@ -5054,6 +5056,7 @@ tests/proven-bounds.test bounds-field-path-index pass
 tests/proven-bounds.test bounds-field-path-lockstep pass
 tests/proven-bounds.test bounds-field-path-rejected pass
 tests/proven-bounds.test bounds-field-path-write pass
+tests/proven-bounds.test bounds-fixed-length-snapshots-proven pass
 tests/proven-bounds.test bounds-guarded-local-index pass
 tests/proven-bounds.test bounds-guarded-local-rejected pass
 tests/proven-bounds.test bounds-nir-copy-one-slice-proven-stays-checked pass
@@ -5082,6 +5085,16 @@ tests/proven-bounds.test bounds-values-agree-known-error-checked pass
 tests/proven-bounds.test bounds-values-agree-proven pass
 tests/proven-bounds.test bounds-values-agree-reduced pass
 tests/proven-bounds.test bounds-values-agree-unknown pass
+tests/proven-bounds.test bounds-vector-context-yield pass
+tests/proven-bounds.test bounds-vector-mutated-operand pass
+tests/proven-bounds.test bounds-vector-operation-value pass
+tests/proven-bounds.test bounds-vector-quiet-runs-proven pass
+tests/proven-bounds.test bounds-vector-same-place-lockstep pass
+tests/proven-bounds.test bounds-vector-snapshots-fail pass
+tests/proven-bounds.test bounds-vector-snapshots-lockstep pass
+tests/proven-bounds.test bounds-vector-snapshots-rejected pass
+tests/proven-bounds.test bounds-vector-static-block pass
+tests/proven-bounds.test bounds-vector-unmutated-proven pass
 tests/proven-bounds.test bounds-verdict-index pass
 tests/proven-bounds.test bounds-verdict-literal-loop-walks pass
 tests/proven-bounds.test bounds-verdict-per-element-union pass
@@ -6014,6 +6027,7 @@ tests/static-economics.test se-equal-ownership-verdict pass
 tests/static-economics.test se-equal-plan-gate pass
 tests/static-economics.test se-equal-sequence pass
 tests/static-economics.test se-equal-untyped-capture pass
+tests/static-economics.test se-equal-vector-context-callee pass
 tests/static-economics.test se-method-invalidated pass
 tests/static-economics.test se-method-reuse pass
 tests/static-economics.test se-no-misprediction pass

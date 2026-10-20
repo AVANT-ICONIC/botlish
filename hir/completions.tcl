@@ -227,6 +227,7 @@ proc hir::completions::resetCache {} {
     set yieldFinalsKnown 0
     set possibleKnown 0
     set reported [dict create]
+    hir::cardinality::resetCache
 }
 
 # ---------------------------------------------------------------------------

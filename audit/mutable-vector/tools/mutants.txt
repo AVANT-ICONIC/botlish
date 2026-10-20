@@ -125,6 +125,24 @@
 >>>>
 
 
+@@ operation-value-allowed a mutating operation may be used as a value: `p = mutable_vector::push; p(v, 4)` mutates v's header behind the copies (`c = v`) that were never written out for it, and a callee's parameter given it
+## hir/mutvec.tcl
+<<<<
+        set problem [OperationValueProblem $hir $e]
+        if {$problem ne ""} {
+====
+        set problem [OperationValueProblem $hir $e]
+        if {0} {
+>>>>
+
+@@ operation-value-help-method-only the MUTABLE-PLACE-RECEIVER help for an operation used as a value always spells the call with method syntax, which a nomethod operation (mutable_array::copy) rejects (NOMETHOD-CALL)
+## hir/mutvec.tcl
+<<<<
+    set call [expr {[dict get $meta nomethod] ? "${op}(v, ...)" : "v.[namespace tail $op](...)"}]
+====
+    set call "v.[namespace tail $op](...)"
+>>>>
+
 @@ callee-mutation-leaks a function's mutation of its unrestricted vector parameter changes the caller's vector (no entry copy)
 ## hir/mutvec.tcl
 <<<<
@@ -795,6 +813,15 @@ core::native::register mutable_vector::clear
         set item [core::mutvec::drainFront $vector]
 ====
     foreach item [core::mutvec::items $vector] {
+>>>>
+
+
+@@ unmarked-loop-drains the interpreter consumes any vector a loop meets, not only the one its consume mark names: a vector reaching an unmarked loop through a value of no collection type is drained instead of the loop's TYPE error (and a later loop over it sees it empty)
+## core/evaluator.tcl
+<<<<
+    if {[ConsumeMarked $listExpr]} {
+====
+    if {[core::value::kind $listValue] in {mutvec mutarray}} {
 >>>>
 
 

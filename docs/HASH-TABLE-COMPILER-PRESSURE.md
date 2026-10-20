@@ -516,6 +516,65 @@ proven sets are `counts.set(0|1, 0)` on a capacity-2 allocation.
 * **Result.** `t.slots.set(i, v)` under a guard on `capacity(t.slots)`
   lowers to `mutarraysetproven` with no share.
 * **Cost.** Cheap.
+* **Soundness correction (review).** A field path names one value, but a
+  `MutableVector`'s length is not fixed: `b.v.push(x)` (or a callee's push
+  to a context member) changes it in place. With the path key, two loops
+  over `b.v` around a push had one length, and a read of the first loop's
+  List at an index proven against the second's lowered to an unchecked
+  `listgetproven` past its end. CP-1's reductions reached the same defect
+  with a local vector, and the counted-loop and lockstep forms had it
+  before both changes. The fix keys a vector's length only when nothing
+  can change it: no mutating operation anywhere in the program has a
+  receiver with its key (a copy is keyed like its source, so a push on
+  either counts) and the key is not rooted at a context parameter. Any
+  other vector is measured by its place (binding and field path), which a
+  copy's push does not change: a place nothing mutates keeps one length,
+  and a loop over any other has the length the vector has at that
+  evaluation, shared with the evaluations of the same place that no
+  mutation of it -- for a context member, also no call that runs Botlish
+  code and no yield -- can come between: consecutive statements of one
+  body holding none (`hir::cardinality::Evaluation`). A vector built with
+  pushes and then walked twice keeps the proof; two loops with a push
+  between them do not. The review's second round found one route no size
+  form saw: a mutating operation taken as a value (`p =
+  mutable_vector::push; p(v, 4)`, or one passed to a function or stored in
+  a field) mutated whatever its caller passed, behind the copies the
+  elaboration never wrote out for it, so it also broke value semantics
+  (`c = v` then changed, on the baseline too). Such an operation is now
+  only ever called (`MUTABLE-PLACE-RECEIVER` at the reference). List and
+  MutableArray lengths keep their keys (`lpmask`'s NIR is unchanged). The
+  cost: two loops over a vector with a mutation of it between them, or,
+  for a context's vector, any function call between them are unrelated
+  (whether or not the callee can reach the member), and an operation
+  that mutates can no longer be a function value (none was, in the corpus
+  or the tests); the analysis is computed once per function body and pass,
+  so the front end costs what it did before the fix. A second hole of the
+  same kind was the interpreter's alone:
+  its `listloop` drained any vector it met, so a vector reaching an unmarked
+  loop through an `any`-typed path was walked (and emptied) there while the
+  other backends raised the loop's TYPE error; it now requires a List like
+  them, and only a loop the compiler marks consuming moves a vector's
+  elements out (`mv-untyped-loop`). The third round narrowed the
+  rule to what soundness needs, recovering sound proofs the second had
+  dropped: only an operation that may change a length counts (a swap is
+  registered `-keeps-length`); a vector keeps its key's length unless a
+  place its own value was copied through is resized (so `u = v;
+  u.push(x)` leaves `v` and `w = v` one length); a place is a context
+  member by its root, so a local copy `items = log.items` is a place of
+  its own; a call is a site of a context member only when it may reach
+  the installed context (its callee requires the context, directly or
+  through what it calls, it runs or resumes a coroutine, or it is a
+  function value given an affine argument, which may carry a handle);
+  and the first run of an `if` branch or a handler, entered with no site
+  before it, continues the run before the statement (a loop in a branch
+  before the branch's own push, a `static compile:` block among them). A
+  lockstep diagnostic now records the evaluations it locates as related
+  origins. What stays unrelated: two loops with a resize of the vector
+  between them on some path, a pop's shorter length read against the
+  longer earlier one (a size form states equalities, no order), and an
+  operation that mutates taken as a value (rejected, even when its
+  receiver is a temporary: telling that apart would need the flow of
+  function values).
 
 ### CP-4. Facts do not cross a call
 

@@ -190,19 +190,23 @@ proc core::forms::op-loop {node env} {
 # normally with the List of every contributed value, in order.
 #
 # A MutableVector or MutableArray iterable (MUTABLE-VECTOR.md, MUTABLE-
-# ARRAY.md) is *consumed*: the compiler hands a loop one only when its
-# elements are affine (an unrestricted one's loop iterates its #to_list
-# snapshot), and the loop then moves each element out of it, first to last,
-# into the loop variable (#take_front). Whatever is left when the loop is
-# left early is still the collection's: the compiler releases it on that
-# exit.
+# ARRAY.md) is *consumed* when LIST-EXPR is the consume mark around it,
+# `mutable_vector#consume(...)` or `mutable_array#consume(...)` (hir/
+# lower.tcl): the compiler hands a loop one only when its elements are
+# affine (an unrestricted one's loop iterates its #to_list snapshot), and
+# the loop then moves each element out of it, first to last, into the loop
+# variable (#take_front). Whatever is left when the loop is left early is
+# still the collection's: the compiler releases it on that exit. Any other
+# LIST-EXPR must be a List, like the Tcl compiler's and the native backend's
+# unmarked loop: a vector reaching one (a value of no collection type that
+# holds one) is a TYPE error, never drained.
 proc core::forms::op-listloop {node env} {
     set listExpr [lindex $node 1]
     set elementBlock [lindex $node 2]
     set param [lindex [core::ir::blockParams $elementBlock] 0]
     set body [core::ir::blockBody $elementBlock]
     set listValue [core::interp::valueOf [core::interp::evalIn $listExpr $env]]
-    if {[core::value::kind $listValue] in {mutvec mutarray}} {
+    if {[ConsumeMarked $listExpr]} {
         return [ConsumeVector $listValue $param $body $env]
     }
     set items [core::value::items [core::value::expect list $listValue "loop iterable"]]
@@ -232,6 +236,13 @@ proc core::forms::op-listloop {node env} {
         }
     }
     return [core::completion::normal [core::value::listOf $results]]
+}
+
+# 1 if Core IR expression EXPR is a call of the consume mark of a loop that
+# consumes a MutableVector or MutableArray (op-listloop).
+proc core::forms::ConsumeMarked {expr} {
+    return [expr {[lindex $expr 0] eq "call"
+        && [lindex $expr 1] in {{ref mutable_vector#consume} {ref mutable_array#consume}}}]
 }
 
 # The consuming iteration of op-listloop over VECTOR (a MutableVector, or a

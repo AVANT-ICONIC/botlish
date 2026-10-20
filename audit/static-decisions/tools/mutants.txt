@@ -354,12 +354,12 @@
             return [dict get $binding name]
 >>>>
 
-@@ hygiene-lockstep a lockstep loop's iteration counts name a List's binding by its NAME#N (hir::cardinality::ShowAtom)
+@@ hygiene-lockstep a lockstep loop's iteration counts name a List's binding by its NAME#N (hir::cardinality::ShowKey)
 ## hir/cardinality.tcl
 <<<<
-                return "length([hir::semantic::SourceName $hir $id])"
+        b { return [hir::semantic::SourceName $hir $what] }
 ====
-                return "length([dict get $hir bindings $id name])"
+        b { return [dict get $hir bindings $what name] }
 >>>>
 
 @@ hygiene-mutable-receiver MUTABLE-PLACE-RECEIVER names the receiver's binding by its NAME#N (hir::mutvec::ReceiverProblem)

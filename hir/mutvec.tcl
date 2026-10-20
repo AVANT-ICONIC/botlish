@@ -218,9 +218,11 @@ proc hir::mutvec::verify {hirVar} {
         return
     }
     set roots [dict create]
+    set callees [dict create]
     dict for {e node} [dict get $hir exprs] {
-        if {[dict get $node kind] ne "call" || ![dict get $node reachable]} continue
-        if {[OpKind $hir $e] ne "mutate"} continue
+        if {[dict get $node kind] ne "call"} continue
+        dict set callees [dict get $node callee] 1
+        if {![dict get $node reachable] || [OpKind $hir $e] ne "mutate"} continue
         set receiver [lindex [dict get $node args] 0]
         if {$receiver eq ""} continue
         set problem [ReceiverProblem $hir $e $receiver]
@@ -229,6 +231,17 @@ proc hir::mutvec::verify {hirVar} {
             continue
         }
         dict set roots [lindex [Path $hir $receiver] 0] [Kind [hir::typeOf $hir $receiver]]
+    }
+    # A mutating operation is only ever called: as a value, it would mutate
+    # whatever header a call through the value passes it -- a place no
+    # receiver check sees, whose copies and captures were never written out
+    # for it -- so a reference to one is a callee or nothing.
+    dict for {e node} [dict get $hir exprs] {
+        if {[dict get $node kind] ne "ref" || ![dict get $node reachable] || [dict exists $callees $e]} continue
+        set problem [OperationValueProblem $hir $e]
+        if {$problem ne ""} {
+            hir::Diagnose hir MUTABLE-PLACE-RECEIVER $problem $e
+        }
     }
     # A nested function may not refer to a place root.
     dict for {e node} [dict get $hir exprs] {
@@ -244,6 +257,36 @@ proc hir::mutvec::verify {hirVar} {
         }
     }
     dict set hir mutvec roots [lsort -dictionary [dict keys $roots]]
+}
+
+# Why reference E, used as a value (not a call's callee), may not be one, or
+# "": it denotes a collection operation that mutates its receiver in place
+# (OpKind). Every guarantee of a place -- the receiver check, the copies a
+# read-out or an entry gets, the capture rule -- is made at a call that
+# names the operation; a call through a function value names none, so it
+# would mutate the header of whatever its caller passes: a copy whose
+# update is lost, or a place's own header behind its copies' back.
+proc hir::mutvec::OperationValueProblem {hir e} {
+    set b [dict get $hir exprs $e binding]
+    if {$b eq "" || [dict get $hir bindings $b kind] ne "root"} {
+        return ""
+    }
+    set symbol [dict get $hir bindings $b symbol]
+    if {$symbol eq "" || [dict get $hir symbols $symbol kind] ne "native"} {
+        return ""
+    }
+    set op [dict get $hir bindings $b name]
+    if {[NativeOpKind $op] ne "mutate"} {
+        return ""
+    }
+    set meta [core::native::metadata $op]
+    set receiver [lindex [dict get $meta paramTypes] 0]
+    set kind [expr {[core::type::base $receiver] eq "mutarray" ? "array" : "vector"}]
+    set name [KindName $kind]
+    # The call on a place, spelled the way the operation can be called: a
+    # nomethod operation only as a function.
+    set call [expr {[dict get $meta nomethod] ? "${op}(v, ...)" : "v.[namespace tail $op](...)"}]
+    return "$op mutates its receiver in place, so it can only be called, never used as a value: a call through a function value has no receiver this check can see, and would update whatever $name its caller passes -- a copy, whose update is lost, or a place's own header (call it on a place, `$call`, or wrap it in a function of your own that takes the $kind and returns it)"
 }
 
 # Why receiver R of mutating call E is not a place, or "".

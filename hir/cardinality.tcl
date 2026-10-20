@@ -115,7 +115,12 @@ proc hir::cardinality::of_loop {hir e} {
 #   {len KEY}   the length of one List value (KEY identifies the value,
 #               ValueKey: {b B} for a parameter / loop binding B, {p KEY
 #               FIELD} for a field path, {e E} for the defining expression E
-#               an alias chain ends at), always >= 0
+#               an alias chain ends at), always >= 0 -- also the length of
+#               a MutableVector nothing can change (IterationLength); or the
+#               length a loop domain over a MutableVector something can
+#               change had when that one loop evaluated its iterable
+#               expression E: KEY is then {o E}, the occurrence itself,
+#               never its binding, path or definition (IterationLength)
 #   {cap KEY}   the capacity of one MutableArray value (KEY as for len),
 #               always >= 0 and fixed at allocation (STDLIB-NAMESPACES.md's
 #               indexed-access proof is its one consumer besides lockstep)
@@ -257,7 +262,11 @@ proc hir::cardinality::Chase {hir e stepsVar} {
 # place (MUTABLE-ARRAY.md) -- and `b.cells` written twice one List. That is
 # what lets a guard or a reduction on `t.slots.capacity()` prove the read
 # `t.slots.at(i)` and the write `t.slots.set(i, v)`: the write has no
-# local-alias form, a local `s = t.slots` being a logical copy.
+# local-alias form, a local `s = t.slots` being a logical copy. A key names
+# one value, not one length: a field (or binding) holding a MutableVector
+# holds one vector whose length a push changes in place, so a size form
+# measures a vector by its key only where nothing can change it
+# (IterationLength).
 proc hir::cardinality::ValueKey {hir e stepsVar} {
     upvar 1 $stepsVar steps
     lassign [Chase $hir $e steps] kind id
@@ -393,6 +402,12 @@ proc hir::cardinality::Capacity {hir e stepsVar} {
 }
 
 # The length of the List value of expression E, as a (nonnegative) form.
+# E's value is a List wherever its length is read -- an operand a List
+# native takes (list::length, list::at, a slice, an array's construction
+# from a List), which fails on anything else, or the iterable of a loop
+# that requires one -- or a MutableArray a loop walks, whose length is
+# fixed too, or a MutableVector nothing can change (IterationLength), so
+# the length of one is its key's (ValueKey).
 proc hir::cardinality::ListLength {hir e stepsVar} {
     upvar 1 $stepsVar steps
     set fact [hir::exact::ListOf $hir $e]
@@ -416,6 +431,600 @@ proc hir::cardinality::ListLength {hir e stepsVar} {
         return [FormConst [llength [dict get $node args]]]
     }
     return [FormAtom [list len [ValueKey $hir $id steps]]]
+}
+
+# The number of elements the list domain over the iterable expression E
+# visits: the length E's value has when its loop evaluates E, once. A loop
+# walks a List -- an iterable of any static type but MutableVector and
+# MutableArray must be one when the loop runs (its TYPE check, on every
+# backend) -- or the snapshot (or, affine, the consumption) of a
+# MutableArray or MutableVector (MUTABLE-VECTOR.md, MUTABLE-ARRAY.md). A
+# List's length never changes (it is immutable), nor does a MutableArray's
+# (its capacity, fixed at allocation), so a binding, field path or
+# definition that names one names one length: ListLength's, keyed by it.
+#
+# A MutableVector's length does change, in place, while its binding, path
+# or member stays the same: through a mutating operation (hir::mutvec::
+# OpKind) that may change a length (Resizes: one registered -keeps-length,
+# a swap, never does) whose receiver is a place holding it -- a binding or
+# a field path of the function itself (MUTABLE-PLACE-RECEIVER; an operation
+# that mutates is only ever called, never a value) -- or a callee's through
+# its own context parameter, the installed context every function
+# requiring it shares. Nothing else reaches it: a vector is a value, so an
+# alias, a struct field or a callee's parameter given it holds a logical
+# copy no mutation of the original changes (hir::mutvec's elaboration), and
+# a nested function cannot mutate a place it captured.
+#
+# So a vector keeps its key's length (ListLength) when its key is not
+# rooted at a context parameter and no place its value was copied through
+# on its way from the key's definition (KeyPlaces: `w` and `v` for `w =
+# v`) is a receiver that resizes, anywhere in the program (Mutations): its
+# value is then that definition's, unchanged, wherever it is evaluated. A
+# copy pushed elsewhere (`u = v; u.push(x)`) changes neither. Otherwise it
+# is measured by its place (hir::mutvec::Path: a binding and a field path
+# from it), which no mutation of another place changes: a place nothing
+# resizes keeps one length, the atom {len {pl B FIELD...}}, wherever it is
+# evaluated -- unless its root is a context parameter, whose member
+# another function may grow (a local copy of a member, `items =
+# log.items`, is no such place). The evaluations of any other place have
+# the length the vector has at that evaluation, which each shares with
+# every evaluation of the same place no mutation can come between
+# (Evaluation): the atom {len {o R}}, R the first of those evaluations in
+# evaluation order, equal to no other's. Two loops over such a vector with
+# a push between them have unrelated lengths, as do the vector and a List
+# an earlier loop collected over it; two with nothing that can mutate it
+# between them -- built with pushes, then walked twice -- have one. An
+# evaluation with no such class (no place, or a mutation before it in its
+# own statement) has its own atom, {len {o E}}. (Two clauses of one
+# lockstep loop over one place, `loop a in v and c in v`, are one class
+# unless a site runs before or between them: a lockstep loop evaluates its
+# domains once, in written order, before its first iteration, and the
+# sites of its body run after them.)
+proc hir::cardinality::IterationLength {hir e stepsVar} {
+    upvar 1 $stepsVar steps
+    if {[hir::types::kindOf [hir::typeOf $hir $e]] ne "mutvec"} {
+        return [ListLength $hir $e steps]
+    }
+    set key [CompleteKey $hir $e]
+    if {$key ne "" && ![ContextRooted $hir $key] && [KeyPlaces $hir $e chain]} {
+        set resized 0
+        foreach place $chain {
+            if {[dict exists [Mutations $hir] $place]} {
+                set resized 1
+                break
+            }
+        }
+        if {!$resized} {
+            return [FormAtom [list len $key]]
+        }
+    }
+    set place [hir::mutvec::Path $hir $e]
+    if {$place eq ""} {
+        return [FormAtom [list len [list o $e]]]
+    }
+    set root [lindex $place 0]
+    set context [ContextRooted $hir [list b $root]]
+    if {!$context && ![dict exists [Mutations $hir] $place]} {
+        return [FormAtom [list len [list pl {*}$place]]]
+    }
+    set first [Evaluation $hir $e $place [expr {$context ? [list [ContextIdOf $hir $root]] : {}}]]
+    if {$first eq ""} {
+        set first $e
+    }
+    return [FormAtom [list len [list o $first]]]
+}
+
+# The key of expression E (ValueKey), followed to the end of its alias
+# chains with a step budget of its own, or "" when the budget ran out
+# first: a key cut short names a point of a chain another expression's key
+# may pass beyond, so two such keys can differ for one value.
+proc hir::cardinality::CompleteKey {hir e} {
+    variable maxSteps
+    set steps 0
+    set key [ValueKey $hir $e steps]
+    return [expr {$steps > $maxSteps ? "" : $key}]
+}
+
+# The places E's value was read from on its way from its key's definition
+# (ValueKey's walk, under CompleteKey's budget): each binding the alias
+# chains pass, as a place path (hir::mutvec::Path's {BINDING {FIELD...}})
+# with the fields the value lies at in it -- `b.v`, with `b = a`, passes
+# {b {v}} and {a {v}}. Stores them in PLACESVAR and returns 1, or returns 0
+# when the walk ran out of steps.
+proc hir::cardinality::KeyPlaces {hir e placesVar} {
+    variable maxSteps
+    upvar 1 $placesVar places
+    set places {}
+    set fields {}
+    set steps 0
+    while 1 {
+        while 1 {
+            incr steps
+            if {$steps > $maxSteps} {
+                return 0
+            }
+            set node [dict get $hir exprs $e]
+            if {[dict get $node kind] ne "ref" || [dict get $node binding] eq ""} {
+                break
+            }
+            set b [dict get $node binding]
+            lappend places [list $b $fields]
+            set binding [dict get $hir bindings $b]
+            set declaration [dict get $binding declaredBy]
+            if {[dict get $binding kind] ne "local" || $declaration eq ""} {
+                return 1
+            }
+            set bind [dict get $hir exprs $declaration]
+            if {[dict get $bind kind] ne "bind" || [dict get $bind duplicate]} {
+                return 1
+            }
+            set e [dict get $bind value]
+        }
+        if {[dict get $node kind] ne "project"} {
+            return 1
+        }
+        set fields [linsert $fields 0 [dict get $node name]]
+        set e [dict get $node receiver]
+    }
+}
+
+# 1 if value key KEY (ValueKey) is rooted at a context parameter: the load
+# of an installed context (hir::contexts::isLoad), or a binding bound to
+# one.
+proc hir::cardinality::ContextRooted {hir key} {
+    while {[lindex $key 0] eq "p"} {
+        set key [lindex $key 1]
+    }
+    lassign $key how what
+    if {$how eq "e"} {
+        return [hir::contexts::isLoad $hir $what]
+    }
+    set by [dict get $hir bindings $what declaredBy]
+    return [expr {$by ne "" && [dict exists $hir exprs $by] && [dict get $hir exprs $by kind] eq "bind"
+        && [hir::contexts::isLoad $hir [dict get $hir exprs $by value]]}]
+}
+
+# 1 if call C is a mutating collection operation (hir::mutvec::OpKind) that
+# may change its receiver's length: every one but those registered
+# -keeps-length (core/native.tcl), which only replace elements.
+proc hir::cardinality::Resizes {hir c} {
+    if {[hir::mutvec::OpKind $hir $c] ne "mutate"} {
+        return 0
+    }
+    return [expr {![dict get [core::native::metadata [hir::affine::NativeName $hir $c]] keepsLength]}]
+}
+
+# The operations of HIR that may change a collection's length (Resizes),
+# grouped by their receiver's place: {PLACE {CALL ...} ...}, PLACE a
+# hir::mutvec::Path (a receiver that is no place, a temporary, changes no
+# place's length). Reachable or not: a mutation counts wherever it is
+# written.
+proc hir::cardinality::Mutations {hir} {
+    variable cache
+    Memo $hir
+    if {![dict exists $cache mutations]} {
+        set mutations [dict create]
+        dict for {c node} [dict get $hir exprs] {
+            if {[dict get $node kind] ne "call" || ![Resizes $hir $c]} continue
+            set receiver [lindex [dict get $node args] 0]
+            if {$receiver eq ""} continue
+            set place [hir::mutvec::Path $hir $receiver]
+            if {$place ne ""} {
+                dict lappend mutations $place $c
+            }
+        }
+        dict set cache mutations $mutations
+    }
+    return [dict get $cache mutations]
+}
+
+# The first evaluation (an iterable expression) of the MutableVector place
+# PLACE that no site can separate from the evaluation E, or "" when E has
+# no such class: no quiet run holds it (Epoch). CONTEXT is {} for a place
+# of the function's own, or {ID} for a member of the installed context ID
+# its root, a context parameter, loads.
+#
+# The evaluations of one invocation (a function body, or the top-level
+# code) run in a statically known order: a body is a sequence of
+# statements, each run once per run of the body. A *site* is what can
+# change the vector's length between two evaluations: an operation of the
+# same invocation that may resize its receiver (Resizes) whose receiver is
+# PLACE -- one of another place, a copy keyed like it included, changes
+# only that place -- and, for a context member, also every call that may
+# run code changing it (ContextSite: a callee that requires the context,
+# a coroutine segment, a yield, after which the resumer runs before the
+# body goes on). A nested function cannot mutate a place it captured, and
+# running it is a call here. An evaluation of PLACE sees the
+# vector its invocation last left: one length from one site to the next.
+# So two evaluations in one *quiet run* of a body -- consecutive statements
+# none of which holds a site -- see one length, however deep each sits in
+# its statement (a loop body, a branch), as long as both run in that one
+# run of the body: each statement of the run runs once in it, and a value
+# of an evaluation in a loop's body never outlives the iteration it was
+# made in. An evaluation in a statement that holds a site lies in one of
+# the statement's bodies or in its operands -- a loop's domains, a call's
+# arguments -- which run once, in evaluation order: before every site of
+# the statement, it belongs to the quiet run before the statement, else to
+# none. In a body, its classes are the body's, except that the first run
+# of a body that runs at most once per run of the statement (a branch, a
+# handler), entered with no site before it, continues the statement's run
+# (Epoch).
+proc hir::cardinality::Evaluation {hir e place context} {
+    variable cache
+    Memo $hir
+    set inv [dict get $hir scopes [dict get $hir exprs $e scope] invocation]
+    set id [list $inv $place $context]
+    if {![dict exists $cache evaluations $id]} {
+        set layout [Layout $hir $inv]
+        set sites {}
+        foreach c [dict get $layout calls] {
+            if {[Resizes $hir $c]} {
+                set receiver [lindex [dict get $hir exprs $c args] 0]
+                if {$receiver ne "" && [hir::mutvec::Path $hir $receiver] eq $place} {
+                    lappend sites $c
+                    continue
+                }
+            }
+            if {$context ne {} && [ContextSite $hir $c [lindex $context 0]]} {
+                lappend sites $c
+            }
+        }
+        set first [dict create]
+        set classes [dict create]
+        foreach o [dict get $layout iterables] {
+            if {[hir::types::kindOf [hir::typeOf $hir $o]] ne "mutvec" || [hir::mutvec::Path $hir $o] ne $place} continue
+            set epoch [Epoch $layout $sites $o]
+            if {$epoch eq ""} continue
+            if {![dict exists $first $epoch]} {
+                dict set first $epoch $o
+            }
+            dict set classes $o [dict get $first $epoch]
+        }
+        dict set cache evaluations $id $classes
+    }
+    set classes [dict get $cache evaluations $id]
+    return [expr {[dict exists $classes $e] ? [dict get $classes $e] : ""}]
+}
+
+# 1 if call C, in an invocation reading a member of the installed context
+# ID through its context parameter, may run code that changes that member
+# before C returns: a function whose own context parameter is that same
+# installed value (MUTABLE-PLACE-RECEIVER confines every other mutation to
+# the place's own function), or a coroutine body or a resumer that may run
+# one. That is (CallReach):
+#
+#   - a native whose registration runs Botlish code (-completion: a
+#     coroutine segment, a callable argument), or a yield (the resumer runs
+#     before it returns);
+#   - a trait operation: its implementation is bound only in the
+#     monomorphized program (hir::traits), so it may be anything;
+#   - a call of a block (hir::contexts::Callee: a function, an alias of one,
+#     the thunk a coroutine construction runs) whose run may (Reaching): one
+#     that loads ID itself -- requires it -- or makes such a call;
+#   - a call of a coroutine handle (a resume), or a call through a function
+#     value given an affine argument: the function is context-free and never
+#     yields (no other function becomes a value: CONTEXT-FUNCTION-VALUE,
+#     UNWRAPPED-YIELD), but it may resume a coroutine handle the argument
+#     carries.
+#
+# Nothing else reaches the installed value: a context is obtained only
+# through a context parameter (CONTEXTS.md), and a context value passed or
+# stored is a copy (an ordinary parameter's place shares its entry), or
+# captured, which is no place.
+proc hir::cardinality::ContextSite {hir c id} {
+    set reach [CallReach $hir $c $id 0]
+    if {[lindex $reach 0] eq "block"} {
+        return [dict exists [Reaching $hir $id] [lindex $reach 1]]
+    }
+    return $reach
+}
+
+# How call C may reach the installed context ID's members (ContextSite; ID
+# "" when the place's root does not tell which context it loads: any): 1
+# (it may), 0 (it cannot), or {block B}, the block it runs, which may if B's
+# run may (Reaching). With LOADS 1 a load of ID (or of a context it cannot
+# tell apart) may: C is then in a function that requires ID.
+proc hir::cardinality::CallReach {hir c id loads} {
+    set node [dict get $hir exprs $c]
+    if {[dict exists $node traitCall]} {
+        return 1
+    }
+    set callee [hir::contexts::Callee $hir $c]
+    lassign [dict get $node target] kind target
+    if {$kind eq "native"} {
+        if {[catch {core::native::metadata [dict get [hir::symbol $hir $target] name]} meta]
+                || [dict get $meta completion] || [dict exists $hir coroutines yields $c]} {
+            return 1
+        }
+        if {$loads && [hir::contexts::isLoad $hir $c]} {
+            # (ID or the load's own identity "": one it cannot tell, any.)
+            set loaded [hir::contexts::loadId $hir $c]
+            if {$id eq "" || $loaded eq "" || $loaded eq $id} {
+                return 1
+            }
+        }
+        if {$callee eq ""} {
+            return 0
+        }
+    }
+    if {$callee ne ""} {
+        return [list block $callee]
+    }
+    # Through a value: a coroutine handle called resumes it (before
+    # hir::coroutines::ElaborateResumes makes the call coroutine#resume),
+    # and an affine argument may carry one the function resumes.
+    foreach operand [concat [list [dict get $node callee]] [dict get $node args]] {
+        if {[hir::types::IsAffine [hir::typeOf $hir $operand]]} {
+            return 1
+        }
+    }
+    return 0
+}
+
+# The blocks of HIR whose run may change a member of the installed context
+# ID (ContextSite), as a dict: the least fixed point over exact call edges
+# of the blocks that load ID or make a call that may (CallReach), memoized
+# per pass.
+proc hir::cardinality::Reaching {hir id} {
+    variable cache
+    Memo $hir
+    if {![dict exists $cache reaching $id]} {
+        set reaching [dict create]
+        set callers [dict create]
+        dict for {b node} [dict get $hir exprs] {
+            if {[dict get $node kind] ne "block"} continue
+            foreach c [dict get [Layout $hir $b] calls] {
+                set reach [CallReach $hir $c $id 1]
+                if {[lindex $reach 0] eq "block"} {
+                    dict lappend callers [lindex $reach 1] $b
+                } elseif {$reach} {
+                    dict set reaching $b 1
+                }
+            }
+        }
+        set work [dict keys $reaching]
+        while {$work ne {}} {
+            set work [lassign $work b]
+            if {![dict exists $callers $b]} continue
+            foreach caller [dict get $callers $b] {
+                if {![dict exists $reaching $caller]} {
+                    dict set reaching $caller 1
+                    lappend work $caller
+                }
+            }
+        }
+        dict set cache reaching $id $reaching
+    }
+    return [dict get $cache reaching $id]
+}
+
+# The context identity binding B, a context parameter, loads ("" when it
+# cannot tell).
+proc hir::cardinality::ContextIdOf {hir b} {
+    set by [dict get $hir bindings $b declaredBy]
+    return [hir::contexts::loadId $hir [dict get $hir exprs $by value]]
+}
+
+# The class of evaluation O (Evaluation) among the sites SITES of LAYOUT's
+# invocation: {SEQUENCE RUN}, the quiet run RUN (the number of statements
+# before it that hold a site) of the body SEQUENCE, or "" for none.
+#
+# O lies in a statement of each body on its path, outermost first. Where
+# that statement holds no site, O is in the statement's run. Where it holds
+# one and O is one of its operands, O is in the run before it if every site
+# of the statement runs after O, else in none. Where it holds one and O is
+# in one of its bodies, O's class is that body's: a loop's body runs again
+# after its own sites, so each of its runs is its own. A body that runs at
+# most once per run of its statement -- an if's branch, a handler -- is
+# different: entered with no site of the statement before it (none in the
+# condition or the handled call, none in an earlier operand; the other
+# branch and the other handlers never run before it), its first run
+# continues the run its statement is in. So an evaluation in a branch before
+# the branch's own push shares the length of the evaluations before the if.
+proc hir::cardinality::Epoch {layout sites o} {
+    if {![dict exists $layout path $o]} {
+        return ""
+    }
+    set path [dict get $layout path $o]
+    set depth [llength $path]
+    set pre [dict get $layout pre $o]
+    set post [dict get $layout post $o]
+    # The class the first run of O's current body continues, or "".
+    set continued ""
+    for {set l 0} {$l < $depth} {incr l} {
+        lassign [lindex $path $l] sequence index
+        set prefix [lrange $path 0 $l-1]
+        set noisy [dict create]
+        set here {}
+        foreach s $sites {
+            set at [dict get $layout path $s]
+            if {[llength $at] <= $l || [lrange $at 0 $l-1] ne $prefix} continue
+            lassign [lindex $at $l] other i
+            if {$other ne $sequence} continue
+            if {$i < $index} {
+                dict set noisy $i 1
+            } elseif {$i == $index} {
+                lappend here $s
+            }
+        }
+        set run [dict size $noisy]
+        set class [expr {$run == 0 && $continued ne "" ? $continued : [list $sequence $run]}]
+        if {$here eq {}} {
+            return $class
+        }
+        if {$l < $depth - 1} {
+            # O is in a body of its statement.
+            set body [lindex $path [expr {$l + 1}] 0]
+            set continued ""
+            if {[OnceBody $body]} {
+                set continued $class
+                foreach s $here {
+                    set at [dict get $layout path $s]
+                    if {[llength $at] > $l + 1} {
+                        set other [lindex $at [expr {$l + 1}] 0]
+                        if {$other eq $body || [Alternatives $body $other]} continue
+                    }
+                    if {![RunsAfter $layout $s $pre $post]} {
+                        set continued ""
+                        break
+                    }
+                }
+            }
+            continue
+        }
+        # O is an operand of a statement that holds a site.
+        foreach s $here {
+            if {![RunsAfter $layout $s $pre $post]} {
+                return ""
+            }
+        }
+        return $class
+    }
+    return ""
+}
+
+# 1 if body SEQUENCE (Layout) runs at most once per run of its statement:
+# an if's branch or a handler's body.
+proc hir::cardinality::OnceBody {sequence} {
+    set part [lindex $sequence 1]
+    return [expr {$part in {then else} || [string match handler* $part]}]
+}
+
+# 1 if bodies A and B (Layout) never both run in one run of their owner:
+# the two branches of one if, or two handlers of one handled call.
+proc hir::cardinality::Alternatives {a b} {
+    lassign $a owner x
+    lassign $b other y
+    if {$owner ne $other || $x eq $y} {
+        return 0
+    }
+    return [expr {([lsort [list $x $y]] eq {else then})
+        || ([string match handler* $x] && [string match handler* $y])}]
+}
+
+# 1 if site S runs after the evaluation whose subtree spans LAYOUT's
+# pre-order indices PRE..POST: later in evaluation order, or a call that
+# evaluation is an operand of.
+proc hir::cardinality::RunsAfter {layout s pre post} {
+    set sPre [dict get $layout pre $s]
+    return [expr {$sPre > $post || ($sPre < $pre && [dict get $layout post $s] >= $post)}]
+}
+
+# The evaluation-order layout of invocation INV (a block ExprId, or "" for
+# the top-level code), not entering nested functions: {pre {E N ...} post
+# {E N ...} path {E PATH ...} calls CALLS iterables ITERABLES}, every
+# expression's pre-order index (pre), the last index of its subtree
+# (post) and its PATH, the {SEQUENCE INDEX} statements of the bodies it
+# lies in, outermost first (SEQUENCE {OWNER BODY}: the invocation's body,
+# an if's then or else body, a loop's body, a handler's body; `program`
+# for the top-level code); and its calls and loop domains' iterables, in
+# evaluation order.
+proc hir::cardinality::Layout {hir inv} {
+    variable cache
+    if {![dict exists $cache layouts $inv]} {
+        set layout [dict create pre {} post {} path {} calls {} iterables {}]
+        set n 0
+        if {$inv eq ""} {
+            LayoutBody $hir layout n program [dict get $hir roots] {}
+        } else {
+            LayoutBody $hir layout n [list $inv body] [dict get $hir exprs $inv body] {}
+        }
+        dict set cache layouts $inv $layout
+    }
+    return [dict get $cache layouts $inv]
+}
+
+proc hir::cardinality::LayoutBody {hir layoutVar nVar sequence body path} {
+    upvar 1 $layoutVar layout $nVar n
+    set index 0
+    foreach s $body {
+        LayoutNode $hir layout n $s [linsert $path end [list $sequence $index]]
+        incr index
+    }
+}
+
+proc hir::cardinality::LayoutNode {hir layoutVar nVar e path} {
+    upvar 1 $layoutVar layout $nVar n
+    dict set layout pre $e $n
+    dict set layout path $e $path
+    incr n
+    set node [dict get $hir exprs $e]
+    switch -- [dict get $node kind] {
+        block {}
+        if {
+            LayoutNode $hir layout n [dict get $node condition] $path
+            LayoutBody $hir layout n [list $e then] [dict get $node thenBody] $path
+            LayoutBody $hir layout n [list $e else] [dict get $node elseBody] $path
+        }
+        loop {
+            LayoutBody $hir layout n [list $e body] [dict get $node body] $path
+        }
+        listloop {
+            dict lappend layout iterables [dict get $node iterable]
+            LayoutNode $hir layout n [dict get $node iterable] $path
+            LayoutBody $hir layout n [list $e body] [dict get $node body] $path
+        }
+        countloop {
+            LayoutNode $hir layout n [dict get $node start] $path
+            LayoutNode $hir layout n [dict get $node end] $path
+            LayoutBody $hir layout n [list $e body] [dict get $node body] $path
+        }
+        lockloop {
+            foreach domain [dict get $node domains] {
+                if {[dict get $domain kind] eq "list"} {
+                    dict lappend layout iterables [dict get $domain iterable]
+                }
+            }
+            foreach operand [hir::loopOperands $node] {
+                LayoutNode $hir layout n $operand $path
+            }
+            LayoutBody $hir layout n [list $e body] [dict get $node body] $path
+        }
+        handle {
+            LayoutNode $hir layout n [dict get $node call] $path
+            set k 0
+            foreach body [dict get $node handlerBodies] {
+                LayoutBody $hir layout n [list $e handler$k] $body $path
+                incr k
+            }
+        }
+        default {
+            if {[dict get $node kind] eq "call"} {
+                dict lappend layout calls $e
+            }
+            foreach child [hir::children $hir $e] {
+                LayoutNode $hir layout n $child $path
+            }
+        }
+    }
+    dict set layout post $e [expr {$n - 1}]
+}
+
+# The memo of the vector-length analysis (Mutations, Evaluation, Layout)
+# for one HIR, cleared by resetCache at the start of each pass that reads
+# sizes (hir/lockstep.tcl's verify, hir::completions::resetCache) and
+# whenever it is asked about a HIR of another shape (Memo).
+namespace eval hir::cardinality {
+    variable cache [dict create]
+    variable stamp ""
+}
+
+proc hir::cardinality::resetCache {} {
+    variable cache
+    variable stamp
+    set cache [dict create]
+    set stamp ""
+}
+
+proc hir::cardinality::Memo {hir} {
+    variable cache
+    variable stamp
+    set shape [list [dict size [dict get $hir exprs]] [dict size [dict get $hir bindings]] \
+        [dict size [dict get $hir scopes]] [dict get $hir roots]]
+    if {$shape ne $stamp} {
+        set cache [dict create]
+        set stamp $shape
+    }
 }
 
 # ---- domains -----------------------------------------------------------------
@@ -451,7 +1060,7 @@ proc hir::cardinality::of_domain {hir domain {stepsVar ""}} {
         upvar 1 $stepsVar steps
     }
     if {[dict get $domain kind] eq "list"} {
-        return [ListLength $hir [dict get $domain iterable] steps]
+        return [IterationLength $hir [dict get $domain iterable] steps]
     }
     set start [IntForm $hir [dict get $domain start] steps]
     set end [IntForm $hir [dict get $domain end] steps]
@@ -526,8 +1135,68 @@ proc hir::cardinality::ShowKey {hir key} {
     switch -- $how {
         b { return [hir::semantic::SourceName $hir $what] }
         p { return "[ShowKey $hir $what].$field" }
+        pl {
+            # A place: its binding and field path.
+            return [join [concat [list [hir::semantic::SourceName $hir $what]] $field] .]
+        }
+        o {
+            # One evaluation of an iterable: its path and where it is
+            # written, so that two loops over one vector read apart.
+            set origin [dict get $hir exprs $what origin]
+            set text [ShowPath $hir $what]
+            set at [lrange $origin 2 end]
+            if {[lindex $origin 0] eq "file" && [dict exists $at line] && [dict exists $at column]} {
+                append text " at [dict get $at line]:[dict get $at column]"
+            }
+            return $text
+        }
     }
     return [ShowExpr $hir $what]
+}
+
+# The source locations FORM's text (show) names besides its own: the origin
+# of every evaluation it prints with "at LINE:COLUMN" (ShowKey's `o` keys),
+# in print order -- a diagnostic's related origins (hir::Diagnose), so that
+# no consumer reads them out of the message.
+proc hir::cardinality::related {hir form} {
+    set origins {}
+    foreach {atom coeff} [lindex $form 1] {
+        RelatedOfAtom $hir $atom origins
+    }
+    return $origins
+}
+
+proc hir::cardinality::RelatedOfAtom {hir atom originsVar} {
+    upvar 1 $originsVar origins
+    lassign $atom kind what
+    switch -- $kind {
+        max { lappend origins {*}[related $hir $what] }
+        len - cap - slen { RelatedOfKey $hir $what origins }
+    }
+}
+
+proc hir::cardinality::RelatedOfKey {hir key originsVar} {
+    upvar 1 $originsVar origins
+    lassign $key how what
+    switch -- $how {
+        p { RelatedOfKey $hir $what origins }
+        o {
+            set origin [dict get $hir exprs $what origin]
+            set at [lrange $origin 2 end]
+            if {[lindex $origin 0] eq "file" && [dict exists $at line] && [dict exists $at column]} {
+                lappend origins $origin
+            }
+        }
+    }
+}
+
+# Source-like text of E, a field path (`b.v`) written out.
+proc hir::cardinality::ShowPath {hir e} {
+    set node [dict get $hir exprs $e]
+    if {[dict get $node kind] eq "project"} {
+        return "[ShowPath $hir [dict get $node receiver]].[dict get $node name]"
+    }
+    return [ShowExpr $hir $e]
 }
 
 proc hir::cardinality::ShowExpr {hir e} {
