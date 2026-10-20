@@ -137,17 +137,24 @@ namespace eval native {
 #   cCalls       programs that call C (C_CALLS)
 #   coroutines   native coroutines (stack switching, runtime/coroutine.rs)
 #   stackGuard   NATIVE LIMIT STACK for any exhausted native stack
+#   frameRoots   GC roots in native frames, found by the frame walk
+#                (runtime/framewalk.rs's NATIVE_FRAME_ROOTS); elsewhere the
+#                fallback plan's shadow stack. A `fallback-roots` test build
+#                of the driver has none on any host: the tests of the
+#                native-frame plan then fail, by design.
 #
 # Windows x86-64 (MSVC) runs native code and links executables since
 # WINDOWS-X86-64-MILESTONE-1.md; its C calls, coroutines and stack guard are
-# later milestones'.
+# later milestones'; its GC roots are on the shadow stack (the frame walk
+# cannot climb Win64 frames).
 namespace eval native {
     variable capabilities [dict create \
         jit {linux-x86_64 linux-aarch64 macos-aarch64 windows-x86_64} \
         executables {linux-x86_64 linux-aarch64 macos-aarch64 windows-x86_64} \
         cCalls {linux-x86_64 linux-aarch64 macos-aarch64} \
         coroutines {linux-x86_64 linux-aarch64 macos-aarch64} \
-        stackGuard {linux-x86_64 linux-aarch64 macos-aarch64}]
+        stackGuard {linux-x86_64 linux-aarch64 macos-aarch64} \
+        frameRoots {linux-x86_64 linux-aarch64 macos-aarch64}]
 }
 
 # Whether the native backend has CAPABILITY (native::capabilities) on this

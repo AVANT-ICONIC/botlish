@@ -806,7 +806,7 @@ test abi-mutable-bytes-nir-update-and-freeze {NIR of the pure operations: set is
     }
 } -match glob -result {{abi::bytes::zeroed 1} {abi::bytes::from_bytes 1} {abi::bytes::replace 1} {abi::bytes::detach missing} {abi::bytes::freeze 1} {abi::bytes::mutable_length 1}}
 
-test abi-mutable-bytes-clif-keepalive-and-stack-map {CLIF of linux::read: the writable address helper, then the syscall helper, then the keepalive helper, in that order, the keepalive's operand being the very value the address helper took (the detached storage), and the syscall call's stack map naming the stack slot that holds that storage -- so the collector sees it as a root at the syscall's own safepoint} -body {
+test abi-mutable-bytes-clif-keepalive-and-stack-map {CLIF of linux::read: the writable address helper, then the syscall helper, then the keepalive helper, in that order, the keepalive's operand being the very value the address helper took (the detached storage), and the syscall call's stack map naming the stack slot that holds that storage -- so the collector sees it as a root at the syscall's own safepoint (nativeFrameRoots: elsewhere it is a shadow-stack root and no stack map is emitted)} -body {
     set clif [native::clif [bytesHir [readProgram 8] 1 linux-x86_64]]
     set helperOf [dict create]
     foreach {- ref name} [regexp -all -inline -line {^; (u0:[0-9]+) = (rt_[a-z0-9_]+)} $clif] { dict set helperOf $ref $name }
@@ -836,7 +836,7 @@ test abi-mutable-bytes-clif-keepalive-and-stack-map {CLIF of linux::read: the wr
     if {$offset eq ""} { set offset 0 }
     list [lsearch -all -inline -regexp $names {^rt_(mbytes_addr|keepalive|linux_x86_64_syscall)$}] \
         [expr {[lindex $addr 1] eq [lindex $keep 1]}] [regexp "ss0\\+$offset\[,\\]\]" [lindex $syscall 2]]
-} -result {{rt_mbytes_addr rt_linux_x86_64_syscall rt_keepalive} 1 1}
+} -result [list {rt_mbytes_addr rt_linux_x86_64_syscall rt_keepalive} 1 [testConstraint nativeFrameRoots]]
 
 proc machineCalls {exe function} {
     set disassembly [exec objdump -d --no-show-raw-insn -M intel --disassemble=$function $exe]

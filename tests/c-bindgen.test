@@ -90,6 +90,12 @@ proc generatable {target} {
 # requires that no test is skipped).
 testConstraint crossLinux [expr {[testConstraint linuxNative] && [generatable $::linuxOther]}]
 testConstraint stubsTarget [generatable linux-x86_64]
+# The fixture is generated, and has a committed binding, for this host's
+# target: none for windows-x86_64, MSVC's (the fixture's Windows target is
+# windows-x86_64-gnu; an MSVC binding is the Windows SDK milestone's,
+# WINDOWS-X86-64-MILESTONE-1.md). A test that generates or compiles the
+# fixture for the host's target carries it.
+testConstraint fixtureHostBinding [expr {$::hostTarget ne "" && [file isdirectory [file join $::projectRoot tools c-bindgen fixture expected $::hostTarget]]}]
 
 # The files of the committed bindings of PAIRS ({PROFILE TARGET ...}) that
 # generation does not reproduce: {PROFILE TARGET PATH STATUS ...}.
@@ -450,11 +456,6 @@ test cb-fixture-only-reached-externs {a program's foreign table holds only the C
     lsearch -all -inline -regexp [split $nir \n] {^(foreign|link) }
 } -cleanup removeScratch -match glob -result {{link "bgf"} {link "botlish_shim_bgf_*"} {foreign 0 "bgf_count" params="" result=i32 name="bgf::bgf::bgf_count"}}
 
-# The fixture has a committed binding for this host's target (none for
-# windows-x86_64, MSVC's: the Windows SDK binding is a later milestone's,
-# WINDOWS-X86-64-MILESTONE-1.md).
-testConstraint fixtureHostBinding [expr {$::hostTarget ne "" && [file isdirectory [file join $::projectRoot tools c-bindgen fixture expected $::hostTarget]]}]
-
 test cb-fixture-no-c-at-compile-time {compiling a program over a generated binding needs no header, no preprocessor and no C compiler: a child process with no compiler on its PATH and no header sources compiles it, with every foreign declaration of the host target's binding (bgf_arm_only is declared on AArch64 only)} -constraints {clang fixtureHostBinding} -body {
     set dir [scratch]
     ::cbind::generate::stage $::fixture $::hostTarget [file join $::fixtureDir demo demo.bot] $dir [generatedDir $::fixture $::hostTarget]
@@ -483,7 +484,7 @@ test cb-fixture-interchange {a program over a generated binding written as HIR i
     lindex [split [string trim $out] \n] end
 } -cleanup removeScratch -result "   value: $::demoValues"
 
-test cb-fixture-isolation {two generated bindings with the same Botlish declaration names but other link symbols, compiled one after the other: each HIR keeps its own foreign declarations (the registry is compilation-local)} -constraints clang -body {
+test cb-fixture-isolation {two generated bindings with the same Botlish declaration names but other link symbols, compiled one after the other: each HIR keeps its own foreign declarations (the registry is compilation-local)} -constraints {clang fixtureHostBinding} -body {
     set a [scratch]
     ::cbind::generate::stage $::fixture $::hostTarget "" $a [generatedDir $::fixture $::hostTarget]
     writeText [file join $a main.bot] "import bgf::bgf\n\n1.bgf_add(2)\n"
@@ -502,7 +503,7 @@ test cb-fixture-isolation {two generated bindings with the same Botlish declarat
         [lindex [regexp -inline {foreign 0 "[^"]*"} $nirA] 0]
 } -cleanup removeScratch -result {bgf_add other_add {foreign 0 "bgf_add"}}
 
-test cb-fixture-static-compile {a static compile: block over a generated extern is decided like any block: a wrong arity is compiler::DiagnosticCode::Arity, an argument out of its C type's range Type, an accepted block the ordinary call (NATIVE-ONLY on the Tcl backends)} -constraints clang -body {
+test cb-fixture-static-compile {a static compile: block over a generated extern is decided like any block: a wrong arity is compiler::DiagnosticCode::Arity, an argument out of its C type's range Type, an accepted block the ordinary call (NATIVE-ONLY on the Tcl backends)} -constraints {clang fixtureHostBinding} -body {
     lmap {body code} {
         "bgf::bgf::bgf_add(1)" Arity
         "bgf::bgf::bgf_add(x, 2)" Type
@@ -781,7 +782,7 @@ test cb-layout-oracle-fixture {every emitted fixture layout agrees with C at run
     list [expr {$checks > 250}] $a $b
 } -cleanup removeScratch -result {1 {} {}}
 
-test cb-layout-ordinary {a generated layout is an ordinary layout: a program over one (bytes in, a LayoutStruct out, bytes back) runs on all four backends, through HIR interchange in a fresh process, and through the front-end cache, with no C compiler at compile time} -constraints clang -body {
+test cb-layout-ordinary {a generated layout is an ordinary layout: a program over one (bytes in, a LayoutStruct out, bytes back) runs on all four backends, through HIR interchange in a fresh process, and through the front-end cache, with no C compiler at compile time} -constraints {clang fixtureHostBinding} -body {
     set dir [scratch]
     ::cbind::generate::stage $::fixture $::hostTarget "" $dir [generatedDir $::fixture $::hostTarget]
     writeText [file join $dir main.bot] "import abi\nimport abi::bytes\nimport binary\nimport bgf::layouts\n\nfn run() -> List\[int\] errors LayoutLengthMismatch:\n    d0 = abi::bytes::zeroed(abi::usize(binary::layout_length(bgf::layouts::bgf_packed_outer)))\n    d1 = binary::write(d0, bgf::layouts::bgf_packed_outer.inner.y, -9)\n    d2 = binary::write(d1, bgf::layouts::bgf_packed_outer.tail, 513)\n    v = binary::parse(bgf::layouts::bgf_packed_outer, abi::bytes::freeze(d2))\n    \[binary::layout_length(bgf::layouts::bgf_packed_outer), binary::layout_alignment(bgf::layouts::bgf_packed_outer), v.inner.y, v.tail, v.lead\]\n\nr = run():\n    on LayoutLengthMismatch:\n        \[\]\nr\n"
@@ -978,7 +979,7 @@ test cb-layout-union-verified {layouts-check.c holds every union layout to the c
     list $clean $caught $anonymous
 } -result {{1 {}} {bgf_tail_u bgf_aligned_u bgf_tail_u.i bgf_word.bytes bgf_overlapped_member3_member1.offset_high bgf_overlapped_member3_member1.offset} {1 {{bgf_anon_tail_member2: size 5, align 4; clang's record layout of the anonymous member at bgf_records.h:269:40: sizeof 8, align 4}} 1 {{bgf_deep_member3: size 8, align 2; clang's record layout of the anonymous member at bgf_records.h:260:5: sizeof 8, align 4}}}}
 
-test cb-layout-union-program {a generated union layout is an ordinary one: a program writes bgf_large's two 32-bit halves through its anonymous struct and reads its 64-bit quad and its named struct's high half from the same bytes, writes bgf_overlapped's offset_high through its anonymous union and struct and reads it back, writes one interpretation of an element of an array of unions (bgf_words3) and reads two others, and reaches bgf_deep's deepest anonymous level through overlapping alternatives -- on all four backends} -constraints clang -body {
+test cb-layout-union-program {a generated union layout is an ordinary one: a program writes bgf_large's two 32-bit halves through its anonymous struct and reads its 64-bit quad and its named struct's high half from the same bytes, writes bgf_overlapped's offset_high through its anonymous union and struct and reads it back, writes one interpretation of an element of an array of unions (bgf_words3) and reads two others, and reaches bgf_deep's deepest anonymous level through overlapping alternatives -- on all four backends} -constraints {clang fixtureHostBinding} -body {
     set dir [scratch]
     ::cbind::generate::stage $::fixture $::hostTarget "" $dir [generatedDir $::fixture $::hostTarget]
     writeText [file join $dir main.bot] [join {
@@ -1290,10 +1291,30 @@ test cb-layout-gcc-bindings {GCC agrees with clang on every layout of the Tcl, T
 # ---------------------------------------------------------------------------
 # Win32: MinGW-w64's headers for Windows x86-64 with the GNU ABI, from Linux
 
-# 1 when clang can preprocess for windows-x86_64-gnu with MinGW-w64's headers.
+# 1 when clang can preprocess for windows-x86_64-gnu with MinGW-w64's headers
+# of the version the profile pins (its version macros). Other MinGW-w64
+# headers -- a Windows runner's own, say -- are not the profile's source, and
+# generation refuses them (cb-win32-version-pinned), so the Win32 tests do
+# not run there; the c-bindgen workflow installs the pinned ones.
 proc mingwReady {} {
     if {[auto_execok clang] eq ""} { return 0 }
-    return [expr {![catch {::cbind::profile::sourceRoot [::cbind::profile::load win32] 0 windows-x86_64-gnu}]}]
+    set profile [::cbind::profile::load win32]
+    if {[catch {::cbind::profile::sourceRoot $profile 0 windows-x86_64-gnu} sourceRoot]} { return 0 }
+    set source [dict get $profile headers source]
+    set tool [::cbind::generate::ToolProfile [::cbind::profile::headersFor $profile windows-x86_64-gnu] $sourceRoot]
+    set channel [file tempfile entry .c]
+    puts $channel "#include <[dict get $source toolchain]>"
+    close $channel
+    try {
+        lassign [::chdr::toolchain::macros [::chdr::toolchain::configFor windows-x86_64-gnu] $tool $entry] ok text
+    } finally {
+        file delete $entry
+    }
+    if {!$ok} { return 1 }
+    dict for {macro value} [dict get $source version] {
+        if {![regexp -line "^#define $macro (.*)\$" $text -> body] || [string trim $body] ne $value} { return 0 }
+    }
+    return 1
 }
 testConstraint mingw [mingwReady]
 testConstraint mingwGcc [expr {[testConstraint mingw] && [auto_execok x86_64-w64-mingw32-gcc] ne ""}]

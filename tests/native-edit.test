@@ -163,6 +163,13 @@ layout CScalars:
 
 }
 
+# A C long's width on this compilation's target (the host's): 64 bits on
+# Linux and macOS (LP64), 32 on Windows (LLP64; C-ABI-TYPES.md). The C scalar
+# tests store the extremes of the target's own domains.
+set neLongBits [dict get [core::cabi::target [core::cabi::hostTarget]] long]
+set neLongMin [expr {-(2 ** ($neLongBits - 1))}]
+set neULongMax [expr {2 ** $neLongBits - 1}]
+
 # A program's value as text: an abi::bytes::Bytes as bytes(HEX ...), a List
 # element-wise, anything else as core::value::show does.
 proc neShow {v} {
@@ -512,7 +519,7 @@ test ne-view-is-read-only {a NativeView[L] gains no write: binary::store through
 
 test ne-store-value-types {the value a store writes is held to its field's type by the proof a construction's field values are (no conversion, truncation or run-time guard): a U16 field admits a value proven in 0..65535 -- a literal, a U16, an Int a comparison bounded -- and rejects -1, 65536 and an unbounded Int (TYPE); a C scalar field admits exactly the target's domain; a data pointer field exactly its pointer type (no Int, no other pointee, no implicit erasure, no function pointer); a function pointer field exactly its signature} -body {
     set f "fn f(e: NativeEdit\[Linked\], o: NativeEdit\[Outer\], c: NativeEdit\[CScalars\], n: int, u: binary::U16, p: ffi::c::Ptr\[Node\], q: ffi::c::Ptr\[Other\], z: ffi::c::Ptr\[ffi::c::Void\], g: ffi::c::FnPtr\[Fn\{args: \[ffi::c::Int\], return: ffi::c::Int\}\], h: ffi::c::FnPtr\[Fn\{args: \[\], return: ffi::c::Int\}\]) -> unit:\n"
-    lmap stmt {
+    lmap stmt [string map [list LONG_MIN $::neLongMin ULONG_MAX $::neULongMax] {
         {binary::store(e, Linked.inner.y, 65535)}
         {binary::store(e, Linked.inner.y, u)}
         {binary::store(e, Linked.inner.y, -1)}
@@ -521,8 +528,8 @@ test ne-store-value-types {the value a store writes is held to its field's type 
         "if n >= 0 and n <= 65535:\n        binary::store(e, Linked.inner.y, n)"
         {binary::store(c, CScalars.uint, 4294967295)}
         {binary::store(c, CScalars.uint, 4294967296)}
-        {binary::store(c, CScalars.lng, -9223372036854775808)}
-        {binary::store(c, CScalars.ulong, 18446744073709551615)}
+        {binary::store(c, CScalars.lng, LONG_MIN)}
+        {binary::store(c, CScalars.ulong, ULONG_MAX)}
         {binary::store(c, CScalars.ulong, -1)}
         {binary::store(e, Linked.next, p)}
         {binary::store(e, Linked.next, 0)}
@@ -533,7 +540,7 @@ test ne-store-value-types {the value a store writes is held to its field's type 
         {binary::store(e, Linked.cb, g)}
         {binary::store(e, Linked.cb, h)}
         {binary::store(e, Linked.cb, p)}
-    } {
+    }] {
         neKinds "$f    $stmt\n0\n"
     }
 } -cleanup {unset -nocomplain f} -result {accepted accepted TYPE TYPE TYPE accepted accepted TYPE accepted accepted TYPE accepted TYPE TYPE TYPE TYPE TYPE accepted TYPE TYPE}
@@ -617,9 +624,14 @@ test ne-nested-stores {a nested layout of an edit is the writable subrecord Nati
     neRun "fn set_inner(i: NativeEdit\[Inner\], x: binary::I16) -> unit:\n    binary::store(i, Inner.x, x)\n\nfn run() -> List\[any\] errors NativeEditNull:\n    p = memory(\[[join [lrepeat 24 165] {, }]\])\n    e = binary::native::edit(Deep, p)\n    binary::store(e, Deep.head, 1)\n    o = e.outer\n    binary::store(o, Outer.count, 4000000000)\n    set_inner(e.outer.inner, -300)\n    binary::store(e, Deep.outer.inner.y, 513)\n    binary::store(e.outer, Outer.last, 9)\n    binary::store(e, Deep.tail, -128)\n    \[dump(p, 24), e.outer.inner.x, e.outer.inner.y, o.inner.x\]\n\nr = run():\n    on NativeEditNull:\n        \[\]\nr\n"
 } -result {same: [[1, 165, 165, 165, 0, 40, 107, 238, 212, 254, 1, 2, 165, 165, 165, 165, 9, 165, 165, 165, 165, 165, 165, 128], -300, 513, -300]}
 
-test ne-c-scalar-stores {C scalar fields are written in the compilation target's widths and domains (an ffi::c::UInt is 4 bytes, an ffi::c::Long and an ffi::c::ULong 8 on linux-x86_64 and linux-aarch64): each extreme lands at its offset, little-endian, in exactly its width; the 4 bytes after the UInt keep the sentinel} -constraints nativeBuilt -body {
-    neValue [neStoreProgram CScalars 24 165 {uint 4294967295 lng -9223372036854775808 ulong 18446744073709551615}]
-} -result {{255 255 255 255 165 165 165 165 0 0 0 0 0 0 0 128 255 255 255 255 255 255 255 255} {4294967295 -9223372036854775808 18446744073709551615} {4294967295 -9223372036854775808 18446744073709551615}}
+test ne-c-scalar-stores {C scalar fields are written in the compilation target's widths and domains (an ffi::c::UInt is 4 bytes, an ffi::c::Long and an ffi::c::ULong 8 on Linux and macOS, LP64, and 4 on Windows, LLP64, the rest of their 8-byte slots untouched): each extreme lands at its offset, little-endian, in exactly its width; the 4 bytes after the UInt keep the sentinel} -constraints nativeBuilt -body {
+    neValue [neStoreProgram CScalars 24 165 [list uint 4294967295 lng $::neLongMin ulong $::neULongMax]]
+} -result [apply {{bits} {
+    set w [expr {$bits / 8}]
+    set rest [lrepeat [expr {8 - $w}] 165]
+    set bytes [concat {255 255 255 255 165 165 165 165} [lrepeat [expr {$w - 1}] 0] 128 $rest [lrepeat $w 255] $rest]
+    list $bytes [list 4294967295 $::neLongMin $::neULongMax] [list 4294967295 $::neLongMin $::neULongMax]
+}} $neLongBits]
 
 # The pointer fields' program: P a fresh sentinel Linked record, TARGET a
 # fixture record (the data pointer stored), CB a fixture function address;

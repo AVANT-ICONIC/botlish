@@ -1009,8 +1009,15 @@ WINDOWS-TOOLCHAIN-CENSUS.md): the driver and runtime built for
   pointers or not. Never re-enable the walk on Windows by forcing frame
   pointers or by a second, diverging check; native-frame roots there need
   unwind metadata (`.pdata`/`.xdata`, `RtlVirtualUnwind`), a milestone of
-  their own. The `fallback-roots` cargo feature builds Windows' root plan
-  on any host, to run the suite with it (a test build, never shipped).
+  their own. Where the shadow stack's depth check bounds recursion
+  (`runtime::native_stack::depth_checked`), every function with a Botlish
+  call can fail with NATIVE LIMIT STACK from its prologue: the depth
+  reservation and nir's call effects read that one predicate, so no call
+  site skips the check (WINDOWS-X86-64-MILESTONE-1.md, section 3.4). The
+  fallback plan does not support coroutines (a suspended coroutine's
+  shadow slots break the shadow stack's order). The `fallback-roots` cargo
+  feature builds Windows' root plan on any host, to run the suite with it
+  (a test build, never shipped; its coroutine tests fail under GC stress).
 * Stack probes are on on Windows (`codegen::stack_probes`): Windows
   commits a thread's stack a page at a time. They are not a stack guard:
   there is none on Windows yet, and the shadow stack's depth check is the

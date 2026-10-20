@@ -18,7 +18,10 @@ name: tests (windows x86-64)
 #                imports only the system's DLLs -- the C runtime linked
 #                statically); the allocation-heavy workloads on both native
 #                backends and as executables, plainly and repeatedly under
-#                GC stress; the 2048 benchmark's executable and MSVC's own
+#                GC stress; the census's pure program, URI workload and 2048
+#                benchmark through main.tcl on both Cranelift backends,
+#                plainly and under GC stress; the 2048 benchmark's
+#                executable and MSVC's own
 #                dumpbin's reading of the object and the executable; the
 #                smoke tier and the Windows-relevant test files
 #                (argv, targets, executables, the command line)
@@ -69,6 +72,13 @@ concurrency:
   group: windows-x86_64-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
+# The C compiler of core::cabi's windows-x86_64 row, for every job: clang,
+# whose default target on Windows is MSVC's. The image's `cc` is a MinGW gcc,
+# windows-x86_64-gnu's toolchain, which cabi-facts.tcl refuses for this row,
+# as it should.
+env:
+  CC: clang
+
 defaults:
   run:
     # Git for Windows' bash, -eo pipefail (a failure piped through tee
@@ -81,10 +91,6 @@ jobs:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name != github.repository
     runs-on: windows-2025
     timeout-minutes: 75
-    env:
-      # The C compiler of core::cabi's windows-x86_64 row: clang for MSVC's
-      # target (the runner's `cc` is a MinGW gcc, another row's).
-      CC: clang
     steps:
       - name: Keep the repository's bytes
         run: git config --global core.autocrlf false
@@ -140,20 +146,6 @@ jobs:
       # stress, objects, executables, the target boundary (another
       # operating system, the other Windows environment), C calls and
       # coroutines refused, the stack without its guard.
-      - name: "Debug (temporary): ca-native-code's CLIF"
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        run: |
-          cat > ca-debug.tcl <<'EOF'
-          source native/native.tcl
-          set src "import ffi::c\nopaque struct SSL:\n    tag: unit\n\nopaque struct Ctx:\n    tag: unit\n\nfn f() -> bool:\n    p = ffi::c::null\[SSL\]()\n    q = p.clone()\n    v = ffi::c::erase(q)\n    r = ffi::c::retype\[SSL\](v)\n    r.null?()\n\nf()\n"
-          set hir [surface::compile $src -warnings off]
-          puts [native::nir $hir]
-          set clif [native::clif $hir]
-          puts [string range $clif [string first {; function 1 "f"} $clif] end]
-          puts [native::roots $hir]
-          EOF
-          tclsh9.0 ca-debug.tcl
-
       - name: Native status
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: tclsh9.0 tests/platform/native-status.tcl -verbose 1 2>&1 | tee native-status.log
@@ -170,6 +162,30 @@ jobs:
       - name: GC workloads (cranelift, cranelift-generic, executables; GC stress)
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: tclsh9.0 tests/platform/gc-workloads.tcl -repeat 5 2>&1 | tee gc-workloads.log
+
+      # The census's three programs (its pure program, the URI workload and
+      # the 2048 benchmark) through main.tcl itself, on both Cranelift
+      # backends, as ordinary runs and under GC stress.
+      - name: The census's programs through main.tcl (cranelift, cranelift-generic; GC stress)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          failed=0
+          while IFS='|' read -r file expected; do
+            for backend in cranelift cranelift-generic; do
+              for stress in 0 1; do
+                out=$(BOTLISH_NATIVE_GC_STRESS=$stress tclsh9.0 main.tcl -warnings off -backend $backend "$file" 2>&1 | tr -d '\r') || true
+                value=$(printf '%s\n' "$out" | sed -n 's/^   value: //p')
+                if [ "$value" = "$expected" ]; then verdict=ok; else verdict=FAIL; failed=1; fi
+                echo "$verdict $file -backend $backend, GC stress $stress: $value"
+                [ "$verdict" = ok ] || printf '%s\n' "$out"
+              done
+            done
+          done <<'EOF'
+          audit/windows-toolchain/programs/fib.bot|[75025, "hello", 18446744073709551614]
+          bench/uri-steady.bot|29500
+          examples/games/2048/bench.bot|2002720
+          EOF
+          exit $failed
 
       - name: The 2048 benchmark as an executable
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}

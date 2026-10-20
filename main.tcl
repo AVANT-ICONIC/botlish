@@ -174,12 +174,17 @@ set cliOptions {
 set cliAliases {--help -help -h -help --version -version}
 
 # How this compiler is invoked, as messages name it: the single executable's
-# own name, or tclsh9.0 main.tcl in a checkout.
+# own name, or tclsh9.0 main.tcl in a checkout -- as typed, so without the
+# .exe Windows finds by itself.
 proc cliInvocation {} {
-    if {[info exists ::single::app]} {
-        return [file tail [info nameofexecutable]]
+    set name [file tail [info nameofexecutable]]
+    if {$::tcl_platform(platform) eq "windows" && [string equal -nocase [file extension $name] .exe]} {
+        set name [file rootname $name]
     }
-    return "[file tail [info nameofexecutable]] main.tcl"
+    if {[info exists ::single::app]} {
+        return $name
+    }
+    return "$name main.tcl"
 }
 set cliInvocation [cliInvocation]
 

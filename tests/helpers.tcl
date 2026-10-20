@@ -131,6 +131,20 @@ testConstraint nativeCoroutines [native::hostSupports coroutines]
 # x86-64 and AArch64 and macOS AArch64.
 testConstraint nativeStackGuard [native::hostSupports stackGuard]
 
+# GC roots in native frames (runtime/framewalk.rs's NATIVE_FRAME_ROOTS,
+# WINDOWS-X86-64-MILESTONE-1.md, section 3): stack maps and the frame walk on
+# Linux x86-64 and AArch64 and macOS AArch64; the fallback plan's shadow stack
+# on Windows. A test of the root plan expects the host's plan by it.
+testConstraint nativeFrameRoots [native::hostSupports frameRoots]
+
+# The shadow stack's depth check bounds Botlish recursion
+# (runtime::native_stack::depth_checked): unless native frames hold the roots
+# and the stack guard reports an exhausted stack (Windows). Every function
+# with a Botlish call then fails with NATIVE LIMIT STACK from its prologue
+# when the shadow stack is full, which nir's call effects record as
+# may_error: a test of a call's effects expects it by this.
+testConstraint nativeDepthChecked [expr {!([testConstraint nativeFrameRoots] && [testConstraint nativeStackGuard])}]
+
 # Standalone executables (native::executable, native/src/codegen/aot.rs): the
 # native backend links them on Linux x86-64 and AArch64 (ELF), on macOS
 # AArch64 (Mach-O, MACOS-AARCH64-MILESTONE-5.md) and on Windows x86-64 with

@@ -45,7 +45,7 @@ proc caError {source args} {
         # The first diagnostic (a program may have others, DIAGNOSTIC-RECOVERY.md).
         set message [dict get [lindex [dict get $options -diagnostics] 0] message]
     }
-    regsub {^[^:]*:[0-9]+:[0-9]+: } $message {} message
+    regsub {^.*?:[0-9]+:[0-9]+: } $message {} message
     return [list $kind $message]
 }
 
@@ -597,7 +597,7 @@ test ca-native-code {natively, null is a constant word, null? one comparison wit
     set ops [lsort -unique [regexp -all -inline {op cptr[a-z]+} $nir]]
     set clif [native::clif $hir]
     set f [string range $clif [string first {; function 1 "f"} $clif] end]
-    list $ops [regexp -all {call } $f] [regexp -all {iconst.i64 14} $f] [regexp -all {icmp eq} $f] \
+    list $ops [regexp -all {\mcall } $f] [regexp -all {iconst.i64 14} $f] [regexp -all {icmp eq} $f] \
         [native::assertAllocations $hir 0]
 } -cleanup {unset -nocomplain hir nir ops clif f} -result {{{op cptrisnull} {op cptrnull} {op cptrsame}} 0 2 1 {}}
 
