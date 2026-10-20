@@ -36,9 +36,11 @@ on:
 permissions:
   contents: read
 
+# A newer push waits for the running probe instead of cancelling it: each
+# run's results are census evidence.
 concurrency:
   group: react-native-probe-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 defaults:
   run:

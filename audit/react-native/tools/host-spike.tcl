@@ -18,6 +18,9 @@
 #                          (headers only: react/bridging includes
 #                          folly/dynamic.h); glog's headers and library come
 #                          from the system
+#   -gc-stress 1           runs both probes under BOTLISH_NATIVE_GC_STRESS=1
+#   -stack-kib N           runs them with an N KiB main-thread stack (the JS
+#                          thread's: 512 is an iOS release build's)
 #
 # Steps: libmode.tcl builds the probe's Botlish library for the host;
 # rnpackage.tcl generates the package (running Codegen); the generated

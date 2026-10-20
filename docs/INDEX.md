@@ -168,6 +168,7 @@ at its top ("Superseded by ...", "Partially superseded by ...").
 - [COMPILER-BOTTLENECKS.md](COMPILER-BOTTLENECKS.md) -- compiler performance bugs: what to tackle next
 - [RANGE-FIXPOINT-SCALING.md](RANGE-FIXPOINT-SCALING.md) -- range fixpoint scaling
 - [CRANELIFT-WASM.md](CRANELIFT-WASM.md) -- WebAssembly for the Cranelift backend
+- [REACT-NATIVE-TARGET-CENSUS.md](REACT-NATIVE-TARGET-CENSUS.md) -- a React Native target census: Botlish functions as a Pure C++ TurboModule through a generated C++ adapter over a C ABI, the React Native 0.88 contract (Codegen, Android pure C++ autolinking, iOS module providers), what library mode, embedding and the mobile targets need in core, the plugin seams, a Tcl package generator, and the host (Hermes) and Android/iOS CI probes (material: `audit/react-native/`)
 - [VM-OPCODE-VIABILITY.md](VM-OPCODE-VIABILITY.md) -- a register bytecode compiled from NIR
 - [NATIVE-BOTLISH-LOWERING-IMPL.md](NATIVE-BOTLISH-LOWERING-IMPL.md) -- native lowering written in Botlish: what it would take
 
