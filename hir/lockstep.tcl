@@ -31,6 +31,7 @@ namespace eval hir::lockstep {}
 
 proc hir::lockstep::verify {hirVar} {
     upvar 1 $hirVar hir
+    hir::cardinality::resetCache
     dict for {e node} [dict get $hir exprs] {
         if {[dict get $node kind] ne "lockloop"} {
             continue

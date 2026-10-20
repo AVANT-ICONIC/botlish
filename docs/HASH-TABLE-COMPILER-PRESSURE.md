@@ -516,15 +516,28 @@ proven sets are `counts.set(0|1, 0)` on a capacity-2 allocation.
   before both changes. The fix keys a vector's length only when nothing
   can change it: no mutating operation anywhere in the program has a
   receiver with its key (a copy is keyed like its source, so a push on
-  either counts) and the key is not rooted at a context parameter
-  (`hir::cardinality::Mutable`). A loop over any other `MutableVector` has
-  the length of its own evaluation (`hir::cardinality::IterationLength`),
-  whatever its binding or path, except that two clauses of one lockstep
-  loop over the same place, with no code run between them, walk one vector.
-  List and MutableArray lengths keep their keys (`lpmask`'s NIR is
-  unchanged). The cost: two loops over a vector the program mutates
-  somewhere, or over a context's vector, are unrelated even with nothing
-  between them. A second hole of the same kind was the interpreter's alone:
+  either counts) and the key is not rooted at a context parameter. A loop
+  over any other `MutableVector` has the length the vector has at that
+  evaluation, shared with the evaluations of the same place that no
+  mutation -- for a context member, also no call that runs Botlish code
+  and no yield -- can come between: consecutive statements of one body
+  holding none (`hir::cardinality::Evaluation`). A vector built with
+  pushes and then walked twice keeps the proof; two loops with a push
+  between them do not. The review's second round found one route no size
+  form saw: a mutating operation taken as a value (`p =
+  mutable_vector::push; p(v, 4)`, or one passed to a function or stored in
+  a field) mutated whatever its caller passed, behind the copies the
+  elaboration never wrote out for it, so it also broke value semantics
+  (`c = v` then changed, on the baseline too). Such an operation is now
+  only ever called (`MUTABLE-PLACE-RECEIVER` at the reference). List and
+  MutableArray lengths keep their keys (`lpmask`'s NIR is unchanged). The
+  cost: two loops over a vector with a mutation between them, a copy pushed
+  between them (`w = v; w.push(x)`, conservatively), or, for a context's
+  vector, any function call between them are unrelated, and an operation
+  that mutates can no longer be a function value (none was, in the corpus
+  or the tests); the analysis is computed once per function body and pass,
+  so the front end costs what it did before the fix. A second hole of the
+  same kind was the interpreter's alone:
   its `listloop` drained any vector it met, so a vector reaching an unmarked
   loop through an `any`-typed path was walked (and emptied) there while the
   other backends raised the loop's TYPE error; it now requires a List like

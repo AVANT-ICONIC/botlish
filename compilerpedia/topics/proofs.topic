@@ -132,9 +132,12 @@ forms:
   * the List a loop collected (with no break or continue) over a container
     has that container's length, so any of the forms above may use the
     length of another loop's List over the same List or MutableArray -- or
-    the same MutableVector, when nothing in the program mutates it (no
-    push, pop, take, swap or clear on it or on a copy of it, and no
-    function's on a context's vector).
+    the same MutableVector, when nothing can change the vector between the
+    two loops: no push, pop, take, swap or clear on it (or on a copy of it)
+    in the statements from the one loop to the other, and, for a context's
+    vector, no call of a function and no yield there either. Pushes before
+    both loops or after both, or in the later loop's own body, are fine:
+    a vector built with pushes, then walked twice, has one length.
 
 @example accept
 import list
@@ -237,6 +240,25 @@ scaled(4)
 @value 20
 @end
 
+@example accept
+import list
+import mutable_vector
+
+fn built(h: int) -> int:
+    v = mutable_vector::from_list([1])
+    loop i from 2 to 5:
+        v.push(i)
+    ys = loop x in v:
+        x * 10
+    zs = loop x in v:
+        x
+    ys.at(h.mod(zs.length()))
+
+built(6)
+@caption Built with pushes, then walked twice: nothing between the loops
+@value 30
+@end
+
 == LIMITATIONS (NOT PROVEN TODAY)
 These forms are often correct, but the compiler does not relate the index
 to the length, so the call must handle or admit IndexNotFound:
@@ -257,13 +279,13 @@ to the length, so the call must handle or admit IndexNotFound:
     not recorded), an offset of a reduced index (`h.mod(n) + 1`), or a mask
     with nothing proving the size is not 0 (the mask of an empty array is -1,
     and bit_and(h, -1) is h).
-  * the List of a loop over a MutableVector the program mutates, against
-    the length of another loop over the same vector: a push, pop or clear
-    on it or on a copy of it (or a function's push to a context's vector)
-    changes the vector's length in place, so each loop over such a vector
-    has only its own length, even with nothing between the two loops. A
-    context's vector is always such a vector: another function may grow
-    it.
+  * the List of a loop over a MutableVector, against the length of
+    another loop over the same vector with something between the two
+    loops that may change it: a push, pop or clear on it or on a copy of
+    it (also in a branch, a handler or a loop body), or -- for a context's
+    vector -- any call of a function (it may grow the vector through its
+    own context parameter) or a yield. A copy is another vector: two
+    copies taken around a push have unrelated lengths.
 
 @example reject
 import list
@@ -685,14 +707,15 @@ fn pairs(xs: List[int], ys: List[int]) -> List[int]:
 
 == LIMITATIONS
 Two different lists are unrelated even when the caller passes lists of the
-same length. So are two loops over one MutableVector the program mutates
-(a push, pop or clear on it or on a copy of it, or a function's push to a
-context's vector), or such a vector and the List an earlier loop over it
-collected: the vector's length changes in place, so each loop over it
-counts only its own walk. Then only two clauses of one lockstep loop naming
-the same vector (`loop a in v and b in v`, the same variable or field path,
-nothing but names and constants between them) are known to walk the same
-vector. A vector nothing mutates keeps one length, like a List.
+same length. So are two loops over one MutableVector with something
+between them that may change it (a push, pop or clear on it or on a copy
+of it; for a context's vector, also a call of a function or a yield), or
+such a vector and the List an earlier loop over it collected: the
+vector's length changes in place, so each walk counts the vector as it is
+then. With nothing of the kind between them -- the pushes all before both,
+or after both, or in the lockstep loop's own body, which runs after its
+clauses are evaluated -- the vector and the List have one length, as do
+two clauses naming the same vector (`loop a in v and b in v`).
 
 @example reject
 import mutable_vector

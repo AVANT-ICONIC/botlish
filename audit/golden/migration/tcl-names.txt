@@ -5078,6 +5078,10 @@ tests/proven-bounds.test bounds-values-agree-known-error-checked pass
 tests/proven-bounds.test bounds-values-agree-proven pass
 tests/proven-bounds.test bounds-values-agree-reduced pass
 tests/proven-bounds.test bounds-values-agree-unknown pass
+tests/proven-bounds.test bounds-vector-context-yield pass
+tests/proven-bounds.test bounds-vector-mutated-operand pass
+tests/proven-bounds.test bounds-vector-operation-value pass
+tests/proven-bounds.test bounds-vector-quiet-runs-proven pass
 tests/proven-bounds.test bounds-vector-same-place-lockstep pass
 tests/proven-bounds.test bounds-vector-snapshots-fail pass
 tests/proven-bounds.test bounds-vector-snapshots-lockstep pass

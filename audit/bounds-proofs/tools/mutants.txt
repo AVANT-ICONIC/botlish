@@ -131,93 +131,171 @@
         return [FormAtom [list cap [list b]]]
 >>>>
 
-# A loop over a MutableVector the program mutates has the length of its own
-# evaluation (hir::cardinality::IterationLength): a key names one vector,
-# not one length. A vector nothing mutates -- no mutating operation's
-# receiver has its key, and its key is not rooted at a context parameter
-# (Mutable) -- keeps its key's length.
+# A loop over a MutableVector the program mutates has the length the
+# vector has at its evaluation (hir::cardinality::IterationLength): a key
+# names one vector, not one length. Two evaluations of one place share it
+# when no site -- a mutation keyed like it, and for a context member a call
+# that runs Botlish code or a yield -- can come between them (Evaluation,
+# Sites, RunsCode, Epoch). A vector nothing mutates -- no mutating
+# operation's receiver has its key, and its key is not rooted at a context
+# parameter -- keeps its key's length.
 
 @@ vector-length-keyed a loop over a MutableVector has its binding's, path's or definition's length, like a List's, so two loops around a push, pop or clear (or a callee's push to a context member) are one size
 ## hir/cardinality.tcl
 <<<<
-    if {[hir::types::kindOf [hir::typeOf $hir $e]] eq "mutvec" && [Mutable $hir $e]} {
+    if {$key ne "" && ![ContextRooted $hir $key] && ![Mutated $hir $key]} {
 ====
-    if {0} {
+    if {$key ne ""} {
 >>>>
 
-@@ vector-mutations-ignored a MutableVector is taken to keep its key's length whatever mutates it in the function (only a context member or a key cut short counts), so two loops over a local, a parameter or a field around a push, pop or clear are one size
+@@ vector-context-unrooted a context member keeps its key's length when no mutation in the program is keyed like it, so a callee's push through its own context parameter between two loops goes unseen
 ## hir/cardinality.tcl
 <<<<
-        if {$mutated eq "" || $mutated eq $key} {
+    if {$key ne "" && ![ContextRooted $hir $key] && ![Mutated $hir $key]} {
 ====
-        if {$mutated eq ""} {
+    if {$key ne "" && ![Mutated $hir $key]} {
 >>>>
 
-@@ vector-context-unrooted a context member is taken to keep its key's length when the function itself does not mutate it, so a callee's push through its own context parameter between two loops goes unseen
+@@ vector-callee-runs-no-code a call of a function is no site of a context member, so a callee's push through its own context parameter between two loops goes unseen
 ## hir/cardinality.tcl
 <<<<
-    if {$key eq "" || [ContextRooted $hir $key]} {
+    if {$kind ne "native"} {
+        return 1
+    }
 ====
-    if {$key eq ""} {
+    if {$kind ne "native"} {
+        return 0
+    }
 >>>>
 
-@@ vector-mutation-by-root-binding a mutation counts for the vectors whose own place has its receiver's root binding, not for every expression keyed like its receiver, so two copies of a vector taken around a push (c1 = v, v pushed, c2 = v) are one length
+@@ vector-yield-unseen a yield is no site of a context member, so the resumer's push to it while a coroutine is suspended between two loops goes unseen
 ## hir/cardinality.tcl
 <<<<
-        set mutated [CompleteKey $hir $receiver]
-        if {$mutated eq "" || $mutated eq $key} {
+    return [dict exists $hir coroutines yields $c]
 ====
-        set mutated [lindex [hir::mutvec::Path $hir $receiver] 0]
-        if {$mutated ne "" && $mutated eq [lindex [hir::mutvec::Path $hir $e] 0]} {
+    return 0
 >>>>
 
-@@ vector-always-per-occurrence a loop over any MutableVector has the length of its own evaluation, mutated or not (precision: two loops over a vector nothing mutates, or a lockstep over it and a List collected over it, are unrelated)
+@@ vector-sites-unkeyed only a mutation whose receiver's key was cut short is a site, so two loops over a local, a parameter or a field around a push, pop or clear are one size
 ## hir/cardinality.tcl
 <<<<
-    if {$key eq "" || [ContextRooted $hir $key]} {
+                if {$mutated eq "" || $mutated eq $key} {
 ====
-    if {1} {
+                if {$mutated eq ""} {
 >>>>
 
-@@ vector-occurrence-keyed-by-value a loop over a MutableVector is keyed by the vector's value key rather than by the loop's own evaluation, so every loop over one binding or field path shares a length
+@@ vector-runs-uncounted a statement holding a site does not end the quiet run it is in, so the loops before and after a push are one run
 ## hir/cardinality.tcl
 <<<<
-        return [FormAtom [list len [list o [expr {$same ne "" ? $same : $e}]]]]
+                dict set noisy $i 1
 ====
-        return [FormAtom [list len [list o [ValueKey $hir $e steps]]]]
+                set noisy [dict create]
 >>>>
 
-@@ same-place-by-value-key two clauses of one lockstep loop walk the same vector when their iterables have one value key (an alias chased to its definition), so a copy w = v, v then pushed, is taken for v
+@@ vector-site-statement-quiet a statement holding a site is taken for a quiet one, so a loop in its body is in the run of the loops before it, though the body's push runs between two of its iterations
 ## hir/cardinality.tcl
 <<<<
-                    set path [expr {$quiet ? [hir::mutvec::Path $hir $iterable] : ""}]
+        if {$here eq {}} {
+            return [list $sequence $run]
+        }
 ====
-                    set s 0
-                    set path [expr {$quiet ? [ValueKey $hir $iterable s] : ""}]
+        if {1} {
+            return [list $sequence $run]
+        }
 >>>>
 
-@@ same-place-unused two clauses of one lockstep loop over the same vector place are unrelated, like two loops over it (precision: `loop a in v and c in v` is unproven)
+@@ vector-sub-sequence-outer-run an evaluation in the body of a statement holding a site takes the quiet run before the statement, so a loop over the vector in a loop body that pushes after it is in the run of a loop before that loop
 ## hir/cardinality.tcl
 <<<<
-                        dict set domain same [dict get $first $path]
+            # O is in a sub-sequence of its statement.
+            continue
 ====
-                        dict get $first $path
+            # O is in a sub-sequence of its statement.
+            return [list $sequence $run]
+>>>>
+
+@@ vector-sub-sequence-unclassed an evaluation in the body of a statement holding a site has no class (precision: two loops over the vector in one iteration of a loop that pushes after them are unrelated)
+## hir/cardinality.tcl
+<<<<
+            # O is in a sub-sequence of its statement.
+            continue
+====
+            # O is in a sub-sequence of its statement.
+            return ""
+>>>>
+
+@@ vector-operand-after-site an operand of a statement holding a site takes the quiet run before the statement even when a site of the statement runs before it, so a lockstep domain over a vector after another domain's pop is the length of a List collected before
+## hir/cardinality.tcl
+<<<<
+            if {!($sPre > $post || ($sPre < $pre && [dict get $layout post $s] >= $post))} {
+                return ""
+            }
+====
+            if {!($sPre > $post || ($sPre < $pre && [dict get $layout post $s] >= $post))} {
+                continue
+            }
+>>>>
+
+@@ vector-class-by-key two places keyed alike are one class, so two copies of a vector taken around a push (c1 = v, v pushed, c2 = v) are one length
+## hir/cardinality.tcl
+<<<<
+            set class [list $place $epoch]
+====
+            set class $epoch
+>>>>
+
+@@ vector-always-per-occurrence a loop over a MutableVector the program mutates has the length of its own evaluation (precision: two loops over a vector built by pushes, then walked, or a lockstep over it and a List collected over it after the pushes, are unrelated)
+## hir/cardinality.tcl
+<<<<
+    set first [expr {$key eq "" ? "" : [Evaluation $hir $e $key]}]
+====
+    set first ""
+>>>>
+
+@@ vector-unmutated-per-occurrence a loop over any MutableVector has the length of its own evaluation, mutated or not (precision: two loops over a vector nothing mutates, or a lockstep over it and a List collected over it, are unrelated)
+## hir/cardinality.tcl
+<<<<
+    if {$key ne "" && ![ContextRooted $hir $key] && ![Mutated $hir $key]} {
+        return [FormAtom [list len $key]]
+    }
+    set first [expr {$key eq "" ? "" : [Evaluation $hir $e $key]}]
+====
+    set first ""
+>>>>
+
+@@ vector-occurrence-keyed-by-value a loop over a MutableVector is keyed by the vector's value key rather than by its class of evaluations, so every loop over one binding or field path shares a length
+## hir/cardinality.tcl
+<<<<
+    return [FormAtom [list len [list o $first]]]
+====
+    return [FormAtom [list len [list o [ValueKey $hir $e steps]]]]
 >>>>
 
 @@ every-domain-per-occurrence a loop over any collection has the length of its own evaluation (precision: two loops over one List or MutableArray, or a lockstep over one and a List collected over it, are unrelated)
 ## hir/cardinality.tcl
 <<<<
-    if {[hir::types::kindOf [hir::typeOf $hir $e]] eq "mutvec" && [Mutable $hir $e]} {
+    if {[hir::types::kindOf [hir::typeOf $hir $e]] ne "mutvec"} {
+        return [ListLength $hir $e steps]
+    }
 ====
     if {1} {
+        return [FormAtom [list len [list o $e]]]
+    }
 >>>>
 
 @@ untyped-domain-per-occurrence a loop over a value of no collection type (an untyped parameter, which the loop requires to be a List) has the length of its own evaluation (precision: a lockstep over it and a List collected over it is unproven)
 ## hir/cardinality.tcl
 <<<<
-    if {[hir::types::kindOf [hir::typeOf $hir $e]] eq "mutvec" && [Mutable $hir $e]} {
+    if {[hir::types::kindOf [hir::typeOf $hir $e]] ne "mutvec"} {
+        return [ListLength $hir $e steps]
+    }
 ====
-    if {([hir::types::kindOf [hir::typeOf $hir $e]] eq "mutvec" && [Mutable $hir $e]) || [hir::types::kindOf [hir::typeOf $hir $e]] ni {list mutarray mutvec}} {
+    if {[hir::types::kindOf [hir::typeOf $hir $e]] ni {list mutarray mutvec}} {
+        return [FormAtom [list len [list o $e]]]
+    }
+    if {[hir::types::kindOf [hir::typeOf $hir $e]] ne "mutvec"} {
+        return [ListLength $hir $e steps]
+    }
 >>>>
 
 # ---------------------------------------------------------------------------

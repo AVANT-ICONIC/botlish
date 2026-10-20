@@ -146,21 +146,32 @@ vocabulary; `hir/lockstep.tcl` is its one consumer.
   A vector keeps its key's length only when no mutating operation anywhere
   in the program has a receiver with its key (a copy `w = v` is keyed like
   `v`, so a push on either counts for both) and the key is not rooted at a
-  context parameter, whose vector another function may grow
-  (`hir::cardinality::Mutable`): a vector is otherwise a value, which an
-  alias, a struct field or a callee holds as a logical copy, and a nested
-  function cannot mutate a place it captured. A domain `x in v` over any
-  other vector has the length of that one evaluation of `v`, an atom equal
-  to no other (`hir::cardinality::IterationLength`): two loops over it, or
-  it and a List an earlier loop collected over it, are unrelated sizes. The
-  one exception is within a lockstep loop, whose domains are evaluated in
-  written order before its first iteration: a clause over the same vector
-  place as an earlier clause (the same binding and field projections, not a
-  copy of it), with only places and constants between them, walks the same
-  vector (`loop a in v and b in v`). A List and a MutableArray (whose length
-  is its capacity, fixed at allocation) keep the key of their binding or
-  path; so does an iterable of no collection type, which the loop requires
-  to be a List on every backend.
+  context parameter, whose vector another function may grow: a vector is
+  otherwise a value, which an alias, a struct field or a callee holds as a
+  logical copy, a nested function cannot mutate a place it captured, and an
+  operation that mutates is only ever called, never a value
+  (`MUTABLE-PLACE-RECEIVER`). A domain `x in v` over any other vector has
+  the length `v` has at that evaluation, which it shares with every
+  evaluation of the same place that no *site* can come between
+  (`hir::cardinality::Evaluation`): a mutation keyed like `v` in the same
+  function body, and, for a context member, also every call that runs
+  Botlish code (a callee may grow the member through its own context
+  parameter) and every yield (the resumer runs before the body goes on).
+  The statements of a body run in order, once per run of the body, so two
+  evaluations in one *quiet run* -- consecutive statements none of which
+  holds a site -- have one length however deep each sits in its statement;
+  an evaluation in a statement that holds a site lies in its sub-sequence (a
+  loop or branch body, a handler: the classes are the sub-sequence's) or in
+  its operands, which belong to the run before the statement when every
+  site of the statement runs after them (a loop's domains before its body's
+  pushes). So a vector built with pushes, then walked twice, has one length,
+  as do the clauses of a lockstep loop over it and a List collected over it
+  after the pushes; two loops with a push (or, for a context member, a call)
+  between them, or a copy taken before a push and one after it, are
+  unrelated sizes. A List and a MutableArray (whose length is its capacity,
+  fixed at allocation) keep the key of their binding or path; so does an
+  iterable of no collection type, which the loop requires to be a List on
+  every backend.
 * **Existing facts reused**, no new List-length inference: exact Ints and exact
   List literals from `hir/exactvalue.tcl` (followed through immutable
   bindings); the `+ - *` and `list_length` natives; `list(...)` literals; and

@@ -19,10 +19,12 @@
 # container that is a parameter, a local array derived from one (`c =
 # create(capacity(a) + K, 3)`), a field path (t.s) or a nested one
 # (o.inner.s), or the List p a loop collects over a vector (a local or a
-# local struct's field built from xs), pushed to before the loop and
-# pushed, popped or cleared after it (a snapshot's size is its own loop's)
-# -- or mutated nowhere, a second loop q over it then giving p's size too --
-# at an index made sound by one theorem:
+# local struct's field built from xs), pushed to before the loop (also in
+# a loop) and pushed, popped or cleared after it, or mutated nowhere (a
+# snapshot's size is the vector's length at its loop) -- with, maybe, a
+# second loop q over it beside p's, before or after it, nothing between
+# them (the later loop's own body may push), giving p's size too -- at an
+# index made sound by one theorem:
 #
 #   mod       mod(X, SIZE): inline, method syntax, a local of the size, a
 #             local of the index, or the size spelled as an equal form
@@ -59,7 +61,9 @@
 # (a counted loop, mod, a mask, a guard; a local or a field path) with a
 # push, pop or clear between the two loops, or over two copies of it taken
 # around a push (c1 = v, v pushed, c2 = v), or over it and a copy pushed
-# (c1 = v, c1 pushed), or with a push in a loop body between them. Each must be rejected
+# (c1 = v, c1 pushed), or with a push in a loop body, a branch or a handler
+# between them, in a loop body after the later loop in it, or in the
+# earlier loop's own body. Each must be rejected
 # strictly (UNHANDLED-ERROR), and each names a witness input at which the
 # same program, declaring the error and handling it, does fail with
 # IndexNotFound on the interpreter: the rejection is necessary, not only
@@ -69,10 +73,13 @@
 # witness showing the two counts differ; one whose two clauses name the
 # same vector place (a local, a field path), or over a vector nothing
 # mutates and a List collected over it (a local, a field path) or a copy
-# of it, is accepted and agrees on every backend. A read of a List
-# collected over a vector nothing mutates, at an index proven against
-# another loop over it or over a copy of it (mod, a counted loop, a guard),
-# is accepted and the proven opcode, and every backend agrees. Three
+# of it, or over a vector and a List collected over it with nothing that
+# can mutate it between them (pushes before both, the lockstep's own body
+# pushing), is accepted and agrees on every backend. A read of a List
+# collected over a vector, at an index proven against another loop over it
+# or over a copy of it (mod, a counted loop, a guard) with nothing between
+# the two that can mutate it, is accepted and the proven opcode, and every
+# backend agrees. Three
 # CONSERVATIVE shapes (the index written twice inline, a guard in a loop
 # that runs once with the read after it, the field of one call result
 # written twice) are safe but outside every theorem: they must stay
@@ -149,29 +156,39 @@ proc kindInfo {kind} {
         snapshot {
             # p, the List a loop collects over a vector built from xs (a
             # local, or a local struct's field), the vector changed before
-            # and after it -- or not at all, and then also the length of a
-            # second loop over it: p's size is its own loop's, whatever
-            # happens to the vector (hir::cardinality::IterationLength). A push before
-            # the loop makes p nonempty at run time (no capacity-0 mod
-            # failure), though no form says so (a mask still needs a guard).
+            # and after it -- or not at all -- and then, maybe, also the
+            # length of a second loop q over it beside p's, nothing between
+            # them: p's size is the one the vector has at its loop, which
+            # q's loop sees too (hir::cardinality::IterationLength,
+            # Evaluation), whatever happens to the vector before or after
+            # both -- also when the later loop's own body pushes (its
+            # domain is evaluated first). A push before the loop makes p
+            # nonempty at run time (no capacity-0 mod failure), though no
+            # form says so (a mask still needs a guard).
             set v [pick {v bx.v}]
             # (vec: a MutableVector[int] even of the empty xs, which a
             # specialization types List[never].)
             set make [expr {$v eq "v" ? "v = vec(xs)" : "bx = V {v: vec(xs)}"}]
             set loop "p = loop x in $v:\n        x + 1\n    "
             set sizes {"list::length(%s)"}
-            if {[chance 0.4]} {
-                # Nothing mutates the vector: a second loop over it, before
-                # or after p's, has p's length, a size of p too (a vector
-                # nothing mutates keeps its key's length).
+            set twin "q = loop x in $v:\n        x * 2\n    "
+            if {[chance 0.3]} {
                 set before ""
                 set after ""
-                set twin "q = loop x in $v:\n        x * 2\n    "
-                set loop [expr {[chance 0.5] ? "$twin$loop" : "$loop$twin"}]
-                lappend sizes "list::length(q)"
             } else {
-                set before [pick [list "" "$v.push(h)\n    " "$v.push(7)\n    $v.push(8)\n    "]]
+                set before [pick [list "" "$v.push(h)\n    " "$v.push(7)\n    $v.push(8)\n    " "loop i from 0 to 3:\n        $v.push(i)\n    "]]
                 set after [pick [list "" "$v.push(h)\n    " "$v.pop():\n        on IndexNotFound:\n            0\n    " "$v.clear()\n    "]]
+            }
+            if {[chance 0.6]} {
+                if {[chance 0.5]} {
+                    set loop "$loop$twin"
+                } elseif {[chance 0.5]} {
+                    set loop "$twin$loop"
+                } else {
+                    # The later loop's body pushes after its domain ran.
+                    set loop "${twin}p = loop x in $v:\n        $v.push(x)\n        x + 1\n    "
+                }
+                lappend sizes "list::length(q)"
             }
             return [dict create c p other ys family list nonzero 0 nonempty [expr {$before ne ""}] \
                 prelude "$make\n    ${before}${loop}$after" sizes $sizes]
@@ -564,6 +581,40 @@ set unsound {
     q = loop x in v:
         x
     list::at(p, mod(h, list::length(q)))} {2 3 3}
+    vector-branch    {v = mutable_vector::from_list(xs)
+    p = loop x in v:
+        x
+    if h > 0:
+        v.push(h)
+    q = loop x in v:
+        x
+    list::at(p, mod(h, list::length(q)))} {2 3 2}
+    vector-loop-encloses {v = mutable_vector::from_list(xs)
+    p = loop x in v:
+        x
+    r = loop t from 0 to 3:
+        q = loop x in v:
+            x
+        v.push(t)
+        list::at(p, mod(h, list::length(q)))
+    list::length(r)} {2 3 2}
+    vector-own-body  {v = mutable_vector::from_list(xs)
+    p = loop x in v:
+        v.push(x)
+        x
+    q = loop x in v:
+        x
+    list::at(p, mod(h, list::length(q)))} {2 3 3}
+    vector-field-handler {bx = V {v: mutable_vector::from_list(xs)}
+    p = loop x in bx.v:
+        x
+    n = list::at(p, 9):
+        on IndexNotFound:
+            bx.v.push(h)
+            0
+    q = loop x in bx.v:
+        x
+    list::at(p, mod(h, list::length(q)))} {2 3 2}
 }
 # Lockstep clauses over a vector and a List an earlier loop collected over
 # it, the vector grown between them: LOCKSTEP-UNPROVEN, and the witness
@@ -613,8 +664,10 @@ set lockstepUnsound {
     [mutable_vector::length(c1), mutable_vector::length(c2)]} {2 3 1}
 }
 # Two clauses of one lockstep loop over the same vector place, nothing but
-# places and constants between them, walk one vector: accepted, and every
-# backend agrees with the interpreter.
+# places and constants between them, walk one vector; a clause over a
+# vector and one over a List collected over it with nothing between that
+# can mutate it (pushes before both, the lockstep's own body pushing) have
+# one count: accepted, and every backend agrees with the interpreter.
 set lockstepSound {
     same-local {v = vec(xs)
     v.push(h)
@@ -643,10 +696,27 @@ set lockstepSound {
     r = loop a in bx.v and y in p:
         a + y
     list::length(r)}
+    built-collected {v = vec(xs)
+    loop i from 0 to 3:
+        v.push(i)
+    p = loop x in v:
+        x * 10
+    r = loop a in v and y in p:
+        a + y
+    list::length(r)}
+    own-body-field {bx = V {v: vec(xs)}
+    p = loop x in bx.v:
+        x * 10
+    r = loop a in bx.v and y in p:
+        bx.v.push(a)
+        a + y
+    [list::length(r), mutable_vector::length(bx.v)]}
 }
-# Reads of a List collected over a vector nothing mutates, at an index
-# proven against another loop over it (or over a copy of it): accepted,
-# the read the proven opcode, every backend agreeing with the interpreter.
+# Reads of a List collected over a vector, at an index proven against
+# another loop over it (or over a copy of it) with nothing between the two
+# loops that can mutate it -- the vector mutated nowhere, or only before or
+# after both loops, or in the later loop's own body: accepted, the read the
+# proven opcode, every backend agreeing with the interpreter.
 set vectorProven {
     twice-mod {v = mutable_vector::from_list(xs)
     p = loop x in v:
@@ -671,6 +741,25 @@ set vectorProven {
     if h < 0 or h >= list::length(q):
         return -1
     list::at(p, h)}
+    built-mod {v = vec(xs)
+    loop i from 0 to 3:
+        v.push(i * h)
+    p = loop x in v:
+        x
+    q = loop x in v:
+        x * 3
+    v.clear()
+    list::at(p, mod(h, list::length(q)))}
+    own-body-counted {bx = V {v: vec(xs)}
+    bx.v.push(h)
+    q = loop x in bx.v:
+        x
+    p = loop x in bx.v:
+        bx.v.push(x)
+        x * 2
+    r = loop k from 0 to list::length(q):
+        list::at(p, k)
+    [list::length(r), mutable_vector::length(bx.v)]}
 }
 set conservative {
     inline-twice     {if h + 1 < 0 or h + 1 >= mutable_array::capacity(a):
@@ -766,7 +855,7 @@ if {[dict get $options -unsound]} {
         set path [writeProgram vp-$name "$header$signature:\n    $body\n\n\[[join $calls ",\n "]\]\n"]
         set kind [strict $path hir]
         if {$kind ne ""} {
-            fail "vector $name: a read proven by a vector nothing mutates rejected: $kind"
+            fail "vector $name: a read proven by another loop over the vector, nothing mutating it between them, rejected: $kind"
             continue
         }
         set nir [native::nir $hir]
