@@ -131,16 +131,52 @@
         return [FormAtom [list cap [list b]]]
 >>>>
 
-# A loop over a MutableVector has the length of its own evaluation
-# (hir::cardinality::IterationLength): a key names one vector, not one
-# length.
+# A loop over a MutableVector the program mutates has the length of its own
+# evaluation (hir::cardinality::IterationLength): a key names one vector,
+# not one length. A vector nothing mutates -- no mutating operation's
+# receiver has its key, and its key is not rooted at a context parameter
+# (Mutable) -- keeps its key's length.
 
 @@ vector-length-keyed a loop over a MutableVector has its binding's, path's or definition's length, like a List's, so two loops around a push, pop or clear (or a callee's push to a context member) are one size
 ## hir/cardinality.tcl
 <<<<
-    if {[hir::types::kindOf [hir::typeOf $hir $e]] eq "mutvec"} {
+    if {[hir::types::kindOf [hir::typeOf $hir $e]] eq "mutvec" && [Mutable $hir $e]} {
 ====
     if {0} {
+>>>>
+
+@@ vector-mutations-ignored a MutableVector is taken to keep its key's length whatever mutates it in the function (only a context member or a key cut short counts), so two loops over a local, a parameter or a field around a push, pop or clear are one size
+## hir/cardinality.tcl
+<<<<
+        if {$mutated eq "" || $mutated eq $key} {
+====
+        if {$mutated eq ""} {
+>>>>
+
+@@ vector-context-unrooted a context member is taken to keep its key's length when the function itself does not mutate it, so a callee's push through its own context parameter between two loops goes unseen
+## hir/cardinality.tcl
+<<<<
+    if {$key eq "" || [ContextRooted $hir $key]} {
+====
+    if {$key eq ""} {
+>>>>
+
+@@ vector-mutation-by-root-binding a mutation counts for the vectors whose own place has its receiver's root binding, not for every expression keyed like its receiver, so two copies of a vector taken around a push (c1 = v, v pushed, c2 = v) are one length
+## hir/cardinality.tcl
+<<<<
+        set mutated [CompleteKey $hir $receiver]
+        if {$mutated eq "" || $mutated eq $key} {
+====
+        set mutated [lindex [hir::mutvec::Path $hir $receiver] 0]
+        if {$mutated ne "" && $mutated eq [lindex [hir::mutvec::Path $hir $e] 0]} {
+>>>>
+
+@@ vector-always-per-occurrence a loop over any MutableVector has the length of its own evaluation, mutated or not (precision: two loops over a vector nothing mutates, or a lockstep over it and a List collected over it, are unrelated)
+## hir/cardinality.tcl
+<<<<
+    if {$key eq "" || [ContextRooted $hir $key]} {
+====
+    if {1} {
 >>>>
 
 @@ vector-occurrence-keyed-by-value a loop over a MutableVector is keyed by the vector's value key rather than by the loop's own evaluation, so every loop over one binding or field path shares a length
@@ -171,7 +207,7 @@
 @@ every-domain-per-occurrence a loop over any collection has the length of its own evaluation (precision: two loops over one List or MutableArray, or a lockstep over one and a List collected over it, are unrelated)
 ## hir/cardinality.tcl
 <<<<
-    if {[hir::types::kindOf [hir::typeOf $hir $e]] eq "mutvec"} {
+    if {[hir::types::kindOf [hir::typeOf $hir $e]] eq "mutvec" && [Mutable $hir $e]} {
 ====
     if {1} {
 >>>>
@@ -179,9 +215,9 @@
 @@ untyped-domain-per-occurrence a loop over a value of no collection type (an untyped parameter, which the loop requires to be a List) has the length of its own evaluation (precision: a lockstep over it and a List collected over it is unproven)
 ## hir/cardinality.tcl
 <<<<
-    if {[hir::types::kindOf [hir::typeOf $hir $e]] eq "mutvec"} {
+    if {[hir::types::kindOf [hir::typeOf $hir $e]] eq "mutvec" && [Mutable $hir $e]} {
 ====
-    if {[hir::types::kindOf [hir::typeOf $hir $e]] ni {list mutarray}} {
+    if {([hir::types::kindOf [hir::typeOf $hir $e]] eq "mutvec" && [Mutable $hir $e]) || [hir::types::kindOf [hir::typeOf $hir $e]] ni {list mutarray mutvec}} {
 >>>>
 
 # ---------------------------------------------------------------------------

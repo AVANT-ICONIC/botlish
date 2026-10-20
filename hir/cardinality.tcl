@@ -115,12 +115,12 @@ proc hir::cardinality::of_loop {hir e} {
 #   {len KEY}   the length of one List value (KEY identifies the value,
 #               ValueKey: {b B} for a parameter / loop binding B, {p KEY
 #               FIELD} for a field path, {e E} for the defining expression E
-#               an alias chain ends at), always >= 0; or the length a loop
-#               domain over a collection whose length is not fixed (a
-#               MutableVector) had when that one loop evaluated its
-#               iterable expression E: KEY is then {o E}, the occurrence
-#               itself, never its binding, path or definition
-#               (IterationLength)
+#               an alias chain ends at), always >= 0 -- also the length of
+#               a MutableVector nothing can change (IterationLength); or the
+#               length a loop domain over a MutableVector something can
+#               change had when that one loop evaluated its iterable
+#               expression E: KEY is then {o E}, the occurrence itself,
+#               never its binding, path or definition (IterationLength)
 #   {cap KEY}   the capacity of one MutableArray value (KEY as for len),
 #               always >= 0 and fixed at allocation (STDLIB-NAMESPACES.md's
 #               indexed-access proof is its one consumer besides lockstep)
@@ -264,8 +264,9 @@ proc hir::cardinality::Chase {hir e stepsVar} {
 # `t.slots.at(i)` and the write `t.slots.set(i, v)`: the write has no
 # local-alias form, a local `s = t.slots` being a logical copy. A key names
 # one value, not one length: a field (or binding) holding a MutableVector
-# holds one vector whose length a push changes in place, so no size form
-# measures a vector by its key (IterationLength).
+# holds one vector whose length a push changes in place, so a size form
+# measures a vector by its key only where nothing can change it
+# (IterationLength).
 proc hir::cardinality::ValueKey {hir e stepsVar} {
     upvar 1 $stepsVar steps
     lassign [Chase $hir $e steps] kind id
@@ -402,10 +403,11 @@ proc hir::cardinality::Capacity {hir e stepsVar} {
 
 # The length of the List value of expression E, as a (nonnegative) form.
 # E's value is a List wherever its length is read -- an operand a List
-# native (list::length, list::at, a slice, mutable_array::from_list) takes,
-# which fails on anything else, or the iterable of a loop that requires one
-# -- or a MutableArray a loop walks (IterationLength), whose length is fixed
-# too, so the length of one is its key's (ValueKey).
+# native takes (list::length, list::at, a slice, an array's construction
+# from a List), which fails on anything else, or the iterable of a loop
+# that requires one -- or a MutableArray a loop walks, whose length is
+# fixed too, or a MutableVector nothing can change (IterationLength), so
+# the length of one is its key's (ValueKey).
 proc hir::cardinality::ListLength {hir e stepsVar} {
     upvar 1 $stepsVar steps
     set fact [hir::exact::ListOf $hir $e]
@@ -434,27 +436,86 @@ proc hir::cardinality::ListLength {hir e stepsVar} {
 # The number of elements the list domain over the iterable expression E
 # visits: the length E's value has when its loop evaluates E, once. A loop
 # walks a List -- an iterable of any static type but MutableVector and
-# MutableArray must be one when the loop runs (its TYPE check) -- or the
-# snapshot (or, affine, the consumption) of a MutableArray or MutableVector
-# (MUTABLE-VECTOR.md, MUTABLE-ARRAY.md). A List's length never changes (it
-# is immutable), nor does a MutableArray's (its capacity, fixed at
-# allocation), so a binding, field path or definition that names one names
-# one length: ListLength's, keyed by it. A MutableVector's does change, in
-# place, through whatever place holds it -- push, pop, take and clear on
-# the binding or the field path, a callee's on its own context parameter --
-# while the binding, path or member stays the same. A domain over a vector
-# has the length of this one evaluation only: the atom {len {o E}}, E the
-# iterable itself, equal to no other occurrence's -- or SAME's, the earlier
-# domain of its lockstep loop that evaluated the same place with no code
-# run between them (domains). Two loops over one vector have unrelated
-# lengths, as do a vector and a List an earlier loop collected over it,
-# whatever runs between them.
+# MutableArray must be one when the loop runs (its TYPE check, on every
+# backend) -- or the snapshot (or, affine, the consumption) of a
+# MutableArray or MutableVector (MUTABLE-VECTOR.md, MUTABLE-ARRAY.md). A
+# List's length never changes (it is immutable), nor does a MutableArray's
+# (its capacity, fixed at allocation), so a binding, field path or
+# definition that names one names one length: ListLength's, keyed by it.
+#
+# A MutableVector's length does change, in place, while its binding, path
+# or member stays the same: through a mutating operation (hir::mutvec::
+# OpKind) whose receiver is a place holding it -- a binding or a field path
+# of the function itself (MUTABLE-PLACE-RECEIVER) -- or a callee's through
+# its own context parameter, the installed context every function
+# requiring it shares. Nothing else reaches it: a vector is a value, so an
+# alias, a struct field or a callee's parameter given it holds a logical
+# copy no mutation of the original changes (hir::mutvec's elaboration), and
+# a nested function cannot mutate a place it captured. So a vector keeps
+# its key's length (ListLength) when its key is not rooted at a context
+# parameter and no mutating operation anywhere in the program has a
+# receiver with that key (Mutable) -- a copy `w = v` is keyed like `v`, so a
+# push on either counts for both. Otherwise the domain has the length of
+# this one evaluation only: the atom {len {o E}}, E the iterable itself,
+# equal to no other occurrence's -- or SAME's, the earlier domain of its
+# lockstep loop that evaluated the same place with no code run between them
+# (domains): two loops over such a vector have unrelated lengths, as do the
+# vector and a List an earlier loop collected over it, whatever runs
+# between them.
 proc hir::cardinality::IterationLength {hir e stepsVar {same ""}} {
     upvar 1 $stepsVar steps
-    if {[hir::types::kindOf [hir::typeOf $hir $e]] eq "mutvec"} {
+    if {[hir::types::kindOf [hir::typeOf $hir $e]] eq "mutvec" && [Mutable $hir $e]} {
         return [FormAtom [list len [list o [expr {$same ne "" ? $same : $e}]]]]
     }
     return [ListLength $hir $e steps]
+}
+
+# 1 if the MutableVector expression E evaluates to may have another length
+# than another expression keyed like it (IterationLength): its key is
+# rooted at a context parameter, a mutating operation's receiver anywhere in
+# HIR has its key, or a key could not be followed to its end (CompleteKey).
+proc hir::cardinality::Mutable {hir e} {
+    set key [CompleteKey $hir $e]
+    if {$key eq "" || [ContextRooted $hir $key]} {
+        return 1
+    }
+    dict for {c node} [dict get $hir exprs] {
+        if {[dict get $node kind] ne "call" || [hir::mutvec::OpKind $hir $c] ne "mutate"} continue
+        set receiver [lindex [dict get $node args] 0]
+        if {$receiver eq ""} continue
+        set mutated [CompleteKey $hir $receiver]
+        if {$mutated eq "" || $mutated eq $key} {
+            return 1
+        }
+    }
+    return 0
+}
+
+# The key of expression E (ValueKey), followed to the end of its alias
+# chains with a step budget of its own, or "" when the budget ran out
+# first: a key cut short names a point of a chain another expression's key
+# may pass beyond, so two such keys can differ for one value.
+proc hir::cardinality::CompleteKey {hir e} {
+    variable maxSteps
+    set steps 0
+    set key [ValueKey $hir $e steps]
+    return [expr {$steps > $maxSteps ? "" : $key}]
+}
+
+# 1 if value key KEY (ValueKey) is rooted at a context parameter: the load
+# of an installed context (hir::contexts::isLoad), or a binding bound to
+# one.
+proc hir::cardinality::ContextRooted {hir key} {
+    while {[lindex $key 0] eq "p"} {
+        set key [lindex $key 1]
+    }
+    lassign $key how what
+    if {$how eq "e"} {
+        return [hir::contexts::isLoad $hir $what]
+    }
+    set by [dict get $hir bindings $what declaredBy]
+    return [expr {$by ne "" && [dict exists $hir exprs $by] && [dict get $hir exprs $by kind] eq "bind"
+        && [hir::contexts::isLoad $hir [dict get $hir exprs $by value]]}]
 }
 
 # ---- domains -----------------------------------------------------------------

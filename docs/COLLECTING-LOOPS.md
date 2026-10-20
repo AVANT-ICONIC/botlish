@@ -140,19 +140,27 @@ vocabulary; `hir/lockstep.tcl` is its one consumer.
   loop binding), `{max FORM}`, `{v B}` (an Int-valued binding) and `{e E}` (one
   specific expression no rule folds, equal only to itself). Immutable
   single-assignment bindings are what make equal atoms the same value — the
-  argument `hir/exactvalue.tcl` already relies on. A `MutableVector` is the
-  exception: a push, pop or clear changes its length in place while its
-  binding, field path or context member stays the same, so a domain `x in v`
-  over a vector has the length of that one evaluation of `v`, an atom equal
-  to no other (`hir::cardinality::IterationLength`). Two loops over one
-  vector, or a vector and a List an earlier loop collected over it, are
-  unrelated sizes. The one exception is within a lockstep loop, whose
-  domains are evaluated in written order before its first iteration: a
-  clause over the same vector place as an earlier clause (the same binding
-  and field projections, not a copy of it), with only places and constants
-  between them, walks the same vector (`loop a in v and b in v`). A List and
-  a MutableArray (whose length is its capacity, fixed at allocation) keep
-  the key of their binding or path.
+  argument `hir/exactvalue.tcl` already relies on. A `MutableVector` the
+  program mutates is the exception: a push, pop or clear changes its length
+  in place while its binding, field path or context member stays the same.
+  A vector keeps its key's length only when no mutating operation anywhere
+  in the program has a receiver with its key (a copy `w = v` is keyed like
+  `v`, so a push on either counts for both) and the key is not rooted at a
+  context parameter, whose vector another function may grow
+  (`hir::cardinality::Mutable`): a vector is otherwise a value, which an
+  alias, a struct field or a callee holds as a logical copy, and a nested
+  function cannot mutate a place it captured. A domain `x in v` over any
+  other vector has the length of that one evaluation of `v`, an atom equal
+  to no other (`hir::cardinality::IterationLength`): two loops over it, or
+  it and a List an earlier loop collected over it, are unrelated sizes. The
+  one exception is within a lockstep loop, whose domains are evaluated in
+  written order before its first iteration: a clause over the same vector
+  place as an earlier clause (the same binding and field projections, not a
+  copy of it), with only places and constants between them, walks the same
+  vector (`loop a in v and b in v`). A List and a MutableArray (whose length
+  is its capacity, fixed at allocation) keep the key of their binding or
+  path; so does an iterable of no collection type, which the loop requires
+  to be a List on every backend.
 * **Existing facts reused**, no new List-length inference: exact Ints and exact
   List literals from `hir/exactvalue.tcl` (followed through immutable
   bindings); the `+ - *` and `list_length` natives; `list(...)` literals; and

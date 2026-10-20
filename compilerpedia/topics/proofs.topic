@@ -129,6 +129,12 @@ forms:
     0 <= h.mod(n) < n. A mask m keeps bit_and(h, m) in 0..m when m >= 0, so
     the mask needs m >= 0 proven (a guard that the size is not 0, or m's own
     range) but no power of two.
+  * the List a loop collected (with no break or continue) over a container
+    has that container's length, so any of the forms above may use the
+    length of another loop's List over the same List or MutableArray -- or
+    the same MutableVector, when nothing in the program mutates it (no
+    push, pop, take, swap or clear on it or on a copy of it, and no
+    function's on a context's vector).
 
 @example accept
 import list
@@ -214,6 +220,23 @@ loop i from 0 to t.slots.capacity():
 @value [0, 0, 0, 7]
 @end
 
+@example accept
+import list
+import mutable_vector
+
+fn scaled(h: int) -> int:
+    v = mutable_vector::from_list([1, 2, 3])
+    ys = loop x in v:
+        x * 10
+    zs = loop x in v:
+        x
+    ys.at(h.mod(zs.length()))
+
+scaled(4)
+@caption Two loops over a vector nothing mutates have one length
+@value 20
+@end
+
 == LIMITATIONS (NOT PROVEN TODAY)
 These forms are often correct, but the compiler does not relate the index
 to the length, so the call must handle or admit IndexNotFound:
@@ -234,11 +257,13 @@ to the length, so the call must handle or admit IndexNotFound:
     not recorded), an offset of a reduced index (`h.mod(n) + 1`), or a mask
     with nothing proving the size is not 0 (the mask of an empty array is -1,
     and bit_and(h, -1) is h).
-  * the List of a loop over a MutableVector, against the length of another
-    loop over the same vector: a push, pop or clear (or a function's push
-    to a context's vector) changes the vector's length in place, so each
-    loop over a vector has only its own length, even with nothing between
-    the two loops.
+  * the List of a loop over a MutableVector the program mutates, against
+    the length of another loop over the same vector: a push, pop or clear
+    on it or on a copy of it (or a function's push to a context's vector)
+    changes the vector's length in place, so each loop over such a vector
+    has only its own length, even with nothing between the two loops. A
+    context's vector is always such a vector: another function may grow
+    it.
 
 @example reject
 import list
@@ -660,12 +685,14 @@ fn pairs(xs: List[int], ys: List[int]) -> List[int]:
 
 == LIMITATIONS
 Two different lists are unrelated even when the caller passes lists of the
-same length. So are two loops over one MutableVector, or a vector and the
-List an earlier loop over it collected: a push, pop or clear changes the
-vector's length in place, so each loop over it counts only its own walk.
-Only two clauses of one lockstep loop naming the same vector (`loop a in v
-and b in v`, the same variable or field path, nothing but names and
-constants between them) are known to walk the same vector.
+same length. So are two loops over one MutableVector the program mutates
+(a push, pop or clear on it or on a copy of it, or a function's push to a
+context's vector), or such a vector and the List an earlier loop over it
+collected: the vector's length changes in place, so each loop over it
+counts only its own walk. Then only two clauses of one lockstep loop naming
+the same vector (`loop a in v and b in v`, the same variable or field path,
+nothing but names and constants between them) are known to walk the same
+vector. A vector nothing mutates keeps one length, like a List.
 
 @example reject
 import mutable_vector

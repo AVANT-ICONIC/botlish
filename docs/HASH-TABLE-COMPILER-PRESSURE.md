@@ -513,13 +513,23 @@ proven sets are `counts.set(0|1, 0)` on a capacity-2 allocation.
   List at an index proven against the second's lowered to an unchecked
   `listgetproven` past its end. CP-1's reductions reached the same defect
   with a local vector, and the counted-loop and lockstep forms had it
-  before both changes. The fix keys no vector's length: a loop over a
-  `MutableVector` has the length of its own evaluation
-  (`hir::cardinality::IterationLength`), whatever its binding or path,
-  except that two clauses of one lockstep loop over the same place, with no
-  code run between them, walk one vector. List and MutableArray lengths
-  keep their keys (`lpmask`'s NIR is unchanged). The cost is that two
-  loops over one vector with nothing between them are unrelated too.
+  before both changes. The fix keys a vector's length only when nothing
+  can change it: no mutating operation anywhere in the program has a
+  receiver with its key (a copy is keyed like its source, so a push on
+  either counts) and the key is not rooted at a context parameter
+  (`hir::cardinality::Mutable`). A loop over any other `MutableVector` has
+  the length of its own evaluation (`hir::cardinality::IterationLength`),
+  whatever its binding or path, except that two clauses of one lockstep
+  loop over the same place, with no code run between them, walk one vector.
+  List and MutableArray lengths keep their keys (`lpmask`'s NIR is
+  unchanged). The cost: two loops over a vector the program mutates
+  somewhere, or over a context's vector, are unrelated even with nothing
+  between them. A second hole of the same kind was the interpreter's alone:
+  its `listloop` drained any vector it met, so a vector reaching an unmarked
+  loop through an `any`-typed path was walked (and emptied) there while the
+  other backends raised the loop's TYPE error; it now requires a List like
+  them, and only a loop the compiler marks consuming moves a vector's
+  elements out (`mv-untyped-loop`).
 
 ### CP-4. Facts do not cross a call
 
