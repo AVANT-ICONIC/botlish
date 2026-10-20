@@ -54,8 +54,10 @@
 # statically); its name (NAME.exe); and the standalone runs, from another
 # directory with only the system directory on PATH, where the outcomes
 # differ from Unix's exactly as recorded: native coroutines and C calls are
-# refused, and a native stack exhausted before the shadow stack's depth
-# check fires ends the process (no stack guard yet). Prints one line per check, the tools' own output with
+# refused, the depth check's NATIVE LIMIT STACK is reported as any run-time
+# error is (MESSAGE (CODE)), and a native stack exhausted before the shadow
+# stack's depth check fires ends the process (no stack guard yet). Prints
+# one line per check, the tools' own output with
 # -verbose 1 (and always for a failed check), the object and link times, and
 # exits 1 on any failure. Needs the native backend built (cargo build
 # --release --manifest-path native/Cargo.toml). Its scratch files are in a
@@ -719,11 +721,14 @@ proc windowsChecks {} {
     check standalone-deep-finite [expr {$outcome eq [list 0 "100000\n" ""]}] [shown $outcome]
     # The shadow stack's depth check (codegen::roots's depth_reservation)
     # bounds Botlish recursion on the default 1 GiB stack: NATIVE LIMIT
-    # STACK, exit status 1, as everywhere. A smaller stack is exhausted
-    # first, and with no stack guard yet the process ends in Rust's own
-    # stack overflow report, a failure status.
+    # STACK, exit status 1, as everywhere -- an ordinary run-time error
+    # here, which the executable reports as it reports every one (MESSAGE
+    # (CODE), like standalone-error), where the guard of the other hosts
+    # writes its own fixed line ($overflowLine). A smaller stack is
+    # exhausted first, and with no stack guard yet the process ends in
+    # Rust's own stack overflow report, a failure status.
     set outcome [{*}$standalone $runDir $cwdDir overflow [string map {DEPTH 100000000} $downProgram] {}]
-    check standalone-depth-limit [expr {$outcome eq [list 1 "" "$overflowLine\n"]}] "1 GiB stack: [shown $outcome]"
+    check standalone-depth-limit [expr {$outcome eq [list 1 "" "native stack exhausted: too many nested calls (NATIVE LIMIT STACK)\n"]}] "1 GiB stack: [shown $outcome]"
     set outcome [windowsRun $cwdDir [file join $runDir overflow.exe] {BOTLISH_NATIVE_STACK_BYTES 16777216}]
     check standalone-stack-overflow [expr {[lindex $outcome 0] ni {0 1} && [lindex $outcome 1] eq ""
         && [string match "*has overflowed its stack*" [lindex $outcome 2]]}] "16 MiB stack, no guard: [shown $outcome]"
