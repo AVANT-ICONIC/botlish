@@ -11,8 +11,10 @@
 #
 #   * 0 to 14 parameters -- past the six (x86-64 SysV) or eight (AAPCS64)
 #     integer argument registers, so the later ones are on the stack -- each
-#     a C integer scalar (all eleven, plain char at the target's signedness)
-#     or a C _Bool (ffi::c::Bool: a Botlish bool),
+#     a C integer scalar (all eleven, plain char at the target's signedness),
+#     a C _Bool (ffi::c::Bool: a Botlish bool), a C double (ffi::c::Double,
+#     recorded as its bit pattern: it takes a floating-point register, and
+#     the variadic conventions count those apart from the integer ones),
 #     a raw `unsigned char *` (null, or an address inside the library's own
 #     cells), a read byte pointer (an abi::bytes::Bytes or a MutableBytes,
 #     exposed) or a write byte pointer (a MutableBytes, C writing a private
@@ -169,9 +171,10 @@ proc doubleBits {v} {
 }
 
 # One function I of program P: a dict {params result named symbol}.
-# A param is {kind scalar type T} | {kind raw escape E} | {kind in escape E
-# owner bytes|mutable} | {kind out escape E}; a result {kind scalar type T
-# from J add C} | {kind unit} | {kind independent} | {kind alias of J}.
+# A param is {kind scalar type T} | {kind double} | {kind raw escape E} |
+# {kind in escape E owner bytes|mutable} | {kind out escape E}; a result
+# {kind scalar type T from J add C} | {kind unit} | {kind independent} |
+# {kind alias of J}.
 proc drawFunction {p i} {
     set params {}
     set variadic [chance 0.3]
@@ -180,9 +183,11 @@ proc drawFunction {p i} {
     for {set j 0} {$j < $n} {incr j} {
         set escape [expr {[chance 0.2] ? "proven noescape" : "noescape"}]
         set r [expr {rand()}]
-        if {$r < 0.6} {
+        if {$r < 0.55} {
             lappend params [dict create kind scalar type [pick [dict keys $::scalars]]]
-        } elseif {$r < 0.73} {
+        } elseif {$r < 0.65} {
+            lappend params [dict create kind double]
+        } elseif {$r < 0.75} {
             lappend params [dict create kind raw escape $escape]
         } elseif {$r < 0.87} {
             lappend params [dict create kind in escape $escape owner [pick {bytes bytes mutable}]]
@@ -268,6 +273,10 @@ proc cSource {functions} {
                     lappend formals "[lindex [dict get $::scalars [dict get $param type]] 0] a$j"
                     append body "    fz_seen\[$j\] = (unsigned long long)a$j;\n"
                 }
+                double {
+                    lappend formals "double a$j"
+                    append body "    { unsigned long long u; memcpy(&u, &a$j, sizeof u); fz_seen\[$j\] = u; }\n"
+                }
                 raw {
                     lappend formals "unsigned char *a$j"
                     append body "    fz_seen\[$j\] = fz_offset(a$j);\n"
@@ -329,6 +338,7 @@ proc binding {functions} {
         foreach param [dict get $f params] {
             switch [dict get $param kind] {
                 scalar { lappend formals "p$j: ffi::c::[dict get $param type]" }
+                double { lappend formals "p$j: ffi::c::Double" }
                 raw { lappend formals "p$j: ffi::c::Ptr\[ffi::c::UChar\] [dict get $param escape]" }
                 in { lappend formals "p$j: ffi::c::Ptr\[ffi::c::UChar\] read [dict get $param escape]" }
                 out { lappend formals "p$j: ffi::c::Ptr\[ffi::c::UChar\] write [dict get $param escape]" }
@@ -395,6 +405,10 @@ proc program {functions} {
                         lappend args $v
                     }
                     lappend seen [expr {$v % (2 ** 64)}]
+                }
+                double {
+                    lappend args [dict get $param value]
+                    lappend seen [doubleBits [dict get $param value]]
                 }
                 raw {
                     set cell [dict get $param cell]
@@ -506,6 +520,7 @@ proc drawArguments {f} {
     foreach param [dict get $f params] {
         switch [dict get $param kind] {
             scalar { dict set param value [scalarValue [dict get $param type]] }
+            double { dict set param value [doubleValue] }
             raw { dict set param cell [expr {[chance 0.25] ? -1 : [between 0 [expr {$::cells - 1}]]}] }
             in - out {
                 set bytes [randomBytes]

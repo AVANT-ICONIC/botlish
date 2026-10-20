@@ -527,6 +527,15 @@ every integer type, `_Bool`, doubles (checked by bit pattern) and raw
 pointers. Seeds 1-4 (6 programs each): 87 variadic functions, 468 trailing
 arguments, no disagreement.
 
+A fixed parameter may also be a C double (`ffi::c::Double`, recorded by
+bit pattern), which every function can draw, variadic or not. The variadic
+conventions count the floating-point registers a call's fixed doubles take
+apart from the integer ones (the `%al` count, AAPCS64's v registers,
+Apple's padding). The fuzzer drew no such parameter until the macOS
+mutant run showed what that missed (section 25). Seeds 1-4 with it (10
+programs each, x86-64): 146 variadic functions, 588 trailing arguments, no
+disagreement.
+
 ## 16. Pointers and sentinels
 
 * `bcf_vsentinel(tag, p1, p2, ..., NULL)` counts the pointers before the
@@ -837,8 +846,10 @@ nothing measurable. The double row is dominated by allocating its Float64
 result, as `big`'s boxed result is: the call itself is in the same few
 nanoseconds. The numbers are measured in one
 linked executable per program (`native::measure`), compilation and linking
-excluded. Apple's padding costs one register move per padded register;
-tier.tcl's `c-ffi-bench` measures it on macOS (section 25).
+excluded. Apple's padding costs one register move per padded register.
+On macOS (section 25) that cost does not show: a variadic call with two or
+eleven trailing arguments costs what a fixed call with as many stack
+arguments costs.
 
 ## 25. macOS GitHub Actions runs
 
@@ -866,8 +877,57 @@ clang 17. The shared development Mac was not used.
   * acceptance shards 1 and 2 passed: every Tcl test file on interp and
     compile, `c-ffi.test` with all five capture scenarios against Apple
     clang's own calls included, and every golden suite on four backends;
-  * Tier C ran the C FFI's `va-*` mutants for this host and
-    `bench/c-ffi.tcl`, results below.
+  * Tier C ran `c-ffi.test` and `variadics.test` on interp and compile
+    (170 tests, 166 passed, 4 skipped, 0 failed), the C FFI's `va-*`
+    mutants and `bench/c-ffi.tcl`.
+
+**The mutants on macOS.** 23 mutants, 18 killed, 0 survived, 5 skipped:
+the four x86-64 ones (`va-al-omitted`, `va-al-zero`,
+`va-stub-jit-jump-misplaced`, `va-stub-plt-addend-dropped`) and
+`va-linux-aarch64-is-apples`, which only a Linux AArch64 host can run.
+Of the 18, the twelve front-end mutants and `va-pointer-truncated` are the
+same mutants Linux kills, killed again on an Apple host. The five Apple
+mutants are new evidence. Each fails at least one capture scenario
+(`cf-va-abi-*`, which compares the machine state at the callee with Apple
+clang's own call) and the Rust `apple_tests`:
+
+| mutant | `c-ffi.test` | fuzzer | Rust |
+|---|---|---|---|
+| `va-apple-trailing-in-registers` | 13 failed (`cf-va-abi-fixedd`, `-ints`, `-mixed`, `-small`, `cf-va-arities`, ...) | killed | 2 failed |
+| `va-apple-integer-padding-skipped` | 7 failed (`cf-va-abi-ints`, `cf-va-arities`, `cf-va-executable-gc-coroutine`, ...) | killed | 1 failed |
+| `va-apple-narrow-slots` | 7 failed (`cf-va-abi-ints`, `cf-va-arities`, `cf-va-clif`, ...) | killed | 1 failed |
+| `va-apple-doubles-counted-as-integers` | 1 failed (`cf-va-abi-fixedd`) | survived | 1 failed |
+| `va-apple-double-registers-miscounted` | 3 failed (`cf-va-abi-fixedd`, `cf-va-doubles`, `cf-va-interchange`) | survived | 1 failed |
+
+The fuzzer missed the two mutants that miscount fixed doubles because it
+drew no fixed C double parameter. Only the `fixedd` capture scenario and
+`ffi_apple_variadic_padding_per_kind` held that rule, the thinnest
+coverage in this slice. The fuzzer now draws fixed doubles (section 15),
+and the next run reruns those two mutants against it (below).
+
+**The Apple benchmark** (`bench/c-ffi.tcl`, macos-15, ns: the loop alone,
+the loop with the call, and the call over the loop):
+
+| call | loop | + call | call |
+|---|---:|---:|---:|
+| `add(a, b)`, fixed | 26.8 | 23.9 | -2.8 |
+| `stack_tail(12 args)`, fixed | 23.2 | 24.4 | 1.2 |
+| `stack_tail(20 args)`, fixed | 26.9 | 35.6 | 8.7 |
+| `vsum(2, a, a)`, variadic | 23.2 | 24.4 | 1.2 |
+| `vsum(11, ...)`, variadic | 24.0 | 32.0 | 8.0 |
+| `vscale(1.0, 4, 4 doubles)`, a Float64 result allocated | 27.4 | 62.4 | 34.9 |
+| (`big`, a fixed call whose u64 result is boxed) | 26.0 | 42.4 | 16.4 |
+
+The Apple padding is invisible:
+
+* a two-trailing call costs what a fixed twelve-argument call costs (1.2 ns
+  over the loop, below the loop's own noise, which makes `add` negative);
+* eleven trailing arguments cost what twenty fixed ones do (8.0 against
+  8.7), although every trailing one goes on the stack and the padding
+  fills the free registers first.
+
+The double row is again the result's allocation (Apple's allocator
+measures slower than Linux's here, `big`'s boxed result as well).
 
 ## 26. Linux x86-64 regression
 
