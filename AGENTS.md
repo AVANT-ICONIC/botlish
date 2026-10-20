@@ -1029,11 +1029,17 @@ WINDOWS-TOOLCHAIN-CENSUS.md): the driver and runtime built for
 * What each native capability does on Windows is recorded in
   `tests/platform/native-status.tcl` (its windows-x86_64 row) and
   `native/native.tcl`'s `capabilities` table (which tests/helpers.tcl's
-  `executableAot`, `nativeCCalls`, `nativeCoroutines`, `nativeStackGuard`
-  and the golden runner read); the test files that do not pass on Windows
-  yet, with their causes, in `tests/platform/tier.tcl`'s `notYetByHost`. A
+  `executableAot`, `nativeCCalls`, `nativeCoroutines`, `nativeStackGuard`,
+  `nativeFrameRoots` (and from the last two `nativeDepthChecked`) and the
+  golden runner read); the test files that do not pass on Windows yet,
+  with their causes, in `tests/platform/tier.tcl`'s `notYetByHost`. A
   milestone that changes one updates it in the same change; never weaken a
-  test to make Windows green.
+  test to make Windows green. A test that needs a capability carries its
+  constraint; a test of the root plan or of call effects expects the
+  host's by `nativeFrameRoots`/`nativeDepthChecked`; a test of C scalar
+  widths reads the target's row (`long` is 32 bits on Windows); one that
+  reads main.tcl's output untranslated expects CRLF from main.tcl's own
+  lines on Windows.
 * CI: `.github/workflows/windows-x86_64.yml` on every push (windows-2025,
   production code, Tcl 9.0.1 built by `tests/platform/setup-windows.ps1`):
   the smoke job (the Rust tests, `native-status.tcl`, `aot-facts.tcl`'s
