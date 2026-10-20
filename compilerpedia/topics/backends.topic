@@ -128,7 +128,7 @@ faster.
 
 @topic backend.native-executable
 title: Standalone native executables
-summary: -emit-native-executable FILE.bot compiles the program into a standalone executable (ELF, Mach-O on macOS, PE on Windows) that runs without Tcl, Rust or a checkout and prints its output, then its value.
+summary: -emit-native-executable FILE.bot compiles the program into a standalone executable (ELF, Mach-O or PE) that runs without Tcl, Rust or a checkout and prints its output, then its value.
 index: backends
 alias: native executable; standalone executable; emit-native-executable; compile to binary
 keywords: executable, ELF, Mach-O, PE, exe, AOT, stub linker, rustc, emit, macOS, Windows, MSVC
@@ -137,10 +137,11 @@ docs: README.md SINGLE-EXECUTABLE.md ARGV.md MACOS-AARCH64-MILESTONE-5.md WINDOW
 
 == WHAT IT IS
 `-emit-native-executable game.bot` writes ./game (the input's name without
-its extension; game.exe on Windows) and does not run the program. The executable prints what the
-program prints, then the program's final value on its own line (`unit` for
-a program ending in unit), and exits 0; a run-time error goes to stderr with
-a nonzero exit status. Its argv() is its real process arguments. It is an
+its extension; game.exe on Windows) and does not run the program. The
+executable prints what the program prints, then the program's final value
+on its own line (`unit` for a program ending in unit), and exits 0; a
+run-time error goes to stderr with a nonzero exit status. Its argv() is its
+real process arguments. It is an
 ordinary command-line program of the host: an ELF executable linked
 against glibc on Linux, a Mach-O arm64 executable linked against libSystem
 (and signed ad hoc by the linker, as every arm64 executable is) on macOS, a
@@ -257,7 +258,7 @@ A program cannot set its process exit status
 
 @topic backend.platforms
 title: Platforms and what runs where
-summary: The Tcl backends need only Tcl 9; the native backend runs on Linux x86-64 and AArch64, macOS AArch64 and Windows x86-64 (MSVC), C calls on Linux and macOS; syscalls are Linux-only; stub linking is Linux x86-64 only.
+summary: The Tcl backends need only Tcl 9; the native backend runs on Linux, macOS AArch64 and Windows x86-64, C calls on Linux and macOS only; syscalls are Linux's; stub linking Linux x86-64's.
 index: backends
 alias: platforms; operating systems; aarch64; arm64; x86-64; supported platforms
 keywords: Linux, x86-64, AArch64, arm64, macOS, Windows, MSVC, Tcl 9, coroutines, stub
