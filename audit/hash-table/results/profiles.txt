@@ -1,0 +1,1034 @@
+== base lpa int-dense 1024 hit
+lpa int-dense n=1024 hit: 890 instructions per operation (tree base)
+     303.0  (generated code)
+     119.9  rt_mutarray_get
+      74.4  botlish_native::runtime::ops::hash_mix
+      57.4  rt_int_mod
+      55.0  <i64 as alloc::string::SpecToString>::spec_to_string
+      53.6  _int_free
+      45.0  malloc
+      41.1  <u64>::_fmt_inner
+      39.0  free
+      22.8  __memcpy_avx_unaligned_erms
+      19.2  rt_mutarray_capacity
+      14.0  <u64>::_fmt
+== base lpa int-dense 1024 miss
+lpa int-dense n=1024 miss: 1083 instructions per operation (tree base)
+     336.9  (generated code)
+     158.0  <u64>::_fmt_inner
+     118.0  botlish_native::runtime::ops::hash_mix
+      91.7  rt_int_mod
+      85.7  rt_mutarray_get
+      55.0  <i64 as alloc::string::SpecToString>::spec_to_string
+      53.9  _int_free
+      45.0  malloc
+      39.0  free
+      30.9  rt_mutarray_capacity
+      14.0  <u64>::_fmt
+      12.0  rt_hash
+== base lpa int-dense 1024 build
+lpa int-dense n=1024 build: 2562 instructions per operation (tree base)
+     885.6  (generated code)
+     318.1  rt_mutarray_get
+     294.5  rt_mutarray_set
+     261.8  botlish_native::runtime::ops::array_writable
+     159.5  rt_int_mod
+      98.7  rt_mutarray_capacity
+      74.4  botlish_native::runtime::ops::hash_mix
+      60.9  <botlish_native::runtime::heap::Heap>::collect::<alloc::vec::into_iter::IntoIter<u64>>
+      60.5  _int_free
+      55.0  <i64 as alloc::string::SpecToString>::spec_to_string
+      51.2  malloc
+      49.6  __memcpy_avx_unaligned_erms
+== base lpa str-short 1024 hit
+lpa str-short n=1024 hit: 823 instructions per operation (tree base)
+     300.2  (generated code)
+     135.0  botlish_native::runtime::value::kind_of
+     121.4  rt_mutarray_get
+      81.1  botlish_native::runtime::ops::hash_mix
+      59.7  rt_int_mod
+      53.0  botlish_native::runtime::ops::equal
+      20.0  rt_mutarray_capacity
+      19.0  __memcmp_avx2_movbe
+      13.0  rt_value_eq
+      12.0  rt_hash
+      11.0  rt_str_len
+== base lpa str-short 1024 miss
+lpa str-short n=1024 miss: 742 instructions per operation (tree base)
+     353.7  (generated code)
+     104.9  rt_int_mod
+      94.1  rt_mutarray_get
+      82.5  botlish_native::runtime::ops::hash_mix
+      45.0  botlish_native::runtime::value::kind_of
+      35.4  rt_mutarray_capacity
+      12.0  rt_hash
+      11.0  rt_str_len
+       1.4  _int_malloc
+       0.7  unlink_chunk.isra.0
+       0.6  __memcpy_avx_unaligned_erms
+== base lpa str-short 1024 build
+lpa str-short n=1024 build: 2338 instructions per operation (tree base)
+     897.3  (generated code)
+     325.6  rt_mutarray_get
+     294.5  rt_mutarray_set
+     261.8  botlish_native::runtime::ops::array_writable
+     171.3  rt_int_mod
+     102.7  rt_mutarray_capacity
+      81.1  botlish_native::runtime::ops::hash_mix
+      45.0  botlish_native::runtime::value::kind_of
+      43.1  <botlish_native::runtime::heap::Heap>::collect::<alloc::vec::into_iter::IntoIter<u64>>
+      21.0  __memcpy_avx_unaligned_erms
+      12.0  rt_hash
+      11.0  rt_str_len
+== base lpa point 1024 hit
+lpa point n=1024 hit: 2902 instructions per operation (tree base)
+     392.9  (generated code)
+     323.9  _int_free
+     286.0  botlish_native::runtime::ops::hash_mix
+     263.9  malloc
+     234.0  free
+     195.0  botlish_native::runtime::value::kind_of
+     135.4  botlish_native::runtime::ops::hash_mix'2
+     127.4  rt_mutarray_get
+     110.0  <i64 as alloc::string::SpecToString>::spec_to_string
+      99.0  <alloc::string::String as core::clone::Clone>::clone
+      90.0  botlish_native::runtime::ops::equal'2
+      78.0  __memcpy_avx_unaligned_erms
+== base lpa point 1024 miss
+lpa point n=1024 miss: 2769 instructions per operation (tree base)
+     438.9  (generated code)
+     323.9  _int_free
+     286.0  botlish_native::runtime::ops::hash_mix
+     263.9  malloc
+     234.0  free
+     177.4  botlish_native::runtime::ops::hash_mix'2
+     129.1  <u64>::_fmt_inner
+     110.9  rt_int_mod
+     110.0  <i64 as alloc::string::SpecToString>::spec_to_string
+      99.0  <alloc::string::String as core::clone::Clone>::clone
+      98.0  rt_mutarray_get
+      78.0  <alloc::vec::Vec<alloc::string::String> as core::clone::Clone>::clone
+== base lpa point 1024 build
+lpa point n=1024 build: 4388 instructions per operation (tree base)
+    1034.0  (generated code)
+     345.5  rt_mutarray_get
+     330.7  _int_free
+     294.5  rt_mutarray_set
+     286.0  botlish_native::runtime::ops::hash_mix
+     270.0  malloc
+     261.8  botlish_native::runtime::ops::array_writable
+     237.4  free
+     202.6  rt_int_mod
+     135.4  botlish_native::runtime::ops::hash_mix'2
+     113.4  rt_mutarray_capacity
+     110.0  <i64 as alloc::string::SpecToString>::spec_to_string
+== base lpmono int-dense 1024 hit
+lpmono int-dense n=1024 hit: 782 instructions per operation (tree base)
+     233.5  (generated code)
+      91.9  rt_mutarray_get
+      74.4  botlish_native::runtime::ops::hash_mix
+      57.4  rt_int_mod
+      55.0  <i64 as alloc::string::SpecToString>::spec_to_string
+      54.2  _int_free
+      45.1  malloc
+      41.1  <u64>::_fmt_inner
+      39.0  free
+      17.6  __memcpy_avx_unaligned_erms
+      15.0  rt_mutarray_capacity
+      14.0  <u64>::_fmt
+== base lpmono int-dense 1024 miss
+lpmono int-dense n=1024 miss: 943 instructions per operation (tree base)
+     238.4  (generated code)
+     158.0  <u64>::_fmt_inner
+     118.0  botlish_native::runtime::ops::hash_mix
+      91.7  rt_int_mod
+      57.7  rt_mutarray_get
+      55.0  <i64 as alloc::string::SpecToString>::spec_to_string
+      54.0  _int_free
+      45.0  malloc
+      39.0  free
+      15.0  rt_mutarray_capacity
+      14.0  <u64>::_fmt
+      12.9  __memcpy_avx_unaligned_erms
+== base lpmono int-dense 1024 build
+lpmono int-dense n=1024 build: 2175 instructions per operation (tree base)
+     573.6  (generated code)
+     294.2  rt_mutarray_set
+     289.7  rt_mutarray_get
+     261.5  botlish_native::runtime::ops::array_writable
+     159.5  rt_int_mod
+      74.4  botlish_native::runtime::ops::hash_mix
+      60.9  <botlish_native::runtime::heap::Heap>::collect::<alloc::vec::into_iter::IntoIter<u64>>
+      60.7  _int_free
+      56.5  __memcpy_avx_unaligned_erms
+      55.0  <i64 as alloc::string::SpecToString>::spec_to_string
+      50.9  malloc
+      45.0  rt_mutarray_capacity
+== base lpmono str-short 1024 hit
+lpmono str-short n=1024 hit: 718 instructions per operation (tree base)
+     228.4  (generated code)
+     135.0  botlish_native::runtime::value::kind_of
+      93.4  rt_mutarray_get
+      81.1  botlish_native::runtime::ops::hash_mix
+      59.7  rt_int_mod
+      53.0  botlish_native::runtime::ops::equal
+      19.1  __memcmp_avx2_movbe
+      15.0  rt_mutarray_capacity
+      13.0  rt_value_eq
+      12.0  rt_hash
+      11.0  rt_str_len
+== base lpmono str-short 1024 miss
+lpmono str-short n=1024 miss: 576 instructions per operation (tree base)
+     242.9  (generated code)
+     104.9  rt_int_mod
+      82.5  botlish_native::runtime::ops::hash_mix
+      66.1  rt_mutarray_get
+      45.0  botlish_native::runtime::value::kind_of
+      15.0  rt_mutarray_capacity
+      12.0  rt_hash
+      11.0  rt_str_len
+== base lpmono str-short 1024 build
+lpmono str-short n=1024 build: 1927 instructions per operation (tree base)
+     575.1  (generated code)
+     297.1  rt_mutarray_get
+     294.2  rt_mutarray_set
+     261.5  botlish_native::runtime::ops::array_writable
+     171.3  rt_int_mod
+      81.1  botlish_native::runtime::ops::hash_mix
+      45.0  botlish_native::runtime::value::kind_of
+      45.0  rt_mutarray_capacity
+      43.1  <botlish_native::runtime::heap::Heap>::collect::<alloc::vec::into_iter::IntoIter<u64>>
+      15.7  __memcpy_avx_unaligned_erms
+      12.0  rt_hash
+      11.0  rt_str_len
+== base lpmono point 1024 hit
+lpmono point n=1024 hit: 2792 instructions per operation (tree base)
+     323.9  _int_free
+     312.3  (generated code)
+     286.0  botlish_native::runtime::ops::hash_mix
+     264.1  malloc
+     234.0  free
+     195.0  botlish_native::runtime::value::kind_of
+     135.4  botlish_native::runtime::ops::hash_mix'2
+     110.0  <i64 as alloc::string::SpecToString>::spec_to_string
+      99.4  rt_mutarray_get
+      99.0  <alloc::string::String as core::clone::Clone>::clone
+      90.0  botlish_native::runtime::ops::equal'2
+      78.9  __memcpy_avx_unaligned_erms
+== base lpmono point 1024 miss
+lpmono point n=1024 miss: 2599 instructions per operation (tree base)
+     323.8  _int_free
+     322.4  (generated code)
+     286.0  botlish_native::runtime::ops::hash_mix
+     263.9  malloc
+     234.0  free
+     177.4  botlish_native::runtime::ops::hash_mix'2
+     129.1  <u64>::_fmt_inner
+     110.9  rt_int_mod
+     110.0  <i64 as alloc::string::SpecToString>::spec_to_string
+      99.0  <alloc::string::String as core::clone::Clone>::clone
+      78.0  <alloc::vec::Vec<alloc::string::String> as core::clone::Clone>::clone
+      76.0  __memcpy_avx_unaligned_erms
+== base lpmono point 1024 build
+lpmono point n=1024 build: 3937 instructions per operation (tree base)
+     686.0  (generated code)
+     330.5  _int_free
+     317.1  rt_mutarray_get
+     294.2  rt_mutarray_set
+     286.0  botlish_native::runtime::ops::hash_mix
+     269.8  malloc
+     261.5  botlish_native::runtime::ops::array_writable
+     237.4  free
+     202.6  rt_int_mod
+     135.4  botlish_native::runtime::ops::hash_mix'2
+     110.0  <i64 as alloc::string::SpecToString>::spec_to_string
+      99.0  <alloc::string::String as core::clone::Clone>::clone
+== base lpmask int-dense 1024 hit
+lpmask int-dense n=1024 hit: 985 instructions per operation (tree base)
+     352.1  (generated code)
+     132.7  rt_mutarray_capacity
+     119.9  rt_mutarray_get
+      74.4  botlish_native::runtime::ops::hash_mix
+      55.0  <i64 as alloc::string::SpecToString>::spec_to_string
+      53.9  _int_free
+      45.0  malloc
+      41.1  <u64>::_fmt_inner
+      39.0  free
+      16.4  __memcpy_avx_unaligned_erms
+      14.0  <u64>::_fmt
+      12.0  rt_hash
+== base lpmask int-dense 1024 miss
+lpmask int-dense n=1024 miss: 1101 instructions per operation (tree base)
+     340.1  (generated code)
+     158.0  <u64>::_fmt_inner
+     137.8  rt_mutarray_capacity
+     118.0  botlish_native::runtime::ops::hash_mix
+      85.7  rt_mutarray_get
+      55.0  <i64 as alloc::string::SpecToString>::spec_to_string
+      54.3  _int_free
+      45.1  malloc
+      39.0  free
+      14.0  <u64>::_fmt
+      12.0  rt_hash
+      11.0  rt_str_len
+== base lpmask int-dense 1024 build
+lpmask int-dense n=1024 build: 3072 instructions per operation (tree base)
+    1114.5  (generated code)
+     533.5  rt_mutarray_capacity
+     318.1  rt_mutarray_get
+     294.5  rt_mutarray_set
+     261.8  botlish_native::runtime::ops::array_writable
+      74.4  botlish_native::runtime::ops::hash_mix
+      60.9  _int_free
+      60.9  <botlish_native::runtime::heap::Heap>::collect::<alloc::vec::into_iter::IntoIter<u64>>
+      55.1  __memcpy_avx_unaligned_erms
+      55.0  <i64 as alloc::string::SpecToString>::spec_to_string
+      50.9  malloc
+      42.4  free
+== base lpmask str-short 1024 hit
+lpmask str-short n=1024 hit: 925 instructions per operation (tree base)
+     347.5  (generated code)
+     135.1  rt_mutarray_capacity
+     135.0  botlish_native::runtime::value::kind_of
+     121.4  rt_mutarray_get
+      81.1  botlish_native::runtime::ops::hash_mix
+      53.0  botlish_native::runtime::ops::equal
+      19.1  __memcmp_avx2_movbe
+      13.0  rt_value_eq
+      12.0  rt_hash
+      11.0  rt_str_len
+== base lpmask str-short 1024 miss
+lpmask str-short n=1024 miss: 753 instructions per operation (tree base)
+     352.6  (generated code)
+     151.3  rt_mutarray_capacity
+      94.1  rt_mutarray_get
+      82.5  botlish_native::runtime::ops::hash_mix
+      45.0  botlish_native::runtime::value::kind_of
+      12.0  rt_hash
+      11.0  rt_str_len
+       2.0  _int_malloc
+       1.9  __memcpy_avx_unaligned_erms
+       0.7  unlink_chunk.isra.0
+== base lpmask str-short 1024 build
+lpmask str-short n=1024 build: 2835 instructions per operation (tree base)
+    1121.9  (generated code)
+     544.1  rt_mutarray_capacity
+     325.6  rt_mutarray_get
+     294.5  rt_mutarray_set
+     261.8  botlish_native::runtime::ops::array_writable
+      81.1  botlish_native::runtime::ops::hash_mix
+      45.0  botlish_native::runtime::value::kind_of
+      43.1  <botlish_native::runtime::heap::Heap>::collect::<alloc::vec::into_iter::IntoIter<u64>>
+      19.8  __memcpy_avx_unaligned_erms
+      12.0  rt_hash
+      11.0  rt_str_len
+      10.8  rt_mutarray_allocate
+== base lpmask point 1024 hit
+lpmask point n=1024 hit: 3006 instructions per operation (tree base)
+     437.2  (generated code)
+     323.6  _int_free
+     286.0  botlish_native::runtime::ops::hash_mix
+     264.4  malloc
+     234.0  free
+     195.0  botlish_native::runtime::value::kind_of
+     144.8  rt_mutarray_capacity
+     135.4  botlish_native::runtime::ops::hash_mix'2
+     127.4  rt_mutarray_get
+     110.0  <i64 as alloc::string::SpecToString>::spec_to_string
+      99.0  <alloc::string::String as core::clone::Clone>::clone
+      90.0  botlish_native::runtime::ops::equal'2
+== base lpmask point 1024 miss
+lpmask point n=1024 miss: 2780 instructions per operation (tree base)
+     435.9  (generated code)
+     324.1  _int_free
+     286.0  botlish_native::runtime::ops::hash_mix
+     264.0  malloc
+     234.0  free
+     177.4  botlish_native::runtime::ops::hash_mix'2
+     157.4  rt_mutarray_capacity
+     129.1  <u64>::_fmt_inner
+     110.0  <i64 as alloc::string::SpecToString>::spec_to_string
+      99.0  <alloc::string::String as core::clone::Clone>::clone
+      98.0  rt_mutarray_get
+      79.5  __memcpy_avx_unaligned_erms
+== base lpmask point 1024 build
+lpmask point n=1024 build: 4863 instructions per operation (tree base)
+    1247.8  (generated code)
+     573.7  rt_mutarray_capacity
+     345.5  rt_mutarray_get
+     330.7  _int_free
+     294.5  rt_mutarray_set
+     286.0  botlish_native::runtime::ops::hash_mix
+     270.1  malloc
+     261.8  botlish_native::runtime::ops::array_writable
+     237.4  free
+     135.4  botlish_native::runtime::ops::hash_mix'2
+     110.0  <i64 as alloc::string::SpecToString>::spec_to_string
+      99.0  <alloc::string::String as core::clone::Clone>::clone
+== combo lpa int-dense 1024 hit
+lpa int-dense n=1024 hit: 501 instructions per operation (tree combo)
+     325.1  (generated code)
+      79.4  botlish_native::runtime::ops::hash_mix
+      60.5  botlish_native::runtime::ops::decimal_text
+      14.0  rt_hash
+      11.0  rt_str_len
+      10.0  botlish_native::runtime::value::kind_of
+       0.7  _int_malloc
+== combo lpa int-dense 1024 miss
+lpa int-dense n=1024 miss: 674 instructions per operation (tree combo)
+     369.0  (generated code)
+     142.0  botlish_native::runtime::ops::decimal_text
+     123.0  botlish_native::runtime::ops::hash_mix
+      14.0  rt_hash
+      11.0  rt_str_len
+      10.0  botlish_native::runtime::value::kind_of
+       3.5  __memcpy_avx_unaligned_erms
+       0.9  _int_malloc
+       0.6  malloc_consolidate
+== combo lpa int-dense 1024 build
+lpa int-dense n=1024 build: 1338 instructions per operation (tree combo)
+    1006.6  (generated code)
+      79.4  botlish_native::runtime::ops::hash_mix
+      60.5  botlish_native::runtime::ops::decimal_text
+      60.4  <botlish_native::runtime::heap::Heap>::collect::<alloc::vec::into_iter::IntoIter<u64>>
+      30.8  __memcpy_avx_unaligned_erms
+      14.3  _int_malloc
+      14.0  rt_hash
+      11.0  rt_str_len
+      10.9  rt_mutarray_allocate
+      10.0  botlish_native::runtime::value::kind_of
+       6.6  _int_free
+       6.0  rt_mutarray_create
+== combo lpa str-short 1024 hit
+lpa str-short n=1024 hit: 669 instructions per operation (tree combo)
+     335.2  (generated code)
+     135.0  botlish_native::runtime::value::kind_of
+      84.1  botlish_native::runtime::ops::hash_mix
+      53.0  botlish_native::runtime::ops::equal
+      19.1  __memcmp_avx2_movbe
+      14.0  rt_hash
+      13.0  rt_value_eq
+      11.0  rt_str_len
+       2.3  _int_malloc
+       1.7  __memcpy_avx_unaligned_erms
+       1.0  unlink_chunk.isra.0
+== combo lpa str-short 1024 miss
+lpa str-short n=1024 miss: 557 instructions per operation (tree combo)
+     403.2  (generated code)
+      85.5  botlish_native::runtime::ops::hash_mix
+      45.0  botlish_native::runtime::value::kind_of
+      14.0  rt_hash
+      11.0  rt_str_len
+== combo lpa str-short 1024 build
+lpa str-short n=1024 build: 1333 instructions per operation (tree combo)
+    1035.3  (generated code)
+      84.1  botlish_native::runtime::ops::hash_mix
+      50.1  <botlish_native::runtime::heap::Heap>::collect::<alloc::vec::into_iter::IntoIter<u64>>
+      45.0  botlish_native::runtime::value::kind_of
+      15.5  __memcpy_avx_unaligned_erms
+      14.0  rt_hash
+      11.0  rt_str_len
+      11.0  _int_malloc
+      10.9  rt_mutarray_allocate
+       7.7  <alloc::vec::Vec<*mut botlish_native::runtime::value::Header>>::retain::<<botlish_native::runtime::heap::Heap>::collect<alloc::vec::into_iter::IntoIter<u64>>::{closure#3}>::{closure#0}
+       6.7  _int_free
+       6.4  malloc_consolidate
+== combo lpa point 1024 hit
+lpa point n=1024 hit: 1371 instructions per operation (tree combo)
+     359.8  (generated code)
+     305.0  <std::thread::local::LocalKey<core::cell::RefCell<core::option::Option<alloc::rc::Rc<botlish_native::runtime::vm::ProgramInfo>>>>>::with::<botlish_native::runtime::vm::current_program<core::result::Result<u64, ()>, botlish_native::runtime::ops::hash_mix::{closure#1}>::{closure#0}, core::result::Result<u64, ()>>
+     195.0  botlish_native::runtime::value::kind_of
+     145.4  botlish_native::runtime::ops::hash_mix'2
+     104.5  botlish_native::runtime::ops::decimal_text
+      90.0  botlish_native::runtime::ops::equal'2
+      78.0  botlish_native::runtime::ops::equal
+      46.0  botlish_native::runtime::ops::hash_mix
+      14.0  rt_hash
+      13.0  rt_value_eq
+      13.0  <botlish_native::runtime::vm::PROGRAM::{K#0}::{closure#0} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::RefCell<core::option::Option<alloc::rc::Rc<botlish_native::runtime::vm::ProgramInfo>>>>>,)>>::call_once
+      11.0  rt_str_len
+== combo lpa point 1024 miss
+lpa point n=1024 miss: 1221 instructions per operation (tree combo)
+     418.8  (generated code)
+     305.0  <std::thread::local::LocalKey<core::cell::RefCell<core::option::Option<alloc::rc::Rc<botlish_native::runtime::vm::ProgramInfo>>>>>::with::<botlish_native::runtime::vm::current_program<core::result::Result<u64, ()>, botlish_native::runtime::ops::hash_mix::{closure#1}>::{closure#0}, core::result::Result<u64, ()>>
+     187.4  botlish_native::runtime::ops::hash_mix'2
+     154.4  botlish_native::runtime::ops::decimal_text
+      65.0  botlish_native::runtime::value::kind_of
+      46.0  botlish_native::runtime::ops::hash_mix
+      14.0  rt_hash
+      13.0  <botlish_native::runtime::vm::PROGRAM::{K#0}::{closure#0} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::RefCell<core::option::Option<alloc::rc::Rc<botlish_native::runtime::vm::ProgramInfo>>>>>,)>>::call_once
+      11.0  rt_str_len
+       6.1  _int_malloc
+       1.5  unlink_chunk.isra.0
+       0.8  malloc_consolidate
+== combo lpa point 1024 build
+lpa point n=1024 build: 1965 instructions per operation (tree combo)
+    1113.4  (generated code)
+     305.0  <std::thread::local::LocalKey<core::cell::RefCell<core::option::Option<alloc::rc::Rc<botlish_native::runtime::vm::ProgramInfo>>>>>::with::<botlish_native::runtime::vm::current_program<core::result::Result<u64, ()>, botlish_native::runtime::ops::hash_mix::{closure#1}>::{closure#0}, core::result::Result<u64, ()>>
+     145.4  botlish_native::runtime::ops::hash_mix'2
+     104.5  botlish_native::runtime::ops::decimal_text
+      65.0  botlish_native::runtime::value::kind_of
+      57.4  <botlish_native::runtime::heap::Heap>::collect::<alloc::vec::into_iter::IntoIter<u64>>
+      46.0  botlish_native::runtime::ops::hash_mix
+      17.5  __memcpy_avx_unaligned_erms
+      14.0  rt_hash
+      13.0  <botlish_native::runtime::vm::PROGRAM::{K#0}::{closure#0} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::RefCell<core::option::Option<alloc::rc::Rc<botlish_native::runtime::vm::ProgramInfo>>>>>,)>>::call_once
+      11.5  _int_malloc
+      11.0  rt_str_len
+== combo lpmono int-dense 1024 hit
+lpmono int-dense n=1024 hit: 392 instructions per operation (tree combo)
+     219.1  (generated code)
+      79.4  botlish_native::runtime::ops::hash_mix
+      60.5  botlish_native::runtime::ops::decimal_text
+      14.0  rt_hash
+      11.0  rt_str_len
+      10.0  botlish_native::runtime::value::kind_of
+== combo lpmono int-dense 1024 miss
+lpmono int-dense n=1024 miss: 526 instructions per operation (tree combo)
+     214.1  (generated code)
+     142.0  botlish_native::runtime::ops::decimal_text
+     123.0  botlish_native::runtime::ops::hash_mix
+      14.0  rt_hash
+      11.3  __memcpy_avx_unaligned_erms
+      11.0  rt_str_len
+      10.0  botlish_native::runtime::value::kind_of
+== combo lpmono int-dense 1024 build
+lpmono int-dense n=1024 build: 1020 instructions per operation (tree combo)
+     694.8  (generated code)
+      79.4  botlish_native::runtime::ops::hash_mix
+      60.5  botlish_native::runtime::ops::decimal_text
+      60.4  <botlish_native::runtime::heap::Heap>::collect::<alloc::vec::into_iter::IntoIter<u64>>
+      20.3  __memcpy_avx_unaligned_erms
+      17.2  _int_malloc
+      14.0  rt_hash
+      11.0  rt_str_len
+      10.9  rt_mutarray_allocate
+      10.0  botlish_native::runtime::value::kind_of
+       6.7  _int_free
+       6.0  rt_mutarray_create
+== combo lpmono str-short 1024 hit
+lpmono str-short n=1024 hit: 559 instructions per operation (tree combo)
+     225.8  (generated code)
+     135.0  botlish_native::runtime::value::kind_of
+      84.1  botlish_native::runtime::ops::hash_mix
+      53.0  botlish_native::runtime::ops::equal
+      19.1  __memcmp_avx2_movbe
+      14.0  rt_hash
+      13.0  rt_value_eq
+      11.0  rt_str_len
+       3.2  _int_malloc
+       0.7  malloc_consolidate
+== combo lpmono str-short 1024 miss
+lpmono str-short n=1024 miss: 386 instructions per operation (tree combo)
+     229.1  (generated code)
+      85.5  botlish_native::runtime::ops::hash_mix
+      45.0  botlish_native::runtime::value::kind_of
+      14.0  rt_hash
+      11.0  rt_str_len
+       4.3  __memcpy_avx_unaligned_erms
+== combo lpmono str-short 1024 build
+lpmono str-short n=1024 build: 1013 instructions per operation (tree combo)
+     713.7  (generated code)
+      84.1  botlish_native::runtime::ops::hash_mix
+      50.1  <botlish_native::runtime::heap::Heap>::collect::<alloc::vec::into_iter::IntoIter<u64>>
+      45.0  botlish_native::runtime::value::kind_of
+      16.4  __memcpy_avx_unaligned_erms
+      14.0  rt_hash
+      13.5  _int_malloc
+      11.0  rt_str_len
+      10.9  rt_mutarray_allocate
+       7.7  <alloc::vec::Vec<*mut botlish_native::runtime::value::Header>>::retain::<<botlish_native::runtime::heap::Heap>::collect<alloc::vec::into_iter::IntoIter<u64>>::{closure#3}>::{closure#0}
+       6.7  _int_free
+       6.0  rt_mutarray_create
+== combo lpmono point 1024 hit
+lpmono point n=1024 hit: 1248 instructions per operation (tree combo)
+     305.0  <std::thread::local::LocalKey<core::cell::RefCell<core::option::Option<alloc::rc::Rc<botlish_native::runtime::vm::ProgramInfo>>>>>::with::<botlish_native::runtime::vm::current_program<core::result::Result<u64, ()>, botlish_native::runtime::ops::hash_mix::{closure#1}>::{closure#0}, core::result::Result<u64, ()>>
+     236.5  (generated code)
+     195.0  botlish_native::runtime::value::kind_of
+     145.4  botlish_native::runtime::ops::hash_mix'2
+     104.5  botlish_native::runtime::ops::decimal_text
+      90.0  botlish_native::runtime::ops::equal'2
+      78.0  botlish_native::runtime::ops::equal
+      46.0  botlish_native::runtime::ops::hash_mix
+      14.0  rt_hash
+      13.0  rt_value_eq
+      13.0  <botlish_native::runtime::vm::PROGRAM::{K#0}::{closure#0} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::RefCell<core::option::Option<alloc::rc::Rc<botlish_native::runtime::vm::ProgramInfo>>>>>,)>>::call_once
+      11.0  rt_str_len
+== combo lpmono point 1024 miss
+lpmono point n=1024 miss: 1027 instructions per operation (tree combo)
+     305.0  <std::thread::local::LocalKey<core::cell::RefCell<core::option::Option<alloc::rc::Rc<botlish_native::runtime::vm::ProgramInfo>>>>>::with::<botlish_native::runtime::vm::current_program<core::result::Result<u64, ()>, botlish_native::runtime::ops::hash_mix::{closure#1}>::{closure#0}, core::result::Result<u64, ()>>
+     235.9  (generated code)
+     187.4  botlish_native::runtime::ops::hash_mix'2
+     154.4  botlish_native::runtime::ops::decimal_text
+      65.0  botlish_native::runtime::value::kind_of
+      46.0  botlish_native::runtime::ops::hash_mix
+      14.0  rt_hash
+      13.0  <botlish_native::runtime::vm::PROGRAM::{K#0}::{closure#0} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::RefCell<core::option::Option<alloc::rc::Rc<botlish_native::runtime::vm::ProgramInfo>>>>>,)>>::call_once
+      11.0  rt_str_len
+== combo lpmono point 1024 build
+lpmono point n=1024 build: 1625 instructions per operation (tree combo)
+     766.5  (generated code)
+     305.0  <std::thread::local::LocalKey<core::cell::RefCell<core::option::Option<alloc::rc::Rc<botlish_native::runtime::vm::ProgramInfo>>>>>::with::<botlish_native::runtime::vm::current_program<core::result::Result<u64, ()>, botlish_native::runtime::ops::hash_mix::{closure#1}>::{closure#0}, core::result::Result<u64, ()>>
+     145.4  botlish_native::runtime::ops::hash_mix'2
+     104.5  botlish_native::runtime::ops::decimal_text
+      65.0  botlish_native::runtime::value::kind_of
+      57.4  <botlish_native::runtime::heap::Heap>::collect::<alloc::vec::into_iter::IntoIter<u64>>
+      46.0  botlish_native::runtime::ops::hash_mix
+      18.0  __memcpy_avx_unaligned_erms
+      15.7  _int_malloc
+      14.0  rt_hash
+      13.0  <botlish_native::runtime::vm::PROGRAM::{K#0}::{closure#0} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::RefCell<core::option::Option<alloc::rc::Rc<botlish_native::runtime::vm::ProgramInfo>>>>>,)>>::call_once
+      11.0  rt_str_len
+== combo lpmask int-dense 1024 hit
+lpmask int-dense n=1024 hit: 495 instructions per operation (tree combo)
+     318.9  (generated code)
+      79.4  botlish_native::runtime::ops::hash_mix
+      60.5  botlish_native::runtime::ops::decimal_text
+      14.0  rt_hash
+      11.0  rt_str_len
+      10.0  botlish_native::runtime::value::kind_of
+       1.0  malloc_consolidate
+== combo lpmask int-dense 1024 miss
+lpmask int-dense n=1024 miss: 617 instructions per operation (tree combo)
+     315.8  (generated code)
+     142.0  botlish_native::runtime::ops::decimal_text
+     123.0  botlish_native::runtime::ops::hash_mix
+      14.0  rt_hash
+      11.0  rt_str_len
+      10.0  botlish_native::runtime::value::kind_of
+       1.5  __memcpy_avx_unaligned_erms
+== combo lpmask int-dense 1024 build
+lpmask int-dense n=1024 build: 1338 instructions per operation (tree combo)
+    1005.1  (generated code)
+      79.4  botlish_native::runtime::ops::hash_mix
+      60.5  botlish_native::runtime::ops::decimal_text
+      60.4  <botlish_native::runtime::heap::Heap>::collect::<alloc::vec::into_iter::IntoIter<u64>>
+      33.5  __memcpy_avx_unaligned_erms
+      14.0  rt_hash
+      13.1  _int_malloc
+      11.0  rt_str_len
+      10.9  rt_mutarray_allocate
+      10.0  botlish_native::runtime::value::kind_of
+       6.0  rt_mutarray_create
+       6.0  _int_free
+== combo lpmask str-short 1024 hit
+lpmask str-short n=1024 hit: 653 instructions per operation (tree combo)
+     326.1  (generated code)
+     135.0  botlish_native::runtime::value::kind_of
+      84.1  botlish_native::runtime::ops::hash_mix
+      53.0  botlish_native::runtime::ops::equal
+      19.1  __memcmp_avx2_movbe
+      14.0  rt_hash
+      13.0  rt_value_eq
+      11.0  rt_str_len
+== combo lpmask str-short 1024 miss
+lpmask str-short n=1024 miss: 491 instructions per operation (tree combo)
+     339.2  (generated code)
+      85.5  botlish_native::runtime::ops::hash_mix
+      45.0  botlish_native::runtime::value::kind_of
+      14.0  rt_hash
+      11.0  rt_str_len
+== combo lpmask str-short 1024 build
+lpmask str-short n=1024 build: 1328 instructions per operation (tree combo)
+    1023.5  (generated code)
+      84.1  botlish_native::runtime::ops::hash_mix
+      50.1  <botlish_native::runtime::heap::Heap>::collect::<alloc::vec::into_iter::IntoIter<u64>>
+      45.0  botlish_native::runtime::value::kind_of
+      19.1  __memcpy_avx_unaligned_erms
+      14.2  _int_malloc
+      14.0  rt_hash
+      11.0  rt_str_len
+      10.9  rt_mutarray_allocate
+       7.7  <alloc::vec::Vec<*mut botlish_native::runtime::value::Header>>::retain::<<botlish_native::runtime::heap::Heap>::collect<alloc::vec::into_iter::IntoIter<u64>>::{closure#3}>::{closure#0}
+       6.8  _int_free
+       6.2  malloc_consolidate
+== combo lpmask point 1024 hit
+lpmask point n=1024 hit: 1364 instructions per operation (tree combo)
+     343.0  (generated code)
+     305.0  <std::thread::local::LocalKey<core::cell::RefCell<core::option::Option<alloc::rc::Rc<botlish_native::runtime::vm::ProgramInfo>>>>>::with::<botlish_native::runtime::vm::current_program<core::result::Result<u64, ()>, botlish_native::runtime::ops::hash_mix::{closure#1}>::{closure#0}, core::result::Result<u64, ()>>
+     195.0  botlish_native::runtime::value::kind_of
+     145.4  botlish_native::runtime::ops::hash_mix'2
+     104.5  botlish_native::runtime::ops::decimal_text
+      90.0  botlish_native::runtime::ops::equal'2
+      78.0  botlish_native::runtime::ops::equal
+      46.0  botlish_native::runtime::ops::hash_mix
+      14.0  rt_hash
+      13.0  rt_value_eq
+      13.0  <botlish_native::runtime::vm::PROGRAM::{K#0}::{closure#0} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::RefCell<core::option::Option<alloc::rc::Rc<botlish_native::runtime::vm::ProgramInfo>>>>>,)>>::call_once
+      11.0  rt_str_len
+== combo lpmask point 1024 miss
+lpmask point n=1024 miss: 1152 instructions per operation (tree combo)
+     349.9  (generated code)
+     305.0  <std::thread::local::LocalKey<core::cell::RefCell<core::option::Option<alloc::rc::Rc<botlish_native::runtime::vm::ProgramInfo>>>>>::with::<botlish_native::runtime::vm::current_program<core::result::Result<u64, ()>, botlish_native::runtime::ops::hash_mix::{closure#1}>::{closure#0}, core::result::Result<u64, ()>>
+     187.4  botlish_native::runtime::ops::hash_mix'2
+     154.4  botlish_native::runtime::ops::decimal_text
+      65.0  botlish_native::runtime::value::kind_of
+      46.0  botlish_native::runtime::ops::hash_mix
+      14.0  rt_hash
+      13.0  <botlish_native::runtime::vm::PROGRAM::{K#0}::{closure#0} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::RefCell<core::option::Option<alloc::rc::Rc<botlish_native::runtime::vm::ProgramInfo>>>>>,)>>::call_once
+      11.0  rt_str_len
+       4.1  __memcpy_avx_unaligned_erms
+       1.2  _int_malloc
+== combo lpmask point 1024 build
+lpmask point n=1024 build: 1931 instructions per operation (tree combo)
+    1074.6  (generated code)
+     305.0  <std::thread::local::LocalKey<core::cell::RefCell<core::option::Option<alloc::rc::Rc<botlish_native::runtime::vm::ProgramInfo>>>>>::with::<botlish_native::runtime::vm::current_program<core::result::Result<u64, ()>, botlish_native::runtime::ops::hash_mix::{closure#1}>::{closure#0}, core::result::Result<u64, ()>>
+     145.4  botlish_native::runtime::ops::hash_mix'2
+     104.5  botlish_native::runtime::ops::decimal_text
+      65.0  botlish_native::runtime::value::kind_of
+      57.4  <botlish_native::runtime::heap::Heap>::collect::<alloc::vec::into_iter::IntoIter<u64>>
+      46.0  botlish_native::runtime::ops::hash_mix
+      15.8  _int_malloc
+      15.5  __memcpy_avx_unaligned_erms
+      14.0  rt_hash
+      13.0  <botlish_native::runtime::vm::PROGRAM::{K#0}::{closure#0} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::RefCell<core::option::Option<alloc::rc::Rc<botlish_native::runtime::vm::ProgramInfo>>>>>,)>>::call_once
+      11.0  rt_str_len
+== probe lpa int-dense 1024 hit
+lpa int-dense n=1024 hit: 884 instructions per operation (tree probe)
+     303.0  (generated code)
+     119.9  rt_mutarray_get
+      74.4  botlish_native::runtime::ops::hash_mix
+      57.4  rt_int_mod
+      55.0  <i64 as alloc::string::SpecToString>::spec_to_string
+      54.4  _int_free
+      45.1  malloc
+      41.1  <u64>::_fmt_inner
+      39.0  free
+      19.2  rt_mutarray_capacity
+      19.0  __memcpy_avx_unaligned_erms
+      14.0  <u64>::_fmt
+== probe lpa int-dense 1024 miss
+lpa int-dense n=1024 miss: 1088 instructions per operation (tree probe)
+     336.9  (generated code)
+     158.0  <u64>::_fmt_inner
+     118.0  botlish_native::runtime::ops::hash_mix
+      91.7  rt_int_mod
+      85.7  rt_mutarray_get
+      55.0  <i64 as alloc::string::SpecToString>::spec_to_string
+      54.2  _int_free
+      44.8  malloc
+      39.0  free
+      30.9  rt_mutarray_capacity
+      15.1  __memcpy_avx_unaligned_erms
+      14.0  <u64>::_fmt
+== probe lpa int-dense 1024 build
+lpa int-dense n=1024 build: 2559 instructions per operation (tree probe)
+     885.7  (generated code)
+     318.1  rt_mutarray_get
+     294.5  rt_mutarray_set
+     261.8  botlish_native::runtime::ops::array_writable
+     159.5  rt_int_mod
+      98.7  rt_mutarray_capacity
+      74.4  botlish_native::runtime::ops::hash_mix
+      60.9  _int_free
+      60.9  <botlish_native::runtime::heap::Heap>::collect::<alloc::vec::into_iter::IntoIter<u64>>
+      55.0  <i64 as alloc::string::SpecToString>::spec_to_string
+      51.8  __memcpy_avx_unaligned_erms
+      50.5  malloc
+== probe lpa str-short 1024 hit
+lpa str-short n=1024 hit: 821 instructions per operation (tree probe)
+     300.2  (generated code)
+     135.0  botlish_native::runtime::value::kind_of
+     121.4  rt_mutarray_get
+      81.1  botlish_native::runtime::ops::hash_mix
+      59.7  rt_int_mod
+      53.0  botlish_native::runtime::ops::equal
+      20.0  rt_mutarray_capacity
+      19.1  __memcmp_avx2_movbe
+      13.0  rt_value_eq
+      12.0  rt_hash
+      11.0  rt_str_len
+       1.3  __memcpy_avx_unaligned_erms
+== probe lpa str-short 1024 miss
+lpa str-short n=1024 miss: 741 instructions per operation (tree probe)
+     353.7  (generated code)
+     104.9  rt_int_mod
+      94.1  rt_mutarray_get
+      82.5  botlish_native::runtime::ops::hash_mix
+      45.0  botlish_native::runtime::value::kind_of
+      35.4  rt_mutarray_capacity
+      12.0  rt_hash
+      11.0  rt_str_len
+       2.1  __memcpy_avx_unaligned_erms
+== probe lpa str-short 1024 build
+lpa str-short n=1024 build: 2339 instructions per operation (tree probe)
+     897.3  (generated code)
+     325.6  rt_mutarray_get
+     294.5  rt_mutarray_set
+     261.8  botlish_native::runtime::ops::array_writable
+     171.3  rt_int_mod
+     102.7  rt_mutarray_capacity
+      81.1  botlish_native::runtime::ops::hash_mix
+      45.0  botlish_native::runtime::value::kind_of
+      43.1  <botlish_native::runtime::heap::Heap>::collect::<alloc::vec::into_iter::IntoIter<u64>>
+      16.4  __memcpy_avx_unaligned_erms
+      12.0  rt_hash
+      11.0  rt_str_len
+== probe lpa point 1024 hit
+lpa point n=1024 hit: 2908 instructions per operation (tree probe)
+     392.9  (generated code)
+     323.9  _int_free
+     286.0  botlish_native::runtime::ops::hash_mix
+     264.3  malloc
+     234.0  free
+     195.0  botlish_native::runtime::value::kind_of
+     135.4  botlish_native::runtime::ops::hash_mix'2
+     127.4  rt_mutarray_get
+     110.0  <i64 as alloc::string::SpecToString>::spec_to_string
+      99.0  <alloc::string::String as core::clone::Clone>::clone
+      90.0  botlish_native::runtime::ops::equal'2
+      78.0  botlish_native::runtime::ops::equal
+== probe lpa point 1024 miss
+lpa point n=1024 miss: 2767 instructions per operation (tree probe)
+     438.9  (generated code)
+     323.9  _int_free
+     286.0  botlish_native::runtime::ops::hash_mix
+     264.1  malloc
+     234.0  free
+     177.4  botlish_native::runtime::ops::hash_mix'2
+     129.1  <u64>::_fmt_inner
+     110.9  rt_int_mod
+     110.0  <i64 as alloc::string::SpecToString>::spec_to_string
+      99.0  <alloc::string::String as core::clone::Clone>::clone
+      98.0  rt_mutarray_get
+      78.8  __memcpy_avx_unaligned_erms
+== probe lpa point 1024 build
+lpa point n=1024 build: 4391 instructions per operation (tree probe)
+    1034.0  (generated code)
+     345.5  rt_mutarray_get
+     331.0  _int_free
+     294.5  rt_mutarray_set
+     286.0  botlish_native::runtime::ops::hash_mix
+     269.9  malloc
+     261.8  botlish_native::runtime::ops::array_writable
+     237.4  free
+     202.6  rt_int_mod
+     135.4  botlish_native::runtime::ops::hash_mix'2
+     113.4  rt_mutarray_capacity
+     110.0  <i64 as alloc::string::SpecToString>::spec_to_string
+== probe lpp int-dense 1024 hit
+lpp int-dense n=1024 hit: 767 instructions per operation (tree probe)
+     163.0  (generated code)
+      98.9  rt_mutarray_probe
+      74.4  botlish_native::runtime::ops::hash_mix
+      56.0  rt_mutarray_get
+      55.0  <i64 as alloc::string::SpecToString>::spec_to_string
+      54.4  _int_free
+      45.2  malloc
+      45.0  botlish_native::runtime::ops::equal
+      41.1  <u64>::_fmt_inner
+      39.0  free
+      30.0  botlish_native::runtime::value::kind_of
+      18.2  __memcpy_avx_unaligned_erms
+== probe lpp int-dense 1024 miss
+lpp int-dense n=1024 miss: 821 instructions per operation (tree probe)
+     167.0  (generated code)
+     158.0  <u64>::_fmt_inner
+     118.0  botlish_native::runtime::ops::hash_mix
+      87.9  rt_mutarray_probe
+      55.0  <i64 as alloc::string::SpecToString>::spec_to_string
+      53.8  _int_free
+      45.0  malloc
+      39.0  free
+      28.0  rt_mutarray_get
+      14.0  <u64>::_fmt
+      13.5  __memcpy_avx_unaligned_erms
+      12.0  rt_hash
+== probe lpp int-dense 1024 build
+lpp int-dense n=1024 build: 2180 instructions per operation (tree probe)
+     623.4  (generated code)
+     294.5  rt_mutarray_set
+     261.8  botlish_native::runtime::ops::array_writable
+     218.1  rt_mutarray_get
+     191.5  rt_mutarray_probe
+      74.4  botlish_native::runtime::ops::hash_mix
+      61.1  _int_free
+      60.9  <botlish_native::runtime::heap::Heap>::collect::<alloc::vec::into_iter::IntoIter<u64>>
+      55.0  <i64 as alloc::string::SpecToString>::spec_to_string
+      51.0  __memcpy_avx_unaligned_erms
+      50.7  malloc
+      45.1  rt_mutarray_capacity
+== probe lpp str-short 1024 hit
+lpp str-short n=1024 hit: 618 instructions per operation (tree probe)
+     151.0  (generated code)
+     135.0  botlish_native::runtime::value::kind_of
+      99.7  rt_mutarray_probe
+      81.1  botlish_native::runtime::ops::hash_mix
+      56.0  rt_mutarray_get
+      53.0  botlish_native::runtime::ops::equal
+      19.1  __memcmp_avx2_movbe
+      12.0  rt_hash
+      11.0  rt_str_len
+== probe lpp str-short 1024 miss
+lpp str-short n=1024 miss: 431 instructions per operation (tree probe)
+     155.0  (generated code)
+      92.1  rt_mutarray_probe
+      82.5  botlish_native::runtime::ops::hash_mix
+      45.0  botlish_native::runtime::value::kind_of
+      28.0  rt_mutarray_get
+      12.0  rt_hash
+      11.0  rt_str_len
+       2.2  _int_malloc
+       2.1  __memcpy_avx_unaligned_erms
+== probe lpp str-short 1024 build
+lpp str-short n=1024 build: 1909 instructions per operation (tree probe)
+     611.4  (generated code)
+     294.5  rt_mutarray_set
+     261.8  botlish_native::runtime::ops::array_writable
+     218.1  rt_mutarray_get
+     195.2  rt_mutarray_probe
+      81.1  botlish_native::runtime::ops::hash_mix
+      45.1  rt_mutarray_capacity
+      45.0  botlish_native::runtime::value::kind_of
+      43.1  <botlish_native::runtime::heap::Heap>::collect::<alloc::vec::into_iter::IntoIter<u64>>
+      14.3  __memcpy_avx_unaligned_erms
+      12.0  rt_hash
+      11.0  rt_str_len
+== probe lpp point 1024 hit
+lpp point n=1024 hit: 2660 instructions per operation (tree probe)
+     323.6  _int_free
+     286.0  botlish_native::runtime::ops::hash_mix
+     264.0  malloc
+     234.0  free
+     223.0  (generated code)
+     195.0  botlish_native::runtime::value::kind_of
+     135.4  botlish_native::runtime::ops::hash_mix'2
+     110.0  <i64 as alloc::string::SpecToString>::spec_to_string
+     102.7  rt_mutarray_probe
+      99.0  <alloc::string::String as core::clone::Clone>::clone
+      90.0  botlish_native::runtime::ops::equal'2
+      78.5  __memcpy_avx_unaligned_erms
+== probe lpp point 1024 miss
+lpp point n=1024 miss: 2436 instructions per operation (tree probe)
+     323.8  _int_free
+     286.0  botlish_native::runtime::ops::hash_mix
+     264.2  malloc
+     234.0  free
+     227.0  (generated code)
+     177.4  botlish_native::runtime::ops::hash_mix'2
+     129.1  <u64>::_fmt_inner
+     110.0  <i64 as alloc::string::SpecToString>::spec_to_string
+      99.0  <alloc::string::String as core::clone::Clone>::clone
+      94.0  rt_mutarray_probe
+      78.0  <alloc::vec::Vec<alloc::string::String> as core::clone::Clone>::clone
+      77.3  __memcpy_avx_unaligned_erms
+== probe lpp point 1024 build
+lpp point n=1024 build: 3846 instructions per operation (tree probe)
+     683.4  (generated code)
+     330.5  _int_free
+     294.5  rt_mutarray_set
+     286.0  botlish_native::runtime::ops::hash_mix
+     270.2  malloc
+     261.8  botlish_native::runtime::ops::array_writable
+     237.4  free
+     218.1  rt_mutarray_get
+     205.2  rt_mutarray_probe
+     135.4  botlish_native::runtime::ops::hash_mix'2
+     110.0  <i64 as alloc::string::SpecToString>::spec_to_string
+     102.2  __memcpy_avx_unaligned_erms
+== comboprobe lpp int-dense 1024 hit
+lpp int-dense n=1024 hit: 486 instructions per operation (tree comboprobe)
+     160.0  (generated code)
+      92.9  rt_mutarray_probe
+      79.4  botlish_native::runtime::ops::hash_mix
+      60.5  botlish_native::runtime::ops::decimal_text
+      45.0  botlish_native::runtime::ops::equal
+      30.0  botlish_native::runtime::value::kind_of
+      14.0  rt_hash
+      11.0  rt_str_len
+== comboprobe lpp int-dense 1024 miss
+lpp int-dense n=1024 miss: 544 instructions per operation (tree comboprobe)
+     159.0  (generated code)
+     142.0  botlish_native::runtime::ops::decimal_text
+     123.0  botlish_native::runtime::ops::hash_mix
+      87.9  rt_mutarray_probe
+      14.0  rt_hash
+      11.0  rt_str_len
+      10.0  botlish_native::runtime::value::kind_of
+== comboprobe lpp int-dense 1024 build
+lpp int-dense n=1024 build: 1200 instructions per operation (tree comboprobe)
+     671.2  (generated code)
+     191.5  rt_mutarray_probe
+      79.4  botlish_native::runtime::ops::hash_mix
+      60.5  botlish_native::runtime::ops::decimal_text
+      60.4  <botlish_native::runtime::heap::Heap>::collect::<alloc::vec::into_iter::IntoIter<u64>>
+      36.6  __memcpy_avx_unaligned_erms
+      14.0  rt_hash
+      13.9  _int_malloc
+      11.0  rt_str_len
+      10.9  rt_mutarray_allocate
+      10.0  botlish_native::runtime::value::kind_of
+       7.0  _int_free
+== comboprobe lpp str-short 1024 hit
+lpp str-short n=1024 hit: 570 instructions per operation (tree comboprobe)
+     160.0  (generated code)
+     135.0  botlish_native::runtime::value::kind_of
+      93.7  rt_mutarray_probe
+      84.1  botlish_native::runtime::ops::hash_mix
+      53.0  botlish_native::runtime::ops::equal
+      19.0  __memcmp_avx2_movbe
+      14.0  rt_hash
+      11.0  rt_str_len
+== comboprobe lpp str-short 1024 miss
+lpp str-short n=1024 miss: 407 instructions per operation (tree comboprobe)
+     159.0  (generated code)
+      92.1  rt_mutarray_probe
+      85.5  botlish_native::runtime::ops::hash_mix
+      45.0  botlish_native::runtime::value::kind_of
+      14.0  rt_hash
+      11.0  rt_str_len
+       0.6  _int_malloc
+== comboprobe lpp str-short 1024 build
+lpp str-short n=1024 build: 1167 instructions per operation (tree comboprobe)
+     671.2  (generated code)
+     195.2  rt_mutarray_probe
+      84.1  botlish_native::runtime::ops::hash_mix
+      50.1  <botlish_native::runtime::heap::Heap>::collect::<alloc::vec::into_iter::IntoIter<u64>>
+      45.0  botlish_native::runtime::value::kind_of
+      15.8  __memcpy_avx_unaligned_erms
+      14.0  rt_hash
+      12.6  _int_malloc
+      11.0  rt_str_len
+      10.9  rt_mutarray_allocate
+       7.7  <alloc::vec::Vec<*mut botlish_native::runtime::value::Header>>::retain::<<botlish_native::runtime::heap::Heap>::collect<alloc::vec::into_iter::IntoIter<u64>>::{closure#3}>::{closure#0}
+       6.8  malloc_consolidate
+== comboprobe lpp point 1024 hit
+lpp point n=1024 hit: 1258 instructions per operation (tree comboprobe)
+     305.0  <std::thread::local::LocalKey<core::cell::RefCell<core::option::Option<alloc::rc::Rc<botlish_native::runtime::vm::ProgramInfo>>>>>::with::<botlish_native::runtime::vm::current_program<core::result::Result<u64, ()>, botlish_native::runtime::ops::hash_mix::{closure#1}>::{closure#0}, core::result::Result<u64, ()>>
+     195.0  botlish_native::runtime::value::kind_of
+     160.0  (generated code)
+     145.4  botlish_native::runtime::ops::hash_mix'2
+     104.5  botlish_native::runtime::ops::decimal_text
+      96.7  rt_mutarray_probe
+      90.0  botlish_native::runtime::ops::equal'2
+      78.0  botlish_native::runtime::ops::equal
+      46.0  botlish_native::runtime::ops::hash_mix
+      14.0  rt_hash
+      13.0  <botlish_native::runtime::vm::PROGRAM::{K#0}::{closure#0} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::RefCell<core::option::Option<alloc::rc::Rc<botlish_native::runtime::vm::ProgramInfo>>>>>,)>>::call_once
+      11.0  rt_str_len
+== comboprobe lpp point 1024 miss
+lpp point n=1024 miss: 1048 instructions per operation (tree comboprobe)
+     305.0  <std::thread::local::LocalKey<core::cell::RefCell<core::option::Option<alloc::rc::Rc<botlish_native::runtime::vm::ProgramInfo>>>>>::with::<botlish_native::runtime::vm::current_program<core::result::Result<u64, ()>, botlish_native::runtime::ops::hash_mix::{closure#1}>::{closure#0}, core::result::Result<u64, ()>>
+     187.4  botlish_native::runtime::ops::hash_mix'2
+     159.0  (generated code)
+     154.4  botlish_native::runtime::ops::decimal_text
+      94.0  rt_mutarray_probe
+      65.0  botlish_native::runtime::value::kind_of
+      46.0  botlish_native::runtime::ops::hash_mix
+      14.0  rt_hash
+      13.0  <botlish_native::runtime::vm::PROGRAM::{K#0}::{closure#0} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::RefCell<core::option::Option<alloc::rc::Rc<botlish_native::runtime::vm::ProgramInfo>>>>>,)>>::call_once
+      11.0  rt_str_len
+== comboprobe lpp point 1024 build
+lpp point n=1024 build: 1734 instructions per operation (tree comboprobe)
+     671.2  (generated code)
+     305.0  <std::thread::local::LocalKey<core::cell::RefCell<core::option::Option<alloc::rc::Rc<botlish_native::runtime::vm::ProgramInfo>>>>>::with::<botlish_native::runtime::vm::current_program<core::result::Result<u64, ()>, botlish_native::runtime::ops::hash_mix::{closure#1}>::{closure#0}, core::result::Result<u64, ()>>
+     205.2  rt_mutarray_probe
+     145.4  botlish_native::runtime::ops::hash_mix'2
+     104.5  botlish_native::runtime::ops::decimal_text
+      65.0  botlish_native::runtime::value::kind_of
+      57.4  <botlish_native::runtime::heap::Heap>::collect::<alloc::vec::into_iter::IntoIter<u64>>
+      46.0  botlish_native::runtime::ops::hash_mix
+      18.0  __memcpy_avx_unaligned_erms
+      14.9  _int_malloc
+      14.0  rt_hash
+      13.0  <botlish_native::runtime::vm::PROGRAM::{K#0}::{closure#0} as core::ops::function::FnOnce<(core::option::Option<&mut core::option::Option<core::cell::RefCell<core::option::Option<alloc::rc::Rc<botlish_native::runtime::vm::ProgramInfo>>>>>,)>>::call_once

@@ -1,0 +1,6 @@
+hashcost	int-dense	10.26	25.21	7.94
+hashcost	int-sparse	20.47	33.68	8.16
+hashcost	int-big	76.40	55.80	10.34
+hashcost	str-short	4.51	5.57	11.91
+hashcost	str-medium	25.63	29.58	19.53
+hashcost	point	29.27	29.57	13.40

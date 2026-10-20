@@ -14,8 +14,8 @@ measured on:
 |---|---|
 | `baseline`, `base` | commit `2aa20d6`, before the prototypes |
 | `hash`, `inline`, `mod`, `bounds`, `vs` | the baseline plus one prototype (RO-1, CG-1, CG-2, CP-1..3, VS-1/VS-2) |
-| `combo` | the branch with all five prototypes merged (the report's "merged tree"), before the review fixes |
-| `fixed` | the merged tree after the review fixes (`plan5.sh`): deterministic counts only |
+| `combo` | the branch with all five prototypes merged (the report's "merged tree"), before the review fixes (commit `340e966`) |
+| `fixed` | the merged tree after the review fixes (merges `cd7ba76`, `a71467d`, `1198a1d`; `plan5.sh`): counts only, no timings |
 | `probe`, `comboprobe` | the baseline, and the merged tree, plus the probe primitive (branch `exp-probe-primitive`) |
 | `rust` | the Rust reference |
 
@@ -28,8 +28,10 @@ measured on:
 * **The first method.** Files from the first sweeps timed against a
   separately timed key run. Their lookup and build columns are
   superseded, as marked below.
-* **Deterministic files.** Instruction counts, profiles, allocations,
-  copies, memory and NIR do not depend on the machine's load.
+* **Counts.** Allocations, copies, memory and NIR are deterministic.
+  Instruction counts and profiles do not depend on the machine's load,
+  but repeat only within about 5 % per operation (20 % for chaining's
+  String misses): `instructions-repeat.tsv` has repeated counts.
 
 ## Files
 
@@ -50,11 +52,12 @@ measured on:
 | `ladder-a.tsv`, `ladder-c.tsv` | the prototype ladders, first round | lookups as passes, builds first method (superseded) |
 | `ladder-a2.tsv`, `ladder-c2.tsv` | the prototype ladders and the probe primitive, three alternating rounds | passes |
 | `rust-*.tsv` | the Rust reference: sweep, mixed, probe statistics, hash cost, insert spikes | its own timings and counts |
-| `instructions.tsv` | instructions per operation (callgrind) | deterministic |
-| `profiles.txt` | instructions per operation and per function | deterministic |
+| `instructions.tsv` | instructions per operation (callgrind) | counts |
+| `instructions-repeat.tsv` | the operations whose `fixed` count differs from `combo` by more than 3 %, counted twice more on each tree | counts |
+| `profiles.txt` | instructions per operation and per function | counts |
 | `allocs.tsv` | managed-heap allocations per lookup | deterministic |
-| `copies-*.txt`, `attribution.txt` | MutableArray copies (shares, detaches, elements copied) | deterministic |
-| `memory-*.tsv` | bytes allocated and peak live bytes per entry | deterministic |
-| `nir-*.txt` | each table's specialized functions: machine-code size, operations, facts | deterministic |
+| `copies-*.txt`, `attribution.txt` | MutableArray copies (shares, detaches, elements copied); `combo` and `fixed` are identical | deterministic |
+| `memory-*.tsv` | bytes allocated and peak live bytes per entry; `combo` and `fixed` are identical | deterministic |
+| `nir-*.txt` | each table's specialized functions: machine-code size, operations, facts; all three trees with the same driver, `combo` and `fixed` identical | deterministic |
 | `unrelated-*.txt`, `corpus-again.txt` | workloads unrelated to tables, both trees | timings |
-| `fuzz-fixed.txt` | every table fuzzed on four backends after the review fixes | correctness |
+| `fuzz-fixed.txt` | every table fuzzed after the review fixes: four backends, `ht0` three (CG-3) | correctness |

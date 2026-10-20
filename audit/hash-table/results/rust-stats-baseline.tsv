@@ -1,3 +1,18 @@
+probes	int-dense	512	1/2	lp	1024	0.500	hit	1.336	1	3	6	8	miss	2.282	2	6	8	10
+probes	int-dense	512	1/2	rh	1024	0.500	hit	1.336	1	2	3	3	miss	1.697	2	3	4	4
+probes	int-dense	512	1/2	chain	512	1.000	hit	1.348	1	2	3	3	miss	1.061	1	2	3	3
+buckets	int-dense	512	512	160,210,124,18,0,0,0,0,0
+distribution	int-dense	512	1024	0.500	chi2	856.0	empty	594	mixed-chi2	1016.0	mixed-empty	618	knuth-hit	1.500	knuth-miss	2.500
+probes	int-dense	512	7/10	lp	1024	0.500	hit	1.336	1	3	6	8	miss	2.282	2	6	8	10
+probes	int-dense	512	7/10	rh	1024	0.500	hit	1.336	1	2	3	3	miss	1.697	2	3	4	4
+probes	int-dense	512	7/10	chain	512	1.000	hit	1.348	1	2	3	3	miss	1.061	1	2	3	3
+buckets	int-dense	512	512	160,210,124,18,0,0,0,0,0
+distribution	int-dense	512	1024	0.500	chi2	856.0	empty	594	mixed-chi2	1016.0	mixed-empty	618	knuth-hit	1.500	knuth-miss	2.500
+probes	int-dense	512	17/20	lp	1024	0.500	hit	1.336	1	3	6	8	miss	2.282	2	6	8	10
+probes	int-dense	512	17/20	rh	1024	0.500	hit	1.336	1	2	3	3	miss	1.697	2	3	4	4
+probes	int-dense	512	17/20	chain	512	1.000	hit	1.348	1	2	3	3	miss	1.061	1	2	3	3
+buckets	int-dense	512	512	160,210,124,18,0,0,0,0,0
+distribution	int-dense	512	1024	0.500	chi2	856.0	empty	594	mixed-chi2	1016.0	mixed-empty	618	knuth-hit	1.500	knuth-miss	2.500
 probes	int-dense	716	1/2	lp	2048	0.350	hit	1.077	1	2	2	4	miss	1.552	1	4	5	7
 probes	int-dense	716	1/2	rh	2048	0.350	hit	1.077	1	2	2	2	miss	1.375	1	2	3	3
 probes	int-dense	716	1/2	chain	1024	0.699	hit	1.235	1	2	3	3	miss	0.721	1	2	2	3
@@ -13,21 +28,36 @@ probes	int-dense	716	17/20	rh	1024	0.699	hit	1.626	1	3	4	5	miss	2.159	2	4	5	5
 probes	int-dense	716	17/20	chain	1024	0.699	hit	1.235	1	2	3	3	miss	0.721	1	2	2	3
 buckets	int-dense	716	1024	464,416,132,12,0,0,0,0,0
 distribution	int-dense	716	1024	0.699	chi2	788.5	empty	464	mixed-chi2	1028.8	mixed-empty	506	knuth-hit	2.162	knuth-miss	6.027
-probes	int-dense	1024	1/2	lp	2048	0.500	hit	1.281	1	3	5	7	miss	2.114	2	5	9	11
-probes	int-dense	1024	1/2	rh	2048	0.500	hit	1.281	1	2	3	4	miss	1.607	2	3	3	4
-probes	int-dense	1024	1/2	chain	1024	1.000	hit	1.381	1	3	3	4	miss	1.000	1	3	3	4
-buckets	int-dense	1024	1024	334,410,228,50,2,0,0,0,0
-distribution	int-dense	1024	2048	0.500	chi2	1656.0	empty	1176	mixed-chi2	2024.0	mixed-empty	1240	knuth-hit	1.500	knuth-miss	2.500
-probes	int-dense	1024	7/10	lp	2048	0.500	hit	1.281	1	3	5	7	miss	2.114	2	5	9	11
-probes	int-dense	1024	7/10	rh	2048	0.500	hit	1.281	1	2	3	4	miss	1.607	2	3	3	4
-probes	int-dense	1024	7/10	chain	1024	1.000	hit	1.381	1	3	3	4	miss	1.000	1	3	3	4
-buckets	int-dense	1024	1024	334,410,228,50,2,0,0,0,0
-distribution	int-dense	1024	2048	0.500	chi2	1656.0	empty	1176	mixed-chi2	2024.0	mixed-empty	1240	knuth-hit	1.500	knuth-miss	2.500
-probes	int-dense	1024	17/20	lp	2048	0.500	hit	1.281	1	3	5	7	miss	2.114	2	5	9	11
-probes	int-dense	1024	17/20	rh	2048	0.500	hit	1.281	1	2	3	4	miss	1.607	2	3	3	4
-probes	int-dense	1024	17/20	chain	1024	1.000	hit	1.381	1	3	3	4	miss	1.000	1	3	3	4
-buckets	int-dense	1024	1024	334,410,228,50,2,0,0,0,0
-distribution	int-dense	1024	2048	0.500	chi2	1656.0	empty	1176	mixed-chi2	2024.0	mixed-empty	1240	knuth-hit	1.500	knuth-miss	2.500
+probes	int-dense	870	1/2	lp	2048	0.425	hit	1.144	1	2	4	6	miss	1.781	1	5	7	9
+probes	int-dense	870	1/2	rh	2048	0.425	hit	1.144	1	2	2	3	miss	1.461	1	2	3	3
+probes	int-dense	870	1/2	chain	1024	0.850	hit	1.262	1	2	3	3	miss	0.842	1	2	3	3
+buckets	int-dense	870	1024	362,474,168,20,0,0,0,0,0
+distribution	int-dense	870	2048	0.425	chi2	1535.8	empty	1254	mixed-chi2	2030.2	mixed-empty	1338	knuth-hit	1.369	knuth-miss	2.011
+probes	int-dense	870	7/10	lp	2048	0.425	hit	1.144	1	2	4	6	miss	1.781	1	5	7	9
+probes	int-dense	870	7/10	rh	2048	0.425	hit	1.144	1	2	2	3	miss	1.461	1	2	3	3
+probes	int-dense	870	7/10	chain	1024	0.850	hit	1.262	1	2	3	3	miss	0.842	1	2	3	3
+buckets	int-dense	870	1024	362,474,168,20,0,0,0,0,0
+distribution	int-dense	870	2048	0.425	chi2	1535.8	empty	1254	mixed-chi2	2030.2	mixed-empty	1338	knuth-hit	1.369	knuth-miss	2.011
+probes	int-dense	870	17/20	lp	1024	0.850	hit	2.320	1	8	19	39	miss	10.802	8	32	41	45
+probes	int-dense	870	17/20	rh	1024	0.850	hit	2.320	2	4	5	7	miss	2.988	3	5	6	7
+probes	int-dense	870	17/20	chain	1024	0.850	hit	1.262	1	2	3	3	miss	0.842	1	2	3	3
+buckets	int-dense	870	1024	362,474,168,20,0,0,0,0,0
+distribution	int-dense	870	1024	0.850	chi2	690.7	empty	362	mixed-chi2	1043.8	mixed-empty	445	knuth-hit	3.825	knuth-miss	22.607
+probes	int-dense	8192	1/2	lp	16384	0.500	hit	1.570	1	4	7	20	miss	2.536	1	8	15	26
+probes	int-dense	8192	1/2	rh	16384	0.500	hit	1.570	1	3	4	7	miss	1.774	1	4	5	8
+probes	int-dense	8192	1/2	chain	8192	1.000	hit	1.435	1	3	4	5	miss	0.952	1	3	3	5
+buckets	int-dense	8192	8192	2818,3202,1618,470,76,8,0,0,0
+distribution	int-dense	8192	16384	0.500	chi2	17240.0	empty	10074	mixed-chi2	16612.0	mixed-empty	9979	knuth-hit	1.500	knuth-miss	2.500
+probes	int-dense	8192	7/10	lp	16384	0.500	hit	1.570	1	4	7	20	miss	2.536	1	8	15	26
+probes	int-dense	8192	7/10	rh	16384	0.500	hit	1.570	1	3	4	7	miss	1.774	1	4	5	8
+probes	int-dense	8192	7/10	chain	8192	1.000	hit	1.435	1	3	4	5	miss	0.952	1	3	3	5
+buckets	int-dense	8192	8192	2818,3202,1618,470,76,8,0,0,0
+distribution	int-dense	8192	16384	0.500	chi2	17240.0	empty	10074	mixed-chi2	16612.0	mixed-empty	9979	knuth-hit	1.500	knuth-miss	2.500
+probes	int-dense	8192	17/20	lp	16384	0.500	hit	1.570	1	4	7	20	miss	2.536	1	8	15	26
+probes	int-dense	8192	17/20	rh	16384	0.500	hit	1.570	1	3	4	7	miss	1.774	1	4	5	8
+probes	int-dense	8192	17/20	chain	8192	1.000	hit	1.435	1	3	4	5	miss	0.952	1	3	3	5
+buckets	int-dense	8192	8192	2818,3202,1618,470,76,8,0,0,0
+distribution	int-dense	8192	16384	0.500	chi2	17240.0	empty	10074	mixed-chi2	16612.0	mixed-empty	9979	knuth-hit	1.500	knuth-miss	2.500
 probes	int-dense	11468	1/2	lp	32768	0.350	hit	1.156	1	2	3	8	miss	1.483	1	3	6	14
 probes	int-dense	11468	1/2	rh	32768	0.350	hit	1.156	1	2	3	4	miss	1.326	1	2	3	5
 probes	int-dense	11468	1/2	chain	16384	0.700	hit	1.340	1	3	3	5	miss	0.620	0	2	3	5
@@ -43,6 +73,36 @@ probes	int-dense	11468	17/20	rh	16384	0.700	hit	2.287	2	5	7	11	miss	2.481	2	6	7	
 probes	int-dense	11468	17/20	chain	16384	0.700	hit	1.340	1	3	3	5	miss	0.620	0	2	3	5
 buckets	int-dense	11468	16384	8110,5690,2066,430,84,4,0,0,0
 distribution	int-dense	11468	16384	0.700	chi2	16059.6	empty	8110	mixed-chi2	16551.1	mixed-empty	8150	knuth-hit	2.166	knuth-miss	6.054
+probes	int-dense	13926	1/2	lp	32768	0.425	hit	1.208	1	2	4	9	miss	1.803	1	5	8	17
+probes	int-dense	13926	1/2	rh	32768	0.425	hit	1.208	1	2	3	4	miss	1.462	1	3	3	5
+probes	int-dense	13926	1/2	chain	16384	0.850	hit	1.392	1	3	4	6	miss	0.768	1	2	3	5
+buckets	int-dense	13926	16384	6794,6216,2562,672,132,6,2,0,0
+distribution	int-dense	13926	32768	0.425	chi2	26974.0	empty	20500	mixed-chi2	32913.0	mixed-empty	21413	knuth-hit	1.370	knuth-miss	2.012
+probes	int-dense	13926	7/10	lp	32768	0.425	hit	1.208	1	2	4	9	miss	1.803	1	5	8	17
+probes	int-dense	13926	7/10	rh	32768	0.425	hit	1.208	1	2	3	4	miss	1.462	1	3	3	5
+probes	int-dense	13926	7/10	chain	16384	0.850	hit	1.392	1	3	4	6	miss	0.768	1	2	3	5
+buckets	int-dense	13926	16384	6794,6216,2562,672,132,6,2,0,0
+distribution	int-dense	13926	32768	0.425	chi2	26974.0	empty	20500	mixed-chi2	32913.0	mixed-empty	21413	knuth-hit	1.370	knuth-miss	2.012
+probes	int-dense	13926	17/20	lp	16384	0.850	hit	4.584	1	20	61	177	miss	25.544	12	98	130	196
+probes	int-dense	13926	17/20	rh	16384	0.850	hit	4.584	4	12	17	25	miss	4.893	4	13	18	26
+probes	int-dense	13926	17/20	chain	16384	0.850	hit	1.392	1	3	4	6	miss	0.768	1	2	3	5
+buckets	int-dense	13926	16384	6794,6216,2562,672,132,6,2,0,0
+distribution	int-dense	13926	16384	0.850	chi2	15305.4	empty	6794	mixed-chi2	16458.4	mixed-empty	6988	knuth-hit	3.833	knuth-miss	22.715
+probes	int-dense	1024	1/2	lp	2048	0.500	hit	1.281	1	3	5	7	miss	2.114	2	5	9	11
+probes	int-dense	1024	1/2	rh	2048	0.500	hit	1.281	1	2	3	4	miss	1.607	2	3	3	4
+probes	int-dense	1024	1/2	chain	1024	1.000	hit	1.381	1	3	3	4	miss	1.000	1	3	3	4
+buckets	int-dense	1024	1024	334,410,228,50,2,0,0,0,0
+distribution	int-dense	1024	2048	0.500	chi2	1656.0	empty	1176	mixed-chi2	2024.0	mixed-empty	1240	knuth-hit	1.500	knuth-miss	2.500
+probes	int-dense	1024	7/10	lp	2048	0.500	hit	1.281	1	3	5	7	miss	2.114	2	5	9	11
+probes	int-dense	1024	7/10	rh	2048	0.500	hit	1.281	1	2	3	4	miss	1.607	2	3	3	4
+probes	int-dense	1024	7/10	chain	1024	1.000	hit	1.381	1	3	3	4	miss	1.000	1	3	3	4
+buckets	int-dense	1024	1024	334,410,228,50,2,0,0,0,0
+distribution	int-dense	1024	2048	0.500	chi2	1656.0	empty	1176	mixed-chi2	2024.0	mixed-empty	1240	knuth-hit	1.500	knuth-miss	2.500
+probes	int-dense	1024	17/20	lp	2048	0.500	hit	1.281	1	3	5	7	miss	2.114	2	5	9	11
+probes	int-dense	1024	17/20	rh	2048	0.500	hit	1.281	1	2	3	4	miss	1.607	2	3	3	4
+probes	int-dense	1024	17/20	chain	1024	1.000	hit	1.381	1	3	3	4	miss	1.000	1	3	3	4
+buckets	int-dense	1024	1024	334,410,228,50,2,0,0,0,0
+distribution	int-dense	1024	2048	0.500	chi2	1656.0	empty	1176	mixed-chi2	2024.0	mixed-empty	1240	knuth-hit	1.500	knuth-miss	2.500
 probes	int-dense	16384	1/2	lp	32768	0.500	hit	1.302	1	3	5	21	miss	2.299	1	6	11	25
 probes	int-dense	16384	1/2	rh	32768	0.500	hit	1.302	1	2	3	5	miss	1.662	1	3	4	6
 probes	int-dense	16384	1/2	chain	16384	1.000	hit	1.508	1	3	4	6	miss	1.002	1	3	4	6
@@ -58,6 +118,21 @@ probes	int-dense	16384	17/20	rh	32768	0.500	hit	1.302	1	2	3	5	miss	1.662	1	3	4	6
 probes	int-dense	16384	17/20	chain	16384	1.000	hit	1.508	1	3	4	6	miss	1.002	1	3	4	6
 buckets	int-dense	16384	16384	6102,5960,2926,1064,284,44,4,0,0
 distribution	int-dense	16384	32768	0.500	chi2	27464.0	empty	18946	mixed-chi2	32988.0	mixed-empty	19889	knuth-hit	1.500	knuth-miss	2.500
+probes	int-sparse	512	1/2	lp	1024	0.500	hit	1.488	1	4	7	11	miss	2.453	1	8	12	15
+probes	int-sparse	512	1/2	rh	1024	0.500	hit	1.488	1	3	4	5	miss	1.690	1	3	5	6
+probes	int-sparse	512	1/2	chain	512	1.000	hit	1.447	1	3	4	5	miss	0.972	1	3	4	5
+buckets	int-sparse	512	512	178,197,104,27,4,2,0,0,0
+distribution	int-sparse	512	1024	0.500	chi2	984.0	empty	613	mixed-chi2	984.0	mixed-empty	618	knuth-hit	1.500	knuth-miss	2.500
+probes	int-sparse	512	7/10	lp	1024	0.500	hit	1.488	1	4	7	11	miss	2.453	1	8	12	15
+probes	int-sparse	512	7/10	rh	1024	0.500	hit	1.488	1	3	4	5	miss	1.690	1	3	5	6
+probes	int-sparse	512	7/10	chain	512	1.000	hit	1.447	1	3	4	5	miss	0.972	1	3	4	5
+buckets	int-sparse	512	512	178,197,104,27,4,2,0,0,0
+distribution	int-sparse	512	1024	0.500	chi2	984.0	empty	613	mixed-chi2	984.0	mixed-empty	618	knuth-hit	1.500	knuth-miss	2.500
+probes	int-sparse	512	17/20	lp	1024	0.500	hit	1.488	1	4	7	11	miss	2.453	1	8	12	15
+probes	int-sparse	512	17/20	rh	1024	0.500	hit	1.488	1	3	4	5	miss	1.690	1	3	5	6
+probes	int-sparse	512	17/20	chain	512	1.000	hit	1.447	1	3	4	5	miss	0.972	1	3	4	5
+buckets	int-sparse	512	512	178,197,104,27,4,2,0,0,0
+distribution	int-sparse	512	1024	0.500	chi2	984.0	empty	613	mixed-chi2	984.0	mixed-empty	618	knuth-hit	1.500	knuth-miss	2.500
 probes	int-sparse	716	1/2	lp	2048	0.350	hit	1.267	1	3	4	9	miss	1.665	1	4	8	14
 probes	int-sparse	716	1/2	rh	2048	0.350	hit	1.267	1	2	3	4	miss	1.409	1	3	4	5
 probes	int-sparse	716	1/2	chain	1024	0.699	hit	1.325	1	3	3	4	miss	0.616	0	2	3	4
@@ -73,21 +148,36 @@ probes	int-sparse	716	17/20	rh	1024	0.699	hit	2.089	2	5	7	9	miss	2.375	2	6	8	10
 probes	int-sparse	716	17/20	chain	1024	0.699	hit	1.325	1	3	3	4	miss	0.616	0	2	3	4
 buckets	int-sparse	716	1024	499,373,116,33,3,0,0,0,0
 distribution	int-sparse	716	1024	0.699	chi2	974.5	empty	499	mixed-chi2	1025.9	mixed-empty	513	knuth-hit	2.162	knuth-miss	6.027
-probes	int-sparse	1024	1/2	lp	2048	0.500	hit	1.531	1	4	8	15	miss	2.704	1	10	17	22
-probes	int-sparse	1024	1/2	rh	2048	0.500	hit	1.531	1	3	4	6	miss	1.772	1	4	5	7
-probes	int-sparse	1024	1/2	chain	1024	1.000	hit	1.487	1	3	4	5	miss	0.961	1	3	4	5
-buckets	int-sparse	1024	1024	368,396,171,74,11,4,0,0,0
-distribution	int-sparse	1024	2048	0.500	chi2	2020.0	empty	1238	mixed-chi2	2112.0	mixed-empty	1254	knuth-hit	1.500	knuth-miss	2.500
-probes	int-sparse	1024	7/10	lp	2048	0.500	hit	1.531	1	4	8	15	miss	2.704	1	10	17	22
-probes	int-sparse	1024	7/10	rh	2048	0.500	hit	1.531	1	3	4	6	miss	1.772	1	4	5	7
-probes	int-sparse	1024	7/10	chain	1024	1.000	hit	1.487	1	3	4	5	miss	0.961	1	3	4	5
-buckets	int-sparse	1024	1024	368,396,171,74,11,4,0,0,0
-distribution	int-sparse	1024	2048	0.500	chi2	2020.0	empty	1238	mixed-chi2	2112.0	mixed-empty	1254	knuth-hit	1.500	knuth-miss	2.500
-probes	int-sparse	1024	17/20	lp	2048	0.500	hit	1.531	1	4	8	15	miss	2.704	1	10	17	22
-probes	int-sparse	1024	17/20	rh	2048	0.500	hit	1.531	1	3	4	6	miss	1.772	1	4	5	7
-probes	int-sparse	1024	17/20	chain	1024	1.000	hit	1.487	1	3	4	5	miss	0.961	1	3	4	5
-buckets	int-sparse	1024	1024	368,396,171,74,11,4,0,0,0
-distribution	int-sparse	1024	2048	0.500	chi2	2020.0	empty	1238	mixed-chi2	2112.0	mixed-empty	1254	knuth-hit	1.500	knuth-miss	2.500
+probes	int-sparse	870	1/2	lp	2048	0.425	hit	1.359	1	3	5	9	miss	2.032	1	6	11	16
+probes	int-sparse	870	1/2	rh	2048	0.425	hit	1.359	1	3	4	5	miss	1.554	1	3	4	6
+probes	int-sparse	870	1/2	chain	1024	0.850	hit	1.409	1	3	4	5	miss	0.776	1	2	3	5
+buckets	int-sparse	870	1024	427,395,142,50,9,1,0,0,0
+distribution	int-sparse	870	2048	0.425	chi2	1983.1	empty	1329	mixed-chi2	2067.8	mixed-empty	1345	knuth-hit	1.369	knuth-miss	2.011
+probes	int-sparse	870	7/10	lp	2048	0.425	hit	1.359	1	3	5	9	miss	2.032	1	6	11	16
+probes	int-sparse	870	7/10	rh	2048	0.425	hit	1.359	1	3	4	5	miss	1.554	1	3	4	6
+probes	int-sparse	870	7/10	chain	1024	0.850	hit	1.409	1	3	4	5	miss	0.776	1	2	3	5
+buckets	int-sparse	870	1024	427,395,142,50,9,1,0,0,0
+distribution	int-sparse	870	2048	0.425	chi2	1983.1	empty	1329	mixed-chi2	2067.8	mixed-empty	1345	knuth-hit	1.369	knuth-miss	2.011
+probes	int-sparse	870	17/20	lp	1024	0.850	hit	3.466	1	13	34	85	miss	14.030	6	62	93	105
+probes	int-sparse	870	17/20	rh	1024	0.850	hit	3.466	3	9	13	16	miss	3.875	3	9	16	17
+probes	int-sparse	870	17/20	chain	1024	0.850	hit	1.409	1	3	4	5	miss	0.776	1	2	3	5
+buckets	int-sparse	870	1024	427,395,142,50,9,1,0,0,0
+distribution	int-sparse	870	1024	0.850	chi2	992.0	empty	427	mixed-chi2	1032.1	mixed-empty	442	knuth-hit	3.825	knuth-miss	22.607
+probes	int-sparse	8192	1/2	lp	16384	0.500	hit	1.494	1	4	7	25	miss	2.452	2	7	12	29
+probes	int-sparse	8192	1/2	rh	16384	0.500	hit	1.494	1	3	4	9	miss	1.758	2	3	5	10
+probes	int-sparse	8192	1/2	chain	8192	1.000	hit	1.494	1	3	4	6	miss	1.007	1	3	4	6
+buckets	int-sparse	8192	8192	2979,3072,1492,497,122,23,7,0,0
+distribution	int-sparse	8192	16384	0.500	chi2	16216.0	empty	9895	mixed-chi2	16596.0	mixed-empty	9967	knuth-hit	1.500	knuth-miss	2.500
+probes	int-sparse	8192	7/10	lp	16384	0.500	hit	1.494	1	4	7	25	miss	2.452	2	7	12	29
+probes	int-sparse	8192	7/10	rh	16384	0.500	hit	1.494	1	3	4	9	miss	1.758	2	3	5	10
+probes	int-sparse	8192	7/10	chain	8192	1.000	hit	1.494	1	3	4	6	miss	1.007	1	3	4	6
+buckets	int-sparse	8192	8192	2979,3072,1492,497,122,23,7,0,0
+distribution	int-sparse	8192	16384	0.500	chi2	16216.0	empty	9895	mixed-chi2	16596.0	mixed-empty	9967	knuth-hit	1.500	knuth-miss	2.500
+probes	int-sparse	8192	17/20	lp	16384	0.500	hit	1.494	1	4	7	25	miss	2.452	2	7	12	29
+probes	int-sparse	8192	17/20	rh	16384	0.500	hit	1.494	1	3	4	9	miss	1.758	2	3	5	10
+probes	int-sparse	8192	17/20	chain	8192	1.000	hit	1.494	1	3	4	6	miss	1.007	1	3	4	6
+buckets	int-sparse	8192	8192	2979,3072,1492,497,122,23,7,0,0
+distribution	int-sparse	8192	16384	0.500	chi2	16216.0	empty	9895	mixed-chi2	16596.0	mixed-empty	9967	knuth-hit	1.500	knuth-miss	2.500
 probes	int-sparse	11468	1/2	lp	32768	0.350	hit	1.272	1	3	4	10	miss	1.658	1	4	7	13
 probes	int-sparse	11468	1/2	rh	32768	0.350	hit	1.272	1	2	3	7	miss	1.437	1	3	4	7
 probes	int-sparse	11468	1/2	chain	16384	0.700	hit	1.354	1	3	3	6	miss	0.700	1	2	3	5
@@ -103,6 +193,36 @@ probes	int-sparse	11468	17/20	rh	16384	0.700	hit	2.147	2	5	7	12	miss	2.491	2	5	8
 probes	int-sparse	11468	17/20	chain	16384	0.700	hit	1.354	1	3	3	6	miss	0.700	1	2	3	5
 buckets	int-sparse	11468	16384	8160,5670,1970,493,78,11,2,0,0
 distribution	int-sparse	11468	16384	0.700	chi2	16508.2	empty	8160	mixed-chi2	16639.7	mixed-empty	8186	knuth-hit	2.166	knuth-miss	6.054
+probes	int-sparse	13926	1/2	lp	32768	0.425	hit	1.362	1	3	5	12	miss	1.971	1	6	8	16
+probes	int-sparse	13926	1/2	rh	32768	0.425	hit	1.362	1	3	4	7	miss	1.572	1	3	4	7
+probes	int-sparse	13926	1/2	chain	16384	0.850	hit	1.426	1	3	4	6	miss	0.855	1	3	4	6
+buckets	int-sparse	13926	16384	7015,5923,2555,712,145,27,7,0,0
+distribution	int-sparse	13926	32768	0.425	chi2	32677.7	empty	21417	mixed-chi2	33171.8	mixed-empty	21465	knuth-hit	1.370	knuth-miss	2.012
+probes	int-sparse	13926	7/10	lp	32768	0.425	hit	1.362	1	3	5	12	miss	1.971	1	6	8	16
+probes	int-sparse	13926	7/10	rh	32768	0.425	hit	1.362	1	3	4	7	miss	1.572	1	3	4	7
+probes	int-sparse	13926	7/10	chain	16384	0.850	hit	1.426	1	3	4	6	miss	0.855	1	3	4	6
+buckets	int-sparse	13926	16384	7015,5923,2555,712,145,27,7,0,0
+distribution	int-sparse	13926	32768	0.425	chi2	32677.7	empty	21417	mixed-chi2	33171.8	mixed-empty	21465	knuth-hit	1.370	knuth-miss	2.012
+probes	int-sparse	13926	17/20	lp	16384	0.850	hit	3.460	1	14	34	119	miss	18.700	9	72	112	192
+probes	int-sparse	13926	17/20	rh	16384	0.850	hit	3.460	3	8	12	17	miss	3.951	3	9	13	18
+probes	int-sparse	13926	17/20	chain	16384	0.850	hit	1.426	1	3	4	6	miss	0.855	1	3	4	6
+buckets	int-sparse	13926	16384	7015,5923,2555,712,145,27,7,0,0
+distribution	int-sparse	13926	16384	0.850	chi2	16425.5	empty	7015	mixed-chi2	16672.5	mixed-empty	7072	knuth-hit	3.833	knuth-miss	22.715
+probes	int-sparse	1024	1/2	lp	2048	0.500	hit	1.531	1	4	8	15	miss	2.704	1	10	17	22
+probes	int-sparse	1024	1/2	rh	2048	0.500	hit	1.531	1	3	4	6	miss	1.772	1	4	5	7
+probes	int-sparse	1024	1/2	chain	1024	1.000	hit	1.487	1	3	4	5	miss	0.961	1	3	4	5
+buckets	int-sparse	1024	1024	368,396,171,74,11,4,0,0,0
+distribution	int-sparse	1024	2048	0.500	chi2	2020.0	empty	1238	mixed-chi2	2112.0	mixed-empty	1254	knuth-hit	1.500	knuth-miss	2.500
+probes	int-sparse	1024	7/10	lp	2048	0.500	hit	1.531	1	4	8	15	miss	2.704	1	10	17	22
+probes	int-sparse	1024	7/10	rh	2048	0.500	hit	1.531	1	3	4	6	miss	1.772	1	4	5	7
+probes	int-sparse	1024	7/10	chain	1024	1.000	hit	1.487	1	3	4	5	miss	0.961	1	3	4	5
+buckets	int-sparse	1024	1024	368,396,171,74,11,4,0,0,0
+distribution	int-sparse	1024	2048	0.500	chi2	2020.0	empty	1238	mixed-chi2	2112.0	mixed-empty	1254	knuth-hit	1.500	knuth-miss	2.500
+probes	int-sparse	1024	17/20	lp	2048	0.500	hit	1.531	1	4	8	15	miss	2.704	1	10	17	22
+probes	int-sparse	1024	17/20	rh	2048	0.500	hit	1.531	1	3	4	6	miss	1.772	1	4	5	7
+probes	int-sparse	1024	17/20	chain	1024	1.000	hit	1.487	1	3	4	5	miss	0.961	1	3	4	5
+buckets	int-sparse	1024	1024	368,396,171,74,11,4,0,0,0
+distribution	int-sparse	1024	2048	0.500	chi2	2020.0	empty	1238	mixed-chi2	2112.0	mixed-empty	1254	knuth-hit	1.500	knuth-miss	2.500
 probes	int-sparse	16384	1/2	lp	32768	0.500	hit	1.489	1	4	6	27	miss	2.443	1	7	12	28
 probes	int-sparse	16384	1/2	rh	32768	0.500	hit	1.489	1	3	4	7	miss	1.738	1	4	5	8
 probes	int-sparse	16384	1/2	chain	16384	1.000	hit	1.501	1	3	4	6	miss	1.003	1	3	4	6
@@ -118,6 +238,21 @@ probes	int-sparse	16384	17/20	rh	32768	0.500	hit	1.489	1	3	4	7	miss	1.738	1	4	5	
 probes	int-sparse	16384	17/20	chain	16384	1.000	hit	1.501	1	3	4	6	miss	1.003	1	3	4	6
 buckets	int-sparse	16384	16384	6053,5980,3018,1037,234,51,11,0,0
 distribution	int-sparse	16384	32768	0.500	chi2	32756.0	empty	19892	mixed-chi2	33020.0	mixed-empty	19919	knuth-hit	1.500	knuth-miss	2.500
+probes	int-big	512	1/2	lp	1024	0.500	hit	1.264	1	3	4	5	miss	2.243	2	6	8	13
+probes	int-big	512	1/2	rh	1024	0.500	hit	1.264	1	2	3	3	miss	1.733	2	3	4	4
+probes	int-big	512	1/2	chain	512	1.000	hit	1.410	1	3	3	4	miss	1.061	1	3	3	4
+buckets	int-big	512	512	172,202,108,26,4,0,0,0,0
+distribution	int-big	512	1024	0.500	chi2	808.0	empty	586	mixed-chi2	1040.0	mixed-empty	626	knuth-hit	1.500	knuth-miss	2.500
+probes	int-big	512	7/10	lp	1024	0.500	hit	1.264	1	3	4	5	miss	2.243	2	6	8	13
+probes	int-big	512	7/10	rh	1024	0.500	hit	1.264	1	2	3	3	miss	1.733	2	3	4	4
+probes	int-big	512	7/10	chain	512	1.000	hit	1.410	1	3	3	4	miss	1.061	1	3	3	4
+buckets	int-big	512	512	172,202,108,26,4,0,0,0,0
+distribution	int-big	512	1024	0.500	chi2	808.0	empty	586	mixed-chi2	1040.0	mixed-empty	626	knuth-hit	1.500	knuth-miss	2.500
+probes	int-big	512	17/20	lp	1024	0.500	hit	1.264	1	3	4	5	miss	2.243	2	6	8	13
+probes	int-big	512	17/20	rh	1024	0.500	hit	1.264	1	2	3	3	miss	1.733	2	3	4	4
+probes	int-big	512	17/20	chain	512	1.000	hit	1.410	1	3	3	4	miss	1.061	1	3	3	4
+buckets	int-big	512	512	172,202,108,26,4,0,0,0,0
+distribution	int-big	512	1024	0.500	chi2	808.0	empty	586	mixed-chi2	1040.0	mixed-empty	626	knuth-hit	1.500	knuth-miss	2.500
 probes	int-big	716	1/2	lp	2048	0.350	hit	1.175	1	2	4	5	miss	1.799	1	4	5	8
 probes	int-big	716	1/2	rh	2048	0.350	hit	1.175	1	2	3	4	miss	1.565	1	3	4	5
 probes	int-big	716	1/2	chain	1024	0.699	hit	1.215	1	2	3	3	miss	0.725	1	2	2	3
@@ -133,21 +268,36 @@ probes	int-big	716	17/20	rh	1024	0.699	hit	1.557	1	3	4	5	miss	2.151	2	4	5	6
 probes	int-big	716	17/20	chain	1024	0.699	hit	1.215	1	2	3	3	miss	0.725	1	2	2	3
 buckets	int-big	716	1024	454,432,130,8,0,0,0,0,0
 distribution	int-big	716	1024	0.699	chi2	748.5	empty	454	mixed-chi2	1046.0	mixed-empty	519	knuth-hit	2.162	knuth-miss	6.027
-probes	int-big	1024	1/2	lp	2048	0.500	hit	1.319	1	3	5	7	miss	2.497	2	6	11	19
-probes	int-big	1024	1/2	rh	2048	0.500	hit	1.319	1	3	4	5	miss	1.849	2	3	5	6
-probes	int-big	1024	1/2	chain	1024	1.000	hit	1.379	1	3	3	4	miss	1.045	1	3	3	4
-buckets	int-big	1024	1024	322,442,202,54,4,0,0,0,0
-distribution	int-big	1024	2048	0.500	chi2	1768.0	empty	1186	mixed-chi2	2000.0	mixed-empty	1241	knuth-hit	1.500	knuth-miss	2.500
-probes	int-big	1024	7/10	lp	2048	0.500	hit	1.319	1	3	5	7	miss	2.497	2	6	11	19
-probes	int-big	1024	7/10	rh	2048	0.500	hit	1.319	1	3	4	5	miss	1.849	2	3	5	6
-probes	int-big	1024	7/10	chain	1024	1.000	hit	1.379	1	3	3	4	miss	1.045	1	3	3	4
-buckets	int-big	1024	1024	322,442,202,54,4,0,0,0,0
-distribution	int-big	1024	2048	0.500	chi2	1768.0	empty	1186	mixed-chi2	2000.0	mixed-empty	1241	knuth-hit	1.500	knuth-miss	2.500
-probes	int-big	1024	17/20	lp	2048	0.500	hit	1.319	1	3	5	7	miss	2.497	2	6	11	19
-probes	int-big	1024	17/20	rh	2048	0.500	hit	1.319	1	3	4	5	miss	1.849	2	3	5	6
-probes	int-big	1024	17/20	chain	1024	1.000	hit	1.379	1	3	3	4	miss	1.045	1	3	3	4
-buckets	int-big	1024	1024	322,442,202,54,4,0,0,0,0
-distribution	int-big	1024	2048	0.500	chi2	1768.0	empty	1186	mixed-chi2	2000.0	mixed-empty	1241	knuth-hit	1.500	knuth-miss	2.500
+probes	int-big	870	1/2	lp	2048	0.425	hit	1.237	1	2	4	6	miss	2.051	2	5	8	12
+probes	int-big	870	1/2	rh	2048	0.425	hit	1.237	1	2	3	5	miss	1.701	2	3	4	6
+probes	int-big	870	1/2	chain	1024	0.850	hit	1.340	1	3	3	4	miss	0.938	1	3	3	4
+buckets	int-big	870	1024	400,424,158,38,4,0,0,0,0
+distribution	int-big	870	2048	0.425	chi2	1846.5	empty	1298	mixed-chi2	2049.0	mixed-empty	1346	knuth-hit	1.369	knuth-miss	2.011
+probes	int-big	870	7/10	lp	2048	0.425	hit	1.237	1	2	4	6	miss	2.051	2	5	8	12
+probes	int-big	870	7/10	rh	2048	0.425	hit	1.237	1	2	3	5	miss	1.701	2	3	4	6
+probes	int-big	870	7/10	chain	1024	0.850	hit	1.340	1	3	3	4	miss	0.938	1	3	3	4
+buckets	int-big	870	1024	400,424,158,38,4,0,0,0,0
+distribution	int-big	870	2048	0.425	chi2	1846.5	empty	1298	mixed-chi2	2049.0	mixed-empty	1346	knuth-hit	1.369	knuth-miss	2.011
+probes	int-big	870	17/20	lp	1024	0.850	hit	2.514	1	9	25	50	miss	11.282	6	41	55	60
+probes	int-big	870	17/20	rh	1024	0.850	hit	2.514	2	6	7	9	miss	3.232	3	7	8	10
+probes	int-big	870	17/20	chain	1024	0.850	hit	1.340	1	3	3	4	miss	0.938	1	3	3	4
+buckets	int-big	870	1024	400,424,158,38,4,0,0,0,0
+distribution	int-big	870	1024	0.850	chi2	850.8	empty	400	mixed-chi2	1109.7	mixed-empty	461	knuth-hit	3.825	knuth-miss	22.607
+probes	int-big	8192	1/2	lp	16384	0.500	hit	1.669	1	4	11	32	miss	3.163	2	12	25	45
+probes	int-big	8192	1/2	rh	16384	0.500	hit	1.669	1	4	6	9	miss	1.867	2	4	7	9
+probes	int-big	8192	1/2	chain	8192	1.000	hit	1.488	1	3	4	6	miss	0.854	1	3	3	5
+buckets	int-big	8192	8192	3016,2954,1592,488,122,18,2,0,0
+distribution	int-big	8192	16384	0.500	chi2	17280.0	empty	10044	mixed-chi2	16344.0	mixed-empty	9928	knuth-hit	1.500	knuth-miss	2.500
+probes	int-big	8192	7/10	lp	16384	0.500	hit	1.669	1	4	11	32	miss	3.163	2	12	25	45
+probes	int-big	8192	7/10	rh	16384	0.500	hit	1.669	1	4	6	9	miss	1.867	2	4	7	9
+probes	int-big	8192	7/10	chain	8192	1.000	hit	1.488	1	3	4	6	miss	0.854	1	3	3	5
+buckets	int-big	8192	8192	3016,2954,1592,488,122,18,2,0,0
+distribution	int-big	8192	16384	0.500	chi2	17280.0	empty	10044	mixed-chi2	16344.0	mixed-empty	9928	knuth-hit	1.500	knuth-miss	2.500
+probes	int-big	8192	17/20	lp	16384	0.500	hit	1.669	1	4	11	32	miss	3.163	2	12	25	45
+probes	int-big	8192	17/20	rh	16384	0.500	hit	1.669	1	4	6	9	miss	1.867	2	4	7	9
+probes	int-big	8192	17/20	chain	8192	1.000	hit	1.488	1	3	4	6	miss	0.854	1	3	3	5
+buckets	int-big	8192	8192	3016,2954,1592,488,122,18,2,0,0
+distribution	int-big	8192	16384	0.500	chi2	17280.0	empty	10044	mixed-chi2	16344.0	mixed-empty	9928	knuth-hit	1.500	knuth-miss	2.500
 probes	int-big	11468	1/2	lp	32768	0.350	hit	1.208	1	2	4	12	miss	1.699	1	4	7	15
 probes	int-big	11468	1/2	rh	32768	0.350	hit	1.208	1	2	3	5	miss	1.426	1	3	3	6
 probes	int-big	11468	1/2	chain	16384	0.700	hit	1.332	1	3	3	5	miss	0.728	1	2	3	5
@@ -163,6 +313,36 @@ probes	int-big	11468	17/20	rh	16384	0.700	hit	2.696	2	8	11	17	miss	2.981	2	8	11	
 probes	int-big	11468	17/20	chain	16384	0.700	hit	1.332	1	3	3	5	miss	0.728	1	2	3	5
 buckets	int-big	11468	16384	8032,5822,2032,422,64,12,0,0,0
 distribution	int-big	11468	16384	0.700	chi2	15779.6	empty	8032	mixed-chi2	16111.1	mixed-empty	8079	knuth-hit	2.166	knuth-miss	6.054
+probes	int-big	13926	1/2	lp	32768	0.425	hit	1.328	1	3	5	17	miss	2.080	1	6	10	32
+probes	int-big	13926	1/2	rh	32768	0.425	hit	1.328	1	2	3	6	miss	1.555	1	3	4	7
+probes	int-big	13926	1/2	chain	16384	0.850	hit	1.439	1	3	4	7	miss	0.850	1	3	3	5
+buckets	int-big	13926	16384	7244,5468,2738,780,132,20,0,2,0
+distribution	int-big	13926	32768	0.425	chi2	31425.9	empty	21272	mixed-chi2	32630.6	mixed-empty	21398	knuth-hit	1.370	knuth-miss	2.012
+probes	int-big	13926	7/10	lp	32768	0.425	hit	1.328	1	3	5	17	miss	2.080	1	6	10	32
+probes	int-big	13926	7/10	rh	32768	0.425	hit	1.328	1	2	3	6	miss	1.555	1	3	4	7
+probes	int-big	13926	7/10	chain	16384	0.850	hit	1.439	1	3	4	7	miss	0.850	1	3	3	5
+buckets	int-big	13926	16384	7244,5468,2738,780,132,20,0,2,0
+distribution	int-big	13926	32768	0.425	chi2	31425.9	empty	21272	mixed-chi2	32630.6	mixed-empty	21398	knuth-hit	1.370	knuth-miss	2.012
+probes	int-big	13926	17/20	lp	16384	0.850	hit	4.494	1	21	50	119	miss	22.229	12	79	115	155
+probes	int-big	13926	17/20	rh	16384	0.850	hit	4.494	3	12	17	24	miss	4.883	4	13	17	24
+probes	int-big	13926	17/20	chain	16384	0.850	hit	1.439	1	3	4	7	miss	0.850	1	3	3	5
+buckets	int-big	13926	16384	7244,5468,2738,780,132,20,0,2,0
+distribution	int-big	13926	16384	0.850	chi2	16839.6	empty	7244	mixed-chi2	16279.6	mixed-empty	6960	knuth-hit	3.833	knuth-miss	22.715
+probes	int-big	1024	1/2	lp	2048	0.500	hit	1.319	1	3	5	7	miss	2.497	2	6	11	19
+probes	int-big	1024	1/2	rh	2048	0.500	hit	1.319	1	3	4	5	miss	1.849	2	3	5	6
+probes	int-big	1024	1/2	chain	1024	1.000	hit	1.379	1	3	3	4	miss	1.045	1	3	3	4
+buckets	int-big	1024	1024	322,442,202,54,4,0,0,0,0
+distribution	int-big	1024	2048	0.500	chi2	1768.0	empty	1186	mixed-chi2	2000.0	mixed-empty	1241	knuth-hit	1.500	knuth-miss	2.500
+probes	int-big	1024	7/10	lp	2048	0.500	hit	1.319	1	3	5	7	miss	2.497	2	6	11	19
+probes	int-big	1024	7/10	rh	2048	0.500	hit	1.319	1	3	4	5	miss	1.849	2	3	5	6
+probes	int-big	1024	7/10	chain	1024	1.000	hit	1.379	1	3	3	4	miss	1.045	1	3	3	4
+buckets	int-big	1024	1024	322,442,202,54,4,0,0,0,0
+distribution	int-big	1024	2048	0.500	chi2	1768.0	empty	1186	mixed-chi2	2000.0	mixed-empty	1241	knuth-hit	1.500	knuth-miss	2.500
+probes	int-big	1024	17/20	lp	2048	0.500	hit	1.319	1	3	5	7	miss	2.497	2	6	11	19
+probes	int-big	1024	17/20	rh	2048	0.500	hit	1.319	1	3	4	5	miss	1.849	2	3	5	6
+probes	int-big	1024	17/20	chain	1024	1.000	hit	1.379	1	3	3	4	miss	1.045	1	3	3	4
+buckets	int-big	1024	1024	322,442,202,54,4,0,0,0,0
+distribution	int-big	1024	2048	0.500	chi2	1768.0	empty	1186	mixed-chi2	2000.0	mixed-empty	1241	knuth-hit	1.500	knuth-miss	2.500
 probes	int-big	16384	1/2	lp	32768	0.500	hit	1.448	1	3	7	26	miss	2.781	2	9	18	39
 probes	int-big	16384	1/2	rh	32768	0.500	hit	1.448	1	3	4	9	miss	1.742	2	3	5	10
 probes	int-big	16384	1/2	chain	16384	1.000	hit	1.484	1	3	4	7	miss	1.016	1	3	4	7
@@ -178,6 +358,21 @@ probes	int-big	16384	17/20	rh	32768	0.500	hit	1.448	1	3	4	9	miss	1.742	2	3	5	10
 probes	int-big	16384	17/20	chain	16384	1.000	hit	1.484	1	3	4	7	miss	1.016	1	3	4	7
 buckets	int-big	16384	16384	5918,6116,3140,924,232,40,10,4,0
 distribution	int-big	16384	32768	0.500	chi2	29864.0	empty	19442	mixed-chi2	32480.0	mixed-empty	19826	knuth-hit	1.500	knuth-miss	2.500
+probes	int-collide	512	1/2	lp	1024	0.500	hit	256.500	257	486	507	512	miss	1.000	1	1	1	1
+probes	int-collide	512	1/2	rh	1024	0.500	hit	256.500	257	486	507	512	miss	1.000	1	1	1	1
+probes	int-collide	512	1/2	chain	512	1.000	hit	256.500	257	486	507	512	miss	512.000	512	512	512	512
+buckets	int-collide	512	512	511,0,0,0,0,0,0,0,1
+distribution	int-collide	512	1024	0.500	chi2	523776.0	empty	1023	mixed-chi2	976.0	mixed-empty	613	knuth-hit	1.500	knuth-miss	2.500
+probes	int-collide	512	7/10	lp	1024	0.500	hit	256.500	257	486	507	512	miss	1.000	1	1	1	1
+probes	int-collide	512	7/10	rh	1024	0.500	hit	256.500	257	486	507	512	miss	1.000	1	1	1	1
+probes	int-collide	512	7/10	chain	512	1.000	hit	256.500	257	486	507	512	miss	512.000	512	512	512	512
+buckets	int-collide	512	512	511,0,0,0,0,0,0,0,1
+distribution	int-collide	512	1024	0.500	chi2	523776.0	empty	1023	mixed-chi2	976.0	mixed-empty	613	knuth-hit	1.500	knuth-miss	2.500
+probes	int-collide	512	17/20	lp	1024	0.500	hit	256.500	257	486	507	512	miss	1.000	1	1	1	1
+probes	int-collide	512	17/20	rh	1024	0.500	hit	256.500	257	486	507	512	miss	1.000	1	1	1	1
+probes	int-collide	512	17/20	chain	512	1.000	hit	256.500	257	486	507	512	miss	512.000	512	512	512	512
+buckets	int-collide	512	512	511,0,0,0,0,0,0,0,1
+distribution	int-collide	512	1024	0.500	chi2	523776.0	empty	1023	mixed-chi2	976.0	mixed-empty	613	knuth-hit	1.500	knuth-miss	2.500
 probes	int-collide	716	1/2	lp	2048	0.350	hit	179.500	180	340	355	358	miss	1.000	1	1	1	1
 probes	int-collide	716	1/2	rh	2048	0.350	hit	179.500	180	340	355	358	miss	1.000	1	1	1	1
 probes	int-collide	716	1/2	chain	1024	0.699	hit	358.500	359	680	709	716	miss	0.000	0	0	0	0
@@ -193,21 +388,36 @@ probes	int-collide	716	17/20	rh	1024	0.699	hit	358.500	359	680	709	716	miss	205.
 probes	int-collide	716	17/20	chain	1024	0.699	hit	358.500	359	680	709	716	miss	0.000	0	0	0	0
 buckets	int-collide	716	1024	1023,0,0,0,0,0,0,0,1
 distribution	int-collide	716	1024	0.699	chi2	732468.0	empty	1023	mixed-chi2	983.0	mixed-empty	508	knuth-hit	2.162	knuth-miss	6.027
-probes	int-collide	1024	1/2	lp	2048	0.500	hit	256.548	257	487	509	519	miss	4.521	8	8	8	8
-probes	int-collide	1024	1/2	rh	2048	0.500	hit	256.548	257	487	509	519	miss	4.521	8	8	8	8
-probes	int-collide	1024	1/2	chain	1024	1.000	hit	512.500	513	973	1014	1024	miss	0.000	0	0	0	0
-buckets	int-collide	1024	1024	1023,0,0,0,0,0,0,0,1
-distribution	int-collide	1024	2048	0.500	chi2	1047748.0	empty	2046	mixed-chi2	1992.0	mixed-empty	1239	knuth-hit	1.500	knuth-miss	2.500
-probes	int-collide	1024	7/10	lp	2048	0.500	hit	256.548	257	487	509	519	miss	4.521	8	8	8	8
-probes	int-collide	1024	7/10	rh	2048	0.500	hit	256.548	257	487	509	519	miss	4.521	8	8	8	8
-probes	int-collide	1024	7/10	chain	1024	1.000	hit	512.500	513	973	1014	1024	miss	0.000	0	0	0	0
-buckets	int-collide	1024	1024	1023,0,0,0,0,0,0,0,1
-distribution	int-collide	1024	2048	0.500	chi2	1047748.0	empty	2046	mixed-chi2	1992.0	mixed-empty	1239	knuth-hit	1.500	knuth-miss	2.500
-probes	int-collide	1024	17/20	lp	2048	0.500	hit	256.548	257	487	509	519	miss	4.521	8	8	8	8
-probes	int-collide	1024	17/20	rh	2048	0.500	hit	256.548	257	487	509	519	miss	4.521	8	8	8	8
-probes	int-collide	1024	17/20	chain	1024	1.000	hit	512.500	513	973	1014	1024	miss	0.000	0	0	0	0
-buckets	int-collide	1024	1024	1023,0,0,0,0,0,0,0,1
-distribution	int-collide	1024	2048	0.500	chi2	1047748.0	empty	2046	mixed-chi2	1992.0	mixed-empty	1239	knuth-hit	1.500	knuth-miss	2.500
+probes	int-collide	870	1/2	lp	2048	0.425	hit	218.010	218	414	431	438	miss	1.000	1	1	1	1
+probes	int-collide	870	1/2	rh	2048	0.425	hit	218.010	218	414	431	438	miss	1.000	1	1	1	1
+probes	int-collide	870	1/2	chain	1024	0.850	hit	435.500	436	827	861	870	miss	0.000	0	0	0	0
+buckets	int-collide	870	1024	1023,0,0,0,0,0,0,0,1
+distribution	int-collide	870	2048	0.425	chi2	890052.4	empty	2046	mixed-chi2	2001.9	mixed-empty	1336	knuth-hit	1.369	knuth-miss	2.011
+probes	int-collide	870	7/10	lp	2048	0.425	hit	218.010	218	414	431	438	miss	1.000	1	1	1	1
+probes	int-collide	870	7/10	rh	2048	0.425	hit	218.010	218	414	431	438	miss	1.000	1	1	1	1
+probes	int-collide	870	7/10	chain	1024	0.850	hit	435.500	436	827	861	870	miss	0.000	0	0	0	0
+buckets	int-collide	870	1024	1023,0,0,0,0,0,0,0,1
+distribution	int-collide	870	2048	0.425	chi2	890052.4	empty	2046	mixed-chi2	2001.9	mixed-empty	1336	knuth-hit	1.369	knuth-miss	2.011
+probes	int-collide	870	17/20	lp	1024	0.850	hit	435.500	436	827	861	870	miss	359.000	359	359	359	359
+probes	int-collide	870	17/20	rh	1024	0.850	hit	435.500	436	827	861	870	miss	359.000	359	359	359	359
+probes	int-collide	870	17/20	chain	1024	0.850	hit	435.500	436	827	861	870	miss	0.000	0	0	0	0
+buckets	int-collide	870	1024	1023,0,0,0,0,0,0,0,1
+distribution	int-collide	870	1024	0.850	chi2	890010.0	empty	1023	mixed-chi2	994.4	mixed-empty	440	knuth-hit	3.825	knuth-miss	22.607
+probes	int-collide	8192	1/2	lp	16384	0.500	hit	256.845	257	488	517	555	miss	8.636	3	44	44	44
+probes	int-collide	8192	1/2	rh	16384	0.500	hit	256.845	257	488	517	555	miss	8.636	3	44	44	44
+probes	int-collide	8192	1/2	chain	8192	1.000	hit	512.675	513	973	1017	1070	miss	0.000	0	0	0	0
+buckets	int-collide	8192	8192	8184,0,0,0,0,0,0,0,8
+distribution	int-collide	8192	16384	0.500	chi2	8391728.0	empty	16368	mixed-chi2	16604.0	mixed-empty	9960	knuth-hit	1.500	knuth-miss	2.500
+probes	int-collide	8192	7/10	lp	16384	0.500	hit	256.845	257	488	517	555	miss	8.636	3	44	44	44
+probes	int-collide	8192	7/10	rh	16384	0.500	hit	256.845	257	488	517	555	miss	8.636	3	44	44	44
+probes	int-collide	8192	7/10	chain	8192	1.000	hit	512.675	513	973	1017	1070	miss	0.000	0	0	0	0
+buckets	int-collide	8192	8192	8184,0,0,0,0,0,0,0,8
+distribution	int-collide	8192	16384	0.500	chi2	8391728.0	empty	16368	mixed-chi2	16604.0	mixed-empty	9960	knuth-hit	1.500	knuth-miss	2.500
+probes	int-collide	8192	17/20	lp	16384	0.500	hit	256.845	257	488	517	555	miss	8.636	3	44	44	44
+probes	int-collide	8192	17/20	rh	16384	0.500	hit	256.845	257	488	517	555	miss	8.636	3	44	44	44
+probes	int-collide	8192	17/20	chain	8192	1.000	hit	512.675	513	973	1017	1070	miss	0.000	0	0	0	0
+buckets	int-collide	8192	8192	8184,0,0,0,0,0,0,0,8
+distribution	int-collide	8192	16384	0.500	chi2	8391728.0	empty	16368	mixed-chi2	16604.0	mixed-empty	9960	knuth-hit	1.500	knuth-miss	2.500
 probes	int-collide	11468	1/2	lp	32768	0.350	hit	179.844	180	341	361	378	miss	1.000	1	1	1	1
 probes	int-collide	11468	1/2	rh	32768	0.350	hit	179.844	180	341	361	378	miss	1.000	1	1	1	1
 probes	int-collide	11468	1/2	chain	16384	0.700	hit	359.054	359	681	715	749	miss	0.000	0	0	0	0
@@ -223,6 +433,36 @@ probes	int-collide	11468	17/20	rh	16384	0.700	hit	359.054	359	681	715	749	miss	2
 probes	int-collide	11468	17/20	chain	16384	0.700	hit	359.054	359	681	715	749	miss	0.000	0	0	0	0
 buckets	int-collide	11468	16384	16368,0,0,0,0,0,0,0,16
 distribution	int-collide	11468	16384	0.700	chi2	11737614.4	empty	16368	mixed-chi2	16322.5	mixed-empty	8132	knuth-hit	2.166	knuth-miss	6.054
+probes	int-collide	13926	1/2	lp	32768	0.425	hit	218.242	218	414	436	456	miss	1.000	1	1	1	1
+probes	int-collide	13926	1/2	rh	32768	0.425	hit	218.242	218	414	436	456	miss	1.000	1	1	1	1
+probes	int-collide	13926	1/2	chain	16384	0.850	hit	435.837	436	827	866	905	miss	0.000	0	0	0	0
+buckets	int-collide	13926	16384	16368,0,0,0,0,0,0,0,16
+distribution	int-collide	13926	32768	0.425	chi2	14256013.3	empty	32736	mixed-chi2	32621.2	mixed-empty	21426	knuth-hit	1.370	knuth-miss	2.012
+probes	int-collide	13926	7/10	lp	32768	0.425	hit	218.242	218	414	436	456	miss	1.000	1	1	1	1
+probes	int-collide	13926	7/10	rh	32768	0.425	hit	218.242	218	414	436	456	miss	1.000	1	1	1	1
+probes	int-collide	13926	7/10	chain	16384	0.850	hit	435.837	436	827	866	905	miss	0.000	0	0	0	0
+buckets	int-collide	13926	16384	16368,0,0,0,0,0,0,0,16
+distribution	int-collide	13926	32768	0.425	chi2	14256013.3	empty	32736	mixed-chi2	32621.2	mixed-empty	21426	knuth-hit	1.370	knuth-miss	2.012
+probes	int-collide	13926	17/20	lp	16384	0.850	hit	435.837	436	827	866	905	miss	359.335	357	394	394	394
+probes	int-collide	13926	17/20	rh	16384	0.850	hit	435.837	436	827	866	905	miss	359.335	357	394	394	394
+probes	int-collide	13926	17/20	chain	16384	0.850	hit	435.837	436	827	866	905	miss	0.000	0	0	0	0
+buckets	int-collide	13926	16384	16368,0,0,0,0,0,0,0,16
+distribution	int-collide	13926	16384	0.850	chi2	14251196.7	empty	16368	mixed-chi2	16401.9	mixed-empty	7025	knuth-hit	3.833	knuth-miss	22.715
+probes	int-collide	1024	1/2	lp	2048	0.500	hit	256.548	257	487	509	519	miss	4.521	8	8	8	8
+probes	int-collide	1024	1/2	rh	2048	0.500	hit	256.548	257	487	509	519	miss	4.521	8	8	8	8
+probes	int-collide	1024	1/2	chain	1024	1.000	hit	512.500	513	973	1014	1024	miss	0.000	0	0	0	0
+buckets	int-collide	1024	1024	1023,0,0,0,0,0,0,0,1
+distribution	int-collide	1024	2048	0.500	chi2	1047748.0	empty	2046	mixed-chi2	1992.0	mixed-empty	1239	knuth-hit	1.500	knuth-miss	2.500
+probes	int-collide	1024	7/10	lp	2048	0.500	hit	256.548	257	487	509	519	miss	4.521	8	8	8	8
+probes	int-collide	1024	7/10	rh	2048	0.500	hit	256.548	257	487	509	519	miss	4.521	8	8	8	8
+probes	int-collide	1024	7/10	chain	1024	1.000	hit	512.500	513	973	1014	1024	miss	0.000	0	0	0	0
+buckets	int-collide	1024	1024	1023,0,0,0,0,0,0,0,1
+distribution	int-collide	1024	2048	0.500	chi2	1047748.0	empty	2046	mixed-chi2	1992.0	mixed-empty	1239	knuth-hit	1.500	knuth-miss	2.500
+probes	int-collide	1024	17/20	lp	2048	0.500	hit	256.548	257	487	509	519	miss	4.521	8	8	8	8
+probes	int-collide	1024	17/20	rh	2048	0.500	hit	256.548	257	487	509	519	miss	4.521	8	8	8	8
+probes	int-collide	1024	17/20	chain	1024	1.000	hit	512.500	513	973	1014	1024	miss	0.000	0	0	0	0
+buckets	int-collide	1024	1024	1023,0,0,0,0,0,0,0,1
+distribution	int-collide	1024	2048	0.500	chi2	1047748.0	empty	2046	mixed-chi2	1992.0	mixed-empty	1239	knuth-hit	1.500	knuth-miss	2.500
 probes	int-collide	16384	1/2	lp	32768	0.500	hit	256.748	257	487	516	544	miss	7.801	2	30	33	33
 probes	int-collide	16384	1/2	rh	32768	0.500	hit	256.748	257	487	516	544	miss	7.801	2	30	33	33
 probes	int-collide	16384	1/2	chain	16384	1.000	hit	512.868	513	973	1024	1085	miss	0.000	0	0	0	0
@@ -238,6 +478,21 @@ probes	int-collide	16384	17/20	rh	32768	0.500	hit	256.748	257	487	516	544	miss	7
 probes	int-collide	16384	17/20	chain	16384	1.000	hit	512.868	513	973	1024	1085	miss	0.000	0	0	0	0
 buckets	int-collide	16384	16384	16368,0,0,0,0,0,0,0,16
 distribution	int-collide	16384	32768	0.500	chi2	16777116.0	empty	32736	mixed-chi2	32680.0	mixed-empty	19871	knuth-hit	1.500	knuth-miss	2.500
+probes	str-short	512	1/2	lp	1024	0.500	hit	1.305	1	3	5	8	miss	2.462	2	6	11	14
+probes	str-short	512	1/2	rh	1024	0.500	hit	1.305	1	2	3	4	miss	1.749	2	3	4	5
+probes	str-short	512	1/2	chain	512	1.000	hit	1.469	1	3	4	4	miss	1.076	1	3	4	4
+buckets	str-short	512	512	177,207,93,21,14,0,0,0,0
+distribution	str-short	512	1024	0.500	chi2	856.0	empty	598	mixed-chi2	928.0	mixed-empty	609	knuth-hit	1.500	knuth-miss	2.500
+probes	str-short	512	7/10	lp	1024	0.500	hit	1.305	1	3	5	8	miss	2.462	2	6	11	14
+probes	str-short	512	7/10	rh	1024	0.500	hit	1.305	1	2	3	4	miss	1.749	2	3	4	5
+probes	str-short	512	7/10	chain	512	1.000	hit	1.469	1	3	4	4	miss	1.076	1	3	4	4
+buckets	str-short	512	512	177,207,93,21,14,0,0,0,0
+distribution	str-short	512	1024	0.500	chi2	856.0	empty	598	mixed-chi2	928.0	mixed-empty	609	knuth-hit	1.500	knuth-miss	2.500
+probes	str-short	512	17/20	lp	1024	0.500	hit	1.305	1	3	5	8	miss	2.462	2	6	11	14
+probes	str-short	512	17/20	rh	1024	0.500	hit	1.305	1	2	3	4	miss	1.749	2	3	4	5
+probes	str-short	512	17/20	chain	512	1.000	hit	1.469	1	3	4	4	miss	1.076	1	3	4	4
+buckets	str-short	512	512	177,207,93,21,14,0,0,0,0
+distribution	str-short	512	1024	0.500	chi2	856.0	empty	598	mixed-chi2	928.0	mixed-empty	609	knuth-hit	1.500	knuth-miss	2.500
 probes	str-short	716	1/2	lp	2048	0.350	hit	1.133	1	2	3	4	miss	1.625	1	4	7	9
 probes	str-short	716	1/2	rh	2048	0.350	hit	1.133	1	2	2	3	miss	1.395	1	2	3	4
 probes	str-short	716	1/2	chain	1024	0.699	hit	1.284	1	2	3	4	miss	0.804	1	2	3	3
@@ -253,21 +508,36 @@ probes	str-short	716	17/20	rh	1024	0.699	hit	1.751	1	4	5	5	miss	2.316	2	4	5	6
 probes	str-short	716	17/20	chain	1024	0.699	hit	1.284	1	2	3	4	miss	0.804	1	2	3	3
 buckets	str-short	716	1024	485,387,128,23,1,0,0,0,0
 distribution	str-short	716	1024	0.699	chi2	888.6	empty	485	mixed-chi2	971.6	mixed-empty	501	knuth-hit	2.162	knuth-miss	6.027
-probes	str-short	1024	1/2	lp	2048	0.500	hit	1.336	1	3	5	8	miss	2.480	2	7	10	12
-probes	str-short	1024	1/2	rh	2048	0.500	hit	1.336	1	2	3	5	miss	1.708	2	3	4	4
-probes	str-short	1024	1/2	chain	1024	1.000	hit	1.463	1	3	4	5	miss	1.139	1	3	3	4
-buckets	str-short	1024	1024	361,394,197,53,18,1,0,0,0
-distribution	str-short	1024	2048	0.500	chi2	1832.0	empty	1214	mixed-chi2	1988.0	mixed-empty	1237	knuth-hit	1.500	knuth-miss	2.500
-probes	str-short	1024	7/10	lp	2048	0.500	hit	1.336	1	3	5	8	miss	2.480	2	7	10	12
-probes	str-short	1024	7/10	rh	2048	0.500	hit	1.336	1	2	3	5	miss	1.708	2	3	4	4
-probes	str-short	1024	7/10	chain	1024	1.000	hit	1.463	1	3	4	5	miss	1.139	1	3	3	4
-buckets	str-short	1024	1024	361,394,197,53,18,1,0,0,0
-distribution	str-short	1024	2048	0.500	chi2	1832.0	empty	1214	mixed-chi2	1988.0	mixed-empty	1237	knuth-hit	1.500	knuth-miss	2.500
-probes	str-short	1024	17/20	lp	2048	0.500	hit	1.336	1	3	5	8	miss	2.480	2	7	10	12
-probes	str-short	1024	17/20	rh	2048	0.500	hit	1.336	1	2	3	5	miss	1.708	2	3	4	4
-probes	str-short	1024	17/20	chain	1024	1.000	hit	1.463	1	3	4	5	miss	1.139	1	3	3	4
-buckets	str-short	1024	1024	361,394,197,53,18,1,0,0,0
-distribution	str-short	1024	2048	0.500	chi2	1832.0	empty	1214	mixed-chi2	1988.0	mixed-empty	1237	knuth-hit	1.500	knuth-miss	2.500
+probes	str-short	870	1/2	lp	2048	0.425	hit	1.263	1	2	4	8	miss	2.035	1	5	7	11
+probes	str-short	870	1/2	rh	2048	0.425	hit	1.263	1	2	3	4	miss	1.576	1	3	3	4
+probes	str-short	870	1/2	chain	1024	0.850	hit	1.411	1	3	4	5	miss	0.973	1	2	3	4
+buckets	str-short	870	1024	428,387,162,30,16,1,0,0,0
+distribution	str-short	870	2048	0.425	chi2	1846.5	empty	1319	mixed-chi2	2001.9	mixed-empty	1339	knuth-hit	1.369	knuth-miss	2.011
+probes	str-short	870	7/10	lp	2048	0.425	hit	1.263	1	2	4	8	miss	2.035	1	5	7	11
+probes	str-short	870	7/10	rh	2048	0.425	hit	1.263	1	2	3	4	miss	1.576	1	3	3	4
+probes	str-short	870	7/10	chain	1024	0.850	hit	1.411	1	3	4	5	miss	0.973	1	2	3	4
+buckets	str-short	870	1024	428,387,162,30,16,1,0,0,0
+distribution	str-short	870	2048	0.425	chi2	1846.5	empty	1319	mixed-chi2	2001.9	mixed-empty	1339	knuth-hit	1.369	knuth-miss	2.011
+probes	str-short	870	17/20	lp	1024	0.850	hit	2.529	1	9	15	32	miss	9.367	6	29	40	49
+probes	str-short	870	17/20	rh	1024	0.850	hit	2.529	2	5	6	8	miss	3.252	3	6	8	9
+probes	str-short	870	17/20	chain	1024	0.850	hit	1.411	1	3	4	5	miss	0.973	1	2	3	4
+buckets	str-short	870	1024	428,387,162,30,16,1,0,0,0
+distribution	str-short	870	1024	0.850	chi2	996.7	empty	428	mixed-chi2	1008.5	mixed-empty	444	knuth-hit	3.825	knuth-miss	22.607
+probes	str-short	8192	1/2	lp	16384	0.500	hit	1.467	1	4	7	18	miss	2.538	2	7	13	24
+probes	str-short	8192	1/2	rh	16384	0.500	hit	1.467	1	3	4	6	miss	1.793	2	3	5	7
+probes	str-short	8192	1/2	chain	8192	1.000	hit	1.432	1	3	4	5	miss	0.954	1	3	4	5
+buckets	str-short	8192	8192	2805,3192,1693,409,78,15,0,0,0
+distribution	str-short	8192	16384	0.500	chi2	15400.0	empty	9829	mixed-chi2	16232.0	mixed-empty	9914	knuth-hit	1.500	knuth-miss	2.500
+probes	str-short	8192	7/10	lp	16384	0.500	hit	1.467	1	4	7	18	miss	2.538	2	7	13	24
+probes	str-short	8192	7/10	rh	16384	0.500	hit	1.467	1	3	4	6	miss	1.793	2	3	5	7
+probes	str-short	8192	7/10	chain	8192	1.000	hit	1.432	1	3	4	5	miss	0.954	1	3	4	5
+buckets	str-short	8192	8192	2805,3192,1693,409,78,15,0,0,0
+distribution	str-short	8192	16384	0.500	chi2	15400.0	empty	9829	mixed-chi2	16232.0	mixed-empty	9914	knuth-hit	1.500	knuth-miss	2.500
+probes	str-short	8192	17/20	lp	16384	0.500	hit	1.467	1	3	7	18	miss	2.538	2	7	13	24
+probes	str-short	8192	17/20	rh	16384	0.500	hit	1.467	1	3	4	6	miss	1.793	2	3	5	7
+probes	str-short	8192	17/20	chain	8192	1.000	hit	1.432	1	3	4	5	miss	0.954	1	3	4	5
+buckets	str-short	8192	8192	2805,3192,1693,409,78,15,0,0,0
+distribution	str-short	8192	16384	0.500	chi2	15400.0	empty	9829	mixed-chi2	16232.0	mixed-empty	9914	knuth-hit	1.500	knuth-miss	2.500
 probes	str-short	11468	1/2	lp	32768	0.350	hit	1.229	1	2	4	11	miss	1.561	1	4	6	12
 probes	str-short	11468	1/2	rh	32768	0.350	hit	1.229	1	2	3	5	miss	1.378	1	3	3	6
 probes	str-short	11468	1/2	chain	16384	0.700	hit	1.339	1	3	3	5	miss	0.709	1	2	3	5
@@ -283,6 +553,36 @@ probes	str-short	11468	17/20	rh	16384	0.700	hit	2.261	2	6	8	13	miss	2.618	2	6	8	
 probes	str-short	11468	17/20	chain	16384	0.700	hit	1.339	1	3	3	5	miss	0.709	1	2	3	5
 buckets	str-short	11468	16384	8064,5796,2007,419,89,9,0,0,0
 distribution	str-short	11468	16384	0.700	chi2	16025.3	empty	8064	mixed-chi2	16233.9	mixed-empty	8098	knuth-hit	2.166	knuth-miss	6.054
+probes	str-short	13926	1/2	lp	32768	0.425	hit	1.334	1	3	5	15	miss	1.942	1	5	9	23
+probes	str-short	13926	1/2	rh	32768	0.425	hit	1.334	1	3	3	6	miss	1.523	1	3	4	7
+probes	str-short	13926	1/2	chain	16384	0.850	hit	1.418	1	3	4	6	miss	0.851	1	2	3	6
+buckets	str-short	13926	16384	6892,6136,2529,621,169,29,8,0,0
+distribution	str-short	13926	32768	0.425	chi2	31416.5	empty	21279	mixed-chi2	32390.6	mixed-empty	21376	knuth-hit	1.370	knuth-miss	2.012
+probes	str-short	13926	7/10	lp	32768	0.425	hit	1.334	1	3	5	15	miss	1.942	1	5	9	23
+probes	str-short	13926	7/10	rh	32768	0.425	hit	1.334	1	3	3	6	miss	1.523	1	3	4	7
+probes	str-short	13926	7/10	chain	16384	0.850	hit	1.418	1	3	4	6	miss	0.851	1	2	3	6
+buckets	str-short	13926	16384	6892,6136,2529,621,169,29,8,0,0
+distribution	str-short	13926	32768	0.425	chi2	31416.5	empty	21279	mixed-chi2	32390.6	mixed-empty	21376	knuth-hit	1.370	knuth-miss	2.012
+probes	str-short	13926	17/20	lp	16384	0.850	hit	4.537	1	20	64	131	miss	24.282	10	89	119	151
+probes	str-short	13926	17/20	rh	16384	0.850	hit	4.537	3	13	18	23	miss	4.829	4	13	18	22
+probes	str-short	13926	17/20	chain	16384	0.850	hit	1.418	1	3	4	6	miss	0.851	1	2	3	6
+buckets	str-short	13926	16384	6892,6136,2529,621,169,29,8,0,0
+distribution	str-short	13926	16384	0.850	chi2	16143.1	empty	6892	mixed-chi2	16126.6	mixed-empty	6939	knuth-hit	3.833	knuth-miss	22.715
+probes	str-short	1024	1/2	lp	2048	0.500	hit	1.336	1	3	5	8	miss	2.480	2	7	10	12
+probes	str-short	1024	1/2	rh	2048	0.500	hit	1.336	1	2	3	5	miss	1.708	2	3	4	4
+probes	str-short	1024	1/2	chain	1024	1.000	hit	1.463	1	3	4	5	miss	1.139	1	3	3	4
+buckets	str-short	1024	1024	361,394,197,53,18,1,0,0,0
+distribution	str-short	1024	2048	0.500	chi2	1832.0	empty	1214	mixed-chi2	1988.0	mixed-empty	1237	knuth-hit	1.500	knuth-miss	2.500
+probes	str-short	1024	7/10	lp	2048	0.500	hit	1.336	1	3	5	8	miss	2.480	2	7	10	12
+probes	str-short	1024	7/10	rh	2048	0.500	hit	1.336	1	2	3	5	miss	1.708	2	3	4	4
+probes	str-short	1024	7/10	chain	1024	1.000	hit	1.463	1	3	4	5	miss	1.139	1	3	3	4
+buckets	str-short	1024	1024	361,394,197,53,18,1,0,0,0
+distribution	str-short	1024	2048	0.500	chi2	1832.0	empty	1214	mixed-chi2	1988.0	mixed-empty	1237	knuth-hit	1.500	knuth-miss	2.500
+probes	str-short	1024	17/20	lp	2048	0.500	hit	1.336	1	3	5	8	miss	2.480	2	7	10	12
+probes	str-short	1024	17/20	rh	2048	0.500	hit	1.336	1	2	3	5	miss	1.708	2	3	4	4
+probes	str-short	1024	17/20	chain	1024	1.000	hit	1.463	1	3	4	5	miss	1.139	1	3	3	4
+buckets	str-short	1024	1024	361,394,197,53,18,1,0,0,0
+distribution	str-short	1024	2048	0.500	chi2	1832.0	empty	1214	mixed-chi2	1988.0	mixed-empty	1237	knuth-hit	1.500	knuth-miss	2.500
 probes	str-short	16384	1/2	lp	32768	0.500	hit	1.448	1	3	6	16	miss	2.363	1	7	13	29
 probes	str-short	16384	1/2	rh	32768	0.500	hit	1.448	1	3	4	7	miss	1.668	1	3	4	7
 probes	str-short	16384	1/2	chain	16384	1.000	hit	1.473	1	3	4	7	miss	0.956	1	3	4	6
@@ -298,6 +598,21 @@ probes	str-short	16384	17/20	rh	32768	0.500	hit	1.448	1	3	4	7	miss	1.668	1	3	4	7
 probes	str-short	16384	17/20	chain	16384	1.000	hit	1.473	1	3	4	7	miss	0.956	1	3	4	6
 buckets	str-short	16384	16384	5820,6269,3100,922,227,36,9,1,0
 distribution	str-short	16384	32768	0.500	chi2	31488.0	empty	19754	mixed-chi2	32304.0	mixed-empty	19800	knuth-hit	1.500	knuth-miss	2.500
+probes	str-medium	512	1/2	lp	1024	0.500	hit	1.160	1	2	4	9	miss	2.103	1	6	10	13
+probes	str-medium	512	1/2	rh	1024	0.500	hit	1.160	1	2	3	3	miss	1.552	1	3	3	4
+probes	str-medium	512	1/2	chain	512	1.000	hit	1.336	1	2	3	4	miss	0.838	1	2	3	4
+buckets	str-medium	512	512	145,246,100,18,3,0,0,0,0
+distribution	str-medium	512	1024	0.500	chi2	664.0	empty	548	mixed-chi2	976.0	mixed-empty	612	knuth-hit	1.500	knuth-miss	2.500
+probes	str-medium	512	7/10	lp	1024	0.500	hit	1.160	1	2	4	9	miss	2.103	1	6	10	13
+probes	str-medium	512	7/10	rh	1024	0.500	hit	1.160	1	2	3	3	miss	1.552	1	3	3	4
+probes	str-medium	512	7/10	chain	512	1.000	hit	1.336	1	2	3	4	miss	0.838	1	2	3	4
+buckets	str-medium	512	512	145,246,100,18,3,0,0,0,0
+distribution	str-medium	512	1024	0.500	chi2	664.0	empty	548	mixed-chi2	976.0	mixed-empty	612	knuth-hit	1.500	knuth-miss	2.500
+probes	str-medium	512	17/20	lp	1024	0.500	hit	1.160	1	2	4	9	miss	2.103	1	6	10	13
+probes	str-medium	512	17/20	rh	1024	0.500	hit	1.160	1	2	3	3	miss	1.552	1	3	3	4
+probes	str-medium	512	17/20	chain	512	1.000	hit	1.336	1	2	3	4	miss	0.838	1	2	3	4
+buckets	str-medium	512	512	145,246,100,18,3,0,0,0,0
+distribution	str-medium	512	1024	0.500	chi2	664.0	empty	548	mixed-chi2	976.0	mixed-empty	612	knuth-hit	1.500	knuth-miss	2.500
 probes	str-medium	716	1/2	lp	2048	0.350	hit	1.158	1	2	4	5	miss	1.936	1	5	7	10
 probes	str-medium	716	1/2	rh	2048	0.350	hit	1.158	1	2	3	3	miss	1.583	1	3	4	4
 probes	str-medium	716	1/2	chain	1024	0.699	hit	1.156	1	2	2	3	miss	0.781	1	2	2	3
@@ -313,21 +628,36 @@ probes	str-medium	716	17/20	rh	1024	0.699	hit	1.503	1	3	4	5	miss	2.124	2	4	5	6
 probes	str-medium	716	17/20	chain	1024	0.699	hit	1.156	1	2	2	3	miss	0.781	1	2	2	3
 buckets	str-medium	716	1024	416,504,100,4,0,0,0,0,0
 distribution	str-medium	716	1024	0.699	chi2	628.4	empty	416	mixed-chi2	977.3	mixed-empty	500	knuth-hit	2.162	knuth-miss	6.027
-probes	str-medium	1024	1/2	lp	2048	0.500	hit	1.307	1	3	5	8	miss	2.621	2	7	10	12
-probes	str-medium	1024	1/2	rh	2048	0.500	hit	1.307	1	2	3	5	miss	1.826	2	3	4	6
-probes	str-medium	1024	1/2	chain	1024	1.000	hit	1.316	1	2	3	4	miss	1.045	1	2	3	4
-buckets	str-medium	1024	1024	286,489,213,35,1,0,0,0,0
-distribution	str-medium	1024	2048	0.500	chi2	1664.0	empty	1166	mixed-chi2	1984.0	mixed-empty	1232	knuth-hit	1.500	knuth-miss	2.500
-probes	str-medium	1024	7/10	lp	2048	0.500	hit	1.307	1	3	5	8	miss	2.621	2	7	10	12
-probes	str-medium	1024	7/10	rh	2048	0.500	hit	1.307	1	2	3	5	miss	1.826	2	3	4	6
-probes	str-medium	1024	7/10	chain	1024	1.000	hit	1.316	1	2	3	4	miss	1.045	1	2	3	4
-buckets	str-medium	1024	1024	286,489,213,35,1,0,0,0,0
-distribution	str-medium	1024	2048	0.500	chi2	1664.0	empty	1166	mixed-chi2	1984.0	mixed-empty	1232	knuth-hit	1.500	knuth-miss	2.500
-probes	str-medium	1024	17/20	lp	2048	0.500	hit	1.307	1	3	5	8	miss	2.621	2	7	10	12
-probes	str-medium	1024	17/20	rh	2048	0.500	hit	1.307	1	2	3	5	miss	1.826	2	3	4	6
-probes	str-medium	1024	17/20	chain	1024	1.000	hit	1.316	1	2	3	4	miss	1.045	1	2	3	4
-buckets	str-medium	1024	1024	286,489,213,35,1,0,0,0,0
-distribution	str-medium	1024	2048	0.500	chi2	1664.0	empty	1166	mixed-chi2	1984.0	mixed-empty	1232	knuth-hit	1.500	knuth-miss	2.500
+probes	str-medium	870	1/2	lp	2048	0.425	hit	1.241	1	3	4	7	miss	2.305	2	6	9	12
+probes	str-medium	870	1/2	rh	2048	0.425	hit	1.241	1	2	3	3	miss	1.724	2	3	4	4
+probes	str-medium	870	1/2	chain	1024	0.850	hit	1.255	1	2	3	3	miss	0.926	1	2	3	3
+buckets	str-medium	870	1024	359,477,171,17,0,0,0,0,0
+distribution	str-medium	870	2048	0.425	chi2	1724.1	empty	1287	mixed-chi2	1945.4	mixed-empty	1320	knuth-hit	1.369	knuth-miss	2.011
+probes	str-medium	870	7/10	lp	2048	0.425	hit	1.241	1	3	4	7	miss	2.305	2	6	9	12
+probes	str-medium	870	7/10	rh	2048	0.425	hit	1.241	1	2	3	3	miss	1.724	2	3	4	4
+probes	str-medium	870	7/10	chain	1024	0.850	hit	1.255	1	2	3	3	miss	0.926	1	2	3	3
+buckets	str-medium	870	1024	359,477,171,17,0,0,0,0,0
+distribution	str-medium	870	2048	0.425	chi2	1724.1	empty	1287	mixed-chi2	1945.4	mixed-empty	1320	knuth-hit	1.369	knuth-miss	2.011
+probes	str-medium	870	17/20	lp	1024	0.850	hit	2.700	1	9	34	78	miss	13.868	7	51	88	96
+probes	str-medium	870	17/20	rh	1024	0.850	hit	2.700	2	8	9	10	miss	3.360	3	8	10	11
+probes	str-medium	870	17/20	chain	1024	0.850	hit	1.255	1	2	3	3	miss	0.926	1	2	3	3
+buckets	str-medium	870	1024	359,477,171,17,0,0,0,0,0
+distribution	str-medium	870	1024	0.850	chi2	676.6	empty	359	mixed-chi2	956.7	mixed-empty	425	knuth-hit	3.825	knuth-miss	22.607
+probes	str-medium	8192	1/2	lp	16384	0.500	hit	1.484	1	4	7	29	miss	2.860	2	9	15	39
+probes	str-medium	8192	1/2	rh	16384	0.500	hit	1.484	1	3	4	8	miss	1.883	2	4	5	9
+probes	str-medium	8192	1/2	chain	8192	1.000	hit	1.504	1	3	4	6	miss	1.119	1	3	4	6
+buckets	str-medium	8192	8192	3049,2945,1537,509,118,30,4,0,0
+distribution	str-medium	8192	16384	0.500	chi2	15800.0	empty	9869	mixed-chi2	16412.0	mixed-empty	9943	knuth-hit	1.500	knuth-miss	2.500
+probes	str-medium	8192	7/10	lp	16384	0.500	hit	1.484	1	4	7	29	miss	2.860	2	9	15	39
+probes	str-medium	8192	7/10	rh	16384	0.500	hit	1.484	1	3	4	8	miss	1.883	2	4	5	9
+probes	str-medium	8192	7/10	chain	8192	1.000	hit	1.504	1	3	4	6	miss	1.119	1	3	4	6
+buckets	str-medium	8192	8192	3049,2945,1537,509,118,30,4,0,0
+distribution	str-medium	8192	16384	0.500	chi2	15800.0	empty	9869	mixed-chi2	16412.0	mixed-empty	9943	knuth-hit	1.500	knuth-miss	2.500
+probes	str-medium	8192	17/20	lp	16384	0.500	hit	1.484	1	4	7	29	miss	2.860	2	9	15	39
+probes	str-medium	8192	17/20	rh	16384	0.500	hit	1.484	1	3	4	8	miss	1.883	2	4	5	9
+probes	str-medium	8192	17/20	chain	8192	1.000	hit	1.504	1	3	4	6	miss	1.119	1	3	4	6
+buckets	str-medium	8192	8192	3049,2945,1537,509,118,30,4,0,0
+distribution	str-medium	8192	16384	0.500	chi2	15800.0	empty	9869	mixed-chi2	16412.0	mixed-empty	9943	knuth-hit	1.500	knuth-miss	2.500
 probes	str-medium	11468	1/2	lp	32768	0.350	hit	1.243	1	2	4	13	miss	1.770	1	4	7	16
 probes	str-medium	11468	1/2	rh	32768	0.350	hit	1.243	1	2	3	5	miss	1.497	1	3	4	6
 probes	str-medium	11468	1/2	chain	16384	0.700	hit	1.309	1	2	3	5	miss	0.834	1	2	3	5
@@ -343,6 +673,36 @@ probes	str-medium	11468	17/20	rh	16384	0.700	hit	2.059	2	5	7	12	miss	2.572	2	6	8
 probes	str-medium	11468	17/20	chain	16384	0.700	hit	1.309	1	2	3	5	miss	0.834	1	2	3	5
 buckets	str-medium	11468	16384	7880,6043,2029,364,65,3,0,0,0
 distribution	str-medium	11468	16384	0.700	chi2	15033.8	empty	7880	mixed-chi2	16302.5	mixed-empty	8145	knuth-hit	2.166	knuth-miss	6.054
+probes	str-medium	13926	1/2	lp	32768	0.425	hit	1.352	1	3	5	20	miss	2.045	1	6	10	26
+probes	str-medium	13926	1/2	rh	32768	0.425	hit	1.352	1	3	4	7	miss	1.596	1	3	4	8
+probes	str-medium	13926	1/2	chain	16384	0.850	hit	1.389	1	3	3	5	miss	0.904	1	3	4	5
+buckets	str-medium	13926	16384	6835,6076,2695,663,104,11,0,0,0
+distribution	str-medium	13926	32768	0.425	chi2	32442.4	empty	21345	mixed-chi2	32691.8	mixed-empty	21422	knuth-hit	1.370	knuth-miss	2.012
+probes	str-medium	13926	7/10	lp	32768	0.425	hit	1.352	1	3	5	20	miss	2.045	1	6	10	26
+probes	str-medium	13926	7/10	rh	32768	0.425	hit	1.352	1	3	4	7	miss	1.596	1	3	4	8
+probes	str-medium	13926	7/10	chain	16384	0.850	hit	1.389	1	3	3	5	miss	0.904	1	3	4	5
+buckets	str-medium	13926	16384	6835,6076,2695,663,104,11,0,0,0
+distribution	str-medium	13926	32768	0.425	chi2	32442.4	empty	21345	mixed-chi2	32691.8	mixed-empty	21422	knuth-hit	1.370	knuth-miss	2.012
+probes	str-medium	13926	17/20	lp	16384	0.850	hit	3.528	1	13	36	273	miss	23.042	9	91	253	422
+probes	str-medium	13926	17/20	rh	16384	0.850	hit	3.528	3	9	13	20	miss	4.062	3	10	14	21
+probes	str-medium	13926	17/20	chain	16384	0.850	hit	1.389	1	3	3	5	miss	0.904	1	3	4	5
+buckets	str-medium	13926	16384	6835,6076,2695,663,104,11,0,0,0
+distribution	str-medium	13926	16384	0.850	chi2	15206.6	empty	6835	mixed-chi2	16378.4	mixed-empty	7021	knuth-hit	3.833	knuth-miss	22.715
+probes	str-medium	1024	1/2	lp	2048	0.500	hit	1.307	1	3	5	8	miss	2.621	2	7	10	12
+probes	str-medium	1024	1/2	rh	2048	0.500	hit	1.307	1	2	3	5	miss	1.826	2	3	4	6
+probes	str-medium	1024	1/2	chain	1024	1.000	hit	1.316	1	2	3	4	miss	1.045	1	2	3	4
+buckets	str-medium	1024	1024	286,489,213,35,1,0,0,0,0
+distribution	str-medium	1024	2048	0.500	chi2	1664.0	empty	1166	mixed-chi2	1984.0	mixed-empty	1232	knuth-hit	1.500	knuth-miss	2.500
+probes	str-medium	1024	7/10	lp	2048	0.500	hit	1.307	1	3	5	8	miss	2.621	2	7	10	12
+probes	str-medium	1024	7/10	rh	2048	0.500	hit	1.307	1	2	3	5	miss	1.826	2	3	4	6
+probes	str-medium	1024	7/10	chain	1024	1.000	hit	1.316	1	2	3	4	miss	1.045	1	2	3	4
+buckets	str-medium	1024	1024	286,489,213,35,1,0,0,0,0
+distribution	str-medium	1024	2048	0.500	chi2	1664.0	empty	1166	mixed-chi2	1984.0	mixed-empty	1232	knuth-hit	1.500	knuth-miss	2.500
+probes	str-medium	1024	17/20	lp	2048	0.500	hit	1.307	1	3	5	8	miss	2.621	2	7	10	12
+probes	str-medium	1024	17/20	rh	2048	0.500	hit	1.307	1	2	3	5	miss	1.826	2	3	4	6
+probes	str-medium	1024	17/20	chain	1024	1.000	hit	1.316	1	2	3	4	miss	1.045	1	2	3	4
+buckets	str-medium	1024	1024	286,489,213,35,1,0,0,0,0
+distribution	str-medium	1024	2048	0.500	chi2	1664.0	empty	1166	mixed-chi2	1984.0	mixed-empty	1232	knuth-hit	1.500	knuth-miss	2.500
 probes	str-medium	16384	1/2	lp	32768	0.500	hit	1.454	1	3	7	30	miss	2.458	2	7	13	30
 probes	str-medium	16384	1/2	rh	32768	0.500	hit	1.454	1	3	4	7	miss	1.733	2	3	5	8
 probes	str-medium	16384	1/2	chain	16384	1.000	hit	1.459	1	3	4	6	miss	1.049	1	3	4	6
@@ -358,6 +718,21 @@ probes	str-medium	16384	17/20	rh	32768	0.500	hit	1.454	1	3	4	7	miss	1.733	2	3	5	
 probes	str-medium	16384	17/20	chain	16384	1.000	hit	1.459	1	3	4	6	miss	1.049	1	3	4	6
 buckets	str-medium	16384	16384	5738,6363,3109,939,193,38,4,0,0
 distribution	str-medium	16384	32768	0.500	chi2	31280.0	empty	19555	mixed-chi2	32624.0	mixed-empty	19875	knuth-hit	1.500	knuth-miss	2.500
+probes	point	512	1/2	lp	1024	0.500	hit	1.484	1	3	6	17	miss	2.449	2	8	12	22
+probes	point	512	1/2	rh	1024	0.500	hit	1.484	1	3	5	6	miss	1.722	2	3	5	7
+probes	point	512	1/2	chain	512	1.000	hit	1.482	1	3	4	4	miss	1.002	1	3	4	4
+buckets	point	512	512	184,194,97,24,13,0,0,0,0
+distribution	point	512	1024	0.500	chi2	988.0	empty	616	mixed-chi2	964.0	mixed-empty	610	knuth-hit	1.500	knuth-miss	2.500
+probes	point	512	7/10	lp	1024	0.500	hit	1.484	1	3	6	17	miss	2.449	2	8	12	22
+probes	point	512	7/10	rh	1024	0.500	hit	1.484	1	3	5	6	miss	1.722	2	3	5	7
+probes	point	512	7/10	chain	512	1.000	hit	1.482	1	3	4	4	miss	1.002	1	3	4	4
+buckets	point	512	512	184,194,97,24,13,0,0,0,0
+distribution	point	512	1024	0.500	chi2	988.0	empty	616	mixed-chi2	964.0	mixed-empty	610	knuth-hit	1.500	knuth-miss	2.500
+probes	point	512	17/20	lp	1024	0.500	hit	1.484	1	3	6	17	miss	2.449	2	8	12	22
+probes	point	512	17/20	rh	1024	0.500	hit	1.484	1	3	5	6	miss	1.722	2	3	5	7
+probes	point	512	17/20	chain	512	1.000	hit	1.482	1	3	4	4	miss	1.002	1	3	4	4
+buckets	point	512	512	184,194,97,24,13,0,0,0,0
+distribution	point	512	1024	0.500	chi2	988.0	empty	616	mixed-chi2	964.0	mixed-empty	610	knuth-hit	1.500	knuth-miss	2.500
 probes	point	716	1/2	lp	2048	0.350	hit	1.288	1	3	5	13	miss	1.661	1	4	6	18
 probes	point	716	1/2	rh	2048	0.350	hit	1.288	1	3	4	5	miss	1.451	1	3	4	5
 probes	point	716	1/2	chain	1024	0.699	hit	1.352	1	3	3	5	miss	0.712	1	2	3	5
@@ -373,21 +748,36 @@ probes	point	716	17/20	rh	1024	0.699	hit	2.295	2	6	8	10	miss	2.518	2	6	8	10
 probes	point	716	17/20	chain	1024	0.699	hit	1.352	1	3	3	5	miss	0.712	1	2	3	5
 buckets	point	716	1024	512,348,130,30,2,2,0,0,0
 distribution	point	716	1024	0.699	chi2	1028.8	empty	512	mixed-chi2	931.6	mixed-empty	489	knuth-hit	2.162	knuth-miss	6.027
-probes	point	1024	1/2	lp	2048	0.500	hit	1.552	1	4	8	20	miss	2.438	2	7	12	26
-probes	point	1024	1/2	rh	2048	0.500	hit	1.552	1	3	5	8	miss	1.765	2	4	5	7
-probes	point	1024	1/2	chain	1024	1.000	hit	1.490	1	3	4	6	miss	0.996	1	3	4	6
-buckets	point	1024	1024	372,379,198,57,13,4,1,0,0
-distribution	point	1024	2048	0.500	chi2	2052.0	empty	1246	mixed-chi2	1884.0	mixed-empty	1216	knuth-hit	1.500	knuth-miss	2.500
-probes	point	1024	7/10	lp	2048	0.500	hit	1.552	1	4	8	20	miss	2.438	2	7	12	26
-probes	point	1024	7/10	rh	2048	0.500	hit	1.552	1	3	5	8	miss	1.765	2	4	5	7
-probes	point	1024	7/10	chain	1024	1.000	hit	1.490	1	3	4	6	miss	0.996	1	3	4	6
-buckets	point	1024	1024	372,379,198,57,13,4,1,0,0
-distribution	point	1024	2048	0.500	chi2	2052.0	empty	1246	mixed-chi2	1884.0	mixed-empty	1216	knuth-hit	1.500	knuth-miss	2.500
-probes	point	1024	17/20	lp	2048	0.500	hit	1.552	1	4	8	20	miss	2.438	2	7	12	26
-probes	point	1024	17/20	rh	2048	0.500	hit	1.552	1	3	5	8	miss	1.765	2	4	5	7
-probes	point	1024	17/20	chain	1024	1.000	hit	1.490	1	3	4	6	miss	0.996	1	3	4	6
-buckets	point	1024	1024	372,379,198,57,13,4,1,0,0
-distribution	point	1024	2048	0.500	chi2	2052.0	empty	1246	mixed-chi2	1884.0	mixed-empty	1216	knuth-hit	1.500	knuth-miss	2.500
+probes	point	870	1/2	lp	2048	0.425	hit	1.374	1	3	5	13	miss	1.873	1	5	7	20
+probes	point	870	1/2	rh	2048	0.425	hit	1.374	1	3	4	6	miss	1.559	1	3	4	6
+probes	point	870	1/2	chain	1024	0.850	hit	1.410	1	3	4	5	miss	0.840	1	2	3	5
+buckets	point	870	1024	434,373,166,41,8,2,0,0,0
+distribution	point	870	2048	0.425	chi2	2011.3	empty	1334	mixed-chi2	1926.6	mixed-empty	1323	knuth-hit	1.369	knuth-miss	2.011
+probes	point	870	7/10	lp	2048	0.425	hit	1.374	1	3	5	13	miss	1.873	1	5	7	20
+probes	point	870	7/10	rh	2048	0.425	hit	1.374	1	3	4	6	miss	1.559	1	3	4	6
+probes	point	870	7/10	chain	1024	0.850	hit	1.410	1	3	4	5	miss	0.840	1	2	3	5
+buckets	point	870	1024	434,373,166,41,8,2,0,0,0
+distribution	point	870	2048	0.425	chi2	2011.3	empty	1334	mixed-chi2	1926.6	mixed-empty	1323	knuth-hit	1.369	knuth-miss	2.011
+probes	point	870	17/20	lp	1024	0.850	hit	3.282	1	13	29	64	miss	22.489	8	116	158	164
+probes	point	870	17/20	rh	1024	0.850	hit	3.282	3	8	11	14	miss	3.761	3	9	12	15
+probes	point	870	17/20	chain	1024	0.850	hit	1.410	1	3	4	5	miss	0.840	1	2	3	5
+buckets	point	870	1024	434,373,166,41,8,2,0,0,0
+distribution	point	870	1024	0.850	chi2	994.4	empty	434	mixed-chi2	947.3	mixed-empty	420	knuth-hit	3.825	knuth-miss	22.607
+probes	point	8192	1/2	lp	16384	0.500	hit	1.485	1	4	6	29	miss	2.562	2	7	15	32
+probes	point	8192	1/2	rh	16384	0.500	hit	1.485	1	3	4	9	miss	1.751	2	4	5	9
+probes	point	8192	1/2	chain	8192	1.000	hit	1.495	1	3	4	8	miss	0.969	1	3	4	7
+buckets	point	8192	8192	2989,3042,1520,491,124,18,6,1,1
+distribution	point	8192	16384	0.500	chi2	16400.0	empty	9939	mixed-chi2	16164.0	mixed-empty	9901	knuth-hit	1.500	knuth-miss	2.500
+probes	point	8192	7/10	lp	16384	0.500	hit	1.485	1	4	6	29	miss	2.562	2	7	15	32
+probes	point	8192	7/10	rh	16384	0.500	hit	1.485	1	3	4	9	miss	1.751	2	4	5	9
+probes	point	8192	7/10	chain	8192	1.000	hit	1.495	1	3	4	8	miss	0.969	1	3	4	7
+buckets	point	8192	8192	2989,3042,1520,491,124,18,6,1,1
+distribution	point	8192	16384	0.500	chi2	16400.0	empty	9939	mixed-chi2	16164.0	mixed-empty	9901	knuth-hit	1.500	knuth-miss	2.500
+probes	point	8192	17/20	lp	16384	0.500	hit	1.485	1	4	6	29	miss	2.562	2	7	15	32
+probes	point	8192	17/20	rh	16384	0.500	hit	1.485	1	3	4	9	miss	1.751	2	4	5	9
+probes	point	8192	17/20	chain	8192	1.000	hit	1.495	1	3	4	8	miss	0.969	1	3	4	7
+buckets	point	8192	8192	2989,3042,1520,491,124,18,6,1,1
+distribution	point	8192	16384	0.500	chi2	16400.0	empty	9939	mixed-chi2	16164.0	mixed-empty	9901	knuth-hit	1.500	knuth-miss	2.500
 probes	point	11468	1/2	lp	32768	0.350	hit	1.269	1	3	4	10	miss	1.667	1	4	7	16
 probes	point	11468	1/2	rh	32768	0.350	hit	1.269	1	2	3	5	miss	1.436	1	3	4	6
 probes	point	11468	1/2	chain	16384	0.700	hit	1.352	1	3	3	5	miss	0.696	0	2	3	5
@@ -403,6 +793,36 @@ probes	point	11468	17/20	rh	16384	0.700	hit	2.183	2	5	8	14	miss	2.543	2	6	9	15
 probes	point	11468	17/20	chain	16384	0.700	hit	1.352	1	3	3	5	miss	0.696	0	2	3	5
 buckets	point	11468	16384	8159,5663,1979,496,76,11,0,0,0
 distribution	point	11468	16384	0.700	chi2	16439.7	empty	8159	mixed-chi2	16231.1	mixed-empty	8118	knuth-hit	2.166	knuth-miss	6.054
+probes	point	13926	1/2	lp	32768	0.425	hit	1.378	1	3	5	21	miss	2.027	1	6	10	23
+probes	point	13926	1/2	rh	32768	0.425	hit	1.378	1	3	4	7	miss	1.585	1	3	4	8
+probes	point	13926	1/2	chain	16384	0.850	hit	1.431	1	3	4	6	miss	0.845	1	3	4	6
+buckets	point	13926	16384	7029,5955,2448,766,155,29,2,0,0
+distribution	point	13926	32768	0.425	chi2	33082.4	empty	21465	mixed-chi2	32828.3	mixed-empty	21433	knuth-hit	1.370	knuth-miss	2.012
+probes	point	13926	7/10	lp	32768	0.425	hit	1.378	1	3	5	21	miss	2.027	1	6	10	23
+probes	point	13926	7/10	rh	32768	0.425	hit	1.378	1	3	4	7	miss	1.585	1	3	4	8
+probes	point	13926	7/10	chain	16384	0.850	hit	1.431	1	3	4	6	miss	0.845	1	3	4	6
+buckets	point	13926	16384	7029,5955,2448,766,155,29,2,0,0
+distribution	point	13926	32768	0.425	chi2	33082.4	empty	21465	mixed-chi2	32828.3	mixed-empty	21433	knuth-hit	1.370	knuth-miss	2.012
+probes	point	13926	17/20	lp	16384	0.850	hit	3.757	1	15	40	190	miss	20.819	9	84	149	217
+probes	point	13926	17/20	rh	16384	0.850	hit	3.757	3	10	15	22	miss	4.210	3	11	15	23
+probes	point	13926	17/20	chain	16384	0.850	hit	1.431	1	3	4	6	miss	0.845	1	3	4	6
+buckets	point	13926	16384	7029,5955,2448,766,155,29,2,0,0
+distribution	point	13926	16384	0.850	chi2	16566.6	empty	7029	mixed-chi2	16343.1	mixed-empty	7028	knuth-hit	3.833	knuth-miss	22.715
+probes	point	1024	1/2	lp	2048	0.500	hit	1.552	1	4	8	20	miss	2.438	2	7	12	26
+probes	point	1024	1/2	rh	2048	0.500	hit	1.552	1	3	5	8	miss	1.765	2	4	5	7
+probes	point	1024	1/2	chain	1024	1.000	hit	1.490	1	3	4	6	miss	0.996	1	3	4	6
+buckets	point	1024	1024	372,379,198,57,13,4,1,0,0
+distribution	point	1024	2048	0.500	chi2	2052.0	empty	1246	mixed-chi2	1884.0	mixed-empty	1216	knuth-hit	1.500	knuth-miss	2.500
+probes	point	1024	7/10	lp	2048	0.500	hit	1.552	1	4	8	20	miss	2.438	2	7	12	26
+probes	point	1024	7/10	rh	2048	0.500	hit	1.552	1	3	5	8	miss	1.765	2	4	5	7
+probes	point	1024	7/10	chain	1024	1.000	hit	1.490	1	3	4	6	miss	0.996	1	3	4	6
+buckets	point	1024	1024	372,379,198,57,13,4,1,0,0
+distribution	point	1024	2048	0.500	chi2	2052.0	empty	1246	mixed-chi2	1884.0	mixed-empty	1216	knuth-hit	1.500	knuth-miss	2.500
+probes	point	1024	17/20	lp	2048	0.500	hit	1.552	1	4	8	20	miss	2.438	2	7	12	26
+probes	point	1024	17/20	rh	2048	0.500	hit	1.552	1	3	5	8	miss	1.765	2	4	5	7
+probes	point	1024	17/20	chain	1024	1.000	hit	1.490	1	3	4	6	miss	0.996	1	3	4	6
+buckets	point	1024	1024	372,379,198,57,13,4,1,0,0
+distribution	point	1024	2048	0.500	chi2	2052.0	empty	1246	mixed-chi2	1884.0	mixed-empty	1216	knuth-hit	1.500	knuth-miss	2.500
 probes	point	16384	1/2	lp	32768	0.500	hit	1.505	1	4	7	24	miss	2.573	1	8	14	28
 probes	point	16384	1/2	rh	32768	0.500	hit	1.505	1	3	4	7	miss	1.761	1	4	5	8
 probes	point	16384	1/2	chain	16384	1.000	hit	1.504	1	3	4	6	miss	0.997	1	3	4	6
