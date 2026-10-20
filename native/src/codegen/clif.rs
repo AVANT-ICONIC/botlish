@@ -24,8 +24,9 @@
 //! Where those physical slots actually live depends on `RootPlan::storage`
 //! (codegen::roots's `RootStorage`, see its own doc), and, for
 //! `NativeFrame`, on `self.stack_maps` (this function's own copy of
-//! `roots::plan`'s `native_frame_supported` argument -- true when
-//! `module.isa().name()` is `"x64"` or `"aarch64"`):
+//! `roots::plan`'s `native_frame_supported` argument --
+//! runtime::framewalk's `NATIVE_FRAME_ROOTS`: x86-64 and AArch64 Linux and
+//! macOS, never Windows):
 //!
 //!   * `RuntimeStack`: the shared shadow-stack array, indexed via
 //!     `vm.ss_top`/`ss_limit`; at least one slot always, so the shared
@@ -40,10 +41,10 @@
 //!     attached to each safepoint's own `call` instruction
 //!     (`mark_safepoint`, runtime/framewalk.rs). Eligible for every
 //!     function, called or not, recursive or not.
-//!   * `NativeFrame`, fallback (`!self.stack_maps`, any other ISA):
-//!     the original, narrower mechanism -- only eligible for a function
-//!     with no Botlish call, published to `vm.native_roots_ptr`/`_len`
-//!     (`prologue_native_frame`).
+//!   * `NativeFrame`, fallback (`!self.stack_maps`, any other host:
+//!     Windows): the original, narrower mechanism -- only eligible for a
+//!     function with no Botlish call, published to `vm.native_roots_ptr`/
+//!     `_len` (`prologue_native_frame`).
 //!
 //! On Linux x86-64 and AArch64 the pthread guard handles native overflow,
 //! so a calling function has no Botlish-specific depth-token instructions.
@@ -642,11 +643,16 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
         // implemented for x86-64 and AArch64, verified against this repo's
         // pinned Cranelift and its own generated assembly (see this file's
         // header, and `define`'s safepoint extraction for AArch64's
-        // frame-pointer-relative roots). Every other host keeps the
-        // original, narrower RootStorage::NativeFrame rule (roots::plan's
-        // own doc). Must agree with roots::report's
-        // `native_frame_supported` and framewalk's own target gates.
-        let stack_maps = matches!(module.isa().name(), "x64" | "aarch64");
+        // frame-pointer-relative roots), and runs on the hosts whose Rust
+        // frames it can climb: runtime::framewalk's NATIVE_FRAME_ROOTS, the
+        // one capability roots::report, the walk and Vm::new's shadow stack
+        // read too. Every other host -- Windows -- keeps the original,
+        // narrower RootStorage::NativeFrame rule (roots::plan's own doc).
+        let stack_maps = crate::runtime::framewalk::NATIVE_FRAME_ROOTS;
+        assert!(
+            !stack_maps || matches!(module.isa().name(), "x64" | "aarch64"),
+            "native-frame roots on an ISA the frame walk does not know"
+        );
         let plan = roots::plan(f, stack_maps);
         let listget_fast = std::env::var("BOTLISH_NATIVE_LISTGET_FAST_OPT").ok().as_deref() != Some("0");
         let root_init_opt = std::env::var("BOTLISH_NATIVE_ROOT_INIT_OPT").ok().as_deref() != Some("0");

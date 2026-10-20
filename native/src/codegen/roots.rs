@@ -839,11 +839,10 @@ pub fn plan(f: &Function, native_frame_supported: bool) -> RootPlan {
 /// unaffected by this module's definite-initialization analysis, the
 /// second is entirely its output.
 pub fn report(program: &Program) -> String {
-    // Reflects what this host's actual JIT compile will decide
-    // (codegen::clif's `stack_maps`: an x64 or aarch64 ISA): this CLI
-    // parses and analyzes only, never compiles (main.rs's own doc), so
-    // there is no `Module`/ISA here to ask directly.
-    let native_frame_supported = cfg!(any(target_arch = "x86_64", target_arch = "aarch64"));
+    // What this host's actual JIT compile decides (codegen::clif's
+    // `stack_maps`): the same capability, runtime::framewalk's
+    // NATIVE_FRAME_ROOTS.
+    let native_frame_supported = crate::runtime::framewalk::NATIVE_FRAME_ROOTS;
     let mut out = String::new();
     for f in &program.functions {
         let plan = plan(f, native_frame_supported);

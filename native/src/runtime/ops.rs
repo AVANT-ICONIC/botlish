@@ -3768,6 +3768,44 @@ mod tests {
         assert_eq!(vm.declared_error, 0);
     }
 
+    /// A Windows argument (runtime/aot.rs's `wtf8_from_utf16`): valid UTF-16
+    /// -- ASCII, a BMP scalar, a surrogate pair, the empty argument, spaces
+    /// and quotes, which are content once the command line is split -- is
+    /// exactly its UTF-8, so `argv()` reads it as on Linux.
+    #[test]
+    fn argv_windows_utf16_is_its_utf8() {
+        use crate::runtime::aot::wtf8_from_utf16;
+        for text in ["C:\\dir with space\\prog.exe", "", "a \"quoted\" b\\", "\u{e9}e\u{301}", "\u{1f600}\u{20ac}", "\u{ffff}\u{10ffff}"] {
+            assert_eq!(wtf8_from_utf16(text.encode_utf16()), text.as_bytes(), "{text:?}");
+        }
+        let mut vm = vm();
+        vm.set_argv(["prog", "", "\u{1f600}"].iter().map(|t| wtf8_from_utf16(t.encode_utf16())).collect());
+        assert_eq!(argv_strings(rt_argv(&mut *vm)), vec!["prog", "", "\u{1f600}"]);
+    }
+
+    /// An unpaired surrogate -- UTF-16 a Windows command line may hold, no
+    /// Unicode scalar -- is its code unit's three-byte form (never U+FFFD or
+    /// a dropped unit), lossless and distinct for every unit, which strict
+    /// UTF-8 rejects: `argv()` is the declared error, as for invalid UTF-8
+    /// on Linux. A surrogate pair split by another unit is two unpaired
+    /// surrogates.
+    #[test]
+    fn argv_windows_unpaired_surrogate_is_the_declared_error() {
+        use crate::runtime::aot::wtf8_from_utf16;
+        assert_eq!(wtf8_from_utf16([0xD800]), b"\xED\xA0\x80");
+        assert_eq!(wtf8_from_utf16([0xDFFF]), b"\xED\xBF\xBF");
+        assert_eq!(wtf8_from_utf16([0x61, 0xDC00, 0x62]), b"a\xED\xB0\x80b");
+        assert_eq!(wtf8_from_utf16([0xD83D, 0x20, 0xDE00]), b"\xED\xA0\xBD \xED\xB8\x80");
+        assert_eq!(wtf8_from_utf16([0xD83D, 0xDE00]), "\u{1f600}".as_bytes());
+        let lone: Vec<Vec<u8>> = (0xD800..=0xDFFFu16).map(|u| wtf8_from_utf16([u])).collect();
+        assert!(lone.iter().all(|b| std::str::from_utf8(b).is_err()));
+        assert_eq!(lone.iter().collect::<std::collections::HashSet<_>>().len(), lone.len());
+        let mut vm = vm();
+        vm.set_argv(vec![b"prog".to_vec(), wtf8_from_utf16([0x61, 0xD800])]);
+        assert_eq!(rt_argv(&mut *vm), NO_VALUE);
+        assert_eq!(vm.declared_error, crate::runtime::error::ERR_INVALID_ARGUMENT_ENCODING);
+    }
+
     #[test]
     fn argv_zero_arguments_is_the_empty_list() {
         let mut vm = vm();

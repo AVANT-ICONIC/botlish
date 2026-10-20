@@ -1,0 +1,24 @@
+name: Install the Windows prerequisites
+description: >
+  The Windows x86-64 counterpart of .devcontainer/setup.sh for the Windows
+  workflow (WINDOWS-X86-64-MILESTONE-1.md, section 7): runs
+  tests/platform/setup-windows.ps1 -- this repository's baseline Tcl 9.0.1,
+  built once from its pinned source release with MSVC's nmake and cached
+  here, and the stable Rust toolchain for x86_64-pc-windows-msvc -- and puts
+  Tcl on PATH for the job's later steps.
+
+runs:
+  using: composite
+  steps:
+    # The build's inputs are the script (version, checksum, flags) and the
+    # runner image's toolchain: the key holds the first; an image change
+    # that breaks the cached build shows as a failing Tcl check.
+    - name: Cache the Tcl 9.0.1 build
+      uses: actions/cache@v4
+      with:
+        path: C:\botlish-tcl
+        key: tcl-9.0.1-msvc-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tests/platform/setup-windows.ps1') }}
+
+    - name: Install Tcl 9.0.1 and stable Rust (x86_64-pc-windows-msvc)
+      shell: pwsh
+      run: tests/platform/setup-windows.ps1 -Prefix C:\botlish-tcl -PathFile $env:GITHUB_PATH

@@ -450,7 +450,12 @@ test cb-fixture-only-reached-externs {a program's foreign table holds only the C
     lsearch -all -inline -regexp [split $nir \n] {^(foreign|link) }
 } -cleanup removeScratch -match glob -result {{link "bgf"} {link "botlish_shim_bgf_*"} {foreign 0 "bgf_count" params="" result=i32 name="bgf::bgf::bgf_count"}}
 
-test cb-fixture-no-c-at-compile-time {compiling a program over a generated binding needs no header, no preprocessor and no C compiler: a child process with no compiler on its PATH and no header sources compiles it, with every foreign declaration of the host target's binding (bgf_arm_only is declared on AArch64 only)} -constraints clang -body {
+# The fixture has a committed binding for this host's target (none for
+# windows-x86_64, MSVC's: the Windows SDK binding is a later milestone's,
+# WINDOWS-X86-64-MILESTONE-1.md).
+testConstraint fixtureHostBinding [expr {$::hostTarget ne "" && [file isdirectory [file join $::projectRoot tools c-bindgen fixture expected $::hostTarget]]}]
+
+test cb-fixture-no-c-at-compile-time {compiling a program over a generated binding needs no header, no preprocessor and no C compiler: a child process with no compiler on its PATH and no header sources compiles it, with every foreign declaration of the host target's binding (bgf_arm_only is declared on AArch64 only)} -constraints {clang fixtureHostBinding} -body {
     set dir [scratch]
     ::cbind::generate::stage $::fixture $::hostTarget [file join $::fixtureDir demo demo.bot] $dir [generatedDir $::fixture $::hostTarget]
     set script [file join $dir compile.tcl]
@@ -465,7 +470,7 @@ test cb-fixture-no-c-at-compile-time {compiling a program over a generated bindi
         array unset ::env
         array set ::env $savedEnv
     }
-} -cleanup removeScratch -result [dict get {linux-x86_64 32 linux-aarch64 33 macos-aarch64 33} $::hostTarget]
+} -cleanup removeScratch -result [dict getdef {linux-x86_64 32 linux-aarch64 33 macos-aarch64 33} $::hostTarget {}]
 
 test cb-fixture-interchange {a program over a generated binding written as HIR interchange and run in a fresh process, with no header, generator input or binding module left, behaves identically} -constraints nativeRun -body {
     set dir [staged $::fixture $::hostTarget [file join $::fixtureDir demo demo.bot]]

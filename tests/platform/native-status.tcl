@@ -11,8 +11,9 @@
 # a foreign signature, a program built for the other operating system of the
 # host's architecture) and compares each outcome with the expectation
 # recorded below for the host target (core::cabi::hostTarget).
-# On Linux every capability is supported. On macOS arm64 some are not yet,
-# and the expectation is the explicit refusal they fail with today: a
+# On Linux every capability is supported. On macOS arm64 and Windows x86-64
+# some are not yet, and the expectation is the explicit refusal they fail
+# with today: a
 # capability that starts working (or fails differently) after a port
 # milestone fails this check until its expectation is updated here, in the
 # same change. A probe that kills the driver is recorded as such, never
@@ -49,7 +50,9 @@ foreach {option value} $argv {
 # reports the calling convention of each foreign C signature; other-target
 # runs the program built for the other operating system's target of this
 # host's architecture (macos-aarch64 on linux-aarch64, linux-aarch64 on
-# macos-aarch64).
+# macos-aarch64, linux-x86_64 on windows-x86_64); other-environment the
+# program built for the other environment of this host's operating system
+# and architecture (windows-x86_64-gnu, MinGW's, on windows-x86_64).
 set fixtures [file join $root native tests fixtures]
 set probes [dict create \
     jit [list program {fn fib(n):
@@ -62,6 +65,7 @@ fib(20)
 } {}] \
     gc-frame-walk [list driver build400.nir {BOTLISH_NATIVE_GC_STRESS 1}] \
     stack-overflow [list driver stack_overflow.ir {BOTLISH_NATIVE_STACK_BYTES 4194304}] \
+    stack-depth-limit [list driver stack_overflow.ir {}] \
     coroutine-stack-overflow [list program {struct Event:
     value: int
 
@@ -137,6 +141,13 @@ fn f(x: ffi::c::Char) -> int:
     x
 
 f(1)
+} {}] \
+    other-environment [list other-environment {import ffi::c
+
+fn f(x: ffi::c::Long) -> int:
+    x
+
+f(1)
 } {}]]
 
 # The recorded outcomes: HOST-TARGET -> NAME -> {value TEXT} (exactly) or
@@ -154,6 +165,17 @@ f(1)
 # since milestone 4 (MACOS-AARCH64-MILESTONE-4.md), where until then the
 # driver died in Rust's stack-overflow abort (the thread's stack) or of
 # SIGBUS (a coroutine's).
+#
+# On windows-x86_64 (WINDOWS-X86-64-MILESTONE-1.md, MSVC's toolchain) the
+# JIT, the collector -- with the fallback root plan, no frame walk -- program
+# objects (COFF) and standalone executables (PE) work; a program built for
+# Linux or for windows-x86_64-gnu (MinGW's environment) is NATIVE TARGET; a
+# C call is refused before the linker runs (C calls are the next
+# milestone's), and so are coroutines (NATIVE UNSUPPORTED); there is no
+# stack guard: a native stack exhausted before the shadow stack's depth
+# check fires kills the driver (Rust's own stack overflow report, recorded
+# as the probe's NATIVE BUG), while the default 1 GiB stack outlasts the
+# depth check, whose NATIVE LIMIT STACK is the stack-depth-limit probe's.
 #
 # Since milestone 2 (MACOS-AARCH64-MILESTONE-2.md) a program importing a
 # Linux namespace does not compile for macos-aarch64 at all
@@ -192,7 +214,22 @@ set expected [dict create \
         executable {value {{macho arm64 execute} 6765}} \
         target {value {format macho c-call-conv apple_aarch64 runs 1}} \
         c-convention {value {labs apple_aarch64 abs apple_aarch64}} \
-        other-target {error {NATIVE TARGET} {this program was built for target linux-aarch64 (aarch64-unknown-linux-gnu)*Both are aarch64, but a matching architecture is not a matching target*}}]]
+        other-target {error {NATIVE TARGET} {this program was built for target linux-aarch64 (aarch64-unknown-linux-gnu)*Both are aarch64, but a matching architecture is not a matching target*}}] \
+    windows-x86_64 [dict create \
+        jit {value 6765} \
+        gc-frame-walk [list value [list str [string repeat xy 400]]] \
+        stack-overflow {error {NATIVE BUG} {native backend failed:*has overflowed its stack*}} \
+        stack-depth-limit {error {NATIVE LIMIT STACK} {native stack exhausted: too many nested calls}} \
+        coroutine-stack-overflow {error {NATIVE UNSUPPORTED} {native coroutines need stack switching*}} \
+        coroutine {error {NATIVE UNSUPPORTED} {native coroutines need stack switching*}} \
+        linux-syscall {error {SURFACE MODULE UNSUPPORTED-PLATFORM} {*namespace "linux" belongs to the Linux platform*unavailable for target windows-x86_64 (Windows on x86_64)*}} \
+        c-call {error {NATIVE LINK} {native link failed: this program calls C*C calls are linked on Linux glibc (x86_64, aarch64) and macOS (aarch64) only*}} \
+        object {value {coff x86_64 object}} \
+        executable {value {{pe x86_64 executable} 6765}} \
+        target {value {format coff c-call-conv windows_fastcall runs 1}} \
+        c-convention {value {labs windows_fastcall abs windows_fastcall}} \
+        other-target {error {NATIVE TARGET} {this program was built for target linux-x86_64 (x86_64-unknown-linux-gnu)*Both are x86_64, but a matching architecture is not a matching target*}} \
+        other-environment {error {NATIVE TARGET} {this program was built for target windows-x86_64-gnu (x86_64-pc-windows-gnu)*Both are x86_64 windows, but the C toolchain environment is part of the target: gnu for this program, msvc here*}}]]
 
 # The outcome of running SCRIPT with ENVIRONMENT ({NAME VALUE ...}) set:
 # {value TEXT} or {error CODE MESSAGE}.
@@ -243,6 +280,11 @@ proc observe {name} {
         convention {
             return [outcome $environment {
                 foreignConventions [native::clif [surface::compile $argument -warnings off]]
+            }]
+        }
+        other-environment {
+            return [outcome $environment {
+                core::formatValue [native::evalHir [surface::compile $argument -warnings off -target windows-x86_64-gnu]]
             }]
         }
         other-target {
