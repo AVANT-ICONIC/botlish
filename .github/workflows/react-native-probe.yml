@@ -18,9 +18,10 @@ name: react-native probe
 #   ios                    macos-15: the iOS-simulator library (the cfg
 #                          patch; the program object as the Mac makes it),
 #                          the app's release simulator build (as made; with
-#                          the object's platform rewritten; with the C
-#                          stand-in, whichever links first) and the
-#                          simulator run
+#                          the object's platform rewritten, whichever
+#                          links first) and the simulator run, then the
+#                          same app with the C stand-in as a control when
+#                          the Botlish one shows nothing
 #
 # Exploratory: it runs only when the probe or this file changes, or by hand.
 # A probe step that is expected to fail is a census result and does not
@@ -229,17 +230,22 @@ jobs:
           ar rs "$vendored" program.o
           "$GITHUB_WORKSPACE/audit/react-native/ci/ios-build.sh" "$RUNNER_TEMP/work" B
 
-      - name: Simulator build C, the C stand-in
-        id: c
-        if: steps.a.outcome == 'failure' && steps.b.outcome == 'failure'
+      - name: Run on the simulator
+        id: run
+        continue-on-error: true
+        run: |
+          bundle=$(cat "$RUNNER_TEMP/work/app-bundle")
+          echo "variant $(cat "$RUNNER_TEMP/work/variant")"
+          audit/react-native/ci/ios-run.sh "$bundle" "$RUNNER_TEMP/ios-probe.log"
+
+      - name: Control, the C stand-in instead of Botlish
+        if: steps.run.outcome == 'failure' || (steps.a.outcome == 'failure' && steps.b.outcome == 'failure')
         run: |
           vendored="$RUNNER_TEMP/work/probe app/node_modules/react-native-botlish-probe/ios/lib/librnprobe_botlish.a"
           xcrun clang -target arm64-apple-ios15.1-simulator -O2 -I "$RUNNER_TEMP/lib-ios-sim" -c audit/react-native/probe/standin.c -o "$RUNNER_TEMP/standin.o"
           rm -f "$vendored" && ar rcs "$vendored" "$RUNNER_TEMP/standin.o"
           audit/react-native/ci/ios-build.sh "$RUNNER_TEMP/work" C
+          audit/react-native/ci/ios-run.sh "$(cat "$RUNNER_TEMP/work/app-bundle")" "$RUNNER_TEMP/ios-probe-standin.log"
 
-      - name: Run on the simulator
-        run: |
-          bundle=$(cat "$RUNNER_TEMP/work/app-bundle")
-          echo "variant $(cat "$RUNNER_TEMP/work/variant")"
-          audit/react-native/ci/ios-run.sh "$bundle" "$RUNNER_TEMP/ios-probe.log"
+      - name: The Botlish variant ran
+        run: test "${{ steps.run.outcome }}" = success

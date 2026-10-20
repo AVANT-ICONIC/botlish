@@ -55,3 +55,14 @@ int32_t rnprobe_depth(int64_t n, int64_t *out) {
   *out = n > 0 ? n : 0;
   return rnprobe_OK;
 }
+
+int32_t rnprobe_same(const uint8_t *a, size_t a_len, const uint8_t *b, size_t b_len, bool *out) {
+  *out = a_len == b_len && memcmp(a, b, a_len) == 0;
+  return rnprobe_OK;
+}
+
+int32_t rnprobe_pick(bool first, const uint8_t *a, size_t a_len, const uint8_t *b, size_t b_len, BotlishStr *out) {
+  out->ptr = first ? a : b;
+  out->len = first ? a_len : b_len;
+  return rnprobe_OK;
+}

@@ -5,15 +5,18 @@
 # tools first, then the emulator and the system image, each with retries.
 set -euo pipefail
 sdk=${ANDROID_HOME:?}
+# The emulator's qemu links PulseAudio and X libraries the runner lacks.
+sudo apt-get update -qq
+sudo apt-get install -y -qq libpulse0 libgl1 libnss3 libxcomposite1 libxcursor1 libxi6 libxtst6 > /dev/null
 image="system-images;android-34;google_apis;x86_64"
 old=$(ls -d "$sdk"/cmdline-tools/*/bin/sdkmanager | sort -V | tail -1)
 yes | "$old" --licenses > /dev/null || true
 for _ in 1 2 3; do "$old" --install "cmdline-tools;latest" > /dev/null && break || sleep 10; done
-sm="$sdk/cmdline-tools/latest/bin/sdkmanager"
+sm=$(ls -d "$sdk"/cmdline-tools/*/bin/sdkmanager | sort -V | tail -1)
 yes | "$sm" --licenses > /dev/null || true
 for _ in 1 2 3; do "$sm" --install emulator platform-tools "$image" > /dev/null && break || sleep 15; done
 "$sdk/emulator/emulator" -version | head -1
-echo no | "$sdk/cmdline-tools/latest/bin/avdmanager" create avd --force -n probe -k "$image"
+echo no | "$(dirname "$sm")/avdmanager" create avd --force -n probe -k "$image"
 nohup "$sdk/emulator/emulator" -avd probe -no-window -gpu swiftshader_indirect -no-snapshot \
   -noaudio -no-boot-anim -accel on > "${RUNNER_TEMP:-/tmp}/emulator.log" 2>&1 &
 export PATH="$sdk/platform-tools:$PATH"

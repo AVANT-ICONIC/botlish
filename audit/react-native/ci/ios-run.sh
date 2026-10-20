@@ -38,7 +38,18 @@ kill "$streamer" || true
 grep "BOTLISH_PROBE\|fault" "$out.stream" > "$out" || true
 cat "$out"
 if ! grep -q "BOTLISH_PROBE done" "$out"; then
-  echo "no probe output; the app's crash reports, if any:"
-  ls -t ~/Library/Logs/DiagnosticReports 2>/dev/null | grep -i botlish | head -3 || true
+  echo "== no probe output. The bundle's JS:"
+  ls -l "$bundle" | grep -i "jsbundle" || echo "no main.jsbundle in the app"
+  echo "== the app's process:"
+  xcrun simctl spawn "$udid" launchctl list | grep -i probeapp || echo "not running"
+  echo "== the app's own log (last 10 minutes):"
+  xcrun simctl spawn "$udid" log show --last 10m --info --debug --style compact \
+    --predicate 'process == "BotlishProbeApp"' 2>/dev/null | grep -v "^Timestamp" | tail -120 || true
+  echo "== crash reports:"
+  for report in $(ls -t ~/Library/Logs/DiagnosticReports 2>/dev/null | head -5); do
+    echo "-- $report"
+    grep -i -m1 -A3 '"exception"\|Exception Type' ~/Library/Logs/DiagnosticReports/"$report" || true
+    grep -m 25 -E 'rnprobe|botlish|Botlish|BotlishProbeApp' ~/Library/Logs/DiagnosticReports/"$report" || true
+  done
   exit 1
 fi
