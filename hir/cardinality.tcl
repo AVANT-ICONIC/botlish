@@ -719,7 +719,8 @@ proc hir::cardinality::ContextSite {hir c id} {
     return $reach
 }
 
-# How call C may reach the installed context ID's members (ContextSite): 1
+# How call C may reach the installed context ID's members (ContextSite; ID
+# "" when the place's root does not tell which context it loads: any): 1
 # (it may), 0 (it cannot), or {block B}, the block it runs, which may if B's
 # run may (Reaching). With LOADS 1 a load of ID (or of a context it cannot
 # tell apart) may: C is then in a function that requires ID.
@@ -736,8 +737,9 @@ proc hir::cardinality::CallReach {hir c id loads} {
             return 1
         }
         if {$loads && [hir::contexts::isLoad $hir $c]} {
+            # (ID or the load's own identity "": one it cannot tell, any.)
             set loaded [hir::contexts::loadId $hir $c]
-            if {$loaded eq "" || $loaded eq $id} {
+            if {$id eq "" || $loaded eq "" || $loaded eq $id} {
                 return 1
             }
         }
