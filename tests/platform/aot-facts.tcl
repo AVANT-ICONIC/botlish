@@ -322,7 +322,9 @@ proc linkCommand {hir path} {
     regsub {^env(\s+-u\s+\S+)*\s+} $command {} command
     regsub {^(\w+="[^"]*"\s+)*} $command {} command
     set sysroot [string trim [lindex [run rustc --print sysroot] 1]]
-    set named [string map [list [file join $work "build dir"] BUILD $release RELEASE $work WORK] $command]
+    # A -L directory reaches the linker normalized (native::withLinkDirs):
+    # on macOS the temporary directory's /var is /private/var.
+    set named [string map [list [file join $work "build dir"] BUILD $release RELEASE [file normalize $work] WORK $work WORK] $command]
     if {$sysroot ne ""} { set named [string map [list $sysroot SYSROOT] $named] }
     regsub -all {"[^"]*/\.botlish-aot-[^/"]*/} $named {"LINKDIR/} named
     return [list $relinked $message $command $named]
@@ -371,7 +373,7 @@ proc cCalls {} {
     lassign [native::withLinkDirs [list $lib] {linkCommand [surface::compile $text c-call.bot -warnings off] [file join $work c-relinked]}] failed message command named
     set group [expr {[string first --start-group $command] >= 0}]
     set nodefault [expr {[string first -nodefaultlibs $command] >= 0}]
-    check c-link-command [expr {!$failed && [string first -lbotlish_aot_facts $command] >= 0 && [string first "-L$lib" $command] >= 0
+    check c-link-command [expr {!$failed && [string first -lbotlish_aot_facts $command] >= 0 && [string first "-L[file normalize $lib]" $command] >= 0
             && $group == !$macos && !$nodefault}] \
         "-lbotlish_aot_facts and -L its directory passed; GNU archive group: $group; -nodefaultlibs: $nodefault" \
         [expr {$failed ? $message : $named}]
