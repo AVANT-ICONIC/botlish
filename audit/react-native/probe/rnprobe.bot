@@ -1,0 +1,47 @@
+# rnprobe.bot -- the Botlish side of the React Native census probe
+# (REACT-NATIVE-TARGET-CENSUS.md): the functions its TurboModule exports.
+# The top level exists only so that native lowering, which compiles what the
+# program reaches, gives each of them an instance with its declared
+# parameter types (audit/react-native/tools/libmode.tcl); a library mode
+# would make them roots instead.
+import list
+import str
+
+error NotPositive
+
+fn add(a: int, b: int) -> int:
+    a + b
+
+fn reverse_into(s: str, i: int, acc: str) -> str:
+    if i == 0:
+        return acc
+    c = s.char_at(i - 1):
+        on IndexNotFound:
+            return ""
+    s.reverse_into(i - 1, acc.append_char(c))
+
+fn reverse(s: str) -> str:
+    s.reverse_into(s.length(), "")
+
+fn require_positive(n: int) -> int errors NotPositive:
+    if n > 0:
+        return n
+    fail NotPositive
+
+# Recursion that is not a tail call: N native frames deep.
+fn depth(n: int) -> int:
+    if n <= 0:
+        return 0
+    depth(n - 1) + 1
+
+fn exercise() -> list:
+    args = argv():
+        on InvalidArgumentEncoding:
+            return []
+    n = args.length()
+    checked = n.require_positive():
+        on NotPositive:
+            return [n]
+    [n.add(n), args.get(0, "").reverse(), checked, n.depth()]
+
+exercise()

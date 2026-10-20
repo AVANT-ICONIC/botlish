@@ -1,0 +1,96 @@
+# host-spike.tcl -- the census's host-side end-to-end probe
+# (REACT-NATIVE-TARGET-CENSUS.md, "Empirical results"): Botlish functions
+# called from JavaScript through React Native's own C++ TurboModule layer,
+# on this machine, with no Android or iOS toolchain.
+#
+#   tclsh9.0 audit/react-native/tools/host-spike.tcl -work DIR \
+#       -react-native-project DIR -hermes-src DIR -hermes-build DIR \
+#       -folly DIR ?-gc-stress 1? ?-stack-kib N?
+#
+#   -react-native-project  a React Native 0.88 project or library with its
+#                          node_modules installed (react-native and
+#                          @react-native-community/cli): Codegen runs from
+#                          there and ReactCommon's sources come from there
+#   -hermes-src, -hermes-build  a Hermes checkout at the tag React Native
+#                          pins (sdks/hermes-engine/version.properties) and
+#                          its CMake build of the hermesvm target
+#   -folly                 a folly checkout at React Native's pinned version
+#                          (headers only: react/bridging includes
+#                          folly/dynamic.h); glog's headers and library come
+#                          from the system
+#
+# Steps: libmode.tcl builds the probe's Botlish library for the host;
+# rnpackage.tcl generates the package (running Codegen); the generated
+# adapter, ReactCommon's TurboModule sources and host/host_main.cpp are
+# compiled and linked with Hermes and the library; host/probe.js runs.
+
+set here [file dirname [file normalize [info script]]]
+set root [file normalize [file join $here .. .. ..]]
+set opts [dict create -gc-stress 0 -stack-kib 0]
+foreach {option value} $argv {
+    dict set opts $option $value
+}
+foreach required {-work -react-native-project -hermes-src -hermes-build -folly} {
+    if {![dict exists $opts $required]} {
+        puts stderr "missing $required"
+        exit 2
+    }
+    if {$required ne "-work"} {
+        dict set opts $required [file normalize [dict get $opts $required]]
+    }
+}
+set work [file normalize [dict get $opts -work]]
+file mkdir $work
+set project [dict get $opts -react-native-project]
+set rn [file join $project node_modules react-native ReactCommon]
+set hermesSrc [dict get $opts -hermes-src]
+set hermesBuild [dict get $opts -hermes-build]
+set tclsh [info nameofexecutable]
+
+proc run {args} {
+    puts "+ [join $args { }]"
+    exec {*}$args >@stdout 2>@stderr
+}
+
+set lib [file join $work botlish]
+set pkg [file join $work "generated package"]
+run $tclsh [file join $here libmode.tcl] -o $lib -prefix rnprobe \
+    [file join $root audit react-native probe rnprobe.bot] add reverse require_positive depth
+file delete -force $pkg
+run $tclsh [file join $here rnpackage.tcl] -o $pkg \
+    -exports [file join $lib rnprobe_botlish.exports] -header [file join $lib rnprobe_botlish.h] \
+    -name react-native-botlish-probe -codegen-project $project
+
+set generated [file join $pkg android generated jni]
+set includes [list -I[file join $pkg cpp] -I[file join $pkg botlish] -I$generated \
+    -I[file join $generated react renderer components BotlishProbeSpec] \
+    -I$rn -I[file join $rn jsi] -I[file join $rn callinvoker] -I[file join $rn react nativemodule core] \
+    -I[file join $hermesSrc API] -I[file join $hermesSrc public] -I[file join $hermesBuild include] \
+    -I[dict get $opts -folly] -DFOLLY_NO_CONFIG=1 -DFOLLY_MOBILE=1 -DFOLLY_HAVE_PTHREAD=1 \
+    -DFOLLY_CFG_NO_COROUTINES=1 -DFOLLY_HAVE_CLOCK_GETTIME=1]
+set sources [list [file join $pkg cpp BotlishProbeModule.cpp] [file join $root audit react-native host host_main.cpp]]
+foreach f {TurboModule TurboModuleBinding TurboModuleWithJSIBindings} {
+    lappend sources [file join $rn react nativemodule core ReactCommon $f.cpp]
+}
+lappend sources [file join $rn react bridging LongLivedObject.cpp] [file join $rn react utils jsi-utils.cpp]
+set objects {}
+set n 0
+foreach source $sources {
+    set object [file join $work obj[incr n].o]
+    run clang++ -std=c++20 -O1 -g -fno-omit-frame-pointer {*}$includes \
+        -DMODULE_HEADER="BotlishProbeModule.h" -DMODULE_CLASS=BotlishProbeModule -c $source -o $object
+    lappend objects $object
+}
+set probe [file join $work host_probe]
+run clang++ -o $probe {*}$objects [file join $lib librnprobe_botlish.a] \
+    -L[file join $hermesBuild lib] -lhermesvm [file join $hermesBuild jsi libjsi.a] \
+    -Wl,-rpath,[file join $hermesBuild lib] -lglog -lpthread -ldl -lm
+
+if {[dict get $opts -gc-stress]} {
+    set ::env(BOTLISH_NATIVE_GC_STRESS) 1
+}
+set script [list $probe [file join $root audit react-native host probe.js]]
+if {[dict get $opts -stack-kib]} {
+    set script [list sh -c "ulimit -s [dict get $opts -stack-kib] && exec \"\$0\" \"\$1\"" {*}$script]
+}
+run {*}$script
