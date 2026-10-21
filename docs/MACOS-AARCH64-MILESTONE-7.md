@@ -345,7 +345,32 @@ facts are the tests', which run on every host).
 
 ## 11. Mutation results
 
-PENDING-MUTANTS
+**On Linux x86-64** (`tclsh9.0 audit/c-pointer-borrowing/tools/mutate.tcl`,
+on the tree merged with main, in parallel `-only` groups): 30 mutants, **29
+killed, 1 skipped (`apple-exposure-tagged`, Apple's convention only), 0
+survived**; every mutant's text still applies. The eight new ones:
+
+| mutant | killed by |
+|---|---|
+| `exposure-is-object-word` | 19 tests (bb-read-*, bb-system-library, bb-gc-stress, bb-coroutines, ...), the fuzzer |
+| `exposure-address-truncated` | 17 tests, among them bb-read-address and bb-read-address-above-4gib |
+| `keepalive-first-only` | `cb-exposure-after-arguments-nir` (structural: the call's keepalives) |
+| `detach-copy-short` | 23 tests, the fuzzer |
+| `read-exposure-copied` | `bb-read-address`, `cb-allocations`, `cb-nir-read-mutable` (structural: an address and an allocation count, not a timing) |
+| `exposure-wrong-owner` | 11 tests (bb-write-two-outputs, bb-read-write-one-owner, bb-system-library, ...) |
+| `variadic-byte-argument-admitted` | `bb-refusals` |
+| `apple-exposure-tagged` | SKIPPED on Linux; macOS below |
+
+`keepalive-first-only` is caught by the NIR test only, and that is the
+right detector: a missing keepalive is observable only if a collection runs
+while C holds the address, and these synchronous calls neither allocate nor
+call back. c-byte-borrowing.test also joined the kills of the older mutants
+that change what C sees (`mutable-exclusivity-dropped`, `copy-back-omitted`,
+`read-write-roles-swapped`, `write-back-without-writes`,
+`capturing-parameter-accepts-borrow`, `ptr-int-from-byte-storage`,
+`unknown-access-admitted`, `strict0-not-replayed`, ...).
+
+PENDING-MUTANTS-MACOS
 
 ## 12. Fuzzing results
 
