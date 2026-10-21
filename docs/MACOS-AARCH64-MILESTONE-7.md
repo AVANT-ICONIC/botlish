@@ -384,7 +384,22 @@ PENDING-MUTANTS-MACOS
 
 ## 12. Fuzzing results
 
-PENDING-FUZZ
+`audit/c-pointer-borrowing/tools/fuzz.tcl -n 10` (ten programs of eight
+cases each, every case predicted by the fuzzer's own model and run on all
+four backends -- the fixture's natives have a Tcl side -- and, with
+`-gc-stress 1`, on both native backends again under GC stress; a refused
+case is compiled alone and must name the model's reason).
+
+**On Linux x86-64**, on this milestone's tree:
+
+| seed | cases | refused | disagreements |
+|---|---:|---:|---:|
+| 1 | 80 | 33 | 0 |
+| 2 | 80 | 37 | 0 |
+| 3 | 80 | 46 | 0 |
+| 4, `-gc-stress 1` | 80 | 41 | 0 |
+
+PENDING-FUZZ-MACOS
 
 ## 13. Performance
 
