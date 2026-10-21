@@ -73,8 +73,8 @@ set mutants [list \
         {    if {![HasRepeat [FailureGroups $sites]]} } \
         {    if {0} }] \
     [list instances-visited hir/warnings.tcl \
-        {        lappend warnings {*}[SameFailureIn $hir $e [expr {[dict exists $names $e] ? [dict get $names $e] : ""}]]} \
-        {        lappend warnings {*}[lrepeat [expr {1 + ([dict exists $hir semantic byBlock $e] ? [dict get $hir semantic byBlock $e] : 0)}] {*}[SameFailureIn $hir $e [expr {[dict exists $names $e] ? [dict get $names $e] : ""}]]]}] \
+        {        lappend warnings {*}[SameFailureIn $hir $e [dict getdef $names $e ""]]} \
+        {        lappend warnings {*}[lrepeat [expr {1 + [dict getdef $hir semantic byBlock $e 0]}] {*}[SameFailureIn $hir $e [dict getdef $names $e ""]]]}] \
     [list re-raise-ignored hir/warnings.tcl \
         $siteLoop \
         "$handlerScan$siteLoop        if \{\[dict exists \$reraise \$e\]\} continue\n"] \

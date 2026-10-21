@@ -6,9 +6,10 @@
  * (libbotlish_cffi_fixture.a) in a private directory and link Botlish
  * programs against it with `extern c library "botlish_cffi_fixture"` and
  * -L. Nothing in the compiler, the runtime or the libraries depends on it.
- * Every function is a plain fixed-signature C function of the ABI universe
- * extern c fn supports: integer scalars, C _Bool, data and function
- * pointers, void.
+ * Every function is a plain C function of the ABI universe extern c fn
+ * supports: integer scalars, C _Bool, data and function pointers, void.
+ * The variadic ones (VARIADICS-VERTICAL-SLICE-1.md, at the end) are genuine
+ * C variadic functions, reading their trailing arguments with <stdarg.h>.
  *
  * A few functions are assembly, where C cannot observe what the ABI
  * promises (a result register's bits beyond its width, the registers and
@@ -16,6 +17,7 @@
  * for the object format through BCF_FUNCTION (ELF's bare symbol and `.type`,
  * Mach-O's `_` user label prefix).
  */
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -444,3 +446,236 @@ int bcf_available(void) {
     return 0;
 }
 #endif
+
+/* ---------------------------------------------------------------------------
+ * Variadic C functions (VARIADICS-VERTICAL-SLICE-1.md): genuine variadic
+ * callees, compiled by the host's own C compiler, reading every trailing
+ * argument with va_arg as the type their fixed arguments say -- the
+ * semantic oracle of a variadic call -- and the machine state a variadic
+ * call arrives in, beside this compiler's own variadic calls of the same
+ * prototype with the same values. */
+
+/* What bcf_vrecord last read: each trailing argument's bits (an integer
+ * sign- or zero-extended to 64 bits by its type, a double's IEEE bits, a
+ * pointer's address). */
+#define BCF_VMAX 32
+static unsigned long long bcf_vseen[BCF_VMAX];
+
+/* Reads COUNT (at most 32) trailing arguments, argument I of the type whose
+ * 4-bit code is nibble I of KINDS (I < 16) or of KINDS2 (I >= 16), low
+ * nibble first: 1 int, 2 unsigned int, 3 long, 4 unsigned long, 5 long
+ * long, 6 unsigned long long, 7 double, 8 void *. Every type is one a
+ * default argument promotion makes: a char, short or _Bool argument is read
+ * as the int it was promoted to. Returns COUNT, or -1 for a code it does not
+ * know (it stops reading there). */
+int bcf_vrecord(int count, unsigned long long kinds, unsigned long long kinds2, ...) {
+    va_list ap;
+    va_start(ap, kinds2);
+    for (int i = 0; i < count && i < BCF_VMAX; i++) {
+        unsigned code = (unsigned)((i < 16 ? kinds >> (4 * i) : kinds2 >> (4 * (i - 16))) & 15);
+        unsigned long long bits;
+        switch (code) {
+        case 1: bits = (unsigned long long)(long long)va_arg(ap, int); break;
+        case 2: bits = va_arg(ap, unsigned int); break;
+        case 3: bits = (unsigned long long)(long long)va_arg(ap, long); break;
+        case 4: bits = va_arg(ap, unsigned long); break;
+        case 5: bits = (unsigned long long)va_arg(ap, long long); break;
+        case 6: bits = va_arg(ap, unsigned long long); break;
+        case 7: {
+            double d = va_arg(ap, double);
+            memcpy(&bits, &d, sizeof bits);
+            break;
+        }
+        case 8: bits = (unsigned long long)(uintptr_t)va_arg(ap, void *); break;
+        default:
+            va_end(ap);
+            return -1;
+        }
+        bcf_vseen[i] = bits;
+    }
+    va_end(ap);
+    return count;
+}
+
+/* Trailing argument I of the last bcf_vrecord call, as its 64 bits. */
+unsigned long long bcf_vseen_bits(int i) { return bcf_vseen[i & (BCF_VMAX - 1)]; }
+
+/* The sum of COUNT trailing ints: none, one, more than the argument
+ * registers hold. */
+long long bcf_vsum(int count, ...) {
+    va_list ap;
+    va_start(ap, count);
+    long long sum = 0;
+    for (int i = 0; i < count; i++) {
+        sum += va_arg(ap, int);
+    }
+    va_end(ap);
+    return sum;
+}
+
+/* FACTOR times the sum of COUNT trailing doubles: a fixed double before the
+ * variadic boundary, then doubles past the floating-point registers. */
+double bcf_vscale(double factor, int count, ...) {
+    va_list ap;
+    va_start(ap, count);
+    double sum = 0.0;
+    for (int i = 0; i < count; i++) {
+        sum += va_arg(ap, double);
+    }
+    va_end(ap);
+    return factor * sum;
+}
+
+/* The trailing pointers up to the first null one, a sentinel-terminated
+ * list as real C APIs take (Tcl_AppendResult's interp, ..., NULL): how many
+ * there are before it; each is kept for bcf_vseen_bits (at most 32). */
+int bcf_vsentinel(int tag, ...) {
+    va_list ap;
+    va_start(ap, tag);
+    int n = 0;
+    for (;;) {
+        void *p = va_arg(ap, void *);
+        if (p == NULL) {
+            break;
+        }
+        if (n < BCF_VMAX) {
+            bcf_vseen[n] = (unsigned long long)(uintptr_t)p;
+        }
+        n++;
+    }
+    va_end(ap);
+    return n;
+}
+
+/* A second static cell, whose address a sentinel list can pass, and its
+ * address as a number (what a capture of it shows). */
+static unsigned char bcf_vcell[8];
+void *bcf_vaddress(void) { return bcf_vcell; }
+unsigned long long bcf_vaddress_bits(void) { return (unsigned long long)(uintptr_t)bcf_vcell; }
+
+/* What a call of bcf_vcapture (or its alias bcf_vcapture_d) arrived in: the
+ * eight integer argument registers (x0-x7; on x86-64 rdi, rsi, rdx, rcx, r8,
+ * r9, then two zeros), %rax (x86-64, where a variadic call's %al states how
+ * many vector registers it uses; 0 on AArch64), the low 64 bits of the
+ * eight floating-point argument registers (v0-v7, xmm0-xmm7) and the first
+ * 256 bytes of the caller's stack arguments (Apple's convention puts every
+ * trailing argument there: the mixed scenario's eighteen take 144). Assembly
+ * saves them before any compiled code can touch them; declared with any
+ * prototype, it returns 0. */
+static unsigned long long bcf_vregs[8], bcf_vfregs[8], bcf_vrax;
+static unsigned char bcf_vstack[256];
+static unsigned long long bcf_vref_regs[8], bcf_vref_fregs[8], bcf_vref_rax;
+static unsigned char bcf_vref_stack[256];
+
+/* REGS: eight integer registers, %rax, eight floating-point registers. */
+int bcf_vcapture_record(const unsigned long long *regs, const unsigned char *stack) {
+    memcpy(bcf_vregs, regs, sizeof bcf_vregs);
+    bcf_vrax = regs[8];
+    memcpy(bcf_vfregs, regs + 9, sizeof bcf_vfregs);
+    memcpy(bcf_vstack, stack, sizeof bcf_vstack);
+    return 0;
+}
+
+int bcf_vcapture(int n, ...);
+int bcf_vcapture_d(double x, int n, ...);
+
+#if defined(__x86_64__) && !defined(__APPLE__)
+__asm__(
+    ".text\n"
+    ".globl bcf_vcapture\n.type bcf_vcapture,@function\n"
+    ".globl bcf_vcapture_d\n.type bcf_vcapture_d,@function\n"
+    "bcf_vcapture:\nbcf_vcapture_d:\n"
+    "    pushq %rbp\n    movq %rsp, %rbp\n    subq $144, %rsp\n"
+    "    movq %rdi, 0(%rsp)\n    movq %rsi, 8(%rsp)\n    movq %rdx, 16(%rsp)\n"
+    "    movq %rcx, 24(%rsp)\n    movq %r8, 32(%rsp)\n    movq %r9, 40(%rsp)\n"
+    "    movq $0, 48(%rsp)\n    movq $0, 56(%rsp)\n    movq %rax, 64(%rsp)\n"
+    "    movsd %xmm0, 72(%rsp)\n    movsd %xmm1, 80(%rsp)\n    movsd %xmm2, 88(%rsp)\n"
+    "    movsd %xmm3, 96(%rsp)\n    movsd %xmm4, 104(%rsp)\n    movsd %xmm5, 112(%rsp)\n"
+    "    movsd %xmm6, 120(%rsp)\n    movsd %xmm7, 128(%rsp)\n"
+    "    movq %rsp, %rdi\n    leaq 16(%rbp), %rsi\n"
+    "    call bcf_vcapture_record@PLT\n"
+    "    leave\n    ret\n");
+#elif defined(__aarch64__)
+__asm__(
+    ".text\n"
+    BCF_FUNCTION(bcf_vcapture)
+    BCF_FUNCTION(bcf_vcapture_d)
+    "    stp x29, x30, [sp, #-160]!\n    mov x29, sp\n"
+    "    stp x0, x1, [sp, #16]\n    stp x2, x3, [sp, #32]\n"
+    "    stp x4, x5, [sp, #48]\n    stp x6, x7, [sp, #64]\n"
+    "    str xzr, [sp, #80]\n"
+    "    stp d0, d1, [sp, #88]\n    stp d2, d3, [sp, #104]\n"
+    "    stp d4, d5, [sp, #120]\n    stp d6, d7, [sp, #136]\n"
+    "    add x0, sp, #16\n    add x1, sp, #160\n"
+    "    bl " BCF_CALL(bcf_vcapture_record) "\n"
+    "    ldp x29, x30, [sp], #160\n    ret\n");
+#endif
+
+/* The last capture, and the reference call's: integer register I, the low
+ * 8 bits of %rax (%al), floating-point register I's 64 bits, stack byte I. */
+unsigned long long bcf_vcaptured_register(int i) { return bcf_vregs[i & 7]; }
+unsigned int bcf_vcaptured_al(void) { return (unsigned int)(bcf_vrax & 0xff); }
+unsigned long long bcf_vcaptured_float(int i) { return bcf_vfregs[i & 7]; }
+unsigned char bcf_vcaptured_stack_byte(int i) { return bcf_vstack[i & 255]; }
+unsigned long long bcf_vreference_register(int i) { return bcf_vref_regs[i & 7]; }
+unsigned int bcf_vreference_al(void) { return (unsigned int)(bcf_vref_rax & 0xff); }
+unsigned long long bcf_vreference_float(int i) { return bcf_vref_fregs[i & 7]; }
+unsigned char bcf_vreference_stack_byte(int i) { return bcf_vref_stack[i & 255]; }
+
+static void bcf_vkeep_reference(void) {
+    memcpy(bcf_vref_regs, bcf_vregs, sizeof bcf_vregs);
+    memcpy(bcf_vref_fregs, bcf_vfregs, sizeof bcf_vfregs);
+    bcf_vref_rax = bcf_vrax;
+    memcpy(bcf_vref_stack, bcf_vstack, sizeof bcf_vstack);
+}
+
+/* This compiler's own variadic calls of the capture, through a volatile
+ * pointer of the variadic prototype (so the call is a variadic call the
+ * compiler lowers itself), with c-ffi.test's cf-va-abi-* values:
+ *
+ *   none     n = 0 and no trailing argument
+ *   small    two trailing arguments, an int and a double: every register
+ *            free (Apple: still on the stack)
+ *   ints     twelve ints: past the integer registers everywhere
+ *   mixed    ints, longs, pointers and doubles interleaved, ten doubles
+ *            (past the floating-point registers) and eight integers
+ *   fixedd   bcf_vcapture_d: a fixed double and a fixed int, then doubles
+ *            and ints */
+typedef int (*bcf_vcapture_fn)(int, ...);
+typedef int (*bcf_vcapture_d_fn)(double, int, ...);
+
+int bcf_vreference_none(void) {
+    volatile bcf_vcapture_fn f = bcf_vcapture;
+    int r = f(0);
+    bcf_vkeep_reference();
+    return r;
+}
+
+int bcf_vreference_small(void) {
+    volatile bcf_vcapture_fn f = bcf_vcapture;
+    int r = f(2, -5, 2.5);
+    bcf_vkeep_reference();
+    return r;
+}
+
+int bcf_vreference_ints(void) {
+    volatile bcf_vcapture_fn f = bcf_vcapture;
+    int r = f(12, -1, 2, -3, 4, -5, 6, -7, 8, -9, 10, -11, 2147483647);
+    bcf_vkeep_reference();
+    return r;
+}
+
+int bcf_vreference_mixed(void) {
+    volatile bcf_vcapture_fn f = bcf_vcapture;
+    int r = f(18, 7, 0.5, -9000000000L, 1.25, (void *)bcf_vcell, -2.0, 4000000000u, 3.5,
+              -1, 4.75, 18446744073709551615ULL, 5.0, (void *)0, 6.125, 42, 7.5, 8.25, 9.0);
+    bcf_vkeep_reference();
+    return r;
+}
+
+int bcf_vreference_fixedd(void) {
+    volatile bcf_vcapture_d_fn f = bcf_vcapture_d;
+    int r = f(0.75, 3, 1.5, -6, 2.5);
+    bcf_vkeep_reference();
+    return r;
+}

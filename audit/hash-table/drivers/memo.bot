@@ -1,0 +1,57 @@
+# memo -- Collatz step counts of 1..N memoized in an Int-keyed table
+# (audit/hash-table/SPEC.md section 6's mixed workloads; the Rust
+# reference's `memo`): a lookup before every step, an insertion for every
+# value met that was not known. The result is the sum of the step counts.
+#
+#   argv: N
+import list
+import str
+import char
+import table
+import keys
+
+struct Steps:
+    memo: table::Table
+    count: int
+
+fn int_of(text: str) -> int errors IndexNotFound:
+    n = text.length()
+    fn digits(i: int, acc: int) -> int errors IndexNotFound:
+        if i >= n:
+            return acc
+        digits(i + 1, acc * 10 + char::scalar_value(text.char_at(i)) - 48)
+    digits(0, 0)
+
+fn successor(v: int) -> int:
+    if bit_and(v, 1) == 0:
+        return shift_right(v, 1)
+    3 * v + 1
+
+# The step count of V, and MEMO with every value met inserted.
+fn steps(memo: table::Table, v: int) -> Steps errors IndexNotFound:
+    if v == 1:
+        return Steps {memo: memo, count: 0}
+    found = table::get(memo, v, -1)
+    if found >= 0:
+        return Steps {memo: memo, count: found}
+    r = steps(memo, successor(v))
+    count = r.count + 1
+    Steps {memo: table::put(r.memo, v, count), count: count}
+
+fn all(memo: table::Table, i: int, n: int, sum: int) errors IndexNotFound:
+    if i > n:
+        return sum
+    r = steps(memo, i)
+    count = r.count
+    all(r.memo, i + 1, n, sum + count)
+
+fn main(args: List[str]) errors IndexNotFound:
+    all(table::fresh(0), 1, int_of(args.get(1, "100")), 0)
+
+args = argv():
+    on InvalidArgumentEncoding:
+        []
+result = main(args):
+    on IndexNotFound:
+        -1
+result

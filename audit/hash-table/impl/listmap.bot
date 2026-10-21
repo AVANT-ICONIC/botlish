@@ -1,0 +1,83 @@
+# listmap -- the linear baseline (audit/hash-table/SPEC.md section 3): the
+# keys and the values in two Lists, in insertion order. A lookup scans the
+# keys from the front with `==`; an insert of a new key appends to both; a
+# replacement or a removal builds new Lists. Every index is a counted loop's
+# over the List it reads, so no access needs IndexNotFound.
+#
+# policy: none
+import list
+
+struct Table:
+    keys: list
+    vals: list
+
+fn fresh(expected: int) -> Table:
+    Table {keys: [], vals: []}
+
+fn size(t: Table) -> int:
+    list::length(t.keys)
+
+fn slots(t: Table) -> int:
+    0
+
+# The position of KEY in T's keys, or -1.
+fn position(t: Table, key) -> int:
+    keys = t.keys
+    loop i from 0 to list::length(keys):
+        if list::at(keys, i) == key:
+            return i
+    -1
+
+fn get(t: Table, key, default):
+    i = position(t, key)
+    if i < 0:
+        return default
+    list::get(t.vals, i, default)
+
+fn has?(t: Table, key) -> bool:
+    position(t, key) >= 0
+
+fn probes(t: Table, key) -> int:
+    i = position(t, key)
+    if i < 0:
+        return size(t)
+    i + 1
+
+# XS with the element at I replaced by X.
+fn replaced(xs: list, i: int, x) -> list:
+    loop j from 0 to list::length(xs):
+        if j == i:
+            x
+        else:
+            list::at(xs, j)
+
+# XS without the element at I.
+fn without(xs: list, i: int) -> list:
+    loop j from 0 to list::length(xs):
+        if j == i:
+            continue
+        list::at(xs, j)
+
+fn put(t: Table, key, value) -> Table:
+    i = position(t, key)
+    if i >= 0:
+        return Table {keys: t.keys, vals: replaced(t.vals, i, value)}
+    Table {keys: list::append(t.keys, key), vals: list::append(t.vals, value)}
+
+fn drop(t: Table, key) -> Table:
+    i = position(t, key)
+    if i < 0:
+        return t
+    Table {keys: without(t.keys, i), vals: without(t.vals, i)}
+
+# ---------------------------------------------------------------------------
+# Bulk construction (SPEC.md section 4)
+
+# The table of KEYS[i] -> VALS[i], in order (a later duplicate's value wins).
+fn from_lists(keys: list, vals: list) -> Table errors IndexNotFound:
+    n = list::length(keys)
+    fn fill(t: Table, i: int) -> Table errors IndexNotFound:
+        if i >= n:
+            return t
+        fill(put(t, list::at(keys, i), list::at(vals, i)), i + 1)
+    fill(fresh(n), 0)

@@ -263,7 +263,7 @@ title: -
 summary: The Euclidean remainder of A divided by B, written mod(a, b) or a.mod(b): always 0 <= r < abs(b); B = 0 fails with ARITHMETIC.
 index: stdlib
 keywords: modulo; remainder; modulus; divisible; even or odd; wrap around; bucket index
-related: concept.integers capability.integer-division stdlib.hash stdlib.shift_right proof.ranges
+related: concept.integers capability.integer-division stdlib.hash stdlib.shift_right proof.ranges proof.list-bounds
 
 == NOTES
 A language primitive: no import, written mod(a, b) or, as a method,
@@ -280,7 +280,9 @@ the divisor first.
 There is no integer division (no `/`, no `div`): see
 capability.integer-division. The range analysis knows mod's result: with a
 divisor of bounded magnitude m it lies in 0..m-1, so `xs.at(k.mod(3))` is
-proven in range where xs is known to have three elements.
+proven in range where xs is known to have three elements; and a divisor that
+is the container's own size proves the read whatever that size is,
+`xs.at(k.mod(xs.length()))` (proof.list-bounds).
 
 A leading minus binds less tightly than the method call: -7.mod(3) is
 -(7.mod(3)), which is -1, not 2.
@@ -308,7 +310,9 @@ bit_and, bit_or and bit_xor are declared nomethod: their two operands are
 symmetric, so neither is a receiver, and a.bit_and(b) is rejected with
 NOMETHOD-CALL. The range analysis bounds the result (an AND with a
 nonnegative mask lies in 0..mask), which is how lib/byte.bot's functions
-prove their Byte and Nibble results.
+prove their Byte and Nibble results; a mask that is a container's size minus
+one, with the size proven not 0, proves an index into it
+(`a.at(bit_and(h, a.capacity() - 1))`, proof.list-bounds).
 
 == EXAMPLES
 @example accept

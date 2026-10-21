@@ -15,7 +15,7 @@ function	Tcl_SetExitProc	thunk	tclstubs::thunks::tcl	thunk (macro-shadow: expres
 function	TclZipfs_AppHook	thunk	tclstubs::thunks::tcl	thunk (macro-shadow: call wrapper: computed arguments)	symbol botlish_tclstubs_TclZipfs_AppHook; (ffi::c::Ptr[ffi::c::Int], ffi::c::Ptr[ffi::c::Ptr[ffi::c::Ptr[ffi::c::Char]]]) -> ffi::c::Ptr[ffi::c::Char]
 macro	Tcl_PkgProvideEx	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_PkgProvideEx; (ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[ffi::c::Char], ffi::c::Ptr[ffi::c::Char], ffi::c::Ptr[ffi::c::Void]) -> ffi::c::Int
 macro	Tcl_PkgRequireEx	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_PkgRequireEx; (ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[ffi::c::Char], ffi::c::Ptr[ffi::c::Char], ffi::c::Int, ffi::c::Ptr[ffi::c::Void]) -> ffi::c::Ptr[ffi::c::Char]
-macro	Tcl_Panic	unsupported		variadic	a variadic function (...)
+macro	Tcl_Panic	unsupported		variadic	a variadic function (...) reached through a C thunk, which cannot forward its trailing arguments
 macro	Tcl_Alloc	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_Alloc; (ffi::c::ULong) -> ffi::c::Ptr[ffi::c::Void]
 macro	Tcl_Free	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_Free; (ffi::c::Ptr[ffi::c::Void]) -> unit
 macro	Tcl_Realloc	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_Realloc; (ffi::c::Ptr[ffi::c::Void], ffi::c::ULong) -> ffi::c::Ptr[ffi::c::Void]
@@ -28,7 +28,7 @@ macro	Tcl_SetTimer	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tcl
 macro	Tcl_Sleep	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_Sleep; (ffi::c::Int) -> unit
 macro	Tcl_WaitForEvent	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_WaitForEvent; (ffi::c::Ptr[Tcl_Time]) -> ffi::c::Int
 macro	Tcl_AppendAllObjTypes	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_AppendAllObjTypes; (ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[Tcl_Obj]) -> ffi::c::Int
-macro	Tcl_AppendStringsToObj	unsupported		variadic	a variadic function (...)
+macro	Tcl_AppendStringsToObj	unsupported		variadic	a variadic function (...) reached through a C thunk, which cannot forward its trailing arguments
 macro	Tcl_AppendToObj	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_AppendToObj; (ffi::c::Ptr[Tcl_Obj], ffi::c::Ptr[ffi::c::Char], ffi::c::Long) -> unit
 macro	Tcl_ConcatObj	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_ConcatObj; (ffi::c::Long, ffi::c::Ptr[ffi::c::Ptr[Tcl_Obj]]) -> ffi::c::Ptr[Tcl_Obj]
 macro	Tcl_ConvertToType	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_ConvertToType; (ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[Tcl_Obj], ffi::c::Ptr[Tcl_ObjType]) -> ffi::c::Int
@@ -72,7 +72,7 @@ macro	Tcl_SetObjLength	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish
 macro	Tcl_SetStringObj	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_SetStringObj; (ffi::c::Ptr[Tcl_Obj], ffi::c::Ptr[ffi::c::Char], ffi::c::Long) -> unit
 macro	Tcl_AllowExceptions	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_AllowExceptions; (ffi::c::Ptr[Tcl_Interp]) -> unit
 macro	Tcl_AppendElement	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_AppendElement; (ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[ffi::c::Char]) -> unit
-macro	Tcl_AppendResult	unsupported		variadic	a variadic function (...)
+macro	Tcl_AppendResult	unsupported		variadic	a variadic function (...) reached through a C thunk, which cannot forward its trailing arguments
 macro	Tcl_AsyncCreate	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_AsyncCreate; (ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[Tcl_Interp], ffi::c::Int], return: ffi::c::Int}], ffi::c::Ptr[ffi::c::Void]) -> ffi::c::Ptr[Tcl_AsyncHandler_]
 macro	Tcl_AsyncDelete	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_AsyncDelete; (ffi::c::Ptr[Tcl_AsyncHandler_]) -> unit
 macro	Tcl_AsyncInvoke	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_AsyncInvoke; (ffi::c::Ptr[Tcl_Interp], ffi::c::Int) -> ffi::c::Int
@@ -215,7 +215,7 @@ macro	Tcl_SetChannelBufferSize	thunk	tclstubs::thunks::decls	thunk (stub)	symbol
 macro	Tcl_SetChannelOption	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_SetChannelOption; (ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[Tcl_Channel_], ffi::c::Ptr[ffi::c::Char], ffi::c::Ptr[ffi::c::Char]) -> ffi::c::Int
 macro	Tcl_SetCommandInfo	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_SetCommandInfo; (ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[ffi::c::Char], ffi::c::Ptr[Tcl_CmdInfo]) -> ffi::c::Int
 macro	Tcl_SetErrno	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_SetErrno; (ffi::c::Int) -> unit
-macro	Tcl_SetErrorCode	unsupported		variadic	a variadic function (...)
+macro	Tcl_SetErrorCode	unsupported		variadic	a variadic function (...) reached through a C thunk, which cannot forward its trailing arguments
 macro	Tcl_SetMaxBlockTime	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_SetMaxBlockTime; (ffi::c::Ptr[Tcl_Time]) -> unit
 macro	Tcl_SetRecursionLimit	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_SetRecursionLimit; (ffi::c::Ptr[Tcl_Interp], ffi::c::Long) -> ffi::c::Long
 macro	Tcl_SetServiceMode	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_SetServiceMode; (ffi::c::Int) -> ffi::c::Int
@@ -237,7 +237,7 @@ macro	Tcl_UnsetVar2	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tc
 macro	Tcl_UntraceVar2	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_UntraceVar2; (ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[ffi::c::Char], ffi::c::Ptr[ffi::c::Char], ffi::c::Int, ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[ffi::c::Char], ffi::c::Ptr[ffi::c::Char], ffi::c::Int], return: ffi::c::Ptr[ffi::c::Char]}], ffi::c::Ptr[ffi::c::Void]) -> unit
 macro	Tcl_UpdateLinkedVar	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_UpdateLinkedVar; (ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[ffi::c::Char]) -> unit
 macro	Tcl_UpVar2	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_UpVar2; (ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[ffi::c::Char], ffi::c::Ptr[ffi::c::Char], ffi::c::Ptr[ffi::c::Char], ffi::c::Ptr[ffi::c::Char], ffi::c::Int) -> ffi::c::Int
-macro	Tcl_VarEval	unsupported		variadic	a variadic function (...)
+macro	Tcl_VarEval	unsupported		variadic	a variadic function (...) reached through a C thunk, which cannot forward its trailing arguments
 macro	Tcl_VarTraceInfo2	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_VarTraceInfo2; (ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[ffi::c::Char], ffi::c::Ptr[ffi::c::Char], ffi::c::Int, ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[ffi::c::Char], ffi::c::Ptr[ffi::c::Char], ffi::c::Int], return: ffi::c::Ptr[ffi::c::Char]}], ffi::c::Ptr[ffi::c::Void]) -> ffi::c::Ptr[ffi::c::Void]
 macro	Tcl_Write	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_Write; (ffi::c::Ptr[Tcl_Channel_], ffi::c::Ptr[ffi::c::Char], ffi::c::Long) -> ffi::c::Long
 macro	Tcl_WrongNumArgs	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_WrongNumArgs; (ffi::c::Ptr[Tcl_Interp], ffi::c::Long, ffi::c::Ptr[ffi::c::Ptr[Tcl_Obj]], ffi::c::Ptr[ffi::c::Char]) -> unit
@@ -529,8 +529,8 @@ macro	Tcl_AppendObjToErrorInfo	thunk	tclstubs::thunks::decls	thunk (stub)	symbol
 macro	Tcl_AppendLimitedToObj	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_AppendLimitedToObj; (ffi::c::Ptr[Tcl_Obj], ffi::c::Ptr[ffi::c::Char], ffi::c::Long, ffi::c::Long, ffi::c::Ptr[ffi::c::Char]) -> unit
 macro	Tcl_Format	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_Format; (ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[ffi::c::Char], ffi::c::Long, ffi::c::Ptr[ffi::c::Ptr[Tcl_Obj]]) -> ffi::c::Ptr[Tcl_Obj]
 macro	Tcl_AppendFormatToObj	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_AppendFormatToObj; (ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[Tcl_Obj], ffi::c::Ptr[ffi::c::Char], ffi::c::Long, ffi::c::Ptr[ffi::c::Ptr[Tcl_Obj]]) -> ffi::c::Int
-macro	Tcl_ObjPrintf	unsupported		variadic	a variadic function (...)
-macro	Tcl_AppendPrintfToObj	unsupported		variadic	a variadic function (...)
+macro	Tcl_ObjPrintf	unsupported		variadic	a variadic function (...) reached through a C thunk, which cannot forward its trailing arguments
+macro	Tcl_AppendPrintfToObj	unsupported		variadic	a variadic function (...) reached through a C thunk, which cannot forward its trailing arguments
 macro	Tcl_CancelEval	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_CancelEval; (ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[Tcl_Obj], ffi::c::Ptr[ffi::c::Void], ffi::c::Int) -> ffi::c::Int
 macro	Tcl_Canceled	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_Canceled; (ffi::c::Ptr[Tcl_Interp], ffi::c::Int) -> ffi::c::Int
 macro	Tcl_CreatePipe	thunk	tclstubs::thunks::decls	thunk (stub)	symbol botlish_tclstubs_Tcl_CreatePipe; (ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[ffi::c::Ptr[Tcl_Channel_]], ffi::c::Ptr[ffi::c::Ptr[Tcl_Channel_]], ffi::c::Int) -> ffi::c::Int
@@ -704,7 +704,7 @@ macro	TclBN_mp_add_d	thunk	tclstubs::thunks::tommathdecls	thunk (stub)	symbol bo
 macro	TclBN_mp_and	thunk	tclstubs::thunks::tommathdecls	thunk (stub)	symbol botlish_tclstubs_TclBN_mp_and; (ffi::c::Ptr[mp_int], ffi::c::Ptr[mp_int], ffi::c::Ptr[mp_int]) -> ffi::c::Int
 macro	TclBN_mp_clamp	thunk	tclstubs::thunks::tommathdecls	thunk (stub)	symbol botlish_tclstubs_TclBN_mp_clamp; (ffi::c::Ptr[mp_int]) -> unit
 macro	TclBN_mp_clear	thunk	tclstubs::thunks::tommathdecls	thunk (stub)	symbol botlish_tclstubs_TclBN_mp_clear; (ffi::c::Ptr[mp_int]) -> unit
-macro	TclBN_mp_clear_multi	unsupported		variadic	a variadic function (...)
+macro	TclBN_mp_clear_multi	unsupported		variadic	a variadic function (...) reached through a C thunk, which cannot forward its trailing arguments
 macro	TclBN_mp_cmp	thunk	tclstubs::thunks::tommathdecls	thunk (stub)	symbol botlish_tclstubs_TclBN_mp_cmp; (ffi::c::Ptr[mp_int], ffi::c::Ptr[mp_int]) -> ffi::c::Int
 macro	TclBN_mp_cmp_d	thunk	tclstubs::thunks::tommathdecls	thunk (stub)	symbol botlish_tclstubs_TclBN_mp_cmp_d; (ffi::c::Ptr[mp_int], ffi::c::ULong) -> ffi::c::Int
 macro	TclBN_mp_cmp_mag	thunk	tclstubs::thunks::tommathdecls	thunk (stub)	symbol botlish_tclstubs_TclBN_mp_cmp_mag; (ffi::c::Ptr[mp_int], ffi::c::Ptr[mp_int]) -> ffi::c::Int
@@ -719,7 +719,7 @@ macro	TclBN_mp_expt_n	thunk	tclstubs::thunks::tommathdecls	thunk (stub)	symbol b
 macro	TclBN_mp_grow	thunk	tclstubs::thunks::tommathdecls	thunk (stub)	symbol botlish_tclstubs_TclBN_mp_grow; (ffi::c::Ptr[mp_int], ffi::c::Int) -> ffi::c::Int
 macro	TclBN_mp_init	thunk	tclstubs::thunks::tommathdecls	thunk (stub)	symbol botlish_tclstubs_TclBN_mp_init; (ffi::c::Ptr[mp_int]) -> ffi::c::Int
 macro	TclBN_mp_init_copy	thunk	tclstubs::thunks::tommathdecls	thunk (stub)	symbol botlish_tclstubs_TclBN_mp_init_copy; (ffi::c::Ptr[mp_int], ffi::c::Ptr[mp_int]) -> ffi::c::Int
-macro	TclBN_mp_init_multi	unsupported		variadic	a variadic function (...)
+macro	TclBN_mp_init_multi	unsupported		variadic	a variadic function (...) reached through a C thunk, which cannot forward its trailing arguments
 macro	TclBN_mp_init_set	thunk	tclstubs::thunks::tommathdecls	thunk (stub)	symbol botlish_tclstubs_TclBN_mp_init_set; (ffi::c::Ptr[mp_int], ffi::c::ULong) -> ffi::c::Int
 macro	TclBN_mp_init_size	thunk	tclstubs::thunks::tommathdecls	thunk (stub)	symbol botlish_tclstubs_TclBN_mp_init_size; (ffi::c::Ptr[mp_int], ffi::c::Int) -> ffi::c::Int
 macro	TclBN_mp_lshd	thunk	tclstubs::thunks::tommathdecls	thunk (stub)	symbol botlish_tclstubs_TclBN_mp_lshd; (ffi::c::Ptr[mp_int], ffi::c::Int) -> ffi::c::Int

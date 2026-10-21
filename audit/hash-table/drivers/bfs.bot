@@ -1,0 +1,83 @@
+# bfs -- a breadth-first search over a W x W grid with a visited table of
+# Points (audit/hash-table/SPEC.md section 6's mixed workloads; the Rust
+# reference's `bfs`): mostly membership tests and insertions. A cell is a
+# wall when mod(7x + 13y, 11) == 0, except the start (0, 0); neighbours are
+# visited in the order (x+1, y), (x, y+1), (x-1, y), (x, y-1). The table maps
+# a reached cell to its distance; the result is the sum of the distances of
+# the cells taken from the queue plus the number of cells reached.
+#
+#   argv: W
+import list
+import str
+import char
+import mutable_vector
+import table
+import keys
+
+fn int_of(text: str) -> int errors IndexNotFound:
+    n = text.length()
+    fn digits(i: int, acc: int) -> int errors IndexNotFound:
+        if i >= n:
+            return acc
+        digits(i + 1, acc * 10 + char::scalar_value(text.char_at(i)) - 48)
+    digits(0, 0)
+
+fn wall?(x: int, y: int) -> bool:
+    if x == 0 and y == 0:
+        return false
+    mod(7 * x + 13 * y, 11) == 0
+
+# Whether P is inside the grid, not a wall, and not reached yet.
+fn open?(seen: table::Table, p: keys::Point, w: int) -> bool errors IndexNotFound:
+    if p.x < 0 or p.y < 0 or p.x >= w or p.y >= w or wall?(p.x, p.y):
+        return false
+    not table::has?(seen, p)
+
+# SEEN with P reached at distance D, when NEW.
+fn marked(seen: table::Table, p: keys::Point, d: int, new: bool) -> table::Table errors IndexNotFound:
+    if new:
+        return table::put(seen, p, d)
+    seen
+
+fn search(seen: table::Table, queue: MutableVector[keys::Point], head: int, sum: int, w: int) errors IndexNotFound:
+    if head >= queue.length():
+        return sum + table::size(seen)
+    p = queue.at(head)
+    d = table::get(seen, p, 0)
+    a = keys::Point {x: p.x + 1, y: p.y}
+    b = keys::Point {x: p.x, y: p.y + 1}
+    c = keys::Point {x: p.x - 1, y: p.y}
+    e = keys::Point {x: p.x, y: p.y - 1}
+    na = open?(seen, a, w)
+    if na:
+        queue.push(a)
+    s1 = marked(seen, a, d + 1, na)
+    nb = open?(s1, b, w)
+    if nb:
+        queue.push(b)
+    s2 = marked(s1, b, d + 1, nb)
+    nc = open?(s2, c, w)
+    if nc:
+        queue.push(c)
+    s3 = marked(s2, c, d + 1, nc)
+    ne = open?(s3, e, w)
+    if ne:
+        queue.push(e)
+    s4 = marked(s3, e, d + 1, ne)
+    search(s4, queue, head + 1, sum + d, w)
+
+fn first_queue() -> MutableVector[keys::Point]:
+    mutable_vector::from_list([keys::Point {x: 0, y: 0}])
+
+fn main(args: List[str]) errors IndexNotFound:
+    w = int_of(args.get(1, "8"))
+    start = table::put(table::fresh(0), keys::Point {x: 0, y: 0}, 0)
+    search(start, first_queue(), 0, 0, w)
+
+args = argv():
+    on InvalidArgumentEncoding:
+        []
+result = main(args):
+    on IndexNotFound:
+        -1
+result

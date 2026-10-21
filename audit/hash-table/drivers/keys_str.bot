@@ -1,0 +1,28 @@
+# keys (String): the String key kinds of SPEC.md section 5, and the trace
+# syntax. The experiment copies this file beside a driver as `keys.bot`.
+import list
+import str
+
+digit_chars = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f']
+
+# PREFIX followed by the lowercase hexadecimal text of I >= 0.
+fn hex_after(prefix: str, i: int) -> str:
+    if i < 16:
+        return prefix.append_char(digit_chars.get(i, '0'))
+    hex_after(prefix, shift_right(i, 4)).append_char(digit_chars.get(bit_and(i, 15), '0'))
+
+# Key kinds: 4 str-short, 5 str-medium.
+fn key(kind: int, i: int) -> str:
+    if kind == 4:
+        hex_after("id_", i)
+    else:
+        hex_after("/usr/share/doc/package-", i).concat("/index.html")
+
+fn miss(kind: int, i: int) -> str:
+    if kind == 4:
+        hex_after("no_", i)
+    else:
+        hex_after("/usr/share/doc/missing-", i).concat("/index.html")
+
+fn parse(text: str) -> str:
+    text

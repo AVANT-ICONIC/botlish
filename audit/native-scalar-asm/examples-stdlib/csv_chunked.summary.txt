@@ -2,7 +2,7 @@ source:  examples/stdlib/csv_chunked.bot
 backend: Cranelift (specialize=1)
 asm:     csv_chunked.asm
 vcode:   csv_chunked.vcode
-machine-code bytes: 6813 (per function: 312 315 749 749 504 625 365 309 470 932 311 630 388 154)
+machine-code bytes: 7445 (per function: 312 315 1037 1037 504 681 365 309 470 932 311 630 388 154)
 
 functions:
   0 <program entry>: nir-regs=9

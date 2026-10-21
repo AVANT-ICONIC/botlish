@@ -566,6 +566,36 @@ extern c fn SDL_UCS4ToUTF8(
     dst: ffi::c::Ptr[ffi::c::Char]
 ) -> ffi::c::Ptr[ffi::c::Char]
 
+# C: int SDL_sscanf(const char *text, const char *fmt, ...)
+extern c fn SDL_sscanf(
+    text: ffi::c::Ptr[ffi::c::Char],
+    fmt: ffi::c::Ptr[ffi::c::Char],
+    variadic
+) -> ffi::c::Int
+
+# C: int SDL_snprintf(char *text, size_t maxlen, const char *fmt, ...)
+extern c fn SDL_snprintf(
+    text: ffi::c::Ptr[ffi::c::Char],
+    maxlen: ffi::c::ULong,
+    fmt: ffi::c::Ptr[ffi::c::Char],
+    variadic
+) -> ffi::c::Int
+
+# C: int SDL_swprintf(wchar_t *text, size_t maxlen, const wchar_t *fmt, ...)
+extern c fn SDL_swprintf(
+    text: ffi::c::Ptr[ffi::c::Int],
+    maxlen: ffi::c::ULong,
+    fmt: ffi::c::Ptr[ffi::c::Int],
+    variadic
+) -> ffi::c::Int
+
+# C: int SDL_asprintf(char **strp, const char *fmt, ...)
+extern c fn SDL_asprintf(
+    strp: ffi::c::Ptr[ffi::c::Ptr[ffi::c::Char]],
+    fmt: ffi::c::Ptr[ffi::c::Char],
+    variadic
+) -> ffi::c::Int
+
 # C: void SDL_srand(Uint64 seed)
 extern c fn SDL_srand(seed: ffi::c::ULong) -> unit
 

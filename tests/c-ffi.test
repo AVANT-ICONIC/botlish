@@ -344,6 +344,54 @@ extern c fn pointer_mix named "bcf_pointer_mix"(a: ffi::c::Ptr[ffi::c::Void] noe
 extern c fn checked_div named "bcf_checked_div"(a: ffi::c::Int, b: ffi::c::Int) -> ffi::c::Int
 extern c fn deep named "bcf_deep"(n: ffi::c::Long) -> ffi::c::Long
 extern c fn available named "bcf_available"() -> ffi::c::Int
+extern c fn vrecord named "bcf_vrecord"(count: ffi::c::Int, kinds: ffi::c::ULongLong, kinds2: ffi::c::ULongLong, variadic) -> ffi::c::Int
+extern c fn vseen_bits named "bcf_vseen_bits"(i: ffi::c::Int) -> ffi::c::ULongLong
+extern c fn vsum named "bcf_vsum"(count: ffi::c::Int, variadic) -> ffi::c::LongLong
+extern c fn vscale named "bcf_vscale"(factor: ffi::c::Double, count: ffi::c::Int, variadic) -> ffi::c::Double
+extern c fn vsentinel named "bcf_vsentinel"(tag: ffi::c::Int, variadic) -> ffi::c::Int
+extern c fn vaddress named "bcf_vaddress"() -> ffi::c::Ptr[ffi::c::Void] independent
+extern c fn vaddress_bits named "bcf_vaddress_bits"() -> ffi::c::ULongLong
+extern c fn vcapture named "bcf_vcapture"(n: ffi::c::Int, variadic) -> ffi::c::Int
+extern c fn vcapture_d named "bcf_vcapture_d"(x: ffi::c::Double, n: ffi::c::Int, variadic) -> ffi::c::Int
+extern c fn vcaptured_register named "bcf_vcaptured_register"(i: ffi::c::Int) -> ffi::c::ULongLong
+extern c fn vcaptured_al named "bcf_vcaptured_al"() -> ffi::c::UInt
+extern c fn vcaptured_float named "bcf_vcaptured_float"(i: ffi::c::Int) -> ffi::c::ULongLong
+extern c fn vcaptured_stack_byte named "bcf_vcaptured_stack_byte"(i: ffi::c::Int) -> ffi::c::UChar
+extern c fn vreference_register named "bcf_vreference_register"(i: ffi::c::Int) -> ffi::c::ULongLong
+extern c fn vreference_al named "bcf_vreference_al"() -> ffi::c::UInt
+extern c fn vreference_float named "bcf_vreference_float"(i: ffi::c::Int) -> ffi::c::ULongLong
+extern c fn vreference_stack_byte named "bcf_vreference_stack_byte"(i: ffi::c::Int) -> ffi::c::UChar
+extern c fn vreference_none named "bcf_vreference_none"() -> ffi::c::Int
+extern c fn vreference_small named "bcf_vreference_small"() -> ffi::c::Int
+extern c fn vreference_ints named "bcf_vreference_ints"() -> ffi::c::Int
+extern c fn vreference_mixed named "bcf_vreference_mixed"() -> ffi::c::Int
+extern c fn vreference_fixedd named "bcf_vreference_fixedd"() -> ffi::c::Int
+
+# C types for the trailing arguments of a variadic C call, which have no
+# declared parameter type to prove a value against (VARIADICS-VERTICAL-
+# SLICE-1.md): a converter is a function whose declared result is the type.
+fn c_char(x: ffi::c::Char) -> ffi::c::Char:
+    x
+fn c_schar(x: ffi::c::SChar) -> ffi::c::SChar:
+    x
+fn c_uchar(x: ffi::c::UChar) -> ffi::c::UChar:
+    x
+fn c_short(x: ffi::c::Short) -> ffi::c::Short:
+    x
+fn c_ushort(x: ffi::c::UShort) -> ffi::c::UShort:
+    x
+fn c_int(x: ffi::c::Int) -> ffi::c::Int:
+    x
+fn c_uint(x: ffi::c::UInt) -> ffi::c::UInt:
+    x
+fn c_long(x: ffi::c::Long) -> ffi::c::Long:
+    x
+fn c_ulong(x: ffi::c::ULong) -> ffi::c::ULong:
+    x
+fn c_longlong(x: ffi::c::LongLong) -> ffi::c::LongLong:
+    x
+fn c_ulonglong(x: ffi::c::ULongLong) -> ffi::c::ULongLong:
+    x
 }
 
 # The retaining part of the fixture's API, for the direct tests: keep stores
@@ -424,7 +472,7 @@ test cf-parse-messages {the messages name what is wrong and the remedy} -body {
         catch {surface::parse $src t.bot} message
         set message
     }
-} -result {{t.bot:1:8: EXTERN-SYNTAX: an extern declaration names its foreign ABI: write "extern c fn NAME(...) -> T" (the only foreign ABI is c)} {t.bot:1:24: EXTERN-SYNTAX: an extern c fn is a declaration with no body: it has no trailing ":" (write "extern c fn f(...) -> T" on its own)} {t.bot:1:23: EXTERN-SYNTAX: variadic C functions are not supported: extern c fn "f" must have a fixed signature (there is no variadic C ABI here: bind a function of fixed parameters instead)} {t.bot:1:22: EXTERN-SYNTAX: expected "->" and the C result type after the parameter list of extern c fn "f", found end of line (a C function returning void is "-> unit")}}
+} -result {{t.bot:1:8: EXTERN-SYNTAX: an extern declaration names its foreign ABI: write "extern c fn NAME(...) -> T" (the only foreign ABI is c)} {t.bot:1:24: EXTERN-SYNTAX: an extern c fn is a declaration with no body: it has no trailing ":" (write "extern c fn f(...) -> T" on its own)} {t.bot:1:23: EXTERN-SYNTAX: C's "..." is written "variadic" in an extern c fn: end the parameter list of "f" with the bare word ("extern c fn f(format: ffi::c::Ptr[ffi::c::Char], variadic) -> ffi::c::Int")} {t.bot:1:22: EXTERN-SYNTAX: expected "->" and the C result type after the parameter list of extern c fn "f", found end of line (a C function returning void is "-> unit")}}
 
 test cf-parse-recover {a recovering parse reports each malformed declaration once and keeps the valid ones: no cascade} -body {
     set ast [surface::parse "extern fn f()\nextern c fn g() -> unit\nextern c fn h(x: int, ...) -> unit\nextern c library \"m\"\nx = 1\n" t.bot -recover 1]
@@ -1286,5 +1334,417 @@ test cf-c-stack-overflow {C recursion that exhausts the native stack it runs on 
 } -cleanup removeApps -result [list {{LIMIT STACK} {native stack exhausted: too many nested calls}} 2000 {{LIMIT STACK} {native stack exhausted: too many nested calls}} {1 CHILDSTATUS 1 {error {NATIVE LIMIT STACK} {native stack exhausted: too many nested calls}
 child process exited abnormally}} {1 CHILDSTATUS 1 {error {NATIVE LIMIT STACK} {native stack exhausted: too many nested calls}
 child process exited abnormally}}]
+
+# ---------------------------------------------------------------------------
+# Variadic C functions (VARIADICS-VERTICAL-SLICE-1.md): `extern c fn NAME(
+# fixed..., variadic)`, each call passing its own trailing C arguments,
+# promoted by C's default argument promotions, against the fixture's genuine
+# <stdarg.h> callees and the machine state its calls arrive in.
+
+test cf-va-parse {the bare word variadic ends a C parameter list after the fixed parameters; it is contextual: `variadic: T` is a parameter named variadic} -body {
+    set ast [surface::parse "import ffi::c\n\nextern c fn printf(format: ffi::c::Ptr\[ffi::c::Char\] read noescape, variadic) -> ffi::c::Int\nextern c fn open(\n    path: ffi::c::Ptr\[ffi::c::Char\],\n    flags: ffi::c::Int,\n    variadic\n) -> ffi::c::Int\nextern c fn f(variadic: ffi::c::Int) -> unit\n" t.bot]
+    lrange [split [surface::formatAst $ast] \n] 1 end
+} -result {{extern c fn printf(format: ffi::c::Ptr[ffi::c::Char] read noescape, variadic) -> ffi::c::Int} {extern c fn open(path: ffi::c::Ptr[ffi::c::Char], flags: ffi::c::Int, variadic) -> ffi::c::Int} {extern c fn f(variadic: ffi::c::Int) -> unit}}
+
+test cf-va-parse-errors {a variadic C function declares a fixed parameter first, ends with the bare marker and names no trailing argument; C's "..." is written variadic: located EXTERN-SYNTAX errors} -body {
+    lmap src [list \
+        "extern c fn f(variadic) -> unit\n" \
+        "extern c fn f(x: ffi::c::Int, variadic, y: ffi::c::Int) -> unit\n" \
+        "extern c fn f(x: ffi::c::Int, variadic, variadic) -> unit\n" \
+        "extern c fn f(x: ffi::c::Int, variadic args) -> unit\n" \
+        "extern c fn f(x: ffi::c::Int, ...) -> unit\n"] {
+        catch {surface::parse $src t.bot} message
+        set message
+    }
+} -result {{t.bot:1:15: EXTERN-SYNTAX: a variadic C function declares at least one fixed parameter before "variadic": extern c fn "f" has none (C's variable arguments follow a named one)} {t.bot:1:41: EXTERN-SYNTAX: "variadic" ends the parameter list of extern c fn "f": the trailing arguments it stands for come after every fixed parameter, so nothing follows it (found name "y")} {t.bot:1:41: EXTERN-SYNTAX: "variadic" ends the parameter list of extern c fn "f": the trailing arguments it stands for come after every fixed parameter, so nothing follows it (found name "variadic")} {t.bot:1:40: EXTERN-SYNTAX: the variadic marker of extern c fn "f" is the bare word "variadic": C's trailing arguments have no name and no declared type (each call passes its own C types)} {t.bot:1:31: EXTERN-SYNTAX: C's "..." is written "variadic" in an extern c fn: end the parameter list of "f" with the bare word ("extern c fn f(format: ffi::c::Ptr[ffi::c::Char], variadic) -> ffi::c::Int")}}
+
+test cf-va-hir {the declaration is its fixed parameters, marked variadic in its contract and its ABI, a native of any arity; each call records how it passes each trailing argument: its C type, its own class and its promoted one} -body {
+    set hir [appHir [bcfApp "direct module\n\nimport ffi::c\nimport bcf\n\np = bcf::vaddress()\nbcf::vrecord(5, 0, 0, bcf::c_uchar(200), bcf::c_short(-2), bcf::c_uint(7), true, 2.5, p)\n"]]
+    set record [dict get [dict get $hir foreign] bcf::vrecord]
+    set calls {}
+    foreach e [hirFind $hir call] {
+        if {[dict exists [hir::node $hir $e] cvarargs]} {
+            lappend calls [hir::get $hir $e cvarargs]
+        }
+    }
+    list [dict get $record contract variadic] [dict get $record abi] \
+        [dict get [core::native::metadata [dict get $record native]] arity] $calls
+} -cleanup removeApps -result {1 {params {i32 u64 u64} result i32 variadic 1} * {{{c ffi::c::UChar class u8 promoted i32} {c ffi::c::Short class i16 promoted i32} {c ffi::c::UInt class u32 promoted u32} {c ffi::c::Bool class bool promoted i32} {c ffi::c::Double class f64 promoted f64} {c {ffi::c::Ptr[ffi::c::Void]} class ptr promoted ptr}}}}
+
+test cf-va-promotions-follow-the-target {the promotions are the compilation target's: every type narrower than int to int, unsigned ones too; long keeps its own width -- 64 bits on LP64, 32 on LLP64 (Windows), where it is int-wide and not promoted -- and plain char is signed or unsigned by the target} -body {
+    set dir [bcfApp "import ffi::c\nimport bcf\n\nbcf::vsum(1, bcf::c_char(1), bcf::c_ushort(65535), bcf::c_long(-1), bcf::c_ulong(1))\n"]
+    lmap target {linux-x86_64 linux-aarch64 macos-aarch64 windows-x86_64} {
+        set hir [surface::readProgramFile [file join $dir main.bot] -warnings off -cache "" -target $target]
+        set classes {}
+        foreach e [hirFind $hir call] {
+            if {[dict exists [hir::node $hir $e] cvarargs]} {
+                set classes [lmap how [hir::get $hir $e cvarargs] {string cat [dict get $how class] : [dict get $how promoted]}]
+            }
+        }
+        list $target $classes
+    }
+} -cleanup removeApps -result {{linux-x86_64 {i8:i32 u16:i32 i64:i64 u64:u64}} {linux-aarch64 {u8:i32 u16:i32 i64:i64 u64:u64}} {macos-aarch64 {i8:i32 u16:i32 i64:i64 u64:u64}} {windows-x86_64 {i8:i32 u16:i32 i32:i32 u32:u32}}}
+
+test cf-va-type-refusals {a trailing argument must be exactly one C ABI value type: a plain Int (its value fitting a C range says no C type), a String, a List, a struct, a Float64-free decimal of no C type, a value erased to any, byte storage (no contract to expose it under) and fewer arguments than the fixed parameters are rejected at the call} -body {
+    lmap body [list \
+        "bcf::vsum(1, 5)" \
+        "bcf::vsum(1, \"five\")" \
+        "bcf::vsum(1, \[bcf::c_int(5)\])" \
+        "bcf::vsum(1, P {x: 1})" \
+        "fn erased(x):\n    bcf::vsum(1, x)\nerased(bcf::c_int(5))" \
+        "bcf::vsum(1, abi::bytes::zeroed(abi::usize(4)))" \
+        "bcf::vsum()" \
+        "bcf::vrecord(1, 0)"] {
+        regsub -all {main\.bot:[0-9]+:[0-9]+: } [appRejection [bcfApp "import abi\nimport abi::bytes\nimport ffi::c\nimport bcf\n\nstruct P:\n    x: int\n\n$body\n"]] {}
+    }
+} -cleanup removeApps -result {{TYPE: argument 2 of bcf::vsum, a trailing argument of a variadic C function: int is a Botlish integer, not a C type: a value fitting a C integer's range does not say which C type the call passes (int, long and long long are different arguments) -- give it one, e.g. a value of ffi::c::Int or ffi::c::Long (a declared parameter, a C function's result, or a converter function whose declared result is the type)} {TYPE: argument 2 of bcf::vsum, a trailing argument of a variadic C function: str is not a C ABI value type: a trailing argument of a variadic C function is a C integer scalar (such as ffi::c::Int), ffi::c::Bool, ffi::c::Double, a ffi::c::Ptr[...] or a ffi::c::FnPtr[...]} {TYPE: argument 2 of bcf::vsum, a trailing argument of a variadic C function: List[ffi::c::Int] is not a C ABI value type: a trailing argument of a variadic C function is a C integer scalar (such as ffi::c::Int), ffi::c::Bool, ffi::c::Double, a ffi::c::Ptr[...] or a ffi::c::FnPtr[...]} {TYPE: argument 2 of bcf::vsum, a trailing argument of a variadic C function: P is not a C ABI value type: a trailing argument of a variadic C function is a C integer scalar (such as ffi::c::Int), ffi::c::Bool, ffi::c::Double, a ffi::c::Ptr[...] or a ffi::c::FnPtr[...]} {TYPE: argument 2 of bcf::vsum, a trailing argument of a variadic C function: any is not a C ABI value type: a trailing argument of a variadic C function is a C integer scalar (such as ffi::c::Int), ffi::c::Bool, ffi::c::Double, a ffi::c::Ptr[...] or a ffi::c::FnPtr[...]} {FOREIGN-BORROW: argument 2 of bcf::vsum, a trailing argument of a variadic C function: byte storage (abi::bytes::MutableBytes) cannot be a trailing argument of a variadic C function: a trailing argument has no contract (no access, no escape), and byte storage reaches C only through a pointer parameter whose contract admits it} {ARITY: bcf::vsum is a variadic C function of 1 fixed parameter(s), its declaration's C signature, and this call passes 0 argument(s)} {ARITY: bcf::vrecord is a variadic C function of 3 fixed parameter(s), its declaration's C signature, and this call passes 2 argument(s)}}
+
+test cf-va-ambiguous-type {a value proven of two C integer types at once has no one C type to pass it as} -constraints cfFixture -body {
+    appHir [bcfApp "import ffi::c\nimport bcf\n\n1\n"]
+    set how [hir::cabi::VariadicArgument {refined int {ffi::c::Int ffi::c::Long}}]
+    list [dict get $how problem] [dict get $how message]
+} -cleanup removeApps -result {TYPE {its C type is ambiguous: the value is proven a ffi::c::Int and a ffi::c::Long at once, and a trailing argument is passed as exactly one C type -- convert it to the one the callee reads (a function whose declared result is that type)}}
+
+test cf-va-strict0-replay {an unchecked (-strict 0) program's trailing argument with no C type replays its refusal on the native backends, the C call never made} -constraints cfFixture -body {
+    set dir [bcfApp "import ffi::c\nimport bcf\n\nbcf::vsum(1, \"five\")\n"]
+    set hir [appHir $dir main.bot 0]
+    native::withLinkDirs [list $::fixtureDir] {
+        lmap backend {interp compile cranelift cranelift-generic} {
+            lassign [outcomeUnderHir $backend $hir] tag code message
+            list [lindex $code end] [string match "*a trailing argument of a variadic C function*" $message]
+        }
+    }
+} -cleanup removeApps -result {{TYPE 1} {TYPE 1} {TYPE 1} {TYPE 1}}
+
+# The kind code bcf_vrecord reads trailing argument of C type TYPE as (its
+# promoted type: fixture.c), and the 64 bits it keeps of VALUE.
+proc vaCode {type} {
+    switch -- $type {
+        Char - SChar - UChar - Short - UShort - Int - Bool { return 1 }
+        UInt { return 2 }
+        Long { return 3 }
+        ULong { return 4 }
+        LongLong { return 5 }
+        ULongLong { return 6 }
+        Double { return 7 }
+        Ptr { return 8 }
+    }
+    error "no kind code for $type"
+}
+proc vaBits {type value} {
+    switch -- $type {
+        Double {
+            binary scan [binary format d $value] w bits
+            return [expr {$bits & 0xffffffffffffffff}]
+        }
+        Bool { return [expr {$value eq "true" ? 1 : 0}] }
+    }
+    return [expr {$value & 0xffffffffffffffff}]
+}
+# The Botlish argument of C type TYPE and VALUE (the bcf converters; a
+# Double is a Float64, a pointer the program's binding P or Z).
+proc vaArg {type value} {
+    switch -- $type {
+        Double - Bool { return $value }
+        Ptr { return [expr {$value eq "null" ? "z" : "p"}] }
+    }
+    return "bcf::c_[string tolower $type]($value)"
+}
+
+test cf-va-values {every C scalar class as a trailing argument at both its bounds (char and short promoted to int, unsigned ones too; _Bool to int; unsigned int, long, unsigned long, long long and unsigned long long at their own width), doubles and null and non-null pointers, read back by genuine C va_arg code: 30 trailing arguments, past every register, in one call} -constraints cfFixture -body {
+    lassign $::cfCharRange charMin charMax
+    set args [list SChar -128 SChar 127 UChar 0 UChar 255 Char $charMin Char $charMax Short -32768 Short 32767 \
+        UShort 65535 Int -2147483648 Int 2147483647 UInt 4294967295 Long -9223372036854775808 Long 9223372036854775807 \
+        ULong 18446744073709551615 LongLong -1 ULongLong 18446744073709551615 Bool true Bool false \
+        Double 1.5 Double -2.25 Double 1.0e300 Ptr p Ptr null Int -1 UInt 0 Short -1 UChar 128 Double 0.0 LongLong 9223372036854775807]
+    set kinds 0
+    set kinds2 0
+    set i 0
+    set passed {}
+    foreach {type value} $args {
+        set code [vaCode $type]
+        if {$i < 16} {
+            set kinds [expr {$kinds | ($code << (4 * $i))}]
+        } else {
+            set kinds2 [expr {$kinds2 | ($code << (4 * ($i - 16)))}]
+        }
+        lappend passed [vaArg $type $value]
+        incr i
+    }
+    set count $i
+    set dir [bcfApp "direct module\n\nimport ffi::c\nimport bcf\n\np = bcf::vaddress()\nz = ffi::c::null\[ffi::c::Void\]()\nn = bcf::vrecord($count, $kinds, $kinds2, [join $passed {, }])\nseen = loop i from 0 to $count:\n    bcf::vseen_bits(i)\n\[n, bcf::vaddress_bits(), seen\]\n"]
+    lmap value [appValues $dir {cranelift cranelift-generic}] {
+        lassign [botlishList $value] n address seen
+        set mismatches {}
+        set i 0
+        foreach {type v} $args seenBits $seen {
+            set expected [expr {$type eq "Ptr" ? ($v eq "null" ? 0 : $address) : [vaBits $type $v]}]
+            if {$seenBits != $expected} {
+                lappend mismatches "$i ($type $v): $seenBits, not $expected"
+            }
+            incr i
+        }
+        list $n $mismatches
+    }
+} -cleanup removeApps -result {{30 {}} {30 {}}}
+
+test cf-va-arities {one variadic C function called with different numbers and C types of trailing arguments in one program -- none, one, several, more than the integer registers hold, negative and boundary ints -- each call its own signature} -constraints cfFixture -body {
+    set ints [lmap n {1 2 3 4 5 6 7 8 9 10 11} {string cat "bcf::c_int($n)"}]
+    appValues [bcfApp "import ffi::c\nimport bcf\n\n\[bcf::vsum(0), bcf::vsum(1, bcf::c_int(-7)), bcf::vsum(3, bcf::c_int(1), bcf::c_int(2), bcf::c_int(3)), bcf::vsum(12, [join $ints {, }], bcf::c_int(-1000)), bcf::vsum(2, bcf::c_int(-2147483648), bcf::c_int(2147483647)), bcf::vsum(2, bcf::c_schar(-3), bcf::c_ushort(65535))\]\n"] {cranelift cranelift-generic}
+} -cleanup removeApps -result [lrepeat 2 {[0, -7, 6, -934, -1, 65532]}]
+
+test cf-va-position-types {the same trailing position of one function passes another C type in another call: an int, a double, a pointer, a long} -constraints cfFixture -body {
+    appValues [bcfApp "direct module\n\nimport ffi::c\nimport bcf\n\np = bcf::vaddress()\na = bcf::vrecord(1, 1, 0, bcf::c_int(-9))\nx = bcf::vseen_bits(0)\nb = bcf::vrecord(1, 7, 0, 0.5)\ny = bcf::vseen_bits(0)\nc = bcf::vrecord(2, 136, 0, p, p)\nw = bcf::vseen_bits(1) == bcf::vaddress_bits()\nd = bcf::vrecord(1, 3, 0, bcf::c_long(-5))\nv = bcf::vseen_bits(0)\n\[a, b, c, d, x, y, w, v\]\n"] {cranelift cranelift-generic}
+} -cleanup removeApps -result [lrepeat 2 {[1, 1, 2, 1, 18446744073709551607, 4602678819172646912, true, 18446744073709551611]}]
+
+test cf-va-doubles {doubles: one, several, more than the floating-point registers hold, interleaved with ints, and after a fixed double before the variadic boundary} -constraints cfFixture -body {
+    appValues [bcfApp "import ffi::c\nimport bcf\n\nfn scaled(f: Float64, n: ffi::c::Int) -> Float64:\n    r = bcf::vscale(f, n, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0):\n        on NonFiniteFloat:\n            -1.0\n    r\nnone = bcf::vscale(3.0, 0):\n    on NonFiniteFloat:\n        -1.0\none = bcf::vscale(3.0, 1, 0.25):\n    on NonFiniteFloat:\n        -1.0\nmixed = bcf::vrecord(4, 5911, 0, 1.5, bcf::c_int(2), 2.5, bcf::c_int(-3))\nseen = loop i from 0 to 4:\n    bcf::vseen_bits(i)\n\[scaled(2.0, 10), scaled(1.0, 3), none, one, mixed, seen\]\n"] {cranelift cranelift-generic}
+} -cleanup removeApps -result [lrepeat 2 {[55.0, 3.0, 0.0, 0.75, 4, [4609434218613702656, 2, 4612811918334230528, 18446744073709551613]]}]
+
+test cf-va-sentinel {a sentinel-terminated pointer list, as real C APIs take: the callee reads pointers up to a typed null pointer, none, three, and eleven of them (past every register)} -constraints cfFixture -body {
+    set many [join [lrepeat 11 p] {, }]
+    appValues [bcfApp "direct module\n\nimport ffi::c\nimport bcf\n\np = bcf::vaddress()\nq = bcf::vaddress()\nz = ffi::c::null\[ffi::c::Void\]()\n\[bcf::vsentinel(0, z), bcf::vsentinel(0, p, q, p, z), bcf::vsentinel(0, $many, z), bcf::vseen_bits(10) == bcf::vaddress_bits()\]\n" {} ] {cranelift cranelift-generic}
+} -cleanup removeApps -result [lrepeat 2 {[0, 3, 11, true]}]
+
+test cf-va-tcl-backends {the Tcl backends run no C call: a variadic one is NATIVE-ONLY too} -constraints cfFixture -body {
+    set dir [bcfApp "import ffi::c\nimport bcf\n\nbcf::vsum(1, bcf::c_int(2))\n"]
+    lmap backend {interp compile} {lindex [appCode $dir $backend] end}
+} -cleanup removeApps -result {NATIVE-ONLY NATIVE-ONLY}
+
+test cf-va-nir {the foreign table marks the function variadic, its fixed parameters' classes only; each call lists its trailing operands' own and promoted classes} -constraints cfFixture -body {
+    set nir [appNir [bcfApp "direct module\n\nimport ffi::c\nimport bcf\n\np = bcf::vaddress()\n\[bcf::vsum(0), bcf::vrecord(3, 0, 0, bcf::c_uchar(1), 2.5, p)\]\n"]]
+    list [lsearch -all -inline -regexp [split $nir \n] {^foreign .*variadic}] \
+        [lmap line [lsearch -all -inline -regexp [split $nir \n] {foreigncall .*(varargs|\s@e)}] {regsub {^\s*%[0-9]+ = (foreigncall [0-9]+)( %[0-9]+)*} $line {\1}}]
+} -cleanup removeApps -match glob -result {{{foreign * "bcf_vsum" params="i32" result=i64 variadic=1 name="bcf::vsum"} {foreign * "bcf_vrecord" params="i32 u64 u64" result=i32 variadic=1 name="bcf::vrecord"}} {{foreigncall * @e*} {foreigncall * varargs=u8:i32,f64:f64,ptr:ptr @e*}}}
+
+test cf-va-clif {the call's machine signature is its own: the fixed parameters, then each trailing argument as its promoted type -- under System V one more parameter of it (on x86-64 the call goes through the %al stub of its vector register count), under Apple's convention padding for the registers the fixed ones left free, then 8-byte stack words} -constraints cfFixture -body {
+    set clif [native::clif [appHir [bcfApp "import ffi::c\nimport bcf\n\nbcf::vrecord(3, 0, 0, bcf::c_uchar(1), 2.5, bcf::c_ulong(7))\n"]]]
+    foreach {- id symbol what} [regexp -all -inline {; u0:(\d+) = (bcf_vrecord|botlish_va_\d+_\d+) \(([^)]*)\)} $clif] {
+        if {[regexp "fn(\\d+) = u0:$id (sig\\d+)" $clif -> fn sig]} break
+    }
+    regexp "$sig = \\((\[^)\]*)\\) -> i32 (\\S+)" $clif -> params convention
+    list $symbol $what $params $convention
+} -cleanup removeApps -result [switch -- $::cConvention {
+    apple_aarch64 { list bcf_vrecord {C bcf::vrecord} "i32 sext, i64, i64, i64, i64, i64, i64, i64, f64, f64, f64, f64, f64, f64, f64, f64, i64, f64, i64" apple_aarch64 }
+    default {
+        if {$::hostTarget eq "linux-x86_64"} {
+            list botlish_va_0_1 {%al=1 stub of C bcf::vrecord} "i32 sext, i64, i64, i32, f64, i64" system_v
+        } else {
+            list bcf_vrecord {C bcf::vrecord} "i32 sext, i64, i64, i32, f64, i64" system_v
+        }
+    }
+}]
+
+# The variadic call ABI of the host target, from the platform documents
+# (the SysV x86-64 psABI, AAPCS64, Apple's "Writing ARM64 code for Apple
+# platforms") -- never from core::cabi or the compiler:
+#
+#   gprs, fprs  integer and floating-point argument registers
+#   anonymous   where a trailing argument goes: `named` (exactly as a named
+#               argument of its promoted type: SysV, AAPCS64) or `stack`
+#               (Apple: every one in its own 8-byte stack slot, whatever
+#               registers are free)
+#   al          1 when the caller states its vector register count in %al
+switch -- $::hostTarget {
+    macos-aarch64 { set ::vabi {gprs 8 fprs 8 anonymous stack al 0} }
+    linux-aarch64 { set ::vabi {gprs 8 fprs 8 anonymous named al 0} }
+    default { set ::vabi {gprs 6 fprs 8 anonymous named al 1} }
+}
+
+# Where each argument of a variadic call of FIXED then TRAILING ({KIND VALUE}
+# lists, KIND int, uint, i64, u64, ptr or double: the promoted types) goes:
+# {LOCATIONS AL}, a location {reg N}, {freg N} or {stack OFFSET} per
+# argument and the vector register count AL. The fixed arguments of the
+# scenarios all take registers.
+proc vabiLocations {fixed trailing} {
+    set gpr 0
+    set fpr 0
+    set stack 0
+    set locations {}
+    foreach arg $fixed {
+        if {[lindex $arg 0] eq "double"} {
+            lappend locations [list freg $fpr]
+            incr fpr
+        } else {
+            lappend locations [list reg $gpr]
+            incr gpr
+        }
+    }
+    foreach arg $trailing {
+        set double [expr {[lindex $arg 0] eq "double"}]
+        if {[dict get $::vabi anonymous] eq "named" && $double && $fpr < [dict get $::vabi fprs]} {
+            lappend locations [list freg $fpr]
+            incr fpr
+        } elseif {[dict get $::vabi anonymous] eq "named" && !$double && $gpr < [dict get $::vabi gprs]} {
+            lappend locations [list reg $gpr]
+            incr gpr
+        } else {
+            lappend locations [list stack $stack]
+            incr stack 8
+        }
+    }
+    return [list $locations $fpr]
+}
+
+# The mismatches of one capture (REGS, FREGS: 64-bit words, AL, STACK
+# bytes) of WHO's call with the model: each argument's defined bits at its
+# location (an int's 32, every other kind's 64) and, where the ABI has one,
+# %al.
+proc vabiMismatches {who fixed trailing regs fregs al stack} {
+    lassign [vabiLocations $fixed $trailing] locations count
+    set mismatches {}
+    foreach arg [concat $fixed $trailing] location $locations {
+        lassign $arg kind value
+        set width [expr {$kind in {int uint} ? 4 : 8}]
+        set bits [expr {$kind eq "double" ? [vaBits Double $value] : ($value & 0xffffffffffffffff)}]
+        set mask [expr {(1 << (8 * $width)) - 1}]
+        lassign $location where n
+        switch -- $where {
+            reg { set got [expr {[lindex $regs $n] & $mask}] }
+            freg { set got [lindex $fregs $n] }
+            stack {
+                set got 0
+                for {set i [expr {$width - 1}]} {$i >= 0} {incr i -1} {
+                    set got [expr {($got << 8) | [lindex $stack [expr {$n + $i}]]}]
+                }
+            }
+        }
+        if {$got != ($bits & $mask)} {
+            lappend mismatches "$who $kind $value at $location: [format %#x $got], not [format %#x [expr {$bits & $mask}]]"
+        }
+    }
+    if {[dict get $::vabi al] && $al != $count} {
+        lappend mismatches "$who %al $al, not $count"
+    }
+    return $mismatches
+}
+
+# The fixture's reference scenarios (fixture.c's bcf_vreference_*): the
+# fixed and trailing arguments, ADDRESS standing for bcf_vcell's.
+set ::vaScenarios {
+    none {vcapture {{int 0}} {}}
+    small {vcapture {{int 2}} {{int -5} {double 2.5}}}
+    ints {vcapture {{int 12}} {{int -1} {int 2} {int -3} {int 4} {int -5} {int 6} {int -7} {int 8} {int -9} {int 10} {int -11} {int 2147483647}}}
+    mixed {vcapture {{int 18}} {{int 7} {double 0.5} {i64 -9000000000} {double 1.25} {ptr ADDRESS} {double -2.0} {uint 4000000000} {double 3.5} {int -1} {double 4.75} {u64 18446744073709551615} {double 5.0} {ptr 0} {double 6.125} {int 42} {double 7.5} {double 8.25} {double 9.0}}}
+    fixedd {vcapture_d {{double 0.75} {int 3}} {{double 1.5} {int -6} {double 2.5}}}
+}
+
+# The Botlish argument of one {KIND VALUE} of a scenario.
+proc vaScenarioArg {arg} {
+    lassign $arg kind value
+    switch -- $kind {
+        int { return "bcf::c_int($value)" }
+        uint { return "bcf::c_uint($value)" }
+        i64 { return "bcf::c_long($value)" }
+        u64 { return "bcf::c_ulonglong($value)" }
+        double { return $value }
+        ptr { return [expr {$value eq "0" ? "z" : "p"}] }
+    }
+}
+
+# The model's mismatches of scenario NAME's capture on BACKEND: Botlish's
+# call and the C compiler's own call of the same prototype and values.
+proc vaCaptureMismatches {name backend} {
+    lassign [dict get $::vaScenarios $name] fn fixed trailing
+    set call "bcf::$fn\([join [lmap a [concat $fixed $trailing] {vaScenarioArg $a}] {, }]\)"
+    # (A pointer passed as a trailing argument is a direct edge: cf-va-direct.)
+    set header [expr {[string match "*ptr*" $trailing] ? "direct module\n\n" : ""}]
+    set dir [bcfApp "${header}import ffi::c\nimport bcf\n\np = bcf::vaddress()\nz = ffi::c::null\[ffi::c::Void\]()\nr = $call\nregs = loop i from 0 to 8:\n    bcf::vcaptured_register(i)\nfregs = loop i from 0 to 8:\n    bcf::vcaptured_float(i)\nal = bcf::vcaptured_al()\nstack = loop i from 0 to 256:\n    bcf::vcaptured_stack_byte(i)\nq = bcf::vreference_${name}()\nrregs = loop i from 0 to 8:\n    bcf::vreference_register(i)\nrfregs = loop i from 0 to 8:\n    bcf::vreference_float(i)\nral = bcf::vreference_al()\nrstack = loop i from 0 to 256:\n    bcf::vreference_stack_byte(i)\n\[r, q, bcf::vaddress_bits(), regs, fregs, al, stack, rregs, rfregs, ral, rstack\]\n"]
+    set value [lindex [appValues $dir [list $backend]] 0]
+    lassign [botlishList $value] r q address regs fregs al stack rregs rfregs ral rstack
+    if {$r != 0 || $q != 0} {
+        error "capture failed: $value"
+    }
+    set trailing [string map [list ADDRESS $address] $trailing]
+    concat [vabiMismatches botlish $fixed $trailing $regs $fregs $al $stack] \
+        [vabiMismatches reference $fixed $trailing $rregs $rfregs $ral $rstack]
+}
+
+test cf-va-abi-model {the model's places of the scenarios' trailing arguments: SysV x86-64 and AAPCS64 pass them as named arguments (registers, then 8-byte stack slots; %al the vector register count on x86-64), Apple every one in its own 8-byte stack slot even while every register is free} -body {
+    lmap name {small mixed fixedd} {
+        lassign [dict get $::vaScenarios $name] fn fixed trailing
+        lassign [vabiLocations $fixed $trailing] locations al
+        list $name [lmap l $locations {expr {[lindex $l 0] eq "stack" ? "s[lindex $l 1]" : "[string index [lindex $l 0] 0][lindex $l 1]"}}] $al
+    }
+} -result [switch -- $::hostTarget {
+    macos-aarch64 { list {small {r0 s0 s8} 0} {mixed {r0 s0 s8 s16 s24 s32 s40 s48 s56 s64 s72 s80 s88 s96 s104 s112 s120 s128 s136} 0} {fixedd {f0 r0 s0 s8 s16} 1} }
+    linux-aarch64 { list {small {r0 r1 f0} 1} {mixed {r0 r1 f0 r2 f1 r3 f2 r4 f3 r5 f4 r6 f5 r7 f6 s0 f7 s8 s16} 8} {fixedd {f0 r0 f1 r1 f2} 3} }
+    default { list {small {r0 r1 f0} 1} {mixed {r0 r1 f0 r2 f1 r3 f2 r4 f3 r5 f4 s0 f5 s8 f6 s16 f7 s24 s32} 8} {fixedd {f0 r0 f1 r1 f2} 3} }
+}]
+
+foreach name {none small ints mixed fixedd} {
+    test cf-va-abi-$name "the machine state a variadic call ($name) arrives in, captured at the callee's entry before any compiled code runs: every argument's defined bits where the host's variadic ABI puts it (and %al on x86-64), as the C compiler's own variadic call of the same prototype and values puts them" -constraints cfFixture -body {
+        lmap backend {cranelift cranelift-generic} {vaCaptureMismatches $name $backend}
+    } -cleanup removeApps -result {{} {}}
+}
+
+test cf-va-direct {a pointer passed as a trailing argument has no escape fact, so its call is an authority source (DIRECT from a context-free function); trailing scalars are ordinary} -constraints cfFixture -body {
+    list [appRejection [bcfApp "import ffi::c\nimport bcf\n\nbcf::vsum(1, bcf::c_int(2))\n"]] \
+        [regsub -all {main\.bot:[0-9]+:[0-9]+: } [appRejection [bcfApp "import ffi::c\nimport bcf\n\nfn f() -> ffi::c::Int:\n    p = bcf::vaddress()\n    z = ffi::c::null\[ffi::c::Void\]()\n    bcf::vsentinel(0, p, z)\nf()\n"]] {}]
+} -cleanup removeApps -result {accepted {DIRECT: the entry program uses direct authority: function "f" calls bcf::vsentinel, a C function whose contract lets it retain pointer authority past the call (arguments 2, 3: pointers passed as a trailing argument, whose escape no contract states), without a context defined by the entry program; require one of this module's own contexts ("context NAME: T", T a context struct or context trait declared by the entry program) in "f", the function that makes the direct call, or declare the module direct with `direct module` as its first line}}
+
+test cf-va-static-compile {a static block diagnoses a variadic C call like any call: a trailing argument with no C type is compiler::DiagnosticCode::Type, too few arguments Arity} -constraints cfFixture -body {
+    lmap {body code} {
+        "bcf::vsum(1, 5)" Type
+        "bcf::vsum()" Arity
+    } {
+        set dir [app [list main.bot "import compiler\nimport ffi::c\nimport bcf\n\nfn probe(x: int) -> int errors compiler::CompilerError:\n    static compile:\n        $body\n        0\n\nr = probe(5):\n    on compiler::CompilerError {code}:\n        if code == compiler::DiagnosticCode::$code:\n            1\n        else:\n            2\nr\n" bcf.bot $::bcfModule]]
+        lindex [appValues $dir {interp}] 0
+    }
+} -cleanup removeApps -result {1 1}
+
+test cf-va-interchange {HIR interchange carries a variadic declaration and each call's trailing classes: read back in a fresh process it lowers to the identical NIR and runs} -constraints cfFixture -body {
+    set dir [bcfApp "import ffi::c\nimport bcf\n\nr = bcf::vscale(2.0, 3, 1.0, 2.0, 3.0):\n    on NonFiniteFloat:\n        -1.0\n\[bcf::vsum(2, bcf::c_int(40), bcf::c_uchar(2)), r\]\n"]
+    set hir [appHir $dir]
+    set path [file join $dir main.hirx]
+    hir::interchange::writeFile $path $hir
+    set direct [native::nir $hir]
+    set script [file join $dir read.tcl]
+    set channel [open $script w]
+    puts $channel "source [list [file join $::projectRoot native native.tcl]]\nset h \[hir::interchange::readFile [list $path]\]\nputs -nonewline \[native::nir \$h\]"
+    close $channel
+    set read [exec [info nameofexecutable] $script]
+    list [expr {$read eq [string trimright $direct \n]}] [regexp {varargs=i32:i32,u8:i32} $read] [native::withLinkDirs [list $::fixtureDir] {
+        lindex [outcomeUnderHir cranelift [hir::interchange::readFile $path]] 1
+    }]
+} -cleanup removeApps -result {1 1 {[42, 12.0]}}
+
+test cf-va-target-identity {a variadic call's HIR keeps its target: interchange text of a program built for another target is refused, never relowered for the host} -constraints cfFixture -body {
+    set other [expr {$::hostTarget eq "linux-x86_64" ? "linux-aarch64" : "linux-x86_64"}]
+    set dir [bcfApp "import ffi::c\nimport bcf\n\nbcf::vsum(1, bcf::c_long(4))\n"]
+    set hir [surface::readProgramFile [file join $dir main.bot] -warnings off -cache "" -target $other]
+    set text [hir::interchange::encode $hir]
+    list [catch {hir::interchange::decode $text -target $::hostTarget} message options] [lrange [dict get $options -errorcode] 0 1]
+} -cleanup removeApps -result {1 {HIR INTERCHANGE}}
+
+test cf-va-cache {the front-end cache keeps a variadic program as its build (a hit runs identically), and a changed variadic declaration is a miss} -constraints cfFixture -body {
+    set dir [bcfApp "import ffi::c\nimport bcf\n\nbcf::vsum(2, bcf::c_int(40), bcf::c_int(2))\n"]
+    set cache [makeDirectory cf-va-cache-[pid]]
+    set path [file join $dir main.bot]
+    set first [surface::readProgramFile $path -warnings off -cache $cache]
+    set hit [surface::readProgramFile $path -warnings off -cache $cache]
+    set channel [open [file join $dir bcf.bot] w]
+    puts -nonewline $channel [string map [list {vsum named "bcf_vsum"(count: ffi::c::Int, variadic)} {vsum named "bcf_vsum"(count: ffi::c::Int, extra: ffi::c::Int, variadic)}] $::bcfModule]
+    close $channel
+    set changed [surface::readProgramFile $path -warnings off -cache $cache]
+    list [expr {$hit eq $first}] [native::withLinkDirs [list $::fixtureDir] {lindex [outcomeUnderHir cranelift $hit] 1}] \
+        [expr {[dict get [dict get $changed foreign] bcf::vsum contract params] ne [dict get [dict get $first foreign] bcf::vsum contract params]}]
+} -cleanup {removeApps; removeDirectory cf-va-cache-[pid]} -result {1 42 1}
+
+test cf-va-executable-gc-coroutine {variadic C calls with managed values held across them -- in the main program, in a loop, inside a coroutine between its yields -- under GC stress, on both backends and in a standalone executable} -constraints {cfFixture nativeCoroutines} -body {
+    set dir [bcfApp "import ffi::c\nimport list\nimport bcf\n\nstruct Event:\n    value: int\n\nfn worker(n: ffi::c::Int) -> Event:\n    held = \[bcf::vsum(2, n, n), n\]\n    yield Event {value: held.get(0, 0)}\n    s = bcf::vscale(1.0, 9, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0):\n        on NonFiniteFloat:\n            -1.0\n    yield Event {value: bcf::vsum(9, n, n, n, n, n, n, n, n, n) + held.get(1, 0)}\n    return Event {value: bcf::vrecord(3, 881, 0, n, 0.5, bcf::c_long(-1)) + list::length(held)}\n\nfn run(n: ffi::c::Int) -> List\[int\]:\n    kept = \[n, n\]\n    coroutine {step, first} = worker(n)\n    second = step()\n    third = step()\n    \[first.value, second.value, third.value, list::length(kept)\]\n\nruns = loop i from 0 to 60:\n    run(i)\n\[run(5), list::length(runs), runs.get(59, \[\])\]\n"]
+    set saved [expr {[info exists ::env(BOTLISH_NATIVE_GC_STRESS)] ? $::env(BOTLISH_NATIVE_GC_STRESS) : ""}]
+    set ::env(BOTLISH_NATIVE_GC_STRESS) 1
+    try {
+        set results [appValues $dir {cranelift cranelift-generic}]
+        set exe [file join $dir program]
+        native::withLinkDirs [list $::fixtureDir] {native::executable [appHir $dir] $exe}
+        lappend results [string trim [exec $exe]]
+    } finally {
+        if {$saved eq ""} { unset ::env(BOTLISH_NATIVE_GC_STRESS) } else { set ::env(BOTLISH_NATIVE_GC_STRESS) $saved }
+    }
+    set results
+} -cleanup removeApps -result [lrepeat 3 {[[10, 50, 5, 2], 60, [118, 590, 5, 2]]}]
+
 
 cleanupTests

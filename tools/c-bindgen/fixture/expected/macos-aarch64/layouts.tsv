@@ -6,7 +6,7 @@ field	struct bgf_point	1	y	scalar	4	4	-	int y	ffi::c::Int	c=y
 record	struct bgf_pair	-	bgf_pair	layout-direct	-	8	4	struct bgf_pair	-	typedefs=bgf_pair; identity=-; header=include/bgf/bgf.h:56
 field	struct bgf_pair	0	a	scalar	0	4	-	int a	ffi::c::Int	c=a
 field	struct bgf_pair	1	b	scalar	4	4	-	int b	ffi::c::Int	c=b
-record	struct bgf_table	-	bgf_table	layout-direct	-	8	8	struct bgf_table	-	typedefs=bgf_table; identity=-; header=include/bgf/bgf.h:121
+record	struct bgf_table	-	bgf_table	layout-direct	-	8	8	struct bgf_table	-	typedefs=bgf_table; identity=-; header=include/bgf/bgf.h:133
 field	struct bgf_table	0	get	function-pointer	0	8	-	int (*get)(int)	ffi::c::FnPtr[Fn{args: [ffi::c::Int], return: ffi::c::Int}]	c=get
 record	struct bgf_scalars	-	bgf_scalars	layout-direct	-	40	8	struct bgf_scalars	-	typedefs=bgf_scalars; identity=-; header=include/bgf/bgf_records.h:17
 field	struct bgf_scalars	0	c	scalar	0	1	-	char c	ffi::c::Char	c=c

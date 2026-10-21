@@ -194,6 +194,15 @@ proc hir::foreign::apply {decls linkDecls} {
         set contract [dict create params $params result $result provenance $provenance]
         set native [nativeName $key]
         set abi [dict create params $abiParams result [AbiClass $result]]
+        # A variadic C function (VARIADICS-VERTICAL-SLICE-1.md): its
+        # declaration is its fixed parameters, and a native of any arity;
+        # each call's trailing arguments carry their own C types
+        # (hir::borrow's `cvarargs`).
+        set variadic [dict getdef $decl variadic 0]
+        if {$variadic} {
+            dict set contract variadic 1
+            dict set abi variadic 1
+        }
         set kinds [lmap p $params {
             set t [dict get $p type]
             if {[hir::types::IsCPtr $t] || [hir::types::IsCFnPtr $t]} {string cat "any"} elseif {$t in {bool Float64}} {set t} else {string cat "int"}
@@ -202,7 +211,7 @@ proc hir::foreign::apply {decls linkDecls} {
         # A double C returns is a Float64 only when it is finite: the call
         # completes with NonFiniteFloat otherwise (FLOAT64-MILESTONE-1.md).
         set errors [expr {$result eq "Float64" ? "NonFiniteFloat" : ""}]
-        core::native::register $native -arity [llength $params] \
+        core::native::register $native -arity [expr {$variadic ? "*" : [llength $params]}] \
             -impl [list core::cabi::ExternImpl $key] \
             -param-types $kinds -result-type any -errors $errors \
             -ownership [lrepeat [llength $params] observe] \

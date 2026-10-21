@@ -98,13 +98,13 @@ function	SDL_strpbrk	direct	sdl3::stdinc	direct	symbol SDL_strpbrk; (ffi::c::Ptr
 function	SDL_StepUTF8	direct	sdl3::stdinc	direct	symbol SDL_StepUTF8; (ffi::c::Ptr[ffi::c::Ptr[ffi::c::Char]], ffi::c::Ptr[ffi::c::ULong]) -> ffi::c::UInt
 function	SDL_StepBackUTF8	direct	sdl3::stdinc	direct	symbol SDL_StepBackUTF8; (ffi::c::Ptr[ffi::c::Char], ffi::c::Ptr[ffi::c::Ptr[ffi::c::Char]]) -> ffi::c::UInt
 function	SDL_UCS4ToUTF8	direct	sdl3::stdinc	direct	symbol SDL_UCS4ToUTF8; (ffi::c::UInt, ffi::c::Ptr[ffi::c::Char]) -> ffi::c::Ptr[ffi::c::Char]
-function	SDL_sscanf	unsupported		variadic	a variadic function (...)
+function	SDL_sscanf	direct	sdl3::stdinc	direct	symbol SDL_sscanf; (ffi::c::Ptr[ffi::c::Char], ffi::c::Ptr[ffi::c::Char], variadic) -> ffi::c::Int
 function	SDL_vsscanf	unsupported		va-list	parameter 3 (ap): __builtin_va_list
-function	SDL_snprintf	unsupported		variadic	a variadic function (...)
-function	SDL_swprintf	unsupported		variadic	a variadic function (...)
+function	SDL_snprintf	direct	sdl3::stdinc	direct	symbol SDL_snprintf; (ffi::c::Ptr[ffi::c::Char], ffi::c::ULong, ffi::c::Ptr[ffi::c::Char], variadic) -> ffi::c::Int
+function	SDL_swprintf	direct	sdl3::stdinc	direct	symbol SDL_swprintf; (ffi::c::Ptr[ffi::c::UInt], ffi::c::ULong, ffi::c::Ptr[ffi::c::UInt], variadic) -> ffi::c::Int
 function	SDL_vsnprintf	unsupported		va-list	parameter 4 (ap): __builtin_va_list
 function	SDL_vswprintf	unsupported		va-list	parameter 4 (ap): __builtin_va_list
-function	SDL_asprintf	unsupported		variadic	a variadic function (...)
+function	SDL_asprintf	direct	sdl3::stdinc	direct	symbol SDL_asprintf; (ffi::c::Ptr[ffi::c::Ptr[ffi::c::Char]], ffi::c::Ptr[ffi::c::Char], variadic) -> ffi::c::Int
 function	SDL_vasprintf	unsupported		va-list	parameter 3 (ap): __builtin_va_list
 function	SDL_srand	direct	sdl3::stdinc	direct	symbol SDL_srand; (ffi::c::ULong) -> unit
 function	SDL_rand	direct	sdl3::stdinc	direct	symbol SDL_rand; (ffi::c::Int) -> ffi::c::Int
@@ -203,7 +203,7 @@ function	SDL_CompareAndSwapAtomicPointer	direct	sdl3::atomic	direct	symbol SDL_C
 function	SDL_SetAtomicPointer	direct	sdl3::atomic	direct	symbol SDL_SetAtomicPointer; (ffi::c::Ptr[ffi::c::Ptr[ffi::c::Void]], ffi::c::Ptr[ffi::c::Void]) -> ffi::c::Ptr[ffi::c::Void]
 function	SDL_GetAtomicPointer	direct	sdl3::atomic	direct	symbol SDL_GetAtomicPointer; (ffi::c::Ptr[ffi::c::Ptr[ffi::c::Void]]) -> ffi::c::Ptr[ffi::c::Void]
 function	SDL_SwapFloat	unsupported		float	parameter 1 (x): float; result: float
-function	SDL_SetError	unsupported		variadic	a variadic function (...)
+function	SDL_SetError	direct	sdl3::error_h	direct	symbol SDL_SetError; (ffi::c::Ptr[ffi::c::Char], variadic) -> ffi::c::Bool
 function	SDL_SetErrorV	unsupported		va-list	parameter 2 (ap): __builtin_va_list
 function	SDL_OutOfMemory	direct	sdl3::error_h	direct	symbol SDL_OutOfMemory; () -> ffi::c::Bool
 function	SDL_GetError	direct	sdl3::error_h	direct	symbol SDL_GetError; () -> ffi::c::Ptr[ffi::c::Char]
@@ -282,7 +282,7 @@ function	SDL_SeekIO	direct	sdl3::iostream	direct	symbol SDL_SeekIO; (ffi::c::Ptr
 function	SDL_TellIO	direct	sdl3::iostream	direct	symbol SDL_TellIO; (ffi::c::Ptr[SDL_IOStream]) -> ffi::c::Long
 function	SDL_ReadIO	direct	sdl3::iostream	direct	symbol SDL_ReadIO; (ffi::c::Ptr[SDL_IOStream], ffi::c::Ptr[ffi::c::Void], ffi::c::ULong) -> ffi::c::ULong
 function	SDL_WriteIO	direct	sdl3::iostream	direct	symbol SDL_WriteIO; (ffi::c::Ptr[SDL_IOStream], ffi::c::Ptr[ffi::c::Void], ffi::c::ULong) -> ffi::c::ULong
-function	SDL_IOprintf	unsupported		variadic	a variadic function (...)
+function	SDL_IOprintf	direct	sdl3::iostream	direct	symbol SDL_IOprintf; (ffi::c::Ptr[SDL_IOStream], ffi::c::Ptr[ffi::c::Char], variadic) -> ffi::c::ULong
 function	SDL_IOvprintf	unsupported		va-list	parameter 3 (ap): __builtin_va_list
 function	SDL_FlushIO	direct	sdl3::iostream	direct	symbol SDL_FlushIO; (ffi::c::Ptr[SDL_IOStream]) -> ffi::c::Bool
 function	SDL_LoadFile_IO	direct	sdl3::iostream	direct	symbol SDL_LoadFile_IO; (ffi::c::Ptr[SDL_IOStream], ffi::c::Ptr[ffi::c::ULong], ffi::c::Bool) -> ffi::c::Ptr[ffi::c::Void]
@@ -1043,15 +1043,15 @@ function	SDL_SetLogPriority	direct	sdl3::log	direct	symbol SDL_SetLogPriority; (
 function	SDL_GetLogPriority	direct	sdl3::log	direct	symbol SDL_GetLogPriority; (ffi::c::Int) -> ffi::c::UInt
 function	SDL_ResetLogPriorities	direct	sdl3::log	direct	symbol SDL_ResetLogPriorities; () -> unit
 function	SDL_SetLogPriorityPrefix	direct	sdl3::log	direct	symbol SDL_SetLogPriorityPrefix; (ffi::c::UInt, ffi::c::Ptr[ffi::c::Char]) -> ffi::c::Bool
-function	SDL_Log	unsupported		variadic	a variadic function (...)
-function	SDL_LogTrace	unsupported		variadic	a variadic function (...)
-function	SDL_LogVerbose	unsupported		variadic	a variadic function (...)
-function	SDL_LogDebug	unsupported		variadic	a variadic function (...)
-function	SDL_LogInfo	unsupported		variadic	a variadic function (...)
-function	SDL_LogWarn	unsupported		variadic	a variadic function (...)
-function	SDL_LogError	unsupported		variadic	a variadic function (...)
-function	SDL_LogCritical	unsupported		variadic	a variadic function (...)
-function	SDL_LogMessage	unsupported		variadic	a variadic function (...)
+function	SDL_Log	direct	sdl3::log	direct	symbol SDL_Log; (ffi::c::Ptr[ffi::c::Char], variadic) -> unit
+function	SDL_LogTrace	direct	sdl3::log	direct	symbol SDL_LogTrace; (ffi::c::Int, ffi::c::Ptr[ffi::c::Char], variadic) -> unit
+function	SDL_LogVerbose	direct	sdl3::log	direct	symbol SDL_LogVerbose; (ffi::c::Int, ffi::c::Ptr[ffi::c::Char], variadic) -> unit
+function	SDL_LogDebug	direct	sdl3::log	direct	symbol SDL_LogDebug; (ffi::c::Int, ffi::c::Ptr[ffi::c::Char], variadic) -> unit
+function	SDL_LogInfo	direct	sdl3::log	direct	symbol SDL_LogInfo; (ffi::c::Int, ffi::c::Ptr[ffi::c::Char], variadic) -> unit
+function	SDL_LogWarn	direct	sdl3::log	direct	symbol SDL_LogWarn; (ffi::c::Int, ffi::c::Ptr[ffi::c::Char], variadic) -> unit
+function	SDL_LogError	direct	sdl3::log	direct	symbol SDL_LogError; (ffi::c::Int, ffi::c::Ptr[ffi::c::Char], variadic) -> unit
+function	SDL_LogCritical	direct	sdl3::log	direct	symbol SDL_LogCritical; (ffi::c::Int, ffi::c::Ptr[ffi::c::Char], variadic) -> unit
+function	SDL_LogMessage	direct	sdl3::log	direct	symbol SDL_LogMessage; (ffi::c::Int, ffi::c::UInt, ffi::c::Ptr[ffi::c::Char], variadic) -> unit
 function	SDL_LogMessageV	unsupported		va-list	parameter 4 (ap): __builtin_va_list
 function	SDL_GetDefaultLogOutputFunction	direct	sdl3::log	direct	symbol SDL_GetDefaultLogOutputFunction; () -> ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Int, ffi::c::UInt, ffi::c::Ptr[ffi::c::Char]], return: unit}]
 function	SDL_GetLogOutputFunction	direct	sdl3::log	direct	symbol SDL_GetLogOutputFunction; (ffi::c::Ptr[ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Int, ffi::c::UInt, ffi::c::Ptr[ffi::c::Char]], return: unit}]], ffi::c::Ptr[ffi::c::Ptr[ffi::c::Void]]) -> unit
@@ -1167,7 +1167,7 @@ function	SDL_AddVulkanRenderSemaphores	direct	sdl3::render	direct	symbol SDL_Add
 function	SDL_SetRenderVSync	direct	sdl3::render	direct	symbol SDL_SetRenderVSync; (ffi::c::Ptr[SDL_Renderer], ffi::c::Int) -> ffi::c::Bool
 function	SDL_GetRenderVSync	direct	sdl3::render	direct	symbol SDL_GetRenderVSync; (ffi::c::Ptr[SDL_Renderer], ffi::c::Ptr[ffi::c::Int]) -> ffi::c::Bool
 function	SDL_RenderDebugText	unsupported		float	parameter 2 (x): float; parameter 3 (y): float
-function	SDL_RenderDebugTextFormat	unsupported		float,variadic	a variadic function (...); parameter 2 (x): float; parameter 3 (y): float
+function	SDL_RenderDebugTextFormat	unsupported		float	parameter 2 (x): float; parameter 3 (y): float
 function	SDL_SetDefaultTextureScaleMode	direct	sdl3::render	direct	symbol SDL_SetDefaultTextureScaleMode; (ffi::c::Ptr[SDL_Renderer], ffi::c::Int) -> ffi::c::Bool
 function	SDL_GetDefaultTextureScaleMode	direct	sdl3::render	direct	symbol SDL_GetDefaultTextureScaleMode; (ffi::c::Ptr[SDL_Renderer], ffi::c::Ptr[ffi::c::Int]) -> ffi::c::Bool
 function	SDL_CreateGPURenderState	direct	sdl3::render	direct	symbol SDL_CreateGPURenderState; (ffi::c::Ptr[SDL_Renderer], ffi::c::Ptr[SDL_GPURenderStateCreateInfo]) -> ffi::c::Ptr[SDL_GPURenderState]

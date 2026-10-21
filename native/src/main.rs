@@ -605,7 +605,12 @@ fn sites_tcl(sites: &[Site], stats: &std::collections::HashMap<u32, SiteStats>) 
 fn execute(command: &str, program: &nir::Program, runs: usize, alloc_mode: AllocMode, snapshot: Option<Vec<Vec<u8>>>) -> i32 {
     let started = Instant::now();
     let mut backend = CraneliftJit;
-    let options = CompileOptions { clif: command == "clif", vcode: command == "vcode", alloc_sites: alloc_mode.sites() };
+    let options = CompileOptions {
+        clif: command == "clif",
+        vcode: command == "vcode",
+        alloc_sites: alloc_mode.sites(),
+        count_accesses: alloc_mode.enabled(),
+    };
     let compiled = match backend.compile(program, &options) {
         Ok(c) => c,
         Err(e) => {

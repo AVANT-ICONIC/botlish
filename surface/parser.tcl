@@ -100,10 +100,11 @@
 #                  (below): the function's author declares that it is never
 #                  called with method syntax
 #   paramList    = [ param { "," param } ] [ "," flagSection ]
-#                  [ "," contextSection ] [ "," resumeClause ] [ "," ]
+#                  [ "," contextSection ] [ "," variadicSection ]
+#                  [ "," resumeClause ] [ "," ]
 #                  -- sections in canonical order: ordinary parameters, then
-#                  flags, then context, then the resume clause
-#                  (ParamSections); any may be absent
+#                  flags, then context, then the variadic parameter, then the
+#                  resume clause (ParamSections); any may be absent
 #   resumeClause = "resume" typeExpr   -- COROUTINES.md: the one structured
 #                  message a yield of this function's coroutine evaluates
 #                  to. "resume" is contextual: the clause only when directly
@@ -120,6 +121,13 @@
 #                  `context: T` are an ordinary parameter named context
 #   contextDecl  = IDENT ":" typeExpr       -- a local name and the required
 #                  context type (always written)
+#   variadicSection = "variadic" IDENT ":" typeExpr   -- VARIADICS-VERTICAL-
+#                  SLICE-1.md: the one parameter bound to the List of the
+#                  call's trailing arguments (List[T], or a bare List whose
+#                  element type each call imprints). "variadic" is contextual
+#                  exactly like "context": the section only when directly
+#                  followed by a name; `variadic`, `variadic: T` are an
+#                  ordinary parameter named variadic
 #   if           = "if" expression ":" suite
 #                  { "elif" expression ":" suite } [ "else" ":" suite ]
 #   loop         = "loop" [ clause { "and" clause } ] ":" suite
@@ -1184,8 +1192,12 @@ proc surface::parser::TraitRequirement {pVar trait {context 0}} {
     set start [dict get [Advance p] span]
     set name [Expect p IDENT "a requirement name after \"fn\""]
     set open [Expect p ( "\"(\" after the requirement name"]
-    lassign [ParamSections p] params flags contexts resume
+    lassign [ParamSections p] params flags contexts resume variadic
     set paramsSpan [SpanFrom p [dict get $open span]]
+    if {$variadic ne ""} {
+        FailCode [dict get $variadic span] MALFORMED-VARIADIC-SECTION \
+            "requirement \"[dict get $name value]\" of $what \"$trait\" declares a variadic parameter: a trait requirement is a fixed signature (variadic trait operations are not supported)"
+    }
     if {$resume ne ""} {
         Fail [dict create span [dict get $resume span]] "requirement \"[dict get $name value]\" of $what \"$trait\" declares a resume clause: a trait requirement cannot be a coroutine protocol"
     }
@@ -1370,7 +1382,8 @@ proc surface::parser::AtExternDecl {pVar} {
 #       linker's ordinary library name (-lNAME), never a path, and never
 #       associated with the declarations around it
 #   "extern" "c" "fn" IDENT [ "named" STRING ] "(" [ externParam
-#       { "," externParam } [ "," ] ] ")" "->" typeExpr [ resultFact ] NEWLINE
+#       { "," externParam } [ "," "variadic" ] [ "," ] ] ")" "->" typeExpr
+#       [ resultFact ] NEWLINE
 #       an `externfn` node {name nameSpan symbol symbolSpan params paramsSpan
 #       resultType resultTypeSpan provenance provenanceSpan}: a truthful C
 #       ABI declaration with no body. SYMBOL is the native link symbol, the
@@ -1383,8 +1396,10 @@ proc surface::parser::AtExternDecl {pVar} {
 # Every PARAM is {name nameSpan type typeSpan access A escape E factsSpan S}
 # with A one of read write "" and E one of declared-noescape proven-noescape
 # captures "" ("": not stated, the contract's unknown). PROVENANCE is
-# independent, {alias NAME} or "" (unknown). Only `c` names an ABI; every
-# word after `extern` is contextual. No varargs, no body, no `errors`.
+# independent, {alias NAME} or "" (unknown). VARIADIC is 1 when the list ends
+# with the bare word `variadic` (VARIADICS-VERTICAL-SLICE-1.md: C's `...`,
+# after at least one fixed parameter; VARIADICSPAN its span). Only `c` names
+# an ABI; every word after `extern` is contextual. No body, no `errors`.
 proc surface::parser::ExternDecl {pVar} {
     upvar 1 $pVar p
     set start [dict get [Advance p] span]
@@ -1450,8 +1465,27 @@ proc surface::parser::ExternDecl {pVar} {
     }
     Advance p
     set params {}
+    set variadicSpan ""
     while {[Kind p] ne ")"} {
-        lappend params [ExternParam p [dict get $name value]]
+        set fn [dict get $name value]
+        if {$variadicSpan ne ""} {
+            FailCode [dict get [Peek p] span] EXTERN-SYNTAX \
+                "\"variadic\" ends the parameter list of extern c fn \"$fn\": the trailing arguments it stands for come after every fixed parameter, so nothing follows it (found [Describe [Peek p]])"
+        }
+        if {[ExternVariadicMarker p]} {
+            set token [Advance p]
+            set variadicSpan [dict get $token span]
+            if {$params eq {}} {
+                FailCode $variadicSpan EXTERN-SYNTAX \
+                    "a variadic C function declares at least one fixed parameter before \"variadic\": extern c fn \"$fn\" has none (C's variable arguments follow a named one)"
+            }
+            if {[Kind p] eq "IDENT"} {
+                FailCode [dict get [Peek p] span] EXTERN-SYNTAX \
+                    "the variadic marker of extern c fn \"$fn\" is the bare word \"variadic\": C's trailing arguments have no name and no declared type (each call passes its own C types)"
+            }
+        } else {
+            lappend params [ExternParam p $fn]
+        }
         if {[Kind p] eq ","} {
             Advance p
         } elseif {[Kind p] ne ")"} {
@@ -1508,8 +1542,18 @@ proc surface::parser::ExternDecl {pVar} {
     return [surface::ast::node externfn [SpanFrom p $start] \
         name [dict get $name value] nameSpan [dict get $name span] \
         symbol $symbol symbolSpan $symbolSpan params $params paramsSpan $paramsSpan \
+        variadic [expr {$variadicSpan ne ""}] variadicSpan $variadicSpan \
         resultType $resultType resultTypeSpan $resultTypeSpan \
         provenance $provenance provenanceSpan $provenanceSpan]
+}
+
+# 1 if the next token of an extern c fn's parameter list is its variadic
+# marker (VARIADICS-VERTICAL-SLICE-1.md): the word `variadic` not followed
+# by ":" -- `variadic: T` is a parameter named variadic, as everywhere.
+proc surface::parser::ExternVariadicMarker {pVar} {
+    upvar 1 $pVar p
+    set token [Peek p]
+    return [expr {[dict get $token kind] eq "IDENT" && [dict get $token value] eq "variadic" && [Kind p 1] ne ":"}]
 }
 
 # One parameter of extern c fn FN: IDENT ":" typeExpr { fact } (ExternDecl).
@@ -1518,7 +1562,7 @@ proc surface::parser::ExternParam {pVar fn} {
     set token [Peek p]
     if {[dict get $token kind] in {.. .}} {
         FailCode [dict get $token span] EXTERN-SYNTAX \
-            "variadic C functions are not supported: extern c fn \"$fn\" must have a fixed signature (there is no variadic C ABI here: bind a function of fixed parameters instead)"
+            "C's \"...\" is written \"variadic\" in an extern c fn: end the parameter list of \"$fn\" with the bare word (\"extern c fn ${fn}(format: ffi::c::Ptr\[ffi::c::Char\], variadic) -> ffi::c::Int\")"
     }
     set param [Expect p IDENT "a parameter name in the parameter list of extern c fn \"$fn\""]
     set pname [dict get $param value]
@@ -1580,7 +1624,7 @@ proc surface::parser::ExternParam {pVar fn} {
     }
     if {[Kind p] in {.. .}} {
         FailCode [dict get [Peek p] span] EXTERN-SYNTAX \
-            "variadic C functions are not supported: extern c fn \"$fn\" must have a fixed signature"
+            "C's \"...\" is written \"variadic\" in an extern c fn: end the parameter list of \"$fn\" with the bare word, after a comma"
     }
     return [dict create name $pname nameSpan [dict get $param span] type $type typeSpan $typeSpan \
         access $access escape $escape factsSpan $factsSpan]
@@ -2466,7 +2510,7 @@ proc surface::parser::Function {pVar} {
     Advance p
     set name [Expect p IDENT "a function name after \"fn\""]
     set open [Expect p ( "\"(\" after the function name"]
-    lassign [ParamSections p] params flags contexts resume
+    lassign [ParamSections p] params flags contexts resume variadic
     set body [Suite p "the parameter list"]
     set nomethod [dict exists $modifiers nomethod]
     return [surface::ast::node function [SpanFrom p $start] \
@@ -2475,7 +2519,7 @@ proc surface::parser::Function {pVar} {
         resultType [dict get $body resultType] resultTypeSpan [dict get $body resultTypeSpan] \
         errors [dict get $body errors] proves [dict get $body proves] body $body \
         nomethod $nomethod nomethodSpan [if {$nomethod} {dict get $modifiers nomethod} else {string cat ""}] \
-        resume $resume]
+        resume $resume variadic $variadic]
 }
 
 # The parameter list of a function declaration, after "(", through ")":
@@ -2488,20 +2532,25 @@ proc surface::parser::Function {pVar} {
 #   flagDecl     = ":" IDENT                          -- no space after ":"
 #   contextSection = "context" contextDecl { "," contextDecl }
 #   contextDecl  = IDENT ":" typeExpr
+#   variadicSection = "variadic" IDENT ":" typeExpr
 #
-# optionally followed by a trailing ",". Returns {PARAMS FLAGS CONTEXTS}:
-# PARAMS the ordinary parameters {NAME SPAN TYPE TYPESPAN}, FLAGS the declared
-# flags {NAME SPAN} in written order (SPAN covers ":name"), CONTEXTS the
-# declared context parameters {name nameSpan type typeSpan} dicts in written
-# order (CONTEXTS.md).
+# optionally followed by a trailing ",". Returns {PARAMS FLAGS CONTEXTS
+# RESUME VARIADIC}: PARAMS the ordinary parameters {NAME SPAN TYPE TYPESPAN},
+# FLAGS the declared flags {NAME SPAN} in written order (SPAN covers
+# ":name"), CONTEXTS the declared context parameters {name nameSpan type
+# typeSpan} dicts in written order (CONTEXTS.md), VARIADIC the variadic
+# parameter {name nameSpan type typeSpan span} or "" (VARIADICS-VERTICAL-
+# SLICE-1.md; SPAN covers the marker through the type).
 #
 # The parameter list is a sequence of *sections* in one canonical order,
-# paramSectionOrder: ordinary parameters, then flags, then context. A new
-# section is introduced by its marker word and runs until the next section
-# marker or the closing ")"; it never swallows "the rest of the signature" --
-# the list is parsed one entry at a time and each entry knows which section it
-# belongs to, so a later section (the planned `variadic`) is one more marker
-# and one more rank in the order, with the same ordering diagnostic.
+# paramSectionOrder: ordinary parameters, then flags, then context, then the
+# variadic parameter. A section is introduced by its marker word and runs
+# until the next section marker or the closing ")"; it never swallows "the
+# rest of the signature" -- the list is parsed one entry at a time and each
+# entry knows which section it belongs to, so each section is one marker and
+# one rank in the order, with the same ordering diagnostic. The variadic
+# section holds exactly one parameter, the last binding of the list (only
+# the resume clause, a type and no binding, may follow it).
 #
 # "flags" is a contextual marker, not a keyword: it opens the flag section
 # only where an entry is spelled `flags :NAME` -- the name, then a colon that
@@ -2515,6 +2564,11 @@ proc surface::parser::Function {pVar} {
 # `fn f(context: Int)` are an ordinary parameter named context. Inside the
 # section every entry is `NAME: Type`; the type is always written, since it
 # is the context's identity (the local name is not).
+#
+# "variadic" is contextual the same way (VariadicMarker): `variadic xs:
+# List[int]` opens the variadic section, `fn f(variadic)` and `fn f(variadic:
+# Int)` are an ordinary parameter named variadic. Its one entry is `NAME:
+# Type`, the type always written (a List type: the resolver checks which).
 proc surface::parser::ParamSections {pVar} {
     upvar 1 $pVar p
     variable paramSectionOrder
@@ -2522,6 +2576,7 @@ proc surface::parser::ParamSections {pVar} {
     set flags {}
     set contexts {}
     set resume ""
+    set variadic ""
     set section ordinary
     while {[Kind p] ne ")"} {
         set token [Peek p]
@@ -2531,6 +2586,14 @@ proc surface::parser::ParamSections {pVar} {
             }
             Fail $token "the resume clause must be the last entry of the parameter list, found [Describe $token] after it"
         }
+        if {$section eq "variadic" && ![ResumeMarker p]} {
+            if {[VariadicMarker p]} {
+                FailCode [dict get $token span] MALFORMED-VARIADIC-SECTION \
+                    "a function declares at most one variadic parameter (\"variadic NAME: List\[T\]\", the last parameter of its list)"
+            }
+            FailCode [dict get $token span] MALFORMED-VARIADIC-SECTION \
+                "the variadic parameter \"[dict get $variadic name]\" must be the last parameter of the list, found [Describe $token] after it (a parameter list is ordinary parameters, then flags, then context, then the variadic parameter)"
+        }
         if {[ResumeMarker p]} {
             Advance p
             EnterSection p section resume [dict get $token span]
@@ -2538,6 +2601,10 @@ proc surface::parser::ParamSections {pVar} {
             set type [TypeExpr p "the resume message type after \"resume\""]
             set resume [dict create type $type typeSpan [SpanFrom p $typeStart] \
                 span [SpanFrom p [dict get $token span]]]
+        } elseif {[VariadicMarker p]} {
+            Advance p
+            EnterSection p section variadic [dict get $token span]
+            set variadic [VariadicEntry p [dict get $token span]]
         } elseif {[ContextMarker p]} {
             Advance p
             EnterSection p section context [dict get $token span]
@@ -2582,13 +2649,43 @@ proc surface::parser::ParamSections {pVar} {
         }
     }
     Advance p
-    return [list $params $flags $contexts $resume]
+    return [list $params $flags $contexts $resume $variadic]
 }
 
-# The canonical order of a declaration's parameter sections. `variadic`
-# (terminal) is planned.
+# The canonical order of a declaration's parameter sections: the variadic
+# parameter is the last binding, and only the resume clause follows it.
 namespace eval surface::parser {
-    variable paramSectionOrder {ordinary flags context resume}
+    variable paramSectionOrder {ordinary flags context variadic resume}
+}
+
+# 1 if the next tokens are the variadic-section marker: the name `variadic`
+# directly followed by another name -- `variadic xs: List[int]`. Never an
+# ordinary parameter (a parameter name is followed by ":", "," or ")"), so
+# `fn f(variadic)` and `fn f(variadic: T)` keep their meaning.
+proc surface::parser::VariadicMarker {pVar} {
+    upvar 1 $pVar p
+    set name [Peek p]
+    return [expr {[dict get $name kind] eq "IDENT" && [dict get $name value] eq "variadic"
+        && [Kind p 1] eq "IDENT"}]
+}
+
+# The variadic parameter `NAME ":" typeExpr`, after the marker at MARKERSPAN.
+# Returns {name NAME nameSpan SPAN type TYPE typeSpan SPAN span SPAN}. The
+# type is required: the parameter is bound to a List, and its declaration
+# says which (List[T], or List for an element type each call imprints).
+proc surface::parser::VariadicEntry {pVar markerSpan} {
+    upvar 1 $pVar p
+    set token [Advance p]
+    if {[Kind p] ne ":"} {
+        FailCode [dict get $token span] MALFORMED-VARIADIC-SECTION \
+            "variadic parameter \"[dict get $token value]\" needs its List type: write \"variadic [dict get $token value]: List\[T\]\" (or \"List\" for an element type each call imprints)"
+    }
+    Advance p
+    set typeStart [dict get [Peek p] span]
+    set type [TypeExpr p "the variadic parameter's List type after \":\""]
+    set typeSpan [SpanFrom p $typeStart]
+    return [dict create name [dict get $token value] nameSpan [dict get $token span] \
+        type $type typeSpan $typeSpan span [SpanFrom p $markerSpan]]
 }
 
 # 1 if the next tokens are the resume clause marker: the name `resume`
@@ -2608,6 +2705,10 @@ proc surface::parser::EnterSection {pVar sectionVar new span} {
     upvar 1 $pVar p $sectionVar section
     variable paramSectionOrder
     if {[lsearch -exact $paramSectionOrder $new] <= [lsearch -exact $paramSectionOrder $section]} {
+        if {$new eq "variadic"} {
+            FailCode $span MALFORMED-VARIADIC-SECTION \
+                "a function declares at most one variadic parameter (\"variadic NAME: List\[T\]\", the last parameter of its list)"
+        }
         if {$new eq "resume"} {
             Fail [dict create span $span] "a function declares at most one resume clause (\"resume TYPE\", the last entry of its parameter list)"
         }

@@ -18,7 +18,13 @@
 #   * every declaration it drew as representable is bound, under its own
 #     name and its C link symbol (a `named` symbol for an asm label), and
 #     every one it drew as unrepresentable (float, double, a struct by value,
-#     varargs) is reported unsupported with the expected blocker;
+#     a va_list, a variadic function only a thunk could reach) is reported
+#     unsupported with the expected blocker;
+#   * every variadic prototype (`T f(FIXED..., ...)`, VARIADICS-VERTICAL-
+#     SLICE-1.md) is bound directly as a variadic extern, and called once
+#     with trailing arguments of drawn C types (every integer scalar, _Bool,
+#     a handle pointer) that its genuine stdarg body reads back with
+#     va_arg of the type C's default argument promotions give;
 #   * every bound function's ABI classes (the HIR foreign table: what the
 #     generator's declaration means to the C FFI) are the model's for its C
 #     signature: typedefs through the stdint/stddef names, enums by their
@@ -29,9 +35,10 @@
 #     model's -- including static inline functions through their thunks and
 #     macro aliases through their symbols.
 #
-# The last line is "programs N declarations D disagreements X" (the exit
-# status is 1 on any); every disagreement is printed with its directory,
-# kept unless -keep is 0.
+# The last line is "programs N declarations D variadic V trailing T
+# disagreements X" (V variadic prototypes called with T trailing arguments
+# in all; the exit status is 1 on any disagreement); every disagreement is
+# printed with its directory, kept unless -keep is 0.
 
 set root [file dirname [file dirname [file dirname [file dirname [file normalize [info script]]]]]]
 set options [dict create -n 10 -seed 1 -functions 12 -gc-stress 0 -keep 1 -verbose 0]
@@ -106,7 +113,8 @@ proc drawProgram {p k} {
         set negative [chance 0.4]
         set values {}
         set v [expr {$negative ? -[between 1 1000] : [between 0 100]}]
-        for {set j 0} {$j < [between 1 4]} {incr j} {
+        set count [between 1 4]
+        for {set j 0} {$j < $count} {incr j} {
             lappend values $v
             incr v [between 1 1000]
         }
@@ -116,15 +124,42 @@ proc drawProgram {p k} {
     for {set i 0} {$i < $k} {incr i} {
         set r [expr {rand()}]
         if {$r < 0.12} {
-            lappend decls [dict create kind unsupported name fz_u$i shape [pick {float double struct variadic}]]
+            lappend decls [dict create kind unsupported name fz_u$i shape [pick {float double struct va-list variadic-thunk}]]
+            continue
+        }
+        if {$r < 0.2} {
+            # A variadic prototype: one to three fixed parameters, and the
+            # trailing arguments its one call passes (at most 16 seen values).
+            # The last fixed parameter is va_start's, whose type must be its
+            # own promoted type (C11 7.16.1.4): none narrower than int.
+            set params {}
+            set n [between 1 3]
+            for {set j 0} {$j < $n} {incr j} {
+                set t [drawType $typedefs $enums 1]
+                while {$j == $n - 1 && ([dict get $t kind] eq "bool"
+                        || ([dict get $t kind] eq "scalar" && [lindex [dict get $::ctypes [dict get $t ctype]] 1] < 32))} {
+                    set t [drawType $typedefs $enums 1]
+                }
+                lappend params $t
+            }
+            set trailing {}
+            set count [pick [list 0 1 2 [between 3 8] [between 6 12]]]
+            for {set j 0} {$j < $count} {incr j} {
+                lappend trailing [drawTrailing]
+            }
+            set result [expr {[chance 0.15] ? [dict create kind void] : [drawType $typedefs $enums 0]}]
+            set seen [expr {[llength $params] + [llength $trailing]}]
+            lappend decls [dict create kind variadic name fz_v$i params $params trailing $trailing result $result \
+                from [between -1 [expr {$seen - 1}]] add [between 0 1000]]
             continue
         }
         set params {}
-        for {set j 0} {$j < [pick {0 1 2 3 [between 4 9]}]} {incr j} {
+        set count [pick [list 0 1 2 3 [between 4 9]]]
+        for {set j 0} {$j < $count} {incr j} {
             lappend params [drawType $typedefs $enums 1]
         }
         set result [expr {[chance 0.15] ? [dict create kind void] : [drawType $typedefs $enums 0]}]
-        set kind [expr {$r < 0.22 ? "inline" : ($r < 0.3 ? "labeled" : "plain")}]
+        set kind [expr {$r < 0.28 ? "inline" : ($r < 0.34 ? "labeled" : "plain")}]
         lappend decls [dict create kind $kind name fz_f$i params $params result $result \
             from [expr {[llength $params] ? [between -1 [expr {[llength $params] - 1}]] : -1}] add [between 0 1000]]
     }
@@ -137,7 +172,8 @@ proc drawProgram {p k} {
     }
     # Integer constants: literals with every suffix, casts to the typedefs.
     set constants {}
-    for {set i 0} {$i < [between 1 6]} {incr i} {
+    set count [between 1 6]
+    for {set i 0} {$i < $count} {incr i} {
         if {[chance 0.3] && [llength $typedefs]} {
             set t [pick $typedefs]
             set ctype [TypedefC $t]
@@ -188,9 +224,32 @@ proc drawType {typedefs enums param} {
     return [dict create kind scalar spelled $ctype ctype $ctype]
 }
 
+# A drawn trailing argument of a variadic call: an integer scalar of any C
+# type, a _Bool or a handle pointer. Its C type after the default argument
+# promotions (what the callee's va_arg names) is the model's (promotedC).
+proc drawTrailing {} {
+    set r [expr {rand()}]
+    if {$r < 0.1} { return [dict create kind bool ctype _Bool] }
+    if {$r < 0.2} { return [dict create kind handle] }
+    return [dict create kind scalar ctype [pick [dict keys $::ctypes]]]
+}
+
+# The C type a trailing argument T reaches a variadic callee as: an integer
+# narrower than int (and _Bool) is int, every other one itself, a pointer a
+# pointer (C11 6.5.2.2p6-7).
+proc promotedC {t} {
+    switch -- [dict get $t kind] {
+        bool { return int }
+        handle { return "fz_handle *" }
+    }
+    set ctype [dict get $t ctype]
+    if {[lindex [dict get $::ctypes $ctype] 1] < 32} { return int }
+    return $ctype
+}
+
 # The header and the implementation of program PROG.
 proc cFiles {prog} {
-    set h "#ifndef FZ_H\n#define FZ_H\n#include <stdbool.h>\n#include <stddef.h>\n#include <stdint.h>\n\n"
+    set h "#ifndef FZ_H\n#define FZ_H\n#include <stdarg.h>\n#include <stdbool.h>\n#include <stddef.h>\n#include <stdint.h>\n\n"
     append h "typedef struct fz_handle fz_handle;\nunsigned long long fz_seen_at(int i);\nfz_handle *fz_cell(int k);\n"
     append h "unsigned long long fz_handle_index(fz_handle *h);\nextern unsigned long long fz_seen\[16\];\n"
     foreach t [dict get $prog typedefs] { append h "typedef [dict get $t base] [dict get $t name];\n" }
@@ -211,7 +270,8 @@ proc cFiles {prog} {
                 float { append h "float ${name}(float x);\n"; append c "float ${name}(float x) { return x; }\n" }
                 double { append h "double ${name}(int x);\n"; append c "double ${name}(int x) { return x; }\n" }
                 struct { append h "typedef struct ${name}_s { int a; } ${name}_s;\nint ${name}(${name}_s s);\n"; append c "int ${name}(${name}_s s) { return s.a; }\n" }
-                variadic { append h "int ${name}(int n, ...);\n"; append c "int ${name}(int n, ...) { return n; }\n" }
+                va-list { append h "int ${name}(int n, va_list ap);\n"; append c "int ${name}(int n, va_list ap) { (void)ap; return n; }\n" }
+                variadic-thunk { append h "static inline int ${name}(int n, ...) { return n; }\n" }
             }
             continue
         }
@@ -227,6 +287,21 @@ proc cFiles {prog} {
             }
             incr j
         }
+        if {[dict get $d kind] eq "variadic"} {
+            # The genuine stdarg body: each trailing argument read with
+            # va_arg of its promoted type, in order.
+            lappend formals ...
+            append body "    va_list ap;\n    va_start(ap, a[expr {$j - 1}]);\n"
+            foreach t [dict get $d trailing] {
+                if {[dict get $t kind] eq "handle"} {
+                    append body "    fz_seen\[$j\] = fz_handle_index(va_arg(ap, fz_handle *));\n"
+                } else {
+                    append body "    fz_seen\[$j\] = (unsigned long long)va_arg(ap, [promotedC $t]);\n"
+                }
+                incr j
+            }
+            append body "    va_end(ap);\n"
+        }
         set result [dict get $d result]
         set rtype [expr {[dict get $result kind] eq "void" ? "void" : ([dict get $result kind] eq "handle" ? "fz_handle *" : [dict get $result spelled])}]
         if {[dict get $result kind] ne "void"} {
@@ -241,7 +316,7 @@ proc cFiles {prog} {
                 append h "$proto __asm__(\"${name}_impl\");\n"
                 append c "$proto {\n$body}\n"
             }
-            plain {
+            plain - variadic {
                 append h "$proto;\n"
                 append c "$proto {\n$body}\n"
             }
@@ -267,10 +342,17 @@ proc abiClass {t} {
 proc program {prog} {
     # A handle parameter has no contract (unknown escape, which retains):
     # calling one is direct authority, which the program acknowledges.
+    # So does a pointer passed as a trailing argument of a variadic call.
     set direct 0
+    set scalars {}
     foreach d [dict get $prog decls] {
         if {[dict get $d kind] eq "unsupported"} continue
-        foreach q [dict get $d params] { if {[dict get $q kind] eq "handle"} { set direct 1 } }
+        foreach q [concat [dict get $d params] [dict getdef $d trailing {}]] {
+            if {[dict get $q kind] eq "handle"} { set direct 1 }
+        }
+        foreach q [dict getdef $d trailing {}] {
+            if {[dict get $q kind] eq "scalar"} { lappend scalars [lindex [dict get $::ctypes [dict get $q ctype]] 3] }
+        }
     }
     set text [expr {$direct ? "direct module\n\n" : ""}]
     append text "import abi\nimport abi::bytes\nimport byte\nimport ffi::c\nimport fz::fz\n"
@@ -279,6 +361,11 @@ proc program {prog} {
     if {$thunks} { append text "import fz::thunks::fz\n" }
     append text "\nfn bit(b: bool) -> int:\n    if b:\n        return 1\n    0\n\n"
     append text "fn byte_of(n: int) -> byte::Byte:\n    if n >= 0 and n <= 255:\n        return n\n    0\n\n"
+    # A trailing argument of a variadic call carries its own C type: an
+    # integer literal enters it through a converter of that scalar.
+    foreach s [lsort -unique $scalars] {
+        append text "fn c_$s\(n: ffi::c::$s) -> ffi::c::$s:\n    n\n\n"
+    }
     set elements {}
     set model {}
     set calls [concat [dict get $prog decls] [lmap a [dict get $prog aliases] {
@@ -317,6 +404,27 @@ proc program {prog} {
                 default {
                     set v [valueOf [dict get $param ctype]]
                     lappend args $v
+                    lappend seen [expr {$v % (2 ** 64)}]
+                }
+            }
+            incr j
+        }
+        foreach t [dict getdef $d trailing {}] {
+            switch -- [dict get $t kind] {
+                bool {
+                    set v [chance 0.5]
+                    lappend args [expr {$v ? "true" : "false"}]
+                    lappend seen $v
+                }
+                handle {
+                    set cell [between 0 7]
+                    append text "h${i}_$j = fz::fz::fz_cell($cell)\n"
+                    lappend args h${i}_$j
+                    lappend seen [expr {$cell + 1}]
+                }
+                default {
+                    set v [valueOf [dict get $t ctype]]
+                    lappend args "c_[lindex [dict get $::ctypes [dict get $t ctype]] 3]($v)"
                     lappend seen [expr {$v % (2 ** 64)}]
                 }
             }
@@ -372,7 +480,7 @@ proc checkGeneration {prog result hir} {
         }
         set row [dict get $rows "function $name"]
         if {[dict get $d kind] eq "unsupported"} {
-            set want [dict get {float float double double struct by-value-aggregate variadic variadic} [dict get $d shape]]
+            set want [dict get {float float double double struct by-value-aggregate va-list va-list variadic-thunk variadic} [dict get $d shape]]
             if {[lindex $row 2] ne "unsupported" || $want ni [split [lindex $row 4] ,]} {
                 lappend problems "$name: expected unsupported $want, the report says [lrange $row 2 4]"
             }
@@ -395,6 +503,9 @@ proc checkGeneration {prog result hir} {
             lappend problems "$name: symbol [dict get $f symbol], the model's $symbol"
         }
         set abi [dict create params [lmap p [dict get $d params] {abiClass $p}] result [abiClass [dict get $d result]]]
+        if {[dict get $d kind] eq "variadic"} {
+            dict set abi variadic 1
+        }
         if {[dict get $f abi] ne $abi} {
             lappend problems "$name: ABI [dict get $f abi], the model's $abi"
         }
@@ -419,6 +530,8 @@ expr {srand([dict get $options -seed])}
 set scratch [file tempdir botlish-cbindgen-fuzz-]
 set programs 0
 set declarations 0
+set variadics 0
+set trailingArgs 0
 set disagreements 0
 set config [::chdr::toolchain::configFor $target]
 for {set p 0} {$p < [dict get $options -n]} {incr p} {
@@ -483,6 +596,12 @@ for {set p 0} {$p < [dict get $options -n]} {incr p} {
     }
     incr programs
     incr declarations [expr {[llength [dict get $prog decls]] + [llength [dict get $prog aliases]] + [llength [dict get $prog constants]]}]
+    foreach d [dict get $prog decls] {
+        if {[dict get $d kind] eq "variadic"} {
+            incr variadics
+            incr trailingArgs [llength [dict get $d trailing]]
+        }
+    }
     set problem [string trim $problem]
     if {$problem ne ""} {
         incr disagreements
@@ -494,5 +613,5 @@ for {set p 0} {$p < [dict get $options -n]} {incr p} {
     }
 }
 if {$disagreements == 0} { file delete -force $scratch }
-puts "programs $programs declarations $declarations disagreements $disagreements"
+puts "programs $programs declarations $declarations variadic $variadics trailing $trailingArgs disagreements $disagreements"
 exit [expr {$disagreements > 0}]

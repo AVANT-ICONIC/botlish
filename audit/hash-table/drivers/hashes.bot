@@ -1,0 +1,29 @@
+# hashes -- hash(keys::key(KIND, i)) for i = 0..4, KIND the driver's key
+# kind number in argv (SPEC.md section 5): the Botlish side of
+# tools/check-hash.tcl, which compares it with the oracle's and the Rust
+# reference's reimplementations of the hash.
+import list
+import str
+import char
+import keys
+
+fn int_of(text: str) -> int errors IndexNotFound:
+    n = text.length()
+    fn digits(i: int, acc: int) -> int errors IndexNotFound:
+        if i >= n:
+            return acc
+        digits(i + 1, acc * 10 + char::scalar_value(text.char_at(i)) - 48)
+    digits(0, 0)
+
+fn main(args: List[str]) -> list errors IndexNotFound:
+    kind = int_of(list::get(args, 1, "0"))
+    loop i from 0 to 5:
+        hash(keys::key(kind, i))
+
+args = argv():
+    on InvalidArgumentEncoding:
+        []
+result = main(args):
+    on IndexNotFound:
+        []
+result

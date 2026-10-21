@@ -75,9 +75,9 @@ header include/SDL3/SDL_version.h 19dc7d48
 header include/SDL3/SDL_video.h 8c3dde2c
 shim_library botlish_shim_sdl3_b3a26b30
 file layouts-check.c 716 dd2e6820
-file layouts.tsv 1030 f479b560
-file report.tsv 5001 dcaf3926
-file report.txt 168 30d393d5
+file layouts.tsv 1030 23373826
+file report.tsv 5001 0540255b
+file report.txt 167 5460c81a
 file sdl3/assert.bot 47 a41c7a1f
 file sdl3/asyncio.bot 82 03624bea
 file sdl3/atomic.bot 84 e8cf562d
@@ -90,7 +90,7 @@ file sdl3/ctypes.bot 451 56695791
 file sdl3/dialog.bot 50 21486ac0
 file sdl3/dlopennote.bot 6 a5aff935
 file sdl3/endian.bot 9 bdbb5a2a
-file sdl3/error_h.bot 15 a5839253
+file sdl3/error_h.bot 21 8b95a0eb
 file sdl3/events.bot 236 155bc7de
 file sdl3/filesystem.bot 85 1dba0d08
 file sdl3/gamepad.bot 389 fd434d1a
@@ -99,14 +99,14 @@ file sdl3/haptic.bot 166 e475cb7e
 file sdl3/hidapi.bot 147 a53ea6cb
 file sdl3/hints.bot 54 e1e85d28
 file sdl3/init.bot 63 db2ee6b3
-file sdl3/iostream.bot 283 cb85bc7b
+file sdl3/iostream.bot 290 ee5b9371
 file sdl3/joystick.bot 295 3003e71d
 file sdl3/keyboard.bot 118 5c694d82
 file sdl3/keycode.bot 282 04f968f6
 file sdl3/layouts.bot 921 82c4a162
 file sdl3/loadso.bot 21 d57b5913
 file sdl3/locale.bot 12 b356f2cc
-file sdl3/log.bot 77 ccb7d0a6
+file sdl3/log.bot 140 824ddf59
 file sdl3/messagebox.bot 36 58929d3c
 file sdl3/metal.bot 18 0faaf36a
 file sdl3/misc.bot 9 83c90c8a
@@ -123,7 +123,7 @@ file sdl3/rect.bot 72 97ec6ce4
 file sdl3/render.bot 524 d0ebfa2f
 file sdl3/scancode.bot 256 81069580
 file sdl3/sensor.bot 65 5dd408f0
-file sdl3/stdinc.bot 611 fb8e99db
+file sdl3/stdinc.bot 641 e476aee0
 file sdl3/storage.bot 115 28835720
 file sdl3/surface.bot 425 7bcbdf61
 file sdl3/system.bot 60 4d3efc21
@@ -193,13 +193,13 @@ libraries sdl3/video.bot SDL3
 count alias 3
 count aliases 0
 count bool 506
-count boolOnly 456
+count boolOnly 457
 count callbacks 36
 count complete 122
 count constants 1656
 count constantsSeen 1071
 count declared 1233
-count direct 1086
+count direct 1101
 count enumerators 1166
 count excluded 0
 count fnmacros 157
@@ -208,16 +208,16 @@ count inline 15
 count manual 2
 count opaque 43
 count proven 16
-count ptrParams 1368
+count ptrParams 1388
 count ptrResults 261
 count resultAlias 0
 count resultIndependent 1
 count resultUnknown 260
 count tablestubs 0
 count thunk 13
-count unknownParams 1350
-count unknownRetention 834
-count unsupported 303
+count unknownParams 1370
+count unknownRetention 849
+count unsupported 288
 count views 225
 blocked by-value-aggregate 8
 blocked double 27
@@ -226,7 +226,6 @@ blocked macro-needs-signature 113
 blocked unsupported-callback-signature 2
 blocked unsupported-macro 44
 blocked va-list 7
-blocked variadic 16
 layout_abi linux-aarch64 clang aarch64-linux-gnu {Ubuntu clang version 18.1.3 (1ubuntu1)}
 layout_count anonymous 5
 layout_count blocked 42

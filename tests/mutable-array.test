@@ -244,6 +244,17 @@ test ma-cow-loop {items 12, 47: a loop over an unrestricted array iterates a sna
     maRoute "" "    b = a\n    xs = loop x in a:\n        a.set(1, 5)\n        b.set(0, 7)\n        x\n    list::append(xs, a.at(1))\n"
 } -result {value {[0, 0, 5]}}
 
+test ma-break-continue-copies {a copy taken just before `break` or `continue` stays independent of the array it came from, which the code after the loop or the next iteration reads (or writes): a binding written then the loop left, an array pushed into a vector before `break` -- on every backend} -body {
+    list \
+        [maRoute "" "    xs = loop i from 0 to 3:\n        if i == 1:\n            u = a\n            u.set(0, 99)\n            break\n        a.set(1, 5 + i)\n        i\n    \[a.at(0), a.at(1), list::length(xs)\]\n"] \
+        [maRoute "" "    xs = loop i from 0 to 3:\n        if i == 0:\n            u = a\n            u.set(0, 99)\n            continue\n        a.at(0)\n    list::append(xs, a.at(0))\n"] \
+        [maRoute "" "    acc = mutable_vector::from_list(\[mutable_array::create(1, 7)\])\n    loop i from 0 to 5:\n        a.set(1, i)\n        if i == 1:\n            acc.push(a)\n            break\n    a.set(0, 99)\n    snap = acc.at(1)\n    \[snap.at(0), snap.at(1), a.at(0), a.at(1)\]\n"]
+} -result {{value {[0, 5, 1]}} {value {[0, 0, 0]}} {value {[0, 1, 99, 1]}}}
+
+test ma-payload-entry-copy {a handler that writes the array in its payload binding (`on Full details:`) writes its own copy: the array the raiser put in the payload, still its caller's, never changes -- on every backend} -body {
+    maRoute "error Full:\n    items: MutableArray\[int\]\nfn g(v: MutableArray\[int\], n: int) -> int errors Full:\n    if n > 0:\n        fail Full {items: v}\n    0\n" "    r = g(a, a.capacity()):\n        on Full details:\n            details.items.set(0, 9)\n            details.items.at(0)\n    \[r, a.at(0)\]\n"
+} -result {value {[9, 0]}}
+
 test ma-cow-repeated-copy {item 30: create(3, x) of an unrestricted MutableVector places three logical copies: mutating one slot's vector after extracting it changes neither the others nor x} -body {
     maRoute "" "    x = mutable_vector::from_list(\[1\])\n    arr = mutable_array::create(3, x)\n    v = arr.at(1)\n    v.push(2)\n    arr.set(1, v)\n    \[arr.at(0).length(), arr.at(1).length(), arr.at(2).length(), x.length(), a.at(0)\]\n"
 } -result {value {[1, 2, 1, 1, 0]}}
@@ -265,6 +276,13 @@ test ma-place-receiver {item 33: a temporary receiver (a call's result, a List e
 test ma-generic-place {item 33: a generic function's untyped parameter is a place its body may mutate (a dynamic copy on entry, `d`): the caller's array never changes} -body {
     maRoute "fn fill(x, v) errors IndexNotFound:\n    mutable_array::set(x, 0, v)\n    x\n" "    b = fill(a, 4)\n    c = fill(b, 5)\n    \[a.at(0), b.at(0), c.at(0)\]\n"
 } -result {value {[0, 4, 5]}}
+
+test ma-any-slot-copies {a struct whose `any` slot sits beside a typed array slot is copied slot by slot, the `any` slot by what it holds at run time (`d`): a copy of the struct taken before the `any` slot's array is moved into a generic function that writes it, at its path's last use while the typed sibling is read later, keeps its own array; so does the array a place's `any` slot was entered from -- on every backend} -body {
+    set decls "import mutable_array\nstruct Bucket:\n    hashes: MutableArray\[int\]\n    slots: any\nfn mut(v) errors IndexNotFound:\n    v.set(0, 99)\n    v\n"
+    list \
+        [maAgree "${decls}fn f() errors IndexNotFound:\n    b = Bucket {hashes: mutable_array::create(2, 7), slots: mutable_array::create(2, 0)}\n    saved = b\n    r = mut(b.slots)\n    hs = b.hashes\n    \[mutable_array::at(saved.slots, 0), r.at(0), hs.at(0)\]\nr = f():\n    on IndexNotFound:\n        \[\]\nr\n"] \
+        [maAgree "${decls}fn f() errors IndexNotFound:\n    orig = mutable_array::create(4, 0)\n    p = Bucket {hashes: mutable_array::create(1, 0), slots: orig}\n    p.hashes.set(0, 1)\n    s = mut(p.slots)\n    n = p.hashes.at(0)\n    \[orig.at(0), s.at(0), n\]\nr = f():\n    on IndexNotFound:\n        \[\]\nr\n"]
+} -cleanup {unset -nocomplain decls} -result {{value {[0, 99, 7]}} {value {[0, 99, 1]}}}
 
 test ma-cow-extraction {items 33, 36: an array taken out of a struct field -- a projection, a destructure, an anonymous struct's field, a struct parameter's field -- is a copy, and inside a generic body (where the static type is too imprecise to say, a dynamic copy `d`) so is a local or struct field bound to the untyped parameter: mutating the copy never changes the struct or the argument} -body {
     set box "struct Box:\n    data: MutableArray\[int\]\n    n: int\n"
@@ -498,6 +516,55 @@ test ma-cow-counters {item 50: a copy is O(1) -- one share whatever the length -
         list [lindex [maNative $text] 1] [core::mutarray::counters]
     }
 } -cleanup {unset -nocomplain n text} -result {{{shares 1 detaches 1 detachElements 10} {created 1 shares 1}} {{shares 1 detaches 1 detachElements 1000} {created 1 shares 1}}}
+
+# hir/mutvec.tcl's last uses per path (NoLaterUse, ReadsPath): a table of
+# parallel arrays and an Int count, updated the natural ways -- rebuilt from
+# its own fields after mutating them, handed whole to a mutating helper
+# together with its new count, or returned in a result struct whose table
+# field is passed on before the Int field is read -- copies no array: each
+# read-out is the last use of its own path.
+test ma-path-last-use-copies {a struct of 1000-slot arrays with an Int field, updated 100 times by a rebuild from its own fields, by a mutating helper given the whole struct and its count, and through a result struct read field by field, makes no logical copy (Tcl counters) and no share or detach (native counters); the values agree on every backend} -constraints nativeCoroutines -body {
+    set decls "import mutable_array\nstruct T:\n    keys: MutableArray\[int\]\n    vals: MutableArray\[int\]\n    count: int\nstruct Put:\n    old: int\n    table: T\nfn table() -> T:\n    T {keys: mutable_array::create(1000, 0), vals: mutable_array::create(1000, 0), count: 0}\n"
+    lmap fns {
+        {fn put(t: T, i: int) -> T errors IndexNotFound:
+    t.keys.set(i, i)
+    t.vals.set(i, i * 2)
+    T {keys: t.keys, vals: t.vals, count: t.count + 1}
+fn fill(t: T, i: int, n: int) -> T errors IndexNotFound:
+    if i >= n:
+        return t
+    fill(put(t, i), i + 1, n)
+}
+        {fn store(t: T, i: int, count: int) -> T errors IndexNotFound:
+    t.keys.set(i, i)
+    t.vals.set(i, i * 2)
+    T {keys: t.keys, vals: t.vals, count: count}
+fn put(t: T, i: int) -> T errors IndexNotFound:
+    store(t, i, t.count + 1)
+fn fill(t: T, i: int, n: int) -> T errors IndexNotFound:
+    if i >= n:
+        return t
+    fill(put(t, i), i + 1, n)
+}
+        {fn put_old(t: T, i: int) -> Put errors IndexNotFound:
+    old = t.vals.at(i)
+    t.keys.set(i, i)
+    t.vals.set(i, i * 2)
+    Put {old: old, table: T {keys: t.keys, vals: t.vals, count: t.count + 1}}
+fn fill(t: T, i: int, n: int) -> T errors IndexNotFound:
+    if i >= n:
+        return t
+    r = put_old(t, i)
+    fill(r.table, i + 1 + r.old, n)
+}
+    } {
+        set text "${decls}${fns}fn f() -> int errors IndexNotFound:\n    t = fill(table(), 0, 100)\n    t.count * 1000000 + t.keys.at(7) * 1000 + t.vals.at(99)\nr = f():\n    on IndexNotFound:\n        -1\nr\n"
+        core::mutarray::resetCounters
+        outcomeUnderHir compile [surface::compile $text -warnings off]
+        set tcl [core::mutarray::counters]
+        list [maAgree $text] $tcl [lindex [maNative $text] 1]
+    }
+} -cleanup {unset -nocomplain decls fns text tcl} -result {{{value 100007198} {created 2 shares 0} {shares 0 detaches 0 detachElements 0}} {{value 100007198} {created 2 shares 0} {shares 0 detaches 0 detachElements 0}} {{value 100007198} {created 2 shares 0} {shares 0 detaches 0 detachElements 0}}}
 
 set maEvidence "${maDecls}fn affine() -> int errors IndexNotFound:
     a = mutable_array::generate(2, make)

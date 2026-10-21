@@ -107,6 +107,21 @@ extern c fn OPENSSL_strncasecmp named "botlish_bssl_OPENSSL_strncasecmp"(
     n: ffi::c::ULong
 ) -> ffi::c::Int
 
+# C: int BIO_snprintf(char *buf, size_t n, const char *format, ...)
+extern c fn BIO_snprintf named "botlish_bssl_BIO_snprintf"(
+    buf: ffi::c::Ptr[ffi::c::Char],
+    n: ffi::c::ULong,
+    format: ffi::c::Ptr[ffi::c::Char],
+    variadic
+) -> ffi::c::Int
+
+# C: int OPENSSL_asprintf(char **str, const char *format, ...)
+extern c fn OPENSSL_asprintf named "botlish_bssl_OPENSSL_asprintf"(
+    str: ffi::c::Ptr[ffi::c::Ptr[ffi::c::Char]],
+    format: ffi::c::Ptr[ffi::c::Char],
+    variadic
+) -> ffi::c::Int
+
 # C: char *OPENSSL_strndup(const char *str, size_t size)
 extern c fn OPENSSL_strndup named "botlish_bssl_OPENSSL_strndup"(
     str: ffi::c::Ptr[ffi::c::Char],

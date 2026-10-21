@@ -1,0 +1,87 @@
+# trace -- runs the operation trace in argv (tools/model.py's syntax, one
+# operation per argument after argument zero) against the `table` module,
+# and evaluates to every result in order: the correctness driver of the
+# hash-table experiment (SPEC.md section 4; tools/fuzz.tcl). The fuzzer
+# copies an implementation beside it as `table.bot` and a key kind as
+# `keys.bot`.
+import list
+import str
+import char
+import table
+import keys
+
+struct Run:
+    t: table::Table
+    out: list
+
+# TEXT from FROM on, an optionally negative decimal Int.
+fn int_from(text: str, from: int) -> int errors IndexNotFound:
+    n = text.length()
+    fn digits(i: int, acc: int) -> int errors IndexNotFound:
+        if i >= n:
+            return acc
+        digits(i + 1, acc * 10 + char::scalar_value(text.char_at(i)) - 48)
+    if from < n and text.char_at(from) == '-':
+        return 0 - digits(from + 1, 0)
+    digits(from, 0)
+
+# The position of the last space of TEXT (an operation has one after its
+# letter).
+fn last_space(text: str) -> int errors IndexNotFound:
+    fn back(i: int) -> int errors IndexNotFound:
+        if i <= 0 or text.char_at(i) == ' ':
+            return i
+        back(i - 1)
+    back(text.length() - 1)
+
+fn bit(b: bool) -> int:
+    if b:
+        1
+    else:
+        0
+
+fn apply(r: Run, op: str) -> Run errors IndexNotFound, LowerUnderrun, UpperOverrun:
+    c = op.char_at(0)
+    if c == 'f':
+        return r
+    if c == 's':
+        return Run {t: r.t, out: r.out.append(table::size(r.t))}
+    if c == 'c':
+        return Run {t: r.t, out: r.out.append(table::slots(r.t))}
+    if c == 'p':
+        space = last_space(op)
+        k = keys::parse(op.substring(2, space))
+        return Run {t: table::put(r.t, k, int_from(op, space + 1)), out: r.out}
+    k = keys::parse(op.substring(2, op.length()))
+    if c == 'g':
+        return Run {t: r.t, out: r.out.append(table::get(r.t, k, -1))}
+    if c == 'h':
+        return Run {t: r.t, out: r.out.append(bit(table::has?(r.t, k)))}
+    Run {t: table::drop(r.t, k), out: r.out}
+
+fn run(ops: List[str], i: int, r: Run) -> Run errors IndexNotFound, LowerUnderrun, UpperOverrun:
+    if i >= ops.length():
+        return r
+    run(ops, i + 1, apply(r, ops.at(i)))
+
+# The first operation may be "f N": the table starts as fresh(N).
+fn start(ops: List[str]) -> Run errors IndexNotFound:
+    first = ops.get(1, "")
+    if first.length() > 2 and first.char_at(0) == 'f':
+        return Run {t: table::fresh(int_from(first, 2)), out: []}
+    Run {t: table::fresh(0), out: []}
+
+fn main(ops: List[str]) -> list errors IndexNotFound, LowerUnderrun, UpperOverrun:
+    run(ops, 1, start(ops)).out
+
+ops = argv():
+    on InvalidArgumentEncoding:
+        []
+result = main(ops):
+    on IndexNotFound:
+        [-1001]
+    on LowerUnderrun:
+        [-1002]
+    on UpperOverrun:
+        [-1003]
+result

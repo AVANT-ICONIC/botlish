@@ -1,0 +1,223 @@
+From 263ce8c475a263994ade2c794b2ad50d334a76d1 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 18 Oct 2026 23:27:48 +0000
+Subject: [PATCH] EXPERIMENT (not for main): mutable_array::probe_linear, a
+ probe primitive
+
+The runtime-primitive experiment of the hash-table milestone
+(HASH-TABLE-EXPERIMENT.md, "Runtime experiments";
+HASH-TABLE-COMPILER-PRESSURE.md, RT-1): the whole linear probing walk of
+a table of stored hashes (negative = empty) and keys as one runtime
+operation, mutable_array::probe_linear(hashes, keys, h, key), returning
+the slot of KEY or -1 - I for the empty slot I ending its sequence.
+
+* core/mutarray.tcl: the Tcl implementation (interp, compile) and the
+  registration (observe ownership, structural equality, IndexNotFound
+  when a slot is outside KEYS);
+* native: NIR op mutarrayprobe, Rust rt_mutarray_probe (no allocation,
+  no safepoint; fallible through ==), its helper symbol;
+* audit/hash-table/impl/lpp.bot: lpa with find_from/empty_from replaced
+  by the primitive (fuzzed on four backends, 144 checks, 0 failures).
+
+The policy, layout, growth and deletion stay Botlish. This branch exists
+to measure the primitive; it is not proposed as an intrinsic.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01GcePHR2hvbBca5kk7HDugb
+---
+ core/mutarray.tcl          | 39 ++++++++++++++++++++++++++++++++++
+ native/lower.tcl           |  1 +
+ native/src/codegen/clif.rs |  1 +
+ native/src/nir.rs          |  5 ++++-
+ native/src/runtime/ops.rs  | 43 ++++++++++++++++++++++++++++++++++++++
+ 5 files changed, 88 insertions(+), 1 deletion(-)
+
+diff --git a/core/mutarray.tcl b/core/mutarray.tcl
+index 76b273b..3c4a3f8 100644
+--- a/core/mutarray.tcl
++++ b/core/mutarray.tcl
+@@ -176,6 +176,42 @@ proc core::mutarray::generateDrop {count factory descriptor} {
+         [core::affine::Tree [core::value::strOf $descriptor] mutable_array#generate_drop] mutable_array#generate_drop]
+ }
+ 
++# EXPERIMENT (HASH-TABLE-EXPERIMENT.md, "Runtime experiments"; not a
++# shipped intrinsic): (mutable_array::probe_linear HASHES KEYS H KEY) walks
++# the linear probing sequence of hash H over the slot arrays HASHES (a
++# stored hash, or a negative Int for an empty slot) and KEYS, from slot
++# H mod capacity(HASHES): the slot I whose stored hash is H and whose key ==
++# KEY, or -1 - I for the first empty slot I; -1 - capacity when every slot
++# is occupied by other keys. A slot outside KEYS is IndexNotFound.
++proc core::mutarray::probeLinear {hashes keys h key} {
++    variable store
++    set hs $store([Id $hashes mutable_array::probe_linear])
++    set ks $store([Id $keys mutable_array::probe_linear])
++    set hv [core::value::intOf [core::value::expect int $h mutable_array::probe_linear]]
++    set cap [llength $hs]
++    if {$cap == 0} {
++        return [core::value::intFromNumber -1]
++    }
++    set i [expr {$hv % $cap}]
++    for {set step 0} {$step < $cap} {incr step} {
++        set stored [core::value::intOf [lindex $hs $i]]
++        if {$stored < 0} {
++            return [core::value::intFromNumber [expr {-1 - $i}]]
++        }
++        if {$stored == $hv} {
++            if {$i >= [llength $ks]} {
++                core::native::failDeclared IndexNotFound \
++                    "mutable_array::probe_linear: slot $i is outside the keys 0..[expr {[llength $ks] - 1}]"
++            }
++            if {[core::value::equal [lindex $ks $i] $key]} {
++                return [core::value::intFromNumber $i]
++            }
++        }
++        set i [expr {($i + 1) % $cap}]
++    }
++    return [core::value::intFromNumber [expr {-1 - $cap}]]
++}
++
+ proc core::mutarray::capacity {v} {
+     variable store
+     return [core::value::intFromNumber [llength $store([Id $v mutable_array::capacity])]]
+@@ -378,6 +414,9 @@ core::native::register mutable_array::generate -arity 2 -impl core::mutarray::ge
+     -param-types {int any} -result-type mutarray -runtime mutarray-alloc -completion 1 \
+     -result-shape {mutarray-generate 1} -errors-from 1 -result-length {int 0} \
+     -drop-form {mutable_array#generate_drop result} -ownership {observe factory}
++core::native::register mutable_array::probe_linear -arity 4 -impl core::mutarray::probeLinear \
++    -param-types {mutarray mutarray int any} -result-type int -runtime {range-check structural-equality} \
++    -errors IndexNotFound -ownership {observe observe observe equality}
+ core::native::register mutable_array::capacity -arity 1 -impl core::mutarray::capacity \
+     -param-types {mutarray} -result-type int -result-range collection-length -ownership {observe}
+ core::native::register mutable_array::at -arity 2 -impl core::mutarray::at \
+diff --git a/native/lower.tcl b/native/lower.tcl
+index be733b6..85eb03a 100644
+--- a/native/lower.tcl
++++ b/native/lower.tcl
+@@ -122,6 +122,7 @@ namespace eval native::lower {
+         immutable_set::contains  {equality-set} \
+         mutable_array::allocate {op mutarrayallocate} \
+         mutable_array::capacity {op mutarraycapacity} \
++        mutable_array::probe_linear {op mutarrayprobe} \
+         mutable_array::at       {op mutarrayget} \
+         mutable_array::set      {op mutarrayset} \
+         mutable_array::copy     {op mutarraycopy} \
+diff --git a/native/src/codegen/clif.rs b/native/src/codegen/clif.rs
+index 5c88f3f..a9f3142 100644
+--- a/native/src/codegen/clif.rs
++++ b/native/src/codegen/clif.rs
+@@ -2327,6 +2327,7 @@ impl<'a, 'b, M: Module> Translator<'a, 'b, M> {
+                             return v;
+                         }
+                         MutArrayCapacity => ("rt_mutarray_capacity", None, false, None),
++                        MutArrayProbe => ("rt_mutarray_probe", None, true, None),
+                         MutArrayGet => ("rt_mutarray_get", None, true, None),
+                         MutArraySet => ("rt_mutarray_set", None, true, None),
+                         MutArrayCopy => ("rt_mutarray_copy", None, true, None),
+diff --git a/native/src/nir.rs b/native/src/nir.rs
+index b710fc0..c419bf5 100644
+--- a/native/src/nir.rs
++++ b/native/src/nir.rs
+@@ -101,6 +101,8 @@ pub enum OpCode {
+     SetContainsTotal,
+     MutArrayAllocate,
+     MutArrayCapacity,
++    /// EXPERIMENT: `mutable_array::probe_linear` (HASH-TABLE-EXPERIMENT.md).
++    MutArrayProbe,
+     MutArrayGet,
+     MutArraySet,
+     MutArrayCopy,
+@@ -635,6 +637,7 @@ op_spellings! {
+     "setcontainstotal" => SetContainsTotal,
+     "mutarrayallocate" => MutArrayAllocate,
+     "mutarraycapacity" => MutArrayCapacity,
++    "mutarrayprobe" => MutArrayProbe,
+     "mutarrayget" => MutArrayGet,
+     "mutarrayset" => MutArraySet,
+     "mutarraycopy" => MutArrayCopy,
+@@ -780,7 +783,7 @@ impl OpCode {
+             | MutArrayFromList | MutArrayToList | MutArrayEmpty | MutArrayTakeFront => Some(1),
+             Substr | SubstrProven | MutArraySet | MutArraySetProven | MBytesSet | BinLoad | NativeLoad | NativeLoadPtr | RegionCheck | StrRegionIsTclAlpha | StrRegionIsTclAlnum | StrSliceShort
+             | MvSwap | MutArraySwap | MutArrayGenerateDrop | FfiFixtureFill | FfiFixtureFillChecked | FfiFixtureCopy => Some(3),
+-            RegionEq | MvSwapDrop | MutArraySwapDrop | MutArraySetDrop | BinStore | FfiFixtureMixed => Some(4),
++            RegionEq | MutArrayProbe | MvSwapDrop | MutArraySwapDrop | MutArraySetDrop | BinStore | FfiFixtureMixed => Some(4),
+             MutArrayCopy | MutArrayCopyProven => Some(5),
+             _ => Some(2),
+         }
+diff --git a/native/src/runtime/ops.rs b/native/src/runtime/ops.rs
+index 20799bf..1a2f72d 100644
+--- a/native/src/runtime/ops.rs
++++ b/native/src/runtime/ops.rs
+@@ -208,6 +208,8 @@ pub fn op_may_error(op: OpCode) -> bool {
+         // UNSUPPORTED, also through NO_VALUE.)
+         | SyscallLinuxX86_64 | SyscallLinuxAarch64
+         | ListNew | ListGet | ListAppend | MutArrayAllocate | MutArrayGet | MutArraySet | MutArrayCopy | MutArrayFreeze
++        // EXPERIMENT: probe_linear's IndexNotFound and its key equality's EQUALITY.
++        | MutArrayProbe
+         // MutableVector: the declared IndexNotFound (runtime/mutvec.rs).
+         | MvAt | MvPop | MvTake | MvSwap | MvSwapDrop
+         // MutableArray: a capacity outside the limit (RANGE), the declared
+@@ -2140,6 +2142,45 @@ pub extern "C" fn rt_mutarray_generate_drop(p: *mut Vm, capacity: Value, factory
+     generate(p, capacity, factory, Some(d), "mutable_array#generate_drop")
+ }
+ 
++/// EXPERIMENT (HASH-TABLE-EXPERIMENT.md, "Runtime experiments"):
++/// `mutable_array::probe_linear(hashes, keys, h, key)`, core/mutarray.tcl's
++/// probeLinear: the slot of KEY along hash H's linear probing sequence over
++/// the stored hashes (negative = empty) and keys, or -1 - the first empty
++/// slot, or -1 - capacity when no slot is empty.
++#[unsafe(no_mangle)]
++pub extern "C" fn rt_mutarray_probe(p: *mut Vm, hashes: Value, keys: Value, h: Value, key: Value) -> Value {
++    let hs = mutarray_of(hashes).items();
++    let ks = mutarray_of(keys).items();
++    let cap = hs.len();
++    let Some(hv) = int_small(h) else { return vm(p).new_int(-1) };
++    if cap == 0 {
++        return make_small(-1);
++    }
++    let mut i = hv.rem_euclid(cap as i64) as usize;
++    for _ in 0..cap {
++        let stored = hs[i];
++        match int_small(stored) {
++            Some(s) if s < 0 => return make_small(-1 - i as i64),
++            Some(s) if s == hv => {
++                if i >= ks.len() {
++                    return index_not_found(p);
++                }
++                match equal(p, ks[i], key) {
++                    Ok(true) => return make_small(i as i64),
++                    Ok(false) => {}
++                    Err(()) => return NO_VALUE,
++                }
++            }
++            _ => {}
++        }
++        i += 1;
++        if i == cap {
++            i = 0;
++        }
++    }
++    make_small(-1 - cap as i64)
++}
++
+ #[unsafe(no_mangle)]
+ pub extern "C" fn rt_mutarray_capacity(p: *mut Vm, arr: Value) -> Value {
+     vm(p).new_int(mutarray_of(arr).items().len() as i64)
+@@ -2547,6 +2588,7 @@ pub fn apply_op(p: *mut Vm, op: OpCode, a: &[Value]) -> Value {
+         MutArrayFreezeProven => rt_mutarray_freeze_proven(p, a[0], a[1]),
+         MutArrayAllocate => rt_mutarray_allocate(p, a[0]),
+         MutArrayCapacity => rt_mutarray_capacity(p, a[0]),
++        MutArrayProbe => rt_mutarray_probe(p, a[0], a[1], a[2], a[3]),
+         MutArrayGet => rt_mutarray_get(p, a[0], a[1]),
+         MutArraySet => rt_mutarray_set(p, a[0], a[1], a[2]),
+         MutArrayCopy => rt_mutarray_copy(p, a[0], a[1], a[2], a[3], a[4]),
+@@ -2741,6 +2783,7 @@ pub fn helpers() -> Vec<(&'static str, usize, *const u8)> {
+         h!(rt_set_contains, 3),
+         h!(rt_mutarray_allocate, 2),
+         h!(rt_mutarray_capacity, 2),
++        h!(rt_mutarray_probe, 5),
+         h!(rt_mutarray_get, 3),
+         h!(rt_mutarray_get_proven, 3),
+         h!(rt_mutarray_set, 4),
+-- 
+2.43.0
+

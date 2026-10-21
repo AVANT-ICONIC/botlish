@@ -54,8 +54,8 @@
 #
 # It ports tests/refinement-validators.test
 # (register_refinement_validators_tests), tests/proven-bounds.test
-# (register_proven_bounds_tests: the source-observable outcomes; its verdict
-# structure, NIR, CLIF and Tcl-compiler code stay in Tcl) and
+# (register_proven_bounds_tests, register_bounds_theorem_tests: the source-
+# observable outcomes; its verdicts, NIR, CLIF and Tcl code stay in Tcl) and
 # tests/proof-loop-intervals.test (register_proof_loop_intervals_tests: each
 # program of its kinds lists is one test, an accepted one a value test of
 # what it computes, a rejected one its first diagnostic). The Tcl tests of
@@ -1740,9 +1740,169 @@ fn register_proof_loop_intervals_tests():
     register_loop_interval_scope_tests()
 
 # ---------------------------------------------------------------------------
+# proven-bounds.test, its bounds theorems: what each one proves, observably
+# (the source half of its tests; the verdicts and the NIR stay in Tcl). New
+# tests go at the end of the file: the rejections above pin their lines.
+
+# The field-path tests' table: a field path written twice is one value.
+struct BoundsTable:
+    slots: MutableArray[int]
+    names: List[str]
+
+fn register_bounds_theorem_tests():
+    # bounds-values-agree-reduced: an index reduced mod, or masked by, the
+    # container's own size needs no handler (mod returns only for a nonzero
+    # divisor, then 0 <= r < |d|; a mask m >= 0 keeps bit_and(h, m) in
+    # 0..m), and computes the same values on every backend for negative
+    # indices, indices beyond a machine word, a capacity that is no power of
+    # two and an empty array.
+    fn reduced_mod() errors compiler::CompilerError:
+        static compile:
+            fn pick(a: MutableArray[int], h: int) -> int:
+                mutable_array::at(a, mod(h, mutable_array::capacity(a)))
+            a = mutable_array::from_list([10, 20, 30, 40, 50])
+            loop h in [0, 7, -1, -8, 4611686018427387904, -1180591620717411303424]:
+                pick(a, h)
+    test::value("bounds-values-agree-reduced/mod", [10, 30, 50, 30, 50, 20], reduced_mod)
+
+    fn reduced_mask() errors compiler::CompilerError:
+        static compile:
+            fn masked(a: MutableArray[int], h: int) -> int:
+                if mutable_array::capacity(a) == 0:
+                    return -1
+                mutable_array::at(a, bit_and(h, mutable_array::capacity(a) - 1))
+            a = mutable_array::from_list([10, 20, 30, 40, 50])
+            loop h in [0, 7, -1, -8, 4611686018427387904, -1180591620717411303424]:
+                masked(a, h)
+    test::value("bounds-values-agree-reduced/mask", [10, 50, 50, 10, 10, 10], reduced_mask)
+
+    fn reduced_mask_empty() errors compiler::CompilerError:
+        static compile:
+            fn masked(a: MutableArray[int], h: int) -> int:
+                if mutable_array::capacity(a) == 0:
+                    return -1
+                mutable_array::at(a, bit_and(h, mutable_array::capacity(a) - 1))
+            e = mutable_array::create(0, 0)
+            loop h in [0, 7, -1, -8, 4611686018427387904, -1180591620717411303424]:
+                masked(e, h)
+    test::value("bounds-values-agree-reduced/mask-empty", [-1, -1, -1, -1, -1, -1], reduced_mask_empty)
+
+    fn reduced_list() errors compiler::CompilerError:
+        static compile:
+            fn item(xs: List[int], h: int) -> int:
+                list::at(xs, h.mod(list::length(xs)))
+            loop h in [0, 7, -1, -8, 4611686018427387904, -1180591620717411303424]:
+                item([1, 2, 3], h)
+    test::value("bounds-values-agree-reduced/list", [1, 2, 3, 2, 2, 3], reduced_list)
+
+    fn reduced_set() errors compiler::CompilerError:
+        static compile:
+            fn put(a: MutableArray[int], h: int) -> MutableArray[int]:
+                a.set(h.mod(a.capacity()), h)
+                a
+            c = put(put(put(mutable_array::create(3, 0), -1), 4), 9)
+            loop i from 0 to mutable_array::capacity(c):
+                mutable_array::at(c, i)
+    test::value("bounds-values-agree-reduced/set", [9, 4, -1], reduced_set)
+
+    # bounds-reduced-empty-container-stays-known-error (its source half): a
+    # container of known size 0 has no element, so a read of it whose index
+    # is reduced by that size (never reached: mod fails with ARITHMETIC
+    # first) stays KnownError rather than becoming vacuously proven.
+    fn empty_array_reduced() errors compiler::CompilerError:
+        static compile:
+            fn f(h: int):
+                a = mutable_array::allocate(0)
+                mutable_array::at(a, mod(h, mutable_array::capacity(a)))
+            0
+    test::rejects("bounds-reduced-empty-container-stays-known-error/array", compiler::DiagnosticCode::KnownError, empty_array_reduced)
+
+    fn empty_list_reduced() errors compiler::CompilerError:
+        static compile:
+            fn f(h: int):
+                xs = []
+                list::at(xs, h.mod(list::length(xs)))
+            0
+    test::rejects("bounds-reduced-empty-container-stays-known-error/list", compiler::DiagnosticCode::KnownError, empty_list_reduced)
+
+    # bounds-values-agree-field-path: accesses through field paths proven
+    # by the same path's size need no handler and compute the same values
+    # on every backend: in-place writes reduced mod the field's capacity,
+    # guarded reads of every index around it, a reduced List read and a
+    # lockstep loop over a field.
+    fn field_path_reads() errors compiler::CompilerError:
+        static compile:
+            fn store(t: BoundsTable, h: int) -> BoundsTable:
+                t.slots.set(h.mod(mutable_array::capacity(t.slots)), h)
+                t
+            fn read(t: BoundsTable, i: int) -> int:
+                if i < 0 or i >= mutable_array::capacity(t.slots):
+                    return -1
+                mutable_array::at(t.slots, i)
+            t = store(store(store(BoundsTable {slots: mutable_array::create(5, 0), names: ["a", "bb", "ccc"]}, -3), 11), 1180591620717411303424)
+            loop i from -1 to 6:
+                read(t, i)
+    test::value("bounds-values-agree-field-path/write-read", [-1, 0, 11, -3, 0, 1180591620717411303424, -1], field_path_reads)
+
+    fn field_path_list() errors compiler::CompilerError:
+        static compile:
+            fn name(t: BoundsTable, h: int) -> str:
+                list::at(t.names, h.mod(list::length(t.names)))
+            t = BoundsTable {slots: mutable_array::create(5, 0), names: ["a", "bb", "ccc"]}
+            loop h in [0, -1, 4, 1180591620717411303424]:
+                name(t, h)
+    test::value("bounds-values-agree-field-path/list", ["a", "ccc", "bb", "bb"], field_path_list)
+
+    fn field_path_lockstep() errors compiler::CompilerError:
+        static compile:
+            fn widths(t: BoundsTable) -> List[int]:
+                loop x in t.names and k from 0 to list::length(t.names):
+                    str::length(x) + k
+            widths(BoundsTable {slots: mutable_array::create(5, 0), names: ["a", "bb", "ccc"]})
+    test::value("bounds-values-agree-field-path/lockstep", [1, 3, 5], field_path_lockstep)
+
+    # bounds-field-path-lockstep (its source half): a counted clause one
+    # longer than a field's List is provably unequal, and the diagnostic
+    # names the field path.
+    fn field_path_lockstep_unequal() errors compiler::CompilerError:
+        static compile:
+            fn widths(t: BoundsTable) -> List[int]:
+                loop x in t.names and k from 0 to list::length(t.names) + 1:
+                    str::length(x) + k
+            0
+    test::rejects_containing("bounds-field-path-lockstep/unequal", compiler::DiagnosticCode::LockstepUnequal, "clause 1 iterates length(t.names) times but clause 2 iterates length(t.names) + 1 times", field_path_lockstep_unequal)
+
+    # bounds-values-agree-guarded-local: reads and writes at computed locals
+    # proven by a guard need no handler and compute the same values on
+    # every backend, in range, just outside it on both sides and far outside.
+    fn guarded_local_read() errors compiler::CompilerError:
+        static compile:
+            fn after(xs: List[int], i: int) -> int:
+                t = i + 1
+                if t < 0 or t >= list::length(xs):
+                    return -1
+                list::at(xs, t)
+            loop i in [-3, -2, -1, 0, 1, 2, 3, 1180591620717411303424]:
+                after([10, 20, 30], i)
+    test::value("bounds-values-agree-guarded-local/after", [-1, -1, 10, 20, 30, -1, -1, -1], guarded_local_read)
+
+    fn guarded_local_write() errors compiler::CompilerError:
+        static compile:
+            fn bump(a: MutableArray[int], i: int) -> MutableArray[int]:
+                j = i * 2
+                if j >= 0 and j < mutable_array::capacity(a):
+                    mutable_array::set(a, j, mutable_array::at(a, j) + 1)
+                a
+            b = bump(bump(bump(bump(mutable_array::create(5, 0), 0), 2), 1), -1)
+            loop k from 0 to mutable_array::capacity(b):
+                mutable_array::at(b, k)
+    test::value("bounds-values-agree-guarded-local/bump", [1, 0, 1, 0, 1], guarded_local_write)
+
+# ---------------------------------------------------------------------------
 
 with context test::suite()
 register_refinement_validators_tests()
 register_proven_bounds_tests()
 register_proof_loop_intervals_tests()
+register_bounds_theorem_tests()
 test::report()

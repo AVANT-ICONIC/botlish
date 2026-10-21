@@ -1103,6 +1103,10 @@ C-BINDGEN-LAYOUTS.md) have equal rows and are two targets. Keep it so:
   exception goes). The registers are counted per kind, as AAPCS64 does:
   the eight that keep it are integer-register parameters, never the first
   eight positions (doubles take v0-v7; `cf-abi-doubles-before-integers`).
+  The one register Botlish places itself is x86-64 System V's `%al` of a
+  variadic call (Cranelift cannot give a value a register at a call): the
+  two-instruction stub `va_stub` (Variadics, below). Never extend it to
+  another register or argument.
 * A test that compiles a Linux program (one importing `linux::*`) compiles
   it for `linuxTarget` (tests/helpers.tcl: the host's own on Linux) and runs
   it on `backendsFor` its HIR's target; the golden runner, the warning
@@ -1901,6 +1905,62 @@ what they cover. The BoringSSL acceptance tests need the package-owned
 static BoringSSL: `tclsh9.0 tests/cffi/boringssl.tcl` builds it once into
 Botlish's cache (never the repository); without it they are skipped.
 `bench/c-ffi.tcl` regenerates the performance report.
+
+## Variadics
+
+Variadic parameters and variadic C calls (VARIADICS-VERTICAL-SLICE-1.md) are
+two things with one marker word. Keep both as they are:
+
+* **Botlish: `fn f(FIXED..., variadic xs: List[T])`** (or a bare `List`,
+  whose element each call imprints) is the last parameter binding (only a
+  resume clause follows), at most once. The body sees an ordinary
+  immutable List; resolution (`hir/variadic.tcl`'s `Arguments`) collects a
+  call's trailing arguments into one ordinary list construction, the
+  call's last argument, and records `variadic {fixed N count K}` on it.
+  Never add a variadic value, type, runtime representation, spread,
+  tuple, heterogeneous sequence or per-position type, never make a bare
+  List `List[any]`, and never let a call through a value collect (a value
+  has no declaration: it passes the List). Each trailing argument is
+  proven in the element type by its own proof (`DiagnoseElements`), never
+  the List literal's static type.
+* **C: `extern c fn f(FIXED..., variadic) -> R`**, a bare marker after at
+  least one fixed parameter (never an `...` token). Each call's trailing
+  arguments are held to exactly one C ABI type each
+  (`hir::cabi::VariadicArgument`: a C scalar, `ffi::c::Bool`, Float64,
+  `Ptr`, `FnPtr`; a plain Int, a String, a List, a struct, byte storage or
+  an erased value refused), promoted by `core::cabi::promoted` (C's default
+  argument promotions, target-relative), recorded on the call (`cvarargs`)
+  and lowered to a per-call machine signature (`codegen/clif.rs`'s
+  `c_call_signature`): x86-64 System V through the `%al` stub, Linux
+  AArch64 as AAPCS64, Apple AArch64 with the free x0-x7/v0-v7 padded so
+  every trailing argument is on the stack in an 8-byte slot. Never build
+  a runtime argument list, use libffi, read a format string, infer
+  variadicity from a name, a format attribute or a library, give a trailing
+  pointer a contract (it is a direct edge, `hir/direct.tcl`), or lower a
+  variadic call on a convention the table has not checked (any other is a
+  codegen error). A `va_list` is a fixed parameter of a type nothing
+  represents; a variadic callback type stays unsupported.
+
+If you change the Botlish side (the grammar's `ParamSections`/
+`VariadicEntry`, `hir/variadic.tcl`, the variadic cases of hir/resolve.tcl,
+hir/flags.tcl, hir/range.tcl, hir/format.tcl, hir/read.tcl, hir/traits.tcl,
+hir/contexts.tcl, hir/warnings.tcl, surface/lower.tcl), run
+`tests/variadics.test`, `audit/variadics/tools/fuzz.tcl` (several seeds,
+once with `-gc-stress 1`) and `audit/variadics/tools/mutate.tcl` (every
+mutant in its `mutants.txt` must still apply and be killed: update a
+mutant's text when you change the code it mutates, keeping it a mutant of
+the same rule). If you change the C side (ExternDecl's marker,
+`VariadicArgument`, `promoted`/`promotedBool`, the variadic cases of
+hir/borrow.tcl, hir/direct.tcl, hir/foreign.tcl, native/lower.tcl's
+`varargs=`, nir.rs's `VarArg`, `c_call_signature`, `vararg_value`,
+`va_stub`), run `tests/c-ffi.test` (its `cf-va-*`, also under
+`BOTLISH_NATIVE_GC_STRESS=1`), `audit/c-ffi/tools/fuzz.tcl`,
+`audit/c-ffi/tools/mutate.tcl -only va-...` (the `va-*` mutants; the
+AArch64 ones apply on an AArch64 host), `cargo test --release
+--manifest-path native/Cargo.toml --bin botlish-native ffi_` (the
+`x86_64_variadic_tests` here; the Apple and Linux AArch64 placements on an
+AArch64 host: CI's arm64 workflow and the macOS smoke job), and the
+binding generator's checks for a change to what it emits (next sections).
 
 ## C header archaeology (a research instrument)
 

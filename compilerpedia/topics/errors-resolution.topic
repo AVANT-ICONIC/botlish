@@ -180,8 +180,9 @@ code: CORE SEMANTIC ARITY
 
 == MEANING
 A call must pass exactly as many arguments as its callee has parameters
-(flags are not counted: they are written as `:name`). A Botlish function
-has no default arguments, optional parameters or variadic parameters.
+(flags are not counted: they are written as `:name`), or, to a variadic
+function (concept.variadics), at least its fixed ones. A Botlish function
+has no default arguments or optional parameters.
 
 What is checked when:
 

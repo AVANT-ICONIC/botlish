@@ -1,0 +1,160 @@
+listmap	int	716	presized	5832.1	20.9	3.00
+listmap	int	716	build	5832.1	20.9	3.00
+listmap	int	1024	presized	8296.1	24.2	3.00
+listmap	int	1024	build	8296.1	24.2	3.00
+listmap	int	4096	presized	32872.0	24.1	3.00
+listmap	int	4096	build	32872.0	24.1	3.00
+listmap	int	11468	presized	91848.0		3.00
+listmap	int	11468	build	91848.0		3.00
+listmap	int	16384	presized	131176.0		3.00
+listmap	int	16384	build	131176.0		3.00
+chain0	int	716	presized	146.7	78.5	4.01
+chain0	int	716	build	171.0	47.7	4.01
+chain0	int	1024	presized	146.0	83.4	4.00
+chain0	int	1024	build	190.4	50.3	4.00
+chain0	int	4096	presized	145.5	83.9	4.00
+chain0	int	4096	build	380.4	48.7	4.00
+chain0	int	11468	presized	145.9		4.00
+chain0	int	11468	build	841.8		4.00
+chain0	int	16384	presized	146.2		4.00
+chain0	int	16384	build	1149.0		4.00
+ht0	int	716	presized	69.0	57.5	0.01
+ht0	int	716	build	140.4	92.9	0.06
+ht0	int	1024	presized	48.3	40.2	0.00
+ht0	int	1024	build	98.2	64.9	0.04
+ht0	int	4096	presized	48.1	40.1	0.00
+ht0	int	4096	build	96.7	64.2	0.01
+ht0	int	11468	presized	68.6		0.00
+ht0	int	11468	build	137.4		0.01
+ht0	int	16384	presized	48.0		0.00
+ht0	int	16384	build	96.2		0.00
+chain	int	716	presized	101.6	83.0	2.01
+chain	int	716	build	164.3	84.6	3.46
+chain	int	1024	presized	99.2	80.3	2.00
+chain	int	1024	build	143.1	80.8	3.02
+chain	int	4096	presized	100.0	79.1	2.00
+chain	int	4096	build	143.3	79.2	3.01
+chain	int	11468	presized	102.2		2.00
+chain	int	11468	build	164.4		3.43
+chain	int	16384	presized	100.1		2.00
+chain	int	16384	build	143.7		3.00
+lpa	int	716	presized	34.7	23.2	0.01
+lpa	int	716	build	71.3	41.4	0.06
+lpa	int	1024	presized	48.3	40.2	0.00
+lpa	int	1024	build	98.1	64.9	0.04
+lpa	int	4096	presized	48.1	40.1	0.00
+lpa	int	4096	build	96.7	64.2	0.01
+lpa	int	11468	presized	34.3		0.00
+lpa	int	11468	build	68.8		0.01
+lpa	int	16384	presized	48.0		0.00
+lpa	int	16384	build	96.2		0.00
+rh	int	716	presized	34.7	23.2	0.01
+rh	int	716	build	71.3	41.4	0.06
+rh	int	1024	presized	48.3	40.2	0.00
+rh	int	1024	build	98.1	64.9	0.04
+rh	int	4096	presized	48.1	40.1	0.00
+rh	int	4096	build	96.7	64.2	0.01
+rh	int	11468	presized	34.3		0.00
+rh	int	11468	build	68.8		0.01
+rh	int	16384	presized	48.0		0.00
+rh	int	16384	build	96.2		0.00
+cd	int	716	presized	46.2	0.2	0.01
+cd	int	716	build	58.4	23.5	0.03
+cd	int	1024	presized	40.3	8.2	0.01
+cd	int	1024	build	57.0	40.4	0.02
+cd	int	4096	presized	40.1	8.0	0.00
+cd	int	4096	build	56.3	40.1	0.01
+cd	int	11468	presized	45.7		0.00
+cd	int	11468	build	57.3		0.00
+cd	int	16384	presized	40.0		0.00
+cd	int	16384	build	56.1		0.00
+sorted	int	716	presized	8948.3	40.5	8.01
+sorted	int	716	build	8948.2	40.5	8.01
+sorted	int	1024	presized	12644.2	40.4	8.00
+sorted	int	1024	build	12644.2	40.4	8.00
+sorted	int	4096	presized	49508.0	40.1	8.00
+sorted	int	4096	build	49508.0	40.1	8.00
+sorted	int	11468	presized	137972.0		8.00
+sorted	int	11468	build	137972.0		8.00
+sorted	int	16384	presized	196964.0		8.00
+sorted	int	16384	build	196964.0		8.00
+listmap	str	716	presized	5832.1	20.9	3.00
+listmap	str	716	build	5832.1	20.9	3.00
+listmap	str	1024	presized	8296.1	24.2	3.00
+listmap	str	1024	build	8296.1	24.2	3.00
+listmap	str	4096	presized	32872.0	24.1	3.00
+listmap	str	4096	build	32872.0	24.1	3.00
+listmap	str	11468	presized	91848.0		3.00
+listmap	str	11468	build	91848.0		3.00
+listmap	str	16384	presized	131176.0		3.00
+listmap	str	16384	build	131176.0		3.00
+chain0	str	716	presized	146.3	79.8	4.01
+chain0	str	716	build	171.0	47.7	4.01
+chain0	str	1024	presized	145.9	83.6	4.00
+chain0	str	1024	build	191.4	50.3	4.00
+chain0	str	4096	presized	146.2	82.7	4.00
+chain0	str	4096	build	382.1	48.7	4.00
+chain0	str	11468	presized	145.9		4.00
+chain0	str	11468	build	841.9		4.00
+chain0	str	16384	presized	145.8		4.00
+chain0	str	16384	build	1150.7		4.00
+ht0	str	716	presized	69.0	57.5	0.01
+ht0	str	716	build	140.4	92.9	0.06
+ht0	str	1024	presized	48.3	40.2	0.00
+ht0	str	1024	build	98.2	64.9	0.04
+ht0	str	4096	presized	48.1	40.1	0.00
+ht0	str	4096	build	96.7	64.2	0.01
+ht0	str	11468	presized	68.6		0.00
+ht0	str	11468	build	137.4		0.01
+ht0	str	16384	presized	48.0		0.00
+ht0	str	16384	build	96.2		0.00
+chain	str	716	presized	102.0	82.3	2.01
+chain	str	716	build	165.3	83.9	3.46
+chain	str	1024	presized	99.9	79.7	2.00
+chain	str	1024	build	144.1	80.1	3.02
+chain	str	4096	presized	99.9	79.4	2.00
+chain	str	4096	build	143.7	79.5	3.01
+chain	str	11468	presized	102.2		2.00
+chain	str	11468	build	164.5		3.43
+chain	str	16384	presized	99.8		2.00
+chain	str	16384	build	143.4		3.00
+lpa	str	716	presized	34.7	23.2	0.01
+lpa	str	716	build	71.3	41.4	0.06
+lpa	str	1024	presized	48.3	40.2	0.00
+lpa	str	1024	build	98.1	64.9	0.04
+lpa	str	4096	presized	48.1	40.1	0.00
+lpa	str	4096	build	96.7	64.2	0.01
+lpa	str	11468	presized	34.3		0.00
+lpa	str	11468	build	68.8		0.01
+lpa	str	16384	presized	48.0		0.00
+lpa	str	16384	build	96.2		0.00
+rh	str	716	presized	34.7	23.2	0.01
+rh	str	716	build	71.3	41.4	0.06
+rh	str	1024	presized	48.3	40.2	0.00
+rh	str	1024	build	98.1	64.9	0.04
+rh	str	4096	presized	48.1	40.1	0.00
+rh	str	4096	build	96.7	64.2	0.01
+rh	str	11468	presized	34.3		0.00
+rh	str	11468	build	68.8		0.01
+rh	str	16384	presized	48.0		0.00
+rh	str	16384	build	96.2		0.00
+cd	str	716	presized	46.2	0.2	0.01
+cd	str	716	build	58.4	23.5	0.03
+cd	str	1024	presized	40.3	8.2	0.01
+cd	str	1024	build	57.0	40.4	0.02
+cd	str	4096	presized	40.1	8.0	0.00
+cd	str	4096	build	56.3	40.1	0.01
+cd	str	11468	presized	45.7		0.00
+cd	str	11468	build	57.3		0.00
+cd	str	16384	presized	40.0		0.00
+cd	str	16384	build	56.1		0.00
+sorted	str	716	presized	8948.3	40.5	8.01
+sorted	str	716	build	8948.2	40.5	8.01
+sorted	str	1024	presized	12644.2	40.4	8.00
+sorted	str	1024	build	12644.2	40.4	8.00
+sorted	str	4096	presized	49508.0	40.1	8.00
+sorted	str	4096	build	49508.0	40.1	8.00
+sorted	str	11468	presized	137972.0		8.00
+sorted	str	11468	build	137972.0		8.00
+sorted	str	16384	presized	196964.0		8.00
+sorted	str	16384	build	196964.0		8.00

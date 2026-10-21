@@ -28,6 +28,7 @@ at its top ("Superseded by ...", "Partially superseded by ...").
 - [ELIF.md](ELIF.md) -- `elif`
 - [METHOD-SUGAR.md](METHOD-SUGAR.md) -- method-call sugar
 - [FLAGS.md](FLAGS.md) -- flag parameters
+- [VARIADICS-VERTICAL-SLICE-1.md](VARIADICS-VERTICAL-SLICE-1.md) -- variadic parameters (`variadic xs: List[T]`) and variadic C calls (`extern c fn f(fixed, variadic)`), with the binding generator's `...` (completion report)
 - [MULTI-VALUE-RESULTS.md](MULTI-VALUE-RESULTS.md) -- multi-value results: name the parts
 - [MUTUAL-RECURSION.md](MUTUAL-RECURSION.md) -- mutual recursion: `mutual:` groups
 - [STRUCTURAL-FUNCTION-TYPES.md](STRUCTURAL-FUNCTION-TYPES.md) -- structural function types (`Fn{...}`)
@@ -171,6 +172,7 @@ at its top ("Superseded by ...", "Partially superseded by ...").
 - [COMPILER-BOTTLENECKS.md](COMPILER-BOTTLENECKS.md) -- compiler performance bugs: what to tackle next
 - [RANGE-FIXPOINT-SCALING.md](RANGE-FIXPOINT-SCALING.md) -- range fixpoint scaling
 - [CRANELIFT-WASM.md](CRANELIFT-WASM.md) -- WebAssembly for the Cranelift backend
+- [REACT-NATIVE-TARGET-CENSUS.md](REACT-NATIVE-TARGET-CENSUS.md) -- a React Native target census: Botlish functions as a Pure C++ TurboModule through a generated C++ adapter over a C ABI, the React Native 0.88 contract (Codegen, Android pure C++ autolinking, iOS module providers), what library mode, embedding and the mobile targets need in core, the plugin seams, a Tcl package generator, and the host (Hermes) and Android/iOS CI probes (material: `audit/react-native/`)
 - [VM-OPCODE-VIABILITY.md](VM-OPCODE-VIABILITY.md) -- a register bytecode compiled from NIR
 - [NATIVE-BOTLISH-LOWERING-IMPL.md](NATIVE-BOTLISH-LOWERING-IMPL.md) -- native lowering written in Botlish: what it would take
 
@@ -245,6 +247,8 @@ Botlish to find what the language, library, compiler and tools need.
 - [2048-ENGINE-WORKLOAD.md](2048-ENGINE-WORKLOAD.md) -- a deterministic 2048 engine (`examples/games/2048/`), full-discovery baseline: findings, the GC root-slot fix it found, and what to fix before the restricted paired run
 - [POST-2048-PRODUCT-FIXES.md](POST-2048-PRODUCT-FIXES.md) -- the three product failures fixed before the paired run (application modules, native program output under main.tcl, the interpreter's recursion limit), and the findings deliberately left open
 - [DIAGNOSTIC-RECOVERY.md](DIAGNOSTIC-RECOVERY.md) -- after the first 15-puzzle run: failed method sugar is poison and the explicit spelling's MISSING-IMPORT (never `any`), one compilation reports every independent error (past resolution failures, a call's whole unhandled set, every rejected reference), and one malformed construct is one error; the diagnostic-efficiency corpus
+- [HASH-TABLE-EXPERIMENT.md](HASH-TABLE-EXPERIMENT.md) -- hash tables, set membership and the compiler/runtime division of labor: sixteen Botlish table variants against a Rust reference of the same algorithms, five general compiler prototypes (value-semantics precision, inline arrays, raw `mod`, an allocation-free hash, bounds theorems), a probe primitive measured and rejected, constant membership as a compiler representation choice, the adversarial review that found and fixed twelve soundness bugs, and the answers to the milestone's twelve questions (`audit/hash-table/`)
+- [HASH-TABLE-COMPILER-PRESSURE.md](HASH-TABLE-COMPILER-PRESSURE.md) -- its catalogue: every compiler and runtime deficiency the experiment found (VS, CP, CG, RO, CO, RT, AR entries), each with its minimal source, evidence, consequence, generality, candidate fix and, where prototyped, the result
 
 ## Audits, censuses and investigations
 

@@ -59,6 +59,69 @@ extern c fn SDL_SetLogPriorityPrefix(
     prefix: ffi::c::Ptr[ffi::c::Char]
 ) -> ffi::c::Bool
 
+# C: void SDL_Log(const char *fmt, ...)
+extern c fn SDL_Log(
+    fmt: ffi::c::Ptr[ffi::c::Char],
+    variadic
+) -> unit
+
+# C: void SDL_LogTrace(int category, const char *fmt, ...)
+extern c fn SDL_LogTrace(
+    category: ffi::c::Int,
+    fmt: ffi::c::Ptr[ffi::c::Char],
+    variadic
+) -> unit
+
+# C: void SDL_LogVerbose(int category, const char *fmt, ...)
+extern c fn SDL_LogVerbose(
+    category: ffi::c::Int,
+    fmt: ffi::c::Ptr[ffi::c::Char],
+    variadic
+) -> unit
+
+# C: void SDL_LogDebug(int category, const char *fmt, ...)
+extern c fn SDL_LogDebug(
+    category: ffi::c::Int,
+    fmt: ffi::c::Ptr[ffi::c::Char],
+    variadic
+) -> unit
+
+# C: void SDL_LogInfo(int category, const char *fmt, ...)
+extern c fn SDL_LogInfo(
+    category: ffi::c::Int,
+    fmt: ffi::c::Ptr[ffi::c::Char],
+    variadic
+) -> unit
+
+# C: void SDL_LogWarn(int category, const char *fmt, ...)
+extern c fn SDL_LogWarn(
+    category: ffi::c::Int,
+    fmt: ffi::c::Ptr[ffi::c::Char],
+    variadic
+) -> unit
+
+# C: void SDL_LogError(int category, const char *fmt, ...)
+extern c fn SDL_LogError(
+    category: ffi::c::Int,
+    fmt: ffi::c::Ptr[ffi::c::Char],
+    variadic
+) -> unit
+
+# C: void SDL_LogCritical(int category, const char *fmt, ...)
+extern c fn SDL_LogCritical(
+    category: ffi::c::Int,
+    fmt: ffi::c::Ptr[ffi::c::Char],
+    variadic
+) -> unit
+
+# C: void SDL_LogMessage(int category, SDL_LogPriority priority, const char *fmt, ...)
+extern c fn SDL_LogMessage(
+    category: ffi::c::Int,
+    priority: ffi::c::UInt,
+    fmt: ffi::c::Ptr[ffi::c::Char],
+    variadic
+) -> unit
+
 # C: SDL_LogOutputFunction SDL_GetDefaultLogOutputFunction(void)
 extern c fn SDL_GetDefaultLogOutputFunction(
     

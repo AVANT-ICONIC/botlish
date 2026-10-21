@@ -585,6 +585,18 @@ pub enum OpCode {
     RIAnd,
     RIOr,
     RIXor,
+    /// Raw (untagged) Euclidean modulo (IMod's 0 <= result < |b|),
+    /// native/lower.tcl's RawEligibleCall ("Euclidean mod"): emitted only
+    /// when range analysis proves both operands small. The result of two
+    /// small operands is small again (|result| < |b| <= 2^62), so neither
+    /// form allocates or calls a helper on its success path: codegen
+    /// lowers them to `srem` and the fix-up `r < 0 ? r + |b| : r`. RIMod
+    /// tests the divisor for 0 first and raises IMod's own ARITHMETIC error
+    /// (`op_may_error`); RIModTotal is emitted only where the divisor's
+    /// Range excludes 0, so it has no test and no error exit -- the same
+    /// per-opcode split as SetContainsTotal's.
+    RIMod,
+    RIModTotal,
     /// ShortString1 (SHORT-STRING.md): a String the compiler proved has at
     /// most one character, carried as one signed i64 -- `-1` is the empty
     /// String, `0..=0x10FFFF` (never a surrogate) is the one Unicode scalar
@@ -871,6 +883,8 @@ op_spellings! {
     "riand" => RIAnd,
     "rior" => RIOr,
     "rixor" => RIXor,
+    "rimod" => RIMod,
+    "rimodtotal" => RIModTotal,
     "strtoshort" => StrToShort,
     "shorttostr" => ShortToStr,
     "shortlen" => ShortLen,
@@ -963,6 +977,7 @@ impl OpCode {
     pub fn raw_result(self) -> bool {
         matches!(self, OpCode::RUnbox | OpCode::RIAdd | OpCode::RISub | OpCode::RIMul
             | OpCode::RIShr | OpCode::RIShl | OpCode::RIAnd | OpCode::RIOr | OpCode::RIXor
+            | OpCode::RIMod | OpCode::RIModTotal
             | OpCode::ShortLen | OpCode::AsciiLen)
     }
 
@@ -970,7 +985,7 @@ impl OpCode {
     pub fn raw_operands(self) -> bool {
         use OpCode::*;
         matches!(self, RBox | RIAdd | RISub | RIMul | RILt | RILe | RIGt | RIGe | RIEq | RIShr | RIShl
-            | RIAnd | RIOr | RIXor)
+            | RIAnd | RIOr | RIXor | RIMod | RIModTotal)
     }
 
     /// The physical kind the operand at position I of OP must have.
@@ -1096,7 +1111,15 @@ pub enum Inst {
     /// place (the alias is an exposure). Always a safepoint: foreign code
     /// may reach the runtime (later, callbacks), so this frame's roots are
     /// in its stack map.
-    ForeignCall { dst: Reg, foreign: u32, args: Vec<Reg>, exposed: Vec<bool>, discard: bool },
+    ///
+    /// A call of a variadic C function (VARIADICS-VERTICAL-SLICE-1.md; its
+    /// declaration's `variadic=1`) passes the declaration's fixed operands,
+    /// then one operand per `varargs=CLASS:PROMOTED,...` entry: the trailing
+    /// arguments, each decoded by its own class and passed as the class C's
+    /// default argument promotion makes it (VarArg). The call's machine
+    /// signature is this call's own (codegen::clif::c_call_signature); no
+    /// list or argument array exists at run time.
+    ForeignCall { dst: Reg, foreign: u32, args: Vec<Reg>, exposed: Vec<bool>, discard: bool, varargs: Vec<VarArg> },
     /// A direct call of a scalar-replacement companion function (a function
     /// with `results` > 1: see Function::results): like Call, but the
     /// callee returns several tagged Values at once -- the fields of a
@@ -1513,6 +1536,43 @@ pub enum CAbi {
     Void,
 }
 
+/// One trailing argument of a variadic C call (`foreigncall`'s `varargs=`
+/// entry `CLASS:PROMOTED`): CLASS the argument's own C ABI class (how its
+/// Botlish value is decoded: an Int, a bool, a Float64's number, a C address
+/// word), PROMOTED the class it is passed as after C's default argument
+/// promotion (hir::cabi::VariadicArgument): an `int` for every integer
+/// narrower than one and for `_Bool`, every other class itself. Never a
+/// narrow integer, a `_Bool` or void.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct VarArg {
+    pub class: CAbi,
+    pub promoted: CAbi,
+}
+
+impl VarArg {
+    /// `CLASS:PROMOTED`, when it is a promotion C performs: a floating-point
+    /// or pointer class unchanged, an integer or `_Bool` to an integer class
+    /// of at least 32 bits that holds every value of CLASS.
+    pub fn parse(text: &str) -> Option<VarArg> {
+        let (class, promoted) = text.split_once(':')?;
+        let class = CAbi::parse(class)?;
+        let promoted = CAbi::parse(promoted)?;
+        let integer = |c: CAbi| !matches!(c, CAbi::Bool | CAbi::F64 | CAbi::Ptr | CAbi::Void);
+        let valid = match class {
+            CAbi::Void => false,
+            CAbi::F64 | CAbi::Ptr => promoted == class,
+            CAbi::Bool => integer(promoted) && promoted.bits() >= 32,
+            _ => {
+                integer(promoted)
+                    && promoted.bits() >= 32
+                    && (promoted == class
+                        || (class.bits() < promoted.bits() && (promoted.signed() || !class.signed())))
+            }
+        };
+        valid.then_some(VarArg { class, promoted })
+    }
+}
+
 impl CAbi {
     pub fn parse(word: &str) -> Option<CAbi> {
         Some(match word {
@@ -1555,7 +1615,9 @@ impl CAbi {
 /// result is exactly the pointer argument I, that index -- every call checks
 /// it (the development assertion of the binding's contract,
 /// `rt_ffi_contract_violation`). NAME is the declaration's Botlish name, for
-/// messages.
+/// messages. VARIADIC (`variadic=1`, VARIADICS-VERTICAL-SLICE-1.md): PARAMS
+/// are the fixed parameters of a variadic C function, whose calls each pass
+/// their own trailing arguments (`foreigncall`'s `varargs=`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct ForeignDecl {
     pub symbol: String,
@@ -1563,6 +1625,7 @@ pub struct ForeignDecl {
     pub params: Vec<CAbi>,
     pub result: CAbi,
     pub alias: Option<u32>,
+    pub variadic: bool,
 }
 
 /// The compilation target a program was built for (`target "NAME"
@@ -2026,7 +2089,12 @@ fn parse_foreign(p: &Parser, tokens: &[Token]) -> Result<(u32, ForeignDecl), Nir
         None => None,
     };
     let name = kv.get("name").cloned().unwrap_or_else(|| symbol.clone());
-    Ok((index, ForeignDecl { symbol, name, params, result, alias }))
+    let variadic = match kv.get("variadic").map(String::as_str) {
+        None => false,
+        Some("1") if !params.is_empty() => true,
+        Some(_) => return p.err("foreign variadic=1 needs at least one fixed parameter"),
+    };
+    Ok((index, ForeignDecl { symbol, name, params, result, alias, variadic }))
 }
 
 fn parse_enum(p: &Parser, tokens: &[Token]) -> Result<(u32, EnumDecl), NirError> {
@@ -2397,8 +2465,17 @@ fn parse_inst(p: &Parser, tokens: &[Token], program: &Program) -> Result<Inst, N
                 }
                 let mut exposed = vec![false; args.len()];
                 let mut discard = false;
+                let mut varargs = Vec::new();
                 for t in &tokens[j..] {
                     match t {
+                        Token::Pair(k, v) if k == "varargs" => {
+                            for w in v.split(',') {
+                                match VarArg::parse(w) {
+                                    Some(a) => varargs.push(a),
+                                    None => return p.err(format!("foreigncall varargs= entry \"{w}\" is no CLASS:PROMOTED of C's default argument promotion")),
+                                }
+                            }
+                        }
                         Token::Pair(k, v) if k == "exposed" => {
                             for w in v.split(',') {
                                 match w.parse::<usize>() {
@@ -2414,8 +2491,21 @@ fn parse_inst(p: &Parser, tokens: &[Token], program: &Program) -> Result<Inst, N
                 let Some(decl) = program.foreigns.get(foreign as usize) else {
                     return p.err(format!("foreigncall of undeclared foreign {foreign}"));
                 };
-                if decl.params.len() != args.len() {
-                    return p.err(format!("foreigncall of {} takes {} operand(s), got {}", decl.name, decl.params.len(), args.len()));
+                if !decl.variadic && !varargs.is_empty() {
+                    return p.err(format!("foreigncall of {}: varargs= of a C function that is not variadic", decl.name));
+                }
+                if decl.params.len() + varargs.len() != args.len() {
+                    return p.err(format!(
+                        "foreigncall of {} takes {} operand(s) ({} fixed, {} trailing), got {}",
+                        decl.name,
+                        decl.params.len() + varargs.len(),
+                        decl.params.len(),
+                        varargs.len(),
+                        args.len()
+                    ));
+                }
+                if exposed.iter().skip(decl.params.len()).any(|e| *e) {
+                    return p.err(format!("foreigncall of {}: a trailing argument is never an exposure", decl.name));
                 }
                 if let Some(i) = exposed.iter().zip(&decl.params).position(|(e, c)| *e && *c != CAbi::Ptr) {
                     return p.err(format!("foreigncall of {}: operand {i} is exposed at a non-pointer parameter", decl.name));
@@ -2423,7 +2513,7 @@ fn parse_inst(p: &Parser, tokens: &[Token], program: &Program) -> Result<Inst, N
                 if discard && !decl.alias.is_some_and(|a| exposed[a as usize]) {
                     return p.err(format!("foreigncall of {}: discard needs a result aliasing an exposed operand", decl.name));
                 }
-                Inst::ForeignCall { dst, foreign, args, exposed, discard }
+                Inst::ForeignCall { dst, foreign, args, exposed, discard, varargs }
             }
             "callmulti" => Inst::CallMulti { dsts, func: num(i)?, args: regs_from(i + 1)?, may_error: true, may_gc: true },
             "callenvmulti" => {

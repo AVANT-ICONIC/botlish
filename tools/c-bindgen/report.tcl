@@ -33,6 +33,9 @@ proc ::cbind::report::rows {model} {
         set sig ""
         if {$k in {direct alias thunk}} {
             set types [lmap q [dict get $e params] {ReportType $ids [dict get $q type]}]
+            if {[dict getdef $e variadic 0]} {
+                lappend types variadic
+            }
             set sig "; ([join $types {, }]) -> [ReportType $ids [dict get $e result type]]"
         }
         set lib [expr {[dict exists $e library] ? "; library [dict get $e library]" : ""}]

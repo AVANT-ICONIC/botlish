@@ -1,0 +1,111 @@
+# chain0 -- the bucketed visited set of the 15-puzzle application study
+# (github.com/mwagner-webdev/botlish-15-puzzle-zero-knowledge, branch
+# claude/upbeat-dirac-kyvw3t, src/solver.bot: `bucket_holds?`, `new_table`,
+# `table_capacity` and the bucket update in `search`), the "simple
+# separate-chaining prototype" the experiment's brief starts from, behind the
+# experiment's table interface (audit/hash-table/SPEC.md section 4).
+#
+# The pattern is the application's, unchanged: a fixed-capacity
+# MutableArray of immutable bucket Lists indexed by hash(key).mod(capacity),
+# capacity 2 * expected + 1 (64 below 16 expected entries) and never grown;
+# a lookup scans its bucket with a collecting loop (`loop other in bucket:
+# if ... != ...: continue`) and tests the collected List's length; an insert
+# appends to the bucket (`bucket.append(...)`, a new List) and stores it
+# back with `set`, through `mutable_array::get(slot, [])`. The study's set
+# held keys; a map entry here is a struct {key, value}, and the count lives
+# in a one-slot MutableArray[int] (SPEC.md section 7), the only additions.
+#
+# Because the capacity is fixed at fresh(), a table that outgrows it keeps
+# working with longer buckets: the benchmarks build it presized (SPEC.md's
+# `presized` mode) for the regime the application used.
+#
+# policy: none
+import list
+import mutable_array
+
+struct Entry:
+    key: any
+    value: any
+
+struct Table:
+    buckets: MutableArray[List[Entry]]
+    meta: MutableArray[int]
+
+fn table_capacity(expected: int) -> int:
+    if expected < 16:
+        return 64
+    2 * expected + 1
+
+fn fresh(expected: int) -> Table:
+    Table {buckets: mutable_array::create(table_capacity(expected), []), meta: mutable_array::create(1, 0)}
+
+fn slots(t: Table) -> int:
+    t.buckets.capacity()
+
+fn size(t: Table) -> int errors IndexNotFound:
+    t.meta.at(0)
+
+# The entries of BUCKET whose key is KEY (none or one).
+fn holding(bucket: List[Entry], key) -> List[Entry]:
+    loop other in bucket:
+        if other.key != key:
+            continue
+        other
+
+fn bucket_of(t: Table, key) -> List[Entry]:
+    t.buckets.get(hash(key).mod(t.buckets.capacity()), [])
+
+fn get(t: Table, key, default) errors IndexNotFound:
+    same = bucket_of(t, key).holding(key)
+    if same.length() > 0:
+        return same.at(0).value
+    default
+
+fn has?(t: Table, key) -> bool:
+    bucket_of(t, key).holding(key).length() > 0
+
+fn probes(t: Table, key) -> int:
+    list::length(bucket_of(t, key))
+
+# BUCKET with KEY's entry, if any, replaced by KEY -> VALUE.
+fn replaced(bucket: List[Entry], key, value) -> List[Entry]:
+    loop other in bucket:
+        if other.key != key:
+            other
+        else:
+            Entry {key: key, value: value}
+
+fn put(t: Table, key, value) -> Table errors IndexNotFound:
+    slot = hash(key).mod(t.buckets.capacity())
+    bucket = t.buckets.get(slot, [])
+    if bucket.holding(key).length() > 0:
+        t.buckets.set(slot, bucket.replaced(key, value))
+        return t
+    t.buckets.set(slot, bucket.append(Entry {key: key, value: value}))
+    t.meta.set(0, t.meta.at(0) + 1)
+    t
+
+fn drop(t: Table, key) -> Table errors IndexNotFound:
+    slot = hash(key).mod(t.buckets.capacity())
+    bucket = t.buckets.get(slot, [])
+    if bucket.holding(key).length() == 0:
+        return t
+    rest = loop other in bucket:
+        if other.key == key:
+            continue
+        other
+    t.buckets.set(slot, rest)
+    t.meta.set(0, t.meta.at(0) - 1)
+    t
+
+# ---------------------------------------------------------------------------
+# Bulk construction (SPEC.md section 4)
+
+# The table of KEYS[i] -> VALS[i], in order (a later duplicate's value wins).
+fn from_lists(keys: list, vals: list) -> Table errors IndexNotFound:
+    n = list::length(keys)
+    fn fill(t: Table, i: int) -> Table errors IndexNotFound:
+        if i >= n:
+            return t
+        fill(put(t, list::at(keys, i), list::at(vals, i)), i + 1)
+    fill(fresh(n), 0)

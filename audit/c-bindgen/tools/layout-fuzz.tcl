@@ -103,12 +103,14 @@ if {[string match windows-* $target]} {
 # reason REASON dep KEY}), in declaration order.
 proc drawProgram {p k} {
     set typedefs {}
-    for {set i 0} {$i < [between 1 3]} {incr i} {
+    set count [between 1 3]
+    for {set i 0} {$i < $count} {incr i} {
         set base [expr {[chance 0.5] ? [pick [dict keys $::stdints]] : [pick [dict keys $::scalars]]}]
         lappend typedefs [dict create name lf_t$i base $base]
     }
     set enums {}
-    for {set i 0} {$i < [between 0 2]} {incr i} {
+    set count [between 0 2]
+    for {set i 0} {$i < $count} {incr i} {
         set negative [chance 0.4]
         lappend enums [dict create name lf_e$i values [expr {$negative ? {-3 1 7} : {0 2 300}}]]
     }

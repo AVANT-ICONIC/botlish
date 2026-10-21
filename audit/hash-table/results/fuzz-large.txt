@@ -1,0 +1,46 @@
+# fuzz.tcl -impls "listmap chain0 chain lp lpc lpa lpmono lpfact lpmask lpint lpstr rh cd sorted" -seeds 2 -profiles large -backends "cranelift cranelift-generic"; then ht0 on cranelift
+listmap int: 2 traces x 2 backends
+listmap str: 2 traces x 2 backends
+listmap point: 2 traces x 2 backends
+chain0 int: 2 traces x 2 backends
+chain0 str: 2 traces x 2 backends
+chain0 point: 2 traces x 2 backends
+chain int: 2 traces x 2 backends
+chain str: 2 traces x 2 backends
+chain point: 2 traces x 2 backends
+lp int: 2 traces x 2 backends
+lp str: 2 traces x 2 backends
+lp point: 2 traces x 2 backends
+lpc int: 2 traces x 2 backends
+lpc str: 2 traces x 2 backends
+lpc point: 2 traces x 2 backends
+lpa int: 2 traces x 2 backends
+lpa str: 2 traces x 2 backends
+lpa point: 2 traces x 2 backends
+lpmono int: 2 traces x 2 backends
+lpmono str: 2 traces x 2 backends
+lpmono point: 2 traces x 2 backends
+lpfact int: 2 traces x 2 backends
+lpfact str: 2 traces x 2 backends
+lpfact point: 2 traces x 2 backends
+lpmask int: 2 traces x 2 backends
+lpmask str: 2 traces x 2 backends
+lpmask point: 2 traces x 2 backends
+lpint int: 2 traces x 2 backends
+lpstr str: 2 traces x 2 backends
+rh int: 2 traces x 2 backends
+rh str: 2 traces x 2 backends
+rh point: 2 traces x 2 backends
+cd int: 2 traces x 2 backends
+cd str: 2 traces x 2 backends
+cd point: 2 traces x 2 backends
+sorted int: 2 traces x 2 backends
+sorted str: 2 traces x 2 backends
+sorted point: 2 traces x 2 backends
+fuzz: 152 checks, 0 failures
+exit 0
+ht0 int: 2 traces x 1 backends
+ht0 str: 2 traces x 1 backends
+ht0 point: 2 traces x 1 backends
+fuzz: 6 checks, 0 failures
+exit 0

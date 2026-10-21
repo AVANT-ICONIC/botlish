@@ -342,7 +342,16 @@ proc hir::range::Mod {x d} {
     set dmn [dict get $d min]
     set dmx [dict get $d max]
     if {$dmn ne "-inf" && $dmx ne "+inf"} {
-        set m [expr {max(abs($dmn), abs($dmx))}]
+        # Not max(abs($dmn), abs($dmx)): Tcl 9.0.1's max() and min() abort
+        # the process (an invalid free) when an argument is a BigInt the
+        # expression computed, such as abs() of a bound below -2^63.
+        set lo [expr {abs($dmn)}]
+        set hi [expr {abs($dmx)}]
+        if {$lo > $hi} {
+            set m $lo
+        } else {
+            set m $hi
+        }
         if {$m > 0} {
             return [dict create min 0 max [expr {$m - 1}]]
         }
@@ -835,7 +844,8 @@ proc hir::range::SeedRange {hir e} {
 
 # InstanceId -> list of Range, one per parameter: the join of the literal
 # argument ranges every *other* used instance's direct calls pass it.
-# Self-recursive calls are excluded (Analyze below feeds those back).
+# Self-recursive calls are excluded, tail or not: hir/induction.tcl, the one
+# reader, counts every one of them as a step of its own proof.
 #
 # A dormant caller (DormantInstances) passes nothing.
 proc hir::range::ExternalSeeds {hir spec} {
@@ -1863,6 +1873,17 @@ proc hir::range::VerifyCall {hirVar ranges e node} {
                 # not one only a semantic-instance view breaks: recorded for
                 # consumers that must not trust it (native::prepareHir).
                 dict set hir violatedDeclared $paramBinding $arg
+            }
+            if {!$inferred && [dict exists $node variadic] && $i == [dict get $node variadic fixed]
+                    && [lindex $declaredType 0] eq "list"} {
+                # A variadic call's collected List (hir/variadic.tcl): each
+                # trailing argument is held to the element type by its own
+                # proof (a List literal's static type keeps no element's
+                # range), and the ones that break it are diagnosed at their
+                # own spelling; when every one is proven, so is the List.
+                hir::variadic::DiagnoseElements hir $e $node $arg [lindex $declaredType 1] \
+                    [hir::semantic::SourceName $hir $paramBinding] $ranges
+                continue
             }
             hir::Diagnose hir TYPE [format \
                 {argument for parameter "%s" cannot be proven to satisfy %s%s (argument type: %s%s)%s%s} \

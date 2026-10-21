@@ -1,0 +1,227 @@
+# Mutants of the hash-table experiment's sorted-by-hash implementation,
+# impl/sorted.bot (audit/hash-table/tools/mutate.tcl -file THIS; the format
+# of tools/mutants.txt): each a deliberate bug of the kind the brief names
+# (wrong bucket index, collision not checked, duplicate insert, resize
+# loses an entry, probe terminates too early, equality omitted after a hash
+# match) or of the representation's own invariants (the bisection's
+# bounds, the order the insertion keeps, the shift of the three parallel
+# structures by an insertion or a removal -- the Lists' collecting loops,
+# the value array's two-copy splices -- and the in-place replacement).
+#
+#   @@ NAME DESCRIPTION
+#   ## impl/IMPL.bot
+#   <<<<
+#   text to replace (must occur exactly once in the file)
+#   ====
+#   replacement
+#   >>>>
+#
+# Every mutant terminates: tools/mutate.tcl has no time limit, and a
+# bisection that stops shrinking its range runs forever natively (a real
+# tail call), so edits such as `mid = shift_right(lo + hi + 1, 1)` or
+# `lower_bound(hs, h, mid, hi)` are not listed.
+#
+# The brief's kinds that are equivalent, or do not exist, in this
+# representation, and what replaces them here:
+#
+#   * "wraparound broken" and "load threshold off by one": there is no
+#     probe sequence to wrap and no load factor or growth (`# policy:
+#     none`). Not listed.
+#   * "collision not checked" / "probe terminates too early" in the run
+#     scan (scan returning its start without walking the run): the scan
+#     walks past an entry only when its hash equals the key's and its key
+#     does not, a 61-bit hash collision of two keys of one kind, and none is
+#     known (tools/mutants.txt, "equality omitted after hash match"). So the
+#     run is never longer than one entry and the walk is unobservable. The
+#     early stop is listed for the bisection instead (one candidate left
+#     unexamined), the collision as the truncated-hash mutant below.
+#   * "equality omitted after hash match" (scan returning at the first
+#     equal hash): equivalent for the same reason, and present? checks the
+#     full stored hash anyway. Listed instead, as in mutants-chain.txt: a
+#     lookup that trusts a match of the hashes' low 3 bits and omits the key
+#     comparison, the bug of a table that stores truncated hashes (both the
+#     scan and present?) -- killed by the collide profiles, whose keys share
+#     their low hash bits, so a miss lands on another key's entry.
+#   * The order of equal hashes (insertion order) and the insertion at the
+#     run's start instead of its end: observable only through equal hashes
+#     of distinct keys, so equivalent through the interface. Not listed.
+#   * The bisection's base case returning hi instead of lo: lo == hi there.
+#     Equivalent; not listed.
+#   * `probes` and `steps` are diagnostics the fuzzer does not check. Not
+#     mutated.
+#   * `from_lists` (the sort, the first-occurrence and last-value scans,
+#     the assembly) is not exercised by the trace driver (drivers/trace.bot
+#     only puts), so a mutant of it would survive here: its mutants were
+#     run against a scratch from_lists check instead (a driver building the
+#     table from Lists with duplicates, then querying and updating it,
+#     against a Python dict, on all four backends). Not listed.
+
+# ---------------------------------------------------------------------------
+# Bisection: the "bucket index" of a sorted table
+
+@@ sorted-bisect-upper-bound the bisection finds the first hash greater than the key's, past its entry (wrong bucket index)
+## impl/sorted.bot
+<<<<
+    if list::at(hs, mid) < h:
+        return lower_bound(hs, h, mid + 1, hi)
+====
+    if list::at(hs, mid) <= h:
+        return lower_bound(hs, h, mid + 1, hi)
+>>>>
+
+@@ sorted-bisect-skips-candidate after a smaller hash at mid the bisection resumes two positions on, skipping a candidate (binary search bounds)
+## impl/sorted.bot
+<<<<
+        return lower_bound(hs, h, mid + 1, hi)
+====
+        return lower_bound(hs, h, mid + 2, hi)
+>>>>
+
+@@ sorted-bisect-drops-mid after a hash at least the key's at mid the bisection continues below mid, dropping mid itself (binary search bounds)
+## impl/sorted.bot
+<<<<
+        return lower_bound(hs, h, mid + 1, hi)
+    lower_bound(hs, h, lo, mid)
+====
+        return lower_bound(hs, h, mid + 1, hi)
+    lower_bound(hs, h, lo, mid - 1)
+>>>>
+
+@@ sorted-bisect-stops-early the bisection stops with one candidate left and answers it unexamined (probe terminates too early)
+## impl/sorted.bot
+<<<<
+    if lo >= hi:
+        return lo
+====
+    if lo + 1 >= hi:
+        return lo
+>>>>
+
+@@ sorted-bisect-misses-last the search range ends one before the last entry (binary search bounds)
+## impl/sorted.bot
+<<<<
+    scan(t.hs, t.ks, h, key, lower_bound(t.hs, h, 0, size(t)))
+====
+    scan(t.hs, t.ks, h, key, lower_bound(t.hs, h, 0, size(t) - 1))
+>>>>
+
+# ---------------------------------------------------------------------------
+# The key check
+
+@@ sorted-truncated-hash lookups trust a match of the hashes' low 3 bits and omit the key comparison (equality omitted after hash match)
+## impl/sorted.bot
+<<<<
+    if i >= list::length(hs) or list::at(hs, i) != h or list::at(ks, i) == key:
+====
+    if i >= list::length(hs) or bit_and(list::at(hs, i), 7) == bit_and(h, 7):
+>>>>
+<<<<
+    i < size(t) and list::at(t.hs, i) == h
+====
+    i < size(t) and bit_and(list::at(t.hs, i), 7) == bit_and(h, 7)
+>>>>
+
+@@ sorted-present-past-end present? reads the position after the last entry when the key belongs at the end (bounds)
+## impl/sorted.bot
+<<<<
+    i < size(t) and list::at(t.hs, i) == h
+====
+    i <= size(t) and list::at(t.hs, i) == h
+>>>>
+
+# ---------------------------------------------------------------------------
+# Insertion
+
+@@ sorted-duplicate-insert put of a present key inserts a second entry instead of replacing the value
+## impl/sorted.bot
+<<<<
+    if present?(t, i, h):
+        t.vs.set(i, value)
+====
+    if present?(t, i, h) and size(t) < 0:
+        t.vs.set(i, value)
+>>>>
+
+@@ sorted-replace-wrong-value a replacement stores the key's hash, not the value
+## impl/sorted.bot
+<<<<
+        t.vs.set(i, value)
+====
+        t.vs.set(i, h)
+>>>>
+
+@@ sorted-insert-out-of-order an absent key is inserted one position after its place, breaking the order the bisection needs
+## impl/sorted.bot
+<<<<
+    inserted(t, i, h, key, value)
+====
+    inserted(t, i + 1, h, key, value)
+>>>>
+
+@@ sorted-insert-loses-last the insertion's rebuild of the hashes and keys stops one short and loses the last entry (resize loses an entry)
+## impl/sorted.bot
+<<<<
+    hs = loop j from 0 through n:
+====
+    hs = loop j from 0 to n:
+>>>>
+<<<<
+    ks = loop j from 0 through n:
+====
+    ks = loop j from 0 to n:
+>>>>
+
+@@ sorted-insert-keys-unshifted the insertion shifts the hashes and values but copies the keys after it unshifted (parallel structures out of step)
+## impl/sorted.bot
+<<<<
+            key
+        else:
+            list::at(t.ks, j - 1)
+====
+            key
+        else:
+            list::at(t.ks, j)
+>>>>
+
+@@ sorted-insert-value-overwritten the value splice's second copy starts at the new value's position and overwrites it with the old neighbour's
+## impl/sorted.bot
+<<<<
+    mutable_array::copy(a, p + 1, old, p, n - p)
+====
+    mutable_array::copy(a, p, old, p, n - p)
+>>>>
+
+# ---------------------------------------------------------------------------
+# Removal
+
+@@ sorted-drop-inverted drop removes the entry where an absent key would go, and keeps a present one
+## impl/sorted.bot
+<<<<
+    if not present?(t, i, h):
+        return t
+    removed(t, i)
+====
+    if present?(t, i, h):
+        return t
+    removed(t, i)
+>>>>
+
+@@ sorted-drop-values-misaligned the value splice of a removal keeps the removed value and loses the last one
+## impl/sorted.bot
+<<<<
+    mutable_array::copy(a, p, old, p + 1, n - 1 - p)
+====
+    mutable_array::copy(a, p, old, p, n - 1 - p)
+>>>>
+
+@@ sorted-drop-keeps-hash the removal keeps the removed entry's hash, so the hashes no longer match the keys
+## impl/sorted.bot
+<<<<
+    hs = loop j from 0 to n:
+        if j == p:
+            continue
+====
+    hs = loop j from 0 to n:
+        if j == p and n < 0:
+            continue
+>>>>

@@ -14,8 +14,8 @@
 #   * the test files FILES (default tests/mutable-vector.test; each with a
 #     private -tmpdir): killed if any test fails or a file does not complete;
 #   * audit/mutable-vector/tools/fuzz.tcl -n N -seed S (every backend, the
-#     independent model): killed if it reports a disagreement or does not
-#     complete;
+#     independent model; N programs and half as many path programs after
+#     them): killed if it reports a disagreement or does not complete;
 #   * for a native mutant (one that edits native/src/ or the crate's
 #     manifest), first a release build of the copy's native backend (a mutant
 #     that does not build is reported NOT-BUILT, never counted as killed),
@@ -246,8 +246,8 @@ try {
             -n [dict get $options -fuzz-count] -seed [dict get $options -fuzz-seed]] status output
         cd $here
         file delete -force $scratch
-        if {[regexp {programs \d+ disagreements (\d+)} [lindex [split [string trim $output] \n] end] -> n]} {
-            set fuzz [expr {$n > 0 ? "killed ($n of [dict get $options -fuzz-count] programs disagree)" : "survived"}]
+        if {[regexp {programs (\d+) disagreements (\d+)} [lindex [split [string trim $output] \n] end] -> programs n]} {
+            set fuzz [expr {$n > 0 ? "killed ($n of $programs programs disagree)" : "survived"}]
         } else {
             set fuzz "killed (did not complete: [lastLine $output])"
         }
