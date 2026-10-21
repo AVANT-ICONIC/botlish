@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=soft&height=200&color=0:0e7490,100:0891b2&text=Botlish&fontColor=fafafa&fontSize=78&fontAlignY=36&desc=a%20language%20for%20humans%20and%20agents%20alike&descSize=16&descAlignY=56&animation=fadeIn" alt="Botlish" width="100%" />
+<img src="./docs/assets/readme-banner.svg" alt="Botlish: a language for humans and agents alike" width="100%" />
 
 <img src="./robot.cyan.svg" alt="Botlish robot" width="96" />
 
@@ -19,13 +19,13 @@
 </p>
 
 <p>
-  <a href="https://github.com/mwagner-webdev/botlish/actions/workflows/tests.yml"><img src="https://img.shields.io/github/actions/workflow/status/mwagner-webdev/botlish/tests.yml?branch=main&style=flat-square&label=tests&labelColor=0e7490&color=0e7490&logo=githubactions&logoColor=white" alt="tests" /></a>
-  <img src="https://img.shields.io/badge/Tcl-9.0-0e7490?style=flat-square&labelColor=0e7490" alt="Tcl 9.0" />
-  <img src="https://img.shields.io/badge/Rust-1.95%2B-0e7490?style=flat-square&labelColor=0e7490&logo=rust&logoColor=white" alt="Rust 1.95+" />
-  <img src="https://img.shields.io/badge/native-Cranelift-0e7490?style=flat-square&labelColor=0e7490" alt="Cranelift" />
-  <img src="https://img.shields.io/badge/Linux-x86--64%20%C2%B7%20arm64-0e7490?style=flat-square&labelColor=0e7490&logo=linux&logoColor=white" alt="Linux x86-64 and arm64" />
-  <img src="https://img.shields.io/badge/macOS-Apple%20Silicon-0e7490?style=flat-square&labelColor=0e7490&logo=apple&logoColor=white" alt="macOS Apple Silicon" />
-  <img src="https://img.shields.io/badge/license-MIT-0e7490?style=flat-square&labelColor=0e7490" alt="MIT" />
+  <a href="https://github.com/mwagner-webdev/botlish/actions/workflows/tests.yml"><img src="https://img.shields.io/github/actions/workflow/status/mwagner-webdev/botlish/tests.yml?branch=main&style=flat-square&label=tests&labelColor=164e63&color=0e7490&logo=githubactions&logoColor=white" alt="tests" /></a>
+  <img src="https://img.shields.io/badge/Tcl-9.0-0e7490?style=flat-square&labelColor=164e63" alt="Tcl 9.0" />
+  <img src="https://img.shields.io/badge/Rust-1.95%2B-0e7490?style=flat-square&labelColor=164e63&logo=rust&logoColor=white" alt="Rust 1.95+" />
+  <img src="https://img.shields.io/badge/native-Cranelift-0e7490?style=flat-square&labelColor=164e63" alt="Cranelift" />
+  <img src="https://img.shields.io/badge/Linux-x86--64%20%C2%B7%20arm64-0e7490?style=flat-square&labelColor=164e63&logo=linux&logoColor=white" alt="Linux x86-64 and arm64" />
+  <img src="https://img.shields.io/badge/macOS-Apple%20Silicon-0e7490?style=flat-square&labelColor=164e63&logo=apple&logoColor=white" alt="macOS Apple Silicon" />
+  <img src="https://img.shields.io/badge/license-MIT-0e7490?style=flat-square&labelColor=164e63" alt="MIT" />
 </p>
 
 </div>
@@ -531,6 +531,6 @@ backends run wherever Tcl 9 does.
 
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=soft&height=60&section=footer&color=0:0891b2,100:0e7490" alt="" width="100%" />
+<img src="./docs/assets/readme-footer.svg" alt="" width="100%" />
 
 </div>
