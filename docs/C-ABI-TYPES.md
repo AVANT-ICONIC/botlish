@@ -1,5 +1,12 @@
 # C-ABI-TYPES.md
 
+> Partially superseded by C-FLOAT-FFI-MILESTONE-1.md: `ffi::c::Float`
+> (C `float`, binary32) and `ffi::c::Double` (C `double`, binary64) are C
+> representations `{cfloat NAME}` whose values are Float64s, admitted as
+> pointees (`Ptr[ffi::c::Float]`, `Ptr[ffi::c::Double]`) and in function
+> pointer signatures; C `long double` still has no type ("No `size_t`; one
+> floating type").
+
 The smallest C ABI type universe the header archaeology justifies: C integer
 scalars by identity, `ffi::c::Void`, typed data pointers, function-pointer
 types, and the five pointer operations -- plus the general callable

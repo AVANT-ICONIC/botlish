@@ -982,11 +982,11 @@ test lu-direct {making a view or an edit is raw authority (binary::native is dir
         [luKinds "${layouts}fn f(p: ffi::c::Ptr\[ffi::c::Void\]) -> int errors NativeViewNull:\n    v = binary::native::view(U, p)\n    v.w\n0\n" 1]
 } -cleanup {unset -nocomplain layouts use} -result {accepted STALE-DIRECT-MODULE DIRECT}
 
-test lu-registrations {binary::read is a root native whose -layout role every layer reads (never a name): its bytes operand (input), its designator (path) and its op; its result is the designated representation's copied type (layout-read), an array's extent its length (-result-length path), LayoutLengthMismatch its one error; it is not context-free, every argument is observed, and it has no method form} -body {
+test lu-registrations {binary::read is a root native whose -layout role every layer reads (never a name): its bytes operand (input), its designator (path) and its op; its result is the designated representation's copied type (layout-read), an array's extent its length (-result-length path), LayoutLengthMismatch its error (and NonFiniteFloat, a C floating representation's: C-FLOAT-FFI-MILESTONE-1.md); it is not context-free, every argument is observed, and it has no method form} -body {
     set meta [core::native::metadata binary::read]
     list [dict get $meta layout] [dict get $meta contextFree] [dict get $meta ownership] [dict get $meta resultShape] \
         [dict get $meta errors] [dict get $meta resultLength] [dict get $meta nomethod]
-} -cleanup {unset -nocomplain meta} -result {{input 0 path 1 op read} 0 {observe observe} {layout-read 1} LayoutLengthMismatch {path 1} 1}
+} -cleanup {unset -nocomplain meta} -result {{input 0 path 1 op read} 0 {observe observe} {layout-read 1} {LayoutLengthMismatch NonFiniteFloat} {path 1} 1}
 
 test lu-not-a-sum-type {a union is no tagged sum: it has no case, tag or active alternative -- a case-style spelling U::alt is no value (a union is no namespace), an alternative is no constructor (an unbound name), and nothing records which alternative was written: writing one and reading another is the other's interpretation of the same bytes, as is reading one never written} -body {
     list \

@@ -1906,6 +1906,59 @@ static BoringSSL: `tclsh9.0 tests/cffi/boringssl.tcl` builds it once into
 Botlish's cache (never the repository); without it they are skipped.
 `bench/c-ffi.tcl` regenerates the performance report.
 
+## C floating types (ffi::c::Float, ffi::c::Double)
+
+C `float` and `double` are C representations whose values are Float64s
+(C-FLOAT-FFI-MILESTONE-1.md): `{cfloat Float}` (binary32) and `{cfloat
+Double}` (binary64), written only where a C type is -- an extern's
+parameters and result, a function pointer's signature, a pointee, a layout
+field or element -- with `hir::cabi::Carrier` their values' type. Keep it so:
+
+* Never add a Botlish Float32 (or Float80, Float128) to support them, and
+  never let `ffi::c::Float` name a type of values: there it is a TYPE error;
+  `ffi::c::Double` there is Float64.
+* Every fact is the C type's, never the carrier's: format, size,
+  alignment, ABI class, layout width, element stride and the outbound rule
+  come from core/cabi.tcl's `floatings`, `floatingModels` and
+  `floatingFormats` (a target row's `floating` model). The two types never
+  collapse into one, and neither is Float64.
+* The boundary is one rule, written once per implementation: Admit (NaN and
+  the infinities are NonFiniteFloat with their NonFiniteResult, negative zero
+  zero, a binary32 widened exactly) and Narrow (binary32 rounded to nearest,
+  ties to even, an overflow NonFiniteFloat before C runs or a byte is
+  written -- never clamped, never decimal text -- a zero +0). core/cabi.tcl
+  (`Narrow`, `AdmitBits`, the codec) for the Tcl backends and the static
+  decisions, runtime/value.rs (`narrow_c_float`, `admit_c_float`) natively,
+  codegen::clif's foreign call with the same checks inline. Never add a path
+  of its own, a fast-math or flush-to-zero mode, or a different rule at
+  compile time (`ExternNarrowing`, `WrittenFloatFormat` call `Narrow`).
+* A call is charged NonFiniteFloat only where it can fail through a C
+  floating value (`hir::layouts::CallErrors`; an extern with a float
+  parameter or a floating result): a float-free program's calls keep exactly
+  their errors.
+* A DecimalRounded value is never a C float or double: no implicit decay,
+  and a C result never acquires a guarantee. `long double` has no type (the
+  binding generator reports `long-double`); never map it to Float64.
+* A C float takes a floating-point register wherever a convention counts
+  them (System V's `%al`, Apple's variadic padding: `vector_registers`,
+  `c_call_signature`): count `CAbi::floating()`, never F64 alone. A
+  trailing variadic argument is never a float (NIR's `varargs=` rejects
+  `f32`).
+
+If you change any of that (the report's section 18 lists the files), run
+`tests/c-float-ffi.test` (its fixture needs `cc`), its golden suite
+(`tclsh9.0 tests/local.tcl tests/golden/c-float-ffi.bot`), `tests/c-ffi.test`,
+`tests/c-abi-types.test`, `tests/float64.test`, the layout test files
+(binary-layout, native-view, native-edit, layout-arrays, layout-unions),
+`audit/c-float-ffi/tools/fuzz.tcl` (several seeds, once with `-gc-stress
+1`), `audit/c-float-ffi/tools/mutate.tcl` (every mutant in its
+`mutants.txt` must still apply and be killed: update a mutant's text when
+you change the code it mutates, keeping it a mutant of the same rule) and
+`cargo test --release --manifest-path native/Cargo.toml --lib c_float` and
+`--bin botlish-native c_float` (the AArch64 lowering tests run on an AArch64
+host, or under qemu-user from an `aarch64-unknown-linux-gnu` build); for the
+generator's float and double, its checks (the C binding generator, below).
+
 ## Variadics
 
 Variadic parameters and variadic C calls (VARIADICS-VERTICAL-SLICE-1.md) are
@@ -2025,7 +2078,7 @@ fixture's `tools/c-bindgen/fixture/expected/TARGET/`. Keep it so:
   _Alignof, offsetof and each member's type, probed -- never a layout rule
   computed in Tcl or Botlish: no padding, alignment, packing or bitfield
   rule anywhere in the generator. A field a layout cannot represent (a
-  flexible array member, a bitfield, float, double, `_Bool`, an array of
+  flexible array member, a bitfield, `long double`, `_Bool`, an array of
   one of those) blocks its record and every record holding it by value,
   with its reason in the manifest: never flatten, approximate or
   reinterpret it, and never extend the layout language from the generator.

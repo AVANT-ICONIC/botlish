@@ -2238,7 +2238,7 @@ related: stdlib.module.binary stdlib.binary::store_element stdlib.binary::load s
     binary::element(any, int) -> any
 
 == ERRORS
-    IndexNotFound
+    IndexNotFound, NonFiniteFloat
 
 A call must handle each (on NAME:), admit it in its function's errors
 clause, or be proven unable to raise it (rule.unhandled-errors).
@@ -2302,7 +2302,7 @@ related: stdlib.module.binary concept.binary-layouts stdlib.binary::parse
     binary::emit(struct) -> struct
 
 == ERRORS
-    LayoutExtentMismatch
+    LayoutExtentMismatch, NonFiniteFloat
 
 A call must handle each (on NAME:), admit it in its function's errors
 clause, or be proven unable to raise it (rule.unhandled-errors).
@@ -2430,6 +2430,12 @@ related: stdlib.module.binary concept.binary-layouts stdlib.binary::native::view
 == SIGNATURE
     binary::load(any) -> any
 
+== ERRORS
+    NonFiniteFloat
+
+A call must handle each (on NAME:), admit it in its function's errors
+clause, or be proven unable to raise it (rule.unhandled-errors).
+
 == USE
 An intrinsic of namespace binary: import binary, then write binary::load.
 Method syntax: receiver.load(...) is the same call.
@@ -2461,7 +2467,7 @@ related: stdlib.module.binary concept.binary-layouts stdlib.binary::emit stdlib.
     binary::parse(str, struct) -> struct
 
 == ERRORS
-    LayoutLengthMismatch
+    LayoutLengthMismatch, NonFiniteFloat
 
 A call must handle each (on NAME:), admit it in its function's errors
 clause, or be proven unable to raise it (rule.unhandled-errors).
@@ -2524,7 +2530,7 @@ related: stdlib.module.binary stdlib.binary::write stdlib.binary::parse concept.
     binary::read(struct, str) -> any
 
 == ERRORS
-    LayoutLengthMismatch
+    LayoutLengthMismatch, NonFiniteFloat
 
 A call must handle each (on NAME:), admit it in its function's errors
 clause, or be proven unable to raise it (rule.unhandled-errors).
@@ -2586,7 +2592,7 @@ related: stdlib.module.binary stdlib.binary::native::edit stdlib.binary::write c
     binary::store(any, str, any) -> unit
 
 == ERRORS
-    LayoutExtentMismatch
+    LayoutExtentMismatch, NonFiniteFloat
 
 A call must handle each (on NAME:), admit it in its function's errors
 clause, or be proven unable to raise it (rule.unhandled-errors).
@@ -2629,7 +2635,7 @@ related: stdlib.module.binary stdlib.binary::element stdlib.binary::store stdlib
     binary::store_element(any, int, any) -> unit
 
 == ERRORS
-    IndexNotFound
+    IndexNotFound, NonFiniteFloat
 
 A call must handle each (on NAME:), admit it in its function's errors
 clause, or be proven unable to raise it (rule.unhandled-errors).
@@ -2664,7 +2670,7 @@ related: stdlib.module.binary stdlib.binary::write_foreign stdlib.binary::store 
     binary::write(struct, str, any) -> struct
 
 == ERRORS
-    LayoutExtentMismatch, LayoutLengthMismatch
+    LayoutExtentMismatch, LayoutLengthMismatch, NonFiniteFloat
 
 A call must handle each (on NAME:), admit it in its function's errors
 clause, or be proven unable to raise it (rule.unhandled-errors).
@@ -2853,8 +2859,18 @@ fixed array, `field name: array 16 of ffi::c::Char at 8`: N elements of
 any representation (a scalar, a pointer, a nested layout, another array),
 element i at the field's offset plus i times the element's width; its
 copied value is a List of exactly N elements (FIXED-LAYOUT-ARRAYS.md).
-There are no unions, bitfields, variable-length tails, zero-length arrays
-or floats in a layout.
+There are no bitfields, variable-length tails or zero-length arrays in a
+layout; overlapping interpretations are a union layout's (LAYOUT-UNIONS.md).
+
+A field may be C's float or double (ffi::c::Float, 4 bytes; ffi::c::Double,
+8), its value a Float64. A read of one -- binary::parse, binary::read,
+binary::load, binary::element, a view's field -- fails with the declared
+NonFiniteFloat when its bits are a NaN or an infinity (negative zero reads
+as 0.0); a write, store or emit of a float rounds the Float64 to nearest,
+ties to even, and fails with NonFiniteFloat when it overflows the float,
+before a byte is written. A call is charged NonFiniteFloat only when it
+reads a float or a double or writes a float: the errors listed below
+include it for those calls alone (concept.c-floats).
 
 A field may be a C pointer (ffi::c::Ptr[T] or ffi::c::FnPtr[F], of the
 target's pointer width). Such a layout is native-only: bytes never become
@@ -5166,22 +5182,32 @@ target's plain char is). Arithmetic on them is Botlish arithmetic (no C
 promotion, no wrapping); an Int becomes one only where its range proves it
 fits. ffi::c::Int and ffi::c::Long stay two types where their ranges agree.
 
-C double (an intrinsic type of this namespace, FLOAT64-MILESTONE-1.md):
+C floating types (intrinsic types of this namespace,
+C-FLOAT-FFI-MILESTONE-1.md): C representations whose values are Float64s.
 
-  ffi::c::Double            Botlish's Float64 under its C ABI name: the
-                            same values, carried as the target's IEEE 754
-                            binary64 in its floating-point register class.
-                            Every Float64 is a double; a double C returns
-                            is a Float64 only when it is finite -- a NaN or
-                            an infinity is the call's NonFiniteFloat (an
-                            extern c fn returning one declares it), and
-                            negative zero is zero.
+  ffi::c::Double            C's double, IEEE 754 binary64 (8 bytes): every
+                            Float64 is one, exactly
+  ffi::c::Float             C's float, IEEE 754 binary32 (4 bytes): a
+                            Float64 leaving for one is rounded to nearest,
+                            ties to even, and one that rounds to an
+                            infinity is NonFiniteFloat before C runs (never
+                            clamped); a float entering widens exactly
+
+They name C types only -- an extern c fn's parameters and result, a function
+pointer's signature, a pointee, a layout field -- and stay two types
+(Ptr[ffi::c::Float] is no Ptr[ffi::c::Double]). A float or double entering
+Botlish is a Float64 only when it is finite: a NaN or an infinity is
+NonFiniteFloat (the call, or the layout read, declares it), and negative
+zero is zero. Where a value type is written, ffi::c::Double means Float64
+and ffi::c::Float is an error: Botlish has no binary32 number. C long double
+has no type.
 
 Pointers (intrinsic types and operations of this namespace):
 
   ffi::c::Void              the C void: an incomplete pointee, no values
   ffi::c::Ptr[T]            a C data pointer whose pointee identity is T:
-                            ffi::c::Void, a C integer scalar, an opaque
+                            ffi::c::Void, a C integer scalar, ffi::c::Bool,
+                            ffi::c::Float or ffi::c::Double, an opaque
                             struct (an incomplete C tag's identity), or
                             another pointer
   ffi::c::FnPtr[Fn{args: [A, ...], return: R}]
