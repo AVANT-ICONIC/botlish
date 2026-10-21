@@ -167,7 +167,7 @@
 namespace eval core::value {
     # Every row of core/type.tcl's float family is a kind of its own here;
     # type.tcl checks that the two lists agree when it loads.
-    variable kinds {int str bool unit list result block native mutarray UnicodeChar immutableSet errorId struct bytestore mutbytes coroutine mutvec enum cptr Float64}
+    variable kinds {int str bool unit list result block native mutarray UnicodeChar immutableSet errorId struct bytestore mutbytes coroutine mutvec enum cptr Float64 DecimalRounded}
 }
 
 proc core::value::isCanonicalInt {text} {
@@ -491,6 +491,17 @@ proc core::value::equal {a b} {
         core::semanticError EQUALITY \
             "== is not defined for callables: [show $a] == [show $b]"
     }
+    if {$ka eq "DecimalRounded" || $kb eq "DecimalRounded"} {
+        # A DecimalRounded value (DECIMAL-ROUNDED-MILESTONE-1.md) is equal
+        # to another at the precision its static type guarantees, which a
+        # type-blind comparison does not know: its representation may hold
+        # digits no type guarantees, and comparing those would make a
+        # decision two correct implementations disagree on. `==` of two
+        # DecimalRounded operands is the precise comparison
+        # (core/decimal.tcl); inside a List, a struct or a set there is none.
+        core::semanticError EQUALITY \
+            "== of a DecimalRounded value needs the precision of its type, which this equality does not know (compare DecimalRounded values directly)"
+    }
     if {$ka ne $kb} {
         return 0
     }
@@ -720,6 +731,19 @@ proc core::value::show {v {debug 0} {reveal 0}} {
                 lappend parts [show $item $debug $reveal]
             }
             return "<mutable-vector \[[join $parts {, }]\]>"
+        }
+        DecimalRounded {
+            # No digits (DECIMAL-ROUNDED-MILESTONE-1.md): a type-blind
+            # rendering does not know how many decimal places the value's
+            # type guarantees, and its representation may hold digits none
+            # does. A display that knows the static type shows round(v, N)
+            # (hir::decimal::Display, core::decimal::text). REVEAL (internal
+            # differential tooling, never user-facing) shows the
+            # representation, so backends are compared bit for bit.
+            if {$reveal} {
+                return "<DecimalRounded [core::float::Text [core::decimal::of $v]]>"
+            }
+            return "<DecimalRounded>"
         }
         default {
             # A floating-point type: its canonical decimal text

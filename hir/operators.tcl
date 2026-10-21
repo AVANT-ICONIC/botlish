@@ -49,14 +49,24 @@ namespace eval hir::operators {}
 # was rewritten (HIR must then be typed again), else 0.
 proc hir::operators::resolve {hirVar} {
     upvar 1 $hirVar hir
+    # A DecimalRounded operand selects its type's operation first, even
+    # beside a Float64 decimal literal, which it makes a DecimalRounded one;
+    # and a decimal constant expression where a DecimalRounded type is
+    # expected becomes a DecimalRounded one (hir/decimal.tcl).
+    set changed [hir::decimal::resolve hir]
     if {![dict exists $hir operatorCalls]} {
-        return 0
+        return $changed
     }
-    set changed 0
     set remaining {}
     foreach e [dict get $hir operatorCalls] {
         set node [dict get $hir exprs $e]
         set op [dict get $node operator]
+        if {$op eq "=="} {
+            # The language's one equality for every other kind, a float's
+            # included (core::value::equal).
+            lappend remaining $e
+            continue
+        }
         set args [dict get $node args]
         set operands [if {$op eq "neg"} {lrange $args 1 end} else {set args}]
         set type [Selected $hir $operands]

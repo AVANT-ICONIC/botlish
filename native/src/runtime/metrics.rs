@@ -11,8 +11,12 @@
 //!   * `Off`: `Metrics::enabled()` is false everywhere, so every hook below
 //!     is a single predictable branch and nothing else. Byte-identical
 //!     execution to the uninstrumented backend otherwise.
-//!   * `Summary`: every hook below runs. No NIR/codegen change is needed
-//!     for this: counts, bytes, live/peak, GC, copies are all runtime-only.
+//!   * `Summary`: every hook below runs. No NIR change is needed for this:
+//!     counts, bytes, live/peak, GC, copies are all runtime-only. The one
+//!     codegen difference from `Off` (CompileOptions::count_accesses):
+//!     `mutable_array::at`/`set`, whose fast paths are otherwise inline
+//!     loads and stores (codegen/clif.rs), always call their helpers, so
+//!     the optional MutableArray read/write counters stay exact.
 //!   * `Sites`: additionally, codegen (codegen/clif.rs) emits one extra
 //!     store of the causing instruction's site id into `Vm::alloc_site`
 //!     before each allocating helper call, so `record_alloc` can attribute
@@ -36,7 +40,7 @@
 
 use super::show::tcl_list;
 use super::value::{
-    KIND_BIGINT, KIND_BYTES, KIND_CLOSURE, KIND_COROUTINE, KIND_FLOAT, KIND_LIST, KIND_LISTPLAN, KIND_MUTARRAY, KIND_MUTBYTES, KIND_MUTVEC,
+    KIND_BIGINT, KIND_BYTES, KIND_CLOSURE, KIND_COROUTINE, KIND_DECIMAL, KIND_FLOAT, KIND_LIST, KIND_LISTPLAN, KIND_MUTARRAY, KIND_MUTBYTES, KIND_MUTVEC,
     KIND_NATIVE, KIND_RESULT, KIND_SET, KIND_STR, KIND_STRPLAN, KIND_STRUCT,
 };
 use std::collections::HashMap;
@@ -44,7 +48,7 @@ use std::time::Duration;
 
 /// One more than the largest `Header::kind` value: `by_kind`/`static_by_kind`
 /// are indexed directly by kind byte (index 0 unused).
-pub const KIND_COUNT: usize = 18;
+pub const KIND_COUNT: usize = 19;
 
 pub fn kind_name(kind: u8) -> &'static str {
     match kind {
@@ -64,6 +68,7 @@ pub fn kind_name(kind: u8) -> &'static str {
         KIND_COROUTINE => "Coroutine",
         KIND_MUTVEC => "MutableVector",
         KIND_FLOAT => "Float",
+        KIND_DECIMAL => "DecimalRounded",
         _ => "?",
     }
 }
@@ -519,6 +524,10 @@ impl Metrics {
         // Likewise floating-point values (FLOAT64-MILESTONE-1.md).
         if self.by_kind[KIND_FLOAT as usize].allocations > 0 {
             kinds.push(KIND_FLOAT);
+        }
+        // And DecimalRounded values (DECIMAL-ROUNDED-MILESTONE-1.md).
+        if self.by_kind[KIND_DECIMAL as usize].allocations > 0 {
+            kinds.push(KIND_DECIMAL);
         }
         let by_kind = dict(&kinds.iter().map(|&k| (kind_name(k), kind_dict(&self.by_kind[k as usize], &n))).collect::<Vec<_>>());
         let static_by_kind =

@@ -1,0 +1,439 @@
+== listmap (int keys): 21911 bytes of machine code in all
+  table::fresh           <int>                                209 B  structnew=1  {may_error=true may_gc=true safepoints=3}
+  table::size            <table::Table>                        46 B  listlen=1  {may_error=false may_gc=false safepoints=0}
+  table::position        <table::Table, int>                  349 B  listgetproven=1 listlen=1 veq=1  {may_error=true may_gc=false safepoints=0}
+  table::get             <table::Table, int, int>             197 B  call=2  {may_error=true may_gc=false safepoints=0}
+  table::has?            <table::Table, int>                   85 B  call=1  {may_error=true may_gc=false safepoints=0}
+  table::probes          <table::Table, int>                  158 B  call=2  {may_error=true may_gc=false safepoints=0}
+  table::replaced        <list, int, int>                     455 B  listgetproven=1 listlen=1  {may_error=true may_gc=true safepoints=3}
+  table::without         <list, int>                          408 B  listgetproven=1 listlen=1  {may_error=true may_gc=true safepoints=3}
+  table::put             <table::Table, int, int>             434 B  listappend=2 structnew=2 call=2  {may_error=true may_gc=true safepoints=5}
+  table::drop            <table::Table, int>                  310 B  structnew=1 call=3  {may_error=true may_gc=true safepoints=3}
+  table::from_lists      <List[int], List[int]>               240 B  listlen=1 call=2  {may_error=true may_gc=true safepoints=2}
+  fill                   <any, int>                           466 B  listget=2 call=2  {may_error=true may_gc=true safepoints=1}
+== chain0 (int keys): 25355 bytes of machine code in all
+  table::table_capacity  <int>                                244 B    {may_error=false may_gc=true safepoints=2}
+  table::fresh           <int>                                286 B  structnew=1 call=1  {may_error=true may_gc=true safepoints=5}
+  table::size            <table::Table>                       103 B  mutarrayget=1  {may_error=true may_gc=false safepoints=0}
+  table::holding         <List[table::Entry], int>            805 B  listget=1 listlen=1 veq=1  {may_error=true may_gc=true safepoints=4}
+  table::bucket_of       <table::Table, int>                  332 B  mutarraycapacity=1 hash=1 call=1  {may_error=true may_gc=true safepoints=1}
+  table::get             <table::Table, int, int>             250 B  listgetproven=1 listlen=1 call=2  {may_error=true may_gc=true safepoints=2}
+  table::has?            <table::Table, int>                  197 B  listlen=1 call=2  {may_error=true may_gc=true safepoints=2}
+  table::probes          <table::Table, int>                  112 B  listlen=1 call=1  {may_error=true may_gc=true safepoints=1}
+  table::replaced        <List[table::Entry], int, int>       996 B  listget=1 listlen=1 veq=1 structnew=1  {may_error=true may_gc=true safepoints=5}
+  table::put             <table::Table, int, int>            1044 B  mutarrayget=1 mutarrayset=1 mutarraysetproven=2 mutarraycapacity=1 listlen=1 listappend=1 hash=1 structnew=1 call=3  {may_error=true may_gc=true safepoints=6}
+  table::drop            <table::Table, int>                 1661 B  mutarrayget=1 mutarrayset=1 mutarraysetproven=1 mutarraycapacity=1 listget=1 listlen=2 hash=1 veq=1 call=2  {may_error=true may_gc=true safepoints=7}
+  table::from_lists      <List[int], List[int]>               240 B  listlen=1 call=2  {may_error=true may_gc=true safepoints=2}
+  fill                   <any, int>                           466 B  listget=2 call=2  {may_error=true may_gc=true safepoints=1}
+== ht0 (int keys): 32033 bytes of machine code in all
+  table::ht_alloc        <int>                                489 B  mutarraysetproven=2 structnew=1  {may_error=true may_gc=true safepoints=5}
+  table::ht_alloc        <int>                                446 B  mutarraysetproven=2  {may_error=true may_gc=true safepoints=4}
+  table::ht_capacity_for <int, int>                           493 B  call=1  {may_error=false may_gc=true safepoints=3}
+  table::ht_new_sized    <int>                                114 B  call=2  {may_error=true may_gc=true safepoints=2}
+  table::ht_size         <table::Table>                       103 B  mutarrayget=1  {may_error=true may_gc=false safepoints=0}
+  table::ht_tombstones   <table::Table>                       105 B  mutarrayget=1  {may_error=true may_gc=false safepoints=0}
+  table::ht_capacity     <table::Table>                        44 B  mutarraycapacity=1  {may_error=false may_gc=false safepoints=0}
+  table::ht_probe_start  <table::Table, int>                  255 B  hash=1 call=1  {may_error=true may_gc=false safepoints=0}
+  table::ht_probe_next   <table::Table, int>                  243 B  call=1  {may_error=true may_gc=false safepoints=0}
+  table::ht_find_get     <table::Table, int, int>             692 B  mutarrayget=2 ieq=2 veq=1 call=2  {may_error=true may_gc=false safepoints=0}
+  table::ht_find_insert  <table::Table, int, int, int>       1096 B  mutarrayget=2 ieq=3 veq=1 call=4  {may_error=true may_gc=false safepoints=0}
+  table::ht_get          <table::Table, int>                  381 B  mutarrayget=1 call=2  {may_error=true may_gc=false safepoints=0}
+  table::ht_contains     <table::Table, int>                  237 B  call=2  {may_error=true may_gc=false safepoints=0}
+  table::ht_rehash_probe <mutarray, int, int>                 588 B  mutarrayget=1 imod=1 veq=1 call=1  {may_error=true may_gc=true safepoints=2}
+  table::ht_rehash_insert <table::Table, int, any, any>        730 B  mutarrayset=3 imod=1 hash=1 call=1  {may_error=true may_gc=true safepoints=2}
+  table::ht_rehash_scan  <mutarray, mutarray, mutarray, int, int, table::Table, int>   784 B  mutarrayget=3 veq=1 call=3  {may_error=true may_gc=true safepoints=1}
+  table::ht_rehash       <table::Table, int>                  723 B  mutarrayset=1 structnew=1 call=3  {may_error=true may_gc=true safepoints=3}
+  table::ht_should_grow  <table::Table>                       801 B  call=3 guard=2  {may_error=true may_gc=true safepoints=4}
+  table::ht_grow_or_clean <table::Table>                       673 B  call=6 guard=2  {may_error=true may_gc=true safepoints=3}
+  table::ht_place        <table::Table, int, int, int>       1304 B  mutarrayget=1 mutarrayset=5 ieq=1 call=2 guard=2  {may_error=true may_gc=true safepoints=2}
+  table::ht_set          <table::Table, int, int>             780 B  mutarrayget=1 mutarrayset=1 ieq=1 call=8  {may_error=true may_gc=true safepoints=4}
+  table::ht_delete       <table::Table, int>                 1181 B  mutarrayset=5 call=4 guard=2  {may_error=true may_gc=true safepoints=2}
+  table::fresh           <int>                                 64 B  call=1  {may_error=true may_gc=true safepoints=1}
+  table::put             <table::Table, int, int>              85 B  call=1  {may_error=true may_gc=true safepoints=1}
+  table::get             <table::Table, int, int>             213 B  call=2  {may_error=true may_gc=false safepoints=0}
+  table::has?            <table::Table, int>                   52 B  call=1  {may_error=true may_gc=false safepoints=0}
+  table::size            <table::Table>                        48 B  call=1  {may_error=true may_gc=false safepoints=0}
+  table::drop            <table::Table, int>                   73 B  call=1  {may_error=true may_gc=true safepoints=1}
+  table::from_lists      <List[int], List[int]>               240 B  listlen=1 call=2  {may_error=true may_gc=true safepoints=2}
+  fill                   <any, int>                           466 B  listget=2 call=2  {may_error=true may_gc=true safepoints=1}
+== chain (int keys): 27056 bytes of machine code in all
+  table::slots_for       <int, int>                           416 B  call=1  {may_error=false may_gc=true safepoints=2}
+  table::empty_table     <int>                                274 B  structnew=1  {may_error=true may_gc=true safepoints=4}
+  table::fresh           <int>                                112 B  call=2  {may_error=true may_gc=true safepoints=2}
+  table::slots           <table::Table>                        44 B  mutarraycapacity=1  {may_error=false may_gc=false safepoints=0}
+  table::size            <table::Table>                       103 B  mutarrayget=1  {may_error=true may_gc=false safepoints=0}
+  table::full?           <table::Table>                       393 B  call=2  {may_error=true may_gc=true safepoints=2}
+  table::home            <int, int>                           202 B  imod=1  {may_error=true may_gc=true safepoints=1}
+  table::bucket          <table::Table, int>                  249 B  mutarrayget=1 call=2  {may_error=true may_gc=true safepoints=1}
+  table::position        <List[table::Entry], int, int>       496 B  listgetproven=1 listlen=1 ieq=1 veq=1  {may_error=true may_gc=false safepoints=0}
+  table::value_in        <List[table::Entry], int, int, int>   472 B  listgetproven=1 listlen=1 ieq=1 veq=1  {may_error=true may_gc=false safepoints=0}
+  table::replaced        <List[table::Entry], int, table::Entry>   455 B  listgetproven=1 listlen=1  {may_error=true may_gc=true safepoints=3}
+  table::without         <List[table::Entry], int>            408 B  listgetproven=1 listlen=1  {may_error=true may_gc=true safepoints=3}
+  table::get             <table::Table, int, int>             230 B  hash=1 call=2  {may_error=true may_gc=true safepoints=1}
+  table::has?            <table::Table, int>                  229 B  hash=1 call=2  {may_error=true may_gc=true safepoints=1}
+  table::probes          <table::Table, int>                  285 B  listlen=1 hash=1 call=2  {may_error=true may_gc=true safepoints=1}
+  table::appended        <table::Table, table::Entry>         479 B  mutarrayget=1 mutarrayset=1 listappend=1 call=2  {may_error=true may_gc=true safepoints=2}
+  table::counted         <table::Table, int>                  379 B  mutarrayget=1 mutarrayset=1  {may_error=true may_gc=true safepoints=1}
+  table::rehomed         <List[table::Entry], int, table::Table>   305 B  listget=1 listlen=1 call=2  {may_error=true may_gc=true safepoints=1}
+  table::moved           <table::Table, int, table::Table>    327 B  mutarrayget=1 call=3  {may_error=true may_gc=true safepoints=1}
+  table::grown           <table::Table>                       324 B  call=5  {may_error=true may_gc=true safepoints=4}
+  table::put             <table::Table, int, int>            1278 B  mutarrayget=1 mutarrayset=2 listappend=1 hash=1 structnew=3 call=9  {may_error=true may_gc=true safepoints=11}
+  table::drop            <table::Table, int>                  584 B  mutarrayget=1 mutarrayset=1 hash=1 call=5  {may_error=true may_gc=true safepoints=3}
+  table::from_lists      <List[int], List[int]>               243 B  listlen=1 call=2  {may_error=true may_gc=true safepoints=2}
+  fill                   <any, int>                           466 B  listget=2 call=2  {may_error=true may_gc=true safepoints=1}
+== lp (int keys): 29903 bytes of machine code in all
+  table::slots_for       <int, int>                           509 B  call=1  {may_error=false may_gc=true safepoints=3}
+  table::empty_table     <int>                                318 B  structnew=1  {may_error=true may_gc=true safepoints=4}
+  table::fresh           <int>                                114 B  call=2  {may_error=true may_gc=true safepoints=2}
+  table::slots           <table::Table>                        44 B  mutarraycapacity=1  {may_error=false may_gc=false safepoints=0}
+  table::size            <table::Table>                        34 B    {may_error=false may_gc=false safepoints=0}
+  table::full?           <table::Table>                       457 B  call=1  {may_error=false may_gc=true safepoints=3}
+  table::home            <int, int>                           202 B  imod=1  {may_error=true may_gc=true safepoints=1}
+  table::next_slot       <int, int>                           319 B  imod=1  {may_error=true may_gc=true safepoints=2}
+  table::find            <table::Table, int, int>             288 B  mutarraycapacity=1 call=2  {may_error=true may_gc=true safepoints=2}
+  walk                   <int>                                764 B  mutarrayget=2 ieq=1 veq=1 call=2  {may_error=true may_gc=true safepoints=1}
+  table::find_empty      <mutarray, int>                      190 B  mutarraycapacity=1 call=2  {may_error=true may_gc=true safepoints=2}
+  walk                   <int>                                372 B  mutarrayget=1 call=2  {may_error=true may_gc=true safepoints=1}
+  table::get             <table::Table, int, int>             524 B  mutarrayget=2 hash=1 call=1  {may_error=true may_gc=true safepoints=1}
+  table::has?            <table::Table, int>                  349 B  mutarrayget=1 hash=1 call=1  {may_error=true may_gc=true safepoints=1}
+  table::probes          <table::Table, int>                  517 B  imod=1 hash=1 call=4  {may_error=true may_gc=true safepoints=4}
+  table::store           <table::Table, int, int, any, any>   475 B  mutarrayset=3  {may_error=true may_gc=false safepoints=0}
+  table::store           <table::Table, int, int, int, int>   475 B  mutarrayset=3  {may_error=true may_gc=false safepoints=0}
+  table::moved           <mutarray, mutarray, mutarray, int, table::Table>   876 B  mutarrayget=3 mutarraycapacity=1 mvshare=1 call=4  {may_error=true may_gc=true safepoints=2}
+  table::grown           <table::Table>                       383 B  call=3  {may_error=true may_gc=true safepoints=3}
+  table::with_count      <table::Table, int>                  125 B  structnew=1  {may_error=false may_gc=true safepoints=1}
+  table::put             <table::Table, int, int>            1236 B  mutarrayget=1 mutarrayset=1 hash=1 structnew=1 mvshare=2 call=7  {may_error=true may_gc=true safepoints=11}
+  table::between?        <int, int, int>                      460 B    {may_error=false may_gc=false safepoints=0}
+  table::shifted         <table::Table, int, int>            1188 B  mutarrayget=3 mutarrayset=3 mvshare=1 call=7  {may_error=true may_gc=true safepoints=3}
+  table::drop            <table::Table, int>                  597 B  mutarrayget=1 hash=1 mvshare=1 call=3  {may_error=true may_gc=true safepoints=5}
+  table::from_lists      <List[int], List[int]>               240 B  listlen=1 call=2  {may_error=true may_gc=true safepoints=2}
+  fill                   <any, int>                           466 B  listget=2 call=2  {may_error=true may_gc=true safepoints=1}
+== lpa (int keys): 29469 bytes of machine code in all
+  table::slots_for       <int, int>                           509 B  call=1  {may_error=false may_gc=true safepoints=3}
+  table::empty_table     <int>                                377 B  structnew=1  {may_error=true may_gc=true safepoints=5}
+  table::fresh           <int>                                114 B  call=2  {may_error=true may_gc=true safepoints=2}
+  table::slots           <table::Table>                        44 B  mutarraycapacity=1  {may_error=false may_gc=false safepoints=0}
+  table::size            <table::Table>                       103 B  mutarrayget=1  {may_error=true may_gc=false safepoints=0}
+  table::full?           <table::Table>                       497 B  call=2  {may_error=true may_gc=true safepoints=3}
+  table::home            <int, int>                           202 B  imod=1  {may_error=true may_gc=true safepoints=1}
+  table::next_slot       <int, int>                           319 B  imod=1  {may_error=true may_gc=true safepoints=2}
+  table::find_from       <table::Table, int, int, int>        720 B  mutarrayget=2 ieq=1 veq=1 call=3  {may_error=true may_gc=true safepoints=1}
+  table::find            <table::Table, int, int>             216 B  call=3  {may_error=true may_gc=true safepoints=2}
+  table::empty_from      <table::Table, int>                  349 B  mutarrayget=1 call=3  {may_error=true may_gc=true safepoints=1}
+  table::find_empty      <table::Table, int>                  180 B  call=3  {may_error=true may_gc=true safepoints=2}
+  table::get             <table::Table, int, int>             524 B  mutarrayget=2 hash=1 call=1  {may_error=true may_gc=true safepoints=1}
+  table::has?            <table::Table, int>                  381 B  mutarrayget=1 hash=1 call=1  {may_error=true may_gc=true safepoints=1}
+  table::probes          <table::Table, int>                  517 B  imod=1 hash=1 call=4  {may_error=true may_gc=true safepoints=4}
+  table::store           <table::Table, int, int, any, any>   475 B  mutarrayset=3  {may_error=true may_gc=false safepoints=0}
+  table::store           <table::Table, int, int, int, int>   475 B  mutarrayset=3  {may_error=true may_gc=false safepoints=0}
+  table::counted         <table::Table, int>                  379 B  mutarrayget=1 mutarrayset=1  {may_error=true may_gc=true safepoints=1}
+  table::moved           <table::Table, int, table::Table>    692 B  mutarrayget=3 call=5  {may_error=true may_gc=true safepoints=1}
+  table::grown           <table::Table>                       324 B  call=5  {may_error=true may_gc=true safepoints=4}
+  table::put             <table::Table, int, int>             844 B  mutarrayget=1 mutarrayset=1 hash=1 call=8  {may_error=true may_gc=true safepoints=6}
+  table::between?        <int, int, int>                      460 B    {may_error=false may_gc=false safepoints=0}
+  table::shifted         <table::Table, int, int>            1196 B  mutarrayget=3 mutarrayset=3 call=7  {may_error=true may_gc=true safepoints=2}
+  table::drop            <table::Table, int>                  461 B  mutarrayget=1 hash=1 call=3  {may_error=true may_gc=true safepoints=3}
+  table::from_lists      <List[int], List[int]>               240 B  listlen=1 call=2  {may_error=true may_gc=true safepoints=2}
+  fill                   <any, int>                           466 B  listget=2 call=2  {may_error=true may_gc=true safepoints=1}
+== lpmono (int keys): 32978 bytes of machine code in all
+  table::fresh           <int>                                406 B  structnew=1 call=1  {may_error=true may_gc=true safepoints=6}
+  table::size            <table::Table>                       103 B  mutarrayget=1  {may_error=true may_gc=false safepoints=0}
+  table::get_from        <table::Table, int, int, int, int, int>   943 B  mutarrayget=3 ieq=1 veq=1 call=1  {may_error=true may_gc=false safepoints=0}
+  table::get             <table::Table, int, int>             322 B  mutarraycapacity=1 hash=1 call=1  {may_error=true may_gc=false safepoints=0}
+  table::has_from        <table::Table, int, int, int, int>   831 B  mutarrayget=2 ieq=1 veq=1 call=1  {may_error=true may_gc=false safepoints=0}
+  table::has?            <table::Table, int>                  277 B  mutarraycapacity=1 hash=1 call=1  {may_error=true may_gc=false safepoints=0}
+  table::probes_from     <table::Table, int, int, int, int, int>   959 B  mutarrayget=2 ieq=1 veq=1 call=1  {may_error=true may_gc=true safepoints=1}
+  table::probes          <table::Table, int>                  318 B  mutarraycapacity=1 hash=1 call=1  {may_error=true may_gc=true safepoints=1}
+  table::slot_from       <table::Table, int, int, int, int>  1028 B  mutarrayget=2 imod=1 ieq=1 veq=1 call=1  {may_error=true may_gc=true safepoints=2}
+  table::empty_from      <table::Table, int, int>             588 B  mutarrayget=1 imod=1 call=1  {may_error=true may_gc=true safepoints=2}
+  table::moved           <table::Table, int, table::Table, int>  1248 B  mutarrayget=3 mutarrayset=3 mutarraycapacity=1 imod=1 call=3  {may_error=true may_gc=true safepoints=2}
+  table::put             <table::Table, int, int>            3172 B  mutarrayget=2 mutarrayset=9 mutarraycapacity=1 imod=1 hash=1 structnew=1 call=3  {may_error=true may_gc=true safepoints=15}
+  table::shifted         <table::Table, int, int, int>       2296 B  mutarrayget=3 mutarrayset=6 imod=2 call=2  {may_error=true may_gc=true safepoints=3}
+  table::drop            <table::Table, int>                  869 B  mutarrayget=2 mutarrayset=1 mutarraycapacity=1 hash=1 call=2  {may_error=true may_gc=true safepoints=3}
+  table::from_lists      <List[int], List[int]>               240 B  listlen=1 call=2  {may_error=true may_gc=true safepoints=2}
+  fill                   <any, int>                           466 B  listget=2 call=2  {may_error=true may_gc=true safepoints=1}
+== lpfact (int keys): 29675 bytes of machine code in all
+  table::slots_for       <int, int>                           509 B  call=1  {may_error=false may_gc=true safepoints=3}
+  table::empty_table     <int>                                377 B  structnew=1  {may_error=true may_gc=true safepoints=5}
+  table::fresh           <int>                                114 B  call=2  {may_error=true may_gc=true safepoints=2}
+  table::slots           <table::Table>                        44 B  mutarraycapacity=1  {may_error=false may_gc=false safepoints=0}
+  table::size            <table::Table>                       103 B  mutarrayget=1  {may_error=true may_gc=false safepoints=0}
+  table::full?           <table::Table>                       497 B  call=2  {may_error=true may_gc=true safepoints=3}
+  table::home            <int, int>                           202 B  imod=1  {may_error=true may_gc=true safepoints=1}
+  table::next_slot       <int, int>                           319 B  imod=1  {may_error=true may_gc=true safepoints=2}
+  table::find_from       <table::Table, int, int, int, int>   791 B  mutarrayget=2 ieq=1 veq=1 call=1  {may_error=true may_gc=false safepoints=0}
+  table::find            <table::Table, int, int>             238 B  call=3  {may_error=true may_gc=true safepoints=1}
+  table::empty_from      <table::Table, int, int>             455 B  mutarrayget=1 call=1  {may_error=true may_gc=false safepoints=0}
+  table::find_empty      <table::Table, int>                  187 B  call=3  {may_error=true may_gc=true safepoints=1}
+  table::get             <table::Table, int, int>             524 B  mutarrayget=2 hash=1 call=1  {may_error=true may_gc=true safepoints=1}
+  table::has?            <table::Table, int>                  381 B  mutarrayget=1 hash=1 call=1  {may_error=true may_gc=true safepoints=1}
+  table::probes          <table::Table, int>                  517 B  imod=1 hash=1 call=4  {may_error=true may_gc=true safepoints=4}
+  table::store           <table::Table, int, int, any, any>   475 B  mutarrayset=3  {may_error=true may_gc=false safepoints=0}
+  table::store           <table::Table, int, int, int, int>   475 B  mutarrayset=3  {may_error=true may_gc=false safepoints=0}
+  table::counted         <table::Table, int>                  379 B  mutarrayget=1 mutarrayset=1  {may_error=true may_gc=true safepoints=1}
+  table::moved           <table::Table, int, table::Table>    692 B  mutarrayget=3 call=5  {may_error=true may_gc=true safepoints=1}
+  table::grown           <table::Table>                       324 B  call=5  {may_error=true may_gc=true safepoints=4}
+  table::put             <table::Table, int, int>             844 B  mutarrayget=1 mutarrayset=1 hash=1 call=8  {may_error=true may_gc=true safepoints=6}
+  table::between?        <int, int, int>                      460 B    {may_error=false may_gc=false safepoints=0}
+  table::shifted         <table::Table, int, int>            1196 B  mutarrayget=3 mutarrayset=3 call=7  {may_error=true may_gc=true safepoints=2}
+  table::drop            <table::Table, int>                  461 B  mutarrayget=1 hash=1 call=3  {may_error=true may_gc=true safepoints=3}
+  table::from_lists      <List[int], List[int]>               240 B  listlen=1 call=2  {may_error=true may_gc=true safepoints=2}
+  fill                   <any, int>                           466 B  listget=2 call=2  {may_error=true may_gc=true safepoints=1}
+== lpmask (int keys): 30230 bytes of machine code in all
+  table::slots_for       <int, int>                           509 B  call=1  {may_error=false may_gc=true safepoints=3}
+  table::empty_table     <int>                                377 B  structnew=1  {may_error=true may_gc=true safepoints=5}
+  table::fresh           <int>                                114 B  call=2  {may_error=true may_gc=true safepoints=2}
+  table::slots           <table::Table>                        44 B  mutarraycapacity=1  {may_error=false may_gc=false safepoints=0}
+  table::size            <table::Table>                        74 B  mutarraygetproven=1 mutarraycapacity=1  {may_error=false may_gc=false safepoints=0}
+  table::full?           <table::Table>                       465 B  call=2  {may_error=false may_gc=true safepoints=3}
+  table::find_from       <table::Table, int, int, int>        920 B  mutarraygetproven=2 mutarraycapacity=4 ieq=1 veq=1 call=1  {may_error=true may_gc=true safepoints=3}
+  table::find            <table::Table, int, int>              88 B  call=1  {may_error=true may_gc=true safepoints=1}
+  table::empty_from      <table::Table, int>                  437 B  mutarraygetproven=1 mutarraycapacity=2 call=1  {may_error=false may_gc=true safepoints=2}
+  table::find_empty      <table::Table, int>                   52 B  call=1  {may_error=false may_gc=true safepoints=1}
+  table::get             <table::Table, int, int>             684 B  mutarraygetproven=2 mutarraycapacity=4 hash=1 call=1  {may_error=true may_gc=true safepoints=3}
+  table::has?            <table::Table, int>                  413 B  mutarraygetproven=1 mutarraycapacity=2 hash=1 call=1  {may_error=true may_gc=true safepoints=2}
+  table::probes          <table::Table, int>                  439 B  hash=1 call=2  {may_error=true may_gc=true safepoints=4}
+  table::store           <table::Table, int, int, any, any>   804 B  mutarraysetproven=3 mutarraycapacity=6  {may_error=false may_gc=true safepoints=3}
+  table::store           <table::Table, int, int, int, int>   804 B  mutarraysetproven=3 mutarraycapacity=6  {may_error=false may_gc=true safepoints=3}
+  table::counted         <table::Table, int>                  297 B  mutarraygetproven=1 mutarraysetproven=1 mutarraycapacity=1  {may_error=false may_gc=true safepoints=1}
+  table::moved           <table::Table, int, table::Table>    532 B  mutarraygetproven=3 mutarraycapacity=3 call=4  {may_error=false may_gc=true safepoints=2}
+  table::grown           <table::Table>                       297 B  call=5  {may_error=true may_gc=true safepoints=4}
+  table::put             <table::Table, int, int>            1020 B  mutarraygetproven=1 mutarraysetproven=1 mutarraycapacity=4 hash=1 call=8  {may_error=true may_gc=true safepoints=10}
+  table::between?        <int, int, int>                      644 B    {may_error=false may_gc=false safepoints=0}
+  table::shifted         <table::Table, int, int>            1596 B  mutarraygetproven=3 mutarraysetproven=3 mutarraycapacity=10 call=4  {may_error=false may_gc=true safepoints=9}
+  table::drop            <table::Table, int>                  541 B  mutarraygetproven=1 mutarraycapacity=2 hash=1 call=3  {may_error=true may_gc=true safepoints=4}
+  table::from_lists      <List[int], List[int]>               240 B  listlen=1 call=2  {may_error=true may_gc=true safepoints=2}
+  fill                   <any, int>                           466 B  listget=2 call=2  {may_error=true may_gc=true safepoints=1}
+== lpint (int keys): 28917 bytes of machine code in all
+  table::slots_for       <int, int>                           509 B  call=1  {may_error=false may_gc=true safepoints=3}
+  table::empty_table     <int>                                405 B  structnew=1  {may_error=true may_gc=true safepoints=5}
+  table::fresh           <int>                                114 B  call=2  {may_error=true may_gc=true safepoints=2}
+  table::slots           <table::Table>                        44 B  mutarraycapacity=1  {may_error=false may_gc=false safepoints=0}
+  table::size            <table::Table>                       103 B  mutarrayget=1  {may_error=true may_gc=false safepoints=0}
+  table::full?           <table::Table>                       497 B  call=2  {may_error=true may_gc=true safepoints=3}
+  table::home            <int, int>                           202 B  imod=1  {may_error=true may_gc=true safepoints=1}
+  table::next_slot       <int, int>                           319 B  imod=1  {may_error=true may_gc=true safepoints=2}
+  table::find_from       <table::Table, int, int, int>        728 B  mutarrayget=2 ieq=2 call=3  {may_error=true may_gc=true safepoints=1}
+  table::find            <table::Table, int, int>             216 B  call=3  {may_error=true may_gc=true safepoints=2}
+  table::empty_from      <table::Table, int>                  349 B  mutarrayget=1 call=3  {may_error=true may_gc=true safepoints=1}
+  table::find_empty      <table::Table, int>                  180 B  call=3  {may_error=true may_gc=true safepoints=2}
+  table::get             <table::Table, int, int>             524 B  mutarrayget=2 hash=1 call=1  {may_error=true may_gc=true safepoints=1}
+  table::has?            <table::Table, int>                  381 B  mutarrayget=1 hash=1 call=1  {may_error=true may_gc=true safepoints=1}
+  table::probes          <table::Table, int>                  517 B  imod=1 hash=1 call=4  {may_error=true may_gc=true safepoints=4}
+  table::store           <table::Table, int, int, int, int>   475 B  mutarrayset=3  {may_error=true may_gc=false safepoints=0}
+  table::counted         <table::Table, int>                  379 B  mutarrayget=1 mutarrayset=1  {may_error=true may_gc=true safepoints=1}
+  table::moved           <table::Table, int, table::Table>    692 B  mutarrayget=3 call=5  {may_error=true may_gc=true safepoints=1}
+  table::grown           <table::Table>                       324 B  call=5  {may_error=true may_gc=true safepoints=4}
+  table::put             <table::Table, int, int>             844 B  mutarrayget=1 mutarrayset=1 hash=1 call=8  {may_error=true may_gc=true safepoints=6}
+  table::between?        <int, int, int>                      460 B    {may_error=false may_gc=false safepoints=0}
+  table::shifted         <table::Table, int, int>            1196 B  mutarrayget=3 mutarrayset=3 call=7  {may_error=true may_gc=true safepoints=2}
+  table::drop            <table::Table, int>                  461 B  mutarrayget=1 hash=1 call=3  {may_error=true may_gc=true safepoints=3}
+  table::from_lists      <List[int], List[int]>               240 B  listlen=1 call=2  {may_error=true may_gc=true safepoints=2}
+  fill                   <any, int>                           466 B  listget=2 call=2  {may_error=true may_gc=true safepoints=1}
+== rh (int keys): 31284 bytes of machine code in all
+  table::slots_for       <int, int>                           509 B  call=1  {may_error=false may_gc=true safepoints=3}
+  table::empty_table     <int>                                377 B  structnew=1  {may_error=true may_gc=true safepoints=5}
+  table::fresh           <int>                                114 B  call=2  {may_error=true may_gc=true safepoints=2}
+  table::slots           <table::Table>                        44 B  mutarraycapacity=1  {may_error=false may_gc=false safepoints=0}
+  table::size            <table::Table>                       103 B  mutarrayget=1  {may_error=true may_gc=false safepoints=0}
+  table::full?           <table::Table>                       497 B  call=2  {may_error=true may_gc=true safepoints=3}
+  table::home            <int, int>                           202 B  imod=1  {may_error=true may_gc=true safepoints=1}
+  table::next_slot       <int, int>                           319 B  imod=1  {may_error=true may_gc=true safepoints=2}
+  table::dist            <int, int, int>                      302 B  call=1  {may_error=true may_gc=true safepoints=1}
+  table::find_from       <table::Table, int, int, int, int>   927 B  mutarrayget=2 ieq=1 veq=1 call=4  {may_error=true may_gc=true safepoints=2}
+  table::find            <table::Table, int, int>             219 B  call=3  {may_error=true may_gc=true safepoints=2}
+  table::get             <table::Table, int, int>             436 B  mutarrayget=1 hash=1 call=1  {may_error=true may_gc=true safepoints=1}
+  table::has?            <table::Table, int>                  261 B  hash=1 call=1  {may_error=true may_gc=true safepoints=1}
+  table::last_slot       <int>                                265 B    {may_error=false may_gc=true safepoints=1}
+  table::probes          <table::Table, int>                  533 B  imod=1 hash=1 call=5  {may_error=true may_gc=true safepoints=5}
+  table::store           <table::Table, int, int, any, any>   475 B  mutarrayset=3  {may_error=true may_gc=false safepoints=0}
+  table::store           <table::Table, int, int, int, int>   475 B  mutarrayset=3  {may_error=true may_gc=false safepoints=0}
+  table::counted         <table::Table, int>                  379 B  mutarrayget=1 mutarrayset=1  {may_error=true may_gc=true safepoints=1}
+  table::placed_from     <table::Table, int, int, int, any, any>   983 B  mutarrayget=1 mutarrayset=1 mutarrayswap=2 call=7  {may_error=true may_gc=true safepoints=3}
+  table::placed_from     <table::Table, int, int, int, int, int>  1007 B  mutarrayget=1 mutarrayset=1 mutarrayswap=2 call=7  {may_error=true may_gc=true safepoints=4}
+  table::placed          <table::Table, int, any, any>        254 B  call=3  {may_error=true may_gc=true safepoints=2}
+  table::placed          <table::Table, int, int, int>        254 B  call=3  {may_error=true may_gc=true safepoints=2}
+  table::moved           <table::Table, int, table::Table>    684 B  mutarrayget=3 call=4  {may_error=true may_gc=true safepoints=1}
+  table::grown           <table::Table>                       324 B  call=5  {may_error=true may_gc=true safepoints=4}
+  table::put             <table::Table, int, int>             716 B  mutarrayset=1 hash=1 call=7  {may_error=true may_gc=true safepoints=7}
+  table::shifted         <table::Table, int>                 1141 B  mutarrayget=3 mutarrayset=3 call=5  {may_error=true may_gc=true safepoints=2}
+  table::drop            <table::Table, int>                  373 B  hash=1 call=3  {may_error=true may_gc=true safepoints=3}
+  table::from_lists      <List[int], List[int]>               240 B  listlen=1 call=2  {may_error=true may_gc=true safepoints=2}
+  fill                   <any, int>                           466 B  listget=2 call=2  {may_error=true may_gc=true safepoints=1}
+== cd (int keys): 25854 bytes of machine code in all
+  table::slots_for       <int, int>                           509 B  call=1  {may_error=false may_gc=true safepoints=3}
+  table::empty_table     <int>                                457 B  structnew=2  {may_error=true may_gc=true safepoints=9}
+  table::fresh           <int>                                114 B  call=2  {may_error=true may_gc=true safepoints=2}
+  table::slots           <table::Table>                        44 B  mutarraycapacity=1  {may_error=false may_gc=false safepoints=0}
+  table::size            <table::Table>                        54 B  mvlen=1  {may_error=false may_gc=false safepoints=0}
+  table::full?           <table::Table>                       465 B  call=2  {may_error=false may_gc=true safepoints=3}
+  table::home            <int, int>                           202 B  imod=1  {may_error=true may_gc=true safepoints=1}
+  table::next_slot       <int, int>                           181 B    {may_error=true may_gc=false safepoints=0}
+  table::find_from       <table::Table, int, int, int>        744 B  mutarrayget=1 mvat=2 ieq=1 veq=1 call=3  {may_error=true may_gc=false safepoints=0}
+  table::find            <table::Table, int, int>             211 B  call=3  {may_error=true may_gc=true safepoints=1}
+  table::empty_from      <mutarray, int>                      349 B  mutarrayget=1 mutarraycapacity=1 call=2  {may_error=true may_gc=false safepoints=0}
+  table::get             <table::Table, int, int>             508 B  mutarrayget=1 mvat=1 hash=1 call=1  {may_error=true may_gc=true safepoints=1}
+  table::has?            <table::Table, int>                  381 B  mutarrayget=1 hash=1 call=1  {may_error=true may_gc=true safepoints=1}
+  table::probes          <table::Table, int>                  517 B  imod=1 hash=1 call=4  {may_error=true may_gc=true safepoints=4}
+  table::appended        <table::Table, int, int, int, int>   395 B  mutarrayset=1 mvpush=3 call=1  {may_error=true may_gc=false safepoints=0}
+  table::placed          <table::Table, int, int, int>        283 B  call=4  {may_error=true may_gc=true safepoints=1}
+  table::indexed         <mutarray, MutableVector[int], int>   450 B  mutarrayset=1 mutarraycapacity=1 mvat=1 mvlen=1 call=3  {may_error=true may_gc=true safepoints=1}
+  table::put             <table::Table, int, int>             988 B  mutarrayget=1 hash=1 structnew=1 call=6  {may_error=true may_gc=true safepoints=7}
+  table::from_lists      <List[int], List[int]>               240 B  listlen=1 call=2  {may_error=true may_gc=true safepoints=2}
+  fill                   <any, int>                           466 B  listget=2 call=2  {may_error=true may_gc=true safepoints=1}
+== sorted (int keys): 40702 bytes of machine code in all
+  table::fresh           <int>                                302 B  structnew=1  {may_error=true may_gc=true safepoints=5}
+  table::size            <table::Table>                        46 B  listlen=1  {may_error=false may_gc=false safepoints=0}
+  table::lower_bound     <List[int], int, int, int>           560 B  listget=1 call=2  {may_error=true may_gc=true safepoints=2}
+  table::scan            <List[int], list, int, int, int>     764 B  listget=2 listlen=1 ieq=1 veq=1 call=1  {may_error=true may_gc=true safepoints=1}
+  table::find            <table::Table, int, int>             303 B  call=3  {may_error=true may_gc=true safepoints=2}
+  table::present?        <table::Table, int, int>             468 B  listget=1 ieq=1 call=1  {may_error=true may_gc=false safepoints=0}
+  table::get             <table::Table, int, int>             388 B  mutarrayget=1 hash=1 call=2  {may_error=true may_gc=true safepoints=1}
+  table::has?            <table::Table, int>                  215 B  hash=1 call=2  {may_error=true may_gc=true safepoints=1}
+  table::steps           <List[int], int, int, int, int>      724 B  listget=1 call=2  {may_error=true may_gc=true safepoints=4}
+  table::entry_count     <int, int>                           133 B    {may_error=false may_gc=false safepoints=0}
+  table::probes          <table::Table, int>                  670 B  hash=1 call=5  {may_error=true may_gc=true safepoints=6}
+  table::spliced_in      <mutarray, int, int>                 828 B  mutarraysetproven=1 mutarraycapacity=1  {may_error=true may_gc=true safepoints=4}
+  table::spliced_out     <mutarray, int>                      605 B  mutarraycapacity=1  {may_error=true may_gc=true safepoints=2}
+  table::inserted        <table::Table, int, int, int, int>  1844 B  listget=4 ieq=2 structnew=1 call=2  {may_error=true may_gc=true safepoints=8}
+  table::removed         <table::Table, int>                 1341 B  listget=2 ieq=2 structnew=1 call=2  {may_error=true may_gc=true safepoints=8}
+  table::put             <table::Table, int, int>             472 B  mutarrayset=1 hash=1 call=3  {may_error=true may_gc=true safepoints=2}
+  table::drop            <table::Table, int>                  288 B  hash=1 call=3  {may_error=true may_gc=true safepoints=2}
+  table::identity        <generic>                             29 B    {may_error=false may_gc=false safepoints=0}
+  table::min             <int, int>                           173 B    {may_error=false may_gc=false safepoints=0}
+  table::merged          <List[int], mutarray, mutarray, int, int, int, int, int>  2998 B  mutarrayget=4 mutarrayset=4 listget=2 call=4  {may_error=true may_gc=true safepoints=8}
+  table::pass            <List[int], int, mutarray, mutarray, int, int>  1004 B  call=4  {may_error=true may_gc=true safepoints=6}
+  table::sorted_from     <List[int], int, mutarray, mutarray, int>   540 B  call=2  {may_error=true may_gc=true safepoints=2}
+  table::order           <List[int]>                          538 B  mutarraygetproven=1 mutarraycapacity=1 listlen=1 call=1  {may_error=true may_gc=true safepoints=6}
+  table::first?          <table::Input, int, int, int>        765 B  listget=3 ieq=1 veq=1 call=1  {may_error=true may_gc=false safepoints=0}
+  table::last            <table::Input, int, int, int, int>  1310 B  listget=3 listlen=1 ieq=1 veq=1 call=2  {may_error=true may_gc=true safepoints=2}
+  table::from_lists      <List[int], List[int]>              5013 B  listget=15 listlen=5 hash=1 structnew=1 call=3  {may_error=true may_gc=true safepoints=24}
+== lpa (str keys): 29352 bytes of machine code in all
+  table::slots_for       <int, int>                           509 B  call=1  {may_error=false may_gc=true safepoints=3}
+  table::empty_table     <int>                                377 B  structnew=1  {may_error=true may_gc=true safepoints=5}
+  table::fresh           <int>                                114 B  call=2  {may_error=true may_gc=true safepoints=2}
+  table::slots           <table::Table>                        44 B  mutarraycapacity=1  {may_error=false may_gc=false safepoints=0}
+  table::size            <table::Table>                       103 B  mutarrayget=1  {may_error=true may_gc=false safepoints=0}
+  table::full?           <table::Table>                       497 B  call=2  {may_error=true may_gc=true safepoints=3}
+  table::home            <int, int>                           202 B  imod=1  {may_error=true may_gc=true safepoints=1}
+  table::next_slot       <int, int>                           319 B  imod=1  {may_error=true may_gc=true safepoints=2}
+  table::find_from       <table::Table, int, str, int>        720 B  mutarrayget=2 ieq=1 veq=1 call=3  {may_error=true may_gc=true safepoints=1}
+  table::find            <table::Table, int, str>             216 B  call=3  {may_error=true may_gc=true safepoints=2}
+  table::empty_from      <table::Table, int>                  349 B  mutarrayget=1 call=3  {may_error=true may_gc=true safepoints=1}
+  table::find_empty      <table::Table, int>                  180 B  call=3  {may_error=true may_gc=true safepoints=2}
+  table::get             <table::Table, str, int>             524 B  mutarrayget=2 hash=1 call=1  {may_error=true may_gc=true safepoints=1}
+  table::has?            <table::Table, str>                  381 B  mutarrayget=1 hash=1 call=1  {may_error=true may_gc=true safepoints=1}
+  table::probes          <table::Table, str>                  517 B  imod=1 hash=1 call=4  {may_error=true may_gc=true safepoints=4}
+  table::store           <table::Table, int, int, any, any>   475 B  mutarrayset=3  {may_error=true may_gc=false safepoints=0}
+  table::store           <table::Table, int, int, str, int>   475 B  mutarrayset=3  {may_error=true may_gc=false safepoints=0}
+  table::counted         <table::Table, int>                  379 B  mutarrayget=1 mutarrayset=1  {may_error=true may_gc=true safepoints=1}
+  table::moved           <table::Table, int, table::Table>    692 B  mutarrayget=3 call=5  {may_error=true may_gc=true safepoints=1}
+  table::grown           <table::Table>                       324 B  call=5  {may_error=true may_gc=true safepoints=4}
+  table::put             <table::Table, str, int>             844 B  mutarrayget=1 mutarrayset=1 hash=1 call=8  {may_error=true may_gc=true safepoints=6}
+  table::between?        <int, int, int>                      460 B    {may_error=false may_gc=false safepoints=0}
+  table::shifted         <table::Table, int, int>            1196 B  mutarrayget=3 mutarrayset=3 call=7  {may_error=true may_gc=true safepoints=2}
+  table::drop            <table::Table, str>                  461 B  mutarrayget=1 hash=1 call=3  {may_error=true may_gc=true safepoints=3}
+  table::from_lists      <List[str], List[int]>               240 B  listlen=1 call=2  {may_error=true may_gc=true safepoints=2}
+  fill                   <any, int>                           466 B  listget=2 call=2  {may_error=true may_gc=true safepoints=1}
+== lpstr (str keys): 28742 bytes of machine code in all
+  table::slots_for       <int, int>                           509 B  call=1  {may_error=false may_gc=true safepoints=3}
+  table::empty_table     <int>                                403 B  structnew=1  {may_error=true may_gc=true safepoints=5}
+  table::fresh           <int>                                114 B  call=2  {may_error=true may_gc=true safepoints=2}
+  table::slots           <table::Table>                        44 B  mutarraycapacity=1  {may_error=false may_gc=false safepoints=0}
+  table::size            <table::Table>                       103 B  mutarrayget=1  {may_error=true may_gc=false safepoints=0}
+  table::full?           <table::Table>                       497 B  call=2  {may_error=true may_gc=true safepoints=3}
+  table::home            <int, int>                           202 B  imod=1  {may_error=true may_gc=true safepoints=1}
+  table::next_slot       <int, int>                           319 B  imod=1  {may_error=true may_gc=true safepoints=2}
+  table::find_from       <table::Table, int, str, int>        672 B  mutarrayget=2 ieq=1 streq=1 call=3  {may_error=true may_gc=true safepoints=1}
+  table::find            <table::Table, int, str>             216 B  call=3  {may_error=true may_gc=true safepoints=2}
+  table::empty_from      <table::Table, int>                  349 B  mutarrayget=1 call=3  {may_error=true may_gc=true safepoints=1}
+  table::find_empty      <table::Table, int>                  180 B  call=3  {may_error=true may_gc=true safepoints=2}
+  table::get             <table::Table, str, int>             524 B  mutarrayget=2 hash=1 call=1  {may_error=true may_gc=true safepoints=1}
+  table::has?            <table::Table, str>                  381 B  mutarrayget=1 hash=1 call=1  {may_error=true may_gc=true safepoints=1}
+  table::probes          <table::Table, str>                  517 B  imod=1 hash=1 call=4  {may_error=true may_gc=true safepoints=4}
+  table::store           <table::Table, int, int, str, int>   475 B  mutarrayset=3  {may_error=true may_gc=false safepoints=0}
+  table::counted         <table::Table, int>                  379 B  mutarrayget=1 mutarrayset=1  {may_error=true may_gc=true safepoints=1}
+  table::moved           <table::Table, int, table::Table>    692 B  mutarrayget=3 call=5  {may_error=true may_gc=true safepoints=1}
+  table::grown           <table::Table>                       324 B  call=5  {may_error=true may_gc=true safepoints=4}
+  table::put             <table::Table, str, int>             844 B  mutarrayget=1 mutarrayset=1 hash=1 call=8  {may_error=true may_gc=true safepoints=6}
+  table::between?        <int, int, int>                      460 B    {may_error=false may_gc=false safepoints=0}
+  table::shifted         <table::Table, int, int>            1196 B  mutarrayget=3 mutarrayset=3 call=7  {may_error=true may_gc=true safepoints=2}
+  table::drop            <table::Table, str>                  461 B  mutarrayget=1 hash=1 call=3  {may_error=true may_gc=true safepoints=3}
+  table::from_lists      <List[str], List[int]>               240 B  listlen=1 call=2  {may_error=true may_gc=true safepoints=2}
+  fill                   <any, int>                           466 B  listget=2 call=2  {may_error=true may_gc=true safepoints=1}
+== chain (str keys): 26939 bytes of machine code in all
+  table::slots_for       <int, int>                           416 B  call=1  {may_error=false may_gc=true safepoints=2}
+  table::empty_table     <int>                                274 B  structnew=1  {may_error=true may_gc=true safepoints=4}
+  table::fresh           <int>                                112 B  call=2  {may_error=true may_gc=true safepoints=2}
+  table::slots           <table::Table>                        44 B  mutarraycapacity=1  {may_error=false may_gc=false safepoints=0}
+  table::size            <table::Table>                       103 B  mutarrayget=1  {may_error=true may_gc=false safepoints=0}
+  table::full?           <table::Table>                       393 B  call=2  {may_error=true may_gc=true safepoints=2}
+  table::home            <int, int>                           202 B  imod=1  {may_error=true may_gc=true safepoints=1}
+  table::bucket          <table::Table, int>                  249 B  mutarrayget=1 call=2  {may_error=true may_gc=true safepoints=1}
+  table::position        <List[table::Entry], int, str>       496 B  listgetproven=1 listlen=1 ieq=1 veq=1  {may_error=true may_gc=false safepoints=0}
+  table::value_in        <List[table::Entry], int, str, int>   472 B  listgetproven=1 listlen=1 ieq=1 veq=1  {may_error=true may_gc=false safepoints=0}
+  table::replaced        <List[table::Entry], int, table::Entry>   455 B  listgetproven=1 listlen=1  {may_error=true may_gc=true safepoints=3}
+  table::without         <List[table::Entry], int>            408 B  listgetproven=1 listlen=1  {may_error=true may_gc=true safepoints=3}
+  table::get             <table::Table, str, int>             230 B  hash=1 call=2  {may_error=true may_gc=true safepoints=1}
+  table::has?            <table::Table, str>                  229 B  hash=1 call=2  {may_error=true may_gc=true safepoints=1}
+  table::probes          <table::Table, str>                  285 B  listlen=1 hash=1 call=2  {may_error=true may_gc=true safepoints=1}
+  table::appended        <table::Table, table::Entry>         479 B  mutarrayget=1 mutarrayset=1 listappend=1 call=2  {may_error=true may_gc=true safepoints=2}
+  table::counted         <table::Table, int>                  379 B  mutarrayget=1 mutarrayset=1  {may_error=true may_gc=true safepoints=1}
+  table::rehomed         <List[table::Entry], int, table::Table>   305 B  listget=1 listlen=1 call=2  {may_error=true may_gc=true safepoints=1}
+  table::moved           <table::Table, int, table::Table>    327 B  mutarrayget=1 call=3  {may_error=true may_gc=true safepoints=1}
+  table::grown           <table::Table>                       324 B  call=5  {may_error=true may_gc=true safepoints=4}
+  table::put             <table::Table, str, int>            1278 B  mutarrayget=1 mutarrayset=2 listappend=1 hash=1 structnew=3 call=9  {may_error=true may_gc=true safepoints=11}
+  table::drop            <table::Table, str>                  584 B  mutarrayget=1 mutarrayset=1 hash=1 call=5  {may_error=true may_gc=true safepoints=3}
+  table::from_lists      <List[str], List[int]>               243 B  listlen=1 call=2  {may_error=true may_gc=true safepoints=2}
+  fill                   <any, int>                           466 B  listget=2 call=2  {may_error=true may_gc=true safepoints=1}
+== cd (str keys): 25737 bytes of machine code in all
+  table::slots_for       <int, int>                           509 B  call=1  {may_error=false may_gc=true safepoints=3}
+  table::empty_table     <int>                                457 B  structnew=2  {may_error=true may_gc=true safepoints=9}
+  table::fresh           <int>                                114 B  call=2  {may_error=true may_gc=true safepoints=2}
+  table::slots           <table::Table>                        44 B  mutarraycapacity=1  {may_error=false may_gc=false safepoints=0}
+  table::size            <table::Table>                        54 B  mvlen=1  {may_error=false may_gc=false safepoints=0}
+  table::full?           <table::Table>                       465 B  call=2  {may_error=false may_gc=true safepoints=3}
+  table::home            <int, int>                           202 B  imod=1  {may_error=true may_gc=true safepoints=1}
+  table::next_slot       <int, int>                           181 B    {may_error=true may_gc=false safepoints=0}
+  table::find_from       <table::Table, int, str, int>        744 B  mutarrayget=1 mvat=2 ieq=1 veq=1 call=3  {may_error=true may_gc=false safepoints=0}
+  table::find            <table::Table, int, str>             211 B  call=3  {may_error=true may_gc=true safepoints=1}
+  table::empty_from      <mutarray, int>                      349 B  mutarrayget=1 mutarraycapacity=1 call=2  {may_error=true may_gc=false safepoints=0}
+  table::get             <table::Table, str, int>             508 B  mutarrayget=1 mvat=1 hash=1 call=1  {may_error=true may_gc=true safepoints=1}
+  table::has?            <table::Table, str>                  381 B  mutarrayget=1 hash=1 call=1  {may_error=true may_gc=true safepoints=1}
+  table::probes          <table::Table, str>                  517 B  imod=1 hash=1 call=4  {may_error=true may_gc=true safepoints=4}
+  table::appended        <table::Table, int, int, str, int>   395 B  mutarrayset=1 mvpush=3 call=1  {may_error=true may_gc=false safepoints=0}
+  table::placed          <table::Table, int, str, int>        283 B  call=4  {may_error=true may_gc=true safepoints=1}
+  table::indexed         <mutarray, MutableVector[int], int>   450 B  mutarrayset=1 mutarraycapacity=1 mvat=1 mvlen=1 call=3  {may_error=true may_gc=true safepoints=1}
+  table::put             <table::Table, str, int>             988 B  mutarrayget=1 hash=1 structnew=1 call=6  {may_error=true may_gc=true safepoints=7}
+  table::from_lists      <List[str], List[int]>               240 B  listlen=1 call=2  {may_error=true may_gc=true safepoints=2}
+  fill                   <any, int>                           466 B  listget=2 call=2  {may_error=true may_gc=true safepoints=1}
+== rh (str keys): 31167 bytes of machine code in all
+  table::slots_for       <int, int>                           509 B  call=1  {may_error=false may_gc=true safepoints=3}
+  table::empty_table     <int>                                377 B  structnew=1  {may_error=true may_gc=true safepoints=5}
+  table::fresh           <int>                                114 B  call=2  {may_error=true may_gc=true safepoints=2}
+  table::slots           <table::Table>                        44 B  mutarraycapacity=1  {may_error=false may_gc=false safepoints=0}
+  table::size            <table::Table>                       103 B  mutarrayget=1  {may_error=true may_gc=false safepoints=0}
+  table::full?           <table::Table>                       497 B  call=2  {may_error=true may_gc=true safepoints=3}
+  table::home            <int, int>                           202 B  imod=1  {may_error=true may_gc=true safepoints=1}
+  table::next_slot       <int, int>                           319 B  imod=1  {may_error=true may_gc=true safepoints=2}
+  table::dist            <int, int, int>                      302 B  call=1  {may_error=true may_gc=true safepoints=1}
+  table::find_from       <table::Table, int, str, int, int>   927 B  mutarrayget=2 ieq=1 veq=1 call=4  {may_error=true may_gc=true safepoints=2}
+  table::find            <table::Table, int, str>             219 B  call=3  {may_error=true may_gc=true safepoints=2}
+  table::get             <table::Table, str, int>             436 B  mutarrayget=1 hash=1 call=1  {may_error=true may_gc=true safepoints=1}
+  table::has?            <table::Table, str>                  261 B  hash=1 call=1  {may_error=true may_gc=true safepoints=1}
+  table::last_slot       <int>                                265 B    {may_error=false may_gc=true safepoints=1}
+  table::probes          <table::Table, str>                  533 B  imod=1 hash=1 call=5  {may_error=true may_gc=true safepoints=5}
+  table::store           <table::Table, int, int, any, any>   475 B  mutarrayset=3  {may_error=true may_gc=false safepoints=0}
+  table::store           <table::Table, int, int, str, int>   475 B  mutarrayset=3  {may_error=true may_gc=false safepoints=0}
+  table::counted         <table::Table, int>                  379 B  mutarrayget=1 mutarrayset=1  {may_error=true may_gc=true safepoints=1}
+  table::placed_from     <table::Table, int, int, int, any, any>   983 B  mutarrayget=1 mutarrayset=1 mutarrayswap=2 call=7  {may_error=true may_gc=true safepoints=3}
+  table::placed_from     <table::Table, int, int, int, str, int>  1007 B  mutarrayget=1 mutarrayset=1 mutarrayswap=2 call=7  {may_error=true may_gc=true safepoints=4}
+  table::placed          <table::Table, int, any, any>        254 B  call=3  {may_error=true may_gc=true safepoints=2}
+  table::placed          <table::Table, int, str, int>        254 B  call=3  {may_error=true may_gc=true safepoints=2}
+  table::moved           <table::Table, int, table::Table>    684 B  mutarrayget=3 call=4  {may_error=true may_gc=true safepoints=1}
+  table::grown           <table::Table>                       324 B  call=5  {may_error=true may_gc=true safepoints=4}
+  table::put             <table::Table, str, int>             716 B  mutarrayset=1 hash=1 call=7  {may_error=true may_gc=true safepoints=7}
+  table::shifted         <table::Table, int>                 1141 B  mutarrayget=3 mutarrayset=3 call=5  {may_error=true may_gc=true safepoints=2}
+  table::drop            <table::Table, str>                  373 B  hash=1 call=3  {may_error=true may_gc=true safepoints=3}
+  table::from_lists      <List[str], List[int]>               240 B  listlen=1 call=2  {may_error=true may_gc=true safepoints=2}
+  fill                   <any, int>                           466 B  listget=2 call=2  {may_error=true may_gc=true safepoints=1}

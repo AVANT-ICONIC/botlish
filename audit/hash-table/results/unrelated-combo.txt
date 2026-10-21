@@ -1,0 +1,134 @@
+== combo: bench/2048.tcl
+Backends:
+  Tcl interp  semantic interpreter -- in-process execution
+  Tcl compile Tcl source/codegen backend (not Cranelift) -- in-process execution
+  Cranelift   Cranelift native machine-code backend -- in-process execution, JIT compile time excluded
+  (cranelift-generic: Cranelift without call-site specialization)
+
+backend               moves      best ms    us/move     checksum  front end
+interp                   30       1140.5   38015.30          198   0.51 s
+compile                 300        999.5    3331.81      3004291   0.28 s
+cranelift-generic    100000       2235.3      22.35   1238344689   0.30 s
+                   lower    185 ms, cranelift    23 ms, 169.92 allocs/move,    7764 B/move, 747 GC cycles
+cranelift            100000       2148.1      21.48   1238344689   0.41 s
+                   lower    265 ms, cranelift    21 ms, 168.91 allocs/move,    7708 B/move, 742 GC cycles
+== combo: bench/mutable-array.tcl
+MutableArray[T]: performance (n = 2000 operations per program on the Tcl backends, 200000 natively; best of 3 runs)
+
+Backends:
+  cranelift   
+
+## Operations
+
+| operation | baseline | cranelift |
+|---|---|---:|
+| List construction (collecting loop), per element, for comparison | -- | 10168 ns (10168 ns) |
+| create(n, 0): one repeated unrestricted value, per slot | -- | 9552 ns (9552 ns) |
+| from_list, per element | list-build | -61 ns (10687 ns) |
+| generate(n, tens): one factory call per slot | -- | 9889 ns (9889 ns) |
+| at (indexed read) | array-base | -1596 ns (11826 ns) |
+| set on a unique array (no detach) | array-base | 1931 ns (11458 ns) |
+| swap (unrestricted) | array-base | -1210 ns (11123 ns) |
+| iterate an unrestricted array (snapshot), per element | array-base | 146 ns (10888 ns) |
+| MutableVector at, for comparison | vector-base | 529 ns (12508 ns) |
+| MutableVector swap, for comparison | vector-base | 1078 ns (13312 ns) |
+| MutableBytes replace on a unique store (threaded), for comparison | bytes-base | 3698 ns (13856 ns) |
+| create and release a coroutine (no array) | -- | 14581 ns (14581 ns) |
+| generate(n, make): affine factory construction, per slot (the array dropped whole) | -- | 29520 ns (29520 ns) |
+| swap a coroutine in, the displaced one released | make-drop | 1916 ns (17357 ns) |
+| consume an affine array in a loop, per element | affine-generate | -734 ns (30598 ns) |
+| MutableVector[MutableArray[int]]: push a 2-slot array, pop it | nested-base | 8692 ns (20412 ns) |
+| MutableVector[MutableArray[int]]: copy an element out, write it | nested-base | 9250 ns (21856 ns) |
+| MutableVector[MutableArray[Coroutine]]: push a generated 2-slot array, pop it (dropped) | nested-base | 16886 ns (27687 ns) |
+
+## Copy-on-write complexity
+
+K = 200 copies of an S-element array (or vector) per program; per copy.
+
+| operation, S | baseline | cranelift |
+|---|---|---:|
+| array copy (read-out of a mutated binding), S = 10 | copy-base-10 | 6415 ns (108540 ns) |
+| array copy, then its first write (detach), S = 10 | copy-10 | 2095 ns (120520 ns) |
+| vector copy, for comparison, S = 10 | vcopy-base-10 | 7315 ns (145320 ns) |
+| vector copy, then its first write (detach), S = 10 | vcopy-10 | 5820 ns (144350 ns) |
+| array copy (read-out of a mutated binding), S = 1000 | copy-base-1000 | 13855 ns (118640 ns) |
+| array copy, then its first write (detach), S = 1000 | copy-1000 | 1830 ns (117215 ns) |
+| vector copy, for comparison, S = 1000 | vcopy-base-1000 | 9415 ns (132900 ns) |
+| vector copy, then its first write (detach), S = 1000 | vcopy-1000 | 5515 ns (141720 ns) |
+| array copy (read-out of a mutated binding), S = 10000 | copy-base-10000 | 10480 ns (120980 ns) |
+| array copy, then its first write (detach), S = 10000 | copy-10000 | 34510 ns (142215 ns) |
+| vector copy, for comparison, S = 10000 | vcopy-base-10000 | 910 ns (131160 ns) |
+| vector copy, then its first write (detach), S = 10000 | vcopy-10000 | -10235 ns (163935 ns) |
+
+## Scheduler-shaped construction
+
+N workers from mutable_array::generate(n, worker), 8 rounds over the array (swap a slot out, resume it, swap it back), then a consuming loop; time per resume.
+
+| program | baseline | cranelift |
+|---|---|---:|
+| sched-8 | -- | 36628 ns |
+== combo: bench/hashtable.tcl
+Construction (native backend, best of 3 runs, presized vs default)
+  entries    kind     presize    allocations allocatedBytes    resizes    time-us
+  100        int      0                  30          13728          5     13.103
+  100        int      1                   5           6416          0       4.72
+  10000      int      0                  60         789504         11   1335.477
+  10000      int      1                   5         393488          0     697.63
+  100000     int      0                  80       12587072         15  26942.427
+  100000     int      1                   5        6291728          0  11126.533
+  100        str      0                  30          13728          5     15.299
+  100        str      1                   5           6416          0      5.287
+  2000       str      0                  50         199136          9    289.998
+  2000       str      1                   5          98576          0    118.001
+
+Operations (native backend, presized table, best of 3 runs; alloc/op must be 0)
+  entries    kind     op           alloc/op                time-us/op           
+  100        int      hit                 0                     0.074           
+  100        int      miss                0                     0.183           
+  100        int      replace             0                     0.075           
+  100        int      delete-all                                0.159           
+  10000      int      hit                 0                     0.165           
+  10000      int      miss                0                     0.206           
+  10000      int      replace             0                     0.324           
+  10000      int      delete-all                                0.170           
+  100000     int      hit                 0                     2.943           
+  100000     int      miss                0                     2.906           
+  100000     int      replace             0                     2.697           
+  100000     int      delete-all                                0.467           
+  100        str      hit                 0                     0.113           
+  100        str      miss                0                     0.081           
+  100        str      replace             0                     0.099           
+  100        str      delete-all                                0.102           
+  2000       str      hit                 0                     0.161           
+  2000       str      miss                0                     0.132           
+  2000       str      replace             0                     0.143           
+  2000       str      delete-all                                0.125           
+
+Probe metrics (Tcl-side model of the identical algorithm: see file header)
+  entries    kind     hashCalls  probeSteps    comparisons    resizes entriesRehashed
+  100        int      263               283            183          5        163
+  10000      int      20912           22851          12851         11      10912
+  100000     int      274750         276159         176159         15     174750
+  100        str      263               246            146          5        163
+  2000       str      4721             3993           1993          9       2721
+== combo: bench/corpus.tcl
+algorithm        input                      cranelift   specialized compile                  code                 alloc
+string_reverse   100 chars                   0.006 ms         57.0 + 2.9 ms -->1397 B, -->5 fn, -->0 guards, -->1 unbox, -->2 box, -->3 rawops 11 objs, 783 B, peak 783 B, 1 gc, 385 B str copied, 5 list elems copied  agree
+string_reverse   1,000 chars                 0.047 ms         49.3 + 3.0 ms -->1397 B, -->5 fn, -->0 guards, -->1 unbox, -->2 box, -->3 rawops 11 objs, 1.7 KB, peak 1.7 KB, 1 gc, 3.4 KB str copied, 5 list elems copied  agree
+string_reverse   10,000 chars                0.984 ms         50.5 + 4.0 ms -->1397 B, -->5 fn, -->0 guards, -->1 unbox, -->2 box, -->3 rawops 11 objs, 10.7 KB, peak 10.7 KB, 1 gc, 31.3 KB str copied, 5 list elems copied  agree
+string_replace   1 KB                        0.063 ms         69.8 + 4.0 ms -->3059 B, -->6 fn, -->0 guards, -->0 unbox, -->3 box, -->1 rawops 973 objs, 28.7 KB, peak 28.7 KB, 1 gc, 6.3 KB str copied, 5 list elems copied  agree
+string_replace   10 KB                       0.671 ms         69.6 + 4.0 ms -->3059 B, -->6 fn, -->0 guards, -->0 unbox, -->3 box, -->1 rawops 9573 objs, 279.7 KB, peak 279.7 KB, 1 gc, 63.7 KB str copied, 5 list elems copied  agree
+string_replace   100 KB                        8.1 ms         90.9 + 4.4 ms -->3059 B, -->6 fn, -->0 guards, -->0 unbox, -->3 box, -->1 rawops 95573 objs, 2.8 MB, peak 1.0 MB, 3 gc, 721.3 KB str copied, 5 list elems copied  agree
+csv              100 rows                    0.378 ms        116.5 + 7.1 ms -->5670 B, -->12 fn, -->0 guards, -->2 unbox, -->0 box, -->1 rawops 2720 objs, 88.8 KB, peak 88.8 KB, 1 gc, 6.6 KB str copied, 534 list elems copied  agree
+csv              1,000 rows                    6.5 ms       133.0 + 11.0 ms -->5670 B, -->12 fn, -->0 guards, -->2 unbox, -->0 box, -->1 rawops 27921 objs, 905.9 KB, peak 905.9 KB, 1 gc, 70.4 KB str copied, 5030 list elems copied  agree
+csv              10,000 rows                  43.5 ms       144.8 + 10.3 ms -->5670 B, -->12 fn, -->0 guards, -->2 unbox, -->0 box, -->1 rawops 288922 objs, 9.3 MB, peak 4.1 MB, 7 gc, 753.4 KB str copied, 56390 list elems copied  agree
+csv_geometric    100 rows                    0.649 ms       154.6 + 12.6 ms -->6750 B, -->19 fn, -->0 guards, -->1 unbox, -->0 box, -->1 rawops 2828 objs, 101.8 KB, peak 101.8 KB, 1 gc, 6.6 KB str copied, 320 mutarrays, 950 mutarray elems copied  agree
+csv_geometric    1,000 rows                    3.1 ms       186.1 + 10.0 ms -->6750 B, -->19 fn, -->0 guards, -->1 unbox, -->0 box, -->1 rawops 28932 objs, 1.0 MB, peak 1.0 MB, 1 gc, 70.4 KB str copied, 3023 mutarrays, 9046 mutarray elems copied  agree
+csv_geometric    10,000 rows                  44.2 ms        179.1 + 9.6 ms -->6750 B, -->19 fn, -->0 guards, -->1 unbox, -->0 box, -->1 rawops 298937 objs, 10.6 MB, peak 3.8 MB, 7 gc, 753.4 KB str copied, 30027 mutarrays, 96406 mutarray elems copied  agree
+csv_chunked      100 rows                    0.258 ms        152.3 + 9.1 ms -->7693 B, -->15 fn, -->1 guards, -->1 unbox, -->1 box, -->2 rawops 3042 objs, 162.3 KB, peak 162.3 KB, 1 gc, 6.6 KB str copied, 320 mutarrays, 1028 mutarray elems copied  agree
+csv_chunked      1,000 rows                    3.6 ms        204.4 + 9.1 ms -->7693 B, -->15 fn, -->1 guards, -->1 unbox, -->1 box, -->2 rawops 30999 objs, 1.6 MB, peak 1.0 MB, 2 gc, 70.4 KB str copied, 105 list elems copied, 3048 mutarrays, 10028 mutarray elems copied  agree
+csv_chunked      10,000 rows                  58.6 ms       206.4 + 10.5 ms -->7693 B, -->15 fn, -->1 guards, -->1 unbox, -->1 box, -->2 rawops 319564 objs, 16.4 MB, peak 4.7 MB, 11 gc, 753.4 KB str copied, 12090 list elems copied, 30330 mutarrays, 100028 mutarray elems copied  agree
+matmul           2x3 * 3x2                   0.002 ms        117.6 + 6.1 ms -->5568 B, -->8 fn, -->0 guards, -->7 unbox, -->5 box, -->7 rawops 32 objs, 1.4 KB, peak 1.4 KB, 1 gc, 46 list elems copied  agree
+matmul           8x8                         0.008 ms       191.1 + 10.5 ms -->8814 B, -->8 fn, -->0 guards, -->7 unbox, -->66 box, -->68 rawops 61 objs, 4.0 KB, peak 4.0 KB, 1 gc, 275 list elems copied  agree
+matmul           16x16                       0.035 ms       467.0 + 17.9 ms -->18853 B, -->8 fn, -->0 guards, -->7 unbox, -->247 box, -->249 rawops 101 objs, 10.1 KB, peak 10.1 KB, 1 gc, 1043 list elems copied  agree
+matmul           32x32                       0.187 ms      2178.0 + 87.9 ms -->58472 B, -->8 fn, -->0 guards, -->7 unbox, -->974 box, -->976 rawops 181 objs, 31.6 KB, peak 31.6 KB, 1 gc, 4115 list elems copied  agree

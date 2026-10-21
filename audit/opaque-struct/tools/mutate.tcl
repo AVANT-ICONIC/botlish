@@ -75,8 +75,8 @@ set mutations {
 }
         {}}
     {instance-kind hir/semantic.tcl
-        {$kind in {OPAQUE-REPRESENTATION USE-AFTER-MOVE UNHANDLED-ERROR}}
-        {$kind in {USE-AFTER-MOVE UNHANDLED-ERROR}}}
+        {$kind in {OPAQUE-REPRESENTATION USE-AFTER-MOVE UNHANDLED-ERROR MISSING-IMPORT}}
+        {$kind in {USE-AFTER-MOVE UNHANDLED-ERROR MISSING-IMPORT}}}
     {print-nominal core/value.tcl
         {!$reveal && [isOpaqueStruct [lindex $v 1 0]]}
         {0}}
@@ -84,7 +84,7 @@ set mutations {
         {opaque $opaque opaqueSpan}
         {opaque 0 opaqueSpan}}
     {lower-flag surface/lower.tcl
-        {opaque [expr {[dict exists $node opaque] ? [dict get $node opaque] : 0}]}
+        {opaque [dict getdef $node opaque 0]}
         {opaque 0}}
     {registry-flag hir/structs.tcl
         {opaque [expr {[dict exists $decl opaque] && [dict get $decl opaque]}]}
@@ -125,7 +125,7 @@ proc makeMutantTree {scratch} {
         file copy -force $f [file join $scratch native]
     }
     file mkdir [file join $scratch tests]
-    foreach f {helpers.tcl opaque-struct.test} {
+    foreach f {helpers.tcl binary-header.tcl opaque-struct.test} {
         file copy -force [file join $root tests $f] [file join $scratch tests]
     }
     file mkdir [file join $scratch audit opaque-struct tools]

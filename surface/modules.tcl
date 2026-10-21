@@ -619,6 +619,12 @@ proc surface::modules::TypeRefs {type span foundVar} {
         TypeRefs [lindex $type 2] $span found
         return
     }
+    if {[llength $type] == 3 && [lindex $type 0] eq "refine"} {
+        # A scalar refinement (DECIMAL-ROUNDED-MILESTONE-1.md): the refined
+        # name's reference (the parameters are numbers).
+        TypeRefs [lindex $type 1] $span found
+        return
+    }
     lassign $type head arg
     if {$head eq "fn"} {
         foreach t [dict get $arg args] { TypeRefs $t $span found }

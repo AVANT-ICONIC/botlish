@@ -1,0 +1,43 @@
+18:18:03 baseline membership: String tries, the enum domain
+18:20:56 ladder A2: every prototype, lpa and lpmask, builds as passes
+18:20:56 round 1/3 base
+18:23:38 round 1/3 hash
+18:25:52 round 1/3 inline
+18:28:02 round 1/3 mod
+18:30:38 round 1/3 bounds
+18:33:14 round 1/3 combo
+18:35:04 round 2/3 base
+18:37:46 round 2/3 hash
+18:39:57 round 2/3 inline
+18:42:19 round 2/3 mod
+18:44:53 round 2/3 bounds
+18:47:26 round 2/3 combo
+18:49:16 round 3/3 base
+18:51:46 round 3/3 hash
+18:53:51 round 3/3 inline
+18:56:04 round 3/3 mod
+18:58:44 round 3/3 bounds
+19:01:15 round 3/3 combo
+19:03:06 ladder C2: the probe primitive, builds as passes
+19:03:06 round 1/3 probe
+19:06:38 round 1/3 comboprobe
+19:09:11 round 2/3 probe
+19:12:44 round 2/3 comboprobe
+19:15:17 round 3/3 probe
+19:18:56 round 3/3 comboprobe
+19:21:36 builds as passes: every table, the baseline and the merged tree interleaved
+20:23:28 policy as passes: base
+20:23:28 bench policy: -impls lpa -keys {int-dense str-short} -sizes {512 716 870 8192 11468 13926} -modes {build hit miss} -edits {{fn load_num() -> int:
+20:24:25 bench policy: -impls lpa -keys {int-dense str-short} -sizes {512 716 870 8192 11468 13926} -modes {build hit miss} -edits {{fn load_num() -> int:
+20:25:23 bench policy: -impls lpa -keys {int-dense str-short} -sizes {512 716 870 8192 11468 13926} -modes {build hit miss} -edits {{fn load_num() -> int:
+20:26:28 bench policy: -impls rh -keys {int-dense str-short} -sizes {512 716 870 8192 11468 13926} -modes {build hit miss} -edits {{fn load_num() -> int:
+20:27:27 bench policy: -impls rh -keys {int-dense str-short} -sizes {512 716 870 8192 11468 13926} -modes {build hit miss} -edits {{fn load_num() -> int:
+20:28:28 bench policy: -impls rh -keys {int-dense str-short} -sizes {512 716 870 8192 11468 13926} -modes {build hit miss} -edits {{fn load_num() -> int:
+20:29:34 policy as passes: combo
+20:29:34 bench policy: -impls lpa -keys {int-dense str-short} -sizes {512 716 870 8192 11468 13926} -modes {build hit miss} -edits {{fn load_num() -> int:
+20:30:19 bench policy: -impls lpa -keys {int-dense str-short} -sizes {512 716 870 8192 11468 13926} -modes {build hit miss} -edits {{fn load_num() -> int:
+20:31:07 bench policy: -impls lpa -keys {int-dense str-short} -sizes {512 716 870 8192 11468 13926} -modes {build hit miss} -edits {{fn load_num() -> int:
+20:32:02 bench policy: -impls rh -keys {int-dense str-short} -sizes {512 716 870 8192 11468 13926} -modes {build hit miss} -edits {{fn load_num() -> int:
+20:32:52 bench policy: -impls rh -keys {int-dense str-short} -sizes {512 716 870 8192 11468 13926} -modes {build hit miss} -edits {{fn load_num() -> int:
+20:33:46 bench policy: -impls rh -keys {int-dense str-short} -sizes {512 716 870 8192 11468 13926} -modes {build hit miss} -edits {{fn load_num() -> int:
+20:34:42 done

@@ -976,8 +976,8 @@ coroutine::done?(step)
 title: MUTABLE-PLACE-RECEIVER: a mutation's receiver is not a place
 summary: A MutableVector or MutableArray operation that mutates must be applied to a place -- a local, parameter or context parameter of the same function, or a field path from one.
 index: errors
-alias: push to a temporary vector; mutate a captured vector
-keywords: MutableVector, MutableArray, push, set, swap, take, pop, place, receiver, temporary, nested function, module binding
+alias: push to a temporary vector; mutate a captured vector; push as a function value
+keywords: MutableVector, MutableArray, push, set, swap, take, pop, place, receiver, temporary, nested function, module binding, function value
 related: concept.mutable-vector concept.mutable-array concept.values error.mutable-place-capture stdlib.mutable_vector::push
 docs: MUTABLE-VECTOR.md MUTABLE-ARRAY.md
 code: CORE SEMANTIC MUTABLE-PLACE-RECEIVER
@@ -999,18 +999,28 @@ rule the receiver breaks:
     its enclosing function sees;
   * a module binding, which every user of the module shares;
   * a binding whose static type is not the collection type (an `any`
-    narrowed by a test): bind the narrowed value to a name first.
+    narrowed by a test): bind the narrowed value to a name first;
+  * no receiver at all: the operation itself is used as a value (bound
+    to a name, passed as an argument, stored in a field). An operation
+    that mutates is only ever called, on a place: a call through a
+    function value names no place, so it would update whatever
+    collection its caller passes -- a copy, whose update is lost, or a
+    place's own header behind the copies of it. The diagnostic is at the
+    reference to the operation.
 
 == LIKELY CAUSES
   * `make_vector().push(x)`;
-  * a nested helper that pushes to its enclosing function's vector.
+  * a nested helper that pushes to its enclosing function's vector;
+  * `p = mutable_vector::push`, or `apply(mutable_vector::push, v, x)`.
 
 == WHAT TO DO
 Bind the value to a name, mutate the name, and use the name afterwards.
 For a helper, pass the collection in and return the updated one, or keep
 it in a field of a context struct: a function mutates it through its
 context parameter (`log.lines.push(n)`), and every function sharing the
-installed context sees the change.
+installed context sees the change. To pass a mutation around, wrap it in a
+function of your own that takes the collection and returns the updated
+one; the operations that only read (`length`, `at`) may be values.
 
 @example reject
 import mutable_vector
@@ -1042,6 +1052,21 @@ fn grow() -> int:
 grow()
 @caption Bound to a name, the vector is a place
 @value 3
+@end
+
+@example reject
+import mutable_vector
+
+fn grow() -> int:
+    v = mutable_vector::from_list([1, 2])
+    p = mutable_vector::push
+    p(v, 3)
+    v.length()
+
+grow()
+@caption Through a function value, push would have no place to update
+@error CORE SEMANTIC MUTABLE-PLACE-RECEIVER
+@at 5:9
 @end
 
 @topic error.mutable-place-capture

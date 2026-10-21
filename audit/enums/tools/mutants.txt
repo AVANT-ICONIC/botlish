@@ -232,14 +232,14 @@ proc core::primitives::add {a b} {
 <<<<
     if {[hir::types::IsCallable $declared] || [hir::types::IsStructLike $declared] || [hir::types::IsCoroutine $declared]
             || [hir::types::IsEnum $declared] || [hir::types::IsCAddress $declared] || [hir::types::IsImprint $declared]
-            || [hir::types::IsNativeMemory $declared]} {
+            || [hir::types::IsNativeMemory $declared] || [hir::refinements::IsRefined $declared]} {
 ====
     if {[hir::types::IsEnum $declared] && [hir::types::IsEnum $argType]} {
         return 1
     }
     if {[hir::types::IsCallable $declared] || [hir::types::IsStructLike $declared] || [hir::types::IsCoroutine $declared]
             || [hir::types::IsEnum $declared] || [hir::types::IsCAddress $declared] || [hir::types::IsImprint $declared]
-            || [hir::types::IsNativeMemory $declared]} {
+            || [hir::types::IsNativeMemory $declared] || [hir::refinements::IsRefined $declared]} {
 >>>>
 
 @@ hash-ignores-enum-tcl the hash ignores the enum's identity (Tcl runtimes)

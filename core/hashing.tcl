@@ -121,6 +121,13 @@ proc core::hashing::Mix {h v} {
         core::semanticError EQUALITY \
             "hash is not defined for callables: [core::value::show $v]"
     }
+    if {$kind eq "DecimalRounded"} {
+        # Hashing agrees with equality, which a DecimalRounded value has only
+        # at the precision of its static type (core::value::equal;
+        # DECIMAL-ROUNDED-MILESTONE-1.md).
+        core::semanticError EQUALITY \
+            "hash of a DecimalRounded value needs the precision of its type, which a hash does not know"
+    }
     set h [Step $h [dict get $KindTag $kind]]
     switch -- $kind {
         int {

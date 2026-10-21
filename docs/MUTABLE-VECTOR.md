@@ -8,6 +8,19 @@
 > `AFFINE-ELEMENT-COPY-OUT`. This report keeps the names it was written
 > with.
 
+> **Mutating operations are only ever called (HASH-TABLE-COMPILER-PRESSURE.md,
+> CP-3).** An operation that mutates its receiver in place (push, pop, take,
+> swap, clear; an array's set, swap, copy) used as a value -- `p =
+> mutable_vector::push`, an argument, a field -- is `MUTABLE-PLACE-RECEIVER`
+> at the reference: a call through the value names no place, so it mutated
+> whatever header its caller passed, behind the copies the elaboration
+> writes only for places it sees mutated (`c = v; p(v, 4)` changed `c`).
+> The operations that only read (length, at) may be values. A loop's length
+> over a vector (COLLECTING-LOOPS.md, "Iteration domains and cardinality")
+> counts only the operations that may resize it: `swap` is registered
+> `-keeps-length` (core/native.tcl), so two loops around a swap have one
+> length.
+
 `MutableVector[T]`: a growable mutable value, affine exactly when its
 elements are.
 
@@ -31,6 +44,9 @@ primitive affine value the scheduler-shaped programs put in it.
 * [Representation in one page](#representation-in-one-page)
 * [Relation to the other mutable types](#relation-to-the-other-mutable-types)
 * [Report](#report) -- the 74 points of the milestone report, in order
+* [By-reference arguments](#by-reference-arguments) -- a later fix
+* [Last uses per path](#last-uses-per-path) -- a later precision change
+* [Demand through struct literals](#demand-through-struct-literals) -- another
 * [Files](#files)
 * [What to run when changing this](#what-to-run-when-changing-this)
 
@@ -281,7 +297,16 @@ same list object.
 `mutable_vector#share(v, "h")` (`rt_mv_share`): a new header on
 `Rc::clone` of the backing -- one allocation, no element copied, counted as
 `shares`. Struct-bearing values are shared by descriptor (`s1.0.h`: a new
-struct whose slot 0 is shared). Where the compiler writes shares: item 11.
+struct whose slot 0 is shared). A slot of a type too imprecise to say
+(`any`, a generic position) beside a typed collection slot is listed with
+`d`, a copy of whatever it holds at run time (`W {a: MutableVector[int], d:
+any}` is `s2.0.h1.d`), so every slot of a copy owns its headers; a struct
+whose only such slots are imprecise is copied whole by `d`
+(`mv-any-slot-copies`: the descriptor once skipped those slots, so an
+`any` field kept its source's header, and two `any` fields of one copy
+shared one). A refined value has its carrier's representation, so an
+integer domain or a C scalar (`abi::I32`'s field, `ffi::c::Int`) holds no
+header and is no such slot (`MayHoldVector` looks through the refinement). Where the compiler writes shares: item 11.
 The descriptor walks struct fields only, so a struct that names itself
 (STRUCTS.md) is met again inside itself only through fields -- a type no
 finite value has -- and shares nothing there: `Chain {items, next: Chain}`
@@ -319,7 +344,9 @@ never on HIR rebuilt from Core IR) writes out:
 * **entries** -- a place root's initial value is shared unless it is fresh:
   a local's bound value, a parameter on entry (renamed: `v#entry`, and `v`
   becomes a local bound by its share), a loop variable per iteration, a
-  context installation's value. *Fresh* is a `from_list` result, a share, a
+  handler's payload binding (`on Full details:`, the same renaming in the
+  handler's body: the payload may hold a header the raiser's caller still
+  owns, `mv-payload-entry-copy`), a context installation's value. *Fresh* is a `from_list` result, a share, a
   struct literal of fresh fields (a field whose type may hold a vector --
   `any`, a generic position -- must be fresh too), or a call of a function
   whose every result is fresh;
@@ -363,7 +390,10 @@ header is a GC root (`ctxroot`, `vm.context_roots`). A context
 parameter is always a place root for read-outs, so a snapshot
 (`snapshot() -> MutableVector[str]: io.output`) is independent of later
 writes, in any function (`mv-context-member`); installing a context copies
-the installed value logically (`mv-context-installed-copy`).
+the installed value logically (`mv-context-installed-copy`). Both hold for a
+context whose members are all `any` too (a dynamic copy, `d`; on the Tcl
+backends: natively such a context is CONTEXT-NATIVE-LOWERING-UNSUPPORTED),
+`mv-any-slot-copies`.
 
 ### 16. `length`
 
@@ -653,8 +683,11 @@ Core IR -- which keeps no element types -- still says the loop consumes
 `core/mutvec.tcl`: headers `{mutvec ID}` over `core::mutvec::store(ID)` (a
 Tcl list); `core::value` knows the kind (`show` `<mutable-vector [1, 2]>`,
 equality is `CORE SEMANTIC EQUALITY` like MutableArray's -- vector equality
-is a non-goal). The interpreter's `listloop` over a vector value drains it
-(`core::forms::ConsumeVector`).
+is a non-goal). The interpreter's `listloop` whose iterable is the consume
+mark drains the vector (`core::forms::ConsumeVector`); any other `listloop`
+requires a List, like the Tcl compiler's and native code's, so a vector
+reaching one through a value of no collection type is the loop's TYPE error,
+never drained (`mv-untyped-loop`).
 
 ### 57. Tcl compiler lowering
 
@@ -1104,6 +1137,162 @@ front removal is O(1): the future test runner can keep either discipline.
 * **What enums and the test framework still need**: a `TestEvent` with
   several cases (enums/tagged unions), payload-bearing failures, and
   `compiler::assert_compiles` -- all non-goals here (item 100).
+
+## By-reference arguments
+
+A later fix of the copy elaboration (hir/mutvec.tcl), the same for both
+collections. The elaboration hands some arguments over uncopied although
+they are not their path's last use: the argument of a parameter that only
+observes (`ObservedOnly`), a native's argument whose ownership role does not
+keep it, a collection operation's receiver. That relied on "the callee reads
+it while the caller waits" -- but a call runs after its *later* arguments,
+and those could change the header first:
+
+| program | value before | value now |
+|---|---:|---:|
+| `obs2(v, grow1(v, 5))` (`v` = [1, 2]; grow1 pushes onto its parameter; v's last use moved into it) | 33 | 23 |
+| `v.at(pop1(v) - 7)` (`v` = [7, 8, 9]) | IndexNotFound | 9 |
+| `obs2(v, v.pop())` (`v` = [1, 2]) | 12 | 22 |
+| `v.at(v.pop() - 7)` | IndexNotFound | 9 |
+| `mutable_vector::at(c.values, bump())` (a context member [5]; bump pushes onto it) | 1 | IndexNotFound |
+
+(every backend agreed on the wrong values: the elaboration is shared). Now
+such an argument (`ByReference`) counts as a later use of its path for an
+operand after it (`NoLaterUse`: the later argument is copied instead of
+moved), and it is copied itself when a later argument of the call mutates
+the same place, or -- a context member, which any function sharing the
+context may mutate -- calls anything that may run code (`WrittenLater`,
+`MayRunCode`), a yield included: it suspends the coroutine, and the
+resumer may mutate the installed context before it resumes it
+(`mutable_vector::at(c.values, (yield Ev {...}).i)` read the resumer's
+replacement until `mv-cow-by-reference-yield`). A mutating receiver stays the place (`PlaceArgument`: `v.push(v.pop()
++ 10)` updates `v`), and later arguments that only read cost nothing
+(`x = v.at(v.length() - 1)` copies nothing). `tests/mutable-vector.test`'s
+`mv-cow-by-reference-arguments` pins the seven cases;
+`audit/mutable-vector/tools/mutants.txt`'s `byref-*` mutants are killed by
+it.
+
+## Last uses per path
+
+A later precision change of the copy elaboration (hir/mutvec.tcl), the same
+for both collections. A read-out of a place path used to move its header
+only at its *root binding's* last use, so a struct rebuilt from its own
+fields -- `T {keys: t.keys, vals: t.vals, count: t.count + 1}` after
+mutating `t.keys` and `t.vals` -- copied every collection field but the
+last (each is followed by a read of `t`), and every later write through
+the rebuilt struct detached (copied) the shared array: O(capacity) per
+update. The test is per path now (`NoLaterUse` with `ReadsPath`, over
+`UseMap`'s paths, `UsePath`): a read-out of path P moves when no later use
+-- in a later statement, a later operand (arguments left to right, struct
+literal fields in written order), an earlier argument of an enclosing call
+read by reference when the call runs (By-reference arguments, above), a
+branch after a condition, a handler after a handled call, or a later
+iteration of a loop the binding is not bound inside -- may read a header at
+P:
+
+* P itself;
+* a prefix of P: the binding (`t`, `f(t)`, a destructure of `t`), an
+  enclosing struct field;
+* an extension of P whose value may hold a header (`MayHoldVector` of its
+  static type: `n.inner.keys` after `n.inner`).
+
+A use of a disjoint path (`t.vals` or `t.count` after `t.keys`) or of an
+extension holding no header (`t.count` after `t` itself: an Int field, a
+List field) does not count. That omits only copies nothing could observe:
+every struct field of a binding the elaboration holds owns its headers
+alone -- a place root's or demanded local's entry and a consumed
+parameter's argument are exclusive (fresh, moved, or shared slot by slot by
+the descriptor, which gives each slot its own header -- an `any` slot too,
+by `d`: the rule relies on it, and the first version of this change, when
+the descriptor skipped `any` slots, moved `k = w.d1` while `w.d2` held the
+same header), and no read-out puts
+one field's header into another -- so a sibling holds other headers; an
+Int or List field of an immutable struct cannot change when a header is
+mutated, and a List element or a closure's capture is never a place. A
+context parameter's path still never moves; affine values are not read
+out at all (hir/affine.tcl moves them); a destructuring temporary is never
+held. The convention's demand uses the same test, so a local whose
+collection field reaches an exclusive position before its Int field is read
+is demanded (`r = put(t, i); fill(r.table, i + 1, acc + r.old)`), and
+`FreshFunctions` -- whose struct-literal case asks `Moved` of each field --
+sees the moves: a function ending in such a rebuild is fresh, and its
+callers copy nothing either.
+
+A statement that never completes skips the rest of its sequence, but only a
+`return` or a `fail` ends the walk there. A `break` goes on after its loop
+and a `continue` with the loop's next iteration (`Leaves`: the loop a
+`break` or `continue` of the statement leaves for, not one of a loop inside
+it), so `if found: r = consume(t); break` copies `t` when the code after the
+loop reads it, and `x = grow1(t, 10); continue` when the next iteration may
+(conservatively: every iteration of a loop the binding is not bound inside
+counts, as at the end of the body); a binding of the loop's own iteration is
+done with at either (`mv-break-continue-last-use`, `ma-break-continue-copies`:
+the rule once took both for a `return`, so the moved header was the one the
+code after the loop or the next iteration read and wrote, on every backend).
+
+Remaining gaps of the same kind (all sound, all still copies): a whole
+struct passed to a consumed parameter is copied when a later argument of
+the same call reads one of its collections, even only to observe it before
+the call runs (`store(dest, find_empty(dest.hashes, h), ...)`); and a
+parameter read by a nested function (a capture) is not observed-only. (A
+struct literal in an exclusive position demands its fields: next section.)
+
+Evidence: `tests/mutable-vector.test`'s `mv-path-last-use-semantics` (eleven
+programs, each overlapping position copied and each disjoint one moved,
+values on every backend and the share count) and `mv-path-last-use-copies`
+(four update loops: no share, no detach), `tests/mutable-array.test`'s
+`ma-path-last-use-copies` (1000-slot arrays updated 100 times three ways: 0
+shares and detaches, against 400/300/400 shares and 198/200/198 detaches of
+1000 elements before); the fuzzer's path family (Path programs in
+`audit/mutable-vector/tools/fuzz.tcl`: structs of two vectors and an Int,
+read out at every kind of position, the generator's last uses never followed
+by a use of the path or a prefix while siblings go on being used, and
+arguments read by reference before a later argument of the same call that
+moves or pops the same path); and the
+`path-*` mutants of `audit/mutable-vector/tools/mutants.txt` (a prefix, the
+same path, a header-bearing extension, later statements, later operands,
+branches, handlers or the next iteration ignored, a context path moved, a
+`break` or `continue` ending the walk, a `continue` taken for a `break`;
+and four economic ones: the per-binding rule back, an Int extension
+counted, a `break` copying what nothing after its loop reads, a binding of
+the iteration kept alive across a `continue`).
+
+## Demand through struct literals
+
+A third change of the copy convention. A struct literal is fresh only when
+each of its collection-bearing fields is fresh or the last use of a held
+path, but a literal in a position that needs an exclusive header (a
+place's entry, a consumed parameter's argument, a demanded function's
+result) did not make its fields such positions: `fn with_count(t: T, c:
+int) -> T` returning `T {keys: t.keys, vals: t.vals, count: c}`, or a step
+returning `Steps {memo: memo, count: found}`, left `t` / `memo` unconsumed,
+so the function was not fresh and each caller copied its result -- and the
+next write detached. Now `ExclusivePositions` follows a literal into its
+collection-bearing fields (through nested literals): the parameter or local
+a returned literal holds is consumed or demanded, the field moves its
+header, and the function is fresh. Sound by construction: demand only makes
+more bindings held, and a held binding's callers or entry copy whatever is
+not exclusive. `FreshFunctions` is computed again once the read-outs are
+written, so a literal whose field became a copy (`Pair {l: v, r: v}`: one
+copy, one move) is fresh too, and its caller does not copy it again.
+
+Measured: the hash-table experiment's memo driver with lpa (N = 1000):
+8908 shares, 8872 detaches, 15.6 million elements copied before; 0, 0, 0
+now (15642 object allocations, 53 now). `tests/mutable-vector.test`'s
+`mv-literal-demand-semantics` (a literal of a parameter used by its caller
+afterwards, twice, nested, of a local: independent values on every backend)
+-- and a generic function returning a List element, bare or in a literal,
+still never fresh: with the demand, `mv-cow-generic-results`' `wrap(x)`
+consumes `x` and its caller copies, so these cases are what keep the
+`fresh-result-imprecise` and `fresh-struct-imprecise` mutants killed --
+and `mv-literal-demand-copies` (a memo-shaped recursion: 45 shares and
+detaches before, none now; a literal of a local; one of a parameter put in
+two fields: one copy); the mutants `literal-fields-not-exclusive` and
+`literal-fresh-before-readouts` (both economic: the change only removes
+copies).
+
+Still not followed into: an `if` expression or a handled call in an
+exclusive position (`t2 = if c: put(t) else: put2(t)`), a List literal.
 
 ## Files
 

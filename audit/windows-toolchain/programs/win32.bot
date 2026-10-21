@@ -1,0 +1,24 @@
+# win32.bot -- the Windows toolchain probe's Win32 program
+# (WINDOWS-TOOLCHAIN-CENSUS.md): writes a line to the console through
+# kernel32 alone -- GetStdHandle and WriteFile, no C runtime -- and returns
+# whether the process id is positive and WriteFile's result (nonzero:
+# success): [true, 1]. Windows only.
+# The declarations are written by hand, with the facts a Botlish exposure
+# needs; the generated binding (generated/c/win32/) declares no facts.
+import abi
+import abi::bytes
+import ffi::c
+import str
+
+extern c library "kernel32"
+
+extern c fn GetCurrentProcessId() -> ffi::c::ULong
+extern c fn GetStdHandle(which: ffi::c::ULong) -> ffi::c::Ptr[ffi::c::Void]
+extern c fn WriteFile(handle: ffi::c::Ptr[ffi::c::Void] noescape, buffer: ffi::c::Ptr[ffi::c::Void] read noescape, count: ffi::c::ULong, written: ffi::c::Ptr[ffi::c::Void] write noescape, overlapped: ffi::c::Ptr[ffi::c::Void] noescape) -> ffi::c::Int
+
+text = abi::bytes::from_list(str::encode_utf8("hello from kernel32\n"))
+# STD_OUTPUT_HANDLE is (DWORD)-11.
+out = GetStdHandle(4294967285)
+none = ffi::c::null[ffi::c::Void]()
+done = out.WriteFile(text, 20, abi::bytes::zeroed(abi::usize(4)), none)
+[GetCurrentProcessId() > 0, done.result]

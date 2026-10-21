@@ -2,7 +2,7 @@ source:  examples/stdlib/csv_records.bot
 backend: Cranelift (specialize=1)
 asm:     csv_records.asm
 vcode:   csv_records.vcode
-machine-code bytes: 19616 (per function: 45 89 89 89 357 420 420 420 202 202 202 81 365 309 470 932 310 758 215 480 318 427 385 70 493 114 69 69 46 182 178 628 1032 341 388 407 616 666 809 673 928 700 107 433 259 629 515 78 78 1222 301)
+machine-code bytes: 21519 (per function: 45 89 89 89 357 436 436 436 272 272 272 81 365 309 470 932 310 758 215 480 318 489 446 70 493 114 103 105 44 255 243 692 1096 381 588 730 784 723 809 673 1304 780 107 433 259 629 515 78 78 1166 301)
 
 functions:
   0 <program entry>: nir-regs=1
@@ -34,8 +34,8 @@ functions:
   26 ht_size<HashTable>: nir-regs=5
   27 ht_tombstones<HashTable>: nir-regs=5
   28 ht_capacity<HashTable>: nir-regs=3
-  29 ht_probe_start<HashTable, str>: nir-regs=5
-  30 ht_probe_next<HashTable, int>: nir-regs=9
+  29 ht_probe_start<HashTable, str>: nir-regs=8
+  30 ht_probe_next<HashTable, int>: nir-regs=8
   31 ht_find_get<HashTable, str, int>: nir-regs=26
   32 ht_find_insert<HashTable, str, int, int>: nir-regs=33
   33 ht_get<HashTable, str>: nir-regs=12
@@ -436,27 +436,27 @@ GC roots (csv_records.asm's NIR ids match roots.txt's "function N"):
     storage: native frame
   
   function 29 "ht_probe_start"
-    NIR regs: 5
-    raw regs: 0
+    NIR regs: 8
+    raw regs: 3
     managed-capable regs: 5
-    effects: may_error=true may_gc=true
-    safepoints: 1
-    root candidates: 2
-    max live roots: 2
-    shadow slots: 2
+    effects: may_error=true may_gc=false
+    safepoints: 0
+    root candidates: 0
+    max live roots: 0
+    shadow slots: 0
     entry zero slots: 0
     depth reservation: no
     storage: native frame
   
   function 30 "ht_probe_next"
-    NIR regs: 9
-    raw regs: 4
-    managed-capable regs: 5
-    effects: may_error=true may_gc=true
-    safepoints: 1
-    root candidates: 2
-    max live roots: 2
-    shadow slots: 2
+    NIR regs: 8
+    raw regs: 5
+    managed-capable regs: 3
+    effects: may_error=true may_gc=false
+    safepoints: 0
+    root candidates: 0
+    max live roots: 0
+    shadow slots: 0
     entry zero slots: 0
     depth reservation: no
     storage: native frame
@@ -465,11 +465,11 @@ GC roots (csv_records.asm's NIR ids match roots.txt's "function N"):
     NIR regs: 26
     raw regs: 7
     managed-capable regs: 19
-    effects: may_error=true may_gc=true
-    safepoints: 1
-    root candidates: 2
-    max live roots: 2
-    shadow slots: 2
+    effects: may_error=true may_gc=false
+    safepoints: 0
+    root candidates: 0
+    max live roots: 0
+    shadow slots: 0
     entry zero slots: 0
     depth reservation: no
     storage: native frame
@@ -478,11 +478,11 @@ GC roots (csv_records.asm's NIR ids match roots.txt's "function N"):
     NIR regs: 33
     raw regs: 8
     managed-capable regs: 25
-    effects: may_error=true may_gc=true
-    safepoints: 2
-    root candidates: 4
-    max live roots: 3
-    shadow slots: 4
+    effects: may_error=true may_gc=false
+    safepoints: 0
+    root candidates: 0
+    max live roots: 0
+    shadow slots: 0
     entry zero slots: 0
     depth reservation: no
     storage: native frame
@@ -491,12 +491,12 @@ GC roots (csv_records.asm's NIR ids match roots.txt's "function N"):
     NIR regs: 12
     raw regs: 1
     managed-capable regs: 11
-    effects: may_error=true may_gc=true
-    safepoints: 2
-    root candidates: 3
-    max live roots: 3
-    shadow slots: 3
-    entry zero slots: 1
+    effects: may_error=true may_gc=false
+    safepoints: 0
+    root candidates: 0
+    max live roots: 0
+    shadow slots: 0
+    entry zero slots: 0
     depth reservation: no
     storage: native frame
   
@@ -596,11 +596,11 @@ GC roots (csv_records.asm's NIR ids match roots.txt's "function N"):
     raw regs: 7
     managed-capable regs: 27
     effects: may_error=true may_gc=true
-    safepoints: 8
-    root candidates: 10
-    max live roots: 5
-    shadow slots: 5
-    entry zero slots: 2
+    safepoints: 4
+    root candidates: 6
+    max live roots: 4
+    shadow slots: 4
+    entry zero slots: 0
     depth reservation: no
     storage: native frame
   
@@ -700,11 +700,11 @@ GC roots (csv_records.asm's NIR ids match roots.txt's "function N"):
     raw regs: 3
     managed-capable regs: 35
     effects: may_error=true may_gc=true
-    safepoints: 10
-    root candidates: 21
-    max live roots: 8
-    shadow slots: 8
-    entry zero slots: 7
+    safepoints: 3
+    root candidates: 10
+    max live roots: 7
+    shadow slots: 7
+    entry zero slots: 6
     depth reservation: no
     storage: native frame
   
@@ -726,5 +726,5 @@ mechanical pattern counts (triage only; see report for interpretation):
   1 x calls to rt_int_sub
   7 x calls to rt_int_mul
   22 x calls to rt_int_cmp
-  103 x calls to other rt_* helpers
+  99 x calls to other rt_* helpers
   6 x guard/guardbool instructions

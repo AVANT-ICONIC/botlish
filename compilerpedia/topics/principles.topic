@@ -368,11 +368,12 @@ say what happens if it does. Both are correct programs: the first is shorter
 and states its invariant in a way the compiler checks.
 
 == IN PRACTICE
-Bind a field's list to a local name before a counted loop; guard a
-parameter rather than a computed local (pass the computed index to a small
-helper); iterate ascending, or iterate the elements. When the code is
-clearer as it is, handle the error where it can occur, or use the
-operation's explicit-default form (list::get).
+Write a field path the same way in the guard or loop and in the access;
+bind a computed index to a name once and guard the name (for a slice bound,
+guard a parameter: pass the computed bound to a small helper); iterate
+ascending, or iterate the elements. When the code is clearer as it is,
+handle the error where it can occur, or use the operation's
+explicit-default form (list::get).
 
 @topic principle.bind-before-use
 title: Bind compound values before using them as operands
@@ -467,8 +468,9 @@ keywords: helper, function, refactor, guard, parameter
 related: principle.restate-in-proven-form principle.bind-before-use proof.list-bounds
 
 == THE PRINCIPLE
-Several of the compiler's proofs work on parameters: an index guarded as a
-parameter is related to a list's length, a computed local is not. A helper
-that takes the computed value as a parameter both names the step and gives
-the compiler the form it proves. Helpers are also how a value-producing
+Several of the compiler's proofs work on parameters: a slice bound guarded
+as a parameter is related to a String's length, a computed local is not
+(an index is, through the local's name: proof.list-bounds). A helper that
+takes the computed value as a parameter both names the step and gives the
+compiler the form it proves. Helpers are also how a value-producing
 `if` is used as an operand (principle.bind-before-use).

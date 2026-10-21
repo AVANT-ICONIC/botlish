@@ -31,6 +31,7 @@ namespace eval hir::lockstep {}
 
 proc hir::lockstep::verify {hirVar} {
     upvar 1 $hirVar hir
+    hir::cardinality::resetCache
     dict for {e node} [dict get $hir exprs] {
         if {[dict get $node kind] ne "lockloop"} {
             continue
@@ -58,7 +59,10 @@ proc hir::lockstep::verify {hirVar} {
                 set message "lockstep loop requires equal iteration counts; could not prove $a == $b\
                     (clause 1 vs clause [expr {$index + 1}])"
             }
-            hir::Diagnose hir $kind $message $e
+            # The evaluations the message locates (two loops over one vector,
+            # hir::cardinality::IterationLength) are its related origins.
+            hir::Diagnose hir $kind $message $e \
+                [concat [hir::cardinality::related $hir $first] [hir::cardinality::related $hir $other]]
             dict set hir exprs $e unproven "$kind: $message"
             break
         }

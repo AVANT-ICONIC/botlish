@@ -4,11 +4,14 @@
 #
 #   tclsh9.0 audit/mutable-vector/tools/fuzz.tcl ?-n N? ?-seed S? ?-dump 1?
 #                                                ?-backends LIST? ?-native 0|1?
-#                                                ?-gc-stress 0|1?
+#                                                ?-gc-stress 0|1? ?-paths P?
 #
 # Each program is a driver function `drive()` -- a straight line of 5..18
 # operations -- whose result is a List of observations (each a List of
-# Ints). Programs alternate between two families: UNRESTRICTED (vectors of
+# Ints). The first N programs alternate between two families, and P more
+# (by default half as many as N) are of a third, PATHS (vectors in the
+# fields of structs that also hold an Int, their read-outs the last uses of
+# their own paths or not: "Path programs" below). The two: UNRESTRICTED (vectors of
 # Ints, held in bindings and in a struct field, Bag {tag, items}) and AFFINE
 # (vectors of coroutine handles and of affine structs, Job {id, step}, held
 # in bindings and in a struct field, Queue {tag, items}). Every operation the
@@ -74,7 +77,7 @@
 # pushed (TYPE).
 
 set root [file dirname [file dirname [file dirname [file dirname [file normalize [info script]]]]]]
-set options [dict create -n 40 -seed 1 -dump 0 -backends {interp compile cranelift-generic cranelift} -native 1 -gc-stress 0]
+set options [dict create -n 40 -seed 1 -dump 0 -backends {interp compile cranelift-generic cranelift} -native 1 -gc-stress 0 -paths ""]
 foreach {option value} $argv {
     if {![dict exists $options $option]} {
         error "fuzz.tcl: unknown option $option"
@@ -1008,22 +1011,454 @@ proc AGenerate {} {
 }
 
 # ---------------------------------------------------------------------------
+# Path programs (last uses per path, hir/mutvec.tcl's NoLaterUse/ReadsPath)
+#
+# Unrestricted vectors held in struct fields -- Duo {left, right, n}, Two
+# {d: Duo, v}, Res {old, duo: Duo} -- and in bindings, read out at every
+# kind of position: a binding, a struct literal's fields (any order, one
+# path twice, a struct and its own field), the arguments of a mutating
+# function (one path twice; a whole Duo beside its Int field), a function
+# rebuilding a Duo from its own fields, a result struct whose Duo field is
+# taken before its Int field is read, a handled call whose handler reads
+# the same path or a disjoint one (the callee fails once its copy is longer
+# than 3), an argument read by reference (an observed parameter, a
+# receiver) before a later argument of the same call that moves or pops the
+# same path, a loop calling a mutating function on
+# the same path each iteration, and an `if` whose condition mutates a copy.
+# Half the time the generator treats a read-out as the path's last use: it
+# never refers to that path again -- nor to a prefix of it (the binding, a
+# whole struct field) -- while it goes on reading and mutating the
+# disjoint paths beside it and the Int fields (the moves the compiler may
+# make), and observes every live path at the end.
+#
+# The model is the unrestricted one: every vector path holds its own pure
+# sequence; a copy is an equal sequence; a callee's mutations change only
+# its copies.
+#
+# State: vecs (live vector path -> sequence), duos (Duo path -> its n; its
+# vector paths are PATH.left and PATH.right), lines, observed, expected, n.
+
+set pathDecls {struct Duo:
+    left: MutableVector[int]
+    right: MutableVector[int]
+    n: int
+
+struct Two:
+    d: Duo
+    v: MutableVector[int]
+
+struct Res:
+    old: int
+    duo: Duo
+
+fn two(a: MutableVector[int], b: MutableVector[int]) -> int:
+    a.push(1)
+    b.push(2)
+    b.push(2)
+    a.length() * 100 + b.length()
+
+fn pushed(a: MutableVector[int], x: int) -> int:
+    a.push(x)
+    a.length()
+
+fn rebuild(d: Duo, x: int) -> Duo:
+    d.left.push(x)
+    Duo {left: d.left, right: d.right, n: d.n + x}
+
+fn with_n(d: Duo, n: int) -> Duo:
+    d.right.push(n)
+    Duo {left: d.left, right: d.right, n: n}
+
+fn rput(d: Duo, x: int) -> Res:
+    old = d.n
+    d.left.push(x)
+    Res {old: old, duo: d}
+
+fn fails(a: MutableVector[int], x: int) -> int errors Boom:
+    a.push(x)
+    if a.length() > 3:
+        fail Boom
+    a.length()
+
+fn obs2(a: MutableVector[int], n: int) -> int:
+    a.length() * 10 + n
+
+}
+
+proc PVecs {state} {
+    return [dict keys [dict get $state vecs]]
+}
+
+# The Duo paths whose two vectors are both live (a whole read reads both).
+proc PWhole {state} {
+    set out {}
+    foreach d [dict keys [dict get $state duos]] {
+        if {[dict exists $state vecs $d.left] && [dict exists $state vecs $d.right]} {
+            lappend out $d
+        }
+    }
+    return $out
+}
+
+proc PSeq {state p} {
+    return [dict get $state vecs $p]
+}
+
+proc PFromList {values} {
+    if {$values eq {}} {
+        return "ints()"
+    }
+    return "mutable_vector::from_list(\[[join $values {, }]\])"
+}
+
+proc PValues {} {
+    set values {}
+    set count [Rand 4]
+    for {set i 0} {$i < $count} {incr i} { lappend values [Rand 10] }
+    return $values
+}
+
+# Adds Duo path D with vectors L and R and Int N.
+proc PAddDuo {stateVar d l r n} {
+    upvar 1 $stateVar state
+    dict set state duos $d $n
+    dict set state vecs $d.left $l
+    dict set state vecs $d.right $r
+}
+
+# Half the time: the read-out of PATH (a vector path, or a whole Duo) was
+# its last use -- the generator never refers to it again.
+proc PMaybeKill {stateVar path} {
+    upvar 1 $stateVar state
+    if {[Rand 2]} {
+        PKill state $path
+    }
+}
+
+proc PKill {stateVar path} {
+    upvar 1 $stateVar state
+    if {[dict exists $state duos $path]} {
+        dict unset state vecs $path.left
+        dict unset state vecs $path.right
+    } else {
+        dict unset state vecs $path
+    }
+}
+
+# Half the time a push onto vector path P (a mutation makes its binding a
+# place root, whose read-outs are the elaboration's copies and moves).
+proc PTouch {stateVar p} {
+    upvar 1 $stateVar state
+    if {[dict exists $state vecs $p] && [Rand 2]} {
+        set x [Rand 10]
+        Emit state "$p.push($x)"
+        dict set state vecs $p [concat [PSeq $state $p] [list $x]]
+    }
+}
+
+proc POperation {stateVar} {
+    upvar 1 $stateVar state
+    set vecs [PVecs $state]
+    set whole [PWhole $state]
+    set duos [dict keys [dict get $state duos]]
+    set kinds {}
+    if {[llength $duos] < 4} { lappend kinds newduo newduo }
+    if {$vecs ne {}} {
+        lappend kinds push push pop length copyout relit two two pushed handler handler loop branch \
+            byref byref byrefpop atpop
+    }
+    if {$duos ne {}} { lappend kinds nfield }
+    if {$whole ne {}} { lappend kinds wholecopy rebuild withn withn rput rput twolit twolit }
+    if {$kinds eq {}} { set kinds newduo }
+    set kind [Pick $kinds]
+    set p [expr {$vecs eq {} ? "" : [Pick $vecs]}]
+    set d [expr {$whole eq {} ? "" : [Pick $whole]}]
+    switch -- $kind {
+        newduo {
+            set name [Fresh state d]
+            set l [PValues]
+            set r [PValues]
+            set n [Rand 10]
+            Emit state "$name = Duo {left: [PFromList $l], right: [PFromList $r], n: $n}"
+            PAddDuo state $name $l $r $n
+            PTouch state $name.[Pick {left right}]
+        }
+        push {
+            set x [Rand 10]
+            Emit state "$p.push($x)"
+            dict set state vecs $p [concat [PSeq $state $p] [list $x]]
+        }
+        pop {
+            set seq [PSeq $state $p]
+            set x [Fresh state x]
+            Handled state $x "$p.pop()" -1
+            if {$seq ne {}} {
+                ObserveInt state $x [lindex $seq end]
+                dict set state vecs $p [lrange $seq 0 end-1]
+            } else {
+                ObserveInt state $x -1
+            }
+        }
+        length {
+            ObserveInt state "$p.length()" [llength [PSeq $state $p]]
+        }
+        nfield {
+            set e [Pick $duos]
+            ObserveInt state "$e.n" [dict get $state duos $e]
+        }
+        copyout {
+            set v [Fresh state v]
+            Emit state "$v = $p"
+            dict set state vecs $v [PSeq $state $p]
+            PMaybeKill state $p
+            PTouch state $v
+        }
+        relit {
+            # A Duo literal from live vector paths (one may be read twice),
+            # its fields in a random order.
+            set l [Pick $vecs]
+            set r [Pick $vecs]
+            set nexpr [Rand 10]
+            set n $nexpr
+            if {$duos ne {} && [Rand 2]} {
+                set e [Pick $duos]
+                set k [Rand 5]
+                set nexpr "$e.n + $k"
+                set n [expr {[dict get $state duos $e] + $k}]
+            }
+            set fields [list "left: $l" "right: $r" "n: $nexpr"]
+            if {[Rand 2]} { set fields [lreverse $fields] }
+            if {[Rand 2]} { set fields [list [lindex $fields 1] [lindex $fields 0] [lindex $fields 2]] }
+            set name [Fresh state d]
+            Emit state "$name = Duo {[join $fields {, }]}"
+            set lseq [PSeq $state $l]
+            set rseq [PSeq $state $r]
+            PMaybeKill state $l
+            if {[dict exists $state vecs $r]} { PMaybeKill state $r }
+            PAddDuo state $name $lseq $rseq $n
+            PTouch state $name.[Pick {left right}]
+        }
+        two {
+            set q [expr {[Rand 3] == 0 ? $p : [Pick $vecs]}]
+            set x [Fresh state x]
+            Emit state "$x = two($p, $q)"
+            ObserveInt state $x [expr {([llength [PSeq $state $p]] + 1) * 100 + [llength [PSeq $state $q]] + 2}]
+            PMaybeKill state $p
+            if {[dict exists $state vecs $q]} { PMaybeKill state $q }
+        }
+        pushed {
+            set x [Fresh state x]
+            Emit state "$x = pushed($p, [Rand 10])"
+            ObserveInt state $x [expr {[llength [PSeq $state $p]] + 1}]
+            PMaybeKill state $p
+        }
+        handler {
+            # The handler reads the same path, a sibling vector path or an
+            # Int field: only the first keeps the argument from moving.
+            set k [Rand 9]
+            set len [llength [PSeq $state $p]]
+            set others [lsearch -all -inline -not -exact $vecs $p]
+            switch -- [expr {$others eq {} ? [Pick {same int}] : [Pick {same other int}]}] {
+                same {
+                    set h "$p.length()"
+                    set hv $len
+                    set kill 0
+                }
+                other {
+                    set o [Pick $others]
+                    set h "$o.length()"
+                    set hv [llength [PSeq $state $o]]
+                    set kill 1
+                }
+                int {
+                    if {$duos ne {}} {
+                        set e [Pick $duos]
+                        set h "$e.n - 1"
+                        set hv [expr {[dict get $state duos $e] - 1}]
+                    } else {
+                        set h "-1"
+                        set hv -1
+                    }
+                    set kill 1
+                }
+            }
+            set x [Fresh state x]
+            Emit state "$x = fails($p, $k):" "    on Boom:" "        $h"
+            ObserveInt state $x [expr {$len + 1 > 3 ? $hv : $len + 1}]
+            if {$kill} { PMaybeKill state $p }
+        }
+        loop {
+            set xs [Fresh state xs]
+            set len [llength [PSeq $state $p]]
+            if {$duos ne {} && [Rand 2]} {
+                set e [Pick $duos]
+                Emit state "$xs = loop i from 0 to 3:" "    pushed($p, i) + $e.n"
+                set m [dict get $state duos $e]
+            } else {
+                Emit state "$xs = loop i from 0 to 3:" "    pushed($p, i)"
+                set m 0
+            }
+            dict lappend state observed $xs
+            dict lappend state expected [lrepeat 3 [expr {$len + 1 + $m}]]
+            PMaybeKill state $p
+        }
+        byref {
+            # An argument read by reference (obs2 only observes it) and a
+            # later argument handing the same or another path to a mutating
+            # call (the generator's last use of it half the time).
+            set q [expr {[Rand 2] ? $p : [Pick $vecs]}]
+            set k [Rand 10]
+            set x [Fresh state x]
+            set m 0
+            set nexpr ""
+            if {$duos ne {} && [Rand 2]} {
+                set e [Pick $duos]
+                set m [dict get $state duos $e]
+                set nexpr " + $e.n"
+            }
+            Emit state "$x = obs2($p, pushed($q, $k)$nexpr)"
+            ObserveInt state $x [expr {[llength [PSeq $state $p]] * 10 + [llength [PSeq $state $q]] + 1 + $m}]
+            if {[dict exists $state vecs $q]} { PMaybeKill state $q }
+        }
+        byrefpop {
+            # An argument read by reference and a later argument popping
+            # the same place in place (a nonempty one: the pop's error is
+            # drive's, which never raises it).
+            set seq [PSeq $state $p]
+            if {$seq eq {}} {
+                ObserveInt state "$p.length()" 0
+                return
+            }
+            set x [Fresh state x]
+            Emit state "$x = obs2($p, $p.pop())"
+            ObserveInt state $x [expr {[llength $seq] * 10 + [lindex $seq end]}]
+            dict set state vecs $p [lrange $seq 0 end-1]
+        }
+        atpop {
+            # A receiver read by reference and its index argument popping
+            # the receiver's own place (the index is the popped element;
+            # the at fails when it is out of range).
+            set seq [PSeq $state $p]
+            if {$seq eq {}} {
+                ObserveInt state "$p.length()" 0
+                return
+            }
+            set x [Fresh state x]
+            Handled state $x "$p.at($p.pop())" -1
+            set i [lindex $seq end]
+            ObserveInt state $x [expr {$i < [llength $seq] ? [lindex $seq $i] : -1}]
+            dict set state vecs $p [lrange $seq 0 end-1]
+        }
+        branch {
+            set x [Fresh state x]
+            set len [llength [PSeq $state $p]]
+            if {$duos ne {} && [Rand 2]} {
+                set e [Pick $duos]
+                Emit state "$x = if pushed($p, 1) > 0:" "    $e.n" "else:" "    0"
+                ObserveInt state $x [dict get $state duos $e]
+                PMaybeKill state $p
+            } else {
+                Emit state "$x = if pushed($p, 1) > 0:" "    $p.length()" "else:" "    0"
+                ObserveInt state $x $len
+            }
+        }
+        wholecopy {
+            set name [Fresh state d]
+            Emit state "$name = $d"
+            PAddDuo state $name [PSeq $state $d.left] [PSeq $state $d.right] [dict get $state duos $d]
+            PMaybeKill state $d
+            PTouch state $name.[Pick {left right}]
+        }
+        rebuild {
+            set x [Rand 10]
+            set name [Fresh state d]
+            Emit state "$name = rebuild($d, $x)"
+            PAddDuo state $name [concat [PSeq $state $d.left] [list $x]] [PSeq $state $d.right] \
+                [expr {[dict get $state duos $d] + $x}]
+            PMaybeKill state $d
+        }
+        withn {
+            # The whole Duo is an argument, its Int field the next one.
+            set x [Rand 10]
+            set n [expr {[dict get $state duos $d] + $x}]
+            set name [Fresh state d]
+            Emit state "$name = with_n($d, $d.n + $x)"
+            PAddDuo state $name [PSeq $state $d.left] [concat [PSeq $state $d.right] [list $n]] $n
+            PMaybeKill state $d
+        }
+        rput {
+            # A result struct: its Duo field taken out, its Int field read
+            # after it.
+            set x [Rand 10]
+            set r [Fresh state r]
+            Emit state "$r = rput($d, $x)"
+            set old [dict get $state duos $d]
+            PAddDuo state $r.duo [concat [PSeq $state $d.left] [list $x]] [PSeq $state $d.right] $old
+            PMaybeKill state $d
+            if {[Rand 2]} {
+                set name [Fresh state d]
+                Emit state "$name = $r.duo"
+                PAddDuo state $name [PSeq $state $r.duo.left] [PSeq $state $r.duo.right] $old
+                PMaybeKill state $r.duo
+                PTouch state $name.[Pick {left right}]
+            }
+            ObserveInt state "$r.old" $old
+        }
+        twolit {
+            # A struct holding a whole Duo and one of its own vectors (or
+            # another), in either order.
+            set v [Pick [concat [list $d.left $d.right] [PVecs $state]]]
+            set name [Fresh state t]
+            if {[Rand 2]} {
+                Emit state "$name = Two {d: $d, v: $v}"
+            } else {
+                Emit state "$name = Two {v: $v, d: $d}"
+            }
+            PAddDuo state $name.d [PSeq $state $d.left] [PSeq $state $d.right] [dict get $state duos $d]
+            dict set state vecs $name.v [PSeq $state $v]
+            PMaybeKill state $d
+            if {[dict exists $state vecs $v]} { PMaybeKill state $v }
+            PTouch state $name.v
+            PTouch state $name.d.[Pick {left right}]
+        }
+    }
+}
+
+proc PGenerate {} {
+    set state [dict create vecs {} duos {} lines {} observed {} expected {} n 0]
+    set count [expr {6 + [Rand 12]}]
+    for {set i 0} {$i < $count} {incr i} {
+        POperation state
+    }
+    # The final contents of every live vector path.
+    foreach p [PVecs $state] {
+        Observe state "contents($p)" [dict get $state vecs $p]
+    }
+    return [list $state ""]
+}
+
+# ---------------------------------------------------------------------------
 # Programs, checks and the run
 
 proc Show {observations} {
     return "\[[join [lmap o $observations {string cat "\[" [join $o {, }] "\]"}] {, }]\]"
 }
 
-proc Generate {number} {
-    set family [expr {$number % 2 ? "affine" : "unrestricted"}]
-    if {$family eq "unrestricted"} {
-        lassign [UGenerate] state code
-    } else {
-        lassign [AGenerate] state code
+proc Generate {number family} {
+    switch -- $family {
+        unrestricted { lassign [UGenerate] state code }
+        affine { lassign [AGenerate] state code }
+        paths { lassign [PGenerate] state code }
     }
     set body [join [lmap line [dict get $state lines] {string cat "    " $line}] \n]
     set result "\[[join [dict get $state observed] {, }]\]"
-    set text "${::prelude}fn drive() -> List\[List\[int\]\]:\n$body\n    $result\n\ndrive()\n"
+    if {$family eq "paths"} {
+        # (byrefpop and atpop pop a nonempty vector inside an argument:
+        # drive declares the error no handler of the call covers.)
+        set text "${::prelude}${::pathDecls}fn drive() -> List\[List\[int\]\] errors IndexNotFound:\n$body\n    $result\n\nr = drive():\n    on IndexNotFound:\n        \[\]\nr\n"
+    } else {
+        set text "${::prelude}fn drive() -> List\[List\[int\]\]:\n$body\n    $result\n\ndrive()\n"
+    }
     set expect [expr {$code ne "" ? [list error $code] : [list value [Show [dict get $state expected]]]}]
     set identities [expr {$family eq "affine" ? [dict size [dict get $state accs]] : 0}]
     set groups [expr {$family eq "affine" ? [dict get $state groups] : {}}]
@@ -1072,10 +1507,20 @@ proc Run {} {
     set families [dict create]
     set disagreements 0
     set identitiesChecked 0
-    for {set p 0} {$p < [dict get $options -n]} {incr p} {
+    set regular [dict get $options -n]
+    set paths [dict get $options -paths]
+    if {$paths eq ""} {
+        set paths [expr {($regular + 1) / 2}]
+    }
+    for {set p 0} {$p < $regular + $paths} {incr p} {
         set number [expr {[dict get $options -seed] + $p}]
         set ::seedState [expr {$number * 7919 + 17}]
-        lassign [Generate $number] family text expect identities groups
+        if {$p < $regular} {
+            set family [expr {$number % 2 ? "affine" : "unrestricted"}]
+        } else {
+            set family paths
+        }
+        lassign [Generate $number $family] family text expect identities groups
         dict incr families $family
         if {[dict get $options -dump]} {
             puts "--- program $number ($family)\n$text--- expect $expect"
@@ -1138,7 +1583,7 @@ proc Run {} {
     puts "families: [join [lmap {f n} [lsort -stride 2 [dict get $families]] {string cat "$f $n"}] {, }]"
     puts "accepted $accepted rejected $rejected ([join [lmap {c n} [lsort -stride 2 [dict get $codes]] {string cat "$c $n"}] {, }])"
     puts "identities whose releases were checked: $identitiesChecked"
-    puts "programs [dict get $options -n] disagreements $disagreements"
+    puts "programs [expr {$regular + $paths}] disagreements $disagreements"
     return $disagreements
 }
 

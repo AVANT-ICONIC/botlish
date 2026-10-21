@@ -3141,3 +3141,195 @@ The message names the namespace's files and the missing one.
 == WHAT TO DO
 Compile for a target whose architecture the namespace supports, or add
 the missing architecture's module file to the library.
+
+@topic error.refinement-parameter
+title: REFINEMENT-PARAMETER: a scalar refinement with wrong parameters
+summary: A type NAME{PARAM: N, ...} names no refinement family, or misses a required parameter, names an unknown one, or gives values out of range or contradicting each other.
+index: errors
+alias: refinement parameter; scalar refinement parameter; minDecimalsPreserved missing; maxDecimalsPreserved below minDecimalsPreserved; bare DecimalRounded
+keywords: DecimalRounded, minDecimalsPreserved, maxDecimalsPreserved, braces, parameter, refinement, annotation, type
+related: concept.decimal-rounded rule.type-annotation error.type error.decimal-precision
+docs: DECIMAL-ROUNDED-MILESTONE-1.md
+code: CORE SEMANTIC REFINEMENT-PARAMETER
+
+== MEANING
+A scalar refinement is a type of a compiler-known family with integer
+parameters, written in braces after the family's name; the parameters are
+part of the type. DecimalRounded is the one family today
+(concept.decimal-rounded): minDecimalsPreserved is required,
+maxDecimalsPreserved optional, both from 0 to 1000, and an upper bound is
+at least the guaranteed precision. The message names every problem of the
+annotation:
+
+    DecimalRounded requires "minDecimalsPreserved" (write
+    DecimalRounded{minDecimalsPreserved: N})
+    an upper precision bound below the guaranteed precision describes no
+    value: maxDecimalsPreserved must be at least minDecimalsPreserved
+    DecimalRounded's "minDecimalsPreserved" must be from 0 to 1000, not 1001
+    "decimals" is not a parameter of DecimalRounded (its parameters: ...)
+    DecimalRounded is written with its refinement parameters, which are
+    part of the type: DecimalRounded{minDecimalsPreserved: N}
+    "Float64" has no scalar refinements: NAME{...} refines one of
+    DecimalRounded
+
+A malformed field (no colon, a value that is not an integer literal, a
+field written twice) is a syntax error where it is written instead.
+
+== WHAT TO DO
+Write the parameters the family requires, with values in range:
+DecimalRounded{minDecimalsPreserved: 2}, or with a ceiling
+DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4}. A bare
+DecimalRounded has no precision and is no annotation.
+
+@example reject
+fn price(x: DecimalRounded{minDecimalsPreserved: 4, maxDecimalsPreserved: 2}) -> int:
+    1
+
+price
+@caption A ceiling below the guarantee describes no value
+@error CORE SEMANTIC REFINEMENT-PARAMETER
+@at 1:9
+@end
+
+@example reject
+fn price() -> DecimalRounded:
+    1.5
+
+price()
+@caption The parameters are part of the type
+@error CORE SEMANTIC REFINEMENT-PARAMETER
+@at 1:9
+@end
+
+@example accept
+fn price() -> DecimalRounded{minDecimalsPreserved: 2, maxDecimalsPreserved: 4}:
+    1.505
+
+price()
+@value 1.50
+@end
+
+@topic error.decimal-precision
+title: DECIMAL-PRECISION: a decimal constant not proven to the places required
+summary: A decimal constant (a literal, or + - * / of literals) where DecimalRounded{minDecimalsPreserved: N} is required, whose run is not proven to round correctly at N places.
+index: errors
+alias: only proven correct to; decimal places not proven; precision loss; not proven correct; divides by an exactly zero decimal
+keywords: DecimalRounded, decimal, places, precision, proof, binary64, literal, constant, rounding, cancellation, large number
+related: concept.decimal-rounded error.decimal-guarantee-lost error.refinement-parameter error.known-error concept.floats
+docs: DECIMAL-ROUNDED-MILESTONE-1.md
+code: CORE SEMANTIC DECIMAL-PRECISION
+
+== MEANING
+The compiler proves every DecimalRounded constant: it computes the exact
+decimal result and, with exact arithmetic, the binary64 a run computes
+(each literal's chosen representation, then each operation correctly
+rounded), and checks that the run's value rounds, half to even, to the
+exact result's decimal at every place up to N. When it does not:
+
+    this result is only proven correct to 16 decimal places, but the
+    declared result of third requires DecimalRounded{minDecimalsPreserved:
+    17} (its exact value is 1/3 = 0.33333333333333333333...; its binary64
+    computation gives 0.3333333333333333148296162562473909929394..., which
+    rounds to 0.33333333333333331 at 17 places where the exact value
+    rounds to 0.33333333333333333)
+
+"no decimal place ... is proven correct (not even its rounding to an
+integer)" means not even round(t, 0) holds: binary64 does not hold the
+integer digits (1.0e23 is 99999999999999991611392 in binary64). A quotient
+whose divisor's exact decimal is zero, though its binary64 is not (0.1 *
+3.0 - 0.3 is 5.55e-17), has no value to round, and is reported the same
+way. A binary64 result that is not finite is NonFiniteFloat instead
+(KNOWN-ERROR for a constant): a different event.
+
+== LIKELY CAUSES
+  * More places than binary64 holds at the magnitude: about 15 to 17
+    significant digits in all, so 1.0e20 + 0.01 holds one place.
+  * Cancellation: a difference of nearly equal values keeps the error of
+    its operands (0.1 * 3.0 - 0.3 holds 15 places, not 16).
+  * A tie that binary64 cannot place on the right side at that precision.
+
+== WHAT TO DO
+Require the places the program needs (the guarantee is a minimum: a
+weaker type accepts the same constant), or write the constant so that it
+holds them (one literal instead of a sum). The message's exact value and
+binary64 value show where the digits part.
+
+@example reject
+fn big() -> DecimalRounded{minDecimalsPreserved: 2}:
+    1.0e20 + 0.01
+
+big()
+@caption Binary64 holds 1.0e20 + 0.01 to one place
+@error CORE SEMANTIC DECIMAL-PRECISION
+@at 2:5
+@end
+
+@example accept
+fn big() -> DecimalRounded{minDecimalsPreserved: 1}:
+    1.0e20 + 0.01
+
+big()
+@value 100000000000000000000.0
+@end
+
+@topic error.decimal-guarantee-lost
+title: DECIMAL-GUARANTEE-LOST: DecimalRounded arithmetic that proves nothing
+summary: + - * / of DecimalRounded values that are not constants (parameters, call results) proves no decimal place, so it is rejected; decay to Float64 to compute.
+index: errors
+alias: guarantee lost; no decimal place can be proved; decimal arithmetic on parameters; DecimalRounded arithmetic
+keywords: DecimalRounded, arithmetic, parameter, guarantee, proof, rounding cell, decay, from_decimal_rounded, round
+related: concept.decimal-rounded stdlib.float64::from_decimal_rounded stdlib.decimal_rounded::round error.decimal-precision
+docs: DECIMAL-ROUNDED-MILESTONE-1.md
+code: CORE SEMANTIC DECIMAL-GUARANTEE-LOST
+
+== MEANING
+Of a DecimalRounded value that is not a constant the compiler knows only
+its guarantee: rounding it to N places gives the intended decimal, so the
+intended number lies somewhere in that decimal's rounding cell. Rounding
+is discontinuous: operands anywhere in their cells can carry an exact sum,
+difference, product or quotient across a rounding boundary of every
+precision, and the type states no magnitude. No decimal place of the
+result can be proved, so the operation is rejected:
+
+    no decimal place of this sum can be proved: its operands are
+    DecimalRounded{minDecimalsPreserved: 2} and
+    DecimalRounded{minDecimalsPreserved: 2}, ...
+
+Unary minus is exact (rounding half to even is symmetric) and keeps its
+operand's type; comparisons and conversions are observations, not
+arithmetic, and are allowed. Only arithmetic of decimal constants is
+proven (error.decimal-precision).
+
+== WHAT TO DO
+Compute with Float64 and say where the guarantee is established again:
+decay each operand with float64::from_decimal_rounded (the Float64 of its
+guaranteed decimal), compute, and round the Float64 result back with
+decimal_rounded::round[DecimalRounded{minDecimalsPreserved: N}](x), which
+quantizes it to N places.
+
+@example reject
+fn sum(a: DecimalRounded{minDecimalsPreserved: 2}, b: DecimalRounded{minDecimalsPreserved: 2}) -> DecimalRounded{minDecimalsPreserved: 2}:
+    a + b
+
+0.25.sum(0.5)
+@caption The sum of two guaranteed values proves nothing
+@error CORE SEMANTIC DECIMAL-GUARANTEE-LOST
+@at 2:5
+@end
+
+@example accept
+import float64
+import decimal_rounded
+
+fn sum(a: DecimalRounded{minDecimalsPreserved: 2}, b: DecimalRounded{minDecimalsPreserved: 2}) -> DecimalRounded{minDecimalsPreserved: 2} errors NonFiniteFloat, UnrepresentableDecimal:
+    total = float64::from_decimal_rounded(a) + float64::from_decimal_rounded(b)
+    decimal_rounded::round[DecimalRounded{minDecimalsPreserved: 2}](total)
+
+0.25.sum(0.5):
+    on NonFiniteFloat:
+        0.00
+    on UnrepresentableDecimal:
+        0.00
+@caption Decay, compute, round back
+@value 0.75
+@end

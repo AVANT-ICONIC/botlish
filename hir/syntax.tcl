@@ -266,12 +266,21 @@ proc hir::syntax::withWritten {call form} {
     return $call
 }
 
+# CONST (a `const` node of a decimal literal, a Float64) carrying the exact
+# decimal TEXT the literal spells (the lexer's DECIMAL token value), as its
+# canonical text (core::decimal::Text): what makes it a DecimalRounded
+# constant where one is expected (hir/decimal.tcl).
+proc hir::syntax::withDecimal {const text} {
+    dict set const decimal [core::decimal::canonical $text]
+    return $const
+}
+
 # CALL (a `call` node) written as the arithmetic or comparison operator OP
 # (`+ - * / < <= > >=`, or `neg` for unary minus, whose call is `- 0 X`):
 # its callee is the root native of that spelling, and its operands' static
 # types select the operation (hir/operators.tcl, FLOAT64-MILESTONE-1.md).
 proc hir::syntax::withOperator {call op} {
-    if {$op ni {+ - * / < <= > >= neg}} {
+    if {$op ni {+ - * / < <= > >= == neg}} {
         core::malformed "not an operator a call's operands select: \"$op\"" [list call $op]
     }
     dict set call operator $op

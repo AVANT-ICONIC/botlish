@@ -585,6 +585,12 @@ proc hir::resolve::ResolveTypeExpr {typeExpr {ns ""} {imprints 0}} {
         # (both resolved by hir/layouts.tcl), never a type of values.
         return -code error -errorcode {BOTLISH LAYOUT-NOT-A-TYPE} [hir::layouts::ArrayNotATypeMessage $typeExpr]
     }
+    if {[hir::refinements::IsRefinementExpr $typeExpr]} {
+        # NAME{param: N ...} (surface::parser::ScalarRefinement): a scalar
+        # refinement, validated against its family's schema
+        # (hir/refinements.tcl, DECIMAL-ROUNDED-MILESTONE-1.md).
+        return [hir::refinements::Resolve [lindex $typeExpr 1] [lindex $typeExpr 2]]
+    }
     lassign $typeExpr name arg
     if {$name eq "fn"} {
         # A structural function type (surface::parser::FnType's
@@ -806,6 +812,9 @@ proc hir::resolve::ShowTypeExpr {typeExpr} {
     if {[hir::layouts::IsArrayTypeExpr $typeExpr]} {
         return "array [lindex $typeExpr 1] of [ShowTypeExpr [lindex $typeExpr 2]]"
     }
+    if {[hir::refinements::IsRefinementExpr $typeExpr]} {
+        return "[lindex $typeExpr 1]{[join [lmap field [lindex $typeExpr 2] {join $field {: }}] {, }]}"
+    }
     lassign $typeExpr name arg
     if {$name eq "fn"} {
         return [format {%s{args: [%s], return: %s, errors: [%s]}} \
@@ -841,6 +850,10 @@ proc hir::resolve::Expr {hirVar node ctx} {
             set literal [dict get $node literal]
             SetField hir $e literal $literal
             SetField hir $e value [core::ir::literalValue [list const {*}$literal]]
+            if {[dict exists $node decimal]} {
+                # A decimal literal's exact decimal (hir/decimal.tcl).
+                SetField hir $e decimal [dict get $node decimal]
+            }
         }
         ref {
             set ident [hir::traits::ExternalIdent $ctx $node]

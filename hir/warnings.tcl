@@ -676,6 +676,13 @@ proc hir::warnings::NamedCallee {hir node} {
                 return [dict create identity native:$native target [list native $native] params $arity \
                     method [dict get $binding spelling] shown [dict get $binding extern]]
             }
+            if {[string first # $native] >= 0} {
+                # An internal operation (`#` starts a comment: no source
+                # spells it), which a call reaches only by the compiler's
+                # rewriting (hir::decimal::Elaborate, hir::layouts::
+                # Elaborate): no sugared spelling of it exists.
+                return ""
+            }
             return [dict create identity native:$native target [list native $native] params $arity \
                 method [MemberName $native] shown $name]
         }

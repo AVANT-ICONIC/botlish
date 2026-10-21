@@ -217,6 +217,21 @@ namespace eval native::lower {
     dict for {name op} [FloatNatives] {
         dict set natives $name [list op $op]
     }
+    # DecimalRounded (core/decimal.tcl; DECIMAL-ROUNDED-MILESTONE-1.md): its
+    # arithmetic is the binary64 operation on the representations (d64add
+    # ..., codegen's float_op), its elaborated observations the exact
+    # decimal rounding of runtime::decimal. The comparisons' and the
+    # conversions' check forms never reach a backend (hir::decimal::
+    # Elaborate).
+    foreach {name op} {
+        DecimalRounded#+ d64add DecimalRounded#- d64sub DecimalRounded#* d64mul DecimalRounded#/ d64div
+        DecimalRounded#neg d64neg
+        decimal_rounded#less d64lt decimal_rounded#less_equal d64le decimal_rounded#greater d64gt
+        decimal_rounded#greater_equal d64ge decimal_rounded#equal d64eq
+        decimal_rounded#to_float64 d64tof64 decimal_rounded#round d64round
+    } {
+        dict set natives $name [list op $op]
+    }
     # The borrow test fixture's synthetic foreign operations (core/cabi.tcl's
     # installBorrowFixture; runtime/ffifixture.rs), one op per behavior.
     foreach {name behavior} [core::cabi::borrowFixture] {
@@ -383,11 +398,12 @@ namespace eval native::lower {
     variable leafInlineMaxOps 8
     # The fixed, generic set of native ops (the same op table above) a tiny
     # leaf's body may call: pure, total, allocation-free scalar Int
-    # arithmetic/comparison/bitwise ops, plus shift (LeafShiftSafe proves
-    # its own error-safety separately) -- deliberately not `imod` (no
-    # existing error-safety proof for it), not `veq`/`streq` (not proven
-    # allocation-free), and nothing else in the `natives` table above.
-    variable leafInlineSafeOps {iadd isub imul ilt ile igt ige ieq iand ior ixor ishr ishl}
+    # arithmetic/comparison/bitwise ops, plus shift and mod, each of which
+    # can raise and so proves its own error-safety separately (LeafShiftSafe,
+    # LeafModSafe: a mod only when its divisor's Range excludes 0) -- not
+    # `veq`/`streq` (not proven allocation-free), and nothing else in the
+    # `natives` table above.
+    variable leafInlineSafeOps {iadd isub imul ilt ile igt ige ieq iand ior ixor ishr ishl imod}
 }
 
 # ---------------------------------------------------------------------------
@@ -409,7 +425,8 @@ namespace eval native::lower {
 # RawIntOp), and, since the bounded-shift-lowering milestone, to `>>`/`<<`
 # (shift_right/shift_left) once both the shifted value and the shift amount
 # are additionally proven safe (RawEligibleShift): nonnegative, in range,
-# and (for the shift amount) a single already-known value. A tagged AND/OR/
+# and (for the shift amount) a single already-known value, and to `mod`
+# (raw `rimod`/`rimodtotal`, or a mask: the "Euclidean mod" section). A tagged AND/OR/
 # XOR (native/src/codegen/clif.rs's int_bitop) works on the tagged words
 # directly, but still tests both operands for a BigInt and keeps a helper
 # call (rt_int_and/or/xor) on the slow path, with the spills that call
@@ -440,7 +457,7 @@ namespace eval native::lower {
 #
 #   ref   a local/parameter register already stored raw (a self-tail-proven
 #         parameter, RawParams): returned as-is, no conversion at all.
-#   call  a native `+ - * < <= > >= ==`, `bit_and bit_or bit_xor` or a
+#   call  a native `+ - * < <= > >= ==`, `bit_and bit_or bit_xor`, `mod` or a
 #         proven-safe `>>`/`<<` whose operands need no runtime kind guard
 #         (RawEligibleCall) and whose operand/result ranges are proven
 #         small (hir/range.tcl): its own
@@ -6135,8 +6152,14 @@ proc native::lower::ProjectChain {fnVar e node} {
 }
 
 # The NIR constant instruction text of the floating-point value V
-# (`float Float64 0x3ff8000000000000`: its type and bits).
+# (`float Float64 0x3ff8000000000000`: its type and bits), or of the
+# DecimalRounded value V (`float DecimalRounded 0x...`: the binary64 that
+# core::decimal::constant chose to represent it -- representation is this
+# backend's, decided here, never in HIR: DECIMAL-ROUNDED-MILESTONE-1.md).
 proc native::lower::FloatConstText {v} {
+    if {[core::value::kind $v] eq $::core::decimal::kind} {
+        return [format {float %s 0x%016llx} $::core::decimal::kind [core::decimal::Bits [core::decimal::of $v]]]
+    }
     return [format {float %s 0x%016llx} [core::value::kind $v] [core::float::bits64 $v]]
 }
 
@@ -6152,7 +6175,7 @@ proc native::lower::Const {fnVar e node} {
         }
         UnicodeChar { return [Assign fn "char [core::value::charOf $value]" $e] }
         enum { return [EnumConst fn $value $e] }
-        Float64 { return [Assign fn [FloatConstText $value] $e] }
+        Float64 - DecimalRounded { return [Assign fn [FloatConstText $value] $e] }
         list {
             # (const list {...}): a list of literal elements.
             set items [lmap item [core::value::items $value] {
@@ -8468,11 +8491,10 @@ proc native::lower::InlineRegionConsumerCall {fnVar e argExpr calleeId paramInde
 #     cannot recurse through one);
 #   - every such native call resolves (NativeCallOp) to one of a small,
 #     fixed, generic set of pure, total, allocation-free scalar Int ops
-#     (LEAFINLINESAFEOPS, above: the arithmetic/comparison/bitwise/shift
-#     family already in the `natives` op table -- deliberately not `imod`,
-#     not equality across non-Int kinds, not any string/list/hash/mutable-
-#     array op, none of which this milestone attempts to prove error- or
-#     allocation-free);
+#     (LEAFINLINESAFEOPS, above: the arithmetic/comparison/bitwise/shift/mod
+#     family already in the `natives` op table -- not equality across
+#     non-Int kinds, not any string/list/hash/mutable-array op, none of
+#     which this milestone attempts to prove error- or allocation-free);
 #   - none of the body's own calls is *proven* to always raise
 #     (hir::aot's own `knownErrors` blocker fact -- computed here for the
 #     callee's own instance specifically, via the same
@@ -8502,6 +8524,9 @@ proc native::lower::InlineRegionConsumerCall {fnVar e argExpr calleeId paramInde
 #     NativeCall's own ordinary, unrelated decision, made the same way
 #     whether this body was inlined or not (spec's own "do not force
 #     rawness");
+#   - a mod call (`imod`) likewise proves (LeafModSafe) its divisor's Range
+#     excludes 0, the one way `mod` can raise (ARITHMETIC): a leaf whose
+#     divisor may be 0 declines, so an inlined body is still total;
 #   - the body's own total native-call count does not exceed
 #     LEAFINLINEMAXOPS (8, above): comfortably above both real target
 #     bodies (byte::high_nibble's 1 call, byte::nibble's 4), with headroom
@@ -8714,11 +8739,32 @@ proc native::lower::LeafExprEligible {e opsVar} {
             if {$op in {ishr ishl} && ![LeafShiftSafe $e $argExprs]} {
                 return 0
             }
+            if {$op eq "imod" && ![LeafModSafe $e $argExprs]} {
+                return 0
+            }
             incr ops
             return [expr {$ops <= $leafInlineMaxOps}]
         }
     }
     return 0
+}
+
+# 1 if mod call E's (op imod, ARGEXPRS = {dividend divisor}) divisor Range,
+# in the callee's own instance, excludes 0: the only condition
+# (core::primitives::modulo, rt_int_mod) under which `mod` raises
+# ({CORE SEMANTIC ARITHMETIC}), so with it the call is total -- the same
+# shape of proof as LeafShiftSafe, and likewise independent of the
+# dividend's size or sign (a BigInt operand still takes the tagged op's
+# helper path, wherever the call is lowered). Whether the inlined call ends
+# up raw (`rimodtotal`), a mask or tagged is NativeCall's ordinary decision,
+# made exactly as it would be in the callee's own function.
+proc native::lower::LeafModSafe {e argExprs} {
+    variable ranges
+    variable currentInstance
+    if {[llength $argExprs] != 2} {
+        return 0
+    }
+    return [RangeExcludesZero [hir::range::of $ranges $currentInstance [lindex $argExprs 1]]]
 }
 
 # 1 if shift call E's (op ishr/ishl, ARGEXPRS = {value amount}) own amount
@@ -9065,6 +9111,13 @@ proc native::lower::NativeCall {fnVar e node name argRegs rawEligible op want} {
             return $folded
         }
     }
+    if {$op eq "imod"} {
+        set masked [ModMaskCall fn $e $argExprs $argRegs $want \
+            [expr {$rawEligible ? "raw" : "tagged"}]]
+        if {$masked ne ""} {
+            return $masked
+        }
+    }
     if {$rawEligible} {
         # ARGREGS are already raw (Call requested it): lower directly, with
         # no RawOf needed on either operand.
@@ -9073,9 +9126,12 @@ proc native::lower::NativeCall {fnVar e node name argRegs rawEligible op want} {
             iadd riadd  isub risub  imul rimul
             ilt  rilt   ile  rile   igt  rigt   ige rige   ieq rieq
             ishr rishr  ishl rishl
-            iand riand  ior  rior   ixor rixor
+            iand riand  ior  rior   ixor rixor  imod rimod
         } $op]
-        set arith [expr {$op in {iadd isub imul ishr ishl iand ior ixor}}]
+        if {$rawOp eq "rimod"} {
+            set rawOp [RawModOp $e $argExprs]
+        }
+        set arith [expr {$op in {iadd isub imul ishr ishl iand ior ixor imod}}]
         if {$arith} {
             set r [AssignRaw fn "op $rawOp $xa $xb" $e]
         } else {
@@ -9304,6 +9360,125 @@ proc native::lower::WantConvert {fnVar reg want} {
 }
 
 # ---------------------------------------------------------------------------
+# Euclidean mod
+#
+# `mod(x, d)` (core/primitives.tcl's modulo) is the one r with 0 <= r < |d|
+# and r = x (mod d); d = 0 raises {CORE SEMANTIC ARITHMETIC}. Besides the
+# tagged `imod`, three lowerings compute exactly that value, each chosen from
+# facts hir/range.tcl already proved for the current instance (nothing here
+# names a function, a type or a particular divisor):
+#
+#   mask        D's Range is the single value d with |d| = 2^k and 2^k - 1 a
+#               small Int (ModMask): r = bit_and(x, 2^k - 1) for every Int x,
+#               negative and BigInt x included -- in two's complement the low
+#               k bits of x are its residue modulo 2^k, and the mask clears
+#               every bit above them, the sign included. `riand` when X's
+#               Range fits small, else the tagged `iand` (an inline both-small
+#               fast path, rt_int_and for a BigInt). D was already evaluated
+#               (Call evaluates every argument); it cannot be 0.
+#   rimodtotal  both Ranges fit small and D's excludes 0 (RangeExcludesZero):
+#               `srem` and the fix-up `r < 0 ? r + |d| : r` on the raw
+#               operands. It never fails, and never allocates (|r| < |d| <=
+#               2^62, so r <= smallMax): no error exit and no safepoint.
+#   rimod       both Ranges fit small, D's may contain 0: the same after an
+#               inline zero test whose cold branch raises rt_int_mod's own
+#               ARITHMETIC error. Fallible, never allocates: no safepoint.
+#
+# Everything else is the tagged `imod`, whose code tests both operands small
+# inline (the same srem and fix-up on the decoded words) and calls rt_int_mod
+# only for a BigInt operand or a zero divisor; that helper may allocate a
+# BigInt remainder, so a tagged `imod` stays a safepoint and fallible
+# (native/src/runtime/ops.rs's op_may_allocate/op_may_error are per opcode).
+
+# 1 if Range R excludes 0: wholly positive, wholly negative, or an exact
+# value set without 0. A divisor with such a Range can never make `mod` fail.
+proc native::lower::RangeExcludesZero {r} {
+    if {$r eq "never"} {
+        return 0
+    }
+    set mn [dict get $r min]
+    set mx [dict get $r max]
+    if {($mn ne "-inf" && $mn > 0) || ($mx ne "+inf" && $mx < 0)} {
+        return 1
+    }
+    set exact [hir::range::ExactOf $r]
+    return [expr {$exact ne "" && [lsearch -exact $exact 0] < 0}]
+}
+
+# The raw op of a raw-eligible mod call E (ARGEXPRS = {dividend divisor}):
+# rimodtotal when the divisor's Range excludes 0, else the checked rimod.
+proc native::lower::RawModOp {e argExprs} {
+    variable ranges
+    variable currentInstance
+    set r [hir::range::of $ranges $currentInstance [lindex $argExprs 1]]
+    return [expr {[RangeExcludesZero $r] ? "rimodtotal" : "rimod"}]
+}
+
+# The mask 2^k - 1 when mod call E's divisor (the second of ARGEXPRS) is
+# proved the single value d with |d| = 2^k and the mask fits small, neither
+# operand needs a runtime check (a guard or a known-error guard, exactly
+# PureBitwiseEligible's rule) and representation optimization is on; else "".
+proc native::lower::ModMask {e argExprs} {
+    variable reprOpt
+    variable ranges
+    variable currentInstance
+    variable guards
+    variable knownErrors
+    if {!$reprOpt || [llength $argExprs] != 2} {
+        return ""
+    }
+    foreach a $argExprs {
+        set key [list $e $a]
+        if {[dict exists $guards $key] || [dict exists $knownErrors $key]} {
+            return ""
+        }
+    }
+    set r [hir::range::of $ranges $currentInstance [lindex $argExprs 1]]
+    if {$r eq "never"} {
+        return ""
+    }
+    set d [dict get $r min]
+    if {$d eq "-inf" || $d ne [dict get $r max] || $d == 0} {
+        return ""
+    }
+    set m [expr {abs($d)}]
+    if {($m & ($m - 1)) != 0 || ![hir::range::fitsSmall [hir::range::point [expr {$m - 1}]]]} {
+        return ""
+    }
+    return [expr {$m - 1}]
+}
+
+# {REG REPR} of mod call E lowered as its mask (ModMask), or "" when it has
+# none. ARGREGS are the evaluated operands, of representation ARGREPR (raw
+# when the call is raw-eligible, RawEligibleCall); WANT is the caller's.
+proc native::lower::ModMaskCall {fnVar e argExprs argRegs want argRepr} {
+    upvar 1 $fnVar fn
+    variable ranges
+    variable currentInstance
+    set mask [ModMask $e $argExprs]
+    if {$mask eq ""} {
+        return ""
+    }
+    set rx [lindex $argRegs 0]
+    set rangeX [hir::range::of $ranges $currentInstance [lindex $argExprs 0]]
+    if {$argRepr eq "raw" || ($rangeX ne "never" && [hir::range::fitsSmall $rangeX])} {
+        if {$argRepr eq "raw"} {
+            set xa $rx
+        } else {
+            set xa [RawOf fn $rx]
+        }
+        set m [lindex [WantConvert fn [IntConst fn $mask $e] raw] 0]
+        set r [AssignRaw fn "op riand $xa $m" $e]
+        dict incr fn rawArith
+        if {$want eq "raw"} {
+            return [list $r raw]
+        }
+        return [list [TaggedOf fn $r] tagged]
+    }
+    return [list [Assign fn "op iand $rx [IntConst fn $mask $e]" $e] tagged]
+}
+
+# ---------------------------------------------------------------------------
 # Representation: local unboxing of proven-small Int arithmetic/comparisons
 #
 # Every operand here already has kind Int by this point (a guard just ran,
@@ -9326,7 +9501,9 @@ proc native::lower::WantConvert {fnVar reg want} {
 # arithmetic, the result's) ranges hir/range.tcl proved fit the small-Int
 # representation -- a bitwise result always does when both operands do (two
 # small Ints agree in bits 62 and 63, and AND, OR and XOR keep that
-# agreement). Decided purely from ARG-EXPRS/E, before either argument is
+# agreement), and so does a Euclidean `mod` (0 <= r < |b| <= 2^62, so r <=
+# smallMax: it never allocates; RawModOp picks its checked or total form).
+# Decided purely from ARG-EXPRS/E, before either argument is
 # lowered, so Call can ask each for raw directly instead of tagged-then-RawOf.
 # `ishr`/`ishl` (proven-safe shifts -- RawEligibleShift) get the same
 # treatment through the same entry point, so a shift chained onto another
@@ -9343,7 +9520,7 @@ proc native::lower::RawEligibleCall {e argExprs op} {
     if {$op in {ishr ishl}} {
         return [RawEligibleShift $e $argExprs $op]
     }
-    if {$op ni {iadd isub imul ilt ile igt ige ieq iand ior ixor}} {
+    if {$op ni {iadd isub imul ilt ile igt ige ieq iand ior ixor imod}} {
         return 0
     }
     lassign $argExprs ea eb
@@ -9467,7 +9644,7 @@ proc native::lower::RawIntOp {fnVar e argExprs argRegs op want} {
         }
         return [list [TaggedOf fn $r] tagged]
     }
-    if {$op ni {iadd isub imul ilt ile igt ige ieq iand ior ixor}} {
+    if {$op ni {iadd isub imul ilt ile igt ige ieq iand ior ixor imod}} {
         return ""
     }
     variable ranges
@@ -9479,7 +9656,7 @@ proc native::lower::RawIntOp {fnVar e argExprs argRegs op want} {
     if {![hir::range::fitsSmall $rangeA] || ![hir::range::fitsSmall $rangeB]} {
         return ""
     }
-    set arith [expr {$op in {iadd isub imul iand ior ixor}}]
+    set arith [expr {$op in {iadd isub imul iand ior ixor imod}}]
     if {$op in {iadd isub imul}} {
         switch -- $op {
             iadd { set resultRange [hir::range::add $rangeA $rangeB] }
@@ -9493,8 +9670,11 @@ proc native::lower::RawIntOp {fnVar e argExprs argRegs op want} {
     set rawOp [dict get {
         iadd riadd  isub risub  imul rimul
         ilt  rilt   ile  rile   igt  rigt   ige rige   ieq rieq
-        iand riand  ior  rior   ixor rixor
+        iand riand  ior  rior   ixor rixor  imod rimod
     } $op]
+    if {$rawOp eq "rimod"} {
+        set rawOp [RawModOp $e $argExprs]
+    }
     set xa [RawOf fn $ra]
     set xb [RawOf fn $rb]
     if {$arith} {
