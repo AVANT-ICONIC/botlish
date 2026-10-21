@@ -510,7 +510,15 @@ wrong), or an accepted program's value differs from the oracle's on any of
 the four backends (the List itself is part of every value, so an unsound
 fact shows as a wrong List, a wrong guard decision or a crash).
 
-FUZZ-RESULTS
+Results (four backends, interp, compile, cranelift-generic and cranelift;
+the case mix is printed by every run): seeds 1 to 5 of 60 cases each and
+seed 6 under `BOTLISH_NATIVE_GC_STRESS=1`, 0 disagreements; after the
+index cases were widened to every source (section 17), seeds 1 to 3 of
+120 cases each, 0 disagreements. Every family of the mix occurs: the six
+consumers accepting and rejecting (TYPE), index reads in and out of range
+(KNOWN-ERROR) of parameters and of sources, sources of unknown length
+read under a handler, equal and unequal extents (KNOWN-ERROR), nested
+literal, loop and ragged Lists.
 
 ## 17. Mutation testing
 
