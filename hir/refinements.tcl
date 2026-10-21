@@ -481,7 +481,12 @@ proc hir::refinements::Lub {a b {base ""}} {
         set va [fact $a $param]
         set vb [fact $b $param]
         if {[dict get $spec order] eq "exactly"} {
-            dict set values $param [expr {$va eq $vb ? $va : ""}]
+            # (Equal values are the join's; different ones state nothing.)
+            if {$va eq $vb} {
+                dict set values $param $va
+            } else {
+                dict set values $param ""
+            }
         } elseif {[AtLeast $va $vb]} {
             dict set values $param $vb
         } else {
@@ -505,7 +510,11 @@ proc hir::refinements::Glb {a b {base ""}} {
             if {$va ne "" && $vb ne "" && $va ne $vb} {
                 return ""
             }
-            dict set values $param [expr {$va eq "" ? $vb : $va}]
+            if {$va eq ""} {
+                dict set values $param $vb
+            } else {
+                dict set values $param $va
+            }
         } elseif {[AtLeast $va $vb]} {
             dict set values $param $va
         } else {

@@ -214,7 +214,10 @@ proc hir::refine::CallImplication {hir e node} {
                 set measured [dict get $measured 1]
                 dict for {b fact} $measured {
                     set set [dict get $result 1]
-                    dict set set $b [expr {[dict exists $set $b] ? [hir::types::narrow [dict get $set $b] $fact] : $fact}]
+                    if {[dict exists $set $b]} {
+                        set fact [hir::types::narrow [dict get $set $b] $fact]
+                    }
+                    dict set set $b $fact
                     dict set result 1 $set
                 }
             }

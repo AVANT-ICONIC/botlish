@@ -3446,7 +3446,10 @@ proc hir::types::LoopResult {hir ctx e result clauses} {
             set n [LengthOf $what]
         } else {
             set form [hir::cardinality::of_domain $hir $what]
-            set n [expr {[hir::cardinality::IsConst $form] ? [lindex $form 0] : ""}]
+            set n ""
+            if {[hir::cardinality::IsConst $form]} {
+                set n [lindex $form 0]
+            }
         }
         if {$n ne ""} {
             return [Refine $result List [list length $n]]
