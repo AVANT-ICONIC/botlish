@@ -113,7 +113,8 @@ proc drawProgram {p k} {
         set negative [chance 0.4]
         set values {}
         set v [expr {$negative ? -[between 1 1000] : [between 0 100]}]
-        for {set j 0} {$j < [between 1 4]} {incr j} {
+        set count [between 1 4]
+        for {set j 0} {$j < $count} {incr j} {
             lappend values $v
             incr v [between 1 1000]
         }
@@ -153,7 +154,8 @@ proc drawProgram {p k} {
             continue
         }
         set params {}
-        for {set j 0} {$j < [pick {0 1 2 3 [between 4 9]}]} {incr j} {
+        set count [pick [list 0 1 2 3 [between 4 9]]]
+        for {set j 0} {$j < $count} {incr j} {
             lappend params [drawType $typedefs $enums 1]
         }
         set result [expr {[chance 0.15] ? [dict create kind void] : [drawType $typedefs $enums 0]}]
@@ -170,7 +172,8 @@ proc drawProgram {p k} {
     }
     # Integer constants: literals with every suffix, casts to the typedefs.
     set constants {}
-    for {set i 0} {$i < [between 1 6]} {incr i} {
+    set count [between 1 6]
+    for {set i 0} {$i < $count} {incr i} {
         if {[chance 0.3] && [llength $typedefs]} {
             set t [pick $typedefs]
             set ctype [TypedefC $t]

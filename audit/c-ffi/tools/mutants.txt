@@ -182,10 +182,8 @@
 @@ every-extern-direct every call of a C function is an authority source, noescape ones included
 ## hir/direct.tcl
 <<<<
-        set retains [core::cabi::RetainingParameters [dict get [core::native::metadata $name] foreign]]
-        if {$retains ne {}} {
+        if {$reasons ne {}} {
 ====
-        set retains [core::cabi::RetainingParameters [dict get [core::native::metadata $name] foreign]]
         if {1} {
 >>>>
 
@@ -193,10 +191,8 @@
 ## hir/direct.tcl
 <<<<
         set retains [core::cabi::RetainingParameters [dict get [core::native::metadata $name] foreign]]
-        if {$retains ne {}} {
 ====
-        set retains [core::cabi::RetainingParameters [dict get [core::native::metadata $name] foreign]]
-        if {0} {
+        set retains {}
 >>>>
 
 @@ nearest-library each C function is associated with the last library its own unit declares, and only libraries some function is associated with are linked
@@ -334,7 +330,7 @@ proc core::cabi::ExternImpl {display args} {
 @@ extern-arity-unchecked a C call passing a different number of arguments than its signature is not a compile-time ARITY
 ## hir/borrow.tcl
 <<<<
-    if {[core::native::isExtern $native] && [llength [dict get $node args]] != [llength $params]} {
+    if {!$variadic && [core::native::isExtern $native] && [llength [dict get $node args]] != [llength $params]} {
 ====
     if {0} {
 >>>>
