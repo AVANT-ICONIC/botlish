@@ -194,6 +194,15 @@ proc runStandalone {path args} {
 # one (and its fixture's own constraint: a C compiler, the rustc linker).
 testConstraint nativeCCalls [native::hostSupports cCalls]
 
+# Darwin I/O (lib/darwin.bot, lib/darwin/io.bot, MACOS-AARCH64-MILESTONE-8.md):
+# the darwin namespace is this host's platform interface (core/cabi.tcl's
+# platforms designates it macOS's) and the native backend links C calls here,
+# so libSystem's read and write run: macOS arm64 today. A capability read from
+# the target table, never from the operating system's name: a test that runs
+# a program importing darwin::* carries it.
+testConstraint darwinIO [expr {[core::cabi::hostTarget] ne "" && [testConstraint nativeCCalls]
+    && [core::cabi::platformOf darwin] eq [dict get [core::cabi::target [core::cabi::hostTarget]] os]}]
+
 # binaryHeader PATH and hostBinaryHeader KIND: what a program object or an
 # executable is, and what this host's are.
 source [file join $::projectRoot tests binary-header.tcl]

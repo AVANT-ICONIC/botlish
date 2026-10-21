@@ -181,6 +181,38 @@ test workload-2048-demo-executable {the demo as a standalone executable prints t
     }
 } -result {1 1}
 
+# The demo on macOS (MACOS-AARCH64-MILESTONE-8.md): demo-darwin.bot is
+# demo.bot with darwin::io's context installed instead of linux::io's; the
+# game and its presentation are one application module, demo_play.bot,
+# printing through the portable io::print_line.
+test workload-2048-demo-two-platforms {demo.bot and demo-darwin.bot are one program on two platforms: their statements are identical but for the platform import and the installed context, each compiles for its own platform's target warning-free, the game's module is the same file, and each selects its platform's io::IO implementation} -body {
+    set code [lmap name {demo.bot demo-darwin.bot} {
+        join [lmap line [split [core::ReadFile [file join $gameDir $name]] \n] {
+            expr {[string match #* $line] || [string match *linux::io* $line] || [string match *darwin::io* $line] ? [continue] : $line}
+        }] \n
+    }]
+    set selections [lmap {name target} [list demo.bot [linuxTarget] demo-darwin.bot macos-aarch64] {
+        set hir [surface::readProgramFile [file join $gameDir $name] -warnings error -warning-channel "" -cache "" -target $target]
+        set modules [lmap {id file} [dict get $hir files] {
+            expr {[file tail [dict get $file path]] eq "demo_play.bot" ? [dict get $file path] : [continue]}
+        }]
+        list $modules [dict values [dict get [dict get $hir traitSource] contexts selections]]
+    }]
+    list [expr {[lindex $code 0] eq [lindex $code 1]}] $selections
+} -result [list 1 [list [list [list [file join $gameDir demo_play.bot]] {{io::IO linux::io::LinuxIO}}] \
+    [list [list [file join $gameDir demo_play.bot]] {{io::IO darwin::io::DarwinIO}}]]]
+
+test workload-2048-demo-darwin-executable {(where Darwin I/O runs) demo-darwin.bot as a standalone executable prints the whole game through libSystem, the same bytes as the Linux demo, identically under GC stress} -constraints {executableAot darwinIO} -body {
+    set dir [makeDirectory workload-2048-demo-darwin]
+    try {
+        set hir [surface::readProgramFile [file join $gameDir demo-darwin.bot] -warnings off]
+        set exe [native::executable $hir [file join $dir demo]]
+        list [string equal [exec $exe] $demoOutput] [string equal [exec env BOTLISH_NATIVE_GC_STRESS=1 $exe] $demoOutput]
+    } finally {
+        removeDirectory workload-2048-demo-darwin
+    }
+} -result {1 1}
+
 # The benchmark as a standalone executable, as an application is built and
 # shipped: bench.bot and its application module game2048.bot copied out of
 # the checkout, compiled by main.tcl from another directory, the executable

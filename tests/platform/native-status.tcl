@@ -6,7 +6,8 @@
 # Runs one small probe per native capability -- the JIT, the GC's frame walk
 # under stress, a native stack overflow (of the thread's stack and of a
 # coroutine's), coroutines, a Linux syscall, a C call, byte storage exposed
-# to the system C library, a program object and
+# to the system C library, Darwin I/O (libSystem's read and write, errno,
+# the portable io::IO through DarwinIO, an executable), a program object and
 # a standalone executable -- and of the target boundary (the
 # driver's reading of the host target's triple, the C calling convention of
 # a foreign signature, a program built for the other operating system of the
@@ -137,6 +138,57 @@ z = abi::bytes::zeroed(abi::usize(2))
 c = abi::bytes::freeze(memset(z, 200, 2).dst)
 [memcmp(a, c, 2) < 0, memcmp(c, a, 2) > 0, memcmp(a, a, 2), c == abi::bytes::from_list([byte::from_int(200), byte::from_int(200)]), memcmp(z, abi::bytes::from_list([byte::from_int(0), byte::from_int(0)]), 2)]
 } {}] \
+    darwin-read-write [list program {direct module
+import abi
+import abi::bytes
+import darwin
+
+# libSystem's write(2) of nothing to descriptor 1 (0 bytes, no errno) and
+# read(2) of descriptor -1 (-1, EBADF = 9), through lib/darwin.bot.
+w = darwin::write(1, abi::bytes::from_list([]))
+r = darwin::read(-1, abi::bytes::zeroed(abi::usize(1)))
+[w.count, w.errno, r.count, r.errno]
+} {}] \
+    darwin-errno [list program {direct module
+import abi
+import abi::bytes
+import darwin
+
+# Two failures in succession, each with its own errno read through __error():
+# close of descriptor -1 (EBADF = 9), then of 9999 (EBADF again), and a
+# success between them reporting 0.
+a = darwin::close(-1)
+b = darwin::write(2, abi::bytes::from_list([]))
+c = darwin::close(9999)
+[a.status, a.errno, b.count, b.errno, c.status, c.errno]
+} {}] \
+    darwin-io [list program {import io
+import darwin::io
+
+# The portable io::IO through the installed DarwinIO context: an empty print
+# (no write at all) and the value saying it succeeded.
+fn quiet() -> str errors io::WriteFailed:
+    io::print("")
+    "ok"
+
+with context darwin::io::create()
+
+quiet():
+    on io::WriteFailed:
+        "failed"
+} {}] \
+    darwin-executable [list executable {import io
+import darwin::io
+
+fn hello() errors io::WriteFailed:
+    io::print_line("Hello, world!")
+
+with context darwin::io::create()
+
+hello():
+    on io::WriteFailed:
+        unit
+} {}] \
     object [list object {fn fib(n):
     if n <= 1:
         return n
@@ -188,7 +240,13 @@ f(1)
 # linker ran (NATIVE LINK, "C calls are linked on Linux glibc only"). Byte
 # storage exposed to the system C library (memcmp reading two buffers,
 # memset writing a private copy) gives the same values everywhere: on
-# macos-aarch64 checked since milestone 7 (MACOS-AARCH64-MILESTONE-7.md). A
+# macos-aarch64 checked since milestone 7 (MACOS-AARCH64-MILESTONE-7.md).
+# Darwin I/O (lib/darwin.bot, lib/darwin/io.bot: libSystem's write, read,
+# close and the thread's errno; the portable io::IO through DarwinIO; a
+# Mach-O executable printing through it) runs on macos-aarch64 since
+# milestone 8 (MACOS-AARCH64-MILESTONE-8.md), and is refused everywhere else
+# before anything runs: `darwin` is the macOS platform's namespace
+# (UNSUPPORTED-PLATFORM), as `linux` is Linux's. A
 # native stack overflow is NATIVE LIMIT STACK on
 # every host, the thread's stack and a coroutine's alike: on macos-aarch64
 # since milestone 4 (MACOS-AARCH64-MILESTONE-4.md), where until then the
@@ -225,6 +283,10 @@ set linux [dict create \
     linux-syscall {value 0} \
     c-call {value 5} \
     c-byte-borrow {value {[true, true, 0, true, 0]}} \
+    darwin-read-write {error {SURFACE MODULE UNSUPPORTED-PLATFORM} {*namespace "darwin" belongs to the macOS platform (the standard namespace darwin*unavailable for target linux-*}} \
+    darwin-errno {error {SURFACE MODULE UNSUPPORTED-PLATFORM} {*namespace "darwin" belongs to the macOS platform*unavailable for target linux-*}} \
+    darwin-io {error {SURFACE MODULE UNSUPPORTED-PLATFORM} {*namespace "darwin::io" belongs to the macOS platform*unavailable for target linux-*}} \
+    darwin-executable {error {SURFACE MODULE UNSUPPORTED-PLATFORM} {*namespace "darwin::io" belongs to the macOS platform*unavailable for target linux-*}} \
     target {value {format elf c-call-conv system_v runs 1}} \
     c-convention {value {labs system_v abs system_v}} \
     other-target {error {NATIVE TARGET} {this program was built for target macos-* and native code runs only on its own target's host*matching architecture is not a matching target*}}]
@@ -247,6 +309,11 @@ set expected [dict create \
         linux-syscall {error {SURFACE MODULE UNSUPPORTED-PLATFORM} {*namespace "linux" belongs to the Linux platform*unavailable for target macos-aarch64 (macOS on aarch64)*}} \
         c-call {value 5} \
         c-byte-borrow {value {[true, true, 0, true, 0]}} \
+        darwin-read-write {value {[0, 0, -1, 9]}} \
+        darwin-errno {value {[-1, 9, 0, 0, -1, 9]}} \
+        darwin-io {value {"ok"}} \
+        darwin-executable {value {{macho arm64 execute} {Hello, world!
+unit}}} \
         object {value {macho arm64 object}} \
         executable {value {{macho arm64 execute} 6765}} \
         target {value {format macho c-call-conv apple_aarch64 runs 1}} \
@@ -262,6 +329,11 @@ set expected [dict create \
         coroutine {error {NATIVE UNSUPPORTED value} {native coroutines need stack switching, implemented for Linux x86-64 and AArch64 and macOS AArch64 only*}} \
         linux-syscall {error {SURFACE MODULE UNSUPPORTED-PLATFORM} {*namespace "linux" belongs to the Linux platform*unavailable for target windows-x86_64 (Windows on x86_64)*}} \
         c-call {error {NATIVE LINK} {native link failed: this program calls C*C calls are linked on Linux glibc (x86_64, aarch64) and macOS (aarch64) only*}} \
+        c-byte-borrow {error {NATIVE LINK} {native link failed: this program calls C*C calls are linked on Linux glibc (x86_64, aarch64) and macOS (aarch64) only*}} \
+        darwin-read-write {error {SURFACE MODULE UNSUPPORTED-PLATFORM} {*namespace "darwin" belongs to the macOS platform*unavailable for target windows-x86_64 (Windows on x86_64)*}} \
+        darwin-errno {error {SURFACE MODULE UNSUPPORTED-PLATFORM} {*namespace "darwin" belongs to the macOS platform*unavailable for target windows-x86_64 (Windows on x86_64)*}} \
+        darwin-io {error {SURFACE MODULE UNSUPPORTED-PLATFORM} {*namespace "darwin::io" belongs to the macOS platform*unavailable for target windows-x86_64 (Windows on x86_64)*}} \
+        darwin-executable {error {SURFACE MODULE UNSUPPORTED-PLATFORM} {*namespace "darwin::io" belongs to the macOS platform*unavailable for target windows-x86_64 (Windows on x86_64)*}} \
         object {value {coff x86_64 object}} \
         executable {value {{pe x86_64 executable} 6765}} \
         target {value {format coff c-call-conv windows_fastcall runs 1}} \

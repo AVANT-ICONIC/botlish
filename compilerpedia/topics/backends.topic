@@ -223,12 +223,12 @@ every backend prints (backend.io).
 
 @topic backend.io
 title: Which forms of I/O work on which backend
-summary: The program's value is printed on every backend; printing (io::print_line) and reading stdin (linux::io::read) need a native backend or an executable; there is no file or exit-status API.
+summary: The program's value is printed on every backend; printing (io::print_line) and reading stdin need a native backend or an executable; there is no portable file or exit-status API.
 index: backends stdlib
 alias: input output; io backends; printing on interp; output on every backend
 keywords: io, print, print_line, stdout, stderr, value, native, interp
-related: task.print-output backend.native-only stdlib.module.io stdlib.io::print_line capability.input capability.files capability.process-exit-status concept.program-value concept.context-traits
-docs: CONTEXT-TRAITS.md POST-2048-PRODUCT-FIXES.md
+related: task.print-output backend.native-only stdlib.module.io stdlib.io::print_line stdlib.module.darwin::io capability.input capability.files capability.process-exit-status concept.program-value concept.context-traits
+docs: CONTEXT-TRAITS.md POST-2048-PRODUCT-FIXES.md MACOS-AARCH64-MILESTONE-8.md
 
 == OUTPUT, BY BACKEND
     the program's value          every backend: the compiler prints it
@@ -237,19 +237,22 @@ docs: CONTEXT-TRAITS.md POST-2048-PRODUCT-FIXES.md
     write_error(_line)           executables; interp and compile refuse the
                                  underlying system call (NATIVE-ONLY)
     linux::write, linux::io      the same: native only
+    darwin::write, darwin::io    the same: native only (C calls)
 
-io's operations need an installed context implementing io::IO; the one the
-standard library provides is linux::io::LinuxIO (`with context
-linux::io::create()`), which makes raw Linux system calls -- hence native
-only, on Linux.
+io's operations need an installed context implementing io::IO; the standard
+library provides two, one per platform: linux::io::LinuxIO (`with context
+linux::io::create()`), which makes raw Linux system calls, and on macOS
+darwin::io::DarwinIO (`with context darwin::io::create()`), which calls
+libSystem's write(2) through C -- hence native only. The function that
+prints is the same on both; only the installed context differs.
 
 == INPUT
     argv()                       every backend (concept.argv)
     linux::io::read(buffer)      standard input, raw bytes: cranelift,
-                                 cranelift-generic and native executables
+    darwin::io::read(buffer)     cranelift-generic and native executables
                                  (capability.input)
 
-There is no text or line input in io, and no file or directory API
+There is no text or line input in io, and no portable file or directory API
 (capability.files).
 
 == EXIT STATUS
@@ -263,14 +266,15 @@ index: backends
 alias: platforms; operating systems; aarch64; arm64; x86-64; supported platforms
 keywords: Linux, x86-64, AArch64, arm64, macOS, Windows, MSVC, Tcl 9, coroutines, stub
 related: backend.targets backend.overview backend.native-executable backend.single-executable
-docs: README.md LINUX-SYSCALL-TRANSPORTS.md COROUTINES.md WINDOWS-X86-64-MILESTONE-1.md
+docs: README.md LINUX-SYSCALL-TRANSPORTS.md COROUTINES.md WINDOWS-X86-64-MILESTONE-1.md MACOS-AARCH64-MILESTONE-8.md
 
 == WHAT IS TESTED
 The repository's continuous integration runs every test on Linux x86-64 and
 Linux AArch64 (the Tcl backends, the native backends, the golden suites)
 and builds the single executable on Linux x86-64. A separate workflow runs
 the native JIT, native coroutines, the native stack guard, standalone
-executables and C calls on Apple Silicon macOS, and another the native JIT,
+executables, C calls and Darwin I/O on Apple Silicon macOS, and
+another the native JIT,
 standalone executables and the collector under GC stress, and every Tcl
 test file and golden suite on the Tcl backends, on Windows x86-64 with
 MSVC's toolchain. Nothing here is a promise about other platforms.
@@ -297,6 +301,11 @@ MSVC's toolchain. Nothing here is a promise about other platforms.
                              portable surface: linux, linux::io, io);
                              the linux namespaces compile for Linux
                              targets only (error.unsupported-platform)
+    Darwin I/O, io           macOS AArch64: libSystem's read, write,
+                             open, close and errno through C calls
+                             (darwin, darwin::io, darwin::path; no raw
+                             Darwin system call); the darwin namespaces
+                             compile for macOS targets only
     executables              Linux, glibc, ELF: rustc linker on x86-64
                              and AArch64, stub linker x86-64 only; macOS
                              AArch64, Mach-O: rustc linker; Windows
