@@ -244,15 +244,15 @@ test di-c-declarations {lib/darwin.bot declares libSystem's write, read, open, c
     list $foreign $contracts [regexp -inline {varargs=\S+} $nir]
 } -result {{{__error {} ptr 0} {close i32 i32 0} {open {ptr i32} i32 1} {read {i32 ptr u64} i64 0} {write {i32 ptr u64} i64 0}} {{darwin::c_write {fd {buf read declared-noescape} nbyte} 0 unknown} {darwin::c_read {fd {buf write declared-noescape} nbyte} 0 unknown} {darwin::c_open {{path read declared-noescape} oflag} 1 unknown} {darwin::c_close fd 0 unknown} {darwin::c_errno_location {} 0 independent}} varargs=u16:i32}
 
-test di-errno-read-first {a failed call's errno is read before anything else runs: in darwin::write, open and close nothing comes between the C call and errno() (no allocation, no other call); in darwin::read only the write-back value of the exposure, two small objects built right after the call; and errno() is one C call of __error and one load through the native view} -body {
-    set nir [native::nir [diHir "direct module\nimport abi\nimport abi::bytes\nimport darwin\nimport darwin::path\nimport io::path\nfn f(p: str) -> List\[int\] errors io::path::NotAPath:\n    darwin::path::validate(p)\n    w = darwin::write(1, abi::bytes::from_list(\[\]))\n    r = darwin::read(0, abi::bytes::zeroed(abi::usize(1)))\n    o = darwin::open(p, darwin::Access::ReadOnly)\n    c = darwin::close(o.fd)\n    \[w.count, w.errno, r.count, r.errno, o.fd, o.errno, c.status, c.errno\]\nf(\"x\"):\n    on io::path::NotAPath:\n        \[\]\n"]]
+test di-errno-read-first {a failed call's errno is read before anything else runs: in darwin::write, open (both forms: open_with, and open_mode behind create and create_new) and close nothing comes between the C call and errno() (no allocation, no other call); in darwin::read only the write-back value of the exposure, two small objects built right after the call; and errno() is one C call of __error and one load through the native view} -body {
+    set nir [native::nir [diHir "direct module\nimport abi\nimport abi::bytes\nimport darwin\nimport darwin::path\nimport io::path\nfn f(p: str) -> List\[int\] errors io::path::NotAPath:\n    darwin::path::validate(p)\n    w = darwin::write(1, abi::bytes::from_list(\[\]))\n    r = darwin::read(0, abi::bytes::zeroed(abi::usize(1)))\n    o = darwin::open(p, darwin::Access::ReadOnly)\n    m = darwin::create(p, darwin::Access::WriteOnly, 384)\n    c = darwin::close(o.fd)\n    \[w.count, w.errno, r.count, r.errno, o.fd, o.errno, m.fd, m.errno, c.status, c.errno\]\nf(\"x\"):\n    on io::path::NotAPath:\n        \[\]\n"]]
     set errno [nirId $nir darwin::errno]
-    set between [lmap name {darwin::write darwin::read darwin::open_with darwin::close} {
+    set between [lmap name {darwin::write darwin::read darwin::open_with darwin::open_mode darwin::close} {
         set body [nirBody $nir $name]
         set from [lsearch -glob $body "*foreigncall*"]
         set to [lsearch -glob $body "* = call $errno"]
         lmap line [lrange $body [expr {$from + 1}] [expr {$to - 1}]] {
-            if {[regexp {= (op (\S+)|(structnew|call|callmulti|structget))} $line -> - op word]} {
+            if {[regexp {= (op (\S+)|(structnew|call|callmulti|structget|foreigncall))} $line -> - op word]} {
                 expr {$op ne "" ? $op : $word}
             } else {
                 continue
@@ -262,7 +262,7 @@ test di-errno-read-first {a failed call's errno is read before anything else run
     list $between [lmap line [nirBody $nir darwin::errno] {
         expr {[regexp {= (foreigncall|op nativeload)} $line -> what] ? $what : [continue]}
     }]
-} -result {{{keepalive ilt} {keepalive structnew structnew structget ilt} {keepalive runbox rilt} {runbox rilt}} {foreigncall {op nativeload}}}
+} -result {{{keepalive ilt} {keepalive structnew structnew structget ilt} {keepalive runbox rilt} {keepalive runbox rilt} {runbox rilt}} {foreigncall {op nativeload}}}
 
 # ---------------------------------------------------------------------------
 # io::IO through DarwinIO: static selection, no dispatch
@@ -724,7 +724,9 @@ test di-files {open(2)'s genuine variadic prototype through darwin::create and d
     set here [pwd]
     cd $dir
     try {
-        lassign [diRun $exe] out err status
+        # Under a known umask (022, which leaves 0640 as it is): the mode
+        # checked is the one open(2) received, not the runner's umask.
+        lassign [diRun [list sh -c {umask 022; exec "$0"} $exe]] out err status
     } finally {
         cd $here
     }

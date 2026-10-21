@@ -320,7 +320,6 @@ extern c fn c_read named "read"(fd: ffi::c::Int, buf: ffi::c::Ptr[ffi::c::Void] 
 >>>>
 
 @@ darwin-errno-after-another-call a failed open reads errno only after another C call (a close of -1, which sets EBADF)
-%% macos-aarch64
 ## lib/darwin.bot
 <<<<
     fd = c_open(c_string(path), oflag)
@@ -334,7 +333,6 @@ extern c fn c_read named "read"(fd: ffi::c::Int, buf: ffi::c::Ptr[ffi::c::Void] 
 >>>>
 
 @@ darwin-errno-constant errno() reports one fixed value (EBADF) whatever the failed call left
-%% macos-aarch64
 ## lib/darwin.bot
 <<<<
             return 0
