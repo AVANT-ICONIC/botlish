@@ -42,11 +42,13 @@ checking it there:
   and the benchmark on macOS (`c-borrow-fuzz`, `c-borrow-mutants`,
   `c-borrow-bench`), and native-status records the capability
   (`c-byte-borrow`).
-* **One test-harness defect fixed on the way** (commit ec7cae8): the first
-  macOS run failed bb-guard-malloc because Guard Malloc writes a banner to
-  standard error, which Tcl's `exec` takes for a failure -- the guarded
-  executable had printed the oracle's value. Runs are now judged by exit
-  status, and a fault by the signal that killed the process (section 8).
+* **Two test-harness defects fixed on the way**, both in bb-guard-malloc's
+  positive control (section 8): Guard Malloc writes a banner to standard
+  error, which Tcl's `exec` took for a failure (commit ec7cae8: runs are now
+  judged by exit status, a fault by the signal that killed the process);
+  and, exposed by that stricter check, the over-reading program had never
+  compiled (`len(d) + 1` is not provably a `size_t`), which the old `catch`
+  had also counted as a fault.
 
 ## 1. The initial census
 
@@ -265,10 +267,18 @@ no C call reads or writes past an exposed storage. The positive control is
 the same executable with one count one byte too long, which must be killed
 by a signal under libgmalloc and must not be without it; a C probe
 (`guardMallocWorks`) shows the detector faults on this host before the test
-is enabled. The first macOS run found the harness defect described in
-"Result": libgmalloc's banner on standard error made `exec` report every
-guarded run as failed, which also made the probe's positive control
-vacuous. Both now read the exit status and require `CHILDKILLED`.
+is enabled. Two macOS runs found the control vacuous, twice over. First,
+libgmalloc's banner on standard error made `exec` report every guarded run
+as failed -- the good executable's correct value included -- so both the
+probe's and the test's fault checks passed without a fault; both now read
+the exit status and require `CHILDKILLED`. Second, with that check in
+place, the bad executable "did not fault": it had never been built, because
+the mutated count `len(d) + 1` is not provably an `ffi::c::ULong` (a
+compile-time TYPE error the old `catch` had counted as the fault). The
+over-read is now the literal count 4081 for a 4080-byte storage made by
+`bytesfromlist` at run time (a heap allocation, not a static storage: the
+NIR shows it), and a program that fails to compile can no longer pass for a
+fault.
 
 **BoringSSL.** Not run on macOS. The SHA-256 acceptance needs the
 package-owned static BoringSSL (tests/cffi/boringssl.tcl) and links
