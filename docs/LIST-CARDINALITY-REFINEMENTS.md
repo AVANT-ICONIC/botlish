@@ -518,10 +518,68 @@ FUZZ-RESULTS
 `audit/list-length-refinement/tools/mutants.txt` to a private copy of the
 tree (rebuilding a private native backend for a native mutant) and runs
 the detectors: `tests/list-length-refinement.test`, the fuzzer (seed 1,
-60 cases) and, for a native mutant, `cargo test --lib list_with_length`. Every
-mutant must still apply and be killed by a test of behavior or the fuzzer.
+60 cases) and, for a native mutant, `cargo test --lib list_with_length`.
+Every mutant must still apply and be killed by a test of behavior or the
+fuzzer.
 
-MUTATION-RESULTS
+37 mutants, all applied and all killed. The first full run killed 36 of
+them; one survived, `bounds-n-plus-one` (a refined List's size form one
+more than its length). It exposed a gap in the tests, not in the
+compiler: when two known sizes of one List disagree,
+`hir::completions::IndexBounds` takes the read for unreachable and proves
+it, so a size form off by one from the type made
+every index of a List whose length an *expression's* type states (a
+declared result, `list::with_length`, `list::append`, a collecting loop, a
+copy) proven, out-of-range ones included -- and the tests indexed only
+parameters and literals, which take other paths. `llr-bounds-every-source`
+now reads each such source in and out of range, and the fuzzer's index
+cases read a random source's List; both kill it (rerun with `-only
+bounds-n-plus-one`).
+
+Each row: the tests that failed (the harness lists the first six), the
+fuzzer's verdict on its 60 cases of seed 1, and, for a native mutant, the
+validator's Rust test. A mutant the fuzzer misses is still killed by a test
+of behavior; none is killed by a pinned snapshot alone.
+
+| mutant | the bug | tests killing it | fuzzer | native |
+|---|---|---|---|---|
+| `refinement-ignored` | a declared List[T]{length: N} resolves to List[T]: the fact is dropped | 21: `llr-admission-static`, `llr-array-writes`, `llr-bounds`, `llr-cache-and-isolation`, `llr-canonical-form`, `llr-captures-contexts-coroutines`, ... | 38 of 60 cases | - |
+| `runtime-type` | a refined List's runtime kind is taken to be its refinement form, not the List's | 10: `llr-admission-static`, `llr-array-copies-run`, `llr-bounds`, `llr-declared-contracts`, `llr-fixed-arity-unchanged`, `llr-guard-narrowing`, ... | 6 of 60 cases | - |
+| `decay-rejected` | forgetting a length is not subtyping | 2: `llr-implication`, `llr-no-monomorphization` | 4 of 60 cases | - |
+| `decay-rejected-admission` | admission does not forget an argument's length where a List[T] is required | 15: `llr-admission-static`, `llr-append`, `llr-array-copies`, `llr-array-writes`, `llr-bounds`, `llr-decay-free`, ... | 32 of 60 cases | - |
+| `wrong-length-admitted` | an exact fact implies any other value of it | 4: `llr-admission-static`, `llr-handlers-branches`, `llr-implication`, `llr-static-compile` | 4 of 60 cases | - |
+| `generic-ordering-exact` | exact length is ordered like an atLeast parameter (a List of 4 is taken for one of 3) | 1: `llr-implication` | 1 of 60 cases | - |
+| `unrefined-admitted` | a List of no known length is admitted where a length is required | 3: `llr-admission-static`, `llr-guard-scopes`, `llr-return-contract` | 11 of 60 cases | - |
+| `join-keeps-left` | two different lengths join to the left one | 4: `llr-handlers-branches`, `llr-joins`, `llr-literals-mint`, `llr-return-contract` | survived | - |
+| `join-keeps-right` | two different lengths join to the right one | 4: `llr-handlers-branches`, `llr-joins`, `llr-literals-mint`, `llr-return-contract` | 1 of 60 cases | - |
+| `join-invents` | two different lengths join to an invented one (their larger) | 4: `llr-handlers-branches`, `llr-joins`, `llr-literals-mint`, `llr-return-contract` | survived | - |
+| `return-unchecked` | a declared refined result is not held to its length | 1: `llr-return-contract` | survived | - |
+| `result-leaks` | an undeclared result keeps the length its implementation happens to have | 1: `llr-undeclared-result-forgets` | survived | - |
+| `instance-key-keeps` | a semantic instance is keyed by the lengths its caller's arguments happen to have | 1: `llr-no-monomorphization` | survived | - |
+| `literal-off-by-one` | a List literal's length is one more than its element count | 20: `llr-admission-static`, `llr-append`, `llr-bounds`, `llr-cache-and-isolation`, `llr-captures-contexts-coroutines`, `llr-collecting-loops`, ... | 24 of 60 cases | - |
+| `empty-is-one` | the empty List[never] states length 1 | 7: `llr-canonical-form`, `llr-guard-narrowing`, `llr-implication`, `llr-joins`, `llr-literals-mint`, `llr-static-compile`, ... | 8 of 60 cases | - |
+| `append-no-increment` | list::append's result has its List's length, not one more | 1: `llr-append` | survived | - |
+| `loop-ignores-break` | a collecting loop that breaks still mints its domain's length | 1: `llr-collecting-loops` | survived | - |
+| `guard-wrong-branch` | list::length(xs) == N refines xs where it does not hold | 2: `llr-guard-narrowing`, `llr-return-contract` | 6 of 60 cases | - |
+| `guard-one-order` | only list::length(xs) == N narrows, never N == list::length(xs) | 1: `llr-guard-narrowing` | survived | - |
+| `neguard-no-narrow` | a != early return does not narrow what follows it (the decided-path facts dropped) | 1: `llr-guard-narrowing` | 3 of 60 cases | - |
+| `inequality-mints` | list::length(xs) >= N refines xs to List[T]{length: N} | 1: `llr-guard-scopes` | survived | - |
+| `copy-unrefined` | a copied fixed array is a List of no known length | 4: `llr-array-copies`, `llr-array-copies-run`, `llr-array-copy-agrees`, `llr-array-writes` | 5 of 60 cases | - |
+| `copy-inner-lost` | a copied array of arrays forgets its rows' extent | 3: `llr-array-copies`, `llr-array-copies-run`, `llr-array-copy-agrees` | survived | - |
+| `copy-off-by-one` | a copied fixed array's List states one element more than the extent (the type and the exact copy disagree) | 3: `llr-array-copies`, `llr-array-copy-agrees`, `llr-array-writes` | 5 of 60 cases | - |
+| `parse-field-unrefined` | a field of what binary::parse made has its LayoutStruct's unrefined field type | 4: `llr-array-copies`, `llr-array-copies-run`, `llr-array-copy-agrees`, `llr-array-writes` | 5 of 60 cases | - |
+| `write-still-checks` | a refined List's length is not read by the size forms: an extent (or index) it proves keeps its run-time check | 1: `llr-bounds` | survived | - |
+| `write-accepts-wrong` | a List of another known length is admitted into a fixed array (a write proven wrong is taken for proven) | 1: `llr-array-writes` | 5 of 60 cases | - |
+| `bounds-n-plus-one` | a refined List's size form is one more than its length | 1: `llr-bounds-every-source` | 3 of 60 cases | - |
+| `measured-ignored` | list::length of a refined List is not known to be its length | 1: `llr-length-known` | survived | - |
+| `handler-strict` | a handler's List of another length is inadmissible as the call's result | 1: `llr-handlers-branches` | survived | - |
+| `vector-keeps-literal-length` | a MutableVector's element contract keeps the length its first elements had | 1: `llr-mutable-element-contracts` | survived | - |
+| `hir-text-drops` | HIR text writes a refined List without its facts | 13: `llr-admission-static`, `llr-append`, `llr-array-copies`, `llr-cache-and-isolation`, `llr-canonical-form`, `llr-collecting-loops`, ... | survived | - |
+| `interchange-drops` | decoding interchange text forgets every List length (the HIR read back, as from the front-end cache, differs from the built one) | 2: `llr-cache-and-isolation`, `llr-interchange` | survived | - |
+| `fixed-arity-suppressed` | a literal exit whose type states a length is no fixed-arity exit (the refinement taken for a suppression) | 1: `llr-fixed-arity-unchanged` | survived | - |
+| `validator-unchecked` | list::with_length mints the refinement without checking the length (Tcl runtime) | 1: `llr-validator` | 7 of 60 cases | - |
+| `validator-unchecked-native` | list::with_length mints the refinement without checking the length (native runtime) | 1: `llr-validator` | 7 of 60 cases | killed |
+| `validator-copies` | list::with_length returns a copy of its List, not the List itself (native runtime) | 1: `llr-validator-once` | survived | killed |
 
 ## 18. Regression
 
