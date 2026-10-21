@@ -663,7 +663,8 @@ What the numbers separate:
   short line (print 14 B against write 14 B) and about 2.4 ns per byte for a
   4 KiB text: write_text encodes the String into a `List[Byte]` and
   write_all makes a Bytes from it -- two size-linear passes before the one
-  write. That is the existing io::IO path (LINUX-IO's), not Darwin's.
+  write. linux::io's write_text and write_all do the same: it is the
+  portable path's cost, not Darwin's.
 * **Process startup dwarfs the IO**: one print_line adds nothing
   measurable to a process's 1.7 ms.
 
