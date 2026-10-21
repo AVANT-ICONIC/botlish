@@ -378,7 +378,27 @@ PENDING-FUZZ
 
 ## 13. Performance
 
-PENDING-BENCH
+`bench/c-pointer-borrowing.tcl` (tier item `c-borrow-bench` on macOS). On
+Linux x86-64, on this milestone's tree (4-core container, 2026-10-21, best of
+5 runs of 20 000 calls, the empty loop subtracted, ns per call):
+
+| owner of S bytes | 0 | 64 | 4096 | 65536 |
+|---|---:|---:|---:|---:|
+| raw (a null `Ptr`: the operation alone) | 52.9 | 50.2 | 33.8 | 44.1 |
+| read exposure of a Bytes | 38.0 | 31.0 | 62.6 | -31.3 |
+| read exposure of a MutableBytes | 34.3 | 33.5 | 34.0 | 27.3 |
+| write exposure, result discarded | 5.3 | 53.4 | 287.8 | 2867.7 |
+| write exposure, result used | 161.5 | 374.6 | 588.4 | 3284.3 |
+| `linux::read(-1, m)` | 422.6 | 327.1 | 655.2 | 3268.3 |
+
+Allocations of one call at S = 64 are unchanged from C-POINTER-BORROWING.md
+section 18: a read exposure allocates nothing, a write exposure one
+MutableBytes storage (the detach), and two small structs when the
+write-back value is used. Read stays flat in the size (the differences are
+the method's noise, tens of ns either way, as the negative entry shows);
+write grows by the detach's copy, about 0.04 ns per byte at 64 KiB.
+
+PENDING-BENCH-MACOS
 
 ## 14. macOS GitHub Actions runs
 

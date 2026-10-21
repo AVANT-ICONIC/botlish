@@ -628,7 +628,50 @@ standard input /dev/zero. Compilation, linking and process startup are
 reported apart (part 3), and partial-write completion through the
 interposer on macOS (part 2).
 
-PENDING-BENCH
+**Linux x86-64** (the reference for the same rows, the linux module through
+the syscall transport; a 4-core container, 2026-10-21; best of 5 runs of
+100 000 iterations; ns per iteration):
+
+| row | loop | + call | call |
+|---|---:|---:|---:|
+| write 14 B | 44.5 | 244.8 | 200.3 |
+| write 64 KiB | 71.7 | 277.5 | 205.8 |
+| write EBADF | 48.2 | 218.1 | 169.9 |
+| read 64 | 42.6 | 439.5 | 396.9 |
+| read 4096 | 56.6 | 960.5 | 903.9 |
+| read 65536 | 70.5 | 7929.1 | 7858.6 |
+| read EBADF 64 | 53.6 | 385.0 | 331.4 |
+| read EBADF 4096 | 43.9 | 858.2 | 814.3 |
+| read EBADF 65536 | 89.9 | 6377.7 | 6287.8 |
+| print 14 B | 42.0 | 659.3 | 617.4 |
+| print 4 KiB | 45.5 | 10242.5 | 10196.9 |
+| print_line 13 B | 54.5 | 656.8 | 602.3 |
+
+Build and process: front end 343 ms, `native::executable` 596 ms; a
+process of hello 1.67 ms against 1.66 ms for an executable that does no
+IO.
+
+What the numbers separate:
+
+* **The write exposure copies nothing**: a 64 KiB write costs what a
+  14-byte one does (the kernel's /dev/null reads nothing either).
+* **The read detach is Botlish's value semantics**: read EBADF, where the
+  kernel returns at once, grows from 331 ns to 6.3 us with the buffer -- the
+  private copy of the caller's buffer; the kernel's own fill is the
+  difference to the successful read (66 ns at 64 B, 1.6 us at 64 KiB).
+* **The portable text path costs about 400 ns over the raw write** for a
+  short line (print 14 B against write 14 B) and about 2.4 ns per byte for a
+  4 KiB text: write_text encodes the String into a `List[Byte]` and
+  write_all makes a Bytes from it -- two size-linear passes before the one
+  write. That is the existing io::IO path (LINUX-IO's), not Darwin's.
+* **Process startup dwarfs the IO**: one print_line adds nothing
+  measurable to a process's 1.7 ms.
+
+(An earlier version of the benchmark had an "encode 14 B" row; it measured
+nothing, because a constant text's encoding is folded into a static
+storage at compile time, and was removed.)
+
+PENDING-BENCH-MACOS
 
 ## 25. macOS GitHub Actions runs
 
