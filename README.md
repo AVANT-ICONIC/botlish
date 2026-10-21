@@ -1,35 +1,31 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&height=230&color=0:09090b,55:18181b,100:3f3f46&text=Botlish&fontColor=fafafa&fontSize=78&fontAlignY=36&desc=a%20language%20for%20humans%20and%20agents%20alike&descSize=16&descAlignY=56&animation=fadeIn" alt="Botlish" width="100%" />
+<img src="https://capsule-render.vercel.app/api?type=waving&height=230&color=0:020617,40:083344,75:0e7490,100:06b6d4&text=Botlish&fontColor=fafafa&fontSize=78&fontAlignY=36&desc=a%20language%20for%20humans%20and%20agents%20alike&descSize=16&descAlignY=56&animation=fadeIn" alt="Botlish" width="100%" />
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./robot.dark.svg" />
-  <source media="(prefers-color-scheme: light)" srcset="./robot.light.svg" />
-  <img src="./robot.transparent.svg" alt="Botlish robot" width="96" />
-</picture>
+<img src="./robot.cyan.svg" alt="Botlish robot" width="96" />
 
 <br />
 
-<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=600&size=20&pause=1400&color=A1A1AA&center=true&vCenter=true&width=900&lines=Reads+like+a+scripting+language.;Compiles+to+machine+code+through+Cranelift.;Every+error+a+call+can+raise+is+in+its+signature.;What+the+compiler+proves%2C+it+takes+off+your+hands." alt="Reads like a scripting language. Compiles to machine code through Cranelift." />
+<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=600&size=20&pause=1400&color=22D3EE&center=true&vCenter=true&width=900&lines=Reads+like+a+scripting+language.;Compiles+to+machine+code+through+Cranelift.;Every+error+a+call+can+raise+is+in+its+signature.;What+the+compiler+proves%2C+it+takes+off+your+hands." alt="Reads like a scripting language. Compiles to machine code through Cranelift." />
 
 <br />
 
 <p>
-  <a href="#why-botlish"><img src="https://img.shields.io/badge/why_botlish-18181b?style=for-the-badge" alt="Why Botlish" /></a>
-  <a href="#a-tour"><img src="https://img.shields.io/badge/a_tour-27272a?style=for-the-badge" alt="A tour" /></a>
-  <a href="#getting-started"><img src="https://img.shields.io/badge/getting_started-3f3f46?style=for-the-badge" alt="Getting started" /></a>
-  <a href="#how-it-is-built"><img src="https://img.shields.io/badge/how_it_is_built-27272a?style=for-the-badge" alt="How it is built" /></a>
-  <a href="docs/INDEX.md"><img src="https://img.shields.io/badge/docs-18181b?style=for-the-badge" alt="Docs" /></a>
+  <a href="#why-botlish"><img src="https://img.shields.io/badge/why_botlish-083344?style=for-the-badge" alt="Why Botlish" /></a>
+  <a href="#a-tour"><img src="https://img.shields.io/badge/a_tour-155e75?style=for-the-badge" alt="A tour" /></a>
+  <a href="#getting-started"><img src="https://img.shields.io/badge/getting_started-0e7490?style=for-the-badge" alt="Getting started" /></a>
+  <a href="#how-it-is-built"><img src="https://img.shields.io/badge/how_it_is_built-155e75?style=for-the-badge" alt="How it is built" /></a>
+  <a href="docs/INDEX.md"><img src="https://img.shields.io/badge/docs-083344?style=for-the-badge" alt="Docs" /></a>
 </p>
 
 <p>
   <a href="https://github.com/mwagner-webdev/botlish/actions/workflows/tests.yml"><img src="https://github.com/mwagner-webdev/botlish/actions/workflows/tests.yml/badge.svg" alt="tests" /></a>
-  <img src="https://img.shields.io/badge/Tcl-9.0-3f3f46?style=flat-square" alt="Tcl 9.0" />
-  <img src="https://img.shields.io/badge/Rust-1.95%2B-3f3f46?style=flat-square&logo=rust&logoColor=white" alt="Rust 1.95+" />
-  <img src="https://img.shields.io/badge/native-Cranelift-3f3f46?style=flat-square" alt="Cranelift" />
-  <img src="https://img.shields.io/badge/Linux-x86--64%20%C2%B7%20arm64-3f3f46?style=flat-square&logo=linux&logoColor=white" alt="Linux x86-64 and arm64" />
-  <img src="https://img.shields.io/badge/macOS-Apple%20Silicon-3f3f46?style=flat-square&logo=apple&logoColor=white" alt="macOS Apple Silicon" />
-  <img src="https://img.shields.io/badge/license-MIT-3f3f46?style=flat-square" alt="MIT" />
+  <img src="https://img.shields.io/badge/Tcl-9.0-0e7490?style=flat-square" alt="Tcl 9.0" />
+  <img src="https://img.shields.io/badge/Rust-1.95%2B-0e7490?style=flat-square&logo=rust&logoColor=white" alt="Rust 1.95+" />
+  <img src="https://img.shields.io/badge/native-Cranelift-0e7490?style=flat-square" alt="Cranelift" />
+  <img src="https://img.shields.io/badge/Linux-x86--64%20%C2%B7%20arm64-0e7490?style=flat-square&logo=linux&logoColor=white" alt="Linux x86-64 and arm64" />
+  <img src="https://img.shields.io/badge/macOS-Apple%20Silicon-0e7490?style=flat-square&logo=apple&logoColor=white" alt="macOS Apple Silicon" />
+  <img src="https://img.shields.io/badge/license-MIT-0e7490?style=flat-square" alt="MIT" />
 </p>
 
 </div>
@@ -535,6 +531,6 @@ backends run wherever Tcl 9 does.
 
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&height=120&section=footer&color=0:3f3f46,45:18181b,100:09090b" alt="" width="100%" />
+<img src="https://capsule-render.vercel.app/api?type=waving&height=120&section=footer&color=0:06b6d4,25:0e7490,60:083344,100:020617" alt="" width="100%" />
 
 </div>
