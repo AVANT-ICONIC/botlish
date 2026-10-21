@@ -37,7 +37,11 @@ examples/io/hello-darwin.bot is examples/io/hello.bot with another context:
 `darwin::io::write_text`, which calls libSystem's `write(2)` with the UTF-8
 bytes exposed for that call (`read noescape`). A standalone Mach-O
 executable of it prints `Hello, world!` with nothing but system libraries
-(PENDING-RUN-LINK).
+(`di-hello-executable` and the native-status probe `darwin-executable`,
+macOS run
+[39593142355](https://github.com/mwagner-webdev/botlish/actions/runs/39593142355);
+every macOS result below is that run's, at 7bdd5e2, unless another run is
+named).
 
 No runtime, C ABI or lowering code changed; the front end changed by one row
 of the platform table and the wording of its diagnostic. The milestone is
@@ -290,7 +294,7 @@ otherwise, so an allocator is permitted to change it. Apple's libmalloc
 does not on success in practice, and the evidence agrees: `di-errno` reads
 EBADF after a failed read twenty times, inside a coroutine, and under GC
 stress -- a collection at every allocation site, so the frees run in exactly
-that window -- and gets 9 every time (PENDING-ERRNO-RUN). It remains an
+that window -- and gets 9 every time (macOS run 39593142355). It remains an
 allocator behavior the library relies on, not a guarantee. The fix is a
 representation change in the compiler, not in this library: let a write
 exposure's write-back value be scalar-replaced like a syscall's result
@@ -361,8 +365,10 @@ LinuxPath does (`concat` joins with one "/" unless the path ends in one, and
 refuses an empty, absolute or NUL-containing component).
 
 open(2) receives the C string `c_string(path)` builds: the path's UTF-8
-bytes and one terminating 0 (`str::encode_utf8(path).append(byte::from_int(0))`,
-then `abi::bytes::from_list`), exposed `read noescape` for that call alone.
+bytes and one terminating 0 (`str::encode_utf8(path).append(terminator())`,
+then `abi::bytes::from_list`; `terminator` is the module's converter `fn
+terminator() -> byte::Byte: 0`, since a bare `0` appended would widen the
+list to `List[int]`), exposed `read noescape` for that call alone.
 Because a DarwinPath holds no U+0000, that NUL is the only one and ends the
 string. A String literal holding a NUL is not a DarwinPath (TYPE, at compile
 time), and a computed one fails `validate` before any C call
@@ -456,7 +462,20 @@ structure (mutant `darwin-io-direct` marks `darwin::io` direct).
 
 ## 14. Standard output and error
 
-PENDING-STDOUT
+DarwinIO's `write_text` and `write_error_text` write descriptors 1 and 2
+through `write_all` (section 17), which returns before any call when the
+text is empty. On macOS arm64, all 27 tests of darwin-io.test ran and
+passed in acceptance shard 1/2 (none skipped: every constraint they carry,
+`darwinIO`, `writeInject`, `cCompiler`, `posixShell`, `nativeCoroutines`,
+held on the runner). The stream tests run a standalone executable and read
+its descriptors 1 and 2 as bytes:
+
+| test | what runs | observed |
+|---|---|---|
+| `di-hello-executable` | hello-darwin.bot's executable, moved out of the tree, the source deleted, run under `env -i PATH=/nonexistent` | descriptor 1 exactly `Hello, world!\n` and then the runner's `unit` result line; descriptor 2 empty; status 0; the same bytes under GC stress; `otool -L` lists system libraries only, libSystem among them |
+| `di-routing-utf8` | `print`, `print_line`, `write_error`, `write_error_line` with `é` (two bytes) and `𝄞` (four) | `out: é 𝄞\n` and the result line on 1 (18 bytes), `err: done\n` on 2 |
+| `di-text-edges` | the empty String, a String holding U+0000, empty lines, on both streams | `a\0b\nline\n` on 1 and `e\0\n` on 2: the NUL is a byte like any other (bytes, not a C string), each line one newline, the empty String nothing |
+| `di-deep-and-modules` | an application module whose functions require `io::IO`, output forty calls down | `first\nsecond\n` on 1, `first!\nsecond!\n` on 2, in program order |
 
 ## 15. Standard input
 
@@ -476,7 +495,13 @@ The caller's own buffer is unchanged every time (the test prints it after
 each read). Text input (decoding, lines) is not here: the raw read is the
 abstraction milestone 8 promises, as Linux's.
 
-PENDING-STDIN
+Observed on macOS arm64 exactly as tabled (`di-stdin`): for each input the
+program printed the copy's bytes and `[none.count, none.errno, r.count,
+r.errno, 16, 16]` -- `[0, 0, 5, 0, 16, 16]` for `hello`, `[0, 0, 16, 0, 16,
+16]` for 16 bytes, `[0, 0, 0, 0, 16, 16]` at end of file, `[0, 0, 5, 0, 16,
+16]` for `00 ff 80 c3 28` (the five bytes as they are), and `[-1, 9, -1, 9,
+16, 16]` with standard input opened write-only -- and the caller's 16 A's
+reached descriptor 2 unchanged every time.
 
 ## 16. File creation and reading
 
@@ -491,7 +516,18 @@ exactly the bytes written, with mode 0640. `di-file-errors`: ENOENT,
 ENOTDIR (a path through a file), EISDIR, EEXIST (`create_new`), EBADF (a
 closed and an invalid descriptor).
 
-PENDING-FILES
+Observed on macOS arm64 (`di-files`, under `umask 022` so the mode checked
+is the one open(2) received): `[true, 0, 11, 1, 0, 0, 0, true, 11, 0, 0, 11,
+0, true, 3, 0]` -- a descriptor of at least 3 with errno 0, 11 bytes
+written, F_GETFD 1 (close-on-exec set: `darwin::open` passes O_CLOEXEC),
+F_SETFD 0 through the variadic call and F_GETFD 0 after it, the close 0, the
+second open's descriptor, a read of 11 into the 64-byte copy, end of file 0
+with errno 0, the 11 bytes written back to descriptor 1 exactly, the close
+0, the relative path opened from the working directory and its 3 bytes
+read. The file's permissions are `0o640` and it holds exactly `first
+line\n`. `di-file-errors`: `[-1, 2, -1, 20, -1, 21, -1, 17, 0, 0, -1, 9, -1,
+9]` -- ENOENT, ENOTDIR, EISDIR, EEXIST, a successful close, then EBADF for
+the closed descriptor and for -1.
 
 ## 17. Short writes and failures
 
@@ -513,11 +549,39 @@ follows a plan per call on one descriptor (`N` bytes at most, `0`, or `-E`:
 -1 with errno E) and logs every call. Botlish knows nothing of it: the
 program calls the real libSystem symbol.
 
-PENDING-SHORT
+Observed on macOS arm64; each call the interposer logged as `{ASKED
+RESULT ERRNO}`:
+
+| test, plan | output | the first calls |
+|---|---|---|
+| `di-short-write-completed`, 5 | `Hello, world!\n` and `"ok"` | `{14 5 0} {9 9 0}`: the 9-byte suffix next |
+| the same, 3,4,2 | the same | `{14 3 0} {11 4 0} {7 2 0} {5 5 0}` |
+| the same, 5, under GC stress | the same | (completed identically) |
+| `di-write-failures`, -9 / -4 / -35 / 0 | `"failed"`: the portable handler ran | one call each: `{14 -1 9}`, `{14 -1 4}`, `{14 -1 35}`, `{14 0 0}` -- no retry of EINTR (4) or EAGAIN (35), no retry of no progress |
+| the same, 5,-9 / 5,0 | `Hello` then `"failed"` | `{14 5 0}` then `{9 -1 9}` / `{9 0 0}`: nothing written again |
+| `di-stderr-failure`, 3 on descriptor 2 | both streams complete | `{4 3 0} {1 1 0} {6 6 0}` |
+| the same, -9 on descriptor 2 | `"failed"`, nothing on 2 | `{4 -1 9}` |
+
+The policy is LinuxIO's; on Linux the same rows are injected with strace
+in portable-io.test (unchanged).
 
 ## 18. GC stress and coroutines
 
-PENDING-GC
+Four darwin-io.test tests run their executable a second time with
+`BOTLISH_NATIVE_GC_STRESS=1` (a collection attempted at every allocation
+site) and require the same bytes: `di-hello-executable`,
+`di-coroutines-gc-stress`, `di-short-write-completed` (a short write
+completed under stress) and `di-errno`. All four passed on macOS arm64.
+
+`di-coroutines-gc-stress` writes from coroutine bodies through the portable
+API: two coroutines started, each suspended holding a managed list, resumed
+in the other order. Observed: `ant starts\nbee starts\nbee resumes\nant
+resumes\n[1, 2, 3, 1, 2, 3]\n` on descriptor 1 and `ant ends\nbee ends\n`
+on 2, the same under GC stress. `di-errno` reads errnos inside a coroutine
+before and after a suspension (2, then 17) and twenty rounds outside it,
+also under GC stress. Contexts stay static across suspension: the
+coroutines' DarwinIO is the one selected at their construction, and no
+context machinery is added to either runtime (COROUTINES.md).
 
 ## 19. Native linked runs
 
@@ -529,11 +593,28 @@ main.rs's `run_linked`), its standard streams the driver's own.
 own output through to its standard output (native program output,
 POST-2048-PRODUCT-FIXES.md).
 
-PENDING-LINKED
+Observed on macOS arm64: `{value "ok"}` on both `cranelift` and
+`cranelift-generic`, and main.tcl's output `Hello, world!` followed by its
+own `   value: unit` line. `di-errno` runs its program on both native
+backends too and requires their value to equal the executable's output.
 
 ## 20. Standalone Mach-O executables
 
-PENDING-EXECUTABLE
+`native::executable` (and `main.tcl -emit-native-executable`) of a Darwin
+program is a Mach-O arm64 executable, linked by rustc through Apple's ld
+with the plan milestone 6 made (the bare `-L`/`-l` list; `extern c
+library` names none here: libSystem is linked by default). Observed on
+macOS arm64:
+
+* the native-status probe `darwin-executable`: `{macho arm64 execute}` and
+  `Hello, world!` from the executable;
+* `di-hello-executable`: moved out of the source tree with the source
+  deleted, run with an empty environment and no Tcl, compiler or source
+  reachable, it writes exactly its output (section 14); `otool -L` names
+  only libraries under /usr/lib, libSystem among them, and its header is
+  the host's executable header (`binaryHeader`);
+* `tests/platform/aot-facts.tcl` in the smoke job: `ok: native objects and
+  executables on macos-aarch64 are as recorded`.
 
 ## 21. The portable Hello World
 
