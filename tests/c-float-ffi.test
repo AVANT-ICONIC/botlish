@@ -19,15 +19,14 @@ source [file join $::projectRoot surface surface.tcl]
 source [file join $::projectRoot native native.tcl]
 
 testConstraint nativeBuilt [expr {![catch {native::binary}]}]
-testConstraint cCompiler [expr {[auto_execok cc] ne ""}]
+testConstraint cCompiler [testConstraint cToolchain]
 
 # The C fixture, built where C calls run (nativeCCalls).
 set ::cflFixtureDir ""
 if {[testConstraint cCompiler] && [testConstraint nativeCCalls] && [testConstraint nativeBuilt]} {
     set ::cflFixtureDir [makeDirectory cfloat-cffi-[pid]]
     if {[catch {
-        exec cc -c -O2 -fPIC [file join $::projectRoot tests cffi cfloat-fixture.c] -o [file join $::cflFixtureDir fixture.o]
-        exec ar rcs [file join $::cflFixtureDir libbotlish_cfloat_fixture.a] [file join $::cflFixtureDir fixture.o]
+        ctool::staticLibrary $::cflFixtureDir botlish_cfloat_fixture [file join $::projectRoot tests cffi cfloat-fixture.c]
     } message]} {
         puts stderr "c-float-ffi.test: the C fixture did not build: $message"
         set ::cflFixtureDir ""
@@ -776,9 +775,8 @@ test cfl-executable {a program that passes and receives C floats and doubles lin
         "go():\n    on NonFiniteFloat:\n        \[\]\n"]
     set hir [cflHir $source]
     set dir [makeDirectory cfl-exe-[pid]]
-    set exe [file join $dir program]
-    native::withLinkDirs [list $::cflFixtureDir] {native::executable $hir $exe}
-    list [string trim [exec env -i PATH=/nonexistent $exe]] [lindex [cflRun $hir cranelift] 1]
+    set exe [native::withLinkDirs [list $::cflFixtureDir] {native::executable $hir [file join $dir program]}]
+    list [string trim [runBare $exe]] [lindex [cflRun $hir cranelift] 1]
 } -cleanup {file delete -force [file join [temporaryDirectory] cfl-exe-[pid]]} -result {{[0.10000000149011612, 0.30000000000000004, 1266679808, 8.5, 1, 1]} {[0.10000000149011612, 0.30000000000000004, 1266679808, 8.5, 1, 1]}}
 
 test cfl-gc-stress {under BOTLISH_NATIVE_GC_STRESS=1 (a collection attempt at every allocation site) every float crossing keeps its value: C results widened into fresh Float64s, a NonFiniteFloat payload, view reads, element reads and whole copies of float arrays, edits, all in a loop that allocates throughout} -constraints cfloatFixture -body {

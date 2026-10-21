@@ -219,16 +219,18 @@ const EXECUTABLES: bool = cfg!(any(
 ));
 
 /// Whether this host links a program that calls C (C-FFI.md): Linux glibc on
-/// x86-64 and AArch64, with GNU ld's link plan, and macOS on AArch64, with
+/// x86-64 and AArch64, with GNU ld's link plan; macOS on AArch64, with
 /// Apple's (`LinkerFlavor`), where the Apple C ABI was validated against real
-/// callees compiled by Apple clang (MACOS-AARCH64-MILESTONE-6.md). A host
-/// that links executables but whose C ABI is not validated refuses a C call
-/// here, before the linker runs: Windows x86-64, whose link plan
-/// (`LinkerFlavor::Msvc`) exists but whose C calls are the next milestone's
-/// (WINDOWS-X86-64-MILESTONE-1.md, section 9).
+/// callees compiled by Apple clang (MACOS-AARCH64-MILESTONE-6.md); Windows
+/// on x86-64 with MSVC's toolchain, with link.exe's, where the Win64 C ABI
+/// was validated against callees compiled by MSVC's cl and ml64
+/// (WINDOWS-X86-64-MILESTONE-2.md). Every host that links executables links
+/// C calls today; a new one refuses them here, before the linker runs, until
+/// its C ABI is validated.
 const C_CALLS: bool = cfg!(any(
     all(target_os = "linux", target_env = "gnu", any(target_arch = "x86_64", target_arch = "aarch64")),
-    all(target_os = "macos", target_arch = "aarch64")
+    all(target_os = "macos", target_arch = "aarch64"),
+    all(target_os = "windows", target_env = "msvc", target_arch = "x86_64")
 ));
 
 /// The file an executable emitted for DESTINATION is: DESTINATION itself,
@@ -254,7 +256,7 @@ pub fn emit_executable(program: &Program, destination: &Path, link_dirs: &[Strin
     }
     if calls_c(program) && !C_CALLS {
         return Err(format!(
-            "native link failed: this program calls C or declares a C library ({}), and C calls are linked on Linux glibc (x86_64, aarch64) and macOS (aarch64) only: on this host executables of programs that call no C are supported, C calls not yet (C-FFI.md)",
+            "native link failed: this program calls C or declares a C library ({}), and C calls are linked on Linux glibc (x86_64, aarch64), macOS (aarch64) and Windows (x86_64, MSVC) only: on this host executables of programs that call no C are supported, C calls not yet (C-FFI.md)",
             describe_link_plan(program)
         ));
     }
@@ -272,18 +274,33 @@ pub fn emit_executable(program: &Program, destination: &Path, link_dirs: &[Strin
     linked.map(|()| destination)
 }
 
-/// The C functions and libraries PROGRAM names, for messages.
+/// The C functions and libraries PROGRAM names, for messages: each library
+/// as this host's linker is given it (`library_argument`).
 fn describe_link_plan(program: &Program) -> String {
+    describe_link_plan_for(LINKER, program)
+}
+
+fn describe_link_plan_for(flavor: LinkerFlavor, program: &Program) -> String {
     let mut parts = Vec::new();
     if !program.foreigns.is_empty() {
         let names: Vec<&str> = program.foreigns.iter().map(|f| f.symbol.as_str()).collect();
         parts.push(format!("symbols {}", names.join(", ")));
     }
     if !program.links.is_empty() {
-        let libraries: Vec<String> = program.links.iter().map(|l| format!("-l{l}")).collect();
+        let libraries: Vec<String> = program.links.iter().map(|l| library_argument(flavor, l)).collect();
         parts.push(format!("libraries {}", libraries.join(" ")));
     }
     parts.join("; ")
+}
+
+/// How a FLAVOR linker is given the library LIBRARY (`extern c library
+/// "LIBRARY"`): `-lLIBRARY`, which GNU ld and Apple's ld search the -L
+/// directories for (libLIBRARY.so/.a, .dylib/.a); `LIBRARY.lib` for
+/// link.exe, which searches its /LIBPATH directories and then the LIB
+/// environment's (the SDK's and MSVC's own) for exactly that file -- a
+/// static library or a DLL's import library.
+fn library_argument(flavor: LinkerFlavor, library: &str) -> String {
+    if flavor == LinkerFlavor::Msvc { format!("{library}.lib") } else { format!("-l{library}") }
 }
 
 /// The linker's own account of a failed link of a program that calls C:
@@ -411,26 +428,64 @@ const LINKER: LinkerFlavor = if cfg!(target_vendor = "apple") {
     LinkerFlavor::Gnu
 };
 
-/// rustc's arguments choosing PROGRAM's C runtime: on Windows (MSVC) the
-/// static one (`+crt-static`, libcmt and the static UCRT), so that an
-/// executable imports only the system's own DLLs -- kernel32 and the API
-/// sets every Windows has -- and never `VCRUNTIME140.dll`, the Visual C++
-/// redistributable's, which rustc's default dynamic runtime (`/MD`) needs.
-/// Only for an executable of a program that calls no C: a program that
-/// calls C links C libraries built against some C runtime, whose choice is
-/// the C call milestone's (and no such program links on Windows yet,
-/// `C_CALLS`). Nothing elsewhere: Linux and macOS executables use the
-/// system's C library as they always have.
+/// The Microsoft C and C++ runtime libraries a Windows executable never
+/// links: every one but the static release runtime it does link (`libcmt`,
+/// `libvcruntime`, `libucrt`; `libcpmt` for C++) -- the dynamic runtimes
+/// (`/MD`, `/MDd`: the import libraries of `VCRUNTIME140.dll`, the UCRT's
+/// `ucrtbase.dll` and `MSVCP140.dll`) and the static debug one (`/MTd`).
+const OTHER_MSVC_RUNTIMES: [&str; 12] = [
+    "msvcrt.lib",
+    "msvcrtd.lib",
+    "vcruntime.lib",
+    "vcruntimed.lib",
+    "ucrt.lib",
+    "ucrtd.lib",
+    "libcmtd.lib",
+    "libvcruntimed.lib",
+    "libucrtd.lib",
+    "msvcprt.lib",
+    "msvcprtd.lib",
+    "libcpmtd.lib",
+];
+
+/// rustc's arguments choosing PROGRAM's C runtime. On Windows (MSVC) every
+/// executable links the static release C runtime (`+crt-static`: libcmt,
+/// libvcruntime and the static UCRT), whether it calls C or not
+/// (WINDOWS-X86-64-MILESTONE-2.md, "The C runtime"):
+///
+///   * it imports only the system's own DLLs -- kernel32 and the API sets
+///     every Windows has -- and never `VCRUNTIME140.dll`, the Visual C++
+///     redistributable's, which rustc's default dynamic runtime (`/MD`)
+///     needs: a program that writes to the console through kernel32 runs on
+///     a Windows without Visual Studio;
+///   * one executable holds one C runtime. A C library brings the runtime it
+///     was compiled for as default-library directives (`/DEFAULTLIB:MSVCRT`
+///     for `/MD`, `LIBCMT` for `/MT`), and link.exe would otherwise link
+///     both, warn (LNK4098) and give the library a second heap, a second
+///     errno and a second set of stdio streams. So every other runtime's
+///     library is excluded (`/NODEFAULTLIB:`, `OTHER_MSVC_RUNTIMES`): a
+///     library compiled with `/MT` (cl's default) shares the executable's
+///     runtime, one compiled with `/MD` that calls the runtime is resolved
+///     against the static one or fails to link with link.exe's own words
+///     (NATIVE LINK), never silently linked with a second runtime; a DLL
+///     keeps the runtime it was linked with, behind its own exports, as
+///     every Windows DLL does.
+///
+/// Nothing elsewhere: Linux and macOS executables use the system's C
+/// library as they always have.
 fn crt_args(program: &Program) -> Vec<String> {
     crt_args_for(LINKER, program)
 }
 
-fn crt_args_for(flavor: LinkerFlavor, program: &Program) -> Vec<String> {
-    if flavor == LinkerFlavor::Msvc && !calls_c(program) {
-        vec!["-C".to_string(), "target-feature=+crt-static".to_string()]
-    } else {
-        Vec::new()
+fn crt_args_for(flavor: LinkerFlavor, _program: &Program) -> Vec<String> {
+    if flavor != LinkerFlavor::Msvc {
+        return Vec::new();
     }
+    let mut args = vec!["-C".to_string(), "target-feature=+crt-static".to_string()];
+    for library in OTHER_MSVC_RUNTIMES {
+        args.extend(["-C".to_string(), format!("link-arg=/NODEFAULTLIB:{library}")]);
+    }
+    args
 }
 
 /// rustc's arguments passing PROGRAM's link plan to this host's system
@@ -487,7 +542,7 @@ fn link_plan_args_for(flavor: LinkerFlavor, program: &Program, link_dirs: &[Stri
             args.extend(["-C".to_string(), format!("link-arg=/LIBPATH:{dir}")]);
         }
         for library in &program.links {
-            args.extend(["-C".to_string(), format!("link-arg={library}.lib")]);
+            args.extend(["-C".to_string(), format!("link-arg={}", library_argument(flavor, library))]);
         }
         return args;
     }
@@ -887,7 +942,7 @@ mod tests {
                 "link-arg=-Wl,--end-group"
             ]
         );
-        assert_eq!(describe_link_plan(&program), "symbols c_add; libraries -lfirst -lsecond");
+        assert_eq!(describe_link_plan_for(LinkerFlavor::Gnu, &program), "symbols c_add; libraries -lfirst -lsecond");
     }
 
     /// Apple's ld gets the same plan without GNU's group, which it rejects
@@ -934,21 +989,41 @@ mod tests {
             ]
         );
         assert!(args.iter().all(|a| !a.contains("-Wl,") && !a.contains("group") && !a.contains("link-arg=-l") && !a.contains("link-arg=-L")));
+        // Messages name each library as link.exe is given it.
+        assert_eq!(describe_link_plan_for(LinkerFlavor::Msvc, &program), "symbols c_add; libraries first.lib second.lib");
+        assert_eq!(describe_link_plan_for(LinkerFlavor::Apple, &program), "symbols c_add; libraries -lfirst -lsecond");
     }
 
-    /// The C runtime of an executable: the static one on Windows (MSVC), so
-    /// that it imports no Visual C++ redistributable DLL, for a program that
-    /// calls no C; nothing anywhere else, and nothing for a program that
-    /// calls C (its C libraries' runtime is the C call milestone's).
+    /// The C runtime of an executable: on Windows (MSVC) the static release
+    /// one, so that it imports no Visual C++ redistributable DLL, for every
+    /// program, one that calls C included, and every other Microsoft runtime
+    /// excluded from the link, so that a C library's default-library
+    /// directive never brings a second one; nothing anywhere else.
     #[test]
-    fn crt_is_static_for_msvc_executables_only() {
+    fn crt_is_static_and_alone_for_msvc_executables() {
         let ffi = crate::nir::parse(FFI_PROGRAM).unwrap_or_else(|e| panic!("{}", e.message));
         let text = FFI_PROGRAM.replace("link \"first\"\n", "").replace("link \"second\"\n", "")
             .replace("foreign 0 \"c_add\" params=\"i32 i32\" result=i32 name=\"m::add\"\n", "")
             .replace("%2 = foreigncall 0 %0 %1", "%2 = int 42");
         let plain = crate::nir::parse(&text).unwrap_or_else(|e| panic!("{}", e.message));
-        assert_eq!(crt_args_for(LinkerFlavor::Msvc, &plain), vec!["-C", "target-feature=+crt-static"]);
-        assert!(crt_args_for(LinkerFlavor::Msvc, &ffi).is_empty());
+        for program in [&plain, &ffi] {
+            let args = crt_args_for(LinkerFlavor::Msvc, program);
+            assert_eq!(&args[..2], ["-C", "target-feature=+crt-static"]);
+            let excluded: Vec<&str> = args[2..]
+                .iter()
+                .filter(|a| *a != "-C")
+                .map(|a| a.strip_prefix("link-arg=/NODEFAULTLIB:").unwrap_or_else(|| panic!("{a}")))
+                .collect();
+            assert_eq!(excluded.len() * 2, args.len() - 2);
+            // The dynamic runtimes, release and debug, and the static debug
+            // one, C and C++; never the static release runtime linked.
+            for library in ["msvcrt.lib", "vcruntime.lib", "ucrt.lib", "msvcrtd.lib", "libcmtd.lib", "libucrtd.lib", "msvcprt.lib"] {
+                assert!(excluded.contains(&library), "{library} not excluded: {excluded:?}");
+            }
+            for library in ["libcmt.lib", "libvcruntime.lib", "libucrt.lib", "libcpmt.lib", "kernel32.lib"] {
+                assert!(!excluded.contains(&library), "{library} excluded: {excluded:?}");
+            }
+        }
         for flavor in [LinkerFlavor::Gnu, LinkerFlavor::Apple] {
             assert!(crt_args_for(flavor, &plain).is_empty());
             assert!(crt_args_for(flavor, &ffi).is_empty());
