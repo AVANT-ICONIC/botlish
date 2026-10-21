@@ -823,7 +823,7 @@ fn id(x: int) -> int:
 
 }
 
-test mv-cow-by-reference-yield {a context member handed over by reference to a native is read as it was when evaluated although a later argument yields and the resumer replaces the member meanwhile -- the yield bare or inside a call; a local vector, which no resumer can reach, is still handed over uncopied -- on every backend, with the copies the elaboration wrote} -body {
+test mv-cow-by-reference-yield {a context member handed over by reference to a native is read as it was when evaluated although a later argument yields and the resumer replaces the member meanwhile -- the yield bare or inside a call; a local vector, which no resumer can reach, is still handed over uncopied -- on every backend, with the copies the elaboration wrote} -constraints nativeCoroutines -body {
     lmap case {
         {fn w(context c: Counts, resume Msg) -> Ev:
     x = mutable_vector::at(c.values, (yield Ev {n: c.values.length()}).i):
