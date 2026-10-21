@@ -20,8 +20,6 @@ source [file join $::projectRoot native native.tcl]
 
 testConstraint nativeBuilt [expr {![catch {native::binary}]}]
 testConstraint cCompiler [expr {[auto_execok cc] ne ""}]
-testConstraint executableAot [expr {$::tcl_platform(os) eq "Linux" &&
-    $::tcl_platform(machine) in {x86_64 amd64 aarch64}}]
 
 # The C fixture, built where C calls run (nativeCCalls).
 set ::cflFixtureDir ""
