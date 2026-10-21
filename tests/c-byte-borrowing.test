@@ -644,7 +644,10 @@ proc appFaults {dir {environment {}}} {
 test bb-guard-malloc {(macOS) under Guard Malloc, a standalone executable making read and write exposures of storages whose sizes are multiples of 16 -- the fixture's and the system library's -- runs to the same value: no C call reads or writes past an exposed storage; the same executable with one count one byte too long faults, so the detector sees what it is meant to} -constraints {bbFixture guardMalloc} -body {
     set main "d = mk(4080, 7)\nm = abi::bytes::zeroed(abi::usize(4080))\nw = bb::fill(m, mlen(m), 3)\nc = sys::memcpy(abi::bytes::zeroed(abi::usize(4080)), d, len(d))\n\[bb::checksum(d, len(d)), bb::checksum(w.out, mlen(w.out)), sys::memcmp(c.dst, d, len(d))\]\n"
     set good [bbApp $main]
-    set bad [bbApp "[string map {{bb::checksum(d, len(d)), } {bb::checksum(d, len(d) + 1), }} $main]"]
+    # The over-read: a literal count one past D's 4080 bytes (len(d) + 1 is
+    # not provably a size_t, and a program that does not compile must never
+    # pass for a fault: appFaults counts only a kill by a signal).
+    set bad [bbApp "[string map {{bb::checksum(d, len(d)), } {bb::checksum(d, 4081), }} $main]"]
     set gmalloc {DYLD_INSERT_LIBRARIES /usr/lib/libgmalloc.dylib}
     list [appExecutable $good $gmalloc] [appFaults $bad $gmalloc] [appFaults $bad]
 } -cleanup removeApps -result [list [bbList [list [bbPatternChecksum 4080 7] [bbChecksum [bbFill 4080 3]] 0]] 1 0]

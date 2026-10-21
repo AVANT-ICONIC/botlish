@@ -4217,6 +4217,23 @@ call: DATA itself never changes (MUTABLE-BYTES.md); the bytes read are in
 the result's `data`, which keeps DATA's length. Take the bytes read with
 abi::bytes::freeze_prefix(result.data, abi::usize(result.count)).
 
+@topic stdlib.darwin::terminator
+title: darwin::terminator -- Function of module darwin
+summary: The byte that terminates a C string.
+index: stdlib
+symbol: darwin::terminator
+related: stdlib.module.darwin
+
+== DECLARATION
+    fn terminator() -> byte::Byte:
+
+== MODULE
+lib/darwin.bot: import darwin, then write darwin::terminator or, as a
+method, receiver.terminator(...).
+
+== DESCRIPTION
+The byte that terminates a C string.
+
 @topic stdlib.darwin::c_string
 title: darwin::c_string -- Function of module darwin
 summary: PATH as the C string open(2) reads
@@ -4475,6 +4492,7 @@ exercises raw authority.
     darwin::open_mode              function -- One open(2) with OFLAG and t...
     darwin::open_with              function -- One open(2) with OFLAG and n...
     darwin::read                   function -- read(2) from descriptor FD i...
+    darwin::terminator             function -- The byte that terminates a C...
     darwin::write                  function -- write(2)
 
 Each member is a topic: -help NAME (e.g. -help darwin::Access).

@@ -32,11 +32,15 @@
 #                       (the kernel returns at once); read S minus this row
 #                       is the kernel's and the C library's own cost
 #      errno()          darwin::errno() alone (macOS)
-#      encode 14 B      abi::bytes::from_list(str::encode_utf8(text)): the
-#                       String-to-UTF-8 conversion and the Bytes, no C
 #      print 14 B       io::print(text) with the platform's context
-#                       installed: the portable path -- encoding, write_all,
-#                       one write
+#                       installed: the portable path -- write_text's
+#                       String-to-UTF-8 encoding into a List[Byte] (made at
+#                       run time: the text reaches it as a parameter),
+#                       write_all's Bytes from that List and its checks,
+#                       one write; print minus `write 14 B` is that path's
+#                       own cost (a constant text's encoding written in the
+#                       loop itself would be folded into a static storage
+#                       at compile time, so it is not measured alone)
 #      print 4 KiB      the same with a 4096-byte text
 #      print_line 13 B  io::print_line("Hello, world!"): + the appended
 #                       newline (a new String)
@@ -182,7 +186,6 @@ try {
     if {$platform eq "darwin"} {
         puts [format "  %-16s %s" "errno()" [perCall {x = 0} {darwin::errno()} 0]]
     }
-    puts [format "  %-16s %s" "encode 14 B" [perCall $text14 {abi::bytes::length(abi::bytes::from_list(str::encode_utf8(text))).value} 0]]
     puts [format "  %-16s %s" "print 14 B" [perCall $text14 "io::print(text)$handled" 1]]
     puts [format "  %-16s %s" "print 4 KiB" [perCall $text4k "io::print(text)$handled" 1]]
     puts [format "  %-16s %s" "print_line 13 B" [perCall {x = 0} "io::print_line(\"Hello, world!\")$handled" 1]]

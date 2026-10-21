@@ -364,7 +364,7 @@ extern c fn c_read named "read"(fd: ffi::c::Int, buf: ffi::c::Ptr[ffi::c::Void] 
 @@ darwin-path-not-terminated the C string open(2) reads has no terminating NUL
 ## lib/darwin.bot
 <<<<
-    abi::bytes::from_list(str::encode_utf8(path).append(byte::from_int(0)))
+    abi::bytes::from_list(str::encode_utf8(path).append(terminator()))
 ====
     abi::bytes::from_list(str::encode_utf8(path))
 >>>>

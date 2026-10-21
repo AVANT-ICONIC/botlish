@@ -186,10 +186,14 @@ fn read(fd: ffi::c::Int, data: abi::bytes::MutableBytes) -> ReadResult:
         return ReadResult {count: r.result, errno: failure, data: r.buf}
     ReadResult {count: r.result, errno: 0, data: r.buf}
 
+# The byte that terminates a C string.
+fn terminator() -> byte::Byte:
+    0
+
 # PATH as the C string open(2) reads: its UTF-8 bytes and a terminating NUL
 # (PATH holds no U+0000, so the NUL is the only one and ends it).
 fn c_string(path: darwin::path::DarwinPath) -> abi::bytes::Bytes:
-    abi::bytes::from_list(str::encode_utf8(path).append(byte::from_int(0)))
+    abi::bytes::from_list(str::encode_utf8(path).append(terminator()))
 
 # The O_RDONLY / O_WRONLY / O_RDWR bits of ACCESS.
 fn access_flags(access: Access) -> AccessBits:

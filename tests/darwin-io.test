@@ -540,7 +540,7 @@ test di-stderr-failure {the standard error stream's completion is the same polic
     set exe [diExecutable $::routingText]
     lmap {plan n} {3 3 -9 1} {
         lassign [injected $exe $plan 2] out err status calls
-        list $out $err [lrange $calls 0 [expr {$n - 1}]]
+        list [encoding convertfrom utf-8 $out] [encoding convertfrom utf-8 $err] [lrange $calls 0 [expr {$n - 1}]]
     }
 } -result [list [list "out: é 𝄞\n\"ok\"\n" "err: done\n" {{4 3 0} {1 1 0} {6 6 0}}] [list "out: é 𝄞\n\"failed\"\n" {} {{4 -1 9}}]]
 
