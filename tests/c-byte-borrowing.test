@@ -652,4 +652,68 @@ test bb-guard-malloc {(macOS) under Guard Malloc, a standalone executable making
     list [appExecutable $good $gmalloc] [appFaults $bad $gmalloc] [appFaults $bad]
 } -cleanup removeApps -result [list [bbList [list [bbPatternChecksum 4080 7] [bbChecksum [bbFill 4080 3]] 0]] 1 0]
 
+
+# ---------------------------------------------------------------------------
+# TEMPORARY DIAGNOSTIC (branch only, never on main): why bb-guard-malloc's
+# over-read does not fault. Its result is the facts; it fails on purpose so
+# that they appear in the log.
+
+proc gmOutcome {command errfile} {
+    if {[catch {exec {*}$command 2> $errfile} out options]} {
+        set code [dict get $options -errorcode]
+        switch -- [lindex $code 0] {
+            CHILDKILLED { return [list signal [lindex $code 2]] }
+            CHILDSTATUS { return [list exit [lindex $code 2] [string range $out 0 120]] }
+            default { return [list error [string range $out 0 120]] }
+        }
+    }
+    return [list value [string range [string trim $out] 0 120]]
+}
+
+proc gmHead {file} {
+    if {![file exists $file]} { return {} }
+    set channel [open $file rb]
+    set text [read $channel 400]
+    close $channel
+    return [string map [list \n " | "] $text]
+}
+
+test bb-gmalloc-diagnostic {TEMPORARY: Guard Malloc facts on this host} -constraints {bbFixture guardMalloc} -body {
+    set facts {}
+    set dir [makeDirectory bb-gm-diag-[pid]]
+    set channel [open [file join $dir probe.c] w]
+    puts $channel "#include <stdio.h>\n#include <stdlib.h>\n#include <stdint.h>\nint main(int c, char **v) { size_t n = strtoul(v\[1\], 0, 10); volatile unsigned char *p = malloc(n); printf(\"%lu \", (unsigned long)((uintptr_t)p % 16384)); fflush(stdout); return p\[n\] == 0x5a; }"
+    close $channel
+    exec cc -O0 [file join $dir probe.c] -o [file join $dir probe]
+    foreach n {16 32 4096 4112} {
+        lappend facts [list C-malloc $n gmalloc [gmOutcome [list env DYLD_INSERT_LIBRARIES=/usr/lib/libgmalloc.dylib [file join $dir probe] $n] [file join $dir e]]]
+        lappend facts [list C-malloc $n plain [gmOutcome [list [file join $dir probe] $n] [file join $dir e]]]
+    }
+    set gm {DYLD_INSERT_LIBRARIES /usr/lib/libgmalloc.dylib}
+    foreach n {16 4080} {
+        set where [bbApp "d = mk($n, 7)\n\[bb::address_of(d), bb::checksum(d, len(d))\]\n"]
+        set exe [file join $where program]
+        native::withLinkDirs [list $::fixtureDir] {native::executable [appHir $where] $exe}
+        set g [gmOutcome [list env DYLD_INSERT_LIBRARIES=/usr/lib/libgmalloc.dylib DYLD_PRINT_LIBRARIES=1 $exe] [file join $where e1]]
+        set loaded [regexp {libgmalloc} [gmHead [file join $where e1]]]
+        set gAddress [lindex [regexp -inline {\[(\d+),} [lindex $g 1]] 1]
+        set p [gmOutcome [list $exe] [file join $where e2]]
+        set pAddress [lindex [regexp -inline {\[(\d+),} [lindex $p 1]] 1]
+        lappend facts [list botlish-address $n gmalloc $g loaded $loaded \
+            [expr {$gAddress eq "" ? "-" : "payload%16384=[expr {$gAddress % 16384}] end%16384=[expr {($gAddress + $n) % 16384}]"}] \
+            plain [expr {$pAddress eq "" ? "-" : "payload%16384=[expr {$pAddress % 16384}]"}]]
+        set bad [bbApp "d = mk($n, 7)\n\[bb::checksum(d, [expr {$n + 1}])\]\n"]
+        set bexe [file join $bad program]
+        native::withLinkDirs [list $::fixtureDir] {native::executable [appHir $bad] $bexe}
+        lappend facts [list botlish-overread $n gmalloc [gmOutcome [list env DYLD_INSERT_LIBRARIES=/usr/lib/libgmalloc.dylib $bexe] [file join $bad e]] stderr [gmHead [file join $bad e]]]
+    }
+    set big [bbApp "d = mk(4080, 7)\n\[bb::checksum(d, 40000)\]\n"]
+    set bigexe [file join $big program]
+    native::withLinkDirs [list $::fixtureDir] {native::executable [appHir $big] $bigexe}
+    lappend facts [list botlish-overread-40000 gmalloc [gmOutcome [list env DYLD_INSERT_LIBRARIES=/usr/lib/libgmalloc.dylib $bigexe] [file join $big e]] plain [gmOutcome [list $bigexe] [file join $big e2]]]
+    lappend facts [list codesign [catch {exec codesign -dv --verbose=2 $bigexe 2>@1} cs] [string map [list \n " | "] $cs]]
+    file delete -force $dir
+    join $facts "\n"
+} -cleanup removeApps -result {see the facts}
+
 cleanupTests

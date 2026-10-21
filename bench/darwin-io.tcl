@@ -197,9 +197,10 @@ try {
         puts "2. partial-write completion: print 4 KiB, every write on descriptor 1 capped at L bytes (ns per print)"
         puts [format "  %-16s %10s %10s %10s" "" loop "+ call" call]
         foreach limit {0 2048 1024 512} {
-            set env [list DYLD_INSERT_LIBRARIES $inject BCF_WRITE_FD 1 BCF_WRITE_LIMIT $limit]
+            # (Not `env`: at the top level that is Tcl's environment array.)
+            set injected [list DYLD_INSERT_LIBRARIES $inject BCF_WRITE_FD 1 BCF_WRITE_LIMIT $limit]
             set label [expr {$limit == 0 ? "no cap (1 write)" : "L $limit ([expr {4096 / $limit}] writes)"}]
-            puts [format "  %-16s %s" $label [perCall $text4k "io::print(text)$handled" 1 $env]]
+            puts [format "  %-16s %s" $label [perCall $text4k "io::print(text)$handled" 1 $injected]]
         }
     } else {
         puts "2. partial-write completion: macOS only (libSystem's write is interposable; Linux's syscalls are not)"
