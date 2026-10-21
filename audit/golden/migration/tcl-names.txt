@@ -379,6 +379,11 @@ tests/argv.test argv-unhandled-at-runtime-is-the-ordinary-uncaught-error pass
 tests/argv.test argv-unhandled-is-rejected-statically pass
 tests/argv.test argv-valid-non-ascii-round-trips-exactly pass
 tests/argv.test argv-whole-call-fails-no-partial-list pass
+tests/argv.test argv-windows-argument-zero-is-the-command-lines skip
+tests/argv.test argv-windows-command-line-round-trips skip
+tests/argv.test argv-windows-large-vector skip
+tests/argv.test argv-windows-same-values-as-in-process skip
+tests/argv.test argv-windows-unpaired-surrogate-is-the-declared-error skip
 tests/argv.test argv-with-argv-restores-the-previous-snapshot pass
 tests/argv.test argv-wrong-arity-is-the-ordinary-arity-error pass
 tests/argv.test argv-zero-is-the-supplied-invocation-argument pass

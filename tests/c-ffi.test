@@ -738,7 +738,7 @@ test cf-strict0-replay {an unchecked (-strict 0) program's refused exposure repl
 # ---------------------------------------------------------------------------
 # Linking
 
-test cf-missing-library {a library the linker cannot find compiles through the front end and fails at the native link, with the linker's own words, as NATIVE LINK -- never an UNKNOWN-NAMESPACE, a TYPE or a HIR error} -constraints {nativeBuilt rustcLinker} -body {
+test cf-missing-library {a library the linker cannot find compiles through the front end and fails at the native link, with the linker's own words, as NATIVE LINK -- never an UNKNOWN-NAMESPACE, a TYPE or a HIR error} -constraints {nativeBuilt rustcLinker nativeCCalls} -body {
     set dir [app [list main.bot "extern c library \"definitely_missing_botlish_lib\"\n1 + 1\n"]]
     set hir [appHir $dir]
     lassign [native::withLinkDirs {} {outcomeUnderHir cranelift $hir}] tag code message

@@ -3634,7 +3634,8 @@ layout FILETIME:
     field dwHighDateTime: ffi::c::ULong at 4
 
 binary::layout_length(FILETIME)
-@caption Win32's FILETIME, generated for windows-x86_64-gnu, compiled for this host (a 64-bit unsigned long)
+@caption Win32's FILETIME, generated for windows-x86_64-gnu, compiled for linux-x86_64 (a 64-bit unsigned long)
+@target linux-x86_64
 @error CORE SEMANTIC LAYOUT-FIELD-BOUNDS
 @at 8:44
 @end

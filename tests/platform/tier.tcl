@@ -1,5 +1,6 @@
-# tier.tcl -- the macOS port's test tiers, run through the repository's own
-# entry points (MACOS-AARCH64-PORT-AUDIT.md, section 16).
+# tier.tcl -- the macOS and Windows ports' test tiers, run through the
+# repository's own entry points (MACOS-AARCH64-PORT-AUDIT.md, section 16;
+# WINDOWS-X86-64-MILESTONE-1.md, section 7).
 #
 #   tclsh9.0 tests/platform/tier.tcl ?-backends LIST? ?-golden-backends LIST?
 #                                    ?-example-backends LIST? ?-gc-stress 0|1?
@@ -23,9 +24,11 @@
 #   smoke       cabi, examples and a dozen front-end test files that never
 #               reach the native backend: about 15 seconds
 #   acceptance  smoke, every Tcl test file except the ones `notYet` lists
-#               below, and every golden suite on -golden-backends (all four:
-#               native coroutines run on macOS since milestone 3): what
-#               passes on a macOS arm64 host today
+#               below for this host, and every golden suite on
+#               -golden-backends (all four: native coroutines run on macOS
+#               since milestone 3; on Windows the golden runner excludes the
+#               native backends, which run no coroutines there yet): what
+#               passes on a macOS arm64 or Windows x86-64 host today
 #   all         every Tcl test file and every golden suite (on
 #               -golden-backends), and rust: the census, which on macOS
 #               fails as notYet says until the port is done
@@ -72,14 +75,22 @@ set smokeFiles {
     regex.test results.test surface-samples.test
 }
 
-# The Tcl test files that do not pass on a macOS arm64 host yet, with the
-# cause and the roadmap milestone it belongs to (MACOS-AARCH64-PORT-AUDIT.md,
-# sections 15 and 17). The acceptance tier is every other file. A port
-# milestone that makes one pass removes it here; a new test file that fails
-# on macOS for a capability not ported yet is added with its cause. Empty
-# since milestone 6 (MACOS-AARCH64-MILESTONE-6.md), which brought
-# c-ffi.test and c-bindgen.test, the last two, to macOS.
-set notYet {}
+# The Tcl test files that do not pass on a host yet, per host target, with
+# the cause and the roadmap milestone it belongs to (macOS:
+# MACOS-AARCH64-PORT-AUDIT.md, sections 15 and 17; Windows:
+# WINDOWS-X86-64-MILESTONE-1.md, section 8). The acceptance tier is every
+# other file. A port milestone that makes one pass removes it here; a new
+# test file that fails on a port's host for a capability not ported yet is
+# added with its cause. macOS's is empty since milestone 6
+# (MACOS-AARCH64-MILESTONE-6.md), which brought c-ffi.test and
+# c-bindgen.test, the last two, to macOS. A file a host passes only in part
+# is never listed: its tests that need a capability the host lacks carry
+# that capability's constraint (tests/helpers.tcl).
+source [file join $root core core.tcl]
+set notYetByHost [dict create \
+    macos-aarch64 {} \
+    windows-x86_64 {}]
+set notYet [dict getdef $notYetByHost [core::cabi::hostTarget] {}]
 
 proc usage {} {
     puts stderr "usage: tclsh9.0 tests/platform/tier.tcl ?-backends LIST? ?-golden-backends LIST? ?-example-backends LIST? ?-gc-stress 0|1? ?-shard I/N? ?-list 0|1? ITEM ..."

@@ -484,8 +484,9 @@ tclsh9.0 tests/all.tcl
 ```
 
 From Windows, run the same thing inside WSL for Linux GC-stress results
-when validating native stack walking (Windows-native execution exercises a
-different stack/guard implementation):
+when validating native stack walking: Windows-native execution walks no
+native frame at all (the fallback root plan: "Windows x86-64 (MSVC)",
+below) and has no stack guard, so it cannot validate either:
 
 ```powershell
 wsl.exe -d Ubuntu-24.04 -- bash -lc 'cd /mnt/c/Users/MarkusWagner/dev/botlish && export LANG=C.utf8 LC_ALL=C.utf8 BOTLISH_NATIVE_GC_STRESS=1 && cargo build --release --manifest-path native/Cargo.toml && tclsh9.0 tests/all.tcl'
@@ -969,6 +970,96 @@ and no acceptance depends on one.
   and tests-arm64.yml (and static-decisions.yml for a front-end change) on
   the branch with workflow_dispatch before a port change merges. A
   macOS-motivated test constraint names a capability, never the OS.
+
+## Windows x86-64 (MSVC)
+
+The native backend runs on Windows x86-64 with Microsoft's toolchain
+(WINDOWS-X86-64-MILESTONE-1.md; the census and the toolchain decision are
+WINDOWS-TOOLCHAIN-CENSUS.md): the driver and runtime built for
+`x86_64-pc-windows-msvc`, executables linked by rustc with `link.exe`,
+`windows-x86_64` the one native Windows target. Keep it so:
+
+* MSVC is the supported Windows toolchain. Never add a second native
+  Windows backend for MinGW: `windows-x86_64-gnu` stays a target row of the
+  binding generator (its committed Win32 binding), and the driver refuses a
+  program built for it (`same_target` compares the triple's environment:
+  NATIVE TARGET). The startup crate is compiled with the driver's own
+  `--target`, never whatever rustc's host is.
+* Code generation, the object writer and the link stay Cranelift's, the
+  `object` crate's and rustc's: no Windows assembler, object rewrite,
+  linker, CRT startup or Visual Studio discovery of Botlish's (rustc finds
+  link.exe and the SDK without a Developer Command Prompt). The object is
+  the same COFF for both Windows environments; never add a target-specific
+  object transformation.
+* The link plan is `LinkerFlavor::Msvc`'s (`/LIBPATH:DIR`, `NAME.lib`, no
+  group): never a GNU flag to link.exe. An executable of a program that
+  calls no C links the C runtime statically (`crt_args`, `+crt-static`), so
+  it imports only the system's DLLs: never let it import `VCRUNTIME140.dll`
+  or the UCRT, and never impose that runtime on anything else (the driver,
+  C libraries). C calls stay refused on Windows (`C_CALLS`) until their
+  milestone validates the Win64 C ABI against real callees.
+* An executable's name ends in `.exe` (`codegen::aot::executable_path`: a
+  name without an extension gets it); `native::executable` returns the
+  file, and a test runs that file, never the name it passed.
+* GC roots: one capability, `runtime::framewalk::NATIVE_FRAME_ROOTS`,
+  decides stack-map emission (`clif.rs`'s `stack_maps`), the root plan,
+  the shadow stack (`Vm::new`), the root report and the walk itself. It is
+  false on Windows: LLVM's Win64 prologue puts the frame pointer inside the
+  frame, so the frame walk cannot climb Rust frames there, forced frame
+  pointers or not. Never re-enable the walk on Windows by forcing frame
+  pointers or by a second, diverging check; native-frame roots there need
+  unwind metadata (`.pdata`/`.xdata`, `RtlVirtualUnwind`), a milestone of
+  their own. Where the shadow stack's depth check bounds recursion
+  (`runtime::native_stack::depth_checked`), every function with a Botlish
+  call can fail with NATIVE LIMIT STACK from its prologue: the depth
+  reservation and nir's call effects read that one predicate, so no call
+  site skips the check (WINDOWS-X86-64-MILESTONE-1.md, section 3.4). The
+  fallback plan does not support coroutines (a suspended coroutine's
+  shadow slots break the shadow stack's order). The `fallback-roots` cargo
+  feature builds Windows' root plan on any host, to run the suite with it
+  (a test build, never shipped; its coroutine tests fail under GC stress).
+* Stack probes are on on Windows (`codegen::stack_probes`): Windows
+  commits a thread's stack a page at a time. They are not a stack guard:
+  there is none on Windows yet, and the shadow stack's depth check is the
+  only clean NATIVE LIMIT STACK there.
+* Arguments: a Windows process's command line, split by the Microsoft C
+  runtime's rules (Rust's `args_os`), each argument's UTF-16 as WTF-8
+  (`runtime::aot::wtf8_from_utf16`): never `OsString`'s internal encoding,
+  never a lossy conversion (ARGV.md, "Windows").
+* What each native capability does on Windows is recorded in
+  `tests/platform/native-status.tcl` (its windows-x86_64 row) and
+  `native/native.tcl`'s `capabilities` table (which tests/helpers.tcl's
+  `executableAot`, `nativeCCalls`, `nativeCoroutines`, `nativeStackGuard`,
+  `nativeFrameRoots` (and from the last two `nativeDepthChecked`) and the
+  golden runner read); the test files that do not pass on Windows yet,
+  with their causes, in `tests/platform/tier.tcl`'s `notYetByHost`. A
+  milestone that changes one updates it in the same change; never weaken a
+  test to make Windows green. A test that needs a capability carries its
+  constraint; a test of the root plan or of call effects expects the
+  host's by `nativeFrameRoots`/`nativeDepthChecked`; a test of C scalar
+  widths reads the target's row (`long` is 32 bits on Windows); one that
+  reads main.tcl's output untranslated expects CRLF from main.tcl's own
+  lines on Windows.
+* CI: `.github/workflows/windows-x86_64.yml` on every push (windows-2025,
+  production code, Tcl 9.0.1 built by `tests/platform/setup-windows.ps1`):
+  the smoke job (the Rust tests, `native-status.tcl`, `aot-facts.tcl`'s
+  COFF/PE checks, `tests/platform/gc-workloads.tcl` under GC stress, the
+  2048 executable, dumpbin, the smoke tier and the Windows-relevant test
+  files) and the acceptance tier in four shards; `[ci-full]` or a manual
+  run adds the GC-stress tier. Neither Wine nor WSL is an authority for
+  Windows; a `-gnu` cross build under Wine is a development aid only.
+
+If you change the Windows link plan, the CRT policy, executable naming,
+`EXECUTABLES`/`C_CALLS`, `same_target`, `NATIVE_FRAME_ROOTS` or what reads
+it, the stack probes or the Windows argument encoding, run the Rust tests,
+`tests/native-executable.test`, `tests/target-model.test`,
+`tests/argv.test`, `tests/platform/native-status.tcl`,
+`tests/platform/aot-facts.tcl`, `tests/platform/gc-workloads.tcl` (also
+with a `fallback-roots` driver: `cargo build --release --features
+fallback-roots` into another target directory, `BOTLISH_NATIVE_BIN`
+pointing at it), `audit/native-aot/tools/mutate.tcl` and
+`audit/target-model/tools/mutate.tcl` on Linux, and the Windows workflow on
+the branch.
 
 ## Compilation targets
 

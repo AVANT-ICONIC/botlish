@@ -348,9 +348,11 @@ proc core::cabi::ExternImpl {display args} {
 %% macos-aarch64
 ## native/src/codegen/aot.rs
 <<<<
-const LINKER: LinkerFlavor = if cfg!(target_vendor = "apple") { LinkerFlavor::Apple } else { LinkerFlavor::Gnu };
+const LINKER: LinkerFlavor = if cfg!(target_vendor = "apple") {
+    LinkerFlavor::Apple
 ====
-const LINKER: LinkerFlavor = LinkerFlavor::Gnu;
+const LINKER: LinkerFlavor = if cfg!(target_vendor = "apple") {
+    LinkerFlavor::Gnu
 >>>>
 
 @@ apple-plan-has-group Apple's link plan keeps GNU ld's archive group
