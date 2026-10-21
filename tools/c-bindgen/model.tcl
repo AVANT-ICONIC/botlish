@@ -457,14 +457,23 @@ proc ::cbind::model::FnPtr {fn} {
     return [list ok "ffi::c::FnPtr\[Fn\{args: \[[join $args {, }]\], return: [lindex $r 1]\}\]" [lsort -unique $features]]
 }
 
-# The mapped signature of the function type TYPE: {ok PARAMS RESULT} with
-# PARAMS {{cname NAME name BOTLISH type TEXT features F} ...} and RESULT
-# {type TEXT features F}, or {no BLOCKERS} (every blocker, each located:
-# "parameter 2 (x): double").
-proc ::cbind::model::Signature {type attrs {ccKey ""}} {
+# The mapped signature of the function type TYPE: {ok PARAMS RESULT
+# VARIADIC} with PARAMS {{cname NAME name BOTLISH type TEXT features F} ...},
+# RESULT {type TEXT features F} and VARIADIC 1 for a prototype ending in
+# `...` (VARIADICS-VERTICAL-SLICE-1.md: its fixed parameters are PARAMS),
+# or {no BLOCKERS} (every blocker, each located: "parameter 2 (x): double").
+# A variadic prototype binds only as a call of its own symbol (VIA direct):
+# a C thunk cannot forward the trailing arguments it would be given, and a
+# prototype with no fixed parameter (C23's `f(...)`) is no extern c fn.
+proc ::cbind::model::Signature {type attrs {ccKey ""} {via direct}} {
     lassign $type _ result params flags
     set blockers {}
-    if {"variadic" in $flags} { lappend blockers [list variadic "a variadic function (...)"] }
+    set variadic [expr {"variadic" in $flags}]
+    if {$variadic && $via ne "direct"} {
+        lappend blockers [list variadic "a variadic function (...) reached through a C thunk, which cannot forward its trailing arguments"]
+    } elseif {$variadic && [llength $params] == 0} {
+        lappend blockers [list variadic "a variadic function (...) with no fixed parameter"]
+    }
     if {"noproto" in $flags} { lappend blockers [list no-prototype "declared without a prototype: ()"] }
     set ccs [Conventions [concat $attrs [concat {*}[lmap p $params {lindex $p 2}]]]]
     if {[llength $ccs] && ![DefaultConvention $ccKey]} {
@@ -499,7 +508,7 @@ proc ::cbind::model::Signature {type attrs {ccKey ""}} {
         set res [dict create type [lindex $r 1] features [lindex $r 2] ctype $result]
     }
     if {$blockers ne ""} { return [list no $blockers] }
-    return [list ok $out $res]
+    return [list ok $out $res $variadic]
 }
 
 # The explicit calling conventions ATTRS (records' attribute lists) name.
@@ -991,21 +1000,23 @@ proc ::cbind::model::ProbeRequests {model} {
         }
     }
     set symbols {}
+    set prototypes {}
     foreach entry [dict get $model apis] {
         switch -- [dict get $entry kind] {
-            direct {
-                lappend symbols [dict get $entry name]
-            }
-            alias {
-                if {[dict exists $entry rename]} {
-                    lappend symbols [dict get $entry target]
-                } else {
-                    lappend symbols [dict get $entry name]
+            direct - alias {
+                set subject [expr {[dict get $entry kind] eq "alias" && [dict exists $entry rename]
+                    ? [dict get $entry target] : [dict get $entry name]}]
+                lappend symbols $subject
+                set type [dict get $entry decl type]
+                if {"variadic" in [lindex $type 3] && [llength [lindex $type 2]] > 0} {
+                    # A variadic prototype the compiler confirms (probe.tcl's
+                    # prototypes), as the header parser read it.
+                    lappend prototypes [list $subject [::cir::render $type]]
                 }
             }
         }
     }
-    return [dict create values $values symbols [lsort -unique $symbols]]
+    return [dict create values $values symbols [lsort -unique $symbols] prototypes [lsort -unique $prototypes]]
 }
 
 # The C expression naming ENTRY's function for its convention probe: an
@@ -1045,7 +1056,8 @@ proc ::cbind::model::resolve {model theFacts} {
             continue
         }
         set decl [dict get $entry decl]
-        set sig [Signature [dict get $decl type] [dict get $decl attrs] cc:$name]
+        set sig [Signature [dict get $decl type] [dict get $decl attrs] cc:$name \
+            [expr {$kind in {direct alias} ? "direct" : "thunk"}]]
         set uses [UsesBool [dict get $decl type]]
         dict set entry usesBool $uses
         if {[lindex $sig 0] ne "ok"} {
@@ -1054,9 +1066,12 @@ proc ::cbind::model::resolve {model theFacts} {
             lappend entries $entry
             continue
         }
-        lassign $sig _ params result
+        lassign $sig _ params result variadic
         dict set entry params $params
         dict set entry result $result
+        if {$variadic} {
+            dict set entry variadic 1
+        }
         # Explicit conventions the compiler took as the plain type's (the
         # target's default, or ignored on it): recorded, never a blocker.
         lassign [dict get $decl type] _ _ dparams
@@ -1077,6 +1092,18 @@ proc ::cbind::model::resolve {model theFacts} {
                     dict set entry blockers [list [list no-link-symbol "&($probeName) is no link-time constant of this target: $symbol"]]
                     lappend entries $entry
                     continue
+                }
+                if {$variadic} {
+                    # The compiler's own type of the function is the
+                    # variadic prototype the header parser read (its fixed
+                    # parameters, then `...`): probe.tcl's prototypes.
+                    lassign [dict getdef $facts prototypes $probeName {error "the prototype probe did not ask about it"}] status message
+                    if {$status ne "ok"} {
+                        dict set entry kind unsupported
+                        dict set entry blockers [list [list prototype-mismatch "the compiler's type of $probeName is not the variadic prototype the header parser read: $message"]]
+                        lappend entries $entry
+                        continue
+                    }
                 }
                 dict set entry symbol $symbol
             }

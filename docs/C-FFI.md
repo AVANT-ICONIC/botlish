@@ -92,7 +92,8 @@ Two top-level declarations, in any module or the entry program:
 externLibrary := "extern" "c" "library" STRING
 
 externFn      := "extern" "c" "fn" NAME ["named" STRING]
-                 "(" [param ("," param)* [","]] ")" "->" resultType [resultFact]
+                 "(" [param ("," param)* ["," "variadic"] [","]] ")"
+                 "->" resultType [resultFact]
 param         := NAME ":" type [access] [escape]
 access        := "read" | "write"
 escape        := "noescape" | "proven" "noescape" | "captures"
@@ -122,8 +123,11 @@ extern c fn keep named "bcf_keep"(p: ffi::c::Ptr[ffi::c::Void] captures) -> unit
 * **`named "SYMBOL"`** overrides the link symbol (section 2): letters,
   digits, `_ . $`, not starting with a digit. One `named` per declaration.
 * **The signature is the C signature**: every parameter typed, the result
-  type required (`-> unit` for void), no varargs (`..`, `...`, a trailing
-  `.` are errors: there is no variadic ABI here).
+  type required (`-> unit` for void). A variadic C function (C's `...`)
+  ends its parameters with the bare word `variadic`, after at least one
+  fixed parameter, with nothing after it and no name or type of its own:
+  each call passes its own C types (VARIADICS-VERTICAL-SLICE-1.md; `..`,
+  `...` and a trailing `.` stay errors, the `...` one naming `variadic`).
 * **Facts** follow a parameter's type and the result type; each is stated
   at most once.
 * **Declarations are top-level** (a module's or the entry program's own),
@@ -209,9 +213,20 @@ zero, and a double returned that is not finite -- NaN or an infinity -- is
 the call's declared error `NonFiniteFloat` (a declaration whose result is
 Double declares it).
 
+A variadic declaration's trailing arguments are typed per call
+(VARIADICS-VERTICAL-SLICE-1.md): each is a C integer scalar, `ffi::c::Bool`,
+Float64 (`double`), an `ffi::c::Ptr` or an `ffi::c::FnPtr` -- a plain `int`,
+a String, a List, a struct, byte storage or an erased value is refused at
+the call -- passed as C's default argument promotions make it (an integer
+narrower than `int`, and `_Bool`, as `int`). The call's machine signature is
+its own: x86-64 System V states the vector registers it used in `%al`,
+Linux AArch64 passes the trailing arguments as AAPCS64 passes any, and Apple
+AArch64 passes every one of them on the stack in an 8-byte slot. A
+`va_list` parameter is a fixed one, which nothing here represents.
+
 Not here, each an error at the declaration: C `float` and `long double`,
 structs or unions by value, arrays (a parameter `uint8_t out[32]` is the pointer it
-decays to), varargs, `unit` as a parameter, an imprint variable in a
+decays to), a `va_list`, `unit` as a parameter, an imprint variable in a
 signature (one C function has one ABI), a Botlish value type that is no C
 type (`int`, `str`, `Bytes`: byte storage reaches C only through a pointer
 parameter's contract, section 6).
@@ -1157,7 +1172,7 @@ and in CI).
 | Temporary byte borrowing still requires noescape. | **Confirmed.** The admission is the borrowing milestone's, unchanged (`cf-borrow-refusals`). |
 | Raw foreign Ptr values can cross calls independently of borrowing. | **Confirmed.** A `Ptr` is a raw address word, passed and returned as one; a pointer result is borrowing's concern only when the same call exposes storage (section 7). |
 | No callback/export mechanism exists yet. | **Confirmed.** Botlish never calls an `FnPtr`, and exports no C symbol. |
-| No aggregate/varargs ABI exists yet. | **Confirmed.** Structs, unions and arrays by value and varargs are declaration errors (floating point was too until FLOAT64-MILESTONE-1.md added `ffi::c::Double`; `float` and `long double` still are). |
+| No aggregate/varargs ABI exists yet. | **Confirmed** at the time; varargs since VARIADICS-VERTICAL-SLICE-1.md (`variadic`, a per-call signature). Structs, unions and arrays by value are declaration errors (floating point was too until FLOAT64-MILESTONE-1.md added `ffi::c::Double`; `float` and `long double` still are). |
 
 ## 25. For a binding generator
 
@@ -1190,8 +1205,9 @@ writes exactly these declarations, which compile like hand-written ones.
   development tool (C-BINDGEN.md) as ordinary source, and compiling them
   needs no header, preprocessor or C compiler.
 * C `float` and `long double` (`double` is `ffi::c::Double`,
-  FLOAT64-MILESTONE-1.md), structs, unions and arrays by value, varargs,
-  bitfields.
+  FLOAT64-MILESTONE-1.md), structs, unions and arrays by value, `va_list`,
+  bitfields. (Variadic calls are VARIADICS-VERTICAL-SLICE-1.md's: no format
+  string is read, no runtime argument list built.)
 * Callbacks (Botlish code called from C), exported C symbols, calling an
   `FnPtr`.
 * `dlopen`/`dlsym`, lazy binding, a runtime library path policy.
@@ -1221,7 +1237,10 @@ it mutates, keeping it a mutant of the same rule), plus
 exposure, `tests/direct-modules.test` and its mutants for a change to the
 direct edge, and the isolation and interchange audits for a change to the
 registry. Build BoringSSL once (`tclsh9.0 tests/cffi/boringssl.tcl`) so the
-acceptance tests run. `bench/c-ffi.tcl` regenerates section 21.
+acceptance tests run. `bench/c-ffi.tcl` regenerates section 21. A change to
+variadic calls (VARIADICS-VERTICAL-SLICE-1.md, "What to run when changing
+this") also needs the `ffi_` Rust tests on an AArch64 host, which carry the
+Apple and Linux AArch64 placements.
 
 ## 28. Files
 
@@ -1231,11 +1250,12 @@ acceptance tests run. `bench/c-ffi.tcl` regenerates section 21.
 | surface/ast.tcl, surface/lower.tcl, surface/modules.tcl | the AST nodes, their collection per unit, the loader passing them to the build |
 | hir/foreign.tcl | registration, validation, the link plan, bindings, the side tables, capture/Install |
 | hir/hir.tcl, hir/declarations.tcl, hir/resolve.tcl, hir/hygiene.tcl, hir/semantic.tcl, hir/warnings.tcl | the build's options and side tables, isolation, the root-kind bindings and their names |
-| hir/borrow.tcl | the extern arity, the result provenance, not-a-value |
+| hir/borrow.tcl | the extern arity, the result provenance, not-a-value, a variadic call's trailing C types (`cvarargs`) |
+| hir/cabi.tcl (`VariadicArgument`), core/cabi.tcl (`promoted`) | a trailing argument's one C type and its default argument promotion |
 | hir/direct.tcl | the retaining call as an authority source |
 | core/native.tcl, core/cabi.tcl | `-extern` metadata, `isExtern`, `displayName`; the provenance in the contract, `ExternImpl` (NATIVE-ONLY) |
 | native/lower.tcl, native/native.tcl, main.tcl | the foreign table, `foreigncall`, link directories, `-L` |
-| native/src/nir.rs, codegen/clif.rs, codegen/roots.rs, codegen/mod.rs | the NIR, the C call and its transport, the safepoint, the JIT's unlinked symbols |
+| native/src/nir.rs, codegen/clif.rs, codegen/roots.rs, codegen/mod.rs | the NIR, the C call and its transport (a variadic call's per-call signature, `c_call_signature`, and x86-64's `%al` stub, `va_stub`), the safepoint, the JIT's unlinked symbols |
 | native/src/codegen/target.rs | the target's C convention, and which parameters carry an extension attribute (Apple's stack-passed ones do not) |
 | native/src/codegen/aot.rs, native/src/main.rs, native/src/runtime/aot.rs | the link plan's arguments (per `LinkerFlavor`), linker failures, the stub's refusal, the linked run and its driver protocol |
 | native/src/runtime/ffi.rs, runtime/error.rs | the slow paths and the two failures |

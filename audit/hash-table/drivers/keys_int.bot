@@ -1,0 +1,33 @@
+# keys (Int): the Int key kinds of SPEC.md section 5, and the trace syntax.
+# The experiment copies this file beside a driver as `keys.bot`.
+import str
+import char
+
+# Key kinds: 0 int-dense, 1 int-sparse, 2 int-big (3, int-collide, comes
+# from the driver's argv pool).
+fn key(kind: int, i: int) -> int:
+    if kind == 0:
+        i
+    elif kind == 1:
+        mod(i * 2654435761, 4294967296)
+    else:
+        i + 1208925819614629174706176
+
+fn miss(kind: int, i: int) -> int:
+    if kind == 0:
+        i + 1099511627776
+    elif kind == 1:
+        mod(i * 2654435761, 4294967296) + 4294967296
+    else:
+        i + 2417851639229258349412352
+
+# TEXT, an optionally negative decimal Int.
+fn parse(text: str) -> int errors IndexNotFound:
+    n = text.length()
+    fn digits(i: int, acc: int) -> int errors IndexNotFound:
+        if i >= n:
+            return acc
+        digits(i + 1, acc * 10 + char::scalar_value(text.char_at(i)) - 48)
+    if n > 0 and text.char_at(0) == '-':
+        return 0 - digits(1, 0)
+    digits(0, 0)

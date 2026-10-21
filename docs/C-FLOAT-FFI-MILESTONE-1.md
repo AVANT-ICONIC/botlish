@@ -365,6 +365,36 @@ backend only); they were run here under qemu-user (an
 aarch64-unknown-linux-gnu build of the driver's tests), and run natively in
 CI's arm64 workflow and the macOS smoke job.
 
+**Variadic C calls** (VARIADICS-VERTICAL-SLICE-1.md, which landed on main
+alongside this milestone) take C floats among their *fixed* parameters
+(SDL3's `SDL_RenderDebugTextFormat(renderer, float x, float y, fmt, ...)`
+is now bound). A fixed float takes a floating-point register exactly as a
+fixed double does, so the per-call signature counts it with the doubles:
+
+* System V's `%al` bound counts F32 parameters as well as F64 ones
+  (`vector_registers`; `ffi_sysv_variadic_vector_count_includes_fixed_floats`).
+  No GCC-compiled callee shows an undercount (its prologue saves every
+  vector register whenever `%al` is nonzero), so only the Rust test kills
+  the `va-fixed-floats-not-vector-registers` mutant.
+* Apple's padding counts a fixed float as a v register, not an x register
+  (`c_call_signature`'s `fixed_floatings`;
+  `ffi_apple_variadic_padding_after_fixed_floats`). Counted as an integer,
+  it would leave x registers unpadded and pad the v registers past the
+  stack, moving every trailing argument (the
+  `va-apple-fixed-floats-counted-as-integers` mutant).
+* A *trailing* argument is never a C float: no Botlish value is one (a
+  Float64 is passed as a double, `hir::cabi::VariadicArgument`), and C
+  promotes a float to a double anyway. NIR's `varargs=` rejects `f32` as
+  either class (`ffi_c_float_never_a_vararg_class`;
+  `va-float-vararg-parses`).
+
+`cfl-c-variadic-fixed-floats` calls such a function against real C on the
+host: two fixed floats (one narrowed), then nine int and double pairs that
+`va_arg` reads back past the registers. The binding generator's fuzzer
+draws fixed C floats and doubles in variadic prototypes (never a float as
+the last fixed parameter, whose promoted type `va_start` requires) and
+trailing doubles from Float64s.
+
 ## 12. The binding generator
 
 `tools/c-bindgen` maps C `float` to `ffi::c::Float` and `double` to
@@ -411,6 +441,13 @@ for byte, so every difference is this milestone's):
 | Win32 | 3295 -> 3304 | 996 -> 1015 |
 | fixture | 39 -> 47 | -- |
 
+Main's variadic C calls (VARIADICS-VERTICAL-SLICE-1.md), merged after these
+counts were taken, bind variadic functions too. With both, every binding
+was regenerated again: SDL3 1233 bound, Tcl 840, Tcl stubs 756, BoringSSL
+3983, Win32 3307, the fixture 50. Some functions need both features, such
+as SDL3's `SDL_RenderDebugTextFormat`, which has fixed floats and then
+`...` (section 11).
+
 The remaining floating blockers in the committed bindings are 11 floating
 macro constants (SDL3 6, Win32 5) and none of `long double`; the fixture's
 long double functions and records are its only `long-double` rows. The
@@ -431,7 +468,7 @@ cfl-layout-declarations).
 
 ## 14. Tests, fuzzing and mutation
 
-* **tests/c-float-ffi.test** (new, 36 tests): the type model, the facts per
+* **tests/c-float-ffi.test** (new, 37 tests): the type model, the facts per
   target, value positions, pointer and function pointer identities, ABI
   classes, the boundary procedures against the integer oracle (boundaries,
   6000 sampled doubles, admission, exact widening), static decisions and
@@ -439,7 +476,8 @@ cfl-layout-declarations).
   (tests/cffi/cfloat-fixture.c, the brief's functions and more): values both
   ways, C's own conversion, non-finite results, subnormals, register
   exhaustion, MixedFloats against C, views and edits, non-finite memory,
-  arrays and pointers, unions, function pointers; byte layouts on all four
+  arrays and pointers, unions, function pointers, a variadic function with
+  fixed floats; byte layouts on all four
   backends; declaration diagnostics; per-call error charging; HIR text,
   interchange and isolation; NIR and CLIF; a standalone executable; GC
   stress; DecimalRounded.
@@ -448,9 +486,11 @@ cfl-layout-declarations).
   shows each can fail.
 * **Rust**: runtime/value.rs `c_float_*` (the narrowing against an integer
   oracle on 20,000 doubles, the boundaries, admission, exact widening);
-  codegen/clif.rs `c_float_sysv_xmm_exhaustion`, `c_float_win64_positions`
-  (x86-64 hosts), `c_float_aapcs64_stack_slots`, `c_float_apple_floats_packed`
-  (AArch64 hosts).
+  codegen/clif.rs `c_float_sysv_xmm_exhaustion`, `c_float_win64_positions`,
+  `ffi_sysv_variadic_vector_count_includes_fixed_floats` (x86-64 hosts),
+  `c_float_aapcs64_stack_slots`, `c_float_apple_floats_packed`,
+  `ffi_apple_variadic_padding_after_fixed_floats` (AArch64 hosts); nir.rs
+  `ffi_c_float_never_a_vararg_class`.
 * **tests/c-bindgen.test**: cb-fixture-floats, cb-layout-floats (new), and
   every expectation the bound floats changed (section 12).
 * **audit/c-float-ffi/tools/fuzz.tcl** (new): random C signatures of floats,
@@ -556,6 +596,18 @@ included): run 39481243115 on commit a5ea3c3 passed.
 
 Windows x86-64: compile and lowering only (section 11; the MinGW-w64
 binding generated and verified as before); no run.
+
+**After merging main's variadic C calls** (Linux x86-64, this container):
+
+| check | result |
+|---|---|
+| tests/local.tcl | 204 Tcl test files on interp and compile (6525 and 6520 passed, 12 and 17 skipped, 2156 golden duplicates skipped) and 101 golden suites on all four backends (4977, 4977, 4885 and 4987 tests passed), 0 failed |
+| tests/c-float-ffi.test, c-ffi.test, c-abi-types.test, c-bindgen.test | 37/37; 109 passed, 3 skipped; 73/73; 77 passed, 6 skipped (BoringSSL and SDL3 libraries), 0 failed |
+| `tools/c-bindgen.tcl check PROFILE -target committed` | every profile and target current |
+| Rust (`--lib`, `--bin botlish-native`) | 272 and 53 passed; under qemu-aarch64, the `ffi_` and `c_float` lowering tests (14, the Apple padding after fixed floats among them) passed |
+| audit/c-ffi/tools/mutate.tcl | `va-al-zero`, `va-fixed-floats-not-vector-registers`, `va-float-vararg-parses` killed; `va-apple-fixed-floats-counted-as-integers` (AArch64 hosts) fails `ffi_apple_variadic_padding_after_fixed_floats` under qemu; every mutant of every harness still applies |
+| fuzzers | audit/c-bindgen fuzz.tcl seeds 1-4 (33 variadic prototypes, 130 trailing arguments), audit/c-float-ffi fuzz.tcl seed 3, audit/c-ffi fuzz.tcl seed 3 (35 variadic calls): 0 disagreements |
+| warning gate, `tools/compilerpedia.tcl check` | passed; 0 problems |
 
 ## 17. Seams for later
 

@@ -138,6 +138,12 @@ pub struct CompileOptions {
     /// (runtime/metrics.rs's AllocMode::Sites). False recompiles to exactly
     /// today's uninstrumented code: no VM_ALLOC_SITE_OFFSET store anywhere.
     pub alloc_sites: bool,
+    /// The program runs with allocation metrics on (summary or sites mode,
+    /// runtime/metrics.rs): `mutable_array::at`/`set` call their helpers,
+    /// which count reads and writes, instead of their inline fast paths
+    /// (codegen::clif's `mutarray_get`/`mutarray_set`), which count
+    /// nothing. False for every uninstrumented run and executable.
+    pub count_accesses: bool,
 }
 
 /// A code generator for NIR programs.
@@ -189,7 +195,7 @@ impl CraneliftJit {
         let mut defines = Vec::with_capacity(program.functions.len());
         for f in &program.functions {
             let result =
-                clif::define(&mut module, &symbols, f, &mut pool, &mut sites, options.alloc_sites, options.clif)?;
+                clif::define(&mut module, &symbols, f, &mut pool, &mut sites, options.alloc_sites, options.count_accesses, options.clif)?;
             code_sizes.push(result.direct_size + result.entry_size);
             if let (Some(listing), Some(text)) = (listing.as_mut(), &result.clif_text) {
                 listing.push('\n');
@@ -341,7 +347,7 @@ pub fn emit_object(program: &Program) -> Result<ObjectProgram, BackendError> {
     let mut sites = Vec::new();
     let mut functions = Vec::new();
     for f in &program.functions {
-        functions.push(clif::define(&mut module, &symbols, f, &mut pool, &mut sites, false, false)?);
+        functions.push(clif::define(&mut module, &symbols, f, &mut pool, &mut sites, false, false, false)?);
     }
     let mut bytes = module.finish().emit().map_err(|e| BackendError::Codegen(e.to_string()))?;
     if program.context_bytes > 0 {
@@ -502,7 +508,7 @@ mod context_area_tests {
         use crate::runtime::vm::ProgramInfo;
         use std::rc::Rc;
         let program = crate::nir::parse(PROGRAM).unwrap_or_else(|e| panic!("{}", e.message));
-        let options = CompileOptions { clif: true, vcode: false, alloc_sites: false };
+        let options = CompileOptions { clif: true, vcode: false, alloc_sites: false, count_accesses: false };
         let compiled = CraneliftJit.compile(&program, &options).expect("compiles");
         let clif = compiled.clif.clone().unwrap();
         assert!(clif.contains("symbol_value.i64"), "{clif}");
@@ -514,6 +520,116 @@ mod context_area_tests {
         vm.set_framemap(compiled.framemap.clone());
         let result = (compiled.entry)(&mut *vm);
         assert_eq!(result, (4 << 1) | 1, "f reads B's slot, the tagged small Int 4");
+    }
+}
+
+/// MutableArray capacity/at/set compile to inline loads and stores (clif.rs's
+/// `mutarray_capacity`, `mutarray_get`, `mutarray_set`), their helpers only
+/// in cold blocks, and to helper calls when the run counts accesses
+/// (CompileOptions::count_accesses); both compilations compute the same
+/// values, copy-on-write included.
+#[cfg(test)]
+mod mutarray_inline_tests {
+    use super::*;
+    use crate::runtime::metrics::AllocMode;
+    use crate::runtime::vm::ProgramInfo;
+    use std::rc::Rc;
+
+    /// A = create(4, 7); A[2] = 9 (a unique backing: the inline store);
+    /// B = a logical copy of A; A[1] = 5 at a proven index (a shared
+    /// backing: the helper detaches A); then B[1] * 100 + A[1] * 10 +
+    /// capacity(B) + A[2] = 700 + 50 + 4 + 9 = 763, and A[INDEX], an
+    /// IndexNotFound for INDEX 4, -1, a large small Int or a BigInt.
+    fn program(index: &str) -> String {
+        [
+            "nir 1 call-effects=1 statics=0\n\n",
+            "func 0 \"<program>\" params=0 env=0 regs=24 pnames=\"\" captures=0\n",
+            "    %0 = int 4\n    %1 = int 7\n    %2 = op mutarraycreate %0 %1\n",
+            "    %3 = int 2\n    %4 = int 9\n    %5 = op mutarrayset %2 %3 %4\n",
+            "    %6 = str \"h\"\n    %7 = op mvshare %2 %6\n",
+            "    %8 = int 1\n    %9 = int 5\n    %10 = op mutarraysetproven %2 %8 %9\n",
+            "    %11 = op mutarrayget %7 %8\n    %12 = op mutarraygetproven %2 %8\n",
+            "    %13 = op mutarraycapacity %7\n    %14 = op mutarrayget %2 %3\n",
+            "    %15 = int 100\n    %16 = op imul %11 %15\n    %17 = int 10\n    %18 = op imul %12 %17\n",
+            "    %19 = op iadd %16 %18\n    %20 = op iadd %19 %13\n    %21 = op iadd %20 %14\n",
+            &format!("    %22 = int {index}\n    %23 = op mutarrayget %2 %22\n"),
+            "    ret %21\nend\n",
+        ]
+        .concat()
+    }
+
+    /// Compiles and runs PROGRAM; returns the CLIF, the result and the Vm.
+    fn run(text: &str, count_accesses: bool) -> (String, Value, Box<Vm>) {
+        let program = crate::nir::parse(text).unwrap_or_else(|e| panic!("{}", e.message));
+        let options = CompileOptions { clif: true, vcode: false, alloc_sites: false, count_accesses };
+        let compiled = CraneliftJit.compile(&program, &options).expect("compiles");
+        let mode = if count_accesses { AllocMode::Summary } else { AllocMode::Off };
+        let mut vm = Vm::new(
+            Rc::new(ProgramInfo { functions: Vec::new(), natives: Vec::new(), shapes: Vec::new(), enums: Vec::new() }),
+            mode,
+        );
+        compiled.install_constants(&mut vm);
+        vm.set_framemap(compiled.framemap.clone());
+        let result = (compiled.entry)(&mut *vm);
+        (compiled.clif.clone().unwrap(), result, vm)
+    }
+
+    /// The calls to helper NAME in CLIF, each as whether its block is cold.
+    fn calls(clif: &str, name: &str) -> Vec<bool> {
+        let Some(id) = clif.lines().find_map(|l| l.strip_prefix("; u0:").and_then(|r| r.strip_suffix(&format!(" = {name}")))) else {
+            return Vec::new();
+        };
+        let refs: Vec<String> = clif
+            .lines()
+            .filter_map(|l| l.trim().split_once(&format!(" = u0:{id} ")).map(|(f, _)| format!("call {f}(")))
+            .collect();
+        let mut cold = false;
+        let mut out = Vec::new();
+        for line in clif.lines() {
+            if line.starts_with("block") {
+                cold = line.contains(" cold:");
+            } else if refs.iter().any(|r| line.contains(r.as_str())) {
+                out.push(cold);
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn mutarray_accesses_are_inline_and_agree_with_the_helpers() {
+        let text = program("0");
+        let (inline, result, vm) = run(&text, false);
+        assert_eq!(result, make_small(763), "{inline}");
+        assert!(calls(&inline, "rt_mutarray_capacity").is_empty(), "capacity is a load: {inline}");
+        for helper in ["rt_mutarray_get", "rt_mutarray_set", "rt_mutarray_set_proven"] {
+            let found = calls(&inline, helper);
+            assert!(!found.is_empty() && found.iter().all(|&cold| cold), "{helper} only on a cold path: {inline}");
+        }
+        assert!(calls(&inline, "rt_mutarray_get_proven").is_empty(), "a proven read has no slow path: {inline}");
+        // The copy, and the one detach its write made.
+        assert_eq!((vm.metrics.mutarray.shares, vm.metrics.mutarray.detaches), (1, 1));
+
+        let (counted, result, vm) = run(&text, true);
+        assert_eq!(result, make_small(763), "{counted}");
+        // Capacity counts nothing: still the load. No slot is accessed inline.
+        assert!(calls(&counted, "rt_mutarray_capacity").is_empty(), "{counted}");
+        assert!(!counted.contains("mutarray slots"), "every element access a helper: {counted}");
+        for helper in ["rt_mutarray_get", "rt_mutarray_get_proven", "rt_mutarray_set", "rt_mutarray_set_proven"] {
+            assert!(calls(&counted, helper).iter().any(|&cold| !cold), "{helper} called: {counted}");
+        }
+        assert_eq!((vm.metrics.mutarray_reads, vm.metrics.mutarray_writes), (4, 2), "every read and write counted");
+        assert_eq!((vm.metrics.mutarray.shares, vm.metrics.mutarray.detaches), (1, 1));
+    }
+
+    #[test]
+    fn an_inline_checked_read_out_of_bounds_is_the_helpers_index_not_found() {
+        for index in ["4", "-1", "1099511627776", "99999999999999999999999"] {
+            for count_accesses in [false, true] {
+                let (clif, result, vm) = run(&program(index), count_accesses);
+                assert_eq!(result, NO_VALUE, "index {index}: {clif}");
+                assert_eq!(vm.declared_error, crate::runtime::error::ERR_INDEX_NOT_FOUND, "index {index}: IndexNotFound pending");
+            }
+        }
     }
 }
 
@@ -552,7 +668,7 @@ mod short_string_generic_entry_tests {
 
     fn rig() -> Rig {
         let program = crate::nir::parse(PROGRAM).unwrap_or_else(|e| panic!("{}", e.message));
-        let options = CompileOptions { clif: false, vcode: false, alloc_sites: false };
+        let options = CompileOptions { clif: false, vcode: false, alloc_sites: false, count_accesses: false };
         let compiled = CraneliftJit.compile(&program, &options).expect("compiles");
         let mut vm = Vm::new(
             Rc::new(ProgramInfo { functions: Vec::new(), natives: Vec::new(), shapes: Vec::new(), enums: Vec::new() }),
@@ -631,7 +747,7 @@ mod packed_ascii_generic_entry_tests {
 
     fn rig() -> Rig {
         let program = crate::nir::parse(PROGRAM).unwrap_or_else(|e| panic!("{}", e.message));
-        let options = CompileOptions { clif: false, vcode: false, alloc_sites: false };
+        let options = CompileOptions { clif: false, vcode: false, alloc_sites: false, count_accesses: false };
         let compiled = CraneliftJit.compile(&program, &options).expect("compiles");
         let mut vm = Vm::new(
             Rc::new(ProgramInfo { functions: Vec::new(), natives: Vec::new(), shapes: Vec::new(), enums: Vec::new() }),
@@ -679,6 +795,156 @@ mod packed_ascii_generic_entry_tests {
         match r.vm.error.take() {
             Some(RtError::Semantic { kind, message }) => assert_eq!((kind, message.as_str()), ("RANGE", "boom")),
             other => panic!("expected the RANGE error, got {other:?}"),
+        }
+    }
+}
+
+/// Euclidean mod's three native forms (native/lower.tcl's "Euclidean mod"):
+/// the raw `rimodtotal` (no zero test), the raw `rimod` (an inline zero test,
+/// rt_int_mod's ARITHMETIC error on a cold path) and the tagged `imod`
+/// (inline when both operands are small, rt_int_mod for a BigInt or a zero
+/// divisor), each JIT-compiled and called over a grid of operands against an
+/// independent reference (i128 / BigInt `rem_euclid`).
+#[cfg(test)]
+mod euclid_mod_tests {
+    use super::*;
+    use crate::runtime::error::RtError;
+    use crate::runtime::metrics::AllocMode;
+    use crate::runtime::ops::GenericEntry;
+    use crate::nir::OpCode;
+    use crate::runtime::vm::ProgramInfo;
+    use num_bigint::BigInt;
+    use num_traits::{Signed, Zero};
+    use std::rc::Rc;
+
+    const PROGRAM: &str = concat!(
+        "nir 1 call-effects=1\n\n",
+        "func 0 \"<program>\" params=0 env=0 regs=1 pnames=\"\" captures=0 rawregs=\"\"\n    %0 = unit\n    ret %0\nend\n\n",
+        "func 1 \"total\" params=2 env=0 regs=6 pnames=\"a b\" captures=0 rawregs=\"2 3 4\"\n",
+        "    %2 = op runbox %0\n    %3 = op runbox %1\n    %4 = op rimodtotal %2 %3\n    %5 = op rbox %4\n    ret %5\nend\n\n",
+        "func 2 \"checked\" params=2 env=0 regs=6 pnames=\"a b\" captures=0 rawregs=\"2 3 4\"\n",
+        "    %2 = op runbox %0\n    %3 = op runbox %1\n    %4 = op rimod %2 %3\n    %5 = op rbox %4\n    ret %5\nend\n\n",
+        "func 3 \"tagged\" params=2 env=0 regs=3 pnames=\"a b\" captures=0 rawregs=\"\"\n",
+        "    %2 = op imod %0 %1\n    ret %2\nend\n\n",
+    );
+
+    const SMALL_MIN: i64 = -(1 << 62);
+    const SMALL_MAX: i64 = (1 << 62) - 1;
+    const SMALLS: [i64; 20] = [
+        SMALL_MIN, SMALL_MIN + 1, -(1 << 61), -1025, -1024, -1000, -7, -3, -2, -1, 0, 1, 2, 3, 7, 1023, 1024,
+        1 << 61, SMALL_MAX - 1, SMALL_MAX,
+    ];
+
+    struct Rig {
+        vm: Box<Vm>,
+        compiled: CompiledProgram,
+    }
+
+    fn rig() -> Rig {
+        let program = crate::nir::parse(PROGRAM).unwrap_or_else(|e| panic!("{}", e.message));
+        let options = CompileOptions { clif: false, vcode: false, alloc_sites: false, count_accesses: false };
+        let compiled = CraneliftJit.compile(&program, &options).expect("compiles");
+        let mut vm = Vm::new(
+            Rc::new(ProgramInfo { functions: Vec::new(), natives: Vec::new(), shapes: Vec::new(), enums: Vec::new() }),
+            AllocMode::Summary,
+        );
+        compiled.install_constants(&mut vm);
+        vm.set_framemap(compiled.framemap.clone());
+        Rig { vm, compiled }
+    }
+
+    fn call(rig: &mut Rig, func: usize, args: &[Value]) -> Value {
+        let entry: GenericEntry = unsafe { std::mem::transmute(rig.compiled.generic_entries[func]) };
+        entry(&mut *rig.vm, 0, args.as_ptr())
+    }
+
+    fn reference(x: &BigInt, y: &BigInt) -> BigInt {
+        let r = x % y;
+        if r.is_negative() { r + y.abs() } else { r }
+    }
+
+    fn expect_division_by_zero(rig: &mut Rig) {
+        match rig.vm.error.take() {
+            Some(RtError::Semantic { kind, message }) => {
+                assert_eq!((kind, message.as_str()), ("ARITHMETIC", "mod: division by zero"))
+            }
+            other => panic!("expected the ARITHMETIC error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn raw_forms_agree_with_the_euclidean_reference_on_small_operands() {
+        let mut r = rig();
+        for &x in &SMALLS {
+            for &y in SMALLS.iter().filter(|y| **y != 0) {
+                let want = (x as i128).rem_euclid(y as i128) as i64;
+                for func in [1, 2, 3] {
+                    let got = call(&mut r, func, &[make_small(x), make_small(y)]);
+                    assert_eq!(int_small(got), Some(want), "func {func}: mod({x}, {y})");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_zero_divisor_raises_the_helpers_error_from_the_checked_and_tagged_forms() {
+        let mut r = rig();
+        for &x in &SMALLS {
+            for func in [2, 3] {
+                let got = call(&mut r, func, &[make_small(x), make_small(0)]);
+                assert_eq!(got, NO_VALUE, "func {func}: mod({x}, 0)");
+                expect_division_by_zero(&mut r);
+            }
+        }
+        let big = r.vm.new_big(BigInt::from(1u8) << 70u32);
+        assert_eq!(call(&mut r, 3, &[big, make_small(0)]), NO_VALUE);
+        expect_division_by_zero(&mut r);
+    }
+
+    #[test]
+    fn the_tagged_form_takes_bigint_operands_to_the_helper() {
+        let mut r = rig();
+        let wide: Vec<BigInt> = [
+            BigInt::from(SMALL_MAX) + 1,
+            BigInt::from(SMALL_MIN) - 1,
+            BigInt::from(i64::MAX),
+            BigInt::from(i64::MIN),
+            BigInt::from(1u8) << 64u32,
+            -(BigInt::from(1u8) << 70u32) + BigInt::from(5),
+            BigInt::from(7),
+            BigInt::from(-7),
+            BigInt::from(SMALL_MIN),
+        ]
+        .into_iter()
+        .collect();
+        for x in &wide {
+            for y in wide.iter().filter(|y| !y.is_zero()) {
+                // Under BOTLISH_NATIVE_GC_STRESS every allocation collects:
+                // the first operand must be a root while the second is
+                // allocated, and both while the helper allocates the result.
+                let vx = r.vm.new_big(x.clone());
+                r.vm.temp_roots.push(vx);
+                let vy = r.vm.new_big(y.clone());
+                r.vm.temp_roots.push(vy);
+                let got = call(&mut r, 3, &[vx, vy]);
+                r.vm.temp_roots.truncate(r.vm.temp_roots.len() - 2);
+                assert_ne!(got, NO_VALUE, "mod({x}, {y})");
+                assert_eq!(int_to_big(got), reference(x, y), "mod({x}, {y})");
+            }
+        }
+    }
+
+    #[test]
+    fn only_the_tagged_form_is_a_safepoint_and_only_rimodtotal_cannot_fail() {
+        use crate::runtime::ops::{op_may_allocate, op_may_error};
+        assert!(op_may_allocate(OpCode::IMod) && op_may_error(OpCode::IMod));
+        assert!(!op_may_allocate(OpCode::RIMod) && op_may_error(OpCode::RIMod));
+        assert!(!op_may_allocate(OpCode::RIModTotal) && !op_may_error(OpCode::RIModTotal));
+        let program = crate::nir::parse(PROGRAM).unwrap_or_else(|e| panic!("{}", e.message));
+        let effects: Vec<(bool, bool)> = program.functions.iter().map(|f| (f.may_error, f.may_gc)).collect();
+        assert_eq!(effects[1..], [(false, false), (true, false), (true, true)]);
+        for op in [OpCode::RIMod, OpCode::RIModTotal] {
+            assert!(op.raw_operands() && op.raw_result() && op.arity() == Some(2), "{op:?}");
         }
     }
 }

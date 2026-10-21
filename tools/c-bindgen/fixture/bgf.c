@@ -91,9 +91,32 @@ double bgf_scale(double x, float y) { return x * y; }
 
 bgf_pair bgf_swap(bgf_pair p) { bgf_pair q = {p.b, p.a}; return q; }
 
-int bgf_printf(const char *format, ...) { (void)format; return 0; }
+/* A variadic callee that reads its trailing arguments as FORMAT says: each
+ * `d` an int, `l` a long, `f` a double (its whole part), `p` a pointer
+ * (counted when non-null); the sum of what it read
+ * (VARIADICS-VERTICAL-SLICE-1.md). */
+int bgf_printf(const char *format, ...) {
+    va_list ap;
+    va_start(ap, format);
+    long sum = 0;
+    for (const char *c = format; *c; c++) {
+        switch (*c) {
+        case 'd': sum += va_arg(ap, int); break;
+        case 'l': sum += va_arg(ap, long); break;
+        case 'f': sum += (long)va_arg(ap, double); break;
+        case 'p': sum += va_arg(ap, void *) != 0; break;
+        default: break;
+        }
+    }
+    va_end(ap);
+    return (int)sum;
+}
 
 int bgf_vprintf(const char *format, va_list args) { (void)format; (void)args; return 0; }
+
+int (bgf_vshadow)(int n, ...) { return n; }
+
+int bgf_vother(int n, ...) { return n; }
 
 void bgf_set_measure(bgf_measure measure) { saved_measure = measure; }
 

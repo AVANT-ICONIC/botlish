@@ -1,0 +1,193 @@
+# lpa -- lp's algorithm (linear probing with stored hashes and backward-shift
+# deletion, audit/hash-table/SPEC.md section 3) and lp's modular helpers,
+# with the table's state held the way the value-semantics rules ask
+# (HASH-TABLE-EXPERIMENT.md, "Value semantics"; SPEC.md section 7):
+#
+#   * the entry count lives in a one-slot MutableArray[int], `meta`, mutated
+#     in place: no update ever builds a new Table, so no update can share
+#     (and then detach, i.e. copy) a slot array;
+#   * every mutating helper takes the table as its last use and returns it,
+#     so the header moves through the call;
+#   * readers only read (they are observed, so they get the caller's
+#     headers uncopied);
+#   * growth builds the destination with its constructors inline in the
+#     struct literal and moves the entries one by one.
+#
+# This is the experiment's main modular open-addressed table: lpmono and
+# lpfact are the same algorithm and state organized differently (brief
+# section 9), lpint the same source with typed keys and values.
+#
+# policy: 7/10
+import list
+import mutable_array
+
+struct Table:
+    hashes: MutableArray[int]
+    keys: mutarray
+    vals: mutarray
+    meta: MutableArray[int]
+
+# ---------------------------------------------------------------------------
+# Policy (SPEC.md section 2)
+
+fn min_slots() -> int:
+    8
+
+fn load_num() -> int:
+    7
+
+fn load_den() -> int:
+    10
+
+fn slots_for(expected: int, cap: int) -> int:
+    if expected * load_den() <= cap * load_num():
+        return cap
+    slots_for(expected, cap * 2)
+
+fn empty_table(cap: int) -> Table:
+    Table {hashes: mutable_array::create(cap, -1), keys: mutable_array::allocate(cap), vals: mutable_array::allocate(cap), meta: mutable_array::create(1, 0)}
+
+fn fresh(expected: int) -> Table:
+    empty_table(slots_for(expected, min_slots()))
+
+fn slots(t: Table) -> int:
+    t.hashes.capacity()
+
+fn size(t: Table) -> int errors IndexNotFound:
+    t.meta.at(0)
+
+fn full?(t: Table) -> bool errors IndexNotFound:
+    (size(t) + 1) * load_den() > slots(t) * load_num()
+
+# ---------------------------------------------------------------------------
+# Probing
+
+fn home(h: int, cap: int) -> int:
+    h.mod(cap)
+
+fn next_slot(i: int, cap: int) -> int:
+    mod(i + 1, cap)
+
+# The slot holding KEY (hash H), or the empty slot that ends its probe
+# sequence, from slot I on.
+fn find_from(t: Table, h: int, key, i: int) -> int errors IndexNotFound:
+    stored = t.hashes.at(i)
+    if stored < 0 or stored == h and t.keys.at(i) == key:
+        return i
+    find_from(t, h, key, next_slot(i, slots(t)))
+
+fn find(t: Table, h: int, key) -> int errors IndexNotFound:
+    find_from(t, h, key, home(h, slots(t)))
+
+# The first empty slot of hash H's probe sequence from slot I on.
+fn empty_from(t: Table, i: int) -> int errors IndexNotFound:
+    if t.hashes.at(i) < 0:
+        return i
+    empty_from(t, next_slot(i, slots(t)))
+
+fn find_empty(t: Table, h: int) -> int errors IndexNotFound:
+    empty_from(t, home(h, slots(t)))
+
+# ---------------------------------------------------------------------------
+# Lookup
+
+fn get(t: Table, key, default) errors IndexNotFound:
+    i = find(t, hash(key), key)
+    if t.hashes.at(i) < 0:
+        return default
+    t.vals.at(i)
+
+fn has?(t: Table, key) -> bool errors IndexNotFound:
+    t.hashes.at(find(t, hash(key), key)) >= 0
+
+fn probes(t: Table, key) -> int errors IndexNotFound:
+    h = hash(key)
+    mod(find(t, h, key) - home(h, slots(t)), slots(t)) + 1
+
+# ---------------------------------------------------------------------------
+# Insertion and growth
+
+# T with the entry (H, KEY, VALUE) stored at slot I.
+fn store(t: Table, i: int, h: int, key, value) -> Table errors IndexNotFound:
+    t.hashes.set(i, h)
+    t.keys.set(i, key)
+    t.vals.set(i, value)
+    t
+
+# T with its entry count increased by DELTA.
+fn counted(t: Table, delta: int) -> Table errors IndexNotFound:
+    t.meta.set(0, t.meta.at(0) + delta)
+    t
+
+# DEST with every entry of OLD from slot I on placed into it.
+fn moved(old: Table, i: int, dest: Table) -> Table errors IndexNotFound:
+    if i >= slots(old):
+        return dest
+    h = old.hashes.at(i)
+    if h < 0:
+        return moved(old, i + 1, dest)
+    j = find_empty(dest, h)
+    moved(old, i + 1, store(dest, j, h, old.keys.at(i), old.vals.at(i)))
+
+# T at twice the capacity, its entries placed in old slot order.
+fn grown(t: Table) -> Table errors IndexNotFound:
+    count = size(t)
+    dest = moved(t, 0, empty_table(2 * slots(t)))
+    counted(dest, count)
+
+fn put(t: Table, key, value) -> Table errors IndexNotFound:
+    h = hash(key)
+    i = find(t, h, key)
+    if t.hashes.at(i) >= 0:
+        t.vals.set(i, value)
+        return t
+    if full?(t):
+        g = grown(t)
+        j = find_empty(g, h)
+        return counted(store(g, j, h, key, value), 1)
+    counted(store(t, i, h, key, value), 1)
+
+# ---------------------------------------------------------------------------
+# Removal: backward shift
+
+# Whether slot K is cyclically in the interval (I, J].
+fn between?(k: int, i: int, j: int) -> bool:
+    if i <= j:
+        i < k and k <= j
+    else:
+        i < k or k <= j
+
+# T after the entry at slot HOLE was removed, the entries after it shifted
+# back: J is the last slot looked at.
+fn shifted(t: Table, hole: int, j: int) -> Table errors IndexNotFound:
+    cap = slots(t)
+    n = next_slot(j, cap)
+    stored = t.hashes.at(n)
+    if stored < 0:
+        t.hashes.set(hole, -1)
+        t.keys.set(hole, unit)
+        t.vals.set(hole, unit)
+        return t
+    if between?(home(stored, cap), hole, n):
+        return shifted(t, hole, n)
+    k = t.keys.at(n)
+    v = t.vals.at(n)
+    shifted(store(t, hole, stored, k, v), n, n)
+
+fn drop(t: Table, key) -> Table errors IndexNotFound:
+    i = find(t, hash(key), key)
+    if t.hashes.at(i) < 0:
+        return t
+    counted(shifted(t, i, i), -1)
+
+# ---------------------------------------------------------------------------
+# Bulk construction (SPEC.md section 4)
+
+# The table of KEYS[i] -> VALS[i], in order (a later duplicate's value wins).
+fn from_lists(keys: list, vals: list) -> Table errors IndexNotFound:
+    n = list::length(keys)
+    fn fill(t: Table, i: int) -> Table errors IndexNotFound:
+        if i >= n:
+            return t
+        fill(put(t, list::at(keys, i), list::at(vals, i)), i + 1)
+    fill(fresh(n), 0)

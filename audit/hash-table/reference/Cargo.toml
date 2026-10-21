@@ -1,0 +1,19 @@
+[package]
+name = "hash-table-reference"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# The independent low-level reference of the hash-table experiment
+# (HASH-TABLE-EXPERIMENT.md): the algorithms of ../SPEC.md in plain Rust,
+# with Botlish's own hash, and std::collections::HashMap beside them. A
+# measuring instrument, not the architecture: nothing in the compiler or
+# the runtime depends on it.
+
+[dependencies]
+
+[workspace]
+
+[profile.release]
+debug = false
+codegen-units = 1

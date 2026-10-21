@@ -670,6 +670,15 @@ extern c fn SDL_RenderDebugText(
     str: ffi::c::Ptr[ffi::c::Char]
 ) -> ffi::c::Bool
 
+# C: _Bool SDL_RenderDebugTextFormat(SDL_Renderer *renderer, float x, float y, const char *fmt, ...)
+extern c fn SDL_RenderDebugTextFormat(
+    renderer: ffi::c::Ptr[sdl3::ctypes::SDL_Renderer],
+    x: ffi::c::Float,
+    y: ffi::c::Float,
+    fmt: ffi::c::Ptr[ffi::c::Char],
+    variadic
+) -> ffi::c::Bool
+
 # C: _Bool SDL_SetDefaultTextureScaleMode(SDL_Renderer *renderer, SDL_ScaleMode scale_mode)
 extern c fn SDL_SetDefaultTextureScaleMode(
     renderer: ffi::c::Ptr[sdl3::ctypes::SDL_Renderer],

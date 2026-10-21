@@ -132,13 +132,17 @@ nothing affine. Pinned: `ma-type-affinity` (eleven types), `ma-nested-affine`.
 The MutableVector model, fixed length. A *header* is the identity of one
 logical array: on the Tcl backends `{mutarray ID}` over
 `core::mutarray::store(ID)`, a Tcl list (Tcl's own copy-on-write); natively
-`MutArrayObj { hdr, start, backing: Rc<[Value]> }` (`runtime/value.rs`): the
-length never changes, so the backing is one allocation (its count and its
-slots), and the array's elements are its slots from `start` on (0 but in an
-affine array a consuming loop drains, 22). A copy is a new header over the
-same backing; the first write through a header whose backing is shared
-detaches it. No runtime ownership state exists (no owner, moved bit or
-affine flag); the `Rc` count is copy-on-write bookkeeping only.
+`MutArrayObj { hdr, len, ptr, unique, backing: Rc<[Value]> }`
+(`runtime/value.rs`): the length never changes, so the backing is one
+allocation (its count and its slots), and the array's elements are its slots
+from `start` on (0 but in an affine array a consuming loop drains, 22;
+`start` is `backing.len() - len`, not stored). `len`, `ptr` (the first
+element's address) and `unique` (the backing is known to be this header's
+alone) are a cache of the backing at fixed offsets, for generated code (47).
+A copy is a new header over the same backing; the first write through a
+header whose backing is shared detaches it. No runtime ownership state exists
+(no owner, moved bit or affine flag); the `Rc` count, and `unique` caching
+it, are copy-on-write bookkeeping only.
 
 ### 5. Copy path
 
@@ -217,8 +221,13 @@ fresh source half the time.
 
 ### 12. Struct-field semantics
 
-A struct literal holds a copy of the array put in (descriptor `s`N...); a
-field path (`b.values`) is a place; a projection read out of it is a copy;
+A struct literal holds a copy of the array put in (descriptor `s`N...; an
+`any` slot beside a typed one by `d`, whatever it holds at run time:
+`ma-any-slot-copies`); a
+field path (`b.values`) is a place; a projection read out of it is a copy
+unless it is the last use of its own path (MUTABLE-VECTOR.md, "Last uses per
+path": a struct rebuilt from its own fields after mutating them copies
+nothing);
 a destructured binding is a copy (`destructure-bound-mutable-value-is-the-same-value`
 now pins independence). An affine array makes its struct affine.
 `ma-cow-routes` route 6 (`Box {values: a}`); `ma-cow-extraction` (a
@@ -370,7 +379,10 @@ name. The roles: `observe`, `place`, `move`, `element`, `repeat`, `factory`,
 `copy-out`, `equality`, `resume`, `message`, `release`, `erase` (the
 default). Beside it, the registration carries what the passes used to key on
 names: `-drop-form` (the element-dropping variant), `-result-length` (a
-constructor's length for hir/cardinality.tcl), `-errors-from`, and the
+constructor's length for hir/cardinality.tcl), `-keeps-length` (a mutating
+operation that replaces elements and never changes its receiver's length:
+set, swap, copy, a vector's swap -- hir/cardinality.tcl's `Resizes`; an
+operation that does not say so may resize), `-errors-from`, and the
 receiver role that makes a native a collection operation
 (`hir::mutvec::OpKind`).
 
@@ -482,7 +494,8 @@ releases are the AFFINE-VALUES.md machinery.
 the dying array first), `Generate` (factory calls through
 `core::callable::invoke`, dropping what it made on failure), `swapDrop`,
 `setDrop`, `takeFront`; counters (`created`, `shares`) for tests. The
-consuming loop (`core::forms::ConsumeVector`) drains a vector or an array
+consuming loop (`core::forms::ConsumeVector`, a `listloop` whose iterable is
+the consume mark) drains a vector or an array
 (`core::mutvec::remaining`/`drainFront`).
 
 ### 46. Tcl compiler lowering
@@ -492,15 +505,32 @@ consuming loop (`core::forms::ConsumeVector`) drains a vector or an array
 
 ### 47. Native representation
 
-`MutArrayObj { hdr, start, backing: Rc<[Value]> }` (4); `mutarray_of`,
-`array_writable` (detaching), `array_owned` (an affine array's backing,
-never shared: a panic would be an ownership invariant violation, never
-reached), `share_array` (the header's `start` with the backing),
-`drop_array_elements` (the elements leave the dying array by its `start`
-moving past them), `array_elements` (trace: the slots from `start`). The
-consuming loop's `mutarraytakefront` advances `start` past the element it
-moves out: it never writes the backing, so it never detaches; the drained
+`MutArrayObj { hdr, len, ptr, unique, backing: Rc<[Value]> }` (4);
+`mutarray_of`, `array_writable` (detaching), `array_owned` (an affine
+array's backing, never shared: a panic would be an ownership invariant
+violation, never reached), `share_array` (the header's `start` with the
+backing), `drop_array_elements` (the elements leave the dying array by its
+`start` moving past them), `array_elements` (trace: the slots from `start`).
+The consuming loop's `mutarraytakefront` advances `start` past the element
+it moves out: it never writes the backing, so it never detaches; the drained
 slots are freed with the header.
+
+The backing is private to `value.rs`: only `MutArrayObj::new`,
+`replace_backing` (a detach) and `advance` (a consuming loop's step, a drop)
+change it or `start`, and each sets `len` and `ptr` from it. `unique` may be
+stale only towards 0: `new` and `replace_backing` set it from the counts,
+`share_backing` (the one place a backing gains a holder) clears it, and
+`items_mut` (every runtime write) refreshes it, so after the collector frees
+a copy the next helper write re-enables it. Generated code reads the three
+words (`MUTARRAY_LEN_OFFSET`, `_PTR_`, `_UNIQUE_`, in the AOT image's ABI
+fingerprint) and never writes them: codegen/clif.rs inlines `capacity` (one
+load), `at` (a tag test, an unsigned compare with `len`, two loads; a proven
+index only the loads) and `set` (the same, then the `unique` test and one
+store), with the helpers only on a cold path -- a BigInt or invalid index
+(IndexNotFound) or a shared backing (the detach). None of them allocates or
+is a safepoint. A run with allocation metrics on compiles `at` and `set`
+through their helpers, which alone count reads and writes;
+`BOTLISH_NATIVE_MUTARRAY_INLINE_OPT=0` disables the inline paths.
 The host round trip carries an array as `mutarrayitems` (an array can be a
 program's result now) and show prints its elements (`<mutable-array [...]>`,
 as a vector's).
@@ -1084,7 +1114,7 @@ reference semantics:
 | file | role |
 |---|---|
 | `core/mutarray.tcl` | Tcl runtime: headers over shared Tcl lists, operations, registrations with roles |
-| `core/native.tcl` | `-ownership`, `-errors-from`, `-result-length`, `-drop-form`; the role vocabulary |
+| `core/native.tcl` | `-ownership`, `-errors-from`, `-result-length`, `-keeps-length`, `-drop-form`; the role vocabulary |
 | `core/mutvec.tcl`, `core/affine.tcl` | shares (`h` for arrays, `d` dynamic), the `a` drop, the kind-generic drain |
 | `lib/mutable_array.bot` | `get` only |
 | `hir/types.tcl` | affinity, covariant subtype, lub, narrow, `MentionsMutable` |
@@ -1093,7 +1123,7 @@ reference semantics:
 | `hir/affine.tcl` | `NativeConsumer` (roles), consuming loops over arrays |
 | `hir/mutvec.tcl` | places, copies, copy elision, dropping forms -- kind-generic, metadata-driven |
 | `hir/specialize.tcl`, `hir/semantic.tcl` | affine array keys; declared mutable parameters |
-| `hir/cardinality.tcl` | constructor lengths from `-result-length` |
+| `hir/cardinality.tcl` | constructor lengths from `-result-length`; `-keeps-length` for a vector's length across a mutation |
 | `native/src/runtime/{value,ops,mutvec,affine,heap,metrics,show}.rs` | native runtime |
 | `native/lower.tcl`, `native/src/nir.rs`, `native/src/codegen/clif.rs` | native lowering |
 | `tests/mutable-array.test` | this milestone's tests |

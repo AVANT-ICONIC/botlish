@@ -382,7 +382,10 @@ callback typedef (`Tcl_ObjCmdProc`) is a binding-generator alias of its
 `FnPtr` type -- naming the protocol is generator policy, not a compiler
 primitive. **Variadic** function pointers are deferred: no spelling exists
 for one, so Tcl's one variadic callback type (`Tcl_PanicProc`) cannot be
-written yet; a variadic flag belongs with vararg calling, if ever.
+written yet. Vararg *calling* exists since VARIADICS-VERTICAL-SLICE-1.md (an
+`extern c fn` ending in `variadic`, each call's trailing types its own); a
+function pointer's type carries no per-call trailing types, so a variadic
+callback stays unsupported (C-BINDGEN.md's `unsupported-callback-signature`).
 
 ## Imprinting
 
@@ -585,7 +588,8 @@ access.
   (REFINEMENT-VALUES.md) refines carriers by declared refinements; a
   non-null pointer fact would be a new kind of fact, and nothing consumes
   one yet.
-* **Function pointers are affine** (above), and **variadic** ones deferred.
+* **Function pointers are affine** (above), and **variadic** ones deferred
+  (variadic calls of declared C functions are VARIADICS-VERTICAL-SLICE-1.md's).
 * **Typedefs, enums and arrays** are generator concerns: integer typedefs are
   aliases of the scalar the probe found, callback typedefs aliases of their
   `FnPtr`, opaque-handle typedefs the opaque struct's name; a C enum is the

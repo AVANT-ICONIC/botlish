@@ -1,0 +1,9 @@
+09:19:20 instructions fixed: -impls lpa lpmono lpfact lpmask rh cd chain -keys int-dense str-short point -sizes 1024 -modes build hit miss replace
+09:32:25 instructions fixed: -impls lpa lpmask lpmono rh -keys int-dense -sizes 16 16384 -modes build hit miss
+09:36:12 instructions fixed: -impls ht0 lp lpc chain0 lpint -keys int-dense -sizes 1024 -modes build hit miss replace
+09:39:47 instructions fixed: -impls lpstr -keys str-short -sizes 1024 -modes build hit miss replace
+09:40:20 allocations per lookup
+09:49:27 copies, memory and NIR
+10:12:31 fuzz every table, four backends
+10:15:13 FAILED: fuzz (see fuzz-fixed.txt)
+10:15:13 done

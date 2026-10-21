@@ -15,7 +15,7 @@ function	Tcl_SetExitProc	direct	tcl::tcl	direct	symbol Tcl_SetExitProc; (ffi::c:
 function	TclZipfs_AppHook	direct	tcl::tcl	direct	symbol TclZipfs_AppHook; (ffi::c::Ptr[ffi::c::Int], ffi::c::Ptr[ffi::c::Ptr[ffi::c::Ptr[ffi::c::Char]]]) -> ffi::c::Ptr[ffi::c::Char]
 function	Tcl_PkgProvideEx	direct	tcl::decls	direct	symbol Tcl_PkgProvideEx; (ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[ffi::c::Char], ffi::c::Ptr[ffi::c::Char], ffi::c::Ptr[ffi::c::Void]) -> ffi::c::Int
 function	Tcl_PkgRequireEx	direct	tcl::decls	direct	symbol Tcl_PkgRequireEx; (ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[ffi::c::Char], ffi::c::Ptr[ffi::c::Char], ffi::c::Int, ffi::c::Ptr[ffi::c::Void]) -> ffi::c::Ptr[ffi::c::Char]
-function	Tcl_Panic	unsupported		variadic	a variadic function (...)
+function	Tcl_Panic	direct	tcl::decls	direct	symbol Tcl_Panic; (ffi::c::Ptr[ffi::c::Char], variadic) -> unit
 function	Tcl_Alloc	direct	tcl::decls	direct	symbol Tcl_Alloc; (ffi::c::ULong) -> ffi::c::Ptr[ffi::c::Void]
 function	Tcl_Free	direct	tcl::decls	direct	symbol Tcl_Free; (ffi::c::Ptr[ffi::c::Void]) -> unit
 function	Tcl_Realloc	direct	tcl::decls	direct	symbol Tcl_Realloc; (ffi::c::Ptr[ffi::c::Void], ffi::c::ULong) -> ffi::c::Ptr[ffi::c::Void]
@@ -28,7 +28,7 @@ function	Tcl_SetTimer	direct	tcl::decls	direct	symbol Tcl_SetTimer; (ffi::c::Ptr
 function	Tcl_Sleep	direct	tcl::decls	direct	symbol Tcl_Sleep; (ffi::c::Int) -> unit
 function	Tcl_WaitForEvent	direct	tcl::decls	direct	symbol Tcl_WaitForEvent; (ffi::c::Ptr[Tcl_Time]) -> ffi::c::Int
 function	Tcl_AppendAllObjTypes	direct	tcl::decls	direct	symbol Tcl_AppendAllObjTypes; (ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[Tcl_Obj]) -> ffi::c::Int
-function	Tcl_AppendStringsToObj	unsupported		variadic	a variadic function (...)
+function	Tcl_AppendStringsToObj	direct	tcl::decls	direct	symbol Tcl_AppendStringsToObj; (ffi::c::Ptr[Tcl_Obj], variadic) -> unit
 function	Tcl_AppendToObj	direct	tcl::decls	direct	symbol Tcl_AppendToObj; (ffi::c::Ptr[Tcl_Obj], ffi::c::Ptr[ffi::c::Char], ffi::c::Long) -> unit
 function	Tcl_ConcatObj	direct	tcl::decls	direct	symbol Tcl_ConcatObj; (ffi::c::Long, ffi::c::Ptr[ffi::c::Ptr[Tcl_Obj]]) -> ffi::c::Ptr[Tcl_Obj]
 function	Tcl_ConvertToType	direct	tcl::decls	direct	symbol Tcl_ConvertToType; (ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[Tcl_Obj], ffi::c::Ptr[Tcl_ObjType]) -> ffi::c::Int
@@ -72,7 +72,7 @@ function	Tcl_SetObjLength	direct	tcl::decls	direct	symbol Tcl_SetObjLength; (ffi
 function	Tcl_SetStringObj	direct	tcl::decls	direct	symbol Tcl_SetStringObj; (ffi::c::Ptr[Tcl_Obj], ffi::c::Ptr[ffi::c::Char], ffi::c::Long) -> unit
 function	Tcl_AllowExceptions	direct	tcl::decls	direct	symbol Tcl_AllowExceptions; (ffi::c::Ptr[Tcl_Interp]) -> unit
 function	Tcl_AppendElement	direct	tcl::decls	direct	symbol Tcl_AppendElement; (ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[ffi::c::Char]) -> unit
-function	Tcl_AppendResult	unsupported		variadic	a variadic function (...)
+function	Tcl_AppendResult	direct	tcl::decls	direct	symbol Tcl_AppendResult; (ffi::c::Ptr[Tcl_Interp], variadic) -> unit
 function	Tcl_AsyncCreate	direct	tcl::decls	direct	symbol Tcl_AsyncCreate; (ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[Tcl_Interp], ffi::c::Int], return: ffi::c::Int}], ffi::c::Ptr[ffi::c::Void]) -> ffi::c::Ptr[Tcl_AsyncHandler_]
 function	Tcl_AsyncDelete	direct	tcl::decls	direct	symbol Tcl_AsyncDelete; (ffi::c::Ptr[Tcl_AsyncHandler_]) -> unit
 function	Tcl_AsyncInvoke	direct	tcl::decls	direct	symbol Tcl_AsyncInvoke; (ffi::c::Ptr[Tcl_Interp], ffi::c::Int) -> ffi::c::Int
@@ -215,7 +215,7 @@ function	Tcl_SetChannelBufferSize	direct	tcl::decls	direct	symbol Tcl_SetChannel
 function	Tcl_SetChannelOption	direct	tcl::decls	direct	symbol Tcl_SetChannelOption; (ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[Tcl_Channel_], ffi::c::Ptr[ffi::c::Char], ffi::c::Ptr[ffi::c::Char]) -> ffi::c::Int
 function	Tcl_SetCommandInfo	direct	tcl::decls	direct	symbol Tcl_SetCommandInfo; (ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[ffi::c::Char], ffi::c::Ptr[Tcl_CmdInfo]) -> ffi::c::Int
 function	Tcl_SetErrno	direct	tcl::decls	direct	symbol Tcl_SetErrno; (ffi::c::Int) -> unit
-function	Tcl_SetErrorCode	unsupported		variadic	a variadic function (...)
+function	Tcl_SetErrorCode	direct	tcl::decls	direct	symbol Tcl_SetErrorCode; (ffi::c::Ptr[Tcl_Interp], variadic) -> unit
 function	Tcl_SetMaxBlockTime	direct	tcl::decls	direct	symbol Tcl_SetMaxBlockTime; (ffi::c::Ptr[Tcl_Time]) -> unit
 function	Tcl_SetRecursionLimit	direct	tcl::decls	direct	symbol Tcl_SetRecursionLimit; (ffi::c::Ptr[Tcl_Interp], ffi::c::Long) -> ffi::c::Long
 function	Tcl_SetServiceMode	direct	tcl::decls	direct	symbol Tcl_SetServiceMode; (ffi::c::Int) -> ffi::c::Int
@@ -237,7 +237,7 @@ function	Tcl_UnsetVar2	direct	tcl::decls	direct	symbol Tcl_UnsetVar2; (ffi::c::P
 function	Tcl_UntraceVar2	direct	tcl::decls	direct	symbol Tcl_UntraceVar2; (ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[ffi::c::Char], ffi::c::Ptr[ffi::c::Char], ffi::c::Int, ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[ffi::c::Char], ffi::c::Ptr[ffi::c::Char], ffi::c::Int], return: ffi::c::Ptr[ffi::c::Char]}], ffi::c::Ptr[ffi::c::Void]) -> unit
 function	Tcl_UpdateLinkedVar	direct	tcl::decls	direct	symbol Tcl_UpdateLinkedVar; (ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[ffi::c::Char]) -> unit
 function	Tcl_UpVar2	direct	tcl::decls	direct	symbol Tcl_UpVar2; (ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[ffi::c::Char], ffi::c::Ptr[ffi::c::Char], ffi::c::Ptr[ffi::c::Char], ffi::c::Ptr[ffi::c::Char], ffi::c::Int) -> ffi::c::Int
-function	Tcl_VarEval	unsupported		variadic	a variadic function (...)
+function	Tcl_VarEval	direct	tcl::decls	direct	symbol Tcl_VarEval; (ffi::c::Ptr[Tcl_Interp], variadic) -> ffi::c::Int
 function	Tcl_VarTraceInfo2	direct	tcl::decls	direct	symbol Tcl_VarTraceInfo2; (ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[ffi::c::Char], ffi::c::Ptr[ffi::c::Char], ffi::c::Int, ffi::c::FnPtr[Fn{args: [ffi::c::Ptr[ffi::c::Void], ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[ffi::c::Char], ffi::c::Ptr[ffi::c::Char], ffi::c::Int], return: ffi::c::Ptr[ffi::c::Char]}], ffi::c::Ptr[ffi::c::Void]) -> ffi::c::Ptr[ffi::c::Void]
 function	Tcl_Write	direct	tcl::decls	direct	symbol Tcl_Write; (ffi::c::Ptr[Tcl_Channel_], ffi::c::Ptr[ffi::c::Char], ffi::c::Long) -> ffi::c::Long
 function	Tcl_WrongNumArgs	direct	tcl::decls	direct	symbol Tcl_WrongNumArgs; (ffi::c::Ptr[Tcl_Interp], ffi::c::Long, ffi::c::Ptr[ffi::c::Ptr[Tcl_Obj]], ffi::c::Ptr[ffi::c::Char]) -> unit
@@ -529,8 +529,8 @@ function	Tcl_AppendObjToErrorInfo	direct	tcl::decls	direct	symbol Tcl_AppendObjT
 function	Tcl_AppendLimitedToObj	direct	tcl::decls	direct	symbol Tcl_AppendLimitedToObj; (ffi::c::Ptr[Tcl_Obj], ffi::c::Ptr[ffi::c::Char], ffi::c::Long, ffi::c::Long, ffi::c::Ptr[ffi::c::Char]) -> unit
 function	Tcl_Format	direct	tcl::decls	direct	symbol Tcl_Format; (ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[ffi::c::Char], ffi::c::Long, ffi::c::Ptr[ffi::c::Ptr[Tcl_Obj]]) -> ffi::c::Ptr[Tcl_Obj]
 function	Tcl_AppendFormatToObj	direct	tcl::decls	direct	symbol Tcl_AppendFormatToObj; (ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[Tcl_Obj], ffi::c::Ptr[ffi::c::Char], ffi::c::Long, ffi::c::Ptr[ffi::c::Ptr[Tcl_Obj]]) -> ffi::c::Int
-function	Tcl_ObjPrintf	unsupported		variadic	a variadic function (...)
-function	Tcl_AppendPrintfToObj	unsupported		variadic	a variadic function (...)
+function	Tcl_ObjPrintf	direct	tcl::decls	direct	symbol Tcl_ObjPrintf; (ffi::c::Ptr[ffi::c::Char], variadic) -> ffi::c::Ptr[Tcl_Obj]
+function	Tcl_AppendPrintfToObj	direct	tcl::decls	direct	symbol Tcl_AppendPrintfToObj; (ffi::c::Ptr[Tcl_Obj], ffi::c::Ptr[ffi::c::Char], variadic) -> unit
 function	Tcl_CancelEval	direct	tcl::decls	direct	symbol Tcl_CancelEval; (ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[Tcl_Obj], ffi::c::Ptr[ffi::c::Void], ffi::c::Int) -> ffi::c::Int
 function	Tcl_Canceled	direct	tcl::decls	direct	symbol Tcl_Canceled; (ffi::c::Ptr[Tcl_Interp], ffi::c::Int) -> ffi::c::Int
 function	Tcl_CreatePipe	direct	tcl::decls	direct	symbol Tcl_CreatePipe; (ffi::c::Ptr[Tcl_Interp], ffi::c::Ptr[ffi::c::Ptr[Tcl_Channel_]], ffi::c::Ptr[ffi::c::Ptr[Tcl_Channel_]], ffi::c::Int) -> ffi::c::Int
@@ -704,7 +704,7 @@ function	TclBN_mp_add_d	direct	tcl::tommathdecls	direct	symbol TclBN_mp_add_d; (
 function	TclBN_mp_and	direct	tcl::tommathdecls	direct	symbol TclBN_mp_and; (ffi::c::Ptr[mp_int], ffi::c::Ptr[mp_int], ffi::c::Ptr[mp_int]) -> ffi::c::Int
 function	TclBN_mp_clamp	direct	tcl::tommathdecls	direct	symbol TclBN_mp_clamp; (ffi::c::Ptr[mp_int]) -> unit
 function	TclBN_mp_clear	direct	tcl::tommathdecls	direct	symbol TclBN_mp_clear; (ffi::c::Ptr[mp_int]) -> unit
-function	TclBN_mp_clear_multi	unsupported		variadic	a variadic function (...)
+function	TclBN_mp_clear_multi	direct	tcl::tommathdecls	direct	symbol TclBN_mp_clear_multi; (ffi::c::Ptr[mp_int], variadic) -> unit
 function	TclBN_mp_cmp	direct	tcl::tommathdecls	direct	symbol TclBN_mp_cmp; (ffi::c::Ptr[mp_int], ffi::c::Ptr[mp_int]) -> ffi::c::Int
 function	TclBN_mp_cmp_d	direct	tcl::tommathdecls	direct	symbol TclBN_mp_cmp_d; (ffi::c::Ptr[mp_int], ffi::c::ULong) -> ffi::c::Int
 function	TclBN_mp_cmp_mag	direct	tcl::tommathdecls	direct	symbol TclBN_mp_cmp_mag; (ffi::c::Ptr[mp_int], ffi::c::Ptr[mp_int]) -> ffi::c::Int
@@ -719,7 +719,7 @@ function	TclBN_mp_expt_n	direct	tcl::tommathdecls	direct	symbol TclBN_mp_expt_n;
 function	TclBN_mp_grow	direct	tcl::tommathdecls	direct	symbol TclBN_mp_grow; (ffi::c::Ptr[mp_int], ffi::c::Int) -> ffi::c::Int
 function	TclBN_mp_init	direct	tcl::tommathdecls	direct	symbol TclBN_mp_init; (ffi::c::Ptr[mp_int]) -> ffi::c::Int
 function	TclBN_mp_init_copy	direct	tcl::tommathdecls	direct	symbol TclBN_mp_init_copy; (ffi::c::Ptr[mp_int], ffi::c::Ptr[mp_int]) -> ffi::c::Int
-function	TclBN_mp_init_multi	unsupported		variadic	a variadic function (...)
+function	TclBN_mp_init_multi	direct	tcl::tommathdecls	direct	symbol TclBN_mp_init_multi; (ffi::c::Ptr[mp_int], variadic) -> ffi::c::Int
 function	TclBN_mp_init_set	direct	tcl::tommathdecls	direct	symbol TclBN_mp_init_set; (ffi::c::Ptr[mp_int], ffi::c::ULong) -> ffi::c::Int
 function	TclBN_mp_init_size	direct	tcl::tommathdecls	direct	symbol TclBN_mp_init_size; (ffi::c::Ptr[mp_int], ffi::c::Int) -> ffi::c::Int
 function	TclBN_mp_lshd	direct	tcl::tommathdecls	direct	symbol TclBN_mp_lshd; (ffi::c::Ptr[mp_int], ffi::c::Int) -> ffi::c::Int
@@ -828,7 +828,7 @@ macro	mp_add_d	alias	tcl::tommathdecls	alias of TclBN_mp_add_d	symbol TclBN_mp_a
 macro	mp_and	alias	tcl::tommathdecls	alias of TclBN_mp_and	symbol TclBN_mp_and; (ffi::c::Ptr[mp_int], ffi::c::Ptr[mp_int], ffi::c::Ptr[mp_int]) -> ffi::c::Int
 macro	mp_clamp	alias	tcl::tommathdecls	alias of TclBN_mp_clamp	symbol TclBN_mp_clamp; (ffi::c::Ptr[mp_int]) -> unit
 macro	mp_clear	alias	tcl::tommathdecls	alias of TclBN_mp_clear	symbol TclBN_mp_clear; (ffi::c::Ptr[mp_int]) -> unit
-macro	mp_clear_multi	unsupported		variadic	a variadic function (...)
+macro	mp_clear_multi	alias	tcl::tommathdecls	alias of TclBN_mp_clear_multi	symbol TclBN_mp_clear_multi; (ffi::c::Ptr[mp_int], variadic) -> unit
 macro	mp_cmp	alias	tcl::tommathdecls	alias of TclBN_mp_cmp	symbol TclBN_mp_cmp; (ffi::c::Ptr[mp_int], ffi::c::Ptr[mp_int]) -> ffi::c::Int
 macro	mp_cmp_d	alias	tcl::tommathdecls	alias of TclBN_mp_cmp_d	symbol TclBN_mp_cmp_d; (ffi::c::Ptr[mp_int], ffi::c::ULong) -> ffi::c::Int
 macro	mp_cmp_mag	alias	tcl::tommathdecls	alias of TclBN_mp_cmp_mag	symbol TclBN_mp_cmp_mag; (ffi::c::Ptr[mp_int], ffi::c::Ptr[mp_int]) -> ffi::c::Int
@@ -847,7 +847,7 @@ macro	mp_grow	alias	tcl::tommathdecls	alias of TclBN_mp_grow	symbol TclBN_mp_gro
 macro	mp_init	alias	tcl::tommathdecls	alias of TclBN_mp_init	symbol TclBN_mp_init; (ffi::c::Ptr[mp_int]) -> ffi::c::Int
 macro	mp_init_copy	alias	tcl::tommathdecls	alias of TclBN_mp_init_copy	symbol TclBN_mp_init_copy; (ffi::c::Ptr[mp_int], ffi::c::Ptr[mp_int]) -> ffi::c::Int
 macro	mp_init_i64	alias	tcl::tommathdecls	alias of TclBN_mp_init_i64	symbol TclBN_mp_init_i64; (ffi::c::Ptr[mp_int], ffi::c::Long) -> ffi::c::Int
-macro	mp_init_multi	unsupported		variadic	a variadic function (...)
+macro	mp_init_multi	alias	tcl::tommathdecls	alias of TclBN_mp_init_multi	symbol TclBN_mp_init_multi; (ffi::c::Ptr[mp_int], variadic) -> ffi::c::Int
 macro	mp_init_set	alias	tcl::tommathdecls	alias of TclBN_mp_init_set	symbol TclBN_mp_init_set; (ffi::c::Ptr[mp_int], ffi::c::ULong) -> ffi::c::Int
 macro	mp_init_size	alias	tcl::tommathdecls	alias of TclBN_mp_init_size	symbol TclBN_mp_init_size; (ffi::c::Ptr[mp_int], ffi::c::Int) -> ffi::c::Int
 macro	mp_init_u64	alias	tcl::tommathdecls	alias of TclBN_mp_init_u64	symbol TclBN_mp_init_u64; (ffi::c::Ptr[mp_int], ffi::c::ULong) -> ffi::c::Int

@@ -1297,10 +1297,12 @@ a function may declare flags (concept.flags) and context parameters
 (concept.contexts).
 
 == RULES
-  * Arity is exact: no default arguments, no variadic functions, no
-    keyword arguments other than flags. A call with the wrong number of
-    arguments fails with ARITY (statically for a function with flags; for
-    other functions the check is currently made when the call runs).
+  * Arity is exact: no default arguments and no keyword arguments other
+    than flags; a variadic function (concept.variadics) takes its fixed
+    arguments and any number of trailing ones. A call with the wrong
+    number of arguments fails with ARITY (statically for a function with
+    flags or a variadic section; for other functions the check is
+    currently made when the call runs).
   * Postfix binds tighter than unary minus: `-3.clamp(0, 10)` is
     `-(3.clamp(0, 10))`; write `(-3).clamp(0, 10)`.
   * Typed parameters and results are contracts proven at every call and
@@ -1684,6 +1686,142 @@ label(1, :shout)
 
 == MORE
 FLAGS.md.
+
+@topic concept.variadics
+title: Variadic parameters: `variadic NAME: List[T]`
+summary: `fn sum(variadic xs: List[int])` takes any number of trailing arguments as one immutable List; `extern c fn f(fixed, variadic)` is a variadic C function.
+index: concepts
+alias: variadic function; variadic parameter; varargs; variable arguments; rest parameter; C varargs; printf
+keywords: variadic, varargs, trailing arguments, List, imprint, extern c fn, va_arg, default argument promotions, MALFORMED-VARIADIC-SECTION
+related: concept.functions concept.flags concept.c-ffi error.malformed-variadic-section error.arity error.extern-syntax
+docs: VARIADICS-VERTICAL-SLICE-1.md FLAGS.md C-FFI.md
+
+== WHAT IT IS
+    fn sum(variadic numbers: List[int]) -> int:
+    fn log(level: int, variadic parts: List[str]) -> int:
+
+The variadic section is a function's last parameter binding: after the
+ordinary parameters, the flags and the context section (only a resume
+clause follows it), at most once, `variadic NAME: List[T]` -- or a bare
+`variadic NAME: List`, whose element type each call imprints. A call
+passes its fixed arguments, then any number of trailing ones, then its
+flags: `sum()` is `sum([])`, `sum(1, 2, 3)` is `sum([1, 2, 3])`,
+`log(1, "a", "b")` is `log(1, ["a", "b"])`.
+
+== RULES
+  * The body receives an ordinary immutable List. There is no variadic
+    value, type or run-time representation: the call is an ordinary call
+    whose last argument is the List construction, every argument
+    evaluated once, in written order.
+  * Each trailing argument is proven in the element type by its own proof:
+    a `variadic xs: List[Small]` takes `smalls(1, 9)` (where the literal
+    `[1, 9]`, a List[int], would not be admitted), and a trailing argument
+    outside it is a TYPE error at that argument.
+  * A call passes at least the fixed arguments (ARITY, at compile time).
+  * Method syntax and aliases collect the trailing arguments too
+    (`(2).log("a")`, `g = sum` then `g(1, 2)`). Used as a value, a
+    variadic function is the ordinary function of its List parameter: a
+    call through the value passes the List itself (`apply(sum, [1, 2])`).
+    A List written as a trailing argument is one element: there is no
+    spread.
+  * A bare `List` makes the function imprinted (an empty call collects
+    List[never], or an explicit imprint names the element: `f[int]()`), so
+    it is called, never passed as a value. A variadic function implements
+    no trait requirement or context-trait operation.
+  * C: `extern c fn printf(format: ffi::c::Ptr[ffi::c::Char] read noescape,
+    variadic) -> ffi::c::Int` -- the bare word `variadic`, last, after at
+    least one fixed parameter (C's `...`, never written `...`). Each
+    trailing argument has exactly one C ABI type: a C integer scalar,
+    ffi::c::Bool, Float64 (a C double), an ffi::c::Ptr or an
+    ffi::c::FnPtr. A plain Int (which says no C type), a String, a List, a
+    struct, byte storage and an erased value are refused. C's default
+    argument promotions apply (an integer narrower than int, and _Bool,
+    are passed as int). A trailing pointer has no contract, so the call is
+    direct authority (concept.direct-modules). The call's machine
+    signature is built per call: x86-64 System V (with its %al count of
+    vector registers), Linux AArch64 (AAPCS64) and Apple AArch64 (every
+    trailing argument on the stack, in an 8-byte slot).
+
+== WHY
+A function of "any number of values of one type" is a List parameter whose
+caller does not write the brackets. Keeping the body's view an ordinary
+List keeps every analysis, ownership rule and backend unchanged; only the
+call collects. A C variadic function is a different thing -- each call has
+its own C signature -- so its trailing arguments must each say which C type
+they are, which a Botlish integer does not.
+
+== EXAMPLES
+@example accept
+import list
+
+fn sum_from(xs: List[int], i: int, acc: int) -> int:
+    if i == xs.length():
+        acc
+    else:
+        x = xs.at(i):
+            on IndexNotFound:
+                0
+        xs.sum_from(i + 1, acc + x)
+
+fn sum(variadic numbers: List[int]) -> int:
+    numbers.sum_from(0, 0)
+
+fn weighted(weight: int, variadic numbers: List[int]) -> int:
+    weight * numbers.sum_from(0, 0)
+
+[sum(), sum(1, 2, 3), weighted(2, 4, 5), (3).weighted(1)]
+@value [0, 6, 18, 3]
+@end
+
+@example accept
+import list
+
+fn count(variadic values: List) -> int:
+    list::length(values)
+
+[count(), count("ab", "cd"), count(true, 2, 3)]
+@caption A bare List: each call imprints its element type
+@value [0, 2, 3]
+@end
+
+@example reject
+type Small = Int in 0..9
+
+fn smalls(variadic xs: List[Small]) -> List[Small]:
+    xs
+
+smalls(1, 9, 10)
+@caption Each trailing argument is proven in the element type
+@error CORE SEMANTIC TYPE
+@at 6:14
+@end
+
+@example accept
+import abi::bytes
+import byte
+import ffi::c
+import list
+import str
+
+extern c fn printf(format: ffi::c::Ptr[ffi::c::Char] read noescape, variadic) -> ffi::c::Int
+
+fn nul() -> byte::Byte:
+    0
+
+fn cstring(text: str) -> abi::bytes::Bytes:
+    abi::bytes::from_list(text.encode_utf8().append(nul()))
+
+fn c_long(n: ffi::c::Long) -> ffi::c::Long:
+    n
+
+printf(cstring("%ld %.1f\n"), c_long(-7), 2.5)
+@caption C's printf: a C long and a double, the characters it wrote
+@backends cranelift-generic cranelift
+@value 7
+@end
+
+== MORE
+VARIADICS-VERTICAL-SLICE-1.md; FLAGS.md (the section order); C-FFI.md.
 
 @topic concept.function-types
 title: Function types: `Fn{args, return, errors}` and `Coroutine{...}`
@@ -3282,6 +3420,9 @@ the one call when its contract says `read noescape` or `write noescape`.
     and passed by the borrowing contract.
   * A retaining call (a pointer that may escape) is direct authority
     (concept.direct-modules).
+  * A variadic C function ends its parameters with the bare word
+    `variadic` (C's `...`); each call's trailing arguments are C ABI
+    values, promoted as C promotes them (concept.variadics).
   * tools/c-bindgen.tcl generates such declarations from real headers,
     and a layout for every C record a layout represents, as the target's C
     compiler lays it out (concept.c-bindgen-layouts).

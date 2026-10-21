@@ -470,8 +470,15 @@ proc hir::cabi::verify {hirVar} {
         if {$paramTypes eq ""} {
             continue
         }
+        # (A native of arity * repeats its last kind, except a variadic C
+        # function: its trailing arguments have no kind of a fixed
+        # parameter, each its own C type, hir::borrow.)
+        set variadic [dict getdef [dict get [core::native::metadata $name] foreign] variadic 0]
         set index 0
         foreach arg [dict get $node args] {
+            if {$variadic && $index >= [llength $paramTypes]} {
+                break
+            }
             set paramType [lindex $paramTypes [expr {min($index, [llength $paramTypes] - 1)}]]
             incr index
             set argType [hir::typeOf $hir $arg]
@@ -521,4 +528,66 @@ proc hir::cabi::ResolveImprint {typeExpr ns {variables {}}} {
         return $floating
     }
     return [hir::resolve::ResolveTypeExpr $typeExpr $ns [if {$variables eq ""} {string cat 0} else {set variables}]]
+}
+
+# How a trailing argument of static type TYPE is passed to a variadic C
+# function (VARIADICS-VERTICAL-SLICE-1.md): {c SPELLING class CLASS promoted
+# PROMOTED} -- the argument's C type, its own ABI class and the class C's
+# default argument promotion passes it as on the compilation's target
+# (core::cabi::promoted) -- or {problem KIND MESSAGE} when it has no C type
+# a call could pass.
+#
+# The rule is stricter than any fixed parameter's: a fixed parameter's
+# declared C type says how an argument is passed, a trailing one has only
+# its own static type to say it. So that type must be exactly one C ABI
+# value type: a C integer scalar (one of its evidence names, never two), C
+# _Bool (Botlish's bool), C double (Float64), a data pointer or a function
+# pointer. A plain Int is none: its value fitting a C range never says
+# which C integer type the call passes (int, long, long long are different
+# arguments), and neither does a format string. Byte storage reaches C only
+# through a parameter's contract (C-POINTER-BORROWING.md), and a trailing
+# argument has none: FOREIGN-BORROW.
+proc hir::cabi::VariadicArgument {type} {
+    if {$type eq "bool"} {
+        return [dict create c [BoolName] class bool \
+            promoted [core::cabi::promotedBool [CompilationTarget]]]
+    }
+    if {$type eq "Float64"} {
+        return [dict create c [DoubleName] class f64 promoted f64]
+    }
+    if {[hir::types::IsCPtr $type] || [hir::types::IsCFnPtr $type]} {
+        return [dict create c [hir::types::show $type] class ptr promoted ptr]
+    }
+    if {[hir::borrow::IsOwner $type]} {
+        return [dict create problem FOREIGN-BORROW message [format \
+            {byte storage (%s) cannot be a trailing argument of a variadic C function: a trailing argument has no contract (no access, no escape), and byte storage reaches C only through a pointer parameter whose contract admits it} \
+            [hir::types::show $type]]]
+    }
+    set scalars {}
+    if {[lindex $type 0] eq "refined" && [lindex $type 1] eq "int" && [llength $type] == 3} {
+        foreach name [lindex $type 2] {
+            set info [core::type::cabiOf $name]
+            if {$info ne "" && $name ni [lmap s $scalars {lindex $s 0}]} {
+                lappend scalars [list $name $info]
+            }
+        }
+    }
+    if {[llength $scalars] == 1} {
+        lassign [lindex $scalars 0] name info
+        set class [expr {[dict get $info signed] ? "i" : "u"}][dict get $info bits]
+        return [dict create c $name class $class promoted [core::cabi::promoted $info]]
+    }
+    if {[llength $scalars] > 1} {
+        return [dict create problem TYPE message [format \
+            {its C type is ambiguous: the value is proven a %s at once, and a trailing argument is passed as exactly one C type -- convert it to the one the callee reads (a function whose declared result is that type)} \
+            [join [lmap s $scalars {lindex $s 0}] " and a "]]]
+    }
+    if {$type eq "int" || ([lindex $type 0] eq "refined" && [lindex $type 1] eq "int")} {
+        return [dict create problem TYPE message [format \
+            {%s is a Botlish integer, not a C type: a value fitting a C integer's range does not say which C type the call passes (int, long and long long are different arguments) -- give it one, e.g. a value of %s or %s (a declared parameter, a C function's result, or a converter function whose declared result is the type)} \
+            [hir::types::show $type] [ScalarExample] "$::core::cabi::namespace\::Long"]]
+    }
+    return [dict create problem TYPE message [format \
+        {%s is not a C ABI value type: a trailing argument of a variadic C function is a C integer scalar (such as %s), %s, %s, a %s[...] or a %s[...]} \
+        [hir::types::show $type] [ScalarExample] [BoolName] [DoubleName] [PtrName] [FnPtrName]]]
 }

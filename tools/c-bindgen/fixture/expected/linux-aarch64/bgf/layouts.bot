@@ -22,7 +22,7 @@ layout bgf_pair:
     field a: ffi::c::Int at 0  # int a
     field b: ffi::c::Int at 4  # int b
 
-# struct bgf_table, typedef bgf_table (include/bgf/bgf.h:121): sizeof 8, _Alignof 8
+# struct bgf_table, typedef bgf_table (include/bgf/bgf.h:133): sizeof 8, _Alignof 8
 layout bgf_table:
     size 8
     align 8

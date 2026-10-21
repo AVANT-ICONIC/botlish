@@ -1,0 +1,20 @@
+20:35:02 corpus, round 1: base
+20:35:44 corpus, round 1: combo
+20:36:26 corpus, round 2: base
+20:37:08 corpus, round 2: combo
+20:37:52 corpus done
+20:37:52 instructions combo: -impls ht0 lp lpc -keys int-dense str-short -sizes 1024 -modes build hit miss replace
+20:41:23 instructions combo: -impls chain0 -keys str-short -sizes 1024 -modes hit miss replace
+20:41:48 instructions combo: -impls lpint -keys int-dense -sizes 1024 -modes build hit miss replace
+20:42:11 instructions combo: -impls lpstr -keys str-short -sizes 1024 -modes build hit miss replace
+20:42:35 instructions combo: -impls lpa lpmask lpmono rh -keys int-dense -sizes 16 16384 -modes build hit miss
+20:44:31 FAILED: instructions combo -impls lpa lpmask lpmono rh -keys int-dense -sizes 16 16384 -modes build hit miss
+20:44:31 instructions probe: -impls lpa lpp -keys int-dense str-short point -sizes 1024 -modes build hit miss replace
+20:46:51 instructions comboprobe: -impls lpa lpp lpmask -keys int-dense str-short point -sizes 1024 -modes build hit miss replace
+20:50:33 instructions: the Rust reference
+20:51:31 allocations per lookup
+20:53:06 FAILED: allocs base
+20:54:43 FAILED: allocs combo
+20:55:30 profiles
+21:12:01 copies, memory and NIR: the merged tree
+21:15:40 done

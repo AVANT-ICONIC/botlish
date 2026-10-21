@@ -1,0 +1,203 @@
+# lpmask -- lpa (audit/hash-table/impl/lpa.bot) written for the bounds
+# proofs (HASH-TABLE-COMPILER-PRESSURE.md, CP-1..CP-4): the same algorithm,
+# representation and helpers, but every slot index is reduced by the array
+# it indexes, at the access, `a.at(bit_and(i, a.capacity() - 1))`, under a
+# guard that the array is not empty. The proofs are intraprocedural and
+# know nothing of the parallel arrays' equal capacities (CP-5), so each
+# array gets its own mask in the function that reads it; an index passed to
+# another function is reduced again there (CP-4). With the bounds-proof
+# prototypes every access is a *proven* opcode; on the baseline compiler
+# the same source keeps its checks, so the pair measures the proofs alone.
+# A capacity is a power of two (SPEC.md section 2), so the mask is the
+# Euclidean mod lpa takes.
+#
+# policy: 7/10
+import list
+import mutable_array
+
+struct Table:
+    hashes: MutableArray[int]
+    keys: mutarray
+    vals: mutarray
+    meta: MutableArray[int]
+
+# ---------------------------------------------------------------------------
+# Policy (SPEC.md section 2)
+
+fn min_slots() -> int:
+    8
+
+fn load_num() -> int:
+    7
+
+fn load_den() -> int:
+    10
+
+fn slots_for(expected: int, cap: int) -> int:
+    if expected * load_den() <= cap * load_num():
+        return cap
+    slots_for(expected, cap * 2)
+
+fn empty_table(cap: int) -> Table:
+    Table {hashes: mutable_array::create(cap, -1), keys: mutable_array::allocate(cap), vals: mutable_array::allocate(cap), meta: mutable_array::create(1, 0)}
+
+fn fresh(expected: int) -> Table:
+    empty_table(slots_for(expected, min_slots()))
+
+fn slots(t: Table) -> int:
+    t.hashes.capacity()
+
+fn size(t: Table) -> int errors IndexNotFound:
+    if t.meta.capacity() < 1:
+        return 0
+    t.meta.at(0)
+
+fn full?(t: Table) -> bool errors IndexNotFound:
+    (size(t) + 1) * load_den() > slots(t) * load_num()
+
+# ---------------------------------------------------------------------------
+# Probing (a table never has 0 slots: the guards only state it)
+
+# The slot holding KEY (hash H), or the empty slot that ends its probe
+# sequence, from slot I on.
+fn find_from(t: Table, h: int, key, i: int) -> int errors IndexNotFound:
+    if t.hashes.capacity() < 1 or t.keys.capacity() < 1:
+        return 0
+    j = bit_and(i, t.hashes.capacity() - 1)
+    stored = t.hashes.at(j)
+    if stored < 0 or stored == h and t.keys.at(bit_and(i, t.keys.capacity() - 1)) == key:
+        return j
+    find_from(t, h, key, j + 1)
+
+fn find(t: Table, h: int, key) -> int errors IndexNotFound:
+    find_from(t, h, key, h)
+
+# The first empty slot of a probe sequence from slot I on.
+fn empty_from(t: Table, i: int) -> int errors IndexNotFound:
+    if t.hashes.capacity() < 1:
+        return 0
+    j = bit_and(i, t.hashes.capacity() - 1)
+    if t.hashes.at(j) < 0:
+        return j
+    empty_from(t, j + 1)
+
+fn find_empty(t: Table, h: int) -> int errors IndexNotFound:
+    empty_from(t, h)
+
+# ---------------------------------------------------------------------------
+# Lookup
+
+fn get(t: Table, key, default) errors IndexNotFound:
+    i = find(t, hash(key), key)
+    if t.hashes.capacity() < 1 or t.vals.capacity() < 1:
+        return default
+    if t.hashes.at(bit_and(i, t.hashes.capacity() - 1)) < 0:
+        return default
+    t.vals.at(bit_and(i, t.vals.capacity() - 1))
+
+fn has?(t: Table, key) -> bool errors IndexNotFound:
+    i = find(t, hash(key), key)
+    if t.hashes.capacity() < 1:
+        return false
+    t.hashes.at(bit_and(i, t.hashes.capacity() - 1)) >= 0
+
+fn probes(t: Table, key) -> int errors IndexNotFound:
+    h = hash(key)
+    bit_and(find(t, h, key) - h, slots(t) - 1) + 1
+
+# ---------------------------------------------------------------------------
+# Insertion and growth
+
+# T with the entry (H, KEY, VALUE) stored at slot I.
+fn store(t: Table, i: int, h: int, key, value) -> Table errors IndexNotFound:
+    if t.hashes.capacity() < 1 or t.keys.capacity() < 1 or t.vals.capacity() < 1:
+        return t
+    t.hashes.set(bit_and(i, t.hashes.capacity() - 1), h)
+    t.keys.set(bit_and(i, t.keys.capacity() - 1), key)
+    t.vals.set(bit_and(i, t.vals.capacity() - 1), value)
+    t
+
+# T with its entry count increased by DELTA.
+fn counted(t: Table, delta: int) -> Table errors IndexNotFound:
+    if t.meta.capacity() < 1:
+        return t
+    t.meta.set(0, t.meta.at(0) + delta)
+    t
+
+# DEST with every entry of OLD from slot I on placed into it.
+fn moved(old: Table, i: int, dest: Table) -> Table errors IndexNotFound:
+    if i < 0 or i >= old.hashes.capacity() or i >= old.keys.capacity() or i >= old.vals.capacity():
+        return dest
+    h = old.hashes.at(i)
+    if h < 0:
+        return moved(old, i + 1, dest)
+    j = find_empty(dest, h)
+    moved(old, i + 1, store(dest, j, h, old.keys.at(i), old.vals.at(i)))
+
+# T at twice the capacity, its entries placed in old slot order.
+fn grown(t: Table) -> Table errors IndexNotFound:
+    count = size(t)
+    dest = moved(t, 0, empty_table(2 * slots(t)))
+    counted(dest, count)
+
+fn put(t: Table, key, value) -> Table errors IndexNotFound:
+    h = hash(key)
+    i = find(t, h, key)
+    if t.hashes.capacity() < 1 or t.vals.capacity() < 1:
+        return t
+    if t.hashes.at(bit_and(i, t.hashes.capacity() - 1)) >= 0:
+        t.vals.set(bit_and(i, t.vals.capacity() - 1), value)
+        return t
+    if full?(t):
+        g = grown(t)
+        j = find_empty(g, h)
+        return counted(store(g, j, h, key, value), 1)
+    counted(store(t, i, h, key, value), 1)
+
+# ---------------------------------------------------------------------------
+# Removal: backward shift
+
+# Whether slot K is cyclically in the interval (I, J].
+fn between?(k: int, i: int, j: int) -> bool:
+    if i <= j:
+        i < k and k <= j
+    else:
+        i < k or k <= j
+
+# T after the entry at slot HOLE was removed, the entries after it shifted
+# back: J is the last slot looked at.
+fn shifted(t: Table, hole: int, j: int) -> Table errors IndexNotFound:
+    if t.hashes.capacity() < 1 or t.keys.capacity() < 1 or t.vals.capacity() < 1:
+        return t
+    n = bit_and(j + 1, t.hashes.capacity() - 1)
+    stored = t.hashes.at(n)
+    if stored < 0:
+        t.hashes.set(bit_and(hole, t.hashes.capacity() - 1), -1)
+        t.keys.set(bit_and(hole, t.keys.capacity() - 1), unit)
+        t.vals.set(bit_and(hole, t.vals.capacity() - 1), unit)
+        return t
+    if between?(bit_and(stored, t.hashes.capacity() - 1), hole, n):
+        return shifted(t, hole, n)
+    k = t.keys.at(bit_and(n, t.keys.capacity() - 1))
+    v = t.vals.at(bit_and(n, t.vals.capacity() - 1))
+    shifted(store(t, hole, stored, k, v), n, n)
+
+fn drop(t: Table, key) -> Table errors IndexNotFound:
+    i = find(t, hash(key), key)
+    if t.hashes.capacity() < 1:
+        return t
+    if t.hashes.at(bit_and(i, t.hashes.capacity() - 1)) < 0:
+        return t
+    counted(shifted(t, i, i), -1)
+
+# ---------------------------------------------------------------------------
+# Bulk construction (SPEC.md section 4)
+
+# The table of KEYS[i] -> VALS[i], in order (a later duplicate's value wins).
+fn from_lists(keys: list, vals: list) -> Table errors IndexNotFound:
+    n = list::length(keys)
+    fn fill(t: Table, i: int) -> Table errors IndexNotFound:
+        if i >= n:
+            return t
+        fill(put(t, list::at(keys, i), list::at(vals, i)), i + 1)
+    fill(fresh(n), 0)

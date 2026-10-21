@@ -404,6 +404,12 @@ proc hir::format::Expr {hir e indent origins linesVar} {
             if {[dict exists $node nomethod]} {
                 append text " nomethod"
             }
+            if {[dict exists $node variadic]} {
+                # A variadic function (VARIADICS-VERTICAL-SLICE-1.md): its
+                # first N parameters are the fixed ones, parameter N the List
+                # its calls collect their trailing arguments into.
+                append text " variadic [dict get $node variadic]"
+            }
             if {[dict exists $node traitClone]} {
                 # A trait clone (TRAITS.md): each trait parameter's source
                 # view -- its declared type is the witness.
@@ -482,6 +488,12 @@ proc hir::format::Expr {hir e indent origins linesVar} {
                 # A call's explicit imprints (hir/imprint.tcl), as resolved:
                 # types, or the pointee ffi::c::Void.
                 append text " imprint \[[join [lmap t [dict get $node imprint] {hir::cabi::ShowPointee $t}] {, }]\]"
+            }
+            if {[dict exists $node variadic]} {
+                # A call of a variadic function (hir/variadic.tcl): its last
+                # argument is the List of its COUNT trailing arguments, after
+                # FIXED fixed ones.
+                append text " variadic [dict get $node variadic fixed] [dict get $node variadic count]"
             }
             if {[dict exists $node traitImpl]} {
                 # A trait operation resolved to its witness's implementation

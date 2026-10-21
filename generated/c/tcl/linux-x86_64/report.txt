@@ -15,45 +15,44 @@ Inventory (public headers, as this target's preprocessor sees them)
   enumerators                                                                 13
 
 Bound (of the API names)
-  directly linked externs                                                    729    79.8%
-  aliases (externs of the symbol a macro names)                               84     9.2%
+  directly linked externs                                                    738    80.8%
+  aliases (externs of the symbol a macro names)                               86     9.4%
   thunks (C wrappers in the shim)                                             16     1.8%
     of them table-redirected names (stubs)                                     0
-  bound in all                                                               829    90.8%
-  unsupported                                                                 84     9.2%
+  bound in all                                                               840    92.0%
+  unsupported                                                                 73     8.0%
   excluded by the profile                                                      0     0.0%
   constants generated                                                        219    93.6%
 
 Unsupported API names by blocker (an API may have several)
   macro-needs-signature                                                       63     6.9%
-  variadic                                                                    11     1.2%
   unsupported-macro                                                            7     0.8%
   thunk-rejected                                                               2     0.2%
   unsupported-callback-signature                                               1     0.1%
 
 Pointer contracts (bound APIs)
-  pointer parameters                                                        1608
+  pointer parameters                                                        1620
     with a favorable manual fact (the profile)                                 5     0.3%
     with a compiler-proven fact                                                8     0.5%
-    unknown (no fact: no exposure, retains)                                 1595    99.2%
-  pointer results                                                            208
+    unknown (no fact: no exposure, retains)                                 1607    99.2%
+  pointer results                                                            209
     independent                                                                1     0.5%
     alias of a parameter                                                       0     0.0%
-    unknown                                                                  207    99.5%
+    unknown                                                                  208    99.5%
 
 Capability pressure (API names a missing FFI capability blocks or limits)
   C _Bool in the signature (blocked without ffi::c::Bool)                      0     0.0%
     of them bound now, bool their only blocker                                 0     0.0%
   long double and the other floating types (C float and double are bound)       0     0.0%
   aggregates by value (struct, union)                                          0     0.0%
-  varargs (..., va_list)                                                      11     1.2%
+  varargs (..., va_list)                                                       0     0.0%
   callback signature outside the ABI universe                                  1     0.1%
   explicit calling convention (one the target does not take as its default)       0     0.0%
   macro without a signature                                                   70     7.7%
   bound, declaring a convention the target takes as its default                0     0.0%
   bound, taking a callback (no Botlish function can be one yet)               50     5.5%
-  bound, pointing to a complete C struct (needs memory views)                459    50.3%
-  bound, a pointer parameter that may be retained (direct)                   760    83.2%
+  bound, pointing to a complete C struct (needs memory views)                466    51.0%
+  bound, a pointer parameter that may be retained (direct)                   771    84.4%
 
 Records and layouts (complete C records of the public headers and every record they hold by value)
   complete structs                                                            36
@@ -87,15 +86,15 @@ Layout pressure (blocked records a missing feature would make layouts: directly 
   all of the above                                                             0     0.0%  0 + 0
 
 API pressure (bound APIs pointing to C records)
-  bound APIs with a pointer to a C record (parameter or result)              699    76.6%
-    to a record with an emitted layout                                       311    44.5%
+  bound APIs with a pointer to a C record (parameter or result)              709    77.7%
+    to a record with an emitted layout                                       314    44.3%
     to a complete record whose layout is blocked                               0     0.0%
-    only to incomplete records (or complete ones outside the headers)        388    55.5%
+    only to incomplete records (or complete ones outside the headers)        395    55.7%
   pointers by shape and record (layout / blocked / incomplete / outside):
-    param T *                249 / 0 / 435 / 121
+    param T *                251 / 0 / 438 / 125
     param const T *          50 / 0 / 13 / 137
     param T **               31 / 0 / 20 / 0
-    result T *               62 / 0 / 60 / 0
+    result T *               63 / 0 / 60 / 0
     result T **              0 / 0 / 1 / 0
   records bound signatures point to                                           51
     complete                                                                  27    52.9%
@@ -115,7 +114,7 @@ API pressure (bound APIs pointing to C records)
 Macro APIs (apparent callables that are macros, and what each became)
   declared functions a function-like macro shadows (thunked: the macro)       14
   declared functions with a self-naming macro (bound as declared)              0
-  object-like aliases of a function (bound: its symbol, named)                79
+  object-like aliases of a function (bound: its symbol, named)                81
   function-like renames of a function (bound: its symbol, named)               5
   stub-table redirections (thunked: the C call goes through the table)         0
   stub-table redirections not bound (a blocker, or no stub policy)             0
@@ -152,8 +151,8 @@ Macros
 
 Generated source
   Botlish files                                                               11
-  lines                                                                     6025
-  extern c fn declarations                                                   829
+  lines                                                                     6092
+  extern c fn declarations                                                   840
   opaque types                                                                59
   constants                                                                  219
   layouts                                                                     34

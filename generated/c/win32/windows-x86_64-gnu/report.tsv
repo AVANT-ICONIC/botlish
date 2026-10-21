@@ -1609,8 +1609,8 @@ function	wglSwapLayerBuffers	direct	win32::wingdi	direct	symbol wglSwapLayerBuff
 function	wglSwapMultipleBuffers	direct	win32::wingdi	direct	symbol wglSwapMultipleBuffers; library opengl32; (ffi::c::UInt, ffi::c::Ptr[WGLSWAP]) -> ffi::c::ULong
 function	wvsprintfA	unsupported		va-list	parameter 3 (arglist): __builtin_va_list
 function	wvsprintfW	unsupported		va-list	parameter 3 (arglist): __builtin_va_list
-function	wsprintfA	unsupported		variadic	a variadic function (...)
-function	wsprintfW	unsupported		variadic	a variadic function (...)
+function	wsprintfA	direct	win32::winuser	direct	symbol wsprintfA; library user32; (ffi::c::Ptr[ffi::c::Char], ffi::c::Ptr[ffi::c::Char], variadic) -> ffi::c::Int
+function	wsprintfW	direct	win32::winuser	direct	symbol wsprintfW; library user32; (ffi::c::Ptr[ffi::c::UShort], ffi::c::Ptr[ffi::c::UShort], variadic) -> ffi::c::Int
 function	LoadKeyboardLayoutA	direct	win32::winuser	direct	symbol LoadKeyboardLayoutA; library user32; (ffi::c::Ptr[ffi::c::Char], ffi::c::UInt) -> ffi::c::Ptr[HKL__]
 function	LoadKeyboardLayoutW	direct	win32::winuser	direct	symbol LoadKeyboardLayoutW; library user32; (ffi::c::Ptr[ffi::c::UShort], ffi::c::UInt) -> ffi::c::Ptr[HKL__]
 function	ActivateKeyboardLayout	direct	win32::winuser	direct	symbol ActivateKeyboardLayout; library user32; (ffi::c::Ptr[HKL__], ffi::c::UInt) -> ffi::c::Ptr[HKL__]
@@ -3361,7 +3361,7 @@ macro	IS_INTRESOURCE	unsupported		macro-needs-signature	a function-like macro (e
 macro	MAKEINTRESOURCEA	unsupported		macro-needs-signature	a function-like macro (expression): no signature of its own
 macro	MAKEINTRESOURCEW	unsupported		macro-needs-signature	a function-like macro (expression): no signature of its own
 macro	wvsprintf	unsupported		va-list	parameter 3 (arglist): __builtin_va_list
-macro	wsprintf	unsupported		variadic	a variadic function (...)
+macro	wsprintf	alias	win32::winuser	alias of wsprintfW	symbol wsprintfW; library user32; (ffi::c::Ptr[ffi::c::UShort], ffi::c::Ptr[ffi::c::UShort], variadic) -> ffi::c::Int
 macro	GET_APPCOMMAND_LPARAM	unsupported		macro-needs-signature	a function-like macro (expression): no signature of its own
 macro	GET_DEVICE_LPARAM	unsupported		macro-needs-signature	a function-like macro (expression): no signature of its own
 macro	GET_FLAGS_LPARAM	unsupported		macro-needs-signature	a function-like macro (expression): no signature of its own

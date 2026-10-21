@@ -747,12 +747,20 @@ proc core::cabi::NormalizeForeign {name contract arity} {
     variable accesses
     variable escapes
     if {[catch {dict size $contract}] || ![dict exists $contract params] || ![dict exists $contract result]
-            || [lmap key [dict keys $contract] {if {$key in {vars params result provenance}} {continue} else {set key}}] ne {}} {
-        error "core::native::register: bad -foreign \"$contract\" for \"$name\" (expected {vars {...} params {...} result R ?provenance PR?})"
+            || [lmap key [dict keys $contract] {if {$key in {vars params result provenance variadic}} {continue} else {set key}}] ne {}} {
+        error "core::native::register: bad -foreign \"$contract\" for \"$name\" (expected {vars {...} params {...} result R ?provenance PR? ?variadic 1?})"
     }
     set vars [dict getdef $contract vars {}]
     set params [dict get $contract params]
-    if {$arity eq "*" || [llength $params] != $arity} {
+    # A variadic C function (VARIADICS-VERTICAL-SLICE-1.md) is a native of
+    # any arity whose PARAMS are its fixed parameters, at least one: each
+    # call passes them and any number of trailing arguments, each of its
+    # own C type (hir::cabi::VariadicArgument).
+    set variadic [dict getdef $contract variadic 0]
+    if {$variadic ni {0 1} || ($variadic && ($arity ne "*" || [llength $params] == 0 || $vars ne {}))} {
+        error "core::native::register: -foreign of \"$name\": a variadic contract is the fixed parameters (at least one, no imprint variable) of a native of arity *"
+    }
+    if {!$variadic && ($arity eq "*" || [llength $params] != $arity)} {
         error "core::native::register: -foreign of \"$name\" must describe its $arity parameter(s)"
     }
     set names {}
@@ -805,7 +813,42 @@ proc core::cabi::NormalizeForeign {name contract arity} {
             error "core::native::register: -foreign of \"$name\": bad provenance \"$provenance\" (unknown, independent or {alias NAME})"
         }
     }
-    return [dict create vars $vars params $normalized result $result provenance $provenance]
+    set normalized [dict create vars $vars params $normalized result $result provenance $provenance]
+    if {$variadic} {
+        dict set normalized variadic 1
+    }
+    return $normalized
+}
+
+# The ABI class a trailing argument of a variadic C call is passed as, for
+# the C integer scalar of metadata INFO ({c SPELLING target TARGET bits N
+# signed 0|1}): C's default argument promotion on INFO's target. A type
+# narrower than `int` becomes `int` (int represents every value of every
+# narrower type on every target of the table, unsigned char and unsigned
+# short included), any other keeps its own representation: iN or uN.
+proc core::cabi::promoted {info} {
+    set int [scalarInfo Int [dict get $info target]]
+    set bits [dict get $info bits]
+    if {$bits < [dict get $int bits]} {
+        return i[dict get $int bits]
+    }
+    return [expr {[dict get $info signed] ? "i" : "u"}]$bits
+}
+
+# The ABI class a C _Bool trailing argument of a variadic call is passed as
+# on TARGET: C's default argument promotion makes it an `int`. TARGET ""
+# (a compilation that declares no C scalar) is any target's: every data
+# model of the table has one `int` width.
+proc core::cabi::promotedBool {target} {
+    variable models
+    if {$target ne ""} {
+        return i[dict get [scalarInfo Int $target] bits]
+    }
+    set widths [lsort -unique [lmap {model widths} $models {dict get $widths int}]]
+    if {[llength $widths] != 1} {
+        error "core::cabi: the data models disagree on int's width; a _Bool trailing argument needs the compilation's target"
+    }
+    return i$widths
 }
 
 # The parameter index the result of CONTRACT aliases (provenance {alias

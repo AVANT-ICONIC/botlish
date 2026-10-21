@@ -569,7 +569,7 @@ record	struct asn1_object_st	-	-	opaque-only	-	-	-	-	-	typedefs=ASN1_OBJECT; ide
 record	struct asn1_pctx_st	-	-	opaque-only	-	-	-	-	-	typedefs=ASN1_PCTX; identity=boringssl::ctypes::ASN1_PCTX; header=include/openssl/base.h:237; pointed-by=3
 record	struct bignum_ctx	-	-	opaque-only	-	-	-	-	-	typedefs=BN_CTX; identity=boringssl::ctypes::BN_CTX; header=include/openssl/base.h:277; pointed-by=60
 record	struct bio_method_st	-	-	opaque-only	-	-	-	-	-	typedefs=BIO_METHOD; identity=boringssl::ctypes::BIO_METHOD; header=include/openssl/base.h:279; pointed-by=27
-record	struct bio_st	-	-	opaque-only	-	-	-	-	-	typedefs=BIO; identity=boringssl::ctypes::BIO; header=include/openssl/base.h:280; pointed-by=228
+record	struct bio_st	-	-	opaque-only	-	-	-	-	-	typedefs=BIO; identity=boringssl::ctypes::BIO; header=include/openssl/base.h:280; pointed-by=229
 record	struct bn_mont_ctx_st	-	-	opaque-only	-	-	-	-	-	typedefs=BN_MONT_CTX; identity=boringssl::ctypes::BN_MONT_CTX; header=include/openssl/base.h:283; pointed-by=14
 record	struct cmac_ctx_st	-	-	opaque-only	-	-	-	-	-	typedefs=CMAC_CTX; identity=boringssl::ctypes::CMAC_CTX; header=include/openssl/base.h:287; pointed-by=7
 record	struct conf_st	-	-	opaque-only	-	-	-	-	-	typedefs=CONF; identity=boringssl::ctypes::CONF; header=include/openssl/base.h:288; pointed-by=13

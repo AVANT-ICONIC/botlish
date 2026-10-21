@@ -1,0 +1,80 @@
+01:25:40 run-all baseline
+01:25:40 rust sweep
+01:43:13 rust life
+01:46:14 rust policy 1/2
+01:46:17 rust policy 7/10
+01:46:21 rust policy 17/20
+01:46:26 rust mixed
+01:50:32 rust stats
+01:50:40 rust hashcost
+01:50:41 rust spike
+01:50:42 bench sizes: -impls lpa -keys {int-dense str-short} -sizes {1 2 4 8 16 32 64 128 256 716 1024 4096 11468 16384} -modes {build presized hit miss member replace drop bulk}
+01:52:41 bench sizes: -impls lpmono -keys {int-dense str-short} -sizes {1 2 4 8 16 32 64 128 256 716 1024 4096 11468 16384} -modes {build presized hit miss member replace drop bulk}
+01:54:38 bench sizes: -impls lpfact -keys {int-dense str-short} -sizes {1 2 4 8 16 32 64 128 256 716 1024 4096 11468 16384} -modes {build presized hit miss member replace drop bulk}
+01:56:32 bench sizes: -impls lpmask -keys {int-dense str-short} -sizes {1 2 4 8 16 32 64 128 256 716 1024 4096 11468 16384} -modes {build presized hit miss member replace drop bulk}
+01:58:39 bench sizes: -impls rh -keys {int-dense str-short} -sizes {1 2 4 8 16 32 64 128 256 716 1024 4096 11468 16384} -modes {build presized hit miss member replace drop bulk}
+02:00:47 bench sizes: -impls chain -keys {int-dense str-short} -sizes {1 2 4 8 16 32 64 128 256 716 1024 4096 11468 16384} -modes {build presized hit miss member replace drop bulk}
+02:03:29 bench sizes: -impls cd -keys {int-dense str-short} -sizes {1 2 4 8 16 32 64 128 256 716 1024 4096 11468 16384} -modes {build presized hit miss member replace bulk}
+02:05:17 bench sizes: -impls ht0 -keys {int-dense str-short} -sizes {1 2 4 8 16 32 64 128 256 716 1024 4096 11468 16384} -modes {build presized hit miss member replace drop bulk}
+02:07:29 bench sizes: -impls lp -keys {int-dense str-short} -sizes {1 2 4 8 16 32 64 128 256 716 1024 4096 11468 16384} -modes {build presized hit miss member replace drop bulk}
+03:27:38 FAILED: bench sizes: -impls lp -keys {int-dense str-short} -sizes {1 2 4 8 16 32 64 128 256 716 1024 4096 11468 16384} -modes {build presized hit miss member replace drop bulk}: child killed: software termination signal
+03:27:38 bench sizes: -impls lpc -keys {int-dense str-short} -sizes {1 2 4 8 16 32 64 128 256 716 1024 4096 11468 16384} -modes {build presized hit miss member replace drop bulk}
+03:29:57 bench sizes: -impls listmap -keys {int-dense str-short} -sizes {1 2 4 8 16 32 64 128 256 716 1024} -modes {build presized hit miss member replace drop bulk}
+03:35:11 bench sizes: -impls chain0 -keys {int-dense str-short} -sizes {1 2 4 8 16 32 64 128 256 716 1024 4096 11468 16384} -modes {presized hit miss member replace drop}
+03:43:05 bench sizes: -impls sorted -keys {int-dense str-short} -sizes {1 2 4 8 16 32 64 128 256 716 1024 4096} -modes {build presized hit miss member replace drop bulk}
+04:22:44 bench keys: -impls lpa -keys {int-sparse int-big str-medium point} -sizes {16 1024 16384} -modes {build hit miss replace}
+04:23:25 bench keys: -impls lpa -keys int-collide -sizes {16 256 1024 4096} -modes {build hit miss replace}
+04:24:22 bench keys: -impls lpmono -keys {int-sparse int-big str-medium point} -sizes {16 1024 16384} -modes {build hit miss replace}
+04:25:04 bench keys: -impls lpmono -keys int-collide -sizes {16 256 1024 4096} -modes {build hit miss replace}
+04:25:48 bench keys: -impls rh -keys {int-sparse int-big str-medium point} -sizes {16 1024 16384} -modes {build hit miss replace}
+04:26:33 bench keys: -impls rh -keys int-collide -sizes {16 256 1024 4096} -modes {build hit miss replace}
+04:28:36 bench keys: -impls chain -keys {int-sparse int-big str-medium point} -sizes {16 1024 16384} -modes {build hit miss replace}
+04:29:27 bench keys: -impls chain -keys int-collide -sizes {16 256 1024 4096} -modes {build hit miss replace}
+04:31:17 bench keys: -impls cd -keys {int-sparse int-big str-medium point} -sizes {16 1024 16384} -modes {build hit miss replace}
+04:32:03 bench keys: -impls cd -keys int-collide -sizes {16 256 1024 4096} -modes {build hit miss replace}
+04:33:04 bench keys: -impls ht0 -keys {int-sparse int-big str-medium point} -sizes {16 1024 16384} -modes {build hit miss replace}
+04:33:57 bench keys: -impls ht0 -keys int-collide -sizes {16 256 1024 4096} -modes {build hit miss replace}
+04:35:10 bench keys: -impls chain0 -keys {int-sparse int-big str-medium point} -sizes {16 1024 16384} -modes {build hit miss replace}
+04:41:48 bench keys: -impls chain0 -keys int-collide -sizes {16 256 1024 4096} -modes {build hit miss replace}
+04:47:42 bench keys: -impls sorted -keys {int-sparse str-medium point} -sizes {16 1024 16384} -modes {bulk hit miss}
+04:56:57 bench typed: -impls lpint -keys {int-dense int-sparse} -sizes {16 1024 16384} -modes {build hit miss replace}
+04:57:12 bench typed: -impls lpstr -keys {str-short str-medium} -sizes {16 1024 16384} -modes {build hit miss replace}
+04:57:30 bench typed: -impls lpa -keys {int-dense int-sparse str-short str-medium} -sizes {16 1024 16384} -modes {build hit miss replace}
+04:58:08 bench life: -impls listmap -keys {int-dense str-short} -sizes {1 2 4 8 16 32 64 128 256} -modes life
+05:01:24 bench life: -impls lpa -keys {int-dense str-short} -sizes {1 2 4 8 16 32 64 128 256} -modes life
+05:06:28 bench life: -impls lpmono -keys {int-dense str-short} -sizes {1 2 4 8 16 32 64 128 256} -modes life
+05:11:06 bench life: -impls rh -keys {int-dense str-short} -sizes {1 2 4 8 16 32 64 128 256} -modes life
+05:16:17 bench life: -impls chain -keys {int-dense str-short} -sizes {1 2 4 8 16 32 64 128 256} -modes life
+05:20:53 bench life: -impls cd -keys {int-dense str-short} -sizes {1 2 4 8 16 32 64 128 256} -modes life
+05:26:17 bench life: -impls sorted -keys {int-dense str-short} -sizes {1 2 4 8 16 32 64 128 256} -modes life
+05:35:34 bench life: -impls chain0 -keys {int-dense str-short} -sizes {1 2 4 8 16 32 64 128 256} -modes life
+06:05:40 bench policy: -impls lpa -keys {int-dense str-short} -sizes {512 716 870 8192 11468 13926} -modes {build hit miss} -edits {{fn load_num() -> int:
+06:06:08 bench policy: -impls lpa -keys {int-dense str-short} -sizes {512 716 870 8192 11468 13926} -modes {build hit miss} -edits {{fn load_num() -> int:
+06:06:38 bench policy: -impls lpa -keys {int-dense str-short} -sizes {512 716 870 8192 11468 13926} -modes {build hit miss} -edits {{fn load_num() -> int:
+06:07:09 bench policy: -impls rh -keys {int-dense str-short} -sizes {512 716 870 8192 11468 13926} -modes {build hit miss} -edits {{fn load_num() -> int:
+06:07:39 bench policy: -impls rh -keys {int-dense str-short} -sizes {512 716 870 8192 11468 13926} -modes {build hit miss} -edits {{fn load_num() -> int:
+06:08:09 bench policy: -impls rh -keys {int-dense str-short} -sizes {512 716 870 8192 11468 13926} -modes {build hit miss} -edits {{fn load_num() -> int:
+06:08:40 mixed
+06:51:27 FAILED: mixed: child killed: software termination signal
+06:51:27 backends interp listmap
+07:05:05 backends interp lpa
+07:11:29 backends interp lpmono
+07:17:25 backends interp rh
+07:25:00 backends interp chain
+07:30:34 backends interp cd
+07:36:58 backends compile listmap
+07:37:46 backends compile lpa
+07:38:20 backends compile lpmono
+07:38:53 backends compile rh
+07:39:30 backends compile chain
+07:39:57 backends compile cd
+07:40:31 backends cranelift-generic listmap
+07:40:40 backends cranelift-generic lpa
+07:40:51 backends cranelift-generic lpmono
+07:41:04 backends cranelift-generic rh
+07:41:14 backends cranelift-generic chain
+07:41:26 backends cranelift-generic cd
+07:41:40 membership
+08:21:01 FAILED: membership: child process exited abnormally
+08:21:01 ladder A: every prototype, lpa and lpmask
+08:21:01 round 1/3 base

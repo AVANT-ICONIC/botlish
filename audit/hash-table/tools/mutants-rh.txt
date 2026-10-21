@@ -1,0 +1,264 @@
+# Mutants of the hash-table experiment's Robin Hood implementation,
+# impl/rh.bot (audit/hash-table/tools/mutate.tcl -file
+# audit/hash-table/tools/mutants-rh.txt; HASH-TABLE-EXPERIMENT.md,
+# "Correctness"): the brief's list where it applies to Robin Hood hashing
+# (wrong bucket index, collision not checked, duplicate insert, resize loses
+# an entry, wraparound broken, probe terminates too early, load threshold
+# off by one), then the algorithm's own invariants -- the displacement of a
+# resident nearer its home, the distance carried by an evicted entry, the
+# distance's wraparound, and backward-shift removal's stop rule.
+#
+#   @@ NAME DESCRIPTION
+#   ## impl/IMPL.bot
+#   <<<<
+#   text to replace (must occur exactly once in the file)
+#   ====
+#   replacement
+#   >>>>
+#
+# Equivalent mutants are not listed; the ones the brief or the algorithm
+# suggests that are equivalent through the table interface (put, get, has?,
+# drop, size, slots: what the fuzzer's traces observe) are explained here:
+#
+#   * "equality omitted after hash match" (compare the stored hash only):
+#     rh stores full 61-bit hashes, so it is observable only with two keys
+#     of one kind whose 61-bit hashes are equal, and none is known
+#     (tools/mutants.txt explains the same for lp). Omitting the stored-hash
+#     comparison instead (key equality alone) is correct by construction.
+#   * Lookup without the Robin Hood early stop (no `dist < d` test, or the
+#     lookup's distance never advanced): the walk then ends only at an empty
+#     slot, which every present key's run reaches first -- correct, only
+#     slower. Its effect is the probe count alone, which no trace reads
+#     (probes(t, key) is a diagnostic; bench.bot's probes mode and the Rust
+#     reference's statistics check it instead).
+#   * Displacing on equal distances (`e <= d` for `e < d`): ties are then
+#     reordered, but every run stays ordered by distance from home, so the
+#     lookup's stop rule and the backward shift stay exact; only probe
+#     counts change.
+#   * The evicted entry carrying the inserted entry's distance on (d + 1
+#     for e + 1, an overstated distance): in a Robin Hood table a run's
+#     distances grow by at most one a slot (dist(j + 1) <= dist(j) + 1:
+#     insertion only displaces nearer residents, the backward shift moves
+#     a run back whole), so every resident the evicted entry meets is at
+#     most at its true distance, and the overstated one adds displacements
+#     only of residents exactly at it -- the tie swaps above. Fuzzed with
+#     12 seeds (144 traces, no difference), and bench.bot's probes checksum
+#     is unchanged too (int-dense 1024, str-short and point 4096): tie
+#     swaps permute equal distances, so even probe sums agree. The
+#     understated distance (e) is listed instead: it skips displacing a
+#     resident at the evictee's own old distance, which the evictee's own
+#     lookup then stops at.
+#   * The load test with `>=` for `>`: (count + 1) * 10 == cap * 7 never
+#     holds for a power-of-two capacity, so the comparison's boundary is
+#     unreachable under the 7/10 policy.
+#   * home() itself shifted by one (h + 1): every operation agrees on the
+#     shifted home, so the table is a consistent Robin Hood table over
+#     another hash; the mutants below shift one side only.
+#   * Not emptying the last shifted slot's hash on removal: it leaves a
+#     slot that no key matches and nothing frees, a tombstone the algorithm
+#     has no use for; results stay correct until the table fills, when an
+#     insertion can no longer terminate. A non-terminating mutant would hang
+#     the harness on the backends that turn tail calls into loops rather
+#     than be killed, so it is not listed -- nor is a grown table that
+#     forgets its count (it overfills the next capacity the same way).
+
+@@ rh-lookup-home-shifted lookups start one slot after the key's home (wrong bucket index)
+## impl/rh.bot
+<<<<
+    find_from(t, h, key, home(h, slots(t)), 0)
+====
+    find_from(t, h, key, home(h + 1, slots(t)), 0)
+>>>>
+
+@@ rh-insert-home-shifted insertion starts one slot after the entry's home with distance 0 (wrong bucket index)
+## impl/rh.bot
+<<<<
+    i = home(h, slots(t))
+    placed_from(t, i, 0, h, key, value)
+====
+    i = home(h + 1, slots(t))
+    placed_from(t, i, 0, h, key, value)
+>>>>
+
+@@ rh-collision-not-checked insertion stores the entry at its home without looking at the resident
+## impl/rh.bot
+<<<<
+    stored = t.hashes.at(i)
+    if stored < 0:
+        return store(t, i, h, key, value)
+    cap = slots(t)
+    e = dist(stored, i, cap)
+====
+    stored = t.hashes.at(i)
+    if stored < 0 or d == 0:
+        return store(t, i, h, key, value)
+    cap = slots(t)
+    e = dist(stored, i, cap)
+>>>>
+
+@@ rh-duplicate-insert put of a present key inserts a second entry instead of replacing the value
+## impl/rh.bot
+<<<<
+    if i >= 0:
+        t.vals.set(i, value)
+        return t
+====
+    if i >= 0 and h < 0:
+        t.vals.set(i, value)
+        return t
+>>>>
+
+@@ rh-probe-stops-early a lookup stops at a resident as far from its home as the key would be (dist <= d)
+## impl/rh.bot
+<<<<
+    if dist(stored, i, cap) < d:
+        return -1 - i
+====
+    if dist(stored, i, cap) <= d:
+        return -1 - i
+>>>>
+
+@@ rh-wraparound-broken the probe sequence runs off the last slot instead of wrapping to slot 0
+## impl/rh.bot
+<<<<
+fn next_slot(i: int, cap: int) -> int:
+    mod(i + 1, cap)
+====
+fn next_slot(i: int, cap: int) -> int:
+    i + 1
+>>>>
+
+@@ rh-dist-wraparound a resident's distance is not taken mod cap (negative past the wrap to slot 0)
+## impl/rh.bot
+<<<<
+    mod(i - home(stored, cap), cap)
+====
+    i - home(stored, cap)
+>>>>
+
+@@ rh-no-displacement insertion never displaces a resident nearer its home (plain linear probing under Robin Hood lookups)
+## impl/rh.bot
+<<<<
+    if e < d:
+        t.hashes.set(i, h)
+====
+    if e < 0:
+        t.hashes.set(i, h)
+>>>>
+
+@@ rh-evicted-distance-understated the evicted entry continues one slot on with the distance it had before it moved (e, not e + 1)
+## impl/rh.bot
+<<<<
+        return placed_from(t, next_slot(i, cap), e + 1, stored, k, v)
+====
+        return placed_from(t, next_slot(i, cap), e, stored, k, v)
+>>>>
+
+@@ rh-evicted-key-lost displacement carries the inserted key on with the evicted entry's hash and value
+## impl/rh.bot
+<<<<
+        return placed_from(t, next_slot(i, cap), e + 1, stored, k, v)
+====
+        return placed_from(t, next_slot(i, cap), e + 1, stored, key, v)
+>>>>
+
+@@ rh-displaced-hash-kept displacement swaps the key and value but leaves the resident's hash in the slot
+## impl/rh.bot
+<<<<
+    if e < d:
+        t.hashes.set(i, h)
+====
+    if e < d:
+        t.hashes.set(i, stored)
+>>>>
+
+@@ rh-insert-distance-not-advanced insertion's distance is not advanced past a resident it does not displace
+## impl/rh.bot
+<<<<
+    placed_from(t, next_slot(i, cap), d + 1, h, key, value)
+====
+    placed_from(t, next_slot(i, cap), d, h, key, value)
+>>>>
+
+@@ rh-resize-loses-last-slot growth never moves the entry in the old table's last slot
+## impl/rh.bot
+<<<<
+    if i >= slots(old):
+        return dest
+====
+    if i >= slots(old) - 1:
+        return dest
+>>>>
+
+@@ rh-grow-ignores-collisions growth stores each entry at its home, overwriting an entry already there
+## impl/rh.bot
+<<<<
+    moved(old, i + 1, placed(dest, h, old.keys.at(i), old.vals.at(i)))
+====
+    j = home(h, slots(dest))
+    moved(old, i + 1, store(dest, j, h, old.keys.at(i), old.vals.at(i)))
+>>>>
+
+@@ rh-load-threshold-off-by-one the table grows one insert later than the policy says
+## impl/rh.bot
+<<<<
+    (size(t) + 1) * load_den() > slots(t) * load_num()
+====
+    size(t) * load_den() > slots(t) * load_num()
+>>>>
+
+@@ rh-presize-ignored fresh(expected) ignores the expected size
+## impl/rh.bot
+<<<<
+    empty_table(slots_for(expected, min_slots()))
+====
+    empty_table(min_slots())
+>>>>
+
+@@ rh-has-slot-zero has? misses a key whose slot is 0
+## impl/rh.bot
+<<<<
+    find(t, hash(key), key) >= 0
+====
+    find(t, hash(key), key) > 0
+>>>>
+
+@@ rh-drop-no-shift removal empties the slot without shifting the following residents back (breaks probe runs)
+## impl/rh.bot
+<<<<
+    if stored < 0 or dist(stored, n, cap) == 0:
+====
+    if stored < 0 or dist(stored, n, cap) >= 0:
+>>>>
+
+@@ rh-drop-shift-past-home removal also shifts back a resident at its own home (moves it before its home)
+## impl/rh.bot
+<<<<
+    if stored < 0 or dist(stored, n, cap) == 0:
+====
+    if stored < 0:
+>>>>
+
+@@ rh-drop-shift-stops-early removal stops shifting at a resident one slot past its home, leaving a hole in its run
+## impl/rh.bot
+<<<<
+    if stored < 0 or dist(stored, n, cap) == 0:
+====
+    if stored < 0 or dist(stored, n, cap) <= 1:
+>>>>
+
+@@ rh-drop-shifts-wrong-key the backward shift moves the hole's own key back instead of the next resident's
+## impl/rh.bot
+<<<<
+    k = t.keys.at(n)
+====
+    k = t.keys.at(hole)
+>>>>
+
+@@ rh-drop-count removal does not decrease the entry count
+## impl/rh.bot
+<<<<
+    counted(shifted(t, i), -1)
+====
+    counted(shifted(t, i), 0)
+>>>>

@@ -1,0 +1,196 @@
+# bench -- the timed workloads of the hash-table experiment (SPEC.md
+# section 6), for any implementation copied beside it as `table.bot` and
+# any key kind copied as `keys.bot` (tools/bench.tcl).
+#
+#   argv: MODE KIND N M REPS [POOL...]
+#
+# Every mode first builds the same inputs -- the N keys, M query keys
+# (present keys in SPEC.md's query order) and M absent keys -- and then
+# does its own work; the result is a checksum that depends on every
+# operation's result, so no operation is dead. tools/bench.tcl subtracts a
+# baseline mode's time from a mode's to get the cost of the operations
+# alone (mode `keys` for the inputs, `build` with the same REPS for a build).
+#
+# Key kinds are keys.bot's (0..6, SPEC.md section 5); kind 9 takes the keys
+# from POOL, argv's arguments after REPS: N keys, then N absent keys (the
+# M absent queries cycle through them).
+import list
+import str
+import char
+import table
+import keys
+
+# TEXT, a non-negative decimal Int.
+fn int_of(text: str) -> int errors IndexNotFound:
+    n = text.length()
+    fn digits(i: int, acc: int) -> int errors IndexNotFound:
+        if i >= n:
+            return acc
+        digits(i + 1, acc * 10 + char::scalar_value(text.char_at(i)) - 48)
+    digits(0, 0)
+
+fn query(j: int, n: int) -> int:
+    mod(j * 40503 + 7, n)
+
+fn bit(b: bool) -> int:
+    if b:
+        1
+    else:
+        0
+
+fn min(a: int, b: int) -> int:
+    if a < b:
+        a
+    else:
+        b
+
+fn max(a: int, b: int) -> int:
+    if a > b:
+        a
+    else:
+        b
+
+fn key_list(kind: int, n: int, args: List[str]) errors IndexNotFound:
+    if kind == 9:
+        return loop i from 0 to n:
+            keys::parse(args.at(6 + i))
+    loop i from 0 to n:
+        keys::key(kind, i)
+
+# M absent keys: a pool of max(N, 4096) of them (at most M), cycled, so that
+# the inputs' construction stays small next to the operations timed.
+fn miss_list(kind: int, n: int, m: int, args: List[str]) errors IndexNotFound:
+    if kind == 9:
+        return loop j from 0 to m:
+            keys::parse(args.at(6 + n + mod(j, n)))
+    pool = loop j from 0 to min(m, max(n, 4096)):
+        keys::miss(kind, j)
+    loop j from 0 to m:
+        list::at(pool, mod(j, list::length(pool)))
+
+# ---------------------------------------------------------------------------
+# The operations
+
+# T with KS's keys from I on inserted, key I mapped to I.
+fn inserted(t, ks, i: int) errors IndexNotFound:
+    if i >= list::length(ks):
+        return t
+    inserted(table::put(t, list::at(ks, i), i), ks, i + 1)
+
+fn built(ks, expected: int) errors IndexNotFound:
+    inserted(table::fresh(expected), ks, 0)
+
+# REPS fresh tables of KS's keys (presized for them when PRESIZE is 1); the
+# sum of their sizes.
+fn builds(ks, reps: int, expected: int, acc: int) errors IndexNotFound:
+    if reps <= 0:
+        return acc
+    builds(ks, reps - 1, expected, acc + table::size(built(ks, expected)))
+
+fn gets(t, qs, j: int, default: int, acc: int) errors IndexNotFound:
+    if j >= list::length(qs):
+        return acc
+    gets(t, qs, j + 1, default, acc + table::get(t, list::at(qs, j), default))
+
+# REPS passes of lookups of QS in one table T: tools/bench.tcl's -passes
+# subtracts a one-pass run, which leaves the lookups alone.
+fn get_passes(t, qs, reps: int, default: int, acc: int) errors IndexNotFound:
+    if reps <= 0:
+        return acc
+    get_passes(t, qs, reps - 1, default, gets(t, qs, 0, default, acc))
+
+fn members(t, qs, ms, j: int, acc: int) errors IndexNotFound:
+    if j >= list::length(qs):
+        return acc
+    members(t, qs, ms, j + 1, acc + bit(table::has?(t, list::at(qs, j))) + bit(table::has?(t, list::at(ms, j))))
+
+fn replaced(t, qs, j: int) errors IndexNotFound:
+    if j >= list::length(qs):
+        return t
+    replaced(table::put(t, list::at(qs, j), j), qs, j + 1)
+
+fn member_passes(t, qs, ms, reps: int, acc: int) errors IndexNotFound:
+    if reps <= 0:
+        return acc
+    member_passes(t, qs, ms, reps - 1, members(t, qs, ms, 0, acc))
+
+fn replace_passes(t, qs, reps: int) errors IndexNotFound:
+    if reps <= 0:
+        return t
+    replace_passes(replaced(t, qs, 0), qs, reps - 1)
+
+fn dropped(t, ks, i: int) errors IndexNotFound:
+    if i >= list::length(ks):
+        return t
+    dropped(table::drop(t, list::at(ks, i)), ks, i + 1)
+
+# REPS times: build KS, then remove every key in insertion order.
+fn drops(ks, reps: int, acc: int) errors IndexNotFound:
+    if reps <= 0:
+        return acc
+    drops(ks, reps - 1, acc + 1 + table::size(dropped(built(ks, 0), ks, 0)))
+
+# REPS tables of KS -> VS built in bulk (table::from_lists).
+fn bulks(ks, vs, reps: int, acc: int) errors IndexNotFound:
+    if reps <= 0:
+        return acc
+    bulks(ks, vs, reps - 1, acc + table::size(table::from_lists(ks, vs)))
+
+# REPS times: build KS, then look up QS (L lookups, L = M).
+fn lives(ks, qs, reps: int, acc: int) errors IndexNotFound:
+    if reps <= 0:
+        return acc
+    lives(ks, qs, reps - 1, gets(built(ks, 0), qs, 0, -1, acc))
+
+# The sum of probes(t, k) over QS and MS (the diagnostic tools/bench.tcl
+# compares with the Rust reference's statistics).
+fn probe_sum(t, qs, j: int, acc: int) errors IndexNotFound:
+    if j >= list::length(qs):
+        return acc
+    probe_sum(t, qs, j + 1, acc + table::probes(t, list::at(qs, j)))
+
+fn run(mode: str, ks, vs, qs, ms, reps: int) errors IndexNotFound:
+    if mode == "bulk":
+        return bulks(ks, vs, reps, 0)
+    if mode == "build":
+        return builds(ks, reps, 0, 0)
+    if mode == "presized":
+        return builds(ks, reps, list::length(ks), 0)
+    if mode == "hit":
+        return get_passes(built(ks, 0), qs, reps, -1, 0)
+    if mode == "miss":
+        return get_passes(built(ks, 0), ms, reps, 1, 0)
+    if mode == "member":
+        return member_passes(built(ks, 0), qs, ms, reps, 0)
+    if mode == "replace":
+        return table::size(replace_passes(built(ks, 0), qs, reps))
+    if mode == "drop":
+        return drops(ks, reps, 0)
+    if mode == "life":
+        return lives(ks, qs, reps, 0)
+    if mode == "probes":
+        t = built(ks, 0)
+        return probe_sum(t, qs, 0, 0) * 1000000000 + probe_sum(t, ms, 0, 0)
+    list::length(ks) + list::length(qs) + list::length(ms)
+
+fn main(args: List[str]) errors IndexNotFound:
+    mode = args.get(1, "keys")
+    kind = int_of(args.get(2, "0"))
+    n = int_of(args.get(3, "1"))
+    m = int_of(args.get(4, "1"))
+    reps = int_of(args.get(5, "1"))
+    ks = key_list(kind, n, args)
+    ms = miss_list(kind, n, m, args)
+    qs = loop j from 0 to m:
+        list::at(ks, query(j, n))
+    vs = loop i from 0 to n:
+        i
+    run(mode, ks, vs, qs, ms, reps)
+
+args = argv():
+    on InvalidArgumentEncoding:
+        []
+result = main(args):
+    on IndexNotFound:
+        -1
+result

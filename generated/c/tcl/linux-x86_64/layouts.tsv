@@ -39,7 +39,7 @@ field	union Tcl_ObjInternalRep	3	wideValue	scalar	0	8	-	Tcl_WideInt wideValue	ff
 field	union Tcl_ObjInternalRep	4	twoPtrValue	nested	0	16	-	struct anon@tcl.h:723 twoPtrValue	Tcl_ObjInternalRep_twoPtrValue	c=twoPtrValue
 field	union Tcl_ObjInternalRep	5	ptrAndLongRep	nested	0	16	-	struct anon@tcl.h:727 ptrAndLongRep	Tcl_ObjInternalRep_ptrAndLongRep	c=ptrAndLongRep
 field	union Tcl_ObjInternalRep	6	ptrAndSize	nested	0	16	-	struct anon@tcl.h:731 ptrAndSize	Tcl_ObjInternalRep_ptrAndSize	c=ptrAndSize
-record	struct Tcl_Obj	-	Tcl_Obj	layout-direct	-	48	8	struct Tcl_Obj	-	typedefs=Tcl_Obj; identity=tcl::ctypes::Tcl_Obj; header=generic/tcl.h:743; deps=union Tcl_ObjInternalRep; pointed-by=209
+record	struct Tcl_Obj	-	Tcl_Obj	layout-direct	-	48	8	struct Tcl_Obj	-	typedefs=Tcl_Obj; identity=tcl::ctypes::Tcl_Obj; header=generic/tcl.h:743; deps=union Tcl_ObjInternalRep; pointed-by=212
 field	struct Tcl_Obj	0	refCount	scalar	0	8	-	Tcl_Size refCount	ffi::c::Long	c=refCount
 field	struct Tcl_Obj	1	bytes	pointer	8	8	-	char *bytes	ffi::c::Ptr[ffi::c::Char]	c=bytes
 field	struct Tcl_Obj	2	length	scalar	16	8	-	Tcl_Size length	ffi::c::Long	c=length
@@ -1084,7 +1084,7 @@ record	struct Tcl_Dict_	-	-	opaque-only	-	-	-	-	-	identity=tcl::ctypes::Tcl_Dict
 record	struct Tcl_EncodingState_	-	-	opaque-only	-	-	-	-	-	identity=tcl::ctypes::Tcl_EncodingState_; header=generic/tcl.h:374; pointed-by=2
 record	struct Tcl_Encoding_	-	-	opaque-only	-	-	-	-	-	identity=tcl::ctypes::Tcl_Encoding_; header=generic/tcl.h:375; pointed-by=12
 record	struct Tcl_FSVersion_	-	-	opaque-only	-	-	-	-	-	identity=tcl::ctypes::Tcl_FSVersion_; header=generic/tcl.h:1599
-record	struct Tcl_Interp	-	-	opaque-only	-	-	-	-	-	typedefs=Tcl_Interp; identity=tcl::ctypes::Tcl_Interp; header=generic/tcl.h:377; pointed-by=287
+record	struct Tcl_Interp	-	-	opaque-only	-	-	-	-	-	typedefs=Tcl_Interp; identity=tcl::ctypes::Tcl_Interp; header=generic/tcl.h:377; pointed-by=290
 record	struct Tcl_InterpState_	-	-	opaque-only	-	-	-	-	-	identity=tcl::ctypes::Tcl_InterpState_; header=generic/tcl.h:378; pointed-by=3
 record	struct Tcl_LoadHandle_	-	-	opaque-only	-	-	-	-	-	identity=tcl::ctypes::Tcl_LoadHandle_; header=generic/tcl.h:379; pointed-by=4
 record	struct Tcl_Method_	-	-	opaque-only	-	-	-	-	-	identity=tcl::ctypes::Tcl_Method_; header=generic/tclOO.h:53; pointed-by=14

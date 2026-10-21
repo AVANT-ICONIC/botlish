@@ -1,0 +1,37 @@
+# keys (Point): the structured key kind of SPEC.md section 5, and the trace
+# syntax ("X,Y"). The experiment copies this file beside a driver as
+# `keys.bot`, so the struct's identity is keys::Point (tools/model.py's
+# POINT_ID).
+import str
+import char
+
+struct Point:
+    x: int
+    y: int
+
+# Key kind 6, point.
+fn key(kind: int, i: int) -> Point:
+    Point {x: bit_and(i, 1023), y: shift_right(i, 10)}
+
+fn miss(kind: int, i: int) -> Point:
+    Point {x: bit_and(i, 1023), y: shift_right(i, 10) + 1048576}
+
+# The Int written in TEXT from FROM up to TO (optionally negative).
+fn int_between(text: str, from: int, to: int) -> int errors IndexNotFound:
+    fn digits(i: int, acc: int) -> int errors IndexNotFound:
+        if i >= to:
+            return acc
+        digits(i + 1, acc * 10 + char::scalar_value(text.char_at(i)) - 48)
+    if from < to and text.char_at(from) == '-':
+        return 0 - digits(from + 1, 0)
+    digits(from, 0)
+
+# "X,Y".
+fn parse(text: str) -> Point errors IndexNotFound:
+    n = text.length()
+    fn comma(i: int) -> int errors IndexNotFound:
+        if i >= n or text.char_at(i) == ',':
+            return i
+        comma(i + 1)
+    c = comma(0)
+    Point {x: int_between(text, 0, c), y: int_between(text, c + 1, n)}

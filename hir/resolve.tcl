@@ -320,8 +320,9 @@ proc hir::resolve::CandidateIdentity {hirVar b} {
 }
 
 # The accepted count of arguments of the function candidate identity IDENTITY
-# stands for, `*` for any, or "" if it is not statically a function of known
-# arity (a parameter, a value).
+# stands for, `*` for any, `>=N` for a variadic function of N fixed
+# parameters (VARIADICS-VERTICAL-SLICE-1.md), or "" if it is not statically
+# a function of known arity (a parameter, a value).
 proc hir::resolve::CandidateArity {hirVar b} {
     upvar 1 $hirVar hir
     set binding [dict get $hir bindings $b]
@@ -332,6 +333,9 @@ proc hir::resolve::CandidateArity {hirVar b} {
         return ""
     }
     if {[dict exists $binding flagIface]} {
+        if {[dict getdef $binding flagIface variadic 0]} {
+            return ">=[expr {[dict get $binding flagIface ordinary] - 1}]"
+        }
         return [dict get $binding flagIface ordinary]
     }
     return ""
@@ -465,7 +469,9 @@ proc hir::resolve::MethodCandidates {hirVar s name ctx argCount {hiddenVar ""}} 
     }
     set fitting [lmap c $all {
         set arity [dict get $arities [dict get $c identity]]
-        if {$arity ne "" && $arity ne "*" && $arity != $argCount} continue
+        if {[string match >=* $arity]} {
+            if {$argCount < [string range $arity 2 end]} continue
+        } elseif {$arity ne "" && $arity ne "*" && $arity != $argCount} continue
         set c
     }]
     if {$fitting ne ""} {
@@ -906,7 +912,12 @@ proc hir::resolve::Expr {hirVar node ctx} {
             set params {}
             set paramTypes [if {[dict exists $node paramTypes]} {dict get $node paramTypes} else {lrepeat [llength [dict get $node params]] {}}]
             set declaredParamTypes {}
+            # The variadic parameter (VARIADICS-VERTICAL-SLICE-1.md, hir/
+            # variadic.tcl): the last ordinary one, a List.
+            set variadic [expr {[dict exists $node variadic] ? [llength [dict get $node params]] - 1 : -1}]
+            set index -1
             foreach param [dict get $node params] paramType $paramTypes {
+                incr index
                 lassign $param name paramOrigin
                 set first [dict getdef $hir scopes $bodyScope names $name ""]
                 set b [NewBinding hir $name param $bodyScope $paramOrigin]
@@ -928,6 +939,14 @@ proc hir::resolve::Expr {hirVar node ctx} {
                     lappend declaredParamTypes {}
                     continue
                 }
+                if {$index == $variadic && $paramType eq "List"} {
+                    # A bare List in the variadic section: List[T] of a fresh
+                    # imprint variable, the element type each call imprints.
+                    lappend declaredParamTypes [hir::types::MakeList [list imprint \
+                        [hir::variadic::ElementVariable $node [CtxNamespace $ctx] \
+                            [hir::imprint::EnclosingVariables $hir $ctx]]] {} 0 0]
+                    continue
+                }
                 # (With imprint variables: hir/imprint.tcl.)
                 if {[catch {ResolveTypeExpr $paramType [CtxNamespace $ctx] 1} normalized options]} {
                     hir::Diagnose hir [TypeErrorKind $options TYPE] \
@@ -941,9 +960,14 @@ proc hir::resolve::Expr {hirVar node ctx} {
                             "the type of the ordinary parameter \"$name\" (write \"context $name: [ShowTypeExpr $paramType]\" in the function's context section)"] \
                         $e $paramOrigin
                     lappend declaredParamTypes {}
+                } elseif {$index == $variadic} {
+                    lappend declaredParamTypes [hir::variadic::CheckDeclared hir $e $name $paramType $normalized]
                 } else {
                     lappend declaredParamTypes $normalized
                 }
+            }
+            if {$variadic >= 0} {
+                SetField hir $e variadic $variadic
             }
             # Imprint variables (hir/imprint.tcl): each one a parameter uses
             # must be established by an earlier one.
@@ -1128,8 +1152,8 @@ proc hir::resolve::Expr {hirVar node ctx} {
                 set nameOrigin [dict get $written nameOrigin]
                 set chosen [MethodChoice hir $e $node $candidates]
                 SetField hir $e callee [Expr hir [MethodCalleeSyntax $chosen $name $nameOrigin] $ctx]
-                SetField hir $e args [Sequence hir \
-                    [concat [list [dict get $written receiver]] [dict get $node args]] $ctx]
+                SetField hir $e args [Sequence hir [hir::variadic::Arguments hir $e \
+                    [concat [list [dict get $written receiver]] [dict get $node args]]] $ctx]
                 SetField hir $e method [dict create name $name nameOrigin $nameOrigin \
                     ns [CtxNamespace $ctx]]
             } else {
@@ -1157,7 +1181,7 @@ proc hir::resolve::Expr {hirVar node ctx} {
                     }
                     SetField hir $e args $args
                 } else {
-                    SetField hir $e args [Sequence hir [dict get $node args] $ctx]
+                    SetField hir $e args [Sequence hir [hir::variadic::Arguments hir $e [dict get $node args]] $ctx]
                 }
                 if {![dict exists $node method]} {
                     # `step(m)` on a coroutine handle (COROUTINES.md) is the
@@ -1939,7 +1963,7 @@ proc hir::resolve::ResolvePlannedCall {hirVar e node action ctx} {
             nameOrigin [dict get $written nameOrigin] ns [CtxNamespace $ctx]]
     }
     SetField hir $e callee $c
-    SetField hir $e args [Sequence hir $argNodes $ctx]
+    SetField hir $e args [Sequence hir [hir::variadic::Arguments hir $e $argNodes] $ctx]
 }
 
 # Resolves module-qualified reference E (a {NAMESPACE NAME} pair) directly

@@ -335,7 +335,7 @@ core::native::register mutable_vector::pop -arity 1 -impl core::mutvec::pop \
 core::native::register mutable_vector::take -arity 2 -impl core::mutvec::take \
     -param-types {mutvec int} -result-type any -runtime {range-check mutvec-mutate} \
     -result-shape {mutvec-element 0} -errors IndexNotFound -ownership {place observe}
-core::native::register mutable_vector::swap -arity 3 -impl core::mutvec::swap \
+core::native::register mutable_vector::swap -arity 3 -impl core::mutvec::swap -keeps-length 1 \
     -param-types {mutvec int any} -result-type any -runtime {range-check mutvec-mutate} \
     -result-shape {mutvec-element 0} -errors IndexNotFound -drop-form {mutable_vector#swap_drop 0} \
     -ownership {place observe move}
@@ -355,6 +355,6 @@ core::native::register mutable_vector#take_front -arity 1 -impl core::mutvec::ta
     -ownership {place}
 core::native::register mutable_vector#clear_drop -arity 2 -impl core::mutvec::clearDrop \
     -param-types {mutvec str} -result-type unit -runtime mutvec-mutate -ownership {place observe}
-core::native::register mutable_vector#swap_drop -arity 4 -impl core::mutvec::swapDrop \
+core::native::register mutable_vector#swap_drop -arity 4 -impl core::mutvec::swapDrop -keeps-length 1 \
     -param-types {mutvec int any str} -result-type any -runtime {range-check mutvec-mutate} \
     -result-shape {mutvec-element 0} -errors IndexNotFound -ownership {place observe move observe}

@@ -120,7 +120,7 @@ file boringssl/asn1.bot 1578 2b38a516
 file boringssl/asn1t.bot 40 87d938a4
 file boringssl/base.bot 8 c958c52a
 file boringssl/base64.bot 95 c17c9048
-file boringssl/bio.bot 790 b96bcabb
+file boringssl/bio.bot 797 ef220f06
 file boringssl/blake2.bot 36 e8c967b7
 file boringssl/blowfish.bot 50 e60110f2
 file boringssl/bn.bot 877 97d87dc2
@@ -145,7 +145,7 @@ file boringssl/ec_key.bot 281 0f3193a4
 file boringssl/ecdh.bot 30 16c0fe3d
 file boringssl/ecdsa.bot 165 c448a774
 file boringssl/engine.bot 54 38175411
-file boringssl/err.bot 244 6839a47d
+file boringssl/err.bot 256 2134b0f7
 file boringssl/evp.bot 1194 f5d51c19
 file boringssl/evp_errors.bot 50 aa410e4f
 file boringssl/ex_data.bot 10 4abe43d4
@@ -157,7 +157,7 @@ file boringssl/kdf.bot 45 c05c73e1
 file boringssl/layouts.bot 1011 bcef47d9
 file boringssl/md4.bot 42 a29c225f
 file boringssl/md5.bot 42 f1ec2b80
-file boringssl/mem.bot 187 ab4e2190
+file boringssl/mem.bot 202 13d976f2
 file boringssl/mldsa.bot 284 8d5d7d74
 file boringssl/mlkem.bot 109 50aaa561
 file boringssl/nid.bot 982 9f2cbd74
@@ -198,9 +198,9 @@ file boringssl/x509v3.bot 25 d6c6e883
 file boringssl/x509v3_errors.bot 70 2bf66f03
 file boringssl/xwing.bot 59 d07bcbdf
 file layouts-check.c 878 120b7fb9
-file layouts.tsv 656 40d833a8
-file report.tsv 11390 5225d652
-file report.txt 163 0dba1b24
+file layouts.tsv 656 e28d6181
+file report.tsv 11390 555fa2ac
+file report.txt 162 08a91fd8
 file shim.c 3374 752c8e63
 libraries boringssl/aead.bot {crypto stdc++}
 libraries boringssl/aes.bot {crypto stdc++}
@@ -284,7 +284,7 @@ count complete 95
 count constants 3117
 count constantsSeen 4429
 count declared 3109
-count direct 3099
+count direct 3104
 count enumerators 95
 count excluded 0
 count fnmacros 185
@@ -293,22 +293,21 @@ count inline 817
 count manual 2
 count opaque 102
 count proven 123
-count ptrParams 6802
+count ptrParams 6809
 count ptrResults 1288
 count resultAlias 1
 count resultIndependent 0
 count resultUnknown 1287
 count tablestubs 0
 count thunk 817
-count unknownParams 6677
-count unknownRetention 3543
-count unsupported 140
+count unknownParams 6684
+count unknownRetention 3547
+count unsupported 135
 count views 1317
 blocked macro-needs-signature 66
 blocked unsupported-macro 64
 blocked unsupported-type 3
 blocked va-list 2
-blocked variadic 5
 layout_abi linux-aarch64 clang aarch64-linux-gnu {Ubuntu clang version 18.1.3 (1ubuntu1)}
 layout_count anonymous 28
 layout_count blocked 4

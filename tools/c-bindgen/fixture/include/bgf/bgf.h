@@ -95,13 +95,25 @@ extern BGF_EXPORT int bgf_current(int x);
 #define bgf_legacy bgf_current
 #define bgf_call_add(a, b) bgf_add(a, b)
 
+/* A variadic function, bound with its fixed parameter and `variadic`, and
+ * an object-like macro naming it (an alias: `named "bgf_printf"`, as Win32's
+ * wsprintf names wsprintfW); its va_list sibling, which is no variadic
+ * function (a va_list parameter is a fixed one, and unsupported); a variadic
+ * function a function-like macro of its name shadows, which only a C thunk
+ * could call -- and C cannot forward the trailing arguments a thunk is given
+ * (unsupported). */
+extern BGF_EXPORT int bgf_printf(const char *format, ...);
+#define bgf_print bgf_printf
+extern BGF_EXPORT int bgf_vprintf(const char *format, va_list args);
+extern BGF_EXPORT int bgf_vshadow(int n, ...);
+extern BGF_EXPORT int bgf_vother(int n, ...);
+#define bgf_vshadow(n, ...) bgf_vother((n) + 1, __VA_ARGS__)
+
 /* Shapes: C float and double (bound: C-FLOAT-FFI-MILESTONE-1.md); then
- * unsupported: an aggregate by value, varargs, a va_list, a callback outside
- * the ABI universe, an explicit calling convention, a 128-bit typedef. */
+ * unsupported: an aggregate by value, a callback outside the ABI universe,
+ * an explicit calling convention, a 128-bit typedef. */
 extern BGF_EXPORT double bgf_scale(double x, float y);
 extern BGF_EXPORT bgf_pair bgf_swap(bgf_pair p);
-extern BGF_EXPORT int bgf_printf(const char *format, ...);
-extern BGF_EXPORT int bgf_vprintf(const char *format, va_list args);
 extern BGF_EXPORT void bgf_set_measure(bgf_measure measure);
 #if defined(__x86_64__)
 extern BGF_EXPORT int __attribute__((ms_abi)) bgf_ms(int x);

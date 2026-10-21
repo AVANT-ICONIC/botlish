@@ -1,0 +1,253 @@
+name: react-native probe
+
+# The React Native census's mobile probes (REACT-NATIVE-TARGET-CENSUS.md,
+# "Empirical results"): the probe's Botlish functions (audit/react-native/
+# probe/rnprobe.bot) as a library (audit/react-native/tools/libmode.tcl, a
+# stand-in for a library mode the compiler does not have), packaged as a
+# Pure C++ TurboModule (audit/react-native/tools/rnpackage.tcl), installed
+# from its npm tarball into an ordinary React Native 0.88 app and called from
+# JavaScript on an Android emulator and an iOS simulator.
+#
+#   android-arm64-library  ubuntu-24.04-arm: the AArch64 Android library (the
+#                          native backend emits machine code for its own
+#                          host only; the runtime needs the probe's cfg patch)
+#   android                ubuntu-latest: the x86_64 Android library, the
+#                          app's release build for every ABI React Native's
+#                          template builds (Botlish's two, stubs for the
+#                          32-bit two), the x86_64 emulator run
+#   ios                    macos-15: the iOS-simulator library (the cfg
+#                          patch; the program object as the Mac makes it),
+#                          the app's release simulator build (as made; with
+#                          the object's platform rewritten, whichever
+#                          links first) and the simulator run, then the
+#                          same app with the C stand-in as a control when
+#                          the Botlish one shows nothing
+#
+# Exploratory: it runs only when the probe or this file changes, or by hand.
+# A probe step that is expected to fail is a census result and does not
+# fail its job; the jobs fail only when no variant runs.
+
+on:
+  push:
+    paths:
+      - "audit/react-native/**"
+      - ".github/workflows/react-native-probe.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push waits for the running probe instead of cancelling it: each
+# run's results are census evidence.
+concurrency:
+  group: react-native-probe-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  LANG: C.utf8
+  LC_ALL: C.utf8
+
+jobs:
+  android-arm64-library:
+    name: Android arm64-v8a Botlish library (ubuntu arm64)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install project prerequisites
+        run: bash .devcontainer/setup.sh
+
+      - name: Build native (Cranelift) backend
+        uses: ./.github/actions/build-native
+
+      - name: Botlish library for aarch64-linux-android (runtime cfg patch applied)
+        run: audit/react-native/ci/library.sh aarch64-linux-android "$RUNNER_TEMP/lib-arm64-v8a" patch
+
+      - name: What the library holds
+        run: |
+          cd "$RUNNER_TEMP/lib-arm64-v8a"
+          mkdir members && cd members && ar x ../librnprobe_botlish.a
+          file program.o
+          readelf -h program.o | grep -E "Machine|OS/ABI"
+          readelf -r program.o | awk '/R_AARCH64/ {print $3}' | sort | uniq -c
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: botlish-lib-arm64-v8a
+          path: |
+            ${{ runner.temp }}/lib-arm64-v8a/librnprobe_botlish.a
+            ${{ runner.temp }}/lib-arm64-v8a/rnprobe_botlish.h
+            ${{ runner.temp }}/lib-arm64-v8a/rnprobe_botlish.exports
+
+  android:
+    name: Android app (ubuntu x86-64, emulator)
+    needs: android-arm64-library
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install project prerequisites
+        run: bash .devcontainer/setup.sh
+
+      - name: Build native (Cranelift) backend
+        uses: ./.github/actions/build-native
+
+      - name: Botlish library for x86_64-linux-android (no patch)
+        run: audit/react-native/ci/library.sh x86_64-linux-android "$RUNNER_TEMP/lib-x86_64"
+
+      - uses: actions/download-artifact@v4
+        id: arm64
+        continue-on-error: true
+        with:
+          name: botlish-lib-arm64-v8a
+          path: ${{ runner.temp }}/lib-arm64-v8a
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: 17
+
+      - name: Tool versions
+        run: |
+          node --version; npm --version; java -version 2>&1 | head -1; rustc --version; cmake --version | head -1
+          echo "ANDROID_HOME=$ANDROID_HOME"; ls "$ANDROID_HOME/ndk" || true
+
+      - name: App with the generated package
+        run: |
+          libs=(-android-lib x86_64 "$RUNNER_TEMP/lib-x86_64/librnprobe_botlish.a")
+          if [ -f "$RUNNER_TEMP/lib-arm64-v8a/librnprobe_botlish.a" ]; then
+            libs+=(-android-lib arm64-v8a "$RUNNER_TEMP/lib-arm64-v8a/librnprobe_botlish.a")
+          fi
+          audit/react-native/ci/app.sh "$RUNNER_TEMP/work" "$RUNNER_TEMP/lib-x86_64" "${libs[@]}"
+          python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1]))["dependencies"]["react-native-botlish-probe"]["platforms"]["android"], indent=1))' "$RUNNER_TEMP/work/react-native-config.json"
+
+      - name: Release build, every ABI of the template (assembleRelease)
+        working-directory: ${{ runner.temp }}/work/probe app/android
+        run: ./gradlew --no-daemon --console=plain assembleRelease 2>&1 | tee "$RUNNER_TEMP/gradle.log" | grep -E "BUILD|botlish|Botlish|FAILURE|error:|ld\.lld|undefined symbol|What went wrong" || true; test "${PIPESTATUS[0]}" = 0
+
+      - name: What the APK holds
+        run: |
+          apk="$RUNNER_TEMP/work/probe app/android/app/build/outputs/apk/release/app-release.apk"
+          ls -l "$apk"
+          unzip -l "$apk" | grep "lib/"
+          mkdir -p "$RUNNER_TEMP/apk" && cd "$RUNNER_TEMP/apk" && unzip -q -o "$apk" 'lib/*'
+          ndk=$(ls -d "$ANDROID_HOME"/ndk/* | sort -V | tail -1)
+          tools="$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          for abi in x86_64 arm64-v8a armeabi-v7a x86; do
+            so="lib/$abi/libappmodules.so"
+            [ -f "$so" ] || continue
+            echo "== $so: $(stat -c %s "$so") bytes, $("$tools/llvm-nm" -D --defined-only "$so" | wc -l) dynamic symbols"
+            "$tools/llvm-readelf" -d "$so" | grep -E "NEEDED|TEXTREL" || true
+            echo "Botlish code: $("$tools/llvm-nm" "$so" 2>/dev/null | grep -c botlish_entry || true) botlish_entry symbols (static table), rnprobe exports dynamic: $("$tools/llvm-nm" -D --defined-only "$so" | grep -c rnprobe || true)"
+            "$tools/llvm-strings" "$so" | grep -m1 "BOTLISH_UNAVAILABLE" || echo "no BOTLISH_UNAVAILABLE stub"
+          done
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Boot an x86_64 emulator (API 34)
+        run: audit/react-native/ci/android-emulator.sh
+
+      - name: Run on the x86_64 emulator
+        run: |
+          export PATH="$ANDROID_HOME/platform-tools:$PATH"
+          audit/react-native/ci/android-run.sh "$RUNNER_TEMP/work/probe app/android/app/build/outputs/apk/release/app-release.apk" "$RUNNER_TEMP/android-probe.log"
+
+  ios:
+    name: iOS app (macOS arm64, simulator)
+    # A head commit carrying the trailer "RN-Probe: android" skips this job.
+    if: "${{ !contains(github.event.head_commit.message, 'RN-Probe: android') }}"
+    runs-on: macos-15
+    timeout-minutes: 120
+    # macOS has no C.utf8 locale, and CocoaPods fails in Ruby's
+    # unicode_normalize under the US-ASCII one that leaves.
+    env:
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install prerequisites (Tcl 9.0.1, stable Rust)
+        uses: ./.github/actions/setup-macos
+
+      - name: Build native (Cranelift) backend
+        uses: ./.github/actions/build-native
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Tool versions
+        run: |
+          sw_vers; xcodebuild -version; node --version; pod --version || true; ruby --version; rustc --version
+
+      - name: Botlish library for aarch64-apple-ios-sim (runtime cfg patch applied)
+        run: audit/react-native/ci/library.sh aarch64-apple-ios-sim "$RUNNER_TEMP/lib-ios-sim" patch
+
+      - name: The program object's platform
+        run: |
+          cd "$RUNNER_TEMP/lib-ios-sim"
+          mkdir members && cd members && ar x ../librnprobe_botlish.a program.o
+          file program.o
+          tclsh9.0 "$GITHUB_WORKSPACE/audit/react-native/tools/macho-platform.tcl" program.o
+          otool -l program.o | grep -A4 -E "LC_BUILD_VERSION|LC_VERSION_MIN" || true
+
+      - name: App with the generated package
+        run: |
+          audit/react-native/ci/app.sh "$RUNNER_TEMP/work" "$RUNNER_TEMP/lib-ios-sim" -ios-lib "$RUNNER_TEMP/lib-ios-sim/librnprobe_botlish.a"
+
+      - name: pod install
+        working-directory: ${{ runner.temp }}/work/probe app/ios
+        run: |
+          bundle install
+          bundle exec pod install 2>&1 | tee "$RUNNER_TEMP/pod.log" | grep -v "^  " | tail -40
+
+      - name: Simulator build A, the program object as the Mac makes it
+        id: a
+        continue-on-error: true
+        run: audit/react-native/ci/ios-build.sh "$RUNNER_TEMP/work" A
+
+      - name: Simulator build B, the object's platform rewritten to iOS simulator
+        id: b
+        if: steps.a.outcome == 'failure'
+        continue-on-error: true
+        run: |
+          vendored="$RUNNER_TEMP/work/probe app/node_modules/react-native-botlish-probe/ios/lib/librnprobe_botlish.a"
+          cd "$RUNNER_TEMP/lib-ios-sim/members"
+          tclsh9.0 "$GITHUB_WORKSPACE/audit/react-native/tools/macho-platform.tcl" program.o 7 15.1
+          ar rs "$vendored" program.o
+          "$GITHUB_WORKSPACE/audit/react-native/ci/ios-build.sh" "$RUNNER_TEMP/work" B
+
+      - name: Run on the simulator
+        id: run
+        continue-on-error: true
+        run: |
+          bundle=$(cat "$RUNNER_TEMP/work/app-bundle")
+          echo "variant $(cat "$RUNNER_TEMP/work/variant")"
+          audit/react-native/ci/ios-run.sh "$bundle" "$RUNNER_TEMP/ios-probe.log"
+
+      - name: Control, the C stand-in instead of Botlish
+        if: steps.run.outcome == 'failure' || (steps.a.outcome == 'failure' && steps.b.outcome == 'failure')
+        run: |
+          vendored="$RUNNER_TEMP/work/probe app/node_modules/react-native-botlish-probe/ios/lib/librnprobe_botlish.a"
+          xcrun clang -target arm64-apple-ios15.1-simulator -O2 -I "$RUNNER_TEMP/lib-ios-sim" -c audit/react-native/probe/standin.c -o "$RUNNER_TEMP/standin.o"
+          rm -f "$vendored" && ar rcs "$vendored" "$RUNNER_TEMP/standin.o"
+          audit/react-native/ci/ios-build.sh "$RUNNER_TEMP/work" C
+          audit/react-native/ci/ios-run.sh "$(cat "$RUNNER_TEMP/work/app-bundle")" "$RUNNER_TEMP/ios-probe-standin.log"
+
+      - name: The Botlish variant ran
+        run: test "${{ steps.run.outcome }}" = success

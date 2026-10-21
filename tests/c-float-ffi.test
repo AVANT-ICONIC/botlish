@@ -458,6 +458,20 @@ test cfl-c-register-exhaustion {more C floats than there are floating-point argu
     cflNative "$::cflPickBindings$main"
 } -result {value {[[0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 9.5, 10.5, 11.5], [0.25, 1.0e300, -3.0, -0.75, 2.5e-300, -1234567890123.0, 1.0000000031710769e-30, 3.0e150, -321.0, 1.0000000150474662e30, -7.0e-200, 2147483647.0, 65504.0, 1.25, -9.223372036854776e18, 0.125, 6.0, 255.0, 3.0000000054977558e38, -1.0e-310], 136.0, [1036831949, 1045220557, 1050253722, 1053609165, 1056964608, 1058642330, 1060320051, 1, 2139095039]]}}
 
+test cfl-c-variadic-fixed-floats {a variadic C function whose fixed parameters include C floats (SDL_RenderDebugTextFormat's shape): each fixed float is narrowed and takes a floating-point register as a double would, so the trailing ints and doubles C reads with va_arg -- past the registers, onto the stack -- are exactly the ones passed, on every target's placement (System V's %al counts the fixed floats, Apple's padding starts after them)} -constraints cfloatFixture -body {
+    set pairs [join [lmap i {0 1 2 3 4 5 6 7 8} {string cat "c_int([expr {10 + $i}]), $i.25"}] {, }]
+    set picks [lmap w {0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19} {string cat "vpick($w, 0.1, 1.5, 9, $pairs)"}]
+    set main [string cat \
+        "import ffi::c\n" \
+        "extern c library \"botlish_cfloat_fixture\"\n" \
+        "extern c fn vpick named \"cff_vpick\"(which: ffi::c::Int, x: ffi::c::Float, y: ffi::c::Float, count: ffi::c::Int, variadic) -> ffi::c::Double\n\n" \
+        "fn c_int(n: ffi::c::Int) -> ffi::c::Int:\n    n\n\n" \
+        "fn calls() -> list errors NonFiniteFloat:\n" \
+        "    \[\[[join $picks {, }]\], vpick(1, 0.5, 3.0e38, 0), vpick(0, 1.0e-45, 0.0, 1, c_int(-1), -2.5)\]\n" \
+        "calls():\n    on NonFiniteFloat:\n        \[\]\n"]
+    cflNative $main
+} -result {value {[[0.10000000149011612, 1.5, 10.0, 0.25, 11.0, 1.25, 12.0, 2.25, 13.0, 3.25, 14.0, 4.25, 15.0, 5.25, 16.0, 6.25, 17.0, 7.25, 18.0, 8.25], 3.0000000054977558e38, 1.401298464324817e-45]}}
+
 # ---------------------------------------------------------------------------
 # Pointers, layouts, arrays and unions over native memory C owns
 

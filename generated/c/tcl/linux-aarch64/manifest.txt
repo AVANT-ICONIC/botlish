@@ -27,12 +27,12 @@ header generic/tclPlatDecls.h c8603094
 header generic/tclTomMathDecls.h 1ebc0288
 shim_library botlish_shim_tcl_47be8309
 file layouts-check.c 384 301ffa2e
-file layouts.tsv 1103 945aab2a
-file report.tsv 1497 0cba2600
-file report.txt 160 0c459d8a
+file layouts.tsv 1103 c6f6fdb7
+file report.tsv 1497 e9fe3654
+file report.txt 159 aa6e7eba
 file shim.c 72 47be8309
 file tcl/ctypes.bot 255 df906f6f
-file tcl/decls.bot 3696 00d94aeb
+file tcl/decls.bot 3739 e5b52347
 file tcl/layouts.bot 449 09474fdf
 file tcl/oo.bot 14 87752fc2
 file tcl/oodecls.bot 227 43c573ea
@@ -41,7 +41,7 @@ file tcl/tcl.bot 312 ed313b38
 file tcl/thunks/decls.bot 84 39ca5fe6
 file tcl/thunks/oo.bot 16 f2d48922
 file tcl/thunks/tcl.bot 25 28e8a831
-file tcl/tommathdecls.bot 924 730e16c4
+file tcl/tommathdecls.bot 948 df2d1635
 libraries tcl/decls.bot tcl9.0
 libraries tcl/oodecls.bot tcl9.0
 libraries tcl/platdecls.bot tcl9.0
@@ -50,7 +50,7 @@ libraries tcl/thunks/decls.bot {botlish_shim_tcl_47be8309 tcl9.0}
 libraries tcl/thunks/oo.bot {botlish_shim_tcl_47be8309 tcl9.0}
 libraries tcl/thunks/tcl.bot {botlish_shim_tcl_47be8309 tcl9.0}
 libraries tcl/tommathdecls.bot tcl9.0
-count alias 84
+count alias 86
 count aliases 81
 count bool 0
 count boolOnly 0
@@ -59,7 +59,7 @@ count complete 29
 count constants 219
 count constantsSeen 221
 count declared 753
-count direct 729
+count direct 738
 count enumerators 13
 count excluded 0
 count fnmacros 78
@@ -68,22 +68,21 @@ count inline 1
 count manual 5
 count opaque 27
 count proven 8
-count ptrParams 1608
-count ptrResults 208
+count ptrParams 1620
+count ptrResults 209
 count resultAlias 0
 count resultIndependent 1
-count resultUnknown 207
+count resultUnknown 208
 count tablestubs 0
 count thunk 16
-count unknownParams 1595
-count unknownRetention 760
-count unsupported 84
-count views 459
+count unknownParams 1607
+count unknownRetention 771
+count unsupported 73
+count views 466
 blocked macro-needs-signature 63
 blocked thunk-rejected 2
 blocked unsupported-callback-signature 1
 blocked unsupported-macro 7
-blocked variadic 11
 layout_abi linux-aarch64 clang aarch64-linux-gnu {Ubuntu clang version 18.1.3 (1ubuntu1)}
 layout_count anonymous 9
 layout_count blocked 2

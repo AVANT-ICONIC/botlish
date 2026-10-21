@@ -1875,6 +1875,24 @@ add10(32)          # 42 (add captures x)
   boolean literals to a function with a subject and boolean options is
   `MANY-BOOLEAN-ARGUMENTS` (§23). See FLAGS.md ("Boolean arguments" states
   the idiom).
+* **Variadic parameters.** `fn sum(variadic numbers: List[int]) -> int:`
+  ends a parameter list (after the flags and the context section; only a
+  resume clause follows it) with one parameter bound to the List of a
+  call's trailing arguments: `sum()`, `sum(1, 2, 3)`, `log(level, "a", "b")`,
+  `report(10, 1, 2, :loud)` (trailing arguments before the flags). The body
+  sees an ordinary immutable List; resolution collects the trailing
+  arguments into one ordinary list construction, every argument evaluated
+  once, in order, each trailing one proven in the element type by its own
+  proof. A bare `variadic values: List` imprints its element type per call
+  (hir/imprint.tcl), so such a function is called, never used as a value;
+  a typed one used as a value is the ordinary function of its List
+  parameter. Method syntax and aliases collect too; there is no spread, no
+  tuple and no heterogeneous sequence. An `extern c fn` ends in the bare
+  word `variadic` for C's `...`: each call's trailing arguments are C ABI
+  values (C scalars, `ffi::c::Bool`, Float64, `Ptr`, `FnPtr`), promoted as
+  C promotes them, passed by a per-call machine signature on the native
+  backends. `MALFORMED-VARIADIC-SECTION` reports a misplaced section. See
+  VARIADICS-VERTICAL-SLICE-1.md.
 * **Contexts.** `context struct Clock:` (or `opaque context struct LinuxIO:`)
   declares a struct whose values may be installed into the current execution
   environment; `with context EXPR` installs EXPR's value -- its inferred type

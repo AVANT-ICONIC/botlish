@@ -9,6 +9,7 @@
  * infrastructure only. */
 
 #include <math.h>
+#include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -113,6 +114,28 @@ uint32_t cff_float_bits9(int which, float a0, float a1, float a2, float a3,
                          float a4, float a5, float a6, float a7, float a8) {
     float all[9] = {a0, a1, a2, a3, a4, a5, a6, a7, a8};
     return (which >= 0 && which < 9) ? cff_float_bits(all[which]) : 0;
+}
+
+/* A variadic function with fixed floats (SDL_RenderDebugTextFormat's
+ * shape: floats among the fixed parameters, then `...`): the fixed floats
+ * take floating-point registers as doubles do, so the trailing arguments
+ * follow them (System V, Linux AAPCS64) or all go to the stack (Apple).
+ * Argument WHICH as a double: 0 x, 1 y, then the trailing ones, COUNT
+ * pairs of an int and a double. */
+double cff_vpick(int which, float x, float y, int count, ...) {
+    va_list ap;
+    double r = -1.0;
+    if (which == 0) r = x;
+    if (which == 1) r = y;
+    va_start(ap, count);
+    for (int i = 0; i < count; i++) {
+        int n = va_arg(ap, int);
+        double d = va_arg(ap, double);
+        if (which == 2 + 2 * i) r = n;
+        if (which == 3 + 2 * i) r = d;
+    }
+    va_end(ap);
+    return r;
 }
 
 /* The brief's struct: on every supported target sizeof 24, _Alignof 8, and

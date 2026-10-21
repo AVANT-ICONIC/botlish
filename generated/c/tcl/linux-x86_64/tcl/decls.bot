@@ -23,6 +23,12 @@ extern c fn Tcl_PkgRequireEx(
     clientDataPtr: ffi::c::Ptr[ffi::c::Void]
 ) -> ffi::c::Ptr[ffi::c::Char]
 
+# C: void Tcl_Panic(const char *format, ...)
+extern c fn Tcl_Panic(
+    format: ffi::c::Ptr[ffi::c::Char],
+    variadic
+) -> unit
+
 # C: void *Tcl_Alloc(size_t size)
 extern c fn Tcl_Alloc(size: ffi::c::ULong) -> ffi::c::Ptr[ffi::c::Void]
 
@@ -82,6 +88,12 @@ extern c fn Tcl_AppendAllObjTypes(
     interp: ffi::c::Ptr[tcl::ctypes::Tcl_Interp],
     objPtr: ffi::c::Ptr[tcl::ctypes::Tcl_Obj]
 ) -> ffi::c::Int
+
+# C: void Tcl_AppendStringsToObj(Tcl_Obj *objPtr, ...)
+extern c fn Tcl_AppendStringsToObj(
+    objPtr: ffi::c::Ptr[tcl::ctypes::Tcl_Obj],
+    variadic
+) -> unit
 
 # C: void Tcl_AppendToObj(Tcl_Obj *objPtr, const char *bytes, Tcl_Size length)
 extern c fn Tcl_AppendToObj(
@@ -335,6 +347,12 @@ extern c fn Tcl_AllowExceptions(interp: ffi::c::Ptr[tcl::ctypes::Tcl_Interp]) ->
 extern c fn Tcl_AppendElement(
     interp: ffi::c::Ptr[tcl::ctypes::Tcl_Interp],
     element: ffi::c::Ptr[ffi::c::Char]
+) -> unit
+
+# C: void Tcl_AppendResult(Tcl_Interp *interp, ...)
+extern c fn Tcl_AppendResult(
+    interp: ffi::c::Ptr[tcl::ctypes::Tcl_Interp],
+    variadic
 ) -> unit
 
 # C: Tcl_AsyncHandler Tcl_AsyncCreate(Tcl_AsyncProc *proc, void *clientData)
@@ -1143,6 +1161,12 @@ extern c fn Tcl_SetCommandInfo(
 # C: void Tcl_SetErrno(int err)
 extern c fn Tcl_SetErrno(err: ffi::c::Int) -> unit
 
+# C: void Tcl_SetErrorCode(Tcl_Interp *interp, ...)
+extern c fn Tcl_SetErrorCode(
+    interp: ffi::c::Ptr[tcl::ctypes::Tcl_Interp],
+    variadic
+) -> unit
+
 # C: void Tcl_SetMaxBlockTime(const Tcl_Time *timePtr)
 extern c fn Tcl_SetMaxBlockTime(timePtr: ffi::c::Ptr[tcl::ctypes::Tcl_Time]) -> unit
 
@@ -1275,6 +1299,12 @@ extern c fn Tcl_UpVar2(
     part2: ffi::c::Ptr[ffi::c::Char],
     localName: ffi::c::Ptr[ffi::c::Char],
     flags: ffi::c::Int
+) -> ffi::c::Int
+
+# C: int Tcl_VarEval(Tcl_Interp *interp, ...)
+extern c fn Tcl_VarEval(
+    interp: ffi::c::Ptr[tcl::ctypes::Tcl_Interp],
+    variadic
 ) -> ffi::c::Int
 
 # C: void *Tcl_VarTraceInfo2(Tcl_Interp *interp, const char *part1, const char *part2, int flags, Tcl_VarTraceProc *procPtr, void *prevClientData)
@@ -2961,6 +2991,19 @@ extern c fn Tcl_AppendFormatToObj(
     objc: ffi::c::Long,
     objv: ffi::c::Ptr[ffi::c::Ptr[tcl::ctypes::Tcl_Obj]]
 ) -> ffi::c::Int
+
+# C: Tcl_Obj *Tcl_ObjPrintf(const char *format, ...)
+extern c fn Tcl_ObjPrintf(
+    format: ffi::c::Ptr[ffi::c::Char],
+    variadic
+) -> ffi::c::Ptr[tcl::ctypes::Tcl_Obj]
+
+# C: void Tcl_AppendPrintfToObj(Tcl_Obj *objPtr, const char *format, ...)
+extern c fn Tcl_AppendPrintfToObj(
+    objPtr: ffi::c::Ptr[tcl::ctypes::Tcl_Obj],
+    format: ffi::c::Ptr[ffi::c::Char],
+    variadic
+) -> unit
 
 # C: int Tcl_CancelEval(Tcl_Interp *interp, Tcl_Obj *resultObjPtr, void *clientData, int flags)
 extern c fn Tcl_CancelEval(

@@ -180,7 +180,10 @@ anywhere in the logic:
    -- the pure, total, allocation-free scalar-Int arithmetic/comparison/
    bitwise/shift family already in `native::lower::natives`'s own op
    table. Deliberately excluded: `imod` (can raise on a zero divisor, no
-   existing error-safety proof for it), `veq`/`streq` (equality across
+   existing error-safety proof for it -- since added: a `mod` whose
+   divisor's Range excludes 0 is total and eligible, `LeafModSafe`, the
+   same shape of proof as item 7's; native/lower.tcl's "Euclidean mod"),
+   `veq`/`streq` (equality across
    non-proven-Int operands; not proven allocation-free), and every
    string/list/hash/mutable-array op (`strcat`, `listnew`, `mutarrayset`,
    `hash`, ...).
@@ -561,7 +564,7 @@ for that question instead.
 | `tiny-leaf-ineligible-captures` | a closure over an enclosing local declines |
 | `tiny-leaf-ineligible-allocating` | List construction declines |
 | `tiny-leaf-ineligible-mutating` | MutableArray mutation declines |
-| `tiny-leaf-ineligible-erroring-mod` | `mod` (no error-safety proof) declines |
+| `tiny-leaf-ineligible-erroring-mod` | `mod` by a divisor that may be 0 declines (since `LeafModSafe`: a nonzero divisor's inlines, `tiny-leaf-eligible-nonzero-mod`) |
 | `tiny-leaf-ineligible-shift-unproven-count` | two callers, two different shift counts: declines |
 | `tiny-leaf-eligible-shift-proven-count` | one proven-safe constant shift count: inlines |
 | `tiny-leaf-dynamic-call-not-inlined` | a `callvalue` call never inlines |
