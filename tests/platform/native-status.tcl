@@ -5,7 +5,8 @@
 #
 # Runs one small probe per native capability -- the JIT, the GC's frame walk
 # under stress, a native stack overflow (of the thread's stack and of a
-# coroutine's), coroutines, a Linux syscall, a C call, a program object and
+# coroutine's), coroutines, a Linux syscall, a C call, byte storage exposed
+# to the system C library, a program object and
 # a standalone executable -- and of the target boundary (the
 # driver's reading of the host target's triple, the C calling convention of
 # a foreign signature, a program built for the other operating system of the
@@ -119,6 +120,23 @@ extern c fn labs(x: ffi::c::Long) -> ffi::c::Long
 
 labs(-5)
 } {}] \
+    c-byte-borrow [list program {import abi
+import abi::bytes
+import byte
+import ffi::c
+
+extern c fn memcmp(a: ffi::c::Ptr[ffi::c::Void] read noescape, b: ffi::c::Ptr[ffi::c::Void] read noescape, n: ffi::c::ULong) -> ffi::c::Int
+extern c fn memset(dst: ffi::c::Ptr[ffi::c::Void] write noescape, c: ffi::c::Int, n: ffi::c::ULong) -> ffi::c::Ptr[ffi::c::Void] alias dst
+
+# Bytes and MutableBytes exposed to the system C library's memcmp (read
+# noescape) and memset (write noescape: a private copy, the write-back
+# value): [1, 200] sorts before the [200, 200] memset wrote, and the
+# zeroed owner stays zeroed.
+a = abi::bytes::from_list([byte::from_int(1), byte::from_int(200)])
+z = abi::bytes::zeroed(abi::usize(2))
+c = abi::bytes::freeze(memset(z, 200, 2).dst)
+[memcmp(a, c, 2) < 0, memcmp(c, a, 2) > 0, memcmp(a, a, 2), c == abi::bytes::from_list([byte::from_int(200), byte::from_int(200)]), memcmp(z, abi::bytes::from_list([byte::from_int(0), byte::from_int(0)]), 2)]
+} {}] \
     object [list object {fn fib(n):
     if n <= 1:
         return n
@@ -167,7 +185,10 @@ f(1)
 # AOT)`). A C call (libc's labs, through the platform linker) is linked and
 # runs, returning 5, on every host: on macos-aarch64 since milestone 6
 # (MACOS-AARCH64-MILESTONE-6.md), where until then it was refused before the
-# linker ran (NATIVE LINK, "C calls are linked on Linux glibc only"). A
+# linker ran (NATIVE LINK, "C calls are linked on Linux glibc only"). Byte
+# storage exposed to the system C library (memcmp reading two buffers,
+# memset writing a private copy) gives the same values everywhere: on
+# macos-aarch64 checked since milestone 7 (MACOS-AARCH64-MILESTONE-7.md). A
 # native stack overflow is NATIVE LIMIT STACK on
 # every host, the thread's stack and a coroutine's alike: on macos-aarch64
 # since milestone 4 (MACOS-AARCH64-MILESTONE-4.md), where until then the
@@ -203,6 +224,7 @@ set linux [dict create \
     coroutine {value {[10, 7]}} \
     linux-syscall {value 0} \
     c-call {value 5} \
+    c-byte-borrow {value {[true, true, 0, true, 0]}} \
     target {value {format elf c-call-conv system_v runs 1}} \
     c-convention {value {labs system_v abs system_v}} \
     other-target {error {NATIVE TARGET} {this program was built for target macos-* and native code runs only on its own target's host*matching architecture is not a matching target*}}]
@@ -224,6 +246,7 @@ set expected [dict create \
         coroutine {value {[10, 7]}} \
         linux-syscall {error {SURFACE MODULE UNSUPPORTED-PLATFORM} {*namespace "linux" belongs to the Linux platform*unavailable for target macos-aarch64 (macOS on aarch64)*}} \
         c-call {value 5} \
+        c-byte-borrow {value {[true, true, 0, true, 0]}} \
         object {value {macho arm64 object}} \
         executable {value {{macho arm64 execute} 6765}} \
         target {value {format macho c-call-conv apple_aarch64 runs 1}} \
