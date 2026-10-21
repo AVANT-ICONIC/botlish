@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&height=230&color=0:042f36,55:065a66,100:08859b&text=Botlish&fontColor=fafafa&fontSize=78&fontAlignY=36&desc=a%20language%20for%20humans%20and%20agents%20alike&descSize=16&descAlignY=56&animation=fadeIn" alt="Botlish" width="100%" />
+<img src="https://capsule-render.vercel.app/api?type=waving&height=230&color=0:0d819f,50:08859b,100:0f8575&text=Botlish&fontColor=fafafa&fontSize=78&fontAlignY=36&desc=a%20language%20for%20humans%20and%20agents%20alike&descSize=16&descAlignY=56&animation=fadeIn" alt="Botlish" width="100%" />
 
 <img src="./robot.cyan.svg" alt="Botlish robot" width="96" />
 
@@ -531,6 +531,6 @@ backends run wherever Tcl 9 does.
 
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&height=120&section=footer&color=0:08859b,45:065a66,100:042f36" alt="" width="100%" />
+<img src="https://capsule-render.vercel.app/api?type=waving&height=120&section=footer&color=0:0f8575,50:08859b,100:0d819f" alt="" width="100%" />
 
 </div>
