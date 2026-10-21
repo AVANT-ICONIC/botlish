@@ -51,7 +51,7 @@ checking it there:
 ## 1. The initial census
 
 Before any change, a macOS dispatch of the borrowing-related files on main
-(run [39574475382](https://github.com/mwagner-webdev/botlish/actions/runs/39574475382),
+at 6828d12 (run [39574475382](https://github.com/mwagner-webdev/botlish/actions/runs/39574475382),
 `tier.tcl` with c-pointer-borrowing, c-ffi, native-view, native-edit,
 layout-arrays, layout-unions, binary-layout, abi-bytes, abi-mutable-bytes,
 portable-io and context-traits on interp and compile):
@@ -66,8 +66,9 @@ Number of tests skipped for each constraint:
 ```
 
 Nothing failed; 91 tests did not run. The constraints, file by file (tests
-declaring each; one test may declare several), on main (22b0005) and after
-this milestone:
+declaring each; one test may declare several), on main (the run's commit,
+6828d12, and this milestone's base, 22b0005, alike) and after this
+milestone:
 
 | file | tests | `nativeLinux` before | after | what replaced it |
 |---|---:|---:|---:|---|
@@ -104,8 +105,9 @@ Each restricted test, classified by the brief's categories:
 5. **GC-stress tests**: nv-gc-stress, ne-gc-stress, la-gc-stress,
    lu-gc-stress, bl-gc-stress, cb-failure-gc-stress,
    abi-mutable-bytes-gc-stress-pure-values -- `nativeLinux` only because GC
-   stress used to be validated on Linux alone; milestone 4 made it a
-   capability of every native host.
+   stress used to be validated on Linux alone; milestone 3 validated the
+   collector's roots (suspended stacks included) under GC stress on macOS
+   (MACOS-AARCH64-MILESTONE-3.md, section 14).
 6. **Mutation campaigns** and 7. **fuzzing campaigns**: the tools, section 10.
 8. **Linux syscall tests with no Darwin counterpart yet**: abi-bytes' 23 and
    abi-mutable-bytes' 12 remaining `nativeLinux` tests write and read through
@@ -120,7 +122,7 @@ each compiles a program that calls no OS facility and either counts its
 heap allocations (native::allocationReport, in-process) or runs it under
 `BOTLISH_NATIVE_GC_STRESS=1`. Neither is Linux-specific: the allocation
 counters are the runtime's own, and stress collections need only the native
-runtime's stack maps, which every native host has had since milestone 4.
+runtime's stack maps, which macOS has had since milestone 3.
 `nativeCoroutines` is the capability that names exactly that runtime
 (tests/helpers.tcl: Linux x86-64 and AArch64, macOS AArch64). The same holds
 for layout-unions' and binary-layout's two each, and for four of

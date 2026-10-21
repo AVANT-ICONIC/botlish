@@ -603,7 +603,19 @@ and reports SKIPPED; tier item `darwin-io-mutants`):
 | `darwin-stderr-is-stdout` | write_error_text writes descriptor 1 | macOS |
 | `darwin-io-direct` | `darwin::io` marked direct | any |
 
-PENDING-MUTANTS
+**On Linux x86-64** (`tclsh9.0 audit/context-traits/tools/mutate.tcl`, the
+whole file on the merged tree, in four `-only` groups): 42 mutants, **33
+killed, 9 skipped, 0 survived**. The 23 context-trait and path mutants that
+predate this milestone are all still applied and killed; of the 19 Darwin
+ones, 10 are killed on Linux -- by the front-end half of darwin-io.test (the
+platform rule, the declarations' NIR, `di-errno-read-first`, the C string,
+the authority table) -- and 9 need a Darwin process and are SKIPPED there.
+Two were first marked macOS-only (`darwin-errno-after-another-call`,
+`darwin-errno-constant`); strengthening `di-errno-read-first` to count C
+calls and to read `open_mode` too made the NIR see both on any host, and
+they lost their marks.
+
+PENDING-MUTANTS-MACOS
 
 ## 24. Performance
 
