@@ -56,7 +56,11 @@ into a direct call of `linux::io::write_text`, which is one `write(2)` system
 call: no dispatch, no hidden argument, no libc in the path. The one way
 `hello` can fail, `io::WriteFailed`, is part of its signature, and its caller
 handles it. ([examples/io/hello.bot](examples/io/hello.bot),
-[CONTEXT-TRAITS.md](docs/CONTEXT-TRAITS.md))
+[CONTEXT-TRAITS.md](docs/CONTEXT-TRAITS.md)) On macOS the same `hello`
+runs with `darwin::io::create()` installed instead, and the write is
+libSystem's `write(2)`, called through the C FFI
+([examples/io/hello-darwin.bot](examples/io/hello-darwin.bot),
+[MACOS-AARCH64-MILESTONE-8.md](docs/MACOS-AARCH64-MILESTONE-8.md)).
 
 ## Botlish and Rust
 

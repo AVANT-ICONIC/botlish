@@ -666,6 +666,11 @@ the fixture compiled by Apple clang, and the machine state each call
 arrives in matches Apple clang's own calls of the same prototypes
 (`cf-abi-*`). Symbols are their C names: the object crate writes Mach-O's
 `_` user label prefix, for a C function's symbol as for Botlish's own.
+macOS's IO is a binding of this kind (MACOS-AARCH64-MILESTONE-8.md):
+lib/darwin.bot declares libSystem's `write`, `read`, `open` (variadic),
+`close` and `__error` as `extern c fn` with byte-borrowing contracts, and
+lib/darwin/io.bot puts them behind `io::IO`; no extern c library is needed,
+libSystem being in every macOS executable's link.
 
 Elsewhere the native backends already refuse executables (Linux glibc
 and macOS AArch64 only), so they refuse a program that calls C the same

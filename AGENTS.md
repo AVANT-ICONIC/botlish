@@ -1076,11 +1076,13 @@ C-BINDGEN-LAYOUTS.md) have equal rows and are two targets. Keep it so:
   execution). The table is the one target representation: a new fact goes
   in its row, never a second table (the driver reads the triple; Cranelift
   derives the C convention and the object format from it).
-* The `linux` namespace and everything under it are the Linux platform's
-  (core/cabi.tcl's `platforms`, surface/modules.tcl's `PlatformCheck`):
-  UNSUPPORTED-PLATFORM for a target of another operating system. A platform
-  is designated in that table, never read from a namespace's spelling. Never map a Linux module to
-  another system's, and add no Darwin syscall transport. An
+* The `linux` namespace and everything under it are the Linux platform's,
+  `darwin` and everything under it the macOS platform's (core/cabi.tcl's
+  `platforms`, surface/modules.tcl's `PlatformCheck`): UNSUPPORTED-PLATFORM
+  for a target of another operating system. A platform is designated in
+  that table, never read from a namespace's spelling. Never map one
+  platform's module to another system's, and add no Darwin syscall
+  transport (Darwin IO is libSystem's, below). An
   architecture-specific namespace that is no platform's stays every
   system's.
 * A build reads the target in three places (ModuleFile's architecture file,
@@ -1173,6 +1175,59 @@ that runs it through `qemu-aarch64 -L /usr/aarch64-linux-gnu`, and set
 `::tcl_platform(machine)` to `aarch64` before sourcing a test file (its
 executable tests need a native arm64 host); CI's arm64 workflow
 (`workflow_dispatch` on a branch) runs everything natively.
+
+## Darwin IO (libSystem)
+
+macOS's IO is libSystem's C functions, never a syscall
+(MACOS-AARCH64-MILESTONE-8.md): Darwin's kernel interface is private, its C
+library the stable one. `darwin` (lib/darwin.bot, a designated direct
+module) declares `write`, `read`, `open`, `close` and `__error` as
+`extern c fn` by their SDK prototypes and wraps each in one C call;
+`darwin::io` (lib/darwin/io.bot) is the opaque `DarwinIO` context
+implementing `io::IO` with linux::io's completion policy; `darwin::path`
+(lib/darwin/path.bot) is `DarwinPath`. `darwin` is the macOS platform's in
+core/cabi.tcl's `platforms` (Compilation targets, below). Keep it so:
+
+* No Darwin syscall, syscall number, `svc #0x80`, x16 or transport, and no
+  compiler, runtime or Tcl knowledge of IO: every effect is an ordinary C
+  call through the C FFI and byte borrowing (write's buffer `read noescape`,
+  read's `write noescape`, open's path `read noescape`), every constant the
+  SDK's (`di-sdk-facts` compares them on macOS), never Linux's.
+* Darwin reports failure as C does (-1, the reason in errno), never as
+  Linux's `-errno`: a result holds the C result and, separately, the errno,
+  read only after a failure and right after the call, before anything that
+  could call C (`di-errno-read-first` pins the NIR). errno is read through
+  `__error()` and a native view of a one-field layout: no pointer
+  dereference operator, no stored or cached errno pointer, no global errno.
+  `darwin::read`'s write-back value is built between its call and the errno
+  read (two allocations; MACOS-AARCH64-MILESTONE-8.md, section 7): do not
+  add a third thing there.
+* `open` is declared with its genuine variadic prototype; the creation mode
+  is its one trailing argument, an `ffi::c::UShort` (macOS's `mode_t`).
+  Never declare a variadic C function with a fixed trailing parameter: on
+  Apple arm64 the two travel in different places.
+* io::IO stays platform-free: DarwinIO satisfies it structurally from its
+  own module; never add a runtime dispatch, a registration or an OS check to
+  lib/io.bot. The completion policy is LinuxIO's (no retry of EINTR or
+  EAGAIN); change both or neither.
+* A test that runs Darwin IO carries `darwinIO` (tests/helpers.tcl: a
+  capability -- the host's target is the darwin platform's and C calls
+  link), never an OS check. Faults are injected with tests/cffi/write-
+  inject.c (a dyld interposer of libSystem's `write`), never by a test
+  hook in the library.
+
+If you change lib/darwin.bot, lib/darwin/io.bot, lib/darwin/path.bot, the
+platform row, or what they rely on (the C FFI's contracts, byte borrowing,
+native views, variadic calls, context-trait satisfaction), run
+`tests/darwin-io.test` (its front-end half runs on every host),
+`tests/context-traits.test`, `tests/portable-io.test`,
+`tests/target-model.test`, `tests/workload-2048.test` and
+`audit/context-traits/tools/mutate.tcl` (its `darwin-*` mutants run on
+macOS through the tier item `darwin-io-mutants`; every mutant that applies
+to the host must still apply and be killed), and on macOS (a branch push
+with `CI-Tests: darwin-io.test ...`) the darwin-io tests themselves.
+`bench/darwin-io.tcl` (tier item `darwin-io-bench`) is the performance
+report.
 
 ## Affine values
 
@@ -1844,12 +1899,15 @@ and a byte-sized pointee (Char, SChar, UChar by registry metadata, or Void).
   a test process's own; nothing else may call it.
 
 If you change any of that (the files are C-POINTER-BORROWING.md's "What to
-run when changing this" list), run `tests/c-pointer-borrowing.test` (also
-under `BOTLISH_NATIVE_GC_STRESS=1`), `audit/c-pointer-borrowing/tools/fuzz.tcl`
-(several seeds, once with `-gc-stress 1`) and
-`audit/c-pointer-borrowing/tools/mutate.tcl` (every mutant in its
-`mutants.txt` must still apply and be killed: update a mutant's text when you
-change the code it mutates, keeping it a mutant of the same rule), plus
+run when changing this" list), run `tests/c-pointer-borrowing.test` and
+`tests/c-byte-borrowing.test` (real C: the host compiler's fixture and the
+system C library; both also under `BOTLISH_NATIVE_GC_STRESS=1`),
+`audit/c-pointer-borrowing/tools/fuzz.tcl` (several seeds, once with
+`-gc-stress 1`) and `audit/c-pointer-borrowing/tools/mutate.tcl` (every
+mutant in its `mutants.txt` that applies to the host must still apply and be
+killed: update a mutant's text when you change the code it mutates, keeping
+it a mutant of the same rule; a `%% macos-aarch64` mutant runs on macOS
+only: the tier item `c-borrow-mutants`, MACOS-AARCH64-MILESTONE-7.md), plus
 `tests/abi-bytes.test`, `tests/abi-mutable-bytes.test`,
 `tests/linux-syscall.test` and the abi-bytes and mutable-bytes mutation tools
 for a change to the shared exposure mechanism. `bench/c-pointer-borrowing.tcl`
@@ -2314,9 +2372,15 @@ in the single executable): it is an application module, the file beside its
 programs, which every entry point compiles as they are (`tclsh9.0 main.tcl
 -backend cranelift examples/games/2048/demo.bot`; `examples/games/2048/run.tcl`
 adds `-suite`, `-hirx OUT FILE.bot` and `-backend B FILE.bot`).
+The demo is the application module `demo_play.bot` (the game's presentation
+and play loop, requiring `io::IO`) and one entry per platform, `demo.bot`
+(Linux, `linux::io`) and `demo-darwin.bot` (macOS, `darwin::io`): keep
+everything but the context's installation in demo_play.bot
+(MACOS-AARCH64-MILESTONE-8.md, section 22).
 `tests/workload-2048.test` runs the suite, the warning check, the benchmark
-checksum, the demo executable (also under GC stress) and the demo under
-main.tcl's native backends in the ordinary suite; `bench/2048.tcl` is the
+checksum, the demo executable (also under GC stress), the demo under
+main.tcl's native backends and, on macOS, the Darwin demo's executable in
+the ordinary suite; `bench/2048.tcl` is the
 performance report. If you change the engine or the suite, also run
 `audit/2048/mutate.tcl` (every mutant in `audit/2048/mutants.txt` must
 still apply and be killed; each mutant is a private application directory,
