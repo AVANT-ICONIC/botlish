@@ -359,7 +359,7 @@ proc hir::borrow::Problems {hir ranges e node name} {
             continue
         }
         lappend problems [list TYPE [format {argument %d of %s cannot be proven to satisfy %s (argument type: %s)%s} \
-            $index $name [hir::types::show $declared] [hir::semantic::ShowType $hir $argType] \
+            $index $name [hir::types::show $declared] [hir::semantic::ShowType $hir [hir::range::ShownArgType $argType $declared]] \
             [hir::range::MismatchClause $argType $declared]] $arg]
     }
     # A data pointer result of a call that exposes Botlish storage may point
