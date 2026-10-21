@@ -2607,6 +2607,14 @@ tests/hir-syntax.test hir-syntax-duplicate-params pass
 tests/hir-syntax.test hir-syntax-from-ir pass
 tests/hir-syntax.test hir-syntax-malformed pass
 tests/hir-syntax.test hir-syntax-origins pass
+tests/hir-text.test ht-module-sections pass
+tests/hir-text.test ht-module-sections-run pass
+tests/hir-text.test ht-module-section-order pass
+tests/hir-text.test ht-module-section-rules pass
+tests/hir-text.test ht-control-characters pass
+tests/hir-text.test ht-control-characters-native pass
+tests/hir-text.test ht-parameterless-clone pass
+tests/hir-text.test ht-coroutine-protocols pass
 tests/hir-types.test hir-call-1 pass
 tests/hir-types.test hir-call-2 pass
 tests/hir-types.test hir-call-3 pass
