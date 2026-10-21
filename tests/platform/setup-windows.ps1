@@ -46,7 +46,11 @@ if (-not (Test-Path "$Prefix\bin\tclsh90.exe")) {
             -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
         if (-not $vs) { throw "no Visual Studio installation with the C++ x64 tools" }
         $vcvars = "$vs\VC\Auxiliary\Build\vcvars64.bat"
-        $build = "call `"$vcvars`" >nul && cd /d tcl$version\win && nmake /nologo /f makefile.vc release INSTALLDIR=$Prefix && nmake /nologo /f makefile.vc install INSTALLDIR=$Prefix"
+        # CC=cl on nmake's command line: nmake takes CC from the environment,
+        # and rules.vc asks $(CC) for MSVC's version (vercl.x), so the
+        # workflow's CC=clang (the C ABI facts' compiler) would leave
+        # VCVERSION undefined: "rules.vc(508) : fatal error U1023".
+        $build = "call `"$vcvars`" >nul && cd /d tcl$version\win && nmake /nologo /f makefile.vc release INSTALLDIR=$Prefix CC=cl && nmake /nologo /f makefile.vc install INSTALLDIR=$Prefix CC=cl"
         cmd /c $build
         if ($LASTEXITCODE -ne 0) { throw "the Tcl build failed" }
     } finally {
