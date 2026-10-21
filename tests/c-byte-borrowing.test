@@ -105,11 +105,14 @@ proc appValue {dir} {
 }
 
 # What DIR's program prints as a standalone executable (its value line),
-# built with ENVIRONMENT ({NAME VALUE ...}) for the run.
+# built with ENVIRONMENT ({NAME VALUE ...}) for the run. Raises when the
+# executable exits with a non-zero status or is killed by a signal; what it
+# writes to its standard error (Guard Malloc's banner) is kept in DIR's
+# `stderr`, never taken for a failure.
 proc appExecutable {dir {environment {}}} {
     set exe [file join $dir program]
     native::withLinkDirs [list $::fixtureDir] {native::executable [appHir $dir] $exe}
-    return [string trim [exec env {*}[lmap {k v} $environment {string cat $k=$v}] $exe]]
+    return [string trim [exec env {*}[lmap {k v} $environment {string cat $k=$v}] $exe 2> [file join $dir stderr]]]
 }
 
 # Runs SCRIPT in the caller with BOTLISH_NATIVE_GC_STRESS=1 (a collection
@@ -605,7 +608,9 @@ test bb-system-symbols {the executable imports memcmp, memcpy, memmove and memse
 # allocation on pages of its own, its end against an inaccessible page, so a
 # read one byte past a storage whose size is a multiple of 16 faults. A
 # probe C program shows the detector works on this host: its one-byte
-# over-read of a 16-byte block faults under libgmalloc and not without.
+# over-read of a 16-byte block faults under libgmalloc and not without. A
+# run is judged by its exit status alone: libgmalloc writes a banner to
+# standard error, which goes to a file (exec would take it for a failure).
 proc guardMallocWorks {} {
     if {$::tcl_platform(os) ne "Darwin" || ![testConstraint cCompiler]} {
         return 0
@@ -616,8 +621,10 @@ proc guardMallocWorks {} {
     close $channel
     set works 0
     if {![catch {exec cc -O0 [file join $dir probe.c] -o [file join $dir probe]}]} {
-        set plain [catch {exec [file join $dir probe]}]
-        set guarded [catch {exec env DYLD_INSERT_LIBRARIES=/usr/lib/libgmalloc.dylib [file join $dir probe]}]
+        set plain [catch {exec [file join $dir probe] 2> [file join $dir stderr]}]
+        set guarded [catch {exec env DYLD_INSERT_LIBRARIES=/usr/lib/libgmalloc.dylib [file join $dir probe] 2> [file join $dir stderr]} message options]
+        # Killed by the fault's signal, not merely a non-zero exit.
+        set guarded [expr {$guarded && [lindex [dict get $options -errorcode] 0] eq "CHILDKILLED"}]
         set works [expr {!$plain && $guarded}]
     }
     file delete -force $dir
@@ -625,12 +632,21 @@ proc guardMallocWorks {} {
 }
 testConstraint guardMalloc [guardMallocWorks]
 
+# 1 when DIR's executable, run with ENVIRONMENT, is killed by a signal (a
+# fault), 0 when it exits, whatever its status.
+proc appFaults {dir {environment {}}} {
+    if {[catch {appExecutable $dir $environment} message options]} {
+        return [expr {[lindex [dict get $options -errorcode] 0] eq "CHILDKILLED"}]
+    }
+    return 0
+}
+
 test bb-guard-malloc {(macOS) under Guard Malloc, a standalone executable making read and write exposures of storages whose sizes are multiples of 16 -- the fixture's and the system library's -- runs to the same value: no C call reads or writes past an exposed storage; the same executable with one count one byte too long faults, so the detector sees what it is meant to} -constraints {bbFixture guardMalloc} -body {
     set main "d = mk(4080, 7)\nm = abi::bytes::zeroed(abi::usize(4080))\nw = bb::fill(m, mlen(m), 3)\nc = sys::memcpy(abi::bytes::zeroed(abi::usize(4080)), d, len(d))\n\[bb::checksum(d, len(d)), bb::checksum(w.out, mlen(w.out)), sys::memcmp(c.dst, d, len(d))\]\n"
     set good [bbApp $main]
     set bad [bbApp "[string map {{bb::checksum(d, len(d)), } {bb::checksum(d, len(d) + 1), }} $main]"]
     set gmalloc {DYLD_INSERT_LIBRARIES /usr/lib/libgmalloc.dylib}
-    list [appExecutable $good $gmalloc] [catch {appExecutable $bad $gmalloc}] [catch {appExecutable $bad}]
+    list [appExecutable $good $gmalloc] [appFaults $bad $gmalloc] [appFaults $bad]
 } -cleanup removeApps -result [list [bbList [list [bbPatternChecksum 4080 7] [bbChecksum [bbFill 4080 3]] 0]] 1 0]
 
 cleanupTests
