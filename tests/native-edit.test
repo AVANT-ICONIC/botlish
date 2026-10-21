@@ -36,8 +36,6 @@ source [file join $::projectRoot native native.tcl]
 core::cabi::installTestFixture
 
 testConstraint nativeBuilt [expr {![catch {native::binary}]}]
-testConstraint nativeLinux [expr {$::tcl_platform(os) eq "Linux" &&
-    $::tcl_platform(machine) in {x86_64 amd64 aarch64} && [testConstraint nativeBuilt]}]
 testConstraint executableAot [expr {[testConstraint executableAot] && [testConstraint nativeBuilt]}]
 testConstraint cCompiler [expr {[auto_execok cc] ne ""}]
 
@@ -794,7 +792,7 @@ test ne-no-caching {a native store and the reads around it are each one runtime 
     neOps [neNir "fn f(e: NativeEdit\[Inner\]) -> int:\n    binary::store(e, Inner.x, 1)\n    binary::store(e, Inner.x, 1)\n    a = e.x\n    binary::store(e, Inner.x, 2)\n    a + e.x\n\nfn g() -> int errors NativeEditNull:\n    p = memory(\[0, 0, 0, 0\])\n    f(binary::native::edit(Inner, p))\n\nr = g():\n    on NativeEditNull:\n        0\nr\n" f]
 } -result {nativestore nativestore nativeload nativestore runbox nativeload runbox riadd rbox}
 
-test ne-allocations {natively a store allocates nothing -- a scalar, a u64 above i64::MAX, a pointer, through a nested subrecord -- and neither does an edit; a layout write into byte storage allocates exactly its fresh storage (the MutableBytes rule: published storage is never written), its MutableBytes wrapper only where the value leaves the function (1000 operations each)} -constraints nativeLinux -body {
+test ne-allocations {natively a store allocates nothing -- a scalar, a u64 above i64::MAX, a pointer, through a nested subrecord -- and neither does an edit; a layout write into byte storage allocates exactly its fresh storage (the MutableBytes rule: published storage is never written), its MutableBytes wrapper only where the value leaves the function (1000 operations each)} -constraints {nativeBuilt nativeCoroutines} -body {
     set reports {}
     foreach program [list \
         "fn f(e: NativeEdit\[Deep\], i: binary::U8) -> unit:\n    binary::store(e, Deep.head, i)\n    binary::store(e.outer.inner, Inner.y, 513)\n    binary::store(e, Deep.outer.count, 4000000000)\nfn run(n: int) -> int errors NativeEditNull:\n    p = memory(\[[join [lrepeat 24 0] {, }]\])\n    e = binary::native::edit(Deep, p)\n    k = loop i from 0 to n:\n        if i >= 0 and i <= 255:\n            f(e, i)\n    0\nr = run(1000):\n    on NativeEditNull:\n        0\nr\n" \
@@ -947,7 +945,7 @@ test ne-executable {a standalone executable (whichever linker BOTLISH_NATIVE_LIN
     list [expr {"value {[exec $path]}" eq $direct}] $direct
 } -cleanup {unset -nocomplain source hir path direct} -result {1 {value {[[255, 128, 255, 255, 0, 0, 0, 128, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 0, 0, 0, 0, 128, 255, 255, 165, 165, 1, 0, 0, 128], true]}}}
 
-test ne-gc-stress {under BOTLISH_NATIVE_GC_STRESS=1 (a collection at every allocation site) the writes stay exact: stores of 64-bit values that are BigInts, a chain of byte writes each allocating a fresh storage while the previous one is live, the record read back through binary::load -- an edit is an immediate word, never a root to lose, and a write's operands stay rooted while its storage is made} -constraints nativeLinux -body {
+test ne-gc-stress {under BOTLISH_NATIVE_GC_STRESS=1 (a collection at every allocation site) the writes stay exact: stores of 64-bit values that are BigInts, a chain of byte writes each allocating a fresh storage while the previous one is live, the record read back through binary::load -- an edit is an immediate word, never a root to lose, and a write's operands stay rooted while its storage is made} -constraints {nativeBuilt nativeCoroutines} -body {
     set source [neProgram "fn many(k: int) -> List\[any\] errors NativeEditNull, LayoutLengthMismatch:\n    p = memory(\[[join [lrepeat 32 0] {, }]\])\n    e = binary::native::edit(Scalars, p)\n    rs = loop i from 0 to k:\n        binary::store(e, Scalars.u64, 18446744073709551615)\n        binary::store(e, Scalars.i64, -9223372036854775808)\n        a = binary::write(abi::bytes::zeroed(abi::usize(32)), Scalars.u64, 18446744073709551614)\n        b = binary::write(a, Scalars.i64, -9223372036854775807)\n        c = binary::write(b, Scalars.u32, 4294967295)\n        \[binary::load(e), frozen(c), e.u64\]\n    list::at(rs, k - 1):\n        on IndexNotFound:\n            \[\]\nr = many(50):\n    on NativeEditNull:\n        \[\]\n    on LayoutLengthMismatch:\n        \[\]\nr\n"]
     set hir [surface::compile $source edit.bot -warnings off]
     set plain [neOutcome cranelift $hir]
