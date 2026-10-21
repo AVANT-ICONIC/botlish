@@ -1075,6 +1075,16 @@ proc hir::types::ForgetInferred {type} {
     return $type
 }
 
+# TYPE as a diagnostic shows a value's type when the diagnostic is not about
+# a List's length: every length inference minted forgotten (ForgetInferred;
+# LIST-CARDINALITY-REFINEMENTS.md, "Diagnostics"). A projection of a List or
+# a List passed where C wants a scalar is wrong whatever its length, which
+# would only distract; a message about a length shows the type itself
+# (hir::range::ShownArgType keeps it where the expected type states one).
+proc hir::types::showValue {type} {
+    return [show [ForgetInferred $type]]
+}
+
 # ---------------------------------------------------------------------------
 # Enum types (ENUMS.md; the header's {enum ID})
 

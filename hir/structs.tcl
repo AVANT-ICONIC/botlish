@@ -626,11 +626,8 @@ proc hir::structs::ProjectionProblem {hir e} {
                 [hir::types::show $type] $name [join [hir::types::StructLayout $type] {, }] $hint]]
         }
         NOT-A-STRUCT {
-            # (A List length inference minted is no part of why a List has
-            # no fields: the message shows the List as a declaration would,
-            # LIST-CARDINALITY-REFINEMENTS.md, "Diagnostics".)
             return [list NOT-A-STRUCT [format {cannot project field "%s" from a value of type %s: only a struct has fields%s} \
-                $name [hir::types::show [hir::types::ForgetInferred $type]] $hint]]
+                $name [hir::types::showValue $type] $hint]]
         }
     }
     return [list UNPROVEN-FIELD [format {cannot project field "%s": the receiver's struct type is not known here (its type is %s), and a field projection is resolved statically, never looked up at run time%s} \

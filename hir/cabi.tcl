@@ -242,7 +242,7 @@ proc hir::cabi::ValueTypeProblem {type} {
     if {[IsValueType $type]} {
         return ""
     }
-    return "[hir::types::show $type] is not a C ABI value type (a C integer scalar such as [hir::cabi::ScalarExample], [BoolName], [DoubleName], [PtrName]\[...\] or [FnPtrName]\[...\])"
+    return "[hir::types::showValue $type] is not a C ABI value type (a C integer scalar such as [hir::cabi::ScalarExample], [BoolName], [DoubleName], [PtrName]\[...\] or [FnPtrName]\[...\])"
 }
 
 proc hir::cabi::ScalarExample {} {
@@ -455,5 +455,5 @@ proc hir::cabi::VariadicArgument {type} {
     }
     return [dict create problem TYPE message [format \
         {%s is not a C ABI value type: a trailing argument of a variadic C function is a C integer scalar (such as %s), %s, %s, a %s[...] or a %s[...]} \
-        [hir::types::show $type] [ScalarExample] [BoolName] [DoubleName] [PtrName] [FnPtrName]]]
+        [hir::types::showValue $type] [ScalarExample] [BoolName] [DoubleName] [PtrName] [FnPtrName]]]
 }
