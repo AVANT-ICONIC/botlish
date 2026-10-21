@@ -13,8 +13,9 @@
 # deep, and hands it to a consumer that requires an exact length N: a
 # refined parameter directly, behind a `list::length(xs) == N` guard, behind
 # a `!=` early return, through list::with_length, through a refined struct
-# field; or reads an index J of a refined List; or writes a copied array of
-# extent N into an array of extent E.
+# field; or reads an index J of a refined parameter or of a source's List
+# (with no handler where the rules promise its length, under one where they
+# do not); or writes a copied array of extent N into an array of extent E.
 #
 # The oracle is the generator's own: it knows each source's run-time List
 # (it computes it) and the exact length the language promises statically
@@ -232,14 +233,53 @@ proc gen::ConsumerCase {} {
 }
 
 proc gen::IndexCase {} {
-    set n [random 5]
-    set j [expr {[random 7] - 1}]
-    set value [lmap i [lrepeat $n 0] {random 9}]
-    set text "import list\nfn pick(xs: List\[int\]{length: $n}) -> int:\n    xs.at($j)\n\npick(\[[join $value {, }]\])\n"
-    if {$j >= 0 && $j < $n} {
-        return [dict create source $text expect accepted value [lindex $value $j] family index-in]
+    if {[chance 0.5]} {
+        # A refined parameter.
+        set n [random 5]
+        set j [expr {[random 7] - 1}]
+        set value [lmap i [lrepeat $n 0] {random 9}]
+        set text "import list\nfn pick(xs: List\[int\]{length: $n}) -> int:\n    xs.at($j)\n\npick(\[[join $value {, }]\])\n"
+        if {$j >= 0 && $j < $n} {
+            return [dict create source $text expect accepted value [lindex $value $j] family index-in]
+        }
+        return [dict create source $text expect KNOWN-ERROR value "" family index-out]
     }
-    return [dict create source $text expect KNOWN-ERROR value "" family index-out]
+    # A List some source computes, read through its binding: a source whose
+    # length the rules promise is read with no handler (an index below the
+    # length is proven, one outside a known failure); any other is read
+    # under a handler, where a known failure is only sound when the index is
+    # outside the List the run computes (a proof beyond the rules' own).
+    set ::cValue [random 2]
+    set ::paramValue [lmap i [lrepeat [random 5] 0] {random 9}]
+    set src [Source [expr {1 + [random 3]}]]
+    set static [dict get $src static]
+    set actual [dict get $src value]
+    set j [expr {[random [expr {[llength $actual] + 3}]] - 1}]
+    set v [dict get $src var]
+    set inside [expr {$j >= 0 && $j < [llength $actual]}]
+    set text "import list\n"
+    foreach h [lsort -unique [dict get $src helpers]] {
+        append text $h "\n\n"
+    }
+    append text "fn run(c: bool, p: List\[int\]) -> int:\n"
+    foreach line [dict get $src lines] {
+        append text "    $line\n"
+    }
+    if {$static ne ""} {
+        append text "    $v.at($j)\n"
+    } else {
+        append text "    r = $v.at($j):\n        on IndexNotFound:\n            -1\n    r\n"
+    }
+    append text "run([expr {$::cValue ? "true" : "false"}], [Show $::paramValue])\n"
+    if {$static ne ""} {
+        if {$inside} {
+            return [dict create source $text expect accepted value [lindex $actual $j] family index-source-in]
+        }
+        return [dict create source $text expect KNOWN-ERROR value "" family index-source-out]
+    }
+    set value [expr {$inside ? [lindex $actual $j] : -1}]
+    set also [expr {$inside ? {} : {KNOWN-ERROR}}]
+    return [dict create source $text expect accepted value $value also $also family index-source-unknown]
 }
 
 proc gen::ExtentCase {} {
@@ -344,7 +384,7 @@ set cases 0
 set disagreements 0
 set mix [dict create]
 for {set k 0} {$k < [dict get $options -count]} {incr k} {
-    set case [switch -- [pick {consumer consumer consumer consumer index extent nested nested}] {
+    set case [switch -- [pick {consumer consumer consumer consumer index index extent nested nested}] {
         consumer { gen::ConsumerCase }
         index { gen::IndexCase }
         extent { gen::ExtentCase }
@@ -363,7 +403,9 @@ for {set k 0} {$k < [dict get $options -count]} {incr k} {
     }
     dict incr mix "$family/$got"
     set problem ""
-    if {$got ne [dict get $case expect]} {
+    if {$got ne [dict get $case expect] && $got in [dict getdef $case also {}]} {
+        # (A sound outcome beyond what the rules promise: nothing runs.)
+    } elseif {$got ne [dict get $case expect]} {
         set problem "expected [dict get $case expect], got $got[if {$verdict ne "accepted"} {string cat ": $b"}]"
     } elseif {$verdict eq "accepted"} {
         set outcomes [lmap backend $backends {Run $backend $a}]

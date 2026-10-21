@@ -420,6 +420,43 @@ use([1, 2, 3, 4])
         [rejectionKind [string cat $prelude "fn unknown(xs: List\[int\]) -> int:\n    xs.at(3)\nunknown(\[1, 2, 3, 4\])\n"]]
 } -result {{1 1 1} {listgetproven listgetproven} {listlen listnew listgetproven} {value 9} KNOWN-ERROR UNHANDLED-ERROR}
 
+test llr-bounds-every-source {every source whose type states a length gives the index proof that length, through a binding or directly: a declared result, list::with_length, list::append, a collecting loop, a fixed array's copy -- an index below it is proven (no handler), the index at it a statically known failure, and the proven reads run alike on every backend} -body {
+    set sources {
+        result {fn src(a: int) -> int:
+    xs = four(a)
+    xs.at(@)}
+        direct {fn src(a: int) -> int:
+    four(a).at(@)}
+        validator {fn src(ys: List[int]) -> int:
+    xs = list::with_length[List[int]{length: 4}](ys):
+        on LengthMismatch:
+            return 0
+    xs.at(@)}
+        append {fn src(ys: List[int]{length: 3}) -> int:
+    xs = ys.append(9)
+    xs.at(@)}
+        loop {fn src(ys: List[int]{length: 4}) -> int:
+    xs = loop y in ys:
+        y * 2
+    xs.at(@)}
+        copy {fn src(d: abi::bytes::Bytes) -> int errors LayoutLengthMismatch:
+    xs = binary::parse(ROW, d).cells
+    xs.at(@)}
+    }
+    set head "import abi\nimport abi::bytes\nimport binary\nimport list\n\nlayout ROW:\n    size 4\n    align 1\n    field cells: array 4 of binary::U8 at 0\n\nfn four(a: int) -> List\[int\]{length: 4}:\n    \[a, a + 1, a + 2, a + 3\]\n\n"
+    set verdicts {}
+    foreach {name text} $sources {
+        lappend verdicts $name [rejectionKind "$head[string map {@ 3} $text]\n\n0\n"] \
+            [rejectionKind "$head[string map {@ 4} $text]\n\n0\n"]
+    }
+    set run $head
+    foreach {name text} [lrange $sources 0 end-2] {
+        append run [string map [list @ 3 "fn src" "fn src_$name"] $text] \n\n
+    }
+    append run "\[src_result(1), src_direct(5), src_validator(\[1, 2, 3, 4\]), src_append(\[1, 2, 3\]), src_loop(\[1, 2, 3, 4\])\]\n"
+    list $verdicts [llrValue $run]
+} -result {{result accepted KNOWN-ERROR direct accepted KNOWN-ERROR validator accepted KNOWN-ERROR append accepted KNOWN-ERROR loop accepted KNOWN-ERROR copy accepted KNOWN-ERROR} {[4, 8, 4, 9, 8]}}
+
 test llr-length-known {list::length of a List whose type states its length is that Int: the range analysis decides a comparison with it, so a decided branch is lowered without the other arm} -constraints nativeBuilt -body {
     set hir [llrHir [string cat $prelude "fn f(xs: List\[int\]{length: 2}) -> int:\n    if list::length(xs) == 2:\n        10\n    else:\n        20\nf(\[1, 2\])\n"]]
     set nir [llrNir $hir]

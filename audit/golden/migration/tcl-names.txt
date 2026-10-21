@@ -3067,6 +3067,7 @@ tests/list-length-refinement.test llr-validator-once pass
 tests/list-length-refinement.test llr-append pass
 tests/list-length-refinement.test llr-collecting-loops pass
 tests/list-length-refinement.test llr-bounds pass
+tests/list-length-refinement.test llr-bounds-every-source pass
 tests/list-length-refinement.test llr-length-known pass
 tests/list-length-refinement.test llr-array-copies pass
 tests/list-length-refinement.test llr-array-copies-run pass
